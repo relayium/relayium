@@ -8,7 +8,7 @@ const en = {
   otherDocLabel: "Privacy Policy",
   lead: [
     "Relayium is built so that the people transferring files — not the server — hold the keys. This page describes exactly what is protected, how it works, and the limits of that protection.",
-    "The short version: in realtime mode your files never touch our servers; the encryption keys are generated fresh on each device and never leave it; and a short verification code lets two people detect a malicious server. The detail follows.",
+    "The short version: in realtime mode on the same network your files never touch our servers, and across networks they cross an encrypted relay that only ever carries ciphertext and holds no key; the encryption keys are generated fresh on each device and never leave it; and a short verification code lets two people detect a malicious server. The detail follows.",
   ],
   sections: [
     {
@@ -25,7 +25,7 @@ const en = {
     {
       heading: "The verification code (SAS) — detecting a malicious server",
       body: [
-        "WebRTC's built-in encryption (DTLS) exchanges key fingerprints through the signaling server, so a dishonest server could sit in the middle and swap keys. To catch this, Relayium derives a 6-digit Short Authentication String (SAS) from both sides' public keys and shows it on both screens. If the two codes match, no one is in the middle.",
+        "WebRTC's built-in encryption (DTLS) exchanges key fingerprints through the signaling server, so a dishonest server could sit in the middle and swap keys. To catch this, Relayium derives a 6-digit Short Authentication String (SAS) from both sides' public keys and shows it on both screens. If the two codes match, the key exchange was not tampered with — nobody swapped a key in the middle of it.",
         "A plain 6-digit code (about 20 bits) could in principle be brute-forced by a relay racing to force a matching code. Relayium closes that gap with a commit-then-reveal handshake: each side first commits to its key by sending a hash, and only reveals the key after receiving the other side's commitment. A server therefore cannot pick a colliding key after the fact, so the short code stays trustworthy.",
       ],
       bullets: [
@@ -37,7 +37,7 @@ const en = {
       heading: "What the server never sees",
       body: [
         "The service is designed so that the following never reach our servers, in any mode:",
-        "In realtime mode the file bytes never touch the server at all — they flow directly between the two devices. The signaling server only relays connection-setup messages and sees room membership (your public IP), a device nickname you choose, and presence.",
+        "In realtime mode on the same network the file bytes never touch a server at all — they flow directly between the two devices; across networks they pass through the TURN relay described below, which carries ciphertext and holds no key. The signaling server only relays connection-setup messages and sees room membership (your public IP), a device nickname you choose, and presence.",
       ],
       bullets: [
         "The contents of your files.",
@@ -48,7 +48,7 @@ const en = {
     {
       heading: "When your files are relayed (TURN)",
       body: [
-        "When two devices cannot open a direct connection across networks (restrictive NATs or firewalls), the encrypted stream is relayed through a TURN server so the transfer can still complete. Direct peer-to-peer is always tried first; the relay is a fallback, and only pairing-code sessions (including their join links) are issued relay credentials.",
+        "Browser transfers across networks — pairing-code sessions, including their join links — run through a TURN server by design, not as a fallback. Restrictive NATs and firewalls make a genuinely direct path unlikely there, so the app forces the relay route outright rather than spending twenty-odd seconds on direct candidate checks that would almost always time out and end up on that same relay anyway. Same-network sessions are issued no relay credentials at all and connect directly; and the CLI never relays file bytes — its cross-network transfers are direct-only and fail if no direct path can be found.",
       ],
       bullets: [
         "The relay forwards only ciphertext — it cannot read your files, which stay end-to-end encrypted.",
@@ -91,8 +91,8 @@ const en = {
         "Relayium runs in any modern browser with WebRTC over HTTPS. A few capabilities differ by browser:",
       ],
       bullets: [
-        "Chrome and Edge stream large files straight to disk, with no practical memory ceiling.",
-        "Firefox and Safari buffer files in memory, so very large files (over roughly 200 MB) may fail — prefer Chrome/Edge, or use the download-link mode for those.",
+        "Desktop Chrome and Edge have the File System Access API and stream large files straight to disk, with no practical memory ceiling.",
+        "Firefox, Safari and every mobile browser (on iOS every browser is WebKit) lack that API and assemble the file in memory on the realtime path, so the app warns above roughly 256 MB — a deliberately conservative estimate, not a measured hard limit. For files that size, prefer desktop Chrome/Edge, or use the download-link mode, whose download page can additionally stream to disk through a service worker.",
         "WebRTC requires a secure context (HTTPS); the app will not connect over plain HTTP.",
       ],
     },
@@ -114,7 +114,7 @@ const zh = {
   otherDocLabel: "隐私政策",
   lead: [
     "Relayium 的设计宗旨是：掌握密钥的是传输文件的双方，而不是服务器。本页说明究竟保护了什么、如何保护，以及这份保护的边界。",
-    "一句话概括：实时模式下你的文件绝不经过我们的服务器；加密密钥在每台设备上重新生成、绝不离开设备；一段简短的校验码让双方能识破恶意服务器。以下是细节。",
+    "一句话概括：实时模式下，同一网络中你的文件绝不经过我们的服务器，跨网络时则经加密中继转发，中继只搬运密文、不持有密钥；加密密钥在每台设备上重新生成、绝不离开设备；一段简短的校验码让双方能识破恶意服务器。以下是细节。",
   ],
   sections: [
     {
@@ -131,7 +131,7 @@ const zh = {
     {
       heading: "校验码（SAS）——识破恶意服务器",
       body: [
-        "WebRTC 自带的加密（DTLS）会通过信令服务器交换密钥指纹，因此不诚实的服务器可能居中调包密钥。为识破这种攻击，Relayium 从双方公钥推导出一段 6 位短校验码（SAS）并显示在两端屏幕上。两边的码一致，就说明没有人居中。",
+        "WebRTC 自带的加密（DTLS）会通过信令服务器交换密钥指纹，因此不诚实的服务器可能居中调包密钥。为识破这种攻击，Relayium 从双方公钥推导出一段 6 位短校验码（SAS）并显示在两端屏幕上。两边的码一致，就说明这次密钥交换没有被篡改——没有人在中途掉包过密钥。",
         "单纯的 6 位数字（约 20 比特）理论上可能被中继抢先暴力凑出一个相同的码。Relayium 用「先承诺后揭示」握手堵住这个缺口：双方先各自发送密钥的哈希作为承诺，收到对方的承诺后才揭示真正的密钥。这样服务器就无法事后挑选一个能撞上的密钥，短校验码因此依然可信。",
       ],
       bullets: [
@@ -143,7 +143,7 @@ const zh = {
       heading: "服务器绝不会看到什么",
       body: [
         "本服务的设计确保以下内容在任何模式下都绝不会到达我们的服务器：",
-        "实时模式下文件字节根本不经过服务器——它们在两台设备之间直接流动。信令服务器只转发建立连接所需的消息，能看到的仅有房间归属（你的公网 IP）、你自选的设备昵称以及在线状态。",
+        "实时模式下，同一网络中文件字节根本不经过服务器——它们在两台设备之间直接流动；跨网络时则经下文所述的 TURN 中继转发，中继搬运的只是密文，且不持有密钥。信令服务器只转发建立连接所需的消息，能看到的仅有房间归属（你的公网 IP）、你自选的设备昵称以及在线状态。",
       ],
       bullets: [
         "你的文件内容。",
@@ -154,7 +154,7 @@ const zh = {
     {
       heading: "文件何时会经中继转发（TURN）",
       body: [
-        "当两台设备无法跨网络直接建立连接（受限的 NAT 或防火墙）时，加密流会经由 TURN 服务器中继，让传输仍能完成。系统始终优先尝试点对点直连；中继只是兜底，且只有配对码会话（含其生成的加入链接）才会获发中继凭证。",
+        "浏览器的跨网络传输——即配对码会话（含其生成的加入链接）——按设计经 TURN 服务器中继，而不是作为兜底手段。在跨网络场景下，受限的 NAT 与防火墙让真正的直连希望渺茫，因此应用直接强制走中继路径，而不是先花二十来秒去等那些几乎注定超时、最终仍会落到同一个中继上的直连候选探测。同一网络的会话根本不会获发中继凭证，走的是直连；命令行工具则从不中继文件字节——它的跨网络传输只走直连，找不到直连路径就直接失败。",
       ],
       bullets: [
         "中继只转发密文——它无法读取你的文件，文件始终保持端到端加密。",
@@ -197,8 +197,8 @@ const zh = {
         "Relayium 可在任何支持 WebRTC 且经 HTTPS 访问的现代浏览器中运行。少数能力因浏览器而异：",
       ],
       bullets: [
-        "Chrome 与 Edge 会把大文件直接流式写入磁盘，几乎没有内存上限。",
-        "Firefox 与 Safari 会把文件缓存在内存中，因此过大的文件（约 200 MB 以上）可能失败——建议改用 Chrome/Edge，或对这类文件使用下载链接模式。",
+        "桌面版 Chrome 与 Edge 具备 File System Access API，会把大文件直接流式写入磁盘，几乎没有内存上限。",
+        "Firefox、Safari 以及所有手机浏览器（iOS 上的浏览器全都是 WebKit）没有这个 API，在实时接收路径上只能把文件攒在内存里，因此超过约 256 MB 时应用会先给出提示——这是一个刻意保守的估计值，而不是实测出来的硬上限。这个量级的文件建议改用桌面版 Chrome/Edge，或改走下载链接模式，其下载页还可以通过 service worker 流式落盘。",
         "WebRTC 需要安全上下文（HTTPS）；应用不会在纯 HTTP 下建立连接。",
       ],
     },
@@ -220,7 +220,7 @@ const ja = {
   otherDocLabel: "プライバシーポリシー",
   lead: [
     "Relayium は、鍵を握るのはサーバーではなくファイルを転送する当事者であるように設計されています。このページでは、何がどのように保護されるのか、そしてその保護の限界を説明します。",
-    "要点：リアルタイムモードではファイルは当社のサーバーを一切通りません。暗号鍵は各デバイスで新たに生成され、デバイスの外に出ることはありません。そして短い検証コードによって、当事者は悪意あるサーバーを見破ることができます。以下に詳細を記します。",
+    "要点：リアルタイムモードでは、同一ネットワークならファイルは当社のサーバーを一切通らず、ネットワークをまたぐ場合も暗号文しか運ばず鍵も持たない暗号化リレーを経由するだけです。暗号鍵は各デバイスで新たに生成され、デバイスの外に出ることはありません。そして短い検証コードによって、当事者は悪意あるサーバーを見破ることができます。以下に詳細を記します。",
   ],
   sections: [
     {
@@ -237,7 +237,7 @@ const ja = {
     {
       heading: "検証コード（SAS）——悪意あるサーバーの検出",
       body: [
-        "WebRTC 標準の暗号化（DTLS）は鍵のフィンガープリントをシグナリングサーバー経由で交換するため、不正なサーバーが中間に入り鍵をすり替える可能性があります。これを検出するため、Relayium は双方の公開鍵から 6 桁の Short Authentication String（SAS）を導出し、両方の画面に表示します。2 つのコードが一致すれば、中間に誰もいません。",
+        "WebRTC 標準の暗号化（DTLS）は鍵のフィンガープリントをシグナリングサーバー経由で交換するため、不正なサーバーが中間に入り鍵をすり替える可能性があります。これを検出するため、Relayium は双方の公開鍵から 6 桁の Short Authentication String（SAS）を導出し、両方の画面に表示します。2 つのコードが一致すれば、その鍵交換は改竄されておらず、途中で鍵をすり替えられてもいないということです。",
         "単純な 6 桁のコード（約 20 ビット）は、原理的には中継サーバーが一致するコードを総当たりで作り出す余地があります。Relayium はコミット後開示ハンドシェイクでこの隙を塞ぎます。各側はまず鍵のハッシュを送ってコミットし、相手のコミットメントを受け取ってから初めて鍵を開示します。そのためサーバーは後から衝突する鍵を選ぶことができず、短いコードは信頼できるままです。",
       ],
       bullets: [
@@ -249,7 +249,7 @@ const ja = {
       heading: "サーバーが決して見ないもの",
       body: [
         "本サービスは、以下がどのモードでも当社のサーバーに届かないように設計されています：",
-        "リアルタイムモードでは、ファイルの実体はサーバーを一切通らず、2 台のデバイス間で直接やり取りされます。シグナリングサーバーは接続確立のためのメッセージを中継するだけで、把握するのはルームの所属（あなたの公開 IP）、あなたが選んだデバイス名、在席状況のみです。",
+        "リアルタイムモードでは、同一ネットワークならファイルの実体はサーバーを一切通らず、2 台のデバイス間で直接やり取りされます。ネットワークをまたぐ場合は後述の TURN リレーを経由しますが、リレーが運ぶのは暗号文だけで鍵は持ちません。シグナリングサーバーは接続確立のためのメッセージを中継するだけで、把握するのはルームの所属（あなたの公開 IP）、あなたが選んだデバイス名、在席状況のみです。",
       ],
       bullets: [
         "ファイルの内容。",
@@ -260,7 +260,7 @@ const ja = {
     {
       heading: "ファイルが中継される場合（TURN）",
       body: [
-        "2 台のデバイスがネットワークをまたいで直接接続できない場合（制限の厳しい NAT やファイアウォール）、転送を完了させるために暗号化ストリームが TURN サーバー経由で中継されます。まず常に直接のピアツーピアが試みられ、中継はフォールバックであり、中継用の資格情報が発行されるのはペアリングコードのセッション（その参加リンクを含む）のみです。",
+        "ブラウザでネットワークをまたぐ転送——つまりペアリングコードのセッション（その参加リンクを含む）——は、フォールバックとしてではなく設計上 TURN サーバー経由で中継されます。この経路では制限の厳しい NAT やファイアウォールのために本当の直接接続はまず望めないため、ほぼ確実にタイムアウトして結局同じリレーに行き着く直接候補の検査に 20 秒前後を費やすより、最初からリレー経路を強制しています。同一ネットワークのセッションには中継用の資格情報がそもそも発行されず、直接接続します。また CLI はファイルの実体を一切中継しません——ネットワークをまたぐ転送も直接接続のみで、直接の経路が見つからなければそのまま失敗します。",
       ],
       bullets: [
         "中継サーバーは暗号文のみを転送します。ファイルを読むことはできず、エンドツーエンド暗号化が維持されます。",
@@ -303,8 +303,8 @@ const ja = {
         "Relayium は、HTTPS 経由で WebRTC が使える最新ブラウザで動作します。一部の機能はブラウザによって異なります：",
       ],
       bullets: [
-        "Chrome と Edge は大きなファイルをディスクへ直接ストリーミングし、実質的なメモリ上限はありません。",
-        "Firefox と Safari はファイルをメモリにバッファするため、非常に大きなファイル（およそ 200 MB 超）は失敗することがあります——Chrome/Edge を使うか、そうしたファイルにはダウンロードリンクモードをご利用ください。",
+        "デスクトップ版の Chrome と Edge は File System Access API を備えており、大きなファイルをディスクへ直接ストリーミングするため、実質的なメモリ上限はありません。",
+        "Firefox と Safari、そしてすべてのモバイルブラウザ（iOS ではどのブラウザも WebKit です）はこの API を持たず、リアルタイム受信の経路ではファイルをメモリ上で組み立てます。そのため、およそ 256 MB を超えるとアプリが事前に警告します——これは実測した上限ではなく、意図的に控えめに置いた見積もりです。その規模のファイルにはデスクトップ版の Chrome/Edge を使うか、ダウンロードリンクモードをご利用ください。後者のダウンロードページは service worker 経由でディスクへ流し込むこともできます。",
         "WebRTC はセキュアコンテキスト（HTTPS）を必要とします。アプリは平文の HTTP では接続しません。",
       ],
     },
@@ -326,7 +326,7 @@ const ko = {
   otherDocLabel: "개인정보 처리방침",
   lead: [
     "Relayium은 서버가 아니라 파일을 전송하는 당사자가 키를 갖도록 설계되었습니다. 이 페이지에서는 무엇이 어떻게 보호되는지, 그리고 그 보호의 한계를 설명합니다.",
-    "요약하면: 실시간 모드에서 파일은 당사 서버를 전혀 거치지 않습니다. 암호화 키는 각 기기에서 새로 생성되어 기기를 떠나지 않습니다. 그리고 짧은 검증 코드로 두 사람은 악의적인 서버를 탐지할 수 있습니다. 자세한 내용은 아래와 같습니다.",
+    "요약하면: 실시간 모드에서 같은 네트워크라면 파일은 당사 서버를 전혀 거치지 않고, 네트워크를 넘을 때는 암호문만 실어 나르고 키는 갖지 않는 암호화된 릴레이를 지나갑니다. 암호화 키는 각 기기에서 새로 생성되어 기기를 떠나지 않습니다. 그리고 짧은 검증 코드로 두 사람은 악의적인 서버를 탐지할 수 있습니다. 자세한 내용은 아래와 같습니다.",
   ],
   sections: [
     {
@@ -343,7 +343,7 @@ const ko = {
     {
       heading: "검증 코드(SAS) — 악의적인 서버 탐지",
       body: [
-        "WebRTC 내장 암호화(DTLS)는 키 지문을 시그널링 서버를 통해 교환하므로, 정직하지 않은 서버가 중간에 끼어들어 키를 바꿔치기할 수 있습니다. 이를 탐지하기 위해 Relayium은 양쪽의 공개 키에서 6자리 Short Authentication String(SAS)을 도출하여 두 화면 모두에 표시합니다. 두 코드가 일치하면 중간에 아무도 없는 것입니다.",
+        "WebRTC 내장 암호화(DTLS)는 키 지문을 시그널링 서버를 통해 교환하므로, 정직하지 않은 서버가 중간에 끼어들어 키를 바꿔치기할 수 있습니다. 이를 탐지하기 위해 Relayium은 양쪽의 공개 키에서 6자리 Short Authentication String(SAS)을 도출하여 두 화면 모두에 표시합니다. 두 코드가 일치하면 그 키 교환이 변조되지 않았고, 도중에 키가 바꿔치기되지도 않았다는 뜻입니다.",
         "단순한 6자리 코드(약 20비트)는 원칙적으로 중계 서버가 일치하는 코드를 무차별 대입으로 만들어낼 여지가 있습니다. Relayium은 커밋 후 공개 핸드셰이크로 이 틈을 막습니다. 각 측은 먼저 키의 해시를 보내 커밋하고, 상대방의 커밋을 받은 후에야 키를 공개합니다. 따라서 서버는 나중에 충돌하는 키를 고를 수 없으며, 짧은 코드는 신뢰할 수 있는 상태로 유지됩니다.",
       ],
       bullets: [
@@ -355,7 +355,7 @@ const ko = {
       heading: "서버가 절대 보지 못하는 것",
       body: [
         "본 서비스는 다음 정보가 어떤 모드에서도 당사 서버에 도달하지 않도록 설계되었습니다:",
-        "실시간 모드에서는 파일 데이터가 서버를 전혀 거치지 않고 두 기기 사이에서 직접 흐릅니다. 시그널링 서버는 연결 설정 메시지만 중계하며, 룸 소속(사용자의 공개 IP), 사용자가 선택한 기기 별칭, 접속 상태만 볼 수 있습니다.",
+        "실시간 모드에서는 같은 네트워크라면 파일 데이터가 서버를 전혀 거치지 않고 두 기기 사이에서 직접 흐릅니다. 네트워크를 넘을 때는 아래에서 설명하는 TURN 릴레이를 지나가지만, 릴레이가 나르는 것은 암호문뿐이며 키는 갖지 않습니다. 시그널링 서버는 연결 설정 메시지만 중계하며, 룸 소속(사용자의 공개 IP), 사용자가 선택한 기기 별칭, 접속 상태만 볼 수 있습니다.",
       ],
       bullets: [
         "파일의 내용.",
@@ -366,7 +366,7 @@ const ko = {
     {
       heading: "파일이 중계될 때(TURN)",
       body: [
-        "두 기기가 네트워크를 가로질러 직접 연결할 수 없는 경우(제한적인 NAT 또는 방화벽), 전송을 완료할 수 있도록 암호화된 스트림이 TURN 서버를 통해 중계됩니다. 언제나 직접 피어 투 피어를 먼저 시도하며, 중계는 대체 수단이고, 중계 자격 증명은 페어링 코드 세션(그 참여 링크 포함)에만 발급됩니다.",
+        "브라우저의 네트워크 간 전송 — 즉 페어링 코드 세션(그 참여 링크 포함) — 은 대체 수단이 아니라 설계상 TURN 서버를 거칩니다. 그 경로에서는 제한적인 NAT과 방화벽 때문에 진짜 직접 연결이 성사될 가능성이 낮으므로, 거의 반드시 시간이 초과된 뒤 결국 같은 릴레이로 귀결될 직접 후보 검사에 20초 남짓을 쓰는 대신 앱이 처음부터 릴레이 경로를 강제합니다. 같은 네트워크의 세션에는 중계 자격 증명이 아예 발급되지 않고 직접 연결되며, CLI는 파일 데이터를 절대 중계하지 않습니다 — 네트워크 간 전송도 직접 연결만 쓰고, 직접 경로를 찾지 못하면 그대로 실패합니다.",
       ],
       bullets: [
         "중계 서버는 암호문만 전달합니다. 파일을 읽을 수 없으며 종단간 암호화가 유지됩니다.",
@@ -409,8 +409,8 @@ const ko = {
         "Relayium은 HTTPS를 통해 WebRTC를 사용할 수 있는 모든 최신 브라우저에서 작동합니다. 일부 기능은 브라우저에 따라 다릅니다:",
       ],
       bullets: [
-        "Chrome과 Edge는 큰 파일을 디스크로 직접 스트리밍하며, 실질적인 메모리 상한이 없습니다.",
-        "Firefox와 Safari는 파일을 메모리에 버퍼링하므로 매우 큰 파일(대략 200MB 초과)은 실패할 수 있습니다 — Chrome/Edge를 사용하거나 그런 파일에는 다운로드 링크 모드를 이용하십시오.",
+        "데스크톱 Chrome과 Edge는 File System Access API가 있어 큰 파일을 디스크로 직접 스트리밍하며, 실질적인 메모리 상한이 없습니다.",
+        "Firefox와 Safari, 그리고 모든 모바일 브라우저(iOS에서는 어떤 브라우저든 WebKit입니다)에는 그 API가 없어 실시간 수신 경로에서는 파일을 메모리에서 조립합니다. 그래서 약 256MB를 넘으면 앱이 미리 경고합니다 — 실측한 한계가 아니라 일부러 보수적으로 잡은 추정값입니다. 그 정도 크기의 파일에는 데스크톱 Chrome/Edge를 사용하거나 다운로드 링크 모드를 이용하십시오. 다운로드 링크의 내려받기 페이지는 service worker를 통해 디스크로 흘려보낼 수도 있습니다.",
         "WebRTC는 보안 컨텍스트(HTTPS)를 요구합니다. 앱은 일반 HTTP에서는 연결되지 않습니다.",
       ],
     },
@@ -432,7 +432,7 @@ const de = {
   otherDocLabel: "Datenschutzerklärung",
   lead: [
     "Relayium ist so gebaut, dass die Personen, die Dateien übertragen — nicht der Server — die Schlüssel besitzen. Diese Seite beschreibt genau, was geschützt ist, wie es funktioniert und wo die Grenzen dieses Schutzes liegen.",
-    "Kurz gesagt: Im Echtzeitmodus berühren Ihre Dateien nie unsere Server; die Verschlüsselungsschlüssel werden auf jedem Gerät neu erzeugt und verlassen es nie; und ein kurzer Prüfcode erlaubt zwei Personen, einen bösartigen Server zu erkennen. Es folgen die Details.",
+    "Kurz gesagt: Im Echtzeitmodus berühren Ihre Dateien im selben Netzwerk nie unsere Server, und netzwerkübergreifend passieren sie ein verschlüsseltes Relay, das ausschließlich Chiffretext transportiert und keinen Schlüssel besitzt; die Verschlüsselungsschlüssel werden auf jedem Gerät neu erzeugt und verlassen es nie; und ein kurzer Prüfcode erlaubt zwei Personen, einen bösartigen Server zu erkennen. Es folgen die Details.",
   ],
   sections: [
     {
@@ -449,7 +449,7 @@ const de = {
     {
       heading: "Der Prüfcode (SAS) — einen bösartigen Server erkennen",
       body: [
-        "Die eingebaute Verschlüsselung von WebRTC (DTLS) tauscht Schlüssel-Fingerabdrücke über den Signalisierungsserver aus, sodass ein unehrlicher Server sich dazwischenschalten und Schlüssel austauschen könnte. Um das zu erkennen, leitet Relayium aus den öffentlichen Schlüsseln beider Seiten einen 6-stelligen Short Authentication String (SAS) ab und zeigt ihn auf beiden Bildschirmen an. Stimmen die beiden Codes überein, ist niemand dazwischen.",
+        "Die eingebaute Verschlüsselung von WebRTC (DTLS) tauscht Schlüssel-Fingerabdrücke über den Signalisierungsserver aus, sodass ein unehrlicher Server sich dazwischenschalten und Schlüssel austauschen könnte. Um das zu erkennen, leitet Relayium aus den öffentlichen Schlüsseln beider Seiten einen 6-stelligen Short Authentication String (SAS) ab und zeigt ihn auf beiden Bildschirmen an. Stimmen die beiden Codes überein, wurde der Schlüsselaustausch nicht manipuliert — niemand hat dabei einen Schlüssel ausgetauscht.",
         "Ein bloßer 6-stelliger Code (etwa 20 Bit) ließe sich im Prinzip von einer Weiterleitung durch Brute Force zu einem passenden Code zwingen. Relayium schließt diese Lücke mit einem Commit-dann-Offenlegen-Handshake: Jede Seite legt sich zunächst durch das Senden eines Hashes auf ihren Schlüssel fest und gibt den Schlüssel erst preis, nachdem sie die Festlegung der Gegenseite erhalten hat. Ein Server kann daher nicht nachträglich einen kollidierenden Schlüssel wählen, und der kurze Code bleibt vertrauenswürdig.",
       ],
       bullets: [
@@ -461,7 +461,7 @@ const de = {
       heading: "Was der Server nie sieht",
       body: [
         "Der Dienst ist so gestaltet, dass Folgendes in keinem Modus unsere Server erreicht:",
-        "Im Echtzeitmodus berühren die Dateidaten den Server überhaupt nicht — sie fließen direkt zwischen den beiden Geräten. Der Signalisierungsserver leitet nur Nachrichten zum Verbindungsaufbau weiter und sieht die Raumzugehörigkeit (Ihre öffentliche IP), einen von Ihnen gewählten Gerätenamen und die Anwesenheit.",
+        "Im Echtzeitmodus berühren die Dateidaten im selben Netzwerk den Server überhaupt nicht — sie fließen direkt zwischen den beiden Geräten; netzwerkübergreifend laufen sie über das unten beschriebene TURN-Relay, das Chiffretext transportiert und keinen Schlüssel besitzt. Der Signalisierungsserver leitet nur Nachrichten zum Verbindungsaufbau weiter und sieht die Raumzugehörigkeit (Ihre öffentliche IP), einen von Ihnen gewählten Gerätenamen und die Anwesenheit.",
       ],
       bullets: [
         "Den Inhalt Ihrer Dateien.",
@@ -472,7 +472,7 @@ const de = {
     {
       heading: "Wenn Ihre Dateien weitergeleitet werden (TURN)",
       body: [
-        "Wenn zwei Geräte über verschiedene Netzwerke hinweg keine direkte Verbindung aufbauen können (restriktive NATs oder Firewalls), wird der verschlüsselte Datenstrom über einen TURN-Server weitergeleitet, damit die Übertragung dennoch abgeschlossen werden kann. Zuerst wird stets eine direkte Peer-to-Peer-Verbindung versucht; die Weiterleitung ist ein Rückfall, und Weiterleitungs-Anmeldedaten werden nur an Pairing-Code-Sitzungen (einschließlich ihrer Beitrittslinks) ausgegeben.",
+        "Netzwerkübergreifende Übertragungen im Browser — Pairing-Code-Sitzungen einschließlich ihrer Beitrittslinks — laufen konstruktionsbedingt über einen TURN-Server, nicht als Rückfall. Restriktive NATs und Firewalls machen dort eine wirklich direkte Verbindung unwahrscheinlich, deshalb erzwingt die App gleich den Relay-Weg, statt gut zwanzig Sekunden auf Prüfungen direkter Kandidaten zu verwenden, die fast immer ablaufen und ohnehin bei demselben Relay enden würden. Sitzungen im selben Netzwerk erhalten überhaupt keine Relay-Anmeldedaten und verbinden sich direkt; und die CLI leitet Dateidaten nie weiter — ihre netzwerkübergreifenden Übertragungen sind ausschließlich direkt und schlagen fehl, wenn kein direkter Weg gefunden wird.",
       ],
       bullets: [
         "Die Weiterleitung übermittelt nur Chiffretext — sie kann Ihre Dateien nicht lesen, die Ende-zu-Ende-verschlüsselt bleiben.",
@@ -515,8 +515,8 @@ const de = {
         "Relayium läuft in jedem modernen Browser mit WebRTC über HTTPS. Einige Fähigkeiten unterscheiden sich je nach Browser:",
       ],
       bullets: [
-        "Chrome und Edge streamen große Dateien direkt auf die Festplatte, ohne praktische Speicherobergrenze.",
-        "Firefox und Safari puffern Dateien im Arbeitsspeicher, sodass sehr große Dateien (über etwa 200 MB) fehlschlagen können — bevorzugen Sie Chrome/Edge oder nutzen Sie für solche Dateien den Download-Link-Modus.",
+        "Chrome und Edge auf dem Desktop verfügen über die File System Access API und streamen große Dateien direkt auf die Festplatte, ohne praktische Speicherobergrenze.",
+        "Firefox, Safari und alle mobilen Browser (auf iOS ist jeder Browser WebKit) haben diese API nicht und setzen die Datei auf dem Echtzeitpfad im Arbeitsspeicher zusammen; ab etwa 256 MB warnt die App deshalb vorab — ein bewusst konservativer Schätzwert, keine gemessene Obergrenze. Nutzen Sie für Dateien dieser Größe bevorzugt Chrome/Edge auf dem Desktop oder den Download-Link-Modus, dessen Download-Seite zusätzlich über einen Service Worker auf die Festplatte streamen kann.",
         "WebRTC erfordert einen sicheren Kontext (HTTPS); die App stellt über einfaches HTTP keine Verbindung her.",
       ],
     },
@@ -538,7 +538,7 @@ const fr = {
   otherDocLabel: "Politique de confidentialité",
   lead: [
     "Relayium est conçu pour que ce soient les personnes qui transfèrent les fichiers — et non le serveur — qui détiennent les clés. Cette page décrit précisément ce qui est protégé, comment cela fonctionne, et les limites de cette protection.",
-    "En bref : en mode temps réel, vos fichiers ne touchent jamais nos serveurs ; les clés de chiffrement sont générées à neuf sur chaque appareil et n'en sortent jamais ; et un court code de vérification permet à deux personnes de détecter un serveur malveillant. Les détails suivent.",
+    "En bref : en mode temps réel, sur le même réseau vos fichiers ne touchent jamais nos serveurs, et entre réseaux différents ils traversent un relais chiffré qui ne transporte que du texte chiffré et ne détient aucune clé ; les clés de chiffrement sont générées à neuf sur chaque appareil et n'en sortent jamais ; et un court code de vérification permet à deux personnes de détecter un serveur malveillant. Les détails suivent.",
   ],
   sections: [
     {
@@ -555,7 +555,7 @@ const fr = {
     {
       heading: "Le code de vérification (SAS) — détecter un serveur malveillant",
       body: [
-        "Le chiffrement intégré de WebRTC (DTLS) échange les empreintes de clés via le serveur de signalisation, si bien qu'un serveur malhonnête pourrait s'interposer et permuter les clés. Pour le détecter, Relayium dérive un Short Authentication String (SAS) à 6 chiffres à partir des clés publiques des deux parties et l'affiche sur les deux écrans. Si les deux codes correspondent, personne ne s'est interposé.",
+        "Le chiffrement intégré de WebRTC (DTLS) échange les empreintes de clés via le serveur de signalisation, si bien qu'un serveur malhonnête pourrait s'interposer et permuter les clés. Pour le détecter, Relayium dérive un Short Authentication String (SAS) à 6 chiffres à partir des clés publiques des deux parties et l'affiche sur les deux écrans. Si les deux codes correspondent, l'échange de clés n'a pas été altéré : personne n'y a permuté de clé.",
         "Un simple code à 6 chiffres (environ 20 bits) pourrait en principe être forcé par un relais cherchant à produire un code correspondant. Relayium comble cette faille par une poignée de main « engagement puis révélation » : chaque partie s'engage d'abord sur sa clé en envoyant un hachage, et ne révèle la clé qu'après avoir reçu l'engagement de l'autre. Un serveur ne peut donc pas choisir après coup une clé provoquant une collision, et le court code reste digne de confiance.",
       ],
       bullets: [
@@ -567,7 +567,7 @@ const fr = {
       heading: "Ce que le serveur ne voit jamais",
       body: [
         "Le service est conçu pour que les éléments suivants n'atteignent jamais nos serveurs, quel que soit le mode :",
-        "En mode temps réel, les données des fichiers ne touchent pas du tout le serveur — elles circulent directement entre les deux appareils. Le serveur de signalisation ne relaie que les messages d'établissement de connexion et voit l'appartenance à un salon (votre IP publique), un nom d'appareil que vous choisissez, et la présence.",
+        "En mode temps réel, sur le même réseau les données des fichiers ne touchent pas du tout le serveur — elles circulent directement entre les deux appareils ; entre réseaux différents, elles passent par le relais TURN décrit plus bas, qui transporte du texte chiffré et ne détient aucune clé. Le serveur de signalisation ne relaie que les messages d'établissement de connexion et voit l'appartenance à un salon (votre IP publique), un nom d'appareil que vous choisissez, et la présence.",
       ],
       bullets: [
         "Le contenu de vos fichiers.",
@@ -578,7 +578,7 @@ const fr = {
     {
       heading: "Quand vos fichiers sont relayés (TURN)",
       body: [
-        "Lorsque deux appareils ne peuvent pas ouvrir de connexion directe entre différents réseaux (NAT restrictifs ou pare-feu), le flux chiffré est relayé via un serveur TURN afin que le transfert puisse tout de même aboutir. Le pair à pair direct est toujours tenté en premier ; le relais est un repli, et les identifiants de relais ne sont délivrés qu'aux sessions par code d'appairage (y compris leurs liens de participation).",
+        "Les transferts entre réseaux différents dans le navigateur — les sessions par code d'appairage, y compris leurs liens de participation — passent par un serveur TURN par conception, et non en repli. Les NAT restrictifs et les pare-feu y rendent une liaison réellement directe improbable ; l'application impose donc d'emblée le chemin relayé plutôt que de consacrer une vingtaine de secondes à des tests de candidats directs qui expireraient presque toujours pour aboutir de toute façon à ce même relais. Les sessions sur un même réseau ne reçoivent aucun identifiant de relais et se connectent directement ; et la CLI ne relaie jamais les données des fichiers — ses transferts entre réseaux sont exclusivement directs et échouent si aucune liaison directe n'est trouvée.",
       ],
       bullets: [
         "Le relais ne transmet que du chiffré — il ne peut pas lire vos fichiers, qui restent chiffrés de bout en bout.",
@@ -621,8 +621,8 @@ const fr = {
         "Relayium fonctionne dans tout navigateur moderne prenant en charge WebRTC via HTTPS. Quelques capacités diffèrent selon le navigateur :",
       ],
       bullets: [
-        "Chrome et Edge diffusent les gros fichiers directement sur le disque, sans plafond de mémoire pratique.",
-        "Firefox et Safari mettent les fichiers en mémoire tampon, si bien que les très gros fichiers (au-delà d'environ 200 Mo) peuvent échouer — préférez Chrome/Edge, ou utilisez le mode lien de téléchargement pour ceux-là.",
+        "Chrome et Edge sur ordinateur disposent de l'API File System Access et diffusent les gros fichiers directement sur le disque, sans plafond de mémoire pratique.",
+        "Firefox, Safari et tous les navigateurs mobiles (sur iOS, tous les navigateurs sont WebKit) n'ont pas cette API et assemblent le fichier en mémoire sur le trajet temps réel ; l'application avertit donc au-delà d'environ 256 Mo — un repère volontairement prudent, pas une limite mesurée. Pour des fichiers de cette taille, préférez Chrome/Edge sur ordinateur, ou le mode lien de téléchargement, dont la page de téléchargement peut en outre écrire sur le disque via un service worker.",
         "WebRTC exige un contexte sécurisé (HTTPS) ; l'application ne se connecte pas en HTTP simple.",
       ],
     },
@@ -644,7 +644,7 @@ const ar = {
   otherDocLabel: "سياسة الخصوصية",
   lead: [
     "صُمِّمت Relayium بحيث يكون مَن ينقلون الملفات — لا الخادم — هم مَن يملكون المفاتيح. تصف هذه الصفحة بدقة ما هو محميّ، وكيف يعمل، وحدود تلك الحماية.",
-    "باختصار: في الوضع الفوري لا تمسّ ملفاتك خوادمنا مطلقًا؛ وتُولَّد مفاتيح التشفير من جديد على كل جهاز ولا تغادره أبدًا؛ ويتيح رمز تحقق قصير لشخصين اكتشاف خادم خبيث. وفيما يلي التفاصيل.",
+    "باختصار: في الوضع الفوري لا تمسّ ملفاتك خوادمنا مطلقًا على نفس الشبكة، أما عبر الشبكات فتمرّ بمُرحِّل مُشفَّر لا ينقل سوى نص مُشفَّر ولا يملك أي مفتاح؛ وتُولَّد مفاتيح التشفير من جديد على كل جهاز ولا تغادره أبدًا؛ ويتيح رمز تحقق قصير لشخصين اكتشاف خادم خبيث. وفيما يلي التفاصيل.",
   ],
   sections: [
     {
@@ -661,7 +661,7 @@ const ar = {
     {
       heading: "رمز التحقق (SAS) — اكتشاف خادم خبيث",
       body: [
-        "يتبادل التشفير المدمج في WebRTC (DTLS) بصمات المفاتيح عبر خادم الإشارة، لذا يمكن لخادم غير أمين أن يتوسّط في المنتصف ويبدّل المفاتيح. ولرصد ذلك، تشتقّ Relayium سلسلة مصادقة قصيرة (SAS) من 6 أرقام من المفاتيح العامة للطرفين وتعرضها على كلتا الشاشتين. فإذا تطابق الرمزان، فلا أحد في المنتصف.",
+        "يتبادل التشفير المدمج في WebRTC (DTLS) بصمات المفاتيح عبر خادم الإشارة، لذا يمكن لخادم غير أمين أن يتوسّط في المنتصف ويبدّل المفاتيح. ولرصد ذلك، تشتقّ Relayium سلسلة مصادقة قصيرة (SAS) من 6 أرقام من المفاتيح العامة للطرفين وتعرضها على كلتا الشاشتين. فإذا تطابق الرمزان، فهذا يعني أن تبادل المفاتيح لم يُعبَث به ولم يبدّل أحد مفتاحًا في أثنائه.",
         "يمكن من حيث المبدأ كسر رمز بسيط من 6 أرقام (نحو 20 بت) بالقوة الغاشمة من قِبل مُرحِّل يسابق الزمن لفرض رمز مُطابِق. تسدّ Relayium هذه الثغرة بمصافحة «الالتزام ثم الكشف»: يلتزم كل طرف أولًا بمفتاحه بإرسال تجزئة له، ولا يكشف المفتاح إلا بعد تلقّي التزام الطرف الآخر. ومن ثمّ لا يستطيع الخادم انتقاء مفتاح مُتصادِم بعد الأمر، فيبقى الرمز القصير جديرًا بالثقة.",
       ],
       bullets: [
@@ -673,7 +673,7 @@ const ar = {
       heading: "ما لا يراه الخادم أبدًا",
       body: [
         "صُمِّمت الخدمة بحيث لا يصل ما يلي مطلقًا إلى خوادمنا، في أي وضع:",
-        "في الوضع الفوري لا تمسّ بايتات الملف الخادم إطلاقًا — بل تتدفق مباشرةً بين الجهازين. ولا يقوم خادم الإشارة إلا بتمرير رسائل إعداد الاتصال، ويرى عضوية الغرفة (عنوان IP العام الخاص بك)، واسمًا مستعارًا للجهاز تختاره أنت، والحضور.",
+        "في الوضع الفوري لا تمسّ بايتات الملف الخادم إطلاقًا على نفس الشبكة — بل تتدفق مباشرةً بين الجهازين؛ أما عبر الشبكات فتمرّ عبر مُرحِّل TURN الموصوف أدناه، وهو ينقل نصًا مُشفَّرًا ولا يملك أي مفتاح. ولا يقوم خادم الإشارة إلا بتمرير رسائل إعداد الاتصال، ويرى عضوية الغرفة (عنوان IP العام الخاص بك)، واسمًا مستعارًا للجهاز تختاره أنت، والحضور.",
       ],
       bullets: [
         "محتويات ملفاتك.",
@@ -684,7 +684,7 @@ const ar = {
     {
       heading: "عندما تُمرَّر ملفاتك (TURN)",
       body: [
-        "عندما يتعذّر على جهازين فتح اتصال مباشر عبر الشبكات (بسبب أنظمة NAT المُقيِّدة أو جدران الحماية)، يُمرَّر التدفق المُشفَّر عبر خادم TURN حتى يتمكّن النقل من الاكتمال رغم ذلك. تُجرَّب دائمًا الوصلة المباشرة من الند للند أولًا؛ والتمرير هو خيار احتياطي، ولا تُصدَر بيانات اعتماد التمرير إلا لجلسات رمز الاقتران (بما في ذلك روابط الانضمام الخاصة بها).",
+        "تمرّ عمليات النقل عبر الشبكات في المتصفح — أي جلسات رمز الاقتران، بما في ذلك روابط الانضمام الخاصة بها — عبر خادم TURN بحكم التصميم، لا كخيار احتياطي. فأنظمة NAT المُقيِّدة وجدران الحماية تجعل المسار المباشر الحقيقي مستبعدًا هناك، لذا يفرض التطبيق مسار التمرير من البداية بدل إنفاق نحو عشرين ثانية على فحص مرشّحين مباشرين ينتهي وقتهم غالبًا لينتهي الأمر عند المُرحِّل نفسه على أي حال. أما جلسات نفس الشبكة فلا تُصدَر لها بيانات اعتماد تمرير إطلاقًا وتتصل مباشرةً؛ كما أن واجهة سطر الأوامر لا تُمرِّر بايتات الملفات أبدًا — فنقلها عبر الشبكات مباشر فقط ويفشل إن لم يُعثر على مسار مباشر.",
       ],
       bullets: [
         "لا يُمرِّر المُرحِّل سوى النص المُشفَّر — ولا يمكنه قراءة ملفاتك، التي تظل مُشفَّرة من الطرف إلى الطرف.",
@@ -727,8 +727,8 @@ const ar = {
         "تعمل Relayium في أي متصفح حديث يدعم WebRTC عبر HTTPS. وتختلف بعض القدرات باختلاف المتصفح:",
       ],
       bullets: [
-        "يبثّ Chrome وEdge الملفات الكبيرة مباشرةً إلى القرص، دون سقف عملي للذاكرة.",
-        "يخزّن Firefox وSafari الملفات في الذاكرة مؤقتًا، لذا قد تفشل الملفات الكبيرة جدًا (فوق نحو 200 MB) — فضّل استخدام Chrome/Edge، أو استخدم وضع رابط التنزيل لتلك الملفات.",
+        "يتوفّر في Chrome وEdge على سطح المكتب واجهة File System Access، فيبثّان الملفات الكبيرة مباشرةً إلى القرص، دون سقف عملي للذاكرة.",
+        "أما Firefox وSafari وجميع متصفحات الهاتف (فكل متصفح على iOS يعمل بـ WebKit) فتفتقر إلى تلك الواجهة وتجمّع الملف في الذاكرة على المسار الفوري، ولذلك يحذّر التطبيق مسبقًا عند تجاوز نحو 256 MB — وهو تقدير متحفّظ عن قصد، لا حدّ مقيس. لملفات بهذا الحجم فضّل Chrome/Edge على سطح المكتب، أو استخدم وضع رابط التنزيل، الذي يمكن لصفحة التنزيل فيه أيضًا الكتابة إلى القرص عبر service worker.",
         "يتطلب WebRTC سياقًا آمنًا (HTTPS)؛ ولن يتصل التطبيق عبر HTTP العادي.",
       ],
     },
@@ -750,7 +750,7 @@ const es = {
   otherDocLabel: "Política de privacidad",
   lead: [
     "Relayium está diseñado para que las personas que transfieren archivos —no el servidor— tengan las claves. Esta página describe exactamente qué está protegido, cómo funciona y los límites de esa protección.",
-    "En resumen: en el modo en tiempo real tus archivos nunca pasan por nuestros servidores; las claves de cifrado se generan de nuevo en cada dispositivo y nunca lo abandonan; y un código de verificación corto permite a dos personas detectar un servidor malicioso. A continuación, los detalles.",
+    "En resumen: en el modo en tiempo real, en la misma red tus archivos nunca pasan por nuestros servidores, y entre redes distintas atraviesan un retransmisor cifrado que solo transporta texto cifrado y no tiene ninguna clave; las claves de cifrado se generan de nuevo en cada dispositivo y nunca lo abandonan; y un código de verificación corto permite a dos personas detectar un servidor malicioso. A continuación, los detalles.",
   ],
   sections: [
     {
@@ -767,7 +767,7 @@ const es = {
     {
       heading: "El código de verificación (SAS): detectar un servidor malicioso",
       body: [
-        "El cifrado integrado de WebRTC (DTLS) intercambia huellas de claves a través del servidor de señalización, por lo que un servidor deshonesto podría interponerse en el medio e intercambiar las claves. Para detectarlo, Relayium deriva una cadena de autenticación corta (SAS) de 6 dígitos a partir de las claves públicas de ambas partes y la muestra en las dos pantallas. Si los dos códigos coinciden, no hay nadie en el medio.",
+        "El cifrado integrado de WebRTC (DTLS) intercambia huellas de claves a través del servidor de señalización, por lo que un servidor deshonesto podría interponerse en el medio e intercambiar las claves. Para detectarlo, Relayium deriva una cadena de autenticación corta (SAS) de 6 dígitos a partir de las claves públicas de ambas partes y la muestra en las dos pantallas. Si los dos códigos coinciden, el intercambio de claves no fue manipulado: nadie permutó ninguna clave durante él.",
         "Un simple código de 6 dígitos (unos 20 bits) podría, en principio, forzarse por fuerza bruta si un retransmisor compite por producir un código coincidente. Relayium cierra esa brecha con un protocolo de compromiso y luego revelación: cada parte se compromete primero con su clave enviando un hash, y solo revela la clave tras recibir el compromiso de la otra parte. Por lo tanto, un servidor no puede elegir a posteriori una clave que colisione, de modo que el código corto sigue siendo digno de confianza.",
       ],
       bullets: [
@@ -779,7 +779,7 @@ const es = {
       heading: "Lo que el servidor nunca ve",
       body: [
         "El servicio está diseñado para que lo siguiente nunca llegue a nuestros servidores, en ningún modo:",
-        "En el modo en tiempo real, los bytes del archivo no pasan en absoluto por el servidor: fluyen directamente entre los dos dispositivos. El servidor de señalización solo retransmite mensajes de establecimiento de la conexión y ve la pertenencia a la sala (tu IP pública), un apodo de dispositivo que tú eliges y la presencia.",
+        "En el modo en tiempo real, en la misma red los bytes del archivo no pasan en absoluto por el servidor: fluyen directamente entre los dos dispositivos; entre redes distintas atraviesan el retransmisor TURN descrito más abajo, que transporta texto cifrado y no tiene ninguna clave. El servidor de señalización solo retransmite mensajes de establecimiento de la conexión y ve la pertenencia a la sala (tu IP pública), un apodo de dispositivo que tú eliges y la presencia.",
       ],
       bullets: [
         "El contenido de tus archivos.",
@@ -790,7 +790,7 @@ const es = {
     {
       heading: "Cuando tus archivos se retransmiten (TURN)",
       body: [
-        "Cuando dos dispositivos no pueden abrir una conexión directa entre redes (NAT o cortafuegos restrictivos), el flujo cifrado se retransmite a través de un servidor TURN para que la transferencia aún pueda completarse. Siempre se intenta primero la conexión directa de igual a igual; el retransmisor es un recurso alternativo, y solo las sesiones con código de emparejamiento (incluidos sus enlaces de unión) reciben credenciales de retransmisión.",
+        "Las transferencias entre redes en el navegador —las sesiones con código de emparejamiento, incluidos sus enlaces de unión— pasan por un servidor TURN por diseño, no como recurso alternativo. Allí los NAT y cortafuegos restrictivos hacen improbable un camino realmente directo, así que la aplicación fuerza de entrada la ruta retransmitida en lugar de gastar unos veinte segundos en comprobaciones de candidatos directos que casi siempre caducarían para terminar igualmente en ese mismo retransmisor. Las sesiones en la misma red no reciben ninguna credencial de retransmisión y se conectan directamente; y la CLI nunca retransmite los bytes de los archivos: sus transferencias entre redes son exclusivamente directas y fallan si no se encuentra un camino directo.",
       ],
       bullets: [
         "El retransmisor reenvía únicamente texto cifrado: no puede leer tus archivos, que permanecen cifrados de extremo a extremo.",
@@ -833,8 +833,8 @@ const es = {
         "Relayium funciona en cualquier navegador moderno con WebRTC a través de HTTPS. Algunas capacidades difieren según el navegador:",
       ],
       bullets: [
-        "Chrome y Edge transmiten los archivos grandes directamente al disco, sin un techo de memoria práctico.",
-        "Firefox y Safari almacenan los archivos en memoria, por lo que los archivos muy grandes (por encima de unos 200 MB) pueden fallar; prefiere Chrome/Edge, o usa el modo de enlace de descarga para esos.",
+        "Chrome y Edge de escritorio disponen de la API File System Access y transmiten los archivos grandes directamente al disco, sin un techo de memoria práctico.",
+        "Firefox, Safari y todos los navegadores móviles (en iOS todos los navegadores son WebKit) carecen de esa API y ensamblan el archivo en memoria en la ruta en tiempo real, por lo que la aplicación avisa por encima de unos 256 MB: una estimación deliberadamente conservadora, no un límite medido. Para archivos de ese tamaño, prefiere Chrome/Edge de escritorio, o usa el modo de enlace de descarga, cuya página de descarga además puede escribir en disco mediante un service worker.",
         "WebRTC requiere un contexto seguro (HTTPS); la aplicación no se conectará por HTTP simple.",
       ],
     },
@@ -856,7 +856,7 @@ const pt = {
   otherDocLabel: "Política de Privacidade",
   lead: [
     "A Relayium foi criada para que as pessoas que transferem arquivos — e não o servidor — tenham as chaves. Esta página descreve exatamente o que é protegido, como funciona e os limites dessa proteção.",
-    "Em resumo: no modo em tempo real, seus arquivos nunca passam pelos nossos servidores; as chaves de criptografia são geradas do zero em cada dispositivo e nunca o deixam; e um código de verificação curto permite que duas pessoas detectem um servidor malicioso. A seguir, os detalhes.",
+    "Em resumo: no modo em tempo real, na mesma rede seus arquivos nunca passam pelos nossos servidores e, entre redes diferentes, atravessam um retransmissor criptografado que só transporta texto cifrado e não detém nenhuma chave; as chaves de criptografia são geradas do zero em cada dispositivo e nunca o deixam; e um código de verificação curto permite que duas pessoas detectem um servidor malicioso. A seguir, os detalhes.",
   ],
   sections: [
     {
@@ -873,7 +873,7 @@ const pt = {
     {
       heading: "O código de verificação (SAS) — detectar um servidor malicioso",
       body: [
-        "A criptografia embutida do WebRTC (DTLS) troca impressões digitais de chaves por meio do servidor de sinalização, então um servidor desonesto poderia se colocar no meio e trocar as chaves. Para detectar isso, a Relayium deriva uma Short Authentication String (SAS) de 6 dígitos a partir das chaves públicas dos dois lados e a exibe nas duas telas. Se os dois códigos coincidirem, não há ninguém no meio.",
+        "A criptografia embutida do WebRTC (DTLS) troca impressões digitais de chaves por meio do servidor de sinalização, então um servidor desonesto poderia se colocar no meio e trocar as chaves. Para detectar isso, a Relayium deriva uma Short Authentication String (SAS) de 6 dígitos a partir das chaves públicas dos dois lados e a exibe nas duas telas. Se os dois códigos coincidirem, a troca de chaves não foi adulterada — ninguém trocou nenhuma chave no meio dela.",
         "Um simples código de 6 dígitos (cerca de 20 bits) poderia, em princípio, ser quebrado por força bruta por um retransmissor correndo para forçar um código coincidente. A Relayium fecha essa brecha com um handshake de comprometer e depois revelar: cada lado primeiro se compromete com sua chave enviando um hash, e só revela a chave depois de receber o comprometimento do outro lado. Um servidor, portanto, não pode escolher depois uma chave que colida, de modo que o código curto continua confiável.",
       ],
       bullets: [
@@ -885,7 +885,7 @@ const pt = {
       heading: "O que o servidor nunca vê",
       body: [
         "O serviço foi projetado para que o seguinte nunca chegue aos nossos servidores, em nenhum modo:",
-        "No modo em tempo real, os bytes do arquivo não passam de forma alguma pelo servidor — eles fluem diretamente entre os dois dispositivos. O servidor de sinalização apenas retransmite mensagens de configuração da conexão e vê a participação na sala (seu IP público), um apelido de dispositivo que você escolhe e a presença.",
+        "No modo em tempo real, na mesma rede os bytes do arquivo não passam de forma alguma pelo servidor — eles fluem diretamente entre os dois dispositivos; entre redes diferentes, passam pelo retransmissor TURN descrito abaixo, que transporta texto cifrado e não detém nenhuma chave. O servidor de sinalização apenas retransmite mensagens de configuração da conexão e vê a participação na sala (seu IP público), um apelido de dispositivo que você escolhe e a presença.",
       ],
       bullets: [
         "O conteúdo dos seus arquivos.",
@@ -896,7 +896,7 @@ const pt = {
     {
       heading: "Quando seus arquivos são retransmitidos (TURN)",
       body: [
-        "Quando dois dispositivos não conseguem abrir uma conexão direta entre redes (NATs ou firewalls restritivos), o fluxo criptografado é retransmitido por um servidor TURN para que a transferência ainda possa ser concluída. A conexão direta ponto a ponto é sempre tentada primeiro; o retransmissor é um recurso alternativo, e apenas as sessões com código de emparelhamento (incluindo seus links de entrada) recebem credenciais de retransmissão.",
+        "As transferências entre redes no navegador — as sessões com código de emparelhamento, incluindo seus links de entrada — passam por um servidor TURN por projeto, não como recurso alternativo. Ali os NATs e firewalls restritivos tornam improvável um caminho realmente direto, então o aplicativo força de saída a rota retransmitida em vez de gastar uns vinte segundos em verificações de candidatos diretos que quase sempre expirariam para acabar nesse mesmo retransmissor de qualquer forma. As sessões na mesma rede não recebem nenhuma credencial de retransmissão e se conectam diretamente; e a CLI nunca retransmite os bytes dos arquivos: suas transferências entre redes são exclusivamente diretas e falham se nenhum caminho direto for encontrado.",
       ],
       bullets: [
         "O retransmissor encaminha apenas texto cifrado — ele não consegue ler seus arquivos, que permanecem criptografados de ponta a ponta.",
@@ -939,8 +939,8 @@ const pt = {
         "A Relayium funciona em qualquer navegador moderno com WebRTC sobre HTTPS. Alguns recursos diferem conforme o navegador:",
       ],
       bullets: [
-        "Chrome e Edge transmitem arquivos grandes diretamente para o disco, sem um teto de memória prático.",
-        "Firefox e Safari armazenam os arquivos em memória, então arquivos muito grandes (acima de cerca de 200 MB) podem falhar — prefira Chrome/Edge, ou use o modo de link de download para esses.",
+        "Chrome e Edge no desktop têm a API File System Access e transmitem arquivos grandes diretamente para o disco, sem um teto de memória prático.",
+        "Firefox, Safari e todos os navegadores móveis (no iOS, todo navegador é WebKit) não têm essa API e montam o arquivo na memória no caminho em tempo real, por isso o aplicativo avisa acima de cerca de 256 MB — uma estimativa deliberadamente conservadora, não um limite medido. Para arquivos desse tamanho, prefira Chrome/Edge no desktop, ou use o modo de link de download, cuja página de download ainda pode gravar em disco por meio de um service worker.",
         "O WebRTC exige um contexto seguro (HTTPS); o aplicativo não se conecta por HTTP simples.",
       ],
     },

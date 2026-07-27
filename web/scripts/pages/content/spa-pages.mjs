@@ -26,7 +26,7 @@ export const pricing = {
     heading: "Always free",
     steps: [
       "Local network (LAN) transfers — instant, no account needed.",
-      "Direct peer-to-peer transfers with the CLI — over your own SSH, daemon-direct, or a pairing code — with no account and nothing metered.",
+      "Direct peer-to-peer transfers with the CLI — over your own SSH, daemon-direct, or a pairing code — with nothing metered. Only minting a send pairing code needs an account; receiving never does.",
       "End-to-end encrypted, no file-size limits, and your files go straight between devices — they never touch our servers.",
     ],
   },
@@ -122,7 +122,7 @@ export const cli = {
       },
       {
         title: "send / receive — by pairing code",
-        desc: "Send to another person across networks. Agree on a short code out of band, then one side sends and the other receives. The connection is direct peer-to-peer: only a small rendezvous handshake passes through Relayium — the file bytes never do. Both terminals print a 6-digit SAS code to rule out a man-in-the-middle.",
+        desc: "Send to another person across networks. After relayium login, run send with no code: the CLI mints a 6-character pairing code (no 0 or 1), good for 5 minutes, and prints the command the other end runs — you pass that on out of band. The receiver needs no account. The connection is direct peer-to-peer: only a small rendezvous handshake passes through Relayium — the file bytes never do. Both terminals print a 6-digit SAS code to rule out a man-in-the-middle.",
       },
       {
         title: "daemon direct — server to server",
@@ -156,7 +156,7 @@ export const cli = {
     items: [
       {
         q: "Does the CLI cost anything?",
-        a: "No. push/pull, send/receive, daemon-direct and sync connect the two ends directly, so there is nothing to meter and no account to create. Only cloud up/down draws on your account's storage and traffic allowance.",
+        a: "No. push/pull, send/receive, daemon-direct and sync connect the two ends directly, so there is nothing to meter. Sending by pairing code needs an account so the server can mint the code — receiving never does — but it still costs nothing. Only cloud up/down draws on your account's storage and traffic allowance.",
       },
       {
         q: "Which platforms does it run on?",
@@ -164,7 +164,7 @@ export const cli = {
       },
       {
         q: "Can I point it at my own server?",
-        a: "Yes — --server https://your-domain sends login, up and down to a self-hosted Relayium instance.",
+        a: "Yes — --server https://your-domain points login, up, down, send and receive at a self-hosted Relayium instance, so pairing codes are minted by your server too.",
       },
     ],
   },

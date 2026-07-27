@@ -18,7 +18,8 @@ usage:
   relayium push <src...> relayium://host[:port]  push straight to a listening peer (daemon direct)
   relayium sync <src...> <dest> [--delete] [--watch]   incremental one-way folder mirror
   relayium pull [user@]host:src <dest>       pull files from such a server
-  relayium send <src...> <code>              send to a peer over a pairing code (cross-network)
+  relayium send <src...> [code]              send to a peer over a pairing code (cross-network)
+                                             (omit the code to mint one; requires login)
   relayium receive <code> [destdir]          receive such a transfer
   relayium serve [--dir D] [--port N] [--once]   listen for daemon-direct pushes
                                              (in a terminal, approve each new peer on first push)

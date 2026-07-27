@@ -18,7 +18,7 @@ const en = {
     {
       heading: "The direct approach: no cloud in the middle",
       body: [
-        "Relayium runs entirely in the browser at relayium.com. There is nothing to install on either computer, and no third-party storage sits between you and the recipient: when a direct connection is possible, the file goes from one browser to the other and is never written to a server.",
+        "Relayium runs entirely in the browser at relayium.com. There is nothing to install on either computer, and no third-party storage sits between you and the recipient: the file streams from one browser to the other and is never written to a server — not even when the two networks require the stream to pass through a relay, which forwards the bytes without keeping a copy or holding a key.",
         "That matters for two reasons: speed (you are not bottlenecked by someone else's upload/download quota) and privacy (no copy of your file sits on a company's servers waiting to be requested, breached, or forgotten about).",
       ],
     },
@@ -53,7 +53,7 @@ const en = {
       heading: "How many files, and how large",
       body: [
         "You can send up to 1,000 files in one batch, folder structure included. There is no server-side size cap — the practical ceiling is set by the receiving browser.",
-        "Chrome and Edge stream incoming data straight to disk, so multi-gigabyte files are fine. Firefox and Safari buffer the file in memory instead, so on those keep a single file to roughly 200 MB or less. Each file is also checked end-to-end with a SHA-256 hash, so you know what arrives is byte-for-byte what was sent.",
+        "A browser with the File System Access API — Chrome or Edge on the desktop — streams incoming data straight to disk, so multi-gigabyte files are fine. Firefox and Safari don't have that API, so a batch received there is assembled in memory instead, and Relayium warns you before you accept once it goes past roughly 256 MB: a deliberately conservative estimate rather than a measured limit, since the real ceiling depends on the machine's memory, its OS and what else is open. Each file is also checked end-to-end with a SHA-256 hash, so you know what arrives is byte-for-byte what was sent.",
       ],
     },
   ],
@@ -62,7 +62,7 @@ const en = {
     items: [
       {
         q: "Is it really peer-to-peer, or does the file pass through a server?",
-        a: "When a direct connection is possible, the file streams straight from one browser to the other and is never stored on a server. Only when a direct path can't be established (a strict firewall or NAT on one side) does it fall back to a relay — and even then the relay only ever sees encrypted ciphertext, never the file itself.",
+        a: "It is peer-to-peer in the sense that matters: the file streams browser to browser and is never stored on a server. On the same network the two browsers connect directly to each other. A cross-network pairing-code transfer is carried by a TURN relay by design — the reliable route through the firewalls and NATs that usually block a direct path — but that relay only ever passes encrypted ciphertext through in flight, never the readable file.",
       },
       {
         q: "Do both people need an account?",
@@ -70,11 +70,11 @@ const en = {
       },
       {
         q: "Does it work across different networks and countries?",
-        a: "Yes. The pairing code exists specifically for this case: two computers that aren't on the same local network connect directly, peer-to-peer, wherever each one is in the world, falling back to an encrypted relay only when a direct path isn't possible.",
+        a: "Yes. The pairing code exists specifically for this case: two computers that aren't on the same local network, wherever each one is in the world. That route runs over an encrypted TURN relay rather than a direct link — the path that connects reliably when NATs and firewalls sit in between, and it comes up in a second or two instead of waiting on direct attempts that would almost always time out first.",
       },
       {
         q: "Is there a limit on file size or how many files I can send?",
-        a: "You can send up to 1,000 files in a single batch. There's no size cap enforced by the server — the limit is what the receiving browser can handle: essentially unlimited in Chrome or Edge (streamed to disk), and around 200 MB per file in Firefox or Safari (buffered in memory).",
+        a: "You can send up to 1,000 files in a single batch. There's no size cap enforced by the server — the limit is what the receiving browser can handle: essentially unlimited in Chrome or Edge on the desktop (streamed to disk), while Firefox and Safari hold the batch in memory, where Relayium warns you above roughly 256 MB. That threshold is a cautious estimate rather than a hard ceiling; the real one depends on the machine.",
       },
     ],
   },
@@ -98,7 +98,7 @@ const zh = {
     {
       heading: "直连方式：中间没有云",
       body: [
-        "Relayium 完全在浏览器里运行，网址是 relayium.com。两台电脑都无需安装任何东西，你和对方之间也没有第三方存储：能直连时，文件从一个浏览器直接流向另一个浏览器，从不写入服务器。",
+        "Relayium 完全在浏览器里运行，网址是 relayium.com。两台电脑都无需安装任何东西，你和对方之间也没有第三方存储：文件从一个浏览器流向另一个浏览器，从不写入服务器——即使两边网络逼得数据流必须经过中继，中继也只是把字节转发过去，既不留副本，也没有密钥。",
         "这一点很重要，原因有二：速度（不会被别人的上传/下载配额卡住）和隐私（不会有一份文件副本留在某公司的服务器上，等着被调取、被泄露或被遗忘）。",
       ],
     },
@@ -133,7 +133,7 @@ const zh = {
       heading: "能传多少文件、多大的文件",
       body: [
         "一批最多可以发送 1,000 个文件，包含文件夹结构。服务器端没有大小上限——实际限制取决于接收方的浏览器。",
-        "Chrome 和 Edge 会把接收到的数据直接流式写入磁盘，所以几个 GB 的文件也没问题。Firefox 和 Safari 则是在内存里缓冲文件，所以在这两者上单个文件建议控制在约 200 MB 以内。每个文件还会做端到端的 SHA-256 校验，确保收到的内容和发出的完全一致。",
+        "支持 File System Access API 的浏览器——桌面版 Chrome、Edge——会把接收到的数据直接流式写入磁盘，所以几个 GB 的文件也没问题。Firefox 和 Safari 没有这个 API，在它们那边接收的整批文件只能先攒在内存里，因此一旦超过约 256 MB，Relayium 会在你点「接收」之前先提示一次：这是刻意取的保守估计，而不是实测出来的上限，真正的天花板取决于这台机器的内存、系统以及还开着什么。每个文件还会做端到端的 SHA-256 校验，确保收到的内容和发出的完全一致。",
       ],
     },
   ],
@@ -142,7 +142,7 @@ const zh = {
     items: [
       {
         q: "这真的是点对点直连吗，会经过服务器吗？",
-        a: "能直连时，文件直接从一个浏览器流向另一个浏览器，从不存储在服务器上。只有在无法建立直连（比如某一侧有严格防火墙或 NAT）时才会退回到中继——即便如此，中继看到的也只是加密密文，从来看不到文件本身。",
+        a: "在要紧的意义上它就是点对点：文件从一个浏览器流向另一个浏览器，从不存储在服务器上。同一网络下两个浏览器彼此直连。而跨网络的配对码传输按设计经由 TURN 中继承载——这是穿过那些通常挡住直连的防火墙和 NAT 的可靠路径——但中继只是在传输过程中转发加密密文，从来看不到可读的文件。",
       },
       {
         q: "双方都需要账号吗？",
@@ -150,11 +150,11 @@ const zh = {
       },
       {
         q: "能跨不同网络甚至不同国家传输吗？",
-        a: "可以。配对码正是为这种情况设计的：两台不在同一局域网的电脑，无论各自身处世界哪个角落，都能点对点直连，只有在无法直连时才会退回到加密中继。",
+        a: "可以。配对码正是为这种情况设计的：两台不在同一局域网的电脑，无论各自身处世界哪个角落都能连上。这条路径走的是加密 TURN 中继而不是直连——在 NAT 和防火墙挡在中间时，它才是可靠连上的那条路，而且一两秒就能建立，不必去等那些几乎注定超时的直连尝试。",
       },
       {
         q: "文件大小或数量有限制吗？",
-        a: "一批最多可以发送 1,000 个文件。服务器不设大小上限——限制取决于接收方浏览器能扛多大：Chrome 或 Edge（流式写入磁盘）基本没有上限，Firefox 或 Safari（内存缓冲）单个文件约在 200 MB 左右。",
+        a: "一批最多可以发送 1,000 个文件。服务器不设大小上限——限制取决于接收方浏览器能扛多大：桌面版 Chrome 或 Edge（流式写入磁盘）基本没有上限；Firefox 和 Safari 会把整批文件放在内存里，超过约 256 MB 时 Relayium 会先提示你。这个阈值是保守估计而非硬性天花板，真正的上限要看那台机器。",
       },
     ],
   },
@@ -178,7 +178,7 @@ const ja = {
     {
       heading: "直接方式：クラウドを介さない",
       body: [
-        "Relayium は relayium.com でブラウザ内だけで動作します。どちらのパソコンにもインストールするものはなく、あなたと相手の間にサードパーティのストレージは存在しません。直接接続が可能な場合、ファイルは一方のブラウザからもう一方のブラウザへそのまま流れ、サーバーに書き込まれることはありません。",
+        "Relayium は relayium.com でブラウザ内だけで動作します。どちらのパソコンにもインストールするものはなく、あなたと相手の間にサードパーティのストレージは存在しません。ファイルは一方のブラウザからもう一方のブラウザへ流れ、サーバーに書き込まれることはありません——2つのネットワークの都合でストリームがリレーを通る場合でも、リレーはバイトを中継するだけで、コピーも鍵も持ちません。",
         "これが重要なのは2つの理由からです。速度（他人のアップロード／ダウンロード割り当てに足を引っ張られない）と、プライバシー（どこかの会社のサーバーにファイルのコピーが残り、要求されたり、漏えいしたり、忘れ去られたりする心配がない）です。",
       ],
     },
@@ -213,7 +213,7 @@ const ja = {
       heading: "何ファイルまで、どのくらいの大きさまで",
       body: [
         "1バッチで最大1,000ファイル、フォルダ構造も含めて送れます。サーバー側にサイズ上限はなく、実質的な上限は受信側のブラウザによって決まります。",
-        "Chrome と Edge は受信データをそのままディスクへストリーミングするので、数ギガバイトのファイルでも問題ありません。Firefox と Safari はファイルをメモリにバッファするため、これらでは1ファイルをおおよそ200MB以内に収めてください。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるため、届いたものが送られたものとバイト単位で一致しているとわかります。",
+        "File System Access API を備えたブラウザ——パソコン版の Chrome や Edge——は受信データをそのままディスクへストリーミングするので、数ギガバイトのファイルでも問題ありません。Firefox と Safari にはこの API がないため、そちらで受信するとひとまとめにメモリへ溜めることになり、およそ 256MB を超えると Relayium が受け取る前に警告を出します。これは実測した上限ではなく意図的に控えめに置いた目安で、実際の天井はそのパソコンのメモリ・OS・ほかに何を開いているかで決まります。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるため、届いたものが送られたものとバイト単位で一致しているとわかります。",
       ],
     },
   ],
@@ -222,7 +222,7 @@ const ja = {
     items: [
       {
         q: "本当に P2P 直接接続ですか、それともファイルはサーバーを経由しますか？",
-        a: "直接接続が可能な場合、ファイルは一方のブラウザからもう一方のブラウザへそのまま流れ、サーバーに保存されることはありません。直接経路が確立できない場合（片側に厳格なファイアウォールや NAT がある場合）のみリレーにフォールバックしますが、その場合でもリレーが見るのは暗号文だけで、ファイル自体を見ることはありません。",
+        a: "肝心な意味では P2P です。ファイルはブラウザからブラウザへ流れ、サーバーに保存されることはありません。同じネットワーク上なら2つのブラウザは互いに直接つながります。ネットワークをまたぐペアリングコードでの転送は、設計上つねに TURN リレーが運びます——直接経路をたいてい塞いでしまうファイアウォールや NAT を越えて確実につながる経路です——が、そのリレーが通すのは通信中の暗号文だけで、読めるファイルが渡ることはありません。",
       },
       {
         q: "双方ともアカウントが必要ですか？",
@@ -230,11 +230,11 @@ const ja = {
       },
       {
         q: "異なるネットワークや国をまたいでも使えますか？",
-        a: "はい。ペアリングコードはまさにこのケースのために存在します。同じローカルネットワークにない2台のパソコンが、世界のどこにいても P2P で直接接続し、直接経路が不可能な場合にのみ暗号化されたリレーにフォールバックします。",
+        a: "はい。ペアリングコードはまさにこのケースのために存在します。同じローカルネットワークにない2台のパソコンが、世界のどこにいてもつながります。その経路は直接接続ではなく暗号化された TURN リレーを通ります——NAT やファイアウォールが間に立ちはだかるときに確実につながるのがこの経路で、しかもほぼ必ずタイムアウトする直接接続の試行を待たずに1〜2秒で確立します。",
       },
       {
         q: "ファイルサイズや送れるファイル数に制限はありますか？",
-        a: "1バッチで最大1,000ファイルまで送れます。サーバーが強制するサイズ上限はなく、限界は受信側のブラウザが扱える範囲で決まります。Chrome や Edge（ディスクへストリーミング）では事実上無制限、Firefox や Safari（メモリにバッファ）では1ファイルあたり約200MBほどです。",
+        a: "1バッチで最大1,000ファイルまで送れます。サーバーが強制するサイズ上限はなく、限界は受信側のブラウザが扱える範囲で決まります。パソコン版の Chrome や Edge（ディスクへストリーミング）では事実上無制限で、Firefox や Safari はバッチをメモリに保持するため、およそ 256MB を超えると Relayium が警告します。この閾値は硬い天井ではなく控えめな目安で、本当の限界はその機械しだいです。",
       },
     ],
   },
@@ -258,7 +258,7 @@ const ko = {
     {
       heading: "직접 연결 방식: 중간에 클라우드가 없다",
       body: [
-        "Relayium은 relayium.com에서 브라우저 안에서만 동작합니다. 어느 컴퓨터에도 설치할 것이 없고, 당신과 상대 사이에 제3자 저장소가 끼어들지 않습니다. 직접 연결이 가능할 때 파일은 한 브라우저에서 다른 브라우저로 곧장 흐르며, 서버에 저장되는 일이 없습니다.",
+        "Relayium은 relayium.com에서 브라우저 안에서만 동작합니다. 어느 컴퓨터에도 설치할 것이 없고, 당신과 상대 사이에 제3자 저장소가 끼어들지 않습니다. 파일은 한 브라우저에서 다른 브라우저로 흐르며 서버에 저장되는 일이 없습니다 — 두 네트워크 사정상 스트림이 릴레이를 거쳐야 할 때도 마찬가지로, 릴레이는 바이트를 넘겨줄 뿐 사본도 키도 갖지 않습니다.",
         "이것이 중요한 이유는 두 가지입니다. 속도(다른 사람의 업로드/다운로드 할당량에 발목 잡히지 않음)와 개인정보 보호(어느 회사 서버에 파일 사본이 남아 요청되거나 유출되거나 방치될 걱정이 없음)입니다.",
       ],
     },
@@ -293,7 +293,7 @@ const ko = {
       heading: "몇 개까지, 얼마나 큰 파일까지",
       body: [
         "한 배치에 폴더 구조를 포함해 최대 1,000개의 파일을 보낼 수 있습니다. 서버 쪽에는 크기 상한이 없으며, 실제 한계는 받는 쪽 브라우저가 결정합니다.",
-        "Chrome과 Edge는 들어오는 데이터를 곧장 디스크로 스트리밍하므로 수 기가바이트짜리 파일도 문제없습니다. Firefox와 Safari는 파일을 메모리에 버퍼링하므로 이들에서는 한 파일을 대략 200MB 이내로 유지하세요. 각 파일은 SHA-256 해시로 종단간 검증되므로 도착한 파일이 보낸 파일과 바이트 단위로 같다는 것을 알 수 있습니다.",
+        "File System Access API가 있는 브라우저 — 데스크톱 Chrome, Edge — 는 들어오는 데이터를 곧장 디스크로 스트리밍하므로 수 기가바이트짜리 파일도 문제없습니다. Firefox와 Safari에는 그 API가 없어서 그쪽에서 받으면 한 묶음을 메모리에 모으게 되며, 대략 256MB를 넘어서면 Relayium이 수락하기 전에 미리 경고합니다. 이는 측정된 상한이 아니라 일부러 보수적으로 잡은 추정치이고, 실제 상한은 그 컴퓨터의 메모리와 OS, 그 밖에 열어 둔 것에 달려 있습니다. 각 파일은 SHA-256 해시로 종단간 검증되므로 도착한 파일이 보낸 파일과 바이트 단위로 같다는 것을 알 수 있습니다.",
       ],
     },
   ],
@@ -302,7 +302,7 @@ const ko = {
     items: [
       {
         q: "정말로 P2P 직접 연결인가요, 아니면 파일이 서버를 거치나요?",
-        a: "직접 연결이 가능할 때는 파일이 한 브라우저에서 다른 브라우저로 곧장 흐르며 서버에 저장되지 않습니다. 직접 경로를 만들 수 없을 때(한쪽에 엄격한 방화벽이나 NAT가 있을 때)만 릴레이로 폴백하는데, 그때도 릴레이는 암호문만 볼 뿐 파일 자체는 볼 수 없습니다.",
+        a: "중요한 의미에서는 P2P가 맞습니다. 파일은 브라우저에서 브라우저로 흐르며 서버에 저장되지 않습니다. 같은 네트워크에서는 두 브라우저가 서로 직접 연결됩니다. 네트워크를 넘는 페어링 코드 전송은 설계상 TURN 릴레이가 실어 나릅니다 — 직접 경로를 대개 막아버리는 방화벽과 NAT를 통과해 확실히 연결되는 경로입니다 — 하지만 그 릴레이는 오가는 암호문만 통과시킬 뿐, 읽을 수 있는 파일은 결코 보지 못합니다.",
       },
       {
         q: "양쪽 모두 계정이 필요한가요?",
@@ -310,11 +310,11 @@ const ko = {
       },
       {
         q: "서로 다른 네트워크나 나라를 넘나들어도 되나요?",
-        a: "네. 페어링 코드는 바로 이런 경우를 위한 것입니다. 같은 로컬 네트워크에 있지 않은 두 컴퓨터가 세상 어디에 있든 P2P로 직접 연결되며, 직접 경로가 불가능할 때만 암호화된 릴레이로 폴백합니다.",
+        a: "네. 페어링 코드는 바로 이런 경우를 위한 것입니다. 같은 로컬 네트워크에 있지 않은 두 컴퓨터가 세상 어디에 있든 연결됩니다. 그 경로는 직접 연결이 아니라 암호화된 TURN 릴레이를 지납니다 — NAT와 방화벽이 사이에 있을 때 확실히 닿는 길이며, 거의 반드시 시간 초과로 끝날 직접 연결 시도를 기다리지 않고 1~2초 만에 성립합니다.",
       },
       {
         q: "파일 크기나 개수에 제한이 있나요?",
-        a: "한 배치에 최대 1,000개의 파일을 보낼 수 있습니다. 서버가 강제하는 크기 상한은 없으며, 한계는 받는 쪽 브라우저가 감당할 수 있는 정도로 정해집니다. Chrome이나 Edge(디스크로 스트리밍)에서는 사실상 무제한이고, Firefox나 Safari(메모리 버퍼링)에서는 파일당 약 200MB 정도입니다.",
+        a: "한 배치에 최대 1,000개의 파일을 보낼 수 있습니다. 서버가 강제하는 크기 상한은 없으며, 한계는 받는 쪽 브라우저가 감당할 수 있는 정도로 정해집니다. 데스크톱 Chrome이나 Edge(디스크로 스트리밍)에서는 사실상 무제한이고, Firefox와 Safari는 묶음을 메모리에 담기 때문에 대략 256MB를 넘으면 Relayium이 경고합니다. 이 기준선은 고정된 천장이 아니라 보수적으로 잡은 값이며, 진짜 한계는 그 컴퓨터에 달려 있습니다.",
       },
     ],
   },
@@ -338,7 +338,7 @@ const de = {
     {
       heading: "Der direkte Weg: keine Cloud dazwischen",
       body: [
-        "Relayium läuft vollständig im Browser unter relayium.com. Es gibt nichts zu installieren, auf keinem der beiden Computer, und kein Drittanbieter-Speicher sitzt zwischen dir und dem Empfänger: Ist eine direkte Verbindung möglich, geht die Datei von einem Browser direkt zum anderen und wird nie auf einem Server abgelegt.",
+        "Relayium läuft vollständig im Browser unter relayium.com. Es gibt nichts zu installieren, auf keinem der beiden Computer, und kein Drittanbieter-Speicher sitzt zwischen dir und dem Empfänger: Die Datei geht von einem Browser zum anderen und wird nie auf einem Server abgelegt — auch dann nicht, wenn die beiden Netzwerke den Datenstrom über ein Relay zwingen, das die Bytes nur weiterreicht, ohne Kopie und ohne Schlüssel.",
         "Das zählt aus zwei Gründen: Geschwindigkeit (du wirst nicht durch das Upload-/Download-Kontingent einer anderen Person ausgebremst) und Privatsphäre (keine Kopie deiner Datei liegt auf den Servern eines Unternehmens und wartet darauf, angefordert, kompromittiert oder vergessen zu werden).",
       ],
     },
@@ -373,7 +373,7 @@ const de = {
       heading: "Wie viele Dateien, wie groß",
       body: [
         "Du kannst bis zu 1.000 Dateien in einem Stapel senden, inklusive Ordnerstruktur. Es gibt keine serverseitige Größenbegrenzung — die praktische Obergrenze setzt der empfangende Browser.",
-        "Chrome und Edge streamen eingehende Daten direkt auf die Festplatte, mehrere Gigabyte große Dateien sind also kein Problem. Firefox und Safari puffern die Datei stattdessen im Arbeitsspeicher, halte dort also eine einzelne Datei bei etwa 200 MB oder weniger. Jede Datei wird zudem per SHA-256-Hash Ende-zu-Ende geprüft, sodass du weißt, dass das Ankommende byteweise mit dem Gesendeten übereinstimmt.",
+        "Ein Browser mit der File System Access API — Chrome oder Edge auf dem Desktop — streamt eingehende Daten direkt auf die Festplatte, mehrere Gigabyte große Dateien sind also kein Problem. Firefox und Safari haben diese API nicht, dort sammelt sich ein empfangener Stapel im Arbeitsspeicher, und ab etwa 256 MB warnt Relayium dich, bevor du annimmst: eine bewusst vorsichtige Schätzung und keine gemessene Grenze, denn die tatsächliche Obergrenze hängt vom Arbeitsspeicher des Rechners, vom Betriebssystem und davon ab, was sonst offen ist. Jede Datei wird zudem per SHA-256-Hash Ende-zu-Ende geprüft, sodass du weißt, dass das Ankommende byteweise mit dem Gesendeten übereinstimmt.",
       ],
     },
   ],
@@ -382,7 +382,7 @@ const de = {
     items: [
       {
         q: "Ist es wirklich Peer-to-Peer, oder läuft die Datei über einen Server?",
-        a: "Ist eine direkte Verbindung möglich, wird die Datei direkt von einem Browser zum anderen gestreamt und nie auf einem Server gespeichert. Nur wenn kein direkter Weg zustande kommt (etwa eine strenge Firewall oder ein NAT auf einer Seite), weicht die Übertragung auf ein Relay aus — und selbst dann sieht das Relay ausschließlich verschlüsselten Chiffretext, nie die Datei selbst.",
+        a: "In dem Sinn, auf den es ankommt, ja: Die Datei wird von Browser zu Browser gestreamt und nie auf einem Server gespeichert. Im selben Netzwerk verbinden sich die beiden Browser direkt miteinander. Eine netzübergreifende Übertragung per Pairing-Code trägt planmäßig ein TURN-Relay — der verlässliche Weg durch die Firewalls und NATs, die einen direkten Pfad meist blockieren —, aber dieses Relay reicht im Betrieb nur verschlüsselten Chiffretext weiter, nie die lesbare Datei.",
       },
       {
         q: "Brauchen beide Seiten ein Konto?",
@@ -390,11 +390,11 @@ const de = {
       },
       {
         q: "Funktioniert das über verschiedene Netzwerke und Länder hinweg?",
-        a: "Ja. Genau dafür gibt es den Pairing-Code: Zwei Computer, die nicht im selben lokalen Netzwerk sind, verbinden sich direkt, Peer-to-Peer, egal wo auf der Welt sie sich befinden, und weichen nur dann auf ein verschlüsseltes Relay aus, wenn ein direkter Weg nicht möglich ist.",
+        a: "Ja. Genau dafür gibt es den Pairing-Code: Zwei Computer, die nicht im selben lokalen Netzwerk sind, egal wo auf der Welt sie stehen. Dieser Weg läuft über ein verschlüsseltes TURN-Relay statt über eine direkte Verbindung — er ist der, der zuverlässig zustande kommt, wenn NATs und Firewalls dazwischenstehen, und er steht in ein bis zwei Sekunden, statt auf Direktversuche zu warten, die fast immer zuerst in einen Timeout laufen.",
       },
       {
         q: "Gibt es eine Grenze bei Dateigröße oder -anzahl?",
-        a: "Du kannst bis zu 1.000 Dateien in einem einzigen Stapel senden. Es gibt keine vom Server erzwungene Größenbegrenzung — die Grenze setzt, was der empfangende Browser bewältigen kann: praktisch unbegrenzt in Chrome oder Edge (auf die Festplatte gestreamt) und rund 200 MB pro Datei in Firefox oder Safari (im Arbeitsspeicher gepuffert).",
+        a: "Du kannst bis zu 1.000 Dateien in einem einzigen Stapel senden. Es gibt keine vom Server erzwungene Größenbegrenzung — die Grenze setzt, was der empfangende Browser bewältigen kann: praktisch unbegrenzt in Chrome oder Edge auf dem Desktop (auf die Festplatte gestreamt), während Firefox und Safari den Stapel im Arbeitsspeicher halten, wo Relayium ab etwa 256 MB warnt. Dieser Schwellenwert ist eine vorsichtige Schätzung und keine harte Obergrenze; die echte hängt vom Rechner ab.",
       },
     ],
   },
@@ -418,7 +418,7 @@ const fr = {
     {
       heading: "La méthode directe : pas de cloud au milieu",
       body: [
-        "Relayium fonctionne entièrement dans le navigateur, sur relayium.com. Il n'y a rien à installer sur aucun des deux ordinateurs, et aucun stockage tiers ne s'interpose entre vous et le destinataire : quand une connexion directe est possible, le fichier va d'un navigateur à l'autre et n'est jamais écrit sur un serveur.",
+        "Relayium fonctionne entièrement dans le navigateur, sur relayium.com. Il n'y a rien à installer sur aucun des deux ordinateurs, et aucun stockage tiers ne s'interpose entre vous et le destinataire : le fichier va d'un navigateur à l'autre et n'est jamais écrit sur un serveur — pas même lorsque les deux réseaux obligent le flux à passer par un relais, qui se contente de faire suivre les octets, sans copie ni clé.",
         "Cela compte pour deux raisons : la vitesse (vous n'êtes pas bridé par le quota de téléversement/téléchargement de quelqu'un d'autre) et la confidentialité (aucune copie de votre fichier ne reste sur les serveurs d'une entreprise, en attente d'être réclamée, compromise ou oubliée).",
       ],
     },
@@ -453,7 +453,7 @@ const fr = {
       heading: "Combien de fichiers, et de quelle taille",
       body: [
         "Vous pouvez envoyer jusqu'à 1 000 fichiers en un seul lot, structure de dossiers comprise. Il n'y a aucune limite de taille côté serveur — le plafond pratique est fixé par le navigateur qui reçoit.",
-        "Chrome et Edge écrivent en flux les données entrantes directement sur le disque, donc des fichiers de plusieurs gigaoctets passent sans problème. Firefox et Safari mettent en revanche le fichier en mémoire tampon, alors sur ceux-ci gardez un fichier unique autour de 200 Mo ou moins. Chaque fichier est aussi vérifié de bout en bout par une empreinte SHA-256, pour que vous sachiez que ce qui arrive est identique, octet pour octet, à ce qui a été envoyé.",
+        "Un navigateur doté de l'API File System Access — Chrome ou Edge sur ordinateur — écrit en flux les données entrantes directement sur le disque, donc des fichiers de plusieurs gigaoctets passent sans problème. Firefox et Safari n'ont pas cette API : un lot reçu là est assemblé en mémoire, et Relayium vous prévient avant que vous acceptiez dès que l'on dépasse environ 256 Mo — une estimation volontairement prudente plutôt qu'une limite mesurée, le plafond réel dépendant de la mémoire de la machine, de son système et de ce qui est ouvert par ailleurs. Chaque fichier est aussi vérifié de bout en bout par une empreinte SHA-256, pour que vous sachiez que ce qui arrive est identique, octet pour octet, à ce qui a été envoyé.",
       ],
     },
   ],
@@ -462,7 +462,7 @@ const fr = {
     items: [
       {
         q: "Est-ce vraiment du pair-à-pair, ou le fichier passe-t-il par un serveur ?",
-        a: "Quand une connexion directe est possible, le fichier transite directement d'un navigateur à l'autre et n'est jamais stocké sur un serveur. C'est seulement quand aucune voie directe ne peut être établie (un pare-feu strict ou un NAT d'un côté) que le transfert bascule vers un relais — et même alors, le relais ne voit que du texte chiffré, jamais le fichier lui-même.",
+        a: "C'est du pair-à-pair au sens qui compte : le fichier transite d'un navigateur à l'autre et n'est jamais stocké sur un serveur. Sur le même réseau, les deux navigateurs se connectent directement l'un à l'autre. Entre réseaux, un transfert par code d'appairage est porté par un relais TURN, par conception — la voie qui aboutit de façon fiable à travers les pare-feux et les NAT qui bloquent d'ordinaire tout chemin direct — mais ce relais ne fait passer que du texte chiffré au vol, jamais le fichier lisible.",
       },
       {
         q: "Les deux personnes ont-elles besoin d'un compte ?",
@@ -470,11 +470,11 @@ const fr = {
       },
       {
         q: "Est-ce que ça marche entre réseaux et pays différents ?",
-        a: "Oui. Le code d'appairage existe précisément pour ce cas : deux ordinateurs qui ne sont pas sur le même réseau local se connectent directement, en pair-à-pair, où qu'ils se trouvent dans le monde, et ne basculent vers un relais chiffré que lorsqu'une voie directe est impossible.",
+        a: "Oui. Le code d'appairage existe précisément pour ce cas : deux ordinateurs qui ne sont pas sur le même réseau local, où qu'ils se trouvent dans le monde. Cette voie emprunte un relais TURN chiffré plutôt qu'une liaison directe — c'est elle qui aboutit de façon fiable quand des NAT et des pare-feux s'interposent, et elle s'établit en une ou deux secondes au lieu d'attendre des tentatives directes qui expireraient presque à coup sûr.",
       },
       {
         q: "Y a-t-il une limite de taille de fichier ou de nombre de fichiers ?",
-        a: "Vous pouvez envoyer jusqu'à 1 000 fichiers en un seul lot. Aucune limite de taille n'est imposée par le serveur — la limite dépend de ce que le navigateur qui reçoit peut gérer : pratiquement illimité dans Chrome ou Edge (écriture en flux sur le disque), et environ 200 Mo par fichier dans Firefox ou Safari (mise en mémoire tampon).",
+        a: "Vous pouvez envoyer jusqu'à 1 000 fichiers en un seul lot. Aucune limite de taille n'est imposée par le serveur — la limite dépend de ce que le navigateur qui reçoit peut gérer : pratiquement illimité dans Chrome ou Edge sur ordinateur (écriture en flux sur le disque), tandis que Firefox et Safari gardent le lot en mémoire, où Relayium prévient au-delà d'environ 256 Mo. Ce seuil est une estimation prudente, pas un plafond ferme ; le vrai dépend de la machine.",
       },
     ],
   },
@@ -498,7 +498,7 @@ const ar = {
     {
       heading: "النهج المباشر: لا سحابة في المنتصف",
       body: [
-        "يعمل Relayium بالكامل داخل المتصفح على relayium.com. لا شيء يُثبَّت على أي من الجهازين، ولا يقف أي تخزين تابع لطرف ثالث بينك وبين المُستقبِل: عندما يكون الاتصال المباشر ممكناً، ينتقل الملف من متصفح إلى آخر ولا يُكتب أبداً على أي خادم.",
+        "يعمل Relayium بالكامل داخل المتصفح على relayium.com. لا شيء يُثبَّت على أي من الجهازين، ولا يقف أي تخزين تابع لطرف ثالث بينك وبين المُستقبِل: ينتقل الملف من متصفح إلى آخر ولا يُكتب أبداً على أي خادم — ولا حتى حين تفرض الشبكتان مرور التدفق عبر مُرحِّل، فهو يمرّر البايتات فحسب، بلا نسخة وبلا مفتاح.",
         "هذا مهم لسببين: السرعة (لا تُقيَّد بحصة الرفع/التنزيل لدى شخص آخر) والخصوصية (لا توجد نسخة من ملفك على خوادم شركة ما تنتظر أن تُطلب أو تُخترق أو تُنسى).",
       ],
     },
@@ -533,7 +533,7 @@ const ar = {
       heading: "كم عدد الملفات، وما حجمها",
       body: [
         "يمكنك إرسال حتى 1000 ملف في دفعة واحدة، بما في ذلك بنية المجلدات. لا يوجد حد أقصى للحجم من جهة الخادم — السقف العملي يحدده متصفح الاستقبال.",
-        "يبث Chrome وEdge البيانات الواردة مباشرةً إلى القرص، لذا فالملفات التي تبلغ عدة غيغابايت لا مشكلة فيها. أما Firefox وSafari فيخزّنان الملف مؤقتاً في الذاكرة بدلاً من ذلك، لذا احتفظ على هذين بملف واحد بحجم نحو 200 ميغابايت أو أقل. كما يُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256، لتعرف أن ما يصل مطابق للمُرسَل بايتاً ببايت.",
+        "المتصفح الذي يدعم واجهة File System Access — ‏Chrome أو Edge على الحاسوب — يبثّ البيانات الواردة مباشرةً إلى القرص، لذا فالملفات التي تبلغ عدة غيغابايت لا مشكلة فيها. أما Firefox وSafari فلا تملكان تلك الواجهة، فتُجمَّع الدفعة المستلمة فيهما بالذاكرة، وينبّهك Relayium قبل القبول متى تجاوزت نحو 256 ميغابايت: تقدير متحفّظ عن قصد لا حدٌّ مقيس، إذ يتوقف السقف الحقيقي على ذاكرة الجهاز ونظامه وما هو مفتوح غير ذلك. كما يُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256، لتعرف أن ما يصل مطابق للمُرسَل بايتاً ببايت.",
       ],
     },
   ],
@@ -542,7 +542,7 @@ const ar = {
     items: [
       {
         q: "هل هو فعلاً من الند للند، أم يمرّ الملف عبر خادم؟",
-        a: "عندما يكون الاتصال المباشر ممكناً، يُبَث الملف مباشرةً من متصفح إلى آخر ولا يُخزَّن أبداً على أي خادم. فقط عندما يتعذر إنشاء مسار مباشر (جدار حماية أو NAT صارم على أحد الطرفين) يرجع إلى مُرحِّل — وحتى حينها لا يرى المُرحِّل سوى النص المُشفَّر، لا الملف نفسه أبداً.",
+        a: "هو من الند للند بالمعنى الذي يهم: يُبَث الملف من متصفح إلى آخر ولا يُخزَّن أبداً على أي خادم. على الشبكة نفسها يتصل المتصفحان ببعضهما مباشرةً. أما النقل عبر الشبكات برمز اقتران فيحمله مُرحِّل TURN بحكم التصميم — وهو المسار الذي ينجح بموثوقية عبر جدران الحماية وأنواع NAT التي تحجب المسار المباشر عادةً — لكن ذلك المُرحِّل لا يمرّر إلا نصاً مُشفَّراً أثناء العبور، ولا يرى الملف المقروء أبداً.",
       },
       {
         q: "هل يحتاج كلا الشخصين إلى حساب؟",
@@ -550,11 +550,11 @@ const ar = {
       },
       {
         q: "هل يعمل عبر شبكات وبلدان مختلفة؟",
-        a: "نعم. رمز الاقتران موجود تحديداً لهذه الحالة: جهازا كمبيوتر ليسا على نفس الشبكة المحلية يتصلان مباشرةً، من الند للند، أينما كان كل منهما في العالم، مع الرجوع إلى مُرحِّل مشفَّر فقط عندما يتعذر وجود مسار مباشر.",
+        a: "نعم. رمز الاقتران موجود تحديداً لهذه الحالة: جهازا كمبيوتر ليسا على نفس الشبكة المحلية، أينما كان كل منهما في العالم. وهذا المسار يمر عبر مُرحِّل TURN مشفَّر لا عبر وصلة مباشرة — فهو الذي ينجح بموثوقية حين تقف NAT وجدران الحماية في الطريق، ويقوم في ثانية أو ثانيتين بدل انتظار محاولات مباشرة تنتهي بالمهلة في الغالب الأعم.",
       },
       {
         q: "هل هناك حد لحجم الملف أو لعدد الملفات التي يمكنني إرسالها؟",
-        a: "يمكنك إرسال حتى 1000 ملف في دفعة واحدة. لا يفرض الخادم أي حد أقصى للحجم — الحد هو ما يستطيع متصفح الاستقبال التعامل معه: غير محدود عملياً في Chrome أو Edge (بثّاً إلى القرص)، ونحو 200 ميغابايت لكل ملف في Firefox أو Safari (تخزيناً مؤقتاً في الذاكرة).",
+        a: "يمكنك إرسال حتى 1000 ملف في دفعة واحدة. لا يفرض الخادم أي حد أقصى للحجم — الحد هو ما يستطيع متصفح الاستقبال التعامل معه: غير محدود عملياً في Chrome أو Edge على الحاسوب (بثّاً إلى القرص)، بينما يحتفظ Firefox وSafari بالدفعة في الذاكرة، وينبّهك Relayium فوق نحو 256 ميغابايت. وهذه العتبة تقدير متحفّظ لا سقف صارم؛ أما السقف الحقيقي فيتوقف على الجهاز نفسه.",
       },
     ],
   },
@@ -578,7 +578,7 @@ const es = {
     {
       heading: "El enfoque directo: sin nube en el medio",
       body: [
-        "Relayium funciona por completo en el navegador, en relayium.com. No hay nada que instalar en ninguna de las dos computadoras, y ningún almacenamiento de terceros se interpone entre tú y el destinatario: cuando es posible una conexión directa, el archivo va de un navegador al otro y nunca se escribe en un servidor.",
+        "Relayium funciona por completo en el navegador, en relayium.com. No hay nada que instalar en ninguna de las dos computadoras, y ningún almacenamiento de terceros se interpone entre tú y el destinatario: el archivo va de un navegador al otro y nunca se escribe en un servidor — ni siquiera cuando las dos redes obligan al flujo a pasar por un retransmisor, que se limita a reenviar los bytes, sin copia y sin clave.",
         "Eso importa por dos razones: velocidad (no te frena la cuota de subida/descarga de otra persona) y privacidad (no queda ninguna copia de tu archivo en los servidores de una empresa esperando a ser solicitada, filtrada u olvidada).",
       ],
     },
@@ -613,7 +613,7 @@ const es = {
       heading: "Cuántos archivos, y de qué tamaño",
       body: [
         "Puedes enviar hasta 1.000 archivos en un solo lote, incluida la estructura de carpetas. No hay límite de tamaño del lado del servidor — el tope práctico lo fija el navegador que recibe.",
-        "Chrome y Edge transmiten los datos entrantes directamente al disco, así que los archivos de varios gigabytes no son problema. Firefox y Safari, en cambio, almacenan el archivo en memoria, así que en esos conviene mantener un solo archivo en unos 200 MB o menos. Cada archivo también se verifica de extremo a extremo con un hash SHA-256, para que sepas que lo que llega es byte por byte lo que se envió.",
+        "Un navegador con la API File System Access — Chrome o Edge de escritorio — transmite los datos entrantes directamente al disco, así que los archivos de varios gigabytes no son problema. Firefox y Safari no tienen esa API, así que un lote recibido ahí se acumula en memoria y Relayium te avisa antes de que aceptes en cuanto se pasa de unos 256 MB: una estimación deliberadamente prudente y no un límite medido, ya que el techo real depende de la memoria de la máquina, de su sistema y de qué más esté abierto. Cada archivo también se verifica de extremo a extremo con un hash SHA-256, para que sepas que lo que llega es byte por byte lo que se envió.",
       ],
     },
   ],
@@ -622,7 +622,7 @@ const es = {
     items: [
       {
         q: "¿Es realmente de igual a igual, o el archivo pasa por un servidor?",
-        a: "Cuando es posible una conexión directa, el archivo se transmite directamente de un navegador al otro y nunca se almacena en un servidor. Solo cuando no se puede establecer una ruta directa (un cortafuegos o NAT estricto en un lado) recurre a un retransmisor — e incluso entonces el retransmisor solo ve texto cifrado, nunca el archivo en sí.",
+        a: "Es de igual a igual en el sentido que importa: el archivo se transmite de un navegador al otro y nunca se almacena en un servidor. En la misma red, los dos navegadores se conectan directamente entre sí. Una transferencia entre redes con código de emparejamiento la lleva un retransmisor TURN por diseño — la vía que conecta de forma fiable a través de los cortafuegos y NAT que suelen bloquear cualquier ruta directa — pero ese retransmisor solo deja pasar texto cifrado en tránsito, nunca el archivo legible.",
       },
       {
         q: "¿Ambas personas necesitan una cuenta?",
@@ -630,11 +630,11 @@ const es = {
       },
       {
         q: "¿Funciona entre redes y países distintos?",
-        a: "Sí. El código de emparejamiento existe precisamente para este caso: dos computadoras que no están en la misma red local se conectan directamente, de igual a igual, esté donde esté cada una en el mundo, y recurren a un retransmisor cifrado solo cuando no es posible una ruta directa.",
+        a: "Sí. El código de emparejamiento existe precisamente para este caso: dos computadoras que no están en la misma red local, esté donde esté cada una en el mundo. Esa vía va por un retransmisor TURN cifrado en lugar de un enlace directo — es la que conecta de forma fiable cuando hay NAT y cortafuegos de por medio, y se establece en uno o dos segundos en vez de esperar intentos directos que casi siempre acabarían agotando el tiempo.",
       },
       {
         q: "¿Hay un límite de tamaño de archivo o de cuántos archivos puedo enviar?",
-        a: "Puedes enviar hasta 1.000 archivos en un solo lote. No hay límite de tamaño impuesto por el servidor — el límite es lo que el navegador que recibe pueda manejar: prácticamente ilimitado en Chrome o Edge (transmitido al disco), y alrededor de 200 MB por archivo en Firefox o Safari (almacenado en memoria).",
+        a: "Puedes enviar hasta 1.000 archivos en un solo lote. No hay límite de tamaño impuesto por el servidor — el límite es lo que el navegador que recibe pueda manejar: prácticamente ilimitado en Chrome o Edge de escritorio (transmitido al disco), mientras que Firefox y Safari mantienen el lote en memoria, donde Relayium avisa por encima de unos 256 MB. Ese umbral es una estimación prudente, no un techo duro; el real depende de la máquina.",
       },
     ],
   },
@@ -658,7 +658,7 @@ const pt = {
     {
       heading: "A abordagem direta: sem nuvem no meio",
       body: [
-        "O Relayium roda inteiramente no navegador, em relayium.com. Não há nada para instalar em nenhum dos dois computadores, e nenhum armazenamento de terceiros fica entre você e o destinatário: quando uma conexão direta é possível, o arquivo vai de um navegador para o outro e nunca é gravado em um servidor.",
+        "O Relayium roda inteiramente no navegador, em relayium.com. Não há nada para instalar em nenhum dos dois computadores, e nenhum armazenamento de terceiros fica entre você e o destinatário: o arquivo vai de um navegador para o outro e nunca é gravado em um servidor — nem mesmo quando as duas redes obrigam o fluxo a passar por um retransmissor, que apenas repassa os bytes, sem cópia e sem chave.",
         "Isso importa por dois motivos: velocidade (você não fica limitado pela cota de upload/download de outra pessoa) e privacidade (nenhuma cópia do seu arquivo fica nos servidores de uma empresa esperando para ser solicitada, vazada ou esquecida).",
       ],
     },
@@ -693,7 +693,7 @@ const pt = {
       heading: "Quantos arquivos, e de que tamanho",
       body: [
         "Você pode enviar até 1.000 arquivos em um único lote, incluindo a estrutura de pastas. Não há limite de tamanho do lado do servidor — o teto prático é definido pelo navegador que recebe.",
-        "O Chrome e o Edge transmitem os dados recebidos direto para o disco, então arquivos de vários gigabytes não são problema. Já o Firefox e o Safari armazenam o arquivo na memória, então neles mantenha um único arquivo em cerca de 200 MB ou menos. Cada arquivo também é verificado de ponta a ponta com um hash SHA-256, para você saber que o que chega é, byte a byte, o que foi enviado.",
+        "Um navegador com a API File System Access — Chrome ou Edge no computador — transmite os dados recebidos direto para o disco, então arquivos de vários gigabytes não são problema. Firefox e Safari não têm essa API, então um lote recebido neles é montado na memória, e o Relayium avisa antes de você aceitar assim que passa de cerca de 256 MB: uma estimativa propositalmente conservadora, não um limite medido, já que o teto real depende da memória da máquina, do sistema e do que mais estiver aberto. Cada arquivo também é verificado de ponta a ponta com um hash SHA-256, para você saber que o que chega é, byte a byte, o que foi enviado.",
       ],
     },
   ],
@@ -702,7 +702,7 @@ const pt = {
     items: [
       {
         q: "É realmente ponto a ponto, ou o arquivo passa por um servidor?",
-        a: "Quando uma conexão direta é possível, o arquivo é transmitido direto de um navegador para o outro e nunca é armazenado em um servidor. Só quando não é possível estabelecer um caminho direto (um firewall ou NAT restrito de um lado) é que ele recorre a um retransmissor — e mesmo assim o retransmissor só vê texto cifrado, nunca o arquivo em si.",
+        a: "É ponto a ponto no sentido que importa: o arquivo é transmitido de um navegador para o outro e nunca é armazenado em um servidor. Na mesma rede, os dois navegadores se conectam diretamente um ao outro. Já uma transferência entre redes por código de emparelhamento é carregada por um retransmissor TURN, por projeto — o caminho que conecta de forma confiável através dos firewalls e NATs que costumam bloquear qualquer rota direta — mas esse retransmissor só deixa passar texto cifrado em trânsito, nunca o arquivo legível.",
       },
       {
         q: "As duas pessoas precisam de conta?",
@@ -710,11 +710,11 @@ const pt = {
       },
       {
         q: "Funciona entre redes e países diferentes?",
-        a: "Sim. O código de emparelhamento existe justamente para este caso: dois computadores que não estão na mesma rede local se conectam diretamente, ponto a ponto, onde quer que cada um esteja no mundo, recorrendo a um retransmissor criptografado apenas quando um caminho direto não é possível.",
+        a: "Sim. O código de emparelhamento existe justamente para este caso: dois computadores que não estão na mesma rede local, onde quer que cada um esteja no mundo. Esse caminho corre por um retransmissor TURN criptografado em vez de uma ligação direta — é o que conecta de forma confiável quando NATs e firewalls estão no meio, e sobe em um ou dois segundos em vez de esperar tentativas diretas que quase sempre acabariam em tempo esgotado.",
       },
       {
         q: "Há um limite de tamanho de arquivo ou de quantos arquivos posso enviar?",
-        a: "Você pode enviar até 1.000 arquivos em um único lote. Não há limite de tamanho imposto pelo servidor — o limite é o que o navegador que recebe consegue lidar: praticamente ilimitado no Chrome ou Edge (transmitido para o disco), e cerca de 200 MB por arquivo no Firefox ou Safari (armazenado na memória).",
+        a: "Você pode enviar até 1.000 arquivos em um único lote. Não há limite de tamanho imposto pelo servidor — o limite é o que o navegador que recebe consegue lidar: praticamente ilimitado no Chrome ou Edge de computador (transmitido para o disco), enquanto Firefox e Safari mantêm o lote na memória, onde o Relayium avisa acima de cerca de 256 MB. Esse limiar é uma estimativa conservadora, não um teto rígido; o real depende da máquina.",
       },
     ],
   },

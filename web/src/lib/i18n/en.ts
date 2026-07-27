@@ -184,7 +184,7 @@ const en: Messages = {
     freeTitle: "Always free",
     freeLead: "Move files at zero cost, forever:",
     free1: "Local network (LAN) transfers — instant, no account needed.",
-    free2: "Direct peer-to-peer transfers with the CLI — over your own SSH, daemon-direct, or a pairing code — with no account and nothing metered.",
+    free2: "Direct peer-to-peer transfers with the CLI — over your own SSH, daemon-direct, or a pairing code — with nothing metered. Only minting a send pairing code needs an account; receiving never does.",
     free3: "End-to-end encrypted, no file-size limits, and your files go straight between devices — they never touch our servers.",
     freeWhy: "Direct and LAN transfers cost us nothing, so they stay free for everyone — no sign-up needed to receive.",
     paidTitle: "What you pay for",
@@ -395,7 +395,7 @@ const en: Messages = {
     mode2Title: "send / receive — by pairing code",
     mode2Tag: "free · direct P2P",
     mode2Body:
-      "Send to another person across networks. Agree on a short code out of band (say it over a call — it's any short string), then one side sends and the other receives. The connection is direct peer-to-peer: only a small rendezvous handshake passes through Relayium to introduce the two ends — the file bytes never do. If both ends are behind strict NAT and can't connect directly, the transfer simply fails (the CLI has no relay). Both terminals print a 6-digit SAS code — compare them to rule out a man-in-the-middle (add --verify to require confirmation before any bytes move).",
+      "Send to another person across networks. Sign in once with relayium login, then run send with no code: the CLI mints a 6-character pairing code (drawn from an alphabet with no 0 or 1), good for 5 minutes, and prints the exact command the other end runs. Pass that code on out of band — say it over a call. You can't pick it yourself, the server only accepts codes it issued, and the receiver needs no account. Both ends must be the CLI; for someone with only a browser, use relayium up instead. The connection is direct peer-to-peer: only a small rendezvous handshake passes through Relayium to introduce the two ends — the file bytes never do. If both ends are behind strict NAT and can't connect directly, the transfer simply fails (the CLI has no relay). Both terminals print a 6-digit SAS code — compare them to rule out a man-in-the-middle (add --verify to require confirmation before any bytes move).",
     mode3Title: "daemon direct — server to server",
     mode3Tag: "free",
     mode3Body:
@@ -428,7 +428,7 @@ const en: Messages = {
       "Delete the cloud upload after a single download",
       "How long a cloud upload lives, e.g. 7d or 24h (capped by your plan)",
       "Allow a fixed number of cloud downloads, then delete",
-      "Point login / up / down at a self-hosted server",
+      "Point login / up / down / send / receive at a self-hosted server",
     ],
     trustH3: "Trust & identity files",
     trustIntro:
@@ -458,7 +458,7 @@ const en: Messages = {
     cloudH2: "Cloud — upload now, download later",
     cloudTag: "account · async",
     cloudIntro:
-      "Upload from one machine and download on another whenever you like — the two never need to be online at the same time. This is the only mode that uses your account, and only for uploading: run relayium login once, then up. Downloading needs no account. Everything else in the CLI stays no-login.",
+      "Upload from one machine and download on another whenever you like — the two never need to be online at the same time. up and send are the two commands that use your account: up to store the file, send to mint a pairing code — run relayium login once and both work. A send given a code you were handed mints nothing and needs no login. Downloading needs no account, and push/pull, daemon-direct and sync never do.",
     cloudBody:
       "up encrypts the files locally, uploads the ciphertext, and prints a claim link. Add a retention flag to control how long it lives (otherwise your account's default applies): --burn (one download), --ttl 7d (a fixed time, capped by your plan), or --max-downloads 5 (a fixed count). On the other machine, hand the link to down — no login needed.",
     cloudLoginNote:

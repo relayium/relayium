@@ -109,29 +109,29 @@ relayium push ./data relayium://backup-server:9031`,
 const zh = {
   title: "用 cron 任务自动化加密的服务器备份",
   description:
-    "在 cron 中定时运行 relayium push 或 sync,按计划自动把目录复制到另一台服务器——加密传输、支持断点续传、SHA-256 校验,而且完全免费。",
+    "在 cron 里定时运行 relayium push 或 sync，按计划自动把目录复制到另一台服务器——加密传输、支持断点续传、逐文件 SHA-256 校验，而且想跑多频繁都免费。",
   updatedLabel: "最近更新",
   lead: [
-    "需要你记得手动运行的备份,常常就不会发生。cron 会记得,而 Relayium CLI 正是为此而生:一条非交互式命令,把目录复制(或镜像)到另一台机器,校验每一个文件,并且在网络中断时从断点继续。",
-    "本文介绍如何用 cron 定时运行 relayium push 和增量的 relayium sync、两者都能使用的两种传输方式,以及可以直接复制使用的 crontab 行。",
+    "需要你记得手动运行的备份，往往就不会发生。cron 会记得，而 Relayium CLI 正是为此而生：一条非交互式命令，把目录复制（或镜像）到另一台机器，逐个校验文件，网络断了也能从断点接着传。",
+    "本文介绍如何用 cron 定时运行 relayium push 和增量的 relayium sync、两者共用的两种传输方式，以及可以直接抄走的 crontab 行。",
   ],
   sections: [
     {
-      heading: "push 与 sync:整体复制还是增量镜像",
+      heading: "push 与 sync：整体复制还是增量镜像",
       body: [
-        "push 和 sync 都能把一个目录传送到另一台机器,也都可以放心地反复运行,但它们解决的备份问题略有不同。",
-        "每次运行 push 都会通过 SSH 或 daemon-direct 发送一份完整拷贝——简单直接,即使远端服务器没装 relayium,也能靠 tar 兜底方案工作。sync 则把目标目录维护成源目录的增量单向镜像:只重新发送发生变化的文件,所以对一个大目录做第一次同步之后,后续的夜间同步会很快。sync 始终需要两端都用 relayium 的原生协议——它没有 tar 兜底方案。",
+        "push 和 sync 都能把一个目录送到另一台机器，也都可以放心地反复运行，但它们解决的备份问题略有不同。",
+        "每次运行 push 都会通过 SSH 或守护进程直连发送一份完整拷贝——简单直接，即使远端服务器没装 relayium，也能靠 tar 兜底方案工作。sync 则把目标目录维护成源目录的增量单向镜像：只重新发送发生变化的文件，所以一个大目录在首次同步之后，后续的每晚同步都会很快。sync 始终需要两端都用 relayium 的原生协议——它没有 tar 兜底方案。",
       ],
       bullets: [
-        "如果只是想做一次简单的定时复制,尤其是目标服务器可能没装 relayium,用 push。",
-        "如果目录很大或经常变化,每晚重新发送全部内容会很浪费,用 sync。",
-        "两者都会对每个文件做 SHA-256 校验,中断后也能续传。",
+        "只是想做一次简单的定时复制，尤其是目标服务器可能没装 relayium，就用 push。",
+        "目录很大或者经常变动，每晚重发全部内容太浪费，就用 sync。",
+        "两者都会逐文件做 SHA-256 校验，中断后也能续传。",
       ],
     },
     {
-      heading: "两种传输方式:SSH 或 daemon-direct",
+      heading: "两种传输方式：SSH 或守护进程直连",
       body: [
-        "两个命令都可以指向一个 SSH 目标(scp 风格,使用你的 ~/.ssh/config),也可以在对方机器运行着 relayium serve 时,直接通过 daemon-direct 协议连接过去——不需要 SSH。",
+        "两个命令都可以指向一个 SSH 目标（scp 风格，走你的 ~/.ssh/config）；如果对方机器正跑着 relayium serve，也可以用守护进程直连（daemon-direct）协议直接连过去——不需要 SSH。",
       ],
       code: [
         `# SSH destination — uses your existing SSH keys and config
@@ -141,14 +141,14 @@ relayium push ./data user@backup-server:/srv/backups/
 relayium push ./data relayium://backup-server:9031`,
       ],
       bullets: [
-        "daemon-direct 连接使用带证书锁定的 TLS 1.3,首次连接时信任(trust-on-first-use),之后的每次运行都会校验同一个指纹。",
-        "sync 接受和 push 相同的两种目标写法。",
+        "守护进程直连走的是带证书锁定的 TLS 1.3：首次连接时信任（trust-on-first-use），之后每次运行都校验同一个指纹。",
+        "sync 接受和 push 完全相同的两种目标写法。",
       ],
     },
     {
       heading: "用 cron 定时运行",
       body: [
-        "push 和 sync 都是单条非交互式命令,可以直接放进 crontab。给它指定一个没有口令的密钥(或者用 agent),并把输出记录下来以便查看失败:",
+        "push 和 sync 都是单条非交互式命令，可以直接放进 crontab。给它指定一个没有口令的密钥（或者用 agent），并把输出记下来，好让失败能被看见：",
       ],
       code: [
         `# full copy every night at 2am — add to your crontab (crontab -e)
@@ -158,19 +158,19 @@ relayium push ./data relayium://backup-server:9031`,
 */15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ >> ~/relayium-sync.log 2>&1`,
       ],
       bullets: [
-        "只要有文件未通过完整性校验,命令就会以非零状态退出,这样 cron 的失败邮件通知就能发现问题。",
-        "被中断的一次运行,会在下一次计划运行时自动续传或补上进度。",
+        "只要有文件没通过完整性校验，命令就会以非零状态退出，cron 的失败邮件通知就能发现问题。",
+        "被中断的一次运行，会在下一次计划运行时自动续传或补上进度。",
       ],
     },
     {
       heading: "镜像删除与实时同步",
       body: [
-        "默认情况下,sync 只会在目标端新增或更新文件。加上 --delete 就会变成真正的镜像,把源目录中已经不存在的文件也从目标端删除——接收端必须显式以 serve --allow-delete 方式监听,否则这些删除操作会被静默跳过,并在结果里报告为被拒绝。如果源目录解析不到任何文件,sync 也会直接拒绝执行 --delete,这样源路径写错也不会清空目标目录。",
-        "如果不想等 cron 的下一个执行时间点,--watch 会让 relayium sync 持续运行,一旦源目录下有文件变化,就会在片刻之后自动重新同步——是按计划轮询之外的一种轻量替代方案。",
+        "默认情况下，sync 只会在目标端新增或更新文件。加上 --delete 才会变成真正的镜像，把源目录里已经不存在的文件也从目标端删掉——接收端必须显式以 serve --allow-delete 监听，否则这些删除会被静默跳过，并在结果里报告为被拒绝。如果源目录解析不出任何文件，sync 还会直接拒绝执行 --delete，这样源路径写错也清空不了目标目录。",
+        "不想等 cron 的下一个执行点，就用 --watch：它会让 relayium sync 常驻运行，源目录下一有文件变动，片刻之后就自动重新同步——比按计划轮询更轻量。",
       ],
       bullets: [
-        "relayium sync ./data user@backup-server:/srv/backups/ --delete 会镜像删除操作(接收端需要 serve --allow-delete)。",
-        "relayium sync ./data user@backup-server:/srv/backups/ --watch 会持续运行,有变化就同步,而不是靠 cron 单次触发。",
+        "relayium sync ./data user@backup-server:/srv/backups/ --delete 会把删除也镜像过去（接收端需要 serve --allow-delete）。",
+        "relayium sync ./data user@backup-server:/srv/backups/ --watch 会常驻运行，一有变化就同步，而不是靠 cron 单次触发。",
       ],
     },
   ],
@@ -178,29 +178,29 @@ relayium push ./data relayium://backup-server:9031`,
     heading: "常见问题",
     items: [
       {
-        q: "备份服务器需要装 relayium 吗?",
-        a: "要看命令。push 不管远端有没有装都能用:装了 relayium 就用原生协议(断点续传 + 每个文件 SHA-256 校验);没装的话,push 会退回到通过 SSH 传输 tar 流,一台裸服务器也能用。sync 则始终需要远端有 relayium 的原生协议——sync 没有 tar 兜底方案,请先在远端装好它。",
+        q: "备份服务器需要装 relayium 吗？",
+        a: "要看用哪条命令。push 不管远端装没装都能用：装了就走原生协议（断点续传 + 逐文件 SHA-256 校验）；没装的话，push 会退回到通过 SSH 传输 tar 流，一台裸服务器也照样能收。sync 则始终需要远端有 relayium 的原生协议——它没有 tar 兜底方案，请先在远端装好。",
       },
       {
-        q: "备份会加密并校验吗?",
-        a: "会。每个文件都会做端到端的 SHA-256 校验,而通过 SSH 或 daemon-direct 推送时,字节已经受该连接自身的加密保护——不需要额外配置。",
+        q: "备份会加密并校验吗？",
+        a: "会。每个文件都会做端到端的 SHA-256 校验；而通过 SSH 或守护进程直连推送时，字节已经受该连接自身的加密保护——不需要额外配置什么。",
       },
       {
-        q: "如果 cron 任务在执行到一半时被中断会怎样?",
-        a: "只要两端都有 relayium,下一次计划运行就会续传未完成的文件,而不是重新发送全部内容。如果你想放弃续传、做一次干净的完整重发,加上 --no-resume 即可。",
+        q: "如果 cron 任务执行到一半被中断会怎样？",
+        a: "只要两端都有 relayium，下一次计划运行就会接着传没传完的文件，而不是重新发送全部内容。如果你想放弃续传、做一次干净的完整重发，加上 --no-resume 即可。",
       },
       {
-        q: "--delete 会不会不小心清空我的目标目录?",
-        a: "如果源目录里没有任何文件,sync 会直接拒绝执行 --delete;而且接收端必须以 serve --allow-delete 方式启动,删除操作才会真正生效——否则会被跳过,并把结果报告给你。",
+        q: "--delete 会不会不小心清空我的目标目录？",
+        a: "如果源目录里一个文件都没有，sync 会直接拒绝执行 --delete；而且接收端必须以 serve --allow-delete 启动，删除才会真正生效——否则会被跳过，并把结果报告给你。",
       },
       {
-        q: "需要账号吗,这个要收费吗?",
-        a: "不需要。CLI 完全免费,push、pull、sync 都不需要账号——传输走的是你自己的 SSH 连接或直接的 daemon 连接,不经过 Relayium 的服务器。",
+        q: "需要账号吗，这个要收费吗？",
+        a: "都不需要。CLI 完全免费，push、pull、sync 都不需要账号——传输走的是你自己的 SSH 连接，或者一条守护进程直连，不经过 Relayium 的服务器。",
       },
     ],
   },
   cta: {
-    text: "把备份放进一个你不用记得的日程里——加密传输、支持断点续传,而且免费。",
+    text: "把备份交给一个你不用记着的日程——加密传输、支持断点续传，而且免费。",
     button: "获取 CLI",
     href: "/cli",
   },

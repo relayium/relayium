@@ -76,41 +76,41 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>Pula os arquivos que já estão lá: um arquivo cuja cópia no receptor coincide em tamanho e hora de modificação não é enviado de novo.</li><li>Retoma arquivos parciais: se um arquivo foi transferido pela metade quando a conexão caiu, a próxima execução continua a partir do deslocamento de bytes já em disco em vez de reiniciá-lo.</li><li>Verifica cada arquivo: cada arquivo é verificado com SHA-256 de ponta a ponta, então se sabe que um espelho concluído está intacto.</li><li>Por causa disso, o comando é idempotente — executá-lo novamente só faz o trabalho que resta, que é exatamente o que permite a um laço de repetição concluir uma transferência enorme.</li></ul>
       <h2>Pré-requisitos</h2>
       <p>Instale relayium nos dois servidores (sync fala o protocolo nativo, então ele precisa estar presente em cada ponta):</p>
-      <pre><code># on BOTH servers
+      <pre><code># nos DOIS servidores
 curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>Este guia usa daemon direct (relayium://), então os dois servidores não precisam de acesso SSH entre si.</li><li>Abra a porta do listener (9031 por padrão) para o emissor no firewall ou grupo de segurança do receptor.</li></ul>
       <h2>Autorizar o emissor uma vez (no receptor)</h2>
       <p>O receptor aprova a máquina emissora uma vez; a aprovação é escrita em disco e permanece válida entre reinicializações, então você nunca a repete. Inicie o listener em um terminal e aponte --dir para o diretório pai — relayium sync /root/workspace reproduz workspace/... no receptor, então --dir /root deposita os arquivos em /root/workspace/.</p>
       <p>Na primeira conexão do emissor (próxima seção), serve mostra seu endereço e sua impressão digital e pede que você o aprove; responda y e ele é lembrado para sempre:</p>
-      <pre><code># on the RECEIVER (foreground, to approve interactively)
+      <pre><code># no RECEPTOR (em primeiro plano, para aprovar interativamente)
 relayium serve --dir /root --port 9031</code></pre>
-      <pre><code># on the RECEIVER, at the first connection:
+      <pre><code># no RECEPTOR, na primeira conexão:
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>Para uma configuração totalmente sem supervisão, pule o prompt: execute relayium id no emissor para imprimir sua impressão digital, e então relayium authorize &lt;impressão digital&gt; no receptor.</li><li>--dir é o pai da pasta que você está sincronizando, não a pasta em si — caso contrário os arquivos caem um nível fundo demais (por exemplo /root/workspace/workspace).</li></ul>
       <h2>Executar o listener em segundo plano (no receptor)</h2>
       <p>Uma vez autorizada a impressão digital, pare o serve em primeiro plano (Ctrl-C) e relance-o desacoplado para que sobreviva ao seu logout. Ele carrega a impressão digital salva e aceita o emissor em silêncio — sem prompt desta vez:</p>
-      <pre><code># on the RECEIVER
+      <pre><code># no RECEPTOR
 nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp;</code></pre>
       <ul><li>serve trata as conexões uma de cada vez e continua rodando, então está pronto para cada reconexão do laço de repetição abaixo.</li><li>Para uma caixa de entrada sempre ativa, execute-o sob systemd em vez disso (Restart=always, --config-dir /etc/relayium).</li></ul>
       <h2>Executar o sync em um laço de repetição sob tmux (no emissor)</h2>
       <p>Transferências longas são interrompidas: uma sessão caída, uma rede instável, uma reinicialização. A solução não é uma ferramenta sofisticada; é um laço que reexecuta sync até ter sucesso, mais um multiplexador de terminal para que sobreviva ao seu logout. Aqui o tmux é mais limpo que o nohup: não há redirecionamento de saída para errar, e você pode reconectar para acompanhar o progresso.</p>
       <p>Inicie uma sessão do tmux, depois execute o espelho em um laço until — ele tenta de novo a cada 10 segundos até que sync retorne sucesso, e então sai sozinho:</p>
-      <pre><code># on the SENDER
-tmux new -s xfer      # apt install -y tmux if it&#39;s missing</code></pre>
+      <pre><code># no EMISSOR
+tmux new -s xfer      # apt install -y tmux se estiver faltando</code></pre>
       <pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre>
       <ul><li>Desanexe com Ctrl-b e depois d; o laço continua rodando depois que você fecha o terminal. Reanexe com tmux attach -t xfer.</li><li>Cada tentativa faz menos: os arquivos já transferidos são pulados, um arquivo enviado pela metade é retomado — então o laço converge e termina.</li><li>O progresso imprime uma linha por arquivo concluído, então um arquivo grande é transferido em silêncio até terminar. O silêncio não é um travamento (veja solução de problemas).</li></ul>
       <h2>Verificar e finalizar</h2>
       <p>A transferência está completa quando o laço until termina e você volta a um prompt de shell normal. Confirme que os dois lados coincidem, depois pare o listener:</p>
-      <pre><code># compare totals on BOTH servers
+      <pre><code># compare os totais nos DOIS servidores
 du -sh /root/workspace</code></pre>
-      <pre><code># on the RECEIVER, once verified
+      <pre><code># no RECEPTOR, depois de verificado
 pkill -f &#39;relayium serve&#39;</code></pre>
       <ul><li>Cada arquivo foi verificado com SHA-256 na chegada, então tamanhos coincidentes mais uma saída limpa significam uma cópia intacta.</li></ul>
       <h2>Solução de problemas</h2>
       <p>Algumas coisas que parecem problemas mas normalmente não são — e a que normalmente é (uma porta bloqueada).</p>
-      <ul><li>A ausência de saída não é um travamento. O progresso só é impresso quando cada arquivo termina, então um arquivo grande é transferido em silêncio. Verifique o estado real no emissor com ss -tnp | grep 9031 — ESTAB significa que está conectado e transferindo; SYN-SENT significa que não consegue alcançar o listener.</li><li>SYN-SENT significa que a porta está bloqueada. Abra 9031/TCP para o emissor no receptor (grupo de segurança na nuvem, ou ufw allow 9031/tcp). Esta é a causa mais comum de uma transferência que nunca começa.</li><li>Prefira tmux mais um laço de uma única linha em vez de um nohup de várias linhas. Colar em uma shell um comando de várias linhas com aspas e um redirecionamento &gt; frequentemente quebra no redirecionamento ou deixa você em um prompt de continuação &gt;.</li><li>Ao limpar processos, faça uma correspondência precisa (pkill -f &#39;relayium sync&#39;), não pkill relayium — uma correspondência ampla pode matar um processo relayium não relacionado rodando na mesma máquina.</li><li>venv e outros diretórios regeneráveis valem a pena excluir. Um virtualenv de Python pode conter gigabytes de bibliotecas que o pip recria do outro lado; pulá-los economiza muita transferência.</li><li>Links simbólicos e arquivos especiais são pulados — sync transfere apenas arquivos regulares. Trate separadamente quaisquer links simbólicos importantes.</li></ul>
+      <ul><li>A ausência de saída não é um travamento. O progresso só é impresso quando cada arquivo termina, então um arquivo grande é transferido em silêncio. Verifique o estado real no emissor com ss -tnp | grep 9031 — ESTAB significa que está conectado e transferindo; SYN-SENT significa que não consegue alcançar o listener.</li><li>SYN-SENT significa que a porta está bloqueada. Abra 9031/TCP para o emissor no receptor (grupo de segurança na nuvem, ou ufw allow 9031/tcp). Esta é a causa mais comum de uma transferência que nunca começa.</li><li>Prefira tmux mais um laço de uma única linha em vez de um nohup de várias linhas. Colar em uma shell um comando de várias linhas com aspas e um redirecionamento &gt; frequentemente quebra no redirecionamento ou deixa você em um prompt de continuação &gt;.</li><li>Ao limpar processos, faça uma correspondência precisa (pkill -f &#39;relayium sync&#39;), não pkill relayium — uma correspondência ampla pode matar um processo relayium não relacionado rodando na mesma máquina.</li><li>Não existe opção de exclusão — em vez disso, escolha as origens. O sync aceita -i e -p (identidade e porta SSH), --delete, --watch e --config-dir, e nada que filtre um caminho no meio da árvore. Para deixar para trás um diretório regenerável como um virtualenv de Python, sincronize os subdiretórios que você realmente quer: o sync aceita várias origens de uma vez, e cada uma chega sob o --dir do receptor com o próprio nome. relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 contra serve --dir /root/workspace as reconstrói em /root/workspace/src e /root/workspace/data, e o venv nunca é percorrido.</li><li>Links simbólicos e arquivos especiais são pulados — sync transfere apenas arquivos regulares. Trate separadamente quaisquer links simbólicos importantes.</li></ul>
       <h2>Perguntas frequentes</h2>
       <h3>O que acontece se a transferência for interrompida no meio do caminho?</h3>
       <p>Nada se perde. Reexecute relayium sync — ele pula os arquivos que já estão no receptor e retoma um arquivo enviado pela metade a partir do deslocamento de bytes já em disco. O laço until deste guia faz isso automaticamente até que a pasta inteira seja espelhada.</p>

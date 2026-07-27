@@ -84,7 +84,7 @@ const zh = {
       },
       {
         q: "文件有大小限制吗？",
-        a: "实时直传采用流式传输，理论上没有硬性大小上限（Chrome、Edge 直接流式落盘；Firefox、Safari 在内存中缓冲，建议单文件不超过约 200 MB）。每批最多 1,000 个文件。",
+        a: "实时传输采用流式传输，Relayium 本身不设硬性大小上限（桌面版 Chrome、Edge 直接流式落盘；Firefox、Safari 以及所有手机浏览器只能把文件攒在内存里，因此超过约 256 MB 时页面会先给出提示——这是一个刻意保守的估计值，不是实测出来的硬上限）。每批最多 1,000 个文件。",
       },
       {
         q: "和 Snapdrop 有什么区别？",
@@ -178,7 +178,7 @@ const ja = {
       },
       {
         q: "ファイルサイズの制限はありますか？",
-        a: "リアルタイム直接転送はストリーミングのため、実用上のサイズ上限はありません（Chrome・Edgeはディスクへ直接ストリーミング、Firefox・Safariはメモリにバッファするため1ファイル約200MBまでを推奨）。1回につき最大1,000ファイルです。",
+        a: "リアルタイム転送はストリーミングのため、Relayium 側で決めた硬いサイズ上限はありません（デスクトップ版の Chrome・Edge はディスクへ直接ストリーミング。Firefox・Safari とすべてのモバイルブラウザはメモリ上で組み立てるため、およそ256MBを超えると事前に警告が出ます——これは実測した上限ではなく、意図的に控えめに置いた見積もりです）。1回につき最大1,000ファイルです。",
       },
       {
         q: "Snapdropとの違いは？",
@@ -272,7 +272,7 @@ const ko = {
       },
       {
         q: "파일 크기 제한이 있나요?",
-        a: "실시간 직접 전송은 스트리밍 방식이라 실질적인 크기 상한이 없습니다(Chrome·Edge는 디스크로 바로 스트리밍하고, Firefox·Safari는 메모리에 버퍼링하므로 파일당 약 200MB 이하를 권장). 한 번에 최대 1,000개 파일입니다.",
+        a: "실시간 전송은 스트리밍 방식이라 Relayium이 정한 크기 상한은 없습니다(데스크톱 Chrome·Edge는 디스크로 바로 스트리밍하고, Firefox·Safari와 모든 모바일 브라우저는 파일을 메모리에서 조립하므로 약 256MB를 넘으면 미리 경고가 표시됩니다 — 실측한 한계가 아니라 일부러 보수적으로 잡은 추정값입니다). 한 번에 최대 1,000개 파일입니다.",
       },
       {
         q: "Snapdrop과 무엇이 다른가요?",
@@ -366,7 +366,7 @@ const de = {
       },
       {
         q: "Gibt es eine Größenbeschränkung?",
-        a: "Die Echtzeit-Direktübertragung streamt die Daten, daher gibt es in der Praxis keine harte Größengrenze (Chrome und Edge streamen direkt auf die Festplatte; Firefox und Safari puffern im Speicher, daher werden ca. 200 MB pro Datei empfohlen). Maximal 1.000 Dateien pro Vorgang.",
+        a: "Die Echtzeitübertragung streamt die Daten, daher setzt Relayium keine harte Größengrenze (Chrome und Edge auf dem Desktop streamen direkt auf die Festplatte; Firefox, Safari und alle mobilen Browser setzen die Datei im Arbeitsspeicher zusammen, weshalb ab etwa 256 MB vorab gewarnt wird — ein bewusst konservativer Schätzwert, keine gemessene Obergrenze). Maximal 1.000 Dateien pro Vorgang.",
       },
       {
         q: "Was ist der Unterschied zu Snapdrop?",
@@ -460,7 +460,7 @@ const fr = {
       },
       {
         q: "Y a-t-il une limite de taille ?",
-        a: "Le transfert direct en temps réel diffuse les données en flux, il n'y a donc en pratique aucune limite stricte de taille (Chrome et Edge écrivent directement sur le disque ; Firefox et Safari mettent en mémoire tampon, environ 200 Mo par fichier sont conseillés). Jusqu'à 1 000 fichiers par lot.",
+        a: "Le transfert en temps réel diffuse les données en flux, Relayium n'impose donc aucune limite stricte de taille (Chrome et Edge sur ordinateur écrivent directement sur le disque ; Firefox, Safari et tous les navigateurs mobiles assemblent le fichier en mémoire, d'où un avertissement au-delà d'environ 256 Mo — un repère volontairement prudent, pas une limite mesurée). Jusqu'à 1 000 fichiers par lot.",
       },
       {
         q: "Quelle différence avec Snapdrop ?",
@@ -554,7 +554,7 @@ const ar = {
       },
       {
         q: "هل هناك حدّ للحجم؟",
-        a: "النقل المباشر الفوري يبثّ البيانات دفقًا، لذا لا يوجد عمليًا أي حدّ صارم للحجم (Chrome وEdge يبثّان مباشرةً إلى القرص؛ Firefox وSafari يخزّنان مؤقتًا في الذاكرة، لذا يُنصح بنحو 200 ميغابايت لكل ملف). حتى 1,000 ملف لكل دفعة.",
+        a: "النقل الفوري يبثّ البيانات دفقًا، لذا لا يفرض Relayium أي حدّ صارم للحجم (Chrome وEdge على سطح المكتب يبثّان مباشرةً إلى القرص؛ أما Firefox وSafari وجميع متصفحات الهاتف فتجمّع الملف في الذاكرة، ولذلك يظهر تحذير عند تجاوز نحو 256 ميغابايت — وهو تقدير متحفّظ عن قصد، لا حدّ مقيس). حتى 1,000 ملف لكل دفعة.",
       },
       {
         q: "ما الفرق عن Snapdrop؟",
@@ -648,7 +648,7 @@ const es = {
       },
       {
         q: "¿Hay un límite de tamaño?",
-        a: "La transferencia directa en tiempo real envía los datos en flujo, así que en la práctica no hay un límite estricto de tamaño (Chrome y Edge escriben directamente en el disco; Firefox y Safari almacenan en memoria, por lo que se recomiendan unos 200 MB por archivo). Hasta 1.000 archivos por lote.",
+        a: "La transferencia en tiempo real envía los datos en flujo, así que Relayium no impone ningún límite estricto de tamaño (Chrome y Edge de escritorio escriben directamente en el disco; Firefox, Safari y todos los navegadores móviles ensamblan el archivo en memoria, por lo que se avisa a partir de unos 256 MB — una estimación deliberadamente conservadora, no un límite medido). Hasta 1.000 archivos por lote.",
       },
       {
         q: "¿En qué se diferencia de Snapdrop?",
@@ -742,7 +742,7 @@ const pt = {
       },
       {
         q: "Há um limite de tamanho?",
-        a: "A transferência direta em tempo real envia os dados em fluxo, então na prática não há um limite rígido de tamanho (Chrome e Edge gravam direto no disco; Firefox e Safari armazenam em memória, por isso recomendam-se cerca de 200 MB por arquivo). Até 1.000 arquivos por lote.",
+        a: "A transferência em tempo real envia os dados em fluxo, então o Relayium não impõe nenhum limite rígido de tamanho (Chrome e Edge no desktop gravam direto no disco; Firefox, Safari e todos os navegadores móveis montam o arquivo na memória, por isso há um aviso acima de cerca de 256 MB — uma estimativa deliberadamente conservadora, não um limite medido). Até 1.000 arquivos por lote.",
       },
       {
         q: "Qual a diferença em relação ao Snapdrop?",

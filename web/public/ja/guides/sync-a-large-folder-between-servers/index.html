@@ -76,41 +76,41 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>すでにあるファイルはスキップ: 受信側のコピーがサイズと更新時刻で一致するファイルは再送しません。</li><li>途中のファイルを再開: 接続が切れたとき半分だけ送られていたファイルは、次回の実行でディスク上にすでにあるバイトオフセットから続行し、やり直しません。</li><li>各ファイルを検証: 各ファイルを端から端まで SHA-256 で検査するため、完了したミラーは完全だと分かります。</li><li>これらのおかげでコマンドは冪等です——もう一度実行しても残りの作業だけを行います。これこそがリトライループで巨大な転送を完了させる要点です。</li></ul>
       <h2>前提条件</h2>
       <p>両方のサーバーに relayium をインストールします(sync はネイティブプロトコルを話すため、各端に必要です):</p>
-      <pre><code># on BOTH servers
+      <pre><code># 両方のサーバーで
 curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>本ガイドはデーモン直結(relayium://)を使うため、2台のサーバー間に SSH アクセスは不要です。</li><li>受信側のファイアウォールまたはセキュリティグループで、リスナーのポート(既定 9031)を送信側に開放してください。</li></ul>
       <h2>送信側を一度だけ承認する(受信側)</h2>
       <p>受信側は送信側のマシンを一度だけ承認します。承認はディスクに書き込まれ、再起動をまたいでも有効なので繰り返す必要はありません。まずターミナルでリスナーをフォアグラウンド起動し、--dir を親ディレクトリに向けます——relayium sync /root/workspace は受信側で workspace/... を再現するので、--dir /root ならファイルは /root/workspace/ に着地します。</p>
       <p>送信側の初回接続時(次節)、serve はその住所とフィンガープリントを表示して承認を求めます。y と答えれば永続的に記憶されます:</p>
-      <pre><code># on the RECEIVER (foreground, to approve interactively)
+      <pre><code># 受信側で（フォアグラウンド、対話的に承認するため）
 relayium serve --dir /root --port 9031</code></pre>
-      <pre><code># on the RECEIVER, at the first connection:
+      <pre><code># 受信側で、初回接続時:
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>完全に無人にするならプロンプトを省けます: 送信側で relayium id を実行してフィンガープリントを表示し、受信側で relayium authorize &lt;フィンガープリント&gt; を実行します。</li><li>--dir は同期するフォルダーの親であって、フォルダー自体ではありません——さもないとファイルが1階層深く着地します(例: /root/workspace/workspace)。</li></ul>
       <h2>リスナーをバックグラウンドで動かす(受信側)</h2>
       <p>フィンガープリントを承認したら、フォアグラウンドの serve を止め(Ctrl-C)、ログアウト後も生き残るようデタッチして再起動します。保存済みのフィンガープリントを読み込み、送信側を確認なしで受け入れます——今回はプロンプトは出ません:</p>
-      <pre><code># on the RECEIVER
+      <pre><code># 受信側で
 nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp;</code></pre>
       <ul><li>serve は接続を1つずつ処理して動き続けるため、下のリトライループの再接続のたびに受信の準備ができています。</li><li>常時稼働の受信箱にするなら、代わりに systemd で動かします(Restart=always、--config-dir /etc/relayium)。</li></ul>
       <h2>tmux 内のリトライループで sync を回す(送信側)</h2>
       <p>長い転送は中断されます——セッション切断、不安定なネットワーク、再起動。解決策は高級なツールではなく、sync を成功するまで再実行するループと、ログアウト後も生き残らせる端末マルチプレクサです。ここでは tmux が nohup より扱いやすい: 間違えやすい出力リダイレクトがなく、再接続して進捗を見られます。</p>
       <p>tmux セッションを開始し、until ループでミラーを実行します——10秒ごとに再試行し、sync が成功を返したら自分で終了します:</p>
-      <pre><code># on the SENDER
-tmux new -s xfer      # apt install -y tmux if it&#39;s missing</code></pre>
+      <pre><code># 送信側で
+tmux new -s xfer      # tmux が無ければ apt install -y tmux</code></pre>
       <pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre>
       <ul><li>Ctrl-b の次に d でデタッチ。ターミナルを閉じてもループは動き続けます。tmux attach -t xfer で再接続します。</li><li>再試行のたびに作業は減ります: 転送済みのファイルはスキップされ、半分送ったファイルは再開する——だからループは収束して終わります。</li><li>進捗はファイルが1つ完了するごとに1行表示されるので、大きなファイルは完了まで静かに転送されます。無音は停止ではありません(トラブルシューティング参照)。</li></ul>
       <h2>検証と仕上げ</h2>
       <p>until ループが終わり、通常のシェルプロンプトに戻ったら転送は完了です。両側が一致することを確認してから、リスナーを停止します:</p>
-      <pre><code># compare totals on BOTH servers
+      <pre><code># 両方のサーバーで合計を比較
 du -sh /root/workspace</code></pre>
-      <pre><code># on the RECEIVER, once verified
+      <pre><code># 受信側で、確認できたら
 pkill -f &#39;relayium serve&#39;</code></pre>
       <ul><li>各ファイルは到着時に SHA-256 で検査済みなので、サイズの一致とクリーンな終了は複製が完全であることを意味します。</li></ul>
       <h2>トラブルシューティング</h2>
       <p>問題に見えて多くの場合そうでないこと——そして多くの場合本当に問題であること(ポートの遮断)を挙げます。</p>
-      <ul><li>無音は停止ではありません。進捗は各ファイルが完了したときだけ表示されるので、大きなファイルは静かに転送されます。送信側で ss -tnp | grep 9031 を使って実際の状態を確認します——ESTAB は接続して転送中、SYN-SENT はリスナーに届いていないことを意味します。</li><li>SYN-SENT はポートが遮断されている印です。受信側で送信側に向けて 9031/TCP を開放します(クラウドのセキュリティグループ、または ufw allow 9031/tcp)。「転送がいつまでも始まらない」最も一般的な原因です。</li><li>複数行の nohup より、tmux と1行のループを優先します。引用符と &gt; リダイレクトを含む複数行コマンドをシェルに貼り付けると、リダイレクトで壊れたり、&gt; の継続プロンプトで止まったりしがちです。</li><li>プロセスを片付けるときは正確に一致させます(pkill -f &#39;relayium sync&#39;)。pkill relayium ではありません——広い一致は同じマシンで動く無関係な relayium プロセスを巻き込みかねません。</li><li>venv などの再生成可能なディレクトリは除外する価値があります。Python の仮想環境は数 GB のライブラリを抱えることがあり、対向側で pip が作り直せます。除けば転送を大きく節約できます。</li><li>シンボリックリンクと特殊ファイルはスキップされます——sync が転送するのは通常ファイルだけです。重要なシンボリックリンクは別途扱ってください。</li></ul>
+      <ul><li>無音は停止ではありません。進捗は各ファイルが完了したときだけ表示されるので、大きなファイルは静かに転送されます。送信側で ss -tnp | grep 9031 を使って実際の状態を確認します——ESTAB は接続して転送中、SYN-SENT はリスナーに届いていないことを意味します。</li><li>SYN-SENT はポートが遮断されている印です。受信側で送信側に向けて 9031/TCP を開放します(クラウドのセキュリティグループ、または ufw allow 9031/tcp)。「転送がいつまでも始まらない」最も一般的な原因です。</li><li>複数行の nohup より、tmux と1行のループを優先します。引用符と &gt; リダイレクトを含む複数行コマンドをシェルに貼り付けると、リダイレクトで壊れたり、&gt; の継続プロンプトで止まったりしがちです。</li><li>プロセスを片付けるときは正確に一致させます(pkill -f &#39;relayium sync&#39;)。pkill relayium ではありません——広い一致は同じマシンで動く無関係な relayium プロセスを巻き込みかねません。</li><li>除外フラグはありません。代わりにソースを指定してください。sync が取るのは -i と -p(SSH の鍵とポート)、--delete、--watch、--config-dir だけで、ツリーの途中のパスを絞り込む手段はありません。Python の仮想環境のような再生成可能なディレクトリを置いていくには、本当に欲しいサブディレクトリを同期します: sync は複数のソースを一度に受け取り、それぞれが自分の名前で受信側の --dir の下に届きます。relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 を serve --dir /root/workspace に対して実行すれば /root/workspace/src と /root/workspace/data に復元され、venv は一度も走査されません。</li><li>シンボリックリンクと特殊ファイルはスキップされます——sync が転送するのは通常ファイルだけです。重要なシンボリックリンクは別途扱ってください。</li></ul>
       <h2>よくある質問</h2>
       <h3>転送が途中で中断されたらどうなりますか?</h3>
       <p>何も失われません。relayium sync を再実行してください——受信側にすでにあるファイルはスキップし、半分送ったファイルはディスク上のバイトオフセットから再開します。本ガイドの until ループが、フォルダー全体がミラーされるまでこれを自動で行います。</p>

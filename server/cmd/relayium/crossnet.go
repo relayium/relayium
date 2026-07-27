@@ -3,14 +3,19 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/relayium/relayium/internal/connect"
 	"github.com/relayium/relayium/internal/rzvous"
 	"github.com/relayium/relayium/internal/secure"
+	"github.com/relayium/relayium/internal/signal"
 	"github.com/relayium/relayium/internal/xfer"
 )
 
@@ -83,18 +88,55 @@ func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr i
 	return tconn, nil
 }
 
+// splitSendArgs separates the source paths from an optional trailing pairing
+// code. An empty code means "mint one".
+//
+// The last argument is a code iff it does NOT exist on disk and IS shaped like
+// a code. Both halves matter: shape alone would eat the second file of
+// `send a.zip b.zip`, and the disk check alone would misread a file genuinely
+// named "K7M4XR". When it is neither, guessing either way produces a wrong and
+// confusing error ("no such file: 726122" for a mistyped code, "not a valid
+// code" for a mistyped filename), so name both readings instead.
+func splitSendArgs(args []string) (srcs []string, code string, err error) {
+	if len(args) == 0 {
+		return nil, "", fmt.Errorf("send needs <src...> [code]")
+	}
+	last := args[len(args)-1]
+	// Only a genuine "does not exist" makes the last argument a candidate code.
+	// A bare `statErr == nil` check would read EVERY stat failure as absence, so
+	// a real file under a directory we lack +x on (or any I/O error) would be
+	// silently reinterpreted as a pairing code — the user gets a rendezvous
+	// failure instead of the permission error that actually stopped them. When
+	// we cannot tell, keep treating it as a source and let BuildManifest report
+	// the real reason.
+	if _, statErr := os.Stat(last); !errors.Is(statErr, fs.ErrNotExist) {
+		return args, "", nil // a real file (or an unreadable one) wins over a code-shaped name
+	}
+	if len(args) == 1 {
+		return args, "", nil // a lone argument is a source; BuildManifest reports it missing
+	}
+	if signal.ValidCodeFormat(last) {
+		return args[:len(args)-1], last, nil
+	}
+	return nil, "", fmt.Errorf(
+		"last argument %q is neither an existing file nor a pairing code\n"+
+			"  codes are %d characters from %s, and last %d minutes\n"+
+			"  to mint one automatically, leave it out:  relayium send %s",
+		last, signal.CodeLen, signal.CodeAlphabet, signal.CodeTTLSeconds/60,
+		strings.Join(args[:len(args)-1], " "))
+}
+
 func runSendCross(args []string, stdout, stderr io.Writer) int {
 	f, rest, err := parseCrossFlags(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	if len(rest) < 2 {
-		fmt.Fprintln(stderr, "send needs <src...> <code>")
+	srcs, code, err := splitSendArgs(rest)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	code := rest[len(rest)-1]
-	srcs := rest[:len(rest)-1]
 	m, paths, err := xfer.BuildManifest(srcs)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -103,6 +145,15 @@ func runSendCross(args []string, stdout, stderr io.Writer) int {
 	xfer.WarnIfEmpty(m, stderr)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	// Mint only after the sources check out: a code starts its expiry clock
+	// (signal.CodeTTLSeconds) the moment it is minted, and burning one on a
+	// typo'd path wastes it.
+	if code == "" {
+		if code, err = mintCode(ctx, f.server, stderr); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
 	conn, err := crossnetConn(ctx, code, "sender", f, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)

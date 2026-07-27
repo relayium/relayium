@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>QR コードをスキャンしてファイルを転送する · Relayium</title>
-    <meta name="description" content="Relayium で QR コードをスキャンしてファイルを送る方法。ペアリングコードを作成し、表示された QR をスキャンするだけで、直接かつエンドツーエンド暗号化された転送が始まります。スキャンする側はアプリもアカウントも不要です。" />
+    <meta name="description" content="Relayium で QR コードをスキャンしてファイルを送る方法。ペアリングコードを作成し、表示された QR をスキャンするだけで、全区間エンドツーエンド暗号化された転送が始まります。スキャンする側はアプリもアカウントも不要です。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/how-to/transfer-files-by-scanning-a-qr-code/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/transfer-files-by-scanning-a-qr-code/" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="QR コードをスキャンしてファイルを転送する" />
-    <meta property="og:description" content="Relayium で QR コードをスキャンしてファイルを送る方法。ペアリングコードを作成し、表示された QR をスキャンするだけで、直接かつエンドツーエンド暗号化された転送が始まります。スキャンする側はアプリもアカウントも不要です。" />
+    <meta property="og:description" content="Relayium で QR コードをスキャンしてファイルを送る方法。ペアリングコードを作成し、表示された QR をスキャンするだけで、全区間エンドツーエンド暗号化された転送が始まります。スキャンする側はアプリもアカウントも不要です。" />
     <meta property="og:url" content="https://relayium.com/ja/how-to/transfer-files-by-scanning-a-qr-code/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="ja_JP" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="QR コードをスキャンしてファイルを転送する" />
-    <meta name="twitter:description" content="Relayium で QR コードをスキャンしてファイルを送る方法。ペアリングコードを作成し、表示された QR をスキャンするだけで、直接かつエンドツーエンド暗号化された転送が始まります。スキャンする側はアプリもアカウントも不要です。" />
+    <meta name="twitter:description" content="Relayium で QR コードをスキャンしてファイルを送る方法。ペアリングコードを作成し、表示された QR をスキャンするだけで、全区間エンドツーエンド暗号化された転送が始まります。スキャンする側はアプリもアカウントも不要です。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"QR コードをスキャンしてファイルを転送する","description":"Relayium で QR コードをスキャンしてファイルを送る方法。ペアリングコードを作成し、表示された QR をスキャンするだけで、直接かつエンドツーエンド暗号化された転送が始まります。スキャンする側はアプリもアカウントも不要です。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-07-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/transfer-files-by-scanning-a-qr-code/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"QR コードをスキャンする側にも Relayium のアカウントが必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。ペアリングコードとその QR コードを作成するのは送信側だけがサインインすれば済みます。スキャンする側はすでに作られたルームに参加するだけで、アカウントもサインアップも、インストールするものも何もありません。"}},{"@type":"Question","name":"QR コードには実際には何が入っていますか？","acceptedAnswer":{"@type":"Answer","text":"「リンクをコピー」ボタンでコピーされるのと同じ参加リンクです——ペアリングコードが埋め込まれた relayium.com の URL です。スキャンするとブラウザでそのリンクが開き、自動的にルームに参加します。"}},{"@type":"Question","name":"QR コードのスキャンはコードを入力するのと同じくらい安全ですか？","acceptedAnswer":{"@type":"Answer","text":"はい、どちらの方法でも接続はまったく同一です。両端末は依然として X25519 鍵交換をネゴシエートし、AES-256-GCM で暗号化し、転送を信頼する前に確認すべき一致した SAS 検証コードを表示します。QR コードが変えるのはルームへの入り方だけで、転送の安全性は変わりません。"}},{"@type":"Question","name":"QR コードがスキャンできない場合は？","acceptedAnswer":{"@type":"Answer","text":"何も失われません——同じペアリングカードに生のコードとコピー可能なリンクが表示され、対応端末では共有シートのボタンもあります。どれを使っても QR コードと同じルームに入れます。"}},{"@type":"Question","name":"スマホがモバイル通信、PC が自宅 Wi-Fi のように、異なるネットワーク間でも使えますか？","acceptedAnswer":{"@type":"Answer","text":"はい。これはもともとネットワークをまたぐペアリング方式なので、2台が同じネットワークであってもなくても動作します。可能なときは Relayium が直接接続し、直接経路が取れないときだけ暗号化されたリレーにフォールバックします。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"QR コードをスキャンしてファイルを転送する","description":"Relayium で QR コードをスキャンしてファイルを送る方法。ペアリングコードを作成し、表示された QR をスキャンするだけで、全区間エンドツーエンド暗号化された転送が始まります。スキャンする側はアプリもアカウントも不要です。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-07-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/transfer-files-by-scanning-a-qr-code/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"QR コードをスキャンする側にも Relayium のアカウントが必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。ペアリングコードとその QR コードを作成するのは送信側だけがサインインすれば済みます。スキャンする側はすでに作られたルームに参加するだけで、アカウントもサインアップも、インストールするものも何もありません。"}},{"@type":"Question","name":"QR コードには実際には何が入っていますか？","acceptedAnswer":{"@type":"Answer","text":"「リンクをコピー」ボタンでコピーされるのと同じ参加リンクです——ペアリングコードが埋め込まれた relayium.com の URL です。スキャンするとブラウザでそのリンクが開き、自動的にルームに参加します。"}},{"@type":"Question","name":"QR コードのスキャンはコードを入力するのと同じくらい安全ですか？","acceptedAnswer":{"@type":"Answer","text":"はい、どちらの方法でも接続はまったく同一です。両端末は依然として X25519 鍵交換をネゴシエートし、AES-256-GCM で暗号化し、転送を信頼する前に確認すべき一致した SAS 検証コードを表示します。QR コードが変えるのはルームへの入り方だけで、転送の安全性は変わりません。"}},{"@type":"Question","name":"QR コードがスキャンできない場合は？","acceptedAnswer":{"@type":"Answer","text":"何も失われません——同じペアリングカードに生のコードとコピー可能なリンクが表示され、対応端末では共有シートのボタンもあります。どれを使っても QR コードと同じルームに入れます。"}},{"@type":"Question","name":"スマホがモバイル通信、PC が自宅 Wi-Fi のように、異なるネットワーク間でも使えますか？","acceptedAnswer":{"@type":"Answer","text":"はい。これはもともとネットワークをまたぐペアリング方式なので、2台が同じネットワークであってもなくても動作します。ペアリングコードでの接続は常に暗号化された TURN リレーを経由します——NAT の都合で直接接続がまず通らないネットワーク同士でも確実につながる経路で、リレーが運ぶのは暗号文だけです。直接つながるのは、コードなしで互いを見つけ合う同一ネットワークの場合です。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -73,16 +73,16 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="lead">これはネットワークをまたぐ転送方式で、同じ Wi-Fi でも、地球の反対側同士でも動作します。QR コードはこの方式への近道にすぎません——スキャンが不便なら、その下にあるコードやリンクもまったく同じように使えます。</p>
       <h2>コードを作ると QR も表示される</h2>
       <p>送信側の端末で relayium.com を開いてサインインします——ペアリングコードの作成は、Relayium が唯一アカウントを求める場面です。コードは誰かに帰属している必要があるからです。ファイル、フォルダを選ぶか、ファイルなしでまず接続だけ済ませることもできます。</p>
-      <p>Relayium は短い数字コードを発行し、その隣に QR コードを描画します。QR コードは何か新しい情報を含んでいるわけではなく、「リンクをコピー」ボタンで得られるのと同じ参加リンクを、テキストではなくスキャン可能な四角形として表示しているだけです。そのリンクを開いた人は、そのままペアリングルームに入ります。</p>
+      <p>Relayium は短いペアリングコードを発行し、その隣に QR コードを描画します。コードは、紛らわしい字形をすべて除いた文字セットから選ばれた6文字で、0 と O も 1 と I も含まれません。有効期間は5分で、切れたら新しいものを発行し直します。QR コードは何か新しい情報を含んでいるわけではなく、「リンクをコピー」ボタンで得られるのと同じ参加リンクを、テキストではなくスキャン可能な四角形として表示しているだけです。そのリンクを開いた人は、そのままペアリングルームに入ります。</p>
       <h2>スキャンするだけ——アプリもアカウントも不要</h2>
       <p>もう一方の端末でカメラアプリ（または任意の QR スキャナー）を開き、画面に向けます。表示された通知をタップするとブラウザでリンクが開き、自動的にルームに参加します——スキャンする側は入力も relayium.com のアカウントも不要で、インストールするものも何もありません。</p>
       <p>カメラが使えない場合も、同じリンクを任意のブラウザに貼り付ければ使えますし、6文字のコードを relayium.com の「コードを入力」欄に打ち込んでも同様に使えます。QR コードはこの両方の上に重ねられた利便性にすぎず、別の仕組みではありません——その場でやりやすい方を選んでください。</p>
       <h2>スキャン後に起きること</h2>
-      <p>スキャンは2台の端末を同じルームに入れるだけで、転送そのものは他のペアリングコードのセッションと変わりません。両端末は直接の P2P 接続をネゴシエートし、X25519 鍵交換で共有鍵を導出したうえで、各チャンクを AES-256-GCM で暗号化します。</p>
-      <p>両方の画面に同じ短い検証コード（SAS）が表示されるので、両方を見比べて一致を確認してから接続を信頼してください——これが、間に悪意あるリレーが入り込んでいないかを見抜く方法です。2つのネットワーク間で直接経路が取れない場合、暗号化ストリームは TURN リレーにフォールバックしますが、リレーが見るのは常に暗号文だけで、ファイルの中身を見ることはありません。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証され、接続が切れても最初からではなく再開できます。</p>
+      <p>スキャンは2台の端末を同じルームに入れるだけで、転送そのものは他のペアリングコードのセッションと変わりません。両端末は X25519 鍵交換で共有鍵を導出し、各チャンクを AES-256-GCM で暗号化したうえで、TURN リレー上に張られた WebRTC チャネルで送り出します。</p>
+      <p>両方の画面に同じ6桁の検証コード（SAS）が表示されるので、両方を見比べて一致を確認してから接続を信頼してください——これが、間に悪意あるリレーが入り込んでいないかを見抜く方法です。ペアリングコードによる転送は、まず直接経路を探すのではなく必ずこのリレー経由で行われます。ネットワークをまたぐ場合、直接経路はそもそも存在しないことがほとんどで、探しに行けば接続確立が20秒ほど止まったあげく結局リレーに落ち着くからです。リレーが転送するのは暗号文だけで、鍵を持たないためファイルの中身を見ることはありません。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証され、接続が切れても最初からではなく再開できます。</p>
       <h2>スキャンできないときは</h2>
       <p>カメラのピントが合わない、照明が悪い、あるいは片方の端末にそもそもカメラがない——そうした事情で転送が止まる必要はありません。送信側のペアリングカードには、生のコードとリンクをコピーするボタン（対応端末では共有シートのボタンも）に加えて、コードの失効までのカウントダウンも表示されます。</p>
-      <p>コードを打ち直す、リンクを貼り付ける、あるいは共有シートで別の方法（チャットや AirDrop など、いちばん速いもの）で送る——どの経路をたどっても同じルームに入り、同じ直接かつ暗号化された接続が得られます。QR コードは複数ある入口の一つにすぎず、必須ではありません。</p>
+      <p>コードを打ち直す、リンクを貼り付ける、あるいは共有シートで別の方法（チャットや AirDrop など、いちばん速いもの）で送る——どの経路をたどっても同じルームに入り、同じ暗号化された接続が得られます。QR コードは複数ある入口の一つにすぎず、必須ではありません。</p>
       <h2>よくある質問</h2>
       <h3>QR コードをスキャンする側にも Relayium のアカウントが必要ですか？</h3>
       <p>いいえ。ペアリングコードとその QR コードを作成するのは送信側だけがサインインすれば済みます。スキャンする側はすでに作られたルームに参加するだけで、アカウントもサインアップも、インストールするものも何もありません。</p>
@@ -93,7 +93,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>QR コードがスキャンできない場合は？</h3>
       <p>何も失われません——同じペアリングカードに生のコードとコピー可能なリンクが表示され、対応端末では共有シートのボタンもあります。どれを使っても QR コードと同じルームに入れます。</p>
       <h3>スマホがモバイル通信、PC が自宅 Wi-Fi のように、異なるネットワーク間でも使えますか？</h3>
-      <p>はい。これはもともとネットワークをまたぐペアリング方式なので、2台が同じネットワークであってもなくても動作します。可能なときは Relayium が直接接続し、直接経路が取れないときだけ暗号化されたリレーにフォールバックします。</p>
+      <p>はい。これはもともとネットワークをまたぐペアリング方式なので、2台が同じネットワークであってもなくても動作します。ペアリングコードでの接続は常に暗号化された TURN リレーを経由します——NAT の都合で直接接続がまず通らないネットワーク同士でも確実につながる経路で、リレーが運ぶのは暗号文だけです。直接つながるのは、コードなしで互いを見つけ合う同一ネットワークの場合です。</p>
       <div class="ctacard">
         <p>Relayium を開いてコードを作成し、別の端末で QR コードのスキャンを試してみてください——スキャンする側はアプリもアカウントも不要です。</p>
         <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>

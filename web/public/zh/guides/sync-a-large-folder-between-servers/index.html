@@ -76,41 +76,41 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>跳过已存在的文件：接收方上大小和修改时间都一致的文件不会重复发送。</li><li>续传半截文件：如果某个文件在连接断开时只传了一半，下次运行会从磁盘上已有的字节偏移继续，而不是重新传。</li><li>校验每个文件：每个文件都做端到端的 SHA-256 校验，因此完成的镜像可以确认是完整的。</li><li>正因如此，这条命令是幂等的——再跑一次只做剩下的活，这正是重试循环能完成一次超大传输的关键。</li></ul>
       <h2>前提条件</h2>
       <p>两端服务器都要装 relayium（sync 走原生协议，因此每一端都必须有）：</p>
-      <pre><code># on BOTH servers
+      <pre><code># 两台服务器上都执行
 curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>本指南用守护进程直连（relayium://），所以两台服务器之间不需要 SSH 互访。</li><li>在接收方的防火墙或安全组上，向发送方开放监听端口（默认 9031）。</li></ul>
       <h2>把发送方授权一次（在接收方）</h2>
       <p>接收方对发送的那台机器授权一次；授权会写入磁盘并在重启之间保持有效，因此你无需重复。先在终端里前台启动监听端，并把 --dir 指向父目录——relayium sync /root/workspace 会在接收方重建出 workspace/...，所以 --dir /root 会把文件落到 /root/workspace/。</p>
       <p>当发送方首次连接时（见下一节），serve 会显示它的地址和指纹并请你批准；回答 y，它就会被永久记住：</p>
-      <pre><code># on the RECEIVER (foreground, to approve interactively)
+      <pre><code># 在接收方（前台运行，以便交互式批准）
 relayium serve --dir /root --port 9031</code></pre>
-      <pre><code># on the RECEIVER, at the first connection:
+      <pre><code># 在接收方，首次连接时：
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>若要完全无人值守，可跳过提示：在发送方运行 relayium id 打印其指纹，再在接收方运行 relayium authorize &lt;指纹&gt;。</li><li>--dir 是你要同步的文件夹的父目录，而不是文件夹本身——否则文件会多落一层（例如 /root/workspace/workspace）。</li></ul>
       <h2>让监听端在后台运行（在接收方）</h2>
       <p>指纹授权之后，停掉前台的 serve（Ctrl-C），再以脱离终端的方式重新启动，让它在你退出登录后依然存活。它会读回已保存的指纹并静默接受发送方——这次不再提示：</p>
-      <pre><code># on the RECEIVER
+      <pre><code># 在接收方
 nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp;</code></pre>
       <ul><li>serve 一次处理一个连接并持续运行，因此下面重试循环的每次重连它都准备好接收。</li><li>若要做常驻收件箱，改用 systemd 运行（Restart=always，--config-dir /etc/relayium）。</li></ul>
       <h2>在 tmux 里用重试循环运行 sync（在发送方）</h2>
       <p>长时间的传输总会被打断——会话断开、网络抖动、机器重启。解决办法不是什么高级工具，而是一个把 sync 反复重跑到成功为止的循环，再加一个终端复用器让它在你退出登录后存活。这里 tmux 比 nohup 更省心：没有容易写错的输出重定向，而且可以重新接入查看进度。</p>
       <p>开一个 tmux 会话，然后在 until 循环里运行镜像——它每 10 秒重试一次，直到 sync 成功返回，然后自己退出：</p>
-      <pre><code># on the SENDER
-tmux new -s xfer      # apt install -y tmux if it&#39;s missing</code></pre>
+      <pre><code># 在发送方
+tmux new -s xfer      # 没有 tmux 就 apt install -y tmux</code></pre>
       <pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre>
       <ul><li>按 Ctrl-b 再按 d 脱离；关掉终端后循环仍在跑。用 tmux attach -t xfer 重新接入。</li><li>每次重试做的活都更少：已传完的文件被跳过，传了一半的文件续传——所以循环会收敛并结束。</li><li>进度是每传完一个文件打印一行，因此一个大文件会安静地传到完成为止。没有输出不代表卡住（见排错）。</li></ul>
       <h2>验证与收尾</h2>
       <p>当 until 循环结束、你回到普通的 shell 提示符时，传输就完成了。确认两边一致，然后停掉监听端：</p>
-      <pre><code># compare totals on BOTH servers
+      <pre><code># 在两台服务器上比较总量
 du -sh /root/workspace</code></pre>
-      <pre><code># on the RECEIVER, once verified
+      <pre><code># 在接收方，确认无误后
 pkill -f &#39;relayium serve&#39;</code></pre>
       <ul><li>每个文件到达时都做过 SHA-256 校验，所以大小一致再加上干净退出，就意味着副本是完整的。</li></ul>
       <h2>排错</h2>
       <p>有几件事看起来像问题，但通常并不是——以及一个通常确实是问题的（端口被挡）。</p>
-      <ul><li>没有输出不代表卡住。进度只在每个文件传完时才打印，因此一个大文件会安静地传。用 ss -tnp | grep 9031 在发送方查看真实状态——ESTAB 表示已连上并在传；SYN-SENT 表示连不上监听端。</li><li>SYN-SENT 表示端口被挡。在接收方向发送方开放 9031/TCP（云安全组，或 ufw allow 9031/tcp）。这是「传输迟迟不开始」最常见的原因。</li><li>优先用 tmux 加单行循环，而不是多行 nohup。把带引号和 &gt; 重定向的多行命令粘进 shell，常常会在重定向处出错，或让你停在 &gt; 续行提示符上。</li><li>清理进程时要精确匹配（pkill -f &#39;relayium sync&#39;），而不是 pkill relayium——宽泛匹配可能误杀同一台机器上无关的 relayium 进程。</li><li>venv 等可再生目录值得排除。一个 Python 虚拟环境可能装着几个 GB 的库，这些在对端 pip 就能重建；跳过它们能省下大量传输。</li><li>符号链接和特殊文件会被跳过——sync 只传常规文件。重要的软链请单独处理。</li></ul>
+      <ul><li>没有输出不代表卡住。进度只在每个文件传完时才打印，因此一个大文件会安静地传。用 ss -tnp | grep 9031 在发送方查看真实状态——ESTAB 表示已连上并在传；SYN-SENT 表示连不上监听端。</li><li>SYN-SENT 表示端口被挡。在接收方向发送方开放 9031/TCP（云安全组，或 ufw allow 9031/tcp）。这是「传输迟迟不开始」最常见的原因。</li><li>优先用 tmux 加单行循环，而不是多行 nohup。把带引号和 &gt; 重定向的多行命令粘进 shell，常常会在重定向处出错，或让你停在 &gt; 续行提示符上。</li><li>清理进程时要精确匹配（pkill -f &#39;relayium sync&#39;），而不是 pkill relayium——宽泛匹配可能误杀同一台机器上无关的 relayium 进程。</li><li>没有排除参数，所以要靠指定源目录来控制范围。sync 只接受 -i 和 -p（SSH 身份文件与端口）、--delete、--watch 和 --config-dir——没有任何能在目录树中间过滤某个路径的选项。想跳过 Python 虚拟环境这类可再生目录，就直接同步你真正需要的子目录：sync 一次可以接受多个源，每个源都会以自己的名字落到接收方的 --dir 下面。用 relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 配合 serve --dir /root/workspace，它们会被还原到 /root/workspace/src 和 /root/workspace/data，而 venv 根本不会被遍历。</li><li>符号链接和特殊文件会被跳过——sync 只传常规文件。重要的软链请单独处理。</li></ul>
       <h2>常见问题</h2>
       <h3>传到一半被打断会怎样？</h3>
       <p>什么都不会丢。重新运行 relayium sync——它会跳过接收方已有的文件，并把传了一半的文件从磁盘上已有的字节偏移续传。本指南里的 until 循环会自动做这件事，直到整个文件夹镜像完成。</p>
@@ -127,7 +127,7 @@ pkill -f &#39;relayium serve&#39;</code></pre>
         <a class="cta" href="/cli">获取 CLI</a>
       </div>
       <h2>继续阅读</h2>
-      <ul class="related"><li><a href="/zh/compare/snapdrop/">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop/">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer/">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone/">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud/">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal/">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh/">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone/">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers/">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/push-to-cloud-pull-on-another-computer/">在一台电脑上传到云端，在另一台电脑取回</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link/">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium/">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/compare/croc/">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files/">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive/">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/rsync/">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/compare/firefox-send/">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/">扫描二维码传输文件</a></li><li><a href="/zh/guides/receive-files-from-the-command-line/">在命令行接收文件</a></li><li><a href="/zh/how-to/send-a-folder/">如何直接发送整个文件夹，而不只是文件</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service/">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/how-to/automate-server-backups/">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/compare/localsend/">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/compare/scp/">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/compare/magic-wormhole/">Relayium 对比 magic-wormhole：命令行文件传输</a></li><li><a href="/zh/compare/nextcloud/">Relayium 对比 Nextcloud：发送文件该选谁</a></li><li><a href="/zh/compare/dropbox/">Relayium 对比 Dropbox：发送单个文件更直接</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android/">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows/">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi/">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/guides/what-is-peer-to-peer-file-transfer/">什么是点对点（P2P）文件传输？</a></li><li><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">在网上发送文件到底安全吗?</a></li><li><a href="/zh/guides/bring-your-own-node/">自建节点：免费使用 Relayium 的中转与存储</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <ul class="related"><li><a href="/zh/compare/snapdrop/">Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</a></li><li><a href="/zh/compare/airdrop/">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/compare/wetransfer/">Relayium 对比 WeTransfer：不经服务器传大文件</a></li><li><a href="/zh/how-to/transfer-files-android-to-iphone/">如何把文件从安卓传到 iPhone（无需数据线）</a></li><li><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/">电脑无线传文件到手机：不用数据线，不用装 App</a></li><li><a href="/zh/how-to/send-large-files-without-cloud/">如何不用网盘传输大文件</a></li><li><a href="/zh/guides/transfer-files-from-terminal/">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh/">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/guides/send-a-file-to-someone/">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/server-to-server-transfers/">用 Relayium CLI 实现服务器到服务器直传（守护进程直连）</a></li><li><a href="/zh/guides/push-to-cloud-pull-on-another-computer/">在一台电脑上传到云端，在另一台电脑取回</a></li><li><a href="/zh/how-to/share-a-file-with-an-expiring-link/">用会过期的安全链接分享文件</a></li><li><a href="/zh/guides/self-host-relayium/">自托管 Relayium：运行属于你自己的文件传输服务器</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/compare/croc/">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files/">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/compare/google-drive/">Relayium 对比 Google Drive：发送文件更直接</a></li><li><a href="/zh/compare/rsync/">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/compare/firefox-send/">2026 年最佳 Firefox Send 替代品</a></li><li><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/">扫描二维码传输文件</a></li><li><a href="/zh/guides/receive-files-from-the-command-line/">在命令行接收文件</a></li><li><a href="/zh/how-to/send-a-folder/">如何直接发送整个文件夹，而不只是文件</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service/">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/how-to/automate-server-backups/">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/compare/localsend/">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/compare/scp/">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/compare/magic-wormhole/">Relayium 对比 magic-wormhole：命令行文件传输</a></li><li><a href="/zh/compare/nextcloud/">Relayium 对比 Nextcloud：发送文件该选谁</a></li><li><a href="/zh/compare/dropbox/">Relayium 对比 Dropbox：发送单个文件更直接</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android/">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows/">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi/">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/guides/what-is-peer-to-peer-file-transfer/">什么是点对点（P2P）文件传输？</a></li><li><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">在网上发送文件到底安全吗？</a></li><li><a href="/zh/guides/bring-your-own-node/">自建节点：免费使用 Relayium 的中转与存储</a></li><li><a href="/zh/">Relayium</a></li></ul>
       <footer>
         <a href="/?lang=zh">← Relayium</a>
         <a href="/zh/apps/">应用</a>

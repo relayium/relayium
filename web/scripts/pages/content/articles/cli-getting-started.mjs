@@ -6,7 +6,7 @@
 const en = {
   title: "Transfer files from the terminal with the Relayium CLI",
   description:
-    "Install the free, end-to-end-encrypted Relayium CLI and move files three ways from your terminal — over your own SSH, by a pairing code across networks, or straight between two servers. No account, and file bytes never pass through our servers.",
+    "Install the free, end-to-end-encrypted Relayium CLI and move files three ways from your terminal — over your own SSH, by a pairing code across networks, or straight between two servers. Free, and file bytes never pass through our servers — and sending by pairing code needs an account, to mint the code.",
   updatedLabel: "Last updated",
   lead: [
     "The Relayium CLI is a single small binary that moves files from your terminal — encrypted end to end, self-hostable, and completely free. It exists for the case a browser handles badly: copying files to a server you already run, pushing a build between two machines, or sending an archive to a colleague across networks without uploading it to anyone's cloud.",
@@ -32,7 +32,7 @@ const en = {
       ],
       bullets: [
         "push / pull — to a server you can already SSH into. Bytes travel over your SSH connection; no Relayium account.",
-        "send / receive — to another person across networks, using a short pairing code. Direct peer-to-peer; if a direct path can't be found the transfer fails rather than routing through us.",
+        "send / receive — to another person across networks, using a short pairing code the sender's CLI mints (sign in once with relayium login; the receiver never does). Direct peer-to-peer; if a direct path can't be found the transfer fails rather than routing through us.",
         "serve + push relayium:// (daemon direct) — straight between two servers you own, over pinned TLS. No relay, no SSH, no code.",
       ],
     },
@@ -51,7 +51,7 @@ const en = {
     {
       heading: "Free, and private by design",
       body: [
-        "There is nothing to pay and no account to keep. The CLI connects the two ends directly, so your files are never uploaded to a server in the middle — the only thing that ever touches Relayium is a tiny rendezvous handshake in send / receive mode, used to introduce the two ends, never the file itself.",
+        "There is nothing to pay. Of the three ways above, the only sign-in is the sender's in send / receive mode, so its CLI can mint a pairing code (cloud up uses your account too, to store the file). The CLI connects the two ends directly, so your files are never uploaded to a server in the middle — the only thing that ever touches Relayium is a tiny rendezvous handshake in send / receive mode, used to introduce the two ends, never the file itself.",
         "Every transfer is encrypted end to end, every file is verified with a SHA-256 hash on arrival, and an interrupted transfer resumes from where it stopped instead of starting over. It runs on macOS, Linux and Windows, and the whole thing is open source and self-hostable.",
       ],
     },
@@ -65,7 +65,7 @@ const en = {
       },
       {
         q: "Do I need a Relayium account?",
-        a: "No. push / pull uses your own SSH, daemon direct uses public-key trust between your servers, and send / receive uses a code you agree on out of band. None of them require an account.",
+        a: "To send, and for cloud up. push / pull uses your own SSH and daemon direct uses public-key trust between your servers, so neither needs an account. send is different: only the server can mint a pairing code, and only for a signed-in account, so the sender runs relayium login once — a send given a code you were handed mints nothing and needs no login. The receiver never signs in.",
       },
       {
         q: "Which operating systems are supported?",
@@ -78,7 +78,7 @@ const en = {
     ],
   },
   cta: {
-    text: "Install the Relayium CLI and make your first transfer — completely free, and no account.",
+    text: "Install the Relayium CLI and make your first transfer — completely free.",
     button: "Get the CLI",
     href: "/cli",
   },
@@ -88,7 +88,7 @@ const en = {
 const zh = {
   title: "用 Relayium CLI 从终端传输文件",
   description:
-    "安装免费、端到端加密的 Relayium CLI，从终端以三种方式传输文件——通过你自己的 SSH、跨网络使用配对码，或直接在两台服务器之间传输。无需账号，文件字节从不经过我们的服务器。",
+    "安装免费、端到端加密的 Relayium CLI，从终端以三种方式传输文件——通过你自己的 SSH、跨网络使用配对码，或直接在两台服务器之间传输。免费，文件字节从不经过我们的服务器——用配对码发送需要账号，用来生成这个码。",
   updatedLabel: "最近更新",
   lead: [
     "Relayium CLI 是一个体积很小的单一二进制文件，用来从终端传输文件——端到端加密、可自托管、完全免费。它解决的正是浏览器难以胜任的场景：把文件复制到你已经在运行的服务器、在两台机器之间推送一次构建产物，或者跨网络把一个压缩包发给同事而不上传到任何人的网盘。",
@@ -114,7 +114,7 @@ const zh = {
       ],
       bullets: [
         "push / pull——传到一台你已能 SSH 进去的服务器。字节走你的 SSH 连接；无需 Relayium 账号。",
-        "send / receive——跨网络传给另一个人，使用一个简短的配对码。直连点对点；如果找不到直连路径，传输会直接失败，而不会经我们中转。",
+        "send / receive——跨网络传给另一个人，使用一个由发送方 CLI 生成的简短配对码（用 relayium login 登录一次即可；接收方无需登录）。直连点对点；如果找不到直连路径，传输会直接失败，而不会经我们中转。",
         "serve + push relayium://（daemon direct）——直接在你拥有的两台服务器之间传输，通过锁定的 TLS。无中继、无 SSH、无需配对码。",
       ],
     },
@@ -133,7 +133,7 @@ const zh = {
     {
       heading: "免费，且从设计上保护隐私",
       body: [
-        "没有任何费用，也不用保留账号。CLI 直接连接两端，因此你的文件永远不会上传到中间的服务器——唯一会接触 Relayium 的，是 send / receive 模式下一次很小的会合握手，用来撮合两端，绝不是文件本身。",
+        "没有任何费用。上面三种方式里，唯一需要登录的是 send / receive 模式下的发送方，好让 CLI 生成配对码（云端 up 也会用到你的账号，用来存文件）。CLI 直接连接两端，因此你的文件永远不会上传到中间的服务器——唯一会接触 Relayium 的，是 send / receive 模式下一次很小的会合握手，用来撮合两端，绝不是文件本身。",
         "每次传输都端到端加密，每个文件到达时都会用 SHA-256 哈希校验，中断的传输会从断点续传而不是从头再来。它可在 macOS、Linux 和 Windows 上运行，整个项目开源、可自托管。",
       ],
     },
@@ -147,7 +147,7 @@ const zh = {
       },
       {
         q: "需要 Relayium 账号吗？",
-        a: "不需要。push / pull 用你自己的 SSH，daemon direct 在你的服务器之间使用公钥信任，send / receive 用你们线下约定的配对码。三者都不需要账号。",
+        a: "send 需要，云端 up 也需要。push / pull 用你自己的 SSH，daemon direct 在你的服务器之间使用公钥信任，这两者都不需要账号。send 不一样：配对码只能由服务器签发，而且只签发给已登录的账号，所以发送方要先运行一次 relayium login——如果用的是别人给你的码，则不需要登录。接收方始终无需登录。",
       },
       {
         q: "支持哪些操作系统？",
@@ -160,7 +160,7 @@ const zh = {
     ],
   },
   cta: {
-    text: "安装 Relayium CLI，完成你的第一次传输——完全免费，也无需账号。",
+    text: "安装 Relayium CLI，完成你的第一次传输——完全免费。",
     button: "获取 CLI",
     href: "/cli",
   },
@@ -170,7 +170,7 @@ const zh = {
 const ja = {
   title: "Relayium CLI でターミナルからファイルを転送する",
   description:
-    "無料でエンドツーエンド暗号化された Relayium CLI をインストールし、ターミナルから3つの方法でファイルを移動しましょう——自分の SSH 経由、ネットワークをまたぐペアリングコード、または2台のサーバー間の直接転送。アカウント不要で、ファイルのバイトが私たちのサーバーを通過することはありません。",
+    "無料でエンドツーエンド暗号化された Relayium CLI をインストールし、ターミナルから3つの方法でファイルを移動しましょう——自分の SSH 経由、ネットワークをまたぐペアリングコード、または2台のサーバー間の直接転送。無料で、ファイルのバイトが私たちのサーバーを通過することはありません——ペアリングコードで送るにはコード発行のためのアカウントが必要です。",
   updatedLabel: "最終更新",
   lead: [
     "Relayium CLI はターミナルからファイルを転送する、小さな単一バイナリです——エンドツーエンドで暗号化され、セルフホスト可能で、完全に無料です。ブラウザではうまく扱えない場面のために存在します。すでに運用しているサーバーへのファイルコピー、2台のマシン間でのビルド成果物のプッシュ、あるいはネットワークをまたいで同僚にアーカイブを送る際、誰のクラウドにもアップロードせずに済みます。",
@@ -196,7 +196,7 @@ const ja = {
       ],
       bullets: [
         "push / pull——すでに SSH でログインできるサーバーへ。バイトは SSH 接続上を流れます。Relayium アカウントは不要です。",
-        "send / receive——短いペアリングコードを使って、ネットワークをまたいで他の人へ。直接の P2P です。直接経路が見つからない場合、転送は私たちを経由する代わりに、そのまま失敗します。",
+        "send / receive——送信側の CLI が発行する短いペアリングコードを使って、ネットワークをまたいで他の人へ（relayium login で一度サインインするだけ。受信側は不要です）。直接の P2P です。直接経路が見つからない場合、転送は私たちを経由する代わりに、そのまま失敗します。",
         "serve + push relayium://（daemon direct）——自分が所有する2台のサーバー間で、ピン留めされた TLS 上を直接。リレーなし、SSH なし、コードなし。",
       ],
     },
@@ -215,7 +215,7 @@ const ja = {
     {
       heading: "無料、そして設計上プライベート",
       body: [
-        "支払うものは何もなく、保持するアカウントもありません。CLI は両端を直接つなぐため、ファイルが中間のサーバーにアップロードされることは決してありません——Relayium が触れるのは、send / receive モードでの小さなランデブーハンドシェイクだけで、両端を引き合わせるために使われ、ファイル自体は決して含まれません。",
+        "支払うものは何もありません。上記の3つの方法のうちサインインが要るのは send / receive モードの送信側だけで、CLI がペアリングコードを発行できるようにするためです（クラウドの up もファイルを保存するためにアカウントを使います）。CLI は両端を直接つなぐため、ファイルが中間のサーバーにアップロードされることは決してありません——Relayium が触れるのは、send / receive モードでの小さなランデブーハンドシェイクだけで、両端を引き合わせるために使われ、ファイル自体は決して含まれません。",
         "すべての転送はエンドツーエンドで暗号化され、すべてのファイルは到着時に SHA-256 ハッシュで検証され、中断した転送は最初からやり直すのではなく、止まった所から再開します。macOS、Linux、Windows で動作し、全体がオープンソースでセルフホスト可能です。",
       ],
     },
@@ -229,7 +229,7 @@ const ja = {
       },
       {
         q: "Relayium アカウントは必要ですか？",
-        a: "いいえ。push / pull は自分の SSH を使い、daemon direct はサーバー間の公開鍵による信頼を使い、send / receive は事前に合意したコードを使います。いずれもアカウントは不要です。",
+        a: "send と、クラウドの up で必要です。push / pull は自分の SSH を使い、daemon direct はサーバー間の公開鍵による信頼を使うので、どちらもアカウントは不要です。send は違います。ペアリングコードを発行できるのはサーバーだけで、しかもサインイン済みのアカウントに対してだけなので、送信側は一度 relayium login を実行します。渡されたコードを使う send は発行を行わないので不要です。受信側がサインインすることはありません。",
       },
       {
         q: "どのオペレーティングシステムに対応していますか？",
@@ -242,7 +242,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "Relayium CLI をインストールして最初の転送をしましょう——完全無料で、アカウントも不要です。",
+    text: "Relayium CLI をインストールして最初の転送をしましょう——完全無料です。",
     button: "CLI を入手",
     href: "/cli",
   },
@@ -252,7 +252,7 @@ const ja = {
 const ko = {
   title: "Relayium CLI로 터미널에서 파일 전송하기",
   description:
-    "무료로 종단간 암호화된 Relayium CLI를 설치하고, 터미널에서 세 가지 방식으로 파일을 옮기세요 — 자신의 SSH를 통해, 네트워크를 넘어 페어링 코드로, 또는 두 서버 사이에서 직접. 계정이 필요 없고, 파일 데이터는 절대 저희 서버를 거치지 않습니다.",
+    "무료로 종단간 암호화된 Relayium CLI를 설치하고, 터미널에서 세 가지 방식으로 파일을 옮기세요 — 자신의 SSH를 통해, 네트워크를 넘어 페어링 코드로, 또는 두 서버 사이에서 직접. 무료이고 파일 데이터는 절대 저희 서버를 거치지 않습니다 — 페어링 코드로 보내려면 코드 발급을 위한 계정이 필요합니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
     "Relayium CLI는 터미널에서 파일을 옮기는 작고 단일한 바이너리입니다 — 종단간 암호화되고, 자체 호스팅이 가능하며, 완전히 무료입니다. 브라우저가 잘 처리하지 못하는 상황을 위해 존재합니다. 이미 운영 중인 서버로 파일을 복사하거나, 두 기기 사이에서 빌드 결과물을 밀어 넣거나, 네트워크를 넘어 동료에게 아카이브를 보낼 때 누구의 클라우드에도 업로드하지 않아도 됩니다.",
@@ -278,7 +278,7 @@ const ko = {
       ],
       bullets: [
         "push / pull — 이미 SSH로 접속 가능한 서버로. 데이터는 SSH 연결을 통해 오가며, Relayium 계정이 필요 없습니다.",
-        "send / receive — 짧은 페어링 코드를 사용해 네트워크를 넘어 다른 사람에게. 직접 P2P 방식입니다. 직접 경로를 찾을 수 없으면 저희를 거쳐 우회하는 대신 전송이 그대로 실패합니다.",
+        "send / receive — 보내는 쪽 CLI가 발급하는 짧은 페어링 코드를 사용해 네트워크를 넘어 다른 사람에게(relayium login으로 한 번만 로그인하면 되고, 받는 쪽은 로그인하지 않습니다). 직접 P2P 방식입니다. 직접 경로를 찾을 수 없으면 저희를 거쳐 우회하는 대신 전송이 그대로 실패합니다.",
         "serve + push relayium://(daemon direct) — 직접 소유한 두 서버 사이에서, 고정된 TLS를 통해 곧바로. 중계도, SSH도, 코드도 필요 없습니다.",
       ],
     },
@@ -297,7 +297,7 @@ const ko = {
     {
       heading: "무료이며, 설계상 프라이버시를 지킵니다",
       body: [
-        "지불할 것도, 유지할 계정도 없습니다. CLI는 두 끝을 직접 연결하므로 파일이 중간의 서버에 업로드되는 일은 결코 없습니다 — Relayium이 유일하게 관여하는 것은 send / receive 모드에서 두 끝을 소개하는 데 쓰이는 아주 작은 랑데부 핸드셰이크뿐이며, 파일 자체는 절대 포함되지 않습니다.",
+        "지불할 것은 없습니다. 위 세 가지 방식 중 로그인이 필요한 곳은 send / receive 모드의 보내는 쪽뿐이며, CLI가 페어링 코드를 발급할 수 있도록 하기 위해서입니다(클라우드 up도 파일을 저장하기 위해 계정을 사용합니다). CLI는 두 끝을 직접 연결하므로 파일이 중간의 서버에 업로드되는 일은 결코 없습니다 — Relayium이 유일하게 관여하는 것은 send / receive 모드에서 두 끝을 소개하는 데 쓰이는 아주 작은 랑데부 핸드셰이크뿐이며, 파일 자체는 절대 포함되지 않습니다.",
         "모든 전송은 종단간 암호화되고, 모든 파일은 도착 시 SHA-256 해시로 검증되며, 중단된 전송은 처음부터 다시 시작하는 대신 멈춘 지점에서 재개됩니다. macOS, Linux, Windows에서 동작하며, 전체가 오픈소스이고 자체 호스팅이 가능합니다.",
       ],
     },
@@ -311,7 +311,7 @@ const ko = {
       },
       {
         q: "Relayium 계정이 필요한가요?",
-        a: "아니요. push / pull은 자신의 SSH를 사용하고, daemon direct는 서버 간 공개키 신뢰를 사용하며, send / receive는 별도 채널로 미리 합의한 코드를 사용합니다. 어느 것도 계정을 요구하지 않습니다.",
+        a: "send할 때와 클라우드 up에 필요합니다. push / pull은 자신의 SSH를 사용하고 daemon direct는 서버 간 공개키 신뢰를 사용하므로 둘 다 계정이 필요 없습니다. send는 다릅니다. 페어링 코드는 서버만, 그것도 로그인된 계정에만 발급할 수 있으므로 보내는 쪽이 relayium login을 한 번 실행합니다. 건네받은 코드를 쓰는 send는 발급을 하지 않으므로 필요 없습니다. 받는 쪽은 절대 로그인하지 않습니다.",
       },
       {
         q: "어떤 운영체제를 지원하나요?",
@@ -324,7 +324,7 @@ const ko = {
     ],
   },
   cta: {
-    text: "Relayium CLI를 설치하고 첫 전송을 해보세요 — 완전 무료이며 계정도 필요 없습니다.",
+    text: "Relayium CLI를 설치하고 첫 전송을 해보세요 — 완전 무료입니다.",
     button: "CLI 받기",
     href: "/cli",
   },
@@ -334,7 +334,7 @@ const ko = {
 const de = {
   title: "Dateien vom Terminal aus übertragen mit der Relayium CLI",
   description:
-    "Installiere die kostenlose, Ende-zu-Ende-verschlüsselte Relayium CLI und bewege Dateien vom Terminal aus auf drei Arten — über dein eigenes SSH, per Pairing-Code netzwerkübergreifend, oder direkt zwischen zwei Servern. Kein Konto, und die Dateibytes laufen nie über unsere Server.",
+    "Installiere die kostenlose, Ende-zu-Ende-verschlüsselte Relayium CLI und bewege Dateien vom Terminal aus auf drei Arten — über dein eigenes SSH, per Pairing-Code netzwerkübergreifend, oder direkt zwischen zwei Servern. Kostenlos, und die Dateibytes laufen nie über unsere Server — und das Senden per Pairing-Code braucht ein Konto, um den Code zu erzeugen.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Die Relayium CLI ist ein einzelnes kleines Binary, das Dateien vom Terminal aus bewegt — Ende-zu-Ende verschlüsselt, selbst hostbar und völlig kostenlos. Sie existiert für die Fälle, die ein Browser schlecht handhabt: Dateien auf einen Server kopieren, den du bereits betreibst, einen Build zwischen zwei Maschinen pushen, oder ein Archiv netzwerkübergreifend an einen Kollegen schicken, ohne es in irgendjemandes Cloud hochzuladen.",
@@ -360,7 +360,7 @@ const de = {
       ],
       bullets: [
         "push / pull — zu einem Server, in den du dich bereits per SSH einloggen kannst. Die Bytes laufen über deine SSH-Verbindung; kein Relayium-Konto nötig.",
-        "send / receive — an eine andere Person netzwerkübergreifend, mit einem kurzen Pairing-Code. Direktes Peer-to-Peer; findet sich kein direkter Weg, schlägt die Übertragung fehl, statt über uns umgeleitet zu werden.",
+        "send / receive — an eine andere Person netzwerkübergreifend, mit einem kurzen Pairing-Code, den die CLI des Absenders erzeugt (einmalig mit relayium login anmelden; der Empfänger nie). Direktes Peer-to-Peer; findet sich kein direkter Weg, schlägt die Übertragung fehl, statt über uns umgeleitet zu werden.",
         "serve + push relayium:// (daemon direct) — direkt zwischen zwei Servern, die dir gehören, über gepinntes TLS. Kein Relay, kein SSH, kein Code.",
       ],
     },
@@ -379,7 +379,7 @@ const de = {
     {
       heading: "Kostenlos und von Natur aus privat",
       body: [
-        "Es gibt nichts zu bezahlen und kein Konto zu pflegen. Die CLI verbindet die beiden Enden direkt, sodass deine Dateien nie auf einen Server dazwischen hochgeladen werden — das Einzige, was Relayium jemals berührt, ist ein winziger Rendezvous-Handshake im send-/receive-Modus, der die beiden Enden einander vorstellt, niemals die Datei selbst.",
+        "Es gibt nichts zu bezahlen. Von den drei Wegen oben erfordert nur der Absender im send-/receive-Modus eine Anmeldung, damit dessen CLI einen Pairing-Code erzeugen kann (auch Cloud-up nutzt dein Konto, um die Datei zu speichern). Die CLI verbindet die beiden Enden direkt, sodass deine Dateien nie auf einen Server dazwischen hochgeladen werden — das Einzige, was Relayium jemals berührt, ist ein winziger Rendezvous-Handshake im send-/receive-Modus, der die beiden Enden einander vorstellt, niemals die Datei selbst.",
         "Jede Übertragung ist Ende-zu-Ende verschlüsselt, jede Datei wird bei Ankunft mit einem SHA-256-Hash geprüft, und eine unterbrochene Übertragung wird dort fortgesetzt, wo sie aufgehört hat, statt von vorn zu beginnen. Sie läuft unter macOS, Linux und Windows, und das Ganze ist Open Source und selbst hostbar.",
       ],
     },
@@ -393,7 +393,7 @@ const de = {
       },
       {
         q: "Brauche ich ein Relayium-Konto?",
-        a: "Nein. push / pull nutzt dein eigenes SSH, daemon direct nutzt Public-Key-Vertrauen zwischen deinen Servern, und send / receive nutzt einen Code, den ihr außerhalb des Kanals vereinbart. Keines davon erfordert ein Konto.",
+        a: "Zum Senden und für Cloud-up. push / pull nutzt dein eigenes SSH und daemon direct nutzt Public-Key-Vertrauen zwischen deinen Servern, beide brauchen also kein Konto. send ist anders: Einen Pairing-Code kann nur der Server erzeugen, und nur für ein angemeldetes Konto, also führt der Absender einmal relayium login aus — mit einem übergebenen Code entfällt das. Der Empfänger meldet sich nie an.",
       },
       {
         q: "Welche Betriebssysteme werden unterstützt?",
@@ -406,7 +406,7 @@ const de = {
     ],
   },
   cta: {
-    text: "Installiere die Relayium CLI und mach deine erste Übertragung — völlig kostenlos und ohne Konto.",
+    text: "Installiere die Relayium CLI und mach deine erste Übertragung — völlig kostenlos.",
     button: "CLI holen",
     href: "/cli",
   },
@@ -416,7 +416,7 @@ const de = {
 const fr = {
   title: "Transférer des fichiers depuis le terminal avec la CLI Relayium",
   description:
-    "Installez la CLI Relayium, gratuite et chiffrée de bout en bout, et déplacez des fichiers de trois façons depuis votre terminal — via votre propre SSH, par un code d'appairage entre réseaux différents, ou directement entre deux serveurs. Aucun compte, et les octets du fichier ne passent jamais par nos serveurs.",
+    "Installez la CLI Relayium, gratuite et chiffrée de bout en bout, et déplacez des fichiers de trois façons depuis votre terminal — via votre propre SSH, par un code d'appairage entre réseaux différents, ou directement entre deux serveurs. Gratuit, et les octets du fichier ne passent jamais par nos serveurs — et l'envoi par code d'appairage demande un compte, pour générer le code.",
   updatedLabel: "Dernière mise à jour",
   lead: [
     "La CLI Relayium est un unique petit binaire qui déplace des fichiers depuis votre terminal — chiffré de bout en bout, auto-hébergeable et entièrement gratuit. Elle existe pour les cas qu'un navigateur gère mal : copier des fichiers vers un serveur que vous exploitez déjà, pousser un build entre deux machines, ou envoyer une archive à un collègue entre réseaux différents sans la téléverser dans le cloud de qui que ce soit.",
@@ -442,7 +442,7 @@ const fr = {
       ],
       bullets: [
         "push / pull — vers un serveur où vous pouvez déjà vous connecter en SSH. Les octets transitent par votre connexion SSH ; aucun compte Relayium requis.",
-        "send / receive — vers une autre personne entre réseaux différents, avec un court code d'appairage. Pair-à-pair direct ; si aucun chemin direct n'est trouvé, le transfert échoue plutôt que d'être routé via nos serveurs.",
+        "send / receive — vers une autre personne entre réseaux différents, avec un court code d'appairage que la CLI de l'expéditeur génère (connectez-vous une fois avec relayium login ; le destinataire, jamais). Pair-à-pair direct ; si aucun chemin direct n'est trouvé, le transfert échoue plutôt que d'être routé via nos serveurs.",
         "serve + push relayium:// (daemon direct) — directement entre deux serveurs qui vous appartiennent, via TLS épinglé. Pas de relais, pas de SSH, pas de code.",
       ],
     },
@@ -461,7 +461,7 @@ const fr = {
     {
       heading: "Gratuit, et privé par conception",
       body: [
-        "Il n'y a rien à payer et aucun compte à conserver. La CLI connecte les deux extrémités directement, si bien que vos fichiers ne sont jamais téléversés vers un serveur intermédiaire — la seule chose que Relayium touche jamais est une petite poignée de main de mise en relation en mode send / receive, utilisée pour présenter les deux extrémités l'une à l'autre, jamais le fichier lui-même.",
+        "Il n'y a rien à payer. Parmi les trois méthodes ci-dessus, la seule connexion est celle de l'expéditeur en mode send / receive, pour que sa CLI puisse générer un code d'appairage (le up cloud utilise aussi votre compte, pour stocker le fichier). La CLI connecte les deux extrémités directement, si bien que vos fichiers ne sont jamais téléversés vers un serveur intermédiaire — la seule chose que Relayium touche jamais est une petite poignée de main de mise en relation en mode send / receive, utilisée pour présenter les deux extrémités l'une à l'autre, jamais le fichier lui-même.",
         "Chaque transfert est chiffré de bout en bout, chaque fichier est vérifié par une empreinte SHA-256 à l'arrivée, et un transfert interrompu reprend là où il s'était arrêté au lieu de recommencer depuis le début. Cela fonctionne sous macOS, Linux et Windows, et l'ensemble est open source et auto-hébergeable.",
       ],
     },
@@ -475,7 +475,7 @@ const fr = {
       },
       {
         q: "Ai-je besoin d'un compte Relayium ?",
-        a: "Non. push / pull utilise votre propre SSH, daemon direct utilise une confiance par clé publique entre vos serveurs, et send / receive utilise un code que vous convenez par un autre canal. Aucun des trois ne nécessite de compte.",
+        a: "Pour send et pour le up cloud. push / pull utilise votre propre SSH et daemon direct utilise une confiance par clé publique entre vos serveurs, donc ni l'un ni l'autre ne nécessite de compte. send est différent : seul le serveur peut générer un code d'appairage, et seulement pour un compte connecté, donc l'expéditeur lance une fois relayium login — inutile si on lui passe un code déjà émis. Le destinataire ne se connecte jamais.",
       },
       {
         q: "Quels systèmes d'exploitation sont pris en charge ?",
@@ -488,7 +488,7 @@ const fr = {
     ],
   },
   cta: {
-    text: "Installez la CLI Relayium et effectuez votre premier transfert — entièrement gratuit, et sans compte.",
+    text: "Installez la CLI Relayium et effectuez votre premier transfert — entièrement gratuit.",
     button: "Obtenir la CLI",
     href: "/cli",
   },
@@ -498,7 +498,7 @@ const fr = {
 const ar = {
   title: "انقل الملفات من الطرفية باستخدام Relayium CLI",
   description:
-    "ثبّت Relayium CLI المجاني والمشفّر من الطرف إلى الطرف، وانقل الملفات بثلاث طرق من طرفيتك — عبر SSH الخاص بك، أو برمز اقتران عبر الشبكات، أو مباشرة بين خادمين. بدون حساب، وبايتات الملف لا تمر أبدًا عبر خوادمنا.",
+    "ثبّت Relayium CLI المجاني والمشفّر من الطرف إلى الطرف، وانقل الملفات بثلاث طرق من طرفيتك — عبر SSH الخاص بك، أو برمز اقتران عبر الشبكات، أو مباشرة بين خادمين. مجاني، وبايتات الملف لا تمر أبدًا عبر خوادمنا — ويلزم الحساب للإرسال برمز اقتران، كي يُصدَر الرمز.",
   updatedLabel: "آخر تحديث",
   lead: [
     "‏Relayium CLI هو ملف ثنائي صغير واحد ينقل الملفات من طرفيتك — مشفّر من الطرف إلى الطرف، قابل للاستضافة الذاتية، ومجاني تمامًا. إنه موجود للحالة التي يتعامل معها المتصفح بشكل سيئ: نسخ الملفات إلى خادم تُشغّله بالفعل، أو دفع بناء بين جهازين، أو إرسال أرشيف إلى زميل عبر الشبكات دون رفعه إلى سحابة أي أحد.",
@@ -524,7 +524,7 @@ const ar = {
       ],
       bullets: [
         "‏push / pull — إلى خادم يمكنك بالفعل الدخول إليه عبر SSH. تنتقل البايتات عبر اتصال SSH الخاص بك؛ بدون حساب Relayium.",
-        "‏send / receive — إلى شخص آخر عبر الشبكات، باستخدام رمز اقتران قصير. من الند للند مباشرة؛ إذا تعذّر إيجاد مسار مباشر يفشل النقل بدل توجيهه عبرنا.",
+        "‏send / receive — إلى شخص آخر عبر الشبكات، باستخدام رمز اقتران قصير تُصدره واجهة CLI لدى المُرسِل (سجِّل الدخول مرة واحدة عبر relayium login؛ أما المُستقبِل فلا يسجّل الدخول أبدًا). من الند للند مباشرة؛ إذا تعذّر إيجاد مسار مباشر يفشل النقل بدل توجيهه عبرنا.",
         "‏serve + push relayium:// (daemon direct) — مباشرة بين خادمين تملكهما، عبر TLS مثبّت. بدون مُرحِّل، بدون SSH، بدون رمز.",
       ],
     },
@@ -543,7 +543,7 @@ const ar = {
     {
       heading: "مجاني، وخاص بحكم التصميم",
       body: [
-        "لا شيء تدفعه ولا حساب تحتفظ به. يصل CLI بين الطرفين مباشرة، فلا تُرفع ملفاتك أبدًا إلى خادم في الوسط — الشيء الوحيد الذي يلمس Relayium على الإطلاق هو مصافحة لقاء صغيرة جدًا في وضع send / receive، تُستخدم للتعريف بين الطرفين، وليست الملف نفسه أبدًا.",
+        "لا شيء تدفعه. ومن بين الطرق الثلاث أعلاه، تسجيل الدخول الوحيد هو تسجيل المُرسِل في وضع send / receive، كي تتمكن واجهة CLI لديه من إصدار رمز اقتران (كما يستخدم up السحابي حسابك أيضًا، لتخزين الملف). يصل CLI بين الطرفين مباشرة، فلا تُرفع ملفاتك أبدًا إلى خادم في الوسط — الشيء الوحيد الذي يلمس Relayium على الإطلاق هو مصافحة لقاء صغيرة جدًا في وضع send / receive، تُستخدم للتعريف بين الطرفين، وليست الملف نفسه أبدًا.",
         "كل عملية نقل مشفّرة من الطرف إلى الطرف، وكل ملف يُتحقق منه بتجزئة SHA-256 عند الوصول، والنقل المنقطع يُستأنف من حيث توقّف بدل البدء من جديد. يعمل على macOS وLinux وWindows، والمشروع كله مفتوح المصدر وقابل للاستضافة الذاتية.",
       ],
     },
@@ -557,7 +557,7 @@ const ar = {
       },
       {
         q: "هل أحتاج إلى حساب Relayium؟",
-        a: "لا. يستخدم push / pull الـ SSH الخاص بك، ويستخدم daemon direct الثقة بالمفتاح العام بين خوادمك، ويستخدم send / receive رمزًا تتفقان عليه عبر قناة خارجية. لا يتطلب أي منها حسابًا.",
+        a: "للإرسال ولـ up السحابي. يستخدم push / pull الـ SSH الخاص بك، ويستخدم daemon direct الثقة بالمفتاح العام بين خوادمك، فلا يتطلب أيٌّ منهما حسابًا. أما send فمختلف: لا يستطيع إصدار رمز الاقتران إلا الخادم، ولحساب مسجَّل الدخول فقط، لذا يشغّل المُرسِل relayium login مرة واحدة — ولا يلزم ذلك إن مرّرت له رمزًا جاهزًا. والمُستقبِل لا يسجّل الدخول أبدًا.",
       },
       {
         q: "ما أنظمة التشغيل المدعومة؟",
@@ -570,7 +570,7 @@ const ar = {
     ],
   },
   cta: {
-    text: "ثبّت Relayium CLI ونفّذ أول عملية نقل لك — مجاني تمامًا، وبدون حساب.",
+    text: "ثبّت Relayium CLI ونفّذ أول عملية نقل لك — مجاني تمامًا.",
     button: "احصل على CLI",
     href: "/cli",
   },
@@ -580,7 +580,7 @@ const ar = {
 const es = {
   title: "Transfiere archivos desde la terminal con la CLI de Relayium",
   description:
-    "Instala la CLI de Relayium, gratis y cifrada de extremo a extremo, y mueve archivos de tres maneras desde tu terminal — por tu propio SSH, con un código de emparejamiento entre redes, o directamente entre dos servidores. Sin cuenta, y los bytes de los archivos nunca pasan por nuestros servidores.",
+    "Instala la CLI de Relayium, gratis y cifrada de extremo a extremo, y mueve archivos de tres maneras desde tu terminal — por tu propio SSH, con un código de emparejamiento entre redes, o directamente entre dos servidores. Gratis, y los bytes de los archivos nunca pasan por nuestros servidores: enviar con un código de emparejamiento necesita cuenta, para generar el código.",
   updatedLabel: "Última actualización",
   lead: [
     "La CLI de Relayium es un único binario pequeño que mueve archivos desde tu terminal — cifrado de extremo a extremo, autoalojable y completamente gratis. Existe para el caso que un navegador maneja mal: copiar archivos a un servidor que ya administras, enviar una compilación entre dos máquinas, o mandar un archivo comprimido a un colega entre redes sin subirlo a la nube de nadie.",
@@ -606,7 +606,7 @@ const es = {
       ],
       bullets: [
         "push / pull — a un servidor al que ya puedes entrar por SSH. Los bytes viajan por tu conexión SSH; sin cuenta de Relayium.",
-        "send / receive — a otra persona entre redes, usando un código de emparejamiento corto. De igual a igual directo; si no se encuentra una ruta directa, la transferencia falla en lugar de enrutarse a través de nosotros.",
+        "send / receive — a otra persona entre redes, usando un código de emparejamiento corto que genera la CLI de quien envía (inicia sesión una vez con relayium login; quien recibe, nunca). De igual a igual directo; si no se encuentra una ruta directa, la transferencia falla en lugar de enrutarse a través de nosotros.",
         "serve + push relayium:// (daemon direct) — directamente entre dos servidores que posees, sobre TLS fijado. Sin retransmisor, sin SSH, sin código.",
       ],
     },
@@ -625,7 +625,7 @@ const es = {
     {
       heading: "Gratis, y privado por diseño",
       body: [
-        "No hay nada que pagar ni cuenta que mantener. La CLI conecta los dos extremos directamente, así que tus archivos nunca se suben a un servidor intermedio — lo único que toca a Relayium en algún momento es un diminuto apretón de manos de encuentro en el modo send / receive, usado para presentar a los dos extremos, nunca el archivo en sí.",
+        "No hay nada que pagar. De las tres formas de arriba, el único inicio de sesión es el de quien envía en modo send / receive, para que su CLI pueda generar un código de emparejamiento (el up en la nube también usa tu cuenta, para guardar el archivo). La CLI conecta los dos extremos directamente, así que tus archivos nunca se suben a un servidor intermedio — lo único que toca a Relayium en algún momento es un diminuto apretón de manos de encuentro en el modo send / receive, usado para presentar a los dos extremos, nunca el archivo en sí.",
         "Cada transferencia está cifrada de extremo a extremo, cada archivo se verifica con un hash SHA-256 al llegar, y una transferencia interrumpida se reanuda desde donde se detuvo en lugar de empezar de nuevo. Funciona en macOS, Linux y Windows, y todo el proyecto es de código abierto y autoalojable.",
       ],
     },
@@ -639,7 +639,7 @@ const es = {
       },
       {
         q: "¿Necesito una cuenta de Relayium?",
-        a: "No. push / pull usa tu propio SSH, daemon direct usa confianza por clave pública entre tus servidores, y send / receive usa un código que acordáis por otro canal. Ninguno de ellos requiere cuenta.",
+        a: "Para enviar y para el up en la nube. push / pull usa tu propio SSH y daemon direct usa confianza por clave pública entre tus servidores, así que ninguno requiere cuenta. send es distinto: solo el servidor puede generar un código de emparejamiento, y solo para una cuenta con sesión iniciada, así que quien envía ejecuta relayium login una vez; no hace falta si le pasas un código ya emitido. Quien recibe no inicia sesión nunca.",
       },
       {
         q: "¿Qué sistemas operativos son compatibles?",
@@ -652,7 +652,7 @@ const es = {
     ],
   },
   cta: {
-    text: "Instala la CLI de Relayium y haz tu primera transferencia — completamente gratis, y sin cuenta.",
+    text: "Instala la CLI de Relayium y haz tu primera transferencia — completamente gratis.",
     button: "Obtener la CLI",
     href: "/cli",
   },
@@ -662,7 +662,7 @@ const es = {
 const pt = {
   title: "Transfira arquivos pelo terminal com a CLI do Relayium",
   description:
-    "Instale a CLI do Relayium, gratuita e com criptografia de ponta a ponta, e mova arquivos de três formas pelo seu terminal — pelo seu próprio SSH, por um código de emparelhamento entre redes, ou direto entre dois servidores. Sem conta, e os bytes dos arquivos nunca passam pelos nossos servidores.",
+    "Instale a CLI do Relayium, gratuita e com criptografia de ponta a ponta, e mova arquivos de três formas pelo seu terminal — pelo seu próprio SSH, por um código de emparelhamento entre redes, ou direto entre dois servidores. Gratuito, e os bytes dos arquivos nunca passam pelos nossos servidores — e enviar por código de emparelhamento precisa de conta, para gerar o código.",
   updatedLabel: "Última atualização",
   lead: [
     "A CLI do Relayium é um único binário pequeno que move arquivos pelo seu terminal — com criptografia de ponta a ponta, auto-hospedável e totalmente gratuito. Ela existe para o caso que um navegador lida mal: copiar arquivos para um servidor que você já administra, enviar um build entre duas máquinas, ou mandar um arquivo compactado para um colega entre redes sem subi-lo para a nuvem de ninguém.",
@@ -688,7 +688,7 @@ const pt = {
       ],
       bullets: [
         "push / pull — para um servidor no qual você já consegue entrar por SSH. Os bytes trafegam pela sua conexão SSH; sem conta do Relayium.",
-        "send / receive — para outra pessoa entre redes, usando um código de emparelhamento curto. Ponto a ponto direto; se nenhum caminho direto for encontrado, a transferência falha em vez de ser roteada por nós.",
+        "send / receive — para outra pessoa entre redes, usando um código de emparelhamento curto que a CLI de quem envia gera (faça login uma vez com relayium login; quem recebe, nunca). Ponto a ponto direto; se nenhum caminho direto for encontrado, a transferência falha em vez de ser roteada por nós.",
         "serve + push relayium:// (daemon direct) — direto entre dois servidores que você possui, sobre TLS fixado. Sem retransmissor, sem SSH, sem código.",
       ],
     },
@@ -707,7 +707,7 @@ const pt = {
     {
       heading: "Gratuito, e privado por design",
       body: [
-        "Não há nada a pagar nem conta a manter. A CLI conecta as duas pontas diretamente, então seus arquivos nunca são enviados para um servidor no meio — a única coisa que toca o Relayium em algum momento é um minúsculo aperto de mãos de encontro no modo send / receive, usado para apresentar as duas pontas uma à outra, nunca o arquivo em si.",
+        "Não há nada a pagar. Das três formas acima, o único login é o de quem envia no modo send / receive, para que a CLI dele possa gerar um código de emparelhamento (o up na nuvem também usa a sua conta, para guardar o arquivo). A CLI conecta as duas pontas diretamente, então seus arquivos nunca são enviados para um servidor no meio — a única coisa que toca o Relayium em algum momento é um minúsculo aperto de mãos de encontro no modo send / receive, usado para apresentar as duas pontas uma à outra, nunca o arquivo em si.",
         "Cada transferência é criptografada de ponta a ponta, cada arquivo é verificado com um hash SHA-256 na chegada, e uma transferência interrompida é retomada de onde parou em vez de começar do zero. Ela roda no macOS, no Linux e no Windows, e o projeto inteiro é de código aberto e auto-hospedável.",
       ],
     },
@@ -721,7 +721,7 @@ const pt = {
       },
       {
         q: "Preciso de uma conta do Relayium?",
-        a: "Não. O push / pull usa o seu próprio SSH, o daemon direct usa confiança por chave pública entre os seus servidores, e o send / receive usa um código que vocês combinam por outro canal. Nenhum deles exige conta.",
+        a: "Para enviar e para o up na nuvem. O push / pull usa o seu próprio SSH e o daemon direct usa confiança por chave pública entre os seus servidores, então nenhum dos dois exige conta. O send é diferente: só o servidor pode gerar um código de emparelhamento, e apenas para uma conta com login feito, então quem envia roda relayium login uma vez; não é preciso se você passar um código já emitido. Quem recebe nunca faz login.",
       },
       {
         q: "Quais sistemas operacionais são compatíveis?",
@@ -734,7 +734,7 @@ const pt = {
     ],
   },
   cta: {
-    text: "Instale a CLI do Relayium e faça a sua primeira transferência — totalmente gratuita, e sem conta.",
+    text: "Instale a CLI do Relayium e faça a sua primeira transferência — totalmente gratuita.",
     button: "Obter a CLI",
     href: "/cli",
   },

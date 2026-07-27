@@ -38,6 +38,65 @@ func startHub(t *testing.T) string {
 	return "ws" + strings.TrimPrefix(srv.URL, "http")
 }
 
+// A code that can't be a pairing code must fail before the dial, and say why.
+// The user-visible bug this pins: `relayium send f.zip 726122` (a made-up
+// numeric code — '1' is not in the alphabet) spent a round trip to come back
+// with "expected handshake response status code 101 but got 403", which names
+// neither the code nor anything the user can act on.
+func TestJoinRejectsMalformedCodeWithoutDialing(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+	}))
+	defer srv.Close()
+	base := "ws" + strings.TrimPrefix(srv.URL, "http")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := Join(ctx, base, "726122", "sender")
+	if err == nil {
+		t.Fatal("Join with a malformed code succeeded")
+	}
+	if n := atomic.LoadInt32(&hits); n != 0 {
+		t.Errorf("malformed code still dialed the server %d time(s)", n)
+	}
+	for _, want := range []string{"726122", "6 characters", "5 minutes", "issued by the server"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+	// serverURL is whatever --server points at. Naming the first-party host
+	// tells a self-hoster their own instance's codes come from a service they
+	// deliberately are not using.
+	if strings.Contains(err.Error(), "relayium.com") {
+		t.Errorf("error %q hard-codes the first-party issuer", err)
+	}
+}
+
+// A well-formed but unknown/expired code is refused by the server with 403 and
+// an explanatory body; the CLI must surface that body rather than the raw
+// handshake failure.
+func TestJoinSurfacesServerRefusalBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "invalid or expired pairing code", http.StatusForbidden)
+	}))
+	defer srv.Close()
+	base := "ws" + strings.TrimPrefix(srv.URL, "http")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := Join(ctx, base, "ACDEFH", "sender")
+	if err == nil {
+		t.Fatal("Join against a 403 server succeeded")
+	}
+	if !strings.Contains(err.Error(), "invalid or expired pairing code") {
+		t.Errorf("error %q drops the server's explanation", err)
+	}
+	if !strings.Contains(err.Error(), "5 minutes") {
+		t.Errorf("error %q does not mention the code lifetime", err)
+	}
+}
+
 func TestJoinPairsTwoPeersAndRelaysSignals(t *testing.T) {
 	base := startHub(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

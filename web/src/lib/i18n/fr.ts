@@ -184,7 +184,7 @@ const fr: Messages = {
     freeTitle: "Toujours gratuit",
     freeLead: "Transférez des fichiers sans aucun frais, pour toujours :",
     free1: "Transferts sur le réseau local (LAN) — instantanés, sans compte.",
-    free2: "Transferts pair à pair directs avec la CLI — via votre propre SSH, en daemon direct ou avec un code d'appairage — sans compte ni comptage.",
+    free2: "Transferts pair à pair directs avec la CLI — via votre propre SSH, en daemon direct ou avec un code d'appairage — sans comptage. Seule la génération d'un code d'appairage pour send nécessite un compte ; recevoir n'en demande jamais.",
     free3: "Chiffrés de bout en bout, sans limite de taille de fichier, et vos fichiers passent directement d'un appareil à l'autre — ils ne touchent jamais nos serveurs.",
     freeWhy: "Les transferts directs et LAN ne nous coûtent rien, ils restent donc gratuits pour tout le monde — aucune inscription requise pour recevoir.",
     paidTitle: "Ce que vous payez",
@@ -381,7 +381,7 @@ const fr: Messages = {
     mode2Title: "send / receive — par code d'appairage",
     mode2Tag: "gratuit · P2P direct",
     mode2Body:
-      "Envoyez à une autre personne au-delà des réseaux. Mettez-vous d'accord sur un code court par un autre canal (dites-le au téléphone — n'importe quelle chaîne courte convient), puis un côté envoie (send) et l'autre reçoit (receive). La connexion est directe en pair-à-pair : seule une petite poignée de main de mise en relation transite par Relayium pour présenter les deux extrémités — les octets du fichier, eux, jamais. Si les deux extrémités sont derrière un NAT strict et ne peuvent pas se connecter directement, le transfert échoue simplement (la CLI ne dispose d'aucun relais). Les deux terminaux affichent un code SAS à 6 chiffres — comparez-les pour écarter tout risque d'attaque de l'homme du milieu (ajoutez --verify pour exiger une confirmation avant tout transfert d'octets).",
+      "Envoyez à une autre personne au-delà des réseaux. Connectez-vous une fois avec relayium login, puis lancez send sans code : la CLI génère un code de jumelage de 6 caractères (tiré d'un alphabet sans 0 ni 1), valable 5 minutes, et affiche la commande exacte que l'autre extrémité doit exécuter. Transmettez ce code par un autre canal — dites-le au téléphone. Vous ne pouvez pas le choisir, le serveur n'accepte que les codes qu'il a émis, et le destinataire n'a besoin d'aucun compte. Les deux extrémités doivent être la CLI ; pour quelqu'un qui n'a qu'un navigateur, utilisez plutôt relayium up. La connexion est directe en pair-à-pair : seule une petite poignée de main de mise en relation transite par Relayium pour présenter les deux extrémités — les octets du fichier, eux, jamais. Si les deux extrémités sont derrière un NAT strict et ne peuvent pas se connecter directement, le transfert échoue simplement (la CLI ne dispose d'aucun relais). Les deux terminaux affichent un code SAS à 6 chiffres — comparez-les pour écarter tout risque d'attaque de l'homme du milieu (ajoutez --verify pour exiger une confirmation avant tout transfert d'octets).",
     mode3Title: "daemon direct — serveur à serveur",
     mode3Tag: "gratuit",
     mode3Body:
@@ -415,7 +415,7 @@ const fr: Messages = {
       "Supprimer le téléversement cloud après un seul téléchargement",
       "Durée de vie d'un téléversement cloud, p. ex. 7d ou 24h (plafonnée par votre offre)",
       "Autoriser un nombre fixe de téléchargements cloud, puis supprimer",
-      "Diriger login / up / down vers un serveur auto-hébergé",
+      "Diriger login / up / down / send / receive vers un serveur auto-hébergé",
     ],
     trustH3: "Fichiers de confiance et d'identité",
     trustIntro:
@@ -445,7 +445,7 @@ const fr: Messages = {
     cloudH2: "Cloud — téléverser maintenant, télécharger plus tard",
     cloudTag: "compte · asynchrone",
     cloudIntro:
-      "Téléversez depuis une machine et téléchargez sur une autre quand vous voulez — les deux n'ont jamais besoin d'être en ligne en même temps. C'est le seul mode qui utilise votre compte, et seulement pour téléverser : lancez relayium login une fois, puis up. Le téléchargement ne demande aucun compte. Tout le reste de la CLI reste sans connexion.",
+      "Téléversez depuis une machine et téléchargez sur une autre quand vous voulez — les deux n'ont jamais besoin d'être en ligne en même temps. up et send sont les deux commandes qui utilisent votre compte : up pour stocker le fichier, send pour générer un code d'appairage — lancez relayium login une fois et les deux fonctionnent. Un send auquel vous passez un code qu'on vous a donné n'en génère aucun et ne demande pas de connexion. Le téléchargement ne demande aucun compte, et push/pull, daemon direct et sync jamais.",
     cloudBody:
       "up chiffre les fichiers localement, téléverse le chiffré et affiche un lien de récupération. Ajoutez un drapeau de rétention pour contrôler sa durée de vie (sinon la valeur par défaut de votre compte s'applique) : --burn (un téléchargement), --ttl 7d (durée fixe, plafonnée par votre offre) ou --max-downloads 5 (nombre fixe). Sur l'autre machine, passez le lien à down — aucune connexion requise.",
     cloudLoginNote:

@@ -52,7 +52,7 @@ const en = {
     {
       heading: "Cross-network relay (TURN)",
       body: [
-        "When two devices cannot connect directly across networks, the encrypted stream is relayed through a TURN server. The relay still cannot read your files — they remain end-to-end encrypted. We record the number of relayed bytes per account, to enforce a monthly relay allowance and prevent abuse — we never inspect what is relayed, only the byte count.",
+        "Browser transfers across networks are relayed through a TURN server by design, not only as a fallback when a direct connection fails. The relay still cannot read your files — they remain end-to-end encrypted. We record the number of relayed bytes per account, to enforce a monthly relay allowance and prevent abuse — we never inspect what is relayed, only the byte count.",
       ],
     },
     {
@@ -172,7 +172,7 @@ const zh = {
     {
       heading: "跨网络中继(TURN)",
       body: [
-        "当两台设备无法跨网络直接连接时,加密流会通过 TURN 服务器中继。中继依然无法读取你的文件——它们始终保持端到端加密。我们按账号记录中继字节数,用于执行每月中继额度限制并防止滥用——我们绝不检查中继的内容,只记录字节数。",
+        "浏览器的跨网络传输按设计经 TURN 服务器中继,而不只是在直连失败时才回退到中继。中继依然无法读取你的文件——它们始终保持端到端加密。我们按账号记录中继字节数,用于执行每月中继额度限制并防止滥用——我们绝不检查中继的内容,只记录字节数。",
       ],
     },
     {
@@ -296,7 +296,7 @@ const ja = {
     {
       heading: "クロスネットワーク中継（TURN）",
       body: [
-        "2台のデバイスがネットワークをまたいで直接接続できない場合、暗号化されたストリームはTURNサーバーを経由して中継されます。中継サーバーはあなたのファイルを読み取ることができません——エンドツーエンド暗号化が維持されます。月間中継割り当ての管理と不正利用の防止のため、中継バイト数はアカウントごとに記録します——中継内容を検査することはなく、記録するのはバイト数のみです。",
+        "ブラウザでネットワークをまたぐ転送は、直接接続が失敗したときのフォールバックとしてではなく、設計上つねにTURNサーバーを経由して中継されます。中継サーバーはあなたのファイルを読み取ることができません——エンドツーエンド暗号化が維持されます。月間中継割り当ての管理と不正利用の防止のため、中継バイト数はアカウントごとに記録します——中継内容を検査することはなく、記録するのはバイト数のみです。",
       ],
     },
     {
@@ -422,7 +422,7 @@ const ko = {
     {
       heading: "크로스 네트워크 릴레이(TURN)",
       body: [
-        "두 장치가 네트워크를 가로질러 직접 연결할 수 없는 경우, 암호화된 스트림이 TURN 서버를 통해 중계됩니다. 릴레이 서버는 여전히 파일을 읽을 수 없습니다——엔드 투 엔드 암호화가 유지됩니다. 월간 릴레이 허용량을 적용하고 남용을 방지하기 위해 계정별로 릴레이된 바이트 수를 기록합니다——중계 내용은 절대 검사하지 않으며, 오직 바이트 수만 기록합니다.",
+        "브라우저의 네트워크 간 전송은 직접 연결이 실패했을 때의 대체 수단이 아니라 설계상 TURN 서버를 통해 중계됩니다. 릴레이 서버는 여전히 파일을 읽을 수 없습니다——엔드 투 엔드 암호화가 유지됩니다. 월간 릴레이 허용량을 적용하고 남용을 방지하기 위해 계정별로 릴레이된 바이트 수를 기록합니다——중계 내용은 절대 검사하지 않으며, 오직 바이트 수만 기록합니다.",
       ],
     },
     {
@@ -548,7 +548,7 @@ const de = {
     {
       heading: "Netzwerkübergreifende Weiterleitung (TURN)",
       body: [
-        "Wenn sich zwei Geräte nicht direkt über verschiedene Netzwerke verbinden können, wird der verschlüsselte Datenstrom über einen TURN-Server weitergeleitet. Die Weiterleitung kann Ihre Dateien dennoch nicht lesen — sie bleiben Ende-zu-Ende-verschlüsselt. Wir erfassen die Anzahl weitergeleiteter Bytes pro Konto, um ein monatliches Weiterleitungskontingent durchzusetzen und Missbrauch zu verhindern — wir sehen niemals ein, was weitergeleitet wird, sondern nur die Byte-Anzahl.",
+        "Netzwerkübergreifende Übertragungen im Browser werden konstruktionsbedingt über einen TURN-Server weitergeleitet, nicht erst als Rückfall, wenn keine direkte Verbindung zustande kommt. Die Weiterleitung kann Ihre Dateien dennoch nicht lesen — sie bleiben Ende-zu-Ende-verschlüsselt. Wir erfassen die Anzahl weitergeleiteter Bytes pro Konto, um ein monatliches Weiterleitungskontingent durchzusetzen und Missbrauch zu verhindern — wir sehen niemals ein, was weitergeleitet wird, sondern nur die Byte-Anzahl.",
       ],
     },
     {
@@ -674,7 +674,7 @@ const fr = {
     {
       heading: "Relais inter-réseau (TURN)",
       body: [
-        "Lorsque deux appareils ne peuvent pas se connecter directement entre différents réseaux, le flux chiffré est relayé via un serveur TURN. Le relais ne peut toujours pas lire vos fichiers — ils restent chiffrés de bout en bout. Nous enregistrons le nombre d'octets relayés par compte, afin d'appliquer un quota de relais mensuel et de prévenir les abus — nous n'inspectons jamais ce qui est relayé, seulement le nombre d'octets.",
+        "Les transferts entre réseaux différents dans le navigateur sont relayés via un serveur TURN par conception, et non seulement en repli lorsqu'une connexion directe échoue. Le relais ne peut toujours pas lire vos fichiers — ils restent chiffrés de bout en bout. Nous enregistrons le nombre d'octets relayés par compte, afin d'appliquer un quota de relais mensuel et de prévenir les abus — nous n'inspectons jamais ce qui est relayé, seulement le nombre d'octets.",
       ],
     },
     {
@@ -800,7 +800,7 @@ const ar = {
     {
       heading: "المُرحِّل عبر الشبكات (TURN)",
       body: [
-        "عندما يتعذّر على جهازين الاتصال مباشرةً عبر الشبكات، يُمرَّر التدفق المُشفَّر عبر خادم TURN. ومع ذلك لا يستطيع المُرحِّل قراءة ملفاتك — فهي تظل مُشفَّرة من الطرف إلى الطرف. نسجّل عدد البايتات المُمرَّرة لكل حساب لفرض حصة تمرير شهرية ومنع إساءة الاستخدام — ولا نفحص أبدًا ما يُمرَّر، بل نسجّل عدد البايتات فقط.",
+        "تُمرَّر عمليات النقل عبر الشبكات في المتصفح عبر خادم TURN بحكم التصميم، لا كخيار احتياطي عند فشل الاتصال المباشر فحسب. ومع ذلك لا يستطيع المُرحِّل قراءة ملفاتك — فهي تظل مُشفَّرة من الطرف إلى الطرف. نسجّل عدد البايتات المُمرَّرة لكل حساب لفرض حصة تمرير شهرية ومنع إساءة الاستخدام — ولا نفحص أبدًا ما يُمرَّر، بل نسجّل عدد البايتات فقط.",
       ],
     },
     {
@@ -926,7 +926,7 @@ const es = {
     {
       heading: "Retransmisión entre redes (TURN)",
       body: [
-        "Cuando dos dispositivos no pueden conectarse directamente entre redes, el flujo cifrado se retransmite a través de un servidor TURN. El retransmisor sigue sin poder leer tus archivos: permanecen cifrados de extremo a extremo. Registramos el número de bytes retransmitidos por cuenta, para aplicar una asignación mensual de retransmisión y evitar el abuso; nunca inspeccionamos lo que se retransmite, solo el recuento de bytes.",
+        "Las transferencias entre redes en el navegador se retransmiten a través de un servidor TURN por diseño, y no solo como recurso alternativo cuando falla una conexión directa. El retransmisor sigue sin poder leer tus archivos: permanecen cifrados de extremo a extremo. Registramos el número de bytes retransmitidos por cuenta, para aplicar una asignación mensual de retransmisión y evitar el abuso; nunca inspeccionamos lo que se retransmite, solo el recuento de bytes.",
       ],
     },
     {
@@ -1052,7 +1052,7 @@ const pt = {
     {
       heading: "Retransmissão entre redes (TURN)",
       body: [
-        "Quando dois dispositivos não conseguem se conectar diretamente entre redes, o fluxo criptografado é retransmitido por um servidor TURN. O retransmissor ainda não consegue ler seus arquivos — eles permanecem com criptografia de ponta a ponta. Registramos o número de bytes retransmitidos por conta, para aplicar uma cota mensal de retransmissão e evitar abusos — nunca inspecionamos o que é retransmitido, apenas a contagem de bytes.",
+        "As transferências entre redes no navegador são retransmitidas por um servidor TURN por projeto, e não apenas como recurso alternativo quando uma conexão direta falha. O retransmissor ainda não consegue ler seus arquivos — eles permanecem com criptografia de ponta a ponta. Registramos o número de bytes retransmitidos por conta, para aplicar uma cota mensal de retransmissão e evitar abusos — nunca inspecionamos o que é retransmitido, apenas a contagem de bytes.",
       ],
     },
     {

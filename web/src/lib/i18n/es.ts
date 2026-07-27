@@ -184,7 +184,7 @@ const es: Messages = {
     freeTitle: "Siempre gratis",
     freeLead: "Mueve archivos sin coste, para siempre:",
     free1: "Transferencias por red local (LAN): instantáneas y sin necesidad de cuenta.",
-    free2: "Transferencias directas entre pares con la CLI — por tu propio SSH, daemon directo o un código de emparejamiento — sin cuenta y sin medición.",
+    free2: "Transferencias directas entre pares con la CLI — por tu propio SSH, daemon directo o un código de emparejamiento — sin medición. Solo generar un código de emparejamiento para send necesita cuenta; recibir nunca la necesita.",
     free3: "Cifradas de extremo a extremo, sin límite de tamaño de archivo, y tus archivos van directamente entre dispositivos: nunca pasan por nuestros servidores.",
     freeWhy: "Las transferencias directas y por LAN no nos cuestan nada, así que siguen siendo gratis para todos, y no hace falta registrarse para recibir.",
     paidTitle: "Por qué pagas",
@@ -381,7 +381,7 @@ const es: Messages = {
     mode2Title: "send / receive — mediante código de emparejamiento",
     mode2Tag: "gratis · P2P directo",
     mode2Body:
-      "Envía a otra persona entre redes. Acuerden un código corto por otro canal (dilo en una llamada — es cualquier cadena corta), luego un lado envía y el otro recibe. La conexión es directa de igual a igual: solo un pequeño handshake de encuentro pasa por Relayium para presentar los dos extremos — los bytes del archivo nunca lo hacen. Si ambos extremos están detrás de un NAT estricto y no pueden conectarse directamente, la transferencia simplemente falla (la CLI no tiene retransmisor). Ambas terminales muestran un código SAS de 6 dígitos — compáralos para descartar un ataque de intermediario (añade --verify para exigir confirmación antes de mover cualquier byte).",
+      "Envía a otra persona entre redes. Inicia sesión una vez con relayium login y luego ejecuta send sin código: la CLI genera un código de emparejamiento de 6 caracteres (de un alfabeto sin 0 ni 1), válido 5 minutos, e imprime el comando exacto que ejecuta el otro extremo. Pasa ese código por otro canal — dilo en una llamada. No puedes elegirlo tú, el servidor solo acepta los códigos que él emitió, y el receptor no necesita cuenta. Ambos extremos tienen que ser la CLI; para alguien que solo tiene navegador, usa relayium up. La conexión es directa de igual a igual: solo un pequeño handshake de encuentro pasa por Relayium para presentar los dos extremos — los bytes del archivo nunca lo hacen. Si ambos extremos están detrás de un NAT estricto y no pueden conectarse directamente, la transferencia simplemente falla (la CLI no tiene retransmisor). Ambas terminales muestran un código SAS de 6 dígitos — compáralos para descartar un ataque de intermediario (añade --verify para exigir confirmación antes de mover cualquier byte).",
     mode3Title: "daemon direct — de servidor a servidor",
     mode3Tag: "gratis",
     mode3Body:
@@ -414,7 +414,7 @@ const es: Messages = {
       "Eliminar la subida a la nube tras una única descarga",
       "Cuánto vive una subida a la nube, p. ej. 7d o 24h (limitado por tu plan)",
       "Permitir un número fijo de descargas en la nube y luego eliminarla",
-      "Apuntar login / up / down a un servidor autoalojado",
+      "Apuntar login / up / down / send / receive a un servidor autoalojado",
     ],
     trustH3: "Archivos de confianza e identidad",
     trustIntro:
@@ -444,7 +444,7 @@ const es: Messages = {
     cloudH2: "Nube — sube ahora, descarga después",
     cloudTag: "cuenta · asíncrono",
     cloudIntro:
-      "Sube desde una máquina y descarga en otra cuando quieras — las dos nunca necesitan estar en línea al mismo tiempo. Este es el único modo que usa tu cuenta, y solo para subir: ejecuta relayium login una vez y luego up. Descargar no necesita cuenta. Todo lo demás en la CLI sigue sin inicio de sesión.",
+      "Sube desde una máquina y descarga en otra cuando quieras — las dos nunca necesitan estar en línea al mismo tiempo. up y send son los dos comandos que usan tu cuenta: up para guardar el archivo, send para generar un código de emparejamiento — ejecuta relayium login una vez y ambos funcionan. Un send al que le pasas un código que te dieron no genera ninguno y no necesita inicio de sesión. Descargar no necesita cuenta, y push/pull, daemon directo y sync nunca la necesitan.",
     cloudBody:
       "up cifra los archivos localmente, sube el texto cifrado e imprime un enlace de reclamo. Añade una opción de retención para controlar cuánto vive (de lo contrario se aplica el valor predeterminado de tu cuenta): --burn (una descarga), --ttl 7d (un tiempo fijo, limitado por tu plan) o --max-downloads 5 (un número fijo). En la otra máquina, pasa el enlace a down — no se necesita inicio de sesión.",
     cloudLoginNote:

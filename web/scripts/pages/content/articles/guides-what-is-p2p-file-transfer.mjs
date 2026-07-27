@@ -74,14 +74,14 @@ const en = {
       },
       {
         q: "Does a P2P transfer ever touch a server at all?",
-        a: "A small signaling server helps the two devices find each other's address — but it only ever sees connection-setup information, never file bytes. If a direct path can't be found, a TURN relay forwards the encrypted file data, but even then it only handles ciphertext it can't decrypt.",
+        a: "A small signaling server helps the two devices find each other's address — but it only ever sees connection-setup information, never file bytes. Across networks in the browser, a TURN relay forwards the encrypted file data as a matter of design, but even then it only handles ciphertext it can't decrypt.",
       },
       {
         q: "Why would a direct connection fail in the first place?",
-        a: "Some networks — often strict corporate firewalls or certain mobile carrier NATs — are built in a way that makes it impossible to discover a reachable address from outside information alone. That's rarer than it sounds, but when it happens, a relay is what keeps the transfer working instead of failing outright.",
+        a: "Some networks — often strict corporate firewalls or certain mobile carrier NATs — are built in a way that makes it impossible to discover a reachable address from outside information alone. Rather than spend twenty-odd seconds finding that out on every transfer, Relayium's browser app sends all cross-network transfers over the relay from the start — so a relay, not a failed direct attempt, is what carries them.",
       },
       {
-        q: "Is P2P transfer slower when it falls back to a relay?",
+        q: "Is P2P transfer slower when it goes over a relay?",
         a: "It can add some latency, since the relay is an extra hop the data passes through and it's a shared server rather than a dedicated one. But it's still generally faster than an upload-then-download flow, since there's no wait for the file to fully land on a server before the download side can start.",
       },
       {
@@ -167,11 +167,11 @@ const zh = {
       },
       {
         q: "P2P 传输会经过服务器吗？",
-        a: "一个小型信令服务器会帮两台设备找到彼此的地址——但它只会看到连接建立所需的信息，从不涉及文件字节。如果找不到直连路径，TURN 中继会转发加密后的文件数据，但即便如此，它处理的也只是它无法解密的密文。",
+        a: "一个小型信令服务器会帮两台设备找到彼此的地址——但它只会看到连接建立所需的信息，从不涉及文件字节。在浏览器里跨网络传输时，TURN 中继会按设计转发加密后的文件数据，但即便如此，它处理的也只是它无法解密的密文。",
       },
       {
         q: "直连为什么一开始就会失败？",
-        a: "有些网络——常见于较严格的企业防火墙或某些移动运营商的 NAT——其构造方式使得仅凭外部信息根本无法找出一条可达的地址。这种情况比听起来要少见，但一旦发生，中继就是让传输继续进行而不是直接失败的关键。",
+        a: "有些网络——常见于较严格的企业防火墙或某些移动运营商的 NAT——其构造方式使得仅凭外部信息根本无法找出一条可达的地址。与其在每次传输时都花二十来秒把这件事试出来，Relayium 的浏览器端干脆让所有跨网络传输一开始就走中继——所以承载它们的是中继，而不是一次失败的直连尝试。",
       },
       {
         q: "走中继时，P2P 传输会变慢吗？",
@@ -260,14 +260,14 @@ const ja = {
       },
       {
         q: "P2P 転送はそもそもサーバーに触れることがあるのですか？",
-        a: "小さなシグナリングサーバーが2台のデバイスが互いのアドレスを見つけるのを助けますが、それが見るのは接続確立の情報だけで、ファイルのバイトは一切見ません。直接経路が見つからない場合は TURN 中継が暗号化されたファイルデータを転送しますが、それでも扱うのは復号できない暗号文だけです。",
+        a: "小さなシグナリングサーバーが2台のデバイスが互いのアドレスを見つけるのを助けますが、それが見るのは接続確立の情報だけで、ファイルのバイトは一切見ません。ブラウザでネットワークをまたぐ場合は、設計上つねに TURN 中継が暗号化されたファイルデータを転送しますが、それでも扱うのは復号できない暗号文だけです。",
       },
       {
         q: "そもそもなぜ直接接続が失敗することがあるのですか？",
-        a: "一部のネットワーク——厳しい企業ファイアウォールや一部の通信キャリアの NAT に多い——は、外部から得られる情報だけでは到達可能なアドレスを発見できないような構造になっています。聞こえるほど頻繁ではありませんが、起きた場合には中継が転送を完全な失敗にせず継続させる役割を果たします。",
+        a: "一部のネットワーク——厳しい企業ファイアウォールや一部の通信キャリアの NAT に多い——は、外部から得られる情報だけでは到達可能なアドレスを発見できないような構造になっています。それを毎回20秒前後かけて確かめるより、Relayium のブラウザ版はネットワークをまたぐ転送を最初からすべて中継経由にしています——つまりそれらを運ぶのは、失敗した直接接続の試行ではなく中継です。",
       },
       {
-        q: "中継にフォールバックすると P2P 転送は遅くなりますか？",
+        q: "中継を経由すると P2P 転送は遅くなりますか？",
         a: "中継はデータが通過する余分な1ホップであり、専用サーバーではなく共有サーバーであるため、多少の遅延は増える可能性があります。それでも一般には、アップロードしてからダウンロードする流れより速いです。ファイルが完全にサーバーに届くのを待たずにダウンロード側が開始できるからです。",
       },
       {
@@ -353,14 +353,14 @@ const ko = {
       },
       {
         q: "P2P 전송이 애초에 서버를 거치기는 하나요?",
-        a: "작은 시그널링 서버가 두 기기가 서로의 주소를 찾도록 돕지만, 그것이 보는 것은 연결 설정 정보뿐이며 파일 바이트는 전혀 보지 않습니다. 직접 경로를 찾지 못하면 TURN 중계가 암호화된 파일 데이터를 전달하지만, 그때조차 다루는 것은 복호화할 수 없는 암호문뿐입니다.",
+        a: "작은 시그널링 서버가 두 기기가 서로의 주소를 찾도록 돕지만, 그것이 보는 것은 연결 설정 정보뿐이며 파일 바이트는 전혀 보지 않습니다. 브라우저에서 네트워크를 넘을 때는 설계상 TURN 중계가 암호화된 파일 데이터를 전달하지만, 그때조차 다루는 것은 복호화할 수 없는 암호문뿐입니다.",
       },
       {
         q: "직접 연결은 애초에 왜 실패할 수 있나요?",
-        a: "일부 네트워크——엄격한 기업 방화벽이나 일부 이동통신사 NAT에 흔함——는 외부 정보만으로는 도달 가능한 주소를 발견할 수 없도록 구성되어 있습니다. 들리는 것보다는 드물지만, 그런 일이 생기면 중계가 전송을 완전한 실패 대신 계속 작동하게 해줍니다.",
+        a: "일부 네트워크——엄격한 기업 방화벽이나 일부 이동통신사 NAT에 흔함——는 외부 정보만으로는 도달 가능한 주소를 발견할 수 없도록 구성되어 있습니다. 전송할 때마다 20초 남짓을 들여 그것을 확인하는 대신, Relayium의 브라우저 앱은 네트워크 간 전송을 처음부터 모두 중계로 보냅니다 — 그것들을 나르는 것은 실패한 직접 연결 시도가 아니라 중계입니다.",
       },
       {
-        q: "중계로 대체되면 P2P 전송이 느려지나요?",
+        q: "중계를 거치면 P2P 전송이 느려지나요?",
         a: "중계는 데이터가 통과하는 추가적인 한 단계이고 전용 서버가 아닌 공유 서버이므로 약간의 지연이 더해질 수 있습니다. 그래도 파일이 서버에 완전히 도착할 때까지 기다리지 않고 다운로드 측이 시작할 수 있으므로, 업로드 후 다운로드하는 방식보다는 대체로 더 빠릅니다.",
       },
       {
@@ -446,14 +446,14 @@ const de = {
       },
       {
         q: "Berührt eine P2P-Übertragung überhaupt jemals einen Server?",
-        a: "Ein kleiner Signalisierungsserver hilft den beiden Geräten, die Adresse des jeweils anderen zu finden — er sieht dabei aber nur Verbindungsaufbau-Informationen, nie Dateibytes. Lässt sich kein direkter Pfad finden, leitet ein TURN-Relay die verschlüsselten Dateidaten weiter, verarbeitet aber auch dann nur Chiffretext, den es nicht entschlüsseln kann.",
+        a: "Ein kleiner Signalisierungsserver hilft den beiden Geräten, die Adresse des jeweils anderen zu finden — er sieht dabei aber nur Verbindungsaufbau-Informationen, nie Dateibytes. Netzübergreifend leitet im Browser konstruktionsbedingt ein TURN-Relay die verschlüsselten Dateidaten weiter, verarbeitet aber auch dann nur Chiffretext, den es nicht entschlüsseln kann.",
       },
       {
         q: "Warum sollte eine direkte Verbindung überhaupt scheitern?",
-        a: "Manche Netzwerke — häufig strenge Unternehmensfirewalls oder bestimmte NATs von Mobilfunkanbietern — sind so aufgebaut, dass sich allein aus außen zugänglichen Informationen keine erreichbare Adresse ermitteln lässt. Das kommt seltener vor, als es klingt, aber wenn es passiert, sorgt ein Relay dafür, dass die Übertragung weiterläuft, statt komplett zu scheitern.",
+        a: "Manche Netzwerke — häufig strenge Unternehmensfirewalls oder bestimmte NATs von Mobilfunkanbietern — sind so aufgebaut, dass sich allein aus außen zugänglichen Informationen keine erreichbare Adresse ermitteln lässt. Statt das bei jeder Übertragung gut zwanzig Sekunden lang herauszufinden, schickt Relayiums Browser-App alle netzwerkübergreifenden Übertragungen von vornherein über das Relay — es ist also das Relay und kein gescheiterter Direktversuch, das sie trägt.",
       },
       {
-        q: "Ist eine P2P-Übertragung langsamer, wenn sie auf ein Relay ausweicht?",
+        q: "Ist eine P2P-Übertragung langsamer, wenn sie über ein Relay läuft?",
         a: "Es kann etwas Latenz hinzukommen, da das Relay ein zusätzlicher Hop ist, den die Daten durchlaufen, und es sich um einen geteilten statt einen dedizierten Server handelt. Trotzdem ist es meist noch schneller als ein Upload-dann-Download-Ablauf, da nicht gewartet werden muss, bis die Datei vollständig auf einem Server angekommen ist, bevor die Download-Seite starten kann.",
       },
       {
@@ -539,14 +539,14 @@ const fr = {
       },
       {
         q: "Un transfert P2P touche-t-il quand même un serveur ?",
-        a: "Un petit serveur de signalisation aide les deux appareils à trouver l'adresse l'un de l'autre — mais il ne voit jamais que des informations d'établissement de connexion, jamais les octets du fichier. Si aucun chemin direct ne peut être trouvé, un relais TURN transmet les données de fichier chiffrées, mais même alors il ne traite que du chiffré qu'il ne peut pas déchiffrer.",
+        a: "Un petit serveur de signalisation aide les deux appareils à trouver l'adresse l'un de l'autre — mais il ne voit jamais que des informations d'établissement de connexion, jamais les octets du fichier. Entre réseaux différents, dans le navigateur, un relais TURN transmet par conception les données de fichier chiffrées, mais même alors il ne traite que du chiffré qu'il ne peut pas déchiffrer.",
       },
       {
         q: "Pourquoi une connexion directe échouerait-elle en premier lieu ?",
-        a: "Certains réseaux — souvent des pare-feu d'entreprise stricts ou certains NAT d'opérateurs mobiles — sont construits de façon à rendre impossible la découverte d'une adresse joignable à partir des seules informations externes. C'est plus rare que ça n'en a l'air, mais quand cela arrive, un relais permet au transfert de continuer à fonctionner plutôt que d'échouer purement et simplement.",
+        a: "Certains réseaux — souvent des pare-feu d'entreprise stricts ou certains NAT d'opérateurs mobiles — sont construits de façon à rendre impossible la découverte d'une adresse joignable à partir des seules informations externes. Plutôt que de passer une vingtaine de secondes à le découvrir à chaque transfert, l'application web de Relayium fait passer d'emblée tous les transferts entre réseaux par le relais — c'est donc le relais, et non une tentative directe échouée, qui les achemine.",
       },
       {
-        q: "Un transfert P2P est-il plus lent quand il bascule sur un relais ?",
+        q: "Un transfert P2P est-il plus lent quand il passe par un relais ?",
         a: "Cela peut ajouter un peu de latence, puisque le relais est un saut supplémentaire que traversent les données, et qu'il s'agit d'un serveur partagé plutôt que dédié. Mais c'est généralement encore plus rapide qu'un flux téléversement-puis-téléchargement, car il n'y a pas d'attente que le fichier arrive entièrement sur un serveur avant que le côté téléchargement puisse démarrer.",
       },
       {
@@ -632,14 +632,14 @@ const ar = {
       },
       {
         q: "هل يمرّ النقل من الند للند بأي خادم على الإطلاق؟",
-        a: "يساعد خادم إشارة صغير الجهازين على العثور على عنوان كل منهما — لكنه لا يرى سوى معلومات إعداد الاتصال، ولا يرى بايتات الملف قط. وإن تعذّر العثور على مسار مباشر، فإن مُرحِّل TURN يمرّر بيانات الملف المُشفَّرة، لكنه حتى حينئذٍ لا يتعامل إلا مع نص مُشفَّر لا يستطيع فك تشفيره.",
+        a: "يساعد خادم إشارة صغير الجهازين على العثور على عنوان كل منهما — لكنه لا يرى سوى معلومات إعداد الاتصال، ولا يرى بايتات الملف قط. وعبر الشبكات في المتصفح، يمرّر مُرحِّل TURN بيانات الملف المُشفَّرة بحكم التصميم، لكنه حتى حينئذٍ لا يتعامل إلا مع نص مُشفَّر لا يستطيع فك تشفيره.",
       },
       {
         q: "لماذا قد يفشل الاتصال المباشر من الأساس؟",
-        a: "بعض الشبكات — غالبًا جدران الحماية الصارمة للشركات أو بعض أنواع NAT لدى مشغّلي الهاتف المحمول — مبنية على نحو يجعل من المستحيل اكتشاف عنوان يمكن الوصول إليه من المعلومات الخارجية وحدها. وهذا أندر مما يبدو، لكن حين يحدث يكون المُرحِّل هو ما يُبقي النقل عاملًا بدلًا من أن يفشل تمامًا.",
+        a: "بعض الشبكات — غالبًا جدران الحماية الصارمة للشركات أو بعض أنواع NAT لدى مشغّلي الهاتف المحمول — مبنية على نحو يجعل من المستحيل اكتشاف عنوان يمكن الوصول إليه من المعلومات الخارجية وحدها. وبدل إنفاق نحو عشرين ثانية لاكتشاف ذلك في كل عملية نقل، يُمرِّر تطبيق Relayium في المتصفح كل عمليات النقل عبر الشبكات على المُرحِّل من البداية — فالذي يحملها هو المُرحِّل، لا محاولة اتصال مباشر فاشلة.",
       },
       {
-        q: "هل يكون النقل من الند للند أبطأ حين يتراجع إلى مُرحِّل؟",
+        q: "هل يكون النقل من الند للند أبطأ حين يمرّ عبر مُرحِّل؟",
         a: "قد يضيف بعض زمن الاستجابة، إذ إن المُرحِّل قفزة إضافية تمر بها البيانات وهو خادم مشترك لا خادم مخصَّص. لكنه يظل أسرع عمومًا من أسلوب الرفع ثم التنزيل، إذ لا انتظار لاستقرار الملف كاملًا على خادم قبل أن يبدأ جانب التنزيل.",
       },
       {
@@ -725,14 +725,14 @@ const es = {
       },
       {
         q: "¿Una transferencia P2P llega a tocar algún servidor?",
-        a: "Un pequeño servidor de señalización ayuda a los dos dispositivos a encontrar la dirección del otro — pero solo ve información de establecimiento de la conexión, nunca bytes del archivo. Si no puede encontrarse un camino directo, un retransmisor TURN reenvía los datos cifrados del archivo, pero incluso entonces solo maneja texto cifrado que no puede descifrar.",
+        a: "Un pequeño servidor de señalización ayuda a los dos dispositivos a encontrar la dirección del otro — pero solo ve información de establecimiento de la conexión, nunca bytes del archivo. Entre redes, en el navegador, un retransmisor TURN reenvía por diseño los datos cifrados del archivo, pero incluso entonces solo maneja texto cifrado que no puede descifrar.",
       },
       {
         q: "¿Por qué fallaría una conexión directa en primer lugar?",
-        a: "Algunas redes — a menudo cortafuegos corporativos estrictos o ciertos NAT de operadores móviles — están construidas de forma que hacen imposible descubrir una dirección alcanzable solo con la información externa. Es más raro de lo que parece, pero cuando ocurre, un retransmisor es lo que mantiene la transferencia funcionando en lugar de fallar por completo.",
+        a: "Algunas redes — a menudo cortafuegos corporativos estrictos o ciertos NAT de operadores móviles — están construidas de forma que hacen imposible descubrir una dirección alcanzable solo con la información externa. En lugar de gastar unos veinte segundos en averiguarlo en cada transferencia, la aplicación web de Relayium envía de entrada todas las transferencias entre redes por el retransmisor: lo que las lleva es el retransmisor, no un intento directo fallido.",
       },
       {
-        q: "¿Es más lenta la transferencia P2P cuando recurre a un retransmisor?",
+        q: "¿Es más lenta la transferencia P2P cuando pasa por un retransmisor?",
         a: "Puede añadir algo de latencia, ya que el retransmisor es un salto extra por el que pasan los datos y es un servidor compartido en lugar de uno dedicado. Pero suele seguir siendo más rápido que un flujo de subida y luego descarga, porque no hay que esperar a que el archivo aterrice por completo en un servidor antes de que el lado de la descarga pueda empezar.",
       },
       {
@@ -818,14 +818,14 @@ const pt = {
       },
       {
         q: "Uma transferência P2P chega a tocar em algum servidor?",
-        a: "Um pequeno servidor de sinalização ajuda os dois dispositivos a encontrar o endereço um do outro — mas ele só vê informação de estabelecimento da conexão, nunca bytes do arquivo. Se um caminho direto não puder ser encontrado, um retransmissor TURN encaminha os dados criptografados do arquivo, mas mesmo assim só lida com texto cifrado que não consegue descriptografar.",
+        a: "Um pequeno servidor de sinalização ajuda os dois dispositivos a encontrar o endereço um do outro — mas ele só vê informação de estabelecimento da conexão, nunca bytes do arquivo. Entre redes, no navegador, um retransmissor TURN encaminha por projeto os dados criptografados do arquivo, mas mesmo assim só lida com texto cifrado que não consegue descriptografar.",
       },
       {
         q: "Por que uma conexão direta falharia em primeiro lugar?",
-        a: "Algumas redes — muitas vezes firewalls corporativos rígidos ou certos NATs de operadoras móveis — são construídas de forma a tornar impossível descobrir um endereço alcançável apenas com a informação externa. Isso é mais raro do que parece, mas quando acontece, um retransmissor é o que mantém a transferência funcionando em vez de falhar por completo.",
+        a: "Algumas redes — muitas vezes firewalls corporativos rígidos ou certos NATs de operadoras móveis — são construídas de forma a tornar impossível descobrir um endereço alcançável apenas com a informação externa. Em vez de gastar uns vinte segundos descobrindo isso a cada transferência, o aplicativo web do Relayium envia de saída todas as transferências entre redes pelo retransmissor — o que as carrega é o retransmissor, não uma tentativa direta que falhou.",
       },
       {
-        q: "A transferência P2P fica mais lenta quando recorre a um retransmissor?",
+        q: "A transferência P2P fica mais lenta quando passa por um retransmissor?",
         a: "Pode acrescentar alguma latência, já que o retransmissor é um salto extra pelo qual os dados passam e é um servidor compartilhado em vez de dedicado. Mas ainda costuma ser mais rápido que um fluxo de upload e depois download, porque não é preciso esperar o arquivo aterrissar por completo em um servidor antes de o lado do download poder começar.",
       },
       {

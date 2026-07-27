@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="Relayium CLI でネットワークを越えて誰かにファイルを送る" />
     <meta name="twitter:description" content="relayium send と receive を使い、短いペアリングコードだけで異なるネットワーク上の2人の間でファイルを直接移動します。エンドツーエンドで暗号化され、SAS コードで検証され、しかも無料——ファイルは二人の間を直接行き来し、当社のサーバーを経由することはありません。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI でネットワークを越えて誰かにファイルを送る","description":"relayium send と receive を使い、短いペアリングコードだけで異なるネットワーク上の2人の間でファイルを直接移動します。エンドツーエンドで暗号化され、SAS コードで検証され、しかも無料——ファイルは二人の間を直接行き来し、当社のサーバーを経由することはありません。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ペアリングコードはどこから来るのですか？","acceptedAnswer":{"@type":"Answer","text":"自分で決めます。両側が入力する任意の短い文字列で構いません——通話やチャットで決めてください。両端で一致してさえいればよいのです。"}},{"@type":"Question","name":"ファイルはどこかにアップロードされますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。ファイルは二人の間で直接ストリーミングされ、エンドツーエンドで暗号化されます。二つの端を引き合わせるためのごく小さなランデブー・ハンドシェイクだけが Relayium を経由し、ファイルは決して経由しません。"}},{"@type":"Question","name":"接続できない場合はどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"両端が厳格な NAT の内側にあり到達可能なアドレスがない場合、直接接続は確立できず転送は失敗します——CLI は設計上リレーへのフォールバックを持ちません。直接の経路が使えない場合は、到達可能な2台のサーバー間での daemon direct、または SSH 経由の push を使ってください。"}},{"@type":"Question","name":"相手が本当に正しい人物だとどうやって分かりますか？","acceptedAnswer":{"@type":"Answer","text":"両方のターミナルがセッション鍵から得た同一の6桁の SAS コードを表示します。帯域外で比べてください。一致すれば、間に誰もいないということです。バイトが動く前にその確認を必須にするには --verify を追加します。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI でネットワークを越えて誰かにファイルを送る","description":"relayium send と receive を使い、短いペアリングコードだけで異なるネットワーク上の2人の間でファイルを直接移動します。エンドツーエンドで暗号化され、SAS コードで検証され、しかも無料——ファイルは二人の間を直接行き来し、当社のサーバーを経由することはありません。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ペアリングコードはどこから来るのですか？","acceptedAnswer":{"@type":"Answer","text":"Relayium が発行します。`relayium login` のうえで `relayium send ./release.zip` を実行すると、CLI が5分間有効な6文字のコードと、相手が実行するコマンドをそのまま表示します。自分で選ぶことはできません——サーバーは自身が発行したコードしか受け付けないからです。"}},{"@type":"Question","name":"ファイルはどこかにアップロードされますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。ファイルは二人の間で直接ストリーミングされ、エンドツーエンドで暗号化されます。二つの端を引き合わせるためのごく小さなランデブー・ハンドシェイクだけが Relayium を経由し、ファイルは決して経由しません。"}},{"@type":"Question","name":"接続できない場合はどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"両端が厳格な NAT の内側にあり到達可能なアドレスがない場合、直接接続は確立できず転送は失敗します——CLI は設計上リレーへのフォールバックを持ちません。直接の経路が使えない場合は、到達可能な2台のサーバー間での daemon direct、または SSH 経由の push を使ってください。"}},{"@type":"Question","name":"相手が本当に正しい人物だとどうやって分かりますか？","acceptedAnswer":{"@type":"Answer","text":"両方のターミナルがセッション鍵から得た同一の6桁の SAS コードを表示します。帯域外で比べてください。一致すれば、間に誰もいないということです。バイトが動く前にその確認を必須にするには --verify を追加します。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -69,31 +69,33 @@ footer a{color:var(--text-h);text-decoration:none}
       <h1>Relayium CLI でネットワークを越えて誰かにファイルを送る</h1>
       <p class="updated">最終更新: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/send-a-file-to-someone/">English</a><a href="/zh/guides/send-a-file-to-someone/">中文</a><a href="/ja/guides/send-a-file-to-someone/" aria-current="true">日本語</a><a href="/ko/guides/send-a-file-to-someone/">한국어</a><a href="/de/guides/send-a-file-to-someone/">Deutsch</a><a href="/fr/guides/send-a-file-to-someone/">Français</a><a href="/ar/guides/send-a-file-to-someone/">العربية</a><a href="/es/guides/send-a-file-to-someone/">Español</a><a href="/pt/guides/send-a-file-to-someone/">Português</a></nav>
-      <p class="lead">相手のマシンが自分のものではなく SSH でログインできないこともあります——別のオフィスの同僚へのファイル、クライアント向けのビルド、遠方の友人へのアーカイブ。relayium send と receive は、二人で決めた短いコードだけを使って、ネットワークを越えてそれを二人の間で直接移動させます。</p>
+      <p class="lead">相手のマシンが自分のものではなく SSH でログインできないこともあります——別のオフィスの同僚へのファイル、クライアント向けのビルド、遠方の友人へのアーカイブ。relayium send と receive は、送信時に CLI が発行する短いペアリングコードだけを使って、ネットワークを越えてそれを二人の間で直接移動させます。</p>
       <p class="lead">接続はピアツーピアでエンドツーエンドに暗号化されています。二つの端を引き合わせるためのごく小さなランデブー・ハンドシェイクだけが Relayium を経由し、ファイルのバイトは決して経由しません。</p>
       <h2>始める前に</h2>
       <p>以下はすべて relayium CLI なので、未インストールならまず入れてください。macOS または Linux では、1つのコマンドでビルド済みバイナリが PATH に入ります：</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>自分でファイルを選びたい、または Windows の場合は、リリースページからバイナリを取得してください——relayium.com/cli にすべてのインストール方法があります（Go があれば go build -o relayium ./cmd/relayium も可）。</li><li>relayium --version でインストールを確認できます。これをしないと以下のコマンドは「command not found」と出るだけです。</li></ul>
-      <h2>コードを決めてから send と receive</h2>
-      <p>好きな短いコードを選び、帯域外で共有します——通話で伝える、チャットに書く、など。一方が send し、もう一方が同じコードで receive します：</p>
-      <pre><code># sender
-relayium send ./release.zip 428571
+      <h2>まず send、そして表示されたコードを相手に伝える</h2>
+      <p>最初に一度だけ relayium login でサインインし、あとは send するだけです。CLI がペアリングコードを発行し、相手が実行するコマンドとあわせて表示して待機します。そのコードを帯域外で伝えてください——通話で伝える、チャットに書く、など：</p>
+      <pre><code># sender (once per machine: relayium login)
+relayium send ./release.zip
+# prints:  Code: K7M4XR   (valid 5 minutes)
+#          On the other machine:  relayium receive K7M4XR
 
-# receiver (in the folder where files should land)
-relayium receive 428571</code></pre>
-      <ul><li>コードは合流するための共有シークレットにすぎません。ランデブー先以外の誰にも送られず、二つの端を引き合わせるためだけに使われます。</li><li>受信側は送り先のディレクトリを指定できます: relayium receive 428571 ./downloads</li></ul>
+# receiver (in the folder where files should land) — no account needed
+relayium receive K7M4XR</code></pre>
+      <ul><li>コードは制限された文字集合から選ばれた6文字です——0 と 1 は含まれず、読み上げて取り違えやすい文字も除いてあります——そして発行から5分で失効します。</li><li>サインインが必要なのは送信側だけです。受信側は CLI とコードさえあればよく、アカウントは一切要りません。</li><li>コードは合流するための共有シークレットにすぎません。ランデブー先以外の誰にも送られず、二つの端を引き合わせるためだけに使われます。</li><li>受信側は送り先のディレクトリを指定できます: relayium receive K7M4XR ./downloads</li><li>両端とも CLI である必要があります——ブラウザは CLI のペアリングコードに参加できません。相手がブラウザしか持っていない場合は、代わりに relayium up を使ってください。ダウンロードリンクが得られます。</li></ul>
       <h2>SAS コードで検証する</h2>
       <p>二つの端が接続すると、両方のターミナルにセッション鍵から導かれた同じ6桁の SAS（short authentication string）が表示されます。それを比べて——通話中に読み上げて——中間の誰かではなく、お互いに接続していることを確認してください。</p>
       <p>確実な保証が欲しいときは --verify を付けます。すると転送は、コードが一致することをあなたが確認するまで、1バイトも動かさずに待機します。</p>
-      <pre><code>relayium send --verify ./release.zip 428571</code></pre>
+      <pre><code>relayium send --verify ./release.zip</code></pre>
       <h2>直接接続のみ——無料、さもなくば失敗</h2>
       <p>転送は二つの端の間で直接接続の確立を競います。確立できれば——少なくとも一方に到達可能なアドレスがある一般的なケースでは——ファイルはそのまま暗号化された状態で全速力かつ無料で流れます。</p>
       <p>両端が厳格な NAT の内側にあり直接の経路が見つからない場合、転送はリレー経由でファイルを送るのではなく、きれいに失敗します。これにより CLI は完全に無料のままで、ファイルのバイトも当社のサーバーに触れません。この状況に当たった場合、確実な答えは到達可能な2台のサーバー間での daemon direct、または SSH 経由の push です。</p>
-      <ul><li>直接接続が成功 → 無料、全速力、エンドツーエンドで暗号化。</li><li>直接の経路がない → 転送は失敗します。CLI が代わりにファイルを中継することは決してありません。</li><li>両端は地理的にどこにあっても構いません——それぞれが同じコードでコマンドを実行するだけです。</li></ul>
+      <ul><li>直接接続が成功 → 無料、全速力、エンドツーエンドで暗号化。</li><li>直接の経路がない → 転送は失敗します。CLI が代わりにファイルを中継することは決してありません。</li><li>両端は地理的にどこにあっても構いません——送信側は send を実行するだけ、受信側はそれが表示したコードで receive を実行します。</li></ul>
       <h2>よくある質問</h2>
       <h3>ペアリングコードはどこから来るのですか？</h3>
-      <p>自分で決めます。両側が入力する任意の短い文字列で構いません——通話やチャットで決めてください。両端で一致してさえいればよいのです。</p>
+      <p>Relayium が発行します。`relayium login` のうえで `relayium send ./release.zip` を実行すると、CLI が5分間有効な6文字のコードと、相手が実行するコマンドをそのまま表示します。自分で選ぶことはできません——サーバーは自身が発行したコードしか受け付けないからです。</p>
       <h3>ファイルはどこかにアップロードされますか？</h3>
       <p>いいえ。ファイルは二人の間で直接ストリーミングされ、エンドツーエンドで暗号化されます。二つの端を引き合わせるためのごく小さなランデブー・ハンドシェイクだけが Relayium を経由し、ファイルは決して経由しません。</p>
       <h3>接続できない場合はどうなりますか？</h3>

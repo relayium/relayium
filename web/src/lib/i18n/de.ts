@@ -184,7 +184,7 @@ const de: Messages = {
     freeTitle: "Immer kostenlos",
     freeLead: "Übertragen Sie Dateien für immer kostenlos:",
     free1: "Übertragungen im lokalen Netzwerk (LAN) – sofort, ohne Konto.",
-    free2: "Direkte Peer-to-Peer-Übertragungen mit dem CLI – über Ihr eigenes SSH, Daemon-direkt oder einen Pairing-Code – ohne Konto und ohne Verbrauchsmessung.",
+    free2: "Direkte Peer-to-Peer-Übertragungen mit dem CLI – über Ihr eigenes SSH, Daemon-direkt oder einen Pairing-Code – ohne Verbrauchsmessung. Ein Konto braucht nur das Erzeugen eines send-Pairing-Codes; zum Empfangen nie.",
     free3: "Ende-zu-Ende-verschlüsselt, ohne Dateigrößenbeschränkung, und Ihre Dateien gehen direkt von Gerät zu Gerät – sie berühren nie unsere Server.",
     freeWhy: "Direkte und LAN-Übertragungen kosten uns nichts und bleiben daher für alle kostenlos – zum Empfangen ist keine Anmeldung nötig.",
     paidTitle: "Wofür Sie bezahlen",
@@ -381,7 +381,7 @@ const de: Messages = {
     mode2Title: "send / receive — per Pairing-Code",
     mode2Tag: "kostenlos · direktes P2P",
     mode2Body:
-      "Sende netzwerkübergreifend an eine andere Person. Vereinbart außerhalb des Kanals einen kurzen Code (etwa am Telefon — ein beliebiger kurzer String), dann sendet die eine Seite und die andere empfängt. Die Verbindung ist direktes Peer-to-Peer: Nur ein kleiner Rendezvous-Handshake läuft über Relayium, um die beiden Enden einander vorzustellen — die Dateibytes nie. Sind beide Enden hinter strengem NAT und können sich nicht direkt verbinden, schlägt die Übertragung schlicht fehl (die CLI hat kein Relay). Beide Terminals zeigen einen 6-stelligen SAS-Code an — vergleicht sie, um einen Man-in-the-Middle auszuschließen (mit --verify wird eine Bestätigung verlangt, bevor überhaupt Bytes fließen).",
+      "Sende netzwerkübergreifend an eine andere Person. Melde dich einmal mit relayium login an und führe send dann ohne Code aus: Die CLI erzeugt einen Pairing-Code aus 6 Zeichen (aus einem Alphabet ohne 0 und 1), gültig für 5 Minuten, und gibt den genauen Befehl für die Gegenseite aus. Gib diesen Code außerhalb des Kanals weiter — etwa am Telefon. Selbst wählen kannst du ihn nicht, der Server akzeptiert nur selbst ausgegebene Codes, und der Empfänger braucht kein Konto. Beide Enden müssen die CLI sein; für jemanden mit nur einem Browser nimm stattdessen relayium up. Die Verbindung ist direktes Peer-to-Peer: Nur ein kleiner Rendezvous-Handshake läuft über Relayium, um die beiden Enden einander vorzustellen — die Dateibytes nie. Sind beide Enden hinter strengem NAT und können sich nicht direkt verbinden, schlägt die Übertragung schlicht fehl (die CLI hat kein Relay). Beide Terminals zeigen einen 6-stelligen SAS-Code an — vergleicht sie, um einen Man-in-the-Middle auszuschließen (mit --verify wird eine Bestätigung verlangt, bevor überhaupt Bytes fließen).",
     mode3Title: "daemon direct — Server zu Server",
     mode3Tag: "kostenlos",
     mode3Body:
@@ -415,7 +415,7 @@ const de: Messages = {
       "Den Cloud-Upload nach einem einzigen Download löschen",
       "Wie lange ein Cloud-Upload lebt, z. B. 7d oder 24h (durch deinen Tarif begrenzt)",
       "Eine feste Zahl an Cloud-Downloads erlauben, dann löschen",
-      "login / up / down auf einen selbst gehosteten Server richten",
+      "login / up / down / send / receive auf einen selbst gehosteten Server richten",
     ],
     trustH3: "Vertrauens- und Identitätsdateien",
     trustIntro:
@@ -445,7 +445,7 @@ const de: Messages = {
     cloudH2: "Cloud — jetzt hochladen, später herunterladen",
     cloudTag: "Konto · asynchron",
     cloudIntro:
-      "Von einem Rechner hochladen und auf einem anderen herunterladen, wann immer du willst — die beiden müssen nie gleichzeitig online sein. Das ist der einzige Modus, der dein Konto nutzt, und nur zum Hochladen: einmal relayium login, dann up. Das Herunterladen braucht kein Konto. Alles andere in der CLI bleibt ohne Anmeldung.",
+      "Von einem Rechner hochladen und auf einem anderen herunterladen, wann immer du willst — die beiden müssen nie gleichzeitig online sein. up und send sind die beiden Befehle, die dein Konto nutzen: up, um die Datei zu speichern, send, um einen Pairing-Code zu erzeugen — einmal relayium login, dann geht beides. Ein send mit einem Code, den man dir gegeben hat, erzeugt keinen und braucht keine Anmeldung. Das Herunterladen braucht kein Konto, und push/pull, Daemon-Direkt und sync nie.",
     cloudBody:
       "up verschlüsselt die Dateien lokal, lädt den Chiffretext hoch und gibt einen Abhol-Link aus. Steuere mit einem Aufbewahrungs-Flag die Lebensdauer (sonst gilt die Vorgabe deines Kontos): --burn (ein Download), --ttl 7d (feste Zeit, durch deinen Tarif begrenzt) oder --max-downloads 5 (feste Anzahl). Auf dem anderen Rechner gibst du den Link einfach an down — keine Anmeldung nötig.",
     cloudLoginNote:

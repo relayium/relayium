@@ -30,7 +30,7 @@ const en = {
       heading: "Not on the same network? Use a pairing code",
       body: [
         "Your phone is on mobile data and your PC is on home Wi-Fi? That is fine — Relayium is built to reach across networks, not only the same one.",
-        "Instead of automatic discovery, the sender gets a short pairing code (or the join link it generates) and signs in to generate it — the person receiving never needs an account. Enter the code on the other device and the two connect directly, peer-to-peer, whenever the networks allow it. When a direct path is impossible, the encrypted stream falls back to a TURN relay — the relay only ever sees ciphertext, so the transfer stays end-to-end encrypted. If the connection drops mid-way, the transfer can resume instead of starting over.",
+        "Instead of automatic discovery, the sender gets a short pairing code (or the join link it generates) and signs in to generate it — the person receiving never needs an account. Enter the code on the other device and the two connect through an encrypted TURN relay. That is the deliberate design for the cross-network path: between a mobile network and a home router a direct route usually can't be found, and trying for one first would burn about 20 seconds before the connection ended up on the relay regardless — starting there instead has you connected in a second or two. Your files are sealed end-to-end before they leave the sending device, so the relay only ever moves ciphertext it cannot read. If the connection drops mid-way, the transfer can resume instead of starting over.",
       ],
     },
     {
@@ -44,7 +44,7 @@ const en = {
       heading: "Big files: what your browser can handle",
       body: [
         "Because a realtime transfer never parks your files on a server, there is no upload quota to worry about. The practical limit is which browser is receiving.",
-        "In Chrome or Edge, incoming data streams straight to disk, so there is effectively no size cap — multi-gigabyte videos are fine. Firefox and Safari buffer the file in memory instead, so on those keep a single file under roughly 200 MB. If you need to send something large to a Safari-based iPhone, receiving on a Chrome-based device avoids the limit entirely.",
+        "A browser with the File System Access API — Chrome or Edge on a desktop — streams incoming data straight to disk, so there is effectively no size cap; multi-gigabyte videos are fine. Firefox, Safari and every phone browser lack that API, so the batch is assembled in memory there instead, and Relayium warns you before you accept once it passes roughly 256 MB. Treat that as a deliberately cautious estimate rather than a hard limit — a phone tab of that size is easy for the OS to reclaim, and the real breaking point moves with the device's memory, its OS and how many tabs are open. Since the phone is the receiving end here, a very large file is better sent the other way, into a desktop Chrome or Edge that can stream it to disk.",
       ],
     },
     {
@@ -69,7 +69,7 @@ const en = {
       },
       {
         q: "How fast is the transfer?",
-        a: "On the same Wi-Fi the two devices connect directly, so speed is bounded by your local network rather than by any server — usually as fast as your Wi-Fi allows. Across different networks it depends on both internet connections, and Relayium falls back to an encrypted relay only when a direct link is not possible.",
+        a: "On the same Wi-Fi the two devices connect directly, so speed is bounded by your local network rather than by any server — usually as fast as your Wi-Fi allows. Across different networks the transfer runs over an encrypted TURN relay by design, so it depends on both internet connections plus that extra hop; the payoff is that the connection comes up in a second or two rather than waiting out direct-path attempts that cross-network NATs rarely allow anyway.",
       },
       {
         q: "Is it secure to send files this way?",
@@ -111,7 +111,7 @@ const zh = {
       heading: "不在同一网络？用配对码",
       body: [
         "手机用的是移动数据，电脑连的是家里的 Wi-Fi？没关系——Relayium 生来就支持跨网络，而不只是同一个网络。",
-        "此时不再自动发现，而是发送方登录后拿到一个短配对码（或它生成的加入链接）——接收方始终无需账号。在另一台设备上输入这个码，两者就点对点直连，只要网络条件允许就直传。当无法直连时，加密数据流会退回到 TURN 中继——中继只能看到密文，因此传输始终保持端到端加密。若中途断开，传输可以断点续传，而不必从头再来。",
+        "此时不再自动发现，而是发送方登录后拿到一个短配对码（或它生成的加入链接）——接收方始终无需账号。在另一台设备上输入这个码，两者就会通过加密的 TURN 中继连上。跨网络这条路径就是这样刻意设计的：在移动网络和家里的路由器之间，直连路径通常根本找不到，先去试一遍要白白花掉二十秒左右，最后照样落到中继上——直接从中继开始，一两秒就连上了。文件在离开发送端之前就已端到端封装，因此中继搬运的始终只是它读不懂的密文。若中途断开，传输可以断点续传，而不必从头再来。",
       ],
     },
     {
@@ -125,7 +125,7 @@ const zh = {
       heading: "大文件：你的浏览器能扛多大",
       body: [
         "由于实时传输从不把文件存到服务器上，所以不用担心任何上传配额。实际的上限取决于用哪个浏览器接收。",
-        "在 Chrome 或 Edge 上，接收到的数据直接流式写入磁盘，因此几乎没有大小上限——几个 GB 的视频也没问题。Firefox 和 Safari 则是在内存里缓冲文件，所以在这两者上单个文件建议控制在约 200 MB 以内。如果你要把很大的文件发给基于 Safari 的 iPhone，改用基于 Chrome 的设备接收就能完全避开这个限制。",
+        "支持 File System Access API 的浏览器——桌面版 Chrome、Edge——会把接收到的数据直接流式写入磁盘，因此几乎没有大小上限，几个 GB 的视频也没问题。Firefox、Safari 以及所有手机浏览器都没有这个 API，这时整批文件只能先攒在内存里，因此一旦超过约 256 MB，Relayium 会在你点「接收」之前先提示一次。这要当成刻意取的保守估计，而不是硬性上限——手机标签页到了这个量级本来就很容易被系统回收，真正的临界点还随设备内存、系统和标签页数量浮动。这里接收端是手机，所以真正很大的文件更适合反过来传：发到桌面端的 Chrome 或 Edge，那边可以直接流式写盘。",
       ],
     },
     {
@@ -150,7 +150,7 @@ const zh = {
       },
       {
         q: "传输速度有多快？",
-        a: "在同一 Wi-Fi 下，两台设备直接互连，所以速度由你的本地网络决定，而不受任何服务器限制——通常能跑满你的 Wi-Fi。跨网络时则取决于双方的网络，而且只有在无法直连时，Relayium 才会退回到加密中继。",
+        a: "在同一 Wi-Fi 下，两台设备直接互连，所以速度由你的本地网络决定，而不受任何服务器限制——通常能跑满你的 Wi-Fi。跨网络时，传输按设计走加密 TURN 中继，因此速度取决于双方的网络以及中继这一跳；换来的是连接一两秒就能建立，而不必去等那些跨网络 NAT 本就极少允许的直连尝试超时。",
       },
       {
         q: "这样传文件安全吗？",
@@ -192,7 +192,7 @@ const ja = {
       heading: "同じネットワークにない？ペアリングコードを使う",
       body: [
         "スマホはモバイル通信、PC は自宅の Wi-Fi？大丈夫です——Relayium は同じネットワークだけでなく、ネットワークをまたいで届くように作られています。",
-        "この場合は自動発見ではなく、送信側がサインインして短いペアリングコード（またはそれが生成する参加リンク）を受け取ります——受信側はアカウント不要です。もう一方の端末でそのコードを入力すると、ネットワークが許す限り2台は P2P で直接つながります。直接の経路が不可能なときは、暗号化ストリームが TURN リレーにフォールバックしますが、リレーが見るのは暗号文だけなので、転送はエンドツーエンド暗号化のままです。途中で切れても、転送は最初からではなく再開できます。",
+        "この場合は自動発見ではなく、送信側がサインインして短いペアリングコード（またはそれが生成する参加リンク）を受け取ります——受信側はアカウント不要です。もう一方の端末でそのコードを入力すると、2台は暗号化された TURN リレーを介してつながります。これはネットワークをまたぐ経路の意図的な設計です。モバイル回線と自宅ルーターの間では直接経路がまず見つからず、先に試すと20秒ほど無駄にしたあげく結局リレーに落ち着くため、最初からリレーを使えば1〜2秒で接続できます。ファイルは送信側の端末を出る前にエンドツーエンドで封印されているので、リレーが運ぶのは読めない暗号文だけです。途中で切れても、転送は最初からではなく再開できます。",
       ],
     },
     {
@@ -206,7 +206,7 @@ const ja = {
       heading: "大きなファイル：ブラウザが扱える上限",
       body: [
         "リアルタイム転送はファイルをサーバーに置かないため、アップロードの割り当てを気にする必要はありません。実際の上限は、どのブラウザで受信するかで決まります。",
-        "Chrome や Edge では受信データがそのままディスクへストリーミングされるので、事実上サイズの上限はなく、数ギガバイトの動画でも問題ありません。Firefox と Safari はファイルをメモリにバッファするため、これらでは1ファイルを約 200 MB 以内に抑えてください。Safari ベースの iPhone に大きなものを送りたい場合は、Chrome ベースの端末で受信すればこの制限を完全に回避できます。",
+        "File System Access API を備えたブラウザ——パソコン版の Chrome や Edge——では受信データがそのままディスクへストリーミングされるので、事実上サイズの上限はなく、数ギガバイトの動画でも問題ありません。Firefox・Safari・スマホのブラウザにはこの API がないため、そこでは受信分をいったんメモリに溜めることになり、およそ 256 MB を超えると Relayium が受け取る前に警告を出します。これは実測した上限ではなく意図的に控えめに置いた目安と考えてください——その規模のスマホのタブは OS に回収されやすく、実際の限界も端末のメモリ・OS・開いているタブの数で動きます。ここでは受信側がスマホなので、本当に大きなファイルは逆向きに送り、ディスクへストリーミングできるパソコンの Chrome や Edge で受け取るほうが確実です。",
       ],
     },
     {
@@ -231,7 +231,7 @@ const ja = {
       },
       {
         q: "転送はどのくらい速いですか？",
-        a: "同じ Wi-Fi では2台が直接つながるため、速度はサーバーではなくローカルネットワークで決まり、たいてい Wi-Fi の許す限りの速さです。ネットワークをまたぐ場合は双方の回線しだいで、直接リンクが不可能なときにだけ Relayium は暗号化リレーにフォールバックします。",
+        a: "同じ Wi-Fi では2台が直接つながるため、速度はサーバーではなくローカルネットワークで決まり、たいてい Wi-Fi の許す限りの速さです。ネットワークをまたぐ場合、転送は設計上つねに暗号化 TURN リレー経由となるため、双方の回線とそのひと跳び分に左右されます。その代わり、ネットワークをまたぐ NAT ではめったに通らない直接接続の試行を待たずに、1〜2秒で接続が確立します。",
       },
       {
         q: "この方法でファイルを送っても安全ですか？",
@@ -273,7 +273,7 @@ const ko = {
       heading: "같은 네트워크가 아니라면? 페어링 코드를 쓰세요",
       body: [
         "휴대폰은 모바일 데이터, PC는 집 Wi-Fi인가요? 괜찮습니다 — Relayium은 같은 네트워크뿐 아니라 네트워크를 넘나들며 닿도록 만들어졌습니다.",
-        "이 경우 자동 탐색 대신 보내는 쪽이 로그인해서 짧은 페어링 코드(또는 그것이 생성하는 참여 링크)를 받습니다 — 받는 쪽은 계정이 필요 없습니다. 상대 기기에 그 코드를 입력하면 네트워크가 허락하는 한 두 기기가 P2P로 직접 연결됩니다. 직접 경로가 불가능할 때는 암호화된 스트림이 TURN 릴레이로 폴백하지만, 릴레이는 암호문만 보므로 전송은 종단간 암호화를 유지합니다. 도중에 끊겨도 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.",
+        "이 경우 자동 탐색 대신 보내는 쪽이 로그인해서 짧은 페어링 코드(또는 그것이 생성하는 참여 링크)를 받습니다 — 받는 쪽은 계정이 필요 없습니다. 상대 기기에 그 코드를 입력하면 두 기기는 암호화된 TURN 릴레이를 거쳐 연결됩니다. 네트워크를 넘는 경로는 의도적으로 그렇게 설계되어 있습니다. 모바일 망과 집 공유기 사이에서는 직접 경로를 찾지 못하는 것이 보통이라, 먼저 시도하면 20초쯤 허비하고도 결국 릴레이로 가게 됩니다. 처음부터 릴레이로 가면 1~2초 만에 연결됩니다. 파일은 보내는 기기를 떠나기 전에 종단간으로 봉인되므로, 릴레이가 옮기는 것은 읽을 수 없는 암호문뿐입니다. 도중에 끊겨도 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.",
       ],
     },
     {
@@ -287,7 +287,7 @@ const ko = {
       heading: "큰 파일: 브라우저가 감당할 수 있는 크기",
       body: [
         "실시간 전송은 파일을 서버에 두지 않으므로 업로드 할당량을 걱정할 필요가 없습니다. 실제 상한은 어떤 브라우저로 받느냐에 달렸습니다.",
-        "Chrome이나 Edge에서는 들어오는 데이터가 곧장 디스크로 스트리밍되어 사실상 크기 상한이 없어, 수 기가바이트 동영상도 괜찮습니다. Firefox와 Safari는 파일을 메모리에 버퍼링하므로 이들에서는 한 파일을 약 200 MB 이내로 두세요. Safari 기반 iPhone에 큰 것을 보내야 한다면 Chrome 기반 기기로 받으면 이 제한을 완전히 피할 수 있습니다.",
+        "File System Access API가 있는 브라우저 — 데스크톱 Chrome, Edge — 에서는 들어오는 데이터가 곧장 디스크로 스트리밍되어 사실상 크기 상한이 없어, 수 기가바이트 동영상도 괜찮습니다. Firefox와 Safari, 그리고 모든 휴대폰 브라우저에는 그 API가 없어서 받은 내용을 일단 메모리에 모으게 되며, 대략 256 MB를 넘어서면 Relayium이 수락하기 전에 미리 경고합니다. 이 수치는 고정된 상한이 아니라 일부러 보수적으로 잡은 추정치로 보세요 — 그 정도 크기의 휴대폰 탭은 OS가 회수하기 쉽고, 실제 한계도 기기 메모리와 OS, 열어 둔 탭 수에 따라 움직입니다. 여기서는 받는 쪽이 휴대폰이므로, 정말 큰 파일이라면 반대 방향으로 보내 디스크로 스트리밍할 수 있는 데스크톱 Chrome이나 Edge에서 받는 편이 낫습니다.",
       ],
     },
     {
@@ -312,7 +312,7 @@ const ko = {
       },
       {
         q: "전송은 얼마나 빠른가요?",
-        a: "같은 Wi-Fi에서는 두 기기가 직접 연결되어 속도가 서버가 아닌 로컬 네트워크로 결정되며, 보통 Wi-Fi가 허락하는 만큼 빠릅니다. 서로 다른 네트워크에서는 양쪽 인터넷 회선에 달렸고, 직접 연결이 불가능할 때만 Relayium이 암호화된 릴레이로 폴백합니다.",
+        a: "같은 Wi-Fi에서는 두 기기가 직접 연결되어 속도가 서버가 아닌 로컬 네트워크로 결정되며, 보통 Wi-Fi가 허락하는 만큼 빠릅니다. 서로 다른 네트워크에서는 설계상 전송이 암호화된 TURN 릴레이를 거치므로, 양쪽 인터넷 회선과 그 한 홉에 달려 있습니다. 대신 네트워크를 넘는 NAT에서 좀처럼 통하지 않는 직접 연결 시도를 기다리지 않고 1~2초 만에 연결이 성립합니다.",
       },
       {
         q: "이렇게 파일을 보내도 안전한가요?",
@@ -354,7 +354,7 @@ const de = {
       heading: "Nicht im selben Netz? Nimm einen Pairing-Code",
       body: [
         "Das Handy ist im Mobilfunknetz und der PC im heimischen WLAN? Kein Problem — Relayium ist darauf ausgelegt, über Netzwerke hinweg zu reichen, nicht nur im selben.",
-        "Statt automatischer Erkennung meldet sich der Absender an und erhält einen kurzen Pairing-Code (oder den erzeugten Beitrittslink) — der Empfänger braucht dabei nie ein Konto. Gib den Code auf dem anderen Gerät ein, und die beiden verbinden sich direkt Peer-to-Peer, sofern die Netzwerke es zulassen. Ist ein direkter Weg unmöglich, weicht der verschlüsselte Datenstrom auf ein TURN-Relay aus — das Relay sieht nur Chiffretext, sodass die Übertragung Ende-zu-Ende-verschlüsselt bleibt. Bricht die Verbindung mittendrin ab, kann die Übertragung fortgesetzt werden, statt neu zu beginnen.",
+        "Statt automatischer Erkennung meldet sich der Absender an und erhält einen kurzen Pairing-Code (oder den erzeugten Beitrittslink) — der Empfänger braucht dabei nie ein Konto. Gib den Code auf dem anderen Gerät ein, und die beiden verbinden sich über ein verschlüsseltes TURN-Relay. So ist der netzübergreifende Weg bewusst ausgelegt: Zwischen einem Mobilfunknetz und einem Heimrouter lässt sich meist kein direkter Weg finden, und der Versuch würde rund 20 Sekunden kosten, bevor die Verbindung ohnehin beim Relay landet — gleich dort zu beginnen bringt sie in ein bis zwei Sekunden zustande. Deine Dateien sind Ende-zu-Ende versiegelt, bevor sie das sendende Gerät verlassen, das Relay bewegt also nur Chiffretext, den es nicht lesen kann. Bricht die Verbindung mittendrin ab, kann die Übertragung fortgesetzt werden, statt neu zu beginnen.",
       ],
     },
     {
@@ -368,7 +368,7 @@ const de = {
       heading: "Große Dateien: was dein Browser bewältigt",
       body: [
         "Da eine Echtzeitübertragung deine Dateien nie auf einem Server ablegt, musst du dich um kein Upload-Kontingent kümmern. Die praktische Grenze hängt davon ab, welcher Browser empfängt.",
-        "In Chrome oder Edge streamen eingehende Daten direkt auf die Festplatte, es gibt also praktisch keine Größengrenze — Videos mit mehreren Gigabyte sind kein Problem. Firefox und Safari puffern die Datei stattdessen im Arbeitsspeicher, halte dort eine einzelne Datei also unter etwa 200 MB. Wenn du etwas Großes an ein Safari-basiertes iPhone senden musst, umgehst du die Grenze vollständig, indem du auf einem Chrome-basierten Gerät empfängst.",
+        "Ein Browser mit der File System Access API — Chrome oder Edge auf dem Desktop — streamt eingehende Daten direkt auf die Festplatte, es gibt also praktisch keine Größengrenze; Videos mit mehreren Gigabyte sind kein Problem. Firefox, Safari und sämtliche Handy-Browser haben diese API nicht, dort sammelt sich der Empfang stattdessen im Arbeitsspeicher, und ab etwa 256 MB warnt Relayium dich, bevor du annimmst. Nimm das als bewusst vorsichtige Schätzung und nicht als harte Grenze — ein Handy-Tab dieser Größe holt sich das Betriebssystem leicht zurück, und der tatsächliche Knackpunkt verschiebt sich mit Arbeitsspeicher, Betriebssystem und Zahl der offenen Tabs. Da hier das Handy empfängt, schickst du etwas sehr Großes besser in die andere Richtung — an ein Chrome oder Edge am Desktop, das es auf die Festplatte streamen kann.",
       ],
     },
     {
@@ -393,7 +393,7 @@ const de = {
       },
       {
         q: "Wie schnell ist die Übertragung?",
-        a: "Im selben WLAN verbinden sich die beiden Geräte direkt, die Geschwindigkeit hängt also von deinem lokalen Netz ab und nicht von einem Server — meist so schnell, wie dein WLAN es erlaubt. Netzwerkübergreifend hängt es von beiden Internetverbindungen ab, und Relayium weicht nur dann auf ein verschlüsseltes Relay aus, wenn keine direkte Verbindung möglich ist.",
+        a: "Im selben WLAN verbinden sich die beiden Geräte direkt, die Geschwindigkeit hängt also von deinem lokalen Netz ab und nicht von einem Server — meist so schnell, wie dein WLAN es erlaubt. Netzwerkübergreifend läuft die Übertragung von vornherein über ein verschlüsseltes TURN-Relay, hängt also von beiden Internetverbindungen plus diesem zusätzlichen Sprung ab; dafür steht die Verbindung in ein bis zwei Sekunden, statt auf Direktversuche zu warten, die netzübergreifende NATs ohnehin selten zulassen.",
       },
       {
         q: "Ist es sicher, Dateien so zu senden?",
@@ -435,7 +435,7 @@ const fr = {
       heading: "Pas sur le même réseau ? Utilisez un code d'appairage",
       body: [
         "Votre téléphone est en données mobiles et votre PC sur le Wi-Fi de la maison ? Aucun souci — Relayium est conçu pour atteindre à travers les réseaux, pas seulement le même.",
-        "Au lieu de la découverte automatique, l'expéditeur se connecte et obtient un court code d'appairage (ou le lien de participation qu'il génère) — le destinataire n'a jamais besoin de compte. Saisissez le code sur l'autre appareil et les deux se connectent directement, en pair-à-pair, chaque fois que les réseaux le permettent. Quand une voie directe est impossible, le flux chiffré bascule vers un relais TURN — le relais ne voit que du texte chiffré, donc le transfert reste chiffré de bout en bout. Si la connexion se coupe en cours de route, le transfert peut reprendre au lieu de tout recommencer.",
+        "Au lieu de la découverte automatique, l'expéditeur se connecte et obtient un court code d'appairage (ou le lien de participation qu'il génère) — le destinataire n'a jamais besoin de compte. Saisissez le code sur l'autre appareil et les deux se connectent via un relais TURN chiffré. C'est le choix délibéré pour le trajet entre réseaux : entre un réseau mobile et une box domestique, une voie directe est généralement introuvable, et la chercher d'abord coûterait une vingtaine de secondes avant que la connexion n'aboutisse malgré tout au relais — en partant directement du relais, elle s'établit en une ou deux secondes. Vos fichiers sont scellés de bout en bout avant de quitter l'appareil émetteur : le relais ne déplace donc que du texte chiffré qu'il ne peut pas lire. Si la connexion se coupe en cours de route, le transfert peut reprendre au lieu de tout recommencer.",
       ],
     },
     {
@@ -449,7 +449,7 @@ const fr = {
       heading: "Gros fichiers : ce que votre navigateur peut gérer",
       body: [
         "Comme un transfert en temps réel ne stocke jamais vos fichiers sur un serveur, aucun quota de téléversement à surveiller. La limite pratique dépend du navigateur qui reçoit.",
-        "Dans Chrome ou Edge, les données entrantes sont écrites en flux directement sur le disque, il n'y a donc en pratique aucune limite de taille — des vidéos de plusieurs gigaoctets passent sans souci. Firefox et Safari mettent le fichier en mémoire tampon, alors sur ceux-ci gardez un fichier unique sous environ 200 Mo. Si vous devez envoyer quelque chose de volumineux vers un iPhone sous Safari, recevoir sur un appareil sous Chrome contourne entièrement la limite.",
+        "Un navigateur doté de l'API File System Access — Chrome ou Edge sur ordinateur — écrit les données entrantes en flux directement sur le disque : en pratique, aucune limite de taille, des vidéos de plusieurs gigaoctets passent sans souci. Firefox, Safari et tous les navigateurs de téléphone n'ont pas cette API : la réception y est assemblée en mémoire, et Relayium vous prévient avant que vous acceptiez dès que l'on dépasse environ 256 Mo. À considérer comme une estimation volontairement prudente plutôt qu'une limite ferme — un onglet de téléphone de cette taille est facile à récupérer pour le système, et le point de rupture réel varie avec la mémoire de l'appareil, son système et le nombre d'onglets ouverts. Comme c'est ici le téléphone qui reçoit, mieux vaut envoyer un très gros fichier dans l'autre sens, vers un Chrome ou Edge de bureau capable de l'écrire en flux sur le disque.",
       ],
     },
     {
@@ -474,7 +474,7 @@ const fr = {
       },
       {
         q: "À quelle vitesse se fait le transfert ?",
-        a: "Sur le même Wi-Fi, les deux appareils se connectent directement, la vitesse est donc limitée par votre réseau local et non par un serveur — en général aussi rapide que votre Wi-Fi le permet. Entre réseaux différents, cela dépend des deux connexions internet, et Relayium ne bascule sur un relais chiffré que lorsqu'une liaison directe est impossible.",
+        a: "Sur le même Wi-Fi, les deux appareils se connectent directement, la vitesse est donc limitée par votre réseau local et non par un serveur — en général aussi rapide que votre Wi-Fi le permet. Entre réseaux différents, le transfert passe par conception par un relais TURN chiffré : cela dépend donc des deux connexions internet et de ce saut supplémentaire, mais la connexion s'établit en une ou deux secondes au lieu d'attendre des tentatives directes que les NAT entre réseaux autorisent rarement.",
       },
       {
         q: "Est-ce sûr d'envoyer des fichiers ainsi ?",
@@ -516,7 +516,7 @@ const ar = {
       heading: "لست على نفس الشبكة؟ استخدم رمز اقتران",
       body: [
         "هاتفك على بيانات الجوال وحاسوبك على شبكة Wi-Fi المنزلية؟ لا بأس بذلك — بُني Relayium ليصل عبر الشبكات، لا على نفس الشبكة فقط.",
-        "بدلًا من الاكتشاف التلقائي، يحصل المُرسِل على رمز اقتران قصير (أو رابط الانضمام الذي يولّده) ويسجّل الدخول لتوليده — أما المُستقبِل فلا يحتاج إلى حساب أبدًا. أدخِل الرمز على الجهاز الآخر فيتصل الجهازان مباشرةً، من الند للند، متى سمحت الشبكات بذلك. وعندما يتعذّر المسار المباشر، يعود التدفق المُشفَّر إلى مُرحِّل TURN — ولا يرى المُرحِّل سوى نص مُشفَّر، فيبقى النقل مشفَّرًا من الطرف إلى الطرف. وإذا انقطع الاتصال في منتصف الطريق، يمكن استئناف النقل بدلًا من البدء من جديد.",
+        "بدلًا من الاكتشاف التلقائي، يحصل المُرسِل على رمز اقتران قصير (أو رابط الانضمام الذي يولّده) ويسجّل الدخول لتوليده — أما المُستقبِل فلا يحتاج إلى حساب أبدًا. أدخِل الرمز على الجهاز الآخر فيتصل الجهازان عبر مُرحِّل TURN مُشفَّر. هكذا صُمِّم المسار عبر الشبكات عن قصد: فبين شبكة الجوال وموجّه المنزل يتعذّر عادةً إيجاد مسار مباشر، ومحاولته أولًا تستهلك نحو عشرين ثانية قبل أن ينتهي الاتصال إلى المُرحِّل على أي حال — أما البدء منه مباشرةً فيُنشئ الاتصال في ثانية أو ثانيتين. وملفاتك مختومة من الطرف إلى الطرف قبل أن تغادر الجهاز المُرسِل، فلا ينقل المُرحِّل سوى نص مُشفَّر لا يستطيع قراءته. وإذا انقطع الاتصال في منتصف الطريق، يمكن استئناف النقل بدلًا من البدء من جديد.",
       ],
     },
     {
@@ -530,7 +530,7 @@ const ar = {
       heading: "الملفات الكبيرة: ما يستطيع متصفحك تحمّله",
       body: [
         "لأن النقل الفوري لا يودِع ملفاتك أبدًا على خادم، فلا حصة رفع تقلق بشأنها. الحد العملي هو أي متصفح يستقبل.",
-        "في Chrome أو Edge، تُبَثّ البيانات الواردة مباشرةً إلى القرص، فلا يوجد فعليًا حد للحجم — مقاطع الفيديو بحجم عدة غيغابايت لا مشكلة فيها. أما Firefox وSafari فيخزّنان الملف مؤقتًا في الذاكرة بدلًا من ذلك، فعليهما أبقِ الملف الواحد دون نحو 200 MB. وإن احتجت إلى إرسال شيء كبير إلى iPhone يعتمد Safari، فإن الاستقبال على جهاز يعتمد Chrome يتجنّب الحد تمامًا.",
+        "المتصفح الذي يدعم واجهة File System Access — ‏Chrome أو Edge على الحاسوب — يبثّ البيانات الواردة مباشرةً إلى القرص، فلا يوجد فعليًا حد للحجم؛ مقاطع الفيديو بحجم عدة غيغابايت لا مشكلة فيها. أما Firefox وSafari وكل متصفحات الهواتف فلا تملك تلك الواجهة، فتُجمَّع الدفعة في الذاكرة بدلًا من ذلك، وينبّهك Relayium قبل القبول متى تجاوزت نحو 256 ميغابايت. واعتبر ذلك تقديرًا متحفّظًا عن قصد لا حدًّا صارمًا — فعلامة تبويب على هاتف بهذا الحجم يسهل على النظام استرجاعها، ونقطة الانهيار الحقيقية تتحرك بحسب ذاكرة الجهاز ونظامه وعدد علامات التبويب المفتوحة. وبما أن المُستقبِل هنا هو الهاتف، فالأفضل إرسال الملف الضخم في الاتجاه المعاكس، إلى Chrome أو Edge على حاسوب يستطيع بثّه إلى القرص.",
       ],
     },
     {
@@ -555,7 +555,7 @@ const ar = {
       },
       {
         q: "ما مدى سرعة النقل؟",
-        a: "على نفس شبكة Wi-Fi يتصل الجهازان مباشرةً، فتتحدد السرعة بشبكتك المحلية لا بأي خادم — عادةً بأقصى سرعة تسمح بها شبكة Wi-Fi لديك. أما عبر شبكات مختلفة فتعتمد على كلا اتصالَي الإنترنت، ولا يعود Relayium إلى مُرحِّل مُشفَّر إلا عندما يتعذّر الاتصال المباشر.",
+        a: "على نفس شبكة Wi-Fi يتصل الجهازان مباشرةً، فتتحدد السرعة بشبكتك المحلية لا بأي خادم — عادةً بأقصى سرعة تسمح بها شبكة Wi-Fi لديك. أما عبر شبكات مختلفة فيجري النقل بحكم التصميم عبر مُرحِّل TURN مُشفَّر، فيعتمد على كلا اتصالَي الإنترنت وعلى تلك القفزة الإضافية؛ والمقابل أن الاتصال يقوم في ثانية أو ثانيتين بدل انتظار محاولات مباشرة نادرًا ما تسمح بها شبكات NAT عبر الشبكات.",
       },
       {
         q: "هل من الآمن إرسال الملفات بهذه الطريقة؟",
@@ -597,7 +597,7 @@ const es = {
       heading: "¿No están en la misma red? Usa un código de emparejamiento",
       body: [
         "¿Tu teléfono va con datos móviles y tu PC con la Wi-Fi de casa? No pasa nada — Relayium está hecho para llegar entre redes, no solo dentro de la misma.",
-        "En lugar del descubrimiento automático, el remitente obtiene un código de emparejamiento corto (o el enlace de unión que genera) e inicia sesión para generarlo — la persona que recibe nunca necesita una cuenta. Introduce el código en el otro dispositivo y los dos se conectan directamente, de igual a igual, siempre que las redes lo permitan. Cuando una ruta directa es imposible, el flujo cifrado recurre a un retransmisor TURN — el retransmisor solo ve texto cifrado, así que la transferencia sigue cifrada de extremo a extremo. Si la conexión se corta a medias, la transferencia puede reanudarse en lugar de empezar de nuevo.",
+        "En lugar del descubrimiento automático, el remitente obtiene un código de emparejamiento corto (o el enlace de unión que genera) e inicia sesión para generarlo — la persona que recibe nunca necesita una cuenta. Introduce el código en el otro dispositivo y los dos se conectan a través de un retransmisor TURN cifrado. Así está pensada a propósito la vía entre redes: entre una red móvil y el router de casa casi nunca se encuentra una ruta directa, e intentarla primero gastaría unos veinte segundos antes de que la conexión acabara igualmente en el retransmisor — empezando por él, queda establecida en uno o dos segundos. Tus archivos van sellados de extremo a extremo antes de salir del dispositivo emisor, así que el retransmisor solo mueve texto cifrado que no puede leer. Si la conexión se corta a medias, la transferencia puede reanudarse en lugar de empezar de nuevo.",
       ],
     },
     {
@@ -611,7 +611,7 @@ const es = {
       heading: "Archivos grandes: lo que tu navegador puede manejar",
       body: [
         "Como una transferencia en tiempo real nunca deja tus archivos en un servidor, no hay cuota de subida que te preocupe. El límite práctico es qué navegador recibe.",
-        "En Chrome o Edge, los datos entrantes se transmiten directamente al disco, así que en la práctica no hay tope de tamaño — vídeos de varios gigabytes no son problema. Firefox y Safari, en cambio, almacenan el archivo en memoria, así que en esos mantén un archivo individual por debajo de unos 200 MB. Si necesitas enviar algo grande a un iPhone basado en Safari, recibir en un dispositivo basado en Chrome evita el límite por completo.",
+        "Un navegador con la API File System Access — Chrome o Edge de escritorio — transmite los datos entrantes directamente al disco, así que en la práctica no hay tope de tamaño; vídeos de varios gigabytes no son problema. Firefox, Safari y todos los navegadores de móvil no tienen esa API, así que ahí la recepción se acumula en memoria y Relayium te avisa antes de que aceptes en cuanto se pasa de unos 256 MB. Tómalo como una estimación deliberadamente prudente y no como un límite duro — una pestaña de móvil de ese tamaño es fácil de reclamar para el sistema, y el punto real de ruptura se mueve con la memoria del dispositivo, su sistema y cuántas pestañas haya abiertas. Como aquí el receptor es el teléfono, un archivo muy grande conviene mandarlo en el otro sentido, hacia un Chrome o Edge de escritorio que pueda escribirlo al disco.",
       ],
     },
     {
@@ -636,7 +636,7 @@ const es = {
       },
       {
         q: "¿Qué velocidad tiene la transferencia?",
-        a: "En la misma Wi-Fi los dos dispositivos se conectan directamente, así que la velocidad la limita tu red local y no un servidor — normalmente tan rápido como lo permita tu Wi-Fi. Entre redes distintas depende de ambas conexiones a internet, y Relayium recurre a un retransmisor cifrado solo cuando no es posible un enlace directo.",
+        a: "En la misma Wi-Fi los dos dispositivos se conectan directamente, así que la velocidad la limita tu red local y no un servidor — normalmente tan rápido como lo permita tu Wi-Fi. Entre redes distintas la transferencia va por diseño a través de un retransmisor TURN cifrado, así que depende de ambas conexiones a internet más ese salto extra; a cambio, la conexión se establece en uno o dos segundos en vez de esperar intentos directos que los NAT entre redes rara vez permiten.",
       },
       {
         q: "¿Es seguro enviar archivos así?",
@@ -678,7 +678,7 @@ const pt = {
       heading: "Não estão na mesma rede? Use um código de emparelhamento",
       body: [
         "Seu celular está no dados móveis e seu PC na Wi-Fi de casa? Tudo bem — o Relayium foi feito para alcançar entre redes, não só dentro da mesma.",
-        "Em vez da descoberta automática, o remetente recebe um código de emparelhamento curto (ou o link de entrada que ele gera) e faz login para gerá-lo — quem recebe nunca precisa de conta. Digite o código no outro dispositivo e os dois se conectam diretamente, ponto a ponto, sempre que as redes permitirem. Quando um caminho direto é impossível, o fluxo criptografado recorre a um retransmissor TURN — o retransmissor só vê texto cifrado, então a transferência continua criptografada de ponta a ponta. Se a conexão cair no meio, a transferência pode ser retomada em vez de recomeçar.",
+        "Em vez da descoberta automática, o remetente recebe um código de emparelhamento curto (ou o link de entrada que ele gera) e faz login para gerá-lo — quem recebe nunca precisa de conta. Digite o código no outro dispositivo e os dois se conectam por um retransmissor TURN criptografado. O caminho entre redes foi pensado assim de propósito: entre uma rede móvel e o roteador de casa quase nunca se acha uma rota direta, e tentá-la primeiro gastaria uns vinte segundos antes de a conexão terminar no retransmissor de qualquer forma — começando por ele, ela sobe em um ou dois segundos. Seus arquivos são selados de ponta a ponta antes de deixar o dispositivo que envia, então o retransmissor só move texto cifrado que não consegue ler. Se a conexão cair no meio, a transferência pode ser retomada em vez de recomeçar.",
       ],
     },
     {
@@ -692,7 +692,7 @@ const pt = {
       heading: "Arquivos grandes: o que seu navegador consegue lidar",
       body: [
         "Como uma transferência em tempo real nunca deixa seus arquivos em um servidor, não há cota de upload com que se preocupar. O limite prático é qual navegador está recebendo.",
-        "No Chrome ou no Edge, os dados que chegam são gravados direto no disco, então praticamente não há limite de tamanho — vídeos de vários gigabytes são tranquilos. Firefox e Safari, em vez disso, guardam o arquivo na memória, então neles mantenha um único arquivo abaixo de cerca de 200 MB. Se você precisar enviar algo grande para um iPhone baseado em Safari, receber em um dispositivo baseado em Chrome evita o limite por completo.",
+        "Um navegador com a API File System Access — Chrome ou Edge no computador — grava os dados que chegam direto no disco, então praticamente não há limite de tamanho; vídeos de vários gigabytes são tranquilos. Firefox, Safari e todos os navegadores de celular não têm essa API, então neles o lote é montado na memória, e o Relayium avisa antes de você aceitar assim que passa de cerca de 256 MB. Encare isso como uma estimativa propositalmente conservadora, não como um limite rígido — uma aba de celular desse tamanho é fácil de o sistema recuperar, e o ponto real de falha muda conforme a memória do aparelho, o sistema e quantas abas estão abertas. Como aqui quem recebe é o celular, um arquivo muito grande vai melhor no sentido contrário, para um Chrome ou Edge de computador que consiga gravá-lo no disco.",
       ],
     },
     {
@@ -717,7 +717,7 @@ const pt = {
       },
       {
         q: "Qual é a velocidade da transferência?",
-        a: "Na mesma Wi-Fi os dois dispositivos se conectam diretamente, então a velocidade é limitada pela sua rede local e não por um servidor — normalmente tão rápido quanto sua Wi-Fi permitir. Entre redes diferentes depende das duas conexões de internet, e o Relayium recorre a um retransmissor criptografado apenas quando um link direto não é possível.",
+        a: "Na mesma Wi-Fi os dois dispositivos se conectam diretamente, então a velocidade é limitada pela sua rede local e não por um servidor — normalmente tão rápido quanto sua Wi-Fi permitir. Entre redes diferentes a transferência corre por projeto sobre um retransmissor TURN criptografado, então depende das duas conexões de internet mais esse salto extra; em troca, a conexão sobe em um ou dois segundos em vez de esperar tentativas diretas que os NATs entre redes raramente permitem.",
       },
       {
         q: "É seguro enviar arquivos assim?",

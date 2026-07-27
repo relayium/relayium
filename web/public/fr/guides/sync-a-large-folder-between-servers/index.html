@@ -76,41 +76,41 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>Saute les fichiers déjà présents : un fichier dont la copie sur le récepteur correspond par taille et date de modification n&#39;est pas renvoyé.</li><li>Reprend les fichiers partiels : si un fichier était à moitié transféré à la coupure, l&#39;exécution suivante continue depuis l&#39;offset d&#39;octets déjà sur le disque au lieu de le recommencer.</li><li>Vérifie chaque fichier : chaque fichier est contrôlé de bout en bout en SHA-256, donc un miroir terminé est connu comme intact.</li><li>De ce fait, la commande est idempotente — la relancer ne fait que le travail restant, ce qui est précisément ce qui permet à une boucle de reprise de terminer un transfert énorme.</li></ul>
       <h2>Prérequis</h2>
       <p>Installez relayium sur les deux serveurs (sync parle le protocole natif, il doit donc être présent à chaque bout) :</p>
-      <pre><code># on BOTH servers
+      <pre><code># sur les DEUX serveurs
 curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>Ce guide utilise le daemon direct (relayium://), les deux serveurs n&#39;ont donc pas besoin d&#39;accès SSH l&#39;un vers l&#39;autre.</li><li>Ouvrez le port de l&#39;écouteur (9031 par défaut) à l&#39;émetteur dans le pare-feu ou le groupe de sécurité du récepteur.</li></ul>
       <h2>Autoriser l&#39;émetteur une fois (sur le récepteur)</h2>
       <p>Le récepteur approuve la machine émettrice une seule fois ; l&#39;approbation est écrite sur le disque et reste valable après les redémarrages, vous ne la répétez donc jamais. Démarrez d&#39;abord l&#39;écouteur dans un terminal, et pointez --dir vers le répertoire parent — relayium sync /root/workspace reproduit workspace/... sur le récepteur, donc --dir /root fait atterrir les fichiers dans /root/workspace/.</p>
       <p>À la première connexion de l&#39;émetteur (section suivante), serve affiche son adresse et son empreinte et vous demande de l&#39;approuver ; répondez y et elle est mémorisée pour de bon :</p>
-      <pre><code># on the RECEIVER (foreground, to approve interactively)
+      <pre><code># sur le RÉCEPTEUR (au premier plan, pour approuver de façon interactive)
 relayium serve --dir /root --port 9031</code></pre>
-      <pre><code># on the RECEIVER, at the first connection:
+      <pre><code># sur le RÉCEPTEUR, à la première connexion :
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>Pour une configuration entièrement sans surveillance, sautez l&#39;invite : lancez relayium id sur l&#39;émetteur pour afficher son empreinte, puis relayium authorize &lt;empreinte&gt; sur le récepteur.</li><li>--dir est le parent du dossier que vous synchronisez, pas le dossier lui-même — sinon les fichiers atterrissent un niveau trop bas (p. ex. /root/workspace/workspace).</li></ul>
       <h2>Faire tourner l&#39;écouteur en arrière-plan (sur le récepteur)</h2>
       <p>Une fois l&#39;empreinte autorisée, arrêtez le serve au premier plan (Ctrl-C) et relancez-le détaché pour qu&#39;il survive à votre déconnexion. Il charge l&#39;empreinte enregistrée et accepte l&#39;émetteur silencieusement — pas d&#39;invite cette fois :</p>
-      <pre><code># on the RECEIVER
+      <pre><code># sur le RÉCEPTEUR
 nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp;</code></pre>
       <ul><li>serve traite les connexions une par une et continue de tourner, il est donc prêt pour chaque reconnexion de la boucle de reprise ci-dessous.</li><li>Pour une boîte de réception toujours active, faites-le tourner plutôt sous systemd (Restart=always, --config-dir /etc/relayium).</li></ul>
       <h2>Exécuter sync dans une boucle de reprise sous tmux (sur l&#39;émetteur)</h2>
       <p>Les longs transferts sont interrompus — une session coupée, un réseau instable, un redémarrage. La solution n&#39;est pas un outil sophistiqué ; c&#39;est une boucle qui réexécute sync jusqu&#39;à la réussite, plus un multiplexeur de terminal pour qu&#39;il survive à votre déconnexion. Ici tmux est plus propre que nohup : pas de redirection de sortie à rater, et vous pouvez vous reconnecter pour voir la progression.</p>
       <p>Démarrez une session tmux, puis exécutez le miroir dans une boucle until — elle réessaie toutes les 10 secondes jusqu&#39;à ce que sync réussisse, puis se termine d&#39;elle-même :</p>
-      <pre><code># on the SENDER
-tmux new -s xfer      # apt install -y tmux if it&#39;s missing</code></pre>
+      <pre><code># sur l&#39;ÉMETTEUR
+tmux new -s xfer      # apt install -y tmux s&#39;il manque</code></pre>
       <pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre>
       <ul><li>Détachez avec Ctrl-b puis d ; la boucle continue de tourner après la fermeture du terminal. Reconnectez-vous avec tmux attach -t xfer.</li><li>Chaque tentative fait moins : les fichiers déjà transférés sont sautés, un fichier envoyé à moitié reprend — la boucle converge donc et se termine.</li><li>La progression affiche une ligne par fichier terminé, un gros fichier se transfère donc en silence jusqu&#39;à sa fin. Le silence n&#39;est pas un blocage (voir dépannage).</li></ul>
       <h2>Vérifier et terminer</h2>
       <p>Le transfert est terminé quand la boucle until s&#39;achève et que vous revenez à une invite shell normale. Confirmez que les deux côtés correspondent, puis arrêtez l&#39;écouteur :</p>
-      <pre><code># compare totals on BOTH servers
+      <pre><code># comparez les totaux sur les DEUX serveurs
 du -sh /root/workspace</code></pre>
-      <pre><code># on the RECEIVER, once verified
+      <pre><code># sur le RÉCEPTEUR, une fois vérifié
 pkill -f &#39;relayium serve&#39;</code></pre>
       <ul><li>Chaque fichier a été contrôlé en SHA-256 à l&#39;arrivée, donc des tailles identiques plus une sortie propre signifient une copie intacte.</li></ul>
       <h2>Dépannage</h2>
       <p>Quelques choses qui ressemblent à des problèmes mais n&#39;en sont généralement pas — et celle qui en est généralement une (un port bloqué).</p>
-      <ul><li>Aucune sortie n&#39;est pas un blocage. La progression ne s&#39;affiche que quand chaque fichier se termine, un gros fichier se transfère donc en silence. Vérifiez l&#39;état réel sur l&#39;émetteur avec ss -tnp | grep 9031 — ESTAB signifie connecté et en transfert ; SYN-SENT signifie qu&#39;il ne peut pas joindre l&#39;écouteur.</li><li>SYN-SENT signifie que le port est bloqué. Ouvrez 9031/TCP à l&#39;émetteur sur le récepteur (groupe de sécurité cloud, ou ufw allow 9031/tcp). C&#39;est la cause la plus fréquente d&#39;un transfert qui ne démarre jamais.</li><li>Préférez tmux plus une boucle sur une seule ligne au nohup multi-lignes. Coller dans un shell une commande multi-lignes avec des guillemets et une redirection &gt; casse souvent sur la redirection ou vous laisse à une invite de continuation &gt;.</li><li>En nettoyant les processus, faites une correspondance précise (pkill -f &#39;relayium sync&#39;), pas pkill relayium — une correspondance large peut tuer un processus relayium sans rapport tournant sur la même machine.</li><li>venv et autres répertoires régénérables valent la peine d&#39;être exclus. Un environnement virtuel Python peut contenir des gigaoctets de bibliothèques que pip recrée de l&#39;autre côté ; les sauter économise beaucoup de transfert.</li><li>Les liens symboliques et fichiers spéciaux sont sautés — sync ne transfère que des fichiers réguliers. Traitez séparément les liens symboliques importants.</li></ul>
+      <ul><li>Aucune sortie n&#39;est pas un blocage. La progression ne s&#39;affiche que quand chaque fichier se termine, un gros fichier se transfère donc en silence. Vérifiez l&#39;état réel sur l&#39;émetteur avec ss -tnp | grep 9031 — ESTAB signifie connecté et en transfert ; SYN-SENT signifie qu&#39;il ne peut pas joindre l&#39;écouteur.</li><li>SYN-SENT signifie que le port est bloqué. Ouvrez 9031/TCP à l&#39;émetteur sur le récepteur (groupe de sécurité cloud, ou ufw allow 9031/tcp). C&#39;est la cause la plus fréquente d&#39;un transfert qui ne démarre jamais.</li><li>Préférez tmux plus une boucle sur une seule ligne au nohup multi-lignes. Coller dans un shell une commande multi-lignes avec des guillemets et une redirection &gt; casse souvent sur la redirection ou vous laisse à une invite de continuation &gt;.</li><li>En nettoyant les processus, faites une correspondance précise (pkill -f &#39;relayium sync&#39;), pas pkill relayium — une correspondance large peut tuer un processus relayium sans rapport tournant sur la même machine.</li><li>Il n&#39;y a pas d&#39;option d&#39;exclusion : nommez plutôt vos sources. sync accepte -i et -p (clé et port SSH), --delete, --watch et --config-dir, et rien qui filtre un chemin au milieu de l&#39;arborescence. Pour laisser de côté un répertoire régénérable comme un environnement virtuel Python, synchronisez les sous-répertoires qui vous intéressent vraiment : sync accepte plusieurs sources à la fois, et chacune arrive sous le --dir du récepteur sous son propre nom. relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 face à serve --dir /root/workspace les reconstitue dans /root/workspace/src et /root/workspace/data, et le venv n&#39;est jamais parcouru.</li><li>Les liens symboliques et fichiers spéciaux sont sautés — sync ne transfère que des fichiers réguliers. Traitez séparément les liens symboliques importants.</li></ul>
       <h2>Questions fréquentes</h2>
       <h3>Que se passe-t-il si le transfert est interrompu à mi-chemin ?</h3>
       <p>Rien n&#39;est perdu. Relancez relayium sync — il saute les fichiers déjà sur le récepteur et reprend un fichier envoyé à moitié depuis l&#39;offset d&#39;octets déjà sur le disque. La boucle until de ce guide le fait automatiquement jusqu&#39;à ce que tout le dossier soit recopié.</p>
