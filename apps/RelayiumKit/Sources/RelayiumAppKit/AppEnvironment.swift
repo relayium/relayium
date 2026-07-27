@@ -74,6 +74,11 @@ public enum AppEnvironment {
     }
 
     @MainActor
+    public static func makeBrowserLoginModel(baseURL: URL = productionBaseURL) -> BrowserLoginModel {
+        BrowserLoginModel(client: HTTPDeviceAuthClient(baseURL: baseURL))
+    }
+
+    @MainActor
     public static func makeUploadModel(baseURL: URL = productionBaseURL) -> CloudUploadModel {
         CloudUploadModel(
             uploader: CloudUploader(transport: HTTPResumableTransport(baseURL: baseURL)),
