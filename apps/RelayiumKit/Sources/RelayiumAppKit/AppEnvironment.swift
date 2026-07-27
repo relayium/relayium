@@ -72,4 +72,19 @@ public enum AppEnvironment {
             deviceName: deviceName()
         )
     }
+
+    @MainActor
+    public static func makeUploadModel(baseURL: URL = productionBaseURL) -> CloudUploadModel {
+        CloudUploadModel(
+            uploader: CloudUploader(transport: HTTPResumableTransport(baseURL: baseURL)),
+            // The origin the link is built from, so a self-hosted build produces
+            // links pointing at its own deployment rather than relayium.com.
+            origin: baseURL.absoluteString
+        )
+    }
+
+    @MainActor
+    public static func makeDownloadModel(baseURL: URL = productionBaseURL) -> CloudDownloadModel {
+        CloudDownloadModel(client: CloudClient(baseURL: baseURL))
+    }
 }

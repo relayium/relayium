@@ -4,6 +4,9 @@ import RelayiumAppKit
 
 struct ContentView: View {
     @EnvironmentObject private var session: AccountSession
+    @EnvironmentObject private var uploadModel: CloudUploadModel
+    @EnvironmentObject private var downloadModel: CloudDownloadModel
+    @State private var showDownload = false
 
     var body: some View {
         Group {
@@ -20,7 +23,19 @@ struct ContentView: View {
                 // the round's primary flow: every wrong password would blank both
                 // fields and make the user retype their email too. "Busy" is a
                 // disabled control inside the form, never a sibling view.
-                LoginView(errorMessage: loginError, isBusy: isAuthenticating)
+                // Still ONE branch: the VStack is a single structural identity,
+                // so LoginView's @State survives every transition among the
+                // three states, exactly as before.
+                VStack(spacing: 16) {
+                    LoginView(errorMessage: loginError, isBusy: isAuthenticating)
+                    Divider()
+                    // A share link that demands a signup is not a share link.
+                    // fetchMeta and the blob route take no token, so receiving
+                    // works here — only sending needs an account.
+                    DisclosureGroup("I have a link", isExpanded: $showDownload) {
+                        DownloadPane(model: downloadModel)
+                    }
+                }
             case .unavailable(let message):
                 // We still hold a valid-looking token — offer a retry, not a form.
                 VStack(spacing: 12) {
@@ -47,7 +62,22 @@ struct ContentView: View {
                     url: AppEnvironment.reactivateWebURL(token: reactivateToken)
                 )
             case let .ready(user, usage):
-                AccountView(user: user, usage: usage)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        AccountView(user: user, usage: usage)
+                        Divider()
+                        UploadPane(model: uploadModel, token: session.bearerToken ?? "")
+                        Divider()
+                        DownloadPane(model: downloadModel)
+                    }
+                    // The retention cap decides which TTLs are offerable, and it
+                    // only exists once usage has loaded. `task(id:)` rather than
+                    // `onChange(of:initial:)`, which needs macOS 14 — this app
+                    // targets 13.0.
+                    .task(id: usage.plan.retentionSecs) {
+                        uploadModel.applyRetentionCap(usage.plan.retentionSecs)
+                    }
+                }
             }
         }
         .frame(minWidth: 380, minHeight: 420)

@@ -15,7 +15,13 @@ public struct StoredFileMeta: Codable, Equatable {
 public enum CloudError: Error, Equatable {
     case unauthorized          // 401
     case quota                 // 413
-    case rateLimited           // 429
+    case rateLimited           // 429 with Retry-After — transient, worth retrying
+    /// 429, this file needs more than the account's remaining daily allowance.
+    /// Resets tomorrow; a plan with a bigger allowance also clears it.
+    case dailyQuota
+    /// 429, the account is out of monthly traffic. Resets next month; only an
+    /// upgrade clears it sooner.
+    case monthlyTraffic
     case notFound              // 404
     case server(status: Int)   // other non-2xx
     case network               // transport failure
