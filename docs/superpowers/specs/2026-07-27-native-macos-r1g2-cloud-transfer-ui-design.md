@@ -67,7 +67,13 @@ this round.
   endpoints, with bounded memory and progress reporting, plus per-chunk retry
   that resyncs from `GET /api/uploads/{id}` rather than restarting the upload.
   Falls back to the existing `CloudClient.upload` when the chunked endpoints are
-  unusable, mirroring `uploadFileResumable`'s safety net.
+  unusable, mirroring `uploadFileResumable`'s safety net. That fallback stays for
+  self-hosted deployments on an older server, and it is **covered by a test that
+  stubs the chunked endpoints as unavailable** — an untested fallback is a path
+  that first runs on the day it is least welcome. Chunk size matches the web's
+  `STORE_CHUNK_SIZE` rather than being tuned for desktop: when an interop problem
+  appears, the two implementations behaving identically is worth more than fewer
+  round trips.
 - **Kit — a config read** for `/api/config`'s `maxFileSize`, so the app can
   refuse an oversize file before spending an upload on a 413.
 - **AppKit — `CloudUploadModel` and `CloudDownloadModel`**: two `@MainActor`
@@ -91,12 +97,23 @@ this round.
   window stays open for the length of a transfer. Deferring it keeps `CloudUploader`
   a plain `async` type rather than a delegate-driven state machine with a
   restoration path. Recorded as R3's problem.
+
+  Deferring it has a user-visible consequence, and the round owns it rather than
+  discovering it: **quitting or closing the window during a transfer kills the
+  transfer.** So an in-flight transfer must confirm before it dies — a quit and
+  window-close guard, in the spirit of the web's route guard, naming what is
+  still running. Silently losing an upload the user watched for two minutes is
+  the failure mode this prevents.
 - **Folder upload** — the manifest is a flat file list. Recursing a directory
   raises name-collision and symlink questions that have nothing to do with this
   round.
 - **QR code and the `relayium down …` command hint** — both are on the web
   upload screen. Neither is on the path to a working transfer, and both are
-  cheap to add to a pane that already exists.
+  cheap to add to a pane that already exists. Ruled out of G2 at product level,
+  not merely by YAGNI: the deliberate consequence is that the native upload
+  screen offers less than the web one for this round. G3 revisits the QR code
+  when it reworks the layout, where desktop → phone is a case it genuinely
+  serves.
 
 ## Architecture
 
@@ -159,7 +176,10 @@ upload is recoverable from an account page.
    picker; files are written into a new subdirectory named `relayium-<id>`, using
    the transfer id from the link, so a multi-file download cannot scatter into an
    existing folder or overwrite by name collision. If that directory already
-   exists, the download refuses rather than merging into it.
+   exists, the download refuses rather than merging into it — **and says why**:
+   that this link was already downloaded here, and that the app will not merge
+   into an existing folder because it cannot tell a leftover partial download
+   from a file the user put there. A bare "refused" would read as a bug.
 4. `CloudClient.download`'s `onChunk` writes straight to disk through a file
    handle. Peak memory stays at one chunk.
 5. On completion, `NSWorkspace.activateFileViewerSelecting` reveals the result.
@@ -205,12 +225,12 @@ wait for a user with a large file.
 **Interop is the round's real risk.** This is the first native code that writes
 data another implementation must read. The program design mandates a native ↔
 cloud ↔ browser E2E rather than trusting unit tests
-(`2026-07-24-native-macos-ios-design.md`, Interop-safety). G2 covers both
-directions by hand at minimum — upload from the app, download in a browser; and
-the reverse — and extends `web/e2e/lan-transfer.mjs` with the cloud path if that
-harness can host a Swift peer without becoming its own project. Whichever holds,
-the round states which one it did; "we ran the unit tests" is not interop
-evidence.
+(`2026-07-24-native-macos-ios-design.md`, Interop-safety). **Manual verification in both directions is a hard gate** — upload from the app,
+download in a browser, and the reverse. Extending `web/e2e/lan-transfer.mjs` to
+host a Swift peer on the cloud path is a **stretch goal**: worth doing if it
+lands within this round's normal size, and split into its own project rather than
+allowed to hold G2 open if it does not. "We ran the unit tests" is not interop
+evidence either way.
 
 ## Done when
 
@@ -225,6 +245,10 @@ evidence.
   not-found rather than failing obscurely.
 - The download pane is reachable and usable while signed out.
 - Cancelling mid-transfer leaves no partial file and no stuck UI.
+- Quitting or closing the window during a transfer prompts for confirmation
+  rather than killing it silently.
+- The single-shot fallback runs, verified against a stub whose chunked endpoints
+  are unavailable.
 
 ## Non-goals
 
