@@ -30,13 +30,18 @@ build when the sandbox is what you are testing:
     APP=$(ls -d ~/Library/Developer/Xcode/DerivedData/Relayium-*/Build/Products/Debug/Relayium.app | head -1)
     codesign -d --entitlements - "$APP" | grep app-sandbox   # proves it applied
 
-For a quick headless build that doesn't need a signing identity (runs
-unsandboxed, useful for CI or checking that the code compiles):
+`CODE_SIGNING_ALLOWED=NO` gives a quick headless build that needs no signing
+identity and no provisioning profile:
 
 ```
 xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 ```
+
+**It is a compile check and nothing more.** The flag skips entitlements, so the
+result is unsandboxed and carries no keychain access group — it cannot answer any
+question about the sandbox, the Keychain, or signing. Use it to find out whether
+the code builds; use a plain `-configuration Debug` build for anything else.
 
 Launch the built app after a build:
 
@@ -44,8 +49,23 @@ Launch the built app after a build:
 open ~/Library/Developer/Xcode/DerivedData/Relayium-*/Build/Products/Debug/Relayium.app
 ```
 
-Real Developer ID signing + notarization is a later round (R1-G5); for now
-`CODE_SIGN_IDENTITY = "-"` and `CODE_SIGNING_ALLOWED=NO` keep local builds ad-hoc.
+### Signing
+
+Builds are signed with a **Developer ID Application** identity under team
+`7PVYUG4YQS`, manually (`CODE_SIGN_STYLE = Manual`) in both Debug and Release.
+Manual in both places, and identical locally and on CI, is deliberate: automatic
+signing needs Xcode holding a logged-in Apple account, which a GitHub runner does
+not have, so CI is manual regardless — and keychain ACL behaviour is sensitive to
+the signing identity, so the two must not diverge.
+
+A provisioning profile is **required**, and the reason is worth knowing before
+you go looking for a way around it: it is the price of the
+`keychain-access-groups` entitlement, not of Developer ID signing. Removing those
+four lines from `Relayium.entitlements` makes the same tree build and sign
+cleanly with no profile at all. See "Provisioning profile" below.
+
+**Notarization, Sparkle, `.dmg` and the `/apps` page flip remain R1-G5.** Nothing
+here produces an artifact for a user.
 
 ### Manual acceptance
 
@@ -74,8 +94,32 @@ carry the entitlement: a signed app or a future app-hosted test target.
 above** — sign in, quit, relaunch the same build, confirm auto-login. That is the
 only check that exercises the real keychain under the real entitlement.
 
-When checking auto-login, quit and relaunch **the same build**. A sandboxed,
-ad-hoc-signed binary ties the keychain item's ACL to that binary's signature, so
-rebuilding between the two launches can legitimately produce a keychain access
-prompt or a failed auto-login — a false negative that has nothing to do with the
-code under test.
+### Provisioning profile
+
+`Relayium Mac`, installed at
+`~/Library/MobileDevice/Provisioning Profiles/`, named by
+`PROVISIONING_PROFILE_SPECIFIER` in both configurations and embedded into the app
+at build time as `Contents/embedded.provisionprofile`.
+
+Three things about it that are not obvious, and cost time to rediscover:
+
+- **Apple's portal has no Keychain Sharing switch for a Developer ID profile.**
+  Do not go looking for one. The profile carries
+  `keychain-access-groups = 7PVYUG4YQS.*` by default, and that wildcard is what
+  covers `7PVYUG4YQS.com.relayium.shared`.
+- **It expires 2044-07-22.** Long enough not to be an operational concern. The
+  *certificate* is the one with a real horizon — `Developer ID Application:
+  JinKui Li (7PVYUG4YQS)`, expiring 2027-02-01. Check with:
+
+      security find-certificate -c "Developer ID Application" -p \
+        | openssl x509 -noout -subject -enddate
+
+- **CI needs its own copy**, base64-encoded into the
+  `MACOS_PROVISIONING_PROFILE_BASE64` secret. The `signed-build` job installs it
+  before building. Export and setup steps live in the `macos-signing` runbook in
+  relayium-ops.
+
+The previous warning here — that rebuilding between two launches could break
+auto-login, because an ad-hoc signature ties a keychain item's ACL to that exact
+binary — no longer applies now that every build is signed by the same stable
+Developer ID identity.

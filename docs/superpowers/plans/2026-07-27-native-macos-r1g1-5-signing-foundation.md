@@ -545,6 +545,16 @@ Two outcomes, both informative:
   Then re-run this step. Record the outcome in the Task 6 README update, because
   a profile expires annually and someone has to own the renewal.
 
+> **Erratum, after execution.** This is the branch that happened, and two of its
+> details were wrong. The profile — `Relayium Mac` — expires **2044-07-22**, not
+> annually; the certificate is the artifact worth tracking, expiring
+> **2027-02-01**. And the portal has no Keychain Sharing capability to select:
+> a Developer ID profile carries `keychain-access-groups = <team>.*` by default.
+> A controlled experiment (approved separately, entitlements restored
+> immediately) established that the profile requirement comes specifically from
+> `keychain-access-groups`: removing those four lines let the same tree build and
+> sign with no profile at all.
+
 - [ ] **Step 4: Verify the signature and the entitlements landed**
 
 Run:

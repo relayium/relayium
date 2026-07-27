@@ -131,6 +131,25 @@ assuming either answer. If a profile turns out to be required, it expires
 annually, which introduces a renewal owner question that this spec does not
 prejudge.
 
+> **Erratum, after implementation.** Leaving the question open was right; the
+> guess embedded in it was wrong, twice over. Answered by building
+> (commit `9ec607f9`):
+>
+> - **A profile is required**, and it is specifically the price of
+>   `keychain-access-groups`, not of Developer ID signing. Controlled experiment:
+>   the same tree with those four entitlement lines removed built and signed
+>   cleanly with no profile; with them present it failed with `"Relayium"
+>   requires a provisioning profile`. The failure also arrives at build time, not
+>   as the runtime `errSecMissingEntitlement` this paragraph predicted.
+> - **It does not expire annually.** `Relayium Mac` expires **2044-07-22**, so
+>   the renewal-owner question does not arise at this horizon. The certificate is
+>   the artifact with a real horizon: `Developer ID Application: JinKui Li
+>   (7PVYUG4YQS)` expires **2027-02-01**.
+> - A third thing this spec did not anticipate: **Apple's portal has no Keychain
+>   Sharing switch** for a Developer ID profile. The profile carries
+>   `keychain-access-groups = 7PVYUG4YQS.*` by default, and that wildcard is what
+>   covers `…com.relayium.shared`. There is nothing to configure.
+
 ## Keychain: the data-protection switch
 
 The change is small. `baseQuery` in `TokenStore.swift:26-30` gains two keys:
