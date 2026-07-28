@@ -61,19 +61,47 @@ func (s *Service) handleCheckNode(w http.ResponseWriter, r *http.Request, u User
 		httpx.WriteJSON(w, http.StatusOK, resp)
 		return
 	}
+	start := s.now()
+	switch perr := s.ProbeNodeStorage(r.Context(), n); {
+	case perr == nil:
+		resp.Reachable = true
+		resp.LatencyMs = s.now().Sub(start).Milliseconds()
+	case errors.Is(perr, errStorageURLNotProbeable):
+		resp.Error = "storage URL not probeable"
+	default:
+		resp.Error = "unreachable — check the node is running and its storage port is open"
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+// errStorageURLNotProbeable means the node's advertised storage URL failed the
+// SSRF gate, so central declined to make the request at all — a different thing
+// from having asked and got nothing back.
+var errStorageURLNotProbeable = errors.New("storage URL not probeable")
+
+// ProbeNodeStorage asks, right now, whether central can reach this node's blob
+// endpoint. Nil means yes.
+//
+// This is the question the heartbeat cannot answer: the heartbeat travels
+// node→central and blob writes travel central→node, so a node whose blob port
+// is closed keeps reporting itself healthy while every write to it fails. Used
+// both by the on-demand check button and by StorageProber's sweep, so the two
+// can never disagree about what "reachable" means.
+//
+// Any HTTP response — even a 404 from an older node without /healthz — proves
+// reachability; only a dial/timeout error means unreachable.
+func (s *Service) ProbeNodeStorage(ctx context.Context, n Node) error {
+	if n.StorageURL == "" {
+		return errStorageURLNotProbeable
+	}
 	// Re-run the SSRF gate: StorageURL is user-controlled and we're about to make
 	// central issue an outbound request to it.
-	if verr := validateNodeStorageURL(n.StorageURL, s.allowPrivateNodeURLs); verr != nil {
-		resp.Error = "storage URL not probeable"
-		httpx.WriteJSON(w, http.StatusOK, resp)
-		return
+	if err := validateNodeStorageURL(n.StorageURL, s.allowPrivateNodeURLs); err != nil {
+		return errStorageURLNotProbeable
 	}
-
-	// A short-timeout probe with the same SSRF-guarded dialer as blob traffic.
-	// Any HTTP response — even a 404 from an older node without /healthz — proves
-	// reachability; only a dial/timeout error means unreachable. When the node
-	// reported a TLS fingerprint (https endpoint), pin it so the probe speaks the
-	// same secured channel real blob traffic does.
+	// The same SSRF-guarded dialer as blob traffic, and when the node reported a
+	// TLS fingerprint, the same pin — so a probe that passes proves the channel
+	// real blob traffic uses, not merely that something is listening.
 	tr := &http.Transport{DialContext: guardedDialContext(s.allowPrivateNodeURLs)}
 	if n.StorageFP != "" {
 		tr.TLSClientConfig = &tls.Config{
@@ -82,21 +110,20 @@ func (s *Service) handleCheckNode(w http.ResponseWriter, r *http.Request, u User
 			VerifyPeerCertificate: nodePinVerify(n.StorageFP),
 		}
 	}
-	client := &http.Client{Timeout: 6 * time.Second, Transport: tr}
-	url := strings.TrimRight(n.StorageURL, "/") + "/healthz"
-	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
+	client := &http.Client{Timeout: nodeProbeTimeout, Transport: tr}
+	pctx, cancel := context.WithTimeout(ctx, nodeProbeTimeout)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	start := s.now()
-	res, perr := client.Do(req)
-	if perr != nil {
-		resp.Reachable = false
-		resp.Error = "unreachable — check the node is running and its storage port is open"
-		httpx.WriteJSON(w, http.StatusOK, resp)
-		return
+	req, err := http.NewRequestWithContext(pctx, http.MethodGet,
+		strings.TrimRight(n.StorageURL, "/")+"/healthz", nil)
+	if err != nil {
+		return err
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return err
 	}
 	res.Body.Close()
-	resp.Reachable = true
-	resp.LatencyMs = s.now().Sub(start).Milliseconds()
-	httpx.WriteJSON(w, http.StatusOK, resp)
+	return nil
 }
+
+const nodeProbeTimeout = 6 * time.Second
