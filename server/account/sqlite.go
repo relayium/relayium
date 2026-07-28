@@ -313,6 +313,13 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// (hex SHA-256), reported at registration. '' = legacy http node.
 		`ALTER TABLE nodes ADD COLUMN storage_fp TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE nodes ADD COLUMN storage_enabled INTEGER NOT NULL DEFAULT 0`,
+		// Central→node blob reachability, which the heartbeat cannot attest: the
+		// heartbeat proves node→central works, and blob writes go the other way.
+		// Written ONLY by a probe (never by register/heartbeat) so a node cannot
+		// clear its own mark. Default 0 = eligible, so the gate fails open: a
+		// prober that never runs must not empty the placement pool.
+		`ALTER TABLE nodes ADD COLUMN storage_unreachable INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE nodes ADD COLUMN storage_probed_at INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE nodes ADD COLUMN storage_total INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE nodes ADD COLUMN storage_free INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE stored_files ADD COLUMN node_id TEXT`,
@@ -3184,7 +3191,7 @@ const nodeCols = `id, owner_type, owner_user_id, region, urls, turn_secret, vers
   storage_url, storage_secret, storage_fp, storage_enabled, storage_total, storage_free,
   traffic_limit_bytes, disk_limit_bytes, label, download_url,
   update_started_at, update_from_version, update_result, update_attempts, draining, removed_at,
-  active_transfers`
+  active_transfers, storage_unreachable, storage_probed_at`
 
 func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	if n.ID == "" {
@@ -3196,7 +3203,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 	}
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO nodes (`+nodeCols+`)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   owner_type=excluded.owner_type, owner_user_id=excluded.owner_user_id,
 		   region=excluded.region, urls=excluded.urls, turn_secret=excluded.turn_secret,
@@ -3209,6 +3216,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		// intentionally set only on INSERT (label seeded from the token name;
 		// update_* owned by the rollout state machine; draining owned by the
 		// operator via SetNodeDraining; removed_at written once by MarkNodeRemoved;
+		// storage_unreachable/storage_probed_at owned by the reachability prober;
 		// active_transfers owned by the heartbeat, which is the only call that
 		// carries a load reading) and preserved on re-register/heartbeat, so
 		// neither a user's rename, an in-flight rollout's bookkeeping, an
@@ -3219,7 +3227,7 @@ func (s *SQLiteStore) UpsertNode(ctx context.Context, n Node) (Node, error) {
 		nullStr(n.StorageURL), nullStr(n.StorageSecret), n.StorageFP, b2i(n.StorageEnabled), n.StorageTotal, n.StorageFree,
 		n.TrafficLimitBytes, n.DiskLimitBytes, n.Label, n.DownloadURL,
 		n.UpdateStartedAt, n.UpdateFromVersion, n.UpdateResult, n.UpdateAttempts, b2i(n.Draining), n.RemovedAt,
-		n.ActiveTransfers)
+		n.ActiveTransfers, b2i(n.StorageUnreachable), n.StorageProbedAt)
 	if err != nil {
 		return Node{}, err
 	}
@@ -3312,7 +3320,8 @@ func (s *SQLiteStore) StorageNodes(ctx context.Context, since, minFree int64) ([
 	// so this SQL, usableBytes and storableBytes can never fall out of sync.
 	query := fmt.Sprintf(
 		`SELECT `+nodeCols+` FROM nodes
-		   WHERE owner_type='fleet' AND storage_enabled=1 AND draining=0 AND removed_at=0 AND last_seen_at >= ? AND storage_free * %d / %d >= ?
+		   WHERE owner_type='fleet' AND storage_enabled=1 AND draining=0 AND removed_at=0
+		     AND storage_unreachable=0 AND last_seen_at >= ? AND storage_free * %d / %d >= ?
 		     AND (disk_limit_bytes = 0 OR disk_limit_bytes - stored_bytes >= ?)
 		     AND (storage_total = 0 OR storage_free * %d >= storage_total)
 		   ORDER BY last_seen_at DESC`, storageHeadroomNum, storageHeadroomDen, volumeReserveDen)
@@ -3496,6 +3505,7 @@ func (s *SQLiteStore) UserStorageNodes(ctx context.Context, userID string, since
 	// storableBytes stay one definition; the request input stays on `?`.
 	query := fmt.Sprintf(
 		`SELECT `+nodeCols+` FROM nodes WHERE owner_type='user' AND owner_user_id=? AND last_seen_at >= ? AND storage_enabled=1 AND draining=0 AND removed_at=0 AND storage_free >= ?
+		   AND storage_unreachable=0
 		   AND (storage_total = 0 OR storage_free * %d >= storage_total) ORDER BY last_seen_at DESC`, volumeReserveDen)
 	return s.queryNodes(ctx, query, userID, since, minFree)
 }
@@ -3558,6 +3568,26 @@ func (s *SQLiteStore) SetNodeLabel(ctx context.Context, id, label string) error 
 // affecting its existing files or download path.
 func (s *SQLiteStore) SetNodeDraining(ctx context.Context, id string, on bool) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET draining = ? WHERE id = ?`, b2i(on), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetNodeStorageReachable records a central→node blob-endpoint probe result.
+// Unscoped like SetNodeDraining: it is infrastructure state, not user state.
+//
+// Deliberately NOT part of UpsertNode's ON CONFLICT set. The node re-registers
+// every few seconds, so letting a heartbeat write this column would let a node
+// whose blob port is shut clear its own mark and be handed the next upload
+// anyway — which is the exact failure this column exists to stop.
+func (s *SQLiteStore) SetNodeStorageReachable(ctx context.Context, id string, reachable bool, at int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE nodes SET storage_unreachable = ?, storage_probed_at = ? WHERE id = ?`,
+		b2i(!reachable), at, id)
 	if err != nil {
 		return err
 	}
@@ -3687,13 +3717,13 @@ func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]
 		var ownerUser sql.NullString
 		var urls string
 		var storageURL, storageSecret sql.NullString
-		var storageEnabled, draining int
+		var storageEnabled, draining, storageUnreachable int
 		if err := rows.Scan(&n.ID, &n.OwnerType, &ownerUser, &n.Region, &urls, &n.TURNSecret,
 			&n.Version, &n.RelayedBytes, &n.StoredBytes, &n.CreatedAt, &n.LastSeenAt,
 			&storageURL, &storageSecret, &n.StorageFP, &storageEnabled, &n.StorageTotal, &n.StorageFree,
 			&n.TrafficLimitBytes, &n.DiskLimitBytes, &n.Label, &n.DownloadURL,
 			&n.UpdateStartedAt, &n.UpdateFromVersion, &n.UpdateResult, &n.UpdateAttempts, &draining,
-			&n.RemovedAt, &n.ActiveTransfers); err != nil {
+			&n.RemovedAt, &n.ActiveTransfers, &storageUnreachable, &n.StorageProbedAt); err != nil {
 			return nil, err
 		}
 		n.OwnerUserID = ownerUser.String
@@ -3701,6 +3731,7 @@ func (s *SQLiteStore) queryNodes(ctx context.Context, q string, args ...any) ([]
 		n.StorageSecret = storageSecret.String
 		n.StorageEnabled = storageEnabled != 0
 		n.Draining = draining != 0
+		n.StorageUnreachable = storageUnreachable != 0
 		if err := json.Unmarshal([]byte(urls), &n.URLs); err != nil {
 			return nil, err
 		}

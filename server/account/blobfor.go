@@ -21,6 +21,13 @@ var errStrictNoNode = errors.New("account: strict mode and no online own node")
 // alive and merely full sends them to reboot a healthy machine.
 var errStrictNodeFull = errors.New("account: strict mode and own node has no room")
 
+// errStrictNodeUnreachable is the third strict-mode refusal: the user's own node
+// is online and has room, but central cannot reach its blob endpoint, so an
+// upload placed there would fail on every chunk. Distinct from the other two
+// because the fix is distinct — open the port, not free up space or start the
+// node — and because the node's heartbeat makes it look fine everywhere else.
+var errStrictNodeUnreachable = errors.New("account: strict mode and own node unreachable")
+
 // blobFor returns the blob store holding (or to hold) a file with the given
 // node_id: the local DiskStore for "" (central-local), else a RemoteBlobStore
 // pointed at the node's storage endpoint.
@@ -62,9 +69,15 @@ func (s *Service) placeUpload(ctx context.Context, userID string, size int64) (s
 	}
 	// Strict users do not fall back to our infrastructure.
 	if u, err := s.store.GetUserByID(ctx, userID); err == nil && u.OnlyOwnNodes {
-		// 在线且开了存储的自有节点存在，却没被上面选中 —— 那只可能是空间不够
-		// （minFree 或 80% 保留闸）。这条要报"没空间"，不能报"离线"。
+		// 在线且开了存储的自有节点存在，却没被上面选中 —— 原因有两种，报错必须
+		// 分开：中心连不上它的 blob 端口（storage_unreachable），或者空间不够
+		// （minFree 或 80% 保留闸）。都不能报"离线"，因为心跳是通的。
 		if own, err := s.store.UserNodes(ctx, userID, since); err == nil {
+			for _, n := range own {
+				if n.StorageEnabled && n.StorageURL != "" && n.StorageUnreachable {
+					return "", nil, false, errStrictNodeUnreachable
+				}
+			}
 			for _, n := range own {
 				if n.StorageEnabled && n.StorageURL != "" {
 					return "", nil, false, errStrictNodeFull

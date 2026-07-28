@@ -110,6 +110,10 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 	// still cannot buy a bigger write budget — sessionWriteCap below ignores ?size=.
 	declared, _ := strconv.ParseInt(r.URL.Query().Get("size"), 10, 64)
 	nodeID, _, billable, perr := s.placeUpload(r.Context(), u.ID, declared)
+	if errors.Is(perr, errStrictNodeUnreachable) {
+		http.Error(w, "central can't reach your storage node — check its blob port is open", http.StatusServiceUnavailable)
+		return
+	}
 	if errors.Is(perr, errStrictNodeFull) {
 		http.Error(w, "your storage node has no free space", http.StatusServiceUnavailable)
 		return
