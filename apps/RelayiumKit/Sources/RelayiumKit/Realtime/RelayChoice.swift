@@ -4,9 +4,30 @@ import Foundation
 /// them measured.
 ///
 /// Mirrors `pickRelay` in `web/src/lib/ice.ts` decision for decision. The Mac
-/// and the browser are routinely each other's peer, and a disagreement here
-/// does not degrade gracefully: each side allocates on a different relay and
-/// the connection fails looking like a network problem.
+/// and the browser are routinely each other's peer, so the two implementations
+/// have to agree.
+///
+/// ## What a disagreement actually costs
+///
+/// It does NOT break the connection. Two peers relaying through different TURN
+/// servers still connect: both gather a relay candidate, TURN permissions are
+/// IP-scoped and installed by CreatePermission for every remote candidate,
+/// there is no NAT between two public TURN servers, and this fleet's coturn
+/// config denies only bogon and private ranges, so the pool's own public IPs
+/// are permitted. Per-client nearest-relay assignment is how every commercial
+/// TURN provider operates.
+///
+/// What it costs is a second hop, and — the part that matters — roughly 2x
+/// metered relay bandwidth, because every byte crosses two of our coturn
+/// instances and counts against both the per-node cap and the code owner's
+/// quota. So converging still matters; it is a bandwidth-and-latency argument,
+/// not a correctness one, and a build that falls back is degraded rather than
+/// broken.
+///
+/// An earlier version of this comment claimed a mismatch "fails looking like a
+/// network problem". It does not. No real cross-peer transfer has been run
+/// either way, so this is reasoning from the protocol and the fleet's config,
+/// not from a measurement.
 public enum RelayChoice {
     /// The id minimising the *worse* of the two peers' RTTs, then their sum,
     /// then the id itself.

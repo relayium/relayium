@@ -26,7 +26,9 @@ import RelayiumKit
 ///    than one that agrees usually.
 /// 2. Disagreement degrades rather than fails. Both sides still allocate on a
 ///    TURN server and exchange relay candidates; ICE connects them through two
-///    relays instead of one, which costs a hop, not the transfer.
+///    relays instead of one. That costs a hop and roughly 2x metered relay
+///    bandwidth — every byte crosses two of our coturn instances — but not the
+///    transfer. See `RelayChoice` for why, and for what has not been measured.
 /// 3. The window is small and self-closing: both maps converge on their final
 ///    contents within the probe timeout, and re-broadcasting every increment
 ///    is what keeps the peer's copy close to ours while it does.

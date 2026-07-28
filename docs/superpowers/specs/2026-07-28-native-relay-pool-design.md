@@ -113,6 +113,33 @@ The last row is the one to keep: a Mac on this round talking to a Mac on the
 previous one must still transfer. Interop degrades to the current behaviour and
 never breaks.
 
+### What a relay mismatch actually costs
+
+Two peers relaying through **different** TURN servers do connect. Both sides
+gather a relay candidate; TURN permissions are IP-scoped and installed via
+`CreatePermission` for every remote candidate; there is no NAT between two
+public TURN servers; and this fleet's coturn config denies only bogon and
+private ranges, so the pool's own public IPs are permitted. Per-client
+nearest-relay assignment is how every commercial TURN provider operates.
+
+The cost is a second hop, and — the part that actually matters — roughly **2x
+metered relay bandwidth**, because every byte crosses two of our coturn
+instances and counts against both the per-node cap and the code owner's quota.
+
+So converging still matters, just not for correctness: it is a
+bandwidth-and-latency argument. A session where the two peers disagree, or
+where one falls back to the legacy relay, is degraded and not broken — which is
+what makes every row of the table above an acceptable outcome rather than a
+failure.
+
+Earlier drafts of this document, and the comment at the head of
+`RelayChoice.swift`, asserted the opposite: that a mismatch "does not degrade
+gracefully" and that the connection "fails looking like a network fault". That
+was wrong, and it mattered, because it made every trade-off in this design look
+like a correctness risk. Keeping it honest: no real cross-peer transfer has been
+run either way, so the claim above is reasoning from the protocol and the
+fleet's configuration, not from a measurement.
+
 ## Components
 
 Split along one line — whether a unit can be tested without WebRTC:
@@ -170,9 +197,8 @@ signalling connects
 
 **`pick`** takes the web's `ice.test.ts` cases plus a symmetry property test:
 for generated pairs of maps, `pick(a, b) == pick(b, a)`. Symmetry is the whole
-basis of "no negotiation"; if it ever stops holding, the two peers pick
-different relays and the connection fails in a way that looks like a network
-fault.
+basis of "no negotiation"; if it stops holding, the two peers pick different
+relays — see below for what that costs.
 
 **`RelayNegotiator`** is driven through a fake channel: a peer map arriving
 re-derives the choice; an older peer that never sends one leaves the fallback in
