@@ -59,6 +59,36 @@ final class ErrorCopyTests: XCTestCase {
         XCTAssertFalse(expired.lowercased().contains("declined"))
     }
 
+    /// The one error in this app that means someone may be attacking the user.
+    /// It must not read as a network hiccup with a retry button.
+    func testMitmSaysStopRatherThanRetry() {
+        let m = ErrorCopy.message(for: HandshakeError.mitm).lowercased()
+        XCTAssertFalse(m.contains("try again"))
+        XCTAssertFalse(m.contains("reconnect"))
+        XCTAssertTrue(m.contains("again") ? m.contains("pair") : true,
+                      "if it suggests anything, it must be pairing again — not reconnecting")
+    }
+
+    /// All four realtime families must have copy; a type name in this UI is a
+    /// dead end for a user mid-transfer.
+    func testEveryRealtimeErrorHasCopy() {
+        let handshake: [HandshakeError] = [.mitm, .noCommitRecorded, .badBase64, .invalidKey]
+        let realtime: [RealtimeError] = [.outOfOrder, .tamper, .legacyPeer, .unknownKind(9), .malformed]
+        let sender: [RealtimeSenderError] = [.manifestTooLarge, .sourceShorterThanDeclared(name: "f")]
+        for e in handshake {
+            let m = ErrorCopy.message(for: e)
+            XCTAssertFalse(m.contains("HandshakeError"), "no copy for \(e)")
+        }
+        for e in realtime {
+            let m = ErrorCopy.message(for: e)
+            XCTAssertFalse(m.contains("RealtimeError"), "no copy for \(e)")
+        }
+        for e in sender {
+            let m = ErrorCopy.message(for: e)
+            XCTAssertFalse(m.contains("RealtimeSenderError"), "no copy for \(e)")
+        }
+    }
+
     /// A missing link has three plausible causes and the copy must not assert one.
     func testNotFoundNamesAllThreeCauses() {
         let m = ErrorCopy.message(for: CloudError.notFound).lowercased()

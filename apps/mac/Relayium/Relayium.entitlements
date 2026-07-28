@@ -6,6 +6,15 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- WebRTC does not merely dial out: ICE binds UDP sockets and has to
+	     receive the peer's connectivity checks arriving unsolicited. Under the
+	     App Sandbox that is an inbound connection, and network.client alone
+	     does not permit it — so host and server-reflexive candidates are
+	     silently dead and the only path left is a relay. Signalling is plain
+	     outbound TCP and works either way, which is why the app reached the
+	     hub, minted a code and paired, then failed at the transfer. -->
+	<key>com.apple.security.network.server</key>
+	<true/>
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
 	<key>com.apple.security.files.downloads.read-write</key>

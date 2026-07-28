@@ -57,24 +57,44 @@ public final class RealtimeSender {
                 let end = min(offset + CHUNK_SIZE, data.count)
                 let chunk = Array(data[offset..<end])
                 hash = chainHash(hash, chunk)
-                let s = seq
-                seq += 1
-                frames.append(realtimeFrame(kind: RealtimeKind.chunk, seq: s, payload: seal(key: sessionKey, seq: UInt64(s), plaintext: chunk)))
+                frames.append(nextChunkFrame(chunk))
                 offset = end
             }
-            // DONE also goes through encryption, so it likewise consumes a
-            // seq. It carries the whole file's SHA-256.
-            let donePlaintext = Array("{\"sha256\":\"\(hash.hexEncodedString)\"}".utf8)
-            let ds = seq
-            seq += 1
-            frames.append(realtimeFrame(kind: RealtimeKind.doneEnc, seq: ds, payload: seal(key: sessionKey, seq: UInt64(ds), plaintext: donePlaintext)))
+            frames.append(nextDoneFrame(hash: hash))
         }
         return frames
+    }
+
+    /// One CHUNK frame, consuming the next seq.
+    ///
+    /// Internal because the only supported callers are `dataFrames` and
+    /// `RealtimeFrameProducer`, and both must share *this instance's* counter:
+    /// seq is global and monotonic across a transfer, so a second sender under
+    /// the same session key would restart the GCM nonce at 0.
+    func nextChunkFrame(_ chunk: [UInt8]) -> [UInt8] {
+        let s = seq
+        seq += 1
+        return realtimeFrame(kind: RealtimeKind.chunk, seq: s,
+                             payload: seal(key: sessionKey, seq: UInt64(s), plaintext: chunk))
+    }
+
+    /// The DONE frame carrying a finished file's chained SHA-256. It is
+    /// encrypted like any other frame, so it consumes a seq too.
+    func nextDoneFrame(hash: [UInt8]) -> [UInt8] {
+        let plaintext = Array("{\"sha256\":\"\(hash.hexEncodedString)\"}".utf8)
+        let s = seq
+        seq += 1
+        return realtimeFrame(kind: RealtimeKind.doneEnc, seq: s,
+                             payload: seal(key: sessionKey, seq: UInt64(s), plaintext: plaintext))
     }
 }
 
 public enum RealtimeSenderError: Error, Equatable {
     case manifestTooLarge
+    /// A source ran out before the manifest said it should. Sending anyway
+    /// would ship a DONE hash covering fewer bytes than the receiver expects,
+    /// failing at the very end of a transfer that looked fine throughout.
+    case sourceShorterThanDeclared(name: String)
 }
 
 private extension Array where Element == UInt8 {

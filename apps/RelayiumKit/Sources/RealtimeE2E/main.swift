@@ -75,7 +75,10 @@ final class E2EPeer {
             // send() is called OFF the connection's callback queue: onOpen runs ON
             // that queue and send() does a queue.sync internally (would deadlock).
             if isSender {
-                DispatchQueue.global().async { log("sender: send()"); c.send(files: [(testFile, testData)]) }
+                DispatchQueue.global().async {
+                    log("sender: send()")
+                    c.send(sources: [DataSource(name: testFile.name, bytes: testData)], metas: [testFile])
+                }
             }
         }
         c.onManifest = { [self] files in
