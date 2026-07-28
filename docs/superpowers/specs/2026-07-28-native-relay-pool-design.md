@@ -11,7 +11,7 @@ The fleet runs six coturn instances across France, China, the US and Canada.
 {
   "iceServers": [ {"urls": ["stun:relayium.com:3478"]},
                   {"urls": ["turn:relayium.com:3478", "turn:relayium.com:3478?transport=tcp"], ...} ],
-  "relays": [ {"id": "2f0f1193…", "iceServers": [{"urls": ["turn:38.49.38.47:3478"], ...}]},
+  "relays": [ {"id": "2f0f1193…", "iceServers": [{"urls": ["turn:203.0.113.10:3478"], ...}]},
               … six more … ]
 }
 ```
@@ -229,6 +229,6 @@ allocation demonstrates.
   stage: a cached RTT from a different network is worse than no cache, and the
   measurement is cheap and parallel.
 - **The duplicate `us-chi` pool entry.** `/api/ice` currently advertises both
-  `us-chi` and node `9eebb2ef…` pointing at `192.3.116.43`, so that relay is
+  `us-chi` and node `9eebb2ef…` pointing at the same address, so that relay is
   measured twice. Harmless — it costs one extra probe and the two entries tie —
   and it is a server-side data cleanup, not part of this round.
