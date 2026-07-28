@@ -1,10 +1,10 @@
 name: go
-# The server had no CI at all until now: macos.yml is filtered to apps/** and
-# repo-hygiene only greps for leaked production identifiers, so a Go change
-# could go green on every check while failing to compile. It was deployed on
-# the strength of whatever the author happened to run locally — and this
-# repository's auto-deploy has no binary rollback, so a server that fails to
-# start stays failed until someone pushes a fix forward.
+# The server had no CI at all until now: macos.yml is filtered to apps/**,
+# repo-hygiene only greps for leaked production identifiers, and release.yml
+# runs on tags — so a Go change could be green on every check while failing to
+# compile. It was deployed on the strength of whatever the author happened to
+# run locally, and this repository's auto-deploy has no binary rollback: a
+# server that fails to start stays failed until someone pushes a fix forward.
 on:
   push:
     paths:
@@ -17,11 +17,12 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Fast gate: everything that answers "is this code even correct" in ~3
+  # minutes. Split from the race job on purpose — a compile break should not
+  # wait behind a twenty-minute race detector run to be reported.
   test:
     runs-on: ubuntu-latest
-    # The race suite is ~5 minutes; this is a "something has hung" bound, not a
-    # target. Failing at 20 beats occupying a runner for the default six hours.
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       # Third-party actions are pinned to a full commit SHA (with the
       # human-readable version in a trailing comment) so a compromised or
@@ -35,25 +36,35 @@ jobs:
       # toolchain that produced the last green run.
       - name: Toolchain version
         run: go version
-
       - name: go build
         working-directory: server
         run: go build ./...
-
       # Catches the classes `go build` accepts and the tests may never reach:
       # Printf arg mismatches, unreachable code, lost struct tags.
       - name: go vet
         working-directory: server
         run: go vet ./...
+      - name: go test
+        working-directory: server
+        run: go test ./...
 
-      # -race, not a plain `go test`. Central runs concurrent goroutines against
-      # shared state by design — the GC sweep, the metering worker, the node
-      # storage prober — and the failure mode of a data race there is a corrupted
-      # ledger or a wedged deploy, discovered in production, not a red build.
-      #
-      # It costs about five minutes. That is the price of the check, and it is
-      # cheaper than the incident.
-      #
+  # Central runs concurrent goroutines against shared state by design — the GC
+  # sweep, the metering worker, the node storage prober — and the failure mode
+  # of a data race there is a corrupted ledger or a wedged deploy, found in
+  # production rather than in a red build.
+  race:
+    runs-on: ubuntu-latest
+    # The account package alone runs ~5 min locally and over 10 on a runner.
+    # Both bounds below exist because the FIRST version of this workflow hit
+    # Go's default 10-minute PER-PACKAGE timeout and reported it as a test
+    # failure with a goroutine dump — which reads like a hang in the code, not
+    # a budget that was simply too small.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: server/go.mod
       # If this ever goes red intermittently, do not paper over it with a retry:
       # a flaky test here is usually a real timing assumption. The first one
       # found was a test seeding an exemption window from wall time and then
@@ -61,4 +72,4 @@ jobs:
       # finished inside a second.
       - name: go test -race
         working-directory: server
-        run: go test -race ./...
+        run: go test -race -timeout 25m ./...
