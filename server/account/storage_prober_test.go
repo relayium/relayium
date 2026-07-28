@@ -78,7 +78,7 @@ func TestProberIgnoresRelayOnlyNodes(t *testing.T) {
 	ctx := context.Background()
 	const now = 10000
 
-	relayOnly := reachableTestNode("relay", "4.4.4.4", now)
+	relayOnly := reachableTestNode("relay", "7.7.7.7", now)
 	relayOnly.StorageEnabled = false
 	relayOnly.StorageURL = ""
 	st.UpsertNode(ctx, relayOnly)
