@@ -157,6 +157,16 @@ public final class RelayNegotiator: @unchecked Sendable {
         return current()
     }
 
+    /// Both maps as they stood when asked. Exists for the one per-session log
+    /// line the design's acceptance list asks for: without the two maps
+    /// alongside the chosen id there is no way to tell a relay that won from a
+    /// relay that was the only one measured, and no way to replace
+    /// `relayChoiceDeadline`'s 800 ms guess with a number.
+    public func maps() -> (mine: [String: Int], theirs: [String: Int]) {
+        lock.lock(); defer { lock.unlock() }
+        return (mine, theirs)
+    }
+
     private func current() -> RelayEntry? {
         lock.lock(); defer { lock.unlock() }
         guard let id = chosenIDLocked() else { return nil }

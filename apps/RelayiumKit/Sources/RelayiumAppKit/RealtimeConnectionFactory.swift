@@ -1,4 +1,5 @@
 import Foundation
+import os
 import WebRTC
 import RelayiumKit
 
@@ -29,6 +30,35 @@ public enum RealtimeConnectionFactory {
     /// real client, and this constant is the first thing to revisit once
     /// someone has — see the design doc's note.
     public static let relayChoiceDeadline: TimeInterval = 0.8
+
+    /// The relay choice is the only thing this package logs, and it is here
+    /// because the design's acceptance list asks for it by name: "the chosen
+    /// relay id, and both RTT maps, are logged once per session so the 800 ms
+    /// constant can be replaced with a measured value".
+    ///
+    /// It is also the only way anyone finds out the feature is not working.
+    /// Every failure path falls back silently and on purpose, so a pool that
+    /// never converges is indistinguishable from one that always does — which
+    /// is exactly how a measurement that only completed at the slowest relay's
+    /// 4 s timeout survived a review, a plan and an acceptance pass.
+    ///
+    /// Read it with:
+    ///     log stream --predicate 'subsystem == "com.relayium"' --info
+    ///
+    /// Subsystem is the product rather than a bundle id because this target is
+    /// shared with the iOS app. Everything interpolated is `.public`: relay
+    /// ids are fleet infrastructure and RTTs are network timings, neither of
+    /// them user data. The pairing code and the peer id are deliberately not
+    /// here.
+    private static let log = Logger(subsystem: "com.relayium", category: "relay")
+
+    /// Sorted, because Swift's dictionary order is unspecified and a log line
+    /// that reorders itself between sessions cannot be diffed or grepped.
+    private static func describe(_ rtt: [String: Int]) -> String {
+        rtt.isEmpty ? "-" : rtt.sorted { $0.key < $1.key }
+                               .map { "\($0.key)=\($0.value)" }
+                               .joined(separator: ",")
+    }
 
     /// The last step of `make`: turn a settled relay choice into a live
     /// connection. Injected, because everything *above* it — the ordering, the
@@ -111,7 +141,23 @@ public enum RealtimeConnectionFactory {
         let peerId = try await firstPeer(on: signaling, timeout: peerTimeout)
         negotiator.peerJoined(peerId)
 
+        let waitBegan = Date()
         let chosen = await negotiator.waitForChoice(deadline: choiceDeadline)
+        // `waited` is the number relayChoiceDeadline is waiting on: how long
+        // convergence actually took on a real pair of clients. `chosen=none`
+        // with a full `mine` and an empty `theirs` is an older or browser peer;
+        // `none` with both full is a pool with nothing in common; `none` with
+        // `mine` short is measurement losing the race, which is what to look
+        // for first.
+        let maps = negotiator.maps()
+        log.notice("""
+                   relay choice chosen=\(chosen?.id ?? "none", privacy: .public) \
+                   waited=\(Int(Date().timeIntervalSince(waitBegan) * 1000), privacy: .public)ms \
+                   deadline=\(Int(choiceDeadline * 1000), privacy: .public)ms \
+                   pool=\(config.relays.count, privacy: .public) \
+                   mine=[\(describe(maps.mine), privacy: .public)] \
+                   theirs=[\(describe(maps.theirs), privacy: .public)]
+                   """)
         // Relay-only only when a relay was actually chosen. Falling back to the
         // advertised set means possibly no relay at all (a LAN room), and
         // forcing .relay there would leave ICE with nothing to gather.
