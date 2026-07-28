@@ -53,7 +53,7 @@ public final class CloudUploader {
 
     public func upload(sources: [PlaintextSource], burnAfterRead: Bool, ttl: Int,
                        token: String,
-                       onProgress: (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
+                       onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
         let raw = generateStoreKey()
         let manifest = StoredManifest(files: sources.map { ManifestFile(name: $0.name, size: $0.size) })
         let encManifest = try encryptManifest(key: raw, manifest)
@@ -90,6 +90,7 @@ public final class CloudUploader {
             if base != 0 { lastStorageBase = base }
         }
 
+        let gate = ProgressGate(onProgress)
         onProgress(0, total)
         while offset < total {
             try Task.checkCancellation()
@@ -103,8 +104,13 @@ public final class CloudUploader {
             if pending.isEmpty { throw CloudError.server(status: 0) }
             bufferPeak = max(bufferPeak, pending.count)
 
-            let received = try await patchWithRetry(uploadId: uploadId, bytes: pending,
-                                                    chunkStart: chunkStart, total: total, token: token)
+            // In-flight progress, so the bar follows the bytes rather than the
+            // chunk boundaries.
+            gate.floor(offset)
+            let received = try await patchWithRetry(
+                uploadId: uploadId, bytes: pending,
+                chunkStart: chunkStart, total: total, token: token,
+                onBytesSent: { gate.report(min($0, total), total) })
             let consumed = received - chunkStart
             // Offset moving backwards, or past bytes we never produced: either way
             // we can no longer align, and sending more writes a misplaced stream.
@@ -139,7 +145,8 @@ public final class CloudUploader {
     /// PATCH with resync-and-replay. A reset commits whatever landed, so the
     /// server's offset can fall inside the chunk we sent; replay from there.
     private func patchWithRetry(uploadId: String, bytes: Data, chunkStart: Int,
-                                total: Int, token: String) async throws -> Int {
+                                total: Int, token: String,
+                                onBytesSent: @escaping (Int) -> Void) async throws -> Int {
         let end = chunkStart + bytes.count
         var from = chunkStart
         for attempt in 1...5 {
@@ -150,9 +157,14 @@ public final class CloudUploader {
                 // worst moment to double the resident buffer.
                 let body = bytes[(bytes.startIndex + (from - chunkStart))...]
                 bufferPeak = max(bufferPeak, bytes.count)
+                // `from` moves on a retry, so the delegate's per-request count
+                // is rebased onto the absolute offset. Without that, a resumed
+                // chunk would restart the bar partway through the file.
+                let base = from
                 let outcome = try await transport.patchChunk(
                     uploadId: uploadId, bytes: body,
-                    from: from, to: end, total: total, token: token)
+                    from: from, to: end, total: total, token: token,
+                    onBytesSent: { onBytesSent(base + $0) })
                 switch outcome {
                 case .committed(let r), .serverAhead(let r): return r
                 }
@@ -198,7 +210,7 @@ extension CloudUploader {
         sources: [PlaintextSource],
         singleShot: (_ burnAfterRead: Bool, _ ttl: Int, _ token: String) async throws -> SingleShotResult,
         burnAfterRead: Bool, ttl: Int, token: String,
-        onProgress: (_ sent: Int, _ total: Int) -> Void
+        onProgress: @escaping (_ sent: Int, _ total: Int) -> Void
     ) async throws -> UploadOutcome {
         do {
             return try await upload(sources: sources, burnAfterRead: burnAfterRead,
@@ -213,5 +225,34 @@ extension CloudUploader {
             return UploadOutcome(id: s.result.id, expiresAt: s.result.expiresAt,
                                  keyB64url: s.keyB64url)
         }
+    }
+}
+
+/// Serialises progress reports and keeps them monotonic.
+///
+/// Two threads reach this: the upload loop, which sets a floor as each chunk
+/// begins, and URLSession's delegate queue, which reports bytes leaving. Both
+/// mutate the same "highest reported" value, so it is locked rather than left
+/// to chance — and the monotonic rule is what stops a retried chunk, whose
+/// per-request counter restarts, from dragging the bar backwards.
+final class ProgressGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var high = 0
+    private let emit: (Int, Int) -> Void
+
+    init(_ emit: @escaping (Int, Int) -> Void) { self.emit = emit }
+
+    /// Never report below this again (the committed offset of a finished chunk).
+    func floor(_ n: Int) {
+        lock.lock(); defer { lock.unlock() }
+        if n > high { high = n }
+    }
+
+    func report(_ n: Int, _ total: Int) {
+        lock.lock()
+        guard n > high else { lock.unlock(); return }
+        high = n
+        lock.unlock()
+        emit(n, total)
     }
 }

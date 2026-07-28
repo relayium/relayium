@@ -9,7 +9,8 @@ private final class FailingInitTransport: ResumableTransport, @unchecked Sendabl
         throw error
     }
     func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
-                    total: Int, token: String) async throws -> PatchOutcome { .committed(received: 0) }
+                    total: Int, token: String,
+                    onBytesSent: ((Int) -> Void)?) async throws -> PatchOutcome { .committed(received: 0) }
     func uploadOffset(uploadId: String, token: String) async throws -> Int { 0 }
     func finalizeUpload(uploadId: String, token: String) async throws -> UploadResult {
         UploadResult(id: "x", expiresAt: 0)
