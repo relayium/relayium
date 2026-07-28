@@ -126,13 +126,13 @@ const zh = {
       heading: "不在同一网络？用配对码",
       body: [
         "你不必连同一个 Wi-Fi。如果两台手机在不同网络——一台用移动数据，另一台用家里的 Wi-Fi——Relayium 依然能用配对码把它们连起来。",
-        "发送方设备会显示一段简短的配对码，在另一台手机上输入即可（或打开它生成的分享链接）。这样建立的跨网络传输走的是加密 TURN 中继，而不是两台手机之间的直连——这是刻意的选择：跨越两个不同网络时往往根本找不到直连路径，先试直连只会让连接卡住二十秒左右，最后仍旧落到中继上，所以 Relayium 干脆直接走中继，一两秒就能连上。中继只转发密文；文件在离开你手机之前就已端到端封装，中继永远读不到内容。若中途连接断开，可以断点续传，而不必从头再来。这样发送需要发送方登录——接收方始终无需账号。",
+        "发送方设备会显示一段简短的配对码，在另一台手机上输入即可（或打开它生成的分享链接）。这样建立的跨网络传输走的是加密 TURN 中继，而不是两台手机之间的直连——这是刻意的选择：跨越两个不同网络时往往根本找不到直连路径，先试直连只会让连接卡住二十秒左右，最后仍旧落到中继上，所以 Relayium 干脆直接走中继，一两秒就能连上。中继只转发密文；文件在离开你手机之前就已完成端到端加密，中继永远读不到内容。若中途连接断开，可以断点续传，而不必从头再来。这样发送需要发送方登录——接收方始终无需账号。",
       ],
     },
     {
       heading: "在安卓和 iPhone 间传文件的其他方式",
       body: [
-        "Relayium 并不是唯一选择，了解各备选方案诚实的取舍也很有必要：",
+        "Relayium 并不是唯一选择，了解各替代方案的取舍也很有必要：",
       ],
       bullets: [
         "谷歌的快速分享（Quick Share）以及 SHAREit 这类第三方 App 传得很快，但两台手机都要安装，而且快速分享无法覆盖 iPhone。",
@@ -180,17 +180,17 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "Android と iPhone は AirDrop を共有していないため、写真を数枚や動画を1本やり取りするだけでも、USB ケーブル、画質を圧縮するチャットアプリ、あるいはクラウドドライブへのアップロードとダウンロードの往復に頼りがちです。どれも本来より遅く、面倒です。",
-    "Relayium はそれをすべて省きます。2台のスマホが同じ Web ページを開き、互いを見つけ、ファイルは端末間で直接転送されます——エンドツーエンド暗号化、アプリのインストール不要。同じネットワークならアカウントも不要で、ネットワークをまたいでペアリングコードで送る場合も送信側がサインインするだけです。本記事で手順を順に説明します。",
+    "Relayium はそれをすべて省きます。2台のスマホが同じ Web ページを開き、互いを見つけ、ファイルは端末間で直接転送されます。エンドツーエンド暗号化で、アプリのインストールは不要です。同じネットワークならアカウントも不要で、ネットワークをまたいでペアリングコードで送る場合も送信側がサインインするだけです。本記事で手順を順に説明します。",
   ],
   sections: [
     {
       heading: "始める前に必要なもの",
       body: [
-        "インストールは不要です。同じネットワークなら登録も不要——リアルタイム転送は両方の端末のブラウザからそのまま使えます。",
+        "インストールは不要です。同じネットワークなら登録も不要です。リアルタイム転送は両方の端末のブラウザからそのまま使えます。",
       ],
       bullets: [
-        "Chrome（または任意の最新ブラウザ）が入った Android 端末と、Safari を使う iPhone——どちらも最新の状態に。",
-        "最速の経路は、両方の端末を同じ Wi-Fi ネットワークに置くことです。無理でも大丈夫——ペアリングコードは異なるネットワークをまたいでも機能します。",
+        "Chrome（または任意の最新ブラウザ）が入った Android 端末と、Safari を使う iPhone（どちらも最新の状態に）。",
+        "最速の経路は、両方の端末を同じ Wi-Fi ネットワークに置くことです。無理でも大丈夫です。ペアリングコードは異なるネットワークをまたいでも機能します。",
         "送りたいファイル、1バッチあたり最大1,000個。",
       ],
     },
@@ -202,7 +202,7 @@ const ja = {
       bullets: [
         "Android 端末と iPhone の両方で、ブラウザから relayium.com を開きます。",
         "各端末はもう一方に近くの端末として表示されます。送信側のスマホで、受信側をタップします。",
-        "送るファイルを選びます——1バッチ最大1,000個——またはそのままドラッグして入れます。",
+        "送るファイルを選ぶか（1バッチ最大1,000個）、そのままドラッグして入れます。",
         "両方の画面に同じ6桁のコードが表示されます。一致するか確認してください。これは、間にサーバーが入り込んでいないことを示す検証コードです。",
         "受信側の iPhone で承認するとファイルが直接転送され、端末に保存されます。",
       ],
@@ -210,8 +210,8 @@ const ja = {
     {
       heading: "異なるネットワークの場合は？ ペアリングコードを使う",
       body: [
-        "同じ Wi-Fi である必要はありません。スマホが別々のネットワーク——一方はモバイルデータ、もう一方は自宅の Wi-Fi——にあっても、Relayium はペアリングコードで両者を接続できます。",
-        "送信側の端末が短いペアリングコードを表示するので、もう一方のスマホで入力します（または生成された共有リンクを開きます）。この方法で結ばれるネットワークをまたぐ転送は、端末同士の直接接続ではなく暗号化された TURN リレー経由で行われます。これは意図的な設計です。異なるネットワークの間では直接経路がそもそも見つからないことがほとんどで、先に直接接続を試すと 20 秒ほど接続が止まったあげく結局リレーに落ち着くため、Relayium は最初からリレーを使い、1〜2 秒で接続します。リレーが転送するのは暗号文だけで、ファイルはスマホを出る前にエンドツーエンドで封印されているため、リレーが中身を読むことはできません。途中で接続が切れても、最初からではなく再開できます。この方法で送るには送信側のサインインが必要です——受信側はアカウント不要です。",
+        "同じ Wi-Fi である必要はありません。スマホが別々のネットワーク（一方はモバイルデータ、もう一方は自宅の Wi-Fi）にあっても、Relayium はペアリングコードで両者を接続できます。",
+        "送信側の端末が短いペアリングコードを表示するので、もう一方のスマホで入力します（または生成された共有リンクを開きます）。この方法で結ばれるネットワークをまたぐ転送は、端末同士の直接接続ではなく暗号化された TURN リレー経由で行われます。これは意図的な設計です。異なるネットワークの間では直接経路がそもそも見つからないことがほとんどで、先に直接接続を試すと 20 秒ほど接続が止まったあげく結局リレーに落ち着くため、Relayium は最初からリレーを使い、1〜2 秒で接続します。リレーが転送するのは暗号文だけで、ファイルはスマホを出る前にエンドツーエンドで封印されているため、リレーが中身を読むことはできません。途中で接続が切れても、最初からではなく再開できます。この方法で送るには送信側のサインインが必要です。受信側はアカウント不要です。",
       ],
     },
     {
@@ -229,7 +229,7 @@ const ja = {
     {
       heading: "写真の画質は落ちますか？",
       body: [
-        "落ちません。メッセージアプリと違い、Relayium は元のファイルをバイト単位でそのまま送ります——再圧縮もリサイズもしません。iPhone に届くのは、Android から出たものの正確なコピーです。",
+        "落ちません。メッセージアプリと違い、Relayium は元のファイルをバイト単位でそのまま送ります。再圧縮もリサイズもしません。iPhone に届くのは、Android から出たものの正確なコピーです。",
         "それを裏づけるため、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるので、届いた写真や動画は送ったものと必ず同一です。大きなファイルもうまく扱えます。File System Access API を備えたブラウザ（パソコン版の Chrome や Edge）は、受信したファイルをサイズ上限なしでそのままディスクへ書き込みます。Firefox・Safari・スマホのブラウザ（iPhone は中身がすべて WebKit です）にはこの API がないため、そこでは受信分をいったんメモリに溜めることになり、およそ 256MB を超えると Relayium が受け取る前に警告を出します。この数値は実測した上限ではなく意図的に控えめに置いた目安で、実際に破綻する地点は端末のメモリ・OS・開いているタブの数によって変わります。",
       ],
     },
@@ -239,11 +239,11 @@ const ja = {
     items: [
       {
         q: "どちらのスマホにもアプリのインストールは必要ですか？",
-        a: "いいえ。Relayium は Android でも iPhone でもすべてブラウザで動作します。各端末で relayium.com を開けば準備完了です——どちらの方法でもダウンロードは不要です。同じネットワークならリアルタイム転送にアカウントは不要で、ネットワークをまたぐペアリングも送信側がサインインするだけです。任意で PWA としてホーム画面に追加できますが、それはショートカットにすぎません。",
+        a: "いいえ。Relayium は Android でも iPhone でもすべてブラウザで動作します。各端末で relayium.com を開けば準備完了です。どちらの方法でもダウンロードは不要です。同じネットワークならリアルタイム転送にアカウントは不要で、ネットワークをまたぐペアリングも送信側がサインインするだけです。任意で PWA としてホーム画面に追加できますが、それはショートカットにすぎません。",
       },
       {
         q: "両方のスマホが同じ Wi-Fi にある必要がありますか？",
-        a: "いいえ。同じネットワークは端末が自動的に互いを見つけるため最速の経路ですが、ペアリングコードなら2台のスマホを異なるネットワークをまたいで接続できます——一方がモバイルデータ、もう一方が Wi-Fi でも大丈夫です。どちらの場合も転送はエンドツーエンド暗号化のままですが、ネットワークをまたぐペアリングには送信側のサインインが必要です——受信側はアカウント不要です。",
+        a: "いいえ。同じネットワークは端末が自動的に互いを見つけるため最速の経路ですが、ペアリングコードなら2台のスマホを異なるネットワークをまたいで接続できます。一方がモバイルデータ、もう一方が Wi-Fi でも大丈夫です。どちらの場合も転送はエンドツーエンド暗号化のままですが、ネットワークをまたぐペアリングには送信側のサインインが必要です。受信側はアカウント不要です。",
       },
       {
         q: "写真は圧縮されたり変更されたりしますか？",
@@ -252,7 +252,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "両方のスマホで Relayium を開いて、最初のファイルを送ってみましょう——インストール不要、同じネットワークならアカウントも不要です。",
+    text: "両方のスマホで Relayium を開いて、最初のファイルを送ってみましょう。インストール不要で、同じネットワークならアカウントも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -302,7 +302,7 @@ const ko = {
     {
       heading: "안드로이드와 아이폰 사이에서 파일을 옮기는 다른 방법",
       body: [
-        "Relayium만이 선택지는 아니며, 대안들의 솔직한 절충점을 알아 둘 가치가 있습니다:",
+        "Relayium만이 선택지는 아니며, 대안의 솔직한 절충점을 알아 둘 가치가 있습니다:",
       ],
       bullets: [
         "구글의 퀵 셰어나 SHAREit 같은 서드파티 앱은 빠르게 옮기지만, 두 폰 모두에 설치가 필요하고 퀵 셰어는 아이폰에 닿지 않습니다.",
@@ -349,7 +349,7 @@ const de = {
     "Eine Schritt-für-Schritt-Anleitung, um Fotos, Videos und Dokumente im Browser von Android auf iPhone zu senden — ohne AirDrop, ohne Kabel, ohne Cloud-Upload. Öffne einfach Relayium auf beiden Geräten.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "Android und iPhone teilen sich kein AirDrop, also bedeutet das Übertragen ein paar Fotos oder eines Videos meist ein USB-Kabel, eine Chat-App, die deine Bilder komprimiert, oder einen Umweg über irgendeine Cloud. Alle drei sind langsamer und umständlicher, als sie sein müssten.",
+    "Android und iPhone teilen sich kein AirDrop, also bedeutet es, ein paar Fotos oder ein Video zu übertragen, meist ein USB-Kabel, eine Chat-App, die deine Bilder komprimiert, oder einen Umweg über irgendeine Cloud. Alle drei sind langsamer und umständlicher, als sie sein müssten.",
     "Relayium spart dir all das. Beide Handys öffnen dieselbe Webseite, finden sich und die Dateien wandern direkt zwischen ihnen — Ende-zu-Ende-verschlüsselt, keine App zu installieren. Im selben Netz ist kein Konto nötig; beim Senden über Netzwerke hinweg per Pairing-Code muss sich nur der Absender anmelden. Diese Anleitung führt dich Schritt für Schritt hindurch.",
   ],
   sections: [
@@ -373,7 +373,7 @@ const de = {
         "Öffne auf dem Android-Handy und dem iPhone jeweils relayium.com im Browser.",
         "Jedes Gerät erscheint beim anderen als Gerät in der Nähe. Tippe auf dem sendenden Handy das empfangende an.",
         "Wähle die Dateien zum Senden — bis zu 1.000 pro Stapel — oder zieh sie einfach hinein.",
-        "Beide Bildschirme zeigen denselben sechsstelligen Code. Prüfe, ob sie übereinstimmen; das ist der Prüfcode, der belegt, dass sich kein Server dazwischengeschoben hat.",
+        "Beide Bildschirme zeigen denselben sechsstelligen Code. Prüfe, ob sie übereinstimmen; das ist der Verifizierungscode, der belegt, dass sich kein Server dazwischengeschoben hat.",
         "Bestätige auf dem empfangenden iPhone, dann werden die Dateien direkt übertragen und auf deinem Gerät gespeichert.",
       ],
     },
@@ -435,7 +435,7 @@ const fr = {
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Android et iPhone ne partagent pas d'AirDrop, donc déplacer quelques photos ou une vidéo entre eux passe le plus souvent par un câble USB, une messagerie qui compresse vos images, ou un aller-retour via un espace cloud. Les trois sont plus lents et plus pénibles qu'ils ne devraient l'être.",
-    "Relayium fait l'impasse sur tout cela. Les deux téléphones ouvrent la même page web, se trouvent, et les fichiers voyagent directement entre eux — chiffrés de bout en bout, aucune application à installer. Sur le même réseau, aucun compte n'est nécessaire ; pour envoyer entre réseaux différents avec un code d'appairage, l'expéditeur n'a qu'à se connecter. Ce guide vous accompagne pas à pas.",
+    "Relayium fait l'impasse sur tout cela. Les deux téléphones ouvrent la même page web, se trouvent, et les fichiers voyagent directement entre eux — chiffrés de bout en bout, aucune application à installer. Sur le même réseau, aucun compte n'est nécessaire ; pour envoyer entre réseaux différents avec un code d'appairage, l'expéditeur n'a qu'à se connecter. Ce guide vous accompagne pas à pas.",
   ],
   sections: [
     {
@@ -446,33 +446,33 @@ const fr = {
       bullets: [
         "Un téléphone Android avec Chrome (ou n'importe quel navigateur moderne) et un iPhone avec Safari — tous deux à jour.",
         "Pour la voie la plus rapide, placez les deux appareils sur le même réseau Wi-Fi. Si c'est impossible, pas de souci — un code d'appairage fonctionne aussi sur des réseaux différents.",
-        "Les fichiers à envoyer, jusqu'à 1 000 par lot.",
+        "Les fichiers à envoyer, jusqu'à 1 000 par lot.",
       ],
     },
     {
-      heading: "Pas à pas : les deux appareils sur le même Wi-Fi",
+      heading: "Pas à pas : les deux appareils sur le même Wi-Fi",
       body: [
         "C'est la voie la plus simple. Sur le même réseau, les deux téléphones se découvrent automatiquement, il n'y a donc presque rien à saisir.",
       ],
       bullets: [
         "Sur le téléphone Android et sur l'iPhone, ouvrez relayium.com dans le navigateur.",
         "Chaque appareil apparaît sur l'autre comme un appareil à proximité. Sur le téléphone qui envoie, touchez celui qui reçoit.",
-        "Choisissez les fichiers à envoyer — jusqu'à 1 000 par lot — ou faites-les simplement glisser.",
-        "Les deux écrans affichent le même code à 6 chiffres. Vérifiez qu'ils concordent ; c'est le code de vérification qui prouve qu'aucun serveur ne s'est intercalé entre vous.",
+        "Choisissez les fichiers à envoyer — jusqu'à 1 000 par lot — ou faites-les simplement glisser.",
+        "Les deux écrans affichent le même code à 6 chiffres. Vérifiez qu'il concorde ; c'est le code de vérification qui prouve qu'aucun serveur ne s'est intercalé entre vous.",
         "Acceptez sur l'iPhone qui reçoit, les fichiers se transfèrent directement, puis enregistrez-les sur votre appareil.",
       ],
     },
     {
-      heading: "Sur des réseaux différents ? Utilisez un code d'appairage",
+      heading: "Sur des réseaux différents ? Utilisez un code d'appairage",
       body: [
         "Vous n'avez pas besoin d'être sur le même Wi-Fi. Si les téléphones sont sur des réseaux différents — l'un en données mobiles, l'autre sur le Wi-Fi de la maison — Relayium peut quand même les connecter avec un code d'appairage.",
-        "L'appareil qui envoie affiche un court code d'appairage ; saisissez-le sur l'autre téléphone (ou ouvrez le lien de partage qu'il génère). Un transfert établi ainsi entre deux réseaux passe par un relais TURN chiffré plutôt que par une liaison directe entre les deux téléphones — et c'est délibéré : entre deux réseaux différents, une voie directe est le plus souvent introuvable, et l'essayer d'abord bloquerait l'établissement de la connexion une vingtaine de secondes avant d'aboutir quand même au relais. Relayium y va donc d'emblée et se connecte en une ou deux secondes. Le relais ne transmet que du texte chiffré ; les fichiers sont scellés de bout en bout avant de quitter votre téléphone, il ne peut donc jamais les lire. Si la connexion se coupe en cours de route, il peut reprendre au lieu de tout recommencer. Envoyer ainsi exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte.",
+        "L'appareil qui envoie affiche un court code d'appairage ; saisissez-le sur l'autre téléphone (ou ouvrez le lien de partage qu'il génère). Un transfert établi ainsi entre deux réseaux passe par un relais TURN chiffré plutôt que par une liaison directe entre les deux téléphones — et c'est délibéré : entre deux réseaux différents, une voie directe est le plus souvent introuvable, et l'essayer d'abord bloquerait l'établissement de la connexion une vingtaine de secondes avant d'aboutir quand même au relais. Relayium y va donc d'emblée et se connecte en une ou deux secondes. Le relais ne transmet que du texte chiffré ; les fichiers sont scellés de bout en bout avant de quitter votre téléphone, il ne peut donc jamais les lire. Si la connexion se coupe en cours de route, il peut reprendre au lieu de tout recommencer. Envoyer ainsi exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte.",
       ],
     },
     {
       heading: "Autres façons de déplacer des fichiers entre Android et iPhone",
       body: [
-        "Relayium n'est pas la seule option, et il vaut la peine de connaître les compromis honnêtes des solutions de rechange :",
+        "Relayium n'est pas la seule option, et il vaut la peine de connaître les compromis honnêtes des solutions de rechange :",
       ],
       bullets: [
         "Le Partage rapide de Google et des applications tierces comme SHAREit transfèrent vite, mais exigent une installation sur les deux téléphones, et le Partage rapide n'atteint pas les iPhone.",
@@ -482,10 +482,10 @@ const fr = {
       ],
     },
     {
-      heading: "Mes photos perdront-elles en qualité ?",
+      heading: "Mes photos perdront-elles en qualité ?",
       body: [
         "Non. Contrairement à une messagerie, Relayium envoie le fichier d'origine octet par octet — aucune recompression, aucun redimensionnement. Ce qui arrive sur l'iPhone est une copie exacte de ce qui a quitté le téléphone Android.",
-        "Pour le prouver, chaque fichier est vérifié de bout en bout par une empreinte SHA-256, si bien qu'une photo ou une vidéo qui arrive est garantie identique à celle que vous avez envoyée. Les gros fichiers sont bien gérés aussi : un navigateur doté de l'API File System Access (Chrome ou Edge sur ordinateur) écrit le fichier entrant directement sur le disque, sans limite de taille. Firefox, Safari et les navigateurs de téléphone — sur iPhone, tout est WebKit — n'ont pas cette API : la réception y est assemblée en mémoire, et Relayium vous avertit avant que vous acceptiez dès que l'on dépasse environ 256 Mo. Ce chiffre est une estimation volontairement prudente, pas un plafond mesuré : le point de rupture réel dépend de la mémoire de l'appareil, de son système et du nombre d'onglets ouverts.",
+        "Pour le prouver, chaque fichier est vérifié de bout en bout par une empreinte SHA-256, si bien qu'une photo ou une vidéo qui arrive est garantie identique à celle que vous avez envoyée. Les gros fichiers sont bien gérés aussi : un navigateur doté de l'API File System Access (Chrome ou Edge sur ordinateur) écrit le fichier entrant directement sur le disque, sans limite de taille. Firefox, Safari et les navigateurs de téléphone — sur iPhone, tout est WebKit — n'ont pas cette API : la réception y est assemblée en mémoire, et Relayium vous avertit avant que vous acceptiez dès que l'on dépasse environ 256 Mo. Ce chiffre est une estimation volontairement prudente, pas un plafond mesuré : le point de rupture réel dépend de la mémoire de l'appareil, de son système et du nombre d'onglets ouverts.",
       ],
     },
   ],
@@ -493,15 +493,15 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Dois-je installer une application sur l'un des téléphones ?",
-        a: "Non. Relayium fonctionne entièrement dans le navigateur, sur Android comme sur iPhone. Ouvrez relayium.com sur chaque appareil et vous êtes prêt — aucun téléchargement dans les deux cas. Sur le même réseau, un transfert en temps réel ne demande aucun compte ; s'appairer entre réseaux différents demande seulement que l'expéditeur se connecte. Vous pouvez au choix l'ajouter à l'écran d'accueil comme PWA, mais ce n'est qu'un raccourci.",
+        q: "Dois-je installer une application sur l'un des téléphones ?",
+        a: "Non. Relayium fonctionne entièrement dans le navigateur, sur Android comme sur iPhone. Ouvrez relayium.com sur chaque appareil et vous êtes prêt — aucun téléchargement dans les deux cas. Sur le même réseau, un transfert en temps réel ne demande aucun compte ; s'appairer entre réseaux différents demande seulement que l'expéditeur se connecte. Vous pouvez au choix l'ajouter à l'écran d'accueil comme PWA, mais ce n'est qu'un raccourci.",
       },
       {
-        q: "Les deux téléphones doivent-ils être sur le même Wi-Fi ?",
+        q: "Les deux téléphones doivent-ils être sur le même Wi-Fi ?",
         a: "Non. Le même réseau est la voie la plus rapide car les appareils se découvrent automatiquement, mais un code d'appairage connecte deux téléphones sur des réseaux différents — même l'un en données mobiles et l'autre en Wi-Fi. Le transfert reste chiffré de bout en bout dans les deux cas, même si s'appairer entre réseaux différents exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte.",
       },
       {
-        q: "Les photos sont-elles compressées ou modifiées d'une quelconque façon ?",
+        q: "Les photos sont-elles compressées ou modifiées d'une quelconque façon ?",
         a: "Non. Le fichier d'origine est transféré octet par octet sans compression, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256, si bien que ce qui arrive sur l'iPhone est identique bit pour bit à ce que vous avez envoyé depuis Android.",
       },
     ],
@@ -531,7 +531,7 @@ const ar = {
       bullets: [
         "هاتف Android مزوَّد بـ Chrome (أو أي متصفح حديث) وهاتف iPhone مزوَّد بـ Safari — كلاهما محدَّث.",
         "للحصول على أسرع مسار، ضع الجهازين على نفس شبكة Wi-Fi. وإن لم تستطع فلا بأس — رمز الاقتران يعمل عبر الشبكات المختلفة أيضًا.",
-        "الملفات التي تريد إرسالها، حتى 1000 ملف في كل دفعة.",
+        "الملفات التي تريد إرسالها، حتى 1,000 ملف في كل دفعة.",
       ],
     },
     {
@@ -542,7 +542,7 @@ const ar = {
       bullets: [
         "على كل من هاتف Android وiPhone، افتح relayium.com في المتصفح.",
         "يظهر كل جهاز على الآخر بوصفه جهازًا قريبًا. على الهاتف المُرسِل، انقر على الهاتف المُستقبِل.",
-        "اختر الملفات المراد إرسالها — حتى 1000 ملف في كل دفعة — أو اسحبها إلى الداخل ببساطة.",
+        "اختر الملفات المراد إرسالها — حتى 1,000 ملف في كل دفعة — أو اسحبها إلى الداخل ببساطة.",
         "تعرض الشاشتان رمز التحقق نفسه المكوَّن من 6 أرقام. تأكد من تطابقهما؛ فهذا رمز التحقق الذي يثبت أنه لم يتسلل خادم بينكما.",
         "اقبل على iPhone المُستقبِل، فتُنقَل الملفات مباشرةً، ثم احفظها على جهازك.",
       ],
@@ -628,25 +628,25 @@ const es = {
         "Tanto en el teléfono Android como en el iPhone, abre relayium.com en el navegador.",
         "Cada dispositivo aparece como un dispositivo cercano en el otro. En el teléfono que envía, toca el que recibe.",
         "Elige los archivos a enviar — hasta 1.000 por lote — o simplemente arrástralos.",
-        "Ambas pantallas muestran el mismo código de 6 dígitos. Comprueba que coinciden; este es el código de verificación que prueba que ningún servidor se ha colado entre vosotros.",
+        "Ambas pantallas muestran el mismo código de 6 dígitos. Comprueba que coinciden; este es el código de verificación que prueba que ningún servidor se ha colado entre los dos dispositivos.",
         "Acepta en el iPhone que recibe y los archivos se transfieren directamente, luego guárdalos en tu dispositivo.",
       ],
     },
     {
       heading: "¿En redes distintas? Usa un código de emparejamiento",
       body: [
-        "No tenéis que estar en la misma Wi-Fi. Si los teléfonos están en redes distintas — uno con datos móviles, el otro con la Wi-Fi de casa — Relayium aún puede conectarlos con un código de emparejamiento.",
+        "No hace falta estar en la misma Wi-Fi. Si los teléfonos están en redes distintas — uno con datos móviles, el otro con la Wi-Fi de casa — Relayium aún puede conectarlos con un código de emparejamiento.",
         "El dispositivo que envía muestra un código de emparejamiento corto; introdúcelo en el otro teléfono (o abre el enlace para compartir que genera). Una transferencia montada así entre dos redes va por un retransmisor TURN cifrado, no por un enlace directo entre los dos teléfonos — y es a propósito: entre dos redes distintas casi nunca hay una ruta directa, e intentarla primero dejaría la conexión colgada unos veinte segundos antes de acabar igualmente en el retransmisor, así que Relayium va directo a él y conecta en uno o dos segundos. El retransmisor solo reenvía texto cifrado; los archivos salen sellados de extremo a extremo antes de dejar tu teléfono, así que nunca puede leerlos. Si la conexión se cae a mitad de la transferencia, puede reanudarse en lugar de empezar de nuevo. Enviar así necesita que el remitente inicie sesión — la persona que recibe nunca necesita una cuenta.",
       ],
     },
     {
       heading: "Otras formas de mover archivos entre Android y iPhone",
       body: [
-        "Relayium no es la única opción, y vale la pena conocer los sacrificios honestos de las alternativas:",
+        "Relayium no es la única opción, y vale la pena conocer las concesiones reales de las alternativas:",
       ],
       bullets: [
         "Quick Share de Google y apps de terceros como SHAREit mueven archivos rápido, pero necesitan instalación en ambos teléfonos y Quick Share no llega a los iPhone.",
-        "Un disco en la nube (Google Drive, iCloud, Dropbox) funciona cuando la otra persona está desconectada, pero subes y luego descargas el mismo archivo dos veces, cuenta contra tu cuota y el proveedor guarda una copia.",
+        "Un disco en la nube (Google Drive, iCloud, Dropbox) funciona cuando la otra persona está desconectada, pero subes y luego descargas el mismo archivo dos veces, se descuenta de tu cuota y el proveedor guarda una copia.",
         "Las apps de chat y el correo están en todas partes, pero suelen recomprimir las fotos, limitar el tamaño de los adjuntos y no están cifradas de extremo a extremo para compartir archivos.",
         "Un cable USB es fiable pero necesita el adaptador adecuado entre USB-C y Lightning, además de un ordenador en medio para muchos tipos de archivo.",
       ],
@@ -654,7 +654,7 @@ const es = {
     {
       heading: "¿Mis fotos perderán calidad?",
       body: [
-        "No. A diferencia de una app de mensajería, Relayium envía el archivo original byte a byte — sin recompresión, sin redimensionar. Lo que aterriza en el iPhone es una copia exacta de lo que salió del teléfono Android.",
+        "No. A diferencia de una app de mensajería, Relayium envía el archivo original byte a byte — sin recompresión, sin redimensionar. Lo que llega al iPhone es una copia exacta de lo que salió del teléfono Android.",
         "Para demostrarlo, cada archivo se verifica de extremo a extremo con un hash SHA-256, así que una foto o un vídeo que llega tiene garantizado ser idéntico al que enviaste. Los archivos grandes también se gestionan bien: un navegador con la API File System Access (Chrome o Edge de escritorio) escribe el archivo entrante directamente al disco, sin límite de tamaño. Firefox, Safari y los navegadores de móvil — en el iPhone todo es WebKit — no tienen esa API, así que ahí la recepción se acumula en memoria y Relayium te avisa antes de que aceptes en cuanto se pasa de unos 256 MB. Esa cifra es una estimación deliberadamente prudente, no un techo medido: dónde falla de verdad depende de la memoria del dispositivo, de su sistema y de cuántas pestañas tengas abiertas.",
       ],
     },
@@ -705,7 +705,7 @@ const pt = {
       ],
     },
     {
-      heading: "Passo a passo: os dois dispositivos na mesma Wi-Fi",
+      heading: "Passo a passo: os dois dispositivos na mesma rede Wi-Fi",
       body: [
         "Este é o caminho mais simples. Na mesma rede, os dois celulares se descobrem automaticamente, então quase não há nada para digitar.",
       ],
@@ -713,15 +713,15 @@ const pt = {
         "Tanto no celular Android quanto no iPhone, abra relayium.com no navegador.",
         "Cada dispositivo aparece como um dispositivo próximo no outro. No celular que envia, toque no que recebe.",
         "Escolha os arquivos a enviar — até 1.000 por lote — ou simplesmente arraste-os.",
-        "As duas telas mostram o mesmo código de 6 dígitos. Confira se eles coincidem; este é o código de verificação que prova que nenhum servidor se meteu entre vocês.",
+        "As duas telas mostram o mesmo código de 6 dígitos. Confira se eles coincidem; este é o código de verificação que prova que nenhum servidor se meteu entre os dois.",
         "Aceite no iPhone que recebe e os arquivos são transferidos diretamente, depois salve-os no seu dispositivo.",
       ],
     },
     {
       heading: "Em redes diferentes? Use um código de emparelhamento",
       body: [
-        "Vocês não precisam estar na mesma Wi-Fi. Se os celulares estão em redes diferentes — um em dados móveis, o outro na Wi-Fi de casa — o Relayium ainda consegue conectá-los com um código de emparelhamento.",
-        "O dispositivo que envia mostra um código de emparelhamento curto; digite-o no outro celular (ou abra o link de compartilhamento que ele gera). Uma transferência montada assim entre duas redes corre por um retransmissor TURN criptografado, e não por uma ligação direta entre os dois celulares — de propósito: entre duas redes diferentes quase nunca existe um caminho direto, e tentá-lo primeiro travaria a conexão por uns vinte segundos antes de acabar no retransmissor mesmo assim, então o Relayium vai direto a ele e conecta em um ou dois segundos. O retransmissor só encaminha texto cifrado; os arquivos saem selados de ponta a ponta antes de deixar o seu celular, então ele nunca consegue lê-los. Se a conexão cair no meio da transferência, ela pode ser retomada em vez de recomeçar. Enviar assim exige que o remetente entre — a pessoa que recebe nunca precisa de conta.",
+        "Você não precisa estar na mesma rede Wi-Fi. Se os celulares estão em redes diferentes — um em dados móveis, o outro na rede Wi-Fi de casa — o Relayium ainda consegue conectá-los com um código de emparelhamento.",
+        "O dispositivo que envia mostra um código de emparelhamento curto; digite-o no outro celular (ou abra o link de compartilhamento que ele gera). Uma transferência montada assim entre duas redes passa por um retransmissor TURN criptografado, e não por uma ligação direta entre os dois celulares — de propósito: entre duas redes diferentes quase nunca existe um caminho direto, e tentá-lo primeiro travaria a conexão por uns vinte segundos antes de acabar no retransmissor mesmo assim, então o Relayium vai direto a ele e conecta em um ou dois segundos. O retransmissor só encaminha texto cifrado; os arquivos saem selados de ponta a ponta antes de deixar o seu celular, então ele nunca consegue lê-los. Se a conexão cair no meio da transferência, ela pode ser retomada em vez de recomeçar. Enviar assim exige que o remetente entre — a pessoa que recebe nunca precisa de conta.",
       ],
     },
     {
@@ -752,7 +752,7 @@ const pt = {
         a: "Não. O Relayium roda inteiramente no navegador tanto no Android quanto no iPhone. Abra relayium.com em cada dispositivo e você está pronto — sem download de qualquer forma. Na mesma rede uma transferência em tempo real não precisa de conta; emparelhar entre redes apenas pede que o remetente entre. Você pode, opcionalmente, adicioná-lo à tela inicial como um PWA, mas isso é só um atalho.",
       },
       {
-        q: "Os dois celulares precisam estar na mesma Wi-Fi?",
+        q: "Os dois celulares precisam estar na mesma rede Wi-Fi?",
         a: "Não. A mesma rede é o caminho mais rápido porque os dispositivos se descobrem automaticamente, mas um código de emparelhamento conecta dois celulares entre redes diferentes — mesmo um em dados móveis e outro em Wi-Fi. A transferência permanece criptografada de ponta a ponta nos dois casos, embora emparelhar entre redes exija que o remetente entre — o destinatário nunca precisa de conta.",
       },
       {

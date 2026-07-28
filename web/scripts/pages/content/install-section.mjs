@@ -71,6 +71,39 @@ export const installSection = {
       "relayium --version confirme l'installation. Sans cela, les commandes ci-dessous affichent seulement « command not found ».",
     ],
   },
+  ar: {
+    heading: "قبل أن تبدأ",
+    body: [
+      "كل ما يلي هو relayium CLI، فثبّته أولًا إن لم تكن قد فعلت. على macOS وLinux، يُسقط أمر واحد ملفًا ثنائيًا مُسبق البناء في PATH الخاص بك:",
+    ],
+    code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+    bullets: [
+      "تفضّل اختيار الملف بنفسك، أو تعمل على Windows؟ احصل على ملف ثنائي من صفحة الإصدارات — يسرد relayium.com/cli كل خيارات التثبيت (أو go build -o relayium ./cmd/relayium إن كان لديك Go).",
+      "يؤكّد relayium --version أنه مثبَّت. تخطَّ هذا وستطبع الأوامر أدناه ‘command not found’ لا غير.",
+    ],
+  },
+  es: {
+    heading: "Antes de empezar",
+    body: [
+      "Todo lo de abajo es la CLI de relayium, así que instálala primero si aún no la tienes. En macOS o Linux, un solo comando deja un binario precompilado en tu PATH:",
+    ],
+    code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+    bullets: [
+      "¿Prefieres elegir el archivo tú mismo, o estás en Windows? Coge un binario de la página de releases — relayium.com/cli lista todas las opciones de instalación (o go build -o relayium ./cmd/relayium si tienes Go).",
+      "relayium --version confirma que está instalada. Sáltate esto y los comandos de abajo solo imprimirán « command not found ».",
+    ],
+  },
+  pt: {
+    heading: "Antes de começar",
+    body: [
+      "Tudo abaixo é a CLI do relayium, então instale-a primeiro se ainda não tiver. No macOS ou Linux, um comando coloca um binário pré-compilado no seu PATH:",
+    ],
+    code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+    bullets: [
+      "Prefere escolher o arquivo você mesmo, ou está no Windows? Pegue um binário na página de releases — relayium.com/cli lista todas as opções de instalação (ou go build -o relayium ./cmd/relayium se você tiver Go).",
+      "relayium --version confirma que está instalada. Pule isso e os comandos abaixo só imprimirão “command not found”.",
+    ],
+  },
 };
 
 // selfHostInstall is a variant for the self-host guide, whose body is server /
@@ -142,6 +175,39 @@ export const selfHostInstall = {
     bullets: [
       "relayium.com/cli liste toutes les options — un binaire Windows, la page des releases, ou go build si vous avez Go.",
       "relayium --version le confirme. Sans la CLI, la commande ci-dessous affiche « command not found ».",
+    ],
+  },
+  ar: {
+    heading: "ثبّت CLI على جهازك",
+    body: [
+      "تُشغّل هذه الخطوة الأخيرة relayium CLI على حاسوبك أنت (لا على الخادم)، فثبّته هناك إن لم تكن قد فعلت. على macOS أو Linux:",
+    ],
+    code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+    bullets: [
+      "يسرد relayium.com/cli كل خيارات التثبيت — ملف ثنائي لـ Windows، أو صفحة الإصدارات، أو go build إن كان لديك Go.",
+      "يؤكّده relayium --version. بلا CLI، سيطبع الأمر أدناه ‘command not found’.",
+    ],
+  },
+  es: {
+    heading: "Instala la CLI en tu máquina",
+    body: [
+      "Este último paso ejecuta la CLI de relayium en tu propio ordenador (no en el servidor), así que instálala ahí si aún no la tienes. En macOS o Linux:",
+    ],
+    code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+    bullets: [
+      "relayium.com/cli lista todas las opciones de instalación — un binario de Windows, la página de releases, o go build si tienes Go.",
+      "relayium --version lo confirma. Sin la CLI, el comando de abajo imprime « command not found ».",
+    ],
+  },
+  pt: {
+    heading: "Instale a CLI na sua máquina",
+    body: [
+      "Este último passo roda a CLI do relayium no seu próprio computador (não no servidor), então instale-a ali se ainda não tiver. No macOS ou Linux:",
+    ],
+    code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+    bullets: [
+      "relayium.com/cli lista todas as opções de instalação — um binário para Windows, a página de releases, ou go build se você tiver Go.",
+      "relayium --version confirma. Sem a CLI, o comando abaixo imprime “command not found”.",
     ],
   },
 };

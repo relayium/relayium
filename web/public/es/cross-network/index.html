@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Transferencia de archivos entre redes — en tiempo real, cifrada de extremo a extremo | Relayium</title>
-    <meta name="description" content="Envía archivos de un dispositivo a otro entre redes distintas con un código de emparejamiento de 6 caracteres. Cifrado de extremo a extremo — el flujo pasa por el retransmisor rápido de Relayium, que solo transporta contenido cifrado que no puede leer, verificado con un código SAS para que ni siquiera un retransmisor comprometido pueda espiar." />
+    <meta name="description" content="Envía archivos de un dispositivo a otro entre redes distintas con un código de emparejamiento de 6 caracteres. Cifrado de extremo a extremo — el flujo pasa por el retransmisor rápido de Relayium, que solo transporta texto cifrado que no puede leer, confirmado con un código de verificación (SAS) para que ni siquiera un retransmisor comprometido pueda espiar." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/es/cross-network/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/cross-network" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Transferencia de archivos entre redes — en tiempo real, cifrada de extremo a extremo | Relayium" />
-    <meta property="og:description" content="Envía archivos de un dispositivo a otro entre redes distintas con un código de emparejamiento de 6 caracteres. Cifrado de extremo a extremo — el flujo pasa por el retransmisor rápido de Relayium, que solo transporta contenido cifrado que no puede leer, verificado con un código SAS para que ni siquiera un retransmisor comprometido pueda espiar." />
+    <meta property="og:description" content="Envía archivos de un dispositivo a otro entre redes distintas con un código de emparejamiento de 6 caracteres. Cifrado de extremo a extremo — el flujo pasa por el retransmisor rápido de Relayium, que solo transporta texto cifrado que no puede leer, confirmado con un código de verificación (SAS) para que ni siquiera un retransmisor comprometido pueda espiar." />
     <meta property="og:url" content="https://relayium.com/es/cross-network/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="es_ES" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Transferencia de archivos entre redes — en tiempo real, cifrada de extremo a extremo | Relayium" />
-    <meta name="twitter:description" content="Envía archivos de un dispositivo a otro entre redes distintas con un código de emparejamiento de 6 caracteres. Cifrado de extremo a extremo — el flujo pasa por el retransmisor rápido de Relayium, que solo transporta contenido cifrado que no puede leer, verificado con un código SAS para que ni siquiera un retransmisor comprometido pueda espiar." />
+    <meta name="twitter:description" content="Envía archivos de un dispositivo a otro entre redes distintas con un código de emparejamiento de 6 caracteres. Cifrado de extremo a extremo — el flujo pasa por el retransmisor rápido de Relayium, que solo transporta texto cifrado que no puede leer, confirmado con un código de verificación (SAS) para que ni siquiera un retransmisor comprometido pueda espiar." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"Transferencia de archivos entre redes — en tiempo real, cifrada de extremo a extremo | Relayium","description":"Envía archivos de un dispositivo a otro entre redes distintas con un código de emparejamiento de 6 caracteres. Cifrado de extremo a extremo — el flujo pasa por el retransmisor rápido de Relayium, que solo transporta contenido cifrado que no puede leer, verificado con un código SAS para que ni siquiera un retransmisor comprometido pueda espiar.","url":"https://relayium.com/es/cross-network/","inLanguage":"es","dateModified":"2026-07-10","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Mis archivos pasan por vuestro servidor?","acceptedAnswer":{"@type":"Answer","text":"El flujo cifrado pasa por el retransmisor de Relayium para garantizar una conexión fiable entre redes — pero todo está cifrado de extremo a extremo, así que el retransmisor solo ve contenido cifrado que no puede leer."}},{"@type":"Question","name":"¿Es obligatorio un código?","acceptedAnswer":{"@type":"Answer","text":"Sí: un código de 6 caracteres (o su enlace de acceso/QR), válido 5 minutos, empareja los dos dispositivos entre redes distintas. El servidor lo genera a partir del alfabeto ACDEFHJKMNPRTWXY23456789 — sin 0 ni 1, para que nada se confunda con O ni I — así que no puedes inventarte uno: solo empareja un código que haya emitido el servidor."}},{"@type":"Question","name":"¿Necesito una cuenta?","acceptedAnswer":{"@type":"Answer","text":"El remitente inicia sesión para generar un código; el destinatario se une de forma anónima."}},{"@type":"Question","name":"¿Es cifrado de extremo a extremo?","acceptedAnswer":{"@type":"Answer","text":"Sí — X25519 y AES-256-GCM por bloque, verificado con el código SAS; ni el retransmisor ni el servidor pueden descifrar."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"Transferencia de archivos entre redes — en tiempo real, cifrada de extremo a extremo | Relayium","description":"Envía archivos de un dispositivo a otro entre redes distintas con un código de emparejamiento de 6 caracteres. Cifrado de extremo a extremo — el flujo pasa por el retransmisor rápido de Relayium, que solo transporta texto cifrado que no puede leer, confirmado con un código de verificación (SAS) para que ni siquiera un retransmisor comprometido pueda espiar.","url":"https://relayium.com/es/cross-network/","inLanguage":"es","dateModified":"2026-07-10","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Mis archivos pasan por el servidor de Relayium?","acceptedAnswer":{"@type":"Answer","text":"El flujo cifrado pasa por el retransmisor de Relayium para garantizar una conexión fiable entre redes — pero todo está cifrado de extremo a extremo, así que el retransmisor solo ve texto cifrado que no puede leer."}},{"@type":"Question","name":"¿Es obligatorio un código?","acceptedAnswer":{"@type":"Answer","text":"Sí: un código de 6 caracteres (o su enlace de acceso/QR), válido 5 minutos, empareja los dos dispositivos entre redes distintas. El servidor lo genera a partir del alfabeto ACDEFHJKMNPRTWXY23456789 — sin 0 ni 1, para que nada se confunda con O ni I — así que no puedes inventarte uno: solo empareja un código que haya emitido el servidor."}},{"@type":"Question","name":"¿Necesito una cuenta?","acceptedAnswer":{"@type":"Answer","text":"El remitente inicia sesión para generar un código; el destinatario se une de forma anónima."}},{"@type":"Question","name":"¿Es cifrado de extremo a extremo?","acceptedAnswer":{"@type":"Answer","text":"Sí — X25519 y AES-256-GCM por bloque, confirmado con el código de verificación (SAS); ni el retransmisor ni el servidor pueden descifrar."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -79,7 +79,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <header><span class="logo">⇌</span><a href="/?lang=es">Relayium</a></header>
       
       <h1>Transferencia de archivos entre redes, cifrada de extremo a extremo</h1>
-      <p class="pitch">Dos dispositivos en redes distintas se emparejan con un código de 6 caracteres (o su enlace/QR). Los archivos circulan por un canal cifrado a través del retransmisor rápido de Relayium — el retransmisor solo ve contenido cifrado, y las claves nunca salen de los dos dispositivos.</p>
+      <p class="pitch">Dos dispositivos en redes distintas se emparejan con un código de 6 caracteres (o su enlace/QR). Los archivos circulan por un canal cifrado a través del retransmisor rápido de Relayium — el retransmisor solo ve texto cifrado, y las claves nunca salen de los dos dispositivos.</p>
       <a class="cta" href="/cross-network?lang=es">Iniciar transferencia</a>
 
       <section class="reveal">
@@ -87,8 +87,8 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <ol class="steps">
         <li>El remitente inicia sesión y genera un código de emparejamiento de 6 caracteres (o comparte su enlace de acceso/QR).</li>
         <li>El destinatario abre el enlace o introduce el código — no hace falta cuenta para recibir.</li>
-        <li>Ambas partes verifican en pantalla el mismo código SAS de 6 dígitos para descartar cualquier intermediario.</li>
-        <li>Los archivos se transfieren cifrados de extremo a extremo (AES-256-GCM por bloque) a través del retransmisor rápido de Relayium, que solo transporta contenido cifrado que no puede leer.</li>
+        <li>Ambas partes comparan en pantalla el mismo código de verificación (SAS) de 6 dígitos para descartar cualquier intermediario.</li>
+        <li>Los archivos se transfieren cifrados de extremo a extremo (AES-256-GCM por bloque) a través del retransmisor rápido de Relayium, que solo transporta texto cifrado que no puede leer.</li>
       </ol>
       </section>
 
@@ -97,7 +97,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <ul class="why">
         <li><b>Cifrado de extremo a extremo</b> — Intercambio de claves X25519 y AES-256-GCM por bloque; las claves se negocian únicamente entre los dos dispositivos, de modo que ni el retransmisor ni el servidor pueden descifrar.</li>
         <li><b>SAS contra el ataque de intermediario</b> — Las dos pantallas muestran el mismo código de 6 dígitos; hacerlo coincidir frustra incluso a un retransmisor o un servidor de señalización comprometido.</li>
-        <li><b>El retransmisor solo ve texto cifrado</b> — Las transferencias entre redes pasan por un retransmisor rápido para garantizar una conexión fiable a través de cualquier NAT — solo transporta contenido cifrado, nunca tus claves ni texto en claro.</li>
+        <li><b>El retransmisor solo ve texto cifrado</b> — Las transferencias entre redes pasan por un retransmisor rápido para garantizar una conexión fiable a través de cualquier NAT — solo transporta texto cifrado, nunca tus claves ni texto en claro.</li>
         <li><b>Multiplataforma</b> — Windows, macOS, Linux, Android, iOS — basta un navegador moderno, nada que instalar.</li>
         <li><b>Gratis</b> — Gratis dentro de un cupo mensual de tráfico de retransmisor; generar un código exige que el remitente haya iniciado sesión, el destinatario se une de forma anónima.</li>
       </ul>
@@ -109,19 +109,19 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <h3>Frente a AirDrop</h3>
       <p>AirDrop se limita a los dispositivos Apple y a la cercanía inmediata; Relayium empareja Windows, Android, iPhone y Mac entre redes distintas, cifrado de extremo a extremo, con un simple navegador.</p>
       <h3>Frente a Snapdrop / PairDrop</h3>
-      <p>Estos solo funcionan en la misma red; Relayium añade el emparejamiento entre redes junto con un cifrado de extremo a extremo a nivel de aplicación y un código SAS, de modo que un retransmisor o un servidor de señalización comprometido no puede espiar.</p>
+      <p>Estos solo funcionan en la misma red; Relayium añade el emparejamiento entre redes junto con un cifrado de extremo a extremo a nivel de aplicación y un código de verificación (SAS), de modo que un retransmisor o un servidor de señalización comprometido no puede espiar.</p>
       </div>
       </section>
 
       <section class="reveal"><h2>Preguntas frecuentes</h2>
-      <h3>¿Mis archivos pasan por vuestro servidor?</h3>
-      <p>El flujo cifrado pasa por el retransmisor de Relayium para garantizar una conexión fiable entre redes — pero todo está cifrado de extremo a extremo, así que el retransmisor solo ve contenido cifrado que no puede leer.</p>
+      <h3>¿Mis archivos pasan por el servidor de Relayium?</h3>
+      <p>El flujo cifrado pasa por el retransmisor de Relayium para garantizar una conexión fiable entre redes — pero todo está cifrado de extremo a extremo, así que el retransmisor solo ve texto cifrado que no puede leer.</p>
       <h3>¿Es obligatorio un código?</h3>
       <p>Sí: un código de 6 caracteres (o su enlace de acceso/QR), válido 5 minutos, empareja los dos dispositivos entre redes distintas. El servidor lo genera a partir del alfabeto ACDEFHJKMNPRTWXY23456789 — sin 0 ni 1, para que nada se confunda con O ni I — así que no puedes inventarte uno: solo empareja un código que haya emitido el servidor.</p>
       <h3>¿Necesito una cuenta?</h3>
       <p>El remitente inicia sesión para generar un código; el destinatario se une de forma anónima.</p>
       <h3>¿Es cifrado de extremo a extremo?</h3>
-      <p>Sí — X25519 y AES-256-GCM por bloque, verificado con el código SAS; ni el retransmisor ni el servidor pueden descifrar.</p></section>
+      <p>Sí — X25519 y AES-256-GCM por bloque, confirmado con el código de verificación (SAS); ni el retransmisor ni el servidor pueden descifrar.</p></section>
 
       
       <footer>

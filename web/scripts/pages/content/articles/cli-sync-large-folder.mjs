@@ -185,7 +185,7 @@ const zh = {
 curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
-        "本指南用守护进程直连（relayium://），所以两台服务器之间不需要 SSH 互访。",
+        "本指南用 daemon 直连（relayium://），所以两台服务器之间不需要 SSH 互访。",
         "在接收方的防火墙或安全组上，向发送方开放监听端口（默认 9031）。",
       ],
     },
@@ -278,7 +278,7 @@ pkill -f 'relayium serve'`,
       },
       {
         q: "这和 rsync 有什么不同？",
-        a: "两者都做增量单向镜像，但 relayium sync 走锁定的 TLS 连接、不需要 SSH 账号（守护进程直连），通过证书指纹互相认证两台机器，并对每个文件做 SHA-256 校验。它和 relayium 其它模式用的是同一个传输引擎。",
+        a: "两者都做增量单向镜像，但 relayium sync 走证书固定的 TLS 连接、不需要 SSH 账号（daemon 直连），通过证书指纹互相认证两台机器，并对每个文件做 SHA-256 校验。它和 relayium 其他模式用的是同一个传输引擎。",
       },
       {
         q: "sync 会把我从源端删掉的文件在接收方也删掉吗？",
@@ -290,7 +290,7 @@ pkill -f 'relayium serve'`,
       },
       {
         q: "我必须开一个端口吗？",
-        a: "用守护进程直连的话，是的——监听端口（默认 9031）必须能从发送方访问到。如果你不想开端口、而且两台服务器之间已经有 SSH，sync 也可以走 SSH：relayium sync /path user@host:/path（远端必须装了 relayium）。",
+        a: "用 daemon 直连的话，是的——监听端口（默认 9031）必须能从发送方访问到。如果你不想开端口、而且两台服务器之间已经有 SSH，sync 也可以走 SSH：relayium sync /path user@host:/path（远端必须装了 relayium）。",
       },
     ],
   },
@@ -303,31 +303,31 @@ pkill -f 'relayium serve'`,
 };
 
 const ja = {
-  title: "2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)",
+  title: "2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）",
   description:
-    "relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング——増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。",
+    "relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング。増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。",
   updatedLabel: "最終更新",
   lead: [
-    "一方のサーバーに大きなフォルダー——数十 GB——があり、それをもう一方に完全な複製として欲しいとします。何時間もターミナルを見張ることはできませんし、途中で落ちた転送が最初からやり直しになるのも困ります。relayium sync はまさにこのために作られています。一方向の増分ミラーで、すでにあるものはスキップし、途中まで送ったファイルは止まったところから再開し、各ファイルを端から端まで検証します。",
+    "一方のサーバーに大きなフォルダー（数十 GB）があり、それをもう一方に完全な複製として欲しいとします。何時間もターミナルを見張ることはできませんし、途中で落ちた転送が最初からやり直しになるのも困ります。relayium sync はまさにこのために作られています。一方向の増分ミラーで、すでにあるものはスキップし、途中まで送ったファイルは止まったところから再開し、各ファイルを端から端まで検証します。",
     "本ガイドでは、無人で自己修復する転送を構築します。送信側を一度だけ承認し、リスナーをバックグラウンドで動かし、tmux 内のリトライループで relayium sync を回して、接続が切れても続行させ、フォルダー全体が届くまで走らせます。",
   ],
   sections: [
     {
       heading: "なぜ relayium sync がこの用途に向くのか",
       body: [
-        "sync はネイティブプロトコル上の一方向増分ミラーです(両端に relayium をインストールします)。無人で繰り返し実行しても安全な理由が3つあります:",
+        "sync はネイティブプロトコル上の一方向増分ミラーです（両端に relayium をインストールします）。無人で繰り返し実行しても安全な理由が3つあります：",
       ],
       bullets: [
-        "すでにあるファイルはスキップ: 受信側のコピーがサイズと更新時刻で一致するファイルは再送しません。",
-        "途中のファイルを再開: 接続が切れたとき半分だけ送られていたファイルは、次回の実行でディスク上にすでにあるバイトオフセットから続行し、やり直しません。",
-        "各ファイルを検証: 各ファイルを端から端まで SHA-256 で検査するため、完了したミラーは完全だと分かります。",
-        "これらのおかげでコマンドは冪等です——もう一度実行しても残りの作業だけを行います。これこそがリトライループで巨大な転送を完了させる要点です。",
+        "すでにあるファイルはスキップ：受信側のコピーがサイズと更新時刻で一致するファイルは再送しません。",
+        "途中のファイルを再開：接続が切れたとき半分だけ送られていたファイルは、次回の実行でディスク上にすでにあるバイトオフセットから続行し、やり直しません。",
+        "各ファイルを検証：各ファイルを端から端まで SHA-256 で検査するため、完了したミラーは完全だと分かります。",
+        "これらのおかげでコマンドは冪等です。もう一度実行しても残りの作業だけを行います。これこそがリトライループで巨大な転送を完了させる要点です。",
       ],
     },
     {
       heading: "前提条件",
       body: [
-        "両方のサーバーに relayium をインストールします(sync はネイティブプロトコルを話すため、各端に必要です):",
+        "両方のサーバーに relayium をインストールします（sync はネイティブプロトコルを話すため、各端に必要です）：",
       ],
       code: [
         `# 両方のサーバーで
@@ -335,14 +335,14 @@ curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
         "本ガイドはデーモン直結(relayium://)を使うため、2台のサーバー間に SSH アクセスは不要です。",
-        "受信側のファイアウォールまたはセキュリティグループで、リスナーのポート(既定 9031)を送信側に開放してください。",
+        "受信側のファイアウォールまたはセキュリティグループで、リスナーのポート（既定 9031）を送信側に開放してください。",
       ],
     },
     {
-      heading: "送信側を一度だけ承認する(受信側)",
+      heading: "送信側を一度だけ承認する（受信側）",
       body: [
-        "受信側は送信側のマシンを一度だけ承認します。承認はディスクに書き込まれ、再起動をまたいでも有効なので繰り返す必要はありません。まずターミナルでリスナーをフォアグラウンド起動し、--dir を親ディレクトリに向けます——relayium sync /root/workspace は受信側で workspace/... を再現するので、--dir /root ならファイルは /root/workspace/ に着地します。",
-        "送信側の初回接続時(次節)、serve はその住所とフィンガープリントを表示して承認を求めます。y と答えれば永続的に記憶されます:",
+        "受信側は送信側のマシンを一度だけ承認します。承認はディスクに書き込まれ、再起動をまたいでも有効なので繰り返す必要はありません。まずターミナルでリスナーをフォアグラウンド起動し、--dir を親ディレクトリに向けます。relayium sync /root/workspace は受信側で workspace/... を再現するので、--dir /root ならファイルは /root/workspace/ に着地します。",
+        "送信側の初回接続時（次節）、serve はそのアドレスとフィンガープリントを表示して承認を求めます。y と答えれば永続的に記憶されます：",
       ],
       code: [
         `# 受信側で（フォアグラウンド、対話的に承認するため）
@@ -353,14 +353,14 @@ Incoming push from 203.0.113.9:52140
 Accept and remember this peer? [y/N] y`,
       ],
       bullets: [
-        "完全に無人にするならプロンプトを省けます: 送信側で relayium id を実行してフィンガープリントを表示し、受信側で relayium authorize <フィンガープリント> を実行します。",
-        "--dir は同期するフォルダーの親であって、フォルダー自体ではありません——さもないとファイルが1階層深く着地します(例: /root/workspace/workspace)。",
+        "完全に無人にするならプロンプトを省けます：送信側で relayium id を実行してフィンガープリントを表示し、受信側で relayium authorize <フィンガープリント> を実行します。",
+        "--dir は同期するフォルダーの親であって、フォルダー自体ではありません。さもないとファイルが1階層深く着地します（例：/root/workspace/workspace）。",
       ],
     },
     {
-      heading: "リスナーをバックグラウンドで動かす(受信側)",
+      heading: "リスナーをバックグラウンドで動かす（受信側）",
       body: [
-        "フィンガープリントを承認したら、フォアグラウンドの serve を止め(Ctrl-C)、ログアウト後も生き残るようデタッチして再起動します。保存済みのフィンガープリントを読み込み、送信側を確認なしで受け入れます——今回はプロンプトは出ません:",
+        "フィンガープリントを承認したら、フォアグラウンドの serve を止め(Ctrl-C)、ログアウト後も生き残るようデタッチして再起動します。保存済みのフィンガープリントを読み込み、送信側を確認なしで受け入れます。今回はプロンプトは出ません：",
       ],
       code: [
         `# 受信側で
@@ -368,14 +368,14 @@ nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
       ],
       bullets: [
         "serve は接続を1つずつ処理して動き続けるため、下のリトライループの再接続のたびに受信の準備ができています。",
-        "常時稼働の受信箱にするなら、代わりに systemd で動かします(Restart=always、--config-dir /etc/relayium)。",
+        "常時稼働の受信箱にするなら、代わりに systemd で動かします（Restart=always、--config-dir /etc/relayium）。",
       ],
     },
     {
-      heading: "tmux 内のリトライループで sync を回す(送信側)",
+      heading: "tmux 内のリトライループで sync を回す（送信側）",
       body: [
-        "長い転送は中断されます——セッション切断、不安定なネットワーク、再起動。解決策は高級なツールではなく、sync を成功するまで再実行するループと、ログアウト後も生き残らせる端末マルチプレクサです。ここでは tmux が nohup より扱いやすい: 間違えやすい出力リダイレクトがなく、再接続して進捗を見られます。",
-        "tmux セッションを開始し、until ループでミラーを実行します——10秒ごとに再試行し、sync が成功を返したら自分で終了します:",
+        "長い転送は中断されます。セッション切断、不安定なネットワーク、再起動。解決策は高級なツールではなく、sync を成功するまで再実行するループと、ログアウト後も生き残らせる端末マルチプレクサです。ここでは tmux のほうが nohup より扱いやすいです：間違えやすい出力リダイレクトがなく、再接続して進捗を見られます。",
+        "tmux セッションを開始し、until ループでミラーを実行します。10秒ごとに再試行し、sync が成功を返したら自分で終了します：",
       ],
       code: [
         `# 送信側で
@@ -384,14 +384,14 @@ tmux new -s xfer      # tmux が無ければ apt install -y tmux`,
       ],
       bullets: [
         "Ctrl-b の次に d でデタッチ。ターミナルを閉じてもループは動き続けます。tmux attach -t xfer で再接続します。",
-        "再試行のたびに作業は減ります: 転送済みのファイルはスキップされ、半分送ったファイルは再開する——だからループは収束して終わります。",
-        "進捗はファイルが1つ完了するごとに1行表示されるので、大きなファイルは完了まで静かに転送されます。無音は停止ではありません(トラブルシューティング参照)。",
+        "再試行のたびに作業は減ります：転送済みのファイルはスキップされ、半分送ったファイルは再開されます。だからループは収束して終わります。",
+        "進捗はファイルが1つ完了するごとに1行表示されるので、大きなファイルは完了まで静かに転送されます。無音は停止ではありません（トラブルシューティング参照）。",
       ],
     },
     {
       heading: "検証と仕上げ",
       body: [
-        "until ループが終わり、通常のシェルプロンプトに戻ったら転送は完了です。両側が一致することを確認してから、リスナーを停止します:",
+        "until ループが終わり、通常のシェルプロンプトに戻ったら転送は完了です。両側が一致することを確認してから、リスナーを停止します：",
       ],
       code: [
         `# 両方のサーバーで合計を比較
@@ -406,15 +406,15 @@ pkill -f 'relayium serve'`,
     {
       heading: "トラブルシューティング",
       body: [
-        "問題に見えて多くの場合そうでないこと——そして多くの場合本当に問題であること(ポートの遮断)を挙げます。",
+        "問題に見えて多くの場合そうでないこと、そして多くの場合本当に問題であること（ポートの遮断）を挙げます。",
       ],
       bullets: [
-        "無音は停止ではありません。進捗は各ファイルが完了したときだけ表示されるので、大きなファイルは静かに転送されます。送信側で ss -tnp | grep 9031 を使って実際の状態を確認します——ESTAB は接続して転送中、SYN-SENT はリスナーに届いていないことを意味します。",
-        "SYN-SENT はポートが遮断されている印です。受信側で送信側に向けて 9031/TCP を開放します(クラウドのセキュリティグループ、または ufw allow 9031/tcp)。「転送がいつまでも始まらない」最も一般的な原因です。",
+        "無音は停止ではありません。進捗は各ファイルが完了したときだけ表示されるので、大きなファイルは静かに転送されます。送信側で ss -tnp | grep 9031 を使って実際の状態を確認します。ESTAB は接続して転送中、SYN-SENT はリスナーに届いていないことを意味します。",
+        "SYN-SENT はポートが遮断されている印です。受信側で送信側に向けて 9031/TCP を開放します（クラウドのセキュリティグループ、または ufw allow 9031/tcp）。「転送がいつまでも始まらない」最も一般的な原因です。",
         "複数行の nohup より、tmux と1行のループを優先します。引用符と > リダイレクトを含む複数行コマンドをシェルに貼り付けると、リダイレクトで壊れたり、> の継続プロンプトで止まったりしがちです。",
-        "プロセスを片付けるときは正確に一致させます(pkill -f 'relayium sync')。pkill relayium ではありません——広い一致は同じマシンで動く無関係な relayium プロセスを巻き込みかねません。",
-        "除外フラグはありません。代わりにソースを指定してください。sync が取るのは -i と -p(SSH の鍵とポート)、--delete、--watch、--config-dir だけで、ツリーの途中のパスを絞り込む手段はありません。Python の仮想環境のような再生成可能なディレクトリを置いていくには、本当に欲しいサブディレクトリを同期します: sync は複数のソースを一度に受け取り、それぞれが自分の名前で受信側の --dir の下に届きます。relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 を serve --dir /root/workspace に対して実行すれば /root/workspace/src と /root/workspace/data に復元され、venv は一度も走査されません。",
-        "シンボリックリンクと特殊ファイルはスキップされます——sync が転送するのは通常ファイルだけです。重要なシンボリックリンクは別途扱ってください。",
+        "プロセスを片付けるときは正確に一致させます(pkill -f 'relayium sync')。pkill relayium ではありません。広い一致は同じマシンで動く無関係な relayium プロセスを巻き込みかねません。",
+        "除外フラグはありません。代わりにソースを指定してください。sync が取るのは -i と -p（SSH の鍵とポート）、--delete、--watch、--config-dir だけで、ツリーの途中のパスを絞り込む手段はありません。Python の仮想環境のような再生成可能なディレクトリを置いていくには、本当に欲しいサブディレクトリを同期します：sync は複数のソースを一度に受け取り、それぞれが自分の名前で受信側の --dir の下に届きます。relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 を serve --dir /root/workspace に対して実行すれば /root/workspace/src と /root/workspace/data に復元され、venv は一度も走査されません。",
+        "シンボリックリンクと特殊ファイルはスキップされます。sync が転送するのは通常ファイルだけです。重要なシンボリックリンクは別途扱ってください。",
       ],
     },
   ],
@@ -422,29 +422,29 @@ pkill -f 'relayium serve'`,
     heading: "よくある質問",
     items: [
       {
-        q: "転送が途中で中断されたらどうなりますか?",
-        a: "何も失われません。relayium sync を再実行してください——受信側にすでにあるファイルはスキップし、半分送ったファイルはディスク上のバイトオフセットから再開します。本ガイドの until ループが、フォルダー全体がミラーされるまでこれを自動で行います。",
+        q: "転送が途中で中断されたらどうなりますか？",
+        a: "何も失われません。relayium sync を再実行してください。受信側にすでにあるファイルはスキップし、半分送ったファイルはディスク上のバイトオフセットから再開します。本ガイドの until ループが、フォルダー全体がミラーされるまでこれを自動で行います。",
       },
       {
-        q: "これは rsync と何が違いますか?",
-        a: "どちらも増分の一方向ミラーですが、relayium sync は固定された TLS 接続で動作し、SSH アカウントを必要とせず(デーモン直結)、証明書のフィンガープリントで2台を認証し、各ファイルを SHA-256 で検証します。relayium の他モードと同じ転送エンジンです。",
+        q: "これは rsync と何が違いますか？",
+        a: "どちらも増分の一方向ミラーですが、relayium sync は証明書ピンニング付き TLS 接続で動作し、SSH アカウントを必要とせず（デーモン直結）、証明書のフィンガープリントで2台を認証し、各ファイルを SHA-256 で検証します。relayium の他モードと同じ転送エンジンです。",
       },
       {
-        q: "ソースから削除したファイルを、sync は受信側でも削除しますか?",
-        a: "あなたが求めたときだけです。既定では sync は追加と更新だけを行います。削除をミラーするには --delete を渡し、それが有効になるには受信側が --allow-delete で serve を実行している必要があります——さもなければ削除は無視され、報告されます。",
+        q: "ソースから削除したファイルを、sync は受信側でも削除しますか？",
+        a: "求めたときだけです。既定では sync は追加と更新だけを行います。削除をミラーするには --delete を渡し、それが有効になるには受信側が --allow-delete で serve を実行している必要があります。さもなければ削除は無視され、報告されます。",
       },
       {
-        q: "2つのフォルダーを継続的に同期し続けられますか?",
-        a: "はい。--watch を付けると sync は動き続け、ソース配下の変更のたびに再ミラーします。大きなフォルダーの一度きりの移動には不要です——リトライループと素の sync で十分です。",
+        q: "2つのフォルダーを継続的に同期し続けられますか？",
+        a: "はい。--watch を付けると sync は動き続け、ソース配下の変更のたびに再ミラーします。大きなフォルダーの一度きりの移動には不要です。リトライループと素の sync で十分です。",
       },
       {
-        q: "ポートを開ける必要がありますか?",
-        a: "デーモン直結ならはい——リスナーのポート(既定 9031)が送信側から到達可能である必要があります。ポートを開けたくなく、サーバー間にすでに SSH があるなら、sync は SSH 経由でも動きます: relayium sync /path user@host:/path(リモートに relayium が必要)。",
+        q: "ポートを開ける必要がありますか？",
+        a: "デーモン直結ならはい。リスナーのポート（既定 9031）が送信側から到達可能である必要があります。ポートを開けたくなく、サーバー間にすでに SSH があるなら、sync は SSH 経由でも動きます：relayium sync /path user@host:/path（リモートに relayium が必要）。",
       },
     ],
   },
   cta: {
-    text: "自分の2台のサーバー間でフォルダーをミラーしましょう——増分、再開可能、張り付き不要。",
+    text: "自分の2台のサーバー間でフォルダーをミラーしましょう。増分、再開可能、張り付き不要。",
     button: "CLI を入手する",
     href: "/cli",
   },
@@ -454,10 +454,10 @@ pkill -f 'relayium serve'`,
 const ko = {
   title: "두 서버 사이에서 큰 폴더 동기화하기(재개 가능, 백그라운드)",
   description:
-    "relayium sync로 큰 디렉터리를 한 서버에서 다른 서버로 미러링하세요——증분 전송, 연결이 끊겨도 재개 가능, 무인 실행도 안전합니다. tmux 안의 재시도 루프로 터미널에 붙어 있지 않고도 수십 GB를 옮길 수 있습니다.",
+    "relayium sync로 큰 디렉터리를 한 서버에서 다른 서버로 미러링하세요. 증분 전송, 연결이 끊겨도 재개 가능, 무인 실행도 안전합니다. tmux 안의 재시도 루프로 터미널에 붙어 있지 않고도 수십 GB를 옮길 수 있습니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "한 서버에 큰 폴더——수십 GB——가 있고, 다른 서버에 똑같은 복사본을 원한다고 합시다. 몇 시간 동안 터미널을 지켜볼 수도 없고, 도중에 죽은 전송이 처음부터 다시 시작되어서도 안 됩니다. relayium sync는 바로 이를 위해 만들어졌습니다. 이미 있는 것은 건너뛰고, 절반만 보낸 파일은 멈춘 지점부터 재개하며, 모든 파일을 끝에서 끝까지 검증하는 단방향 증분 미러입니다.",
+    "한 서버에 큰 폴더(수십 GB)가 있고, 다른 서버에 똑같은 복사본을 원한다고 합시다. 몇 시간 동안 터미널을 지켜볼 수도 없고, 도중에 죽은 전송이 처음부터 다시 시작되어서도 안 됩니다. relayium sync는 바로 이를 위해 만들어졌습니다. 이미 있는 것은 건너뛰고, 절반만 보낸 파일은 멈춘 지점부터 재개하며, 모든 파일을 끝에서 끝까지 검증하는 단방향 증분 미러입니다.",
     "이 가이드는 무인으로 스스로 복구하는 전송을 구성합니다. 보내는 쪽을 한 번만 승인하고, 리스너를 백그라운드에서 돌리고, tmux 안의 재시도 루프로 relayium sync를 구동해 연결이 끊겨도 계속 진행하여 폴더 전체가 도착할 때까지 실행합니다.",
   ],
   sections: [
@@ -470,7 +470,7 @@ const ko = {
         "이미 있는 파일은 건너뜀: 받는 쪽 복사본이 크기와 수정 시각으로 일치하는 파일은 다시 보내지 않습니다.",
         "부분 파일 재개: 연결이 끊길 때 절반만 전송된 파일은, 다음 실행에서 디스크에 이미 있는 바이트 오프셋부터 이어가며 다시 시작하지 않습니다.",
         "모든 파일 검증: 각 파일을 끝에서 끝까지 SHA-256으로 검사하므로 완료된 미러는 온전함이 보장됩니다.",
-        "이 덕분에 명령은 멱등적입니다——다시 실행해도 남은 일만 합니다. 이것이 바로 재시도 루프가 거대한 전송을 끝낼 수 있게 하는 핵심입니다.",
+        "이 덕분에 명령은 멱등적입니다. 다시 실행해도 남은 일만 합니다. 이것이 바로 재시도 루프가 거대한 전송을 끝낼 수 있게 하는 핵심입니다.",
       ],
     },
     {
@@ -490,7 +490,7 @@ curl -fsSL https://relayium.com/install.sh | sh`,
     {
       heading: "보내는 쪽을 한 번만 승인하기(받는 쪽)",
       body: [
-        "받는 쪽은 보내는 기기를 한 번만 승인합니다. 승인은 디스크에 기록되어 재시작을 넘어 유효하므로 반복할 필요가 없습니다. 먼저 터미널에서 리스너를 포그라운드로 시작하고, --dir을 부모 디렉터리로 향하게 하세요——relayium sync /root/workspace는 받는 쪽에서 workspace/...를 재현하므로, --dir /root이면 파일이 /root/workspace/에 안착합니다.",
+        "받는 쪽은 보내는 기기를 한 번만 승인합니다. 승인은 디스크에 기록되어 재시작을 넘어 유효하므로 반복할 필요가 없습니다. 먼저 터미널에서 리스너를 포그라운드로 시작하고, --dir을 부모 디렉터리로 향하게 하세요. relayium sync /root/workspace는 받는 쪽에서 workspace/...를 재현하므로, --dir /root이면 파일이 /root/workspace/에 안착합니다.",
         "보내는 쪽의 첫 연결 시(다음 절), serve가 그 주소와 핑거프린트를 보여주며 승인을 요청합니다. y라고 답하면 영구적으로 기억됩니다:",
       ],
       code: [
@@ -503,13 +503,13 @@ Accept and remember this peer? [y/N] y`,
       ],
       bullets: [
         "완전 무인 구성이라면 프롬프트를 건너뛰세요: 보내는 쪽에서 relayium id로 핑거프린트를 출력하고, 받는 쪽에서 relayium authorize <핑거프린트>를 실행합니다.",
-        "--dir은 동기화하는 폴더의 부모이지 폴더 자체가 아닙니다——그렇지 않으면 파일이 한 단계 더 깊이 안착합니다(예: /root/workspace/workspace).",
+        "--dir은 동기화하는 폴더의 부모이지 폴더 자체가 아닙니다. 그렇지 않으면 파일이 한 단계 더 깊이 안착합니다(예: /root/workspace/workspace).",
       ],
     },
     {
       heading: "리스너를 백그라운드로 돌리기(받는 쪽)",
       body: [
-        "핑거프린트를 승인했으면 포그라운드 serve를 멈추고(Ctrl-C), 로그아웃 후에도 살아남도록 분리해서 다시 실행하세요. 저장된 핑거프린트를 불러와 보내는 쪽을 조용히 받아들입니다——이번엔 프롬프트가 없습니다:",
+        "핑거프린트를 승인했으면 포그라운드 serve를 멈추고(Ctrl-C), 로그아웃 후에도 살아남도록 분리해서 다시 실행하세요. 저장된 핑거프린트를 불러와 보내는 쪽을 조용히 받아들입니다. 이번엔 프롬프트가 없습니다:",
       ],
       code: [
         `# 받는 쪽에서
@@ -523,17 +523,17 @@ nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
     {
       heading: "tmux 안의 재시도 루프로 sync 돌리기(보내는 쪽)",
       body: [
-        "긴 전송은 중단됩니다——세션 끊김, 불안정한 네트워크, 재부팅. 해결책은 멋진 도구가 아니라 sync를 성공할 때까지 다시 실행하는 루프와, 로그아웃 후에도 살아남게 하는 터미널 멀티플렉서입니다. 여기서는 tmux가 nohup보다 깔끔합니다: 틀리기 쉬운 출력 리다이렉트가 없고, 다시 붙어 진행 상황을 볼 수 있습니다.",
-        "tmux 세션을 시작한 뒤 until 루프로 미러를 실행하세요——10초마다 재시도하고 sync가 성공을 반환하면 스스로 종료합니다:",
+        "긴 전송은 중단됩니다. 세션 끊김, 불안정한 네트워크, 재부팅. 해결책은 멋진 도구가 아니라 sync를 성공할 때까지 다시 실행하는 루프와, 로그아웃 후에도 살아남게 하는 터미널 멀티플렉서입니다. 여기서는 tmux가 nohup보다 깔끔합니다: 틀리기 쉬운 출력 리다이렉트가 없고, 다시 붙어 진행 상황을 볼 수 있습니다.",
+        "tmux 세션을 시작한 뒤 until 루프로 미러를 실행하세요. 10초마다 재시도하고 sync가 성공을 반환하면 스스로 종료합니다:",
       ],
       code: [
         `# 보내는 쪽에서
-tmux new -s xfer      # tmux 가 없으면 apt install -y tmux`,
+tmux new -s xfer      # tmux가 없으면 apt install -y tmux`,
         `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
       ],
       bullets: [
         "Ctrl-b 다음 d로 분리하세요. 터미널을 닫아도 루프는 계속 돕니다. tmux attach -t xfer로 다시 붙습니다.",
-        "재시도할 때마다 일이 줄어듭니다: 이미 전송된 파일은 건너뛰고, 절반 보낸 파일은 재개됩니다——그래서 루프는 수렴하고 끝납니다.",
+        "재시도할 때마다 일이 줄어듭니다: 이미 전송된 파일은 건너뛰고, 절반 보낸 파일은 재개됩니다. 그래서 루프는 수렴하고 끝납니다.",
         "진행 상황은 파일 하나가 완료될 때마다 한 줄씩 출력되므로, 큰 파일은 끝날 때까지 조용히 전송됩니다. 침묵은 멈춤이 아닙니다(문제 해결 참고).",
       ],
     },
@@ -555,15 +555,15 @@ pkill -f 'relayium serve'`,
     {
       heading: "문제 해결",
       body: [
-        "문제처럼 보이지만 대개 아닌 몇 가지——그리고 대개 진짜 문제인 하나(포트 차단)입니다.",
+        "문제처럼 보이지만 대개 아닌 몇 가지, 그리고 대개 진짜 문제인 하나(포트 차단)입니다.",
       ],
       bullets: [
-        "출력이 없다고 멈춘 게 아닙니다. 진행 상황은 각 파일이 완료될 때만 출력되므로 큰 파일은 조용히 전송됩니다. 보내는 쪽에서 ss -tnp | grep 9031로 실제 상태를 확인하세요——ESTAB이면 연결되어 전송 중, SYN-SENT이면 리스너에 닿지 못한 것입니다.",
+        "출력이 없다고 멈춘 게 아닙니다. 진행 상황은 각 파일이 완료될 때만 출력되므로 큰 파일은 조용히 전송됩니다. 보내는 쪽에서 ss -tnp | grep 9031로 실제 상태를 확인하세요. ESTAB이면 연결되어 전송 중, SYN-SENT이면 리스너에 닿지 못한 것입니다.",
         "SYN-SENT은 포트가 막혔다는 신호입니다. 받는 쪽에서 보내는 쪽으로 9031/TCP를 여세요(클라우드 보안 그룹 또는 ufw allow 9031/tcp). 전송이 아예 시작되지 않는 가장 흔한 원인입니다.",
         "여러 줄 nohup보다 tmux와 한 줄 루프를 택하세요. 따옴표와 > 리다이렉트가 있는 여러 줄 명령을 셸에 붙여 넣으면 리다이렉트에서 깨지거나 > 연속 프롬프트에서 멈추기 쉽습니다.",
-        "프로세스를 정리할 때는 정확히 일치시키세요(pkill -f 'relayium sync'). pkill relayium이 아닙니다——넓은 일치는 같은 기기에서 도는 무관한 relayium 프로세스를 잡을 수 있습니다.",
-        "제외 플래그는 없으니 대신 소스를 골라서 지정하세요. sync가 받는 것은 -i와 -p(SSH 신원 파일과 포트), --delete, --watch, --config-dir뿐이고, 트리 중간의 경로를 걸러내는 수단은 없습니다. 파이썬 가상환경처럼 다시 만들 수 있는 디렉터리를 두고 가려면 정말 필요한 하위 디렉터리를 동기화하세요: sync는 소스를 여러 개 한꺼번에 받고, 각각은 자기 이름 그대로 받는 쪽 --dir 아래에 도착합니다. relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 을 serve --dir /root/workspace에 대고 실행하면 /root/workspace/src와 /root/workspace/data로 복원되고, venv는 아예 훑지 않습니다.",
-        "심링크와 특수 파일은 건너뜁니다——sync는 일반 파일만 전송합니다. 중요한 심링크는 따로 처리하세요.",
+        "프로세스를 정리할 때는 정확히 일치시키세요(pkill -f 'relayium sync'). pkill relayium이 아닙니다. 넓은 일치는 같은 기기에서 도는 무관한 relayium 프로세스를 잡을 수 있습니다.",
+        "제외 플래그는 없으니 대신 소스를 골라서 지정하세요. sync가 받는 것은 -i와 -p(SSH 신원 파일과 포트), --delete, --watch, --config-dir뿐이고, 트리 중간의 경로를 걸러내는 수단은 없습니다. 파이썬 가상환경처럼 다시 만들 수 있는 디렉터리를 두고 가려면 정말 필요한 하위 디렉터리를 동기화하세요: sync는 소스를 여러 개 한꺼번에 받고, 각각은 자기 이름 그대로 받는 쪽 --dir 아래에 도착합니다. relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031을 serve --dir /root/workspace에 대고 실행하면 /root/workspace/src와 /root/workspace/data로 복원되고, venv는 아예 훑지 않습니다.",
+        "심링크와 특수 파일은 건너뜁니다. sync는 일반 파일만 전송합니다. 중요한 심링크는 따로 처리하세요.",
       ],
     },
   ],
@@ -572,28 +572,28 @@ pkill -f 'relayium serve'`,
     items: [
       {
         q: "전송이 도중에 중단되면 어떻게 되나요?",
-        a: "아무것도 잃지 않습니다. relayium sync를 다시 실행하세요——받는 쪽에 이미 있는 파일은 건너뛰고, 절반 보낸 파일은 디스크에 이미 있는 바이트 오프셋부터 재개합니다. 이 가이드의 until 루프가 폴더 전체가 미러될 때까지 이를 자동으로 합니다.",
+        a: "아무것도 잃지 않습니다. relayium sync를 다시 실행하세요. 받는 쪽에 이미 있는 파일은 건너뛰고, 절반 보낸 파일은 디스크에 이미 있는 바이트 오프셋부터 재개합니다. 이 가이드의 until 루프가 폴더 전체가 미러될 때까지 이를 자동으로 합니다.",
       },
       {
         q: "이것은 rsync와 무엇이 다른가요?",
-        a: "둘 다 증분 단방향 미러링을 하지만, relayium sync는 고정된 TLS 연결로 동작하고 SSH 계정이 필요 없으며(데몬 다이렉트), 인증서 핑거프린트로 두 기기를 인증하고, 모든 파일을 SHA-256으로 검증합니다. relayium의 다른 모드와 같은 전송 엔진입니다.",
+        a: "둘 다 증분 단방향 미러링을 하지만, relayium sync는 인증서 고정 TLS 연결로 동작하고 SSH 계정이 필요 없으며(데몬 다이렉트), 인증서 핑거프린트로 두 기기를 인증하고, 모든 파일을 SHA-256으로 검증합니다. relayium의 다른 모드와 같은 전송 엔진입니다.",
       },
       {
         q: "sync는 소스에서 지운 파일을 받는 쪽에서도 지우나요?",
-        a: "요청할 때만요. 기본적으로 sync는 추가와 갱신만 합니다. 삭제를 미러링하려면 --delete를 넘기고, 그것이 적용되려면 받는 쪽이 --allow-delete로 serve를 실행해야 합니다——그렇지 않으면 삭제는 무시되고 보고됩니다.",
+        a: "요청할 때만요. 기본적으로 sync는 추가와 갱신만 합니다. 삭제를 미러링하려면 --delete를 넘기고, 그것이 적용되려면 받는 쪽이 --allow-delete로 serve를 실행해야 합니다. 그렇지 않으면 삭제는 무시되고 보고됩니다.",
       },
       {
         q: "두 폴더를 계속 동기화 상태로 유지할 수 있나요?",
-        a: "네. --watch를 붙이면 sync가 계속 실행되며 소스 아래의 어떤 변경에도 다시 미러링합니다. 큰 폴더를 한 번 옮기는 데는 필요 없습니다——재시도 루프와 평범한 sync면 충분합니다.",
+        a: "네. --watch를 붙이면 sync가 계속 실행되며 소스 아래의 어떤 변경에도 다시 미러링합니다. 큰 폴더를 한 번 옮기는 데는 필요 없습니다. 재시도 루프와 평범한 sync면 충분합니다.",
       },
       {
         q: "포트를 열어야 하나요?",
-        a: "데몬 다이렉트라면 네——리스너 포트(기본 9031)가 보내는 쪽에서 도달 가능해야 합니다. 포트를 열고 싶지 않고 서버 사이에 이미 SSH가 있다면 sync는 SSH로도 동작합니다: relayium sync /path user@host:/path(원격에 relayium이 필요).",
+        a: "데몬 다이렉트라면 네. 리스너 포트(기본 9031)가 보내는 쪽에서 도달 가능해야 합니다. 포트를 열고 싶지 않고 서버 사이에 이미 SSH가 있다면 sync는 SSH로도 동작합니다: relayium sync /path user@host:/path(원격에 relayium이 필요).",
       },
     ],
   },
   cta: {
-    text: "당신 소유의 두 서버 사이에서 폴더를 미러링하세요——증분, 재개 가능, 지켜볼 필요 없이.",
+    text: "내 소유의 두 서버 사이에서 폴더를 미러링하세요. 증분, 재개 가능, 지켜볼 필요 없이.",
     button: "CLI 받기",
     href: "/cli",
   },
@@ -632,7 +632,7 @@ const de = {
 curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
-        "Diese Anleitung nutzt Daemon Direct (relayium://), die beiden Server brauchen also keinen SSH-Zugang zueinander.",
+        "Diese Anleitung nutzt daemon-direct (relayium://), die beiden Server brauchen also keinen SSH-Zugang zueinander.",
         "Öffne den Port des Listeners (Standard 9031) für den Sender in Firewall oder Security-Group des Empfängers.",
       ],
     },
@@ -725,7 +725,7 @@ pkill -f 'relayium serve'`,
       },
       {
         q: "Wie unterscheidet sich das von rsync?",
-        a: "Beide machen inkrementelles einseitiges Spiegeln, aber relayium sync läuft über eine gepinnte TLS-Verbindung ohne SSH-Konto (Daemon Direct), authentifiziert die beiden Maschinen per Zertifikats-Fingerprint und prüft jede Datei mit SHA-256. Es ist dieselbe Übertragungs-Engine wie die anderen Modi von relayium.",
+        a: "Beide machen inkrementelles einseitiges Spiegeln, aber relayium sync läuft über eine TLS-Verbindung mit Pinning ohne SSH-Konto (daemon-direct), authentifiziert die beiden Maschinen per Zertifikats-Fingerprint und prüft jede Datei mit SHA-256. Es ist dieselbe Übertragungs-Engine wie die anderen Modi von relayium.",
       },
       {
         q: "Löscht sync auf dem Empfänger Dateien, die ich aus der Quelle entfernt habe?",
@@ -737,7 +737,7 @@ pkill -f 'relayium serve'`,
       },
       {
         q: "Muss ich einen Port öffnen?",
-        a: "Für Daemon Direct ja — der Port des Listeners (Standard 9031) muss vom Sender erreichbar sein. Willst du keinen Port öffnen und hast bereits SSH zwischen den Servern, funktioniert sync auch über SSH: relayium sync /path user@host:/path (relayium muss auf der Gegenseite installiert sein).",
+        a: "Für daemon-direct ja — der Port des Listeners (Standard 9031) muss vom Sender erreichbar sein. Willst du keinen Port öffnen und hast bereits SSH zwischen den Servern, funktioniert sync auch über SSH: relayium sync /path user@host:/path (relayium muss auf der Gegenseite installiert sein).",
       },
     ],
   },
@@ -750,46 +750,46 @@ pkill -f 'relayium serve'`,
 };
 
 const fr = {
-  title: "Synchroniser un gros dossier entre deux serveurs (reprenable, en arrière-plan)",
+  title: "Synchroniser un gros dossier entre deux serveurs (avec reprise, en arrière-plan)",
   description:
-    "Recopiez un gros répertoire d'un serveur vers un autre avec relayium sync — incrémental, reprenable après une coupure, et sûr à exécuter sans surveillance. Une boucle de reprise sous tmux déplace des gigaoctets sans surveiller un terminal.",
+    "Recopiez un gros répertoire d'un serveur vers un autre avec relayium sync — incrémental, avec reprise après une coupure, et sûr à exécuter sans surveillance. Une boucle de reprise sous tmux déplace des gigaoctets sans surveiller un terminal.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Vous avez un gros dossier — des dizaines de gigaoctets — sur un serveur et vous voulez une copie exacte sur un autre. Vous ne pouvez pas surveiller un terminal pendant des heures, et un transfert qui meurt à mi-chemin ne devrait pas repartir de zéro. relayium sync est fait pour cela : un miroir incrémental à sens unique qui saute ce qui est déjà là, reprend un fichier envoyé à moitié là où il s'est arrêté, et vérifie chaque fichier de bout en bout.",
-    "Ce guide met en place un transfert sans surveillance et auto-réparateur : autorisez l'émetteur une fois, faites tourner l'écouteur en arrière-plan, et pilotez relayium sync depuis une boucle de reprise dans tmux pour qu'il continue malgré les coupures jusqu'à ce que tout le dossier soit arrivé.",
+    "Vous avez un gros dossier — des dizaines de gigaoctets — sur un serveur et vous voulez une copie exacte sur un autre. Vous ne pouvez pas surveiller un terminal pendant des heures, et un transfert qui meurt à mi-chemin ne devrait pas repartir de zéro. relayium sync est fait pour cela : un miroir incrémental à sens unique qui saute ce qui est déjà là, reprend un fichier envoyé à moitié là où il s'est arrêté, et vérifie chaque fichier de bout en bout.",
+    "Ce guide met en place un transfert sans surveillance et auto-réparateur : autorisez l'émetteur une fois, faites tourner le processus à l'écoute en arrière-plan, et pilotez relayium sync depuis une boucle de reprise dans tmux pour qu'il continue malgré les coupures jusqu'à ce que tout le dossier soit arrivé.",
   ],
   sections: [
     {
       heading: "Pourquoi relayium sync convient à cette tâche",
       body: [
-        "sync est un miroir incrémental à sens unique via le protocole natif (installez relayium aux deux bouts). Trois propriétés le rendent sûr à exécuter et réexécuter sans surveillance :",
+        "sync est un miroir incrémental à sens unique via le protocole natif (installez relayium aux deux bouts). Trois propriétés le rendent sûr à exécuter et réexécuter sans surveillance :",
       ],
       bullets: [
-        "Saute les fichiers déjà présents : un fichier dont la copie sur le récepteur correspond par taille et date de modification n'est pas renvoyé.",
-        "Reprend les fichiers partiels : si un fichier était à moitié transféré à la coupure, l'exécution suivante continue depuis l'offset d'octets déjà sur le disque au lieu de le recommencer.",
-        "Vérifie chaque fichier : chaque fichier est contrôlé de bout en bout en SHA-256, donc un miroir terminé est connu comme intact.",
+        "Saute les fichiers déjà présents : un fichier dont la copie sur le récepteur correspond par taille et date de modification n'est pas renvoyé.",
+        "Reprend les fichiers partiels : si un fichier était à moitié transféré à la coupure, l'exécution suivante continue depuis l'offset d'octets déjà sur le disque au lieu de le recommencer.",
+        "Vérifie chaque fichier : chaque fichier est contrôlé de bout en bout en SHA-256, donc un miroir terminé est connu comme intact.",
         "De ce fait, la commande est idempotente — la relancer ne fait que le travail restant, ce qui est précisément ce qui permet à une boucle de reprise de terminer un transfert énorme.",
       ],
     },
     {
       heading: "Prérequis",
       body: [
-        "Installez relayium sur les deux serveurs (sync parle le protocole natif, il doit donc être présent à chaque bout) :",
+        "Installez relayium sur les deux serveurs (sync parle le protocole natif, il doit donc être présent à chaque bout) :",
       ],
       code: [
         `# sur les DEUX serveurs
 curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
-        "Ce guide utilise le daemon direct (relayium://), les deux serveurs n'ont donc pas besoin d'accès SSH l'un vers l'autre.",
-        "Ouvrez le port de l'écouteur (9031 par défaut) à l'émetteur dans le pare-feu ou le groupe de sécurité du récepteur.",
+        "Ce guide utilise le daemon-direct (relayium://), les deux serveurs n'ont donc pas besoin d'accès SSH l'un vers l'autre.",
+        "Ouvrez le port du processus à l'écoute (9031 par défaut) à l'émetteur dans le pare-feu ou le groupe de sécurité du récepteur.",
       ],
     },
     {
       heading: "Autoriser l'émetteur une fois (sur le récepteur)",
       body: [
-        "Le récepteur approuve la machine émettrice une seule fois ; l'approbation est écrite sur le disque et reste valable après les redémarrages, vous ne la répétez donc jamais. Démarrez d'abord l'écouteur dans un terminal, et pointez --dir vers le répertoire parent — relayium sync /root/workspace reproduit workspace/... sur le récepteur, donc --dir /root fait atterrir les fichiers dans /root/workspace/.",
-        "À la première connexion de l'émetteur (section suivante), serve affiche son adresse et son empreinte et vous demande de l'approuver ; répondez y et elle est mémorisée pour de bon :",
+        "Le récepteur approuve la machine émettrice une seule fois ; l'approbation est écrite sur le disque et reste valable après les redémarrages, vous ne la répétez donc jamais. Démarrez d'abord le processus à l'écoute dans un terminal, et pointez --dir vers le répertoire parent — relayium sync /root/workspace reproduit workspace/... sur le récepteur, donc --dir /root fait atterrir les fichiers dans /root/workspace/.",
+        "À la première connexion de l'émetteur (section suivante), serve affiche son adresse et son empreinte et vous demande de l'approuver ; répondez y et elle est mémorisée pour de bon :",
       ],
       code: [
         `# sur le RÉCEPTEUR (au premier plan, pour approuver de façon interactive)
@@ -800,14 +800,14 @@ Incoming push from 203.0.113.9:52140
 Accept and remember this peer? [y/N] y`,
       ],
       bullets: [
-        "Pour une configuration entièrement sans surveillance, sautez l'invite : lancez relayium id sur l'émetteur pour afficher son empreinte, puis relayium authorize <empreinte> sur le récepteur.",
+        "Pour une configuration entièrement sans surveillance, sautez l'invite : lancez relayium id sur l'émetteur pour afficher son empreinte, puis relayium authorize <empreinte> sur le récepteur.",
         "--dir est le parent du dossier que vous synchronisez, pas le dossier lui-même — sinon les fichiers atterrissent un niveau trop bas (p. ex. /root/workspace/workspace).",
       ],
     },
     {
-      heading: "Faire tourner l'écouteur en arrière-plan (sur le récepteur)",
+      heading: "Faire tourner le processus à l'écoute en arrière-plan (sur le récepteur)",
       body: [
-        "Une fois l'empreinte autorisée, arrêtez le serve au premier plan (Ctrl-C) et relancez-le détaché pour qu'il survive à votre déconnexion. Il charge l'empreinte enregistrée et accepte l'émetteur silencieusement — pas d'invite cette fois :",
+        "Une fois l'empreinte autorisée, arrêtez le serve au premier plan (Ctrl-C) et relancez-le détaché pour qu'il survive à votre déconnexion. Il charge l'empreinte enregistrée et accepte l'émetteur silencieusement — pas d'invite cette fois :",
       ],
       code: [
         `# sur le RÉCEPTEUR
@@ -821,8 +821,8 @@ nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
     {
       heading: "Exécuter sync dans une boucle de reprise sous tmux (sur l'émetteur)",
       body: [
-        "Les longs transferts sont interrompus — une session coupée, un réseau instable, un redémarrage. La solution n'est pas un outil sophistiqué ; c'est une boucle qui réexécute sync jusqu'à la réussite, plus un multiplexeur de terminal pour qu'il survive à votre déconnexion. Ici tmux est plus propre que nohup : pas de redirection de sortie à rater, et vous pouvez vous reconnecter pour voir la progression.",
-        "Démarrez une session tmux, puis exécutez le miroir dans une boucle until — elle réessaie toutes les 10 secondes jusqu'à ce que sync réussisse, puis se termine d'elle-même :",
+        "Les longs transferts sont interrompus — une session coupée, un réseau instable, un redémarrage. La solution n'est pas un outil sophistiqué ; c'est une boucle qui réexécute sync jusqu'à la réussite, plus un multiplexeur de terminal pour qu'il survive à votre déconnexion. Ici tmux est plus propre que nohup : pas de redirection de sortie à rater, et vous pouvez vous reconnecter pour voir la progression.",
+        "Démarrez une session tmux, puis exécutez le miroir dans une boucle until — elle réessaie toutes les 10 secondes jusqu'à ce que sync réussisse, puis se termine d'elle-même :",
       ],
       code: [
         `# sur l'ÉMETTEUR
@@ -830,15 +830,15 @@ tmux new -s xfer      # apt install -y tmux s'il manque`,
         `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
       ],
       bullets: [
-        "Détachez avec Ctrl-b puis d ; la boucle continue de tourner après la fermeture du terminal. Reconnectez-vous avec tmux attach -t xfer.",
-        "Chaque tentative fait moins : les fichiers déjà transférés sont sautés, un fichier envoyé à moitié reprend — la boucle converge donc et se termine.",
+        "Détachez avec Ctrl-b puis d ; la boucle continue de tourner après la fermeture du terminal. Reconnectez-vous avec tmux attach -t xfer.",
+        "Chaque tentative fait moins : les fichiers déjà transférés sont sautés, un fichier envoyé à moitié reprend — la boucle converge donc et se termine.",
         "La progression affiche une ligne par fichier terminé, un gros fichier se transfère donc en silence jusqu'à sa fin. Le silence n'est pas un blocage (voir dépannage).",
       ],
     },
     {
       heading: "Vérifier et terminer",
       body: [
-        "Le transfert est terminé quand la boucle until s'achève et que vous revenez à une invite shell normale. Confirmez que les deux côtés correspondent, puis arrêtez l'écouteur :",
+        "Le transfert est terminé quand la boucle until s'achève et que vous revenez à une invite shell normale. Confirmez que les deux côtés correspondent, puis arrêtez le processus à l'écoute :",
       ],
       code: [
         `# comparez les totaux sur les DEUX serveurs
@@ -856,11 +856,11 @@ pkill -f 'relayium serve'`,
         "Quelques choses qui ressemblent à des problèmes mais n'en sont généralement pas — et celle qui en est généralement une (un port bloqué).",
       ],
       bullets: [
-        "Aucune sortie n'est pas un blocage. La progression ne s'affiche que quand chaque fichier se termine, un gros fichier se transfère donc en silence. Vérifiez l'état réel sur l'émetteur avec ss -tnp | grep 9031 — ESTAB signifie connecté et en transfert ; SYN-SENT signifie qu'il ne peut pas joindre l'écouteur.",
+        "Aucune sortie n'est pas un blocage. La progression ne s'affiche que quand chaque fichier se termine, un gros fichier se transfère donc en silence. Vérifiez l'état réel sur l'émetteur avec ss -tnp | grep 9031 — ESTAB signifie connecté et en transfert ; SYN-SENT signifie qu'il ne peut pas joindre le processus à l'écoute.",
         "SYN-SENT signifie que le port est bloqué. Ouvrez 9031/TCP à l'émetteur sur le récepteur (groupe de sécurité cloud, ou ufw allow 9031/tcp). C'est la cause la plus fréquente d'un transfert qui ne démarre jamais.",
         "Préférez tmux plus une boucle sur une seule ligne au nohup multi-lignes. Coller dans un shell une commande multi-lignes avec des guillemets et une redirection > casse souvent sur la redirection ou vous laisse à une invite de continuation >.",
         "En nettoyant les processus, faites une correspondance précise (pkill -f 'relayium sync'), pas pkill relayium — une correspondance large peut tuer un processus relayium sans rapport tournant sur la même machine.",
-        "Il n'y a pas d'option d'exclusion : nommez plutôt vos sources. sync accepte -i et -p (clé et port SSH), --delete, --watch et --config-dir, et rien qui filtre un chemin au milieu de l'arborescence. Pour laisser de côté un répertoire régénérable comme un environnement virtuel Python, synchronisez les sous-répertoires qui vous intéressent vraiment : sync accepte plusieurs sources à la fois, et chacune arrive sous le --dir du récepteur sous son propre nom. relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 face à serve --dir /root/workspace les reconstitue dans /root/workspace/src et /root/workspace/data, et le venv n'est jamais parcouru.",
+        "Il n'y a pas d'option d'exclusion : nommez plutôt vos sources. sync accepte -i et -p (clé et port SSH), --delete, --watch et --config-dir, et rien qui filtre un chemin au milieu de l'arborescence. Pour laisser de côté un répertoire régénérable comme un environnement virtuel Python, synchronisez les sous-répertoires qui vous intéressent vraiment : sync accepte plusieurs sources à la fois, et chacune arrive sous le --dir du récepteur sous son propre nom. relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 face à serve --dir /root/workspace les reconstitue dans /root/workspace/src et /root/workspace/data, et le venv n'est jamais parcouru.",
         "Les liens symboliques et fichiers spéciaux sont sautés — sync ne transfère que des fichiers réguliers. Traitez séparément les liens symboliques importants.",
       ],
     },
@@ -869,29 +869,29 @@ pkill -f 'relayium serve'`,
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Que se passe-t-il si le transfert est interrompu à mi-chemin ?",
+        q: "Que se passe-t-il si le transfert est interrompu à mi-chemin ?",
         a: "Rien n'est perdu. Relancez relayium sync — il saute les fichiers déjà sur le récepteur et reprend un fichier envoyé à moitié depuis l'offset d'octets déjà sur le disque. La boucle until de ce guide le fait automatiquement jusqu'à ce que tout le dossier soit recopié.",
       },
       {
-        q: "En quoi est-ce différent de rsync ?",
-        a: "Les deux font un miroir incrémental à sens unique, mais relayium sync tourne sur une connexion TLS épinglée sans compte SSH (daemon direct), authentifie les deux machines par empreinte de certificat, et vérifie chaque fichier en SHA-256. C'est le même moteur de transfert que les autres modes de relayium.",
+        q: "En quoi est-ce différent de rsync ?",
+        a: "Les deux font un miroir incrémental à sens unique, mais relayium sync tourne sur une connexion TLS avec épinglagee sans compte SSH (daemon-direct), authentifie les deux machines par empreinte de certificat, et vérifie chaque fichier en SHA-256. C'est le même moteur de transfert que les autres modes de relayium.",
       },
       {
-        q: "sync supprime-t-il sur le récepteur les fichiers que j'ai retirés de la source ?",
+        q: "sync supprime-t-il sur le récepteur les fichiers que j'ai retirés de la source ?",
         a: "Seulement si vous le demandez. Par défaut, sync ne fait qu'ajouter et mettre à jour. Passez --delete pour recopier les suppressions, et le récepteur doit exécuter serve avec --allow-delete pour que ce soit honoré — sinon la suppression est ignorée et signalée.",
       },
       {
-        q: "Puis-je garder deux dossiers synchronisés en continu ?",
+        q: "Puis-je garder deux dossiers synchronisés en continu ?",
         a: "Oui. Ajoutez --watch et sync reste en marche, recopiant à chaque changement sous la source. Pour un déplacement ponctuel d'un gros dossier, inutile — la boucle de reprise plus un sync simple suffisent.",
       },
       {
-        q: "Dois-je ouvrir un port ?",
-        a: "Pour le daemon direct, oui — le port de l'écouteur (9031 par défaut) doit être joignable depuis l'émetteur. Si vous préférez ne pas ouvrir de port et avez déjà SSH entre les serveurs, sync fonctionne aussi via SSH : relayium sync /path user@host:/path (relayium doit être installé côté distant).",
+        q: "Dois-je ouvrir un port ?",
+        a: "Pour le daemon-direct, oui — le port du processus à l'écoute (9031 par défaut) doit être joignable depuis l'émetteur. Si vous préférez ne pas ouvrir de port et avez déjà SSH entre les serveurs, sync fonctionne aussi via SSH : relayium sync /path user@host:/path (relayium doit être installé côté distant).",
       },
     ],
   },
   cta: {
-    text: "Recopiez un dossier entre deux de vos propres serveurs — incrémental, reprenable, sans surveillance.",
+    text: "Recopiez un dossier entre deux de vos propres serveurs — incrémental, avec reprise, sans surveillance.",
     button: "Obtenir la CLI",
     href: "/cli",
   },
@@ -901,21 +901,21 @@ pkill -f 'relayium serve'`,
 const ar = {
   title: "مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)",
   description:
-    "انسخ دليلاً كبيراً من خادم إلى آخر بـ relayium sync — تزايدية، قابلة للاستئناف بعد انقطاع الاتصال، وآمنة للتشغيل دون إشراف. حلقة إعادة محاولة تحت tmux تنقل غيغابايتات دون ملازمة طرفية.",
+    "انسخ دليلًا كبيرًا من خادم إلى آخر بـ relayium sync — تزايدية، قابلة للاستئناف بعد انقطاع الاتصال، وآمنة للتشغيل دون إشراف. حلقة إعادة محاولة تحت tmux تنقل غيغابايتات دون ملازمة طرفية.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "لديك مجلد كبير — عشرات الغيغابايتات — على خادم وتريد نسخة مطابقة على آخر. لا يمكنك مراقبة طرفية لساعات، ولا ينبغي لنقلٍ يموت في منتصف الطريق أن يبدأ من الصفر. صُمِّم relayium sync لهذا: مرآة تزايدية أحادية الاتجاه تتخطى ما هو موجود سلفاً، وتستأنف ملفاً أُرسِل نصفه من حيث توقف، وتتحقق من كل ملف من الطرف إلى الطرف.",
-    "يُعِدّ هذا الدليل نقلاً دون إشراف يُصلِح نفسه: فوِّض المُرسِل مرةً واحدة، وشغّل المُنصِت في الخلفية، وقُد relayium sync من حلقة إعادة محاولة داخل tmux كي يستمر عبر الانقطاعات حتى يصل المجلد كاملاً.",
+    "لديك مجلد كبير — عشرات الغيغابايتات — على خادم وتريد نسخة مطابقة على آخر. لا يمكنك مراقبة طرفية لساعات، ولا ينبغي لنقلٍ يموت في منتصف الطريق أن يبدأ من الصفر. صُمِّم relayium sync لهذا: مرآة تزايدية أحادية الاتجاه تتخطى ما هو موجود سلفًا، وتستأنف ملفًا أُرسِل نصفه من حيث توقف، وتتحقق من كل ملف من الطرف إلى الطرف.",
+    "يُعِدّ هذا الدليل نقلًا دون إشراف يُصلِح نفسه: فوِّض المُرسِل مرةً واحدة، وشغّل المُستمِع في الخلفية، وقُد relayium sync من حلقة إعادة محاولة داخل tmux كي يستمر عبر الانقطاعات حتى يصل المجلد كاملًا.",
   ],
   sections: [
     {
       heading: "لماذا يناسب relayium sync هذه المهمة",
       body: [
-        "sync مرآة تزايدية أحادية الاتجاه عبر البروتوكول الأصلي (ثبّت relayium على الطرفين). ثلاث خصائص تجعله آمناً للتشغيل وإعادة التشغيل دون إشراف:",
+        "sync مرآة تزايدية أحادية الاتجاه عبر البروتوكول الأصلي (ثبّت relayium على الطرفين). ثلاث خصائص تجعله آمنًا للتشغيل وإعادة التشغيل دون إشراف:",
       ],
       bullets: [
-        "يتخطى الملفات الموجودة سلفاً: الملف الذي تطابق نسخته لدى المُستقبِل في الحجم ووقت التعديل لا يُرسَل ثانيةً.",
-        "يستأنف الملفات الجزئية: إذا نُقِل نصف ملف عند انقطاع الاتصال، يُكمِل التشغيل التالي من إزاحة البايت الموجودة سلفاً على القرص بدل إعادته من البداية.",
+        "يتخطى الملفات الموجودة سلفًا: الملف الذي تطابق نسخته لدى المُستقبِل في الحجم ووقت التعديل لا يُرسَل ثانيةً.",
+        "يستأنف الملفات الجزئية: إذا نُقِل نصف ملف عند انقطاع الاتصال، يُكمِل التشغيل التالي من إزاحة البايت الموجودة سلفًا على القرص بدل إعادته من البداية.",
         "يتحقق من كل ملف: يُفحَص كل ملف بـ SHA-256 من الطرف إلى الطرف، فتُعرَف المرآة المكتملة أنها سليمة.",
         "بسبب هذا، الأمر خامل التكرار (idempotent) — إعادة تشغيله تنجز ما تبقى فقط، وهذا بالضبط ما يتيح لحلقة إعادة المحاولة إتمام نقلٍ ضخم.",
       ],
@@ -923,7 +923,7 @@ const ar = {
     {
       heading: "المتطلبات المسبقة",
       body: [
-        "ثبّت relayium على كلا الخادمين (sync يتحدث البروتوكول الأصلي، فيجب أن يكون حاضراً على كل طرف):",
+        "ثبّت relayium على كلا الخادمين (sync يتحدث البروتوكول الأصلي، فيجب أن يكون حاضرًا على كل طرف):",
       ],
       code: [
         `# على كلا الخادمين
@@ -931,13 +931,13 @@ curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
         "يستخدم هذا الدليل daemon direct (relayium://)، فلا يحتاج الخادمان إلى وصول SSH أحدهما للآخر.",
-        "افتح منفذ المُنصِت (9031 افتراضياً) للمُرسِل على الجدار الناري أو مجموعة الأمان لدى المُستقبِل.",
+        "افتح منفذ المُستمِع (9031 افتراضيًا) للمُرسِل على الجدار الناري أو مجموعة الأمان لدى المُستقبِل.",
       ],
     },
     {
       heading: "فوِّض المُرسِل مرةً واحدة (على المُستقبِل)",
       body: [
-        "يعتمد المُستقبِل الجهاز المُرسِل مرةً واحدة؛ يُكتَب الاعتماد على القرص ويبقى صالحاً عبر إعادات التشغيل، فلا تكرره أبداً. شغّل المُنصِت أولاً في طرفية في المقدمة، ووجِّه --dir إلى الدليل الأب — relayium sync /root/workspace يُعيد إنتاج workspace/... لدى المُستقبِل، فـ --dir /root يُنزِل الملفات في /root/workspace/.",
+        "يعتمد المُستقبِل الجهاز المُرسِل مرةً واحدة؛ يُكتَب الاعتماد على القرص ويبقى صالحًا عبر إعادات التشغيل، فلا تكرره أبدًا. شغّل المُستمِع أولًا في طرفية في المقدمة، ووجِّه --dir إلى الدليل الأب — relayium sync /root/workspace يُعيد إنتاج workspace/... لدى المُستقبِل، فـ --dir /root يُنزِل الملفات في /root/workspace/.",
         "عند أول اتصال للمُرسِل (القسم التالي)، يُظهِر serve عنوانه وبصمته ويطلب منك اعتماده؛ أجِب بـ y فيُحفَظ إلى الأبد:",
       ],
       code: [
@@ -949,29 +949,29 @@ Incoming push from 203.0.113.9:52140
 Accept and remember this peer? [y/N] y`,
       ],
       bullets: [
-        "لإعداد بلا إشراف تماماً، تخطَّ المُطالبة: شغّل relayium id على المُرسِل لطباعة بصمته، ثم relayium authorize <البصمة> على المُستقبِل.",
-        "‏--dir هو أب المجلد الذي تزامنه، لا المجلد نفسه — وإلا نزلت الملفات مستوى أعمق مما ينبغي (مثلاً /root/workspace/workspace).",
+        "لإعداد بلا إشراف تمامًا، تخطَّ المُطالبة: شغّل relayium id على المُرسِل لطباعة بصمته، ثم relayium authorize ‎<البصمة>‎ على المُستقبِل.",
+        "‏--dir هو أب المجلد الذي تزامنه، لا المجلد نفسه — وإلا نزلت الملفات مستوى أعمق مما ينبغي (مثلًا /root/workspace/workspace).",
       ],
     },
     {
-      heading: "شغّل المُنصِت في الخلفية (على المُستقبِل)",
+      heading: "شغّل المُستمِع في الخلفية (على المُستقبِل)",
       body: [
-        "بمجرد اعتماد البصمة، أوقِف serve الذي في المقدمة (Ctrl-C) وأعِد تشغيله منفصلاً كي يصمد بعد خروجك من الجلسة. يحمّل البصمة المحفوظة ويقبل المُرسِل بصمت — لا مُطالبة هذه المرة:",
+        "بمجرد اعتماد البصمة، أوقِف serve الذي في المقدمة (Ctrl-C) وأعِد تشغيله منفصلًا كي يصمد بعد خروجك من الجلسة. يحمّل البصمة المحفوظة ويقبل المُرسِل بصمت — لا مُطالبة هذه المرة:",
       ],
       code: [
         `# على المُستقبِل
 nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
       ],
       bullets: [
-        "يعالج serve الاتصالات واحداً تلو الآخر ويبقى شغّالاً، فيكون جاهزاً لكل إعادة اتصال من حلقة إعادة المحاولة أدناه.",
-        "لصندوق وارد دائم التشغيل، شغّله تحت systemd بدلاً من ذلك (Restart=always، --config-dir /etc/relayium).",
+        "يعالج serve الاتصالات واحدًا تلو الآخر ويبقى شغّالًا، فيكون جاهزًا لكل إعادة اتصال من حلقة إعادة المحاولة أدناه.",
+        "لصندوق وارد دائم التشغيل، شغّله تحت systemd بدلًا من ذلك (Restart=always، --config-dir /etc/relayium).",
       ],
     },
     {
       heading: "شغّل sync في حلقة إعادة محاولة تحت tmux (على المُرسِل)",
       body: [
         "تُقطَع عمليات النقل الطويلة — جلسة تسقط، شبكة متذبذبة، إعادة إقلاع. الحل ليس أداة متطورة؛ بل حلقة تعيد تشغيل sync حتى ينجح، مع مُعدِّد طرفيات كي يصمد بعد خروجك. هنا tmux أنظف من nohup: لا إعادة توجيه مخرجات يمكن أن تُخطئ فيها، ويمكنك إعادة الوصل لمتابعة التقدم.",
-        "ابدأ جلسة tmux، ثم شغّل المرآة في حلقة until — تعيد المحاولة كل 10 ثوانٍ حتى يُرجِع sync نجاحاً، ثم تخرج من تلقاء نفسها:",
+        "ابدأ جلسة tmux، ثم شغّل المرآة في حلقة until — تعيد المحاولة كل 10 ثوانٍ حتى يُرجِع sync نجاحًا، ثم تخرج من تلقاء نفسها:",
       ],
       code: [
         `# على المُرسِل
@@ -980,14 +980,14 @@ tmux new -s xfer      # نفّذ apt install -y tmux إن لم يكن موجود
       ],
       bullets: [
         "افصِل بـ Ctrl-b ثم d؛ تظل الحلقة شغّالة بعد إغلاقك الطرفية. أعِد الوصل بـ tmux attach -t xfer.",
-        "كل إعادة محاولة تنجز أقل: تُتخطى الملفات المنقولة سلفاً، ويُستأنف الملف المُرسَل نصفه — فتتقارب الحلقة وتنتهي.",
-        "يطبع التقدم سطراً واحداً لكل ملف مكتمل، فينتقل الملف الكبير بهدوء حتى يكتمل. الصمت ليس تعطّلاً (انظر استكشاف الأخطاء).",
+        "كل إعادة محاولة تنجز أقل: تُتخطى الملفات المنقولة سلفًا، ويُستأنف الملف المُرسَل نصفه — فتتقارب الحلقة وتنتهي.",
+        "يطبع التقدم سطرًا واحدًا لكل ملف مكتمل، فينتقل الملف الكبير بهدوء حتى يكتمل. الصمت ليس تعطّلًا (انظر استكشاف الأخطاء).",
       ],
     },
     {
       heading: "التحقق والإنهاء",
       body: [
-        "يكتمل النقل حين تنتهي حلقة until وتعود إلى مُطالبة صدفة عادية. تأكد من تطابق الطرفين، ثم أوقِف المُنصِت:",
+        "يكتمل النقل حين تنتهي حلقة until وتعود إلى مُطالبة صدفة عادية. تأكد من تطابق الطرفين، ثم أوقِف المُستمِع:",
       ],
       code: [
         `# قارِن الإجماليات على كلا الخادمين
@@ -1002,14 +1002,14 @@ pkill -f 'relayium serve'`,
     {
       heading: "استكشاف الأخطاء وإصلاحها",
       body: [
-        "بضعة أمور تبدو كمشكلات لكنها غالباً ليست كذلك — والأمر الذي يكون عادةً مشكلة فعلاً (منفذ محجوب).",
+        "بضعة أمور تبدو كمشكلات لكنها غالبًا ليست كذلك — والأمر الذي يكون عادةً مشكلة فعلًا (منفذ محجوب).",
       ],
       bullets: [
-        "غياب المخرجات ليس تعطّلاً. لا يُطبَع التقدم إلا حين يكتمل كل ملف، فينتقل الملف الكبير بصمت. تحقق من الحالة الحقيقية على المُرسِل بـ ss -tnp | grep 9031 — ESTAB تعني متصلاً وينقل؛ SYN-SENT تعني أنه لا يستطيع بلوغ المُنصِت.",
-        "‏SYN-SENT تعني أن المنفذ محجوب. افتح 9031/TCP للمُرسِل على المُستقبِل (مجموعة أمان سحابية، أو ufw allow 9031/tcp). هذا أشيع سبب لنقلٍ لا يبدأ أبداً.",
-        "فضِّل tmux مع حلقة من سطر واحد على nohup متعدد الأسطر. لصق أمر متعدد الأسطر فيه علامات اقتباس وإعادة توجيه > في صدفة كثيراً ما ينكسر عند إعادة التوجيه أو يتركك عند مُطالبة استمرار >.",
+        "غياب المخرجات ليس تعطّلًا. لا يُطبَع التقدم إلا حين يكتمل كل ملف، فينتقل الملف الكبير بصمت. تحقق من الحالة الحقيقية على المُرسِل بـ ss -tnp | grep 9031 — ESTAB تعني متصلًا وينقل؛ SYN-SENT تعني أنه لا يستطيع بلوغ المُستمِع.",
+        "‏SYN-SENT تعني أن المنفذ محجوب. افتح 9031/TCP للمُرسِل على المُستقبِل (مجموعة أمان سحابية، أو ufw allow 9031/tcp). هذا أشيع سبب لنقلٍ لا يبدأ أبدًا.",
+        "فضِّل tmux مع حلقة من سطر واحد على nohup متعدد الأسطر. لصق أمر متعدد الأسطر فيه علامات اقتباس وإعادة توجيه > في صدفة كثيرًا ما ينكسر عند إعادة التوجيه أو يتركك عند مُطالبة استمرار >.",
         "عند تنظيف العمليات، طابِق بدقة (pkill -f 'relayium sync')، لا pkill relayium — فالمطابقة الواسعة قد تقتل عملية relayium غير ذات صلة تعمل على الجهاز نفسه.",
-        "لا يوجد خيار استبعاد، فحدِّد مصادرك بدلاً من ذلك. لا يقبل sync سوى ‎-i و ‎-p (هوية SSH والمنفذ) و --delete و --watch و --config-dir — ولا شيء فيها يُرشِّح مساراً في وسط الشجرة. ولترك دليل قابل لإعادة التوليد مثل بيئة Python الافتراضية، زامِن الأدلة الفرعية التي تريدها فعلاً: يقبل sync عدة مصادر دفعةً واحدة، ويصل كل مصدر تحت ‎--dir لدى المُستقبِل باسمه هو. فتشغيل relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 مقابل serve --dir /root/workspace يعيد بناءهما في /root/workspace/src و /root/workspace/data، ولا يُمَرّ على venv أصلاً.",
+        "لا يوجد خيار استبعاد، فحدِّد مصادرك بدلًا من ذلك. لا يقبل sync سوى ‎-i و ‎-p (هوية SSH والمنفذ) و --delete و --watch و --config-dir — ولا شيء فيها يُرشِّح مسارًا في وسط الشجرة. ولترك دليل قابل لإعادة التوليد مثل بيئة Python الافتراضية، زامِن الأدلة الفرعية التي تريدها فعلًا: يقبل sync عدة مصادر دفعةً واحدة، ويصل كل مصدر تحت ‎--dir لدى المُستقبِل باسمه هو. فتشغيل relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 مقابل serve --dir /root/workspace يعيد بناءهما في /root/workspace/src و /root/workspace/data، ولا يُمَرّ على venv أصلًا.",
         "تُتخطى الروابط الرمزية والملفات الخاصة — ينقل sync الملفات العادية فقط. عالِج أي روابط رمزية مهمة على حدة.",
       ],
     },
@@ -1019,7 +1019,7 @@ pkill -f 'relayium serve'`,
     items: [
       {
         q: "ماذا يحدث إذا انقطع النقل في منتصف الطريق؟",
-        a: "لا يُفقَد شيء. أعِد تشغيل relayium sync — يتخطى الملفات الموجودة سلفاً لدى المُستقبِل ويستأنف الملف المُرسَل نصفه من إزاحة البايت الموجودة سلفاً على القرص. حلقة until في هذا الدليل تفعل ذلك تلقائياً حتى تُنسَخ صورة المجلد كاملة.",
+        a: "لا يُفقَد شيء. أعِد تشغيل relayium sync — يتخطى الملفات الموجودة سلفًا لدى المُستقبِل ويستأنف الملف المُرسَل نصفه من إزاحة البايت الموجودة سلفًا على القرص. حلقة until في هذا الدليل تفعل ذلك تلقائيًا حتى تُنسَخ صورة المجلد كاملة.",
       },
       {
         q: "بماذا يختلف هذا عن rsync؟",
@@ -1027,20 +1027,20 @@ pkill -f 'relayium serve'`,
       },
       {
         q: "هل يحذف sync لدى المُستقبِل الملفات التي أزلتها من المصدر؟",
-        a: "فقط إن طلبت ذلك. افتراضياً، يضيف sync ويحدّث فقط. مرِّر --delete لعكس عمليات الحذف، ويجب أن يشغّل المُستقبِل serve مع --allow-delete كي يُحترَم ذلك — وإلا يُتجاهَل الحذف ويُبلَّغ عنه.",
+        a: "فقط إن طلبت ذلك. افتراضيًا، يضيف sync ويحدّث فقط. مرِّر --delete لعكس عمليات الحذف، ويجب أن يشغّل المُستقبِل serve مع --allow-delete كي يُحترَم ذلك — وإلا يُتجاهَل الحذف ويُبلَّغ عنه.",
       },
       {
         q: "هل يمكنني إبقاء مجلدين متزامنين باستمرار؟",
-        a: "نعم. أضِف --watch فيبقى sync شغّالاً، مُعيداً عكس الصورة عند أي تغيير تحت المصدر. لنقل مجلد كبير لمرة واحدة لا تحتاجه — تكفي حلقة إعادة المحاولة مع sync بسيط.",
+        a: "نعم. أضِف --watch فيبقى sync شغّالًا، مُعيدًا عكس الصورة عند أي تغيير تحت المصدر. لنقل مجلد كبير لمرة واحدة لا تحتاجه — تكفي حلقة إعادة المحاولة مع sync بسيط.",
       },
       {
         q: "هل عليّ فتح منفذ؟",
-        a: "لـ daemon direct، نعم — يجب أن يكون منفذ المُنصِت (9031 افتراضياً) قابلاً للوصول من المُرسِل. إن كنت تفضّل عدم فتح منفذ ولديك SSH بين الخادمين سلفاً، فإن sync يعمل أيضاً عبر SSH: relayium sync /path user@host:/path (يجب تثبيت relayium على الطرف البعيد).",
+        a: "لـ daemon direct، نعم — يجب أن يكون منفذ المُستمِع (9031 افتراضيًا) قابلًا للوصول من المُرسِل. إن كنت تفضّل عدم فتح منفذ ولديك SSH بين الخادمين سلفًا، فإن sync يعمل أيضًا عبر SSH: relayium sync /path user@host:/path (يجب تثبيت relayium على الطرف البعيد).",
       },
     ],
   },
   cta: {
-    text: "انسخ صورة مجلد بين خادمين من خوادمك — تزايدياً، قابلاً للاستئناف، دون ملازمة.",
+    text: "انسخ صورة مجلد بين خادمين من خوادمك — تزايديًا، قابلًا للاستئناف، دون ملازمة.",
     button: "احصل على CLI",
     href: "/cli",
   },
@@ -1054,7 +1054,7 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "Tienes una carpeta grande —decenas de gigabytes— en un servidor y quieres una copia exacta en otro. No puedes vigilar una terminal durante horas, y una transferencia que muere a mitad de camino no debería empezar de cero. relayium sync está hecho para esto: un espejo incremental unidireccional que se salta lo que ya está, reanuda un archivo enviado a medias desde donde se detuvo y verifica cada archivo de extremo a extremo.",
-    "Esta guía configura una transferencia sin supervisión y con recuperación automática: autoriza al emisor una vez, ejecuta el escucha en segundo plano y dirige relayium sync desde un bucle de reintentos dentro de tmux para que siga adelante a través de las caídas de conexión hasta que toda la carpeta haya llegado.",
+    "Esta guía configura una transferencia sin supervisión y con recuperación automática: autoriza al emisor una vez, ejecuta el proceso a la escucha en segundo plano y dirige relayium sync desde un bucle de reintentos dentro de tmux para que siga adelante a través de las caídas de conexión hasta que toda la carpeta haya llegado.",
   ],
   sections: [
     {
@@ -1079,14 +1079,14 @@ const es = {
 curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
-        "Esta guía usa daemon direct (relayium://), así que los dos servidores no necesitan acceso SSH entre sí.",
-        "Abre el puerto del escucha (9031 por defecto) al emisor en el cortafuegos o grupo de seguridad del receptor.",
+        "Esta guía usa daemon directo (relayium://), así que los dos servidores no necesitan acceso SSH entre sí.",
+        "Abre el puerto del proceso a la escucha (9031 por defecto) al emisor en el cortafuegos o grupo de seguridad del receptor.",
       ],
     },
     {
       heading: "Autorizar al emisor una vez (en el receptor)",
       body: [
-        "El receptor aprueba la máquina emisora una vez; la aprobación se escribe en disco y sigue siendo válida entre reinicios, así que nunca la repites. Inicia el escucha en una terminal y apunta --dir al directorio padre — relayium sync /root/workspace reproduce workspace/... en el receptor, así que --dir /root deposita los archivos en /root/workspace/.",
+        "El receptor aprueba la máquina emisora una vez; la aprobación se escribe en disco y sigue siendo válida entre reinicios, así que nunca la repites. Inicia el proceso a la escucha en una terminal y apunta --dir al directorio padre — relayium sync /root/workspace reproduce workspace/... en el receptor, así que --dir /root deposita los archivos en /root/workspace/.",
         "En la primera conexión del emisor (siguiente sección), serve muestra su dirección y su huella y te pide que lo apruebes; responde y y se recuerda para siempre:",
       ],
       code: [
@@ -1099,11 +1099,11 @@ Accept and remember this peer? [y/N] y`,
       ],
       bullets: [
         "Para una configuración totalmente sin supervisión, sáltate el aviso: ejecuta relayium id en el emisor para imprimir su huella, y luego relayium authorize <huella> en el receptor.",
-        "--dir es el padre de la carpeta que sincronizas, no la carpeta en sí; de lo contrario los archivos caen un nivel demasiado profundo (p. ej. /root/workspace/workspace).",
+        "--dir es el padre de la carpeta que sincronizas, no la carpeta en sí; de lo contrario los archivos llegan un nivel demasiado profundo (p. ej. /root/workspace/workspace).",
       ],
     },
     {
-      heading: "Ejecutar el escucha en segundo plano (en el receptor)",
+      heading: "Ejecutar el proceso a la escucha en segundo plano (en el receptor)",
       body: [
         "Una vez autorizada la huella, detén el serve en primer plano (Ctrl-C) y relánzalo desacoplado para que sobreviva a tu cierre de sesión. Carga la huella guardada y acepta al emisor en silencio: esta vez no hay aviso:",
       ],
@@ -1136,7 +1136,7 @@ tmux new -s xfer      # apt install -y tmux si falta`,
     {
       heading: "Verificar y terminar",
       body: [
-        "La transferencia está completa cuando el bucle until termina y vuelves a un prompt de shell normal. Confirma que ambos lados coinciden, y luego detén el escucha:",
+        "La transferencia está completa cuando el bucle until termina y vuelves a un prompt de shell normal. Confirma que ambos lados coinciden, y luego detén el proceso a la escucha:",
       ],
       code: [
         `# compara los totales en AMBOS servidores
@@ -1154,7 +1154,7 @@ pkill -f 'relayium serve'`,
         "Algunas cosas que parecen problemas pero normalmente no lo son, y la que normalmente sí lo es (un puerto bloqueado).",
       ],
       bullets: [
-        "La falta de salida no es un atasco. El progreso solo se imprime cuando cada archivo termina, así que un archivo grande se transfiere en silencio. Comprueba el estado real en el emisor con ss -tnp | grep 9031 — ESTAB significa que está conectado y transfiriendo; SYN-SENT significa que no puede alcanzar el escucha.",
+        "La falta de salida no es un atasco. El progreso solo se imprime cuando cada archivo termina, así que un archivo grande se transfiere en silencio. Comprueba el estado real en el emisor con ss -tnp | grep 9031 — ESTAB significa que está conectado y transfiriendo; SYN-SENT significa que no puede alcanzar el proceso a la escucha.",
         "SYN-SENT significa que el puerto está bloqueado. Abre 9031/TCP al emisor en el receptor (grupo de seguridad en la nube, o ufw allow 9031/tcp). Esta es la causa más común de una transferencia que nunca empieza.",
         "Prefiere tmux más un bucle de una sola línea antes que un nohup de varias líneas. Pegar en una shell un comando de varias líneas con comillas y una redirección > a menudo se rompe en la redirección o te deja en un prompt de continuación >.",
         "Al limpiar procesos, haz una coincidencia precisa (pkill -f 'relayium sync'), no pkill relayium — una coincidencia amplia puede matar un proceso relayium no relacionado que se ejecute en la misma máquina.",
@@ -1172,7 +1172,7 @@ pkill -f 'relayium serve'`,
       },
       {
         q: "¿En qué se diferencia esto de rsync?",
-        a: "Ambos hacen replicación incremental unidireccional, pero relayium sync se ejecuta sobre una conexión TLS fijada sin necesidad de cuenta SSH (daemon direct), autentica las dos máquinas por huella de certificado y verifica cada archivo con SHA-256. Es el mismo motor de transferencia que los otros modos de relayium.",
+        a: "Ambos hacen replicación incremental unidireccional, pero relayium sync se ejecuta sobre una conexión TLS fijada sin necesidad de cuenta SSH (daemon directo), autentica las dos máquinas por huella de certificado y verifica cada archivo con SHA-256. Es el mismo motor de transferencia que los otros modos de relayium.",
       },
       {
         q: "¿sync elimina en el receptor los archivos que quité del origen?",
@@ -1184,7 +1184,7 @@ pkill -f 'relayium serve'`,
       },
       {
         q: "¿Tengo que abrir un puerto?",
-        a: "Para daemon direct, sí: el puerto del escucha (9031 por defecto) debe ser alcanzable desde el emisor. Si prefieres no abrir un puerto y ya tienes SSH entre los servidores, sync también funciona sobre SSH: relayium sync /path user@host:/path (relayium debe estar instalado en el remoto).",
+        a: "Para daemon directo, sí: el puerto del proceso a la escucha (9031 por defecto) debe ser alcanzable desde el emisor. Si prefieres no abrir un puerto y ya tienes SSH entre los servidores, sync también funciona sobre SSH: relayium sync /path user@host:/path (relayium debe estar instalado en el remoto).",
       },
     ],
   },
@@ -1203,7 +1203,7 @@ const pt = {
   updatedLabel: "Última atualização",
   lead: [
     "Você tem uma pasta grande — dezenas de gigabytes — em um servidor e quer uma cópia exata em outro. Você não pode vigiar um terminal por horas, e uma transferência que morre no meio do caminho não deveria recomeçar do zero. relayium sync foi feito para isso: um espelho incremental unidirecional que pula o que já está lá, retoma um arquivo enviado pela metade de onde parou e verifica cada arquivo de ponta a ponta.",
-    "Este guia configura uma transferência sem supervisão e com autorrecuperação: autorize o emissor uma vez, execute o listener em segundo plano e conduza relayium sync a partir de um laço de repetição dentro do tmux para que ele continue através das quedas de conexão até que a pasta inteira chegue.",
+    "Este guia configura uma transferência sem supervisão e com autorrecuperação: autorize o emissor uma vez, execute o processo à escuta em segundo plano e conduza relayium sync a partir de um laço de repetição dentro do tmux para que ele continue através das quedas de conexão até que a pasta inteira chegue.",
   ],
   sections: [
     {
@@ -1228,14 +1228,14 @@ const pt = {
 curl -fsSL https://relayium.com/install.sh | sh`,
       ],
       bullets: [
-        "Este guia usa daemon direct (relayium://), então os dois servidores não precisam de acesso SSH entre si.",
-        "Abra a porta do listener (9031 por padrão) para o emissor no firewall ou grupo de segurança do receptor.",
+        "Este guia usa daemon direto (relayium://), então os dois servidores não precisam de acesso SSH entre si.",
+        "Abra a porta do processo à escuta (9031 por padrão) para o emissor no firewall ou grupo de segurança do receptor.",
       ],
     },
     {
       heading: "Autorizar o emissor uma vez (no receptor)",
       body: [
-        "O receptor aprova a máquina emissora uma vez; a aprovação é escrita em disco e permanece válida entre reinicializações, então você nunca a repete. Inicie o listener em um terminal e aponte --dir para o diretório pai — relayium sync /root/workspace reproduz workspace/... no receptor, então --dir /root deposita os arquivos em /root/workspace/.",
+        "O receptor aprova a máquina emissora uma vez; a aprovação é escrita em disco e permanece válida entre reinicializações, então você nunca a repete. Inicie o processo à escuta em um terminal e aponte --dir para o diretório pai — relayium sync /root/workspace reproduz workspace/... no receptor, então --dir /root deposita os arquivos em /root/workspace/.",
         "Na primeira conexão do emissor (próxima seção), serve mostra seu endereço e sua impressão digital e pede que você o aprove; responda y e ele é lembrado para sempre:",
       ],
       code: [
@@ -1252,7 +1252,7 @@ Accept and remember this peer? [y/N] y`,
       ],
     },
     {
-      heading: "Executar o listener em segundo plano (no receptor)",
+      heading: "Executar o processo à escuta em segundo plano (no receptor)",
       body: [
         "Uma vez autorizada a impressão digital, pare o serve em primeiro plano (Ctrl-C) e relance-o desacoplado para que sobreviva ao seu logout. Ele carrega a impressão digital salva e aceita o emissor em silêncio — sem prompt desta vez:",
       ],
@@ -1285,7 +1285,7 @@ tmux new -s xfer      # apt install -y tmux se estiver faltando`,
     {
       heading: "Verificar e finalizar",
       body: [
-        "A transferência está completa quando o laço until termina e você volta a um prompt de shell normal. Confirme que os dois lados coincidem, depois pare o listener:",
+        "A transferência está completa quando o laço until termina e você volta a um prompt de shell normal. Confirme que os dois lados coincidem, depois pare o processo à escuta:",
       ],
       code: [
         `# compare os totais nos DOIS servidores
@@ -1303,7 +1303,7 @@ pkill -f 'relayium serve'`,
         "Algumas coisas que parecem problemas mas normalmente não são — e a que normalmente é (uma porta bloqueada).",
       ],
       bullets: [
-        "A ausência de saída não é um travamento. O progresso só é impresso quando cada arquivo termina, então um arquivo grande é transferido em silêncio. Verifique o estado real no emissor com ss -tnp | grep 9031 — ESTAB significa que está conectado e transferindo; SYN-SENT significa que não consegue alcançar o listener.",
+        "A ausência de saída não é um travamento. O progresso só é impresso quando cada arquivo termina, então um arquivo grande é transferido em silêncio. Verifique o estado real no emissor com ss -tnp | grep 9031 — ESTAB significa que está conectado e transferindo; SYN-SENT significa que não consegue alcançar o processo à escuta.",
         "SYN-SENT significa que a porta está bloqueada. Abra 9031/TCP para o emissor no receptor (grupo de segurança na nuvem, ou ufw allow 9031/tcp). Esta é a causa mais comum de uma transferência que nunca começa.",
         "Prefira tmux mais um laço de uma única linha em vez de um nohup de várias linhas. Colar em uma shell um comando de várias linhas com aspas e um redirecionamento > frequentemente quebra no redirecionamento ou deixa você em um prompt de continuação >.",
         "Ao limpar processos, faça uma correspondência precisa (pkill -f 'relayium sync'), não pkill relayium — uma correspondência ampla pode matar um processo relayium não relacionado rodando na mesma máquina.",
@@ -1321,7 +1321,7 @@ pkill -f 'relayium serve'`,
       },
       {
         q: "Em que isso difere do rsync?",
-        a: "Ambos fazem espelhamento incremental unidirecional, mas relayium sync roda sobre uma conexão TLS fixada sem exigir conta SSH (daemon direct), autentica as duas máquinas pela impressão digital do certificado e verifica cada arquivo com SHA-256. É o mesmo motor de transferência dos outros modos do relayium.",
+        a: "Ambos fazem espelhamento incremental unidirecional, mas relayium sync roda sobre uma conexão TLS fixada sem exigir conta SSH (daemon direto), autentica as duas máquinas pela impressão digital do certificado e verifica cada arquivo com SHA-256. É o mesmo motor de transferência dos outros modos do relayium.",
       },
       {
         q: "O sync apaga no receptor os arquivos que removi da origem?",
@@ -1333,7 +1333,7 @@ pkill -f 'relayium serve'`,
       },
       {
         q: "Preciso abrir uma porta?",
-        a: "Para daemon direct, sim — a porta do listener (9031 por padrão) precisa ser alcançável a partir do emissor. Se você preferir não abrir uma porta e já tiver SSH entre os servidores, sync também funciona sobre SSH: relayium sync /path user@host:/path (relayium precisa estar instalado no remoto).",
+        a: "Para daemon direto, sim — a porta do processo à escuta (9031 por padrão) precisa ser alcançável a partir do emissor. Se você preferir não abrir uma porta e já tiver SSH entre os servidores, sync também funciona sobre SSH: relayium sync /path user@host:/path (relayium precisa estar instalado no remoto).",
       },
     ],
   },

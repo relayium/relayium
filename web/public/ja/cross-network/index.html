@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ネットワークをまたぐファイル転送——リアルタイム・エンドツーエンド暗号化 | Relayium</title>
-    <meta name="description" content="6文字のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。SASコードで検証するため、リレーが侵害されていても盗聴されません。" />
+    <meta name="description" content="6文字のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。検証コード（SAS）で照合するため、リレーが侵害されていても盗聴されません。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/cross-network/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/cross-network" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="ネットワークをまたぐファイル転送——リアルタイム・エンドツーエンド暗号化 | Relayium" />
-    <meta property="og:description" content="6文字のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。SASコードで検証するため、リレーが侵害されていても盗聴されません。" />
+    <meta property="og:description" content="6文字のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。検証コード（SAS）で照合するため、リレーが侵害されていても盗聴されません。" />
     <meta property="og:url" content="https://relayium.com/ja/cross-network/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="ja_JP" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="ネットワークをまたぐファイル転送——リアルタイム・エンドツーエンド暗号化 | Relayium" />
-    <meta name="twitter:description" content="6文字のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。SASコードで検証するため、リレーが侵害されていても盗聴されません。" />
+    <meta name="twitter:description" content="6文字のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。検証コード（SAS）で照合するため、リレーが侵害されていても盗聴されません。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"ネットワークをまたぐファイル転送——リアルタイム・エンドツーエンド暗号化 | Relayium","description":"6文字のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。SASコードで検証するため、リレーが侵害されていても盗聴されません。","url":"https://relayium.com/ja/cross-network/","inLanguage":"ja","dateModified":"2026-07-10","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ファイルは御社のサーバーを経由しますか？","acceptedAnswer":{"@type":"Answer","text":"暗号化されたデータストリームはRelayiumのリレーを経由し、ネットワークをまたいでも確実に接続できるようにしています——ただしエンドツーエンドで暗号化されているため、リレーが目にするのは復号できない暗号文だけです。"}},{"@type":"Question","name":"コードは必須ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。6文字のコード（またはその参加リンク/QR）は5分間有効で、ネットワークをまたぐ2台の端末をペアリングします。コードはサーバーが文字集合 ACDEFHJKMNPRTWXY23456789 から発行します——0 と 1 は O・I と紛らわしいため含みません——ので、自分で考えて作ることはできません。サーバーが発行したコードだけがペアリングできます。"}},{"@type":"Question","name":"アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"送信側はコードを発行するためにサインインが必要ですが、受信側は匿名で参加できます。"}},{"@type":"Question","name":"エンドツーエンド暗号化されていますか？","acceptedAnswer":{"@type":"Answer","text":"はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、SASコードで検証します。リレーもサーバーも復号できません。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"ネットワークをまたぐファイル転送——リアルタイム・エンドツーエンド暗号化 | Relayium","description":"6文字のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。検証コード（SAS）で照合するため、リレーが侵害されていても盗聴されません。","url":"https://relayium.com/ja/cross-network/","inLanguage":"ja","dateModified":"2026-07-10","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ファイルはRelayiumのサーバーを経由しますか？","acceptedAnswer":{"@type":"Answer","text":"暗号化されたデータストリームはRelayiumのリレーを経由し、ネットワークをまたいでも確実に接続できるようにしています——ただしエンドツーエンドで暗号化されているため、リレーが目にするのは復号できない暗号文だけです。"}},{"@type":"Question","name":"コードは必須ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。6文字のコード（またはその参加リンク/QR）は5分間有効で、ネットワークをまたぐ2台の端末をペアリングします。コードはサーバーが文字集合 ACDEFHJKMNPRTWXY23456789 から発行します——0 と 1 は O・I と紛らわしいため含みません——ので、自分で考えて作ることはできません。サーバーが発行したコードだけがペアリングできます。"}},{"@type":"Question","name":"アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"送信側はコードを発行するためにサインインが必要ですが、受信側は匿名で参加できます。"}},{"@type":"Question","name":"エンドツーエンド暗号化されていますか？","acceptedAnswer":{"@type":"Answer","text":"はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、検証コード（SAS）で照合します。リレーもサーバーも復号できません。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -87,7 +87,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <ol class="steps">
         <li>送信側がサインインし、6文字のペアリングコードを発行します（参加リンク/QRの共有も可能）。</li>
         <li>受信側はリンクを開くかコードを入力するだけ——受信にアカウントは不要です。</li>
-        <li>両方の画面に表示される同じ6桁のSASコードを照合し、中間者がいないことを確認します。</li>
+        <li>両方の画面に表示される同じ6桁の検証コード（SAS）を照合し、中間者がいないことを確認します。</li>
         <li>ファイルはエンドツーエンドで暗号化され（チャンクごとにAES-256-GCM）、Relayiumの高速リレーを経由してストリーミング転送されます。リレーは復号できない暗号文しか扱いません。</li>
       </ol>
       </section>
@@ -109,19 +109,19 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <h3>AirDropとの比較</h3>
       <p>AirDropはApple製品同士、かつ近接している場合に限られます。RelayiumはブラウザだけでWindows・Android・iPhone・Macをネットワークをまたいでエンドツーエンド暗号化しながらペアリングできます。</p>
       <h3>Snapdrop / PairDropとの比較</h3>
-      <p>それらは同一ネットワーク限定です。Relayiumはネットワークをまたぐペアリングに加え、アプリケーション層のエンドツーエンド暗号化とSASコードを備え、リレーやシグナリングサーバーが侵害されていても盗聴できません。</p>
+      <p>それらは同一ネットワーク限定です。Relayiumはネットワークをまたぐペアリングに加え、アプリケーション層のエンドツーエンド暗号化と検証コード（SAS）を備え、リレーやシグナリングサーバーが侵害されていても盗聴できません。</p>
       </div>
       </section>
 
       <section class="reveal"><h2>よくある質問</h2>
-      <h3>ファイルは御社のサーバーを経由しますか？</h3>
+      <h3>ファイルはRelayiumのサーバーを経由しますか？</h3>
       <p>暗号化されたデータストリームはRelayiumのリレーを経由し、ネットワークをまたいでも確実に接続できるようにしています——ただしエンドツーエンドで暗号化されているため、リレーが目にするのは復号できない暗号文だけです。</p>
       <h3>コードは必須ですか？</h3>
       <p>はい。6文字のコード（またはその参加リンク/QR）は5分間有効で、ネットワークをまたぐ2台の端末をペアリングします。コードはサーバーが文字集合 ACDEFHJKMNPRTWXY23456789 から発行します——0 と 1 は O・I と紛らわしいため含みません——ので、自分で考えて作ることはできません。サーバーが発行したコードだけがペアリングできます。</p>
       <h3>アカウントは必要ですか？</h3>
       <p>送信側はコードを発行するためにサインインが必要ですが、受信側は匿名で参加できます。</p>
       <h3>エンドツーエンド暗号化されていますか？</h3>
-      <p>はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、SASコードで検証します。リレーもサーバーも復号できません。</p></section>
+      <p>はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、検証コード（SAS）で照合します。リレーもサーバーも復号できません。</p></section>
 
       
       <footer>

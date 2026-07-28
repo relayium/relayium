@@ -115,7 +115,7 @@ const zh = {
     {
       heading: "Relayium 的不同：应用层端到端加密",
       body: [
-        "原生 WebRTC 由 DTLS 提供传输加密，这对被动的网络窃听者确实是有效保护。但用于验证双方身份的 DTLS 指纹是经由信令服务器交换的。恶意或被入侵的信令服务器可以替换成自己的指纹，隐形地插在中间——这正是 DTLS 本身无法阻止的中间人攻击。",
+        "裸用 WebRTC 时，传输加密只靠 DTLS，这对被动的网络窃听者确实是有效保护。但用于验证双方身份的 DTLS 指纹是经由信令服务器交换的。恶意或被入侵的信令服务器可以替换成自己的指纹，隐形地插在中间——这正是 DTLS 本身无法阻止的中间人攻击。",
         "Relayium 在 WebRTC 通道之上再加了一层独立加密：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，而这把密钥从不发送给任何服务器。为发现中间人，两台设备会显示同一段 6 位校验码（SAS）；只要两边一致，就说明没有服务器插在中间。每个文件还会用 SHA-256 做端到端完整性校验。",
       ],
     },
@@ -132,8 +132,8 @@ const zh = {
         "把最关键的差别并排列出：",
       ],
       bullets: [
-        "加密层级：原生 WebRTC 只依赖 DTLS；Relayium 在其之上再加应用层 X25519 + AES-256-GCM。",
-        "防中间人：Relayium 显示两边核对的 6 位 SAS 校验码；原生 WebRTC 对恶意信令服务器没有对应的核验手段。",
+        "加密层级：裸用 WebRTC 只依赖 DTLS；Relayium 在其之上再加应用层 X25519 + AES-256-GCM。",
+        "防中间人：Relayium 显示两边核对的 6 位 SAS 校验码；裸用 WebRTC 对恶意信令服务器没有对应的核验手段。",
         "跨网络：Relayium 可用配对码（或它生成的加入链接）连接，数据经加密 TURN 中继转发；Snapdrop 主要依赖局域网发现。",
         "存储模式：Relayium 提供可选的零知识存储下载链接；另两者只有实时模式。",
         "断点续传：Relayium 可在传输中断后续传，而非重来。",
@@ -189,22 +189,22 @@ const ja = {
       ],
       bullets: [
         "PairDrop はルームと永続的な端末ペアリングを備え、ペアリングコードで特定の端末を、異なるネットワークをまたいでも接続できます。",
-        "どちらも自己ホストが簡単です。サーバーコードは小さくよく理解されており、自分のインスタンスを運用したい場合に重要です。",
+        "どちらもセルフホストが簡単です。サーバーコードは小さくよく理解されており、自分のインスタンスを運用したい場合に重要です。",
         "長年の実運用により、広い端末対応、豊富なドキュメント、成熟して予測可能な体験があります。",
       ],
     },
     {
       heading: "Relayium の違い：アプリケーション層のエンドツーエンド暗号化",
       body: [
-        "素の WebRTC は DTLS によって転送中は暗号化され、受動的な盗聴者に対しては確かな保護になります。しかし双方を認証する DTLS フィンガープリントはシグナリングサーバー経由で交換されます。悪意ある、あるいは侵害されたシグナリングサーバーは自分のフィンガープリントに差し替え、見えない形で間に入り込めます——これは DTLS だけでは防げない典型的な中間者攻撃です。",
-        "Relayium は WebRTC チャネルの上に、独立した2つ目の暗号化層を加えます。X25519 の鍵交換で導出した鍵をブロックごとの AES-256-GCM に使い、その鍵はどのサーバーにも送られません。中間者を検出するため、両方の端末が同じ6桁のショート認証文字列（SAS）を表示します。コードが一致すれば、間にサーバーはいません。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
+        "素の WebRTC は DTLS によって転送中は暗号化され、受動的な盗聴者に対しては確かな保護になります。しかし双方を認証する DTLS フィンガープリントはシグナリングサーバー経由で交換されます。悪意ある、あるいは侵害されたシグナリングサーバーは自分のフィンガープリントに差し替え、見えない形で間に入り込めます。これは DTLS だけでは防げない典型的な中間者攻撃です。",
+        "Relayium は WebRTC チャネルの上に、独立した2つ目の暗号化層を加えます。X25519 の鍵交換で導出した鍵をチャンクごとの AES-256-GCM に使い、その鍵はどのサーバーにも送られません。中間者を検出するため、両方の端末が同じ6桁のショート認証文字列（SAS）を表示します。コードが一致すれば、間にサーバーはいません。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
       ],
     },
     {
       heading: "LAN を越えて",
       body: [
         "Relayium は同じ Wi-Fi だけでなく、ネットワークをまたいで動くよう設計されています。ペアリングコード（またはそれが生成する参加リンク）で2台の端末を接続でき、可能な限り転送は P2P で直接行われます。",
-        "ネットワークをまたぐときは暗号化ストリームが TURN リレーを経由しますが、リレーが見るのは暗号文だけなので、転送はエンドツーエンド暗号化のままです。任意の保存型ダウンロードリンクもあります。ブラウザが AES-256-GCM でファイルを暗号化し、復号鍵は URL フラグメントにだけ存在するため、サーバーは読めないゼロ知識の暗号文を保存します。同じネットワークならアカウントは不要です。ネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要です——受信側はどちらの場合もアカウント不要で、保存型ダウンロードリンクの作成にも送信側のサインインが必要です。途中で切れた転送は最初からではなく再開できます。",
+        "ネットワークをまたぐときは暗号化ストリームが TURN リレーを経由しますが、リレーが見るのは暗号文だけなので、転送はエンドツーエンド暗号化のままです。任意の保存型ダウンロードリンクもあります。ブラウザが AES-256-GCM でファイルを暗号化し、復号鍵は URL フラグメントにだけ存在するため、サーバーは読めないゼロ知識の暗号文を保存します。同じネットワークならアカウントは不要です。ネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要です。受信側はどちらの場合もアカウント不要で、保存型ダウンロードリンクの作成にも送信側のサインインが必要です。途中で切れた転送は最初からではなく再開できます。",
       ],
     },
     {
@@ -230,8 +230,8 @@ const ja = {
         a: "同じネットワーク内の端末間で手早く共有するなら、どれもよく機能します。異なるネットワークをまたぐ必要がある場合や、サーバーに依存しない検証コード付きの追加暗号化層が欲しい場合は Relayium が狙いです。PairDrop のルームや永続ペアリングが好きなら、それも引き続き優れた選択肢です。",
       },
       {
-        q: "Relayium はオープンソースで自己ホストできますか？",
-        a: "はい。Relayium は AGPL-3.0 ライセンスで、プロトコルとコードのすべてが github.com/relayium/relayium で公開されています。監査も自分のインスタンス運用も可能です——Snapdrop と PairDrop が信頼された、まさに同じ開放性です。",
+        q: "Relayium はオープンソースでセルフホストできますか？",
+        a: "はい。Relayium は AGPL-3.0 ライセンスで、プロトコルとコードのすべてが github.com/relayium/relayium で公開されています。監査も自分のインスタンス運用も可能です。Snapdrop と PairDrop が信頼されたのと、まさに同じ開放性です。",
       },
       {
         q: "性能に違いはありますか？",
@@ -240,7 +240,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "アプリケーション層の暗号化の実際の感触を体験してください——インストール不要、同じネットワークならアカウントも不要です。",
+    text: "アプリケーション層の暗号化の実際の感触を体験してください。インストール不要で、同じネットワークならアカウントも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -278,7 +278,7 @@ const ko = {
       heading: "Relayium의 차이: 애플리케이션 계층 종단간 암호화",
       body: [
         "순수 WebRTC는 DTLS로 전송 중 암호화되며, 수동적 도청자에 대해서는 실질적인 보호가 됩니다. 하지만 양쪽을 인증하는 DTLS 지문은 시그널링 서버를 거쳐 교환됩니다. 악의적이거나 침해된 시그널링 서버는 자신의 지문으로 바꿔치기해 보이지 않게 중간에 끼어들 수 있습니다. 이것이 DTLS만으로는 막을 수 없는 전형적인 중간자 공격입니다.",
-        "Relayium은 WebRTC 채널 위에 독립적인 두 번째 암호화 계층을 더합니다. X25519 키 교환으로 도출한 키를 블록별 AES-256-GCM에 사용하며, 이 키는 어떤 서버에도 전송되지 않습니다. 중간자를 탐지하기 위해 두 기기가 동일한 6자리 짧은 인증 문자열(SAS)을 표시합니다. 코드가 일치하면 사이에 서버가 없다는 뜻입니다. 각 파일은 SHA-256 해시로 종단간 검증됩니다.",
+        "Relayium은 WebRTC 채널 위에 독립적인 두 번째 암호화 계층을 더합니다. X25519 키 교환으로 도출한 키를 청크별 AES-256-GCM에 사용하며, 이 키는 어떤 서버에도 전송되지 않습니다. 중간자를 탐지하기 위해 두 기기가 동일한 6자리 짧은 인증 문자열(SAS)을 표시합니다. 코드가 일치하면 사이에 서버가 없다는 뜻입니다. 각 파일은 SHA-256 해시로 종단간 검증됩니다.",
       ],
     },
     {
@@ -294,10 +294,10 @@ const ko = {
         "가장 중요한 차이를 나란히 정리하면:",
       ],
       bullets: [
-        "암호화 계층: 순수 WebRTC는 DTLS에만 의존; Relayium은 그 위에 애플리케이션 계층 X25519 + AES-256-GCM을 더함.",
-        "중간자 방어: Relayium은 양쪽이 대조하는 6자리 SAS 코드를 표시; 순수 WebRTC는 악의적 시그널링 서버에 대한 상응하는 확인 수단이 없음.",
-        "네트워크 넘기: Relayium은 페어링 코드(또는 그 참여 링크)로 연결하며 암호화된 TURN 중계를 거침; Snapdrop은 주로 LAN 탐색에 의존.",
-        "저장 모드: Relayium은 선택적 영지식 저장 다운로드 링크를 제공; 나머지는 실시간 전용.",
+        "암호화 계층: 순수 WebRTC는 DTLS에만 의존합니다. Relayium은 그 위에 애플리케이션 계층 X25519 + AES-256-GCM을 더합니다.",
+        "중간자 방어: Relayium은 양쪽이 대조하는 6자리 SAS 코드를 표시합니다. 순수 WebRTC는 악의적 시그널링 서버에 대한 상응하는 확인 수단이 없습니다.",
+        "네트워크 넘기: Relayium은 페어링 코드(또는 그 참여 링크)로 연결하며 암호화된 TURN 릴레이를 거칩니다. Snapdrop은 주로 LAN 탐색에 의존합니다.",
+        "저장 모드: Relayium은 선택적 영지식 저장 다운로드 링크를 제공합니다. 나머지는 실시간 전용입니다.",
         "재개: Relayium은 중단된 전송을 처음부터 다시 하지 않고 이어받을 수 있음.",
         "일괄: Relayium은 배치당 최대 1,000개 파일을 보내며 파일별 SHA-256 무결성 검사를 함.",
       ],
@@ -389,7 +389,7 @@ const de = {
     items: [
       {
         q: "Können Relayium und Snapdrop/PairDrop einander ersetzen?",
-        a: "Für schnelles Teilen zwischen Geräten im selben Netz funktioniert jedes gut. Wenn du über verschiedene Netzwerke hinweg erreichen musst oder eine zusätzliche, serverunabhängige Verschlüsselungsschicht mit Prüfcode willst, zielt Relayium darauf ab; wenn du PairDrops Räume und dauerhafte Paarung liebst, bleibt es eine ausgezeichnete Wahl.",
+        a: "Für schnelles Teilen zwischen Geräten im selben Netz funktioniert jedes gut. Wenn du über verschiedene Netzwerke hinweg erreichen musst oder eine zusätzliche, serverunabhängige Verschlüsselungsschicht mit Verifizierungscode willst, zielt Relayium darauf ab; wenn du PairDrops Räume und dauerhafte Paarung liebst, bleibt es eine ausgezeichnete Wahl.",
       },
       {
         q: "Ist Relayium quelloffen und selbst hostbar?",
@@ -409,13 +409,13 @@ const de = {
 };
 
 const fr = {
-  title: "Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?",
+  title: "Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?",
   description:
-    "Un comparatif honnête de Relayium, Snapdrop et PairDrop. Les trois font du transfert pair-à-pair dans le navigateur ; la vraie différence est le chiffrement de bout en bout au niveau applicatif de Relayium et sa portée entre réseaux.",
+    "Un comparatif honnête de Relayium, Snapdrop et PairDrop. Les trois font du transfert pair-à-pair dans le navigateur ; la vraie différence est le chiffrement de bout en bout au niveau applicatif de Relayium et sa portée entre réseaux.",
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Snapdrop et son fork activement maintenu PairDrop sont des pionniers du partage de fichiers sans installation, dans le navigateur. Ce sont des outils soignés, familiers et vraiment bons — Relayium s'appuie sur la même idée plutôt que de la balayer.",
-    "Cet article compare les trois équitablement : ce qu'ils partagent, là où Snapdrop et PairDrop sont plus forts, et là où Relayium diffère. En bref, Relayium se concentre sur la force du chiffrement et l'atteinte entre réseaux, pas sur le remplacement de ce qui fonctionne déjà bien sur votre réseau local.",
+    "Cet article compare les trois équitablement : ce qu'ils partagent, là où Snapdrop et PairDrop sont plus forts, et là où Relayium diffère. En bref, Relayium se concentre sur la force du chiffrement et l'atteinte entre réseaux, pas sur le remplacement de ce qui fonctionne déjà bien sur votre réseau local.",
   ],
   sections: [
     {
@@ -428,7 +428,7 @@ const fr = {
     {
       heading: "Là où Snapdrop et PairDrop brillent",
       body: [
-        "Snapdrop existe depuis des années et compte une grande communauté qui lui fait confiance ; PairDrop l'étend avec des fonctions que Relayium ne cherche pas à égaler aujourd'hui.",
+        "Snapdrop existe depuis des années et compte une grande communauté qui lui fait confiance ; PairDrop l'étend avec des fonctions que Relayium ne cherche pas à égaler aujourd'hui.",
       ],
       bullets: [
         "PairDrop ajoute des salons et un appairage d'appareils persistant, permettant de connecter des appareils précis par code d'appairage, même sur des réseaux différents.",
@@ -437,31 +437,31 @@ const fr = {
       ],
     },
     {
-      heading: "Là où Relayium diffère : chiffrement de bout en bout au niveau applicatif",
+      heading: "Là où Relayium diffère : chiffrement de bout en bout au niveau applicatif",
       body: [
         "Le WebRTC brut est chiffré en transit par DTLS, ce qui protège réellement contre une écoute réseau passive. Mais les empreintes DTLS qui authentifient chaque partie sont échangées via le serveur de signalisation. Un serveur de signalisation malveillant ou compromis peut y substituer ses propres empreintes et s'intercaler de façon invisible — une attaque de l'homme du milieu classique que DTLS seul n'empêche pas.",
-        "Relayium ajoute une seconde couche de chiffrement indépendante par-dessus le canal WebRTC : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n'est jamais envoyée à aucun serveur. Pour détecter un homme du milieu, les deux appareils affichent la même chaîne d'authentification courte (SAS) à 6 chiffres ; si les codes concordent, aucun serveur ne s'intercale. Chaque fichier est aussi vérifié de bout en bout par une empreinte SHA-256.",
+        "Relayium ajoute une seconde couche de chiffrement indépendante par-dessus le canal WebRTC : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n'est jamais envoyée à aucun serveur. Pour détecter un homme du milieu, les deux appareils affichent la même chaîne d'authentification courte (SAS) à 6 chiffres ; si les codes concordent, aucun serveur ne s'intercale. Chaque fichier est aussi vérifié de bout en bout par une empreinte SHA-256.",
       ],
     },
     {
       heading: "Au-delà du réseau local",
       body: [
         "Relayium est conçu pour fonctionner entre réseaux, pas seulement sur le même Wi-Fi. Vous pouvez connecter deux appareils par code d'appairage (ou le lien de participation qu'il génère), et le transfert reste en pair-à-pair direct chaque fois que possible.",
-        "Entre réseaux, le flux chiffré passe par un relais TURN — mais le relais ne voit que du texte chiffré, donc le transfert reste chiffré de bout en bout. Il existe aussi un mode optionnel de lien de téléchargement stocké : le navigateur chiffre les fichiers en AES-256-GCM et la clé de déchiffrement ne vit que dans le fragment de l'URL, si bien que le serveur ne stocke qu'un texte chiffré à divulgation nulle qu'il ne peut pas lire. Sur le même réseau, aucun compte n'est nécessaire ; envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte, et il en va de même pour les liens de téléchargement stockés. Les transferts interrompus en cours de route peuvent reprendre au lieu de tout recommencer.",
+        "Entre réseaux, le flux chiffré passe par un relais TURN — mais le relais ne voit que du texte chiffré, donc le transfert reste chiffré de bout en bout. Il existe aussi un mode optionnel de lien de téléchargement stocké : le navigateur chiffre les fichiers en AES-256-GCM et la clé de déchiffrement ne vit que dans le fragment de l'URL, si bien que le serveur ne stocke qu'un texte chiffré à divulgation nulle qu'il ne peut pas lire. Sur le même réseau, aucun compte n'est nécessaire ; envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte, et il en va de même pour les liens de téléchargement stockés. Les transferts interrompus en cours de route peuvent reprendre au lieu de tout recommencer.",
       ],
     },
     {
       heading: "Comparatif des fonctions en un coup d'œil",
       body: [
-        "Les différences qui comptent le plus, côte à côte :",
+        "Les différences qui comptent le plus, côte à côte :",
       ],
       bullets: [
-        "Couche de chiffrement : le WebRTC brut ne repose que sur DTLS ; Relayium ajoute par-dessus X25519 + AES-256-GCM au niveau applicatif.",
-        "Défense MITM : Relayium affiche un code SAS à 6 chiffres que les deux parties vérifient ; le WebRTC brut n'a aucun contrôle équivalent contre un serveur de signalisation malveillant.",
-        "Entre réseaux : Relayium se connecte par code d'appairage (ou son lien de participation) via un relais TURN chiffré ; pour Snapdrop, la découverte sur le réseau local est la voie principale.",
-        "Mode de stockage : Relayium propose des liens de téléchargement stockés à divulgation nulle en option ; les autres sont uniquement en temps réel.",
-        "Reprise : Relayium peut reprendre un transfert interrompu au lieu de recommencer.",
-        "Lot : Relayium envoie jusqu'à 1 000 fichiers par lot avec une vérification d'intégrité SHA-256 par fichier.",
+        "Couche de chiffrement : le WebRTC brut ne repose que sur DTLS ; Relayium ajoute par-dessus X25519 + AES-256-GCM au niveau applicatif.",
+        "Défense MITM : Relayium affiche un code SAS à 6 chiffres que les deux parties vérifient ; le WebRTC brut n'a aucun contrôle équivalent contre un serveur de signalisation malveillant.",
+        "Entre réseaux : Relayium se connecte par code d'appairage (ou son lien de participation) via un relais TURN chiffré ; pour Snapdrop, la découverte sur le réseau local est la voie principale.",
+        "Mode de stockage : Relayium propose des liens de téléchargement stockés à divulgation nulle en option ; les autres sont uniquement en temps réel.",
+        "Reprise : Relayium peut reprendre un transfert interrompu au lieu de recommencer.",
+        "Lot : Relayium envoie jusqu'à 1 000 fichiers par lot avec une vérification d'intégrité SHA-256 par fichier.",
       ],
     },
   ],
@@ -469,15 +469,15 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Relayium et Snapdrop/PairDrop peuvent-ils se remplacer mutuellement ?",
-        a: "Pour un partage rapide entre appareils du même réseau, chacun fonctionne bien. Si vous devez atteindre des réseaux différents ou voulez une couche de chiffrement supplémentaire, indépendante du serveur, avec un code de vérification, Relayium vise cela ; si vous aimez les salons et l'appairage persistant de PairDrop, il reste un excellent choix.",
+        q: "Relayium et Snapdrop/PairDrop peuvent-ils se remplacer mutuellement ?",
+        a: "Pour un partage rapide entre appareils du même réseau, chacun fonctionne bien. Si vous devez atteindre des réseaux différents ou voulez une couche de chiffrement supplémentaire, indépendante du serveur, avec un code de vérification, Relayium vise cela ; si vous aimez les salons et l'appairage persistant de PairDrop, il reste un excellent choix.",
       },
       {
-        q: "Relayium est-il open source et auto-hébergeable ?",
+        q: "Relayium est-il open source et auto-hébergeable ?",
         a: "Oui. Relayium est sous licence AGPL-3.0 et l'intégralité du protocole et du code est publique sur github.com/relayium/relayium, vous pouvez donc l'auditer ou faire tourner votre propre instance — la même ouverture qui a rendu Snapdrop et PairDrop dignes de confiance.",
       },
       {
-        q: "Y a-t-il une différence de performance ?",
+        q: "Y a-t-il une différence de performance ?",
         a: "En pratique, aucune notable. Les trois établissent une connexion WebRTC directe, le débit est donc limité par votre réseau. La couche AES-256-GCM supplémentaire de Relayium s'exécute dans le navigateur et son coût est négligeable face au transfert réseau lui-même.",
       },
     ],
@@ -521,7 +521,7 @@ const ar = {
       heading: "أين يختلف Relayium: التشفير من الطرف إلى الطرف على طبقة التطبيق",
       body: [
         "WebRTC العادي مُشفَّر أثناء النقل بواسطة DTLS، وهذه حماية حقيقية ضد متنصّت سلبي على الشبكة. لكن بصمات DTLS التي تصادق على كل طرف تُتبادَل عبر خادم الإشارة. يمكن لخادم إشارة خبيث أو مخترَق أن يستبدل بصماته الخاصة ويجلس بلا مرئية في المنتصف — هجوم وسيط كلاسيكي لا يوقفه DTLS وحده.",
-        "يضيف Relayium طبقة تشفير ثانية مستقلة فوق قناة WebRTC: يشتق تبادل مفاتيح X25519 مفتاحًا يُستخدم لـ AES-256-GCM لكل قطعة، ولا يُرسَل هذا المفتاح أبدًا إلى أي خادم. ولاكتشاف الوسيط، يعرض كلا الجهازين نفس رمز التحقق القصير المكوّن من 6 أرقام (SAS)؛ فإن تطابق الرمزان، فلا خادم يجلس بينكما. كما يُتحقق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
+        "يضيف Relayium طبقة تشفير ثانية مستقلة فوق قناة WebRTC: يشتق تبادل مفاتيح X25519 مفتاحًا يُستخدم لـ AES-256-GCM لكل كتلة، ولا يُرسَل هذا المفتاح أبدًا إلى أي خادم. ولاكتشاف الوسيط، يعرض كلا الجهازين نفس رمز التحقق القصير المكوّن من 6 أرقام (SAS)؛ فإن تطابق الرمزان، فلا خادم يجلس بينكما. كما يُتحقق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
       ],
     },
     {
@@ -602,7 +602,7 @@ const es = {
       heading: "En qué se diferencia Relayium: cifrado de extremo a extremo en la capa de aplicación",
       body: [
         "El WebRTC simple está cifrado en tránsito por DTLS, y eso es protección real frente a un fisgón pasivo de la red. Pero las huellas DTLS que autentican a cada lado se intercambian a través del servidor de señalización. Un servidor de señalización malicioso o comprometido puede sustituir sus propias huellas y colocarse invisiblemente en medio: un ataque de intermediario clásico que DTLS por sí solo no detiene.",
-        "Relayium añade una segunda capa de cifrado independiente sobre el canal WebRTC: un intercambio de claves X25519 deriva una clave usada para AES-256-GCM por fragmento, y esa clave nunca se envía a ningún servidor. Para detectar a un intermediario, ambos dispositivos muestran el mismo código de verificación de 6 dígitos (SAS); si los códigos coinciden, no hay ningún servidor entre vosotros. Cada archivo también se verifica de extremo a extremo con un hash SHA-256.",
+        "Relayium añade una segunda capa de cifrado independiente sobre el canal WebRTC: un intercambio de claves X25519 deriva una clave usada para AES-256-GCM por bloque, y esa clave nunca se envía a ningún servidor. Para detectar a un intermediario, ambos dispositivos muestran el mismo código de verificación de 6 dígitos (SAS); si los códigos coinciden, no hay ningún servidor entre las dos partes. Cada archivo también se verifica de extremo a extremo con un hash SHA-256.",
       ],
     },
     {
@@ -694,7 +694,7 @@ const pt = {
       ],
     },
     {
-      heading: "Comparativo de recursos num relance",
+      heading: "Comparativo de recursos em resumo",
       body: [
         "As diferenças que mais importam, lado a lado:",
       ],

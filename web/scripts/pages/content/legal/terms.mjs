@@ -113,61 +113,61 @@ const en = {
 
 const zh = {
   title: "服务条款",
-  description: "使用 Relayium 的条款——一项开源、端到端加密的点对点文件传输服务。核心服务免费,另有可选的付费套餐。",
+  description: "使用 Relayium 的条款——一项开源、端到端加密的点对点文件传输服务。核心服务免费，另有可选的付费套餐。",
   updatedLabel: "最后更新",
   updated: "2026-07-21",
   otherDocLabel: "隐私政策",
   lead: [
-    "使用 Relayium 即表示你同意本条款。Relayium 是一项开源服务,让你在设备之间直接、端到端加密地发送文件。核心服务免费,部分可选套餐需付费——详见「订阅与计费」。",
+    "使用 Relayium 即表示你同意本条款。Relayium 是一项开源服务，让你在设备之间直接、端到端加密地发送文件。核心服务免费，部分可选套餐需付费——详见「订阅与计费」。",
   ],
   sections: [
     {
       heading: "服务说明",
-      body: ["Relayium 在设备之间点对点传输文件。核心服务免费,其源代码以 AGPL-3.0 许可证开源。可选的付费套餐可提高存储、传输与保留时长上限——详见「订阅与计费」。"],
+      body: ["Relayium 在设备之间点对点传输文件。核心服务免费，其源代码以 AGPL-3.0 许可证开源。可选的付费套餐可提高存储、传输与保留时长上限——详见「订阅与计费」。"],
     },
     {
       heading: "使用资格",
       body: [
-        "你须达到能够订立有约束力协议、并能就你所在地的数据处理作出同意的年龄——至少 13 岁,你所在国家要求更高时以其为准。Relayium 并非面向儿童,我们不会在知情的情况下允许儿童创建账号。",
+        "你须达到能够订立有约束力协议、并能就你所在地的数据处理作出同意的年龄——至少 13 岁，你所在国家要求更高时以其为准。Relayium 并非面向儿童，我们不会在知情的情况下允许儿童创建账号。",
       ],
     },
     {
       heading: "可接受的使用",
-      body: ["你同意不将 Relayium 用于:"],
+      body: ["你同意不将 Relayium 用于："],
       bullets: [
-        "违反法律或侵犯他人权利,包括发送你无权分享的内容。",
-        "传播恶意软件,或试图扰乱、过载或滥用本服务及其基础设施。",
-        "规避安全措施,或试图访问不属于你的数据。",
+        "违反法律或侵犯他人权利，包括发送你无权分享的内容。",
+        "传播恶意软件，或试图扰乱、过载或滥用本服务及其基础设施。",
+        "规避安全措施，或试图访问不属于你的数据。",
       ],
     },
     {
       heading: "账号",
       body: [
-        "同一网络(局域网)内的传输无需账号。跨网络使用配对码传输时,需要发送方登录——接收方始终无需账号。创建暂存下载链接同样需要账号。你有责任妥善保管你的邮箱和账号访问权限。你可以随时在账号设置中(网页或 App 内)删除你的账号及其数据。删除会进入 30 天宽限期,期间你可重新登录撤销;之后你的账号及个人数据将被永久移除。",
+        "同一网络（局域网）内的传输无需账号。跨网络使用配对码传输时，需要发送方登录——接收方始终无需账号。创建暂存下载链接同样需要账号。你有责任妥善保管你的邮箱和账号访问权限。你可以随时在账号设置中（网页或 App 内）删除你的账号及其数据。删除会进入 30 天宽限期，期间你可重新登录撤销；之后你的账号及个人数据将被永久移除。",
       ],
     },
     {
       heading: "订阅与计费",
       body: [
-        "Relayium 提供免费档和可选的付费套餐。付费套餐按你选择的周期(按月或按年)预先、周期性计费,并自动续订,直至你取消。",
+        "Relayium 提供免费档和可选的付费套餐。付费套餐按你选择的周期（按月或按年）预先、周期性计费，并自动续订，直至你取消。",
       ],
       bullets: [
-        "升级到更高套餐立即生效,并按当前周期剩余时间收取按比例的差额。",
-        "降级,或切换到更短的计费周期,在当前周期结束时生效;对已用周期的未用部分不退款、不折抵。",
+        "升级到更高套餐立即生效，并按当前周期剩余时间收取按比例的差额。",
+        "降级，或切换到更短的计费周期，在当前周期结束时生效；对已用周期的未用部分不退款、不折抵。",
         "你可以随时取消。已付费的权益会保留到你已支付的周期结束为止。",
-        "除法律另有要求外,我们不对未满周期提供退款。",
-        "我们可能调整套餐价格或功能。价格调整在应用于你的下一次续订前我们会提前通知,你如不同意可取消。",
-        "在网页端,支付由 Stripe 处理;在 iOS App 内,订阅由 Apple 销售并计费——见下一节。",
+        "除法律另有要求外，我们不对未满周期提供退款。",
+        "我们可能调整套餐价格或功能。价格调整在应用于你的下一次续订前我们会提前通知，你如不同意可取消。",
+        "在网页端，支付由 Stripe 处理；在 iOS App 内，订阅由 Apple 销售并计费——见下一节。",
       ],
     },
     {
       heading: "Apple App Store 与应用内购买",
       body: [
-        "如果你从 Apple App Store 下载 Relayium,Apple 的标准《授权应用最终用户许可协议》同样适用于你对 App 的使用,且 Apple 是本条款的第三方受益人,有权对你强制执行本条款。",
+        "如果你从 Apple App Store 下载 Relayium，Apple 的标准《授权应用最终用户许可协议》同样适用于你对 App 的使用，且 Apple 是本条款的第三方受益人，有权对你强制执行本条款。",
       ],
       bullets: [
-        "在 iOS App 内购买的订阅由 Apple 通过应用内购买销售并计费,从你的 Apple ID 扣款。",
-        "除非你在当前周期结束前至少 24 小时关闭自动续订,否则订阅将自动续订。",
+        "在 iOS App 内购买的订阅由 Apple 通过应用内购买销售并计费，从你的 Apple ID 扣款。",
+        "除非你在当前周期结束前至少 24 小时关闭自动续订，否则订阅将自动续订。",
         "请在你的 Apple ID 账号设置中管理或取消由 Apple 计费的订阅——我们无法为你取消或退款。App Store 购买的退款由 Apple 处理。",
       ],
     },
@@ -179,20 +179,20 @@ const zh = {
       ],
       bullets: [
         "你可以通过向 support@relayium.com 举报文件 id 来申请删除特定下载链接。",
-        "暂存密文在到期或首次完整下载（阅后即焚）时自动删除，以先到者为准。",
+        "暂存密文在到期或首次完整下载（阅后即焚）时自动删除，以较早发生者为准。",
         "我们保留暂停或删除被可信举报为违法内容的权利。",
       ],
     },
     {
       heading: "不提供担保",
       body: [
-        "本服务按「现状」和「可用情况」提供,不附带任何明示或默示的担保。我们不保证传输总能成功,也不保证服务不中断或无错误。",
+        "本服务按「现状」及「现有」提供，不附带任何明示或默示的担保。我们不保证传输总能成功，也不保证服务不中断或无错误。",
       ],
     },
     {
       heading: "责任限制",
       body: [
-        "在法律允许的最大范围内,对于因你使用本服务而产生的任何间接、附带或后果性损害,或任何数据丢失,Relayium 及其贡献者概不负责。",
+        "在法律允许的最大范围内，对于因你使用本服务而产生的任何间接、附带或后果性损害，或任何数据丢失，Relayium 及其贡献者概不负责。",
       ],
     },
     {
@@ -202,18 +202,18 @@ const zh = {
     {
       heading: "适用法律",
       body: [
-        "本条款受服务运营方所在地的适用法律管辖,但不影响你所在地依法享有的强制性消费者保护权利。若任何条款被认定为不可执行,其余条款仍然有效。",
+        "本条款受服务运营方所在地的适用法律管辖，但不影响你所在地依法享有的强制性消费者保护权利。若任何条款被认定为不可执行，其余条款仍然有效。",
       ],
     },
     {
       heading: "本条款的变更",
       body: [
-        "随着服务演进,我们可能会更新本条款。届时我们会更新上方的「最后更新」日期。变更后继续使用即表示你接受更新后的条款。",
+        "随着服务演进，我们可能会更新本条款。届时我们会更新上方的「最后更新」日期。变更后继续使用即表示你接受更新后的条款。",
       ],
     },
     {
       heading: "联系我们",
-      body: ["有关于条款的疑问?请发邮件至 support@relayium.com。"],
+      body: ["有关于条款的疑问？请发邮件至 support@relayium.com。"],
     },
   ],
 };
@@ -221,45 +221,45 @@ const zh = {
 const ja = {
   title: "利用規約",
   description:
-    "Relayiumの利用規約——オープンソースのエンドツーエンドで暗号化されたピアツーピアのファイル転送サービスです。コア機能は無料で、オプションの有料プランもご利用いただけます。",
+    "Relayium の利用規約——オープンソースのエンドツーエンドで暗号化されたピアツーピアのファイル転送サービスです。コア機能は無料で、オプションの有料プランもご利用いただけます。",
   updatedLabel: "最終更新",
   updated: "2026-07-21",
   otherDocLabel: "プライバシーポリシー",
   lead: [
-    "Relayiumを利用することで、あなたはこれらの規約に同意したものとみなします。Relayiumは、デバイス間で直接かつエンドツーエンドで暗号化されたファイル送信を可能にする、オープンソースのサービスです。コア機能は無料で、一部のオプションプランは有料です——詳細は「サブスクリプションと請求」をご覧ください。",
+    "本サービスをご利用いただいた時点で、お客様は本規約に同意したものとみなされます。Relayium は、デバイス間で直接かつエンドツーエンドで暗号化されたファイル送信を可能にする、オープンソースのサービスです。コア機能は無料で、一部のオプションプランは有料です——詳細は「サブスクリプションと請求」をご覧ください。",
   ],
   sections: [
     {
       heading: "サービスについて",
       body: [
-        "Relayiumはデバイス間でピアツーピアでファイルを転送します。コア機能は無料で、そのソースコードはAGPL-3.0ライセンスのもとオープンソースとして公開されています。オプションの有料プランでは、ストレージ、転送、保存期間の上限を引き上げることができます——詳細は「サブスクリプションと請求」をご覧ください。",
+        "Relayium はデバイス間でピアツーピアでファイルを転送します。コア機能は無料で、そのソースコードは AGPL-3.0 ライセンスのもとオープンソースとして公開されています。オプションの有料プランでは、ストレージ、転送、保存期間の上限を引き上げることができます——詳細は「サブスクリプションと請求」をご覧ください。",
       ],
     },
     {
       heading: "利用資格",
       body: [
-        "拘束力のある契約を締結し、お住まいの地域でのデータ処理に同意できる年齢に達している必要があります——少なくとも13歳以上、またはお住まいの国がそれ以上の年齢を求める場合はその年齢以上である必要があります。Relayiumは子供を対象としたサービスではなく、子供が意図的にアカウントを作成できるようにすることはありません。",
+        "拘束力のある契約を締結し、お住まいの地域でのデータ処理に同意できる年齢に達している必要があります——少なくとも 13 歳以上、またはお住まいの国がそれ以上の年齢を求める場合はその年齢以上である必要があります。Relayium は子供を対象としたサービスではなく、子供が意図的にアカウントを作成できるようにすることはありません。",
       ],
     },
     {
       heading: "許容される使用",
-      body: ["あなたはRelayiumを以下の目的で使用しないことに同意します："],
+      body: ["お客様は、本サービスを次の目的で利用しないことに同意するものとします。"],
       bullets: [
         "法律に違反したり、他者の権利を侵害したりすること。共有する権利のないコンテンツの送信を含みます。",
         "マルウェアを配布すること、またはサービスやそのインフラを妨害、過負荷にする、または悪用しようとすること。",
-        "セキュリティ対策を迂回すること、またはあなたのものではないデータへのアクセスを試みること。",
+        "セキュリティ対策を迂回すること、またはお客様のものではないデータへのアクセスを試みること。",
       ],
     },
     {
       heading: "アカウント",
       body: [
-        "同一ネットワーク(LAN)内の転送はアカウント不要です。ペアリングコードを使ってネットワークをまたいで送信する場合は、送信者のサインインが必要です——受信者はアカウント不要のままです。保存型ダウンロードリンクの作成にもアカウントが必要です。メールアドレスとアカウントへのアクセスを安全に保つ責任はあなたにあります。アカウントとそのデータは、アプリまたはウェブのアカウント設定からいつでも削除できます。削除を行うと30日間の猶予期間が始まり、その間に再度サインインすることで削除を取り消すことができます。その後、アカウントと個人データは完全に削除されます。",
+        "同一ネットワーク（LAN）内の転送はアカウント不要です。ペアリングコードを使ってネットワークをまたいで送信する場合は、送信者のサインインが必要です——受信者はアカウント不要のままです。保存型ダウンロードリンクの作成にもアカウントが必要です。メールアドレスとアカウントへのアクセスを安全に保つ責任はお客様にあります。アカウントとそのデータは、アプリまたはウェブのアカウント設定からいつでも削除できます。削除を行うと 30 日間の猶予期間が始まり、その間に再度サインインすることで削除を取り消すことができます。その後、アカウントと個人データは完全に削除されます。",
       ],
     },
     {
       heading: "サブスクリプションと請求",
       body: [
-        "Relayiumは無料プランとオプションの有料プランを提供しています。有料プランは、選択した周期(月次または年次)で前払いにより定期的に請求され、あなたが解約するまで自動更新されます。",
+        "Relayium は無料プランとオプションの有料プランを提供しています。有料プランは、選択した周期（月次または年次）で前払いにより定期的に請求され、お客様が解約するまで自動更新されます。",
       ],
       bullets: [
         "上位プランへのアップグレードは即座に適用され、当該期間の残り分に応じた日割り金額が請求されます。",
@@ -267,24 +267,24 @@ const ja = {
         "いつでも解約できます。有料機能は、すでに支払い済みの期間の終了まで有効です。",
         "法律で義務付けられている場合を除き、期間途中の返金は行いません。",
         "プランの価格や機能を変更する場合があります。価格変更が次回の更新に適用される前に通知し、同意いただけない場合は解約できます。",
-        "ウェブでは、支払いはStripeによって処理されます。iOSアプリでは、サブスクリプションはAppleによって販売・請求されます——次のセクションをご覧ください。",
+        "ウェブでは、支払いは Stripe によって処理されます。iOS アプリでは、サブスクリプションは Apple によって販売・請求されます——次のセクションをご覧ください。",
       ],
     },
     {
-      heading: "Apple App Storeとアプリ内課金",
+      heading: "Apple App Store とアプリ内課金",
       body: [
-        "Relayiumを Apple App Store からダウンロードした場合、Appleの標準的な「ライセンス供与アプリケーション使用許諾契約(Licensed Application End User License Agreement)」もアプリの利用に適用され、Appleは本規約の第三者受益者として、これをあなたに対して執行する権利を有します。",
+        "Relayium を Apple App Store からダウンロードした場合、Apple の標準的な「ライセンス供与アプリケーション使用許諾契約（Licensed Application End User License Agreement）」もアプリの利用に適用され、Apple は本規約の第三者受益者として、これをお客様に対して執行する権利を有します。",
       ],
       bullets: [
-        "iOSアプリ内で購入したサブスクリプションは、アプリ内課金を通じてAppleが販売・請求し、あなたのApple IDに課金されます。",
-        "現在の期間終了の少なくとも24時間前に自動更新をオフにしない限り、自動的に更新されます。",
-        "Appleが請求するサブスクリプションの管理・解約は、あなたのApple IDのアカウント設定から行ってください——当社はあなたに代わって解約や返金を行うことはできません。App Store購入の返金はAppleが対応します。",
+        "iOS アプリ内で購入したサブスクリプションは、アプリ内課金を通じて Apple が販売・請求し、お客様の Apple ID に課金されます。",
+        "現在の期間終了の少なくとも 24 時間前に自動更新をオフにしない限り、自動的に更新されます。",
+        "Apple が請求するサブスクリプションの管理・解約は、お客様の Apple ID のアカウント設定から行ってください——当社がお客様に代わって解約や返金を行うことはできません。App Store 購入の返金は Apple が対応します。",
       ],
     },
     {
       heading: "保存コンテンツ",
       body: [
-        "オプションの一時保存ダウンロードリンク機能を使用する場合、ブラウザがアップロード前にファイルを暗号化し、サーバーは暗号文のみを保存します。保存コンテンツを復号できない（ゼロ知識）ため、当社は事前にコンテンツを審査することができません。あなたは一時保存転送を、共有する権利を持ちかつ適用法に違反しないコンテンツのためにのみ使用することに同意します。",
+        "オプションの一時保存ダウンロードリンク機能を使用する場合、ブラウザがアップロード前にファイルを暗号化し、サーバーは暗号文のみを保存します。保存コンテンツを復号できない（ゼロ知識）ため、当社は事前にコンテンツを審査することができません。お客様は、一時保存転送を、共有する権利を持ちかつ適用法に違反しないコンテンツのためにのみ利用することに同意するものとします。",
         "保存転送はファイルを届けるための一時的な手段であり、バックアップではありません。リンクは期限切れになり、ファイルはダウンロード後または期限切れ時に削除されるため、重要なものは必ずご自身で控えを保管してください——一度失われたコンテンツを当社が復元することはできません。",
       ],
       bullets: [
@@ -302,13 +302,13 @@ const ja = {
     {
       heading: "責任の制限",
       body: [
-        "法律で許可される最大限の範囲において、Relayiumおよびその貢献者は、本サービスの利用に起因するいかなる間接的、付随的、または結果的損害、あるいはデータの損失についても責任を負いません。",
+        "法律で許可される最大限の範囲において、Relayium およびその貢献者は、本サービスの利用に起因するいかなる間接的、付随的、または結果的損害、あるいはデータの損失についても責任を負いません。",
       ],
     },
     {
       heading: "オープンソースとライセンス",
       body: [
-        "RelayiumのソースコードはAGPL-3.0ライセンスのもとで公開されています。ソースコードの使用はそのライセンスに従います。",
+        "Relayium のソースコードは AGPL-3.0 ライセンスのもとで公開されています。ソースコードの使用はそのライセンスに従います。",
       ],
     },
     {
@@ -325,7 +325,7 @@ const ja = {
     },
     {
       heading: "お問い合わせ",
-      body: ["規約に関するご質問は、support@relayium.comまでメールでお問い合わせください。"],
+      body: ["規約に関するご質問は、support@relayium.com までメールでお問い合わせください。"],
     },
   ],
 };
@@ -338,13 +338,13 @@ const ko = {
   updated: "2026-07-21",
   otherDocLabel: "개인정보 처리방침",
   lead: [
-    "Relayium을 사용함으로써 귀하는 이 약관에 동의하는 것으로 간주됩니다. Relayium은 장치 간에 직접 종단간 암호화된 파일 전송을 지원하는 오픈소스 서비스입니다. 핵심 서비스는 무료이며, 일부 선택적 플랜은 유료입니다 — 자세한 내용은 '구독 및 결제'를 참고하세요.",
+    "Relayium을 사용함으로써 귀하는 이 약관에 동의하는 것으로 간주됩니다. Relayium은 기기 간에 직접 종단간 암호화된 파일 전송을 지원하는 오픈소스 서비스입니다. 핵심 서비스는 무료이며, 일부 선택적 플랜은 유료입니다 — 자세한 내용은 ‘구독 및 결제’를 참고하세요.",
   ],
   sections: [
     {
       heading: "서비스 소개",
       body: [
-        "Relayium은 장치 간에 피어 투 피어로 파일을 전송합니다. 핵심 서비스는 무료이며 소스 코드는 AGPL-3.0 라이선스 하에 오픈소스로 공개되어 있습니다. 선택적 유료 플랜을 이용하면 저장 용량, 전송량, 보관 기간 한도를 늘릴 수 있습니다 — 자세한 내용은 '구독 및 결제'를 참고하세요.",
+        "Relayium은 기기 간에 P2P로 파일을 전송합니다. 핵심 서비스는 무료이며 소스 코드는 AGPL-3.0 라이선스 하에 오픈소스로 공개되어 있습니다. 선택적 유료 플랜을 이용하면 저장 용량, 전송량, 보관 기간 한도를 늘릴 수 있습니다 — 자세한 내용은 ‘구독 및 결제’를 참고하세요.",
       ],
     },
     {
@@ -385,7 +385,7 @@ const ko = {
     {
       heading: "Apple App Store 및 인앱 구매",
       body: [
-        "Apple App Store에서 Relayium을 다운로드하는 경우, Apple의 표준 '라이선스 애플리케이션 최종 사용자 사용권 계약(Licensed Application End User License Agreement)'도 앱 사용에 적용되며, Apple은 이 약관의 제3자 수익자로서 귀하에게 이를 집행할 권리를 가집니다.",
+        "Apple App Store에서 Relayium을 다운로드하는 경우, Apple의 표준 ‘라이선스 애플리케이션 최종 사용자 사용권 계약(Licensed Application End User License Agreement)’도 앱 사용에 적용되며, Apple은 이 약관의 제3자 수익자로서 귀하에게 이를 집행할 권리를 가집니다.",
       ],
       bullets: [
         "iOS 앱 내에서 구매한 구독은 인앱 구매를 통해 Apple이 판매 및 청구하며, 귀하의 Apple ID로 청구됩니다.",
@@ -396,7 +396,7 @@ const ko = {
     {
       heading: "임시 보관 콘텐츠",
       body: [
-        "선택적 임시 보관 다운로드 링크 기능을 사용하면 브라우저가 업로드 전에 파일을 암호화하고 서버는 암호문만 저장합니다. 저장된 콘텐츠를 복호화할 수 없기 때문에(제로 지식) 사전에 콘텐츠를 심사할 수 없습니다. 귀하는 임시 보관 전송을 공유할 권리가 있고 적용 법률을 위반하지 않는 콘텐츠에만 사용하는 것에 동의합니다.",
+        "선택적 임시 보관 다운로드 링크 기능을 사용하면 브라우저가 업로드 전에 파일을 암호화하고 서버는 암호문만 저장합니다. 저장된 콘텐츠를 복호화할 수 없기 때문에(영지식) 사전에 콘텐츠를 심사할 수 없습니다. 귀하는 임시 보관 전송을 공유할 권리가 있고 적용 법률을 위반하지 않는 콘텐츠에만 사용하는 것에 동의합니다.",
         "임시 보관 전송은 파일을 전달하기 위한 일시적인 수단이며 백업이 아닙니다. 링크는 만료되고 파일은 다운로드 후 또는 만료 시 삭제되므로, 중요한 파일은 반드시 본인이 직접 사본을 보관하시기 바랍니다 — 한 번 사라진 저장 콘텐츠는 당사도 복구할 수 없습니다.",
       ],
       bullets: [
@@ -408,7 +408,7 @@ const ko = {
     {
       heading: "무보증",
       body: [
-        "본 서비스는 명시적 또는 묵시적 보증 없이 '있는 그대로' 및 '이용 가능한 상태로' 제공됩니다. 전송이 항상 성공하거나 서비스가 중단 없이 오류 없이 제공될 것을 보장하지 않습니다.",
+        "본 서비스는 명시적 또는 묵시적 보증 없이 ‘있는 그대로’ 및 ‘이용 가능한 상태로’ 제공됩니다. 전송이 항상 성공하거나 서비스가 중단 없이 오류 없이 제공될 것을 보장하지 않습니다.",
       ],
     },
     {
@@ -432,7 +432,7 @@ const ko = {
     {
       heading: "약관 변경",
       body: [
-        "서비스가 발전함에 따라 이 약관을 업데이트할 수 있습니다. 업데이트 시 위의 '최종 업데이트' 날짜를 변경합니다. 변경 후 계속 사용하는 것은 업데이트된 약관에 동의하는 것을 의미합니다.",
+        "서비스가 발전함에 따라 이 약관을 업데이트할 수 있습니다. 업데이트 시 위의 ‘최종 업데이트’ 날짜를 변경합니다. 변경 후 계속 사용하는 것은 업데이트된 약관에 동의하는 것을 의미합니다.",
       ],
     },
     {
@@ -557,18 +557,18 @@ const de = {
 const fr = {
   title: "Conditions d'utilisation",
   description:
-    "Les conditions d'utilisation de Relayium — un service de transfert de fichiers pair à pair, open source et chiffré de bout en bout. Le service de base est gratuit ; des forfaits payants optionnels sont disponibles.",
+    "Les conditions d'utilisation de Relayium — un service de transfert de fichiers pair à pair, open source et chiffré de bout en bout. Le service de base est gratuit ; des offres payantes optionnelles sont disponibles.",
   updatedLabel: "Dernière mise à jour",
   updated: "2026-07-21",
   otherDocLabel: "Politique de confidentialité",
   lead: [
-    "En utilisant Relayium, vous acceptez ces conditions. Relayium est un service open source qui vous permet d'envoyer des fichiers directement entre appareils, chiffrés de bout en bout. Le service de base est gratuit ; certains forfaits optionnels sont payants — voir Abonnements et facturation.",
+    "En utilisant Relayium, vous acceptez ces conditions. Relayium est un service open source qui vous permet d'envoyer des fichiers directement entre appareils, chiffrés de bout en bout. Le service de base est gratuit ; certaines offres optionnelles sont payantes — voir Abonnements et facturation.",
   ],
   sections: [
     {
       heading: "Le service",
       body: [
-        "Relayium transfère des fichiers de pair à pair entre appareils. Le service de base est gratuit et son code source est open source sous licence AGPL-3.0. Les forfaits payants optionnels augmentent les limites de stockage, de transfert et de conservation — voir Abonnements et facturation.",
+        "Relayium transfère des fichiers de pair à pair entre appareils. Le service de base est gratuit et son code source est open source sous licence AGPL-3.0. Les offres payantes optionnelles augmentent les limites de stockage, de transfert et de conservation — voir Abonnements et facturation.",
       ],
     },
     {
@@ -579,7 +579,7 @@ const fr = {
     },
     {
       heading: "Utilisation acceptable",
-      body: ["Vous acceptez de ne pas utiliser Relayium pour :"],
+      body: ["Vous acceptez de ne pas utiliser Relayium pour :"],
       bullets: [
         "Enfreindre la loi ou porter atteinte aux droits d'autrui, notamment en envoyant des contenus que vous n'avez pas le droit de partager.",
         "Distribuer des logiciels malveillants, ou tenter de perturber, de surcharger ou d'abuser du service ou de son infrastructure.",
@@ -589,20 +589,20 @@ const fr = {
     {
       heading: "Comptes",
       body: [
-        "Les transferts sur le même réseau (local) ne nécessitent aucun compte. L'envoi entre réseaux différents via un code d'appairage exige que l'expéditeur se connecte — la personne qui reçoit n'a jamais besoin de compte. La création d'un lien de téléchargement stocké exige elle aussi un compte. Vous êtes responsable de la sécurisation de l'accès à votre adresse e-mail et à votre compte. Vous pouvez supprimer votre compte et ses données à tout moment depuis les paramètres de votre compte, dans l'application ou sur le web. La suppression déclenche un délai de grâce de 30 jours pendant lequel vous pouvez l'annuler en vous reconnectant ; passé ce délai, votre compte et vos données personnelles sont définitivement supprimés.",
+        "Les transferts sur le même réseau (local) ne nécessitent aucun compte. L'envoi entre réseaux différents via un code d'appairage exige que l'expéditeur se connecte — la personne qui reçoit n'a jamais besoin de compte. La création d'un lien de téléchargement stocké exige elle aussi un compte. Vous êtes responsable de la sécurisation de l'accès à votre adresse e-mail et à votre compte. Vous pouvez supprimer votre compte et ses données à tout moment depuis les paramètres de votre compte, dans l'application ou sur le web. La suppression déclenche un délai de grâce de 30 jours pendant lequel vous pouvez l'annuler en vous reconnectant ; passé ce délai, votre compte et vos données personnelles sont définitivement supprimés.",
       ],
     },
     {
       heading: "Abonnements et facturation",
       body: [
-        "Relayium propose un niveau gratuit et des forfaits payants optionnels. Les forfaits payants sont facturés à l'avance de façon récurrente — mensuellement ou annuellement, selon votre choix — et se renouvellent automatiquement jusqu'à ce que vous annuliez.",
+        "Relayium propose un niveau gratuit et des offres payantes optionnelles. Les offres payantes sont facturées à l'avance de façon récurrente — mensuellement ou annuellement, selon votre choix — et se renouvellent automatiquement jusqu'à ce que vous annuliez.",
       ],
       bullets: [
-        "Le passage à un forfait supérieur prend effet immédiatement et est facturé au prorata pour le reste de la période en cours.",
-        "Le passage à un forfait inférieur, ou à un cycle de facturation plus court, prend effet à la fin de la période en cours ; nous ne remboursons ni ne créditons la partie inutilisée d'une période.",
+        "Le passage à une offre supérieure prend effet immédiatement et est facturé au prorata pour le reste de la période en cours.",
+        "Le passage à une offre inférieure, ou à un cycle de facturation plus court, prend effet à la fin de la période en cours ; nous ne remboursons ni ne créditons la partie inutilisée d'une période.",
         "Vous pouvez annuler à tout moment. Les fonctionnalités payantes restent actives jusqu'à la fin de la période déjà payée.",
         "Nous ne remboursons pas les périodes partielles, sauf lorsque la loi l'exige.",
-        "Nous pouvons modifier les prix ou les fonctionnalités des forfaits. Nous vous préviendrons avant qu'un changement de prix ne s'applique à votre prochain renouvellement, et vous pourrez annuler si vous n'êtes pas d'accord.",
+        "Nous pouvons modifier les prix ou les fonctionnalités des offres. Nous vous préviendrons avant qu'un changement de prix ne s'applique à votre prochain renouvellement, et vous pourrez annuler si vous n'êtes pas d'accord.",
         "Sur le web, les paiements sont traités par Stripe. Dans l'application iOS, les abonnements sont vendus et facturés par Apple — voir la section suivante.",
       ],
     },
@@ -620,7 +620,7 @@ const fr = {
     {
       heading: "Contenu stocké",
       body: [
-        "Lorsque vous utilisez le mode optionnel de liens de téléchargement stockés, votre navigateur chiffre les fichiers avant l'envoi et le serveur ne stocke que du chiffré. Comme nous ne pouvons pas déchiffrer le contenu stocké (zéro-connaissance), nous ne pouvons pas en faire une présélection. Vous acceptez d'utiliser les transferts stockés uniquement pour du contenu que vous avez le droit de partager et qui ne viole pas la loi applicable.",
+        "Lorsque vous utilisez le mode optionnel de liens de téléchargement stockés, votre navigateur chiffre les fichiers avant l'envoi et le serveur ne stocke que du chiffré. Comme nous ne pouvons pas déchiffrer le contenu stocké (à divulgation nulle), nous ne pouvons pas en faire une présélection. Vous acceptez d'utiliser les transferts stockés uniquement pour du contenu que vous avez le droit de partager et qui ne viole pas la loi applicable.",
         "Les transferts stockés sont un moyen temporaire de livrer des fichiers, pas une sauvegarde. Comme les liens expirent et que les fichiers sont supprimés après le téléchargement ou à l'expiration, conservez votre propre copie de tout ce qui compte pour vous — nous ne pouvons pas récupérer un contenu stocké une fois qu'il a disparu.",
       ],
       bullets: [
@@ -661,7 +661,7 @@ const fr = {
     },
     {
       heading: "Contact",
-      body: ["Des questions sur ces conditions ? Écrivez-nous à support@relayium.com."],
+      body: ["Des questions sur ces conditions ? Écrivez-nous à support@relayium.com."],
     },
   ],
 };
@@ -833,7 +833,7 @@ const es = {
     {
       heading: "Apple App Store y compras dentro de la aplicación",
       body: [
-        "Si descargas Relayium desde el Apple App Store, el Contrato de licencia de usuario final estándar de Apple para aplicaciones con licencia («Licensed Application End User License Agreement») también se aplica a tu uso de la aplicación, y Apple es un beneficiario externo de estos términos con derecho a hacerlos cumplir frente a ti.",
+        "Si descargas Relayium desde el Apple App Store, el Contrato de licencia de usuario final estándar de Apple para aplicaciones con licencia («Licensed Application End User License Agreement») también se aplica a tu uso de la aplicación, y Apple es un tercero beneficiario de estos términos con derecho a hacerlos cumplir frente a ti.",
       ],
       bullets: [
         "Las suscripciones compradas dentro de la aplicación de iOS son vendidas y facturadas por Apple mediante compras dentro de la aplicación, con cargo a tu Apple ID.",
@@ -862,7 +862,7 @@ const es = {
     {
       heading: "Limitación de responsabilidad",
       body: [
-        "En la máxima medida permitida por la ley, Relayium y sus colaboradores no son responsables de ningún daño indirecto, incidental o consecuente, ni de ninguna pérdida de datos, derivados de tu uso del servicio.",
+        "En la máxima medida permitida por la ley, Relayium y sus colaboradores no son responsables de ningún daño indirecto, incidental o consiguiente, ni de ninguna pérdida de datos, que se derive de tu uso del servicio.",
       ],
     },
     {

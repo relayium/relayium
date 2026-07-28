@@ -108,7 +108,7 @@ const zh = {
       heading: "跨越互联网：AirDrop 做不到的事",
       body: [
         "AirDrop 只能就近使用——走出蓝牙/Wi-Fi 范围就失灵了。Relayium 的第二种模式正好补上这个空缺：两台设备处在完全不同的网络里，无论在世界的哪个角落。",
-        "发送方登录后会拿到一段短配对码（附带加入链接和二维码）；接收方输入这个码，或扫描二维码，或直接打开链接——始终无需账号。这条跨网络的连接走的是加密 TURN 中继，而不是两端直连，这是有意为之：在两个互不相干的网络之间，直连路径通常根本找不到，先去试一遍只会让连接悬着二十秒左右，最后照样落到中继上。文件在离开发送方之前就已端到端封装，因此中继全程只转发它无法解开的密文——整条路径依旧是端到端加密的。若连接中断，传输可以断点续传，不必从头再来。",
+        "发送方登录后会拿到一段短配对码（附带加入链接和二维码）；接收方输入这个码，或扫描二维码，或直接打开链接——始终无需账号。这条跨网络的连接走的是加密 TURN 中继，而不是两端直连，这是有意为之：在两个互不相干的网络之间，直连路径通常根本找不到，先去试一遍只会让连接悬着二十秒左右，最后照样落到中继上。文件在离开发送方之前就已完成端到端加密，因此中继全程只转发它无法解开的密文——整条路径依旧是端到端加密的。若连接中断，传输可以断点续传，不必从头再来。",
       ],
     },
     {
@@ -165,7 +165,7 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "AirDrop は Apple の世界の中だけに存在するため、Windows・Linux・Android のユーザー、そして複数の種類の端末が混在する家庭には、内蔵の代替手段がありません。本ガイドは、Apple 以外の端末で AirDrop に最も近い体験を得る方法を示します：両端でウェブページを開くだけで、ファイルが移動します。",
-    "この方法はプラットフォームを問わず同じように動作するため、AirDrop がうまく扱えない場面——同じ部屋に Windows ノート、Linux デスクトップ、Android スマホがある、あるいはそれに iPhone まで加わる——もカバーします。",
+    "この方法はプラットフォームを問わず同じように動作するため、AirDrop がうまく扱えない場面（同じ部屋に Windows ノート、Linux デスクトップ、Android スマホがある、あるいはそれに iPhone まで加わる）もカバーします。",
   ],
   sections: [
     {
@@ -174,24 +174,24 @@ const ja = {
         "これはまさに AirDrop が想定する日常的なケースであり、Relayium はどのストアからもアプリを入れることなく同じ体験を実現します。",
       ],
       bullets: [
-        "各端末で、任意の最新ブラウザで relayium.com を開きます——Windows なら Chrome か Edge、Linux なら Firefox か Chrome、Android なら Chrome。",
-        "同じ Wi-Fi では、端末どうしが自動的に見つけ合います——コードもアカウントもペアリング操作も不要で、AirDrop が近くの端末を発見するのと同じです。",
+        "各端末で、任意の最新ブラウザで relayium.com を開きます。Windows なら Chrome か Edge、Linux なら Firefox か Chrome、Android なら Chrome。",
+        "同じ Wi-Fi では、端末どうしが自動的に見つけ合います。コードもアカウントもペアリング操作も不要で、AirDrop が近くの端末を発見するのと同じです。",
         "ファイルをページにドラッグします（フォルダごとでも可、1バッチ最大1,000ファイル）。相手の端末を選び、両方の画面に表示された同じ6桁コードを確認します。",
-        "転送は自分のネットワーク上で直接ピアツーピアに行われます——途中でどこかのサーバーにアップロードされることはありません。",
+        "転送は自分のネットワーク上で直接ピアツーピアに行われます。途中でどこかのサーバーにアップロードされることはありません。",
       ],
     },
     {
       heading: "インターネット越し：AirDrop にはできないこと",
       body: [
-        "AirDrop は近接専用です——Bluetooth や Wi-Fi の範囲外に出ると動かなくなります。Relayium の2つ目のモードはまさにその空白を埋めます：まったく異なるネットワーク上の2台の端末を、世界中どこにいても。",
-        "送信側がサインインすると短いペアリングコード（参加リンクと QR コード付き）を受け取ります。受信側はそれを入力するか、QR を読み取るか、リンクを開きます——アカウントは一切不要です。このネットワークをまたぐ接続は、端末同士の直接接続ではなく暗号化された TURN リレー経由で行われます。これは設計上の選択です。無関係な2つのネットワークの間では直接経路がそもそも見つからないことがほとんどで、先に試すと接続が20秒ほど宙づりになったあげく結局リレーに落ち着くからです。ファイルは送信側を出る前にエンドツーエンドで封印されているため、リレーが転送するのは鍵を持たない暗号文だけで、経路全体がエンドツーエンド暗号化のままです。接続が切れても、最初からではなく再開できます。",
+        "AirDrop は近接専用です。Bluetooth や Wi-Fi の範囲外に出ると動かなくなります。Relayium の2つ目のモードはまさにその空白を埋めます：まったく異なるネットワーク上の2台の端末を、世界中どこにいても。",
+        "送信側がサインインすると短いペアリングコード（参加リンクと QR コード付き）を受け取ります。受信側はそれを入力するか、QR を読み取るか、リンクを開きます。アカウントは一切不要です。このネットワークをまたぐ接続は、端末同士の直接接続ではなく暗号化された TURN リレー経由で行われます。これは設計上の選択です。無関係な2つのネットワークの間では直接経路がそもそも見つからないことがほとんどで、先に試すと接続が20秒ほど宙づりになったあげく結局リレーに落ち着くからです。ファイルは送信側を出る前にエンドツーエンドで封印されているため、リレーが転送するのは鍵を持たない暗号文だけで、経路全体がエンドツーエンド暗号化のままです。接続が切れても、最初からではなく再開できます。",
       ],
     },
     {
       heading: "実際にファイルを守っているもの",
       body: [
-        "上記どちらのモードもリアルタイム転送で、同じ暗号化方式を使います：X25519 の鍵交換で導出した鍵をブロックごとの AES-256-GCM に使い、2台の端末の間だけで協議されます。両端が同じ6桁の検証コード（ショート認証文字列、SAS）を表示するので、間に誰もいないことを確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
-        "このモードではサーバーに何も保存されません——存在するのは転送中の間だけです。Relayium は AGPL-3.0 ライセンスのオープンソースで、コードは github.com/relayium/relayium にあり、ブラックボックスではなく仕組みを検証できます。",
+        "上記どちらのモードもリアルタイム転送で、同じ暗号化方式を使います：X25519 の鍵交換で導出した鍵をチャンクごとの AES-256-GCM に使い、2台の端末の間だけで協議されます。両端が同じ6桁の検証コード（ショート認証文字列、SAS）を表示するので、間に誰もいないことを確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
+        "このモードではサーバーに何も保存されません。存在するのは転送中の間だけです。Relayium は AGPL-3.0 ライセンスのオープンソースで、コードは github.com/relayium/relayium にあり、ブラックボックスではなく仕組みを検証できます。",
       ],
     },
     {
@@ -207,11 +207,11 @@ const ja = {
     items: [
       {
         q: "Windows や Android 向けの公式 AirDrop はありますか？",
-        a: "ありません——AirDrop は Apple 端末専用で、Apple は Windows や Android 向けクライアントを一度も出していません。Relayium はブラウザベースの代替です。両方の端末で relayium.com を開けば、Apple と非 Apple が混在する組み合わせも含め、プラットフォームを問わず同じように動作します。",
+        a: "ありません。AirDrop は Apple 端末専用で、Apple は Windows や Android 向けクライアントを一度も出していません。Relayium はブラウザベースの代替です。両方の端末で relayium.com を開けば、Apple と非 Apple が混在する組み合わせも含め、プラットフォームを問わず同じように動作します。",
       },
       {
         q: "アカウントは必要ですか？",
-        a: "同じ Wi-Fi での流れでは不要です——両端でページを開けば互いを発見し、サインインは一切要りません。異なるネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要ですが、どちらのネットワークモードでも受信側はアカウント不要です。",
+        a: "同じ Wi-Fi での流れでは不要です。両端でページを開けば互いを発見し、サインインは一切要りません。異なるネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要ですが、どちらのネットワークモードでも受信側はアカウント不要です。",
       },
       {
         q: "何かインストールする必要はありますか？",
@@ -223,12 +223,12 @@ const ja = {
       },
       {
         q: "AirDrop のように複数人へ送れますか？",
-        a: "同じネットワーク上でなら可能です——ローカルの部屋は2台に限定されないため、近くの複数端末が同時に受信できます。インターネット越しのペアリングコードモードは、暗号化リレーを介した2台の端末どうしの接続です。",
+        a: "同じネットワーク上でなら可能です。ローカルの部屋は2台に限定されないため、近くの複数端末が同時に受信できます。インターネット越しのペアリングコードモードは、暗号化リレーを介した2台の端末どうしの接続です。",
       },
     ],
   },
   cta: {
-    text: "あなたの Windows・Linux・Android 端末と、送り先の端末で Relayium を開いてください——同じネットワークならアカウントは不要です。",
+    text: "お使いの Windows・Linux・Android 端末と、送り先の端末で Relayium を開いてください。同じネットワークならアカウントは不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -251,7 +251,7 @@ const ko = {
       ],
       bullets: [
         "각 기기에서 최신 브라우저로 relayium.com을 엽니다 — Windows는 Chrome이나 Edge, Linux는 Firefox나 Chrome, Android는 Chrome.",
-        "같은 Wi-Fi에서는 기기들이 자동으로 서로를 찾습니다 — 코드도, 계정도, 페어링 단계도 필요 없이, AirDrop이 근처 기기를 발견하는 것과 같습니다.",
+        "같은 Wi-Fi에서는 기기가 자동으로 서로를 찾습니다 — 코드도, 계정도, 페어링 단계도 필요 없이, AirDrop이 근처 기기를 발견하는 것과 같습니다.",
         "파일을 페이지에 끌어다 놓습니다(폴더째로도 가능 — 배치당 최대 1,000개). 상대 기기를 고르고, 두 화면에 표시된 동일한 6자리 코드를 확인합니다.",
         "전송은 여러분 자신의 네트워크를 통해 직접, 피어투피어로 이루어집니다 — 중간에 어떤 서버로도 업로드되지 않습니다.",
       ],
@@ -342,7 +342,7 @@ const de = {
     {
       heading: "Was die Datei tatsächlich schützt",
       body: [
-        "Beide obigen Modi sind Echtzeitübertragungen und nutzen dieselbe Verschlüsselung: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, ausgehandelt nur zwischen den beiden Geräten. Beide Seiten zeigen denselben sechsstelligen Prüfcode (einen Short Authentication String), sodass du bestätigen kannst, dass niemand dazwischensitzt, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft.",
+        "Beide obigen Modi sind Echtzeitübertragungen und nutzen dieselbe Verschlüsselung: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, ausgehandelt nur zwischen den beiden Geräten. Beide Seiten zeigen denselben sechsstelligen Verifizierungscode (einen Short Authentication String), sodass du bestätigen kannst, dass niemand dazwischensitzt, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft.",
         "In diesem Modus wird nichts auf einem Server gespeichert — es existiert nur für die Dauer der Übertragung. Relayium ist quelloffen unter der AGPL-3.0-Lizenz auf github.com/relayium/relayium, die Mechanik ist also prüfbar statt eine Blackbox.",
       ],
     },
@@ -389,44 +389,44 @@ const de = {
 const fr = {
   title: "AirDrop pour Windows, Linux et Android",
   description:
-    "Il n'existe pas d'AirDrop officiel pour Windows, Linux ou Android — voici ce qui s'en rapproche le plus : partage instantané sur le même Wi-Fi dans le navigateur, sans compte, sans installation, plus une façon de traverser internet qu'AirDrop ne sait pas faire.",
+    "Il n'existe pas d'AirDrop officiel pour Windows, Linux ou Android — voici ce qui s'en rapproche le plus : partage instantané sur le même Wi-Fi dans le navigateur, sans compte, sans installation, plus une façon de traverser internet qu'AirDrop ne sait pas faire.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "AirDrop n'existe que dans le monde d'Apple, ce qui laisse tous les autres — Windows, Linux, Android, et tout foyer avec des appareils mélangés — sans équivalent intégré. Ce guide montre ce qui se rapproche le plus d'AirDrop pour les appareils non-Apple : ouvrir une page web des deux côtés, et le fichier se déplace tout simplement.",
-    "Cela fonctionne de la même façon quelle que soit la plateforme, couvrant donc aussi le cas qu'AirDrop ne gère jamais bien : un portable Windows, un poste Linux et un téléphone Android dans la même pièce — ou les trois plus un iPhone en plus.",
+    "AirDrop n'existe que dans le monde d'Apple, ce qui laisse tous les autres — Windows, Linux, Android, et tout foyer avec des appareils mélangés — sans équivalent intégré. Ce guide montre ce qui se rapproche le plus d'AirDrop pour les appareils non-Apple : ouvrir une page web des deux côtés, et le fichier se déplace tout simplement.",
+    "Cela fonctionne de la même façon quelle que soit la plateforme, couvrant donc aussi le cas qu'AirDrop ne gère jamais bien : un portable Windows, un poste Linux et un téléphone Android dans la même pièce — ou les trois plus un iPhone en plus.",
   ],
   sections: [
     {
-      heading: "Le flux façon AirDrop : même Wi-Fi, dans le navigateur",
+      heading: "Le flux façon AirDrop : même Wi-Fi, dans le navigateur",
       body: [
         "C'est le cas quotidien pour lequel AirDrop est conçu, et Relayium l'égale sans nécessiter d'appli d'aucune boutique.",
       ],
       bullets: [
         "Sur chaque appareil, ouvrez relayium.com dans n'importe quel navigateur moderne — Chrome ou Edge sous Windows, Firefox ou Chrome sous Linux, Chrome sous Android.",
         "Sur le même Wi-Fi, les appareils se trouvent automatiquement — pas de code, pas de compte, pas d'étape d'appairage, tout comme AirDrop découvre les appareils proches.",
-        "Glissez des fichiers sur la page (ou tout un dossier — jusqu'à 1 000 fichiers par lot), choisissez l'autre appareil et confirmez le code à 6 chiffres identique affiché sur les deux écrans.",
+        "Glissez des fichiers sur la page (ou tout un dossier — jusqu'à 1 000 fichiers par lot), choisissez l'autre appareil et confirmez le code à 6 chiffres identique affiché sur les deux écrans.",
         "Le transfert s'effectue directement, en pair-à-pair, sur votre propre réseau — rien n'est envoyé sur un serveur entre les deux.",
       ],
     },
     {
-      heading: "À travers internet : ce qu'AirDrop ne sait pas faire",
+      heading: "À travers internet : ce qu'AirDrop ne sait pas faire",
       body: [
-        "AirDrop fonctionne uniquement à proximité — sortez de la portée Bluetooth/Wi-Fi et il s'arrête. Le second mode de Relayium comble exactement ce manque : deux appareils sur des réseaux totalement différents, n'importe où dans le monde.",
-        "L'expéditeur se connecte et obtient un court code d'appairage (avec un lien de participation et un QR code) ; le destinataire le saisit, scanne le QR code, ou ouvre le lien — sans jamais avoir besoin de compte. Cette connexion entre réseaux passe par un relais TURN chiffré plutôt que par une liaison directe, et c'est voulu : entre deux réseaux étrangers l'un à l'autre, une voie directe est généralement introuvable, et la chercher d'abord laisserait la connexion en suspens une vingtaine de secondes avant d'aboutir malgré tout au relais. Les fichiers sont scellés de bout en bout avant de quitter l'expéditeur : le relais ne transmet donc que du texte chiffré qu'aucune clé ne lui permet d'ouvrir, et tout le trajet reste chiffré de bout en bout. Une connexion coupée peut reprendre au lieu de repartir de zéro.",
+        "AirDrop fonctionne uniquement à proximité — sortez de la portée Bluetooth/Wi-Fi et il s'arrête. Le second mode de Relayium comble exactement ce manque : deux appareils sur des réseaux totalement différents, n'importe où dans le monde.",
+        "L'expéditeur se connecte et obtient un court code d'appairage (avec un lien de participation et un QR code) ; le destinataire le saisit, scanne le QR code, ou ouvre le lien — sans jamais avoir besoin de compte. Cette connexion entre réseaux passe par un relais TURN chiffré plutôt que par une liaison directe, et c'est voulu : entre deux réseaux étrangers l'un à l'autre, une voie directe est généralement introuvable, et la chercher d'abord laisserait la connexion en suspens une vingtaine de secondes avant d'aboutir malgré tout au relais. Les fichiers sont scellés de bout en bout avant de quitter l'expéditeur : le relais ne transmet donc que du texte chiffré qu'aucune clé ne lui permet d'ouvrir, et tout le trajet reste chiffré de bout en bout. Une connexion coupée peut reprendre au lieu de repartir de zéro.",
       ],
     },
     {
       heading: "Ce qui protège réellement le fichier",
       body: [
-        "Les deux modes ci-dessus sont des transferts en temps réel et utilisent le même chiffrement : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, négocié uniquement entre les deux appareils. Les deux côtés affichent le même code de vérification à 6 chiffres (une chaîne d'authentification courte), ce qui vous permet de confirmer que personne ne s'intercale, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256.",
+        "Les deux modes ci-dessus sont des transferts en temps réel et utilisent le même chiffrement : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, négocié uniquement entre les deux appareils. Les deux côtés affichent le même code de vérification à 6 chiffres (une chaîne d'authentification courte), ce qui vous permet de confirmer que personne ne s'intercale, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256.",
         "Rien n'est stocké sur un serveur dans ce mode — il n'existe que pour la durée du transfert. Relayium est open source sous licence AGPL-3.0 sur github.com/relayium/relayium, la mécanique est donc auditable plutôt qu'une boîte noire.",
       ],
     },
     {
       heading: "Les limites pratiques, en toute franchise",
       body: [
-        "Comme le fichier n'atterrit jamais sur un serveur, il n'y a pas de quota de téléversement — la vraie limite dépend du navigateur qui reçoit. Un navigateur de bureau doté de l'API File System Access (Chrome ou Edge sous Windows ou Linux) écrit les données entrantes en flux directement sur le disque, donc les fichiers de plusieurs gigaoctets passent sans souci. Firefox, Safari et tous les navigateurs de téléphone — Chrome sous Android compris — n'ont pas cette API : la réception y est assemblée en mémoire, et Relayium prévient le destinataire avant qu'il accepte dès que l'on dépasse environ 256 Mo. À prendre comme une estimation volontairement prudente, pas comme un plafond mesuré : le point où cela lâche vraiment dépend de la mémoire de l'appareil, de son système et du nombre d'onglets ouverts.",
-        "Les dossiers fonctionnent aussi : choisissez un dossier sur ordinateur (pas sous iOS) et les chemins relatifs sont conservés. Si le navigateur qui reçoit peut écrire directement dans un répertoire choisi (Chrome ou Edge sur ordinateur), les fichiers s'y placent ; sinon (Firefox, Safari, tout navigateur de téléphone) tout le dossier arrive sous forme d'un seul .zip qui se décompresse en gardant la même structure.",
+        "Comme le fichier n'atterrit jamais sur un serveur, il n'y a pas de quota de téléversement — la vraie limite dépend du navigateur qui reçoit. Un navigateur de bureau doté de l'API File System Access (Chrome ou Edge sous Windows ou Linux) écrit les données entrantes en flux directement sur le disque, donc les fichiers de plusieurs gigaoctets passent sans souci. Firefox, Safari et tous les navigateurs de téléphone — Chrome sous Android compris — n'ont pas cette API : la réception y est assemblée en mémoire, et Relayium prévient le destinataire avant qu'il accepte dès que l'on dépasse environ 256 Mo. À prendre comme une estimation volontairement prudente, pas comme un plafond mesuré : le point où cela lâche vraiment dépend de la mémoire de l'appareil, de son système et du nombre d'onglets ouverts.",
+        "Les dossiers fonctionnent aussi : choisissez un dossier sur ordinateur (pas sous iOS) et les chemins relatifs sont conservés. Si le navigateur qui reçoit peut écrire directement dans un répertoire choisi (Chrome ou Edge sur ordinateur), les fichiers s'y placent ; sinon (Firefox, Safari, tout navigateur de téléphone) tout le dossier arrive sous forme d'un seul .zip qui se décompresse en gardant la même structure.",
       ],
     },
   ],
@@ -434,23 +434,23 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Existe-t-il une appli AirDrop officielle pour Windows ou Android ?",
-        a: "Non — AirDrop est exclusif aux appareils Apple, et Apple n'a jamais publié de client Windows ou Android. Relayium est une alternative basée sur le navigateur : ouvrez relayium.com sur les deux appareils, et cela fonctionne de la même façon quelle que soit la plateforme, y compris pour des paires Apple/non-Apple mélangées.",
+        q: "Existe-t-il une appli AirDrop officielle pour Windows ou Android ?",
+        a: "Non — AirDrop est exclusif aux appareils Apple, et Apple n'a jamais publié de client Windows ou Android. Relayium est une alternative basée sur le navigateur : ouvrez relayium.com sur les deux appareils, et cela fonctionne de la même façon quelle que soit la plateforme, y compris pour des paires Apple/non-Apple mélangées.",
       },
       {
-        q: "Ai-je besoin d'un compte ?",
-        a: "Pas pour le flux sur le même Wi-Fi — ouvrez la page sur les deux appareils et ils se découvrent, sans aucune connexion. Envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte ; le destinataire n'a jamais besoin de compte, dans aucun des deux modes réseau.",
+        q: "Ai-je besoin d'un compte ?",
+        a: "Pas pour le flux sur le même Wi-Fi — ouvrez la page sur les deux appareils et ils se découvrent, sans aucune connexion. Envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte ; le destinataire n'a jamais besoin de compte, dans aucun des deux modes réseau.",
       },
       {
-        q: "Dois-je installer quelque chose ?",
+        q: "Dois-je installer quelque chose ?",
         a: "Non. C'est une page web sur chaque plateforme — Windows, Linux, macOS, Android et iOS — donc rien à télécharger depuis une boutique et rien à maintenir à jour.",
       },
       {
-        q: "En quoi est-ce différent de la comparaison Relayium vs AirDrop ?",
+        q: "En quoi est-ce différent de la comparaison Relayium vs AirDrop ?",
         a: "Cet article-là est une comparaison frontale montrant où AirDrop est réellement meilleur (foyers tout-Apple) et où il atteint ses limites. Ce guide-ci est le mode d'emploi pour obtenir concrètement l'expérience façon AirDrop quand au moins un appareil n'est pas Apple.",
       },
       {
-        q: "Puis-je envoyer à un groupe, comme avec AirDrop ?",
+        q: "Puis-je envoyer à un groupe, comme avec AirDrop ?",
         a: "Sur le même réseau, oui — la salle locale n'est pas limitée à deux appareils, donc plusieurs appareils proches peuvent recevoir en même temps. Le mode par code d'appairage pour l'envoi à travers internet relie exactement deux appareils, via un relais chiffré.",
       },
     ],
@@ -480,7 +480,7 @@ const ar = {
       bullets: [
         "على كل جهاز، افتح relayium.com في أي متصفح حديث — Chrome أو Edge على Windows، وFirefox أو Chrome على Linux، وChrome على Android.",
         "على نفس شبكة Wi-Fi، تعثر الأجهزة على بعضها تلقائيًا — دون رمز ودون حساب ودون خطوة اقتران، تمامًا كما يكتشف AirDrop الأجهزة القريبة.",
-        "اسحب الملفات إلى الصفحة (أو مجلدًا كاملًا — حتى 1000 ملف في كل دفعة)، واختر الجهاز الآخر، وأكِّد رمز التحقق المكوَّن من 6 أرقام المتطابق المعروض على الشاشتين.",
+        "اسحب الملفات إلى الصفحة (أو مجلدًا كاملًا — حتى 1,000 ملف في كل دفعة)، واختر الجهاز الآخر، وأكِّد رمز التحقق المكوَّن من 6 أرقام المتطابق المعروض على الشاشتين.",
         "يجري النقل مباشرةً، من الند للند (P2P)، عبر شبكتك الخاصة — دون رفع أي شيء إلى خادم في المنتصف.",
       ],
     },
@@ -494,7 +494,7 @@ const ar = {
     {
       heading: "ما الذي يحمي الملف فعليًا",
       body: [
-        "كلا الوضعين أعلاه نقل فوري، وكلاهما يستخدم التشفير نفسه: تبادل مفاتيح X25519 يشتق مفتاحًا يُستخدم في AES-256-GCM لكل جزء، ويُتفاوض عليه بين الجهازين فقط. ويعرض الطرفان رمز التحقق نفسه المكوَّن من 6 أرقام (سلسلة مصادقة قصيرة، SAS) كي تتأكد من عدم وجود أحد في المنتصف، ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
+        "كلا الوضعين أعلاه نقل فوري، وكلاهما يستخدم التشفير نفسه: تبادل مفاتيح X25519 يشتق مفتاحًا يُستخدم في AES-256-GCM لكل كتلة، ويُتفاوض عليه بين الجهازين فقط. ويعرض الطرفان رمز التحقق نفسه المكوَّن من 6 أرقام (سلسلة مصادقة قصيرة، SAS) كي تتأكد من عدم وجود أحد في المنتصف، ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
         "لا يُخزَّن أي شيء على خادم في هذا الوضع — فهو لا يوجد إلا طوال مدة النقل. وRelayium مفتوح المصدر بموجب رخصة AGPL-3.0 على github.com/relayium/relayium، فآليته قابلة للتدقيق وليست صندوقًا أسود.",
       ],
     },
@@ -570,14 +570,14 @@ const es = {
     {
       heading: "Qué protege realmente el archivo",
       body: [
-        "Ambos modos anteriores son transferencias en tiempo real, y ambos usan el mismo cifrado: un intercambio de claves X25519 deriva una clave que se usa para AES-256-GCM por fragmento, negociada solo entre los dos dispositivos. Ambos lados muestran el mismo código de verificación de 6 dígitos (una Short Authentication String) para que puedas confirmar que nadie está en medio, y cada archivo se comprueba de extremo a extremo con un hash SHA-256.",
+        "Ambos modos anteriores son transferencias en tiempo real, y ambos usan el mismo cifrado: un intercambio de claves X25519 deriva una clave que se usa para AES-256-GCM por bloque, negociada solo entre los dos dispositivos. Ambos lados muestran el mismo código de verificación de 6 dígitos (una Short Authentication String) para que puedas confirmar que nadie está en medio, y cada archivo se comprueba de extremo a extremo con un hash SHA-256.",
         "En este modo no se almacena nada en un servidor — existe solo durante la transferencia. Relayium es de código abierto bajo la licencia AGPL-3.0 en github.com/relayium/relayium, así que su mecánica es auditable en lugar de una caja negra.",
       ],
     },
     {
       heading: "Los límites prácticos, con honestidad",
       body: [
-        "Como el archivo nunca aterriza en un servidor, no hay cuota de subida — el límite real es qué navegador está recibiendo. Un navegador de escritorio con la API File System Access (Chrome o Edge en Windows o Linux) transmite los datos entrantes directamente al disco, así que los archivos de varios gigabytes no dan problema. Firefox, Safari y todos los navegadores de móvil — incluido Chrome en Android — no tienen esa API, así que ahí la recepción se acumula en memoria y Relayium avisa a quien recibe antes de que acepte en cuanto se pasa de unos 256 MB. Tómalo como una estimación deliberadamente prudente, no como un techo medido: dónde cede de verdad depende de la memoria del dispositivo, de su sistema y de cuántas pestañas haya abiertas.",
+        "Como el archivo nunca llega a un servidor, no hay cuota de subida — el límite real es qué navegador está recibiendo. Un navegador de escritorio con la API File System Access (Chrome o Edge en Windows o Linux) transmite los datos entrantes directamente al disco, así que los archivos de varios gigabytes no dan problema. Firefox, Safari y todos los navegadores de móvil — incluido Chrome en Android — no tienen esa API, así que ahí la recepción se acumula en memoria y Relayium avisa a quien recibe antes de que acepte en cuanto se pasa de unos 256 MB. Tómalo como una estimación deliberadamente prudente, no como un techo medido: dónde cede de verdad depende de la memoria del dispositivo, de su sistema y de cuántas pestañas haya abiertas.",
         "Las carpetas también funcionan: elige una carpeta en el escritorio (no en iOS) y se conservan las rutas relativas. Si el navegador receptor puede escribir directamente en un directorio elegido (Chrome o Edge de escritorio) los archivos se colocan en su sitio; si no (Firefox, Safari, cualquier navegador de móvil) toda la carpeta llega como un único .zip que se descomprime con la misma estructura.",
       ],
     },
@@ -617,7 +617,7 @@ const es = {
 const pt = {
   title: "AirDrop para Windows, Linux e Android",
   description:
-    "Não existe um AirDrop oficial para Windows, Linux ou Android — aqui está o mais próximo: compartilhamento instantâneo na mesma Wi-Fi pelo navegador, sem conta, sem instalação, além de um jeito de alcançar pela internet que o AirDrop não consegue.",
+    "Não existe um AirDrop oficial para Windows, Linux ou Android — aqui está o mais próximo: compartilhamento instantâneo na mesma rede Wi-Fi pelo navegador, sem conta, sem instalação, além de um jeito de alcançar pela internet que o AirDrop não consegue.",
   updatedLabel: "Última atualização",
   lead: [
     "O AirDrop só existe dentro do mundo da Apple, o que deixa todos os demais — Windows, Linux, Android e qualquer casa com uma mistura de dispositivos — sem um equivalente embutido. Este guia mostra o mais próximo do AirDrop para dispositivos que não são da Apple: abra uma página web nas duas pontas e o arquivo simplesmente se move.",
@@ -625,13 +625,13 @@ const pt = {
   ],
   sections: [
     {
-      heading: "O fluxo estilo AirDrop: mesma Wi-Fi, no navegador",
+      heading: "O fluxo estilo AirDrop: mesma rede Wi-Fi, no navegador",
       body: [
         "Este é o caso do dia a dia para o qual o AirDrop foi feito, e o Relayium o iguala sem precisar de um app de nenhuma loja.",
       ],
       bullets: [
         "Em cada dispositivo, abra relayium.com em qualquer navegador moderno — Chrome ou Edge no Windows, Firefox ou Chrome no Linux, Chrome no Android.",
-        "Na mesma Wi-Fi, os dispositivos se encontram automaticamente — sem código, sem conta, sem etapa de emparelhamento, assim como o AirDrop descobre dispositivos próximos.",
+        "Na mesma rede Wi-Fi, os dispositivos se encontram automaticamente — sem código, sem conta, sem etapa de emparelhamento, assim como o AirDrop descobre dispositivos próximos.",
         "Arraste arquivos para a página (ou uma pasta inteira — até 1.000 arquivos por lote), escolha o outro dispositivo e confirme o código de 6 dígitos correspondente exibido nas duas telas.",
         "A transferência ocorre diretamente, ponto a ponto, pela sua própria rede — nada é enviado para um servidor no meio.",
       ],
@@ -640,7 +640,7 @@ const pt = {
       heading: "Pela internet: algo que o AirDrop não consegue fazer",
       body: [
         "O AirDrop é só de proximidade — saia do alcance de Bluetooth/Wi-Fi e ele para de funcionar. O segundo modo do Relayium cobre exatamente essa lacuna: dois dispositivos em redes completamente diferentes, em qualquer lugar do mundo.",
-        "O remetente entra e recebe um código de emparelhamento curto (com um link de entrada e um código QR); o destinatário o digita, escaneia o QR ou abre o link — e nunca precisa de conta. Essa conexão entre redes corre por um retransmissor TURN criptografado em vez de uma ligação direta, e isso é proposital: entre duas redes sem relação uma com a outra quase nunca existe caminho direto, e tentá-lo primeiro deixaria a conexão pendurada por uns vinte segundos antes de terminar no retransmissor mesmo assim. Os arquivos saem selados de ponta a ponta antes de deixar o remetente, então o retransmissor só encaminha texto cifrado que não tem chave para abrir — o trajeto inteiro continua criptografado de ponta a ponta. Uma conexão caída pode ser retomada em vez de recomeçar do zero.",
+        "O remetente entra e recebe um código de emparelhamento curto (com um link de entrada e um código QR); o destinatário o digita, escaneia o QR ou abre o link — e nunca precisa de conta. Essa conexão entre redes passa por um retransmissor TURN criptografado em vez de uma ligação direta, e isso é proposital: entre duas redes sem relação uma com a outra quase nunca existe caminho direto, e tentá-lo primeiro deixaria a conexão pendurada por uns vinte segundos antes de terminar no retransmissor mesmo assim. Os arquivos saem selados de ponta a ponta antes de deixar o remetente, então o retransmissor só encaminha texto cifrado que não tem chave para abrir — o trajeto inteiro continua criptografado de ponta a ponta. Uma conexão caída pode ser retomada em vez de recomeçar do zero.",
       ],
     },
     {
@@ -667,7 +667,7 @@ const pt = {
       },
       {
         q: "Preciso de uma conta?",
-        a: "Não para o fluxo na mesma Wi-Fi — abra a página nos dois dispositivos e eles se descobrem, sem nenhum login. Enviar entre redes diferentes com um código de emparelhamento exige que o remetente entre; a pessoa que recebe nunca precisa de conta, em nenhum dos dois modos de rede.",
+        a: "Não para o fluxo na mesma rede Wi-Fi — abra a página nos dois dispositivos e eles se descobrem, sem nenhum login. Enviar entre redes diferentes com um código de emparelhamento exige que o remetente entre; a pessoa que recebe nunca precisa de conta, em nenhum dos dois modos de rede.",
       },
       {
         q: "Preciso instalar alguma coisa?",

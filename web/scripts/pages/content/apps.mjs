@@ -123,6 +123,7 @@ const zh = {
       },
     ],
   },
+  learnHeading: "深入了解",
   footer: { privacy: "隐私政策", terms: "服务条款", security: "安全说明" },
 };
 
@@ -178,6 +179,7 @@ const ja = {
       },
     ],
   },
+  learnHeading: "さらに詳しく",
   footer: { privacy: "プライバシーポリシー", terms: "利用規約", security: "セキュリティ" },
 };
 
@@ -233,6 +235,7 @@ const ko = {
       },
     ],
   },
+  learnHeading: "더 알아보기",
   footer: { privacy: "개인정보 처리방침", terms: "이용약관", security: "보안" },
 };
 
@@ -288,6 +291,7 @@ const de = {
       },
     ],
   },
+  learnHeading: "Mehr erfahren",
   footer: { privacy: "Datenschutz", terms: "Nutzungsbedingungen", security: "Sicherheit" },
 };
 
@@ -343,16 +347,17 @@ const fr = {
       },
     ],
   },
+  learnHeading: "En savoir plus",
   footer: { privacy: "Confidentialité", terms: "Conditions d'utilisation", security: "Sécurité" },
 };
 
 const ar = {
   title: "احصل على Relayium — تطبيقات للويب وسطر الأوامر وmacOS وiOS",
   description:
-    "نزّل Relayium: استخدمه في أي متصفح، أو ثبّت أداة سطر الأوامر، أو احصل على تطبيقَي macOS وiOS الأصليين (قريبًا). نقل ملفات مشفّر من طرف إلى طرف على كل جهاز.",
+    "نزّل Relayium: استخدمه في أي متصفح، أو ثبّت أداة سطر الأوامر، أو احصل على تطبيقَي macOS وiOS الأصليين (قريبًا). نقل ملفات مُشفَّر من الطرف إلى الطرف على كل جهاز.",
   hero: {
     h1: "احصل على Relayium",
-    pitch: "نقل ملفات واحد مشفّر من طرف إلى طرف، في كل مكان تعمل فيه. اختر منصّتك.",
+    pitch: "نقل ملفات واحد مُشفَّر من الطرف إلى الطرف، في كل مكان تعمل فيه. اختر منصّتك.",
     cta: "افتح تطبيق الويب",
   },
   how: {
@@ -398,6 +403,7 @@ const ar = {
       },
     ],
   },
+  learnHeading: "اعرف المزيد",
   footer: { privacy: "الخصوصية", terms: "شروط الخدمة", security: "الأمان" },
 };
 
@@ -453,6 +459,7 @@ const es = {
       },
     ],
   },
+  learnHeading: "Más información",
   footer: { privacy: "Privacidad", terms: "Términos del servicio", security: "Seguridad" },
 };
 
@@ -508,6 +515,7 @@ const pt = {
       },
     ],
   },
+  learnHeading: "Saiba mais",
   footer: { privacy: "Privacidade", terms: "Termos de Serviço", security: "Segurança" },
 };
 

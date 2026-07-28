@@ -79,11 +79,11 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
       
       <h1>Enviar um arquivo como link criptografado</h1>
-      <p class="pitch">Quando a outra pessoa não está on-line, envie agora e compartilhe um link. Seu navegador criptografa antes de enviar; o servidor guarda somente texto cifrado que não consegue ler — a chave nunca sai do link.</p>
+      <p class="pitch">Quando a outra pessoa não está online, envie agora e compartilhe um link. Seu navegador criptografa antes de enviar; o servidor guarda somente texto cifrado que não consegue ler — a chave nunca sai do link.</p>
       <a class="cta" href="/offline-transfer?lang=pt">Enviar um arquivo</a>
 
       <section class="reveal">
-      <h2>Transferir em quatro passos</h2>
+      <h2>Como o link é criado</h2>
       <ol class="steps">
         <li>Faça login e escolha um arquivo — seu navegador o criptografa localmente antes que qualquer coisa saia do dispositivo.</li>
         <li>O servidor só armazena o texto cifrado; a chave de descriptografia permanece no fragmento do link e nunca é enviada ao servidor.</li>
@@ -93,13 +93,13 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       </section>
 
       <section class="reveal">
-      <h2>Por que o Relayium</h2>
+      <h2>Por que enviar assim</h2>
       <ul class="why">
         <li><b>Conhecimento zero</b> — O arquivo é criptografado no navegador; o servidor só chega a ter texto cifrado que não consegue descriptografar.</li>
         <li><b>A chave está no link</b> — A chave de descriptografia fica no fragmento da URL (após o #), que os navegadores nunca enviam ao servidor.</li>
         <li><b>Autodestruição após a leitura + validade</b> — Apague o arquivo, se quiser, no primeiro download, e defina um tempo de vida após o qual ele desaparece.</li>
         <li><b>Sem conta para o destinatário</b> — Qualquer pessoa com o link pode baixar; só quem envia precisa fazer login.</li>
-        <li><b>Complemento assíncrono</b> — Use isto quando a outra pessoa não está on-line agora; use a transferência entre redes em tempo real quando ambas estão presentes.</li>
+        <li><b>Complemento assíncrono</b> — Use isto quando a outra pessoa não está online agora; use a transferência entre redes em tempo real quando ambas estão presentes.</li>
         <li><b>Também pelo terminal</b> — No terminal, relayium up envia e exibe o mesmo link, e relayium down o recupera em outra máquina — a CLI e a web compartilham um único link.</li>
       </ul>
       </section>
@@ -110,7 +110,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <h3>Comparado aos links do WeTransfer/Dropbox</h3>
       <p>Esses podem ler seus arquivos no servidor; o servidor do Relayium só guarda texto cifrado que não consegue descriptografar — a chave permanece no link.</p>
       <h3>Comparado ao modo em tempo real</h3>
-      <p>O tempo real exige que as duas partes estejam on-line ao mesmo tempo; este modo armazena o arquivo criptografado para que o destinatário possa recuperá-lo depois.</p>
+      <p>O tempo real exige que as duas partes estejam online ao mesmo tempo; este modo armazena o arquivo criptografado para que o destinatário possa recuperá-lo depois.</p>
       </div>
       </section>
 

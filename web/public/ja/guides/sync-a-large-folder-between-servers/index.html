@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド) · Relayium</title>
-    <meta name="description" content="relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング——増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。" />
+    <title>2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド） · Relayium</title>
+    <meta name="description" content="relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング。増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/guides/sync-a-large-folder-between-servers/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/sync-a-large-folder-between-servers/" />
@@ -22,8 +22,8 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
-    <meta property="og:title" content="2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)" />
-    <meta property="og:description" content="relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング——増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。" />
+    <meta property="og:title" content="2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）" />
+    <meta property="og:description" content="relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング。増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。" />
     <meta property="og:url" content="https://relayium.com/ja/guides/sync-a-large-folder-between-servers/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -32,10 +32,10 @@
     <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
     <meta property="og:locale" content="ja_JP" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)" />
-    <meta name="twitter:description" content="relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング——増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。" />
+    <meta name="twitter:title" content="2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）" />
+    <meta name="twitter:description" content="relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング。増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)","description":"relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング——増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-07-08","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/sync-a-large-folder-between-servers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"転送が途中で中断されたらどうなりますか?","acceptedAnswer":{"@type":"Answer","text":"何も失われません。relayium sync を再実行してください——受信側にすでにあるファイルはスキップし、半分送ったファイルはディスク上のバイトオフセットから再開します。本ガイドの until ループが、フォルダー全体がミラーされるまでこれを自動で行います。"}},{"@type":"Question","name":"これは rsync と何が違いますか?","acceptedAnswer":{"@type":"Answer","text":"どちらも増分の一方向ミラーですが、relayium sync は固定された TLS 接続で動作し、SSH アカウントを必要とせず(デーモン直結)、証明書のフィンガープリントで2台を認証し、各ファイルを SHA-256 で検証します。relayium の他モードと同じ転送エンジンです。"}},{"@type":"Question","name":"ソースから削除したファイルを、sync は受信側でも削除しますか?","acceptedAnswer":{"@type":"Answer","text":"あなたが求めたときだけです。既定では sync は追加と更新だけを行います。削除をミラーするには --delete を渡し、それが有効になるには受信側が --allow-delete で serve を実行している必要があります——さもなければ削除は無視され、報告されます。"}},{"@type":"Question","name":"2つのフォルダーを継続的に同期し続けられますか?","acceptedAnswer":{"@type":"Answer","text":"はい。--watch を付けると sync は動き続け、ソース配下の変更のたびに再ミラーします。大きなフォルダーの一度きりの移動には不要です——リトライループと素の sync で十分です。"}},{"@type":"Question","name":"ポートを開ける必要がありますか?","acceptedAnswer":{"@type":"Answer","text":"デーモン直結ならはい——リスナーのポート(既定 9031)が送信側から到達可能である必要があります。ポートを開けたくなく、サーバー間にすでに SSH があるなら、sync は SSH 経由でも動きます: relayium sync /path user@host:/path(リモートに relayium が必要)。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）","description":"relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング。増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-07-08","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/sync-a-large-folder-between-servers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"転送が途中で中断されたらどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"何も失われません。relayium sync を再実行してください。受信側にすでにあるファイルはスキップし、半分送ったファイルはディスク上のバイトオフセットから再開します。本ガイドの until ループが、フォルダー全体がミラーされるまでこれを自動で行います。"}},{"@type":"Question","name":"これは rsync と何が違いますか？","acceptedAnswer":{"@type":"Answer","text":"どちらも増分の一方向ミラーですが、relayium sync は証明書ピンニング付き TLS 接続で動作し、SSH アカウントを必要とせず（デーモン直結）、証明書のフィンガープリントで2台を認証し、各ファイルを SHA-256 で検証します。relayium の他モードと同じ転送エンジンです。"}},{"@type":"Question","name":"ソースから削除したファイルを、sync は受信側でも削除しますか？","acceptedAnswer":{"@type":"Answer","text":"求めたときだけです。既定では sync は追加と更新だけを行います。削除をミラーするには --delete を渡し、それが有効になるには受信側が --allow-delete で serve を実行している必要があります。さもなければ削除は無視され、報告されます。"}},{"@type":"Question","name":"2つのフォルダーを継続的に同期し続けられますか？","acceptedAnswer":{"@type":"Answer","text":"はい。--watch を付けると sync は動き続け、ソース配下の変更のたびに再ミラーします。大きなフォルダーの一度きりの移動には不要です。リトライループと素の sync で十分です。"}},{"@type":"Question","name":"ポートを開ける必要がありますか？","acceptedAnswer":{"@type":"Answer","text":"デーモン直結ならはい。リスナーのポート（既定 9031）が送信側から到達可能である必要があります。ポートを開けたくなく、サーバー間にすでに SSH があるなら、sync は SSH 経由でも動きます：relayium sync /path user@host:/path（リモートに relayium が必要）。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -66,68 +66,68 @@ footer a{color:var(--text-h);text-decoration:none}
   <body>
     <div class="wrap">
       <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
-      <h1>2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)</h1>
+      <h1>2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）</h1>
       <p class="updated">最終更新: 2026-07-08</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers/">English</a><a href="/zh/guides/sync-a-large-folder-between-servers/">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers/" aria-current="true">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers/">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers/">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers/">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers/">العربية</a><a href="/es/guides/sync-a-large-folder-between-servers/">Español</a><a href="/pt/guides/sync-a-large-folder-between-servers/">Português</a></nav>
-      <p class="lead">一方のサーバーに大きなフォルダー——数十 GB——があり、それをもう一方に完全な複製として欲しいとします。何時間もターミナルを見張ることはできませんし、途中で落ちた転送が最初からやり直しになるのも困ります。relayium sync はまさにこのために作られています。一方向の増分ミラーで、すでにあるものはスキップし、途中まで送ったファイルは止まったところから再開し、各ファイルを端から端まで検証します。</p>
+      <p class="lead">一方のサーバーに大きなフォルダー（数十 GB）があり、それをもう一方に完全な複製として欲しいとします。何時間もターミナルを見張ることはできませんし、途中で落ちた転送が最初からやり直しになるのも困ります。relayium sync はまさにこのために作られています。一方向の増分ミラーで、すでにあるものはスキップし、途中まで送ったファイルは止まったところから再開し、各ファイルを端から端まで検証します。</p>
       <p class="lead">本ガイドでは、無人で自己修復する転送を構築します。送信側を一度だけ承認し、リスナーをバックグラウンドで動かし、tmux 内のリトライループで relayium sync を回して、接続が切れても続行させ、フォルダー全体が届くまで走らせます。</p>
       <h2>なぜ relayium sync がこの用途に向くのか</h2>
-      <p>sync はネイティブプロトコル上の一方向増分ミラーです(両端に relayium をインストールします)。無人で繰り返し実行しても安全な理由が3つあります:</p>
-      <ul><li>すでにあるファイルはスキップ: 受信側のコピーがサイズと更新時刻で一致するファイルは再送しません。</li><li>途中のファイルを再開: 接続が切れたとき半分だけ送られていたファイルは、次回の実行でディスク上にすでにあるバイトオフセットから続行し、やり直しません。</li><li>各ファイルを検証: 各ファイルを端から端まで SHA-256 で検査するため、完了したミラーは完全だと分かります。</li><li>これらのおかげでコマンドは冪等です——もう一度実行しても残りの作業だけを行います。これこそがリトライループで巨大な転送を完了させる要点です。</li></ul>
+      <p>sync はネイティブプロトコル上の一方向増分ミラーです（両端に relayium をインストールします）。無人で繰り返し実行しても安全な理由が3つあります：</p>
+      <ul><li>すでにあるファイルはスキップ：受信側のコピーがサイズと更新時刻で一致するファイルは再送しません。</li><li>途中のファイルを再開：接続が切れたとき半分だけ送られていたファイルは、次回の実行でディスク上にすでにあるバイトオフセットから続行し、やり直しません。</li><li>各ファイルを検証：各ファイルを端から端まで SHA-256 で検査するため、完了したミラーは完全だと分かります。</li><li>これらのおかげでコマンドは冪等です。もう一度実行しても残りの作業だけを行います。これこそがリトライループで巨大な転送を完了させる要点です。</li></ul>
       <h2>前提条件</h2>
-      <p>両方のサーバーに relayium をインストールします(sync はネイティブプロトコルを話すため、各端に必要です):</p>
+      <p>両方のサーバーに relayium をインストールします（sync はネイティブプロトコルを話すため、各端に必要です）：</p>
       <pre><code># 両方のサーバーで
 curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>本ガイドはデーモン直結(relayium://)を使うため、2台のサーバー間に SSH アクセスは不要です。</li><li>受信側のファイアウォールまたはセキュリティグループで、リスナーのポート(既定 9031)を送信側に開放してください。</li></ul>
-      <h2>送信側を一度だけ承認する(受信側)</h2>
-      <p>受信側は送信側のマシンを一度だけ承認します。承認はディスクに書き込まれ、再起動をまたいでも有効なので繰り返す必要はありません。まずターミナルでリスナーをフォアグラウンド起動し、--dir を親ディレクトリに向けます——relayium sync /root/workspace は受信側で workspace/... を再現するので、--dir /root ならファイルは /root/workspace/ に着地します。</p>
-      <p>送信側の初回接続時(次節)、serve はその住所とフィンガープリントを表示して承認を求めます。y と答えれば永続的に記憶されます:</p>
+      <ul><li>本ガイドはデーモン直結(relayium://)を使うため、2台のサーバー間に SSH アクセスは不要です。</li><li>受信側のファイアウォールまたはセキュリティグループで、リスナーのポート（既定 9031）を送信側に開放してください。</li></ul>
+      <h2>送信側を一度だけ承認する（受信側）</h2>
+      <p>受信側は送信側のマシンを一度だけ承認します。承認はディスクに書き込まれ、再起動をまたいでも有効なので繰り返す必要はありません。まずターミナルでリスナーをフォアグラウンド起動し、--dir を親ディレクトリに向けます。relayium sync /root/workspace は受信側で workspace/... を再現するので、--dir /root ならファイルは /root/workspace/ に着地します。</p>
+      <p>送信側の初回接続時（次節）、serve はそのアドレスとフィンガープリントを表示して承認を求めます。y と答えれば永続的に記憶されます：</p>
       <pre><code># 受信側で（フォアグラウンド、対話的に承認するため）
 relayium serve --dir /root --port 9031</code></pre>
       <pre><code># 受信側で、初回接続時:
 Incoming push from 203.0.113.9:52140
   fingerprint: 9f2c41ab…
 Accept and remember this peer? [y/N] y</code></pre>
-      <ul><li>完全に無人にするならプロンプトを省けます: 送信側で relayium id を実行してフィンガープリントを表示し、受信側で relayium authorize &lt;フィンガープリント&gt; を実行します。</li><li>--dir は同期するフォルダーの親であって、フォルダー自体ではありません——さもないとファイルが1階層深く着地します(例: /root/workspace/workspace)。</li></ul>
-      <h2>リスナーをバックグラウンドで動かす(受信側)</h2>
-      <p>フィンガープリントを承認したら、フォアグラウンドの serve を止め(Ctrl-C)、ログアウト後も生き残るようデタッチして再起動します。保存済みのフィンガープリントを読み込み、送信側を確認なしで受け入れます——今回はプロンプトは出ません:</p>
+      <ul><li>完全に無人にするならプロンプトを省けます：送信側で relayium id を実行してフィンガープリントを表示し、受信側で relayium authorize &lt;フィンガープリント&gt; を実行します。</li><li>--dir は同期するフォルダーの親であって、フォルダー自体ではありません。さもないとファイルが1階層深く着地します（例：/root/workspace/workspace）。</li></ul>
+      <h2>リスナーをバックグラウンドで動かす（受信側）</h2>
+      <p>フィンガープリントを承認したら、フォアグラウンドの serve を止め(Ctrl-C)、ログアウト後も生き残るようデタッチして再起動します。保存済みのフィンガープリントを読み込み、送信側を確認なしで受け入れます。今回はプロンプトは出ません：</p>
       <pre><code># 受信側で
 nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp;</code></pre>
-      <ul><li>serve は接続を1つずつ処理して動き続けるため、下のリトライループの再接続のたびに受信の準備ができています。</li><li>常時稼働の受信箱にするなら、代わりに systemd で動かします(Restart=always、--config-dir /etc/relayium)。</li></ul>
-      <h2>tmux 内のリトライループで sync を回す(送信側)</h2>
-      <p>長い転送は中断されます——セッション切断、不安定なネットワーク、再起動。解決策は高級なツールではなく、sync を成功するまで再実行するループと、ログアウト後も生き残らせる端末マルチプレクサです。ここでは tmux が nohup より扱いやすい: 間違えやすい出力リダイレクトがなく、再接続して進捗を見られます。</p>
-      <p>tmux セッションを開始し、until ループでミラーを実行します——10秒ごとに再試行し、sync が成功を返したら自分で終了します:</p>
+      <ul><li>serve は接続を1つずつ処理して動き続けるため、下のリトライループの再接続のたびに受信の準備ができています。</li><li>常時稼働の受信箱にするなら、代わりに systemd で動かします（Restart=always、--config-dir /etc/relayium）。</li></ul>
+      <h2>tmux 内のリトライループで sync を回す（送信側）</h2>
+      <p>長い転送は中断されます。セッション切断、不安定なネットワーク、再起動。解決策は高級なツールではなく、sync を成功するまで再実行するループと、ログアウト後も生き残らせる端末マルチプレクサです。ここでは tmux のほうが nohup より扱いやすいです：間違えやすい出力リダイレクトがなく、再接続して進捗を見られます。</p>
+      <p>tmux セッションを開始し、until ループでミラーを実行します。10秒ごとに再試行し、sync が成功を返したら自分で終了します：</p>
       <pre><code># 送信側で
 tmux new -s xfer      # tmux が無ければ apt install -y tmux</code></pre>
       <pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre>
-      <ul><li>Ctrl-b の次に d でデタッチ。ターミナルを閉じてもループは動き続けます。tmux attach -t xfer で再接続します。</li><li>再試行のたびに作業は減ります: 転送済みのファイルはスキップされ、半分送ったファイルは再開する——だからループは収束して終わります。</li><li>進捗はファイルが1つ完了するごとに1行表示されるので、大きなファイルは完了まで静かに転送されます。無音は停止ではありません(トラブルシューティング参照)。</li></ul>
+      <ul><li>Ctrl-b の次に d でデタッチ。ターミナルを閉じてもループは動き続けます。tmux attach -t xfer で再接続します。</li><li>再試行のたびに作業は減ります：転送済みのファイルはスキップされ、半分送ったファイルは再開されます。だからループは収束して終わります。</li><li>進捗はファイルが1つ完了するごとに1行表示されるので、大きなファイルは完了まで静かに転送されます。無音は停止ではありません（トラブルシューティング参照）。</li></ul>
       <h2>検証と仕上げ</h2>
-      <p>until ループが終わり、通常のシェルプロンプトに戻ったら転送は完了です。両側が一致することを確認してから、リスナーを停止します:</p>
+      <p>until ループが終わり、通常のシェルプロンプトに戻ったら転送は完了です。両側が一致することを確認してから、リスナーを停止します：</p>
       <pre><code># 両方のサーバーで合計を比較
 du -sh /root/workspace</code></pre>
       <pre><code># 受信側で、確認できたら
 pkill -f &#39;relayium serve&#39;</code></pre>
       <ul><li>各ファイルは到着時に SHA-256 で検査済みなので、サイズの一致とクリーンな終了は複製が完全であることを意味します。</li></ul>
       <h2>トラブルシューティング</h2>
-      <p>問題に見えて多くの場合そうでないこと——そして多くの場合本当に問題であること(ポートの遮断)を挙げます。</p>
-      <ul><li>無音は停止ではありません。進捗は各ファイルが完了したときだけ表示されるので、大きなファイルは静かに転送されます。送信側で ss -tnp | grep 9031 を使って実際の状態を確認します——ESTAB は接続して転送中、SYN-SENT はリスナーに届いていないことを意味します。</li><li>SYN-SENT はポートが遮断されている印です。受信側で送信側に向けて 9031/TCP を開放します(クラウドのセキュリティグループ、または ufw allow 9031/tcp)。「転送がいつまでも始まらない」最も一般的な原因です。</li><li>複数行の nohup より、tmux と1行のループを優先します。引用符と &gt; リダイレクトを含む複数行コマンドをシェルに貼り付けると、リダイレクトで壊れたり、&gt; の継続プロンプトで止まったりしがちです。</li><li>プロセスを片付けるときは正確に一致させます(pkill -f &#39;relayium sync&#39;)。pkill relayium ではありません——広い一致は同じマシンで動く無関係な relayium プロセスを巻き込みかねません。</li><li>除外フラグはありません。代わりにソースを指定してください。sync が取るのは -i と -p(SSH の鍵とポート)、--delete、--watch、--config-dir だけで、ツリーの途中のパスを絞り込む手段はありません。Python の仮想環境のような再生成可能なディレクトリを置いていくには、本当に欲しいサブディレクトリを同期します: sync は複数のソースを一度に受け取り、それぞれが自分の名前で受信側の --dir の下に届きます。relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 を serve --dir /root/workspace に対して実行すれば /root/workspace/src と /root/workspace/data に復元され、venv は一度も走査されません。</li><li>シンボリックリンクと特殊ファイルはスキップされます——sync が転送するのは通常ファイルだけです。重要なシンボリックリンクは別途扱ってください。</li></ul>
+      <p>問題に見えて多くの場合そうでないこと、そして多くの場合本当に問題であること（ポートの遮断）を挙げます。</p>
+      <ul><li>無音は停止ではありません。進捗は各ファイルが完了したときだけ表示されるので、大きなファイルは静かに転送されます。送信側で ss -tnp | grep 9031 を使って実際の状態を確認します。ESTAB は接続して転送中、SYN-SENT はリスナーに届いていないことを意味します。</li><li>SYN-SENT はポートが遮断されている印です。受信側で送信側に向けて 9031/TCP を開放します（クラウドのセキュリティグループ、または ufw allow 9031/tcp）。「転送がいつまでも始まらない」最も一般的な原因です。</li><li>複数行の nohup より、tmux と1行のループを優先します。引用符と &gt; リダイレクトを含む複数行コマンドをシェルに貼り付けると、リダイレクトで壊れたり、&gt; の継続プロンプトで止まったりしがちです。</li><li>プロセスを片付けるときは正確に一致させます(pkill -f &#39;relayium sync&#39;)。pkill relayium ではありません。広い一致は同じマシンで動く無関係な relayium プロセスを巻き込みかねません。</li><li>除外フラグはありません。代わりにソースを指定してください。sync が取るのは -i と -p（SSH の鍵とポート）、--delete、--watch、--config-dir だけで、ツリーの途中のパスを絞り込む手段はありません。Python の仮想環境のような再生成可能なディレクトリを置いていくには、本当に欲しいサブディレクトリを同期します：sync は複数のソースを一度に受け取り、それぞれが自分の名前で受信側の --dir の下に届きます。relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 を serve --dir /root/workspace に対して実行すれば /root/workspace/src と /root/workspace/data に復元され、venv は一度も走査されません。</li><li>シンボリックリンクと特殊ファイルはスキップされます。sync が転送するのは通常ファイルだけです。重要なシンボリックリンクは別途扱ってください。</li></ul>
       <h2>よくある質問</h2>
-      <h3>転送が途中で中断されたらどうなりますか?</h3>
-      <p>何も失われません。relayium sync を再実行してください——受信側にすでにあるファイルはスキップし、半分送ったファイルはディスク上のバイトオフセットから再開します。本ガイドの until ループが、フォルダー全体がミラーされるまでこれを自動で行います。</p>
-      <h3>これは rsync と何が違いますか?</h3>
-      <p>どちらも増分の一方向ミラーですが、relayium sync は固定された TLS 接続で動作し、SSH アカウントを必要とせず(デーモン直結)、証明書のフィンガープリントで2台を認証し、各ファイルを SHA-256 で検証します。relayium の他モードと同じ転送エンジンです。</p>
-      <h3>ソースから削除したファイルを、sync は受信側でも削除しますか?</h3>
-      <p>あなたが求めたときだけです。既定では sync は追加と更新だけを行います。削除をミラーするには --delete を渡し、それが有効になるには受信側が --allow-delete で serve を実行している必要があります——さもなければ削除は無視され、報告されます。</p>
-      <h3>2つのフォルダーを継続的に同期し続けられますか?</h3>
-      <p>はい。--watch を付けると sync は動き続け、ソース配下の変更のたびに再ミラーします。大きなフォルダーの一度きりの移動には不要です——リトライループと素の sync で十分です。</p>
-      <h3>ポートを開ける必要がありますか?</h3>
-      <p>デーモン直結ならはい——リスナーのポート(既定 9031)が送信側から到達可能である必要があります。ポートを開けたくなく、サーバー間にすでに SSH があるなら、sync は SSH 経由でも動きます: relayium sync /path user@host:/path(リモートに relayium が必要)。</p>
+      <h3>転送が途中で中断されたらどうなりますか？</h3>
+      <p>何も失われません。relayium sync を再実行してください。受信側にすでにあるファイルはスキップし、半分送ったファイルはディスク上のバイトオフセットから再開します。本ガイドの until ループが、フォルダー全体がミラーされるまでこれを自動で行います。</p>
+      <h3>これは rsync と何が違いますか？</h3>
+      <p>どちらも増分の一方向ミラーですが、relayium sync は証明書ピンニング付き TLS 接続で動作し、SSH アカウントを必要とせず（デーモン直結）、証明書のフィンガープリントで2台を認証し、各ファイルを SHA-256 で検証します。relayium の他モードと同じ転送エンジンです。</p>
+      <h3>ソースから削除したファイルを、sync は受信側でも削除しますか？</h3>
+      <p>求めたときだけです。既定では sync は追加と更新だけを行います。削除をミラーするには --delete を渡し、それが有効になるには受信側が --allow-delete で serve を実行している必要があります。さもなければ削除は無視され、報告されます。</p>
+      <h3>2つのフォルダーを継続的に同期し続けられますか？</h3>
+      <p>はい。--watch を付けると sync は動き続け、ソース配下の変更のたびに再ミラーします。大きなフォルダーの一度きりの移動には不要です。リトライループと素の sync で十分です。</p>
+      <h3>ポートを開ける必要がありますか？</h3>
+      <p>デーモン直結ならはい。リスナーのポート（既定 9031）が送信側から到達可能である必要があります。ポートを開けたくなく、サーバー間にすでに SSH があるなら、sync は SSH 経由でも動きます：relayium sync /path user@host:/path（リモートに relayium が必要）。</p>
       <div class="ctacard">
-        <p>自分の2台のサーバー間でフォルダーをミラーしましょう——増分、再開可能、張り付き不要。</p>
+        <p>自分の2台のサーバー間でフォルダーをミラーしましょう。増分、再開可能、張り付き不要。</p>
         <a class="cta" href="/cli">CLI を入手する</a>
       </div>
       <h2>続けて読む</h2>
-      <ul class="related"><li><a href="/ja/compare/snapdrop/">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop/">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer/">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone/">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly/">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud/">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal/">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh/">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone/">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers/">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/guides/push-to-cloud-pull-on-another-computer/">クラウドにアップロードし、別のコンピュータで取得する</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link/">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/guides/self-host-relayium/">Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/compare/croc/">Relayium と croc の比較：ターミナルから暗号化転送</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files/">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/compare/google-drive/">Relayium と Google Drive の比較：ファイル送信をもっと直接に</a></li><li><a href="/ja/compare/rsync/">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/compare/firefox-send/">2026年、最良の Firefox Send 代替サービス</a></li><li><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code/">QR コードをスキャンしてファイルを転送する</a></li><li><a href="/ja/guides/receive-files-from-the-command-line/">コマンドラインでファイルを受信する</a></li><li><a href="/ja/how-to/send-a-folder/">ファイルではなくフォルダごと送る方法</a></li><li><a href="/ja/guides/run-relayium-as-an-always-on-service/">Relayium を常時稼働の受信サービスとして実行する</a></li><li><a href="/ja/how-to/automate-server-backups/">cron で暗号化されたサーバーバックアップを自動化する</a></li><li><a href="/ja/compare/localsend/">Relayium と LocalSend の比較：ローカル転送はどちらを使う？</a></li><li><a href="/ja/compare/scp/">Relayium と scp の比較：よりシンプルな SSH 転送</a></li><li><a href="/ja/compare/magic-wormhole/">Relayium と magic-wormhole の比較：CLI ファイル転送</a></li><li><a href="/ja/compare/nextcloud/">Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか</a></li><li><a href="/ja/compare/dropbox/">Relayium と Dropbox の比較：1ファイルの送信をもっと直接に</a></li><li><a href="/ja/how-to/airdrop-for-windows-and-android/">Windows・Linux・Android 向け AirDrop 代替</a></li><li><a href="/ja/how-to/transfer-files-between-mac-and-windows/">Mac と Windows パソコン間でファイルを転送する方法</a></li><li><a href="/ja/how-to/send-files-on-the-same-wifi/">同じ Wi-Fi 上の端末間でファイルを送る</a></li><li><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">P2P（ピアツーピア）ファイル転送とは？</a></li><li><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/">インターネットでファイルを送るのは安全か</a></li><li><a href="/ja/guides/bring-your-own-node/">Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <ul class="related"><li><a href="/ja/compare/snapdrop/">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop/">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer/">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone/">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly/">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud/">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal/">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh/">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone/">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers/">Relayium CLI でサーバー間転送（デーモン直結）</a></li><li><a href="/ja/guides/push-to-cloud-pull-on-another-computer/">クラウドにアップロードし、別のコンピュータで取得する</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link/">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/guides/self-host-relayium/">Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/compare/croc/">Relayium と croc の比較：ターミナルから暗号化転送</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files/">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/compare/google-drive/">Relayium と Google Drive の比較：ファイル送信をもっと直接に</a></li><li><a href="/ja/compare/rsync/">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/compare/firefox-send/">2026年、最良の Firefox Send 代替サービス</a></li><li><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code/">QR コードをスキャンしてファイルを転送する</a></li><li><a href="/ja/guides/receive-files-from-the-command-line/">コマンドラインでファイルを受信する</a></li><li><a href="/ja/how-to/send-a-folder/">ファイルではなくフォルダごと送る方法</a></li><li><a href="/ja/guides/run-relayium-as-an-always-on-service/">Relayium を常時稼働の受信サービスとして実行する</a></li><li><a href="/ja/how-to/automate-server-backups/">cron で暗号化されたサーバーバックアップを自動化する</a></li><li><a href="/ja/compare/localsend/">Relayium と LocalSend の比較：ローカル転送はどちらを使う？</a></li><li><a href="/ja/compare/scp/">Relayium と scp の比較：よりシンプルな SSH 転送</a></li><li><a href="/ja/compare/magic-wormhole/">Relayium と magic-wormhole の比較：CLI ファイル転送</a></li><li><a href="/ja/compare/nextcloud/">Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか</a></li><li><a href="/ja/compare/dropbox/">Relayium と Dropbox の比較：1ファイルの送信をもっと直接に</a></li><li><a href="/ja/how-to/airdrop-for-windows-and-android/">Windows・Linux・Android 向け AirDrop 代替</a></li><li><a href="/ja/how-to/transfer-files-between-mac-and-windows/">Mac と Windows パソコン間でファイルを転送する方法</a></li><li><a href="/ja/how-to/send-files-on-the-same-wifi/">同じ Wi-Fi 上の端末間でファイルを送る</a></li><li><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">P2P（ピアツーピア）ファイル転送とは？</a></li><li><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/">インターネットでファイルを送るのは安全か</a></li><li><a href="/ja/guides/bring-your-own-node/">Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う</a></li><li><a href="/ja/">Relayium</a></li></ul>
       <footer>
         <a href="/?lang=ja">← Relayium</a>
         <a href="/ja/apps/">アプリ</a>

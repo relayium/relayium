@@ -105,7 +105,7 @@ const zh = {
     {
       heading: "为什么要自托管",
       body: [
-        "Relayium 的实时传输本身就是点对点、端到端加密的，服务器在这个过程中根本看不到你的文件字节。但服务器确实保存着你的账号，以及——对于存储型/链接型传输——密文数据块和一个小型 SQLite 数据库。自托管意味着这些数据存放在你自己掌控的基础设施上，挂在你自己的域名下，不受任何人其他运维决策的影响。",
+        "Relayium 的实时传输本身就是点对点、端到端加密的，服务器在这个过程中根本看不到你的文件字节。但服务器确实保存着你的账号，以及——对于存储型/链接型传输——密文数据块和一个小型 SQLite 数据库。自托管意味着这些数据存放在你自己掌控的基础设施上，挂在你自己的域名下，不受其他任何人的运维决策影响。",
         "由于该项目采用 AGPL-3.0 许可并且开源（github.com/relayium/relayium），你可以在信任它之前先读清楚服务端到底做了什么，也可以自由 fork 或修改它。",
       ],
     },
@@ -146,7 +146,7 @@ const zh = {
       ],
       bullets: [
         "无论用哪个服务器，CLI 都是免费的——--server 只是改变了配对码握手所连接的会合服务器。send 的配对码也由同一台服务器签发，云端 up 也存到那台服务器上的账号下，所以要先用 relayium login --server https://your-domain 在那边登录；receive 和 down 依然不需要账号。",
-        "push/pull（走你自己的 SSH）以及 serve + daemon-direct 的 push relayium://host，无论是否自托管都完全不会接触 relayium.com——它们直接连到你指定的远程地址。",
+        "push/pull（走你自己的 SSH）以及 serve + daemon 直连的 push relayium://host，无论是否自托管都完全不会接触 relayium.com——它们直接连到你指定的远程地址。",
       ],
     },
   ],
@@ -155,7 +155,7 @@ const zh = {
     items: [
       {
         q: "我需要搭建 TURN 吗？",
-        a: "只有当你希望跨网络的实时传输能穿透严格 NAT 时才需要。同网络传输、基于 SSH 的 push/pull，以及 daemon-direct 都不需要它——TURN 只用于跨网络配对码路径上的 NAT 穿透。",
+        a: "只有当你希望跨网络的实时传输能穿透严格 NAT 时才需要。同一网络传输、基于 SSH 的 push/pull，以及 daemon 直连都不需要它——TURN 只用于跨网络配对码路径上的 NAT 穿透。",
       },
       {
         q: "自托管之后 CLI 还免费吗？",
@@ -192,7 +192,7 @@ const ja = {
     {
       heading: "なぜセルフホストするのか",
       body: [
-        "Relayium のリアルタイム転送はもともとピアツーピアかつエンドツーエンドで暗号化されているため、その過程でサーバーがファイルのバイトを目にすることはありません。しかしサーバーはあなたのアカウントを保持し、また保存型/リンク型の転送については、暗号化されたブロブと小さな SQLite データベースを保持します。セルフホストとは、そのデータが自分が管理するインフラ上に、自分のドメインの下に置かれ、他人の運用判断が介在しないということです。",
+        "Relayium のリアルタイム転送はもともと P2P かつエンドツーエンドで暗号化されているため、その過程でサーバーがファイルのバイトを目にすることはありません。しかしサーバーはアカウントを保持し、また保存型/リンク型の転送については、暗号化されたブロブと小さな SQLite データベースを保持します。セルフホストとは、そのデータが自分が管理するインフラ上に、自分のドメインの下に置かれ、他人の運用判断が介在しないということです。",
         "このプロジェクトは AGPL-3.0 ライセンスでオープンソース（github.com/relayium/relayium）なので、何かを任せる前にサーバーが正確に何をしているかを読んで確認でき、自由に fork したり改変したりできます。",
       ],
     },
@@ -233,7 +233,7 @@ const ja = {
       ],
       bullets: [
         "どちらのサーバーを使っても CLI は無料です——--server はペアリングコードのハンドシェイクで話すランデブーサーバーを変更するだけです。send のコードも同じサーバーが発行し、クラウドの up もそのサーバー上のアカウントに保存するので、先に relayium login --server https://your-domain でそちらにサインインしてください。receive と down は引き続きアカウント不要です。",
-        "push/pull（自分の SSH 経由）や、serve と daemon-direct の push relayium://host は、セルフホストかどうかにかかわらず relayium.com に一切触れません——指定したリモートに直接接続します。",
+        "push/pull（自分の SSH 経由）や、serve とデーモン直結の push relayium://host は、セルフホストかどうかにかかわらず relayium.com に一切触れません——指定したリモートに直接接続します。",
       ],
     },
   ],
@@ -242,7 +242,7 @@ const ja = {
     items: [
       {
         q: "TURN を設定する必要はありますか？",
-        a: "ネットワークをまたぐリアルタイム転送を厳しい NAT 越しでも機能させたい場合にのみ必要です。同一ネットワークの転送、SSH ベースの push/pull、daemon-direct はいずれも TURN なしで動作します——TURN はネットワークをまたぐペアリングコード経路での NAT 越え専用です。",
+        a: "ネットワークをまたぐリアルタイム転送を厳しい NAT 越しでも機能させたい場合にのみ必要です。同一ネットワークの転送、SSH ベースの push/pull、デーモン直結はいずれも TURN なしで動作します——TURN はネットワークをまたぐペアリングコード経路での NAT 越え専用です。",
       },
       {
         q: "セルフホストしても CLI は無料のままですか？",
@@ -254,7 +254,7 @@ const ja = {
       },
       {
         q: "セルフホストしたサーバーはどんなデータを保存しますか？",
-        a: "RELAYIUM_DB にある SQLite データベース（アカウント、セッション）と、保存型/リンク型の転送については RELAYIUM_BLOB_DIR にある暗号化されたブロブ——これはサーバー自身も復号できません。リアルタイムのピアツーピア転送はどこにも保存されません——サーバーはシグナリングのハンドシェイクを中継するだけです。",
+        a: "RELAYIUM_DB にある SQLite データベース（アカウント、セッション）と、保存型/リンク型の転送については RELAYIUM_BLOB_DIR にある暗号化されたブロブ——これはサーバー自身も復号できません。リアルタイムの P2P 転送はどこにも保存されません——サーバーはシグナリングのハンドシェイクを中継するだけです。",
       },
     ],
   },
@@ -273,13 +273,13 @@ const ko = {
   updatedLabel: "마지막 업데이트",
   lead: [
     "Relayium은 AGPL-3.0 라이선스 오픈소스이며, 서버는 단일한 자체 완결형 이미지입니다 — 외부 데이터베이스도, 서드파티 스토리지 버킷도 필요 없고, 가입할 것도 없습니다. relayium.com에 의존하는 대신 전체를 직접 운영하고 싶다면, 이 가이드는 Docker로 서버를 띄우고 CLI를 그 서버로 연결하는 방법을 안내합니다.",
-    "셀프 호스팅을 하면 데이터가 어디에 저장되는지 완전히 통제할 수 있고, 자신의 도메인과 TLS 인증서를 쓸 수 있으며, 다른 누구의 운영 판단에도 의존하지 않습니다. 아래 내용은 모두 저장소에 실제로 존재하는 파일 — docker-compose.yml, server/.env.example, docs/self-hosting.md — 을 근거로 하므로, 실제로 존재하지 않는 플래그나 설정은 등장하지 않습니다.",
+    "자체 호스팅을 하면 데이터가 어디에 저장되는지 완전히 통제할 수 있고, 자신의 도메인과 TLS 인증서를 쓸 수 있으며, 다른 누구의 운영 판단에도 의존하지 않습니다. 아래 내용은 모두 저장소에 실제로 존재하는 파일 — docker-compose.yml, server/.env.example, docs/self-hosting.md — 을 근거로 하므로, 실제로 존재하지 않는 플래그나 설정은 등장하지 않습니다.",
   ],
   sections: [
     {
-      heading: "왜 셀프 호스팅을 하나",
+      heading: "왜 자체 호스팅을 하나",
       body: [
-        "Relayium의 실시간 전송은 원래부터 P2P이자 종단간 암호화되어 있어, 그 과정에서 서버는 파일 데이터를 전혀 보지 못합니다. 하지만 서버는 여러분의 계정을 보관하며, 저장형/링크형 전송의 경우 암호화된 블롭과 작은 SQLite 데이터베이스도 보관합니다. 셀프 호스팅이란 그 데이터가 여러분이 통제하는 인프라 위에, 여러분의 도메인 아래 놓이고, 다른 누구의 운영 판단도 개입하지 않는다는 뜻입니다.",
+        "Relayium의 실시간 전송은 원래부터 P2P이자 종단간 암호화되어 있어, 그 과정에서 서버는 파일 데이터를 전혀 보지 못합니다. 하지만 서버는 계정을 보관하며, 저장형/링크형 전송의 경우 암호화된 블롭과 작은 SQLite 데이터베이스도 보관합니다. 자체 호스팅이란 그 데이터가 직접 통제하는 인프라 위에, 자신의 도메인 아래 놓이고, 다른 누구의 운영 판단도 개입하지 않는다는 뜻입니다.",
         "이 프로젝트는 AGPL-3.0 라이선스로 오픈소스(github.com/relayium/relayium)이므로, 무언가를 맡기기 전에 서버가 정확히 무엇을 하는지 직접 읽어볼 수 있고, 자유롭게 fork하거나 수정할 수도 있습니다.",
       ],
     },
@@ -298,7 +298,7 @@ const ko = {
     {
       heading: "네트워크 간 전송을 위한 TURN 릴레이 추가하기",
       body: [
-        "동일 네트워크(LAN) 전송과 SSH 기반 push/pull은 별도 설정 없이 동작합니다. 네트워크를 넘나드는 실시간 전송(서로 다른 NAT 뒤에 있는 두 기기)은 경로를 확보하기 위해 TURN 릴레이가 필요할 때가 있습니다 — 릴레이는 언제나 암호문만 볼 뿐, 파일 내용을 보는 일은 결코 없습니다.",
+        "같은 네트워크(LAN) 전송과 SSH 기반 push/pull은 별도 설정 없이 동작합니다. 네트워크를 넘나드는 실시간 전송(서로 다른 NAT 뒤에 있는 두 기기)은 경로를 확보하기 위해 TURN 릴레이가 필요할 때가 있습니다 — 릴레이는 언제나 암호문만 볼 뿐, 파일 내용을 보는 일은 결코 없습니다.",
         "docker-compose.yml에는 선택적인 relay 프로필이 있어, 메인 서버와 함께 coturn(TURN 서버)과 릴레이 바이트 계량용 소형 Redis 인스턴스를 시작할 수 있습니다:",
       ],
       code: [
@@ -320,7 +320,7 @@ const ko = {
       ],
       bullets: [
         "어느 서버를 쓰든 CLI는 무료입니다 — --server는 페어링 코드 핸드셰이크가 대화하는 랑데부 서버만 바꿀 뿐입니다. send의 코드도 같은 서버가 발급하고 클라우드 up도 그 서버의 계정에 저장하므로, 먼저 relayium login --server https://your-domain으로 그쪽에 로그인하세요. receive와 down은 여전히 계정이 필요 없습니다.",
-        "push/pull(자신의 SSH를 통한)과 serve + daemon-direct의 push relayium://host는 셀프 호스팅 여부와 무관하게 relayium.com에 전혀 닿지 않습니다 — 지정한 원격지에 직접 연결됩니다.",
+        "push/pull(자신의 SSH를 통한)과 serve + 데몬 다이렉트의 push relayium://host는 자체 호스팅 여부와 무관하게 relayium.com에 전혀 닿지 않습니다 — 지정한 원격지에 직접 연결됩니다.",
       ],
     },
   ],
@@ -329,10 +329,10 @@ const ko = {
     items: [
       {
         q: "TURN을 설정해야 하나요?",
-        a: "네트워크를 넘나드는 실시간 전송이 엄격한 NAT 환경에서도 동작하길 원할 때만 필요합니다. 동일 네트워크 전송, SSH 기반 push/pull, daemon-direct는 모두 TURN 없이 동작합니다 — TURN은 네트워크 간 페어링 코드 경로의 NAT 통과에만 쓰입니다.",
+        a: "네트워크를 넘나드는 실시간 전송이 엄격한 NAT 환경에서도 동작하길 원할 때만 필요합니다. 같은 네트워크 전송, SSH 기반 push/pull, 데몬 다이렉트는 모두 TURN 없이 동작합니다 — TURN은 네트워크 간 페어링 코드 경로의 NAT 통과에만 쓰입니다.",
       },
       {
-        q: "셀프 호스팅해도 CLI는 여전히 무료인가요?",
+        q: "자체 호스팅해도 CLI는 여전히 무료인가요?",
         a: "네. relayium.com에 연결하든 직접 운영하는 서버에 연결하든 CLI는 완전히 무료입니다 — --server는 단지 자신의 인스턴스를 가리키도록 할 뿐입니다. 계정이 필요한 것은 코드를 발급해야 하는 send(건네받은 코드를 쓸 때는 불필요)와 파일을 저장하는 up입니다. 그것도 가리키는 그 서버의 계정이어야 하므로 먼저 relayium login --server https://your-domain을 실행하세요. receive와 down은 필요 없습니다.",
       },
       {
@@ -340,7 +340,7 @@ const ko = {
         a: "네. Docker 이미지 자체는 :8080에서 평문 HTTP로 대기합니다. 앞단에 nginx나 Caddy를 두고 자신의 도메인과 인증서(예: certbot/Let's Encrypt)를 설정하세요. docs/self-hosting.md에 프록시해야 할 경로가 설명되어 있습니다. Relayium이 실제 운영에 쓰는 nginx 설정은 공개되어 있지 않으므로 직접 작성해야 합니다.",
       },
       {
-        q: "셀프 호스팅한 서버는 어떤 데이터를 저장하나요?",
+        q: "자체 호스팅한 서버는 어떤 데이터를 저장하나요?",
         a: "RELAYIUM_DB에 있는 SQLite 데이터베이스(계정, 세션)와, 저장형/링크형 전송의 경우 RELAYIUM_BLOB_DIR에 있는 암호화된 블롭 — 이는 서버 자신도 복호화할 수 없습니다. 실시간 P2P 전송은 어디에도 저장되지 않습니다 — 서버는 시그널링 핸드셰이크만 중계할 뿐입니다.",
       },
     ],
@@ -360,7 +360,7 @@ const de = {
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Relayium ist AGPL-3.0-lizenziert und Open Source, und der Server ist ein einziges eigenständiges Image — keine externe Datenbank, kein Storage-Bucket eines Drittanbieters, nichts, wofür man sich anmelden müsste. Wenn du lieber alles selbst betreibst, statt dich auf relayium.com zu verlassen, bringt dich diese Anleitung mit Docker zu einem laufenden Server und richtet die CLI darauf aus.",
-    "Selbst hosten heißt, volle Kontrolle darüber zu haben, wo deine Daten liegen, eine eigene Domain und ein eigenes TLS-Zertifikat zu nutzen, und von niemandes fremden Betriebsentscheidungen abhängig zu sein. Alles Folgende stützt sich auf Dateien, die tatsächlich im Repository liegen — docker-compose.yml, server/.env.example und docs/self-hosting.md —, sodass hier keine Flag oder Einstellung erwähnt wird, die es nicht wirklich gibt.",
+    "Selbst hosten heißt, volle Kontrolle darüber zu haben, wo deine Daten liegen, eine eigene Domain und ein eigenes TLS-Zertifikat zu nutzen, und von den Betriebsentscheidungen anderer unabhängig zu sein. Alles Folgende stützt sich auf Dateien, die tatsächlich im Repository liegen — docker-compose.yml, server/.env.example und docs/self-hosting.md —, sodass hier kein Flag und keine Einstellung erwähnt wird, die es nicht wirklich gibt.",
   ],
   sections: [
     {
@@ -379,13 +379,13 @@ const de = {
       bullets: [
         "Das ist bereits der gesamte Server, er lauscht auf :8080. Setze in Produktion nginx oder Caddy davor, um TLS zu übernehmen — docs/self-hosting.md beschreibt den Docker-Weg und was du proxyen musst; Relayiums eigene Produktions-nginx-Konfiguration ist nicht veröffentlicht.",
         "Die App-Konfiguration kommt aus einer optionalen server/.env-Datei plus dem environment:-Block in docker-compose.yml. Jede Einstellung hat einen passenden RELAYIUM_*-Key — kopiere server/.env.example als Ausgangspunkt.",
-        "Die vier für eine einfache Bereitstellung wichtigen Keys: RELAYIUM_ADDR (Listen-Adresse), RELAYIUM_STATIC (Pfad zur gebauten Web-App), RELAYIUM_DB (SQLite-Dateipfad) und RELAYIUM_BLOB_DIR (wohin das Chiffrat gespeicherter Links geschrieben wird). docker-compose.yml setzt für alle vier bereits sinnvolle Standardwerte und persistiert sie in einem benannten Volume.",
+        "Die vier für eine einfache Bereitstellung wichtigen Keys: RELAYIUM_ADDR (Listen-Adresse), RELAYIUM_STATIC (Pfad zur gebauten Web-App), RELAYIUM_DB (SQLite-Dateipfad) und RELAYIUM_BLOB_DIR (wohin der Chiffretext gespeicherter Links geschrieben wird). docker-compose.yml setzt für alle vier bereits sinnvolle Standardwerte und persistiert sie in einem benannten Volume.",
       ],
     },
     {
       heading: "Ein TURN-Relay für netzwerkübergreifende Übertragungen hinzufügen",
       body: [
-        "Übertragungen im selben Netzwerk (LAN) und SSH-basiertes push/pull funktionieren ohne alles Zusätzliche. Netzwerkübergreifende Echtzeit-Übertragungen (zwei Geräte hinter unterschiedlichen NATs) brauchen manchmal ein TURN-Relay, um einen Pfad herzustellen — das Relay sieht dabei stets nur Chiffrat, niemals deinen Dateiinhalt.",
+        "Übertragungen im selben Netzwerk (LAN) und SSH-basiertes push/pull funktionieren ohne irgendetwas Zusätzliches. Netzwerkübergreifende Echtzeit-Übertragungen (zwei Geräte hinter unterschiedlichen NATs) brauchen manchmal ein TURN-Relay, um einen Pfad herzustellen — das Relay sieht dabei stets nur Chiffretext, niemals deinen Dateiinhalt.",
         "docker-compose.yml hat ein optionales relay-Profil, das zusammen mit dem Hauptserver coturn (den TURN-Server) und eine kleine Redis-Instanz für die Zählung der Relay-Bytes startet:",
       ],
       code: [
@@ -419,7 +419,7 @@ const de = {
         a: "Nur, wenn netzwerkübergreifende Echtzeit-Übertragungen auch durch strenge NATs funktionieren sollen. Übertragungen im selben Netzwerk, SSH-basiertes push/pull und daemon-direct funktionieren alle ohne TURN — TURN dient ausschließlich der NAT-Traversal auf dem netzwerkübergreifenden Pairing-Code-Pfad.",
       },
       {
-        q: "Ist die CLI beim Selbsthosten immer noch kostenlos?",
+        q: "Ist die CLI immer noch kostenlos, wenn ich selbst hoste?",
         a: "Ja. Ob sie mit relayium.com oder einem selbst betriebenen Server spricht, die CLI ist völlig kostenlos — --server richtet sie nur auf deine Instanz aus. Ein Konto brauchen send, wenn es einen Code erzeugen muss (nicht, wenn du ihm einen gibst), und up, um eine Datei zu speichern — und zwar auf genau dem Server, auf den du sie richtest: führe zuerst relayium login --server https://your-domain aus. receive und down brauchen keines.",
       },
       {
@@ -460,40 +460,40 @@ const fr = {
     {
       heading: "Démarrage rapide avec Docker",
       body: [
-        "La racine du dépôt fournit un Dockerfile et un docker-compose.yml qui construisent une seule image autonome — un binaire Go statique servant l'application web précompilée, donc aucun Node, chaîne d'outils Go ou nginx séparés n'est requis juste pour le faire tourner :",
+        "La racine du dépôt fournit un Dockerfile et un docker-compose.yml qui construisent une seule image autonome — un binaire Go statique servant l'application web précompilée, donc aucun Node, aucune chaîne d'outils Go ni aucun nginx séparé n'est requis juste pour le faire tourner :",
       ],
       code: ["docker compose up -d --build"],
       bullets: [
-        "C'est tout le serveur, à l'écoute sur :8080. En production, placez nginx ou Caddy devant pour le TLS — docs/self-hosting.md couvre le chemin Docker et ce qu'il faut proxyfier ; la configuration nginx de production propre à Relayium n'est pas publiée.",
+        "C'est tout le serveur, à l'écoute sur :8080. En production, placez nginx ou Caddy devant pour le TLS — docs/self-hosting.md couvre le chemin Docker et ce qu'il faut proxyfier ; la configuration nginx de production propre à Relayium n'est pas publiée.",
         "La configuration de l'appli provient d'un fichier server/.env optionnel plus le bloc environment: dans docker-compose.yml. Chaque réglage a une clé RELAYIUM_* correspondante — copiez server/.env.example comme point de départ.",
-        "Les quatre clés qui comptent pour un déploiement de base : RELAYIUM_ADDR (adresse d'écoute), RELAYIUM_STATIC (chemin vers l'application web compilée), RELAYIUM_DB (chemin du fichier SQLite) et RELAYIUM_BLOB_DIR (où est écrit le chiffré des liens stockés). docker-compose.yml définit déjà des valeurs par défaut raisonnables pour ces quatre clés et les persiste dans un volume nommé.",
+        "Les quatre clés qui comptent pour un déploiement de base : RELAYIUM_ADDR (adresse d'écoute), RELAYIUM_STATIC (chemin vers l'application web compilée), RELAYIUM_DB (chemin du fichier SQLite) et RELAYIUM_BLOB_DIR (où est écrit le texte chiffré des liens stockés). docker-compose.yml définit déjà des valeurs par défaut raisonnables pour ces quatre clés et les persiste dans un volume nommé.",
       ],
     },
     {
       heading: "Ajouter un relais TURN pour les transferts entre réseaux",
       body: [
-        "Les transferts sur le même réseau (LAN) et le push/pull basé sur SSH fonctionnent sans rien de plus. Les transferts en temps réel entre réseaux différents (deux appareils derrière des NAT différents) nécessitent parfois un relais TURN pour établir un chemin — le relais ne voit jamais que du chiffré, jamais le contenu de vos fichiers.",
-        "docker-compose.yml a un profil relay optionnel qui démarre coturn (le serveur TURN) et une petite instance Redis pour la mesure des octets relayés, aux côtés du serveur principal :",
+        "Les transferts sur le même réseau (LAN) et le push/pull basé sur SSH fonctionnent sans rien de plus. Les transferts en temps réel entre réseaux différents (deux appareils derrière des NAT différents) nécessitent parfois un relais TURN pour établir un chemin — le relais ne voit jamais que du texte chiffré, jamais le contenu de vos fichiers.",
+        "docker-compose.yml a un profil relay optionnel qui démarre coturn (le serveur TURN) et une petite instance Redis pour la mesure des octets relayés, aux côtés du serveur principal :",
       ],
       code: [
         "RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build",
       ],
       bullets: [
-        "coturn a besoin de la véritable IP publique de l'hôte et d'une plage de ports UDP ouverte pour fonctionner — docs/self-hosting.md couvre le démarrage via le profil relay de Docker ; la configuration coturn de production propre à Relayium (y compris son script d'installation) n'est pas publiée.",
+        "coturn a besoin de la véritable IP publique de l'hôte et d'une plage de ports UDP ouverte pour fonctionner — docs/self-hosting.md couvre le démarrage via le profil relay de Docker ; la configuration coturn de production propre à Relayium (y compris son script d'installation) n'est pas publiée.",
         "Sans --profile relay ni RELAYIUM_TURN_SECRET, le serveur fonctionne quand même parfaitement — les transferts entre réseaux différents basculent simplement sur STUN seul, ce qui fonctionne pour les NAT les plus simples mais pas pour les plus stricts.",
       ],
     },
     {
       heading: "Paramétrer la CLI pour votre serveur",
       body: [
-        "Par défaut, la CLI Relayium utilise le serveur de rendez-vous de relayium.com pour le send/receive entre réseaux différents. Passez --server pour utiliser le vôtre à la place :",
+        "Par défaut, la CLI Relayium utilise le serveur de rendez-vous de relayium.com pour le send/receive entre réseaux différents. Passez --server pour utiliser le vôtre à la place :",
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
         "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "Quel que soit le serveur utilisé, la CLI est gratuite — --server change seulement le serveur de rendez-vous avec lequel elle communique pour la poignée de main du code d'appairage. send fait générer son code par ce même serveur, et le up cloud stocke sous un compte dessus, connectez-vous donc d'abord avec relayium login --server https://your-domain ; receive et down ne nécessitent toujours aucun compte.",
+        "Quel que soit le serveur utilisé, la CLI est gratuite — --server change seulement le serveur de rendez-vous avec lequel elle communique pour la poignée de main du code d'appairage. send fait générer son code par ce même serveur, et up stocke dans le cloud sous un compte hébergé sur ce même serveur, connectez-vous donc d'abord là-bas avec relayium login --server https://your-domain ; receive et down ne nécessitent toujours aucun compte.",
         "push/pull (via votre propre SSH) ainsi que serve + le push daemon-direct relayium://host ne touchent jamais relayium.com, auto-hébergé ou non — ils se connectent directement à la machine distante que vous indiquez.",
       ],
     },
@@ -502,19 +502,19 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Dois-je configurer TURN ?",
+        q: "Dois-je configurer TURN ?",
         a: "Seulement si vous voulez que les transferts en temps réel entre réseaux différents fonctionnent à travers des NAT stricts. Les transferts sur le même réseau, le push/pull basé sur SSH et le daemon-direct fonctionnent tous sans TURN — TURN sert uniquement au NAT traversal sur le chemin du code d'appairage entre réseaux différents.",
       },
       {
-        q: "La CLI reste-t-elle gratuite si je m'auto-héberge ?",
-        a: "Oui. Qu'elle parle à relayium.com ou à un serveur que vous exploitez vous-même, la CLI est entièrement gratuite — --server la fait simplement pointer vers votre instance. Ce qui nécessite un compte, c'est send quand il doit générer un code (pas quand vous lui en passez un) et up pour stocker un fichier — et le compte doit être sur le serveur que vous visez : lancez d'abord relayium login --server https://your-domain. receive et down n'en demandent aucun.",
+        q: "La CLI reste-t-elle gratuite si je m'auto-héberge ?",
+        a: "Oui. Qu'elle parle à relayium.com ou à un serveur que vous exploitez vous-même, la CLI est entièrement gratuite — --server la fait simplement pointer vers votre instance. Ce qui nécessite un compte, c'est send quand il doit générer un code (pas quand vous lui en passez un) et up pour stocker un fichier — et le compte doit être sur le serveur que vous visez : lancez d'abord relayium login --server https://your-domain. receive et down n'en demandent aucun.",
       },
       {
-        q: "Puis-je utiliser mon propre domaine et mon propre certificat TLS ?",
-        a: "Oui. L'image Docker écoute elle-même en HTTP simple sur :8080 ; placez nginx ou Caddy devant avec votre propre domaine et votre certificat (par exemple via certbot/Let's Encrypt). docs/self-hosting.md couvre ce qu'il faut proxyfier ; la configuration nginx de production propre à Relayium n'est pas publiée, il faudra écrire la vôtre.",
+        q: "Puis-je utiliser mon propre domaine et mon propre certificat TLS ?",
+        a: "Oui. L'image Docker écoute elle-même en HTTP simple sur :8080 ; placez nginx ou Caddy devant avec votre propre domaine et votre certificat (par exemple via certbot/Let's Encrypt). docs/self-hosting.md couvre ce qu'il faut proxyfier ; la configuration nginx de production propre à Relayium n'est pas publiée, il faudra écrire la vôtre.",
       },
       {
-        q: "Quelles données mon serveur auto-hébergé stocke-t-il ?",
+        q: "Quelles données mon serveur auto-hébergé stocke-t-il ?",
         a: "Une base SQLite (comptes, sessions) sous RELAYIUM_DB et, pour les transferts stockés/basés sur un lien, des blobs chiffrés sous RELAYIUM_BLOB_DIR que le serveur lui-même ne peut pas déchiffrer. Les transferts pair-à-pair en temps réel ne sont stockés nulle part — le serveur ne fait que relayer la poignée de main de signalisation.",
       },
     ],
@@ -534,7 +534,7 @@ const ar = {
   updatedLabel: "آخر تحديث",
   lead: [
     "‏Relayium مرخَّص بموجب AGPL-3.0 ومفتوح المصدر، والخادم صورة واحدة مكتفية بذاتها — بلا قاعدة بيانات خارجية، بلا حاوية تخزين لطرف ثالث، ولا شيء للتسجيل فيه. إن كنت تفضّل تشغيل كل شيء بنفسك بدل الاعتماد على relayium.com، فهذا الدليل يشغّل خادمًا بـ Docker ويوجّه الـ CLI إليه.",
-    "تمنحك الاستضافة الذاتية تحكمًا كاملًا في مكان بياناتك، ونطاقك الخاص وشهادة TLS خاصة بك، وبلا اعتماد على بنية أحد آخر. كل ما يلي مبني على ملفات موجودة فعلًا في المستودع — `docker-compose.yml` و `server/.env.example` و `docs/self-hosting.md` — فلا شيء هنا عبارة عن راية أو إعداد غير موجود فعلًا.",
+    "تمنحك الاستضافة الذاتية تحكمًا كاملًا في مكان بياناتك، ونطاقك الخاص وشهادة TLS خاصة بك، وبلا اعتماد على بنية أحد آخر. كل ما يلي مبني على ملفات موجودة فعلًا في المستودع — `docker-compose.yml` و`server/.env.example` و`docs/self-hosting.md` — فلا شيء هنا عبارة عن راية أو إعداد غير موجود فعلًا.",
   ],
   sections: [
     {
@@ -547,7 +547,7 @@ const ar = {
     {
       heading: "بداية سريعة مع Docker",
       body: [
-        "جذر المستودع يوفّر `Dockerfile` و `docker-compose.yml` يبنيان صورة واحدة مكتفية بذاتها — ثنائي Go ساكن يقدّم تطبيق الويب المبني مسبقًا، فلا حاجة إلى Node منفصل أو سلسلة أدوات Go أو nginx لمجرد تشغيله:",
+        "جذر المستودع يوفّر `Dockerfile` و`docker-compose.yml` يبنيان صورة واحدة مكتفية بذاتها — ثنائي Go ساكن يقدّم تطبيق الويب المبني مسبقًا، فلا حاجة إلى Node منفصل أو سلسلة أدوات Go أو nginx لمجرد تشغيله:",
       ],
       code: ["docker compose up -d --build"],
       bullets: [
@@ -559,7 +559,7 @@ const ar = {
     {
       heading: "أضف مُرحِّل TURN لعمليات النقل عبر الشبكات",
       body: [
-        "عمليات النقل في نفس الشبكة (LAN) وpush/pull القائم على SSH تعمل بلا أي إضافة. عمليات النقل الفوري عبر الشبكات (جهازان خلف NAT مختلفين) تحتاج أحيانًا مُرحِّل TURN لإنشاء مسار — لا يرى المُرحِّل سوى نص مُشفَّر أبدًا، لا محتوى ملفاتك.",
+        "عمليات النقل في الشبكة نفسها (LAN) وpush/pull القائم على SSH تعمل بلا أي إضافة. عمليات النقل الفوري عبر الشبكات (جهازان خلف NAT مختلفين) تحتاج أحيانًا مُرحِّل TURN لإنشاء مسار — لا يرى المُرحِّل سوى نص مُشفَّر أبدًا، لا محتوى ملفاتك.",
         "لدى docker-compose.yml ملف تعريف relay اختياري يُشغّل coturn (خادم TURN) ونسخة Redis صغيرة لقياس بايتات الترحيل، إلى جانب الخادم الرئيسي:",
       ],
       code: [
@@ -573,15 +573,15 @@ const ar = {
     {
       heading: "وجّه الـ CLI إلى خادمك",
       body: [
-        "يستخدم Relayium CLI افتراضيًا خادم الالتقاء الخاص بـ relayium.com لعمليات send/receive عبر الشبكات. مرّر ‎--server‎ لاستخدام خادمك بدلًا منه:",
+        "يستخدم Relayium CLI افتراضيًا خادم التعارف الخاص بـ relayium.com لعمليات send/receive عبر الشبكات. مرّر ‎--server‎ لاستخدام خادمك بدلًا منه:",
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
         "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "الـ CLI مجاني في كلتا الحالتين — ‎--server‎ يغيّر فقط خادم الالتقاء الذي يتحدث إليه لمصافحة رمز الاقتران. و send يستصدر رمزه من الخادم نفسه، كما يخزّن up السحابي تحت حساب عليه، لذا سجّل الدخول هناك أولًا بـ ‎relayium login --server https://your-domain‎؛ أما receive و down فلا يزالان لا يحتاجان حسابًا.",
-        "‏push/pull (عبر SSH الخاص بك) وserve + الدفع المباشر عبر الخدمة push relayium://host لا يلمسان relayium.com إطلاقًا، سواء بالاستضافة الذاتية أم لا — يتصلان مباشرةً بالجهاز البعيد الذي تحدده.",
+        "الـ CLI مجاني في كلتا الحالتين — ‎--server‎ يغيّر فقط خادم التعارف الذي يتحدث إليه لمصافحة رمز الاقتران. وsend يستصدر رمزه من الخادم نفسه، كما يخزّن up السحابي تحت حساب عليه، لذا سجّل الدخول هناك أولًا بـ ‎relayium login --server https://your-domain‎؛ أما receive وdown فلا يزالان لا يحتاجان حسابًا.",
+        "‏push/pull (عبر SSH الخاص بك) وserve + دفع daemon direct عبر push relayium://host لا يلمسان relayium.com إطلاقًا، سواء بالاستضافة الذاتية أم لا — يتصلان مباشرةً بالجهاز البعيد الذي تحدده.",
       ],
     },
   ],
@@ -590,11 +590,11 @@ const ar = {
     items: [
       {
         q: "هل أحتاج إلى إعداد TURN؟",
-        a: "فقط إن أردت أن تعمل عمليات النقل الفوري عبر الشبكات عبر أنواع NAT الصارمة. عمليات النقل في نفس الشبكة، وpush/pull القائم على SSH، والدفع المباشر عبر الخدمة، جميعها تعمل بدونه — TURN مخصّص بحتًا لاجتياز NAT على مسار رمز الاقتران عبر الشبكات.",
+        a: "فقط إن أردت أن تعمل عمليات النقل الفوري عبر الشبكات عبر أنواع NAT الصارمة. عمليات النقل في الشبكة نفسها، وpush/pull القائم على SSH، وdaemon direct، جميعها تعمل بدونه — TURN مخصّص بحتًا لاجتياز NAT على مسار رمز الاقتران عبر الشبكات.",
       },
       {
         q: "هل يبقى الـ CLI مجانيًا إن استضفتُ ذاتيًا؟",
-        a: "نعم. الـ CLI مجاني تمامًا سواء تحدّث إلى relayium.com أو إلى خادم تشغّله بنفسك — ‎--server‎ يوجّهه فقط إلى نسختك. والذي يحتاج حسابًا هو send حين يلزمه إصدار رمز (لا حين تمرّر له رمزًا جاهزًا)، و up لتخزين ملف — ويجب أن يكون الحساب على الخادم الذي توجّهه إليه، فشغّل أولًا ‎relayium login --server https://your-domain‎. أما receive و down فلا يحتاجان حسابًا.",
+        a: "نعم. الـ CLI مجاني تمامًا سواء تحدّث إلى relayium.com أو إلى خادم تشغّله بنفسك — ‎--server‎ يوجّهه فقط إلى نسختك. والذي يحتاج حسابًا هو send حين يلزمه إصدار رمز (لا حين تمرّر له رمزًا جاهزًا)، وup لتخزين ملف — ويجب أن يكون الحساب على الخادم الذي توجّهه إليه، فشغّل أولًا ‎relayium login --server https://your-domain‎. أما receive وdown فلا يحتاجان حسابًا.",
       },
       {
         q: "هل يمكنني استخدام نطاقي الخاص وشهادة TLS خاصة بي؟",
@@ -621,13 +621,13 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "Relayium tiene licencia AGPL-3.0 y es de código abierto, y el servidor es una única imagen autocontenida — sin base de datos externa, sin bucket de almacenamiento de terceros, nada para lo que registrarse. Si prefieres ejecutarlo todo por tu cuenta en vez de depender de relayium.com, esta guía levanta un servidor con Docker y apunta la CLI hacia él.",
-    "Alojar por tu cuenta te da control total sobre dónde viven tus datos, tu propio dominio y certificado TLS, y ninguna dependencia de la infraestructura de nadie más. Todo lo que sigue se basa en los archivos que se distribuyen en el repositorio — `docker-compose.yml`, `server/.env.example` y `docs/self-hosting.md` — así que nada de lo que hay aquí es un indicador o ajuste que no exista de verdad.",
+    "Autoalojar te da control total sobre dónde viven tus datos, tu propio dominio y certificado TLS, y ninguna dependencia de la infraestructura de nadie más. Todo lo que sigue se basa en los archivos que se distribuyen en el repositorio — `docker-compose.yml`, `server/.env.example` y `docs/self-hosting.md` — así que nada de lo que hay aquí es un indicador o ajuste que no exista de verdad.",
   ],
   sections: [
     {
-      heading: "Por qué alojar por tu cuenta",
+      heading: "Por qué autoalojar",
       body: [
-        "Las transferencias en tiempo real de Relayium ya son de igual a igual y cifradas de extremo a extremo, así que el servidor nunca ve los bytes de tu archivo ahí. Pero sí guarda tu cuenta y — para las transferencias almacenadas/basadas en enlace — blobs de texto cifrado y una pequeña base de datos SQLite. Alojar por tu cuenta significa que esos datos viven en infraestructura que tú controlas, bajo tu propio dominio, sin las decisiones operativas de nadie más de por medio.",
+        "Las transferencias en tiempo real de Relayium ya son de igual a igual y cifradas de extremo a extremo, así que el servidor nunca ve los bytes de tu archivo ahí. Pero sí guarda tu cuenta y — para las transferencias almacenadas/basadas en enlace — blobs de texto cifrado y una pequeña base de datos SQLite. Autoalojar significa que esos datos viven en infraestructura que tú controlas, bajo tu propio dominio, sin las decisiones operativas de nadie más de por medio.",
         "Como el proyecto tiene licencia AGPL-3.0 y es de código abierto (github.com/relayium/relayium), puedes leer exactamente qué hace el servidor antes de confiarle nada, y bifurcarlo o modificarlo libremente.",
       ],
     },
@@ -660,15 +660,15 @@ const es = {
     {
       heading: "Apunta la CLI hacia tu servidor",
       body: [
-        "La CLI de Relayium usa por defecto el servidor de encuentro de relayium.com para el send/receive entre redes. Pasa --server para usar el tuyo en su lugar:",
+        "La CLI de Relayium usa por defecto el servidor de punto de encuentro de relayium.com para el send/receive entre redes. Pasa --server para usar el tuyo en su lugar:",
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
         "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "La CLI es gratis en cualquier caso — --server solo cambia con qué servidor de encuentro habla para el handshake del código de emparejamiento. send genera su código contra ese mismo servidor, y el up en la nube guarda bajo una cuenta en él, así que inicia sesión allí primero con relayium login --server https://your-domain; receive y down siguen sin necesitar cuenta.",
-        "push/pull (por tu propio SSH) y serve + el push daemon-direct relayium://host no tocan relayium.com en absoluto, con o sin alojamiento propio — se conectan directamente al remoto que indiques.",
+        "La CLI es gratis en cualquier caso — --server solo cambia con qué servidor de punto de encuentro habla para el handshake del código de emparejamiento. send genera su código contra ese mismo servidor, y el up en la nube guarda bajo una cuenta en él, así que inicia sesión allí primero con relayium login --server https://your-domain; receive y down siguen sin necesitar cuenta.",
+        "push/pull (por tu propio SSH) y serve + el push daemon directo relayium://host no tocan relayium.com en absoluto, te autoalojes o no — se conectan directamente al remoto que indiques.",
       ],
     },
   ],
@@ -677,10 +677,10 @@ const es = {
     items: [
       {
         q: "¿Necesito configurar TURN?",
-        a: "Solo si quieres que las transferencias en tiempo real entre redes funcionen a través de NAT estrictos. Las transferencias en la misma red, el push/pull basado en SSH y el daemon-direct funcionan todos sin él — TURN sirve puramente para el recorrido de NAT en la ruta del código de emparejamiento entre redes.",
+        a: "Solo si quieres que las transferencias en tiempo real entre redes funcionen a través de NAT estrictos. Las transferencias en la misma red, el push/pull basado en SSH y el daemon directo funcionan todos sin él — TURN sirve puramente para el recorrido de NAT en la ruta del código de emparejamiento entre redes.",
       },
       {
-        q: "¿La CLI sigue siendo gratis si alojo por mi cuenta?",
+        q: "¿La CLI sigue siendo gratis si me autoalojo?",
         a: "Sí. Tanto si habla con relayium.com como con un servidor que ejecutas tú mismo, la CLI es completamente gratis — --server solo la apunta hacia tu instancia. Lo que necesita cuenta es send cuando tiene que generar un código (no cuando le pasas uno) y up para guardar un archivo — y la cuenta tiene que estar en el servidor al que la apuntes: ejecuta primero relayium login --server https://your-domain. receive y down no necesitan ninguna.",
       },
       {
@@ -688,7 +688,7 @@ const es = {
         a: "Sí. La imagen de Docker escucha en HTTP simple en :8080; pon nginx o Caddy delante con tu propio dominio y certificado (por ejemplo, vía certbot/Let's Encrypt). docs/self-hosting.md cubre qué hay que redirigir; la configuración nginx de producción propia de Relayium no está publicada, así que tendrás que escribir la tuya.",
       },
       {
-        q: "¿Qué datos almacena mi servidor alojado por mi cuenta?",
+        q: "¿Qué datos almacena mi servidor autoalojado?",
         a: "Una base de datos SQLite (cuentas, sesiones) en RELAYIUM_DB y, para las transferencias almacenadas/basadas en enlace, blobs cifrados en RELAYIUM_BLOB_DIR que el propio servidor no puede descifrar. Las transferencias de igual a igual en tiempo real no se almacenan en ningún sitio — el servidor solo retransmite el handshake de señalización.",
       },
     ],
@@ -708,13 +708,13 @@ const pt = {
   updatedLabel: "Última atualização",
   lead: [
     "O Relayium tem licença AGPL-3.0 e é de código aberto, e o servidor é uma única imagem autocontida — sem banco de dados externo, sem bucket de armazenamento de terceiros, nada para se cadastrar. Se você prefere rodar tudo por conta própria em vez de depender do relayium.com, este guia coloca um servidor no ar com Docker e aponta a CLI para ele.",
-    "Hospedar por conta própria dá a você controle total sobre onde seus dados ficam, seu próprio domínio e certificado TLS, e nenhuma dependência da infraestrutura de mais ninguém. Tudo a seguir se baseia nos arquivos que acompanham o repositório — `docker-compose.yml`, `server/.env.example` e `docs/self-hosting.md` — então nada aqui é uma flag ou configuração que não exista de verdade.",
+    "Auto-hospedar dá a você controle total sobre onde seus dados ficam, seu próprio domínio e certificado TLS, e nenhuma dependência da infraestrutura de mais ninguém. Tudo a seguir se baseia nos arquivos que acompanham o repositório — `docker-compose.yml`, `server/.env.example` e `docs/self-hosting.md` — então nada aqui é uma flag ou configuração que não exista de verdade.",
   ],
   sections: [
     {
-      heading: "Por que hospedar por conta própria",
+      heading: "Por que auto-hospedar",
       body: [
-        "As transferências em tempo real do Relayium já são ponto a ponto e com criptografia de ponta a ponta, então o servidor nunca vê os bytes do seu arquivo ali. Mas ele guarda sua conta e — para transferências armazenadas/baseadas em link — blobs de texto cifrado e um pequeno banco de dados SQLite. Hospedar por conta própria significa que esses dados ficam em infraestrutura que você controla, sob seu próprio domínio, sem as decisões operacionais de mais ninguém envolvidas.",
+        "As transferências em tempo real do Relayium já são ponto a ponto e com criptografia de ponta a ponta, então o servidor nunca vê os bytes do seu arquivo ali. Mas ele guarda sua conta e — para transferências armazenadas/baseadas em link — blobs de texto cifrado e um pequeno banco de dados SQLite. Auto-hospedar significa que esses dados ficam em infraestrutura que você controla, sob seu próprio domínio, sem as decisões operacionais de mais ninguém envolvidas.",
         "Como o projeto tem licença AGPL-3.0 e é de código aberto (github.com/relayium/relayium), você pode ler exatamente o que o servidor faz antes de confiar qualquer coisa a ele, e fazer fork ou modificá-lo livremente.",
       ],
     },
@@ -754,8 +754,8 @@ const pt = {
         "relayium receive K7M4XR --server https://your-domain",
       ],
       bullets: [
-        "A CLI é gratuita em qualquer dos casos — --server apenas muda com qual servidor de encontro ela fala para o handshake do código de emparelhamento. O send gera o código nesse mesmo servidor, e o up na nuvem guarda sob uma conta nele, então faça login lá primeiro com relayium login --server https://your-domain; o receive e o down continuam sem precisar de conta.",
-        "push/pull (pelo seu próprio SSH) e serve + o push daemon-direct relayium://host não tocam o relayium.com em nada, com ou sem auto-hospedagem — eles se conectam diretamente ao remoto que você especificar.",
+        "A CLI é gratuita em qualquer dos casos — --server apenas muda com qual servidor de encontro ela fala para o handshake do código de emparelhamento. O send gera o código nesse mesmo servidor, e o up na nuvem guarda sob uma conta nele, então entre lá primeiro com relayium login --server https://your-domain; o receive e o down continuam sem precisar de conta.",
+        "push/pull (pelo seu próprio SSH) e serve + o push daemon direto relayium://host não tocam o relayium.com em nada, com ou sem auto-hospedagem — eles se conectam diretamente ao remoto que você especificar.",
       ],
     },
   ],
@@ -764,10 +764,10 @@ const pt = {
     items: [
       {
         q: "Preciso configurar o TURN?",
-        a: "Só se você quiser que as transferências em tempo real entre redes funcionem através de NATs rígidos. Transferências na mesma rede, o push/pull baseado em SSH e o daemon-direct funcionam todos sem ele — o TURN serve puramente para a travessia de NAT no caminho do código de emparelhamento entre redes.",
+        a: "Só se você quiser que as transferências em tempo real entre redes funcionem através de NATs rígidos. Transferências na mesma rede, o push/pull baseado em SSH e o daemon direto funcionam todos sem ele — o TURN serve puramente para a travessia de NAT no caminho do código de emparelhamento entre redes.",
       },
       {
-        q: "A CLI continua gratuita se eu hospedar por conta própria?",
+        q: "A CLI continua gratuita se eu auto-hospedar?",
         a: "Sim. Quer ela fale com o relayium.com ou com um servidor que você mesmo opera, a CLI é completamente gratuita — --server apenas a aponta para a sua instância. O que precisa de conta é o send quando tem de gerar um código (não quando você lhe passa um) e o up para guardar um arquivo — e a conta tem de estar no servidor para o qual você apontá-lo: rode primeiro relayium login --server https://your-domain. O receive e o down não precisam de nenhuma.",
       },
       {

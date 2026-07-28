@@ -287,11 +287,11 @@ const ko = {
 const de = {
   title: "Relayium — Ende-zu-Ende-verschlüsselte P2P-Dateiübertragung",
   description:
-    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug zur Dateiübertragung. Bei der Echtzeitübertragung im Browser verbinden sich im selben Netz zwei Geräte direkt und Dateien erreichen nie den Server; netzübergreifend läuft es über einen verschlüsselten Relay, der nur Chiffretext sieht. Ohne Installation; im selben Netz ist kein Konto nötig, für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
+    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug zur Dateiübertragung. Bei der Echtzeitübertragung im Browser verbinden sich im selben Netz zwei Geräte direkt und Dateien erreichen nie den Server; netzübergreifend läuft es über ein verschlüsseltes Relay, das nur Chiffretext sieht. Ohne Installation; im selben Netz ist kein Konto nötig, für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
   hero: {
     h1: "Ende-zu-Ende-verschlüsselte P2P-Dateiübertragung",
     pitch:
-      "Verbinde zwei Geräte direkt im Browser; Dateien werden Ende-zu-Ende verschlüsselt und Chunk für Chunk übertragen. Im selben Netz erreichen sie nie den Server, netzübergreifend laufen sie über einen verschlüsselten Relay, der nur Chiffretext sieht. Keine Installation, keine Registrierung — einfach die Webseite öffnen und loslegen.",
+      "Verbinde zwei Geräte direkt im Browser; Dateien werden Ende-zu-Ende verschlüsselt und Block für Block übertragen. Im selben Netz erreichen sie nie den Server, netzübergreifend laufen sie über ein verschlüsseltes Relay, das nur Chiffretext sieht. Keine Installation, keine Registrierung — einfach die Webseite öffnen und loslegen.",
     cta: "Übertragung starten",
   },
   how: {
@@ -299,8 +299,8 @@ const de = {
     steps: [
       "Öffne relayium.com auf beiden Geräten in einem modernen Browser.",
       "Eine Seite wählt die zu sendenden Dateien aus oder zieht sie hinein (bis zu 1.000 pro Vorgang).",
-      "Vergleiche auf beiden Bildschirmen denselben 6-stelligen Prüfcode (SAS) und bestätige die Übereinstimmung, um einen Mittelsmann auszuschließen.",
-      "Eine direkte P2P-Verbindung wird aufgebaut; Dateien werden Chunk für Chunk mit AES-256-GCM verschlüsselt übertragen, jede Datei per SHA-256 auf Integrität geprüft.",
+      "Vergleiche auf beiden Bildschirmen denselben 6-stelligen Verifizierungscode (SAS) und bestätige die Übereinstimmung, um einen Man-in-the-Middle auszuschließen.",
+      "Eine direkte P2P-Verbindung wird aufgebaut; Dateien werden Block für Block mit AES-256-GCM verschlüsselt übertragen, jede Datei per SHA-256 auf Integrität geprüft.",
     ],
   },
   why: {
@@ -308,15 +308,15 @@ const de = {
     items: [
       {
         title: "Ende-zu-Ende-verschlüsselt",
-        desc: "X25519-Schlüsselaustausch und AES-256-GCM pro Chunk; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, der Server kann nicht entschlüsseln.",
+        desc: "X25519-Schlüsselaustausch und AES-256-GCM pro Block; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, der Server kann nicht entschlüsseln.",
       },
       {
         title: "Echtes Peer-to-Peer",
-        desc: "Im selben Netz fließen Dateien über einen verschlüsselten WebRTC-Kanal direkt von Gerät zu Gerät und erreichen unsere Server nie; netzübergreifend läuft es über einen verschlüsselten Relay, der ebenfalls nur Chiffretext sieht.",
+        desc: "Im selben Netz fließen Dateien über einen verschlüsselten WebRTC-Kanal direkt von Gerät zu Gerät und erreichen unsere Server nie; netzübergreifend läuft es über ein verschlüsseltes Relay, das ebenfalls nur Chiffretext sieht.",
       },
       {
         title: "SAS gegen Man-in-the-Middle",
-        desc: "Beide Bildschirme zeigen denselben 6-stelligen Prüfcode; stimmt er überein, ist ein mithörender Mittelsmann ausgeschlossen — selbst ein kompromittierter Signalisierungsserver kann sich nicht ausgeben.",
+        desc: "Beide Bildschirme zeigen denselben 6-stelligen Verifizierungscode; stimmt er überein, ist ein mithörender Man-in-the-Middle ausgeschlossen — selbst ein kompromittierter Signalisierungsserver kann sich nicht ausgeben.",
       },
       {
         title: "Plattformübergreifend",
@@ -337,7 +337,7 @@ const de = {
       },
       {
         title: "Gegenüber Snapdrop / PairDrop",
-        body: "Snapdrop und PairDrop sind Vorreiter derselben Art. Relayium ergänzt sie um Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und einen SAS-Prüfcode: Selbst ein bösartiger Signalisierungsserver kann keinen Mittelsmann-Angriff durchführen.",
+        body: "Snapdrop und PairDrop sind Vorreiter derselben Art. Relayium ergänzt sie um Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und einen Verifizierungscode (SAS): Selbst ein bösartiger Signalisierungsserver kann keinen Man-in-the-Middle-Angriff durchführen.",
       },
       {
         title: "Gegenüber WeTransfer / Cloud-Speicher",
@@ -354,11 +354,11 @@ const de = {
       },
       {
         q: "Werden meine Dateien auf einen Server hochgeladen?",
-        a: "Im selben Netz erreichen Dateien der Echtzeit-Direktübertragung den Server nie; netzübergreifend laufen sie über einen verschlüsselten Relay, der ebenfalls nur Chiffretext sieht. Nur wenn du den optionalen Download-Link nutzt, verschlüsselt der Browser sie vor dem Hochladen, und der Server behält lediglich Chiffretext, den er nicht entschlüsseln kann — der Schlüssel steckt nur im Link.",
+        a: "Im selben Netz erreichen Dateien der Echtzeit-Direktübertragung den Server nie; netzübergreifend laufen sie über ein verschlüsseltes Relay, das ebenfalls nur Chiffretext sieht. Nur wenn du den optionalen Download-Link nutzt, verschlüsselt der Browser sie vor dem Hochladen, und der Server behält lediglich Chiffretext, den er nicht entschlüsseln kann — der Schlüssel steckt nur im Link.",
       },
       {
         q: "Ist es Ende-zu-Ende-verschlüsselt?",
-        a: "Ja. Es nutzt X25519-Schlüsselaustausch und AES-256-GCM pro Chunk; die Schlüssel werden nur zwischen den beiden Geräten ausgehandelt, sodass der Server nichts entschlüsseln kann.",
+        a: "Ja. Es nutzt X25519-Schlüsselaustausch und AES-256-GCM pro Block; die Schlüssel werden nur zwischen den beiden Geräten ausgehandelt, sodass der Server nichts entschlüsseln kann.",
       },
       {
         q: "Funktioniert es systemübergreifend?",
@@ -370,7 +370,7 @@ const de = {
       },
       {
         q: "Was ist der Unterschied zu Snapdrop?",
-        a: "Relayium ergänzt Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und einen SAS-Prüfcode, sodass selbst ein kompromittierter Signalisierungsserver weder mithören noch sich ausgeben kann. Zudem unterstützt es netzübergreifende Übertragungen und optionale Zero-Knowledge-Download-Links.",
+        a: "Relayium ergänzt Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und einen Verifizierungscode (SAS), sodass selbst ein kompromittierter Signalisierungsserver weder mithören noch sich ausgeben kann. Zudem unterstützt es netzübergreifende Übertragungen und optionale Zero-Knowledge-Download-Links.",
       },
     ],
   },
@@ -473,9 +473,9 @@ const fr = {
 };
 
 const ar = {
-  title: "Relayium — نقل ملفات P2P مُشفَّر من الطرف إلى الطرف",
+  title: "‏Relayium — نقل ملفات P2P مُشفَّر من الطرف إلى الطرف",
   description:
-    "Relayium أداة مفتوحة المصدر لنقل الملفات مُشفَّرة من الطرف إلى الطرف. أثناء النقل الفوري في المتصفح، يتصل جهازان على نفس الشبكة مباشرةً ولا تمر الملفات أبدًا عبر الخادم؛ أما عبر الشبكات المختلفة فتمر عبر مُرحِّل مُشفَّر لا يرى سوى نص مُشفَّر. بدون تثبيت؛ على نفس الشبكة لا حاجة لأي حساب، وللاقتران عبر الشبكات المختلفة يسجّل المُرسِل وحده الدخول.",
+    "‏Relayium أداة مفتوحة المصدر لنقل الملفات مُشفَّرة من الطرف إلى الطرف. أثناء النقل الفوري في المتصفح، يتصل جهازان على نفس الشبكة مباشرةً ولا تمر الملفات أبدًا عبر الخادم؛ أما عبر الشبكات المختلفة فتمر عبر مُرحِّل مُشفَّر لا يرى سوى نص مُشفَّر. بدون تثبيت؛ على نفس الشبكة لا حاجة لأي حساب، وللاقتران عبر الشبكات المختلفة يسجّل المُرسِل وحده الدخول.",
   hero: {
     h1: "نقل ملفات من الند للند مُشفَّر من الطرف إلى الطرف",
     pitch:
@@ -581,7 +581,7 @@ const es = {
     steps: [
       "Abre relayium.com en ambos dispositivos con un navegador moderno.",
       "Un lado selecciona o arrastra los archivos a enviar (hasta 1.000 por lote).",
-      "Comparad en las dos pantallas el mismo código de verificación de 6 dígitos (SAS) y confirmad la coincidencia para descartar cualquier intermediario.",
+      "Compara en las dos pantallas el mismo código de verificación de 6 dígitos (SAS) y confirma la coincidencia para descartar cualquier intermediario.",
       "Se establece una conexión directa de igual a igual; los archivos se transfieren bloque a bloque, cifrados con AES-256-GCM, y se verifica la integridad de cada archivo mediante SHA-256.",
     ],
   },
@@ -675,7 +675,7 @@ const pt = {
     steps: [
       "Abra relayium.com nos dois dispositivos em um navegador moderno.",
       "Um lado seleciona ou arrasta os arquivos a enviar (até 1.000 por lote).",
-      "Comparem nas duas telas o mesmo código de verificação de 6 dígitos (SAS) e confirmem a correspondência para descartar qualquer intermediário.",
+      "Compare nas duas telas o mesmo código de verificação de 6 dígitos (SAS) e confirme a correspondência para descartar qualquer intermediário.",
       "Uma conexão direta ponto a ponto é estabelecida; os arquivos são transferidos bloco a bloco, criptografados com AES-256-GCM, e a integridade de cada arquivo é verificada por SHA-256.",
     ],
   },

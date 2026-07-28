@@ -143,7 +143,7 @@ const zh = {
       heading: "Mac 和 PC 不在同一网络",
       body: [
         "在家办公而另一台机器在办公室，或者只是连在不同的 Wi-Fi 上？配对码能让 Mac 和 Windows PC 跨越互联网连接，而不仅仅是跨越房间。",
-        "发送方电脑会生成一段简短的配对码（或一个分享链接）；在另一台机器上输入即可连接。跨网络的传输走的是加密 TURN 中继，而不是两台机器之间的直连，这是刻意的设计：在两个不同网络之间，直连路径通常根本找不到，先探一遍只会白白多花二十秒左右，最后照样落到中继上。中继只转发密文——文件在离开发送端之前就已端到端封装，所以它拿不到任何能读的东西。如果传输一个大文件夹时连接中途断开，可以续传而不必从头再来。这种方式需要发送方登录；接收方始终无需账号。",
+        "发送方电脑会生成一段简短的配对码（或一个分享链接）；在另一台机器上输入即可连接。跨网络的传输走的是加密 TURN 中继，而不是两台机器之间的直连，这是刻意的设计：在两个不同网络之间，直连路径通常根本找不到，先探一遍只会白白多花二十秒左右，最后照样落到中继上。中继只转发密文——文件在离开发送端之前就已完成端到端加密，所以它拿不到任何能读的东西。如果传输一个大文件夹时连接中途断开，可以续传而不必从头再来。这种方式需要发送方登录；接收方始终无需账号。",
       ],
     },
     {
@@ -159,7 +159,7 @@ const zh = {
     },
     {
       heading: "在 Mac 和 Windows 之间传文件的其他方式",
-      body: ["Relayium 不是唯一选择——以下是常见备选方案诚实的取舍："],
+      body: ["Relayium 不是唯一选择——以下把常见替代方案的取舍摊开讲："],
       bullets: [
         "U 盘可以离线使用，但 macOS 和 Windows 在文件系统上并不总是兼容，可能需要重新格式化，而且多了一个要随身携带的实物。",
         "Windows 网络共享（SMB）可以连到 Mac，但为了一次性的传输去配置工作组、权限和防火墙规则，付出远超收益。",
@@ -213,38 +213,38 @@ const ja = {
     "USB メモリも共有フォルダもクラウドへのアップロードも使わずに、macOS と Windows の間でファイルを送る方法。同じネットワークでもインターネット越しでも、どちらの端末にもインストール不要です。",
   updatedLabel: "最終更新",
   lead: [
-    "Mac と PC は、そのままではファイル共有の言葉が違います。AirDrop は Apple 専用、Windows のネットワーク共有は両方の端末が一致するワークグループやドメインに入っている必要があり、どちらも5分でさっと設定できるものではありません——MacBook 上のプロジェクトフォルダを1つ、Windows デスクトップに移したいだけなのに。",
-    "Relayium はその互換性の問題をまるごと回避します。Mac と Windows パソコンのブラウザで同じページを開けば、ファイルはその間で直接転送されます——エンドツーエンド暗号化、どちらの OS にもインストール不要です。同じネットワークならアカウントすら不要で、ペアリングコードでインターネット越しに送る場合も送信側がサインインするだけです。以下、両方向の具体的な手順を説明します。",
+    "Mac と PC は、そのままではファイル共有の言葉が違います。AirDrop は Apple 専用、Windows のネットワーク共有は両方の端末が一致するワークグループやドメインに入っている必要があり、どちらも5分でさっと設定できるものではありません。MacBook 上のプロジェクトフォルダを1つ、Windows デスクトップに移したいだけなのに。",
+    "Relayium はその互換性の問題をまるごと回避します。Mac と Windows パソコンのブラウザで同じページを開けば、ファイルはその間で直接転送されます。エンドツーエンド暗号化で、どちらの OS にもインストールは不要です。同じネットワークならアカウントすら不要で、ペアリングコードでインターネット越しに送る場合も送信側がサインインするだけです。以下、両方向の具体的な手順を説明します。",
   ],
   sections: [
     {
       heading: "始める前に必要なもの",
       body: [
-        "Mac にも PC にもインストールは不要です。同じネットワークなら登録も不要——ブラウザがすべて処理します。",
+        "Mac にも PC にもインストールは不要です。同じネットワークなら登録も不要です。ブラウザがすべて処理します。",
       ],
       bullets: [
-        "Safari か Chrome を使う Mac と、Edge か Chrome を使う Windows パソコン——どちらも最新のブラウザで構いません。",
+        "Safari か Chrome を使う Mac と、Edge か Chrome を使う Windows パソコン（どちらも最新のブラウザで構いません）。",
         "最もシンプルな方法は、両方の端末を同じ Wi-Fi または有線ネットワークに接続することです。別々の場所にあっても、ペアリングコードでつなげます。",
-        "送りたいファイルまたはフォルダ——1バッチあたり最大1,000ファイル。",
+        "送りたいファイルまたはフォルダ（1バッチあたり最大1,000ファイル）。",
       ],
     },
     {
       heading: "Mac と PC が同じネットワークにある場合",
       body: [
-        "両方のパソコンが同じオフィスや自宅のネットワークにあれば、これがファイルを移す最速の方法です——共有ドライブをマウントする必要も、権限で苦労する必要もありません。",
+        "両方のパソコンが同じオフィスや自宅のネットワークにあれば、これがファイルを移す最速の方法です。共有ドライブをマウントする必要も、権限で苦労する必要もありません。",
       ],
       bullets: [
         "Mac でブラウザから relayium.com を開きます。Windows パソコンでも同じアドレスを開きます。",
-        "各端末はもう一方に近くの端末として表示されます——Windows のワークグループ設定も、macOS のファイル共有を有効にする必要もありません。",
+        "各端末はもう一方に近くの端末として表示されます。Windows のワークグループ設定も、macOS のファイル共有を有効にする必要もありません。",
         "送信側のパソコンでもう一方をタップし、送るファイル（またはフォルダ丸ごと）を選びます。",
-        "両方の画面に同じ短い検証コードが表示されます。両方で一致するか確認してください——これは接続が2台のパソコンの間で直接行われており、途中で何も経由していないことを確認するものです。",
+        "両方の画面に同じ短い検証コードが表示されます。両方で一致するか確認してください。これは接続が2台のパソコンの間で直接行われており、途中で何も経由していないことを確認するものです。",
         "受信側で承認すると転送がすぐに始まり、ディスクへ直接ストリーミングされます。",
       ],
     },
     {
       heading: "Mac と PC が異なるネットワークにある場合",
       body: [
-        "自宅から作業していて、もう一方のパソコンはオフィスにある、あるいは単に別の Wi-Fi につながっている——そんなときも、ペアリングコードは Mac と Windows パソコンを部屋を越えるだけでなく、インターネット越しにつなげます。",
+        "自宅から作業していて、もう一方のパソコンはオフィスにある、あるいは単に別の Wi-Fi につながっている。そんなときも、ペアリングコードは Mac と Windows パソコンを部屋を越えるだけでなく、インターネット越しにつなげます。",
         "送信側のパソコンが短いペアリングコード（または共有リンク）を生成するので、もう一方の端末で入力して接続します。ネットワークをまたぐ転送は、端末同士の直接接続ではなく暗号化された TURN リレー経由で行われます。これは意図的な設計です。異なるネットワークの間では直接経路がそもそも見つからないことがほとんどで、先に探すと接続確立に20秒ほど無駄が加わったあげく結局リレーに落ち着くからです。リレーが転送するのは暗号文だけで、ファイルは送信側のパソコンを出る前にエンドツーエンドで封印されているため、読めるものは何も渡りません。大きなフォルダの転送中に接続が切れても、最初からではなく再開できます。この方式には送信側のサインインが必要です。受信側はアカウント不要です。",
       ],
     },
@@ -254,7 +254,7 @@ const ja = {
         "プロジェクトフォルダを Mac から Windows へ（あるいはその逆）移すには、通常まず ZIP 化が必要です。Relayium ならフォルダをそのまま、構造を保ったまま送信できます。",
       ],
       bullets: [
-        "Mac では、フォルダをドラッグして入れるか、ファイル選択ダイアログから選びます——1バッチ最大1,000ファイル。",
+        "Mac では、フォルダをドラッグして入れるか、ファイル選択ダイアログから選びます（1バッチ最大1,000ファイル）。",
         "Edge か Chrome を使う Windows パソコンでは、届いたフォルダが選んだディレクトリへ構造そのままで直接書き込まれます。",
         "受信側のブラウザがフォルダの直接書き込みに対応していない場合、フォルダは同じ構造に展開できる単一の .zip として届きます。",
       ],
@@ -272,8 +272,8 @@ const ja = {
     {
       heading: "ファイルに何か変化はありますか？",
       body: [
-        "ありません。Relayium は元のバイトをそのまま正確に転送します——再圧縮も再フォーマットもなく、2つの OS の間で改行コードやファイル名が変わることもありません。",
-        "各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるので、Windows パソコン（または Mac）に届くものは、もう一方の端末から送られたものと同一であることが確認されます。大きなファイルもうまく扱えます。File System Access API を備えたブラウザ——パソコン版の Chrome や Edge——なら、ダウンロードはサイズ上限なしでそのままディスクにストリーミングされます。Firefox と Safari にはこの API がないため、そちらで受信するとひとまとめにメモリへ溜めることになり、およそ 256MB を超えると Relayium が受け取る前に警告を出します。この数値は実測した上限ではなく意図的に控えめに置いた目安で、実際に破綻する地点はそのパソコンのメモリ・OS・ほかに何を開いているかによって変わります。",
+        "ありません。Relayium は元のバイトをそのまま正確に転送します。再圧縮も再フォーマットもなく、2つの OS の間で改行コードやファイル名が変わることもありません。",
+        "各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるので、Windows パソコン（または Mac）に届くものは、もう一方の端末から送られたものと同一であることが確認されます。大きなファイルもうまく扱えます。File System Access API を備えたブラウザ（パソコン版の Chrome や Edge）なら、ダウンロードはサイズ上限なしでそのままディスクにストリーミングされます。Firefox と Safari にはこの API がないため、そちらで受信するとひとまとめにメモリへ溜めることになり、およそ 256MB を超えると Relayium が受け取る前に警告を出します。この数値は実測した上限ではなく意図的に控えめに置いた目安で、実際に破綻する地点はそのパソコンのメモリ・OS・ほかに何を開いているかによって変わります。",
       ],
     },
   ],
@@ -282,7 +282,7 @@ const ja = {
     items: [
       {
         q: "Mac や Windows パソコンに何かインストールする必要がありますか？",
-        a: "いいえ。Relayium は macOS でも Windows でもすべてブラウザで動作します。各端末で relayium.com を開けば準備完了です——どちらの方法でもダウンロードは不要です。同じネットワークなら転送にアカウントは一切不要で、インターネット越しのペアリングも送信側がサインインするだけです。",
+        a: "いいえ。Relayium は macOS でも Windows でもすべてブラウザで動作します。各端末で relayium.com を開けば準備完了です。どちらの方法でもダウンロードは不要です。同じネットワークなら転送にアカウントは一切不要で、インターネット越しのペアリングも送信側がサインインするだけです。",
       },
       {
         q: "両方のパソコンが同じネットワークにある必要がありますか？",
@@ -294,23 +294,23 @@ const ja = {
       },
       {
         q: "Mac から Windows に渡ると、ファイル権限や改行コード、ファイル名が崩れませんか？",
-        a: "崩れません。Relayium は各ファイルの正確なバイトを移動し、SHA-256 ハッシュでエンドツーエンドに検証します——改行コード、エンコーディング、ファイル名には一切触れません。アプリケーション側の変換が必要になるようなもの（テキストファイルの CRLF と LF の違いなど）は、ファイル自体が変更されないため影響を受けません。",
+        a: "崩れません。Relayium は各ファイルの正確なバイトを移動し、SHA-256 ハッシュでエンドツーエンドに検証します。改行コード、エンコーディング、ファイル名には一切触れません。アプリケーション側の変換が必要になるようなもの（テキストファイルの CRLF と LF の違いなど）は、ファイル自体が変更されないため影響を受けません。",
       },
       {
         q: "サイズに制限はありますか？",
-        a: "1バッチあたり最大1,000ファイルです。サーバー側のサイズ上限はそもそもありません——パソコン版の Chrome と Edge はそのままディスクへストリーミングします。Firefox と Safari には File System Access API がないため、そちらで受け取るとひとまとめにメモリへ保持することになり、およそ 256MB を超えると Relayium が警告します。これは硬い上限ではなく控えめな目安で、実際の天井はそのパソコンのメモリと、ほかに何を動かしているかで決まります。",
+        a: "1バッチあたり最大1,000ファイルです。サーバー側のサイズ上限はそもそもありません。パソコン版の Chrome と Edge はそのままディスクへストリーミングします。Firefox と Safari には File System Access API がないため、そちらで受け取るとひとまとめにメモリへ保持することになり、およそ 256MB を超えると Relayium が警告します。これは硬い上限ではなく控えめな目安で、実際の天井はそのパソコンのメモリと、ほかに何を動かしているかで決まります。",
       },
     ],
   },
   cta: {
-    text: "Mac と Windows パソコンの両方で Relayium を開いて、最初のファイルを送ってみましょう——インストール不要、同じネットワークならアカウントも不要です。",
+    text: "Mac と Windows パソコンの両方で Relayium を開いて、最初のファイルを送ってみましょう。インストール不要で、同じネットワークならアカウントも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
 };
 
 const ko = {
-  title: "Mac와 Windows PC 사이에서 파일 전송하는 방법",
+  title: "Mac과 Windows PC 사이에서 파일 전송하는 방법",
   description:
     "USB 드라이브도, 공유 폴더도, 클라우드 업로드도 없이 macOS와 Windows 사이에서 파일을 보내는 방법. 같은 네트워크에서도 인터넷 너머로도 가능하며, 두 운영체제 모두 설치할 것이 없습니다.",
   updatedLabel: "마지막 업데이트",
@@ -363,7 +363,7 @@ const ko = {
     },
     {
       heading: "Mac과 Windows 사이에서 파일을 옮기는 다른 방법",
-      body: ["Relayium만이 선택지는 아닙니다 — 흔한 대안들의 솔직한 절충점입니다:"],
+      body: ["Relayium만이 선택지는 아닙니다 — 흔한 대안의 솔직한 절충점입니다:"],
       bullets: [
         "USB 드라이브는 오프라인에서 쓸 수 있지만, macOS와 Windows가 파일 시스템에서 항상 맞지는 않아 재포맷이 필요할 수 있고, 챙겨야 할 물건이 하나 더 생깁니다.",
         "Windows 네트워크 공유(SMB)는 Mac에도 닿지만, 일회성 전송을 위해 작업 그룹, 권한, 방화벽 규칙을 설정하는 건 전송 자체보다 손이 더 갑니다.",
@@ -441,7 +441,7 @@ const de = {
         "Öffne auf dem Mac relayium.com im Browser. Öffne auf dem Windows-PC dieselbe Adresse.",
         "Jeder Rechner erscheint beim anderen als Gerät in der Nähe — keine Windows-Arbeitsgruppe einzurichten, keine macOS-Dateifreigabe zu aktivieren.",
         "Tippe auf dem sendenden Rechner den anderen an und wähle die Dateien (oder einen ganzen Ordner) zum Senden.",
-        "Beide Bildschirme zeigen denselben kurzen Prüfcode. Vergleiche ihn auf beiden Seiten — das bestätigt, dass die Verbindung direkt zwischen deinen zwei Rechnern besteht und nichts dazwischengeschaltet ist.",
+        "Beide Bildschirme zeigen denselben kurzen Verifizierungscode. Vergleiche ihn auf beiden Seiten — das bestätigt, dass die Verbindung direkt zwischen deinen zwei Rechnern besteht und nichts dazwischengeschaltet ist.",
         "Bestätige auf der empfangenden Seite, und die Übertragung startet sofort und streamt direkt auf die Festplatte.",
       ],
     },
@@ -522,7 +522,7 @@ const fr = {
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Mac et PC ne parlent pas nativement le même langage de partage de fichiers. AirDrop est réservé à Apple, le partage réseau de Windows exige que les deux machines soient dans un groupe de travail ou un domaine compatible, et aucun des deux ne se configure vraiment en cinq minutes — alors que vous voulez peut-être juste déplacer un dossier de projet d'un MacBook vers un PC de bureau Windows.",
-    "Relayium contourne tout ce problème de compatibilité. Ouvrez la même page dans le navigateur sur le Mac et sur le PC Windows, et les fichiers voyagent directement entre eux — chiffrés de bout en bout, rien à installer sur aucun des deux systèmes d'exploitation. Sur le même réseau, aucun compte n'est nécessaire du tout ; pour envoyer via Internet avec un code d'appairage, l'expéditeur n'a qu'à se connecter. Voici la marche à suivre exacte dans les deux sens.",
+    "Relayium contourne tout ce problème de compatibilité. Ouvrez la même page dans le navigateur sur le Mac et sur le PC Windows, et les fichiers voyagent directement entre eux — chiffrés de bout en bout, rien à installer sur aucun des deux systèmes d'exploitation. Sur le même réseau, aucun compte n'est nécessaire du tout ; pour envoyer via Internet avec un code d'appairage, l'expéditeur n'a qu'à se connecter. Voici la marche à suivre exacte dans les deux sens.",
   ],
   sections: [
     {
@@ -533,7 +533,7 @@ const fr = {
       bullets: [
         "Un Mac avec Safari ou Chrome, et un PC Windows avec Edge ou Chrome — n'importe quel navigateur moderne des deux côtés suffit.",
         "Pour la voie la plus simple, connectez les deux machines au même réseau Wi-Fi ou Ethernet. Si elles sont à des endroits différents, un code d'appairage comble l'écart.",
-        "Les fichiers ou dossiers à envoyer — jusqu'à 1 000 fichiers par lot.",
+        "Les fichiers ou dossiers à envoyer — jusqu'à 1 000 fichiers par lot.",
       ],
     },
     {
@@ -552,8 +552,8 @@ const fr = {
     {
       heading: "Mac et PC sur des réseaux différents",
       body: [
-        "Vous travaillez depuis chez vous pendant que l'autre machine est au bureau, ou simplement sur un autre réseau Wi-Fi ? Un code d'appairage connecte un Mac et un PC Windows via Internet, pas seulement d'une pièce à l'autre.",
-        "L'ordinateur qui envoie génère un court code d'appairage (ou un lien de partage) ; saisissez-le sur l'autre machine pour vous connecter. Un transfert entre réseaux passe par un relais TURN chiffré plutôt que par une liaison directe entre les deux machines, et c'est délibéré : entre deux réseaux différents, une voie directe est le plus souvent introuvable, et la chercher d'abord ajouterait une vingtaine de secondes d'attente avant que la connexion n'aboutisse malgré tout au relais. Le relais ne transmet que du texte chiffré — les fichiers sont scellés de bout en bout avant de quitter la machine émettrice, il n'a donc rien de lisible entre les mains. Si la connexion se coupe en cours de transfert d'un gros dossier, elle reprend au lieu de tout recommencer. Ce mode exige que l'expéditeur se connecte ; celui qui reçoit n'a jamais besoin de compte.",
+        "Vous travaillez depuis chez vous pendant que l'autre machine est au bureau, ou simplement sur un autre réseau Wi-Fi ? Un code d'appairage connecte un Mac et un PC Windows via Internet, pas seulement d'une pièce à l'autre.",
+        "L'ordinateur qui envoie génère un court code d'appairage (ou un lien de partage) ; saisissez-le sur l'autre machine pour vous connecter. Un transfert entre réseaux passe par un relais TURN chiffré plutôt que par une liaison directe entre les deux machines, et c'est délibéré : entre deux réseaux différents, une voie directe est le plus souvent introuvable, et la chercher d'abord ajouterait une vingtaine de secondes d'attente avant que la connexion n'aboutisse malgré tout au relais. Le relais ne transmet que du texte chiffré — les fichiers sont scellés de bout en bout avant de quitter la machine émettrice, il n'a donc rien de lisible entre les mains. Si la connexion se coupe en cours de transfert d'un gros dossier, elle reprend au lieu de tout recommencer. Ce mode exige que l'expéditeur se connecte ; celui qui reçoit n'a jamais besoin de compte.",
       ],
     },
     {
@@ -562,7 +562,7 @@ const fr = {
         "Déplacer un dossier de projet du Mac vers Windows (ou l'inverse) implique généralement de le compresser d'abord. Relayium peut envoyer un dossier directement, en conservant sa structure intacte.",
       ],
       bullets: [
-        "Sur le Mac, glissez un dossier ou choisissez-en un dans le sélecteur de fichiers — jusqu'à 1 000 fichiers dans le lot.",
+        "Sur le Mac, glissez un dossier ou choisissez-en un dans le sélecteur de fichiers — jusqu'à 1 000 fichiers dans le lot.",
         "Sur un PC Windows utilisant Edge ou Chrome, le dossier reçu est écrit directement dans un répertoire de votre choix, structure préservée.",
         "Si le navigateur du destinataire ne prend pas en charge l'écriture directe de dossiers, le dossier arrive sous forme d'un seul .zip qui se décompresse selon la même arborescence.",
       ],
@@ -570,7 +570,7 @@ const fr = {
     {
       heading: "Autres façons de déplacer des fichiers entre Mac et Windows",
       body: [
-        "Relayium n'est pas la seule option — voici les compromis honnêtes des solutions de rechange habituelles :",
+        "Relayium n'est pas la seule option — voici les compromis honnêtes des solutions de rechange habituelles :",
       ],
       bullets: [
         "Une clé USB fonctionne hors ligne, mais macOS et Windows ne s'accordent pas toujours sur un système de fichiers sans reformatage, et c'est un objet physique de plus à ne pas perdre.",
@@ -580,10 +580,10 @@ const fr = {
       ],
     },
     {
-      heading: "Quelque chose change-t-il dans les fichiers ?",
+      heading: "Quelque chose change-t-il dans les fichiers ?",
       body: [
         "Non. Relayium transfère les octets d'origine exactement tels quels — aucune recompression, aucun reformatage, aucun changement de fin de ligne ou de nom de fichier entre les deux systèmes d'exploitation.",
-        "Chaque fichier est vérifié de bout en bout par une empreinte SHA-256, si bien que ce qui arrive sur le PC Windows (ou le Mac) est vérifié identique à ce qui a quitté l'autre machine. Les gros fichiers sont bien gérés aussi : un navigateur doté de l'API File System Access — Chrome ou Edge sur ordinateur — diffuse le téléchargement directement sur le disque, sans limite de taille. Firefox et Safari n'ont pas cette API : un lot reçu là est assemblé en mémoire, et Relayium vous prévient avant que vous acceptiez dès que l'on dépasse environ 256 Mo. Ce chiffre est une estimation volontairement prudente, pas une limite mesurée — le point de rupture réel dépend de la mémoire de la machine, de son système et de tout ce qui tourne à côté.",
+        "Chaque fichier est vérifié de bout en bout par une empreinte SHA-256, si bien que ce qui arrive sur le PC Windows (ou le Mac) est vérifié identique à ce qui a quitté l'autre machine. Les gros fichiers sont bien gérés aussi : un navigateur doté de l'API File System Access — Chrome ou Edge sur ordinateur — diffuse le téléchargement directement sur le disque, sans limite de taille. Firefox et Safari n'ont pas cette API : un lot reçu là est assemblé en mémoire, et Relayium vous prévient avant que vous acceptiez dès que l'on dépasse environ 256 Mo. Ce chiffre est une estimation volontairement prudente, pas une limite mesurée — le point de rupture réel dépend de la mémoire de la machine, de son système et de tout ce qui tourne à côté.",
       ],
     },
   ],
@@ -591,24 +591,24 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Dois-je installer quelque chose sur le Mac ou sur le PC Windows ?",
-        a: "Non. Relayium fonctionne entièrement dans le navigateur, sur macOS comme sur Windows. Ouvrez relayium.com sur chaque machine et vous êtes prêt — aucun téléchargement dans les deux cas. Sur le même réseau, un transfert ne demande aucun compte du tout ; s'appairer via Internet demande seulement que l'expéditeur se connecte.",
+        q: "Dois-je installer quelque chose sur le Mac ou sur le PC Windows ?",
+        a: "Non. Relayium fonctionne entièrement dans le navigateur, sur macOS comme sur Windows. Ouvrez relayium.com sur chaque machine et vous êtes prêt — aucun téléchargement dans les deux cas. Sur le même réseau, un transfert ne demande aucun compte du tout ; s'appairer via Internet demande seulement que l'expéditeur se connecte.",
       },
       {
-        q: "Les deux ordinateurs doivent-ils être sur le même réseau ?",
-        a: "Non. Être sur le même réseau est la voie la plus rapide car les deux machines se découvrent automatiquement, mais un code d'appairage connecte tout aussi bien un Mac et un PC Windows via Internet — même depuis des villes différentes. Dans les deux cas, le transfert reste chiffré de bout en bout ; la voie entre réseaux différents demande seulement que l'expéditeur se connecte d'abord, et le destinataire n'a jamais besoin de compte.",
+        q: "Les deux ordinateurs doivent-ils être sur le même réseau ?",
+        a: "Non. Être sur le même réseau est la voie la plus rapide car les deux machines se découvrent automatiquement, mais un code d'appairage connecte tout aussi bien un Mac et un PC Windows via Internet — même depuis des villes différentes. Dans les deux cas, le transfert reste chiffré de bout en bout ; la voie entre réseaux différents demande seulement que l'expéditeur se connecte d'abord, et le destinataire n'a jamais besoin de compte.",
       },
       {
-        q: "Puis-je envoyer un dossier entier, pas seulement des fichiers isolés ?",
-        a: "Oui. Glissez un dossier, et Relayium envoie jusqu'à 1 000 fichiers dans le lot, en conservant la structure du dossier. Chrome et Edge sous Windows l'écrivent directement dans un répertoire choisi ; si le navigateur du destinataire ne peut pas écrire de dossiers directement, il arrive sous forme d'un seul .zip avec la même arborescence.",
+        q: "Puis-je envoyer un dossier entier, pas seulement des fichiers isolés ?",
+        a: "Oui. Glissez un dossier, et Relayium envoie jusqu'à 1 000 fichiers dans le lot, en conservant la structure du dossier. Chrome et Edge sous Windows l'écrivent directement dans un répertoire choisi ; si le navigateur du destinataire ne peut pas écrire de dossiers directement, il arrive sous forme d'un seul .zip avec la même arborescence.",
       },
       {
-        q: "Les permissions de fichiers, fins de ligne ou noms de fichiers sont-ils altérés en passant de Mac à Windows ?",
+        q: "Les permissions de fichiers, fins de ligne ou noms de fichiers sont-ils altérés en passant de Mac à Windows ?",
         a: "Non. Relayium déplace les octets exacts de chaque fichier et les vérifie par une empreinte SHA-256 de bout en bout — il ne touche ni aux fins de ligne, ni à l'encodage, ni aux noms de fichiers. Tout ce qu'une conversion au niveau applicatif devrait gérer (comme CRLF contre LF dans un fichier texte) reste inchangé, car le fichier lui-même reste inchangé.",
       },
       {
-        q: "Y a-t-il une limite de taille ?",
-        a: "Jusqu'à 1 000 fichiers par lot. Il n'y a aucune limite de taille côté serveur — Chrome et Edge sur ordinateur diffusent directement sur le disque. Firefox et Safari n'ont pas l'API File System Access : un lot reçu dans l'un d'eux est gardé en mémoire, et Relayium prévient au-delà d'environ 256 Mo — une estimation prudente plutôt qu'une limite ferme, le plafond réel dépendant de la mémoire de la machine et de ce qu'elle fait par ailleurs.",
+        q: "Y a-t-il une limite de taille ?",
+        a: "Jusqu'à 1 000 fichiers par lot. Il n'y a aucune limite de taille côté serveur — Chrome et Edge sur ordinateur diffusent directement sur le disque. Firefox et Safari n'ont pas l'API File System Access : un lot reçu dans l'un d'eux est gardé en mémoire, et Relayium prévient au-delà d'environ 256 Mo — une estimation prudente plutôt qu'une limite ferme, le plafond réel dépendant de la mémoire de la machine et de ce qu'elle fait par ailleurs.",
       },
     ],
   },
@@ -622,10 +622,10 @@ const fr = {
 const ar = {
   title: "نقل الملفات بين جهاز Mac وحاسوب Windows",
   description:
-    "كيفية إرسال الملفات بين macOS و Windows دون ذاكرة فلاش، ولا مجلد شبكة مشترك، ولا رفع إلى السحابة. على نفس الشبكة وعبر الإنترنت معًا — لا شيء لتثبيته على أي من الجهازين.",
+    "كيفية إرسال الملفات بين macOS وWindows دون ذاكرة فلاش، ولا مجلد شبكة مشترك، ولا رفع إلى السحابة. على نفس الشبكة وعبر الإنترنت معًا — لا شيء لتثبيته على أي من الجهازين.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "لا يتكلم جهازا Mac و PC اللغة نفسها لمشاركة الملفات جاهزَين. فـ AirDrop حكرٌ على Apple، ومشاركة الشبكة في Windows تريد أن يكون الجهازان في مجموعة عمل أو نطاق متطابق، وأيٌّ منهما ليس سهل الإعداد تمامًا في خمس دقائق حين تريد فقط نقل مجلد واحد من ملفات مشروع من MacBook إلى سطح مكتب Windows.",
+    "لا يتكلم جهازا Mac وPC اللغة نفسها لمشاركة الملفات جاهزَين. فـ AirDrop حكرٌ على Apple، ومشاركة الشبكة في Windows تريد أن يكون الجهازان في مجموعة عمل أو نطاق متطابق، وأيٌّ منهما ليس سهل الإعداد تمامًا في خمس دقائق حين تريد فقط نقل مجلد واحد من ملفات مشروع من MacBook إلى سطح مكتب Windows.",
     "يتجاوز Relayium مسألة التوافق برمّتها. افتح الصفحة نفسها في متصفح على الـ Mac وعلى حاسوب Windows، وتنتقل الملفات مباشرةً بينهما — مشفَّرة من الطرف إلى الطرف، لا شيء لتثبيته على أي من نظامَي التشغيل. على نفس الشبكة لا حاجة إلى حساب على الإطلاق؛ والإرسال عبر الإنترنت برمز اقتران يطلب من المُرسِل فقط تسجيل الدخول. إليك تحديدًا كيف يعمل الأمر في كلا الاتجاهين.",
   ],
   sections: [
@@ -641,7 +641,7 @@ const ar = {
       ],
     },
     {
-      heading: "Mac و PC على نفس الشبكة",
+      heading: "Mac وPC على نفس الشبكة",
       body: [
         "إذا كان الحاسوبان على نفس شبكة المكتب أو المنزل، فهذه أسرع طريقة لنقل الملفات — لا قرص مشترك لتوصيله، ولا أذونات للمصارعة معها.",
       ],
@@ -654,7 +654,7 @@ const ar = {
       ],
     },
     {
-      heading: "Mac و PC على شبكتين مختلفتين",
+      heading: "Mac وPC على شبكتين مختلفتين",
       body: [
         "تعمل من المنزل بينما الجهاز الآخر في المكتب، أو مجرد على شبكة Wi-Fi مختلفة؟ يوصِل رمز الاقتران جهاز Mac وحاسوب Windows عبر الإنترنت، لا عبر الغرفة فحسب.",
         "يولّد الحاسوب المُرسِل رمز اقتران قصيرًا (أو رابط مشاركة)؛ أدخِله على الجهاز الآخر للاتصال. والنقل عبر الشبكات يجري عبر مُرحِّل TURN مشفَّر لا عبر وصلة مباشرة بين الحاسوبين، وهذا مقصود بحكم التصميم: فبين شبكتين مختلفتين يتعذّر في الغالب إيجاد مسار مباشر أصلًا، والبحث عنه أولًا يضيف نحو عشرين ثانية من الانتظار قبل أن يستقر الاتصال على المُرحِّل على أي حال. ولا يُمرِّر المُرحِّل سوى نص مُشفَّر — فالملفات مختومة من الطرف إلى الطرف قبل أن تغادر الحاسوب المُرسِل، فلا يصله شيء يمكن قراءته. وإذا انقطع الاتصال في منتصف مجلد كبير، يستأنف بدلًا من البدء من جديد. يحتاج هذا الوضع إلى تسجيل دخول المُرسِل؛ أما من يستقبل فلا يحتاج أبدًا إلى حساب.",
@@ -672,12 +672,12 @@ const ar = {
       ],
     },
     {
-      heading: "طرق أخرى لنقل الملفات بين Mac و Windows",
+      heading: "طرق أخرى لنقل الملفات بين Mac وWindows",
       body: [
         "ليس Relayium الخيار الوحيد — إليك المقايضات الصادقة للبدائل المعتادة:",
       ],
       bullets: [
-        "تعمل ذاكرة فلاش USB دون اتصال، لكن macOS و Windows لا يتفقان دائمًا على نظام ملفات دون إعادة تهيئة، وهي غرض مادي إضافي عليك تتبّعه.",
+        "تعمل ذاكرة فلاش USB دون اتصال، لكن macOS وWindows لا يتفقان دائمًا على نظام ملفات دون إعادة تهيئة، وهي غرض مادي إضافي عليك تتبّعه.",
         "يمكن لمشاركة شبكة Windows (SMB) الوصول إلى Mac، لكن إعداد مجموعات العمل والأذونات وقواعد جدار الحماية لنقل لمرة واحدة إعدادٌ يفوق قيمة النقل نفسه.",
         "يعمل قرص سحابي (OneDrive أو iCloud أو Google Drive) حين يكون الطرف الآخر غير متصل، لكن الملف يُرفَع ثم يُنزَّل، ويُحتسَب على حصة تخزينك، ويحتفظ المزوّد بنسخة.",
         "البريد الإلكتروني وتطبيقات الدردشة مريحة لكنها تحدّ عادةً من حجم المرفق وليست مشفَّرة من الطرف إلى الطرف لمشاركة الملفات.",
@@ -687,7 +687,7 @@ const ar = {
       heading: "هل يتغير أي شيء في الملفات؟",
       body: [
         "لا. ينقل Relayium البايتات الأصلية كما هي تمامًا — دون إعادة ضغط، ودون إعادة تهيئة، ودون تغيير في نهايات الأسطر أو أسماء الملفات بين نظامَي التشغيل.",
-        "يُفحَص كل ملف من الطرف إلى الطرف بتجزئة SHA-256، فما يحطّ على حاسوب Windows (أو الـ Mac) مُتحقَّق من تطابقه تمامًا مع ما غادر الجهاز الآخر. وتُعالَج الملفات الكبيرة جيدًا أيضًا: المتصفح الذي يدعم واجهة File System Access — ‏Chrome أو Edge على الحاسوب — يبثّ التنزيل مباشرةً إلى القرص دون سقف للحجم. أما Firefox و Safari فلا تملكان تلك الواجهة، فتُجمَّع الدفعة المستلمة هناك في الذاكرة، وينبّهك Relayium قبل القبول متى تجاوزت نحو 256 ميغابايت. وهذا الرقم تقدير متحفّظ عن قصد لا حدٌّ مقيس — فنقطة الانهيار الفعلية تتوقف على ذاكرة الجهاز ونظامه وما هو مفتوح غير ذلك.",
+        "يُفحَص كل ملف من الطرف إلى الطرف بتجزئة SHA-256، فما يحطّ على حاسوب Windows (أو الـ Mac) مُتحقَّق من تطابقه تمامًا مع ما غادر الجهاز الآخر. وتُعالَج الملفات الكبيرة جيدًا أيضًا: المتصفح الذي يدعم واجهة File System Access — ‏Chrome أو Edge على الحاسوب — يبثّ التنزيل مباشرةً إلى القرص دون سقف للحجم. أما Firefox وSafari فلا تملكان تلك الواجهة، فتُجمَّع الدفعة المستلمة هناك في الذاكرة، وينبّهك Relayium قبل القبول متى تجاوزت نحو 256 ميغابايت. وهذا الرقم تقدير متحفّظ عن قصد لا حدٌّ مقيس — فنقطة الانهيار الفعلية تتوقف على ذاكرة الجهاز ونظامه وما هو مفتوح غير ذلك.",
       ],
     },
   ],
@@ -696,7 +696,7 @@ const ar = {
     items: [
       {
         q: "هل أحتاج إلى تثبيت أي شيء على الـ Mac أو حاسوب Windows؟",
-        a: "لا. يعمل Relayium كليًا في المتصفح على كلٍّ من macOS و Windows. افتح relayium.com على كل جهاز وأنت جاهز — لا شيء للتنزيل في أي من الحالتين. على نفس الشبكة لا يحتاج النقل إلى حساب على الإطلاق؛ والاقتران عبر الإنترنت يطلب من المُرسِل فقط تسجيل الدخول.",
+        a: "لا. يعمل Relayium كليًا في المتصفح على كلٍّ من macOS وWindows. افتح relayium.com على كل جهاز وأنت جاهز — لا شيء للتنزيل في أي من الحالتين. على نفس الشبكة لا يحتاج النقل إلى حساب على الإطلاق؛ والاقتران عبر الإنترنت يطلب من المُرسِل فقط تسجيل الدخول.",
       },
       {
         q: "هل يجب أن يكون الحاسوبان على نفس الشبكة؟",
@@ -704,7 +704,7 @@ const ar = {
       },
       {
         q: "هل يمكنني إرسال مجلد كامل، لا ملفات مفردة فحسب؟",
-        a: "نعم. اسحب مجلدًا إلى الداخل فيرسل Relayium حتى 1,000 ملف في الدفعة، مع الحفاظ على بنية المجلد. يكتب Chrome و Edge على Windows مباشرةً إلى دليل مختار؛ وإذا كان المتصفح المستقبِل لا يستطيع كتابة المجلدات مباشرةً، يصل كملف .zip واحد بالبنية نفسها.",
+        a: "نعم. اسحب مجلدًا إلى الداخل فيرسل Relayium حتى 1,000 ملف في الدفعة، مع الحفاظ على بنية المجلد. يكتب Chrome وEdge على Windows مباشرةً إلى دليل مختار؛ وإذا كان المتصفح المستقبِل لا يستطيع كتابة المجلدات مباشرةً، يصل كملف .zip واحد بالبنية نفسها.",
       },
       {
         q: "هل تتشوّه أذونات الملفات أو نهايات الأسطر أو أسماء الملفات عند الانتقال من Mac إلى Windows؟",
@@ -712,12 +712,12 @@ const ar = {
       },
       {
         q: "هل هناك حد للحجم؟",
-        a: "حتى 1,000 ملف لكل دفعة. لا يوجد سقف للحجم من جهة الخادم إطلاقًا — يبثّ Chrome و Edge على الحاسوب مباشرةً إلى القرص. أما Firefox و Safari فتنقصهما واجهة File System Access، فتُحفَظ الدفعة المستلمة فيهما بالذاكرة، وينبّهك Relayium فوق نحو 256 ميغابايت — وهو تقدير متحفّظ لا حدٌّ صارم، إذ يتوقف السقف الحقيقي على ذاكرة الجهاز وما يشغّله إلى جانب ذلك.",
+        a: "حتى 1,000 ملف لكل دفعة. لا يوجد سقف للحجم من جهة الخادم إطلاقًا — يبثّ Chrome وEdge على الحاسوب مباشرةً إلى القرص. أما Firefox وSafari فتنقصهما واجهة File System Access، فتُحفَظ الدفعة المستلمة فيهما بالذاكرة، وينبّهك Relayium فوق نحو 256 ميغابايت — وهو تقدير متحفّظ لا حدٌّ صارم، إذ يتوقف السقف الحقيقي على ذاكرة الجهاز وما يشغّله إلى جانب ذلك.",
       },
     ],
   },
   cta: {
-    text: "افتح Relayium على جهاز Mac وحاسوب Windows الخاصين بك وانقل أول ملفاتك — دون تثبيت، ودون حاجة إلى حساب على نفس الشبكة.",
+    text: "افتح Relayium على جهاز Mac وحاسوب Windows وانقل أول ملفاتك — دون تثبيت، ودون حاجة إلى حساب على نفس الشبكة.",
     button: "جرّب Relayium الآن",
   },
   relatedHeading: "تابع القراءة",
@@ -729,7 +729,7 @@ const es = {
     "Cómo enviar archivos entre macOS y Windows sin una memoria USB, una carpeta de red compartida ni una subida a la nube. En la misma red y por internet — nada que instalar en ninguna de las dos máquinas.",
   updatedLabel: "Última actualización",
   lead: [
-    "Los Mac y los PC no hablan el mismo idioma de compartición de archivos de fábrica. AirDrop es solo de Apple, la compartición de red de Windows quiere que ambas máquinas estén en un grupo de trabajo o dominio coincidente, y ninguna de las dos es precisamente fácil de configurar en cinco minutos cuando solo quieres mover una carpeta de archivos de proyecto de un MacBook a un equipo de escritorio con Windows.",
+    "Los Mac y los PC no hablan el mismo idioma de uso compartido de archivos de fábrica. AirDrop es solo de Apple, el uso compartido de red de Windows quiere que ambas máquinas estén en un grupo de trabajo o dominio coincidente, y ninguna de las dos es precisamente fácil de configurar en cinco minutos cuando solo quieres mover una carpeta de archivos de proyecto de un MacBook a un equipo de escritorio con Windows.",
     "Relayium esquiva toda la cuestión de la compatibilidad. Abre la misma página en un navegador en el Mac y en el PC con Windows, y los archivos viajan directamente entre ellos — cifrados de extremo a extremo, nada que instalar en ninguno de los dos sistemas operativos. En la misma red no hace falta cuenta alguna; enviar por internet con un código de emparejamiento solo pide al remitente iniciar sesión. Aquí tienes exactamente cómo funciona en ambas direcciones.",
   ],
   sections: [
@@ -751,8 +751,8 @@ const es = {
       ],
       bullets: [
         "En el Mac, abre relayium.com en el navegador. En el PC con Windows, abre la misma dirección.",
-        "Cada máquina aparece como un dispositivo cercano para la otra — sin configurar un grupo de trabajo de Windows, sin habilitar la compartición de archivos de macOS.",
-        "En el ordenador que envía, toca el otro y luego elige los archivos (o una carpeta entera) a enviar.",
+        "Cada máquina aparece como un dispositivo cercano para la otra — sin configurar un grupo de trabajo de Windows, sin habilitar el uso compartido de archivos de macOS.",
+        "En el ordenador que envía, haz clic en el otro y luego elige los archivos (o una carpeta entera) a enviar.",
         "Ambas pantallas muestran el mismo código de verificación corto. Comprueba que coincide en las dos — eso confirma que la conexión es directa entre tus dos máquinas, sin pasar por nada en medio.",
         "Acepta en el lado que recibe y la transferencia empieza de inmediato, transmitiendo directamente al disco.",
       ],
@@ -778,12 +778,12 @@ const es = {
     {
       heading: "Otras formas de mover archivos entre Mac y Windows",
       body: [
-        "Relayium no es la única opción — aquí están los compromisos honestos de las alternativas habituales:",
+        "Relayium no es la única opción — aquí están las concesiones reales de las alternativas habituales:",
       ],
       bullets: [
         "Una memoria USB funciona sin conexión, pero macOS y Windows no siempre se ponen de acuerdo en un sistema de archivos sin reformatear, y es un objeto físico más del que estar pendiente.",
-        "La compartición de red de Windows (SMB) puede llegar a un Mac, pero configurar grupos de trabajo, permisos y reglas de cortafuegos para una transferencia puntual es más trabajo del que vale la transferencia.",
-        "Una unidad en la nube (OneDrive, iCloud, Google Drive) funciona cuando la otra persona está desconectada, pero el archivo se sube y luego se descarga, cuenta contra tu cuota de almacenamiento y el proveedor guarda una copia.",
+        "El uso compartido de red de Windows (SMB) puede llegar a un Mac, pero configurar grupos de trabajo, permisos y reglas de cortafuegos para una transferencia puntual es más trabajo del que vale la transferencia.",
+        "Una unidad en la nube (OneDrive, iCloud, Google Drive) funciona cuando la otra persona está desconectada, pero el archivo se sube y luego se descarga, se descuenta de tu cuota de almacenamiento y el proveedor guarda una copia.",
         "El correo y las apps de chat son cómodos, pero suelen limitar el tamaño del adjunto y no están cifrados de extremo a extremo para compartir archivos.",
       ],
     },
@@ -791,7 +791,7 @@ const es = {
       heading: "¿Cambiará algo en los archivos?",
       body: [
         "No. Relayium transfiere los bytes originales exactamente como están — sin recompresión, sin reformateo, sin cambios de fin de línea ni de nombre de archivo entre los dos sistemas operativos.",
-        "Cada archivo se comprueba de extremo a extremo con un hash SHA-256, así que lo que aterriza en el PC con Windows (o en el Mac) queda verificado como idéntico a lo que salió de la otra máquina. Los archivos grandes también se manejan bien: un navegador con la API File System Access — Chrome o Edge de escritorio — transmite la descarga directamente al disco, sin límite de tamaño. Firefox y Safari no tienen esa API, así que un lote recibido ahí se acumula en memoria y Relayium te avisa antes de que aceptes en cuanto se pasa de unos 256 MB. Esa cifra es una estimación deliberadamente prudente, no un límite medido: dónde falla de verdad depende de la memoria de la máquina, de su sistema y de qué más tengas abierto.",
+        "Cada archivo se comprueba de extremo a extremo con un hash SHA-256, así que lo que llega al PC con Windows (o al Mac) queda verificado como idéntico a lo que salió de la otra máquina. Los archivos grandes también se manejan bien: un navegador con la API File System Access — Chrome o Edge de escritorio — transmite la descarga directamente al disco, sin límite de tamaño. Firefox y Safari no tienen esa API, así que un lote recibido ahí se acumula en memoria y Relayium te avisa antes de que aceptes en cuanto se pasa de unos 256 MB. Esa cifra es una estimación deliberadamente prudente, no un límite medido: dónde falla de verdad depende de la memoria de la máquina, de su sistema y de qué más tengas abierto.",
       ],
     },
   ],
@@ -851,7 +851,7 @@ const pt = {
     {
       heading: "Mac e PC na mesma rede",
       body: [
-        "Se os dois computadores estiverem na mesma rede do escritório ou de casa, esta é a forma mais rápida de mover arquivos — nenhuma unidade compartilhada para montar, nenhuma permissão para brigar.",
+        "Se os dois computadores estiverem na mesma rede do escritório ou de casa, esta é a forma mais rápida de mover arquivos — nenhuma unidade compartilhada para montar e nenhuma briga com permissões.",
       ],
       bullets: [
         "No Mac, abra o relayium.com no navegador. No PC com Windows, abra o mesmo endereço.",
@@ -865,7 +865,7 @@ const pt = {
       heading: "Mac e PC em redes diferentes",
       body: [
         "Trabalhando de casa enquanto a outra máquina está no escritório, ou apenas em uma rede Wi-Fi diferente? Um código de emparelhamento conecta um Mac e um PC com Windows pela internet, não só de um lado a outro da sala.",
-        "O computador que envia gera um código de emparelhamento curto (ou um link de compartilhamento); digite-o na outra máquina para conectar. Uma transferência entre redes corre por um retransmissor TURN criptografado em vez de uma ligação direta entre as duas máquinas, e isso é proposital: entre duas redes diferentes quase nunca existe um caminho direto, e procurá-lo primeiro acrescentaria uns vinte segundos parados antes de a conexão terminar no retransmissor de qualquer forma. O retransmissor só encaminha texto cifrado — os arquivos são selados de ponta a ponta antes de deixar a máquina que envia, então nada legível chega até ele. Se a conexão cair no meio de uma pasta grande, ela retoma em vez de recomeçar. Esse modo precisa que o remetente faça login; quem recebe nunca precisa de conta.",
+        "O computador que envia gera um código de emparelhamento curto (ou um link de compartilhamento); digite-o na outra máquina para conectar. Uma transferência entre redes passa por um retransmissor TURN criptografado em vez de uma ligação direta entre as duas máquinas, e isso é proposital: entre duas redes diferentes quase nunca existe um caminho direto, e procurá-lo primeiro acrescentaria uns vinte segundos parados antes de a conexão terminar no retransmissor de qualquer forma. O retransmissor só encaminha texto cifrado — os arquivos são selados de ponta a ponta antes de deixar a máquina que envia, então nada legível chega até ele. Se a conexão cair no meio de uma pasta grande, ela retoma em vez de recomeçar. Esse modo precisa que o remetente faça login; quem recebe nunca precisa de conta.",
       ],
     },
     {
@@ -882,12 +882,12 @@ const pt = {
     {
       heading: "Outras formas de mover arquivos entre Mac e Windows",
       body: [
-        "O Relayium não é a única opção — aqui estão os compromissos honestos das alternativas de sempre:",
+        "O Relayium não é a única opção — aqui estão as concessões reais das alternativas de sempre:",
       ],
       bullets: [
-        "Um pen drive funciona off-line, mas macOS e Windows nem sempre concordam sobre um sistema de arquivos sem reformatar, e é mais um objeto físico para não perder de vista.",
+        "Um pen drive funciona offline, mas macOS e Windows nem sempre concordam sobre um sistema de arquivos sem reformatar, e é mais um objeto físico para não perder de vista.",
         "O compartilhamento de rede do Windows (SMB) consegue alcançar um Mac, mas configurar grupos de trabalho, permissões e regras de firewall para uma transferência única dá mais trabalho do que a transferência vale.",
-        "Uma unidade na nuvem (OneDrive, iCloud, Google Drive) funciona quando a outra pessoa está off-line, mas o arquivo é enviado e depois baixado, conta contra sua cota de armazenamento e o provedor guarda uma cópia.",
+        "Uma unidade na nuvem (OneDrive, iCloud, Google Drive) funciona quando a outra pessoa está offline, mas o arquivo é enviado e depois baixado, conta contra sua cota de armazenamento e o provedor guarda uma cópia.",
         "E-mail e apps de mensagens são convenientes, mas costumam limitar o tamanho do anexo e não são criptografados de ponta a ponta para compartilhar arquivos.",
       ],
     },

@@ -163,20 +163,20 @@ const en = {
 };
 
 const zh = {
-  title: "自建节点：免费使用 Relayium 的中转与存储",
+  title: "自建节点：免费使用 Relayium 的中继与存储",
   description:
-    "用一条命令把你自己的中转/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。",
+    "用一条命令把你自己的中继/存储节点绑定到 Relayium 账号。之后你的传输全部走你自己的节点、不经过我们的计量服务器——因此免费，数据也留在你自己掌控的硬件上。",
   updatedLabel: "最近更新",
   lead: [
-    "跨网络传输和存储型链接会消耗中继带宽和磁盘，这对我们是有成本的，所以它们按免费额度提供、超出后收费。但有个绕过办法：自己搭一个中转/存储节点，绑定到你的账号，之后你的传输就走你自己的节点而不是我们的——不计量、不收费。",
+    "跨网络传输和存储型链接会消耗中继带宽和磁盘，这对我们是有成本的，所以它们按免费额度提供、超出后收费。但有个绕过办法：自己搭一个中继/存储节点，绑定到你的账号，之后你的传输就走你自己的节点而不是我们的——不计量、不收费。",
     "这跟「自托管整套 Relayium 服务端」不是一回事。你依然用你平常的 relayium.com 账号、同样的客户端；只是多接了一个你自己名下的节点来承载你的流量。本指南带你从一台全新的 Linux 服务器，到节点上线，大约五分钟。",
   ],
   sections: [
     {
       heading: "为什么要自建节点",
       body: [
-        "两个理由。其一是成本：你自己的节点直接承载你的中转和存储流量，完全不碰我们的计量设施，也就没有任何可计费的东西——无论用量多大都免费。",
-        "其二是掌控：中转的字节和存储的数据块都落在你自己运行的硬件上，由你自己运维。实时传输全程端到端加密，所以即便是你自己的节点，看到的也只是密文。",
+        "两个理由。其一是成本：你自己的节点直接承载你的中继和存储流量，完全不碰我们的计量设施，也就没有任何可计费的东西——无论用量多大都免费。",
+        "其二是掌控：中继的字节和存储的数据块都落在你自己运行的硬件上，由你自己运维。实时传输全程端到端加密，所以即便是你自己的节点，看到的也只是密文。",
       ],
     },
     {
@@ -186,18 +186,18 @@ const zh = {
       ],
     },
     {
-      heading: "第一步 —— 拿到你的安装命令",
+      heading: "第一步——拿到你的安装命令",
       body: [
-        "在 relayium.com 登录，打开账户页（/me），滚动到「我的节点」，点「添加节点」。你会得到一条内嵌令牌的一次性安装命令——令牌只显示这一次，请立即复制。它长这样：",
+        "在 relayium.com 登录，打开账号页（/me），滚动到「我的节点」，点「添加节点」。你会得到一条内嵌令牌的一次性安装命令——令牌只显示这一次，请立即复制。它长这样：",
       ],
       code: [INSTALL_CMD],
       bullets: [
-        "其中 <your-token> 会在账户页里替你填好——不要直接照抄上面的占位符。",
-        "RELAYIUM_NODE_STORAGE_DIR 会同时开启存储（不只是中转）。如果你只想让节点中转、不存储，去掉这个变量即可。",
+        "其中 <your-token> 会在账号页里替你填好——不要直接照抄上面的占位符。",
+        "RELAYIUM_NODE_STORAGE_DIR 会同时开启存储（不只是中继）。如果你只想让节点中继、不存储，去掉这个变量即可。",
       ],
     },
     {
-      heading: "第二步 —— 在你的服务器上以 root 运行",
+      heading: "第二步——在你的服务器上以 root 运行",
       body: [
         "把命令粘到你的服务器上。它会把我们的安装脚本管道给 sh：脚本下载并校验 relayium-node 二进制、装到 /usr/local/bin、写好 systemd 服务并启动它。开头的 sudo 就是它能安装服务的原因；如果你本来就是 root，sudo 是无副作用的空操作。",
         "因为它是 systemd 服务，节点会开机自启，崩溃后也会自动重启——无需额外操作就能一直在线。如果你看到 `relayium-node: command not found`，说明你直接运行了二进制、而不是上面的安装命令——正是那条一行命令把二进制装好的。",
@@ -212,8 +212,8 @@ const zh = {
       heading: "用 root 跑这个安装脚本安全吗？",
       body: [
         "先把最重要的一句说在前面：自建节点和我们自己机队的节点跑的是同一套代码、同一套加固——同一个签名发布里的同一个二进制、同一个安装脚本、同一份 systemd unit。唯一的差别是这台机器归谁。下面讲的东西对两者都成立。",
-        "把一个从网上拉下来的脚本管道给 root shell，值得警惕，也值得一个具体的回答，而不是一句「放心」。root 只用在安装这一步，节点后续运行完全用不到它。安装脚本会建一个叫 relayium-node 的系统账户（没有登录 shell、没有家目录），写好 systemd unit，启动服务，然后退出。节点本身从不以 root 运行：unit 里写死了 User=relayium-node，所以它一上线就是一个在你机器上什么都不拥有的低权限账户。（默认开启的自动更新确实会多装一个以 root 运行的 unit——下一节整节都在讲它能做什么、不能做什么。）",
-        "在这个账户外面，unit 还套了一层 systemd 沙箱。每一行都对着「节点进程万一被攻破，攻击者接下来会伸手去够什么」。这里没有任何东西对你隐藏：装完之后 `cat /etc/systemd/system/relayium-node.service` 就能看到完整的 unit。",
+        "把一个从网上拉下来的脚本管道给 root shell，值得警惕，也值得一个具体的回答，而不是一句「放心」。root 只用在安装这一步，节点后续运行完全用不到它。安装脚本会建一个叫 relayium-node 的系统账号（没有登录 shell、没有家目录），写好 systemd unit，启动服务，然后退出。节点本身从不以 root 运行：unit 里写死了 User=relayium-node，所以它一上线就是一个在你机器上什么都不拥有的低权限账号。（默认开启的自动更新确实会多装一个以 root 运行的 unit——下一节整节都在讲它能做什么、不能做什么。）",
+        "在这个账号外面，unit 还套了一层 systemd 沙箱。每一行都对着「节点进程万一被攻破，攻击者接下来会伸手去够什么」。这里没有任何东西对你隐藏：装完之后 `cat /etc/systemd/system/relayium-node.service` 就能看到完整的 unit。",
       ],
       table: {
         head: ["unit 里的配置", "万一节点被攻破，它挡住了什么"],
@@ -251,7 +251,7 @@ const zh = {
     {
       heading: "移除你的节点",
       body: [
-        "卸载只有一个脚本，无论这台节点只做中继还是也存文件，用的都是它。它会删掉 unit、二进制、配置和那个服务账户，并尽力（best-effort）通知 relayium.com 这台节点已经下线。这次调用失败的话，终端上只多一行提示，不是卸载出了问题——它会打印节点 ID，方便手工标记为已移除。",
+        "卸载只有一个脚本，无论这台节点只做中继还是也存文件，用的都是它。它会删掉 unit、二进制、配置和那个服务账号，并尽力（best-effort）通知 relayium.com 这台节点已经下线。这次调用失败的话，终端上只多一行提示，不是卸载出了问题——它会打印节点 ID，方便手工标记为已移除。",
         "先下载、检查，再执行。直接管道给 `sh` 的话，一旦 404 或网络抖动，整条命令会什么都不打印、退出码却是 0，看起来和卸载成功一模一样。",
         "它只删自己认得的东西：状态目录或存储目录里出现的意外文件会被保留并报告，而不是一并扫掉。",
       ],
@@ -260,13 +260,13 @@ const zh = {
         "只要存储目录里还有它认不出的文件，它就拒绝卸载——包括清理还没轮到的过期 blob——因为每个存储文件只存在于唯一一台节点上，没有副本。等这个数变成 0 再跑，或者加 RELAYIUM_NODE_FORCE=1 表示你接受那些文件从此不可达。",
         "如果它判断不出你的 blob 在哪，它会停下来而不是猜。RELAYIUM_NODE_ASSUME_NO_STORAGE=1 是唯一的放行开关，而且它照样不会删任何认不出的东西。",
         "存储目录本身会被保留，除非你另外加 RELAYIUM_NODE_PURGE_STORAGE=1。环境变量过不了 `| sudo sh`，要写成 `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`。",
-        "卸完之后，`systemctl status relayium-node` 应该是 not-found，也不该再列出 relayium-node 的 timer。以后重装的话，你账户里会多出一台**新**节点：卸载把节点的身份文件删掉了，所以重装是注册一台全新节点，而不是把旧的那台救回来。",
+        "卸完之后，`systemctl status relayium-node` 应该是 not-found，也不该再列出 relayium-node 的 timer。以后重装的话，你账号里得到的会是一台新节点：卸载把节点的身份文件删掉了，所以重装是注册一台全新节点，而不是把旧的那台救回来。",
       ],
     },
     {
-      heading: "第三步 —— 放通入站端口",
+      heading: "第三步——放通入站端口",
       body: [
-        "「在线」（向 relayium.com 发心跳）只需要出站访问，你已经有了。但要让别人真正通过你的节点中转、往上存储，它的入站端口必须可达。如果这台主机开了防火墙，就放通它们——用 ufw 就是：",
+        "「在线」（向 relayium.com 发心跳）只需要出站访问，你已经有了。但要让别人真正通过你的节点中继、往上存储，它的入站端口必须可达。如果这台主机开了防火墙，就放通它们——用 ufw 就是：",
       ],
       code: PORTS_CODE,
       bullets: [
@@ -275,10 +275,10 @@ const zh = {
       ],
     },
     {
-      heading: "第四步 —— 确认并让流量走它",
+      heading: "第四步——确认并让流量走它",
       body: [
-        "回到账户页，你的节点会出现在「我的节点」里，约 30 秒内变为「在线」。从此你账号的传输会自动优先使用你自己的节点。",
-        "想强制生效——绝不回落到我们的公共设施——就在同一页打开「仅使用我自己的节点中转/存储」。开启后，若你的节点都不在线，传输会失败，而不是悄悄用我们的。",
+        "回到账号页，你的节点会出现在「我的节点」里，约 30 秒内变为「在线」。从此你账号的传输会自动优先使用你自己的节点。",
+        "想强制生效——绝不回落到我们的公共设施——就在同一页打开「仅使用我自己的节点中继/存储」。开启后，若你的节点都不在线，传输会失败，而不是悄悄用我们的。",
       ],
     },
   ],
@@ -287,7 +287,7 @@ const zh = {
     items: [
       {
         q: "我遇到「relayium-node: command not found」，哪里错了？",
-        a: "你在安装之前就运行了 relayium-node 二进制。请用账户页给的那条一行安装命令（curl … | sudo … sh 形式）：它会下载二进制、放到 PATH 上，并作为服务启动。你从不需要单独安装 relayium-node。",
+        a: "你在安装之前就运行了 relayium-node 二进制。请用账号页给的那条一行安装命令（curl … | sudo … sh 形式）：它会下载二进制、放到 PATH 上，并作为服务启动。你从不需要单独安装 relayium-node。",
       },
       {
         q: "重启之后节点还会在线吗？",
@@ -304,8 +304,8 @@ const zh = {
     ],
   },
   cta: {
-    text: "登录，打开账户页，一分钟内添加你的第一个节点。",
-    button: "打开账户页",
+    text: "登录，打开账号页，一分钟内添加你的第一个节点。",
+    button: "打开账号页",
     href: "/me",
   },
   relatedHeading: "继续阅读",
@@ -314,18 +314,18 @@ const zh = {
 const ja = {
   title: "Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う",
   description:
-    "自分で用意したリレー／ストレージノードを、コマンド1つで Relayium アカウントに紐付けます。以降、あなたの転送は当社の従量課金サーバーではなく自分のノードを経由するので無料になり、データもあなたが管理するハードウェア上にとどまります。",
+    "自分で用意したリレー／ストレージノードを、コマンド1つで Relayium アカウントに紐付けます。以降、転送は当社の従量課金サーバーではなく自分のノードを経由するので無料になり、データも自分で管理するハードウェア上にとどまります。",
   updatedLabel: "最終更新",
   lead: [
-    "ネットワークをまたぐ転送や保存リンクは、当社にとってコストのかかるリレー帯域とディスクを使うため、無料枠の範囲内で動作し、それを超えると有料になります。それを回避する方法があります。自分のリレー／ストレージノードを立ち上げてアカウントに紐付ければ、あなたの転送は当社ではなく自分のノードを経由するようになり、従量課金も請求も一切ありません。",
+    "ネットワークをまたぐ転送や保存リンクは、当社にとってコストのかかるリレー帯域とディスクを使うため、無料枠の範囲内で動作し、それを超えると有料になります。それを回避する方法があります。自分のリレー／ストレージノードを立ち上げてアカウントに紐付ければ、転送は当社ではなく自分のノードを経由するようになり、従量課金も請求も一切ありません。",
     "これは Relayium サーバー全体をセルフホストするのとは異なります。いつもの relayium.com アカウントと同じアプリをそのまま使い続け、自分のトラフィックを運ぶノードを追加するだけです。このガイドでは、まっさらな Linux マシンからオンラインのノードまで、およそ5分で到達できます。",
   ],
   sections: [
     {
       heading: "なぜ自分のノードを立てるのか",
       body: [
-        "理由は2つあります。1つ目はコストです。自分のノードはあなたのリレーとストレージのトラフィックを直接運ぶため、当社の従量課金インフラに一切触れず、請求するものが何もありません。使用量がどれだけ大きくても無料です。",
-        "2つ目はコントロールです。リレーされたバイト列や保存されたブロブは、あなたが運用し、あなた自身の運用管理下にあるハードウェア上に存在します。リアルタイム転送は全経路でエンドツーエンド暗号化されたままなので、自分のノードでさえ常に暗号文しか見えません。",
+        "理由は2つあります。1つ目はコストです。自分のノードはリレーとストレージのトラフィックを直接運ぶため、当社の従量課金インフラに一切触れず、請求するものが何もありません。使用量がどれだけ大きくても無料です。",
+        "2つ目はコントロールです。リレーされたバイト列や保存されたブロブは、自分で運用し、自分の運用管理下に置いたハードウェア上に存在します。リアルタイム転送は全経路でエンドツーエンド暗号化されたままなので、自分のノードでさえ常に暗号文しか見えません。",
       ],
     },
     {
@@ -337,7 +337,7 @@ const ja = {
     {
       heading: "ステップ1 — インストールコマンドを取得する",
       body: [
-        "relayium.com にサインインし、アカウントページ（/me）を開いて、My Nodes までスクロールし、Add node をクリックします。トークンが埋め込まれた一度きりのインストールコマンドが表示されます。トークンは一度しか表示されないので、すぐにコピーしてください。次のような形式です。",
+        "relayium.com にサインインし、アカウントページ（/me）を開いて、「マイノード」までスクロールし、「ノードを追加」をクリックします。トークンが埋め込まれた一度きりのインストールコマンドが表示されます。トークンは一度しか表示されないので、すぐにコピーしてください。次のような形式です。",
       ],
       code: [INSTALL_CMD],
       bullets: [
@@ -381,7 +381,7 @@ const ja = {
       bullets: [
         "ReadWritePaths と NoExecPaths がストレージディレクトリを指すのは、実際に保存を行うノードだけです。リレー専用のノードにはどちらの行も付かず、自分の状態ディレクトリ以外どこにも書けません。",
         "通常の構成ではケーパビリティ集合は空です。唯一の例外は、直接ダウンロードのリスナーを 1024 未満のポートに置く場合で、バインドに CAP_NET_BIND_SERVICE が必要になります。既定のダウンロードポートは 1024 より上の 2053 なので、何も付与されません。",
-        "ノードは鍵を持ちません。ファイルはアップロード前に送信側で暗号化されるため、ストレージノードに届くのはそれ自身が読めない暗号文です — あなた自身のノードでも、あなた自身でも読めません。",
+        "ノードは鍵を持ちません。ファイルはアップロード前に送信側で暗号化されるため、ストレージノードに届くのはそれ自身が読めない暗号文です — 自分のノードでも、自分自身でも読めません。",
       ],
     },
     {
@@ -393,7 +393,7 @@ const ja = {
         "更新に失敗すれば自分で元に戻します。更新器は旧バイナリを新バイナリの隣に残し、サービスを再起動し、最大10分間ハートビートを待ちます。その間に新バージョンが健全と報告しなければ、旧バイナリを戻して再起動し、その不良バージョンを記録して再試行しません。この一連の処理で保存済みファイルが読まれたり、移動されたり、削除されたりすることは一度もありません。",
       ],
       bullets: [
-        "不要な場合: RELAYIUM_NODE_AUTO_UPDATE=off を付けてインストーラーを再実行します。タイマーとそのサービスは無効化され削除されます。ノードはそのまま動き続け、更新の時期はあなたが決めます。",
+        "不要な場合: RELAYIUM_NODE_AUTO_UPDATE=off を付けてインストーラーを再実行します。タイマーとそのサービスは無効化され削除されます。ノードはそのまま動き続け、更新の時期は自分で決められます。",
         "ノードを完全にやめる場合: 下の「ノードを削除する」を参照してください。",
       ],
     },
@@ -409,13 +409,13 @@ const ja = {
         "保存ディレクトリに把握していないファイルが 1 つでも残っている間は拒否します（クリーンアップがまだ届いていない期限切れの blob も同じ扱いです）。保存ファイルは 1 台のノードにしか存在せず、レプリカが無いためです。0 になるまで待つか、それらが到達不能になることを受け入れて RELAYIUM_NODE_FORCE=1 を渡してください。",
         "blob の場所を特定できない場合は、推測せずに停止します。RELAYIUM_NODE_ASSUME_NO_STORAGE=1 が唯一の回避手段で、それでも把握していないものは削除しません。",
         "保存ディレクトリ自体は、RELAYIUM_NODE_PURGE_STORAGE=1 を併せて渡さない限り残ります。環境変数は `| sudo sh` を越えないので、`sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh` の形で渡してください。",
-        "その後、`systemctl status relayium-node` は not-found になり、relayium-node のタイマーも一覧に出ないはずです。後で再インストールすると、アカウントには**新しい**ノードが追加されます。アンインストールがノードの識別ファイルを削除するため、再インストールは旧ノードの復活ではなく新規登録になります。",
+        "その後、`systemctl status relayium-node` は not-found になり、relayium-node のタイマーも一覧に出ないはずです。後で再インストールすると、アカウントに追加されるのは新しいノードです。アンインストールがノードの識別ファイルを削除するため、再インストールは旧ノードの復活ではなく新規登録になります。",
       ],
     },
     {
       heading: "ステップ3 — 受信ポートを開く",
       body: [
-        "オンライン状態（relayium.com へのハートビート）には送信アクセスだけが必要で、これはすでに備わっています。しかしピアが実際にあなたのノードを経由してリレーし、保存するには、その受信ポートが到達可能でなければなりません。ホストでファイアウォールが動いている場合は開放してください。ufw では次のようにします。",
+        "オンライン状態（relayium.com へのハートビート）には送信アクセスだけが必要で、これはすでに備わっています。しかしピアが実際に自分のノードを経由してリレーし、保存するには、その受信ポートが到達可能でなければなりません。ホストでファイアウォールが動いている場合は開放してください。ufw では次のようにします。",
       ],
       code: PORTS_CODE,
       bullets: [
@@ -426,8 +426,8 @@ const ja = {
     {
       heading: "ステップ4 — 確認して経由させる",
       body: [
-        "アカウントページに戻ると、あなたのノードが My Nodes の下に表示され、約30秒以内に Online に切り替わります。それ以降、あなたのアカウントの転送は自動的に自分のノードを優先します。",
-        "強制するには — 当社の共有インフラに決してフォールバックしない — 同じページで「Only use my own nodes for relay/storage」をオンにします。これをオンにすると、自分のノードが1つもオンラインでない場合、当社のものを黙って使うのではなく転送が失敗します。",
+        "アカウントページに戻ると、追加したノードが「マイノード」の下に表示され、約30秒以内に「オンライン」に切り替わります。それ以降、アカウントの転送は自動的に自分のノードを優先します。",
+        "強制するには — 当社の共有インフラに決してフォールバックしない — 同じページで「自分のノードのみで中継・保存する」をオンにします。これをオンにすると、自分のノードが1つもオンラインでない場合、当社のものを黙って使うのではなく転送が失敗します。",
       ],
     },
   ],
@@ -444,11 +444,11 @@ const ja = {
       },
       {
         q: "これは Relayium のセルフホストとどう違うのですか？",
-        a: "Bring-your-own-node は、いつもの relayium.com アカウントとアプリをそのまま使い、自分のトラフィックを運ぶノードを追加するだけです。セルフホストはサーバースタック全体（アカウント、Web アプリ、シグナリング）を自分のドメインで運用します。それについては \"Self-host Relayium\" ガイドを参照してください。",
+        a: "Bring-your-own-node は、いつもの relayium.com アカウントとアプリをそのまま使い、自分のトラフィックを運ぶノードを追加するだけです。セルフホストはサーバースタック全体（アカウント、Web アプリ、シグナリング）を自分のドメインで運用します。それについては「Relayium をセルフホスト」ガイドを参照してください。",
       },
       {
         q: "他の誰かが私のノードを使ったり、私のデータを見たりできますか？",
-        a: "いいえ。ノードはトークンによってあなたのアカウントに紐付けられ、あなたのアカウントのトラフィックのみを運びます。リアルタイム転送はエンドツーエンド暗号化されており、保存されるブロブはあなたのノードが読めない暗号文です。あなたのデータとノード設定は、あなただけが利用できます。",
+        a: "いいえ。ノードはトークンによって自分のアカウントに紐付けられ、そのアカウントのトラフィックのみを運びます。リアルタイム転送はエンドツーエンド暗号化されており、保存されるブロブは自分のノードが読めない暗号文です。データとノード設定を利用できるのは本人だけです。",
       },
     ],
   },
@@ -463,18 +463,18 @@ const ja = {
 const ko = {
   title: "Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기",
   description:
-    "직접 준비한 릴레이/스토리지 노드를 명령어 하나로 Relayium 계정에 연결하세요. 그러면 전송이 종량제 서버가 아닌 여러분의 노드를 통해 이루어지므로 무료이며, 데이터도 여러분이 관리하는 하드웨어에 남습니다.",
+    "직접 준비한 릴레이/스토리지 노드를 명령어 하나로 Relayium 계정에 연결하세요. 그러면 전송이 종량제 서버가 아닌 내 노드를 통해 이루어지므로 무료이며, 데이터도 직접 관리하는 하드웨어에 남습니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "네트워크를 넘나드는 전송과 저장된 링크는 당사에 비용이 드는 릴레이 대역폭과 디스크를 사용하므로, 무료 허용량 내에서 동작하고 그 이상은 유료입니다. 이를 우회하는 방법이 있습니다. 직접 릴레이/스토리지 노드를 운영하여 계정에 연결하면, 전송이 당사가 아닌 여러분의 노드를 통해 흐르며 종량 계측도 청구도 전혀 없습니다.",
-    "이는 Relayium 서버 전체를 셀프 호스팅하는 것과는 다릅니다. 평소 쓰던 relayium.com 계정과 동일한 앱을 그대로 사용하면서, 트래픽을 운반할 여러분 소유의 노드를 추가하는 것뿐입니다. 이 가이드는 새로운 Linux 머신에서 온라인 노드까지 약 5분 만에 안내합니다.",
+    "네트워크를 넘나드는 전송과 저장된 링크는 당사에 비용이 드는 릴레이 대역폭과 디스크를 사용하므로, 무료 허용량 내에서 동작하고 그 이상은 유료입니다. 이를 우회하는 방법이 있습니다. 직접 릴레이/스토리지 노드를 운영하여 계정에 연결하면, 전송이 당사가 아닌 내 노드를 통해 흐르며 종량 계측도 청구도 전혀 없습니다.",
+    "이는 Relayium 서버 전체를 셀프 호스팅하는 것과는 다릅니다. 평소 쓰던 relayium.com 계정과 동일한 앱을 그대로 사용하면서, 트래픽을 운반할 본인 소유의 노드를 추가하는 것뿐입니다. 이 가이드는 새로운 Linux 머신에서 온라인 노드까지 약 5분 만에 안내합니다.",
   ],
   sections: [
     {
       heading: "왜 직접 노드를 운영해야 하나",
       body: [
-        "두 가지 이유가 있습니다. 첫째, 비용입니다. 직접 운영하는 노드는 여러분의 릴레이와 스토리지 트래픽을 직접 운반하므로 당사의 종량제 인프라에 전혀 닿지 않고 청구할 것이 없습니다. 사용량이 아무리 커도 무료입니다.",
-        "둘째, 통제권입니다. 릴레이된 바이트와 저장된 블롭은 여러분이 운영하고 여러분 자신의 운영 통제하에 있는 하드웨어에 존재합니다. 실시간 전송은 전 구간에서 종단 간 암호화를 유지하므로, 여러분 자신의 노드조차 항상 암호문만 보게 됩니다.",
+        "두 가지 이유가 있습니다. 첫째, 비용입니다. 직접 운영하는 노드는 내 릴레이와 스토리지 트래픽을 직접 운반하므로 당사의 종량제 인프라에 전혀 닿지 않고 청구할 것이 없습니다. 사용량이 아무리 커도 무료입니다.",
+        "둘째, 통제권입니다. 릴레이된 바이트와 저장된 블롭은 직접 운영하고 본인의 운영 통제하에 있는 하드웨어에 존재합니다. 실시간 전송은 전 구간에서 종단 간 암호화를 유지하므로, 내 노드조차 항상 암호문만 보게 됩니다.",
       ],
     },
     {
@@ -486,7 +486,7 @@ const ko = {
     {
       heading: "1단계 — 설치 명령어 받기",
       body: [
-        "relayium.com에 로그인하여 계정 페이지(/me)를 열고, My Nodes까지 스크롤한 뒤 Add node를 클릭하세요. 토큰이 삽입된 일회성 설치 명령어를 받게 됩니다. 토큰은 한 번만 표시되므로 즉시 복사하세요. 다음과 같은 형태입니다.",
+        "relayium.com에 로그인하여 계정 페이지(/me)를 열고, “내 노드”까지 스크롤한 뒤 “노드 추가”를 클릭하세요. 토큰이 삽입된 일회성 설치 명령어를 받게 됩니다. 토큰은 한 번만 표시되므로 즉시 복사하세요. 다음과 같은 형태입니다.",
       ],
       code: [INSTALL_CMD],
       bullets: [
@@ -510,8 +510,8 @@ const ko = {
       heading: "이 설치 프로그램을 root로 실행해도 안전한가요?",
       body: [
         "무엇보다 먼저: BYO 노드는 당사 자체 플릿 노드와 완전히 같은 코드, 완전히 같은 강화 설정으로 동작합니다 — 같은 서명된 릴리스의 같은 바이너리를, 같은 스크립트로, 같은 systemd 유닛 아래에 설치합니다. 유일한 차이는 그 머신이 누구의 것이냐뿐입니다. 아래 설명은 양쪽 모두에 해당합니다.",
-        "인터넷에서 받아온 스크립트를 root 셸로 파이프하는 명령에 대해 나올 만한 질문이며, \"괜찮습니다\"라는 안심 대신 구체적인 답을 받을 자격이 있습니다. root는 설치에만 쓰이고, 그 이후 노드가 하는 일에는 전혀 쓰이지 않습니다. 설치 프로그램은 로그인 셸도 홈 디렉터리도 없는 relayium-node 시스템 계정을 만들고, systemd 유닛을 작성하고, 서비스를 시작한 뒤 종료합니다. 노드 자체는 결코 root로 실행되지 않습니다. 유닛에 User=relayium-node가 지정되어 있어, 온라인이 되는 순간부터 여러분의 머신에서 아무것도 소유하지 않은 비특권 계정입니다. (기본으로 켜져 있는 자동 업데이트는 root로 실행되는 두 번째 유닛을 추가합니다 — 다음 절 전체가 그 유닛이 무엇을 할 수 있고 무엇을 할 수 없는지에 대한 이야기입니다.)",
-        "그 계정 주위로 유닛은 systemd 샌드박스를 두릅니다. 모든 줄이 \"노드 프로세스가 장악당했을 때 공격자가 다음으로 손을 뻗을 대상\"을 겨냥합니다. 감춰 둔 것은 없습니다. 설치 후 `cat /etc/systemd/system/relayium-node.service`로 유닛 전체를 읽어 보세요.",
+        "인터넷에서 받아온 스크립트를 root 셸로 파이프하는 명령에 대해 나올 만한 질문이며, “괜찮습니다”라는 안심 대신 구체적인 답을 받을 자격이 있습니다. root는 설치에만 쓰이고, 그 이후 노드가 하는 일에는 전혀 쓰이지 않습니다. 설치 프로그램은 로그인 셸도 홈 디렉터리도 없는 relayium-node 시스템 계정을 만들고, systemd 유닛을 작성하고, 서비스를 시작한 뒤 종료합니다. 노드 자체는 결코 root로 실행되지 않습니다. 유닛에 User=relayium-node가 지정되어 있어, 온라인이 되는 순간부터 내 머신에서 아무것도 소유하지 않은 비특권 계정입니다. (기본으로 켜져 있는 자동 업데이트는 root로 실행되는 두 번째 유닛을 추가합니다 — 다음 절 전체가 그 유닛이 무엇을 할 수 있고 무엇을 할 수 없는지에 대한 이야기입니다.)",
+        "그 계정 주위로 유닛은 systemd 샌드박스를 두릅니다. 모든 줄이 “노드 프로세스가 장악당했을 때 공격자가 다음으로 손을 뻗을 대상”을 겨냥합니다. 감춰 둔 것은 없습니다. 설치 후 `cat /etc/systemd/system/relayium-node.service`로 유닛 전체를 읽어 보세요.",
       ],
       table: {
         head: ["유닛의 설정", "노드가 침해되었을 때 무엇을 막는가"],
@@ -530,26 +530,26 @@ const ko = {
       bullets: [
         "ReadWritePaths와 NoExecPaths가 스토리지 디렉터리를 가리키는 것은 실제로 저장을 하는 노드뿐입니다. 릴레이 전용 노드에는 두 줄 모두 없으며, 자신의 상태 디렉터리 외에는 어디에도 쓸 수 없습니다.",
         "일반적인 구성에서 케이퍼빌리티 집합은 비어 있습니다. 유일한 예외는 직접 다운로드 리스너를 1024 미만 포트에 두는 경우로, 바인딩에 CAP_NET_BIND_SERVICE가 필요합니다. 기본 다운로드 포트는 1024보다 큰 2053이므로 아무것도 부여되지 않습니다.",
-        "노드는 키를 갖고 있지 않습니다. 파일은 업로드되기 전에 보내는 쪽에서 암호화되므로, 스토리지 노드에 도달하는 것은 그 노드가 읽을 수 없는 암호문입니다 — 여러분 자신의 노드도, 여러분 자신도 읽을 수 없습니다.",
+        "노드는 키를 갖고 있지 않습니다. 파일은 업로드되기 전에 보내는 쪽에서 암호화되므로, 스토리지 노드에 도달하는 것은 그 노드가 읽을 수 없는 암호문입니다 — 내 노드도, 본인도 읽을 수 없습니다.",
       ],
     },
     {
       heading: "자동 업데이터가 할 수 있는 일과 할 수 없는 일",
       body: [
-        "설치 프로그램은 자동 업데이트 타이머도 설정하며, 기본값은 켜짐입니다. relayium-node-update.timer가 약 10분마다 relayium.com에 \"이 노드는 어떤 버전을 실행해야 하는지\"를 묻습니다. 이것은 두 번째 유닛이고 root로 실행되므로, 그 자신에 대한 설명도 마땅히 필요합니다.",
+        "설치 프로그램은 자동 업데이트 타이머도 설정하며, 기본값은 켜짐입니다. relayium-node-update.timer가 약 10분마다 relayium.com에 “이 노드는 어떤 버전을 실행해야 하는지”를 묻습니다. 이것은 두 번째 유닛이고 root로 실행되므로, 그 자신에 대한 설명도 마땅히 필요합니다.",
         "중앙은 결코 바이너리를 보내지 않습니다. 응답의 전부는 버전 번호, 두 개의 플래그(이 노드가 지금 움직여도 되는지, 이것이 의도적인 다운그레이드인지), 그리고 짧은 사유 문자열입니다 — 바이트도, URL도, 명령도 없습니다. 그다음 노드가 스스로 그 릴리스를 받아 아카이브의 SHA-256을 릴리스의 checksums.txt와 대조하고, checksums.txt에 대한 ECDSA P-256 서명을 바로 그 검증을 수행하는 바이너리 자체에 컴파일되어 들어 있는 공개키로 검증합니다. 그 키의 개인키 쪽은 이 폴링에 답하는 서버에 있지 않습니다. 따라서 중앙이 침해되더라도 버전을 지목할 수는 있어도, 검증을 통과하는 바이너리를 만들어 낼 수는 없습니다.",
         "업데이터와 노드는 권한이 정반대인 두 개의 별도 프로세스입니다. relayium-node.service는 위의 샌드박스 그 자체로, ProtectSystem=strict 아래에서는 /usr/local/bin에 쓰는 것 자체가 불가능합니다. 즉 노드는 자기 것을 포함해 어떤 바이너리도 수정할 수 없습니다. relayium-node-update.service는 root로 실행되는 작은 oneshot 유닛이며 의도적으로 샌드박스를 두르지 않습니다. /usr/local/bin의 파일을 교체하려면, 바로 노드의 샌드박스가 막으려는 그 권한이 필요하기 때문입니다. 그 권한을 노드 본체의 강화를 느슨하게 푸는 대신 단일 목적 유닛 하나에 가둬 두는 것 — 그것이 이 분리의 핵심입니다. root를 가진 프로세스는 바이너리를 교체만 하고, 우리 안의 프로세스는 결코 바이너리에 손댈 수 없습니다.",
         "업데이트가 잘못되면 스스로 되돌립니다. 업데이터는 이전 바이너리를 새 바이너리 옆에 남겨 두고 서비스를 재시작한 뒤 최대 10분간 하트비트를 지켜봅니다. 그 시간 안에 새 버전이 정상이라고 보고하지 않으면 이전 바이너리를 되돌려 놓고 다시 재시작하며, 그 불량 버전을 기록해 다시 시도하지 않습니다. 이 과정에서 저장된 파일이 읽히거나 옮겨지거나 삭제되는 일은 전혀 없습니다.",
       ],
       bullets: [
-        "원하지 않는다면: RELAYIUM_NODE_AUTO_UPDATE=off를 주고 설치 프로그램을 다시 실행하세요. 타이머와 그 서비스는 비활성화되고 삭제됩니다. 노드는 계속 동작하며, 업데이트 시점은 여러분이 정합니다.",
+        "원하지 않는다면: RELAYIUM_NODE_AUTO_UPDATE=off를 주고 설치 프로그램을 다시 실행하세요. 타이머와 그 서비스는 비활성화되고 삭제됩니다. 노드는 계속 동작하며, 업데이트 시점은 직접 정합니다.",
         "노드를 완전히 그만두려면: 아래 “노드 제거하기”를 보세요.",
       ],
     },
     {
       heading: "노드 제거하기",
       body: [
-        "제거는 스크립트 하나로 끝나며, 파일을 저장하는 노드든 중계만 하는 노드든 같은 스크립트를 씁니다. 유닛, 바이너리, 설정, 서비스 계정을 제거하고 노드가 사라졌음을 relayium.com에 최선을 다해 알립니다. 그 호출이 실패해도 터미널에 한 줄이 더 나올 뿐 제거가 고장 난 것은 아니며, 노드 ID가 출력되므로 수동으로 제거됨 표시를 할 수 있습니다.",
+        "제거는 스크립트 하나로 끝나며, 파일을 저장하는 노드든 릴레이만 하는 노드든 같은 스크립트를 씁니다. 유닛, 바이너리, 설정, 서비스 계정을 제거하고 노드가 사라졌음을 relayium.com에 최선을 다해 알립니다. 그 호출이 실패해도 터미널에 한 줄이 더 나올 뿐 제거가 고장 난 것은 아니며, 노드 ID가 출력되므로 수동으로 제거됨 표시를 할 수 있습니다.",
         "내려받고, 확인한 다음 실행하세요. `sh`로 바로 파이프하면 404나 일시적인 네트워크 문제에서 명령 전체가 아무것도 출력하지 않고 종료 코드 0으로 끝나, 제거가 성공한 것처럼 보입니다.",
         "아는 것만 지웁니다. 상태 디렉터리나 저장 디렉터리에 예상치 못한 파일이 있으면 지우지 않고 보관한 뒤 보고합니다.",
       ],
@@ -558,13 +558,13 @@ const ko = {
         "저장 디렉터리에 알아보지 못하는 파일이 하나라도 남아 있으면 거부합니다(정리가 아직 닿지 않은 만료된 blob도 마찬가지). 저장된 파일은 정확히 한 노드에만 있고 복제본이 없기 때문입니다. 0이 될 때까지 기다리거나, 그 파일들이 도달 불가능해지는 것을 감수하고 RELAYIUM_NODE_FORCE=1을 넘기세요.",
         "blob이 어디 있는지 판단할 수 없으면 추측하지 않고 멈춥니다. RELAYIUM_NODE_ASSUME_NO_STORAGE=1이 유일한 통과 방법이며, 그래도 알아보지 못하는 것은 삭제하지 않습니다.",
         "저장 디렉터리 자체는 RELAYIUM_NODE_PURGE_STORAGE=1을 함께 넘기지 않는 한 남습니다. 환경 변수는 `| sudo sh`를 넘지 못하므로 `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh` 형태로 넘기세요.",
-        "그다음 `systemctl status relayium-node`는 not-found여야 하고 relayium-node 타이머도 보이지 않아야 합니다. 나중에 다시 설치하면 계정에 **새** 노드가 생깁니다. 제거가 노드의 신원 파일을 지우므로, 재설치는 옛 노드를 되살리는 것이 아니라 새로 등록하는 것입니다.",
+        "그다음 `systemctl status relayium-node`는 not-found여야 하고 relayium-node 타이머도 보이지 않아야 합니다. 나중에 다시 설치하면 계정에 생기는 것은 완전히 새 노드입니다. 제거가 노드의 신원 파일을 지우므로, 재설치는 옛 노드를 되살리는 것이 아니라 새로 등록하는 것입니다.",
       ],
     },
     {
       heading: "3단계 — 인바운드 포트 열기",
       body: [
-        "온라인 상태(relayium.com으로의 하트비트)에는 이미 갖추고 있는 아웃바운드 접근만 필요합니다. 하지만 피어가 실제로 여러분의 노드를 통해 릴레이하고 저장하려면 인바운드 포트가 접근 가능해야 합니다. 호스트에서 방화벽이 실행 중이라면 열어 주세요. ufw에서는 다음과 같습니다.",
+        "온라인 상태(relayium.com으로의 하트비트)에는 이미 갖추고 있는 아웃바운드 접근만 필요합니다. 하지만 피어가 실제로 내 노드를 통해 릴레이하고 저장하려면 인바운드 포트가 접근 가능해야 합니다. 호스트에서 방화벽이 실행 중이라면 열어 주세요. ufw에서는 다음과 같습니다.",
       ],
       code: PORTS_CODE,
       bullets: [
@@ -575,8 +575,8 @@ const ko = {
     {
       heading: "4단계 — 확인하고 노드를 경유시키기",
       body: [
-        "계정 페이지로 돌아가면 여러분의 노드가 My Nodes 아래에 나타나고 약 30초 이내에 Online으로 바뀝니다. 그때부터 여러분 계정의 전송은 자동으로 여러분의 노드를 우선합니다.",
-        "이를 강제하려면 — 당사의 공유 인프라로 절대 폴백하지 않도록 — 같은 페이지에서 \"Only use my own nodes for relay/storage\"를 켜세요. 이를 켜면 여러분의 노드가 하나도 온라인이 아닐 때 당사 것을 조용히 사용하는 대신 전송이 실패합니다.",
+        "계정 페이지로 돌아가면 추가한 노드가 “내 노드” 아래에 나타나고 약 30초 이내에 “온라인”으로 바뀝니다. 그때부터 내 계정의 전송은 자동으로 내 노드를 우선합니다.",
+        "이를 강제하려면 — 당사의 공유 인프라로 절대 폴백하지 않도록 — 같은 페이지에서 “내 노드로만 중계/저장하기”를 켜세요. 이를 켜면 내 노드가 하나도 온라인이 아닐 때 당사 것을 조용히 사용하는 대신 전송이 실패합니다.",
       ],
     },
   ],
@@ -584,7 +584,7 @@ const ko = {
     heading: "자주 묻는 질문",
     items: [
       {
-        q: "\"relayium-node: command not found\"가 떴습니다 — 무엇이 잘못되었나요?",
+        q: "“relayium-node: command not found”가 떴습니다 — 무엇이 잘못되었나요?",
         a: "relayium-node 바이너리를 설치하기 전에 실행한 것입니다. 계정 페이지의 한 줄 설치 명령어(curl … | sudo … sh 형태)를 사용하세요. 이것이 바이너리를 다운로드하여 PATH에 놓고 서비스로 시작합니다. relayium-node를 별도로 설치하는 일은 결코 없습니다.",
       },
       {
@@ -593,11 +593,11 @@ const ko = {
       },
       {
         q: "이것은 Relayium 셀프 호스팅과 어떻게 다른가요?",
-        a: "Bring-your-own-node는 평소의 relayium.com 계정과 앱을 그대로 유지하면서 트래픽을 운반할 여러분 소유의 노드를 추가하는 것뿐입니다. 셀프 호스팅은 서버 스택 전체(계정, 웹 앱, 시그널링)를 여러분 자신의 도메인에서 운영합니다. 이에 대해서는 \"Self-host Relayium\" 가이드를 참조하세요.",
+        a: "Bring-your-own-node는 평소의 relayium.com 계정과 앱을 그대로 유지하면서 트래픽을 운반할 본인 소유의 노드를 추가하는 것뿐입니다. 셀프 호스팅은 서버 스택 전체(계정, 웹 앱, 시그널링)를 본인 도메인에서 운영합니다. 이에 대해서는 “Relayium 셀프 호스팅” 가이드를 참조하세요.",
       },
       {
         q: "다른 사람이 제 노드를 사용하거나 제 데이터를 볼 수 있나요?",
-        a: "아니요. 노드는 토큰으로 여러분의 계정에 연결되어 여러분 계정의 트래픽만 운반합니다. 실시간 전송은 종단 간 암호화되고, 저장된 블롭은 여러분의 노드가 읽을 수 없는 암호문입니다. 여러분의 데이터와 노드 구성은 오직 여러분만 사용할 수 있습니다.",
+        a: "아니요. 노드는 토큰으로 내 계정에 연결되어 그 계정의 트래픽만 운반합니다. 실시간 전송은 종단 간 암호화되고, 저장된 블롭은 내 노드가 읽을 수 없는 암호문입니다. 내 데이터와 노드 구성은 오직 본인만 사용할 수 있습니다.",
       },
     ],
   },
@@ -610,44 +610,44 @@ const ko = {
 };
 
 const de = {
-  title: "Bring Your Own Node: Relais und Speicher von Relayium kostenlos nutzen",
+  title: "Bring Your Own Node: Relay und Speicher von Relayium kostenlos nutzen",
   description:
-    "Binden Sie mit einem einzigen Befehl Ihren eigenen Relais-/Speicher-Node an Ihr Relayium-Konto an. Ihre Übertragungen laufen dann über Ihren Node — nicht über unsere abrechnungspflichtigen Server —, sind also kostenlos, und die Daten bleiben auf Hardware, die Sie selbst kontrollieren.",
+    "Binde mit einem einzigen Befehl deinen eigenen Relay-/Speicher-Node an dein Relayium-Konto an. Deine Übertragungen laufen dann über deinen Node — nicht über unsere abrechnungspflichtigen Server —, sind also kostenlos, und die Daten bleiben auf Hardware, die du selbst kontrollierst.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "Netzübergreifende Übertragungen und gespeicherte Links nutzen Relais-Bandbreite und Speicherplatz, die uns Geld kosten, und laufen daher auf einem kostenlosen Kontingent, das darüber hinaus kostenpflichtig ist. Es gibt einen Ausweg: Betreiben Sie Ihren eigenen Relais-/Speicher-Node, binden Sie ihn an Ihr Konto, und Ihre Übertragungen fließen über Ihren Node statt über unseren — nichts wird gemessen, nichts wird berechnet.",
-    "Das unterscheidet sich davon, den gesamten Relayium-Server selbst zu hosten. Sie verwenden weiterhin Ihr normales relayium.com-Konto und dieselben Apps; Sie fügen lediglich einen Node hinzu, der Ihnen gehört und Ihren Datenverkehr trägt. Diese Anleitung führt Sie in etwa fünf Minuten von einem frischen Linux-Rechner zu einem Online-Node.",
+    "Netzübergreifende Übertragungen und gespeicherte Links nutzen Relay-Bandbreite und Speicherplatz, die uns Geld kosten, und laufen daher auf einem kostenlosen Kontingent, das darüber hinaus kostenpflichtig ist. Es gibt einen Ausweg: Betreibe deinen eigenen Relay-/Speicher-Node, binde ihn an dein Konto, und deine Übertragungen fließen über deinen Node statt über unseren — nichts wird gemessen, nichts wird berechnet.",
+    "Das unterscheidet sich davon, den gesamten Relayium-Server selbst zu hosten. Du verwendest weiterhin dein normales relayium.com-Konto und dieselben Apps; du fügst lediglich einen Node hinzu, der dir gehört und deinen Datenverkehr trägt. Diese Anleitung führt dich in etwa fünf Minuten von einem frischen Linux-Rechner zu einem Online-Node.",
   ],
   sections: [
     {
       heading: "Warum einen eigenen Node betreiben",
       body: [
-        "Zwei Gründe. Erstens die Kosten: Ein Node, der Ihnen gehört, trägt Ihren Relais- und Speicherverkehr direkt, berührt also nie unsere abrechnungspflichtige Infrastruktur, und es gibt nichts zu berechnen — Ihre Nutzung ist kostenlos, egal wie groß.",
-        "Zweitens die Kontrolle: Die weitergeleiteten Bytes und gespeicherten Blobs liegen auf Hardware, die Sie betreiben, unter Ihrer eigenen betrieblichen Kontrolle. Echtzeit-Übertragungen bleiben auf dem gesamten Weg Ende-zu-Ende-verschlüsselt, sodass selbst Ihr eigener Node immer nur Chiffretext sieht.",
+        "Zwei Gründe. Erstens die Kosten: Ein Node, der dir gehört, trägt deinen Relay- und Speicherverkehr direkt, berührt also nie unsere abrechnungspflichtige Infrastruktur, und es gibt nichts zu berechnen — deine Nutzung ist kostenlos, egal wie groß.",
+        "Zweitens die Kontrolle: Die weitergeleiteten Bytes und gespeicherten Blobs liegen auf Hardware, die du betreibst, unter deiner eigenen betrieblichen Kontrolle. Echtzeit-Übertragungen bleiben auf dem gesamten Weg Ende-zu-Ende-verschlüsselt, sodass selbst dein eigener Node immer nur Chiffretext sieht.",
       ],
     },
     {
-      heading: "Was Sie brauchen",
+      heading: "Was du brauchst",
       body: [
-        "Einen aus dem Internet erreichbaren Linux-Server — ein günstiger VPS oder ein dauerhaft laufender Rechner zu Hause funktionieren beide. Sie benötigen root (oder sudo) und die Möglichkeit, einige eingehende Ports zu öffnen. Sowohl amd64 als auch arm64 werden unterstützt.",
+        "Einen aus dem Internet erreichbaren Linux-Server — ein günstiger VPS oder ein dauerhaft laufender Rechner zu Hause funktionieren beide. Du benötigst root (oder sudo) und die Möglichkeit, einige eingehende Ports zu öffnen. Sowohl amd64 als auch arm64 werden unterstützt.",
       ],
     },
     {
-      heading: "Schritt 1 — Ihren Installationsbefehl abrufen",
+      heading: "Schritt 1 — deinen Installationsbefehl abrufen",
       body: [
-        "Melden Sie sich bei relayium.com an, öffnen Sie die Kontoseite (/me), scrollen Sie zu My Nodes und klicken Sie auf Add node. Sie erhalten einen einmaligen Installationsbefehl mit eingebettetem Token — der Token wird nur einmal angezeigt, kopieren Sie ihn also sofort. Er sieht so aus:",
+        "Melde dich bei relayium.com an, öffne die Kontoseite (/me), scrolle zu „Meine Knoten“ und klicke auf „Knoten hinzufügen“. Du erhältst einen einmaligen Installationsbefehl mit eingebettetem Token — der Token wird nur einmal angezeigt, kopiere ihn also sofort. Er sieht so aus:",
       ],
       code: [INSTALL_CMD],
       bullets: [
-        "Der Teil <your-token> wird auf der Kontoseite für Sie ausgefüllt — fügen Sie den obigen Platzhalter nicht wörtlich ein.",
-        "RELAYIUM_NODE_STORAGE_DIR aktiviert neben dem Relais auch die Blob-Speicherung. Lassen Sie es weg (die Variable auslassen), wenn der Node nur weiterleiten und nicht speichern soll.",
+        "Der Teil <your-token> wird auf der Kontoseite für dich ausgefüllt — füge den obigen Platzhalter nicht wörtlich ein.",
+        "RELAYIUM_NODE_STORAGE_DIR aktiviert neben dem Relay auch die Blob-Speicherung. Lass es weg (die Variable auslassen), wenn der Node nur weiterleiten und nicht speichern soll.",
       ],
     },
     {
-      heading: "Schritt 2 — auf Ihrem Server als root ausführen",
+      heading: "Schritt 2 — auf deinem Server als root ausführen",
       body: [
-        "Fügen Sie den Befehl auf Ihrem Server ein. Er leitet unseren Installer an sh weiter: Der Installer lädt die relayium-node-Binärdatei herunter, verifiziert sie per Prüfsumme, installiert sie nach /usr/local/bin, schreibt einen systemd-Dienst und startet ihn. Das führende sudo ist der Grund, warum er den Dienst installieren kann; wenn Sie bereits root sind, ist es ein harmloser No-op.",
-        "Da es sich um einen systemd-Dienst handelt, wird der Node beim Booten aktiviert und startet sich selbst neu, falls er jemals abstürzt — er bleibt über Neustarts hinweg online, ohne dass Sie weiter etwas tun müssen. Wenn Sie `relayium-node: command not found` sehen, haben Sie die Binärdatei direkt ausgeführt statt des obigen Installers — der Einzeiler ist es, der die Binärdatei an ihren Platz bringt.",
+        "Füge den Befehl auf deinem Server ein. Er leitet unseren Installer an sh weiter: Der Installer lädt die relayium-node-Binärdatei herunter, verifiziert sie per Prüfsumme, installiert sie nach /usr/local/bin, schreibt einen systemd-Dienst und startet ihn. Das führende sudo ist der Grund, warum er den Dienst installieren kann; wenn du bereits root bist, ist es ein harmloser No-op.",
+        "Da es sich um einen systemd-Dienst handelt, wird der Node beim Booten aktiviert und startet sich selbst neu, falls er jemals abstürzt — er bleibt über Neustarts hinweg online, ohne dass du weiter etwas tun musst. Wenn du `relayium-node: command not found` siehst, hast du die Binärdatei direkt ausgeführt statt des obigen Installers — der Einzeiler ist es, der die Binärdatei an ihren Platz bringt.",
       ],
       bullets: [
         "Prüfen, ob er gestartet ist: `systemctl status relayium-node` (sollte active/running anzeigen).",
@@ -659,8 +659,8 @@ const de = {
       heading: "Ist es sicher, diesen Installer als root auszuführen?",
       body: [
         "Zuerst das Wichtigste: BYO-Nodes laufen mit demselben Code und derselben Härtung wie unsere eigenen Flotten-Nodes — dieselbe Binärdatei aus demselben signierten Release, installiert vom selben Skript, unter derselben systemd-Unit. Der einzige Unterschied ist, wem die Maschine gehört. Alles Folgende beschreibt beide.",
-        "Das ist eine berechtigte Frage zu einem Befehl, der ein Skript aus dem Internet in eine root-Shell leitet, und sie verdient eine konkrete Antwort statt einer Beruhigung. root wird für die Installation gebraucht und für nichts, was der Node danach tut. Der Installer legt ein Systemkonto namens relayium-node ohne Login-Shell und ohne Home-Verzeichnis an, schreibt die systemd-Units, startet den Dienst und beendet sich. Der Node selbst läuft nie als root: Seine Unit setzt User=relayium-node, er ist also ab der Sekunde, in der er online geht, ein unprivilegiertes Konto, dem auf Ihrer Maschine nichts gehört. (Die standardmäßig aktive Auto-Aktualisierung fügt allerdings eine zweite Unit hinzu, die als root läuft — der nächste Abschnitt handelt ausschließlich davon, was diese kann und was nicht.)",
-        "Um dieses Konto legt die Unit eine systemd-Sandbox. Jede Zeile zielt auf etwas, wonach ein Angreifer greifen würde, der den Node-Prozess je übernimmt. Nichts davon ist vor Ihnen verborgen: Lesen Sie nach der Installation die ganze Unit mit `cat /etc/systemd/system/relayium-node.service`.",
+        "Das ist eine berechtigte Frage zu einem Befehl, der ein Skript aus dem Internet in eine root-Shell leitet, und sie verdient eine konkrete Antwort statt einer Beruhigung. root wird für die Installation gebraucht und für nichts, was der Node danach tut. Der Installer legt ein Systemkonto namens relayium-node ohne Login-Shell und ohne Home-Verzeichnis an, schreibt die systemd-Units, startet den Dienst und beendet sich. Der Node selbst läuft nie als root: Seine Unit setzt User=relayium-node, er ist also ab der Sekunde, in der er online geht, ein unprivilegiertes Konto, dem auf deiner Maschine nichts gehört. (Die standardmäßig aktive Auto-Aktualisierung fügt allerdings eine zweite Unit hinzu, die als root läuft — der nächste Abschnitt handelt ausschließlich davon, was diese kann und was nicht.)",
+        "Um dieses Konto legt die Unit eine systemd-Sandbox. Jede Zeile zielt auf etwas, wonach ein Angreifer greifen würde, der den Node-Prozess je übernimmt. Nichts davon ist vor dir verborgen: Lies nach der Installation die ganze Unit mit `cat /etc/systemd/system/relayium-node.service`.",
       ],
       table: {
         head: ["In der Unit", "Was es verhindert, falls der Node je kompromittiert wird"],
@@ -677,55 +677,55 @@ const de = {
         ],
       },
       bullets: [
-        "ReadWritePaths und NoExecPaths nennen das Speicherverzeichnis nur auf einem Node, der tatsächlich speichert. Ein reiner Relais-Node bekommt keine der beiden Zeilen und kann nirgends außer in sein eigenes Statusverzeichnis schreiben.",
+        "ReadWritePaths und NoExecPaths nennen das Speicherverzeichnis nur auf einem Node, der tatsächlich speichert. Ein reiner Relay-Node bekommt keine der beiden Zeilen und kann nirgends außer in sein eigenes Statusverzeichnis schreiben.",
         "Im Normalfall ist die Capability-Menge leer. Die einzige Ausnahme ist ein Direkt-Download-Listener auf einem Port unter 1024, der zum Binden CAP_NET_BIND_SERVICE braucht; der voreingestellte Download-Port ist 2053, also über 1024, sodass gar nichts gewährt wird.",
-        "Der Node besitzt keine Schlüssel. Dateien werden vom Absender vor dem Hochladen verschlüsselt, auf einem Speicher-Node landet also Chiffretext, den er nicht lesen kann — das gilt auch für Ihren eigenen Node und auch für Sie.",
+        "Der Node besitzt keine Schlüssel. Dateien werden vom Absender vor dem Hochladen verschlüsselt, auf einem Speicher-Node landet also Chiffretext, den er nicht lesen kann — das gilt auch für deinen eigenen Node und auch für dich.",
       ],
     },
     {
       heading: "Was die Auto-Aktualisierung kann und was nicht",
       body: [
-        "Der Installer richtet außerdem einen Selbstaktualisierungs-Timer ein, standardmäßig aktiv: relayium-node-update.timer fragt relayium.com etwa alle zehn Minuten, welche Version dieser Node laufen lassen soll. Das ist eine zweite Unit, und sie läuft als root — sie schuldet Ihnen also eine eigene Erklärung.",
+        "Der Installer richtet außerdem einen Selbstaktualisierungs-Timer ein, standardmäßig aktiv: relayium-node-update.timer fragt relayium.com etwa alle zehn Minuten, welche Version dieser Node laufen lassen soll. Das ist eine zweite Unit, und sie läuft als root — sie schuldet dir also eine eigene Erklärung.",
         "Die Zentrale schickt nie eine Binärdatei. Ihre gesamte Antwort besteht aus einer Versionsnummer, zwei Flags (darf dieser Node jetzt wechseln, und ist das ein bewusstes Downgrade) und einer kurzen Begründung — keine Bytes, keine URL, kein Befehl. Der Node holt sich dieses Release anschließend selbst, prüft den SHA-256 des Archivs gegen die checksums.txt des Releases und verifiziert eine ECDSA-P-256-Signatur über die checksums.txt mit einem öffentlichen Schlüssel, der in genau die Binärdatei einkompiliert ist, die diese Prüfung durchführt. Die private Hälfte dieses Schlüssels liegt nicht auf dem Server, der diese Abfragen beantwortet. Eine kompromittierte Zentrale könnte also eine Version benennen; eine Binärdatei, die die Prüfung besteht, könnte sie nicht herstellen.",
         "Aktualisierer und Node sind zwei getrennte Prozesse mit entgegengesetzten Rechten. relayium-node.service ist die obige Sandbox — unter ProtectSystem=strict kann er überhaupt nicht nach /usr/local/bin schreiben, der Node kann also nie eine Binärdatei verändern, auch nicht seine eigene. relayium-node-update.service ist eine kleine oneshot-Unit, die als root läuft und bewusst keine Sandbox trägt, denn eine Datei in /usr/local/bin zu ersetzen erfordert genau das Privileg, das die Sandbox des Nodes ihm verwehren soll. Diese Macht in einer einzigen Unit mit einem einzigen Zweck zu bündeln, statt die Härtung des Nodes aufzuweichen, ist der ganze Sinn der Trennung: Der Prozess mit root tauscht nur Binärdateien aus, und der Prozess im Käfig kommt an keine heran.",
         "Eine misslungene Aktualisierung macht sich selbst rückgängig. Der Aktualisierer legt die alte Binärdatei neben die neue, startet den Dienst neu und wartet bis zu zehn Minuten auf einen Heartbeat; meldet sich die neue Version in diesem Fenster nicht gesund, stellt er die alte Binärdatei zurück, startet erneut neu und vermerkt die fehlerhafte Version, damit sie nicht wieder versucht wird. Gespeicherte Dateien werden dabei nie gelesen, verschoben oder gelöscht.",
       ],
       bullets: [
-        "Nicht erwünscht: Führen Sie den Installer erneut mit RELAYIUM_NODE_AUTO_UPDATE=off aus. Der Timer und sein Dienst werden deaktiviert und gelöscht; der Node läuft weiter, und Sie aktualisieren ihn, wann Sie wollen.",
+        "Nicht erwünscht: Führe den Installer erneut mit RELAYIUM_NODE_AUTO_UPDATE=off aus. Der Timer und sein Dienst werden deaktiviert und gelöscht; der Node läuft weiter, und du aktualisierst ihn, wann du willst.",
         "Node ganz aufgeben: siehe „Node entfernen“ weiter unten.",
       ],
     },
     {
       heading: "Node entfernen",
       body: [
-        "Die Deinstallation ist ein einziges Skript — dasselbe, ob Ihr Node Dateien speichert oder nur weiterleitet. Es entfernt die Units, die Binärdatei, die Konfiguration und das Dienstkonto und meldet relayium.com nach bestem Wissen, dass der Node weg ist. Schlägt dieser Aufruf fehl, ist das eine Zeile auf Ihrem Terminal und keine kaputte Deinstallation — die ausgegebene Node-ID erlaubt es, ihn von Hand als entfernt zu markieren.",
+        "Die Deinstallation ist ein einziges Skript — dasselbe, ob dein Node Dateien speichert oder nur weiterleitet. Es entfernt die Units, die Binärdatei, die Konfiguration und das Dienstkonto und meldet relayium.com nach bestem Wissen, dass der Node weg ist. Schlägt dieser Aufruf fehl, ist das eine Zeile auf deinem Terminal und keine kaputte Deinstallation — die ausgegebene Node-ID erlaubt es, ihn von Hand als entfernt zu markieren.",
         "Herunterladen, prüfen, dann ausführen. Direkt in `sh` zu pipen bedeutet, dass ein 404 oder ein kurzer Netzaussetzer den ganzen Befehl nichts ausgeben und mit Code 0 enden lässt — was wie eine erfolgreiche Deinstallation aussieht.",
         "Entfernt wird nur, was es kennt: Unerwartetes im Status- oder Speicherverzeichnis wird behalten und gemeldet statt mitgelöscht.",
       ],
       code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
       bullets: [
-        "Es verweigert die Deinstallation, solange im Speicherverzeichnis noch eine Datei liegt, die es nicht kennt — auch ein abgelaufener Blob, den die Aufräumung noch nicht erreicht hat. Jede gespeicherte Datei liegt auf genau einem Node, Repliken gibt es nicht. Warten Sie, bis dieser Zähler null ist, oder übergeben Sie RELAYIUM_NODE_FORCE=1 und nehmen in Kauf, dass diese Dateien unerreichbar werden.",
-        "Kann es nicht ermitteln, wo Ihre Blobs liegen, hält es an, statt zu raten. RELAYIUM_NODE_ASSUME_NO_STORAGE=1 ist der einzige Weg daran vorbei — und löscht weiterhin nichts, was es nicht kennt.",
-        "Das Speicherverzeichnis selbst bleibt erhalten, sofern Sie nicht zusätzlich RELAYIUM_NODE_PURGE_STORAGE=1 übergeben. Umgebungsvariablen überleben `| sudo sh` nicht — übergeben Sie sie als `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`.",
-        "Danach sollte `systemctl status relayium-node` not-found melden und kein relayium-node-Timer mehr gelistet sein. Installieren Sie später erneut, erhält Ihr Konto einen **neuen** Node: die Deinstallation löscht die Identitätsdatei, eine Neuinstallation registriert also einen frischen Node statt den alten wiederzubeleben.",
+        "Es verweigert die Deinstallation, solange im Speicherverzeichnis noch eine Datei liegt, die es nicht kennt — auch ein abgelaufener Blob, den die Aufräumung noch nicht erreicht hat. Jede gespeicherte Datei liegt auf genau einem Node, Repliken gibt es nicht. Warte, bis dieser Zähler null ist, oder übergib RELAYIUM_NODE_FORCE=1 und nimm in Kauf, dass diese Dateien unerreichbar werden.",
+        "Kann es nicht ermitteln, wo deine Blobs liegen, hält es an, statt zu raten. RELAYIUM_NODE_ASSUME_NO_STORAGE=1 ist der einzige Weg daran vorbei — und löscht weiterhin nichts, was es nicht kennt.",
+        "Das Speicherverzeichnis selbst bleibt erhalten, sofern du nicht zusätzlich RELAYIUM_NODE_PURGE_STORAGE=1 übergibst. Umgebungsvariablen überleben `| sudo sh` nicht — übergib sie als `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`.",
+        "Danach sollte `systemctl status relayium-node` not-found melden und kein relayium-node-Timer mehr gelistet sein. Installierst du später erneut, ist der Node, den dein Konto bekommt, ein ganz neuer: die Deinstallation löscht die Identitätsdatei, eine Neuinstallation registriert also einen frischen Node statt den alten wiederzubeleben.",
       ],
     },
     {
       heading: "Schritt 3 — die eingehenden Ports öffnen",
       body: [
-        "Online zu sein (ein Heartbeat an relayium.com) erfordert nur ausgehenden Zugriff, den Sie bereits haben. Damit Peers aber tatsächlich über Ihren Node weiterleiten und darauf speichern können, müssen dessen eingehende Ports erreichbar sein. Wenn auf dem Host eine Firewall läuft, öffnen Sie sie — mit ufw geht das so:",
+        "Online zu sein (ein Heartbeat an relayium.com) erfordert nur ausgehenden Zugriff, den du bereits hast. Damit Peers aber tatsächlich über deinen Node weiterleiten und darauf speichern können, müssen dessen eingehende Ports erreichbar sein. Wenn auf dem Host eine Firewall läuft, öffne sie — mit ufw geht das so:",
       ],
       code: PORTS_CODE,
       bullets: [
-        "3478/udp ist der TURN-Port, den Peers zum Weiterleiten verwenden; 8081/tcp ist der HTTP-Port der Blob-Speicherung; 49152–65535/udp ist der Relais-Medienbereich.",
-        "Auf einem Cloud-VPS erlauben Sie diese auch in der Sicherheitsgruppe / Netzwerk-Firewall des Anbieters, nicht nur in ufw.",
+        "3478/udp ist der TURN-Port, den Peers zum Weiterleiten verwenden; 8081/tcp ist der HTTP-Port der Blob-Speicherung; 49152–65535/udp ist der Relay-Medienbereich.",
+        "Auf einem Cloud-VPS erlaube sie auch in der Sicherheitsgruppe / Netzwerk-Firewall des Anbieters, nicht nur in ufw.",
       ],
     },
     {
       heading: "Schritt 4 — bestätigen und den Verkehr darüber leiten",
       body: [
-        "Zurück auf der Kontoseite erscheint Ihr Node unter My Nodes und wechselt innerhalb von etwa 30 Sekunden auf Online. Von da an bevorzugen die Übertragungen Ihres Kontos automatisch Ihren eigenen Node.",
-        "Um es zu erzwingen — nie auf unsere gemeinsam genutzte Infrastruktur zurückzufallen — aktivieren Sie auf derselben Seite \"Only use my own nodes for relay/storage\". Ist das aktiviert und keiner Ihrer Nodes ist online, schlägt eine Übertragung fehl, statt stillschweigend unsere zu verwenden.",
+        "Zurück auf der Kontoseite erscheint dein Node unter „Meine Knoten“ und wechselt innerhalb von etwa 30 Sekunden auf „Online“. Von da an bevorzugen die Übertragungen deines Kontos automatisch deinen eigenen Node.",
+        "Um es zu erzwingen — nie auf unsere gemeinsam genutzte Infrastruktur zurückzufallen — aktiviere auf derselben Seite „Nur meine eigenen Knoten für Relay/Speicher verwenden“. Ist das aktiviert und keiner deiner Nodes ist online, schlägt eine Übertragung fehl, statt stillschweigend unsere zu verwenden.",
       ],
     },
   ],
@@ -733,25 +733,25 @@ const de = {
     heading: "Häufig gestellte Fragen",
     items: [
       {
-        q: "Ich habe \"relayium-node: command not found\" bekommen — was ist schiefgelaufen?",
-        a: "Sie haben die relayium-node-Binärdatei ausgeführt, bevor Sie sie installiert haben. Verwenden Sie den Einzeiler-Installationsbefehl von der Kontoseite (in der Form curl … | sudo … sh): Er lädt die Binärdatei herunter, legt sie in Ihren PATH und startet sie als Dienst. Sie installieren relayium-node nie separat.",
+        q: "Ich habe „relayium-node: command not found“ bekommen — was ist schiefgelaufen?",
+        a: "Du hast die relayium-node-Binärdatei ausgeführt, bevor du sie installiert hast. Verwende den Einzeiler-Installationsbefehl von der Kontoseite (in der Form curl … | sudo … sh): Er lädt die Binärdatei herunter, legt sie in deinen PATH und startet sie als Dienst. Du installierst relayium-node nie separat.",
       },
       {
         q: "Bleibt der Node nach einem Neustart online?",
         a: "Ja. Der Installer registriert einen systemd-Dienst, der beim Booten aktiviert und auf Restart=always gesetzt ist, sodass er nach einem Neustart zurückkehrt und sich bei einem Absturz selbst neu startet. Es ist nichts weiter auszuführen.",
       },
       {
-        q: "Wie unterscheidet sich das vom Selbst-Hosten von Relayium?",
-        a: "Bring-your-own-node behält Ihr normales relayium.com-Konto und Ihre Apps bei und fügt lediglich einen Node hinzu, der Ihnen gehört und Ihren Verkehr trägt. Selbst-Hosten betreibt den gesamten Server-Stack (Konten, Web-App, Signalisierung) auf Ihrer eigenen Domain — siehe dazu die Anleitung \"Self-host Relayium\".",
+        q: "Wie unterscheidet sich das davon, Relayium selbst zu hosten?",
+        a: "Bring-your-own-node behält dein normales relayium.com-Konto und deine Apps bei und fügt lediglich einen Node hinzu, der dir gehört und deinen Verkehr trägt. Hostest du Relayium selbst, läuft der gesamte Server-Stack (Konten, Web-App, Signalisierung) auf deiner eigenen Domain — siehe dazu die Anleitung „Relayium selbst hosten“.",
       },
       {
         q: "Kann jemand anderes meinen Node nutzen oder meine Daten sehen?",
-        a: "Nein. Ein Node ist über seinen Token an Ihr Konto gebunden und trägt nur den Verkehr Ihres Kontos. Echtzeit-Übertragungen sind Ende-zu-Ende-verschlüsselt und gespeicherte Blobs sind Chiffretext, den Ihr Node nicht lesen kann. Ihre Daten und Ihre Node-Konfiguration sind ausschließlich von Ihnen nutzbar.",
+        a: "Nein. Ein Node ist über seinen Token an dein Konto gebunden und trägt nur den Verkehr deines Kontos. Echtzeit-Übertragungen sind Ende-zu-Ende-verschlüsselt und gespeicherte Blobs sind Chiffretext, den dein Node nicht lesen kann. Deine Daten und deine Node-Konfiguration sind ausschließlich von dir nutzbar.",
       },
     ],
   },
   cta: {
-    text: "Melden Sie sich an, öffnen Sie Ihre Kontoseite und fügen Sie in unter einer Minute Ihren ersten Node hinzu.",
+    text: "Melde dich an, öffne deine Kontoseite und füge in unter einer Minute deinen ersten Node hinzu.",
     button: "Kontoseite öffnen",
     href: "/me",
   },
@@ -759,20 +759,20 @@ const de = {
 };
 
 const fr = {
-  title: "Bring Your Own Node : utilisez gratuitement le relais et le stockage de Relayium",
+  title: "Apportez votre propre nœud : utilisez gratuitement le relais et le stockage de Relayium",
   description:
     "Rattachez votre propre nœud de relais/stockage à votre compte Relayium en une seule commande. Vos transferts passent alors par votre nœud — et non par nos serveurs facturés à l'usage —, ils sont donc gratuits, et les données restent sur du matériel que vous contrôlez.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Les transferts inter-réseaux et les liens stockés consomment de la bande passante de relais et de l'espace disque qui nous coûtent de l'argent ; ils fonctionnent donc dans la limite d'un quota gratuit et deviennent payants au-delà. Il existe un moyen de contourner cela : faites tourner votre propre nœud de relais/stockage, rattachez-le à votre compte, et vos transferts passent par votre nœud au lieu du nôtre — rien de mesuré, rien de facturé.",
-    "C'est différent d'héberger vous-même l'ensemble du serveur Relayium. Vous continuez à utiliser votre compte relayium.com habituel et les mêmes applications ; vous ajoutez simplement un nœud qui vous appartient pour acheminer votre trafic. Ce guide vous mène d'une machine Linux vierge à un nœud en ligne en environ cinq minutes.",
+    "Les transferts inter-réseaux et les liens stockés consomment de la bande passante de relais et de l'espace disque qui nous coûtent de l'argent ; ils fonctionnent donc dans la limite d'un quota gratuit et deviennent payants au-delà. Il existe un moyen de contourner cela : faites tourner votre propre nœud de relais/stockage, rattachez-le à votre compte, et vos transferts passent par votre nœud au lieu du nôtre — rien de mesuré, rien de facturé.",
+    "C'est différent d'auto-héberger l'ensemble du serveur Relayium. Vous continuez à utiliser votre compte relayium.com habituel et les mêmes applications ; vous ajoutez simplement un nœud qui vous appartient pour acheminer votre trafic. Ce guide vous mène d'une machine Linux vierge à un nœud en ligne en environ cinq minutes.",
   ],
   sections: [
     {
       heading: "Pourquoi faire tourner votre propre nœud",
       body: [
-        "Deux raisons. D'abord, le coût : un nœud qui vous appartient achemine directement votre trafic de relais et de stockage, il ne touche donc jamais notre infrastructure facturée à l'usage et il n'y a rien à facturer — votre utilisation est gratuite, quelle que soit son ampleur.",
-        "Ensuite, le contrôle : les octets relayés et les blobs stockés résident sur du matériel que vous exploitez, sous votre propre contrôle opérationnel. Les transferts en temps réel restent chiffrés de bout en bout sur tout le trajet, de sorte que même votre propre nœud ne voit jamais que du texte chiffré.",
+        "Deux raisons. D'abord, le coût : un nœud qui vous appartient achemine directement votre trafic de relais et de stockage, il ne touche donc jamais notre infrastructure facturée à l'usage et il n'y a rien à facturer — votre utilisation est gratuite, quelle que soit son ampleur.",
+        "Ensuite, le contrôle : les octets relayés et les blobs stockés résident sur du matériel que vous exploitez, sous votre propre contrôle opérationnel. Les transferts en temps réel restent chiffrés de bout en bout sur tout le trajet, de sorte que même votre propre nœud ne voit jamais que du texte chiffré.",
       ],
     },
     {
@@ -784,7 +784,7 @@ const fr = {
     {
       heading: "Étape 1 — obtenez votre commande d'installation",
       body: [
-        "Connectez-vous sur relayium.com, ouvrez la page du compte (/me), faites défiler jusqu'à My Nodes et cliquez sur Add node. Vous obtenez une commande d'installation à usage unique avec un jeton intégré — le jeton n'est affiché qu'une seule fois, copiez-le donc immédiatement. Elle ressemble à ceci :",
+        "Connectez-vous sur relayium.com, ouvrez la page du compte (/me), faites défiler jusqu'à « Mes nœuds » et cliquez sur « Ajouter un nœud ». Vous obtenez une commande d'installation à usage unique avec un jeton intégré — le jeton n'est affiché qu'une seule fois, copiez-le donc immédiatement. Elle ressemble à ceci :",
       ],
       code: [INSTALL_CMD],
       bullets: [
@@ -795,21 +795,21 @@ const fr = {
     {
       heading: "Étape 2 — exécutez-la sur votre serveur, en tant que root",
       body: [
-        "Collez la commande sur votre serveur. Elle achemine notre installateur vers sh : l'installateur télécharge le binaire relayium-node et en vérifie la somme de contrôle, l'installe dans /usr/local/bin, écrit un service systemd et le démarre. Le sudo en tête est ce qui lui permet d'installer le service ; si vous êtes déjà root, c'est un no-op sans conséquence.",
+        "Collez la commande sur votre serveur. Elle achemine notre installateur vers sh : l'installateur télécharge le binaire relayium-node et en vérifie la somme de contrôle, l'installe dans /usr/local/bin, écrit un service systemd et le démarre. Le sudo en tête est ce qui lui permet d'installer le service ; si vous êtes déjà root, c'est un no-op sans conséquence.",
         "Comme il s'agit d'un service systemd, le nœud est activé au démarrage et se relance de lui-même s'il venait à planter — il reste en ligne à travers les redémarrages sans rien de plus à faire. Si vous voyez `relayium-node: command not found`, c'est que vous avez exécuté le binaire directement au lieu de l'installateur ci-dessus — c'est la commande en une ligne qui met le binaire en place.",
       ],
       bullets: [
-        "Vérifiez qu'il a démarré : `systemctl status relayium-node` (devrait indiquer active/running).",
-        "Confirmez la persistance au démarrage : `systemctl is-enabled relayium-node` (devrait indiquer enabled).",
-        "Suivez les journaux en direct : `journalctl -u relayium-node -f`.",
+        "Vérifiez qu'il a démarré : `systemctl status relayium-node` (devrait indiquer active/running).",
+        "Confirmez la persistance au démarrage : `systemctl is-enabled relayium-node` (devrait indiquer enabled).",
+        "Suivez les journaux en direct : `journalctl -u relayium-node -f`.",
       ],
     },
     {
-      heading: "Est-il prudent d'exécuter cet installateur en root ?",
+      heading: "Est-il prudent d'exécuter cet installateur en root ?",
       body: [
-        "Avant tout : les nœuds que vous apportez tournent avec le même code et le même durcissement que les nœuds de notre propre flotte — le même binaire issu de la même version signée, installé par le même script, sous la même unité systemd. La seule différence est de savoir à qui appartient la machine. Tout ce qui suit décrit les deux.",
-        "La question est légitime pour une commande qui achemine un script pris sur Internet vers un shell root, et elle mérite une réponse précise plutôt qu'une formule rassurante. root sert à l'installation et à rien de ce que le nœud fait ensuite. L'installateur crée un compte système nommé relayium-node, sans shell de connexion ni répertoire personnel, écrit les unités systemd, démarre le service et se termine. Le nœud lui-même ne tourne jamais en root : son unité fixe User=relayium-node, si bien que dès la seconde où il est en ligne, c'est un compte non privilégié qui ne possède rien d'autre sur votre machine. (La mise à jour automatique, active par défaut, ajoute bien une seconde unité qui, elle, tourne en root — la section suivante lui est entièrement consacrée.)",
-        "Autour de ce compte, l'unité dresse un bac à sable systemd. Chaque ligne vise quelque chose qu'un attaquant chercherait à atteindre s'il prenait un jour le contrôle du processus du nœud. Rien ne vous est caché : après l'installation, lisez l'unité entière avec `cat /etc/systemd/system/relayium-node.service`.",
+        "Avant tout : les nœuds que vous apportez tournent avec le même code et le même durcissement que les nœuds de notre propre flotte — le même binaire issu de la même version signée, installé par le même script, sous la même unité systemd. La seule différence est de savoir à qui appartient la machine. Tout ce qui suit décrit les deux.",
+        "La question est légitime pour une commande qui achemine un script pris sur Internet vers un shell root, et elle mérite une réponse précise plutôt qu'une formule rassurante. root sert à l'installation et à rien de ce que le nœud fait ensuite. L'installateur crée un compte système nommé relayium-node, sans shell de connexion ni répertoire personnel, écrit les unités systemd, démarre le service et se termine. Le nœud lui-même ne tourne jamais en root : son unité fixe User=relayium-node, si bien que dès la seconde où il est en ligne, c'est un compte non privilégié qui ne possède rien d'autre sur votre machine. (La mise à jour automatique, active par défaut, ajoute bien une seconde unité qui, elle, tourne en root — la section suivante lui est entièrement consacrée.)",
+        "Autour de ce compte, l'unité dresse un bac à sable systemd. Chaque ligne vise quelque chose qu'un attaquant chercherait à atteindre s'il prenait un jour le contrôle du processus du nœud. Rien ne vous est caché : après l'installation, lisez l'unité entière avec `cat /etc/systemd/system/relayium-node.service`.",
       ],
       table: {
         head: ["Dans l'unité", "Ce que cela bloque si le nœud est un jour compromis"],
@@ -817,31 +817,31 @@ const fr = {
         rows: [
           ["User=relayium-node", "L'attaquant n'est qu'un utilisateur qui ne possède rien, pas root."],
           ["ProtectHome=yes", "/home et /root sont invisibles — ni clés SSH privées, ni données d'autres projets."],
-          ["ProtectSystem=strict", "Tout le système de fichiers est en lecture seule ; aucun fichier système ne peut être modifié."],
+          ["ProtectSystem=strict", "Tout le système de fichiers est en lecture seule ; aucun fichier système ne peut être modifié."],
           ["ReadWritePaths=", "Les seuls emplacements accessibles en écriture sont le répertoire d'état du nœud et, si vous en avez configuré un, le répertoire de stockage. Toute écriture ailleurs échoue."],
           ["NoExecPaths=", "Rien dans le répertoire de stockage ne peut être exécuté — un fichier téléversé ne peut pas être lancé."],
-          ["NoNewPrivileges=yes", "Aucun chemin de retour vers root ; les astuces d'élévation habituelles sont fermées."],
+          ["NoNewPrivileges=yes", "Aucun chemin de retour vers root ; les astuces d'élévation habituelles sont fermées."],
           ["CapabilityBoundingSet=", "Vide — aucune capability Linux, pas une seule."],
-          ["ProtectKernelTunables=yes, ProtectKernelModules=yes", "Le noyau est hors de portée : pas de modification de sysctl, pas de chargement de module, pas de rootkit."],
+          ["ProtectKernelTunables=yes, ProtectKernelModules=yes", "Le noyau est hors de portée : pas de modification de sysctl, pas de chargement de module, pas de rootkit."],
         ],
       },
       bullets: [
         "ReadWritePaths et NoExecPaths ne désignent le répertoire de stockage que sur un nœud qui stocke réellement. Un nœud purement relais n'a ni l'une ni l'autre de ces lignes et ne peut écrire nulle part sauf dans son propre répertoire d'état.",
-        "Dans le cas normal, l'ensemble des capabilities est vide. La seule exception est un écouteur de téléchargement direct sur un port inférieur à 1024, qui a besoin de CAP_NET_BIND_SERVICE pour s'y attacher ; le port de téléchargement par défaut est 2053, au-dessus de 1024, donc rien n'est accordé.",
-        "Le nœud ne détient aucune clé. Les fichiers sont chiffrés par l'expéditeur avant d'être téléversés : ce qui arrive sur un nœud de stockage est du texte chiffré qu'il ne peut pas lire — y compris sur votre propre nœud, et y compris pour vous.",
+        "Dans le cas normal, l'ensemble des capabilities est vide. La seule exception est un processus à l'écoute pour le téléchargement direct sur un port inférieur à 1024, qui a besoin de CAP_NET_BIND_SERVICE pour s'y attacher ; le port de téléchargement par défaut est 2053, au-dessus de 1024, donc rien n'est accordé.",
+        "Le nœud ne détient aucune clé. Les fichiers sont chiffrés par l'expéditeur avant d'être téléversés : ce qui arrive sur un nœud de stockage est du texte chiffré qu'il ne peut pas lire — y compris sur votre propre nœud, et y compris pour vous.",
       ],
     },
     {
       heading: "Ce que la mise à jour automatique peut et ne peut pas faire",
       body: [
-        "L'installateur met aussi en place un minuteur de mise à jour automatique, actif par défaut : relayium-node-update.timer demande à relayium.com, environ toutes les dix minutes, quelle version ce nœud devrait exécuter. C'est une seconde unité, et elle tourne en root : elle vous doit donc ses propres explications.",
-        "Le serveur central n'envoie jamais de binaire. Toute sa réponse tient en un numéro de version, deux drapeaux (ce nœud peut-il bouger maintenant, et s'agit-il d'un retour en arrière délibéré) et une brève justification — pas d'octets, pas d'URL, pas de commande. C'est ensuite le nœud qui récupère lui-même cette version, compare le SHA-256 de l'archive au checksums.txt de la version, puis vérifie une signature ECDSA P-256 sur ce checksums.txt à l'aide d'une clé publique compilée dans le binaire même qui effectue la vérification. La moitié privée de cette clé ne se trouve pas sur le serveur qui répond à ces sondages. Un serveur central compromis pourrait donc nommer une version ; il ne pourrait pas fabriquer un binaire qui passe la vérification.",
-        "Le programme de mise à jour et le nœud sont deux processus distincts aux pouvoirs opposés. relayium-node.service, c'est le bac à sable ci-dessus — sous ProtectSystem=strict, il ne peut pas écrire du tout dans /usr/local/bin, donc le nœud ne peut jamais modifier un binaire, pas même le sien. relayium-node-update.service est une petite unité oneshot qui tourne en root et ne porte délibérément aucun bac à sable, car remplacer un fichier dans /usr/local/bin exige précisément le privilège que le bac à sable du nœud existe pour lui refuser. Enfermer ce pouvoir dans une seule unité à usage unique, plutôt que d'assouplir le durcissement du nœud lui-même, est tout l'intérêt de cette séparation : le processus qui détient root ne fait que remplacer des binaires, et celui qui est en cage ne peut jamais en toucher un.",
-        "Une mise à jour qui tourne mal se défait d'elle-même. Le programme conserve l'ancien binaire à côté du nouveau, redémarre le service, puis guette un signal de présence pendant dix minutes au plus ; si la nouvelle version ne se déclare pas saine dans cette fenêtre, il remet l'ancien binaire, redémarre à nouveau et note la version fautive pour ne pas la réessayer. Les fichiers stockés ne sont jamais lus, déplacés ni supprimés par tout cela.",
+        "L'installateur met aussi en place un minuteur de mise à jour automatique, actif par défaut : relayium-node-update.timer demande à relayium.com, environ toutes les dix minutes, quelle version ce nœud devrait exécuter. C'est une seconde unité, et elle tourne en root : elle vous doit donc ses propres explications.",
+        "Le serveur central n'envoie jamais de binaire. Toute sa réponse tient en un numéro de version, deux options (ce nœud peut-il bouger maintenant, et s'agit-il d'un retour en arrière délibéré) et une brève justification — pas d'octets, pas d'URL, pas de commande. C'est ensuite le nœud qui récupère lui-même cette version, compare le SHA-256 de l'archive au checksums.txt de la version, puis vérifie une signature ECDSA P-256 sur ce checksums.txt à l'aide d'une clé publique compilée dans le binaire même qui effectue la vérification. La moitié privée de cette clé ne se trouve pas sur le serveur qui répond à ces sondages. Un serveur central compromis pourrait donc nommer une version ; il ne pourrait pas fabriquer un binaire qui passe la vérification.",
+        "Le programme de mise à jour et le nœud sont deux processus distincts aux pouvoirs opposés. relayium-node.service, c'est le bac à sable ci-dessus — sous ProtectSystem=strict, il ne peut pas écrire du tout dans /usr/local/bin, donc le nœud ne peut jamais modifier un binaire, pas même le sien. relayium-node-update.service est une petite unité oneshot qui tourne en root et ne porte délibérément aucun bac à sable, car remplacer un fichier dans /usr/local/bin exige précisément le privilège que le bac à sable du nœud existe pour lui refuser. Enfermer ce pouvoir dans une seule unité à usage unique, plutôt que d'assouplir le durcissement du nœud lui-même, est tout l'intérêt de cette séparation : le processus qui détient root ne fait que remplacer des binaires, et celui qui est en cage ne peut jamais en toucher un.",
+        "Une mise à jour qui tourne mal se défait d'elle-même. Le programme conserve l'ancien binaire à côté du nouveau, redémarre le service, puis guette un signal de présence pendant dix minutes au plus ; si la nouvelle version ne se déclare pas saine dans cette fenêtre, il remet l'ancien binaire, redémarre à nouveau et note la version fautive pour ne pas la réessayer. Les fichiers stockés ne sont jamais lus, déplacés ni supprimés par tout cela.",
       ],
       bullets: [
-        "Vous n'en voulez pas : relancez l'installateur avec RELAYIUM_NODE_AUTO_UPDATE=off. Le minuteur et son service sont désactivés puis supprimés ; le nœud continue de tourner et vous le mettez à jour quand vous le décidez.",
-        "Vous arrêtez tout : voir « Retirer votre nœud » plus bas.",
+        "Vous n'en voulez pas : relancez l'installateur avec RELAYIUM_NODE_AUTO_UPDATE=off. Le minuteur et son service sont désactivés puis supprimés ; le nœud continue de tourner et vous le mettez à jour quand vous le décidez.",
+        "Vous arrêtez tout : voir « Retirer votre nœud » plus bas.",
       ],
     },
     {
@@ -849,32 +849,32 @@ const fr = {
       body: [
         "La désinstallation tient en un seul script, le même que votre nœud stocke des fichiers ou se contente de relayer. Il retire les unités, le binaire, la configuration et le compte de service, et signale à relayium.com, sans garantie, que le nœud a disparu. Si cet appel échoue, c'est une ligne sur votre terminal et non une désinstallation cassée — l'identifiant du nœud s'affiche pour qu'on puisse le marquer retiré à la main.",
         "Téléchargez-le, vérifiez-le, puis exécutez-le. Le faire passer directement dans `sh` signifie qu'une 404 ou un accroc réseau fait que toute la commande n'affiche rien et se termine avec le code 0 — ce qui ressemble à une désinstallation réussie.",
-        "Il ne retire que ce qu'il reconnaît : tout élément inattendu dans le répertoire d'état ou de stockage est conservé et signalé plutôt que balayé.",
+        "Il ne retire que ce qu'il reconnaît : tout élément inattendu dans le répertoire d'état ou de stockage est conservé et signalé plutôt que balayé.",
       ],
       code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
       bullets: [
-        "Il refuse tant que le répertoire de stockage contient un fichier qu'il ne reconnaît pas — y compris un blob expiré que le nettoyage n'a pas encore atteint — car chaque fichier stocké vit sur un seul nœud et il n'y a pas de réplique. Attendez que ce compte tombe à zéro, ou passez RELAYIUM_NODE_FORCE=1 en acceptant que ces fichiers deviennent inaccessibles.",
+        "Il refuse tant que le répertoire de stockage contient un fichier qu'il ne reconnaît pas — y compris un blob expiré que le nettoyage n'a pas encore atteint — car chaque fichier stocké vit sur un seul nœud et il n'y a pas de réplique. Attendez que ce décompte tombe à zéro, ou passez RELAYIUM_NODE_FORCE=1 en acceptant que ces fichiers deviennent inaccessibles.",
         "S'il n'arrive pas à déterminer où vivent vos blobs, il s'arrête au lieu de deviner. RELAYIUM_NODE_ASSUME_NO_STORAGE=1 est le seul moyen de passer outre, et il ne supprime toujours rien qu'il ne reconnaisse pas.",
         "Le répertoire de stockage lui-même est conservé sauf si vous passez aussi RELAYIUM_NODE_PURGE_STORAGE=1. Les variables d'environnement ne survivent pas à `| sudo sh` — passez-les via `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`.",
-        "Ensuite, `systemctl status relayium-node` doit répondre not-found et aucun minuteur relayium-node ne doit être listé. Si vous réinstallez plus tard, votre compte obtient un **nouveau** nœud : la désinstallation supprime le fichier d'identité, donc une nouvelle installation enregistre un nœud neuf au lieu de ressusciter l'ancien.",
+        "Ensuite, `systemctl status relayium-node` doit répondre not-found et aucun minuteur relayium-node ne doit être listé. Si vous réinstallez plus tard, votre compte obtient un nœud entièrement nouveau : la désinstallation supprime le fichier d'identité, donc une nouvelle installation enregistre un nœud neuf au lieu de ressusciter l'ancien.",
       ],
     },
     {
       heading: "Étape 3 — ouvrez les ports entrants",
       body: [
-        "Être en ligne (un signal de présence vers relayium.com) ne nécessite qu'un accès sortant, que vous avez déjà. Mais pour que les pairs puissent effectivement relayer via votre nœud et y stocker, ses ports entrants doivent être accessibles. Si l'hôte fait tourner un pare-feu, ouvrez-les — avec ufw, cela donne :",
+        "Être en ligne (un signal de présence vers relayium.com) ne nécessite qu'un accès sortant, que vous avez déjà. Mais pour que les pairs puissent effectivement relayer via votre nœud et y stocker, ses ports entrants doivent être accessibles. Si l'hôte fait tourner un pare-feu, ouvrez-les — avec ufw, cela donne :",
       ],
       code: PORTS_CODE,
       bullets: [
-        "3478/udp est le port TURN que les pairs utilisent pour relayer ; 8081/tcp est le port HTTP du stockage de blobs ; 49152–65535/udp est la plage média du relais.",
+        "3478/udp est le port TURN que les pairs utilisent pour relayer ; 8081/tcp est le port HTTP du stockage de blobs ; 49152–65535/udp est la plage média du relais.",
         "Sur un VPS cloud, autorisez-les aussi dans le groupe de sécurité / pare-feu réseau du fournisseur, pas seulement dans ufw.",
       ],
     },
     {
       heading: "Étape 4 — confirmez et faites transiter le trafic par lui",
       body: [
-        "De retour sur la page du compte, votre nœud apparaît sous My Nodes et passe à Online en une trentaine de secondes. À partir de là, les transferts de votre compte privilégient automatiquement votre propre nœud.",
-        "Pour le forcer — ne jamais retomber sur notre infrastructure partagée — activez \"Only use my own nodes for relay/storage\" sur la même page. Avec cette option activée, si aucun de vos nœuds n'est en ligne, un transfert échoue au lieu d'utiliser discrètement les nôtres.",
+        "De retour sur la page du compte, votre nœud apparaît sous « Mes nœuds » et passe à « En ligne » en une trentaine de secondes. À partir de là, les transferts de votre compte privilégient automatiquement votre propre nœud.",
+        "Pour le forcer — ne jamais retomber sur notre infrastructure partagée — activez « N'utiliser que mes propres nœuds pour le relais/stockage » sur la même page. Avec cette option activée, si aucun de vos nœuds n'est en ligne, un transfert échoue au lieu d'utiliser discrètement les nôtres.",
       ],
     },
   ],
@@ -882,19 +882,19 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "J'ai obtenu \"relayium-node: command not found\" — qu'est-ce qui a mal tourné ?",
-        a: "Vous avez exécuté le binaire relayium-node avant de l'installer. Utilisez la commande d'installation en une ligne de la page du compte (de la forme curl … | sudo … sh) : elle télécharge le binaire, le place dans votre PATH et le démarre en tant que service. Vous n'installez jamais relayium-node séparément.",
+        q: "J'ai obtenu « relayium-node: command not found » — qu'est-ce qui a mal tourné ?",
+        a: "Vous avez exécuté le binaire relayium-node avant de l'installer. Utilisez la commande d'installation en une ligne de la page du compte (de la forme curl … | sudo … sh) : elle télécharge le binaire, le place dans votre PATH et le démarre en tant que service. Vous n'installez jamais relayium-node séparément.",
       },
       {
-        q: "Le nœud reste-t-il en ligne après un redémarrage ?",
+        q: "Le nœud reste-t-il en ligne après un redémarrage ?",
         a: "Oui. L'installateur enregistre un service systemd qui est activé au démarrage et réglé sur Restart=always, si bien qu'il revient après un redémarrage et se relance de lui-même en cas de plantage. Rien de plus à exécuter.",
       },
       {
-        q: "En quoi est-ce différent d'héberger soi-même Relayium ?",
-        a: "Bring-your-own-node conserve votre compte relayium.com et vos applications habituels et ajoute simplement un nœud qui vous appartient pour acheminer votre trafic. L'auto-hébergement fait tourner toute la pile serveur (comptes, application web, signalisation) sur votre propre domaine — voyez le guide \"Self-host Relayium\" pour cela.",
+        q: "En quoi est-ce différent d'auto-héberger Relayium ?",
+        a: "Bring-your-own-node conserve votre compte relayium.com et vos applications habituels et ajoute simplement un nœud qui vous appartient pour acheminer votre trafic. L'auto-hébergement fait tourner toute la pile serveur (comptes, application web, signalisation) sur votre propre domaine — voyez le guide « Auto-héberger Relayium » pour cela.",
       },
       {
-        q: "Quelqu'un d'autre peut-il utiliser mon nœud ou voir mes données ?",
+        q: "Quelqu'un d'autre peut-il utiliser mon nœud ou voir mes données ?",
         a: "Non. Un nœud est rattaché à votre compte par son jeton et n'achemine que le trafic de votre compte. Les transferts en temps réel sont chiffrés de bout en bout et les blobs stockés sont du texte chiffré que votre nœud ne peut pas lire. Vos données et la configuration de votre nœud ne sont utilisables que par vous.",
       },
     ],
@@ -910,10 +910,10 @@ const fr = {
 const ar = {
   title: "شغّل عقدتك الخاصة: استخدم مُرحِّل وتخزين Relayium مجانًا",
   description:
-    "اربط عقدة مُرحِّل/تخزين خاصة بك بحساب Relayium بأمر واحد. عندها تمر عمليات النقل عبر عقدتك — لا عبر خوادمنا المحسوبة بالاستهلاك — فتصبح مجانية، وتبقى البيانات على عتاد تتحكم فيه أنت.",
+    "اربط عقدتك للترحيل/التخزين بحساب Relayium بأمر واحد. عندها تمر عمليات النقل عبر عقدتك — لا عبر خوادمنا المحسوبة بالاستهلاك — فتصبح مجانية، وتبقى البيانات على عتاد تتحكم فيه أنت.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "عمليات النقل عبر الشبكات والروابط المُخزَّنة تستهلك عرض نطاق المُرحِّل والقرص، وهذا يكلّفنا مالًا، لذا تعمل ضمن حصة مجانية وتصبح مدفوعة بعد تجاوزها. هناك طريقة لتفادي ذلك: شغّل عقدة مُرحِّل/تخزين خاصة بك، اربطها بحسابك، فتتدفق عمليات نقلك عبر عقدتك بدل عقدتنا — لا شيء يُحسَب، ولا شيء يُفوتَر.",
+    "عمليات النقل عبر الشبكات والروابط المُخزَّنة تستهلك عرض نطاق المُرحِّل والقرص، وهذا يكلّفنا مالًا، لذا تعمل ضمن حصة مجانية وتصبح مدفوعة بعد تجاوزها. هناك طريقة لتفادي ذلك: شغّل عقدتك للترحيل/التخزين، اربطها بحسابك، فتتدفق عمليات نقلك عبر عقدتك بدل عقدتنا — لا شيء يُحسَب، ولا شيء يُفوتَر.",
     "هذا يختلف عن الاستضافة الذاتية لخادم Relayium بالكامل. تبقى تستخدم حساب relayium.com المعتاد ونفس التطبيقات؛ أنت فقط تضيف عقدة تملكها لتحمل حركتك. يأخذك هذا الدليل من جهاز Linux جديد إلى عقدة متصلة في نحو خمس دقائق.",
   ],
   sections: [
@@ -927,17 +927,17 @@ const ar = {
     {
       heading: "ما الذي تحتاجه",
       body: [
-        "خادم Linux يمكن الوصول إليه من الإنترنت — سواء VPS رخيص أو جهاز يعمل دائمًا في المنزل، كلاهما يفي بالغرض. ستحتاج صلاحية root (أو sudo)، والقدرة على فتح بضعة منافذ واردة. كلٌّ من amd64 و arm64 مدعوم.",
+        "خادم Linux يمكن الوصول إليه من الإنترنت — سواء VPS رخيص أو جهاز يعمل دائمًا في المنزل، كلاهما يفي بالغرض. ستحتاج صلاحية root (أو sudo)، والقدرة على فتح بضعة منافذ واردة. كلٌّ من amd64 وarm64 مدعوم.",
       ],
     },
     {
-      heading: "الخطوة 1 — احصل على أمر التثبيت الخاص بك",
+      heading: "الخطوة 1 — احصل على أمر التثبيت",
       body: [
-        "سجّل الدخول في relayium.com، افتح صفحة الحساب (/me)، مرّر إلى My Nodes، وانقر على Add node. ستحصل على أمر تثبيت لمرة واحدة مع رمز مضمَّن فيه — يُعرض الرمز مرة واحدة فقط، فانسخه فورًا. يبدو هكذا:",
+        "سجّل الدخول في relayium.com، افتح صفحة الحساب (/me)، مرّر إلى «عُقدي»، وانقر على «إضافة عُقدة». ستحصل على أمر تثبيت لمرة واحدة مع رمز مضمَّن فيه — يُعرض الرمز مرة واحدة فقط، فانسخه فورًا. يبدو هكذا:",
       ],
       code: [INSTALL_CMD],
       bullets: [
-        "الجزء <your-token> يُملأ لك في صفحة الحساب — لا تلصق العنصر النائب أعلاه حرفيًا.",
+        "الجزء ‎<your-token>‎ يُملأ لك في صفحة الحساب — لا تلصق العنصر النائب أعلاه حرفيًا.",
         "RELAYIUM_NODE_STORAGE_DIR يفعّل تخزين الكتل إضافةً إلى الترحيل. اتركه معطّلًا (احذف المتغير) إن أردت أن تقوم العقدة بالترحيل فقط دون التخزين.",
       ],
     },
@@ -975,7 +975,7 @@ const ar = {
         ],
       },
       bullets: [
-        "لا يشير ReadWritePaths و NoExecPaths إلى مجلد التخزين إلا على عقدة تخزّن فعلًا. أما العقدة المخصصة للترحيل فقط فلا يظهر لديها أيٌّ من السطرين، ولا تستطيع الكتابة في أي مكان سوى مجلد حالتها.",
+        "لا يشير ReadWritePaths وNoExecPaths إلى مجلد التخزين إلا على عقدة تخزّن فعلًا. أما العقدة المخصصة للترحيل فقط فلا يظهر لديها أيٌّ من السطرين، ولا تستطيع الكتابة في أي مكان سوى مجلد حالتها.",
         "مجموعة القدرات فارغة في الحالة المعتادة. والاستثناء الوحيد هو مستمع التنزيل المباشر على منفذ أقل من 1024، إذ يحتاج CAP_NET_BIND_SERVICE للارتباط به؛ ومنفذ التنزيل الافتراضي هو 2053، أي فوق 1024، فلا يُمنح شيء.",
         "العقدة لا تحمل أي مفاتيح. تُشفَّر الملفات لدى المرسِل قبل رفعها، فما يصل إلى عقدة التخزين نصٌّ مُشفَّر لا تستطيع قراءته — بما في ذلك عقدتك أنت، وبما في ذلك أنت شخصيًا.",
       ],
@@ -1005,7 +1005,7 @@ const ar = {
         "يرفض ما دام دليل التخزين يحوي أي ملف لا يعرفه — بما في ذلك كائن منتهي الصلاحية لم يصله التنظيف بعد — لأن كل ملف مخزَّن يوجد على عقدة واحدة فقط ولا توجد نسخ. انتظر حتى يصل العدد إلى صفر، أو مرّر RELAYIUM_NODE_FORCE=1 قابلًا بأن تصبح تلك الملفات غير قابلة للوصول.",
         "إن تعذّر عليه تحديد مكان الكائنات، يتوقف بدل أن يخمّن. المتغير RELAYIUM_NODE_ASSUME_NO_STORAGE=1 هو السبيل الوحيد لتجاوز ذلك، ومع هذا لا يحذف شيئًا لا يعرفه.",
         "يبقى دليل التخزين نفسه ما لم تمرّر أيضًا RELAYIUM_NODE_PURGE_STORAGE=1. متغيرات البيئة لا تعبر `| sudo sh` — مرّرها هكذا: `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`.",
-        "بعد ذلك يجب أن يقول `systemctl status relayium-node` أنه not-found وألا يظهر أي مؤقّت relayium-node. وإذا أعدت التثبيت لاحقًا فستحصل في حسابك على عقدة **جديدة**: فالإلغاء يحذف ملف هوية العقدة، لذا يسجّل التثبيت الجديد عقدة جديدة بدل إحياء القديمة.",
+        "بعد ذلك يجب أن يقول `systemctl status relayium-node` أنه not-found وألا يظهر أي مؤقّت relayium-node. وإذا أعدت التثبيت لاحقًا فستحصل في حسابك على عقدة جديدة تمامًا: فالإلغاء يحذف ملف هوية العقدة، لذا يسجّل التثبيت الجديد عقدة جديدة بدل إحياء القديمة.",
       ],
     },
     {
@@ -1022,8 +1022,8 @@ const ar = {
     {
       heading: "الخطوة 4 — تأكّد ووجّه الحركة عبرها",
       body: [
-        "عند العودة إلى صفحة الحساب، تظهر عقدتك تحت My Nodes وتتحوّل إلى Online خلال نحو 30 ثانية. من ثم تفضّل عمليات نقل حسابك عقدتك الخاصة تلقائيًا.",
-        "لفرض ذلك — بحيث لا ترجع أبدًا إلى بنيتنا المشتركة — فعّل \"Only use my own nodes for relay/storage\" في الصفحة ذاتها. مع تفعيله، إذا لم تكن أيٌّ من عقدك متصلة يفشل النقل بدل أن يستخدم عقدنا بصمت.",
+        "عند العودة إلى صفحة الحساب، تظهر عقدتك تحت «عُقدي» وتتحوّل إلى «متصل» خلال نحو 30 ثانية. من ثم تفضّل عمليات نقل حسابك عقدتك الخاصة تلقائيًا.",
+        "لفرض ذلك — بحيث لا ترجع أبدًا إلى بنيتنا المشتركة — فعّل «استخدم عُقدي الخاصة فقط للترحيل/التخزين» في الصفحة ذاتها. مع تفعيله، إذا لم تكن أيٌّ من عقدك متصلة يفشل النقل بدل أن يستخدم عقدنا بصمت.",
       ],
     },
   ],
@@ -1031,7 +1031,7 @@ const ar = {
     heading: "الأسئلة الشائعة",
     items: [
       {
-        q: "ظهر لي \"relayium-node: command not found\" — ما الخطأ؟",
+        q: "ظهر لي «‎relayium-node: command not found‎» — ما الخطأ؟",
         a: "لقد شغّلت ثنائي relayium-node قبل تثبيته. استخدم أمر التثبيت ذا السطر الواحد من صفحة الحساب (بصيغة curl … | sudo … sh): إنه ينزّل الثنائي، ويضعه في مسار PATH، ويشغّله كخدمة. أنت لا تثبّت relayium-node بشكل منفصل أبدًا.",
       },
       {
@@ -1040,7 +1040,7 @@ const ar = {
       },
       {
         q: "كيف يختلف هذا عن الاستضافة الذاتية لـ Relayium؟",
-        a: "تشغيل عقدتك الخاصة يبقي حساب relayium.com المعتاد وتطبيقاتك ويضيف فقط عقدة تملكها لتحمل حركتك. أما الاستضافة الذاتية فتشغّل حزمة الخادم بالكامل (الحسابات، تطبيق الويب، الإشارة) على نطاقك الخاص — راجع دليل \"الاستضافة الذاتية لـ Relayium\" لذلك.",
+        a: "تشغيل عقدتك الخاصة يبقي حساب relayium.com المعتاد وتطبيقاتك ويضيف فقط عقدة تملكها لتحمل حركتك. أما الاستضافة الذاتية فتشغّل حزمة الخادم بالكامل (الحسابات، تطبيق الويب، الإشارة) على نطاقك الخاص — راجع دليل «الاستضافة الذاتية لـ Relayium» لذلك.",
       },
       {
         q: "هل يمكن لأي شخص آخر استخدام عقدتي أو رؤية بياناتي؟",
@@ -1063,13 +1063,13 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "Las transferencias entre redes y los enlaces almacenados usan ancho de banda de retransmisión y disco que nos cuestan dinero, así que funcionan con una franquicia gratuita y se pagan a partir de ahí. Hay una forma de evitarlo: ejecuta tu propio nodo de retransmisión/almacenamiento, vincúlalo a tu cuenta, y tus transferencias fluyen por tu nodo en lugar del nuestro — nada medido, nada facturado.",
-    "Esto es distinto de alojar por tu cuenta todo el servidor de Relayium. Sigues usando tu cuenta habitual de relayium.com y las mismas aplicaciones; solo estás añadiendo un nodo que es tuyo para que lleve tu tráfico. Esta guía te lleva de una máquina Linux recién instalada a un nodo en línea en unos cinco minutos.",
+    "Esto es distinto de autoalojar todo el servidor de Relayium. Sigues usando tu cuenta habitual de relayium.com y las mismas aplicaciones; solo estás añadiendo un nodo que es tuyo para que lleve tu tráfico. Esta guía te lleva de una máquina Linux recién instalada a un nodo en línea en unos cinco minutos.",
   ],
   sections: [
     {
       heading: "Por qué ejecutar tu propio nodo",
       body: [
-        "Dos razones. Primero, el costo: un nodo que es tuyo lleva tu tráfico de retransmisión y almacenamiento directamente, así que nunca toca nuestra infraestructura medida y no hay nada que facturar — tu uso es gratis por grande que sea.",
+        "Dos razones. Primero, el coste: un nodo que es tuyo lleva tu tráfico de retransmisión y almacenamiento directamente, así que nunca toca nuestra infraestructura medida y no hay nada que facturar — tu uso es gratis por grande que sea.",
         "Segundo, el control: los bytes retransmitidos y los blobs almacenados residen en hardware que tú operas, bajo tu propio control operativo. Las transferencias en tiempo real siguen cifradas de extremo a extremo durante todo el trayecto, así que incluso tu propio nodo solo ve texto cifrado.",
       ],
     },
@@ -1082,7 +1082,7 @@ const es = {
     {
       heading: "Paso 1 — obtén tu comando de instalación",
       body: [
-        "Inicia sesión en relayium.com, abre la página de cuenta (/me), desplázate hasta My Nodes y haz clic en Add node. Obtendrás un comando de instalación de un solo uso con un token incrustado — el token se muestra una única vez, así que cópialo de inmediato. Tiene este aspecto:",
+        "Inicia sesión en relayium.com, abre la página de cuenta (/me), desplázate hasta «Mis nodos» y haz clic en «Añadir nodo». Obtendrás un comando de instalación de un solo uso con un token incrustado — el token se muestra una única vez, así que cópialo de inmediato. Tiene este aspecto:",
       ],
       code: [INSTALL_CMD],
       bullets: [
@@ -1125,7 +1125,7 @@ const es = {
       },
       bullets: [
         "ReadWritePaths y NoExecPaths solo nombran el directorio de almacenamiento en un nodo que realmente almacena. Un nodo de solo retransmisión no lleva ninguna de las dos líneas y no puede escribir en ningún sitio salvo en su propio directorio de estado.",
-        "En el caso normal el conjunto de capabilities está vacío. La única excepción es un escuchador de descarga directa en un puerto por debajo de 1024, que necesita CAP_NET_BIND_SERVICE para poder asociarse; el puerto de descarga por omisión es 2053, por encima de 1024, así que no se concede nada.",
+        "En el caso normal el conjunto de capabilities está vacío. La única excepción es un proceso a la escucha de descarga directa en un puerto por debajo de 1024, que necesita CAP_NET_BIND_SERVICE para poder asociarse; el puerto de descarga por omisión es 2053, por encima de 1024, así que no se concede nada.",
         "El nodo no guarda ninguna clave. Los archivos los cifra el remitente antes de subirlos, así que lo que llega a un nodo de almacenamiento es texto cifrado que no puede leer — eso incluye tu propio nodo, y te incluye a ti.",
       ],
     },
@@ -1139,7 +1139,7 @@ const es = {
       ],
       bullets: [
         "Si no la quieres: vuelve a ejecutar el instalador con RELAYIUM_NODE_AUTO_UPDATE=off. El temporizador y su servicio se desactivan y se eliminan; el nodo sigue funcionando y lo actualizas cuando tú decidas.",
-        "¿Terminaste del todo con el nodo?: consulta “Eliminar tu nodo” más abajo.",
+        "¿Terminaste del todo con el nodo?: consulta «Eliminar tu nodo» más abajo.",
       ],
     },
     {
@@ -1154,7 +1154,7 @@ const es = {
         "Se niega mientras el directorio de almacenamiento contenga algún archivo que no reconozca — incluido un blob caducado que la limpieza aún no ha alcanzado — porque cada archivo almacenado vive en exactamente un nodo y no hay réplicas. Espera a que ese recuento llegue a cero, o pasa RELAYIUM_NODE_FORCE=1 aceptando que esos archivos queden inalcanzables.",
         "Si no logra determinar dónde viven tus blobs, se detiene en lugar de adivinar. RELAYIUM_NODE_ASSUME_NO_STORAGE=1 es la única forma de saltarse eso, y sigue sin borrar nada que no reconozca.",
         "El directorio de almacenamiento se conserva salvo que pases también RELAYIUM_NODE_PURGE_STORAGE=1. Las variables de entorno no sobreviven a `| sudo sh`: pásalas como `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`.",
-        "Después, `systemctl status relayium-node` debería decir not-found y no debería listarse ningún temporizador relayium-node. Si vuelves a instalarlo más adelante, tu cuenta obtiene un nodo **nuevo**: la desinstalación borra el archivo de identidad del nodo, así que una instalación nueva registra un nodo nuevo en lugar de revivir el anterior.",
+        "Después, `systemctl status relayium-node` debería decir not-found y no debería listarse ningún temporizador relayium-node. Si vuelves a instalarlo más adelante, tu cuenta obtiene un nodo completamente nuevo: la desinstalación borra el archivo de identidad del nodo, así que una instalación nueva registra un nodo nuevo en lugar de revivir el anterior.",
       ],
     },
     {
@@ -1171,8 +1171,8 @@ const es = {
     {
       heading: "Paso 4 — confirma y enruta el tráfico a través de él",
       body: [
-        "De vuelta en la página de cuenta, tu nodo aparece bajo My Nodes y cambia a Online en unos 30 segundos. A partir de entonces, las transferencias de tu cuenta prefieren tu propio nodo automáticamente.",
-        "Para forzarlo — que nunca recurra a nuestra infraestructura compartida — activa \"Only use my own nodes for relay/storage\" en la misma página. Con eso activado, si ninguno de tus nodos está en línea, una transferencia falla en lugar de usar discretamente los nuestros.",
+        "De vuelta en la página de cuenta, tu nodo aparece bajo «Mis nodos» y cambia a «En línea» en unos 30 segundos. A partir de entonces, las transferencias de tu cuenta prefieren tu propio nodo automáticamente.",
+        "Para forzarlo — que nunca recurra a nuestra infraestructura compartida — activa «Usar solo mis propios nodos para retransmisión/almacenamiento» en la misma página. Con eso activado, si ninguno de tus nodos está en línea, una transferencia falla en lugar de usar discretamente los nuestros.",
       ],
     },
   ],
@@ -1180,7 +1180,7 @@ const es = {
     heading: "Preguntas frecuentes",
     items: [
       {
-        q: "Recibí \"relayium-node: command not found\" — ¿qué salió mal?",
+        q: "Recibí «relayium-node: command not found» — ¿qué salió mal?",
         a: "Ejecutaste el binario relayium-node antes de instalarlo. Usa el comando de instalación de una línea de la página de cuenta (la forma curl … | sudo … sh): descarga el binario, lo coloca en tu PATH y lo arranca como servicio. Nunca instalas relayium-node por separado.",
       },
       {
@@ -1188,8 +1188,8 @@ const es = {
         a: "Sí. El instalador registra un servicio systemd que se habilita al arrancar y está configurado con Restart=always, así que vuelve tras un reinicio y se reinicia por sí solo si se cae. Nada más que ejecutar.",
       },
       {
-        q: "¿En qué se diferencia esto de alojar Relayium por tu cuenta?",
-        a: "Usar tu propio nodo conserva tu cuenta y aplicaciones habituales de relayium.com y solo añade un nodo que es tuyo para llevar tu tráfico. El autoalojamiento ejecuta toda la pila del servidor (cuentas, aplicación web, señalización) en tu propio dominio — consulta la guía \"Aloja Relayium por tu cuenta\" para eso.",
+        q: "¿En qué se diferencia esto de autoalojar Relayium?",
+        a: "Usar tu propio nodo conserva tu cuenta y aplicaciones habituales de relayium.com y solo añade un nodo que es tuyo para llevar tu tráfico. El autoalojamiento ejecuta toda la pila del servidor (cuentas, aplicación web, señalización) en tu propio dominio — consulta la guía «Aloja Relayium por tu cuenta» para eso.",
       },
       {
         q: "¿Puede alguien más usar mi nodo o ver mis datos?",
@@ -1212,7 +1212,7 @@ const pt = {
   updatedLabel: "Última atualização",
   lead: [
     "Transferências entre redes e links armazenados usam largura de banda de retransmissão e disco que nos custam dinheiro, então funcionam dentro de uma cota gratuita e são pagas além dela. Há um jeito de contornar isso: rode seu próprio nó de retransmissão/armazenamento, vincule-o à sua conta, e suas transferências fluem pelo seu nó em vez do nosso — nada medido, nada faturado.",
-    "Isso é diferente de hospedar por conta própria o servidor Relayium inteiro. Você continua usando sua conta habitual do relayium.com e os mesmos aplicativos; só está adicionando um nó que é seu para carregar seu tráfego. Este guia leva você de uma máquina Linux recém-instalada a um nó on-line em cerca de cinco minutos.",
+    "Isso é diferente de auto-hospedar o servidor Relayium inteiro. Você continua usando sua conta habitual do relayium.com e os mesmos aplicativos; só está adicionando um nó que é seu para carregar seu tráfego. Este guia leva você de uma máquina Linux recém-instalada a um nó online em cerca de cinco minutos.",
   ],
   sections: [
     {
@@ -1225,13 +1225,13 @@ const pt = {
     {
       heading: "O que você precisa",
       body: [
-        "Um servidor Linux acessível pela internet — serve tanto um VPS barato quanto uma máquina sempre ligada em casa. Você vai precisar de root (ou sudo) e da capacidade de abrir alguns poucos portos de entrada. Tanto amd64 quanto arm64 são suportados.",
+        "Um servidor Linux acessível pela internet — serve tanto um VPS barato quanto uma máquina sempre ligada em casa. Você vai precisar de root (ou sudo) e da capacidade de abrir algumas poucas portas de entrada. Tanto amd64 quanto arm64 são suportados.",
       ],
     },
     {
       heading: "Passo 1 — obtenha seu comando de instalação",
       body: [
-        "Faça login em relayium.com, abra a página da conta (/me), role até My Nodes e clique em Add node. Você receberá um comando de instalação de uso único com um token embutido — o token é exibido apenas uma vez, então copie-o imediatamente. Ele tem esta aparência:",
+        "Faça login em relayium.com, abra a página da conta (/me), role até “Meus nós” e clique em “Adicionar nó”. Você receberá um comando de instalação de uso único com um token embutido — o token é exibido apenas uma vez, então copie-o imediatamente. Ele tem esta aparência:",
       ],
       code: [INSTALL_CMD],
       bullets: [
@@ -1243,7 +1243,7 @@ const pt = {
       heading: "Passo 2 — execute-o no seu servidor, como root",
       body: [
         "Cole o comando no seu servidor. Ele canaliza nosso instalador para o sh: o instalador baixa e verifica por soma de verificação o binário relayium-node, instala-o em /usr/local/bin, escreve um serviço systemd e o inicia. O sudo inicial é o que permite instalar o serviço; se você já for root, é um no-op inofensivo.",
-        "Como é um serviço systemd, o nó é habilitado na inicialização e reinicia-se sozinho caso venha a travar — ele permanece on-line através dos reinícios sem nada mais a fazer. Se você vir `relayium-node: command not found`, executou o binário diretamente em vez do instalador acima — é o comando de uma linha que coloca o binário no lugar.",
+        "Como é um serviço systemd, o nó é habilitado na inicialização e reinicia-se sozinho caso venha a travar — ele permanece online através dos reinícios sem nada mais a fazer. Se você vir `relayium-node: command not found`, executou o binário diretamente em vez do instalador acima — é o comando de uma linha que coloca o binário no lugar.",
       ],
       bullets: [
         "Verifique que iniciou: `systemctl status relayium-node` (deve indicar active/running).",
@@ -1255,7 +1255,7 @@ const pt = {
       heading: "É seguro executar este instalador como root?",
       body: [
         "Antes de tudo: os nós que você traz rodam o mesmo código e o mesmo endurecimento dos nós da nossa própria frota — o mesmo binário da mesma versão assinada, instalado pelo mesmo script, sob a mesma unidade do systemd. A única diferença é de quem é a máquina. Tudo o que vem a seguir descreve os dois.",
-        "É uma pergunta justa diante de um comando que canaliza um script da internet para um shell root, e ela merece uma resposta específica em vez de um \"pode confiar\". O root é usado para a instalação e para nada do que o nó faz depois. O instalador cria uma conta de sistema chamada relayium-node, sem shell de login e sem diretório pessoal, escreve as unidades do systemd, inicia o serviço e termina. O nó em si nunca roda como root: sua unidade define User=relayium-node, então, desde o segundo em que fica on-line, ele é uma conta sem privilégios que não possui mais nada na sua máquina. (A atualização automática, ligada por padrão, de fato acrescenta uma segunda unidade que roda como root — a próxima seção trata inteiramente do que essa unidade pode e não pode fazer.)",
+        "É uma pergunta justa diante de um comando que canaliza um script da internet para um shell root, e ela merece uma resposta específica em vez de um “pode confiar”. O root é usado para a instalação e para nada do que o nó faz depois. O instalador cria uma conta de sistema chamada relayium-node, sem shell de login e sem diretório pessoal, escreve as unidades do systemd, inicia o serviço e termina. O nó em si nunca roda como root: sua unidade define User=relayium-node, então, desde o segundo em que fica online, ele é uma conta sem privilégios que não possui mais nada na sua máquina. (A atualização automática, ligada por padrão, de fato acrescenta uma segunda unidade que roda como root — a próxima seção trata inteiramente do que essa unidade pode e não pode fazer.)",
         "Em volta dessa conta, a unidade monta um sandbox do systemd. Cada linha mira algo que um atacante tentaria alcançar se um dia tomasse o processo do nó. Nada disso é escondido de você: depois de instalar, leia a unidade inteira com `cat /etc/systemd/system/relayium-node.service`.",
       ],
       table: {
@@ -1274,7 +1274,7 @@ const pt = {
       },
       bullets: [
         "ReadWritePaths e NoExecPaths só apontam para o diretório de armazenamento em um nó que de fato armazena. Um nó só de retransmissão não recebe nenhuma das duas linhas e não consegue gravar em lugar algum além do seu próprio diretório de estado.",
-        "No caso normal, o conjunto de capabilities é vazio. A única exceção é um ouvinte de download direto em um porto abaixo de 1024, que precisa de CAP_NET_BIND_SERVICE para se associar; o porto de download padrão é 2053, acima de 1024, então nada é concedido.",
+        "No caso normal, o conjunto de capabilities é vazio. A única exceção é um processo à escuta de download direto em uma porta abaixo de 1024, que precisa de CAP_NET_BIND_SERVICE para se associar; a porta de download padrão é 2053, acima de 1024, então nada é concedido.",
         "O nó não guarda chave nenhuma. Os arquivos são cifrados pelo remetente antes do envio, então o que chega a um nó de armazenamento é texto cifrado que ele não consegue ler — isso inclui o seu próprio nó, e inclui você.",
       ],
     },
@@ -1294,34 +1294,34 @@ const pt = {
     {
       heading: "Remover o seu nó",
       body: [
-        "Desinstalar é um único script, o mesmo quer o seu nó armazene ficheiros quer apenas retransmita. Ele remove as unidades, o binário, a configuração e a conta de serviço, e tenta, em regime de melhor esforço, avisar o relayium.com de que o nó se foi. Se essa chamada falhar, é uma linha no seu terminal e não uma desinstalação partida — ela imprime o ID do nó para que seja marcado como removido à mão.",
+        "Desinstalar é um único script, o mesmo quer o seu nó armazene arquivos quer apenas retransmita. Ele remove as unidades, o binário, a configuração e a conta de serviço, e tenta, em regime de melhor esforço, avisar o relayium.com de que o nó se foi. Se essa chamada falhar, é uma linha no seu terminal e não uma desinstalação quebrada — ela imprime o ID do nó para que seja marcado como removido à mão.",
         "Baixe, verifique e só então execute. Canalizar direto para o `sh` significa que um 404 ou uma falha passageira de rede faz o comando inteiro não exibir nada e sair com código 0, o que parece uma desinstalação bem-sucedida.",
         "Só remove o que reconhece: qualquer coisa inesperada no diretório de estado ou de armazenamento é mantida e reportada em vez de ser varrida.",
       ],
       code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
       bullets: [
-        "Ele recusa enquanto o diretório de armazenamento tiver algum ficheiro que não reconheça — incluindo um blob expirado que a limpeza ainda não alcançou — porque cada ficheiro armazenado vive em exatamente um nó e não há réplicas. Espere esse número chegar a zero, ou passe RELAYIUM_NODE_FORCE=1 aceitando que esses ficheiros fiquem inacessíveis.",
+        "Ele recusa enquanto o diretório de armazenamento tiver algum arquivo que não reconheça — incluindo um blob expirado que a limpeza ainda não alcançou — porque cada arquivo armazenado vive em exatamente um nó e não há réplicas. Espere esse número chegar a zero, ou passe RELAYIUM_NODE_FORCE=1 aceitando que esses arquivos fiquem inacessíveis.",
         "Se não conseguir determinar onde vivem os seus blobs, ele para em vez de adivinhar. RELAYIUM_NODE_ASSUME_NO_STORAGE=1 é a única forma de passar disso, e mesmo assim não apaga nada que não reconheça.",
         "O diretório de armazenamento em si é mantido a menos que passe também RELAYIUM_NODE_PURGE_STORAGE=1. Variáveis de ambiente não sobrevivem ao `| sudo sh` — passe-as como `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh`.",
-        "Depois, `systemctl status relayium-node` deve dizer not-found e nenhum temporizador relayium-node deve aparecer. Se instalar novamente mais tarde, a sua conta recebe um nó **novo**: a desinstalação apaga o ficheiro de identidade do nó, por isso uma nova instalação regista um nó novo em vez de ressuscitar o antigo.",
+        "Depois, `systemctl status relayium-node` deve dizer not-found e nenhum temporizador relayium-node deve aparecer. Se instalar novamente mais tarde, a sua conta recebe um nó totalmente novo: a desinstalação apaga o arquivo de identidade do nó, por isso uma nova instalação registra um nó novo em vez de ressuscitar o antigo.",
       ],
     },
     {
-      heading: "Passo 3 — abra os portos de entrada",
+      heading: "Passo 3 — abra as portas de entrada",
       body: [
-        "Estar on-line (um heartbeat para relayium.com) só precisa de acesso de saída, que você já tem. Mas para que os pares realmente retransmitam através do seu nó e armazenem nele, seus portos de entrada precisam estar acessíveis. Se o host executa um firewall, abra-os — com ufw é assim:",
+        "Estar online (um heartbeat para relayium.com) só precisa de acesso de saída, que você já tem. Mas para que os pares realmente retransmitam através do seu nó e armazenem nele, suas portas de entrada precisam estar acessíveis. Se o host executa um firewall, abra-as — com ufw é assim:",
       ],
       code: PORTS_CODE,
       bullets: [
-        "3478/udp é o porto TURN que os pares usam para retransmitir; 8081/tcp é o porto HTTP do armazenamento de blobs; 49152–65535/udp é a faixa de mídia da retransmissão.",
+        "3478/udp é a porta TURN que os pares usam para retransmitir; 8081/tcp é a porta HTTP do armazenamento de blobs; 49152–65535/udp é a faixa de mídia da retransmissão.",
         "Em um VPS na nuvem, permita-os também no grupo de segurança / firewall de rede do provedor, não só no ufw.",
       ],
     },
     {
       heading: "Passo 4 — confirme e roteie o tráfego por ele",
       body: [
-        "De volta à página da conta, seu nó aparece em My Nodes e muda para Online em cerca de 30 segundos. A partir daí, as transferências da sua conta preferem seu próprio nó automaticamente.",
-        "Para forçá-lo — que nunca recorra à nossa infraestrutura compartilhada — ative \"Only use my own nodes for relay/storage\" na mesma página. Com isso ativado, se nenhum dos seus nós estiver on-line, uma transferência falha em vez de usar discretamente os nossos.",
+        "De volta à página da conta, seu nó aparece em “Meus nós” e muda para “Online” em cerca de 30 segundos. A partir daí, as transferências da sua conta preferem seu próprio nó automaticamente.",
+        "Para forçá-lo — que nunca recorra à nossa infraestrutura compartilhada — ative “Usar apenas meus próprios nós para retransmissão/armazenamento” na mesma página. Com isso ativado, se nenhum dos seus nós estiver online, uma transferência falha em vez de usar discretamente os nossos.",
       ],
     },
   ],
@@ -1329,16 +1329,16 @@ const pt = {
     heading: "Perguntas frequentes",
     items: [
       {
-        q: "Recebi \"relayium-node: command not found\" — o que deu errado?",
+        q: "Recebi “relayium-node: command not found” — o que deu errado?",
         a: "Você executou o binário relayium-node antes de instalá-lo. Use o comando de instalação de uma linha da página da conta (a forma curl … | sudo … sh): ele baixa o binário, coloca-o no seu PATH e o inicia como serviço. Você nunca instala relayium-node separadamente.",
       },
       {
-        q: "O nó continua on-line depois de um reinício?",
+        q: "O nó continua online depois de um reinício?",
         a: "Sim. O instalador registra um serviço systemd que é habilitado na inicialização e configurado com Restart=always, então ele volta após um reinício e reinicia-se sozinho se travar. Nada mais a executar.",
       },
       {
-        q: "Em que isso difere de hospedar o Relayium por conta própria?",
-        a: "Usar seu próprio nó mantém sua conta e aplicativos habituais do relayium.com e apenas adiciona um nó que é seu para carregar seu tráfego. A auto-hospedagem executa toda a pilha do servidor (contas, aplicativo web, sinalização) no seu próprio domínio — veja o guia \"Hospede o Relayium por conta própria\" para isso.",
+        q: "Em que isso difere de auto-hospedar o Relayium?",
+        a: "Usar seu próprio nó mantém sua conta e aplicativos habituais do relayium.com e apenas adiciona um nó que é seu para carregar seu tráfego. A auto-hospedagem executa toda a pilha do servidor (contas, aplicativo web, sinalização) no seu próprio domínio — veja o guia “Hospede o Relayium por conta própria” para isso.",
       },
       {
         q: "Alguém mais pode usar meu nó ou ver meus dados?",

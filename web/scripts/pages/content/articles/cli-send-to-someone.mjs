@@ -103,12 +103,12 @@ const zh = {
         "用 relayium login 登录一次，然后直接 send 就行。CLI 会生成一个配对码，连同对面要执行的完整命令一起打印出来，然后等待。把这个码用带外方式转告对方——打电话说一下，或者丢进聊天里：",
       ],
       code: [
-        `# sender (once per machine: relayium login)
+        `# 发送方（每台机器执行一次：relayium login）
 relayium send ./release.zip
-# prints:  Code: K7M4XR   (valid 5 minutes)
+# 输出：  Code: K7M4XR   (valid 5 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
-# receiver (in the folder where files should land) — no account needed
+# 接收方（在文件应落地的目录下）——无需账号
 relayium receive K7M4XR`,
       ],
       bullets: [
@@ -131,7 +131,7 @@ relayium receive K7M4XR`,
       heading: "只走直连——免费，否则失败",
       body: [
         "传输会在两端之间竞速建立直连。一旦能建立——这是常见情况，只要至少一方有可达地址——文件就会直接、加密地全速传输，不收费。",
-        "如果两端都在严格 NAT 之后，找不到直连路径，传输会干净地失败，而不会把你的文件路由经过中继。这样才能让 CLI 保持完全免费，也让你的文件字节远离我们的服务器。如果遇到这种情况，可靠的办法是在两台可达的服务器之间用 daemon direct，或者用 SSH push。",
+        "如果两端都在严格 NAT 之后，找不到直连路径，传输会干净地失败，而不会把你的文件路由经过中继。这样才能让 CLI 保持完全免费，也让你的文件字节远离我们的服务器。如果遇到这种情况，可靠的办法是在两台可达的服务器之间用 daemon 直连，或者用 SSH push。",
       ],
       bullets: [
         "直连成功 → 免费、全速、端到端加密。",
@@ -153,7 +153,7 @@ relayium receive K7M4XR`,
       },
       {
         q: "如果连接不上怎么办？",
-        a: "如果两端都在严格 NAT 之后、没有可达地址，就无法建立直连，传输会失败——CLI 按设计没有中继兜底。当没有直连路径时，可以在两台可达的服务器之间用 daemon direct，或者用 SSH push。",
+        a: "如果两端都在严格 NAT 之后、没有可达地址，就无法建立直连，传输会失败——CLI 按设计没有中继兜底。当没有直连路径时，可以在两台可达的服务器之间用 daemon 直连，或者用 SSH push。",
       },
       {
         q: "我怎么知道对面真的是对的人？",
@@ -172,53 +172,53 @@ relayium receive K7M4XR`,
 const ja = {
   title: "Relayium CLI でネットワークを越えて誰かにファイルを送る",
   description:
-    "relayium send と receive を使い、短いペアリングコードだけで異なるネットワーク上の2人の間でファイルを直接移動します。エンドツーエンドで暗号化され、SAS コードで検証され、しかも無料——ファイルは二人の間を直接行き来し、当社のサーバーを経由することはありません。",
+    "relayium send と receive を使い、短いペアリングコードだけで異なるネットワーク上の2人の間でファイルを直接移動します。エンドツーエンドで暗号化され、SAS コードで検証され、しかも無料。ファイルは二人の間を直接行き来し、当社のサーバーを経由することはありません。",
   updatedLabel: "最終更新",
   lead: [
-    "相手のマシンが自分のものではなく SSH でログインできないこともあります——別のオフィスの同僚へのファイル、クライアント向けのビルド、遠方の友人へのアーカイブ。relayium send と receive は、送信時に CLI が発行する短いペアリングコードだけを使って、ネットワークを越えてそれを二人の間で直接移動させます。",
-    "接続はピアツーピアでエンドツーエンドに暗号化されています。二つの端を引き合わせるためのごく小さなランデブー・ハンドシェイクだけが Relayium を経由し、ファイルのバイトは決して経由しません。",
+    "相手のマシンが自分のものではなく SSH でログインできないこともあります。別のオフィスの同僚へのファイル、クライアント向けのビルド、遠方の友人へのアーカイブ。relayium send と receive は、送信時に CLI が発行する短いペアリングコードだけを使って、ネットワークを越えてそれを二人の間で直接移動させます。",
+    "接続は P2P で、エンドツーエンドに暗号化されています。二つの端を引き合わせるためのごく小さなランデブーハンドシェイクだけが Relayium を経由し、ファイルのバイトは決して経由しません。",
   ],
   sections: [
     {
       heading: "まず send、そして表示されたコードを相手に伝える",
       body: [
-        "最初に一度だけ relayium login でサインインし、あとは send するだけです。CLI がペアリングコードを発行し、相手が実行するコマンドとあわせて表示して待機します。そのコードを帯域外で伝えてください——通話で伝える、チャットに書く、など：",
+        "最初に一度だけ relayium login でサインインし、あとは send するだけです。CLI がペアリングコードを発行し、相手が実行するコマンドとあわせて表示して待機します。そのコードを帯域外で伝えてください。通話で伝える、チャットに書く、など：",
       ],
       code: [
-        `# sender (once per machine: relayium login)
+        `# 送信側（マシンごとに一度：relayium login）
 relayium send ./release.zip
-# prints:  Code: K7M4XR   (valid 5 minutes)
+# 表示：  Code: K7M4XR   (valid 5 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
-# receiver (in the folder where files should land) — no account needed
+# 受信側（ファイルを置きたいフォルダーで）。アカウントは不要
 relayium receive K7M4XR`,
       ],
       bullets: [
-        "コードは制限された文字集合から選ばれた6文字です——0 と 1 は含まれず、読み上げて取り違えやすい文字も除いてあります——そして発行から5分で失効します。",
+        "コードは制限された文字集合から選ばれた6文字です。0 と 1 は含まれず、読み上げて取り違えやすい文字も除いてあります。そして発行から5分で失効します。",
         "サインインが必要なのは送信側だけです。受信側は CLI とコードさえあればよく、アカウントは一切要りません。",
         "コードは合流するための共有シークレットにすぎません。ランデブー先以外の誰にも送られず、二つの端を引き合わせるためだけに使われます。",
-        "受信側は送り先のディレクトリを指定できます: relayium receive K7M4XR ./downloads",
-        "両端とも CLI である必要があります——ブラウザは CLI のペアリングコードに参加できません。相手がブラウザしか持っていない場合は、代わりに relayium up を使ってください。ダウンロードリンクが得られます。",
+        "受信側は送り先のディレクトリを指定できます：relayium receive K7M4XR ./downloads",
+        "両端とも CLI である必要があります。ブラウザは CLI のペアリングコードに参加できません。相手がブラウザしか持っていない場合は、代わりに relayium up を使ってください。ダウンロードリンクが得られます。",
       ],
     },
     {
       heading: "SAS コードで検証する",
       body: [
-        "二つの端が接続すると、両方のターミナルにセッション鍵から導かれた同じ6桁の SAS（short authentication string）が表示されます。それを比べて——通話中に読み上げて——中間の誰かではなく、お互いに接続していることを確認してください。",
-        "確実な保証が欲しいときは --verify を付けます。すると転送は、コードが一致することをあなたが確認するまで、1バイトも動かさずに待機します。",
+        "二つの端が接続すると、両方のターミナルにセッション鍵から導かれた同じ6桁の SAS（short authentication string）が表示されます。それを比べて（通話中に読み上げて）中間の誰かではなく、お互いに接続していることを確認してください。",
+        "確実な保証が欲しいときは --verify を付けます。すると転送は、コードが一致することを確認するまで、1バイトも動かさずに待機します。",
       ],
       code: ["relayium send --verify ./release.zip"],
     },
     {
-      heading: "直接接続のみ——無料、さもなくば失敗",
+      heading: "直接接続のみ：無料、さもなくば失敗",
       body: [
-        "転送は二つの端の間で直接接続の確立を競います。確立できれば——少なくとも一方に到達可能なアドレスがある一般的なケースでは——ファイルはそのまま暗号化された状態で全速力かつ無料で流れます。",
-        "両端が厳格な NAT の内側にあり直接の経路が見つからない場合、転送はリレー経由でファイルを送るのではなく、きれいに失敗します。これにより CLI は完全に無料のままで、ファイルのバイトも当社のサーバーに触れません。この状況に当たった場合、確実な答えは到達可能な2台のサーバー間での daemon direct、または SSH 経由の push です。",
+        "転送は二つの端の間で直接接続の確立を競います。確立できれば（少なくとも一方に到達可能なアドレスがある一般的なケースでは）、ファイルはそのまま暗号化された状態で全速力かつ無料で流れます。",
+        "両端が厳格な NAT の内側にあり直接の経路が見つからない場合、転送はリレー経由でファイルを送るのではなく、きれいに失敗します。これにより CLI は完全に無料のままで、ファイルのバイトも当社のサーバーに触れません。この状況に当たった場合、確実な答えは到達可能な2台のサーバー間でのデーモン直結、または SSH 経由の push です。",
       ],
       bullets: [
         "直接接続が成功 → 無料、全速力、エンドツーエンドで暗号化。",
         "直接の経路がない → 転送は失敗します。CLI が代わりにファイルを中継することは決してありません。",
-        "両端は地理的にどこにあっても構いません——送信側は send を実行するだけ、受信側はそれが表示したコードで receive を実行します。",
+        "両端は地理的にどこにあっても構いません。送信側は send を実行するだけ、受信側はそれが表示したコードで receive を実行します。",
       ],
     },
   ],
@@ -227,15 +227,15 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "ペアリングコードはどこから来るのですか？",
-        a: "Relayium が発行します。`relayium login` のうえで `relayium send ./release.zip` を実行すると、CLI が5分間有効な6文字のコードと、相手が実行するコマンドをそのまま表示します。自分で選ぶことはできません——サーバーは自身が発行したコードしか受け付けないからです。",
+        a: "Relayium が発行します。`relayium login` のうえで `relayium send ./release.zip` を実行すると、CLI が5分間有効な6文字のコードと、相手が実行するコマンドをそのまま表示します。自分で選ぶことはできません。サーバーは自身が発行したコードしか受け付けないからです。",
       },
       {
         q: "ファイルはどこかにアップロードされますか？",
-        a: "いいえ。ファイルは二人の間で直接ストリーミングされ、エンドツーエンドで暗号化されます。二つの端を引き合わせるためのごく小さなランデブー・ハンドシェイクだけが Relayium を経由し、ファイルは決して経由しません。",
+        a: "いいえ。ファイルは二人の間で直接ストリーミングされ、エンドツーエンドで暗号化されます。二つの端を引き合わせるためのごく小さなランデブーハンドシェイクだけが Relayium を経由し、ファイルは決して経由しません。",
       },
       {
         q: "接続できない場合はどうなりますか？",
-        a: "両端が厳格な NAT の内側にあり到達可能なアドレスがない場合、直接接続は確立できず転送は失敗します——CLI は設計上リレーへのフォールバックを持ちません。直接の経路が使えない場合は、到達可能な2台のサーバー間での daemon direct、または SSH 経由の push を使ってください。",
+        a: "両端が厳格な NAT の内側にあり到達可能なアドレスがない場合、直接接続は確立できず転送は失敗します。CLI は設計上リレーへのフォールバックを持ちません。直接の経路が使えない場合は、到達可能な2台のサーバー間でのデーモン直結、または SSH 経由の push を使ってください。",
       },
       {
         q: "相手が本当に正しい人物だとどうやって分かりますか？",
@@ -244,7 +244,7 @@ relayium receive K7M4XR`,
     ],
   },
   cta: {
-    text: "次のファイルを、別のネットワークにいる相手へ直接送りましょう——エンドツーエンドで暗号化され、しかも無料です。",
+    text: "次のファイルを、別のネットワークにいる相手へ直接送りましょう。エンドツーエンドで暗号化され、しかも無料です。",
     button: "CLI を入手する",
     href: "/cli",
   },
@@ -254,53 +254,53 @@ relayium receive K7M4XR`,
 const ko = {
   title: "Relayium CLI로 네트워크를 넘어 상대에게 파일 보내기",
   description:
-    "relayium send와 receive를 사용해, 짧은 페어링 코드 하나로 서로 다른 네트워크에 있는 두 사람 사이에서 파일을 직접 옮기세요. 종단간 암호화되고 SAS 코드로 검증되며 무료입니다——파일은 두 사람 사이를 곧장 오가며, 저희 서버를 절대 거치지 않습니다.",
+    "relayium send와 receive를 사용해, 짧은 페어링 코드 하나로 서로 다른 네트워크에 있는 두 사람 사이에서 파일을 직접 옮기세요. 종단간 암호화되고 SAS 코드로 검증되며 무료입니다. 파일은 두 사람 사이를 곧장 오가며, 저희 서버를 절대 거치지 않습니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "때로는 상대의 컴퓨터가 내 것이 아니어서 SSH로 접속할 수 없을 때가 있습니다——다른 사무실 동료에게 줄 파일, 고객에게 줄 빌드, 먼 곳의 친구에게 줄 아카이브. relayium send와 receive는 보낼 때 CLI가 발급하는 짧은 페어링 코드 하나만으로 네트워크를 넘어 그것을 두 사람 사이에 직접 옮깁니다.",
-    "연결은 피어투피어이며 종단간 암호화됩니다. 두 끝을 서로 소개하기 위한 아주 작은 랑데부 핸드셰이크만 Relayium을 거치며, 파일 바이트는 결코 거치지 않습니다.",
+    "때로는 상대의 컴퓨터가 내 것이 아니어서 SSH로 접속할 수 없을 때가 있습니다. 다른 사무실 동료에게 줄 파일, 고객에게 줄 빌드, 먼 곳의 친구에게 줄 아카이브. relayium send와 receive는 보낼 때 CLI가 발급하는 짧은 페어링 코드 하나만으로 네트워크를 넘어 그것을 두 사람 사이에 직접 옮깁니다.",
+    "연결은 P2P이며 종단간 암호화됩니다. 두 끝을 서로 소개하기 위한 아주 작은 랑데부 핸드셰이크만 Relayium을 거치며, 파일 바이트는 결코 거치지 않습니다.",
   ],
   sections: [
     {
       heading: "먼저 send하고, 출력된 코드를 상대에게 전달하기",
       body: [
-        "relayium login으로 한 번만 로그인한 뒤에는 그냥 send하면 됩니다. CLI가 페어링 코드를 발급해 상대가 실행할 명령과 함께 출력하고 기다립니다. 그 코드를 대역 외 방식으로 전달하세요——통화로 말하거나 채팅에 남기면 됩니다:",
+        "relayium login으로 한 번만 로그인한 뒤에는 그냥 send하면 됩니다. CLI가 페어링 코드를 발급해 상대가 실행할 명령과 함께 출력하고 기다립니다. 그 코드를 대역 외 방식으로 전달하세요. 통화로 말하거나 채팅에 남기면 됩니다:",
       ],
       code: [
-        `# sender (once per machine: relayium login)
+        `# 보내는 쪽(기기마다 한 번: relayium login)
 relayium send ./release.zip
-# prints:  Code: K7M4XR   (valid 5 minutes)
+# 출력:   Code: K7M4XR   (valid 5 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
-# receiver (in the folder where files should land) — no account needed
+# 받는 쪽(파일이 저장될 폴더에서) — 계정 필요 없음
 relayium receive K7M4XR`,
       ],
       bullets: [
-        "코드는 제한된 문자 집합에서 뽑은 6자입니다——0과 1이 없고, 소리 내어 읽을 때 헷갈리는 문자도 빠져 있습니다——그리고 발급된 지 5분이 지나면 만료됩니다.",
+        "코드는 제한된 문자 집합에서 뽑은 6자입니다. 0과 1이 없고, 소리 내어 읽을 때 헷갈리는 문자도 빠져 있습니다. 그리고 발급된 지 5분이 지나면 만료됩니다.",
         "로그인이 필요한 쪽은 보내는 사람뿐입니다. 받는 쪽은 CLI와 코드만 있으면 되고, 계정은 전혀 필요 없습니다.",
         "이 코드는 만남을 위한 공유 비밀일 뿐입니다. 랑데부 서버 외에는 누구에게도 전송되지 않으며, 오직 두 끝을 서로 소개하는 데만 쓰입니다.",
         "받는 쪽은 대상 디렉터리를 지정할 수 있습니다: relayium receive K7M4XR ./downloads",
-        "양쪽 모두 CLI여야 합니다——브라우저는 CLI 페어링 코드에 참여할 수 없습니다. 상대에게 브라우저밖에 없다면 대신 relayium up을 쓰세요. 다운로드 링크가 나옵니다.",
+        "양쪽 모두 CLI여야 합니다. 브라우저는 CLI 페어링 코드에 참여할 수 없습니다. 상대에게 브라우저밖에 없다면 대신 relayium up을 쓰세요. 다운로드 링크가 나옵니다.",
       ],
     },
     {
       heading: "SAS 코드로 검증하기",
       body: [
-        "두 끝이 연결되면 양쪽 터미널에 세션 키에서 파생된 동일한 6자리 SAS(짧은 인증 문자열)가 출력됩니다. 이를 비교해——통화 중에 소리 내어 읽어——중간의 누군가가 아니라 서로 연결되어 있음을 확인하세요.",
-        "확실한 보장이 필요하면 --verify를 추가하세요. 그러면 전송은 코드가 일치함을 당신이 확인할 때까지 단 1바이트도 움직이지 않고 기다립니다.",
+        "두 끝이 연결되면 양쪽 터미널에 세션 키에서 파생된 동일한 6자리 SAS(짧은 인증 문자열)가 출력됩니다. 이를 비교하세요. 통화 중에 소리 내어 읽으면 됩니다. 중간의 누군가가 아니라 서로 연결되어 있는지 확인할 수 있습니다.",
+        "확실한 보장이 필요하면 --verify를 추가하세요. 그러면 전송은 코드가 일치함을 확인할 때까지 단 1바이트도 움직이지 않고 기다립니다.",
       ],
       code: ["relayium send --verify ./release.zip"],
     },
     {
       heading: "직접 연결만 — 무료가 아니면 실패",
       body: [
-        "전송은 두 끝 사이의 직접 연결 수립을 경쟁적으로 시도합니다. 연결이 이루어지면——적어도 한쪽에 도달 가능한 주소가 있는 일반적인 경우——파일은 암호화된 채로 곧장 전속력으로, 비용 없이 흐릅니다.",
-        "양쪽 모두 엄격한 NAT 뒤에 있어 직접 경로를 찾을 수 없으면, 전송은 파일을 릴레이로 우회시키는 대신 깔끔하게 실패합니다. 이렇게 해야 CLI가 완전히 무료로 유지되고, 파일 바이트가 저희 서버에 닿지 않습니다. 이런 상황이라면 확실한 방법은 도달 가능한 두 서버 사이의 daemon direct나, SSH를 통한 push입니다.",
+        "전송은 두 끝 사이의 직접 연결 수립을 경쟁적으로 시도합니다. 연결이 이루어지면(적어도 한쪽에 도달 가능한 주소가 있는 일반적인 경우) 파일은 암호화된 채로 곧장 전속력으로, 비용 없이 흐릅니다.",
+        "양쪽 모두 엄격한 NAT 뒤에 있어 직접 경로를 찾을 수 없으면, 전송은 파일을 릴레이로 우회시키는 대신 깔끔하게 실패합니다. 이렇게 해야 CLI가 완전히 무료로 유지되고, 파일 바이트가 저희 서버에 닿지 않습니다. 이런 상황이라면 확실한 방법은 도달 가능한 두 서버 사이의 데몬 다이렉트나, SSH를 통한 push입니다.",
       ],
       bullets: [
         "직접 연결 성공 → 무료, 전속력, 종단간 암호화.",
         "직접 경로 없음 → 전송 실패; CLI는 결코 대신 파일을 프록시하지 않습니다.",
-        "양쪽은 지리적으로 어디에나 있을 수 있습니다——보내는 쪽은 send를 실행하기만 하고, 받는 쪽은 거기서 출력된 코드로 receive를 실행합니다.",
+        "양쪽은 지리적으로 어디에나 있을 수 있습니다. 보내는 쪽은 send를 실행하기만 하고, 받는 쪽은 거기서 출력된 코드로 receive를 실행합니다.",
       ],
     },
   ],
@@ -309,15 +309,15 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "페어링 코드는 어디서 나오나요?",
-        a: "Relayium이 발급합니다. `relayium login` 후 `relayium send ./release.zip`을 실행하면 CLI가 5분간 유효한 6자 코드와 상대가 실행할 명령을 그대로 출력합니다. 직접 고를 수는 없습니다——서버는 자신이 발급한 코드만 받아들이기 때문입니다.",
+        a: "Relayium이 발급합니다. `relayium login` 후 `relayium send ./release.zip`을 실행하면 CLI가 5분간 유효한 6자 코드와 상대가 실행할 명령을 그대로 출력합니다. 직접 고를 수는 없습니다. 서버는 자신이 발급한 코드만 받아들이기 때문입니다.",
       },
       {
         q: "파일이 어딘가에 업로드되나요?",
-        a: "아니요. 파일은 두 사람 사이에서 직접 스트리밍되며 종단간 암호화됩니다. 두 끝을 서로 소개하기 위한 아주 작은 랑데부 핸드셰이크만 Relayium을 거치며——파일은 절대 거치지 않습니다.",
+        a: "아니요. 파일은 두 사람 사이에서 직접 스트리밍되며 종단간 암호화됩니다. 두 끝을 서로 소개하기 위한 아주 작은 랑데부 핸드셰이크만 Relayium을 거치며, 파일은 절대 거치지 않습니다.",
       },
       {
         q: "연결이 안 되면 어떻게 되나요?",
-        a: "양쪽 모두 엄격한 NAT 뒤에 있고 도달 가능한 주소가 없다면 직접 연결을 만들 수 없어 전송이 실패합니다——CLI는 설계상 릴레이 폴백이 없습니다. 직접 경로를 쓸 수 없을 때는 도달 가능한 두 서버 사이의 daemon direct나, SSH를 통한 push를 사용하세요.",
+        a: "양쪽 모두 엄격한 NAT 뒤에 있고 도달 가능한 주소가 없다면 직접 연결을 만들 수 없어 전송이 실패합니다. CLI는 설계상 릴레이 폴백이 없습니다. 직접 경로를 쓸 수 없을 때는 도달 가능한 두 서버 사이의 데몬 다이렉트나, SSH를 통한 push를 사용하세요.",
       },
       {
         q: "상대가 정말 맞는 사람인지 어떻게 알 수 있나요?",
@@ -326,7 +326,7 @@ relayium receive K7M4XR`,
     ],
   },
   cta: {
-    text: "다음 파일을 다른 네트워크에 있는 상대에게 직접 보내세요——종단간 암호화되고 무료입니다.",
+    text: "다음 파일을 다른 네트워크에 있는 상대에게 직접 보내세요. 종단간 암호화되고 무료입니다.",
     button: "CLI 받기",
     href: "/cli",
   },
@@ -349,12 +349,12 @@ const de = {
         "Melde dich einmalig mit relayium login an, danach sendest du einfach. Die CLI erzeugt einen Pairing-Code, gibt ihn zusammen mit dem Befehl aus, den die andere Seite ausführt, und wartet. Gib diesen Code außerhalb des Kanals weiter — sag ihn am Telefon, schreib ihn in einen Chat:",
       ],
       code: [
-        `# sender (once per machine: relayium login)
+        `# Absender (einmal pro Rechner: relayium login)
 relayium send ./release.zip
-# prints:  Code: K7M4XR   (valid 5 minutes)
+# gibt aus:  Code: K7M4XR   (valid 5 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
-# receiver (in the folder where files should land) — no account needed
+# Empfänger (in dem Ordner, in dem die Dateien landen sollen) — kein Konto nötig
 relayium receive K7M4XR`,
       ],
       bullets: [
@@ -377,7 +377,7 @@ relayium receive K7M4XR`,
       heading: "Nur direkt — kostenlos, sonst schlägt es fehl",
       body: [
         "Die Übertragung versucht, eine direkte Verbindung zwischen den beiden Enden herzustellen. Gelingt das — der übliche Fall, wenn wenigstens eine Seite eine erreichbare Adresse hat —, fließt die Datei verschlüsselt direkt hindurch, mit voller Geschwindigkeit und ohne Kosten.",
-        "Stehen beide Enden hinter strengem NAT und lässt sich kein direkter Pfad finden, schlägt die Übertragung sauber fehl, statt deine Datei über ein Relay zu leiten. So bleibt die CLI vollständig kostenlos, und deine Dateibytes bleiben von unseren Servern fern. Falls das passiert, ist die verlässliche Antwort daemon direct zwischen zwei erreichbaren Servern oder push über SSH.",
+        "Stehen beide Enden hinter strengem NAT und lässt sich kein direkter Pfad finden, schlägt die Übertragung sauber fehl, statt deine Datei über ein Relay zu leiten. So bleibt die CLI vollständig kostenlos, und deine Dateibytes bleiben von unseren Servern fern. Falls das passiert, ist die verlässliche Antwort daemon-direct zwischen zwei erreichbaren Servern oder push über SSH.",
       ],
       bullets: [
         "Direkte Verbindung gelingt → kostenlos, volle Geschwindigkeit, Ende-zu-Ende verschlüsselt.",
@@ -399,7 +399,7 @@ relayium receive K7M4XR`,
       },
       {
         q: "Was, wenn wir keine Verbindung herstellen können?",
-        a: "Stehen beide Enden hinter strengem NAT ohne erreichbare Adresse, kann die direkte Verbindung nicht hergestellt werden und die Übertragung schlägt fehl — die CLI hat absichtlich kein Relay-Fallback. Nutzt daemon direct zwischen zwei erreichbaren Servern oder push über SSH, wenn kein direkter Pfad verfügbar ist.",
+        a: "Stehen beide Enden hinter strengem NAT ohne erreichbare Adresse, kann die direkte Verbindung nicht hergestellt werden und die Übertragung schlägt fehl — die CLI hat absichtlich kein Relay-Fallback. Nutzt daemon-direct zwischen zwei erreichbaren Servern oder push über SSH, wenn kein direkter Pfad verfügbar ist.",
       },
       {
         q: "Woher weiß ich, dass wirklich die richtige Person am anderen Ende ist?",
@@ -418,40 +418,40 @@ relayium receive K7M4XR`,
 const fr = {
   title: "Envoyer un fichier à quelqu'un à travers les réseaux avec la CLI Relayium",
   description:
-    "Utilisez relayium send et receive pour déplacer un fichier directement entre deux personnes sur des réseaux différents, à l'aide d'un court code de jumelage. Chiffré de bout en bout, vérifié par un code SAS, et gratuit — le fichier va tout droit entre vous, jamais via nos serveurs.",
+    "Utilisez relayium send et receive pour déplacer un fichier directement entre deux personnes sur des réseaux différents, à l'aide d'un court code d'appairage. Chiffré de bout en bout, vérifié par un code SAS, et gratuit — le fichier va tout droit entre vous, jamais via nos serveurs.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Parfois l'autre machine n'est pas la vôtre et vous ne pouvez pas vous y connecter en SSH — un fichier pour un collègue dans un autre bureau, un build pour un client, une archive pour un ami à l'autre bout du pays. relayium send et receive le déplacent directement entre vous deux à travers les réseaux, en utilisant seulement un court code de jumelage que votre CLI génère au moment de l'envoi.",
-    "La connexion est pair-à-pair et chiffrée de bout en bout. Seule une minuscule poignée de main de rendez-vous passe par Relayium pour présenter les deux extrémités ; les octets du fichier, eux, jamais.",
+    "Parfois l'autre machine n'est pas la vôtre et vous ne pouvez pas vous y connecter en SSH — un fichier pour un collègue dans un autre bureau, un build pour un client, une archive pour un ami à l'autre bout du pays. relayium send et receive le déplacent directement entre vous deux à travers les réseaux, en utilisant seulement un court code d'appairage que votre CLI génère au moment de l'envoi.",
+    "La connexion est pair-à-pair et chiffrée de bout en bout. Seule une minuscule poignée de main de rendez-vous passe par Relayium pour présenter les deux extrémités ; les octets du fichier, eux, jamais.",
   ],
   sections: [
     {
       heading: "Faire send, puis transmettre le code affiché",
       body: [
-        "Connectez-vous une fois avec relayium login, puis contentez-vous de faire send. La CLI génère un code de jumelage, l'affiche avec la commande exacte que l'autre extrémité doit exécuter, et attend. Transmettez ce code hors bande — dites-le au téléphone, glissez-le dans un chat :",
+        "Connectez-vous une fois avec relayium login, puis contentez-vous de faire send. La CLI génère un code d'appairage, l'affiche avec la commande exacte que l'autre extrémité doit exécuter, et attend. Transmettez ce code hors bande — dites-le au téléphone, glissez-le dans un chat :",
       ],
       code: [
-        `# sender (once per machine: relayium login)
+        `# expéditeur (une fois par machine : relayium login)
 relayium send ./release.zip
-# prints:  Code: K7M4XR   (valid 5 minutes)
+# affiche :  Code: K7M4XR   (valid 5 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
-# receiver (in the folder where files should land) — no account needed
+# destinataire (dans le dossier où les fichiers doivent arriver) — aucun compte nécessaire
 relayium receive K7M4XR`,
       ],
       bullets: [
         "Le code fait 6 caractères tirés d'un alphabet restreint — ni 0 ni 1, et rien qui puisse être confondu à l'oral — et il expire 5 minutes après sa génération.",
         "Seul l'expéditeur se connecte. Le destinataire a besoin de la CLI et du code, et d'aucun compte.",
-        "Le code n'est qu'un secret partagé pour se retrouver ; il n'est envoyé à personne d'autre qu'au point de rendez-vous, et il ne sert qu'à présenter les deux extrémités.",
-        "Le destinataire peut indiquer un répertoire de destination : relayium receive K7M4XR ./downloads",
-        "Les deux extrémités doivent être la CLI — un navigateur ne peut pas rejoindre un code de jumelage CLI. Vous envoyez à quelqu'un qui n'a qu'un navigateur ? Utilisez plutôt relayium up, qui vous donne un lien de téléchargement.",
+        "Le code n'est qu'un secret partagé pour se retrouver ; il n'est envoyé à personne d'autre qu'au point de rendez-vous, et il ne sert qu'à présenter les deux extrémités.",
+        "Le destinataire peut indiquer un répertoire de destination : relayium receive K7M4XR ./downloads",
+        "Les deux extrémités doivent être la CLI — un navigateur ne peut pas rejoindre un code d'appairage CLI. Vous envoyez à quelqu'un qui n'a qu'un navigateur ? Utilisez plutôt relayium up, qui vous donne un lien de téléchargement.",
       ],
     },
     {
       heading: "Vérifier avec le code SAS",
       body: [
         "Quand les deux extrémités se connectent, les deux terminaux affichent le même SAS (short authentication string) à 6 chiffres, dérivé des clés de session. Comparez-les — lisez-le à voix haute pendant l'appel — pour être sûrs d'être connectés l'un à l'autre, et non à quelqu'un au milieu.",
-        "Pour une garantie ferme, ajoutez --verify : le transfert attend alors que vous confirmiez que les codes correspondent avant qu'un seul octet ne bouge.",
+        "Pour une garantie ferme, ajoutez --verify : le transfert attend alors que vous confirmiez que les codes correspondent avant qu'un seul octet ne bouge.",
       ],
       code: ["relayium send --verify ./release.zip"],
     },
@@ -459,11 +459,11 @@ relayium receive K7M4XR`,
       heading: "Direct uniquement — gratuit, sinon ça échoue",
       body: [
         "Le transfert tente d'établir en priorité une connexion directe entre les deux extrémités. Quand elle peut être établie — le cas courant dès qu'au moins un côté a une adresse joignable —, le fichier passe tout droit, chiffré, à pleine vitesse et sans frais.",
-        "Si les deux extrémités sont derrière un NAT strict et qu'aucun chemin direct n'est trouvé, le transfert échoue proprement plutôt que de faire transiter votre fichier par un relais. Cela garde la CLI entièrement gratuite et garde les octets de votre fichier hors de nos serveurs. Si cela vous arrive, la réponse fiable est le daemon direct entre deux serveurs joignables, ou le push via SSH.",
+        "Si les deux extrémités sont derrière un NAT strict et qu'aucun chemin direct n'est trouvé, le transfert échoue proprement plutôt que de faire transiter votre fichier par un relais. Cela garde la CLI entièrement gratuite et garde les octets de votre fichier hors de nos serveurs. Si cela vous arrive, la réponse fiable est le daemon-direct entre deux serveurs joignables, ou le push via SSH.",
       ],
       bullets: [
         "Connexion directe réussie → gratuit, pleine vitesse, chiffré de bout en bout.",
-        "Aucun chemin direct → le transfert échoue ; la CLI ne fait jamais transiter le fichier à votre place.",
+        "Aucun chemin direct → le transfert échoue ; la CLI ne fait jamais transiter le fichier à votre place.",
         "Les deux extrémités peuvent être n'importe où géographiquement — l'expéditeur lance simplement send, et le destinataire lance receive avec le code affiché.",
       ],
     },
@@ -472,20 +472,20 @@ relayium receive K7M4XR`,
     heading: "Questions fréquentes",
     items: [
       {
-        q: "D'où vient le code de jumelage ?",
+        q: "D'où vient le code d'appairage ?",
         a: "C'est Relayium qui le génère. Lancez `relayium send ./release.zip` (après `relayium login`) et la CLI affiche un code de 6 caractères valable cinq minutes, ainsi que la commande exacte que l'autre extrémité doit exécuter. Vous ne pouvez pas le choisir vous-même — le serveur n'accepte que les codes qu'il a émis.",
       },
       {
-        q: "Le fichier est-il envoyé quelque part ?",
+        q: "Le fichier est-il envoyé quelque part ?",
         a: "Non. Le fichier circule directement entre vous deux, chiffré de bout en bout. Seule une petite poignée de main de rendez-vous passe par Relayium pour présenter les extrémités — jamais le fichier.",
       },
       {
-        q: "Que se passe-t-il si nous ne pouvons pas nous connecter ?",
-        a: "Si les deux extrémités sont derrière un NAT strict sans adresse joignable, la connexion directe ne peut pas être établie et le transfert échoue — la CLI n'a volontairement aucun repli par relais. Utilisez le daemon direct entre deux serveurs joignables, ou le push via SSH, quand aucun chemin direct n'est disponible.",
+        q: "Que se passe-t-il si nous ne pouvons pas nous connecter ?",
+        a: "Si les deux extrémités sont derrière un NAT strict sans adresse joignable, la connexion directe ne peut pas être établie et le transfert échoue — la CLI n'a volontairement aucun repli par relais. Utilisez le daemon-direct entre deux serveurs joignables, ou le push via SSH, quand aucun chemin direct n'est disponible.",
       },
       {
-        q: "Comment savoir que c'est vraiment la bonne personne en face ?",
-        a: "Les deux terminaux affichent un code SAS identique à 6 chiffres issu des clés de session. Comparez-les hors bande ; s'ils correspondent, personne n'est au milieu. Ajoutez --verify pour exiger cette confirmation avant qu'aucun octet ne bouge.",
+        q: "Comment savoir que c'est vraiment la bonne personne en face ?",
+        a: "Les deux terminaux affichent un code SAS identique à 6 chiffres issu des clés de session. Comparez-les hors bande ; s'ils correspondent, personne n'est au milieu. Ajoutez --verify pour exiger cette confirmation avant qu'aucun octet ne bouge.",
       },
     ],
   },
@@ -500,33 +500,33 @@ relayium receive K7M4XR`,
 const ar = {
   title: "إرسال ملف إلى شخص ما عبر الشبكات باستخدام واجهة Relayium الطرفية (CLI)",
   description:
-    "استخدم relayium send و receive لنقل ملف مباشرةً بين شخصين على شبكتين مختلفتين، بالاعتماد على رمز اقتران قصير. مُشفَّر من الطرف إلى الطرف، ويُتحقَّق منه برمز SAS، ومجاني — يذهب الملف مباشرةً بينكما، ولا يمر أبداً عبر خوادمنا.",
+    "استخدم relayium send وreceive لنقل ملف مباشرةً بين شخصين على شبكتين مختلفتين، بالاعتماد على رمز اقتران قصير. مُشفَّر من الطرف إلى الطرف، ويُتحقَّق منه برمز SAS، ومجاني — يذهب الملف مباشرةً بينكما، ولا يمر أبدًا عبر خوادمنا.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "أحياناً لا يكون الجهاز الآخر جهازك ولا يمكنك الدخول إليه عبر SSH — ملف لزميل في مكتب آخر، أو نسخة بناء لعميل، أو أرشيف لصديق في الطرف الآخر من البلاد. يقوم relayium send و receive بنقله مباشرةً بينكما عبر الشبكات، بالاعتماد فقط على رمز اقتران قصير تُصدره واجهة CLI لديك عند الإرسال.",
-    "الاتصال من الند للند (P2P) ومُشفَّر من الطرف إلى الطرف. لا يمر عبر Relayium سوى مصافحة لقاء ضئيلة للغاية تُعرِّف الطرفين ببعضهما؛ أما بايتات الملف فلا تمر أبداً.",
+    "أحيانًا لا يكون الجهاز الآخر جهازك ولا يمكنك الدخول إليه عبر SSH — ملف لزميل في مكتب آخر، أو نسخة بناء لعميل، أو أرشيف لصديق في الطرف الآخر من البلاد. يقوم relayium send وreceive بنقله مباشرةً بينكما عبر الشبكات، بالاعتماد فقط على رمز اقتران قصير تُصدره واجهة CLI لديك عند الإرسال.",
+    "الاتصال من الند للند (P2P) ومُشفَّر من الطرف إلى الطرف. لا يمر عبر Relayium سوى مصافحة تعارف ضئيلة للغاية تُعرِّف الطرفين ببعضهما؛ أما بايتات الملف فلا تمر أبدًا.",
   ],
   sections: [
     {
-      heading: "أرسِل أولاً، ثم مرِّر الرمز الذي يُطبَع لك",
+      heading: "أرسِل أولًا، ثم مرِّر الرمز الذي يُطبَع لك",
       body: [
         "سجِّل الدخول مرة واحدة عبر relayium login، ثم اكتفِ بالإرسال. تُصدر واجهة CLI رمز اقتران وتطبعه مع الأمر الذي سينفّذه الطرف الآخر بالضبط، ثم تنتظر. مرِّر هذا الرمز خارج القناة — قُله في مكالمة، أو ألقِه في محادثة:",
       ],
       code: [
-        `# sender (once per machine: relayium login)
+        `# المُرسِل (مرة واحدة لكل جهاز: relayium login)
 relayium send ./release.zip
-# prints:  Code: K7M4XR   (valid 5 minutes)
+# يطبع:   Code: K7M4XR   (valid 5 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
-# receiver (in the folder where files should land) — no account needed
+# المُستقبِل (في المجلد الذي يجب أن تصل إليه الملفات) — بلا حساب
 relayium receive K7M4XR`,
       ],
       bullets: [
         "الرمز مكوَّن من 6 محارف من أبجدية مقيَّدة — بلا 0 أو 1، وبلا أي محرف يسهل الخلط بينه وبين غيره عند النطق — وينتهي مفعوله بعد 5 دقائق من إصداره.",
-        "المُرسِل وحده هو من يسجّل الدخول. أما المُستقبِل فيحتاج إلى واجهة CLI والرمز فقط، ولا يحتاج إلى حساب إطلاقاً.",
-        "الرمز مجرد سر مشترك للقاء؛ لا يُرسَل إلى أحد سوى نقطة اللقاء، وهو يُعرِّف الطرفين ببعضهما فقط.",
+        "المُرسِل وحده هو من يسجّل الدخول. أما المُستقبِل فيحتاج إلى واجهة CLI والرمز فقط، ولا يحتاج إلى حساب إطلاقًا.",
+        "الرمز مجرد سر مشترك للقاء؛ لا يُرسَل إلى أحد سوى نقطة التعارف، وهو يُعرِّف الطرفين ببعضهما فقط.",
         "يمكن للمُستقبِل تمرير مجلد وجهة: relayium receive K7M4XR ./downloads",
-        "يجب أن يكون الطرفان كلاهما على واجهة CLI — فالمتصفح لا يستطيع الانضمام إلى رمز اقتران خاص بـ CLI. هل تُرسِل إلى شخص لا يملك سوى متصفح؟ استخدم relayium up بدلاً من ذلك، فهو يعطيك رابط تنزيل.",
+        "يجب أن يكون الطرفان كلاهما على واجهة CLI — فالمتصفح لا يستطيع الانضمام إلى رمز اقتران خاص بـ CLI. هل تُرسِل إلى شخص لا يملك سوى متصفح؟ استخدم relayium up بدلًا من ذلك، فهو يعطيك رابط تنزيل.",
       ],
     },
     {
@@ -540,13 +540,13 @@ relayium receive K7M4XR`,
     {
       heading: "مباشر فقط — مجاني، أو يفشل",
       body: [
-        "يتسابق النقل على إنشاء اتصال مباشر بين الطرفين. حين يمكن إنشاؤه — وهي الحالة الشائعة ما دام لأحد الطرفين على الأقل عنوان يمكن الوصول إليه — يتدفق الملف مباشرةً، مُشفَّراً، بأقصى سرعة وبلا تكلفة.",
-        "إذا كان الطرفان خلف NAT صارم ولم يُعثَر على مسار مباشر، يفشل النقل بنظافة بدلاً من توجيه ملفك عبر مُرحِّل. هذا يبقي واجهة CLI مجانية تماماً ويُبعد بايتات ملفك عن خوادمنا. إن واجهت هذا، فالحل الموثوق هو daemon direct بين خادمين يمكن الوصول إليهما، أو push عبر SSH.",
+        "يتسابق النقل على إنشاء اتصال مباشر بين الطرفين. حين يمكن إنشاؤه — وهي الحالة الشائعة ما دام لأحد الطرفين على الأقل عنوان يمكن الوصول إليه — يتدفق الملف مباشرةً، مُشفَّرًا، بأقصى سرعة وبلا تكلفة.",
+        "إذا كان الطرفان خلف NAT صارم ولم يُعثَر على مسار مباشر، يفشل النقل بنظافة بدلًا من توجيه ملفك عبر مُرحِّل. هذا يبقي واجهة CLI مجانية تمامًا ويُبعد بايتات ملفك عن خوادمنا. إن واجهت هذا، فالحل الموثوق هو daemon direct بين خادمين يمكن الوصول إليهما، أو push عبر SSH.",
       ],
       bullets: [
         "نجاح الاتصال المباشر ← مجاني، بأقصى سرعة، مُشفَّر من الطرف إلى الطرف.",
-        "لا مسار مباشر ← يفشل النقل؛ لا تُوكِّل CLI أبداً بترحيل الملف نيابةً عنك.",
-        "يمكن أن يكون الطرفان في أي مكان جغرافياً — يكفي أن يشغّل المُرسِل send، وأن يشغّل المُستقبِل receive بالرمز الذي طُبع.",
+        "لا مسار مباشر ← يفشل النقل؛ لا تُوكِّل CLI أبدًا بترحيل الملف نيابةً عنك.",
+        "يمكن أن يكون الطرفان في أي مكان جغرافيًا — يكفي أن يشغّل المُرسِل send، وأن يشغّل المُستقبِل receive بالرمز الذي طُبع.",
       ],
     },
   ],
@@ -555,24 +555,24 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "من أين يأتي رمز الاقتران؟",
-        a: "‏Relayium هو من يُصدره. شغِّل `relayium send ./release.zip` (بعد `relayium login`) فتطبع واجهة CLI رمزاً من 6 محارف صالحاً لخمس دقائق، مع الأمر الذي سينفّذه الطرف الآخر بالضبط. لا يمكنك اختياره بنفسك — فالخادم لا يقبل إلا الرموز التي أصدرها هو.",
+        a: "‏Relayium هو من يُصدره. شغِّل `relayium send ./release.zip` (بعد `relayium login`) فتطبع واجهة CLI رمزًا من 6 محارف صالحًا لخمس دقائق، مع الأمر الذي سينفّذه الطرف الآخر بالضبط. لا يمكنك اختياره بنفسك — فالخادم لا يقبل إلا الرموز التي أصدرها هو.",
       },
       {
         q: "هل يُرفَع الملف إلى أي مكان؟",
-        a: "لا. يتدفق الملف مباشرةً بينكما، مُشفَّراً من الطرف إلى الطرف. لا يمر عبر Relayium سوى مصافحة لقاء صغيرة لتعريف الطرفين — أما الملف فلا يمر أبداً.",
+        a: "لا. يتدفق الملف مباشرةً بينكما، مُشفَّرًا من الطرف إلى الطرف. لا يمر عبر Relayium سوى مصافحة تعارف صغيرة لتعريف الطرفين — أما الملف فلا يمر أبدًا.",
       },
       {
         q: "ماذا لو تعذَّر علينا الاتصال؟",
-        a: "إذا كان الطرفان خلف NAT صارم بلا عنوان يمكن الوصول إليه، فلا يمكن إنشاء الاتصال المباشر ويفشل النقل — فواجهة CLI لا تملك احتياطياً عبر مُرحِّل، وهذا بحكم التصميم. استخدم daemon direct بين خادمين يمكن الوصول إليهما، أو push عبر SSH، حين لا يتوفر مسار مباشر.",
+        a: "إذا كان الطرفان خلف NAT صارم بلا عنوان يمكن الوصول إليه، فلا يمكن إنشاء الاتصال المباشر ويفشل النقل — فواجهة CLI لا تملك احتياطيًا عبر مُرحِّل، وهذا بحكم التصميم. استخدم daemon direct بين خادمين يمكن الوصول إليهما، أو push عبر SSH، حين لا يتوفر مسار مباشر.",
       },
       {
-        q: "كيف أعرف أنه فعلاً الشخص الصحيح على الطرف الآخر؟",
-        a: "تطبع كلتا الطرفيتين رمز SAS متطابقاً من 6 أرقام مُشتَقاً من مفاتيح الجلسة. قارِنا بينهما خارج القناة؛ فإن تطابقا، فلا أحد في المنتصف. أضِف --verify لتشترط ذلك التأكيد قبل أن يتحرك أي بايت.",
+        q: "كيف أعرف أنه فعلًا الشخص الصحيح على الطرف الآخر؟",
+        a: "تطبع كلتا الطرفيتين رمز SAS متطابقًا من 6 أرقام مُشتَقًا من مفاتيح الجلسة. قارِنا بينهما خارج القناة؛ فإن تطابقا، فلا أحد في المنتصف. أضِف --verify لتشترط ذلك التأكيد قبل أن يتحرك أي بايت.",
       },
     ],
   },
   cta: {
-    text: "أرسِل ملفك التالي مباشرةً إلى شخص على شبكة أخرى — مُشفَّراً من الطرف إلى الطرف، ومجاناً.",
+    text: "أرسِل ملفك التالي مباشرةً إلى شخص على شبكة أخرى — مُشفَّرًا من الطرف إلى الطرف، ومجانًا.",
     button: "احصل على CLI",
     href: "/cli",
   },
@@ -582,11 +582,11 @@ relayium receive K7M4XR`,
 const es = {
   title: "Enviar un archivo a alguien entre redes con la CLI de Relayium",
   description:
-    "Usa relayium send y receive para mover un archivo directamente entre dos personas en redes distintas, con un breve código de emparejamiento. Cifrado de extremo a extremo, verificado con un código SAS y gratis: el archivo va directo entre ustedes, nunca a través de nuestros servidores.",
+    "Usa relayium send y receive para mover un archivo directamente entre dos personas en redes distintas, con un breve código de emparejamiento. Cifrado de extremo a extremo, verificado con un código SAS y gratis: el archivo va directo entre los dos extremos, nunca a través de nuestros servidores.",
   updatedLabel: "Última actualización",
   lead: [
-    "A veces la otra máquina no es tuya y no puedes entrar por SSH: un archivo para un colega en otra oficina, una compilación para un cliente, un archivo comprimido para un amigo al otro lado del país. relayium send y receive lo mueven directamente entre ustedes dos, entre redes, usando solo un código de emparejamiento corto que tu CLI genera al enviar.",
-    "La conexión es de igual a igual y cifrada de extremo a extremo. Solo un pequeñísimo apretón de manos de encuentro pasa por Relayium para presentar los dos extremos; los bytes del archivo nunca lo hacen.",
+    "A veces la otra máquina no es tuya y no puedes entrar por SSH: un archivo para un colega en otra oficina, una compilación para un cliente, un archivo comprimido para un amigo al otro lado del país. relayium send y receive lo mueven directamente entre las dos partes, entre redes, usando solo un código de emparejamiento corto que tu CLI genera al enviar.",
+    "La conexión es de igual a igual y cifrada de extremo a extremo. Solo un pequeñísimo handshake con el punto de encuentro pasa por Relayium para presentar los dos extremos; los bytes del archivo nunca lo hacen.",
   ],
   sections: [
     {
@@ -595,12 +595,12 @@ const es = {
         "Inicia sesión una vez con relayium login y después solo envía. La CLI genera un código de emparejamiento, lo imprime junto con el comando exacto que ejecuta el otro extremo, y espera. Pasa ese código fuera de banda: dilo en una llamada, escríbelo en un chat:",
       ],
       code: [
-        `# sender (once per machine: relayium login)
+        `# quien envía (una vez por máquina: relayium login)
 relayium send ./release.zip
-# prints:  Code: K7M4XR   (valid 5 minutes)
+# imprime:  Code: K7M4XR   (valid 5 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
-# receiver (in the folder where files should land) — no account needed
+# quien recibe (en la carpeta donde deben llegar los archivos) — sin cuenta
 relayium receive K7M4XR`,
       ],
       bullets: [
@@ -623,7 +623,7 @@ relayium receive K7M4XR`,
       heading: "Solo directo: gratis, o falla",
       body: [
         "La transferencia compite por establecer una conexión directa entre los dos extremos. Cuando se puede establecer —lo habitual cuando al menos un lado tiene una dirección alcanzable— el archivo fluye directo, cifrado, a máxima velocidad y sin coste.",
-        "Si ambos extremos están detrás de un NAT estricto y no se encuentra ninguna ruta directa, la transferencia falla limpiamente en lugar de enrutar tu archivo a través de un retransmisor. Eso mantiene la CLI completamente gratis y mantiene los bytes de tu archivo fuera de nuestros servidores. Si te ocurre esto, la respuesta fiable es daemon direct entre dos servidores alcanzables, o push por SSH.",
+        "Si ambos extremos están detrás de un NAT estricto y no se encuentra ninguna ruta directa, la transferencia falla limpiamente en lugar de enrutar tu archivo a través de un retransmisor. Eso mantiene la CLI completamente gratis y mantiene los bytes de tu archivo fuera de nuestros servidores. Si te ocurre esto, la respuesta fiable es daemon directo entre dos servidores alcanzables, o push por SSH.",
       ],
       bullets: [
         "La conexión directa tiene éxito → gratis, a máxima velocidad, cifrada de extremo a extremo.",
@@ -641,11 +641,11 @@ relayium receive K7M4XR`,
       },
       {
         q: "¿Se sube el archivo a algún sitio?",
-        a: "No. El archivo fluye directamente entre ustedes dos, cifrado de extremo a extremo. Solo un pequeño apretón de manos de encuentro pasa por Relayium para presentar los extremos; el archivo nunca.",
+        a: "No. El archivo fluye directamente entre las dos partes, cifrado de extremo a extremo. Solo un pequeño handshake con el punto de encuentro pasa por Relayium para presentar los extremos; el archivo nunca.",
       },
       {
         q: "¿Y si no podemos conectarnos?",
-        a: "Si ambos extremos están detrás de un NAT estricto sin dirección alcanzable, no se puede establecer la conexión directa y la transferencia falla: la CLI no tiene respaldo por retransmisor, por diseño. Usa daemon direct entre dos servidores alcanzables, o push por SSH, cuando no haya una ruta directa disponible.",
+        a: "Si ambos extremos están detrás de un NAT estricto sin dirección alcanzable, no se puede establecer la conexión directa y la transferencia falla: la CLI no tiene respaldo por retransmisor, por diseño. Usa daemon directo entre dos servidores alcanzables, o push por SSH, cuando no haya una ruta directa disponible.",
       },
       {
         q: "¿Cómo sé que de verdad es la persona correcta al otro lado?",
@@ -664,10 +664,10 @@ relayium receive K7M4XR`,
 const pt = {
   title: "Enviar um arquivo para alguém entre redes com a CLI do Relayium",
   description:
-    "Use relayium send e receive para mover um arquivo diretamente entre duas pessoas em redes diferentes, com um código de emparelhamento curto. Com criptografia de ponta a ponta, verificado com um código SAS e gratuito: o arquivo vai direto entre vocês, nunca através dos nossos servidores.",
+    "Use relayium send e receive para mover um arquivo diretamente entre duas pessoas em redes diferentes, com um código de emparelhamento curto. Com criptografia de ponta a ponta, verificado com um código SAS e gratuito: o arquivo vai direto entre as duas pontas, nunca através dos nossos servidores.",
   updatedLabel: "Última atualização",
   lead: [
-    "Às vezes a outra máquina não é sua e você não consegue entrar por SSH: um arquivo para um colega em outro escritório, um build para um cliente, um arquivo compactado para um amigo do outro lado do país. relayium send e receive o movem diretamente entre vocês dois, entre redes, usando apenas um código de emparelhamento curto que a sua CLI gera na hora de enviar.",
+    "Às vezes a outra máquina não é sua e você não consegue entrar por SSH: um arquivo para um colega em outro escritório, um build para um cliente, um arquivo compactado para um amigo do outro lado do país. relayium send e receive o movem diretamente entre as duas partes, entre redes, usando apenas um código de emparelhamento curto que a sua CLI gera na hora de enviar.",
     "A conexão é ponto a ponto e com criptografia de ponta a ponta. Apenas um pequeníssimo handshake de encontro passa pelo Relayium para apresentar as duas pontas; os bytes do arquivo nunca passam.",
   ],
   sections: [
@@ -677,12 +677,12 @@ const pt = {
         "Faça login uma vez com relayium login e depois é só enviar. A CLI gera um código de emparelhamento, exibe-o junto com o comando exato que a outra ponta executa, e fica aguardando. Repasse esse código fora de banda: diga em uma chamada, coloque em um chat:",
       ],
       code: [
-        `# sender (once per machine: relayium login)
+        `# quem envia (uma vez por máquina: relayium login)
 relayium send ./release.zip
-# prints:  Code: K7M4XR   (valid 5 minutes)
+# imprime:  Code: K7M4XR   (valid 5 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
-# receiver (in the folder where files should land) — no account needed
+# quem recebe (na pasta onde os arquivos devem chegar) — sem conta
 relayium receive K7M4XR`,
       ],
       bullets: [
@@ -696,7 +696,7 @@ relayium receive K7M4XR`,
     {
       heading: "Verificar com o código SAS",
       body: [
-        "Quando as duas pontas se conectam, os dois terminais exibem o mesmo SAS (short authentication string) de 6 dígitos derivado das chaves de sessão. Compare-os — leia em voz alta durante a chamada — para ter certeza de que vocês estão conectados um ao outro e não a alguém no meio.",
+        "Quando as duas pontas se conectam, os dois terminais exibem o mesmo SAS (short authentication string) de 6 dígitos derivado das chaves de sessão. Compare-os — leia em voz alta durante a chamada — para ter certeza de que as duas pontas estão conectadas uma à outra e não a alguém no meio.",
         "Para uma garantia firme, adicione --verify: a transferência então espera que você confirme que os códigos coincidem antes que um único byte se mova.",
       ],
       code: ["relayium send --verify ./release.zip"],
@@ -705,7 +705,7 @@ relayium receive K7M4XR`,
       heading: "Somente direto: gratuito, ou falha",
       body: [
         "A transferência disputa o estabelecimento de uma conexão direta entre as duas pontas. Quando ela pode ser estabelecida — o caso comum quando pelo menos um lado tem um endereço alcançável — o arquivo flui direto, criptografado, na velocidade máxima e sem custo.",
-        "Se ambas as pontas estiverem atrás de um NAT estrito e nenhum caminho direto puder ser encontrado, a transferência falha de forma limpa em vez de rotear seu arquivo por um retransmissor. Isso mantém a CLI completamente gratuita e mantém os bytes do seu arquivo fora dos nossos servidores. Se você se deparar com isso, a resposta confiável é daemon direct entre dois servidores alcançáveis, ou push por SSH.",
+        "Se ambas as pontas estiverem atrás de um NAT estrito e nenhum caminho direto puder ser encontrado, a transferência falha de forma limpa em vez de rotear seu arquivo por um retransmissor. Isso mantém a CLI completamente gratuita e mantém os bytes do seu arquivo fora dos nossos servidores. Se você se deparar com isso, a resposta confiável é daemon direto entre dois servidores alcançáveis, ou push por SSH.",
       ],
       bullets: [
         "A conexão direta é bem-sucedida → gratuita, na velocidade máxima, com criptografia de ponta a ponta.",
@@ -723,11 +723,11 @@ relayium receive K7M4XR`,
       },
       {
         q: "O arquivo é enviado para algum lugar?",
-        a: "Não. O arquivo flui diretamente entre vocês dois, com criptografia de ponta a ponta. Apenas um pequeno handshake de encontro passa pelo Relayium para apresentar as pontas — nunca o arquivo.",
+        a: "Não. O arquivo flui diretamente entre as duas partes, com criptografia de ponta a ponta. Apenas um pequeno handshake de encontro passa pelo Relayium para apresentar as pontas — nunca o arquivo.",
       },
       {
         q: "E se não conseguirmos conectar?",
-        a: "Se ambas as pontas estiverem atrás de um NAT estrito sem endereço alcançável, a conexão direta não pode ser feita e a transferência falha — a CLI não tem retorno por retransmissor, por design. Use daemon direct entre dois servidores alcançáveis, ou push por SSH, quando não houver um caminho direto disponível.",
+        a: "Se ambas as pontas estiverem atrás de um NAT estrito sem endereço alcançável, a conexão direta não pode ser feita e a transferência falha — a CLI não tem retorno por retransmissor, por decisão de projeto. Use daemon direto entre dois servidores alcançáveis, ou push por SSH, quando não houver um caminho direto disponível.",
       },
       {
         q: "Como sei que é mesmo a pessoa certa do outro lado?",

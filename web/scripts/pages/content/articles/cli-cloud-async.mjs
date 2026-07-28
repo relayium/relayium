@@ -164,7 +164,7 @@ const zh = {
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
-        "先装 CLI，这样 relayium 命令才存在。上面这行会把预编译好的二进制放到你的 PATH 上（macOS 和 Linux；Windows 请从发布页下载 .zip）；relayium --version 可确认是否装好，relayium.com/cli 列出了所有安装方式。不装这一步，relayium login 只会报 “command not found”。",
+        "先装 CLI，这样 relayium 命令才存在。上面这行会把预编译好的二进制放到你的 PATH 上（macOS 和 Linux；Windows 请从发布页下载 .zip）；relayium --version 可确认是否装好，relayium.com/cli 列出了所有安装方式。不装这一步，relayium login 只会报「command not found」。",
         "有一个免费的 Relayium 账号。浏览器那一步是拿你的账号来批准这次登录，所以你得先有账号才能批准——先在 relayium.com 登录，没有就在那里注册一个。只有上传才需要账号；下载从不需要。",
       ],
     },
@@ -177,7 +177,7 @@ const zh = {
       bullets: [
         "CLI 会打印一个短码和一个网址（relayium.com/device）。在已登录 relayium.com 的浏览器里打开它（若尚未登录，先在那里登录），输入短码并确认——这台机器就绑定好了。",
         "登录信息存在 ~/.config/relayium/ 下，所以每台机器只需做一次。relayium whoami 显示当前绑定的账号；relayium logout 清除它。",
-        "以后要撤销某台机器，在浏览器里从账号的“设备”页删掉对应设备即可。",
+        "以后要撤销某台机器，在浏览器里从账号的「设备」页删掉对应设备即可。",
       ],
     },
     {
@@ -274,32 +274,32 @@ relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除
 const ja = {
   title: "クラウドにアップロードし、別のコンピュータで取得する",
   description:
-    "Relayium アカウントを使った非同期ファイル転送。relayium up で一方のマシンからアップロードし、都合のよいときに relayium down で別のマシンからダウンロード——エンドツーエンド暗号化で、アカウントが要るのはアップロードだけ。",
+    "Relayium アカウントを使った非同期ファイル転送。relayium up で一方のマシンからアップロードし、都合のよいときに relayium down で別のマシンからダウンロード。エンドツーエンド暗号化で、アカウントが要るのはアップロードだけ。",
   updatedLabel: "最終更新",
   lead: [
-    "二台のコンピュータが同時に起きていることは決してない、という場面があります。今夜は仕事用ノートからファイルを置いておき、明日は自宅のデスクトップから取りたい——ライブ接続を待つ人は誰もいない。relayium up と relayium down はまさにそれです。up はローカルで暗号化してアカウントにアップロードし、down は後から任意のマシンで取得・復号します。ピアツーピアのハンドシェイクも、双方が ssh できるサーバーも不要です。",
-    "これは CLI の中で Relayium アカウントを使う主な部分です。もう一つはペアリングコードの発行にアカウントを必要とする send です。残りのバインドは任意で、push/pull、daemon 直結、sync はログインなしで動き続け、receive も同様です。ダウンロードにはアカウントは一切不要で、リンクさえあれば十分です。",
+    "二台のコンピュータが同時に起きていることは決してない、という場面があります。今夜は仕事用ノートからファイルを置いておき、明日は自宅のデスクトップから取りたい。ライブ接続を待つ人は誰もいません。relayium up と relayium down はまさにそれです。up はローカルで暗号化してアカウントにアップロードし、down は後から任意のマシンで取得・復号します。P2P ハンドシェイクも、双方が ssh できるサーバーも不要です。",
+    "これは CLI の中で Relayium アカウントを使う主な部分です。もう一つはペアリングコードの発行にアカウントを必要とする send です。残りのバインドは任意で、push/pull、デーモン直結、sync はログインなしで動き続け、receive も同様です。ダウンロードにはアカウントは一切不要で、リンクさえあれば十分です。",
   ],
   sections: [
     {
       heading: "どんなときに使うか",
       body: ["相手側がオンラインかどうか、二台がどう到達し合うかでモードを選びます："],
       bullets: [
-        "up / down（このガイド）——二台が同時にオンラインにならない。今アップロードし、後で自分（または別のマシン）がダウンロードする。アカウント経由。",
-        "send / receive——両端が今オンラインで、使い捨てコードで直接ピアツーピア転送したい。",
-        "push / pull——相手のマシンに既に ssh できる。",
-        "relayium login が要るのは up と send の二つ——up はファイルをアカウントに保存するため、send はペアリングコードを発行しなければならないときだけ（コードを渡されていれば不要）。down、receive、push/pull、daemon 直結、sync はアカウント不要。",
+        "up / down（このガイド）：二台が同時にオンラインになりません。今アップロードし、後で自分（または別のマシン）がダウンロードします。アカウント経由です。",
+        "send / receive：両端が今オンラインで、使い捨てコードで直接 P2P 転送したいときです。",
+        "push / pull：相手のマシンに既に ssh できます。",
+        "relayium login が要るのは up と send の二つ。up はファイルをアカウントに保存するため、send はペアリングコードを発行しなければならないときだけ（コードを渡されていれば不要）。down、receive、push/pull、デーモン直結、sync はアカウント不要です。",
       ],
     },
     {
       heading: "始める前に",
       body: [
-        "最初の up の前に、一度だけ済ませることが二つあります——CLI のインストールと、アカウントの用意です。両方そろっていれば読み飛ばしてください。",
+        "最初の up の前に、一度だけ済ませることが二つあります。CLI のインストールと、アカウントの用意です。両方そろっていれば読み飛ばしてください。",
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
         "まず CLI をインストールして relayium コマンドが存在するようにします。上の一行でビルド済みバイナリが PATH に入ります（macOS と Linux。Windows は releases ページから .zip を取得）。relayium --version でインストールを確認でき、relayium.com/cli にすべてのインストール方法があります。これをしないと relayium login は「command not found」と出るだけです。",
-        "無料の Relayium アカウントを用意します。ブラウザでの手順はあなたのアカウントに対してログインを承認するので、承認する前にアカウントが必要です——まず relayium.com でサインインし、なければそこで作成してください。アカウントが要るのはアップロードだけで、ダウンロードには不要です。",
+        "無料の Relayium アカウントを用意します。ブラウザでの手順は自分のアカウントに対してログインを承認するので、承認する前にアカウントが必要です。まず relayium.com でサインインし、なければそこで作成してください。アカウントが要るのはアップロードだけで、ダウンロードには不要です。",
       ],
     },
     {
@@ -326,22 +326,22 @@ relayium up ./report.pdf --ttl 7d            # 7日間保持（上限はプラ�
 relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除`,
       ],
       bullets: [
-        "リンクが受け渡しのすべてです——相手のマシンが読める場所にコピーしてください。リンクを持つ誰もがダウンロードできるので、パスワードのように扱ってください。",
-        "保持：--burn は一度のダウンロードで削除。--ttl <期間> は一定時間保持。--max-downloads <n> は一定回数まで。どれも指定しなければリンクは24時間保持されます——これが --ttl を付けないときの既定です。",
-        "--ttl は単位付きの期間——30m、12h、7d、2w——のほか、単なる秒数も受け取ります。つまり --ttl 3600 と --ttl 1h は同じ指定です。上限はプランで決まります：Free は1日、Plus は3日、Pro は7日、Max は14日。上限より長く要求すると、サーバーは黙って上限までしか保持しません——その場合 up が後から、実際に保持される期間を1行で知らせます。",
+        "リンクが受け渡しのすべてです。相手のマシンが読める場所にコピーしてください。リンクを持つ誰もがダウンロードできるので、パスワードのように扱ってください。",
+        "保持：--burn は一度のダウンロードで削除。--ttl <期間> は一定時間保持。--max-downloads <n> は一定回数まで。どれも指定しなければリンクは24時間保持されます。これが --ttl を付けないときの既定です。",
+        "--ttl は単位付きの期間（30m、12h、7d、2w）のほか、単なる秒数も受け取ります。つまり --ttl 3600 と --ttl 1h は同じ指定です。上限はプランで決まります：Free は1日、Plus は3日、Pro は7日、Max は14日。上限より長く要求すると、サーバーは黙って上限までしか保持しません。その場合 up が後から、実際に保持される期間を1行で知らせます。",
         "up はログインが必要です。していなければその旨を伝え、何もしません。",
       ],
     },
     {
       heading: "二台目のコンピュータでダウンロード",
       body: [
-        "別のマシンでは、リンクを down に渡します。ログインも設定も不要——ファイルを復号する鍵はリンクの中にあるので、down はアカウントから何も必要としません：",
+        "別のマシンでは、リンクを down に渡します。ログインも設定も不要。ファイルを復号する鍵はリンクの中にあるので、down はアカウントから何も必要としません：",
       ],
       code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
       widget: {
         kind: "downloadBuilder",
         linkLabel: "共有リンク",
-        linkToken: "あなたのリンク",
+        linkToken: "自分のリンク",
         linkPlaceholder: "https://relayium.com/d/…#k=…",
         destLabel: "保存先（pwd の出力を貼り付け）",
         destToken: "保存先ディレクトリ",
@@ -359,7 +359,7 @@ relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除`,
       heading: "ウェブサイトとも連携",
       body: ["このリンクはウェブサイトが使うものと同じなので、CLI とブラウザは自由に連携します："],
       bullets: [
-        "relayium up のリンクはブラウザで開けます——CLI を持たない人に渡せば、その人はウェブからダウンロードできます。",
+        "relayium up のリンクはブラウザで開けます。CLI を持たない人に渡せば、その人はウェブからダウンロードできます。",
         "relayium.com で作った共有リンクは、別のマシンで relayium down から取得できます。",
       ],
     },
@@ -367,8 +367,8 @@ relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除`,
       heading: "サーバーに見えるもの・見えないもの",
       body: ["クラウド転送はエンドツーエンドで暗号化されたままです："],
       bullets: [
-        "ファイルはアップロード前にあなたのマシンで暗号化されます。復号鍵はリンクの #k= 断片にのみ存在し、サーバーには決して送られません——Relayium は読めない暗号文を、ファイル名も含めて保存します。",
-        "つまりリンクだけがファイルへ戻る唯一の手段です。失えばファイルは復旧できません。あなたにも私たちにも。",
+        "ファイルはアップロード前に自分のマシンで暗号化されます。復号鍵はリンクの #k= 断片にのみ存在し、サーバーには決して送られません。Relayium は読めない暗号文を、ファイル名も含めて保存します。",
+        "つまりリンクだけがファイルへ戻る唯一の手段です。失えばファイルは復旧できません。自分でも当社でも同じです。",
       ],
     },
   ],
@@ -377,15 +377,15 @@ relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除`,
     items: [
       {
         q: "アカウントは必要ですか？",
-        a: "アップロードのときと、コードを発行しなければならない送信のときです。relayium up は常に relayium login が必要で、ファイルをあなたのアカウントに保存するためです。relayium send が必要なのは、サーバーが新しいペアリングコードを発行しなければならないときだけです——誰かから渡されたコードで send を実行する場合は何も発行されないため、ログインは要りません。relayium down と relayium receive にアカウントは不要で、push/pull、daemon 直結、sync もアカウントなしで動きます。",
+        a: "アップロードのときと、コードを発行しなければならない送信のときです。relayium up は常に relayium login が必要で、ファイルを自分のアカウントに保存するためです。relayium send が必要なのは、サーバーが新しいペアリングコードを発行しなければならないときだけです。誰かから渡されたコードで send を実行する場合は何も発行されないため、ログインは要りません。relayium down と relayium receive にアカウントは不要で、push/pull、デーモン直結、sync もアカウントなしで動きます。",
       },
       {
         q: "ファイルは暗号化されますか？",
-        a: "はい、エンドツーエンドで。アップロード前にあなたのマシンで暗号化され、鍵はリンクの #k= 断片にのみ存在し、サーバーには決して送られません。Relayium は読めない暗号文を、ファイル名も含めて保存します。",
+        a: "はい、エンドツーエンドで。アップロード前に自分のマシンで暗号化され、鍵はリンクの #k= 断片にのみ存在し、サーバーには決して送られません。Relayium は読めない暗号文を、ファイル名も含めて保存します。",
       },
       {
         q: "リンクを失ったら？",
-        a: "リンクは復号鍵の唯一の控えを運びます。失えばファイルは復旧不能です——サーバー側に復元できるものは何もありません。",
+        a: "リンクは復号鍵の唯一の控えを運びます。失えばファイルは復旧不能です。サーバー側に復元できるものは何もありません。",
       },
       {
         q: "誰がダウンロードできるか制限できますか？",
@@ -408,11 +408,11 @@ relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除`,
 const ko = {
   title: "클라우드에 올리고 다른 컴퓨터에서 받기",
   description:
-    "Relayium 계정을 통한 비동기 파일 전송. relayium up 으로 한 기기에서 업로드하고, 편할 때 relayium down 으로 다른 기기에서 다운로드 — 종단 간 암호화이며 계정이 필요한 것은 업로드뿐입니다.",
+    "Relayium 계정을 통한 비동기 파일 전송. relayium up으로 한 기기에서 업로드하고, 편할 때 relayium down으로 다른 기기에서 다운로드 — 종단간 암호화이며 계정이 필요한 것은 업로드뿐입니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "두 컴퓨터가 동시에 켜져 있는 일이 결코 없을 때가 있습니다. 오늘 밤 업무용 노트북에서 파일을 올려두고 내일 집 데스크톱에서 받고 싶은데, 실시간 연결을 기다리는 사람은 아무도 없습니다. relayium up 과 relayium down 이 바로 그 일을 합니다. up 은 로컬에서 암호화해 계정에 업로드하고, down 은 나중에 아무 기기에서나 가져와 복호화합니다. 피어 투 피어 핸드셰이크도, 둘 다 ssh 할 수 있는 서버도 필요 없습니다.",
-    "이것은 CLI 에서 Relayium 계정을 사용하는 주된 부분이며, 다른 하나는 페어링 코드를 발급하기 위해 계정이 필요한 send 입니다. 나머지의 바인딩은 선택 사항입니다. push/pull, daemon 직결, sync 는 로그인 없이 계속 동작하고 receive 도 마찬가지입니다. 다운로드에는 계정이 전혀 필요 없고 링크만 있으면 됩니다.",
+    "두 컴퓨터가 동시에 켜져 있는 일이 결코 없을 때가 있습니다. 오늘 밤 업무용 노트북에서 파일을 올려두고 내일 집 데스크톱에서 받고 싶은데, 실시간 연결을 기다리는 사람은 아무도 없습니다. relayium up과 relayium down이 바로 그 일을 합니다. up은 로컬에서 암호화해 계정에 업로드하고, down은 나중에 아무 기기에서나 가져와 복호화합니다. P2P 핸드셰이크도, 둘 다 ssh 할 수 있는 서버도 필요 없습니다.",
+    "이것은 CLI에서 Relayium 계정을 사용하는 주된 부분이며, 다른 하나는 페어링 코드를 발급하기 위해 계정이 필요한 send입니다. 나머지의 바인딩은 선택 사항입니다. push/pull, 데몬 다이렉트, sync는 로그인 없이 계속 동작하고 receive도 마찬가지입니다. 다운로드에는 계정이 전혀 필요 없고 링크만 있으면 됩니다.",
   ],
   sections: [
     {
@@ -420,9 +420,9 @@ const ko = {
       body: ["상대편이 온라인인지, 두 기기가 서로 어떻게 닿는지에 따라 모드를 고릅니다:"],
       bullets: [
         "up / down (이 가이드) — 두 기기가 동시에 온라인이 되지 않습니다. 지금 업로드하고, 나중에 자신(또는 다른 기기)이 다운로드합니다. 계정을 거칩니다.",
-        "send / receive — 양쪽이 지금 온라인이며 일회용 코드로 직접 피어 투 피어 전송을 원합니다.",
+        "send / receive — 양쪽이 지금 온라인이며 일회용 코드로 직접 P2P 전송을 원합니다.",
         "push / pull — 상대 기기에 이미 ssh 할 수 있습니다.",
-        "relayium login 이 필요한 것은 up 과 send 둘입니다 — up 은 파일을 계정에 저장하기 위해, send 는 페어링 코드를 발급해야 할 때만(코드를 받았다면 필요 없습니다). down, receive, push/pull, daemon 직결, sync 는 계정이 필요 없습니다.",
+        "relayium login이 필요한 것은 up과 send 둘입니다 — up은 파일을 계정에 저장하기 위해, send는 페어링 코드를 발급해야 할 때만(코드를 받았다면 필요 없습니다). down, receive, push/pull, 데몬 다이렉트, sync는 계정이 필요 없습니다.",
       ],
     },
     {
@@ -432,25 +432,25 @@ const ko = {
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
-        "먼저 CLI를 설치해 relayium 명령이 존재하게 합니다. 위 한 줄이 미리 빌드된 바이너리를 PATH에 올립니다(macOS와 Linux; Windows는 releases 페이지에서 .zip을 받으세요). relayium --version 으로 설치를 확인할 수 있고, relayium.com/cli 에 모든 설치 방법이 있습니다. 이 단계를 건너뛰면 relayium login 은 “command not found”만 출력합니다.",
-        "무료 Relayium 계정을 준비합니다. 브라우저 단계는 당신의 계정에 대해 로그인을 승인하므로, 승인하려면 먼저 계정이 있어야 합니다 — relayium.com 에서 로그인하거나 없으면 거기서 새로 만드세요. 계정이 필요한 것은 업로드뿐이고 다운로드에는 필요 없습니다.",
+        "먼저 CLI를 설치해 relayium 명령이 존재하게 합니다. 위 한 줄이 미리 빌드된 바이너리를 PATH에 올립니다(macOS와 Linux; Windows는 releases 페이지에서 .zip을 받으세요). relayium --version으로 설치를 확인할 수 있고, relayium.com/cli에 모든 설치 방법이 있습니다. 이 단계를 건너뛰면 relayium login은 “command not found”만 출력합니다.",
+        "무료 Relayium 계정을 준비합니다. 브라우저 단계는 본인 계정에 대해 로그인을 승인하므로, 승인하려면 먼저 계정이 있어야 합니다 — relayium.com에서 로그인하거나 없으면 거기서 새로 만드세요. 계정이 필요한 것은 업로드뿐이고 다운로드에는 필요 없습니다.",
       ],
     },
     {
       heading: "이 기기를 계정에 바인딩하기 (한 번만)",
       body: [
-        "up 은 누구의 계정에 저장할지 알아야 하므로 기기마다 한 번 로그인합니다. 브라우저에서 승인하는 기기 로그인이며, 터미널에는 확인할 코드 외에는 아무것도 입력하지 않습니다:",
+        "up은 누구의 계정에 저장할지 알아야 하므로 기기마다 한 번 로그인합니다. 브라우저에서 승인하는 기기 로그인이며, 터미널에는 확인할 코드 외에는 아무것도 입력하지 않습니다:",
       ],
       code: ["relayium login"],
       bullets: [
-        "CLI 가 짧은 코드와 URL(relayium.com/device)을 표시합니다. relayium.com 에 로그인된 브라우저에서 열어(로그인되어 있지 않으면 먼저 거기서 로그인) 코드를 입력하고 승인하면 이 기기가 바인딩됩니다.",
-        "로그인 정보는 ~/.config/relayium/ 아래 저장되므로 기기마다 한 번이면 됩니다. relayium whoami 로 바인딩 대상을 보고, relayium logout 으로 지웁니다.",
+        "CLI가 짧은 코드와 URL(relayium.com/device)을 표시합니다. relayium.com에 로그인된 브라우저에서 열어(로그인되어 있지 않으면 먼저 거기서 로그인) 코드를 입력하고 승인하면 이 기기가 바인딩됩니다.",
+        "로그인 정보는 ~/.config/relayium/ 아래 저장되므로 기기마다 한 번이면 됩니다. relayium whoami로 바인딩 대상을 보고, relayium logout으로 지웁니다.",
         "나중에 기기를 취소하려면 브라우저의 계정 '기기' 페이지에서 해당 기기를 삭제하세요.",
       ],
     },
     {
       heading: "첫 번째 컴퓨터에서 업로드",
-      body: ["up 은 준 파일들을 훑어 로컬에서 암호화하고 암호문을 업로드한 뒤 수령용 링크를 출력합니다:"],
+      body: ["up은 준 파일들을 훑어 로컬에서 암호화하고 암호문을 업로드한 뒤 수령용 링크를 출력합니다:"],
       code: [
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
@@ -461,21 +461,21 @@ relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제`,
       ],
       bullets: [
         "링크가 전달의 전부입니다 — 다른 기기가 읽을 수 있는 곳에 복사하세요. 링크를 가진 누구나 파일을 다운로드할 수 있으니 비밀번호처럼 다루세요.",
-        "보관: --burn 은 한 번 다운로드하면 삭제, --ttl <기간> 은 정해진 시간 보관, --max-downloads <n> 은 정해진 횟수 허용. 셋 다 주지 않으면 링크는 24시간 살아 있습니다 — --ttl 이 없을 때의 기본값입니다.",
-        "--ttl 은 단위가 붙은 기간(30m, 12h, 7d, 2w)이나 초 단위 숫자를 받습니다. 그래서 --ttl 3600 과 --ttl 1h 는 같은 요청입니다. 상한은 요금제가 정합니다: Free 1일, Plus 3일, Pro 7일, Max 14일. 상한보다 길게 요청하면 서버는 조용히 상한까지만 보관하며, up 이 실제로 얼마나 보관되는지 한 줄로 알려줍니다.",
-        "up 은 로그인이 필요합니다. 되어 있지 않으면 알려주고 아무 일도 하지 않습니다.",
+        "보관: --burn은 한 번 다운로드하면 삭제, --ttl <기간>은 정해진 시간 보관, --max-downloads <n>은 정해진 횟수 허용. 셋 다 주지 않으면 링크는 24시간 살아 있습니다 — --ttl이 없을 때의 기본값입니다.",
+        "--ttl은 단위가 붙은 기간(30m, 12h, 7d, 2w)이나 초 단위 숫자를 받습니다. 그래서 --ttl 3600과 --ttl 1h는 같은 요청입니다. 상한은 요금제가 정합니다: Free 1일, Plus 3일, Pro 7일, Max 14일. 상한보다 길게 요청하면 서버는 조용히 상한까지만 보관하며, up이 실제로 얼마나 보관되는지 한 줄로 알려줍니다.",
+        "up은 로그인이 필요합니다. 되어 있지 않으면 알려주고 아무 일도 하지 않습니다.",
       ],
     },
     {
       heading: "두 번째 컴퓨터에서 다운로드",
       body: [
-        "다른 기기에서 링크를 down 에 건넵니다. 로그인도 설정도 필요 없습니다 — 파일을 복호화하는 키가 링크 안에 있으므로 down 은 계정에서 아무것도 필요로 하지 않습니다:",
+        "다른 기기에서 링크를 down에 건넵니다. 로그인도 설정도 필요 없습니다 — 파일을 복호화하는 키가 링크 안에 있으므로 down은 계정에서 아무것도 필요로 하지 않습니다:",
       ],
       code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
       widget: {
         kind: "downloadBuilder",
         linkLabel: "공유 링크",
-        linkToken: "당신의 링크",
+        linkToken: "내 링크",
         linkPlaceholder: "https://relayium.com/d/…#k=…",
         destLabel: "저장 위치 (pwd 출력을 붙여넣기)",
         destToken: "대상 디렉터리",
@@ -486,23 +486,23 @@ relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제`,
       bullets: [
         "링크는 따옴표로 감싸세요: #k=… 조각이 복호화 키를 담고 있는데 일부 셸은 # 을 주석 시작으로 취급합니다.",
         "대상 디렉터리(여기서는 ./downloads)를 주거나 생략해 현재 디렉터리에 받습니다.",
-        "파일이 번(burn) 설정이거나 다운로드 한도에 도달했거나 만료되었으면 링크는 소진된 것이고, down 은 사라졌다고 알립니다.",
+        "파일이 번(burn) 설정이거나 다운로드 한도에 도달했거나 만료되었으면 링크는 소진된 것이고, down은 사라졌다고 알립니다.",
       ],
     },
     {
       heading: "웹사이트와도 연동",
-      body: ["이 링크는 웹사이트가 쓰는 것과 같으므로 CLI 와 브라우저가 자유롭게 연동됩니다:"],
+      body: ["이 링크는 웹사이트가 쓰는 것과 같으므로 CLI와 브라우저가 자유롭게 연동됩니다:"],
       bullets: [
-        "relayium up 의 링크는 브라우저에서 열립니다 — CLI 가 없는 사람에게 건네면 웹에서 다운로드합니다.",
-        "relayium.com 에서 만든 공유 링크는 다른 기기에서 relayium down 으로 받을 수 있습니다.",
+        "relayium up의 링크는 브라우저에서 열립니다 — CLI가 없는 사람에게 건네면 웹에서 다운로드합니다.",
+        "relayium.com에서 만든 공유 링크는 다른 기기에서 relayium down으로 받을 수 있습니다.",
       ],
     },
     {
       heading: "서버가 볼 수 있는 것과 없는 것",
-      body: ["클라우드 전송은 종단 간 암호화를 유지합니다:"],
+      body: ["클라우드 전송은 종단간 암호화를 유지합니다:"],
       bullets: [
-        "파일은 업로드 전에 당신의 기기에서 암호화됩니다. 복호화 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다 — Relayium 은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다.",
-        "그래서 링크가 파일로 돌아가는 유일한 길입니다: 잃으면 파일은 복구할 수 없습니다, 당신도 우리도.",
+        "파일은 업로드 전에 내 기기에서 암호화됩니다. 복호화 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다 — Relayium은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다.",
+        "그래서 링크가 파일로 돌아가는 유일한 길입니다: 잃으면 파일은 복구할 수 없습니다. 본인도, 저희도.",
       ],
     },
   ],
@@ -511,11 +511,11 @@ relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제`,
     items: [
       {
         q: "계정이 필요한가요?",
-        a: "업로드할 때, 그리고 코드를 발급해야 하는 보내기일 때요. relayium up 은 파일을 당신의 계정에 저장해야 하므로 언제나 relayium login 이 필요합니다. relayium send 는 서버가 새 페어링 코드를 발급해야 할 때만 필요합니다 — 누군가 건네준 코드로 send 를 실행하면 아무것도 발급하지 않으므로 로그인이 필요 없습니다. relayium down 과 relayium receive 는 계정이 필요 없고, push/pull, daemon 직결, sync 도 계정 없이 동작합니다.",
+        a: "업로드할 때, 그리고 코드를 발급해야 하는 보내기일 때요. relayium up은 파일을 내 계정에 저장해야 하므로 언제나 relayium login이 필요합니다. relayium send는 서버가 새 페어링 코드를 발급해야 할 때만 필요합니다 — 누군가 건네준 코드로 send를 실행하면 아무것도 발급하지 않으므로 로그인이 필요 없습니다. relayium down과 relayium receive는 계정이 필요 없고, push/pull, 데몬 다이렉트, sync도 계정 없이 동작합니다.",
       },
       {
         q: "파일은 암호화되나요?",
-        a: "네, 종단 간으로요. 업로드 전에 당신의 기기에서 암호화되며, 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다. Relayium 은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다.",
+        a: "네, 종단간으로요. 업로드 전에 내 기기에서 암호화되며, 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다. Relayium은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다.",
       },
       {
         q: "링크를 잃어버리면요?",
@@ -523,16 +523,16 @@ relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제`,
       },
       {
         q: "누가 다운로드할지 제한할 수 있나요?",
-        a: "링크를 가진 누구나 다운로드할 수 있으니 비공개로 공유하세요. --burn 으로 한 번만, --max-downloads <n> 으로 횟수를 제한하고, --ttl <기간> 으로 일정 시간 후 만료시킬 수 있습니다.",
+        a: "링크를 가진 누구나 다운로드할 수 있으니 비공개로 공유하세요. --burn으로 한 번만, --max-downloads <n>으로 횟수를 제한하고, --ttl <기간>으로 일정 시간 후 만료시킬 수 있습니다.",
       },
       {
         q: "웹사이트와 연동되나요?",
-        a: "네. relayium up 의 링크는 브라우저에서 열리고, relayium.com 에서 만든 공유 링크는 다른 기기에서 relayium down 으로 받을 수 있습니다.",
+        a: "네. relayium up의 링크는 브라우저에서 열리고, relayium.com에서 만든 공유 링크는 다른 기기에서 relayium down으로 받을 수 있습니다.",
       },
     ],
   },
   cta: {
-    text: "자신의 기기들 사이에서 파일을 옮길 준비가 되셨나요? CLI를 설치하고 relayium login 을 실행한 뒤 up 하세요.",
+    text: "자신의 기기들 사이에서 파일을 옮길 준비가 되셨나요? CLI를 설치하고 relayium login을 실행한 뒤 up 하세요.",
     button: "CLI 받기",
     href: "/cli",
   },
@@ -546,7 +546,7 @@ const de = {
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Manchmal sind die beiden Computer nie gleichzeitig wach. Du willst heute Abend vom Arbeitslaptop eine Datei ablegen und sie morgen vom Desktop zu Hause holen, ohne dass jemand auf eine Live-Verbindung wartet. Genau das tun relayium up und relayium down: up verschlüsselt lokal und lädt in dein Konto hoch, down holt sie später auf einem beliebigen Rechner und entschlüsselt sie — kein Peer-to-Peer-Handshake, kein Server, in den beide per ssh kommen.",
-    "Das ist der wesentliche Teil der CLI, der dein Relayium-Konto nutzt — daneben send, das eines braucht, um einen Pairing-Code zu erzeugen. Für den Rest ist das Binden optional: push/pull, Daemon-Direkt und sync laufen weiter ohne Anmeldung, receive ebenso. Das Herunterladen braucht überhaupt kein Konto, nur den Link.",
+    "Das ist der wesentliche Teil der CLI, der dein Relayium-Konto nutzt — daneben send, das eines braucht, um einen Pairing-Code zu erzeugen. Für den Rest ist das Binden optional: push/pull, daemon-direct und sync laufen weiter ohne Anmeldung, receive ebenso. Das Herunterladen braucht überhaupt kein Konto, nur den Link.",
   ],
   sections: [
     {
@@ -556,7 +556,7 @@ const de = {
         "up / down (diese Anleitung) — die beiden Rechner sind nie gleichzeitig online. Du lädst jetzt hoch; du (oder ein anderer Rechner) lädst später herunter. Läuft über dein Konto.",
         "send / receive — beide Seiten sind jetzt online und wollen eine direkte Peer-to-Peer-Übertragung über einen Einmalcode.",
         "push / pull — du kommst bereits per ssh auf den entfernten Rechner.",
-        "relayium login brauchen nur up und send — up, um die Datei unter deinem Konto zu speichern, send nur dann, wenn es einen Pairing-Code erzeugen muss (mit einem übergebenen Code gar nicht). down, receive, push/pull, Daemon-Direkt und sync brauchen kein Konto.",
+        "relayium login brauchen nur up und send — up, um die Datei unter deinem Konto zu speichern, send nur dann, wenn es einen Pairing-Code erzeugen muss (mit einem übergebenen Code gar nicht). down, receive, push/pull, daemon-direct und sync brauchen kein Konto.",
       ],
     },
     {
@@ -566,7 +566,7 @@ const de = {
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
-        "Installiere die CLI, damit es den Befehl relayium gibt. Die Zeile oben legt eine vorgefertigte Binärdatei in deinen PATH (macOS und Linux; unter Windows die .zip von der Releases-Seite holen); relayium --version bestätigt die Installation, und relayium.com/cli listet alle Installationswege. Ohne das gibt relayium login nur „command not found“ aus.",
+        "Installiere die CLI, damit es den Befehl relayium gibt. Die Zeile oben legt eine vorkompilierte Binärdatei in deinen PATH (macOS und Linux; unter Windows die .zip von der Releases-Seite holen); relayium --version bestätigt die Installation, und relayium.com/cli listet alle Installationswege. Ohne das gibt relayium login nur „command not found“ aus.",
         "Halte ein kostenloses Relayium-Konto bereit. Der Browser-Schritt bestätigt die Anmeldung gegenüber deinem Konto, du brauchst also vorher eines — melde dich zuerst auf relayium.com an oder erstelle dort eines. Nur das Hochladen braucht das Konto; das Herunterladen nie.",
       ],
     },
@@ -645,7 +645,7 @@ relayium up ./report.pdf --max-downloads 5   # 5 Downloads erlaubt, dann weg`,
     items: [
       {
         q: "Brauche ich ein Konto?",
-        a: "Zum Hochladen — und zum Senden, wenn dabei ein Code erzeugt werden muss. relayium up erfordert immer relayium login, damit die Datei unter deinem Konto liegen kann. relayium send erfordert es nur, wenn der Server einen frischen Pairing-Code für dich erzeugen muss — führst du send mit einem Code aus, den dir jemand gegeben hat, wird keiner erzeugt und es braucht keine Anmeldung. relayium down und relayium receive brauchen kein Konto, und push/pull, Daemon-Direkt und sync laufen ohne eines.",
+        a: "Zum Hochladen — und zum Senden, wenn dabei ein Code erzeugt werden muss. relayium up erfordert immer relayium login, damit die Datei unter deinem Konto liegen kann. relayium send erfordert es nur, wenn der Server einen frischen Pairing-Code für dich erzeugen muss — führst du send mit einem Code aus, den dir jemand gegeben hat, wird keiner erzeugt und es braucht keine Anmeldung. relayium down und relayium receive brauchen kein Konto, und push/pull, daemon-direct und sync laufen ohne eines.",
       },
       {
         q: "Ist meine Datei verschlüsselt?",
@@ -676,21 +676,21 @@ relayium up ./report.pdf --max-downloads 5   # 5 Downloads erlaubt, dann weg`,
 const fr = {
   title: "Envoyer des fichiers dans le cloud, les récupérer sur un autre ordinateur",
   description:
-    "Transfert de fichiers asynchrone via votre compte Relayium : téléversez depuis une machine avec relayium up, téléchargez sur une autre avec relayium down quand cela vous arrange — chiffré de bout en bout, et seul le téléversement demande un compte.",
+    "Transfert de fichiers asynchrone via votre compte Relayium : téléversez depuis une machine avec relayium up, téléchargez sur une autre avec relayium down quand cela vous arrange — chiffré de bout en bout, et seul le téléversement demande un compte.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Parfois, les deux ordinateurs ne sont jamais allumés en même temps. Vous voulez déposer un fichier ce soir depuis le portable du travail et le récupérer demain depuis le poste de la maison, sans que personne n'attende une connexion en direct. relayium up et relayium down font exactement cela : up chiffre localement puis téléverse vers votre compte, et down le récupère plus tard sur n'importe quelle machine et le déchiffre — pas de poignée de main pair-à-pair, pas de serveur où vous pouvez tous les deux vous connecter en ssh.",
-    "C'est la principale partie de la CLI qui utilise votre compte Relayium, avec send, qui en a besoin pour générer un code d'appairage. Pour le reste, la liaison est facultative : push/pull, daemon direct et sync continuent de fonctionner sans connexion, et receive aussi. Le téléchargement ne demande aucun compte, juste le lien.",
+    "Parfois, les deux ordinateurs ne sont jamais allumés en même temps. Vous voulez déposer un fichier ce soir depuis le portable du travail et le récupérer demain depuis le poste de la maison, sans que personne n'attende une connexion en direct. relayium up et relayium down font exactement cela : up chiffre localement puis téléverse vers votre compte, et down le récupère plus tard sur n'importe quelle machine et le déchiffre — pas de poignée de main pair-à-pair, pas de serveur où vous pouvez tous les deux vous connecter en ssh.",
+    "C'est la principale partie de la CLI qui utilise votre compte Relayium, avec send, qui en a besoin pour générer un code d'appairage. Pour le reste, la liaison est facultative : push/pull, daemon-direct et sync continuent de fonctionner sans connexion, et receive aussi. Le téléchargement ne demande aucun compte, juste le lien.",
   ],
   sections: [
     {
       heading: "Quand y recourir",
-      body: ["Choisissez le mode selon que l'autre extrémité est en ligne et selon la façon dont les deux machines se joignent :"],
+      body: ["Choisissez le mode selon que l'autre extrémité est en ligne et selon la façon dont les deux machines se joignent :"],
       bullets: [
-        "up / down (ce guide) — les deux machines ne sont jamais en ligne ensemble. Vous téléversez maintenant ; vous (ou une autre machine) téléchargez plus tard. Passe par votre compte.",
+        "up / down (ce guide) — les deux machines ne sont jamais en ligne ensemble. Vous téléversez maintenant ; vous (ou une autre machine) téléchargez plus tard. Passe par votre compte.",
         "send / receive — les deux extrémités sont en ligne maintenant et veulent un transfert pair-à-pair direct via un code à usage unique.",
         "push / pull — vous pouvez déjà vous connecter en ssh à la machine distante.",
-        "Seuls up et send demandent relayium login — up pour stocker le fichier sous votre compte, send uniquement quand il doit générer un code d'appairage (avec un code qu'on vous a donné, aucun). down, receive, push/pull, daemon direct et sync ne demandent aucun compte.",
+        "Seuls up et send demandent relayium login — up pour stocker le fichier sous votre compte, send uniquement quand il doit générer un code d'appairage (avec un code qu'on vous a donné, aucun). down, receive, push/pull, daemon-direct et sync ne demandent aucun compte.",
       ],
     },
     {
@@ -700,25 +700,25 @@ const fr = {
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
-        "Installez la CLI pour que la commande relayium existe. La ligne ci-dessus place un binaire précompilé dans votre PATH (macOS et Linux ; sous Windows, récupérez le .zip depuis la page des releases) ; relayium --version confirme l'installation, et relayium.com/cli liste toutes les options d'installation. Sans cela, relayium login affiche seulement « command not found ».",
-        "Ayez un compte Relayium gratuit. L'étape dans le navigateur approuve la connexion pour votre compte, il vous en faut donc un avant de pouvoir approuver — connectez-vous d'abord sur relayium.com, ou créez-en un là-bas. Seul le téléversement demande le compte ; le téléchargement jamais.",
+        "Installez la CLI pour que la commande relayium existe. La ligne ci-dessus place un binaire précompilé dans votre PATH (macOS et Linux ; sous Windows, récupérez le .zip depuis la page des releases) ; relayium --version confirme l'installation, et relayium.com/cli liste toutes les options d'installation. Sans cela, relayium login affiche seulement « command not found ».",
+        "Ayez un compte Relayium gratuit. L'étape dans le navigateur approuve la connexion pour votre compte, il vous en faut donc un avant de pouvoir approuver — connectez-vous d'abord sur relayium.com, ou créez-en un là-bas. Seul le téléversement demande le compte ; le téléchargement jamais.",
       ],
     },
     {
       heading: "Lier cette machine à votre compte (une seule fois)",
       body: [
-        "up doit savoir sous quel compte stocker, alors connectez-vous une fois par machine. C'est une connexion d'appareil approuvée dans le navigateur — vous ne tapez rien dans le terminal, hormis le code que vous confirmez :",
+        "up doit savoir sous quel compte stocker, alors connectez-vous une fois par machine. C'est une connexion d'appareil approuvée dans le navigateur — vous ne tapez rien dans le terminal, hormis le code que vous confirmez :",
       ],
       code: ["relayium login"],
       bullets: [
         "La CLI affiche un code court et une URL (relayium.com/device). Ouvrez-la dans le navigateur où vous êtes connecté à relayium.com (connectez-vous-y d'abord si ce n'est pas le cas), saisissez le code et approuvez — cette machine est désormais liée.",
-        "La connexion est enregistrée sous ~/.config/relayium/, vous ne le faites donc qu'une fois par machine. relayium whoami montre à qui vous êtes lié ; relayium logout l'efface.",
-        "Pour révoquer une machine plus tard, supprimez son appareil depuis la page « appareils » de votre compte dans le navigateur.",
+        "La connexion est enregistrée sous ~/.config/relayium/, vous ne le faites donc qu'une fois par machine. relayium whoami montre à qui vous êtes lié ; relayium logout l'efface.",
+        "Pour révoquer une machine plus tard, supprimez son appareil depuis la page « appareils » de votre compte dans le navigateur.",
       ],
     },
     {
       heading: "Téléverser depuis le premier ordinateur",
-      body: ["up parcourt les fichiers indiqués, les chiffre localement, téléverse le chiffré et affiche un lien de récupération :"],
+      body: ["up parcourt les fichiers indiqués, les chiffre localement, téléverse le chiffré et affiche un lien de récupération :"],
       code: [
         `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
@@ -728,16 +728,16 @@ relayium up ./report.pdf --ttl 7d            # conservé 7 jours (plafond selon 
 relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, puis supprimé`,
       ],
       bullets: [
-        "Le lien est toute la remise — copiez-le là où l'autre machine peut le lire. Quiconque a le lien peut télécharger le fichier, traitez-le donc comme un mot de passe.",
-        "Rétention : --burn supprime le fichier après un seul téléchargement ; --ttl <durée> le conserve un temps fixe ; --max-downloads <n> autorise un nombre fixe. Si vous n'en donnez aucun, le lien vit 24 heures — la valeur par défaut en l'absence de --ttl.",
-        "--ttl accepte une durée avec unité — 30m, 12h, 7d, 2w — ou un simple nombre de secondes : --ttl 3600 et --ttl 1h sont la même demande. Votre offre fixe le plafond : 1 jour en Free, 3 jours en Plus, 7 jours en Pro, 14 jours en Max. Demandez plus que votre plafond et le serveur ne le conserve silencieusement que jusqu'au plafond — up affiche ensuite une note indiquant la durée réellement retenue.",
-        "up exige que vous soyez connecté ; sinon il vous le dit et ne fait rien.",
+        "Tout se joue sur le lien — copiez-le là où l'autre machine peut le lire. Quiconque a le lien peut télécharger le fichier, traitez-le donc comme un mot de passe.",
+        "Rétention : --burn supprime le fichier après un seul téléchargement ; --ttl <durée> le conserve un temps fixe ; --max-downloads <n> autorise un nombre fixe. Si vous n'en donnez aucun, le lien vit 24 heures — la valeur par défaut en l'absence de --ttl.",
+        "--ttl accepte une durée avec unité — 30m, 12h, 7d, 2w — ou un simple nombre de secondes : --ttl 3600 et --ttl 1h sont la même demande. Votre offre fixe le plafond : 1 jour en Free, 3 jours en Plus, 7 jours en Pro, 14 jours en Max. Demandez plus que votre plafond et le serveur ne le conserve silencieusement que jusqu'au plafond — up affiche ensuite une note indiquant la durée réellement retenue.",
+        "up exige que vous soyez connecté ; sinon il vous le dit et ne fait rien.",
       ],
     },
     {
       heading: "Télécharger sur le deuxième ordinateur",
       body: [
-        "Sur l'autre machine, passez le lien à down. Pas de connexion, pas de configuration — la clé qui déchiffre le fichier est dans le lien, donc down n'a besoin de rien de votre compte :",
+        "Sur l'autre machine, passez le lien à down. Pas de connexion, pas de configuration — la clé qui déchiffre le fichier est dans le lien, donc down n'a besoin de rien de votre compte :",
       ],
       code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
       widget: {
@@ -752,14 +752,14 @@ relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, p
         copied: "Copié",
       },
       bullets: [
-        "Mettez le lien entre guillemets : le fragment #k=… porte la clé de déchiffrement, et certains shells traitent # comme un début de commentaire.",
+        "Mettez le lien entre guillemets : le fragment #k=… porte la clé de déchiffrement, et certains shells traitent # comme un début de commentaire.",
         "Indiquez un répertoire de destination (ici ./downloads) ou omettez-le pour atterrir dans le répertoire courant.",
         "Si le fichier était en mode burn, a atteint sa limite de téléchargements ou a expiré, le lien est épuisé et down signale qu'il n'existe plus.",
       ],
     },
     {
       heading: "Fonctionne aussi avec le site web",
-      body: ["Le lien est le même que celui du site web, donc la CLI et le navigateur interopèrent librement :"],
+      body: ["Le lien est le même que celui du site web, donc la CLI et le navigateur interopèrent librement :"],
       bullets: [
         "Un lien issu de relayium up s'ouvre dans un navigateur — donnez-le à quelqu'un sans la CLI et il télécharge depuis le web.",
         "Un lien de partage créé sur relayium.com peut être récupéré avec relayium down sur une autre machine.",
@@ -767,10 +767,10 @@ relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, p
     },
     {
       heading: "Ce que le serveur peut voir et ne peut pas voir",
-      body: ["Les transferts cloud restent chiffrés de bout en bout :"],
+      body: ["Les transferts cloud restent chiffrés de bout en bout :"],
       bullets: [
         "Votre fichier est chiffré sur votre machine avant d'être téléversé. La clé de déchiffrement ne vit que dans le fragment #k= du lien et n'est jamais envoyée au serveur — Relayium stocke un chiffré qu'il ne peut pas lire, noms de fichiers compris.",
-        "Cela signifie aussi que le lien est le seul chemin de retour vers le fichier : perdez-le et le fichier est irrécupérable, par vous comme par nous.",
+        "Cela signifie aussi que le lien est le seul chemin de retour vers le fichier : perdez-le et le fichier est irrécupérable, par vous comme par nous.",
       ],
     },
   ],
@@ -778,29 +778,29 @@ relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, p
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Ai-je besoin d'un compte ?",
-        a: "Pour téléverser, et pour envoyer quand un code doit être généré. relayium up exige toujours relayium login, afin que le fichier soit stocké sous votre compte. relayium send ne l'exige que lorsque le serveur doit générer un nouveau code d'appairage pour vous — lancez send avec un code qu'on vous a remis et il n'en génère aucun, donc il ne demande pas de connexion. relayium down et relayium receive ne demandent aucun compte, et push/pull, daemon direct et sync fonctionnent sans.",
+        q: "Ai-je besoin d'un compte ?",
+        a: "Pour téléverser, et pour envoyer quand un code doit être généré. relayium up exige toujours relayium login, afin que le fichier soit stocké sous votre compte. relayium send ne l'exige que lorsque le serveur doit générer un nouveau code d'appairage pour vous — lancez send avec un code qu'on vous a remis et il n'en génère aucun, donc il ne demande pas de connexion. relayium down et relayium receive ne demandent aucun compte, et push/pull, daemon-direct et sync fonctionnent sans.",
       },
       {
-        q: "Mon fichier est-il chiffré ?",
-        a: "Oui, de bout en bout. Il est chiffré sur votre machine avant le téléversement ; la clé ne vit que dans le fragment #k= du lien et n'est jamais envoyée au serveur. Relayium stocke un chiffré qu'il ne peut pas lire, noms de fichiers compris.",
+        q: "Mon fichier est-il chiffré ?",
+        a: "Oui, de bout en bout. Il est chiffré sur votre machine avant le téléversement ; la clé ne vit que dans le fragment #k= du lien et n'est jamais envoyée au serveur. Relayium stocke un chiffré qu'il ne peut pas lire, noms de fichiers compris.",
       },
       {
-        q: "Et si je perds le lien ?",
-        a: "Le lien porte l'unique copie de la clé de déchiffrement ; un lien perdu signifie donc un fichier irrécupérable — rien sur le serveur ne permet de le restaurer.",
+        q: "Et si je perds le lien ?",
+        a: "Le lien porte l'unique copie de la clé de déchiffrement ; un lien perdu signifie donc un fichier irrécupérable — rien sur le serveur ne permet de le restaurer.",
       },
       {
-        q: "Puis-je limiter qui le télécharge ?",
+        q: "Puis-je limiter qui le télécharge ?",
         a: "Quiconque a le lien peut télécharger, alors partagez-le en privé. Utilisez --burn pour un seul téléchargement, --max-downloads <n> pour plafonner le nombre, et --ttl <durée> pour le faire expirer après un temps donné.",
       },
       {
-        q: "Est-ce compatible avec le site web ?",
+        q: "Est-ce compatible avec le site web ?",
         a: "Oui. Un lien de relayium up s'ouvre dans un navigateur, et un lien de partage créé sur relayium.com peut être récupéré avec relayium down sur une autre machine.",
       },
     ],
   },
   cta: {
-    text: "Prêt à déplacer un fichier entre vos propres machines ? Installez la CLI, lancez relayium login, puis faites-en un up.",
+    text: "Prêt à déplacer un fichier entre vos propres machines ? Installez la CLI, lancez relayium login, puis faites-en un up.",
     button: "Obtenir la CLI",
     href: "/cli",
   },
@@ -810,11 +810,11 @@ relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, p
 const ar = {
   title: "ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر",
   description:
-    "نقل ملفات غير متزامن عبر حساب Relayium الخاص بك: ارفع من جهاز باستخدام relayium up، ونزّل على جهاز آخر باستخدام relayium down متى ناسبك ذلك — مشفّر من الطرف إلى الطرف، والرفع وحده هو ما يحتاج إلى حساب.",
+    "نقل ملفات غير متزامن عبر حساب Relayium لديك: ارفع من جهاز باستخدام relayium up، ونزّل على جهاز آخر باستخدام relayium down متى ناسبك ذلك — مشفّر من الطرف إلى الطرف، والرفع وحده هو ما يحتاج إلى حساب.",
   updatedLabel: "آخر تحديث",
   lead: [
     "أحيانًا لا يكون الحاسوبان مستيقظين في الوقت نفسه أبدًا. تريد أن تُسقط ملفًا من حاسوب العمل المحمول الليلة وتلتقطه من سطح مكتب المنزل غدًا، دون أن ينتظر أحد اتصالًا مباشرًا. يفعل relayium up وrelayium down ذلك بالضبط: up يشفّر ويرفع إلى حسابك، وdown يجلبه ويفكّ تشفيره لاحقًا على أي جهاز — بلا مصافحة من الند للند، وبلا خادم يدخل إليه كلاكما عبر ssh.",
-    "هذا هو الجزء الرئيسي من CLI الذي يستخدم حساب Relayium الخاص بك، إلى جانب send الذي يحتاجه لإصدار رمز اقتران. أما البقية فالربط فيها اختياري: push/pull، وdaemon-direct، وsync تظل تعمل بلا تسجيل دخول، وكذلك receive. التنزيل لا يحتاج إلى حساب على الإطلاق، فقط الرابط.",
+    "هذا هو الجزء الرئيسي من CLI الذي يستخدم حساب Relayium لديك، إلى جانب send الذي يحتاجه لإصدار رمز اقتران. أما البقية فالربط فيها اختياري: push/pull، وdaemon direct، وsync تظل تعمل بلا تسجيل دخول، وكذلك receive. التنزيل لا يحتاج إلى حساب على الإطلاق، فقط الرابط.",
   ],
   sections: [
     {
@@ -824,7 +824,7 @@ const ar = {
         "‏up / down (هذا الدليل) — الجهازان لا يكونان متصلين معًا أبدًا. ترفع الآن؛ وتنزّل أنت (أو جهاز آخر) لاحقًا. يمرّ عبر حسابك.",
         "‏send / receive — كلا الطرفين متصل الآن ويريدان نقلًا مباشرًا من الند للند عبر رمز لمرة واحدة.",
         "‏push / pull — يمكنك بالفعل الدخول إلى الجهاز البعيد عبر ssh.",
-        "الأمران اللذان يتطلبان relayium login هما up و send — الأول ليخزّن الملف تحت حسابك، والثاني فقط حين يلزمه إصدار رمز اقتران (ومع رمز سُلِّم إليك لا يلزمه شيء). أما down و receive و push/pull و daemon-direct و sync فلا تحتاج إلى حساب.",
+        "الأمران اللذان يتطلبان relayium login هما up وsend — الأول ليخزّن الملف تحت حسابك، والثاني فقط حين يلزمه إصدار رمز اقتران (ومع رمز سُلِّم إليك لا يلزمه شيء). أما down وreceive وpush/pull وdaemon direct وsync فلا تحتاج إلى حساب.",
       ],
     },
     {
@@ -834,7 +834,7 @@ const ar = {
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
-        "ثبّت CLI كي يوجد أمر relayium. يُسقط السطر أعلاه ملفًا ثنائيًا مُسبق البناء في PATH الخاص بك (macOS وLinux؛ على Windows، احصل على ملف .zip من صفحة الإصدارات)؛ ويؤكّده relayium --version، وrelayium.com/cli يسرد كل خيارات التثبيت. تخطَّ هذا وسيطبع relayium login فقط ‘command not found’.",
+        "ثبّت CLI كي يوجد أمر relayium. يُسقط السطر أعلاه ملفًا ثنائيًا مُسبق البناء في PATH لديك (macOS وLinux؛ على Windows، احصل على ملف .zip من صفحة الإصدارات)؛ ويؤكّده relayium --version، وrelayium.com/cli يسرد كل خيارات التثبيت. تخطَّ هذا وسيطبع relayium login فقط «command not found».",
         "امتلك حساب Relayium مجانيًا. تعتمد خطوة المتصفح تسجيل الدخول على حسابك، فتحتاج إليه قبل أن تتمكن من الاعتماد — سجّل الدخول في relayium.com أولًا، أو أنشئ واحدًا هناك إن لم تكن قد فعلت. الرفع وحده هو ما يحتاج إلى الحساب؛ أما التنزيل فلا يحتاج أبدًا.",
       ],
     },
@@ -863,7 +863,7 @@ relayium up ./report.pdf --max-downloads 5   # يسمح بـ 5 تنزيلات ث
       ],
       bullets: [
         "الرابط هو كامل التسليم — انسخه إلى حيث يستطيع الجهاز الآخر قراءته. أي شخص يملك الرابط يستطيع تنزيل الملف، فعامله كأنه كلمة مرور.",
-        "الاحتفاظ: --burn يزيل الملف بعد تنزيل واحد؛ و --ttl <duration> يبقيه مدة ثابتة؛ و --max-downloads <n> يسمح بعدد ثابت من التنزيلات. إن لم تعطِ أيًّا منها عاش الرابط 24 ساعة — وهذا هو الافتراضي عند غياب --ttl.",
+        "الاحتفاظ: --burn يزيل الملف بعد تنزيل واحد؛ و ‎--ttl <duration>‎ يبقيه مدة ثابتة؛ و ‎--max-downloads <n>‎ يسمح بعدد ثابت من التنزيلات. إن لم تعطِ أيًّا منها عاش الرابط 24 ساعة — وهذا هو الافتراضي عند غياب --ttl.",
         "يقبل --ttl مدةً بوحدة — 30m أو 12h أو 7d أو 2w — كما يقبل عدد ثوانٍ مجردًا، فـ --ttl 3600 و --ttl 1h طلب واحد. وخطتك تحدّد السقف: يوم واحد في Free، و3 أيام في Plus، و7 أيام في Pro، و14 يومًا في Max. وإن طلبت أطول من سقفك، احتفظ الخادم به حتى السقف فقط وبصمت — ثم يطبع up سطرًا يخبرك بالمدة التي حُفِظ بها فعلًا.",
         "يحتاج up إلى أن تكون مسجّل الدخول؛ إن لم تكن، يخبرك ولا يفعل شيئًا.",
       ],
@@ -876,10 +876,10 @@ relayium up ./report.pdf --max-downloads 5   # يسمح بـ 5 تنزيلات ث
       code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
       widget: {
         kind: "downloadBuilder",
-        linkLabel: "رابط المشاركة الخاص بك",
+        linkLabel: "رابط المشاركة لديك",
         linkToken: "رابطك",
         linkPlaceholder: "https://relayium.com/d/…#k=…",
-        destLabel: "احفظ في (الصق مخرجات pwd الخاصة بك)",
+        destLabel: "احفظ في (الصق مخرجات pwd لديك)",
         destToken: "المجلد الهدف",
         destPlaceholder: "/home/you/downloads",
         copy: "انسخ الأمر",
@@ -913,7 +913,7 @@ relayium up ./report.pdf --max-downloads 5   # يسمح بـ 5 تنزيلات ث
     items: [
       {
         q: "هل أحتاج إلى حساب؟",
-        a: "للرفع، وللإرسال حين يلزم إصدار رمز. يتطلب relayium up دائمًا تسجيل relayium login كي يُخزَّن الملف تحت حسابك. أما relayium send فلا يتطلبه إلا حين يلزم الخادم أن يُصدر لك رمز اقتران جديدًا — فإن شغّلت send برمزٍ سلّمه إليك أحدهم، فهو لا يُصدر شيئًا ولا يلزمه تسجيل الدخول. أما relayium down و relayium receive فلا يحتاجان إلى حساب، وكذلك تعمل push/pull، وdaemon-direct، وsync بلا واحد.",
+        a: "للرفع، وللإرسال حين يلزم إصدار رمز. يتطلب relayium up دائمًا تسجيل relayium login كي يُخزَّن الملف تحت حسابك. أما relayium send فلا يتطلبه إلا حين يلزم الخادم أن يُصدر لك رمز اقتران جديدًا — فإن شغّلت send برمزٍ سلّمه إليك أحدهم، فهو لا يُصدر شيئًا ولا يلزمه تسجيل الدخول. أما relayium down وrelayium receive فلا يحتاجان إلى حساب، وكذلك تعمل push/pull، وdaemon direct، وsync بلا واحد.",
       },
       {
         q: "هل ملفي مشفّر؟",
@@ -925,7 +925,7 @@ relayium up ./report.pdf --max-downloads 5   # يسمح بـ 5 تنزيلات ث
       },
       {
         q: "هل يمكنني تقييد من ينزّله؟",
-        a: "أي شخص يملك الرابط يستطيع التنزيل، فشاركه بشكل خاص. استخدم --burn للسماح بتنزيل واحد، أو --max-downloads <n> لتحديد العدد، و --ttl <duration> لإنهاء صلاحيته بعد وقت محدد.",
+        a: "أي شخص يملك الرابط يستطيع التنزيل، فشاركه بشكل خاص. استخدم --burn للسماح بتنزيل واحد، أو ‎--max-downloads <n>‎ لتحديد العدد، و ‎--ttl <duration>‎ لإنهاء صلاحيته بعد وقت محدد.",
       },
       {
         q: "هل يعمل مع الموقع؟",
@@ -947,8 +947,8 @@ const es = {
     "Transferencia de archivos asíncrona a través de tu cuenta de Relayium: sube desde una máquina con relayium up y descarga en otra con relayium down cuando te venga bien — cifrado de extremo a extremo, y solo subir necesita una cuenta.",
   updatedLabel: "Última actualización",
   lead: [
-    "A veces los dos ordenadores nunca están despiertos a la vez. Quieres soltar un archivo desde el portátil del trabajo esta noche y cogerlo desde el sobremesa de casa mañana, sin que nadie espere una conexión en directo. relayium up y relayium down hacen exactamente eso: up cifra y sube a tu cuenta, y down lo recupera y lo descifra después en cualquier máquina — sin apretón de manos de igual a igual, sin un servidor al que ambos entréis por ssh.",
-    "Esta es la parte principal de la CLI que usa tu cuenta de Relayium, junto con send, que la necesita para generar un código de emparejamiento. Para el resto la vinculación es opcional: push/pull, daemon-direct y sync siguen funcionando sin iniciar sesión, y receive también. Descargar no necesita ninguna cuenta, solo el enlace.",
+    "A veces los dos ordenadores nunca están despiertos a la vez. Quieres soltar un archivo desde el portátil del trabajo esta noche y cogerlo desde el sobremesa de casa mañana, sin que nadie espere una conexión en directo. relayium up y relayium down hacen exactamente eso: up cifra y sube a tu cuenta, y down lo recupera y lo descifra después en cualquier máquina — sin handshake de igual a igual, sin un servidor al que las dos partes entren por ssh.",
+    "Esta es la parte principal de la CLI que usa tu cuenta de Relayium, junto con send, que la necesita para generar un código de emparejamiento. Para el resto la vinculación es opcional: push/pull, daemon directo y sync siguen funcionando sin iniciar sesión, y receive también. Descargar no necesita ninguna cuenta, solo el enlace.",
   ],
   sections: [
     {
@@ -958,7 +958,7 @@ const es = {
         "up / down (esta guía) — las dos máquinas nunca están en línea a la vez. Subes ahora; tú (u otra máquina) descargas después. Pasa por tu cuenta.",
         "send / receive — ambos extremos están en línea ahora mismo y quieren una transferencia directa de igual a igual con un código de un solo uso.",
         "push / pull — ya puedes entrar por ssh a la máquina remota.",
-        "Los que piden relayium login son up y send — up para guardar el archivo bajo tu cuenta, send solo cuando tiene que generar un código de emparejamiento (con uno que te hayan dado, ninguno). down, receive, push/pull, daemon-direct y sync no necesitan cuenta.",
+        "Los que piden relayium login son up y send — up para guardar el archivo bajo tu cuenta, send solo cuando tiene que generar un código de emparejamiento (con uno que te hayan dado, ninguno). down, receive, push/pull, daemon directo y sync no necesitan cuenta.",
       ],
     },
     {
@@ -968,7 +968,7 @@ const es = {
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
-        "Instala la CLI para que exista el comando relayium. La línea de arriba deja un binario precompilado en tu PATH (macOS y Linux; en Windows, coge el .zip de la página de releases); relayium --version lo confirma, y relayium.com/cli lista todas las opciones de instalación. Sáltate esto y relayium login solo imprimirá 'command not found'.",
+        "Instala la CLI para que exista el comando relayium. La línea de arriba deja un binario precompilado en tu PATH (macOS y Linux; en Windows, coge el .zip de la página de releases); relayium --version lo confirma, y relayium.com/cli lista todas las opciones de instalación. Sáltate esto y relayium login solo imprimirá « command not found ».",
         "Ten una cuenta gratuita de Relayium. El paso del navegador aprueba el inicio de sesión contra tu cuenta, así que necesitas una antes de poder aprobar — inicia sesión primero en relayium.com, o crea una allí si no la tienes. Solo subir necesita la cuenta; descargar nunca.",
       ],
     },
@@ -1021,7 +1021,7 @@ relayium up ./report.pdf --max-downloads 5   # 5 descargas y luego desaparece`,
       },
       bullets: [
         "Pon el enlace entre comillas: el fragmento #k=… lleva la clave de descifrado, y algunas shells tratan # como el inicio de un comentario.",
-        "Da un directorio de destino (aquí ./downloads) u omítelo para caer en el directorio actual.",
+        "Da un directorio de destino (aquí ./downloads) u omítelo para guardarse en el directorio actual.",
         "Si el archivo estaba en modo de un solo uso, ha alcanzado su límite de descargas o ha caducado, el enlace está agotado y down informa de que ya no existe.",
       ],
     },
@@ -1047,7 +1047,7 @@ relayium up ./report.pdf --max-downloads 5   # 5 descargas y luego desaparece`,
     items: [
       {
         q: "¿Necesito una cuenta?",
-        a: "Para subir, y para enviar cuando hay que generar un código. relayium up requiere siempre relayium login, para guardar el archivo bajo tu cuenta. relayium send lo requiere solo cuando el servidor tiene que generar un código de emparejamiento nuevo para ti — si ejecutas send con un código que te han dado, no genera ninguno, así que no hace falta iniciar sesión. relayium down y relayium receive no necesitan cuenta, y push/pull, daemon-direct y sync funcionan sin una.",
+        a: "Para subir, y para enviar cuando hay que generar un código. relayium up requiere siempre relayium login, para guardar el archivo bajo tu cuenta. relayium send lo requiere solo cuando el servidor tiene que generar un código de emparejamiento nuevo para ti — si ejecutas send con un código que te han dado, no genera ninguno, así que no hace falta iniciar sesión. relayium down y relayium receive no necesitan cuenta, y push/pull, daemon directo y sync funcionan sin una.",
       },
       {
         q: "¿Está cifrado mi archivo?",
@@ -1081,28 +1081,28 @@ const pt = {
     "Transferência de arquivos assíncrona pela sua conta do Relayium: envie de uma máquina com relayium up e baixe em outra com relayium down quando for conveniente — com criptografia de ponta a ponta, e só o envio precisa de conta.",
   updatedLabel: "Última atualização",
   lead: [
-    "Às vezes os dois computadores nunca estão ligados ao mesmo tempo. Você quer soltar um arquivo do notebook do trabalho hoje à noite e pegá-lo no desktop de casa amanhã, sem ninguém esperando uma conexão ao vivo. relayium up e relayium down fazem exatamente isso: o up criptografa e envia para a sua conta, e o down o busca e o descriptografa depois em qualquer máquina — sem aperto de mãos ponto a ponto, sem um servidor no qual os dois entrem por ssh.",
-    "Esta é a principal parte da CLI que usa a sua conta do Relayium, ao lado do send, que precisa dela para gerar um código de emparelhamento. Para o resto a vinculação é opcional: push/pull, daemon-direct e sync continuam funcionando sem login, e o receive também. Baixar não precisa de conta alguma, apenas do link.",
+    "Às vezes os dois computadores nunca estão ligados ao mesmo tempo. Você quer soltar um arquivo do notebook do trabalho hoje à noite e pegá-lo no desktop de casa amanhã, sem ninguém esperando uma conexão ao vivo. relayium up e relayium down fazem exatamente isso: o up criptografa e envia para a sua conta, e o down o busca e o descriptografa depois em qualquer máquina — sem handshake ponto a ponto, sem um servidor no qual os dois entrem por ssh.",
+    "Esta é a principal parte da CLI que usa a sua conta do Relayium, ao lado do send, que precisa dela para gerar um código de emparelhamento. Para o resto a vinculação é opcional: push/pull, daemon direto e sync continuam funcionando sem login, e o receive também. Baixar não precisa de conta alguma, apenas do link.",
   ],
   sections: [
     {
       heading: "Quando recorrer a isso",
-      body: ["Escolha o modo conforme a outra ponta esteja on-line e como as duas máquinas se alcançam:"],
+      body: ["Escolha o modo conforme a outra ponta esteja online e como as duas máquinas se alcançam:"],
       bullets: [
-        "up / down (este guia) — as duas máquinas nunca estão on-line juntas. Você envia agora; você (ou outra máquina) baixa depois. Passa pela sua conta.",
-        "send / receive — as duas pontas estão on-line agora e querem uma transferência ponto a ponto direta com um código de uso único.",
+        "up / down (este guia) — as duas máquinas nunca estão online juntas. Você envia agora; você (ou outra máquina) baixa depois. Passa pela sua conta.",
+        "send / receive — as duas pontas estão online agora e querem uma transferência ponto a ponto direta com um código de uso único.",
         "push / pull — você já consegue entrar por ssh na máquina remota.",
-        "Os que pedem relayium login são o up e o send — o up para guardar o arquivo sob a sua conta, o send apenas quando precisa gerar um código de emparelhamento (com um código que lhe deram, nenhum). O down, o receive, push/pull, daemon-direct e sync não precisam de conta.",
+        "Os que pedem relayium login são o up e o send — o up para guardar o arquivo sob a sua conta, o send apenas quando precisa gerar um código de emparelhamento (com um código que lhe deram, nenhum). O down, o receive, push/pull, daemon direto e sync não precisam de conta.",
       ],
     },
     {
       heading: "Antes de começar",
       body: [
-        "Duas coisas de uma vez só antes do seu primeiro up — instalar a CLI e ter uma conta. Já tem as duas? Pule adiante.",
+        "Duas coisas para fazer uma vez só antes do seu primeiro up — instalar a CLI e ter uma conta. Já tem as duas? Pule adiante.",
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
       bullets: [
-        "Instale a CLI para que o comando relayium exista. A linha acima coloca um binário pré-compilado no seu PATH (macOS e Linux; no Windows, pegue o .zip na página de releases); relayium --version confirma, e relayium.com/cli lista todas as opções de instalação. Pule isso e o relayium login só imprimirá 'command not found'.",
+        "Instale a CLI para que o comando relayium exista. A linha acima coloca um binário pré-compilado no seu PATH (macOS e Linux; no Windows, pegue o .zip na página de releases); relayium --version confirma, e relayium.com/cli lista todas as opções de instalação. Pule isso e o relayium login só imprimirá “command not found”.",
         "Tenha uma conta gratuita do Relayium. O passo do navegador aprova o login contra a sua conta, então você precisa de uma antes de poder aprovar — faça login em relayium.com primeiro, ou crie uma lá se ainda não tiver. Só o envio precisa da conta; baixar nunca.",
       ],
     },
@@ -1181,7 +1181,7 @@ relayium up ./report.pdf --max-downloads 5   # 5 downloads permitidos, depois so
     items: [
       {
         q: "Preciso de uma conta?",
-        a: "Para enviar para a nuvem, e para o send quando um código precisa ser gerado. O relayium up sempre exige relayium login, para que o arquivo fique guardado sob a sua conta. O relayium send só exige quando o servidor precisa gerar um novo código de emparelhamento para você — se você executar send com um código que alguém lhe passou, nada é gerado, então nenhum login é necessário. O relayium down e o relayium receive não precisam de conta, e push/pull, daemon-direct e sync funcionam sem uma.",
+        a: "Para enviar para a nuvem, e para o send quando um código precisa ser gerado. O relayium up sempre exige relayium login, para que o arquivo fique guardado sob a sua conta. O relayium send só exige quando o servidor precisa gerar um novo código de emparelhamento para você — se você executar send com um código que alguém lhe passou, nada é gerado, então nenhum login é necessário. O relayium down e o relayium receive não precisam de conta, e push/pull, daemon direto e sync funcionam sem uma.",
       },
       {
         q: "Meu arquivo é criptografado?",

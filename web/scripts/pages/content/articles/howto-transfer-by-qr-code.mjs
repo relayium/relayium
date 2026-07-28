@@ -89,21 +89,21 @@ const zh = {
       heading: "创建配对码，就会拿到二维码",
       body: [
         "在发送端设备上打开 relayium.com 并登录——创建配对码是 Relayium 唯一要求账号的地方，因为这个码得归属于某个人。选一个文件、一个文件夹，或者先不排队文件直接连接。",
-        "Relayium 会生成一段简短的配对码——六个字符，取自一套剔除了所有易混淆字形的字符集，所以里面既没有 0 和 O，也没有 1 和 I——并紧挨着它渲染出一个二维码。配对码有效期五分钟，过期后重新生成一个即可。二维码本身并没有编码什么新东西——它就是\"复制链接\"按钮给你的那条加入链接，只是渲染成了可扫描的方块而不是文字。谁打开那条链接，谁就会直接进入你的配对房间。",
+        "Relayium 会生成一段简短的配对码——六个字符，取自一套剔除了所有易混淆字形的字符集，所以里面既没有 0 和 O，也没有 1 和 I——并紧挨着它渲染出一个二维码。配对码有效期五分钟，过期后重新生成一个即可。二维码本身并没有编码什么新东西——它就是「复制链接」按钮给你的那条加入链接，只是渲染成了可扫描的方块而不是文字。谁打开那条链接，谁就会直接进入你的配对房间。",
       ],
     },
     {
       heading: "扫一下——不用装 App，不用账号",
       body: [
         "在另一台设备上打开相机 App（或任何二维码扫描工具），对准屏幕。点一下弹出的通知，会在浏览器里打开那条链接，并自动加入房间——扫码那一方不用打字，不用注册 relayium.com 账号，也没有任何东西要安装。",
-        "如果手边没有摄像头，同一条链接粘贴到任意浏览器里也能用，那六个字符的配对码打进 relayium.com 的\"输入配对码\"框里也一样能用。二维码只是叠加在两者之上的一层便利，不是另一套机制——哪个方便用哪个。",
+        "如果手边没有摄像头，同一条链接粘贴到任意浏览器里也能用，那六个字符的配对码打进 relayium.com 的「输入配对码」框里也一样能用。二维码只是叠加在两者之上的一层便利，不是另一套机制——哪个方便用哪个。",
       ],
     },
     {
       heading: "扫码之后发生了什么",
       body: [
-        "扫码只是让两台设备进到同一个房间；传输本身和其它任何配对码会话完全一样。两边浏览器用 X25519 密钥交换协商出共享密钥，用 AES-256-GCM 对每个数据块加密，再把这些数据块通过架在 TURN 中继上的 WebRTC 通道发出去。",
-        "两块屏幕会显示同一段六位数字校验码（SAS）——扫一眼两边，确认一致后再信任这条连接；这正是发现中间人恶意中继的办法。配对码传输一律走这条中继路径，而不是先去试直连：跨越两个网络时直连路径通常根本不存在，先探一遍只会让连接卡住二十秒左右，最后仍旧落到中继上。中继只转发密文——它没有密钥，永远看不到你的文件内容。每个文件都会用 SHA-256 哈希做端到端校验，中途断开也能续传而不必重来。",
+        "扫码只是让两台设备进到同一个房间；传输本身和其他任何配对码会话完全一样。两边浏览器用 X25519 密钥交换协商出共享密钥，用 AES-256-GCM 对每个数据块加密，再把这些数据块通过架在 TURN 中继上的 WebRTC 通道发出去。",
+        "两块屏幕会显示同一段六位数字校验码（SAS）——扫一眼两边，确认一致后再信任这条连接；这正是发现中间人恶意中继的办法。配对码传输一律走这条中继路径，而不是先去试直连：跨越两个网络时直连路径通常根本不存在，先探一遍只会让连接卡住二十秒左右，最后仍旧落到中继上。中继只转发密文——它没有密钥，永远看不到你的文件内容。每个文件都会用 SHA-256 哈希做端到端完整性校验，中途断开也能续传而不必重来。",
       ],
     },
     {
@@ -123,7 +123,7 @@ const zh = {
       },
       {
         q: "二维码里到底存的是什么？",
-        a: "和\"复制链接\"按钮复制出来的那条加入链接一模一样——一个内嵌了配对码的 relayium.com 网址。扫一下，就是在浏览器里打开那条链接，然后自动加入房间。",
+        a: "和「复制链接」按钮复制出来的那条加入链接一模一样——一个内嵌了配对码的 relayium.com 网址。扫一下，就是在浏览器里打开那条链接，然后自动加入房间。",
       },
       {
         q: "扫二维码和手动输码一样安全吗？",
@@ -153,35 +153,35 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "6文字のコードを入力するのも速いですが、スキャンならさらに速いです。スマホのカメラを画面に向けるだけで、コードを入力し終える前に転送の準備が整います。Relayium のペアリング画面がペアリングコードと並べて QR コードを表示するのは、まさにこのためです。",
-    "これはネットワークをまたぐ転送方式で、同じ Wi-Fi でも、地球の反対側同士でも動作します。QR コードはこの方式への近道にすぎません——スキャンが不便なら、その下にあるコードやリンクもまったく同じように使えます。",
+    "これはネットワークをまたぐ転送方式で、同じ Wi-Fi でも、地球の反対側同士でも動作します。QR コードはこの方式への近道にすぎません。スキャンが不便なら、その下にあるコードやリンクもまったく同じように使えます。",
   ],
   sections: [
     {
       heading: "コードを作ると QR も表示される",
       body: [
-        "送信側の端末で relayium.com を開いてサインインします——ペアリングコードの作成は、Relayium が唯一アカウントを求める場面です。コードは誰かに帰属している必要があるからです。ファイル、フォルダを選ぶか、ファイルなしでまず接続だけ済ませることもできます。",
+        "送信側の端末で relayium.com を開いてサインインします。ペアリングコードの作成は、Relayium が唯一アカウントを求める場面です。コードは誰かに帰属している必要があるからです。ファイル、フォルダを選ぶか、ファイルなしでまず接続だけ済ませることもできます。",
         "Relayium は短いペアリングコードを発行し、その隣に QR コードを描画します。コードは、紛らわしい字形をすべて除いた文字セットから選ばれた6文字で、0 と O も 1 と I も含まれません。有効期間は5分で、切れたら新しいものを発行し直します。QR コードは何か新しい情報を含んでいるわけではなく、「リンクをコピー」ボタンで得られるのと同じ参加リンクを、テキストではなくスキャン可能な四角形として表示しているだけです。そのリンクを開いた人は、そのままペアリングルームに入ります。",
       ],
     },
     {
-      heading: "スキャンするだけ——アプリもアカウントも不要",
+      heading: "スキャンするだけ、アプリもアカウントも不要",
       body: [
-        "もう一方の端末でカメラアプリ（または任意の QR スキャナー）を開き、画面に向けます。表示された通知をタップするとブラウザでリンクが開き、自動的にルームに参加します——スキャンする側は入力も relayium.com のアカウントも不要で、インストールするものも何もありません。",
-        "カメラが使えない場合も、同じリンクを任意のブラウザに貼り付ければ使えますし、6文字のコードを relayium.com の「コードを入力」欄に打ち込んでも同様に使えます。QR コードはこの両方の上に重ねられた利便性にすぎず、別の仕組みではありません——その場でやりやすい方を選んでください。",
+        "もう一方の端末でカメラアプリ（または任意の QR スキャナー）を開き、画面に向けます。表示された通知をタップするとブラウザでリンクが開き、自動的にルームに参加します。スキャンする側は入力も relayium.com のアカウントも不要で、インストールするものも何もありません。",
+        "カメラが使えない場合も、同じリンクを任意のブラウザに貼り付ければ使えますし、6文字のコードを relayium.com の「コードを入力」欄に打ち込んでも同様に使えます。QR コードはこの両方の上に重ねられた利便性にすぎず、別の仕組みではありません。その場でやりやすい方を選んでください。",
       ],
     },
     {
       heading: "スキャン後に起きること",
       body: [
         "スキャンは2台の端末を同じルームに入れるだけで、転送そのものは他のペアリングコードのセッションと変わりません。両端末は X25519 鍵交換で共有鍵を導出し、各チャンクを AES-256-GCM で暗号化したうえで、TURN リレー上に張られた WebRTC チャネルで送り出します。",
-        "両方の画面に同じ6桁の検証コード（SAS）が表示されるので、両方を見比べて一致を確認してから接続を信頼してください——これが、間に悪意あるリレーが入り込んでいないかを見抜く方法です。ペアリングコードによる転送は、まず直接経路を探すのではなく必ずこのリレー経由で行われます。ネットワークをまたぐ場合、直接経路はそもそも存在しないことがほとんどで、探しに行けば接続確立が20秒ほど止まったあげく結局リレーに落ち着くからです。リレーが転送するのは暗号文だけで、鍵を持たないためファイルの中身を見ることはありません。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証され、接続が切れても最初からではなく再開できます。",
+        "両方の画面に同じ6桁の検証コード（SAS）が表示されるので、両方を見比べて一致を確認してから接続を信頼してください。これが、間に悪意あるリレーが入り込んでいないかを見抜く方法です。ペアリングコードによる転送は、まず直接経路を探すのではなく必ずこのリレー経由で行われます。ネットワークをまたぐ場合、直接経路はそもそも存在しないことがほとんどで、探しに行けば接続確立が20秒ほど止まったあげく結局リレーに落ち着くからです。リレーが転送するのは暗号文だけで、鍵を持たないためファイルの中身を見ることはありません。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証され、接続が切れても最初からではなく再開できます。",
       ],
     },
     {
       heading: "スキャンできないときは",
       body: [
-        "カメラのピントが合わない、照明が悪い、あるいは片方の端末にそもそもカメラがない——そうした事情で転送が止まる必要はありません。送信側のペアリングカードには、生のコードとリンクをコピーするボタン（対応端末では共有シートのボタンも）に加えて、コードの失効までのカウントダウンも表示されます。",
-        "コードを打ち直す、リンクを貼り付ける、あるいは共有シートで別の方法（チャットや AirDrop など、いちばん速いもの）で送る——どの経路をたどっても同じルームに入り、同じ暗号化された接続が得られます。QR コードは複数ある入口の一つにすぎず、必須ではありません。",
+        "カメラのピントが合わない、照明が悪い、あるいは片方の端末にそもそもカメラがない。そうした事情で転送が止まる必要はありません。送信側のペアリングカードには、生のコードとリンクをコピーするボタン（対応端末では共有シートのボタンも）に加えて、コードの失効までのカウントダウンも表示されます。",
+        "コードを打ち直す、リンクを貼り付ける、あるいは共有シートで別の方法（チャットや AirDrop など、いちばん速いもの）で送る。どの経路をたどっても同じルームに入り、同じ暗号化された接続が得られます。QR コードは複数ある入口の一つにすぎず、必須ではありません。",
       ],
     },
   ],
@@ -194,7 +194,7 @@ const ja = {
       },
       {
         q: "QR コードには実際には何が入っていますか？",
-        a: "「リンクをコピー」ボタンでコピーされるのと同じ参加リンクです——ペアリングコードが埋め込まれた relayium.com の URL です。スキャンするとブラウザでそのリンクが開き、自動的にルームに参加します。",
+        a: "「リンクをコピー」ボタンでコピーされるのと同じ参加リンクです。ペアリングコードが埋め込まれた relayium.com の URL です。スキャンするとブラウザでそのリンクが開き、自動的にルームに参加します。",
       },
       {
         q: "QR コードのスキャンはコードを入力するのと同じくらい安全ですか？",
@@ -202,16 +202,16 @@ const ja = {
       },
       {
         q: "QR コードがスキャンできない場合は？",
-        a: "何も失われません——同じペアリングカードに生のコードとコピー可能なリンクが表示され、対応端末では共有シートのボタンもあります。どれを使っても QR コードと同じルームに入れます。",
+        a: "何も失われません。同じペアリングカードに生のコードとコピー可能なリンクが表示され、対応端末では共有シートのボタンもあります。どれを使っても QR コードと同じルームに入れます。",
       },
       {
         q: "スマホがモバイル通信、PC が自宅 Wi-Fi のように、異なるネットワーク間でも使えますか？",
-        a: "はい。これはもともとネットワークをまたぐペアリング方式なので、2台が同じネットワークであってもなくても動作します。ペアリングコードでの接続は常に暗号化された TURN リレーを経由します——NAT の都合で直接接続がまず通らないネットワーク同士でも確実につながる経路で、リレーが運ぶのは暗号文だけです。直接つながるのは、コードなしで互いを見つけ合う同一ネットワークの場合です。",
+        a: "はい。これはもともとネットワークをまたぐペアリング方式なので、2台が同じネットワークであってもなくても動作します。ペアリングコードでの接続は常に暗号化された TURN リレーを経由します。NAT の都合で直接接続がまず通らないネットワーク同士でも確実につながる経路で、リレーが運ぶのは暗号文だけです。直接つながるのは、コードなしで互いを見つけ合う同一ネットワークの場合です。",
       },
     ],
   },
   cta: {
-    text: "Relayium を開いてコードを作成し、別の端末で QR コードのスキャンを試してみてください——スキャンする側はアプリもアカウントも不要です。",
+    text: "Relayium を開いてコードを作成し、別の端末で QR コードのスキャンを試してみてください。スキャンする側はアプリもアカウントも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -231,7 +231,7 @@ const ko = {
       heading: "코드를 만들면 QR도 함께 생깁니다",
       body: [
         "보내는 쪽 기기에서 relayium.com을 열고 로그인합니다 — 페어링 코드를 만드는 것이 Relayium이 계정을 요구하는 유일한 순간인데, 코드는 누군가에게 귀속되어야 하기 때문입니다. 파일이나 폴더를 고르거나, 파일 없이 우선 연결만 시작할 수도 있습니다.",
-        "Relayium은 짧은 페어링 코드를 발급하고 바로 옆에 QR 코드를 그립니다. 코드는 헷갈리는 글자를 모두 걷어낸 문자 집합에서 고른 여섯 글자라, 0도 O도, 1도 I도 들어가지 않습니다. 유효 시간은 5분이며, 지나면 새로 만들면 됩니다. QR 코드는 새로운 정보를 담고 있는 게 아니라, '링크 복사' 버튼으로 얻는 것과 같은 참여 링크를 텍스트 대신 스캔 가능한 사각형으로 표시할 뿐입니다. 그 링크를 여는 사람은 곧바로 당신의 페어링 방으로 들어갑니다.",
+        "Relayium은 짧은 페어링 코드를 발급하고 바로 옆에 QR 코드를 그립니다. 코드는 헷갈리는 글자를 모두 걷어낸 문자 집합에서 고른 여섯 글자라, 0도 O도, 1도 I도 들어가지 않습니다. 유효 시간은 5분이며, 지나면 새로 만들면 됩니다. QR 코드는 새로운 정보를 담고 있는 게 아니라, '링크 복사' 버튼으로 얻는 것과 같은 참여 링크를 텍스트 대신 스캔 가능한 사각형으로 표시할 뿐입니다. 그 링크를 여는 사람은 곧바로 페어링 방으로 들어갑니다.",
       ],
     },
     {
@@ -316,7 +316,7 @@ const de = {
       heading: "Was nach dem Scannen passiert",
       body: [
         "Scannen bringt die beiden Geräte lediglich in denselben Raum; die Übertragung selbst unterscheidet sich nicht von jeder anderen Pairing-Code-Sitzung. Die beiden Browser leiten mit einem X25519-Schlüsselaustausch einen gemeinsamen Schlüssel ab, verschlüsseln jeden Block mit AES-256-GCM und schicken ihn über einen WebRTC-Kanal, der auf einem TURN-Relay aufsetzt.",
-        "Beide Bildschirme zeigen denselben sechsstelligen Prüfcode (SAS) — vergleicht beide und bestätigt die Übereinstimmung, bevor ihr der Verbindung vertraut; so entlarvt man ein böswilliges Relay in der Mitte. Eine Übertragung per Pairing-Code nimmt immer diesen Relay-Weg, statt zuerst nach einem direkten Pfad zu suchen: Über zwei Netzwerke hinweg gibt es meist gar keinen, und die Suche würde den Verbindungsaufbau rund 20 Sekunden aufhalten, bevor er ohnehin beim Relay endet. Das Relay leitet ausschließlich Chiffretext weiter — es besitzt keinen Schlüssel und sieht eure Dateien nie. Jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft, und eine unterbrochene Verbindung kann fortgesetzt statt neu gestartet werden.",
+        "Beide Bildschirme zeigen denselben sechsstelligen Verifizierungscode (SAS) — vergleiche beide und bestätige die Übereinstimmung, bevor du der Verbindung vertraust; so entlarvt man ein böswilliges Relay in der Mitte. Eine Übertragung per Pairing-Code nimmt immer diesen Relay-Weg, statt zuerst nach einem direkten Pfad zu suchen: Über zwei Netzwerke hinweg gibt es meist gar keinen, und die Suche würde den Verbindungsaufbau rund 20 Sekunden aufhalten, bevor er ohnehin beim Relay endet. Das Relay leitet ausschließlich Chiffretext weiter — es besitzt keinen Schlüssel und sieht deine Dateien nie. Jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft, und eine unterbrochene Verbindung kann fortgesetzt statt neu gestartet werden.",
       ],
     },
     {
@@ -340,7 +340,7 @@ const de = {
       },
       {
         q: "Ist das Scannen des QR-Codes genauso sicher wie das Eintippen des Codes?",
-        a: "Ja, die Verbindung ist in beiden Fällen identisch. Beide Geräte handeln weiterhin einen X25519-Schlüsselaustausch aus, verschlüsseln mit AES-256-GCM und zeigen einen übereinstimmenden SAS-Prüfcode, den ihr vor dem Vertrauen kontrollieren solltet. Der QR-Code ändert nur, wie ihr in den Raum kommt, nicht wie die Übertragung abgesichert ist.",
+        a: "Ja, die Verbindung ist in beiden Fällen identisch. Beide Geräte handeln weiterhin einen X25519-Schlüsselaustausch aus, verschlüsseln mit AES-256-GCM und zeigen einen übereinstimmenden SAS-Verifizierungscode, den du vor dem Vertrauen kontrollieren solltest. Der QR-Code ändert nur, wie du in den Raum kommst, nicht wie die Übertragung abgesichert ist.",
       },
       {
         q: "Was, wenn sich der QR-Code nicht scannen lässt?",
@@ -362,39 +362,39 @@ const de = {
 const fr = {
   title: "Transférer des fichiers en scannant un code QR",
   description:
-    "Envoyez des fichiers en scannant un QR lié à un code d'appairage : transfert chiffré de bout en bout sur tout le trajet. Sans appli ni compte pour la personne qui scanne.",
+    "Envoyez des fichiers en scannant un code QR lié à un code d'appairage : transfert chiffré de bout en bout sur tout le trajet. Sans appli ni compte pour la personne qui scanne.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Taper un code de six caractères est rapide, mais scanner l'est encore plus : pointez la caméra du téléphone vers l'écran, et le transfert est prêt avant même d'avoir fini de taper le code. C'est exactement pour cela que l'écran d'appairage de Relayium affiche un code QR juste à côté de chaque code d'appairage.",
-    "C'est le mode d'appairage entre réseaux différents : il fonctionne que les deux appareils soient sur le même Wi-Fi ou aux antipodes l'un de l'autre. Le QR n'est qu'un raccourci vers ce mode — le code et le lien qu'il contient fonctionnent exactement de la même façon si scanner n'est pas pratique.",
+    "Taper un code de six caractères est rapide, mais scanner l'est encore plus : pointez la caméra du téléphone vers l'écran, et le transfert est prêt avant même d'avoir fini de taper le code. C'est exactement pour cela que l'écran d'appairage de Relayium affiche un code QR juste à côté de chaque code d'appairage.",
+    "C'est le mode d'appairage entre réseaux différents : il fonctionne que les deux appareils soient sur le même Wi-Fi ou aux antipodes l'un de l'autre. Le code QR n'est qu'un raccourci vers ce mode — le code et le lien qu'il contient fonctionnent exactement de la même façon si scanner n'est pas pratique.",
   ],
   sections: [
     {
-      heading: "Créez un code, obtenez un QR",
+      heading: "Créez un code, obtenez un code QR",
       body: [
         "Sur l'appareil expéditeur, ouvrez relayium.com et connectez-vous — créer un code d'appairage est le seul moment où Relayium demande un compte, car le code doit appartenir à quelqu'un. Choisissez un fichier, un dossier, ou connectez-vous simplement sans fichier en attente.",
-        "Relayium génère un court code d'appairage — six caractères tirés d'un alphabet dont toutes les formes ambiguës ont été retirées : ni 0 ni O, ni 1 ni I — et affiche juste à côté un code QR. Le code reste valable cinq minutes ; passé ce délai, il suffit d'en générer un autre. Ce QR n'encode rien de nouveau : c'est le même lien de participation que fournit le bouton « copier le lien », simplement représenté sous forme de carré scannable plutôt qu'en texte. Quiconque ouvre ce lien atterrit directement dans votre salon d'appairage.",
+        "Relayium génère un court code d'appairage — six caractères tirés d'un alphabet dont toutes les formes ambiguës ont été retirées : ni 0 ni O, ni 1 ni I — et affiche juste à côté un code QR. Le code reste valable cinq minutes ; passé ce délai, il suffit d'en générer un autre. Ce code QR n'encode rien de nouveau : c'est le même lien de participation que fournit le bouton « copier le lien », simplement représenté sous forme de carré scannable plutôt qu'en texte. Quiconque ouvre ce lien atterrit directement dans votre salle d'appairage.",
       ],
     },
     {
       heading: "Il suffit de scanner — sans appli, sans compte",
       body: [
-        "Sur l'autre appareil, ouvrez l'appli appareil photo (ou n'importe quel scanner QR) et pointez-la vers l'écran. Toucher la notification qui apparaît ouvre le lien dans un navigateur, qui rejoint automatiquement le salon — la personne qui scanne n'a rien à taper, pas besoin de compte relayium.com, et rien à installer.",
+        "Sur l'autre appareil, ouvrez l'appli appareil photo (ou n'importe quel lecteur de code QR) et pointez-la vers l'écran. Toucher la notification qui apparaît ouvre le lien dans un navigateur, qui rejoint automatiquement la salle — la personne qui scanne n'a rien à taper, pas besoin de compte relayium.com, et rien à installer.",
         "Si une caméra n'est pas à portée de main, le même lien fonctionne collé dans n'importe quel navigateur, et le code de six caractères fonctionne tout aussi bien tapé dans le champ « saisir le code » de relayium.com. Le code QR est une commodité ajoutée par-dessus les deux, pas un mécanisme distinct — choisissez ce qui est le plus simple sur le moment.",
       ],
     },
     {
       heading: "Ce qui se passe après le scan",
       body: [
-        "Scanner ne fait qu'amener les deux appareils dans le même salon ; le transfert lui-même ne diffère en rien de n'importe quelle autre session par code d'appairage. Les deux navigateurs dérivent une clé partagée via un échange de clés X25519, chiffrent chaque bloc avec AES-256-GCM, puis les envoient sur un canal WebRTC porté par un relais TURN.",
-        "Les deux écrans affichent le même code de vérification à six chiffres (SAS) — comparez-les et confirmez qu'ils concordent avant de faire confiance à la connexion ; c'est ainsi qu'on repère un relais malveillant placé au milieu. Un transfert par code d'appairage emprunte toujours cette voie du relais au lieu de chercher d'abord un chemin direct : entre deux réseaux, il n'y en a généralement aucun, et le chercher retarderait l'établissement de la connexion d'une vingtaine de secondes avant d'aboutir malgré tout au relais. Le relais ne transmet que du texte chiffré — il ne détient aucune clé et ne voit jamais vos fichiers. Chaque fichier est vérifié de bout en bout par une empreinte SHA-256, et une connexion interrompue peut reprendre au lieu de tout recommencer.",
+        "Scanner ne fait qu'amener les deux appareils dans la même salle ; le transfert lui-même ne diffère en rien de n'importe quelle autre session par code d'appairage. Les deux navigateurs dérivent une clé partagée via un échange de clés X25519, chiffrent chaque bloc avec AES-256-GCM, puis les envoient sur un canal WebRTC porté par un relais TURN.",
+        "Les deux écrans affichent le même code de vérification à six chiffres (SAS) — comparez-les et confirmez qu'il concorde avant de faire confiance à la connexion ; c'est ainsi qu'on repère un relais malveillant placé au milieu. Un transfert par code d'appairage emprunte toujours cette voie du relais au lieu de chercher d'abord un chemin direct : entre deux réseaux, il n'y en a généralement aucun, et le chercher retarderait l'établissement de la connexion d'une vingtaine de secondes avant d'aboutir malgré tout au relais. Le relais ne transmet que du texte chiffré — il ne détient aucune clé et ne voit jamais vos fichiers. Chaque fichier est vérifié de bout en bout par une empreinte SHA-256, et une connexion interrompue peut reprendre au lieu de tout recommencer.",
       ],
     },
     {
       heading: "Si le scan ne fonctionne pas",
       body: [
         "La caméra a du mal à faire le point, l'éclairage est mauvais, ou l'un des appareils n'a tout simplement pas de caméra sous la main — rien de tout cela ne devrait bloquer le transfert. La carte d'appairage sur l'appareil expéditeur affiche aussi des boutons pour copier le code brut et le lien (plus un bouton de partage sur les appareils qui le prennent en charge), ainsi qu'un compte à rebours jusqu'à l'expiration du code.",
-        "Retapez le code, collez le lien, ou utilisez le partage pour l'envoyer autrement (messagerie, AirDrop, ce qui est le plus rapide) — chaque chemin mène au même salon et obtient la même connexion chiffrée. Le code QR n'est qu'un point d'entrée parmi d'autres, jamais une obligation.",
+        "Retapez le code, collez le lien, ou utilisez le partage pour l'envoyer autrement (messagerie, AirDrop, ce qui est le plus rapide) — chaque chemin mène à la même salle et obtient la même connexion chiffrée. Le code QR n'est qu'un point d'entrée parmi d'autres, jamais une obligation.",
       ],
     },
   ],
@@ -402,70 +402,70 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "La personne qui scanne le QR a-t-elle besoin d'un compte Relayium ?",
-        a: "Non. Seul l'expéditeur se connecte pour créer le code d'appairage et son QR. Celui qui le scanne ne fait que rejoindre le salon déjà créé — pas de compte, pas d'inscription, rien à installer.",
+        q: "La personne qui scanne le code QR a-t-elle besoin d'un compte Relayium ?",
+        a: "Non. Seul l'expéditeur se connecte pour créer le code d'appairage et son code QR. Celui qui le scanne ne fait que rejoindre la salle déjà créée — pas de compte, pas d'inscription, rien à installer.",
       },
       {
-        q: "Que contient exactement le code QR ?",
-        a: "Le même lien de participation que copie le bouton « copier le lien » — une URL relayium.com contenant le code d'appairage. Le scanner ouvre simplement ce lien dans le navigateur, qui rejoint automatiquement le salon.",
+        q: "Que contient exactement le code QR ?",
+        a: "Le même lien de participation que copie le bouton « copier le lien » — une URL relayium.com contenant le code d'appairage. Le scanner ouvre simplement ce lien dans le navigateur, qui rejoint automatiquement la salle.",
       },
       {
-        q: "Scanner le QR est-il aussi sûr que taper le code ?",
-        a: "Oui, la connexion est strictement identique dans les deux cas. Les deux appareils négocient toujours un échange de clés X25519, chiffrent avec AES-256-GCM et affichent un code de vérification SAS concordant à contrôler avant de faire confiance au transfert. Le QR ne change que la façon d'entrer dans le salon, pas la façon dont le transfert est sécurisé.",
+        q: "Scanner le code QR est-il aussi sûr que taper le code ?",
+        a: "Oui, la connexion est strictement identique dans les deux cas. Les deux appareils négocient toujours un échange de clés X25519, chiffrent avec AES-256-GCM et affichent un code de vérification SAS concordant à contrôler avant de faire confiance au transfert. Le code QR ne change que la façon d'entrer dans la salle, pas la façon dont le transfert est sécurisé.",
       },
       {
-        q: "Et si le code QR ne veut pas se scanner ?",
-        a: "Rien n'est perdu — la même carte d'appairage affiche le code brut et un lien copiable, plus un bouton de partage sur les appareils compatibles. N'importe lequel des deux mène au même salon que le QR.",
+        q: "Et si le code QR ne veut pas se scanner ?",
+        a: "Rien n'est perdu — la même carte d'appairage affiche le code brut et un lien copiable, plus un bouton de partage sur les appareils compatibles. N'importe lequel des deux mène à la même salle que le code QR.",
       },
       {
-        q: "Est-ce que ça marche entre réseaux différents, par exemple téléphone en données mobiles et PC sur le Wi-Fi de la maison ?",
+        q: "Est-ce que cela marche entre réseaux différents, par exemple téléphone en données mobiles et PC sur le Wi-Fi de la maison ?",
         a: "Oui. C'est par nature le mode d'appairage entre réseaux différents, donc il fonctionne que les deux appareils partagent un réseau ou non. Un code d'appairage relie toujours les deux via un relais TURN chiffré — la voie fiable entre des réseaux dont les NAT empêchent le plus souvent toute liaison directe — et ce relais ne transporte que du texte chiffré. Ce sont les appareils d'un même réseau, qui se trouvent sans code, qui se connectent directement.",
       },
     ],
   },
   cta: {
-    text: "Ouvrez Relayium, créez un code, et essayez de scanner le QR avec un autre appareil — la personne qui scanne n'a besoin ni d'appli ni de compte.",
+    text: "Ouvrez Relayium, créez un code, et essayez de scanner le code QR avec un autre appareil — la personne qui scanne n'a besoin ni d'appli ni de compte.",
     button: "Essayer Relayium maintenant",
   },
   relatedHeading: "À lire ensuite",
 };
 
 const ar = {
-  title: "نقل الملفات بمسح رمز QR ضوئياً",
+  title: "نقل الملفات بمسح رمز QR ضوئيًا",
   description:
-    "أرسل الملفات بمسح رمز QR من جلسة اقتران ضوئياً — النقل مشفَّر من الطرف إلى الطرف طوال الطريق. لا حاجة إلى تطبيق أو حساب للشخص الذي يمسح.",
+    "أرسل الملفات بمسح رمز QR من جلسة اقتران ضوئيًا — النقل مشفَّر من الطرف إلى الطرف طوال الطريق. لا حاجة إلى تطبيق أو حساب للشخص الذي يمسح.",
   updatedLabel: "آخر تحديث",
   lead: [
     "إدخال رمز من ستة محارف سريع، لكن المسح الضوئي أسرع — وجّه كاميرا الهاتف نحو الشاشة ويُهيَّأ النقل قبل أن تنتهي من الكتابة. تُظهر عملية اقتران Relayium رمز QR إلى جانب كل رمز اقتران لهذا السبب بالضبط.",
-    "هذا هو التدفق عبر الشبكات: فهو يعمل سواء أكان الجهازان على نفس شبكة Wi-Fi أم على طرفي الكوكب المتقابلين. رمز QR ليس سوى اختصار إلى ذلك التدفق — فالرمز والرابط الكامنان تحته يعملان بالطريقة نفسها تماماً إن لم يكن المسح مناسباً.",
+    "هذا هو مسار النقل عبر الشبكات: فهو يعمل سواء أكان الجهازان على نفس شبكة Wi-Fi أم على طرفي الكوكب المتقابلين. رمز QR ليس سوى اختصار إلى ذلك المسار — فالرمز والرابط الكامنان تحته يعملان بالطريقة نفسها تمامًا إن لم يكن المسح مناسبًا.",
   ],
   sections: [
     {
-      heading: "أنشئ رمزاً، واحصل على QR",
+      heading: "أنشئ رمزًا، واحصل على QR",
       body: [
-        "على جهاز الإرسال، افتح relayium.com وسجّل الدخول — إنشاء رمز اقتران هو الموضع الوحيد الذي يطلب فيه Relayium حساباً، لأن الرمز يجب أن يعود لشخص ما. اختر ملفاً أو مجلداً، أو اتصل فقط دون ملفات في الانتظار بعد.",
-        "يُنشئ Relayium رمز اقتران قصيراً — ستة محارف من مجموعة حُذفت منها كل الأشكال المتشابهة، فلا 0 ولا O ولا 1 ولا I — وإلى جانبه مباشرةً، يعرض رمز QR. ويبقى الرمز صالحاً خمس دقائق، وبعدها تُنشئ رمزاً جديداً. لا يشفّر رمز QR أي شيء جديد — إنه رابط الانضمام نفسه الذي يمنحك إياه زر \"نسخ الرابط\"، معروضاً على هيئة مربع قابل للمسح بدلاً من نص. من يفتح ذلك الرابط يصل مباشرةً إلى غرفة الاقتران خاصتك.",
+        "على جهاز الإرسال، افتح relayium.com وسجّل الدخول — إنشاء رمز اقتران هو الموضع الوحيد الذي يطلب فيه Relayium حسابًا، لأن الرمز يجب أن يعود لشخص ما. اختر ملفًا أو مجلدًا، أو اتصل فقط دون ملفات في الانتظار بعد.",
+        "يُنشئ Relayium رمز اقتران قصيرًا — ستة محارف من مجموعة حُذفت منها كل الأشكال المتشابهة، فلا 0 ولا O ولا 1 ولا I — وإلى جانبه مباشرةً، يعرض رمز QR. ويبقى الرمز صالحًا خمس دقائق، وبعدها تُنشئ رمزًا جديدًا. لا يحمل رمز QR أي شيء جديد — إنه رابط الانضمام نفسه الذي يمنحك إياه زر «نسخ الرابط»، معروضًا على هيئة مربع قابل للمسح بدلًا من نص. من يفتح ذلك الرابط يصل مباشرةً إلى غرفة الاقتران لديك.",
       ],
     },
     {
-      heading: "امسحه ضوئياً — لا تطبيق، لا حساب",
+      heading: "امسحه ضوئيًا — لا تطبيق، لا حساب",
       body: [
-        "على الجهاز الآخر، افتح تطبيق الكاميرا (أو أي ماسح QR) ووجّهه نحو الشاشة. النقر على الإشعار الذي يظهر يفتح الرابط في متصفح، والذي ينضم إلى الغرفة تلقائياً — لا كتابة، ولا حساب relayium.com للشخص الذي يمسح، ولا شيء يُثبَّت.",
-        "إن لم تكن الكاميرا في المتناول، يعمل الرابط نفسه ملصوقاً في أي متصفح، ويعمل الرمز المؤلف من ستة محارف مكتوباً في خانة \"أدخل الرمز\" على relayium.com. رمز QR وسيلة راحة مضافة فوق كليهما، لا آلية منفصلة — اختر أيهما أسهل في اللحظة.",
+        "على الجهاز الآخر، افتح تطبيق الكاميرا (أو أي ماسح QR) ووجّهه نحو الشاشة. النقر على الإشعار الذي يظهر يفتح الرابط في متصفح، فينضم إلى الغرفة تلقائيًا — لا كتابة، ولا حساب relayium.com للشخص الذي يمسح، ولا شيء يُثبَّت.",
+        "إن لم تكن الكاميرا في المتناول، يعمل الرابط نفسه ملصوقًا في أي متصفح، ويعمل الرمز المؤلف من ستة محارف مكتوبًا في خانة «أدخل الرمز» على relayium.com. رمز QR وسيلة راحة مضافة فوق كليهما، لا آلية منفصلة — اختر أيهما أسهل في اللحظة.",
       ],
     },
     {
       heading: "ما يحدث بعد المسح",
       body: [
-        "المسح يُدخل الجهازين إلى الغرفة نفسها فحسب؛ أما النقل نفسه فلا يتغير عن أي جلسة رمز اقتران أخرى. يشتقّ المتصفحان مفتاحاً مشتركاً بتبادل مفاتيح X25519، ويشفّران كل جزء بـ AES-256-GCM، ثم يرسلانه عبر قناة WebRTC محمولة على مُرحِّل TURN.",
-        "تعرض الشاشتان نفس رمز التحقق المؤلف من ست خانات رقمية (SAS) — ألقِ نظرة على كليهما وأكّد تطابقهما قبل أن تثق بالاتصال؛ هكذا تكشف مُرحِّلاً خبيثاً يقف في المنتصف. والنقل عبر رمز اقتران يسلك دائماً طريق المُرحِّل هذا بدل البحث أولاً عن مسار مباشر: فبين شبكتين مختلفتين لا وجود لمسار مباشر في الغالب، والبحث عنه يعطّل إنشاء الاتصال نحو عشرين ثانية ثم ينتهي إلى المُرحِّل على أي حال. ولا يُمرِّر المُرحِّل سوى نص مُشفَّر — فهو بلا مفتاح، ولا يرى ملفاتك أبداً. يُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256، ويمكن للاتصال المنقطع أن يُستأنف بدلاً من البدء من جديد.",
+        "المسح يُدخل الجهازين إلى الغرفة نفسها فحسب؛ أما النقل نفسه فلا يتغير عن أي جلسة رمز اقتران أخرى. يشتقّ المتصفحان مفتاحًا مشتركًا بتبادل مفاتيح X25519، ويشفّران كل جزء بـ AES-256-GCM، ثم يرسلانه عبر قناة WebRTC محمولة على مُرحِّل TURN.",
+        "تعرض الشاشتان نفس رمز التحقق المؤلف من ست خانات رقمية (SAS) — ألقِ نظرة على كليهما وأكّد تطابقهما قبل أن تثق بالاتصال؛ هكذا تكشف مُرحِّلًا خبيثًا يقف في المنتصف. والنقل عبر رمز اقتران يسلك دائمًا طريق المُرحِّل هذا بدل البحث أولًا عن مسار مباشر: فبين شبكتين مختلفتين لا وجود لمسار مباشر في الغالب، والبحث عنه يعطّل إنشاء الاتصال نحو عشرين ثانية ثم ينتهي إلى المُرحِّل على أي حال. ولا يُمرِّر المُرحِّل سوى نص مُشفَّر — فهو بلا مفتاح، ولا يرى ملفاتك أبدًا. يُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256، ويمكن للاتصال المنقطع أن يُستأنف بدلًا من البدء من جديد.",
       ],
     },
     {
       heading: "إن لم يعمل المسح",
       body: [
-        "قد تخطئ الكاميرات، أو تكون الإضاءة سيئة، أو لا يكون لدى أحد الجهازين كاميرا في المتناول — لا ينبغي لأي من ذلك أن يعطّل النقل. تعرض بطاقة الاقتران على جهاز الإرسال أيضاً أزرار نسخ للرمز الخام وللرابط (وزر ورقة مشاركة على الأجهزة التي تدعمها)، إضافةً إلى عدّ تنازلي حتى انتهاء صلاحية الرمز.",
-        "أعد كتابة الرمز، أو الصق الرابط، أو استخدم ورقة المشاركة لإرساله بطريقة أخرى (محادثة، AirDrop، أياً كان الأسرع) — كل مسار يصل إلى الغرفة نفسها ويحصل على الاتصال المشفَّر نفسه. رمز QR واحد من عدة مداخل، وليس شرطاً أبداً.",
+        "قد تخطئ الكاميرات، أو تكون الإضاءة سيئة، أو لا يكون لدى أحد الجهازين كاميرا في المتناول — لا ينبغي لأي من ذلك أن يعطّل النقل. تعرض بطاقة الاقتران على جهاز الإرسال أيضًا أزرار نسخ للرمز الخام وللرابط (وزر ورقة مشاركة على الأجهزة التي تدعمها)، إضافةً إلى عدّ تنازلي حتى انتهاء صلاحية الرمز.",
+        "أعد كتابة الرمز، أو الصق الرابط، أو استخدم ورقة المشاركة لإرساله بطريقة أخرى (محادثة، AirDrop، أيًا كان الأسرع) — كل مسار يصل إلى الغرفة نفسها ويحصل على الاتصال المشفَّر نفسه. رمز QR واحد من عدة مداخل، وليس شرطًا أبدًا.",
       ],
     },
   ],
@@ -477,25 +477,25 @@ const ar = {
         a: "لا. المُرسِل وحده يسجّل الدخول لإنشاء رمز الاقتران ورمز QR الخاص به. من يمسحه ينضم فقط إلى الغرفة التي أُنشئت بالفعل — لا حساب، لا تسجيل، ولا شيء يُثبَّت.",
       },
       {
-        q: "ماذا يحتوي رمز QR فعلاً؟",
-        a: "رابط الانضمام نفسه الذي ينسخه زر \"نسخ الرابط\" — عنوان URL على relayium.com برمز الاقتران مضمّناً فيه. مسحه ضوئياً يفتح ذلك الرابط في المتصفح فحسب، والذي ينضم إلى الغرفة تلقائياً.",
+        q: "ماذا يحتوي رمز QR فعلًا؟",
+        a: "رابط الانضمام نفسه الذي ينسخه زر «نسخ الرابط» — عنوان URL على relayium.com برمز الاقتران مضمّنًا فيه. مسحه ضوئيًا يفتح ذلك الرابط في المتصفح فحسب، فينضم إلى الغرفة تلقائيًا.",
       },
       {
         q: "هل مسح رمز QR آمن بقدر إدخال الرمز؟",
-        a: "نعم، إنه الاتصال ذاته في كلتا الحالتين. لا يزال الجهازان يتفاوضان على تبادل مفاتيح X25519، ويشفّران بـ AES-256-GCM، ويعرضان رمز تحقق SAS متطابقاً ينبغي لك التحقق منه قبل أن تثق بالنقل. رمز QR يغير فقط كيف تدخل الغرفة، لا كيف يُؤمَّن النقل.",
+        a: "نعم، إنه الاتصال ذاته في كلتا الحالتين. لا يزال الجهازان يتفاوضان على تبادل مفاتيح X25519، ويشفّران بـ AES-256-GCM، ويعرضان رمز تحقق SAS متطابقًا ينبغي لك التحقق منه قبل أن تثق بالنقل. رمز QR يغير فقط كيف تدخل الغرفة، لا كيف يُؤمَّن النقل.",
       },
       {
         q: "ماذا لو لم يُمسح رمز QR؟",
-        a: "لا شيء يُفقد — تعرض بطاقة الاقتران نفسها الرمز الخام ورابطاً قابلاً للنسخ، وزر ورقة مشاركة على الأجهزة المدعومة. أي منها يفتح الغرفة نفسها التي يفتحها رمز QR.",
+        a: "لا شيء يُفقد — تعرض بطاقة الاقتران نفسها الرمز الخام ورابطًا قابلًا للنسخ، وزر ورقة مشاركة على الأجهزة المدعومة. أي منها يفتح الغرفة نفسها التي يفتحها رمز QR.",
       },
       {
         q: "هل يعمل هذا عبر شبكات مختلفة، مثل بيانات الهاتف مع شبكة Wi-Fi المنزلية؟",
-        a: "نعم. هذا هو تدفق الاقتران عبر الشبكات، لذا فهو يعمل سواء أكان الجهازان يتشاركان شبكة أم لا. ورمز الاقتران يصل بينهما دائماً عبر مُرحِّل TURN مشفَّر — وهو المسار الموثوق بين شبكات كثيراً ما تمنع فيها NAT أي اتصال مباشر — ولا يحمل ذلك المُرحِّل إلا نصاً مُشفَّراً. أما الاتصال المباشر فهو ما يحدث بين أجهزة على الشبكة نفسها يعثر بعضها على بعض دون رمز.",
+        a: "نعم. هذا هو مسار الاقتران عبر الشبكات، لذا فهو يعمل سواء أكان الجهازان يتشاركان شبكة أم لا. ورمز الاقتران يصل بينهما دائمًا عبر مُرحِّل TURN مشفَّر — وهو المسار الموثوق بين شبكات كثيرًا ما تمنع فيها NAT أي اتصال مباشر — ولا يحمل ذلك المُرحِّل إلا نصًا مُشفَّرًا. أما الاتصال المباشر فهو ما يحدث بين أجهزة على الشبكة نفسها يعثر بعضها على بعض دون رمز.",
       },
     ],
   },
   cta: {
-    text: "افتح Relayium، وأنشئ رمزاً، وجرّب مسح رمز QR بجهاز آخر — لا حاجة إلى تطبيق أو حساب للشخص الذي يمسح.",
+    text: "افتح Relayium، وأنشئ رمزًا، وجرّب مسح رمز QR بجهاز آخر — لا حاجة إلى تطبيق أو حساب للشخص الذي يمسح.",
     button: "جرّب Relayium الآن",
   },
   relatedHeading: "تابع القراءة",
@@ -515,14 +515,14 @@ const es = {
       heading: "Crea un código, obtén un QR",
       body: [
         "En el dispositivo que envía, abre relayium.com e inicia sesión — crear un código de emparejamiento es el único punto en el que Relayium pide una cuenta, porque el código tiene que pertenecer a alguien. Elige un archivo, una carpeta, o simplemente conéctate sin archivos en cola todavía.",
-        "Relayium genera un código de emparejamiento corto — seis caracteres de un alfabeto al que se le han quitado todas las formas que se confunden entre sí, así que no hay 0 ni O, ni 1 ni I — y, justo al lado, representa un código QR. El código vale cinco minutos; pasados esos, generas otro. El QR no codifica nada nuevo — es el mismo enlace de unión que te da el botón \"copiar enlace\", solo que representado como un cuadrado escaneable en lugar de texto. Quien abra ese enlace llega directamente a tu sala de emparejamiento.",
+        "Relayium genera un código de emparejamiento corto — seis caracteres de un alfabeto al que se le han quitado todas las formas que se confunden entre sí, así que no hay 0 ni O, ni 1 ni I — y, justo al lado, representa un código QR. El código vale cinco minutos; pasados esos, generas otro. El QR no codifica nada nuevo — es el mismo enlace de unión que te da el botón «copiar enlace», solo que representado como un cuadrado escaneable en lugar de texto. Quien abra ese enlace llega directamente a tu sala de emparejamiento.",
       ],
     },
     {
       heading: "Escanéalo — sin app, sin cuenta",
       body: [
         "En el otro dispositivo, abre la app de la cámara (o cualquier escáner de QR) y apúntala a la pantalla. Tocar la notificación que aparece abre el enlace en un navegador, que se une a la sala automáticamente — sin escribir nada, sin cuenta de relayium.com para quien escanea, y sin nada que instalar.",
-        "Si no tienes una cámara a mano, el mismo enlace funciona pegado en cualquier navegador, y el código de seis caracteres funciona escrito en el cuadro de \"introducir código\" de relayium.com. El QR es una comodidad añadida sobre ambos, no un mecanismo aparte — elige lo que sea más fácil en el momento.",
+        "Si no tienes una cámara a mano, el mismo enlace funciona pegado en cualquier navegador, y el código de seis caracteres funciona escrito en el cuadro de «introducir código» de relayium.com. El QR es una comodidad añadida sobre ambos, no un mecanismo aparte — elige lo que sea más fácil en el momento.",
       ],
     },
     {
@@ -549,7 +549,7 @@ const es = {
       },
       {
         q: "¿Qué contiene en realidad el código QR?",
-        a: "El mismo enlace de unión que copia el botón \"copiar enlace\" — una URL de relayium.com con el código de emparejamiento incorporado. Escanearlo simplemente abre ese enlace en el navegador, que se une a la sala automáticamente.",
+        a: "El mismo enlace de unión que copia el botón «copiar enlace» — una URL de relayium.com con el código de emparejamiento incorporado. Escanearlo simplemente abre ese enlace en el navegador, que se une a la sala automáticamente.",
       },
       {
         q: "¿Escanear el QR es tan seguro como escribir el código?",
@@ -586,14 +586,14 @@ const pt = {
       heading: "Crie um código, obtenha um QR",
       body: [
         "No dispositivo que envia, abra relayium.com e faça login — criar um código de emparelhamento é o único ponto em que o Relayium pede uma conta, porque o código precisa pertencer a alguém. Escolha um arquivo, uma pasta, ou apenas conecte sem arquivos na fila ainda.",
-        "O Relayium gera um código de emparelhamento curto — seis caracteres de um alfabeto do qual foram retiradas todas as formas que se confundem, então não há 0 nem O, nem 1 nem I — e, logo ao lado, renderiza um código QR. O código vale cinco minutos; depois disso, basta gerar outro. O QR não codifica nada de novo — é o mesmo link de entrada que o botão \"copiar link\" oferece, apenas renderizado como um quadrado escaneável em vez de texto. Quem abrir esse link chega direto à sua sala de emparelhamento.",
+        "O Relayium gera um código de emparelhamento curto — seis caracteres de um alfabeto do qual foram retiradas todas as formas que se confundem, então não há 0 nem O, nem 1 nem I — e, logo ao lado, renderiza um código QR. O código vale cinco minutos; depois disso, basta gerar outro. O QR não codifica nada de novo — é o mesmo link de entrada que o botão “copiar link” oferece, apenas renderizado como um quadrado escaneável em vez de texto. Quem abrir esse link chega direto à sua sala de emparelhamento.",
       ],
     },
     {
       heading: "Escaneie — sem app, sem conta",
       body: [
         "No outro dispositivo, abra o app da câmera (ou qualquer leitor de QR) e aponte para a tela. Tocar na notificação que aparece abre o link em um navegador, que entra na sala automaticamente — sem digitar nada, sem conta relayium.com para quem escaneia, e nada para instalar.",
-        "Se não houver uma câmera à mão, o mesmo link funciona colado em qualquer navegador, e o código de seis caracteres funciona digitado na caixa \"inserir código\" de relayium.com. O QR é uma comodidade sobreposta aos dois, não um mecanismo separado — escolha o que for mais fácil no momento.",
+        "Se não houver uma câmera à mão, o mesmo link funciona colado em qualquer navegador, e o código de seis caracteres funciona digitado na caixa “inserir código” de relayium.com. O QR é uma comodidade sobreposta aos dois, não um mecanismo separado — escolha o que for mais fácil no momento.",
       ],
     },
     {
@@ -620,7 +620,7 @@ const pt = {
       },
       {
         q: "O que o código QR contém de fato?",
-        a: "O mesmo link de entrada que o botão \"copiar link\" copia — uma URL relayium.com com o código de emparelhamento embutido. Escaneá-lo apenas abre esse link no navegador, que entra na sala automaticamente.",
+        a: "O mesmo link de entrada que o botão “copiar link” copia — uma URL relayium.com com o código de emparelhamento embutido. Escaneá-lo apenas abre esse link no navegador, que entra na sala automaticamente.",
       },
       {
         q: "Escanear o QR é tão seguro quanto digitar o código?",

@@ -134,23 +134,23 @@ const zh = {
   otherDocLabel: "服务条款",
   lead: [
     "Relayium 的设计宗旨是让你的文件始终属于你。实时直连传输以点对点方式进行，端到端加密，绝不经过我们的服务器；可选的暂存下载链接模式采用零知识加密——服务器仅存储无法解读的密文。",
-    "本页说明本服务确实会处理的少量数据,以及它刻意从不接触的数据。",
+    "本页说明本服务确实会处理的少量数据，以及它刻意从不接触的数据。",
   ],
   sections: [
     {
       heading: "局域网传输不收集任何数据",
       body: [
-        "在同一网络下的设备之间传输文件时,无需账号,服务也不会存储任何关于你的信息。信令服务器只帮助两台设备相互发现;文件字节通过加密的 WebRTC 通道在设备之间直接流动。",
+        "在同一网络下的设备之间传输文件时，无需账号，服务也不会存储任何关于你的信息。信令服务器只帮助两台设备相互发现；文件字节通过加密的 WebRTC 通道在设备之间直接流动。",
       ],
     },
     {
-      heading: "账号会存储什么(仅在你登录时)",
-      body: ["同一网络(局域网)内的传输无需账号。跨网络使用配对码传输时,需要发送方登录——接收方始终无需账号。创建暂存下载链接同样需要登录。如果你登录,我们只存储运行账号所必需的最少信息:"],
+      heading: "账号会存储什么（仅在你登录时）",
+      body: ["同一网络（局域网）内的传输无需账号。跨网络使用配对码传输时，需要发送方登录——接收方始终无需账号。创建暂存下载链接同样需要登录。如果你登录，我们只存储运行账号所必需的最少信息："],
       bullets: [
-        "你的邮箱地址和一个显示名。",
-        "你使用的登录方式(通过 Apple 登录、Google、邮箱魔法链接,或邮箱+密码)。魔法链接令牌只以哈希形式存储,绝不明文保存;如果你设置了密码,我们只存储其 bcrypt 哈希值,绝不存储密码本身。如果你使用「通过 Apple 登录」并选择 Apple 的私密邮件转发,我们只会看到该转发地址。",
-        "登录会话,保存在安全的 httpOnly cookie 中。",
-        "你注册的设备,以一个随机设备 id 和设备名(例如你的平台名称)的形式。",
+        "你的邮箱地址和显示名。",
+        "你使用的登录方式（通过 Apple 登录、Google、邮箱魔法链接，或邮箱+密码）。魔法链接令牌只以哈希形式存储，绝不明文保存；如果你设置了密码，我们只存储其 bcrypt 哈希值，绝不存储密码本身。如果你使用「通过 Apple 登录」并选择 Apple 的私密邮件转发，我们只会看到该转发地址。",
+        "登录会话，保存在安全的 httpOnly cookie 中。",
+        "你注册的设备，以一个随机设备 id 和设备名（例如你的平台名称）的形式。",
       ],
     },
     {
@@ -161,35 +161,35 @@ const zh = {
       bullets: [
         "服务器仅存储密文，无法读取你的文件内容、文件名或密钥。",
         "我们记录密文大小和时间戳（上传时间、有效期）用于配额管理和清理。",
-        "密文在到期或首次完整下载（阅后即焚）时自动删除，以先到者为准。",
+        "密文在到期或首次完整下载（阅后即焚）时自动删除，以较早发生者为准。",
       ],
     },
     {
       heading: "我们绝不收集什么",
-      body: ["本服务的设计确保以下内容绝不会到达我们的服务器:"],
+      body: ["本服务的设计确保以下内容绝不会到达我们的服务器："],
       bullets: ["你的文件内容。", "你的文件名。", "你的加密密钥。"],
     },
     {
-      heading: "跨网络中继(TURN)",
+      heading: "跨网络中继（TURN）",
       body: [
-        "浏览器的跨网络传输按设计经 TURN 服务器中继,而不只是在直连失败时才回退到中继。中继依然无法读取你的文件——它们始终保持端到端加密。我们按账号记录中继字节数,用于执行每月中继额度限制并防止滥用——我们绝不检查中继的内容,只记录字节数。",
+        "浏览器的跨网络传输按设计经 TURN 服务器中继，而不只是在直连失败时才回退到中继。中继依然无法读取你的文件——它们始终保持端到端加密。我们按账号记录中继字节数，用于执行每月中继额度限制并防止滥用——我们绝不检查中继的内容，只记录字节数。",
       ],
     },
     {
       heading: "Cookie 与本地存储",
       body: [
-        "我们使用一个会话 cookie 来保持你的登录状态。在你浏览器的本地存储中,我们保存一个随机设备 id,以便识别你注册过的设备。我们不使用广告或追踪 cookie。",
+        "我们使用一个会话 cookie 来保持你的登录状态。在你浏览器的本地存储中，我们保存一个随机设备 id，以便识别你注册过的设备。我们不使用广告或追踪 cookie。",
       ],
     },
     {
       heading: "第三方服务",
-      body: ["只有在你选择使用时,才会涉及少数第三方:"],
+      body: ["只有在你选择使用时，才会涉及少数第三方："],
       bullets: [
-        "Google——如果你用 Google 登录,我们会获取你的邮箱和基本资料以创建账号。",
-        "Apple——如果你使用「通过 Apple 登录」,我们会获取一个稳定标识符,以及你选择分享的邮箱(或 Apple 的私密转发地址)。",
-        "Stripe——我们在网页端订阅的支付处理方,详见「支付」。",
-        "Apple——在 iOS App 内通过应用内购买订阅时的处理方,详见「支付」。",
-        "邮件发送服务商——用于发送账号邮件,如魔法链接登录与验证邮件。",
+        "Google——如果你用 Google 登录，我们会获取你的邮箱和基本资料以创建账号。",
+        "Apple——如果你使用「通过 Apple 登录」，我们会获取一个稳定标识符，以及你选择分享的邮箱（或 Apple 的私密转发地址）。",
+        "Stripe——我们在网页端订阅的支付处理方，详见「支付」。",
+        "Apple——在 iOS App 内通过应用内购买订阅时的处理方，详见「支付」。",
+        "邮件发送服务商——用于发送账号邮件，如魔法链接登录与验证邮件。",
       ],
     },
     {
@@ -198,47 +198,47 @@ const zh = {
         "只有在你购买付费套餐时才会涉及支付数据。我们绝不接收或存储你的完整卡号。",
       ],
       bullets: [
-        "在网页端,支付由 Stripe 处理。卡片信息提交给 Stripe,而非我们;我们只获得一个客户引用和由此产生的订阅状态。",
-        "在 iOS App 内,订阅通过 Apple 应用内购买完成。Apple 从你的 Apple ID 处理支付;我们只获知你持有一个有效订阅。",
-        "就你的账号而言,我们只存储你当前的套餐、订阅状态、计费周期与周期起止日期——绝不存储卡片数据。",
+        "在网页端，支付由 Stripe 处理。卡片信息提交给 Stripe，而非我们；我们只拿到一个客户标识和由此产生的订阅状态。",
+        "在 iOS App 内，订阅通过 Apple 应用内购买完成。Apple 从你的 Apple ID 处理支付；我们只获知你持有一个有效订阅。",
+        "就你的账号而言，我们只存储你当前的套餐、订阅状态、计费周期与周期起止日期——绝不存储卡片数据。",
       ],
     },
     {
       heading: "Relayium App",
       body: [
-        "我们的原生 App 会处理少量网站不涉及的设备级数据:",
+        "我们的原生 App 会处理少量网站不涉及的设备级数据：",
       ],
       bullets: [
-        "推送通知:如果你开启,我们会存储一个 Apple 推送通知服务(APNs)设备令牌,以便向你的设备投递通知。你可以随时在设备设置中关闭通知。",
-        "相机与相册:仅在你的设备本地用于扫描二维码或选择要发送的文件。除你主动选择传输的文件外,不会从相机或相册采集或上传任何内容。",
-        "App 不会跨其他 App 或网站追踪你,也不含广告或第三方分析 SDK。",
+        "推送通知：如果你开启，我们会存储一个 Apple 推送通知服务（APNs）设备令牌，以便向你的设备投递通知。你可以随时在设备设置中关闭通知。",
+        "相机与相册：仅在你的设备本地用于扫描二维码或选择要发送的文件。除你主动选择传输的文件外，不会从相机或相册采集或上传任何内容。",
+        "App 不会跨其他 App 或网站追踪你，也不含广告或第三方分析 SDK。",
       ],
     },
     {
       heading: "数据保留与删除",
       body: [
-        "账号数据在你的账号存在期间保留。你可以随时在账号设置中(网页或 App 内)删除你的账号及其数据。删除会进入 30 天宽限期,期间你可重新登录撤销;之后你的账号及个人数据将被永久移除。因计费和防滥用而必须保留的汇总用量计数会被匿名化,不再与你关联。",
+        "账号数据在你的账号存在期间保留。你可以随时在账号设置中（网页或 App 内）删除你的账号及其数据。删除会进入 30 天宽限期，期间你可重新登录撤销；之后你的账号及个人数据将被永久移除。因计费和防滥用而必须保留的汇总用量计数会被匿名化，不再与你关联。",
       ],
     },
     {
       heading: "你的权利",
       body: [
-        "你可以访问、更正、导出或删除你的账号数据,并可反对或限制某些处理。其中大部分你可以自行在账号设置中完成;其他事项请发邮件至 support@relayium.com。我们不出售你的个人数据。在适用 GDPR 或类似法律的情况下,我们处理这少量数据的依据是履行你所请求的服务,以及我们在保障其安全、防止滥用方面的合法利益。",
+        "你可以访问、更正、导出或删除你的账号数据，并可反对或限制某些处理。其中大部分你可以自行在账号设置中完成；其他事项请发邮件至 support@relayium.com。我们不出售你的个人数据。在适用 GDPR 或类似法律的情况下，我们处理这少量数据的依据是履行你所请求的服务，以及我们在保障其安全、防止滥用方面的合法利益。",
       ],
     },
     {
       heading: "儿童",
       body: [
-        "Relayium 并非面向儿童。我们不会在知情的情况下收集 13 岁以下(或你所在地数字同意最低年龄以下)任何人的个人数据。如果你认为有儿童向我们提供了数据,请联系 support@relayium.com,我们会将其删除。",
+        "Relayium 并非面向儿童。我们不会在知情的情况下收集 13 岁以下（或你所在地数字同意最低年龄以下）任何人的个人数据。如果你认为有儿童向我们提供了数据，请联系 support@relayium.com，我们会将其删除。",
       ],
     },
     {
       heading: "本政策的变更",
-      body: ["随着服务演进,我们可能会更新本政策。届时我们会更新上方的「最后更新」日期。"],
+      body: ["随着服务演进，我们可能会更新本政策。届时我们会更新上方的「最后更新」日期。"],
     },
     {
       heading: "联系我们",
-      body: ["有隐私方面的疑问?请发邮件至 support@relayium.com。"],
+      body: ["有隐私方面的疑问？请发邮件至 support@relayium.com。"],
     },
   ],
 };
@@ -246,37 +246,37 @@ const zh = {
 const ja = {
   title: "プライバシーポリシー",
   description:
-    "Relayiumがあなたのデータを扱う方法：リアルタイム直接転送はピアツーピアかつエンドツーエンド暗号化で行われ、当社のサーバーを通過しません。一時保存ダウンロードリンク機能はファイルをゼロ知識暗号化で保護します。アカウントは任意で、メールアドレスと表示名のみを保存します。",
+    "Relayium がお客様のデータを扱う方法：リアルタイム直接転送はピアツーピアかつエンドツーエンド暗号化で行われ、当社のサーバーを通過しません。一時保存ダウンロードリンク機能はファイルをゼロ知識暗号化で保護します。アカウントは任意で、メールアドレスと表示名のみを保存します。",
   updatedLabel: "最終更新",
   updated: "2026-07-21",
   otherDocLabel: "利用規約",
   lead: [
-    "Relayiumはあなたのファイルが常にあなたのものであるよう設計されています。リアルタイムの直接転送はピアツーピアかつエンドツーエンド暗号化で行われ、当社のサーバーを通過しません——オプションの一時保存ダウンロードリンク機能はゼロ知識暗号化を使用するため、サーバーには解読不能な暗号文のみが保存されます。",
+    "Relayium は、ファイルが常にお客様のものであり続けるよう設計されています。リアルタイムの直接転送はピアツーピアかつエンドツーエンド暗号化で行われ、当社のサーバーを通過しません——オプションの一時保存ダウンロードリンク機能はゼロ知識暗号化を使用するため、サーバーには解読不能な暗号文のみが保存されます。",
     "このページでは、本サービスが実際に扱う少量のデータと、意図的に取得しないデータについて説明します。",
   ],
   sections: [
     {
       heading: "ローカルネットワーク転送ではデータを収集しません",
       body: [
-        "同じネットワーク上のデバイス間でファイルを転送する場合、アカウントは不要で、サービスはあなたに関する情報を一切保存しません。シグナリングサーバーは2台のデバイスが互いを見つけるのを助けるだけで、ファイルの実体は暗号化されたWebRTCチャネルを通じてデバイス間で直接やり取りされます。",
+        "同じネットワーク上のデバイス間でファイルを転送する場合、アカウントは不要で、サービスはお客様に関する情報を一切保存しません。シグナリングサーバーは 2 台のデバイスが互いを見つけるのを助けるだけで、ファイルの実体は暗号化された WebRTC チャネルを通じてデバイス間で直接やり取りされます。",
       ],
     },
     {
       heading: "アカウントに保存される情報（サインインした場合のみ）",
       body: [
-        "同一ネットワーク(LAN)内の転送はアカウント不要です。ペアリングコードを使ってネットワークをまたいで送信する場合は、送信者のサインインが必要です——受信者はアカウント不要のままです。保存型ダウンロードリンクの作成にもサインインが必要です。サインインした場合、アカウントの運用に必要な最小限の情報のみを保存します：",
+        "同一ネットワーク（LAN）内の転送はアカウント不要です。ペアリングコードを使ってネットワークをまたいで送信する場合は、送信者のサインインが必要です——受信者はアカウント不要のままです。保存型ダウンロードリンクの作成にもサインインが必要です。サインインした場合、アカウントの運用に必要な最小限の情報のみを保存します：",
       ],
       bullets: [
         "メールアドレスと表示名。",
-        "使用したサインイン方法（Appleでサインイン、Google、メールマジックリンク、またはメール+パスワード）。マジックリンクのトークンはハッシュ値のみ保存され、平文では保存されません。パスワードを設定した場合も、その bcrypt ハッシュのみを保存し、パスワード自体は保存しません。Appleのプライベートメールリレーを使用して「Appleでサインイン」した場合、当社が把握するのはそのリレーアドレスのみです。",
-        "ログインセッション。安全なhttpOnlyクッキーに保存されます。",
-        "登録したデバイス。ランダムなデバイスIDとデバイス名（例：プラットフォーム名）で管理されます。",
+        "使用したサインイン方法（Apple でサインイン、Google、メールマジックリンク、またはメール+パスワード）。マジックリンクのトークンはハッシュ値のみ保存され、平文では保存されません。パスワードを設定した場合も、その bcrypt ハッシュのみを保存し、パスワード自体は保存しません。Apple のプライベートメールリレーを使用して「Apple でサインイン」した場合、当社が把握するのはそのリレーアドレスのみです。",
+        "ログインセッション。安全な httpOnly クッキーに保存されます。",
+        "登録したデバイス。ランダムなデバイス ID とデバイス名（例：プラットフォーム名）で管理されます。",
       ],
     },
     {
       heading: "一時保存転送（ダウンロードリンク）",
       body: [
-        "オプションの一時保存ダウンロードリンク機能を使用する場合、ファイルはデバイスから送信される前にブラウザで AES-256-GCM 暗号化されます。復号キーは URL フラグメント（# 部分）にのみ存在し、サーバーには送信されません。これは以下を意味します：",
+        "オプションの一時保存ダウンロードリンク機能を使用する場合、ファイルはデバイスから送信される前にブラウザで AES-256-GCM 暗号化されます。復号キーは URL フラグメント（# 部分）にのみ存在し、サーバーには送信されません。つまり、次のとおりです。",
       ],
       bullets: [
         "サーバーは暗号文のみを保存します。ファイルの内容、ファイル名、キーを読み取ることはできません。",
@@ -296,23 +296,23 @@ const ja = {
     {
       heading: "クロスネットワーク中継（TURN）",
       body: [
-        "ブラウザでネットワークをまたぐ転送は、直接接続が失敗したときのフォールバックとしてではなく、設計上つねにTURNサーバーを経由して中継されます。中継サーバーはあなたのファイルを読み取ることができません——エンドツーエンド暗号化が維持されます。月間中継割り当ての管理と不正利用の防止のため、中継バイト数はアカウントごとに記録します——中継内容を検査することはなく、記録するのはバイト数のみです。",
+        "ブラウザでネットワークをまたぐ転送は、直接接続が失敗したときのフォールバックとしてではなく、設計上つねに TURN サーバーを経由して中継されます。中継サーバーがお客様のファイルを読み取ることはできません——エンドツーエンド暗号化が維持されます。月間中継割り当ての管理と不正利用の防止のため、中継バイト数はアカウントごとに記録します——中継内容を検査することはなく、記録するのはバイト数のみです。",
       ],
     },
     {
-      heading: "Cookieとローカルストレージ",
+      heading: "Cookie とローカルストレージ",
       body: [
-        "サインイン状態を維持するために1つのセッションCookieを使用します。ブラウザのローカルストレージには、登録済みデバイスを識別するためのランダムなデバイスIDを保存します。広告用または追跡用のCookieは使用しません。",
+        "サインイン状態を維持するために 1 つのセッション Cookie を使用します。ブラウザのローカルストレージには、登録済みデバイスを識別するためのランダムなデバイス ID を保存します。広告用または追跡用の Cookie は使用しません。",
       ],
     },
     {
       heading: "第三者サービス",
-      body: ["あなたが使用を選択した場合にのみ、一部の第三者が関与します："],
+      body: ["お客様が利用を選択した場合にのみ、一部の第三者が関与します："],
       bullets: [
-        "Google——Googleでサインインする場合、アカウント作成のためにメールアドレスと基本プロフィール情報を受け取ります。",
-        "Apple——「Appleでサインイン」を使用する場合、安定した識別子と、あなたが共有を選択したメールアドレス（またはAppleのプライベートリレーアドレス）を受け取ります。",
+        "Google——Google でサインインする場合、アカウント作成のためにメールアドレスと基本プロフィール情報を受け取ります。",
+        "Apple——「Apple でサインイン」を使用する場合、安定した識別子と、お客様が共有を選択したメールアドレス（または Apple のプライベートリレーアドレス）を受け取ります。",
         "Stripe——ウェブで購入したサブスクリプションの決済処理業者です。詳しくは「支払い」をご覧ください。",
-        "Apple——iOSアプリ内でアプリ内課金により購入したサブスクリプションについて。詳しくは「支払い」をご覧ください。",
+        "Apple——iOS アプリ内でアプリ内課金により購入したサブスクリプションについて。詳しくは「支払い」をご覧ください。",
         "メール配信プロバイダー——マジックリンクのサインインや確認メールなど、アカウント関連メールの送信に使用します。",
       ],
     },
@@ -322,38 +322,38 @@ const ja = {
         "有料プランを購入した場合にのみ、支払いに関するデータが共有されます。当社がカード番号の全体を受け取ったり保存したりすることは一切ありません。",
       ],
       bullets: [
-        "ウェブでは、支払いはStripeが処理します。カード情報は当社ではなくStripeに送られます。当社が受け取るのは顧客参照情報と、その結果としてのサブスクリプション状況のみです。",
-        "iOSアプリでは、サブスクリプションはApple のアプリ内課金を通じて購入されます。Appleがあなたの Apple ID のもとで支払いを処理します。当社が把握するのは、有効なサブスクリプションを保有しているという事実のみです。",
+        "ウェブでは、支払いは Stripe が処理します。カード情報は当社ではなく Stripe に送られます。当社が受け取るのは顧客参照情報と、その結果としてのサブスクリプション状況のみです。",
+        "iOS アプリでは、サブスクリプションは Apple のアプリ内課金を通じて購入されます。Apple がお客様の Apple ID のもとで支払いを処理します。当社が把握するのは、有効なサブスクリプションを保有しているという事実のみです。",
         "アカウントについて当社が保存するのは、現在のプラン、サブスクリプションの状況、請求サイクル、期間の日付のみであり、カード情報は一切保存しません。",
       ],
     },
     {
-      heading: "Relayiumアプリ",
+      heading: "Relayium アプリ",
       body: [
         "当社のネイティブアプリは、ウェブサイトでは扱わない、デバイスレベルの小さなデータを扱います：",
       ],
       bullets: [
         "プッシュ通知：有効にした場合、デバイスに通知を配信できるよう、Apple Push Notification service（APNs）のデバイストークンを保存します。通知はいつでもデバイスの設定でオフにできます。",
-        "カメラと写真：QRコードのスキャンや送信するファイルの選択のためにのみ、デバイス上で使用されます。あなたが意図的に転送を選んだファイル以外、カメラやライブラリから何も取得・アップロードされません。",
-        "アプリは他のアプリやウェブサイトを横断してあなたを追跡することはなく、広告や第三者の分析SDKも含まれていません。",
+        "カメラと写真：QR コードのスキャンや送信するファイルの選択のためにのみ、デバイス上で使用されます。お客様が意図的に転送を選んだファイル以外、カメラやライブラリから何も取得・アップロードされません。",
+        "アプリは他のアプリやウェブサイトを横断してお客様を追跡することはなく、広告や第三者の分析 SDK も含まれていません。",
       ],
     },
     {
       heading: "データの保持と削除",
       body: [
-        "アカウントデータはアカウントが存在する間保持されます。アカウントとそのデータは、アプリまたはウェブのアカウント設定からいつでもご自身で削除できます。削除を行うと30日間の猶予期間が始まり、その間に再度サインインすることで取り消すことができます。その後、アカウントと個人データは完全に削除されます。課金と不正利用防止のために保持が必要な集計利用カウンターは匿名化され、あなたと紐づかなくなります。",
+        "アカウントデータはアカウントが存在する間保持されます。アカウントとそのデータは、アプリまたはウェブのアカウント設定からいつでもご自身で削除できます。削除を行うと 30 日間の猶予期間が始まり、その間に再度サインインすることで取り消すことができます。その後、アカウントと個人データは完全に削除されます。課金と不正利用防止のために保持が必要な集計利用カウンターは匿名化され、お客様と紐づかなくなります。",
       ],
     },
     {
-      heading: "あなたの権利",
+      heading: "お客様の権利",
       body: [
-        "あなたは自分のアカウントデータへのアクセス、訂正、エクスポート、削除を求めることができ、また特定の処理に異議を唱えたり制限を求めたりすることもできます。その大半はアカウント設定でご自身で行えます。それ以外については support@relayium.com までメールでご連絡ください。当社はあなたの個人データを販売しません。GDPRまたは類似の法律が適用される場合、当社がこの少量のデータを処理する法的根拠は、あなたが依頼したサービスの提供、および安全性の確保と不正利用の防止という当社の正当な利益です。",
+        "お客様は、ご自身のアカウントデータへのアクセス、訂正、エクスポート、削除を求めることができ、また特定の処理に異議を唱えたり制限を求めたりすることもできます。その大半はアカウント設定でご自身で行えます。それ以外については support@relayium.com までメールでご連絡ください。当社はお客様の個人データを販売しません。GDPR または類似の法律が適用される場合、当社がこの少量のデータを処理する法的根拠は、お客様が依頼したサービスの提供、および安全性の確保と不正利用の防止という当社の正当な利益です。",
       ],
     },
     {
       heading: "子どもについて",
       body: [
-        "Relayiumは子ども向けのサービスではありません。当社は、13歳未満、またはお住まいの地域におけるデジタル同意の最低年齢未満の方から、意図的に個人データを収集することはありません。お子様が当社にデータを提供したと思われる場合は、support@relayium.com までご連絡ください。速やかに削除します。",
+        "Relayium は子ども向けのサービスではありません。当社は、13 歳未満、またはお住まいの地域におけるデジタル同意の最低年齢未満の方から、意図的に個人データを収集することはありません。お子様が当社にデータを提供したと思われる場合は、support@relayium.com までご連絡ください。速やかに削除します。",
       ],
     },
     {
@@ -364,7 +364,7 @@ const ja = {
     },
     {
       heading: "お問い合わせ",
-      body: ["プライバシーに関するご質問は、support@relayium.comまでメールでお問い合わせください。"],
+      body: ["プライバシーに関するご質問は、support@relayium.com までメールでお問い合わせください。"],
     },
   ],
 };
@@ -372,19 +372,19 @@ const ja = {
 const ko = {
   title: "개인정보 처리방침",
   description:
-    "Relayium이 데이터를 처리하는 방식: 실시간 직접 전송은 피어 투 피어로 이루어지며 당사 서버를 거치지 않습니다. 임시 보관 다운로드 링크 기능은 파일을 영지식 암호화로 보호합니다. 계정은 선택 사항이며 이메일 주소와 표시 이름만 저장합니다.",
+    "Relayium이 데이터를 처리하는 방식: 실시간 직접 전송은 P2P로 이루어지며 저희 서버를 거치지 않습니다. 임시 보관 다운로드 링크 기능은 파일을 영지식 암호화로 보호합니다. 계정은 선택 사항이며 이메일 주소와 표시 이름만 저장합니다.",
   updatedLabel: "최종 업데이트",
   updated: "2026-07-21",
   otherDocLabel: "이용약관",
   lead: [
-    "Relayium은 파일이 항상 사용자의 것으로 남도록 설계되었습니다. 실시간 직접 전송은 피어 투 피어로 이루어지며, 엔드 투 엔드로 암호화되어 당사 서버를 통과하지 않습니다——선택적 임시 보관 다운로드 링크 기능은 영지식 암호화를 사용하여 서버에는 해독할 수 없는 암호문만 저장됩니다.",
+    "Relayium은 파일이 항상 사용자의 것으로 남도록 설계되었습니다. 실시간 직접 전송은 P2P로 이루어지며, 종단간 암호화가 적용되어 저희 서버를 통과하지 않습니다——선택적 임시 보관 다운로드 링크 기능은 영지식 암호화를 사용하여 서버에는 해독할 수 없는 암호문만 저장됩니다.",
     "이 페이지에서는 서비스가 실제로 처리하는 소량의 데이터와 의도적으로 수집하지 않는 데이터를 설명합니다.",
   ],
   sections: [
     {
       heading: "로컬 네트워크 전송은 아무것도 수집하지 않습니다",
       body: [
-        "동일한 네트워크상의 장치 간에 파일을 전송할 때는 계정이 필요하지 않으며 서비스는 사용자에 관한 어떤 정보도 저장하지 않습니다. 시그널링 서버는 두 장치가 서로를 찾도록 도울 뿐이며, 파일 데이터는 암호화된 WebRTC 채널을 통해 장치 간에 직접 전송됩니다.",
+        "동일한 네트워크상의 기기 간에 파일을 전송할 때는 계정이 필요하지 않으며 서비스는 사용자에 관한 어떤 정보도 저장하지 않습니다. 시그널링 서버는 두 기기가 서로를 찾도록 도울 뿐이며, 파일 데이터는 암호화된 WebRTC 채널을 통해 기기 간에 직접 전송됩니다.",
       ],
     },
     {
@@ -394,9 +394,9 @@ const ko = {
       ],
       bullets: [
         "이메일 주소와 표시 이름.",
-        "사용한 로그인 방식(Apple로 로그인, Google, 이메일 매직 링크, 또는 이메일+비밀번호). 매직 링크 토큰은 해시값으로만 저장되며 평문으로는 저장되지 않습니다. 비밀번호를 설정한 경우에도 bcrypt 해시값만 저장하며 비밀번호 자체는 저장하지 않습니다. Apple의 비공개 이메일 릴레이와 함께 'Apple로 로그인'을 사용하는 경우, 저희는 해당 릴레이 주소만 확인합니다.",
+        "사용한 로그인 방식(Apple로 로그인, Google, 이메일 매직 링크, 또는 이메일+비밀번호). 매직 링크 토큰은 해시값으로만 저장되며 평문으로는 저장되지 않습니다. 비밀번호를 설정한 경우에도 bcrypt 해시값만 저장하며 비밀번호 자체는 저장하지 않습니다. Apple의 비공개 이메일 릴레이와 함께 ‘Apple로 로그인’을 사용하는 경우, 저희는 해당 릴레이 주소만 확인합니다.",
         "로그인 세션. 안전한 httpOnly 쿠키에 보관됩니다.",
-        "등록한 장치. 임의 장치 ID와 장치 이름(예: 플랫폼 이름)으로 관리됩니다.",
+        "등록한 기기. 임의 기기 ID와 기기 이름(예: 플랫폼 이름)으로 관리됩니다.",
       ],
     },
     {
@@ -412,7 +412,7 @@ const ko = {
     },
     {
       heading: "절대 수집하지 않는 정보",
-      body: ["서비스는 다음 정보가 당사 서버에 도달하지 않도록 설계되어 있습니다:"],
+      body: ["서비스는 다음 정보가 저희 서버에 도달하지 않도록 설계되어 있습니다:"],
       bullets: [
         "파일 내용.",
         "파일 이름.",
@@ -422,13 +422,13 @@ const ko = {
     {
       heading: "크로스 네트워크 릴레이(TURN)",
       body: [
-        "브라우저의 네트워크 간 전송은 직접 연결이 실패했을 때의 대체 수단이 아니라 설계상 TURN 서버를 통해 중계됩니다. 릴레이 서버는 여전히 파일을 읽을 수 없습니다——엔드 투 엔드 암호화가 유지됩니다. 월간 릴레이 허용량을 적용하고 남용을 방지하기 위해 계정별로 릴레이된 바이트 수를 기록합니다——중계 내용은 절대 검사하지 않으며, 오직 바이트 수만 기록합니다.",
+        "브라우저의 네트워크 간 전송은 직접 연결이 실패했을 때의 대체 수단이 아니라 설계상 TURN 서버를 통해 중계됩니다. 릴레이 서버는 여전히 파일을 읽을 수 없습니다——종단간 암호화가 유지됩니다. 월간 릴레이 허용량을 적용하고 남용을 방지하기 위해 계정별로 릴레이된 바이트 수를 기록합니다——중계 내용은 절대 검사하지 않으며, 오직 바이트 수만 기록합니다.",
       ],
     },
     {
       heading: "쿠키 및 로컬 스토리지",
       body: [
-        "로그인 상태를 유지하기 위해 세션 쿠키 하나를 사용합니다. 브라우저의 로컬 스토리지에는 등록된 장치를 식별하기 위한 임의 장치 ID를 저장합니다. 광고 또는 추적 쿠키는 사용하지 않습니다.",
+        "로그인 상태를 유지하기 위해 세션 쿠키 하나를 사용합니다. 브라우저의 로컬 스토리지에는 등록된 기기를 식별하기 위한 임의 기기 ID를 저장합니다. 광고 또는 추적 쿠키는 사용하지 않습니다.",
       ],
     },
     {
@@ -436,9 +436,9 @@ const ko = {
       body: ["사용자가 선택하여 사용하는 경우에만 일부 제3자가 관여합니다:"],
       bullets: [
         "Google — Google로 로그인하는 경우, 계정 생성을 위해 이메일 주소와 기본 프로필 정보를 받습니다.",
-        "Apple — 'Apple로 로그인'을 사용하는 경우, 고정된 식별자와 사용자가 공유하기로 선택한 이메일(또는 Apple의 비공개 릴레이 주소)을 받습니다.",
-        "Stripe — 웹에서 구매한 구독의 결제 처리업체입니다. 자세한 내용은 '결제'를 참고하세요.",
-        "Apple — iOS 앱 내 인앱 구매로 구매한 구독에 대해서입니다. 자세한 내용은 '결제'를 참고하세요.",
+        "Apple — ‘Apple로 로그인’을 사용하는 경우, 고정된 식별자와 사용자가 공유하기로 선택한 이메일(또는 Apple의 비공개 릴레이 주소)을 받습니다.",
+        "Stripe — 웹에서 구매한 구독의 결제 처리업체입니다. 자세한 내용은 ‘결제’를 참고하세요.",
+        "Apple — iOS 앱 내 인앱 구매로 구매한 구독에 대해서입니다. 자세한 내용은 ‘결제’를 참고하세요.",
         "이메일 발송 서비스 제공업체 — 매직 링크 로그인, 인증 등 계정 관련 이메일 전송에 사용됩니다.",
       ],
     },
@@ -456,7 +456,7 @@ const ko = {
     {
       heading: "Relayium 앱",
       body: [
-        "당사의 네이티브 앱은 웹사이트에서는 다루지 않는 소량의 기기 수준 데이터를 처리합니다:",
+        "저희 네이티브 앱은 웹사이트에서는 다루지 않는 소량의 기기 수준 데이터를 처리합니다:",
       ],
       bullets: [
         "푸시 알림: 활성화하면 기기에 알림을 전달할 수 있도록 Apple Push Notification service(APNs) 기기 토큰을 저장합니다. 알림은 언제든지 기기 설정에서 끌 수 있습니다.",
@@ -485,7 +485,7 @@ const ko = {
     {
       heading: "이 방침의 변경",
       body: [
-        "서비스가 발전함에 따라 이 방침을 업데이트할 수 있습니다. 업데이트 시 위의 '최종 업데이트' 날짜를 변경합니다.",
+        "서비스가 발전함에 따라 이 방침을 업데이트할 수 있습니다. 업데이트 시 위의 ‘최종 업데이트’ 날짜를 변경합니다.",
       ],
     },
     {
@@ -503,7 +503,7 @@ const de = {
   updated: "2026-07-21",
   otherDocLabel: "Nutzungsbedingungen",
   lead: [
-    "Relayium ist so konzipiert, dass Ihre Dateien Ihnen gehören. Echtzeit-Direktübertragungen erfolgen Peer-to-Peer, Ende-zu-Ende-verschlüsselt, und passieren nie unsere Server – der optionale Modus für zwischengespeicherte Download-Links verwendet Zero-Knowledge-Verschlüsselung, sodass der Server nur Chiffretext speichert, den er nicht lesen kann.",
+    "Relayium ist so konzipiert, dass Ihre Dateien Ihnen gehören. Echtzeit-Direktübertragungen erfolgen Peer-to-Peer, Ende-zu-Ende-verschlüsselt, und passieren nie unsere Server — der optionale Modus für zwischengespeicherte Download-Links verwendet Zero-Knowledge-Verschlüsselung, sodass der Server nur Chiffretext speichert, den er nicht lesen kann.",
     "Diese Seite erläutert, mit welchen wenigen Daten der Dienst tatsächlich umgeht und welche Daten er bewusst nie einsieht.",
   ],
   sections: [
@@ -533,7 +533,7 @@ const de = {
       bullets: [
         "Der Server speichert ausschließlich Chiffretext. Er kann Ihre Dateiinhalte, Dateinamen oder Schlüssel nicht lesen.",
         "Wir erfassen die Chiffretextgröße und Zeitstempel (Upload-Zeitpunkt, Ablaufzeit) für Kontingentverwaltung und Bereinigung.",
-        "Der Chiffretext wird automatisch gelöscht, wenn er abläuft oder beim ersten vollständigen Download (einmaliges Lesen) — je nachdem, was zuerst eintritt.",
+        "Der Chiffretext wird automatisch gelöscht, wenn er abläuft oder beim ersten vollständigen Download (Burn-after-read) — je nachdem, was zuerst eintritt.",
       ],
     },
     {
@@ -624,29 +624,29 @@ const de = {
 const fr = {
   title: "Politique de confidentialité",
   description:
-    "Comment Relayium traite vos données : les transferts directs en temps réel s'effectuent de pair à pair et ne passent jamais par nos serveurs ; le mode de liens de téléchargement stockés maintient les fichiers chiffrés à connaissance nulle. Les comptes sont facultatifs et ne stockent qu'une adresse e-mail et un nom d'affichage.",
+    "Comment Relayium traite vos données : les transferts directs en temps réel s'effectuent de pair à pair et ne passent jamais par nos serveurs ; le mode de liens de téléchargement stockés maintient les fichiers chiffrés à divulgation nulle. Les comptes sont facultatifs et ne stockent qu'une adresse e-mail et un nom d'affichage.",
   updatedLabel: "Dernière mise à jour",
   updated: "2026-07-21",
   otherDocLabel: "Conditions d'utilisation",
   lead: [
-    "Relayium est conçu pour que vos fichiers restent les vôtres. Les transferts directs en temps réel s'effectuent de pair à pair, chiffrés de bout en bout, et ne passent jamais par nos serveurs ; le mode optionnel de liens de téléchargement stockés utilise un chiffrement à connaissance nulle — le serveur ne conserve que du chiffré qu'il ne peut pas lire.",
+    "Relayium est conçu pour que vos fichiers restent les vôtres. Les transferts directs en temps réel s'effectuent de pair à pair, chiffrés de bout en bout, et ne passent jamais par nos serveurs ; le mode optionnel de liens de téléchargement stockés utilise un chiffrement à divulgation nulle — le serveur ne conserve que du chiffré qu'il ne peut pas lire.",
     "Cette page explique les quelques données que le service traite effectivement, et celles qu'il ne voit délibérément jamais.",
   ],
   sections: [
     {
       heading: "Les transferts sur réseau local ne collectent rien",
       body: [
-        "Lorsque vous transférez des fichiers entre appareils sur le même réseau, aucun compte n'est nécessaire et le service ne stocke rien vous concernant. Le serveur de signalisation aide simplement les deux appareils à se trouver mutuellement ; les données de fichiers circulent directement d'appareil à appareil via un canal WebRTC chiffré.",
+        "Lorsque vous transférez des fichiers entre appareils sur le même réseau, aucun compte n'est nécessaire et le service ne stocke rien vous concernant. Le serveur de signalisation aide simplement les deux appareils à se trouver mutuellement ; les données de fichiers circulent directement d'appareil à appareil via un canal WebRTC chiffré.",
       ],
     },
     {
       heading: "Ce que stocke un compte (uniquement si vous vous connectez)",
       body: [
-        "Les transferts sur le même réseau (local) ne nécessitent aucun compte. L'envoi entre réseaux différents via un code d'appairage exige que l'expéditeur se connecte — la personne qui reçoit n'a jamais besoin de compte. La création d'un lien de téléchargement stocké exige elle aussi une connexion. En cas de connexion, nous stockons le strict minimum nécessaire au fonctionnement du compte :",
+        "Les transferts sur le même réseau (local) ne nécessitent aucun compte. L'envoi entre réseaux différents via un code d'appairage exige que l'expéditeur se connecte — la personne qui reçoit n'a jamais besoin de compte. La création d'un lien de téléchargement stocké exige elle aussi une connexion. En cas de connexion, nous stockons le strict minimum nécessaire au fonctionnement du compte :",
       ],
       bullets: [
         "Votre adresse e-mail et un nom d'affichage.",
-        "La méthode de connexion utilisée (Se connecter avec Apple, Google, un lien magique par e-mail, ou e-mail + mot de passe). Les jetons de lien magique sont stockés uniquement sous forme de hachage, jamais en clair ; si vous définissez un mot de passe, nous ne stockons que son hachage bcrypt, jamais le mot de passe lui-même. Si vous utilisez « Se connecter avec Apple » avec le relais d'e-mail privé d'Apple, nous ne voyons jamais que cette adresse de relais.",
+        "La méthode de connexion utilisée (Se connecter avec Apple, Google, un lien magique par e-mail, ou e-mail + mot de passe). Les jetons de lien magique sont stockés uniquement sous forme de hachage, jamais en clair ; si vous définissez un mot de passe, nous ne stockons que son hachage bcrypt, jamais le mot de passe lui-même. Si vous utilisez « Se connecter avec Apple » avec le relais d'e-mail privé d'Apple, nous ne voyons jamais que cette adresse de relais.",
         "Une session de connexion, conservée dans un cookie sécurisé httpOnly.",
         "Les appareils que vous enregistrez, sous la forme d'un identifiant d'appareil aléatoire et d'un nom d'appareil (par ex. le nom de votre plateforme).",
       ],
@@ -654,7 +654,7 @@ const fr = {
     {
       heading: "Transfert stocké (liens de téléchargement)",
       body: [
-        "Lorsque vous utilisez le mode optionnel de liens de téléchargement stockés, votre navigateur chiffre vos fichiers avec AES-256-GCM avant qu'ils ne quittent votre appareil. La clé de déchiffrement n'existe que dans le fragment d'URL (après le #) et n'est jamais envoyée au serveur. Cela signifie :",
+        "Lorsque vous utilisez le mode optionnel de liens de téléchargement stockés, votre navigateur chiffre vos fichiers avec AES-256-GCM avant qu'ils ne quittent votre appareil. La clé de déchiffrement n'existe que dans le fragment d'URL (après le #) et n'est jamais envoyée au serveur. Cela signifie :",
       ],
       bullets: [
         "Le serveur ne stocke que du chiffré. Il ne peut pas lire le contenu de vos fichiers, leurs noms ni les clés.",
@@ -664,7 +664,7 @@ const fr = {
     },
     {
       heading: "Ce que nous ne collectons jamais",
-      body: ["Le service est conçu pour que les éléments suivants n'atteignent jamais nos serveurs :"],
+      body: ["Le service est conçu pour que les éléments suivants n'atteignent jamais nos serveurs :"],
       bullets: [
         "Le contenu de vos fichiers.",
         "Les noms de vos fichiers.",
@@ -685,7 +685,7 @@ const fr = {
     },
     {
       heading: "Services tiers",
-      body: ["Quelques tiers interviennent uniquement lorsque vous choisissez de les utiliser :"],
+      body: ["Quelques tiers interviennent uniquement lorsque vous choisissez de les utiliser :"],
       bullets: [
         "Google, si vous vous connectez avec Google — nous recevons votre adresse e-mail et votre profil de base pour créer le compte.",
         "Apple, si vous utilisez « Se connecter avec Apple » — nous recevons un identifiant stable et l'adresse e-mail (ou l'adresse de relais privée d'Apple) que vous choisissez de partager.",
@@ -697,35 +697,35 @@ const fr = {
     {
       heading: "Paiements",
       body: [
-        "Vous ne partagez des données de paiement que si vous achetez un plan payant. Nous ne recevons ni ne stockons jamais votre numéro de carte complet.",
+        "Vous ne partagez des données de paiement que si vous achetez une offre payante. Nous ne recevons ni ne stockons jamais votre numéro de carte complet.",
       ],
       bullets: [
-        "Sur le web, les paiements sont traités par Stripe. Les détails de la carte vont à Stripe, pas à nous ; nous ne recevons qu'une référence client et le statut d'abonnement qui en résulte.",
-        "Dans l'application iOS, les abonnements sont achetés via l'achat intégré d'Apple. Apple traite le paiement sous votre identifiant Apple ; nous savons seulement que vous détenez un abonnement actif.",
-        "Pour votre compte, nous ne stockons que votre plan actuel, le statut de l'abonnement, le cycle de facturation et les dates de période — jamais les données de carte.",
+        "Sur le web, les paiements sont traités par Stripe. Les détails de la carte vont à Stripe, pas à nous ; nous ne recevons qu'une référence client et le statut d'abonnement qui en résulte.",
+        "Dans l'application iOS, les abonnements sont achetés via l'achat intégré d'Apple. Apple traite le paiement sous votre identifiant Apple ; nous savons seulement que vous détenez un abonnement actif.",
+        "Pour votre compte, nous ne stockons que votre offre actuelle, le statut de l'abonnement, le cycle de facturation et les dates de période — jamais les données de carte.",
       ],
     },
     {
       heading: "L'application Relayium",
       body: [
-        "Nos applications natives traitent quelques données au niveau de l'appareil que le site web ne traite pas :",
+        "Nos applications natives traitent quelques données au niveau de l'appareil que le site web ne traite pas :",
       ],
       bullets: [
-        "Notifications push : si vous les activez, nous stockons un jeton d'appareil Apple Push Notification service (APNs) afin de pouvoir livrer des notifications à votre appareil. Vous pouvez désactiver les notifications à tout moment dans les réglages de votre appareil.",
-        "Appareil photo et photos : utilisés uniquement sur votre appareil pour scanner un code QR ou choisir des fichiers à envoyer. Rien n'est capturé ni téléversé depuis l'appareil photo ou votre bibliothèque, à l'exception des fichiers que vous choisissez délibérément de transférer.",
+        "Notifications push : si vous les activez, nous stockons un jeton d'appareil Apple Push Notification service (APNs) afin de pouvoir livrer des notifications à votre appareil. Vous pouvez désactiver les notifications à tout moment dans les réglages de votre appareil.",
+        "Appareil photo et photos : utilisés uniquement sur votre appareil pour scanner un code QR ou choisir des fichiers à envoyer. Rien n'est capturé ni téléversé depuis l'appareil photo ou votre bibliothèque, à l'exception des fichiers que vous choisissez délibérément de transférer.",
         "L'application ne vous suit pas à travers d'autres applications ou sites web, et ne contient aucun SDK publicitaire ou d'analyse tiers.",
       ],
     },
     {
       heading: "Conservation et suppression des données",
       body: [
-        "Les données du compte sont conservées tant que votre compte existe. Vous pouvez supprimer votre compte et ses données à tout moment depuis les paramètres de votre compte, dans l'application ou sur le web. La suppression déclenche une période de grâce de 30 jours pendant laquelle vous pouvez l'annuler en vous reconnectant ; passé ce délai, votre compte et vos données personnelles sont définitivement supprimés. Les compteurs d'utilisation agrégés que nous devons conserver pour la facturation et la prévention des abus sont anonymisés afin de ne plus être liés à vous.",
+        "Les données du compte sont conservées tant que votre compte existe. Vous pouvez supprimer votre compte et ses données à tout moment depuis les paramètres de votre compte, dans l'application ou sur le web. La suppression déclenche un délai de grâce de 30 jours pendant lequel vous pouvez l'annuler en vous reconnectant ; passé ce délai, votre compte et vos données personnelles sont définitivement supprimés. Les compteurs d'utilisation agrégés que nous devons conserver pour la facturation et la prévention des abus sont anonymisés afin de ne plus être liés à vous.",
       ],
     },
     {
       heading: "Vos droits",
       body: [
-        "Vous pouvez accéder à vos données de compte, les corriger, les exporter ou les supprimer, et vous opposer à certains traitements ou en demander la limitation. La plupart de ces actions sont possibles vous-même depuis les paramètres de votre compte ; pour le reste, écrivez à support@relayium.com. Nous ne vendons pas vos données personnelles. Lorsque le GDPR ou des lois similaires s'appliquent, notre base légale pour les quelques données que nous traitons est l'exécution du service que vous avez demandé, ainsi que notre intérêt légitime à en assurer la sécurité et à prévenir les abus.",
+        "Vous pouvez accéder à vos données de compte, les corriger, les exporter ou les supprimer, et vous opposer à certains traitements ou en demander la limitation. La plupart de ces actions sont possibles vous-même depuis les paramètres de votre compte ; pour le reste, écrivez à support@relayium.com. Nous ne vendons pas vos données personnelles. Lorsque le GDPR ou des lois similaires s'appliquent, notre base légale pour les quelques données que nous traitons est l'exécution du service que vous avez demandé, ainsi que notre intérêt légitime à en assurer la sécurité et à prévenir les abus.",
       ],
     },
     {
@@ -742,7 +742,7 @@ const fr = {
     },
     {
       heading: "Contact",
-      body: ["Des questions sur la confidentialité ? Écrivez-nous à support@relayium.com."],
+      body: ["Des questions sur la confidentialité ? Écrivez-nous à support@relayium.com."],
     },
   ],
 };
@@ -772,7 +772,7 @@ const ar = {
       ],
       bullets: [
         "عنوان بريدك الإلكتروني واسم عرض.",
-        "طريقة تسجيل الدخول التي استخدمتها (تسجيل الدخول عبر Apple، أو Google، أو رابط سحري عبر البريد الإلكتروني، أو البريد الإلكتروني + كلمة المرور). تُخزَّن رموز الرابط السحري على هيئة تجزئة فقط، ولا تُخزَّن أبدًا كنص صريح؛ وإذا ضبطت كلمة مرور، فإننا نخزّن تجزئة bcrypt الخاصة بها فقط، ولا نخزّن كلمة المرور نفسها أبدًا. إذا استخدمت «تسجيل الدخول عبر Apple» مع خدمة إخفاء البريد الإلكتروني الخاصة بـ Apple، فإننا لا نرى سوى عنوان التمرير ذاك.",
+        "طريقة تسجيل الدخول التي استخدمتها (تسجيل الدخول عبر Apple، أو Google، أو رابط تسجيل الدخول عبر البريد الإلكتروني، أو البريد الإلكتروني + كلمة المرور). تُخزَّن رموز رابط تسجيل الدخول على هيئة تجزئة فقط، ولا تُخزَّن أبدًا كنص صريح؛ وإذا ضبطت كلمة مرور، فإننا نخزّن تجزئة bcrypt الخاصة بها فقط، ولا نخزّن كلمة المرور نفسها أبدًا. إذا استخدمت «تسجيل الدخول عبر Apple» مع خدمة إخفاء البريد الإلكتروني الخاصة بـ Apple، فإننا لا نرى سوى عنوان الترحيل ذاك.",
         "جلسة تسجيل دخول، محفوظة في ملف تعريف ارتباط آمن من نوع httpOnly.",
         "الأجهزة التي تسجّلها، على هيئة مُعرِّف جهاز عشوائي واسم جهاز (مثل اسم منصّتك).",
       ],
@@ -800,7 +800,7 @@ const ar = {
     {
       heading: "المُرحِّل عبر الشبكات (TURN)",
       body: [
-        "تُمرَّر عمليات النقل عبر الشبكات في المتصفح عبر خادم TURN بحكم التصميم، لا كخيار احتياطي عند فشل الاتصال المباشر فحسب. ومع ذلك لا يستطيع المُرحِّل قراءة ملفاتك — فهي تظل مُشفَّرة من الطرف إلى الطرف. نسجّل عدد البايتات المُمرَّرة لكل حساب لفرض حصة تمرير شهرية ومنع إساءة الاستخدام — ولا نفحص أبدًا ما يُمرَّر، بل نسجّل عدد البايتات فقط.",
+        "تُرحَّل عمليات النقل عبر الشبكات في المتصفح عبر خادم TURN بحكم التصميم، لا كخيار احتياطي عند فشل الاتصال المباشر فحسب. ومع ذلك لا يستطيع المُرحِّل قراءة ملفاتك — فهي تظل مُشفَّرة من الطرف إلى الطرف. نسجّل عدد البايتات المُرحَّلة لكل حساب لفرض حصة ترحيل شهرية ومنع إساءة الاستخدام — ولا نفحص أبدًا ما يُرحَّل، بل نسجّل عدد البايتات فقط.",
       ],
     },
     {
@@ -814,10 +814,10 @@ const ar = {
       body: ["لا يشارك سوى عدد قليل من الأطراف الثالثة وذلك فقط عندما تختار استخدامها:"],
       bullets: [
         "Google، إذا سجّلت الدخول باستخدام Google — نتلقّى بريدك الإلكتروني وملفك التعريفي الأساسي لإنشاء الحساب.",
-        "Apple، إذا استخدمت «تسجيل الدخول عبر Apple» — نتلقّى مُعرِّفًا ثابتًا والبريد الإلكتروني (أو عنوان تمرير Apple الخاص) الذي تختار مشاركته.",
+        "Apple، إذا استخدمت «تسجيل الدخول عبر Apple» — نتلقّى مُعرِّفًا ثابتًا والبريد الإلكتروني (أو عنوان ترحيل Apple الخاص) الذي تختار مشاركته.",
         "Stripe، مُعالِج المدفوعات الخاص بنا للاشتراكات التي تُشترى عبر الويب — راجع «المدفوعات».",
         "Apple، للاشتراكات التي تُشترى داخل تطبيق iOS عبر الشراء داخل التطبيق — راجع «المدفوعات».",
-        "مزوّد لتوصيل البريد الإلكتروني، لإرسال رسائل الحساب مثل تسجيل الدخول بالرابط السحري والتحقق.",
+        "مزوّد لتوصيل البريد الإلكتروني، لإرسال رسائل الحساب مثل رابط تسجيل الدخول والتحقق.",
       ],
     },
     {
@@ -898,7 +898,7 @@ const es = {
       ],
       bullets: [
         "Tu dirección de correo electrónico y un nombre para mostrar.",
-        "Qué método de inicio de sesión usaste (Iniciar sesión con Apple, Google, un enlace mágico por correo electrónico, o correo electrónico + contraseña). Los tokens de enlace mágico se almacenan solo como un hash, nunca en texto claro; si estableces una contraseña, almacenamos solo su hash bcrypt, nunca la contraseña en sí. Si usas Iniciar sesión con Apple con el relé de correo privado de Apple, solo vemos esa dirección de relé.",
+        "Qué método de inicio de sesión usaste (Iniciar sesión con Apple, Google, un enlace mágico por correo electrónico, o correo electrónico + contraseña). Los tokens de enlace mágico se almacenan solo como un hash, nunca en texto en claro; si estableces una contraseña, almacenamos solo su hash bcrypt, nunca la contraseña en sí. Si usas Iniciar sesión con Apple con la retransmisión de correo privada de Apple, solo vemos esa dirección de retransmisión.",
         "Una sesión de inicio de sesión, guardada en una cookie segura httpOnly.",
         "Los dispositivos que registras, como un id de dispositivo aleatorio y un nombre de dispositivo (p. ej., el nombre de tu plataforma).",
       ],
@@ -940,7 +940,7 @@ const es = {
       body: ["Solo intervienen un par de terceros cuando eliges usarlos:"],
       bullets: [
         "Google, si inicias sesión con Google: recibimos tu correo electrónico y tu perfil básico para crear la cuenta.",
-        "Apple, si usas Iniciar sesión con Apple: recibimos un identificador estable y el correo electrónico (o la dirección de relé privado de Apple) que elijas compartir.",
+        "Apple, si usas Iniciar sesión con Apple: recibimos un identificador estable y el correo electrónico (o la dirección de retransmisión privada de Apple) que elijas compartir.",
         "Stripe, nuestro procesador de pagos para las suscripciones compradas en la web; consulta Pagos.",
         "Apple, para las suscripciones compradas dentro de la app de iOS mediante compra dentro de la app; consulta Pagos.",
         "Un proveedor de envío de correo electrónico, para enviar correos de la cuenta como el inicio de sesión con enlace mágico y la verificación.",
@@ -1052,7 +1052,7 @@ const pt = {
     {
       heading: "Retransmissão entre redes (TURN)",
       body: [
-        "As transferências entre redes no navegador são retransmitidas por um servidor TURN por projeto, e não apenas como recurso alternativo quando uma conexão direta falha. O retransmissor ainda não consegue ler seus arquivos — eles permanecem com criptografia de ponta a ponta. Registramos o número de bytes retransmitidos por conta, para aplicar uma cota mensal de retransmissão e evitar abusos — nunca inspecionamos o que é retransmitido, apenas a contagem de bytes.",
+        "As transferências entre redes no navegador são retransmitidas por um servidor TURN por decisão de projeto, e não apenas como recurso alternativo quando uma conexão direta falha. O retransmissor ainda não consegue ler seus arquivos — eles permanecem com criptografia de ponta a ponta. Registramos o número de bytes retransmitidos por conta, para aplicar uma cota mensal de retransmissão e evitar abusos — nunca inspecionamos o que é retransmitido, apenas a contagem de bytes.",
       ],
     },
     {

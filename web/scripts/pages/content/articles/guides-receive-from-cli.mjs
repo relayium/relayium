@@ -119,7 +119,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
 const zh = {
   title: "在命令行接收文件",
   description:
-    "用 Relayium CLI 接收文件的三种方式：receive 接收跨网络的配对码发送，serve 作为监听收件箱接收守护进程直连推送，或者 pull 从你已能 SSH 登录的服务器取回文件。免费，无需账号。",
+    "用 Relayium CLI 接收文件的三种方式：receive 接收跨网络的配对码发送，serve 作为监听收件箱接收 daemon 直连推送，或者 pull 从你已能 SSH 登录的服务器取回文件。免费，无需账号。",
   updatedLabel: "最近更新",
   lead: [
     "发送只是故事的一半——迟早你也会是接收方：同事想跨网络给你一个文件，你自己的一台机器想把东西交给另一台，或者你想主动从你管理的服务器上取点东西回来。Relayium CLI 用三个不同的命令覆盖这三种情形，而且都不需要账号。",
@@ -130,20 +130,20 @@ const zh = {
       heading: "三种接收方式，各自适用于什么场景",
       body: ["用哪个命令，取决于谁在发起传输，以及两台机器是怎么互相认识的："],
       bullets: [
-        "relayium receive <code> [destdir] ——对方用他那边 CLI 生成、再线下转告给你的配对码跨网络发给你。直接点对点，用 SAS 码验证。",
-        "relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——这台机器监听守护进程直连的 relayium:// 推送，默认端口 9031。",
+        "relayium receive <code> [destdir] ——对方跨网络发给你：他的 CLI 先生成一个配对码，再线下转告你。直接点对点，用 SAS 码验证。",
+        "relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——这台机器监听 daemon 直连的 relayium:// 推送，默认端口 9031。",
         "relayium pull [user@]host:src <dest> ——你主动通过 SSH 连接到一台你已能登录的服务器，把文件取回来。",
       ],
     },
     {
       heading: "receive：对方跨网络把文件发给你",
       body: [
-        "这是 relayium send 的接收端。对方在他那边运行 relayium send <path>（事先 relayium login 过），他的 CLI 会生成一个 6 位、5 分钟内有效的码并打印出来。他再通过你们都信任的渠道告诉你——打个电话、发条消息。你则用这个码运行 receive：",
+        "这是 relayium send 的接收端。对方在自己那边运行 relayium send <path>（事先 relayium login 过），CLI 会生成一个 6 位、5 分钟内有效的码并打印出来。然后对方通过你们都信任的渠道告诉你——打个电话、发条消息。你则用这个码运行 receive：",
       ],
       code: [
         `relayium receive K7M4XR
 
-# or into a specific directory
+# 或者放进指定的目录
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
@@ -151,18 +151,18 @@ relayium receive K7M4XR ./downloads`,
         "不指定目标目录时，文件会落到当前目录。",
         "和 send 一样只走直连：如果两个网络之间找不到直连路径，传输会失败，而不会经中继转发。",
         "这是 CLI 自己的配对码协议——CLI 的码只能和 CLI 配对。目前和 relayium.com 浏览器端的配对码或二维码流程互不通用；未来也许会支持，但现在还不能指望。如果你手上只有浏览器，请让发送方改用 relayium up 给你一个下载链接。",
-        "接收方无论在哪个网络上，都不需要账号。只有发送方需要登录，好让他的 CLI 生成配对码。",
+        "接收方无论在哪个网络上，都不需要账号。只有发送方需要登录，好让发送端的 CLI 生成配对码。",
       ],
     },
     {
       heading: "serve：把这台机器变成一个监听收件箱",
       body: [
-        "serve 的方向正相反：不是你去连别人，而是其他机器通过 relayium:// 直接推送给你——专为你已经信任的机器设计，比如你自己的笔记本推给一台 NAS，或者构建服务器把产物投递到你的机器上——走的是锁定的 TLS 1.3 连接，无需 SSH，无需中转撮合。",
+        "serve 的方向正相反：不是你去连别人，而是其他机器通过 relayium:// 直接推送给你——专为你已经信任的机器设计，比如你自己的笔记本推给一台 NAS，或者构建服务器把产物投递到你的机器上——走的是证书固定的 TLS 1.3 连接，无需 SSH，无需会合。",
       ],
       code: [
         `relayium serve
 
-# a specific directory, port, and allowing delete requests
+# 指定目录和端口，并允许删除请求
 relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       ],
       bullets: [
@@ -178,7 +178,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       code: ["relayium authorize <fingerprint>"],
       bullets: [
         "--dir 设置文件落地的位置（默认为当前目录）；--once 只接受一次传输就退出；--allow-delete 允许推送方的 --delete（镜像）请求真正在这里删除文件，默认关闭。",
-        "--config-dir（默认 ~/.config/relayium）是这台主机的身份和已授权指纹列表所在的位置——如果把 serve 作为专用服务运行，可以覆盖它。",
+        "--config-dir（默认 ~/.config/relayium）指向一个位置：这台主机的身份和已授权指纹列表都存放在那里——如果把 serve 作为专用服务运行，可以覆盖它。",
       ],
     },
     {
@@ -199,7 +199,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "接收文件需要账号吗？",
-        a: "不需要。三种方式——receive、serve、pull——都完全免费，你这一端不需要 Relayium 账号。整个过程里唯一需要登录的，是 receive 模式下的发送方，好让他的 CLI 生成配对码。",
+        a: "不需要。三种方式——receive、serve、pull——都完全免费，你这一端不需要 Relayium 账号。整个过程里唯一需要登录的，是 receive 模式下的发送方，好让发送端的 CLI 生成配对码。",
       },
       {
         q: "relayium receive 和浏览器的配对码互通吗？",
@@ -233,8 +233,8 @@ const ja = {
     "Relayium CLI でファイルを受信する3つの方法: ネットワークを越えたペアリングコード送信を receive で受け取る、デーモン直結のプッシュを待ち受ける serve、すでに SSH でログインできるサーバーから取り込む pull。無料、アカウント不要。",
   updatedLabel: "最終更新",
   lead: [
-    "送信は話の半分にすぎません——いずれあなたが受け取る側になります。同僚がインターネット越しにファイルを渡したいとき、自分のマシン同士で受け渡ししたいとき、あるいは自分が管理するサーバーから何かを取りに行きたいとき。Relayium CLI はそれぞれに異なるコマンドで、この3つすべてに対応しています。どれもアカウントは不要です。",
-    "相手がペアリングコードであなたへプッシュしてくるなら receive、信頼できるマシンがいつでもプッシュできる常設の受信箱が欲しいなら serve、そしてあなた自身がすでに SSH でログインできるサーバーへ出向くなら pull を選びます。",
+    "送信は話の半分にすぎません——いずれ受け取る側になります。同僚がインターネット越しにファイルを渡したいとき、自分のマシン同士で受け渡ししたいとき、あるいは自分が管理するサーバーから何かを取りに行きたいとき。Relayium CLI はそれぞれに異なるコマンドで、この3つすべてに対応しています。どれもアカウントは不要です。",
+    "相手がペアリングコードでこちらへプッシュしてくるなら receive、信頼できるマシンがいつでもプッシュできる常設の受信箱が欲しいなら serve、そして自分からすでに SSH でログインできるサーバーへ出向くなら pull を選びます。",
   ],
   sections: [
     {
@@ -243,24 +243,24 @@ const ja = {
         "どのコマンドを使うかは、誰が転送を始めるのか、そして2台のマシンがどう互いを知っているかによって決まります:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] ——相手の CLI が発行し、帯域外であなたに伝えられたペアリングコードを使って、相手がネットワークを越えて送ってきます。直接ピアツーピアで、SAS コードで検証します。",
+        "relayium receive <code> [destdir] ——相手の CLI が発行し、帯域外で伝えられたペアリングコードを使って、相手がネットワークを越えて送ってきます。直接ピアツーピアで、SAS コードで検証します。",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——このマシンがデーモン直結の relayium:// プッシュを待ち受けます。デフォルトのポートは 9031 です。",
-        "relayium pull [user@]host:src <dest> ——あなた自身がすでにログインできるサーバーへ SSH で出向き、ファイルを取り込みます。",
+        "relayium pull [user@]host:src <dest> ——自分からすでにログインできるサーバーへ SSH で出向き、ファイルを取り込みます。",
       ],
     },
     {
       heading: "receive: 相手がネットワークを越えてファイルを送ってくる",
       body: [
-        "これは relayium send の受信側です。相手は自分の側で relayium send <path> を実行します(事前に relayium login 済み)。相手の CLI が5分間有効な6文字のコードを発行して表示するので、通話やチャットなど二人が信頼できる手段でそれを伝えてもらいます。あなたはそのコードで receive を実行します:",
+        "これは relayium send の受信側です。相手は自分の側で relayium send <path> を実行します（事前に relayium login 済み）。相手の CLI が5分間有効な6文字のコードを発行して表示するので、通話やチャットなど二人が信頼できる手段でそれを伝えてもらいます。受け取ったコードで receive を実行します:",
       ],
       code: [
         `relayium receive K7M4XR
 
-# or into a specific directory
+# 特定のディレクトリに受け取る場合
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
-        "接続は直接のピアツーピアでエンドツーエンドに暗号化されています。接続後、両方のターミナルに同じ SAS(short authentication string)が表示されます——送信側と見比べて、中間に誰もいないことを確認してください。",
+        "接続は直接のピアツーピアでエンドツーエンドに暗号化されています。接続後、両方のターミナルに同じ SAS（short authentication string）が表示されます——送信側と見比べて、中間に誰もいないことを確認してください。",
         "宛先を指定しない場合、ファイルはカレントディレクトリに置かれます。",
         "send と同じく直接接続のみのルールです。2つのネットワークの間に直接の経路が見つからなければ、リレー経由で送るのではなく転送が失敗します。",
         "これは CLI 独自のペアリングコード・プロトコルです——CLI のコードは CLI 同士でしかペアリングできません。現時点では relayium.com のブラウザ側のペアリングコードや QR フローとは相互運用しません。将来追加される可能性はありますが、今はまだ頼れるものではありません。ブラウザしかない場合は、代わりに relayium up のダウンロードリンクを送ってもらってください。",
@@ -270,28 +270,28 @@ relayium receive K7M4XR ./downloads`,
     {
       heading: "serve: このマシンを待ち受け型の受信箱にする",
       body: [
-        "serve は逆方向に動作します。あなたが出向くのではなく、他のマシンが relayium:// 経由で直接あなたへプッシュしてきます——自分のノート PC が NAS へプッシュする、ビルドサーバーが成果物を自分のマシンへ落とすなど、すでに信頼しているマシン向けです。固定された TLS 1.3 接続で、SSH も集合場所も不要です。",
+        "serve は逆方向に動作します。こちらから出向くのではなく、他のマシンが relayium:// 経由で直接プッシュしてきます——自分のノート PC が NAS へプッシュする、ビルドサーバーが成果物を自分のマシンへ落とすなど、すでに信頼しているマシン向けです。証明書ピンニング付き TLS 1.3 接続で、SSH もランデブーも不要です。",
       ],
       code: [
         `relayium serve
 
-# a specific directory, port, and allowing delete requests
+# ディレクトリとポートを指定し、削除要求を許可する場合
 relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       ],
       bullets: [
-        "新しいマシンが初めてあなたへプッシュすると、serve は(ターミナルで実行している場合)その住所とフィンガープリントを表示し、一度だけ承認するよう求めます。以降、同じフィンガープリントからのプッシュは黙って通過します。",
+        "新しいマシンが初めてプッシュしてくると、serve は（ターミナルで実行している場合）そのアドレスとフィンガープリントを表示し、一度だけ承認するよう求めます。以降、同じフィンガープリントからのプッシュは黙って通過します。",
         "ターミナルがない場合——systemd サービスや TTY のないスクリプト——確認する相手がいないため、未知のプッシュ側はそのまま拒否されます。代わりに、プッシュ側が relayium id で表示するフィンガープリントを使って事前に承認してください:",
       ],
     },
     {
       heading: "無人稼働の serve のために事前承認する",
       body: [
-        "無人で動作する serve(systemd、バックグラウンドスクリプト)では、プッシュ側に relayium id を実行させてフィンガープリントを表示させ、受信側であらかじめそれを承認しておきます:",
+        "無人で動作する serve（systemd、バックグラウンドスクリプト）では、プッシュ側に relayium id を実行させてフィンガープリントを表示させ、受信側であらかじめそれを承認しておきます:",
       ],
       code: ["relayium authorize <fingerprint>"],
       bullets: [
-        "--dir はファイルの置き場所を設定します(デフォルトはカレントディレクトリ)。--once は1回の転送だけ受け入れて終了します。--allow-delete は受信した --delete(ミラー)要求によって実際にここでファイルを削除できるようにするもので、デフォルトでは無効です。",
-        "--config-dir(デフォルト ~/.config/relayium)は、このホストのアイデンティティと承認済みフィンガープリントのリストが置かれる場所です——serve を専用サービスとして動かす場合は上書きしてください。",
+        "--dir はファイルの置き場所を設定します（デフォルトはカレントディレクトリ）。--once は1回の転送だけ受け入れて終了します。--allow-delete は受信した --delete（ミラー）要求によって実際にここでファイルを削除できるようにするもので、デフォルトでは無効です。",
+        "--config-dir（デフォルト ~/.config/relayium）は、このホストのアイデンティティと承認済みフィンガープリントのリストが置かれる場所です——serve を専用サービスとして動かす場合は上書きしてください。",
       ],
     },
     {
@@ -302,7 +302,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       code: ["relayium pull user@host:/path/to/files ./local-dest"],
       bullets: [
         "push と異なり、pull は常にリモート側にすでに relayium がインストールされている必要があります——素のサーバーから pull するための tar フォールバックはありません。リモートにまだ入っていない場合は、先に curl -fsSL https://relayium.com/install.sh | sh でインストールしてください。",
-        "ファイルはファイルごとの SHA-256 チェックで検証され、中断しても自動的に再開します(--no-resume で無効化できます)。",
+        "ファイルはファイルごとの SHA-256 チェックで検証され、中断しても自動的に再開します（--no-resume で無効化できます）。",
         "-i と -p は ssh 自体の -i/-p と同様に、特定のアイデンティティファイルやポートを指定するために使えます。",
       ],
     },
@@ -311,23 +311,23 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     heading: "よくある質問",
     items: [
       {
-        q: "ファイルを受信するのにアカウントは必要ですか?",
-        a: "いいえ。receive、serve、pull の3つすべてが完全に無料で、あなたの側に Relayium アカウントは不要です。どこかでサインインが要るのは receive モードの送信側だけで、その CLI がペアリングコードを発行できるようにするためです。",
+        q: "ファイルを受信するのにアカウントは必要ですか？",
+        a: "いいえ。receive、serve、pull の3つすべてが完全に無料で、受信側に Relayium アカウントは不要です。どこかでサインインが要るのは receive モードの送信側だけで、その CLI がペアリングコードを発行できるようにするためです。",
       },
       {
-        q: "relayium receive はブラウザのペアリングコードと相互運用しますか?",
+        q: "relayium receive はブラウザのペアリングコードと相互運用しますか？",
         a: "しません。CLI のペアリングコード・プロトコルは、relayium.com のブラウザ側の参加リンクや QR フローとは別物です——ハンドシェイクの方式が異なり、現時点では互いに通信しないので、CLI のコードは別の CLI としかペアリングできません。それはロードマップ上の話であり、今はまだ頼れるものではありません。それまでは、ブラウザで受け取る相手にはコードではなく relayium up のリンクを渡します。",
       },
       {
-        q: "未知のマシンが自分の serve リスナーへプッシュしてきたらどうなりますか?",
-        a: "ターミナルでは、初回のプッシュ時に住所とフィンガープリントを見せて承認するかどうか尋ねられ、その承認は記憶されます。ターミナルがない場合——systemd サービスや cron ジョブ——確認する相手がいないため、未知のプッシュ側は拒否されます。先に relayium authorize <fingerprint> で事前承認してください。",
+        q: "未知のマシンが自分の serve リスナーへプッシュしてきたらどうなりますか？",
+        a: "ターミナルでは、初回のプッシュ時にアドレスとフィンガープリントを見せて承認するかどうか尋ねられ、その承認は記憶されます。ターミナルがない場合——systemd サービスや cron ジョブ——確認する相手がいないため、未知のプッシュ側は拒否されます。先に relayium authorize <fingerprint> で事前承認してください。",
       },
       {
-        q: "relayium がインストールされていないサーバーから pull できますか?",
+        q: "relayium がインストールされていないサーバーから pull できますか？",
         a: "できません。pull は常にリモート側に relayium が必要です——push にあるような tar フォールバックはありません。先にリモートへ relayium をインストールしてください。",
       },
       {
-        q: "relayium は自分のアイデンティティと信頼済みの相手をどこに保存しますか?",
+        q: "relayium は自分のアイデンティティと信頼済みの相手をどこに保存しますか？",
         a: "デフォルトでは ~/.config/relayium にあります——アイデンティティや信頼に関わるどのコマンドでも --config-dir でこの場所を上書きできます。",
       },
     ],
@@ -346,28 +346,28 @@ const ko = {
     "Relayium CLI로 파일을 받는 세 가지 방법: 네트워크를 넘어온 페어링 코드 전송을 receive로 받거나, 데몬 다이렉트 푸시를 대기하는 serve, 이미 SSH로 접속 가능한 서버에서 가져오는 pull. 무료이며 계정이 필요 없습니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "보내는 것은 이야기의 절반일 뿐입니다——언젠가는 당신이 받는 쪽이 됩니다. 동료가 인터넷 너머로 파일을 건네주고 싶을 때, 당신의 기기 하나가 다른 기기에게 넘겨주고 싶을 때, 또는 당신이 관리하는 서버에서 무언가를 직접 가져오고 싶을 때. Relayium CLI는 이 세 가지 각각에 서로 다른 명령으로 대응하며, 어느 쪽도 계정이 필요 없습니다.",
-    "상대가 페어링 코드로 당신에게 푸시할 때는 receive를, 신뢰하는 기기들이 언제든 푸시할 수 있는 상시 수신함이 필요할 때는 serve를, 그리고 당신이 이미 SSH로 접속 가능한 서버로 직접 다가갈 때는 pull을 선택하세요.",
+    "보내는 것은 이야기의 절반일 뿐입니다——언젠가는 받는 쪽이 됩니다. 동료가 인터넷 너머로 파일을 건네주고 싶을 때, 내 기기 하나가 다른 기기에게 넘겨주고 싶을 때, 또는 본인이 관리하는 서버에서 무언가를 직접 가져오고 싶을 때. Relayium CLI는 이 세 가지 각각에 서로 다른 명령으로 대응하며, 어느 쪽도 계정이 필요 없습니다.",
+    "상대가 페어링 코드로 푸시해 올 때는 receive를, 신뢰하는 기기들이 언제든 푸시할 수 있는 상시 수신함이 필요할 때는 serve를, 그리고 이미 SSH로 접속 가능한 서버로 직접 다가갈 때는 pull을 선택하세요.",
   ],
   sections: [
     {
       heading: "받는 세 가지 방법과 각각이 적용되는 상황",
       body: ["어떤 명령을 실행할지는 누가 전송을 시작하는지, 그리고 두 기기가 서로 어떻게 아는 사이인지에 따라 달라집니다:"],
       bullets: [
-        "relayium receive <code> [destdir] — 상대의 CLI가 발급해 대역 외로 알려준 페어링 코드를 사용해 상대가 네트워크를 넘어 당신에게 보냅니다. 직접적인 피어투피어이며 SAS 코드로 검증됩니다.",
+        "relayium receive <code> [destdir] — 상대의 CLI가 발급해 대역 외로 알려준 페어링 코드를 사용해 상대가 네트워크를 넘어 보내옵니다. 직접적인 피어투피어이며 SAS 코드로 검증됩니다.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — 이 기기가 데몬 다이렉트 relayium:// 푸시를 대기합니다. 기본 포트는 9031입니다.",
-        "relayium pull [user@]host:src <dest> — 당신이 이미 로그인할 수 있는 서버로 SSH를 통해 직접 다가가 파일을 가져옵니다.",
+        "relayium pull [user@]host:src <dest> — 이미 로그인할 수 있는 서버로 SSH를 통해 직접 다가가 파일을 가져옵니다.",
       ],
     },
     {
       heading: "receive: 상대가 네트워크를 넘어 파일을 보낼 때",
       body: [
-        "이것은 relayium send의 받는 쪽입니다. 상대는 자기 쪽에서 relayium send <path>를 실행합니다(미리 relayium login을 해 둔 상태로). 그러면 상대의 CLI가 5분간 유효한 6자 코드를 발급해 출력하고, 상대는 통화나 채팅 등 서로 신뢰하는 채널로 그것을 알려줍니다. 당신은 그 코드로 receive를 실행합니다:",
+        "이것은 relayium send의 받는 쪽입니다. 상대는 자기 쪽에서 relayium send <path>를 실행합니다(미리 relayium login을 해 둔 상태로). 그러면 상대의 CLI가 5분간 유효한 6자 코드를 발급해 출력하고, 상대는 통화나 채팅 등 서로 신뢰하는 채널로 그것을 알려줍니다. 받는 쪽에서는 그 코드로 receive를 실행합니다:",
       ],
       code: [
         `relayium receive K7M4XR
 
-# or into a specific directory
+# 특정 디렉터리로 받으려면
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
@@ -381,16 +381,16 @@ relayium receive K7M4XR ./downloads`,
     {
       heading: "serve: 이 기기를 대기형 수신함으로 만들기",
       body: [
-        "serve는 반대 방향으로 동작합니다. 당신이 다가가는 대신, 다른 기기가 relayium://를 통해 곧바로 당신에게 푸시합니다——이미 신뢰하는 기기, 예를 들어 자신의 노트북이 NAS로 푸시하거나 빌드 서버가 산출물을 당신의 기기에 떨어뜨리는 경우를 위한 것입니다. 고정된 TLS 1.3 연결로, SSH도 랑데부도 필요 없습니다.",
+        "serve는 반대 방향으로 동작합니다. 이쪽에서 다가가는 대신, 다른 기기가 relayium://를 통해 곧바로 푸시해 옵니다——이미 신뢰하는 기기, 예를 들어 자신의 노트북이 NAS로 푸시하거나 빌드 서버가 산출물을 내 기기에 떨어뜨리는 경우를 위한 것입니다. 인증서 고정 TLS 1.3 연결로, SSH도 랑데부도 필요 없습니다.",
       ],
       code: [
         `relayium serve
 
-# a specific directory, port, and allowing delete requests
+# 디렉터리와 포트를 지정하고 삭제 요청을 허용하려면
 relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       ],
       bullets: [
-        "새 기기가 처음 당신에게 푸시하면, serve는(터미널에서 실행 중일 때) 그 주소와 핑거프린트를 보여주고 한 번 승인해 달라고 요청합니다. 이후 같은 핑거프린트의 푸시는 조용히 통과합니다.",
+        "새 기기가 처음 푸시해 오면, serve는(터미널에서 실행 중일 때) 그 주소와 핑거프린트를 보여주고 한 번 승인해 달라고 요청합니다. 이후 같은 핑거프린트의 푸시는 조용히 통과합니다.",
         "터미널이 없을 때——systemd 서비스, TTY 없는 스크립트——물어볼 사람이 없으므로 알 수 없는 푸시하는 쪽은 그대로 거부됩니다. 대신 푸시하는 쪽이 relayium id로 출력하는 핑거프린트를 이용해 미리 승인하세요:",
       ],
     },
@@ -423,7 +423,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "파일을 받는 데 계정이 필요한가요?",
-        a: "아니요. receive, serve, pull 세 가지 모두 완전히 무료이며 당신 쪽에는 Relayium 계정이 필요 없습니다. 전체 과정에서 유일하게 로그인하는 쪽은 receive 모드의 보내는 사람이며, 그 CLI가 페어링 코드를 발급할 수 있도록 하기 위해서입니다.",
+        a: "아니요. receive, serve, pull 세 가지 모두 완전히 무료이며 받는 쪽에는 Relayium 계정이 필요 없습니다. 전체 과정에서 유일하게 로그인하는 쪽은 receive 모드의 보내는 사람이며, 그 CLI가 페어링 코드를 발급할 수 있도록 하기 위해서입니다.",
       },
       {
         q: "relayium receive는 브라우저의 페어링 코드와 상호 운용되나요?",
@@ -480,7 +480,7 @@ const de = {
       code: [
         `relayium receive K7M4XR
 
-# or into a specific directory
+# oder in ein bestimmtes Verzeichnis
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
@@ -494,12 +494,12 @@ relayium receive K7M4XR ./downloads`,
     {
       heading: "serve: diese Maschine zu einem lauschenden Eingangskorb machen",
       body: [
-        "serve funktioniert umgekehrt: Statt dass du selbst aktiv wirst, pushen andere Maschinen direkt zu dir über relayium:// — gebaut für Maschinen, denen du schon vertraust, etwa dein eigener Laptop, der zu einem NAS pusht, oder ein Build-Server, der Artefakte auf einer Maschine ablegt, die dir gehört — über eine gepinnte TLS-1.3-Verbindung, ohne SSH, ohne Rendezvous.",
+        "serve funktioniert umgekehrt: Statt dass du selbst aktiv wirst, pushen andere Maschinen direkt zu dir über relayium:// — gebaut für Maschinen, denen du schon vertraust, etwa dein eigener Laptop, der zu einem NAS pusht, oder ein Build-Server, der Artefakte auf einer Maschine ablegt, die dir gehört — über eine TLS-1.3-Verbindung mit Pinning, ohne SSH, ohne Rendezvous.",
       ],
       code: [
         `relayium serve
 
-# a specific directory, port, and allowing delete requests
+# ein bestimmtes Verzeichnis, ein bestimmter Port, Löschanfragen erlaubt
 relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       ],
       bullets: [
@@ -567,17 +567,17 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
 const fr = {
   title: "Recevoir des fichiers depuis la ligne de commande",
   description:
-    "Trois façons de recevoir un fichier avec la CLI Relayium : receive pour un envoi par code de jumelage entre réseaux, serve comme boîte de réception à l'écoute des envois en daemon direct, ou pull depuis un serveur où vous pouvez déjà vous connecter en SSH. Gratuit, sans compte.",
+    "Trois façons de recevoir un fichier avec la CLI Relayium : receive pour un envoi par code de jumelage entre réseaux, serve comme boîte de réception à l'écoute des envois en daemon direct, ou pull depuis un serveur où vous pouvez déjà vous connecter en SSH. Gratuit, sans compte.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Envoyer n'est que la moitié de l'histoire — tôt ou tard, c'est vous qui recevez : un collègue veut vous remettre un fichier par Internet, l'une de vos machines veut le transmettre à une autre, ou vous voulez aller chercher quelque chose sur un serveur que vous administrez. La CLI Relayium couvre ces trois cas avec une commande différente pour chacun, et aucune ne nécessite de compte.",
+    "Envoyer n'est que la moitié de l'histoire — tôt ou tard, c'est vous qui recevez : un collègue veut vous remettre un fichier par Internet, l'une de vos machines veut le transmettre à une autre, ou vous voulez aller chercher quelque chose sur un serveur que vous administrez. La CLI Relayium couvre ces trois cas avec une commande différente pour chacun, et aucune ne nécessite de compte.",
     "Choisissez receive quand quelqu'un d'autre vous envoie via un code de jumelage, serve quand vous voulez une boîte de réception permanente vers laquelle des machines de confiance peuvent envoyer à tout moment, et pull quand c'est vous qui allez chercher sur un serveur où vous pouvez déjà vous connecter en SSH.",
   ],
   sections: [
     {
       heading: "Trois façons de recevoir, et quand utiliser chacune",
       body: [
-        "La commande à exécuter dépend de qui déclenche le transfert et de la façon dont les deux machines se connaissent :",
+        "La commande à exécuter dépend de qui déclenche le transfert et de la façon dont les deux machines se connaissent :",
       ],
       bullets: [
         "relayium receive <code> [destdir] — quelqu'un vous envoie à travers les réseaux avec un code de jumelage que sa CLI a généré et vous a communiqué hors bande. Pair-à-pair direct, vérifié par un code SAS.",
@@ -586,55 +586,55 @@ const fr = {
       ],
     },
     {
-      heading: "receive : quelqu'un vous envoie un fichier à travers les réseaux",
+      heading: "receive : quelqu'un vous envoie un fichier à travers les réseaux",
       body: [
-        "C'est le pendant côté réception de relayium send. L'autre personne exécute relayium send <path> de son côté (après relayium login) ; sa CLI génère un code de 6 caractères, valable 5 minutes, et l'affiche. Elle vous le communique par un canal auquel vous faites tous deux confiance — un appel, un message. Vous exécutez receive avec ce code :",
+        "C'est le pendant côté réception de relayium send. L'autre personne exécute relayium send <path> de son côté (après relayium login) ; sa CLI génère un code de 6 caractères, valable 5 minutes, et l'affiche. Elle vous le communique par un canal auquel vous faites tous deux confiance — un appel, un message. Vous exécutez receive avec ce code :",
       ],
       code: [
         `relayium receive K7M4XR
 
-# or into a specific directory
+# ou vers un répertoire précis
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
-        "La connexion est directe, pair-à-pair, et chiffrée de bout en bout ; une fois connectés, les deux terminaux affichent le même SAS (short authentication string) — comparez-le avec l'expéditeur pour être sûrs que personne n'est au milieu.",
+        "La connexion est directe, pair-à-pair, et chiffrée de bout en bout ; une fois connectés, les deux terminaux affichent le même SAS (short authentication string) — comparez-le avec l'expéditeur pour être sûrs que personne n'est au milieu.",
         "Sans destination indiquée, les fichiers atterrissent dans le répertoire courant.",
-        "Même règle de connexion directe uniquement que pour send : si aucun chemin direct n'est trouvé entre les deux réseaux, le transfert échoue plutôt que de transiter par un relais.",
-        "C'est le protocole de code de jumelage propre à la CLI — un code CLI ne se jumelle qu'avec une autre CLI. Il ne s'interopère pas aujourd'hui avec le code de jumelage ou le flux QR du navigateur sur relayium.com ; c'est un ajout possible à l'avenir, pas encore quelque chose sur quoi compter. Si vous n'avez qu'un navigateur, demandez plutôt à l'expéditeur un lien de téléchargement relayium up.",
+        "Même règle de connexion directe uniquement que pour send : si aucun chemin direct n'est trouvé entre les deux réseaux, le transfert échoue plutôt que de transiter par un relais.",
+        "C'est le protocole de code de jumelage propre à la CLI — un code CLI ne se jumelle qu'avec une autre CLI. Il n'est pas interopérable aujourd'hui avec le code de jumelage ou le flux QR du navigateur sur relayium.com ; c'est un ajout possible à l'avenir, pas encore quelque chose sur quoi compter. Si vous n'avez qu'un navigateur, demandez plutôt à l'expéditeur un lien de téléchargement relayium up.",
         "Le destinataire n'a jamais besoin de compte, quel que soit le réseau. Seul l'expéditeur se connecte, pour que sa CLI puisse générer le code.",
       ],
     },
     {
-      heading: "serve : transformer cette machine en boîte de réception à l'écoute",
+      heading: "serve : transformer cette machine en boîte de réception à l'écoute",
       body: [
-        "serve fonctionne dans l'autre sens : au lieu que vous alliez chercher, d'autres machines vous envoient directement via relayium:// — conçu pour des machines en qui vous avez déjà confiance, comme votre propre ordinateur portable qui envoie vers un NAS, ou un serveur de build qui dépose des artefacts sur une machine qui vous appartient — via une connexion TLS 1.3 épinglée, sans SSH, sans rendez-vous.",
+        "serve fonctionne dans l'autre sens : au lieu que vous alliez chercher, d'autres machines vous envoient directement via relayium:// — conçu pour des machines en qui vous avez déjà confiance, comme votre propre ordinateur portable qui envoie vers un NAS, ou un serveur de build qui dépose des artefacts sur une machine qui vous appartient — via une connexion TLS 1.3 avec épinglage, sans SSH, sans rendez-vous.",
       ],
       code: [
         `relayium serve
 
-# a specific directory, port, and allowing delete requests
+# un répertoire et un port précis, en autorisant les requêtes de suppression
 relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       ],
       bullets: [
-        "La première fois qu'une nouvelle machine vous envoie quelque chose, serve (exécuté dans un terminal) affiche son adresse et son empreinte et vous demande de l'approuver une fois ; ensuite, les envois de la même empreinte passent silencieusement.",
-        "Sans terminal — un service systemd, un script sans TTY — il n'y a personne à qui demander, donc un émetteur inconnu est rejeté d'emblée. Autorisez-le plutôt à l'avance, en utilisant l'empreinte que l'émetteur affiche avec relayium id :",
+        "La première fois qu'une nouvelle machine vous envoie quelque chose, serve (exécuté dans un terminal) affiche son adresse et son empreinte et vous demande de l'approuver une fois ; ensuite, les envois de la même empreinte passent silencieusement.",
+        "Sans terminal — un service systemd, un script sans TTY — il n'y a personne à qui demander, donc un émetteur inconnu est rejeté d'emblée. Autorisez-le plutôt à l'avance, en utilisant l'empreinte que l'émetteur affiche avec relayium id :",
       ],
     },
     {
       heading: "Autoriser à l'avance pour un serve sans surveillance",
       body: [
-        "Pour un serve qui tourne sans surveillance (systemd, un script en arrière-plan), demandez à l'émetteur d'exécuter relayium id pour afficher son empreinte, puis approuvez-la à l'avance côté récepteur :",
+        "Pour un serve qui tourne sans surveillance (systemd, un script en arrière-plan), demandez à l'émetteur d'exécuter relayium id pour afficher son empreinte, puis approuvez-la à l'avance côté récepteur :",
       ],
       code: ["relayium authorize <fingerprint>"],
       bullets: [
-        "--dir définit où les fichiers atterrissent (par défaut le répertoire courant) ; --once accepte un seul transfert puis s'arrête ; --allow-delete permet à une requête --delete (miroir) entrante de réellement supprimer des fichiers ici, et est désactivé par défaut.",
+        "--dir définit où les fichiers atterrissent (par défaut le répertoire courant) ; --once accepte un seul transfert puis s'arrête ; --allow-delete permet à une requête --delete (miroir) entrante de réellement supprimer des fichiers ici, et est désactivé par défaut.",
         "--config-dir (par défaut ~/.config/relayium) est l'endroit où se trouvent l'identité de cet hôte et sa liste d'empreintes autorisées — surchargez-le si vous exécutez serve comme service dédié.",
       ],
     },
     {
-      heading: "pull : aller chercher sur un serveur où vous pouvez déjà vous connecter en SSH",
+      heading: "pull : aller chercher sur un serveur où vous pouvez déjà vous connecter en SSH",
       body: [
-        "pull est le miroir de push : au lieu d'attendre que quelqu'un vous envoie quelque chose, vous allez chercher via votre accès SSH existant et récupérez des fichiers.",
+        "pull est le miroir de push : au lieu d'attendre que quelqu'un vous envoie quelque chose, vous allez chercher via votre accès SSH existant et récupérez des fichiers.",
       ],
       code: ["relayium pull user@host:/path/to/files ./local-dest"],
       bullets: [
@@ -648,29 +648,29 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Ai-je besoin d'un compte pour recevoir des fichiers ?",
+        q: "Ai-je besoin d'un compte pour recevoir des fichiers ?",
         a: "Non. Les trois méthodes — receive, serve et pull — sont entièrement gratuites et ne nécessitent aucun compte Relayium de votre côté. La seule connexion où que ce soit est celle de l'expéditeur en mode receive, pour que sa CLI puisse générer le code de jumelage.",
       },
       {
-        q: "relayium receive s'interopère-t-il avec le code de jumelage du navigateur ?",
+        q: "relayium receive est-il interopérable avec le code de jumelage du navigateur ?",
         a: "Non. Le protocole de code de jumelage de la CLI est distinct du flux de lien de participation et de QR code du navigateur sur relayium.com — ils utilisent des poignées de main différentes et ne communiquent pas entre eux aujourd'hui, donc un code CLI ne se jumelle qu'avec une autre CLI. C'est sur la feuille de route, mais ce n'est pas encore quelque chose sur quoi compter. En attendant, un destinataire sur navigateur veut un lien relayium up plutôt qu'un code.",
       },
       {
-        q: "Que se passe-t-il si une machine inconnue envoie vers mon écouteur serve ?",
-        a: "Dans un terminal, on vous demande de l'approuver par son adresse et son empreinte lors de son premier envoi, et l'approbation est mémorisée. Sans terminal — un service systemd, une tâche cron — il n'y a personne à qui demander, donc un émetteur inconnu est rejeté ; autorisez-le d'abord avec relayium authorize <fingerprint>.",
+        q: "Que se passe-t-il si une machine inconnue envoie vers mon processus serve à l'écoute ?",
+        a: "Dans un terminal, on vous demande de l'approuver par son adresse et son empreinte lors de son premier envoi, et l'approbation est mémorisée. Sans terminal — un service systemd, une tâche cron — il n'y a personne à qui demander, donc un émetteur inconnu est rejeté ; autorisez-le d'abord avec relayium authorize <fingerprint>.",
       },
       {
-        q: "Puis-je faire un pull depuis un serveur où relayium n'est pas installé ?",
-        a: "Non. pull a toujours besoin de relayium côté distant ; il n'y a pas de repli tar comme pour push. Installez d'abord relayium là-bas.",
+        q: "Puis-je faire un pull depuis un serveur où relayium n'est pas installé ?",
+        a: "Non. pull a toujours besoin de relayium côté distant ; il n'y a pas de repli tar comme pour push. Installez d'abord relayium là-bas.",
       },
       {
-        q: "Où relayium conserve-t-il mon identité et les pairs de confiance ?",
+        q: "Où relayium conserve-t-il mon identité et les pairs de confiance ?",
         a: "Par défaut dans ~/.config/relayium — surchargez cet emplacement avec --config-dir sur toute commande touchant à l'identité ou à la confiance.",
       },
     ],
   },
   cta: {
-    text: "Prêt à recevoir votre premier transfert ? Installez la CLI et choisissez receive, serve ou pull.",
+    text: "Prêt à recevoir votre premier transfert ? Installez la CLI et choisissez receive, serve ou pull.",
     button: "Obtenir la CLI",
     href: "/cli",
   },
@@ -680,7 +680,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
 const ar = {
   title: "استقبال الملفات من سطر الأوامر",
   description:
-    "ثلاث طرق لاستقبال ملف باستخدام Relayium CLI: استقبال إرسال برمز اقتران عبر الشبكات باستخدام receive، أو العمل كصندوق وارد مُستمِع لعمليات الدفع المباشرة عبر الخدمة باستخدام serve، أو السحب من خادم يمكنك أصلًا تسجيل الدخول إليه عبر ssh باستخدام pull. مجاني، بلا حساب.",
+    "ثلاث طرق لاستقبال ملف باستخدام Relayium CLI: استقبال إرسال برمز اقتران عبر الشبكات باستخدام receive، أو العمل كصندوق وارد مُستمِع لعمليات الدفع daemon direct باستخدام serve، أو السحب من خادم يمكنك أصلًا تسجيل الدخول إليه عبر ssh باستخدام pull. مجاني، بلا حساب.",
   updatedLabel: "آخر تحديث",
   lead: [
     "الإرسال نصف القصة فقط — عاجلًا أم آجلًا ستكون أنت في الطرف المُستقبِل: زميل يريد أن يسلّمك ملفًا عبر الإنترنت، أو أحد أجهزتك يريد أن يمرّره إلى آخر، أو تريد أن تمدّ يدك وتجلب شيئًا من خادم تديره. يغطي Relayium CLI الحالات الثلاث بأمر مختلف لكلٍّ منها، ولا واحدة منها تحتاج حسابًا.",
@@ -693,39 +693,39 @@ const ar = {
         "الأمر الذي تشغّله يعتمد على من يبدأ النقل وكيف يعرف الجهازان أحدهما الآخر:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — يرسل إليك شخص عبر الشبكات باستخدام رمز اقتران أصدرته واجهة CLI لديه ثم أبلغك به خارج القناة. من الند للند مباشرةً، مُتحقَّق منه برمز SAS.",
-        "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — يستمع هذا الجهاز لعمليات الدفع المباشرة عبر الخدمة relayium://، على المنفذ 9031 افتراضيًا.",
-        "relayium pull [user@]host:src <dest> — تمدّ يدك عبر SSH إلى خادم يمكنك أصلًا تسجيل الدخول إليه وتجلب الملفات.",
+        "‏‎relayium receive <code> [destdir]‎ — يرسل إليك شخص عبر الشبكات باستخدام رمز اقتران أصدرته واجهة CLI لديه ثم أبلغك به خارج القناة. من الند للند مباشرةً، مُتحقَّق منه برمز SAS.",
+        "‏‎relayium serve [--dir D] [--port N] [--once] [--allow-delete]‎ — يستمع هذا الجهاز لعمليات الدفع daemon direct عبر relayium://، على المنفذ 9031 افتراضيًا.",
+        "‏‎relayium pull [user@]host:src <dest>‎ — تمدّ يدك عبر SSH إلى خادم يمكنك أصلًا تسجيل الدخول إليه وتجلب الملفات.",
       ],
     },
     {
       heading: "receive: شخص يرسل إليك ملفًا عبر الشبكات",
       body: [
-        "هذا هو نصف الاستقبال من relayium send. يشغّل الطرف الآخر relayium send <path> من جهته (بعد relayium login)، فتُصدر واجهة CLI لديه رمزًا من 6 محارف صالحًا لـ 5 دقائق وتطبعه. ثم يخبرك به عبر أي قناة تثقان بها كلاكما — مكالمة، رسالة محادثة. تشغّل أنت receive بذلك الرمز:",
+        "هذا هو نصف الاستقبال من relayium send. يشغّل الطرف الآخر ‎relayium send <path>‎ من جهته (بعد relayium login)، فتُصدر واجهة CLI لديه رمزًا من 6 محارف صالحًا لـ 5 دقائق وتطبعه. ثم يخبرك به عبر أي قناة تثقان بها كلاكما — مكالمة، رسالة محادثة. تشغّل أنت receive بذلك الرمز:",
       ],
       code: [
         `relayium receive K7M4XR
 
-# or into a specific directory
+# أو إلى مجلد محدد
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
         "الاتصال مباشر ومن الند للند ومشفَّر من الطرف إلى الطرف؛ يطبع الطرفان الرمز SAS نفسه (سلسلة المصادقة القصيرة) بمجرد الاتصال — قارنه مع المُرسِل لتتأكد ألا أحد في المنتصف.",
         "بلا وجهة محددة: تصل الملفات إلى المجلد الحالي.",
         "القاعدة نفسها كما في send، الاتصال المباشر فقط: إن لم يُعثر على مسار مباشر بين الشبكتين، يفشل النقل بدل توجيهه عبر مُرحِّل.",
-        "هذا هو بروتوكول رمز الاقتران الخاص بالـ CLI — ورموز CLI تقترن بـ CLI فقط. لا يتوافق اليوم مع رمز اقتران المتصفح أو تدفق QR في relayium.com؛ ذلك إضافة مستقبلية محتملة، لا شيء تعتمد عليه بعد. إن لم يكن لديك سوى متصفح، اطلب من المُرسِل رابط تنزيل عبر relayium up بدلًا من ذلك.",
+        "هذا هو بروتوكول رمز الاقتران في الـ CLI — ورموز CLI تقترن بـ CLI فقط. لا يتوافق اليوم مع رمز اقتران المتصفح أو تدفق QR في relayium.com؛ ذلك إضافة مستقبلية محتملة، لا شيء تعتمد عليه بعد. إن لم يكن لديك سوى متصفح، اطلب من المُرسِل رابط تنزيل عبر relayium up بدلًا من ذلك.",
         "المُستقبِل لا يحتاج حسابًا أبدًا، على أي شبكة. المُرسِل وحده هو من يسجّل الدخول، كي تتمكن واجهة CLI لديه من إصدار الرمز.",
       ],
     },
     {
       heading: "serve: حوّل هذا الجهاز إلى صندوق وارد مُستمِع",
       body: [
-        "يعمل serve بالعكس: بدل أن تمدّ يدك أنت، تدفع أجهزة أخرى إليك مباشرةً عبر relayium:// — مصمَّم للأجهزة التي تثق بها أصلًا، مثل حاسوبك المحمول يدفع إلى NAS، أو خادم بناء يُسقط منتجاته على جهاز تملكه — عبر اتصال TLS 1.3 مثبَّت، بلا SSH وبلا التقاء.",
+        "يعمل serve بالعكس: بدل أن تمدّ يدك أنت، تدفع أجهزة أخرى إليك مباشرةً عبر relayium:// — مصمَّم للأجهزة التي تثق بها أصلًا، مثل حاسوبك المحمول يدفع إلى NAS، أو خادم بناء يُسقط منتجاته على جهاز تملكه — عبر اتصال TLS 1.3 مثبَّت، بلا SSH وبلا تعارف.",
       ],
       code: [
         `relayium serve
 
-# a specific directory, port, and allowing delete requests
+# مجلد ومنفذ محددان، مع السماح بطلبات الحذف
 relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       ],
       bullets: [
@@ -769,8 +769,8 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
         a: "لا. بروتوكول رمز الاقتران في الـ CLI منفصل عن تدفق رابط الانضمام وQR في المتصفح على relayium.com — يستخدمان مصافحات مختلفة ولا يتحدثان أحدهما إلى الآخر اليوم، فرمز الـ CLI لا يقترن إلا بواجهة CLI أخرى. ذلك على خارطة الطريق، لا شيء تعتمد عليه بعد. وإلى أن يحدث ذلك، من يستقبل عبر متصفح يحتاج رابط relayium up لا رمزًا.",
       },
       {
-        q: "ماذا يحدث إذا دفع جهاز غير معروف إلى مُستمِع serve الخاص بي؟",
-        a: "في الطرفية، يُطلب منك الموافقة عليه بعنوانه وبصمته عند أول دفعة، وتُحفَظ الموافقة. بلا طرفية — خدمة systemd، مهمة cron — لا أحد ليُسأل، فيُرفض الطرف الدافع غير المعروف؛ امنحه الإذن مسبقًا أولًا بـ relayium authorize <fingerprint>.",
+        q: "ماذا يحدث إذا دفع جهاز غير معروف إلى مُستمِع serve لديّ؟",
+        a: "في الطرفية، يُطلب منك الموافقة عليه بعنوانه وبصمته عند أول دفعة، وتُحفَظ الموافقة. بلا طرفية — خدمة systemd، مهمة cron — لا أحد ليُسأل، فيُرفض الطرف الدافع غير المعروف؛ امنحه الإذن مسبقًا أولًا بـ ‎relayium authorize <fingerprint>‎.",
       },
       {
         q: "هل يمكنني السحب من خادم لا يوجد فيه relayium مثبَّتًا؟",
@@ -793,7 +793,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
 const es = {
   title: "Recibir archivos desde la línea de comandos",
   description:
-    "Tres formas de recibir un archivo con la CLI de Relayium: recibir un envío entre redes por código de emparejamiento, actuar como buzón a la escucha para envíos daemon-direct, o hacer un pull desde un servidor al que ya puedes conectarte por ssh. Gratis, sin cuenta.",
+    "Tres formas de recibir un archivo con la CLI de Relayium: recibir un envío entre redes por código de emparejamiento, actuar como buzón a la escucha para envíos en daemon directo, o hacer un pull desde un servidor al que ya puedes conectarte por ssh. Gratis, sin cuenta.",
   updatedLabel: "Última actualización",
   lead: [
     "Enviar es solo la mitad de la historia — tarde o temprano estás en el extremo receptor: un colega quiere entregarte un archivo por internet, una de tus propias máquinas quiere pasárselo a otra, o quieres ir a buscar algo en un servidor que administras. La CLI de Relayium cubre los tres casos con un comando distinto para cada uno, y ninguno necesita cuenta.",
@@ -807,7 +807,7 @@ const es = {
       ],
       bullets: [
         "relayium receive <code> [destdir] — alguien te envía entre redes usando un código de emparejamiento que generó su CLI y te comunicó fuera de banda. Directo de igual a igual, verificado con un código SAS.",
-        "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — esta máquina escucha envíos daemon-direct por relayium://, en el puerto 9031 por defecto.",
+        "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — esta máquina escucha envíos en daemon directo por relayium://, en el puerto 9031 por defecto.",
         "relayium pull [user@]host:src <dest> — vas a buscar por SSH a un servidor al que ya puedes conectarte y recuperas archivos.",
       ],
     },
@@ -819,7 +819,7 @@ const es = {
       code: [
         `relayium receive K7M4XR
 
-# or into a specific directory
+# o dentro de un directorio concreto
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
@@ -833,12 +833,12 @@ relayium receive K7M4XR ./downloads`,
     {
       heading: "serve: convierte esta máquina en un buzón a la escucha",
       body: [
-        "serve funciona al revés: en lugar de que seas tú quien va a buscar, otras máquinas te envían directamente por relayium:// — pensado para máquinas en las que ya confías, como tu propio portátil enviando a un NAS, o un servidor de compilación dejando artefactos en una máquina que es tuya — por una conexión TLS 1.3 fijada, sin SSH, sin punto de encuentro.",
+        "serve funciona al revés: en lugar de que seas tú quien va a buscar, otras máquinas te envían directamente por relayium:// — pensado para máquinas en las que ya confías, como tu propio portátil enviando a un NAS, o un servidor de compilación dejando artefactos en una máquina que es tuya — por una conexión TLS 1.3 con anclaje, sin SSH, sin punto de encuentro.",
       ],
       code: [
         `relayium serve
 
-# a specific directory, port, and allowing delete requests
+# un directorio y un puerto concretos, permitiendo peticiones de borrado
 relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       ],
       bullets: [
@@ -882,7 +882,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
         a: "No. El protocolo de código de emparejamiento de la CLI está separado del flujo de enlace de unión y QR del navegador en relayium.com — usan handshakes distintos y hoy no se hablan entre sí, así que un código de la CLI solo se empareja con otra CLI. Eso está en la hoja de ruta, no es algo en lo que puedas confiar todavía. Hasta entonces, quien reciba desde un navegador quiere un enlace de relayium up, no un código.",
       },
       {
-        q: "¿Qué pasa si una máquina desconocida envía a mi escucha serve?",
+        q: "¿Qué pasa si una máquina desconocida envía a mi proceso serve a la escucha?",
         a: "En un terminal, se te pide aprobarla por dirección y huella en su primer envío, y la aprobación se recuerda. Sin terminal — un servicio systemd, una tarea cron — no hay a quién preguntar, así que un emisor no reconocido se rechaza; autorízalo primero con relayium authorize <fingerprint>.",
       },
       {
@@ -906,7 +906,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
 const pt = {
   title: "Receber arquivos pela linha de comando",
   description:
-    "Três formas de receber um arquivo com a CLI do Relayium: receber um envio entre redes por código de emparelhamento, atuar como caixa de entrada à escuta para envios daemon-direct, ou fazer um pull de um servidor ao qual você já consegue se conectar por ssh. Gratuito, sem conta.",
+    "Três formas de receber um arquivo com a CLI do Relayium: receber um envio entre redes por código de emparelhamento, atuar como caixa de entrada à escuta para envios em daemon direto, ou fazer um pull de um servidor ao qual você já consegue se conectar por ssh. Gratuito, sem conta.",
   updatedLabel: "Última atualização",
   lead: [
     "Enviar é só metade da história — mais cedo ou mais tarde você está na ponta receptora: um colega quer te entregar um arquivo pela internet, uma das suas próprias máquinas quer repassá-lo a outra, ou você quer buscar algo em um servidor que administra. A CLI do Relayium cobre os três casos com um comando diferente para cada um, e nenhum precisa de conta.",
@@ -920,19 +920,19 @@ const pt = {
       ],
       bullets: [
         "relayium receive <code> [destdir] — alguém envia para você entre redes usando um código de emparelhamento que a CLI dessa pessoa gerou e repassou a você fora de banda. Direto ponto a ponto, verificado com um código SAS.",
-        "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — esta máquina fica à escuta de envios daemon-direct por relayium://, na porta 9031 por padrão.",
+        "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — esta máquina fica à escuta de envios em daemon direto por relayium://, na porta 9031 por padrão.",
         "relayium pull [user@]host:src <dest> — você vai buscar por SSH em um servidor ao qual já consegue se conectar e recupera arquivos.",
       ],
     },
     {
       heading: "receive: alguém envia um arquivo para você entre redes",
       body: [
-        "Esta é a metade receptora do relayium send. A outra pessoa executa relayium send <path> do lado dela (depois de relayium login); a CLI dela gera um código de 6 caracteres, válido por 5 minutos, e o exibe. Ela te diz qual é por qualquer canal em que vocês dois confiem — uma ligação, uma mensagem de chat. Você executa receive com esse código:",
+        "Esta é a metade receptora do relayium send. A outra pessoa executa relayium send <path> do lado dela (depois de relayium login); a CLI dela gera um código de 6 caracteres, válido por 5 minutos, e o exibe. Ela te diz qual é por qualquer canal em que ambos confiem — uma ligação, uma mensagem de chat. Você executa receive com esse código:",
       ],
       code: [
         `relayium receive K7M4XR
 
-# or into a specific directory
+# ou para um diretório específico
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
@@ -946,12 +946,12 @@ relayium receive K7M4XR ./downloads`,
     {
       heading: "serve: transforme esta máquina em uma caixa de entrada à escuta",
       body: [
-        "serve funciona ao contrário: em vez de você ir buscar, outras máquinas enviam diretamente para você por relayium:// — feito para máquinas em que você já confia, como seu próprio notebook enviando para um NAS, ou um servidor de compilação despejando artefatos em uma máquina que é sua — por uma conexão TLS 1.3 fixada, sem SSH, sem ponto de encontro.",
+        "serve funciona ao contrário: em vez de você ir buscar, outras máquinas enviam diretamente para você por relayium:// — feito para máquinas em que você já confia, como seu próprio notebook enviando para um NAS, ou um servidor de compilação despejando artefatos em uma máquina que é sua — por uma conexão TLS 1.3 com fixação, sem SSH, sem encontro.",
       ],
       code: [
         `relayium serve
 
-# a specific directory, port, and allowing delete requests
+# um diretório e uma porta específicos, permitindo requisições de exclusão
 relayium serve --dir ~/incoming --port 9031 --allow-delete`,
       ],
       bullets: [
@@ -995,7 +995,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
         a: "Não. O protocolo de código de emparelhamento da CLI é separado do fluxo de link de entrada e QR do navegador em relayium.com — eles usam handshakes diferentes e hoje não se comunicam entre si, então um código da CLI só emparelha com outra CLI. Isso está no roteiro, não é algo com que você possa contar ainda. Até lá, quem recebe pelo navegador quer um link do relayium up, não um código.",
       },
       {
-        q: "O que acontece se uma máquina desconhecida enviar para o meu ouvinte serve?",
+        q: "O que acontece se uma máquina desconhecida enviar para o meu processo serve à escuta?",
         a: "Em um terminal, você é solicitado a aprová-la por endereço e impressão digital no primeiro envio dela, e a aprovação é lembrada. Sem terminal — um serviço systemd, uma tarefa cron — não há a quem perguntar, então um emissor não reconhecido é rejeitado; autorize-o primeiro com relayium authorize <fingerprint>.",
       },
       {
