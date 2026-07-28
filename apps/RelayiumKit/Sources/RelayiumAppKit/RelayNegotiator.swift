@@ -87,38 +87,64 @@ public final class RelayNegotiator: @unchecked Sendable {
     /// Re-broadcasting is deliberate: an incremental map is only useful to the
     /// peer if the peer actually receives the increments.
     ///
+    /// The broadcast happens INSIDE the lock, which is the one thing here that
+    /// is not obvious. Growing the map and then releasing the lock before
+    /// encoding and sending let two probes reach the socket in the opposite
+    /// order to the growth:
+    ///
+    ///     A: mine = {a}       snapshot {a}
+    ///     B: mine = {a, b}    snapshot {a, b}
+    ///     B: sends {a, b}     — reaches the wire first
+    ///     A: sends {a}        — reaches the wire second
+    ///
+    /// The peer applies the LAST thing it received, so its copy of our map
+    /// shrinks — permanently, when this lands on the final increments, which is
+    /// exactly when several probes finish together (two unreachable relays
+    /// timing out in the same instant). The reordering is ours, on this side of
+    /// the socket; the transport has nothing to do with it. Serialising the
+    /// encode and the send with the growth is what makes "what we put on the
+    /// wire only ever grows" true rather than merely likely.
+    ///
     /// Synchronous on purpose. `NSLock.lock()`/`unlock()` are `noasync`, so
     /// taking the lock inline in `start()`'s async closure was a warning today
     /// and an error under the Swift 6 language mode. `current()`, `wake()` and
-    /// `send()` below are the same move for the same reason.
+    /// `broadcastLocked()` below are the same move for the same reason.
     private func record(_ id: String, _ ms: Int) {
         lock.lock()
         mine[id] = ms
-        let targets = peers
+        broadcastLocked(to: Array(peers))
         lock.unlock()
-        for p in targets { send(to: p) }
         wake()
     }
 
     public func peerJoined(_ peerId: String) {
         lock.lock()
         peers.insert(peerId)
-        let haveMine = !mine.isEmpty
+        // Only worth sending once there is something to say — which is what
+        // broadcastLocked's own guard does; `record`'s broadcast covers the
+        // other ordering.
+        broadcastLocked(to: [peerId])
         lock.unlock()
-        // Only worth sending once there is something to say; `start`'s
-        // completion covers the other ordering.
-        if haveMine { send(to: peerId) }
     }
 
-    /// A peer's map. A native peer now sends this several times as its own
-    /// probes land, each send carrying everything it has measured so far, so
-    /// the map only ever grows and taking the newest wholesale is right. A
-    /// browser peer still sends one complete map, which is the same thing with
-    /// one increment.
+    /// A peer's map, MERGED rather than assigned.
+    ///
+    /// A native peer sends this several times as its own probes land, each send
+    /// carrying everything it has measured so far, so within one session the
+    /// map only grows and the newest value for a relay is always the right one.
+    /// Merging is what keeps a *short* message from undoing that: a peer on a
+    /// build without the send-ordering fix above, or any future client that
+    /// broadcasts genuine increments rather than cumulative maps, can hand us
+    /// fewer entries than we already hold, and assigning wholesale would drop
+    /// the rest for the rest of the session. A browser peer sends one complete
+    /// map, for which merging and assigning are the same thing.
+    ///
+    /// Nothing removes a relay from a peer's map mid-session, so there is no
+    /// case where forgetting an entry is the correct behaviour.
     public func handleSignal(from: String, data: JSONValue) {
         guard let map = RelayRttMessage.decode(data) else { return }
         lock.lock()
-        theirs = map
+        theirs.merge(map) { _, new in new }
         lock.unlock()
         // Deliberately no reply. Broadcasts happen on measure-done and on
         // peer-join; answering here would have two peers echoing maps forever.
@@ -177,10 +203,18 @@ public final class RelayNegotiator: @unchecked Sendable {
         RelayChoice.pick(mine: mine, theirs: theirs)
     }
 
-    private func send(to peerId: String) {
-        lock.lock(); let m = mine; lock.unlock()
-        guard !m.isEmpty else { return }
-        signaling.sendSignal(to: peerId, data: RelayRttMessage.encode(m))
+    /// Puts `mine` on the wire for each of `targets`. **Call with the lock
+    /// held**, and keep the encode inside it — that is the whole fix described
+    /// on `record`; releasing early to be polite about lock hold time is what
+    /// lets a later, larger map overtake an earlier, smaller one.
+    ///
+    /// `sendSignal` is a synchronous encode plus a `WebSocketChannel.send`, and
+    /// nothing on that path re-enters this object, so holding the lock across
+    /// it cannot deadlock.
+    private func broadcastLocked(to targets: [String]) {
+        guard !mine.isEmpty else { return }
+        let payload = RelayRttMessage.encode(mine)
+        for p in targets { signaling.sendSignal(to: p, data: payload) }
     }
 
     private func wake() {

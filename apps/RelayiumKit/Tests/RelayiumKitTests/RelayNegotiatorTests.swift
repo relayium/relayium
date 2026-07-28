@@ -14,6 +14,60 @@ private func measuring(_ map: [String: Int]) -> RelayNegotiator.Measure {
     { _, publish in for (id, ms) in map { publish(id, ms) } }
 }
 
+/// A channel that stalls inside `send` for the FIRST relay-RTT message it is
+/// given, and records it only once the stall is over.
+///
+/// This is the window the sender-side reordering defect lives in. `record()`
+/// used to release the lock, and only then encode and hand the map to the
+/// socket — so a probe finishing during another probe's `send` could put a
+/// LARGER map on the wire first and leave the smaller one to land behind it.
+/// `handleSignal` on the far side replaced its copy wholesale, so the peer's
+/// view of our map shrank, permanently if that pair was the last one.
+///
+/// Stalling before the append rather than after is the whole point: it lets the
+/// second, later map get onto the wire ahead of the first if — and only if —
+/// nothing is serialising the two.
+private final class StallingChannel: WebSocketChannel {
+    var onOpen: (() -> Void)?
+    var onText: ((String) -> Void)?
+    var onClose: (() -> Void)?
+    private(set) var isOpen = false
+
+    private let stall: TimeInterval
+    private let lock = NSLock()
+    private var stalledOnce = false
+    private var _sent: [String] = []
+    var sent: [String] { lock.lock(); defer { lock.unlock() }; return _sent }
+
+    init(stall: TimeInterval) { self.stall = stall }
+
+    func send(_ text: String) {
+        guard isOpen else { return }
+        var shouldStall = false
+        if text.contains("relayRtt") {
+            lock.lock()
+            if !stalledOnce { stalledOnce = true; shouldStall = true }
+            lock.unlock()
+        }
+        if shouldStall { Thread.sleep(forTimeInterval: stall) }
+        lock.lock(); _sent.append(text); lock.unlock()
+    }
+
+    func close() { isOpen = false; onClose?() }
+    func fireOpen() { isOpen = true; onOpen?() }
+}
+
+/// How many relays each `relayRtt` message on the wire carried, in wire order.
+private func relayRttSizes(_ sent: [String]) -> [Int] {
+    sent.compactMap { text in
+        guard let d = text.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+              let data = root["data"] as? [String: Any],
+              let rtt = data["relayRtt"] as? [String: Any] else { return nil }
+        return rtt.count
+    }
+}
+
 final class RelayNegotiatorTests: XCTestCase {
     private func negotiator(_ ids: [String],
                             mine: [String: Int]) -> (RelayNegotiator, FakeWebSocketChannel) {
@@ -200,5 +254,58 @@ final class RelayNegotiatorTests: XCTestCase {
                        "a 3s straggler must not stop the relay that already answered from being chosen")
         XCTAssertLessThan(Date().timeIntervalSince(began), 2.0,
                           "the deadline must govern, not the slowest probe in the pool")
+    }
+
+    /// Sender-side reordering: two probes landing while a send is in flight
+    /// must not put the SMALLER map on the wire last.
+    ///
+    /// `a` is recorded first and its send stalls for 300 ms. `b` lands 100 ms
+    /// into that stall. Unless the encode-and-send is serialised with the map
+    /// growth, `b`'s two-entry map overtakes `a`'s one-entry map, the peer
+    /// applies `{a}` last, and its copy of our map is one relay short from then
+    /// on — which on the final increments is permanent.
+    ///
+    /// The assertion is on sizes rather than contents because that is the
+    /// invariant: what we put on the wire only ever grows.
+    func testAnEarlierMapNeverOvertakesALaterOneOnTheWire() async {
+        let ch = StallingChannel(stall: 0.3)
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["a", "b"]),
+                                measure: { _, publish in
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { publish("a", 10) }
+                group.addTask {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    publish("b", 20)
+                }
+            }
+        })
+        n.peerJoined("peer")   // before start(): mine is empty, so this sends nothing itself
+        n.start()
+
+        let sawBoth = await eventually(timeout: 3.0) {
+            relayRttSizes(ch.sent).count >= 2
+        }
+        XCTAssertTrue(sawBoth, "both increments should have reached the socket")
+        XCTAssertEqual(relayRttSizes(ch.sent), [1, 2],
+                       "the map on the wire must never shrink: {a} then {a,b}, never {a,b} then {a}")
+    }
+
+    /// The receiving half of the same defect. A peer whose sends reorder — an
+    /// older native build, or any client that broadcasts increments — can hand
+    /// us a map shorter than one we already have. Merging keeps what we were
+    /// told before; replacing wholesale throws it away.
+    ///
+    /// Here the stale second message would leave only `x` in the intersection
+    /// (max(100, 1) = 100). Merged, `y` survives and wins on max(10, 2) = 10.
+    func testAStaleShorterPeerMapDoesNotShrinkOurCopyOfIt() async {
+        let (n, _) = negotiator(["x", "y"], mine: ["x": 100, "y": 10])
+        n.start()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["x": 1, "y": 2]))
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["x": 1]))
+        let chosen = await n.waitForChoice(deadline: 1.0)
+        XCTAssertEqual(chosen?.id, "y",
+                       "a short, late map must not drop a relay the peer already told us about")
     }
 }
