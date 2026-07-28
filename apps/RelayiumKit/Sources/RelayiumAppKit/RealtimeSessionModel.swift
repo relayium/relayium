@@ -104,7 +104,14 @@ public final class RealtimeSessionModel: ObservableObject {
     public func join(code: String, role: Role = .responder) async {
         generation += 1
         let g = generation
-        state = .joining(code)
+        // A sender minted this code and is already displaying it; the other
+        // device has to read it off that screen, so replacing it with
+        // "Connecting…" removes the one thing the wait depends on — and the
+        // wait could then only ever end in the peer timeout.
+        //
+        // A receiver typed a code instead of minting one and has nothing to
+        // display, so it gets progress.
+        if !isShowing(code) { state = .joining(code) }
         do {
             // Fetched once per attempt, not per retry: /api/ice is limited to
             // 5/min per IP because guessing a live code steals its TURN
@@ -123,6 +130,11 @@ public final class RealtimeSessionModel: ObservableObject {
             // connection would fail later and blame the network.
             state = .failed(ErrorCopy.message(for: error))
         }
+    }
+
+    private func isShowing(_ code: String) -> Bool {
+        if case let .showingCode(shown, _) = state { return shown == code }
+        return false
     }
 
     /// Queued until the SAS is confirmed — see `confirmSAS`.

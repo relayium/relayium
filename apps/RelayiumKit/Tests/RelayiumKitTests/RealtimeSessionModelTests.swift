@@ -293,3 +293,74 @@ final class RealtimeSessionModelTests: XCTestCase {
         guard case .failed = m.state else { return XCTFail("got \(m.state)") }
     }
 }
+
+/// Lets a test hold `makeConnection` suspended so the state *while waiting for
+/// a peer* can be asserted, without sleeping on a wall clock.
+private actor ConnectGate {
+    private var cont: CheckedContinuation<Void, Never>?
+    private var opened = false
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { self.cont = $0 }
+    }
+    func open() {
+        opened = true
+        cont?.resume()
+        cont = nil
+    }
+}
+
+extension RealtimeSessionModelTests {
+    /// The sender mints a code and then joins its own room to wait there. Those
+    /// are two steps of one action, and the second used to overwrite the first:
+    /// `.showingCode` became `.joining`, so the pane replaced the code and its
+    /// QR with "Connecting…" before either had been on screen for a frame.
+    ///
+    /// The user is then holding nothing to type into the other device, and the
+    /// wait can only end in the 120s timeout.
+    func testSenderKeepsShowingTheCodeWhileWaitingForAPeer() async {
+        let gate = ConnectGate()
+        let pair = StubPair(), ice = StubICE(), conn = StubConnection()
+        let m = RealtimeSessionModel(pairClient: pair, iceClient: ice,
+                                     makeConnection: { _, _, _ in
+                                         await gate.wait()
+                                         return conn
+                                     })
+
+        await m.mintCode(token: "tok")
+        guard case .showingCode = m.state else { return XCTFail("mint: got \(m.state)") }
+
+        let joining = Task { await m.join(code: "K7M3X9", role: .initiator) }
+        await settle()
+
+        // Still on screen: this is the whole point of the state.
+        guard case let .showingCode(code, _) = m.state else {
+            return XCTFail("the code stopped being shown while waiting: \(m.state)")
+        }
+        XCTAssertEqual(code, "K7M3X9")
+
+        await gate.open()
+        _ = await joining.value
+        await settle()
+        guard case .connecting = m.state else { return XCTFail("after peer: got \(m.state)") }
+    }
+
+    /// The receiver has no code to display — it typed one — so it must still
+    /// show progress rather than sit on an empty screen.
+    func testReceiverStillShowsConnecting() async {
+        let gate = ConnectGate()
+        let pair = StubPair(), ice = StubICE(), conn = StubConnection()
+        let m = RealtimeSessionModel(pairClient: pair, iceClient: ice,
+                                     makeConnection: { _, _, _ in
+                                         await gate.wait()
+                                         return conn
+                                     })
+
+        let joining = Task { await m.join(code: "K7M3X9") }
+        await settle()
+        guard case .joining = m.state else { return XCTFail("got \(m.state)") }
+
+        await gate.open()
+        _ = await joining.value
+    }
+}
