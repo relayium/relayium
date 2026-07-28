@@ -1,0 +1,146 @@
+name: auto-release
+# Cuts a release from main on a schedule, so that shipping does not depend on
+# anyone remembering to.
+#
+# It was not remembering. v0.10.2 → v0.11.0 sat unreleased for months and 201
+# commits, and the gap only surfaced when someone hit a CLI on a production box
+# that was missing a feature written long before — `relayium send <file>` with
+# no pairing code, which had never been in any published build.
+#
+# This is only safe because of what landed alongside it: until go.yml existed
+# the server had no CI at all, and scheduling releases off an unverified main
+# would have been worse than forgetting. The green-CI gate below is therefore
+# load-bearing, not decorative.
+#
+# Blast radius is deliberately small. Nodes do not follow releases — they ask
+# central which version to run (relayium-node's resolveTargetFromCentral), so a
+# published tag changes nothing in the fleet until an operator starts a
+# rollout. CLI users upgrade by running `relayium update`.
+on:
+  schedule:
+    # Mondays, 04:00 UTC. Early in the week on purpose: a release that goes out
+    # on a Friday is discovered on a Monday.
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # create and push the tag
+  actions: write    # dispatch release.yml for that tag
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Third-party actions are pinned to a full commit SHA (with the
+      # human-readable version in a trailing comment) so a compromised or
+      # retagged upstream release can't silently change what runs here.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: main
+          fetch-depth: 0   # tags and full history: both are inputs below
+
+      - name: Work out whether there is anything to release
+        id: scan
+        run: |
+          set -euo pipefail
+          last="$(git describe --tags --abbrev=0 2>/dev/null || echo '')"
+          if [ -z "$last" ]; then
+            echo "no tags yet — refusing to invent the first version number" >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          count="$(git rev-list --count "$last"..HEAD)"
+          echo "last=$last" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          if [ "$count" -eq 0 ]; then
+            # Nothing to ship is the normal state most weeks, and is not a
+            # problem — but it is still written down, because a run that says
+            # nothing is indistinguishable from a run that did not happen.
+            echo "Nothing to release: main is at \`$last\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          {
+            echo "### $count commits since \`$last\`"
+            echo
+            git log --format='- %s' "$last"..HEAD | head -40
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # A red main must stop the release, and must stop it LOUDLY. Skipping
+      # quietly here would reproduce the exact failure this workflow exists to
+      # prevent: everything looks fine and nothing ships.
+      - name: Require the checks on this commit to be green
+        if: steps.scan.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          # A check that is queued or in progress counts as not-green: the point
+          # is to release something already verified, not to race it.
+          bad="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs" \
+                   --jq '.check_runs[]
+                         | select(.name != "tag")
+                         | select(.conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped")
+                         | "\(.name): \(.status)/\(.conclusion // "pending")"' || true)"
+          if [ -n "$bad" ]; then
+            {
+              echo "### Release withheld — checks are not green on \`$sha\`"
+              echo '```'
+              printf '%s\n' "$bad"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::main is not green; refusing to tag it"
+            exit 1
+          fi
+
+      - name: Choose the next version
+        id: ver
+        if: steps.scan.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          last="${{ steps.scan.outputs.last }}"
+          v="${last#v}"
+          major="${v%%.*}"; rest="${v#*.}"; minor="${rest%%.*}"; patch="${rest#*.}"
+          subjects="$(git log --format='%s' "$last"..HEAD)"
+          # Pre-1.0 semantics: a breaking change bumps the minor, because there
+          # is no major to spend. feat does too; everything else is a patch.
+          if printf '%s\n' "$subjects" | grep -qE '^[a-z]+(\([^)]*\))?!:|^feat(\([^)]*\))?:' \
+             || git log --format='%B' "$last"..HEAD | grep -q 'BREAKING CHANGE'; then
+            minor=$((minor + 1)); patch=0
+          else
+            patch=$((patch + 1))
+          fi
+          next="v${major}.${minor}.${patch}"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "Next version: **$next**" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tag it
+        if: steps.scan.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          next="${{ steps.ver.outputs.next }}"
+          if git rev-parse -q --verify "refs/tags/$next" >/dev/null; then
+            echo "::error::$next already exists — the version arithmetic and the tag list disagree"
+            exit 1
+          fi
+          git config user.name  "relayium-release[bot]"
+          git config user.email "github@relayium.com"
+          git tag -a "$next" -m "$next
+
+          Released automatically from main by .github/workflows/auto-release.yml.
+          $(git rev-list --count "${{ steps.scan.outputs.last }}"..HEAD) commits since ${{ steps.scan.outputs.last }}."
+          git push origin "$next"
+
+      # See the comment on release.yml's workflow_dispatch: the tag above was
+      # pushed with GITHUB_TOKEN and therefore started nothing by itself.
+      - name: Build it
+        if: steps.scan.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh workflow run release.yml --ref "${{ steps.ver.outputs.next }}"
+          echo "Dispatched release.yml for **${{ steps.ver.outputs.next }}**" >> "$GITHUB_STEP_SUMMARY"

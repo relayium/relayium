@@ -3,6 +3,16 @@ on:
   push:
     tags:
       - 'v*'
+  # Invoked with a tag ref by auto-release.yml, and available for a manual
+  # re-run of a tag whose first attempt failed.
+  #
+  # This is not redundant with the trigger above. A tag pushed by a workflow
+  # using the default GITHUB_TOKEN does NOT start another workflow — GitHub
+  # suppresses it to stop recursion — so auto-release can create the tag and
+  # then has to say so out loud. Without this entry the tag would appear and
+  # nothing would build it, which is a worse failure than not tagging at all:
+  # the version looks released and no artifact exists.
+  workflow_dispatch:
 
 permissions:
   contents: write
