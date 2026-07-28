@@ -22,8 +22,11 @@ is the only piece that needs a live allocation.
 - **The algorithm is copied, not invented.** `RelayChoice.pick` must match
   `web/src/lib/ice.ts`'s `pickRelay` decision for decision, and
   `RelayRttMessage` must produce exactly `{"relayRtt": {"<id>": <ms>}}` — the
-  web and the Mac are each other's peers, and a difference here means they
-  choose different relays and the connection fails looking like a network fault.
+  web and the Mac are each other's peers, and a difference here means they may
+  choose different relays. That connects — both sides still gather a relay
+  candidate and there is no NAT between two public TURN servers — it just costs
+  a second hop and roughly double metered relay bandwidth, not correctness. See
+  "What a relay mismatch actually costs" in the design doc.
 - **Symmetry is the load-bearing property.** `pick(a, b) == pick(b, a)` for all
   inputs. It is what removes the negotiation round; if it breaks, nothing else
   in this design works.
@@ -142,8 +145,9 @@ import Foundation
 ///
 /// Mirrors `pickRelay` in `web/src/lib/ice.ts` decision for decision. The Mac
 /// and the browser are routinely each other's peer, and a disagreement here
-/// does not degrade gracefully: each side allocates on a different relay and
-/// the connection fails looking like a network problem.
+/// still connects — each side allocates on a different relay, but there is no
+/// NAT between two public TURN servers — at the cost of a second hop and
+/// roughly double metered relay bandwidth, not a broken connection.
 public enum RelayChoice {
     /// The id minimising the *worse* of the two peers' RTTs, then their sum,
     /// then the id itself.
@@ -193,9 +197,9 @@ git add apps/RelayiumKit/Sources/RelayiumKit/Realtime/RelayChoice.swift \
 git commit -s -m "feat(kit): the symmetric relay choice
 
 Copied decision for decision from web/src/lib/ice.ts's pickRelay, because the
-Mac and the browser are routinely each other's peer and a disagreement does not
-degrade gracefully — each side allocates on a different relay and the failure
-looks like a network fault.
+Mac and the browser are routinely each other's peer and a disagreement still
+connects — each side allocates on a different relay, at roughly double
+metered relay bandwidth, rather than failing.
 
 The property test is the point. Symmetry is what removes the negotiation round:
 both peers feed the same two maps in opposite order and must reach the same
