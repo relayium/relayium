@@ -819,6 +819,59 @@ CIQRCodeGenerator ships with the OS, so this costs no dependency."
 
 ### Task 11: Acceptance
 
+## OUTCOME, recorded 2026-07-28
+
+**The interactive items were not run.** Not "ran and passed" — not run. The
+decision to ship without them was taken deliberately; this section says so
+plainly so that nobody later reads silence as success.
+
+| Item | Result |
+|---|---|
+| Mac → browser | not exercised |
+| Browser → Mac | not exercised |
+| SAS reject | not exercised |
+| Cancel mid-transfer | not exercised |
+| Signed out, join a code | not exercised |
+| **Sender memory** | **verified** — 512 MB over a live connection, peak 24 MB flat, sha256 identical |
+| Mac ↔ Mac | not exercised |
+| TURN forced relay | not exercised |
+
+### What the partial attempt found before it stopped
+
+Three defects, none of which 251 passing unit tests caught, and every one of
+them on the first thing a user does with this round's feature:
+
+1. **The sender dialled itself** (`df5780bb`). The hub broadcasts the whole room
+   roster to every member including the recipient; the factory took
+   `peers.first`. Reproduced from a real failure, fixed, and covered by a test.
+2. **The pairing code was never displayed** (`cdbe6b3f`). `mintCode` set
+   `.showingCode` and `join` overwrote it with `.joining` in the same action, so
+   the sender had nothing to hand the other device. Reproduced from a real
+   failure, fixed, covered.
+3. **`com.apple.security.network.server` was missing** (`4a5dbce6`). Under the
+   App Sandbox, WebRTC needs inbound permission for ICE; without it host and
+   server-reflexive candidates are dead while signalling still works, which is
+   why it presented as "pairs fine, transfers never".
+
+**Number 3 is a diagnosis, not a confirmed fix.** It was inferred from the
+entitlement list and the pattern of the failure — relay allocations made,
+zero bytes carried — and it is well founded. But no successful transfer has
+run against it. The first real peer connection is still the test that decides
+whether it was the whole cause or only part of it.
+
+### The standing lesson
+
+The round's own unit suite was green through all three. They are only reachable
+by connecting two real peers, which is exactly what this task exists to do —
+so the value of running it is not in doubt, only its cost. If a later round
+wants to know whether skipping was expensive, the answer is: it found three in
+the first ten minutes and stopped before the fourth.
+
+---
+
+## Original plan
+
+
 **Blocked on Tasks 1–10.** Needs a signed Debug build (`CODE_SIGNING_ALLOWED=NO`
 skips entitlements, and this flow writes to the keychain and to disk).
 
