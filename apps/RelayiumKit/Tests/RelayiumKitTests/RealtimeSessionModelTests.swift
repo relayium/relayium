@@ -14,10 +14,10 @@ private final class StubPair: PairCodeClient, @unchecked Sendable {
 }
 
 private final class StubICE: ICEConfigClient, @unchecked Sendable {
-    var result = [ICEServerConfig(urls: ["stun:s:3478"])]
+    var result = ICEConfig(iceServers: [ICEServerConfig(urls: ["stun:s:3478"])])
     var error: Error?
     private(set) var fetchedCodes: [String] = []
-    func fetch(code: String) async throws -> [ICEServerConfig] {
+    func fetch(code: String) async throws -> ICEConfig {
         fetchedCodes.append(code)
         if let e = error { throw e }
         return result

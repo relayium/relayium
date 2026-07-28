@@ -15,15 +15,47 @@ public struct ICEServerConfig: Codable, Equatable {
     }
 }
 
-/// An empty list is a configuration failure, not an empty success: a peer
-/// connection with no ICE servers fails later, and much more obscurely.
-func parseICEServers(_ data: Data) throws -> [ICEServerConfig] {
-    struct Body: Decodable { let iceServers: [ICEServerConfig]? }
+/// One relay in the pool `/api/ice` advertises alongside the legacy single
+/// TURN. `id` is what the two peers exchange to agree on a relay.
+public struct RelayEntry: Codable, Equatable {
+    public let id: String
+    public let region: String?
+    public let iceServers: [ICEServerConfig]
+
+    public init(id: String, region: String? = nil, iceServers: [ICEServerConfig]) {
+        self.id = id
+        self.region = region
+        self.iceServers = iceServers
+    }
+}
+
+/// Everything `/api/ice` returns: the servers to use when there is no better
+/// choice, and the pool to choose from when there is.
+public struct ICEConfig: Equatable {
+    public let iceServers: [ICEServerConfig]
+    public let relays: [RelayEntry]
+
+    public init(iceServers: [ICEServerConfig], relays: [RelayEntry] = []) {
+        self.iceServers = iceServers
+        self.relays = relays
+    }
+}
+
+/// An empty `iceServers` is a configuration failure, not an empty success: a
+/// peer connection with no ICE servers fails later, and much more obscurely.
+///
+/// An empty `relays` is neither — it is the LAN case, and every caller treats
+/// the pool as optional.
+func parseICEConfig(_ data: Data) throws -> ICEConfig {
+    struct Body: Decodable {
+        let iceServers: [ICEServerConfig]?
+        let relays: [RelayEntry]?
+    }
     guard let b = try? JSONDecoder().decode(Body.self, from: data),
           let servers = b.iceServers, !servers.isEmpty else {
         throw AccountError.decoding
     }
-    return servers
+    return ICEConfig(iceServers: servers, relays: b.relays ?? [])
 }
 
 func iceStatusError(_ code: Int) -> AccountError {
@@ -31,10 +63,10 @@ func iceStatusError(_ code: Int) -> AccountError {
 }
 
 public protocol ICEConfigClient {
-    /// `code` is the live pairing code. TURN credentials come back only for a
-    /// valid one, because relayed bytes bill to that code's owner; without it
-    /// the response is STUN-only.
-    func fetch(code: String) async throws -> [ICEServerConfig]
+    /// `code` is the live pairing code. TURN credentials and the relay pool
+    /// come back only for a valid one, because relayed bytes bill to that
+    /// code's owner; without it the response is STUN-only.
+    func fetch(code: String) async throws -> ICEConfig
 }
 
 public struct HTTPICEClient: ICEConfigClient {
@@ -46,7 +78,7 @@ public struct HTTPICEClient: ICEConfigClient {
         self.session = session
     }
 
-    public func fetch(code: String) async throws -> [ICEServerConfig] {
+    public func fetch(code: String) async throws -> ICEConfig {
         var comps = URLComponents(url: baseURL.appendingPathComponent("api/ice"),
                                   resolvingAgainstBaseURL: false)!
         if !code.isEmpty { comps.queryItems = [URLQueryItem(name: "code", value: code)] }
@@ -55,7 +87,7 @@ public struct HTTPICEClient: ICEConfigClient {
             let (data, resp) = try await session.data(for: req)
             guard let http = resp as? HTTPURLResponse else { throw AccountError.network }
             guard http.statusCode == 200 else { throw iceStatusError(http.statusCode) }
-            return try parseICEServers(data)
+            return try parseICEConfig(data)
         } catch let e as AccountError {
             throw e
         } catch {
@@ -63,12 +95,3 @@ public struct HTTPICEClient: ICEConfigClient {
         }
     }
 }
-
-// The response may also carry `relays` (a pool of TURN servers with ids) and
-// `relayDenied`. Both are decoded away on purpose.
-//
-// The pool exists so both peers measure RTT to each candidate and converge on
-// the lowest-latency common relay. Skipping it costs latency, not correctness:
-// with TURN each peer may relay through a different server and ICE still finds
-// a working candidate pair. Implementing convergence means measuring RTT and
-// agreeing with the peer, which is its own round.
