@@ -144,15 +144,33 @@ public enum RealtimeConnectionFactory {
         let waitBegan = Date()
         let chosen = await negotiator.waitForChoice(deadline: choiceDeadline)
         // `waited` is the number relayChoiceDeadline is waiting on: how long
-        // convergence actually took on a real pair of clients. `chosen=none`
-        // with a full `mine` and an empty `theirs` is an older or browser peer;
-        // `none` with both full is a pool with nothing in common; `none` with
-        // `mine` short is measurement losing the race, which is what to look
-        // for first.
+        // convergence actually took on a real pair of clients. But `waited`
+        // conflates two different waits, and they call for opposite fixes:
+        // time spent waiting for the PEER to arrive says nothing about
+        // relayChoiceDeadline, while time spent waiting on OUR OWN probes says
+        // everything. `measured` is the second of those on its own — the span
+        // from `negotiator.start()` to our own measurement finishing — so the
+        // two together say which one this session's `waited` was actually
+        // measuring.
+        //
+        // `measured` is "unfinished" rather than a number when our own
+        // measurement had not completed before the wait ended: logging 800ms
+        // (or whatever the deadline was) as if it were our probe time would
+        // read as "measurement takes about this long", when the true story is
+        // "a straggler relay was still outstanding and the deadline cut it
+        // off" — the one case relayChoiceDeadline should be raised for, not
+        // the one to average in with the rest.
+        //
+        // `chosen=none` with a full `mine` and an empty `theirs` is an older or
+        // browser peer; `none` with both full is a pool with nothing in
+        // common; `none` with `mine` short is measurement losing the race,
+        // which is what to look for first.
         let maps = negotiator.maps()
+        let measuredMs = negotiator.measuredMs()
         log.notice("""
                    relay choice chosen=\(chosen?.id ?? "none", privacy: .public) \
                    waited=\(Int(Date().timeIntervalSince(waitBegan) * 1000), privacy: .public)ms \
+                   measured=\(measuredMs.map { "\($0)ms" } ?? "unfinished", privacy: .public) \
                    deadline=\(Int(choiceDeadline * 1000), privacy: .public)ms \
                    pool=\(config.relays.count, privacy: .public) \
                    mine=[\(describe(maps.mine), privacy: .public)] \

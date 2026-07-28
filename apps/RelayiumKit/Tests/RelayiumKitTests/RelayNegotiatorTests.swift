@@ -326,6 +326,51 @@ final class RelayNegotiatorTests: XCTestCase {
                           "the deadline must govern, not the slowest probe in the pool")
     }
 
+    /// `measuredMs()` feeds the other half of what `RealtimeConnectionFactory`'s
+    /// `waited=` field conflates: time spent on our OWN probes, independent of
+    /// whether or when the peer shows up. Nil until `start()`'s measurement
+    /// actually finishes, then latched.
+    func testMeasuredMsIsNilUntilOurOwnMeasurementFinishesThenLatches() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["slow"]),
+                                measure: { _, publish in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            publish("slow", 5)
+        })
+        n.start()
+        XCTAssertNil(n.measuredMs(), "our own measurement has not finished yet")
+        // A peer map already in hand means `waitForChoice` wakes the instant
+        // our own measurement finishes rather than running the full deadline.
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["slow": 8]))
+        _ = await n.waitForChoice(deadline: 2.0)
+        XCTAssertNotNil(n.measuredMs(), "our own measurement has finished by now")
+    }
+
+    /// The case the log line's "unfinished" representation exists for: the
+    /// deadline cuts the wait off before our own measurement is done. Same
+    /// setup as `testAStragglerCannotHoldTheDeadlineHostage` — `waitForChoice`
+    /// still returns the best relay so far, but `measuredMs()` must not report
+    /// a number for a probe that has not actually finished.
+    func testMeasuredMsIsNilWhenTheDeadlineCutsOffOurOwnMeasurement() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["fast", "slow"]),
+                                measure: { _, publish in
+            publish("fast", 10)
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            publish("slow", 1)
+        })
+        n.start()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["fast": 10, "slow": 1]))
+        let chosen = await n.waitForChoice(deadline: 0.3)
+        XCTAssertEqual(chosen?.id, "fast")
+        XCTAssertNil(n.measuredMs(),
+                     "the slow relay's probe had not finished when the deadline cut the wait off")
+    }
+
     /// Sender-side reordering: two probes landing while a send is in flight
     /// must not put the SMALLER map on the wire last.
     ///

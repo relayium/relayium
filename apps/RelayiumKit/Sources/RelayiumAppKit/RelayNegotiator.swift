@@ -62,6 +62,17 @@ public final class RelayNegotiator: @unchecked Sendable {
     /// out, so `mine` can no longer grow. This is what `waitForChoice` waits
     /// for rather than the first common relay; see `wake`.
     private var measurementFinished = false
+    /// When `start()` was called, so `finishMeasurement` can time our own
+    /// probes. Set under the lock even though `start()` runs once, because the
+    /// `Task` that reads it back in `finishMeasurement` can hop to a different
+    /// thread — same reasoning as everywhere else in this file that a field
+    /// crosses the async boundary.
+    private var measurementStartedAt: Date?
+    /// Milliseconds from `measurementStartedAt` to `finishMeasurement` —
+    /// latched once and never recomputed, so a caller that asks after the
+    /// fact gets the same answer `wake()` already acted on. Nil until our own
+    /// measurement has actually finished; see `measuredMs()`.
+    private var measurementElapsedMs: Int?
     // Each waiter is a "fire" closure rather than a raw continuation: see
     // `waitForChoice` for why a plain `withCheckedContinuation` here would
     // deadlock the whole call in the (very common) case nobody ever wakes it.
@@ -86,6 +97,9 @@ public final class RelayNegotiator: @unchecked Sendable {
     /// peers, on every transfer. Publishing per probe means our fast relays are
     /// on the wire, and in the peer's hands, inside the budget.
     public func start() {
+        lock.lock()
+        measurementStartedAt = Date()
+        lock.unlock()
         guard !pool.isEmpty else { finishMeasurement(); return }
         Task { [self] in
             await measure(pool) { id, ms in self.record(id, ms) }
@@ -100,6 +114,9 @@ public final class RelayNegotiator: @unchecked Sendable {
     private func finishMeasurement() {
         lock.lock()
         measurementFinished = true
+        if measurementElapsedMs == nil, let startedAt = measurementStartedAt {
+            measurementElapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+        }
         lock.unlock()
         wake()
     }
@@ -238,6 +255,22 @@ public final class RelayNegotiator: @unchecked Sendable {
     public func maps() -> (mine: [String: Int], theirs: [String: Int]) {
         lock.lock(); defer { lock.unlock() }
         return (mine, theirs)
+    }
+
+    /// How long OUR OWN probes took to settle: `start()` to `finishMeasurement`,
+    /// in milliseconds. Nil means our own measurement had not finished when
+    /// this was asked — the case that matters is a caller checking right after
+    /// `waitForChoice`'s deadline elapsed, where nil means a straggler relay
+    /// overran the deadline rather than the peer being slow to arrive.
+    ///
+    /// Exists for the same log line `maps()` does: `waited` in
+    /// `RealtimeConnectionFactory` conflates time spent waiting for the PEER
+    /// with time spent waiting on our OWN probes, and those two call for
+    /// opposite fixes to `relayChoiceDeadline`. This is the second one, on its
+    /// own.
+    public func measuredMs() -> Int? {
+        lock.lock(); defer { lock.unlock() }
+        return measurementElapsedMs
     }
 
     /// The best choice available right now, settled or not. This is what the
