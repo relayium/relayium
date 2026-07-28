@@ -87,40 +87,45 @@ public enum RealtimeConnectionFactory {
     /// `onPeers` callback must not resume a continuation that already fired.
     /// Internal rather than private so the roster logic can be tested without
     /// a live hub — it is the part with a decision in it.
+    ///
+    /// Deliberately NOT a `withThrowingTaskGroup` racing a
+    /// continuation-waiting child against a `Task.sleep` child: when the
+    /// timeout child throws, the group cancels the other child and then still
+    /// awaits it at scope exit — and cancellation cannot resume a raw
+    /// `withCheckedThrowingContinuation`. So on exactly the path the timeout
+    /// exists for, `peerTimeout` never surfaced as `noPeerAppeared` and the
+    /// call hung until `signaling.onClose` happened to fire. One continuation
+    /// shared by the roster callback, the close callback and a plain timeout
+    /// `Task`, guarded so only the first of the three resumes it — the same
+    /// shape as `RelayNegotiator.waitForChoice` and `RelayProbe`'s
+    /// `FirstRelayCandidate`, which carry this fix for the same reason.
     static func firstPeer(on signaling: SignalingClient,
                           timeout: TimeInterval) async throws -> String {
         let box = ResumeOnce()
-        return try await withThrowingTaskGroup(of: String.self) { group in
-            group.addTask {
-                try await withCheckedThrowingContinuation { cont in
-                    signaling.onPeers = { peers in
-                        // The hub sends the WHOLE room roster to every member,
-                        // ourselves included (signal/hub.go broadcastRoster), so
-                        // the first entry is as likely to be us as the peer. A
-                        // sender that dialled its own id got a bare WebRTC
-                        // NSError and the "something went wrong" fallback,
-                        // immediately, on the very first Create a code.
-                        //
-                        // Before `welcome` there is no way to tell which entry
-                        // is us, so an early roster is skipped rather than
-                        // guessed at: another one arrives when a peer joins,
-                        // which is the only roster we actually want.
-                        guard let mine = signaling.selfId,
-                              let other = peers.first(where: { $0.id != mine }) else { return }
-                        box.resume { cont.resume(returning: other.id) }
-                    }
-                    signaling.onClose = {
-                        box.resume { cont.resume(throwing: FactoryError.noPeerAppeared) }
-                    }
-                }
+        return try await withCheckedThrowingContinuation { cont in
+            signaling.onPeers = { peers in
+                // The hub sends the WHOLE room roster to every member,
+                // ourselves included (signal/hub.go broadcastRoster), so
+                // the first entry is as likely to be us as the peer. A
+                // sender that dialled its own id got a bare WebRTC
+                // NSError and the "something went wrong" fallback,
+                // immediately, on the very first Create a code.
+                //
+                // Before `welcome` there is no way to tell which entry
+                // is us, so an early roster is skipped rather than
+                // guessed at: another one arrives when a peer joins,
+                // which is the only roster we actually want.
+                guard let mine = signaling.selfId,
+                      let other = peers.first(where: { $0.id != mine }) else { return }
+                box.resume { cont.resume(returning: other.id) }
             }
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                throw FactoryError.noPeerAppeared
+            signaling.onClose = {
+                box.resume { cont.resume(throwing: FactoryError.noPeerAppeared) }
             }
-            defer { group.cancelAll() }
-            guard let first = try await group.next() else { throw FactoryError.noPeerAppeared }
-            return first
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(max(0, timeout) * 1_000_000_000))
+                box.resume { cont.resume(throwing: FactoryError.noPeerAppeared) }
+            }
         }
     }
 }

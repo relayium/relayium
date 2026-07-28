@@ -47,4 +47,45 @@ final class RealtimeConnectionFactoryTests: XCTestCase {
         let peer = try await waiting.value
         XCTAssertEqual(peer, "other-2")
     }
+
+    /// The timeout has to actually surface. It used to be a `Task.sleep` child
+    /// racing a `withCheckedThrowingContinuation` child inside a
+    /// `withThrowingTaskGroup`: the sleeper threw, the group cancelled the
+    /// other child and then awaited it anyway, and cancellation cannot resume a
+    /// raw continuation — so `firstPeer` hung until `signaling.onClose`
+    /// happened to fire, which for a peer that simply never joins is never.
+    ///
+    /// Driven through an expectation rather than a bare `await`: against the
+    /// old code this call does not return at all, and a test that awaited it
+    /// directly would hang the whole suite instead of failing it.
+    func testTheTimeoutSurfacesAsNoPeerAppeared() async {
+        let ch = FakeWebSocketChannel()
+        let client = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        // A welcome, but nobody else ever joins and the socket never closes —
+        // the one path the timeout exists for.
+        ch.fireText(#"{"type":"welcome","name":"self-1","ip":"1.2.3.4"}"#)
+        ch.fireText(#"{"type":"peers","peers":[{"id":"self-1","name":"Mac"}]}"#)
+
+        let returned = expectation(description: "firstPeer returned")
+        let caught = ErrorBox()
+        Task {
+            do { _ = try await RealtimeConnectionFactory.firstPeer(on: client, timeout: 0.2) }
+            catch { caught.value = error }
+            returned.fulfill()
+        }
+        await fulfillment(of: [returned], timeout: 5)
+        XCTAssertEqual(caught.value as? RealtimeConnectionFactory.FactoryError, .noPeerAppeared)
+    }
+}
+
+/// Carries the thrown error out of a detached `Task` without an unstructured
+/// capture the compiler has to take on trust.
+private final class ErrorBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Error?
+    var value: Error? {
+        get { lock.lock(); defer { lock.unlock() }; return stored }
+        set { lock.lock(); stored = newValue; lock.unlock() }
+    }
 }
