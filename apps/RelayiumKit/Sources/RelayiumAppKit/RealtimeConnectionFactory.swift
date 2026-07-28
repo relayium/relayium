@@ -46,14 +46,16 @@ public enum RealtimeConnectionFactory {
                                          })
         // RelayNegotiator.handleSignal silently drops anything RelayRttMessage
         // can't decode — i.e. every real WebRTC signal. This handler is the
-        // only thing installed until RealtimeConnection exists below, and that
-        // window is up to relayChoiceDeadline long, not the microseconds it
-        // used to be. A peer whose own wait resolves instantly — the web
-        // client never blocks on the choice, and any native peer with an empty
-        // pool doesn't either — can have its offer or ICE candidates land
-        // during that window. So everything is buffered here, in arrival
-        // order, and replayed into the real handler once it exists; nothing
-        // is decided or discarded at this layer.
+        // only thing installed until RealtimeConnection exists below, and the
+        // window is the whole span from here to there: the firstPeer wait plus
+        // the relay-choice wait, so up to peerTimeout (120 s) + 800 ms, not
+        // the 800 ms alone. Both halves are real. A peer can join the room and
+        // send its offer before its own roster callback has resolved ours, and
+        // a peer whose relay wait resolves instantly — the web client never
+        // blocks on the choice, and neither does a native peer with an empty
+        // pool — sends with no delay at all. So everything is buffered here,
+        // in arrival order, and replayed into the real handler once it exists;
+        // nothing is decided or discarded at this layer.
         let pending = PendingSignals()
         signaling.onSignal = { from, data in
             negotiator.handleSignal(from: from, data: data)
