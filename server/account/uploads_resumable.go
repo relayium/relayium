@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -110,6 +111,10 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 	// still cannot buy a bigger write budget — sessionWriteCap below ignores ?size=.
 	declared, _ := strconv.ParseInt(r.URL.Query().Get("size"), 10, 64)
 	nodeID, _, billable, perr := s.placeUpload(r.Context(), u.ID, declared)
+	if errors.Is(perr, errStrictNodeUnreachable) {
+		http.Error(w, "central can't reach your storage node — check its blob port is open", http.StatusServiceUnavailable)
+		return
+	}
 	if errors.Is(perr, errStrictNodeFull) {
 		http.Error(w, "your storage node has no free space", http.StatusServiceUnavailable)
 		return
@@ -257,8 +262,10 @@ func (s *Service) sessionWriteCap(ctx context.Context, userID string, maxFileSiz
 // The blob store's own offset check is the authority; the DB `received` mirrors
 // it (advanced monotonically), so any instance can serve the next chunk.
 func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u User) {
-	sess, ok, err := s.store.GetUploadSession(r.Context(), r.PathValue("uploadId"), u.ID)
+	uploadID := r.PathValue("uploadId")
+	sess, ok, err := s.store.GetUploadSession(r.Context(), uploadID, u.ID)
 	if err != nil {
+		log.Printf("upload chunk %s: read session: %v", uploadID, err)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
@@ -326,6 +333,7 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 	// clamped to max_size so a lying node can't inflate the ledger). Stamps
 	// last_activity so the idle reaper knows this session is still progressing.
 	if uerr := s.store.AdvanceUploadReceived(r.Context(), sess.ID, newSize, s.now().Unix()); uerr != nil {
+		log.Printf("upload chunk %s: advance received to %d: %v", uploadID, newSize, uerr)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
@@ -336,10 +344,25 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 		return
 	}
 	if err != nil {
+		// The line that was missing when a node's blob port was firewalled shut:
+		// every PATCH 500'd, nothing was logged, and the only route to the cause
+		// was nginx's access log plus a hand-written database query. Name the
+		// node — "which node" is the whole question.
+		log.Printf("upload chunk %s: append to blob %s on node %s at offset %d: %v",
+			uploadID, sess.BlobKey, nodeLabelForLog(sess.NodeID), sess.Received, err)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"received": newSize})
+}
+
+// nodeLabelForLog renders a placement target for a log line: the node id, or
+// "central" for the empty id that means central-local storage.
+func nodeLabelForLog(nodeID string) string {
+	if nodeID == "" {
+		return "central"
+	}
+	return nodeID
 }
 
 // handleUploadFinalize (POST /api/files/uploads/{uploadId}/finalize) commits the

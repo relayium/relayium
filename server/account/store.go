@@ -281,6 +281,18 @@ type Node struct {
 	StorageEnabled bool
 	StorageTotal   int64
 	StorageFree    int64
+	// StorageUnreachable is set when central could not reach this node's blob
+	// endpoint, and cleared when it could. The heartbeat cannot stand in for it:
+	// the heartbeat is node→central and blob writes are central→node, so a node
+	// with its blob port firewalled shut heartbeats perfectly while every write
+	// to it fails. Written only by the reachability probe — never by
+	// register/heartbeat, or a node would clear its own mark seconds later.
+	//
+	// Zero value means eligible, so the gate fails open: a prober that has not
+	// run yet, or is broken, must not empty the placement pool.
+	StorageUnreachable bool
+	// When the reachability probe last ran (unix seconds); 0 = never probed.
+	StorageProbedAt int64
 	// Admin-set hard caps for official (fleet) nodes; 0 = unlimited. TrafficLimit
 	// is a monthly relay-bytes cap enforced in handleICE; DiskLimit caps stored
 	// bytes and is enforced in StorageNodes placement.
@@ -877,6 +889,9 @@ type Store interface {
 	// draining node is excluded from new-upload placement but keeps serving its
 	// existing files. See Node.Draining.
 	SetNodeDraining(ctx context.Context, id string, on bool) error
+	// SetNodeStorageReachable records the outcome of a central→node blob-endpoint
+	// probe. `at` is the probe time (unix seconds).
+	SetNodeStorageReachable(ctx context.Context, id string, reachable bool, at int64) error
 	// MarkNodeRemoved records that a node has been uninstalled: the row stays for
 	// audit, but the node leaves the placement pool, the ICE candidate list and
 	// the direct-download path. Idempotent — re-marking an already-removed node

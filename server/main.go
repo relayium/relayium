@@ -491,6 +491,18 @@ func main() {
 				AuditRetention: *auditRetentionDays * 86400,
 			}
 			go gc.Run(context.Background(), 10*time.Minute)
+			// Placement's other precondition. Node liveness comes from the
+			// heartbeat, which travels node→central; blob writes travel
+			// central→node. A node with its blob port shut satisfies the first
+			// and fails the second, so without this it keeps being handed
+			// uploads that can only ever 500.
+			prober := &account.StorageProber{
+				Store: store,
+				Now:   time.Now,
+				Probe: acct.ProbeNodeStorage,
+				Log:   log.Default(),
+			}
+			go prober.Run(context.Background(), 2*time.Minute)
 			log.Printf("stored transfers enabled: blobs in %s", *blobDir)
 		}
 		if *redisAddr != "" {
