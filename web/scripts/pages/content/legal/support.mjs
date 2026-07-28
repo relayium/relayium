@@ -66,12 +66,12 @@ const zh = {
     {
       heading: "账单与订阅",
       body: [
-        "大部分事情你都可以自己处理，无需写信给我们。在账户页面你可以随时升级、降级或取消；取消后套餐仍会持续到你已付费周期的结束，之后转为免费版。",
-        "凡是账户页面做不到的事，请写信到 support@relayium.com——退款申请、扣错费用、发票或税务信息，以及你看不出原因的支付失败。",
+        "大部分事情你都可以自己处理，无需写信给我们。在账号页面你可以随时升级、降级或取消；取消后套餐仍会持续到你已付费周期的结束，之后转为免费版。",
+        "凡是账号页面做不到的事，请写信到 support@relayium.com——退款申请、扣错费用、发票或税务信息，以及你看不出原因的支付失败。",
       ],
       bullets: [
         "升级立即生效并按比例计费；降级在当前计费周期结束时生效，因此你付过的部分不会白付。",
-        "请附上账户所用的邮箱地址。切勿把卡号发给我们——我们看不到它，也永远不会索要。",
+        "请附上账号所用的邮箱地址。切勿把卡号发给我们——我们看不到它，也永远不会索要。",
       ],
     },
     {
@@ -246,23 +246,23 @@ const de = {
 const fr = {
   title: "Assistance",
   description:
-    "Comment obtenir de l'aide sur Relayium : contact pour la facturation et les abonnements, les problèmes de transfert, les nœuds auto-hébergés et les signalements de sécurité.",
+    "Comment obtenir de l'aide sur Relayium : contact pour la facturation et les abonnements, les problèmes de transfert, les nœuds auto-hébergés et les signalements de sécurité.",
   updatedLabel: "Dernière mise à jour",
   updated: "2026-07-20",
   otherDocLabel: "Conditions d'utilisation",
   lead: [
     "Relayium est géré par une petite équipe. Chaque message parvient à une personne qui travaille sur le produit — il n'y a ni dédale de tickets, ni robot conversationnel en première ligne.",
-    "Écrivez à support@relayium.com ; nous nous efforçons de répondre sous deux jours ouvrés.",
+    "Écrivez à support@relayium.com ; nous nous efforçons de répondre sous deux jours ouvrés.",
   ],
   sections: [
     {
       heading: "Facturation et abonnements",
       body: [
-        "Vous pouvez gérer l'essentiel vous-même sans nous écrire. Depuis votre page de compte, vous pouvez à tout moment passer à une offre supérieure, rétrograder ou résilier ; en cas de résiliation, votre forfait reste actif jusqu'à la fin de la période déjà payée, puis bascule vers Gratuit.",
+        "Vous pouvez gérer l'essentiel vous-même sans nous écrire. Depuis votre page de compte, vous pouvez à tout moment passer à une offre supérieure, rétrograder ou résilier ; en cas de résiliation, votre offre reste active jusqu'à la fin de la période déjà payée, puis bascule vers Gratuit.",
         "Écrivez à support@relayium.com pour tout ce que la page de compte ne permet pas — une demande de remboursement, un prélèvement erroné, une facture ou une mention de TVA, ou un paiement échoué pour une raison que vous ne pouvez pas identifier.",
       ],
       bullets: [
-        "Les mises à niveau prennent effet immédiatement et sont calculées au prorata ; les rétrogradations prennent effet à la fin de la période de facturation en cours, de sorte que vous conservez ce que vous avez payé.",
+        "Les mises à niveau prennent effet immédiatement et sont calculées au prorata ; les rétrogradations prennent effet à la fin de la période de facturation en cours, de sorte que vous conservez ce que vous avez payé.",
         "Indiquez l'adresse e-mail associée au compte. Ne nous envoyez jamais votre numéro de carte — nous ne le voyons jamais et ne vous le demanderons jamais.",
       ],
     },
@@ -354,11 +354,11 @@ const es = {
     {
       heading: "Facturación y suscripciones",
       body: [
-        "Casi todo puedes gestionarlo tú mismo sin escribirnos. Desde tu página de cuenta puedes mejorar, bajar de plan o cancelar cuando quieras; al cancelar, tu plan sigue activo hasta el final del periodo que ya pagaste y después pasa a Gratis.",
+        "Casi todo puedes gestionarlo tú mismo sin escribirnos. Desde tu página de cuenta puedes mejorar, bajar de plan o cancelar cuando quieras; al cancelar, tu plan sigue activo hasta el final del período que ya pagaste y después pasa a Gratis.",
         "Escribe a support@relayium.com para todo lo que la página de cuenta no cubre: una solicitud de reembolso, un cargo erróneo, un dato de factura o de IVA, o un pago que falló por un motivo que no puedes ver.",
       ],
       bullets: [
-        "Las mejoras surten efecto de inmediato y se prorratean; las bajadas de plan se aplican al final del periodo de facturación actual, así que conservas lo que pagaste.",
+        "Las mejoras surten efecto de inmediato y se prorratean; las bajadas de plan se aplican al final del período de facturación actual, así que conservas lo que pagaste.",
         "Incluye la dirección de correo de la cuenta. Nunca nos envíes el número de tu tarjeta: no lo vemos nunca y jamás te lo pediremos.",
       ],
     },

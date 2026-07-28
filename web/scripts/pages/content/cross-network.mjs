@@ -182,7 +182,7 @@ const zh = {
 const ja = {
   title: "ネットワークをまたぐファイル転送——リアルタイム・エンドツーエンド暗号化 | Relayium",
   description:
-    "6文字のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。SASコードで検証するため、リレーが侵害されていても盗聴されません。",
+    "6文字のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。検証コード（SAS）で照合するため、リレーが侵害されていても盗聴されません。",
   hero: {
     h1: "ネットワークをまたぐファイル転送、エンドツーエンド暗号化",
     pitch:
@@ -194,7 +194,7 @@ const ja = {
     steps: [
       "送信側がサインインし、6文字のペアリングコードを発行します（参加リンク/QRの共有も可能）。",
       "受信側はリンクを開くかコードを入力するだけ——受信にアカウントは不要です。",
-      "両方の画面に表示される同じ6桁のSASコードを照合し、中間者がいないことを確認します。",
+      "両方の画面に表示される同じ6桁の検証コード（SAS）を照合し、中間者がいないことを確認します。",
       "ファイルはエンドツーエンドで暗号化され（チャンクごとにAES-256-GCM）、Relayiumの高速リレーを経由してストリーミング転送されます。リレーは復号できない暗号文しか扱いません。",
     ],
   },
@@ -232,7 +232,7 @@ const ja = {
       },
       {
         title: "Snapdrop / PairDropとの比較",
-        body: "それらは同一ネットワーク限定です。Relayiumはネットワークをまたぐペアリングに加え、アプリケーション層のエンドツーエンド暗号化とSASコードを備え、リレーやシグナリングサーバーが侵害されていても盗聴できません。",
+        body: "それらは同一ネットワーク限定です。Relayiumはネットワークをまたぐペアリングに加え、アプリケーション層のエンドツーエンド暗号化と検証コード（SAS）を備え、リレーやシグナリングサーバーが侵害されていても盗聴できません。",
       },
     ],
   },
@@ -240,7 +240,7 @@ const ja = {
     heading: "よくある質問",
     items: [
       {
-        q: "ファイルは御社のサーバーを経由しますか？",
+        q: "ファイルはRelayiumのサーバーを経由しますか？",
         a: "暗号化されたデータストリームはRelayiumのリレーを経由し、ネットワークをまたいでも確実に接続できるようにしています——ただしエンドツーエンドで暗号化されているため、リレーが目にするのは復号できない暗号文だけです。",
       },
       {
@@ -253,7 +253,7 @@ const ja = {
       },
       {
         q: "エンドツーエンド暗号化されていますか？",
-        a: "はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、SASコードで検証します。リレーもサーバーも復号できません。",
+        a: "はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、検証コード（SAS）で照合します。リレーもサーバーも復号できません。",
       },
     ],
   },
@@ -264,11 +264,11 @@ const ja = {
 const ko = {
   title: "네트워크를 넘는 파일 전송 — 실시간, 종단간 암호화 | Relayium",
   description:
-    "6자 페어링 코드로 서로 다른 네트워크에 있는 두 기기가 파일을 주고받습니다. 종단간 암호화——파일은 Relayium의 빠른 중계를 거치지만, 중계는 복호화할 수 없는 암호문만 다룹니다. SAS 코드로 검증하므로 중계가 침해되어도 도청할 수 없습니다.",
+    "6자 페어링 코드로 서로 다른 네트워크에 있는 두 기기가 파일을 주고받습니다. 종단간 암호화——파일은 Relayium의 빠른 릴레이를 거치지만, 릴레이는 복호화할 수 없는 암호문만 다룹니다. 검증 코드(SAS)로 대조하므로 릴레이가 침해되어도 도청할 수 없습니다.",
   hero: {
     h1: "네트워크를 넘는 파일 전송, 종단간 암호화",
     pitch:
-      "서로 다른 네트워크에 있는 두 기기가 6자 코드(또는 참여 링크/QR)로 페어링합니다. 파일은 암호화된 채널을 통해 Relayium의 빠른 중계를 거쳐 전송됩니다——중계는 암호문만 볼 수 있으며, 키는 항상 두 기기 사이에만 머무릅니다.",
+      "서로 다른 네트워크에 있는 두 기기가 6자 코드(또는 참여 링크/QR)로 페어링합니다. 파일은 암호화된 채널을 통해 Relayium의 빠른 릴레이를 거쳐 전송됩니다——릴레이는 암호문만 볼 수 있으며, 키는 항상 두 기기 사이에만 머무릅니다.",
     cta: "전송 시작",
   },
   how: {
@@ -276,8 +276,8 @@ const ko = {
     steps: [
       "보내는 쪽이 로그인한 뒤 6자 페어링 코드를 생성합니다(참여 링크/QR 공유도 가능).",
       "받는 쪽은 링크를 열거나 코드를 입력하기만 하면 됩니다 — 받는 데는 계정이 필요 없습니다.",
-      "양쪽 화면에 표시되는 동일한 6자리 숫자 SAS 코드(페어링 코드와는 다른 값)를 대조해 중간자가 없는지 확인합니다.",
-      "파일은 종단간 암호화되어(청크마다 AES-256-GCM) Relayium의 빠른 중계를 거쳐 스트리밍됩니다. 중계는 복호화할 수 없는 암호문만 전달합니다.",
+      "양쪽 화면에 표시되는 동일한 6자리 숫자 검증 코드(SAS, 페어링 코드와는 다른 값)를 대조해 중간자가 없는지 확인합니다.",
+      "파일은 종단간 암호화되어(청크마다 AES-256-GCM) Relayium의 빠른 릴레이를 거쳐 스트리밍됩니다. 릴레이는 복호화할 수 없는 암호문만 전달합니다.",
     ],
   },
   why: {
@@ -285,15 +285,15 @@ const ko = {
     items: [
       {
         title: "종단간 암호화",
-        desc: "X25519 키 교환과 청크별 AES-256-GCM. 키는 두 기기 사이에서만 협상되어 중계도 서버도 복호화할 수 없습니다.",
+        desc: "X25519 키 교환과 청크별 AES-256-GCM. 키는 두 기기 사이에서만 협상되어 릴레이도 서버도 복호화할 수 없습니다.",
       },
       {
         title: "SAS로 중간자 공격 차단",
-        desc: "양쪽 화면에 동일한 6자리 코드가 표시됩니다. 서로 대조하면 중계나 시그널링 서버가 침해되어도 중간자 공격을 막을 수 있습니다.",
+        desc: "양쪽 화면에 동일한 6자리 코드가 표시됩니다. 서로 대조하면 릴레이나 시그널링 서버가 침해되어도 중간자 공격을 막을 수 있습니다.",
       },
       {
-        title: "중계는 암호문만 전달",
-        desc: "네트워크를 넘는 전송은 어떤 NAT 환경에서도 안정적으로 연결되도록 빠른 중계를 거칩니다——중계는 항상 암호문만 다루며, 키나 평문에는 접근하지 않습니다.",
+        title: "릴레이는 암호문만 전달",
+        desc: "네트워크를 넘는 전송은 어떤 NAT 환경에서도 안정적으로 연결되도록 빠른 릴레이를 거칩니다——릴레이는 항상 암호문만 다루며, 키나 평문에는 접근하지 않습니다.",
       },
       {
         title: "크로스 플랫폼",
@@ -301,7 +301,7 @@ const ko = {
       },
       {
         title: "무료",
-        desc: "월별 중계 트래픽 한도 내에서 무료로 이용할 수 있습니다. 코드 생성에는 보내는 쪽의 로그인이 필요하며, 받는 쪽은 익명으로 참여합니다.",
+        desc: "월별 릴레이 트래픽 한도 내에서 무료로 이용할 수 있습니다. 코드 생성에는 보내는 쪽의 로그인이 필요하며, 받는 쪽은 익명으로 참여합니다.",
       },
     ],
   },
@@ -314,7 +314,7 @@ const ko = {
       },
       {
         title: "Snapdrop / PairDrop과 비교",
-        body: "이들은 같은 네트워크에서만 동작합니다. Relayium은 네트워크를 넘는 페어링에 더해 애플리케이션 계층의 종단간 암호화와 SAS 코드를 갖춰, 중계나 시그널링 서버가 침해되어도 도청할 수 없습니다.",
+        body: "이들은 같은 네트워크에서만 동작합니다. Relayium은 네트워크를 넘는 페어링에 더해 애플리케이션 계층의 종단간 암호화와 검증 코드(SAS)를 갖춰, 릴레이나 시그널링 서버가 침해되어도 도청할 수 없습니다.",
       },
     ],
   },
@@ -323,7 +323,7 @@ const ko = {
     items: [
       {
         q: "파일이 서버를 거치나요?",
-        a: "암호화된 데이터 스트림은 Relayium의 중계를 거쳐 네트워크를 넘는 안정적인 연결을 제공합니다——다만 종단간 암호화되어 있어 중계는 복호화할 수 없는 암호문만 볼 수 있습니다.",
+        a: "암호화된 데이터 스트림은 Relayium의 릴레이를 거쳐 네트워크를 넘는 안정적인 연결을 제공합니다——다만 종단간 암호화되어 있어 릴레이는 복호화할 수 없는 암호문만 볼 수 있습니다.",
       },
       {
         q: "코드가 꼭 필요한가요?",
@@ -335,7 +335,7 @@ const ko = {
       },
       {
         q: "종단간 암호화인가요?",
-        a: "네 — X25519 키 교환과 청크별 AES-256-GCM 암호화를 사용하며 SAS 코드로 검증합니다. 중계도 서버도 복호화할 수 없습니다.",
+        a: "네 — X25519 키 교환과 청크별 AES-256-GCM 암호화를 사용하며 검증 코드(SAS)로 대조합니다. 릴레이도 서버도 복호화할 수 없습니다.",
       },
     ],
   },
@@ -346,7 +346,7 @@ const ko = {
 const de = {
   title: "Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium",
   description:
-    "Übertrage Dateien mit einem 6-Zeichen-Kopplungscode zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per SAS-Code, sodass selbst ein kompromittiertes Relay nicht mithören kann.",
+    "Übertrage Dateien mit einem 6-Zeichen-Pairing-Code zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per Verifizierungscode (SAS), sodass selbst ein kompromittiertes Relay nicht mithören kann.",
   hero: {
     h1: "Netzwerkübergreifende Dateiübertragung, Ende-zu-Ende-verschlüsselt",
     pitch:
@@ -356,10 +356,10 @@ const de = {
   how: {
     heading: "In vier Schritten übertragen",
     steps: [
-      "Der Absender meldet sich an und erzeugt einen 6-Zeichen-Kopplungscode (oder teilt dessen Beitrittslink/QR).",
+      "Der Absender meldet sich an und erzeugt einen 6-Zeichen-Pairing-Code (oder teilt dessen Beitrittslink/QR).",
       "Der Empfänger öffnet den Link oder gibt den Code ein — zum Empfangen ist kein Konto nötig.",
-      "Beide Seiten vergleichen denselben 6-stelligen SAS-Code auf dem Bildschirm (ein anderer Wert als der Kopplungscode), um einen Mittelsmann auszuschließen.",
-      "Dateien werden Ende-zu-Ende-verschlüsselt gestreamt (Chunk für Chunk mit AES-256-GCM) — über Relayiums schnelles Relay, das nur Chiffretext transportiert, den es nicht entschlüsseln kann.",
+      "Beide Seiten vergleichen denselben 6-stelligen Verifizierungscode auf dem Bildschirm (SAS — ein anderer Wert als der Pairing-Code), um einen Man-in-the-Middle auszuschließen.",
+      "Dateien werden Ende-zu-Ende-verschlüsselt gestreamt (Block für Block mit AES-256-GCM) — über Relayiums schnelles Relay, das nur Chiffretext transportiert, den es nicht entschlüsseln kann.",
     ],
   },
   why: {
@@ -367,11 +367,11 @@ const de = {
     items: [
       {
         title: "Ende-zu-Ende-verschlüsselt",
-        desc: "X25519-Schlüsselaustausch und AES-256-GCM pro Chunk; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, weder das Relay noch der Server können entschlüsseln.",
+        desc: "X25519-Schlüsselaustausch und AES-256-GCM pro Block; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, weder das Relay noch der Server können entschlüsseln.",
       },
       {
         title: "SAS gegen Man-in-the-Middle",
-        desc: "Beide Bildschirme zeigen denselben 6-stelligen Code; stimmt er überein, ist ein Mittelsmann ausgeschlossen — selbst ein kompromittiertes Relay oder ein kompromittierter Signalisierungsserver kann sich nicht einschleichen.",
+        desc: "Beide Bildschirme zeigen denselben 6-stelligen Code; stimmt er überein, ist ein Man-in-the-Middle ausgeschlossen — selbst ein kompromittiertes Relay oder ein kompromittierter Signalisierungsserver kann sich nicht einschleichen.",
       },
       {
         title: "Relay sieht nur Chiffretext",
@@ -396,7 +396,7 @@ const de = {
       },
       {
         title: "Gegenüber Snapdrop / PairDrop",
-        body: "Diese funktionieren nur im selben Netzwerk; Relayium ergänzt netzwerkübergreifendes Koppeln plus Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und den SAS-Code, sodass selbst ein kompromittiertes Relay oder ein kompromittierter Signalisierungsserver nicht mithören kann.",
+        body: "Diese funktionieren nur im selben Netzwerk; Relayium ergänzt netzwerkübergreifendes Koppeln plus Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und den Verifizierungscode (SAS), sodass selbst ein kompromittiertes Relay oder ein kompromittierter Signalisierungsserver nicht mithören kann.",
       },
     ],
   },
@@ -417,7 +417,7 @@ const de = {
       },
       {
         q: "Ist es Ende-zu-Ende-verschlüsselt?",
-        a: "Ja — X25519 plus AES-256-GCM pro Chunk, verifiziert mit dem SAS-Code; weder das Relay noch der Server können entschlüsseln.",
+        a: "Ja — X25519 plus AES-256-GCM pro Block, verifiziert mit dem Verifizierungscode; weder das Relay noch der Server können entschlüsseln.",
       },
     ],
   },
@@ -428,11 +428,11 @@ const de = {
 const fr = {
   title: "Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout | Relayium",
   description:
-    "Envoyez des fichiers d'un appareil à l'autre entre réseaux différents avec un code d'appairage à 6 caractères. Chiffré de bout en bout — le flux transite par le relais rapide de Relayium, qui ne transporte que du contenu chiffré qu'il ne peut pas lire, vérifié par un code SAS afin que même un relais compromis ne puisse pas espionner.",
+    "Envoyez des fichiers d'un appareil à l'autre entre réseaux différents avec un code d'appairage à 6 caractères. Chiffré de bout en bout — le flux transite par le relais rapide de Relayium, qui ne transporte que du texte chiffré qu'il ne peut pas lire, confirmé par un code de vérification (SAS) afin que même un relais compromis ne puisse pas espionner.",
   hero: {
     h1: "Transfert de fichiers inter-réseaux, chiffré de bout en bout",
     pitch:
-      "Deux appareils sur des réseaux différents s'appairent avec un code à 6 caractères (ou son lien/QR). Les fichiers circulent via un canal chiffré à travers le relais rapide de Relayium — le relais ne voit jamais que du contenu chiffré, les clés ne quittent jamais les deux appareils.",
+      "Deux appareils sur des réseaux différents s'appairent avec un code à 6 caractères (ou son lien/QR). Les fichiers circulent via un canal chiffré à travers le relais rapide de Relayium — le relais ne voit jamais que du texte chiffré, les clés ne quittent jamais les deux appareils.",
     cta: "Démarrer le transfert",
   },
   how: {
@@ -440,8 +440,8 @@ const fr = {
     steps: [
       "L'expéditeur se connecte et génère un code d'appairage à 6 caractères (ou partage son lien d'accès/QR).",
       "Le destinataire ouvre le lien ou saisit le code — aucun compte n'est nécessaire pour recevoir.",
-      "Les deux parties vérifient le même code SAS à 6 chiffres à l'écran pour écarter tout homme du milieu.",
-      "Les fichiers sont transférés chiffrés de bout en bout (AES-256-GCM par bloc) via le relais rapide de Relayium, qui ne transporte que du contenu chiffré qu'il ne peut pas lire.",
+      "Les deux parties comparent le même code de vérification (SAS) à 6 chiffres à l'écran pour écarter tout homme du milieu.",
+      "Les fichiers sont transférés chiffrés de bout en bout (AES-256-GCM par bloc) via le relais rapide de Relayium, qui ne transporte que du texte chiffré qu'il ne peut pas lire.",
     ],
   },
   why: {
@@ -457,7 +457,7 @@ const fr = {
       },
       {
         title: "Le relais ne voit que du chiffré",
-        desc: "Les transferts inter-réseaux passent par un relais rapide pour garantir une connexion fiable à travers n'importe quel NAT — il ne transporte que du contenu chiffré, jamais vos clés ni du texte en clair.",
+        desc: "Les transferts inter-réseaux passent par un relais rapide pour garantir une connexion fiable à travers n'importe quel NAT — il ne transporte que du texte chiffré, jamais vos clés ni du texte en clair.",
       },
       {
         title: "Multiplateforme",
@@ -478,7 +478,7 @@ const fr = {
       },
       {
         title: "Face à Snapdrop / PairDrop",
-        body: "Ceux-ci ne fonctionnent que sur le même réseau ; Relayium ajoute l'appairage inter-réseaux ainsi qu'un chiffrement de bout en bout au niveau applicatif et un code SAS, si bien qu'un relais ou un serveur de signalisation compromis ne peut pas espionner.",
+        body: "Ceux-ci ne fonctionnent que sur le même réseau ; Relayium ajoute l'appairage inter-réseaux ainsi qu'un chiffrement de bout en bout au niveau applicatif et un code de vérification (SAS), si bien qu'un relais ou un serveur de signalisation compromis ne peut pas espionner.",
       },
     ],
   },
@@ -487,7 +487,7 @@ const fr = {
     items: [
       {
         q: "Mes fichiers passent-ils par votre serveur ?",
-        a: "Le flux chiffré transite par le relais de Relayium pour garantir une connexion inter-réseaux fiable — mais tout est chiffré de bout en bout, donc le relais ne voit jamais que du contenu chiffré qu'il ne peut pas lire.",
+        a: "Le flux chiffré transite par le relais de Relayium pour garantir une connexion inter-réseaux fiable — mais tout est chiffré de bout en bout, donc le relais ne voit jamais que du texte chiffré qu'il ne peut pas lire.",
       },
       {
         q: "Un code est-il obligatoire ?",
@@ -499,7 +499,7 @@ const fr = {
       },
       {
         q: "Est-ce chiffré de bout en bout ?",
-        a: "Oui — X25519 et AES-256-GCM par bloc, vérifié avec le code SAS ; ni le relais ni le serveur ne peuvent déchiffrer.",
+        a: "Oui — X25519 et AES-256-GCM par bloc, confirmé avec le code de vérification (SAS) ; ni le relais ni le serveur ne peuvent déchiffrer.",
       },
     ],
   },
@@ -510,7 +510,7 @@ const fr = {
 const ar = {
   title: "نقل الملفات عبر الشبكات — فوري، مُشفَّر من الطرف إلى الطرف | Relayium",
   description:
-    "أرسل الملفات من جهاز إلى آخر عبر شبكات مختلفة برمز اقتران مكوّن من 6 خانات. مُشفَّر من الطرف إلى الطرف — يمر التدفق عبر مُرحِّل Relayium السريع الذي لا ينقل سوى نص مُشفَّر لا يستطيع قراءته، ويُتحقق منه برمز SAS بحيث لا يستطيع حتى مُرحِّل مخترَق التنصّت.",
+    "أرسل الملفات من جهاز إلى آخر عبر شبكات مختلفة برمز اقتران مكوّن من 6 خانات. مُشفَّر من الطرف إلى الطرف — يمر التدفق عبر مُرحِّل Relayium السريع الذي لا ينقل سوى نص مُشفَّر لا يستطيع قراءته، ويُؤكَّد برمز التحقق (SAS) بحيث لا يستطيع حتى مُرحِّل مخترَق التنصّت.",
   hero: {
     h1: "نقل الملفات عبر الشبكات، مُشفَّر من الطرف إلى الطرف",
     pitch:
@@ -522,7 +522,7 @@ const ar = {
     steps: [
       "يسجّل المُرسِل الدخول ويولّد رمز اقتران مكوّنًا من 6 خانات (أو يشارك رابط الانضمام/رمز QR الخاص به).",
       "يفتح المُستقبِل الرابط أو يُدخل الرمز — لا حاجة إلى حساب للاستقبال.",
-      "يتحقق الطرفان من رمز SAS نفسه المكوّن من 6 أرقام على الشاشة لاستبعاد أي هجوم وسيط.",
+      "يقارن الطرفان رمز التحقق نفسه المكوّن من 6 أرقام (SAS) على الشاشة لاستبعاد أي هجوم وسيط.",
       "تُنقل الملفات مُشفَّرة من الطرف إلى الطرف (AES-256-GCM لكل كتلة) عبر مُرحِّل Relayium السريع الذي لا ينقل سوى نص مُشفَّر لا يستطيع قراءته.",
     ],
   },
@@ -560,7 +560,7 @@ const ar = {
       },
       {
         title: "مقابل Snapdrop / PairDrop",
-        body: "هذان يعملان على نفس الشبكة فقط؛ يضيف Relayium الاقتران عبر الشبكات إضافةً إلى تشفير من الطرف إلى الطرف على مستوى التطبيق ورمز SAS، بحيث لا يستطيع مُرحِّل أو خادم إشارة مخترَق التنصّت.",
+        body: "هذان يعملان على نفس الشبكة فقط؛ يضيف Relayium الاقتران عبر الشبكات إضافةً إلى تشفير من الطرف إلى الطرف على مستوى التطبيق ورمز التحقق (SAS)، بحيث لا يستطيع مُرحِّل أو خادم إشارة مخترَق التنصّت.",
       },
     ],
   },
@@ -581,7 +581,7 @@ const ar = {
       },
       {
         q: "هل هو مُشفَّر من الطرف إلى الطرف؟",
-        a: "نعم — X25519 وAES-256-GCM لكل كتلة، مُتحقَّق منه برمز SAS؛ لا يستطيع المُرحِّل ولا الخادم فك التشفير.",
+        a: "نعم — X25519 وAES-256-GCM لكل كتلة، مؤكَّد برمز التحقق (SAS)؛ لا يستطيع المُرحِّل ولا الخادم فك التشفير.",
       },
     ],
   },
@@ -592,11 +592,11 @@ const ar = {
 const es = {
   title: "Transferencia de archivos entre redes — en tiempo real, cifrada de extremo a extremo | Relayium",
   description:
-    "Envía archivos de un dispositivo a otro entre redes distintas con un código de emparejamiento de 6 caracteres. Cifrado de extremo a extremo — el flujo pasa por el retransmisor rápido de Relayium, que solo transporta contenido cifrado que no puede leer, verificado con un código SAS para que ni siquiera un retransmisor comprometido pueda espiar.",
+    "Envía archivos de un dispositivo a otro entre redes distintas con un código de emparejamiento de 6 caracteres. Cifrado de extremo a extremo — el flujo pasa por el retransmisor rápido de Relayium, que solo transporta texto cifrado que no puede leer, confirmado con un código de verificación (SAS) para que ni siquiera un retransmisor comprometido pueda espiar.",
   hero: {
     h1: "Transferencia de archivos entre redes, cifrada de extremo a extremo",
     pitch:
-      "Dos dispositivos en redes distintas se emparejan con un código de 6 caracteres (o su enlace/QR). Los archivos circulan por un canal cifrado a través del retransmisor rápido de Relayium — el retransmisor solo ve contenido cifrado, y las claves nunca salen de los dos dispositivos.",
+      "Dos dispositivos en redes distintas se emparejan con un código de 6 caracteres (o su enlace/QR). Los archivos circulan por un canal cifrado a través del retransmisor rápido de Relayium — el retransmisor solo ve texto cifrado, y las claves nunca salen de los dos dispositivos.",
     cta: "Iniciar transferencia",
   },
   how: {
@@ -604,8 +604,8 @@ const es = {
     steps: [
       "El remitente inicia sesión y genera un código de emparejamiento de 6 caracteres (o comparte su enlace de acceso/QR).",
       "El destinatario abre el enlace o introduce el código — no hace falta cuenta para recibir.",
-      "Ambas partes verifican en pantalla el mismo código SAS de 6 dígitos para descartar cualquier intermediario.",
-      "Los archivos se transfieren cifrados de extremo a extremo (AES-256-GCM por bloque) a través del retransmisor rápido de Relayium, que solo transporta contenido cifrado que no puede leer.",
+      "Ambas partes comparan en pantalla el mismo código de verificación (SAS) de 6 dígitos para descartar cualquier intermediario.",
+      "Los archivos se transfieren cifrados de extremo a extremo (AES-256-GCM por bloque) a través del retransmisor rápido de Relayium, que solo transporta texto cifrado que no puede leer.",
     ],
   },
   why: {
@@ -621,7 +621,7 @@ const es = {
       },
       {
         title: "El retransmisor solo ve texto cifrado",
-        desc: "Las transferencias entre redes pasan por un retransmisor rápido para garantizar una conexión fiable a través de cualquier NAT — solo transporta contenido cifrado, nunca tus claves ni texto en claro.",
+        desc: "Las transferencias entre redes pasan por un retransmisor rápido para garantizar una conexión fiable a través de cualquier NAT — solo transporta texto cifrado, nunca tus claves ni texto en claro.",
       },
       {
         title: "Multiplataforma",
@@ -642,7 +642,7 @@ const es = {
       },
       {
         title: "Frente a Snapdrop / PairDrop",
-        body: "Estos solo funcionan en la misma red; Relayium añade el emparejamiento entre redes junto con un cifrado de extremo a extremo a nivel de aplicación y un código SAS, de modo que un retransmisor o un servidor de señalización comprometido no puede espiar.",
+        body: "Estos solo funcionan en la misma red; Relayium añade el emparejamiento entre redes junto con un cifrado de extremo a extremo a nivel de aplicación y un código de verificación (SAS), de modo que un retransmisor o un servidor de señalización comprometido no puede espiar.",
       },
     ],
   },
@@ -650,8 +650,8 @@ const es = {
     heading: "Preguntas frecuentes",
     items: [
       {
-        q: "¿Mis archivos pasan por vuestro servidor?",
-        a: "El flujo cifrado pasa por el retransmisor de Relayium para garantizar una conexión fiable entre redes — pero todo está cifrado de extremo a extremo, así que el retransmisor solo ve contenido cifrado que no puede leer.",
+        q: "¿Mis archivos pasan por el servidor de Relayium?",
+        a: "El flujo cifrado pasa por el retransmisor de Relayium para garantizar una conexión fiable entre redes — pero todo está cifrado de extremo a extremo, así que el retransmisor solo ve texto cifrado que no puede leer.",
       },
       {
         q: "¿Es obligatorio un código?",
@@ -663,7 +663,7 @@ const es = {
       },
       {
         q: "¿Es cifrado de extremo a extremo?",
-        a: "Sí — X25519 y AES-256-GCM por bloque, verificado con el código SAS; ni el retransmisor ni el servidor pueden descifrar.",
+        a: "Sí — X25519 y AES-256-GCM por bloque, confirmado con el código de verificación (SAS); ni el retransmisor ni el servidor pueden descifrar.",
       },
     ],
   },
@@ -674,11 +674,11 @@ const es = {
 const pt = {
   title: "Transferência de arquivos entre redes — em tempo real, criptografia de ponta a ponta | Relayium",
   description:
-    "Envie arquivos de um dispositivo a outro entre redes diferentes com um código de emparelhamento de 6 caracteres. Criptografia de ponta a ponta — o fluxo passa pelo retransmissor rápido do Relayium, que só transporta conteúdo cifrado que não consegue ler, verificado com um código SAS para que nem mesmo um retransmissor comprometido consiga espionar.",
+    "Envie arquivos de um dispositivo a outro entre redes diferentes com um código de emparelhamento de 6 caracteres. Criptografia de ponta a ponta — o fluxo passa pelo retransmissor rápido do Relayium, que só transporta texto cifrado que não consegue ler, confirmado com um código de verificação (SAS) para que nem mesmo um retransmissor comprometido consiga espionar.",
   hero: {
     h1: "Transferência de arquivos entre redes, criptografia de ponta a ponta",
     pitch:
-      "Dois dispositivos em redes diferentes se emparelham com um código de 6 caracteres (ou seu link/QR). Os arquivos circulam por um canal criptografado através do retransmissor rápido do Relayium — o retransmissor só vê conteúdo cifrado, e as chaves nunca saem dos dois dispositivos.",
+      "Dois dispositivos em redes diferentes se emparelham com um código de 6 caracteres (ou seu link/QR). Os arquivos circulam por um canal criptografado através do retransmissor rápido do Relayium — o retransmissor só vê texto cifrado, e as chaves nunca saem dos dois dispositivos.",
     cta: "Iniciar transferência",
   },
   how: {
@@ -686,8 +686,8 @@ const pt = {
     steps: [
       "O remetente faz login e gera um código de emparelhamento de 6 caracteres (ou compartilha seu link de acesso/QR).",
       "O destinatário abre o link ou digita o código — não é preciso conta para receber.",
-      "As duas partes verificam na tela o mesmo código SAS de 6 dígitos para descartar qualquer intermediário.",
-      "Os arquivos são transferidos com criptografia de ponta a ponta (AES-256-GCM por bloco) através do retransmissor rápido do Relayium, que só transporta conteúdo cifrado que não consegue ler.",
+      "As duas partes comparam na tela o mesmo código de verificação (SAS) de 6 dígitos para descartar qualquer intermediário.",
+      "Os arquivos são transferidos com criptografia de ponta a ponta (AES-256-GCM por bloco) através do retransmissor rápido do Relayium, que só transporta texto cifrado que não consegue ler.",
     ],
   },
   why: {
@@ -703,7 +703,7 @@ const pt = {
       },
       {
         title: "O retransmissor só vê texto cifrado",
-        desc: "As transferências entre redes passam por um retransmissor rápido para garantir uma conexão confiável através de qualquer NAT — ele só transporta conteúdo cifrado, nunca suas chaves nem texto em claro.",
+        desc: "As transferências entre redes passam por um retransmissor rápido para garantir uma conexão confiável através de qualquer NAT — ele só transporta texto cifrado, nunca suas chaves nem texto em claro.",
       },
       {
         title: "Multiplataforma",
@@ -724,7 +724,7 @@ const pt = {
       },
       {
         title: "Comparado ao Snapdrop / PairDrop",
-        body: "Esses só funcionam na mesma rede; o Relayium acrescenta o emparelhamento entre redes, além de uma criptografia de ponta a ponta na camada de aplicação e um código SAS, de modo que um retransmissor ou um servidor de sinalização comprometido não consegue espionar.",
+        body: "Esses só funcionam na mesma rede; o Relayium acrescenta o emparelhamento entre redes, além de uma criptografia de ponta a ponta na camada de aplicação e um código de verificação (SAS), de modo que um retransmissor ou um servidor de sinalização comprometido não consegue espionar.",
       },
     ],
   },
@@ -732,8 +732,8 @@ const pt = {
     heading: "Perguntas frequentes",
     items: [
       {
-        q: "Meus arquivos passam pelo servidor de vocês?",
-        a: "O fluxo criptografado passa pelo retransmissor do Relayium para garantir uma conexão confiável entre redes — mas tudo é criptografado de ponta a ponta, então o retransmissor só vê conteúdo cifrado que não consegue ler.",
+        q: "Meus arquivos passam pelo servidor do Relayium?",
+        a: "O fluxo criptografado passa pelo retransmissor do Relayium para garantir uma conexão confiável entre redes — mas tudo é criptografado de ponta a ponta, então o retransmissor só vê texto cifrado que não consegue ler.",
       },
       {
         q: "Um código é obrigatório?",
@@ -745,7 +745,7 @@ const pt = {
       },
       {
         q: "É criptografia de ponta a ponta?",
-        a: "Sim — X25519 e AES-256-GCM por bloco, verificado com o código SAS; nem o retransmissor nem o servidor conseguem descriptografar.",
+        a: "Sim — X25519 e AES-256-GCM por bloco, confirmado com o código de verificação (SAS); nem o retransmissor nem o servidor conseguem descriptografar.",
       },
     ],
   },

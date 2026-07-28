@@ -196,26 +196,26 @@ const ja = {
     "P2P ファイル転送を平易に解説。サーバーへのアップロードとの違い、WebRTC が直接接続を見つける仕組み、プライベートかつ高速である理由まで。",
   updatedLabel: "最終更新",
   lead: [
-    "「ピアツーピア」という言葉はあいまいに使われがちですが、ファイル転送における本当の意味はこうです。ファイルは会社のサーバーに一度アップロードされてからダウンロードされるのではなく、一台のデバイスからもう一台へ直接送られます。途中にコピーが留まりうる寄り道はありません。",
+    "「P2P」という言葉はあいまいに使われがちですが、ファイル転送における本当の意味はこうです。ファイルは会社のサーバーに一度アップロードされてからダウンロードされるのではなく、一台のデバイスからもう一台へ直接送られます。途中にコピーが留まりうる寄り道はありません。",
     "簡単そうに聞こえますが、インターネットはもともと2台の見知らぬデバイスが勝手に見つけ合って直接話せるようには作られていません——ほとんどの接続はルーターやファイアウォールの内側に隠れていて、外部から到達されることを想定していないのです。このページでは、直接接続が実際にどう確立されるのか、確立できないときはどうなるのか、それがプライバシーと速度にとって何を意味するのかを平易な言葉で説明します。具体例として全編で Relayium を取り上げますが、これはまさにこの仕組みを実装したサービスだからです。",
   ],
   sections: [
     {
       heading: "P2P と一般的な方式の違い：中間の寄り道を省く",
       body: [
-        "ほとんどの「ファイルを送る」ツールはアップロード方式で動きます。あなたのデバイスから会社のサーバーへファイルが送られ、そこに保存され、相手はそれをダウンロードします。これは2ホップであり、しばらくの間、あなたのファイルの完全なコピーが他者のストレージ上に存在します——後で削除されるとしてもです。",
-        "ピアツーピア転送はこの寄り道を省きます。あなたのデバイスと相手のデバイスの間に接続が開けば、ファイルのバイトはその1ホップだけを直接流れ、他のどこも経由しません。保存すべきサーバー側のコピーも、守るべき対象も、いずれ削除すべきものもありません。そもそもアップロードされていないからです。",
+        "ほとんどの「ファイルを送る」ツールはアップロード方式で動きます。手元のデバイスから会社のサーバーへファイルが送られ、そこに保存され、相手はそれをダウンロードします。これは2ホップであり、しばらくの間、そのファイルの完全なコピーが他者のストレージ上に存在します——後で削除されるとしてもです。",
+        "P2P 転送はこの寄り道を省きます。手元のデバイスと相手のデバイスの間に接続が開けば、ファイルのバイトはその1ホップだけを直接流れ、他のどこも経由しません。保存すべきサーバー側のコピーも、守るべき対象も、いずれ削除すべきものもありません。そもそもアップロードされていないからです。",
       ],
       bullets: [
-        "アップロード方式：あなたのデバイス → サーバー → 相手のデバイス——2ホップで、途中に保存されたコピーがある。",
-        "ピアツーピア方式：あなたのデバイス → 相手のデバイス——1ホップで、何も保存されない。",
+        "アップロード方式：手元のデバイス → サーバー → 相手のデバイス——2ホップで、途中に保存されたコピーがある。",
+        "P2P 方式：手元のデバイス → 相手のデバイス——1ホップで、何も保存されない。",
         "Relayium ではこれがリアルタイムモードにあたります。両方のデバイスでサイトを開いて接続すれば、ファイルはブラウザ間で直接ストリーミングされます。",
       ],
     },
     {
       heading: "2台のデバイスが実際にどう見つけ合うか：STUN",
       body: [
-        "ここが直感的ではない部分です。あなたのデバイスは、外部インターネットからどう見えているかをほぼ確実に知りません——家庭用ルーターや通信キャリアのネットワークアドレス変換（NAT）の内側にあり、共有のグローバル IP の裏に隠され、ポートも動的に割り当てられます。相手のデバイスも同じ状況です。どちらも、実際に到達できるアドレスをまず知らなければ、相手に直接「電話」をかけることはできません。",
+        "ここが直感的ではない部分です。手元のデバイスは、外部インターネットから自分がどう見えているかをほぼ確実に知りません——家庭用ルーターや通信キャリアのネットワークアドレス変換（NAT）の内側にあり、共有のグローバル IP の裏に隠され、ポートも動的に割り当てられます。相手のデバイスも同じ状況です。どちらも、実際に到達できるアドレスをまず知らなければ、相手に直接「電話」をかけることはできません。",
         "そこで使われるのが STUN（NAT 越え用セッション走査ユーティリティ）です。各デバイスは軽量な STUN サーバーに短く一つの質問をします。「私はどのアドレス・ポートから来ているように見えますか？」その答えが、自分の外部向けアドレスを教えてくれます——ファイルでも、コンテンツでもなく、そこへの経路を示すのに十分なネットワーク情報だけです。両デバイスはこの情報を（接続確立の詳細だけを運び、ファイルのバイトは一切運ばないシグナリングの手順を通じて）交換し、互いのアドレスへ直接経路を開こうとします。多くの現実のケース——特に同じ Wi-Fi 上の2台や、挙動が予測可能な NAT——では、これだけで成功し、完全な直接接続が開きます。",
       ],
       bullets: [
@@ -225,15 +225,15 @@ const ja = {
       ],
     },
     {
-      heading: "直接経路が見つからないとき：TURN 中継",
+      heading: "直接経路が見つからないとき：TURN リレー",
       body: [
         "STUN だけでは足りないこともあります。一部の NAT——特に厳しい企業ネットワークや一部の通信キャリア——は挙動が予測できず、外部から得られる情報だけでは到達可能なアドレスを発見できないことがあります。両方のデバイスがそうした NAT の内側にある場合、本当の意味での直接接続は不可能で、何かが間でトラフィックを中継する必要があります。",
-        "それが TURN（NAT 越えのための中継利用）です。直接経路が失敗したときに両デバイスが接続するフォールバック用の中継サーバーです。これは回避策やプライバシーの妥協というより、一部のネットワークの構造そのものが要求する必然と言えます——ただし、それが何を見て何を見ないのかは正確に説明する価値があります。Relayium では、ファイルは中継に届く前にすでにエンドツーエンドで暗号化されているため、中継が転送するのは常に暗号文だけです——開ける鍵を持たない封印されたデータです。バイトを運ぶだけで、読むことはできません。",
+        "それが TURN（NAT 越えのためのリレー利用）です。直接経路が失敗したときに両デバイスが接続する予備のリレーサーバーです。これは回避策やプライバシーの妥協というより、一部のネットワークの構造そのものが要求する必然と言えます——ただし、それが何を見て何を見ないのかは正確に説明する価値があります。Relayium では、ファイルはリレーに届く前にすでにエンドツーエンドで暗号化されているため、リレーが転送するのは常に暗号文だけです——開ける鍵を持たない封印されたデータです。バイトを運ぶだけで、読むことはできません。",
       ],
       bullets: [
-        "同一ネットワークでは Relayium はデバイス同士を直接つなぎます。ネットワークをまたぐ場合は、直接経路が見つからないことが多いため、既定で TURN 中継を使います。",
-        "中継は暗号文だけを転送します。復号鍵を持つことは決してなく、ファイルの中身もファイル名も、中に含まれる他の情報も読めません。",
-        "ある転送が直接だったか中継経由だったかは、確認したい人であれば Relayium の接続診断情報から見ることができます。",
+        "同一ネットワークでは Relayium はデバイス同士を直接つなぎます。ネットワークをまたぐ場合は、直接経路が見つからないことが多いため、既定で TURN リレーを使います。",
+        "リレーは暗号文だけを転送します。復号鍵を持つことは決してなく、ファイルの中身もファイル名も、中に含まれる他の情報も読めません。",
+        "ある転送が直接だったかリレー経由だったかは、確認したい人であれば Relayium の接続診断情報から見ることができます。",
       ],
     },
     {
@@ -247,7 +247,7 @@ const ja = {
       heading: "Relayium はこれをどう組み合わせているか",
       body: [
         "同じネットワーク上の2台で relayium.com を開くと、たいていは自動的に見つけ合います——アカウントもコードも不要、インストールするものも何もありません。これがローカルネットワークのケースで、多くの場合 STUN すら不要です。異なるネットワーク上の相手にインターネット越しに送る場合はペアリングコードを使います。送信者がサインインしてコードを生成する（または QR コードのオプション付きでリンクを共有する）と、相手が参加した時点で、転送は暗号化 TURN リレー経由で行われます——予測しづらい NAT を越える最も確実な経路で、リレーが扱うのは暗号文だけです。受信者はアカウント不要のままです。",
-        "いずれの場合も、接続が開けば最大1,000ファイルのバッチがその接続を直接流れ、それぞれが SHA-256 ハッシュで個別に検証されるので、届いたものが送られたものと正確に一致しているか分かります。リアルタイムが不可能な場合——たとえば相手がオフラインの場合——は、それは本当に別のモード（ゼロ知識の保存リンク）であり、ピアツーピアではないので、別に理解しておく価値があります。",
+        "いずれの場合も、接続が開けば最大1,000ファイルのバッチがその接続を直接流れ、それぞれが SHA-256 ハッシュで個別に検証されるので、届いたものが送られたものと正確に一致しているか分かります。リアルタイムが不可能な場合——たとえば相手がオフラインの場合——は、それは本当に別のモード（ゼロ知識の保存リンク）であり、P2P ではないので、別に理解しておく価値があります。",
       ],
     },
   ],
@@ -255,20 +255,20 @@ const ja = {
     heading: "よくある質問",
     items: [
       {
-        q: "ピアツーピアとエンドツーエンド暗号化は同じことですか？",
-        a: "関連はしていますが同じではありません。P2P はネットワーク経路——バイトが2台のデバイス間を直接移動すること——を指します。暗号化は、そのバイトが途中の誰にとっても読めないかどうかを指します。Relayium のリアルタイム転送は両方を備えています。どちらの経路を取るかに関わらず、ファイルは直接（または中継経由だが暗号化された）経路上で、エンドツーエンドで封印されています。",
+        q: "P2P とエンドツーエンド暗号化は同じことですか？",
+        a: "関連はしていますが同じではありません。P2P はネットワーク経路——バイトが2台のデバイス間を直接移動すること——を指します。暗号化は、そのバイトが途中の誰にとっても読めないかどうかを指します。Relayium のリアルタイム転送は両方を備えています。どちらの経路を取るかに関わらず、ファイルは直接（またはリレー経由だが暗号化された）経路上で、エンドツーエンドで封印されています。",
       },
       {
         q: "P2P 転送はそもそもサーバーに触れることがあるのですか？",
-        a: "小さなシグナリングサーバーが2台のデバイスが互いのアドレスを見つけるのを助けますが、それが見るのは接続確立の情報だけで、ファイルのバイトは一切見ません。ブラウザでネットワークをまたぐ場合は、設計上つねに TURN 中継が暗号化されたファイルデータを転送しますが、それでも扱うのは復号できない暗号文だけです。",
+        a: "小さなシグナリングサーバーが2台のデバイスが互いのアドレスを見つけるのを助けますが、それが見るのは接続確立の情報だけで、ファイルのバイトは一切見ません。ブラウザでネットワークをまたぐ場合は、設計上つねに TURN リレーが暗号化されたファイルデータを転送しますが、それでも扱うのは復号できない暗号文だけです。",
       },
       {
         q: "そもそもなぜ直接接続が失敗することがあるのですか？",
-        a: "一部のネットワーク——厳しい企業ファイアウォールや一部の通信キャリアの NAT に多い——は、外部から得られる情報だけでは到達可能なアドレスを発見できないような構造になっています。それを毎回20秒前後かけて確かめるより、Relayium のブラウザ版はネットワークをまたぐ転送を最初からすべて中継経由にしています——つまりそれらを運ぶのは、失敗した直接接続の試行ではなく中継です。",
+        a: "一部のネットワーク——厳しい企業ファイアウォールや一部の通信キャリアの NAT に多い——は、外部から得られる情報だけでは到達可能なアドレスを発見できないような構造になっています。それを毎回20秒前後かけて確かめるより、Relayium のブラウザ版はネットワークをまたぐ転送を最初からすべてリレー経由にしています——つまりそれらを運ぶのは、失敗した直接接続の試行ではなくリレーです。",
       },
       {
-        q: "中継を経由すると P2P 転送は遅くなりますか？",
-        a: "中継はデータが通過する余分な1ホップであり、専用サーバーではなく共有サーバーであるため、多少の遅延は増える可能性があります。それでも一般には、アップロードしてからダウンロードする流れより速いです。ファイルが完全にサーバーに届くのを待たずにダウンロード側が開始できるからです。",
+        q: "リレーを経由すると P2P 転送は遅くなりますか？",
+        a: "リレーはデータが通過する余分な1ホップであり、専用サーバーではなく共有サーバーであるため、多少の遅延は増える可能性があります。それでも一般には、アップロードしてからダウンロードする流れより速いです。ファイルが完全にサーバーに届くのを待たずにダウンロード側が開始できるからです。",
       },
       {
         q: "P2P 転送には双方ともアカウントが必要ですか？",
@@ -289,58 +289,58 @@ const ko = {
     "P2P 파일 전송을 쉽게 설명합니다. 서버 업로드 방식과 무엇이 다른지, WebRTC가 직접 연결을 찾는 방법, 왜 사적이고 빠른지까지.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "\"피어투피어\"라는 말은 느슨하게 쓰이곤 하지만, 파일 전송에서 실제로 의미하는 바는 이렇습니다. 파일이 어느 회사의 서버로 올라갔다가 다시 내려오는 게 아니라, 한 기기에서 다른 기기로 곧장 이동한다는 뜻입니다. 중간에 사본이 머무를 수 있는 정거장이 없습니다.",
-    "간단해 보이지만, 인터넷은 원래 임의의 두 기기가 서로를 알아서 찾아 직접 대화하도록 설계되지 않았습니다——대부분의 연결은 라우터와 방화벽 뒤에 숨어 있고, 이들은 애초에 외부에서 도달되도록 만들어지지 않았습니다. 이 페이지는 직접 연결이 실제로 어떻게 만들어지는지, 만들어지지 못할 때는 어떻게 되는지, 그것이 프라이버시와 속도에 어떤 의미인지를 쉬운 말로 설명합니다. 전체적으로 Relayium을 구체적인 예시로 사용하는데, 바로 이 메커니즘을 실제로 구현한 서비스이기 때문입니다.",
+    "\"P2P\"라는 말은 느슨하게 쓰이곤 하지만, 파일 전송에서 실제로 의미하는 바는 이렇습니다. 파일이 어느 회사의 서버로 올라갔다가 다시 내려오는 게 아니라, 한 기기에서 다른 기기로 곧장 이동한다는 뜻입니다. 중간에 사본이 머무를 수 있는 정거장이 없습니다.",
+    "간단해 보이지만, 인터넷은 원래 임의의 두 기기가 서로를 알아서 찾아 직접 대화하도록 설계되지 않았습니다. 대부분의 연결은 라우터와 방화벽 뒤에 숨어 있고, 이들은 애초에 외부에서 도달되도록 만들어지지 않았습니다. 이 페이지는 직접 연결이 실제로 어떻게 만들어지는지, 만들어지지 못할 때는 어떻게 되는지, 그것이 프라이버시와 속도에 어떤 의미인지를 쉬운 말로 설명합니다. 전체적으로 Relayium을 구체적인 예시로 사용하는데, 바로 이 메커니즘을 실제로 구현한 서비스이기 때문입니다.",
   ],
   sections: [
     {
       heading: "P2P와 일반적인 방식의 차이: 중간 정거장을 없애다",
       body: [
-        "대부분의 \"파일 보내기\" 도구는 업로드 방식으로 동작합니다. 당신의 기기에서 회사 서버로 파일이 올라가 그곳에 저장되고, 상대방은 그것을 다시 다운로드합니다. 이는 두 번의 이동이며, 나중에 삭제되더라도 한동안은 당신 파일의 완전한 사본이 다른 누군가의 저장소에 존재합니다.",
-        "피어투피어 전송은 이 정거장을 건너뜁니다. 당신의 기기와 상대방 기기 사이에 연결이 열리면, 파일의 바이트는 그 한 번의 이동만으로 직접 흐르고 다른 어디도 거치지 않습니다. 저장하거나 보호하거나 나중에 삭제해야 할 서버 측 사본이 없습니다. 애초에 업로드된 적이 없기 때문입니다.",
+        "대부분의 \"파일 보내기\" 도구는 업로드 방식으로 동작합니다. 내 기기에서 회사 서버로 파일이 올라가 그곳에 저장되고, 상대방은 그것을 다시 다운로드합니다. 이는 두 번의 이동이며, 나중에 삭제되더라도 한동안은 내 파일의 완전한 사본이 다른 누군가의 저장소에 존재합니다.",
+        "P2P 전송은 이 정거장을 건너뜁니다. 내 기기와 상대방 기기 사이에 연결이 열리면, 파일의 바이트는 그 한 번의 이동만으로 직접 흐르고 다른 어디도 거치지 않습니다. 저장하거나 보호하거나 나중에 삭제해야 할 서버 측 사본이 없습니다. 애초에 업로드된 적이 없기 때문입니다.",
       ],
       bullets: [
-        "업로드 기반 전송: 내 기기 → 서버 → 상대 기기——두 번의 이동, 그 사이에 저장된 사본.",
-        "피어투피어 전송: 내 기기 → 상대 기기——한 번의 이동, 아무것도 저장되지 않음.",
+        "업로드 기반 전송: 내 기기 → 서버 → 상대 기기. 두 번의 이동, 그 사이에 저장된 사본.",
+        "P2P 전송: 내 기기 → 상대 기기. 한 번의 이동, 아무것도 저장되지 않음.",
         "Relayium에서는 이것이 실시간 모드입니다. 두 기기 모두에서 사이트를 열고 연결하면 파일이 브라우저 간에 직접 스트리밍됩니다.",
       ],
     },
     {
       heading: "두 기기가 실제로 서로를 찾는 방법: STUN",
       body: [
-        "여기 직관적이지 않은 부분이 있습니다. 당신의 기기는 외부 인터넷에서 자신이 어떻게 보이는지 거의 확실히 알지 못합니다——가정용 라우터나 통신사의 네트워크 주소 변환(NAT) 뒤에 있어, 공유된 공인 IP 뒤에 숨겨지고 포트도 동적으로 재할당됩니다. 상대 기기도 같은 처지입니다. 어느 쪽도 실제로 도달 가능한 주소를 먼저 알아내지 않고서는 상대에게 곧바로 \"전화를 걸\" 수 없습니다.",
-        "이때 쓰이는 것이 STUN(NAT 통과용 세션 순회 유틸리티)입니다. 각 기기는 가벼운 STUN 서버에 짧게 한 가지를 묻습니다. \"내가 어느 주소, 어느 포트에서 오는 것으로 보이나요?\" 그 답이 자신의 외부 주소를 알려줍니다——파일도, 어떤 콘텐츠도 아니고, 그곳으로 가는 경로를 설명하기에 충분한 네트워크 정보일 뿐입니다. 두 기기는 이 정보를(연결 설정 세부 사항만 전달하고 파일 바이트는 전혀 전달하지 않는 시그널링 단계를 통해) 교환한 뒤, 서로의 주소로 직접 경로를 열려고 시도합니다. 실제 상황의 상당수——특히 같은 Wi-Fi에 있는 두 기기나 예측 가능하게 동작하는 NAT——에서는 이것만으로 성공해 완전히 직접적인 연결이 열립니다.",
+        "여기 직관적이지 않은 부분이 있습니다. 내 기기는 외부 인터넷에서 자신이 어떻게 보이는지 거의 확실히 알지 못합니다. 가정용 라우터나 통신사의 네트워크 주소 변환(NAT) 뒤에 있어, 공유된 공인 IP 뒤에 숨겨지고 포트도 동적으로 재할당되기 때문입니다. 상대 기기도 같은 처지입니다. 어느 쪽도 실제로 도달 가능한 주소를 먼저 알아내지 않고서는 상대에게 곧바로 \"전화를 걸\" 수 없습니다.",
+        "이때 쓰이는 것이 STUN(NAT 통과용 세션 순회 유틸리티)입니다. 각 기기는 가벼운 STUN 서버에 짧게 한 가지를 묻습니다. \"내가 어느 주소, 어느 포트에서 오는 것으로 보이나요?\" 그 답이 자신의 외부 주소를 알려줍니다. 파일도 아니고 어떤 콘텐츠도 아니며, 그곳으로 가는 경로를 설명하기에 충분한 네트워크 정보일 뿐입니다. 두 기기는 이 정보를(연결 설정 세부 사항만 전달하고 파일 바이트는 전혀 전달하지 않는 시그널링 단계를 통해) 교환한 뒤, 서로의 주소로 직접 경로를 열려고 시도합니다. 실제 상황의 상당수에서는 이것만으로 성공해 완전히 직접적인 연결이 열립니다. 특히 같은 Wi-Fi에 있는 두 기기나 예측 가능하게 동작하는 NAT이라면 그렇습니다.",
       ],
       bullets: [
-        "STUN은 오직 네트워크 주소만 알아내고 주고받습니다——파일 내용, 파일 이름, 암호화 키는 절대 다루지 않습니다.",
+        "STUN은 오직 네트워크 주소만 알아내고 주고받습니다. 파일 내용이나 파일 이름, 암호화 키는 절대 다루지 않습니다.",
         "Relayium은 이를 위해 WebRTC를 사용합니다. 모든 현대 브라우저에 화상 통화용으로 내장된 것과 같은 직접 연결 기술을, 영상 프레임 대신 파일 바이트를 옮기는 데 재사용한 것입니다.",
         "같은 네트워크에 있는 두 기기(코드 불필요)는 대개 그 사이에 NAT 자체가 없는 경우가 많아 가장 직접적으로 연결되는 경향이 있습니다.",
       ],
     },
     {
-      heading: "직접 경로를 찾지 못할 때: TURN 중계",
+      heading: "직접 경로를 찾지 못할 때: TURN 릴레이",
       body: [
-        "때로는 STUN만으로 부족합니다. 일부 NAT——특히 엄격한 기업 네트워크나 일부 이동통신사——는 예측하기 어렵게 동작해서, 외부 정보만으로는 도달 가능한 주소를 전혀 발견할 수 없는 경우가 있습니다. 두 기기 모두 그런 종류의 NAT 뒤에 있다면 진정한 의미의 직접 연결은 불가능하며, 무언가가 그 사이에서 트래픽을 중계해야 합니다.",
-        "그것이 TURN(NAT 우회를 위한 중계 사용)입니다. 직접 경로가 실패했을 때 두 기기가 모두 연결하는 대체 중계 서버입니다. 이는 우회책이나 프라이버시 타협이라기보다, 일부 네트워크가 구축된 방식이 요구하는 필연에 가깝습니다——다만 그것이 무엇을 보고 무엇을 보지 못하는지는 정확히 짚어볼 가치가 있습니다. Relayium에서는 파일이 중계에 도달하기 전에 이미 종단간 암호화되어 있으므로, 중계는 항상 암호문만 전달합니다——열 수 있는 키가 없는 봉인된 데이터입니다. 바이트를 옮길 뿐, 읽을 수는 없습니다.",
+        "때로는 STUN만으로 부족합니다. 일부 NAT은 예측하기 어렵게 동작해서, 외부 정보만으로는 도달 가능한 주소를 전혀 발견할 수 없는 경우가 있습니다. 특히 엄격한 기업 네트워크나 일부 이동통신사가 그렇습니다. 두 기기 모두 그런 종류의 NAT 뒤에 있다면 진정한 의미의 직접 연결은 불가능하며, 무언가가 그 사이에서 트래픽을 중계해야 합니다.",
+        "그것이 TURN(NAT 우회를 위한 릴레이 사용)입니다. 직접 경로가 실패했을 때 두 기기가 모두 연결하는 대체 릴레이 서버입니다. 이는 우회책이나 프라이버시 타협이라기보다, 일부 네트워크가 구축된 방식이 요구하는 필연에 가깝습니다. 다만 그것이 무엇을 보고 무엇을 보지 못하는지는 정확히 짚어볼 가치가 있습니다. Relayium에서는 파일이 릴레이에 도달하기 전에 이미 종단간 암호화되어 있으므로, 릴레이는 항상 암호문만 전달합니다. 열 수 있는 키가 없는 봉인된 데이터입니다. 바이트를 옮길 뿐, 읽을 수는 없습니다.",
       ],
       bullets: [
-        "같은 네트워크에서는 Relayium이 기기를 직접 연결합니다. 네트워크를 넘을 때는 직접 경로를 찾지 못하는 경우가 워낙 많아 기본적으로 TURN 중계를 사용합니다.",
-        "중계는 암호문만 전달합니다. 복호화 키를 절대 갖지 않으며, 파일 내용도 파일 이름도 그 안의 다른 어떤 정보도 읽을 수 없습니다.",
-        "특정 전송이 직접 연결이었는지 중계를 거쳤는지는 궁금한 사람이라면 Relayium의 연결 진단 정보에서 확인할 수 있습니다.",
+        "같은 네트워크에서는 Relayium이 기기를 직접 연결합니다. 네트워크를 넘을 때는 직접 경로를 찾지 못하는 경우가 워낙 많아 기본적으로 TURN 릴레이를 사용합니다.",
+        "릴레이는 암호문만 전달합니다. 복호화 키를 절대 갖지 않으며, 파일 내용도 파일 이름도 그 안의 다른 어떤 정보도 읽을 수 없습니다.",
+        "특정 전송이 직접 연결이었는지 릴레이를 거쳤는지는 궁금한 사람이라면 Relayium의 연결 진단 정보에서 확인할 수 있습니다.",
       ],
     },
     {
       heading: "왜 중요한가: 프라이버시와 속도",
       body: [
-        "프라이버시 측면의 논리는 단순합니다. 파일의 바이트가 두 기기 사이를 단 한 번만 직접 오갈 때, 사본이 머무르거나 기록되거나 다른 누군가에게 접근될 수 있는 서버 측 저장 단계 자체가 존재하지 않습니다——애초에 거기에 놓인 적이 없기 때문입니다. 이는 \"결국엔 삭제하겠다고 약속합니다\"와는 구조적으로 전혀 다른 보장입니다.",
-        "속도 측면의 논리도 같은 맥락입니다. 업로드 후 다운로드하는 전송은 네트워크를 두 번——한 번 올리고, 한 번 내리고——가로질러야 하며, 종종 발신 측이 완전히 끝날 때까지 수신 측이 시작하지 못하고 기다립니다. 직접 연결은 네트워크를 한 번만 가로지르며, 처리량을 제한하거나 자체 지연을 더하는 서버가 중간에 없이, 둘 중 느린 쪽 연결이 허용하는 속도로 데이터가 두 기기 사이에서 끊임없이 스트리밍될 수 있습니다.",
+        "프라이버시 측면의 논리는 단순합니다. 파일의 바이트가 두 기기 사이를 단 한 번만 직접 오갈 때, 사본이 머무르거나 기록되거나 다른 누군가에게 접근될 수 있는 서버 측 저장 단계 자체가 존재하지 않습니다. 애초에 거기에 놓인 적이 없기 때문입니다. 이는 \"결국엔 삭제하겠다고 약속합니다\"와는 구조적으로 전혀 다른 보장입니다.",
+        "속도 측면의 논리도 같은 맥락입니다. 업로드 후 다운로드하는 전송은 네트워크를 두 번 가로질러야 합니다. 한 번은 올리고, 한 번은 내립니다. 게다가 종종 발신 측이 완전히 끝날 때까지 수신 측이 시작하지 못하고 기다립니다. 직접 연결은 네트워크를 한 번만 가로지르며, 처리량을 제한하거나 자체 지연을 더하는 서버가 중간에 없이, 둘 중 느린 쪽 연결이 허용하는 속도로 데이터가 두 기기 사이에서 끊임없이 스트리밍될 수 있습니다.",
       ],
     },
     {
       heading: "Relayium이 이를 어떻게 조합하는가",
       body: [
-        "같은 네트워크에 있는 두 기기에서 relayium.com을 열면 보통 자동으로 서로를 찾습니다——계정도, 코드도 필요 없고, 설치할 것도 없습니다. 이것이 LAN 상황이며, 많은 경우 STUN조차 필요하지 않습니다. 다른 네트워크에 있는 사람에게 인터넷 너머로 보낼 때는 페어링 코드를 사용합니다. 발신자가 로그인해서 코드를 생성하면(또는 스캔할 수 있는 QR 코드 옵션과 함께 링크를 공유하면), 상대방이 참여하는 순간 전송은 암호화된 TURN 중계를 통해 이뤄집니다——예측하기 어려운 NAT를 넘는 가장 확실한 경로이며, 중계는 암호문만 나릅니다. 수신자는 여전히 계정이 필요 없습니다.",
-        "어느 경우든 연결이 열리면 최대 1,000개 파일이 그 연결을 통해 직접 스트리밍되며, 각 파일은 개별적으로 SHA-256 해시로 검증되어 도착한 것이 보낸 것과 정확히 일치하는지 확인합니다. 실시간이 불가능한 경우——예를 들어 상대방이 오프라인인 경우——는 정말로 다른 모드(영지식 저장 링크)이지 피어투피어가 아니며, 별도로 이해할 가치가 있습니다.",
+        "같은 네트워크에 있는 두 기기에서 relayium.com을 열면 보통 자동으로 서로를 찾습니다. 계정도, 코드도 필요 없고, 설치할 것도 없습니다. 이것이 LAN 상황이며, 많은 경우 STUN조차 필요하지 않습니다. 다른 네트워크에 있는 사람에게 인터넷 너머로 보낼 때는 페어링 코드를 사용합니다. 발신자가 로그인해서 코드를 생성하면(또는 스캔할 수 있는 QR 코드 옵션과 함께 링크를 공유하면), 상대방이 참여하는 순간 전송은 암호화된 TURN 릴레이를 통해 이뤄집니다. 이는 예측하기 어려운 NAT을 넘는 가장 확실한 경로이며, 릴레이는 암호문만 나릅니다. 수신자는 여전히 계정이 필요 없습니다.",
+        "어느 경우든 연결이 열리면 최대 1,000개 파일이 그 연결을 통해 직접 스트리밍되며, 각 파일은 개별적으로 SHA-256 해시로 검증되어 도착한 것이 보낸 것과 정확히 일치하는지 확인합니다. 실시간이 불가능한 경우, 예를 들어 상대방이 오프라인인 경우는 정말로 다른 모드(영지식 저장 링크)이지 P2P가 아니며, 별도로 이해할 가치가 있습니다.",
       ],
     },
   ],
@@ -348,20 +348,20 @@ const ko = {
     heading: "자주 묻는 질문",
     items: [
       {
-        q: "피어투피어와 종단간 암호화는 같은 것인가요?",
-        a: "관련은 있지만 같지는 않습니다. P2P는 네트워크 경로——바이트가 두 기기 사이를 직접 이동하는 것——를 가리킵니다. 암호화는 그 바이트가 중간의 누구에게도 읽히지 않는지를 가리킵니다. Relayium의 실시간 전송은 둘 다에 해당합니다. 어느 경로를 거치든, 파일은 종단간으로 봉인되어 있습니다.",
+        q: "P2P와 종단간 암호화는 같은 것인가요?",
+        a: "관련은 있지만 같지는 않습니다. P2P는 네트워크 경로, 즉 바이트가 두 기기 사이를 직접 이동하는 것을 가리킵니다. 암호화는 그 바이트가 중간의 누구에게도 읽히지 않는지를 가리킵니다. Relayium의 실시간 전송은 둘 다에 해당합니다. 어느 경로를 거치든, 파일은 종단간으로 봉인되어 있습니다.",
       },
       {
         q: "P2P 전송이 애초에 서버를 거치기는 하나요?",
-        a: "작은 시그널링 서버가 두 기기가 서로의 주소를 찾도록 돕지만, 그것이 보는 것은 연결 설정 정보뿐이며 파일 바이트는 전혀 보지 않습니다. 브라우저에서 네트워크를 넘을 때는 설계상 TURN 중계가 암호화된 파일 데이터를 전달하지만, 그때조차 다루는 것은 복호화할 수 없는 암호문뿐입니다.",
+        a: "작은 시그널링 서버가 두 기기가 서로의 주소를 찾도록 돕지만, 그것이 보는 것은 연결 설정 정보뿐이며 파일 바이트는 전혀 보지 않습니다. 브라우저에서 네트워크를 넘을 때는 설계상 TURN 릴레이가 암호화된 파일 데이터를 전달하지만, 그때조차 다루는 것은 복호화할 수 없는 암호문뿐입니다.",
       },
       {
         q: "직접 연결은 애초에 왜 실패할 수 있나요?",
-        a: "일부 네트워크——엄격한 기업 방화벽이나 일부 이동통신사 NAT에 흔함——는 외부 정보만으로는 도달 가능한 주소를 발견할 수 없도록 구성되어 있습니다. 전송할 때마다 20초 남짓을 들여 그것을 확인하는 대신, Relayium의 브라우저 앱은 네트워크 간 전송을 처음부터 모두 중계로 보냅니다 — 그것들을 나르는 것은 실패한 직접 연결 시도가 아니라 중계입니다.",
+        a: "일부 네트워크는 외부 정보만으로는 도달 가능한 주소를 발견할 수 없도록 구성되어 있습니다. 엄격한 기업 방화벽이나 일부 이동통신사 NAT에서 흔한 일입니다. 전송할 때마다 20초 남짓을 들여 그것을 확인하는 대신, Relayium의 브라우저 앱은 네트워크 간 전송을 처음부터 모두 릴레이로 보냅니다. 그것들을 나르는 것은 실패한 직접 연결 시도가 아니라 릴레이입니다.",
       },
       {
-        q: "중계를 거치면 P2P 전송이 느려지나요?",
-        a: "중계는 데이터가 통과하는 추가적인 한 단계이고 전용 서버가 아닌 공유 서버이므로 약간의 지연이 더해질 수 있습니다. 그래도 파일이 서버에 완전히 도착할 때까지 기다리지 않고 다운로드 측이 시작할 수 있으므로, 업로드 후 다운로드하는 방식보다는 대체로 더 빠릅니다.",
+        q: "릴레이를 거치면 P2P 전송이 느려지나요?",
+        a: "릴레이는 데이터가 통과하는 추가적인 한 단계이고 전용 서버가 아닌 공유 서버이므로 약간의 지연이 더해질 수 있습니다. 그래도 파일이 서버에 완전히 도착할 때까지 기다리지 않고 다운로드 측이 시작할 수 있으므로, 업로드 후 다운로드하는 방식보다는 대체로 더 빠릅니다.",
       },
       {
         q: "P2P 전송에는 양쪽 모두 계정이 필요한가요?",
@@ -382,26 +382,26 @@ const de = {
     "Eine verständliche Erklärung von P2P-Dateiübertragung: der Unterschied zum Hochladen auf einen Server, wie eine direkte WebRTC-Verbindung entsteht und warum sie privat und schnell ist.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "„Peer-to-Peer“ wird oft locker verwendet, aber bei einer Dateiübertragung bedeutet es konkret: Ihre Datei geht direkt von einem Gerät zum anderen — nicht auf den Server eines Unternehmens hoch und wieder herunter. Kein Zwischenstopp, an dem eine Kopie liegen bleiben könnte.",
-    "Das klingt einfach, aber das Internet ist nicht dafür gebaut, dass zwei beliebige Geräte sich einfach finden und direkt miteinander sprechen — die meisten Verbindungen verstecken sich hinter Routern und Firewalls, die nie dafür ausgelegt waren, von außen erreicht zu werden. Diese Seite erklärt in einfachen Worten, wie eine direkte Verbindung tatsächlich zustande kommt, wann das nicht möglich ist und was das für Ihre Privatsphäre und Geschwindigkeit bedeutet. Relayium dient dabei durchgehend als konkretes Beispiel, denn es ist eine funktionierende Umsetzung genau dieses Mechanismus.",
+    "„Peer-to-Peer“ wird oft locker verwendet, aber bei einer Dateiübertragung bedeutet es konkret: Deine Datei geht direkt von einem Gerät zum anderen — nicht auf den Server eines Unternehmens hoch und wieder herunter. Kein Zwischenstopp, an dem eine Kopie liegen bleiben könnte.",
+    "Das klingt einfach, aber das Internet ist nicht dafür gebaut, dass zwei beliebige Geräte sich einfach finden und direkt miteinander sprechen — die meisten Verbindungen verstecken sich hinter Routern und Firewalls, die nie dafür ausgelegt waren, von außen erreicht zu werden. Diese Seite erklärt in einfachen Worten, wie eine direkte Verbindung tatsächlich zustande kommt, wann das nicht möglich ist und was das für deine Privatsphäre und Geschwindigkeit bedeutet. Relayium dient dabei durchgehend als konkretes Beispiel, denn es ist eine funktionierende Umsetzung genau dieses Mechanismus.",
   ],
   sections: [
     {
       heading: "P2P vs. der übliche Weg: den Zwischenstopp streichen",
       body: [
-        "Die meisten „Datei senden“-Tools funktionieren per Upload: Ihre Datei geht von Ihrem Gerät auf den Server des Anbieters hoch, wird dort gespeichert, und die andere Person lädt sie wieder herunter. Das sind zwei Hops, und eine Weile lang liegt eine vollständige Kopie Ihrer Datei auf fremdem Speicher — auch wenn sie später gelöscht wird.",
-        "Peer-to-Peer-Übertragung überspringt diesen Zwischenstopp. Sobald eine Verbindung zwischen Ihrem Gerät und dem der anderen Person offen ist, fließen die Bytes der Datei direkt über diesen einen Hop und nirgendwo sonst hin. Es gibt keine serverseitige Kopie, die gespeichert, gesichert oder irgendwann gelöscht werden müsste — denn sie wurde nie hochgeladen.",
+        "Die meisten „Datei senden“-Tools funktionieren per Upload: Deine Datei geht von deinem Gerät auf den Server des Anbieters hoch, wird dort gespeichert, und die andere Person lädt sie wieder herunter. Das sind zwei Hops, und eine Weile lang liegt eine vollständige Kopie deiner Datei auf fremdem Speicher — auch wenn sie später gelöscht wird.",
+        "Peer-to-Peer-Übertragung überspringt diesen Zwischenstopp. Sobald eine Verbindung zwischen deinem Gerät und dem der anderen Person offen ist, fließen die Bytes der Datei direkt über diesen einen Hop und nirgendwo sonst hin. Es gibt keine serverseitige Kopie, die gespeichert, gesichert oder irgendwann gelöscht werden müsste — denn sie wurde nie hochgeladen.",
       ],
       bullets: [
-        "Upload-basierte Übertragung: Ihr Gerät zu einem Server zum Gerät der anderen Person — zwei Hops, dazwischen eine gespeicherte Kopie.",
-        "Peer-to-Peer-Übertragung: Ihr Gerät direkt zum Gerät der anderen Person — ein Hop, nichts wird gespeichert.",
+        "Upload-basierte Übertragung: dein Gerät zu einem Server zum Gerät der anderen Person — zwei Hops, dazwischen eine gespeicherte Kopie.",
+        "Peer-to-Peer-Übertragung: dein Gerät direkt zum Gerät der anderen Person — ein Hop, nichts wird gespeichert.",
         "Bei Relayium ist das der Echtzeitmodus: Beide Geräte öffnen die Seite, verbinden sich, und die Datei streamt direkt von Browser zu Browser.",
       ],
     },
     {
       heading: "Wie zwei Geräte sich tatsächlich finden: STUN",
       body: [
-        "Hier kommt der nicht offensichtliche Teil: Ihr Gerät kennt so gut wie sicher seine eigene Adresse, wie sie vom öffentlichen Internet aus gesehen wird, gar nicht — es sitzt hinter einem heimischen Router oder der Network Address Translation (NAT) eines Mobilfunkanbieters, die es hinter einer geteilten öffentlichen IP verbirgt und Ports laufend neu zuweist. Das andere Gerät befindet sich in derselben Lage. Keines von beiden kann das andere einfach „anwählen“, ohne vorher herauszufinden, welche Adresse es überhaupt erreichen würde.",
+        "Hier kommt der nicht offensichtliche Teil: Dein Gerät kennt so gut wie sicher seine eigene Adresse, wie sie vom öffentlichen Internet aus gesehen wird, gar nicht — es sitzt hinter einem heimischen Router oder der Network Address Translation (NAT) eines Mobilfunkanbieters, die es hinter einer geteilten öffentlichen IP verbirgt und Ports laufend neu zuweist. Das andere Gerät befindet sich in derselben Lage. Keines von beiden kann das andere einfach „anwählen“, ohne vorher herauszufinden, welche Adresse es überhaupt erreichen würde.",
         "Genau dafür ist STUN (Session Traversal Utilities for NAT) da. Jedes Gerät stellt kurz einem schlanken STUN-Server eine Frage: „Von welcher Adresse und welchem Port aus siehst du mich kommen?“ Die Antwort verrät ihm seine eigene nach außen sichtbare Adresse — keine Datei, kein Inhalt, nur genug Netzwerkinformation, um einen Weg zurück zu ihm zu beschreiben. Beide Geräte tauschen diese Information aus (über einen Signalisierungsschritt, der ausschließlich Verbindungsaufbau-Details trägt, nie Dateibytes) und versuchen dann, einen direkten Pfad zur Adresse des jeweils anderen zu öffnen. In einem großen Teil realer Fälle — besonders bei zwei Geräten im selben WLAN oder bei NATs mit vorhersehbarem Verhalten — funktioniert das, und es öffnet sich eine vollständig direkte Verbindung.",
       ],
       bullets: [
@@ -433,7 +433,7 @@ const de = {
       heading: "Wie Relayium das zusammenfügt",
       body: [
         "Öffnen zwei Geräte im selben Netzwerk relayium.com, finden sie sich meist automatisch — kein Konto, kein Code, nichts zu installieren; das ist der LAN-Fall, in dem STUN oft nicht einmal gebraucht wird. Für den Versand über das Internet an jemanden in einem anderen Netzwerk kommt ein Pairing-Code zum Einsatz: Der Absender meldet sich an, erzeugt einen Code (oder teilt einen Link, wahlweise mit QR-Code zum Scannen), und sobald die andere Person beitritt, läuft die Übertragung über ein verschlüsseltes TURN-Relay — der zuverlässige Weg durch unvorhersehbare NATs, und es trägt ausschließlich Chiffretext. Der Empfänger braucht weiterhin kein Konto.",
-        "So oder so: Sobald die Verbindung steht, streamen bis zu 1.000 Dateien in einem Stapel direkt darüber, jede einzeln mit einem SHA-256-Hash geprüft, sodass Sie wissen, dass das Angekommene exakt dem Gesendeten entspricht. Ist Echtzeit nicht möglich — etwa weil die andere Person offline ist —, handelt es sich um einen wirklich anderen Modus (einen Zero-Knowledge-Speicherlink), nicht um Peer-to-Peer, und das ist es wert, separat verstanden zu werden.",
+        "So oder so: Sobald die Verbindung steht, streamen bis zu 1.000 Dateien in einem Stapel direkt darüber, jede einzeln mit einem SHA-256-Hash geprüft, sodass du weißt, dass das Angekommene exakt dem Gesendeten entspricht. Ist Echtzeit nicht möglich — etwa weil die andere Person offline ist —, handelt es sich um einen wirklich anderen Modus (einen Zero-Knowledge-Speicherlink), nicht um Peer-to-Peer, und das ist es wert, separat verstanden zu werden.",
       ],
     },
   ],
@@ -463,7 +463,7 @@ const de = {
     ],
   },
   cta: {
-    text: "Neugierig, wie sich das anfühlt? Öffnen Sie Relayium auf zwei Geräten und beobachten Sie, wie sich eine direkte Verbindung in Echtzeit aufbaut.",
+    text: "Neugierig, wie sich das anfühlt? Öffne Relayium auf zwei Geräten und beobachte, wie sich eine direkte Verbindung in Echtzeit aufbaut.",
     button: "Relayium jetzt ausprobieren",
   },
   relatedHeading: "Weiterlesen",
@@ -472,30 +472,30 @@ const de = {
 const fr = {
   title: "Qu'est-ce que le transfert de fichiers pair à pair ?",
   description:
-    "Une explication simple du transfert pair à pair : la différence avec l'envoi vers un serveur, comment WebRTC établit une connexion directe, et pourquoi c'est privé et rapide.",
+    "Une explication simple du transfert pair-à-pair : la différence avec l'envoi vers un serveur, comment WebRTC établit une connexion directe, et pourquoi c'est privé et rapide.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "« Pair à pair » est une expression employée un peu librement, alors voici ce qu'elle signifie vraiment pour un transfert de fichiers : votre fichier va directement d'un appareil à l'autre, pas vers le serveur d'une entreprise puis à nouveau vers le bas. Aucune étape intermédiaire où une copie pourrait rester.",
+    "« Pair-à-pair » est une expression employée un peu librement, alors voici ce qu'elle signifie vraiment pour un transfert de fichiers : votre fichier va directement d'un appareil à l'autre, et non vers le serveur d'une entreprise avant d'en redescendre. Aucune étape intermédiaire où une copie pourrait rester.",
     "Cela paraît simple, mais Internet n'a pas été conçu pour que deux appareils quelconques se trouvent tout seuls et se parlent directement — la plupart des connexions se cachent derrière des routeurs et des pare-feu jamais prévus pour être atteints de l'extérieur. Cette page explique, en termes simples, comment une connexion directe s'établit réellement, quand elle ne le peut pas, et ce que cela signifie pour votre vie privée et la vitesse. Relayium sert d'exemple concret tout au long du texte, puisqu'il s'agit d'une implémentation fonctionnelle exactement de ce mécanisme.",
   ],
   sections: [
     {
-      heading: "P2P contre la méthode habituelle : supprimer l'étape intermédiaire",
+      heading: "P2P contre la méthode habituelle : supprimer l'étape intermédiaire",
       body: [
-        "La plupart des outils « envoyer un fichier » fonctionnent par téléversement : votre fichier part de votre appareil vers le serveur de l'entreprise, y est stocké, puis l'autre personne le télécharge à son tour. Cela fait deux sauts, et pendant un moment, une copie complète de votre fichier repose sur le stockage de quelqu'un d'autre — même si elle est supprimée par la suite.",
-        "Le transfert pair à pair supprime cette étape. Une fois qu'une connexion est ouverte entre votre appareil et celui de l'autre personne, les octets du fichier circulent directement sur ce seul saut, et nulle part ailleurs. Il n'y a pas de copie côté serveur à stocker, à sécuriser ou à finir par supprimer, puisqu'elle n'a jamais été téléversée en premier lieu.",
+        "La plupart des outils « envoyer un fichier » fonctionnent par téléversement : votre fichier part de votre appareil vers le serveur de l'entreprise, y est stocké, puis l'autre personne le télécharge à son tour. Cela fait deux sauts, et pendant un moment, une copie complète de votre fichier repose sur le stockage de quelqu'un d'autre — même si elle est supprimée par la suite.",
+        "Le transfert pair-à-pair supprime cette étape. Une fois qu'une connexion est ouverte entre votre appareil et celui de l'autre personne, les octets du fichier circulent directement sur ce seul saut, et nulle part ailleurs. Il n'y a pas de copie côté serveur à stocker, à sécuriser ou à finir par supprimer, puisqu'elle n'a jamais été téléversée en premier lieu.",
       ],
       bullets: [
-        "Transfert par téléversement : votre appareil vers un serveur vers l'appareil de l'autre — deux sauts, une copie stockée entre les deux.",
-        "Transfert pair à pair : votre appareil directement vers l'appareil de l'autre — un seul saut, rien de stocké.",
-        "Chez Relayium, c'est le mode temps réel : ouvrez le site sur les deux appareils, connectez-les, et le fichier circule directement, navigateur à navigateur.",
+        "Transfert par téléversement : votre appareil vers un serveur vers l'appareil de l'autre — deux sauts, une copie stockée entre les deux.",
+        "Transfert pair-à-pair : votre appareil directement vers l'appareil de l'autre — un seul saut, rien de stocké.",
+        "Chez Relayium, c'est le mode temps réel : ouvrez le site sur les deux appareils, connectez-les, et le fichier circule directement, navigateur à navigateur.",
       ],
     },
     {
-      heading: "Comment deux appareils se trouvent réellement : STUN",
+      heading: "Comment deux appareils se trouvent réellement : STUN",
       body: [
-        "Voici la partie qui n'est pas évidente : votre appareil ne connaît presque certainement pas sa propre adresse telle qu'elle est vue depuis l'Internet public — il se trouve derrière un routeur domestique ou la traduction d'adresse réseau (NAT) d'un opérateur mobile, qui le dissimule derrière une adresse IP publique partagée et réattribue les ports à la volée. L'autre appareil est dans la même situation. Aucun des deux ne peut simplement « composer » l'autre directement sans d'abord déterminer quelle adresse permettrait réellement de l'atteindre.",
-        "C'est à cela que sert STUN (Session Traversal Utilities for NAT). Chaque appareil pose brièvement une question à un serveur STUN léger : « depuis quelle adresse et quel port me vois-tu arriver ? » La réponse lui indique sa propre adresse visible de l'extérieur — ni fichier, ni contenu, juste assez d'information réseau pour décrire un chemin pour le rejoindre. Les deux appareils échangent cette information (via une étape de signalisation qui ne transporte que des détails d'établissement de connexion, jamais des octets de fichier), puis tentent d'ouvrir un chemin direct vers l'adresse de l'autre. Dans une large part des cas réels — en particulier deux appareils sur le même Wi-Fi, ou des NAT au comportement prévisible — cela fonctionne, et une connexion entièrement directe s'ouvre.",
+        "Voici la partie qui n'est pas évidente : votre appareil ne connaît presque certainement pas sa propre adresse telle qu'elle est vue depuis l'Internet public — il se trouve derrière un routeur domestique ou la traduction d'adresse réseau (NAT) d'un opérateur mobile, qui le dissimule derrière une adresse IP publique partagée et réattribue les ports à la volée. L'autre appareil est dans la même situation. Aucun des deux ne peut simplement « composer » l'autre directement sans d'abord déterminer quelle adresse permettrait réellement de l'atteindre.",
+        "C'est à cela que sert STUN (Session Traversal Utilities for NAT). Chaque appareil pose brièvement une question à un serveur STUN léger : « depuis quelle adresse et quel port me voyez-vous arriver ? » La réponse lui indique sa propre adresse visible de l'extérieur — ni fichier, ni contenu, juste assez d'information réseau pour décrire un chemin pour le rejoindre. Les deux appareils échangent cette information (via une étape de signalisation qui ne transporte que des détails d'établissement de connexion, jamais des octets de fichier), puis tentent d'ouvrir un chemin direct vers l'adresse de l'autre. Dans une large part des cas réels — en particulier deux appareils sur le même Wi-Fi, ou des NAT au comportement prévisible — cela fonctionne, et une connexion entièrement directe s'ouvre.",
       ],
       bullets: [
         "STUN n'apprend et ne partage jamais que des adresses réseau — jamais le contenu des fichiers, leurs noms, ni les clés de chiffrement.",
@@ -504,29 +504,29 @@ const fr = {
       ],
     },
     {
-      heading: "Quand aucun chemin direct ne peut être trouvé : le relais TURN",
+      heading: "Quand aucun chemin direct ne peut être trouvé : le relais TURN",
       body: [
-        "Parfois, STUN ne suffit pas. Certains NAT — en particulier sur des réseaux d'entreprise plus stricts ou chez certains opérateurs mobiles — sont suffisamment imprévisibles pour qu'aucun chemin direct ne puisse être découvert à partir des seules informations externes. Si les deux appareils se trouvent derrière ce genre de NAT, une connexion réellement directe est tout simplement impossible ; quelque chose doit relayer le trafic entre les deux.",
-        "C'est le rôle de TURN (Traversal Using Relays around NAT) : un serveur relais de secours auquel les deux appareils se connectent lorsqu'un chemin direct échoue. Ce n'est pas tant un contournement ou un compromis sur la vie privée qu'une nécessité liée à la façon dont certains réseaux sont construits — mais il vaut la peine d'être précis sur ce qu'il voit et ne voit pas. Chez Relayium, le fichier est déjà chiffré de bout en bout avant d'atteindre le relais, si bien que celui-ci ne transmet toujours que du chiffré — des données scellées dont il n'a pas la clé. Il déplace des octets ; il ne peut pas les lire.",
+        "Parfois, STUN ne suffit pas. Certains NAT — en particulier sur des réseaux d'entreprise plus stricts ou chez certains opérateurs mobiles — sont suffisamment imprévisibles pour qu'aucun chemin direct ne puisse être découvert à partir des seules informations externes. Si les deux appareils se trouvent derrière ce genre de NAT, une connexion réellement directe est tout simplement impossible ; quelque chose doit relayer le trafic entre les deux.",
+        "C'est le rôle de TURN (Traversal Using Relays around NAT) : un serveur relais de secours auquel les deux appareils se connectent lorsqu'un chemin direct échoue. Ce n'est pas tant un contournement ou un compromis sur la vie privée qu'une nécessité liée à la façon dont certains réseaux sont construits — mais il vaut la peine d'être précis sur ce qu'il voit et ne voit pas. Chez Relayium, le fichier est déjà chiffré de bout en bout avant d'atteindre le relais, si bien que celui-ci ne transmet toujours que du texte chiffré — des données scellées dont il n'a pas la clé. Il déplace des octets ; il ne peut pas les lire.",
       ],
       bullets: [
-        "Sur le même réseau, Relayium relie les appareils directement ; entre réseaux, il utilise le relais TURN par défaut, car un chemin direct y est si souvent introuvable.",
-        "Le relais ne transmet que du chiffré ; il ne possède jamais la clé de déchiffrement et ne peut lire ni le contenu des fichiers, ni leurs noms, ni rien d'autre à leur sujet.",
+        "Sur le même réseau, Relayium relie les appareils directement ; entre réseaux, il utilise le relais TURN par défaut, car un chemin direct y est si souvent introuvable.",
+        "Le relais ne transmet que du texte chiffré ; il ne possède jamais la clé de déchiffrement et ne peut lire ni le contenu des fichiers, ni leurs noms, ni rien d'autre à leur sujet.",
         "Le fait qu'un transfert donné soit passé en direct ou via un relais est visible dans les diagnostics de connexion de Relayium, pour qui souhaite vérifier.",
       ],
     },
     {
-      heading: "Pourquoi cela compte : vie privée et vitesse",
+      heading: "Pourquoi cela compte : vie privée et vitesse",
       body: [
-        "L'argument de la vie privée est simple : quand les octets du fichier ne traversent qu'un seul saut, directement entre deux appareils, il n'existe aucune étape de stockage côté serveur où une copie pourrait rester, être journalisée ou être consultée par quelqu'un d'autre — parce qu'elle n'y a jamais été déposée. C'est une garantie structurellement différente d'un « nous promettons de la supprimer un jour ».",
+        "L'argument de la vie privée est simple : quand les octets du fichier ne traversent qu'un seul saut, directement entre deux appareils, il n'existe aucune étape de stockage côté serveur où une copie pourrait rester, être journalisée ou être consultée par quelqu'un d'autre — parce qu'elle n'y a jamais été déposée. C'est une garantie structurellement différente d'un « nous promettons de la supprimer un jour ».",
         "L'argument de la vitesse suit la même logique. Un transfert téléversement-puis-téléchargement doit traverser le réseau deux fois — une fois vers le haut, une fois vers le bas — et attend souvent que le côté émetteur ait entièrement terminé avant que le côté récepteur puisse commencer. Une connexion directe ne traverse le réseau qu'une seule fois, et les données peuvent circuler en continu entre les deux appareils, aussi vite que le permet la connexion la plus lente, sans serveur intermédiaire limitant le débit ou ajoutant sa propre latence.",
       ],
     },
     {
       heading: "Comment Relayium assemble tout cela",
       body: [
-        "Ouvrez relayium.com sur deux appareils du même réseau et ils se trouvent généralement automatiquement — pas de compte, pas de code, rien à installer ; c'est le cas du réseau local, où STUN n'est souvent même pas nécessaire. Pour envoyer sur Internet vers quelqu'un sur un autre réseau, on utilise un code de jumelage : l'expéditeur se connecte, génère un code (ou partage un lien, avec en option un QR code à scanner), et dès que l'autre personne rejoint, le transfert passe par un relais TURN chiffré — la voie fiable à travers des NAT imprévisibles, et il ne transporte que du chiffré ; le destinataire n'a toujours besoin d'aucun compte.",
-        "Dans tous les cas, une fois la connexion ouverte, jusqu'à 1 000 fichiers d'un même lot circulent directement dessus, chacun vérifié indépendamment par un hachage SHA-256, afin que vous sachiez que ce qui est arrivé correspond exactement à ce qui a été envoyé. Si le temps réel n'est pas possible — par exemple si l'autre personne est hors ligne —, il s'agit d'un mode réellement différent (un lien stocké à connaissance nulle), pas de pair à pair, et cela vaut la peine d'être compris séparément.",
+        "Ouvrez relayium.com sur deux appareils du même réseau et ils se trouvent généralement automatiquement — pas de compte, pas de code, rien à installer ; c'est le cas du réseau local, où STUN n'est souvent même pas nécessaire. Pour envoyer sur Internet vers quelqu'un sur un autre réseau, on utilise un code d'appairage : l'expéditeur se connecte, génère un code (ou partage un lien, avec en option un QR code à scanner), et dès que l'autre personne rejoint, le transfert passe par un relais TURN chiffré — la voie fiable à travers des NAT imprévisibles, et il ne transporte que du texte chiffré ; le destinataire n'a toujours besoin d'aucun compte.",
+        "Dans tous les cas, une fois la connexion ouverte, jusqu'à 1 000 fichiers d'un même lot circulent directement dessus, chacun vérifié indépendamment par un hachage SHA-256, afin que vous sachiez que ce qui est arrivé correspond exactement à ce qui a été envoyé. Si le temps réel n'est pas possible — par exemple si l'autre personne est hors ligne —, il s'agit d'un mode réellement différent (un lien stocké à divulgation nulle), pas de pair-à-pair, et cela vaut la peine d'être compris séparément.",
       ],
     },
   ],
@@ -534,29 +534,29 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Le pair à pair est-il la même chose que le chiffrement de bout en bout ?",
-        a: "Les deux sont liés mais pas identiques. Le P2P décrit le chemin réseau — des octets circulant directement entre deux appareils. Le chiffrement décrit si ces octets sont illisibles pour quiconque se trouverait entre les deux. Les transferts en temps réel de Relayium réunissent les deux : un chemin direct (ou relayé mais chiffré), avec un fichier scellé de bout en bout quel que soit le chemin emprunté.",
+        q: "Le pair-à-pair est-il la même chose que le chiffrement de bout en bout ?",
+        a: "Les deux sont liés mais pas identiques. Le P2P décrit le chemin réseau — des octets circulant directement entre deux appareils. Le chiffrement décrit si ces octets sont illisibles pour quiconque se trouverait entre les deux. Les transferts en temps réel de Relayium réunissent les deux : un chemin direct (ou relayé mais chiffré), avec un fichier scellé de bout en bout quel que soit le chemin emprunté.",
       },
       {
-        q: "Un transfert P2P touche-t-il quand même un serveur ?",
-        a: "Un petit serveur de signalisation aide les deux appareils à trouver l'adresse l'un de l'autre — mais il ne voit jamais que des informations d'établissement de connexion, jamais les octets du fichier. Entre réseaux différents, dans le navigateur, un relais TURN transmet par conception les données de fichier chiffrées, mais même alors il ne traite que du chiffré qu'il ne peut pas déchiffrer.",
+        q: "Un transfert P2P touche-t-il quand même un serveur ?",
+        a: "Un petit serveur de signalisation aide les deux appareils à trouver l'adresse l'un de l'autre — mais il ne voit jamais que des informations d'établissement de connexion, jamais les octets du fichier. Entre réseaux différents, dans le navigateur, un relais TURN transmet par conception les données de fichier chiffrées, mais même alors il ne traite que du texte chiffré qu'il ne peut pas déchiffrer.",
       },
       {
-        q: "Pourquoi une connexion directe échouerait-elle en premier lieu ?",
+        q: "Pourquoi une connexion directe échouerait-elle en premier lieu ?",
         a: "Certains réseaux — souvent des pare-feu d'entreprise stricts ou certains NAT d'opérateurs mobiles — sont construits de façon à rendre impossible la découverte d'une adresse joignable à partir des seules informations externes. Plutôt que de passer une vingtaine de secondes à le découvrir à chaque transfert, l'application web de Relayium fait passer d'emblée tous les transferts entre réseaux par le relais — c'est donc le relais, et non une tentative directe échouée, qui les achemine.",
       },
       {
-        q: "Un transfert P2P est-il plus lent quand il passe par un relais ?",
+        q: "Un transfert P2P est-il plus lent quand il passe par un relais ?",
         a: "Cela peut ajouter un peu de latence, puisque le relais est un saut supplémentaire que traversent les données, et qu'il s'agit d'un serveur partagé plutôt que dédié. Mais c'est généralement encore plus rapide qu'un flux téléversement-puis-téléchargement, car il n'y a pas d'attente que le fichier arrive entièrement sur un serveur avant que le côté téléchargement puisse démarrer.",
       },
       {
-        q: "Les deux personnes ont-elles besoin d'un compte pour un transfert P2P ?",
-        a: "Deux appareils sur le même réseau n'ont besoin d'aucun compte. Envoyer entre réseaux différents via un code de jumelage exige que l'expéditeur se connecte, mais la personne qui reçoit n'a jamais besoin de compte, quel que soit le chemin emprunté.",
+        q: "Les deux personnes ont-elles besoin d'un compte pour un transfert P2P ?",
+        a: "Deux appareils sur le même réseau n'ont besoin d'aucun compte. Envoyer entre réseaux différents via un code d'appairage exige que l'expéditeur se connecte, mais la personne qui reçoit n'a jamais besoin de compte, quel que soit le chemin emprunté.",
       },
     ],
   },
   cta: {
-    text: "Curieux de voir l'effet que ça fait ? Ouvrez Relayium sur deux appareils et observez une connexion directe se former en temps réel.",
+    text: "Curieux de voir l'effet que ça fait ? Ouvrez Relayium sur deux appareils et observez une connexion directe se former en temps réel.",
     button: "Essayer Relayium maintenant",
   },
   relatedHeading: "À lire ensuite",
@@ -593,7 +593,7 @@ const ar = {
       bullets: [
         "لا يعرف STUN ويشارك سوى عناوين الشبكة — ولا يعرف قط محتويات الملفات أو أسماءها أو مفاتيح التشفير.",
         "يستخدم Relayium تقنية WebRTC لهذا الغرض، وهي تقنية الاتصال المباشر نفسها المدمجة في كل متصفح حديث لمكالمات الفيديو — أُعيد توظيفها هنا لنقل بايتات الملفات بدلًا من إطارات الفيديو.",
-        "جهازان على نفس الشبكة (دون حاجة إلى رمز) يتصلان عادةً على النحو الأكثر مباشرةً بينها جميعًا، إذ لا يوجد غالبًا أي NAT يعترض الطريق.",
+        "جهازان على الشبكة نفسها (دون حاجة إلى رمز) يتصلان عادةً على النحو الأكثر مباشرةً بينها جميعًا، إذ لا يوجد غالبًا أي NAT يعترض الطريق.",
       ],
     },
     {
@@ -618,7 +618,7 @@ const ar = {
     {
       heading: "كيف يجمع Relayium هذا كله",
       body: [
-        "افتح relayium.com على جهازين على نفس الشبكة فيعثر كل منهما على الآخر تلقائيًا في العادة — دون حساب ودون رمز ودون أي شيء يُثبَّت؛ تلك هي حالة الشبكة المحلية التي لا يكون STUN فيها ضروريًا غالبًا. أما الإرسال عبر الإنترنت إلى شخص على شبكة مختلفة فيستخدم رمز اقتران: يسجّل المُرسِل الدخول، ويولّد رمزًا (أو يشارك رابطًا، مع رمز QR اختياري للمسح)، وما إن ينضم الشخص الآخر حتى يجري النقل عبر مُرحِّل TURN مشفَّر — وهو المسار الموثوق عبر شبكات NAT التي يصعب التنبؤ بها، ولا يحمل إلا نصًا مُشفَّرًا — ويبقى المُستقبِل بلا حاجة إلى حساب.",
+        "افتح relayium.com على جهازين على الشبكة نفسها فيعثر كل منهما على الآخر تلقائيًا في العادة — دون حساب ودون رمز ودون أي شيء يُثبَّت؛ تلك هي حالة الشبكة المحلية التي لا يكون STUN فيها ضروريًا غالبًا. أما الإرسال عبر الإنترنت إلى شخص على شبكة مختلفة فيستخدم رمز اقتران: يسجّل المُرسِل الدخول، ويولّد رمزًا (أو يشارك رابطًا، مع رمز QR اختياري للمسح)، وما إن ينضم الشخص الآخر حتى يجري النقل عبر مُرحِّل TURN مشفَّر — وهو المسار الموثوق عبر شبكات NAT التي يصعب التنبؤ بها، ولا يحمل إلا نصًا مُشفَّرًا — ويبقى المُستقبِل بلا حاجة إلى حساب.",
         "في كلتا الحالتين، ما إن يُفتح الاتصال حتى يُبَثّ ما يصل إلى 1000 ملف في دفعة واحدة مباشرةً عبره، ويُتحقَّق من كل منها على حدة بتجزئة SHA-256 كي تعرف أن ما وصل يطابق تمامًا ما أُرسل. وإذا تعذّر الوضع الفوري — كأن يكون الشخص الآخر غير متصل — فذلك وضع مختلف حقًا (رابط مُخزَّن بمعرفة صفرية)، لا نقل من الند للند، ويستحق أن يُفهَم على حدة.",
       ],
     },
@@ -644,7 +644,7 @@ const ar = {
       },
       {
         q: "هل يحتاج الطرفان إلى حساب للنقل من الند للند؟",
-        a: "جهازان على نفس الشبكة لا يحتاجان إلى حساب على الإطلاق. والإرسال عبر الشبكات برمز اقتران يتطلب أن يسجّل المُرسِل الدخول، أما الشخص المُستقبِل فلا يحتاج إلى حساب مطلقًا في كلتا الحالتين.",
+        a: "جهازان على الشبكة نفسها لا يحتاجان إلى حساب على الإطلاق. والإرسال عبر الشبكات برمز اقتران يتطلب أن يسجّل المُرسِل الدخول، أما الشخص المُستقبِل فلا يحتاج إلى حساب مطلقًا في كلتا الحالتين.",
       },
     ],
   },
@@ -754,14 +754,14 @@ const pt = {
     "Uma explicação em linguagem simples da transferência de arquivos P2P: como ela difere de enviar para um servidor, como uma conexão WebRTC direta é encontrada e por que é privada e rápida.",
   updatedLabel: "Última atualização",
   lead: [
-    "\"Ponto a ponto\" é usado de forma imprecisa, então aqui está o que realmente significa para uma transferência de arquivos: seu arquivo vai direto de um dispositivo para o outro, e não sobe para o servidor de uma empresa e desce de volta. Não há parada no meio onde uma cópia poderia ficar.",
+    "“Ponto a ponto” é usado de forma imprecisa, então aqui está o que realmente significa para uma transferência de arquivos: seu arquivo vai direto de um dispositivo para o outro, e não sobe para o servidor de uma empresa e desce de volta. Não há parada no meio onde uma cópia poderia ficar.",
     "Parece simples, mas a internet não foi feita para que dois dispositivos quaisquer simplesmente se encontrem e conversem diretamente — a maioria das conexões se esconde atrás de roteadores e firewalls que nunca foram projetados para serem alcançados de fora. Esta página explica, em termos claros, como uma conexão direta é realmente estabelecida, quando ela não pode ser estabelecida e o que isso significa para sua privacidade e velocidade. O Relayium é usado como exemplo concreto ao longo de todo o texto, já que é uma implementação funcional exatamente disso.",
   ],
   sections: [
     {
       heading: "P2P versus a forma habitual: eliminar a parada intermediária",
       body: [
-        "A maioria das ferramentas de \"enviar arquivo\" funciona por upload: seu arquivo vai do seu dispositivo para o servidor da empresa, fica armazenado lá e a outra pessoa baixa de volta. São dois saltos e, por um tempo, uma cópia completa do seu arquivo fica no armazenamento de outra pessoa — mesmo que seja excluída depois.",
+        "A maioria das ferramentas de “enviar arquivo” funciona por upload: seu arquivo vai do seu dispositivo para o servidor da empresa, fica armazenado lá e a outra pessoa baixa de volta. São dois saltos e, por um tempo, uma cópia completa do seu arquivo fica no armazenamento de outra pessoa — mesmo que seja excluída depois.",
         "A transferência ponto a ponto pula essa parada. Assim que há uma conexão aberta entre o seu dispositivo e o da outra pessoa, os bytes do arquivo fluem diretamente por esse único salto e por nenhum outro lugar. Não há cópia do lado do servidor para armazenar, proteger ou acabar excluindo, porque ela nunca foi enviada em primeiro lugar.",
       ],
       bullets: [
@@ -773,8 +773,8 @@ const pt = {
     {
       heading: "Como dois dispositivos realmente se encontram: STUN",
       body: [
-        "Aqui está a parte que não é óbvia: seu dispositivo quase com certeza não conhece o próprio endereço tal como visto da internet externa — ele fica atrás de um roteador doméstico ou da tradução de endereços de rede (NAT) de uma operadora móvel, que o esconde atrás de um IP público compartilhado e reatribui as portas dinamicamente. O outro dispositivo está na mesma situação. Nenhum dos dois pode simplesmente \"discar\" para o outro diretamente sem antes descobrir qual endereço realmente o alcançaria.",
-        "É para isso que serve o STUN (Session Traversal Utilities for NAT). Cada dispositivo faz brevemente uma pergunta a um pequeno e leve servidor STUN: \"de qual endereço e porta você me vê chegando?\". A resposta lhe informa o próprio endereço visível de fora — nem o arquivo, nem qualquer conteúdo, apenas informação de rede suficiente para descrever um caminho de volta até ele. Ambos os dispositivos trocam essa informação (por meio de uma etapa de sinalização que só transporta detalhes de estabelecimento da conexão, nunca bytes do arquivo) e então tentam abrir um caminho direto até o endereço um do outro. Em grande parte dos casos reais — especialmente dois dispositivos na mesma Wi-Fi, ou NATs que se comportam de forma previsível — isso funciona e uma conexão totalmente direta se abre.",
+        "Aqui está a parte que não é óbvia: seu dispositivo quase com certeza não conhece o próprio endereço tal como visto da internet externa — ele fica atrás de um roteador doméstico ou da tradução de endereços de rede (NAT) de uma operadora móvel, que o esconde atrás de um IP público compartilhado e reatribui as portas dinamicamente. O outro dispositivo está na mesma situação. Nenhum dos dois pode simplesmente “discar” para o outro diretamente sem antes descobrir qual endereço realmente o alcançaria.",
+        "É para isso que serve o STUN (Session Traversal Utilities for NAT). Cada dispositivo faz brevemente uma pergunta a um pequeno e leve servidor STUN: “de qual endereço e porta você me vê chegando?”. A resposta lhe informa o próprio endereço visível de fora — nem o arquivo, nem qualquer conteúdo, apenas informação de rede suficiente para descrever um caminho de volta até ele. Ambos os dispositivos trocam essa informação (por meio de uma etapa de sinalização que só transporta detalhes de estabelecimento da conexão, nunca bytes do arquivo) e então tentam abrir um caminho direto até o endereço um do outro. Em grande parte dos casos reais — especialmente dois dispositivos na mesma Wi-Fi, ou NATs que se comportam de forma previsível — isso funciona e uma conexão totalmente direta se abre.",
       ],
       bullets: [
         "O STUN só chega a conhecer e compartilhar endereços de rede — nunca o conteúdo dos arquivos, seus nomes ou as chaves de criptografia.",
@@ -786,7 +786,7 @@ const pt = {
       heading: "Quando um caminho direto não pode ser encontrado: o retransmissor TURN",
       body: [
         "Às vezes o STUN não basta. Alguns NATs — especialmente em redes corporativas mais rígidas ou em certas operadoras móveis — são imprevisíveis o suficiente para que nenhum caminho direto possa ser descoberto apenas com a informação externa. Se ambos os dispositivos estiverem atrás desse tipo de NAT, uma conexão genuinamente direta simplesmente não é possível; algo tem que retransmitir o tráfego no meio.",
-        "É para isso que existe o TURN (Traversal Using Relays around NAT): um servidor de retransmissão de reserva ao qual ambos os dispositivos se conectam quando um caminho direto falha. Não é tanto um truque ou uma concessão de privacidade quanto uma necessidade decorrente de como algumas redes são construídas — mas vale ser preciso sobre o que ele vê e o que não vê. No Relayium, o arquivo já está criptografado de ponta a ponta antes de chegar ao retransmissor, então o retransmissor só encaminha texto cifrado — dados selados dos quais ele não tem chave para abrir. Ele move bytes; não pode lê-los.",
+        "É para isso que existe o TURN (Traversal Using Relays around NAT): um servidor de retransmissão de reserva ao qual ambos os dispositivos se conectam quando um caminho direto falha. Não é tanto um truque ou uma concessão de privacidade quanto uma necessidade decorrente de como algumas redes são construídas — mas vale ser preciso sobre o que ele vê e o que não vê. No Relayium, o arquivo já está criptografado de ponta a ponta antes de chegar ao retransmissor, então o retransmissor só encaminha texto cifrado — dados lacrados cuja chave ele não possui. Ele move bytes; não pode lê-los.",
       ],
       bullets: [
         "Na mesma rede, o Relayium conecta os dispositivos diretamente; entre redes ele usa o retransmissor TURN por padrão, porque ali muitas vezes não há caminho direto.",
@@ -797,7 +797,7 @@ const pt = {
     {
       heading: "Por que isso importa: privacidade e velocidade",
       body: [
-        "O argumento da privacidade é simples: quando os bytes do arquivo só cruzam um único salto, diretamente entre dois dispositivos, não há nenhuma etapa de armazenamento do lado do servidor onde uma cópia pudesse ficar, ser registrada ou ser acessada por outra pessoa — porque ela nunca foi colocada ali. Essa é uma garantia estruturalmente diferente de um \"prometemos excluir em algum momento\".",
+        "O argumento da privacidade é simples: quando os bytes do arquivo só cruzam um único salto, diretamente entre dois dispositivos, não há nenhuma etapa de armazenamento do lado do servidor onde uma cópia pudesse ficar, ser registrada ou ser acessada por outra pessoa — porque ela nunca foi colocada ali. Essa é uma garantia estruturalmente diferente de um “prometemos excluir em algum momento”.",
         "O argumento da velocidade segue a mesma lógica. Uma transferência de upload e depois download precisa cruzar a rede duas vezes — uma de subida, uma de descida — e muitas vezes espera o lado remetente terminar por completo antes de o lado receptor poder começar. Uma conexão direta cruza a rede apenas uma vez, e os dados podem fluir continuamente entre os dois dispositivos tão rápido quanto a conexão mais lenta permitir, sem um servidor no meio limitando a taxa de transferência ou acrescentando sua própria latência.",
       ],
     },

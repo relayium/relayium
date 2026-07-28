@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>cron で暗号化されたサーバーバックアップを自動化する · Relayium</title>
-    <meta name="description" content="cron から relayium push または sync を定期実行して、ディレクトリを別のサーバーへ自動コピー——暗号化、再開可能、SHA-256 検証付きで、しかも無料です。" />
+    <meta name="description" content="cron から relayium push または sync を定期実行して、ディレクトリを別のサーバーへ自動コピー。暗号化、再開可能、SHA-256 検証付きで、しかも無料です。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/how-to/automate-server-backups/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/automate-server-backups/" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="cron で暗号化されたサーバーバックアップを自動化する" />
-    <meta property="og:description" content="cron から relayium push または sync を定期実行して、ディレクトリを別のサーバーへ自動コピー——暗号化、再開可能、SHA-256 検証付きで、しかも無料です。" />
+    <meta property="og:description" content="cron から relayium push または sync を定期実行して、ディレクトリを別のサーバーへ自動コピー。暗号化、再開可能、SHA-256 検証付きで、しかも無料です。" />
     <meta property="og:url" content="https://relayium.com/ja/how-to/automate-server-backups/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="ja_JP" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="cron で暗号化されたサーバーバックアップを自動化する" />
-    <meta name="twitter:description" content="cron から relayium push または sync を定期実行して、ディレクトリを別のサーバーへ自動コピー——暗号化、再開可能、SHA-256 検証付きで、しかも無料です。" />
+    <meta name="twitter:description" content="cron から relayium push または sync を定期実行して、ディレクトリを別のサーバーへ自動コピー。暗号化、再開可能、SHA-256 検証付きで、しかも無料です。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"cron で暗号化されたサーバーバックアップを自動化する","description":"cron から relayium push または sync を定期実行して、ディレクトリを別のサーバーへ自動コピー——暗号化、再開可能、SHA-256 検証付きで、しかも無料です。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/automate-server-backups/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"バックアップサーバーに relayium のインストールは必要ですか?","acceptedAnswer":{"@type":"Answer","text":"コマンドによります。push はどちらでも動作します。relayium がインストールされていればネイティブプロトコル(再開 + ファイルごとの SHA-256 検証)を使い、なければ push は SSH 上の tar ストリームにフォールバックするので、素のサーバーでも動作します。sync は常にリモート側で relayium のネイティブプロトコルが必要です——sync に tar フォールバックはないので、先にインストールしてください。"}},{"@type":"Question","name":"バックアップは暗号化・検証されますか?","acceptedAnswer":{"@type":"Answer","text":"されます。すべてのファイルはエンドツーエンドで SHA-256 ハッシュによって検証され、SSH または daemon-direct でプッシュする場合、バイトはその接続自体の暗号化によってすでに保護されています——追加の設定は不要です。"}},{"@type":"Question","name":"cron ジョブが途中で中断された場合はどうなりますか?","acceptedAnswer":{"@type":"Answer","text":"両端に relayium があれば、次の予定された実行で部分的なファイルが全体を再送するのではなく再開されます。きれいに全体を再送したい場合は --no-resume を指定してください。"}},{"@type":"Question","name":"--delete で誤って宛先を消してしまうことはありますか?","acceptedAnswer":{"@type":"Answer","text":"sync はソースディレクトリにファイルが1つもない場合、--delete の実行自体を拒否します。また、削除が実際に反映されるには受信側が serve --allow-delete で起動されている必要があります——そうでなければスキップされ、結果として報告されます。"}},{"@type":"Question","name":"アカウントは必要ですか、これは有料ですか?","acceptedAnswer":{"@type":"Answer","text":"いいえ。CLI は無料で、push、pull、sync のいずれにもアカウントは不要です。転送はあなた自身の SSH 接続、または直接の daemon 接続の上で行われ、Relayium のサーバーは経由しません。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"cron で暗号化されたサーバーバックアップを自動化する","description":"cron から relayium push または sync を定期実行して、ディレクトリを別のサーバーへ自動コピー。暗号化、再開可能、SHA-256 検証付きで、しかも無料です。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/automate-server-backups/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"バックアップサーバーに relayium のインストールは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"コマンドによります。push はどちらでも動作します。relayium がインストールされていればネイティブプロトコル（再開 + ファイルごとの SHA-256 検証）を使い、なければ push は SSH 上の tar ストリームにフォールバックするので、素のサーバーでも動作します。sync は常にリモート側で relayium のネイティブプロトコルが必要です。sync に tar フォールバックはないので、先にインストールしてください。"}},{"@type":"Question","name":"バックアップは暗号化・検証されますか？","acceptedAnswer":{"@type":"Answer","text":"されます。すべてのファイルはエンドツーエンドで SHA-256 ハッシュによって検証され、SSH または daemon-direct でプッシュする場合、バイトはその接続自体の暗号化によってすでに保護されています。追加の設定は不要です。"}},{"@type":"Question","name":"cron ジョブが途中で中断された場合はどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"両端に relayium があれば、次の予定された実行で部分的なファイルが全体を再送するのではなく再開されます。きれいに全体を再送したい場合は --no-resume を指定してください。"}},{"@type":"Question","name":"--delete で誤って宛先を消してしまうことはありますか？","acceptedAnswer":{"@type":"Answer","text":"sync はソースディレクトリにファイルが1つもない場合、--delete の実行自体を拒否します。また、削除が実際に反映されるには受信側が serve --allow-delete で起動されている必要があります。そうでなければスキップされ、結果として報告されます。"}},{"@type":"Question","name":"アカウントは必要ですか、これは有料ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。CLI は無料で、push、pull、sync のいずれにもアカウントは不要です。転送はご自身の SSH 接続、または直接の daemon 接続の上で行われ、Relayium のサーバーは経由しません。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -69,53 +69,53 @@ footer a{color:var(--text-h);text-decoration:none}
       <h1>cron で暗号化されたサーバーバックアップを自動化する</h1>
       <p class="updated">最終更新: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups/">English</a><a href="/zh/how-to/automate-server-backups/">中文</a><a href="/ja/how-to/automate-server-backups/" aria-current="true">日本語</a><a href="/ko/how-to/automate-server-backups/">한국어</a><a href="/de/how-to/automate-server-backups/">Deutsch</a><a href="/fr/how-to/automate-server-backups/">Français</a><a href="/ar/how-to/automate-server-backups/">العربية</a><a href="/es/how-to/automate-server-backups/">Español</a><a href="/pt/how-to/automate-server-backups/">Português</a></nav>
-      <p class="lead">自分で覚えて実行しなければならないバックアップは、たいてい実行されません。cron は覚えていてくれますし、Relayium CLI はまさにそのために作られています。ディレクトリを別のマシンへコピー(またはミラー)し、すべてのファイルを検証し、ネットワークが切れても中断した所から再開する、単一の非対話型コマンドです。</p>
+      <p class="lead">自分で覚えて実行しなければならないバックアップは、たいてい実行されません。cron は覚えていてくれますし、Relayium CLI はまさにそのために作られています。ディレクトリを別のマシンへコピー（またはミラー）し、すべてのファイルを検証し、ネットワークが切れても中断した所から再開する、単一の非対話型コマンドです。</p>
       <p class="lead">本ガイドでは、cron から relayium push と増分同期の relayium sync をスケジュール実行する方法、どちらでも使える2つの転送方式、そしてそのままコピーできる crontab の行を扱います。</p>
-      <h2>push と sync:全体コピーか増分ミラーか</h2>
+      <h2>push と sync：全体コピーか増分ミラーか</h2>
       <p>push と sync はどちらもディレクトリを別のマシンへ転送し、どちらも繰り返し実行して安全ですが、解決するバックアップの課題は少し異なります。</p>
-      <p>push は実行するたびに SSH または daemon-direct 経由で毎回コピーを送ります——シンプルで、relayium がインストールされていない素のサーバーに対しても tar フォールバックで動作します。一方 sync は宛先をソースの増分・一方向ミラーとして維持します。変更されたファイルだけを再送するので、大きなディレクトリでも最初の同期の後は夜間の同期が高速です。sync は常に両端で relayium のネイティブプロトコルを必要とします——tar フォールバックはありません。</p>
+      <p>push は実行するたびに SSH または daemon-direct 経由で毎回コピーを送ります。シンプルで、relayium がインストールされていない素のサーバーに対しても tar フォールバックで動作します。一方 sync は宛先をソースの増分・一方向ミラーとして維持します。変更されたファイルだけを再送するので、大きなディレクトリでも最初の同期の後は夜間の同期が高速です。sync は常に両端で relayium のネイティブプロトコルを必要とします。tar フォールバックはありません。</p>
       <ul><li>relayium がインストールされていないかもしれないサーバーへの、シンプルなスケジュールコピーには push を使いましょう。</li><li>大きい、あるいは頻繁に変化するディレクトリで、毎晩すべてを再送するのが無駄になる場合は sync を使いましょう。</li><li>どちらもファイルごとに SHA-256 で検証され、中断されても再開できます。</li></ul>
       <h2>始める前に</h2>
       <p>以下はすべて relayium CLI なので、未インストールならまず入れてください。macOS または Linux では、1つのコマンドでビルド済みバイナリが PATH に入ります：</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>自分でファイルを選びたい、または Windows の場合は、リリースページからバイナリを取得してください——relayium.com/cli にすべてのインストール方法があります（Go があれば go build -o relayium ./cmd/relayium も可）。</li><li>relayium --version でインストールを確認できます。これをしないと以下のコマンドは「command not found」と出るだけです。</li></ul>
-      <h2>2つの転送方式:SSH か daemon-direct か</h2>
-      <p>どちらのコマンドも、SSH の宛先(scp 形式、あなたの ~/.ssh/config を使用)を指定できますし、相手のマシンで relayium serve が動いていれば、SSH なしで daemon-direct プロトコル経由で直接接続することもできます。</p>
-      <pre><code># SSH destination — uses your existing SSH keys and config
+      <h2>2つの転送方式：SSH か daemon-direct か</h2>
+      <p>どちらのコマンドも、SSH の宛先（scp 形式、お使いの ~/.ssh/config を使用）を指定できますし、相手のマシンで relayium serve が動いていれば、SSH なしで daemon-direct プロトコル経由で直接接続することもできます。</p>
+      <pre><code># SSH の宛先：既存の SSH 鍵と設定をそのまま使います
 relayium push ./data user@backup-server:/srv/backups/
 
-# daemon-direct — the destination runs &quot;relayium serve&quot;, no SSH required
+# daemon-direct：宛先で &quot;relayium serve&quot; が動いていれば SSH は不要です
 relayium push ./data relayium://backup-server:9031</code></pre>
-      <ul><li>daemon-direct 接続はピン留めされた TLS 1.3 で、初回接続時に信頼(trust-on-first-use)し、以降の実行では同じフィンガープリントに対して検証します。</li><li>sync は push と同じ2つの宛先の書き方を受け付けます。</li></ul>
+      <ul><li>daemon-direct 接続はピン留めされた TLS 1.3 で、初回接続時に信頼（trust-on-first-use）し、以降の実行では同じフィンガープリントに対して検証します。</li><li>sync は push と同じ2つの宛先の書き方を受け付けます。</li></ul>
       <h2>cron でスケジュール実行する</h2>
-      <p>push と sync はどちらも単一の非対話型コマンドなので、そのまま crontab に組み込めます。パスフレーズなしの鍵(または agent)を指定し、出力をログに残して失敗を確認できるようにしましょう:</p>
-      <pre><code># full copy every night at 2am — add to your crontab (crontab -e)
+      <p>push と sync はどちらも単一の非対話型コマンドなので、そのまま crontab に組み込めます。パスフレーズなしの鍵（または agent）を指定し、出力をログに残して失敗を確認できるようにしましょう：</p>
+      <pre><code># 毎晩2時に全体コピー：crontab に追加します（crontab -e）
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1
 
-# incremental mirror every 15 minutes instead
+# 代わりに15分ごとの増分ミラー
 */15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-sync.log 2&gt;&amp;1</code></pre>
       <ul><li>いずれかのファイルが整合性チェックに失敗すると、コマンドは非ゼロで終了するので、cron の失敗時メール通知で問題に気づけます。</li><li>中断された実行は、次の予定された実行で自動的に再開または追いつきます。</li></ul>
       <h2>削除のミラーリングとリアルタイム同期</h2>
-      <p>デフォルトでは、sync は宛先側でファイルを追加または更新するだけです。--delete を付けると真のミラーになり、ソースにもう存在しないファイルも削除します——受信側は serve --allow-delete で明示的に待ち受けている必要があり、そうでなければ削除は黙って無視され、拒否されたと結果に報告されます。ソースディレクトリが1つもファイルを解決しない場合、sync は --delete の実行そのものを拒否するので、ソースパスの誤字で宛先が消えてしまうことはありません。</p>
-      <p>cron の次の実行タイミングを待ちたくない場合は、--watch を使うと relayium sync が動き続け、ソース配下のファイルが変化するとすぐに自動で再同期します——スケジュールでポーリングする代わりの軽量な選択肢です。</p>
-      <ul><li>relayium sync ./data user@backup-server:/srv/backups/ --delete は削除もミラーします(受信側に serve --allow-delete が必要)。</li><li>relayium sync ./data user@backup-server:/srv/backups/ --watch は動き続けて変化のたびに同期します。cron による単発実行の代わりに使えます。</li></ul>
+      <p>デフォルトでは、sync は宛先側でファイルを追加または更新するだけです。--delete を付けると真のミラーになり、ソースにもう存在しないファイルも削除します。受信側は serve --allow-delete で明示的に待ち受けている必要があり、そうでなければ削除は黙って無視され、拒否されたと結果に報告されます。ソースディレクトリが1つもファイルを解決しない場合、sync は --delete の実行そのものを拒否するので、ソースパスの誤字で宛先が消えてしまうことはありません。</p>
+      <p>cron の次の実行タイミングを待ちたくない場合は、--watch を使うと relayium sync が動き続け、ソース配下のファイルが変化するとすぐに自動で再同期します。スケジュールでポーリングする代わりの軽量な選択肢です。</p>
+      <ul><li>relayium sync ./data user@backup-server:/srv/backups/ --delete は削除もミラーします（受信側に serve --allow-delete が必要）。</li><li>relayium sync ./data user@backup-server:/srv/backups/ --watch は動き続けて変化のたびに同期します。cron による単発実行の代わりに使えます。</li></ul>
       <h2>よくある質問</h2>
-      <h3>バックアップサーバーに relayium のインストールは必要ですか?</h3>
-      <p>コマンドによります。push はどちらでも動作します。relayium がインストールされていればネイティブプロトコル(再開 + ファイルごとの SHA-256 検証)を使い、なければ push は SSH 上の tar ストリームにフォールバックするので、素のサーバーでも動作します。sync は常にリモート側で relayium のネイティブプロトコルが必要です——sync に tar フォールバックはないので、先にインストールしてください。</p>
-      <h3>バックアップは暗号化・検証されますか?</h3>
-      <p>されます。すべてのファイルはエンドツーエンドで SHA-256 ハッシュによって検証され、SSH または daemon-direct でプッシュする場合、バイトはその接続自体の暗号化によってすでに保護されています——追加の設定は不要です。</p>
-      <h3>cron ジョブが途中で中断された場合はどうなりますか?</h3>
+      <h3>バックアップサーバーに relayium のインストールは必要ですか？</h3>
+      <p>コマンドによります。push はどちらでも動作します。relayium がインストールされていればネイティブプロトコル（再開 + ファイルごとの SHA-256 検証）を使い、なければ push は SSH 上の tar ストリームにフォールバックするので、素のサーバーでも動作します。sync は常にリモート側で relayium のネイティブプロトコルが必要です。sync に tar フォールバックはないので、先にインストールしてください。</p>
+      <h3>バックアップは暗号化・検証されますか？</h3>
+      <p>されます。すべてのファイルはエンドツーエンドで SHA-256 ハッシュによって検証され、SSH または daemon-direct でプッシュする場合、バイトはその接続自体の暗号化によってすでに保護されています。追加の設定は不要です。</p>
+      <h3>cron ジョブが途中で中断された場合はどうなりますか？</h3>
       <p>両端に relayium があれば、次の予定された実行で部分的なファイルが全体を再送するのではなく再開されます。きれいに全体を再送したい場合は --no-resume を指定してください。</p>
-      <h3>--delete で誤って宛先を消してしまうことはありますか?</h3>
-      <p>sync はソースディレクトリにファイルが1つもない場合、--delete の実行自体を拒否します。また、削除が実際に反映されるには受信側が serve --allow-delete で起動されている必要があります——そうでなければスキップされ、結果として報告されます。</p>
-      <h3>アカウントは必要ですか、これは有料ですか?</h3>
-      <p>いいえ。CLI は無料で、push、pull、sync のいずれにもアカウントは不要です。転送はあなた自身の SSH 接続、または直接の daemon 接続の上で行われ、Relayium のサーバーは経由しません。</p>
+      <h3>--delete で誤って宛先を消してしまうことはありますか？</h3>
+      <p>sync はソースディレクトリにファイルが1つもない場合、--delete の実行自体を拒否します。また、削除が実際に反映されるには受信側が serve --allow-delete で起動されている必要があります。そうでなければスキップされ、結果として報告されます。</p>
+      <h3>アカウントは必要ですか、これは有料ですか？</h3>
+      <p>いいえ。CLI は無料で、push、pull、sync のいずれにもアカウントは不要です。転送はご自身の SSH 接続、または直接の daemon 接続の上で行われ、Relayium のサーバーは経由しません。</p>
       <div class="ctacard">
-        <p>覚えておかなくていいスケジュールにバックアップを乗せましょう——暗号化、再開可能、そして無料です。</p>
+        <p>覚えておかなくていいスケジュールにバックアップを乗せましょう。暗号化、再開可能、そして無料です。</p>
         <a class="cta" href="/cli">CLI を入手</a>
       </div>
       <h2>続けて読む</h2>
-      <ul class="related"><li><a href="/ja/compare/snapdrop/">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop/">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer/">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone/">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly/">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud/">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal/">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh/">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone/">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers/">Relayium CLI でサーバー間転送(デーモン直結)</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers/">2台のサーバー間で大きなフォルダーを同期する(再開可能・バックグラウンド)</a></li><li><a href="/ja/guides/push-to-cloud-pull-on-another-computer/">クラウドにアップロードし、別のコンピュータで取得する</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link/">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/guides/self-host-relayium/">Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/compare/croc/">Relayium と croc の比較：ターミナルから暗号化転送</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files/">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/compare/google-drive/">Relayium と Google Drive の比較：ファイル送信をもっと直接に</a></li><li><a href="/ja/compare/rsync/">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/compare/firefox-send/">2026年、最良の Firefox Send 代替サービス</a></li><li><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code/">QR コードをスキャンしてファイルを転送する</a></li><li><a href="/ja/guides/receive-files-from-the-command-line/">コマンドラインでファイルを受信する</a></li><li><a href="/ja/how-to/send-a-folder/">ファイルではなくフォルダごと送る方法</a></li><li><a href="/ja/guides/run-relayium-as-an-always-on-service/">Relayium を常時稼働の受信サービスとして実行する</a></li><li><a href="/ja/compare/localsend/">Relayium と LocalSend の比較：ローカル転送はどちらを使う？</a></li><li><a href="/ja/compare/scp/">Relayium と scp の比較：よりシンプルな SSH 転送</a></li><li><a href="/ja/compare/magic-wormhole/">Relayium と magic-wormhole の比較：CLI ファイル転送</a></li><li><a href="/ja/compare/nextcloud/">Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか</a></li><li><a href="/ja/compare/dropbox/">Relayium と Dropbox の比較：1ファイルの送信をもっと直接に</a></li><li><a href="/ja/how-to/airdrop-for-windows-and-android/">Windows・Linux・Android 向け AirDrop 代替</a></li><li><a href="/ja/how-to/transfer-files-between-mac-and-windows/">Mac と Windows パソコン間でファイルを転送する方法</a></li><li><a href="/ja/how-to/send-files-on-the-same-wifi/">同じ Wi-Fi 上の端末間でファイルを送る</a></li><li><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">P2P（ピアツーピア）ファイル転送とは？</a></li><li><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/">インターネットでファイルを送るのは安全か</a></li><li><a href="/ja/guides/bring-your-own-node/">Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <ul class="related"><li><a href="/ja/compare/snapdrop/">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/compare/airdrop/">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/compare/wetransfer/">Relayium と WeTransfer の比較：サーバーを介さず大容量を送る</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone/">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly/">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/how-to/send-large-files-without-cloud/">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/transfer-files-from-terminal/">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/back-up-a-server-over-ssh/">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/send-a-file-to-someone/">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/guides/server-to-server-transfers/">Relayium CLI でサーバー間転送（デーモン直結）</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers/">2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）</a></li><li><a href="/ja/guides/push-to-cloud-pull-on-another-computer/">クラウドにアップロードし、別のコンピュータで取得する</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link/">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/guides/self-host-relayium/">Relayium をセルフホスト：自分専用のファイル転送サーバーを運用</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/compare/croc/">Relayium と croc の比較：ターミナルから暗号化転送</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files/">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/compare/google-drive/">Relayium と Google Drive の比較：ファイル送信をもっと直接に</a></li><li><a href="/ja/compare/rsync/">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/compare/firefox-send/">2026年、最良の Firefox Send 代替サービス</a></li><li><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code/">QR コードをスキャンしてファイルを転送する</a></li><li><a href="/ja/guides/receive-files-from-the-command-line/">コマンドラインでファイルを受信する</a></li><li><a href="/ja/how-to/send-a-folder/">ファイルではなくフォルダごと送る方法</a></li><li><a href="/ja/guides/run-relayium-as-an-always-on-service/">Relayium を常時稼働の受信サービスとして実行する</a></li><li><a href="/ja/compare/localsend/">Relayium と LocalSend の比較：ローカル転送はどちらを使う？</a></li><li><a href="/ja/compare/scp/">Relayium と scp の比較：よりシンプルな SSH 転送</a></li><li><a href="/ja/compare/magic-wormhole/">Relayium と magic-wormhole の比較：CLI ファイル転送</a></li><li><a href="/ja/compare/nextcloud/">Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか</a></li><li><a href="/ja/compare/dropbox/">Relayium と Dropbox の比較：1ファイルの送信をもっと直接に</a></li><li><a href="/ja/how-to/airdrop-for-windows-and-android/">Windows・Linux・Android 向け AirDrop 代替</a></li><li><a href="/ja/how-to/transfer-files-between-mac-and-windows/">Mac と Windows パソコン間でファイルを転送する方法</a></li><li><a href="/ja/how-to/send-files-on-the-same-wifi/">同じ Wi-Fi 上の端末間でファイルを送る</a></li><li><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">P2P（ピアツーピア）ファイル転送とは？</a></li><li><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/">インターネットでファイルを送るのは安全か</a></li><li><a href="/ja/guides/bring-your-own-node/">Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う</a></li><li><a href="/ja/">Relayium</a></li></ul>
       <footer>
         <a href="/?lang=ja">← Relayium</a>
         <a href="/ja/apps/">アプリ</a>

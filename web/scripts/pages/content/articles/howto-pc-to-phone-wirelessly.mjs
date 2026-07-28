@@ -111,14 +111,14 @@ const zh = {
       heading: "不在同一网络？用配对码",
       body: [
         "手机用的是移动数据，电脑连的是家里的 Wi-Fi？没关系——Relayium 生来就支持跨网络，而不只是同一个网络。",
-        "此时不再自动发现，而是发送方登录后拿到一个短配对码（或它生成的加入链接）——接收方始终无需账号。在另一台设备上输入这个码，两者就会通过加密的 TURN 中继连上。跨网络这条路径就是这样刻意设计的：在移动网络和家里的路由器之间，直连路径通常根本找不到，先去试一遍要白白花掉二十秒左右，最后照样落到中继上——直接从中继开始，一两秒就连上了。文件在离开发送端之前就已端到端封装，因此中继搬运的始终只是它读不懂的密文。若中途断开，传输可以断点续传，而不必从头再来。",
+        "此时不再自动发现，而是发送方登录后拿到一个短配对码（或它生成的加入链接）——接收方始终无需账号。在另一台设备上输入这个码，两者就会通过加密的 TURN 中继连上。跨网络这条路径就是这样刻意设计的：在移动网络和家里的路由器之间，直连路径通常根本找不到，先去试一遍要白白花掉二十秒左右，最后照样落到中继上——直接从中继开始，一两秒就连上了。文件在离开发送端之前就已完成端到端加密，因此中继搬运的始终只是它读不懂的密文。若中途断开，传输可以断点续传，而不必从头再来。",
       ],
     },
     {
       heading: "像 App 一样安装（可选的 PWA）",
       body: [
         "Relayium 就是一个网站，所以确实没有什么要安装的。但如果你经常传文件，可以把它添加到主屏幕或桌面，作为渐进式网页应用（PWA）：它会在独立窗口中打开，像原生应用一样启动，而底层依然只是那张网页。",
-        "在手机上用浏览器的\"添加到主屏幕\"；在电脑上用地址栏里的安装图标。无论哪种方式它都保持免费——Relayium 采用 AGPL-3.0 许可开源，代码在 github.com/relayium/relayium，支持 Windows、macOS、Linux、Android 和 iOS。",
+        "在手机上用浏览器的「添加到主屏幕」；在电脑上用地址栏里的安装图标。无论哪种方式它都保持免费——Relayium 采用 AGPL-3.0 许可开源，代码在 github.com/relayium/relayium，支持 Windows、macOS、Linux、Android 和 iOS。",
       ],
     },
     {
@@ -129,7 +129,7 @@ const zh = {
       ],
     },
     {
-      heading: "电脑传手机的其它方式（及其局限）",
+      heading: "电脑传手机的其他方式（及其局限）",
       body: [
         "浏览器无线传输并不是唯一选择，而且说句实话，每种替代方式都有它的用武之地。常见的几种对比如下：",
       ],
@@ -172,7 +172,7 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "ノートPCのファイルをスマホに移すのに、合うケーブルを探したり、自分宛にメールしたり、クラウドにアップして再びダウンロードしたりする必要はないはずです。Relayium は自分の Wi-Fi を通じて、ファイルのバイトをパソコンからスマホへ直接送ります。すべてブラウザ内で完結し、どちらの端末にもインストールは要りません。",
-    "本ガイドは無線での方法を段階的に説明します——同じネットワークでも、ネットワークをまたいでも。そのうえで、よくある代替手段（USB、Bluetooth、チャットアプリ、メール）と公平に比較し、用途に合った手段を選べるようにします。",
+    "本ガイドは無線での方法を段階的に説明します（同じネットワークでも、ネットワークをまたいでも）。そのうえで、よくある代替手段（USB、Bluetooth、チャットアプリ、メール）と公平に比較し、用途に合った手段を選べるようにします。",
   ],
   sections: [
     {
@@ -183,7 +183,7 @@ const ja = {
       bullets: [
         "パソコンで、任意の最新ブラウザ（Chrome、Edge、Firefox、Safari）で relayium.com を開きます。",
         "スマホでも relayium.com を開きます。同じネットワークなら、2台は自動的に互いを発見します。",
-        "パソコンで、ファイルをページ上に直接ドラッグするか、クリックして選びます——1バッチ最大1,000ファイル。フォルダごとドロップしても Relayium は構造を保ちます。",
+        "パソコンで、ファイルをページ上に直接ドラッグするか、クリックして選びます（1バッチ最大1,000ファイル）。フォルダごとドロップしても Relayium は構造を保ちます。",
         "宛先にスマホを選んで開始します。両方の端末が同じ6桁の検証コード（SAS）を表示します。ちらっと見て一致を確かめれば、ファイルが飛んでいきます。",
         "スマホで受け取ったファイルを保存します。このようなリアルタイム転送にアカウントは不要です。",
       ],
@@ -191,22 +191,22 @@ const ja = {
     {
       heading: "同じネットワークにない？ペアリングコードを使う",
       body: [
-        "スマホはモバイル通信、PC は自宅の Wi-Fi？大丈夫です——Relayium は同じネットワークだけでなく、ネットワークをまたいで届くように作られています。",
-        "この場合は自動発見ではなく、送信側がサインインして短いペアリングコード（またはそれが生成する参加リンク）を受け取ります——受信側はアカウント不要です。もう一方の端末でそのコードを入力すると、2台は暗号化された TURN リレーを介してつながります。これはネットワークをまたぐ経路の意図的な設計です。モバイル回線と自宅ルーターの間では直接経路がまず見つからず、先に試すと20秒ほど無駄にしたあげく結局リレーに落ち着くため、最初からリレーを使えば1〜2秒で接続できます。ファイルは送信側の端末を出る前にエンドツーエンドで封印されているので、リレーが運ぶのは読めない暗号文だけです。途中で切れても、転送は最初からではなく再開できます。",
+        "スマホはモバイル通信、PC は自宅の Wi-Fi？大丈夫です。Relayium は同じネットワークだけでなく、ネットワークをまたいで届くように作られています。",
+        "この場合は自動発見ではなく、送信側がサインインして短いペアリングコード（またはそれが生成する参加リンク）を受け取ります。受信側はアカウント不要です。もう一方の端末でそのコードを入力すると、2台は暗号化された TURN リレーを介してつながります。これはネットワークをまたぐ経路の意図的な設計です。モバイル回線と自宅ルーターの間では直接経路がまず見つからず、先に試すと20秒ほど無駄にしたあげく結局リレーに落ち着くため、最初からリレーを使えば1〜2秒で接続できます。ファイルは送信側の端末を出る前にエンドツーエンドで封印されているので、リレーが運ぶのは読めない暗号文だけです。途中で切れても、転送は最初からではなく再開できます。",
       ],
     },
     {
       heading: "アプリのようにインストール（任意の PWA）",
       body: [
         "Relayium はウェブサイトなので、本当にインストールするものはありません。ただ、頻繁に送るなら、ホーム画面やデスクトップにプログレッシブウェブアプリ（PWA）として追加できます。独立したウィンドウで開き、ネイティブアプリのように起動しますが、中身はあくまでそのウェブページです。",
-        "スマホではブラウザの「ホーム画面に追加」を、パソコンではアドレスバーのインストールアイコンを使います。どちらでも無料のままです——Relayium は AGPL-3.0 ライセンスのオープンソースで、コードは github.com/relayium/relayium にあり、Windows、macOS、Linux、Android、iOS で動作します。",
+        "スマホではブラウザの「ホーム画面に追加」を、パソコンではアドレスバーのインストールアイコンを使います。どちらでも無料のままです。Relayium は AGPL-3.0 ライセンスのオープンソースで、コードは github.com/relayium/relayium にあり、Windows、macOS、Linux、Android、iOS で動作します。",
       ],
     },
     {
       heading: "大きなファイル：ブラウザが扱える上限",
       body: [
         "リアルタイム転送はファイルをサーバーに置かないため、アップロードの割り当てを気にする必要はありません。実際の上限は、どのブラウザで受信するかで決まります。",
-        "File System Access API を備えたブラウザ——パソコン版の Chrome や Edge——では受信データがそのままディスクへストリーミングされるので、事実上サイズの上限はなく、数ギガバイトの動画でも問題ありません。Firefox・Safari・スマホのブラウザにはこの API がないため、そこでは受信分をいったんメモリに溜めることになり、およそ 256 MB を超えると Relayium が受け取る前に警告を出します。これは実測した上限ではなく意図的に控えめに置いた目安と考えてください——その規模のスマホのタブは OS に回収されやすく、実際の限界も端末のメモリ・OS・開いているタブの数で動きます。ここでは受信側がスマホなので、本当に大きなファイルは逆向きに送り、ディスクへストリーミングできるパソコンの Chrome や Edge で受け取るほうが確実です。",
+        "File System Access API を備えたブラウザ（パソコン版の Chrome や Edge）では受信データがそのままディスクへストリーミングされるので、事実上サイズの上限はなく、数ギガバイトの動画でも問題ありません。Firefox・Safari・スマホのブラウザにはこの API がないため、そこでは受信分をいったんメモリに溜めることになり、およそ 256 MB を超えると Relayium が受け取る前に警告を出します。これは実測した上限ではなく意図的に控えめに置いた目安と考えてください。その規模のスマホのタブは OS に回収されやすく、実際の限界も端末のメモリ・OS・開いているタブの数で動きます。ここでは受信側がスマホなので、本当に大きなファイルは逆向きに送り、ディスクへストリーミングできるパソコンの Chrome や Edge で受け取るほうが確実です。",
       ],
     },
     {
@@ -216,7 +216,7 @@ const ja = {
       ],
       bullets: [
         "USB ケーブル：信頼できて速いですが、合うケーブルが要り、スマホから PC へのファイルアクセスは面倒なこともあります（特に iPhone から Windows）。有線であって無線ではありません。",
-        "Bluetooth：本当にケーブル不要ですが遅く——大きな写真を数枚送るだけで数分かかることもあり、動画や大量のバッチには非現実的です。",
+        "Bluetooth：本当にケーブル不要ですが遅く、大きな写真を数枚送るだけで数分かかることもあり、動画や大量のバッチには非現実的です。",
         "チャットアプリや自分宛メール（LINE、Telegram、メール）：すでに開いていれば便利ですが、多くはサイズ制限があり、写真を再圧縮することもあり、しかもファイルを第三者のサーバー経由で送るため私的なまま保てません。",
         "Relayium：無線、インストール不要、同じネットワークならアカウント不要（ネットワークをまたぐペアリングは送信側のサインインのみ）、再圧縮なし（ファイルごとの SHA-256 整合性チェック付きでバイト単位）、そして自分で確認できる検証コード付きのエンドツーエンド暗号化。",
       ],
@@ -227,7 +227,7 @@ const ja = {
     items: [
       {
         q: "Windows と iPhone だけでなく、Mac や Android でも使えますか？",
-        a: "はい。Relayium は Windows、macOS、Linux、Android、iOS のブラウザで動作するので、どの組み合わせでも使えます——Windows から Android、Mac から iPhone、Linux からスマホ、その逆も同様です。どちらの端末にもインストールするものはありません。",
+        a: "はい。Relayium は Windows、macOS、Linux、Android、iOS のブラウザで動作するので、どの組み合わせでも使えます。Windows から Android、Mac から iPhone、Linux からスマホ、その逆も同様です。どちらの端末にもインストールするものはありません。",
       },
       {
         q: "転送はどのくらい速いですか？",
@@ -235,12 +235,12 @@ const ja = {
       },
       {
         q: "この方法でファイルを送っても安全ですか？",
-        a: "はい。ブラウザの転送暗号化に加えて、Relayium は独自の層を重ねます。X25519 の鍵交換で導出した鍵をブロックごとの AES-256-GCM に使い、その鍵はサーバーに触れません。両方の端末が同じ6桁のコード（SAS）を表示するので、間に誰もいないことを確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
+        a: "はい。ブラウザの転送暗号化に加えて、Relayium は独自の層を重ねます。X25519 の鍵交換で導出した鍵をチャンクごとの AES-256-GCM に使い、その鍵はサーバーに触れません。両方の端末が同じ6桁のコード（SAS）を表示するので、間に誰もいないことを確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
       },
     ],
   },
   cta: {
-    text: "パソコンとスマホで Relayium を開き、最初のファイルを無線で送ってみてください——ケーブルもインストールも不要、同じネットワークならアカウントも不要です。",
+    text: "パソコンとスマホで Relayium を開き、最初のファイルを無線で送ってみてください。ケーブルもインストールも不要で、同じネットワークならアカウントも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -293,7 +293,7 @@ const ko = {
     {
       heading: "PC에서 폰으로 옮기는 다른 방법 (그리고 그 한계)",
       body: [
-        "브라우저 무선 전송만이 선택지는 아니며, 솔직히 말하면 각 대안마다 쓸모가 있습니다. 흔한 것들을 비교하면 다음과 같습니다.",
+        "브라우저 무선 전송만이 선택지는 아니며, 솔직히 말하면 각 대안마다 쓸모가 있습니다. 흔한 것을 비교하면 다음과 같습니다.",
       ],
       bullets: [
         "USB 케이블: 믿음직하고 빠르지만 맞는 케이블이 필요하고, 휴대폰에서 PC로의 파일 접근이 번거로울 수 있습니다(특히 iPhone에서 Windows). 무선이 아니라 유선입니다.",
@@ -346,7 +346,7 @@ const de = {
         "Öffne am Computer relayium.com in einem beliebigen modernen Browser (Chrome, Edge, Firefox oder Safari).",
         "Öffne relayium.com auch auf dem Handy. Im selben Netz erkennen sich die beiden Geräte automatisch.",
         "Ziehe am Computer Dateien direkt auf die Seite oder klicke, um sie auszuwählen — bis zu 1.000 Dateien pro Stapel. Du kannst einen ganzen Ordner ablegen, und Relayium behält dessen Struktur bei.",
-        "Wähle das Handy als Ziel und starte. Beide Geräte zeigen denselben sechsstelligen Prüfcode (SAS); ein kurzer Blick, bestätige die Übereinstimmung, und die Dateien fliegen hinüber.",
+        "Wähle das Handy als Ziel und starte. Beide Geräte zeigen denselben sechsstelligen Verifizierungscode (SAS); ein kurzer Blick, bestätige die Übereinstimmung, und die Dateien fliegen hinüber.",
         "Speichere die empfangenen Dateien auf dem Handy. Für eine solche Echtzeitübertragung ist kein Konto nötig.",
       ],
     },
@@ -380,7 +380,7 @@ const de = {
         "USB-Kabel: zuverlässig und schnell, aber du brauchst das richtige Kabel, und der Dateizugriff vom Handy zum PC kann fummelig sein (besonders iPhone zu Windows). Es ist kabelgebunden, nicht drahtlos.",
         "Bluetooth: wirklich kabellos, aber langsam — schon ein paar große Fotos können Minuten dauern, und für Videos oder große Stapel ist es unpraktisch.",
         "Chat-Apps oder E-Mail an sich selbst (WhatsApp, Telegram, Mail): praktisch, wenn schon geöffnet, aber die meisten haben Größenbeschränkungen, komprimieren Fotos womöglich neu und leiten deine Dateien über einen fremden Server, statt sie privat zu halten.",
-        "Relayium: drahtlos, ohne Installation, im selben Netz ohne Konto (nur der Absender meldet sich für Pairing über Netzwerke hinweg an), ohne Neukomprimierung (byteweise mit SHA-256-Integritätsprüfung je Datei) und Ende-zu-Ende-verschlüsselt mit einem Prüfcode, den du selbst kontrollieren kannst.",
+        "Relayium: drahtlos, ohne Installation, im selben Netz ohne Konto (nur der Absender meldet sich für Pairing über Netzwerke hinweg an), ohne Neukomprimierung (byteweise mit SHA-256-Integritätsprüfung je Datei) und Ende-zu-Ende-verschlüsselt mit einem Verifizierungscode, den du selbst kontrollieren kannst.",
       ],
     },
   ],
@@ -421,47 +421,47 @@ const fr = {
     {
       heading: "Envoyer du PC au téléphone sur le même Wi-Fi",
       body: [
-        "C'est la voie la plus rapide : les deux appareils sont sur le même réseau, ils se connectent donc directement et le transfert n'est limité que par votre Wi-Fi. Vous n'avez besoin que d'un navigateur sur chaque appareil.",
+        "C'est la voie la plus rapide : les deux appareils sont sur le même réseau, ils se connectent donc directement et le transfert n'est limité que par votre Wi-Fi. Vous n'avez besoin que d'un navigateur sur chaque appareil.",
       ],
       bullets: [
         "Sur l'ordinateur, ouvrez relayium.com dans n'importe quel navigateur moderne (Chrome, Edge, Firefox ou Safari).",
         "Sur le téléphone, ouvrez relayium.com aussi. Sur le même réseau, les deux appareils se découvrent automatiquement.",
-        "Sur l'ordinateur, glissez les fichiers directement sur la page, ou cliquez pour les choisir — jusqu'à 1 000 fichiers par lot. Vous pouvez déposer un dossier entier et Relayium en conserve la structure.",
-        "Choisissez le téléphone comme destination et lancez. Les deux appareils affichent le même code de vérification à 6 chiffres (SAS) ; un coup d'œil, confirmez qu'ils concordent, et les fichiers filent.",
+        "Sur l'ordinateur, glissez les fichiers directement sur la page, ou cliquez pour les choisir — jusqu'à 1 000 fichiers par lot. Vous pouvez déposer un dossier entier et Relayium en conserve la structure.",
+        "Choisissez le téléphone comme destination et lancez. Les deux appareils affichent le même code de vérification à 6 chiffres (SAS) ; un coup d'œil, confirmez qu'il concorde, et les fichiers filent.",
         "Sur le téléphone, enregistrez les fichiers reçus. Aucun compte n'est nécessaire pour un transfert en temps réel comme celui-ci.",
       ],
     },
     {
-      heading: "Pas sur le même réseau ? Utilisez un code d'appairage",
+      heading: "Pas sur le même réseau ? Utilisez un code d'appairage",
       body: [
-        "Votre téléphone est en données mobiles et votre PC sur le Wi-Fi de la maison ? Aucun souci — Relayium est conçu pour atteindre à travers les réseaux, pas seulement le même.",
-        "Au lieu de la découverte automatique, l'expéditeur se connecte et obtient un court code d'appairage (ou le lien de participation qu'il génère) — le destinataire n'a jamais besoin de compte. Saisissez le code sur l'autre appareil et les deux se connectent via un relais TURN chiffré. C'est le choix délibéré pour le trajet entre réseaux : entre un réseau mobile et une box domestique, une voie directe est généralement introuvable, et la chercher d'abord coûterait une vingtaine de secondes avant que la connexion n'aboutisse malgré tout au relais — en partant directement du relais, elle s'établit en une ou deux secondes. Vos fichiers sont scellés de bout en bout avant de quitter l'appareil émetteur : le relais ne déplace donc que du texte chiffré qu'il ne peut pas lire. Si la connexion se coupe en cours de route, le transfert peut reprendre au lieu de tout recommencer.",
+        "Votre téléphone est en données mobiles et votre PC sur le Wi-Fi de la maison ? Aucun souci — Relayium est conçu pour atteindre à travers les réseaux, pas seulement le même.",
+        "Au lieu de la découverte automatique, l'expéditeur se connecte et obtient un court code d'appairage (ou le lien de participation qu'il génère) — le destinataire n'a jamais besoin de compte. Saisissez le code sur l'autre appareil et les deux se connectent via un relais TURN chiffré. C'est le choix délibéré pour le trajet entre réseaux : entre un réseau mobile et une box domestique, une voie directe est généralement introuvable, et la chercher d'abord coûterait une vingtaine de secondes avant que la connexion n'aboutisse malgré tout au relais — en partant directement du relais, elle s'établit en une ou deux secondes. Vos fichiers sont scellés de bout en bout avant de quitter l'appareil émetteur : le relais ne déplace donc que du texte chiffré qu'il ne peut pas lire. Si la connexion se coupe en cours de route, le transfert peut reprendre au lieu de tout recommencer.",
       ],
     },
     {
       heading: "L'installer comme une appli (PWA facultative)",
       body: [
-        "Relayium est un site web, il n'y a donc vraiment rien à installer. Mais si vous envoyez souvent des fichiers, vous pouvez l'ajouter à votre écran d'accueil ou à votre bureau en tant qu'application web progressive (PWA) : elle s'ouvre alors dans sa propre fenêtre et se lance comme une appli native, tout en restant, au fond, la même page web.",
-        "Sur le téléphone, utilisez l'option « Ajouter à l'écran d'accueil » de votre navigateur ; sur l'ordinateur, l'icône d'installation dans la barre d'adresse. Cela reste gratuit dans tous les cas — Relayium est open source sous licence AGPL-3.0 sur github.com/relayium/relayium et fonctionne sous Windows, macOS, Linux, Android et iOS.",
+        "Relayium est un site web, il n'y a donc vraiment rien à installer. Mais si vous envoyez souvent des fichiers, vous pouvez l'ajouter à votre écran d'accueil ou à votre bureau en tant qu'application web progressive (PWA) : elle s'ouvre alors dans sa propre fenêtre et se lance comme une appli native, tout en restant, au fond, la même page web.",
+        "Sur le téléphone, utilisez l'option « Ajouter à l'écran d'accueil » de votre navigateur ; sur l'ordinateur, l'icône d'installation dans la barre d'adresse. Cela reste gratuit dans tous les cas — Relayium est open source sous licence AGPL-3.0 sur github.com/relayium/relayium et fonctionne sous Windows, macOS, Linux, Android et iOS.",
       ],
     },
     {
-      heading: "Gros fichiers : ce que votre navigateur peut gérer",
+      heading: "Gros fichiers : ce que votre navigateur peut gérer",
       body: [
         "Comme un transfert en temps réel ne stocke jamais vos fichiers sur un serveur, aucun quota de téléversement à surveiller. La limite pratique dépend du navigateur qui reçoit.",
-        "Un navigateur doté de l'API File System Access — Chrome ou Edge sur ordinateur — écrit les données entrantes en flux directement sur le disque : en pratique, aucune limite de taille, des vidéos de plusieurs gigaoctets passent sans souci. Firefox, Safari et tous les navigateurs de téléphone n'ont pas cette API : la réception y est assemblée en mémoire, et Relayium vous prévient avant que vous acceptiez dès que l'on dépasse environ 256 Mo. À considérer comme une estimation volontairement prudente plutôt qu'une limite ferme — un onglet de téléphone de cette taille est facile à récupérer pour le système, et le point de rupture réel varie avec la mémoire de l'appareil, son système et le nombre d'onglets ouverts. Comme c'est ici le téléphone qui reçoit, mieux vaut envoyer un très gros fichier dans l'autre sens, vers un Chrome ou Edge de bureau capable de l'écrire en flux sur le disque.",
+        "Un navigateur doté de l'API File System Access — Chrome ou Edge sur ordinateur — écrit les données entrantes en flux directement sur le disque : en pratique, aucune limite de taille, des vidéos de plusieurs gigaoctets passent sans souci. Firefox, Safari et tous les navigateurs de téléphone n'ont pas cette API : la réception y est assemblée en mémoire, et Relayium vous prévient avant que vous acceptiez dès que l'on dépasse environ 256 Mo. À considérer comme une estimation volontairement prudente plutôt qu'une limite ferme — un onglet de téléphone de cette taille est facile à récupérer pour le système, et le point de rupture réel varie avec la mémoire de l'appareil, son système et le nombre d'onglets ouverts. Comme c'est ici le téléphone qui reçoit, mieux vaut envoyer un très gros fichier dans l'autre sens, vers un Chrome ou Edge de bureau capable de l'écrire en flux sur le disque.",
       ],
     },
     {
       heading: "Autres façons de transférer du PC au téléphone (et leurs limites)",
       body: [
-        "Le sans-fil dans le navigateur n'est pas la seule option, et honnêtement, chaque solution a sa place. Voici comment les plus courantes se comparent :",
+        "Le sans-fil dans le navigateur n'est pas la seule option, et honnêtement, chaque solution a sa place. Voici comment les plus courantes se comparent :",
       ],
       bullets: [
-        "Câble USB : fiable et rapide, mais il faut le bon câble, et l'accès aux fichiers du téléphone vers le PC peut être capricieux (surtout iPhone vers Windows). C'est filaire, pas sans fil.",
-        "Bluetooth : vraiment sans câble, mais lent — envoyer quelques grandes photos peut prendre des minutes, et c'est impraticable pour des vidéos ou de gros lots.",
-        "Applis de messagerie ou e-mail à soi-même (WhatsApp, Telegram, mail) : pratique si c'est déjà ouvert, mais la plupart imposent des limites de taille, peuvent recompresser les photos, et font transiter vos fichiers par un serveur tiers au lieu de les garder privés.",
-        "Relayium : sans fil, sans installation, sans compte sur le même réseau (l'expéditeur se connecte seulement pour s'appairer entre réseaux différents), sans recompression (octet pour octet avec une vérification d'intégrité SHA-256 par fichier), et chiffré de bout en bout avec un code de vérification que vous pouvez contrôler vous-même.",
+        "Câble USB : fiable et rapide, mais il faut le bon câble, et l'accès aux fichiers du téléphone vers le PC peut être capricieux (surtout iPhone vers Windows). C'est filaire, pas sans fil.",
+        "Bluetooth : vraiment sans câble, mais lent — envoyer quelques grandes photos peut prendre des minutes, et c'est impraticable pour des vidéos ou de gros lots.",
+        "Applis de messagerie ou e-mail à soi-même (WhatsApp, Telegram, mail) : pratique si c'est déjà ouvert, mais la plupart imposent des limites de taille, peuvent recompresser les photos, et font transiter vos fichiers par un serveur tiers au lieu de les garder privés.",
+        "Relayium : sans fil, sans installation, sans compte sur le même réseau (l'expéditeur se connecte seulement pour s'appairer entre réseaux différents), sans recompression (octet pour octet avec une vérification d'intégrité SHA-256 par fichier), et chiffré de bout en bout avec un code de vérification que vous pouvez contrôler vous-même.",
       ],
     },
   ],
@@ -469,16 +469,16 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Est-ce que ça marche avec Mac et Android, pas seulement Windows et iPhone ?",
+        q: "Est-ce que cela marche avec Mac et Android, pas seulement Windows et iPhone ?",
         a: "Oui. Relayium tourne dans le navigateur sous Windows, macOS, Linux, Android et iOS, donc toute combinaison fonctionne — Windows vers Android, Mac vers iPhone, Linux vers un téléphone, et inversement. Il n'y a rien à installer sur aucun des appareils.",
       },
       {
-        q: "À quelle vitesse se fait le transfert ?",
-        a: "Sur le même Wi-Fi, les deux appareils se connectent directement, la vitesse est donc limitée par votre réseau local et non par un serveur — en général aussi rapide que votre Wi-Fi le permet. Entre réseaux différents, le transfert passe par conception par un relais TURN chiffré : cela dépend donc des deux connexions internet et de ce saut supplémentaire, mais la connexion s'établit en une ou deux secondes au lieu d'attendre des tentatives directes que les NAT entre réseaux autorisent rarement.",
+        q: "À quelle vitesse se fait le transfert ?",
+        a: "Sur le même Wi-Fi, les deux appareils se connectent directement, la vitesse est donc limitée par votre réseau local et non par un serveur — en général aussi rapide que votre Wi-Fi le permet. Entre réseaux différents, le transfert passe par conception par un relais TURN chiffré : cela dépend donc des deux connexions internet et de ce saut supplémentaire, mais la connexion s'établit en une ou deux secondes au lieu d'attendre des tentatives directes que les NAT entre réseaux autorisent rarement.",
       },
       {
-        q: "Est-ce sûr d'envoyer des fichiers ainsi ?",
-        a: "Oui. Par-dessus le chiffrement de transport du navigateur, Relayium ajoute sa propre couche : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n'atteint jamais un serveur. Les deux appareils affichent le même code à 6 chiffres (SAS) pour confirmer que personne ne s'intercale, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256.",
+        q: "Est-ce sûr d'envoyer des fichiers ainsi ?",
+        a: "Oui. Par-dessus le chiffrement de transport du navigateur, Relayium ajoute sa propre couche : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n'atteint jamais un serveur. Les deux appareils affichent le même code à 6 chiffres (SAS) pour confirmer que personne ne s'intercale, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256.",
       },
     ],
   },
@@ -495,7 +495,7 @@ const ar = {
     "دليل خطوة بخطوة لنقل الملفات بين الحاسوب والهاتف عبر Wi-Fi — بالسحب والإفلات، دون كابل USB، دون حساب سحابي، ومع التشفير من الطرف إلى الطرف طوال الطريق.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "نقل ملف من حاسوبك المحمول إلى هاتفك لا ينبغي أن يعني البحث عن الكابل المناسب، أو إرسال بريد إلكتروني إلى نفسك، أو الرفع إلى قرص سحابي ثم تنزيله من جديد. ينقل Relayium البايتات مباشرةً من حاسوبك إلى هاتفك عبر شبكة Wi-Fi الخاصة بك، داخل المتصفح، دون أي شيء لتثبيته على أي من الجهازين.",
+    "نقل ملف من حاسوبك المحمول إلى هاتفك لا ينبغي أن يعني البحث عن الكابل المناسب، أو إرسال بريد إلكتروني إلى نفسك، أو الرفع إلى قرص سحابي ثم تنزيله من جديد. ينقل Relayium البايتات مباشرةً من حاسوبك إلى هاتفك عبر شبكة Wi-Fi لديك، داخل المتصفح، دون أي شيء لتثبيته على أي من الجهازين.",
     "يشرح هذا الدليل الطريقة اللاسلكية خطوة بخطوة — على نفس الشبكة أو عبر الشبكات — ثم يقارنها بصدق مع البدائل المعتادة (USB، بلوتوث، تطبيقات المحادثة والبريد الإلكتروني) حتى تختار الأداة المناسبة للمهمة.",
   ],
   sections: [
@@ -523,7 +523,7 @@ const ar = {
       heading: "ثبّته كتطبيق (تطبيق ويب تقدُّمي PWA اختياري)",
       body: [
         "Relayium موقع ويب، فلا يوجد فعلًا ما يُثبَّت. لكن إن كنت تُرسِل الملفات كثيرًا، فيمكنك إضافته إلى شاشتك الرئيسية أو سطح مكتبك كتطبيق ويب تقدُّمي (PWA): عندها يُفتح في نافذته الخاصة ويُطلَق كتطبيق أصلي، بينما يبقى في جوهره مجرد صفحة الويب نفسها.",
-        "على الهاتف، استخدم خيار \"إضافة إلى الشاشة الرئيسية\" في متصفحك؛ وعلى الحاسوب، استخدم أيقونة التثبيت في شريط العنوان. يبقى مجانيًا في كلتا الحالتين — Relayium مفتوح المصدر بموجب رخصة AGPL-3.0 على github.com/relayium/relayium، ويعمل على Windows وmacOS وLinux وAndroid وiOS.",
+        "على الهاتف، استخدم خيار «إضافة إلى الشاشة الرئيسية» في متصفحك؛ وعلى الحاسوب، استخدم أيقونة التثبيت في شريط العنوان. يبقى مجانيًا في كلتا الحالتين — Relayium مفتوح المصدر بموجب رخصة AGPL-3.0 على github.com/relayium/relayium، ويعمل على Windows وmacOS وLinux وAndroid وiOS.",
       ],
     },
     {
@@ -559,7 +559,7 @@ const ar = {
       },
       {
         q: "هل من الآمن إرسال الملفات بهذه الطريقة؟",
-        a: "نعم. فوق تشفير النقل الذي يوفّره المتصفح، يضيف Relayium طبقته الخاصة: يشتقّ تبادل مفاتيح X25519 مفتاحًا يُستخدَم لتشفير AES-256-GCM لكل جزء، وهذا المفتاح لا يلمس خادمًا أبدًا. يعرض كلا الجهازين الرمز نفسه المكوَّن من 6 أرقام (SAS) لتتأكّد من عدم وجود أحد في المنتصف، ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
+        a: "نعم. فوق تشفير النقل الذي يوفّره المتصفح، يضيف Relayium طبقته الخاصة: يشتقّ تبادل مفاتيح X25519 مفتاحًا يُستخدَم لتشفير AES-256-GCM لكل كتلة، وهذا المفتاح لا يلمس خادمًا أبدًا. يعرض كلا الجهازين الرمز نفسه المكوَّن من 6 أرقام (SAS) لتتأكّد من عدم وجود أحد في المنتصف، ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
       },
     ],
   },
@@ -657,14 +657,14 @@ const pt = {
     "Um guia passo a passo para mover arquivos entre um computador e um celular por Wi-Fi — arrastar e soltar, sem cabo USB, sem conta na nuvem e com criptografia de ponta a ponta o tempo todo.",
   updatedLabel: "Última atualização",
   lead: [
-    "Levar um arquivo do notebook para o celular não deveria significar caçar o cabo certo, mandar um e-mail para si mesmo ou subir para um disco na nuvem e baixar de novo. O Relayium move os bytes direto do seu computador para o seu celular pela sua própria Wi-Fi, no navegador, sem nada para instalar em nenhum dos lados.",
+    "Levar um arquivo do notebook para o celular não deveria significar caçar o cabo certo, mandar um e-mail para si mesmo ou subir para um disco na nuvem e baixar de novo. O Relayium move os bytes direto do seu computador para o seu celular pela sua própria rede Wi-Fi, no navegador, sem nada para instalar em nenhum dos lados.",
     "Este guia mostra o jeito sem fio passo a passo — na mesma rede ou entre redes — e depois compara com honestidade com as alternativas de sempre (USB, Bluetooth, apps de mensagem e e-mail) para você escolher a ferramenta certa para cada situação.",
   ],
   sections: [
     {
-      heading: "Enviar do PC para o celular na mesma Wi-Fi",
+      heading: "Enviar do PC para o celular na mesma rede Wi-Fi",
       body: [
-        "Este é o caminho mais rápido: os dois dispositivos estão na mesma rede, então se conectam diretamente e a transferência é limitada apenas pela sua Wi-Fi. Você não precisa de nada além de um navegador em cada dispositivo.",
+        "Este é o caminho mais rápido: os dois dispositivos estão na mesma rede, então se conectam diretamente e a transferência é limitada apenas pela sua rede Wi-Fi. Você não precisa de nada além de um navegador em cada dispositivo.",
       ],
       bullets: [
         "No computador, abra relayium.com em qualquer navegador moderno (Chrome, Edge, Firefox ou Safari).",
@@ -677,7 +677,7 @@ const pt = {
     {
       heading: "Não estão na mesma rede? Use um código de emparelhamento",
       body: [
-        "Seu celular está no dados móveis e seu PC na Wi-Fi de casa? Tudo bem — o Relayium foi feito para alcançar entre redes, não só dentro da mesma.",
+        "Seu celular está no dados móveis e seu PC na rede Wi-Fi de casa? Tudo bem — o Relayium foi feito para alcançar entre redes, não só dentro da mesma.",
         "Em vez da descoberta automática, o remetente recebe um código de emparelhamento curto (ou o link de entrada que ele gera) e faz login para gerá-lo — quem recebe nunca precisa de conta. Digite o código no outro dispositivo e os dois se conectam por um retransmissor TURN criptografado. O caminho entre redes foi pensado assim de propósito: entre uma rede móvel e o roteador de casa quase nunca se acha uma rota direta, e tentá-la primeiro gastaria uns vinte segundos antes de a conexão terminar no retransmissor de qualquer forma — começando por ele, ela sobe em um ou dois segundos. Seus arquivos são selados de ponta a ponta antes de deixar o dispositivo que envia, então o retransmissor só move texto cifrado que não consegue ler. Se a conexão cair no meio, a transferência pode ser retomada em vez de recomeçar.",
       ],
     },
@@ -685,7 +685,7 @@ const pt = {
       heading: "Instale como um app (PWA opcional)",
       body: [
         "O Relayium é um site, então realmente não há nada para instalar. Mas se você envia arquivos com frequência, pode adicioná-lo à tela inicial ou à área de trabalho como um aplicativo web progressivo (PWA): ele então abre na própria janela e é iniciado como um app nativo, embora por baixo continue sendo apenas a página web.",
-        "No celular, use a opção «Adicionar à tela inicial» do seu navegador; no computador, o ícone de instalar na barra de endereços. De qualquer forma continua gratuito — o Relayium é de código aberto sob a licença AGPL-3.0 em github.com/relayium/relayium, e funciona em Windows, macOS, Linux, Android e iOS.",
+        "No celular, use a opção “Adicionar à tela inicial” do seu navegador; no computador, o ícone de instalar na barra de endereços. De qualquer forma continua gratuito — o Relayium é de código aberto sob a licença AGPL-3.0 em github.com/relayium/relayium, e funciona em Windows, macOS, Linux, Android e iOS.",
       ],
     },
     {
@@ -717,7 +717,7 @@ const pt = {
       },
       {
         q: "Qual é a velocidade da transferência?",
-        a: "Na mesma Wi-Fi os dois dispositivos se conectam diretamente, então a velocidade é limitada pela sua rede local e não por um servidor — normalmente tão rápido quanto sua Wi-Fi permitir. Entre redes diferentes a transferência corre por projeto sobre um retransmissor TURN criptografado, então depende das duas conexões de internet mais esse salto extra; em troca, a conexão sobe em um ou dois segundos em vez de esperar tentativas diretas que os NATs entre redes raramente permitem.",
+        a: "Na mesma rede Wi-Fi os dois dispositivos se conectam diretamente, então a velocidade é limitada pela sua rede local e não por um servidor — normalmente tão rápido quanto sua rede Wi-Fi permitir. Entre redes diferentes a transferência passa, por decisão de projeto, por um retransmissor TURN criptografado, então depende das duas conexões de internet mais esse salto extra; em troca, a conexão sobe em um ou dois segundos em vez de esperar tentativas diretas que os NATs entre redes raramente permitem.",
       },
       {
         q: "É seguro enviar arquivos assim?",

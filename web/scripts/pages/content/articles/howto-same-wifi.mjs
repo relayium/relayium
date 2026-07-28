@@ -129,7 +129,7 @@ const zh = {
     {
       heading: "依然是端到端加密",
       body: [
-        "在同一网络下不代表传输就是明文的。Relayium 会在两台设备之间协商 X25519 密钥交换，并用 AES-256-GCM 对每个数据块加密；这把密钥不会被任何服务器看到，包括 Relayium 自己的信令服务器——它只负责帮设备找到彼此。两块屏幕显示的同一段简短校验码（SAS）能让你亲眼确认这条连接确实建立在你的两台设备之间，而每个文件还会用 SHA-256 做端到端校验，让你确信它是逐字节完整到达的。",
+        "在同一网络下不代表传输就是明文的。Relayium 会在两台设备之间协商 X25519 密钥交换，并用 AES-256-GCM 对每个数据块加密；这把密钥不会被任何服务器看到，包括 Relayium 自己的信令服务器——它只负责帮设备找到彼此。两块屏幕显示的同一段简短校验码（SAS）能让你亲眼确认这条连接确实建立在你的两台设备之间，而每个文件还会用 SHA-256 哈希做端到端完整性校验，让你确信它是逐字节完整到达的。",
       ],
     },
     {
@@ -178,25 +178,25 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "2台以上の端末が同じ Wi-Fi やローカルネットワークにあるなら、その間でファイルを送るのにアカウントもコードもクラウド経由も要らないはずです。Relayium は端末が同じネットワークを共有しているかを検出し、ブラウザの中で直接つなぎます。登録するものは何もありません。",
-    "本ガイドは汎用的な同一ネットワークのケースを扱います——どんな端末・OS でも、同時に2台以上でも構いません。特定の端末の組み合わせを想定しているなら、末尾にリンクした PC からスマホへ、Mac から Windows へ、あるいは Windows/Linux/Android 向けの AirDrop 的な手順の専用ガイドを参照してください。",
+    "本ガイドは汎用的な同一ネットワークのケースを扱います。どんな端末・OS でも、同時に2台以上でも構いません。特定の端末の組み合わせを想定しているなら、末尾にリンクした PC からスマホへ、Mac から Windows へ、あるいは Windows/Linux/Android 向けの AirDrop 的な手順の専用ガイドを参照してください。",
   ],
   sections: [
     {
       heading: "同一ネットワークの検出の仕組み",
       body: [
-        "Relayium は近くの端末を見つけるのに何かを入力させることはありません。ペアリングコードなしでブラウザが relayium.com を開くと、サーバーは接続元のネットワークをもとにあなたを部屋へ割り当てます——実際には、同じグローバル IP アドレスを共有する端末（同じ自宅・オフィス・キャンパスの Wi-Fi、同じモバイルホットスポットなど）が自動的に同じ部屋に入ります。",
-        "その部屋は2人までに限られません。そのネットワークから relayium.com を開いた端末はいくつでも入れるので、机を並べたノートPCの一群や教室のスマホ全員が、1対1に限らず一度に互いを見つけられます。",
+        "Relayium は近くの端末を見つけるのに何かを入力させることはありません。ペアリングコードなしでブラウザが relayium.com を開くと、サーバーは接続元のネットワークをもとにルームへ割り当てます。実際には、同じグローバル IP アドレスを共有する端末（同じ自宅・オフィス・キャンパスの Wi-Fi、同じモバイルホットスポットなど）が自動的に同じルームに入ります。",
+        "そのルームは2台までに限られません。そのネットワークから relayium.com を開いた端末はいくつでも入れるので、机を並べたノートPCの一群や教室のスマホ全員が、1対1に限らず一度に互いを見つけられます。",
       ],
     },
     {
       heading: "手順",
       body: [
-        "すべてブラウザの中で完結します——どの端末にもインストールするものはありません。",
+        "すべてブラウザの中で完結します。どの端末にもインストールするものはありません。",
       ],
       bullets: [
         "使いたいすべての端末を同じ Wi-Fi またはローカルネットワークに接続します。",
         "各端末で最新のブラウザ（Chrome、Edge、Firefox、Safari）で relayium.com を開きます。",
-        "そのネットワーク上の端末は自動的に互いに表示されます——両側ともコードもログインもアカウントも不要です。",
+        "そのネットワーク上の端末は自動的に互いに表示されます。両側ともコードもログインもアカウントも不要です。",
         "ファイルまたはフォルダ全体（1バッチ最大1,000ファイル）を選び、一覧から受信させたい端末を選びます。",
         "両方の端末が同じ短い検証コード（SAS）を表示します。それぞれの画面でちらっと見て一致を確認すれば、転送が始まります。",
         "ファイルは1台からもう1台へ直接移動します。届いたら保存してください。",
@@ -205,20 +205,20 @@ const ja = {
     {
       heading: "なぜ速いのか：間にサーバーが挟まらない",
       body: [
-        "両方の端末がすでに同じネットワークにあるため、Relayium はそれらを P2P で直接つなぎます——バイトはローカル Wi-Fi 上を1台からもう1台へ流れ、Relayium のサーバーへ往復することは決してありません。アップロードするものも、ダウンロードを待つものもなく、速度はローカルネットワークだけに左右されます。これは通常、どちら向きのインターネット接続よりもずっと速いものです。",
+        "両方の端末がすでに同じネットワークにあるため、Relayium はそれらを P2P で直接つなぎます。バイトはローカル Wi-Fi 上を1台からもう1台へ流れ、Relayium のサーバーへ往復することは決してありません。アップロードするものも、ダウンロードを待つものもなく、速度はローカルネットワークだけに左右されます。これは通常、どちら向きのインターネット接続よりもずっと速いものです。",
         "これがどちら側にもアカウントが要らない理由でもあります。全員がすでに同じ信頼できるネットワーク上にいるので、誰が誰につないでよいかを知るのにサインインは必要ありません。",
       ],
     },
     {
       heading: "それでもエンドツーエンド暗号化",
       body: [
-        "同じネットワーク上にあるからといって、転送が平文で送られるわけではありません。Relayium は2台の端末間で X25519 鍵交換を行い、すべてのチャンクを AES-256-GCM で暗号化します。その鍵は、端末同士が互いを見つける手助けをするだけの Relayium 自身のシグナリングサーバーを含め、いかなるサーバーにも見えません。両方の画面が表示する短い検証コード（SAS）で、接続が本当にあなたの2台の端末間であることを目視で確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるので、バイト単位で無事に届いたことがわかります。",
+        "同じネットワーク上にあるからといって、転送が平文で送られるわけではありません。Relayium は2台の端末間で X25519 鍵交換を行い、すべてのチャンクを AES-256-GCM で暗号化します。その鍵は、端末同士が互いを見つける手助けをするだけの Relayium 自身のシグナリングサーバーを含め、いかなるサーバーにも見えません。両方の画面が表示する短い検証コード（SAS）で、接続が本当に手元の2台の端末間であることを目視で確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるので、バイト単位で無事に届いたことがわかります。",
       ],
     },
     {
       heading: "端末が別のネットワークにある場合",
       body: [
-        "同一ネットワークモードは端末が実際にネットワークを共有しているときだけ働きます——モバイル通信のスマホ、別の Wi-Fi のノートPC、別のルーターの背後にある端末は自動的には現れません。その場合、Relayium は短いペアリングコードでネットワークをまたいで接続することもサポートしています。送信側がサインインしてコード（または QR コード／リンク）を生成し、受信側はアカウント不要です。ネットワークをまたぐ場合、2 つのブラウザは直接ではなく暗号化された TURN リレー経由でつながります——この経路は意図的にリレー専用にしてあり、2 つの NAT の間でほぼ確実に失敗する直接候補のチェックを待たずに、1〜2 秒で接続が確立します。プライバシーが下がるわけではありません。鍵は 2 台の端末に留まるので、リレーが転送するのは常に暗号文だけで、ファイルの中身は読めません。",
+        "同一ネットワークモードは端末が実際にネットワークを共有しているときだけ働きます。モバイル通信のスマホ、別の Wi-Fi のノートPC、別のルーターの背後にある端末は自動的には現れません。その場合、Relayium は短いペアリングコードでネットワークをまたいで接続することもサポートしています。送信側がサインインしてコード（または QR コード／リンク）を生成し、受信側はアカウント不要です。ネットワークをまたぐ場合、2 つのブラウザは直接ではなく暗号化された TURN リレー経由でつながります。この経路は意図的にリレー専用にしてあり、2 つの NAT の間でほぼ確実に失敗する直接候補のチェックを待たずに、1〜2 秒で接続が確立します。プライバシーが下がるわけではありません。鍵は 2 台の端末に留まるので、リレーが転送するのは常に暗号文だけで、ファイルの中身は読めません。",
       ],
     },
   ],
@@ -227,15 +227,15 @@ const ja = {
     items: [
       {
         q: "同じ Wi-Fi でファイルを送るのにアカウントは必要ですか？",
-        a: "いいえ。同一ネットワークでの転送はどちら側にもアカウントもペアリングコードも不要です——各端末で relayium.com を開くだけです。",
+        a: "いいえ。同一ネットワークでの転送はどちら側にもアカウントもペアリングコードも不要です。各端末で relayium.com を開くだけです。",
       },
       {
         q: "Relayium はどの端末が自分のネットワークにあると分かるのですか？",
-        a: "同一ネットワーク上の端末は通常同じグローバル IP アドレスを共有しており、Relayium はグローバル IP が一致する端末を自動的に同じ部屋にまとめます。コードは不要です。",
+        a: "同一ネットワーク上の端末は通常同じグローバル IP アドレスを共有しており、Relayium はグローバル IP が一致する端末を自動的に同じルームにまとめます。コードは不要です。",
       },
       {
         q: "3台以上の端末が同時に互いを見られますか？",
-        a: "はい。同一ネットワークの部屋は2台に限られません。そのネットワークから relayium.com を開いた端末はすべて表示されファイルを受け取れるので、同じ部屋やオフィスの複数人と共有するのに便利です。",
+        a: "はい。同一ネットワークのルームは2台に限られません。そのネットワークから relayium.com を開いた端末はすべて表示されファイルを受け取れるので、同じ部屋やオフィスの複数人と共有するのに便利です。",
       },
       {
         q: "ネットワークの外に出ない転送でも暗号化されていますか？",
@@ -248,7 +248,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "同じ Wi-Fi 上の任意の2台（またはそれ以上）で Relayium を開き、最初のファイルを送ってみてください——アカウントもコードも不要です。",
+    text: "同じ Wi-Fi 上の任意の2台（またはそれ以上）で Relayium を開き、最初のファイルを送ってみてください。アカウントもコードも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -260,15 +260,15 @@ const ko = {
     "같은 Wi-Fi나 로컬 네트워크에 있는 어떤 기기끼리도 파일을 보내는 방법 — 계정도, 페어링 코드도 필요 없이 양쪽에서 relayium.com만 열면 직접 전송되며 종단간 암호화됩니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "두 대 이상의 기기가 같은 Wi-Fi나 로컬 네트워크에 있다면, 그 사이에 파일을 보내는 데 계정도, 코드도, 클라우드를 거칠 필요도 없어야 합니다. Relayium은 기기들이 같은 네트워크를 공유하는지 감지해 브라우저 안에서 곧바로 연결해 줍니다. 가입할 것도 없습니다.",
+    "두 대 이상의 기기가 같은 Wi-Fi나 로컬 네트워크에 있다면, 그 사이에 파일을 보내는 데 계정도, 코드도, 클라우드를 거칠 필요도 없어야 합니다. Relayium은 기기가 같은 네트워크를 공유하는지 감지해 브라우저 안에서 곧바로 연결해 줍니다. 가입할 것도 없습니다.",
     "이 가이드는 일반적인 같은 네트워크 상황을 다룹니다 — 어떤 기기든, 어떤 운영체제든, 심지어 동시에 두 대 이상이어도 됩니다. 특정 기기 조합을 염두에 두고 있다면 끝에 링크된 PC에서 폰으로, Mac에서 Windows로, 또는 Windows/Linux/Android용 AirDrop 방식 전용 가이드를 참고하세요.",
   ],
   sections: [
     {
       heading: "같은 네트워크 감지는 어떻게 되나",
       body: [
-        "Relayium은 근처 기기를 찾기 위해 무언가를 입력하라고 하지 않습니다. 브라우저가 페어링 코드 없이 relayium.com을 열면 서버는 접속한 네트워크를 기준으로 방에 배치합니다 — 실제로는 같은 공인 IP 주소를 공유하는 기기들(같은 집, 사무실, 캠퍼스 Wi-Fi, 또는 같은 모바일 핫스팟)이 자동으로 같은 방에 들어갑니다.",
-        "그 방은 두 명으로 제한되지 않습니다. 그 네트워크에서 사이트를 연 기기가 몇 대든 방에 들어갈 수 있어서, 책상 가득한 노트북들이나 교실의 휴대폰들이 한 쌍뿐 아니라 한꺼번에 서로를 볼 수 있습니다.",
+        "Relayium은 근처 기기를 찾기 위해 무언가를 입력하라고 하지 않습니다. 브라우저가 페어링 코드 없이 relayium.com을 열면 서버는 접속한 네트워크를 기준으로 방에 배치합니다 — 실제로는 같은 공인 IP 주소를 공유하는 기기(같은 집, 사무실, 캠퍼스 Wi-Fi, 또는 같은 모바일 핫스팟)이 자동으로 같은 방에 들어갑니다.",
+        "그 방은 두 대로 제한되지 않습니다. 그 네트워크에서 사이트를 연 기기가 몇 대든 방에 들어갈 수 있어서, 책상 가득한 노트북이나 교실의 휴대폰이 한 쌍뿐 아니라 한꺼번에 서로를 볼 수 있습니다.",
       ],
     },
     {
@@ -279,10 +279,10 @@ const ko = {
       bullets: [
         "사용하려는 모든 기기를 같은 Wi-Fi 또는 로컬 네트워크에 연결합니다.",
         "각 기기에서 최신 브라우저(Chrome, Edge, Firefox 또는 Safari)로 relayium.com을 엽니다.",
-        "그 네트워크에 있는 기기들이 자동으로 서로에게 나타납니다 — 양쪽 다 코드도, 로그인도, 계정도 필요 없습니다.",
+        "그 네트워크에 있는 기기가 자동으로 서로에게 나타납니다 — 양쪽 다 코드도, 로그인도, 계정도 필요 없습니다.",
         "파일이나 폴더 전체(배치당 최대 1,000개)를 고르고, 목록에서 받을 기기를 선택합니다.",
         "두 기기가 동일한 짧은 검증 코드(SAS)를 표시합니다. 각 화면에서 힐끗 보고 일치하는지 확인하면 전송이 시작됩니다.",
-        "파일이 한 기기에서 다른 기기로 곧장 이동합니다. 도착하면 저장하세요.",
+        "파일이 한 기기에서 다른 기기로 곧장 이동합니다. 도착하면 저장합니다.",
       ],
     },
     {
@@ -295,13 +295,13 @@ const ko = {
     {
       heading: "그래도 종단간 암호화",
       body: [
-        "같은 네트워크에 있다고 해서 전송이 평문으로 이루어지는 것은 아닙니다. Relayium은 두 기기 사이에서 X25519 키 교환을 협상하고 모든 청크를 AES-256-GCM으로 암호화합니다. 그 키는 기기들이 서로를 찾도록 돕기만 하는 Relayium 자체 시그널링 서버를 포함해 어떤 서버에도 보이지 않습니다. 두 화면이 표시하는 동일한 짧은 검증 코드(SAS)로 연결이 정말로 당신의 두 기기 사이에서 이루어졌는지 눈으로 확인할 수 있고, 각 파일은 SHA-256 해시로 종단간 검증되어 바이트 단위로 온전히 도착했음을 알 수 있습니다.",
+        "같은 네트워크에 있다고 해서 전송이 평문으로 이루어지는 것은 아닙니다. Relayium은 두 기기 사이에서 X25519 키 교환을 협상하고 모든 청크를 AES-256-GCM으로 암호화합니다. 그 키는 기기가 서로를 찾도록 돕기만 하는 Relayium 자체 시그널링 서버를 포함해 어떤 서버에도 보이지 않습니다. 두 화면이 표시하는 동일한 짧은 검증 코드(SAS)로 연결이 정말로 내 두 기기 사이에서 이루어졌는지 눈으로 확인할 수 있고, 각 파일은 SHA-256 해시로 종단간 검증되어 바이트 단위로 온전히 도착했음을 알 수 있습니다.",
       ],
     },
     {
       heading: "기기가 다른 네트워크에 있다면",
       body: [
-        "같은 네트워크 모드는 기기들이 실제로 네트워크를 공유할 때만 작동합니다 — 모바일 데이터를 쓰는 휴대폰, 다른 Wi-Fi에 있는 노트북, 다른 공유기 뒤에 있는 기기는 자동으로 나타나지 않습니다. 이런 경우 Relayium은 짧은 페어링 코드로 네트워크를 넘나드는 연결도 지원합니다. 보내는 쪽이 로그인해 코드(또는 QR 코드/링크)를 생성하고, 받는 쪽은 계정이 필요 없습니다. 네트워크를 넘나드는 경우 두 브라우저는 직접이 아니라 암호화된 TURN 릴레이를 거쳐 연결됩니다 — 이 경로는 의도적으로 릴레이 전용이며, 두 NAT 사이에서 거의 반드시 실패할 직접 후보 검사를 기다리는 대신 1~2초 만에 연결이 맺어집니다. 그렇다고 덜 안전한 것은 아닙니다. 키는 두 기기에만 남으므로 릴레이는 암호문만 전달할 뿐 파일 내용을 읽을 수 없습니다.",
+        "같은 네트워크 모드는 기기가 실제로 네트워크를 공유할 때만 작동합니다 — 모바일 데이터를 쓰는 휴대폰, 다른 Wi-Fi에 있는 노트북, 다른 공유기 뒤에 있는 기기는 자동으로 나타나지 않습니다. 이런 경우 Relayium은 짧은 페어링 코드로 네트워크를 넘나드는 연결도 지원합니다. 보내는 쪽이 로그인해 코드(또는 QR 코드/링크)를 생성하고, 받는 쪽은 계정이 필요 없습니다. 네트워크를 넘나드는 경우 두 브라우저는 직접이 아니라 암호화된 TURN 릴레이를 거쳐 연결됩니다 — 이 경로는 의도적으로 릴레이 전용이며, 두 NAT 사이에서 거의 반드시 실패할 직접 후보 검사를 기다리는 대신 1~2초 만에 연결이 맺어집니다. 그렇다고 덜 안전한 것은 아닙니다. 키는 두 기기에만 남으므로 릴레이는 암호문만 전달할 뿐 파일 내용을 읽을 수 없습니다.",
       ],
     },
   ],
@@ -314,7 +314,7 @@ const ko = {
       },
       {
         q: "Relayium은 어떤 기기가 내 네트워크에 있는지 어떻게 아나요?",
-        a: "같은 네트워크에 있는 기기들은 보통 같은 공인 IP 주소를 공유하며, Relayium은 공인 IP가 일치하는 기기들을 자동으로 같은 방에 묶습니다. 코드는 필요 없습니다.",
+        a: "같은 네트워크에 있는 기기는 보통 같은 공인 IP 주소를 공유하며, Relayium은 공인 IP가 일치하는 기기를 자동으로 같은 방에 묶습니다. 코드는 필요 없습니다.",
       },
       {
         q: "두 대보다 많은 기기가 동시에 서로를 볼 수 있나요?",
@@ -343,7 +343,7 @@ const de = {
     "So sendest du Dateien zwischen beliebigen Geräten im selben WLAN oder lokalen Netz — kein Konto, kein Pairing-Code, einfach relayium.com auf beiden öffnen und direkt übertragen, Ende-zu-Ende-verschlüsselt.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "Wenn zwei oder mehr Geräte im selben WLAN oder lokalen Netz sind, sollte eine Dateiübertragung zwischen ihnen kein Konto, keinen Code und keinen Umweg über die Cloud erfordern. Relayium erkennt, wenn Geräte sich ein Netzwerk teilen, und lässt sie direkt im Browser verbinden, ohne dass irgendwo eine Anmeldung nötig ist.",
+    "Wenn zwei oder mehr Geräte im selben WLAN oder lokalen Netz sind, sollte eine Dateiübertragung zwischen ihnen kein Konto, keinen Code und keinen Umweg über die Cloud erfordern. Relayium erkennt, wenn Geräte sich ein Netzwerk teilen, und lässt sie sich direkt im Browser verbinden, ohne dass irgendwo eine Anmeldung nötig ist.",
     "Diese Anleitung behandelt den allgemeinen Fall im selben Netz — beliebige Geräte, beliebige Betriebssysteme, sogar mehr als zwei gleichzeitig. Wenn du ein bestimmtes Gerätepaar im Sinn hast, findest du am Ende Links zu den eigenen Anleitungen für PC zu Handy, Mac zu Windows oder einen AirDrop-ähnlichen Ablauf für Windows/Linux/Android.",
   ],
   sections: [
@@ -362,29 +362,29 @@ const de = {
       bullets: [
         "Verbinde jedes Gerät, das du nutzen möchtest, mit demselben WLAN oder lokalen Netz.",
         "Öffne auf jedem Gerät relayium.com in einem modernen Browser (Chrome, Edge, Firefox oder Safari).",
-        "Die Geräte in diesem Netz erscheinen einander automatisch — kein Code, kein Login, kein Konto auf beiden Seiten.",
+        "Die Geräte in diesem Netz erscheinen einander automatisch — kein Code, kein Login, auf keiner der beiden Seiten ein Konto.",
         "Wähle eine Datei oder einen ganzen Ordner (bis zu 1.000 Dateien pro Stapel) und bestimme, welches Gerät aus der Liste sie empfangen soll.",
-        "Beide Geräte zeigen denselben kurzen Prüfcode (SAS). Ein Blick auf jeden Bildschirm, bestätige die Übereinstimmung, und die Übertragung beginnt.",
+        "Beide Geräte zeigen denselben kurzen Verifizierungscode (SAS). Wirf auf beiden Bildschirmen einen Blick darauf, bestätige, dass er übereinstimmt, und die Übertragung beginnt.",
         "Dateien wandern direkt von einem Gerät zum anderen; speichere sie, sobald sie ankommen.",
       ],
     },
     {
       heading: "Warum es schnell ist: kein Server dazwischen",
       body: [
-        "Da beide Geräte bereits im selben Netz sind, verbindet Relayium sie direkt Peer-to-Peer — die Bytes wandern über dein lokales WLAN von einem Gerät zum anderen und machen nie den Umweg zu einem Relayium-Server. Es gibt nichts hochzuladen und nichts herunterzuladen, worauf man warten müsste; die Geschwindigkeit ist nur durch dein lokales Netz begrenzt, das meist deutlich schneller ist als eine Internetverbindung in beide Richtungen.",
+        "Da beide Geräte bereits im selben Netz sind, verbindet Relayium sie direkt Peer-to-Peer — die Bytes wandern über dein lokales WLAN von einem Gerät zum anderen und machen nie den Umweg zu einem Relayium-Server. Es gibt nichts hochzuladen und nichts herunterzuladen, worauf man warten müsste; die Geschwindigkeit ist nur durch dein lokales Netz begrenzt, das in beiden Richtungen meist deutlich schneller ist als eine Internetverbindung.",
         "Das ist auch der Grund, warum auf keiner Seite ein Konto beteiligt ist: Da alle bereits im selben vertrauenswürdigen Netz sind, braucht Relayium keine Anmeldung, um zu wissen, wer sich mit wem verbinden darf.",
       ],
     },
     {
       heading: "Trotzdem Ende-zu-Ende-verschlüsselt",
       body: [
-        "Im selben Netz zu sein bedeutet nicht, dass die Übertragung im Klartext erfolgt. Relayium handelt zwischen den beiden Geräten einen X25519-Schlüsselaustausch aus und verschlüsselt jeden Chunk mit AES-256-GCM; diesen Schlüssel bekommt kein Server zu sehen, auch nicht Relayiums eigener Signaling-Server, der den Geräten nur hilft, einander zu finden. Der kurze Prüfcode (SAS), den beide Bildschirme anzeigen, lässt dich visuell bestätigen, dass die Verbindung wirklich zwischen deinen beiden Geräten besteht, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft, damit du weißt, dass sie byte-genau angekommen ist.",
+        "Im selben Netz zu sein bedeutet nicht, dass die Übertragung im Klartext erfolgt. Relayium handelt zwischen den beiden Geräten einen X25519-Schlüsselaustausch aus und verschlüsselt jeden Block mit AES-256-GCM; diesen Schlüssel bekommt kein Server zu sehen, auch nicht Relayiums eigener Signaling-Server, der den Geräten nur hilft, einander zu finden. Der kurze Verifizierungscode (SAS), den beide Bildschirme anzeigen, lässt dich visuell bestätigen, dass die Verbindung wirklich zwischen deinen beiden Geräten besteht, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft, damit du weißt, dass sie byte-genau angekommen ist.",
       ],
     },
     {
       heading: "Wenn ein Gerät in einem anderen Netz ist",
       body: [
-        "Der Modus für dasselbe Netz funktioniert nur, wenn die Geräte tatsächlich ein Netzwerk teilen — ein Handy im Mobilfunknetz, ein Laptop in einem anderen WLAN oder ein Gerät hinter einem anderen Router erscheint nicht automatisch. Für diesen Fall unterstützt Relayium auch die Verbindung über Netzwerke hinweg mit einem kurzen Pairing-Code: Der Absender meldet sich an, um den Code (oder einen QR-Code / Link) zu erzeugen, und der Empfänger braucht dabei nie ein Konto. Über Netzwerkgrenzen hinweg verbinden sich die beiden Browser nicht direkt, sondern über ein verschlüsseltes TURN-Relay — dieser Weg ist bewusst reines Relay, sodass die Verbindung in ein bis zwei Sekunden steht, statt auf Prüfungen direkter Kandidaten zu warten, die zwischen zwei NATs fast immer scheitern. Das ist nicht weniger privat: Der Schlüssel bleibt auf den beiden Geräten, das Relay leitet also immer nur Chiffretext weiter und kann die Datei nicht lesen.",
+        "Der Modus für dasselbe Netz funktioniert nur, wenn die Geräte tatsächlich ein Netzwerk teilen — ein Handy im Mobilfunknetz, ein Laptop in einem anderen WLAN oder ein Gerät hinter einem anderen Router erscheint nicht automatisch. Für diesen Fall unterstützt Relayium auch die Verbindung über Netzwerke hinweg mit einem kurzen Pairing-Code: Der Absender meldet sich an, um den Code (oder einen QR-Code / Link) zu erzeugen, und der Empfänger braucht dabei nie ein Konto. Über Netzwerkgrenzen hinweg verbinden sich die beiden Browser nicht direkt, sondern über ein verschlüsseltes TURN-Relay — dieser Weg ist von Grund auf reines Relay, sodass die Verbindung in ein bis zwei Sekunden steht, statt auf Prüfungen direkter Kandidaten zu warten, die zwischen zwei NATs fast immer scheitern. Das ist nicht weniger privat: Der Schlüssel bleibt auf den beiden Geräten, das Relay leitet also immer nur Chiffretext weiter und kann die Datei nicht lesen.",
       ],
     },
   ],
@@ -405,7 +405,7 @@ const de = {
       },
       {
         q: "Ist die Übertragung immer noch verschlüsselt, wenn sie mein Netz nie verlässt?",
-        a: "Ja. Jede Übertragung im selben Netz nutzt denselben X25519-Schlüsselaustausch und dieselbe AES-256-GCM-Verschlüsselung wie eine netzübergreifende, mit einem Prüfcode, den du selbst kontrollieren kannst, und einer SHA-256-Integritätsprüfung pro Datei.",
+        a: "Ja. Jede Übertragung im selben Netz nutzt denselben X25519-Schlüsselaustausch und dieselbe AES-256-GCM-Verschlüsselung wie eine netzübergreifende, mit einem Verifizierungscode, den du selbst kontrollieren kannst, und einer SHA-256-Integritätsprüfung pro Datei.",
       },
       {
         q: "Was, wenn ein Gerät im WLAN und das andere im Mobilfunknetz ist?",
@@ -434,7 +434,7 @@ const fr = {
       heading: "Comment fonctionne la détection du même réseau",
       body: [
         "Relayium ne vous demande rien à saisir pour trouver les appareils à proximité. Quand votre navigateur ouvre relayium.com sans code d'appairage, le serveur vous place dans une salle basée sur le réseau depuis lequel vous vous connectez — en pratique, les appareils qui partagent la même adresse IP publique (le même Wi-Fi à la maison, au bureau, sur un campus, ou le même point d'accès mobile) atterrissent automatiquement dans la même salle.",
-        "Cette salle n'est pas limitée à deux participants : elle contient autant d'appareils qu'il y en a à ouvrir le site depuis ce réseau, si bien qu'un bureau entier d'ordinateurs portables ou une salle de classe de téléphones peuvent tous se voir en même temps, pas seulement une paire.",
+        "Cette salle n'est pas limitée à deux participants : elle contient autant d'appareils qu'il y en a à ouvrir le site depuis ce réseau, si bien qu'un bureau entier d'ordinateurs portables ou une salle de classe de téléphones peuvent tous se voir en même temps, pas seulement une paire.",
       ],
     },
     {
@@ -446,28 +446,28 @@ const fr = {
         "Connectez chaque appareil que vous voulez utiliser au même Wi-Fi ou réseau local.",
         "Sur chaque appareil, ouvrez relayium.com dans un navigateur moderne (Chrome, Edge, Firefox ou Safari).",
         "Les appareils de ce réseau apparaissent automatiquement les uns aux autres — aucun code, aucune connexion, aucun compte d'aucun côté.",
-        "Choisissez un fichier ou un dossier entier (jusqu'à 1 000 fichiers par lot) et sélectionnez, dans la liste, l'appareil qui doit le recevoir.",
-        "Les deux appareils affichent le même code de vérification court (SAS). Un coup d'œil sur chaque écran, confirmez qu'ils concordent, et le transfert démarre.",
-        "Les fichiers passent directement d'un appareil à l'autre ; enregistrez-les une fois arrivés.",
+        "Choisissez un fichier ou un dossier entier (jusqu'à 1 000 fichiers par lot) et sélectionnez, dans la liste, l'appareil qui doit le recevoir.",
+        "Les deux appareils affichent le même code de vérification court (SAS). Un coup d'œil sur chaque écran, confirmez qu'il concorde, et le transfert démarre.",
+        "Les fichiers passent directement d'un appareil à l'autre ; enregistrez-les une fois arrivés.",
       ],
     },
     {
-      heading: "Pourquoi c'est rapide : aucun serveur au milieu",
+      heading: "Pourquoi c'est rapide : aucun serveur au milieu",
       body: [
-        "Comme les deux appareils sont déjà sur le même réseau, Relayium les connecte directement en pair-à-pair — les octets voyagent sur votre Wi-Fi local d'un appareil à l'autre et ne font jamais l'aller-retour par un serveur Relayium. Rien à téléverser, rien à attendre en téléchargement ; la vitesse n'est limitée que par votre réseau local, généralement bien plus rapide qu'une connexion internet dans un sens ou dans l'autre.",
-        "C'est aussi pourquoi aucun compte n'intervient d'aucun côté : tout le monde étant déjà sur le même réseau de confiance, Relayium n'a pas besoin d'une connexion pour savoir qui peut se connecter à qui.",
+        "Comme les deux appareils sont déjà sur le même réseau, Relayium les connecte directement en pair-à-pair — les octets voyagent sur votre Wi-Fi local d'un appareil à l'autre et ne font jamais l'aller-retour par un serveur Relayium. Rien à téléverser, rien à attendre en téléchargement ; la vitesse n'est limitée que par votre réseau local, généralement bien plus rapide qu'une connexion internet dans un sens ou dans l'autre.",
+        "C'est aussi pourquoi aucun compte n'intervient d'aucun côté : tout le monde étant déjà sur le même réseau de confiance, Relayium n'a pas besoin d'une connexion pour savoir qui peut se connecter à qui.",
       ],
     },
     {
       heading: "Toujours chiffré de bout en bout",
       body: [
-        "Être sur le même réseau ne veut pas dire que le transfert circule en clair. Relayium négocie un échange de clés X25519 entre les deux appareils et chiffre chaque bloc avec AES-256-GCM ; cette clé n'est jamais vue par aucun serveur, y compris le propre serveur de signalisation de Relayium, qui aide seulement les appareils à se trouver. Le code de vérification court (SAS) affiché sur les deux écrans vous permet de confirmer visuellement que la connexion est bien entre vos deux appareils, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256, pour savoir qu'il est arrivé intact, octet pour octet.",
+        "Être sur le même réseau ne veut pas dire que le transfert circule en clair. Relayium négocie un échange de clés X25519 entre les deux appareils et chiffre chaque bloc avec AES-256-GCM ; cette clé n'est jamais vue par aucun serveur, y compris le propre serveur de signalisation de Relayium, qui aide seulement les appareils à se trouver. Le code de vérification court (SAS) affiché sur les deux écrans vous permet de confirmer visuellement que la connexion est bien entre vos deux appareils, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256, pour savoir qu'il est arrivé intact, octet pour octet.",
       ],
     },
     {
       heading: "Si un appareil est sur un réseau différent",
       body: [
-        "Le mode même réseau ne fonctionne que quand les appareils partagent réellement un réseau — un téléphone en données mobiles, un ordinateur portable sur un autre Wi-Fi, ou un appareil derrière un autre routeur n'apparaîtra pas automatiquement. Dans ce cas, Relayium prend aussi en charge la connexion entre réseaux différents avec un court code d'appairage : l'expéditeur se connecte pour générer le code (ou un QR code / lien), et le destinataire n'a jamais besoin de compte. Entre réseaux différents, les deux navigateurs ne se connectent pas directement mais passent par un relais TURN chiffré — cette voie est délibérément réservée au relais, si bien que la connexion s'établit en une ou deux secondes au lieu d'attendre des tests de candidats directs qui échouent presque toujours entre deux NAT. Ce n'est pas moins privé : la clé reste sur les deux appareils, le relais ne transmet donc jamais que du texte chiffré et ne peut pas lire le fichier.",
+        "Le mode même réseau ne fonctionne que quand les appareils partagent réellement un réseau — un téléphone en données mobiles, un ordinateur portable sur un autre Wi-Fi, ou un appareil derrière un autre routeur n'apparaîtra pas automatiquement. Dans ce cas, Relayium prend aussi en charge la connexion entre réseaux différents avec un court code d'appairage : l'expéditeur se connecte pour générer le code (ou un code QR / lien), et le destinataire n'a jamais besoin de compte. Entre réseaux différents, les deux navigateurs ne se connectent pas directement mais passent par un relais TURN chiffré — cette voie est délibérément réservée au relais, si bien que la connexion s'établit en une ou deux secondes au lieu d'attendre des tests de candidats directs qui échouent presque toujours entre deux NAT. Ce n'est pas moins privé : la clé reste sur les deux appareils, le relais ne transmet donc jamais que du texte chiffré et ne peut pas lire le fichier.",
       ],
     },
   ],
@@ -475,24 +475,24 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Ai-je besoin d'un compte pour envoyer des fichiers sur le même Wi-Fi ?",
+        q: "Ai-je besoin d'un compte pour envoyer des fichiers sur le même Wi-Fi ?",
         a: "Non. Les transferts sur le même réseau ne nécessitent ni compte ni code d'appairage d'aucun côté — ouvrez simplement relayium.com sur chaque appareil.",
       },
       {
-        q: "Comment Relayium sait-il quels appareils sont sur mon réseau ?",
+        q: "Comment Relayium sait-il quels appareils sont sur mon réseau ?",
         a: "Les appareils connectés au même réseau partagent généralement la même adresse IP publique, et Relayium regroupe automatiquement les appareils dont l'IP publique correspond dans la même salle, sans code requis.",
       },
       {
-        q: "Plus de deux appareils peuvent-ils se voir en même temps ?",
-        a: "Oui. Les salles du même réseau ne sont pas limitées à une paire : tout appareil qui ouvre relayium.com depuis ce réseau peut apparaître et recevoir des fichiers, pratique pour partager avec plusieurs personnes dans la même pièce ou le même bureau.",
+        q: "Plus de deux appareils peuvent-ils se voir en même temps ?",
+        a: "Oui. Les salles du même réseau ne sont pas limitées à une paire : tout appareil qui ouvre relayium.com depuis ce réseau peut apparaître et recevoir des fichiers, pratique pour partager avec plusieurs personnes dans la même pièce ou le même bureau.",
       },
       {
-        q: "Le transfert est-il quand même chiffré s'il ne quitte jamais mon réseau ?",
+        q: "Le transfert est-il quand même chiffré s'il ne quitte jamais mon réseau ?",
         a: "Oui. Chaque transfert sur le même réseau utilise le même échange de clés X25519 et le même chiffrement AES-256-GCM qu'un transfert entre réseaux différents, avec un code de vérification que vous pouvez contrôler vous-même et une vérification d'intégrité SHA-256 par fichier.",
       },
       {
-        q: "Et si un appareil est en Wi-Fi et l'autre en données mobiles ?",
-        a: "Ils ne sont alors pas sur le même réseau, et la découverte automatique ne les connectera pas. Utilisez plutôt un code d'appairage — l'expéditeur se connecte pour le créer, et le destinataire n'a pas besoin de compte. Entre réseaux différents, le transfert passe par un relais TURN chiffré plutôt que par une connexion directe, tout en restant chiffré de bout en bout : le relais ne transmet que du texte chiffré et ne peut pas lire le fichier.",
+        q: "Et si un appareil est en Wi-Fi et l'autre en données mobiles ?",
+        a: "Ils ne sont alors pas sur le même réseau, et la découverte automatique ne les connectera pas. Utilisez plutôt un code d'appairage — l'expéditeur se connecte pour le créer, et le destinataire n'a pas besoin de compte. Entre réseaux différents, le transfert passe par un relais TURN chiffré plutôt que par une connexion directe, tout en restant chiffré de bout en bout : le relais ne transmet que du texte chiffré et ne peut pas lire le fichier.",
       },
     ],
   },
@@ -510,7 +510,7 @@ const ar = {
   updatedLabel: "آخر تحديث",
   lead: [
     "إذا كان جهازان أو أكثر على نفس شبكة Wi-Fi أو الشبكة المحلية، فإن إرسال ملف بينها لا ينبغي أن يتطلب حسابًا، أو رمزًا، أو مرورًا عبر السحابة. يكتشف Relayium متى تتشارك الأجهزة شبكةً ويتيح لها الاتصال مباشرةً، داخل المتصفح، دون أي تسجيل.",
-    "يغطّي هذا الدليل الحالة العامة لنفس الشبكة — أي أجهزة، وأي أنظمة تشغيل، بل وأكثر من جهازين في آنٍ واحد. وإن كان لديك زوج أجهزة محدد في ذهنك، فراجع الأدلة المخصصة للحاسوب إلى الهاتف، أو Mac إلى Windows، أو تدفّق بأسلوب AirDrop لـ Windows/Linux/Android، المرتبطة في النهاية.",
+    "يغطّي هذا الدليل الحالة العامة لنفس الشبكة — أي أجهزة، وأي أنظمة تشغيل، بل وأكثر من جهازين في آنٍ واحد. وإن كان لديك زوج أجهزة محدد في ذهنك، فراجع الأدلة المخصصة للحاسوب إلى الهاتف، أو Mac إلى Windows، أو مسار نقل بأسلوب AirDrop لـ Windows/Linux/Android، المرتبطة في النهاية.",
   ],
   sections: [
     {
@@ -523,7 +523,7 @@ const ar = {
     {
       heading: "خطوة بخطوة",
       body: [
-        "يجري التدفّق كله في المتصفح — لا تطبيق لتثبيته على أي جهاز.",
+        "يجري مسار النقل كله في المتصفح — لا تطبيق لتثبيته على أي جهاز.",
       ],
       bullets: [
         "اربط كل جهاز تريد استخدامه بنفس شبكة Wi-Fi أو الشبكة المحلية.",
@@ -670,12 +670,12 @@ const es = {
 };
 
 const pt = {
-  title: "Enviar arquivos entre dispositivos na mesma Wi-Fi",
+  title: "Enviar arquivos entre dispositivos na mesma rede Wi-Fi",
   description:
-    "Como enviar arquivos entre quaisquer dispositivos na mesma Wi-Fi ou rede local — sem conta, sem código de emparelhamento, é só abrir relayium.com nos dois e transferir diretamente, criptografado de ponta a ponta.",
+    "Como enviar arquivos entre quaisquer dispositivos na mesma rede Wi-Fi ou local — sem conta, sem código de emparelhamento, é só abrir relayium.com nos dois e transferir diretamente, criptografado de ponta a ponta.",
   updatedLabel: "Última atualização",
   lead: [
-    "Se dois ou mais dispositivos estão na mesma Wi-Fi ou rede local, enviar um arquivo entre eles não deveria exigir uma conta, um código nem um desvio pela nuvem. O Relayium detecta quando os dispositivos compartilham uma rede e permite que se conectem diretamente, no navegador, sem nada para cadastrar.",
+    "Se dois ou mais dispositivos estão na mesma rede Wi-Fi ou local, enviar um arquivo entre eles não deveria exigir uma conta, um código nem um desvio pela nuvem. O Relayium detecta quando os dispositivos compartilham uma rede e permite que se conectem diretamente, no navegador, sem nada para cadastrar.",
     "Este guia cobre o caso genérico da mesma rede — quaisquer dispositivos, quaisquer sistemas operacionais, até mais de dois ao mesmo tempo. Se você tem em mente um par de dispositivos específico, veja os guias dedicados para PC para celular, Mac para Windows, ou um fluxo no estilo AirDrop para Windows/Linux/Android, com links no fim.",
   ],
   sections: [
@@ -716,7 +716,7 @@ const pt = {
     {
       heading: "Se um dispositivo estiver em uma rede diferente",
       body: [
-        "O modo da mesma rede só funciona quando os dispositivos realmente compartilham uma rede — um celular no dados móveis, um notebook em outra Wi-Fi ou um dispositivo atrás de outro roteador não aparecerá automaticamente. Para esse caso, o Relayium também oferece conexão entre redes com um código de emparelhamento curto: o remetente faz login para gerar o código (ou um código QR / link) e quem recebe nunca precisa de conta. Entre redes diferentes, os dois navegadores não se conectam diretamente, e sim através de um retransmissor TURN criptografado — esse caminho é propositalmente só de retransmissão, então a conexão se estabelece em um ou dois segundos em vez de esperar por verificações de candidatos diretos que quase sempre falham entre dois NATs. Não é menos privado: a chave fica nos dois dispositivos, então o retransmissor só encaminha texto cifrado e não consegue ler o arquivo.",
+        "O modo da mesma rede só funciona quando os dispositivos realmente compartilham uma rede — um celular usando dados móveis, um notebook em outra Wi-Fi ou um dispositivo atrás de outro roteador não aparecerá automaticamente. Para esse caso, o Relayium também oferece conexão entre redes com um código de emparelhamento curto: o remetente faz login para gerar o código (ou um código QR / link) e quem recebe nunca precisa de conta. Entre redes diferentes, os dois navegadores não se conectam diretamente, e sim através de um retransmissor TURN criptografado — esse caminho é propositalmente só de retransmissão, então a conexão se estabelece em um ou dois segundos em vez de esperar por verificações de candidatos diretos que quase sempre falham entre dois NATs. Não é menos privado: a chave fica nos dois dispositivos, então o retransmissor só encaminha texto cifrado e não consegue ler o arquivo.",
       ],
     },
   ],
@@ -724,7 +724,7 @@ const pt = {
     heading: "Perguntas frequentes",
     items: [
       {
-        q: "Preciso de uma conta para enviar arquivos na mesma Wi-Fi?",
+        q: "Preciso de uma conta para enviar arquivos na mesma rede Wi-Fi?",
         a: "Não. Transferências na mesma rede não precisam de conta nem de código de emparelhamento em nenhum dos lados — é só abrir relayium.com em cada dispositivo.",
       },
       {
@@ -740,13 +740,13 @@ const pt = {
         a: "Sim. Toda transferência na mesma rede usa a mesma troca de chaves X25519 e a mesma criptografia AES-256-GCM de uma entre redes, com um código de verificação que você mesmo pode conferir e uma verificação de integridade SHA-256 por arquivo.",
       },
       {
-        q: "E se um dispositivo estiver na Wi-Fi e o outro no dados móveis?",
+        q: "E se um dispositivo estiver na Wi-Fi e o outro nos dados móveis?",
         a: "Então eles não estão na mesma rede, e a descoberta automática não vai conectá-los. Use um código de emparelhamento em vez disso — o remetente faz login para criá-lo e quem recebe não precisa de conta. Entre redes diferentes a transferência passa por um retransmissor TURN criptografado em vez de uma conexão direta, mas continua criptografada de ponta a ponta o tempo todo: o retransmissor só encaminha texto cifrado e não consegue ler o arquivo.",
       },
     ],
   },
   cta: {
-    text: "Abra o Relayium em dois (ou mais) dispositivos quaisquer na mesma Wi-Fi e envie seu primeiro arquivo — sem conta, sem código.",
+    text: "Abra o Relayium em dois (ou mais) dispositivos quaisquer na mesma rede Wi-Fi e envie seu primeiro arquivo — sem conta, sem código.",
     button: "Experimente o Relayium agora",
   },
   relatedHeading: "Continue lendo",

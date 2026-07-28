@@ -103,7 +103,7 @@ const zh = {
       ],
     },
     {
-      heading: "同一网络 vs. 跨越互联网",
+      heading: "同一网络，还是跨越互联网",
       body: [
         "如果两台电脑在同一 Wi-Fi 或局域网里，Relayium 会自动找到彼此——两边都打开 relayium.com 即可，双方都无需账号。",
         "如果两台电脑处于不同网络——比如你家里的台式机和同事在外地的笔记本——自动发现就没法跨越互联网了，这时 Relayium 改用一个短配对码。发送方需要登录才能生成这个码；接收方始终无需账号，无论是手动输入码还是直接打开它生成的链接。",
@@ -142,7 +142,7 @@ const zh = {
     items: [
       {
         q: "这真的是点对点直连吗，会经过服务器吗？",
-        a: "在要紧的意义上它就是点对点：文件从一个浏览器流向另一个浏览器，从不存储在服务器上。同一网络下两个浏览器彼此直连。而跨网络的配对码传输按设计经由 TURN 中继承载——这是穿过那些通常挡住直连的防火墙和 NAT 的可靠路径——但中继只是在传输过程中转发加密密文，从来看不到可读的文件。",
+        a: "在真正关键的那一点上，它就是点对点：文件从一个浏览器流向另一个浏览器，从不存储在服务器上。同一网络下两个浏览器彼此直连。而跨网络的配对码传输按设计经由 TURN 中继承载——这是穿过那些通常挡住直连的防火墙和 NAT 的可靠路径——但中继只是在传输过程中转发加密密文，从来看不到可读的文件。",
       },
       {
         q: "双方都需要账号吗？",
@@ -171,41 +171,41 @@ const ja = {
     "インターネットを介して2台のパソコン間で直接ファイルを送る手順ガイド。P2P直接接続、クラウドへのアップロード不要、インストール不要、全行程エンドツーエンド暗号化。",
   updatedLabel: "最終更新",
   lead: [
-    "別のパソコンにファイルを送るには、たいていまずどこかにアップロードして——クラウドドライブ、メールの添付、チャットアプリ——相手が無事に取り出せることを願うことになります。Relayium はその手順を省きます。世界のどこにいても、あなたのブラウザと相手のブラウザを直接つなぎ、ファイルをそのまま流します。",
-    "本ガイドは2つのケース——同じネットワーク上の2台と、まったく別のネットワーク（別の家、別のオフィス、別の国）にある2台——を扱い、それぞれの側が何をすればよいかを正確に示します。",
+    "別のパソコンにファイルを送るには、たいていまずどこかにアップロードして（クラウドドライブ、メールの添付、チャットアプリ）、相手が無事に取り出せることを願うことになります。Relayium はその手順を省きます。世界のどこにいても、手元のブラウザと相手のブラウザを直接つなぎ、ファイルをそのまま流します。",
+    "本ガイドは2つのケース、すなわち同じネットワーク上の2台と、まったく別のネットワーク（別の家、別のオフィス、別の国）にある2台を扱い、それぞれの側が何をすればよいかを正確に示します。",
   ],
   sections: [
     {
       heading: "直接方式：クラウドを介さない",
       body: [
-        "Relayium は relayium.com でブラウザ内だけで動作します。どちらのパソコンにもインストールするものはなく、あなたと相手の間にサードパーティのストレージは存在しません。ファイルは一方のブラウザからもう一方のブラウザへ流れ、サーバーに書き込まれることはありません——2つのネットワークの都合でストリームがリレーを通る場合でも、リレーはバイトを中継するだけで、コピーも鍵も持ちません。",
+        "Relayium は relayium.com でブラウザ内だけで動作します。どちらのパソコンにもインストールするものはなく、自分と相手の間にサードパーティのストレージは存在しません。ファイルは一方のブラウザからもう一方のブラウザへ流れ、サーバーに書き込まれることはありません。2つのネットワークの都合でストリームがリレーを通る場合でも、リレーはバイトを中継するだけで、コピーも鍵も持ちません。",
         "これが重要なのは2つの理由からです。速度（他人のアップロード／ダウンロード割り当てに足を引っ張られない）と、プライバシー（どこかの会社のサーバーにファイルのコピーが残り、要求されたり、漏えいしたり、忘れ去られたりする心配がない）です。",
       ],
     },
     {
-      heading: "同じネットワーク vs. インターネットをまたぐ",
+      heading: "同じネットワークか、インターネットをまたぐか",
       body: [
-        "2台とも同じ Wi-Fi や LAN にあれば、Relayium は自動的に互いを見つけます——両方で relayium.com を開くだけで、どちらの側もアカウントは不要です。",
-        "2台が別々のネットワークにある場合——たとえば自宅のデスクトップと遠方にいる同僚のノートPCなど——自動発見はインターネットをまたげないため、Relayium は代わりに短いペアリングコードを使います。送信する側がサインインしてそのコードを発行し、受信する側はコードを入力するにせよ、生成されたリンクを開くにせよ、アカウントは一切不要です。",
+        "2台とも同じ Wi-Fi や LAN にあれば、Relayium は自動的に互いを見つけます。両方で relayium.com を開くだけで、どちらの側もアカウントは不要です。",
+        "2台が別々のネットワークにある場合（たとえば自宅のデスクトップと遠方にいる同僚のノートPCなど）、自動発見はインターネットをまたげないため、Relayium は代わりに短いペアリングコードを使います。送信する側がサインインしてそのコードを発行し、受信する側はコードを入力するにせよ、生成されたリンクを開くにせよ、アカウントは一切不要です。",
       ],
     },
     {
-      heading: "手順:インターネット経由でファイルを送る",
+      heading: "手順：インターネット経由でファイルを送る",
       body: [
         "別々のネットワークにある2台のパソコンの場合の全体の流れです。",
       ],
       bullets: [
         "送信側のパソコンで relayium.com を開き、サインインします。",
-        "送るファイルまたはフォルダを選びます——1バッチ最大1,000ファイル。Relayium が6文字のペアリングコード（対応する参加リンク／QRコード付き）を発行します。",
-        "そのコードやリンクを都合の良い方法で相手に伝えます——読み上げる、テキストメッセージで送る、チャットに貼り付けるなど。",
+        "送るファイルまたはフォルダを選びます。1バッチ最大1,000ファイル。Relayium が6文字のペアリングコード（対応する参加リンク／QRコード付き）を発行します。",
+        "そのコードやリンクを都合の良い方法で相手に伝えます。読み上げる、テキストメッセージで送る、チャットに貼り付けるなど。",
         "受信側のパソコンで、リンクを開くか、relayium.com を開いて6文字のコードを入力します。こちら側にサインインは不要です。",
-        "両方の画面に同じ短い検証コード（SAS）が表示されます。一致を確認してください——これは接続が本当に2人の間だけで、間に誰も入っていないことを確認するものです——その後、転送が自動的に始まります。",
+        "両方の画面に同じ短い検証コード（SAS）が表示されます。一致を確認してください（これは接続が本当に2人の間だけで、間に誰も入っていないことを確認するものです）。その後、転送が自動的に始まります。",
       ],
     },
     {
-      heading: "ネットワークをまたぐ場合:暗号化リレー",
+      heading: "ネットワークをまたぐ場合：暗号化リレー",
       body: [
-        "同じネットワーク上の2つのブラウザは互いに直接接続します。ネットワークをまたぐ場合は——企業のファイアウォールや厳格な NAT が直接経路を日常的に阻むため——Relayium が暗号化されたストリームを TURN リレー経由で運び、確実につながるようにします。",
+        "同じネットワーク上の2つのブラウザは互いに直接接続します。ネットワークをまたぐ場合は、企業のファイアウォールや厳格な NAT が直接経路を日常的に阻むため、Relayium が暗号化されたストリームを TURN リレー経由で運び、確実につながるようにします。",
         "リレーが見るのは常に暗号文だけです。ファイルは送信側ブラウザを離れる前にすでにエンドツーエンドで暗号化されており（X25519 鍵交換と AES-256-GCM）、リレーはインターネット上の見知らぬパソコンと同様、中身を読み取ることはできません。途中で接続が切れても、転送は最初からではなく再開されます。",
       ],
     },
@@ -213,7 +213,7 @@ const ja = {
       heading: "何ファイルまで、どのくらいの大きさまで",
       body: [
         "1バッチで最大1,000ファイル、フォルダ構造も含めて送れます。サーバー側にサイズ上限はなく、実質的な上限は受信側のブラウザによって決まります。",
-        "File System Access API を備えたブラウザ——パソコン版の Chrome や Edge——は受信データをそのままディスクへストリーミングするので、数ギガバイトのファイルでも問題ありません。Firefox と Safari にはこの API がないため、そちらで受信するとひとまとめにメモリへ溜めることになり、およそ 256MB を超えると Relayium が受け取る前に警告を出します。これは実測した上限ではなく意図的に控えめに置いた目安で、実際の天井はそのパソコンのメモリ・OS・ほかに何を開いているかで決まります。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるため、届いたものが送られたものとバイト単位で一致しているとわかります。",
+        "File System Access API を備えたブラウザ（パソコン版の Chrome や Edge）は受信データをそのままディスクへストリーミングするので、数ギガバイトのファイルでも問題ありません。Firefox と Safari にはこの API がないため、そちらで受信するとひとまとめにメモリへ溜めることになり、およそ 256MB を超えると Relayium が受け取る前に警告を出します。これは実測した上限ではなく意図的に控えめに置いた目安で、実際の天井はそのパソコンのメモリ・OS・ほかに何を開いているかで決まります。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるため、届いたものが送られたものとバイト単位で一致しているとわかります。",
       ],
     },
   ],
@@ -222,15 +222,15 @@ const ja = {
     items: [
       {
         q: "本当に P2P 直接接続ですか、それともファイルはサーバーを経由しますか？",
-        a: "肝心な意味では P2P です。ファイルはブラウザからブラウザへ流れ、サーバーに保存されることはありません。同じネットワーク上なら2つのブラウザは互いに直接つながります。ネットワークをまたぐペアリングコードでの転送は、設計上つねに TURN リレーが運びます——直接経路をたいてい塞いでしまうファイアウォールや NAT を越えて確実につながる経路です——が、そのリレーが通すのは通信中の暗号文だけで、読めるファイルが渡ることはありません。",
+        a: "肝心な意味では P2P です。ファイルはブラウザからブラウザへ流れ、サーバーに保存されることはありません。同じネットワーク上なら2つのブラウザは互いに直接つながります。ネットワークをまたぐペアリングコードでの転送は、設計上つねに TURN リレーが運びます。直接経路をたいてい塞いでしまうファイアウォールや NAT を越えて確実につながる経路です。ただし、そのリレーが通すのは通信中の暗号文だけで、読めるファイルが渡ることはありません。",
       },
       {
         q: "双方ともアカウントが必要ですか？",
-        a: "いいえ。同じネットワーク上では、どちらの側もアカウントは不要です。ネットワークをまたぐ場合、送信する側はペアリングコードを作成するためにサインインします——これは Relayium がコードを発行・管理するために必要です——ですが受信する側は、コードを入力するにせよリンクを開くにせよ、アカウントは一切不要です。",
+        a: "いいえ。同じネットワーク上では、どちらの側もアカウントは不要です。ネットワークをまたぐ場合、送信する側はペアリングコードを作成するためにサインインします（これは Relayium がコードを発行・管理するために必要です）。ですが受信する側は、コードを入力するにせよリンクを開くにせよ、アカウントは一切不要です。",
       },
       {
         q: "異なるネットワークや国をまたいでも使えますか？",
-        a: "はい。ペアリングコードはまさにこのケースのために存在します。同じローカルネットワークにない2台のパソコンが、世界のどこにいてもつながります。その経路は直接接続ではなく暗号化された TURN リレーを通ります——NAT やファイアウォールが間に立ちはだかるときに確実につながるのがこの経路で、しかもほぼ必ずタイムアウトする直接接続の試行を待たずに1〜2秒で確立します。",
+        a: "はい。ペアリングコードはまさにこのケースのために存在します。同じローカルネットワークにない2台のパソコンが、世界のどこにいてもつながります。その経路は直接接続ではなく暗号化された TURN リレーを通ります。NAT やファイアウォールが間に立ちはだかるときに確実につながるのがこの経路で、しかもほぼ必ずタイムアウトする直接接続の試行を待たずに1〜2秒で確立します。",
       },
       {
         q: "ファイルサイズや送れるファイル数に制限はありますか？",
@@ -239,7 +239,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "両方のパソコンで Relayium を開き、インターネット経由で最初のファイルを送ってみてください——クラウドへのアップロードも、インストールも不要で、受信側は常にアカウント不要です。",
+    text: "両方のパソコンで Relayium を開き、インターネット経由で最初のファイルを送ってみてください。クラウドへのアップロードも、インストールも不要で、受信側は常にアカウント不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -251,14 +251,14 @@ const ko = {
     "인터넷을 통해 두 컴퓨터 사이에서 파일을 직접 보내는 단계별 가이드 — P2P 직접 연결, 클라우드 업로드 없이, 설치 없이, 전 과정 종단간 암호화.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "다른 컴퓨터에 파일을 보내려면 보통 먼저 어딘가에 올려야 합니다 — 클라우드 드라이브, 메일 첨부, 채팅 앱 — 그리고 상대가 무사히 다시 꺼낼 수 있길 바라야 합니다. Relayium은 이 단계를 건너뜁니다. 세상 어디에 있든 당신의 브라우저와 상대의 브라우저를 직접 연결해 파일을 곧장 흘려보냅니다.",
+    "다른 컴퓨터에 파일을 보내려면 보통 먼저 어딘가에 올려야 합니다 — 클라우드 드라이브, 메일 첨부, 채팅 앱 — 그리고 상대가 무사히 다시 꺼낼 수 있길 바라야 합니다. Relayium은 이 단계를 건너뜁니다. 세상 어디에 있든 내 브라우저와 상대의 브라우저를 직접 연결해 파일을 곧장 흘려보냅니다.",
     "이 가이드는 두 가지 경우 — 같은 네트워크의 컴퓨터 두 대, 그리고 완전히 다른 네트워크(다른 집, 다른 사무실, 다른 나라)에 있는 컴퓨터 두 대 — 를 모두 다루고, 각 쪽이 정확히 무엇을 해야 하는지 보여줍니다.",
   ],
   sections: [
     {
       heading: "직접 연결 방식: 중간에 클라우드가 없다",
       body: [
-        "Relayium은 relayium.com에서 브라우저 안에서만 동작합니다. 어느 컴퓨터에도 설치할 것이 없고, 당신과 상대 사이에 제3자 저장소가 끼어들지 않습니다. 파일은 한 브라우저에서 다른 브라우저로 흐르며 서버에 저장되는 일이 없습니다 — 두 네트워크 사정상 스트림이 릴레이를 거쳐야 할 때도 마찬가지로, 릴레이는 바이트를 넘겨줄 뿐 사본도 키도 갖지 않습니다.",
+        "Relayium은 relayium.com에서 브라우저 안에서만 동작합니다. 어느 컴퓨터에도 설치할 것이 없고, 나와 상대 사이에 제3자 저장소가 끼어들지 않습니다. 파일은 한 브라우저에서 다른 브라우저로 흐르며 서버에 저장되는 일이 없습니다 — 두 네트워크 사정상 스트림이 릴레이를 거쳐야 할 때도 마찬가지로, 릴레이는 바이트를 넘겨줄 뿐 사본도 키도 갖지 않습니다.",
         "이것이 중요한 이유는 두 가지입니다. 속도(다른 사람의 업로드/다운로드 할당량에 발목 잡히지 않음)와 개인정보 보호(어느 회사 서버에 파일 사본이 남아 요청되거나 유출되거나 방치될 걱정이 없음)입니다.",
       ],
     },
@@ -283,7 +283,7 @@ const ko = {
       ],
     },
     {
-      heading: "네트워크를 넘을 때: 암호화된 중계",
+      heading: "네트워크를 넘을 때: 암호화된 릴레이",
       body: [
         "같은 네트워크에 있는 두 브라우저는 서로 직접 연결됩니다. 네트워크를 넘을 때는 — 회사 방화벽이나 엄격한 NAT가 직접 경로를 흔히 막기 때문에 — Relayium이 암호화된 스트림을 TURN 릴레이로 전달해 안정적으로 연결합니다.",
         "릴레이는 항상 암호문만 봅니다. 파일은 보내는 쪽 브라우저를 떠나기 전에 이미 종단간 암호화되어 있으므로(X25519 키 교환과 AES-256-GCM), 릴레이는 인터넷의 아무 컴퓨터나 마찬가지로 내용을 읽을 수 없습니다. 도중에 연결이 끊겨도 전송은 처음부터가 아니라 이어서 재개됩니다.",
@@ -293,7 +293,7 @@ const ko = {
       heading: "몇 개까지, 얼마나 큰 파일까지",
       body: [
         "한 배치에 폴더 구조를 포함해 최대 1,000개의 파일을 보낼 수 있습니다. 서버 쪽에는 크기 상한이 없으며, 실제 한계는 받는 쪽 브라우저가 결정합니다.",
-        "File System Access API가 있는 브라우저 — 데스크톱 Chrome, Edge — 는 들어오는 데이터를 곧장 디스크로 스트리밍하므로 수 기가바이트짜리 파일도 문제없습니다. Firefox와 Safari에는 그 API가 없어서 그쪽에서 받으면 한 묶음을 메모리에 모으게 되며, 대략 256MB를 넘어서면 Relayium이 수락하기 전에 미리 경고합니다. 이는 측정된 상한이 아니라 일부러 보수적으로 잡은 추정치이고, 실제 상한은 그 컴퓨터의 메모리와 OS, 그 밖에 열어 둔 것에 달려 있습니다. 각 파일은 SHA-256 해시로 종단간 검증되므로 도착한 파일이 보낸 파일과 바이트 단위로 같다는 것을 알 수 있습니다.",
+        "File System Access API가 있는 브라우저(데스크톱 Chrome, Edge)는 들어오는 데이터를 곧장 디스크로 스트리밍하므로 수 기가바이트짜리 파일도 문제없습니다. Firefox와 Safari에는 그 API가 없어서 그쪽에서 받으면 한 묶음을 메모리에 모으게 되며, 대략 256MB를 넘어서면 Relayium이 수락하기 전에 미리 경고합니다. 이는 측정된 상한이 아니라 일부러 보수적으로 잡은 추정치이고, 실제 상한은 그 컴퓨터의 메모리와 OS, 그 밖에 열어 둔 것에 달려 있습니다. 각 파일은 SHA-256 해시로 종단간 검증되므로 도착한 파일이 보낸 파일과 바이트 단위로 같다는 것을 알 수 있습니다.",
       ],
     },
   ],
@@ -359,7 +359,7 @@ const de = {
         "Wähle die zu sendenden Dateien oder den Ordner aus — bis zu 1.000 Dateien pro Stapel. Relayium erzeugt einen sechsstelligen Pairing-Code (und den passenden Beitrittslink/QR-Code).",
         "Teile diesen Code oder Link auf beliebige, bequeme Weise mit der anderen Person — vorlesen, per SMS schicken, in den Chat einfügen.",
         "Öffne auf dem empfangenden Computer den Link, oder öffne relayium.com und gib den sechsstelligen Code ein. Auf dieser Seite ist keine Anmeldung nötig.",
-        "Beide Bildschirme zeigen nun denselben kurzen Prüfcode (SAS). Prüfe, ob sie übereinstimmen — das bestätigt, dass die Verbindung wirklich nur zwischen euch beiden besteht und niemand dazwischensitzt — dann startet die Übertragung automatisch.",
+        "Beide Bildschirme zeigen nun denselben kurzen Verifizierungscode (SAS). Prüfe, ob sie übereinstimmen — das bestätigt, dass die Verbindung wirklich nur zwischen den beiden Seiten besteht und niemand dazwischensitzt — dann startet die Übertragung automatisch.",
       ],
     },
     {
@@ -382,7 +382,7 @@ const de = {
     items: [
       {
         q: "Ist es wirklich Peer-to-Peer, oder läuft die Datei über einen Server?",
-        a: "In dem Sinn, auf den es ankommt, ja: Die Datei wird von Browser zu Browser gestreamt und nie auf einem Server gespeichert. Im selben Netzwerk verbinden sich die beiden Browser direkt miteinander. Eine netzübergreifende Übertragung per Pairing-Code trägt planmäßig ein TURN-Relay — der verlässliche Weg durch die Firewalls und NATs, die einen direkten Pfad meist blockieren —, aber dieses Relay reicht im Betrieb nur verschlüsselten Chiffretext weiter, nie die lesbare Datei.",
+        a: "In dem Sinn, auf den es ankommt, ja: Die Datei wird von Browser zu Browser gestreamt und nie auf einem Server gespeichert. Im selben Netzwerk verbinden sich die beiden Browser direkt miteinander. Eine netzübergreifende Übertragung per Pairing-Code trägt von Grund auf ein TURN-Relay — der verlässliche Weg durch die Firewalls und NATs, die einen direkten Pfad meist blockieren —, aber dieses Relay reicht im Betrieb nur verschlüsselten Chiffretext weiter, nie die lesbare Datei.",
       },
       {
         q: "Brauchen beide Seiten ein Konto?",
@@ -411,49 +411,49 @@ const fr = {
     "Un guide pas à pas pour envoyer des fichiers directement entre deux ordinateurs par Internet — pair-à-pair, sans envoi vers le cloud, sans installation, chiffré de bout en bout tout du long.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Envoyer un fichier à un autre ordinateur signifie généralement le téléverser quelque part au préalable — un cloud, une pièce jointe d'e-mail, une appli de messagerie — puis espérer que le destinataire pourra le récupérer. Relayium saute cette étape : il connecte votre navigateur directement à celui du destinataire, où qu'il se trouve dans le monde, et fait transiter le fichier directement.",
+    "Envoyer un fichier à un autre ordinateur signifie généralement le téléverser quelque part au préalable — un cloud, une pièce jointe d'e-mail, une appli de messagerie — puis espérer que le destinataire pourra le récupérer. Relayium saute cette étape : il connecte votre navigateur directement à celui du destinataire, où qu'il se trouve dans le monde, et fait transiter le fichier directement.",
     "Ce guide couvre les deux cas — deux ordinateurs sur le même réseau, et deux ordinateurs sur des réseaux complètement différents (domiciles, bureaux, pays différents) — et montre exactement ce que chaque côté doit faire.",
   ],
   sections: [
     {
-      heading: "La méthode directe : pas de cloud au milieu",
+      heading: "La méthode directe : pas de cloud au milieu",
       body: [
-        "Relayium fonctionne entièrement dans le navigateur, sur relayium.com. Il n'y a rien à installer sur aucun des deux ordinateurs, et aucun stockage tiers ne s'interpose entre vous et le destinataire : le fichier va d'un navigateur à l'autre et n'est jamais écrit sur un serveur — pas même lorsque les deux réseaux obligent le flux à passer par un relais, qui se contente de faire suivre les octets, sans copie ni clé.",
-        "Cela compte pour deux raisons : la vitesse (vous n'êtes pas bridé par le quota de téléversement/téléchargement de quelqu'un d'autre) et la confidentialité (aucune copie de votre fichier ne reste sur les serveurs d'une entreprise, en attente d'être réclamée, compromise ou oubliée).",
+        "Relayium fonctionne entièrement dans le navigateur, sur relayium.com. Il n'y a rien à installer sur aucun des deux ordinateurs, et aucun stockage tiers ne s'interpose entre vous et le destinataire : le fichier va d'un navigateur à l'autre et n'est jamais écrit sur un serveur — pas même lorsque les deux réseaux obligent le flux à passer par un relais, qui se contente de faire suivre les octets, sans copie ni clé.",
+        "Cela compte pour deux raisons : la vitesse (vous n'êtes pas bridé par le quota de téléversement/téléchargement de quelqu'un d'autre) et la confidentialité (aucune copie de votre fichier ne reste sur les serveurs d'une entreprise, en attente d'être réclamée, compromise ou oubliée).",
       ],
     },
     {
       heading: "Même réseau vs. à travers Internet",
       body: [
         "Si les deux ordinateurs sont sur le même Wi-Fi ou réseau local, Relayium les trouve automatiquement — ouvrez relayium.com sur les deux, aucun compte n'est nécessaire d'un côté comme de l'autre.",
-        "Si les deux ordinateurs sont sur des réseaux différents — votre ordinateur de bureau chez vous et le portable d'une collègue à l'autre bout du pays, par exemple — la découverte automatique ne peut pas traverser Internet, donc Relayium utilise à la place un court code d'appairage. La personne qui envoie se connecte pour générer ce code ; la personne qui reçoit n'a jamais besoin de compte, qu'elle saisisse le code ou ouvre simplement le lien généré.",
+        "Si les deux ordinateurs sont sur des réseaux différents — votre ordinateur de bureau chez vous et le portable d'une collègue à l'autre bout du pays, par exemple — la découverte automatique ne peut pas traverser Internet, donc Relayium utilise à la place un court code d'appairage. La personne qui envoie se connecte pour générer ce code ; la personne qui reçoit n'a jamais besoin de compte, qu'elle saisisse le code ou ouvre simplement le lien généré.",
       ],
     },
     {
-      heading: "Étape par étape : envoyer un fichier par Internet",
+      heading: "Étape par étape : envoyer un fichier par Internet",
       body: [
-        "Voici le déroulé complet pour deux ordinateurs sur des réseaux différents :",
+        "Voici le déroulé complet pour deux ordinateurs sur des réseaux différents :",
       ],
       bullets: [
         "Sur l'ordinateur qui envoie, ouvrez relayium.com et connectez-vous.",
-        "Choisissez les fichiers ou le dossier à envoyer — jusqu'à 1 000 fichiers par lot. Relayium génère un code d'appairage à 6 caractères (avec le lien de participation/QR code correspondant).",
+        "Choisissez les fichiers ou le dossier à envoyer — jusqu'à 1 000 fichiers par lot. Relayium génère un code d'appairage à 6 caractères (avec le lien de participation/code QR correspondant).",
         "Partagez ce code ou ce lien avec l'autre personne comme cela vous arrange — le lire à voix haute, l'envoyer par SMS, le coller dans un chat.",
         "Sur l'ordinateur qui reçoit, ouvrez le lien, ou ouvrez relayium.com et saisissez le code à 6 caractères. Aucune connexion n'est requise de ce côté.",
-        "Les deux écrans affichent maintenant le même court code de vérification (SAS). Vérifiez qu'ils concordent — cela confirme que la connexion se fait bien uniquement entre vous deux, sans personne au milieu — puis le transfert démarre automatiquement.",
+        "Les deux écrans affichent maintenant le même court code de vérification (SAS). Vérifiez qu'il concorde — cela confirme que la connexion se fait bien uniquement entre vous deux, sans personne au milieu — puis le transfert démarre automatiquement.",
       ],
     },
     {
-      heading: "Entre réseaux : le relais chiffré",
+      heading: "Entre réseaux : le relais chiffré",
       body: [
         "Deux navigateurs sur le même réseau se connectent directement l'un à l'autre. Entre réseaux — où les pare-feux d'entreprise et les NAT stricts bloquent régulièrement tout chemin direct —, Relayium achemine le flux chiffré via un relais TURN, pour que la connexion aboutisse de façon fiable.",
-        "Le relais ne voit jamais que du texte chiffré : le fichier est déjà chiffré de bout en bout (échange de clés X25519 plus AES-256-GCM) avant même de quitter le navigateur expéditeur, si bien que le relais ne peut pas le lire, pas plus qu'un ordinateur quelconque sur Internet. Si la connexion se coupe en cours de route, le transfert reprend au lieu de tout recommencer.",
+        "Le relais ne voit jamais que du texte chiffré : le fichier est déjà chiffré de bout en bout (échange de clés X25519 plus AES-256-GCM) avant même de quitter le navigateur expéditeur, si bien que le relais ne peut pas le lire, pas plus qu'un ordinateur quelconque sur Internet. Si la connexion se coupe en cours de route, le transfert reprend au lieu de tout recommencer.",
       ],
     },
     {
       heading: "Combien de fichiers, et de quelle taille",
       body: [
-        "Vous pouvez envoyer jusqu'à 1 000 fichiers en un seul lot, structure de dossiers comprise. Il n'y a aucune limite de taille côté serveur — le plafond pratique est fixé par le navigateur qui reçoit.",
-        "Un navigateur doté de l'API File System Access — Chrome ou Edge sur ordinateur — écrit en flux les données entrantes directement sur le disque, donc des fichiers de plusieurs gigaoctets passent sans problème. Firefox et Safari n'ont pas cette API : un lot reçu là est assemblé en mémoire, et Relayium vous prévient avant que vous acceptiez dès que l'on dépasse environ 256 Mo — une estimation volontairement prudente plutôt qu'une limite mesurée, le plafond réel dépendant de la mémoire de la machine, de son système et de ce qui est ouvert par ailleurs. Chaque fichier est aussi vérifié de bout en bout par une empreinte SHA-256, pour que vous sachiez que ce qui arrive est identique, octet pour octet, à ce qui a été envoyé.",
+        "Vous pouvez envoyer jusqu'à 1 000 fichiers en un seul lot, structure de dossiers comprise. Il n'y a aucune limite de taille côté serveur — le plafond pratique est fixé par le navigateur qui reçoit.",
+        "Un navigateur doté de l'API File System Access — Chrome ou Edge sur ordinateur — écrit en flux les données entrantes directement sur le disque, donc des fichiers de plusieurs gigaoctets passent sans problème. Firefox et Safari n'ont pas cette API : un lot reçu là est assemblé en mémoire, et Relayium vous prévient avant que vous acceptiez dès que l'on dépasse environ 256 Mo — une estimation volontairement prudente plutôt qu'une limite mesurée, le plafond réel dépendant de la mémoire de la machine, de son système et de ce qui est ouvert par ailleurs. Chaque fichier est aussi vérifié de bout en bout par une empreinte SHA-256, pour que vous sachiez que ce qui arrive est identique, octet pour octet, à ce qui a été envoyé.",
       ],
     },
   ],
@@ -461,20 +461,20 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Est-ce vraiment du pair-à-pair, ou le fichier passe-t-il par un serveur ?",
-        a: "C'est du pair-à-pair au sens qui compte : le fichier transite d'un navigateur à l'autre et n'est jamais stocké sur un serveur. Sur le même réseau, les deux navigateurs se connectent directement l'un à l'autre. Entre réseaux, un transfert par code d'appairage est porté par un relais TURN, par conception — la voie qui aboutit de façon fiable à travers les pare-feux et les NAT qui bloquent d'ordinaire tout chemin direct — mais ce relais ne fait passer que du texte chiffré au vol, jamais le fichier lisible.",
+        q: "Est-ce vraiment du pair-à-pair, ou le fichier passe-t-il par un serveur ?",
+        a: "C'est du pair-à-pair au sens qui compte : le fichier transite d'un navigateur à l'autre et n'est jamais stocké sur un serveur. Sur le même réseau, les deux navigateurs se connectent directement l'un à l'autre. Entre réseaux, un transfert par code d'appairage est porté par un relais TURN, par conception — la voie qui aboutit de façon fiable à travers les pare-feux et les NAT qui bloquent d'ordinaire tout chemin direct — mais ce relais ne fait passer que du texte chiffré au vol, jamais le fichier lisible.",
       },
       {
-        q: "Les deux personnes ont-elles besoin d'un compte ?",
+        q: "Les deux personnes ont-elles besoin d'un compte ?",
         a: "Non. Sur le même réseau, aucun des deux côtés n'a besoin de compte. Entre réseaux différents, la personne qui envoie se connecte pour créer le code d'appairage — c'est ce qui permet à Relayium de générer et de gérer ce code — mais la personne qui reçoit n'a jamais besoin de compte, qu'elle saisisse le code ou ouvre simplement le lien.",
       },
       {
-        q: "Est-ce que ça marche entre réseaux et pays différents ?",
-        a: "Oui. Le code d'appairage existe précisément pour ce cas : deux ordinateurs qui ne sont pas sur le même réseau local, où qu'ils se trouvent dans le monde. Cette voie emprunte un relais TURN chiffré plutôt qu'une liaison directe — c'est elle qui aboutit de façon fiable quand des NAT et des pare-feux s'interposent, et elle s'établit en une ou deux secondes au lieu d'attendre des tentatives directes qui expireraient presque à coup sûr.",
+        q: "Est-ce que cela marche entre réseaux et pays différents ?",
+        a: "Oui. Le code d'appairage existe précisément pour ce cas : deux ordinateurs qui ne sont pas sur le même réseau local, où qu'ils se trouvent dans le monde. Cette voie emprunte un relais TURN chiffré plutôt qu'une liaison directe — c'est elle qui aboutit de façon fiable quand des NAT et des pare-feux s'interposent, et elle s'établit en une ou deux secondes au lieu d'attendre des tentatives directes qui expireraient presque à coup sûr.",
       },
       {
-        q: "Y a-t-il une limite de taille de fichier ou de nombre de fichiers ?",
-        a: "Vous pouvez envoyer jusqu'à 1 000 fichiers en un seul lot. Aucune limite de taille n'est imposée par le serveur — la limite dépend de ce que le navigateur qui reçoit peut gérer : pratiquement illimité dans Chrome ou Edge sur ordinateur (écriture en flux sur le disque), tandis que Firefox et Safari gardent le lot en mémoire, où Relayium prévient au-delà d'environ 256 Mo. Ce seuil est une estimation prudente, pas un plafond ferme ; le vrai dépend de la machine.",
+        q: "Y a-t-il une limite de taille de fichier ou de nombre de fichiers ?",
+        a: "Vous pouvez envoyer jusqu'à 1 000 fichiers en un seul lot. Aucune limite de taille n'est imposée par le serveur — la limite dépend de ce que le navigateur qui reçoit peut gérer : pratiquement illimité dans Chrome ou Edge sur ordinateur (écriture en flux sur le disque), tandis que Firefox et Safari gardent le lot en mémoire, où Relayium prévient au-delà d'environ 256 Mo. Ce seuil est une estimation prudente, pas un plafond ferme ; le vrai dépend de la machine.",
       },
     ],
   },
@@ -486,54 +486,54 @@ const fr = {
 };
 
 const ar = {
-  title: "إرسال الملفات بين جهازي كمبيوتر عبر الإنترنت",
+  title: "إرسال الملفات بين حاسوبين عبر الإنترنت",
   description:
-    "دليل تفصيلي خطوة بخطوة لإرسال الملفات مباشرة بين جهازي كمبيوتر عبر الإنترنت — من الند للند، دون رفع إلى السحابة، دون تثبيت، ومشفَّر من الطرف إلى الطرف طوال الطريق.",
+    "دليل تفصيلي خطوة بخطوة لإرسال الملفات مباشرة بين حاسوبين عبر الإنترنت — من الند للند، دون رفع إلى السحابة، دون تثبيت، ومشفَّر من الطرف إلى الطرف طوال الطريق.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "إرسال ملف إلى جهاز كمبيوتر آخر يعني عادةً رفعه إلى مكان ما أولاً — قرص سحابي، مرفق بريد إلكتروني، تطبيق محادثة — والأمل في أن يتمكن المُستقبِل من إخراجه مجدداً. يتخطى Relayium هذه الخطوة: فهو يربط متصفحك مباشرةً بمتصفح الطرف الآخر، أينما كان في العالم، ويبث الملف عبره مباشرةً.",
-    "يغطي هذا الدليل كلتا الحالتين — جهازا كمبيوتر على نفس الشبكة، وجهازا كمبيوتر على شبكتين مختلفتين تماماً (منازل، مكاتب، بلدان مختلفة) — ويوضح بالضبط ما يحتاج كل طرف إلى فعله.",
+    "إرسال ملف إلى حاسوب آخر يعني عادةً رفعه إلى مكان ما أولًا — قرص سحابي، مرفق بريد إلكتروني، تطبيق محادثة — والأمل في أن يتمكن المُستقبِل من إخراجه مجددًا. يتخطى Relayium هذه الخطوة: فهو يربط متصفحك مباشرةً بمتصفح الطرف الآخر، أينما كان في العالم، ويبث الملف عبره مباشرةً.",
+    "يغطي هذا الدليل كلتا الحالتين — حاسوبان على نفس الشبكة، وحاسوبان على شبكتين مختلفتين تمامًا (منازل، مكاتب، بلدان مختلفة) — ويوضح بالضبط ما يحتاج كل طرف إلى فعله.",
   ],
   sections: [
     {
       heading: "النهج المباشر: لا سحابة في المنتصف",
       body: [
-        "يعمل Relayium بالكامل داخل المتصفح على relayium.com. لا شيء يُثبَّت على أي من الجهازين، ولا يقف أي تخزين تابع لطرف ثالث بينك وبين المُستقبِل: ينتقل الملف من متصفح إلى آخر ولا يُكتب أبداً على أي خادم — ولا حتى حين تفرض الشبكتان مرور التدفق عبر مُرحِّل، فهو يمرّر البايتات فحسب، بلا نسخة وبلا مفتاح.",
+        "يعمل Relayium بالكامل داخل المتصفح على relayium.com. لا شيء يُثبَّت على أي من الجهازين، ولا يقف أي تخزين تابع لطرف ثالث بينك وبين المُستقبِل: ينتقل الملف من متصفح إلى آخر ولا يُكتب أبدًا على أي خادم — ولا حتى حين تفرض الشبكتان مرور التدفق عبر مُرحِّل، فهو يمرّر البايتات فحسب، بلا نسخة وبلا مفتاح.",
         "هذا مهم لسببين: السرعة (لا تُقيَّد بحصة الرفع/التنزيل لدى شخص آخر) والخصوصية (لا توجد نسخة من ملفك على خوادم شركة ما تنتظر أن تُطلب أو تُخترق أو تُنسى).",
       ],
     },
     {
       heading: "نفس الشبكة مقابل عبر الإنترنت",
       body: [
-        "إذا كان الجهازان على نفس شبكة Wi-Fi أو الشبكة المحلية، يجدهما Relayium تلقائياً — افتح relayium.com على كليهما، ولا حاجة إلى حساب على أي من الطرفين.",
-        "إذا كان الجهازان على شبكتين مختلفتين — جهاز مكتبك في المنزل وحاسوب زميل محمول في مدينة أخرى، مثلاً — فلا يستطيع الاكتشاف التلقائي العبور عبر الإنترنت، لذا يستخدم Relayium بدلاً من ذلك رمز اقتران قصيراً. الشخص الذي يُرسل يسجّل الدخول لإنشاء ذلك الرمز؛ أما الشخص الذي يستقبل فلا يحتاج أبداً إلى حساب، سواء أدخل الرمز أو فتح الرابط الذي يولّده فحسب.",
+        "إذا كان الجهازان على نفس شبكة Wi-Fi أو الشبكة المحلية، يجدهما Relayium تلقائيًا — افتح relayium.com على كليهما، ولا حاجة إلى حساب على أي من الطرفين.",
+        "إذا كان الجهازان على شبكتين مختلفتين — جهاز مكتبك في المنزل وحاسوب زميل محمول في مدينة أخرى، مثلًا — فلا يستطيع الاكتشاف التلقائي العبور عبر الإنترنت، لذا يستخدم Relayium بدلًا من ذلك رمز اقتران قصيرًا. الشخص الذي يُرسل يسجّل الدخول لإنشاء ذلك الرمز؛ أما الشخص الذي يستقبل فلا يحتاج أبدًا إلى حساب، سواء أدخل الرمز أو فتح الرابط الذي يولّده فحسب.",
       ],
     },
     {
       heading: "خطوة بخطوة: إرسال ملف عبر الإنترنت",
       body: [
-        "إليك التدفق الكامل لجهازي كمبيوتر على شبكتين مختلفتين:",
+        "إليك مسار النقل الكامل لحاسوبين على شبكتين مختلفتين:",
       ],
       bullets: [
         "على جهاز الإرسال، افتح relayium.com وسجّل الدخول.",
-        "اختر الملفات أو المجلد المراد إرساله — حتى 1000 ملف في الدفعة الواحدة. يُنشئ Relayium رمز اقتران من 6 خانات (ورابط انضمام/رمز QR مطابقاً له).",
+        "اختر الملفات أو المجلد المراد إرساله — حتى 1,000 ملف في الدفعة الواحدة. يُنشئ Relayium رمز اقتران من 6 محارف (ورابط انضمام/رمز QR مطابقًا له).",
         "شارك ذلك الرمز أو الرابط مع الطرف الآخر بأي طريقة مناسبة — اقرأه بصوت عالٍ، أرسله برسالة نصية، الصقه في المحادثة.",
-        "على جهاز الاستقبال، افتح الرابط، أو افتح relayium.com وأدخل الرمز المؤلف من 6 خانات. لا حاجة لتسجيل الدخول على هذا الطرف.",
-        "تعرض الشاشتان الآن نفس رمز التحقق القصير (SAS). تحقق من تطابقهما — يؤكد هذا أن الاتصال يجري حقاً بينكما أنتما الاثنين، دون أحد في المنتصف — ثم يبدأ النقل تلقائياً.",
+        "على جهاز الاستقبال، افتح الرابط، أو افتح relayium.com وأدخل الرمز المؤلف من 6 محارف. لا حاجة لتسجيل الدخول على هذا الطرف.",
+        "تعرض الشاشتان الآن نفس رمز التحقق القصير (SAS). تحقق من تطابقهما — يؤكد هذا أن الاتصال يجري حقًا بينكما أنتما الاثنين، دون أحد في المنتصف — ثم يبدأ النقل تلقائيًا.",
       ],
     },
     {
       heading: "عبر الشبكات: المُرحِّل المشفَّر",
       body: [
         "يتصل متصفحان على الشبكة نفسها ببعضهما مباشرةً. أمّا عبر الشبكات — حيث تحجب جدران الحماية المؤسسية وأنواع NAT الصارمة المسار المباشر عادةً — فيحمل Relayium التدفق المشفَّر عبر مُرحِّل TURN، فيتم الاتصال بموثوقية.",
-        "لا يرى المُرحِّل سوى النص المُشفَّر أبداً: فالملف مشفَّر من الطرف إلى الطرف (تبادل مفاتيح X25519 إضافةً إلى AES-256-GCM) قبل أن يغادر متصفح الإرسال أصلاً، لذا لا يمكن للمُرحِّل قراءته أكثر مما يستطيع أي جهاز كمبيوتر عشوائي على الإنترنت. وإذا انقطع الاتصال في منتصف الطريق، يُستأنف النقل بدلاً من البدء من جديد.",
+        "لا يرى المُرحِّل سوى النص المُشفَّر أبدًا: فالملف مشفَّر من الطرف إلى الطرف (تبادل مفاتيح X25519 إضافةً إلى AES-256-GCM) قبل أن يغادر متصفح الإرسال أصلًا، لذا لا يمكن للمُرحِّل قراءته أكثر مما يستطيع أي حاسوب عشوائي على الإنترنت. وإذا انقطع الاتصال في منتصف الطريق، يُستأنف النقل بدلًا من البدء من جديد.",
       ],
     },
     {
       heading: "كم عدد الملفات، وما حجمها",
       body: [
-        "يمكنك إرسال حتى 1000 ملف في دفعة واحدة، بما في ذلك بنية المجلدات. لا يوجد حد أقصى للحجم من جهة الخادم — السقف العملي يحدده متصفح الاستقبال.",
-        "المتصفح الذي يدعم واجهة File System Access — ‏Chrome أو Edge على الحاسوب — يبثّ البيانات الواردة مباشرةً إلى القرص، لذا فالملفات التي تبلغ عدة غيغابايت لا مشكلة فيها. أما Firefox وSafari فلا تملكان تلك الواجهة، فتُجمَّع الدفعة المستلمة فيهما بالذاكرة، وينبّهك Relayium قبل القبول متى تجاوزت نحو 256 ميغابايت: تقدير متحفّظ عن قصد لا حدٌّ مقيس، إذ يتوقف السقف الحقيقي على ذاكرة الجهاز ونظامه وما هو مفتوح غير ذلك. كما يُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256، لتعرف أن ما يصل مطابق للمُرسَل بايتاً ببايت.",
+        "يمكنك إرسال حتى 1,000 ملف في دفعة واحدة، بما في ذلك بنية المجلدات. لا يوجد حد أقصى للحجم من جهة الخادم — السقف العملي يحدده متصفح الاستقبال.",
+        "المتصفح الذي يدعم واجهة File System Access — ‏Chrome أو Edge على الحاسوب — يبثّ البيانات الواردة مباشرةً إلى القرص، لذا فالملفات التي تبلغ عدة غيغابايت لا مشكلة فيها. أما Firefox وSafari فلا تملكان تلك الواجهة، فتُجمَّع الدفعة المستلمة فيهما بالذاكرة، وينبّهك Relayium قبل القبول متى تجاوزت نحو 256 ميغابايت: تقدير متحفّظ عن قصد لا حدٌّ مقيس، إذ يتوقف السقف الحقيقي على ذاكرة الجهاز ونظامه وما هو مفتوح غير ذلك. كما يُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256، لتعرف أن ما يصل مطابق للمُرسَل بايتًا ببايت.",
       ],
     },
   ],
@@ -541,72 +541,72 @@ const ar = {
     heading: "الأسئلة الشائعة",
     items: [
       {
-        q: "هل هو فعلاً من الند للند، أم يمرّ الملف عبر خادم؟",
-        a: "هو من الند للند بالمعنى الذي يهم: يُبَث الملف من متصفح إلى آخر ولا يُخزَّن أبداً على أي خادم. على الشبكة نفسها يتصل المتصفحان ببعضهما مباشرةً. أما النقل عبر الشبكات برمز اقتران فيحمله مُرحِّل TURN بحكم التصميم — وهو المسار الذي ينجح بموثوقية عبر جدران الحماية وأنواع NAT التي تحجب المسار المباشر عادةً — لكن ذلك المُرحِّل لا يمرّر إلا نصاً مُشفَّراً أثناء العبور، ولا يرى الملف المقروء أبداً.",
+        q: "هل هو فعلًا من الند للند، أم يمرّ الملف عبر خادم؟",
+        a: "هو من الند للند بالمعنى الذي يهم: يُبَث الملف من متصفح إلى آخر ولا يُخزَّن أبدًا على أي خادم. على الشبكة نفسها يتصل المتصفحان ببعضهما مباشرةً. أما النقل عبر الشبكات برمز اقتران فيحمله مُرحِّل TURN بحكم التصميم — وهو المسار الذي ينجح بموثوقية عبر جدران الحماية وأنواع NAT التي تحجب المسار المباشر عادةً — لكن ذلك المُرحِّل لا يمرّر إلا نصًا مُشفَّرًا أثناء العبور، ولا يرى الملف المقروء أبدًا.",
       },
       {
         q: "هل يحتاج كلا الشخصين إلى حساب؟",
-        a: "لا. على نفس الشبكة، لا يحتاج أي من الطرفين إلى حساب. أما عبر شبكات مختلفة، فالشخص الذي يُرسل يسجّل الدخول لإنشاء رمز الاقتران — وهذا ما يتيح لـ Relayium إنشاء الرمز وإدارته — لكن الشخص الذي يستقبل لا يحتاج أبداً إلى حساب، سواء أدخل الرمز أو فتح الرابط فحسب.",
+        a: "لا. على نفس الشبكة، لا يحتاج أي من الطرفين إلى حساب. أما عبر شبكات مختلفة، فالشخص الذي يُرسل يسجّل الدخول لإنشاء رمز الاقتران — وهذا ما يتيح لـ Relayium إنشاء الرمز وإدارته — لكن الشخص الذي يستقبل لا يحتاج أبدًا إلى حساب، سواء أدخل الرمز أو فتح الرابط فحسب.",
       },
       {
         q: "هل يعمل عبر شبكات وبلدان مختلفة؟",
-        a: "نعم. رمز الاقتران موجود تحديداً لهذه الحالة: جهازا كمبيوتر ليسا على نفس الشبكة المحلية، أينما كان كل منهما في العالم. وهذا المسار يمر عبر مُرحِّل TURN مشفَّر لا عبر وصلة مباشرة — فهو الذي ينجح بموثوقية حين تقف NAT وجدران الحماية في الطريق، ويقوم في ثانية أو ثانيتين بدل انتظار محاولات مباشرة تنتهي بالمهلة في الغالب الأعم.",
+        a: "نعم. رمز الاقتران موجود تحديدًا لهذه الحالة: حاسوبان ليسا على نفس الشبكة المحلية، أينما كان كل منهما في العالم. وهذا المسار يمر عبر مُرحِّل TURN مشفَّر لا عبر وصلة مباشرة — فهو الذي ينجح بموثوقية حين تقف NAT وجدران الحماية في الطريق، ويقوم في ثانية أو ثانيتين بدل انتظار محاولات مباشرة تنتهي بالمهلة في الغالب الأعم.",
       },
       {
         q: "هل هناك حد لحجم الملف أو لعدد الملفات التي يمكنني إرسالها؟",
-        a: "يمكنك إرسال حتى 1000 ملف في دفعة واحدة. لا يفرض الخادم أي حد أقصى للحجم — الحد هو ما يستطيع متصفح الاستقبال التعامل معه: غير محدود عملياً في Chrome أو Edge على الحاسوب (بثّاً إلى القرص)، بينما يحتفظ Firefox وSafari بالدفعة في الذاكرة، وينبّهك Relayium فوق نحو 256 ميغابايت. وهذه العتبة تقدير متحفّظ لا سقف صارم؛ أما السقف الحقيقي فيتوقف على الجهاز نفسه.",
+        a: "يمكنك إرسال حتى 1,000 ملف في دفعة واحدة. لا يفرض الخادم أي حد أقصى للحجم — الحد هو ما يستطيع متصفح الاستقبال التعامل معه: غير محدود عمليًا في Chrome أو Edge على الحاسوب (بثًّا إلى القرص)، بينما يحتفظ Firefox وSafari بالدفعة في الذاكرة، وينبّهك Relayium فوق نحو 256 ميغابايت. وهذه العتبة تقدير متحفّظ لا سقف صارم؛ أما السقف الحقيقي فيتوقف على الجهاز نفسه.",
       },
     ],
   },
   cta: {
-    text: "افتح Relayium على كلا الجهازين وأرسل أول ملف لك عبر الإنترنت — دون رفع إلى السحابة، دون تثبيت، ودون أن يحتاج المُستقبِل أبداً إلى حساب.",
+    text: "افتح Relayium على كلا الجهازين وأرسل أول ملف لك عبر الإنترنت — دون رفع إلى السحابة، دون تثبيت، ودون أن يحتاج المُستقبِل أبدًا إلى حساب.",
     button: "جرّب Relayium الآن",
   },
   relatedHeading: "تابع القراءة",
 };
 
 const es = {
-  title: "Enviar archivos entre dos computadoras por Internet",
+  title: "Enviar archivos entre dos ordenadores por Internet",
   description:
-    "Una guía paso a paso para enviar archivos directamente entre dos computadoras por Internet — de igual a igual, sin subir a la nube, sin instalar nada y cifrado de extremo a extremo de principio a fin.",
+    "Una guía paso a paso para enviar archivos directamente entre dos ordenadores por Internet — de igual a igual, sin subir a la nube, sin instalar nada y cifrado de extremo a extremo de principio a fin.",
   updatedLabel: "Última actualización",
   lead: [
-    "Enviar un archivo a otra computadora suele significar subirlo primero a algún sitio — un disco en la nube, un adjunto de correo, una aplicación de chat — y esperar que el destinatario pueda recuperarlo. Relayium se salta ese paso: conecta tu navegador directamente con el suyo, esté donde esté en el mundo, y transmite el archivo directamente de un lado a otro.",
-    "Esta guía cubre ambos casos — dos computadoras en la misma red, y dos computadoras en redes completamente distintas (distintas casas, oficinas, países) — y muestra exactamente qué debe hacer cada lado.",
+    "Enviar un archivo a otro ordenador suele significar subirlo primero a algún sitio — un disco en la nube, un adjunto de correo, una aplicación de chat — y esperar que el destinatario pueda recuperarlo. Relayium se salta ese paso: conecta tu navegador directamente con el suyo, esté donde esté en el mundo, y transmite el archivo directamente de un lado a otro.",
+    "Esta guía cubre ambos casos — dos ordenadores en la misma red, y dos ordenadores en redes completamente distintas (distintas casas, oficinas, países) — y muestra exactamente qué debe hacer cada lado.",
   ],
   sections: [
     {
       heading: "El enfoque directo: sin nube en el medio",
       body: [
-        "Relayium funciona por completo en el navegador, en relayium.com. No hay nada que instalar en ninguna de las dos computadoras, y ningún almacenamiento de terceros se interpone entre tú y el destinatario: el archivo va de un navegador al otro y nunca se escribe en un servidor — ni siquiera cuando las dos redes obligan al flujo a pasar por un retransmisor, que se limita a reenviar los bytes, sin copia y sin clave.",
+        "Relayium funciona por completo en el navegador, en relayium.com. No hay nada que instalar en ninguno de los dos ordenadores, y ningún almacenamiento de terceros se interpone entre tú y el destinatario: el archivo va de un navegador al otro y nunca se escribe en un servidor — ni siquiera cuando las dos redes obligan al flujo a pasar por un retransmisor, que se limita a reenviar los bytes, sin copia y sin clave.",
         "Eso importa por dos razones: velocidad (no te frena la cuota de subida/descarga de otra persona) y privacidad (no queda ninguna copia de tu archivo en los servidores de una empresa esperando a ser solicitada, filtrada u olvidada).",
       ],
     },
     {
       heading: "Misma red vs. a través de Internet",
       body: [
-        "Si ambas computadoras están en la misma Wi-Fi o red local, Relayium las encuentra automáticamente — abre relayium.com en las dos, y no hace falta cuenta en ninguno de los lados.",
-        "Si las dos computadoras están en redes distintas — tu equipo de escritorio en casa y la laptop de un colega al otro lado del país, por ejemplo — el descubrimiento automático no puede cruzar Internet, así que Relayium usa en su lugar un código de emparejamiento corto. La persona que envía inicia sesión para generar ese código; la persona que recibe nunca necesita una cuenta, ya sea que escriba el código o simplemente abra el enlace que este genera.",
+        "Si ambos ordenadores están en la misma Wi-Fi o red local, Relayium los encuentra automáticamente — abre relayium.com en los dos, y no hace falta cuenta en ninguno de los lados.",
+        "Si los dos ordenadores están en redes distintas — tu ordenador de sobremesa en casa y el portátil de un colega al otro lado del país, por ejemplo — el descubrimiento automático no puede cruzar Internet, así que Relayium usa en su lugar un código de emparejamiento corto. La persona que envía inicia sesión para generar ese código; la persona que recibe nunca necesita una cuenta, ya sea que escriba el código o simplemente abra el enlace que este genera.",
       ],
     },
     {
       heading: "Paso a paso: enviar un archivo a través de Internet",
       body: [
-        "Este es el flujo completo para dos computadoras en redes distintas:",
+        "Este es el flujo completo para dos ordenadores en redes distintas:",
       ],
       bullets: [
-        "En la computadora que envía, abre relayium.com e inicia sesión.",
+        "En el ordenador que envía, abre relayium.com e inicia sesión.",
         "Elige los archivos o la carpeta a enviar — hasta 1.000 archivos por lote. Relayium genera un código de emparejamiento de 6 caracteres (y un enlace/QR de unión que le corresponde).",
         "Comparte ese código o enlace con la otra persona como te resulte más cómodo — léelo en voz alta, mándalo por mensaje, pégalo en el chat.",
-        "En la computadora que recibe, abre el enlace, o abre relayium.com y escribe el código de 6 caracteres. En este lado no hace falta iniciar sesión.",
-        "Ahora ambas pantallas muestran el mismo código de verificación corto (SAS). Comprueba que coincidan — esto confirma que la conexión es genuinamente entre ustedes dos, sin nadie en el medio — y entonces la transferencia comienza automáticamente.",
+        "En el ordenador que recibe, abre el enlace, o abre relayium.com y escribe el código de 6 caracteres. En este lado no hace falta iniciar sesión.",
+        "Ahora ambas pantallas muestran el mismo código de verificación corto (SAS). Comprueba que coincidan — esto confirma que la conexión es genuinamente entre las dos partes, sin nadie en el medio — y entonces la transferencia comienza automáticamente.",
       ],
     },
     {
-      heading: "¿Detrás de un cortafuegos o un NAT estricto? El retransmisor de reserva",
+      heading: "Entre redes: el retransmisor cifrado",
       body: [
-        "Dos navegadores en la misma red se conectan directamente entre sí. Entre redes —donde los cortafuegos corporativos y los NAT estrictos bloquean habitualmente cualquier ruta directa— Relayium transporta el flujo cifrado por un retransmisor TURN, de modo que la conexión se establece de forma fiable.",
-        "El retransmisor solo ve texto cifrado: el archivo se cifra de extremo a extremo (intercambio de claves X25519 más AES-256-GCM) antes de salir siquiera del navegador que envía, así que el retransmisor no puede leerlo más de lo que podría cualquier computadora al azar en Internet. Si la conexión se corta a mitad de camino, la transferencia se reanuda en lugar de empezar de nuevo.",
+        "Dos navegadores en la misma red se conectan directamente entre sí. Entre redes — donde los cortafuegos corporativos y los NAT estrictos bloquean habitualmente cualquier ruta directa — Relayium transporta el flujo cifrado por un retransmisor TURN, de modo que la conexión se establece de forma fiable.",
+        "El retransmisor solo ve texto cifrado: el archivo se cifra de extremo a extremo (intercambio de claves X25519 más AES-256-GCM) antes de salir siquiera del navegador que envía, así que el retransmisor no puede leerlo más de lo que podría cualquier ordenador al azar en Internet. Si la conexión se corta a mitad de camino, la transferencia se reanuda en lugar de empezar de nuevo.",
       ],
     },
     {
@@ -630,7 +630,7 @@ const es = {
       },
       {
         q: "¿Funciona entre redes y países distintos?",
-        a: "Sí. El código de emparejamiento existe precisamente para este caso: dos computadoras que no están en la misma red local, esté donde esté cada una en el mundo. Esa vía va por un retransmisor TURN cifrado en lugar de un enlace directo — es la que conecta de forma fiable cuando hay NAT y cortafuegos de por medio, y se establece en uno o dos segundos en vez de esperar intentos directos que casi siempre acabarían agotando el tiempo.",
+        a: "Sí. El código de emparejamiento existe precisamente para este caso: dos ordenadores que no están en la misma red local, esté donde esté cada uno en el mundo. Esa vía va por un retransmisor TURN cifrado en lugar de un enlace directo — es la que conecta de forma fiable cuando hay NAT y cortafuegos de por medio, y se establece en uno o dos segundos en vez de esperar intentos directos que casi siempre acabarían agotando el tiempo.",
       },
       {
         q: "¿Hay un límite de tamaño de archivo o de cuántos archivos puedo enviar?",
@@ -639,7 +639,7 @@ const es = {
     ],
   },
   cta: {
-    text: "Abre Relayium en ambas computadoras y envía tu primer archivo a través de Internet — sin subir a la nube, sin instalar nada, y el destinatario nunca necesita una cuenta.",
+    text: "Abre Relayium en ambos ordenadores y envía tu primer archivo a través de Internet — sin subir a la nube, sin instalar nada, y el destinatario nunca necesita una cuenta.",
     button: "Prueba Relayium ahora",
   },
   relatedHeading: "Sigue leyendo",
@@ -679,11 +679,11 @@ const pt = {
         "Escolha os arquivos ou a pasta a enviar — até 1.000 arquivos por lote. O Relayium gera um código de emparelhamento de 6 caracteres (e um link/QR de entrada correspondente).",
         "Compartilhe esse código ou link com a outra pessoa da forma que for mais conveniente — leia em voz alta, mande por mensagem, cole no chat.",
         "No computador que recebe, abra o link, ou abra relayium.com e digite o código de 6 caracteres. Deste lado não é preciso fazer login.",
-        "Agora as duas telas mostram o mesmo código de verificação curto (SAS). Confira se eles coincidem — isso confirma que a conexão é genuinamente entre vocês dois, sem ninguém no meio — e então a transferência começa automaticamente.",
+        "Agora as duas telas mostram o mesmo código de verificação curto (SAS). Confira se eles coincidem — isso confirma que a conexão é genuinamente entre as duas partes, sem ninguém no meio — e então a transferência começa automaticamente.",
       ],
     },
     {
-      heading: "Atrás de um firewall ou NAT restrito? O retransmissor de reserva",
+      heading: "Entre redes: o retransmissor criptografado",
       body: [
         "Dois navegadores na mesma rede se conectam diretamente um ao outro. Entre redes — onde firewalls corporativos e NATs restritos bloqueiam rotineiramente qualquer caminho direto — o Relayium carrega o fluxo criptografado por um retransmissor TURN, para que a conexão se estabeleça de forma confiável.",
         "O retransmissor só vê texto cifrado: o arquivo é criptografado de ponta a ponta (troca de chaves X25519 mais AES-256-GCM) antes mesmo de sair do navegador que envia, então o retransmissor não consegue lê-lo, assim como qualquer computador aleatório na Internet também não conseguiria. Se a conexão cair no meio do caminho, a transferência é retomada em vez de recomeçar.",
@@ -702,7 +702,7 @@ const pt = {
     items: [
       {
         q: "É realmente ponto a ponto, ou o arquivo passa por um servidor?",
-        a: "É ponto a ponto no sentido que importa: o arquivo é transmitido de um navegador para o outro e nunca é armazenado em um servidor. Na mesma rede, os dois navegadores se conectam diretamente um ao outro. Já uma transferência entre redes por código de emparelhamento é carregada por um retransmissor TURN, por projeto — o caminho que conecta de forma confiável através dos firewalls e NATs que costumam bloquear qualquer rota direta — mas esse retransmissor só deixa passar texto cifrado em trânsito, nunca o arquivo legível.",
+        a: "É ponto a ponto no sentido que importa: o arquivo é transmitido de um navegador para o outro e nunca é armazenado em um servidor. Na mesma rede, os dois navegadores se conectam diretamente um ao outro. Já uma transferência entre redes por código de emparelhamento é carregada por um retransmissor TURN, por decisão de projeto — o caminho que conecta de forma confiável através dos firewalls e NATs que costumam bloquear qualquer rota direta — mas esse retransmissor só deixa passar texto cifrado em trânsito, nunca o arquivo legível.",
       },
       {
         q: "As duas pessoas precisam de conta?",

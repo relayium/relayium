@@ -160,17 +160,17 @@ const zh = {
 const ja = {
   title: "期限付きの安全なダウンロードリンクでファイルを共有する",
   description:
-    "ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・7日・最長14日（プランによる）、または初回ダウンロード後に消去から選べます——準備ができたときに送れます。",
+    "ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・7日・最長14日（プランによる）、または初回ダウンロード後に消去から選べます。準備ができたときに送れます。",
   updatedLabel: "最終更新",
   lead: [
-    "すべての転送で、相手が今すぐ待っているとは限りません。受信者が寝ていたり、飛行機の中だったり、あるいはただリンクをメッセージに貼って自分のことに戻りたいだけかもしれません。そのために Relayium にはもう一つのモードがあります。開いている別のブラウザへファイルをその場でストリーミングする代わりに、あなたの手元でファイルを暗号化し、暗号文だけをアップロードして、いつでも送れるリンクを渡します——ダウンロードのタイミングは受信者自身のスケジュール次第です。",
-    "本ガイドでは、こうしたリンクの作成方法、有効期限と「初回ダウンロード後に消去」オプション、そしてゼロ知識設計が実際に何を意味するかを説明します。正直な制約も含めて——リンクの作成には送信側のサインインが必要で、リンクはストレージ容量を消費します。",
+    "すべての転送で、相手が今すぐ待っているとは限りません。受信者が寝ていたり、飛行機の中だったり、あるいはただリンクをメッセージに貼って自分のことに戻りたいだけかもしれません。そのために Relayium にはもう一つのモードがあります。開いている別のブラウザへファイルをその場でストリーミングする代わりに、手元でファイルを暗号化し、暗号文だけをアップロードして、いつでも送れるリンクを渡します。ダウンロードのタイミングは受信者自身のスケジュール次第です。",
+    "本ガイドでは、こうしたリンクの作成方法、有効期限と「初回ダウンロード後に消去」オプション、そしてゼロ知識設計が実際に何を意味するかを説明します。正直な制約も含めています。リンクの作成には送信側のサインインが必要で、リンクはストレージ容量を消費します。",
   ],
   sections: [
     {
-      heading: "保存型リンク vs リアルタイム: どちらを使うか",
+      heading: "保存型リンク vs リアルタイム：どちらを使うか",
       body: [
-        "Relayium のリアルタイムモードは、開いている2つのブラウザタブの間で直接ファイルを転送します——速く、どこにも保存されませんが、双方が同時にオンラインである必要があります。保存型の期限付きリンクはその逆です。あなたのブラウザが暗号化を行い結果を一度アップロードすれば、受信者は数分後、数時間後、あるいは数日後でも、自分の都合でリンクを開けます。",
+        "Relayium のリアルタイムモードは、開いている2つのブラウザタブの間で直接ファイルを転送します。速く、どこにも保存されませんが、双方が同時にオンラインである必要があります。保存型の期限付きリンクはその逆です。ブラウザが暗号化を行い結果を一度アップロードすれば、受信者は数分後、数時間後、あるいは数日後でも、自分の都合でリンクを開けます。",
         "相手がいつ空くか分からないとき、同じファイルを複数人に送りたいとき、あるいはメールやチャットに貼り付けてそれで終わりにしたいときに、保存型リンクを使ってください。",
       ],
     },
@@ -179,26 +179,26 @@ const ja = {
       body: ["リンクの作成は、すべてブラウザ内でいくつかの手順を踏むだけです。"],
       bullets: [
         "relayium.com を開き、リンク/オフラインモードに切り替える。",
-        "サインインする——アカウントが必要なのは送信側だけで、受信側は不要。",
+        "サインインする。アカウントが必要なのは送信側だけで、受信側は不要。",
         "ファイルを1つ以上選ぶ。",
         "必要なら有効期限を設定するか、初回ダウンロード後に消去をオンにする。",
-        "ブラウザが暗号化してからアップロードするのを待つ——進行バーが両方の段階を示す。",
-        "リンクをコピー(またはQRコードをスキャン)して、好きな方法で送る。",
+        "ブラウザが暗号化してからアップロードするのを待つ。進行バーが両方の段階を示す。",
+        "リンクをコピー（またはQRコードをスキャン）して、好きな方法で送る。",
       ],
     },
     {
       heading: "有効期限と初回ダウンロード後の消去",
       body: [
-        "どのリンクにも寿命が必要です——永久に有効なままにしておくのは、一度きりの受け渡しの趣旨に反します。リンクを作成するとき、どれだけ有効にしておくかを選べますし、一度使われたら即座に消えるよう設定することもできます。",
-        "初回ダウンロード後の消去とは、受信者がダウンロードを完了した瞬間にリンクが機能しなくなるということです。ファイルが機微な内容で、一人に一度だけ見せて、その後は何も残したくないときに便利です。どちらを選んでも、受信者はダウンロードページでリアルタイムのカウントダウンを見られるので、残り時間(またはダウンロード回数)がわかります。",
+        "どのリンクにも寿命が必要です。永久に有効なままにしておくのは、一度きりの受け渡しの趣旨に反します。リンクを作成するとき、どれだけ有効にしておくかを選べますし、一度使われたら即座に消えるよう設定することもできます。",
+        "初回ダウンロード後の消去とは、受信者がダウンロードを完了した瞬間にリンクが機能しなくなるということです。ファイルが機微な内容で、一人に一度だけ見せて、その後は何も残したくないときに便利です。どちらを選んでも、受信者はダウンロードページでリアルタイムのカウントダウンを見られるので、残り時間（またはダウンロード回数）がわかります。",
       ],
-      bullets: ["1時間", "1日(既定値)", "3日", "7日", "14日（最長。最上位プランのみ）", "または: 固定の期限の代わりに、初回の完全なダウンロード後に消去"],
+      bullets: ["1時間", "1日（既定値）", "3日", "7日", "14日（最長。最上位プランのみ）", "または：固定の期限の代わりに、初回の完全なダウンロード後に消去"],
     },
     {
       heading: "ゼロ知識保証と、その限界",
       body: [
-        "リンクを作成するとき実際に起きていることはこうです。あなたのブラウザはランダムな AES-256-GCM 鍵を生成します——これは Relayium のリアルタイムモードとは異なる仕組みで、リアルタイムモードは X25519 で2つの端末間の鍵を協議します。保存リンクの鍵はローカルで生成され、誰とも協議する必要がありません。その鍵は、何かが端末を離れる前にファイル本体とファイル名のリストを暗号化し、ダウンロードリンクの `#` の後に付加されます——ここはブラウザが決してどのサーバーにも送信しない URL の部分です。サーバーは渡された暗号文を、暗号文だけを保存します。鍵を一切受け取らないため、それを復号する方法がありません。",
-        "この設計には知っておくべき現実的なトレードオフがあります。リンク自体が鍵の唯一のコピーなので、それを失うとパスワードリセットのようなものは存在せず、サーバー上のデータは永久に読めなくなります。リンクの作成には送信側がサインインしている必要があり、削除または期限切れになるまで各リンクはアカウントのストレージ容量を消費します。そして「ゼロ知識」がここで何を意味するかは正確に言っておく価値があります——暗号文は作成からダウンロードまでの間、実際に Relayium のサーバーに保存されています。ただ、あなたのブラウザを一度も離れなかった鍵がなければ読めない、というだけです。",
+        "リンクを作成するとき実際に起きていることはこうです。ブラウザはランダムな AES-256-GCM 鍵を生成します。これは Relayium のリアルタイムモードとは異なる仕組みで、リアルタイムモードは X25519 で2つの端末間の鍵を協議します。保存リンクの鍵はローカルで生成され、誰とも協議する必要がありません。その鍵は、何かが端末を離れる前にファイル本体とファイル名のリストを暗号化し、ダウンロードリンクの `#` の後に付加されます。ここはブラウザが決してどのサーバーにも送信しない URL の部分です。サーバーは渡された暗号文を、暗号文だけを保存します。鍵を一切受け取らないため、それを復号する方法がありません。",
+        "この設計には知っておくべき現実的なトレードオフがあります。リンク自体が鍵の唯一のコピーなので、それを失うとパスワードリセットのようなものは存在せず、サーバー上のデータは永久に読めなくなります。リンクの作成には送信側がサインインしている必要があり、削除または期限切れになるまで各リンクはアカウントのストレージ容量を消費します。そして「ゼロ知識」がここで何を意味するかは正確に言っておく価値があります。暗号文は作成からダウンロードまでの間、実際に Relayium のサーバーに保存されています。ただ、ブラウザを一度も離れなかった鍵がなければ読めない、というだけです。",
       ],
     },
   ],
@@ -206,25 +206,25 @@ const ja = {
     heading: "よくある質問",
     items: [
       {
-        q: "リンクを送る相手にアカウントは必要ですか?",
+        q: "リンクを送る相手にアカウントは必要ですか？",
         a: "いいえ。`#` の後の部分を含む完全なリンクを持っている人なら誰でも開いてファイルをダウンロードできます。リンクを作成するときにサインインが必要なのは送信側だけです。",
       },
       {
-        q: "Relayium は私のファイルを読めますか?",
-        a: "いいえ。あなたのブラウザは、何かをアップロードする前にランダムに生成した AES-256-GCM 鍵でファイルを暗号化し、その鍵は URL フラグメントにしか存在せず、サーバーには決して届きません。サーバーが保存するのは復号する方法のない暗号文だけです——ゼロ知識設計です。",
+        q: "Relayium は私のファイルを読めますか？",
+        a: "いいえ。ブラウザは、何かをアップロードする前にランダムに生成した AES-256-GCM 鍵でファイルを暗号化し、その鍵は URL フラグメントにしか存在せず、サーバーには決して届きません。サーバーが保存するのは復号する方法のない暗号文だけです。ゼロ知識設計です。",
       },
       {
-        q: "リンクはどのくらい持ちますか?",
-        a: "リンクを作成するときに選べます: 1時間、1日、3日、7日、最長14日（プランによる）、あるいは固定の期限の代わりに初回の完全なダウンロード後に消去するよう設定できます。その時点を過ぎるとリンクは機能しなくなります。",
+        q: "リンクはどのくらい持ちますか？",
+        a: "リンクを作成するときに選べます：1時間、1日、3日、7日、最長14日（プランによる）、あるいは固定の期限の代わりに初回の完全なダウンロード後に消去するよう設定できます。その時点を過ぎるとリンクは機能しなくなります。",
       },
       {
-        q: "初回ダウンロード後の消去で、ファイルは本当になくなりますか?",
+        q: "初回ダウンロード後の消去で、ファイルは本当になくなりますか？",
         a: "初回ダウンロード後の消去は、まさに1回きりのダウンロードのために設計されています。受信者がファイルのダウンロードを終えた時点で、それ以降にリンクを開いても機能しなくなるため、こっそり二度目を見られることはありません。",
       },
     ],
   },
   cta: {
-    text: "ファイルの準備はできているけれど、相手がまだ待っていない? ブラウザで期限付きリンクを作成して、準備ができたときに送りましょう。",
+    text: "ファイルの準備はできているけれど、相手がまだ待っていない？ ブラウザで期限付きリンクを作成して、準備ができたときに送りましょう。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -236,14 +236,14 @@ const ko = {
     "브라우저에서 파일을 암호화하고 서버가 복호화할 수 없는 링크를 생성하세요. 1시간·1일·3일·7일·최대 14일(요금제에 따라 다름) 만료 또는 첫 다운로드 후 소각 중 선택하고, 준비됐을 때 보내세요.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "모든 전송에서 상대방이 지금 기다리고 있는 것은 아닙니다. 수신자가 자고 있거나 비행기 안이거나, 아니면 그냥 메시지에 링크를 남기고 하던 일로 돌아가고 싶을 수도 있습니다. 이를 위해 Relayium에는 두 번째 모드가 있습니다. 열려 있는 다른 브라우저로 파일을 실시간 스트리밍하는 대신, 당신 쪽에서 파일을 암호화하고 암호문만 업로드한 뒤, 언제든 보낼 수 있는 링크를 건네줍니다——다운로드는 수신자 자신의 일정에 맞춰 이루어집니다.",
-    "이 가이드는 이런 링크를 만드는 방법, 만료 및 첫 다운로드 후 소각 옵션, 그리고 영지식 설계가 실제로 무엇을 의미하는지 설명합니다. 솔직한 제약도 함께 다룹니다——링크 생성에는 보내는 쪽의 로그인이 필요하고, 링크는 스토리지 할당량을 차지합니다.",
+    "모든 전송에서 상대방이 지금 기다리고 있는 것은 아닙니다. 수신자가 자고 있거나 비행기 안이거나, 아니면 그냥 메시지에 링크를 남기고 하던 일로 돌아가고 싶을 수도 있습니다. 이를 위해 Relayium에는 두 번째 모드가 있습니다. 열려 있는 다른 브라우저로 파일을 실시간 스트리밍하는 대신, 내 쪽에서 파일을 암호화하고 암호문만 업로드한 뒤, 언제든 보낼 수 있는 링크를 건네줍니다. 다운로드는 수신자 자신의 일정에 맞춰 이루어집니다.",
+    "이 가이드는 이런 링크를 만드는 방법, 만료 및 첫 다운로드 후 소각 옵션, 그리고 영지식 설계가 실제로 무엇을 의미하는지 설명합니다. 솔직한 제약도 함께 다룹니다. 링크 생성에는 보내는 쪽의 로그인이 필요하고, 링크는 스토리지 할당량을 차지합니다.",
   ],
   sections: [
     {
       heading: "저장 링크 vs 실시간: 어느 쪽을 써야 할까",
       body: [
-        "Relayium의 실시간 모드는 열려 있는 두 브라우저 탭 사이에서 파일을 직접 전송합니다——빠르고 어디에도 저장되지 않지만, 양쪽이 동시에 온라인이어야 합니다. 저장형 만료 링크는 그 반대입니다. 브라우저가 암호화를 수행하고 결과를 한 번 업로드하면, 수신자는 몇 분, 몇 시간, 심지어 며칠 뒤에도 자기 시간에 맞춰 링크를 열 수 있습니다.",
+        "Relayium의 실시간 모드는 열려 있는 두 브라우저 탭 사이에서 파일을 직접 전송합니다. 빠르고 어디에도 저장되지 않지만, 양쪽이 동시에 온라인이어야 합니다. 저장형 만료 링크는 그 반대입니다. 브라우저가 암호화를 수행하고 결과를 한 번 업로드하면, 수신자는 몇 분, 몇 시간, 심지어 며칠 뒤에도 자기 시간에 맞춰 링크를 열 수 있습니다.",
         "상대가 언제 시간이 날지 모를 때, 같은 파일을 여러 사람에게 보낼 때, 아니면 그냥 이메일이나 채팅에 붙여넣고 끝내고 싶을 때 저장 링크를 사용하세요.",
       ],
     },
@@ -252,17 +252,17 @@ const ko = {
       body: ["링크를 만드는 과정은 모두 브라우저 안에서 몇 단계로 이루어집니다."],
       bullets: [
         "relayium.com을 열고 링크/오프라인 모드로 전환합니다.",
-        "로그인합니다——계정이 필요한 쪽은 보내는 사람뿐이고, 받는 사람은 필요 없습니다.",
+        "로그인합니다. 계정이 필요한 쪽은 보내는 사람뿐이고, 받는 사람은 필요 없습니다.",
         "파일을 하나 이상 선택합니다.",
         "필요하면 만료 기간을 설정하거나 첫 다운로드 후 소각을 켭니다.",
-        "브라우저가 먼저 암호화한 뒤 업로드하는 동안 기다립니다——진행 막대가 두 단계를 각각 보여줍니다.",
+        "브라우저가 먼저 암호화한 뒤 업로드하는 동안 기다립니다. 진행 막대가 두 단계를 각각 보여줍니다.",
         "링크를 복사하거나(또는 QR 코드를 스캔해) 원하는 방식으로 보냅니다.",
       ],
     },
     {
       heading: "만료와 첫 다운로드 후 소각",
       body: [
-        "모든 링크에는 수명이 필요합니다——영원히 살아있게 두는 것은 일회성 전송의 취지에 맞지 않습니다. 링크를 만들 때 얼마나 오래 유효할지 고를 수 있고, 한 번 쓰이면 즉시 사라지도록 설정할 수도 있습니다.",
+        "모든 링크에는 수명이 필요합니다. 영원히 살아있게 두는 것은 일회성 전송의 취지에 맞지 않습니다. 링크를 만들 때 얼마나 오래 유효할지 고를 수 있고, 한 번 쓰이면 즉시 사라지도록 설정할 수도 있습니다.",
         "첫 다운로드 후 소각은 수신자가 다운로드를 마치는 순간 링크가 작동을 멈춘다는 뜻입니다. 파일이 민감해서 딱 한 사람에게 한 번만 보여주고 이후로는 아무것도 남기고 싶지 않을 때 유용합니다. 어느 쪽을 선택하든 수신자는 다운로드 페이지에서 실시간 카운트다운을 볼 수 있어, 남은 시간(또는 다운로드 가능 여부)을 알 수 있습니다.",
       ],
       bullets: ["1시간", "1일(기본값)", "3일", "7일", "14일(최대, 최상위 요금제)", "또는: 고정된 시간 대신 첫 완전한 다운로드 후 소각"],
@@ -270,8 +270,8 @@ const ko = {
     {
       heading: "영지식 보장, 그리고 그 한계",
       body: [
-        "링크를 만들 때 실제로 일어나는 일은 이렇습니다. 브라우저가 무작위 AES-256-GCM 키를 생성합니다——이는 Relayium의 실시간 모드와는 다른 방식으로, 실시간 모드는 X25519로 두 기기 사이에 키를 협상합니다. 저장 링크의 키는 로컬에서 생성되며 협상할 상대가 없습니다. 이 키는 무언가가 기기를 떠나기 전에 파일 본문과 파일명 목록을 암호화하고, 다운로드 링크의 `#` 뒤에 붙습니다——브라우저가 어떤 서버로도 절대 보내지 않는 URL 부분입니다. 서버는 전달받은 암호문을, 오직 암호문만 저장합니다. 키를 전혀 받지 않으므로 복호화할 방법이 없습니다.",
-        "이 설계에는 알아둘 만한 현실적인 절충점이 있습니다. 링크 자체가 키의 유일한 사본이므로, 이를 잃어버리면 비밀번호 재설정 같은 것은 없습니다——서버에 있는 데이터는 영구히 읽을 수 없게 됩니다. 링크 생성에는 보내는 쪽이 로그인 상태여야 하고, 삭제되거나 만료될 때까지 각 링크는 계정의 스토리지 할당량을 차지합니다. 그리고 여기서 '영지식'이 정확히 무엇을 뜻하는지 분명히 해둘 가치가 있습니다——암호문은 생성부터 다운로드까지 실제로 Relayium 서버에 저장되어 있습니다. 다만 당신의 브라우저를 한 번도 떠난 적 없는 키가 없으면 읽을 수 없을 뿐입니다.",
+        "링크를 만들 때 실제로 일어나는 일은 이렇습니다. 브라우저가 무작위 AES-256-GCM 키를 생성합니다. 이는 Relayium의 실시간 모드와는 다른 방식으로, 실시간 모드는 X25519로 두 기기 사이에 키를 협상합니다. 저장 링크의 키는 로컬에서 생성되며 협상할 상대가 없습니다. 이 키는 무언가가 기기를 떠나기 전에 파일 본문과 파일명 목록을 암호화하고, 다운로드 링크의 `#` 뒤에 붙습니다. 브라우저가 어떤 서버로도 절대 보내지 않는 URL 부분입니다. 서버는 전달받은 암호문을, 오직 암호문만 저장합니다. 키를 전혀 받지 않으므로 복호화할 방법이 없습니다.",
+        "이 설계에는 알아둘 만한 현실적인 절충점이 있습니다. 링크 자체가 키의 유일한 사본이므로, 이를 잃어버리면 비밀번호 재설정 같은 것은 없습니다. 서버에 있는 데이터는 영구히 읽을 수 없게 됩니다. 링크 생성에는 보내는 쪽이 로그인 상태여야 하고, 삭제되거나 만료될 때까지 각 링크는 계정의 스토리지 할당량을 차지합니다. 그리고 여기서 '영지식'이 정확히 무엇을 뜻하는지 분명히 해둘 가치가 있습니다. 암호문은 생성부터 다운로드까지 실제로 Relayium 서버에 저장되어 있습니다. 다만 내 브라우저를 한 번도 떠난 적 없는 키가 없으면 읽을 수 없을 뿐입니다.",
       ],
     },
   ],
@@ -284,7 +284,7 @@ const ko = {
       },
       {
         q: "Relayium이 제 파일을 읽을 수 있나요?",
-        a: "아니요. 브라우저는 업로드하기 전에 무작위로 생성한 AES-256-GCM 키로 파일을 암호화하며, 그 키는 URL 프래그먼트에만 존재하고 서버에는 절대 도달하지 않습니다. 서버가 저장하는 것은 복호화할 방법이 없는 암호문뿐입니다——영지식 설계입니다.",
+        a: "아니요. 브라우저는 업로드하기 전에 무작위로 생성한 AES-256-GCM 키로 파일을 암호화하며, 그 키는 URL 프래그먼트에만 존재하고 서버에는 절대 도달하지 않습니다. 서버가 저장하는 것은 복호화할 방법이 없는 암호문뿐입니다. 영지식 설계입니다.",
       },
       {
         q: "링크는 얼마나 유지되나요?",
@@ -389,27 +389,27 @@ const fr = {
     "Chiffrez un fichier dans votre navigateur et obtenez un lien que le serveur ne peut pas déchiffrer. Choisissez 1 heure, 1 jour, 3, 7 ou jusqu'à 14 jours selon votre offre, ou l'autodestruction après le premier téléchargement, puis envoyez-le.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Il n'y a pas toujours quelqu'un qui attend de l'autre côté d'un transfert. Le destinataire dort peut-être, est dans l'avion, ou vous voulez simplement déposer un lien dans un message et passer à autre chose. C'est pour cela que Relayium propose un second mode : au lieu de diffuser un fichier en direct vers un autre navigateur ouvert, il chiffre le fichier chez vous, ne téléverse que le texte chiffré, et vous remet un lien que vous pouvez envoyer quand vous voulez — le téléchargement se fait selon le calendrier du destinataire.",
-    "Ce guide explique comment créer un tel lien, les options d'expiration et d'autodestruction après le premier téléchargement, et ce que la conception à divulgation nulle signifie concrètement — y compris les limites honnêtes : créer un lien exige que l'expéditeur se connecte, et les liens comptent dans un quota de stockage.",
+    "Il n'y a pas toujours quelqu'un qui attend de l'autre côté d'un transfert. Le destinataire dort peut-être, est dans l'avion, ou vous voulez simplement déposer un lien dans un message et passer à autre chose. C'est pour cela que Relayium propose un second mode : au lieu de diffuser un fichier en direct vers un autre navigateur ouvert, il chiffre le fichier chez vous, ne téléverse que le texte chiffré, et vous remet un lien que vous pouvez envoyer quand vous voulez — le téléchargement se fait au moment qui convient au destinataire.",
+    "Ce guide explique comment créer un tel lien, les options d'expiration et d'autodestruction après le premier téléchargement, et ce que la conception à divulgation nulle signifie concrètement — y compris les limites honnêtes : créer un lien exige que l'expéditeur se connecte, et les liens comptent dans un quota de stockage.",
   ],
   sections: [
     {
-      heading: "Lien stocké ou temps réel : lequel choisir",
+      heading: "Lien stocké ou temps réel : lequel choisir",
       body: [
-        "Le mode temps réel de Relayium transfère un fichier directement entre deux onglets de navigateur ouverts — rapide, et rien n'est stocké nulle part, mais les deux personnes doivent être en ligne en même temps. Un lien stocké et à expiration inverse ce compromis : votre navigateur se charge du chiffrement et téléverse le résultat une seule fois, et le destinataire peut ouvrir le lien des minutes, des heures ou des jours plus tard, à son propre rythme.",
+        "Le mode temps réel de Relayium transfère un fichier directement entre deux onglets de navigateur ouverts — rapide, et rien n'est stocké nulle part, mais les deux personnes doivent être en ligne en même temps. Un lien stocké et à expiration renverse cet équilibre : votre navigateur se charge du chiffrement et téléverse le résultat une seule fois, et le destinataire peut ouvrir le lien des minutes, des heures ou des jours plus tard, à son propre rythme.",
         "Utilisez un lien stocké quand vous ne savez pas exactement quand l'autre personne sera disponible, quand vous envoyez le même fichier à plusieurs personnes, ou quand vous voulez simplement quelque chose à coller dans un e-mail ou un chat et à oublier ensuite.",
       ],
     },
     {
       heading: "Comment créer un lien",
-      body: ["Créer un lien prend quelques étapes, toutes dans le navigateur :"],
+      body: ["Créer un lien prend quelques étapes, toutes dans le navigateur :"],
       bullets: [
         "Ouvrez relayium.com et passez au mode lien/hors ligne.",
         "Connectez-vous — seul l'expéditeur a besoin d'un compte, jamais le destinataire.",
         "Choisissez un ou plusieurs fichiers.",
         "Réglez éventuellement une durée d'expiration, ou activez l'autodestruction après le premier téléchargement.",
         "Attendez que le navigateur chiffre puis téléverse les fichiers — une barre de progression indique les deux phases.",
-        "Copiez le lien (ou scannez le QR code) et envoyez-le comme vous voulez.",
+        "Copiez le lien (ou scannez le code QR) et envoyez-le comme vous voulez.",
       ],
     },
     {
@@ -424,14 +424,14 @@ const fr = {
         "3 jours",
         "7 jours",
         "14 jours (le maximum, sur l'offre la plus élevée)",
-        "Ou : autodestruction après le premier téléchargement complet, au lieu d'une durée fixe",
+        "Ou : autodestruction après le premier téléchargement complet, au lieu d'une durée fixe",
       ],
     },
     {
       heading: "La garantie à divulgation nulle, et ses limites",
       body: [
-        "Voici ce qui se passe réellement quand vous créez un lien. Votre navigateur génère une clé AES-256-GCM aléatoire — ce n'est pas le même mécanisme que le mode temps réel de Relayium, qui négocie une clé entre deux appareils via X25519 ; la clé d'un lien stocké est générée localement, sans rien à négocier. Cette clé chiffre vos fichiers et la liste des noms de fichiers avant que quoi que ce soit ne quitte votre appareil, et elle est ajoutée au lien de téléchargement après un `#` — une partie de l'URL que les navigateurs n'envoient jamais à un serveur. Le serveur stocke le texte chiffré qu'on lui donne, et seulement lui ; il n'a aucun moyen de le déchiffrer, car il ne reçoit jamais la clé.",
-        "Cette conception a de vrais compromis à connaître. Le lien lui-même est la seule copie de la clé : si vous le perdez, il n'y a pas de réinitialisation de mot de passe — les données sur le serveur deviennent définitivement illisibles. Créer un lien exige que l'expéditeur soit connecté, et chaque lien compte dans le quota de stockage de votre compte jusqu'à sa suppression ou son expiration. Et il vaut la peine d'être précis sur ce que signifie ici « divulgation nulle » : le texte chiffré est bel et bien stocké sur le serveur de Relayium entre la création et le téléchargement — il est simplement illisible sans la clé qui n'a jamais quitté votre navigateur.",
+        "Voici ce qui se passe réellement quand vous créez un lien. Votre navigateur génère une clé AES-256-GCM aléatoire — ce n'est pas le même mécanisme que le mode temps réel de Relayium, qui négocie une clé entre deux appareils via X25519 ; la clé d'un lien stocké est générée localement, sans rien à négocier. Cette clé chiffre vos fichiers et la liste des noms de fichiers avant que quoi que ce soit ne quitte votre appareil, et elle est ajoutée au lien de téléchargement après un `#` — une partie de l'URL que les navigateurs n'envoient jamais à un serveur. Le serveur stocke le texte chiffré qu'on lui donne, et seulement lui ; il n'a aucun moyen de le déchiffrer, car il ne reçoit jamais la clé.",
+        "Cette conception a de vrais compromis à connaître. Le lien lui-même est la seule copie de la clé : si vous le perdez, il n'y a pas de réinitialisation de mot de passe — les données sur le serveur deviennent définitivement illisibles. Créer un lien exige que l'expéditeur soit connecté, et chaque lien compte dans le quota de stockage de votre compte jusqu'à sa suppression ou son expiration. Et il vaut la peine d'être précis sur ce que signifie ici « divulgation nulle » : le texte chiffré est bel et bien stocké sur le serveur de Relayium entre la création et le téléchargement — il est simplement illisible sans la clé qui n'a jamais quitté votre navigateur.",
       ],
     },
   ],
@@ -439,25 +439,25 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "La personne à qui j'envoie le lien a-t-elle besoin d'un compte ?",
+        q: "La personne à qui j'envoie le lien a-t-elle besoin d'un compte ?",
         a: "Non. Quiconque possède le lien complet — y compris la partie après le `#` — peut l'ouvrir et télécharger les fichiers. Seul l'expéditeur doit se connecter pour créer le lien.",
       },
       {
-        q: "Relayium peut-il lire mon fichier ?",
+        q: "Relayium peut-il lire mon fichier ?",
         a: "Non. Votre navigateur chiffre les fichiers avec une clé AES-256-GCM générée aléatoirement avant tout téléversement, et cette clé n'existe que dans le fragment de l'URL, qui n'atteint jamais le serveur. Le serveur stocke un texte chiffré qu'il ne peut pas déchiffrer — une conception à divulgation nulle.",
       },
       {
-        q: "Combien de temps les liens durent-ils ?",
-        a: "Vous choisissez à la création : 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre, ou réglez une autodestruction après le premier téléchargement complet au lieu d'une durée fixe. Passé ce délai, le lien cesse de fonctionner.",
+        q: "Combien de temps les liens durent-ils ?",
+        a: "Vous choisissez à la création : 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre, ou réglez une autodestruction après le premier téléchargement complet au lieu d'une durée fixe. Passé ce délai, le lien cesse de fonctionner.",
       },
       {
-        q: "Le fichier disparaît-il vraiment après l'autodestruction ?",
-        a: "L'autodestruction après le premier téléchargement est conçue pour exactement un seul téléchargement : une fois que le destinataire a fini de télécharger le fichier, le lien ne fonctionne plus pour personne qui l'ouvrirait ensuite, donc il ne peut pas être consulté discrètement une seconde fois.",
+        q: "Le fichier disparaît-il vraiment après l'autodestruction ?",
+        a: "L'autodestruction après le premier téléchargement est conçue pour exactement un seul téléchargement : une fois que le destinataire a fini de télécharger le fichier, le lien ne fonctionne plus pour personne qui l'ouvrirait ensuite, donc il ne peut pas être consulté discrètement une seconde fois.",
       },
     ],
   },
   cta: {
-    text: "Un fichier prêt mais personne n'attend encore de l'autre côté ? Créez un lien à expiration dans votre navigateur et envoyez-le quand vous êtes prêt.",
+    text: "Un fichier prêt mais personne n'attend encore de l'autre côté ? Créez un lien à expiration dans votre navigateur et envoyez-le quand vous êtes prêt.",
     button: "Essayer Relayium maintenant",
   },
   relatedHeading: "À lire ensuite",
@@ -466,18 +466,18 @@ const fr = {
 const ar = {
   title: "مشاركة ملف برابط تنزيل آمن ينتهي صلاحيته",
   description:
-    "شفّر ملفاً في متصفحك واحصل على رابط لا يستطيع الخادم فك تشفيره. اختر ساعة واحدة، أو يوماً واحداً، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب خطتك، أو الحذف بعد أول تنزيل، ثم أرسله متى كنت مستعداً.",
+    "شفّر ملفًا في متصفحك واحصل على رابط لا يستطيع الخادم فك تشفيره. اختر ساعة واحدة، أو يومًا واحدًا، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب خطتك، أو الحذف بعد أول تنزيل، ثم أرسله متى كنت مستعدًا.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "ليس في كل عملية نقل من ينتظر على الطرف الآخر. ربما يكون المُستقبِل نائماً، أو على متن طائرة، أو تريد ببساطة أن تترك رابطاً في رسالة وتمضي في يومك. لذلك لدى Relayium وضع ثانٍ: بدلاً من بثّ ملف مباشرةً إلى متصفح آخر مفتوح، يشفّر الملف حيث أنت، ويرفع النص المُشفَّر فقط، ويسلّمك رابطاً يمكنك إرساله متى شئت — ويحدث التنزيل وفق جدول المُستقبِل نفسه.",
-    "يرشدك هذا الدليل خلال إنشاء أحد هذه الروابط، وخيارات انتهاء الصلاحية والحذف بعد القراءة، وما يعنيه تصميم المعرفة الصفرية بالضبط عملياً — بما في ذلك الحدود الصريحة: إنشاء رابط يتطلب أن يسجّل المُرسِل الدخول، والروابط تُحتسب ضمن حصة تخزين.",
+    "ليس في كل عملية نقل من ينتظر على الطرف الآخر. ربما يكون المُستقبِل نائمًا، أو على متن طائرة، أو تريد ببساطة أن تترك رابطًا في رسالة وتمضي في يومك. لذلك لدى Relayium وضع ثانٍ: بدلًا من بثّ ملف مباشرةً إلى متصفح آخر مفتوح، يشفّر الملف حيث أنت، ويرفع النص المُشفَّر فقط، ويسلّمك رابطًا يمكنك إرساله متى شئت — ويحدث التنزيل وفق جدول المُستقبِل نفسه.",
+    "يرشدك هذا الدليل خلال إنشاء أحد هذه الروابط، وخيارات انتهاء الصلاحية والحذف بعد القراءة، وما يعنيه تصميم المعرفة الصفرية بالضبط عمليًا — بما في ذلك الحدود الصريحة: إنشاء رابط يتطلب أن يسجّل المُرسِل الدخول، والروابط تُحتسب ضمن حصة تخزين.",
   ],
   sections: [
     {
-      heading: "الروابط المُخزَّنة مقابل الوضع الفوري: متى تستخدم كلاً منهما",
+      heading: "الروابط المُخزَّنة مقابل الوضع الفوري: متى تستخدم كلًا منهما",
       body: [
-        "يبث وضع Relayium الفوري ملفاً مباشرةً بين علامتي تبويب متصفح مفتوحتين — سريع، ولا شيء يُخزَّن في أي مكان، لكن يلزم أن يكون كلا الشخصين متصلين معاً. الرابط المُخزَّن المنتهي الصلاحية يقلب هذه المقايضة: يقوم متصفحك بالتشفير ويرفع النتيجة مرة واحدة، ويمكن للمُستقبِل فتح الرابط بعد دقائق أو ساعات أو أيام، في وقته الخاص.",
-        "استخدم رابطاً مُخزَّناً عندما لا تعرف بالضبط متى سيكون الطرف الآخر متفرغاً، أو عندما ترسل الملف نفسه إلى أكثر من شخص، أو عندما تريد فقط شيئاً تلصقه في بريد إلكتروني أو محادثة وتنتهي منه.",
+        "يبث وضع Relayium الفوري ملفًا مباشرةً بين علامتي تبويب متصفح مفتوحتين — سريع، ولا شيء يُخزَّن في أي مكان، لكن يلزم أن يكون كلا الشخصين متصلين معًا. الرابط المُخزَّن المنتهي الصلاحية يقلب هذه المقايضة: يقوم متصفحك بالتشفير ويرفع النتيجة مرة واحدة، ويمكن للمُستقبِل فتح الرابط بعد دقائق أو ساعات أو أيام، في وقته الخاص.",
+        "استخدم رابطًا مُخزَّنًا عندما لا تعرف بالضبط متى سيكون الطرف الآخر متفرغًا، أو عندما ترسل الملف نفسه إلى أكثر من شخص، أو عندما تريد فقط شيئًا تلصقه في بريد إلكتروني أو محادثة وتنتهي منه.",
       ],
     },
     {
@@ -485,18 +485,18 @@ const ar = {
       body: ["إنشاء رابط يستغرق بضع خطوات، كلها في المتصفح:"],
       bullets: [
         "افتح relayium.com وبدّل إلى وضع الرابط/عدم الاتصال.",
-        "سجّل الدخول — المُرسِل وحده يحتاج إلى حساب؛ أما المُستقبِل فلن يحتاجه أبداً.",
-        "اختر ملفاً واحداً أو أكثر.",
-        "اضبط اختيارياً نافذة انتهاء صلاحية، أو فعّل الحذف بعد القراءة.",
+        "سجّل الدخول — المُرسِل وحده يحتاج إلى حساب؛ أما المُستقبِل فلن يحتاجه أبدًا.",
+        "اختر ملفًا واحدًا أو أكثر.",
+        "اضبط اختياريًا نافذة انتهاء صلاحية، أو فعّل الحذف بعد القراءة.",
         "انتظر بينما يشفّر المتصفح الملفات ثم يرفعها — يعرض شريط التقدم كلتا المرحلتين.",
-        "انسخ الرابط (أو امسح رمز QR ضوئياً) وأرسله كما يحلو لك.",
+        "انسخ الرابط (أو امسح رمز QR ضوئيًا) وأرسله كما يحلو لك.",
       ],
     },
     {
       heading: "انتهاء الصلاحية والحذف بعد القراءة",
       body: [
-        "كل رابط يحتاج إلى عمر — إبقاء رابط حياً إلى الأبد ليس هو الغرض من نقلة لمرة واحدة. عند إنشاء رابط تختار كم ينبغي أن يبقى صالحاً، أو يمكنك ضبطه ليختفي بمجرد استخدامه مرة واحدة.",
-        "الحذف بعد القراءة يعني أن الرابط يتوقف عن العمل في اللحظة التي ينتهي فيها المُستقبِل من التنزيل — مفيد عندما يكون الملف حساساً وتريد شخصاً واحداً بالضبط، مرة واحدة، دون أن يبقى شيء عالقاً بعد ذلك. في كلتا الحالتين، يرى المُستقبِل عداً تنازلياً حياً على صفحة التنزيل، فيعرف كم بقي من الوقت (أو كم بقي من التنزيلات).",
+        "كل رابط يحتاج إلى عمر — إبقاء رابط حيًا إلى الأبد ليس هو الغرض من نقلة لمرة واحدة. عند إنشاء رابط تختار كم ينبغي أن يبقى صالحًا، أو يمكنك ضبطه ليختفي بمجرد استخدامه مرة واحدة.",
+        "الحذف بعد القراءة يعني أن الرابط يتوقف عن العمل في اللحظة التي ينتهي فيها المُستقبِل من التنزيل — مفيد عندما يكون الملف حساسًا وتريد شخصًا واحدًا بالضبط، مرة واحدة، دون أن يبقى شيء عالقًا بعد ذلك. في كلتا الحالتين، يرى المُستقبِل عدًا تنازليًا حيًا على صفحة التنزيل، فيعرف كم بقي من الوقت (أو كم بقي من التنزيلات).",
       ],
       bullets: [
         "ساعة واحدة",
@@ -504,14 +504,14 @@ const ar = {
         "3 أيام",
         "7 أيام",
         "14 يومًا (الحد الأقصى، في الخطة الأعلى)",
-        "أو: الحذف بعد أول تنزيل كامل، بدلاً من وقت ثابت",
+        "أو: الحذف بعد أول تنزيل كامل، بدلًا من وقت ثابت",
       ],
     },
     {
       heading: "ضمان المعرفة الصفرية، وحدوده",
       body: [
-        "إليك ما يحدث فعلاً عندما تنشئ رابطاً. يولّد متصفحك مفتاح AES-256-GCM عشوائياً — آلية مختلفة عن وضع Relayium الفوري الذي يتفاوض على مفتاح بين جهازين باستخدام X25519؛ أما مفتاح الرابط المُخزَّن فيُولَّد محلياً، دون شيء للتفاوض عليه. يشفّر ذلك المفتاح ملفاتك وقائمة أسماء الملفات قبل أن يغادر أي شيء جهازك، ويُلحَق برابط التنزيل بعد `#` — وهو جزء من الـ URL لا ترسله المتصفحات أبداً إلى أي خادم. يخزّن الخادم النص المُشفَّر الذي يُعطى له، والنص المُشفَّر وحده؛ ولا سبيل لديه لفك تشفيره، لأنه لا يتلقى المفتاح أبداً.",
-        "لهذا التصميم مقايضات حقيقية تستحق المعرفة. الرابط نفسه هو النسخة الوحيدة من المفتاح، فإن فقدته، فلا إعادة تعيين لكلمة مرور — تصبح البيانات على الخادم غير قابلة للقراءة نهائياً. إنشاء رابط يتطلب أن يكون المُرسِل مسجّل الدخول، وكل رابط يُحتسب ضمن حصة تخزين حسابك حتى يُحذف أو تنتهي صلاحيته. ويجدر أن نكون دقيقين بشأن ما تعنيه \"المعرفة الصفرية\" هنا: النص المُشفَّر مخزَّن فعلاً على خادم Relayium بين الإنشاء والتنزيل — لكنه فقط غير قابل للقراءة دون المفتاح الذي لم يغادر متصفحك أبداً.",
+        "إليك ما يحدث فعلًا عندما تنشئ رابطًا. يولّد متصفحك مفتاح AES-256-GCM عشوائيًا — آلية مختلفة عن وضع Relayium الفوري الذي يتفاوض على مفتاح بين جهازين باستخدام X25519؛ أما مفتاح الرابط المُخزَّن فيُولَّد محليًا، دون شيء للتفاوض عليه. يشفّر ذلك المفتاح ملفاتك وقائمة أسماء الملفات قبل أن يغادر أي شيء جهازك، ويُلحَق برابط التنزيل بعد `#` — وهو جزء من الـ URL لا ترسله المتصفحات أبدًا إلى أي خادم. يخزّن الخادم النص المُشفَّر الذي يُعطى له، والنص المُشفَّر وحده؛ ولا سبيل لديه لفك تشفيره، لأنه لا يتلقى المفتاح أبدًا.",
+        "لهذا التصميم مقايضات حقيقية تستحق المعرفة. الرابط نفسه هو النسخة الوحيدة من المفتاح، فإن فقدته، فلا إعادة تعيين لكلمة مرور — تصبح البيانات على الخادم غير قابلة للقراءة نهائيًا. إنشاء رابط يتطلب أن يكون المُرسِل مسجّل الدخول، وكل رابط يُحتسب ضمن حصة تخزين حسابك حتى يُحذف أو تنتهي صلاحيته. ويجدر أن نكون دقيقين بشأن ما تعنيه «المعرفة الصفرية» هنا: النص المُشفَّر مخزَّن فعلًا على خادم Relayium بين الإنشاء والتنزيل — لكنه فقط غير قابل للقراءة دون المفتاح الذي لم يغادر متصفحك أبدًا.",
       ],
     },
   ],
@@ -524,20 +524,20 @@ const ar = {
       },
       {
         q: "هل يستطيع Relayium قراءة ملفي؟",
-        a: "لا. يشفّر متصفحك الملفات بمفتاح AES-256-GCM عشوائي قبل أن يُرفع أي شيء، ويوجد ذلك المفتاح فقط في جزء الـ URL (fragment) الذي لا يصل إلى الخادم أبداً. يخزّن الخادم نصاً مُشفَّراً لا سبيل لديه لفك تشفيره — وهو تصميم قائم على المعرفة الصفرية.",
+        a: "لا. يشفّر متصفحك الملفات بمفتاح AES-256-GCM عشوائي قبل أن يُرفع أي شيء، ويوجد ذلك المفتاح فقط في جزء الـ URL (fragment) الذي لا يصل إلى الخادم أبدًا. يخزّن الخادم نصًا مُشفَّرًا لا سبيل لديه لفك تشفيره — وهو تصميم قائم على المعرفة الصفرية.",
       },
       {
         q: "كم تدوم الروابط؟",
-        a: "تختار عند إنشاء الرابط: ساعة واحدة، أو يوماً واحداً، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب خطتك، أو يمكنك ضبطه ليُحذف بعد أول تنزيل كامل بدلاً من انتهاء صلاحية ثابت. بعد تلك النقطة يتوقف الرابط عن العمل.",
+        a: "تختار عند إنشاء الرابط: ساعة واحدة، أو يومًا واحدًا، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب خطتك، أو يمكنك ضبطه ليُحذف بعد أول تنزيل كامل بدلًا من انتهاء صلاحية ثابت. بعد تلك النقطة يتوقف الرابط عن العمل.",
       },
       {
-        q: "هل يختفي الملف حقاً بعد الحذف بعد القراءة؟",
+        q: "هل يختفي الملف حقًا بعد الحذف بعد القراءة؟",
         a: "الحذف بعد القراءة مصمَّم لتنزيل واحد بالضبط: بمجرد أن ينتهي المُستقبِل من تنزيل الملف، يتوقف الرابط عن العمل لأي شخص يفتحه بعد ذلك، فلا يمكن الاطلاع عليه خلسةً مرة ثانية.",
       },
     ],
   },
   cta: {
-    text: "لديك ملف جاهز لكن لا أحد ينتظر على الطرف الآخر؟ أنشئ رابطاً ينتهي صلاحيته في متصفحك وأرسله متى كنت مستعداً.",
+    text: "لديك ملف جاهز لكن لا أحد ينتظر على الطرف الآخر؟ أنشئ رابطًا ينتهي صلاحيته في متصفحك وأرسله متى كنت مستعدًا.",
     button: "جرّب Relayium الآن",
   },
   relatedHeading: "تابع القراءة",
@@ -550,13 +550,13 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "No en toda transferencia hay alguien esperando del otro lado. Quizás el destinatario está dormido, en un vuelo, o simplemente quieres dejar un enlace en un mensaje y seguir con tu día. Para eso Relayium tiene un segundo modo: en lugar de transmitir un archivo en vivo a otro navegador abierto, cifra el archivo donde estás, sube solo el texto cifrado y te entrega un enlace que puedes enviar cuando quieras — la descarga ocurre según el horario del propio destinatario.",
-    "Esta guía recorre la creación de uno de estos enlaces, las opciones de caducidad y de borrado tras la lectura, y qué significa exactamente en la práctica el diseño de conocimiento cero — incluidos los límites honestos: crear un enlace requiere que el remitente inicie sesión, y los enlaces cuentan contra una cuota de almacenamiento.",
+    "Esta guía recorre la creación de uno de estos enlaces, las opciones de caducidad y de borrado tras la lectura, y qué significa exactamente en la práctica el diseño de conocimiento cero — incluidos los límites honestos: crear un enlace requiere que el remitente inicie sesión, y los enlaces se descuentan de una cuota de almacenamiento.",
   ],
   sections: [
     {
       heading: "Enlaces almacenados vs. tiempo real: cuándo usar cada uno",
       body: [
-        "El modo en tiempo real de Relayium transmite un archivo directamente entre dos pestañas de navegador abiertas — rápido, y sin que nada quede almacenado en ninguna parte, pero ambas personas deben estar en línea a la vez. Un enlace almacenado y con caducidad invierte ese compromiso: tu navegador se encarga del cifrado y sube el resultado una sola vez, y el destinatario puede abrir el enlace minutos, horas o días después, a su propio ritmo.",
+        "El modo en tiempo real de Relayium transmite un archivo directamente entre dos pestañas de navegador abiertas — rápido, y sin que nada quede almacenado en ninguna parte, pero ambas personas deben estar en línea a la vez. Un enlace almacenado y con caducidad le da la vuelta a ese equilibrio: tu navegador se encarga del cifrado y sube el resultado una sola vez, y el destinatario puede abrir el enlace minutos, horas o días después, a su propio ritmo.",
         "Usa un enlace almacenado cuando no sabes exactamente cuándo estará libre la otra persona, cuando envías el mismo archivo a más de una persona, o cuando simplemente quieres algo que puedas pegar en un correo o chat y olvidarte del asunto.",
       ],
     },
@@ -591,7 +591,7 @@ const es = {
       heading: "La garantía de conocimiento cero, y sus límites",
       body: [
         "Esto es lo que realmente ocurre cuando creas un enlace. Tu navegador genera una clave AES-256-GCM aleatoria — un mecanismo distinto del modo en tiempo real de Relayium, que negocia una clave entre dos dispositivos con X25519; la clave de un enlace almacenado se genera localmente, sin nada que negociar. Esa clave cifra tus archivos y la lista de nombres de archivo antes de que nada salga de tu dispositivo, y se añade al enlace de descarga después de un `#` — una parte de la URL que los navegadores nunca envían a ningún servidor. El servidor almacena el texto cifrado que se le da, y solo el texto cifrado; no tiene forma de descifrarlo, porque nunca recibe la clave.",
-        "Ese diseño tiene compromisos reales que conviene conocer. El enlace en sí es la única copia de la clave, así que si lo pierdes, no hay restablecimiento de contraseña — los datos en el servidor quedan permanentemente ilegibles. Crear un enlace requiere que el remitente haya iniciado sesión, y cada enlace cuenta contra la cuota de almacenamiento de tu cuenta hasta que se borra o caduca. Y vale la pena ser precisos sobre lo que significa aquí \"conocimiento cero\": el texto cifrado sí se almacena en el servidor de Relayium entre la creación y la descarga — solo que es ilegible sin la clave que nunca salió de tu navegador.",
+        "Ese diseño tiene compromisos reales que conviene conocer. El enlace en sí es la única copia de la clave, así que si lo pierdes, no hay restablecimiento de contraseña — los datos en el servidor quedan permanentemente ilegibles. Crear un enlace requiere que el remitente haya iniciado sesión, y cada enlace se descuenta de la cuota de almacenamiento de tu cuenta hasta que se borra o caduca. Y vale la pena ser precisos sobre lo que significa aquí «conocimiento cero»: el texto cifrado sí se almacena en el servidor de Relayium entre la creación y la descarga — solo que es ilegible sin la clave que nunca salió de tu navegador.",
       ],
     },
   ],
@@ -626,11 +626,11 @@ const es = {
 const pt = {
   title: "Compartilhar um arquivo com um link de download seguro e com validade",
   description:
-    "Criptografe um arquivo no seu navegador e obtenha um link que o servidor não consegue descriptografar. Escolha 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou que se apague após o primeiro download, e envie quando estiver pronto.",
+    "Criptografe um arquivo no seu navegador e obtenha um link que o servidor não consegue descriptografar. Escolha 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou que se autodestrua após o primeiro download, e envie quando estiver pronto.",
   updatedLabel: "Última atualização",
   lead: [
     "Nem toda transferência tem alguém esperando do outro lado. Talvez o destinatário esteja dormindo, em um voo, ou você só queira deixar um link em uma mensagem e seguir com o seu dia. Para isso o Relayium tem um segundo modo: em vez de transmitir um arquivo ao vivo para outro navegador aberto, ele criptografa o arquivo onde você está, envia apenas o texto cifrado e lhe entrega um link que você pode enviar quando quiser — o download acontece de acordo com a agenda do próprio destinatário.",
-    "Este guia percorre a criação de um desses links, as opções de validade e de apagar após a leitura, e o que exatamente o design de conhecimento zero significa na prática — incluindo os limites honestos: criar um link exige que o remetente faça login, e os links contam contra uma cota de armazenamento.",
+    "Este guia percorre a criação de um desses links, as opções de validade e de autodestruição após a leitura, e o que exatamente o design de conhecimento zero significa na prática — incluindo os limites honestos: criar um link exige que o remetente faça login, e os links contam contra uma cota de armazenamento.",
   ],
   sections: [
     {
@@ -647,16 +647,16 @@ const pt = {
         "Abra relayium.com e mude para o modo link/offline.",
         "Faça login — só o remetente precisa de uma conta; o destinatário nunca.",
         "Escolha um ou mais arquivos.",
-        "Opcionalmente defina uma janela de validade, ou ative o apagar após a leitura.",
+        "Opcionalmente defina uma janela de validade, ou ative a autodestruição após a leitura.",
         "Aguarde enquanto o navegador criptografa e depois envia os arquivos — uma barra de progresso mostra as duas fases.",
         "Copie o link (ou escaneie o código QR) e envie da forma que preferir.",
       ],
     },
     {
-      heading: "Validade e apagar após a leitura",
+      heading: "Validade e autodestruição após a leitura",
       body: [
         "Todo link precisa de um tempo de vida — deixar um ativo para sempre não é o objetivo de uma transferência pontual. Ao criar um link você escolhe por quanto tempo ele deve permanecer válido, ou pode configurá-lo para desaparecer assim que for usado uma vez.",
-        "Apagar após a leitura significa que o link para de funcionar no momento em que o destinatário termina de baixar — útil quando o arquivo é sensível e você quer exatamente uma pessoa, uma vez, sem deixar nada solto depois. De qualquer forma, o destinatário vê uma contagem regressiva ao vivo na página de download, então sabe quanto tempo (ou quantos downloads) resta.",
+        "A autodestruição após a leitura significa que o link para de funcionar no momento em que o destinatário termina de baixar — útil quando o arquivo é sensível e você quer exatamente uma pessoa, uma vez, sem deixar nada solto depois. De qualquer forma, o destinatário vê uma contagem regressiva ao vivo na página de download, então sabe quanto tempo (ou quantos downloads) resta.",
       ],
       bullets: [
         "1 hora",
@@ -664,14 +664,14 @@ const pt = {
         "3 dias",
         "7 dias",
         "14 dias (o máximo, no plano superior)",
-        "Ou: apagar após o primeiro download completo, em vez de um tempo fixo",
+        "Ou: autodestruição após o primeiro download completo, em vez de um tempo fixo",
       ],
     },
     {
       heading: "A garantia de conhecimento zero, e seus limites",
       body: [
         "Veja o que realmente acontece quando você cria um link. O seu navegador gera uma chave AES-256-GCM aleatória — um mecanismo diferente do modo em tempo real do Relayium, que negocia uma chave entre dois dispositivos com X25519; a chave de um link armazenado é gerada localmente, sem nada a negociar. Essa chave criptografa seus arquivos e a lista de nomes de arquivo antes de qualquer coisa sair do seu dispositivo, e é anexada ao link de download depois de um `#` — uma parte da URL que os navegadores nunca enviam a nenhum servidor. O servidor armazena o texto cifrado que recebe, e apenas o texto cifrado; ele não tem como descriptografá-lo, porque nunca recebe a chave.",
-        "Esse design tem compromissos reais que vale a pena conhecer. O link em si é a única cópia da chave, então se você o perder, não há redefinição de senha — os dados no servidor ficam permanentemente ilegíveis. Criar um link exige que o remetente esteja com login feito, e cada link conta contra a cota de armazenamento da sua conta até ser apagado ou expirar. E vale ser preciso sobre o que \"conhecimento zero\" significa aqui: o texto cifrado é de fato armazenado no servidor do Relayium entre a criação e o download — só que é ilegível sem a chave que nunca saiu do seu navegador.",
+        "Esse design tem compromissos reais que vale a pena conhecer. O link em si é a única cópia da chave, então se você o perder, não há redefinição de senha — os dados no servidor ficam permanentemente ilegíveis. Criar um link exige que o remetente esteja com login feito, e cada link conta contra a cota de armazenamento da sua conta até ser apagado ou expirar. E vale ser preciso sobre o que “conhecimento zero” significa aqui: o texto cifrado é de fato armazenado no servidor do Relayium entre a criação e o download — só que é ilegível sem a chave que nunca saiu do seu navegador.",
       ],
     },
   ],
@@ -688,11 +688,11 @@ const pt = {
       },
       {
         q: "Quanto tempo os links duram?",
-        a: "Você escolhe ao criar o link: 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou pode configurá-lo para apagar após o primeiro download completo em vez de uma validade fixa. Depois desse ponto, o link para de funcionar.",
+        a: "Você escolhe ao criar o link: 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou pode configurá-lo para se autodestruir após o primeiro download completo em vez de uma validade fixa. Depois desse ponto, o link para de funcionar.",
       },
       {
-        q: "O arquivo realmente some depois de apagar após a leitura?",
-        a: "Apagar após a leitura é projetado para exatamente um download: assim que o destinatário termina de baixar o arquivo, o link para de funcionar para qualquer um que o abra depois, então ele não pode ser visto discretamente uma segunda vez.",
+        q: "O arquivo realmente some depois da autodestruição após a leitura?",
+        a: "A autodestruição após a leitura é projetada para exatamente um download: assim que o destinatário termina de baixar o arquivo, o link para de funcionar para qualquer um que o abra depois, então ele não pode ser visto discretamente uma segunda vez.",
       },
     ],
   },

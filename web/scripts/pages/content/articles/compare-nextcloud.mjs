@@ -101,7 +101,7 @@ const zh = {
       heading: "Nextcloud 做得好的地方",
       body: [
         "Nextcloud 是一整套自托管云套件：文件存储、桌面和移动端同步客户端、日历、联系人、办公套件、聊天，再加上庞大的应用生态。一旦搭建起来，它的使用体验就像私有的 Google Workspace——文件长期留在那里，跨设备自动同步，随时可用。",
-        "这和“发送一个文件”是完全不同的任务。当你想要的是数据的长期共享归宿——团队共享盘、相册库、家庭或公司长期存放文件的地方——Nextcloud 正是对的选择。",
+        "这和「发送一个文件」是完全不同的任务。当你想要的是数据的长期共享归宿——团队共享盘、相册库、家庭或公司长期存放文件的地方——Nextcloud 正是对的选择。",
       ],
     },
     {
@@ -116,7 +116,7 @@ const zh = {
       heading: "点对点直连传输，什么都不存储",
       body: [
         "Relayium 的实时模式通过加密的点对点通道直接在两台设备之间发送文件——Nextcloud 没有对应的功能，因为每一次 Nextcloud 分享都要先上传到你的服务器、再从服务器下载。X25519 密钥交换协商出用于 AES-256-GCM 的密钥，两台设备会显示一致的 6 位校验码（SAS）以排除中间人，每个文件都用 SHA-256 哈希做端到端校验。",
-        "同一网络下完全无需账号：在两台设备上打开 relayium.com，最多选 1,000 个文件，核对校验码，然后发送。跨网络用配对码发送则需要发送方登录——接收方始终无需账号。若连接中途断开，传输会断点续传而非从头再来。同一网络下文件在两台设备之间直接传输；跨网络时按设计经加密的 TURN 中继转发——中继只转发密文，从不持有密钥。",
+        "同一网络下完全无需账号：在两台设备上打开 relayium.com，最多选 1,000 个文件，核对校验码，然后发送。跨网络用配对码发送则需要发送方登录——接收方始终无需账号。若连接中途断开，传输会断点续传而非从头再来。同一网络下文件在两台设备之间直接传输；跨网络时刻意经由加密的 TURN 中继转发——中继只转发密文，从不持有密钥。",
       ],
     },
     {
@@ -174,40 +174,40 @@ const zh = {
 const ja = {
   title: "Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか",
   description:
-    "Relayium と Nextcloud を公平に比較。Nextcloud は長期保存に向く本格的な自己ホスト型クラウド基盤、Relayium は転送そのものに特化したツールです——P2P 直送、またはゼロ知識で暗号化される期限付きリンク、加えて軽量な単一コンテナのセルフホストも用意しています。",
+    "Relayium と Nextcloud を公平に比較。Nextcloud は長期保存に向く本格的なセルフホスト型クラウド基盤、Relayium は転送そのものに特化したツールです。P2P 直送、またはゼロ知識で暗号化される期限付きリンクに加え、軽量な単一コンテナのセルフホストも用意しています。",
   updatedLabel: "最終更新",
   lead: [
-    "Nextcloud は、セルフホストを Google Drive や Dropbox の本物の代替にしました。自分のファイル、あらゆる端末をまたぐ同期、自分のカレンダーと連絡先——すべてが自分の管理するドメインの下で動きます。これは正真正銘、強力なソフトウェアであり、ファイルの恒久的な置き場所が欲しいなら、Nextcloud はまさに適した道具です。",
-    "本記事はこの2つを公平に比較します。Nextcloud はデータを長期的に保存し同期し続けるために作られており、その守備範囲こそが強みですが、その分、実際のセットアップと運用コストも伴います。Web サーバー、データベース、PHP ランタイム、そしてコア本体とインストール済みアプリへの継続的なアップデートです。Relayium が解決するのはもっと狭い問題です。ファイルを1人から別の1人へ渡すこと——直接転送で何も保存しないか、期限付きのリンクを使うかのどちらかです。永続的なクラウドストレージが必要なら Nextcloud の方が向いています。ファイルを移動したいだけなら、Relayium の方が軽量です。",
+    "Nextcloud は、セルフホストを Google Drive や Dropbox の本物の代替にしました。自分のファイル、あらゆる端末をまたぐ同期、自分のカレンダーと連絡先。そのすべてが自分の管理するドメインの下で動きます。これは正真正銘、強力なソフトウェアであり、ファイルの恒久的な置き場所が欲しいなら、Nextcloud はまさに適した道具です。",
+    "本記事はこの2つを公平に比較します。Nextcloud はデータを長期的に保存し同期し続けるために作られており、その守備範囲こそが強みですが、その分、実際のセットアップと運用コストも伴います。Web サーバー、データベース、PHP ランタイム、そしてコア本体とインストール済みアプリへの継続的なアップデートです。Relayium が解決するのはもっと狭い問題です。ファイルを1人から別の1人へ渡すことです。直接転送で何も保存しないか、期限付きのリンクを使うかのどちらかです。永続的なクラウドストレージが必要なら Nextcloud の方が向いています。ファイルを移動したいだけなら、Relayium の方が軽量です。",
   ],
   sections: [
     {
       heading: "Nextcloud が優れている点",
       body: [
-        "Nextcloud は完結したセルフホスト型クラウドスイートです。デスクトップとモバイルの同期クライアントを備えたファイルストレージ、カレンダー、連絡先、オフィススイート、チャット、その上に大規模なアプリエコシステムが乗っています。一度立ち上げれば、プライベートな Google Workspace のように動作します——ファイルはそこに恒久的に置かれ、端末間で自動同期され、いつでも利用できます。",
-        "これは「ファイルを送る」こととは根本的に違う仕事です。データの恒久的で共有された置き場所——チーム共有ドライブ、写真ライブラリ、家庭や会社が長期的にファイルを保管する場所——が欲しいなら、Nextcloud が正しい選択です。",
+        "Nextcloud は完結したセルフホスト型クラウドスイートです。デスクトップとモバイルの同期クライアントを備えたファイルストレージ、カレンダー、連絡先、オフィススイート、チャット、その上に大規模なアプリエコシステムが乗っています。一度立ち上げれば、プライベートな Google Workspace のように動作します。ファイルはそこに恒久的に置かれ、端末間で自動同期され、いつでも利用できます。",
+        "これは「ファイルを送る」こととは根本的に違う仕事です。データの恒久的で共有された置き場所（チーム共有ドライブ、写真ライブラリ、家庭や会社が長期的にファイルを保管する場所）が欲しいなら、Nextcloud が正しい選択です。",
       ],
     },
     {
       heading: "違いはどこか：ストレージ基盤 vs 転送ツール",
       body: [
         "Nextcloud は多くのことをこなす分、それを運用するということは本格的なアプリケーション基盤を運用することを意味します。Web サーバー、データベース（MySQL、PostgreSQL、または SQLite）、PHP ランタイム、定期実行される cron ジョブ、そしてコア本体とインストールした各アプリへの継続的なアップデートです。得られるものを考えれば妥当な対価ですが、それは継続的な作業であり、保管するすべてのもののストレージ容量計画も自分で行うことになります。",
-        "Relayium はストレージ基盤になろうとはしません。ファイルを一箇所から別の場所へ移動すること——リアルタイムのピアツーピア、あるいは期限付きのリンク——に範囲を絞っています。セルフホスト時のサーバー側は単一のコンテナです。アプリを提供する1つの Go バイナリが、小さな SQLite データベースと、保存型リンクについては自身も読めない暗号化ブロブを保持します。このコマンドがセットアップのすべてで、任意のプロファイルを追加すればネットワークをまたぐ NAT 越え用の TURN リレーも加わります。ファイルを A から B へ渡すことだけが目的なら、運用し続けるものはずっと少なくて済みます。",
+        "Relayium はストレージ基盤になろうとはしません。ファイルを一箇所から別の場所へ移動すること（リアルタイムのピアツーピア、あるいは期限付きのリンク）に範囲を絞っています。セルフホスト時のサーバー側は単一のコンテナです。アプリを提供する1つの Go バイナリが、小さな SQLite データベースと、保存型リンクについては自身も読めない暗号化ブロブを保持します。このコマンドがセットアップのすべてで、任意のプロファイルを追加すればネットワークをまたぐ NAT 越え用の TURN リレーも加わります。ファイルを A から B へ渡すことだけが目的なら、運用し続けるものはずっと少なくて済みます。",
       ],
       code: ["docker compose up -d --build"],
     },
     {
       heading: "P2P 直送、何も保存されない",
       body: [
-        "Relayium のリアルタイムモードは暗号化されたピアツーピアのチャネルを通じてファイルを2台の端末間で直接送ります——Nextcloud にはこれに相当する機能がありません。すべての Nextcloud の共有は、まず自分のサーバーにアップロードされ、そこからダウンロードされるからです。X25519 の鍵交換が AES-256-GCM 用の鍵を導出し、両方の端末が一致する6桁の検証コード（SAS）を表示して中間者を排除し、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
-        "同一ネットワークならアカウントは一切不要です。両方の端末で relayium.com を開き、最大1,000ファイルを選び、コードを照合して送ります。ペアリングコードでネットワークをまたいで送る場合は送信側のサインインが必要です——受信側はどちらの場合もアカウント不要です。途中で接続が切れても、転送は最初からではなく再開されます。同一ネットワークならファイルは2台の端末のあいだを直接流れ、ネットワークをまたぐ場合は設計上、暗号化された TURN リレーを経由します——リレーが中継するのは暗号文だけで、鍵は持ちません。",
+        "Relayium のリアルタイムモードは暗号化されたピアツーピアのチャネルを通じてファイルを2台の端末間で直接送ります。Nextcloud にはこれに相当する機能がありません。すべての Nextcloud の共有は、まず自分のサーバーにアップロードされ、そこからダウンロードされるからです。X25519 の鍵交換が AES-256-GCM 用の鍵を導出し、両方の端末が一致する6桁の検証コード（SAS）を表示して中間者を排除し、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
+        "同一ネットワークならアカウントは一切不要です。両方の端末で relayium.com を開き、最大1,000ファイルを選び、コードを照合して送ります。ペアリングコードでネットワークをまたいで送る場合は送信側のサインインが必要です。受信側はどちらの場合もアカウント不要です。途中で接続が切れても、転送は最初からではなく再開されます。同一ネットワークならファイルは2台の端末のあいだを直接流れ、ネットワークをまたぐ場合は設計上、暗号化された TURN リレーを経由します。リレーが中継するのは暗号文だけで、鍵は持ちません。",
       ],
     },
     {
       heading: "受信側がオフラインのとき：ゼロ知識の保存リンク",
       body: [
-        "リアルタイム転送には双方が同時にオンラインである必要があり、ここは Nextcloud の常駐サーバーが本当に優れている点です。Relayium もこのケースをカバーします。プライバシーを犠牲にせずにです。ブラウザがランダムな AES-256-GCM 鍵を生成し、何も端末から出ていく前にそれでファイルを暗号化し、鍵は URL フラグメント——# の後の、ブラウザがサーバーに決して送らない部分——にだけ存在します。サーバーは復号できない暗号文だけを保存します。",
-        "こうした保存リンクの作成には送信側のサインインが必要です。受信側はダウンロードにアカウントが要りません。各リンクは1時間、1日、3日、7日、最長14日（プランによる）で期限切れになるよう設定でき、あるいは最初の完全なダウンロード後に消去するよう設定できます——Nextcloud の共有のような恒久的な置き場所ではなく、消えることを前提としています。",
+        "リアルタイム転送には双方が同時にオンラインである必要があり、ここは Nextcloud の常駐サーバーが本当に優れている点です。Relayium もこのケースをカバーします。プライバシーを犠牲にせずにです。ブラウザがランダムな AES-256-GCM 鍵を生成し、何も端末から出ていく前にそれでファイルを暗号化し、鍵は URL フラグメント（# の後の、ブラウザがサーバーに決して送らない部分）にだけ存在します。サーバーは復号できない暗号文だけを保存します。",
+        "こうした保存リンクの作成には送信側のサインインが必要です。受信側はダウンロードにアカウントが要りません。各リンクは1時間、1日、3日、7日、最長14日（プランによる）で期限切れになるよう設定でき、あるいは最初の完全なダウンロード後に消去するよう設定できます。Nextcloud の共有のような恒久的な置き場所ではなく、消えることを前提としています。",
       ],
     },
     {
@@ -215,11 +215,11 @@ const ja = {
       body: ["最も重要な違いを並べて示します。"],
       bullets: [
         "目的：Nextcloud は永続的で同期されたストレージのための完全なクラウド基盤、Relayium は直接転送や期限付きリンクに特化したツール。",
-        "ファイルの置き場所：Nextcloud は望む限りファイルをサーバーに保管する；Relayium のリアルタイムモードは何も保存せず、保存リンクは期限切れになるか1回のダウンロード後に消去される。",
-        "セルフホストの重さ：Nextcloud は Web サーバー、データベース、PHP ランタイム、継続的なアプリ更新が必要；Relayium のセルフホストは単一コンテナ（docker compose up -d --build）に加え、ネットワークをまたぐ転送用の任意の TURN リレー。",
-        "アカウント：Nextcloud はアクセスするすべてのユーザーにアカウントが必要；Relayium は同一ネットワークの転送にはアカウント不要で、ネットワークをまたぐペアリングや保存リンクは送信側のサインインだけが必要、受信側は決して不要。",
-        "暗号化：Relayium のリアルタイムモードは6桁の SAS コード付きのエンドツーエンド——同一ネットワークならサーバーに一切触れず、ネットワークをまたぐ場合もリレーが中継するのは鍵を持たない暗号文だけ；保存リンクはランダムな鍵が URL フラグメントだけに存在するゼロ知識。Nextcloud の共有は自分のサーバーへのアップロードとそこからのダウンロードを経由し、通信中は TLS で、保存時の暗号化は自分の設定次第で保護される。",
-        "費用と開放性：Relayium は無料で AGPL-3.0 ライセンス、github.com/relayium/relayium にある；Nextcloud のサーバーソフトウェアも無料でオープンソース（AGPL）だが、Nextcloud GmbH やパートナーによる有料のホスティングとサポートも利用できる。",
+        "ファイルの置き場所：Nextcloud は望む限りファイルをサーバーに保管します。Relayium のリアルタイムモードは何も保存せず、保存リンクは期限切れになるか1回のダウンロード後に消去されます。",
+        "セルフホストの重さ：Nextcloud は Web サーバー、データベース、PHP ランタイム、継続的なアプリ更新が必要です。Relayium のセルフホストは単一コンテナ（docker compose up -d --build）に加え、ネットワークをまたぐ転送用の任意の TURN リレーだけで済みます。",
+        "アカウント：Nextcloud はアクセスするすべてのユーザーにアカウントが必要です。Relayium は同一ネットワークの転送にはアカウント不要で、ネットワークをまたぐペアリングや保存リンクは送信側のサインインだけが必要、受信側は決して不要です。",
+        "暗号化：Relayium のリアルタイムモードは6桁の SAS コード付きのエンドツーエンド暗号化です。同一ネットワークならサーバーに一切触れず、ネットワークをまたぐ場合もリレーが中継するのは鍵を持たない暗号文だけで、保存リンクはランダムな鍵が URL フラグメントだけに存在するゼロ知識です。Nextcloud の共有は自分のサーバーへのアップロードとそこからのダウンロードを経由し、通信中は TLS で保護され、保存時の暗号化は自分の設定次第です。",
+        "費用と開放性：Relayium は無料で AGPL-3.0 ライセンス、github.com/relayium/relayium にあります。Nextcloud のサーバーソフトウェアも無料でオープンソース（AGPL）ですが、Nextcloud GmbH やパートナーによる有料のホスティングとサポートも利用できます。",
       ],
     },
   ],
@@ -232,7 +232,7 @@ const ja = {
       },
       {
         q: "Relayium は Nextcloud のようにファイルを保存しますか？",
-        a: "いいえ。リアルタイムモードでは何もどこにも保存されません——ファイルは2台の端末のあいだをストリーミングで流れ、サーバーに書き込まれることはありません。保存リンクは、期限切れ（1時間から最長14日、プランによる）になるか、バーン・アフター・リードで1回ダウンロードされるまでの間だけゼロ知識の暗号文を保持し、Nextcloud の共有のように無期限には保存されません。",
+        a: "いいえ。リアルタイムモードでは何もどこにも保存されません。ファイルは2台の端末のあいだをストリーミングで流れ、サーバーに書き込まれることはありません。保存リンクは、期限切れ（1時間から最長14日、プランによる）になるか、閲覧後削除で1回ダウンロードされるまでの間だけゼロ知識の暗号文を保持し、Nextcloud の共有のように無期限には保存されません。",
       },
       {
         q: "アカウントは必要ですか？",
@@ -244,12 +244,12 @@ const ja = {
       },
       {
         q: "Relayium は無料ですか？",
-        a: "はい——AGPL-3.0 ライセンスの無料オープンソースで、有料プランはありません。Nextcloud のコアサーバーソフトウェアも無料でオープンソースですが、Nextcloud GmbH による一部のホスティングとサポートは有料です。",
+        a: "はい。AGPL-3.0 ライセンスの無料オープンソースで、有料プランはありません。Nextcloud のコアサーバーソフトウェアも無料でオープンソースですが、Nextcloud GmbH による一部のホスティングとサポートは有料です。",
       },
     ],
   },
   cta: {
-    text: "ファイルを直接送るか、期限付きのゼロ知識リンクを共有しましょう——同じネットワークならクラウドストレージのアカウントは不要です。",
+    text: "ファイルを直接送るか、期限付きのゼロ知識リンクを共有しましょう。同じネットワークならクラウドストレージのアカウントは不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -258,10 +258,10 @@ const ja = {
 const ko = {
   title: "Relayium vs Nextcloud: 파일 전송에는 무엇을 써야 할까",
   description:
-    "Relayium과 Nextcloud를 공정하게 비교합니다. Nextcloud는 장기 저장에 적합한 완전한 자체 호스팅 클라우드 플랫폼이고, Relayium은 전송 자체에 집중한 도구입니다 — 직접 P2P 전송 또는 영지식으로 암호화된 만료 링크, 그리고 가벼운 단일 컨테이너 셀프 호스팅 옵션까지 제공합니다.",
+    "Relayium과 Nextcloud를 공정하게 비교합니다. Nextcloud는 장기 저장에 적합한 완전한 자체 호스팅 클라우드 플랫폼이고, Relayium은 전송 자체에 집중한 도구입니다 — 직접 P2P 전송 또는 영지식으로 암호화된 만료 링크, 그리고 가벼운 단일 컨테이너 자체 호스팅 옵션까지 제공합니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "Nextcloud는 셀프 호스팅을 Google Drive나 Dropbox의 진짜 대안으로 만들었습니다. 자신의 파일, 모든 기기에 걸친 동기화, 자신의 캘린더와 연락처까지 — 모두 자신이 통제하는 도메인 아래에서 돌아갑니다. 이는 정말로 강력한 소프트웨어이며, 파일의 영구적인 보금자리를 원한다면 Nextcloud가 딱 맞는 도구입니다.",
+    "Nextcloud는 자체 호스팅을 Google Drive나 Dropbox의 진짜 대안으로 만들었습니다. 자신의 파일, 모든 기기에 걸친 동기화, 자신의 캘린더와 연락처까지 — 모두 자신이 통제하는 도메인 아래에서 돌아갑니다. 이는 정말로 강력한 소프트웨어이며, 파일의 영구적인 보금자리를 원한다면 Nextcloud가 딱 맞는 도구입니다.",
     "이 글은 두 가지를 공정하게 비교합니다. Nextcloud는 데이터를 무기한 저장하고 동기화 상태로 유지하도록 만들어졌습니다 — 그 범위 자체가 강점이지만, 그만큼 실제 설치와 유지보수 비용도 따릅니다. 웹 서버, 데이터베이스, PHP 런타임, 그리고 코어와 설치한 앱들에 대한 지속적인 업데이트가 필요합니다. Relayium이 푸는 문제는 더 좁습니다. 파일을 한 사람에게서 다른 사람에게 전달하는 것 — 아무것도 저장하지 않는 직접 전송이거나, 만료되는 링크입니다. 지속적인 클라우드 저장이 필요하다면 Nextcloud가 더 맞고, 그냥 파일을 옮기고 싶다면 Relayium이 더 가볍습니다.",
   ],
   sections: [
@@ -276,7 +276,7 @@ const ko = {
       heading: "차이가 나는 지점: 저장 플랫폼 vs 전송 도구",
       body: [
         "Nextcloud는 하는 일이 많은 만큼, 이를 운영한다는 것은 진짜 애플리케이션 플랫폼을 운영한다는 뜻입니다. 웹 서버, 데이터베이스(MySQL, PostgreSQL, 또는 SQLite), PHP 런타임, 예약된 cron 작업, 그리고 코어와 설치한 각 앱에 대한 주기적인 업데이트가 필요합니다. 얻는 것을 생각하면 합당한 대가지만, 이는 지속적인 작업이며 보관하는 모든 것의 저장 용량 계획도 직접 해야 합니다.",
-        "Relayium은 저장 플랫폼이 되려고 하지 않습니다. 파일을 한 곳에서 다른 곳으로 옮기는 것 — 실시간 P2P이거나 만료되는 링크 — 에 범위를 좁혔습니다. 셀프 호스팅 시 서버 쪽은 단일 컨테이너입니다. 앱을 제공하는 하나의 Go 바이너리가 작은 SQLite 데이터베이스와, 저장형 링크를 위해 자신도 읽을 수 없는 암호화된 블롭을 보관합니다. 이 명령이 설치 작업의 전부이며, 선택적인 프로필을 추가하면 네트워크 간 NAT 통과용 TURN 릴레이도 붙습니다. 파일을 A에서 B로 옮기는 것만이 목적이라면, 운영하고 계속 업데이트할 것이 훨씬 적습니다.",
+        "Relayium은 저장 플랫폼이 되려고 하지 않습니다. 파일을 한 곳에서 다른 곳으로 옮기는 것 — 실시간 P2P이거나 만료되는 링크 — 에 범위를 좁혔습니다. 자체 호스팅 시 서버 쪽은 단일 컨테이너입니다. 앱을 제공하는 하나의 Go 바이너리가 작은 SQLite 데이터베이스와, 저장형 링크를 위해 자신도 읽을 수 없는 암호화된 블롭을 보관합니다. 이 명령이 설치 작업의 전부이며, 선택적인 프로필을 추가하면 네트워크 간 NAT 통과용 TURN 릴레이도 붙습니다. 파일을 A에서 B로 옮기는 것만이 목적이라면, 운영하고 계속 업데이트할 것이 훨씬 적습니다.",
       ],
       code: ["docker compose up -d --build"],
     },
@@ -291,19 +291,19 @@ const ko = {
       heading: "받는 쪽이 오프라인일 때: 영지식 저장 링크",
       body: [
         "실시간 전송은 양쪽이 동시에 접속해 있어야 하는데, 이 지점에서는 Nextcloud의 상시 구동 서버가 실질적으로 유리합니다. Relayium도 프라이버시를 포기하지 않고 이 경우를 처리합니다. 브라우저가 무작위 AES-256-GCM 키를 생성해, 무엇이든 기기를 떠나기 전에 그 키로 파일을 암호화하고, 키는 URL 프래그먼트 — # 뒤의, 브라우저가 서버로 결코 보내지 않는 부분 — 에만 존재합니다. 서버는 복호화할 수 없는 암호문만 저장합니다.",
-        "이런 저장 링크 생성에는 보내는 쪽의 로그인이 필요합니다. 받는 쪽은 다운로드에 계정이 필요 없습니다. 각 링크는 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 뒤 만료되도록 설정하거나, 첫 완전한 다운로드 후 소각되도록 설정할 수 있습니다 — Nextcloud 공유처럼 영구적인 보금자리가 아니라, 사라지는 것이 원래 목적입니다.",
+        "이런 저장 링크 생성에는 보내는 쪽의 로그인이 필요합니다. 받는 쪽은 다운로드에 계정이 필요 없습니다. 각 링크는 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 뒤 만료되도록 설정하거나, 열람 후 삭제로 첫 완전한 다운로드 뒤 사라지도록 설정할 수 있습니다. Nextcloud 공유처럼 영구적인 보금자리가 아니라, 사라지는 것이 원래 목적입니다.",
       ],
     },
     {
       heading: "기능 한눈에 비교",
       body: ["가장 중요한 차이를 나란히 정리하면:"],
       bullets: [
-        "목적: Nextcloud는 지속적이고 동기화된 저장을 위한 완전한 클라우드 플랫폼; Relayium은 직접 전송이나 만료 링크에 집중한 도구.",
-        "파일이 놓이는 곳: Nextcloud는 원하는 만큼 파일을 서버에 보관; Relayium의 실시간 모드는 아무것도 저장하지 않고, 저장 링크는 만료되거나 한 번 다운로드된 후 소각됨.",
-        "셀프 호스팅 부담: Nextcloud는 웹 서버, 데이터베이스, PHP 런타임, 지속적인 앱 업데이트가 필요; Relayium의 셀프 호스팅은 단일 컨테이너(docker compose up -d --build)에, 네트워크 간 전송용 선택적 TURN 릴레이만 추가.",
-        "계정: Nextcloud는 접근하는 모든 사용자에게 계정이 필요; Relayium은 같은 네트워크 전송에는 계정이 필요 없고, 네트워크 간 페어링이나 저장 링크는 보내는 쪽의 로그인만 필요하며, 받는 쪽은 결코 필요 없음.",
-        "암호화: Relayium의 실시간 모드는 6자리 SAS 코드가 있는 종단간 암호화 — 같은 네트워크에서는 서버를 전혀 거치지 않고, 네트워크를 넘을 때도 릴레이가 전달하는 것은 키가 없는 암호문뿐; 저장 링크는 키가 URL 프래그먼트에만 존재하는 영지식. Nextcloud 공유는 서버에 업로드되고 서버에서 다운로드되며, 전송 중에는 TLS로, 저장 시 암호화는 직접 설정한 대로 보호됨.",
-        "비용과 개방성: Relayium은 무료이며 AGPL-3.0 라이선스로 github.com/relayium/relayium에 있음; Nextcloud의 서버 소프트웨어도 무료 오픈소스(AGPL)이지만, Nextcloud GmbH와 파트너사가 제공하는 유료 호스팅과 지원도 이용할 수 있음.",
+        "목적: Nextcloud는 지속적이고 동기화된 저장을 위한 완전한 클라우드 플랫폼입니다. Relayium은 직접 전송이나 만료 링크에 집중한 도구입니다.",
+        "파일이 놓이는 곳: Nextcloud는 원하는 만큼 파일을 서버에 보관합니다. Relayium의 실시간 모드는 아무것도 저장하지 않고, 저장 링크는 만료되거나 한 번 다운로드된 뒤 열람 후 삭제됩니다.",
+        "자체 호스팅 부담: Nextcloud는 웹 서버, 데이터베이스, PHP 런타임, 지속적인 앱 업데이트가 필요합니다. Relayium의 자체 호스팅은 단일 컨테이너(docker compose up -d --build)에 네트워크 간 전송용 선택적 TURN 릴레이만 더하면 됩니다.",
+        "계정: Nextcloud는 접근하는 모든 사용자에게 계정이 필요합니다. Relayium은 같은 네트워크 전송에는 계정이 필요 없고, 네트워크 간 페어링이나 저장 링크는 보내는 쪽의 로그인만 필요하며, 받는 쪽은 결코 필요 없습니다.",
+        "암호화: Relayium의 실시간 모드는 6자리 SAS 코드가 있는 종단간 암호화입니다. 같은 네트워크에서는 서버를 전혀 거치지 않고, 네트워크를 넘을 때도 릴레이가 전달하는 것은 키가 없는 암호문뿐이며, 저장 링크는 키가 URL 프래그먼트에만 존재하는 영지식입니다. Nextcloud 공유는 서버에 업로드되고 서버에서 다운로드되며, 전송 중에는 TLS로 보호되고 저장 시 암호화는 직접 설정한 대로입니다.",
+        "비용과 개방성: Relayium은 무료이며 AGPL-3.0 라이선스로 github.com/relayium/relayium에 있습니다. Nextcloud의 서버 소프트웨어도 무료 오픈소스(AGPL)이지만, Nextcloud GmbH와 파트너사가 제공하는 유료 호스팅과 지원도 이용할 수 있습니다.",
       ],
     },
   ],
@@ -316,14 +316,14 @@ const ko = {
       },
       {
         q: "Relayium도 Nextcloud처럼 파일을 저장하나요?",
-        a: "아니요. 실시간 모드에서는 아무것도 어디에도 저장되지 않습니다 — 파일은 두 기기 사이를 스트리밍으로 흐르며 서버에 기록되지 않습니다. 저장 링크는 만료되거나(1시간~최대 14일, 요금제에 따라 다름) 소각형 다운로드로 한 번 받아질 때까지만 영지식 암호문을 보관하며, Nextcloud 공유처럼 무기한 보관되지 않습니다.",
+        a: "아니요. 실시간 모드에서는 아무것도 어디에도 저장되지 않습니다 — 파일은 두 기기 사이를 스트리밍으로 흐르며 서버에 기록되지 않습니다. 저장 링크는 만료되거나(1시간~최대 14일, 요금제에 따라 다름) 열람 후 삭제로 한 번 받아질 때까지만 영지식 암호문을 보관하며, Nextcloud 공유처럼 무기한 보관되지 않습니다.",
       },
       {
         q: "계정이 필요한가요?",
         a: "같은 네트워크에서는 필요 없습니다. 페어링 코드로 네트워크를 넘어 보내거나 저장 링크를 만들 때는 보내는 쪽의 로그인이 필요합니다. 받는 쪽은 어느 경우든 계정이 필요 없습니다. 반면 Nextcloud는 접근하는 모든 사용자에게 계정(또는 계정 보유자가 만든 공유 링크)이 필요합니다.",
       },
       {
-        q: "Relayium도 셀프 호스팅할 수 있나요?",
+        q: "Relayium도 자체 호스팅할 수 있나요?",
         a: "네. Nextcloud의 여러 서비스로 이루어진 구성과 달리, Relayium의 서버는 단일 컨테이너입니다. docker compose 명령 하나로 전체 시스템이 구동되며, 네트워크 간 NAT 통과용 선택적 TURN 릴레이 프로필도 있습니다.",
       },
       {
@@ -340,7 +340,7 @@ const ko = {
 };
 
 const de = {
-  title: "Relayium vs. Nextcloud zum Versenden von Dateien",
+  title: "Relayium vs. Nextcloud: Dateien versenden",
   description:
     "Ein ehrlicher Vergleich von Relayium und Nextcloud. Nextcloud ist eine vollwertige selbstgehostete Cloud-Plattform für dauerhafte Speicherung; Relayium ist ein fokussiertes Übertragungstool — direktes P2P oder ein Zero-Knowledge-Link mit Ablauf, plus eine schlanke Ein-Container-Selfhosting-Option.",
   updatedLabel: "Zuletzt aktualisiert",
@@ -367,8 +367,8 @@ const de = {
     {
       heading: "Direkte P2P-Übertragungen, nichts wird gespeichert",
       body: [
-        "Relayiums Echtzeitmodus sendet Dateien direkt zwischen zwei Geräten über einen verschlüsselten Peer-to-Peer-Kanal — dafür gibt es bei Nextcloud kein Äquivalent, weil jede Nextcloud-Freigabe zuerst auf deinen Server hoch- und von dort heruntergeladen wird. Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM ab, beide Geräte zeigen einen übereinstimmenden sechsstelligen Prüfcode (SAS), um einen Man-in-the-Middle auszuschließen, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft.",
-        "Im selben Netzwerk braucht das überhaupt kein Konto: Öffne relayium.com auf beiden Geräten, wähle bis zu 1.000 Dateien, prüfe den Code und sende. Beim Senden über Netzwerke hinweg per Pairing-Code muss sich der Absender anmelden — der Empfänger braucht in beiden Fällen kein Konto. Bricht eine Verbindung mittendrin ab, wird die Übertragung fortgesetzt statt neu gestartet. Im selben Netzwerk laufen die Dateien direkt zwischen den beiden Geräten; über Netzwerkgrenzen hinweg läuft die Übertragung konstruktionsbedingt über ein verschlüsseltes TURN-Relay — es leitet nur Chiffretext weiter und besitzt nie den Schlüssel.",
+        "Relayiums Echtzeitmodus sendet Dateien direkt zwischen zwei Geräten über einen verschlüsselten Peer-to-Peer-Kanal — dafür gibt es bei Nextcloud kein Äquivalent, weil jede Nextcloud-Freigabe zuerst auf deinen Server hoch- und von dort heruntergeladen wird. Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM ab, beide Geräte zeigen einen übereinstimmenden sechsstelligen Verifizierungscode (SAS), um einen Man-in-the-Middle auszuschließen, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft.",
+        "Im selben Netzwerk braucht das überhaupt kein Konto: Öffne relayium.com auf beiden Geräten, wähle bis zu 1.000 Dateien, prüfe den Code und sende. Beim Senden über Netzwerke hinweg per Pairing-Code muss sich der Absender anmelden — der Empfänger braucht in beiden Fällen kein Konto. Bricht eine Verbindung mittendrin ab, wird die Übertragung fortgesetzt statt neu gestartet. Im selben Netzwerk laufen die Dateien direkt zwischen den beiden Geräten; über Netzwerkgrenzen hinweg läuft die Übertragung von Grund auf über ein verschlüsseltes TURN-Relay — es leitet nur Chiffretext weiter und besitzt nie den Schlüssel.",
       ],
     },
     {
@@ -426,25 +426,25 @@ const de = {
 const fr = {
   title: "Relayium vs Nextcloud pour l'envoi de fichiers",
   description:
-    "Un comparatif honnête de Relayium et Nextcloud. Nextcloud est une plateforme cloud auto-hébergée complète pour un stockage durable ; Relayium est un outil focalisé sur le transfert — P2P direct ou lien à divulgation nulle qui expire, avec une option d'auto-hébergement légère en un seul conteneur.",
+    "Un comparatif honnête de Relayium et Nextcloud. Nextcloud est une plateforme cloud auto-hébergée complète pour un stockage durable ; Relayium est un outil focalisé sur le transfert — P2P direct ou lien à divulgation nulle qui expire, avec une option d'auto-hébergement légère en un seul conteneur.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Nextcloud a fait de l'auto-hébergement une vraie alternative à Google Drive ou Dropbox : vos propres fichiers, une synchronisation sur tous vos appareils, votre propre calendrier et vos contacts, le tout sous un domaine que vous contrôlez. C'est un logiciel véritablement puissant, et si ce que vous voulez, c'est un foyer permanent pour vos fichiers, Nextcloud est le bon outil.",
-    "Cet article compare les deux équitablement. Nextcloud est conçu pour stocker vos données indéfiniment et les garder synchronisées — cette portée est sa force, et elle s'accompagne d'une vraie mise en place et d'une vraie maintenance : un serveur web, une base de données, un environnement PHP, et des mises à jour continues pour le cœur et les applications installées. Relayium résout un problème plus étroit : faire passer un fichier d'une personne à une autre, soit directement sans rien stocker du tout, soit via un lien qui expire. Si vous avez besoin d'un stockage cloud durable, Nextcloud convient mieux. Si vous voulez juste déplacer un fichier, Relayium est plus léger.",
+    "Nextcloud a fait de l'auto-hébergement une vraie alternative à Google Drive ou Dropbox : vos propres fichiers, une synchronisation sur tous vos appareils, votre propre calendrier et vos contacts, le tout sous un domaine que vous contrôlez. C'est un logiciel véritablement puissant, et si ce que vous voulez, c'est un foyer permanent pour vos fichiers, Nextcloud est le bon outil.",
+    "Cet article compare les deux équitablement. Nextcloud est conçu pour stocker vos données indéfiniment et les garder synchronisées — cette portée est sa force, et elle s'accompagne d'une vraie mise en place et d'une vraie maintenance : un serveur web, une base de données, un environnement PHP, et des mises à jour continues pour le cœur et les applications installées. Relayium résout un problème plus étroit : faire passer un fichier d'une personne à une autre, soit directement sans rien stocker du tout, soit via un lien qui expire. Si vous avez besoin d'un stockage cloud durable, Nextcloud convient mieux. Si vous voulez juste déplacer un fichier, Relayium est plus léger.",
   ],
   sections: [
     {
       heading: "Ce que Nextcloud fait bien",
       body: [
-        "Nextcloud est une suite cloud auto-hébergée complète : stockage de fichiers avec des clients de synchronisation sur ordinateur et mobile, calendrier, contacts, une suite bureautique, un chat, et par-dessus tout cela un vaste écosystème d'applications. Une fois en place, il se comporte comme un Google Workspace privé — les fichiers y restent en permanence, se synchronisent automatiquement entre appareils, et restent disponibles à tout moment.",
-        "C'est un travail fondamentalement différent d'envoyer un fichier. Nextcloud est le bon choix quand vous voulez un foyer permanent et partagé pour vos données : un lecteur d'équipe, une photothèque, un endroit où votre foyer ou votre entreprise conserve des fichiers sur le long terme.",
+        "Nextcloud est une suite cloud auto-hébergée complète : stockage de fichiers avec des clients de synchronisation sur ordinateur et mobile, calendrier, contacts, une suite bureautique, un chat, et par-dessus tout cela un vaste écosystème d'applications. Une fois en place, il se comporte comme un Google Workspace privé — les fichiers y restent en permanence, se synchronisent automatiquement entre appareils, et restent disponibles à tout moment.",
+        "C'est un travail fondamentalement différent d'envoyer un fichier. Nextcloud est le bon choix quand vous voulez un foyer permanent et partagé pour vos données : un lecteur d'équipe, une photothèque, un endroit où votre foyer ou votre entreprise conserve des fichiers sur le long terme.",
       ],
     },
     {
-      heading: "Là où ils diffèrent : plateforme de stockage vs outil de transfert",
+      heading: "Là où ils diffèrent : plateforme de stockage vs outil de transfert",
       body: [
-        "Comme Nextcloud fait tant de choses, le faire tourner signifie exploiter une véritable plateforme applicative : un serveur web, une base de données (MySQL, PostgreSQL ou SQLite), un environnement PHP, des tâches cron planifiées, et des mises à jour périodiques du cœur et de chaque application installée. C'est un prix raisonnable pour tout ce que vous obtenez, mais c'est un travail continu, et c'est à vous de planifier la capacité de stockage pour tout ce que vous y conservez.",
-        "Relayium n'essaie pas d'être une plateforme de stockage. Il se limite à déplacer des fichiers d'un endroit à un autre — pair-à-pair en temps réel, ou un lien qui expire. Son serveur auto-hébergé est un seul conteneur : un binaire Go qui sert l'application et conserve une petite base SQLite plus, pour les liens stockés, des blobs chiffrés qu'il ne peut pas lire lui-même. Cette commande constitue toute l'installation ; un profil optionnel ajoute un relais TURN pour le NAT traversal entre réseaux différents. Si tout ce dont vous avez besoin, c'est de faire passer un fichier de A à B, il y a beaucoup moins à faire tourner et à maintenir à jour.",
+        "Comme Nextcloud fait tant de choses, le faire tourner signifie exploiter une véritable plateforme applicative : un serveur web, une base de données (MySQL, PostgreSQL ou SQLite), un environnement PHP, des tâches cron planifiées, et des mises à jour périodiques du cœur et de chaque application installée. C'est un prix raisonnable pour tout ce que vous obtenez, mais c'est un travail continu, et c'est à vous de planifier la capacité de stockage pour tout ce que vous y conservez.",
+        "Relayium n'essaie pas d'être une plateforme de stockage. Il se limite à déplacer des fichiers d'un endroit à un autre — pair-à-pair en temps réel, ou un lien qui expire. Son serveur auto-hébergé est un seul conteneur : un binaire Go qui sert l'application et conserve une petite base SQLite plus, pour les liens stockés, des blobs chiffrés qu'il ne peut pas lire lui-même. Cette commande constitue toute l'installation ; un profil optionnel ajoute un relais TURN pour le NAT traversal entre réseaux différents. Si tout ce dont vous avez besoin, c'est de faire passer un fichier de A à B, il y a beaucoup moins à faire tourner et à maintenir à jour.",
       ],
       code: ["docker compose up -d --build"],
     },
@@ -452,26 +452,26 @@ const fr = {
       heading: "Transferts P2P directs, rien n'est stocké",
       body: [
         "Le mode temps réel de Relayium envoie les fichiers directement entre deux appareils via un canal pair-à-pair chiffré — Nextcloud n'a pas d'équivalent, puisque chaque partage Nextcloud est d'abord téléversé sur votre serveur puis téléchargé depuis celui-ci. Un échange de clés X25519 dérive une clé pour AES-256-GCM, les deux appareils affichent un code de vérification à 6 chiffres identique (SAS) pour écarter un homme du milieu, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256.",
-        "Sur le même réseau, cela ne demande aucun compte du tout : ouvrez relayium.com sur les deux appareils, choisissez jusqu'à 1 000 fichiers, vérifiez le code, et envoyez. Envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte. Si une connexion tombe en cours de route, le transfert reprend au lieu de recommencer. Sur le même réseau, les fichiers passent directement d'un appareil à l'autre ; entre réseaux différents, le transfert emprunte par conception un relais TURN chiffré — il ne fait transiter que du texte chiffré et ne détient jamais la clé.",
+        "Sur le même réseau, cela ne demande aucun compte du tout : ouvrez relayium.com sur les deux appareils, choisissez jusqu'à 1 000 fichiers, vérifiez le code, et envoyez. Envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte. Si une connexion tombe en cours de route, le transfert reprend au lieu de recommencer. Sur le même réseau, les fichiers passent directement d'un appareil à l'autre ; entre réseaux différents, le transfert emprunte par conception un relais TURN chiffré — il ne fait transiter que du texte chiffré et ne détient jamais la clé.",
       ],
     },
     {
-      heading: "Quand le destinataire est hors ligne : les liens stockés à divulgation nulle",
+      heading: "Quand le destinataire est hors ligne : les liens stockés à divulgation nulle",
       body: [
-        "Le transfert en temps réel exige que les deux soient en ligne en même temps, et c'est là que le serveur toujours actif de Nextcloud a un vrai avantage. Relayium couvre aussi ce cas, sans renoncer à la confidentialité : votre navigateur génère une clé AES-256-GCM aléatoire, chiffre les fichiers avec avant que quoi que ce soit ne quitte votre appareil, et la clé ne vit que dans le fragment de l'URL — la partie après le #, que les navigateurs n'envoient jamais à un serveur. Le serveur ne stocke qu'un texte chiffré qu'il ne peut pas déchiffrer.",
-        "Créer un lien stocké exige que l'expéditeur se connecte ; le destinataire n'a besoin d'aucun compte pour télécharger. Chaque lien peut être réglé pour expirer après 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre, ou pour se détruire après le premier téléchargement complet — ce n'est pas un foyer permanent pour le fichier comme un partage Nextcloud, il est fait pour disparaître.",
+        "Le transfert en temps réel exige que les deux soient en ligne en même temps, et c'est là que le serveur toujours actif de Nextcloud a un vrai avantage. Relayium couvre aussi ce cas, sans renoncer à la confidentialité : votre navigateur génère une clé AES-256-GCM aléatoire, chiffre les fichiers avec avant que quoi que ce soit ne quitte votre appareil, et la clé ne vit que dans le fragment de l'URL — la partie après le #, que les navigateurs n'envoient jamais à un serveur. Le serveur ne stocke qu'un texte chiffré qu'il ne peut pas déchiffrer.",
+        "Créer un lien stocké exige que l'expéditeur se connecte ; le destinataire n'a besoin d'aucun compte pour télécharger. Chaque lien peut être réglé pour expirer après 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre, ou pour se détruire après le premier téléchargement complet — ce n'est pas un foyer permanent pour le fichier comme un partage Nextcloud, il est fait pour disparaître.",
       ],
     },
     {
       heading: "Comparatif des fonctions en un coup d'œil",
-      body: ["Les différences qui comptent le plus, côte à côte :"],
+      body: ["Les différences qui comptent le plus, côte à côte :"],
       bullets: [
-        "But : Nextcloud est une plateforme cloud complète pour un stockage durable et synchronisé ; Relayium est un outil focalisé sur le transfert direct ou un lien qui expire.",
-        "Où résident les fichiers : Nextcloud garde vos fichiers sur le serveur aussi longtemps que vous le voulez ; le mode temps réel de Relayium ne les stocke jamais du tout, et les liens stockés expirent ou se détruisent après un téléchargement.",
-        "Empreinte d'auto-hébergement : Nextcloud a besoin d'un serveur web, d'une base de données, d'un environnement PHP et de mises à jour d'applications continues ; l'auto-hébergement de Relayium est un seul conteneur (docker compose up -d --build) plus un relais TURN optionnel pour les transferts entre réseaux différents.",
-        "Comptes : Nextcloud exige un compte pour chaque utilisateur qui y accède ; Relayium n'en exige aucun pour les transferts sur le même réseau, seul l'expéditeur se connecte pour l'appairage entre réseaux différents ou les liens stockés, et les destinataires n'en ont jamais besoin.",
-        "Chiffrement : le mode temps réel de Relayium est de bout en bout avec un code SAS à 6 chiffres — sur le même réseau il ne touche aucun serveur, et entre réseaux le relais ne fait transiter que du texte chiffré dont il n'a pas la clé ; les liens stockés sont à divulgation nulle avec une clé qui ne quitte jamais le fragment de l'URL. Les partages Nextcloud sont téléversés sur votre serveur puis téléchargés depuis celui-ci, protégés par TLS en transit et par le chiffrement au repos que vous configurez vous-même.",
-        "Coût et ouverture : Relayium est gratuit et sous licence AGPL-3.0 sur github.com/relayium/relayium ; le logiciel serveur de Nextcloud est lui aussi gratuit et open source (AGPL), avec de l'hébergement et du support payants disponibles auprès de Nextcloud GmbH et de partenaires.",
+        "But : Nextcloud est une plateforme cloud complète pour un stockage durable et synchronisé ; Relayium est un outil focalisé sur le transfert direct ou un lien qui expire.",
+        "Où résident les fichiers : Nextcloud garde vos fichiers sur le serveur aussi longtemps que vous le voulez ; le mode temps réel de Relayium ne les stocke jamais du tout, et les liens stockés expirent ou se détruisent après un téléchargement.",
+        "Empreinte d'auto-hébergement : Nextcloud a besoin d'un serveur web, d'une base de données, d'un environnement PHP et de mises à jour d'applications continues ; l'auto-hébergement de Relayium est un seul conteneur (docker compose up -d --build) plus un relais TURN optionnel pour les transferts entre réseaux différents.",
+        "Comptes : Nextcloud exige un compte pour chaque utilisateur qui y accède ; Relayium n'en exige aucun pour les transferts sur le même réseau, seul l'expéditeur se connecte pour l'appairage entre réseaux différents ou les liens stockés, et les destinataires n'en ont jamais besoin.",
+        "Chiffrement : le mode temps réel de Relayium est de bout en bout avec un code SAS à 6 chiffres — sur le même réseau il ne touche aucun serveur, et entre réseaux le relais ne fait transiter que du texte chiffré dont il n'a pas la clé ; les liens stockés sont à divulgation nulle avec une clé qui ne quitte jamais le fragment de l'URL. Les partages Nextcloud sont téléversés sur votre serveur puis téléchargés depuis celui-ci, protégés par TLS en transit et par le chiffrement au repos que vous configurez vous-même.",
+        "Coût et ouverture : Relayium est gratuit et sous licence AGPL-3.0 sur github.com/relayium/relayium ; le logiciel serveur de Nextcloud est lui aussi gratuit et open source (AGPL), avec de l'hébergement et du support payants disponibles auprès de Nextcloud GmbH et de partenaires.",
       ],
     },
   ],
@@ -479,24 +479,24 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Devrais-je utiliser Nextcloud plutôt que Relayium ?",
-        a: "Si vous voulez un foyer permanent et synchronisé pour vos fichiers — photos, documents, un lecteur d'équipe partagé —, oui, c'est exactement pour cela que Nextcloud a été conçu. Relayium ne le remplace pas ; il sert la tâche plus étroite de faire passer un fichier d'une personne à une autre, rapidement et en privé.",
+        q: "Devrais-je utiliser Nextcloud plutôt que Relayium ?",
+        a: "Si vous voulez un foyer permanent et synchronisé pour vos fichiers — photos, documents, un lecteur d'équipe partagé —, oui, c'est exactement pour cela que Nextcloud a été conçu. Relayium ne le remplace pas ; il sert la tâche plus étroite de faire passer un fichier d'une personne à une autre, rapidement et en privé.",
       },
       {
-        q: "Relayium stocke-t-il mes fichiers comme Nextcloud ?",
+        q: "Relayium stocke-t-il mes fichiers comme Nextcloud ?",
         a: "Non. En mode temps réel, rien n'est stocké nulle part — le fichier circule en flux entre les deux appareils et n'est jamais écrit sur un serveur. Les liens stockés ne conservent un texte chiffré à divulgation nulle que jusqu'à leur expiration (1 heure à 14 jours maximum, selon votre offre) ou jusqu'à un unique téléchargement avec destruction après lecture, pas indéfiniment comme un partage Nextcloud.",
       },
       {
-        q: "Ai-je besoin d'un compte ?",
-        a: "Sur le même réseau, non. Envoyer entre réseaux différents avec un code d'appairage, ou créer un lien stocké, exige que l'expéditeur se connecte ; le destinataire n'a jamais besoin de compte. Nextcloud exige quant à lui un compte (ou un lien de partage créé par un compte) pour chaque utilisateur qui y accède.",
+        q: "Ai-je besoin d'un compte ?",
+        a: "Sur le même réseau, non. Envoyer entre réseaux différents avec un code d'appairage, ou créer un lien stocké, exige que l'expéditeur se connecte ; le destinataire n'a jamais besoin de compte. Nextcloud exige quant à lui un compte (ou un lien de partage créé par un compte) pour chaque utilisateur qui y accède.",
       },
       {
-        q: "Puis-je aussi auto-héberger Relayium ?",
-        a: "Oui. Contrairement à la pile multi-services de Nextcloud, le serveur de Relayium est un seul conteneur : une seule commande docker compose fait tourner tout le système, avec un profil de relais TURN optionnel pour le NAT traversal entre réseaux différents.",
+        q: "Puis-je aussi auto-héberger Relayium ?",
+        a: "Oui. Contrairement à la pile multi-services de Nextcloud, le serveur de Relayium est un seul conteneur : une seule commande docker compose fait tourner tout le système, avec un profil de relais TURN optionnel pour le NAT traversal entre réseaux différents.",
       },
       {
-        q: "Relayium est-il gratuit ?",
-        a: "Oui — gratuit et open source sous licence AGPL-3.0, sans offre payante. Le logiciel serveur cœur de Nextcloud est lui aussi gratuit et open source ; certaines options d'hébergement et de support de Nextcloud GmbH sont payantes.",
+        q: "Relayium est-il gratuit ?",
+        a: "Oui — gratuit et open source sous licence AGPL-3.0, sans offre payante. Le logiciel serveur cœur de Nextcloud est lui aussi gratuit et open source ; certaines options d'hébergement et de support de Nextcloud GmbH sont payantes.",
       },
     ],
   },
@@ -513,49 +513,49 @@ const ar = {
     "مقارنة صادقة بين Relayium و Nextcloud. إن Nextcloud منصة سحابية كاملة ذاتية الاستضافة للتخزين الدائم؛ أما Relayium فأداة نقل مركّزة — نقل مباشر من الند للند أو رابط معرفة صفرية ينتهي، مع استضافة ذاتية خفيفة بحاوية واحدة.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "حوّل Nextcloud الاستضافة الذاتية إلى بديل حقيقي عن Google Drive أو Dropbox: ملفاتك أنت، ومزامنتك أنت عبر كل جهاز، وتقويمك وجهات اتصالك أنت، كلها تحت نطاق تتحكم فيه. إنه برنامج قوي فعلاً، وإن كان ما تريده بيتاً دائماً لملفاتك، فإن Nextcloud هو الأداة المناسبة للمهمة.",
-    "يقارن هذا المقال الاثنين بإنصاف. بُني Nextcloud لتخزين بياناتك إلى أجل غير مسمى وإبقائها متزامنة — هذا النطاق هو قوّته، ويأتي بإعداد وصيانة حقيقيين: خادم ويب، وقاعدة بيانات، وبيئة تشغيل PHP، وتحديثات مستمرة للمنصة وتطبيقاتها. يحلّ Relayium مشكلة أضيق: إيصال ملف من شخص إلى آخر، إما مباشرة بلا تخزين أي شيء إطلاقاً، أو عبر رابط ينتهي. إن كنت بحاجة إلى تخزين سحابي دائم، فإن Nextcloud أنسب. وإن كنت تريد فقط نقل ملف، فإن Relayium أخفّ.",
+    "حوّل Nextcloud الاستضافة الذاتية إلى بديل حقيقي عن Google Drive أو Dropbox: ملفاتك أنت، ومزامنتك أنت عبر كل جهاز، وتقويمك وجهات اتصالك أنت، كلها تحت نطاق تتحكم فيه. إنه برنامج قوي فعلًا، وإن كان ما تريده بيتًا دائمًا لملفاتك، فإن Nextcloud هو الأداة المناسبة للمهمة.",
+    "يقارن هذا المقال الاثنين بإنصاف. بُني Nextcloud لتخزين بياناتك إلى أجل غير مسمى وإبقائها متزامنة — هذا النطاق هو قوّته، ويأتي بإعداد وصيانة حقيقيين: خادم ويب، وقاعدة بيانات، وبيئة تشغيل PHP، وتحديثات مستمرة للمنصة وتطبيقاتها. يحلّ Relayium مشكلة أضيق: إيصال ملف من شخص إلى آخر، إما مباشرة بلا تخزين أي شيء إطلاقًا، أو عبر رابط ينتهي. إن كنت بحاجة إلى تخزين سحابي دائم، فإن Nextcloud أنسب. وإن كنت تريد فقط نقل ملف، فإن Relayium أخفّ.",
   ],
   sections: [
     {
       heading: "ما يبرع فيه Nextcloud",
       body: [
-        "إن Nextcloud حزمة سحابية ذاتية الاستضافة كاملة: تخزين ملفات مع عملاء مزامنة لسطح المكتب والجوال، وتقاويم، وجهات اتصال، وحزمة مكتبية، ودردشة، ومنظومة تطبيقات واسعة فوق ذلك. متى شُغِّل، تصرّف كأنه Google Workspace خاص — تعيش الملفات هناك بشكل دائم، وتتزامن تلقائياً عبر الأجهزة، وتبقى متاحة متى احتجتها.",
-        "هذه مهمة مختلفة فعلاً عن إرسال ملف. إن Nextcloud هو الخيار الصحيح حين تريد بيتاً دائماً ومشتركاً لبياناتك: قرص فريق، أو مكتبة صور، أو مكان يحتفظ فيه بيتك أو شركتك بالملفات على المدى الطويل.",
+        "إن Nextcloud حزمة سحابية ذاتية الاستضافة كاملة: تخزين ملفات مع عملاء مزامنة لسطح المكتب والجوال، وتقاويم، وجهات اتصال، وحزمة مكتبية، ودردشة، ومنظومة تطبيقات واسعة فوق ذلك. متى شُغِّل، تصرّف كأنه Google Workspace خاص — تعيش الملفات هناك بشكل دائم، وتتزامن تلقائيًا عبر الأجهزة، وتبقى متاحة متى احتجتها.",
+        "هذه مهمة مختلفة فعلًا عن إرسال ملف. إن Nextcloud هو الخيار الصحيح حين تريد بيتًا دائمًا ومشتركًا لبياناتك: قرص فريق، أو مكتبة صور، أو مكان يحتفظ فيه بيتك أو شركتك بالملفات على المدى الطويل.",
       ],
     },
     {
       heading: "أين يختلفان: منصة تخزين مقابل أداة نقل",
       body: [
         "لأن Nextcloud يفعل الكثير، فإن تشغيله يعني تشغيل منصة تطبيقات حقيقية: خادم ويب، وقاعدة بيانات (MySQL أو PostgreSQL أو SQLite)، وبيئة تشغيل PHP، ومهام cron مجدولة، وتحديثات دورية للنواة ولأي تطبيقات ثبّتها. هذا ثمن عادل مقابل كل ما تحصل عليه، لكنه عمل مستمر، وأنت من يخطّط لسعة التخزين لكل ما تحتفظ به هناك.",
-        "لا يحاول Relayium أن يكون منصة تخزين. نطاقه محصور في نقل الملفات من مكان إلى آخر — من الند للند فوري، أو رابط ينتهي. خادمه ذاتي الاستضافة حاوية واحدة: ثنائي Go واحد يخدم التطبيق ويحتفظ بقاعدة بيانات SQLite صغيرة، إضافةً إلى كتل مُشفَّرة لا يستطيع قراءتها من أجل الروابط المُخزَّنة. هذا الأمر هو الإعداد كله؛ ويضيف ملف تعريف اختياري مُرحِّل TURN لاجتياز NAT عبر الشبكات. إن كان كل ما تحتاجه هو إيصال ملف من A إلى B، فهذا أقل بكثير لتشغيله وإبقائه محدَّثاً.",
+        "لا يحاول Relayium أن يكون منصة تخزين. نطاقه محصور في نقل الملفات من مكان إلى آخر — من الند للند فوري، أو رابط ينتهي. خادمه ذاتي الاستضافة حاوية واحدة: ثنائي Go واحد يخدم التطبيق ويحتفظ بقاعدة بيانات SQLite صغيرة، إضافةً إلى كتل مُشفَّرة لا يستطيع قراءتها من أجل الروابط المُخزَّنة. هذا الأمر هو الإعداد كله؛ ويضيف ملف تعريف اختياري مُرحِّل TURN لاجتياز NAT عبر الشبكات. إن كان كل ما تحتاجه هو إيصال ملف من A إلى B، فهذا أقل بكثير لتشغيله وإبقائه محدَّثًا.",
       ],
       code: ["docker compose up -d --build"],
     },
     {
       heading: "نقل مباشر من الند للند، بلا تخزين أي شيء",
       body: [
-        "يرسل الوضع الفوري في Relayium الملفات مباشرة بين جهازين عبر قناة مشفَّرة من الند للند — لا يوجد لدى Nextcloud ما يعادله، إذ يُرفَع كل مشاركة في Nextcloud إلى خادمك ثم يُنزَّل منه. يشتقّ تبادل مفاتيح X25519 مفتاحاً لـ AES-256-GCM، ويعرض الجهازان رمز تحقق مطابقاً من 6 أرقام (SAS) لاستبعاد هجوم الوسيط، ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
-        "على نفس الشبكة لا يحتاج هذا حساباً إطلاقاً: افتح relayium.com على الجهازين، واختر حتى 1000 ملف، وتحقّق من الرمز، وأرسِل. أما الإرسال عبر الشبكات برمز اقتران فيتطلب من المُرسِل تسجيل الدخول — ولا يحتاج المُستقبِل حساباً أبداً. إن انقطع اتصال في منتصف النقل استُؤنف بدل البدء من جديد. وعلى نفس الشبكة تنتقل الملفات مباشرةً بين الجهازين؛ أما عبر الشبكات فيمرّ النقل بحكم التصميم عبر مُرحِّل TURN مُشفَّر — لا يُمرِّر سوى نص مُشفَّر ولا يملك المفتاح أبداً.",
+        "يرسل الوضع الفوري في Relayium الملفات مباشرة بين جهازين عبر قناة مشفَّرة من الند للند — لا يوجد لدى Nextcloud ما يعادله، إذ يُرفَع كل مشاركة في Nextcloud إلى خادمك ثم يُنزَّل منه. يشتقّ تبادل مفاتيح X25519 مفتاحًا لـ AES-256-GCM، ويعرض الجهازان رمز تحقق مطابقًا من 6 أرقام (SAS) لاستبعاد هجوم الوسيط، ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
+        "على نفس الشبكة لا يحتاج هذا حسابًا إطلاقًا: افتح relayium.com على الجهازين، واختر حتى 1000 ملف، وتحقّق من الرمز، وأرسِل. أما الإرسال عبر الشبكات برمز اقتران فيتطلب من المُرسِل تسجيل الدخول — ولا يحتاج المُستقبِل حسابًا أبدًا. إن انقطع اتصال في منتصف النقل استُؤنف بدل البدء من جديد. وعلى نفس الشبكة تنتقل الملفات مباشرةً بين الجهازين؛ أما عبر الشبكات فيمرّ النقل بحكم التصميم عبر مُرحِّل TURN مُشفَّر — لا يُمرِّر سوى نص مُشفَّر ولا يملك المفتاح أبدًا.",
       ],
     },
     {
       heading: "حين يكون المُستقبِل غير متصل: روابط مُخزَّنة بمعرفة صفرية",
       body: [
-        "يحتاج النقل الفوري إلى وجود الطرفين متصلين في آنٍ واحد، وهنا يتفوّق خادم Nextcloud الدائم التشغيل تفوّقاً حقيقياً. يغطّي Relayium هذه الحالة أيضاً، دون التخلّي عن الخصوصية: يولّد متصفحك مفتاح AES-256-GCM عشوائياً، ويشفّر به الملفات قبل أن يغادر أي شيء جهازك، ويعيش المفتاح في جزء الـ URL فقط — الجزء بعد # الذي لا ترسله المتصفحات أبداً إلى خادم. يخزّن الخادم نصاً مُشفَّراً لا يستطيع فكّه.",
-        "يتطلب إنشاء رابط مُخزَّن من المُرسِل تسجيل الدخول؛ ولا يحتاج المُستقبِل حساباً للتنزيل. يمكن ضبط كل رابط لينتهي بعد ساعة واحدة أو يوم واحد أو 3 أيام أو 7 أيام أو حتى 14 يومًا حسب خطتك، أو ليُحرَق بعد أول تنزيل كامل — فهو ليس بيتاً دائماً للملف مثل مشاركة Nextcloud، بل قُصِد له أن يختفي.",
+        "يحتاج النقل الفوري إلى وجود الطرفين متصلين في آنٍ واحد، وهنا يتفوّق خادم Nextcloud الدائم التشغيل تفوّقًا حقيقيًا. يغطّي Relayium هذه الحالة أيضًا، دون التخلّي عن الخصوصية: يولّد متصفحك مفتاح AES-256-GCM عشوائيًا، ويشفّر به الملفات قبل أن يغادر أي شيء جهازك، ويعيش المفتاح في جزء الـ URL فقط — الجزء بعد # الذي لا ترسله المتصفحات أبدًا إلى خادم. يخزّن الخادم نصًا مُشفَّرًا لا يستطيع فكّه.",
+        "يتطلب إنشاء رابط مُخزَّن من المُرسِل تسجيل الدخول؛ ولا يحتاج المُستقبِل حسابًا للتنزيل. يمكن ضبط كل رابط لينتهي بعد ساعة واحدة أو يوم واحد أو 3 أيام أو 7 أيام أو حتى 14 يومًا حسب خطتك، أو ليُحرَق بعد أول تنزيل كامل — فهو ليس بيتًا دائمًا للملف مثل مشاركة Nextcloud، بل قُصِد له أن يختفي.",
       ],
     },
     {
       heading: "مقارنة الميزات في لمحة",
-      body: ["أهمّ الفروق، جنباً إلى جنب:"],
+      body: ["أهمّ الفروق، جنبًا إلى جنب:"],
       bullets: [
         "الغرض: إن Nextcloud منصة سحابية كاملة لتخزين دائم ومتزامن؛ أما Relayium فأداة مركّزة للنقل المباشر أو رابط ينتهي.",
-        "أين تعيش الملفات: يبقي Nextcloud ملفاتك على الخادم ما دمت تريد؛ أما الوضع الفوري في Relayium فلا يخزّنها إطلاقاً، والروابط المُخزَّنة تنتهي أو تُحرَق بعد تنزيل واحد.",
+        "أين تعيش الملفات: يبقي Nextcloud ملفاتك على الخادم ما دمت تريد؛ أما الوضع الفوري في Relayium فلا يخزّنها إطلاقًا، والروابط المُخزَّنة تنتهي أو تُحرَق بعد تنزيل واحد.",
         "أثر الاستضافة الذاتية: يحتاج Nextcloud إلى خادم ويب وقاعدة بيانات وبيئة تشغيل PHP وتحديثات تطبيقات مستمرة؛ أما الاستضافة الذاتية في Relayium فحاوية واحدة (docker compose up -d --build) إضافةً إلى مُرحِّل TURN اختياري للنقل عبر الشبكات.",
-        "الحسابات: يحتاج Nextcloud إلى حساب لكل مستخدم يصل إليه؛ أما Relayium فلا يحتاج أياً منها للنقل على نفس الشبكة، ولا يسجّل الدخول إلا المُرسِل للاقتران عبر الشبكات أو للروابط المُخزَّنة، ولا يحتاج المُستقبِلون حساباً أبداً.",
-        "التشفير: الوضع الفوري في Relayium من الطرف إلى الطرف برمز SAS من 6 أرقام — على نفس الشبكة لا يلمس خادماً إطلاقاً، وعبر الشبكات لا يُمرِّر المُرحِّل سوى نص مُشفَّر لا يملك مفتاحه؛ والروابط المُخزَّنة بمعرفة صفرية بمفتاح عشوائي لا يغادر جزء الـ URL أبداً. أما مشاركات Nextcloud فتُرفَع إلى خادمك وتُنزَّل منه، محميّة بـ TLS أثناء النقل وبأي تشفير في السكون تضبطه أنت.",
-        "التكلفة والانفتاح: إن Relayium مجاني ومرخَّص بـ AGPL-3.0 على github.com/relayium/relayium؛ وبرنامج خادم Nextcloud مجاني ومفتوح المصدر أيضاً (AGPL)، مع استضافة ودعم مدفوعين متاحين من Nextcloud GmbH وشركائها.",
+        "الحسابات: يحتاج Nextcloud إلى حساب لكل مستخدم يصل إليه؛ أما Relayium فلا يحتاج أيًا منها للنقل على نفس الشبكة، ولا يسجّل الدخول إلا المُرسِل للاقتران عبر الشبكات أو للروابط المُخزَّنة، ولا يحتاج المُستقبِلون حسابًا أبدًا.",
+        "التشفير: الوضع الفوري في Relayium من الطرف إلى الطرف برمز SAS من 6 أرقام — على نفس الشبكة لا يلمس خادمًا إطلاقًا، وعبر الشبكات لا يُمرِّر المُرحِّل سوى نص مُشفَّر لا يملك مفتاحه؛ والروابط المُخزَّنة بمعرفة صفرية بمفتاح عشوائي لا يغادر جزء الـ URL أبدًا. أما مشاركات Nextcloud فتُرفَع إلى خادمك وتُنزَّل منه، محميّة بـ TLS أثناء النقل وبأي تشفير في السكون تضبطه أنت.",
+        "التكلفة والانفتاح: إن Relayium مجاني ومرخَّص بـ AGPL-3.0 على github.com/relayium/relayium؛ وبرنامج خادم Nextcloud مجاني ومفتوح المصدر أيضًا (AGPL)، مع استضافة ودعم مدفوعين متاحين من Nextcloud GmbH وشركائها.",
       ],
     },
   ],
@@ -564,7 +564,7 @@ const ar = {
     items: [
       {
         q: "هل ينبغي أن أستخدم Nextcloud بدل Relayium؟",
-        a: "إن أردت بيتاً دائماً ومتزامناً لملفاتك — صور، مستندات، قرص فريق مشترك — فنعم، هذا بالضبط ما بُني له Nextcloud. ليس Relayium بديلاً عن ذلك؛ فهو للمهمة الأضيق المتمثّلة في إيصال ملف من شخص إلى آخر، بسرعة وبخصوصية.",
+        a: "إن أردت بيتًا دائمًا ومتزامنًا لملفاتك — صور، مستندات، قرص فريق مشترك — فنعم، هذا بالضبط ما بُني له Nextcloud. ليس Relayium بديلًا عن ذلك؛ فهو للمهمة الأضيق المتمثّلة في إيصال ملف من شخص إلى آخر، بسرعة وبخصوصية.",
       },
       {
         q: "هل يخزّن Relayium ملفاتي كما يفعل Nextcloud؟",
@@ -572,20 +572,20 @@ const ar = {
       },
       {
         q: "هل أحتاج إلى حساب؟",
-        a: "على نفس الشبكة، لا. أما الإرسال عبر الشبكات برمز اقتران، أو إنشاء رابط مُخزَّن، فيتطلب من المُرسِل تسجيل الدخول؛ ولا يحتاج المُستقبِل حساباً أبداً. أما Nextcloud فيتطلب حساباً (أو رابط مشاركة من حساب) لكل مستخدم يصل إليه.",
+        a: "على نفس الشبكة، لا. أما الإرسال عبر الشبكات برمز اقتران، أو إنشاء رابط مُخزَّن، فيتطلب من المُرسِل تسجيل الدخول؛ ولا يحتاج المُستقبِل حسابًا أبدًا. أما Nextcloud فيتطلب حسابًا (أو رابط مشاركة من حساب) لكل مستخدم يصل إليه.",
       },
       {
-        q: "هل أستطيع استضافة Relayium ذاتياً أيضاً؟",
-        a: "نعم. خلافاً لحزمة الخدمات المتعددة في Nextcloud، خادم Relayium حاوية واحدة: أمر docker compose واحد يشغّل كل شيء، مع ملف تعريف مُرحِّل TURN اختياري لاجتياز NAT عبر الشبكات.",
+        q: "هل أستطيع استضافة Relayium ذاتيًا أيضًا؟",
+        a: "نعم. خلافًا لحزمة الخدمات المتعددة في Nextcloud، خادم Relayium حاوية واحدة: أمر docker compose واحد يشغّل كل شيء، مع ملف تعريف مُرحِّل TURN اختياري لاجتياز NAT عبر الشبكات.",
       },
       {
         q: "هل Relayium مجاني؟",
-        a: "نعم — مجاني ومفتوح المصدر بموجب ترخيص AGPL-3.0، بلا فئة مدفوعة. وبرنامج خادم Nextcloud الأساسي مجاني ومفتوح المصدر أيضاً؛ لكن بعض خيارات الاستضافة والدعم من Nextcloud GmbH مدفوعة.",
+        a: "نعم — مجاني ومفتوح المصدر بموجب ترخيص AGPL-3.0، بلا فئة مدفوعة. وبرنامج خادم Nextcloud الأساسي مجاني ومفتوح المصدر أيضًا؛ لكن بعض خيارات الاستضافة والدعم من Nextcloud GmbH مدفوعة.",
       },
     ],
   },
   cta: {
-    text: "أرسِل ملفاً مباشرة، أو شارك رابط معرفة صفرية ينتهي — بلا حساب تخزين سحابي على نفس الشبكة.",
+    text: "أرسِل ملفًا مباشرة، أو شارك رابط معرفة صفرية ينتهي — بلا حساب تخزين سحابي على نفس الشبكة.",
     button: "جرّب Relayium الآن",
   },
   relatedHeading: "تابع القراءة",
@@ -704,7 +704,7 @@ const pt = {
       heading: "Transferências P2P diretas, nada armazenado",
       body: [
         "O modo em tempo real do Relayium envia arquivos diretamente entre dois dispositivos por um canal ponto a ponto criptografado — o Nextcloud não tem equivalente, já que todo compartilhamento do Nextcloud é enviado para o seu servidor e baixado dele. Uma troca de chaves X25519 deriva uma chave para AES-256-GCM, ambos os dispositivos mostram um código de verificação de 6 dígitos idêntico (SAS) para descartar um ataque de intermediário, e cada arquivo é verificado de ponta a ponta com um hash SHA-256.",
-        "Na mesma rede isso não precisa de conta alguma: abra o relayium.com nos dois dispositivos, escolha até 1.000 arquivos, verifique o código e envie. Enviar entre redes com um código de emparelhamento exige que o remetente faça login — o destinatário nunca precisa de conta. Se uma conexão cai no meio da transferência, ela retoma em vez de recomeçar. Na mesma rede os arquivos vão direto entre os dois dispositivos; entre redes diferentes a transferência passa, por projeto, por um retransmissor TURN criptografado — ele só encaminha texto cifrado e nunca detém a chave.",
+        "Na mesma rede isso não precisa de conta alguma: abra o relayium.com nos dois dispositivos, escolha até 1.000 arquivos, verifique o código e envie. Enviar entre redes com um código de emparelhamento exige que o remetente faça login — o destinatário nunca precisa de conta. Se uma conexão cai no meio da transferência, ela retoma em vez de recomeçar. Na mesma rede os arquivos vão direto entre os dois dispositivos; entre redes diferentes a transferência passa, por decisão de projeto, por um retransmissor TURN criptografado — ele só encaminha texto cifrado e nunca detém a chave.",
       ],
     },
     {
@@ -715,7 +715,7 @@ const pt = {
       ],
     },
     {
-      heading: "Comparação de recursos num relance",
+      heading: "Comparação de recursos em resumo",
       body: ["As diferenças que mais importam, lado a lado:"],
       bullets: [
         "Propósito: o Nextcloud é uma plataforma de nuvem completa para armazenamento duradouro e sincronizado; o Relayium é uma ferramenta focada em transferência direta ou um link que expira.",

@@ -223,17 +223,17 @@ const ja = {
     "メール添付・クラウドリンク・USBメモリそれぞれの本当のリスク、「エンドツーエンドで暗号化」と「ゼロ知識」が実際に意味すること、そして転送ツールを信頼する前に確認すべきことを平易に解説します。",
   updatedLabel: "最終更新",
   lead: [
-    "「このファイルを送っても大丈夫だろうか」と立ち止まって考えるのは、ごく自然な疑問です。確定申告書でも、契約書でも、人に見られたくない写真でも同じです。このガイドは、普段使っているツールを怖がらせるためのものではありません。メールで送る、クラウドフォルダに置く、USBメモリで持ち歩く——それぞれの場合に実際に何が起きるのか、「エンドツーエンドで暗号化されている」「ゼロ知識」という言葉が実際に何を約束しているのか、そして大切なものをどんなツールに預けるにせよ、その前に何を確認すべきかを、平易な言葉で説明します。",
-    "専門知識は一切必要ありません。読み終える頃には、どんな転送方法に対しても——このページで紹介するものも含めて——どんな質問をすればよいかが分かるはずです。",
+    "「このファイルを送っても大丈夫だろうか」と立ち止まって考えるのは、ごく自然な疑問です。確定申告書でも、契約書でも、人に見られたくない写真でも同じです。このガイドは、普段使っているツールを怖がらせるためのものではありません。メールで送る、クラウドフォルダに置く、USBメモリで持ち歩く、それぞれの場合に実際に何が起きるのか、「エンドツーエンドで暗号化されている」「ゼロ知識」という言葉が実際に何を約束しているのか、そして大切なものをどんなツールに預けるにせよ、その前に何を確認すべきかを、平易な言葉で説明します。",
+    "専門知識は一切必要ありません。読み終える頃には、このページで紹介するものも含め、どんな転送方法に対してもどんな質問をすればよいかが分かるはずです。",
   ],
   sections: [
     {
       heading: "ファイルが実際に危険にさらされる場面:日常に潜むリスク",
       body: [
-        "メールの添付ファイルは、送信者と受信者それぞれのメールプロバイダのサーバーを通過します。どちらもスパム対策や災害復旧のために、メッセージを日常的にスキャンし、索引を作り、バックアップします——あなたが送ったことすら忘れてしまったずっと後になっても。メールが一度でも転送されれば、ファイルは意図しなかった相手の目の前に現れ、すべてのコピーが消えたことを確認する術はありません。",
-        "クラウドストレージのリンクは便利ですが、あなたが取り消すのを忘れない限り、たいてい効き続けます。「リンクを知っている全員」というのは、その URL がどれだけ推測しにくいかにすぎず、短縮リンクや不用意な転送によって簡単に崩れます。ファイルの安全性は、その共有自体だけでなく、それが置かれているアカウント全体の安全性も引き継ぎます。",
+        "メールの添付ファイルは、送信者と受信者それぞれのメールプロバイダのサーバーを通過します。どちらもスパム対策や災害復旧のために、メッセージを日常的にスキャンし、索引を作り、バックアップします。送ったことすら忘れてしまったずっと後になっても、それは残り続けます。メールが一度でも転送されれば、ファイルは意図しなかった相手の目の前に現れ、すべてのコピーが消えたことを確認する術はありません。",
+        "クラウドストレージのリンクは便利ですが、取り消そうと思い出すまで、たいてい効き続けます。「リンクを知っている全員」というのは、その URL がどれだけ推測しにくいかにすぎず、短縮リンクや不用意な転送によって簡単に崩れます。ファイルの安全性は、その共有自体だけでなく、それが置かれているアカウント全体の安全性も引き継ぎます。",
         "USBメモリはオフラインなので安全に感じられますが、まさにそこが落とし穴です。ほとんどのドライブはデフォルトで暗号化されておらず、ノートPCのバッグやレンタカーに置き忘れれば、拾った人はパスワードなしで平文をそのまま手にすることになります。",
-        "無料の公開アップロードサイトは、AからBへファイルを届けるという目の前の問題は解決しますが、その後どうなるかはほとんど説明されません——どれくらい保存されるのか、スキャンされるのか、誰かが偶然見つけるかもしれないのか、そのサイトがどうやって運営費をまかなっているのか(広告収入で運営されているファイルホスティングサイトには、トラッカーやさらに悪質なものを紛れ込ませてきた前例があります)。",
+        "無料の公開アップロードサイトは、AからBへファイルを届けるという目の前の問題は解決しますが、その後どうなるかはほとんど説明されません。どれくらい保存されるのか、スキャンされるのか、誰かが偶然見つけるかもしれないのか、そのサイトがどうやって運営費をまかなっているのか（広告収入で運営されているファイルホスティングサイトには、トラッカーやさらに悪質なものを紛れ込ませてきた前例があります）。",
       ],
       bullets: [
         "メール:メールサーバーに保存・スキャンされ、自分のコントロールを超えて転送されやすい",
@@ -245,8 +245,8 @@ const ja = {
     {
       heading: "「エンドツーエンドで暗号化」と「ゼロ知識」が実際に意味すること",
       body: [
-        "多くのサービスは「暗号化されている」と謳いますが、それが意味するのはサーバーへの接続が暗号化されているだけ——標準的な HTTPS/TLS で、あなたの銀行が使っているのと同じ錠前アイコンです。これはネットワーク上の盗聴に対する本物の保護ですが、サーバーで止まります。ファイルが到着すれば、サービス自体がそれを読むことができます。鍵を持っているからです。多くの日常的なツールはまさにそこで止まっています。",
-        "エンドツーエンド暗号化はもっと強いことを意味します。ファイルはあなたの端末を離れる前に暗号化され、その鍵を持つのは送信者と意図した受信者だけです。それを運ぶサービス——サーバーも中継も、途中にある何もかも——はその鍵を一度も持ちません。だから、どう求められても平文を持つことがありません。",
+        "多くのサービスは「暗号化されている」と謳いますが、それが意味するのはサーバーへの接続が暗号化されていることだけです。標準的な HTTPS/TLS であり、銀行のサイトで見るのと同じ錠前アイコンです。これはネットワーク上の盗聴に対する本物の保護ですが、サーバーで止まります。ファイルが到着すれば、サービス自体がそれを読むことができます。鍵を持っているからです。多くの日常的なツールはまさにそこで止まっています。",
+        "エンドツーエンド暗号化はもっと強いことを意味します。ファイルは端末を離れる前に暗号化され、その鍵を持つのは送信者と意図した受信者だけです。それを運ぶサービスは、サーバーもリレーも、その間にあるものすべても、その鍵を一度も持ちません。だから、どう求められても平文を持つことがありません。",
         "「ゼロ知識」は関連する概念で、通常はリアルタイムで送るものではなく、保存されるものに使われます。サーバー上に静かに置かれているデータでさえ、その暗号化に使われた鍵はサーバー自身に一度も渡されていません。だから運営者は、データがどれだけ長く置かれていても、それを読む手段を持ちません。",
       ],
       bullets: [
@@ -261,29 +261,29 @@ const ja = {
         "ウェブサイトの宣伝文句より、いくつかの具体的な質問のほうがずっと役に立ちます。",
       ],
       bullets: [
-        "「暗号化」とだけ書かれているか(単なる TLS かもしれません)、それとも明確に「エンドツーエンドで暗号化」と書かれているか(送信者と受信者だけが鍵を持つ)?",
-        "接続が改ざんされていないことを確認する方法があるか——信頼するしかない錠前アイコンだけでなく、自分で照合するコードがあるか?",
-        "ファイルの完全性がチェックされ、壊れたり改ざんされたりしたファイルが、何ごともなかったかのように届いてしまわないか?",
-        "コードはオープンソースで監査可能か、それとも主張は単に信じるしかない宣伝文句か?",
-        "送受信の際、その転送に本当に必要な以上の身元情報を差し出すことを求められないか?",
-        "何かが保存される場合、それには明確で有限の寿命——有効期限やダウンロード後の削除——があるか、それとも無期限にそこに置かれ続けるのか?",
+        "「暗号化」とだけ書かれているか（単なる TLS かもしれません）、それとも明確に「エンドツーエンドで暗号化」と書かれているか（送信者と受信者だけが鍵を持つ）？",
+        "接続が改ざんされていないことを確認する方法があるか、つまり、信頼するしかない錠前アイコンだけでなく、自分で照合するコードがあるか？",
+        "ファイルの完全性がチェックされ、壊れたり改ざんされたりしたファイルが、何ごともなかったかのように届いてしまわないか？",
+        "コードはオープンソースで監査可能か、それとも主張は単に信じるしかない宣伝文句か？",
+        "送受信の際、その転送に本当に必要な以上の身元情報を差し出すことを求められないか？",
+        "何かが保存される場合、有効期限やダウンロード後の削除といった、明確で有限の寿命があるか、それとも無期限にそこに置かれ続けるのか？",
       ],
     },
     {
       heading: "Relayium はこれらにどう答えるか",
       body: [
-        "双方が同時にオンラインであるリアルタイム転送では、Relayium は各デバイスに新しい X25519 鍵ペアを生成させ、両ブラウザの内部にのみ存在する共有 AES-256-GCM 鍵を導出します——この鍵は Relayium 自身のサーバーに送られることはありません。画面に表示される短い検証コード(SAS)によって、双方は鍵が中間の不正なサーバーによってすり替えられていないことを確認でき、各ファイルの SHA-256 ハッシュがエンドツーエンドで照合されるため、破損した転送が何ごともなかったように見えることはありません。この仕組みの詳細をさらに知りたい場合は、より深く解説した「Relayium がファイルをエンドツーエンドで暗号化する仕組み」をご覧ください。",
-        "受信者がまだオンラインでないとき、保存型のダウンロードリンクは本当に異なるゼロ知識方式を使います。あなたのブラウザは1つのランダムな AES-256-GCM 鍵を生成し、何かがアップロードされる前にそれでファイルを暗号化します。この鍵はサーバーには一切送られません——リンクの URL フラグメント、つまり # の後ろの部分にのみ存在し、ブラウザはこの部分を決して送信しません。結果としてサーバーが持つのは、復号する術のない暗号文と、あなたが選んだ有効期限(1時間、1日、3日、7日、最長14日（プランによる）、または最初のダウンロード完了後に消去)だけです。",
-        "ネットワークをまたぐ転送では、暗号化されたストリームは TURN 中継を経由します（そうした環境では直接経路がそもそも見つからないことが多いためです）——その中継もやはり暗号文しか見ることがなく、読める形のファイルを見ることは決してありません。",
-        "これらはどれも、あなたが主張を鵜呑みにする必要はありません。Relayium のクライアントとサーバーのコードは AGPL-3.0 ライセンスのもとオープンソースで公開されており、宣伝を信じるのではなく、誰でも読んで監査できます。",
+        "双方が同時にオンラインであるリアルタイム転送では、Relayium は各デバイスに新しい X25519 鍵ペアを生成させ、両ブラウザの内部にのみ存在する共有 AES-256-GCM 鍵を導出します。この鍵が Relayium 自身のサーバーに送られることはありません。画面に表示される短い検証コード（SAS）によって、双方は鍵が中間の不正なサーバーによってすり替えられていないことを確認でき、各ファイルの SHA-256 ハッシュがエンドツーエンドで照合されるため、破損した転送が何ごともなかったように見えることはありません。この仕組みの詳細をさらに知りたい場合は、より深く解説した「Relayium がファイルをエンドツーエンドで暗号化する仕組み」をご覧ください。",
+        "受信者がまだオンラインでないとき、保存型のダウンロードリンクは本当に異なるゼロ知識方式を使います。ブラウザがランダムな AES-256-GCM 鍵を生成し、何かがアップロードされる前にそれでファイルを暗号化します。この鍵はサーバーには一切送られません。リンクの URL フラグメント、つまり # の後ろの部分にのみ存在し、ブラウザはこの部分を決して送信しません。結果としてサーバーが持つのは、復号する術のない暗号文と、選んだ有効期限（1時間、1日、3日、7日、プランに応じて最長14日、または最初のダウンロード完了後に消去）だけです。",
+        "ネットワークをまたぐ転送では、そもそも直接経路が見つからないことが多いため、暗号化されたストリームは TURN リレーを経由します。そのリレーもやはり暗号文しか見ることがなく、読める形のファイルを見ることは決してありません。",
+        "これらのどれについても、主張を鵜呑みにする必要はありません。Relayium のクライアントとサーバーのコードは AGPL-3.0 ライセンスのもとオープンソースで公開されており、宣伝を信じるのではなく、誰でも読んで監査できます。",
       ],
       bullets: [
         "同一ネットワーク内の転送にはアカウントが一切不要です。",
-        "ペアリングコードでネットワークをまたいで送る場合や、保存リンクを作成する場合は送信者のサインインが必要です——受信者にはアカウントが一切必要ありません。",
+        "ペアリングコードでネットワークをまたいで送る場合や、保存リンクを作成する場合は送信者のサインインが必要です。受信者にはアカウントが一切必要ありません。",
       ],
     },
     {
-      heading: "暗号化がすべてではない——それでも大切ないくつかの習慣",
+      heading: "暗号化がすべてではない:それでも大切ないくつかの習慣",
       body: [
         "強力な暗号化は転送中と保存中のファイルを守りますが、リンクを間違った宛先に送ってしまうことまでは防げません。共有リンクはファイルそのものだと思って扱い、どこか公開の場に貼らないようにしましょう。",
         "本当に機密性の高い内容については、あと数秒手間をかけて、通話で検証コードを声に出して読み合わせるか、対面で照合しましょう。隣り合った2つの画面が両方とも欺かれていないと信じるだけでは十分ではありません。",
@@ -295,29 +295,29 @@ const ja = {
     heading: "よくある質問",
     items: [
       {
-        q: "機密性の高いファイルをメールで送っても安全ですか?",
-        a: "メールは機密ファイルの転送のために設計されたものではありません。添付ファイルは送受信双方のメールサーバーに日常的に保存・スキャン・バックアップされ、転送されたメッセージはあなたが意図しなかった人の目に触れることがあります。重要度の低いファイルなら問題ありませんが、機密性の高いものには、エンドツーエンド暗号化を備えたツールがこうした露出を取り除きます。",
+        q: "機密性の高いファイルをメールで送っても安全ですか？",
+        a: "メールは機密ファイルの転送のために設計されたものではありません。添付ファイルは送受信双方のメールサーバーに日常的に保存・スキャン・バックアップされ、転送されたメッセージは、意図しなかった人の目に触れることがあります。重要度の低いファイルなら問題ありませんが、機密性の高いものには、エンドツーエンド暗号化を備えたツールがこうした露出を取り除きます。",
       },
       {
-        q: "「ゼロ知識」とは実際には何を意味しますか?",
-        a: "あなたのデータを保存する側が、それを読むための鍵を一度も渡されていないということです。暗号化はアップロードの前にあなたの端末上で行われ、鍵はサーバーが決して目にしない場所——たとえば URL フラグメント——にのみ存在します。そのためサーバー上にあるのは、構造的に復号できない暗号文であり、単に「見ないと約束された」データではありません。",
+        q: "「ゼロ知識」とは実際には何を意味しますか？",
+        a: "データを保存する側が、それを読むための鍵を一度も渡されていないということです。暗号化はアップロードの前に端末上で行われ、鍵は、たとえば URL フラグメントのように、サーバーが決して目にしない場所にのみ存在します。そのためサーバー上にあるのは、構造的に復号できない暗号文であり、単に「見ないと約束された」データではありません。",
       },
       {
-        q: "パスワード付きZIPファイルで十分ですか?",
-        a: "何もしないよりはましですが、そのパスワードはしばしばファイルと同じ経路——たとえば同じメールスレッド——で送られてしまい、それが保護を無効にしてしまいます。また ZIP の暗号化実装は製品によって強度に大きな差があります。エンドツーエンド暗号化を前提としたツールは、そもそも共有パスワードを必要としないため、この弱点そのものを取り除きます。",
+        q: "パスワード付きZIPファイルで十分ですか？",
+        a: "何もしないよりはましですが、そのパスワードはしばしば、たとえば同じメールスレッドのように、ファイルと同じ経路で送られてしまい、それが保護を無効にしてしまいます。また ZIP の暗号化実装は製品によって強度に大きな差があります。エンドツーエンド暗号化を前提としたツールは、そもそも共有パスワードを必要としないため、この弱点そのものを取り除きます。",
       },
       {
-        q: "Relayium は私のファイルのコピーを保持しますか?",
-        a: "リアルタイムモードでは保持しません——ファイルは2つのブラウザ間を直接ストリーミングされ、何も保存されません。保存リンクの場合、サーバーが持つのは読むことのできない暗号文だけで、リンクが期限切れになるか、「初回ダウンロード後に消去」を選んでいれば一度ダウンロードされるまでの間だけ保持されます。",
+        q: "Relayium は私のファイルのコピーを保持しますか？",
+        a: "リアルタイムモードでは保持しません。ファイルは2つのブラウザ間を直接ストリーミングされ、何も保存されません。保存リンクの場合、サーバーが持つのは読むことのできない暗号文だけで、リンクが期限切れになるか、「閲覧後削除」を選んでいれば一度ダウンロードされるまでの間だけ保持されます。",
       },
       {
-        q: "ファイルの送受信にアカウントは必要ですか?",
+        q: "ファイルの送受信にアカウントは必要ですか？",
         a: "同一ネットワーク内であれば、どちらの側もアカウントは不要です。ペアリングコードでネットワークをまたいで送る場合や、保存リンクを作成する場合は送信者のサインインが必要ですが、どちらの方式でも受信者にはアカウントが一切必要ありません。",
       },
     ],
   },
   cta: {
-    text: "あるツールが本当に謳い文句どおりに守ってくれているのか気になりますか?転送を始めて、検証コードとゼロ知識のリンクを自分の目で確かめてください。",
+    text: "あるツールが本当に謳い文句どおりに守ってくれているのか気になりますか？転送を始めて、検証コードとゼロ知識のリンクを自分の目で確かめてください。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -336,8 +336,8 @@ const ko = {
     {
       heading: "파일이 실제로 새는 지점: 일상적인 위험들",
       body: [
-        "이메일 첨부파일은 발신자와 수신자 각각의 메일 서버를 거치는데, 두 서버 모두 스팸 필터링과 재해 복구를 위해 메시지를 일상적으로 스캔하고 색인하고 백업합니다——당신이 그 파일을 보냈다는 사실조차 잊어버린 훨씬 뒤에도요. 이메일이 한 번이라도 전달되면, 파일은 당신이 의도하지 않은 사람 앞에 놓이게 되고, 모든 사본이 사라졌는지 확인할 방법은 없습니다.",
-        "클라우드 저장소 링크는 편리하지만, 보통 당신이 취소하는 것을 기억하지 않는 한 계속 작동합니다. \"링크를 가진 누구나\"라는 말의 프라이버시 수준은 그 URL을 추측하기 얼마나 어려운가에 달려 있으며, 단축 링크나 부주의한 전달 한 번으로 그 조건이 깨질 수 있습니다. 파일은 그 공유 자체뿐 아니라 그것이 속한 계정 전체의 보안 수준도 물려받습니다.",
+        "이메일 첨부파일은 발신자와 수신자 각각의 메일 서버를 거치는데, 두 서버 모두 스팸 필터링과 재해 복구를 위해 메시지를 일상적으로 스캔하고 색인하고 백업합니다——그 파일을 보냈다는 사실조차 잊어버린 훨씬 뒤에도요. 이메일이 한 번이라도 전달되면, 파일은 의도하지 않은 사람 앞에 놓이게 되고, 모든 사본이 사라졌는지 확인할 방법은 없습니다.",
+        "클라우드 저장소 링크는 편리하지만, 보통 취소해야겠다고 떠올리기 전까지는 계속 작동합니다. \"링크를 가진 누구나\"라는 말의 프라이버시 수준은 그 URL을 추측하기 얼마나 어려운가에 달려 있으며, 단축 링크나 부주의한 전달 한 번으로 그 조건이 깨질 수 있습니다. 파일은 그 공유 자체뿐 아니라 그것이 속한 계정 전체의 보안 수준도 물려받습니다.",
         "USB 드라이브는 오프라인이라 안전하게 느껴지지만, 바로 그 지점이 함정입니다. 대부분의 드라이브는 기본적으로 암호화되어 있지 않아서, 노트북 가방이나 렌터카에 두고 내리면 발견한 사람이 비밀번호 없이 평문 그대로를 손에 넣게 됩니다.",
         "무료 공개 업로드 사이트는 당장 눈앞의 문제——파일을 A에서 B로 옮기는 것——는 해결해주지만, 그다음에 무슨 일이 일어나는지는 거의 설명하지 않습니다. 얼마나 보관되는지, 스캔되는지, 누군가 우연히 발견할 수 있는지, 그 사이트가 어떻게 운영비를 충당하는지(광고로 운영되는 파일 호스팅 사이트들은 트래커나 그보다 더한 것을 끼워 넣어온 전례가 있습니다).",
       ],
@@ -352,7 +352,7 @@ const ko = {
       heading: "\"종단간 암호화\"와 \"영지식\"이 실제로 의미하는 것",
       body: [
         "많은 서비스가 \"암호화됨\"이라고 말하지만, 실제로는 서버로의 연결만 암호화되어 있다는 뜻일 때가 많습니다——은행 사이트에서 보는 것과 같은 자물쇠 아이콘, 즉 표준 HTTPS/TLS입니다. 이는 네트워크 상의 도청을 막는 실질적인 보호이지만, 서버에서 멈춥니다. 파일이 도착하는 순간, 서비스 자체는 그것을 읽을 수 있습니다. 키를 가지고 있으니까요. 많은 일상적인 도구들이 정확히 이 지점에서 멈춥니다.",
-        "종단간 암호화는 더 강한 것을 의미합니다. 파일은 기기를 떠나기 전에 암호화되고, 그 키는 오직 발신자와 의도된 수신자만 갖습니다. 그것을 나르는 서비스——서버, 중계, 그 사이의 무엇이든——는 그 키를 한 번도 갖지 않으므로, 어떻게 요구받든 평문을 가질 수 없습니다.",
+        "종단간 암호화는 더 강한 것을 의미합니다. 파일은 기기를 떠나기 전에 암호화되고, 그 키는 오직 발신자와 의도된 수신자만 갖습니다. 그것을 나르는 서비스——서버, 릴레이, 그 사이의 무엇이든——는 그 키를 한 번도 갖지 않으므로, 어떻게 요구받든 평문을 가질 수 없습니다.",
         "\"영지식\"은 관련된 개념으로, 보통 실시간으로 보내는 것이 아니라 저장되는 것에 적용됩니다. 서버에 조용히 놓여 있는 데이터조차, 그것을 암호화하는 데 쓰인 키는 서버 자신에게 한 번도 주어지지 않았습니다. 그래서 운영자는 데이터가 얼마나 오래 놓여 있든 그것을 읽을 방법이 전혀 없습니다.",
       ],
       bullets: [
@@ -378,10 +378,10 @@ const ko = {
     {
       heading: "Relayium이 이 각각에 답하는 방식",
       body: [
-        "양쪽이 동시에 온라인 상태인 실시간 전송에서, Relayium은 각 기기에 새로운 X25519 키 쌍을 생성하게 하고, 두 브라우저 내부에만 존재하는 공유 AES-256-GCM 키를 도출합니다——이 키는 Relayium 자체 서버로 전송되는 일이 없습니다. 화면에 표시되는 짧은 검증 코드(SAS)를 통해 양쪽 모두 키가 중간의 부정직한 서버에 의해 바꿔치기되지 않았음을 확인할 수 있고, 각 파일의 SHA-256 해시가 종단간으로 대조되므로 손상된 전송이 문제없어 보이게 도착하는 일이 없습니다. 이 원리가 정확히 어떻게 작동하는지 더 깊이 알고 싶다면 \"Relayium이 파일을 종단간 암호화하는 방식\"에서 더 자세히 다룹니다.",
-        "수신자가 아직 온라인이 아닐 때, 저장형 다운로드 링크는 진짜로 다른 영지식 방식을 사용합니다. 당신의 브라우저는 무작위 AES-256-GCM 키를 생성하고, 무언가 업로드되기 전에 그것으로 파일을 암호화합니다. 이 키는 서버로 전혀 전송되지 않습니다——링크의 URL 프래그먼트, 즉 # 뒤의 부분에만 존재하며, 브라우저는 이 부분을 절대 전송하지 않습니다. 결국 서버가 갖게 되는 것은 복호화할 방법이 없는 암호문과, 당신이 선택한 만료 기한(1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름), 또는 첫 다운로드 완료 후 소각)뿐입니다.",
-        "네트워크를 넘는 전송에서 암호화된 스트림은 TURN 중계를 거칩니다(그런 환경에서는 직접 경로가 아예 열리지 않는 경우가 많습니다)——그리고 그 중계 역시 언제나 암호문만 보며, 읽을 수 있는 파일을 보는 일은 결코 없습니다.",
-        "이 중 어느 것도 당신이 주장을 그냥 믿어야만 하는 것은 없습니다. Relayium의 클라이언트와 서버 코드는 AGPL-3.0 라이선스로 공개되어 있어, 홍보 문구를 믿는 대신 누구나 읽고 감사할 수 있습니다.",
+        "양쪽이 동시에 온라인 상태인 실시간 전송에서, Relayium은 각 기기에서 새로운 X25519 키 쌍을 만들고, 두 브라우저 내부에만 존재하는 공유 AES-256-GCM 키를 도출합니다——이 키는 Relayium 자체 서버로 전송되는 일이 없습니다. 화면에 표시되는 짧은 검증 코드(SAS)를 통해 양쪽 모두 중간의 부정직한 서버가 키를 바꿔치기하지 않았음을 확인할 수 있고, 각 파일의 SHA-256 해시가 종단간으로 대조되므로 손상된 전송이 문제없어 보이게 도착하는 일이 없습니다. 이 원리가 정확히 어떻게 작동하는지 더 깊이 알고 싶다면 \"Relayium이 파일을 종단간 암호화하는 방식\"에서 더 자세히 다룹니다.",
+        "수신자가 아직 온라인이 아닐 때, 저장형 다운로드 링크는 진짜로 다른 영지식 방식을 사용합니다. 브라우저는 무작위 AES-256-GCM 키를 생성하고, 무언가 업로드되기 전에 그것으로 파일을 암호화합니다. 이 키는 서버로 전혀 전송되지 않습니다——링크의 URL 프래그먼트, 즉 # 뒤의 부분에만 존재하며, 브라우저는 이 부분을 절대 전송하지 않습니다. 결국 서버가 갖게 되는 것은 복호화할 방법이 없는 암호문과, 직접 선택한 만료 기한(1시간, 1일, 3일, 7일, 요금제에 따라 최대 14일, 또는 첫 다운로드 완료 후 삭제)뿐입니다.",
+        "네트워크를 넘는 전송에서 암호화된 스트림은 TURN 릴레이를 거칩니다(그런 환경에서는 직접 경로가 아예 열리지 않는 경우가 많습니다)——그리고 그 릴레이 역시 언제나 암호문만 보며, 읽을 수 있는 파일을 보는 일은 결코 없습니다.",
+        "이 중 어느 것도 주장을 그냥 믿으라고 요구하지 않습니다. Relayium의 클라이언트와 서버 코드는 AGPL-3.0 라이선스로 공개되어 있어, 홍보 문구를 믿는 대신 누구나 읽고 감사할 수 있습니다.",
       ],
       bullets: [
         "같은 네트워크 내의 전송은 계정이 전혀 필요 없습니다.",
@@ -402,11 +402,11 @@ const ko = {
     items: [
       {
         q: "민감한 파일을 이메일로 보내도 안전한가요?",
-        a: "이메일은 기밀 파일 전송을 위해 설계된 것이 아닙니다. 첨부파일은 양쪽 메일 서버에 일상적으로 보관·스캔·백업되며, 전달된 메시지는 당신이 의도하지 않은 사람 앞에 놓일 수 있습니다. 중요하지 않은 파일이라면 괜찮지만, 민감한 내용이라면 종단간 암호화를 갖춘 도구가 이런 노출을 없애줍니다.",
+        a: "이메일은 기밀 파일 전송을 위해 설계된 것이 아닙니다. 첨부파일은 양쪽 메일 서버에 일상적으로 보관·스캔·백업되며, 전달된 메시지는 의도하지 않은 사람 앞에 놓일 수 있습니다. 중요하지 않은 파일이라면 괜찮지만, 민감한 내용이라면 종단간 암호화를 갖춘 도구가 이런 노출을 없애줍니다.",
       },
       {
         q: "\"영지식\"이 실제로 무엇을 의미하나요?",
-        a: "당신의 데이터를 저장하는 쪽이 그것을 읽을 수 있는 키를 한 번도 받은 적이 없다는 뜻입니다. 암호화는 업로드되기 전에 당신의 기기에서 이루어지며, 키는 서버가 절대 보지 못하는 곳——예를 들어 URL 프래그먼트——에만 존재합니다. 그래서 서버에 있는 것은 구조적으로 복호화할 수 없는 암호문일 뿐, 단순히 '보지 않겠다고 약속한' 데이터가 아닙니다.",
+        a: "내 데이터를 저장하는 쪽이 그것을 읽을 수 있는 키를 한 번도 받은 적이 없다는 뜻입니다. 암호화는 업로드되기 전에 내 기기에서 이루어지며, 키는 서버가 절대 보지 못하는 곳——예를 들어 URL 프래그먼트——에만 존재합니다. 그래서 서버에 있는 것은 구조적으로 복호화할 수 없는 암호문일 뿐, 단순히 '보지 않겠다고 약속한' 데이터가 아닙니다.",
       },
       {
         q: "비밀번호로 보호된 압축 파일이면 충분한가요?",
@@ -414,7 +414,7 @@ const ko = {
       },
       {
         q: "Relayium이 제 파일 사본을 보관하나요?",
-        a: "실시간 모드에서는 아닙니다——파일은 두 브라우저 사이에서 직접 스트리밍되며 아무것도 저장되지 않습니다. 저장 링크의 경우, 서버는 읽을 수 없는 암호문만 가지고 있으며, 링크가 만료되거나 '첫 다운로드 후 소각'을 선택했다면 한 번 다운로드된 후까지만 보관합니다.",
+        a: "실시간 모드에서는 아닙니다——파일은 두 브라우저 사이에서 직접 스트리밍되며 아무것도 저장되지 않습니다. 저장 링크의 경우, 서버는 읽을 수 없는 암호문만 가지고 있으며, 링크가 만료되거나 '열람 후 삭제'를 선택했다면 한 번 다운로드된 후까지만 보관합니다.",
       },
       {
         q: "파일을 보내거나 받으려면 계정이 필요한가요?",
@@ -432,23 +432,23 @@ const ko = {
 const de = {
   title: "Ist es sicher, Dateien über das Internet zu senden?",
   description:
-    "Die echten Risiken von E-Mail-Anhängen, Cloud-Links und USB-Sticks, was „Ende-zu-Ende verschlüsselt“ und „Zero-Knowledge“ wirklich bedeuten, und worauf Sie achten sollten, bevor Sie einem Tool vertrauen.",
+    "Die echten Risiken von E-Mail-Anhängen, Cloud-Links und USB-Sticks, was „Ende-zu-Ende verschlüsselt“ und „Zero-Knowledge“ wirklich bedeuten, und worauf du achten solltest, bevor du einem Tool vertraust.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "„Ist es sicher, diese Datei zu senden?“ ist eine berechtigte Frage, kurz innezuhalten — egal ob es sich um eine Steuererklärung, einen Vertrag oder einfach Fotos handelt, die privat bleiben sollen. Diese Anleitung soll Sie nicht von gängigen Tools abschrecken, sondern in aller Ruhe durchgehen, was tatsächlich passiert, wenn Sie eine Datei per E-Mail senden, in einen Cloud-Ordner legen oder auf einem USB-Stick mit sich tragen, was die Begriffe „Ende-zu-Ende verschlüsselt“ und „Zero-Knowledge“ tatsächlich versprechen, und worauf Sie achten sollten, bevor Sie einem Tool etwas Wichtiges anvertrauen.",
-    "Dafür ist kein technisches Vorwissen nötig. Am Ende wissen Sie, welche Fragen Sie bei jeder Übertragungsmethode stellen sollten — auch bei der hier vorgestellten.",
+    "„Ist es sicher, diese Datei zu senden?“ ist eine berechtigte Frage, kurz innezuhalten — egal ob es sich um eine Steuererklärung, einen Vertrag oder einfach Fotos handelt, die privat bleiben sollen. Diese Anleitung soll dich nicht von gängigen Tools abschrecken, sondern in aller Ruhe durchgehen, was tatsächlich passiert, wenn du eine Datei per E-Mail sendest, in einen Cloud-Ordner legst oder auf einem USB-Stick mit dir herumträgst, was die Begriffe „Ende-zu-Ende verschlüsselt“ und „Zero-Knowledge“ tatsächlich versprechen, und worauf du achten solltest, bevor du einem Tool etwas Wichtiges anvertraust.",
+    "Dafür ist kein technisches Vorwissen nötig. Am Ende weißt du, welche Fragen du bei jeder Übertragungsmethode stellen solltest — auch bei der hier vorgestellten.",
   ],
   sections: [
     {
       heading: "Wo Dateien tatsächlich zum Problem werden: die alltäglichen Risiken",
       body: [
-        "E-Mail-Anhänge durchlaufen die Server Ihres Mail-Anbieters und die des Empfängers, und beide scannen, indizieren und sichern Nachrichten routinemäßig für Spam-Filterung und Notfallwiederherstellung — noch lange, nachdem Sie vergessen haben, dass Sie die Datei überhaupt verschickt haben. Wird die E-Mail einmal weitergeleitet, liegt die Datei jemandem vor, den Sie nie im Sinn hatten, und es gibt keine Möglichkeit zu wissen, dass wirklich jede Kopie verschwunden ist.",
-        "Cloud-Speicherlinks sind bequem, aber ein Link funktioniert meist so lange weiter, bis Sie daran denken, ihn zu widerrufen, und „jeder mit dem Link“ ist nur so privat wie eine schwer zu erratende URL — was ein Link-Kürzungsdienst oder eine unbedachte Weiterleitung zunichtemachen kann. Die Datei erbt außerdem die Sicherheit des gesamten Kontos, in dem sie liegt, nicht nur die der eigentlichen Freigabe.",
+        "E-Mail-Anhänge durchlaufen die Server deines Mail-Anbieters und die des Empfängers, und beide scannen, indizieren und sichern Nachrichten routinemäßig für Spam-Filterung und Notfallwiederherstellung — noch lange, nachdem du vergessen hast, dass du die Datei überhaupt verschickt hast. Wird die E-Mail einmal weitergeleitet, liegt die Datei jemandem vor, den du nie im Sinn hattest, und es gibt keine Möglichkeit zu wissen, dass wirklich jede Kopie verschwunden ist.",
+        "Cloud-Speicherlinks sind bequem, aber ein Link funktioniert meist so lange weiter, bis du daran denkst, ihn zu widerrufen, und „jeder mit dem Link“ ist nur so privat wie eine schwer zu erratende URL — was ein Link-Kürzungsdienst oder eine unbedachte Weiterleitung zunichtemachen kann. Die Datei erbt außerdem die Sicherheit des gesamten Kontos, in dem sie liegt, nicht nur die der eigentlichen Freigabe.",
         "Ein USB-Stick fühlt sich sicher an, weil er offline ist, aber genau darin liegt die Lücke: Die meisten Sticks sind standardmäßig nicht verschlüsselt, sodass jemand, der einen liegen gelassenen Stick in einer Laptop-Tasche oder einem Mietwagen findet, den Klartext ohne jedes Passwort in die Hand bekommt.",
         "Kostenlose öffentliche Upload-Seiten lösen das unmittelbare Problem — eine Datei von A nach B zu bringen —, sagen aber selten, was danach passiert: wie lange die Datei aufbewahrt wird, ob sie gescannt wird, wer zufällig darüber stolpern könnte, oder wie sich die Seite finanziert (werbefinanzierte Datei-Hoster haben eine Vorgeschichte, Tracker oder Schlimmeres mitzuliefern).",
       ],
       bullets: [
-        "E-Mail: wird von Mailservern aufbewahrt und gescannt, lässt sich leicht über Ihre Kontrolle hinaus weiterleiten",
+        "E-Mail: wird von Mailservern aufbewahrt und gescannt, lässt sich leicht über deine Kontrolle hinaus weiterleiten",
         "Cloud-Links: funktionieren weiter, bis sie widerrufen werden, und erben die Sicherheit des gesamten Kontos",
         "USB-Sticks: standardmäßig unverschlüsselt, leicht zu verlieren oder liegen zu lassen",
         "Kostenlose Upload-Seiten: Aufbewahrung und Scan-Praktiken sind meist unklar",
@@ -457,8 +457,8 @@ const de = {
     {
       heading: "Was „Ende-zu-Ende verschlüsselt“ und „Zero-Knowledge“ wirklich bedeuten",
       body: [
-        "Viele Dienste sagen „verschlüsselt“ und meinen damit nur, dass die Verbindung zu ihrem Server verschlüsselt ist — Standard-HTTPS/TLS, dasselbe Schloss-Symbol wie bei Ihrer Bank. Das ist echter Schutz gegen jemanden, der den Netzwerkverkehr abhört, endet aber am Server: Sobald Ihre Datei ankommt, kann der Dienst selbst sie lesen, weil er den Schlüssel besitzt. Viele alltägliche Tools hören genau da auf.",
-        "Ende-zu-Ende-Verschlüsselung bedeutet etwas Stärkeres: Die Datei wird verschlüsselt, bevor sie Ihr Gerät verlässt, mit einem Schlüssel, den nur Absender und vorgesehener Empfänger je besitzen. Der Dienst, der sie transportiert — Server, Relay, alles dazwischen — besitzt diesen Schlüssel nie und hat deshalb auch nie den Klartext, egal wie danach gefragt wird.",
+        "Viele Dienste sagen „verschlüsselt“ und meinen damit nur, dass die Verbindung zu ihrem Server verschlüsselt ist — Standard-HTTPS/TLS, dasselbe Schloss-Symbol wie bei deiner Bank. Das ist echter Schutz gegen jemanden, der den Netzwerkverkehr abhört, endet aber am Server: Sobald deine Datei ankommt, kann der Dienst selbst sie lesen, weil er den Schlüssel besitzt. Viele alltägliche Tools hören genau da auf.",
+        "Ende-zu-Ende-Verschlüsselung bedeutet etwas Stärkeres: Die Datei wird verschlüsselt, bevor sie dein Gerät verlässt, mit einem Schlüssel, den nur Absender und vorgesehener Empfänger je besitzen. Der Dienst, der sie transportiert — Server, Relay, alles dazwischen — besitzt diesen Schlüssel nie und hat deshalb auch nie den Klartext, egal wie danach gefragt wird.",
         "„Zero-Knowledge“ ist ein verwandtes Konzept, das meist auf gespeicherte statt live gesendete Daten angewendet wird: Selbst Daten, die ruhig auf einem Server liegen, wurden mit einem Schlüssel verschlüsselt, den der Server selbst nie erhalten hat — der Betreiber hat also keine Möglichkeit, sie zu lesen, egal wie lange sie dort liegen.",
       ],
       bullets: [
@@ -468,13 +468,13 @@ const de = {
       ],
     },
     {
-      heading: "Was Sie vor dem Vertrauen in ein Übertragungs-Tool wirklich prüfen sollten",
+      heading: "Was du vor dem Vertrauen in ein Übertragungs-Tool wirklich prüfen solltest",
       body: [
         "Die Marketing-Sprache auf einer Website ist weniger wert als ein paar konkrete Fragen:",
       ],
       bullets: [
         "Steht dort „verschlüsselt“ (könnte nur TLS bedeuten) oder ausdrücklich „Ende-zu-Ende verschlüsselt“ (nur Absender und Empfänger besitzen den Schlüssel)?",
-        "Gibt es eine Möglichkeit zu überprüfen, dass die Verbindung nicht manipuliert wurde — ein Code, den Sie selbst vergleichen, statt nur ein Schloss-Symbol, dem Sie vertrauen müssen?",
+        "Gibt es eine Möglichkeit zu überprüfen, dass die Verbindung nicht manipuliert wurde — ein Code, den du selbst vergleichst, statt nur ein Schloss-Symbol, dem du vertrauen musst?",
         "Wird die Integrität der Datei geprüft, sodass eine beschädigte oder veränderte Datei nicht klammheimlich falsch ankommt?",
         "Ist der Code quelloffen und auditierbar, oder sind die Behauptungen bloß Marketing, dem man glauben muss?",
         "Verlangen Senden oder Empfangen mehr Identitätspreisgabe, als für die Übertragung tatsächlich nötig ist?",
@@ -484,10 +484,10 @@ const de = {
     {
       heading: "Wie Relayium jede dieser Fragen beantwortet",
       body: [
-        "Bei einer Live-Übertragung, bei der beide Seiten gleichzeitig online sind, erzeugt Relayium auf jedem Gerät ein frisches X25519-Schlüsselpaar und leitet einen gemeinsamen AES-256-GCM-Schlüssel ab, der nur innerhalb der beiden Browser existiert — er wird nie an Relayiums eigene Server gesendet. Ein kurzer, auf dem Bildschirm angezeigter Prüfcode (ein SAS) lässt beide Seiten bestätigen, dass die Schlüssel nicht von einem unehrlichen Server in der Mitte ausgetauscht wurden, und der SHA-256-Hash jeder Datei wird Ende-zu-Ende geprüft, sodass eine beschädigte Übertragung nicht unauffällig ankommt. Wie das genau funktioniert, wird ausführlicher in „Wie Relayium Ihre Dateien Ende-zu-Ende verschlüsselt“ beschrieben, falls Sie tiefer einsteigen möchten.",
-        "Ist der Empfänger noch nicht online, nutzt ein gespeicherter Download-Link ein wirklich anderes, Zero-Knowledge-Design: Ihr Browser erzeugt einen zufälligen AES-256-GCM-Schlüssel und verschlüsselt die Dateien damit, bevor überhaupt etwas hochgeladen wird. Dieser Schlüssel wird nie an den Server gesendet — er lebt nur im URL-Fragment des Links, dem Teil nach dem #, den Browser nie übertragen. Der Server besitzt am Ende nur Chiffretext, den er nicht entschlüsseln kann, plus ein von Ihnen gewähltes Ablaufdatum: 1 Stunde, 1 Tag, 3 Tage, 7 Tage, bis zu 14 Tage je nach Tarif, oder Löschung nach dem ersten vollständigen Download.",
+        "Bei einer Live-Übertragung, bei der beide Seiten gleichzeitig online sind, erzeugt Relayium auf jedem Gerät ein frisches X25519-Schlüsselpaar und leitet einen gemeinsamen AES-256-GCM-Schlüssel ab, der nur innerhalb der beiden Browser existiert — er wird nie an Relayiums eigene Server gesendet. Ein kurzer, auf dem Bildschirm angezeigter Verifizierungscode (ein SAS) lässt beide Seiten bestätigen, dass die Schlüssel nicht von einem unehrlichen Server in der Mitte ausgetauscht wurden, und der SHA-256-Hash jeder Datei wird Ende-zu-Ende geprüft, sodass eine beschädigte Übertragung nicht unauffällig ankommt. Wie das genau funktioniert, wird ausführlicher in „Wie Relayium deine Dateien Ende-zu-Ende verschlüsselt“ beschrieben, falls du tiefer einsteigen möchtest.",
+        "Ist der Empfänger noch nicht online, nutzt ein gespeicherter Download-Link ein wirklich anderes, Zero-Knowledge-Design: Dein Browser erzeugt einen zufälligen AES-256-GCM-Schlüssel und verschlüsselt die Dateien damit, bevor überhaupt etwas hochgeladen wird. Dieser Schlüssel wird nie an den Server gesendet — er lebt nur im URL-Fragment des Links, dem Teil nach dem #, den Browser nie übertragen. Der Server besitzt am Ende nur Chiffretext, den er nicht entschlüsseln kann, plus ein von dir gewähltes Ablaufdatum: 1 Stunde, 1 Tag, 3 Tage, 7 Tage, bis zu 14 Tage je nach Tarif, oder Löschung nach dem ersten vollständigen Download.",
         "Netzübergreifend, wo sich ohnehin oft kein direkter Pfad finden lässt, läuft der verschlüsselte Datenstrom über ein TURN-Relay — und auch dieses Relay sieht stets nur Chiffretext, nie eine lesbare Datei.",
-        "Nichts davon verlangt, dass Sie einer Behauptung einfach glauben: Relayiums Client- und Servercode ist unter der AGPL-3.0-Lizenz quelloffen und kann gelesen und geprüft werden, statt bloß geglaubt zu werden.",
+        "Nichts davon verlangt, dass du einer Behauptung einfach glaubst: Relayiums Client- und Servercode ist unter der AGPL-3.0-Lizenz quelloffen und kann gelesen und geprüft werden, statt bloß geglaubt zu werden.",
       ],
       bullets: [
         "Übertragungen im selben Netzwerk benötigen überhaupt kein Konto.",
@@ -497,8 +497,8 @@ const de = {
     {
       heading: "Verschlüsselung ist nicht alles — ein paar Gewohnheiten zählen weiterhin",
       body: [
-        "Starke Verschlüsselung schützt eine Datei während der Übertragung und im Ruhezustand, kann Sie aber nicht davon abhalten, einen Link an die falsche Adresse zu senden — behandeln Sie einen Freigabelink wie die Datei selbst und posten Sie ihn nicht irgendwo öffentlich.",
-        "Bei wirklich sensiblen Inhalten nehmen Sie sich die paar zusätzlichen Sekunden, einen Prüfcode am Telefon laut vorzulesen oder persönlich zu vergleichen, statt einfach darauf zu vertrauen, dass zwei nebeneinanderliegende, übereinstimmende Bildschirme nicht beide getäuscht wurden.",
+        "Starke Verschlüsselung schützt eine Datei während der Übertragung und im Ruhezustand, kann dich aber nicht davon abhalten, einen Link an die falsche Adresse zu senden — behandle einen Freigabelink wie die Datei selbst und poste ihn nicht irgendwo öffentlich.",
+        "Bei wirklich sensiblen Inhalten nimm dir die paar zusätzlichen Sekunden, einen Verifizierungscode am Telefon laut vorzulesen oder persönlich zu vergleichen, statt einfach darauf zu vertrauen, dass zwei nebeneinanderliegende, übereinstimmende Bildschirme nicht beide getäuscht wurden.",
         "Und kein noch so gut verschlüsseltes Übertragungs-Tool schützt eine Datei, die bereits auf einem kompromittierten Gerät offenliegt — gute Verschlüsselung setzt voraus, dass die beiden Endpunkte selbst vertrauenswürdig sind. Das ist kein Grund, beim Versenden von Dateien paranoid zu werden — es lohnt sich nur zu wissen, was Verschlüsselung abdeckt und was nicht.",
       ],
     },
@@ -508,11 +508,11 @@ const de = {
     items: [
       {
         q: "Ist es sicher, eine sensible Datei per E-Mail zu senden?",
-        a: "E-Mail ist nicht für vertrauliche Dateiübertragung konzipiert — Anhänge werden auf beiden Seiten routinemäßig von Mailservern aufbewahrt, gescannt und gesichert, und eine weitergeleitete Nachricht kann die Datei Personen vorlegen, die Sie nie im Sinn hatten. Für unkritische Dateien ist das in Ordnung; bei sensiblen Inhalten beseitigt ein Tool mit Ende-zu-Ende-Verschlüsselung diese Angriffsfläche.",
+        a: "E-Mail ist nicht für vertrauliche Dateiübertragung konzipiert — Anhänge werden auf beiden Seiten routinemäßig von Mailservern aufbewahrt, gescannt und gesichert, und eine weitergeleitete Nachricht kann die Datei Personen vorlegen, die du nie im Sinn hattest. Für unkritische Dateien ist das in Ordnung; bei sensiblen Inhalten beseitigt ein Tool mit Ende-zu-Ende-Verschlüsselung diese Angriffsfläche.",
       },
       {
         q: "Was bedeutet „Zero-Knowledge“ eigentlich?",
-        a: "Dass die Partei, die Ihre Daten speichert, nie den Schlüssel erhalten hat, um sie zu lesen. Die Verschlüsselung erfolgt auf Ihrem Gerät, bevor überhaupt etwas hochgeladen wird, und der Schlüssel liegt nur an einem Ort, den der Server nie sieht — etwa im URL-Fragment. Was auf dem Server liegt, ist also Chiffretext, den er strukturell nicht entschlüsseln kann, nicht nur Daten, die er verspricht, nicht anzusehen.",
+        a: "Dass die Partei, die deine Daten speichert, nie den Schlüssel erhalten hat, um sie zu lesen. Die Verschlüsselung erfolgt auf deinem Gerät, bevor überhaupt etwas hochgeladen wird, und der Schlüssel liegt nur an einem Ort, den der Server nie sieht — etwa im URL-Fragment. Was auf dem Server liegt, ist also Chiffretext, den er strukturell nicht entschlüsseln kann, nicht nur Daten, die er verspricht, nicht anzusehen.",
       },
       {
         q: "Reicht eine passwortgeschützte ZIP-Datei aus?",
@@ -520,7 +520,7 @@ const de = {
       },
       {
         q: "Behält Relayium eine Kopie meiner Dateien?",
-        a: "Im Echtzeitmodus nicht — die Datei wird direkt zwischen den beiden Browsern gestreamt, und nichts wird gespeichert. Bei einem gespeicherten Link besitzt der Server nur verschlüsselten Chiffretext, den er nicht lesen kann, bis der Link abläuft oder — bei gewählter Löschung nach dem ersten Download — einmal heruntergeladen wurde.",
+        a: "Im Echtzeitmodus nicht — die Datei wird direkt zwischen den beiden Browsern gestreamt, und nichts wird gespeichert. Bei einem gespeicherten Link besitzt der Server nur verschlüsselten Chiffretext, den er nicht lesen kann, bis der Link abläuft oder, wenn du Burn-after-read gewählt hast, einmal heruntergeladen wurde.",
       },
       {
         q: "Brauche ich ein Konto, um eine Datei zu senden oder zu empfangen?",
@@ -529,7 +529,7 @@ const de = {
     ],
   },
   cta: {
-    text: "Neugierig, ob ein Tool wirklich das schützt, was es verspricht? Starten Sie eine Übertragung und sehen Sie sich den Prüfcode und den Zero-Knowledge-Link selbst an.",
+    text: "Neugierig, ob ein Tool wirklich das schützt, was es verspricht? Starte eine Übertragung und sieh dir den Verifizierungscode und den Zero-Knowledge-Link selbst an.",
     button: "Relayium jetzt ausprobieren",
   },
   relatedHeading: "Weiterlesen",
@@ -538,66 +538,66 @@ const de = {
 const fr = {
   title: "Est-il sûr d'envoyer des fichiers sur Internet ?",
   description:
-    "Les vrais risques des pièces jointes, des liens cloud et des clés USB, ce que « chiffré de bout en bout » et « connaissance nulle » signifient réellement, et ce qu'il faut vérifier avant de faire confiance à un outil de transfert.",
+    "Les vrais risques des pièces jointes, des liens cloud et des clés USB, ce que « chiffré de bout en bout » et « divulgation nulle » signifient réellement, et ce qu'il faut vérifier avant de faire confiance à un outil de transfert.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "« Est-ce sûr d'envoyer ce fichier ? » est une question raisonnable à se poser, qu'il s'agisse d'une déclaration d'impôts, d'un contrat, ou simplement de photos que vous préféreriez garder privées. Ce guide n'a pas pour but de vous détourner des outils courants — il s'agit d'expliquer clairement ce qui se passe réellement quand vous envoyez un fichier par e-mail, le déposez dans un dossier cloud, ou le transportez sur une clé USB, ce que les expressions « chiffré de bout en bout » et « connaissance nulle » promettent réellement, et ce qu'il faut vérifier avant de confier quelque chose d'important à n'importe quel outil.",
+    "« Est-ce sûr d'envoyer ce fichier ? » est une question raisonnable à se poser, qu'il s'agisse d'une déclaration d'impôts, d'un contrat, ou simplement de photos que vous préféreriez garder privées. Ce guide n'a pas pour but de vous détourner des outils courants — il s'agit d'expliquer clairement ce qui se passe réellement quand vous envoyez un fichier par e-mail, le déposez dans un dossier cloud, ou le transportez sur une clé USB, ce que les expressions « chiffré de bout en bout » et « divulgation nulle » promettent réellement, et ce qu'il faut vérifier avant de confier quelque chose d'important à n'importe quel outil.",
     "Rien de tout cela ne nécessite de connaissances techniques. À la fin, vous saurez quelles questions poser — pour n'importe quelle méthode de transfert, y compris celle présentée ici.",
   ],
   sections: [
     {
-      heading: "Où les fichiers posent vraiment problème : les risques du quotidien",
+      heading: "Où les fichiers posent vraiment problème : les risques du quotidien",
       body: [
         "Les pièces jointes aux e-mails passent par les serveurs de votre fournisseur de messagerie et ceux du destinataire, et les deux analysent, indexent et sauvegardent couramment les messages pour le filtrage antispam et la reprise après sinistre — bien après que vous ayez oublié avoir envoyé ce fichier. Un e-mail transféré une seule fois, et le fichier se retrouve devant quelqu'un que vous n'aviez jamais prévu, sans aucun moyen de savoir si toutes les copies ont disparu.",
         "Les liens de stockage cloud sont pratiques, mais un lien continue généralement de fonctionner jusqu'à ce que vous pensiez à le révoquer, et « toute personne disposant du lien » n'est privé que dans la mesure où l'URL est difficile à deviner — ce qu'un raccourcisseur de lien ou un transfert malencontreux peut annuler. Le fichier hérite aussi de la sécurité de tout le compte dans lequel il se trouve, pas seulement de ce partage précis.",
-        "Une clé USB paraît sûre parce qu'elle est hors ligne, mais c'est précisément là le problème : la plupart des clés ne sont pas chiffrées par défaut, donc une clé oubliée dans un sac d'ordinateur portable ou une voiture de location remet le contenu en clair à quiconque la trouve, sans aucun mot de passe requis.",
-        "Les sites d'upload public gratuits résolvent le problème immédiat — faire passer un fichier de A à B — mais précisent rarement ce qui se passe ensuite : combien de temps il est conservé, s'il est analysé, qui pourrait tomber dessus par hasard, ou comment le site finance ses coûts (les hébergeurs de fichiers financés par la publicité ont un historique d'ajout de traceurs, voire pire).",
+        "Une clé USB paraît sûre parce qu'elle est hors ligne, mais c'est précisément là le problème : la plupart des clés ne sont pas chiffrées par défaut, donc une clé oubliée dans un sac d'ordinateur portable ou une voiture de location remet le contenu en clair à quiconque la trouve, sans aucun mot de passe requis.",
+        "Les sites de téléversement publics et gratuits résolvent le problème immédiat — faire passer un fichier de A à B — mais précisent rarement ce qui se passe ensuite : combien de temps il est conservé, s'il est analysé, qui pourrait tomber dessus par hasard, ou comment le site finance ses coûts (les hébergeurs de fichiers financés par la publicité ont un historique d'ajout de traceurs, voire pire).",
       ],
       bullets: [
-        "E-mail : conservé et analysé par les serveurs de messagerie, facile à transférer au-delà de votre contrôle",
-        "Liens cloud : continuent de fonctionner jusqu'à révocation, et héritent de la sécurité de tout le compte",
-        "Clés USB : non chiffrées par défaut, faciles à perdre ou à oublier",
-        "Sites d'upload gratuits : pratiques de conservation et d'analyse généralement peu claires",
+        "E-mail : conservé et analysé par les serveurs de messagerie, facile à transférer au-delà de votre contrôle",
+        "Liens cloud : continuent de fonctionner jusqu'à révocation, et héritent de la sécurité de tout le compte",
+        "Clés USB : non chiffrées par défaut, faciles à perdre ou à oublier",
+        "Sites de téléversement gratuits : pratiques de conservation et d'analyse généralement peu claires",
       ],
     },
     {
-      heading: "Ce que « chiffré de bout en bout » et « connaissance nulle » signifient réellement",
+      heading: "Ce que « chiffré de bout en bout » et « divulgation nulle » signifient réellement",
       body: [
-        "De nombreux services disent « chiffré » alors qu'ils veulent simplement dire que la connexion à leur serveur est chiffrée — le HTTPS/TLS standard, la même icône de cadenas que celle de votre banque. C'est une vraie protection contre quelqu'un qui écouterait le réseau, mais elle s'arrête au serveur : une fois votre fichier arrivé, le service lui-même peut le lire, parce qu'il détient la clé. Beaucoup d'outils du quotidien s'arrêtent exactement là.",
-        "Le chiffrement de bout en bout signifie quelque chose de plus fort : le fichier est chiffré avant même de quitter votre appareil, avec une clé que seuls l'expéditeur et le destinataire prévu détiennent jamais. Le service qui le transporte — le serveur, le relais, tout ce qui se trouve entre les deux — ne possède jamais cette clé, et n'a donc jamais le contenu en clair, quoi qu'on lui demande.",
-        "La « connaissance nulle » est une idée voisine, généralement appliquée à ce qui est stocké plutôt qu'envoyé en direct : même des données posées tranquillement sur un serveur ont été chiffrées avec une clé que le serveur lui-même n'a jamais reçue, si bien que l'opérateur n'a aucun moyen de les lire, quelle que soit la durée pendant laquelle elles y restent.",
+        "De nombreux services disent « chiffré » alors qu'ils veulent simplement dire que la connexion à leur serveur est chiffrée — le HTTPS/TLS standard, la même icône de cadenas que celle de votre banque. C'est une vraie protection contre quelqu'un qui écouterait le réseau, mais elle s'arrête au serveur : une fois votre fichier arrivé, le service lui-même peut le lire, parce qu'il détient la clé. Beaucoup d'outils du quotidien s'arrêtent exactement là.",
+        "Le chiffrement de bout en bout signifie quelque chose de plus fort : le fichier est chiffré avant même de quitter votre appareil, avec une clé que seuls l'expéditeur et le destinataire possèdent. Le service qui le transporte — le serveur, le relais, tout ce qui se trouve entre les deux — ne possède jamais cette clé, et n'a donc jamais le contenu en clair, quoi qu'on lui demande.",
+        "La « divulgation nulle » est une idée voisine, généralement appliquée à ce qui est stocké plutôt qu'envoyé en direct : même des données posées tranquillement sur un serveur ont été chiffrées avec une clé que le serveur lui-même n'a jamais reçue, si bien que l'opérateur n'a aucun moyen de les lire, quelle que soit la durée pendant laquelle elles y restent.",
       ],
       bullets: [
         "« Chiffré » tout seul signifie souvent simplement du TLS jusqu'au serveur — le fournisseur peut toujours lire le fichier.",
         "« Chiffré de bout en bout » signifie que seuls l'expéditeur et le destinataire détiennent la clé.",
-        "« Connaissance nulle » signifie que le serveur détient des données qu'il ne peut structurellement pas déchiffrer, même au repos.",
+        "« Divulgation nulle » signifie que le serveur détient des données qu'il ne peut structurellement pas déchiffrer, même au repos.",
       ],
     },
     {
       heading: "Ce qu'il faut vraiment vérifier avant de faire confiance à un outil de transfert",
       body: [
-        "Le langage marketing d'un site web vaut moins que quelques questions concrètes :",
+        "Le langage marketing d'un site web vaut moins que quelques questions concrètes :",
       ],
       bullets: [
-        "Est-il dit « chiffré » (ce qui pourrait n'être que du TLS) ou explicitement « chiffré de bout en bout » (seuls l'expéditeur et le destinataire détiennent la clé) ?",
-        "Existe-t-il un moyen de vérifier que la connexion n'a pas été altérée — un code que vous comparez vous-même, et pas seulement une icône de cadenas à laquelle il faut faire confiance ?",
-        "L'intégrité du fichier est-elle vérifiée, pour qu'un fichier corrompu ou modifié n'arrive pas silencieusement en paraissant intact ?",
-        "Le code est-il open source et auditable, ou ces affirmations ne sont-elles que du marketing à croire sur parole ?",
-        "L'envoi ou la réception exigent-ils de révéler plus d'identité que le transfert n'en a réellement besoin ?",
-        "Si quelque chose est stocké, a-t-il une durée de vie claire et limitée — une expiration ou une suppression après téléchargement — plutôt que de rester là indéfiniment ?",
+        "Est-il dit « chiffré » (ce qui pourrait n'être que du TLS) ou explicitement « chiffré de bout en bout » (seuls l'expéditeur et le destinataire détiennent la clé) ?",
+        "Existe-t-il un moyen de vérifier que la connexion n'a pas été altérée — un code que vous comparez vous-même, et pas seulement une icône de cadenas à laquelle il faut faire confiance ?",
+        "L'intégrité du fichier est-elle vérifiée, pour qu'un fichier corrompu ou modifié n'arrive pas silencieusement en paraissant intact ?",
+        "Le code est-il open source et auditable, ou ces affirmations ne sont-elles que du marketing à croire sur parole ?",
+        "L'envoi ou la réception exigent-ils de révéler plus d'identité que le transfert n'en a réellement besoin ?",
+        "Si quelque chose est stocké, a-t-il une durée de vie claire et limitée — une expiration ou une suppression après téléchargement — plutôt que de rester là indéfiniment ?",
       ],
     },
     {
       heading: "Comment Relayium répond à chacun de ces points",
       body: [
         "Pour un transfert en direct, avec les deux personnes en ligne en même temps, Relayium génère une nouvelle paire de clés X25519 sur chaque appareil et dérive une clé AES-256-GCM partagée qui n'existe qu'à l'intérieur des deux navigateurs — elle n'est jamais envoyée aux serveurs de Relayium eux-mêmes. Un court code de vérification affiché à l'écran (un SAS) permet aux deux parties de confirmer que les clés n'ont pas été substituées par un serveur malhonnête au milieu, et le hachage SHA-256 de chaque fichier est vérifié de bout en bout, si bien qu'un transfert corrompu n'arrive pas en paraissant intact. Le détail exact de ce mécanisme est expliqué plus en profondeur dans « Comment Relayium chiffre vos fichiers de bout en bout », si vous voulez aller plus loin que cette page.",
-        "Quand le destinataire n'est pas encore en ligne, un lien de téléchargement stocké utilise un mécanisme réellement différent, à connaissance nulle : votre navigateur génère une clé AES-256-GCM aléatoire et l'utilise pour chiffrer les fichiers avant tout envoi. Cette clé n'est jamais envoyée au serveur — elle ne vit que dans le fragment d'URL du lien, la partie après le #, que les navigateurs ne transmettent jamais. Le serveur finit par détenir uniquement du chiffré qu'il n'a aucun moyen de déchiffrer, plus une expiration que vous choisissez : 1 heure, 1 jour, 3 jours, 7 jours, jusqu'à 14 jours selon votre offre, ou effacement après le premier téléchargement complet.",
-        "Entre réseaux, où un chemin direct est de toute façon souvent introuvable, le flux chiffré passe par un relais TURN — et ce relais aussi ne voit toujours que du chiffré, jamais un fichier lisible.",
-        "Rien de tout cela ne vous demande de croire une affirmation sur parole : le code client et serveur de Relayium est open source sous licence AGPL-3.0, et peut donc être lu et audité plutôt que simplement cru.",
+        "Quand le destinataire n'est pas encore en ligne, un lien de téléchargement stocké utilise un mécanisme réellement différent, à divulgation nulle : votre navigateur génère une clé AES-256-GCM aléatoire et l'utilise pour chiffrer les fichiers avant tout envoi. Cette clé n'est jamais envoyée au serveur — elle ne vit que dans le fragment d'URL du lien, la partie après le #, que les navigateurs ne transmettent jamais. Le serveur finit par détenir uniquement du texte chiffré qu'il n'a aucun moyen de déchiffrer, plus une expiration que vous choisissez : 1 heure, 1 jour, 3 jours, 7 jours, jusqu'à 14 jours selon votre offre, ou autodestruction après le premier téléchargement complet.",
+        "Entre réseaux, où un chemin direct est de toute façon souvent introuvable, le flux chiffré passe par un relais TURN — et ce relais aussi ne voit toujours que du texte chiffré, jamais un fichier lisible.",
+        "Rien de tout cela ne vous demande de croire une affirmation sur parole : le code client et serveur de Relayium est open source sous licence AGPL-3.0, et peut donc être lu et audité plutôt que simplement cru.",
       ],
       bullets: [
         "Les transferts sur le même réseau ne nécessitent aucun compte du tout.",
-        "Envoyer entre réseaux via un code de jumelage, ou créer un lien stocké, exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte.",
+        "Envoyer entre réseaux via un code d'appairage, ou créer un lien stocké, exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte.",
       ],
     },
     {
@@ -605,7 +605,7 @@ const fr = {
       body: [
         "Un chiffrement solide protège un fichier en transit et au repos, mais il ne peut pas vous empêcher d'envoyer un lien à la mauvaise adresse — traitez un lien de partage comme le fichier lui-même, et ne le publiez pas quelque part de public.",
         "Pour tout ce qui est vraiment sensible, prenez les quelques secondes supplémentaires pour comparer un code de vérification à voix haute lors d'un appel, ou en personne, plutôt que de faire confiance au fait que deux écrans côte à côte qui correspondent n'aient pas tous deux été trompés.",
-        "Et aucun outil de transfert, aussi bien chiffré soit-il, ne protège un fichier déjà exposé sur un appareil compromis — un bon chiffrement suppose que les deux extrémités elles-mêmes sont dignes de confiance. Rien de tout cela n'est une raison de devenir paranoïaque à l'idée d'envoyer des fichiers ; il vaut simplement la peine de savoir ce que le chiffrement couvre, et ce qu'il ne couvre pas.",
+        "Et aucun outil de transfert, aussi bien chiffré soit-il, ne protège un fichier déjà exposé sur un appareil compromis — un bon chiffrement suppose que les deux extrémités elles-mêmes sont dignes de confiance. Rien de tout cela n'est une raison de devenir paranoïaque à l'idée d'envoyer des fichiers ; il vaut simplement la peine de savoir ce que le chiffrement couvre, et ce qu'il ne couvre pas.",
       ],
     },
   ],
@@ -613,29 +613,29 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Est-il sûr d'envoyer un fichier sensible par e-mail ?",
-        a: "L'e-mail n'est pas conçu pour le transfert confidentiel de fichiers — les pièces jointes sont couramment conservées, analysées et sauvegardées par les serveurs de messagerie des deux côtés, et un message transféré peut mettre le fichier sous les yeux de personnes que vous n'aviez jamais prévues. C'est acceptable pour des fichiers peu sensibles ; pour quelque chose de sensible, un outil chiffré de bout en bout supprime cette exposition.",
+        q: "Est-il sûr d'envoyer un fichier sensible par e-mail ?",
+        a: "L'e-mail n'est pas conçu pour le transfert confidentiel de fichiers — les pièces jointes sont couramment conservées, analysées et sauvegardées par les serveurs de messagerie des deux côtés, et un message transféré peut mettre le fichier sous les yeux de personnes que vous n'aviez jamais prévues. C'est acceptable pour des fichiers peu sensibles ; pour quelque chose de sensible, un outil chiffré de bout en bout supprime cette exposition.",
       },
       {
-        q: "Que signifie réellement « connaissance nulle » ?",
-        a: "Que la partie qui stocke vos données n'a jamais reçu la clé pour les lire. Le chiffrement se fait sur votre appareil avant tout envoi, et la clé ne vit que là où le serveur ne la voit jamais — comme un fragment d'URL — si bien que ce qui se trouve sur le serveur est du chiffré qu'il ne peut structurellement pas déchiffrer, pas simplement des données qu'il promet de ne pas regarder.",
+        q: "Que signifie réellement « divulgation nulle » ?",
+        a: "Que la partie qui stocke vos données n'a jamais reçu la clé pour les lire. Le chiffrement se fait sur votre appareil avant tout envoi, et la clé ne vit que là où le serveur ne la voit jamais — comme un fragment d'URL — si bien que ce qui se trouve sur le serveur est du texte chiffré qu'il ne peut structurellement pas déchiffrer, pas simplement des données qu'il promet de ne pas regarder.",
       },
       {
-        q: "Un fichier zip protégé par mot de passe suffit-il ?",
+        q: "Un fichier zip protégé par mot de passe suffit-il ?",
         a: "C'est mieux que rien, mais le mot de passe voyage souvent par le même canal que le fichier — dans le même fil d'e-mails, par exemple —, ce qui annule la protection, et les implémentations du chiffrement zip varient beaucoup en solidité. Un outil construit autour du chiffrement de bout en bout supprime ce maillon faible en n'ayant jamais besoin d'un mot de passe partagé.",
       },
       {
-        q: "Relayium conserve-t-il une copie de mes fichiers ?",
-        a: "En mode temps réel, non — le fichier circule directement entre les deux navigateurs et rien n'est stocké. Pour un lien stocké, le serveur ne détient que du chiffré qu'il ne peut pas lire, jusqu'à ce que le lien expire ou soit téléchargé une fois si vous avez choisi l'effacement après premier téléchargement.",
+        q: "Relayium conserve-t-il une copie de mes fichiers ?",
+        a: "En mode temps réel, non — le fichier circule directement entre les deux navigateurs et rien n'est stocké. Pour un lien stocké, le serveur ne détient que du texte chiffré qu'il ne peut pas lire, jusqu'à ce que le lien expire ou soit téléchargé une fois si vous avez choisi l'autodestruction après lecture.",
       },
       {
-        q: "Ai-je besoin d'un compte pour envoyer ou recevoir un fichier ?",
-        a: "Sur le même réseau, aucun des deux côtés n'a besoin de compte. Envoyer entre réseaux via un code de jumelage, ou créer un lien stocké, exige que l'expéditeur se connecte — mais la personne qui reçoit n'a jamais besoin de compte, quel que soit le mode utilisé.",
+        q: "Ai-je besoin d'un compte pour envoyer ou recevoir un fichier ?",
+        a: "Sur le même réseau, aucun des deux côtés n'a besoin de compte. Envoyer entre réseaux via un code d'appairage, ou créer un lien stocké, exige que l'expéditeur se connecte — mais la personne qui reçoit n'a jamais besoin de compte, quel que soit le mode utilisé.",
       },
     ],
   },
   cta: {
-    text: "Curieux de savoir si un outil protège vraiment ce qu'il prétend ? Lancez un transfert et observez par vous-même le code de vérification et le lien à connaissance nulle.",
+    text: "Curieux de savoir si un outil protège vraiment ce qu'il prétend ? Lancez un transfert et observez par vous-même le code de vérification et le lien à divulgation nulle.",
     button: "Essayer Relayium maintenant",
   },
   relatedHeading: "À lire ensuite",
@@ -644,74 +644,74 @@ const fr = {
 const ar = {
   title: "هل من الآمن إرسال الملفات عبر الإنترنت؟",
   description:
-    "ما الذي يحدث فعلاً من مشكلات مع البريد الإلكتروني وروابط السحابة ومحركات USB — وما الذي يعنيه حقاً «التشفير من الطرف إلى الطرف» و«المعرفة الصفرية»، وما الذي ينبغي التحقق منه قبل الوثوق بأداة نقل.",
+    "ما الذي يحدث فعلًا من مشكلات مع البريد الإلكتروني وروابط السحابة ومحركات USB — وما الذي يعنيه حقًا «التشفير من الطرف إلى الطرف» و«المعرفة الصفرية»، وما الذي ينبغي التحقق منه قبل الوثوق بأداة نقل.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "«هل من الآمن إرسال هذا الملف؟» سؤال معقول يستحق أن تتوقف وتطرحه، سواء أكان إقراراً ضريبياً أم عقداً أم مجرد صور تفضّل أن تبقى خاصة. لا تهدف هذه المقالة إلى تنفيرك من الأدوات الشائعة — بل إلى أن تستعرض بوضوح ما الذي يحدث فعلاً لملف حين ترسله بالبريد الإلكتروني، أو تضعه في مجلد سحابي، أو تحمله على ذاكرة USB، وما الذي تَعِد به عبارتا «التشفير من الطرف إلى الطرف» و«المعرفة الصفرية» فعلاً، وما الذي ينبغي التحقق منه قبل أن تأتمن أي أداة على شيء يهمّك.",
+    "«هل من الآمن إرسال هذا الملف؟» سؤال معقول يستحق أن تتوقف وتطرحه، سواء أكان إقرارًا ضريبيًا أم عقدًا أم مجرد صور تفضّل أن تبقى خاصة. لا تهدف هذه المقالة إلى تنفيرك من الأدوات الشائعة — بل إلى أن تستعرض بوضوح ما الذي يحدث فعلًا لملف حين ترسله بالبريد الإلكتروني، أو تضعه في مجلد سحابي، أو تحمله على ذاكرة USB، وما الذي تَعِد به عبارتا «التشفير من الطرف إلى الطرف» و«المعرفة الصفرية» فعلًا، وما الذي ينبغي التحقق منه قبل أن تأتمن أي أداة على شيء يهمّك.",
     "لا يتطلّب أيٌّ من هذا خلفية تقنية. وبحلول النهاية، ستعرف ما الأسئلة التي ينبغي طرحها — على أي طريقة نقل، بما فيها هذه الطريقة.",
   ],
   sections: [
     {
-      heading: "أين تتعرّض الملفات للخطر فعلاً: المخاطر اليومية",
+      heading: "أين تتعرّض الملفات للخطر فعلًا: المخاطر اليومية",
       body: [
-        "تمرّ مرفقات البريد الإلكتروني عبر خوادم مزوّد بريدك وخوادم المُستقبِل، وكلاهما عادةً يفحص الرسائل ويفهرسها وينشئ نسخاً احتياطية منها لغرض تصفية البريد المزعج والتعافي من الكوارث — بعد وقت طويل من نسيانك أنك أرسلتها. أعد توجيه البريد مرة واحدة، ويصبح الملف أمام شخص لم تقصده قط، دون أي وسيلة للتأكد من أن كل نسخة قد زالت.",
-        "روابط التخزين السحابي مريحة، لكن الرابط عادةً يظل يعمل حتى تتذكّر إبطاله، و«أي شخص لديه الرابط» ليس خاصاً إلا بقدر عنوان URL يصعب تخمينه — وهو ما قد تُبطِله خدمة اختصار روابط أو إعادة توجيه غير مبالية. كما يرث الملف أمان الحساب كله الذي يقبع فيه، لا أمان المشاركة نفسها فقط.",
-        "تبدو ذاكرة USB آمنة لأنها غير متصلة بالإنترنت، لكن هذا بالضبط هو مكمن الثغرة: معظم المحركات غير مشفّرة افتراضياً، فذاكرة تُركت في حقيبة حاسوب محمول أو في سيارة مستأجرة تسلّم النص الصريح لمن يجدها، دون الحاجة إلى أي كلمة مرور.",
-        "تحلّ مواقع الرفع العامة المجانية المشكلة الآنية — نقل ملف من ألف إلى باء — لكنها نادراً ما تقول ما الذي يحدث بعد ذلك: كم يُحتفَظ به، وهل يُفحَص، ومن قد يعثر عليه مصادفةً، وكيف يغطّي الموقع نفقاته (مواقع استضافة الملفات المموَّلة بالإعلانات لها سجلّ في تضمين أدوات التتبّع أو ما هو أسوأ).",
+        "تمرّ مرفقات البريد الإلكتروني عبر خوادم مزوّد بريدك وخوادم المُستقبِل، وكلاهما عادةً يفحص الرسائل ويفهرسها وينشئ نسخًا احتياطية منها لغرض تصفية البريد المزعج والتعافي من الكوارث — بعد وقت طويل من نسيانك أنك أرسلتها. أعد توجيه البريد مرة واحدة، ويصبح الملف أمام شخص لم تقصده قط، دون أي وسيلة للتأكد من أن كل نسخة قد زالت.",
+        "روابط التخزين السحابي مريحة، لكن الرابط عادةً يظل يعمل حتى تتذكّر إبطاله، و«أي شخص لديه الرابط» ليس خاصًا إلا بقدر عنوان URL يصعب تخمينه — وهو ما قد تُبطِله خدمة اختصار روابط أو إعادة توجيه غير مبالية. كما يرث الملف أمان الحساب كله الذي يقبع فيه، لا أمان المشاركة نفسها فقط.",
+        "تبدو ذاكرة USB آمنة لأنها غير متصلة بالإنترنت، لكن هذا بالضبط هو مكمن الثغرة: معظم المحركات غير مشفّرة افتراضيًا، فذاكرة تُركت في حقيبة حاسوب محمول أو في سيارة مستأجرة تسلّم النص الصريح لمن يجدها، دون الحاجة إلى أي كلمة مرور.",
+        "تحلّ مواقع الرفع العامة المجانية المشكلة الآنية — نقل ملف من ألف إلى باء — لكنها نادرًا ما تقول ما الذي يحدث بعد ذلك: كم يُحتفَظ به، وهل يُفحَص، ومن قد يعثر عليه مصادفةً، وكيف يغطّي الموقع نفقاته (مواقع استضافة الملفات المموَّلة بالإعلانات لها سجلّ في تضمين أدوات التتبّع أو ما هو أسوأ).",
       ],
       bullets: [
         "البريد الإلكتروني: تحتفظ به خوادم البريد وتفحصه، ويسهل إعادة توجيهه خارج نطاق سيطرتك",
         "روابط السحابة: تظل تعمل حتى إبطالها، وترث أمان الحساب كله",
-        "محركات USB: غير مشفّرة افتراضياً، ويسهل فقدانها أو نسيانها",
+        "محركات USB: غير مشفّرة افتراضيًا، ويسهل فقدانها أو نسيانها",
         "مواقع الرفع المجانية: ممارسات الاحتفاظ والفحص عادةً غير واضحة",
       ],
     },
     {
-      heading: "ما الذي يعنيه فعلاً «التشفير من الطرف إلى الطرف» و«المعرفة الصفرية»",
+      heading: "ما الذي يعنيه فعلًا «التشفير من الطرف إلى الطرف» و«المعرفة الصفرية»",
       body: [
         "كثير من الخدمات تقول «مشفّر» ولا تعني بذلك سوى أن الاتصال بخادمها مشفّر — أي HTTPS/TLS القياسي، نفس أيقونة القفل التي يستخدمها مصرفك. هذه حماية حقيقية ضد من يتنصّت على الشبكة، لكنها تتوقف عند الخادم: ما إن يصل ملفك، حتى تستطيع الخدمة نفسها قراءته، لأنها تملك المفتاح. وكثير من الأدوات اليومية تتوقف عند هذا الحد بالضبط.",
-        "يعني التشفير من الطرف إلى الطرف شيئاً أقوى: يُشفَّر الملف قبل أن يغادر جهازك، بمفتاح لا يملكه سوى المُرسِل والمُستقبِل المقصود. أما الخدمة التي تحمله — الخادم، المُرحِّل، وأي شيء بينهما — فلا تملك المفتاح أبداً، ولذلك لا تملك النص الصريح أبداً، مهما طُلِب منها ذلك.",
-        "«المعرفة الصفرية» فكرة ذات صلة تُطبَّق عادةً على شيء مُخزَّن لا مُرسَل بشكل فوري: حتى البيانات القابعة على خادم شُفِّرت بمفتاح لم يُعطَ للخادم نفسه قط، فلا سبيل للمشغّل إلى قراءتها أبداً، مهما طالت مدة بقائها هناك.",
+        "يعني التشفير من الطرف إلى الطرف شيئًا أقوى: يُشفَّر الملف قبل أن يغادر جهازك، بمفتاح لا يملكه سوى المُرسِل والمُستقبِل المقصود. أما الخدمة التي تحمله — الخادم، المُرحِّل، وأي شيء بينهما — فلا تملك المفتاح أبدًا، ولذلك لا تملك النص الصريح أبدًا، مهما طُلِب منها ذلك.",
+        "«المعرفة الصفرية» فكرة ذات صلة تُطبَّق عادةً على شيء مُخزَّن لا مُرسَل بشكل فوري: حتى البيانات القابعة على خادم شُفِّرت بمفتاح لم يُعطَ للخادم نفسه قط، فلا سبيل للمشغّل إلى قراءتها أبدًا، مهما طالت مدة بقائها هناك.",
       ],
       bullets: [
-        "كلمة «مشفّر» وحدها كثيراً ما تعني مجرد TLS حتى الخادم — ولا يزال بإمكان المزوّد قراءة الملف.",
+        "كلمة «مشفّر» وحدها كثيرًا ما تعني مجرد TLS حتى الخادم — ولا يزال بإمكان المزوّد قراءة الملف.",
         "«التشفير من الطرف إلى الطرف» يعني أن المُرسِل والمُستقبِل وحدهما يملكان المفتاح.",
-        "«المعرفة الصفرية» تعني أن الخادم يحمل بيانات لا يستطيع فك تشفيرها بنيوياً، حتى وهي قابعة.",
+        "«المعرفة الصفرية» تعني أن الخادم يحمل بيانات لا يستطيع فك تشفيرها بنيويًا، حتى وهي قابعة.",
       ],
     },
     {
-      heading: "ما الذي ينبغي التحقق منه فعلاً قبل الوثوق بأداة نقل",
+      heading: "ما الذي ينبغي التحقق منه فعلًا قبل الوثوق بأداة نقل",
       body: [
         "لغة التسويق على أي موقع أقل قيمة من بضعة أسئلة ملموسة:",
       ],
       bullets: [
-        "هل تقول «مشفّر» (قد تعني مجرد TLS) أم تقول تحديداً «التشفير من الطرف إلى الطرف» (المُرسِل والمُستقبِل وحدهما يملكان المفتاح)؟",
+        "هل تقول «مشفّر» (قد تعني مجرد TLS) أم تقول تحديدًا «التشفير من الطرف إلى الطرف» (المُرسِل والمُستقبِل وحدهما يملكان المفتاح)؟",
         "هل هناك طريقة للتحقق من أن الاتصال لم يُعبَث به — رمز تقارنه، لا مجرد أيقونة قفل عليك أن تثق بها؟",
-        "هل يُتحقَّق من سلامة الملف، بحيث لا يصل ملف تالف أو مُعدَّل خاطئاً بصمت؟",
+        "هل يُتحقَّق من سلامة الملف، بحيث لا يصل ملف تالف أو مُعدَّل خاطئًا بصمت؟",
         "هل الشيفرة مفتوحة المصدر وقابلة للتدقيق، أم أن الادّعاءات مجرد تسويق عليك تصديقه على عِلّاته؟",
-        "هل يتطلّب الإرسال أو الاستقبال تسليم هوية أكثر مما تحتاجه عملية النقل فعلاً؟",
-        "إذا خُزِّن أي شيء، فهل له عمر واضح ومحدود — انتهاء صلاحية أو حذف بعد التنزيل — بدلاً من بقائه هناك إلى أجل غير مسمّى؟",
+        "هل يتطلّب الإرسال أو الاستقبال تسليم هوية أكثر مما تحتاجه عملية النقل فعلًا؟",
+        "إذا خُزِّن أي شيء، فهل له عمر واضح ومحدود — انتهاء صلاحية أو حذف بعد التنزيل — بدلًا من بقائه هناك إلى أجل غير مسمّى؟",
       ],
     },
     {
       heading: "كيف يجيب Relayium عن كلٍّ من هذه",
       body: [
-        "في النقل الفوري، مع وجود الطرفين متصلَين في آن واحد، يولّد Relayium زوج مفاتيح X25519 جديداً على كل جهاز ويشتقّ مفتاح AES-256-GCM مشتركاً موجوداً فقط داخل المتصفحَين — ولا يُرسَل أبداً إلى خوادم Relayium نفسها. ويتيح رمز تحقق قصير على الشاشة (SAS) للطرفين تأكيد أن المفاتيح لم تُستبدَل من قِبَل خادم غير نزيه في المنتصف، وتُفحَص تجزئة SHA-256 لكل ملف من الطرف إلى الطرف حتى لا يصل نقل تالف وهو يبدو سليماً. أما تفاصيل كيفية عمل ذلك بالضبط فتُشرَح بعمق أكبر في «كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف»، إن أردت التعمّق أكثر من هذه الصفحة.",
-        "حين لا يكون المُستقبِل متصلاً بعد، يستخدم رابط التنزيل المُخزَّن تصميماً مختلفاً فعلاً بمعرفة صفرية: يولّد متصفحك مفتاح AES-256-GCM عشوائياً ويشفّر به الملفات قبل رفع أي شيء. لا يُرسَل هذا المفتاح إلى الخادم أبداً — بل يوجد فقط في جزء عنوان الرابط (URL fragment)، وهو الجزء الذي يلي #، والذي لا ترسله المتصفحات أبداً. ينتهي الأمر بالخادم حاملاً نصاً مُشفَّراً لا سبيل له إلى فك تشفيره، إضافة إلى مدة انتهاء صلاحية تختارها أنت: ساعة واحدة، أو يوم واحد، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب خطتك، أو التلاشي بعد أول تنزيل مكتمل.",
-        "عبر الشبكات، حيث يتعذّر إيجاد مسار مباشر في الغالب أصلاً، يمرّ التدفق المُشفَّر على مُرحِّل TURN — وهذا المُرحِّل أيضاً لا يرى سوى النص المُشفَّر، ولا يرى أبداً ملفاً قابلاً للقراءة.",
-        "لا يطلب أيٌّ من هذا أن تصدّق ادّعاءً على عِلّاته: شيفرة عميل Relayium وخادمه مفتوحة المصدر بموجب رخصة AGPL-3.0، فيمكن قراءتها وتدقيقها بدلاً من تصديقها على عِلّاته.",
+        "في النقل الفوري، مع وجود الطرفين متصلَين في آن واحد، يولّد Relayium زوج مفاتيح X25519 جديدًا على كل جهاز ويشتقّ مفتاح AES-256-GCM مشتركًا موجودًا فقط داخل المتصفحَين — ولا يُرسَل أبدًا إلى خوادم Relayium نفسها. ويتيح رمز تحقق قصير على الشاشة (SAS) للطرفين تأكيد أن المفاتيح لم تُستبدَل من قِبَل خادم غير نزيه في المنتصف، وتُفحَص تجزئة SHA-256 لكل ملف من الطرف إلى الطرف حتى لا يصل نقل تالف وهو يبدو سليمًا. أما تفاصيل كيفية عمل ذلك بالضبط فتُشرَح بعمق أكبر في «كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف»، إن أردت التعمّق أكثر من هذه الصفحة.",
+        "حين لا يكون المُستقبِل متصلًا بعد، يستخدم رابط التنزيل المُخزَّن تصميمًا مختلفًا فعلًا بمعرفة صفرية: يولّد متصفحك مفتاح AES-256-GCM عشوائيًا ويشفّر به الملفات قبل رفع أي شيء. لا يُرسَل هذا المفتاح إلى الخادم أبدًا — بل يوجد فقط في جزء عنوان الرابط (URL fragment)، وهو الجزء الذي يلي #، والذي لا ترسله المتصفحات أبدًا. ينتهي الأمر بالخادم حاملًا نصًا مُشفَّرًا لا سبيل له إلى فك تشفيره، إضافة إلى مدة انتهاء صلاحية تختارها أنت: ساعة واحدة، أو يوم واحد، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب باقتك، أو الحذف بعد أول تنزيل مكتمل.",
+        "عبر الشبكات، حيث يتعذّر إيجاد مسار مباشر في الغالب أصلًا، يمرّ التدفق المُشفَّر على مُرحِّل TURN — وهذا المُرحِّل أيضًا لا يرى سوى النص المُشفَّر، ولا يرى أبدًا ملفًا قابلًا للقراءة.",
+        "لا يطلب أيٌّ من هذا أن تصدّق ادّعاءً على عِلّاته: شيفرة عميل Relayium وخادمه مفتوحة المصدر بموجب رخصة AGPL-3.0، فيمكن قراءتها وتدقيقها بدلًا من تصديقها على عِلّاته.",
       ],
       bullets: [
         "لا تحتاج عمليات النقل داخل الشبكة نفسها إلى أي حساب على الإطلاق.",
-        "الإرسال عبر الشبكات برمز الاقتران، أو إنشاء رابط مُخزَّن، يتطلّب تسجيل دخول المُرسِل — أما المُستقبِل فلا يحتاج إلى حساب أبداً.",
+        "الإرسال عبر الشبكات برمز الاقتران، أو إنشاء رابط مُخزَّن، يتطلّب تسجيل دخول المُرسِل — أما المُستقبِل فلا يحتاج إلى حساب أبدًا.",
       ],
     },
     {
       heading: "التشفير ليس القصة كلها — لا تزال بعض العادات مهمة",
       body: [
         "يحمي التشفير القوي الملف أثناء نقله وأثناء تخزينه، لكنه لا يمنعك من إرسال رابط إلى العنوان الخطأ — تعامل مع رابط المشاركة كأنه الملف نفسه، ولا تنشره في مكان عام.",
-        "بالنسبة لأي شيء حسّاس فعلاً، خصّص بضع ثوانٍ إضافية لمقارنة رمز التحقق بصوت عالٍ عبر مكالمة، أو وجهاً لوجه، بدلاً من الثقة بأن شاشتين متطابقتين متجاورتين لم تُخدَعا كلتاهما.",
-        "ولا توجد أداة نقل، مهما بلغت جودة تشفيرها، تحمي ملفاً منكشفاً أصلاً على جهاز مُخترَق — فالتشفير الجيد يفترض أن الطرفين نفسيهما جديران بالثقة. لا شيء من هذا سبب للإصابة بجنون الارتياب من إرسال الملفات؛ إنما من المفيد فقط أن تعرف ما الذي يغطّيه التشفير وما لا يغطّيه.",
+        "بالنسبة لأي شيء حسّاس فعلًا، خصّص بضع ثوانٍ إضافية لمقارنة رمز التحقق بصوت عالٍ عبر مكالمة، أو وجهًا لوجه، بدلًا من الثقة بأن شاشتين متطابقتين متجاورتين لم تُخدَعا كلتاهما.",
+        "ولا توجد أداة نقل، مهما بلغت جودة تشفيرها، تحمي ملفًا منكشفًا أصلًا على جهاز مُخترَق — فالتشفير الجيد يفترض أن الطرفين نفسيهما جديران بالثقة. لا شيء من هذا سبب للإصابة بجنون الارتياب من إرسال الملفات؛ إنما من المفيد فقط أن تعرف ما الذي يغطّيه التشفير وما لا يغطّيه.",
       ],
     },
   ],
@@ -720,28 +720,28 @@ const ar = {
     items: [
       {
         q: "هل من الآمن إرسال ملف حسّاس بالبريد الإلكتروني؟",
-        a: "لم يُصمَّم البريد الإلكتروني لنقل الملفات السرية — فالمرفقات عادةً تُحتفَظ بها خوادم البريد على الطرفين وتُفحَص وتُنسَخ احتياطياً، ويمكن لرسالة معاد توجيهها أن تضع الملف أمام أشخاص لم تقصدهم قط. لا بأس بذلك للملفات قليلة الأهمية؛ أما لأي شيء حسّاس، فأداة تعتمد التشفير من الطرف إلى الطرف تُزيل هذا الانكشاف.",
+        a: "لم يُصمَّم البريد الإلكتروني لنقل الملفات السرية — فالمرفقات عادةً تُحتفَظ بها خوادم البريد على الطرفين وتُفحَص وتُنسَخ احتياطيًا، ويمكن لرسالة معاد توجيهها أن تضع الملف أمام أشخاص لم تقصدهم قط. لا بأس بذلك للملفات قليلة الأهمية؛ أما لأي شيء حسّاس، فأداة تعتمد التشفير من الطرف إلى الطرف تُزيل هذا الانكشاف.",
       },
       {
-        q: "ما الذي تعنيه «المعرفة الصفرية» فعلاً؟",
-        a: "تعني أن الطرف الذي يخزّن بياناتك لم يُعطَ قط المفتاح اللازم لقراءتها. يحدث التشفير على جهازك قبل رفع أي شيء، ويوجد المفتاح فقط في مكان لا يراه الخادم أبداً — مثل جزء عنوان الرابط (URL fragment) — فيكون ما يقبع على الخادم نصاً مُشفَّراً لا يستطيع فك تشفيره بنيوياً، لا مجرد بيانات يَعِد بألّا ينظر إليها.",
+        q: "ما الذي تعنيه «المعرفة الصفرية» فعلًا؟",
+        a: "تعني أن الطرف الذي يخزّن بياناتك لم يُعطَ قط المفتاح اللازم لقراءتها. يحدث التشفير على جهازك قبل رفع أي شيء، ويوجد المفتاح فقط في مكان لا يراه الخادم أبدًا — مثل جزء عنوان الرابط (URL fragment) — فيكون ما يقبع على الخادم نصًا مُشفَّرًا لا يستطيع فك تشفيره بنيويًا، لا مجرد بيانات يَعِد بألّا ينظر إليها.",
       },
       {
         q: "هل يكفي ملف مضغوط محميّ بكلمة مرور؟",
-        a: "هذا أفضل من لا شيء، لكن كلمة المرور غالباً ما تسير بالطريق نفسه الذي يسير به الملف — في سلسلة رسائل البريد الإلكتروني نفسها مثلاً — وهو ما يُبطِل الحماية، كما أن قوة تطبيقات تشفير الملفات المضغوطة تتفاوت تفاوتاً كبيراً. أما أداة مبنية على التشفير من الطرف إلى الطرف فتُزيل هذه الحلقة الضعيفة بعدم حاجتها إلى كلمة مرور مشتركة من الأساس.",
+        a: "هذا أفضل من لا شيء، لكن كلمة المرور غالبًا ما تسير بالطريق نفسه الذي يسير به الملف — في سلسلة رسائل البريد الإلكتروني نفسها مثلًا — وهو ما يُبطِل الحماية، كما أن قوة تطبيقات تشفير الملفات المضغوطة تتفاوت تفاوتًا كبيرًا. أما أداة مبنية على التشفير من الطرف إلى الطرف فتُزيل هذه الحلقة الضعيفة بعدم حاجتها إلى كلمة مرور مشتركة من الأساس.",
       },
       {
         q: "هل يحتفظ Relayium بنسخة من ملفاتي؟",
-        a: "في الوضع الفوري، لا — إذ يُبَثّ الملف مباشرة بين المتصفحَين ولا يُخزَّن شيء. أما بالنسبة لرابط مُخزَّن، فيحتفظ الخادم فقط بنص مُشفَّر لا يستطيع قراءته، إلى أن تنتهي صلاحية الرابط أو يُنزَّل مرة واحدة إذا اخترت التلاشي بعد القراءة.",
+        a: "في الوضع الفوري، لا — إذ يُبَثّ الملف مباشرة بين المتصفحَين ولا يُخزَّن شيء. أما بالنسبة لرابط مُخزَّن، فيحتفظ الخادم فقط بنص مُشفَّر لا يستطيع قراءته، إلى أن تنتهي صلاحية الرابط أو يُنزَّل مرة واحدة إذا اخترت الحذف بعد القراءة.",
       },
       {
         q: "هل أحتاج إلى حساب لإرسال ملف أو استقباله؟",
-        a: "على الشبكة نفسها، لا يحتاج أيٌّ من الطرفين إلى حساب. أما الإرسال عبر الشبكات برمز الاقتران، أو إنشاء رابط مُخزَّن، فيتطلّب تسجيل دخول المُرسِل — لكن الشخص المُستقبِل لا يحتاج إلى حساب أبداً، أياً كان الوضع المُستخدَم.",
+        a: "على الشبكة نفسها، لا يحتاج أيٌّ من الطرفين إلى حساب. أما الإرسال عبر الشبكات برمز الاقتران، أو إنشاء رابط مُخزَّن، فيتطلّب تسجيل دخول المُرسِل — لكن الشخص المُستقبِل لا يحتاج إلى حساب أبدًا، أيًا كان الوضع المُستخدَم.",
       },
     ],
   },
   cta: {
-    text: "أتتساءل إن كانت أداة ما تحمي فعلاً ما تدّعي حمايته؟ ابدأ عملية نقل وشاهد رمز التحقق ورابط المعرفة الصفرية بنفسك.",
+    text: "أتتساءل إن كانت أداة ما تحمي فعلًا ما تدّعي حمايته؟ ابدأ عملية نقل وشاهد رمز التحقق ورابط المعرفة الصفرية بنفسك.",
     button: "جرّب Relayium الآن",
   },
   relatedHeading: "تابع القراءة",
@@ -856,10 +856,10 @@ const es = {
 const pt = {
   title: "É seguro enviar arquivos pela internet?",
   description:
-    "O que de fato dá errado com e-mail, links na nuvem e pendrives — o que «criptografia de ponta a ponta» e «conhecimento zero» realmente significam, e o que verificar antes de confiar em uma ferramenta de transferência.",
+    "O que de fato dá errado com e-mail, links na nuvem e pendrives — o que “criptografia de ponta a ponta” e “conhecimento zero” realmente significam, e o que verificar antes de confiar em uma ferramenta de transferência.",
   updatedLabel: "Última atualização",
   lead: [
-    "«É seguro enviar este arquivo?» é uma pergunta razoável para parar e fazer, seja uma declaração de imposto de renda, um contrato ou apenas fotos que você preferiria manter privadas. Este guia não pretende afastar você das ferramentas comuns — trata-se de percorrer, com clareza, o que de fato acontece com um arquivo quando você o envia por e-mail, o deixa em uma pasta na nuvem ou o carrega em um pendrive, o que as expressões «criptografia de ponta a ponta» e «conhecimento zero» realmente prometem, e o que verificar antes de confiar algo importante a qualquer ferramenta.",
+    "“É seguro enviar este arquivo?” é uma pergunta razoável para parar e fazer, seja uma declaração de imposto de renda, um contrato ou apenas fotos que você preferiria manter privadas. Este guia não pretende afastar você das ferramentas comuns — trata-se de percorrer, com clareza, o que de fato acontece com um arquivo quando você o envia por e-mail, o deixa em uma pasta na nuvem ou o carrega em um pendrive, o que as expressões “criptografia de ponta a ponta” e “conhecimento zero” realmente prometem, e o que verificar antes de confiar algo importante a qualquer ferramenta.",
     "Nada disso exige formação técnica. Ao final, você saberá que perguntas fazer — sobre qualquer método de transferência, incluindo este.",
   ],
   sections: [
@@ -867,8 +867,8 @@ const pt = {
       heading: "Onde os arquivos de fato dão errado: os riscos do dia a dia",
       body: [
         "Os anexos de e-mail passam pelos servidores do seu provedor de e-mail e pelos do destinatário, e ambos costumam escanear, indexar e fazer backup das mensagens para filtragem de spam e recuperação de desastres — muito depois de você ter esquecido que o enviou. Encaminhe o e-mail uma vez, e o arquivo fica diante de alguém a quem você nunca o destinou, sem como saber se todas as cópias desapareceram.",
-        "Os links de armazenamento na nuvem são convenientes, mas um link geralmente continua funcionando até você lembrar de revogá-lo, e «qualquer pessoa com o link» só é tão privado quanto uma URL impossível de adivinhar — algo que um encurtador de links ou um encaminhamento descuidado pode desfazer. O arquivo também herda a segurança de toda a conta em que está, não apenas do compartilhamento em si.",
-        "Um pendrive parece seguro porque está off-line, mas é exatamente aí que está a brecha: a maioria das unidades não é criptografada por padrão, então um pendrive esquecido na bolsa do notebook ou em um carro alugado entrega o texto claro a quem o encontrar, sem exigir nenhuma senha.",
+        "Os links de armazenamento na nuvem são convenientes, mas um link geralmente continua funcionando até você lembrar de revogá-lo, e “qualquer pessoa com o link” só é tão privado quanto uma URL impossível de adivinhar — algo que um encurtador de links ou um encaminhamento descuidado pode desfazer. O arquivo também herda a segurança de toda a conta em que está, não apenas do compartilhamento em si.",
+        "Um pendrive parece seguro porque está offline, mas é exatamente aí que está a brecha: a maioria das unidades não é criptografada por padrão, então um pendrive esquecido na bolsa do notebook ou em um carro alugado entrega o texto claro a quem o encontrar, sem exigir nenhuma senha.",
         "Os sites de upload públicos e gratuitos resolvem o problema imediato — levar um arquivo de A a B — mas raramente dizem o que acontece depois: por quanto tempo é mantido, se é escaneado, quem pode topar com ele, ou como o site paga suas contas (hospedagens de arquivos financiadas por anúncios têm um histórico de embutir rastreadores ou coisas piores).",
       ],
       bullets: [
@@ -879,16 +879,16 @@ const pt = {
       ],
     },
     {
-      heading: "O que «criptografia de ponta a ponta» e «conhecimento zero» realmente significam",
+      heading: "O que “criptografia de ponta a ponta” e “conhecimento zero” realmente significam",
       body: [
-        "Muitos serviços dizem «criptografado» e querem dizer apenas que a conexão com o servidor deles é criptografada — o HTTPS/TLS padrão, o mesmo ícone de cadeado que o seu banco usa. Isso é proteção real contra alguém que espione a rede, mas para no servidor: assim que seu arquivo chega, o próprio serviço pode lê-lo, porque tem a chave. Muitas ferramentas do dia a dia param exatamente aí.",
+        "Muitos serviços dizem “criptografado” e querem dizer apenas que a conexão com o servidor deles é criptografada — o HTTPS/TLS padrão, o mesmo ícone de cadeado que o seu banco usa. Isso é proteção real contra alguém que espione a rede, mas para no servidor: assim que seu arquivo chega, o próprio serviço pode lê-lo, porque tem a chave. Muitas ferramentas do dia a dia param exatamente aí.",
         "A criptografia de ponta a ponta significa algo mais forte: o arquivo é criptografado antes de sair do seu dispositivo, com uma chave que só o remetente e o destinatário pretendido têm. O serviço que o transporta — o servidor, o retransmissor, qualquer coisa no meio — nunca tem a chave, então nunca tem o texto claro, por mais que seja solicitado.",
-        "«Conhecimento zero» é uma ideia relacionada geralmente aplicada a algo armazenado em vez de enviado ao vivo: até dados parados em um servidor foram criptografados com uma chave que o próprio servidor nunca recebeu, então o operador não tem como lê-los, jamais, por mais tempo que fiquem lá.",
+        "“Conhecimento zero” é uma ideia relacionada geralmente aplicada a algo armazenado em vez de enviado ao vivo: até dados parados em um servidor foram criptografados com uma chave que o próprio servidor nunca recebeu, então o operador não tem como lê-los, jamais, por mais tempo que fiquem lá.",
       ],
       bullets: [
-        "«Criptografado» sozinho muitas vezes significa apenas TLS até o servidor — o provedor ainda pode ler o arquivo.",
-        "«Criptografia de ponta a ponta» significa que só o remetente e o destinatário têm a chave.",
-        "«Conhecimento zero» significa que o servidor guarda dados que, por sua estrutura, não consegue descriptografar, mesmo em repouso.",
+        "“Criptografado” sozinho muitas vezes significa apenas TLS até o servidor — o provedor ainda pode ler o arquivo.",
+        "“Criptografia de ponta a ponta” significa que só o remetente e o destinatário têm a chave.",
+        "“Conhecimento zero” significa que o servidor guarda dados que, por sua estrutura, não consegue descriptografar, mesmo em repouso.",
       ],
     },
     {
@@ -897,10 +897,10 @@ const pt = {
         "A linguagem de marketing de um site vale menos do que algumas perguntas concretas:",
       ],
       bullets: [
-        "Diz «criptografado» (pode significar apenas TLS) ou especificamente «criptografia de ponta a ponta» (só o remetente e o destinatário têm a chave)?",
+        "Diz “criptografado” (pode significar apenas TLS) ou especificamente “criptografia de ponta a ponta” (só o remetente e o destinatário têm a chave)?",
         "Existe uma forma de verificar que a conexão não foi adulterada — um código que você compara, e não apenas um ícone de cadeado no qual você tem de confiar?",
         "A integridade do arquivo é verificada, para que um arquivo corrompido ou alterado não chegue silenciosamente errado?",
-        "O código é aberto e auditável, ou as afirmações são apenas marketing que você tem de aceitar por fé?",
+        "O código é aberto e auditável, ou as afirmações são apenas marketing que você tem de aceitar às cegas?",
         "Enviar ou receber exige entregar mais identidade do que a transferência realmente precisa?",
         "Se algo é armazenado, ele tem um tempo de vida claro e finito — uma expiração ou exclusão após o download — em vez de ficar ali indefinidamente?",
       ],
@@ -908,14 +908,14 @@ const pt = {
     {
       heading: "Como o Relayium responde a cada um desses pontos",
       body: [
-        "Para uma transferência ao vivo, com as duas pessoas on-line ao mesmo tempo, o Relayium gera um novo par de chaves X25519 em cada dispositivo e deriva uma chave AES-256-GCM compartilhada que existe apenas dentro dos dois navegadores — ela nunca é enviada aos próprios servidores do Relayium. Um curto código de verificação na tela (um SAS) permite que ambos os lados confirmem que as chaves não foram substituídas por um servidor desonesto no meio, e o hash SHA-256 de cada arquivo é verificado de ponta a ponta para que uma transferência corrompida não chegue parecendo intacta. Os detalhes exatos de como isso funciona são abordados com mais profundidade em «Como o Relayium criptografa seus arquivos de ponta a ponta», se você quiser ir além desta página.",
-        "Quando o destinatário ainda não está on-line, um link de download armazenado usa um design genuinamente diferente, de conhecimento zero: seu navegador gera uma chave AES-256-GCM aleatória e criptografa os arquivos com ela antes que qualquer coisa seja enviada. Essa chave nunca é enviada ao servidor — ela vive apenas no fragmento da URL do link, a parte depois do #, que os navegadores nunca transmitem. O servidor acaba guardando texto cifrado que não tem como descriptografar, mais uma expiração que você escolhe: 1 hora, 1 dia, 3 dias, 7 dias, até 14 dias conforme o seu plano, ou autodestruição após o primeiro download concluído.",
+        "Para uma transferência ao vivo, com as duas pessoas online ao mesmo tempo, o Relayium gera um novo par de chaves X25519 em cada dispositivo e deriva uma chave AES-256-GCM compartilhada que existe apenas dentro dos dois navegadores — ela nunca é enviada aos próprios servidores do Relayium. Um curto código de verificação na tela (um SAS) permite que ambos os lados confirmem que as chaves não foram substituídas por um servidor desonesto no meio, e o hash SHA-256 de cada arquivo é verificado de ponta a ponta para que uma transferência corrompida não chegue parecendo intacta. Os detalhes exatos de como isso funciona são abordados com mais profundidade em “Como o Relayium criptografa seus arquivos de ponta a ponta”, se você quiser ir além desta página.",
+        "Quando o destinatário ainda não está online, um link de download armazenado usa um design genuinamente diferente, de conhecimento zero: seu navegador gera uma chave AES-256-GCM aleatória e criptografa os arquivos com ela antes que qualquer coisa seja enviada. Essa chave nunca é enviada ao servidor — ela vive apenas no fragmento da URL do link, a parte depois do #, que os navegadores nunca transmitem. O servidor acaba guardando texto cifrado que não tem como descriptografar, mais uma expiração que você escolhe: 1 hora, 1 dia, 3 dias, 7 dias, até 14 dias conforme o seu plano, ou autodestruição após o primeiro download concluído.",
         "Entre redes, onde muitas vezes não há caminho direto possível, o fluxo criptografado passa por um retransmissor TURN — e esse retransmissor também vê sempre apenas texto cifrado, nunca um arquivo legível.",
-        "Nada disso pede que você confie em uma afirmação por fé: o código de cliente e servidor do Relayium é de código aberto sob a licença AGPL-3.0, então pode ser lido e auditado em vez de aceito por fé.",
+        "Nada disso pede que você acredite em uma afirmação às cegas: o código de cliente e servidor do Relayium é de código aberto sob a licença AGPL-3.0, então pode ser lido e auditado em vez de aceito às cegas.",
       ],
       bullets: [
         "As transferências na mesma rede não precisam de conta alguma.",
-        "Enviar entre redes por código de emparelhamento, ou criar um link armazenado, exige que o remetente faça login — o destinatário nunca precisa de conta.",
+        "Enviar entre redes por código de emparelhamento, ou criar um link armazenado, exige que o remetente entre — o destinatário nunca precisa de conta.",
       ],
     },
     {
@@ -935,12 +935,12 @@ const pt = {
         a: "O e-mail não foi projetado para transferência confidencial de arquivos — os anexos costumam ser retidos, escaneados e copiados por servidores de e-mail nas duas pontas, e uma mensagem encaminhada pode colocar o arquivo diante de pessoas a quem você nunca o destinou. Tudo bem para arquivos de baixo risco; para qualquer coisa sensível, uma ferramenta com criptografia de ponta a ponta elimina essa exposição.",
       },
       {
-        q: "O que «conhecimento zero» realmente significa?",
+        q: "O que “conhecimento zero” realmente significa?",
         a: "Que a parte que armazena seus dados nunca recebeu a chave para lê-los. A criptografia acontece no seu dispositivo antes que qualquer coisa seja enviada, e a chave vive apenas em algum lugar que o servidor nunca vê — como um fragmento de URL — então o que fica no servidor é texto cifrado que, por sua estrutura, ele não consegue descriptografar, e não apenas dados que ele promete não olhar.",
       },
       {
         q: "Um arquivo zip protegido por senha é suficiente?",
-        a: "É melhor que nada, mas a senha muitas vezes viaja pelo mesmo caminho que o arquivo — no mesmo fio de e-mail, por exemplo — o que desfaz a proteção, e as implementações de criptografia zip variam muito em robustez. Uma ferramenta construída em torno da criptografia de ponta a ponta elimina esse elo fraco por nunca precisar de uma senha compartilhada.",
+        a: "É melhor que nada, mas a senha muitas vezes viaja pelo mesmo caminho que o arquivo — na mesma conversa de e-mail, por exemplo — o que desfaz a proteção, e as implementações de criptografia zip variam muito em robustez. Uma ferramenta construída em torno da criptografia de ponta a ponta elimina esse elo fraco por nunca precisar de uma senha compartilhada.",
       },
       {
         q: "O Relayium mantém uma cópia dos meus arquivos?",
@@ -948,7 +948,7 @@ const pt = {
       },
       {
         q: "Preciso de uma conta para enviar ou receber um arquivo?",
-        a: "Na mesma rede, nenhum dos lados precisa de conta. Enviar entre redes por código de emparelhamento, ou criar um link armazenado, exige que o remetente faça login — mas a pessoa que recebe nunca precisa de conta, seja qual for o modo usado.",
+        a: "Na mesma rede, nenhum dos lados precisa de conta. Enviar entre redes por código de emparelhamento, ou criar um link armazenado, exige que o remetente entre — mas a pessoa que recebe nunca precisa de conta, seja qual for o modo usado.",
       },
     ],
   },

@@ -12,9 +12,9 @@ const en = {
 const zh = {
   title: "使用指南 · Relayium",
   description:
-    "用 Relayium 传输文件的分步指南与对比：从终端、手机之间、服务器到服务器，以及与其它工具的对比。",
+    "用 Relayium 传输文件的分步指南与对比：从终端、手机之间、服务器到服务器，以及与其他工具的对比。",
   heading: "使用指南",
-  intro: "关于用 Relayium 传输文件的一切——终端操作、手机互传，以及与其它工具的坦诚对比。",
+  intro: "关于用 Relayium 传输文件的一切——终端操作、手机互传，以及与其他工具的坦诚对比。",
   categories: { guides: "教程", howTo: "操作指南", compare: "对比" },
 };
 const ja = {

@@ -108,7 +108,7 @@ const zh = {
       heading: "无大小上限的实时传输",
       body: [
         "因为不在服务器上存储任何东西，实际的文件大小上限取决于你自己的浏览器。在 Chrome 或 Edge 中，Relayium 会把接收的数据直接流式写入磁盘，所以基本没有大小上限——几 GB 的视频和工程压缩包都没问题。",
-        "Firefox 和 Safari 没有同样的 File System Access 流式下载，因此当所有流式写盘路径都不适用时，浏览器只能把文件攒在内存里；Relayium 会在超过约 256 MB 时给出提示，这是刻意取的保守估计，而不是实测出来的硬上限。同一网络下实时传输无需账号，两台设备之间是直连：在两台设备上打开 relayium.com，最多选 1,000 个文件，核对校验码，然后发送。跨网络传输要用配对码，需要创建配对码的一方登录，并且按设计经由加密的 TURN 中继——正是这一点让连接一两秒就能建立，而不必去等两个网络之间很难成功的直连尝试；中继只转发它读不懂的密文。接收方始终无需账号。若连接中途断开，传输会断点续传而非从头再来。",
+        "Firefox 和 Safari 没有同样的 File System Access 流式下载，因此当所有流式写盘路径都不适用时，浏览器只能把文件攒在内存里；Relayium 会在超过约 256 MB 时给出提示，这是刻意取的保守估计，而不是实测出来的硬上限。同一网络下实时传输无需账号，两台设备之间是直连：在两台设备上打开 relayium.com，最多选 1,000 个文件，核对校验码，然后发送。跨网络传输要用配对码，需要创建配对码的一方登录，并且刻意经由加密的 TURN 中继——正是这一点让连接一两秒就能建立，而不必去等两个网络之间很难成功的直连尝试；中继只转发它读不懂的密文。接收方始终无需账号。若连接中途断开，传输会断点续传而非从头再来。",
       ],
     },
     {
@@ -163,7 +163,7 @@ const ja = {
     "Relayium と WeTransfer を公平に比較。WeTransfer は非同期のリンク共有が得意です。Relayium はサイズ上限のないリアルタイム転送でサーバーに置かず、ゼロ知識の保存リンクも備えます。",
   updatedLabel: "最終更新",
   lead: [
-    "WeTransfer は大きなファイルの送信を簡単にしました。ファイルをドロップしてリンクを受け取れば、相手は好きなときにダウンロードできます——送った時点で相手がオフラインでも大丈夫です。この非同期で、受け取りにアカウントが要らない体験は本当に優れており、多くの人が選ぶ理由です。",
+    "WeTransfer は大きなファイルの送信を簡単にしました。ファイルをドロップしてリンクを受け取れば、相手は好きなときにダウンロードできます。送った時点で相手がオフラインでも大丈夫です。この非同期で、受け取りにアカウントが要らない体験は本当に優れており、多くの人が選ぶ理由です。",
     "本記事はこの2つを公平に比較します。WeTransfer の強みは、ファイルがサーバー上で待つ洗練されたリンクベースの共有です。Relayium の焦点は異なります。端末間を直接つなぐリアルタイム転送はサイズ上限がなく、サーバーに置かれません。加えて、常にゼロ知識で暗号化される任意の保存リンクもあります。どちらが単純に優れているわけではなく、少し異なる問題を解いています。",
   ],
   sections: [
@@ -178,21 +178,21 @@ const ja = {
       heading: "違いはどこか：ファイルはサーバー上に置かれる",
       body: [
         "WeTransfer では、ファイルはそのサーバーにアップロードされ、しばらく保存され、そこからダウンロードされます。無料枠は1回の転送を 2 GB に制限し、リンクはあなたが管理できないインフラ上のコピーを指します。転送は通信中も保存時も暗号化されますが、ゼロ知識ではありません。サービス側が鍵を持ち、原理的にはファイルを読めます。",
-        "Relayium のリアルタイムモードは逆の仕組みです。バイトは暗号化された P2P チャネルを通じて2台の端末間を直接流れ、サーバーに置かれることはないため、サーバー側のサイズ上限は存在しません。WebRTC の転送の上に、Relayium は独自の層を加えます。X25519 の鍵交換でブロックごとの AES-256-GCM 用の鍵を導出し、両方の端末が一致する6桁の検証コード（SAS）を表示して中間者を排除し、各ファイルを SHA-256 ハッシュでエンドツーエンドに検証します。",
+        "Relayium のリアルタイムモードは逆の仕組みです。バイトは暗号化された P2P チャネルを通じて2台の端末間を直接流れ、サーバーに置かれることはないため、サーバー側のサイズ上限は存在しません。WebRTC の転送の上に、Relayium は独自の層を加えます。X25519 の鍵交換でチャンクごとの AES-256-GCM 用の鍵を導出し、両方の端末が一致する6桁の検証コード（SAS）を表示して中間者を排除し、各ファイルを SHA-256 ハッシュでエンドツーエンドに検証します。",
       ],
     },
     {
       heading: "サイズ上限のないリアルタイム転送",
       body: [
-        "サーバーに何も保存しないため、実用上のファイルサイズ上限は自分のブラウザ次第です。Chrome や Edge では、Relayium は受信データをそのままディスクにストリーミングするので、事実上サイズ上限はありません——数ギガバイトの動画やプロジェクトのアーカイブも問題ありません。",
-        "Firefox と Safari は同じ File System Access のストリーミングを備えていないため、ストリーミングで書き出せる経路がどれも使えないときはファイルをメモリに保持します。Relayium は約 256 MB を超えると警告しますが、これは実測された上限ではなく、意図的に保守的な見積もりです。同じネットワークならリアルタイム転送にアカウントは不要で、2台の端末は直接つながります。両方の端末で relayium.com を開き、最大1,000ファイルを選び、コードを照合して送ります。ネットワークをまたぐ送信にはペアリングコードを使い、そのコードを作る側のサインインが必要で、設計上は暗号化された TURN リレーを経由します——だからこそ、ネットワーク同士ではめったに成功しない直接接続の試行を待たずに1〜2秒でつながり、リレーが中継するのは読めない暗号文だけです。受信側はどちらの場合もアカウント不要です。途中で接続が切れても、転送は最初からではなく再開します。",
+        "サーバーに何も保存しないため、実用上のファイルサイズ上限は自分のブラウザ次第です。Chrome や Edge では、Relayium は受信データをそのままディスクにストリーミングするので、事実上サイズ上限はありません。数ギガバイトの動画やプロジェクトのアーカイブも問題ありません。",
+        "Firefox と Safari は同じ File System Access のストリーミングを備えていないため、ストリーミングで書き出せる経路がどれも使えないときはファイルをメモリに保持します。Relayium は約 256 MB を超えると警告しますが、これは実測された上限ではなく、意図的に保守的な見積もりです。同じネットワークならリアルタイム転送にアカウントは不要で、2台の端末は直接つながります。両方の端末で relayium.com を開き、最大1,000ファイルを選び、コードを照合して送ります。ネットワークをまたぐ送信にはペアリングコードを使い、そのコードを作る側のサインインが必要で、設計上は暗号化された TURN リレーを経由します。だからこそ、ネットワーク同士ではめったに成功しない直接接続の試行を待たずに1〜2秒でつながり、リレーが中継するのは読めない暗号文だけです。受信側はどちらの場合もアカウント不要です。途中で接続が切れても、転送は最初からではなく再開します。",
       ],
     },
     {
       heading: "受信側がオフラインのとき：ゼロ知識の保存リンク",
       body: [
         "リアルタイム転送は双方が同席している必要があり、これは WeTransfer のリンク方式が優れている唯一の点です。そこで Relayium は、プライバシーを犠牲にせずに同じ非同期の便利さを提供します。保存型ダウンロードリンクです。",
-        "ブラウザがアップロード前にファイルを AES-256-GCM で暗号化し、復号鍵は URL フラグメント——# の後の、ブラウザがサーバーに決して送らない部分——にだけ存在します。したがってサーバーは読めないゼロ知識の暗号文を保存し、受信側はアカウントなしでダウンロードできます。こうしたリンクの作成には送信側のサインインが必要で、各リンクは有効期限切れ、または最初のダウンロード後に消去するよう設定できます。",
+        "ブラウザがアップロード前にファイルを AES-256-GCM で暗号化し、復号鍵は URL フラグメント（# の後の、ブラウザがサーバーに決して送らない部分）にだけ存在します。したがってサーバーは読めないゼロ知識の暗号文を保存し、受信側はアカウントなしでダウンロードできます。こうしたリンクの作成には送信側のサインインが必要で、各リンクは有効期限切れ、または最初のダウンロード後に消去するよう設定できます。",
       ],
     },
     {
@@ -201,10 +201,10 @@ const ja = {
         "最も重要な違いを並べて示します。",
       ],
       bullets: [
-        "サイズ上限：WeTransfer の無料枠は転送を 2 GB に制限；Relayium のリアルタイムはサーバー側の上限なし（Chrome/Edge はディスクへストリーミング。ブラウザがメモリに溜めるしかない場合は約 256 MB を超えると警告）。",
-        "ファイルの置き場所：WeTransfer はファイルをサーバーに保存；Relayium のリアルタイムはファイルをサーバーに一切置かない。",
-        "暗号化：WeTransfer は通信中も保存時も暗号化するが鍵を保持；Relayium は6桁の SAS コード付きのエンドツーエンドで、保存リンクは鍵が URL フラグメントだけにあるゼロ知識。",
-        "受信側がオフライン：どちらも対応——WeTransfer は保存リンク、Relayium は有効期限やダウンロード後消去付きのゼロ知識保存ダウンロードリンク。",
+        "サイズ上限：WeTransfer の無料枠は転送を 2 GB に制限します。Relayium のリアルタイムはサーバー側の上限がありません（Chrome/Edge はディスクへストリーミング。ブラウザがメモリに溜めるしかない場合は約 256 MB を超えると警告します）。",
+        "ファイルの置き場所：WeTransfer はファイルをサーバーに保存します。Relayium のリアルタイムはファイルをサーバーに一切置きません。",
+        "暗号化：WeTransfer は通信中も保存時も暗号化しますが、鍵はサービス側が保持します。Relayium は6桁の SAS コード付きのエンドツーエンド暗号化で、保存リンクは鍵が URL フラグメントだけにあるゼロ知識です。",
+        "受信側がオフライン：どちらも対応します。WeTransfer は保存リンクで、Relayium は有効期限や閲覧後削除を設定できるゼロ知識の保存ダウンロードリンクで対応します。",
         "整合性と再開：Relayium は各ファイルを SHA-256 で検証し、中断した転送を最初からやり直さず再開できる。",
         "費用と開放性：Relayium は無料で AGPL-3.0 ライセンス、github.com/relayium/relayium にあり、ブラウザで Windows・macOS・Linux・Android・iOS で動作し、インストール不要。",
       ],
@@ -215,7 +215,7 @@ const ja = {
     items: [
       {
         q: "本当にファイルサイズの上限はないのですか？",
-        a: "リアルタイムモードではサーバー側の上限はありません。ファイルがサーバーに一切触れないからです。Chrome や Edge ではダウンロードがそのままディスクにストリーミングされるので、数ギガバイトのファイルも問題ありません。Firefox や Safari では、ストリーミングで書き出せる経路がどれも使えないときにメモリへ溜めることになり、Relayium は約 256 MB を超えると警告します——意図的に保守的な見積もりで、ハードな上限ではありません。保存型ダウンロードリンクにはアカウントに紐づく容量枠があります。",
+        a: "リアルタイムモードではサーバー側の上限はありません。ファイルがサーバーに一切触れないからです。Chrome や Edge ではダウンロードがそのままディスクにストリーミングされるので、数ギガバイトのファイルも問題ありません。Firefox や Safari では、ストリーミングで書き出せる経路がどれも使えないときにメモリへ溜めることになり、Relayium は約 256 MB を超えると警告します。これは意図的に保守的な見積もりであり、ハードな上限ではありません。保存型ダウンロードリンクにはアカウントに紐づく容量枠があります。",
       },
       {
         q: "受信側がオンラインでないときは？",
@@ -223,12 +223,12 @@ const ja = {
       },
       {
         q: "Relayium は無料ですか？",
-        a: "はい。Relayium は AGPL-3.0 ライセンスの無料オープンソースで、プロトコルとコードのすべてが github.com/relayium/relayium にあります。より大きなリアルタイム転送を解放する有料プランはありません——大容量の余裕はブラウザのディスクへのストリーミングから来るものであり、サブスクリプションからではありません。",
+        a: "はい。Relayium は AGPL-3.0 ライセンスの無料オープンソースで、プロトコルとコードのすべてが github.com/relayium/relayium にあります。より大きなリアルタイム転送を解放する有料プランはありません。大容量の余裕はブラウザのディスクへのストリーミングから来るものであり、サブスクリプションからではありません。",
       },
     ],
   },
   cta: {
-    text: "今すぐ大容量ファイルを送ってみてください——サイズ上限なし、インストール不要、同じネットワークならアカウントも不要です。",
+    text: "今すぐ大容量ファイルを送ってみてください。サイズ上限なし、インストール不要で、同じネットワークならアカウントも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -240,7 +240,7 @@ const ko = {
     "Relayium과 WeTransfer를 공정하게 비교합니다. WeTransfer는 비동기 링크 공유에 강하고, Relayium은 크기 제한 없이 서버를 거치지 않는 실시간 전송과 영지식 저장 링크를 제공합니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "WeTransfer는 큰 파일 보내기를 손쉽게 만들었습니다. 파일을 끌어다 놓고 링크를 받으면 상대는 원할 때 다운로드합니다——보낼 때 상대가 오프라인이어도 괜찮습니다. 이런 비동기적이고 받는 데 계정이 필요 없는 경험은 정말 훌륭하며, 많은 사람이 선택하는 이유입니다.",
+    "WeTransfer는 큰 파일 보내기를 손쉽게 만들었습니다. 파일을 끌어다 놓고 링크를 받으면 상대는 원할 때 다운로드합니다. 보낼 때 상대가 오프라인이어도 괜찮습니다. 이런 비동기적이고 받는 데 계정이 필요 없는 경험은 정말 훌륭하며, 많은 사람이 선택하는 이유입니다.",
     "이 글은 두 가지를 공정하게 비교합니다. WeTransfer의 강점은 파일이 서버에서 기다리는 세련된 링크 기반 공유입니다. Relayium의 초점은 다릅니다. 기기 사이를 직접 잇는 실시간 전송은 크기 제한이 없고 서버에 놓이지 않습니다. 여기에 항상 영지식으로 암호화되는 선택적 저장 링크도 있습니다. 어느 하나가 단순히 낫다기보다, 조금 다른 문제를 풉니다.",
   ],
   sections: [
@@ -254,14 +254,14 @@ const ko = {
     {
       heading: "차이가 나는 지점: 파일이 서버에 놓인다",
       body: [
-        "WeTransfer에서는 파일이 그 서버에 업로드되어 한동안 저장되고 거기서 다운로드됩니다. 무료 등급은 전송 한 건을 2 GB로 제한하며, 링크는 당신이 통제할 수 없는 인프라 위의 사본을 가리킵니다. 전송은 전송 중과 저장 시 모두 암호화되지만 영지식은 아닙니다. 서비스가 키를 쥐고 있어 원칙적으로 파일을 읽을 수 있습니다.",
-        "Relayium의 실시간 모드는 그 반대입니다. 바이트는 암호화된 P2P 채널을 통해 두 기기 사이를 직접 흐르며 서버에 놓이지 않으므로, 서버 측 크기 제한이 존재하지 않습니다. WebRTC 전송 위에 Relayium은 자체 계층을 더합니다. X25519 키 교환으로 블록별 AES-256-GCM용 키를 도출하고, 두 기기가 일치하는 6자리 검증 코드(SAS)를 표시해 중간자를 배제하며, 각 파일을 SHA-256 해시로 종단간 검증합니다.",
+        "WeTransfer에서는 파일이 그 서버에 업로드되어 한동안 저장되고 거기서 다운로드됩니다. 무료 등급은 전송 한 건을 2 GB로 제한하며, 링크는 직접 통제할 수 없는 인프라 위의 사본을 가리킵니다. 전송은 전송 중과 저장 시 모두 암호화되지만 영지식은 아닙니다. 서비스가 키를 쥐고 있어 원칙적으로 파일을 읽을 수 있습니다.",
+        "Relayium의 실시간 모드는 그 반대입니다. 바이트는 암호화된 P2P 채널을 통해 두 기기 사이를 직접 흐르며 서버에 놓이지 않으므로, 서버 측 크기 제한이 존재하지 않습니다. WebRTC 전송 위에 Relayium은 자체 계층을 더합니다. X25519 키 교환으로 청크별 AES-256-GCM용 키를 도출하고, 두 기기가 일치하는 6자리 검증 코드(SAS)를 표시해 중간자를 배제하며, 각 파일을 SHA-256 해시로 종단간 검증합니다.",
       ],
     },
     {
       heading: "크기 제한 없는 실시간 전송",
       body: [
-        "서버에 아무것도 저장하지 않기 때문에, 실질적인 파일 크기 제한은 자신의 브라우저에서 옵니다. Chrome이나 Edge에서는 Relayium이 들어오는 데이터를 곧바로 디스크로 스트리밍하므로 사실상 크기 제한이 없습니다——수 기가바이트의 동영상과 프로젝트 아카이브도 괜찮습니다.",
+        "서버에 아무것도 저장하지 않기 때문에, 실질적인 파일 크기 제한은 자신의 브라우저에서 옵니다. Chrome이나 Edge에서는 Relayium이 들어오는 데이터를 곧바로 디스크로 스트리밍하므로 사실상 크기 제한이 없습니다. 수 기가바이트의 동영상과 프로젝트 아카이브도 괜찮습니다.",
         "Firefox와 Safari에는 같은 File System Access 스트리밍이 없어, 디스크로 흘려보낼 경로가 하나도 적용되지 않으면 브라우저가 파일을 메모리에 담습니다. Relayium은 약 256 MB를 넘으면 경고하는데, 이는 측정된 하드 한계가 아니라 일부러 보수적으로 잡은 추정치입니다. 같은 네트워크에서는 실시간 전송에 계정이 필요 없고 두 기기가 서로 직접 연결됩니다. 두 기기에서 relayium.com을 열고, 최대 1,000개 파일을 고르고, 코드를 대조한 뒤 보냅니다. 네트워크를 넘어 보낼 때는 페어링 코드를 쓰고, 그 코드를 만드는 쪽의 로그인이 필요하며, 설계상 암호화된 TURN 릴레이를 거칩니다 — 덕분에 네트워크 사이에서는 좀처럼 성공하지 않는 직접 연결 시도를 기다리지 않고 1~2초 만에 연결되며, 릴레이는 스스로 읽을 수 없는 암호문만 전달합니다. 받는 쪽은 어느 경우든 계정이 필요 없습니다. 도중에 연결이 끊겨도 전송은 처음부터가 아니라 이어서 재개됩니다.",
       ],
     },
@@ -269,7 +269,7 @@ const ko = {
       heading: "받는 쪽이 오프라인일 때: 영지식 저장 링크",
       body: [
         "실시간 전송은 양쪽이 함께 있어야 하는데, 이것이 WeTransfer의 링크 방식이 더 잘하는 유일한 점입니다. 그래서 Relayium은 프라이버시를 포기하지 않고 같은 비동기 편의를 제공합니다. 저장형 다운로드 링크입니다.",
-        "브라우저가 업로드 전에 파일을 AES-256-GCM으로 암호화하고, 복호화 키는 URL 프래그먼트——# 뒤의, 브라우저가 서버로 결코 보내지 않는 부분——에만 존재합니다. 따라서 서버는 읽을 수 없는 영지식 암호문을 저장하고, 받는 쪽은 계정 없이 다운로드할 수 있습니다. 이런 링크 생성에는 보내는 쪽의 로그인이 필요하며, 각 링크는 만료되거나 첫 다운로드 후 소각되도록 설정할 수 있습니다.",
+        "브라우저가 업로드 전에 파일을 AES-256-GCM으로 암호화하고, 복호화 키는 URL 프래그먼트(# 뒤의, 브라우저가 서버로 결코 보내지 않는 부분)에만 존재합니다. 따라서 서버는 읽을 수 없는 영지식 암호문을 저장하고, 받는 쪽은 계정 없이 다운로드할 수 있습니다. 이런 링크 생성에는 보내는 쪽의 로그인이 필요하며, 각 링크는 만료되도록, 또는 열람 후 삭제로 첫 다운로드 뒤 사라지도록 설정할 수 있습니다.",
       ],
     },
     {
@@ -278,10 +278,10 @@ const ko = {
         "가장 중요한 차이를 나란히 정리하면:",
       ],
       bullets: [
-        "크기 제한: WeTransfer 무료 등급은 전송을 2 GB로 제한; Relayium 실시간은 서버 측 제한 없음(Chrome/Edge는 디스크로 스트리밍하고, 브라우저가 메모리에 담을 수밖에 없을 때는 약 256 MB를 넘으면 경고).",
-        "파일이 놓이는 곳: WeTransfer는 파일을 서버에 저장; Relayium 실시간은 파일을 서버에 전혀 두지 않음.",
-        "암호화: WeTransfer는 전송 중과 저장 시 암호화하지만 키를 보유; Relayium은 6자리 SAS 코드가 있는 종단간 암호화이고, 저장 링크는 키가 URL 프래그먼트에만 있는 영지식.",
-        "받는 쪽 오프라인: 둘 다 대응——WeTransfer는 저장 링크, Relayium은 만료나 다운로드 후 소각이 가능한 영지식 저장 다운로드 링크.",
+        "크기 제한: WeTransfer 무료 등급은 전송을 2 GB로 제한합니다. Relayium 실시간은 서버 측 제한이 없습니다(Chrome/Edge는 디스크로 스트리밍하고, 브라우저가 메모리에 담을 수밖에 없을 때는 약 256 MB를 넘으면 경고합니다).",
+        "파일이 놓이는 곳: WeTransfer는 파일을 서버에 저장합니다. Relayium 실시간은 파일을 서버에 전혀 두지 않습니다.",
+        "암호화: WeTransfer는 전송 중과 저장 시 암호화하지만 키를 보유합니다. Relayium은 6자리 SAS 코드가 있는 종단간 암호화이고, 저장 링크는 키가 URL 프래그먼트에만 있는 영지식입니다.",
+        "받는 쪽 오프라인: 둘 다 대응합니다. WeTransfer는 저장 링크로, Relayium은 만료나 열람 후 삭제를 설정할 수 있는 영지식 저장 다운로드 링크로 대응합니다.",
         "무결성과 재개: Relayium은 각 파일을 SHA-256으로 검증하고 중단된 전송을 처음부터 다시 하지 않고 이어받을 수 있음.",
         "비용과 개방성: Relayium은 무료이며 AGPL-3.0 라이선스로 github.com/relayium/relayium에 있고, 브라우저에서 Windows·macOS·Linux·Android·iOS로 동작하며 설치가 필요 없음.",
       ],
@@ -296,16 +296,16 @@ const ko = {
       },
       {
         q: "받는 쪽이 접속해 있지 않으면요?",
-        a: "저장형 다운로드 링크를 쓰세요. 브라우저가 파일을 AES-256-GCM으로 암호화하고, 키는 URL 프래그먼트에만 남으며, 서버는 받는 쪽이 나중에 가져갈 수 있는 영지식 암호문을 보관합니다. 링크 생성에는 보내는 쪽의 로그인이 필요하며, 만료나 첫 다운로드 후 소각을 설정할 수 있습니다.",
+        a: "저장형 다운로드 링크를 쓰세요. 브라우저가 파일을 AES-256-GCM으로 암호화하고, 키는 URL 프래그먼트에만 남으며, 서버는 받는 쪽이 나중에 가져갈 수 있는 영지식 암호문을 보관합니다. 링크 생성에는 보내는 쪽의 로그인이 필요하며, 만료나 열람 후 삭제를 설정할 수 있습니다.",
       },
       {
         q: "Relayium은 무료인가요?",
-        a: "네. Relayium은 AGPL-3.0 라이선스의 무료 오픈소스이며, 프로토콜과 코드 전체가 github.com/relayium/relayium에 있습니다. 더 큰 실시간 전송을 여는 유료 등급은 없습니다——대용량 여유는 브라우저의 디스크 스트리밍에서 오는 것이지 구독에서 오는 것이 아닙니다.",
+        a: "네. Relayium은 AGPL-3.0 라이선스의 무료 오픈소스이며, 프로토콜과 코드 전체가 github.com/relayium/relayium에 있습니다. 더 큰 실시간 전송을 여는 유료 등급은 없습니다. 대용량 여유는 브라우저의 디스크 스트리밍에서 오는 것이지 구독에서 오는 것이 아닙니다.",
       },
     ],
   },
   cta: {
-    text: "지금 대용량 파일을 보내보세요——크기 제한 없이, 설치 없이, 같은 네트워크에서는 계정도 필요 없습니다.",
+    text: "지금 대용량 파일을 보내보세요. 크기 제한 없이, 설치 없이, 같은 네트워크에서는 계정도 필요 없습니다.",
     button: "지금 Relayium 사용해보기",
   },
   relatedHeading: "계속 읽기",
@@ -332,7 +332,7 @@ const de = {
       heading: "Worin sie sich unterscheiden: die Datei liegt auf einem Server",
       body: [
         "Bei WeTransfer wird deine Datei auf dessen Server hochgeladen, dort eine Weile gespeichert und von dort heruntergeladen. Der kostenlose Tarif begrenzt jede Übertragung auf 2 GB, und der Link verweist auf eine Kopie auf einer Infrastruktur, die du nicht kontrollierst. Die Übertragung ist beim Transport und im Ruhezustand verschlüsselt, aber nicht Zero-Knowledge: Der Dienst hält die Schlüssel und könnte die Datei im Prinzip lesen.",
-        "Relayiums Echtzeitmodus funktioniert umgekehrt. Die Bytes fließen über einen verschlüsselten Peer-to-Peer-Kanal direkt zwischen den beiden Geräten und werden nie auf einem Server abgelegt, also gibt es kein serverseitiges Größenlimit. Über dem WebRTC-Transport fügt Relayium eine eigene Schicht hinzu: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, beide Geräte zeigen einen übereinstimmenden sechsstelligen Prüfcode (SAS), um einen Man-in-the-Middle auszuschließen, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft.",
+        "Relayiums Echtzeitmodus funktioniert umgekehrt. Die Bytes fließen über einen verschlüsselten Peer-to-Peer-Kanal direkt zwischen den beiden Geräten und werden nie auf einem Server abgelegt, also gibt es kein serverseitiges Größenlimit. Über dem WebRTC-Transport fügt Relayium eine eigene Schicht hinzu: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, beide Geräte zeigen einen übereinstimmenden sechsstelligen Verifizierungscode (SAS), um einen Man-in-the-Middle auszuschließen, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft.",
       ],
     },
     {
@@ -358,7 +358,7 @@ const de = {
         "Größenlimit: WeTransfers kostenloser Tarif begrenzt Übertragungen auf 2 GB; Relayium-Echtzeit hat kein serverseitiges Limit (Chrome/Edge streamen auf die Festplatte; muss der Browser stattdessen im Speicher puffern, warnt Relayium oberhalb von rund 256 MB).",
         "Wo Dateien liegen: WeTransfer speichert deine Datei auf seinen Servern; Relayium-Echtzeit legt die Datei überhaupt nicht auf einem Server ab.",
         "Verschlüsselung: WeTransfer verschlüsselt beim Transport und im Ruhezustand, hält aber die Schlüssel; Relayium ist Ende-zu-Ende mit sechsstelligem SAS-Code, und Speicherlinks sind Zero-Knowledge mit dem Schlüssel nur im URL-Fragment.",
-        "Empfänger offline: beide schaffen das — WeTransfer über seinen Speicherlink, Relayium über einen Zero-Knowledge-Download-Link mit Ablauf oder Vernichtung nach dem Download.",
+        "Empfänger offline: beide schaffen das — WeTransfer über seinen Speicherlink, Relayium über einen Zero-Knowledge-Download-Link mit Ablauf oder Burn-after-read.",
         "Integrität und Fortsetzen: Relayium prüft jede Datei mit SHA-256 und kann eine unterbrochene Übertragung fortsetzen statt neu zu beginnen.",
         "Kosten und Offenheit: Relayium ist kostenlos und AGPL-3.0-lizenziert unter github.com/relayium/relayium und läuft im Browser unter Windows, macOS, Linux, Android und iOS ohne Installation.",
       ],
@@ -389,55 +389,55 @@ const de = {
 };
 
 const fr = {
-  title: "Relayium vs WeTransfer : envoyer de gros fichiers sans serveur",
+  title: "Relayium vs WeTransfer : envoyer de gros fichiers sans serveur",
   description:
-    "Un comparatif honnête de Relayium et WeTransfer. WeTransfer excelle au partage asynchrone par lien ; Relayium ajoute des transferts en temps réel sans limite de taille, sans serveur, et des liens stockés à divulgation nulle.",
+    "Un comparatif honnête de Relayium et WeTransfer. WeTransfer excelle au partage asynchrone par lien ; Relayium ajoute des transferts en temps réel sans limite de taille, sans serveur, et des liens stockés à divulgation nulle.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "WeTransfer a rendu l'envoi de gros fichiers sans effort : déposez un fichier, obtenez un lien, et le destinataire télécharge quand il est prêt — même s'il était hors ligne au moment de l'envoi. Cette expérience asynchrone, sans compte pour recevoir, est vraiment bonne, et c'est pourquoi tant de gens s'y fient.",
-    "Cet article compare les deux équitablement. La force de WeTransfer est un partage soigné, basé sur des liens, où le fichier attend sur un serveur. Le focus de Relayium est différent : des transferts en temps réel qui vont directement entre les appareils, sans limite de taille, et qui n'atterrissent jamais sur un serveur ; s'y ajoute un lien stocké optionnel qui reste chiffré à divulgation nulle. Aucun n'est simplement meilleur — ils résolvent des problèmes légèrement différents.",
+    "WeTransfer a rendu l'envoi de gros fichiers sans effort : déposez un fichier, obtenez un lien, et le destinataire télécharge quand il est prêt — même s'il était hors ligne au moment de l'envoi. Cette expérience asynchrone, sans compte pour recevoir, est vraiment bonne, et c'est pourquoi tant de gens s'y fient.",
+    "Cet article compare les deux équitablement. La force de WeTransfer est un partage soigné, basé sur des liens, où le fichier attend sur un serveur. Le focus de Relayium est différent : des transferts en temps réel qui vont directement entre les appareils, sans limite de taille, et qui n'atterrissent jamais sur un serveur ; s'y ajoute un lien stocké optionnel qui reste chiffré à divulgation nulle. Aucun n'est simplement meilleur — ils résolvent des problèmes légèrement différents.",
   ],
   sections: [
     {
       heading: "Ce que WeTransfer fait bien",
       body: [
-        "L'idée centrale de WeTransfer est asynchrone : l'expéditeur téléverse une fois, obtient un lien, et le destinataire télécharge plus tard. Les deux n'ont jamais à être en ligne en même temps, exactement ce que vous voulez quand vous envoyez par e-mail une vidéo à un client qui l'ouvrira demain.",
+        "L'idée centrale de WeTransfer est asynchrone : l'expéditeur téléverse une fois, obtient un lien, et le destinataire télécharge plus tard. Les deux n'ont jamais à être en ligne en même temps, exactement ce que vous voulez quand vous envoyez par e-mail une vidéo à un client qui l'ouvrira demain.",
         "Il est aussi mature et sans friction. Rien à installer, l'offre gratuite permet d'envoyer sans compte, et l'interface est réputée simple. Pour un partage occasionnel par lien dans la limite de taille, il fonctionne tout simplement.",
       ],
     },
     {
-      heading: "Là où ils diffèrent : le fichier réside sur un serveur",
+      heading: "Là où ils diffèrent : le fichier réside sur un serveur",
       body: [
-        "Avec WeTransfer, votre fichier est téléversé sur ses serveurs, y est stocké un moment, puis téléchargé depuis là. L'offre gratuite plafonne chaque transfert à 2 Go, et le lien pointe vers une copie posée sur une infrastructure que vous ne contrôlez pas. Le transfert est chiffré en transit et au repos, mais il n'est pas à divulgation nulle : le service détient les clés et pourrait, en principe, lire le fichier.",
-        "Le mode temps réel de Relayium fonctionne à l'inverse. Les octets circulent directement entre les deux appareils via un canal pair-à-pair chiffré et ne sont jamais garés sur un serveur, il n'y a donc aucune limite de taille côté serveur à atteindre. Par-dessus le transport WebRTC, Relayium ajoute sa propre couche : un échange de clés X25519 dérive une clé pour un AES-256-GCM par bloc, les deux appareils affichent un code de vérification à 6 chiffres identique (SAS) pour écarter un homme du milieu, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256.",
+        "Avec WeTransfer, votre fichier est téléversé sur ses serveurs, y est stocké un moment, puis téléchargé depuis là. L'offre gratuite plafonne chaque transfert à 2 Go, et le lien pointe vers une copie posée sur une infrastructure que vous ne contrôlez pas. Le transfert est chiffré en transit et au repos, mais il n'est pas à divulgation nulle : le service détient les clés et pourrait, en principe, lire le fichier.",
+        "Le mode temps réel de Relayium fonctionne à l'inverse. Les octets circulent directement entre les deux appareils via un canal pair-à-pair chiffré et ne sont jamais garés sur un serveur, il n'y a donc aucune limite de taille côté serveur à atteindre. Par-dessus le transport WebRTC, Relayium ajoute sa propre couche : un échange de clés X25519 dérive une clé pour un AES-256-GCM par bloc, les deux appareils affichent un code de vérification à 6 chiffres identique (SAS) pour écarter un homme du milieu, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256.",
       ],
     },
     {
       heading: "Des transferts en temps réel sans limite de taille",
       body: [
         "Comme rien n'est stocké sur un serveur, la limite pratique de taille vient de votre propre navigateur. Dans Chrome ou Edge, Relayium diffuse les données entrantes directement sur le disque, il n'y a donc en pratique aucune limite de taille — des vidéos et archives de projet de plusieurs gigaoctets passent sans souci.",
-        "Firefox et Safari n'offrent pas le même flux via l'API File System Access : quand aucun chemin d'écriture en flux ne s'applique, le navigateur garde le fichier en mémoire ; Relayium prévient au-delà d'environ 256 Mo, une estimation volontairement prudente et non une limite dure mesurée. Sur le même réseau, les transferts en temps réel ne demandent aucun compte et les deux appareils se connectent directement : ouvrez relayium.com sur les deux appareils, choisissez jusqu'à 1 000 fichiers, vérifiez le code, et envoyez. Envoyer entre réseaux différents utilise un code d'appairage, exige que la personne qui crée ce code se connecte, et passe par conception par un relais TURN chiffré — c'est précisément ce qui établit la connexion en une ou deux secondes au lieu d'attendre des tentatives de connexion directe qui aboutissent rarement entre deux réseaux, et le relais ne transporte que du texte chiffré qu'il ne peut pas lire. Le destinataire n'a jamais besoin de compte. Si une connexion tombe en cours de route, le transfert reprend au lieu de recommencer.",
+        "Firefox et Safari n'offrent pas le même flux via l'API File System Access : quand aucun chemin d'écriture en flux ne s'applique, le navigateur garde le fichier en mémoire ; Relayium prévient au-delà d'environ 256 Mo, une estimation volontairement prudente et non une limite dure mesurée. Sur le même réseau, les transferts en temps réel ne demandent aucun compte et les deux appareils se connectent directement : ouvrez relayium.com sur les deux appareils, choisissez jusqu'à 1 000 fichiers, vérifiez le code, et envoyez. Envoyer entre réseaux différents utilise un code d'appairage, exige que la personne qui crée ce code se connecte, et passe par conception par un relais TURN chiffré — c'est précisément ce qui établit la connexion en une ou deux secondes au lieu d'attendre des tentatives de connexion directe qui aboutissent rarement entre deux réseaux, et le relais ne transporte que du texte chiffré qu'il ne peut pas lire. Le destinataire n'a jamais besoin de compte. Si une connexion tombe en cours de route, le transfert reprend au lieu de recommencer.",
       ],
     },
     {
-      heading: "Quand le destinataire est hors ligne : les liens stockés à divulgation nulle",
+      heading: "Quand le destinataire est hors ligne : les liens stockés à divulgation nulle",
       body: [
-        "Le transfert en temps réel exige que les deux soient présents, la seule chose que le modèle de lien de WeTransfer fait mieux. Alors Relayium offre le même confort asynchrone sans renoncer à la confidentialité : un lien de téléchargement stocké.",
+        "Le transfert en temps réel exige que les deux soient présents, la seule chose que le modèle de lien de WeTransfer fait mieux. Alors Relayium offre le même confort asynchrone sans renoncer à la confidentialité : un lien de téléchargement stocké.",
         "Votre navigateur chiffre les fichiers en AES-256-GCM avant le téléversement, et la clé de déchiffrement ne vit que dans le fragment de l'URL — la partie après le #, que les navigateurs n'envoient jamais au serveur. Le serveur ne stocke donc qu'un texte chiffré à divulgation nulle qu'il ne peut pas lire, et le destinataire n'a pas besoin de compte pour télécharger. Créer un tel lien exige que l'expéditeur se connecte, et chaque lien peut être réglé pour expirer ou se détruire après le premier téléchargement.",
       ],
     },
     {
       heading: "Comparatif des fonctions en un coup d'œil",
       body: [
-        "Les différences qui comptent le plus, côte à côte :",
+        "Les différences qui comptent le plus, côte à côte :",
       ],
       bullets: [
-        "Limite de taille : l'offre gratuite de WeTransfer plafonne les transferts à 2 Go ; le temps réel de Relayium n'a aucune limite côté serveur (Chrome/Edge écrivent sur le disque ; quand le navigateur doit mettre en mémoire tampon, Relayium prévient au-delà d'environ 256 Mo).",
-        "Où résident les fichiers : WeTransfer stocke votre fichier sur ses serveurs ; le temps réel de Relayium ne met jamais le fichier sur un serveur.",
-        "Chiffrement : WeTransfer chiffre en transit et au repos mais détient les clés ; Relayium est de bout en bout avec un code SAS à 6 chiffres, et les liens stockés sont à divulgation nulle avec la clé uniquement dans le fragment de l'URL.",
-        "Destinataire hors ligne : les deux gèrent le cas — WeTransfer via son lien stocké, Relayium via un lien de téléchargement stocké à divulgation nulle avec expiration ou destruction après téléchargement.",
-        "Intégrité et reprise : Relayium vérifie chaque fichier par SHA-256 et peut reprendre un transfert interrompu au lieu de recommencer.",
-        "Coût et ouverture : Relayium est gratuit et sous licence AGPL-3.0 sur github.com/relayium/relayium, et tourne dans le navigateur sur Windows, macOS, Linux, Android et iOS sans rien installer.",
+        "Limite de taille : l'offre gratuite de WeTransfer plafonne les transferts à 2 Go ; le temps réel de Relayium n'a aucune limite côté serveur (Chrome/Edge écrivent sur le disque ; quand le navigateur doit mettre en mémoire tampon, Relayium prévient au-delà d'environ 256 Mo).",
+        "Où résident les fichiers : WeTransfer stocke votre fichier sur ses serveurs ; le temps réel de Relayium ne met jamais le fichier sur un serveur.",
+        "Chiffrement : WeTransfer chiffre en transit et au repos mais détient les clés ; Relayium est de bout en bout avec un code SAS à 6 chiffres, et les liens stockés sont à divulgation nulle avec la clé uniquement dans le fragment de l'URL.",
+        "Destinataire hors ligne : les deux gèrent le cas — WeTransfer via son lien stocké, Relayium via un lien de téléchargement stocké à divulgation nulle avec autodestruction après lecture.",
+        "Intégrité et reprise : Relayium vérifie chaque fichier par SHA-256 et peut reprendre un transfert interrompu au lieu de recommencer.",
+        "Coût et ouverture : Relayium est gratuit et sous licence AGPL-3.0 sur github.com/relayium/relayium, et tourne dans le navigateur sur Windows, macOS, Linux, Android et iOS sans rien installer.",
       ],
     },
   ],
@@ -445,15 +445,15 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "N'y a-t-il vraiment aucune limite de taille de fichier ?",
-        a: "En mode temps réel, il n'y a aucune limite côté serveur, car le fichier ne touche jamais un serveur. Dans Chrome ou Edge, le téléchargement s'écrit directement sur le disque, donc les fichiers de plusieurs gigaoctets passent sans souci. Dans Firefox ou Safari, quand aucun chemin d'écriture en flux ne s'applique, le navigateur met en mémoire tampon et Relayium prévient au-delà d'environ 256 Mo — une estimation volontairement prudente, pas une limite dure. Les liens de téléchargement stockés ont un quota lié à votre compte.",
+        q: "N'y a-t-il vraiment aucune limite de taille de fichier ?",
+        a: "En mode temps réel, il n'y a aucune limite côté serveur, car le fichier ne touche jamais un serveur. Dans Chrome ou Edge, le téléchargement s'écrit directement sur le disque, donc les fichiers de plusieurs gigaoctets passent sans souci. Dans Firefox ou Safari, quand aucun chemin d'écriture en flux ne s'applique, le navigateur met en mémoire tampon et Relayium prévient au-delà d'environ 256 Mo — une estimation volontairement prudente, pas une limite dure. Les liens de téléchargement stockés ont un quota lié à votre compte.",
       },
       {
-        q: "Que faire si le destinataire n'est pas en ligne ?",
+        q: "Que faire si le destinataire n'est pas en ligne ?",
         a: "Utilisez un lien de téléchargement stocké. Votre navigateur chiffre les fichiers en AES-256-GCM, la clé reste uniquement dans le fragment de l'URL, et le serveur conserve un texte chiffré à divulgation nulle que le destinataire pourra récupérer plus tard. Créer le lien exige que l'expéditeur se connecte, et vous pouvez le régler pour expirer ou se détruire après le premier téléchargement.",
       },
       {
-        q: "Relayium est-il gratuit ?",
+        q: "Relayium est-il gratuit ?",
         a: "Oui. Relayium est gratuit et open source sous licence AGPL-3.0, avec l'intégralité du protocole et du code sur github.com/relayium/relayium. Il n'y a pas d'offre payante pour débloquer de plus gros transferts en temps réel — la marge de taille vient de la diffusion sur le disque dans le navigateur, pas d'un abonnement.",
       },
     ],
@@ -486,7 +486,7 @@ const ar = {
       heading: "أين يختلفان: الملف يعيش على خادم",
       body: [
         "مع WeTransfer، يُرفع ملفك إلى خوادمه، ويُخزَّن هناك مدة، ويُنزَّل من هناك. تحدّ الفئة المجانية كل نقل عند 2 GB، ويشير الرابط إلى نسخة موجودة على بنية تحتية لا تتحكم بها. النقل مُشفَّر أثناء العبور وفي حالة السكون، لكنه ليس بمعرفة صفرية: تحتفظ الخدمة بالمفاتيح ويمكنها، من حيث المبدأ، قراءة الملف.",
-        "يعمل الوضع الفوري في Relayium بالعكس. تتدفق البايتات مباشرةً بين الجهازين عبر قناة مُشفَّرة من الند للند ولا تُركَن على خادم أبدًا، فلا سقف حجم من جانب الخادم لتصطدم به. وفوق نقل WebRTC، يضيف Relayium طبقته الخاصة: يشتق تبادل مفاتيح X25519 مفتاحًا لـ AES-256-GCM لكل قطعة، ويعرض كلا الجهازين رمز تحقق متطابقًا من 6 أرقام (SAS) لاستبعاد وسيط، ويُتحقق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
+        "يعمل الوضع الفوري في Relayium بالعكس. تتدفق البايتات مباشرةً بين الجهازين عبر قناة مُشفَّرة من الند للند ولا تُركَن على خادم أبدًا، فلا سقف حجم من جانب الخادم لتصطدم به. وفوق نقل WebRTC، يضيف Relayium طبقته الخاصة: يشتق تبادل مفاتيح X25519 مفتاحًا لـ AES-256-GCM لكل كتلة، ويعرض كلا الجهازين رمز تحقق متطابقًا من 6 أرقام (SAS) لاستبعاد وسيط، ويُتحقق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
       ],
     },
     {
@@ -563,7 +563,7 @@ const es = {
       heading: "En qué se diferencian: el archivo vive en un servidor",
       body: [
         "Con WeTransfer, tu archivo se sube a sus servidores, se almacena allí un tiempo y se descarga desde allí. El nivel gratuito limita cada transferencia a 2 GB, y el enlace apunta a una copia alojada en una infraestructura que no controlas. La transferencia está cifrada en tránsito y en reposo, pero no es de conocimiento cero: el servicio guarda las claves y podría, en principio, leer el archivo.",
-        "El modo en tiempo real de Relayium funciona al revés. Los bytes fluyen directamente entre los dos dispositivos por un canal cifrado de igual a igual y nunca se aparcan en un servidor, así que no hay ningún límite de tamaño del lado del servidor con el que topar. Sobre el transporte WebRTC, Relayium añade su propia capa: un intercambio de claves X25519 deriva una clave para AES-256-GCM por fragmento, ambos dispositivos muestran un código de verificación coincidente de 6 dígitos (SAS) para descartar a un intermediario, y cada archivo se verifica de extremo a extremo con un hash SHA-256.",
+        "El modo en tiempo real de Relayium funciona al revés. Los bytes fluyen directamente entre los dos dispositivos por un canal cifrado de igual a igual y nunca se aparcan en un servidor, así que no hay ningún límite de tamaño del lado del servidor con el que topar. Sobre el transporte WebRTC, Relayium añade su propia capa: un intercambio de claves X25519 deriva una clave para AES-256-GCM por bloque, ambos dispositivos muestran un código de verificación coincidente de 6 dígitos (SAS) para descartar a un intermediario, y cada archivo se verifica de extremo a extremo con un hash SHA-256.",
       ],
     },
     {
@@ -589,7 +589,7 @@ const es = {
         "Límite de tamaño: el nivel gratuito de WeTransfer limita las transferencias a 2 GB; el tiempo real de Relayium no tiene límite del lado del servidor (Chrome/Edge escriben al disco; cuando el navegador tiene que almacenar en memoria, Relayium avisa por encima de unos 256 MB).",
         "Dónde viven los archivos: WeTransfer almacena tu archivo en sus servidores; el tiempo real de Relayium nunca pone el archivo en un servidor.",
         "Cifrado: WeTransfer cifra en tránsito y en reposo pero guarda las claves; Relayium es de extremo a extremo con un código SAS de 6 dígitos, y los enlaces almacenados son de conocimiento cero con la clave solo en el fragmento de la URL.",
-        "Destinatario desconectado: ambos lo resuelven: WeTransfer con su enlace almacenado, Relayium con un enlace de descarga almacenado de conocimiento cero con caducidad o autodestrucción tras la descarga.",
+        "Destinatario desconectado: ambos lo resuelven: WeTransfer con su enlace almacenado, Relayium con un enlace de descarga almacenado de conocimiento cero con destrucción tras la lectura o caducidad.",
         "Integridad y reanudación: Relayium verifica cada archivo con SHA-256 y puede reanudar una transferencia interrumpida en lugar de reiniciar.",
         "Coste y apertura: Relayium es gratis y está bajo licencia AGPL-3.0 en github.com/relayium/relayium, y se ejecuta en el navegador en Windows, macOS, Linux, Android e iOS sin nada que instalar.",
       ],
@@ -647,7 +647,7 @@ const pt = {
       heading: "Transferências em tempo real sem limite de tamanho",
       body: [
         "Como nada é armazenado num servidor, o limite prático de tamanho de arquivo vem do seu próprio navegador. No Chrome ou no Edge, o Relayium transmite os dados recebidos direto para o disco, então praticamente não há limite de tamanho — vídeos de vários gigabytes e arquivos compactados de projetos vão bem.",
-        "Firefox e Safari não oferecem esse mesmo fluxo pela API File System Access, então, quando nenhum caminho de gravação em fluxo se aplica, o navegador guarda o arquivo na memória; o Relayium avisa acima de cerca de 256 MB, uma estimativa deliberadamente conservadora e não um limite duro medido. Na mesma rede, as transferências em tempo real não precisam de conta e os dois dispositivos se conectam diretamente: abra relayium.com nos dois dispositivos, escolha até 1.000 arquivos, verifique o código e envie. Enviar entre redes usa um código de emparelhamento, exige que quem cria esse código faça login e passa por design por um retransmissor TURN criptografado — é justamente isso que faz a conexão subir em um ou dois segundos em vez de esperar tentativas de conexão direta que raramente dão certo entre duas redes, e o retransmissor só encaminha texto cifrado que não consegue ler. O destinatário nunca precisa de conta. Se uma conexão cai no meio, a transferência retoma em vez de começar de novo.",
+        "Firefox e Safari não oferecem esse mesmo fluxo pela API File System Access, então, quando nenhum caminho de gravação em fluxo se aplica, o navegador guarda o arquivo na memória; o Relayium avisa acima de cerca de 256 MB, uma estimativa deliberadamente conservadora e não um limite rígido medido. Na mesma rede, as transferências em tempo real não precisam de conta e os dois dispositivos se conectam diretamente: abra relayium.com nos dois dispositivos, escolha até 1.000 arquivos, verifique o código e envie. Enviar entre redes usa um código de emparelhamento, exige que quem cria esse código faça login e passa por decisão de projeto por um retransmissor TURN criptografado — é justamente isso que faz a conexão subir em um ou dois segundos em vez de esperar tentativas de conexão direta que raramente dão certo entre duas redes, e o retransmissor só encaminha texto cifrado que não consegue ler. O destinatário nunca precisa de conta. Se uma conexão cai no meio, a transferência retoma em vez de começar de novo.",
       ],
     },
     {
@@ -658,7 +658,7 @@ const pt = {
       ],
     },
     {
-      heading: "Comparativo de recursos num relance",
+      heading: "Comparativo de recursos em resumo",
       body: [
         "As diferenças que mais importam, lado a lado:",
       ],
@@ -666,7 +666,7 @@ const pt = {
         "Limite de tamanho: o nível gratuito do WeTransfer limita as transferências a 2 GB; o tempo real do Relayium não tem limite do lado do servidor (Chrome/Edge gravam no disco; quando o navegador precisa armazenar na memória, o Relayium avisa acima de cerca de 256 MB).",
         "Onde os arquivos vivem: o WeTransfer armazena seu arquivo nos servidores dele; o tempo real do Relayium nunca coloca o arquivo num servidor.",
         "Criptografia: o WeTransfer criptografa em trânsito e em repouso, mas guarda as chaves; o Relayium é de ponta a ponta com um código SAS de 6 dígitos, e os links armazenados são de conhecimento zero com a chave só no fragmento da URL.",
-        "Destinatário offline: os dois lidam com isso — o WeTransfer via seu link armazenado, o Relayium via um link de download armazenado de conhecimento zero com expiração ou autodestruição após o download.",
+        "Destinatário offline: os dois lidam com isso — o WeTransfer via seu link armazenado, o Relayium via um link de download armazenado de conhecimento zero com expiração ou autodestruição após a leitura.",
         "Integridade e retomada: o Relayium verifica cada arquivo com SHA-256 e pode retomar uma transferência interrompida em vez de reiniciar.",
         "Custo e abertura: o Relayium é gratuito e licenciado sob AGPL-3.0 em github.com/relayium/relayium, e roda no navegador em Windows, macOS, Linux, Android e iOS sem nada para instalar.",
       ],
@@ -677,7 +677,7 @@ const pt = {
     items: [
       {
         q: "Realmente não há limite de tamanho de arquivo?",
-        a: "No modo em tempo real não há limite do lado do servidor, porque o arquivo nunca toca um servidor. No Chrome ou no Edge o download é gravado direto no disco, então arquivos de vários gigabytes vão bem. No Firefox ou no Safari, quando nenhum caminho de gravação em fluxo se aplica, o navegador guarda na memória e o Relayium avisa acima de cerca de 256 MB — uma estimativa deliberadamente conservadora, não um limite duro. Os links de download armazenados têm uma cota ligada à sua conta.",
+        a: "No modo em tempo real não há limite do lado do servidor, porque o arquivo nunca toca um servidor. No Chrome ou no Edge o download é gravado direto no disco, então arquivos de vários gigabytes vão bem. No Firefox ou no Safari, quando nenhum caminho de gravação em fluxo se aplica, o navegador guarda na memória e o Relayium avisa acima de cerca de 256 MB — uma estimativa deliberadamente conservadora, não um limite rígido. Os links de download armazenados têm uma cota ligada à sua conta.",
       },
       {
         q: "E se o destinatário não estiver online?",

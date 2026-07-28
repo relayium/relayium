@@ -114,10 +114,10 @@ const zh = {
         "push 接受一个或多个源，以及一个 scp 风格的目标地址。Relayium 会用你平常的密钥和配置通过 SSH 连过去，再把文件流式写入目标目录：",
       ],
       code: [
-        `# copy a local folder to the server
+        `# 把本地文件夹复制到服务器
 relayium push ./photos user@your-server:backups/
 
-# choose an SSH key and a non-default port
+# 指定 SSH 密钥和非默认端口
 relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       ],
       bullets: [
@@ -153,7 +153,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
         "push 是一条用你自己 SSH 密钥的非交互式命令，所以可以原样放进 cron 做定期备份。给它指定一个没有口令的密钥（或者用 agent），并把输出记下来，好让失败能被看见：",
       ],
       code: [
-        `# back up every night at 2am — add to your crontab (crontab -e)
+        `# 每晚 2 点备份——加到你的 crontab 里（crontab -e）
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ >> ~/relayium-backup.log 2>&1`,
       ],
       bullets: [
@@ -194,27 +194,27 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
 const ja = {
   title: "Relayium CLI と SSH で自分のサーバーにファイルをバックアップする",
   description:
-    "relayium push と pull を使って、すでに ssh でアクセスできるサーバーへディレクトリをコピーまたは同期。再開可能、整合性チェック付きで無料。バイトはあなた自身の SSH 接続を通り、Relayium のサーバーには一切触れません。",
+    "relayium push と pull を使って、すでに ssh でアクセスできるサーバーへディレクトリをコピーまたは同期。再開可能、整合性チェック付きで無料。バイトは自分の SSH 接続を通り、Relayium のサーバーには一切触れません。",
   updatedLabel: "最終更新",
   lead: [
-    "VPS、自宅サーバー、NAS、ワークステーションなど、すでに ssh でアクセスできるマシンがあれば、同期サービスやアカウントを用意しなくても Relayium CLI でそこへファイルをバックアップできます。転送は既存の SSH 接続の上で行われるため、バイトは直接あなたのサーバーへ向かい、Relayium を通ることはありません。",
+    "VPS、自宅サーバー、NAS、ワークステーションなど、すでに ssh でアクセスできるマシンがあれば、同期サービスやアカウントを用意しなくても Relayium CLI でそこへファイルをバックアップできます。転送は既存の SSH 接続の上で行われるため、バイトは直接自分のサーバーへ向かい、Relayium を通ることはありません。",
     "本ガイドではディレクトリの push と pull、再開機能と整合性チェックが何をもたらすか、そして cron でスケジュール実行する方法を扱います。",
   ],
   sections: [
     {
       heading: "ディレクトリをサーバーへ push する",
       body: [
-        "push は1つ以上のソースと scp 形式の宛先を受け取ります。Relayium はいつも使っている鍵と設定を使って SSH 経由で接続し、ファイルを宛先ディレクトリへストリーミングします:",
+        "push は1つ以上のソースと scp 形式の宛先を受け取ります。Relayium はいつも使っている鍵と設定を使って SSH 経由で接続し、ファイルを宛先ディレクトリへストリーミングします：",
       ],
       code: [
-        `# copy a local folder to the server
+        `# ローカルのフォルダーをサーバーへコピーする
 relayium push ./photos user@your-server:backups/
 
-# choose an SSH key and a non-default port
+# SSH 鍵と既定以外のポートを指定する
 relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       ],
       bullets: [
-        "あなたの ~/.ssh/config を再利用するので、すでに設定済みのホストエイリアス、鍵、ポートがそのまま使えます。",
+        "既存の ~/.ssh/config を再利用するので、すでに設定済みのホストエイリアス、鍵、ポートがそのまま使えます。",
         "サーバーに relayium がインストールされていれば、ネイティブプロトコルを使います。ファイルごとの再開と、すべてのファイルに対する SHA-256 チェックです。",
         "インストールされていない場合は、tar ストリームをリモートへパイプする方式にフォールバックするので、relayium のない素のサーバーでも動作します。",
       ],
@@ -222,31 +222,31 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
     {
       heading: "ファイルを pull で戻す",
       body: [
-        "復元は同じコマンドを逆にするだけです。リモートのソースとローカルの宛先ディレクトリを指定します。これがバックアップを復元したり、サーバーの出力をノート PC に同期したりする方法です:",
+        "復元は同じコマンドを逆にするだけです。リモートのソースとローカルの宛先ディレクトリを指定します。これがバックアップを復元したり、サーバーの出力をノート PC に同期したりする方法です：",
       ],
       code: ["relayium pull user@your-server:backups/ ./restore"],
       bullets: [
-        "push と異なり、pull は常にリモートに relayium がすでにインストールされている必要があります——tar フォールバックがないため、なければ先にそちらへインストールしてください。",
+        "push と異なり、pull は常にリモートに relayium がすでにインストールされている必要があります。tar フォールバックがないため、なければ先にそちらへインストールしてください。",
       ],
     },
     {
       heading: "再開と整合性が標準で備わっている",
       body: [
-        "バックアップは大きくなりがちで、ネットワークは切れがちです。relayium が両端にあれば、中断された転送は次回の実行時にすべてを再送するのではなく中断した所から再開し、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます——サーバーに届くものは送ったものとバイト単位で同一です。",
+        "バックアップは大きくなりがちで、ネットワークは切れがちです。relayium が両端にあれば、中断された転送は次回の実行時にすべてを再送するのではなく中断した所から再開し、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。サーバーに届くものは送ったものとバイト単位で同一です。",
         "部分的なファイルを再開するのではなく、きれいに全体を再送したい場合は --no-resume を指定してください。",
       ],
       bullets: [
-        "再開にはリモート側に relayium が必要です(ネイティブプロトコル)。tar フォールバックは常に全体を送信します。",
+        "再開にはリモート側に relayium が必要です（ネイティブプロトコル）。tar フォールバックは常に全体を送信します。",
         "SHA-256 チェックは自動的に実行され、不一致があれば報告され、そのファイルは失敗としてフラグが立てられます。",
       ],
     },
     {
       heading: "cron でスケジュール実行する",
       body: [
-        "push は SSH 鍵を使う単一の非対話型コマンドなので、そのまま cron に組み込んで定期バックアップにできます。パスフレーズなしの鍵(または agent)を指定し、出力をログに残して失敗を確認できるようにしましょう:",
+        "push は SSH 鍵を使う単一の非対話型コマンドなので、そのまま cron に組み込んで定期バックアップにできます。パスフレーズなしの鍵（または agent）を指定し、出力をログに残して失敗を確認できるようにしましょう：",
       ],
       code: [
-        `# back up every night at 2am — add to your crontab (crontab -e)
+        `# 毎晩2時にバックアップ（crontab -e で crontab に追加）
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ >> ~/relayium-backup.log 2>&1`,
       ],
       bullets: [
@@ -259,25 +259,25 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
     heading: "よくある質問",
     items: [
       {
-        q: "ファイルは Relayium のサーバーを経由しますか?",
-        a: "いいえ。push と pull はすべてあなた自身の SSH 接続の上で完結します。Relayium のサーバーは一切関与せず、アカウントも不要です。",
+        q: "ファイルは Relayium のサーバーを経由しますか？",
+        a: "いいえ。push と pull はすべて自分の SSH 接続の上で完結します。Relayium のサーバーは一切関与せず、アカウントも不要です。",
       },
       {
-        q: "サーバーに relayium のインストールは必要ですか?",
-        a: "方向によります。push の場合は任意です。リモートに relayium があればネイティブプロトコルが使え、再開可能な転送とファイルごとの SHA-256 チェックが得られます。なければ push は SSH 上の tar ストリームにフォールバックし、それでも動作しますが、各ファイルは常に全体が送信されます。pull の場合は必須です。pull は常にリモート側の relayium を必要とし(tar フォールバックはありません)、先にリモートへインストールしておいてください。",
+        q: "サーバーに relayium のインストールは必要ですか？",
+        a: "方向によります。push の場合は任意です。リモートに relayium があればネイティブプロトコルが使え、再開可能な転送とファイルごとの SHA-256 チェックが得られます。なければ push は SSH 上の tar ストリームにフォールバックし、それでも動作しますが、各ファイルは常に全体が送信されます。pull の場合は必須です。pull は常にリモート側の relayium を必要とし（tar フォールバックはありません）、先にリモートへインストールしておいてください。",
       },
       {
-        q: "どの SSH 鍵とポートを使うかはどう決まりますか?",
-        a: "ssh と同じようにあなたの ~/.ssh/config を読み込むため、ホストエイリアス、鍵、ポートは自動的に反映されます。コマンドごとに -i でアイデンティティファイル、-p でポートを指定して上書きすることもできます。",
+        q: "どの SSH 鍵とポートを使うかはどう決まりますか？",
+        a: "ssh と同じように既存の ~/.ssh/config を読み込むため、ホストエイリアス、鍵、ポートは自動的に反映されます。コマンドごとに -i でアイデンティティファイル、-p でポートを指定して上書きすることもできます。",
       },
       {
-        q: "これは rsync より速いですか?",
+        q: "これは rsync より速いですか？",
         a: "自分のサーバーへの push に関しては、SSH 経由の rsync とほぼ同等です。狙いは rsync に勝つことではなく、同じ再開・整合性保証を備えたまま、クロスネットワーク転送やサーバー間転送もこなせる1つのツールを提供することです。",
       },
     ],
   },
   cta: {
-    text: "次のディレクトリを直接の方法でバックアップしましょう——自分の SSH 経由、再開可能、整合性チェック付きで無料です。",
+    text: "次のディレクトリを直接の方法でバックアップしましょう。自分の SSH 経由、再開可能、整合性チェック付きで無料です。",
     button: "CLI を入手",
     href: "/cli",
   },
@@ -287,10 +287,10 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
 const ko = {
   title: "Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기",
   description:
-    "relayium push와 pull로 이미 ssh로 접속하는 서버에 디렉터리를 복사하거나 동기화하세요 — 재개 가능하고 무결성 검사가 되며 무료입니다. 바이트는 당신 자신의 SSH 연결을 통해 이동하며 Relayium의 서버를 전혀 거치지 않습니다.",
+    "relayium push와 pull로 이미 ssh로 접속하는 서버에 디렉터리를 복사하거나 동기화하세요 — 재개 가능하고 무결성 검사가 되며 무료입니다. 바이트는 내 SSH 연결을 통해 이동하며 Relayium의 서버를 전혀 거치지 않습니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "VPS, 홈 서버, NAS, 워크스테이션 등 이미 ssh로 접속할 수 있는 서버가 있다면, 동기화 서비스나 계정을 따로 마련하지 않고도 Relayium CLI로 그곳에 파일을 백업할 수 있습니다. 전송은 기존 SSH 연결을 통해 이루어지므로 바이트는 곧장 당신의 서버로 가고 Relayium을 거치지 않습니다.",
+    "VPS, 홈 서버, NAS, 워크스테이션 등 이미 ssh로 접속할 수 있는 서버가 있다면, 동기화 서비스나 계정을 따로 마련하지 않고도 Relayium CLI로 그곳에 파일을 백업할 수 있습니다. 전송은 기존 SSH 연결을 통해 이루어지므로 바이트는 곧장 내 서버로 가고 Relayium을 거치지 않습니다.",
     "이 가이드는 디렉터리를 push하고 pull하는 방법, 재개와 무결성 검사가 주는 이점, 그리고 cron으로 예약 실행하는 방법을 다룹니다.",
   ],
   sections: [
@@ -300,14 +300,14 @@ const ko = {
         "push는 하나 이상의 소스와 scp 형식의 대상을 받습니다. Relayium은 평소 쓰는 키와 설정으로 SSH를 통해 연결한 뒤, 파일을 대상 디렉터리로 스트리밍합니다:",
       ],
       code: [
-        `# copy a local folder to the server
+        `# 로컬 폴더를 서버로 복사
 relayium push ./photos user@your-server:backups/
 
-# choose an SSH key and a non-default port
+# SSH 키와 기본이 아닌 포트 지정
 relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       ],
       bullets: [
-        "당신의 ~/.ssh/config를 그대로 재사용하므로, 이미 설정해 둔 호스트 별칭, 키, 포트가 그대로 작동합니다.",
+        "기존 ~/.ssh/config를 그대로 재사용하므로, 이미 설정해 둔 호스트 별칭, 키, 포트가 그대로 작동합니다.",
         "서버에 relayium이 설치되어 있으면 네이티브 프로토콜을 사용합니다: 파일별 재개와 모든 파일에 대한 SHA-256 검사입니다.",
         "설치되어 있지 않으면 tar 스트림을 원격으로 파이프하는 방식으로 대체되어, relayium이 없는 순수한 서버에서도 동작합니다.",
       ],
@@ -325,7 +325,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
     {
       heading: "재개와 무결성이 기본으로 내장되어 있다",
       body: [
-        "백업은 대체로 크고, 네트워크는 대체로 끊깁니다. 양쪽에 relayium이 있으면 중단된 전송은 다음 실행 시 전체를 다시 보내는 대신 멈춘 지점에서 재개되고, 각 파일은 SHA-256 해시로 종단간 검증됩니다 — 서버에 도착하는 것은 당신이 보낸 것과 바이트 단위로 동일합니다.",
+        "백업은 대체로 크고, 네트워크는 대체로 끊깁니다. 양쪽에 relayium이 있으면 중단된 전송은 다음 실행 시 전체를 다시 보내는 대신 멈춘 지점에서 재개되고, 각 파일은 SHA-256 해시로 종단간 검증됩니다 — 서버에 도착하는 것은 보낸 것과 바이트 단위로 동일합니다.",
         "부분 파일을 재개하는 대신 깔끔하게 전체를 다시 보내고 싶다면 --no-resume을 넘기세요.",
       ],
       bullets: [
@@ -339,7 +339,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
         "push는 SSH 키를 사용하는 단일 비대화형 명령이므로, 그대로 cron에 넣어 반복 백업으로 쓸 수 있습니다. 암호 없는 키(또는 agent)를 지정하고, 출력을 로그로 남겨 실패를 확인할 수 있게 하세요:",
       ],
       code: [
-        `# back up every night at 2am — add to your crontab (crontab -e)
+        `# 매일 밤 2시에 백업. crontab에 추가하세요(crontab -e)
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ >> ~/relayium-backup.log 2>&1`,
       ],
       bullets: [
@@ -353,7 +353,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
     items: [
       {
         q: "파일이 Relayium의 서버를 거치나요?",
-        a: "아니요. push와 pull은 전적으로 당신 자신의 SSH 연결을 통해 실행됩니다. Relayium의 서버는 전혀 관여하지 않으며 계정도 필요 없습니다.",
+        a: "아니요. push와 pull은 전적으로 내 SSH 연결을 통해 실행됩니다. Relayium의 서버는 전혀 관여하지 않으며 계정도 필요 없습니다.",
       },
       {
         q: "서버에 relayium이 설치되어 있어야 하나요?",
@@ -361,7 +361,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       },
       {
         q: "어떤 SSH 키와 포트를 사용할지 어떻게 정하나요?",
-        a: "ssh와 마찬가지로 당신의 ~/.ssh/config를 읽으므로, 호스트 별칭, 키, 포트가 자동으로 반영됩니다. 명령마다 -i로 신원 파일을, -p로 포트를 지정해 재정의할 수도 있습니다.",
+        a: "ssh와 마찬가지로 기존 ~/.ssh/config를 읽으므로, 호스트 별칭, 키, 포트가 자동으로 반영됩니다. 명령마다 -i로 신원 파일을, -p로 포트를 지정해 재정의할 수도 있습니다.",
       },
       {
         q: "이게 rsync보다 빠른가요?",
@@ -370,7 +370,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
     ],
   },
   cta: {
-    text: "다음 디렉터리를 직접적인 방식으로 백업하세요 — 당신 자신의 SSH를 통해, 재개 가능하고, 무결성 검사가 되며, 무료입니다.",
+    text: "다음 디렉터리를 직접적인 방식으로 백업하세요 — 내 SSH를 통해, 재개 가능하고, 무결성 검사가 되며, 무료입니다.",
     button: "CLI 받기",
     href: "/cli",
   },
@@ -393,10 +393,10 @@ const de = {
         "push nimmt eine oder mehrere Quellen und ein Ziel im scp-Stil entgegen. Relayium verbindet sich per SSH mit deinen üblichen Schlüsseln und deiner Konfiguration und streamt die Dateien dann in das Zielverzeichnis:",
       ],
       code: [
-        `# copy a local folder to the server
+        `# einen lokalen Ordner auf den Server kopieren
 relayium push ./photos user@your-server:backups/
 
-# choose an SSH key and a non-default port
+# einen SSH-Schlüssel und einen abweichenden Port wählen
 relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       ],
       bullets: [
@@ -432,7 +432,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
         "Da push ein einzelner, nicht-interaktiver Befehl ist, der deine SSH-Schlüssel nutzt, lässt es sich direkt in cron für ein wiederkehrendes Backup einsetzen. Verweise auf einen Schlüssel ohne Passphrase (oder einen Agent) und protokolliere die Ausgabe, damit du Fehlschläge siehst:",
       ],
       code: [
-        `# back up every night at 2am — add to your crontab (crontab -e)
+        `# jede Nacht um 2 Uhr sichern — in deine crontab eintragen (crontab -e)
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ >> ~/relayium-backup.log 2>&1`,
       ],
       bullets: [
@@ -477,31 +477,31 @@ const fr = {
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Si vous avez déjà un accès SSH à une machine — un VPS, un serveur personnel, un NAS, un poste de travail —, vous pouvez y sauvegarder des fichiers avec la CLI Relayium sans mettre en place un service de synchronisation ni de compte. Le transfert passe par votre connexion SSH existante, si bien que les octets vont directement à votre serveur et ne transitent jamais par Relayium.",
-    "Ce guide couvre le push et le pull de répertoires, ce que la reprise et la vérification d'intégrité vous apportent, et comment lancer cela sur un calendrier avec cron.",
+    "Ce guide couvre le push et le pull de répertoires, ce que la reprise et la vérification d'intégrité vous apportent, et comment le planifier avec cron.",
   ],
   sections: [
     {
       heading: "Pousser (push) un répertoire vers votre serveur",
       body: [
-        "push prend une ou plusieurs sources et une destination de style scp. Relayium se connecte en SSH avec vos clés et votre configuration habituelles, puis diffuse les fichiers vers le répertoire de destination :",
+        "push prend une ou plusieurs sources et une destination de style scp. Relayium se connecte en SSH avec vos clés et votre configuration habituelles, puis diffuse les fichiers vers le répertoire de destination :",
       ],
       code: [
-        `# copy a local folder to the server
+        `# copier un dossier local vers le serveur
 relayium push ./photos user@your-server:backups/
 
-# choose an SSH key and a non-default port
+# choisir une clé SSH et un port non standard
 relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       ],
       bullets: [
         "Il réutilise votre ~/.ssh/config, donc les alias d'hôtes, les clés et les ports déjà configurés fonctionnent tels quels.",
-        "Si relayium est installé sur le serveur, il utilise le protocole natif : reprise par fichier et vérification SHA-256 sur chaque fichier.",
+        "Si relayium est installé sur le serveur, il utilise le protocole natif : reprise par fichier et vérification SHA-256 sur chaque fichier.",
         "Sinon, il bascule sur l'envoi d'un flux tar par tube vers la machine distante, si bien qu'un serveur nu sans relayium fonctionne quand même.",
       ],
     },
     {
       heading: "Récupérer les fichiers avec pull",
       body: [
-        "La restauration est la même commande en sens inverse : indiquez une source distante et un répertoire de destination local. C'est ainsi que vous récupérez une sauvegarde, ou que vous synchronisez la sortie d'un serveur vers votre portable :",
+        "La restauration est la même commande en sens inverse : indiquez une source distante et un répertoire de destination local. C'est ainsi que vous récupérez une sauvegarde, ou que vous synchronisez la sortie d'un serveur vers votre portable :",
       ],
       code: ["relayium pull user@your-server:backups/ ./restore"],
       bullets: [
@@ -515,17 +515,17 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
         "Si vous voulez un renvoi complet et propre plutôt que la reprise d'un fichier partiel, passez --no-resume.",
       ],
       bullets: [
-        "La reprise nécessite relayium côté distant (le protocole natif) ; le repli tar envoie toujours l'intégralité.",
-        "La vérification SHA-256 s'exécute automatiquement ; une divergence est signalée et le fichier est marqué en échec.",
+        "La reprise nécessite relayium côté distant (le protocole natif) ; le repli tar envoie toujours l'intégralité.",
+        "La vérification SHA-256 s'exécute automatiquement ; une divergence est signalée et le fichier est marqué en échec.",
       ],
     },
     {
-      heading: "L'exécuter sur un calendrier avec cron",
+      heading: "Le planifier avec cron",
       body: [
-        "Comme push est une commande unique et non interactive qui utilise vos clés SSH, elle s'intègre directement dans cron pour une sauvegarde récurrente. Pointez-la vers une clé sans phrase de passe (ou vers un agent), et journalisez la sortie pour repérer les échecs :",
+        "Comme push est une commande unique et non interactive qui utilise vos clés SSH, elle s'intègre directement dans cron pour une sauvegarde récurrente. Pointez-la vers une clé sans phrase de passe (ou vers un agent), et journalisez la sortie pour repérer les échecs :",
       ],
       code: [
-        `# back up every night at 2am — add to your crontab (crontab -e)
+        `# sauvegarde chaque nuit à 2 h — à ajouter dans votre crontab (crontab -e)
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ >> ~/relayium-backup.log 2>&1`,
       ],
       bullets: [
@@ -538,20 +538,20 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Les fichiers passent-ils par les serveurs de Relayium ?",
+        q: "Les fichiers passent-ils par les serveurs de Relayium ?",
         a: "Non. push et pull s'exécutent entièrement sur votre propre connexion SSH. Les serveurs de Relayium ne sont jamais impliqués et aucun compte n'est nécessaire.",
       },
       {
-        q: "Le serveur a-t-il besoin de relayium installé ?",
-        a: "Cela dépend du sens. Pour push, c'est optionnel : avec relayium côté distant, vous obtenez le protocole natif — transferts reprenables et vérifications SHA-256 par fichier — et sans cela, push bascule sur un flux tar via SSH, qui fonctionne toujours mais renvoie systématiquement chaque fichier en entier. Pour pull, c'est requis : pull a toujours besoin de relayium côté distant (aucun repli tar), installez-le donc là-bas au préalable.",
+        q: "Le serveur a-t-il besoin de relayium installé ?",
+        a: "Cela dépend du sens. Pour push, c'est optionnel : avec relayium côté distant, vous obtenez le protocole natif — transferts avec reprise et vérifications SHA-256 par fichier — et sans cela, push bascule sur un flux tar via SSH, qui fonctionne toujours mais renvoie systématiquement chaque fichier en entier. Pour pull, c'est requis : pull a toujours besoin de relayium côté distant (aucun repli tar), installez-le donc là-bas au préalable.",
       },
       {
-        q: "Comment choisit-il quelle clé SSH et quel port utiliser ?",
+        q: "Comment choisit-il quelle clé SSH et quel port utiliser ?",
         a: "Il lit votre ~/.ssh/config comme le fait ssh, si bien que les alias d'hôtes, les clés et les ports sont repris automatiquement. Vous pouvez aussi les surcharger par commande avec -i pour le fichier d'identité et -p pour le port.",
       },
       {
-        q: "Est-ce plus rapide que rsync ?",
-        a: "Pour pousser vers votre propre serveur, c'est dans le même ordre de grandeur que rsync via SSH ; l'objectif n'est pas de battre rsync mais de vous offrir un seul outil qui gère aussi les transferts entre réseaux et de serveur à serveur, avec les mêmes garanties de reprise et d'intégrité.",
+        q: "Est-ce plus rapide que rsync ?",
+        a: "Pour pousser vers votre propre serveur, c'est dans le même ordre de grandeur que rsync via SSH ; l'objectif n'est pas de battre rsync mais de vous offrir un seul outil qui gère aussi les transferts entre réseaux et de serveur à serveur, avec les mêmes garanties de reprise et d'intégrité.",
       },
     ],
   },
@@ -566,7 +566,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
 const ar = {
   title: "انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI",
   description:
-    "استخدم relayium push وpull لنسخ المجلدات أو مزامنتها إلى خادم تدخل إليه بالفعل عبر ssh — قابل للاستئناف، ومُتحقَّق من سلامته، ومجاني. تنتقل البايتات عبر اتصال SSH الخاص بك ولا تلمس خوادم Relayium أبدًا.",
+    "استخدم relayium push وpull لنسخ المجلدات أو مزامنتها إلى خادم تدخل إليه بالفعل عبر ssh — قابل للاستئناف، ومُتحقَّق من سلامته، ومجاني. تنتقل البايتات عبر اتصال SSH لديك ولا تلمس خوادم Relayium أبدًا.",
   updatedLabel: "آخر تحديث",
   lead: [
     "إذا كان لديك بالفعل وصول SSH إلى جهاز — خادم افتراضي خاص، أو خادم منزلي، أو NAS، أو محطة عمل — فيمكنك نسخ الملفات إليه احتياطيًا باستخدام Relayium CLI دون إعداد خدمة مزامنة أو حساب. تجري عملية النقل عبر اتصال SSH الموجود لديك، فتذهب البايتات مباشرة إلى خادمك ولا تمر أبدًا عبر Relayium.",
@@ -579,14 +579,14 @@ const ar = {
         "يأخذ push مصدرًا واحدًا أو أكثر ووجهة بأسلوب scp. يتصل Relayium عبر SSH باستخدام مفاتيحك وإعداداتك المعتادة، ثم يبثّ الملفات إلى مجلد الوجهة:",
       ],
       code: [
-        `# copy a local folder to the server
+        `# انسخ مجلدًا محليًا إلى الخادم
 relayium push ./photos user@your-server:backups/
 
-# choose an SSH key and a non-default port
+# اختر مفتاح SSH ومنفذًا غير افتراضي
 relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       ],
       bullets: [
-        "يعيد استخدام ملف ~/.ssh/config الخاص بك، فأسماء المضيفين المستعارة والمفاتيح والمنافذ التي أعددتها من قبل تعمل مباشرة.",
+        "يعيد استخدام ملف ~/.ssh/config لديك، فأسماء المضيفين المستعارة والمفاتيح والمنافذ التي أعددتها من قبل تعمل مباشرة.",
         "إذا كان relayium مثبّتًا على الخادم، يستخدم البروتوكول الأصلي: استئناف لكل ملف وتحقق SHA-256 على كل ملف.",
         "إن لم يكن، يتراجع إلى تمرير بث tar عبر أنبوب إلى الطرف البعيد، فيعمل حتى خادم عارٍ لا يملك relayium.",
       ],
@@ -615,10 +615,10 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
     {
       heading: "شغّله وفق جدول باستخدام cron",
       body: [
-        "لأن push أمر واحد غير تفاعلي يستخدم مفاتيح SSH الخاصة بك، فإنه يندرج مباشرة في cron لنسخ احتياطي متكرر. وجّهه إلى مفتاح بلا عبارة مرور (أو إلى agent)، وسجّل المخرجات كي ترى حالات الفشل:",
+        "لأن push أمر واحد غير تفاعلي يستخدم مفاتيح SSH لديك، فإنه يندرج مباشرة في cron لنسخ احتياطي متكرر. وجّهه إلى مفتاح بلا عبارة مرور (أو إلى agent)، وسجّل المخرجات كي ترى حالات الفشل:",
       ],
       code: [
-        `# back up every night at 2am — add to your crontab (crontab -e)
+        `# انسخ احتياطيًا كل ليلة عند الساعة 2 — أضِف هذا إلى crontab لديك (crontab -e)
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ >> ~/relayium-backup.log 2>&1`,
       ],
       bullets: [
@@ -632,7 +632,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
     items: [
       {
         q: "هل تمر الملفات عبر خوادم Relayium؟",
-        a: "لا. يجري push وpull بالكامل عبر اتصال SSH الخاص بك. خوادم Relayium لا تشارك أبدًا ولا تحتاج إلى حساب.",
+        a: "لا. يجري push وpull بالكامل عبر اتصال SSH لديك. خوادم Relayium لا تشارك أبدًا ولا تحتاج إلى حساب.",
       },
       {
         q: "هل يحتاج الخادم إلى تثبيت relayium؟",
@@ -640,7 +640,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       },
       {
         q: "كيف يختار أي مفتاح SSH وأي منفذ يستخدم؟",
-        a: "يقرأ ملف ~/.ssh/config الخاص بك كما يفعل ssh، فتُلتقط أسماء المضيفين المستعارة والمفاتيح والمنافذ تلقائيًا. يمكنك أيضًا تجاوزها لكل أمر بـ -i لملف الهوية و -p للمنفذ.",
+        a: "يقرأ ملف ~/.ssh/config لديك كما يفعل ssh، فتُلتقط أسماء المضيفين المستعارة والمفاتيح والمنافذ تلقائيًا. يمكنك أيضًا تجاوزها لكل أمر بـ -i لملف الهوية و -p للمنفذ.",
       },
       {
         q: "هل هذا أسرع من rsync؟",
@@ -649,7 +649,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
     ],
   },
   cta: {
-    text: "انسخ مجلدك التالي احتياطيًا بالطريقة المباشرة — عبر SSH الخاص بك، قابل للاستئناف، ومُتحقَّق من سلامته، ومجاني.",
+    text: "انسخ مجلدك التالي احتياطيًا بالطريقة المباشرة — عبر SSH لديك، قابل للاستئناف، ومُتحقَّق من سلامته، ومجاني.",
     button: "احصل على CLI",
     href: "/cli",
   },
@@ -672,16 +672,16 @@ const es = {
         "push toma una o más fuentes y un destino al estilo scp. Relayium se conecta por SSH usando tus claves y tu configuración habituales, y luego transmite los archivos al directorio de destino:",
       ],
       code: [
-        `# copy a local folder to the server
+        `# copia una carpeta local al servidor
 relayium push ./photos user@your-server:backups/
 
-# choose an SSH key and a non-default port
+# elige una clave SSH y un puerto distinto al de por defecto
 relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       ],
       bullets: [
         "Reutiliza tu ~/.ssh/config, así que los alias de host, las claves y los puertos que ya configuraste funcionan sin más.",
         "Si relayium está instalado en el servidor, usa el protocolo nativo: reanudación por archivo y una comprobación SHA-256 en cada archivo.",
-        "Si no lo está, recurre a canalizar un flujo tar hacia la máquina remota, de modo que hasta un servidor pelado sin relayium funciona.",
+        "Si no lo está, recurre a canalizar un flujo tar hacia la máquina remota, de modo que hasta un servidor sin nada instalado y sin relayium funciona.",
       ],
     },
     {
@@ -711,7 +711,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
         "Como push es un único comando no interactivo que usa tus claves SSH, encaja directamente en cron para una copia de seguridad recurrente. Apúntalo a una clave sin frase de contraseña (o a un agente), y registra la salida para poder ver los fallos:",
       ],
       code: [
-        `# back up every night at 2am — add to your crontab (crontab -e)
+        `# copia de seguridad cada noche a las 2 — añádela a tu crontab (crontab -e)
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ >> ~/relayium-backup.log 2>&1`,
       ],
       bullets: [
@@ -765,16 +765,16 @@ const pt = {
         "O push recebe uma ou mais origens e um destino no estilo scp. O Relayium se conecta por SSH usando suas chaves e sua configuração de sempre e, em seguida, transmite os arquivos para o diretório de destino:",
       ],
       code: [
-        `# copy a local folder to the server
+        `# copie uma pasta local para o servidor
 relayium push ./photos user@your-server:backups/
 
-# choose an SSH key and a non-default port
+# escolha uma chave SSH e uma porta diferente da padrão
 relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
       ],
       bullets: [
         "Ele reaproveita seu ~/.ssh/config, então os apelidos de host, as chaves e as portas que você já configurou simplesmente funcionam.",
         "Se o relayium estiver instalado no servidor, ele usa o protocolo nativo: retomada por arquivo e uma verificação SHA-256 em cada arquivo.",
-        "Se não estiver, ele recorre a canalizar um fluxo tar para a máquina remota, de modo que até um servidor pelado sem relayium funciona.",
+        "Se não estiver, ele recorre a canalizar um fluxo tar para a máquina remota, de modo que até um servidor sem nada instalado e sem relayium funciona.",
       ],
     },
     {
@@ -804,7 +804,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/`,
         "Como o push é um único comando não interativo que usa suas chaves SSH, ele entra direto no cron para um backup recorrente. Aponte-o para uma chave sem frase-senha (ou para um agente) e registre a saída para conseguir ver as falhas:",
       ],
       code: [
-        `# back up every night at 2am — add to your crontab (crontab -e)
+        `# backup toda noite às 2h — adicione ao seu crontab (crontab -e)
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ >> ~/relayium-backup.log 2>&1`,
       ],
       bullets: [

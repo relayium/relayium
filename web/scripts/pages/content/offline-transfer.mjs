@@ -122,7 +122,7 @@ const zh = {
     cta: "上传文件",
   },
   how: {
-    heading: "四步完成一次传输",
+    heading: "链接是怎么生成的",
     steps: [
       "登录后选择一个文件——你的浏览器会在文件离开设备前于本地完成加密。",
       "服务器只保存密文；解密密钥保留在链接片段中，绝不会发送给服务器。",
@@ -131,7 +131,7 @@ const zh = {
     ],
   },
   why: {
-    heading: "为什么选择 Relayium",
+    heading: "为什么用这种方式发送",
     items: [
       {
         title: "零知识",
@@ -159,7 +159,6 @@ const zh = {
       },
     ],
   },
-  learnHeading: "延伸阅读",
   compare: {
     heading: "与其他方式相比",
     items: [
@@ -209,7 +208,7 @@ const ja = {
     cta: "ファイルをアップロード",
   },
   how: {
-    heading: "4ステップで転送",
+    heading: "リンクができるまで",
     steps: [
       "サインインしてファイルを選びます——ブラウザが端末を離れる前にローカルで暗号化します。",
       "サーバーは暗号文だけを保存します。復号鍵はリンクのフラグメントにとどまり、サーバーに送信されることはありません。",
@@ -218,7 +217,7 @@ const ja = {
     ],
   },
   why: {
-    heading: "Relayiumが選ばれる理由",
+    heading: "この方法で送る理由",
     items: [
       {
         title: "ゼロ知識",
@@ -246,7 +245,6 @@ const ja = {
       },
     ],
   },
-  learnHeading: "さらに詳しく",
   compare: {
     heading: "他の方法との比較",
     items: [
@@ -296,7 +294,7 @@ const ko = {
     cta: "파일 업로드",
   },
   how: {
-    heading: "4단계로 전송",
+    heading: "링크가 만들어지는 과정",
     steps: [
       "로그인 후 파일을 선택하세요 — 브라우저가 기기를 벗어나기 전에 로컬에서 암호화합니다.",
       "서버는 암호문만 저장합니다. 복호화 키는 링크 프래그먼트에 남아 있으며 서버로 전송되지 않습니다.",
@@ -305,7 +303,7 @@ const ko = {
     ],
   },
   why: {
-    heading: "Relayium을 선택하는 이유",
+    heading: "이 방식으로 보내는 이유",
     items: [
       {
         title: "영지식",
@@ -333,7 +331,6 @@ const ko = {
       },
     ],
   },
-  learnHeading: "더 알아보기",
   compare: {
     heading: "다른 방식과 비교",
     items: [
@@ -383,7 +380,7 @@ const de = {
     cta: "Datei hochladen",
   },
   how: {
-    heading: "In vier Schritten übertragen",
+    heading: "Wie der Link entsteht",
     steps: [
       "Melde dich an und wähle eine Datei — dein Browser verschlüsselt sie lokal, bevor irgendetwas das Gerät verlässt.",
       "Der Server speichert nur den Chiffretext; der Entschlüsselungsschlüssel bleibt im Link-Fragment und wird nie an den Server gesendet.",
@@ -392,7 +389,7 @@ const de = {
     ],
   },
   why: {
-    heading: "Warum Relayium",
+    heading: "Warum du so senden solltest",
     items: [
       {
         title: "Zero-Knowledge",
@@ -420,7 +417,6 @@ const de = {
       },
     ],
   },
-  learnHeading: "Mehr erfahren",
   compare: {
     heading: "Im Vergleich",
     items: [
@@ -462,28 +458,28 @@ const de = {
 const fr = {
   title: "Lien de fichier chiffré — téléverser maintenant, télécharger plus tard, à divulgation nulle (Relayium)",
   description:
-    "Téléversez un fichier chiffré dans votre navigateur et partagez un lien de téléchargement. Le serveur ne stocke que du contenu chiffré qu'il ne peut pas déchiffrer — la clé se trouve dans le lien. Autodestruction après lecture et expiration en option.",
+    "Téléversez un fichier chiffré dans votre navigateur et partagez un lien de téléchargement. Le serveur ne stocke que du texte chiffré qu'il ne peut pas déchiffrer — la clé se trouve dans le lien. Autodestruction après lecture et expiration en option.",
   hero: {
     h1: "Envoyer un fichier sous forme de lien chiffré",
     pitch:
-      "Quand l'autre personne n'est pas en ligne, téléversez maintenant et partagez un lien. Votre navigateur chiffre avant l'envoi ; le serveur ne conserve que du contenu chiffré qu'il ne peut pas lire — la clé ne quitte jamais le lien.",
+      "Quand l'autre personne n'est pas en ligne, téléversez maintenant et partagez un lien. Votre navigateur chiffre avant l'envoi ; le serveur ne conserve que du texte chiffré qu'il ne peut pas lire — la clé ne quitte jamais le lien.",
     cta: "Téléverser un fichier",
   },
   how: {
-    heading: "Transférer en quatre étapes",
+    heading: "Comment le lien est créé",
     steps: [
       "Connectez-vous et choisissez un fichier — votre navigateur le chiffre localement avant que quoi que ce soit ne quitte l'appareil.",
-      "Le serveur ne stocke que le contenu chiffré ; la clé de déchiffrement reste dans le fragment du lien et n'est jamais envoyée au serveur.",
+      "Le serveur ne stocke que le texte chiffré ; la clé de déchiffrement reste dans le fragment du lien et n'est jamais envoyée au serveur.",
       "Partagez le lien de téléchargement (avec, en option, l'autodestruction après lecture et une expiration de votre choix).",
-      "Le destinataire ouvre le lien ; son navigateur récupère le contenu chiffré et le déchiffre avec la clé du lien.",
+      "Le destinataire ouvre le lien ; son navigateur récupère le texte chiffré et le déchiffre avec la clé du lien.",
     ],
   },
   why: {
-    heading: "Pourquoi Relayium",
+    heading: "Pourquoi envoyer de cette façon",
     items: [
       {
         title: "À divulgation nulle",
-        desc: "Le fichier est chiffré dans le navigateur ; le serveur ne détient jamais que du contenu chiffré qu'il ne peut pas déchiffrer.",
+        desc: "Le fichier est chiffré dans le navigateur ; le serveur ne détient jamais que du texte chiffré qu'il ne peut pas déchiffrer.",
       },
       {
         title: "La clé est dans le lien",
@@ -507,13 +503,12 @@ const fr = {
       },
     ],
   },
-  learnHeading: "Pour aller plus loin",
   compare: {
     heading: "En comparaison",
     items: [
       {
         title: "Face aux liens WeTransfer/Dropbox",
-        body: "Ceux-ci peuvent lire vos fichiers côté serveur ; le serveur de Relayium ne détient que du contenu chiffré qu'il ne peut pas déchiffrer — la clé reste dans le lien.",
+        body: "Ceux-ci peuvent lire vos fichiers côté serveur ; le serveur de Relayium ne détient que du texte chiffré qu'il ne peut pas déchiffrer — la clé reste dans le lien.",
       },
       {
         title: "Face au mode temps réel",
@@ -526,7 +521,7 @@ const fr = {
     items: [
       {
         q: "Le serveur peut-il lire mon fichier ?",
-        a: "Non — il est chiffré dans votre navigateur ; le serveur ne stocke que du contenu chiffré, et la clé ne l'atteint jamais.",
+        a: "Non — il est chiffré dans votre navigateur ; le serveur ne stocke que du texte chiffré, et la clé ne l'atteint jamais.",
       },
       {
         q: "Où se trouve la clé ?",
@@ -557,7 +552,7 @@ const ar = {
     cta: "ارفع ملفًا",
   },
   how: {
-    heading: "انقل في أربع خطوات",
+    heading: "كيف يُصنَع الرابط",
     steps: [
       "سجّل الدخول واختر ملفًا — يشفّره متصفحك محليًا قبل أن يغادر أي شيء الجهاز.",
       "لا يخزّن الخادم سوى النص المُشفَّر؛ ويبقى مفتاح فك التشفير في جزء الرابط ولا يُرسَل أبدًا إلى الخادم.",
@@ -566,7 +561,7 @@ const ar = {
     ],
   },
   why: {
-    heading: "لماذا Relayium",
+    heading: "لماذا ترسل بهذه الطريقة",
     items: [
       {
         title: "بمعرفة صفرية",
@@ -594,7 +589,6 @@ const ar = {
       },
     ],
   },
-  learnHeading: "لمزيد من التعمّق",
   compare: {
     heading: "بالمقارنة",
     items: [
@@ -644,7 +638,7 @@ const es = {
     cta: "Subir un archivo",
   },
   how: {
-    heading: "Transferir en cuatro pasos",
+    heading: "Cómo se crea el enlace",
     steps: [
       "Inicia sesión y elige un archivo — tu navegador lo cifra localmente antes de que nada salga del dispositivo.",
       "El servidor solo almacena el texto cifrado; la clave de descifrado permanece en el fragmento del enlace y nunca se envía al servidor.",
@@ -653,7 +647,7 @@ const es = {
     ],
   },
   why: {
-    heading: "Por qué Relayium",
+    heading: "Por qué enviarlo así",
     items: [
       {
         title: "De conocimiento cero",
@@ -681,7 +675,6 @@ const es = {
       },
     ],
   },
-  learnHeading: "Para profundizar",
   compare: {
     heading: "En comparación",
     items: [
@@ -727,11 +720,11 @@ const pt = {
   hero: {
     h1: "Enviar um arquivo como link criptografado",
     pitch:
-      "Quando a outra pessoa não está on-line, envie agora e compartilhe um link. Seu navegador criptografa antes de enviar; o servidor guarda somente texto cifrado que não consegue ler — a chave nunca sai do link.",
+      "Quando a outra pessoa não está online, envie agora e compartilhe um link. Seu navegador criptografa antes de enviar; o servidor guarda somente texto cifrado que não consegue ler — a chave nunca sai do link.",
     cta: "Enviar um arquivo",
   },
   how: {
-    heading: "Transferir em quatro passos",
+    heading: "Como o link é criado",
     steps: [
       "Faça login e escolha um arquivo — seu navegador o criptografa localmente antes que qualquer coisa saia do dispositivo.",
       "O servidor só armazena o texto cifrado; a chave de descriptografia permanece no fragmento do link e nunca é enviada ao servidor.",
@@ -740,7 +733,7 @@ const pt = {
     ],
   },
   why: {
-    heading: "Por que o Relayium",
+    heading: "Por que enviar assim",
     items: [
       {
         title: "Conhecimento zero",
@@ -760,7 +753,7 @@ const pt = {
       },
       {
         title: "Complemento assíncrono",
-        desc: "Use isto quando a outra pessoa não está on-line agora; use a transferência entre redes em tempo real quando ambas estão presentes.",
+        desc: "Use isto quando a outra pessoa não está online agora; use a transferência entre redes em tempo real quando ambas estão presentes.",
       },
       {
         title: "Também pelo terminal",
@@ -768,7 +761,6 @@ const pt = {
       },
     ],
   },
-  learnHeading: "Para se aprofundar",
   compare: {
     heading: "Em comparação",
     items: [
@@ -778,7 +770,7 @@ const pt = {
       },
       {
         title: "Comparado ao modo em tempo real",
-        body: "O tempo real exige que as duas partes estejam on-line ao mesmo tempo; este modo armazena o arquivo criptografado para que o destinatário possa recuperá-lo depois.",
+        body: "O tempo real exige que as duas partes estejam online ao mesmo tempo; este modo armazena o arquivo criptografado para que o destinatário possa recuperá-lo depois.",
       },
     ],
   },

@@ -91,7 +91,7 @@ const zh = {
   updatedLabel: "最近更新",
   lead: [
     "Dropbox 的口碑是挣来的：它能把一个文件夹同步到你所有设备上，误覆盖文件时还能靠版本历史找回来，把整个项目文件夹通过分享链接交给客户也很省心。如果你要的是一个始终保持同步的工作文件夹，Dropbox 确实做得好，本文并不是要劝你别这么用它。",
-    "但另一类更窄的任务会暴露出摩擦：只有一个文件、一个收件人，之后也不需要它继续留在任何地方——一份已签字的 PDF、一段导出的视频、一个照片压缩包。Dropbox 仍然要求你先把文件放进账号里，生成一条分享链接，再想清楚这个文件夹里还有谁能访问。Relayium 正是为这类更窄的任务而生：文件直接送到对方设备上，或者变成一条只能在对方浏览器里解密、并按你设定的时间自动消失的链接。",
+    "但换成另一类更具体的场景，别扭之处就显出来了：只有一个文件、一个接收方，之后也不需要它继续留在任何地方——一份已签字的 PDF、一段导出的视频、一个照片压缩包。Dropbox 仍然要求你先把文件放进账号里，生成一条分享链接，再想清楚这个文件夹里还有谁能访问。Relayium 正是为这类更窄的任务而生：文件直接送到对方设备上，或者变成一条只能在对方浏览器里解密、并按你设定的时间自动消失的链接。",
   ],
   sections: [
     {
@@ -105,21 +105,21 @@ const zh = {
       heading: "差距在哪：分享链接背后仍是账号在持有文件",
       body: [
         "要通过 Dropbox 发送一个文件，它得先进入 Dropbox——上传到你的账号、放进某个文件夹，然后你才能为它生成一条可分享的链接。这条链接指向的是 Dropbox 代你保存的一份副本，Dropbox 自己的基础设施能读取它，并且会一直留在那里，直到你回去删除文件或撤销链接。",
-        "对一次性发送来说，为一个没人需要长期保留的文件动用这么多常驻基础设施有点多余。Relayium 的实时模式在常见场景下直接跳过存储：字节通过端到端加密的点对点连接在发送方与接收方的设备之间流动，文件本身根本不会写到任何服务器上。当你确实需要一条链接——因为收件人现在不在线——存储链接模式保留了 Dropbox 分享所没有的特性：你的浏览器会在上传前生成一个随机的 AES-256-GCM 密钥并用它加密文件，这个密钥只存在于 URL 片段中（# 之后的部分，浏览器从不会把它发给服务器）。Dropbox 的服务器在技术上可以读取你账号里的内容；而 Relayium 的服务器对于存储链接，只保存它无法解密的密文。",
+        "对一次性发送来说，为一个没人需要长期保留的文件动用这么多常驻基础设施有点多余。Relayium 的实时模式在常见场景下直接跳过存储：字节通过端到端加密的点对点连接在发送方与接收方的设备之间流动，文件本身根本不会写到任何服务器上。当你确实需要一条链接——因为接收方现在不在线——存储链接模式保留了 Dropbox 分享所没有的特性：你的浏览器会在上传前生成一个随机的 AES-256-GCM 密钥并用它加密文件，这个密钥只存在于 URL 片段中（# 之后的部分，浏览器从不把它发给服务器）。Dropbox 的服务器在技术上可以读取你账号里的内容；而 Relayium 的服务器对于存储链接，只保存它无法解密的密文。",
       ],
     },
     {
       heading: "实时发送：服务器上什么都不会留下",
       body: [
         "当双方同时在线时，实时直连传输可以一次最多发送 1,000 个文件，直接从一台设备送到另一台，没有上传步骤，中间也不存放任何东西。双方会看到一致的 6 位校验码（SAS）以排除中间人，每个文件都用 SHA-256 做端到端校验，连接中断时会断点续传而不是从头再来。",
-        "实时传输没有服务器端的大小上限，真正的限制来自接收方的浏览器：Chrome 和 Edge 会把接收数据直接流式写入磁盘，几十 GB 也不成问题；Firefox 和 Safari 没有这套 API，当所有流式写盘路径都不适用时，它们只能把数据攒在内存里——Relayium 会在超过约 256 MB 时给出提示，这个数字是刻意取的保守估计，而不是实测出来的硬上限。同一网络下——比如在办公室 Wi-Fi 下发给同事的笔记本——完全无需账号，两台设备之间是直连。跨不同网络发送要用配对码，需要创建配对码的一方登录，并且按设计经由加密的 TURN 中继传输，因此连接一两秒就能建立，不必去等两个网络之间很难成功的直连尝试；中继只转发它读不懂的密文，而无论哪种情况，接收方都始终无需账号。",
+        "实时传输没有服务器端的大小上限，真正的限制来自接收方的浏览器：Chrome 和 Edge 会把接收数据直接流式写入磁盘，几十 GB 也不成问题；Firefox 和 Safari 没有这套 API，当所有流式写盘路径都不适用时，它们只能把数据攒在内存里——Relayium 会在超过约 256 MB 时给出提示，这个数字是刻意取的保守估计，而不是实测出来的硬上限。同一网络下——比如在办公室 Wi-Fi 下发给同事的笔记本——完全无需账号，两台设备之间是直连。跨不同网络发送要用配对码，需要创建配对码的一方登录，并且刻意经由加密的 TURN 中继传输，因此连接一两秒就能建立，不必去等两个网络之间很难成功的直连尝试；中继只转发它读不懂的密文，而无论哪种情况，接收方都始终无需账号。",
       ],
     },
     {
       heading: "需要一条链接时：零知识、自动到期",
       body: [
-        "有时候链接确实是更合适的方式——收件人在另一个时区正在睡觉，或者你想要一条可以直接贴进邮件的 URL，而不是协调一次实时会话。Relayium 的存储链接模式正是为此而生，同时不牺牲实时模式的隐私性。",
-        "你可以选择链接的存活时间——1 小时、1 天、3 天、7 天或最长 14 天（取决于套餐）——或设置为首次下载完成后即焚，这样就不用惦记着回去清理留下的副本。创建链接需要发送方登录（会计入账号的存储配额），但收件人只需打开链接下载，不需要像 Dropbox 那样注册账号。因为解密密钥从不离开 URL 片段，Relayium 存储链接的服务器在结构上就无法读取其中内容，这和 Dropbox 分享链接不同——Dropbox 自己的基础设施在技术上是可以解密它托管的文件的。",
+        "有时候链接确实是更合适的方式——接收方在另一个时区正在睡觉，或者你想要一条可以直接贴进邮件的 URL，而不是协调一次实时会话。Relayium 的存储链接模式正是为此而生，同时不牺牲实时模式的隐私性。",
+        "你可以选择链接的存活时间——1 小时、1 天、3 天、7 天或最长 14 天（取决于套餐）——或设置为首次下载后即焚，这样就不用惦记着回去清理留下的副本。创建链接需要发送方登录（会计入账号的存储配额），但接收方只需打开链接下载，不需要像 Dropbox 那样注册账号。因为解密密钥从不离开 URL 片段，Relayium 存储链接的服务器在结构上就无法读取其中内容，这和 Dropbox 分享链接不同——Dropbox 自己的基础设施在技术上是可以解密它托管的文件的。",
       ],
     },
     {
@@ -143,7 +143,7 @@ const zh = {
         a: "实时传输不会——文件直接在设备之间移动，从不存到服务器上。下载链接确实会在服务器端保存一些内容，但只是它无法解密的零知识密文；链接会到期（1小时/1天/3天/7天，视套餐而定）或首次下载后即焚。",
       },
       {
-        q: "收件人需要注册什么吗？",
+        q: "接收方需要注册什么吗？",
         a: "不需要。同一网络下双方都无需账号。为跨网络发送创建配对码，或创建存储下载链接，都需要登录——但无论哪种情况，接收方都始终无需账号。",
       },
       {
@@ -170,47 +170,47 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "Dropbox の評判には理由があります。所有するすべての端末でフォルダを同期し、うっかり上書きしてもバージョン履歴で戻せ、プロジェクトフォルダ丸ごとを共有リンクでクライアントに渡すのも簡単です。常に同期された作業フォルダが欲しいなら、Dropbox はその仕事をきちんとこなしますし、本記事はその使い方をやめさせようとするものではありません。",
-    "摩擦が出てくるのは、もっと狭い作業のときです。ファイルは1つ、受信者は1人、その後どこかに残しておく必要もない——署名済みの PDF、書き出した動画、写真をまとめた zip。それでも Dropbox は、まずそのファイルをアカウントに入れ、共有リンクを発行し、そのフォルダに他に誰がアクセスできるかを考えることを求めます。Relayium はまさにこの狭い作業のために作られています。ファイルは相手の端末へ直接届くか、相手のブラウザでしか復号できず、あなたが設定した時間で消えるリンクになります。",
+    "摩擦が出てくるのは、もっと狭い作業のときです。ファイルは1つ、受信者は1人、その後どこかに残しておく必要もありません。署名済みの PDF、書き出した動画、写真をまとめた zip といったものです。それでも Dropbox は、まずそのファイルをアカウントに入れ、共有リンクを発行し、そのフォルダに他に誰がアクセスできるかを考えることを求めます。Relayium はまさにこの狭い作業のために作られています。ファイルは相手の端末へ直接届くか、相手のブラウザでしか復号できず、設定した時間で消えるリンクになります。",
   ],
   sections: [
     {
       heading: "Dropbox が本当に得意なこと",
       body: [
-        "Dropbox の核心的な強みは、あなたが頼りにしているフォルダが常にどこでも最新であることです。ノートパソコンでファイルを編集すれば、スマートフォンを確認する頃にはもう更新されています。選択的同期、大きなローカル転送のための LAN 同期、ファイル復元・バージョン履歴、これらすべてが同じ目標——何度も戻ってくる、永続的で信頼できる置き場所——に貢献しています。",
+        "Dropbox の核心的な強みは、頼りにしているフォルダが常にどこでも最新であることです。ノートパソコンでファイルを編集すれば、スマートフォンを確認する頃にはもう更新されています。選択的同期、大きなローカル転送のための LAN 同期、ファイル復元・バージョン履歴、これらすべてが同じ目標（何度も戻ってくる、永続的で信頼できる置き場所）に貢献しています。",
         "共有フォルダと Dropbox Paper は継続的な協業にも適しており、リンク共有はすでに日常的に Dropbox を使う小規模チームにとって本当に便利です。これらはどれも Relayium が目指しているものではありません。Relayium はフォルダを同期せず、何かの作業用コピーを保持することもありません。",
       ],
     },
     {
       heading: "違いの核心：共有リンクの先には依然としてアカウントがある",
       body: [
-        "Dropbox で1つのファイルを送るには、まずそれが Dropbox の中になければなりません——アカウントにアップロードされ、フォルダに置かれてから、共有可能なリンクを発行します。そのリンクが指すのは、Dropbox があなたに代わって保管しているコピーであり、Dropbox 自身のインフラが読み取ることができ、あなたが戻ってファイルを削除するかリンクを取り消すまでそこに残り続けます。",
-        "一度きりの送信にしては、誰も保持する必要のないファイルのためにかなりの常設インフラです。Relayium のリアルタイムモードは、よくあるケースでこの保存という手順を完全に省きます。バイトはエンドツーエンドで暗号化された P2P 接続を通じて送信者と受信者の端末の間を流れ、ファイル自体はサーバーに一切書き込まれません。受信者が今オフラインで、それでもリンクが欲しいときは、保存リンクモードが Dropbox の共有にはない性質を保ちます。ブラウザはアップロード前にランダムな AES-256-GCM 鍵を生成してファイルを暗号化し、その鍵は URL フラグメント（# の後の部分。ブラウザが決してサーバーへ送らない部分）にだけ存在します。Dropbox のサーバーは、あなたのアカウント内のものを技術的に読み取ることができます。一方 Relayium のサーバーは、保存リンクについて復号できない暗号文しか保持しません。",
+        "Dropbox で1つのファイルを送るには、まずそれが Dropbox の中になければなりません。アカウントにアップロードされ、フォルダに置かれてから、共有可能なリンクを発行します。そのリンクが指すのは、Dropbox が代わりに保管しているコピーであり、Dropbox 自身のインフラが読み取ることができ、戻ってファイルを削除するかリンクを取り消すまでそこに残り続けます。",
+        "一度きりの送信にしては、誰も保持する必要のないファイルのためにかなりの常設インフラです。Relayium のリアルタイムモードは、よくあるケースでこの保存という手順を完全に省きます。バイトはエンドツーエンドで暗号化された P2P 接続を通じて送信者と受信者の端末の間を流れ、ファイル自体はサーバーに一切書き込まれません。受信者が今オフラインで、それでもリンクが欲しいときは、保存リンクモードが Dropbox の共有にはない性質を保ちます。ブラウザはアップロード前にランダムな AES-256-GCM 鍵を生成してファイルを暗号化し、その鍵は URL フラグメント（# の後の部分。ブラウザが決してサーバーへ送らない部分）にだけ存在します。Dropbox のサーバーは、アカウント内のものを技術的に読み取ることができます。一方 Relayium のサーバーは、保存リンクについて復号できない暗号文しか保持しません。",
       ],
     },
     {
       heading: "リアルタイム送信：サーバーには何も保存されない",
       body: [
-        "両者が同時にオンラインのとき、リアルタイム直接転送は最大1,000ファイルを1バッチとして一方の端末からもう一方へ直接送ります——アップロードの手順もなく、途中で何も保存されません。両方の端末は一致する6桁の検証コード（SAS）を表示して中間者を排除し、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証され、接続が切れても最初からではなく再開します。",
-        "サーバー側のサイズ上限はなく、実際の限界は受信側のブラウザ次第です。Chrome と Edge は受信データをそのままディスクにストリーミングするため数十ギガバイトでも問題ありません。Firefox と Safari にはその API がなく、ストリーミングで書き出せる経路がどれも使えないときは受信データをメモリに保持します——Relayium は約256MBを超えると警告しますが、これは実測された上限ではなく、意図的に保守的な見積もりです。同じネットワーク内——たとえばオフィスの Wi-Fi で同僚のノートパソコンに送るような場合——ではアカウントは一切不要で、2台の端末は直接つながります。異なるネットワーク間の送信にはペアリングコードを使い、そのコードを作る側のサインインが必要で、設計上は暗号化された TURN リレーを経由します。そのため、ネットワーク同士ではめったに成功しない直接接続の試行を待たずに1〜2秒でつながります。リレーが中継するのは読めない暗号文だけで、どちらの場合でも受信側は常にアカウント不要です。",
+        "両者が同時にオンラインのとき、リアルタイム直接転送は最大1,000ファイルを1バッチとして一方の端末からもう一方へ直接送ります。アップロードの手順もなく、途中で何も保存されません。両方の端末は一致する6桁の検証コード（SAS）を表示して中間者を排除し、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証され、接続が切れても最初からではなく再開します。",
+        "サーバー側のサイズ上限はなく、実際の限界は受信側のブラウザ次第です。Chrome と Edge は受信データをそのままディスクにストリーミングするため数十ギガバイトでも問題ありません。Firefox と Safari にはその API がなく、ストリーミングで書き出せる経路がどれも使えないときは受信データをメモリに保持します。Relayium は約256MBを超えると警告しますが、これは実測された上限ではなく、意図的に保守的な見積もりです。同じネットワーク内（たとえばオフィスの Wi-Fi で同僚のノートパソコンに送るような場合）ではアカウントは一切不要で、2台の端末は直接つながります。異なるネットワーク間の送信にはペアリングコードを使い、そのコードを作る側のサインインが必要で、設計上は暗号化された TURN リレーを経由します。そのため、ネットワーク同士ではめったに成功しない直接接続の試行を待たずに1〜2秒でつながります。リレーが中継するのは読めない暗号文だけで、どちらの場合でも受信側は常にアカウント不要です。",
       ],
     },
     {
       heading: "リンクが必要なとき：ゼロ知識で自動失効",
       body: [
-        "受信者が別のタイムゾーンで眠っている、あるいはリアルタイムセッションを調整する代わりにメールに貼り付けられる1つの URL が欲しい——そんなときはリンクこそが正しい道具です。Relayium の保存リンクモードは、リアルタイムモードのプライバシーを犠牲にせずまさにその場面のために作られています。",
-        "有効期限は1時間・1日・3日・7日・最長14日（プランによる）から選ぶか、最初のダウンロード完了後に消去する設定にでき、後で片付けを覚えておく必要のあるコピーが残りません。リンクの作成には送信側のサインインが必要です（アカウントの保存容量枠に計上されます）が、受信側はリンクを開いてダウンロードするだけで、Dropbox のようなアカウント登録は不要です。復号鍵が URL フラグメントから外に出ることは決してないため、Relayium の保存リンクのサーバーは構造的に中身を読み取れません。これは Dropbox の共有リンクとは異なる保証です。Dropbox 自身のインフラは、ホストしているファイルを技術的には復号できます。",
+        "受信者が別のタイムゾーンで眠っている、あるいはリアルタイムセッションを調整する代わりにメールに貼り付けられる1つの URL が欲しい。そんなときはリンクこそが正しい道具です。Relayium の保存リンクモードは、リアルタイムモードのプライバシーを犠牲にせずまさにその場面のために作られています。",
+        "有効期限は1時間・1日・3日・7日・最長14日（プランによる）から選ぶか、最初のダウンロード完了後に削除する設定にでき、後で片付けを覚えておく必要のあるコピーが残りません。リンクの作成には送信側のサインインが必要です（アカウントの保存容量枠に計上されます）が、受信側はリンクを開いてダウンロードするだけで、Dropbox のようなアカウント登録は不要です。復号鍵が URL フラグメントから外に出ることは決してないため、Relayium の保存リンクのサーバーは構造的に中身を読み取れません。これは Dropbox の共有リンクとは異なる保証です。Dropbox 自身のインフラは、ホストしているファイルを技術的には復号できます。",
       ],
     },
     {
       heading: "並べて比較",
       body: ["一度きりの送信に最も関係する違い："],
       bullets: [
-        "目的：Dropbox は使い続けるフォルダのために作られた、常時同期する永続ストレージ；Relayium は1ファイルの受け渡しのために作られている——リアルタイム P2P か、自動失効するリンクで、後に何も残らない。",
-        "ファイルの行き先：Dropbox の共有リンクは、あなたが削除するまでアカウントに残るコピーを指す；Relayium のリアルタイムはファイルを一切保存せず、保存リンクは自動失効（1時間/1日/3日/7日、プランによる）または初回ダウンロード後に消去。",
-        "誰が読めるか：Dropbox のインフラは技術的にアカウント内のファイルを復号できる；Relayium の保存リンクはゼロ知識で、鍵は URL フラグメントにだけ存在し、サーバーは読めない暗号文を保持する。",
-        "アカウント：Dropbox はアップロードと共有にアカウントを要求する；Relayium は同一ネットワークではアカウントが一切不要で、ペアリングコードや保存リンクを作る側だけがサインインする——受信側は常にアカウント不要。",
-        "サイズ上限：Dropbox はプランの保存容量枠に制約される；Relayium のリアルタイムはサーバー側の上限なし（Chrome/Edge は数十GBまでディスクへストリーミング。ブラウザがメモリに溜めるしかない場合は約256MBを超えると警告）。",
-        "費用と開放性：Relayium は無料で AGPL-3.0 ライセンス、github.com/relayium/relayium にあり、ブラウザで Windows・macOS・Linux・Android・iOS で動作し、インストール不要。",
+        "目的：Dropbox は使い続けるフォルダのために作られた、常時同期する永続ストレージです。Relayium は1ファイルの受け渡しのために作られており、リアルタイム P2P か自動失効するリンクで、後に何も残りません。",
+        "ファイルの行き先：Dropbox の共有リンクは、削除するまでアカウントに残るコピーを指します。Relayium のリアルタイムはファイルを一切保存せず、保存リンクは自動失効（1時間/1日/3日/7日、プランによる）するか初回ダウンロード後に削除されます。",
+        "誰が読めるか：Dropbox のインフラは技術的にアカウント内のファイルを復号できます。Relayium の保存リンクはゼロ知識で、鍵は URL フラグメントにだけ存在し、サーバーは読めない暗号文を保持します。",
+        "アカウント：Dropbox はアップロードと共有にアカウントを要求します。Relayium は同一ネットワークではアカウントが一切不要で、ペアリングコードや保存リンクを作る側だけがサインインします。受信側は常にアカウント不要です。",
+        "サイズ上限：Dropbox はプランの保存容量枠に制約されます。Relayium のリアルタイムはサーバー側の上限がありません（Chrome/Edge は数十GBまでディスクへストリーミング。ブラウザがメモリに溜めるしかない場合は約256MBを超えると警告）。",
+        "費用と開放性：Relayium は無料で AGPL-3.0 ライセンス、github.com/relayium/relayium にあり、ブラウザで Windows・macOS・Linux・Android・iOS で動作し、インストールは不要です。",
       ],
     },
   ],
@@ -219,7 +219,7 @@ const ja = {
     items: [
       {
         q: "Dropbox のようにファイルがアカウントの中に残りますか？",
-        a: "リアルタイム転送では残りません——ファイルは端末間を直接移動し、サーバーには一切保存されません。ダウンロードリンクはサーバー側で何かを保存しますが、それは復号できないゼロ知識の暗号文だけです。リンクは失効するか（1時間/1日/3日/7日、プランによる）、最初のダウンロード後に消去されます。",
+        a: "リアルタイム転送では残りません。ファイルは端末間を直接移動し、サーバーには一切保存されません。ダウンロードリンクはサーバー側で何かを保存しますが、それは復号できないゼロ知識の暗号文だけです。リンクは失効するか（1時間/1日/3日/7日、プランによる）、最初のダウンロード後に削除されます。",
       },
       {
         q: "受信者は何かに登録する必要がありますか？",
@@ -227,7 +227,7 @@ const ja = {
       },
       {
         q: "ファイルサイズに上限はありますか？",
-        a: "リアルタイム転送は1バッチにつき最大1,000ファイルまで扱え、サーバー側のサイズ上限はありません——Chrome と Edge は数十ギガバイトまでそのままディスクにストリーミングします。ストリーミングで書き出せる経路がどれも使えず、ブラウザがメモリに溜めるしかない場合、Relayium は約256MBを超えると警告します。この数字は意図的に保守的な見積もりで、ハードな上限ではありません。保存リンクは送信側のアカウントに紐づく容量枠に計上されます。",
+        a: "リアルタイム転送は1バッチにつき最大1,000ファイルまで扱え、サーバー側のサイズ上限はありません。Chrome と Edge は数十ギガバイトまでそのままディスクにストリーミングします。ストリーミングで書き出せる経路がどれも使えず、ブラウザがメモリに溜めるしかない場合、Relayium は約256MBを超えると警告します。この数字は意図的に保守的な見積もりで、ハードな上限ではありません。保存リンクは送信側のアカウントに紐づく容量枠に計上されます。",
       },
       {
         q: "Dropbox のプランの代わりに Relayium を使うのは無料ですか？",
@@ -236,7 +236,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "誰のアカウントにも入れず、ファイルを直接送ってみてください——サイズ上限なし、インストール不要、同じネットワークならアカウントも不要です。",
+    text: "誰のアカウントにも入れず、ファイルを直接送ってみてください。サイズ上限なし、インストール不要、同じネットワークならアカウントも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -249,46 +249,46 @@ const ko = {
   updatedLabel: "마지막 업데이트",
   lead: [
     "Dropbox의 평판에는 이유가 있습니다. 소유한 모든 기기에서 폴더를 동기화하고, 실수로 덮어써도 버전 기록으로 되돌릴 수 있으며, 프로젝트 폴더 전체를 공유 링크로 클라이언트에게 넘기는 것도 수월합니다. 계속 동기화 상태를 유지하는 작업 폴더가 필요하다면 Dropbox는 그 역할을 잘 해내며, 이 글은 그런 용도로 쓰지 말라고 설득하려는 것이 아닙니다.",
-    "마찰이 드러나는 건 더 좁은 작업에서입니다. 파일은 하나, 받는 사람도 한 명, 이후 어딘가에 계속 남아 있어야 할 필요도 없는 경우——서명된 PDF, 내보낸 동영상, 사진을 담은 zip 파일. 그런데도 Dropbox는 먼저 그 파일을 계정에 넣고, 공유 링크를 만들고, 그 폴더에 또 누가 접근할 수 있는지 신경 쓰라고 요구합니다. Relayium은 바로 이 좁은 작업을 위해 만들어졌습니다. 파일은 상대방 기기로 곧장 전달되거나, 상대방 브라우저에서만 복호화되고 당신이 정한 시간에 맞춰 사라지는 링크가 됩니다.",
+    "마찰이 드러나는 건 더 좁은 작업에서입니다. 파일은 하나, 받는 사람도 한 명, 이후 어딘가에 계속 남아 있어야 할 필요도 없는 경우입니다. 서명된 PDF, 내보낸 동영상, 사진을 담은 zip 파일이 그렇습니다. 그런데도 Dropbox는 먼저 그 파일을 계정에 넣고, 공유 링크를 만들고, 그 폴더에 또 누가 접근할 수 있는지 신경 쓰라고 요구합니다. Relayium은 바로 이 좁은 작업을 위해 만들어졌습니다. 파일은 상대방 기기로 곧장 전달되거나, 상대방 브라우저에서만 복호화되고 직접 정한 시간에 맞춰 사라지는 링크가 됩니다.",
   ],
   sections: [
     {
       heading: "Dropbox가 정말 잘하는 것",
       body: [
-        "Dropbox의 핵심 강점은 당신이 의지하는 폴더가 어디서나 항상 최신 상태라는 점입니다. 노트북에서 파일을 편집하면 휴대폰을 확인할 때쯤엔 이미 업데이트되어 있습니다. 선택적 동기화, 대용량 로컬 전송을 위한 LAN 동기화, 파일 복구·버전 기록 모두 같은 목표——계속 다시 찾게 되는 영구적이고 신뢰할 수 있는 보관 장소——를 위한 것입니다.",
+        "Dropbox의 핵심 강점은 의지하는 폴더가 어디서나 항상 최신 상태라는 점입니다. 노트북에서 파일을 편집하면 휴대폰을 확인할 때쯤엔 이미 업데이트되어 있습니다. 선택적 동기화, 대용량 로컬 전송을 위한 LAN 동기화, 파일 복구·버전 기록 모두 같은 목표, 즉 계속 다시 찾게 되는 영구적이고 신뢰할 수 있는 보관 장소를 위한 것입니다.",
         "공유 폴더와 Dropbox Paper는 지속적인 협업에도 적합하고, 링크 공유는 이미 매일 Dropbox를 쓰는 소규모 팀에게는 정말 편리합니다. 이런 것들은 Relayium이 되려는 대상이 아닙니다. Relayium은 폴더를 동기화하지 않고, 무언가의 작업용 사본을 보관하지도 않습니다.",
       ],
     },
     {
       heading: "차이의 핵심: 공유 링크 뒤에는 여전히 계정이 파일을 쥐고 있다",
       body: [
-        "Dropbox로 파일 하나를 보내려면 먼저 그것이 Dropbox 안에 있어야 합니다——계정에 업로드되어 폴더에 놓인 뒤에야 공유 가능한 링크를 만들 수 있습니다. 그 링크가 가리키는 것은 Dropbox가 당신을 대신해 보관하는 사본이며, Dropbox 자체 인프라가 이를 읽을 수 있고, 당신이 돌아가 파일을 삭제하거나 링크를 취소할 때까지 그대로 남아 있습니다.",
-        "일회성 전송치고는, 아무도 계속 보관할 필요가 없는 파일 하나를 위해 상당한 상시 인프라를 쓰는 셈입니다. Relayium의 실시간 모드는 흔한 경우에 이 저장 단계를 완전히 건너뜁니다. 바이트는 종단간 암호화된 P2P 연결을 통해 보내는 사람과 받는 사람의 기기 사이를 오가며, 파일 자체는 서버에 전혀 기록되지 않습니다. 받는 사람이 지금 오프라인이라 링크가 정말로 필요할 때는, 저장 링크 모드가 Dropbox 공유에는 없는 속성을 유지합니다. 브라우저가 업로드 전에 무작위 AES-256-GCM 키를 생성해 파일을 암호화하고, 그 키는 URL 프래그먼트——# 뒤의, 브라우저가 서버로 절대 보내지 않는 부분——에만 존재합니다. Dropbox의 서버는 계정 안의 내용을 기술적으로 읽을 수 있습니다. 반면 Relayium의 서버는 저장 링크에 대해 복호화할 수 없는 암호문만 보관합니다.",
+        "Dropbox로 파일 하나를 보내려면 먼저 그것이 Dropbox 안에 있어야 합니다. 계정에 업로드되어 폴더에 놓인 뒤에야 공유 가능한 링크를 만들 수 있습니다. 그 링크가 가리키는 것은 Dropbox가 대신 보관하는 사본이며, Dropbox 자체 인프라가 이를 읽을 수 있고, 직접 돌아가 파일을 삭제하거나 링크를 취소할 때까지 그대로 남아 있습니다.",
+        "일회성 전송치고는, 아무도 계속 보관할 필요가 없는 파일 하나를 위해 상당한 상시 인프라를 쓰는 셈입니다. Relayium의 실시간 모드는 흔한 경우에 이 저장 단계를 완전히 건너뜁니다. 바이트는 종단간 암호화된 P2P 연결을 통해 보내는 사람과 받는 사람의 기기 사이를 오가며, 파일 자체는 서버에 전혀 기록되지 않습니다. 받는 사람이 지금 오프라인이라 링크가 정말로 필요할 때는, 저장 링크 모드가 Dropbox 공유에는 없는 속성을 유지합니다. 브라우저가 업로드 전에 무작위 AES-256-GCM 키를 생성해 파일을 암호화하고, 그 키는 URL 프래그먼트, 즉 # 뒤의 브라우저가 서버로 절대 보내지 않는 부분에만 존재합니다. Dropbox의 서버는 계정 안의 내용을 기술적으로 읽을 수 있습니다. 반면 Relayium의 서버는 저장 링크에 대해 복호화할 수 없는 암호문만 보관합니다.",
       ],
     },
     {
       heading: "실시간 전송: 서버에는 아무것도 저장되지 않음",
       body: [
-        "양쪽이 동시에 온라인일 때, 실시간 직접 전송은 한 번에 최대 1,000개 파일을 한 기기에서 다른 기기로 곧바로 보냅니다——업로드 단계도 없고, 그 사이 아무것도 저장되지 않습니다. 양쪽 모두 일치하는 6자리 검증 코드(SAS)를 보여 중간자를 배제하고, 각 파일은 SHA-256 해시로 종단간 검증되며, 연결이 끊겨도 처음부터가 아니라 이어서 재개됩니다.",
-        "서버 측 크기 제한이 없으므로 실제 한계는 받는 쪽 브라우저에서 옵니다. Chrome과 Edge는 들어오는 데이터를 곧바로 디스크로 스트리밍해 수십 기가바이트도 문제없이 처리합니다. Firefox와 Safari에는 그 API가 없어, 디스크로 흘려보낼 경로가 하나도 적용되지 않으면 들어오는 데이터를 메모리에 담습니다——Relayium은 약 256 MB를 넘으면 경고하는데, 이는 측정된 하드 한계가 아니라 일부러 보수적으로 잡은 추정치입니다. 같은 네트워크——예를 들어 사무실 Wi-Fi로 동료의 노트북에 보내는 경우——에서는 계정이 전혀 필요 없고, 두 기기가 서로 직접 연결됩니다. 서로 다른 네트워크 간 전송은 페어링 코드를 쓰고, 그 코드를 만드는 쪽의 로그인이 필요하며, 설계상 암호화된 TURN 릴레이를 거칩니다. 덕분에 네트워크 사이에서는 좀처럼 성공하지 않는 직접 연결 시도를 기다리지 않고 1~2초 만에 연결됩니다. 릴레이는 스스로 읽을 수 없는 암호문만 전달하고, 어느 경우든 받는 쪽은 항상 계정이 필요 없습니다.",
+        "양쪽이 동시에 온라인일 때, 실시간 직접 전송은 한 번에 최대 1,000개 파일을 한 기기에서 다른 기기로 곧바로 보냅니다. 업로드 단계도 없고, 그 사이 아무것도 저장되지 않습니다. 양쪽 모두 일치하는 6자리 검증 코드(SAS)를 보여 중간자를 배제하고, 각 파일은 SHA-256 해시로 종단간 검증되며, 연결이 끊겨도 처음부터가 아니라 이어서 재개됩니다.",
+        "서버 측 크기 제한이 없으므로 실제 한계는 받는 쪽 브라우저에서 옵니다. Chrome과 Edge는 들어오는 데이터를 곧바로 디스크로 스트리밍해 수십 기가바이트도 문제없이 처리합니다. Firefox와 Safari에는 그 API가 없어, 디스크로 흘려보낼 경로가 하나도 적용되지 않으면 들어오는 데이터를 메모리에 담습니다. Relayium은 약 256 MB를 넘으면 경고하는데, 이는 측정된 하드 한계가 아니라 일부러 보수적으로 잡은 추정치입니다. 같은 네트워크(예를 들어 사무실 Wi-Fi로 동료의 노트북에 보내는 경우)에서는 계정이 전혀 필요 없고, 두 기기가 서로 직접 연결됩니다. 서로 다른 네트워크 간 전송은 페어링 코드를 쓰고, 그 코드를 만드는 쪽의 로그인이 필요하며, 설계상 암호화된 TURN 릴레이를 거칩니다. 덕분에 네트워크 사이에서는 좀처럼 성공하지 않는 직접 연결 시도를 기다리지 않고 1~2초 만에 연결됩니다. 릴레이는 스스로 읽을 수 없는 암호문만 전달하고, 어느 경우든 받는 쪽은 항상 계정이 필요 없습니다.",
       ],
     },
     {
       heading: "링크가 필요할 때: 영지식이며 자동 만료",
       body: [
-        "받는 사람이 다른 시간대에서 자고 있거나, 실시간 세션을 조율하는 대신 이메일에 붙여넣을 URL 하나가 필요할 때——그럴 때는 링크가 정말로 맞는 도구입니다. Relayium의 저장 링크 모드는 실시간 모드의 프라이버시를 포기하지 않고 바로 그 경우를 위해 만들어졌습니다.",
-        "링크가 얼마나 유지될지——1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 중——선택하거나, 첫 다운로드 완료 후 소각되도록 설정할 수 있어 나중에 정리해야 할 사본이 남지 않습니다. 링크 생성에는 보내는 쪽의 로그인이 필요하지만(계정의 저장 용량 한도에 포함됩니다), 받는 쪽은 링크를 열어 다운로드하기만 하면 되고 Dropbox 같은 계정 가입은 필요 없습니다. 복호화 키가 URL 프래그먼트를 벗어나는 일이 없기 때문에, Relayium 저장 링크의 서버는 구조적으로 내용을 읽을 수 없습니다. 이는 Dropbox 공유 링크와는 다른 보장입니다. Dropbox 자체 인프라는 호스팅하는 파일을 기술적으로 복호화할 수 있습니다.",
+        "받는 사람이 다른 시간대에서 자고 있거나, 실시간 세션을 조율하는 대신 이메일에 붙여넣을 URL 하나가 필요할 때가 있습니다. 그럴 때는 링크가 정말로 맞는 도구입니다. Relayium의 저장 링크 모드는 실시간 모드의 프라이버시를 포기하지 않고 바로 그 경우를 위해 만들어졌습니다.",
+        "링크가 얼마나 유지될지 1시간, 1일, 3일, 7일, 최대 14일(요금제에 따라 다름) 중에서 선택하거나, 첫 다운로드 완료 후 삭제되도록 설정할 수 있어 나중에 정리해야 할 사본이 남지 않습니다. 링크 생성에는 보내는 쪽의 로그인이 필요하지만(계정의 저장 용량 한도에 포함됩니다), 받는 쪽은 링크를 열어 다운로드하기만 하면 되고 Dropbox 같은 계정 가입은 필요 없습니다. 복호화 키가 URL 프래그먼트를 벗어나는 일이 없기 때문에, Relayium 저장 링크의 서버는 구조적으로 내용을 읽을 수 없습니다. 이는 Dropbox 공유 링크와는 다른 보장입니다. Dropbox 자체 인프라는 호스팅하는 파일을 기술적으로 복호화할 수 있습니다.",
       ],
     },
     {
       heading: "나란히 비교",
       body: ["일회성 전송에 가장 관련 있는 차이:"],
       bullets: [
-        "목적: Dropbox는 계속 작업하는 폴더를 위한, 항상 동기화되는 영구 저장소; Relayium은 파일 하나를 전달하기 위해 만들어짐——실시간 P2P 또는 자동 만료 링크로, 나중에 아무것도 남지 않음.",
-        "파일이 놓이는 곳: Dropbox 공유 링크는 당신이 삭제할 때까지 계정에 남아 있는 사본을 가리킴; Relayium 실시간은 파일을 아예 저장하지 않고, 저장 링크는 자동 만료(1시간/1일/3일/7일, 요금제에 따라 다름)되거나 첫 다운로드 후 소각됨.",
-        "누가 읽을 수 있는가: Dropbox의 인프라는 기술적으로 계정 내 파일을 복호화할 수 있음; Relayium의 저장 링크는 영지식으로, 키가 URL 프래그먼트에만 있어 서버는 읽을 수 없는 암호문을 보관함.",
-        "계정: Dropbox는 업로드와 공유에 계정을 요구함; Relayium은 같은 네트워크에서 계정이 전혀 필요 없고, 페어링 코드나 저장 링크를 만드는 쪽만 로그인함——받는 쪽은 항상 계정 불필요.",
-        "크기 제한: Dropbox는 요금제의 저장 용량 한도에 제약됨; Relayium 실시간은 서버 측 제한 없음(Chrome/Edge는 수십 GB까지 디스크로 스트리밍하고, 브라우저가 메모리에 담을 수밖에 없을 때는 약 256 MB를 넘으면 경고).",
+        "목적: Dropbox는 계속 작업하는 폴더를 위한, 항상 동기화되는 영구 저장소임. Relayium은 파일 하나를 전달하기 위해 만들어졌고, 실시간 P2P 또는 자동 만료 링크로 나중에 아무것도 남지 않음.",
+        "파일이 놓이는 곳: Dropbox 공유 링크는 삭제할 때까지 계정에 남아 있는 사본을 가리킴. Relayium 실시간은 파일을 아예 저장하지 않고, 저장 링크는 자동 만료(1시간/1일/3일/7일, 요금제에 따라 다름)되거나 첫 다운로드 후 삭제됨.",
+        "누가 읽을 수 있는가: Dropbox의 인프라는 기술적으로 계정 내 파일을 복호화할 수 있음. Relayium의 저장 링크는 영지식으로, 키가 URL 프래그먼트에만 있어 서버는 읽을 수 없는 암호문을 보관함.",
+        "계정: Dropbox는 업로드와 공유에 계정을 요구함. Relayium은 같은 네트워크에서 계정이 전혀 필요 없고, 페어링 코드나 저장 링크를 만드는 쪽만 로그인함. 받는 쪽은 항상 계정 불필요.",
+        "크기 제한: Dropbox는 요금제의 저장 용량 한도에 제약됨. Relayium 실시간은 서버 측 제한 없음(Chrome/Edge는 수십 GB까지 디스크로 스트리밍하고, 브라우저가 메모리에 담을 수밖에 없을 때는 약 256 MB를 넘으면 경고).",
         "비용과 개방성: Relayium은 무료이며 AGPL-3.0 라이선스로 github.com/relayium/relayium에 있고, 브라우저에서 Windows·macOS·Linux·Android·iOS로 동작하며 설치가 필요 없음.",
       ],
     },
@@ -298,7 +298,7 @@ const ko = {
     items: [
       {
         q: "Dropbox처럼 파일이 계정 안에 남나요?",
-        a: "실시간 전송에서는 아닙니다——파일이 기기 사이에서 직접 이동하며 서버에 전혀 저장되지 않습니다. 다운로드 링크는 서버 측에 무언가를 저장하지만, 그것은 복호화할 수 없는 영지식 암호문뿐입니다. 링크는 만료되거나(1시간/1일/3일/7일, 요금제에 따라 다름) 첫 다운로드 후 소각됩니다.",
+        a: "실시간 전송에서는 아닙니다. 파일이 기기 사이에서 직접 이동하며 서버에 전혀 저장되지 않습니다. 다운로드 링크는 서버 측에 무언가를 저장하지만, 그것은 복호화할 수 없는 영지식 암호문뿐입니다. 링크는 만료되거나(1시간/1일/3일/7일, 요금제에 따라 다름) 첫 다운로드 후 삭제됩니다.",
       },
       {
         q: "받는 사람이 뭔가에 가입해야 하나요?",
@@ -306,7 +306,7 @@ const ko = {
       },
       {
         q: "파일 크기 제한이 있나요?",
-        a: "실시간 전송은 한 번에 최대 1,000개 파일을 처리할 수 있고 서버 측 크기 제한이 없습니다——Chrome과 Edge는 수십 기가바이트까지 곧바로 디스크로 스트리밍합니다. 디스크로 흘려보낼 경로가 하나도 적용되지 않아 브라우저가 메모리에 담아야 할 때는 Relayium이 약 256 MB를 넘으면 경고합니다. 이 수치는 일부러 보수적으로 잡은 추정치이지 하드 한계가 아닙니다. 저장 링크는 보내는 쪽 계정에 연결된 용량 한도에 포함됩니다.",
+        a: "실시간 전송은 한 번에 최대 1,000개 파일을 처리할 수 있고 서버 측 크기 제한이 없습니다. Chrome과 Edge는 수십 기가바이트까지 곧바로 디스크로 스트리밍합니다. 디스크로 흘려보낼 경로가 하나도 적용되지 않아 브라우저가 메모리에 담아야 할 때는 Relayium이 약 256 MB를 넘으면 경고합니다. 이 수치는 일부러 보수적으로 잡은 추정치이지 하드 한계가 아닙니다. 저장 링크는 보내는 쪽 계정에 연결된 용량 한도에 포함됩니다.",
       },
       {
         q: "Dropbox 요금제 대신 Relayium을 쓰는 건 무료인가요?",
@@ -315,7 +315,7 @@ const ko = {
     ],
   },
   cta: {
-    text: "누구의 계정에도 넣지 않고 파일을 직접 보내보세요——크기 제한 없이, 설치 없이, 같은 네트워크에서는 계정도 필요 없습니다.",
+    text: "누구의 계정에도 넣지 않고 파일을 직접 보내보세요. 크기 제한 없이, 설치 없이, 같은 네트워크에서는 계정도 필요 없습니다.",
     button: "지금 Relayium 사용해보기",
   },
   relatedHeading: "계속 읽기",
@@ -348,7 +348,7 @@ const de = {
     {
       heading: "Echtzeit-Versand: Nichts wird auf einem Server gespeichert",
       body: [
-        "Sind beide gerade gleichzeitig online, sendet die direkte Echtzeitübertragung bis zu 1.000 Dateien in einem Durchgang direkt von einem Gerät zum anderen — ohne Hochladeschritt und ohne dass zwischendurch irgendwo etwas gespeichert wird. Beide Seiten erhalten einen übereinstimmenden sechsstelligen Prüfcode (SAS), um einen Man-in-the-Middle auszuschließen, jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft, und eine abgebrochene Verbindung wird fortgesetzt statt neu gestartet.",
+        "Sind beide gerade gleichzeitig online, sendet die direkte Echtzeitübertragung bis zu 1.000 Dateien in einem Durchgang direkt von einem Gerät zum anderen — ohne Hochladeschritt und ohne dass zwischendurch irgendwo etwas gespeichert wird. Beide Seiten erhalten einen übereinstimmenden sechsstelligen Verifizierungscode (SAS), um einen Man-in-the-Middle auszuschließen, jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft, und eine abgebrochene Verbindung wird fortgesetzt statt neu gestartet.",
         "Es gibt kein serverseitiges Größenlimit; die eigentliche Grenze setzt der empfangende Browser. Chrome und Edge streamen eingehende Daten direkt auf die Festplatte, sodass mehrere Dutzend Gigabyte kein Problem sind. Firefox und Safari haben diese API nicht, und wenn kein Streaming-Weg greift, halten sie die eingehenden Daten stattdessen im Arbeitsspeicher — Relayium warnt oberhalb von rund 256 MB, einer bewusst konservativen Schätzung und keiner gemessenen harten Grenze. Im selben Netz — etwa beim Senden an den Laptop einer Kollegin über das Büro-WLAN — ist überhaupt kein Konto nötig, und die beiden Geräte verbinden sich direkt miteinander. Das Senden über verschiedene Netzwerke hinweg nutzt einen Pairing-Code, erfordert die Anmeldung derjenigen Person, die diesen Code erstellt, und läuft planmäßig über ein verschlüsseltes TURN-Relay, sodass die Verbindung in ein bis zwei Sekunden steht, statt auf Direktverbindungsversuche zu warten, die zwischen zwei Netzen selten gelingen; das Relay leitet nur Chiffretext weiter, den es nicht lesen kann, und der Empfänger braucht in beiden Fällen nie ein Konto.",
       ],
     },
@@ -403,51 +403,51 @@ const de = {
 const fr = {
   title: "Relayium vs Dropbox pour envoyer un fichier",
   description:
-    "Comparatif équitable : Dropbox excelle pour la synchronisation durable et les liens partagés, mais le fichier finit par résider dans un compte. Relayium l'envoie en pair-à-pair, sans rien stocker sur un serveur, ou via un lien à divulgation nulle qui expire.",
+    "Comparatif équitable : Dropbox excelle pour la synchronisation durable et les liens partagés, mais le fichier finit par résider dans un compte. Relayium l'envoie en pair-à-pair, sans rien stocker sur un serveur, ou via un lien à divulgation nulle qui expire.",
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Dropbox mérite sa réputation. Il synchronise un dossier sur tous vos appareils, conserve un historique des versions quand vous écrasez quelque chose par erreur, et permet de remettre tout un dossier de projet à un client via un lien partagé sans effort. Si vous voulez un dossier de travail qui reste simplement synchronisé, Dropbox fait bien ce travail, et cet article ne cherche pas à vous en dissuader.",
-    "La friction apparaît sur une tâche plus étroite : vous avez un fichier, un destinataire, et aucun besoin durable qu'il reste quelque part ensuite — un PDF signé, un export vidéo, un zip de photos. Dropbox vous demande quand même de déposer ce fichier dans votre compte, de générer un lien de partage, et de réfléchir à qui d'autre a accès à ce dossier. Relayium est conçu précisément pour cette tâche plus étroite : le fichier va directement sur l'appareil de l'autre personne, ou devient un lien qui ne se déchiffre que dans son navigateur et disparaît selon le calendrier que vous fixez.",
+    "La friction apparaît sur une tâche plus étroite : vous avez un fichier, un destinataire, et aucun besoin durable qu'il reste quelque part ensuite — un PDF signé, un export vidéo, un zip de photos. Dropbox vous demande quand même de déposer ce fichier dans votre compte, de générer un lien de partage, et de réfléchir à qui d'autre a accès à ce dossier. Relayium est conçu précisément pour cette tâche plus étroite : le fichier va directement sur l'appareil de l'autre personne, ou devient un lien qui ne se déchiffre que dans son navigateur et disparaît selon le calendrier que vous fixez.",
   ],
   sections: [
     {
       heading: "Ce en quoi Dropbox est vraiment bon",
       body: [
-        "La force centrale de Dropbox est qu'un dossier sur lequel vous comptez est toujours à jour partout : modifiez un fichier sur votre ordinateur portable, il est déjà à jour sur votre téléphone le temps que vous le consultiez. La synchronisation sélective, la synchronisation LAN pour les gros transferts locaux, la récupération de fichiers et l'historique des versions servent tous le même objectif — un endroit durable et fiable pour des fichiers auxquels vous revenez sans cesse.",
+        "La force centrale de Dropbox est qu'un dossier sur lequel vous comptez est toujours à jour partout : modifiez un fichier sur votre ordinateur portable, il est déjà à jour sur votre téléphone le temps que vous le consultiez. La synchronisation sélective, la synchronisation LAN pour les gros transferts locaux, la récupération de fichiers et l'historique des versions servent tous le même objectif — un endroit durable et fiable pour des fichiers auxquels vous revenez sans cesse.",
         "Les dossiers partagés et Dropbox Paper en font un choix solide pour une collaboration continue, et le partage de liens est vraiment pratique pour les petites équipes déjà installées dans Dropbox au quotidien. Rien de tout cela n'est ce que Relayium essaie d'être — Relayium ne synchronise pas de dossier et ne conserve de copie de travail de rien.",
       ],
     },
     {
-      heading: "L'écart : un lien de partage signifie quand même qu'un compte détient le fichier",
+      heading: "L'écart : un lien de partage signifie quand même qu'un compte détient le fichier",
       body: [
         "Pour envoyer un fichier via Dropbox, il doit d'abord se trouver dans Dropbox — téléversé dans votre compte, posé dans un dossier, avant que vous ne génériez un lien partageable pour lui. Ce lien pointe vers une copie que Dropbox stocke en votre nom, lisible par l'infrastructure propre de Dropbox, et qui y reste jusqu'à ce que vous reveniez supprimer le fichier ou révoquer le lien vous-même.",
-        "Pour un envoi ponctuel, c'est beaucoup d'infrastructure permanente pour un fichier que personne n'a besoin de conserver. Le mode temps réel de Relayium saute entièrement l'étape de stockage pour le cas courant : les octets circulent entre les appareils de l'expéditeur et du destinataire via une connexion pair-à-pair chiffrée de bout en bout, et le fichier n'est jamais écrit sur un serveur. Quand vous voulez vraiment un lien — parce que le destinataire n'est pas en ligne en ce moment — le mode lien stocké conserve une propriété que le partage Dropbox n'a pas : votre navigateur génère une clé AES-256-GCM aléatoire et chiffre le fichier avec elle avant le téléversement, et cette clé ne vit que dans le fragment de l'URL (la partie après le #, que les navigateurs ne transmettent jamais à un serveur). Les serveurs de Dropbox peuvent techniquement lire ce qui se trouve dans votre compte ; le serveur de Relayium, pour un lien stocké, ne détient qu'un texte chiffré qu'il n'a aucun moyen de déchiffrer.",
+        "Pour un envoi ponctuel, c'est beaucoup d'infrastructure permanente pour un fichier que personne n'a besoin de conserver. Le mode temps réel de Relayium saute entièrement l'étape de stockage pour le cas courant : les octets circulent entre les appareils de l'expéditeur et du destinataire via une connexion pair-à-pair chiffrée de bout en bout, et le fichier n'est jamais écrit sur un serveur. Quand vous voulez vraiment un lien — parce que le destinataire n'est pas en ligne en ce moment — le mode lien stocké conserve une propriété que le partage Dropbox n'a pas : votre navigateur génère une clé AES-256-GCM aléatoire et chiffre le fichier avec elle avant le téléversement, et cette clé ne vit que dans le fragment de l'URL (la partie après le #, que les navigateurs ne transmettent jamais à un serveur). Les serveurs de Dropbox peuvent techniquement lire ce qui se trouve dans votre compte ; le serveur de Relayium, pour un lien stocké, ne détient qu'un texte chiffré qu'il n'a aucun moyen de déchiffrer.",
       ],
     },
     {
-      heading: "Envoi en temps réel : rien n'est stocké sur un serveur",
+      heading: "Envoi en temps réel : rien n'est stocké sur un serveur",
       body: [
-        "Quand les deux personnes sont en ligne en même temps, le transfert direct en temps réel envoie jusqu'à 1 000 fichiers en un seul lot directement d'un appareil à l'autre — sans étape de téléversement, et sans rien stocker entre les deux. Les deux côtés reçoivent un code de vérification à 6 chiffres identique (SAS) pour repérer un homme du milieu, chaque fichier est vérifié de bout en bout par une empreinte SHA-256, et une connexion interrompue reprend au lieu de tout recommencer.",
-        "Il n'y a aucune limite de taille côté serveur ; le vrai plafond vient du navigateur du destinataire. Chrome et Edge écrivent les données entrantes directement sur le disque, si bien que plusieurs dizaines de gigaoctets ne posent aucun problème. Firefox et Safari n'ont pas cette API et, quand aucun chemin d'écriture en flux ne s'applique, gardent les données entrantes en mémoire — Relayium prévient au-delà d'environ 256 Mo, une estimation volontairement prudente et non une limite dure mesurée. Sur le même réseau — par exemple en envoyant vers l'ordinateur portable d'un collègue via le Wi-Fi du bureau — aucun compte n'est nécessaire du tout, et les deux appareils se connectent directement l'un à l'autre. Envoyer entre réseaux différents utilise un code d'appairage, exige que la personne qui crée ce code se connecte, et passe par conception par un relais TURN chiffré : la connexion s'établit ainsi en une ou deux secondes au lieu d'attendre des tentatives de connexion directe qui aboutissent rarement entre deux réseaux ; le relais ne transporte que du texte chiffré qu'il ne peut pas lire, et le destinataire n'a jamais besoin de compte, dans un cas comme dans l'autre.",
+        "Quand les deux personnes sont en ligne en même temps, le transfert direct en temps réel envoie jusqu'à 1 000 fichiers en un seul lot directement d'un appareil à l'autre — sans étape de téléversement, et sans rien stocker entre les deux. Les deux côtés reçoivent un code de vérification à 6 chiffres identique (SAS) pour repérer un homme du milieu, chaque fichier est vérifié de bout en bout par une empreinte SHA-256, et une connexion interrompue reprend au lieu de tout recommencer.",
+        "Il n'y a aucune limite de taille côté serveur ; le vrai plafond vient du navigateur du destinataire. Chrome et Edge écrivent les données entrantes directement sur le disque, si bien que plusieurs dizaines de gigaoctets ne posent aucun problème. Firefox et Safari n'ont pas cette API et, quand aucun chemin d'écriture en flux ne s'applique, gardent les données entrantes en mémoire — Relayium prévient au-delà d'environ 256 Mo, une estimation volontairement prudente et non une limite dure mesurée. Sur le même réseau — par exemple en envoyant vers l'ordinateur portable d'un collègue via le Wi-Fi du bureau — aucun compte n'est nécessaire du tout, et les deux appareils se connectent directement l'un à l'autre. Envoyer entre réseaux différents utilise un code d'appairage, exige que la personne qui crée ce code se connecte, et passe par conception par un relais TURN chiffré : la connexion s'établit ainsi en une ou deux secondes au lieu d'attendre des tentatives de connexion directe qui aboutissent rarement entre deux réseaux ; le relais ne transporte que du texte chiffré qu'il ne peut pas lire, et le destinataire n'a jamais besoin de compte, dans un cas comme dans l'autre.",
       ],
     },
     {
-      heading: "Quand un lien s'impose : à divulgation nulle, expiration automatique",
+      heading: "Quand un lien s'impose : à divulgation nulle, expiration automatique",
       body: [
         "Parfois un lien est vraiment le bon outil — le destinataire dort dans un autre fuseau horaire, ou vous voulez une seule URL à coller dans un e-mail plutôt que de coordonner une session en direct. Le mode lien stocké de Relayium est conçu exactement pour ce cas, sans renoncer à la confidentialité du mode temps réel.",
-        "Vous choisissez combien de temps il vit — 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre — ou le réglez pour qu'il se détruise après le premier téléchargement complet, si bien qu'aucune copie persistante ne traîne à nettoyer. Créer le lien exige que l'expéditeur se connecte (cela compte dans un quota de stockage du compte), mais le destinataire n'a qu'à l'ouvrir et télécharger — aucun compte façon Dropbox requis de son côté. Comme la clé de déchiffrement ne quitte jamais le fragment de l'URL, le serveur de Relayium pour un lien stocké est structurellement incapable de lire ce qu'il contient, une garantie différente de celle d'un lien de partage Dropbox, où l'infrastructure propre de Dropbox peut techniquement déchiffrer le fichier qu'elle héberge.",
+        "Vous choisissez combien de temps il vit — 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre — ou le réglez pour qu'il s'autodétruise après le premier téléchargement complet, si bien qu'aucune copie persistante ne traîne à nettoyer. Créer le lien exige que l'expéditeur se connecte (cela compte dans un quota de stockage du compte), mais le destinataire n'a qu'à l'ouvrir et télécharger — aucun compte façon Dropbox requis de son côté. Comme la clé de déchiffrement ne quitte jamais le fragment de l'URL, le serveur de Relayium pour un lien stocké est structurellement incapable de lire ce qu'il contient, une garantie différente de celle d'un lien de partage Dropbox, où l'infrastructure propre de Dropbox peut techniquement déchiffrer le fichier qu'elle héberge.",
       ],
     },
     {
       heading: "Côte à côte",
-      body: ["Les différences les plus pertinentes pour un envoi ponctuel :"],
+      body: ["Les différences les plus pertinentes pour un envoi ponctuel :"],
       bullets: [
-        "Objectif : Dropbox est un stockage durable, toujours synchronisé, conçu pour des dossiers où vous continuez à travailler ; Relayium est conçu pour remettre un seul fichier — P2P en temps réel ou lien à expiration automatique, sans rien laisser derrière.",
-        "Où finit le fichier : un lien de partage Dropbox pointe vers une copie qui reste dans votre compte jusqu'à ce que vous la supprimiez ; le temps réel de Relayium ne stocke jamais le fichier, et les liens stockés expirent automatiquement (1 h/1 j/3 j/7 j, selon l'offre) ou se détruisent après le premier téléchargement.",
-        "Qui peut le lire : l'infrastructure de Dropbox peut techniquement déchiffrer les fichiers de votre compte ; les liens stockés de Relayium sont à divulgation nulle — la clé n'existe que dans le fragment de l'URL, donc le serveur détient un texte chiffré qu'il ne peut pas lire.",
-        "Comptes : Dropbox exige un compte pour téléverser et partager ; Relayium ne demande aucun compte du tout sur le même réseau, et seule la personne qui crée le code d'appairage ou le lien stocké se connecte — le destinataire n'en a jamais besoin.",
-        "Limites de taille : Dropbox est borné par le quota de stockage de votre offre ; le temps réel de Relayium n'a aucune limite côté serveur (Chrome/Edge écrivent sur le disque pour plusieurs dizaines de Go ; quand le navigateur doit mettre en mémoire tampon, Relayium prévient au-delà d'environ 256 Mo).",
-        "Coût et ouverture : Relayium est gratuit et sous licence AGPL-3.0 sur github.com/relayium/relayium, et tourne dans le navigateur sur Windows, macOS, Linux, Android et iOS sans rien installer.",
+        "Objectif : Dropbox est un stockage durable, toujours synchronisé, conçu pour des dossiers où vous continuez à travailler ; Relayium est conçu pour remettre un seul fichier — P2P en temps réel ou lien à expiration automatique, sans rien laisser derrière.",
+        "Où finit le fichier : un lien de partage Dropbox pointe vers une copie qui reste dans votre compte jusqu'à ce que vous la supprimiez ; le temps réel de Relayium ne stocke jamais le fichier, et les liens stockés expirent automatiquement (1 h/1 j/3 j/7 j, selon l'offre) ou s'autodétruisent après le premier téléchargement.",
+        "Qui peut le lire : l'infrastructure de Dropbox peut techniquement déchiffrer les fichiers de votre compte ; les liens stockés de Relayium sont à divulgation nulle — la clé n'existe que dans le fragment de l'URL, donc le serveur détient un texte chiffré qu'il ne peut pas lire.",
+        "Comptes : Dropbox exige un compte pour téléverser et partager ; Relayium ne demande aucun compte du tout sur le même réseau, et seule la personne qui crée le code d'appairage ou le lien stocké se connecte — le destinataire n'en a jamais besoin.",
+        "Limites de taille : Dropbox est borné par le quota de stockage de votre offre ; le temps réel de Relayium n'a aucune limite côté serveur (Chrome/Edge écrivent sur le disque pour plusieurs dizaines de Go ; quand le navigateur doit mettre en mémoire tampon, Relayium prévient au-delà d'environ 256 Mo).",
+        "Coût et ouverture : Relayium est gratuit et sous licence AGPL-3.0 sur github.com/relayium/relayium, et tourne dans le navigateur sur Windows, macOS, Linux, Android et iOS sans rien installer.",
       ],
     },
   ],
@@ -455,19 +455,19 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Le fichier reste-t-il dans un compte comme avec Dropbox ?",
-        a: "Pas avec le transfert en temps réel — le fichier se déplace directement entre les appareils et n'est jamais stocké sur un serveur. Un lien de téléchargement stocke bien quelque chose côté serveur, mais uniquement un texte chiffré à divulgation nulle que le serveur ne peut pas déchiffrer ; il expire (1 h/1 j/3 j/7 j, selon l'offre) ou se détruit après le premier téléchargement.",
+        q: "Le fichier reste-t-il dans un compte comme avec Dropbox ?",
+        a: "Pas avec le transfert en temps réel — le fichier se déplace directement entre les appareils et n'est jamais stocké sur un serveur. Un lien de téléchargement stocke bien quelque chose côté serveur, mais uniquement un texte chiffré à divulgation nulle que le serveur ne peut pas déchiffrer ; il expire (1 h/1 j/3 j/7 j, selon l'offre) ou s'autodétruit après le premier téléchargement.",
       },
       {
-        q: "Mon destinataire doit-il s'inscrire quelque part ?",
+        q: "Mon destinataire doit-il s'inscrire quelque part ?",
         a: "Non. Sur le même réseau, aucun des deux côtés n'a besoin de compte. Créer le code d'appairage pour un envoi entre réseaux, ou créer un lien de téléchargement stocké, exige d'être connecté — le destinataire n'a jamais besoin de compte, dans les deux cas.",
       },
       {
-        q: "Y a-t-il une limite de taille de fichier ?",
-        a: "Les transferts en temps réel gèrent jusqu'à 1 000 fichiers par lot sans limite de taille côté serveur — Chrome et Edge écrivent directement sur le disque pour plusieurs dizaines de gigaoctets. Quand aucun chemin d'écriture en flux ne s'applique et que le navigateur doit mettre en mémoire tampon, Relayium prévient au-delà d'environ 256 Mo ; ce chiffre est une estimation volontairement prudente, pas une limite dure. Les liens stockés comptent dans un quota lié au compte de l'expéditeur.",
+        q: "Y a-t-il une limite de taille de fichier ?",
+        a: "Les transferts en temps réel gèrent jusqu'à 1 000 fichiers par lot sans limite de taille côté serveur — Chrome et Edge écrivent directement sur le disque pour plusieurs dizaines de gigaoctets. Quand aucun chemin d'écriture en flux ne s'applique et que le navigateur doit mettre en mémoire tampon, Relayium prévient au-delà d'environ 256 Mo ; ce chiffre est une estimation volontairement prudente, pas une limite dure. Les liens stockés comptent dans un quota lié au compte de l'expéditeur.",
       },
       {
-        q: "Est-ce gratuit d'utiliser Relayium à la place d'une offre Dropbox ?",
+        q: "Est-ce gratuit d'utiliser Relayium à la place d'une offre Dropbox ?",
         a: "Oui. Relayium est gratuit et open source sous licence AGPL-3.0, avec l'intégralité du protocole et du code sur github.com/relayium/relayium — aucune offre payante ne verrouille des transferts plus grands ou plus rapides.",
       },
     ],
@@ -492,29 +492,29 @@ const ar = {
     {
       heading: "ما الذي يُتقنه Dropbox حقًّا",
       body: [
-        "القوّة الأساسية لـ Dropbox هي أنّ المجلد الذي تعتمد عليه يكون دائمًا محدَّثًا في كل مكان: حرِّر ملفًّا على حاسوبك المحمول فيكون محدَّثًا أصلاً على هاتفك حين تتفقّده. المزامنة الانتقائية، ومزامنة الشبكة المحلية لعمليات النقل المحلية الكبيرة، واسترجاع الملفات وسجلّ الإصدارات، كلها تخدم الهدف نفسه — مكانًا دائمًا يُعتمَد عليه لملفات تعود إليها مرارًا.",
-        "والمجلدات المشتركة وDropbox Paper تجعله خيارًا متينًا للتعاون المستمرّ، ومشاركة الروابط فيه مريحة فعلاً للفرق الصغيرة التي تعيش أصلاً في Dropbox يوميًّا. لا شيء من ذلك هو ما يحاول Relayium أن يكونه — فـ Relayium لا يزامن مجلدًا ولا يحتفظ بنسخة عمل لأي شيء.",
+        "القوّة الأساسية لـ Dropbox هي أنّ المجلد الذي تعتمد عليه يكون دائمًا محدَّثًا في كل مكان: حرِّر ملفًّا على حاسوبك المحمول فيكون محدَّثًا أصلًا على هاتفك حين تتفقّده. المزامنة الانتقائية، ومزامنة الشبكة المحلية لعمليات النقل المحلية الكبيرة، واسترجاع الملفات وسجلّ الإصدارات، كلها تخدم الهدف نفسه — مكانًا دائمًا يُعتمَد عليه لملفات تعود إليها مرارًا.",
+        "والمجلدات المشتركة وDropbox Paper تجعله خيارًا متينًا للتعاون المستمرّ، ومشاركة الروابط فيه مريحة فعلًا للفرق الصغيرة التي تعيش أصلًا في Dropbox يوميًّا. لا شيء من ذلك هو ما يحاول Relayium أن يكونه — فـ Relayium لا يزامن مجلدًا ولا يحتفظ بنسخة عمل لأي شيء.",
       ],
     },
     {
       heading: "الفجوة: رابط المشاركة يعني مع ذلك أنّ حسابًا يحتفظ بالملف",
       body: [
-        "لإرسال ملف واحد عبر Dropbox، يجب أولاً أن يكون داخل Dropbox — مرفوعًا إلى حسابك، جالسًا في مجلد، قبل أن تولّد له رابطًا قابلاً للمشاركة. وهذا الرابط يشير إلى نسخة يخزّنها Dropbox نيابةً عنك، قابلة للقراءة من بنية Dropbox التحتية الخاصة، وتبقى هناك إلى أن تعود وتحذف الملف أو تُبطِل الرابط بنفسك.",
-        "ولإرسال لمرّة واحدة، فذلك قدرٌ كبير من البنية التحتية الدائمة لملف لا يحتاج أحد إلى الاحتفاظ به. والوضع الفوري في Relayium يتخطّى التخزين كليًّا في الحالة الشائعة: تتحرّك البايتات بين جهازَي المُرسِل والمُستقبِل عبر اتصال من الند للند مشفّر من الطرف إلى الطرف، ولا يُكتب الملف على خادم قط. وحين ترغب فعلاً في رابط — لأنّ المُستقبِل ليس متصلاً الآن — يحتفظ وضع الرابط المُخزَّن بخاصّية لا تملكها مشاركة Dropbox: يولّد متصفّحك مفتاح AES-256-GCM عشوائيًّا ويشفّر الملف به قبل الرفع، وهذا المفتاح يبقى فقط في مقطع الـ URL (الجزء الذي يلي #، والذي لا ترسله المتصفّحات إلى خادم أبدًا). خوادم Dropbox تستطيع تقنيًّا قراءة ما في حسابك؛ أمّا خادم Relayium، بالنسبة إلى رابط مُخزَّن، فلا يحتفظ إلا بنص مُشفَّر لا سبيل له إلى فكّ تشفيره.",
+        "لإرسال ملف واحد عبر Dropbox، يجب أولًا أن يكون داخل Dropbox — مرفوعًا إلى حسابك، جالسًا في مجلد، قبل أن تولّد له رابطًا قابلًا للمشاركة. وهذا الرابط يشير إلى نسخة يخزّنها Dropbox نيابةً عنك، قابلة للقراءة من بنية Dropbox التحتية الخاصة، وتبقى هناك إلى أن تعود وتحذف الملف أو تُبطِل الرابط بنفسك.",
+        "ولإرسال لمرّة واحدة، فذلك قدرٌ كبير من البنية التحتية الدائمة لملف لا يحتاج أحد إلى الاحتفاظ به. والوضع الفوري في Relayium يتخطّى التخزين كليًّا في الحالة الشائعة: تتحرّك البايتات بين جهازَي المُرسِل والمُستقبِل عبر اتصال من الند للند مشفّر من الطرف إلى الطرف، ولا يُكتب الملف على خادم قط. وحين ترغب فعلًا في رابط — لأنّ المُستقبِل ليس متصلًا الآن — يحتفظ وضع الرابط المُخزَّن بخاصّية لا تملكها مشاركة Dropbox: يولّد متصفّحك مفتاح AES-256-GCM عشوائيًّا ويشفّر الملف به قبل الرفع، وهذا المفتاح يبقى فقط في مقطع الـ URL (الجزء الذي يلي #، والذي لا ترسله المتصفّحات إلى خادم أبدًا). خوادم Dropbox تستطيع تقنيًّا قراءة ما في حسابك؛ أمّا خادم Relayium، بالنسبة إلى رابط مُخزَّن، فلا يحتفظ إلا بنص مُشفَّر لا سبيل له إلى فكّ تشفيره.",
       ],
     },
     {
       heading: "الإرسال الفوري: لا يُخزَّن شيء على أي خادم",
       body: [
-        "حين يكون الشخصان متصلين في الوقت نفسه، يرسل النقل المباشر الفوري ما يصل إلى 1,000 ملف في دفعة واحدة مباشرةً من جهاز إلى آخر — دون خطوة رفع، ودون تخزين أي شيء بينهما. ويحصل الطرفان على رمز تحقق متطابق من 6 أرقام (SAS) لالتقاط أي هجوم وسيط، ويُتحقَّق من كل ملف ببصمة SHA-256 من الطرف إلى الطرف، والاتصال المنقطع يُستأنف بدلاً من إعادة كل شيء من البداية.",
-        "لا يوجد حدّ حجم من جهة الخادم؛ والسقف الحقيقي هو المتصفّح المُستقبِل. يبثّ Chrome وEdge البيانات الواردة مباشرةً إلى القرص، فعشرات الغيغابايتات ليست مشكلة. أمّا Firefox وSafari فلا يملكان تلك الواجهة، وحين لا ينطبق أي مسار للكتابة التدفّقية يحتفظان بالبيانات الواردة في الذاكرة — ويحذّر Relayium فوق نحو 256 MB، وهو تقدير متحفّظ عن قصد لا حدّ صلب مقيس. وعلى نفس الشبكة — كأن ترسل إلى حاسوب زميل محمول عبر Wi-Fi المكتب — لا حاجة إلى حساب على الإطلاق، ويتّصل الجهازان أحدهما بالآخر مباشرةً. أمّا الإرسال عبر شبكات مختلفة فيستخدم رمز اقتران، ويتطلّب أن يسجّل مُنشئ الرمز الدخول، ويمرّ بحكم التصميم عبر مُرحِّل TURN مشفّر، فينعقد الاتصال خلال ثانية أو ثانيتين بدل انتظار محاولات اتصال مباشر نادرًا ما تنجح بين شبكتين؛ والمُرحِّل لا ينقل سوى نص مُشفَّر لا يستطيع قراءته، ولا يحتاج المُستقبِل إلى حساب في كلتا الحالتين.",
+        "حين يكون الشخصان متصلين في الوقت نفسه، يرسل النقل المباشر الفوري ما يصل إلى 1,000 ملف في دفعة واحدة مباشرةً من جهاز إلى آخر — دون خطوة رفع، ودون تخزين أي شيء بينهما. ويحصل الطرفان على رمز تحقق متطابق من 6 أرقام (SAS) لالتقاط أي هجوم وسيط، ويُتحقَّق من كل ملف ببصمة SHA-256 من الطرف إلى الطرف، والاتصال المنقطع يُستأنف بدلًا من إعادة كل شيء من البداية.",
+        "لا يوجد حدّ حجم من جهة الخادم؛ والسقف الحقيقي هو المتصفّح المُستقبِل. يبثّ Chrome وEdge البيانات الواردة مباشرةً إلى القرص، فعشرات الغيغابايتات ليست مشكلة. أمّا Firefox وSafari فلا يملكان تلك الواجهة، وحين لا ينطبق أي مسار للكتابة التدفّقية يحتفظان بالبيانات الواردة في الذاكرة — ويحذّر Relayium فوق نحو 256 ميغابايت، وهو تقدير متحفّظ عن قصد لا حدّ صلب مقيس. وعلى نفس الشبكة — كأن ترسل إلى حاسوب زميل محمول عبر Wi-Fi المكتب — لا حاجة إلى حساب على الإطلاق، ويتّصل الجهازان أحدهما بالآخر مباشرةً. أمّا الإرسال عبر شبكات مختلفة فيستخدم رمز اقتران، ويتطلّب أن يسجّل مُنشئ الرمز الدخول، ويمرّ بحكم التصميم عبر مُرحِّل TURN مشفّر، فينعقد الاتصال خلال ثانية أو ثانيتين بدل انتظار محاولات اتصال مباشر نادرًا ما تنجح بين شبكتين؛ والمُرحِّل لا ينقل سوى نص مُشفَّر لا يستطيع قراءته، ولا يحتاج المُستقبِل إلى حساب في كلتا الحالتين.",
       ],
     },
     {
-      heading: "حين تحتاج إلى رابط بدلاً من ذلك: معرفة صفرية، وانتهاء ذاتي",
+      heading: "حين تحتاج إلى رابط بدلًا من ذلك: معرفة صفرية، وانتهاء ذاتي",
       body: [
-        "أحيانًا يكون الرابط حقًّا الأداة الصحيحة — فالمُستقبِل نائم في منطقة زمنية أخرى، أو تريد رابط URL واحدًا تلصقه في بريد إلكتروني بدلاً من تنسيق جلسة مباشرة. ووضع الرابط المُخزَّن في Relayium مبني لهذا تمامًا، دون التخلّي عن خصوصية الوضع الفوري.",
-        "تختار كم يعيش — ساعة واحدة، أو يومًا واحدًا، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب خطتك — أو تضبطه ليُحرَق بعد أول تنزيل مكتمل، فلا تبقى نسخة عالقة تتذكّر تنظيفها. ويتطلّب إنشاء الرابط أن يسجّل المُرسِل الدخول (فهو يُحتسب ضمن حصّة تخزين على الحساب)، لكنّ المُستقبِل يفتحه ببساطة ويُنزّل — دون حساب على طريقة Dropbox من جهته. ولأنّ مفتاح فكّ التشفير لا يغادر مقطع الـ URL أبدًا، فإنّ خادم Relayium بالنسبة إلى رابط مُخزَّن عاجز بنيويًّا عن قراءة ما بداخله، وهو ضمان مختلف عن رابط مشاركة Dropbox، حيث تستطيع بنية Dropbox التحتية الخاصة أن تفكّ تشفير الملف الذي تستضيفه تقنيًّا.",
+        "أحيانًا يكون الرابط حقًّا الأداة الصحيحة — فالمُستقبِل نائم في منطقة زمنية أخرى، أو تريد رابط URL واحدًا تلصقه في بريد إلكتروني بدلًا من تنسيق جلسة مباشرة. ووضع الرابط المُخزَّن في Relayium مبني لهذا تمامًا، دون التخلّي عن خصوصية الوضع الفوري.",
+        "تختار كم يعيش — ساعة واحدة، أو يومًا واحدًا، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب خطتك — أو تضبطه ليُحذف بعد أول تنزيل مكتمل، فلا تبقى نسخة عالقة تتذكّر تنظيفها. ويتطلّب إنشاء الرابط أن يسجّل المُرسِل الدخول (فهو يُحتسب ضمن حصّة تخزين على الحساب)، لكنّ المُستقبِل يفتحه ببساطة ويُنزّل — دون حساب على طريقة Dropbox من جهته. ولأنّ مفتاح فكّ التشفير لا يغادر مقطع الـ URL أبدًا، فإنّ خادم Relayium بالنسبة إلى رابط مُخزَّن عاجز بنيويًّا عن قراءة ما بداخله، وهو ضمان مختلف عن رابط مشاركة Dropbox، حيث تستطيع بنية Dropbox التحتية الخاصة أن تفكّ تشفير الملف الذي تستضيفه تقنيًّا.",
       ],
     },
     {
@@ -522,10 +522,10 @@ const ar = {
       body: ["الفروق الأكثر صلة بالإرسال لمرّة واحدة:"],
       bullets: [
         "الغرض: Dropbox تخزين دائم متزامن دائمًا مبني لمجلدات تواصل العمل فيها؛ أمّا Relayium فمبني لتسليم ملف واحد — من الند للند فوريًّا أو رابط ينتهي ذاتيًّا، دون أن يبقى شيء خلفك.",
-        "أين ينتهي الملف: رابط مشاركة Dropbox يشير إلى نسخة تبقى في حسابك حتى تحذفها؛ أمّا الوضع الفوري في Relayium فلا يخزّن الملف قط، والروابط المُخزَّنة تنتهي تلقائيًّا (ساعة/يوم/3 أيام/7 أيام، حسب الخطة) أو تُحرَق بعد أول تنزيل.",
+        "أين ينتهي الملف: رابط مشاركة Dropbox يشير إلى نسخة تبقى في حسابك حتى تحذفها؛ أمّا الوضع الفوري في Relayium فلا يخزّن الملف قط، والروابط المُخزَّنة تنتهي تلقائيًّا (ساعة/يوم/3 أيام/7 أيام، حسب الخطة) أو تُحذف بعد أول تنزيل.",
         "مَن يستطيع قراءته: بنية Dropbox التحتية تستطيع تقنيًّا فكّ تشفير الملفات في حسابك؛ أمّا الروابط المُخزَّنة في Relayium فبمعرفة صفرية — المفتاح موجود فقط في مقطع الـ URL، فيحتفظ الخادم بنص مُشفَّر لا يستطيع قراءته.",
         "الحسابات: Dropbox يتطلّب حسابًا للرفع والمشاركة؛ أمّا Relayium فلا يحتاج حسابًا على الإطلاق على نفس الشبكة، ولا يسجّل الدخول إلا من ينشئ رمز الاقتران أو الرابط المُخزَّن — والمُستقبِل لا يحتاج إليه أبدًا.",
-        "حدود الحجم: Dropbox محدود بحصّة تخزين خطّتك؛ أمّا الوضع الفوري في Relayium فلا حدّ له من جهة الخادم (Chrome/Edge يبثّان إلى القرص لعشرات الغيغابايتات؛ وحين يضطر المتصفّح إلى التخزين في الذاكرة يحذّر Relayium فوق نحو 256 MB).",
+        "حدود الحجم: Dropbox محدود بحصّة تخزين خطّتك؛ أمّا الوضع الفوري في Relayium فلا حدّ له من جهة الخادم (Chrome/Edge يبثّان إلى القرص لعشرات الغيغابايتات؛ وحين يضطر المتصفّح إلى التخزين في الذاكرة يحذّر Relayium فوق نحو 256 ميغابايت).",
         "التكلفة والانفتاح: Relayium مجاني ومرخّص بـ AGPL-3.0 على github.com/relayium/relayium، ويعمل في المتصفّح على Windows وmacOS وLinux وAndroid وiOS دون أي تثبيت.",
       ],
     },
@@ -535,7 +535,7 @@ const ar = {
     items: [
       {
         q: "هل يبقى الملف في حساب كما يحدث مع Dropbox؟",
-        a: "ليس مع النقل الفوري — يتحرّك الملف مباشرةً بين الأجهزة ولا يُخزَّن على خادم قط. أمّا رابط التنزيل فيخزّن شيئًا من جهة الخادم، لكنّه نص مُشفَّر بمعرفة صفرية فقط لا يستطيع الخادم فكّ تشفيره، وينتهي (ساعة/يوم/3 أيام/7 أيام، حسب الخطة) أو يُحرَق بعد أول تنزيل.",
+        a: "ليس مع النقل الفوري — يتحرّك الملف مباشرةً بين الأجهزة ولا يُخزَّن على خادم قط. أمّا رابط التنزيل فيخزّن شيئًا من جهة الخادم، لكنّه نص مُشفَّر بمعرفة صفرية فقط لا يستطيع الخادم فكّ تشفيره، وينتهي (ساعة/يوم/3 أيام/7 أيام، حسب الخطة) أو يُحذف بعد أول تنزيل.",
       },
       {
         q: "هل يحتاج المُستقبِل إلى التسجيل في أي شيء؟",
@@ -543,10 +543,10 @@ const ar = {
       },
       {
         q: "هل هناك حدّ لحجم الملف؟",
-        a: "تتعامل عمليات النقل الفوري مع ما يصل إلى 1,000 ملف في الدفعة الواحدة دون حدّ حجم من جهة الخادم — يبثّ Chrome وEdge مباشرةً إلى القرص لعشرات الغيغابايتات. وحين لا ينطبق أي مسار للكتابة التدفّقية ويضطر المتصفّح إلى التخزين في الذاكرة، يحذّر Relayium فوق نحو 256 MB؛ وهذا الرقم تقدير متحفّظ عن قصد، لا حدّ صلب. أمّا الروابط المُخزَّنة فتُحتسب ضمن حصّة مرتبطة بحساب المُرسِل.",
+        a: "تتعامل عمليات النقل الفوري مع ما يصل إلى 1,000 ملف في الدفعة الواحدة دون حدّ حجم من جهة الخادم — يبثّ Chrome وEdge مباشرةً إلى القرص لعشرات الغيغابايتات. وحين لا ينطبق أي مسار للكتابة التدفّقية ويضطر المتصفّح إلى التخزين في الذاكرة، يحذّر Relayium فوق نحو 256 ميغابايت؛ وهذا الرقم تقدير متحفّظ عن قصد، لا حدّ صلب. أمّا الروابط المُخزَّنة فتُحتسب ضمن حصّة مرتبطة بحساب المُرسِل.",
       },
       {
-        q: "هل استخدام Relayium بدلاً من خطّة Dropbox مجاني؟",
+        q: "هل استخدام Relayium بدلًا من خطّة Dropbox مجاني؟",
         a: "نعم. Relayium مجاني ومفتوح المصدر بموجب رخصة AGPL-3.0، مع البروتوكول والشيفرة كاملةً على github.com/relayium/relayium — لا فئة مدفوعة تحجب عمليات نقل أكبر أو أسرع.",
       },
     ],
@@ -564,7 +564,7 @@ const es = {
     "Una comparación justa para entregar un archivo: Dropbox es excelente para la sincronización duradera y los enlaces compartidos, pero el archivo acaba viviendo en una cuenta. Relayium lo envía de igual a igual, sin almacenar nada en un servidor, o mediante un enlace de conocimiento cero que caduca.",
   updatedLabel: "Última actualización",
   lead: [
-    "Dropbox se gana su reputación. Sincroniza una carpeta en todas las máquinas que posees, mantiene un historial de versiones cuando sobrescribes algo por accidente, y hace indoloro entregar una carpeta de proyecto entera a un cliente con una invitación por enlace para compartir. Si quieres una carpeta de trabajo que simplemente se mantenga sincronizada, Dropbox hace bien ese trabajo y esto no es un argumento en contra de usarlo así.",
+    "Dropbox se gana su reputación. Sincroniza una carpeta en todas las máquinas que posees, mantiene un historial de versiones cuando sobrescribes algo por accidente, y convierte en un trámite el entregar una carpeta de proyecto entera a un cliente con una invitación por enlace para compartir. Si quieres una carpeta de trabajo que simplemente se mantenga sincronizada, Dropbox hace bien ese trabajo y esto no es un argumento en contra de usarlo así.",
     "La fricción aparece en un trabajo más acotado: tienes un archivo, un destinatario, y ninguna necesidad continua de que viva en ningún sitio después — un PDF firmado, un vídeo exportado, un zip de fotos. Dropbox aún te pide dejar ese archivo en tu cuenta, generar un enlace para compartir, y pensar en quién más tiene acceso a esa carpeta. Relayium está construido específicamente para ese trabajo más acotado: el archivo va directo al dispositivo de la otra persona, o se convierte en un enlace que solo se descifra en su navegador y desaparece según un calendario que tú fijas.",
   ],
   sections: [
@@ -590,17 +590,17 @@ const es = {
       ],
     },
     {
-      heading: "Cuando en cambio necesitas un enlace: conocimiento cero, autocaducante",
+      heading: "Cuando en cambio necesitas un enlace: conocimiento cero, con caducidad automática",
       body: [
         "A veces un enlace es genuinamente la herramienta correcta — el destinatario duerme en otra zona horaria, o quieres una sola URL para pegar en un correo en lugar de coordinar una sesión en vivo. El modo de enlace almacenado de Relayium está hecho exactamente para eso, sin renunciar a la privacidad del modo en tiempo real.",
-        "Eliges cuánto vive — 1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan — o lo configuras para que se destruya tras la primera descarga completada, así no queda ninguna copia persistente que recordar limpiar. Crear el enlace requiere que el remitente inicie sesión (cuenta contra una cuota de almacenamiento de la cuenta), pero el destinatario simplemente lo abre y descarga — sin cuenta al estilo Dropbox requerida por su parte. Como la clave de descifrado nunca abandona el fragmento de la URL, el servidor de Relayium para un enlace almacenado es estructuralmente incapaz de leer lo que hay dentro, lo cual es una garantía distinta de un enlace para compartir de Dropbox, donde la propia infraestructura de Dropbox puede técnicamente descifrar el archivo que aloja.",
+        "Eliges cuánto vive — 1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan — o lo configuras para que se destruya tras la primera descarga completada, así no queda ninguna copia persistente que recordar limpiar. Crear el enlace requiere que el remitente inicie sesión (se descuenta de una cuota de almacenamiento de la cuenta), pero el destinatario simplemente lo abre y descarga — no necesita ninguna cuenta como la de Dropbox. Como la clave de descifrado nunca abandona el fragmento de la URL, el servidor de Relayium para un enlace almacenado es estructuralmente incapaz de leer lo que hay dentro, lo cual es una garantía distinta de un enlace para compartir de Dropbox, donde la propia infraestructura de Dropbox puede técnicamente descifrar el archivo que aloja.",
       ],
     },
     {
-      heading: "Lado a lado",
+      heading: "Cara a cara",
       body: ["Las diferencias más relevantes para un envío puntual:"],
       bullets: [
-        "Propósito: Dropbox es almacenamiento duradero y siempre sincronizado, hecho para carpetas en las que sigues trabajando; Relayium está hecho para entregar un archivo — P2P en tiempo real o un enlace autocaducante, sin dejar nada atrás.",
+        "Propósito: Dropbox es almacenamiento duradero y siempre sincronizado, hecho para carpetas en las que sigues trabajando; Relayium está hecho para entregar un archivo — P2P en tiempo real o un enlace con caducidad automática, sin dejar nada atrás.",
         "Dónde acaba el archivo: un enlace para compartir de Dropbox apunta a una copia que permanece en tu cuenta hasta que la elimines; el tiempo real de Relayium nunca almacena el archivo, y los enlaces almacenados caducan automáticamente (1h/1d/3d/7d, según el plan) o se destruyen tras la primera descarga.",
         "Quién puede leerlo: la infraestructura de Dropbox puede técnicamente descifrar los archivos de tu cuenta; los enlaces almacenados de Relayium son de conocimiento cero — la clave existe solo en el fragmento de la URL, así que el servidor guarda texto cifrado que no puede leer.",
         "Cuentas: Dropbox requiere una cuenta para subir y compartir; Relayium no necesita cuenta en absoluto en la misma red, y solo inicia sesión quien crea el código de emparejamiento o el enlace almacenado — el destinatario nunca necesita una.",
@@ -622,7 +622,7 @@ const es = {
       },
       {
         q: "¿Hay un límite de tamaño de archivo?",
-        a: "Las transferencias en tiempo real manejan hasta 1.000 archivos por lote sin límite de tamaño del lado del servidor — Chrome y Edge escriben directo al disco para decenas de gigabytes. Cuando no se aplica ninguna vía de escritura en flujo y el navegador tiene que almacenar en memoria, Relayium avisa por encima de unos 256 MB; esa cifra es una estimación deliberadamente conservadora, no un límite duro. Los enlaces almacenados cuentan contra una cuota vinculada a la cuenta del remitente.",
+        a: "Las transferencias en tiempo real manejan hasta 1.000 archivos por lote sin límite de tamaño del lado del servidor — Chrome y Edge escriben directo al disco para decenas de gigabytes. Cuando no se aplica ninguna vía de escritura en flujo y el navegador tiene que almacenar en memoria, Relayium avisa por encima de unos 256 MB; esa cifra es una estimación deliberadamente conservadora, no un límite duro. Los enlaces almacenados se descuentan de una cuota vinculada a la cuenta del remitente.",
       },
       {
         q: "¿Es gratis usar Relayium en lugar de un plan de Dropbox?",
@@ -658,14 +658,14 @@ const pt = {
       heading: "A lacuna: um link de compartilhamento ainda significa que uma conta guarda o arquivo",
       body: [
         "Para enviar um arquivo pelo Dropbox, ele primeiro precisa estar dentro do Dropbox — enviado para a sua conta, parado em uma pasta, antes de você gerar um link compartilhável para ele. Esse link aponta para uma cópia que o Dropbox armazena em seu nome, legível pela própria infraestrutura do Dropbox e que fica lá até você voltar e apagar o arquivo ou revogar o link você mesmo.",
-        "Para um envio pontual, isso é muita infraestrutura permanente para um arquivo que ninguém precisa guardar. O modo em tempo real do Relayium pula o armazenamento por completo no caso comum: os bytes se movem entre os dispositivos do remetente e do destinatário por uma conexão ponto a ponto criptografada de ponta a ponta, e o arquivo nunca é gravado em um servidor. Quando você realmente quer um link — porque o destinatário não está on-line agora — o modo de link armazenado mantém uma propriedade que o compartilhamento do Dropbox não tem: seu navegador gera uma chave AES-256-GCM aleatória e criptografa o arquivo com ela antes do upload, e essa chave vive apenas no fragmento da URL (a parte depois do #, que os navegadores nunca transmitem a um servidor). Os servidores do Dropbox podem tecnicamente ler o que está na sua conta; o servidor do Relayium, para um link armazenado, guarda apenas texto cifrado que não tem como descriptografar.",
+        "Para um envio pontual, isso é muita infraestrutura permanente para um arquivo que ninguém precisa guardar. O modo em tempo real do Relayium pula o armazenamento por completo no caso comum: os bytes se movem entre os dispositivos do remetente e do destinatário por uma conexão ponto a ponto criptografada de ponta a ponta, e o arquivo nunca é gravado em um servidor. Quando você realmente quer um link — porque o destinatário não está online agora — o modo de link armazenado mantém uma propriedade que o compartilhamento do Dropbox não tem: seu navegador gera uma chave AES-256-GCM aleatória e criptografa o arquivo com ela antes do upload, e essa chave vive apenas no fragmento da URL (a parte depois do #, que os navegadores nunca transmitem a um servidor). Os servidores do Dropbox podem tecnicamente ler o que está na sua conta; o servidor do Relayium, para um link armazenado, guarda apenas texto cifrado que não tem como descriptografar.",
       ],
     },
     {
       heading: "Envio em tempo real: nada é armazenado em um servidor",
       body: [
-        "Quando as duas pessoas estão on-line ao mesmo tempo, a transferência direta em tempo real envia até 1.000 arquivos em um único lote direto de um dispositivo para o outro — sem etapa de upload, e sem nada armazenado no meio. Os dois lados recebem um código de verificação de 6 dígitos correspondente (SAS) para pegar qualquer ataque de intermediário, cada arquivo é verificado com um hash SHA-256 de ponta a ponta, e uma conexão caída é retomada em vez de recomeçar tudo.",
-        "Não há limite de tamanho do lado do servidor; o teto real é o navegador que recebe. Chrome e Edge gravam os dados que chegam direto no disco, então dezenas de gigabytes não são problema. Firefox e Safari não têm essa API e, quando nenhum caminho de gravação em fluxo se aplica, guardam os dados que chegam na memória — o Relayium avisa acima de cerca de 256 MB, uma estimativa deliberadamente conservadora e não um limite duro medido. Na mesma rede — digamos, enviando para o notebook de um colega pela Wi-Fi do escritório — não é preciso conta alguma, e os dois dispositivos se conectam diretamente um ao outro. Enviar entre redes diferentes usa um código de emparelhamento, exige que quem cria esse código faça login e passa por design por um retransmissor TURN criptografado, de modo que a conexão sobe em um ou dois segundos em vez de esperar tentativas de conexão direta que raramente dão certo entre duas redes; o retransmissor só encaminha texto cifrado que não consegue ler, e o destinatário nunca precisa de conta em nenhum dos casos.",
+        "Quando as duas pessoas estão online ao mesmo tempo, a transferência direta em tempo real envia até 1.000 arquivos em um único lote direto de um dispositivo para o outro — sem etapa de upload, e sem nada armazenado no meio. Os dois lados recebem um código de verificação de 6 dígitos correspondente (SAS) para pegar qualquer ataque de intermediário, cada arquivo é verificado com um hash SHA-256 de ponta a ponta, e uma conexão caída é retomada em vez de recomeçar tudo.",
+        "Não há limite de tamanho do lado do servidor; o teto real é o navegador que recebe. Chrome e Edge gravam os dados que chegam direto no disco, então dezenas de gigabytes não são problema. Firefox e Safari não têm essa API e, quando nenhum caminho de gravação em fluxo se aplica, guardam os dados que chegam na memória — o Relayium avisa acima de cerca de 256 MB, uma estimativa deliberadamente conservadora e não um limite rígido medido. Na mesma rede — digamos, enviando para o notebook de um colega pela Wi-Fi do escritório — não é preciso conta alguma, e os dois dispositivos se conectam diretamente um ao outro. Enviar entre redes diferentes usa um código de emparelhamento, exige que quem cria esse código faça login e passa por decisão de projeto por um retransmissor TURN criptografado, de modo que a conexão sobe em um ou dois segundos em vez de esperar tentativas de conexão direta que raramente dão certo entre duas redes; o retransmissor só encaminha texto cifrado que não consegue ler, e o destinatário nunca precisa de conta em nenhum dos casos.",
       ],
     },
     {
@@ -701,7 +701,7 @@ const pt = {
       },
       {
         q: "Existe um limite de tamanho de arquivo?",
-        a: "As transferências em tempo real lidam com até 1.000 arquivos por lote sem limite de tamanho do lado do servidor — Chrome e Edge gravam direto no disco para dezenas de gigabytes. Quando nenhum caminho de gravação em fluxo se aplica e o navegador precisa armazenar na memória, o Relayium avisa acima de cerca de 256 MB; esse número é uma estimativa deliberadamente conservadora, não um limite duro. Os links armazenados contam contra uma cota vinculada à conta do remetente.",
+        a: "As transferências em tempo real lidam com até 1.000 arquivos por lote sem limite de tamanho do lado do servidor — Chrome e Edge gravam direto no disco para dezenas de gigabytes. Quando nenhum caminho de gravação em fluxo se aplica e o navegador precisa armazenar na memória, o Relayium avisa acima de cerca de 256 MB; esse número é uma estimativa deliberadamente conservadora, não um limite rígido. Os links armazenados contam contra uma cota vinculada à conta do remetente.",
       },
       {
         q: "É gratuito usar o Relayium no lugar de um plano do Dropbox?",

@@ -249,12 +249,12 @@ const ja = {
       heading: "サーバーが決して見ないもの",
       body: [
         "本サービスは、以下がどのモードでも当社のサーバーに届かないように設計されています：",
-        "リアルタイムモードでは、同一ネットワークならファイルの実体はサーバーを一切通らず、2 台のデバイス間で直接やり取りされます。ネットワークをまたぐ場合は後述の TURN リレーを経由しますが、リレーが運ぶのは暗号文だけで鍵は持ちません。シグナリングサーバーは接続確立のためのメッセージを中継するだけで、把握するのはルームの所属（あなたの公開 IP）、あなたが選んだデバイス名、在席状況のみです。",
+        "リアルタイムモードでは、同一ネットワークならファイルの実体はサーバーを一切通らず、2 台のデバイス間で直接やり取りされます。ネットワークをまたぐ場合は後述の TURN リレーを経由しますが、リレーが運ぶのは暗号文だけで鍵は持ちません。シグナリングサーバーは接続確立のためのメッセージを中継するだけで、把握するのはルームの所属（お客様の公開 IP）、お客様が選んだデバイス名、在席状況のみです。",
       ],
       bullets: [
         "ファイルの内容。",
         "ファイルの名前。",
-        "あなたの暗号鍵。",
+        "お客様の暗号鍵。",
       ],
     },
     {
@@ -426,13 +426,13 @@ const ko = {
 const de = {
   title: "Sicherheit & Bedrohungsmodell",
   description:
-    "Wie Relayium Ihre Dateien schützt: pro Übertragung neue X25519-Schlüssel und AES-256-GCM, ein SAS-Prüfcode mit Commit-dann-Offenlegen-Handshake gegen einen bösartigen Server, Zero-Knowledge-Download-Links und eine ehrliche Darstellung dessen, wovor wir schützen und wovor nicht.",
+    "Wie Relayium Ihre Dateien schützt: pro Übertragung neue X25519-Schlüssel und AES-256-GCM, ein SAS-Verifizierungscode mit Commit-dann-Offenlegen-Handshake gegen einen bösartigen Server, Zero-Knowledge-Download-Links und eine ehrliche Darstellung dessen, wovor wir schützen und wovor nicht.",
   updatedLabel: "Zuletzt aktualisiert",
   updated: "2026-07-01",
   otherDocLabel: "Datenschutzerklärung",
   lead: [
     "Relayium ist so gebaut, dass die Personen, die Dateien übertragen — nicht der Server — die Schlüssel besitzen. Diese Seite beschreibt genau, was geschützt ist, wie es funktioniert und wo die Grenzen dieses Schutzes liegen.",
-    "Kurz gesagt: Im Echtzeitmodus berühren Ihre Dateien im selben Netzwerk nie unsere Server, und netzwerkübergreifend passieren sie ein verschlüsseltes Relay, das ausschließlich Chiffretext transportiert und keinen Schlüssel besitzt; die Verschlüsselungsschlüssel werden auf jedem Gerät neu erzeugt und verlassen es nie; und ein kurzer Prüfcode erlaubt zwei Personen, einen bösartigen Server zu erkennen. Es folgen die Details.",
+    "Kurz gesagt: Im Echtzeitmodus berühren Ihre Dateien im selben Netzwerk nie unsere Server, und netzwerkübergreifend passieren sie ein verschlüsseltes Relay, das ausschließlich Chiffretext transportiert und keinen Schlüssel besitzt; die Verschlüsselungsschlüssel werden auf jedem Gerät neu erzeugt und verlassen es nie; und ein kurzer Verifizierungscode erlaubt zwei Personen, einen bösartigen Server zu erkennen. Es folgen die Details.",
   ],
   sections: [
     {
@@ -447,7 +447,7 @@ const de = {
       ],
     },
     {
-      heading: "Der Prüfcode (SAS) — einen bösartigen Server erkennen",
+      heading: "Der Verifizierungscode (SAS) — einen bösartigen Server erkennen",
       body: [
         "Die eingebaute Verschlüsselung von WebRTC (DTLS) tauscht Schlüssel-Fingerabdrücke über den Signalisierungsserver aus, sodass ein unehrlicher Server sich dazwischenschalten und Schlüssel austauschen könnte. Um das zu erkennen, leitet Relayium aus den öffentlichen Schlüsseln beider Seiten einen 6-stelligen Short Authentication String (SAS) ab und zeigt ihn auf beiden Bildschirmen an. Stimmen die beiden Codes überein, wurde der Schlüsselaustausch nicht manipuliert — niemand hat dabei einen Schlüssel ausgetauscht.",
         "Ein bloßer 6-stelliger Code (etwa 20 Bit) ließe sich im Prinzip von einer Weiterleitung durch Brute Force zu einem passenden Code zwingen. Relayium schließt diese Lücke mit einem Commit-dann-Offenlegen-Handshake: Jede Seite legt sich zunächst durch das Senden eines Hashes auf ihren Schlüssel fest und gibt den Schlüssel erst preis, nachdem sie die Festlegung der Gegenseite erhalten hat. Ein Server kann daher nicht nachträglich einen kollidierenden Schlüssel wählen, und der kurze Code bleibt vertrauenswürdig.",
@@ -532,13 +532,13 @@ const de = {
 const fr = {
   title: "Sécurité et modèle de menace",
   description:
-    "Comment Relayium protège vos fichiers : des clés X25519 propres à chaque transfert et AES-256-GCM, un code de vérification SAS avec une poignée de main « engagement puis révélation » pour déjouer un serveur malveillant, des liens de téléchargement à connaissance nulle, et un exposé honnête de ce contre quoi nous protégeons ou non.",
+    "Comment Relayium protège vos fichiers : des clés X25519 propres à chaque transfert et AES-256-GCM, un code de vérification SAS avec une poignée de main « engagement puis révélation » pour déjouer un serveur malveillant, des liens de téléchargement à divulgation nulle, et un exposé honnête de ce contre quoi nous protégeons ou non.",
   updatedLabel: "Dernière mise à jour",
   updated: "2026-07-01",
   otherDocLabel: "Politique de confidentialité",
   lead: [
     "Relayium est conçu pour que ce soient les personnes qui transfèrent les fichiers — et non le serveur — qui détiennent les clés. Cette page décrit précisément ce qui est protégé, comment cela fonctionne, et les limites de cette protection.",
-    "En bref : en mode temps réel, sur le même réseau vos fichiers ne touchent jamais nos serveurs, et entre réseaux différents ils traversent un relais chiffré qui ne transporte que du texte chiffré et ne détient aucune clé ; les clés de chiffrement sont générées à neuf sur chaque appareil et n'en sortent jamais ; et un court code de vérification permet à deux personnes de détecter un serveur malveillant. Les détails suivent.",
+    "En bref : en mode temps réel, sur le même réseau vos fichiers ne touchent jamais nos serveurs, et entre réseaux différents ils traversent un relais chiffré qui ne transporte que du texte chiffré et ne détient aucune clé ; les clés de chiffrement sont générées à neuf sur chaque appareil et n'en sortent jamais ; et un court code de vérification permet à deux personnes de détecter un serveur malveillant. Les détails suivent.",
   ],
   sections: [
     {
@@ -548,26 +548,26 @@ const fr = {
       ],
       bullets: [
         "Les clés sont éphémères et propres à chaque transfert — rien n'est réutilisé d'une session à l'autre.",
-        "La clé partagée est dérivée sur les deux appareils ; elle n'est jamais envoyée à un serveur ni stockée sur celui-ci.",
+        "La clé partagée est dérivée sur les deux appareils ; elle n'est jamais envoyée à un serveur ni stockée sur celui-ci.",
         "Le chiffrement est appliqué au niveau applicatif, au-dessus de la sécurité de transport propre à WebRTC, et tient donc même si la couche de transport est compromise.",
       ],
     },
     {
       heading: "Le code de vérification (SAS) — détecter un serveur malveillant",
       body: [
-        "Le chiffrement intégré de WebRTC (DTLS) échange les empreintes de clés via le serveur de signalisation, si bien qu'un serveur malhonnête pourrait s'interposer et permuter les clés. Pour le détecter, Relayium dérive un Short Authentication String (SAS) à 6 chiffres à partir des clés publiques des deux parties et l'affiche sur les deux écrans. Si les deux codes correspondent, l'échange de clés n'a pas été altéré : personne n'y a permuté de clé.",
-        "Un simple code à 6 chiffres (environ 20 bits) pourrait en principe être forcé par un relais cherchant à produire un code correspondant. Relayium comble cette faille par une poignée de main « engagement puis révélation » : chaque partie s'engage d'abord sur sa clé en envoyant un hachage, et ne révèle la clé qu'après avoir reçu l'engagement de l'autre. Un serveur ne peut donc pas choisir après coup une clé provoquant une collision, et le court code reste digne de confiance.",
+        "Le chiffrement intégré de WebRTC (DTLS) échange les empreintes de clés via le serveur de signalisation, si bien qu'un serveur malhonnête pourrait s'interposer et permuter les clés. Pour le détecter, Relayium dérive un Short Authentication String (SAS) à 6 chiffres à partir des clés publiques des deux parties et l'affiche sur les deux écrans. Si les deux codes correspondent, l'échange de clés n'a pas été altéré : personne n'y a permuté de clé.",
+        "Un simple code à 6 chiffres (environ 20 bits) pourrait en principe être forcé par un relais cherchant à produire un code correspondant. Relayium comble cette faille par une poignée de main « engagement puis révélation » : chaque partie s'engage d'abord sur sa clé en envoyant un hachage, et ne révèle la clé qu'après avoir reçu l'engagement de l'autre. Un serveur ne peut donc pas choisir après coup une clé provoquant une collision, et le court code reste digne de confiance.",
       ],
       bullets: [
         "Pour la garantie la plus forte, comparez le code hors bande — en personne ou par appel vocal.",
-        "Si les deux codes diffèrent, interrompez le transfert : quelqu'un intercepte peut-être la connexion.",
+        "Si les deux codes diffèrent, interrompez le transfert : quelqu'un intercepte peut-être la connexion.",
       ],
     },
     {
       heading: "Ce que le serveur ne voit jamais",
       body: [
-        "Le service est conçu pour que les éléments suivants n'atteignent jamais nos serveurs, quel que soit le mode :",
-        "En mode temps réel, sur le même réseau les données des fichiers ne touchent pas du tout le serveur — elles circulent directement entre les deux appareils ; entre réseaux différents, elles passent par le relais TURN décrit plus bas, qui transporte du texte chiffré et ne détient aucune clé. Le serveur de signalisation ne relaie que les messages d'établissement de connexion et voit l'appartenance à un salon (votre IP publique), un nom d'appareil que vous choisissez, et la présence.",
+        "Le service est conçu pour que les éléments suivants n'atteignent jamais nos serveurs, quel que soit le mode :",
+        "En mode temps réel, sur le même réseau les données des fichiers ne touchent pas du tout le serveur — elles circulent directement entre les deux appareils ; entre réseaux différents, elles passent par le relais TURN décrit plus bas, qui transporte du texte chiffré et ne détient aucune clé. Le serveur de signalisation ne relaie que les messages d'établissement de connexion et voit l'appartenance à une salle (votre IP publique), un nom d'appareil que vous choisissez, et la présence.",
       ],
       bullets: [
         "Le contenu de vos fichiers.",
@@ -578,7 +578,7 @@ const fr = {
     {
       heading: "Quand vos fichiers sont relayés (TURN)",
       body: [
-        "Les transferts entre réseaux différents dans le navigateur — les sessions par code d'appairage, y compris leurs liens de participation — passent par un serveur TURN par conception, et non en repli. Les NAT restrictifs et les pare-feu y rendent une liaison réellement directe improbable ; l'application impose donc d'emblée le chemin relayé plutôt que de consacrer une vingtaine de secondes à des tests de candidats directs qui expireraient presque toujours pour aboutir de toute façon à ce même relais. Les sessions sur un même réseau ne reçoivent aucun identifiant de relais et se connectent directement ; et la CLI ne relaie jamais les données des fichiers — ses transferts entre réseaux sont exclusivement directs et échouent si aucune liaison directe n'est trouvée.",
+        "Les transferts entre réseaux différents dans le navigateur — les sessions par code d'appairage, y compris leurs liens de participation — passent par un serveur TURN par conception, et non en repli. Les NAT restrictifs et les pare-feu y rendent une liaison réellement directe improbable ; l'application impose donc d'emblée le chemin relayé plutôt que de consacrer une vingtaine de secondes à des tests de candidats directs qui expireraient presque toujours pour aboutir de toute façon à ce même relais. Les sessions sur un même réseau ne reçoivent aucun identifiant de relais et se connectent directement ; et la CLI ne relaie jamais les données des fichiers — ses transferts entre réseaux sont exclusivement directs et échouent si aucune liaison directe n'est trouvée.",
       ],
       bullets: [
         "Le relais ne transmet que du chiffré — il ne peut pas lire vos fichiers, qui restent chiffrés de bout en bout.",
@@ -593,7 +593,7 @@ const fr = {
       ],
       bullets: [
         "Le serveur ne stocke que du chiffré, plus la taille du chiffré et des horodatages pour les quotas et le nettoyage — jamais de clair, de noms de fichiers ni de clés.",
-        "Quiconque possède le lien complet peut déchiffrer ; traitez donc le lien comme le fichier lui-même et partagez-le par un canal de confiance.",
+        "Quiconque possède le lien complet peut déchiffrer ; traitez donc le lien comme le fichier lui-même et partagez-le par un canal de confiance.",
         "Les liens peuvent être réglés pour expirer (de 1 heure à 14 jours au maximum, selon votre offre) ou pour s'effacer après le premier téléchargement complet.",
       ],
     },
@@ -606,11 +606,11 @@ const fr = {
     {
       heading: "Ce contre quoi Relayium ne protège pas",
       body: [
-        "Le chiffrement de bout en bout protège les données en transit entre deux extrémités honnêtes. Par conception, il ne peut pas protéger contre :",
+        "Le chiffrement de bout en bout protège les données en transit entre deux extrémités honnêtes. Par conception, il ne peut pas protéger contre :",
       ],
       bullets: [
         "Un appareil ou un navigateur compromis à l'une des extrémités — logiciel malveillant, extension de navigateur hostile, ou quelqu'un qui regarde l'écran.",
-        "Les métadonnées que le serveur traite nécessairement : le fait qu'un transfert a eu lieu, sa taille et son horodatage, et — pour un lien de téléchargement stocké ou un transfert inter-réseaux par code d'appairage — le compte qui l'a créé ou envoyé.",
+        "Les métadonnées que le serveur traite nécessairement : le fait qu'un transfert a eu lieu, sa taille et son horodatage, et — pour un lien de téléchargement stocké ou un transfert inter-réseaux par code d'appairage — le compte qui l'a créé ou envoyé.",
         "Un destinataire qui choisit de conserver ou de transmettre les fichiers après les avoir reçus.",
         "Le partage d'un lien de téléchargement par un canal non fiable, puisque la clé de déchiffrement voyage dans le lien.",
       ],
@@ -618,12 +618,12 @@ const fr = {
     {
       heading: "Prise en charge des navigateurs et ses limites",
       body: [
-        "Relayium fonctionne dans tout navigateur moderne prenant en charge WebRTC via HTTPS. Quelques capacités diffèrent selon le navigateur :",
+        "Relayium fonctionne dans tout navigateur moderne prenant en charge WebRTC via HTTPS. Quelques capacités diffèrent selon le navigateur :",
       ],
       bullets: [
         "Chrome et Edge sur ordinateur disposent de l'API File System Access et diffusent les gros fichiers directement sur le disque, sans plafond de mémoire pratique.",
-        "Firefox, Safari et tous les navigateurs mobiles (sur iOS, tous les navigateurs sont WebKit) n'ont pas cette API et assemblent le fichier en mémoire sur le trajet temps réel ; l'application avertit donc au-delà d'environ 256 Mo — un repère volontairement prudent, pas une limite mesurée. Pour des fichiers de cette taille, préférez Chrome/Edge sur ordinateur, ou le mode lien de téléchargement, dont la page de téléchargement peut en outre écrire sur le disque via un service worker.",
-        "WebRTC exige un contexte sécurisé (HTTPS) ; l'application ne se connecte pas en HTTP simple.",
+        "Firefox, Safari et tous les navigateurs mobiles (sur iOS, tous les navigateurs sont WebKit) n'ont pas cette API et assemblent le fichier en mémoire sur le trajet temps réel ; l'application avertit donc au-delà d'environ 256 Mo — un repère volontairement prudent, pas une limite mesurée. Pour des fichiers de cette taille, préférez Chrome/Edge sur ordinateur, ou le mode lien de téléchargement, dont la page de téléchargement peut en outre écrire sur le disque via un service worker.",
+        "WebRTC exige un contexte sécurisé (HTTPS) ; l'application ne se connecte pas en HTTP simple.",
       ],
     },
     {
@@ -682,14 +682,14 @@ const ar = {
       ],
     },
     {
-      heading: "عندما تُمرَّر ملفاتك (TURN)",
+      heading: "عندما تُرحَّل ملفاتك (TURN)",
       body: [
-        "تمرّ عمليات النقل عبر الشبكات في المتصفح — أي جلسات رمز الاقتران، بما في ذلك روابط الانضمام الخاصة بها — عبر خادم TURN بحكم التصميم، لا كخيار احتياطي. فأنظمة NAT المُقيِّدة وجدران الحماية تجعل المسار المباشر الحقيقي مستبعدًا هناك، لذا يفرض التطبيق مسار التمرير من البداية بدل إنفاق نحو عشرين ثانية على فحص مرشّحين مباشرين ينتهي وقتهم غالبًا لينتهي الأمر عند المُرحِّل نفسه على أي حال. أما جلسات نفس الشبكة فلا تُصدَر لها بيانات اعتماد تمرير إطلاقًا وتتصل مباشرةً؛ كما أن واجهة سطر الأوامر لا تُمرِّر بايتات الملفات أبدًا — فنقلها عبر الشبكات مباشر فقط ويفشل إن لم يُعثر على مسار مباشر.",
+        "تمرّ عمليات النقل عبر الشبكات في المتصفح — أي جلسات رمز الاقتران، بما في ذلك روابط الانضمام الخاصة بها — عبر خادم TURN بحكم التصميم، لا كخيار احتياطي. فأنظمة NAT المُقيِّدة وجدران الحماية تجعل المسار المباشر الحقيقي مستبعدًا هناك، لذا يفرض التطبيق مسار الترحيل من البداية بدل إنفاق نحو عشرين ثانية على فحص مرشّحين مباشرين ينتهي وقتهم غالبًا لينتهي الأمر عند المُرحِّل نفسه على أي حال. أما جلسات نفس الشبكة فلا تُصدَر لها بيانات اعتماد ترحيل إطلاقًا وتتصل مباشرةً؛ كما أن واجهة سطر الأوامر لا تُرحِّل بايتات الملفات أبدًا — فنقلها عبر الشبكات مباشر فقط ويفشل إن لم يُعثر على مسار مباشر.",
       ],
       bullets: [
-        "لا يُمرِّر المُرحِّل سوى النص المُشفَّر — ولا يمكنه قراءة ملفاتك، التي تظل مُشفَّرة من الطرف إلى الطرف.",
-        "نسجّل عدد البايتات المُمرَّرة لكل حساب لفرض حصة تمرير شهرية ومنع إساءة الاستخدام — ولا نفحص أبدًا ما يُمرَّر، بل نسجّل عدد البايتات فقط.",
-        "لا نفحص أبدًا المحتوى المُمرَّر.",
+        "لا ينقل المُرحِّل سوى النص المُشفَّر — ولا يمكنه قراءة ملفاتك، التي تظل مُشفَّرة من الطرف إلى الطرف.",
+        "نسجّل عدد البايتات المُرحَّلة لكل حساب لفرض حصة ترحيل شهرية ومنع إساءة الاستخدام — ولا نفحص أبدًا ما يُرحَّل، بل نسجّل عدد البايتات فقط.",
+        "لا نفحص أبدًا المحتوى المُرحَّل.",
       ],
     },
     {
@@ -804,7 +804,7 @@ const es = {
         "El modo opcional de enlace de descarga es para cuando el destinatario no está en línea. Tu navegador cifra los archivos con AES-256-GCM antes de subir nada, y la clave de descifrado se coloca únicamente en el fragmento de la URL —la parte después del #—, que los navegadores nunca envían al servidor.",
       ],
       bullets: [
-        "El servidor almacena solo texto cifrado, además del tamaño del texto cifrado y marcas de tiempo para la cuota y la limpieza; nunca texto plano, nombres de archivos ni claves.",
+        "El servidor almacena solo texto cifrado, además del tamaño del texto cifrado y marcas de tiempo para la cuota y la limpieza; nunca texto en claro, nombres de archivos ni claves.",
         "Cualquiera que tenga el enlace completo puede descifrar, así que trata el enlace como el archivo mismo y compártelo por un canal de confianza.",
         "Los enlaces pueden configurarse para que caduquen (de 1 hora hasta 14 días, según tu plan) o para que se destruyan tras la primera descarga completa.",
       ],
@@ -896,7 +896,7 @@ const pt = {
     {
       heading: "Quando seus arquivos são retransmitidos (TURN)",
       body: [
-        "As transferências entre redes no navegador — as sessões com código de emparelhamento, incluindo seus links de entrada — passam por um servidor TURN por projeto, não como recurso alternativo. Ali os NATs e firewalls restritivos tornam improvável um caminho realmente direto, então o aplicativo força de saída a rota retransmitida em vez de gastar uns vinte segundos em verificações de candidatos diretos que quase sempre expirariam para acabar nesse mesmo retransmissor de qualquer forma. As sessões na mesma rede não recebem nenhuma credencial de retransmissão e se conectam diretamente; e a CLI nunca retransmite os bytes dos arquivos: suas transferências entre redes são exclusivamente diretas e falham se nenhum caminho direto for encontrado.",
+        "As transferências entre redes no navegador — as sessões com código de emparelhamento, incluindo seus links de entrada — passam por um servidor TURN por decisão de projeto, não como recurso alternativo. Ali os NATs e firewalls restritivos tornam improvável um caminho realmente direto, então o aplicativo força de saída a rota retransmitida em vez de gastar uns vinte segundos em verificações de candidatos diretos que quase sempre expirariam para acabar nesse mesmo retransmissor de qualquer forma. As sessões na mesma rede não recebem nenhuma credencial de retransmissão e se conectam diretamente; e a CLI nunca retransmite os bytes dos arquivos: suas transferências entre redes são exclusivamente diretas e falham se nenhum caminho direto for encontrado.",
       ],
       bullets: [
         "O retransmissor encaminha apenas texto cifrado — ele não consegue ler seus arquivos, que permanecem criptografados de ponta a ponta.",

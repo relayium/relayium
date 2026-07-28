@@ -144,36 +144,36 @@ const zh = {
 const ja = {
   title: "ファイルではなくフォルダごと送る方法",
   description:
-    "ブラウザでフォルダをまるごと選んで一括送信——相対パスを保持したまま、1バッチ最大1,000ファイル、それぞれ SHA-256 で検証。事前の圧縮は不要です。",
+    "ブラウザでフォルダをまるごと選んで一括送信。相対パスを保持したまま、1バッチ最大1,000ファイル、それぞれ SHA-256 で検証。事前の圧縮は不要です。",
   updatedLabel: "最終更新",
   lead: [
     "プロジェクトを送ることは、ファイルを送ることとは違います。手元にあるのはサブフォルダの入ったフォルダで、ひとつずつコピー&ペーストすると、それを役立つものにしている構造が失われてしまいます。先に圧縮しておく手もありますが、転送を始める前に圧縮ツールへ寄り道することになります。",
-    "Relayium ならフォルダをそのまま選んで送信できます。ブラウザがディレクトリツリー全体をたどり、各ファイルの相対パスをそのまま保ち、相手側へストリーミングします——最終的にサーバーに何も残らない P2P になるか、あとで受け取れるリンクになるかは選べます。",
+    "Relayium ならフォルダをそのまま選んで送信できます。ブラウザがディレクトリツリー全体をたどり、各ファイルの相対パスをそのまま保ち、相手側へストリーミングします。最終的にサーバーに何も残らない P2P になるか、あとで受け取れるリンクになるかは選べます。",
   ],
   sections: [
     {
       heading: "ファイルの山ではなく、フォルダを選ぶ",
       body: [
-        "ファイルを1つずつ選ぶのではなく、フォルダそのものを選びます。Relayium はブラウザ内でディレクトリツリー全体をたどり、各ファイルの相対パス——サブフォルダ、入れ子になったサブフォルダも含め——をすべて保持するので、相手に届くものは元と同じレイアウトになります。",
+        "ファイルを1つずつ選ぶのではなく、フォルダそのものを選びます。Relayium はブラウザ内でディレクトリツリー全体をたどり、各ファイルの相対パス（サブフォルダ、入れ子になったサブフォルダも含む）をすべて保持するので、相手に届くものは元と同じレイアウトになります。",
         "これは現在、デスクトップの Chrome、Edge、Firefox で使えます。iOS では使えません。iPhone や iPad の Safari のファイル選択画面にはフォルダを選ぶ手段がなく、個々のファイルしか選べないため、フォルダ送信は今のところデスクトップの機能です。",
       ],
       bullets: [
         "1バッチ最大1,000ファイル。",
         "各ファイルは固有の SHA-256 ハッシュでエンドツーエンドに検証され、届いたものが送ったものと完全に一致することを確認します。",
-        "ドラッグ&ドロップでもフォルダ選択ボタンでも使えます——事前に圧縮する必要はありません。",
+        "ドラッグ&ドロップでもフォルダ選択ボタンでも使えます。事前に圧縮する必要はありません。",
       ],
     },
     {
       heading: "相手が受け取るもの",
       body: [
-        "フォルダの届き方は受信側のブラウザによって変わります。Chrome と Edge は、受信者が選んだディレクトリへファイルを直接書き込めるため、フォルダは送り出したときとまったく同じ形でディスク上に現れます——追加の手順は不要です。",
+        "フォルダの届き方は受信側のブラウザによって変わります。Chrome と Edge は、受信者が選んだディレクトリへファイルを直接書き込めるため、フォルダは送り出したときとまったく同じ形でディスク上に現れます。追加の手順は不要です。",
         "Firefox と Safari にはその機能がないため、代わりに無圧縮（ストア方式）の .zip アーカイブを1つ受け取り、解凍すると同じフォルダ構造になります。サイズは 4 GiB 未満に収まります（ZIP64 非対応）。これはほとんどのプロジェクトフォルダや写真・書類のまとまりをカバーしますが、それより大きい場合は2回に分けて送ってください。",
       ],
     },
     {
       heading: "今すぐリアルタイムで、または後で取れるリンクを",
       body: [
-        "双方が同時にオンラインになれるなら、フォルダを直接送りましょう——P2P で流れ、途中どのサーバーにも何も保存されません。これが最も速い方法で、同じネットワークならアカウントは不要です。ネットワークをまたいでペアリングコードで送る場合も送信側がサインインするだけで、受信側はどちらの場合もアカウント不要です。",
+        "双方が同時にオンラインになれるなら、フォルダを直接送りましょう。P2P で流れ、途中どのサーバーにも何も保存されません。これが最も速い方法で、同じネットワークならアカウントは不要です。ネットワークをまたいでペアリングコードで送る場合も送信側がサインインするだけで、受信側はどちらの場合もアカウント不要です。",
         "相手が今いない場合は、代わりに保存リンクを作成できます。ブラウザはアップロード前に、そのリンク自体にしか存在しないランダムな AES-256-GCM 鍵でフォルダ内のファイルを暗号化するため、サーバーは読めない暗号文だけを保持します。リンクの作成には送信側のサインインが必要です。有効期限は1時間・1日・3日・7日・最長14日（プランによる）から選ぶか、初回ダウンロード後に消去する設定にもできます。",
       ],
     },
@@ -183,7 +183,7 @@ const ja = {
     items: [
       {
         q: "iPhone や iPad からフォルダを送れますか？",
-        a: "送信側としては送れません——iOS の Safari にはフォルダ選択の手段がなく、個々のファイルしか選べないため、現在フォルダ送信はデスクトップの Chrome、Edge、Firefox からのみ行えます。iPhone や iPad は受信側としてはフォルダを問題なく受け取れます（.zip として届きます）。",
+        a: "送信側としては送れません。iOS の Safari にはフォルダ選択の手段がなく、個々のファイルしか選べないため、現在フォルダ送信はデスクトップの Chrome、Edge、Firefox からのみ行えます。iPhone や iPad は受信側としてはフォルダを問題なく受け取れます（.zip として届きます）。",
       },
       {
         q: "サブフォルダやファイル構造は保持されますか？",
@@ -204,7 +204,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "フォルダを選んで、そのままの形で送りましょう——構造そのまま、すべてのファイルを検証済みで。",
+    text: "フォルダを選んで、そのままの形で送りましょう。構造そのまま、すべてのファイルを検証済みで。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -213,37 +213,37 @@ const ja = {
 const ko = {
   title: "파일이 아니라 폴더째로 보내는 방법",
   description:
-    "브라우저에서 폴더 전체를 선택해 한 번에 전송하세요——상대 경로 유지, 배치당 최대 1,000개 파일, 각각 SHA-256으로 검증. 미리 압축할 필요가 없습니다.",
+    "브라우저에서 폴더 전체를 선택해 한 번에 전송하세요. 상대 경로 유지, 배치당 최대 1,000개 파일, 각각 SHA-256으로 검증. 미리 압축할 필요가 없습니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
     "프로젝트를 보내는 것은 파일 하나를 보내는 것과 다릅니다. 손에 든 건 하위 폴더가 잔뜩 있는 폴더이고, 하나씩 복사-붙여넣기하면 그것을 쓸모 있게 만드는 구조가 사라져 버립니다. 먼저 압축해도 되지만, 그러면 전송을 시작하기 전에 압축 도구를 거쳐야 합니다.",
-    "Relayium은 폴더를 그대로 선택해 보낼 수 있게 해줍니다. 브라우저가 디렉터리 트리 전체를 훑으며 모든 파일의 상대 경로를 그대로 유지한 채 상대에게 스트리밍합니다——결과적으로 아무것도 저장되지 않는 P2P가 되든, 나중에 받을 수 있게 남겨두는 링크가 되든 마찬가지입니다.",
+    "Relayium은 폴더를 그대로 선택해 보낼 수 있게 해줍니다. 브라우저가 디렉터리 트리 전체를 훑으며 모든 파일의 상대 경로를 그대로 유지한 채 상대에게 스트리밍합니다. 결과적으로 아무것도 저장되지 않는 P2P가 되든, 나중에 받을 수 있게 남겨두는 링크가 되든 마찬가지입니다.",
   ],
   sections: [
     {
       heading: "파일 더미가 아니라 폴더를 선택하세요",
       body: [
-        "파일을 하나씩 고르는 대신 폴더 자체를 선택하세요. Relayium은 브라우저에서 디렉터리 트리 전체를 훑으며 각 파일의 상대 경로——하위 폴더, 중첩된 하위 폴더까지 전부——를 유지하므로, 상대에게 도착하는 것은 처음 시작할 때와 같은 구조를 갖습니다.",
+        "파일을 하나씩 고르는 대신 폴더 자체를 선택하세요. Relayium은 브라우저에서 디렉터리 트리 전체를 훑으며 각 파일의 상대 경로(하위 폴더, 중첩된 하위 폴더까지 전부)를 유지하므로, 상대에게 도착하는 것은 처음 시작할 때와 같은 구조를 갖습니다.",
         "현재 이 기능은 데스크톱 Chrome, Edge, Firefox에서 동작합니다. iOS에서는 동작하지 않습니다. iPhone과 iPad의 Safari 파일 선택기는 폴더를 선택할 방법이 없고 개별 파일만 고를 수 있어서, 폴더 전송은 지금으로선 데스크톱 기능입니다.",
       ],
       bullets: [
         "한 배치에 최대 1,000개 파일.",
         "각 파일은 고유한 SHA-256 해시로 종단간 검증되어, 도착한 것이 보낸 것과 정확히 일치하는지 확인합니다.",
-        "드래그 앤 드롭이나 폴더 선택 버튼 모두 사용할 수 있습니다——미리 압축할 필요가 없습니다.",
+        "드래그 앤 드롭이나 폴더 선택 버튼 모두 사용할 수 있습니다. 미리 압축할 필요가 없습니다.",
       ],
     },
     {
       heading: "상대방이 받는 것",
       body: [
-        "폴더가 어떻게 도착하는지는 받는 쪽의 브라우저에 따라 다릅니다. Chrome과 Edge는 받는 사람이 선택한 디렉터리로 파일을 곧바로 써넣을 수 있어서, 폴더가 떠날 때와 똑같은 모습으로 디스크에 나타납니다——추가 단계가 없습니다.",
+        "폴더가 어떻게 도착하는지는 받는 쪽의 브라우저에 따라 다릅니다. Chrome과 Edge는 받는 사람이 선택한 디렉터리로 파일을 곧바로 써넣을 수 있어서, 폴더가 떠날 때와 똑같은 모습으로 디스크에 나타납니다. 추가 단계가 없습니다.",
         "Firefox와 Safari에는 그 기능이 없어서, 대신 압축하지 않은(저장 방식) .zip 아카이브 하나를 받으며 이를 풀면 정확히 같은 폴더 구조가 됩니다. 크기는 4 GiB 미만으로 유지됩니다(ZIP64 미지원). 대부분의 프로젝트 폴더나 사진·문서 모음에는 충분하며, 더 크다면 두 번으로 나눠 보내세요.",
       ],
     },
     {
       heading: "지금 실시간으로, 또는 나중을 위해 링크로",
       body: [
-        "양쪽이 동시에 온라인일 수 있다면 폴더를 직접 보내세요——P2P로 전달되며 그 사이 어떤 서버에도 아무것도 저장되지 않습니다. 이것이 가장 빠른 방법이며, 같은 네트워크에서는 계정이 필요 없습니다. 네트워크를 넘어 페어링 코드로 보낼 때도 보내는 쪽이 로그인만 하면 되고, 받는 쪽은 어느 경우든 계정이 전혀 필요 없습니다.",
-        "상대가 지금 없다면 대신 저장 링크를 만들 수 있습니다. 브라우저는 업로드 전에 그 링크에만 존재하는 무작위 AES-256-GCM 키로 폴더 안의 파일들을 암호화하므로, 서버는 읽을 수 없는 암호문만 보관합니다. 링크 생성에는 보내는 쪽의 로그인이 필요합니다. 1시간·1일·3일·7일·최대 14일(요금제에 따라 다름) 중 만료 시점을 정하거나, 첫 다운로드 후 소각되도록 설정할 수도 있습니다.",
+        "양쪽이 동시에 온라인일 수 있다면 폴더를 직접 보내세요. P2P로 전달되며 그 사이 어떤 서버에도 아무것도 저장되지 않습니다. 이것이 가장 빠른 방법이며, 같은 네트워크에서는 계정이 필요 없습니다. 네트워크를 넘어 페어링 코드로 보낼 때도 보내는 쪽이 로그인만 하면 되고, 받는 쪽은 어느 경우든 계정이 전혀 필요 없습니다.",
+        "상대가 지금 없다면 대신 저장 링크를 만들 수 있습니다. 브라우저는 업로드 전에 그 링크에만 존재하는 무작위 AES-256-GCM 키로 폴더 안의 파일을 암호화하므로, 서버는 읽을 수 없는 암호문만 보관합니다. 링크 생성에는 보내는 쪽의 로그인이 필요합니다. 1시간·1일·3일·7일·최대 14일(요금제에 따라 다름) 중 만료 시점을 정하거나, 첫 다운로드 후 소각되도록 설정할 수도 있습니다.",
       ],
     },
   ],
@@ -252,7 +252,7 @@ const ko = {
     items: [
       {
         q: "iPhone이나 iPad에서 폴더를 보낼 수 있나요?",
-        a: "보내는 쪽으로는 안 됩니다——iOS의 Safari에는 폴더 선택 수단이 없고 개별 파일만 고를 수 있어서, 현재 폴더 전송은 데스크톱 Chrome, Edge, Firefox에서만 가능합니다. iPhone이나 iPad는 받는 쪽으로는 폴더를 문제없이 받을 수 있으며, .zip 형태로 도착합니다.",
+        a: "보내는 쪽으로는 안 됩니다. iOS의 Safari에는 폴더 선택 수단이 없고 개별 파일만 고를 수 있어서, 현재 폴더 전송은 데스크톱 Chrome, Edge, Firefox에서만 가능합니다. iPhone이나 iPad는 받는 쪽으로는 폴더를 문제없이 받을 수 있으며, .zip 형태로 도착합니다.",
       },
       {
         q: "하위 폴더와 파일 구조가 유지되나요?",
@@ -311,7 +311,7 @@ const de = {
     {
       heading: "Jetzt in Echtzeit oder als Link für später",
       body: [
-        "Könnt ihr beide gleichzeitig online sein, sende den Ordner direkt — er läuft Peer-to-Peer, und dazwischen wird nichts auf irgendeinem Server gespeichert. Das ist der schnellste Weg und braucht im selben Netz kein Konto; beim Senden über Netzwerke hinweg per Pairing-Code muss sich nur der Absender anmelden, und die empfangende Person braucht in keinem Fall ein Konto.",
+        "Können beide Seiten gleichzeitig online sein, sende den Ordner direkt — er läuft Peer-to-Peer, und dazwischen wird nichts auf irgendeinem Server gespeichert. Das ist der schnellste Weg und braucht im selben Netz kein Konto; beim Senden über Netzwerke hinweg per Pairing-Code muss sich nur der Absender anmelden, und die empfangende Person braucht in keinem Fall ein Konto.",
         "Ist die andere Person gerade nicht da, erstelle stattdessen einen gespeicherten Link. Dein Browser verschlüsselt die Dateien des Ordners vor dem Upload mit einem zufälligen AES-256-GCM-Schlüssel, der nur im Link selbst existiert, sodass der Server Chiffretext hält, den er nicht lesen kann. Das Erstellen eines Links erfordert die Anmeldung des Absenders; lege eine Gültigkeit von 1 Stunde, 1 Tag, 3 Tagen, 7 Tagen oder bis zu 14 Tagen je nach Tarif fest, oder lass ihn nach dem ersten Download verfallen.",
       ],
     },
@@ -351,10 +351,10 @@ const de = {
 const fr = {
   title: "Envoyer un dossier entier, pas seulement des fichiers",
   description:
-    "Choisissez un dossier entier dans le navigateur et envoyez-le en un lot — chemins relatifs conservés, jusqu'à 1 000 fichiers, chacun vérifié par SHA-256. Pas besoin de zipper au préalable.",
+    "Choisissez un dossier entier dans le navigateur et envoyez-le en un lot — chemins relatifs conservés, jusqu'à 1 000 fichiers, chacun vérifié par SHA-256. Pas besoin de zipper au préalable.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Envoyer un projet, ce n'est pas comme envoyer un fichier : vous avez un dossier plein de sous-dossiers, et copier-coller chaque élément un par un détruit la structure qui le rend utile. Le zipper d'abord fonctionne, mais cela impose un détour par un outil de compression avant même de pouvoir commencer.",
+    "Envoyer un projet, ce n'est pas comme envoyer un fichier : vous avez un dossier plein de sous-dossiers, et copier-coller chaque élément un par un détruit la structure qui le rend utile. Le zipper d'abord fonctionne, mais cela impose un détour par un outil de compression avant même de pouvoir commencer.",
     "Relayium vous laisse choisir un dossier directement et l'envoyer tel quel. Le navigateur parcourt toute l'arborescence, conserve le chemin relatif de chaque fichier, et le diffuse vers l'autre côté — que cela se termine en pair-à-pair sans rien stocker, ou en un lien que vous laissez pour plus tard.",
   ],
   sections: [
@@ -362,10 +362,10 @@ const fr = {
       heading: "Choisir un dossier, pas un tas de fichiers",
       body: [
         "Plutôt que de sélectionner les fichiers un par un, choisissez le dossier lui-même. Relayium parcourt l'arborescence dans le navigateur et conserve le chemin relatif de chaque fichier — sous-dossiers, sous-dossiers imbriqués, tout — de sorte que ce qui arrive de l'autre côté a la même disposition que ce que vous avez envoyé.",
-        "Cela fonctionne aujourd'hui sur Chrome, Edge et Firefox de bureau. Ça ne fonctionne pas sous iOS : le sélecteur de fichiers de Safari sur iPhone et iPad ne permet pas de choisir un dossier, seulement des fichiers individuels, donc l'envoi de dossier reste pour l'instant une fonctionnalité de bureau.",
+        "Cela fonctionne aujourd'hui sur Chrome, Edge et Firefox de bureau. Ça ne fonctionne pas sous iOS : le sélecteur de fichiers de Safari sur iPhone et iPad ne permet pas de choisir un dossier, seulement des fichiers individuels, donc l'envoi de dossier reste pour l'instant une fonctionnalité de bureau.",
       ],
       bullets: [
-        "Jusqu'à 1 000 fichiers dans un seul lot.",
+        "Jusqu'à 1 000 fichiers dans un seul lot.",
         "Chaque fichier est vérifié de bout en bout par sa propre empreinte SHA-256, pour que ce qui arrive corresponde exactement à ce que vous avez envoyé.",
         "Fonctionne par glisser-déposer ou via un bouton de sélection de dossier — rien à zipper au préalable.",
       ],
@@ -374,14 +374,14 @@ const fr = {
       heading: "Ce que l'autre personne reçoit",
       body: [
         "La façon dont le dossier arrive dépend du navigateur de réception. Chrome et Edge peuvent écrire les fichiers directement dans un répertoire choisi par le destinataire, si bien que le dossier apparaît sur le disque exactement tel qu'il est parti — sans étape supplémentaire.",
-        "Firefox et Safari n'ont pas cette capacité ; ils reçoivent à la place une seule archive .zip non compressée (mode stockage) qui, une fois décompressée, redonne exactement la même structure de dossier. Elle reste sous 4 Gio (pas de ZIP64), ce qui couvre la grande majorité des dossiers de projet et des ensembles de photos ou documents — au-delà, répartissez l'envoi en deux.",
+        "Firefox et Safari n'ont pas cette capacité ; ils reçoivent à la place une seule archive .zip non compressée (mode stockage) qui, une fois décompressée, redonne exactement la même structure de dossier. Elle reste sous 4 Gio (pas de ZIP64), ce qui couvre la grande majorité des dossiers de projet et des ensembles de photos ou documents — au-delà, répartissez l'envoi en deux.",
       ],
     },
     {
       heading: "En temps réel maintenant, ou un lien pour plus tard",
       body: [
-        "Si vous pouvez être en ligne en même temps tous les deux, envoyez le dossier directement — il passe en pair-à-pair et rien n'est stocké sur un serveur entre les deux. C'est la voie la plus rapide et elle ne demande aucun compte sur le même réseau ; envoyer entre réseaux différents avec un code d'appairage exige seulement que l'expéditeur se connecte, et le destinataire n'a jamais besoin de compte.",
-        "Si l'autre personne n'est pas disponible maintenant, créez plutôt un lien stocké. Votre navigateur chiffre les fichiers du dossier avant l'envoi avec une clé AES-256-GCM aléatoire qui ne vit que dans le lien lui-même, de sorte que le serveur conserve un texte chiffré qu'il ne peut pas lire. Créer un lien exige que l'expéditeur se connecte ; réglez son expiration à 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre, ou faites-le s'autodétruire après le premier téléchargement.",
+        "Si vous pouvez être en ligne en même temps tous les deux, envoyez le dossier directement — il passe en pair-à-pair et rien n'est stocké sur un serveur entre les deux. C'est la voie la plus rapide et elle ne demande aucun compte sur le même réseau ; envoyer entre réseaux différents avec un code d'appairage exige seulement que l'expéditeur se connecte, et le destinataire n'a jamais besoin de compte.",
+        "Si l'autre personne n'est pas disponible maintenant, créez plutôt un lien stocké. Votre navigateur chiffre les fichiers du dossier avant l'envoi avec une clé AES-256-GCM aléatoire qui ne vit que dans le lien lui-même, de sorte que le serveur conserve un texte chiffré qu'il ne peut pas lire. Créer un lien exige que l'expéditeur se connecte ; réglez son expiration à 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre, ou faites-le s'autodétruire après le premier téléchargement.",
       ],
     },
   ],
@@ -389,23 +389,23 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Puis-je envoyer un dossier depuis un iPhone ou un iPad ?",
+        q: "Puis-je envoyer un dossier depuis un iPhone ou un iPad ?",
         a: "Pas en tant qu'expéditeur — Safari sous iOS n'a pas de sélecteur de dossier, seulement des fichiers individuels, donc l'envoi de dossier fonctionne aujourd'hui depuis Chrome, Edge ou Firefox de bureau. Un iPhone ou un iPad peut tout à fait recevoir un dossier, sous forme de .zip.",
       },
       {
-        q: "Les sous-dossiers et la structure des fichiers sont-ils conservés ?",
+        q: "Les sous-dossiers et la structure des fichiers sont-ils conservés ?",
         a: "Oui. Relayium conserve le chemin relatif de chaque fichier, y compris les sous-dossiers imbriqués, de sorte que le dossier reçu a la même disposition que celui que vous avez choisi.",
       },
       {
-        q: "Combien de fichiers un envoi de dossier peut-il contenir ?",
-        a: "Jusqu'à 1 000 fichiers dans un seul lot, chacun vérifié individuellement par une empreinte SHA-256 à son arrivée.",
+        q: "Combien de fichiers un envoi de dossier peut-il contenir ?",
+        a: "Jusqu'à 1 000 fichiers dans un seul lot, chacun vérifié individuellement par une empreinte SHA-256 à son arrivée.",
       },
       {
-        q: "Le destinataire reçoit-il un vrai dossier ou un .zip ?",
-        a: "Cela dépend de son navigateur. Chrome et Edge écrivent les fichiers directement dans un répertoire qu'il choisit. Firefox et Safari reçoivent une seule archive .zip non compressée (moins de 4 Gio) qui, une fois décompressée, redonne la même structure de dossier.",
+        q: "Le destinataire reçoit-il un vrai dossier ou un .zip ?",
+        a: "Cela dépend de son navigateur. Chrome et Edge écrivent les fichiers directement dans un répertoire qu'il choisit. Firefox et Safari reçoivent une seule archive .zip non compressée (moins de 4 Gio) qui, une fois décompressée, redonne la même structure de dossier.",
       },
       {
-        q: "Ai-je besoin d'un compte pour envoyer un dossier ?",
+        q: "Ai-je besoin d'un compte pour envoyer un dossier ?",
         a: "Pas sur le même réseau. Envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte, mais le destinataire n'a jamais besoin de compte, dans un cas comme dans l'autre.",
       },
     ],
@@ -518,7 +518,7 @@ const es = {
     {
       heading: "En tiempo real, o un enlace para más tarde",
       body: [
-        "Si ambos podéis estar en línea a la vez, envía la carpeta directamente — va de igual a igual y nada se almacena en ningún servidor por el camino. Esta es la vía más rápida y no necesita cuenta si estáis en la misma red; enviar entre redes con un código de emparejamiento solo requiere que el remitente inicie sesión, y quien recibe nunca necesita cuenta en absoluto.",
+        "Si ambos lados pueden estar en línea a la vez, envía la carpeta directamente — va de igual a igual y nada se almacena en ningún servidor por el camino. Esta es la vía más rápida y no necesita cuenta si ambos lados están en la misma red; enviar entre redes con un código de emparejamiento solo requiere que el remitente inicie sesión, y quien recibe nunca necesita cuenta en absoluto.",
         "Si la otra persona no está disponible ahora mismo, crea en su lugar un enlace almacenado. Tu navegador cifra los archivos de la carpeta antes de subirlos con una clave AES-256-GCM aleatoria que solo vive en el propio enlace, de modo que el servidor guarda texto cifrado que no puede leer. Crear un enlace requiere que el remitente inicie sesión; configúralo para que caduque en 1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan, o haz que se destruya tras la primera descarga.",
       ],
     },
@@ -587,7 +587,7 @@ const pt = {
     {
       heading: "Em tempo real, ou um link para depois",
       body: [
-        "Se vocês dois puderem estar on-line ao mesmo tempo, envie a pasta diretamente — ela vai ponto a ponto e nada é armazenado em nenhum servidor no meio. Este é o caminho mais rápido e não precisa de conta se vocês estão na mesma rede; enviar entre redes com um código de emparelhamento só exige que o remetente faça login, e quem recebe nunca precisa de conta alguma.",
+        "Se as duas partes puderem estar online ao mesmo tempo, envie a pasta diretamente — ela vai ponto a ponto e nada é armazenado em nenhum servidor no meio. Este é o caminho mais rápido e não precisa de conta se os dois lados estão na mesma rede; enviar entre redes com um código de emparelhamento só exige que o remetente faça login, e quem recebe nunca precisa de conta alguma.",
         "Se a outra pessoa não estiver por perto agora, crie um link armazenado em vez disso. Seu navegador criptografa os arquivos da pasta antes do upload com uma chave AES-256-GCM aleatória que só existe no próprio link, de modo que o servidor guarda texto cifrado que não consegue ler. Criar um link exige que o remetente faça login; defina para expirar em 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou faça-o se autodestruir após o primeiro download.",
       ],
     },

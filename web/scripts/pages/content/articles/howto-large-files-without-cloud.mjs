@@ -77,7 +77,7 @@ const zh = {
     "把几 GB 的视频和工程文件在浏览器之间直接互传——无需上传网盘，实时模式没有大小上限，支持断点续传和逐文件完整性校验。",
   updatedLabel: "最近更新",
   lead: [
-    "一个 20 GB 的视频导出，或者一个沉重的工程压缩包，恰恰是网盘最慢的场景：你先把整个文件上传一遍、等待，然后对方再下载一遍——两次完整传输，还要受制于你的存储配额。对一次性的交付来说，只是想把字节从 A 送到 B，却要这样反复复制和等待。",
+    "一个 20 GB 的视频导出，或者一个体积庞大的工程压缩包，恰恰是网盘最慢的场景：你先把整个文件上传一遍、等待，然后对方再下载一遍——两次完整传输，还要受制于你的存储配额。对一次性的交付来说，只是想把字节从 A 送到 B，却要这样反复复制和等待。",
     "Relayium 走的是直连的路。文件通过加密的点对点通道从你的浏览器直接流向对方，中途从不落在任何服务器上。本文讲的就是这样传大文件的做法，同时也如实说明两个真实的限制：哪些浏览器能承受无上限的大小，以及双方通常需要同时在线这件事。",
   ],
   sections: [
@@ -104,7 +104,7 @@ const zh = {
       heading: "断点续传，而非重来",
       body: [
         "大文件传输耗时，而耗时正是 Wi-Fi 断线、笔记本休眠、手机切换网络最容易发生的时候。Relayium 就是为此而生：如果连接中途断开，传输会从中断处续传，而不是把整个文件从头再来。",
-        "连通性也以同样的方式处理。同一网络内传输在设备之间直连；跨网络时加密数据流经 TURN 中继转发。中继只能看到密文，因此这条路径同样保持端到端加密。",
+        "网络连通问题也是同样的处理思路。同一网络内传输在设备之间直连；跨网络时加密数据流经 TURN 中继转发。中继只能看到密文，因此这条路径同样保持端到端加密。",
       ],
     },
     {
@@ -128,7 +128,7 @@ const zh = {
       },
       {
         q: "传大文件时隐私如何保证？",
-        a: "实时传输用 X25519 密钥交换加逐块 AES-256-GCM 做端到端加密，而这把密钥从不抵达任何服务器。两台设备会显示 6 位校验码以确认没有中间人，每个文件都用 SHA-256 校验。即便需要 TURN 中继，它也只能看到密文。",
+        a: "实时传输用 X25519 密钥交换加逐个数据块的 AES-256-GCM 做端到端加密，而这把密钥从不抵达任何服务器。两台设备会显示 6 位校验码以确认没有中间人，每个文件都用 SHA-256 校验。即便需要 TURN 中继，它也只能看到密文。",
       },
     ],
   },
@@ -145,26 +145,26 @@ const ja = {
     "数ギガバイトの動画やプロジェクトのアーカイブを、ブラウザからブラウザへ直接送信。クラウドへのアップロード不要、リアルタイムモードではサイズ上限なし、再開可能な転送とファイルごとの整合性チェック付き。",
   updatedLabel: "最終更新",
   lead: [
-    "20 GB の動画書き出しや重いプロジェクトのアーカイブは、まさにクラウドストレージが最も遅く感じる場面です。ファイル全体を一度アップロードして待ち、相手がもう一度ダウンロードする——2回の完全な転送に加え、ストレージ容量の制限も受けます。一度きりの受け渡しなのに、A から B へ送るだけのバイトのために、これだけの複製と待ち時間がかかります。",
-    "Relayium は直接の経路を取ります。ファイルは暗号化された P2P チャネルであなたのブラウザから相手のブラウザへ直接流れ、途中でサーバーに置かれることはありません。本ガイドではその方法で大きなファイルを送る手順を示し、2つの現実的な制限についても正直にお伝えします。どのブラウザが無制限のサイズに対応できるか、そして通常は双方が同時にオンラインである必要がある、という点です。",
+    "20 GB の動画書き出しや重いプロジェクトのアーカイブは、まさにクラウドストレージが最も遅く感じる場面です。ファイル全体を一度アップロードして待ち、相手がもう一度ダウンロードします。2回の完全な転送に加え、ストレージ容量の制限も受けます。一度きりの受け渡しなのに、A から B へ送るだけのバイトのために、これだけの複製と待ち時間がかかります。",
+    "Relayium は直接の経路を取ります。ファイルは暗号化された P2P チャネルで手元のブラウザから相手のブラウザへ直接流れ、途中でサーバーに置かれることはありません。本ガイドではその方法で大きなファイルを送る手順を示し、2つの現実的な制限についても正直にお伝えします。どのブラウザが無制限のサイズに対応できるか、そして通常は双方が同時にオンラインである必要がある、という点です。",
   ],
   sections: [
     {
       heading: "大きなファイルで直接転送が有利な理由",
       body: [
-        "クラウドストレージでは大きなファイルがネットワークを2回横断します——サーバーへアップロードし、相手へダウンロードで——その間ストレージ容量も消費します。P2P の直接転送はネットワークを1回だけ、送信者から受信者へ横断し、途中には何も保存しません。",
-        "Relayium は完全にブラウザ内で動作するため、どちらの端末にもインストールは不要です。Windows、macOS、Linux、Android、iOS で動きます。同じネットワークならリアルタイム転送にアカウントは要りません。ネットワークをまたいでペアリングコードで送る場合も送信側がサインインするだけです——両方の端末で relayium.com を開いて接続するだけです。",
+        "クラウドストレージでは大きなファイルがネットワークを2回横断し（サーバーへアップロードし、相手へダウンロード）、その間ストレージ容量も消費します。P2P の直接転送はネットワークを1回だけ、送信者から受信者へ横断し、途中には何も保存しません。",
+        "Relayium は完全にブラウザ内で動作するため、どちらの端末にもインストールは不要です。Windows、macOS、Linux、Android、iOS で動きます。同じネットワークならリアルタイム転送にアカウントは要りません。ネットワークをまたいでペアリングコードで送る場合も送信側がサインインするだけです。両方の端末で relayium.com を開いて接続するだけです。",
       ],
     },
     {
       heading: "リアルタイムモードにはサイズ上限がない",
       body: [
-        "リアルタイム転送にはサーバー側のサイズ制限がありません。ファイルを保持するサーバーが存在しないからです。実際の上限は受信側のブラウザが決めるもので、私たちが決めるものではありません。",
-        "Chrome と Edge では、届いたファイルは到着に合わせてそのままディスクへストリーミングされるため、メモリに収める必要がありません——これが非常に大きなファイルに使うべき組み合わせで、数十 GB まで余裕です。1バッチには最大1,000ファイルを入れられ、それぞれが SHA-256 ハッシュでエンドツーエンドに検証されるので、ディスクに残るものは送ったものとバイト単位で同一です。",
+        "リアルタイム転送にはサーバー側のサイズ制限がありません。ファイルを保持するサーバーが存在しないからです。実際の上限は受信側のブラウザが決めるもので、当社が決めるものではありません。",
+        "Chrome と Edge では、届いたファイルは到着に合わせてそのままディスクへストリーミングされるため、メモリに収める必要がありません。これが非常に大きなファイルに使うべき組み合わせで、数十 GB まで余裕です。1バッチには最大1,000ファイルを入れられ、それぞれが SHA-256 ハッシュでエンドツーエンドに検証されるので、ディスクに残るものは送ったものとバイト単位で同一です。",
       ],
       bullets: [
         "受信側がパソコン版の Chrome または Edge：ファイルはそのままディスクへストリーミングされるため、実質的にサイズ上限はありません。",
-        "Firefox と Safari には File System Access API がないため、リアルタイム受信の1バッチはメモリに保持されます——およそ 256 MB を超えると Relayium が警告します。これは硬い上限ではなく、意図的に控えめに置いた目安です。",
+        "Firefox と Safari には File System Access API がないため、リアルタイム受信の1バッチはメモリに保持されます。およそ 256 MB を超えると Relayium が警告します。これは硬い上限ではなく、意図的に控えめに置いた目安です。",
         "1バッチ最大1,000ファイル、それぞれ到着時に固有の SHA-256 ハッシュで検証されます。",
       ],
     },
@@ -178,8 +178,8 @@ const ja = {
     {
       heading: "今すぐ送る、または後で取れるリンクを残す",
       body: [
-        "リアルタイムの直接転送は双方が同時にオンラインであることが必要で、都合を合わせられるときに最適です——通話中、共有の瞬間、席にいる同僚。相手が今いない場合は、代わりに保存型のダウンロードリンクを作成できます。",
-        "保存リンクはゼロ知識です。ブラウザがアップロード前に AES-256-GCM でファイルを暗号化し、復号鍵は URL フラグメントにだけ存在するため、サーバーは読めない暗号文を保持します。トレードオフも把握してください——リンクの作成には送信側のサインインが必要で、リンクはストレージ容量を消費し、有効期限があります(初回ダウンロード後に消去する設定も可能)。リンク経由には利点もあります。そのダウンロードページは Firefox や Safari でも Service Worker を使って単一ファイルをディスクへストリーミングできるため、受信側ブラウザのメモリが制約になりません。最大のファイルでは、双方がオンラインになれるなら、リアルタイムの経路が常に最もすっきりした選択肢です。",
+        "リアルタイムの直接転送は双方が同時にオンラインであることが必要で、都合を合わせられるときに最適です（通話中、共有の瞬間、席にいる同僚）。相手が今いない場合は、代わりに保存型のダウンロードリンクを作成できます。",
+        "保存リンクはゼロ知識です。ブラウザがアップロード前に AES-256-GCM でファイルを暗号化し、復号鍵は URL フラグメントにだけ存在するため、サーバーは読めない暗号文を保持します。トレードオフも把握してください。リンクの作成には送信側のサインインが必要で、リンクはストレージ容量を消費し、有効期限があります（初回ダウンロード後に消去する設定も可能）。リンク経由には利点もあります。そのダウンロードページは Firefox や Safari でも Service Worker を使って単一ファイルをディスクへストリーミングできるため、受信側ブラウザのメモリが制約になりません。最大のファイルでは、双方がオンラインになれるなら、リアルタイムの経路が常に最もすっきりした選択肢です。",
       ],
     },
   ],
@@ -188,20 +188,20 @@ const ja = {
     items: [
       {
         q: "送れるファイルの最大サイズは？",
-        a: "リアルタイムモードにサーバー側の制限はありません——上限は受信側のブラウザ次第です。パソコン版の Chrome や Edge ではファイルがディスクへストリーミングされるため、メモリを使い切らずに数十 GB を送れます。Firefox と Safari には File System Access API がないため、受け取った分はメモリに溜められることになり、およそ 256 MB を超えると Relayium が警告します——実測した天井ではなく控えめな見積もりで、本当の限界は端末のメモリ・OS・ほかに何を開いているかで決まります。",
+        a: "リアルタイムモードにサーバー側の制限はありません。上限は受信側のブラウザ次第です。パソコン版の Chrome や Edge ではファイルがディスクへストリーミングされるため、メモリを使い切らずに数十 GB を送れます。Firefox と Safari には File System Access API がないため、受け取った分はメモリに溜められることになり、およそ 256 MB を超えると Relayium が警告します。これは実測した天井ではなく控えめな見積もりで、本当の限界は端末のメモリ・OS・ほかに何を開いているかで決まります。",
       },
       {
         q: "転送が中断されたらどうなりますか？",
-        a: "自動的に再開します。転送の途中で接続が切れても——Wi-Fi の切断、ノートPCのスリープ、ネットワークの切り替え——Relayium はファイル全体をやり直すのではなく止まった所から続けるので、長い転送が一瞬の不調で無駄になりません。",
+        a: "自動的に再開します。転送の途中で接続が切れても（Wi-Fi の切断、ノートPCのスリープ、ネットワークの切り替えなど）、Relayium はファイル全体をやり直すのではなく止まった所から続けるので、長い転送が一瞬の不調で無駄になりません。",
       },
       {
         q: "大きなファイルでプライバシーはどう守られますか？",
-        a: "リアルタイム転送は X25519 の鍵交換とブロックごとの AES-256-GCM でエンドツーエンドに暗号化され、その鍵はどのサーバーにも届きません。両方の端末が6桁の検証コードを表示して間に誰もいないことを確認し、各ファイルは SHA-256 ハッシュで検証されます。TURN リレーが必要な場合でも、それが見るのは暗号文だけです。",
+        a: "リアルタイム転送は X25519 の鍵交換とチャンクごとの AES-256-GCM でエンドツーエンドに暗号化され、その鍵はどのサーバーにも届きません。両方の端末が6桁の検証コードを表示して間に誰もいないことを確認し、各ファイルは SHA-256 ハッシュで検証されます。TURN リレーが必要な場合でも、それが見るのは暗号文だけです。",
       },
     ],
   },
   cta: {
-    text: "次の数ギガバイトのファイルを直接の方法で送りましょう——インストール不要、同じネットワークならアカウントも不要です。",
+    text: "次の数ギガバイトのファイルを直接の方法で送りましょう。インストール不要で、同じネットワークならアカウントも不要です。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -213,22 +213,22 @@ const ko = {
     "수 기가바이트의 동영상과 프로젝트 아카이브를 브라우저에서 브라우저로 직접 전송하세요. 클라우드 업로드 불필요, 실시간 모드에서는 크기 제한 없음, 재개 가능한 전송과 파일별 무결성 검사 포함.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "20 GB짜리 동영상 내보내기나 무거운 프로젝트 아카이브야말로 클라우드 스토리지가 가장 느리게 느껴지는 순간입니다. 파일 전체를 한 번 업로드하고 기다린 뒤, 상대가 다시 다운로드합니다——두 번의 완전한 전송에 스토리지 할당량 제한까지 받습니다. 한 번뿐인 전달인데, A에서 B로 보내기만 하면 되는 바이트를 위해 이렇게 복사하고 기다려야 합니다.",
-    "Relayium은 직접 경로를 택합니다. 파일은 암호화된 P2P 채널로 당신의 브라우저에서 상대의 브라우저로 곧장 흐르며, 중간에 어떤 서버에도 놓이지 않습니다. 이 가이드는 그 방식으로 대용량 파일을 옮기는 방법을 보여주며, 두 가지 실제 제약도 솔직하게 밝힙니다. 어떤 브라우저가 무제한 크기를 감당할 수 있는지, 그리고 보통 양쪽이 동시에 온라인이어야 한다는 점입니다.",
+    "20 GB짜리 동영상 내보내기나 무거운 프로젝트 아카이브야말로 클라우드 스토리지가 가장 느리게 느껴지는 순간입니다. 파일 전체를 한 번 업로드하고 기다린 뒤, 상대가 다시 다운로드합니다. 두 번의 완전한 전송에 스토리지 할당량 제한까지 받습니다. 한 번뿐인 전달인데, A에서 B로 보내기만 하면 되는 바이트를 위해 이렇게 복사하고 기다려야 합니다.",
+    "Relayium은 직접 경로를 택합니다. 파일은 암호화된 P2P 채널로 내 브라우저에서 상대의 브라우저로 곧장 흐르며, 중간에 어떤 서버에도 놓이지 않습니다. 이 가이드는 그 방식으로 대용량 파일을 옮기는 방법을 보여주며, 두 가지 실제 제약도 솔직하게 밝힙니다. 어떤 브라우저가 무제한 크기를 감당할 수 있는지, 그리고 보통 양쪽이 동시에 온라인이어야 한다는 점입니다.",
   ],
   sections: [
     {
       heading: "대용량 파일에 직접 전송이 유리한 이유",
       body: [
-        "클라우드 스토리지에서는 대용량 파일이 네트워크를 두 번 건넙니다——서버로 업로드, 다시 상대에게 다운로드——그 사이 스토리지 할당량도 차지합니다. P2P 직접 전송은 네트워크를 한 번만, 보내는 쪽에서 받는 쪽으로 건너며 중간에 아무것도 저장하지 않습니다.",
-        "Relayium은 완전히 브라우저에서 동작하므로 양쪽 모두 설치할 것이 없습니다. Windows, macOS, Linux, Android, iOS에서 작동합니다. 같은 네트워크에서는 실시간 전송에 계정이 필요 없고, 페어링 코드로 네트워크를 넘어 보낼 때도 보내는 쪽이 로그인만 하면 됩니다——두 기기에서 relayium.com을 열어 연결하기만 하면 됩니다.",
+        "클라우드 스토리지에서는 대용량 파일이 네트워크를 두 번 건너고(서버로 업로드, 다시 상대에게 다운로드), 그 사이 스토리지 할당량도 차지합니다. P2P 직접 전송은 네트워크를 한 번만, 보내는 쪽에서 받는 쪽으로 건너며 중간에 아무것도 저장하지 않습니다.",
+        "Relayium은 완전히 브라우저에서 동작하므로 양쪽 모두 설치할 것이 없습니다. Windows, macOS, Linux, Android, iOS에서 작동합니다. 같은 네트워크에서는 실시간 전송에 계정이 필요 없고, 페어링 코드로 네트워크를 넘어 보낼 때도 보내는 쪽이 로그인만 하면 됩니다. 두 기기에서 relayium.com을 열어 연결하기만 하면 됩니다.",
       ],
     },
     {
       heading: "실시간 모드에는 크기 제한이 없다",
       body: [
         "실시간 전송에는 서버 측 크기 제한이 없습니다. 파일을 담아 두는 서버가 없기 때문입니다. 실질적인 상한은 받는 쪽 브라우저가 정하며, 우리가 정하는 것이 아닙니다.",
-        "Chrome과 Edge에서는 들어오는 파일이 도착하는 대로 곧바로 디스크로 스트리밍되므로 메모리에 담을 필요가 없습니다——이것이 아주 큰 파일에 써야 할 조합이며, 수십 GB까지 여유롭습니다. 한 배치에 최대 1,000개 파일을 담을 수 있고, 각각 SHA-256 해시로 종단간 검증되므로 디스크에 남는 것은 보낸 것과 바이트 단위로 동일합니다.",
+        "Chrome과 Edge에서는 들어오는 파일이 도착하는 대로 곧바로 디스크로 스트리밍되므로 메모리에 담을 필요가 없습니다. 이것이 아주 큰 파일에 써야 할 조합이며, 수십 GB까지 여유롭습니다. 한 배치에 최대 1,000개 파일을 담을 수 있고, 각각 SHA-256 해시로 종단간 검증되므로 디스크에 남는 것은 보낸 것과 바이트 단위로 동일합니다.",
       ],
       bullets: [
         "받는 쪽이 데스크톱 Chrome 또는 Edge: 파일이 곧장 디스크로 스트리밍되므로 사실상 크기 제한이 없습니다.",
@@ -246,8 +246,8 @@ const ko = {
     {
       heading: "지금 보내거나, 나중에 받을 링크를 남기거나",
       body: [
-        "실시간 직접 전송은 양쪽이 동시에 온라인이어야 하며, 시간을 맞출 수 있을 때 가장 이상적입니다——통화 중, 함께하는 순간, 자리에 있는 동료. 상대가 지금 없다면 대신 저장형 다운로드 링크를 만들 수 있습니다.",
-        "저장 링크는 영지식입니다. 브라우저가 업로드 전에 AES-256-GCM으로 파일을 암호화하고 복호화 키는 URL 프래그먼트에만 존재하므로, 서버는 읽을 수 없는 암호문을 보관합니다. 절충점도 알아두세요——링크 생성에는 보내는 쪽의 로그인이 필요하고, 링크는 스토리지 할당량을 차지하며, 만료됩니다(첫 다운로드 후 소각으로 설정할 수도 있습니다). 링크 쪽이 더 나은 점도 있습니다. 그 다운로드 페이지는 Firefox와 Safari에서도 서비스 워커를 통해 단일 파일을 디스크로 스트리밍할 수 있어, 거기서는 받는 브라우저의 메모리가 제약이 되지 않습니다. 가장 큰 파일이라면, 양쪽이 온라인일 수 있을 때 실시간 경로가 언제나 가장 깔끔한 선택입니다.",
+        "실시간 직접 전송은 양쪽이 동시에 온라인이어야 하며, 시간을 맞출 수 있을 때 가장 이상적입니다. 통화 중이거나, 함께하는 순간이거나, 자리에 있는 동료에게 보낼 때입니다. 상대가 지금 없다면 대신 저장형 다운로드 링크를 만들 수 있습니다.",
+        "저장 링크는 영지식입니다. 브라우저가 업로드 전에 AES-256-GCM으로 파일을 암호화하고 복호화 키는 URL 프래그먼트에만 존재하므로, 서버는 읽을 수 없는 암호문을 보관합니다. 절충점도 알아두세요. 링크 생성에는 보내는 쪽의 로그인이 필요하고, 링크는 스토리지 할당량을 차지하며, 만료됩니다(첫 다운로드 후 소각으로 설정할 수도 있습니다). 링크 쪽이 더 나은 점도 있습니다. 그 다운로드 페이지는 Firefox와 Safari에서도 서비스 워커를 통해 단일 파일을 디스크로 스트리밍할 수 있어, 거기서는 받는 브라우저의 메모리가 제약이 되지 않습니다. 가장 큰 파일이라면, 양쪽이 온라인일 수 있을 때 실시간 경로가 언제나 가장 깔끔한 선택입니다.",
       ],
     },
   ],
@@ -256,11 +256,11 @@ const ko = {
     items: [
       {
         q: "보낼 수 있는 파일 최대 크기는 얼마인가요?",
-        a: "실시간 모드에는 서버 측 제한이 없습니다——상한은 받는 쪽 브라우저에 달렸습니다. 데스크톱 Chrome이나 Edge에서는 파일이 디스크로 스트리밍되어 메모리가 바닥나지 않고 수십 GB를 보낼 수 있습니다. Firefox와 Safari에는 File System Access API가 없어 받은 내용이 메모리에 모이며, 대략 256 MB를 넘으면 Relayium이 경고합니다——측정된 천장이 아니라 보수적으로 잡은 추정치이고, 진짜 한계는 기기 메모리와 OS, 그 밖에 열어 둔 것에 달려 있습니다.",
+        a: "실시간 모드에는 서버 측 제한이 없습니다. 상한은 받는 쪽 브라우저에 달렸습니다. 데스크톱 Chrome이나 Edge에서는 파일이 디스크로 스트리밍되어 메모리가 바닥나지 않고 수십 GB를 보낼 수 있습니다. Firefox와 Safari에는 File System Access API가 없어 받은 내용이 메모리에 모이며, 대략 256 MB를 넘으면 Relayium이 경고합니다. 측정된 천장이 아니라 보수적으로 잡은 추정치이고, 진짜 한계는 기기 메모리와 OS, 그 밖에 열어 둔 것에 달려 있습니다.",
       },
       {
         q: "전송이 중단되면 어떻게 되나요?",
-        a: "자동으로 재개됩니다. 전송 도중 연결이 끊겨도——Wi-Fi 끊김, 노트북 절전, 네트워크 전환——Relayium은 파일 전체를 다시 시작하지 않고 멈춘 지점에서 이어가므로, 긴 전송이 잠깐의 장애로 헛되지 않습니다.",
+        a: "자동으로 재개됩니다. 전송 도중 연결이 끊겨도(Wi-Fi 끊김, 노트북 절전, 네트워크 전환) Relayium은 파일 전체를 다시 시작하지 않고 멈춘 지점에서 이어가므로, 긴 전송이 잠깐의 장애로 헛되지 않습니다.",
       },
       {
         q: "대용량 파일에서 개인정보는 어떻게 보호되나요?",
@@ -332,7 +332,7 @@ const de = {
       },
       {
         q: "Wie ist meine Privatsphäre bei großen Dateien geschützt?",
-        a: "Echtzeitübertragungen sind mit einem X25519-Schlüsselaustausch und AES-256-GCM pro Block Ende-zu-Ende verschlüsselt, und dieser Schlüssel erreicht keinen Server. Beide Geräte zeigen einen sechsstelligen Prüfcode, um zu bestätigen, dass niemand dazwischensitzt, und jede Datei wird per SHA-256-Hash geprüft. Selbst wenn ein TURN-Relay nötig ist, sieht es nur Chiffretext.",
+        a: "Echtzeitübertragungen sind mit einem X25519-Schlüsselaustausch und AES-256-GCM pro Block Ende-zu-Ende verschlüsselt, und dieser Schlüssel erreicht keinen Server. Beide Geräte zeigen einen sechsstelligen Verifizierungscode, um zu bestätigen, dass niemand dazwischensitzt, und jede Datei wird per SHA-256-Hash geprüft. Selbst wenn ein TURN-Relay nötig ist, sieht es nur Chiffretext.",
       },
     ],
   },
@@ -349,41 +349,41 @@ const fr = {
     "Envoyez des vidéos et des archives de projet de plusieurs gigaoctets directement, d'un navigateur à l'autre — sans envoi vers le cloud, sans limite de taille en temps réel, avec reprise des transferts et vérification d'intégrité par fichier.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Un export vidéo de 20 Go ou une lourde archive de projet, c'est justement là que le stockage cloud paraît le plus lent : vous téléversez tout le fichier une fois, vous attendez, puis l'autre personne le télécharge à nouveau — deux transferts complets, plus ce que votre quota de stockage autorise. Pour une remise unique, cela fait beaucoup de copies et d'attente pour des octets qui ne devaient aller que de A à B.",
-    "Relayium prend la voie directe. Le fichier circule tout droit de votre navigateur vers celui du destinataire par un canal pair-à-pair chiffré, et n'atterrit jamais sur un serveur entre les deux. Ce guide montre comment déplacer de gros fichiers ainsi, et reste honnête sur les deux limites réelles : quels navigateurs supportent des tailles illimitées, et le fait que les deux personnes doivent généralement être en ligne en même temps.",
+    "Un export vidéo de 20 Go ou une lourde archive de projet, c'est justement là que le stockage cloud paraît le plus lent : vous téléversez tout le fichier une fois, vous attendez, puis l'autre personne le télécharge à nouveau — deux transferts complets, plus ce que votre quota de stockage autorise. Pour une remise unique, cela fait beaucoup de copies et d'attente pour des octets qui ne devaient aller que de A à B.",
+    "Relayium prend la voie directe. Le fichier circule tout droit de votre navigateur vers celui du destinataire par un canal pair-à-pair chiffré, et n'atterrit jamais sur un serveur entre les deux. Ce guide montre comment déplacer de gros fichiers ainsi, et reste honnête sur les deux limites réelles : quels navigateurs supportent des tailles illimitées, et le fait que les deux personnes doivent généralement être en ligne en même temps.",
   ],
   sections: [
     {
       heading: "Pourquoi le transfert direct l'emporte pour les gros fichiers",
       body: [
         "Avec le stockage cloud, un gros fichier traverse le réseau deux fois — jusqu'au serveur, puis de nouveau vers le destinataire — et pèse sur un quota de stockage entre les deux. Un transfert pair-à-pair direct traverse le réseau une seule fois, de l'expéditeur au destinataire, sans rien stocker au milieu.",
-        "Relayium fonctionne entièrement dans le navigateur, il n'y a donc rien à installer d'un côté ou de l'autre. Il marche sous Windows, macOS, Linux, Android et iOS. Sur le même réseau, les transferts en temps réel ne demandent aucun compte ; envoyer entre réseaux différents avec un code d'appairage exige seulement que l'expéditeur se connecte — il suffit d'ouvrir relayium.com sur les deux appareils et de les connecter.",
+        "Relayium fonctionne entièrement dans le navigateur, il n'y a donc rien à installer d'un côté ou de l'autre. Il marche sous Windows, macOS, Linux, Android et iOS. Sur le même réseau, les transferts en temps réel ne demandent aucun compte ; envoyer entre réseaux différents avec un code d'appairage exige seulement que l'expéditeur se connecte — il suffit d'ouvrir relayium.com sur les deux appareils et de les connecter.",
       ],
     },
     {
       heading: "Aucune limite de taille en mode temps réel",
       body: [
         "Les transferts en temps réel n'ont aucune limite de taille côté serveur, parce qu'aucun serveur ne détient le fichier. Le plafond pratique est fixé par le navigateur qui reçoit, pas par nous.",
-        "Sur Chrome et Edge, le fichier entrant est diffusé directement sur le disque à mesure qu'il arrive, il n'a donc jamais à tenir en mémoire — c'est la combinaison à utiliser pour de très gros fichiers, aisément jusqu'à des dizaines de gigaoctets. Un lot peut contenir jusqu'à 1 000 fichiers, et chacun est vérifié de bout en bout par une empreinte SHA-256, de sorte que ce qui arrive sur le disque est identique octet pour octet à ce que vous avez envoyé.",
+        "Sur Chrome et Edge, le fichier entrant est diffusé directement sur le disque à mesure qu'il arrive, il n'a donc jamais à tenir en mémoire — c'est la combinaison à utiliser pour de très gros fichiers, aisément jusqu'à des dizaines de gigaoctets. Un lot peut contenir jusqu'à 1 000 fichiers, et chacun est vérifié de bout en bout par une empreinte SHA-256, de sorte que ce qui arrive sur le disque est identique octet pour octet à ce que vous avez envoyé.",
       ],
       bullets: [
-        "Chrome ou Edge sur l'ordinateur qui reçoit : les fichiers sont diffusés directement sur le disque, il n'y a donc pratiquement aucune limite de taille.",
-        "Firefox et Safari n'ont pas l'API File System Access : un lot reçu en temps réel y tient en mémoire — Relayium prévient au-delà d'environ 256 Mo, une estimation volontairement prudente et non une limite ferme.",
-        "Jusqu'à 1 000 fichiers par lot, chacun vérifié à l'arrivée par sa propre empreinte SHA-256.",
+        "Chrome ou Edge sur l'ordinateur qui reçoit : les fichiers sont diffusés directement sur le disque, il n'y a donc pratiquement aucune limite de taille.",
+        "Firefox et Safari n'ont pas l'API File System Access : un lot reçu en temps réel y tient en mémoire — Relayium prévient au-delà d'environ 256 Mo, une estimation volontairement prudente et non une limite ferme.",
+        "Jusqu'à 1 000 fichiers par lot, chacun vérifié à l'arrivée par sa propre empreinte SHA-256.",
       ],
     },
     {
       heading: "Reprendre plutôt que recommencer",
       body: [
-        "Les gros transferts prennent du temps, et c'est pendant ce temps que le Wi-Fi lâche, que les ordinateurs se mettent en veille et que les téléphones changent de réseau. Relayium est conçu pour cela : si la connexion se rompt en cours de route, le transfert reprend là où il s'était arrêté au lieu de recommencer tout le fichier.",
-        "La connectivité est gérée de la même façon. Sur un même réseau, le transfert se fait directement d'appareil à appareil ; entre réseaux, le flux chiffré passe par un relais TURN. Le relais ne voit que du texte chiffré, si bien que cette voie reste elle aussi chiffrée de bout en bout.",
+        "Les gros transferts prennent du temps, et c'est pendant ce temps que le Wi-Fi lâche, que les ordinateurs se mettent en veille et que les téléphones changent de réseau. Relayium est conçu pour cela : si la connexion se rompt en cours de route, le transfert reprend là où il s'était arrêté au lieu de recommencer tout le fichier.",
+        "La connectivité est gérée de la même façon. Sur un même réseau, le transfert se fait directement d'appareil à appareil ; entre réseaux, le flux chiffré passe par un relais TURN. Le relais ne voit que du texte chiffré, si bien que cette voie reste elle aussi chiffrée de bout en bout.",
       ],
     },
     {
       heading: "Envoyer maintenant, ou laisser un lien pour plus tard",
       body: [
         "Le transfert direct en temps réel exige que les deux personnes soient en ligne en même temps, ce qui est idéal quand vous pouvez vous coordonner — un appel, un moment partagé, un collègue à son bureau. Si l'autre personne n'est pas disponible pour l'instant, vous pouvez créer un lien de téléchargement stocké à la place.",
-        "Un lien stocké est à divulgation nulle : votre navigateur chiffre les fichiers en AES-256-GCM avant l'envoi et la clé de déchiffrement ne vit que dans le fragment de l'URL, de sorte que le serveur conserve un texte chiffré qu'il ne peut pas lire. Ayez les compromis en tête — créer un lien exige que l'expéditeur se connecte, les liens comptent dans un quota de stockage et expirent (ou peuvent s'autodétruire après le premier téléchargement). Un point où la voie du lien fait mieux : sa page de téléchargement peut diffuser un fichier unique sur le disque via un service worker, même dans Firefox et Safari, si bien que la mémoire du navigateur qui reçoit n'y est pas la contrainte. Pour les plus gros fichiers, quand vous pouvez tous deux être en ligne, la voie en temps réel reste l'option la plus nette.",
+        "Un lien stocké est à divulgation nulle : votre navigateur chiffre les fichiers en AES-256-GCM avant l'envoi et la clé de déchiffrement ne vit que dans le fragment de l'URL, de sorte que le serveur conserve un texte chiffré qu'il ne peut pas lire. Ayez les compromis en tête — créer un lien exige que l'expéditeur se connecte, les liens comptent dans un quota de stockage et expirent (ou peuvent s'autodétruire après le premier téléchargement). Un point où la voie du lien fait mieux : sa page de téléchargement peut diffuser un fichier unique sur le disque via un service worker, même dans Firefox et Safari, si bien que la mémoire du navigateur qui reçoit n'y est pas la contrainte. Pour les plus gros fichiers, quand vous pouvez tous deux être en ligne, la voie en temps réel reste l'option la plus nette.",
       ],
     },
   ],
@@ -391,15 +391,15 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Quelle est la taille maximale d'un fichier que je peux envoyer ?",
-        a: "En mode temps réel, il n'y a aucune limite côté serveur — le plafond vient du navigateur qui reçoit. Sur un Chrome ou Edge de bureau, le fichier est diffusé sur le disque, vous pouvez donc envoyer des dizaines de gigaoctets sans manquer de mémoire. Firefox et Safari n'ont pas l'API File System Access : ce qu'ils reçoivent est assemblé en mémoire, et Relayium prévient au-delà d'environ 256 Mo — une estimation prudente plutôt qu'un plafond mesuré, le vrai dépendant de la mémoire de l'appareil, de son système et de ce qui est ouvert par ailleurs.",
+        q: "Quelle est la taille maximale d'un fichier que je peux envoyer ?",
+        a: "En mode temps réel, il n'y a aucune limite côté serveur — le plafond vient du navigateur qui reçoit. Sur un Chrome ou Edge de bureau, le fichier est diffusé sur le disque, vous pouvez donc envoyer des dizaines de gigaoctets sans manquer de mémoire. Firefox et Safari n'ont pas l'API File System Access : ce qu'ils reçoivent est assemblé en mémoire, et Relayium prévient au-delà d'environ 256 Mo — une estimation prudente plutôt qu'un plafond mesuré, le vrai dépendant de la mémoire de l'appareil, de son système et de ce qui est ouvert par ailleurs.",
       },
       {
-        q: "Que se passe-t-il si le transfert est interrompu ?",
+        q: "Que se passe-t-il si le transfert est interrompu ?",
         a: "Il reprend automatiquement. Si la connexion se coupe en cours de transfert — un signal Wi-Fi perdu, un ordinateur en veille, un changement de réseau — Relayium repart de là où il s'était arrêté au lieu de recommencer tout le fichier, de sorte qu'un long transfert n'est pas perdu pour un bref incident.",
       },
       {
-        q: "Comment ma vie privée est-elle protégée pour les gros fichiers ?",
+        q: "Comment ma vie privée est-elle protégée pour les gros fichiers ?",
         a: "Les transferts en temps réel sont chiffrés de bout en bout par un échange de clés X25519 et un AES-256-GCM par bloc, et cette clé n'atteint jamais aucun serveur. Les deux appareils affichent un code de vérification à 6 chiffres pour confirmer que personne ne s'intercale, et chaque fichier est vérifié par une empreinte SHA-256. Même quand un relais TURN est nécessaire, il ne voit que du texte chiffré.",
       },
     ],
@@ -425,18 +425,18 @@ const ar = {
       heading: "لماذا يفوز النقل المباشر للملفات الكبيرة",
       body: [
         "مع تخزين السحابة يعبر الملف الكبير الشبكة مرتين — صعودًا إلى الخادم، ثم نزولًا إلى المستقبِل — ويشغل حصة تخزين بينهما. أما النقل المباشر من الند للند فيعبر الشبكة مرة واحدة، من المُرسِل إلى المُستقبِل، دون تخزين أي شيء في المنتصف.",
-        "يعمل Relayium كليًا داخل المتصفح، فلا شيء لتثبيته على أي من الطرفين. يعمل على Windows و macOS و Linux و Android و iOS. على نفس الشبكة لا يحتاج النقل الفوري إلى حساب؛ والإرسال عبر الشبكات برمز اقتران يطلب من المُرسِل فقط تسجيل الدخول — ما عليك إلا فتح relayium.com على كلا الجهازين والاتصال.",
+        "يعمل Relayium كليًا داخل المتصفح، فلا شيء لتثبيته على أي من الطرفين. يعمل على Windows وmacOS وLinux وAndroid وiOS. على نفس الشبكة لا يحتاج النقل الفوري إلى حساب؛ والإرسال عبر الشبكات برمز اقتران يطلب من المُرسِل فقط تسجيل الدخول — ما عليك إلا فتح relayium.com على كلا الجهازين والاتصال.",
       ],
     },
     {
       heading: "لا سقف للحجم في الوضع الفوري",
       body: [
         "النقل الفوري ليس له حد للحجم من جهة الخادم، لأنه لا يوجد خادم يحتفظ بالملف. السقف العملي يحدده المتصفح المستقبِل، لا نحن.",
-        "على Chrome و Edge يُبَثّ الملف الوارد مباشرةً إلى القرص فور وصوله، فلا يحتاج أبدًا إلى أن يتّسع له في الذاكرة — هذه هي التركيبة التي تُستخدَم للملفات الكبيرة جدًا، وصولًا بأريحية إلى عشرات الغيغابايت. يمكن أن تضم الدفعة حتى 1,000 ملف، ويُتحقَّق من كلٍّ منها من الطرف إلى الطرف بتجزئة SHA-256، فما يحطّ على القرص مطابق بايتًا ببايت لما أرسلته.",
+        "على Chrome وEdge يُبَثّ الملف الوارد مباشرةً إلى القرص فور وصوله، فلا يحتاج أبدًا إلى أن يتّسع له في الذاكرة — هذه هي التركيبة التي تُستخدَم للملفات الكبيرة جدًا، وصولًا بأريحية إلى عشرات الغيغابايت. يمكن أن تضم الدفعة حتى 1,000 ملف، ويُتحقَّق من كلٍّ منها من الطرف إلى الطرف بتجزئة SHA-256، فما يحطّ على القرص مطابق بايتًا ببايت لما أرسلته.",
       ],
       bullets: [
         "Chrome أو Edge على حاسوب الطرف المستقبِل: تُبَثّ الملفات مباشرةً إلى القرص، فلا يوجد عمليًا سقف للحجم.",
-        "أما Firefox و Safari فلا تملكان واجهة File System Access، فتبقى الدفعة المستلمة فوريًا في الذاكرة — وينبّهك Relayium فوق نحو 256 ميغابايت، وهو تقدير متحفّظ عن قصد لا حدٌّ صارم.",
+        "أما Firefox وSafari فلا تملكان واجهة File System Access، فتبقى الدفعة المستلمة فوريًا في الذاكرة — وينبّهك Relayium فوق نحو 256 ميغابايت، وهو تقدير متحفّظ عن قصد لا حدٌّ صارم.",
         "حتى 1,000 ملف لكل دفعة، يُفحَص كلٌّ منها بتجزئة SHA-256 خاصة به عند الوصول.",
       ],
     },
@@ -444,14 +444,14 @@ const ar = {
       heading: "الاستئناف بدلًا من البدء من جديد",
       body: [
         "النقلات الكبيرة تستغرق وقتًا، والوقت هو حين ينقطع Wi-Fi، وتخلد الحواسيب المحمولة إلى السكون، وتبدّل الهواتف الشبكات. صُمِّم Relayium لذلك: إذا انقطع الاتصال في منتصف الطريق، يستأنف النقل من حيث توقف بدلًا من إعادة الملف كاملًا من البداية.",
-        "تُعالَج الاتصالية بالطريقة نفسها. داخل الشبكة الواحدة يجري النقل من جهاز إلى جهاز مباشرةً؛ وعبر الشبكات يمرّ التدفق المشفَّر على مُرحِّل TURN. لا يرى المُرحِّل سوى نص مُشفَّر، فيبقى هذا المسار أيضًا مشفَّرًا من الطرف إلى الطرف.",
+        "تُعالَج الاتصالية بالطريقة نفسها. داخل الشبكة الواحدة يجري النقل من الند للند مباشرةً؛ وعبر الشبكات يمرّ التدفق المشفَّر على مُرحِّل TURN. لا يرى المُرحِّل سوى نص مُشفَّر، فيبقى هذا المسار أيضًا مشفَّرًا من الطرف إلى الطرف.",
       ],
     },
     {
       heading: "أرسِل الآن، أو اترك رابطًا للاحقًا",
       body: [
         "يحتاج النقل الفوري المباشر إلى أن يكون الطرفان متصلين في الوقت نفسه، وهو مثالي حين يمكنك التنسيق — مكالمة، لحظة مشتركة، زميل عند مكتبه. إذا لم يكن الطرف الآخر متاحًا الآن، يمكنك بدلًا من ذلك إنشاء رابط تنزيل مُخزَّن.",
-        "الرابط المُخزَّن ذو معرفة صفرية: يشفّر متصفحك الملفات بـ AES-256-GCM قبل الرفع، ويعيش مفتاح فك التشفير في جزء الـ URL فقط، فيحتفظ الخادم بنص مُشفَّر لا يمكنه قراءته. كن واعيًا للمقايضات — إنشاء رابط يتطلب من المُرسِل تسجيل الدخول، والروابط تُحتسَب على حصة تخزين، وتنتهي صلاحيتها (أو يمكن أن تُمحى بعد أول تنزيل). ولمسار الرابط ميزة واحدة يتفوق بها: صفحة التنزيل الخاصة به تستطيع بثّ ملف واحد إلى القرص عبر عامل خدمة (service worker) حتى في Firefox و Safari، فلا تكون ذاكرة المتصفح المستقبِل هي القيد هناك. أما لأكبر الملفات، حين يمكنكما أن تكونا متصلين معًا، فيبقى المسار الفوري الخيار الأنظف.",
+        "الرابط المُخزَّن ذو معرفة صفرية: يشفّر متصفحك الملفات بـ AES-256-GCM قبل الرفع، ويعيش مفتاح فك التشفير في جزء الـ URL فقط، فيحتفظ الخادم بنص مُشفَّر لا يمكنه قراءته. كن واعيًا للمقايضات — إنشاء رابط يتطلب من المُرسِل تسجيل الدخول، والروابط تُحتسَب على حصة تخزين، وتنتهي صلاحيتها (أو يمكن أن تُمحى بعد أول تنزيل). ولمسار الرابط ميزة واحدة يتفوق بها: صفحة التنزيل الخاصة به تستطيع بثّ ملف واحد إلى القرص عبر عامل خدمة (service worker) حتى في Firefox وSafari، فلا تكون ذاكرة المتصفح المستقبِل هي القيد هناك. أما لأكبر الملفات، حين يمكنكما أن تكونا متصلين معًا، فيبقى المسار الفوري الخيار الأنظف.",
       ],
     },
   ],
@@ -460,7 +460,7 @@ const ar = {
     items: [
       {
         q: "ما أكبر ملف يمكنني إرساله؟",
-        a: "في الوضع الفوري لا يوجد حد من جهة الخادم — يأتي السقف من المتصفح المستقبِل. على Chrome أو Edge في الحاسوب يُبَثّ الملف إلى القرص، فيمكنك إرسال عشرات الغيغابايت دون نفاد الذاكرة. أما Firefox و Safari فتنقصهما واجهة File System Access، فيُجمَّع ما يستقبلانه في الذاكرة، وينبّهك Relayium فوق نحو 256 ميغابايت — وهو تقدير متحفّظ لا سقف مقيس، إذ يتوقف السقف الحقيقي على ذاكرة الجهاز ونظامه وما هو مفتوح غير ذلك.",
+        a: "في الوضع الفوري لا يوجد حد من جهة الخادم — يأتي السقف من المتصفح المستقبِل. على Chrome أو Edge في الحاسوب يُبَثّ الملف إلى القرص، فيمكنك إرسال عشرات الغيغابايت دون نفاد الذاكرة. أما Firefox وSafari فتنقصهما واجهة File System Access، فيُجمَّع ما يستقبلانه في الذاكرة، وينبّهك Relayium فوق نحو 256 ميغابايت — وهو تقدير متحفّظ لا سقف مقيس، إذ يتوقف السقف الحقيقي على ذاكرة الجهاز ونظامه وما هو مفتوح غير ذلك.",
       },
       {
         q: "ماذا يحدث إذا قُوطِع النقل؟",
@@ -468,7 +468,7 @@ const ar = {
       },
       {
         q: "كيف تُحمى خصوصيتي للملفات الكبيرة؟",
-        a: "النقل الفوري مشفَّر من الطرف إلى الطرف بتبادل مفاتيح X25519 و AES-256-GCM لكل كتلة، وذلك المفتاح لا يصل أبدًا إلى أي خادم. يُظهر الجهازان رمز تحقق من 6 أرقام لتأكيد عدم وجود أحد في المنتصف، ويُفحَص كل ملف بتجزئة SHA-256. وحتى عند الحاجة إلى مُرحِّل TURN، فإنه لا يرى سوى نص مُشفَّر.",
+        a: "النقل الفوري مشفَّر من الطرف إلى الطرف بتبادل مفاتيح X25519 وAES-256-GCM لكل كتلة، وذلك المفتاح لا يصل أبدًا إلى أي خادم. يُظهر الجهازان رمز تحقق من 6 أرقام لتأكيد عدم وجود أحد في المنتصف، ويُفحَص كل ملف بتجزئة SHA-256. وحتى عند الحاجة إلى مُرحِّل TURN، فإنه لا يرى سوى نص مُشفَّر.",
       },
     ],
   },
@@ -486,7 +486,7 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "Una exportación de vídeo de 20 GB o un pesado archivo de proyecto es justo donde el almacenamiento en la nube se siente más lento: subes el archivo entero una vez, esperas y luego la otra persona lo descarga de nuevo — dos transferencias completas más lo que permita tu cuota de almacenamiento. Para una entrega única, es mucho copiar y esperar por bytes que solo tenían que ir de A a B.",
-    "Relayium toma la ruta directa. El archivo fluye directamente desde tu navegador al de quien lo recibe por un canal de igual a igual cifrado, así que nunca aterriza en un servidor de por medio. Esta guía muestra cómo mover archivos grandes de esa forma, y es honesta sobre los dos límites reales: qué navegadores pueden manejar tamaños ilimitados y el hecho de que ambas personas suelen tener que estar en línea al mismo tiempo.",
+    "Relayium toma la ruta directa. El archivo fluye directamente desde tu navegador al de quien lo recibe por un canal de igual a igual cifrado, así que nunca llega a un servidor de por medio. Esta guía muestra cómo mover archivos grandes de esa forma, y es honesta sobre los dos límites reales: qué navegadores pueden manejar tamaños ilimitados y el hecho de que ambas personas suelen tener que estar en línea al mismo tiempo.",
   ],
   sections: [
     {
@@ -500,7 +500,7 @@ const es = {
       heading: "Sin límite de tamaño en modo en tiempo real",
       body: [
         "Las transferencias en tiempo real no tienen límite de tamaño del lado del servidor, porque no hay ningún servidor guardando el archivo. El tope práctico lo fija el navegador que recibe, no nosotros.",
-        "En Chrome y Edge el archivo entrante se transmite directamente al disco a medida que llega, así que nunca tiene que caber en memoria — esta es la combinación que conviene usar para archivos muy grandes, cómodamente hasta decenas de gigabytes. Un lote puede contener hasta 1.000 archivos, y cada uno se verifica de extremo a extremo con un hash SHA-256, así que lo que aterriza en el disco es byte por byte lo que enviaste.",
+        "En Chrome y Edge el archivo entrante se transmite directamente al disco a medida que llega, así que nunca tiene que caber en memoria — esta es la combinación que conviene usar para archivos muy grandes, cómodamente hasta decenas de gigabytes. Un lote puede contener hasta 1.000 archivos, y cada uno se verifica de extremo a extremo con un hash SHA-256, así que lo que llega al disco es byte por byte lo que enviaste.",
       ],
       bullets: [
         "Chrome o Edge en el ordenador que recibe: los archivos se transmiten directamente al disco, así que prácticamente no hay límite de tamaño.",
@@ -519,7 +519,7 @@ const es = {
       heading: "Envía ahora, o deja un enlace para después",
       body: [
         "La transferencia directa en tiempo real necesita a ambas personas en línea al mismo tiempo, lo cual es ideal cuando puedes coordinarte — una llamada, un momento compartido, un colega en su escritorio. Si la otra persona no está disponible ahora mismo, puedes crear en su lugar un enlace de descarga almacenado.",
-        "Un enlace almacenado es de conocimiento cero: tu navegador cifra los archivos con AES-256-GCM antes de subirlos y la clave de descifrado vive solo en el fragmento de la URL, así que el servidor guarda texto cifrado que no puede leer. Ten presentes los compromisos — crear un enlace requiere que el remitente inicie sesión, los enlaces cuentan contra una cuota de almacenamiento y caducan (o pueden autodestruirse tras la primera descarga). Hay algo que la vía del enlace hace mejor: su página de descarga puede transmitir un solo archivo al disco mediante un service worker incluso en Firefox y Safari, así que ahí la memoria del navegador que recibe no es la restricción. Para los archivos más grandes, cuando ambos podéis estar en línea, la vía en tiempo real sigue siendo la opción más limpia.",
+        "Un enlace almacenado es de conocimiento cero: tu navegador cifra los archivos con AES-256-GCM antes de subirlos y la clave de descifrado vive solo en el fragmento de la URL, así que el servidor guarda texto cifrado que no puede leer. Ten presentes las concesiones — crear un enlace requiere que el remitente inicie sesión, los enlaces se descuentan de una cuota de almacenamiento y caducan (o pueden autodestruirse tras la primera descarga). Hay algo que la vía del enlace hace mejor: su página de descarga puede transmitir un solo archivo al disco mediante un service worker incluso en Firefox y Safari, así que ahí la memoria del navegador que recibe no es la restricción. Para los archivos más grandes, cuando ambos lados pueden estar en línea, la vía en tiempo real sigue siendo la opción más limpia.",
       ],
     },
   ],
@@ -554,7 +554,7 @@ const pt = {
   updatedLabel: "Última atualização",
   lead: [
     "Uma exportação de vídeo de 20 GB ou um arquivo de projeto pesado é exatamente onde o armazenamento em nuvem parece mais lento: você faz upload do arquivo inteiro uma vez, espera e a outra pessoa faz o download de novo — duas transferências completas mais o que sua cota de armazenamento permitir. Para uma entrega única, é muita cópia e espera por bytes que só precisavam ir de A para B.",
-    "O Relayium segue o caminho direto. O arquivo flui direto do seu navegador para o de quem recebe por um canal ponto a ponto criptografado, então nunca pousa em um servidor no meio. Este guia mostra como mover arquivos grandes desse jeito e é honesto sobre os dois limites reais: quais navegadores conseguem lidar com tamanhos ilimitados e o fato de que as duas pessoas normalmente precisam estar on-line ao mesmo tempo.",
+    "O Relayium segue o caminho direto. O arquivo flui direto do seu navegador para o de quem recebe por um canal ponto a ponto criptografado, então nunca pousa em um servidor no meio. Este guia mostra como mover arquivos grandes desse jeito e é honesto sobre os dois limites reais: quais navegadores conseguem lidar com tamanhos ilimitados e o fato de que as duas pessoas normalmente precisam estar online ao mesmo tempo.",
   ],
   sections: [
     {
@@ -586,8 +586,8 @@ const pt = {
     {
       heading: "Envie agora ou deixe um link para depois",
       body: [
-        "A transferência direta em tempo real precisa das duas pessoas on-line ao mesmo tempo, o que é ideal quando dá para coordenar — uma chamada, um momento compartilhado, um colega na mesa dele. Se a outra pessoa não estiver disponível agora, você pode criar um link de download armazenado no lugar.",
-        "Um link armazenado é de conhecimento zero: seu navegador criptografa os arquivos com AES-256-GCM antes do upload e a chave de descriptografia vive apenas no fragmento da URL, então o servidor guarda texto cifrado que não consegue ler. Tenha em mente os compromissos — criar um link exige que o remetente faça login, os links contam contra uma cota de armazenamento e expiram (ou podem se autodestruir após o primeiro download). Há algo em que o caminho do link é melhor: sua página de download consegue transmitir um único arquivo para o disco por meio de um service worker mesmo no Firefox e no Safari, então ali a memória do navegador que recebe não é a restrição. Para os maiores arquivos, quando os dois conseguem ficar on-line, o caminho em tempo real continua sendo a opção mais limpa.",
+        "A transferência direta em tempo real precisa das duas pessoas online ao mesmo tempo, o que é ideal quando dá para coordenar — uma chamada, um momento compartilhado, um colega na mesa dele. Se a outra pessoa não estiver disponível agora, você pode criar um link de download armazenado no lugar.",
+        "Um link armazenado é de conhecimento zero: seu navegador criptografa os arquivos com AES-256-GCM antes do upload e a chave de descriptografia vive apenas no fragmento da URL, então o servidor guarda texto cifrado que não consegue ler. Tenha em mente as concessões — criar um link exige que o remetente faça login, os links contam contra uma cota de armazenamento e expiram (ou podem se autodestruir após o primeiro download). Há algo em que o caminho do link é melhor: sua página de download consegue transmitir um único arquivo para o disco por meio de um service worker mesmo no Firefox e no Safari, então ali a memória do navegador que recebe não é a restrição. Para os maiores arquivos, quando os dois conseguem ficar online, o caminho em tempo real continua sendo a opção mais limpa.",
       ],
     },
   ],
