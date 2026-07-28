@@ -11,7 +11,14 @@ import WebRTC
 private let rtcSSLInitialized: Void = { RTCInitializeSSL() }()
 
 /// Call before touching any WebRTC SSL-dependent API. Cheap after the first call.
-private func ensureRTCSSL() {
+///
+/// `package`, not `private`: `RelayProbe` (in the `RelayiumAppKit` target of
+/// this same package) constructs its own `RTCPeerConnectionFactory` and needs
+/// this same guard to have run first — `package` grants that without making it
+/// public API outside the package, and without a second file-scope `let`
+/// duplicating (and only weakly approximating) the "exactly once per process"
+/// guarantee this one provides.
+package func ensureRTCSSL() {
     _ = rtcSSLInitialized
 }
 

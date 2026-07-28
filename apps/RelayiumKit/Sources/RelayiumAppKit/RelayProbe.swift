@@ -31,6 +31,7 @@ public enum RelayProbe {
     }
 
     private static func measure(_ entry: RelayEntry, timeout: TimeInterval) async -> Int? {
+        ensureRTCSSL()
         let factory = RTCPeerConnectionFactory()
         let config = RTCConfiguration()
         config.iceServers = entry.iceServers.map(rtcServer)
@@ -56,40 +57,56 @@ public enum RelayProbe {
     }
 }
 
-/// Resumes once, on the first `typ relay` candidate.
+/// Resumes once, on the first `typ relay` candidate — or on timeout, whichever
+/// comes first.
+///
+/// Deliberately NOT a `withTaskGroup` racing a continuation-waiting child
+/// against a `Task.sleep` child: cancelling the loser after `group.next()`
+/// does not resume a raw `withCheckedContinuation`, and `withTaskGroup`
+/// implicitly awaits every child at scope exit regardless of cancellation —
+/// so on exactly the path this class exists for ("relay never answers"), that
+/// shape hangs forever. (Verified with a standalone repro — see the report.)
+/// Mirrors `RelayNegotiator.waitForChoice`, which carries the same fix for the
+/// same reason: one continuation shared between the candidate callback and a
+/// plain timeout `Task`, guarded so only the first of the two resumes it.
 private final class FirstRelayCandidate: NSObject, RTCPeerConnectionDelegate, @unchecked Sendable {
     private let lock = NSLock()
     private var cont: CheckedContinuation<Bool, Never>?
-    private var fired = false
+    /// Set the first time either side (candidate or timeout) decides the
+    /// outcome, so a late arrival on the other side is a no-op instead of a
+    /// second `resume`.
+    private var result: Bool?
 
     func wait(timeout: TimeInterval) async -> Bool {
-        await withTaskGroup(of: Bool.self) { group in
-            group.addTask { [self] in
-                await withCheckedContinuation { c in
-                    lock.lock()
-                    if fired { lock.unlock(); c.resume(returning: true); return }
-                    cont = c
-                    lock.unlock()
-                }
+        await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+            lock.lock()
+            if let result {
+                lock.unlock()
+                c.resume(returning: result)
+                return
             }
-            group.addTask {
+            cont = c
+            lock.unlock()
+            Task {
                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                return false
+                self.settle(false)
             }
-            let first = await group.next() ?? false
-            group.cancelAll()
-            return first
         }
+    }
+
+    private func settle(_ value: Bool) {
+        lock.lock()
+        guard result == nil else { lock.unlock(); return }
+        result = value
+        let c = cont
+        cont = nil
+        lock.unlock()
+        c?.resume(returning: value)
     }
 
     func peerConnection(_ pc: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
         guard candidate.sdp.contains(" typ relay") else { return }
-        lock.lock()
-        let c = cont
-        cont = nil
-        fired = true
-        lock.unlock()
-        c?.resume(returning: true)
+        settle(true)
     }
 
     // Unused delegate requirements.
