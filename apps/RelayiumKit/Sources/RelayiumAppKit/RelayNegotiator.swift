@@ -10,10 +10,39 @@ import RelayiumKit
 ///
 /// Measurement is injected rather than owned: everything in this type is a
 /// decision, and decisions are worth testing without a live TURN allocation.
+///
+/// ## On symmetry, which incremental measurement weakens
+///
+/// `RelayChoice.pick` is symmetric, so two peers holding the *same pair of
+/// maps* cannot disagree. Publishing measurements incrementally means the
+/// pairs are no longer guaranteed identical: each side picks from whatever
+/// prefix of the other's map has reached it, and the two prefixes can differ.
+/// Accepted deliberately, on three grounds.
+///
+/// 1. The alternative is not a symmetric choice, it is no choice. With the
+///    map published only on completion, the 4 s probe timeout overruns the
+///    800 ms deadline whenever any relay is silent, and both peers fall back —
+///    every time. A feature that agrees perfectly and never runs is worth less
+///    than one that agrees usually.
+/// 2. Disagreement degrades rather than fails. Both sides still allocate on a
+///    TURN server and exchange relay candidates; ICE connects them through two
+///    relays instead of one, which costs a hop, not the transfer.
+/// 3. The window is small and self-closing: both maps converge on their final
+///    contents within the probe timeout, and re-broadcasting every increment
+///    is what keeps the peer's copy close to ours while it does.
+///
+/// The measurement that would settle this — how often two real peers converge
+/// — is the same one the design doc already flags as unrun, and is what the
+/// per-session log line in `RealtimeConnectionFactory` exists to feed.
 public final class RelayNegotiator: @unchecked Sendable {
     private let signaling: SignalingClient
     private let pool: [RelayEntry]
-    private let measure: ([RelayEntry]) async -> [String: Int]
+    /// Runs the pool's probes and calls `publish` once per relay that answers,
+    /// as it answers. Streaming, not returning a finished map: see `start`.
+    public typealias Measure =
+        (_ pool: [RelayEntry], _ publish: @escaping @Sendable (String, Int) -> Void) async -> Void
+
+    private let measure: Measure
 
     private let lock = NSLock()
     private var mine: [String: Int] = [:]
@@ -26,7 +55,7 @@ public final class RelayNegotiator: @unchecked Sendable {
 
     public init(signaling: SignalingClient,
                 pool: [RelayEntry],
-                measure: @escaping ([RelayEntry]) async -> [String: Int]) {
+                measure: @escaping Measure) {
         self.signaling = signaling
         self.pool = pool
         self.measure = measure
@@ -34,21 +63,37 @@ public final class RelayNegotiator: @unchecked Sendable {
 
     /// Begin measuring. Returns immediately; the work runs detached so the
     /// caller can go on waiting for a peer, which is the window this uses.
+    ///
+    /// Each relay is recorded and broadcast the moment it answers, rather than
+    /// once the whole pool has settled. That ordering is what makes the
+    /// feature reachable at all: probes time out at 4 s and `waitForChoice`'s
+    /// deadline upstream is 800 ms, so a map published only on completion
+    /// arrives five times too late whenever any one relay is silent — on both
+    /// peers, on every transfer. Publishing per probe means our fast relays are
+    /// on the wire, and in the peer's hands, inside the budget.
     public func start() {
         guard !pool.isEmpty else { return }
         Task { [self] in
-            record(await measure(pool))
+            await measure(pool) { id, ms in self.record(id, ms) }
         }
     }
 
+    /// One relay's measurement: remember it, tell whoever is already here, and
+    /// wake anyone parked in `waitForChoice` if that made a choice possible.
+    ///
+    /// Called concurrently, once per probe, from whatever task the probe
+    /// finished on — hence the lock, and hence the broadcast being at most
+    /// `pool.count` small messages per peer over the session rather than one.
+    /// Re-broadcasting is deliberate: an incremental map is only useful to the
+    /// peer if the peer actually receives the increments.
+    ///
     /// Synchronous on purpose. `NSLock.lock()`/`unlock()` are `noasync`, so
     /// taking the lock inline in `start()`'s async closure was a warning today
-    /// and an error under the Swift 6 language mode — and the only such site
-    /// left in the package. `current()`, `wake()` and `send()` below are the
-    /// same move for the same reason.
-    private func record(_ rtt: [String: Int]) {
+    /// and an error under the Swift 6 language mode. `current()`, `wake()` and
+    /// `send()` below are the same move for the same reason.
+    private func record(_ id: String, _ ms: Int) {
         lock.lock()
-        mine = rtt
+        mine[id] = ms
         let targets = peers
         lock.unlock()
         for p in targets { send(to: p) }
@@ -65,6 +110,11 @@ public final class RelayNegotiator: @unchecked Sendable {
         if haveMine { send(to: peerId) }
     }
 
+    /// A peer's map. A native peer now sends this several times as its own
+    /// probes land, each send carrying everything it has measured so far, so
+    /// the map only ever grows and taking the newest wholesale is right. A
+    /// browser peer still sends one complete map, which is the same thing with
+    /// one increment.
     public func handleSignal(from: String, data: JSONValue) {
         guard let map = RelayRttMessage.decode(data) else { return }
         lock.lock()

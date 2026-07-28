@@ -41,7 +41,9 @@ public enum RealtimeConnectionFactory {
         // Start measuring immediately: the sender is about to spend real time
         // waiting for a peer, and that window is free.
         let negotiator = RelayNegotiator(signaling: signaling, pool: config.relays,
-                                         measure: { await RelayProbe.measureAll($0) })
+                                         measure: { pool, publish in
+                                             await RelayProbe.measureAll(pool, publish: publish)
+                                         })
         // RelayNegotiator.handleSignal silently drops anything RelayRttMessage
         // can't decode — i.e. every real WebRTC signal. This handler is the
         // only thing installed until RealtimeConnection exists below, and that

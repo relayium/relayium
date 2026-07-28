@@ -15,18 +15,29 @@ import RelayiumKit
 /// first `typ relay` candidate. The absolute number carries fixed overhead, but
 /// it is the same overhead for every relay, so comparison is valid.
 public enum RelayProbe {
-    /// Measures the whole pool concurrently, so the wall clock is the slowest
-    /// single relay rather than their sum. Relays that do not answer within
-    /// `timeout` are absent from the result, which makes them ineligible.
+    /// Measures the whole pool concurrently, handing each result to `publish`
+    /// the moment it lands. Relays that do not answer within `timeout` are
+    /// never published, which makes them ineligible.
+    ///
+    /// Streaming rather than returning a map is the whole point. Draining the
+    /// group first meant the caller saw nothing until the SLOWEST relay
+    /// finished — so a single silent relay pinned the map at the full 4 s
+    /// timeout, while `relayChoiceDeadline` upstream is 800 ms. One
+    /// unreachable relay in a pool of six therefore cost every transfer its
+    /// entire relay-choice budget and produced nothing for it. Publishing per
+    /// probe means a slow relay costs only its own absence.
+    ///
+    /// `publish` is called from several child tasks at once, so it must be
+    /// safe to call concurrently.
     public static func measureAll(_ pool: [RelayEntry],
-                                  timeout: TimeInterval = 4) async -> [String: Int] {
-        await withTaskGroup(of: (String, Int?).self) { group in
+                                  timeout: TimeInterval = 4,
+                                  publish: @escaping @Sendable (String, Int) -> Void) async {
+        await withTaskGroup(of: Void.self) { group in
             for entry in pool {
-                group.addTask { (entry.id, await measure(entry, timeout: timeout)) }
+                group.addTask {
+                    if let ms = await measure(entry, timeout: timeout) { publish(entry.id, ms) }
+                }
             }
-            var out: [String: Int] = [:]
-            for await (id, ms) in group where ms != nil { out[id] = ms }
-            return out
         }
     }
 

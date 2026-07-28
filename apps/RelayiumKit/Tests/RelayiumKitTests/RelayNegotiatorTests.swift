@@ -6,13 +6,21 @@ private func pool(_ ids: [String]) -> [RelayEntry] {
     ids.map { RelayEntry(id: $0, iceServers: [ICEServerConfig(urls: ["turn:\($0):3478"])]) }
 }
 
+/// A measurement that publishes every entry of `map` immediately — the stand-in
+/// for a pool where every relay answers at once. `RelayNegotiator.Measure`
+/// streams results rather than returning a map, so tests hand it one of these
+/// instead of a plain closure returning a dictionary.
+private func measuring(_ map: [String: Int]) -> RelayNegotiator.Measure {
+    { _, publish in for (id, ms) in map { publish(id, ms) } }
+}
+
 final class RelayNegotiatorTests: XCTestCase {
     private func negotiator(_ ids: [String],
                             mine: [String: Int]) -> (RelayNegotiator, FakeWebSocketChannel) {
         let ch = FakeWebSocketChannel()
         let sig = SignalingClient(channel: ch, name: "Mac")
         ch.fireOpen()
-        let n = RelayNegotiator(signaling: sig, pool: pool(ids), measure: { _ in mine })
+        let n = RelayNegotiator(signaling: sig, pool: pool(ids), measure: measuring(mine))
         return (n, ch)
     }
 
@@ -118,7 +126,7 @@ final class RelayNegotiatorTests: XCTestCase {
         let ch = FakeWebSocketChannel()
         let sig = SignalingClient(channel: ch, name: "Mac")
         ch.fireOpen()
-        let n = RelayNegotiator(signaling: sig, pool: pool(["n1"]), measure: { _ in ["n1": 10] })
+        let n = RelayNegotiator(signaling: sig, pool: pool(["n1"]), measure: measuring(["n1": 10]))
         n.start()
         n.handleSignal(from: "peer", data: RelayRttMessage.encode(["n1": 20]))
         let chosen = await n.waitForChoice(deadline: 5.0)
@@ -147,7 +155,7 @@ final class RelayNegotiatorTests: XCTestCase {
         let ch = FakeWebSocketChannel()
         let sig = SignalingClient(channel: ch, name: "Mac")
         ch.fireOpen()
-        let n = RelayNegotiator(signaling: sig, pool: pool(["n1"]), measure: { _ in ["n1": 10] })
+        let n = RelayNegotiator(signaling: sig, pool: pool(["n1"]), measure: measuring(["n1": 10]))
         n.peerJoined("peer")   // before start(): mine is empty, so this alone sends nothing
         n.start()
         n.handleSignal(from: "peer", data: RelayRttMessage.encode(["n1": 20]))
@@ -159,5 +167,38 @@ final class RelayNegotiatorTests: XCTestCase {
         XCTAssertTrue(sawIt, "start()'s completion loop should have sent to the already-joined peer")
         XCTAssertEqual(ch.sent.filter { $0.contains("relayRtt") }.count, 1,
                        "exactly one relayRtt message — not zero, not a duplicate from both paths")
+    }
+
+    /// The defect this branch shipped with. `RelayProbe.measureAll` drained its
+    /// entire TaskGroup before returning anything, so the map became visible
+    /// only at the MAX over all six probes — and one silent relay pins that at
+    /// the full 4 s probe timeout while `relayChoiceDeadline` upstream is
+    /// 800 ms. A single unreachable relay in the pool therefore made
+    /// `waitForChoice` time out on BOTH peers on EVERY transfer: the feature
+    /// charged its full cost and delivered none of its benefit.
+    ///
+    /// Here "slow" answers after 3 s, far past the 0.4 s deadline, and would
+    /// win outright if it arrived (RTT 1 against 10) — so the assertion cannot
+    /// pass by accident. Against publish-on-completion this returns nil.
+    func testASlowRelayDoesNotHoldUpAFastOne() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["fast", "slow"]),
+                                measure: { _, publish in
+            publish("fast", 10)
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            publish("slow", 1)
+        })
+        n.start()
+        // The peer measured both and would rather have "slow".
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["fast": 10, "slow": 1]))
+
+        let began = Date()
+        let chosen = await n.waitForChoice(deadline: 0.4)
+        XCTAssertEqual(chosen?.id, "fast",
+                       "a 3s straggler must not stop the relay that already answered from being chosen")
+        XCTAssertLessThan(Date().timeIntervalSince(began), 2.0,
+                          "the deadline must govern, not the slowest probe in the pool")
     }
 }
