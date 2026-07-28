@@ -1055,6 +1055,65 @@ ICE with nothing to gather."
 
 ### Task 8: Acceptance
 
+## OUTCOME, recorded 2026-07-28
+
+**Not exercised.** Every item below needs two real peers on different networks;
+none was run. This is a record of a decision, not a result.
+
+| Item | Result |
+|---|---|
+| Cross-network Mac → browser, chosen relay id matches on both sides | not exercised |
+| Fallback against a peer on a build without this change | not exercised |
+| Record the RTT numbers and replace the 800 ms guess | not exercised |
+| LAN room (no code, empty pool) still connects with host candidates | not exercised |
+
+So `relayChoiceDeadline = 800ms` remains what the design said it was: a guess
+with no measurement behind it.
+
+### What review caught instead
+
+Nothing here was found by running the code. It was found by reading it, and two
+of the three were defects in this plan's own text rather than in the
+implementation:
+
+1. **Task 4** — the plan's `waitForChoice` raced a `withCheckedContinuation`
+   against `Task.sleep` inside a `withTaskGroup`. Cancellation does not resume a
+   suspended continuation and the group awaits every child at scope exit, so on
+   the "nobody answers" path — the fallback this whole feature depends on — it
+   hung forever, silently. Found by the implementer, reproduced standalone,
+   rewritten.
+2. **Task 6** — the plan handed the same rejected shape to a second task, which
+   used it. Caught in review by noticing that `RelayNegotiator` already carried
+   a comment warning against exactly that pattern, written by the same
+   implementer one task earlier.
+3. **Task 7** — during the wait, `onSignal` belongs to the negotiator, which
+   silently drops anything that is not a relay-RTT map. A peer's SDP offer
+   arriving in that window was lost permanently, with no error. The window was
+   microseconds before this round widened it. A browser peer never blocks on
+   the choice, so it sends its offer immediately — this was a real silent hang
+   against the web client. Now buffered and replayed.
+
+### What is still unknown
+
+The three above were reachable by reading. These are not:
+
+- Whether two peers actually converge on the same relay id in practice. The
+  algorithm is symmetric and property-tested, but nothing has confirmed the
+  Mac and the browser agree on a live pairing.
+- Whether 800 ms is enough for the joining side, whose `firstPeer` returns
+  immediately and whose whole measurement must therefore fit inside the
+  deadline — while `RelayProbe`'s own per-relay timeout is 4 s. One unreachable
+  relay in the pool plausibly disables the feature for both peers on every
+  transfer. This is written up as a deferred minor and is the first thing a
+  real run would answer.
+- Whether relay-only transport breaks anything that works today. The fallback
+  keeps `.all`, and that is traced and reviewed, but not observed.
+
+---
+
+## Original plan
+
+
 **Blocked on Tasks 1–7.** Needs a signed Debug build and two real peers.
 
 - [ ] **Cross-network Mac → browser** completes, and the Mac's chosen relay id
