@@ -32,15 +32,18 @@ private final class StubConnection: RealtimePeerConnection, @unchecked Sendable 
     var onFileChunk: (([UInt8]) -> Void)?
     var onProgress: ((Int) -> Void)?
     var onDone: ((Bool) -> Void)?
+    var onControl: ((RealtimeControl) -> Void)?
     var onClose: (() -> Void)?
     var onError: ((Error) -> Void)?
 
     private(set) var started = false
     private(set) var closeCount = 0
     private(set) var sentMetas: [FileMeta] = []
+    private(set) var completeCount = 0
 
     func start() { started = true }
     func send(sources: [PlaintextSource], metas: [FileMeta]) { sentMetas = metas }
+    func complete() { completeCount += 1 }
     func close() { closeCount += 1 }
 }
 
@@ -161,6 +164,75 @@ final class RealtimeSessionModelTests: XCTestCase {
         guard case let .completed(urls) = m.state else { return XCTFail("got \(m.state)") }
         XCTAssertEqual(try Data(contentsOf: urls[0]), Data([1, 2, 3]))
         XCTAssertEqual(try Data(contentsOf: urls[1]), Data([4, 5]))
+    }
+
+    // MARK: - the sender's end of a transfer
+
+    /// A sender never receives a DONE frame — its own — so CTRL_COMPLETE is the
+    /// only thing that tells it the batch landed. Without this the send sits in
+    /// `.transferring` forever and the peer's disconnect turns a success into
+    /// "The other device disconnected."
+    func testSenderCompletesOnTheCompleteControl() async {
+        let m = makeModel()
+        m.stageSend(sources: [], metas: [FileMeta(name: "a.txt", size: 3)])
+        await m.join(code: "K7M3X9", role: .initiator)
+        conn.onSAS?("x")
+        await settle()
+        m.confirmSAS()
+        conn.onControl?(.complete)
+        await settle()
+        guard case .completed = m.state else { return XCTFail("got \(m.state)") }
+    }
+
+    /// The peer hanging up after it has confirmed the batch is the normal end of
+    /// a send, not a failure.
+    func testPeerDisconnectAfterCompleteIsNotAFailure() async {
+        let m = makeModel()
+        m.stageSend(sources: [], metas: [FileMeta(name: "a.txt", size: 3)])
+        await m.join(code: "K7M3X9", role: .initiator)
+        conn.onSAS?("x")
+        await settle()
+        m.confirmSAS()
+        conn.onControl?(.complete)
+        await settle()
+        conn.onClose?()
+        await settle()
+        guard case .completed = m.state else { return XCTFail("got \(m.state)") }
+    }
+
+    /// The mirror image: our receiver has to send CTRL_COMPLETE, or the peer —
+    /// native or the web sender, which waits on exactly this — never finishes.
+    func testReceiverTellsThePeerTheBatchLanded() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "K7M3X9")
+        conn.onSAS?("x")
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([FileMeta(name: "a.txt", size: 3)])
+        conn.onFileChunk?([1, 2, 3])
+        await settle()
+        conn.onDone?(true)
+        await settle()
+        XCTAssertEqual(conn.completeCount, 1)
+    }
+
+    /// A batch that failed its integrity check must not be confirmed to the peer.
+    func testReceiverDoesNotConfirmAFailedBatch() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "K7M3X9")
+        conn.onSAS?("x")
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([FileMeta(name: "a.txt", size: 3)])
+        conn.onFileChunk?([1, 2, 3])
+        await settle()
+        conn.onDone?(false)
+        await settle()
+        XCTAssertEqual(conn.completeCount, 0)
     }
 
     /// A failed integrity check must not leave files that look complete.

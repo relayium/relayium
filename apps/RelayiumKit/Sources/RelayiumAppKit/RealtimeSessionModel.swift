@@ -13,11 +13,16 @@ public protocol RealtimePeerConnection: AnyObject {
     var onFileChunk: (([UInt8]) -> Void)? { get set }
     var onProgress: ((Int) -> Void)? { get set }
     var onDone: ((Bool) -> Void)? { get set }
+    /// Accept/reject/complete. `complete` is how a sender — which never
+    /// receives a DONE frame of its own — learns the batch landed.
+    var onControl: ((RealtimeControl) -> Void)? { get set }
     var onClose: (() -> Void)? { get set }
     var onError: ((Error) -> Void)? { get set }
 
     func start()
     func send(sources: [PlaintextSource], metas: [FileMeta])
+    /// Tell the peer the whole batch arrived and verified (CTRL_COMPLETE).
+    func complete()
     func close()
 }
 
@@ -187,7 +192,21 @@ public final class RealtimeSessionModel: ObservableObject {
                         return
                     }
                     let urls = (try? m.writer?.finish()) ?? nil
+                    // Only once the bytes are actually on disk, matching the
+                    // web receiver (transfer-session.svelte.ts:458). The sender
+                    // has no DONE frame of its own and waits on exactly this.
+                    m.connection?.complete()
                     m.state = .completed(urls ?? [])
+                }
+            }
+        }
+        c.onControl = { [weak self] control in
+            Task { @MainActor in
+                self?.apply(g) { m in
+                    // The sending half's terminal state. `.accept`/`.reject` are
+                    // consumed inside the connection's send path.
+                    guard case .complete = control else { return }
+                    m.state = .completed([])
                 }
             }
         }
