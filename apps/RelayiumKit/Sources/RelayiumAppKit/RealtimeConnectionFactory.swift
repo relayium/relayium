@@ -91,7 +91,10 @@ private final class ResumeOnce: @unchecked Sendable {
     }
 }
 
-private func rtcServer(_ c: ICEServerConfig) -> RTCIceServer {
+/// Not `private`: `RelayProbe.measure` needs this exact mapping too, and a
+/// second copy of the same three-line branch would just be a second place for
+/// the two to drift apart.
+func rtcServer(_ c: ICEServerConfig) -> RTCIceServer {
     if let user = c.username, let cred = c.credential {
         return RTCIceServer(urlStrings: c.urls, username: user, credential: cred)
     }
