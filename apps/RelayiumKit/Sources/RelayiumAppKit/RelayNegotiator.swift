@@ -37,14 +37,22 @@ public final class RelayNegotiator: @unchecked Sendable {
     public func start() {
         guard !pool.isEmpty else { return }
         Task { [self] in
-            let rtt = await measure(pool)
-            lock.lock()
-            mine = rtt
-            let targets = peers
-            lock.unlock()
-            for p in targets { send(to: p) }
-            wake()
+            record(await measure(pool))
         }
+    }
+
+    /// Synchronous on purpose. `NSLock.lock()`/`unlock()` are `noasync`, so
+    /// taking the lock inline in `start()`'s async closure was a warning today
+    /// and an error under the Swift 6 language mode — and the only such site
+    /// left in the package. `current()`, `wake()` and `send()` below are the
+    /// same move for the same reason.
+    private func record(_ rtt: [String: Int]) {
+        lock.lock()
+        mine = rtt
+        let targets = peers
+        lock.unlock()
+        for p in targets { send(to: p) }
+        wake()
     }
 
     public func peerJoined(_ peerId: String) {
