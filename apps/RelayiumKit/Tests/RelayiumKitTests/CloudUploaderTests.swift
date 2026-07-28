@@ -20,7 +20,8 @@ final class StubTransport: ResumableTransport, @unchecked Sendable {
     }
 
     func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
-                    total: Int, token: String) async throws -> PatchOutcome {
+                    total: Int, token: String,
+                    onBytesSent: ((Int) -> Void)?) async throws -> PatchOutcome {
         if failNextPatch { failNextPatch = false; throw CloudError.network }
         patches.append((from, bytes.count))
         var take = bytes.count
@@ -46,7 +47,8 @@ final class RetainingTransport: ResumableTransport, @unchecked Sendable {
         ("up1", chunkSize)
     }
     func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
-                    total: Int, token: String) async throws -> PatchOutcome {
+                    total: Int, token: String,
+                    onBytesSent: ((Int) -> Void)?) async throws -> PatchOutcome {
         retained.append(bytes)          // the URLSession-shaped hazard
         committedCount += bytes.count
         return .committed(received: committedCount)
@@ -188,5 +190,60 @@ final class CloudUploaderTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? CloudError, .quota)
         }
+    }
+}
+
+/// A transport that reports the body leaving in four instalments, the way
+/// URLSession's didSendBodyData does on a real link.
+private final class DribblingTransport: ResumableTransport, @unchecked Sendable {
+    var chunkSize = 64 * 1024
+    private var committed = 0
+
+    func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+                    size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
+        ("up1", chunkSize)
+    }
+
+    func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
+                    total: Int, token: String,
+                    onBytesSent: ((Int) -> Void)?) async throws -> PatchOutcome {
+        let step = max(1, bytes.count / 4)
+        var sent = 0
+        while sent < bytes.count {
+            sent = min(sent + step, bytes.count)
+            onBytesSent?(sent)
+        }
+        committed += bytes.count
+        return .committed(received: committed)
+    }
+
+    func uploadOffset(uploadId: String, token: String) async throws -> Int { committed }
+    func finalizeUpload(uploadId: String, token: String) async throws -> UploadResult {
+        UploadResult(id: "fid", expiresAt: 1)
+    }
+}
+
+extension CloudUploaderTests {
+    /// The server hands out 8 MiB chunks. Reporting progress only when a chunk
+    /// commits means a 13 MB upload moves twice — and on a 2 Mbit link the first
+    /// move is 28 seconds in, so the transfer reads as frozen while it is in
+    /// fact running. Progress has to follow the bytes, not the chunk boundaries.
+    func testProgressAdvancesWithinAChunkNotOnlyWhenItCommits() async throws {
+        let t = DribblingTransport()
+        t.chunkSize = 64 * 1024
+        let up = CloudUploader(transport: t)
+        // Two chunks' worth, so "only at commit" would yield just two moves.
+        let payload = [UInt8](repeating: 7, count: 100 * 1024)
+        var seen: [Int] = []
+        _ = try await up.upload(sources: [DataSource(name: "a.bin", bytes: payload)],
+                                burnAfterRead: false, ttl: 3600, token: "tok",
+                                onProgress: { sent, _ in seen.append(sent) })
+
+        let firstCommit = seen.first(where: { $0 >= 64 * 1024 }) ?? Int.max
+        let intra = seen.filter { $0 > 0 && $0 < firstCommit }
+        XCTAssertFalse(intra.isEmpty,
+                       "progress never moved inside the first chunk: \(seen)")
+        // And it must never go backwards, or the bar jumps about.
+        XCTAssertEqual(seen, seen.sorted(), "progress went backwards: \(seen)")
     }
 }

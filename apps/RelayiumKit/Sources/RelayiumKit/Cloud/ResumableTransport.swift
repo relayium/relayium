@@ -40,8 +40,15 @@ public protocol ResumableTransport {
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int)
     /// `bytes` is a slice of the caller's packing buffer and shares its storage.
     /// Implementations must not copy it — that copy is the whole memory problem.
+    ///
+    /// `onBytesSent` reports bytes of THIS chunk that have left, cumulatively.
+    /// Without it the only progress signal is the chunk committing, and the
+    /// server hands out 8 MiB chunks: on a 2 Mbit uplink that is one movement
+    /// every ~28 seconds, which reads as a frozen transfer rather than a slow
+    /// one. May be called from any thread.
     func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
-                    total: Int, token: String) async throws -> PatchOutcome
+                    total: Int, token: String,
+                    onBytesSent: ((Int) -> Void)?) async throws -> PatchOutcome
     func uploadOffset(uploadId: String, token: String) async throws -> Int
     func finalizeUpload(uploadId: String, token: String) async throws -> UploadResult
 }
@@ -76,7 +83,8 @@ public struct HTTPResumableTransport: ResumableTransport {
     }
 
     public func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,
-                           total: Int, token: String) async throws -> PatchOutcome {
+                           total: Int, token: String,
+                           onBytesSent: ((Int) -> Void)?) async throws -> PatchOutcome {
         var req = URLRequest(url: baseURL.appendingPathComponent("api/uploads/\(uploadId)"))
         req.httpMethod = "PATCH"
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -85,7 +93,7 @@ public struct HTTPResumableTransport: ResumableTransport {
         // Assigned, not re-wrapped: `Data(bytes)` here was one of three full
         // copies of every chunk that the memory investigation found.
         req.httpBody = bytes
-        let (data, http) = try await send(req)
+        let (data, http) = try await send(req, onBytesSent: onBytesSent)
         struct Body: Decodable { let received: Int }
         switch http.statusCode {
         case 200:
@@ -134,9 +142,15 @@ public struct HTTPResumableTransport: ResumableTransport {
         }
     }
 
-    private func send(_ req: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    private func send(_ req: URLRequest,
+                      onBytesSent: ((Int) -> Void)? = nil) async throws -> (Data, HTTPURLResponse) {
         do {
-            let (data, resp) = try await session.data(for: req)
+            // A per-task delegate rather than a session-wide one: this type is
+            // handed a URLSession it does not own (the app shares one, tests
+            // pass a stubbed one), and installing a session delegate would
+            // reach beyond this request.
+            let delegate = onBytesSent.map(UploadProgressDelegate.init)
+            let (data, resp) = try await session.data(for: req, delegate: delegate)
             guard let http = resp as? HTTPURLResponse else { throw CloudError.network }
             return (data, http)
         } catch let e as CloudError {
@@ -144,5 +158,28 @@ public struct HTTPResumableTransport: ResumableTransport {
         } catch {
             throw CloudError.network
         }
+    }
+}
+
+/// Turns URLSession's `didSendBodyData` into the cumulative byte count
+/// `patchChunk` promises its caller.
+///
+/// `totalBytesSent` is what the transport has handed to the kernel, not what
+/// the server has acknowledged — so it can reach the chunk's full size a little
+/// before the response arrives. That is the right signal for a progress bar
+/// (the bytes really have left) and the wrong one for the resume offset, which
+/// keeps coming from the server's own `received` in the PATCH response.
+final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
+    private let onBytesSent: (Int) -> Void
+
+    init(onBytesSent: @escaping (Int) -> Void) {
+        self.onBytesSent = onBytesSent
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    didSendBodyData bytesSent: Int64,
+                    totalBytesSent: Int64,
+                    totalBytesExpectedToSend: Int64) {
+        onBytesSent(Int(totalBytesSent))
     }
 }
