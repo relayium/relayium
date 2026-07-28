@@ -47,6 +47,9 @@ public struct HTTPPairClient: PairCodeClient {
     }
 
     public func mint(token: String) async throws -> MintedCode {
+        // Answerable without asking: the server can only say 401, and offline
+        // the round trip fails as `.network` — the wrong explanation entirely.
+        guard !token.isEmpty else { throw AccountError.notSignedIn }
         var req = URLRequest(url: baseURL.appendingPathComponent("api/pair"))
         req.httpMethod = "POST"
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

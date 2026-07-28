@@ -8,6 +8,7 @@ struct ContentView: View {
     @EnvironmentObject private var downloadModel: CloudDownloadModel
     @EnvironmentObject private var realtimeModel: RealtimeSessionModel
     @State private var showDownload = false
+    @State private var showDirect = false
 
     var body: some View {
         Group {
@@ -35,6 +36,14 @@ struct ContentView: View {
                     // works here — only sending needs an account.
                     DisclosureGroup("I have a link", isExpanded: $showDownload) {
                         DownloadPane(model: downloadModel)
+                    }
+                    // Same reasoning one transport over: joining a code needs no
+                    // account (the server only gates minting, because the code's
+                    // owner pays for relayed traffic). Appended, never inserted
+                    // above LoginView — its @State has to survive every
+                    // transition through this branch.
+                    DisclosureGroup("I have a pairing code", isExpanded: $showDirect) {
+                        DirectPane(model: realtimeModel, token: "")
                     }
                 }
             case .unavailable(let message):
