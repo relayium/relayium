@@ -30,20 +30,65 @@ public enum RealtimeConnectionFactory {
     /// someone has — see the design doc's note.
     public static let relayChoiceDeadline: TimeInterval = 0.8
 
+    /// The last step of `make`: turn a settled relay choice into a live
+    /// connection. Injected, because everything *above* it — the ordering, the
+    /// fallback, the buffer-and-replay — is the part that has repeatedly been
+    /// wrong, and none of it could be tested while the step itself needed
+    /// WebRTC and two real peers.
+    ///
+    /// Deliberately takes `[ICEServerConfig]` and a `relayOnly` flag rather
+    /// than WebRTC's own types, so a test can assert on what was decided
+    /// without linking a peer connection.
+    typealias ConnectionBuilder = (_ signaling: SignalingClient,
+                                   _ peerId: String,
+                                   _ role: Role,
+                                   _ iceServers: [ICEServerConfig],
+                                   _ relayOnly: Bool) -> RealtimePeerConnection
+
+    /// The real one. The only place WebRTC's types enter this file's flow.
+    static let liveConnection: ConnectionBuilder = { signaling, peerId, role, servers, relayOnly in
+        RealtimeConnection(signaling: signaling, peerId: peerId, role: role,
+                           iceServers: servers.map(rtcServer),
+                           iceTransportPolicy: relayOnly ? .relay : .all)
+    }
+
+    /// Unchanged for callers: `AppEnvironment` still calls exactly this.
+    /// Everything injectable is bound here, to the real thing.
     public static func make(code: String,
                             role: Role,
                             config: ICEConfig,
                             baseURL: URL,
                             deviceName: String,
                             peerTimeout: TimeInterval = 120) async throws -> RealtimePeerConnection {
-        let signaling = SignalingClient.connect(wsBase: signalingBase(baseURL),
-                                                code: code, name: deviceName)
+        try await make(role: role,
+                       config: config,
+                       signaling: SignalingClient.connect(wsBase: signalingBase(baseURL),
+                                                          code: code, name: deviceName),
+                       peerTimeout: peerTimeout,
+                       choiceDeadline: relayChoiceDeadline,
+                       measure: { pool, publish in
+                           await RelayProbe.measureAll(pool, publish: publish)
+                       },
+                       build: liveConnection)
+    }
+
+    /// The orchestration, with the three things a test cannot supply for real
+    /// — the socket, the probes, the peer connection — handed in.
+    ///
+    /// Internal rather than public: the seam exists for this package's tests,
+    /// not as API. `make` above is the whole public surface and its signature
+    /// has not moved.
+    static func make(role: Role,
+                     config: ICEConfig,
+                     signaling: SignalingClient,
+                     peerTimeout: TimeInterval,
+                     choiceDeadline: TimeInterval,
+                     measure: @escaping RelayNegotiator.Measure,
+                     build: ConnectionBuilder) async throws -> RealtimePeerConnection {
         // Start measuring immediately: the sender is about to spend real time
         // waiting for a peer, and that window is free.
         let negotiator = RelayNegotiator(signaling: signaling, pool: config.relays,
-                                         measure: { pool, publish in
-                                             await RelayProbe.measureAll(pool, publish: publish)
-                                         })
+                                         measure: measure)
         // RelayNegotiator.handleSignal silently drops anything RelayRttMessage
         // can't decode — i.e. every real WebRTC signal. This handler is the
         // only thing installed until RealtimeConnection exists below, and the
@@ -66,16 +111,20 @@ public enum RealtimeConnectionFactory {
         let peerId = try await firstPeer(on: signaling, timeout: peerTimeout)
         negotiator.peerJoined(peerId)
 
-        let chosen = await negotiator.waitForChoice(deadline: relayChoiceDeadline)
-        let servers = (chosen?.iceServers ?? config.iceServers).map(rtcServer)
+        let chosen = await negotiator.waitForChoice(deadline: choiceDeadline)
         // Relay-only only when a relay was actually chosen. Falling back to the
         // advertised set means possibly no relay at all (a LAN room), and
         // forcing .relay there would leave ICE with nothing to gather.
-        let policy: RTCIceTransportPolicy = chosen != nil ? .relay : .all
+        //
         // Constructed last on purpose: this call takes over signaling.onSignal,
-        // which the negotiator needed until now.
-        let connection = RealtimeConnection(signaling: signaling, peerId: peerId, role: role,
-                                            iceServers: servers, iceTransportPolicy: policy)
+        // which the negotiator needed until now. Hoisting it above the wait
+        // would disable the whole feature with no error and no test failure —
+        // which is why `build` is a seam, and why
+        // RealtimeConnectionFactoryTests pins this ordering by asserting on
+        // which servers arrive here.
+        let connection = build(signaling, peerId, role,
+                               chosen?.iceServers ?? config.iceServers,
+                               chosen != nil)
         // `signaling.onSignal` is now RealtimeConnection's own handler (wired
         // at the end of its init) — it filters on peerId and hops to its own
         // queue, so replaying a stray relay-RTT message here is a harmless
