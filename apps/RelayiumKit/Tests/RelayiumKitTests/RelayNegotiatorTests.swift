@@ -256,6 +256,76 @@ final class RelayNegotiatorTests: XCTestCase {
                           "the deadline must govern, not the slowest probe in the pool")
     }
 
+    /// The choice must be made over our WHOLE map, not over whichever relay
+    /// happened to answer first.
+    ///
+    /// `wake()` used to fire the instant any relay was common to both maps.
+    /// Before measurement became incremental that moment necessarily had a
+    /// complete `mine`; afterwards it usually has a one-entry prefix, so
+    /// "minimise the worse of the two RTTs" was never actually evaluated — the
+    /// pair converged on whichever relay answered us first. Worse, with both
+    /// peers still probing, each side's local increment beats the peer's
+    /// matching broadcast by one network delay, so each latches on its own
+    /// nearest relay measured against the peer's older prefix and the two SWAP:
+    /// each picks the other's nearest, the worst pair on offer.
+    ///
+    /// Here `x` answers first and is the peer's favourite (max(100, 1) = 100),
+    /// while `y` arrives 300 ms later and is the jointly best (max(10, 10) =
+    /// 10). Latching on the first overlap returns `x`.
+    func testTheCompleteMapDecidesRatherThanTheFirstOverlap() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["x", "y"]),
+                                measure: { _, publish in
+            publish("x", 100)
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            publish("y", 10)
+        })
+        n.start()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["x": 1, "y": 10]))
+
+        let began = Date()
+        let chosen = await n.waitForChoice(deadline: 3.0)
+        XCTAssertEqual(chosen?.id, "y",
+                       "the choice must wait for our own measurement rather than latch on the first common relay")
+        XCTAssertLessThan(Date().timeIntervalSince(began), 2.0,
+                          "waiting for our measurement is not waiting for the deadline")
+    }
+
+    /// The other half of the same rule: "wait for our own measurement" must not
+    /// become "wait for the slowest probe". A relay that never answers cannot
+    /// hold the deadline hostage — which is the entire reason measurement was
+    /// made incremental in the first place.
+    ///
+    /// `slow` never lands inside the 0.3 s deadline, so the wait can only end
+    /// on the deadline, and it must end there with a usable answer rather than
+    /// nil. The lower bound is the half that goes red against the old
+    /// wake-on-first-choice behaviour, which returned at once.
+    func testAStragglerCannotHoldTheDeadlineHostage() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["fast", "slow"]),
+                                measure: { _, publish in
+            publish("fast", 10)
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            publish("slow", 1)
+        })
+        n.start()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["fast": 10, "slow": 1]))
+
+        let began = Date()
+        let chosen = await n.waitForChoice(deadline: 0.3)
+        let elapsed = Date().timeIntervalSince(began)
+        XCTAssertEqual(chosen?.id, "fast",
+                       "the deadline must yield the best relay so far, not nil")
+        XCTAssertGreaterThanOrEqual(elapsed, 0.3,
+                                    "an unfinished measurement must not latch the choice early")
+        XCTAssertLessThan(elapsed, 2.0,
+                          "the deadline must govern, not the slowest probe in the pool")
+    }
+
     /// Sender-side reordering: two probes landing while a send is in flight
     /// must not put the SMALLER map on the wire last.
     ///

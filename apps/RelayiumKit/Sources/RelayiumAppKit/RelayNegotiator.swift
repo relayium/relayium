@@ -31,6 +31,14 @@ import RelayiumKit
 ///    contents within the probe timeout, and re-broadcasting every increment
 ///    is what keeps the peer's copy close to ours while it does.
 ///
+/// What narrows that window to almost nothing is `waitForChoice` refusing to
+/// return on a prefix of our OWN map: whenever measurement finishes inside the
+/// deadline — the healthy case, and most of the time — `pick` sees the same
+/// complete `mine` it saw before publishing went incremental, and the only
+/// asymmetry left is how much of the peer's map has reached us. Only a
+/// measurement that overruns the deadline still decides on a prefix, and there
+/// the alternative really is no choice at all.
+///
 /// The measurement that would settle this — how often two real peers converge
 /// — is the same one the design doc already flags as unrun, and is what the
 /// per-session log line in `RealtimeConnectionFactory` exists to feed.
@@ -48,6 +56,10 @@ public final class RelayNegotiator: @unchecked Sendable {
     private var mine: [String: Int] = [:]
     private var theirs: [String: Int] = [:]
     private var peers: Set<String> = []
+    /// True once `measure` has returned — every probe has answered or timed
+    /// out, so `mine` can no longer grow. This is what `waitForChoice` waits
+    /// for rather than the first common relay; see `wake`.
+    private var measurementFinished = false
     // Each waiter is a "fire" closure rather than a raw continuation: see
     // `waitForChoice` for why a plain `withCheckedContinuation` here would
     // deadlock the whole call in the (very common) case nobody ever wakes it.
@@ -72,10 +84,22 @@ public final class RelayNegotiator: @unchecked Sendable {
     /// peers, on every transfer. Publishing per probe means our fast relays are
     /// on the wire, and in the peer's hands, inside the budget.
     public func start() {
-        guard !pool.isEmpty else { return }
+        guard !pool.isEmpty else { finishMeasurement(); return }
         Task { [self] in
             await measure(pool) { id, ms in self.record(id, ms) }
+            finishMeasurement()
         }
+    }
+
+    /// `mine` will not grow again. Recorded because it is half of the condition
+    /// `waitForChoice` wakes on, and it is the half that turns a one-relay
+    /// prefix into a decision worth latching. The empty pool takes this path
+    /// too, so the flag never lies about a measurement that is not coming.
+    private func finishMeasurement() {
+        lock.lock()
+        measurementFinished = true
+        lock.unlock()
+        wake()
     }
 
     /// One relay's measurement: remember it, tell whoever is already here, and
@@ -155,6 +179,27 @@ public final class RelayNegotiator: @unchecked Sendable {
     /// Nil means "use whatever the caller already had" — an empty pool, a peer
     /// that never answered, no relay in common, or simply not in time.
     ///
+    /// Returns early only once the choice can no longer change from our side:
+    /// there is a choice AND our own measurement has finished. Returning at the
+    /// first moment any relay was common to both maps was wrong twice over, and
+    /// only became wrong when measurement started publishing incrementally:
+    ///
+    /// - `pick` ran over a one-element intersection, so "minimise the worse of
+    ///   the two RTTs" was never evaluated at all. The pair converged on the
+    ///   relay that answered fastest, not the jointly best one.
+    /// - With both peers still probing, each side's own increment beats the
+    ///   peer's matching broadcast by one network delay, so each evaluates its
+    ///   nearest relay against the peer's older prefix and latches. The two
+    ///   then SWAP — each picks the other's nearest, the worst pair available —
+    ///   and nothing revisits it, because the choice latches once and the
+    ///   connection is built on the next line. That is the structurally
+    ///   favoured outcome, not a narrow race.
+    ///
+    /// The deadline is the other way out, and it is what keeps the reason
+    /// measurement went incremental intact: a 4 s straggler still cannot stop
+    /// the 800 ms budget from producing an answer, it just cannot force a
+    /// premature one either.
+    ///
     /// Deliberately NOT a `withTaskGroup` racing a continuation-waiting child
     /// against a `Task.sleep` child: cancelling the loser after `group.next()`
     /// does not resume a raw `withCheckedContinuation`, and `withTaskGroup`
@@ -165,14 +210,14 @@ public final class RelayNegotiator: @unchecked Sendable {
     /// continuation is shared by both the wake-up path and the timeout, guarded
     /// so only the first of the two actually resumes it.
     public func waitForChoice(deadline: TimeInterval) async -> RelayEntry? {
-        if let e = current() { return e }
         guard !pool.isEmpty else { return nil }
+        if let e = settledChoice() { return e }
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             let once = ResumeOnce(c)
             lock.lock()
             // Re-check inside the lock: the answer may have arrived between
-            // current() above and here.
-            if chosenIDLocked() != nil { lock.unlock(); once.fire(); return }
+            // settledChoice() above and here.
+            if settledLocked() { lock.unlock(); once.fire(); return }
             waiters.append(once.fire)
             lock.unlock()
             Task {
@@ -193,8 +238,30 @@ public final class RelayNegotiator: @unchecked Sendable {
         return (mine, theirs)
     }
 
+    /// The best choice available right now, settled or not. This is what the
+    /// deadline path returns: once the clock has run out, a choice made on a
+    /// partial map still beats no choice at all.
     private func current() -> RelayEntry? {
         lock.lock(); defer { lock.unlock() }
+        return entryLocked()
+    }
+
+    /// The choice only if it can no longer change from our side — the early
+    /// return, as opposed to the deadline one.
+    private func settledChoice() -> RelayEntry? {
+        lock.lock(); defer { lock.unlock() }
+        guard settledLocked() else { return nil }
+        return entryLocked()
+    }
+
+    /// A choice exists and our own measurement is done, so waiting longer can
+    /// only change it if the PEER sends more — and waiting on the peer is what
+    /// the deadline is for.
+    private func settledLocked() -> Bool {
+        measurementFinished && chosenIDLocked() != nil
+    }
+
+    private func entryLocked() -> RelayEntry? {
         guard let id = chosenIDLocked() else { return nil }
         return pool.first { $0.id == id }
     }
@@ -217,9 +284,14 @@ public final class RelayNegotiator: @unchecked Sendable {
         for p in targets { signaling.sendSignal(to: p, data: payload) }
     }
 
+    /// Wakes the parked waiters, but only for a choice that can no longer
+    /// change from our side. A choice that is merely *available* is not a
+    /// reason to stop waiting — see `waitForChoice` for what latching on one
+    /// costs. Called from `record`, `handleSignal` and `finishMeasurement`,
+    /// which is every place either half of the condition can become true.
     private func wake() {
         lock.lock()
-        guard chosenIDLocked() != nil else { lock.unlock(); return }
+        guard settledLocked() else { lock.unlock(); return }
         let pending = waiters
         waiters = []
         lock.unlock()
