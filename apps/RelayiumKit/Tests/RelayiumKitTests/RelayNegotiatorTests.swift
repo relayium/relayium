@@ -16,6 +16,20 @@ final class RelayNegotiatorTests: XCTestCase {
         return (n, ch)
     }
 
+    /// Polls `predicate` with a bounded wait instead of a fixed sleep.
+    /// `FakeWebSocketChannel.sent` is mutated from `start()`'s background
+    /// Task without synchronisation, so a flat `Task.sleep` before reading it
+    /// would either flake under load or mask a genuine failure to send —
+    /// polling for the condition itself does neither.
+    private func eventually(timeout: TimeInterval = 2.0, _ predicate: () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if predicate() { return true }
+            try? await Task.sleep(nanoseconds: 10_000_000)   // 10ms
+        }
+        return predicate()
+    }
+
     func testConvergesOnTheRelayBothPeersLike() async {
         let (n, _) = negotiator(["n1", "n3"], mine: ["n1": 200, "n3": 40])
         n.start()
@@ -63,5 +77,87 @@ final class RelayNegotiatorTests: XCTestCase {
         n.handleSignal(from: "peer", data: .object(["rename": .string("Phone")]))
         let chosen = await n.waitForChoice(deadline: 0.5)
         XCTAssertEqual(chosen?.id, "n1")
+    }
+
+    /// Regression test for the `waitForChoice` rewrite: a signal arriving
+    /// mid-wait must resume the parked call itself, not merely get picked up
+    /// because the deadline eventually elapsed and the maps got rechecked.
+    /// Deleting `wake()` entirely still leaves every other test in this file
+    /// green (their deadlines are generous enough to mask it), so only
+    /// measuring elapsed time distinguishes "woken early" from "timed out and
+    /// recomputed". The deadline (5s) and the assertion (well under 2s) are
+    /// both loose on purpose: this measures whether a wake-up happened at
+    /// all, not how fast the machine is.
+    func testWakingDuringTheWaitReturnsWellBeforeTheDeadline() async {
+        let (n, _) = negotiator(["n1"], mine: ["n1": 10])
+        n.start()
+        let began = Date()
+        async let chosen: RelayEntry? = n.waitForChoice(deadline: 5.0)
+        // Give the wait a moment to actually park (register a waiter) before
+        // signalling, so this exercises the wake()-while-parked path rather
+        // than the current()-already-chosen fast path at entry. The 2s
+        // assertion below has enough slack that imprecision here can't turn
+        // this into a false pass.
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["n1": 20]))
+        let result = await chosen
+        XCTAssertEqual(result?.id, "n1")
+        XCTAssertLessThan(Date().timeIntervalSince(began), 2.0,
+                           "a mid-wait signal should wake waitForChoice long before its 5s deadline")
+    }
+
+    /// peerJoined's own broadcast path: the peer arrives once measuring has
+    /// already finished, so `peerJoined` itself must be the one to send.
+    ///
+    /// `ch.sent` is an unsynchronised array mutated from `start()`'s
+    /// background Task, so this does not read it until `waitForChoice` has
+    /// returned non-nil — which can only happen once `mine` was actually
+    /// recorded, and `mine` is never cleared afterwards. That handshake is
+    /// the synchronisation, so there is nothing left to poll or race.
+    func testBroadcastsToAPeerThatJoinsAfterMeasuringCompletes() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["n1"]), measure: { _ in ["n1": 10] })
+        n.start()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["n1": 20]))
+        let chosen = await n.waitForChoice(deadline: 5.0)
+        XCTAssertEqual(chosen?.id, "n1", "sanity: measuring must have actually landed")
+
+        n.peerJoined("newPeer")   // joins now that `mine` is guaranteed populated
+        XCTAssertEqual(ch.sent.filter { $0.contains("relayRtt") }.count, 1,
+                       "peerJoined's own send is the only path that should have fired")
+    }
+
+    /// start()'s completion broadcast path: the peer is already registered
+    /// before measuring finishes, so peerJoined's own send is skipped
+    /// (nothing to say yet) and start()'s completion loop must be the one
+    /// to send instead.
+    ///
+    /// Unlike the test above, `waitForChoice` resolving here does NOT prove
+    /// the send has landed: `mine` becomes visible (and so `chosenIDLocked()`
+    /// non-nil, unblocking `current()`'s fast path and any `wake()` call) as
+    /// soon as `start()`'s Task releases the lock, which is *before* that same
+    /// Task's `for p in targets { send(to: p) }` loop actually runs — traced
+    /// with monotonic timestamps while first writing this test, where
+    /// `waitForChoice` returned non-nil measurably earlier than the matching
+    /// `FakeWebSocketChannel.send` call. So this polls for the actual send
+    /// with a bounded wait instead of trusting the resolution order.
+    func testBroadcastsToAPeerAlreadyJoinedWhenMeasuringCompletes() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let n = RelayNegotiator(signaling: sig, pool: pool(["n1"]), measure: { _ in ["n1": 10] })
+        n.peerJoined("peer")   // before start(): mine is empty, so this alone sends nothing
+        n.start()
+        n.handleSignal(from: "peer", data: RelayRttMessage.encode(["n1": 20]))
+        _ = await n.waitForChoice(deadline: 5.0)   // let the measurement land
+
+        let sawIt = await eventually {
+            ch.sent.filter { $0.contains("relayRtt") }.count >= 1
+        }
+        XCTAssertTrue(sawIt, "start()'s completion loop should have sent to the already-joined peer")
+        XCTAssertEqual(ch.sent.filter { $0.contains("relayRtt") }.count, 1,
+                       "exactly one relayRtt message — not zero, not a duplicate from both paths")
     }
 }
