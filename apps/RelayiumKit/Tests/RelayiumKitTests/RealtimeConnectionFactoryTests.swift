@@ -77,6 +77,23 @@ final class RealtimeConnectionFactoryTests: XCTestCase {
         await fulfillment(of: [returned], timeout: 5)
         XCTAssertEqual(caught.value as? RealtimeConnectionFactory.FactoryError, .noPeerAppeared)
     }
+
+    /// The buffer stays installed for the whole firstPeer wait — up to two
+    /// minutes — and anyone holding the pairing code can push signals into it
+    /// for all of that. Unbounded, that is memory spent from the far end of a
+    /// WebSocket. The cap has to hold, and it has to keep the EARLIEST signals:
+    /// the offer arrives first and a flood behind it must not evict it.
+    func testPendingSignalsCapsAndKeepsTheEarliestSignals() {
+        let pending = PendingSignals()
+        for i in 0..<(PendingSignals.capacity + 500) {
+            pending.append(("peer", .object(["n": .number(Double(i))])))
+        }
+        let drained = pending.drain()
+        XCTAssertEqual(drained.count, PendingSignals.capacity)
+        XCTAssertEqual(drained.first?.1, .object(["n": .number(0)]), "the offer must survive the flood")
+        XCTAssertEqual(drained.last?.1, .object(["n": .number(Double(PendingSignals.capacity - 1))]))
+        XCTAssertTrue(pending.drain().isEmpty, "draining empties the buffer")
+    }
 }
 
 /// Carries the thrown error out of a detached `Task` without an unstructured

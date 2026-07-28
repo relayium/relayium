@@ -154,11 +154,32 @@ private final class ResumeOnce: @unchecked Sendable {
 /// because `append` runs on whatever queue the WebSocket delivers on, while
 /// `drain` runs on the caller's — the same two-thread shape as `ResumeOnce`
 /// above.
-private final class PendingSignals: @unchecked Sendable {
+///
+/// Internal rather than private so the cap can be tested directly — it is the
+/// one thing in here with a decision in it.
+final class PendingSignals: @unchecked Sendable {
+    /// Anyone holding the pairing code can push signals at us for the whole
+    /// buffering window, which runs to peerTimeout + the relay wait — around
+    /// two minutes. An unbounded queue there is a way to spend our memory from
+    /// the other end of a WebSocket, on the same untrusted-peer footing as the
+    /// relay-RTT numbers in `RelayRttMessage.decode`.
+    ///
+    /// 256 is far above anything a real session produces. An offer or answer
+    /// is one signal and ICE candidates are a handful; a WebRTC peer that
+    /// needed hundreds queued *before* its connection object even exists is
+    /// not a peer this build is going to talk to.
+    static let capacity = 256
+
     private let lock = NSLock()
     private var items: [(String, JSONValue)] = []
+
+    /// Drops on overflow rather than evicting: the signals worth having are
+    /// the earliest ones — the offer, then the first candidates — and a flood
+    /// arriving behind them is exactly what must not push them out.
     func append(_ item: (String, JSONValue)) {
-        lock.lock(); items.append(item); lock.unlock()
+        lock.lock()
+        if items.count < Self.capacity { items.append(item) }
+        lock.unlock()
     }
     func drain() -> [(String, JSONValue)] {
         lock.lock(); defer { lock.unlock() }
