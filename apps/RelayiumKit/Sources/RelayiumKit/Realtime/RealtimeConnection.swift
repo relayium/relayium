@@ -127,7 +127,7 @@ public final class RealtimeConnection: NSObject {
     private var accepted = false
     private var rejected = false
 
-    public init(signaling: SignalingClient, peerId: String, role: Role, iceServers: [RTCIceServer]) {
+    public init(signaling: SignalingClient, peerId: String, role: Role, iceServers: [RTCIceServer], iceTransportPolicy: RTCIceTransportPolicy = .all) {
         self.signaling = signaling
         self.peerId = peerId
         self.role = role
@@ -139,6 +139,11 @@ public final class RealtimeConnection: NSObject {
         let config = RTCConfiguration()
         config.iceServers = iceServers
         config.sdpSemantics = .unifiedPlan
+        // Relay-only on the cross-network path. ICE otherwise spends ~20s
+        // failing direct candidate checks before falling back to the relay it
+        // was always going to use; the caller decides, because a LAN room has
+        // no relay to fall back to and must keep host candidates.
+        config.iceTransportPolicy = iceTransportPolicy
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         self.pc = factory.peerConnection(with: config, constraints: constraints, delegate: self)
 
