@@ -420,9 +420,18 @@ public final class RealtimeConnection: NSObject {
             // continue the counter batchFrame already advanced.
             let producer = RealtimeFrameProducer(sender: sender, sources: sources,
                                                  declaredSizes: metas.map(\.size))
-            while let frame = try producer.next() {
-                if queue.sync(execute: { self.closed }) { return }
-                guard transmit(frame) else { return }
+            // `RealtimeFrameProducer.next()` drains its own reads; this pool is
+            // for the other half — `transmit` builds a `Data` and an
+            // `RTCDataBuffer` per frame, and this loop does not return until the
+            // whole transfer is out. Not unit-testable (this class needs two
+            // live peers); the guard is the live 512 MB footprint run.
+            while true {
+                let more = try autoreleasepool { () throws -> Bool in
+                    guard let frame = try producer.next() else { return false }
+                    if queue.sync(execute: { self.closed }) { return false }
+                    return transmit(frame)
+                }
+                if !more { return }
             }
         } catch {
             queue.async { [weak self] in self?.onError?(error) }

@@ -64,6 +64,36 @@ final class RealtimeFrameProducerTests: XCTestCase {
         XCTAssertLessThanOrEqual(p.peakHeldBytes, (CHUNK_SIZE + 4096) * 2)
     }
 
+    /// `peakHeldBytes` only sees what Swift retains. Reading a real file goes
+    /// through `FileHandle`, which hands back autoreleased objects — those live
+    /// until the *enclosing* pool drains, and in a live send that is not until
+    /// the whole transfer has gone out. So the producer can hold one chunk and
+    /// the process can still grow by the size of the transfer.
+    ///
+    /// Measured on phys_footprint, never RSS (G2's false alarm).
+    func testStreamingARealFileDoesNotGrowWithTheTransfer() throws {
+        let size = 64 << 20
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("producer-fp-\(UUID().uuidString).bin")
+        try Data(count: size).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let key = [UInt8](repeating: 3, count: 32)
+        let s = RealtimeSender(sessionKey: key)
+        _ = try s.batchFrame([FileMeta(name: "big.bin", size: size)])
+        let p = RealtimeFrameProducer(sender: s, sources: [try FileURLSource(url: url)],
+                                      declaredSizes: [size])
+
+        let before = physFootprint()
+        var peak = before
+        while try p.next() != nil { peak = max(peak, physFootprint()) }
+
+        let grew = peak - before
+        XCTAssertLessThan(grew, 16 << 20,
+                          "footprint grew \(grew >> 20) MB streaming \(size >> 20) MB — "
+                          + "the reads are accumulating instead of draining")
+    }
+
     /// A file read short of its declared size must fail rather than send a DONE
     /// whose hash covers fewer bytes than the manifest promised.
     func testShortReadIsRejected() throws {

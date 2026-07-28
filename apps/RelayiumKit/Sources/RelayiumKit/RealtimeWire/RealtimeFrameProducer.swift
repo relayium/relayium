@@ -31,7 +31,18 @@ public final class RealtimeFrameProducer {
     }
 
     /// The next frame, or nil once every source has been read and closed out.
+    ///
+    /// The pool is load-bearing, not hygiene: `FileURLSource` reads through
+    /// `FileHandle`, which returns autoreleased objects, and the send loop this
+    /// feeds does not return until the whole transfer has gone out. Without a
+    /// drain per frame the process grows by the size of the transfer even though
+    /// `peakHeldBytes` — which only counts what Swift retains — stays at one
+    /// chunk.
     public func next() throws -> [UInt8]? {
+        try autoreleasepool { try nextFrame() }
+    }
+
+    private func nextFrame() throws -> [UInt8]? {
         while index < sources.count {
             if pendingDone {
                 let f = sender.nextDoneFrame(hash: hash)
