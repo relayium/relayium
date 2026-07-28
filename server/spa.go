@@ -211,6 +211,19 @@ func spaHandler(dir string) http.Handler {
 		}
 		// A known SPA route: <route>.html next to index.html.
 		if shell := full + ".html"; fileExists(shell) {
+			// path.Clean above dropped any trailing slash, so /pricing/ would
+			// otherwise answer 200 with the shell that canonicals at /pricing —
+			// the same duplicate-URL bug the index.html twins had, and the shape
+			// a reader is most likely to guess, since every *generated* page is
+			// slashed. Send it to the canonical instead of serving it twice.
+			if upath != "/" && strings.HasSuffix(r.URL.Path, "/") {
+				target := upath
+				if r.URL.RawQuery != "" {
+					target += "?" + r.URL.RawQuery
+				}
+				http.Redirect(w, r, target, http.StatusMovedPermanently)
+				return
+			}
 			http.ServeFile(w, r, shell)
 			return
 		}
