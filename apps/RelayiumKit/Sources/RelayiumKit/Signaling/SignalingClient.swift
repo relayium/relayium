@@ -8,6 +8,19 @@ public final class SignalingClient {
     public var onSignal: ((String, JSONValue) -> Void)? // (fromPeerId, data)
     public var onClose: (() -> Void)?
 
+    /// The id the hub assigned us, once `welcome` has arrived; nil before that.
+    ///
+    /// Stored, not merely announced through `onSelfId`, because the roster is
+    /// unusable without it — the hub broadcasts the whole room to every member,
+    /// so "which of these is me" has to be answerable by a caller that
+    /// subscribed after `welcome` had already landed.
+    public var selfId: String? {
+        selfLock.lock(); defer { selfLock.unlock() }
+        return _selfId
+    }
+    private var _selfId: String?
+    private let selfLock = NSLock()
+
     private let channel: WebSocketChannel
     private let name: String
     private let enc = JSONEncoder()
@@ -55,7 +68,10 @@ public final class SignalingClient {
         guard let e = try? dec.decode(Envelope.self, from: Data(text.utf8)) else { return }
         switch e.type {
         case SignalType.welcome:
-            if let id = e.name { onSelfId?(id, e.ip ?? "") }
+            if let id = e.name {
+                selfLock.lock(); _selfId = id; selfLock.unlock()
+                onSelfId?(id, e.ip ?? "")
+            }
         case SignalType.peers:
             if let p = e.peers { onPeers?(p) }
         case SignalType.signal:

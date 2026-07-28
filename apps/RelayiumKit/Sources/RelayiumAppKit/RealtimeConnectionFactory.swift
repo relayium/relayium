@@ -37,15 +37,29 @@ public enum RealtimeConnectionFactory {
 
     /// Resumes on the first peer the room reports, and only once — a second
     /// `onPeers` callback must not resume a continuation that already fired.
-    private static func firstPeer(on signaling: SignalingClient,
-                                  timeout: TimeInterval) async throws -> String {
+    /// Internal rather than private so the roster logic can be tested without
+    /// a live hub — it is the part with a decision in it.
+    static func firstPeer(on signaling: SignalingClient,
+                          timeout: TimeInterval) async throws -> String {
         let box = ResumeOnce()
         return try await withThrowingTaskGroup(of: String.self) { group in
             group.addTask {
                 try await withCheckedThrowingContinuation { cont in
                     signaling.onPeers = { peers in
-                        guard let first = peers.first else { return }
-                        box.resume { cont.resume(returning: first.id) }
+                        // The hub sends the WHOLE room roster to every member,
+                        // ourselves included (signal/hub.go broadcastRoster), so
+                        // the first entry is as likely to be us as the peer. A
+                        // sender that dialled its own id got a bare WebRTC
+                        // NSError and the "something went wrong" fallback,
+                        // immediately, on the very first Create a code.
+                        //
+                        // Before `welcome` there is no way to tell which entry
+                        // is us, so an early roster is skipped rather than
+                        // guessed at: another one arrives when a peer joins,
+                        // which is the only roster we actually want.
+                        guard let mine = signaling.selfId,
+                              let other = peers.first(where: { $0.id != mine }) else { return }
+                        box.resume { cont.resume(returning: other.id) }
                     }
                     signaling.onClose = {
                         box.resume { cont.resume(throwing: FactoryError.noPeerAppeared) }
