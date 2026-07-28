@@ -13,7 +13,7 @@ import (
 // nodeOnlineWindow, so central must fall back to proxying rather than
 // redirecting direct to it), with UpdateStartedAt set as given. Returns
 // (ts, svc, store, ownerID, fileID).
-func seedByoOwnNodeOffline(t *testing.T, updateStartedAt int64) (ts *httptest.Server, svc *Service, store *SQLiteStore, ownerID, fileID string) {
+func seedByoOwnNodeOffline(t *testing.T, updateStartedAt func(now time.Time) int64) (ts *httptest.Server, svc *Service, store *SQLiteStore, ownerID, fileID string) {
 	t.Helper()
 	return seedByoOwnNode(t, updateStartedAt, 0, true)
 }
@@ -22,9 +22,17 @@ func seedByoOwnNodeOffline(t *testing.T, updateStartedAt int64) (ts *httptest.Se
 // (so a burn/limited file can be seeded) and whether s.directDownload is on at
 // all, since byoUpdateExempt now requires both to match the direct-download
 // branch's own eligibility gate. Returns (ts, svc, store, ownerID, fileID).
-func seedByoOwnNode(t *testing.T, updateStartedAt, maxDownloads int64, directDownload bool) (ts *httptest.Server, svc *Service, store *SQLiteStore, ownerID, fileID string) {
+// updateStartedAt is a function of the service clock, not a timestamp, and the
+// clock is frozen below. byoUpdateExempt compares s.now() against the seeded
+// value at REQUEST time, so seeding from wall time meant the gap grew by
+// however long setup took — and a test seeding the exact window boundary was
+// really asserting "setup finished within one second". Under -race, or a loaded
+// machine, it did not, and the boundary tests failed at random.
+func seedByoOwnNode(t *testing.T, updateStartedAt func(now time.Time) int64, maxDownloads int64, directDownload bool) (ts *httptest.Server, svc *Service, store *SQLiteStore, ownerID, fileID string) {
 	t.Helper()
 	ts, svc, store, _ = newFileServer(t)
+	frozen := time.Now()
+	svc.now = func() time.Time { return frozen }
 	svc.SetDirectDownload(directDownload)
 	ctx := context.Background()
 	owner, _ := store.UpsertUserByEmail(ctx, "byoupdate@example.com", "")
@@ -43,7 +51,7 @@ func seedByoOwnNode(t *testing.T, updateStartedAt, maxDownloads int64, directDow
 		// Offline: last heartbeat well outside nodeOnlineWindow (90s), so the
 		// direct-redirect path is skipped and the download falls back to proxy.
 		LastSeenAt:      svc.now().Add(-1 * time.Hour).Unix(),
-		UpdateStartedAt: updateStartedAt,
+		UpdateStartedAt: updateStartedAt(frozen),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +71,7 @@ func seedByoOwnNode(t *testing.T, updateStartedAt, maxDownloads int64, directDow
 // update it, central proxies instead and would normally meter the owner. That
 // bill exists only because WE chose to update their machine, so we eat it.
 func TestByoOwnNodeDownloadIsNotMeteredDuringItsUpdateWindow(t *testing.T) {
-	ts, svc, store, ownerID, fid := seedByoOwnNodeOffline(t, time.Now().Unix())
+	ts, svc, store, ownerID, fid := seedByoOwnNodeOffline(t, func(now time.Time) int64 { return now.Unix() })
 	ctx := context.Background()
 	period := periodOf(svc.now().Unix())
 
@@ -85,7 +93,7 @@ func TestByoOwnNodeDownloadIsNotMeteredDuringItsUpdateWindow(t *testing.T) {
 // The exemption must be narrow. A user who simply powered their node off is not
 // our doing, and central really is paying that egress — keep metering it.
 func TestByoOwnNodeDownloadIsStillMeteredWhenOfflineForOtherReasons(t *testing.T) {
-	ts, svc, store, ownerID, fid := seedByoOwnNodeOffline(t, 0) // no update in flight
+	ts, svc, store, ownerID, fid := seedByoOwnNodeOffline(t, func(time.Time) int64 { return 0 }) // no update in flight
 	ctx := context.Background()
 	period := periodOf(svc.now().Unix())
 
@@ -108,7 +116,7 @@ func TestByoOwnNodeDownloadIsStillMeteredWhenOfflineForOtherReasons(t *testing.T
 // never came back is a broken node, not an update in progress — metering
 // resumes, otherwise a single stuck update would grant permanent free egress.
 func TestByoUpdateExemptionExpires(t *testing.T) {
-	ts, svc, store, ownerID, fid := seedByoOwnNodeOffline(t, time.Now().Add(-2*time.Hour).Unix())
+	ts, svc, store, ownerID, fid := seedByoOwnNodeOffline(t, func(now time.Time) int64 { return now.Add(-2 * time.Hour).Unix() })
 	ctx := context.Background()
 	period := periodOf(svc.now().Unix())
 
@@ -180,7 +188,7 @@ func TestFleetNodeDownloadIsStillMeteredDuringItsUpdateWindow(t *testing.T) {
 // been proxied (never eligible for the free direct path in the first place),
 // and it must stay metered.
 func TestByoOwnNodeLimitedFileStillMeteredDuringUpdateWindow(t *testing.T) {
-	ts, svc, store, ownerID, fid := seedByoOwnNode(t, time.Now().Unix(), 1, true)
+	ts, svc, store, ownerID, fid := seedByoOwnNode(t, func(now time.Time) int64 { return now.Unix() }, 1, true)
 	ctx := context.Background()
 	period := periodOf(svc.now().Unix())
 
@@ -204,7 +212,7 @@ func TestByoOwnNodeLimitedFileStillMeteredDuringUpdateWindow(t *testing.T) {
 // flight on the owner's own node caused nothing here either — absent the
 // update this download would never have taken the direct path anyway.
 func TestByoOwnNodeStillMeteredWhenDirectDownloadOff(t *testing.T) {
-	ts, svc, store, ownerID, fid := seedByoOwnNode(t, time.Now().Unix(), 0, false)
+	ts, svc, store, ownerID, fid := seedByoOwnNode(t, func(now time.Time) int64 { return now.Unix() }, 0, false)
 	ctx := context.Background()
 	period := periodOf(svc.now().Unix())
 
@@ -226,7 +234,7 @@ func TestByoOwnNodeStillMeteredWhenDirectDownloadOff(t *testing.T) {
 // Boundary: exactly at byoUpdateExemptWindow the check ("<=") must still
 // treat the update as in flight, so the download stays exempt.
 func TestByoUpdateExemptionAtExactWindowBoundaryIsStillExempt(t *testing.T) {
-	ts, svc, store, ownerID, fid := seedByoOwnNodeOffline(t, time.Now().Add(-byoUpdateExemptWindow).Unix())
+	ts, svc, store, ownerID, fid := seedByoOwnNodeOffline(t, func(now time.Time) int64 { return now.Add(-byoUpdateExemptWindow).Unix() })
 	ctx := context.Background()
 	period := periodOf(svc.now().Unix())
 
@@ -248,7 +256,7 @@ func TestByoUpdateExemptionAtExactWindowBoundaryIsStillExempt(t *testing.T) {
 // Boundary: one second past byoUpdateExemptWindow the update must be treated
 // as stuck/broken, not in flight, so the download is metered again.
 func TestByoUpdateExemptionOneSecondPastWindowIsMetered(t *testing.T) {
-	ts, svc, store, ownerID, fid := seedByoOwnNodeOffline(t, time.Now().Add(-byoUpdateExemptWindow-time.Second).Unix())
+	ts, svc, store, ownerID, fid := seedByoOwnNodeOffline(t, func(now time.Time) int64 { return now.Add(-byoUpdateExemptWindow - time.Second).Unix() })
 	ctx := context.Background()
 	period := periodOf(svc.now().Unix())
 
