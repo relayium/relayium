@@ -22,6 +22,11 @@ on:
     # on a Friday is discovered on a Monday.
     - cron: '0 4 * * 1'
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Release even if nothing under server/ changed'
+        type: boolean
+        default: false
 
 permissions:
   contents: write   # create and push the tag
@@ -58,6 +63,29 @@ jobs:
             # problem — but it is still written down, because a run that says
             # nothing is indistinguishable from a run that did not happen.
             echo "Nothing to release: main is at \`$last\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Commits are not the same thing as a release. Everything goreleaser
+          # publishes is built from server/ (.goreleaser.yaml's two `dir:
+          # server` builds — the relayium CLI and relayium-node); the macOS app
+          # under apps/ is not in any artifact. So a run of docs- or app-only
+          # commits would cut a tag whose binaries are byte-identical to the
+          # previous one, and send every CLI user's `relayium update` to fetch
+          # a version that changes nothing for them.
+          #
+          # This is not hypothetical: at the time this gate was added, main had
+          # 52 commits since v0.11.1 and not one of them touched server/.
+          rel="$(git diff --name-only "$last"..HEAD -- server/ | head -1)"
+          if [ -z "$rel" ] && [ "${{ inputs.force }}" != "true" ]; then
+            {
+              echo "### Nothing to release"
+              echo
+              echo "$count commits since \`$last\`, but none of them touch \`server/\`."
+              echo "Every published artifact is built from there, so a tag would ship"
+              echo "identical binaries. Run this workflow manually with \`force\` if you"
+              echo "want one anyway."
+            } >> "$GITHUB_STEP_SUMMARY"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
