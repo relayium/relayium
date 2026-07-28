@@ -34,4 +34,41 @@ final class RelayRttMessageTests: XCTestCase {
         let v = JSONValue.object(["relayRtt": .object(["n1": .number(10), "bad": .string("x")])])
         XCTAssertEqual(RelayRttMessage.decode(v), ["n1": 10])
     }
+
+    /// `JSONValue.number` is an unconstrained `Double` arriving from the
+    /// signalling server, which is untrusted by design. `Int(_: Double)` traps
+    /// outside `Int`'s range, so before this guard a peer sending
+    /// `{"relayRtt":{"huge":1e30}}` aborted the process — a one-line remote
+    /// crash. Out-of-range entries are dropped exactly like non-numeric ones,
+    /// so the rest of an otherwise usable map still survives.
+    func testDropsOutOfRangeNumbersInsteadOfTrapping() {
+        let v = JSONValue.object(["relayRtt": .object([
+            "n1": .number(10),
+            "huge": .number(1e30),
+            "negativeHuge": .number(-1e30),
+            "nan": .number(Double.nan),
+            "inf": .number(Double.infinity),
+            "negative": .number(-1),
+            "justOver": .number(Double(RelayRttMessage.maxRttMs) + 1),
+        ])])
+        XCTAssertEqual(RelayRttMessage.decode(v), ["n1": 10])
+    }
+
+    /// The bound itself is inclusive — a genuinely awful but honest RTT is
+    /// still a measurement, and dropping it would silently make that relay
+    /// ineligible rather than merely last.
+    func testKeepsValuesUpToTheBound() {
+        let v = JSONValue.object(["relayRtt": .object([
+            "slow": .number(Double(RelayRttMessage.maxRttMs)),
+            "zero": .number(0),
+        ])])
+        XCTAssertEqual(RelayRttMessage.decode(v), ["slow": RelayRttMessage.maxRttMs, "zero": 0])
+    }
+
+    /// The bound is what makes `RelayChoice.pick`'s `m + t` provably safe: two
+    /// decoded values can never sum past `Int.max`.
+    func testTheBoundKeepsPickFromOverflowing() {
+        let worst = RelayRttMessage.maxRttMs
+        XCTAssertEqual(RelayChoice.pick(mine: ["a": worst], theirs: ["a": worst]), "a")
+    }
 }
