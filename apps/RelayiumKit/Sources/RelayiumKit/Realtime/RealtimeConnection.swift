@@ -49,10 +49,11 @@ public final class RealtimeConnection: NSObject {
         /// An operation (e.g. `send`) was attempted before the handshake/channel
         /// were ready.
         case notReady
-        /// `send(files:)` was called a second time on this connection. Refused
-        /// rather than run: a fresh `RealtimeSender` restarts its AES-GCM nonce
-        /// (seq) counter at 0 under the same session key, so a second send would
-        /// reuse nonces already used by the first — catastrophic for GCM.
+        /// `send(sources:metas:)` was called a second time on this connection.
+        /// Refused rather than run: a fresh `RealtimeSender` restarts its
+        /// AES-GCM nonce (seq) counter at 0 under the same session key, so a
+        /// second send would reuse nonces already used by the first —
+        /// catastrophic for GCM.
         case alreadySending
         /// The receiver sent CTRL_REJECT (or the connection closed) before
         /// accepting the batch; the data frames were never streamed.
@@ -97,9 +98,9 @@ public final class RealtimeConnection: NSObject {
     /// hops onto this single serial queue before touching any mutable state
     /// below — the handshake/flow-control state is not otherwise thread-safe.
     private let queue = DispatchQueue(label: "im.relayium.RealtimeConnection")
-    /// `send(files:)` runs its (documented-simplified) busy-poll loop here,
-    /// never on `queue`, so it can't starve the ack/signal handlers that need
-    /// `queue` to make progress.
+    /// `send(sources:metas:)` runs its (documented-simplified) busy-poll loop
+    /// here, never on `queue`, so it can't starve the ack/signal handlers that
+    /// need `queue` to make progress.
     private let sendQueue = DispatchQueue(label: "im.relayium.RealtimeConnection.send", qos: .utility)
 
     private let factory: RTCPeerConnectionFactory
@@ -117,7 +118,8 @@ public final class RealtimeConnection: NSObject {
     private var sentTotal = 0
     private var openedSignaled = false
     private var closed = false
-    /// One-shot guard for `send(files:)` — see `ConnectionError.alreadySending`.
+    /// One-shot guard for `send(sources:metas:)` — see
+    /// `ConnectionError.alreadySending`.
     private var sendStarted = false
     /// Set when a CTRL_ACCEPT/CTRL_REJECT control frame arrives, gating the
     /// send path between the batch frame and the data frames (mirrors
@@ -364,26 +366,6 @@ public final class RealtimeConnection: NSObject {
     /// `web/src/lib/transfer-session.svelte.ts`'s `creditGate`.
     private static let sendStallTimeout: TimeInterval = 60
 
-    /// Seals the manifest + file bytes with the derived session key and streams
-    /// them over the DataChannel, gated by `SendWindow` (receiver ack credit) and
-    /// the SCTP send buffer.
-    ///
-    /// One-shot: a second call is refused (see `ConnectionError.alreadySending`)
-    /// because a fresh `RealtimeSender` would restart its GCM nonce counter at 0
-    /// under the same session key.
-    public func send(files: [(meta: FileMeta, data: [UInt8])]) {
-        let alreadyStarted = queue.sync { () -> Bool in
-            if self.sendStarted { return true }
-            self.sendStarted = true
-            return false
-        }
-        guard !alreadyStarted else {
-            queue.async { [weak self] in self?.onError?(ConnectionError.alreadySending) }
-            return
-        }
-        sendQueue.async { [weak self] in self?.sendOnSendQueue(files: files) }
-    }
-
     /// Streaming send: each file is read as it goes rather than taken whole up
     /// front, so what this holds is one chunk instead of one transfer.
     ///
@@ -402,10 +384,10 @@ public final class RealtimeConnection: NSObject {
         sendQueue.async { [weak self] in self?.streamOnSendQueue(sources: sources, metas: metas) }
     }
 
-    /// The array path's twin. Everything except the frame loop is deliberately
-    /// identical: the accept wait, the closed checks and the error routing are
-    /// the parts a live peer exercises, and this round has no way to re-prove
-    /// them in a unit test.
+    /// The only send path. A whole-transfer twin taking `[(FileMeta, [UInt8])]`
+    /// used to sit beside this one; it was removed once nothing called it,
+    /// because it was a public door back into the peak-memory-equals-transfer
+    /// behaviour this replaced.
     private func streamOnSendQueue(sources: [PlaintextSource], metas: [FileMeta]) {
         guard let sendKey = queue.sync(execute: { self.keys?.send }) else {
             queue.async { [weak self] in self?.onError?(ConnectionError.notReady) }
@@ -432,30 +414,6 @@ public final class RealtimeConnection: NSObject {
                     return transmit(frame)
                 }
                 if !more { return }
-            }
-        } catch {
-            queue.async { [weak self] in self?.onError?(error) }
-        }
-    }
-
-    private func sendOnSendQueue(files: [(meta: FileMeta, data: [UInt8])]) {
-        guard let sendKey = queue.sync(execute: { self.keys?.send }) else {
-            queue.async { [weak self] in self?.onError?(ConnectionError.notReady) }
-            return
-        }
-        let sender = RealtimeSender(sessionKey: sendKey)
-        do {
-            let batch = try sender.batchFrame(files.map { $0.meta })
-            guard transmit(batch) else { return }
-
-            // Web parity: announce the batch, then wait for the receiver's
-            // CTRL_ACCEPT before streaming any data frames; abort on
-            // CTRL_REJECT, on close, or if the receiver never answers.
-            guard waitForAccept() else { return }
-
-            for frame in sender.dataFrames(files) {
-                if queue.sync(execute: { self.closed }) { return }
-                guard transmit(frame) else { return }
             }
         } catch {
             queue.async { [weak self] in self?.onError?(error) }
