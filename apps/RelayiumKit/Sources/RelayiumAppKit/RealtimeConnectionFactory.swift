@@ -22,17 +22,42 @@ public enum RealtimeConnectionFactory {
         return comps.url ?? base
     }
 
+    /// How long a connection waits for the two peers' relay measurements to
+    /// meet before giving up and using the advertised servers.
+    ///
+    /// 800 ms is a guess. Nobody has measured this fleet's round trips from a
+    /// real client, and this constant is the first thing to revisit once
+    /// someone has — see the design doc's note.
+    public static let relayChoiceDeadline: TimeInterval = 0.8
+
     public static func make(code: String,
                             role: Role,
-                            iceServers: [ICEServerConfig],
+                            config: ICEConfig,
                             baseURL: URL,
                             deviceName: String,
                             peerTimeout: TimeInterval = 120) async throws -> RealtimePeerConnection {
         let signaling = SignalingClient.connect(wsBase: signalingBase(baseURL),
                                                 code: code, name: deviceName)
+        // Start measuring immediately: the sender is about to spend real time
+        // waiting for a peer, and that window is free.
+        let negotiator = RelayNegotiator(signaling: signaling, pool: config.relays,
+                                         measure: { await RelayProbe.measureAll($0) })
+        signaling.onSignal = { from, data in negotiator.handleSignal(from: from, data: data) }
+        negotiator.start()
+
         let peerId = try await firstPeer(on: signaling, timeout: peerTimeout)
+        negotiator.peerJoined(peerId)
+
+        let chosen = await negotiator.waitForChoice(deadline: relayChoiceDeadline)
+        let servers = (chosen?.iceServers ?? config.iceServers).map(rtcServer)
+        // Relay-only only when a relay was actually chosen. Falling back to the
+        // advertised set means possibly no relay at all (a LAN room), and
+        // forcing .relay there would leave ICE with nothing to gather.
+        let policy: RTCIceTransportPolicy = chosen != nil ? .relay : .all
+        // Constructed last on purpose: this call takes over signaling.onSignal,
+        // which the negotiator needed until now.
         return RealtimeConnection(signaling: signaling, peerId: peerId, role: role,
-                                  iceServers: iceServers.map(rtcServer))
+                                  iceServers: servers, iceTransportPolicy: policy)
     }
 
     /// Resumes on the first peer the room reports, and only once — a second

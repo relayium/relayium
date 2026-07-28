@@ -80,7 +80,7 @@ public enum AppEnvironment {
             iceClient: HTTPICEClient(baseURL: baseURL),
             makeConnection: { code, role, servers in
                 try await RealtimeConnectionFactory.make(
-                    code: code, role: role, iceServers: servers.iceServers,
+                    code: code, role: role, config: servers,
                     baseURL: baseURL, deviceName: deviceName())
             })
     }
