@@ -575,6 +575,15 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// 由 HandleAdminConfirm 落审计。
 	mux.Handle("POST /admin/rollout/{id}/emergency",
 		s.CSRFGuard(s.RequireStepUp(AuditRolloutEmergency, s.handleAdminRolloutEmergency)))
+	// 新版本通知：一键把机队轨指向 GitHub 上最新的 release，或忽略这个版本。
+	// 底层调用的是与手动填版本号相同的 SetTargetVersion（见
+	// handleAdminReleaseRollout），但审计动作是独立的 release.rollout ——
+	// 事后复盘要能区分"是谁手填的版本号"和"是谁点了通知里的按钮"。不需要
+	// 额外的 step-up：该 handler 自带的两道校验（轨道未在发布中 + 提交版本
+	// 与服务器当前检测到的最新版本一致）已经排除了误操作/过期页面的风险，
+	// stepup 的机制回答的是这两道校验已经回答过的问题。
+	mux.Handle("POST /admin/release/rollout", s.CSRFGuard(http.HandlerFunc(s.handleAdminReleaseRollout)))
+	mux.Handle("POST /admin/release/dismiss", s.CSRFGuard(http.HandlerFunc(s.handleAdminReleaseDismiss)))
 }
 
 // newAdminSession mints a session token and records how it was established
@@ -950,10 +959,32 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	rolloutFleet := s.rolloutPanel(r.Context(), "fleet", "机队轨", s.Now(), allNodes, nodesErr)
 	rolloutByo := s.rolloutPanel(r.Context(), "byo", "自带节点轨", s.Now(), allNodes, nodesErr)
 
+	// The release notice reads the fleet track DIRECTLY rather than off
+	// rolloutFleet above: rolloutPanel is the rollout PANEL's own read, and a
+	// future change to that panel (what it selects, how it degrades on error)
+	// must not be able to silently change what the notice decides. Two
+	// independent reads of the same row, same reasoning as the fleet/byo
+	// panels never sharing one read.
+	var notice releaseNoticeView
+	if s.cfg.ReleaseCheck {
+		rc, rcErr := s.Store().GetReleaseCheck(r.Context())
+		if rcErr != nil {
+			log.Printf("admin: GetReleaseCheck failed: %v", rcErr)
+		} else {
+			fleetTrack, found, ftErr := s.Store().GetRolloutTrack(r.Context(), "fleet")
+			if ftErr != nil {
+				log.Printf("admin: GetRolloutTrack(fleet) for the release notice failed: %v", ftErr)
+			} else {
+				notice = releaseNotice(rc, fleetTrack, found)
+			}
+		}
+	}
+
 	return adminHomeData{
 		RolloutFleet: rolloutFleet, RolloutByo: rolloutByo,
-		HaltedTracks: haltedRolloutTracks(rolloutFleet, rolloutByo),
-		Metrics:      metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
+		HaltedTracks:  haltedRolloutTracks(rolloutFleet, rolloutByo),
+		ReleaseNotice: notice,
+		Metrics:       metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
 		Nodes: nodeVs, FleetNodeCount: fleetNodeCount, FleetTokens: tokenVs,

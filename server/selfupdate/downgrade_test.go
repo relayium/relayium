@@ -25,9 +25,9 @@ func TestCompareVersions(t *testing.T) {
 		{"v1.2.3-rc1", "v1.2.3", 0, false}, // pre-release → incomparable
 	}
 	for _, c := range cases {
-		got, ok := compareVersions(c.a, c.b)
+		got, ok := CompareVersions(c.a, c.b)
 		if ok != c.ok || (ok && got != c.want) {
-			t.Errorf("compareVersions(%q,%q) = (%d,%v), want (%d,%v)", c.a, c.b, got, ok, c.want, c.ok)
+			t.Errorf("CompareVersions(%q,%q) = (%d,%v), want (%d,%v)", c.a, c.b, got, ok, c.want, c.ok)
 		}
 	}
 }

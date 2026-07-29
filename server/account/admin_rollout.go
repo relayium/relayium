@@ -427,6 +427,126 @@ func (s *Service) rolloutSetVersion(w http.ResponseWriter, r *http.Request, acti
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
+// handleAdminReleaseRollout points the fleet track at the release the
+// notice named, going through SetTargetVersion — the same call the typed
+// fleet-target form uses — so there is exactly one way a target is ever set.
+//
+// It has TWO guards, and both exist for the same reason: a stale page, or a
+// direct POST, must not be able to do what the UI declines to offer.
+//
+//  1. WHETHER. Re-read the fleet track and the check row, and refuse unless
+//     releaseNotice(...).OfferButton — the EXACT predicate the template renders
+//     the button on. It is expressed as a call, not as a restatement, and that
+//     shape is the fix rather than an incidental tidy: every previous version of
+//     this guard restated one axis of the UI's rule in its own words and drifted
+//     from the rest. A hand-written `status != "rolling"` waved through a paused
+//     rollout (halted, but with the canary still in current_node_id, which
+//     HaltRolloutTrack leaves set on purpose). A hand-written
+//     `version == LatestTag` waved through a fleet target that was AHEAD of
+//     GitHub's releases/latest — routine while a tag is a pre-release rolled to
+//     the fleet first, or after a bad release is unpublished — where the panel
+//     correctly renders nothing and a stale page posted successfully anyway.
+//     Delegating collapses button and handler onto one predicate, so a future
+//     condition added to releaseNotice reaches this handler for free and the two
+//     cannot fall out of step again.
+//
+//     What that predicate is protecting: SetTargetVersion rewrites the WHOLE
+//     fleet row — resetting Status to rolling, restamping StageStartedAt,
+//     clearing CurrentNodeID/FirstNodeID — so pressing the button on a rollout
+//     in flight, live or paused, silently abandons it.
+//
+//  2. WHICH. Re-read GetReleaseCheck and refuse unless the posted version equals
+//     the stored LatestTag. OfferButton says whether ANY release may be shipped
+//     from here; it says nothing about the string this request carried. Without
+//     this the handler trusts a client-supplied version: an admin leaves /admin
+//     open showing v1.3.0, the fleet completes a rollout to v1.5.0, and the
+//     stale button posts v1.3.0 — which passes guard 1 (a newer release does
+//     exist and nothing is in flight) and repoints the fleet BACKWARDS. That is
+//     not inert: nodes.go:445 sets AllowDowngrade automatically for a
+//     downgrade, so nodes actually install the older build.
+//
+// Audited as its own action, AuditReleaseRollout, rather than reused
+// AuditRolloutTarget. That is deliberate, not an oversight: the house rule
+// here is the OPPOSITE of "identical writes share an action" —
+// handleAdminRolloutTarget and handleAdminRolloutRollback (above) funnel
+// into this exact same SetTargetVersion write and are deliberately given
+// DIFFERENT actions, precisely so the audit trail (and the UI) can tell
+// "shipping v1.3.0" from "getting off v1.3.0" — the fact an incident review
+// actually needs. Entry point is exactly what an incident review wants to
+// know here too: "the operator typed a version in" and "the operator clicked
+// the button the release notice offered" are different facts about how a
+// rollout started, even though the row ends up in the same shape.
+func (s *Service) handleAdminReleaseRollout(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	version := strings.TrimSpace(r.FormValue("version"))
+	before, found, err := s.Store().GetRolloutTrack(r.Context(), "fleet")
+	if err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "发布失败："+err.Error())
+		return
+	}
+	rc, rcErr := s.Store().GetReleaseCheck(r.Context())
+	if rcErr != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "发布失败："+rcErr.Error())
+		return
+	}
+	if v := releaseNotice(rc, before, found); !v.OfferButton {
+		// The button the page posted from is not one this server would render
+		// right now. One message covers every reason, because the point of
+		// asking releaseNotice is that this handler does not maintain its own
+		// list of them.
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"发布失败：当前没有可一键发布的新版本，请刷新页面后重试。"+
+				"若机队轨上有未结束的发布（正在发布或已暂停），请到下方机队面板手动处理。")
+		return
+	}
+	if rc.LatestTag == "" || version != rc.LatestTag {
+		// A stale page (or a direct POST) naming a version other than what
+		// the server currently reports as newest. Refusing here is what
+		// keeps the button's only possible effect "set the target to the
+		// version this page is actually offering" — never an arbitrary
+		// client-supplied string.
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"发布失败：提交的版本与服务器当前检测到的最新版本不一致，请刷新页面后重试")
+		return
+	}
+	if err := s.SetTargetVersion(r.Context(), "fleet", version); err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "目标版本设置失败："+err.Error())
+		return
+	}
+	s.WriteAudit(r, AuditReleaseRollout, "rollout:fleet", []ChangeField{
+		{Field: "target_version", Old: before.TargetVersion, New: version},
+		{Field: "status", Old: before.Status, New: "rolling"},
+	}, StepUpNone)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminReleaseDismiss records (or, with an empty version, clears) the
+// release the operator does not want to be prompted about again. It never
+// touches a rollout track — dismissing changes nothing about what is
+// running, only what the notice says.
+func (s *Service) handleAdminReleaseDismiss(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	version := strings.TrimSpace(r.FormValue("version"))
+	before, err := s.Store().GetReleaseCheck(r.Context())
+	if err != nil {
+		log.Printf("admin: GetReleaseCheck (release dismiss before-image) failed: %v", err)
+	}
+	if err := s.Store().SetReleaseCheckDismissed(r.Context(), version, s.Now().Unix()); err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "忽略发布通知失败："+err.Error())
+		return
+	}
+	s.WriteAudit(r, AuditReleaseDismiss, "release:notice", []ChangeField{
+		{Field: "dismissed_tag", Old: before.DismissedTag, New: version},
+	}, StepUpNone)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
 // handleAdminRolloutByoRollbackPrevious rolls the BYO track back onto the
 // version it held immediately before the current one. It is registered on a
 // path with "byo" spelled out, not on the {id} wildcard, because it is

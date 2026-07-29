@@ -23,9 +23,15 @@ import (
 	"github.com/relayium/relayium/internal/metering"
 	"github.com/relayium/relayium/internal/signal"
 	"github.com/relayium/relayium/internal/storage"
+	"github.com/relayium/relayium/selfupdate"
 )
 
 const lanMaxPeers = 50 // LAN room peer cap (H4); tunable.
+
+// releaseRepo is the GitHub repo the admin release check polls for the
+// newest release tag. Same repo cmd/relayium-node/update.go:23 uses for its
+// own updateRepo constant.
+const releaseRepo = "relayium/relayium"
 
 // sessionTTL 是登录会话的**绝对**有效期。没有空闲超时也没有滑动续期，所以这个数字
 // 就是"一枚泄漏的 cookie 还能用多久"的上限，同时也是共用设备上"忘了登出"的窗口。
@@ -95,6 +101,7 @@ func main() {
 	nodeToken := flag.String("node-token", envStr("RELAYIUM_NODE_TOKEN", ""), "fleet bootstrap bearer token for relay-node /api/nodes/* (empty disables the node API)")
 	enableUserNodes := flag.Bool("enable-user-nodes", envBool("RELAYIUM_ENABLE_USER_NODES", true), "serve per-user BYO node tokens (account-bound relay/storage nodes)")
 	directDownload := flag.Bool("direct-download", envBool("RELAYIUM_DIRECT_DOWNLOAD", false), "redirect stored downloads straight to fleet nodes that advertise a public DownloadURL (default off = central proxies)")
+	releaseCheck := flag.Bool("release-check", envBool("RELAYIUM_RELEASE_CHECK", true), "ask GitHub hourly for the newest release and offer it in /admin (default on; sends no instance data)")
 	enableGoogle := flag.Bool("enable-google", envBool("RELAYIUM_ENABLE_GOOGLE", false), "enable Google OAuth login (disabled by default)")
 	enableApple := flag.Bool("enable-apple", envBool("RELAYIUM_ENABLE_APPLE", false), "enable Sign in with Apple (disabled by default)")
 	appleClientIDs := flag.String("apple-client-ids", envStr("RELAYIUM_APPLE_CLIENT_IDS", ""), "comma-separated Apple aud allowlist: app Bundle ID + web Services ID")
@@ -429,6 +436,7 @@ func main() {
 			StripeSecretKey:      *stripeSecretKey,
 			StripeWebhookSecret:  *stripeWebhookSecret,
 			StripePortalConfig:   *stripePortalConfig,
+			ReleaseCheck:         *releaseCheck,
 		})
 		// Wire /api/ice to validate anonymous pairing codes so it can hand out
 		// TURN credentials for them — otherwise code transfers are STUN-only
@@ -504,6 +512,45 @@ func main() {
 			}
 			go prober.Run(context.Background(), 2*time.Minute)
 			log.Printf("stored transfers enabled: blobs in %s", *blobDir)
+		}
+		if *releaseCheck {
+			// Printed unconditionally, because this ships to self-hosters and it
+			// changes what their server does on the network. It reads a public API
+			// and uploads nothing about the instance; what GitHub can observe is
+			// this machine's egress IP asking on a timer.
+			//
+			// It names api.github.com, which is the host actually contacted
+			// (selfupdate's defaultAPIBase) — NOT github.com, which is only the
+			// download host and is never reached by this poller. The stated
+			// purpose of this line is to let a self-hoster act on it, and an
+			// egress allowlist built from the wrong hostname fails closed: the
+			// check silently never succeeds and /admin quietly says it has never
+			// checked. It also says "at startup and then hourly", because
+			// ReleaseChecker.Run checks once immediately and central restarts on
+			// every deploy — "hourly" undercounts the requests it will see.
+			log.Printf("release check enabled: asking api.github.com at startup and then hourly for the newest %s release, to offer it in /admin. "+
+				"No instance data is sent. Set RELAYIUM_RELEASE_CHECK=false to turn it off.", releaseRepo)
+			checker := &account.ReleaseChecker{
+				Store: store,
+				Now:   time.Now,
+				Latest: func(ctx context.Context) (string, error) {
+					// Per-check deadline. selfupdate.DefaultHTTPClient sets NO
+					// blanket Client.Timeout on purpose — it is tuned for
+					// multi-MB archive downloads and bounds only the fast phases
+					// (connect, TLS, time-to-first-byte) — so a server that
+					// sends headers and then stalls the body wedges this call
+					// forever, and Run calls CheckOnce SERIALLY: the poller
+					// never ticks again and the panel silently stops updating.
+					// This request is a few hundred bytes of JSON, so a deadline
+					// on the whole request is right here even though it would
+					// be wrong for a download.
+					ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+					defer cancel()
+					return selfupdate.LatestTag(ctx, selfupdate.Options{Repo: releaseRepo})
+				},
+				Log: log.Default(),
+			}
+			go checker.Run(context.Background(), time.Hour)
 		}
 		if *redisAddr != "" {
 			worker := &metering.Worker{

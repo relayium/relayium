@@ -559,6 +559,15 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// row = "no history recorded", which the rollback action refuses
 		// rather than guessing.
 		`ALTER TABLE node_rollout ADD COLUMN previous_version TEXT NOT NULL DEFAULT ''`,
+		// One row, enforced by the CHECK, holding what the last successful
+		// release check saw and which tag the operator dismissed. The two
+		// halves are written by separate statements so neither can clobber the
+		// other: a failed check must leave the result alone, and a dismissal
+		// must not look like a check.
+		`CREATE TABLE IF NOT EXISTS release_check (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  latest_tag TEXT NOT NULL DEFAULT '', checked_at INTEGER NOT NULL DEFAULT 0,
+  dismissed_tag TEXT NOT NULL DEFAULT '', dismissed_at INTEGER NOT NULL DEFAULT 0)`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -2952,6 +2961,35 @@ func (s *SQLiteStore) SetSetting(ctx context.Context, key string, value, at int6
 		`INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
 		 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
 		key, value, at)
+	return err
+}
+
+func (s *SQLiteStore) GetReleaseCheck(ctx context.Context) (ReleaseCheck, error) {
+	var rc ReleaseCheck
+	err := s.reader().QueryRowContext(ctx,
+		`SELECT latest_tag, checked_at, dismissed_tag, dismissed_at FROM release_check WHERE id = 1`).
+		Scan(&rc.LatestTag, &rc.CheckedAt, &rc.DismissedTag, &rc.DismissedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		// Never checked and never dismissed. That is a state, not a failure:
+		// the panel has its own wording for it.
+		return ReleaseCheck{}, nil
+	}
+	return rc, err
+}
+
+func (s *SQLiteStore) SetReleaseCheckResult(ctx context.Context, tag string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO release_check (id, latest_tag, checked_at) VALUES (1, ?, ?)
+		   ON CONFLICT(id) DO UPDATE SET latest_tag = excluded.latest_tag, checked_at = excluded.checked_at`,
+		tag, at)
+	return err
+}
+
+func (s *SQLiteStore) SetReleaseCheckDismissed(ctx context.Context, tag string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO release_check (id, dismissed_tag, dismissed_at) VALUES (1, ?, ?)
+		   ON CONFLICT(id) DO UPDATE SET dismissed_tag = excluded.dismissed_tag, dismissed_at = excluded.dismissed_at`,
+		tag, at)
 	return err
 }
 

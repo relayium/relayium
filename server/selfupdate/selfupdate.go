@@ -161,11 +161,14 @@ func parseVer(s string) ([3]int, bool) {
 	return out, true
 }
 
-// compareVersions reports -1/0/1 for a<b / a==b / a>b over two release tags.
+// CompareVersions reports -1/0/1 for a<b / a==b / a>b over two release tags.
 // ok=false when either isn't a plain numeric semver, in which case the result
 // must not be trusted (a "dev" or unparseable current version never blocks an
 // update).
-func compareVersions(a, b string) (int, bool) {
+//
+// Exported because the admin panel decides whether a release is newer than
+// what the fleet targets, and it lives in another package.
+func CompareVersions(a, b string) (int, bool) {
 	pa, oka := parseVer(a)
 	pb, okb := parseVer(b)
 	if !oka || !okb {
@@ -259,7 +262,7 @@ func Update(ctx context.Context, o Options, progress io.Writer) (from, to string
 	// 而且只认 o.Force**：AllowDowngrade 是中心下发的，如果地板也能被它越过，那么
 	// 一个被攻破的中心照样能把车队降到有洞的旧版本——地板就白设了。
 	if !o.Force && minSupportedVersion != "" {
-		if cmp, ok := compareVersions(tag, minSupportedVersion); ok && cmp < 0 {
+		if cmp, ok := CompareVersions(tag, minSupportedVersion); ok && cmp < 0 {
 			return o.CurrentVersion, tag, false, fmt.Errorf(
 				"refusing to install %s: below the minimum version %s burned into this build "+
 					"(a rollback past a security fix must be done on the machine itself with --force)",
@@ -268,7 +271,7 @@ func Update(ctx context.Context, o Options, progress io.Writer) (from, to string
 	}
 
 	if !o.Force && !o.AllowDowngrade {
-		if cmp, ok := compareVersions(tag, o.CurrentVersion); ok && cmp < 0 {
+		if cmp, ok := CompareVersions(tag, o.CurrentVersion); ok && cmp < 0 {
 			return o.CurrentVersion, tag, false, fmt.Errorf(
 				"refusing to downgrade: latest release %s is older than the running %s (use --force to override)",
 				tag, o.CurrentVersion)

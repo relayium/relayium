@@ -70,6 +70,7 @@ definitions in [`server/main.go`](../server/main.go). The essentials:
 | `RELAYIUM_REDIS_ADDR` | Optional Redis `host:port` for TURN relay-byte metering. Empty disables metering entirely; transfers still work without it. |
 | `RELAYIUM_ADMIN_USER` / `RELAYIUM_ADMIN_PASS` | Credentials for the `/admin` console (username defaults to `admin` if unset). It is a full mutating console, not a read-only viewer — see [Admin dashboard](#admin-dashboard-optional-and-not-read-only) below. Password empty (the default) disables `/admin` outright — it 404s and falls through to the SPA. |
 | `RELAYIUM_ADMIN_TOTP_SECRET` | Optional TOTP 2FA on top of the admin login. See [Admin dashboard](#admin-dashboard-optional-and-not-read-only) below. |
+| `RELAYIUM_RELEASE_CHECK` | On (`true`) by default: ask GitHub hourly for the newest release and offer it in `/admin`. See [Release check](#release-check-on-by-default) below. `false` disables it — no request is made at all. |
 | `RELAYIUM_BIND` | Docker-compose only (not read by the server itself) — the host address the container's port 8080 is published on. Defaults to the loopback interface only, so a public host doesn't expose plaintext HTTP; set it to the wildcard address (all interfaces) for direct LAN access without a reverse proxy. |
 
 `server/.env.example` also documents optional Google/Apple sign-in, Stripe
@@ -121,6 +122,40 @@ secrets:
 
 Leaving `RELAYIUM_ADMIN_PASS` empty (the default) disables `/admin`
 entirely — it 404s and falls through to the SPA.
+
+## Release check (on by default)
+
+Once at startup and then every hour, the server asks GitHub's public API for
+the newest release tag of
+[`relayium/relayium`](https://github.com/relayium/relayium) — a plain
+`GET https://api.github.com/repos/relayium/relayium/releases/latest`, the same
+call `relayium-node update` already makes when you run it by hand. The startup
+check matters if you are counting requests or writing an egress allowlist: a
+server that is restarted often (every deploy, every config change) asks once
+per restart on top of the hourly tick, so the interval is an upper bound on the
+gap between checks, not on their number. The host to allow is `api.github.com`
+— `github.com` itself is only the download host and this check never contacts
+it.
+
+If that tag is newer than what your fleet track is targeting, `/admin` shows a
+banner offering a one-click rollout to it (or, when a rollout on the fleet
+track has not finished — still running, or paused with a node recorded in
+flight — just names the new version without a button, since starting a new
+rollout would discard where that one had got to; see
+[Admin dashboard](#admin-dashboard-optional-and-not-read-only)).
+
+Nothing about your instance is sent with that request — no version, no host,
+no usage. What GitHub *can* observe is that some machine at your egress IP
+asked, on a timer and at each restart, the same as it can for anyone's `curl`
+cron job.
+A failed check (offline, rate-limited, GitHub down) never overwrites the
+last-known result and never claims the deployment is current — silence is
+the only "nothing new" signal, and the panel prints when the last successful
+check happened so that silence stays legible.
+
+Set `RELAYIUM_RELEASE_CHECK=false` to turn it off. Once disabled, no request
+is made at all, and the `/admin` panel shows none of this — no banner, no
+last-checked line.
 
 ## Cross-network transfers
 

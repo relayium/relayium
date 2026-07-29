@@ -118,6 +118,10 @@ type adminHomeData struct {
 	// Derived from the two panels, so it inherits their independence: an
 	// unreadable track contributes nothing here and cannot suppress the other.
 	HaltedTracks []rolloutHaltView
+	// ReleaseNotice is the "a newer release exists" banner. Its zero value
+	// renders nothing, which is also what a failed check produces — this
+	// banner only ever makes a positive claim.
+	ReleaseNotice releaseNoticeView
 	// RolloutError is the banner shown when a rollout control was refused (bad
 	// version, unknown track, the byo-behind-fleet gate, pausing a track that
 	// is not rolling). Empty on a normal render.
@@ -537,6 +541,29 @@ button:hover{filter:brightness(1.07)}
 {{end}}
 </body></html>`))
 
+// Every onsubmit="return confirm(...)" in the template text below — on the
+// node restore/remove/delete forms, the token revoke form, the passkey
+// delete form, and the release notice's "发布 ... 到机队" button — is DEAD
+// CODE, same as rolloutPanelTmpl's own onsubmit attributes (see the doc
+// comment on that var): buildCSP emits script-src 'self' 'nonce-…' with no
+// 'unsafe-inline' / 'unsafe-hashes', so the browser never runs an inline
+// event handler and every one of these forms posts with no dialog. None of
+// them must ever be read as "this control has a confirmation step".
+//
+// The release-rollout button is the newest and, on the page an admin visits
+// most casually, the most consequential of the lot — it's why it gets its
+// own guards instead of relying on the dead confirm(): handleAdminReleaseRollout
+// re-evaluates releaseNotice — the very predicate the {{if .OfferButton}}
+// below renders on — and refuses unless it still says OfferButton, AND
+// refuses unless the posted version matches the server's own current
+// GetReleaseCheck.LatestTag. With both of those in place the button can only
+// ever set the target to the version the server itself currently reports as
+// newest, and only in a state where this template would have drawn the button
+// — so what remains is a misclick, not a stale-state hazard, and a step-up
+// flow would just be answering a question those two guards already answer.
+//
+// Note the shape: the handler calls the predicate rather than restating it.
+// Restating it is what let a stale page post while the panel showed nothing.
 var adminUsersTmpl = template.Must(withRolloutPanel(withPasskeyJS(template.New("users").Funcs(template.FuncMap{
 	"ts":    func(sec int64) string { return time.Unix(sec, 0).UTC().Format("2006-01-02 15:04") },
 	"bytes": humanBytes,
@@ -624,6 +651,36 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <a href="/admin/audit" style="color:var(--a);text-decoration:none">审计日志</a>
 <form method="post" action="/admin/logout"><button type="submit">退出</button></form>
 </div></div>
+
+{{with .ReleaseNotice}}
+{{if .Enabled}}
+{{if .Show}}
+<section class="halts">
+<div class="halt">
+<b>有新版本：{{.LatestTag}}</b>{{if .TargetTag}} · 当前目标 {{.TargetTag}}{{else}} · 尚未配置发布目标{{end}}
+{{if .OfferButton}}
+<form method="post" action="/admin/release/rollout" class="lim"
+  onsubmit="return confirm('把机队轨的目标版本设为 {{.LatestTag}} 并开始发布？')">
+<input type="hidden" name="version" value="{{.LatestTag}}">
+<button type="submit">发布 {{.LatestTag}} 到机队</button></form>
+{{else}}
+<div class="halt-why">机队轨上有一次发布尚未结束（目标 {{.TargetTag}}，正在发布或已暂停），此处不提供一键发布：那会中止它、清掉记录在案的发布位置并从头开始，已暂停的发布也就无法再原样继续。要改目标请到下方机队面板手动设定。</div>
+{{end}}
+<form method="post" action="/admin/release/dismiss" class="lim">
+<input type="hidden" name="version" value="{{.LatestTag}}">
+<button type="submit">忽略此版本</button></form>
+</div>
+</section>
+{{else if .DismissedTag}}
+<div style="color:var(--muted);font-size:12px">已忽略 {{.DismissedTag}} ·
+<form method="post" action="/admin/release/dismiss" class="lim" style="display:inline">
+<input type="hidden" name="version" value="">
+<button type="submit">撤销</button></form></div>
+{{end}}
+{{if .CheckedAt}}<div style="color:var(--muted);font-size:12px">上次成功检查：{{ts .CheckedAt}} UTC</div>
+{{else}}<div style="color:var(--muted);font-size:12px">尚未成功检查过</div>{{end}}
+{{end}}
+{{end}}
 
 {{if .HaltedTracks}}
 <section class="halts">
