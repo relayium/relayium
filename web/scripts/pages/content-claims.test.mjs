@@ -286,7 +286,21 @@ const FALLS_BACK = {
 // fall back to our shared infrastructure … Only use my own nodes for
 // relay/storage" out — that sentence is about node selection and has no notion
 // of a direct path in it.
-const RELAY = /\brelay(?:s|ed|ing)?\b|中继|リレー|릴레이|relais|retransmis|مرحل/i;
+// Every form the corpus actually uses, which is not what this pattern used to
+// list. Measured against the content tree, the old version was blind to:
+//   ja  中継    33 occurrences — it only had the SIMPLIFIED 中继 (继 ≠ 継)
+//   ko  중계    17 — it only had the loanword 릴레이
+//   zh  中转     4 — the verb form, kept deliberately over the noun 中继
+//   ar  مُرحِّل  145 — see stripArabicMarks below
+// So the ja and ar halves of this guard were passing because they never fired,
+// not because the copy was clean.
+const RELAY = /\brelay(?:s|ed|ing)?\b|中继|中継|中转|リレー|릴레이|중계|relais|retransmis|مرحل|ترحيل/i;
+// Arabic is written with diacritics throughout this corpus (المُرحِّل), and the
+// marks are separate code points sitting between the letters — so a pattern
+// written as the bare skeleton (مرحل) matches none of them. That skeleton had
+// exactly 1 hit in the whole tree against 145 for the vocalised form. Strip the
+// marks before matching rather than trying to spell every vocalisation.
+const stripArabicMarks = (s) => s.replace(/[ً-ْٰـ]/g, "");
 // "diret" is not a typo for "direct": Portuguese drops the c (direto / direta),
 // and leaving it out is exactly how the pt locale slipped through a first draft
 // of this rule while the other eight were caught.
@@ -320,13 +334,16 @@ const NOT_FALLING_BACK = {
 const SOMEONE_ELSES_TOOL = /magic-wormhole|\bcroc\b|transit relay|localsend|syncthing|tailscale|resilio/i;
 
 function claimsRelayIsAFallback(s, lang) {
-  for (const t of sentences(s)) {
+  for (const raw of sentences(s)) {
+    // Diacritics only ever hide a match, never create one, so normalising every
+    // language is safe and keeps the Arabic tables from needing vocalised twins.
+    const t = stripArabicMarks(raw);
     const lt = t.toLowerCase();
     if (!FALLS_BACK[lang].some((p) => lt.includes(p.toLowerCase()))) continue;
     if (!RELAY.test(t) || !DIRECT.test(t)) continue;
     if (NOT_FALLING_BACK[lang].test(t)) continue;
     if (SOMEONE_ELSES_TOOL.test(t)) continue;
-    return `says a transfer falls back to a relay when a direct path fails: "${t.trim()}"`;
+    return `says a transfer falls back to a relay when a direct path fails: "${raw.trim()}"`;
   }
 }
 // Deliberately tolerated: guides-what-is-p2p-file-transfer.mjs defines the TURN
@@ -354,5 +371,47 @@ describe("content claims about pairing codes, accounts and the relay", () => {
   it("never tells a reader that a transfer falls back to a relay", () => {
     const bad = scan(claimsRelayIsAFallback);
     if (bad.length) throw new Error(`false relay-fallback claims:\n  ${bad.join("\n  ")}`);
+  });
+
+  // The rule above is nine independent per-language matchers, and a green run
+  // proves nothing about a matcher that cannot fire at all. Two of them could
+  // not: the ja half listed only the simplified 中继 while the corpus writes 中継
+  // (33 occurrences), and the ar half listed the unvocalised مرحل while the
+  // corpus writes مُرحِّل (145 vs 1). Both had been "passing" since they were
+  // written. This feeds each locale a sentence that IS the thing the rule
+  // forbids, and fails if the rule shrugs.
+  it("actually fires in every language it claims to cover", () => {
+    const BAIT = {
+      en: "If a direct connection fails it falls back to a relay.",
+      zh: "如果直连失败，就会回落到中继。",
+      ja: "直接接続に失敗した場合は中継サーバーにフォールバックします。",
+      ko: "직접 연결이 실패하면 릴레이로 폴백합니다.",
+      de: "Wenn keine direkte Verbindung zustande kommt, weicht es auf ein Relay aus.",
+      fr: "Si la connexion directe échoue, il bascule vers le relais.",
+      ar: "إذا فشل الاتصال المباشر فإنه يتراجع إلى المُرحِّل.",
+      es: "Si la conexión directa falla, recurre a un retransmisor.",
+      pt: "Se a conexão direta falhar, recorre a um retransmissor.",
+    };
+    const deaf = LANGS.filter((l) => !claimsRelayIsAFallback(BAIT[l], l));
+    if (deaf.length) throw new Error(`relay-fallback rule never fires for: ${deaf.join(", ")}`);
+  });
+
+  // The mirror of the above: a matcher that fires on everything is just as
+  // useless, and the corrected copy ("does NOT fall back to a relay") is the
+  // sentence most at risk of being swallowed.
+  it("does not fire on copy that denies the fallback", () => {
+    const DENIALS = {
+      en: "It never falls back to a relay when a direct path is available.",
+      zh: "在可以直连时它从不回落到中继。",
+      ja: "直接接続できる場合は中継にフォールバックしません。",
+      ko: "직접 연결이 가능하면 릴레이로 폴백하지 않습니다.",
+      de: "Es weicht nicht auf ein Relay aus, wenn eine direkte Verbindung möglich ist.",
+      fr: "Il ne bascule pas vers le relais lorsque la connexion directe est possible.",
+      ar: "لا يتراجع إلى المُرحِّل عندما يكون الاتصال المباشر متاحًا.",
+      es: "No recurre a un retransmisor cuando la conexión directa es posible.",
+      pt: "Não recorre a um retransmissor quando a conexão direta é possível.",
+    };
+    const trigger = LANGS.filter((l) => claimsRelayIsAFallback(DENIALS[l], l));
+    if (trigger.length) throw new Error(`relay-fallback rule false-positives on a denial in: ${trigger.join(", ")}`);
   });
 });
