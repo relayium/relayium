@@ -380,6 +380,19 @@ func TestReleaseNoticeSilentWhenNothingIsNewer(t *testing.T) {
 
 // The whole point of the "positive claims only" rule: a deployment that has
 // never checked successfully says nothing about being current.
+// A deployment that switched the check off must not be told 尚未成功检查过
+// forever: true, useless, and it implies something is broken when the operator
+// turned it off deliberately. admin.go leaves the zero value in that case.
+func TestReleaseNoticeZeroValueIsNotEnabled(t *testing.T) {
+	var v releaseNoticeView
+	if v.Enabled || v.Show || v.OfferButton {
+		t.Fatalf("the zero view must render nothing at all: %+v", v)
+	}
+	if got := releaseNotice(ReleaseCheck{}, RolloutTrack{}, false); !got.Enabled {
+		t.Fatal("releaseNotice is only called when the feature is on, so its result is Enabled")
+	}
+}
+
 func TestReleaseNoticeSaysNothingWhenNeverChecked(t *testing.T) {
 	got := releaseNotice(
 		ReleaseCheck{},
@@ -522,6 +535,11 @@ import (
 
 // releaseNoticeView is what the panel renders. Zero value = render nothing.
 type releaseNoticeView struct {
+	// Enabled gates the whole block, including the freshness line. Without it
+	// a deployment that deliberately set RELAYIUM_RELEASE_CHECK=false would be
+	// told 尚未成功检查过 forever -- true, useless, and implying something is
+	// wrong when the operator switched it off on purpose.
+	Enabled     bool
 	Show        bool
 	OfferButton bool
 	// Rolling is true when the fleet track is mid-rollout: the notice informs
@@ -549,6 +567,7 @@ type releaseNoticeView struct {
 // a refusal. This is the case that is worse, because it succeeds.
 func releaseNotice(rc ReleaseCheck, fleet RolloutTrack, fleetFound bool) releaseNoticeView {
 	v := releaseNoticeView{
+		Enabled:   true,
 		LatestTag: rc.LatestTag, CheckedAt: rc.CheckedAt, DismissedTag: rc.DismissedTag,
 	}
 	if fleetFound {
@@ -905,6 +924,7 @@ In `server/account/admin_templates.go`, immediately before the `{{if .HaltedTrac
 
 ```
 {{with .ReleaseNotice}}
+{{if .Enabled}}
 {{if .Show}}
 <section class="halts">
 <div class="halt">
@@ -923,15 +943,20 @@ In `server/account/admin_templates.go`, immediately before the `{{if .HaltedTrac
 </div>
 </section>
 {{else if .DismissedTag}}
-<p style="color:var(--muted);font-size:12px">已忽略 {{.DismissedTag}} ·
+<div style="color:var(--muted);font-size:12px">已忽略 {{.DismissedTag}} ·
 <form method="post" action="/admin/release/dismiss" class="lim" style="display:inline">
 <input type="hidden" name="version" value="">
-<button type="submit">撤销</button></form></p>
+<button type="submit">撤销</button></form></div>
 {{end}}
-{{if .CheckedAt}}<p style="color:var(--muted);font-size:12px">上次成功检查：{{ts .CheckedAt}} UTC</p>
-{{else}}<p style="color:var(--muted);font-size:12px">尚未成功检查过</p>{{end}}
+{{if .CheckedAt}}<div style="color:var(--muted);font-size:12px">上次成功检查：{{ts .CheckedAt}} UTC</div>
+{{else}}<div style="color:var(--muted);font-size:12px">尚未成功检查过</div>{{end}}
+{{end}}
 {{end}}
 ```
+
+`div` rather than `p` for the two muted lines: a `p` cannot contain a `form`, and
+the browser would auto-close it, putting the undo button outside the element that
+styles it.
 
 `ts` is the template's existing unix-to-UTC helper (`admin_templates.go:541`), the same one the rollout panel's `本阶段开始` uses. Do not add a second one.
 
