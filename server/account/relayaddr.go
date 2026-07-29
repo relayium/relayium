@@ -87,3 +87,31 @@ func relayAddrs(urls []string) []string {
 	}
 	return out
 }
+
+// claimAddrs reports whether every address this candidate advertises is still
+// free and, when it is, claims them all for it.
+//
+// ANY overlap disqualifies the whole candidate: a relay advertising several
+// URLs is one machine, so accepting it "for the URLs that don't collide" would
+// hand the client a second entry pointing at the same box -- exactly the bug
+// this dedup exists to fix.
+//
+// A candidate whose URLs are all unparseable claims nothing and is admitted.
+// That is deliberate: see relayAddrs.
+//
+// Call this LAST, immediately before appending. Claiming before the other skip
+// checks would let a candidate that is then withheld (over its traffic cap, say)
+// leave its address claimed behind it, silently removing the relay that would
+// otherwise have covered that address.
+func claimAddrs(seenAddr map[string]bool, urls []string) bool {
+	addrs := relayAddrs(urls)
+	for _, a := range addrs {
+		if seenAddr[a] {
+			return false
+		}
+	}
+	for _, a := range addrs {
+		seenAddr[a] = true
+	}
+	return true
+}
