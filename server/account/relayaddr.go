@@ -15,6 +15,10 @@ import (
 //
 // DNS is deliberately not resolved. Two names for one machine stay two entries;
 // resolving would put a network round trip on /api/ice, which must stay fast.
+//
+// See nodeHost in usernodes.go for the other TURN-URL parser in this package:
+// display-only, strips brackets, no default port. Reach for that one to show a
+// host to a user; reach for this one to compare relays for identity.
 func relayAddr(raw string) (string, bool) {
 	s := strings.TrimSpace(raw)
 	lower := strings.ToLower(s)
@@ -95,6 +99,14 @@ func relayAddrs(urls []string) []string {
 // URLs is one machine, so accepting it "for the URLs that don't collide" would
 // hand the client a second entry pointing at the same box -- exactly the bug
 // this dedup exists to fix.
+//
+// This assumes one entry IS one machine. Fleet nodes guarantee that -- the node
+// agent emits exactly one URL. A static RELAYIUM_TURN_RELAYS entry is
+// operator-written, though, and could list two different hosts in one entry;
+// if a node covers the first, the whole entry -- including the second,
+// otherwise-uncovered host -- is dropped here. That is a config property to
+// verify before deploying (split such an entry in two), not something this
+// function can detect from the URLs alone.
 //
 // A candidate whose URLs are all unparseable claims nothing and is admitted.
 // That is deliberate: see relayAddrs.

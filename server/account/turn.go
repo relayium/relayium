@@ -154,6 +154,20 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 		// entry and a registered node at the same address, or a node that lost
 		// state.json and re-registered with a fresh id while its old row is
 		// still inside nodeOnlineWindow. See claimAddrs.
+		//
+		// Precedence across sources is positional, not freshness-based: the
+		// own-nodes loop below claims an address before the fleet loop ever
+		// runs, so an own-node row wins regardless of which heartbeat is newer.
+		// A stale own-node row (up to nodeOnlineWindow, 90s, after the box
+		// actually died) can therefore suppress a live fleet row at the same
+		// address, handing the client only the dead credential -- before this
+		// dedup existed, the client would have probed both and the dead one
+		// would simply have failed to answer. Near-unreachable in practice --
+		// one process binds a host:port, and the node agent owns its own TURN
+		// secret, so the surviving row is normally the authoritative one anyway
+		// -- but it is the one scenario where this dedup turns "one working
+		// entry plus one dead entry" into "only the dead one". Worth knowing
+		// before reordering these three loops.
 		seenAddr := map[string]bool{}
 		since := now.Add(-nodeOnlineWindow).Unix()
 

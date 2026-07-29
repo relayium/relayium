@@ -1,7 +1,7 @@
 # Relay pool: dedupe by address, not only by id
 
 Date: 2026-07-29
-Status: designed; not yet implemented
+Status: implemented
 
 ## Background
 
@@ -73,6 +73,20 @@ More fundamentally: what the client measures is the **machine**, not the URL. Tw
 spellings of one host:port are one RTT. `host:port` is the granularity that
 matches what the duplicate actually costs.
 
+**Why the scheme is not part of the key.** A reviewer proposed keying on
+scheme-class plus `host:port` — i.e. treating `turn:H:P` and `turns:H:P` as
+distinct — as cheap insurance against a dedup that could collapse TURN and
+TURN-over-TLS onto one surviving entry, losing TLS reachability for whichever
+side lost. That change was **not made**; the key stays plain `host:port`.
+`turn:` defaults to port 3478 and `turns:` to port 5349, and a single port
+cannot serve both plaintext TURN and TURN-over-TLS — coturn binds them on
+separate listeners. So a genuine `turn:H:P` / `turns:H:P` pair sharing both the
+same host **and** the same port is not physically realisable, and the reviewer
+who raised the concern could not construct one. Since the collision this would
+guard against does not occur, adding scheme to the key would only weaken the
+dedup's ability to collapse the real duplicates it exists for, for no offsetting
+benefit.
+
 Note for anyone extending this: fleet nodes today report exactly one URL each —
 `relay.go` builds a single `turn:IP:PORT`, UDP only. The transport variants live
 in the legacy top-level `RELAYIUM_TURN_URLS`, which is not part of this pool.
@@ -106,6 +120,19 @@ A relay advertising several URLs is one machine. If one of its host:ports is
 already claimed, the whole entry is a duplicate. Accepting it "for the URLs that
 don't collide" would hand the client a second entry pointing at the same box —
 the exact thing being fixed.
+
+This rule assumes one entry describes one machine. Fleet nodes guarantee that —
+the node agent emits exactly one URL per node. A static `RELAYIUM_TURN_RELAYS`
+entry is operator-written, though, and could legitimately list URLs for **two
+different hosts** in one entry's `urls` array. If a node happens to cover the
+first host, the whole entry — including the second, otherwise-uncovered host —
+is skipped, which is a narrow but real violation of this design's own "the
+dedup must never shrink the pool". The code has no way to tell "two URLs, one
+machine" from "two URLs, two machines" apart from trusting the input, so this
+is not something the dedup can detect or fix; it is a property of
+`RELAYIUM_TURN_RELAYS` to verify before deploying. A static entry that
+genuinely spans two hosts (e.g. `198.51.100.1` and `198.51.100.2`) must be
+configured as two separate entries, not one.
 
 ### Unparseable URLs fail open
 

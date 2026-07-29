@@ -14,6 +14,10 @@ const maxNodeTokensPerUser = 10
 // nodeHost extracts the host (IP or DNS name) from a node's first TURN URL,
 // e.g. "turn:203.0.113.7:3478?transport=udp" -> "203.0.113.7". Returns ""
 // when there are no URLs. Public info for the node's own dashboard/admin.
+//
+// See relayAddr in relayaddr.go for the other TURN-URL parser in this package:
+// comparison-grade, keeps brackets, defaults the port. Reach for that one to
+// compare relays for identity; reach for this one to show a host to a user.
 func nodeHost(urls []string) string {
 	if len(urls) == 0 {
 		return ""
