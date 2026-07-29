@@ -809,13 +809,81 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 3: the rules line, the next step, and controls that follow status
 
 **Files:**
+- Modify: `server/account/rollout_status.go` (`byoNextStepText` gains the batch argument)
+- Modify: `server/account/rollout_status_test.go` (its test follows)
 - Modify: `server/account/admin_rollout.go` (two more `rolloutPanelView` fields, populated in `rolloutPanel`)
 - Modify: `server/account/admin_templates.go` (status line ~229, rules line, control forms ~121-137)
 - Modify: `server/account/admin_rollout_panel_test.go` (add the control-set tests)
 
 **Interfaces:**
-- Consumes: `byoNextStepText`, `fleetRulesText`, `byoRulesText` from Task 1; `rolloutPanelView.FirstNodeID` from Task 2
-- Produces: `rolloutPanelView.RulesText string` and `rolloutPanelView.NextStepText string`
+- Consumes: `fleetRulesText`, `byoRulesText` from Task 1; `rolloutPanelView.FirstNodeID` from Task 2
+- Produces: `byoNextStepText(batch int, stageStartedAt, now int64) string` — **changed signature**, see Step 0; `rolloutPanelView.RulesText string`; `rolloutPanelView.NextStepText string`
+
+- [ ] **Step 0: teach `byoNextStepText` that a fresh track has no window**
+
+`decideByo` gates its observation window on the batch, not only on the status
+(`server/account/rollout_byo.go:229-231`):
+
+```go
+// A fresh track opens its first batch immediately; every later transition
+// waits out the observation window.
+if tr.ByoBatch != 0 && now-tr.StageStartedAt < byoBatchWindow {
+    return "wait", nil, ""
+}
+```
+
+So on a track with `ByoBatch == 0` there is nothing to wait out — the first
+batch opens on the next poll. Saying `不早于 <six hours from now>` there would be
+the panel inventing a wait the state machine does not have.
+
+In `server/account/rollout_status.go`, replace `byoNextStepText` with:
+
+```go
+// byoNextStepText is the BYO track's equivalent of the fleet bands. It has no
+// per-node states -- it commands a whole batch -- so all it needs is when the
+// current batch's window closes.
+//
+// batch is tr.ByoBatch, and it is load-bearing: decideByo gates the window on
+// `tr.ByoBatch != 0` (rollout_byo.go:229-231), because a FRESH track opens its
+// first batch immediately. Reporting a six-hour wait there would be the panel
+// inventing a delay the state machine does not have.
+func byoNextStepText(batch int, stageStartedAt, now int64) string {
+	if batch == 0 {
+		return "首批将在下一次轮询时下发"
+	}
+	return notBeforeText(stageStartedAt+byoBatchWindow, now)
+}
+```
+
+In `server/account/rollout_status_test.go`, update `TestByoNextStepText` to pass a
+non-zero batch to its two existing cases, and add the fresh-track case:
+
+```go
+func TestByoNextStepText(t *testing.T) {
+	const now = 1_000_000
+	open := byoNextStepText(10, now-60, now)
+	if !strings.Contains(open, "不早于") {
+		t.Fatalf("byoNextStepText = %q, want the 不早于 phrasing", open)
+	}
+	closed := byoNextStepText(10, now-byoBatchWindow-1, now)
+	if !strings.Contains(closed, "等待下一次轮询") {
+		t.Fatalf("closed window text = %q, want it to wait for the next poll", closed)
+	}
+	if strings.Contains(closed, "-") {
+		t.Fatalf("closed window text %q contains a negative duration", closed)
+	}
+	// A fresh track has no window to wait out: decideByo opens its first batch
+	// immediately. Inventing a six-hour wait here would be the panel claiming a
+	// delay the state machine does not have.
+	fresh := byoNextStepText(0, now, now)
+	if strings.Contains(fresh, "不早于") {
+		t.Fatalf("fresh track text = %q, want no waiting period", fresh)
+	}
+	if !strings.Contains(fresh, "下一次轮询") {
+		t.Fatalf("fresh track text = %q, want it to say the first batch goes out on the next poll", fresh)
+	}
+}
+```
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -926,7 +994,9 @@ In `rolloutPanel`, right after `p.StatusText = rolloutStatusText(tr.Status, foun
 	} else {
 		p.RulesText = byoRulesText()
 		if found && tr.Status == "rolling" {
-			p.NextStepText = byoNextStepText(tr.StageStartedAt, now.Unix())
+			// tr.ByoBatch decides whether there is a window at all — a fresh
+			// track opens its first batch immediately. See byoNextStepText.
+			p.NextStepText = byoNextStepText(tr.ByoBatch, tr.StageStartedAt, now.Unix())
 		}
 	}
 ```
