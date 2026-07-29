@@ -96,19 +96,26 @@ func TestRunCSREmitsCSRForHostname(t *testing.T) {
 	}
 }
 
+// noEnvFile points -env-file at a path that does not exist, so the test reads
+// the machine's real /etc/relayium-node/env under no circumstances.
+func noEnvFile(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "absent-env")
+}
+
 // A CSR signed for the wrong name produces a certificate that can never match
 // what Cloudflare connects to, so a mismatch is an error rather than a
 // silently-preferred value.
 func TestParseCSRFlagsRejectsHostMismatch(t *testing.T) {
 	t.Setenv("RELAYIUM_NODE_DOWNLOAD_URL", "https://node7.relayium.com")
-	if _, err := parseCSRFlags([]string{"node9.relayium.com"}, &bytes.Buffer{}); err == nil {
+	if _, err := parseCSRFlags([]string{"-env-file", noEnvFile(t), "node3.relayium.com"}, &bytes.Buffer{}); err == nil {
 		t.Fatal("accepted a hostname that contradicts RELAYIUM_NODE_DOWNLOAD_URL")
 	}
 }
 
 func TestParseCSRFlagsFallsBackToDownloadURL(t *testing.T) {
 	t.Setenv("RELAYIUM_NODE_DOWNLOAD_URL", "https://node7.relayium.com")
-	cc, err := parseCSRFlags(nil, &bytes.Buffer{})
+	cc, err := parseCSRFlags([]string{"-env-file", noEnvFile(t)}, &bytes.Buffer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +126,61 @@ func TestParseCSRFlagsFallsBackToDownloadURL(t *testing.T) {
 
 func TestParseCSRFlagsRequiresHostname(t *testing.T) {
 	t.Setenv("RELAYIUM_NODE_DOWNLOAD_URL", "")
-	if _, err := parseCSRFlags(nil, &bytes.Buffer{}); err == nil {
+	if _, err := parseCSRFlags([]string{"-env-file", noEnvFile(t)}, &bytes.Buffer{}); err == nil {
 		t.Fatal("accepted dl-csr with no hostname and no RELAYIUM_NODE_DOWNLOAD_URL")
+	}
+}
+
+// dl-csr is documented as being run under sudo, which scrubs the environment
+// and does not load the unit's EnvironmentFile. A node whose state dir was
+// moved would otherwise get dl.key written to /var/lib/relayium-node while the
+// service looks for it elsewhere and reports "no download certificate
+// installed" forever.
+func TestParseCSRFlagsReadsStateDirFromEnvFile(t *testing.T) {
+	t.Setenv("RELAYIUM_NODE_STATE_DIR", "")
+	t.Setenv("RELAYIUM_NODE_DOWNLOAD_URL", "")
+	envFile := writeEnvFile(t, "# node env\nRELAYIUM_NODE_STATE_DIR=/srv/relayium/state\n")
+	cc, err := parseCSRFlags([]string{"-env-file", envFile, "node7.relayium.com"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cc.StateDir != "/srv/relayium/state" {
+		t.Fatalf("StateDir = %q, want /srv/relayium/state (from the EnvironmentFile)", cc.StateDir)
+	}
+
+	// The flag still wins over the file, and the file still loses to nothing.
+	cc, err = parseCSRFlags([]string{"-env-file", envFile, "-state-dir", "/tmp/explicit", "node7.relayium.com"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cc.StateDir != "/tmp/explicit" {
+		t.Fatalf("StateDir = %q, want the explicit flag to win", cc.StateDir)
+	}
+
+	cc, err = parseCSRFlags([]string{"-env-file", noEnvFile(t), "node7.relayium.com"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cc.StateDir != "/var/lib/relayium-node" {
+		t.Fatalf("StateDir = %q, want the built-in default with no env file", cc.StateDir)
+	}
+}
+
+// The mismatch guard is only useful if it can actually see DOWNLOAD_URL on the
+// documented invocation path — under sudo that value lives in the env file, not
+// in the process environment.
+func TestParseCSRFlagsRejectsHostMismatchFromEnvFile(t *testing.T) {
+	t.Setenv("RELAYIUM_NODE_DOWNLOAD_URL", "")
+	envFile := writeEnvFile(t, "RELAYIUM_NODE_DOWNLOAD_URL=https://node7.relayium.com\n")
+	if _, err := parseCSRFlags([]string{"-env-file", envFile, "node3.relayium.com"}, &bytes.Buffer{}); err == nil {
+		t.Fatal("accepted a hostname that contradicts the env file's RELAYIUM_NODE_DOWNLOAD_URL")
+	}
+	// And it still supplies the hostname when none is given.
+	cc, err := parseCSRFlags([]string{"-env-file", envFile}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cc.Host != "node7.relayium.com" {
+		t.Fatalf("Host = %q, want node7.relayium.com from the env file", cc.Host)
 	}
 }

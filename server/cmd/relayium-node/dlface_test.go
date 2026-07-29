@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -134,7 +135,7 @@ func TestResolveDownloadFaceRefusals(t *testing.T) {
 			installCert(t, dir, host, now.AddDate(1, 0, 0), now.AddDate(2, 0, 0), false)
 		}},
 		{"SAN does not cover the host", func(t *testing.T, dir string) {
-			installCert(t, dir, "node9.relayium.com", now.Add(-time.Hour), now.AddDate(15, 0, 0), false)
+			installCert(t, dir, "node3.relayium.com", now.Add(-time.Hour), now.AddDate(15, 0, 0), false)
 		}},
 		{"Ed25519 certificate", func(t *testing.T, dir string) {
 			installCert(t, dir, host, now.Add(-time.Hour), now.AddDate(15, 0, 0), true)
@@ -175,30 +176,90 @@ func TestResolveDownloadFaceRefusals(t *testing.T) {
 	}
 }
 
+// The window between `dl-csr` and the signed certificate coming back leaves the
+// key on disk with no dl.crt beside it. That is the state an operator is most
+// likely to be looking at, so it must produce the instruction, not a raw
+// LoadX509KeyPair "no such file".
+func TestResolveDownloadFaceExplainsMissingCertWithKeyPresent(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	if _, err := loadOrCreateDownloadKey(dir); err != nil {
+		t.Fatal(err)
+	}
+	face, why := resolveDownloadFace(dir, "https://node7.relayium.com", ":2053", now)
+	if face != nil {
+		t.Fatal("served a face with no certificate on disk")
+	}
+	if !strings.Contains(why, "dl-csr") {
+		t.Fatalf("reason %q does not tell the operator what to run", why)
+	}
+}
+
 // The listener and the advertised URL come from one call, so they cannot be
 // decided separately. Nil face: no server AND no URL. Real face: both.
 func TestStartDownloadFaceTiesListenerToAdvertisement(t *testing.T) {
-	srv, url := startDownloadFace(nil, http.NewServeMux())
-	if srv != nil || url != "" {
-		t.Fatalf("nil face produced srv=%v url=%q; central must keep proxying", srv, url)
+	srv, ln, url, err := startDownloadFace(nil, http.NewServeMux())
+	if err != nil {
+		t.Fatalf("nil face is not an error: %v", err)
+	}
+	if srv != nil || ln != nil || url != "" {
+		t.Fatalf("nil face produced srv=%v ln=%v url=%q; central must keep proxying", srv, ln, url)
 	}
 
 	dir := t.TempDir()
 	now := time.Now()
 	installCert(t, dir, "node7.relayium.com", now.Add(-time.Hour), now.AddDate(15, 0, 0), false)
-	face, why := resolveDownloadFace(dir, "https://node7.relayium.com", ":2053", now)
+	face, why := resolveDownloadFace(dir, "https://node7.relayium.com", "127.0.0.1:0", now)
 	if face == nil {
 		t.Fatalf("setup: %s", why)
 	}
-	srv, url = startDownloadFace(face, http.NewServeMux())
-	if srv == nil || url != "https://node7.relayium.com" {
-		t.Fatalf("valid face produced srv=%v url=%q", srv, url)
+	srv, ln, url, err = startDownloadFace(face, http.NewServeMux())
+	if err != nil {
+		t.Fatalf("valid face failed to bind: %v", err)
 	}
-	if srv.Addr != ":2053" {
-		t.Fatalf("Addr = %q, want :2053", srv.Addr)
+	defer ln.Close()
+	if srv == nil || ln == nil || url != "https://node7.relayium.com" {
+		t.Fatalf("valid face produced srv=%v ln=%v url=%q", srv, ln, url)
+	}
+	if srv.Addr != "127.0.0.1:0" {
+		t.Fatalf("Addr = %q, want the configured download address", srv.Addr)
 	}
 	if srv.TLSConfig.MinVersion != tls.VersionTLS12 {
 		t.Fatalf("MinVersion = %x, want TLS 1.2 for CF-origin compatibility", srv.TLSConfig.MinVersion)
+	}
+}
+
+// A bind failure must leave the advertised URL empty. If it did not, central
+// would route every download at a node with no listener: the same unrecoverable
+// state as a rejected certificate, and just as invisible — the reachability
+// prober watches the blob-WRITE direction, not this one.
+func TestStartDownloadFaceBindFailureAdvertisesNothing(t *testing.T) {
+	busy, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+
+	dir := t.TempDir()
+	now := time.Now()
+	installCert(t, dir, "node7.relayium.com", now.Add(-time.Hour), now.AddDate(15, 0, 0), false)
+	face, why := resolveDownloadFace(dir, "https://node7.relayium.com", busy.Addr().String(), now)
+	if face == nil {
+		t.Fatalf("setup: %s", why)
+	}
+
+	srv, ln, url, err := startDownloadFace(face, http.NewServeMux())
+	if err == nil {
+		if ln != nil {
+			ln.Close()
+		}
+		t.Fatal("bound a port that was already taken")
+	}
+	if url != "" {
+		t.Fatalf("bind failed but advertised %q; central would stop proxying and every download would fail", url)
+	}
+	if srv != nil || ln != nil {
+		t.Fatalf("bind failed but returned srv=%v ln=%v", srv, ln)
 	}
 }
 
@@ -212,11 +273,9 @@ func TestStartDownloadFaceServesTheInstalledCert(t *testing.T) {
 	if face == nil {
 		t.Fatalf("setup: %s", why)
 	}
-	srv, _ := startDownloadFace(face, http.NewServeMux())
-
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	srv, ln, _, err := startDownloadFace(face, http.NewServeMux())
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("bind: %v", err)
 	}
 	defer ln.Close()
 	go srv.ServeTLS(ln, "", "")

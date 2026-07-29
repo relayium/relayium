@@ -38,17 +38,34 @@ type csrConfig struct {
 // preference: a certificate signed for the wrong name can never match the SNI
 // Cloudflare presents, and the symptom would be a 526 with a valid-looking
 // certificate sitting on disk.
+//
+// Config precedence is the same chain `update` uses, and for the same reason:
+// explicit flag > process environment > /etc/relayium-node/env (the unit's
+// EnvironmentFile) > built-in default. dl-csr is run under sudo, which scrubs
+// the environment and does not load the EnvironmentFile, so reading only the
+// process environment would write dl.key into /var/lib/relayium-node on a node
+// whose RELAYIUM_NODE_STATE_DIR points elsewhere — the service then honours the
+// env file, finds nothing, and reports "no download certificate installed"
+// forever. It would also make the DOWNLOAD_URL mismatch guard below dead code
+// on the documented invocation path.
 func parseCSRFlags(args []string, stderr io.Writer) (csrConfig, error) {
 	fs := flag.NewFlagSet("dl-csr", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var cc csrConfig
-	fs.StringVar(&cc.StateDir, "state-dir", env("RELAYIUM_NODE_STATE_DIR", "/var/lib/relayium-node"),
-		"directory holding dl.key")
+	var envFile string
+	fs.StringVar(&cc.StateDir, "state-dir", env("RELAYIUM_NODE_STATE_DIR", ""),
+		"directory holding dl.key (default from "+defaultEnvFile+", else /var/lib/relayium-node)")
+	fs.StringVar(&envFile, "env-file", defaultEnvFile,
+		"KEY=value file to read RELAYIUM_NODE_* defaults from; missing file is fine")
 	if err := fs.Parse(args); err != nil {
 		return cc, err
 	}
+	fileEnv := readEnvFile(envFile)
+	if cc.StateDir == "" {
+		cc.StateDir = valueOr(fileEnv["RELAYIUM_NODE_STATE_DIR"], "/var/lib/relayium-node")
+	}
 	cc.Host = fs.Arg(0)
-	fromURL := urlHost(env("RELAYIUM_NODE_DOWNLOAD_URL", ""))
+	fromURL := urlHost(valueOr(env("RELAYIUM_NODE_DOWNLOAD_URL", ""), fileEnv["RELAYIUM_NODE_DOWNLOAD_URL"]))
 	switch {
 	case cc.Host == "" && fromURL == "":
 		return cc, errors.New("dl-csr: hostname required, e.g. `relayium-node dl-csr node7.relayium.com`")

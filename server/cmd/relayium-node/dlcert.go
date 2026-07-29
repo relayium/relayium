@@ -2,6 +2,8 @@ package main
 
 import (
 	"crypto/tls"
+	"fmt"
+	"net"
 	"net/http"
 )
 
@@ -25,12 +27,26 @@ func downloadServer(addr string, cert tls.Certificate, h http.Handler) *http.Ser
 	}
 }
 
-// startDownloadFace builds the public download listener and returns the URL to
-// advertise to central. Both outputs come from the same face, so a node cannot
-// listen without advertising or advertise without listening.
-func startDownloadFace(face *downloadFace, h http.Handler) (*http.Server, string) {
+// startDownloadFace BINDS the public download listener and returns it together
+// with the URL to advertise to central. Both outputs come from the same face
+// and from the same successful bind, so a node cannot listen without
+// advertising or advertise without listening.
+//
+// The bind is explicit, and synchronous, on purpose. ListenAndServeTLS binds
+// inside the goroutine that serves, so a port conflict there is only ever a log
+// line — by which time the URL has already been handed to rp.register and
+// central believes this node serves downloads directly. Every download then
+// fails and nothing pulls the traffic back: exactly the unrecoverable state
+// resolveDownloadFace exists to prevent, differing from the 526 case only in
+// status code. On a bind error the caller gets no server and no URL, and
+// central keeps proxying.
+func startDownloadFace(face *downloadFace, h http.Handler) (*http.Server, net.Listener, string, error) {
 	if face == nil {
-		return nil, ""
+		return nil, nil, "", nil
 	}
-	return downloadServer(face.Addr, face.Cert, h), face.URL
+	ln, err := net.Listen("tcp", face.Addr)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("bind download listener on %s: %w", face.Addr, err)
+	}
+	return downloadServer(face.Addr, face.Cert, h), ln, face.URL, nil
 }

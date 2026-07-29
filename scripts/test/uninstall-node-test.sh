@@ -129,6 +129,8 @@ newtree() {
     "$d/usr/local/bin" "$d/var/lib/relayium-node"
   printf '{"nodeID":"n-1"}' >"$d/var/lib/relayium-node/state.json"
   : >"$d/var/lib/relayium-node/id.key"
+  : >"$d/var/lib/relayium-node/dl.key"
+  : >"$d/var/lib/relayium-node/dl.crt"
   : >"$d/var/lib/relayium-node/last-heartbeat"
   : >"$d/usr/local/bin/relayium-node"
   : >"$d/usr/local/bin/relayium-node.prev"
@@ -245,6 +247,13 @@ rc=$?
 check_rc "storage from env: uninstalls" "$rc" 0
 assert_present "$p/var/lib/relayium-node/blobs" "storage from env: keeps storage dir"
 assert_gone "$p/var/lib/relayium-node/state.json" "storage from env: removes state files"
+# dl.key is the private key of a 15-year Cloudflare Origin CA certificate for
+# this node's download hostname, under a Full (strict) zone. Left behind on a
+# machine the operator believes was wiped, it plus a DNS repoint is a clean
+# origin takeover — so its removal gets its own assertion, not just "state
+# files removed".
+assert_gone "$p/var/lib/relayium-node/dl.key" "storage from env: removes the origin CA private key"
+assert_gone "$p/var/lib/relayium-node/dl.crt" "storage from env: removes the origin certificate"
 
 # --- 3. storage declared through the env file ---
 p=$(newtree c3)

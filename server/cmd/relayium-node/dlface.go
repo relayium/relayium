@@ -60,8 +60,12 @@ func loadDownloadCert(stateDir, host string, now time.Time) (tls.Certificate, er
 	keyPath := filepath.Join(stateDir, dlKeyName)
 	crtPath := filepath.Join(stateDir, dlCrtName)
 
+	// Both files, not just the key: between `dl-csr` and the signed certificate
+	// coming back there is a window where the key exists and dl.crt does not,
+	// and that is precisely when an operator most needs to be told what the
+	// remaining step is — a raw LoadX509KeyPair "no such file" would not.
 	info, err := os.Stat(keyPath)
-	if err != nil {
+	if err != nil || !fileExists(crtPath) {
 		return tls.Certificate{}, fmt.Errorf("no download certificate installed: run `relayium-node dl-csr %s`, "+
 			"have the CSR signed by Cloudflare Origin CA, and write the certificate to %s", host, crtPath)
 	}
@@ -94,4 +98,9 @@ func loadDownloadCert(stateDir, host string, now time.Time) (tls.Certificate, er
 	}
 	cert.Leaf = leaf
 	return cert, nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

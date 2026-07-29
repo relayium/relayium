@@ -306,25 +306,35 @@ func run(c config, st nodeState) error {
 					}
 				}()
 			}
-			var dlSrv *http.Server
-			dlSrv, advertisedDownloadURL = startDownloadFace(face,
+			dlSrv, dlLn, dlURL, berr := startDownloadFace(face,
 				newDownloadHandler(ds, storageSecret, dlGuard, sendReceipt))
-			go func() {
-				if err := dlSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-					log.Printf("relayium-node: public download server exited: %v", err)
-				}
-			}()
-			httpSrvs = append(httpSrvs, dlSrv)
-			log.Printf("relayium-node: public direct-download listener on %s → %s", face.Addr, face.URL)
+			if berr != nil {
+				// The port is taken (or otherwise unbindable). Say nothing to
+				// central: an advertised URL nobody is listening on is worse
+				// than proxying, because nothing ever takes it back.
+				log.Printf("relayium-node: direct download DISABLED, central will proxy for this node: %v", berr)
+			} else {
+				advertisedDownloadURL = dlURL
+				go func() {
+					// Certs come from TLSConfig, so the cert/key path args are empty.
+					if err := dlSrv.ServeTLS(dlLn, "", ""); err != nil && err != http.ErrServerClosed {
+						log.Printf("relayium-node: public download server exited: %v", err)
+					}
+				}()
+				httpSrvs = append(httpSrvs, dlSrv)
+				log.Printf("relayium-node: public direct-download listener on %s → %s", face.Addr, face.URL)
 
-			// Auto-manage this node's Cloudflare A record (subdomain -> public IP,
-			// proxied) so bringing up a node needs no manual dashboard step.
-			if c.CFToken != "" && c.CFZoneID != "" {
-				cf := &cfdns.Client{Token: c.CFToken, ZoneID: c.CFZoneID}
-				if err := cf.UpsertA(face.Host, publicIP, true); err != nil {
-					log.Printf("relayium-node: cloudflare A-record upsert for %s failed: %v (set it manually)", face.Host, err)
-				} else {
-					log.Printf("relayium-node: cloudflare A-record %s -> %s (proxied) ensured", face.Host, publicIP)
+				// Auto-manage this node's Cloudflare A record (subdomain -> public IP,
+				// proxied) so bringing up a node needs no manual dashboard step. Only
+				// once the listener is actually bound — pointing the record at a host
+				// that is not serving is the same failure in DNS form.
+				if c.CFToken != "" && c.CFZoneID != "" {
+					cf := &cfdns.Client{Token: c.CFToken, ZoneID: c.CFZoneID}
+					if err := cf.UpsertA(face.Host, publicIP, true); err != nil {
+						log.Printf("relayium-node: cloudflare A-record upsert for %s failed: %v (set it manually)", face.Host, err)
+					} else {
+						log.Printf("relayium-node: cloudflare A-record %s -> %s (proxied) ensured", face.Host, publicIP)
+					}
 				}
 			}
 		}
@@ -336,8 +346,8 @@ func run(c config, st nodeState) error {
 	}
 	// Only advertise a direct-download URL when this node actually serves storage;
 	// it's meaningless without a blob store to serve from. advertisedDownloadURL is
-	// set only inside the storage branch and only by startDownloadFace, so it is
-	// non-empty exactly when the listener is up.
+	// set only inside the storage branch, and only after startDownloadFace has
+	// BOUND the listener, so it is non-empty exactly when the listener is up.
 	downloadURL := advertisedDownloadURL
 	rr, err := rp.register(registerBody{
 		NodeID: st.NodeID, TURNSecret: st.TURNSecret, URLs: urls,
