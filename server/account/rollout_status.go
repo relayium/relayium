@@ -103,10 +103,18 @@ func fleetNodeStatus(in fleetNodeInput, now int64) rolloutNodeStatus {
 	}
 }
 
-// byoNextStepText is the BYO track's equivalent. It has no per-node bands --
-// it commands a whole batch -- so all it needs is when the batch's window
-// closes (rollout_byo.go:230).
-func byoNextStepText(stageStartedAt, now int64) string {
+// byoNextStepText is the BYO track's equivalent of the fleet bands. It has no
+// per-node states -- it commands a whole batch -- so all it needs is when the
+// current batch's window closes.
+//
+// batch is tr.ByoBatch, and it is load-bearing: decideByo gates the window on
+// `tr.ByoBatch != 0` (rollout_byo.go:229-231), because a FRESH track opens its
+// first batch immediately. Reporting a six-hour wait there would be the panel
+// inventing a delay the state machine does not have.
+func byoNextStepText(batch int, stageStartedAt, now int64) string {
+	if batch == 0 {
+		return "首批将在下一次轮询时下发"
+	}
 	return notBeforeText(stageStartedAt+byoBatchWindow, now)
 }
 

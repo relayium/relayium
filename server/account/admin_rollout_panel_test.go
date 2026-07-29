@@ -127,3 +127,78 @@ func TestPanelTreatsAnUnsetCanaryAsTheCanary(t *testing.T) {
 		t.Fatal("the panel used the 30-minute window for a node the state machine treats as the canary")
 	}
 }
+
+// The bug that prompted this work: pressing 继续 on a rolling track returns
+// "该轨道当前不是已中止状态". The refusal is correct; offering the button is
+// not. This panel's own view model already names the principle -- a button
+// whose only possible outcome is a refusal is worse than no button -- and
+// already applies it to 回滚到上一版本.
+func TestPanelHidesControlsThatCanOnlyBeRefused(t *testing.T) {
+	const (
+		pauseAction  = "/admin/rollout/fleet/pause"
+		resumeAction = "/admin/rollout/fleet/resume"
+	)
+	cases := []struct {
+		name       string
+		status     string // "" means the track row exists but was never started
+		configured bool
+		wantShown  []string
+		wantHidden []string
+	}{
+		{"rolling", "rolling", true, []string{pauseAction}, []string{resumeAction}},
+		{"halted", "halted", true, []string{resumeAction}, []string{pauseAction}},
+		{"complete", "complete", true, nil, []string{pauseAction, resumeAction}},
+		{"never configured", "", false, nil, []string{pauseAction, resumeAction}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ts, _, store := newAdminSettingsServer(t)
+			cookie := adminLogin(t, ts)
+			now := time.Now().Unix()
+			seedRolloutNode(t, store, "n-1", "fleet", "", "v1.0.0", "", "")
+			if tc.configured {
+				if err := store.PutRolloutTrack(context.Background(), RolloutTrack{
+					Track: "fleet", TargetVersion: "v1.1.0", Status: tc.status,
+					StageStartedAt: now - 60,
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			body := adminDashboardHTML(t, ts, cookie)
+			for _, want := range tc.wantShown {
+				if !strings.Contains(body, want) {
+					t.Fatalf("status %q: %s should be offered here but is missing", tc.status, want)
+				}
+			}
+			for _, unwanted := range tc.wantHidden {
+				if strings.Contains(body, unwanted) {
+					t.Fatalf("status %q: %s is rendered, but pressing it can only be refused",
+						tc.status, unwanted)
+				}
+			}
+		})
+	}
+}
+
+// The timing rules belong on the page, not in an operator's memory.
+func TestPanelPrintsTheTimingRules(t *testing.T) {
+	ts, _, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	now := time.Now().Unix()
+	seedRolloutNode(t, store, "n-1", "fleet", "", "v1.0.0", "", "")
+	if err := store.PutRolloutTrack(context.Background(), RolloutTrack{
+		Track: "fleet", TargetVersion: "v1.1.0", Status: "rolling", StageStartedAt: now - 60,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body := adminDashboardHTML(t, ts, cookie)
+	if !strings.Contains(body, humanDuration(fleetFirstWindow)) {
+		t.Fatal("panel does not state the canary observation window")
+	}
+	if !strings.Contains(body, humanDuration(fleetStepWindow)) {
+		t.Fatal("panel does not state the per-node window")
+	}
+	if !strings.Contains(body, humanDuration(byoBatchWindow)) {
+		t.Fatal("panel does not state the BYO batch window")
+	}
+}

@@ -216,16 +216,26 @@ func TestFleetNodeStatusLabelsAreDistinct(t *testing.T) {
 
 func TestByoNextStepText(t *testing.T) {
 	const now = 1_000_000
-	open := byoNextStepText(now-60, now)
+	open := byoNextStepText(10, now-60, now)
 	if !strings.Contains(open, "不早于") {
 		t.Fatalf("byoNextStepText = %q, want the 不早于 phrasing", open)
 	}
-	closed := byoNextStepText(now-byoBatchWindow-1, now)
+	closed := byoNextStepText(10, now-byoBatchWindow-1, now)
 	if !strings.Contains(closed, "等待下一次轮询") {
 		t.Fatalf("closed window text = %q, want it to wait for the next poll", closed)
 	}
 	if strings.Contains(closed, "-") {
 		t.Fatalf("closed window text %q contains a negative duration", closed)
+	}
+	// A fresh track has no window to wait out: decideByo opens its first batch
+	// immediately. Inventing a six-hour wait here would be the panel claiming a
+	// delay the state machine does not have.
+	fresh := byoNextStepText(0, now, now)
+	if strings.Contains(fresh, "不早于") {
+		t.Fatalf("fresh track text = %q, want no waiting period", fresh)
+	}
+	if !strings.Contains(fresh, "下一次轮询") {
+		t.Fatalf("fresh track text = %q, want it to say the first batch goes out on the next poll", fresh)
 	}
 }
 

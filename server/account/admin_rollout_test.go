@@ -164,19 +164,39 @@ func TestAdminDashboardShowsBothRolloutPanels(t *testing.T) {
 		"fleet-a", "fleet-b", "byo-a", "byo-b",
 		"更新失败", "已回滚",
 		// Each panel has its OWN set of controls (independent form actions).
+		// pause/resume are asserted below instead of here: which one of the
+		// pair renders follows this panel's own status (see
+		// TestPanelHidesControlsThatCanOnlyBeRefused), and fleet here is
+		// "rolling" while byo is "halted", so the two tracks show opposite
+		// halves of the pair.
 		`action="/admin/rollout/fleet/target"`,
-		`action="/admin/rollout/fleet/pause"`,
-		`action="/admin/rollout/fleet/resume"`,
 		`action="/admin/rollout/fleet/rollback"`,
 		`action="/admin/rollout/fleet/emergency"`,
 		`action="/admin/rollout/byo/target"`,
-		`action="/admin/rollout/byo/pause"`,
-		`action="/admin/rollout/byo/resume"`,
 		`action="/admin/rollout/byo/rollback"`,
 		`action="/admin/rollout/byo/emergency"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("rollout panels missing %q", want)
+		}
+	}
+	// fleet is "rolling": only pause can succeed. byo is "halted": only resume
+	// can succeed. A button whose only possible outcome is a refusal must not
+	// be rendered (the same principle already applied to 回滚到上一版本).
+	for _, want := range []string{
+		`action="/admin/rollout/fleet/pause"`,
+		`action="/admin/rollout/byo/resume"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("rollout panels missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{
+		`action="/admin/rollout/fleet/resume"`,
+		`action="/admin/rollout/byo/pause"`,
+	} {
+		if strings.Contains(html, unwanted) {
+			t.Fatalf("rollout panels render %q, but pressing it can only be refused", unwanted)
 		}
 	}
 	// "1/2 台已在目标版本" must appear once per panel — one shared progress

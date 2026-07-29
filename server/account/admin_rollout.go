@@ -53,8 +53,16 @@ type rolloutPanelView struct {
 	// 回滚到上一版本 control. Empty means the control is not rendered at all —
 	// a button whose only possible outcome is a refusal is worse than no button.
 	PreviousVersion string
-	OnTarget        int // nodes already running TargetVersion
-	Total           int
+	// RulesText states this track's timing rules on the page, generated from
+	// the state machine's constants (see rollout_status.go) so it cannot drift
+	// away from them.
+	RulesText string
+	// NextStepText is set on the BYO panel only: the fleet track's next step is
+	// a property of the node in flight and is rendered on that node's row
+	// instead. Empty means there is nothing pending to time.
+	NextStepText string
+	OnTarget     int // nodes already running TargetVersion
+	Total        int
 	// Nodes is at most rolloutPanelMaxRows rows, most relevant first; Hidden
 	// counts the rest. OnTarget/Total are always over the WHOLE track, never
 	// over the rendered slice.
@@ -244,6 +252,16 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 	p.Configured = found
 	p.TargetVersion, p.Status = tr.TargetVersion, tr.Status
 	p.StatusText = rolloutStatusText(tr.Status, found)
+	if track == "fleet" {
+		p.RulesText = fleetRulesText()
+	} else {
+		p.RulesText = byoRulesText()
+		if found && tr.Status == "rolling" {
+			// tr.ByoBatch decides whether there is a window at all — a fresh
+			// track opens its first batch immediately. See byoNextStepText.
+			p.NextStepText = byoNextStepText(tr.ByoBatch, tr.StageStartedAt, now.Unix())
+		}
+	}
 	p.HaltedReason, p.Emergency = tr.HaltedReason, tr.Emergency
 	p.StageStartedAt, p.CurrentNodeID, p.ByoBatch = tr.StageStartedAt, tr.CurrentNodeID, tr.ByoBatch
 	p.FirstNodeID = tr.FirstNodeID

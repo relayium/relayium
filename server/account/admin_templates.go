@@ -230,6 +230,8 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 {{else}}当前批次：{{if .ByoBatch}}{{.ByoBatch}}%{{else}}未开批{{end}}{{end}}
 {{if .StageStartedAt}} · 本阶段开始：{{ts .StageStartedAt}}{{end}}
 </p>
+{{if .NextStepText}}<div style="color:var(--muted);font-size:12px">下一批：{{.NextStepText}}</div>{{end}}
+{{if .RulesText}}<div style="color:var(--muted);font-size:12px">{{.RulesText}}</div>{{end}}
 {{if .HaltedReason}}<p class="err">中止原因：{{.HaltedReason}}</p>{{end}}
 
 <div class="ro-ctl">
@@ -237,10 +239,14 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 <input type="text" name="version" placeholder="v1.2.3" title="目标版本（vMAJOR.MINOR.PATCH）" style="width:110px">
 <button type="submit">设定目标版本</button>
 </form>
+{{if eq .Status "rolling"}}
 <form method="post" action="/admin/rollout/{{.Track}}/pause" class="lim"
   onsubmit="return confirm('暂停 {{.Track}} 轨的发布？')"><button type="submit">暂停</button></form>
+{{end}}
+{{if eq .Status "halted"}}
 <form method="post" action="/admin/rollout/{{.Track}}/resume" class="lim"
   onsubmit="return confirm('继续 {{.Track}} 轨的发布？将从头重新分批。')"><button type="submit">继续</button></form>
+{{end}}
 <form method="post" action="/admin/rollout/{{.Track}}/rollback" class="lim"
   onsubmit="return confirm('把 {{.Track}} 轨回滚到该版本？')">
 <input type="text" name="version" placeholder="v1.2.2" title="回滚到的版本" style="width:110px">
