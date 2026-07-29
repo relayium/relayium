@@ -541,6 +541,24 @@ button:hover{filter:brightness(1.07)}
 {{end}}
 </body></html>`))
 
+// Every onsubmit="return confirm(...)" in the template text below — on the
+// node restore/remove/delete forms, the token revoke form, the passkey
+// delete form, and the release notice's "发布 ... 到机队" button — is DEAD
+// CODE, same as rolloutPanelTmpl's own onsubmit attributes (see the doc
+// comment on that var): buildCSP emits script-src 'self' 'nonce-…' with no
+// 'unsafe-inline' / 'unsafe-hashes', so the browser never runs an inline
+// event handler and every one of these forms posts with no dialog. None of
+// them must ever be read as "this control has a confirmation step".
+//
+// The release-rollout button is the newest and, on the page an admin visits
+// most casually, the most consequential of the lot — it's why it gets its
+// own guards instead of relying on the dead confirm(): handleAdminReleaseRollout
+// refuses unless the fleet track is idle AND the posted version matches the
+// server's own current GetReleaseCheck.LatestTag. With both of those in
+// place the button can only ever set the target to the version the server
+// itself currently reports as newest, and only while nothing is rolling — so
+// what remains is a misclick, not a stale-state hazard, and a step-up flow
+// would just be answering a question those two guards already answer.
 var adminUsersTmpl = template.Must(withRolloutPanel(withPasskeyJS(template.New("users").Funcs(template.FuncMap{
 	"ts":    func(sec int64) string { return time.Unix(sec, 0).UTC().Format("2006-01-02 15:04") },
 	"bytes": humanBytes,

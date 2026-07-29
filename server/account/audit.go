@@ -36,14 +36,20 @@ const (
 	AuditRolloutResume    = "rollout.resume"
 	AuditRolloutRollback  = "rollout.rollback"
 	AuditRolloutEmergency = "rollout.emergency"
+	// AuditReleaseRollout is the release-notice "发布到机队" button. It funnels
+	// into the exact same SetTargetVersion write as AuditRolloutTarget (the
+	// hand-typed fleet-target form), and gets a SEPARATE action anyway — same
+	// reasoning as AuditRolloutTarget vs AuditRolloutRollback just above:
+	// "the operator typed a version in" and "the operator clicked the button
+	// the release notice offered" are different facts about how a rollout
+	// started, and an incident review wants to tell them apart, not have them
+	// collapse into one action because the resulting row looks the same.
+	AuditReleaseRollout = "release.rollout"
 	// AuditReleaseDismiss records dismissing (or, with an empty new value,
-	// un-dismissing) a release-check notice. It is its own action rather than
-	// folded into rollout.target: dismissing changes nothing about the fleet
-	// track, it only silences a notice, and the pressing-the-button path
-	// itself is audited as rollout.target — the same action a hand-typed
-	// target on that track would produce, because SetTargetVersion is the
-	// only way a target is ever set and the audit trail should not be able
-	// to tell entry points apart when the underlying write is identical.
+	// un-dismissing) a release-check notice. Its own action for the same
+	// reason as AuditReleaseRollout above: dismissing changes nothing about
+	// the fleet track, it only silences a notice, which is itself a fact an
+	// incident review would want distinguishable from either rollout action.
 	AuditReleaseDismiss = "release.dismiss"
 )
 
@@ -58,7 +64,8 @@ var auditActions = []string{
 	AuditNodeLabel, AuditNodeDraining, AuditNodeRestore, AuditNodeRemove, AuditNodeDeregister,
 	AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete,
 	AuditRolloutTarget, AuditRolloutPause, AuditRolloutResume,
-	AuditRolloutRollback, AuditRolloutEmergency, AuditReleaseDismiss,
+	AuditRolloutRollback, AuditRolloutEmergency,
+	AuditReleaseRollout, AuditReleaseDismiss,
 }
 
 // 步进因子取值。"" = 该操作无需步进；grace = 落在宽限期内跳过了校验。

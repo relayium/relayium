@@ -576,8 +576,12 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.Handle("POST /admin/rollout/{id}/emergency",
 		s.CSRFGuard(s.RequireStepUp(AuditRolloutEmergency, s.handleAdminRolloutEmergency)))
 	// 新版本通知：一键把机队轨指向 GitHub 上最新的 release，或忽略这个版本。
-	// 复用 rollout.target 那条写路径（见 handleAdminReleaseRollout），所以不需要
-	// 额外的 step-up —— 这和手动在机队面板里填版本号是同一个动作。
+	// 底层调用的是与手动填版本号相同的 SetTargetVersion（见
+	// handleAdminReleaseRollout），但审计动作是独立的 release.rollout ——
+	// 事后复盘要能区分"是谁手填的版本号"和"是谁点了通知里的按钮"。不需要
+	// 额外的 step-up：该 handler 自带的两道校验（轨道未在发布中 + 提交版本
+	// 与服务器当前检测到的最新版本一致）已经排除了误操作/过期页面的风险，
+	// stepup 的机制回答的是这两道校验已经回答过的问题。
 	mux.Handle("POST /admin/release/rollout", s.CSRFGuard(http.HandlerFunc(s.handleAdminReleaseRollout)))
 	mux.Handle("POST /admin/release/dismiss", s.CSRFGuard(http.HandlerFunc(s.handleAdminReleaseDismiss)))
 }

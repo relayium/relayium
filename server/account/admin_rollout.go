@@ -431,15 +431,37 @@ func (s *Service) rolloutSetVersion(w http.ResponseWriter, r *http.Request, acti
 // notice named, going through SetTargetVersion — the same call the typed
 // fleet-target form uses — so there is exactly one way a target is ever set.
 //
-// The button that posts here is hidden by the template whenever the fleet
-// track is already rolling (releaseNotice.OfferButton), but that is a UI
-// affordance, not the guard: a stale page, or a direct POST, must not be
-// able to do what the UI declines to offer. SetTargetVersion rewrites the
-// WHOLE fleet row — resetting Status to rolling, restamping
-// StageStartedAt, clearing CurrentNodeID/FirstNodeID — so pressing it during
-// a live rollout would silently abandon that rollout in flight. This
-// handler therefore re-reads the fleet track itself and refuses while its
-// status is "rolling", rather than trusting that the button was absent.
+// It has TWO guards, and both exist for the same reason: a stale page, or a
+// direct POST, must not be able to do what the UI declines to offer.
+//
+//  1. Re-read the fleet track and refuse while its status is "rolling". The
+//     button is hidden by the template in that state (releaseNotice.OfferButton),
+//     but that is a UI affordance, not the guard: SetTargetVersion rewrites the
+//     WHOLE fleet row — resetting Status to rolling, restamping StageStartedAt,
+//     clearing CurrentNodeID/FirstNodeID — so pressing it during a live
+//     rollout would silently abandon that rollout in flight.
+//  2. Re-read GetReleaseCheck and refuse unless the posted version equals the
+//     stored LatestTag. Without this the handler trusts a client-supplied
+//     version: an admin leaves /admin open showing v1.3.0, the fleet completes
+//     a rollout to v1.5.0, and the stale button posts v1.3.0 — which would
+//     pass guard 1 (the track is "complete", not "rolling") and repoint the
+//     fleet BACKWARDS. That is not inert: nodes.go:445 sets AllowDowngrade
+//     automatically for a downgrade, so nodes actually install the older
+//     build. Guarding one axis (status) and not the other (version) is not a
+//     partial fix, because the two axes are independent: a stale page can be
+//     stale about either one.
+//
+// Audited as its own action, AuditReleaseRollout, rather than reused
+// AuditRolloutTarget. That is deliberate, not an oversight: the house rule
+// here is the OPPOSITE of "identical writes share an action" —
+// handleAdminRolloutTarget and handleAdminRolloutRollback (above) funnel
+// into this exact same SetTargetVersion write and are deliberately given
+// DIFFERENT actions, precisely so the audit trail (and the UI) can tell
+// "shipping v1.3.0" from "getting off v1.3.0" — the fact an incident review
+// actually needs. Entry point is exactly what an incident review wants to
+// know here too: "the operator typed a version in" and "the operator clicked
+// the button the release notice offered" are different facts about how a
+// rollout started, even though the row ends up in the same shape.
 func (s *Service) handleAdminReleaseRollout(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -456,15 +478,26 @@ func (s *Service) handleAdminReleaseRollout(w http.ResponseWriter, r *http.Reque
 			"发布失败：机队轨正在发布中，此处不提供一键发布——那会中止正在进行的发布。请到下方机队面板手动处理。")
 		return
 	}
+	rc, rcErr := s.Store().GetReleaseCheck(r.Context())
+	if rcErr != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "发布失败："+rcErr.Error())
+		return
+	}
+	if rc.LatestTag == "" || version != rc.LatestTag {
+		// A stale page (or a direct POST) naming a version other than what
+		// the server currently reports as newest. Refusing here is what
+		// keeps the button's only possible effect "set the target to the
+		// version this page is actually offering" — never an arbitrary
+		// client-supplied string.
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"发布失败：提交的版本与服务器当前检测到的最新版本不一致，请刷新页面后重试")
+		return
+	}
 	if err := s.SetTargetVersion(r.Context(), "fleet", version); err != nil {
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "目标版本设置失败："+err.Error())
 		return
 	}
-	// Audited under the SAME action a hand-typed fleet target uses: this is
-	// that action, reached from a different button, and the audit trail
-	// should not be able to tell entry points apart when the write is
-	// identical.
-	s.WriteAudit(r, AuditRolloutTarget, "rollout:fleet", []ChangeField{
+	s.WriteAudit(r, AuditReleaseRollout, "rollout:fleet", []ChangeField{
 		{Field: "target_version", Old: before.TargetVersion, New: version},
 		{Field: "status", Old: before.Status, New: "rolling"},
 	}, StepUpNone)
