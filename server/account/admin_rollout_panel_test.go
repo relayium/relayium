@@ -93,3 +93,37 @@ func TestPanelCallsANodeStillBehindInstalling(t *testing.T) {
 		t.Fatal("a node not yet on target must not read as 观察中")
 	}
 }
+
+// A track written before FirstNodeID existed carries "" while a node is in
+// flight. rollout_fleet.go:247 treats that node as the canary -- every defence
+// there fails LONG, because guessing "not the canary" cuts a live six-hour
+// observation to thirty minutes. The panel has to guess the same way, or it
+// reports the short window and marks a healthy canary overdue.
+func TestPanelTreatsAnUnsetCanaryAsTheCanary(t *testing.T) {
+	ts, _, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	ctx := context.Background()
+	now := time.Now().Unix()
+
+	seedRolloutNode(t, store, "n-legacy", "fleet", "", "v1.1.0", "v1.0.0", "ok")
+	if err := store.TouchNode(ctx, "n-legacy", 0, 0, 0, 0, now, 0); err != nil {
+		t.Fatal(err)
+	}
+	// Stage started longer ago than the SHORT window but well inside the long
+	// one, so the two guesses give visibly different answers.
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v1.1.0", Status: "rolling",
+		CurrentNodeID: "n-legacy", FirstNodeID: "",
+		StageStartedAt: now - fleetStepWindow - 60,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	body := adminDashboardHTML(t, ts, cookie)
+	if !strings.Contains(body, "不早于") {
+		t.Fatal("an unset FirstNodeID must still get the canary's long window, not an expired short one")
+	}
+	if strings.Contains(body, "等待下一次轮询") {
+		t.Fatal("the panel used the 30-minute window for a node the state machine treats as the canary")
+	}
+}

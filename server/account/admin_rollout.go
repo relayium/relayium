@@ -282,8 +282,17 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 		var status rolloutNodeStatus
 		if current {
 			status = fleetNodeStatus(fleetNodeInput{
-				OnTarget:        onTarget,
-				IsCanary:        n.ID == tr.FirstNodeID,
+				OnTarget: onTarget,
+				// Same rule as rollout_fleet.go:247, including the empty case:
+				// FirstNodeID == "" while a node IS in flight is a track
+				// written before that field existed, and the state machine
+				// assumes the node in flight IS the canary, because guessing
+				// "not the canary" silently cuts a live 6h observation to 30
+				// minutes. Every defence there fails LONG; a panel that guessed
+				// the other way would report the shorter window and mark a
+				// healthy canary overdue -- the failure this work removes,
+				// recreated in a narrower case.
+				IsCanary:        n.ID == tr.FirstNodeID || tr.FirstNodeID == "",
 				UpdateStartedAt: n.UpdateStartedAt,
 				LastSeenAt:      n.LastSeenAt,
 				StageStartedAt:  tr.StageStartedAt,
