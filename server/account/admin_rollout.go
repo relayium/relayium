@@ -256,7 +256,12 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 		p.RulesText = fleetRulesText()
 	} else {
 		p.RulesText = byoRulesText()
-		if found && tr.Status == "rolling" {
+		// !tr.Emergency is part of the precondition, not a nicety: nodes.go:470
+		// short-circuits BOTH state machines on an emergency, before the
+		// per-track dispatch, so during one there is no batch ladder running at
+		// all. Timing "the next batch" there would describe a ladder that is not
+		// there — and the panel two lines above already says 已跳过分批.
+		if found && tr.Status == "rolling" && !tr.Emergency {
 			// tr.ByoBatch decides whether there is a window at all — a fresh
 			// track opens its first batch immediately. See byoNextStepText.
 			p.NextStepText = byoNextStepText(tr.ByoBatch, tr.StageStartedAt, now.Unix())
