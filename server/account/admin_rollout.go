@@ -43,13 +43,29 @@ type rolloutPanelView struct {
 	// the template only renders the one that belongs to this panel.
 	CurrentNodeID string
 	ByoBatch      int
+	// FirstNodeID is the canary of this rollout. It is positional and cannot be
+	// re-derived from fleet version state later (see RolloutTrack.FirstNodeID),
+	// and it is what decides whether the node in flight gets the long
+	// observation window or the short one.
+	FirstNodeID string
 	// PreviousVersion is set on the BYO panel only, and only when a predecessor
 	// is actually recorded: it is both the label and the availability of the
 	// 回滚到上一版本 control. Empty means the control is not rendered at all —
 	// a button whose only possible outcome is a refusal is worse than no button.
 	PreviousVersion string
-	OnTarget        int // nodes already running TargetVersion
-	Total           int
+	// RulesText states this track's timing rules on the page, generated from
+	// the state machine's constants (see rollout_status.go) so it cannot drift
+	// away from them.
+	RulesText string
+	// NextStepText is set on the BYO panel only: the fleet track's next step is
+	// a property of the node in flight and is rendered on that node's row
+	// instead. Empty means there is nothing pending to time. NextStepLabel
+	// names what that time is the time OF — at the widest batch it is not
+	// "下一批", because there is no wider batch. See byoNextStepLabel.
+	NextStepText  string
+	NextStepLabel string
+	OnTarget      int // nodes already running TargetVersion
+	Total         int
 	// Nodes is at most rolloutPanelMaxRows rows, most relevant first; Hidden
 	// counts the rest. OnTarget/Total are always over the WHOLE track, never
 	// over the rendered slice.
@@ -122,6 +138,10 @@ type rolloutNodeView struct {
 	ResultText        string // Chinese label
 	Current           bool   // fleet: this node holds the rollout slot
 	InBatch           bool   // byo: this node is in the batch currently open
+	// Status describes what this node is doing, for the node holding the fleet
+	// rollout slot. Zero for every other row. See rollout_status.go: it
+	// DESCRIBES decideFleet's state and never re-decides it.
+	Status rolloutNodeStatus
 }
 
 // rolloutStatusText maps the stored status onto the panel's label. An empty
@@ -235,8 +255,25 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 	p.Configured = found
 	p.TargetVersion, p.Status = tr.TargetVersion, tr.Status
 	p.StatusText = rolloutStatusText(tr.Status, found)
+	if track == "fleet" {
+		p.RulesText = fleetRulesText()
+	} else {
+		p.RulesText = byoRulesText()
+		// !tr.Emergency is part of the precondition, not a nicety: nodes.go:470
+		// short-circuits BOTH state machines on an emergency, before the
+		// per-track dispatch, so during one there is no batch ladder running at
+		// all. Timing "the next batch" there would describe a ladder that is not
+		// there — and the panel two lines above already says 已跳过分批.
+		if found && tr.Status == "rolling" && !tr.Emergency {
+			// tr.ByoBatch decides whether there is a window at all — a fresh
+			// track opens its first batch immediately. See byoNextStepText.
+			p.NextStepText = byoNextStepText(tr.ByoBatch, tr.StageStartedAt, now.Unix())
+			p.NextStepLabel = byoNextStepLabel(tr.ByoBatch)
+		}
+	}
 	p.HaltedReason, p.Emergency = tr.HaltedReason, tr.Emergency
 	p.StageStartedAt, p.CurrentNodeID, p.ByoBatch = tr.StageStartedAt, tr.CurrentNodeID, tr.ByoBatch
+	p.FirstNodeID = tr.FirstNodeID
 	if track == "byo" {
 		p.PreviousVersion = tr.PreviousVersion
 	}
@@ -263,17 +300,32 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 	cutoff := now.Add(-nodeOnlineWindow).Unix()
 	p.Total = len(nodes)
 	rows := make([]rolloutNodeView, 0, len(nodes))
-	for _, n := range nodes {
+	for i, n := range nodes {
 		onTarget := tr.TargetVersion != "" && selfupdate.SameVersion(n.Version, tr.TargetVersion)
 		if onTarget {
 			p.OnTarget++
+		}
+		// Current stays derived from CurrentNodeID alone, and deliberately so:
+		// it ranks this row to the top of the table (see rolloutNodeRows), and
+		// on a HALTED track the node that was in flight is still the one an
+		// operator opens this panel to find. What must not survive a halt is the
+		// timing — and that is fleetNodeStatus's own first check, not this one.
+		current := track == "fleet" && n.ID == tr.CurrentNodeID && tr.CurrentNodeID != ""
+		var status rolloutNodeStatus
+		if current {
+			// snaps is nodeSnapshots(nodes), which is 1:1 and in order, so
+			// snaps[i] is this row's node as the state machine sees it. Built
+			// through newFleetNodeInput so the panel and the test that pins it
+			// to decideFleet cannot assemble the input two different ways.
+			status = fleetNodeStatus(newFleetNodeInput(tr, snaps[i], onTarget), now.Unix())
 		}
 		rows = append(rows, rolloutNodeView{
 			ID: n.ID, Label: n.Label, Version: n.Version,
 			Online: n.LastSeenAt >= cutoff, OnTarget: onTarget,
 			UpdateFromVersion: n.UpdateFromVersion, UpdateStartedAt: n.UpdateStartedAt,
 			Result: n.UpdateResult, ResultText: rolloutResultText(n.UpdateResult),
-			Current: track == "fleet" && n.ID == tr.CurrentNodeID && tr.CurrentNodeID != "",
+			Current: current,
+			Status:  status,
 			InBatch: inBatch[n.ID],
 		})
 	}

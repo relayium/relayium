@@ -216,6 +216,19 @@ func withPasskeyJS(t *template.Template) *template.Template {
 // Node rows are capped at rolloutPanelMaxRows and ordered most-relevant-first
 // (see rolloutNodeRows): the BYO track is every user's machine, so an
 // uncapped one-row-per-node table is an unbounded page.
+//
+// The in-flight tag renders ONLY when fleetNodeStatus produced a label, with no
+// fallback word. There used to be one — 更新中 — for a row that holds the slot
+// with nothing being timed, which is precisely the state a HALTED track leaves
+// behind (HaltRolloutTrack keeps current_node_id). Printing the very word this
+// panel exists to remove, in the one case where the panel knows nothing is
+// happening, is worse than printing nothing: the track-level line above already
+// says 已中止 and gives the halt reason.
+//
+// The `never` class is driven by Status.Alarm, NOT by Status.Overdue. A crossed
+// limit means opposite things in different bands — in the observing band it is
+// the window succeeding — and colouring the successful case red is how an
+// operator learns to ignore the colour. See rolloutNodeStatus.Alarm.
 const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 <div class="ro-panel" id="rollout-{{.Track}}">
 <h3>{{.Title}}（{{.Track}}）</h3>
@@ -230,6 +243,8 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 {{else}}当前批次：{{if .ByoBatch}}{{.ByoBatch}}%{{else}}未开批{{end}}{{end}}
 {{if .StageStartedAt}} · 本阶段开始：{{ts .StageStartedAt}}{{end}}
 </p>
+{{if .NextStepText}}<div style="color:var(--muted);font-size:12px">{{.NextStepLabel}}：{{.NextStepText}}</div>{{end}}
+{{if .RulesText}}<div style="color:var(--muted);font-size:12px">{{.RulesText}}</div>{{end}}
 {{if .HaltedReason}}<p class="err">中止原因：{{.HaltedReason}}</p>{{end}}
 
 <div class="ro-ctl">
@@ -237,10 +252,14 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 <input type="text" name="version" placeholder="v1.2.3" title="目标版本（vMAJOR.MINOR.PATCH）" style="width:110px">
 <button type="submit">设定目标版本</button>
 </form>
+{{if eq .Status "rolling"}}
 <form method="post" action="/admin/rollout/{{.Track}}/pause" class="lim"
   onsubmit="return confirm('暂停 {{.Track}} 轨的发布？')"><button type="submit">暂停</button></form>
+{{end}}
+{{if eq .Status "halted"}}
 <form method="post" action="/admin/rollout/{{.Track}}/resume" class="lim"
   onsubmit="return confirm('继续 {{.Track}} 轨的发布？将从头重新分批。')"><button type="submit">继续</button></form>
+{{end}}
 <form method="post" action="/admin/rollout/{{.Track}}/rollback" class="lim"
   onsubmit="return confirm('把 {{.Track}} 轨回滚到该版本？')">
 <input type="text" name="version" placeholder="v1.2.2" title="回滚到的版本" style="width:110px">
@@ -264,7 +283,7 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 {{range .Nodes}}
 <tr>
 <td>{{if .Label}}<b>{{.Label}}</b> {{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span>
-{{if .Current}}<span class="ro-tag">更新中</span>{{end}}{{if .InBatch}}<span class="ro-tag">本批次</span>{{end}}</td>
+{{if .Status.Label}}<span class="ro-tag{{if .Status.Alarm}} never{{end}}">{{.Status.Label}}</span>{{end}}{{if .Status.Detail}}<div style="color:var(--muted);font-size:12px">{{.Status.Detail}}</div>{{end}}{{if .InBatch}}<span class="ro-tag">本批次</span>{{end}}</td>
 <td>{{if .Online}}在线{{else}}离线{{end}}</td>
 <td>{{if .Version}}{{.Version}}{{else}}—{{end}}{{if .OnTarget}} ✓{{end}}</td>
 <td>{{if eq .Result "failed"}}<b class="never">{{.ResultText}}</b>{{else if eq .Result "rolled_back"}}<b class="never">{{.ResultText}}</b>{{else}}{{.ResultText}}{{end}}</td>
@@ -275,7 +294,7 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 <tr><td colspan="6" style="color:var(--muted)">该轨道下暂无节点</td></tr>
 {{end}}
 </tbody></table>
-{{if .Hidden}}<p style="color:var(--muted);font-size:12px">共 {{.Total}} 台，仅列出最需要关注的 {{len .Nodes}} 台（失败 / 更新中 / 落后版本优先），其余 {{.Hidden}} 台未显示。</p>{{end}}
+{{if .Hidden}}<p style="color:var(--muted);font-size:12px">共 {{.Total}} 台，仅列出最需要关注的 {{len .Nodes}} 台（失败 / 发布中 / 落后版本优先），其余 {{.Hidden}} 台未显示。</p>{{end}}
 {{end}}
 </div>
 {{end}}`
