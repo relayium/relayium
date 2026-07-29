@@ -501,6 +501,25 @@ type Setting struct {
 	UpdatedAt int64
 }
 
+// ReleaseCheck is the single row behind the admin panel's "a newer release
+// exists" notice: what the last SUCCESSFUL check saw, and which tag the
+// operator dismissed.
+//
+// Both halves are persisted rather than held per-process because central is
+// built to run as several instances (see the admin-session and TOTP-guard
+// notes on Service). Process-local state would have each instance polling on
+// its own schedule and the "last checked" line jumping around depending on
+// which one served the page, while the dismissal beside it stayed consistent.
+//
+// CheckedAt == 0 means no check has ever SUCCEEDED. That is a state the panel
+// renders in its own words; it is never rendered as "up to date".
+type ReleaseCheck struct {
+	LatestTag    string
+	CheckedAt    int64
+	DismissedTag string
+	DismissedAt  int64
+}
+
 // AdminUserRow 是后台用户列表的一行聚合视图（只读）。
 type AdminUserRow struct {
 	ID            string
@@ -846,6 +865,15 @@ type Store interface {
 	GetSetting(ctx context.Context, key string) (int64, bool, error)
 	SetSetting(ctx context.Context, key string, value, at int64) error
 	ListSettings(ctx context.Context) ([]Setting, error)
+	// release check (admin "a newer release exists" notice)
+	GetReleaseCheck(ctx context.Context) (ReleaseCheck, error)
+	// SetReleaseCheckResult records a SUCCESSFUL check. A failed check must not
+	// call this: leaving the previous values in place is what makes the panel
+	// degrade to silence rather than to a false claim.
+	SetReleaseCheckResult(ctx context.Context, tag string, at int64) error
+	// SetReleaseCheckDismissed records (or, with an empty tag, clears) the
+	// dismissal without touching the result.
+	SetReleaseCheckDismissed(ctx context.Context, tag string, at int64) error
 	// relay nodes (self-reporting fleet telemetry)
 	UpsertNode(ctx context.Context, n Node) (Node, error)
 	// TouchNode records a heartbeat. activeTransfers is the node's live
