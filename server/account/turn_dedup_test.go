@@ -94,6 +94,9 @@ func TestICEStaticRelayDuplicatingViaTransportVariantIsDropped(t *testing.T) {
 			URLs: []string{"turn:198.51.100.7:3478?transport=tcp"}, Secret: "s2"}}}
 
 	ids := icePoolIDs(t, st, cfg, owner, now)
+	if !has(ids, "node-a") {
+		t.Fatalf("the registered node must survive, got %v", ids)
+	}
 	if has(ids, "static-a") {
 		t.Fatalf("?transport=tcp names a transport, not a second relay, got %v", ids)
 	}
@@ -177,12 +180,22 @@ func TestICEKeepsDistinctRelays(t *testing.T) {
 	// Same host as node-a but a different port: a genuinely different relay.
 	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "node-c",
 		URLs: []string{"turn:198.51.100.7:3479"}, TURNSecret: "s3", CreatedAt: 1, LastSeenAt: now.Unix()})
+	// One relay, two URLs for the same address: a transport variant of its own
+	// first URL. claimAddrs checks every address before claiming any of them,
+	// so this candidate never sees itself as already claimed. Collapsing that
+	// two-pass shape into a single check-and-claim loop would disqualify this
+	// node against its own first URL and drop it -- exactly the operator-
+	// written static-config shape relayAddr's docs cite as the motivation for
+	// stripping ?transport=tcp.
+	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "node-multi-url",
+		URLs: []string{"turn:198.51.100.9:3478", "turn:198.51.100.9:3478?transport=tcp"},
+		TURNSecret: "s5", CreatedAt: 1, LastSeenAt: now.Unix()})
 
 	cfg := Config{TURNCredTTL: time.Hour, STUNURLs: []string{"stun:stun.l:3478"},
 		TURNRelays: []RelayConfig{{ID: "static-z", URLs: []string{"turn:203.0.113.9:3478"}, Secret: "s4"}}}
 
 	ids := icePoolIDs(t, st, cfg, owner, now)
-	for _, want := range []string{"node-a", "node-b", "node-c", "static-z"} {
+	for _, want := range []string{"node-a", "node-b", "node-c", "node-multi-url", "static-z"} {
 		if !has(ids, want) {
 			t.Fatalf("distinct relay %s was dropped, got %v", want, ids)
 		}
