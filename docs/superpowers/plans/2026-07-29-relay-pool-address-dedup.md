@@ -13,6 +13,7 @@
 ## Global Constraints
 
 - **The key is `host:port`**, not the URL string. What the client measures is the machine, not the URL, so two spellings of one host:port are one RTT.
+  - **Corrected after review:** this key was shipped as plain `host:port` and then changed to `scheme:host:port` — a `turn:` and a `turns:` endpoint on the same host:port are two distinct services, not one machine spelled two ways. See `docs/superpowers/specs/2026-07-29-relay-pool-address-dedup-design.md` for why. This plan is left as originally written below; the code and spec are the current source of truth.
 - Scheme defaults: `turn:` → port `3478`, `turns:` → port `5349`.
 - Host comparison is case-insensitive. **Never resolve DNS** — two names for one machine stay two entries, because resolving would put a network round trip on `/api/ice`, which must stay fast.
 - **A candidate is skipped when *any* of its addresses is already claimed.** A relay advertising several URLs is one machine; accepting it "for the URLs that don't collide" hands the client a second entry pointing at the same box, which is the bug being fixed.

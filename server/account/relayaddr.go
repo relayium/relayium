@@ -5,13 +5,20 @@ import (
 	"strings"
 )
 
-// relayAddr normalises one TURN URL to a comparable "host:port", reporting
-// false when it cannot read one.
+// relayAddr normalises one TURN URL to a comparable "scheme:host:port",
+// reporting false when it cannot read one.
 //
 // The relay pool dedupes on this rather than on the URL string because what the
 // client measures is the MACHINE, not the URL: turn:H:3478 and
 // turn:H:3478?transport=tcp are one relay and one RTT. A statically configured
 // relay's `urls` array is operator-written and may legitimately list both.
+//
+// The scheme is part of the key because it is part of the service: a `turns:`
+// endpoint and a `turn:` endpoint on the same host and port are two distinct
+// listeners, not one machine spelled two ways -- UDP and TCP port spaces are
+// independent, so plain TURN and TURN-over-TLS can and do coexist on what looks
+// like "the same" host:port. Collapsing them would drop whichever one lost,
+// and it is always TURN-over-TLS that a UDP-hostile network's peers need most.
 //
 // DNS is deliberately not resolved. Two names for one machine stay two entries;
 // resolving would put a network round trip on /api/ice, which must stay fast.
@@ -22,12 +29,12 @@ import (
 func relayAddr(raw string) (string, bool) {
 	s := strings.TrimSpace(raw)
 	lower := strings.ToLower(s)
-	var defPort string
+	var scheme, defPort string
 	switch {
 	case strings.HasPrefix(lower, "turns:"):
-		s, defPort = s[len("turns:"):], "5349"
+		s, scheme, defPort = s[len("turns:"):], "turns", "5349"
 	case strings.HasPrefix(lower, "turn:"):
-		s, defPort = s[len("turn:"):], "3478"
+		s, scheme, defPort = s[len("turn:"):], "turn", "3478"
 	default:
 		return "", false
 	}
@@ -74,7 +81,7 @@ func relayAddr(raw string) (string, bool) {
 	if _, err := strconv.Atoi(port); err != nil {
 		return "", false
 	}
-	return strings.ToLower(host) + ":" + port, true
+	return scheme + ":" + strings.ToLower(host) + ":" + port, true
 }
 
 // relayAddrs normalises a relay's URL list, dropping what it cannot read.

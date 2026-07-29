@@ -62,7 +62,7 @@ sources, in the existing order. Precedence is therefore unchanged: own nodes bea
 fleet nodes beat static config — which is what the existing comments already
 claim happens.
 
-### The key is `host:port`, not the URL string
+### The key is `scheme:host:port`, not the URL string
 
 A TURN URL is `turn:host:port[?transport=…]` (or `turns:` on the TLS port).
 Keying on the raw URL would treat `turn:H:3478` and `turn:H:3478?transport=tcp`
@@ -70,31 +70,42 @@ as two relays. A static `RELAYIUM_TURN_RELAYS` entry's `urls` array is
 operator-written and may legitimately list both.
 
 More fundamentally: what the client measures is the **machine**, not the URL. Two
-spellings of one host:port are one RTT. `host:port` is the granularity that
-matches what the duplicate actually costs.
+spellings of one host:port are one RTT. Stripping `?transport=…` is the part of
+this that gets that right, and it survives unchanged below.
 
-**Why the scheme is not part of the key.** A reviewer proposed keying on
-scheme-class plus `host:port` — i.e. treating `turn:H:P` and `turns:H:P` as
-distinct — as cheap insurance against a dedup that could collapse TURN and
-TURN-over-TLS onto one surviving entry, losing TLS reachability for whichever
-side lost. That change was **not made**; the key stays plain `host:port`.
-`turn:` defaults to port 3478 and `turns:` to port 5349, and a single port
-cannot serve both plaintext TURN and TURN-over-TLS — coturn binds them on
-separate listeners. So a genuine `turn:H:P` / `turns:H:P` pair sharing both the
-same host **and** the same port is not physically realisable, and the reviewer
-who raised the concern could not construct one. Since the collision this would
-guard against does not occur, adding scheme to the key would only weaken the
-dedup's ability to collapse the real duplicates it exists for, for no offsetting
-benefit.
+**Why the scheme is part of the key — corrected after review.** An earlier
+draft of this design keyed on plain `host:port` and argued the scheme could be
+dropped: that "a single port cannot serve both plaintext TURN and
+TURN-over-TLS," so a `turn:H:P` / `turns:H:P` pair sharing a host and port was
+not physically realisable, and that including the scheme would only weaken the
+dedup's ability to collapse real duplicates.
+
+**Both legs of that argument were wrong**, and the record should say so plainly
+rather than quietly fixing the code. UDP and TCP port spaces are independent:
+plain TURN on UDP:5349 and TURN-over-TLS on TCP:5349 coexist with no bind
+conflict, so the "not physically realisable" claim does not hold. And the
+transport-variant collapsing that motivated the design — `turn:H:P` and
+`turn:H:P?transport=tcp` being one relay — is untouched by putting the scheme
+in the key, because `?transport=tcp` does not change the scheme; a
+scheme-aware key still strips it and still collapses those two to one entry.
+There was no real tradeoff to weigh.
+
+The decision is: the key is `scheme:host:port`. A `turns:` endpoint and a
+`turn:` endpoint on one host are two distinct services, and dropping the
+`turns:` one on the mistaken belief it duplicates the `turn:` one costs exactly
+the TURN-over-TLS reachability that peers on UDP-hostile networks need most —
+precisely the population a relay pool exists to help.
 
 Note for anyone extending this: fleet nodes today report exactly one URL each —
 `relay.go` builds a single `turn:IP:PORT`, UDP only. The transport variants live
 in the legacy top-level `RELAYIUM_TURN_URLS`, which is not part of this pool.
-So the transport case arises from static config, not from nodes.
+So a `turns:` entry can only ever come from operator-written static config, not
+from a node.
 
 ### Normalisation rules
 
-- Strip the scheme (`turn:` / `turns:`) and anything from `?` onward.
+- Normalise and keep the scheme (`turn:` / `turns:`) as part of the key; strip
+  anything from `?` onward.
 - A missing port takes the scheme's default: 3478 for `turn:`, 5349 for `turns:`.
 - IPv6 literals arrive bracketed (`turn:[2001:db8::1]:3478`); the brackets are
   part of the host and the last colon outside them separates the port.

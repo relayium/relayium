@@ -8,16 +8,16 @@ func TestRelayAddrNormalises(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"plain turn", "turn:198.51.100.7:3478", "198.51.100.7:3478"},
-		{"transport variant is the same relay", "turn:198.51.100.7:3478?transport=tcp", "198.51.100.7:3478"},
-		{"turn default port", "turn:relay.example", "relay.example:3478"},
-		{"turns default port", "turns:relay.example", "relay.example:5349"},
-		{"turns explicit port", "turns:relay.example:5349", "relay.example:5349"},
-		{"host case folds", "turn:Relay.EXAMPLE:3478", "relay.example:3478"},
-		{"scheme case folds", "TURN:relay.example:3478", "relay.example:3478"},
-		{"ipv6 with port", "turn:[2001:db8::1]:3478", "[2001:db8::1]:3478"},
-		{"ipv6 without port", "turn:[2001:db8::1]", "[2001:db8::1]:3478"},
-		{"surrounding space", "  turn:relay.example:3478  ", "relay.example:3478"},
+		{"plain turn", "turn:198.51.100.7:3478", "turn:198.51.100.7:3478"},
+		{"transport variant is the same relay", "turn:198.51.100.7:3478?transport=tcp", "turn:198.51.100.7:3478"},
+		{"turn default port", "turn:relay.example", "turn:relay.example:3478"},
+		{"turns default port", "turns:relay.example", "turns:relay.example:5349"},
+		{"turns explicit port", "turns:relay.example:5349", "turns:relay.example:5349"},
+		{"host case folds", "turn:Relay.EXAMPLE:3478", "turn:relay.example:3478"},
+		{"scheme case folds", "TURN:relay.example:3478", "turn:relay.example:3478"},
+		{"ipv6 with port", "turn:[2001:db8::1]:3478", "turn:[2001:db8::1]:3478"},
+		{"ipv6 without port", "turn:[2001:db8::1]", "turn:[2001:db8::1]:3478"},
+		{"surrounding space", "  turn:relay.example:3478  ", "turn:relay.example:3478"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -48,6 +48,43 @@ func TestRelayAddrDistinguishesPorts(t *testing.T) {
 	}
 }
 
+// turn: and turns: on the same host and port are two distinct listeners, not
+// one machine spelled two ways -- UDP and TCP port spaces are independent, so
+// plaintext TURN and TURN-over-TLS can coexist on what looks like "the same"
+// host:port. Collapsing them would drop whichever one lost, and it is always
+// TURN-over-TLS that a UDP-hostile network's peers need most. This is the hole
+// a scheme-less key opened and the one this key format exists to close.
+func TestRelayAddrDistinguishesSchemes(t *testing.T) {
+	a, ok := relayAddr("turn:relay.example:3478")
+	if !ok {
+		t.Fatal("turn url did not parse")
+	}
+	b, ok := relayAddr("turns:relay.example:3478")
+	if !ok {
+		t.Fatal("turns url did not parse")
+	}
+	if a == b {
+		t.Fatalf("turn: and turns: collapsed to one key: %q", a)
+	}
+}
+
+// A transport variant of one scheme must still collapse to one key -- the
+// property the whole host:port design exists for, and it must survive scheme
+// being added to the key.
+func TestRelayAddrTransportVariantStillCollapses(t *testing.T) {
+	a, ok := relayAddr("turn:relay.example:3478")
+	if !ok {
+		t.Fatal("first url did not parse")
+	}
+	b, ok := relayAddr("turn:relay.example:3478?transport=tcp")
+	if !ok {
+		t.Fatal("second url did not parse")
+	}
+	if a != b {
+		t.Fatalf("transport variant did not collapse: %q != %q", a, b)
+	}
+}
+
 // Anything unreadable must report not-ok rather than inventing an address.
 // A wrong address is worse than no address: it would drop a working relay.
 func TestRelayAddrRejectsUnparseable(t *testing.T) {
@@ -73,7 +110,7 @@ func TestRelayAddrRejectsUnparseable(t *testing.T) {
 // this is what makes an entry with one odd URL stay in the pool.
 func TestRelayAddrsSkipsUnparseable(t *testing.T) {
 	got := relayAddrs([]string{"turn:relay.example:3478", "garbage", "turns:other.example"})
-	want := []string{"relay.example:3478", "other.example:5349"}
+	want := []string{"turn:relay.example:3478", "turns:other.example:5349"}
 	if len(got) != len(want) {
 		t.Fatalf("relayAddrs = %v, want %v", got, want)
 	}

@@ -202,6 +202,32 @@ func TestICEKeepsDistinctRelays(t *testing.T) {
 	}
 }
 
+// A fleet node's turn: address and a static config entry's turns: address at
+// the same host and port are two distinct services -- plaintext TURN and
+// TURN-over-TLS can coexist there without conflict, since UDP and TCP port
+// spaces are independent. Both must survive in the pool; collapsing them
+// would cost TURN-over-TLS reachability for peers on UDP-hostile networks,
+// exactly the population that most needs it.
+func TestICEStaticTURNSDoesNotDedupeAgainstNodeTURN(t *testing.T) {
+	st := newTestStore(t)
+	now := time.Unix(10000, 0)
+	owner := seedOwner(t, st)
+	st.UpsertNode(context.Background(), Node{OwnerType: "fleet", ID: "node-a",
+		URLs: []string{"turn:198.51.100.7:3478"}, TURNSecret: "s1", CreatedAt: 1, LastSeenAt: now.Unix()})
+
+	cfg := Config{TURNCredTTL: time.Hour, STUNURLs: []string{"stun:stun.l:3478"},
+		TURNRelays: []RelayConfig{{ID: "static-tls",
+			URLs: []string{"turns:198.51.100.7:3478"}, Secret: "s2"}}}
+
+	ids := icePoolIDs(t, st, cfg, owner, now)
+	if !has(ids, "node-a") {
+		t.Fatalf("the fleet node's plain turn: relay must survive, got %v", ids)
+	}
+	if !has(ids, "static-tls") {
+		t.Fatalf("the static turns: relay is a distinct service and must survive, got %v", ids)
+	}
+}
+
 // Fail open: a URL the parser cannot read claims nothing and blocks nothing.
 // A parser that cannot read an unusual but working URL must never be able to
 // empty the relay pool.
