@@ -859,6 +859,68 @@ func TestAdminDismissHidesTheNoticeAndCanBeUndone(t *testing.T) {
 		t.Fatal("undoing the dismissal must bring the notice back")
 	}
 }
+
+// A page left open showing an old release must not be able to repoint the fleet
+// backwards. nodes.go:445 sets AllowDowngrade automatically for a downgrade, so
+// this is not inert -- the nodes would install the older build.
+func TestAdminRolloutRefusesAStaleVersion(t *testing.T) {
+	ts, _, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	ctx := context.Background()
+	now := time.Now().Unix()
+
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v1.5.0", Status: "complete",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetReleaseCheckResult(ctx, "v1.5.0", now); err != nil {
+		t.Fatal(err)
+	}
+
+	// The stale page still holds v1.3.0.
+	resp := postAdminForm(t, ts, cookie, "/admin/release/rollout", url.Values{"version": {"v1.3.0"}})
+	resp.Body.Close()
+
+	after, ok, err := store.GetRolloutTrack(ctx, "fleet")
+	if err != nil || !ok {
+		t.Fatalf("GetRolloutTrack: %v/%v", ok, err)
+	}
+	if after.TargetVersion != "v1.5.0" || after.Status != "complete" {
+		t.Fatalf("a stale version repointed the fleet: %+v", after)
+	}
+}
+
+// The rolling guard, at the handler rather than at the button.
+func TestAdminRolloutRefusesWhileRolling(t *testing.T) {
+	ts, _, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	ctx := context.Background()
+	now := time.Now().Unix()
+
+	before := RolloutTrack{
+		Track: "fleet", TargetVersion: "v1.2.0", Status: "rolling",
+		CurrentNodeID: "n-canary", FirstNodeID: "n-canary", StageStartedAt: now - 3600,
+	}
+	if err := store.PutRolloutTrack(ctx, before); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetReleaseCheckResult(ctx, "v1.3.0", now); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := postAdminForm(t, ts, cookie, "/admin/release/rollout", url.Values{"version": {"v1.3.0"}})
+	resp.Body.Close()
+
+	after, ok, err := store.GetRolloutTrack(ctx, "fleet")
+	if err != nil || !ok {
+		t.Fatalf("GetRolloutTrack: %v/%v", ok, err)
+	}
+	if after.TargetVersion != before.TargetVersion || after.Status != before.Status ||
+		after.CurrentNodeID != before.CurrentNodeID || after.StageStartedAt != before.StageStartedAt {
+		t.Fatalf("a direct POST abandoned the rollout in flight: before=%+v after=%+v", before, after)
+	}
+}
 ```
 
 `postAdminForm(t, ts, cookie, path, url.Values) *http.Response` already exists in this package's tests — `admin_rollout_test.go` uses it for the rollout target POSTs — and it is what satisfies `CSRFGuard`. Use it rather than hand-rolling a request. Drop the `net/http` and `strings.NewReader` imports if nothing else in the file needs them.
@@ -952,7 +1014,15 @@ Register the two routes in `RegisterAdmin` beside the rollout ones:
 
 Add both handlers to `server/account/admin_rollout.go`, following `rolloutSetVersion`'s existing shape for parsing, auditing and redirecting:
 
-- `handleAdminReleaseRollout` reads `version` from the form and calls the same path the typed fleet form uses (`SetTargetVersion(ctx, "fleet", version)`), so there is exactly one way a target is ever set. **Re-read the fleet track first and refuse if its status is `rolling`** — the button is hidden in that state, but a stale page or a direct POST must not be able to do what the UI declines to offer.
+- `handleAdminReleaseRollout` reads `version` from the form and calls the same path the typed fleet form uses (`SetTargetVersion(ctx, "fleet", version)`), so there is exactly one way a target is ever set. It has **two** guards, and both exist for the same reason — a stale page or a direct POST must not be able to do what the UI declines to offer:
+
+  1. **Re-read the fleet track and refuse if its status is `rolling`.** The button is hidden in that state; the handler is what makes it a rule.
+  2. **Re-read `GetReleaseCheck` and refuse unless the posted `version` equals the stored `LatestTag`.** Without this the handler trusts a client-supplied version: an admin leaves `/admin` open showing v1.3.0, the fleet completes a rollout to v1.5.0, and the stale button posts v1.3.0 — which passes the rolling guard and **repoints the fleet backwards**. That is not inert: `nodes.go:445` sets `AllowDowngrade` automatically for a downgrade, so nodes install the older build. Guarding one axis and not the other is how this hole got here in the first place.
+
+  Give it **its own audit action** — `AuditReleaseRollout` — rather than reusing `AuditRolloutTarget`. The house rule is the opposite of "identical writes share an action": `handleAdminRolloutTarget` and `handleAdminRolloutRollback` funnel into the identical `SetTargetVersion` write and are deliberately given different actions, documented at `admin_rollout.go:388-392` as being "purely so the audit trail (and the UI) can tell 'shipping v1.3.0' from 'getting off v1.3.0', which is the fact an incident review actually needs". Entry point is exactly what an incident review wants here too.
+
+- **The inline `onsubmit="return confirm(...)"` on this form is decorative and must be annotated as such**, the way `admin_templates.go:211-218` already annotates the others: the admin CSP has no `'unsafe-inline'`, so inline handlers never run and a `confirm()` must never be treated as a confirmation step. Do not build a step-up flow for it. With both guards above in place the button can only set the target to the version the server itself currently reports as newest, and only while no rollout is running — so what is left is a misclick, not a stale-state hazard, and `stepup.go`'s machinery would be answering a question the guards already answer.
+
 - `handleAdminReleaseDismiss` reads `version` and calls `SetReleaseCheckDismissed(ctx, version, now)`. An empty value is the undo.
 
 - [ ] **Step 6: Render it**
