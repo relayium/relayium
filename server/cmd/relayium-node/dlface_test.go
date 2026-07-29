@@ -197,6 +197,9 @@ func TestStartDownloadFaceTiesListenerToAdvertisement(t *testing.T) {
 	if srv.Addr != ":2053" {
 		t.Fatalf("Addr = %q, want :2053", srv.Addr)
 	}
+	if srv.TLSConfig.MinVersion != tls.VersionTLS12 {
+		t.Fatalf("MinVersion = %x, want TLS 1.2 for CF-origin compatibility", srv.TLSConfig.MinVersion)
+	}
 }
 
 // Holds the WIRING through a real handshake, not just TLSConfig inspection:
@@ -237,6 +240,9 @@ func TestStartDownloadFaceServesTheInstalledCert(t *testing.T) {
 		t.Fatal(err)
 	}
 	blk, _ := pem.Decode(onDisk)
+	if blk == nil {
+		t.Fatalf("%s does not contain a PEM block", filepath.Join(dir, dlCrtName))
+	}
 	if !bytes.Equal(served.Raw, blk.Bytes) {
 		t.Fatal("the certificate served is not the one installed on disk")
 	}
@@ -254,7 +260,7 @@ func TestDownloadCertIsNotTheIdentityCert(t *testing.T) {
 	}
 	face, why := resolveDownloadFace(dir, "https://node7.relayium.com", ":2053", now)
 	if face == nil {
-		t.Fatalf("setup: %s", why)
+		t.Fatalf("setup failed OR the identity cert got wired onto the download face and was rejected as Ed25519: %s", why)
 	}
 	if bytes.Equal(face.Cert.Certificate[0], id.TLSCert.Certificate[0]) {
 		t.Fatal("the public download listener is serving the pinned identity certificate")
