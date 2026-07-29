@@ -217,20 +217,33 @@ its band's deadline, and the 15-minute silence backstop — and printing both is
 noise, because a heartbeating node resets its silence clock every 30 seconds.
 
 The rule: while the node's last heartbeat is within `nodeOnlineWindow` (90 s),
-show the band's own deadline. Once the heartbeat is older than that, the node has
-gone quiet, the silence limit is the one about to fire, and the panel shows that
-one and says the node has stopped heartbeating — **including when the node is on
-target and otherwise merely observing**, since `decideFleet` halts on silence
-regardless of version. The label keeps the band it came from
-(`观察中（已停止心跳）`, `安装中（已停止心跳）`) so the operator can still see
-what it was doing when it went dark.
+show the band's own deadline alone. Once the heartbeat is older than that, the
+node has gone quiet and the silence limit **overlays** the band — it does not
+replace it. The label keeps the band it came from (`观察中（已停止心跳）`,
+`安装中（已停止心跳）`) so the operator can still see what it was doing when it
+went dark, and the band's own clock is kept alongside the silence one whenever it
+has already expired.
+
+**Overlay, not replacement, and this correction cost a defect to learn.** An
+earlier version of this section said the silence limit "is the one about to fire,
+and the panel shows that one" — so the code returned early and discarded the
+band's clock. A node already past `fleetInstallLimit` that then went quiet for
+91 seconds therefore read as a calm two-minute silence, while `decideFleet` was
+halting it on the install limit. The two clocks are not alternatives: whichever
+has expired is the one that decides, and both can have. This was found by the
+sweep described below, not by reading — see *Pinning the panel to the state
+machine*.
 
 ### The rules are on the page, not in a help modal
 
 One line of small text under the status, per track:
 
-- Fleet: canary 观察 6 小时，之后每台 30 分钟；节点每 ~10 分钟来问一次。
-- BYO: 每批观察 6 小时。
+- Fleet: canary 观察 6 小时，之后每台 30 分钟；节点每 ~10 分钟来问一次，所以下发会落在窗口关闭之后的十分钟内。
+- BYO: 每批观察 6 小时，之后自动放宽到下一档；节点每 ~10 分钟来问一次。
+
+Both are emitted by `fleetRulesText` / `byoRulesText`, which build them from the
+constants — so the durations above are illustrative of the current values, not a
+second copy of them.
 
 These are the numbers an operator otherwise has to know or ask. Printing them
 costs one line and removes the question permanently.
@@ -310,10 +323,28 @@ the state machine, the panel and the sweep together. The test calls `decideFleet
 `admin_rollout.go` and `rollout_status.go` must never call it, because two
 authorities means the operator eventually believes the wrong one.
 
-This sweep catches all four fleet defects found on this work, plus one nobody had
-noticed (silence hiding an already-expired install limit). A per-band test
-written from the same understanding as the code cannot do that; this one has to
-survive a comparison against the thing it describes.
+This sweep catches three of the four fleet defects found on this work — the
+missing rolling gate, the missing `UpdateResult` bands, and the canary fallback —
+plus one nobody had noticed (silence hiding an already-expired install limit).
+It does **not** catch the fourth, the observing band styling itself as an alarm;
+that one is held by `TestFleetNodeStatusObservingNeverAlarms`, because it is a
+presentation choice rather than a disagreement with `decideFleet`.
+
+**Where the sweep is weaker than its size suggests**, recorded because a test
+believed to cover more than it does is how this document went wrong five times:
+
+- The tuple space is one node that is always the current node, so
+  `Action == "update"` is structurally unreachable — the pick step is only
+  reached when that node is `skipped`, which also removes it from the candidate
+  set. `halt` and `complete` are exercised in bulk; `update` is not exercised at
+  all.
+- The invariant is one-sided: it forbids a calm panel where the machine acts, but
+  a panel that returned an empty status for *everything* would pass it. What
+  stops that is the sibling per-band tests, not this one. The two halves are
+  complementary and neither is sufficient.
+- `!in.Emergency` in the precondition is not constrained here at all, because
+  `decideFleet` has no emergency model — the short-circuit lives above it in
+  `nodes.go`. `TestFleetNodeStatusPrintsNothingOnAnInertTrack` is what holds it.
 
 ## Testing
 
