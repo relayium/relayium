@@ -960,8 +960,57 @@ func TestPanelPrintsTheTimingRules(t *testing.T) {
 	if !strings.Contains(body, humanDuration(fleetStepWindow)) {
 		t.Fatal("panel does not state the per-node window")
 	}
-	if !strings.Contains(body, humanDuration(byoBatchWindow)) {
-		t.Fatal("panel does not state the BYO batch window")
+	// Deliberately NOT asserted here: humanDuration(byoBatchWindow). Both it and
+	// fleetFirstWindow are six hours, so that string is already on the page from
+	// the fleet panel and the assertion would pass with the BYO rules line
+	// deleted. The BYO half is covered by TestPanelPrintsTheByoBatchStep below,
+	// which asserts a BYO-specific sentence.
+}
+
+// The BYO half of this change had no coverage until this test: every other test
+// here seeds only a fleet track, and asserting a duration string does not work
+// because both windows are six hours. Assert the BYO sentence itself.
+func TestPanelPrintsTheByoBatchStep(t *testing.T) {
+	ts, _, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	now := time.Now().Unix()
+	seedRolloutNode(t, store, "byo-1", "user", "u1", "v1.0.0", "", "")
+	if err := store.PutRolloutTrack(context.Background(), RolloutTrack{
+		Track: "byo", TargetVersion: "v1.1.0", Status: "rolling",
+		ByoBatch: 10, StageStartedAt: now - 60,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body := adminDashboardHTML(t, ts, cookie)
+	if !strings.Contains(body, "下一批：") {
+		t.Fatal("the BYO panel does not show when its next batch can open")
+	}
+	if !strings.Contains(body, "不早于") {
+		t.Fatal("the BYO next step is not phrased as an earliest time")
+	}
+	if !strings.Contains(body, byoRulesText()) {
+		t.Fatal("the BYO panel does not print its own rules line")
+	}
+}
+
+// An emergency release skips the batch ladder entirely: nodes.go:470
+// short-circuits both state machines before the per-track dispatch. There is no
+// next batch to time, and the panel already says 已跳过分批 two lines above, so
+// timing one would describe a ladder that is not running.
+func TestPanelPrintsNoNextBatchDuringAnEmergency(t *testing.T) {
+	ts, _, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	now := time.Now().Unix()
+	seedRolloutNode(t, store, "byo-1", "user", "u1", "v1.0.0", "", "")
+	if err := store.PutRolloutTrack(context.Background(), RolloutTrack{
+		Track: "byo", TargetVersion: "v1.1.0", Status: "rolling",
+		ByoBatch: 10, StageStartedAt: now - 60, Emergency: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body := adminDashboardHTML(t, ts, cookie)
+	if strings.Contains(body, "下一批：") {
+		t.Fatal("an emergency release has no batch ladder, so there is no next batch to time")
 	}
 }
 ```
@@ -993,7 +1042,12 @@ In `rolloutPanel`, right after `p.StatusText = rolloutStatusText(tr.Status, foun
 		p.RulesText = fleetRulesText()
 	} else {
 		p.RulesText = byoRulesText()
-		if found && tr.Status == "rolling" {
+		// !tr.Emergency is part of the precondition, not a nicety: nodes.go:470
+		// short-circuits BOTH state machines on an emergency, before the
+		// per-track dispatch, so during one there is no batch ladder running at
+		// all. Timing "the next batch" there would describe a ladder that is not
+		// there — and the panel two lines above already says 已跳过分批.
+		if found && tr.Status == "rolling" && !tr.Emergency {
 			// tr.ByoBatch decides whether there is a window at all — a fresh
 			// track opens its first batch immediately. See byoNextStepText.
 			p.NextStepText = byoNextStepText(tr.ByoBatch, tr.StageStartedAt, now.Unix())
