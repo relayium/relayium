@@ -645,6 +645,40 @@ func TestPanelCallsANodeStillBehindInstalling(t *testing.T) {
 		t.Fatal("a node not yet on target must not read as 观察中")
 	}
 }
+
+// A track written before FirstNodeID existed carries "" while a node is in
+// flight. rollout_fleet.go:247 treats that node as the canary -- every defence
+// there fails LONG, because guessing "not the canary" cuts a live six-hour
+// observation to thirty minutes. The panel has to guess the same way, or it
+// reports the short window and marks a healthy canary overdue.
+func TestPanelTreatsAnUnsetCanaryAsTheCanary(t *testing.T) {
+	ts, _, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	ctx := context.Background()
+	now := time.Now().Unix()
+
+	seedRolloutNode(t, store, "n-legacy", "fleet", "", "v1.1.0", "v1.0.0", "ok")
+	if err := store.TouchNode(ctx, "n-legacy", 0, 0, 0, 0, now, 0); err != nil {
+		t.Fatal(err)
+	}
+	// Stage started longer ago than the SHORT window but well inside the long
+	// one, so the two guesses give visibly different answers.
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v1.1.0", Status: "rolling",
+		CurrentNodeID: "n-legacy", FirstNodeID: "",
+		StageStartedAt: now - fleetStepWindow - 60,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	body := adminDashboardHTML(t, ts, cookie)
+	if !strings.Contains(body, "不早于") {
+		t.Fatal("an unset FirstNodeID must still get the canary's long window, not an expired short one")
+	}
+	if strings.Contains(body, "等待下一次轮询") {
+		t.Fatal("the panel used the 30-minute window for a node the state machine treats as the canary")
+	}
+}
 ```
 
 Note `seedRolloutNode`'s own `CommandNodeUpdate` call stamps `update_started_at`
@@ -694,8 +728,17 @@ Then in the row-building loop, compute the status for the node in flight. Replac
 		var status rolloutNodeStatus
 		if current {
 			status = fleetNodeStatus(fleetNodeInput{
-				OnTarget:        onTarget,
-				IsCanary:        n.ID == tr.FirstNodeID,
+				OnTarget: onTarget,
+				// Same rule as rollout_fleet.go:247, including the empty case:
+				// FirstNodeID == "" while a node IS in flight is a track
+				// written before that field existed, and the state machine
+				// assumes the node in flight IS the canary, because guessing
+				// "not the canary" silently cuts a live 6h observation to 30
+				// minutes. Every defence there fails LONG; a panel that guessed
+				// the other way would report the shorter window and mark a
+				// healthy canary overdue -- the failure this work removes,
+				// recreated in a narrower case.
+				IsCanary:        n.ID == tr.FirstNodeID || tr.FirstNodeID == "",
 				UpdateStartedAt: n.UpdateStartedAt,
 				LastSeenAt:      n.LastSeenAt,
 				StageStartedAt:  tr.StageStartedAt,
