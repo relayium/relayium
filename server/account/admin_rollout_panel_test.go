@@ -251,3 +251,106 @@ func TestPanelPrintsNoNextBatchDuringAnEmergency(t *testing.T) {
 		t.Fatal("an emergency release has no batch ladder, so there is no next batch to time")
 	}
 }
+
+// Pausing a rolling canary must not leave a timer running on the panel.
+// HaltRolloutTrack keeps current_node_id and RESTAMPS stage_started_at, so a
+// panel that times the node regardless of the track's status prints an
+// observation window that the PAUSE created — and, later, that the node is
+// about to be aborted "在下一次轮询时", which no poll can do to a track that has
+// already stopped. The row itself stays (and stays at the top): on a halted
+// track the node that was in flight is exactly the one an operator is looking
+// for. What goes is the clock.
+func TestPanelStopsTimingWhenTheTrackIsNotRolling(t *testing.T) {
+	for _, status := range []string{"halted", "complete"} {
+		t.Run(status, func(t *testing.T) {
+			ts, _, store := newAdminSettingsServer(t)
+			cookie := adminLogin(t, ts)
+			ctx := context.Background()
+			now := time.Now().Unix()
+
+			seedRolloutNode(t, store, "n-canary", "fleet", "", "v1.1.0", "v1.0.0", "ok")
+			if err := store.TouchNode(ctx, "n-canary", 0, 0, 0, 0, now, 0); err != nil {
+				t.Fatal(err)
+			}
+			// StageStartedAt is `now` because that is what HaltRolloutTrack
+			// writes: the pause itself restamps the stage.
+			if err := store.PutRolloutTrack(ctx, RolloutTrack{
+				Track: "fleet", TargetVersion: "v1.1.0", Status: status,
+				CurrentNodeID: "n-canary", FirstNodeID: "n-canary",
+				StageStartedAt: now, HaltedReason: "管理员手动暂停",
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			body := adminDashboardHTML(t, ts, cookie)
+			if !strings.Contains(body, "n-canary") {
+				t.Fatal("the node that was in flight must still be listed")
+			}
+			for _, unwanted := range []string{"观察中", "安装中", "等待节点开始", "不早于", "更新中"} {
+				if strings.Contains(body, unwanted) {
+					t.Fatalf("track is %q, nothing is being timed, but the panel says %q", status, unwanted)
+				}
+			}
+		})
+	}
+}
+
+// A node that reported a failure is why the track stops. decideFleet:228 halts
+// on it above every clock it runs, so the panel must not answer "you have 55
+// minutes of headroom" about it.
+func TestPanelSaysAFailedNodeIsWhyTheTrackStops(t *testing.T) {
+	ts, _, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	ctx := context.Background()
+	now := time.Now().Unix()
+
+	seedRolloutNode(t, store, "n-broken", "fleet", "", "v1.0.0", "v1.0.0", "failed")
+	if err := store.TouchNode(ctx, "n-broken", 0, 0, 0, 0, now, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v1.1.0", Status: "rolling",
+		CurrentNodeID: "n-broken", FirstNodeID: "n-broken",
+		StageStartedAt: now - 300,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	body := adminDashboardHTML(t, ts, cookie)
+	if strings.Contains(body, "安装中") {
+		t.Fatal("a node that already reported failed is not installing, and it has no headroom left")
+	}
+	// "· 上限 1 小时" is how elapsedText offers the install limit as remaining
+	// room. A node whose track halts on the next poll has no such room. (The
+	// bare word 上限 appears all over this page for quotas, hence the full
+	// phrase, built from the constant rather than written out.)
+	if headroom := "· 上限 " + humanDuration(fleetInstallLimit); strings.Contains(body, headroom) {
+		t.Fatalf("the panel still offers %q to a node whose track halts on the next poll", headroom)
+	}
+	if !strings.Contains(body, "中止") {
+		t.Fatal("the panel does not say this node is why the track stops")
+	}
+}
+
+// At the widest batch there is no wider one, so the time the panel prints is not
+// the time of a "next batch". decideByo's ladder is exhausted: what the window's
+// close brings is completion or a re-sweep of the nodes still behind.
+func TestPanelDoesNotNameANextBatchAtTheWidestBatch(t *testing.T) {
+	ts, _, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	now := time.Now().Unix()
+	seedRolloutNode(t, store, "byo-1", "user", "u1", "v1.0.0", "", "")
+	if err := store.PutRolloutTrack(context.Background(), RolloutTrack{
+		Track: "byo", TargetVersion: "v1.1.0", Status: "rolling",
+		ByoBatch: byoBatches[len(byoBatches)-1], StageStartedAt: now - 60,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body := adminDashboardHTML(t, ts, cookie)
+	if strings.Contains(body, "下一批：") {
+		t.Fatal("the widest batch is already open; there is no next batch to name")
+	}
+	if !strings.Contains(body, "不早于") {
+		t.Fatal("the window still runs at the widest batch, so its close must still be shown")
+	}
+}

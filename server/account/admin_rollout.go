@@ -59,10 +59,13 @@ type rolloutPanelView struct {
 	RulesText string
 	// NextStepText is set on the BYO panel only: the fleet track's next step is
 	// a property of the node in flight and is rendered on that node's row
-	// instead. Empty means there is nothing pending to time.
-	NextStepText string
-	OnTarget     int // nodes already running TargetVersion
-	Total        int
+	// instead. Empty means there is nothing pending to time. NextStepLabel
+	// names what that time is the time OF — at the widest batch it is not
+	// "下一批", because there is no wider batch. See byoNextStepLabel.
+	NextStepText  string
+	NextStepLabel string
+	OnTarget      int // nodes already running TargetVersion
+	Total         int
 	// Nodes is at most rolloutPanelMaxRows rows, most relevant first; Hidden
 	// counts the rest. OnTarget/Total are always over the WHOLE track, never
 	// over the rendered slice.
@@ -265,6 +268,7 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 			// tr.ByoBatch decides whether there is a window at all — a fresh
 			// track opens its first batch immediately. See byoNextStepText.
 			p.NextStepText = byoNextStepText(tr.ByoBatch, tr.StageStartedAt, now.Unix())
+			p.NextStepLabel = byoNextStepLabel(tr.ByoBatch)
 		}
 	}
 	p.HaltedReason, p.Emergency = tr.HaltedReason, tr.Emergency
@@ -296,30 +300,24 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 	cutoff := now.Add(-nodeOnlineWindow).Unix()
 	p.Total = len(nodes)
 	rows := make([]rolloutNodeView, 0, len(nodes))
-	for _, n := range nodes {
+	for i, n := range nodes {
 		onTarget := tr.TargetVersion != "" && selfupdate.SameVersion(n.Version, tr.TargetVersion)
 		if onTarget {
 			p.OnTarget++
 		}
+		// Current stays derived from CurrentNodeID alone, and deliberately so:
+		// it ranks this row to the top of the table (see rolloutNodeRows), and
+		// on a HALTED track the node that was in flight is still the one an
+		// operator opens this panel to find. What must not survive a halt is the
+		// timing — and that is fleetNodeStatus's own first check, not this one.
 		current := track == "fleet" && n.ID == tr.CurrentNodeID && tr.CurrentNodeID != ""
 		var status rolloutNodeStatus
 		if current {
-			status = fleetNodeStatus(fleetNodeInput{
-				OnTarget: onTarget,
-				// Same rule as rollout_fleet.go:247, including the empty case:
-				// FirstNodeID == "" while a node IS in flight is a track
-				// written before that field existed, and the state machine
-				// assumes the node in flight IS the canary, because guessing
-				// "not the canary" silently cuts a live 6h observation to 30
-				// minutes. Every defence there fails LONG; a panel that guessed
-				// the other way would report the shorter window and mark a
-				// healthy canary overdue -- the failure this work removes,
-				// recreated in a narrower case.
-				IsCanary:        n.ID == tr.FirstNodeID || tr.FirstNodeID == "",
-				UpdateStartedAt: n.UpdateStartedAt,
-				LastSeenAt:      n.LastSeenAt,
-				StageStartedAt:  tr.StageStartedAt,
-			}, now.Unix())
+			// snaps is nodeSnapshots(nodes), which is 1:1 and in order, so
+			// snaps[i] is this row's node as the state machine sees it. Built
+			// through newFleetNodeInput so the panel and the test that pins it
+			// to decideFleet cannot assemble the input two different ways.
+			status = fleetNodeStatus(newFleetNodeInput(tr, snaps[i], onTarget), now.Unix())
 		}
 		rows = append(rows, rolloutNodeView{
 			ID: n.ID, Label: n.Label, Version: n.Version,
