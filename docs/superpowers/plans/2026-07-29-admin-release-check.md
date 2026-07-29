@@ -417,15 +417,35 @@ func TestReleaseNoticeWithNoTargetConfigured(t *testing.T) {
 	}
 }
 
-// An unparseable stored tag must not read as "nothing new". CompareVersions
-// returns ok=false for it, and that has to reach a decision rather than being
-// dropped into the equal case.
+// An unparseable stored tag must not read as "nothing new". Both cases matter,
+// and the second is the one an earlier draft got wrong: the comparison against
+// the fleet target only runs when there IS a target, so on a never-configured
+// track an unreadable tag sailed past it and produced a button that
+// setTargetVersion is guaranteed to reject.
 func TestReleaseNoticeIgnoresAnUnparseableTag(t *testing.T) {
 	got := releaseNotice(
 		ReleaseCheck{LatestTag: "not-a-version", CheckedAt: 1000},
 		RolloutTrack{Track: "fleet", TargetVersion: "v1.2.0", Status: "complete"}, true)
 	if got.Show {
 		t.Fatalf("an unparseable tag must not produce a prompt: %+v", got)
+	}
+	noTarget := releaseNotice(
+		ReleaseCheck{LatestTag: "not-a-version", CheckedAt: 1000}, RolloutTrack{}, false)
+	if noTarget.Show || noTarget.OfferButton {
+		t.Fatalf("an unparseable tag on a never-configured track must stay silent: %+v", noTarget)
+	}
+}
+
+// A DismissedTag that cannot be parsed must not silence everything forever.
+// This is the guard on the `ok &&` in the dismissal comparison, which reads as
+// redundant and is not: without it the unparseable tag compares as 0 and
+// suppresses every future notice, with nothing on screen to say why.
+func TestReleaseNoticeIgnoresAnUnparseableDismissal(t *testing.T) {
+	got := releaseNotice(
+		ReleaseCheck{LatestTag: "v1.3.0", CheckedAt: 1000, DismissedTag: "not-a-version", DismissedAt: 1100},
+		RolloutTrack{Track: "fleet", TargetVersion: "v1.2.0", Status: "complete"}, true)
+	if !got.Show || !got.OfferButton {
+		t.Fatalf("an unreadable dismissal must not suppress a real release: %+v", got)
 	}
 }
 
@@ -578,6 +598,17 @@ func releaseNotice(rc ReleaseCheck, fleet RolloutTrack, fleetFound bool) release
 	if rc.CheckedAt == 0 || rc.LatestTag == "" {
 		return v
 	}
+	// A tag we cannot read is not a release we can offer. This guard is here,
+	// above every other branch, rather than folded into the comparison below --
+	// the comparison only runs when the fleet track HAS a target, so an
+	// unreadable tag on a never-configured track would sail past it and produce
+	// a button that setTargetVersion is guaranteed to reject. That is a control
+	// whose only possible outcome is a refusal, which is exactly what this
+	// panel refuses to render, and it would appear on the deployment where the
+	// notice matters most.
+	if !selfupdate.IsPlainVersion(rc.LatestTag) {
+		return v
+	}
 	// Newer than what the fleet targets? An unconfigured track has nothing to
 	// compare against, and offering the rollout is the point.
 	if fleetFound && fleet.TargetVersion != "" {
@@ -589,8 +620,14 @@ func releaseNotice(rc ReleaseCheck, fleet RolloutTrack, fleetFound bool) release
 			return v
 		}
 	}
-	// Dismissed exactly this tag: stay quiet, but leave the dismissal visible
-	// so it can be undone. A newer tag falls through and prompts again.
+	// Dismissed this tag or a newer one: stay quiet, but leave the dismissal
+	// visible so it can be undone. A tag newer than the dismissed one falls
+	// through and prompts again.
+	//
+	// The `ok &&` is load-bearing and easy to drop as redundant. Without it, a
+	// DismissedTag that cannot be parsed -- a hand-edited row, a tag from before
+	// a naming change -- compares as 0 and silences EVERY future notice
+	// permanently, with nothing on screen to say why.
 	if rc.DismissedTag != "" {
 		if n, ok := selfupdate.CompareVersions(rc.LatestTag, rc.DismissedTag); ok && n <= 0 {
 			return v
