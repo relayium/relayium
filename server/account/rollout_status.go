@@ -42,6 +42,27 @@ type fleetNodeInput struct {
 // They have different deadlines and they call for opposite responses: an
 // observing node needs waiting for, the other two need looking at.
 func fleetNodeStatus(in fleetNodeInput, now int64) rolloutNodeStatus {
+	if in.UpdateStartedAt == 0 && in.StageStartedAt == 0 {
+		return rolloutNodeStatus{} // not in flight at all
+	}
+	// Silence is tested FIRST, above the on-target branch, because that is
+	// where decideFleet tests it (rollout_fleet.go:252 sits above the
+	// !onTarget branch at :255). A node that installed successfully and then
+	// went dark during its six-hour window halts the whole track, so reporting
+	// it as calmly 观察中 would be the panel lying in the band it presents as
+	// the safe one. Mirroring the order of the thing you describe is what stops
+	// the two drifting apart when either is restructured.
+	if in.UpdateStartedAt != 0 && now-in.LastSeenAt > int64(nodeOnlineWindow/time.Second) {
+		band, label := "installing", "安装中（已停止心跳）"
+		if in.OnTarget {
+			band, label = "observing", "观察中（已停止心跳）"
+		}
+		deadline := in.LastSeenAt + updateSilenceLimit
+		return rolloutNodeStatus{
+			Band: band, Label: label,
+			Detail: elapsedText(in.LastSeenAt, deadline, now), Overdue: now > deadline,
+		}
+	}
 	if in.OnTarget {
 		// The observation window only starts once the node actually runs the
 		// target. The six hours are spent watching a node that already
@@ -63,9 +84,6 @@ func fleetNodeStatus(in fleetNodeInput, now int64) rolloutNodeStatus {
 			Detail: notBeforeText(deadline, now), Overdue: now >= deadline,
 		}
 	}
-	if in.UpdateStartedAt == 0 && in.StageStartedAt == 0 {
-		return rolloutNodeStatus{} // not in flight at all
-	}
 	if in.UpdateStartedAt == 0 {
 		// Commanded, but the node never recorded a start: central's two writes
 		// split. The stage's clock is the backstop (rollout_fleet.go:263).
@@ -75,16 +93,9 @@ func fleetNodeStatus(in fleetNodeInput, now int64) rolloutNodeStatus {
 			Detail: elapsedText(in.StageStartedAt, deadline, now), Overdue: now > deadline,
 		}
 	}
-	// Installing. Two limits apply, and showing both is noise: a heartbeating
-	// node resets its silence clock every 30s, so that limit is irrelevant to
-	// it. Show whichever one will actually decide this node's fate.
-	if now-in.LastSeenAt > int64(nodeOnlineWindow/time.Second) {
-		deadline := in.LastSeenAt + updateSilenceLimit
-		return rolloutNodeStatus{
-			Band: "installing", Label: "安装中（已停止心跳）",
-			Detail: elapsedText(in.LastSeenAt, deadline, now), Overdue: now > deadline,
-		}
-	}
+	// Installing, and still heartbeating -- the silence branch above already
+	// took every node that has gone quiet. So the install limit is the one
+	// that will decide this node's fate, and it is the only one worth showing.
 	deadline := in.UpdateStartedAt + fleetInstallLimit
 	return rolloutNodeStatus{
 		Band: "installing", Label: "安装中",
