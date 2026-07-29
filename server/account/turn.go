@@ -149,12 +149,35 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 	if validCode {
 		relays := make([]relayEntry, 0)
 		seen := map[string]bool{}
+		// Second dedup key: the physical relay. `seen` catches a repeated id;
+		// this catches one machine offered under two ids -- a static config
+		// entry and a registered node at the same address, or a node that lost
+		// state.json and re-registered with a fresh id while its old row is
+		// still inside nodeOnlineWindow. See claimAddrs.
+		//
+		// Precedence across sources is positional, not freshness-based: the
+		// own-nodes loop below claims an address before the fleet loop ever
+		// runs, so an own-node row wins regardless of which heartbeat is newer.
+		// A stale own-node row (up to nodeOnlineWindow, 90s, after the box
+		// actually died) can therefore suppress a live fleet row at the same
+		// address, handing the client only the dead credential -- before this
+		// dedup existed, the client would have probed both and the dead one
+		// would simply have failed to answer. Near-unreachable in practice --
+		// one process binds a host:port, and the node agent owns its own TURN
+		// secret, so the surviving row is normally the authoritative one anyway
+		// -- but it is the one scenario where this dedup turns "one working
+		// entry plus one dead entry" into "only the dead one". Worth knowing
+		// before reordering these three loops.
+		seenAddr := map[string]bool{}
 		since := now.Add(-nodeOnlineWindow).Unix()
 
 		// The owner's own nodes (free relay), always included.
 		if own, err := s.store.UserNodes(r.Context(), owner, since); err == nil {
 			for _, n := range own {
 				if n.ID == "" || n.TURNSecret == "" || len(n.URLs) == 0 {
+					continue
+				}
+				if !claimAddrs(seenAddr, n.URLs) {
 					continue
 				}
 				relays = append(relays, relayEntry{ID: n.ID, Region: n.Region,
@@ -188,6 +211,9 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 					if cap := usableTraffic(resolveNodeTrafficLimit(n, st)); cap > 0 && monthlyUsed[n.ID] >= cap {
 						continue // at/over the 90% scheduling reserve — withhold this node
 					}
+					if !claimAddrs(seenAddr, n.URLs) {
+						continue
+					}
 					relays = append(relays, relayEntry{ID: n.ID, Region: n.Region,
 						ICEServers: []ICEServer{turnCredentials(n.TURNSecret, token, expiry, n.URLs)}})
 					seen[n.ID] = true
@@ -198,6 +224,9 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 			for _, rc := range s.cfg.TURNRelays {
 				if rc.ID == "" || rc.Secret == "" || len(rc.URLs) == 0 || seen[rc.ID] {
 					continue // skip misconfigured or already-covered-by-a-dynamic-node
+				}
+				if !claimAddrs(seenAddr, rc.URLs) {
+					continue // a dynamic node already covers this machine
 				}
 				relays = append(relays, relayEntry{ID: rc.ID, Region: rc.Region, STUN: rc.STUN,
 					ICEServers: []ICEServer{turnCredentials(rc.Secret, token, expiry, rc.URLs)}})

@@ -65,3 +65,46 @@ func TestICEWithholdsFleetNodeOverTrafficLimit(t *testing.T) {
 		t.Fatalf("under-limit and unlimited nodes must be offered, got %+v", resp.Relays)
 	}
 }
+
+// A node withheld by its traffic cap must not claim its address on the way
+// out: claimAddrs sits after the cap check in the fleet-nodes loop
+// specifically so a withheld node claims nothing. If that guard were ever
+// merged into the id/shape check ahead of the cap check, the withheld node
+// would claim 198.51.100.7:3478 before being skipped, and the static relay
+// below -- which is not itself withheld -- would vanish from the pool with
+// no error anywhere. This test fails if that regresses.
+func TestICEWithheldFleetNodeDoesNotClaimAddressForStaticRelay(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	now := time.Unix(1_700_000_000, 0)
+
+	owner, _ := st.UpsertUserByEmail(ctx, "u@example.com", "u")
+	st.SetEmailVerified(ctx, owner.ID)
+	// Same free-plan setup as TestICEWithholdsFleetNodeOverTrafficLimit above:
+	// give the owner an effectively unlimited plan cap so only the per-node
+	// TrafficLimitBytes check is exercised, not the separate owner-level
+	// quota gate.
+	if err := st.UpsertPlan(ctx, Plan{ID: "free", Name: "Free", StorageBytes: 1 << 30,
+		TrafficBytes: 1 << 40, RetentionSecs: 86400, Active: true, UpdatedAt: 1}); err != nil {
+		t.Fatalf("UpsertPlan: %v", err)
+	}
+
+	// "capped": limit 1 GiB, already used 2 GiB this period -> withheld.
+	st.UpsertNode(ctx, Node{OwnerType: "fleet", ID: "capped",
+		URLs: []string{"turn:198.51.100.7:3478"}, TURNSecret: "s", CreatedAt: 1,
+		LastSeenAt: now.Unix(), TrafficLimitBytes: 1 << 30})
+	st.RecordUsage(ctx, UsageEvent{AllocID: "x", Token: "c", UserID: owner.ID,
+		RelayedBytes: 2 << 30, RecordedAt: now.Unix(), NodeID: "capped", Billable: true})
+
+	cfg := Config{TURNCredTTL: time.Hour,
+		TURNRelays: []RelayConfig{{ID: "static-same-addr",
+			URLs: []string{"turn:198.51.100.7:3478"}, Secret: "s2"}}}
+
+	ids := icePoolIDs(t, st, cfg, owner.ID, now)
+	if has(ids, "capped") {
+		t.Fatalf("over-limit fleet node must still be withheld, got %v", ids)
+	}
+	if !has(ids, "static-same-addr") {
+		t.Fatalf("a withheld node must not claim its address -- the static relay at the same address must survive, got %v", ids)
+	}
+}

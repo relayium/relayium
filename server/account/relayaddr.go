@@ -1,0 +1,136 @@
+package account
+
+import (
+	"strconv"
+	"strings"
+)
+
+// relayAddr normalises one TURN URL to a comparable "scheme:host:port",
+// reporting false when it cannot read one.
+//
+// The relay pool dedupes on this rather than on the URL string because what the
+// client measures is the MACHINE, not the URL: turn:H:3478 and
+// turn:H:3478?transport=tcp are one relay and one RTT. A statically configured
+// relay's `urls` array is operator-written and may legitimately list both.
+//
+// The scheme is part of the key because it is part of the service: a `turns:`
+// endpoint and a `turn:` endpoint on the same host and port are two distinct
+// listeners, not one machine spelled two ways -- UDP and TCP port spaces are
+// independent, so plain TURN and TURN-over-TLS can and do coexist on what looks
+// like "the same" host:port. Collapsing them would drop whichever one lost,
+// and it is always TURN-over-TLS that a UDP-hostile network's peers need most.
+//
+// DNS is deliberately not resolved. Two names for one machine stay two entries;
+// resolving would put a network round trip on /api/ice, which must stay fast.
+//
+// See nodeHost in usernodes.go for the other TURN-URL parser in this package:
+// display-only, strips brackets, no default port. Reach for that one to show a
+// host to a user; reach for this one to compare relays for identity.
+func relayAddr(raw string) (string, bool) {
+	s := strings.TrimSpace(raw)
+	lower := strings.ToLower(s)
+	var scheme, defPort string
+	switch {
+	case strings.HasPrefix(lower, "turns:"):
+		s, scheme, defPort = s[len("turns:"):], "turns", "5349"
+	case strings.HasPrefix(lower, "turn:"):
+		s, scheme, defPort = s[len("turn:"):], "turn", "3478"
+	default:
+		return "", false
+	}
+	// Query parameters (?transport=tcp) name a transport, not a relay.
+	if i := strings.IndexByte(s, '?'); i >= 0 {
+		s = s[:i]
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", false
+	}
+
+	host, port := s, defPort
+	switch {
+	case strings.HasPrefix(s, "["):
+		// IPv6 literal: the host runs to the closing bracket, which stays part
+		// of the key so "[::1]:3478" cannot be confused with a name.
+		end := strings.IndexByte(s, ']')
+		if end < 0 {
+			return "", false
+		}
+		host = s[:end+1]
+		switch rest := s[end+1:]; {
+		case rest == "":
+		case strings.HasPrefix(rest, ":"):
+			port = rest[1:]
+		default:
+			return "", false
+		}
+	default:
+		if i := strings.LastIndexByte(s, ':'); i >= 0 {
+			host, port = s[:i], s[i+1:]
+		}
+		// A bare IPv6 would have just been split at its last colon, yielding a
+		// host that is really an address prefix. TURN URLs require brackets, so
+		// reject it rather than invent a host.
+		if strings.Contains(host, ":") {
+			return "", false
+		}
+	}
+	if host == "" || port == "" {
+		return "", false
+	}
+	if _, err := strconv.Atoi(port); err != nil {
+		return "", false
+	}
+	return scheme + ":" + strings.ToLower(host) + ":" + port, true
+}
+
+// relayAddrs normalises a relay's URL list, dropping what it cannot read.
+//
+// Dropping rather than failing is what makes an entry with one odd URL stay in
+// the pool: a parser that cannot read an unusual but working URL must never be
+// able to empty the relay pool.
+func relayAddrs(urls []string) []string {
+	out := make([]string, 0, len(urls))
+	for _, u := range urls {
+		if a, ok := relayAddr(u); ok {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// claimAddrs reports whether every address this candidate advertises is still
+// free and, when it is, claims them all for it.
+//
+// ANY overlap disqualifies the whole candidate: a relay advertising several
+// URLs is one machine, so accepting it "for the URLs that don't collide" would
+// hand the client a second entry pointing at the same box -- exactly the bug
+// this dedup exists to fix.
+//
+// This assumes one entry IS one machine. Fleet nodes guarantee that -- the node
+// agent emits exactly one URL. A static RELAYIUM_TURN_RELAYS entry is
+// operator-written, though, and could list two different hosts in one entry;
+// if a node covers the first, the whole entry -- including the second,
+// otherwise-uncovered host -- is dropped here. That is a config property to
+// verify before deploying (split such an entry in two), not something this
+// function can detect from the URLs alone.
+//
+// A candidate whose URLs are all unparseable claims nothing and is admitted.
+// That is deliberate: see relayAddrs.
+//
+// Call this LAST, immediately before appending. Claiming before the other skip
+// checks would let a candidate that is then withheld (over its traffic cap, say)
+// leave its address claimed behind it, silently removing the relay that would
+// otherwise have covered that address.
+func claimAddrs(seenAddr map[string]bool, urls []string) bool {
+	addrs := relayAddrs(urls)
+	for _, a := range addrs {
+		if seenAddr[a] {
+			return false
+		}
+	}
+	for _, a := range addrs {
+		seenAddr[a] = true
+	}
+	return true
+}
