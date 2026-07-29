@@ -89,12 +89,12 @@ Silence is made legible by one muted line carrying the last *successful* check's
 timestamp, so "no new version" and "has not checked successfully in three days"
 are distinguishable at a glance.
 
-Because the last successful result is held in memory, that line has a third
-state and it must be spelled differently from the other two: after a restart
-whose first check has not completed — or has failed — there is no timestamp at
-all, and the line reads `尚未成功检查过`. Rendering an empty timestamp, or
-omitting the line, would put that state back in the same silence as "checked
-fine, nothing new", which is exactly what this section exists to prevent.
+That line has a third state and it must be spelled differently from the other
+two: on a fresh deployment whose first check has not completed — or has failed —
+there is no timestamp at all (`checked_at == 0`), and the line reads
+`尚未成功检查过`. Rendering an empty timestamp, or omitting the line, would put
+that state back in the same silence as "checked fine, nothing new", which is
+exactly what this section exists to prevent.
 
 ## Polling
 
@@ -107,10 +107,22 @@ IP, and a release matters on the scale of days. Note one interaction: central
 restarts on every push to `main` because of auto-deploy, and each restart costs
 one extra check. Bounded and negligible.
 
-**The result lives in memory; the decision lives in the database.** The last
-successful tag and its timestamp hang off the service — losing them to a restart
-costs one HTTP request. The dismissal is persisted, because losing *that* would
-resurrect a notice the operator already dealt with, on every deploy.
+**Both the result and the dismissal are persisted**, in the same row.
+
+An earlier draft kept the last successful tag in memory on the grounds that
+losing it to a restart costs only one HTTP request. That is true and it is not
+the whole story: central is built to run as **several instances** — admin
+sessions and the TOTP replay guard were deliberately moved into the store for
+exactly that reason, and `RateLimitDivisor` exists to split per-instance
+thresholds across N of them. Process-local state would mean each instance polls
+on its own schedule and, worse, that the `上次成功检查` line jumps around
+depending on which instance served the page, while the dismissal beside it stays
+consistent. A panel that is internally inconsistent about its own freshness is
+the same defect as one that overstates it.
+
+The cost of persisting is one write per successful check — hourly — and in
+exchange the timestamp becomes a fact about the deployment rather than about
+whichever process answered.
 
 Failures keep the previous successful result rather than clearing it, and are
 logged on transition only — first failure, then on each `ok`↔`fail` flip — so an
@@ -120,16 +132,23 @@ prober's reachability logging.
 ## Storage
 
 `settings.value` is `INTEGER NOT NULL` (`sqlite.go:103-107`) and `GetSetting`
-returns an `int64`, so the dismissed tag cannot live there. It gets a
-single-row table instead:
+returns an `int64`, so neither the dismissed tag nor the last seen tag can live
+there. They share a single-row table:
 
 ```sql
 CREATE TABLE IF NOT EXISTS release_check (
   id            INTEGER PRIMARY KEY CHECK (id = 1),
+  latest_tag    TEXT NOT NULL DEFAULT '',
+  checked_at    INTEGER NOT NULL DEFAULT 0,
   dismissed_tag TEXT NOT NULL DEFAULT '',
   dismissed_at  INTEGER NOT NULL DEFAULT 0
 );
 ```
+
+`checked_at == 0` is the "never checked successfully" state — the third wording
+above — and it is why the two halves are written by separate statements: a failed
+check must leave `latest_tag`/`checked_at` exactly as they were, and a dismissal
+must not disturb them either.
 
 Rejected alternative: widening the settings store to hold text. That changes the
 shared `Store` interface and every implementation for one string, and
@@ -200,7 +219,10 @@ code and drift with it; a property over every state is what catches a later
 
 Poller tests inject `selfupdate.Options.HTTP`:
 
-- a failing request leaves the previous successful result intact
+- a failing request leaves `latest_tag` and `checked_at` exactly as they were —
+  asserted by reading the row back, not by inspecting process state
+- a dismissal does not disturb `latest_tag`/`checked_at`, and a successful check
+  does not disturb the dismissal
 - `RELAYIUM_RELEASE_CHECK` disabled issues **no** request — asserted against a
   transport that fails the test if it is called at all
 
