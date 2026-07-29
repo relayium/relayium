@@ -264,7 +264,7 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 {{range .Nodes}}
 <tr>
 <td>{{if .Label}}<b>{{.Label}}</b> {{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span>
-{{if .Current}}<span class="ro-tag">更新中</span>{{end}}{{if .InBatch}}<span class="ro-tag">本批次</span>{{end}}</td>
+{{if .Current}}<span class="ro-tag{{if .Status.Overdue}} never{{end}}">{{if .Status.Label}}{{.Status.Label}}{{else}}更新中{{end}}</span>{{if .Status.Detail}}<div style="color:var(--muted);font-size:12px">{{.Status.Detail}}</div>{{end}}{{end}}{{if .InBatch}}<span class="ro-tag">本批次</span>{{end}}</td>
 <td>{{if .Online}}在线{{else}}离线{{end}}</td>
 <td>{{if .Version}}{{.Version}}{{else}}—{{end}}{{if .OnTarget}} ✓{{end}}</td>
 <td>{{if eq .Result "failed"}}<b class="never">{{.ResultText}}</b>{{else if eq .Result "rolled_back"}}<b class="never">{{.ResultText}}</b>{{else}}{{.ResultText}}{{end}}</td>
@@ -275,7 +275,7 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 <tr><td colspan="6" style="color:var(--muted)">该轨道下暂无节点</td></tr>
 {{end}}
 </tbody></table>
-{{if .Hidden}}<p style="color:var(--muted);font-size:12px">共 {{.Total}} 台，仅列出最需要关注的 {{len .Nodes}} 台（失败 / 更新中 / 落后版本优先），其余 {{.Hidden}} 台未显示。</p>{{end}}
+{{if .Hidden}}<p style="color:var(--muted);font-size:12px">共 {{.Total}} 台，仅列出最需要关注的 {{len .Nodes}} 台（失败 / 发布中 / 落后版本优先），其余 {{.Hidden}} 台未显示。</p>{{end}}
 {{end}}
 </div>
 {{end}}`

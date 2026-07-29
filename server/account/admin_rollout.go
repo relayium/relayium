@@ -43,6 +43,11 @@ type rolloutPanelView struct {
 	// the template only renders the one that belongs to this panel.
 	CurrentNodeID string
 	ByoBatch      int
+	// FirstNodeID is the canary of this rollout. It is positional and cannot be
+	// re-derived from fleet version state later (see RolloutTrack.FirstNodeID),
+	// and it is what decides whether the node in flight gets the long
+	// observation window or the short one.
+	FirstNodeID string
 	// PreviousVersion is set on the BYO panel only, and only when a predecessor
 	// is actually recorded: it is both the label and the availability of the
 	// 回滚到上一版本 control. Empty means the control is not rendered at all —
@@ -122,6 +127,10 @@ type rolloutNodeView struct {
 	ResultText        string // Chinese label
 	Current           bool   // fleet: this node holds the rollout slot
 	InBatch           bool   // byo: this node is in the batch currently open
+	// Status describes what this node is doing, for the node holding the fleet
+	// rollout slot. Zero for every other row. See rollout_status.go: it
+	// DESCRIBES decideFleet's state and never re-decides it.
+	Status rolloutNodeStatus
 }
 
 // rolloutStatusText maps the stored status onto the panel's label. An empty
@@ -237,6 +246,7 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 	p.StatusText = rolloutStatusText(tr.Status, found)
 	p.HaltedReason, p.Emergency = tr.HaltedReason, tr.Emergency
 	p.StageStartedAt, p.CurrentNodeID, p.ByoBatch = tr.StageStartedAt, tr.CurrentNodeID, tr.ByoBatch
+	p.FirstNodeID = tr.FirstNodeID
 	if track == "byo" {
 		p.PreviousVersion = tr.PreviousVersion
 	}
@@ -268,12 +278,24 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 		if onTarget {
 			p.OnTarget++
 		}
+		current := track == "fleet" && n.ID == tr.CurrentNodeID && tr.CurrentNodeID != ""
+		var status rolloutNodeStatus
+		if current {
+			status = fleetNodeStatus(fleetNodeInput{
+				OnTarget:        onTarget,
+				IsCanary:        n.ID == tr.FirstNodeID,
+				UpdateStartedAt: n.UpdateStartedAt,
+				LastSeenAt:      n.LastSeenAt,
+				StageStartedAt:  tr.StageStartedAt,
+			}, now.Unix())
+		}
 		rows = append(rows, rolloutNodeView{
 			ID: n.ID, Label: n.Label, Version: n.Version,
 			Online: n.LastSeenAt >= cutoff, OnTarget: onTarget,
 			UpdateFromVersion: n.UpdateFromVersion, UpdateStartedAt: n.UpdateStartedAt,
 			Result: n.UpdateResult, ResultText: rolloutResultText(n.UpdateResult),
-			Current: track == "fleet" && n.ID == tr.CurrentNodeID && tr.CurrentNodeID != "",
+			Current: current,
+			Status:  status,
 			InBatch: inBatch[n.ID],
 		})
 	}
