@@ -3,6 +3,7 @@ import { LANGS, LANDING_LANGS, DEFAULT_LANG, SITE, SPA_ONLY_EN_SLUGS, pagePath, 
 import { renderLegalPage } from "./legal-template.mjs";
 import { renderLandingPage } from "./landing-template.mjs";
 import { renderArticlePage } from "./article-template.mjs";
+import { RELATED } from "./content/related-map.mjs";
 import { renderGuidesIndexPage } from "./guides-index-template.mjs";
 import { renderModePage } from "./mode-template.mjs";
 
@@ -28,6 +29,7 @@ export function buildLandingPages(landing, articleLinksByLang = {}) {
 }
 
 export function buildArticlePages(articles) {
+  const bySlug = new Map(articles.map((a) => [a.slug, a]));
   return articles.flatMap((a) => {
     validateLangs(a.slug, a.langs);
     return LANGS.map((lang) => ({
@@ -38,8 +40,11 @@ export function buildArticlePages(articles) {
         doc: a.langs[lang],
         updated: a.updated,
         published: a.published,
-        related: articles
-          .filter((o) => o.slug !== a.slug)
+        // Four curated links, not all 35 others. See content/related-map.mjs
+        // for why, and related-map.test.mjs for the shape it has to keep.
+        related: (RELATED[a.slug] ?? [])
+          .map((s) => bySlug.get(s))
+          .filter(Boolean)
           .map((o) => ({ slug: o.slug, title: o.langs[lang].title })),
       }),
     }));
@@ -108,7 +113,11 @@ export function buildSitemap(docs, { home = true, landing = null, articles = [],
   if (home) urls.push({ loc: SITE.origin + "/", lastmod: newest, priority: "1.0", changefreq: "weekly" });
   if (guidesIndex) {
     for (const lang of LANGS) {
-      urls.push({ loc: absUrl(urlPath("guides", lang)), lastmod: guidesIndex.updated, priority: "0.5", changefreq: "monthly" });
+      // 0.8, above the 0.6 articles it indexes. It was 0.5 — the one hub on the
+      // site ranked below every page hanging off it, which is backwards for the
+      // page we most want crawled often. (Google treats priority as a weak hint
+      // at best; this is for internal consistency more than for Google.)
+      urls.push({ loc: absUrl(urlPath("guides", lang)), lastmod: guidesIndex.updated, priority: "0.8", changefreq: "weekly" });
     }
   }
   if (landing) {

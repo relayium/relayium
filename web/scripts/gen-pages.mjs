@@ -63,7 +63,9 @@ import { renderNotFoundPage } from "./pages/notfound-template.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(here, "..", "public");
 const legalDocs = [privacy, terms, security, support];
-const articles = [
+/** Every article, in import order. Exported so related-map.test.mjs can check
+ *  the curated map against the real list rather than a copy that would drift. */
+export const articles = [
   compareSnapdrop,
   compareAirdrop,
   compareWetransfer,
