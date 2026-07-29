@@ -94,7 +94,9 @@ t = base64url(exp ‖ nonce ‖ HMAC-SHA256(nodeSecret, "dl" ‖ key ‖ exp ‖
 
 **② 机队（fleet）节点 —— Cloudflare 代理的子域名（已实现，改进版）**
 - DNS：`nodeK.relayium.com → 节点 K 公网 IP`，**橙云 proxied**。节点二进制启动时用 CF API token **自动 upsert** 这条记录（`internal/cfdns`），无需手动进 dashboard。
-- TLS：**Cloudflare 边缘自动出证书**（面向浏览器），节点源站用**自签**即可（CF「Full」SSL 模式接受）——节点复用它已有的自签证书，**不需要泛域名证书、不需要 autocert/Let's Encrypt**。
+- TLS：**Cloudflare 边缘自动出证书**（面向浏览器）；节点源站这一段则必须是一张**该主机名下真实可校验的证书**——zone 跑的是 **Full (strict)**，CF 回源时会校验源站证书，自签会被判 526。做法是节点自己生成一把 **ECDSA P-256** 私钥（`dl.key`，永不外传），`relayium-node dl-csr <hostname>` 出 CSR，签好的证书写回 `dl.crt`；**不需要泛域名证书、不需要 autocert/Let's Encrypt**。
+  - **没有自签回退**：Full (strict) 下自签不是「降级服务」而是静默 526，所以证书不可用时节点干脆不起下载监听、也不上报 `DownloadURL`，中央照常代理（慢，但是通的）。
+  - 也**不复用节点身份证书**（`id.crt`）：那张是 Ed25519、被中央按指纹钉住用于 blob 通道，CF 的回源握手根本吃不下 Ed25519（表现为源站一切正常、代理返回 525）。密钥算法固定 P-256 就是为了这条。
 - 中央查出文件在 node K，`302` 到 `https://nodeK.relayium.com/dl/{key}?t=…`。
 - **用户端全程只看到 `relayium.com` 域名 + CF 证书；节点真实 IP 藏在 CF 后面**（比裸子域名 A 记录更好），且 **CF 带宽免费**。数据面是 客户端→CF→节点，中央退出。
 - 节点起一个**只服务 `/dl`**的公开监听（默认 `:443`，CF 代理到此），绝不暴露 bearer 的 `/blob` 写接口。
@@ -193,7 +195,7 @@ CDN 对"唯一密文 + burn"基本无效，排除为主方案；可作为多下�
 6. ✅ 测试全绿。
 
 7. ✅ **客户端跟随 302**：Web `downloadBlob` 的 fetch 与 CLI 的 Go http.Client 都原生跟随 302（Range 跨主机转发），无需改动；配套改了 **CSP `connect-src` 加 `https://*.relayium.com`**（否则 SPA 被自己的 CSP 拦住连不到节点子域名）+ 节点 `/dl` 的 **CORS 预检 + expose headers**。
-8. ✅ **自动化**：`internal/cfdns` 自动建 A 记录（proxied）；节点公开 `/dl` 监听（复用自签证书，CF Full）；`install-node.sh` 升到 v0.8，透传 download/CF env + 按需授予 `CAP_NET_BIND_SERVICE`。部署手册在私有的 relayium-ops 仓库中，未公开。
+8. ✅ **自动化**：`internal/cfdns` 自动建 A 记录（proxied）；节点公开 `/dl` 监听（源站证书为 `dl.crt`，配 `dl-csr` 生成的 P-256 私钥，CF Full (strict) 会校验；没有可用证书就不起这个监听、也不上报 `DownloadURL`）；`install-node.sh` 升到 v0.8，透传 download/CF env + 按需授予 `CAP_NET_BIND_SERVICE`。部署手册在私有的 relayium-ops 仓库中，未公开。
 
 **仍需真机验证（给了 CF API token + 部署后）**：节点 `:443` TLS 监听 + CF 代理链路 + 自动 DNS upsert 的端到端；`RELAYIUM_DIRECT_DOWNLOAD=true` 开启后浏览器/CLI 实测。
 

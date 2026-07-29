@@ -134,6 +134,17 @@ func main() {
 		os.Exit(runUpdate(uc, os.Stdout, os.Stderr))
 	}
 
+	// dl-csr is root-run for the same reason update is: it writes into StateDir,
+	// which the sandboxed service user owns.
+	if len(os.Args) > 1 && os.Args[1] == "dl-csr" {
+		cc, err := parseCSRFlags(os.Args[2:], os.Stderr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(exitUsage)
+		}
+		os.Exit(runCSR(cc, os.Stdout, os.Stderr))
+	}
+
 	c, err := parseConfig()
 	if err != nil {
 		log.Fatalf("relayium-node: %v", err)

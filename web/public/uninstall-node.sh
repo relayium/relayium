@@ -336,6 +336,7 @@ fi
 is_state_file() {
   case $1 in
     "${STATE_REAL}/state.json" | "${STATE_REAL}/id.key" | "${STATE_REAL}/id.crt" | \
+      "${STATE_REAL}/dl.key" | "${STATE_REAL}/dl.crt" | \
       "${STATE_REAL}/last-heartbeat" | "${STATE_REAL}/pending-update-result" | \
       "${STATE_REAL}/failed-versions") return 0 ;;
     "${STATE_REAL}"/state.json.tmp* | "${STATE_REAL}"/last-heartbeat.tmp*) return 0 ;;
@@ -608,9 +609,16 @@ if [ -n "$STORAGE_REAL" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# State. Holds state.json (this node's identity), id.key/id.crt, last-heartbeat,
-# and the root-written pending-update-result and failed-versions — per-machine
-# bookkeeping, none of it user data.
+# State. Holds state.json (this node's identity), id.key/id.crt, the direct
+# download listener's dl.key/dl.crt, last-heartbeat, and the root-written
+# pending-update-result and failed-versions — per-machine bookkeeping, none of
+# it user data.
+#
+# dl.key is the one item here that is dangerous to leave behind rather than
+# merely untidy: it is the private key of a 15-year Cloudflare Origin CA
+# certificate for this node's download hostname, and the zone runs Full
+# (strict). Surviving on a machine the operator believes was wiped — a returned
+# rental, a resold VPS — it plus a DNS repoint is a clean origin takeover.
 #
 # Those names, and nothing else, are what gets deleted. The directory itself is
 # then rmdir'd, which succeeds only if that was genuinely all it held. The nested
@@ -627,6 +635,7 @@ fi
 # dir would not actually be empty of node state.
 if [ -d "$STATE_REAL" ]; then
   rm -f "${STATE_REAL}/state.json" "${STATE_REAL}/id.key" "${STATE_REAL}/id.crt" \
+    "${STATE_REAL}/dl.key" "${STATE_REAL}/dl.crt" \
     "${STATE_REAL}/last-heartbeat" "${STATE_REAL}/pending-update-result" \
     "${STATE_REAL}/failed-versions"
   rm -f "${STATE_REAL}"/state.json.tmp* "${STATE_REAL}"/last-heartbeat.tmp*
