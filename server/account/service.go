@@ -129,6 +129,10 @@ type Config struct {
 	StripeSecretKey     string
 	StripeWebhookSecret string
 	StripePortalConfig  string
+	// ReleaseCheck enables the hourly poll for a newer upstream release and the
+	// admin notice built on it. On by default; RELAYIUM_RELEASE_CHECK=false
+	// turns it off, and when off no request is made at all.
+	ReleaseCheck bool
 }
 
 type Service struct {

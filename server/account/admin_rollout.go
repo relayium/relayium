@@ -427,6 +427,74 @@ func (s *Service) rolloutSetVersion(w http.ResponseWriter, r *http.Request, acti
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
+// handleAdminReleaseRollout points the fleet track at the release the
+// notice named, going through SetTargetVersion — the same call the typed
+// fleet-target form uses — so there is exactly one way a target is ever set.
+//
+// The button that posts here is hidden by the template whenever the fleet
+// track is already rolling (releaseNotice.OfferButton), but that is a UI
+// affordance, not the guard: a stale page, or a direct POST, must not be
+// able to do what the UI declines to offer. SetTargetVersion rewrites the
+// WHOLE fleet row — resetting Status to rolling, restamping
+// StageStartedAt, clearing CurrentNodeID/FirstNodeID — so pressing it during
+// a live rollout would silently abandon that rollout in flight. This
+// handler therefore re-reads the fleet track itself and refuses while its
+// status is "rolling", rather than trusting that the button was absent.
+func (s *Service) handleAdminReleaseRollout(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	version := strings.TrimSpace(r.FormValue("version"))
+	before, found, err := s.Store().GetRolloutTrack(r.Context(), "fleet")
+	if err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "发布失败："+err.Error())
+		return
+	}
+	if found && before.Status == "rolling" {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"发布失败：机队轨正在发布中，此处不提供一键发布——那会中止正在进行的发布。请到下方机队面板手动处理。")
+		return
+	}
+	if err := s.SetTargetVersion(r.Context(), "fleet", version); err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "目标版本设置失败："+err.Error())
+		return
+	}
+	// Audited under the SAME action a hand-typed fleet target uses: this is
+	// that action, reached from a different button, and the audit trail
+	// should not be able to tell entry points apart when the write is
+	// identical.
+	s.WriteAudit(r, AuditRolloutTarget, "rollout:fleet", []ChangeField{
+		{Field: "target_version", Old: before.TargetVersion, New: version},
+		{Field: "status", Old: before.Status, New: "rolling"},
+	}, StepUpNone)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminReleaseDismiss records (or, with an empty version, clears) the
+// release the operator does not want to be prompted about again. It never
+// touches a rollout track — dismissing changes nothing about what is
+// running, only what the notice says.
+func (s *Service) handleAdminReleaseDismiss(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	version := strings.TrimSpace(r.FormValue("version"))
+	before, err := s.Store().GetReleaseCheck(r.Context())
+	if err != nil {
+		log.Printf("admin: GetReleaseCheck (release dismiss before-image) failed: %v", err)
+	}
+	if err := s.Store().SetReleaseCheckDismissed(r.Context(), version, s.Now().Unix()); err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "忽略发布通知失败："+err.Error())
+		return
+	}
+	s.WriteAudit(r, AuditReleaseDismiss, "release:notice", []ChangeField{
+		{Field: "dismissed_tag", Old: before.DismissedTag, New: version},
+	}, StepUpNone)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
 // handleAdminRolloutByoRollbackPrevious rolls the BYO track back onto the
 // version it held immediately before the current one. It is registered on a
 // path with "byo" spelled out, not on the {id} wildcard, because it is

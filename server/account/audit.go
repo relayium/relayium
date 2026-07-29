@@ -36,6 +36,15 @@ const (
 	AuditRolloutResume    = "rollout.resume"
 	AuditRolloutRollback  = "rollout.rollback"
 	AuditRolloutEmergency = "rollout.emergency"
+	// AuditReleaseDismiss records dismissing (or, with an empty new value,
+	// un-dismissing) a release-check notice. It is its own action rather than
+	// folded into rollout.target: dismissing changes nothing about the fleet
+	// track, it only silences a notice, and the pressing-the-button path
+	// itself is audited as rollout.target — the same action a hand-typed
+	// target on that track would produce, because SetTargetVersion is the
+	// only way a target is ever set and the audit trail should not be able
+	// to tell entry points apart when the underlying write is identical.
+	AuditReleaseDismiss = "release.dismiss"
 )
 
 // auditActions lists every known action, in the same order as the const
@@ -49,7 +58,7 @@ var auditActions = []string{
 	AuditNodeLabel, AuditNodeDraining, AuditNodeRestore, AuditNodeRemove, AuditNodeDeregister,
 	AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete,
 	AuditRolloutTarget, AuditRolloutPause, AuditRolloutResume,
-	AuditRolloutRollback, AuditRolloutEmergency,
+	AuditRolloutRollback, AuditRolloutEmergency, AuditReleaseDismiss,
 }
 
 // 步进因子取值。"" = 该操作无需步进；grace = 落在宽限期内跳过了校验。

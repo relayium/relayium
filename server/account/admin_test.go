@@ -53,6 +53,11 @@ func newAdminSettingsServer(t *testing.T) (*httptest.Server, *Service, *SQLiteSt
 	svc := NewService(store, &capturingMailer{}, Config{
 		BaseURL: "http://example.test", AdminUser: "boss", AdminPassword: "s3cret",
 		MaxFileSize: 50 << 20, DailyQuota: 200 << 20, DefaultTTL: 86400, MaxTTL: 604800,
+		// The release notice is on by default in production (RELAYIUM_RELEASE_CHECK
+		// defaults true); tests that build the dashboard through this helper — the
+		// release-notice tests included — need it on here too, since Config's zero
+		// value is off like every other feature flag in this struct.
+		ReleaseCheck: true,
 	})
 	mux := http.NewServeMux()
 	svc.RegisterAdmin(mux)

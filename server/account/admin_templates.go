@@ -118,6 +118,10 @@ type adminHomeData struct {
 	// Derived from the two panels, so it inherits their independence: an
 	// unreadable track contributes nothing here and cannot suppress the other.
 	HaltedTracks []rolloutHaltView
+	// ReleaseNotice is the "a newer release exists" banner. Its zero value
+	// renders nothing, which is also what a failed check produces — this
+	// banner only ever makes a positive claim.
+	ReleaseNotice releaseNoticeView
 	// RolloutError is the banner shown when a rollout control was refused (bad
 	// version, unknown track, the byo-behind-fleet gate, pausing a track that
 	// is not rolling). Empty on a normal render.
@@ -624,6 +628,36 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <a href="/admin/audit" style="color:var(--a);text-decoration:none">审计日志</a>
 <form method="post" action="/admin/logout"><button type="submit">退出</button></form>
 </div></div>
+
+{{with .ReleaseNotice}}
+{{if .Enabled}}
+{{if .Show}}
+<section class="halts">
+<div class="halt">
+<b>有新版本：{{.LatestTag}}</b>{{if .TargetTag}} · 当前目标 {{.TargetTag}}{{else}} · 尚未配置发布目标{{end}}
+{{if .OfferButton}}
+<form method="post" action="/admin/release/rollout" class="lim"
+  onsubmit="return confirm('把机队轨的目标版本设为 {{.LatestTag}} 并开始发布？')">
+<input type="hidden" name="version" value="{{.LatestTag}}">
+<button type="submit">发布 {{.LatestTag}} 到机队</button></form>
+{{else}}
+<div class="halt-why">机队轨正在发布 {{.TargetTag}}，此处不提供一键发布：那会中止正在进行的发布并从头开始。要改目标请到下方机队面板手动设定。</div>
+{{end}}
+<form method="post" action="/admin/release/dismiss" class="lim">
+<input type="hidden" name="version" value="{{.LatestTag}}">
+<button type="submit">忽略此版本</button></form>
+</div>
+</section>
+{{else if .DismissedTag}}
+<div style="color:var(--muted);font-size:12px">已忽略 {{.DismissedTag}} ·
+<form method="post" action="/admin/release/dismiss" class="lim" style="display:inline">
+<input type="hidden" name="version" value="">
+<button type="submit">撤销</button></form></div>
+{{end}}
+{{if .CheckedAt}}<div style="color:var(--muted);font-size:12px">上次成功检查：{{ts .CheckedAt}} UTC</div>
+{{else}}<div style="color:var(--muted);font-size:12px">尚未成功检查过</div>{{end}}
+{{end}}
+{{end}}
 
 {{if .HaltedTracks}}
 <section class="halts">
