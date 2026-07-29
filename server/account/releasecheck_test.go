@@ -113,15 +113,35 @@ func TestReleaseNoticeWithNoTargetConfigured(t *testing.T) {
 	}
 }
 
-// An unparseable stored tag must not read as "nothing new". CompareVersions
-// returns ok=false for it, and that has to reach a decision rather than being
-// dropped into the equal case.
+// An unparseable stored tag must not read as "nothing new". Both cases matter,
+// and the second is the one an earlier draft got wrong: the comparison against
+// the fleet target only runs when there IS a target, so on a never-configured
+// track an unreadable tag sailed past it and produced a button that
+// setTargetVersion is guaranteed to reject.
 func TestReleaseNoticeIgnoresAnUnparseableTag(t *testing.T) {
 	got := releaseNotice(
 		ReleaseCheck{LatestTag: "not-a-version", CheckedAt: 1000},
 		RolloutTrack{Track: "fleet", TargetVersion: "v1.2.0", Status: "complete"}, true)
 	if got.Show {
 		t.Fatalf("an unparseable tag must not produce a prompt: %+v", got)
+	}
+	noTarget := releaseNotice(
+		ReleaseCheck{LatestTag: "not-a-version", CheckedAt: 1000}, RolloutTrack{}, false)
+	if noTarget.Show || noTarget.OfferButton {
+		t.Fatalf("an unparseable tag on a never-configured track must stay silent: %+v", noTarget)
+	}
+}
+
+// A DismissedTag that cannot be parsed must not silence everything forever.
+// This is the guard on the `ok &&` in the dismissal comparison, which reads as
+// redundant and is not: without it the unparseable tag compares as 0 and
+// suppresses every future notice, with nothing on screen to say why.
+func TestReleaseNoticeIgnoresAnUnparseableDismissal(t *testing.T) {
+	got := releaseNotice(
+		ReleaseCheck{LatestTag: "v1.3.0", CheckedAt: 1000, DismissedTag: "not-a-version", DismissedAt: 1100},
+		RolloutTrack{Track: "fleet", TargetVersion: "v1.2.0", Status: "complete"}, true)
+	if !got.Show || !got.OfferButton {
+		t.Fatalf("an unreadable dismissal must not suppress a real release: %+v", got)
 	}
 }
 

@@ -62,6 +62,17 @@ func releaseNotice(rc ReleaseCheck, fleet RolloutTrack, fleetFound bool) release
 	if rc.CheckedAt == 0 || rc.LatestTag == "" {
 		return v
 	}
+	// A tag we cannot read is not a release we can offer. This guard is here,
+	// above every other branch, rather than folded into the comparison below --
+	// the comparison only runs when the fleet track HAS a target, so an
+	// unreadable tag on a never-configured track would sail past it and produce
+	// a button that setTargetVersion is guaranteed to reject. That is a control
+	// whose only possible outcome is a refusal, which is exactly what this
+	// panel refuses to render, and it would appear on the deployment where the
+	// notice matters most.
+	if !selfupdate.IsPlainVersion(rc.LatestTag) {
+		return v
+	}
 	// Newer than what the fleet targets? An unconfigured track has nothing to
 	// compare against, and offering the rollout is the point.
 	if fleetFound && fleet.TargetVersion != "" {
@@ -73,8 +84,14 @@ func releaseNotice(rc ReleaseCheck, fleet RolloutTrack, fleetFound bool) release
 			return v
 		}
 	}
-	// Dismissed exactly this tag: stay quiet, but leave the dismissal visible
-	// so it can be undone. A newer tag falls through and prompts again.
+	// Dismissed this tag or a newer one: stay quiet, but leave the dismissal
+	// visible so it can be undone. A tag newer than the dismissed one falls
+	// through and prompts again.
+	//
+	// The `ok &&` is load-bearing and easy to drop as redundant. Without it, a
+	// DismissedTag that cannot be parsed -- a hand-edited row, a tag from before
+	// a naming change -- compares as 0 and silences EVERY future notice
+	// permanently, with nothing on screen to say why.
 	if rc.DismissedTag != "" {
 		if n, ok := selfupdate.CompareVersions(rc.LatestTag, rc.DismissedTag); ok && n <= 0 {
 			return v
