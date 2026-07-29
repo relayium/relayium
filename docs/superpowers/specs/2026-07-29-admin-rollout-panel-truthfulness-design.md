@@ -50,9 +50,24 @@ All of it is already computable from data the view model holds.
 
 | Band | Test | Deadline that applies | Source |
 |---|---|---|---|
-| **Installing** | not on target, `UpdateStartedAt != 0` | `fleetInstallLimit` (1 h) since `UpdateStartedAt`; and `updateSilenceLimit` (15 min) since `LastSeenAt` | `rollout_fleet.go:252`, `:275` |
+| **Gone quiet** | `UpdateStartedAt != 0` and no heartbeat for longer than `nodeOnlineWindow` (90 s) | `updateSilenceLimit` (15 min) since `LastSeenAt` | `rollout_fleet.go:252` |
+| **Installing** | not on target, `UpdateStartedAt != 0`, still heartbeating | `fleetInstallLimit` (1 h) since `UpdateStartedAt` | `rollout_fleet.go:275` |
 | **Command never landed** | not on target, `UpdateStartedAt == 0` | `updateSilenceLimit` (15 min) since `tr.StageStartedAt` | `rollout_fleet.go:263` |
-| **Observing** | **on target** | `fleetFirstWindow` (6 h) for the canary, `fleetStepWindow` (30 min) otherwise, since `max(tr.StageStartedAt, UpdateStartedAt)` | `rollout_fleet.go:282-293` |
+| **Observing** | **on target**, still heartbeating | `fleetFirstWindow` (6 h) for the canary, `fleetStepWindow` (30 min) otherwise, since `max(tr.StageStartedAt, UpdateStartedAt)` | `rollout_fleet.go:282-293` |
+
+**The silence check is tested first, before the on-target branch — because that
+is where `decideFleet` tests it.** `rollout_fleet.go:252` runs its silence halt
+above the `if !onTarget(cur)` branch at `:255`, so a node that installed
+successfully and then went dark during its six-hour observation window halts the
+whole track. An earlier draft of this design put silence inside the installing
+band only, which would have had the panel report
+`观察中，还有 5 小时` about a track `decideFleet` had already halted — the panel
+lying in the band it presents as the safe one, which is the exact failure this
+work exists to remove.
+
+The general rule that follows: **mirror the order of the thing you describe.**
+Where the classifier's branch order matches `decideFleet`'s, the two cannot drift
+apart by restructuring; where it does not, they can, silently.
 
 Two details in that table are easy to get wrong and both are already documented
 in the state machine:
@@ -108,15 +123,19 @@ The same treatment applies to the halt deadlines in the two non-observing bands:
 they are stated as facts and limits (`已 40 分钟 · 上限 60 分钟`), not as
 predictions of when the track will halt.
 
-**Which limit the installing band shows.** That band has two deadlines —
-`fleetInstallLimit` (1 h since `UpdateStartedAt`) and `updateSilenceLimit`
-(15 min since `LastSeenAt`) — and showing both at once is noise, because a
-heartbeating node resets its silence clock every 30 seconds and that limit is
-therefore irrelevant to it. The rule: while the node's last heartbeat is within
-`nodeOnlineWindow` (90 s), show the install limit; once it is older than that,
-the node has gone quiet and the silence limit is the one about to fire, so show
-that one instead and say the node has stopped heartbeating. One limit is shown
-at a time, and it is always the one that will actually decide this node's fate.
+**Only one limit is shown at a time, and it is always the one that will actually
+decide this node's fate.** A node in flight is subject to two clocks at once —
+its band's deadline, and the 15-minute silence backstop — and printing both is
+noise, because a heartbeating node resets its silence clock every 30 seconds.
+
+The rule: while the node's last heartbeat is within `nodeOnlineWindow` (90 s),
+show the band's own deadline. Once the heartbeat is older than that, the node has
+gone quiet, the silence limit is the one about to fire, and the panel shows that
+one and says the node has stopped heartbeating — **including when the node is on
+target and otherwise merely observing**, since `decideFleet` halts on silence
+regardless of version. The label keeps the band it came from
+(`观察中（已停止心跳）`, `安装中（已停止心跳）`) so the operator can still see
+what it was doing when it went dark.
 
 ### The rules are on the page, not in a help modal
 

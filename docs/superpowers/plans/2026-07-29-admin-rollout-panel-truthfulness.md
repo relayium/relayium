@@ -73,26 +73,61 @@ func TestFleetNodeStatusOnTargetIsObserving(t *testing.T) {
 	}
 }
 
+// observingAt evaluates a heartbeating on-target node at some later instant.
+// LastSeenAt has to track that instant: a real node heartbeats every 30s, and
+// the silence branch sits above the window branch, so pinning LastSeenAt to
+// the start would make every hours-later evaluation report silence instead of
+// the window under test.
+func observingAt(isCanary bool, start, now int64) rolloutNodeStatus {
+	return fleetNodeStatus(fleetNodeInput{
+		OnTarget: true, IsCanary: isCanary,
+		UpdateStartedAt: start, StageStartedAt: start, LastSeenAt: now,
+	}, now)
+}
+
 // The canary gets the long window and every later node the short one.
 func TestFleetNodeStatusWindowDependsOnCanary(t *testing.T) {
-	const now = 1_000_000
-	base := fleetNodeInput{OnTarget: true, UpdateStartedAt: now, StageStartedAt: now, LastSeenAt: now}
-
-	canary := base
-	canary.IsCanary = true
-	// Just before the canary's window closes, it is still observing.
-	if got := fleetNodeStatus(canary, now+fleetFirstWindow-1); got.Overdue {
+	const start = 1_000_000
+	if observingAt(true, start, start+fleetFirstWindow-1).Overdue {
 		t.Fatal("canary window closed early")
 	}
-	if got := fleetNodeStatus(canary, now+fleetFirstWindow); !got.Overdue {
+	if !observingAt(true, start, start+fleetFirstWindow).Overdue {
 		t.Fatal("canary window did not close on time")
 	}
 	// A later node uses the short window, so it is already due at that point.
-	if got := fleetNodeStatus(base, now+fleetStepWindow); !got.Overdue {
+	if !observingAt(false, start, start+fleetStepWindow).Overdue {
 		t.Fatal("step window did not close on time")
 	}
-	if got := fleetNodeStatus(base, now+fleetStepWindow-1); got.Overdue {
+	if observingAt(false, start, start+fleetStepWindow-1).Overdue {
 		t.Fatal("step window closed early")
+	}
+}
+
+// decideFleet halts on silence BEFORE it looks at the version
+// (rollout_fleet.go:252 sits above the !onTarget branch at :255). A node that
+// installed successfully and then went dark is not calmly 观察中 -- the track
+// is about to halt on it, and a panel reporting "还有 5 小时" there would be
+// lying in the band it presents as the safe one.
+func TestFleetNodeStatusOnTargetButQuietReportsSilence(t *testing.T) {
+	const now = 1_000_000
+	quiet := int64(nodeOnlineWindow/time.Second) + 1
+	got := fleetNodeStatus(fleetNodeInput{
+		OnTarget: true, IsCanary: true,
+		UpdateStartedAt: now - 600, StageStartedAt: now - 600, LastSeenAt: now - quiet,
+	}, now)
+	if !strings.Contains(got.Label, "心跳") {
+		t.Fatalf("label = %q, want it to say the node stopped heartbeating", got.Label)
+	}
+	if strings.Contains(got.Detail, "不早于") {
+		t.Fatalf("detail = %q, still reporting the observation window on a silent node", got.Detail)
+	}
+	late := fleetNodeStatus(fleetNodeInput{
+		OnTarget: true, IsCanary: true,
+		UpdateStartedAt: now - 600, StageStartedAt: now - 600,
+		LastSeenAt: now - updateSilenceLimit - 1,
+	}, now)
+	if !late.Overdue {
+		t.Fatal("an on-target node silent past updateSilenceLimit must read overdue")
 	}
 }
 
@@ -102,16 +137,18 @@ func TestFleetNodeStatusWindowDependsOnCanary(t *testing.T) {
 func TestFleetNodeStatusUsesLaterOfTheTwoStamps(t *testing.T) {
 	const now = 1_000_000
 	// A StageStartedAt left over from the PREVIOUS stage, long past.
-	in := fleetNodeInput{
-		OnTarget: true, IsCanary: true,
-		StageStartedAt:  now - fleetFirstWindow - 3600,
-		UpdateStartedAt: now,
-		LastSeenAt:      now,
+	stale := func(at int64) rolloutNodeStatus {
+		return fleetNodeStatus(fleetNodeInput{
+			OnTarget: true, IsCanary: true,
+			StageStartedAt:  now - fleetFirstWindow - 3600,
+			UpdateStartedAt: now,
+			LastSeenAt:      at, // heartbeating, so the silence branch stays out of it
+		}, at)
 	}
-	if got := fleetNodeStatus(in, now); got.Overdue {
+	if stale(now).Overdue {
 		t.Fatal("a stale StageStartedAt collapsed the observation window")
 	}
-	if got := fleetNodeStatus(in, now+fleetFirstWindow-1); got.Overdue {
+	if stale(now + fleetFirstWindow - 1).Overdue {
 		t.Fatal("window measured from the stale stamp rather than the node's own")
 	}
 }
@@ -327,6 +364,27 @@ type fleetNodeInput struct {
 // They have different deadlines and they call for opposite responses: an
 // observing node needs waiting for, the other two need looking at.
 func fleetNodeStatus(in fleetNodeInput, now int64) rolloutNodeStatus {
+	if in.UpdateStartedAt == 0 && in.StageStartedAt == 0 {
+		return rolloutNodeStatus{} // not in flight at all
+	}
+	// Silence is tested FIRST, above the on-target branch, because that is
+	// where decideFleet tests it (rollout_fleet.go:252 sits above the
+	// !onTarget branch at :255). A node that installed successfully and then
+	// went dark during its six-hour window halts the whole track, so reporting
+	// it as calmly 观察中 would be the panel lying in the band it presents as
+	// the safe one. Mirroring the order of the thing you describe is what stops
+	// the two drifting apart when either is restructured.
+	if in.UpdateStartedAt != 0 && now-in.LastSeenAt > int64(nodeOnlineWindow/time.Second) {
+		band, label := "installing", "安装中（已停止心跳）"
+		if in.OnTarget {
+			band, label = "observing", "观察中（已停止心跳）"
+		}
+		deadline := in.LastSeenAt + updateSilenceLimit
+		return rolloutNodeStatus{
+			Band: band, Label: label,
+			Detail: elapsedText(in.LastSeenAt, deadline, now), Overdue: now > deadline,
+		}
+	}
 	if in.OnTarget {
 		// The observation window only starts once the node actually runs the
 		// target. The six hours are spent watching a node that already
@@ -348,9 +406,6 @@ func fleetNodeStatus(in fleetNodeInput, now int64) rolloutNodeStatus {
 			Detail: notBeforeText(deadline, now), Overdue: now >= deadline,
 		}
 	}
-	if in.UpdateStartedAt == 0 && in.StageStartedAt == 0 {
-		return rolloutNodeStatus{} // not in flight at all
-	}
 	if in.UpdateStartedAt == 0 {
 		// Commanded, but the node never recorded a start: central's two writes
 		// split. The stage's clock is the backstop (rollout_fleet.go:263).
@@ -360,16 +415,9 @@ func fleetNodeStatus(in fleetNodeInput, now int64) rolloutNodeStatus {
 			Detail: elapsedText(in.StageStartedAt, deadline, now), Overdue: now > deadline,
 		}
 	}
-	// Installing. Two limits apply, and showing both is noise: a heartbeating
-	// node resets its silence clock every 30s, so that limit is irrelevant to
-	// it. Show whichever one will actually decide this node's fate.
-	if now-in.LastSeenAt > int64(nodeOnlineWindow/time.Second) {
-		deadline := in.LastSeenAt + updateSilenceLimit
-		return rolloutNodeStatus{
-			Band: "installing", Label: "安装中（已停止心跳）",
-			Detail: elapsedText(in.LastSeenAt, deadline, now), Overdue: now > deadline,
-		}
-	}
+	// Installing, and still heartbeating -- the silence branch above already
+	// took every node that has gone quiet. So the install limit is the one
+	// that will decide this node's fate, and it is the only one worth showing.
 	deadline := in.UpdateStartedAt + fleetInstallLimit
 	return rolloutNodeStatus{
 		Band: "installing", Label: "安装中",
