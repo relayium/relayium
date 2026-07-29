@@ -35,8 +35,42 @@ func TestReleaseNoticeWithholdsTheButtonWhileRolling(t *testing.T) {
 	if got.OfferButton {
 		t.Fatal("pressing the button here would silently abandon the rollout in flight")
 	}
-	if !got.Rolling {
+	if !got.InFlight {
 		t.Fatal("the notice must be able to say what is currently rolling")
+	}
+}
+
+// A PAUSED rollout is a rollout in flight. HaltRolloutTrack sets
+// status='halted' and deliberately leaves current_node_id alone
+// (rollout_store.go), so the canary is still recorded as the node in flight.
+// Offering the button here loses that position: setTargetVersion clears
+// CurrentNodeID/FirstNodeID and rewrites the target, after which 恢复发布 can no
+// longer put the operator back where they pressed pause.
+func TestReleaseNoticeWithholdsTheButtonOnAPausedRollout(t *testing.T) {
+	got := releaseNotice(
+		ReleaseCheck{LatestTag: "v1.3.0", CheckedAt: 1000},
+		RolloutTrack{Track: "fleet", TargetVersion: "v1.2.0", Status: "halted", CurrentNodeID: "n-canary"}, true)
+	if !got.Show {
+		t.Fatal("a paused rollout is not 'nothing new'; the notice must still inform")
+	}
+	if got.OfferButton {
+		t.Fatal("pressing the button here discards the paused rollout's canary position")
+	}
+	if !got.InFlight {
+		t.Fatal("the notice must be able to say a rollout is still in flight")
+	}
+}
+
+// The other side of it: a halted track with NO node in flight (resumed and
+// re-halted, or halted before any pick) has nothing to lose, and the button is
+// exactly what the operator wants. ResumeRolloutTrack and CompleteRolloutTrack
+// both clear current_node_id, so this state is reachable and ordinary.
+func TestReleaseNoticeOffersTheButtonOnAHaltedTrackWithNoNodeInFlight(t *testing.T) {
+	got := releaseNotice(
+		ReleaseCheck{LatestTag: "v1.3.0", CheckedAt: 1000},
+		RolloutTrack{Track: "fleet", TargetVersion: "v1.2.0", Status: "halted"}, true)
+	if !got.Show || !got.OfferButton {
+		t.Fatalf("nothing is in flight here; the button is the point: %+v", got)
 	}
 }
 
@@ -147,26 +181,31 @@ func TestReleaseNoticeIgnoresAnUnparseableDismissal(t *testing.T) {
 
 // The property, in the shape the rollout panel's sweep established: per-case
 // assertions are written from the same understanding as the code and drift with
-// it. Offering the button must imply the fleet track is not rolling, in EVERY
-// state, not just the one case above.
-func TestReleaseNoticeButtonImpliesNotRolling(t *testing.T) {
+// it. Offering the button must imply NOTHING IS IN FLIGHT on the fleet track,
+// in EVERY state, not just the cases above — and "in flight" is status
+// 'rolling' OR a node still recorded in current_node_id, which is what a paused
+// rollout looks like.
+func TestReleaseNoticeButtonImpliesNothingInFlight(t *testing.T) {
 	statuses := []string{"", "rolling", "halted", "complete"}
 	tags := []string{"", "v1.1.0", "v1.2.0", "v1.3.0", "not-a-version"}
 	times := []int64{0, 1000}
+	nodes := []string{"", "n-canary"}
 	for _, status := range statuses {
 		for _, latest := range tags {
 			for _, target := range tags {
 				for _, dismissed := range tags {
 					for _, at := range times {
-						for _, found := range []bool{true, false} {
-							rc := ReleaseCheck{LatestTag: latest, CheckedAt: at, DismissedTag: dismissed}
-							tr := RolloutTrack{Track: "fleet", TargetVersion: target, Status: status}
-							got := releaseNotice(rc, tr, found)
-							if got.OfferButton && found && tr.Status == "rolling" {
-								t.Fatalf("button offered on a rolling track: rc=%+v tr=%+v -> %+v", rc, tr, got)
-							}
-							if got.OfferButton && !got.Show {
-								t.Fatalf("button offered without a notice: rc=%+v tr=%+v -> %+v", rc, tr, got)
+						for _, node := range nodes {
+							for _, found := range []bool{true, false} {
+								rc := ReleaseCheck{LatestTag: latest, CheckedAt: at, DismissedTag: dismissed}
+								tr := RolloutTrack{Track: "fleet", TargetVersion: target, Status: status, CurrentNodeID: node}
+								got := releaseNotice(rc, tr, found)
+								if got.OfferButton && found && (tr.Status == "rolling" || tr.CurrentNodeID != "") {
+									t.Fatalf("button offered with a rollout in flight: rc=%+v tr=%+v -> %+v", rc, tr, got)
+								}
+								if got.OfferButton && !got.Show {
+									t.Fatalf("button offered without a notice: rc=%+v tr=%+v -> %+v", rc, tr, got)
+								}
 							}
 						}
 					}

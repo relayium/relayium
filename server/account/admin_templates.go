@@ -553,12 +553,17 @@ button:hover{filter:brightness(1.07)}
 // The release-rollout button is the newest and, on the page an admin visits
 // most casually, the most consequential of the lot — it's why it gets its
 // own guards instead of relying on the dead confirm(): handleAdminReleaseRollout
-// refuses unless the fleet track is idle AND the posted version matches the
-// server's own current GetReleaseCheck.LatestTag. With both of those in
-// place the button can only ever set the target to the version the server
-// itself currently reports as newest, and only while nothing is rolling — so
-// what remains is a misclick, not a stale-state hazard, and a step-up flow
-// would just be answering a question those two guards already answer.
+// re-evaluates releaseNotice — the very predicate the {{if .OfferButton}}
+// below renders on — and refuses unless it still says OfferButton, AND
+// refuses unless the posted version matches the server's own current
+// GetReleaseCheck.LatestTag. With both of those in place the button can only
+// ever set the target to the version the server itself currently reports as
+// newest, and only in a state where this template would have drawn the button
+// — so what remains is a misclick, not a stale-state hazard, and a step-up
+// flow would just be answering a question those two guards already answer.
+//
+// Note the shape: the handler calls the predicate rather than restating it.
+// Restating it is what let a stale page post while the panel showed nothing.
 var adminUsersTmpl = template.Must(withRolloutPanel(withPasskeyJS(template.New("users").Funcs(template.FuncMap{
 	"ts":    func(sec int64) string { return time.Unix(sec, 0).UTC().Format("2006-01-02 15:04") },
 	"bytes": humanBytes,
@@ -659,7 +664,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <input type="hidden" name="version" value="{{.LatestTag}}">
 <button type="submit">发布 {{.LatestTag}} 到机队</button></form>
 {{else}}
-<div class="halt-why">机队轨正在发布 {{.TargetTag}}，此处不提供一键发布：那会中止正在进行的发布并从头开始。要改目标请到下方机队面板手动设定。</div>
+<div class="halt-why">机队轨上有一次发布尚未结束（目标 {{.TargetTag}}，正在发布或已暂停），此处不提供一键发布：那会中止它、清掉记录在案的发布位置并从头开始，已暂停的发布也就无法再原样继续。要改目标请到下方机队面板手动设定。</div>
 {{end}}
 <form method="post" action="/admin/release/dismiss" class="lim">
 <input type="hidden" name="version" value="{{.LatestTag}}">

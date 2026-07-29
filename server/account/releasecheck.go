@@ -26,9 +26,9 @@ type releaseNoticeView struct {
 	Enabled     bool
 	Show        bool
 	OfferButton bool
-	// Rolling is true when the fleet track is mid-rollout: the notice informs
-	// but offers no button. See releaseNotice.
-	Rolling      bool
+	// InFlight is true when the fleet track has a rollout in flight: the notice
+	// informs but offers no button. See releaseNotice.
+	InFlight     bool
 	LatestTag    string
 	TargetTag    string // "" when the fleet track was never configured
 	DismissedTag string // non-empty: render the muted 已忽略 line
@@ -38,14 +38,35 @@ type releaseNoticeView struct {
 // releaseNotice decides what the panel shows, from the stored check and the
 // fleet track. Pure: no clock, no database, no HTTP.
 //
-// The button is withheld while the track is rolling, and that is the constraint
-// this whole feature is built around. setTargetVersion (rollout_gate.go) has no
-// status gate on the fleet path: it rewrites the whole row, resetting Status to
-// rolling, restamping StageStartedAt, and clearing CurrentNodeID/FirstNodeID.
-// Pressing it during a live rollout silently abandons it -- discarding, say, a
-// canary five hours and fifty minutes into a six-hour observation window, with
-// nothing shown to say so. That is defensible behind a form someone typed a
-// version into. It is not defensible one click from a notification.
+// It is also the HANDLER's guard, not only the button's: handleAdminReleaseRollout
+// calls this and refuses unless OfferButton. One predicate, so the two cannot
+// drift apart -- see that function.
+//
+// The button is withheld while a rollout is IN FLIGHT, and that is the
+// constraint this whole feature is built around. setTargetVersion
+// (rollout_gate.go) has no status gate on the fleet path: it rewrites the whole
+// row, resetting Status to rolling, restamping StageStartedAt, and clearing
+// CurrentNodeID/FirstNodeID. Pressing it during a live rollout silently
+// abandons it -- discarding, say, a canary five hours and fifty minutes into a
+// six-hour observation window, with nothing shown to say so. That is defensible
+// behind a form someone typed a version into. It is not defensible one click
+// from a notification.
+//
+// "In flight" is Status == "rolling" OR CurrentNodeID != "", and the second
+// disjunct is the whole point: a PAUSED rollout is a rollout in flight.
+// Checking only the status offered the button on one, and one click erased the
+// canary position 恢复发布 exists to restore. Which of rollout_store.go's
+// statements leave current_node_id set, checked rather than assumed:
+//
+//   - HaltRolloutTrack writes status='halted' and does NOT touch
+//     current_node_id -- deliberately, per its own comment and the rollout
+//     panel's: on a halted track the node that was in flight is still the one
+//     the operator opened the panel to find.
+//   - ResumeRolloutTrack CLEARS it (a fresh canary pick), CompleteRolloutTrack
+//     CLEARS it (nothing is in flight once a track is done). So a halted track
+//     with an empty current_node_id has genuinely nothing to lose, and gets the
+//     button -- see the test.
+//   - ClaimRolloutNode is what sets it, and only on status='rolling'.
 //
 // The panel already refuses to render a control whose only possible outcome is
 // a refusal. This is the case that is worse, because it succeeds.
@@ -98,8 +119,8 @@ func releaseNotice(rc ReleaseCheck, fleet RolloutTrack, fleetFound bool) release
 		}
 	}
 	v.Show = true
-	v.Rolling = fleetFound && fleet.Status == "rolling"
-	v.OfferButton = !v.Rolling
+	v.InFlight = fleetFound && (fleet.Status == "rolling" || fleet.CurrentNodeID != "")
+	v.OfferButton = !v.InFlight
 	return v
 }
 

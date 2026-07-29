@@ -518,12 +518,34 @@ func main() {
 			// changes what their server does on the network. It reads a public API
 			// and uploads nothing about the instance; what GitHub can observe is
 			// this machine's egress IP asking on a timer.
-			log.Printf("release check enabled: asking github.com hourly for the newest %s release, to offer it in /admin. "+
+			//
+			// It names api.github.com, which is the host actually contacted
+			// (selfupdate's defaultAPIBase) — NOT github.com, which is only the
+			// download host and is never reached by this poller. The stated
+			// purpose of this line is to let a self-hoster act on it, and an
+			// egress allowlist built from the wrong hostname fails closed: the
+			// check silently never succeeds and /admin quietly says it has never
+			// checked. It also says "at startup and then hourly", because
+			// ReleaseChecker.Run checks once immediately and central restarts on
+			// every deploy — "hourly" undercounts the requests it will see.
+			log.Printf("release check enabled: asking api.github.com at startup and then hourly for the newest %s release, to offer it in /admin. "+
 				"No instance data is sent. Set RELAYIUM_RELEASE_CHECK=false to turn it off.", releaseRepo)
 			checker := &account.ReleaseChecker{
 				Store: store,
 				Now:   time.Now,
 				Latest: func(ctx context.Context) (string, error) {
+					// Per-check deadline. selfupdate.DefaultHTTPClient sets NO
+					// blanket Client.Timeout on purpose — it is tuned for
+					// multi-MB archive downloads and bounds only the fast phases
+					// (connect, TLS, time-to-first-byte) — so a server that
+					// sends headers and then stalls the body wedges this call
+					// forever, and Run calls CheckOnce SERIALLY: the poller
+					// never ticks again and the panel silently stops updating.
+					// This request is a few hundred bytes of JSON, so a deadline
+					// on the whole request is right here even though it would
+					// be wrong for a download.
+					ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+					defer cancel()
 					return selfupdate.LatestTag(ctx, selfupdate.Options{Repo: releaseRepo})
 				},
 				Log: log.Default(),

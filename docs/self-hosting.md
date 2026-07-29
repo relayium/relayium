@@ -125,18 +125,29 @@ entirely — it 404s and falls through to the SPA.
 
 ## Release check (on by default)
 
-Every hour, the server asks GitHub's public API for the newest release tag
-of [`relayium/relayium`](https://github.com/relayium/relayium) — a plain
-`GET /repos/relayium/relayium/releases/latest`, the same call
-`relayium-node update` already makes when you run it by hand. If that tag is
-newer than what your fleet track is targeting, `/admin` shows a banner
-offering a one-click rollout to it (or, while a rollout is already running,
-just names the new version without a button — see
+Once at startup and then every hour, the server asks GitHub's public API for
+the newest release tag of
+[`relayium/relayium`](https://github.com/relayium/relayium) — a plain
+`GET https://api.github.com/repos/relayium/relayium/releases/latest`, the same
+call `relayium-node update` already makes when you run it by hand. The startup
+check matters if you are counting requests or writing an egress allowlist: a
+server that is restarted often (every deploy, every config change) asks once
+per restart on top of the hourly tick, so the interval is an upper bound on the
+gap between checks, not on their number. The host to allow is `api.github.com`
+— `github.com` itself is only the download host and this check never contacts
+it.
+
+If that tag is newer than what your fleet track is targeting, `/admin` shows a
+banner offering a one-click rollout to it (or, when a rollout on the fleet
+track has not finished — still running, or paused with a node recorded in
+flight — just names the new version without a button, since starting a new
+rollout would discard where that one had got to; see
 [Admin dashboard](#admin-dashboard-optional-and-not-read-only)).
 
 Nothing about your instance is sent with that request — no version, no host,
 no usage. What GitHub *can* observe is that some machine at your egress IP
-asked on an hourly schedule, the same as it can for anyone's `curl` cron job.
+asked, on a timer and at each restart, the same as it can for anyone's `curl`
+cron job.
 A failed check (offline, rate-limited, GitHub down) never overwrites the
 last-known result and never claims the deployment is current — silence is
 the only "nothing new" signal, and the panel prints when the last successful

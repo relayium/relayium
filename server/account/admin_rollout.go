@@ -434,22 +434,36 @@ func (s *Service) rolloutSetVersion(w http.ResponseWriter, r *http.Request, acti
 // It has TWO guards, and both exist for the same reason: a stale page, or a
 // direct POST, must not be able to do what the UI declines to offer.
 //
-//  1. Re-read the fleet track and refuse while its status is "rolling". The
-//     button is hidden by the template in that state (releaseNotice.OfferButton),
-//     but that is a UI affordance, not the guard: SetTargetVersion rewrites the
-//     WHOLE fleet row — resetting Status to rolling, restamping StageStartedAt,
-//     clearing CurrentNodeID/FirstNodeID — so pressing it during a live
-//     rollout would silently abandon that rollout in flight.
-//  2. Re-read GetReleaseCheck and refuse unless the posted version equals the
-//     stored LatestTag. Without this the handler trusts a client-supplied
-//     version: an admin leaves /admin open showing v1.3.0, the fleet completes
-//     a rollout to v1.5.0, and the stale button posts v1.3.0 — which would
-//     pass guard 1 (the track is "complete", not "rolling") and repoint the
-//     fleet BACKWARDS. That is not inert: nodes.go:445 sets AllowDowngrade
-//     automatically for a downgrade, so nodes actually install the older
-//     build. Guarding one axis (status) and not the other (version) is not a
-//     partial fix, because the two axes are independent: a stale page can be
-//     stale about either one.
+//  1. WHETHER. Re-read the fleet track and the check row, and refuse unless
+//     releaseNotice(...).OfferButton — the EXACT predicate the template renders
+//     the button on. It is expressed as a call, not as a restatement, and that
+//     shape is the fix rather than an incidental tidy: every previous version of
+//     this guard restated one axis of the UI's rule in its own words and drifted
+//     from the rest. A hand-written `status != "rolling"` waved through a paused
+//     rollout (halted, but with the canary still in current_node_id, which
+//     HaltRolloutTrack leaves set on purpose). A hand-written
+//     `version == LatestTag` waved through a fleet target that was AHEAD of
+//     GitHub's releases/latest — routine while a tag is a pre-release rolled to
+//     the fleet first, or after a bad release is unpublished — where the panel
+//     correctly renders nothing and a stale page posted successfully anyway.
+//     Delegating collapses button and handler onto one predicate, so a future
+//     condition added to releaseNotice reaches this handler for free and the two
+//     cannot fall out of step again.
+//
+//     What that predicate is protecting: SetTargetVersion rewrites the WHOLE
+//     fleet row — resetting Status to rolling, restamping StageStartedAt,
+//     clearing CurrentNodeID/FirstNodeID — so pressing the button on a rollout
+//     in flight, live or paused, silently abandons it.
+//
+//  2. WHICH. Re-read GetReleaseCheck and refuse unless the posted version equals
+//     the stored LatestTag. OfferButton says whether ANY release may be shipped
+//     from here; it says nothing about the string this request carried. Without
+//     this the handler trusts a client-supplied version: an admin leaves /admin
+//     open showing v1.3.0, the fleet completes a rollout to v1.5.0, and the
+//     stale button posts v1.3.0 — which passes guard 1 (a newer release does
+//     exist and nothing is in flight) and repoints the fleet BACKWARDS. That is
+//     not inert: nodes.go:445 sets AllowDowngrade automatically for a
+//     downgrade, so nodes actually install the older build.
 //
 // Audited as its own action, AuditReleaseRollout, rather than reused
 // AuditRolloutTarget. That is deliberate, not an oversight: the house rule
@@ -473,14 +487,19 @@ func (s *Service) handleAdminReleaseRollout(w http.ResponseWriter, r *http.Reque
 		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "发布失败："+err.Error())
 		return
 	}
-	if found && before.Status == "rolling" {
-		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
-			"发布失败：机队轨正在发布中，此处不提供一键发布——那会中止正在进行的发布。请到下方机队面板手动处理。")
-		return
-	}
 	rc, rcErr := s.Store().GetReleaseCheck(r.Context())
 	if rcErr != nil {
 		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "发布失败："+rcErr.Error())
+		return
+	}
+	if v := releaseNotice(rc, before, found); !v.OfferButton {
+		// The button the page posted from is not one this server would render
+		// right now. One message covers every reason, because the point of
+		// asking releaseNotice is that this handler does not maintain its own
+		// list of them.
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"发布失败：当前没有可一键发布的新版本，请刷新页面后重试。"+
+				"若机队轨上有未结束的发布（正在发布或已暂停），请到下方机队面板手动处理。")
 		return
 	}
 	if rc.LatestTag == "" || version != rc.LatestTag {

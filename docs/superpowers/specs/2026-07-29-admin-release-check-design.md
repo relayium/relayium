@@ -28,7 +28,7 @@ a BYO target stays a deliberate, typed action. The two panels are deliberately
 separate — `admin_templates.go` carries a comment warning against collapsing them
 into one form — and this keeps them that way.
 
-## The button is not offered while a rollout is running
+## The button is not offered while a rollout is in flight
 
 This is the constraint the rest of the design hangs off, and it comes from an
 existing behaviour that is safe under a typed form and unsafe under a button.
@@ -45,15 +45,58 @@ observation window is discarded, with nothing shown to say so. That is defensibl
 when someone typed a version and pressed a button in a form; it is not defensible
 one click from a notification that says "有新版本了，要更新吗？".
 
-So the notice has two shapes:
+So the notice has two shapes, and the line between them is **whether a rollout
+is in flight** — which is *not* the same question as `Status == "rolling"`:
 
 | Fleet track | Notice |
 |---|---|
-| `complete`, `halted`, or never configured | Full notice with the rollout button |
-| `rolling` | Informational only — states the new version and what is currently rolling, **no button** |
+| `complete`, never configured, or `halted` with `current_node_id` empty | Full notice with the rollout button |
+| `rolling`, **or any status with `current_node_id` set** | Informational only — states the new version and that a rollout has not finished, **no button** |
+
+**This table said `halted` gets the button, flatly, and that was wrong.**
+`HaltRolloutTrack` (`rollout_store.go`) writes `status='halted'` and
+deliberately does **not** clear `current_node_id`; the rollout panel depends on
+that, because on a halted track the node that was in flight is still the one the
+operator opened the panel to find. So a rollout an operator *paused* mid-canary
+is `halted` with the canary still recorded — a rollout in flight in every sense
+that matters here, differing from the live case only in that a human pressed
+pause first. Offering the button there and pressing it produced
+`{TargetVersion:v1.3.0 Status:rolling CurrentNodeID: FirstNodeID:}`: the canary
+position gone and 恢复发布 unable to restore anything. Exactly the harm this
+section exists to prevent, reached through the state the section itself blessed.
+
+`ResumeRolloutTrack` and `CompleteRolloutTrack` both *do* clear
+`current_node_id`, which is why the first row is a real state and not a
+technicality: a track halted with nothing in flight has nothing to lose, and
+gets the button.
 
 The typed form is untouched: an operator who genuinely wants to repoint a live
-rollout can still do it there, deliberately.
+or paused rollout can still do it there, deliberately.
+
+### The handler asks the notice, it does not restate it
+
+The button's predicate and the POST handler's guard are **one function call**,
+not two implementations of one rule: `handleAdminReleaseRollout` calls
+`releaseNotice(...)` and refuses unless `OfferButton`, then separately pins
+*which* version was posted against the stored `LatestTag`. `OfferButton` answers
+*whether*; the version equality answers *which*.
+
+This is not a tidy-up. Every earlier version of that guard restated one axis of
+the UI's rule in its own words, and each restatement was wrong about a state the
+UI already handled correctly:
+
+- `status != "rolling"` alone let a stale page repoint the fleet *backwards*
+  after a completed rollout.
+- Adding `version == LatestTag` alongside it still let a stale page post
+  whenever the fleet target was **ahead** of GitHub's `releases/latest` — routine
+  while a tag is published as a pre-release and rolled to the fleet first, or
+  after a bad release is unpublished. The panel renders nothing in that state;
+  the handler happily accepted `version=<LatestTag>` and downgraded the fleet
+  (`nodes.go` sets `AllowDowngrade` automatically for a downgrade, so the nodes
+  really do install the older build).
+
+A restated predicate drifts from the thing it restates; a called one cannot. Any
+condition added to `releaseNotice` from here reaches the handler for free.
 
 This is the same principle the panel already applies twice, one step further
 along. The first was "a button whose only possible outcome is a refusal is worse
@@ -106,6 +149,16 @@ Hourly is far inside GitHub's unauthenticated limit of 60 requests per hour per
 IP, and a release matters on the scale of days. Note one interaction: central
 restarts on every push to `main` because of auto-deploy, and each restart costs
 one extra check. Bounded and negligible.
+
+Each check carries its own 30s deadline (`context.WithTimeout` in the `Latest`
+closure). `selfupdate.DefaultHTTPClient` sets no blanket `Client.Timeout` on
+purpose — it is tuned for multi-MB archive downloads and bounds only connect,
+TLS and time-to-first-byte — so a server that sends headers and then stalls the
+body would hang this call indefinitely. `Run` calls `CheckOnce` **serially**, so
+that is not one lost check: the ticker never fires again and the panel silently
+stops updating for the life of the process. The deadline belongs at this call
+site rather than in the shared client, because it is right for a few hundred
+bytes of JSON and wrong for a release archive.
 
 **Both the result and the dismissal are persisted**, in the same row.
 
@@ -179,12 +232,32 @@ what their server does on the network. It is disclosed in two places:
   who never opens the docs still sees this. The house style already uses
   explanatory output this way — `requireSecureCentral`'s refusal message and
   `install-node.sh`'s echoes.
+
+  It must name the host actually contacted, `api.github.com`, and not
+  `github.com` (the download host, which this poller never reaches). It said
+  `github.com` and that is a real cost, not a typo: the line's stated purpose is
+  to let a self-hoster act on it, and an egress allowlist built from the wrong
+  hostname fails **closed** — the check never succeeds and the panel, which only
+  ever makes positive claims, just quietly says it has never checked. For the
+  same reason the line says "at startup and then hourly": "hourly" undercounts
+  what an operator watching their egress will see.
 - **A section in `docs/self-hosting.md`** stating that it reads a public API
   only, uploads nothing about the instance, and that what GitHub can observe is
   the instance's egress IP asking on a timer.
 
 When disabled, **no request is made at all** — not a request whose result is
-discarded. That is the promise being made, and it has a test.
+discarded — and the panel renders no part of the notice, not even the
+`尚未成功检查过` freshness line.
+
+This document previously claimed that promise "has a test" when neither half
+did. The panel half now does: `TestAdminNoticeAbsentWhenTheCheckIsDisabled`
+builds a service with `ReleaseCheck: false` (its own, because
+`newAdminSettingsServer` sets it true for every other test) and asserts the
+dashboard contains neither `/admin/release/rollout` nor `尚未成功检查过`, with a
+check result sitting in the store so the assertion is about the flag and not
+about an empty database. The request half is structural rather than tested:
+`main.go` only constructs and starts `ReleaseChecker` inside `if *releaseCheck`,
+so there is no code path that could issue a discarded request.
 
 ## Code shape
 
@@ -204,6 +277,9 @@ and returns what to render and whether the button is offered. Table-driven:
 
 - newer + fleet idle → notice **with** button
 - newer + fleet `rolling` → notice **without** button
+- newer + fleet `halted` **with `current_node_id` set** (a paused rollout) →
+  notice **without** button
+- newer + fleet `halted` with `current_node_id` empty → notice **with** button
 - newer + dismissed tag equal → nothing but the muted dismissed line
 - newer + dismissed tag older → notice returns
 - equal or older latest → nothing
@@ -212,10 +288,23 @@ and returns what to render and whether the button is offered. Table-driven:
 - fleet target empty → notice with button, different copy
 
 Plus one property over the whole state space, in the shape the rollout panel's
-sweep established: **offering the button implies the fleet track is not
-`rolling`.** Per-case assertions are written from the same understanding as the
-code and drift with it; a property over every state is what catches a later
-"simplification" of the condition.
+sweep established: **offering the button implies nothing is in flight on the
+fleet track** — neither `status = 'rolling'` nor a non-empty `current_node_id`.
+Per-case assertions are written from the same understanding as the code and
+drift with it; a property over every state is what catches a later
+"simplification" of the condition. The sweep's axes must include
+`current_node_id`, because the version that swept only `status` is the one that
+missed the paused rollout.
+
+The handler is tested against the same states through the HTTP surface, since
+the defect being guarded is precisely "the panel and the handler disagree":
+
+- fleet ahead of `LatestTag` (pre-release rolled first, or a release
+  unpublished) → no button rendered **and** a direct POST of `LatestTag` leaves
+  the track untouched
+- fleet paused mid-canary → no button rendered **and** a direct POST leaves
+  `TargetVersion`/`Status`/`CurrentNodeID`/`FirstNodeID` exactly as they were
+- a stale page posting an older version while the fleet is current → refused
 
 Poller tests inject `selfupdate.Options.HTTP`:
 
@@ -223,8 +312,12 @@ Poller tests inject `selfupdate.Options.HTTP`:
   asserted by reading the row back, not by inspecting process state
 - a dismissal does not disturb `latest_tag`/`checked_at`, and a successful check
   does not disturb the dismissal
-- `RELAYIUM_RELEASE_CHECK` disabled issues **no** request — asserted against a
-  transport that fails the test if it is called at all
+- `RELAYIUM_RELEASE_CHECK` disabled renders **no** part of the notice —
+  `TestAdminNoticeAbsentWhenTheCheckIsDisabled`, asserted through the rendered
+  dashboard. That it issues no request is structural (`main.go` builds the
+  poller only inside `if *releaseCheck`) rather than asserted against a
+  transport; do not let this bullet imply a test that does not exist, which is
+  what it did before.
 
 ## Out of scope
 
