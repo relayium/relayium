@@ -19,6 +19,7 @@
 - **Unparseable URLs fail open.** A URL that yields no `host:port` claims nothing and forces no skip; its entry stays in the pool. A parser that cannot read an unusual but working URL must never be able to empty the relay pool.
 - **Addresses are claimed only when an entry is actually appended** — never before the other skip checks. A node withheld by the traffic cap must not leave its address claimed behind it.
 - Existing precedence must not change: own nodes → fleet nodes → static config.
+- **Two of Task 2's tests are regression guards and pass before the change as well as after** — `TestICEKeepsDistinctRelays` and `TestICEKeepsEntriesWithUnparseableURLs`. They pin behaviour that must not change, rather than demonstrating new behaviour, so "it passed before implementation" is their purpose and not a defect. Do not rewrite them to fail first. An over-eager dedup silently shrinks the relay pool, and a shrunken pool looks exactly like a healthy one from the outside; these two are the only thing standing between that and production.
 - Conventional commits. Commit messages in English regardless of the working language.
 - No real node IP addresses or production relay ids anywhere in this repo. Tests use documentation-range addresses and invented ids.
 
