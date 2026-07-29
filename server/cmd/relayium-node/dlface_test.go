@@ -1,19 +1,25 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/relayium/relayium/internal/secure"
 )
 
 // installCert writes a dl.key + dl.crt pair into dir. It self-signs, which is
@@ -166,5 +172,91 @@ func TestResolveDownloadFaceRefusals(t *testing.T) {
 				t.Fatal("refused silently — an operator would have no way to find out why direct download is off")
 			}
 		})
+	}
+}
+
+// The listener and the advertised URL come from one call, so they cannot be
+// decided separately. Nil face: no server AND no URL. Real face: both.
+func TestStartDownloadFaceTiesListenerToAdvertisement(t *testing.T) {
+	srv, url := startDownloadFace(nil, http.NewServeMux())
+	if srv != nil || url != "" {
+		t.Fatalf("nil face produced srv=%v url=%q; central must keep proxying", srv, url)
+	}
+
+	dir := t.TempDir()
+	now := time.Now()
+	installCert(t, dir, "node7.relayium.com", now.Add(-time.Hour), now.AddDate(15, 0, 0), false)
+	face, why := resolveDownloadFace(dir, "https://node7.relayium.com", ":2053", now)
+	if face == nil {
+		t.Fatalf("setup: %s", why)
+	}
+	srv, url = startDownloadFace(face, http.NewServeMux())
+	if srv == nil || url != "https://node7.relayium.com" {
+		t.Fatalf("valid face produced srv=%v url=%q", srv, url)
+	}
+	if srv.Addr != ":2053" {
+		t.Fatalf("Addr = %q, want :2053", srv.Addr)
+	}
+}
+
+// Holds the WIRING through a real handshake, not just TLSConfig inspection:
+// the certificate a client actually receives must be the one on disk.
+func TestStartDownloadFaceServesTheInstalledCert(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	installCert(t, dir, "node7.relayium.com", now.Add(-time.Hour), now.AddDate(15, 0, 0), false)
+	face, why := resolveDownloadFace(dir, "https://node7.relayium.com", "127.0.0.1:0", now)
+	if face == nil {
+		t.Fatalf("setup: %s", why)
+	}
+	srv, _ := startDownloadFace(face, http.NewServeMux())
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go srv.ServeTLS(ln, "", "")
+	defer srv.Close()
+
+	conn, err := tls.Dial("tcp", ln.Addr().String(), &tls.Config{
+		InsecureSkipVerify: true, // the test CA is not in any trust store; we check the leaf ourselves
+		ServerName:         "node7.relayium.com",
+	})
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	defer conn.Close()
+
+	served := conn.ConnectionState().PeerCertificates[0]
+	if served.PublicKeyAlgorithm != x509.ECDSA {
+		t.Fatalf("served %v, want ECDSA (Cloudflare cannot handshake with Ed25519)", served.PublicKeyAlgorithm)
+	}
+	onDisk, err := os.ReadFile(filepath.Join(dir, dlCrtName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	blk, _ := pem.Decode(onDisk)
+	if !bytes.Equal(served.Raw, blk.Bytes) {
+		t.Fatal("the certificate served is not the one installed on disk")
+	}
+}
+
+// Central pins the identity certificate's fingerprint for the storage channel.
+// A key pinning depends on must not also be handed to every downloader.
+func TestDownloadCertIsNotTheIdentityCert(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	installCert(t, dir, "node7.relayium.com", now.Add(-time.Hour), now.AddDate(15, 0, 0), false)
+	id, err := secure.LoadOrCreateIdentity(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	face, why := resolveDownloadFace(dir, "https://node7.relayium.com", ":2053", now)
+	if face == nil {
+		t.Fatalf("setup: %s", why)
+	}
+	if bytes.Equal(face.Cert.Certificate[0], id.TLSCert.Certificate[0]) {
+		t.Fatal("the public download listener is serving the pinned identity certificate")
 	}
 }

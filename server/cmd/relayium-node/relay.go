@@ -228,6 +228,8 @@ func run(c config, st nodeState) error {
 			}
 		}
 	}()
+	// Set only when a usable download certificate is installed; see downloadFace.
+	var advertisedDownloadURL string
 	if c.StorageDir != "" {
 		ds, derr := storage.NewDiskStore(c.StorageDir)
 		if derr != nil {
@@ -283,12 +285,16 @@ func run(c config, st nodeState) error {
 
 		// Public direct-download face: a separate listener serving ONLY the
 		// token-authed /dl routes (never the bearer /blob API), which Cloudflare
-		// proxies to. CF terminates the browser-facing TLS and hides the node IP;
-		// the origin cert stays self-signed under CF's "Full" SSL mode, but it is
-		// its OWN ECDSA cert, not the node identity — CF cannot handshake with an
-		// Ed25519 origin cert, and the identity cert is fingerprint-pinned by
-		// central besides (see downloadServer).
-		if c.DownloadURL != "" && c.DownloadAddr != "" {
+		// proxies to. CF terminates the browser-facing TLS and hides the node IP.
+		// The origin certificate is a Cloudflare Origin CA certificate installed at
+		// dl.crt — the zone runs Full (strict), which validates it. It is NOT the
+		// node identity: CF cannot handshake with an Ed25519 origin certificate,
+		// and the identity certificate is fingerprint-pinned by central besides.
+		face, why := resolveDownloadFace(c.StateDir, c.DownloadURL, c.DownloadAddr, time.Now())
+		if why != "" {
+			log.Printf("relayium-node: direct download DISABLED, central will proxy for this node: %s", why)
+		}
+		if face != nil {
 			// After serving a download, report the bytes actually sent so central
 			// can refund any over-metering (async + best-effort — never block or
 			// fail the download on a receipt hiccup).
@@ -300,29 +306,25 @@ func run(c config, st nodeState) error {
 					}
 				}()
 			}
-			dlSrv, derr := downloadServer(c.DownloadAddr, urlHost(c.DownloadURL),
+			var dlSrv *http.Server
+			dlSrv, advertisedDownloadURL = startDownloadFace(face,
 				newDownloadHandler(ds, storageSecret, dlGuard, sendReceipt))
-			if derr != nil {
-				return fmt.Errorf("download listener certificate: %w", derr)
-			}
 			go func() {
 				if err := dlSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
 					log.Printf("relayium-node: public download server exited: %v", err)
 				}
 			}()
 			httpSrvs = append(httpSrvs, dlSrv)
-			log.Printf("relayium-node: public direct-download listener on %s → %s", c.DownloadAddr, c.DownloadURL)
+			log.Printf("relayium-node: public direct-download listener on %s → %s", face.Addr, face.URL)
 
 			// Auto-manage this node's Cloudflare A record (subdomain -> public IP,
 			// proxied) so bringing up a node needs no manual dashboard step.
 			if c.CFToken != "" && c.CFZoneID != "" {
-				if host := urlHost(c.DownloadURL); host != "" {
-					cf := &cfdns.Client{Token: c.CFToken, ZoneID: c.CFZoneID}
-					if err := cf.UpsertA(host, publicIP, true); err != nil {
-						log.Printf("relayium-node: cloudflare A-record upsert for %s failed: %v (set it manually)", host, err)
-					} else {
-						log.Printf("relayium-node: cloudflare A-record %s -> %s (proxied) ensured", host, publicIP)
-					}
+				cf := &cfdns.Client{Token: c.CFToken, ZoneID: c.CFZoneID}
+				if err := cf.UpsertA(face.Host, publicIP, true); err != nil {
+					log.Printf("relayium-node: cloudflare A-record upsert for %s failed: %v (set it manually)", face.Host, err)
+				} else {
+					log.Printf("relayium-node: cloudflare A-record %s -> %s (proxied) ensured", face.Host, publicIP)
 				}
 			}
 		}
@@ -333,11 +335,10 @@ func run(c config, st nodeState) error {
 		capabilities = append(capabilities, "storage")
 	}
 	// Only advertise a direct-download URL when this node actually serves storage;
-	// it's meaningless without a blob store to serve from.
-	downloadURL := ""
-	if storageURL != "" {
-		downloadURL = c.DownloadURL
-	}
+	// it's meaningless without a blob store to serve from. advertisedDownloadURL is
+	// set only inside the storage branch and only by startDownloadFace, so it is
+	// non-empty exactly when the listener is up.
+	downloadURL := advertisedDownloadURL
 	rr, err := rp.register(registerBody{
 		NodeID: st.NodeID, TURNSecret: st.TURNSecret, URLs: urls,
 		Region: c.Region, Version: version, Capabilities: capabilities,
