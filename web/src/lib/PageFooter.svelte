@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { lang, legalUrl, messages, type Messages } from "./i18n.svelte";
+  import { lang, legalUrl, messages, pageUrl, type Messages } from "./i18n.svelte";
   import { navigate, PRICING_PATH, APPS_PATH } from "./router.svelte";
 
   // Fineprint text differs per page (realtime E2E vs at-rest encryption story),
@@ -13,6 +13,10 @@
   <nav class="legal">
     <a href={APPS_PATH} onclick={(e) => { e.preventDefault(); navigate("apps"); }}>{t.nav.appsTab}</a>
     <a href={PRICING_PATH} onclick={(e) => { e.preventDefault(); navigate("pricing"); }}>{t.pricingPage.navLink}</a>
+    <!-- The 36 generated guides had no entry point from any SPA route: read the
+         six cards on /cli and there was no way to reach the other 30. Trailing
+         slash because the hub is a generated directory and the bare form 301s. -->
+    <a href={pageUrl("guides", lang()) + "/"}>{t.learn.hub}</a>
     <a href={legalUrl("support", lang())}>{t.legal.support}</a>
     <a href={legalUrl("security", lang())}>{t.legal.security}</a>
     <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>

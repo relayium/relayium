@@ -32,6 +32,9 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .ctacard p{margin:0 0 14px}
 .cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
 .related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
+.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 `;
@@ -209,6 +212,20 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
         author: org,
         publisher: org,
       },
+      // Every article sat two clicks below the homepage with nothing on the page
+      // saying so: no breadcrumb, and the only link back to the hub was in the
+      // footer. This gives Google the hierarchy explicitly (and earns the
+      // breadcrumb line in a search result instead of a bare URL).
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: SITE.name, item: absUrl(landingUrl(lang)) },
+          { "@type": "ListItem", position: 2, name: GUIDES_LABELS[lang], item: absUrl(urlPath("guides", lang)) },
+          // The last crumb carries no `item`: it is the current page, and
+          // Google's own guidance is to leave the trailing URL off.
+          { "@type": "ListItem", position: 3, name: doc.title },
+        ],
+      },
       ...(doc.faq
         ? [
             {
@@ -268,6 +285,7 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
   <body>
     <div class="wrap">
       <header><span class="logo">⇌</span><a href="${ctaHref(lang)}">Relayium</a></header>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="${landingUrl(lang)}">${esc(SITE.name)}</a> <span aria-hidden="true">›</span> <a href="${urlPath("guides", lang)}">${esc(GUIDES_LABELS[lang])}</a> <span aria-hidden="true">›</span> <span aria-current="page">${esc(doc.title)}</span></nav>
       <h1>${esc(doc.title)}</h1>
       <p class="updated">${esc(doc.updatedLabel)}: ${esc(dateModified)}</p>
       ${langBar(slug, lang)}

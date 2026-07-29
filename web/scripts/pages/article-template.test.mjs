@@ -60,13 +60,39 @@ describe("buildArticlePages", () => {
     expect(en).toContain('<a href="/privacy/">Privacy</a>');
   });
 
+  it("puts a breadcrumb above the h1, and a BreadcrumbList in the graph", () => {
+    const en = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
+    const crumbs = en.slice(en.indexOf('<nav class="crumbs"'), en.indexOf("<h1>"));
+    expect(crumbs).toContain('href="/">Relayium</a>');
+    expect(crumbs).toContain('href="/guides/">Guides</a>');
+    expect(crumbs).toContain('aria-current="page"');
+
+    const ld = JSON.parse(en.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)[1].replace(/\\u003c/g, "<"));
+    const crumb = ld["@graph"].find((n) => n["@type"] === "BreadcrumbList");
+    expect(crumb.itemListElement.map((i) => i.position)).toEqual([1, 2, 3]);
+    expect(crumb.itemListElement[0].item).toBe("https://relayium.com/");
+    expect(crumb.itemListElement[1].item).toBe("https://relayium.com/guides/");
+    // Google's guidance: the current page is the last crumb and carries no URL.
+    expect(crumb.itemListElement[2].item).toBeUndefined();
+  });
+
+  it("localises the breadcrumb rather than linking the English hub", () => {
+    const zh = pages.find((p) => p.path === "zh/compare/snapdrop/index.html").html;
+    const crumbs = zh.slice(zh.indexOf('<nav class="crumbs"'), zh.indexOf("<h1>"));
+    expect(crumbs).toContain('href="/zh/"');
+    expect(crumbs).toContain('href="/zh/guides/"');
+  });
+
   it("links the Guides hub in the footer", () => {
     const en = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
     expect(en).toContain('href="/guides/">Guides<');
   });
 
   it("footer order: Relayium link, then Guides, then Privacy", () => {
-    const en = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
+    const html = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
+    // Scope to the footer. The breadcrumb above <h1> also links /guides/, so an
+    // indexOf over the whole document finds that one and measures nothing.
+    const en = html.slice(html.lastIndexOf("<footer>"));
     const relayiumIdx = en.indexOf(">← Relayium<");
     const guidesIdx = en.indexOf('href="/guides/">Guides<');
     const privacyIdx = en.indexOf('href="/privacy/">Privacy<');

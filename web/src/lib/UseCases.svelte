@@ -1,7 +1,23 @@
 <script lang="ts">
-  import { lang, messages, type Messages } from "./i18n.svelte";
+  import { lang, messages, pageUrl, type Messages } from "./i18n.svelte";
   import { reveal } from "./reveal";
   const t = $derived<Messages>(messages[lang()]);
+
+  // The four cards are the most self-identifying thing on the homepage — a
+  // reader picks the one that is their situation — and they were plain text, so
+  // that recognition led nowhere. Each now opens the guide that answers it.
+  //
+  // Indexed by position, so this array and `useCases.items` in i18n/*.ts must
+  // stay the same length and order; the test in use-cases.test.ts fails if they
+  // drift apart. Trailing slash: these are generated directories, and the
+  // slash-less form 301s.
+  const CASE_SLUGS = [
+    "how-to/send-large-files-without-cloud", // 🌍 big files across the world
+    "how-to/share-a-file-with-an-expiring-link", // ⏳ when they're not online
+    "how-to/send-files-pc-to-phone-wirelessly", // 📱 phone ↔ computer
+    "guides/how-relayium-encrypts-your-files", // 🔒 privacy-sensitive one-shot
+  ];
+  const caseHref = (i: number) => pageUrl(CASE_SLUGS[i], lang()) + "/";
 </script>
 
 <section class="cases" aria-label={t.useCases.title}>
@@ -11,13 +27,13 @@
   </div>
   <div class="grid">
     {#each t.useCases.items as c, i (c.title)}
-      <div class="case reveal" use:reveal={{ delay: i * 60 }}>
+      <a class="case reveal" href={caseHref(i)} use:reveal={{ delay: i * 60 }}>
         <span class="icon" aria-hidden="true">{c.icon}</span>
         <div class="body">
           <h3>{c.title}</h3>
           <p>{c.desc}</p>
         </div>
-      </div>
+      </a>
     {/each}
   </div>
 </section>
@@ -37,8 +53,11 @@
     border: 1px solid var(--border); border-radius: var(--radius);
     background: var(--surface-2); padding: var(--space-5);
     transition: border-color .13s, box-shadow .13s;
+    text-decoration: none; color: inherit;
   }
   .case:hover { border-color: var(--accent-border); box-shadow: var(--shadow); }
+  .case:hover h3 { color: var(--accent); }
+  .case:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .icon {
     flex: none; width: 44px; height: 44px; line-height: 44px; text-align: center;
     font-size: 24px; border-radius: var(--radius-sm); background: var(--accent-bg);
