@@ -647,18 +647,21 @@ func (s *Service) handleAdminRolloutPause(w http.ResponseWriter, r *http.Request
 // other thing that clears those results is retyping the target. That is a
 // rollout silently finishing over a machine it never updated.
 //
-// The asymmetry with "failed"/"rolled_back" is the point, not an omission:
-// ClearPassedOverResults erases only "skipped" and "unreachable". A failure is
-// the judgement that STOPPED the track, and resuming is a decision to carry on
-// past it, never a licence to forget it — decideByo's failure rate and
-// emergencyRefusesNode both still read those rows.
+// The asymmetry with "failed"/"rolled_back" is the point, not an omission: the
+// clear erases only "skipped" and "unreachable". A failure is the judgement that
+// STOPPED the track, and resuming is a decision to carry on past it, never a
+// licence to forget it — decideByo's failure rate and emergencyRefusesNode both
+// still read those rows.
 //
-// Cleared BEFORE the resume, for setTargetVersion's reason: a failed clear must
-// not leave a track rolling with stale exclusions. Reversed, the operator could
-// not even retry, since the track is no longer halted for 继续 to act on. In the
-// other direction, the harm of clearing when the resume then fails is nil for a
-// still-halted track (halted tracks are inert, and the next 继续 clears again)
-// and at worst one re-offer of the build on a track that had already moved on.
+// The clear is NOT a separate call here. It happens inside ResumeRolloutTrack's
+// transaction, conditional on the status compare-and-swap having matched, and it
+// has to: a 继续 this handler goes on to REFUSE with 400 must leave the track
+// exactly as it found it. The reachable case is a track that has completed —
+// every node passed over is now an ordinary outcome — with a stale panel still
+// offering the control. Clearing there would erase the markers the panel's
+// finished-but-incomplete count and the per-node retry guard are both derived
+// from, destroying the report and the repair affordance for precisely the nodes
+// that need them, while telling the operator nothing happened.
 func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -667,10 +670,6 @@ func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Reques
 	track := r.PathValue("id")
 	if !validRolloutTrack(track) {
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "继续失败：未知轨道 "+track)
-		return
-	}
-	if err := s.Store().ClearPassedOverResults(r.Context(), rolloutOwnerClass(track)); err != nil {
-		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "继续失败："+err.Error())
 		return
 	}
 	ok, err := s.Store().ResumeRolloutTrack(r.Context(), track, s.Now().Unix())

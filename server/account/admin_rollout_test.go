@@ -389,11 +389,11 @@ func TestEmergencyReleaseIsSeparateActionAndAudited(t *testing.T) {
 
 // A leftover failure from a PREVIOUS rollout must NOT exclude a node from an
 // emergency release. Nothing clears a FAILURE result except CommandNodeUpdate —
-// not re-register, not heartbeat, and not SetTargetVersion, whose
-// ClearPassedOverResults erases only "skipped"/"unreachable" — so before the
-// guard was time-scoped a
-// single stale "failed" made a machine sit out every future emergency release,
-// silently and forever. The STAGED ladder would have re-commanded that same node
+// not re-register, not heartbeat, and neither SetTargetVersion nor
+// ResumeRolloutTrack, whose erase spares failures by design — so before the
+// guard was time-scoped, a single stale "failed" made a machine sit out every
+// future emergency release, silently and forever. The STAGED ladder would have
+// re-commanded that same node
 // (decideFleet/decideByo use failures for the halt rate, never to exclude
 // candidates), so the emergency path was STRICTER than staging in exactly the
 // place it is meant to be looser.

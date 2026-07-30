@@ -159,8 +159,32 @@ func (s *SQLiteStore) HaltRolloutTrack(ctx context.Context, track, reason string
 //   - emergency back to 0: resuming is the staged, careful path. An emergency
 //     release that was halted must be re-armed explicitly (and re-confirmed),
 //     never silently by pressing 继续.
+//
+// It also clears this track's passed-over results, and that clear is INSIDE the
+// transaction with the compare-and-swap above, conditional on it having matched.
+// 继续 restarts the ladder from the beginning, so a node marked "skipped" or
+// "unreachable" by the halted rollout must become a candidate again — see
+// handleAdminRolloutResume for why, and ClearPassedOverResults for what the
+// markers do. Failures are spared: resuming is a decision to carry on past the
+// judgement that stopped the track, never a licence to forget it.
+//
+// The two writes cannot be separate statements in either order. Clearing first
+// and then finding the CAS matches nothing (the track completed, or another
+// instance already resumed it) erases markers on a track that did not move — and
+// those markers are load-bearing: the panel derives its finished-but-incomplete
+// count from them and the per-node retry is guarded on them, so a refused 继续
+// would delete both the report and the repair affordance for the nodes that need
+// them. Writing the row first and then failing the clear leaves a track rolling
+// with stale exclusions and no longer halted for a second 继续 to act on. One
+// transaction has neither failure mode.
 func (s *SQLiteStore) ResumeRolloutTrack(ctx context.Context, track string, at int64) (bool, error) {
-	res, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+
+	res, err := tx.ExecContext(ctx,
 		`UPDATE node_rollout SET status = 'rolling', halted_reason = '', current_node_id = '',
 		   first_node_id = '', byo_batch = 0, emergency = 0, stage_started_at = ?
 		   WHERE track = ? AND status = 'halted'`,
@@ -172,7 +196,17 @@ func (s *SQLiteStore) ResumeRolloutTrack(ctx context.Context, track string, at i
 	if err != nil {
 		return false, err
 	}
-	return n == 1, nil
+	if n != 1 {
+		// Not halted. Roll back rather than clear anything.
+		return false, nil
+	}
+	if _, err := tx.ExecContext(ctx, clearPassedOverResultsSQL, rolloutOwnerClass(track)); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // SetRolloutEmergency arms emergency mode on a track that is rolling to
@@ -313,9 +347,11 @@ func (s *SQLiteStore) NodesByOwnerType(ctx context.Context, ownerType string) ([
 //     (both numerator and denominator are empty) and the BYO track can never
 //     halt however bad the build is;
 //   - update_result is CLEARED, because it survives re-register and heartbeat
-//     and the only other writer of it (ClearPassedOverResults) spares failures:
-//     a stale "failed" from the node's previous command would otherwise read as
-//     a failure of the command being issued right now.
+//     and the only other things that CLEAR it (setTargetVersion and
+//     ResumeRolloutTrack, both via clearPassedOverResultsSQL) spare failures: a
+//     stale "failed" from the node's previous command would otherwise read as a
+//     failure of the command being issued right now. SetNodeUpdateResult writes
+//     the column too, but it is the node reporting an outcome, never an erase.
 //   - update_attempts is reset to 0 for hygiene. Nothing reads it as a bound
 //     anymore (the fleet resume path now bounds itself by elapsed time since
 //     update_started_at, not by this counter — see Node.UpdateAttempts), but
@@ -328,6 +364,13 @@ func (s *SQLiteStore) CommandNodeUpdate(ctx context.Context, nodeID, fromVersion
 	return err
 }
 
+// clearPassedOverResultsSQL is shared by the two writes that hand a passed-over
+// node its candidacy back — ClearPassedOverResults (called by setTargetVersion)
+// and ResumeRolloutTrack, which runs it inside its transaction. One statement,
+// one place, so the two cannot drift into disagreeing about which results count
+// as passed over. Takes owner_type as its only parameter.
+const clearPassedOverResultsSQL = `UPDATE nodes SET update_result = '' WHERE owner_type = ? AND update_result IN ('skipped', 'unreachable')`
+
 // ClearPassedOverResults wipes the update results that decideFleet reads as
 // "this node has already had its turn in the rollout that is running now" --
 // "skipped" and "unreachable" -- for one ownership class of nodes.
@@ -339,8 +382,13 @@ func (s *SQLiteStore) CommandNodeUpdate(ctx context.Context, nodeID, fromVersion
 // re-commanded, so it could never clear its own flag: without this the first
 // pass-over would strand the node in EVERY later rollout, permanently. Scoping
 // the exclusion at the read instead was tried twice and cannot work -- see
-// passedOverResult. Clearing it at the one write that starts a new rollout can:
+// passedOverResult. Clearing it whenever a rollout starts or restarts can:
 // afterwards a passed-over result can only belong to the rollout in flight.
+//
+// Two writes do that clearing, and both must, because either one alone leaves a
+// gap: setTargetVersion through this method (a new target), and
+// ResumeRolloutTrack in its own transaction (继续 on the same target). Anything
+// added here that restarts a ladder needs the same treatment.
 //
 // ownerType comes from rolloutOwnerClass, so retargeting one track can never
 // clear the other track's node rows -- the fleet and byo rollouts are
@@ -352,9 +400,7 @@ func (s *SQLiteStore) CommandNodeUpdate(ctx context.Context, nodeID, fromVersion
 // read, and clearing them here would make a node commanded moments before a
 // retarget look like one that was never commanded at all.
 func (s *SQLiteStore) ClearPassedOverResults(ctx context.Context, ownerType string) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE nodes SET update_result = '' WHERE owner_type = ? AND update_result IN ('skipped', 'unreachable')`,
-		ownerType)
+	_, err := s.db.ExecContext(ctx, clearPassedOverResultsSQL, ownerType)
 	return err
 }
 

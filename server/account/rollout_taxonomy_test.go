@@ -335,6 +335,62 @@ func TestResumeClearsPassedOverResultsButNotFailures(t *testing.T) {
 	}
 }
 
+// A REFUSED 继续 must change nothing. The clear and the status compare-and-swap
+// are one operation or the operator loses state by pressing a button that then
+// tells them it did nothing.
+//
+// The case is reachable without a race: the track completed (every node passed
+// over, which is now an ordinary outcome), the panel still offers 继续 on a stale
+// page, the operator presses it. The CAS matches no row -- 'complete' is not
+// 'halted' -- so they get 该轨道当前不是已中止状态 and a 400. If the clear ran
+// first it has already erased every "unreachable"/"skipped" marker on the track,
+// and those markers are load-bearing downstream: the panel derives 完成，但 N 台
+// 未更新 from them and the per-node retry is guarded on them. A refused resume
+// would therefore delete both the report of what went wrong and the affordance
+// to fix it, for exactly the nodes that need repairing.
+func TestRefusedResumeDoesNotClearPassedOverResults(t *testing.T) {
+	ts, store := newRolloutFullServer(t)
+	cookie := adminLoginCookie(t, ts)
+	ctx := context.Background()
+
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v2.0.0", Status: "complete", StageStartedAt: tNow - 100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertNode(ctx, Node{
+		ID: "n1", OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "s",
+		Version: "v1.0.0", CreatedAt: 1, LastSeenAt: tNow,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetNodeUpdateResult(ctx, "n1", "unreachable"); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := postAdminForm(t, ts, cookie, "/admin/rollout/fleet/resume", url.Values{})
+	body := readAll(t, resp)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("resume on a complete track: want a legible 400, got %d\n%s", resp.StatusCode, body)
+	}
+
+	n, ok, err := store.GetNode(ctx, "n1")
+	if err != nil || !ok {
+		t.Fatalf("GetNode: %v/%v", ok, err)
+	}
+	if n.UpdateResult != "unreachable" {
+		t.Errorf("a refused 继续 erased the passed-over marker: n1 = %q, want unreachable", n.UpdateResult)
+	}
+	tr, _, err := store.GetRolloutTrack(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Status != "complete" {
+		t.Errorf("a refused 继续 moved the track to %q", tr.Status)
+	}
+}
+
 type clearFailStore struct {
 	*SQLiteStore
 }
