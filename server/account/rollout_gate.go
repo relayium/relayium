@@ -118,18 +118,58 @@ func (s *Service) setTargetVersion(ctx context.Context, track, version string, e
 		if fleet.Status != "complete" || !selfupdate.SameVersion(fleet.TargetVersion, version) {
 			return fmt.Errorf("%w: fleet is on %q/%q", ErrByoAheadOfFleet, fleet.TargetVersion, fleet.Status)
 		}
+		// The track row alone does NOT carry the property this gate certifies.
+		// "complete" means decideFleet ran out of candidates, and a node that
+		// could not obtain the artifact is passed over rather than halting the
+		// track — so a release published with a broken asset fails on every
+		// fleet machine, all of them are passed over, and the track completes on
+		// a version no machine we own ever ran a byte of. Admitting that onto
+		// user machines is precisely what the ordering above exists to prevent.
+		//
+		// So ask the machines, not the row: at least one fleet node actually
+		// running this version. ONE, not a proportion — the question is "did a
+		// machine we own run this build", which is a yes/no, and a percentage
+		// would be a threshold to tune with no principled value on a fleet this
+		// size. An empty fleet therefore fails, which is correct: it has
+		// certified nothing.
+		//
+		// This was a protection a bug used to provide. Before passing over was
+		// fixed, a track with two or more passed-over nodes could never complete
+		// (they were re-commanded forever), so the gate was shielded by the loop.
+		//
+		// The fix belongs HERE and not in decideFleet: "complete" has always
+		// meant the queue finished, and "skipped" could already produce a
+		// completion with a node left behind. Changing what the producer emits to
+		// suit one consumer's misreading would leave the misreading in place for
+		// the next consumer.
+		fleetNodes, err := s.store.NodesByOwnerType(ctx, rolloutOwnerClass("fleet"))
+		if err != nil {
+			return err
+		}
+		ran := false
+		for _, n := range fleetNodes {
+			if selfupdate.SameVersion(n.Version, version) {
+				ran = true
+				break
+			}
+		}
+		if !ran {
+			return fmt.Errorf("%w: the fleet track completed %q but no fleet node is running it, "+
+				"so nothing we own has actually run this build", ErrByoAheadOfFleet, version)
+		}
 		// Non-transactional read-then-write is safe here even though this
-		// deployment is multi-instance. The property this gate certifies is
-		// "the fleet track has ALREADY COMPLETED this version" — a fact
-		// about the past. Once we've observed complete@X above, admitting
-		// byo->X is justified no matter what the fleet row becomes between
-		// this read and the PutRolloutTrack below (it could move on to
-		// complete@Y, or start rolling again; neither retroactively un-ships
-		// X). The only other interleaving — this read sees "rolling" while
-		// the fleet concurrently completes — fails CLOSED (we return
-		// ErrByoAheadOfFleet above) and the admin simply retries. There is
-		// no interleaving that admits a byo target the fleet never
-		// completed, so no transaction is needed.
+		// deployment is multi-instance. Both properties this gate certifies are
+		// facts about the PAST: "the fleet track has ALREADY COMPLETED this
+		// version", and "a fleet machine has ALREADY RUN it". Once we have
+		// observed complete@X and a node on X above, admitting byo->X is
+		// justified no matter what either row becomes between here and the
+		// PutRolloutTrack below (the fleet could move on to complete@Y, or start
+		// rolling again, and that node could be rolled back; none of it
+		// retroactively un-ships X). The opposite interleavings — this read sees
+		// "rolling", or sees the node a moment before it reports the new version
+		// — fail CLOSED, returning ErrByoAheadOfFleet, and the admin simply
+		// retries. There is no interleaving that admits a byo target the fleet
+		// never completed and never ran, so no transaction is needed.
 	}
 	// Clear the results that mark a node as already passed over, BEFORE the row
 	// write. decideFleet excludes any node whose last result is
