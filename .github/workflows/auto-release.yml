@@ -93,7 +93,10 @@ jobs:
           {
             echo "### $count commits since \`$last\`"
             echo
-            git log --format='- %s' "$last"..HEAD | head -40
+            # Let git bound its own output. With `pipefail`, piping a longer
+            # history into `head` makes git receive SIGPIPE and exit 141,
+            # aborting the release exactly when there are more than 40 commits.
+            git log -n 40 --format='- %s' "$last"..HEAD
           } >> "$GITHUB_STEP_SUMMARY"
 
       # A red main must stop the release, and must stop it LOUDLY. Skipping
