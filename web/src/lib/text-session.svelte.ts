@@ -132,6 +132,12 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
   // 硬失败整条会话。文件接收那一侧用同一个手法（transfer-session 的 pending 链）。
   let recvChain: Promise<void> = Promise.resolve();
   let unlisten: (() => void) | null = null;
+  // 当前"这一次尝试"的代号。openWith 要 await deps.connect()，而在那个 await 悬着的
+  // 时候 end()、换房间、拒绝都可能已经把会话收掉了。续体拿自己开始时的快照和这个值
+  // 比：不一致就说明它已经被取代，那条**迟到的连接必须自己关掉**，并且一个字节的
+  // status/history/keys 都不许改——否则它会把用户已经关掉的会话重新点亮，还漏掉一条
+  // 开着的连接。
+  let attempt = 0;
   // 页面生命周期内有效，有意如此：被拒绝过的对端不能靠重开一条连接再问一次。换一个
   // 新的 peer id 就能绕过它——这一点和这个应用里所有按 peer 做的决定一样，是已知代价。
   const refused = new Set<string>();
@@ -154,6 +160,9 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
 
   /** 收尾一次。幂等：已经收尾过就什么都不做。 */
   function finish(next: TextStatus, key: TextErrorKey = "") {
+    // 无条件递增，而且在下面那个提前 return 之前：状态已经是终态时更不该让一次
+    // 在途的尝试落地。
+    attempt++;
     if (status === "idle" || status === "ended" || status === "failed"
         || status === "refused" || status === "unsupported" || status === "peerBusy") {
       return;
@@ -256,6 +265,10 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
     },
 
     async openWith(id: string): Promise<void> {
+      // 已经有一次尝试或一场会话在跑就直接不理。UI 那边 busy 已经把按钮禁掉了，这里
+      // 是第二道：重入会 resetSession() 掉一场活着的会话的历史，而两次 openWith 交错
+      // 落地还会让一条连接无人认领。
+      if (active()) return;
       // 在**任何**尝试之前就挡住：跑旧版本的对端绝不能收到一条它会当成文件传输、然后
       // 等一个永远不来的 manifest 的 offer。
       if (!peerSupportsText(id)) {
@@ -264,12 +277,15 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
         errorKey = "unsupported";
         return;
       }
+      const mine = ++attempt;
       resetSession();
       peerId = id;
       status = "connecting";
       errorKey = "";
       try {
         const c = await deps.connect(id);
+        // 迟到了：这次尝试已经被取代。把连接关掉，什么都不改。
+        if (mine !== attempt) { try { c.close(); } catch { /* already gone */ } return; }
         conn = c;
         keys = c.keys;
         sasCode = c.sas;
@@ -278,6 +294,8 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
         status = "waitingAccept";
         touch();
       } catch (err) {
+        // 失败也一样会迟到，而 "failed"/"peerBusy" 同样会盖掉用户看到的 "ended"。
+        if (mine !== attempt) return;
         if (err instanceof PeerBusyError) {
           status = "peerBusy";
           errorKey = "peerBusy";

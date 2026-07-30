@@ -36,7 +36,7 @@ async function drainUntil(pred: () => boolean, maxTicks = 4000) {
   for (let i = 0; i < maxTicks && !pred(); i++) await new Promise((r) => setTimeout(r, 0));
 }
 
-async function harness(opts: { failWith?: Error; autoTick?: number } = {}) {
+async function harness(opts: { failWith?: Error; autoTick?: number; deferred?: boolean } = {}) {
   const a = generateKeyPair();
   const b = generateKeyPair();
   const ka = await deriveSession("initiator", a, b.publicKey);
@@ -52,7 +52,19 @@ async function harness(opts: { failWith?: Error; autoTick?: number } = {}) {
   const conn = (keys: SessionKeys, channel: FakeChannel): TextConn => ({
     channel, keys, sas: "123456", path: "lan", close: () => channel.close(),
   });
+  // deferred 模式：每次 connect 都挂起，测试自己决定什么时候、以什么顺序落地。
+  const attempts: { ch: FakeChannel; resolve: () => void; reject: (e: Error) => void }[] = [];
   const connectFn = vi.fn(async () => {
+    if (opts.deferred) {
+      const channel = fakeChannel();
+      return await new Promise<TextConn>((res, rej) => {
+        attempts.push({
+          ch: channel,
+          resolve: () => res(conn(ka, channel)),
+          reject: (e) => rej(e),
+        });
+      });
+    }
     if (opts.failWith) throw opts.failWith;
     return conn(ka, ch);
   });
@@ -62,7 +74,7 @@ async function harness(opts: { failWith?: Error; autoTick?: number } = {}) {
     now,
   });
   return {
-    s, ch, ka, kb, connectFn,
+    s, ch, ka, kb, connectFn, attempts,
     /** Deliver an inbound text connection the way App.svelte's listener will. */
     inbound(peerId: string, channel: FakeChannel = ch) {
       if (!listening) { s.listenForRequests(); listening = true; }
@@ -355,6 +367,119 @@ describe("text session", () => {
     expect(s.active()).toBe(true);
     s.end();
     expect(s.active()).toBe(false);
+  });
+
+  // ── stale attempts ─────────────────────────────────────────────────────────
+  // openWith awaits deps.connect. Anything that ends the session while that await
+  // is outstanding -- end(), a room switch, a decline -- must not be undone when
+  // the connection finally lands. Before the epoch guard the continuation assigned
+  // conn/keys, re-attached handlers and set status back to "waitingAccept",
+  // resurrecting a session the user had closed and leaking the connection.
+  it("a connection arriving after end() is closed and changes nothing", async () => {
+    const { s, attempts } = await harness({ deferred: true });
+    recordPeerCaps("p1", { caps: [CAP_TEXT] });
+    const pending = s.openWith("p1");
+    expect(s.status).toBe("connecting");
+
+    s.end();
+    expect(s.status).toBe("ended");
+
+    attempts[0].resolve();
+    await pending;
+    await settle();
+
+    expect(s.status).toBe("ended");                  // not resurrected
+    expect(attempts[0].ch.readyState).toBe("closed"); // the late connection was closed
+    expect(attempts[0].ch.onmessage).toBe(null);      // no handler was attached
+    expect(attempts[0].ch.onclose).toBe(null);
+    expect(s.history).toEqual([]);
+    expect(s.errorKey).toBe("");
+    // And the session really is dead, not merely labelled so.
+    await s.send("must be impossible");
+    expect(attempts[0].ch.sent.length).toBe(0);
+    expect(s.history).toEqual([]);
+  });
+
+  it("a connect failure arriving after end() does not overwrite the ended state", async () => {
+    const { s, attempts } = await harness({ deferred: true });
+    recordPeerCaps("p1", { caps: [CAP_TEXT] });
+    const pending = s.openWith("p1");
+    s.end();
+    attempts[0].reject(new Error("ice timeout"));
+    await pending;
+    await settle();
+    expect(s.status).toBe("ended");
+    expect(s.errorKey).toBe("");
+  });
+
+  it("a busy rejection arriving after end() does not overwrite it either", async () => {
+    const { s, attempts } = await harness({ deferred: true });
+    recordPeerCaps("p1", { caps: [CAP_TEXT] });
+    const pending = s.openWith("p1");
+    s.end();
+    attempts[0].reject(new PeerBusyError());
+    await pending;
+    await settle();
+    expect(s.status).toBe("ended");
+    expect(s.errorKey).toBe("");
+  });
+
+  // A decline while connecting takes the same path through finish().
+  it("a connection arriving after a session was declined is closed", async () => {
+    const { s, ch, kb, attempts } = await harness({ deferred: true });
+    // An inbound request, declined, and then an unrelated outbound attempt that
+    // was already in flight lands late.
+    recordPeerCaps("p1", { caps: [CAP_TEXT] });
+    const pending = s.openWith("p1");
+    s.end();
+    void ch; void kb;
+    attempts[0].resolve();
+    await pending;
+    await settle();
+    expect(s.active()).toBe(false);
+    expect(attempts[0].ch.readyState).toBe("closed");
+  });
+
+  // Defence in depth against overlap: a second attempt while one is in flight
+  // must not tear down or interleave with the first.
+  it("refuses a second openWith while one is already in flight", async () => {
+    const { s, attempts, connectFn } = await harness({ deferred: true });
+    recordPeerCaps("p1", { caps: [CAP_TEXT] });
+    recordPeerCaps("p2", { caps: [CAP_TEXT] });
+    const first = s.openWith("p1");
+    await s.openWith("p2");
+    expect(connectFn).toHaveBeenCalledTimes(1);
+    expect(s.peerId).toBe("p1");
+    expect(s.status).toBe("connecting");
+    attempts[0].resolve();
+    await first;
+    expect(s.status).toBe("waitingAccept");
+    expect(s.peerId).toBe("p1");
+  });
+
+  it("refuses openWith while a session is already open", async () => {
+    const { s, peerAccepts, connectFn } = await harness();
+    recordPeerCaps("p1", { caps: [CAP_TEXT] });
+    await s.openWith("p1");
+    await peerAccepts();
+    await s.send("kept");
+    await s.openWith("p1");
+    expect(connectFn).toHaveBeenCalledTimes(1);
+    expect(s.status).toBe("open");
+    expect(s.history.map((m) => m.body)).toEqual(["kept"]); // not wiped
+  });
+
+  it("still opens again once a session has ended", async () => {
+    const { s, ch, peerAccepts, connectFn } = await harness();
+    recordPeerCaps("p1", { caps: [CAP_TEXT] });
+    await s.openWith("p1");
+    await peerAccepts();
+    ch.onclose!();
+    expect(s.status).toBe("ended");
+    ch.readyState = "open";
+    await s.openWith("p1");
+    expect(connectFn).toHaveBeenCalledTimes(2);
+    expect(s.status).toBe("waitingAccept");
   });
 
   // ── history ────────────────────────────────────────────────────────────────
