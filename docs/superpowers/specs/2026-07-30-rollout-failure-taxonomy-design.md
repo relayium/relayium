@@ -135,6 +135,36 @@ The one honest cost: code reading `Status == "complete"` and inferring "every
 node updated" would still be wrong. It was already wrong before this change, for
 the pre-existing `skipped` case.
 
+## The BYO gate has to check what it claims to certify
+
+`setTargetVersion`'s BYO branch (`rollout_gate.go:111`) admits a BYO target when
+the fleet track is `complete` on that same version. Its doc calls the certified
+property *"the fleet track has ALREADY COMPLETED this version"* and says the
+ordering is "the entire justification for auto-updating machines we don't own."
+
+`complete` does not carry that meaning. It means the queue ran out of
+candidates. With passing-over fixed, a release published with a broken asset
+fails on every fleet node, all are passed over, the queue empties, and the track
+completes on a version **no machine we own ever ran a byte of** — after which
+the gate would point users' machines at it.
+
+This is not a new risk discovered here; it is a protection this work removed by
+accident. Before the passing-over fix the re-command loop meant a track with two
+or more passed-over nodes never completed at all, so the gate was shielded by a
+bug.
+
+**The fix belongs at the gate, not at `decideFleet`.** `complete` has always
+meant "the queue finished" — `skipped` could already produce a completion with a
+node left behind, and the loop merely kept it from happening at scale. Changing
+what the producer emits to suit one consumer's misreading would leave the
+misreading in place for the next consumer. So: the gate additionally requires
+that **at least one fleet node is actually running that version**.
+
+One node, not a proportion. The question the gate is asking is "did a machine we
+own actually run this build" — that is a yes/no, and a percentage would be a
+threshold to tune with no principled value on a six-machine fleet. An empty
+fleet answers no, correctly: it has certified nothing.
+
 ## Retrying a node
 
 Mechanically the smallest thing that works: **clear that node's

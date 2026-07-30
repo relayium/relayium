@@ -380,6 +380,62 @@ func TestDecideFleetAdvancesPastUnreachable(t *testing.T) {
 	}
 }
 
+// The test that would have caught two failed attempts at this task: drive the
+// state machine the way the real caller does and assert it CONVERGES.
+//
+// Both attempts scoped the exclusion on a clock, and both looked right in a
+// single-evaluation fixture while cycling forever in the sequence. A test that
+// evaluates once cannot see a loop; this one replays the caller's writes.
+func TestDecideFleetConvergesWhenEveryNodeFailsToFetch(t *testing.T) {
+	tr := fleetTrackAt("v2.0.0", "rolling", "", "")
+	nodes := []NodeSnapshot{
+		{ID: "n1", Version: "v1.0.0", LastSeenAt: 9000},
+		{ID: "n2", Version: "v1.0.0", LastSeenAt: 9000},
+		{ID: "n3", Version: "v1.0.0", LastSeenAt: 9000},
+	}
+	byID := func(id string) *NodeSnapshot {
+		for i := range nodes {
+			if nodes[i].ID == id {
+				return &nodes[i]
+			}
+		}
+		return nil
+	}
+	commanded := map[string]int{}
+	now := int64(1000)
+	for step := 0; step < 20; step++ {
+		d := decideFleet(tr, nodes, now)
+		switch d.Action {
+		case "update":
+			// Mirror the real caller: ClaimRolloutNode moves the track's
+			// pointers and restamps the stage; CommandNodeUpdate stamps the
+			// node and CLEARS its previous result.
+			tr.CurrentNodeID = d.NodeID
+			if d.IsFirst {
+				tr.FirstNodeID = d.NodeID
+			}
+			tr.StageStartedAt = now
+			n := byID(d.NodeID)
+			n.UpdateStartedAt, n.UpdateResult = now, ""
+			commanded[d.NodeID]++
+			if commanded[d.NodeID] > 1 {
+				t.Fatalf("step %d: %s commanded twice — the queue is cycling, not converging", step, d.NodeID)
+			}
+			// The node cannot fetch, and says so.
+			n.UpdateResult = "unreachable"
+		case "complete":
+			if len(commanded) != 3 {
+				t.Fatalf("completed after commanding %d of 3 nodes", len(commanded))
+			}
+			return
+		case "halt":
+			t.Fatalf("step %d: a fleet-wide fetch failure must not halt: %+v", step, d)
+		}
+		now += 10
+	}
+	t.Fatal("decideFleet never reached a terminal decision in 20 evaluations")
+}
+
 // The exclusion is by RESULT, not by "is the current node". With a single
 // skipped-id the queue re-commands a passed-over node as soon as some other
 // node takes the slot, which is an endless loop rather than a rollout: n1
@@ -479,7 +535,19 @@ Exclude by **result** instead:
 if online(n) && !onTarget(n) && !passedOverResult(n.UpdateResult) {
 ```
 
-with a small helper reporting true for `"skipped"` and `"unreachable"`. This is safe because `CommandNodeUpdate` clears `update_result` when it commands a node, so a stale result cannot survive a re-command, and Task 5's retry clears it explicitly. The `skipped` variable becomes redundant — remove it and its assignment, and check whether `reassertFirst`, which is set alongside it, still needs to be.
+with a small helper reporting true for `"skipped"` and `"unreachable"`. The `skipped` variable becomes redundant — remove it and its assignment, and check whether `reassertFirst`, which is set alongside it, still needs to be.
+
+**`passedOverResult` takes the result string and nothing else. Do not give it a rollout scope.** Two earlier attempts tried, and both failed the same way: `update_result` outlives a rollout, so a read-time rule needs a clock to say "was this reported for the rollout running now" — and **no clock available to `decideFleet` is stable**, because `nodes.go:673-677` moves `FirstNodeID` onto each new pick whenever the outgoing node was the canary, which is exactly what a pass-over triggers. `tr.StageStartedAt` and the canary's `UpdateStartedAt` therefore move under the identical trigger, and both produce an infinite re-command loop one hop later. Read-time cleverness is the wrong layer.
+
+**Scope it at the write instead.** `setTargetVersion` (`server/account/rollout_gate.go`) is the single place a track's target changes and already performs a whole-row write. Clear the tainted results there:
+
+```sql
+UPDATE nodes SET update_result = '' WHERE owner_type = ? AND update_result IN ('skipped', 'unreachable')
+```
+
+behind a store method, with `rolloutOwnerClass(track)` supplying the owner type so the fleet and BYO tracks cannot clear each other's nodes. Then a passed-over result can only ever belong to the rollout currently running, because starting a new one erases the old ones — and the one-argument predicate is correct exactly as written, with no clocks, no anchors and no edge cases.
+
+**Clear before the `PutRolloutTrack`, not after.** If the clear succeeds and the row write then fails, some nodes became candidates again for a target that did not change — harmless, and the status quo for them. In the other order, a failed clear leaves the row pointing at a new target while stale results still exclude nodes from it, which is the bug this is fixing.
 
 This also changes existing behaviour for `"skipped"`: such a node goes from re-commanded forever to passed over once. That is what the filter's own comment already claims happens (*"bar any node left behind"*), and fixing both instances together rather than adding a second exclusion path is deliberate — two rules for one question drift apart.
 
