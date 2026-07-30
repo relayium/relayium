@@ -2,12 +2,12 @@
 // into stored chat. Browser and CLI pairing are separate, non-interoperable
 // transports; the shared product contract is online-only, session-scoped text.
 
-const commands = `# Get a five-minute CLI code (relayium login is required once)
-printf x > /tmp/relayium-code.txt
-relayium send /tmp/relayium-code.txt
-# Copy the printed code, then press Ctrl-C before either text client starts.
+const commands = `# One machine mints the code and waits (relayium login is required once)
+relayium text
+# Code: K7M4XR   (valid 5 minutes)
+# On the other machine:  relayium text K7M4XR
 
-# Run this on both machines
+# The other machine joins that code
 relayium text K7M4XR
 
 # Send one multiline message exactly as copied (macOS)
@@ -66,14 +66,14 @@ const en = article({
     "Compare the six-digit verification code (SAS) on both screens, then type or paste text. Use ⌘/Ctrl+Enter to send.",
     "Each side can send several messages and use Copy on any received message while the session remains open.",
   ],
-  cliHeading: "CLI: use the same issued code on both machines",
+  cliHeading: "CLI: mint a code on one machine, join it on the other",
   cliBody: [
-    "The CLI text command joins an existing six-character code; it does not mint one. Today, obtain a code by starting relayium send with a tiny temporary file, copy the printed code, and immediately stop that sender with Ctrl-C. A waiting sender occupies one of the code room's two places, so stopping it is required.",
-    "Run relayium text with that code on both machines. Interactive mode sends one line per message and asks both people to confirm the SAS. For multiline or byte-exact stdin, pipe it as one message and pass --yes because no terminal is available for the SAS prompt.",
+    "Run relayium text with no code on one machine. It mints a six-character code with your account, prints the exact command the other machine should run, and stays in the session waiting for it. There is no temporary file to send and no extra process to stop.",
+    "Run relayium text with that code on the other machine. Interactive mode sends one line per message and asks both people to confirm the SAS. For multiline or byte-exact stdin, pipe it as one message and pass --yes because no terminal is available for the SAS prompt.",
   ],
   cliNotes: [
     "CLI codes last five minutes and are CLI-to-CLI only; browser codes cannot connect a browser to the CLI.",
-    "Only minting the code needs a signed-in account. Both text clients join the already-issued code.",
+    "Only the machine that mints needs a signed-in account. The machine joining the printed code does not sign in.",
     "--yes skips the interactive SAS confirmation, so compare the session another trusted way before using it.",
   ],
   boundariesHeading: "What text transfer is — and is not",
@@ -117,14 +117,14 @@ const zh = article({
     "核对两块屏幕上的 6 位校验码（SAS），然后输入或粘贴文本，用 ⌘/Ctrl+Enter 发送。",
     "会话保持打开时，双方都能连续发送多条消息，也能对收到的任意消息点“复制”。",
   ],
-  cliHeading: "CLI：两台机器使用同一个已签发配对码",
+  cliHeading: "CLI：一台机器生成配对码，另一台加入",
   cliBody: [
-    "CLI 的 text 命令只加入已有的 6 位配对码，不会自行生成。当前需要先用一个很小的临时文件启动 relayium send，复制它打印的配对码，然后立刻按 Ctrl-C 停掉发送进程。等待中的 sender 会占用双人房间的一个位置，所以必须先停掉。",
-    "随后两台机器都用该码运行 relayium text。交互模式每行是一条消息，并默认要求双方确认 SAS；多行或要求逐字节保真的内容请通过管道作为一条消息发送，因为此时没有终端可确认 SAS，所以必须显式加 --yes。",
+    "在其中一台机器上直接运行 relayium text，不带配对码。它会用你的账号生成一个 6 位配对码，打印出另一台机器该运行的完整命令，并留在会话里等待对方加入。不需要临时文件，也不需要另外停掉任何进程。",
+    "另一台机器用该码运行 relayium text。交互模式每行是一条消息，并默认要求双方确认 SAS；多行或要求逐字节保真的内容请通过管道作为一条消息发送，因为此时没有终端可确认 SAS，所以必须显式加 --yes。",
   ],
   cliNotes: [
     "CLI 配对码有效期 5 分钟，只能 CLI 对 CLI；浏览器码不能让浏览器与 CLI 互连。",
-    "只有生成配对码需要已登录账号；两端 text 客户端只是加入已经签发的码。",
+    "只有生成配对码的那台机器需要已登录账号；使用打印出来的配对码加入时不需要登录。",
     "--yes 会跳过交互式 SAS 确认，使用前应通过其他可信方式核对会话。",
   ],
   boundariesHeading: "文本传输是什么，也不是什么",
@@ -168,14 +168,14 @@ const ja = article({
     "両画面の 6 桁の確認コード（SAS）を比べ、入力または貼り付け後に ⌘/Ctrl+Enter で送信します。",
     "セッション中は双方が複数のメッセージを送り、受信メッセージをコピーできます。",
   ],
-  cliHeading: "CLI：両方のマシンで同じ発行済みコードを使う",
+  cliHeading: "CLI：片方でコードを発行し、もう片方が参加する",
   cliBody: [
-    "CLI の text は既存の 6 文字コードへ参加するだけで、発行はしません。現状は小さな一時ファイルで relayium send を開始し、表示されたコードを控え、すぐ Ctrl-C で sender を止めます。待機中の sender は 2 人部屋の 1 席を使うため、停止が必須です。",
-    "両方でそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、既定で SAS 確認を求めます。複数行や正確な stdin はパイプで 1 メッセージとして送り、端末プロンプトがないため --yes を付けます。",
+    "片方のマシンでコードを付けずに relayium text を実行します。アカウントで 6 文字のコードを発行し、もう一方が実行すべきコマンドをそのまま表示し、相手の参加を待ちます。一時ファイルも、止めるべき別プロセスもありません。",
+    "もう一方のマシンではそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、既定で SAS 確認を求めます。複数行や正確な stdin はパイプで 1 メッセージとして送り、端末プロンプトがないため --yes を付けます。",
   ],
   cliNotes: [
     "CLI コードは 5 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。",
-    "コード発行だけはログイン済みアカウントが必要で、2 つの text クライアントは発行済みコードへ参加します。",
+    "ログイン済みアカウントが必要なのはコードを発行する側だけです。表示されたコードで参加する側はログイン不要です。",
     "--yes は対話的な SAS 確認を省くため、別の信頼できる手段で確認してください。",
   ],
   boundariesHeading: "テキスト転送の範囲",
@@ -213,14 +213,14 @@ const ko = article({
     "두 화면의 6자리 확인 코드(SAS)를 비교한 뒤 입력하거나 붙여 넣고 ⌘/Ctrl+Enter로 보냅니다.",
     "세션이 열린 동안 양쪽에서 여러 메시지를 보내고 받은 메시지를 복사할 수 있습니다.",
   ],
-  cliHeading: "CLI: 두 컴퓨터에서 같은 발급 코드를 사용",
+  cliHeading: "CLI: 한쪽에서 코드를 발급하고 다른 쪽이 참여",
   cliBody: [
-    "CLI text 명령은 기존 6자리 코드에 참여할 뿐 코드를 만들지 않습니다. 현재는 작은 임시 파일로 relayium send를 시작해 출력된 코드를 복사하고 즉시 Ctrl-C로 sender를 중지해야 합니다. 기다리는 sender가 2인 방 한 자리를 차지하므로 반드시 중지하세요.",
-    "양쪽에서 그 코드로 relayium text를 실행합니다. 대화형 모드는 한 줄을 한 메시지로 보내고 기본적으로 SAS 확인을 요구합니다. 여러 줄 또는 정확한 stdin은 파이프로 한 메시지로 보내며 터미널 확인이 없으므로 --yes를 붙입니다.",
+    "한쪽 컴퓨터에서 코드 없이 relayium text를 실행합니다. 계정으로 6자리 코드를 발급하고, 다른 쪽이 실행할 명령을 그대로 출력한 뒤 상대가 참여할 때까지 세션에서 기다립니다. 임시 파일도, 따로 중지할 프로세스도 없습니다.",
+    "다른 쪽 컴퓨터에서 그 코드로 relayium text를 실행합니다. 대화형 모드는 한 줄을 한 메시지로 보내고 기본적으로 SAS 확인을 요구합니다. 여러 줄 또는 정확한 stdin은 파이프로 한 메시지로 보내며 터미널 확인이 없으므로 --yes를 붙입니다.",
   ],
   cliNotes: [
     "CLI 코드는 5분 동안 유효하고 CLI끼리만 연결합니다. 브라우저와 CLI는 서로 연결되지 않습니다.",
-    "코드 발급에만 로그인 계정이 필요하며 두 text 클라이언트는 이미 발급된 코드에 참여합니다.",
+    "로그인 계정은 코드를 발급하는 쪽에만 필요합니다. 출력된 코드로 참여하는 쪽은 로그인할 필요가 없습니다.",
     "--yes는 대화형 SAS 확인을 건너뛰므로 다른 신뢰할 수 있는 방법으로 세션을 확인하세요.",
   ],
   boundariesHeading: "텍스트 전송의 범위",
@@ -258,14 +258,14 @@ const de = article({
     "Vergleiche den sechsstelligen Prüfcode (SAS) auf beiden Bildschirmen, füge Text ein und sende mit ⌘/Strg+Enter.",
     "Solange die Sitzung offen ist, können beide Seiten mehrere Nachrichten senden und empfangene Inhalte kopieren.",
   ],
-  cliHeading: "CLI: denselben ausgegebenen Code auf beiden Rechnern nutzen",
+  cliHeading: "CLI: auf einem Rechner einen Code erzeugen, auf dem anderen beitreten",
   cliBody: [
-    "Der CLI-Befehl text tritt nur einem vorhandenen sechsstelligen Code bei und erzeugt keinen. Starte derzeit relayium send mit einer winzigen temporären Datei, kopiere den ausgegebenen Code und beende den Sender sofort mit Strg-C. Ein wartender Sender belegt einen der zwei Plätze im Raum und muss daher beendet werden.",
-    "Starte danach auf beiden Rechnern relayium text mit diesem Code. Interaktiv ist jede Zeile eine Nachricht und beide Seiten bestätigen standardmäßig den SAS. Mehrzeilige oder bytegenaue Eingabe wird als eine Nachricht gepiped und braucht --yes, weil kein Terminal für die Bestätigung vorhanden ist.",
+    "Starte auf einem Rechner relayium text ohne Code. Der Befehl erzeugt mit deinem Konto einen sechsstelligen Code, gibt genau den Befehl aus, den der andere Rechner ausführen soll, und wartet in der Sitzung auf ihn. Keine temporäre Datei, kein zusätzlicher Prozess, der beendet werden müsste.",
+    "Starte auf dem anderen Rechner relayium text mit diesem Code. Interaktiv ist jede Zeile eine Nachricht und beide Seiten bestätigen standardmäßig den SAS. Mehrzeilige oder bytegenaue Eingabe wird als eine Nachricht gepiped und braucht --yes, weil kein Terminal für die Bestätigung vorhanden ist.",
   ],
   cliNotes: [
     "CLI-Codes gelten fünf Minuten und verbinden nur CLI mit CLI; Browser und CLI sind nicht interoperabel.",
-    "Nur das Erzeugen des Codes benötigt ein angemeldetes Konto. Beide text-Clients treten dem bereits ausgegebenen Code bei.",
+    "Nur der Rechner, der den Code erzeugt, braucht ein angemeldetes Konto. Der Rechner, der dem ausgegebenen Code beitritt, muss sich nicht anmelden.",
     "--yes überspringt die interaktive SAS-Bestätigung; prüfe die Sitzung vorher auf einem anderen vertrauenswürdigen Weg.",
   ],
   boundariesHeading: "Was Textübertragung ist — und was nicht",
@@ -303,14 +303,14 @@ const fr = article({
     "Comparez le code de vérification à six chiffres (SAS), saisissez ou collez le texte, puis envoyez avec ⌘/Ctrl+Entrée.",
     "Tant que la session reste ouverte, chaque côté peut envoyer plusieurs messages et copier ceux qu'il reçoit.",
   ],
-  cliHeading: "CLI : utiliser le même code émis sur les deux machines",
+  cliHeading: "CLI : créer un code sur une machine, le rejoindre sur l'autre",
   cliBody: [
-    "La commande CLI text rejoint un code existant à six caractères mais n'en crée pas. Pour l'instant, lancez relayium send avec un minuscule fichier temporaire, copiez le code affiché puis arrêtez aussitôt l'envoi avec Ctrl-C. Un sender en attente occupe l'une des deux places de la salle et doit donc être arrêté.",
-    "Lancez ensuite relayium text avec ce code sur les deux machines. En mode interactif, chaque ligne est un message et le SAS doit être confirmé. Pour du texte multiligne ou exact, utilisez un pipe en un seul message avec --yes, car aucun terminal ne peut afficher la confirmation.",
+    "Lancez relayium text sans code sur une machine. La commande crée un code à six caractères avec votre compte, affiche exactement la commande que l'autre machine doit exécuter, et reste dans la session à l'attendre. Aucun fichier temporaire, aucun processus supplémentaire à arrêter.",
+    "Lancez ensuite relayium text avec ce code sur l'autre machine. En mode interactif, chaque ligne est un message et le SAS doit être confirmé. Pour du texte multiligne ou exact, utilisez un pipe en un seul message avec --yes, car aucun terminal ne peut afficher la confirmation.",
   ],
   cliNotes: [
     "Les codes CLI durent cinq minutes et relient uniquement deux CLI ; navigateur et CLI ne sont pas interopérables.",
-    "Seule la création du code exige un compte connecté. Les deux clients text rejoignent le code déjà émis.",
+    "Seule la machine qui crée le code exige un compte connecté. Celle qui rejoint le code affiché n'a pas besoin de se connecter.",
     "--yes ignore la confirmation interactive du SAS ; vérifiez la session par un autre moyen fiable.",
   ],
   boundariesHeading: "Ce que le transfert de texte est — et n'est pas",
@@ -348,14 +348,14 @@ const ar = article({
     "قارن رمز التحقق ذي الأرقام الستة (SAS) على الشاشتين، ثم اكتب أو الصق وأرسل باستخدام ⌘/Ctrl+Enter.",
     "ما دامت الجلسة مفتوحة يستطيع الطرفان إرسال عدة رسائل ونسخ أي رسالة مستلمة.",
   ],
-  cliHeading: "سطر الأوامر: استخدام الرمز الصادر نفسه على الجهازين",
+  cliHeading: "سطر الأوامر: أصدر الرمز على جهاز وانضم إليه من الآخر",
   cliBody: [
-    "ينضم أمر text إلى رمز موجود من ستة محارف ولا يصدر رمزًا. حاليًا ابدأ relayium send بملف مؤقت صغير، وانسخ الرمز المطبوع، ثم أوقف المرسل فورًا بـ Ctrl-C. المرسل المنتظر يشغل أحد مقعدي الغرفة، لذلك يجب إيقافه.",
-    "شغّل relayium text بالرمز نفسه على الجهازين. في الوضع التفاعلي كل سطر رسالة ويُطلب تأكيد SAS افتراضيًا. أرسل النص متعدد الأسطر أو الدقيق عبر pipe كرسالة واحدة مع --yes لأن الطرفية غير متاحة للتأكيد.",
+    "شغّل relayium text بلا رمز على أحد الجهازين. سيصدر رمزًا من ستة محارف باستخدام حسابك، ويطبع الأمر الذي يشغّله الجهاز الآخر تمامًا، ثم يبقى في الجلسة بانتظاره. لا ملف مؤقت ولا عملية إضافية يجب إيقافها.",
+    "شغّل relayium text بذلك الرمز على الجهاز الآخر. في الوضع التفاعلي كل سطر رسالة ويُطلب تأكيد SAS افتراضيًا. أرسل النص متعدد الأسطر أو الدقيق عبر pipe كرسالة واحدة مع --yes لأن الطرفية غير متاحة للتأكيد.",
   ],
   cliNotes: [
     "رمز CLI صالح لخمس دقائق ويربط CLI بـ CLI فقط؛ لا يتوافق المتصفح مع CLI.",
-    "إصدار الرمز وحده يحتاج حسابًا مسجل الدخول، أما عميلا text فينضمان إلى الرمز الصادر.",
+    "الجهاز الذي يصدر الرمز وحده يحتاج حسابًا مسجل الدخول؛ أما الجهاز الذي ينضم بالرمز المطبوع فلا يحتاج إلى تسجيل الدخول.",
     "--yes يتجاوز تأكيد SAS التفاعلي؛ تحقق من الجلسة بوسيلة موثوقة أخرى.",
   ],
   boundariesHeading: "حدود نقل النصوص",
@@ -393,14 +393,14 @@ const es = article({
     "Compara el código de verificación de seis dígitos (SAS), escribe o pega y envía con ⌘/Ctrl+Enter.",
     "Mientras la sesión siga abierta, ambos lados pueden enviar varios mensajes y copiar cualquiera que reciban.",
   ],
-  cliHeading: "CLI: usar el mismo código emitido en ambos equipos",
+  cliHeading: "CLI: emite el código en un equipo y únete desde el otro",
   cliBody: [
-    "El comando text de la CLI se une a un código existente de seis caracteres, pero no lo crea. Hoy debes iniciar relayium send con un archivo temporal pequeño, copiar el código impreso y detener enseguida el sender con Ctrl-C. Un sender esperando ocupa una de las dos plazas de la sala, por eso hay que detenerlo.",
-    "Después ejecuta relayium text con ese código en ambos equipos. El modo interactivo envía una línea por mensaje y pide confirmar el SAS. Para texto multilínea o exacto, usa una tubería como un solo mensaje con --yes, porque no hay terminal para confirmar.",
+    "Ejecuta relayium text sin código en un equipo. Emite un código de seis caracteres con tu cuenta, imprime exactamente el comando que debe ejecutar el otro equipo y se queda en la sesión esperándolo. Sin archivo temporal y sin ningún proceso extra que detener.",
+    "Después ejecuta relayium text con ese código en el otro equipo. El modo interactivo envía una línea por mensaje y pide confirmar el SAS. Para texto multilínea o exacto, usa una tubería como un solo mensaje con --yes, porque no hay terminal para confirmar.",
   ],
   cliNotes: [
     "Los códigos CLI duran cinco minutos y solo conectan CLI con CLI; navegador y CLI no son interoperables.",
-    "Solo emitir el código exige una cuenta conectada. Los dos clientes text se unen al código ya emitido.",
+    "Solo el equipo que emite el código exige una cuenta conectada. El equipo que se une con el código impreso no necesita iniciar sesión.",
     "--yes omite la confirmación interactiva del SAS; verifica la sesión por otro medio fiable.",
   ],
   boundariesHeading: "Qué es —y qué no es— la transferencia de texto",
@@ -438,14 +438,14 @@ const pt = article({
     "Compare o código de verificação de seis dígitos (SAS), digite ou cole e envie com ⌘/Ctrl+Enter.",
     "Enquanto a sessão estiver aberta, os dois lados podem enviar várias mensagens e copiar qualquer mensagem recebida.",
   ],
-  cliHeading: "CLI: usar o mesmo código emitido nas duas máquinas",
+  cliHeading: "CLI: emita o código em uma máquina e entre pela outra",
   cliBody: [
-    "O comando text da CLI entra em um código existente de seis caracteres, mas não cria um. Hoje, inicie relayium send com um arquivo temporário pequeno, copie o código impresso e pare imediatamente o sender com Ctrl-C. Um sender esperando ocupa uma das duas vagas da sala, por isso precisa ser parado.",
-    "Depois execute relayium text com esse código nas duas máquinas. O modo interativo envia uma linha por mensagem e pede confirmação do SAS. Para texto multilinha ou exato, use um pipe como uma mensagem com --yes, pois não há terminal para confirmar.",
+    "Execute relayium text sem código em uma das máquinas. Ele emite um código de seis caracteres com a sua conta, imprime exatamente o comando que a outra máquina deve executar e permanece na sessão esperando por ela. Sem arquivo temporário e sem nenhum processo extra para parar.",
+    "Depois execute relayium text com esse código na outra máquina. O modo interativo envia uma linha por mensagem e pede confirmação do SAS. Para texto multilinha ou exato, use um pipe como uma mensagem com --yes, pois não há terminal para confirmar.",
   ],
   cliNotes: [
     "Códigos CLI duram cinco minutos e conectam apenas CLI com CLI; navegador e CLI não são interoperáveis.",
-    "Somente emitir o código exige uma conta conectada. Os dois clientes text entram no código já emitido.",
+    "Somente a máquina que emite o código exige uma conta conectada. A máquina que entra com o código impresso não precisa fazer login.",
     "--yes pula a confirmação interativa do SAS; verifique a sessão por outro meio confiável.",
   ],
   boundariesHeading: "O que a transferência de texto é — e não é",

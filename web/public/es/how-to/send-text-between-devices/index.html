@@ -78,15 +78,15 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Navegador: enviar un mensaje a un dispositivo en línea</h2>
       <p>Abre relayium.com en ambos dispositivos. En la misma red aparecen automáticamente; en redes distintas crea un código de navegador en la página entre redes y únete desde el otro navegador.</p>
       <ul><li>Elige «Enviar un mensaje» en la tarjeta del par. Antes de aceptar, el destinatario no ve contenido ni editor.</li><li>Compara el código de verificación de seis dígitos (SAS), escribe o pega y envía con ⌘/Ctrl+Enter.</li><li>Mientras la sesión siga abierta, ambos lados pueden enviar varios mensajes y copiar cualquiera que reciban.</li></ul>
-      <h2>CLI: usar el mismo código emitido en ambos equipos</h2>
-      <p>El comando text de la CLI se une a un código existente de seis caracteres, pero no lo crea. Hoy debes iniciar relayium send con un archivo temporal pequeño, copiar el código impreso y detener enseguida el sender con Ctrl-C. Un sender esperando ocupa una de las dos plazas de la sala, por eso hay que detenerlo.</p>
-      <p>Después ejecuta relayium text con ese código en ambos equipos. El modo interactivo envía una línea por mensaje y pide confirmar el SAS. Para texto multilínea o exacto, usa una tubería como un solo mensaje con --yes, porque no hay terminal para confirmar.</p>
-      <pre><code># Get a five-minute CLI code (relayium login is required once)
-printf x &gt; /tmp/relayium-code.txt
-relayium send /tmp/relayium-code.txt
-# Copy the printed code, then press Ctrl-C before either text client starts.
+      <h2>CLI: emite el código en un equipo y únete desde el otro</h2>
+      <p>Ejecuta relayium text sin código en un equipo. Emite un código de seis caracteres con tu cuenta, imprime exactamente el comando que debe ejecutar el otro equipo y se queda en la sesión esperándolo. Sin archivo temporal y sin ningún proceso extra que detener.</p>
+      <p>Después ejecuta relayium text con ese código en el otro equipo. El modo interactivo envía una línea por mensaje y pide confirmar el SAS. Para texto multilínea o exacto, usa una tubería como un solo mensaje con --yes, porque no hay terminal para confirmar.</p>
+      <pre><code># One machine mints the code and waits (relayium login is required once)
+relayium text
+# Code: K7M4XR   (valid 5 minutes)
+# On the other machine:  relayium text K7M4XR
 
-# Run this on both machines
+# The other machine joins that code
 relayium text K7M4XR
 
 # Send one multiline message exactly as copied (macOS)
@@ -94,7 +94,7 @@ pbpaste | relayium text K7M4XR --yes
 
 # Or pipe a file on any shell
 cat snippet.txt | relayium text K7M4XR --yes</code></pre>
-      <ul><li>Los códigos CLI duran cinco minutos y solo conectan CLI con CLI; navegador y CLI no son interoperables.</li><li>Solo emitir el código exige una cuenta conectada. Los dos clientes text se unen al código ya emitido.</li><li>--yes omite la confirmación interactiva del SAS; verifica la sesión por otro medio fiable.</li></ul>
+      <ul><li>Los códigos CLI duran cinco minutos y solo conectan CLI con CLI; navegador y CLI no son interoperables.</li><li>Solo el equipo que emite el código exige una cuenta conectada. El equipo que se une con el código impreso no necesita iniciar sesión.</li><li>--yes omite la confirmación interactiva del SAS; verifica la sesión por otro medio fiable.</li></ul>
       <h2>Qué es —y qué no es— la transferencia de texto</h2>
       <p>El contenido sigue siendo texto plano UTF-8, incluidos espacios, tabulaciones, líneas vacías y saltos. Relayium no lo ejecuta, no muestra Markdown, no enlaza ni crea vistas previas.</p>
       <ul><li>Ambos dispositivos deben estar en línea a la vez. No hay entrega sin conexión, bandeja de entrada, contactos ni historial sincronizado.</li><li>El historial es local a la sesión abierta y desaparece al terminar o recargar. El servidor nunca almacena el cuerpo.</li><li>Cada mensaje admite hasta 65.536 bytes UTF-8. Envía el contenido mayor como archivo.</li></ul>

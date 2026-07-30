@@ -78,15 +78,15 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>ブラウザ：オンライン端末へメッセージを送る</h2>
       <p>両方の端末で relayium.com を開きます。同じネットワークなら自動表示され、別ネットワークならクロスネットワーク画面でブラウザ用コードを作り、もう一方のブラウザで参加します。</p>
       <ul><li>相手のカードで「メッセージを送信」を選びます。受信側が承認するまで本文も入力欄も表示されません。</li><li>両画面の 6 桁の確認コード（SAS）を比べ、入力または貼り付け後に ⌘/Ctrl+Enter で送信します。</li><li>セッション中は双方が複数のメッセージを送り、受信メッセージをコピーできます。</li></ul>
-      <h2>CLI：両方のマシンで同じ発行済みコードを使う</h2>
-      <p>CLI の text は既存の 6 文字コードへ参加するだけで、発行はしません。現状は小さな一時ファイルで relayium send を開始し、表示されたコードを控え、すぐ Ctrl-C で sender を止めます。待機中の sender は 2 人部屋の 1 席を使うため、停止が必須です。</p>
-      <p>両方でそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、既定で SAS 確認を求めます。複数行や正確な stdin はパイプで 1 メッセージとして送り、端末プロンプトがないため --yes を付けます。</p>
-      <pre><code># Get a five-minute CLI code (relayium login is required once)
-printf x &gt; /tmp/relayium-code.txt
-relayium send /tmp/relayium-code.txt
-# Copy the printed code, then press Ctrl-C before either text client starts.
+      <h2>CLI：片方でコードを発行し、もう片方が参加する</h2>
+      <p>片方のマシンでコードを付けずに relayium text を実行します。アカウントで 6 文字のコードを発行し、もう一方が実行すべきコマンドをそのまま表示し、相手の参加を待ちます。一時ファイルも、止めるべき別プロセスもありません。</p>
+      <p>もう一方のマシンではそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、既定で SAS 確認を求めます。複数行や正確な stdin はパイプで 1 メッセージとして送り、端末プロンプトがないため --yes を付けます。</p>
+      <pre><code># One machine mints the code and waits (relayium login is required once)
+relayium text
+# Code: K7M4XR   (valid 5 minutes)
+# On the other machine:  relayium text K7M4XR
 
-# Run this on both machines
+# The other machine joins that code
 relayium text K7M4XR
 
 # Send one multiline message exactly as copied (macOS)
@@ -94,7 +94,7 @@ pbpaste | relayium text K7M4XR --yes
 
 # Or pipe a file on any shell
 cat snippet.txt | relayium text K7M4XR --yes</code></pre>
-      <ul><li>CLI コードは 5 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。</li><li>コード発行だけはログイン済みアカウントが必要で、2 つの text クライアントは発行済みコードへ参加します。</li><li>--yes は対話的な SAS 確認を省くため、別の信頼できる手段で確認してください。</li></ul>
+      <ul><li>CLI コードは 5 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。</li><li>ログイン済みアカウントが必要なのはコードを発行する側だけです。表示されたコードで参加する側はログイン不要です。</li><li>--yes は対話的な SAS 確認を省くため、別の信頼できる手段で確認してください。</li></ul>
       <h2>テキスト転送の範囲</h2>
       <p>本文は UTF-8 のプレーンテキストです。空白、タブ、空行、改行を保持し、実行、Markdown 描画、リンク化、プレビューはしません。</p>
       <ul><li>両端が同時にオンラインである必要があります。オフライン配信、受信箱、連絡先、同期チャット履歴はありません。</li><li>履歴は開いているローカルセッションだけにあり、終了や再読み込みで消えます。サーバーは本文を保存しません。</li><li>1 メッセージは UTF-8 で 65,536 バイトまで。それ以上はファイルとして送ってください。</li></ul>

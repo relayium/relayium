@@ -174,7 +174,7 @@ func runSendCross(args []string, stdout, stderr io.Writer) int {
 	// (signal.CodeTTLSeconds) the moment it is minted, and burning one on a
 	// typo'd path wastes it.
 	if code == "" {
-		if code, err = mintCode(ctx, f.server, stderr); err != nil {
+		if code, err = mintCode(ctx, f.server, stderr, mintForSend); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}

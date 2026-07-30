@@ -42,7 +42,11 @@ relayium authorize 74318e3b…`;
   // 变成了编译期约束（见该文件的 SameLength）。
   const osBadge = "macOS · Linux · Windows";
   const syncCmd = "relayium sync ./site relayium://receiver.example.com --delete --watch";
-  const textCmd = `# both machines, same code — one line per message, Ctrl-D to end
+  const textCmd = `# one machine mints and waits (needs relayium login); the other joins
+relayium text
+#   → Code: K7M4XR   |   On the other machine:  relayium text K7M4XR
+
+# the other machine joins the printed code — one line per message, Ctrl-D to end
 relayium text K7M4XR`;
   const textPipeCmd = `# exact bytes, including multiline: pipe it
 pbpaste | relayium text K7M4XR --yes

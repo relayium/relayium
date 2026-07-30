@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"runtime"
 	"strings"
@@ -13,16 +15,32 @@ import (
 	"testing"
 	"time"
 
+	"github.com/relayium/relayium/internal/cloud"
 	"github.com/relayium/relayium/internal/xfer"
 )
 
-func TestTextRequiresACode(t *testing.T) {
+// No code means "mint one" — so an omitted code must reach minting rather than
+// print a usage error. Logged out, minting is where it stops, and the remedy is
+// the text one: `relayium text <code>`, never `relayium send`/`relayium up`.
+func TestTextWithoutACodeMintsRatherThanPrintingUsage(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	withStdin(t, "", false)
 	var out, errb bytes.Buffer
-	if code := runText(nil, &out, &errb); code == 0 {
-		t.Fatal("expected a non-zero exit without a code")
+	// --yes clears the SAS gate so the run gets as far as minting.
+	if code := runText([]string{"--yes"}, &out, &errb); code == 0 {
+		t.Fatal("expected a non-zero exit when minting is impossible")
 	}
-	if !strings.Contains(errb.String(), "relayium text") {
-		t.Fatalf("error should show the usage form, got %q", errb.String())
+	msg := errb.String()
+	for _, want := range []string{"needs an account", "relayium login", "relayium text <code>"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error %q does not mention %q", msg, want)
+		}
+	}
+	if strings.Contains(msg, "usage:") {
+		t.Errorf("an omitted code is no longer a usage error: %q", msg)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("nothing should reach stdout, got %q", out.String())
 	}
 }
 
@@ -137,6 +155,181 @@ func TestRunTextRejectsExtraOperands(t *testing.T) {
 	var out, errb bytes.Buffer
 	if code := runText([]string{"K7M4XR", "extra"}, &out, &errb); code == 0 {
 		t.Fatal("expected a non-zero exit on a second operand")
+	}
+}
+
+// ── minting a code from `text` itself ────────────────────────────────────────
+
+// pairServer stands in for the account API: it mints one fixed code, counts the
+// requests it was asked for, and refuses to speak WebSocket — so a run that
+// proceeds past minting fails at the rendezvous instead of reaching the network
+// proper, and the assertions below are about what was printed and what was
+// requested, not about timing.
+func pairServer(t *testing.T) (*httptest.Server, func() int) {
+	t.Helper()
+	var mu sync.Mutex
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/pair" {
+			// The rendezvous dial lands here too; only mints are counted.
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		mu.Lock()
+		hits++
+		mu.Unlock()
+		if r.Header.Get("Authorization") != "Bearer rlm_cli_abc" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{"code":"K7M4XR","expiresAt":4102444800}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv, func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return hits
+	}
+}
+
+// loginAgainst stores CLI credentials for srv in a config dir private to this test.
+func loginAgainst(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfgDir, err := resolveConfigDir("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cloud.Save(cfgDir, cloud.Creds{Server: srv.URL, AccessToken: "rlm_cli_abc"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The whole point of the feature: `relayium text` with no code mints one, hands
+// the other machine a TEXT command, and then joins that same code itself rather
+// than leaving the user to find a second process. Handing off `relayium receive`
+// here would be worse than no hand-off at all — it is a command that pairs, gets
+// as far as the mode check, and only then refuses.
+func TestRunTextWithoutACodeMintsAndHandsOffTheTextCommand(t *testing.T) {
+	srv, hits := pairServer(t)
+	loginAgainst(t, srv)
+	withStdin(t, "", false)
+
+	var out, errb bytes.Buffer
+	// srv speaks HTTP, not WebSocket, so the rendezvous fails right after the
+	// hand-off — which is exactly the point at which this test is done looking.
+	code := runText([]string{"--yes", "--server", srv.URL}, &out, &errb)
+	if code == 0 {
+		t.Fatal("the rendezvous cannot succeed against an HTTP-only test server")
+	}
+	if got := hits(); got != 1 {
+		t.Fatalf("want exactly one mint request, got %d", got)
+	}
+	msg := errb.String()
+	for _, want := range []string{"Code: K7M4XR", "On the other machine:  relayium text K7M4XR"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("hand-off %q does not contain %q", msg, want)
+		}
+	}
+	if strings.Contains(msg, "relayium receive") {
+		t.Errorf("a message session must never hand off `relayium receive`: %q", msg)
+	}
+	// The minted code is the one this side joins — the room's other place stays
+	// free for the peer, which is what the old "start a send, then Ctrl-C it"
+	// workaround existed to arrange by hand.
+	if !strings.Contains(msg, "K7M4XR") {
+		t.Errorf("the session should use the minted code: %q", msg)
+	}
+	// stdout carries the peer's message bytes verbatim; the hand-off is not part
+	// of that contract and must stay on stderr.
+	if out.Len() != 0 {
+		t.Fatalf("nothing should reach stdout, got %q", out.String())
+	}
+}
+
+// A given code is still joined as-is: minting is what an OMITTED code means, and
+// a run that also minted would burn a code and pair with the wrong room.
+func TestRunTextWithACodeNeverMints(t *testing.T) {
+	srv, hits := pairServer(t)
+	loginAgainst(t, srv)
+	withStdin(t, "", false)
+
+	var out, errb bytes.Buffer
+	if code := runText([]string{"--yes", "--server", srv.URL, "K7M4XR"}, &out, &errb); code == 0 {
+		t.Fatal("the rendezvous cannot succeed against an HTTP-only test server")
+	}
+	if got := hits(); got != 0 {
+		t.Fatalf("a supplied code must not mint; got %d request(s)", got)
+	}
+	if strings.Contains(errb.String(), "On the other machine") {
+		t.Errorf("no hand-off block belongs on the joining side: %q", errb.String())
+	}
+}
+
+// The SAS gate comes first, so a piped run without --yes is refused before any
+// request is made. Minting is an authenticated call that starts a five-minute
+// expiry clock; spending one on a session that was never going to open is the
+// kind of waste the ordering exists to prevent.
+func TestRunTextWithoutACodeRefusesAPipedRunBeforeMinting(t *testing.T) {
+	srv, hits := pairServer(t)
+	loginAgainst(t, srv)
+	withStdin(t, "hello\n", false)
+
+	var out, errb bytes.Buffer
+	if code := runText([]string{"--server", srv.URL}, &out, &errb); code != 2 {
+		t.Fatalf("want exit 2 for a piped run without --yes, got %d", code)
+	}
+	if got := hits(); got != 0 {
+		t.Fatalf("a refused run must not mint; got %d request(s)", got)
+	}
+	if !strings.Contains(errb.String(), "--yes") {
+		t.Fatalf("the refusal must name the opt-out, got %q", errb.String())
+	}
+	if out.Len() != 0 {
+		t.Fatalf("nothing should reach stdout, got %q", out.String())
+	}
+}
+
+// A --server that is not a usable URL is reported as such, without a request and
+// without an "are you logged in?" remedy whose --server argument would be junk.
+func TestRunTextWithoutACodeRejectsAnUnusableServerWithoutDialing(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	withStdin(t, "", false)
+
+	var out, errb bytes.Buffer
+	if code := runText([]string{"--yes", "--server", "127.0.0.1:18080"}, &out, &errb); code == 0 {
+		t.Fatal("expected a non-zero exit for an unusable --server")
+	}
+	msg := errb.String()
+	if !strings.Contains(msg, "not a usable server URL") {
+		t.Errorf("want the server-URL error, got %q", msg)
+	}
+	if strings.Contains(msg, "relayium login") {
+		t.Errorf("an unusable --server must not print a login remedy: %q", msg)
+	}
+}
+
+// Self-host, end to end: minting goes to the deployment named by --server (not
+// relayium.com), and the block it prints omits the install one-liner, which only
+// exists on the first-party origin.
+func TestRunTextWithoutACodeMintsAgainstASelfHostedServer(t *testing.T) {
+	srv, hits := pairServer(t)
+	loginAgainst(t, srv)
+	withStdin(t, "", false)
+
+	var out, errb bytes.Buffer
+	// The signaling form of the same deployment's URL — what a self-hoster
+	// actually passes — must resolve to the same API base as the stored creds.
+	runText([]string{"--yes", "--server", srv.URL + "/ws"}, &out, &errb)
+	if got := hits(); got != 1 {
+		t.Fatalf("want exactly one mint request against the self-hosted server, got %d", got)
+	}
+	msg := errb.String()
+	if !strings.Contains(msg, "On the other machine:  relayium text K7M4XR") {
+		t.Errorf("hand-off %q does not name the text command", msg)
+	}
+	if strings.Contains(msg, "install.sh") {
+		t.Errorf("a self-hosted origin has no install.sh to curl: %q", msg)
 	}
 }
 

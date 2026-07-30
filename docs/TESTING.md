@@ -477,35 +477,47 @@ direction may cause horizontal page scrolling.
 Two machines with this branch's binary:
 `cd server && go build -o relayium ./cmd/relayium`.
 
-#### Minting a code, and why you must stop the minter
+#### Minting a code
 
 `/api/pair` requires an account, so on the minting machine run `relayium login`
-first. There is no standalone mint command — `relayium send` mints as a side
-effect, prints the code, and *then* joins the code's room to wait:
+first. `relayium text` with **no code** mints one, prints the hand-off, and then
+joins that code's room itself as the first of its two peers:
 
 ```bash
-printf 'x' > /tmp/mint.txt
-relayium send /tmp/mint.txt
+relayium text
 # Code: K7M4XR   (valid 5 minutes)
-# On the other machine:  relayium receive K7M4XR
-# waiting for the receiver…
+# On the other machine:  relayium text K7M4XR
+# waiting for the other side to join…
 ```
 
-**Stop that process (Ctrl-C) as soon as the code is printed, before starting any
-`text` client.** A code room holds exactly **two** peers; a sender left waiting
-occupies one of them, and the second `relayium text` would be refused. The code
-itself lives on the server for its 5-minute TTL and stays valid after you stop the
-sender.
+**Expect:** the hand-off line says `relayium text`, never `relayium receive` —
+that command would pair and then be refused by the mode check. Machine A stays in
+that session; machine B joins it with the printed code, so nothing has to be
+stopped and no throwaway file is involved. (`relayium send` still mints for file
+transfers and still hands off `relayium receive`.)
 
-For the same reason, make sure the previous pair of processes has **exited** before
-starting the next sub-test, and mint a fresh code if more than five minutes have
-passed.
+A code room holds exactly **two** peers, so make sure the previous pair of
+processes has **exited** before starting the next sub-test, and mint a fresh code
+if more than five minutes have passed.
+
+Also check the refusals, which must not spend a code:
+
+```bash
+printf 'hi' | relayium text; echo "exit=$?"          # exit 2, names --yes, no code minted
+empty_config="$(mktemp -d)"
+XDG_CONFIG_HOME="$empty_config" relayium text --yes; echo "exit=$?"  # exit 1,
+                                                     # tells you to log in and
+                                                     # says `relayium text <code>`
+rmdir "$empty_config"
+```
 
 #### 10a. Interactive: SAS prompted by default
 
+Machine A mints and waits; machine B joins the code it prints:
+
 ```bash
 # machine A                        # machine B
-relayium text K7M4XR               relayium text K7M4XR
+relayium text                      relayium text K7M4XR
 ```
 
 **Expect:** both print `SAS: NNNNNN  (compare on both ends)` and **prompt for
@@ -516,6 +528,7 @@ either side ends the session cleanly on both, with no hang and no stack trace.
 #### 10b. Piped without `--yes`: refused before the network
 
 ```bash
+# machine A mints and waits; on machine B:
 printf 'hello' | relayium text K7M4XR; echo "exit=$?"
 ```
 
@@ -534,11 +547,11 @@ terminal rather than whether it is a character device:
 # prepare on A
 printf '  \tif x:\n\n\t\tprint("你好 🌍")\n  trailing   ' > /tmp/msg.txt
 
-# machine B first (stdin redirected, so it runs in piped mode)
-relayium text K7M4XR --yes < /dev/null > /tmp/got.txt
+# machine A mints, sends the file as one message, and waits
+relayium text --yes < /tmp/msg.txt
 
-# machine A
-relayium text K7M4XR --yes < /tmp/msg.txt
+# machine B joins the printed code (redirected stdin means piped mode)
+relayium text K7M4XR --yes < /dev/null > /tmp/got.txt
 
 # then on B
 diff /tmp/msg.txt /tmp/got.txt && echo "byte-identical"
@@ -555,7 +568,7 @@ ends, which is what lets both terminate.
 
 ```bash
 # machine A
-relayium text K7M4XR --yes < /dev/null
+relayium text --yes < /dev/null
 # machine B
 relayium receive K7M4XR
 ```

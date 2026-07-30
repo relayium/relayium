@@ -70,24 +70,64 @@ func badServerURL(server string) error {
 		server)
 }
 
+// mintPurpose is what varies between the commands that mint a code, and it is
+// only ever copy. The mechanics below — the API base, the credential/server
+// match, the HTTP error mapping — are identical for `send` and `text`, so they
+// are shared; what must NOT be shared is the command the other machine is told
+// to run. A message session handed `relayium receive` sends both people to a
+// command that the mode check refuses after they have already typed it, and a
+// logged-out `text` user pointed at `relayium up` is pointed at file upload.
+type mintPurpose struct {
+	// join is the command the OTHER machine runs with the minted code.
+	join func(code string) string
+	// waiting is the line printed once the hand-off block is complete.
+	waiting string
+	// loggedOut is the body of the "minting needs an account" error, given the
+	// exact `relayium login…` invocation for this server.
+	loggedOut func(login string) string
+}
+
+var mintForSend = mintPurpose{
+	join:    func(code string) string { return "relayium receive " + code },
+	waiting: "waiting for the receiver…",
+	loggedOut: func(login string) string {
+		return fmt.Sprintf(
+			"minting a pairing code needs an account (the sender signs in; the receiver never does)\n"+
+				"  run `%s` first, or pass a code you were given:  relayium send <file> <code>\n"+
+				"  sending to someone with a browser instead?  `relayium up <file>` returns a download link",
+			login)
+	},
+}
+
+// mintForText mints for a message session. Only the side that mints signs in —
+// the other end just joins — and there is no `relayium up` equivalent to fall
+// back to, because a message session is live-only: both ends are online at the
+// same time or there is nothing to deliver.
+var mintForText = mintPurpose{
+	join:    func(code string) string { return "relayium text " + code },
+	waiting: "waiting for the other side to join…",
+	loggedOut: func(login string) string {
+		return fmt.Sprintf(
+			"minting a pairing code needs an account (only the side that mints signs in; the other never does)\n"+
+				"  run `%s` first, or pass a code you were given:  relayium text <code>",
+			login)
+	},
+}
+
 // errNotLoggedIn is the copy for "minting needs an account". It never starts a
 // login: `send` runs on servers and in CI, where blocking on a browser approval
 // hangs a job that expected a fast failure.
-func errNotLoggedIn(base string) error {
+func errNotLoggedIn(base string, p mintPurpose) error {
 	login := "relayium login"
 	if !sameServer(base, defaultCloudServer) {
 		login = "relayium login --server " + base
 	}
-	return fmt.Errorf(
-		"minting a pairing code needs an account (the sender signs in; the receiver never does)\n"+
-			"  run `%s` first, or pass a code you were given:  relayium send <file> <code>\n"+
-			"  sending to someone with a browser instead?  `relayium up <file>` returns a download link",
-		login)
+	return errors.New(p.loggedOut(login))
 }
 
 // mintCode mints a pairing code with the stored CLI credentials and prints the
-// block the sender hands to the other machine's operator.
-func mintCode(ctx context.Context, server string, stderr io.Writer) (string, error) {
+// block the minting machine hands to the other machine's operator.
+func mintCode(ctx context.Context, server string, stderr io.Writer, p mintPurpose) (string, error) {
 	base, err := apiBase(server)
 	if err != nil {
 		return "", err
@@ -101,7 +141,7 @@ func mintCode(ctx context.Context, server string, stderr io.Writer) (string, err
 		return "", err
 	}
 	if !ok {
-		return "", errNotLoggedIn(base)
+		return "", errNotLoggedIn(base, p)
 	}
 	// Never send the access token to a server other than the one that issued it
 	// — it would leak the credential and would not authenticate there anyway.
@@ -110,43 +150,43 @@ func mintCode(ctx context.Context, server string, stderr io.Writer) (string, err
 	}
 	c := cloud.NewClient(creds.Server)
 	c.Token = creds.AccessToken
-	p, err := c.MintPair(ctx)
+	pair, err := c.MintPair(ctx)
 	if err != nil {
 		var he *cloud.HTTPError
 		if errors.As(err, &he) {
 			switch he.Status {
 			case http.StatusUnauthorized:
-				return "", errNotLoggedIn(base)
+				return "", errNotLoggedIn(base, p)
 			case http.StatusTooManyRequests:
 				return "", fmt.Errorf("too many pairing requests — wait a minute and try again")
 			}
 		}
 		return "", err
 	}
-	printHandoff(stderr, p, base)
-	return p.Code, nil
+	printHandoff(stderr, pair, base, p)
+	return pair.Code, nil
 }
 
-// printHandoff writes the one block a sender pastes into a chat window or
-// another machine's SSH session: everything the recipient needs, no link to
-// follow (the CLI cannot consume a URL, and the recipient is at a terminal).
+// printHandoff writes the one block a minter pastes into a chat window or
+// another machine's SSH session: everything the other end needs, no link to
+// follow (the CLI cannot consume a URL, and the other end is at a terminal).
 //
 // This block goes to stderr, which is deliberately the opposite of runUp's
 // convention (cloud.go: the share link goes to stdout so `relayium up … |
 // pbcopy` keeps piping a clean link). The difference is that `up` finishes and
 // leaves the link as its terminal artifact, whereas `send` prints this and then
 // blocks waiting for the receiver — nothing downstream of a pipe would run
-// until the transfer ended, so there is no pipeline to keep clean. Treat it as
-// interactive hand-off, alongside the SAS line and "path: direct" that
-// crossnetConn already writes to stderr, rather than as command output.
-func printHandoff(w io.Writer, p cloud.Pair, base string) {
-	fmt.Fprintf(w, "Code: %s%s\n", p.Code, ttlClause(p.ExpiresAt))
-	fmt.Fprintf(w, "On the other machine:  relayium receive %s\n", p.Code)
+// until the transfer ended, so there is no pipeline to keep clean. `text` has
+// the same shape and the stronger reason: its stdout carries the peer's
+// messages byte for byte, so a hand-off line there would corrupt them.
+func printHandoff(w io.Writer, pair cloud.Pair, base string, p mintPurpose) {
+	fmt.Fprintf(w, "Code: %s%s\n", pair.Code, ttlClause(pair.ExpiresAt))
+	fmt.Fprintf(w, "On the other machine:  %s\n", p.join(pair.Code))
 	// First-party only: a self-hosted origin has no install.sh to point at.
 	if sameServer(base, defaultCloudServer) {
 		fmt.Fprintf(w, "  not installed there?  curl -fsSL %s/install.sh | sh\n", defaultCloudServer)
 	}
-	fmt.Fprintln(w, "waiting for the receiver…")
+	fmt.Fprintln(w, p.waiting)
 }
 
 // ttlClause renders " (valid N minutes)" for the hand-off block, derived from

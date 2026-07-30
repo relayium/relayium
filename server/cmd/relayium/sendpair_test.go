@@ -102,7 +102,7 @@ func TestMintCodeAcceptsASignalingURLWithAPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	var errb bytes.Buffer
-	code, err := mintCode(context.Background(), srv.URL+"/ws", &errb)
+	code, err := mintCode(context.Background(), srv.URL+"/ws", &errb, mintForSend)
 	if err != nil {
 		t.Fatalf("mintCode against the signaling path: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestMintCodeAcceptsASubPathDeployment(t *testing.T) {
 	}
 	var errb bytes.Buffer
 	// The sender passes the signaling URL of that same deployment.
-	code, err := mintCode(context.Background(), srv.URL+"/relay/ws", &errb)
+	code, err := mintCode(context.Background(), srv.URL+"/relay/ws", &errb, mintForSend)
 	if err != nil {
 		t.Fatalf("mintCode against a sub-path deployment: %v (request hit %q)", err, gotPath)
 	}
@@ -151,7 +151,7 @@ func TestMintCodeAcceptsASubPathDeployment(t *testing.T) {
 func TestMintCodeRejectsAnEmptyServer(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	var errb bytes.Buffer
-	_, err := mintCode(context.Background(), "", &errb)
+	_, err := mintCode(context.Background(), "", &errb, mintForSend)
 	if err == nil {
 		t.Fatal("want an error for an empty --server")
 	}
@@ -169,7 +169,7 @@ func TestMintCodeRejectsAnEmptyServer(t *testing.T) {
 func TestMintCodeNotLoggedIn(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	var errb bytes.Buffer
-	_, err := mintCode(context.Background(), "wss://relayium.com", &errb)
+	_, err := mintCode(context.Background(), "wss://relayium.com", &errb, mintForSend)
 	if err == nil {
 		t.Fatal("want an error when not logged in")
 	}
@@ -200,7 +200,7 @@ func TestMintCodePrintsHandoffBlock(t *testing.T) {
 	}
 
 	var errb bytes.Buffer
-	code, err := mintCode(context.Background(), srv.URL, &errb)
+	code, err := mintCode(context.Background(), srv.URL, &errb, mintForSend)
 	if err != nil {
 		t.Fatalf("mintCode: %v", err)
 	}
@@ -213,10 +213,111 @@ func TestMintCodePrintsHandoffBlock(t *testing.T) {
 			t.Errorf("block %q does not contain %q", out, want)
 		}
 	}
+	// A file transfer's hand-off must keep naming `receive`. Now that the block
+	// is parameterised so `text` can print its own command, the way to break
+	// this is to make the text form the default rather than a second purpose —
+	// and the receiving end would run a command whose mode check refuses.
+	if strings.Contains(out, "relayium text") {
+		t.Errorf("a file hand-off must not point the other end at `relayium text`: %q", out)
+	}
 	// The install one-liner is first-party only: a self-hosted origin has no
 	// install.sh, and this test server is one.
 	if strings.Contains(out, "install.sh") {
 		t.Errorf("install line should be omitted for a non-default server: %q", out)
+	}
+}
+
+// The text hand-off is the whole point of minting from `text`: whoever reads it
+// has to end up in a message session, and `relayium receive` would put them in a
+// file transfer that the mode check refuses only after both people have typed it.
+func TestMintCodeForTextHandsOffTheTextCommand(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer rlm_cli_abc" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{"code":"K7M4XR","expiresAt":4102444800}`))
+	}))
+	defer srv.Close()
+
+	code, err, out := mintCodeWithCreds(t, srv, mintForText)
+	if err != nil {
+		t.Fatalf("mintCode for text: %v", err)
+	}
+	if code != "K7M4XR" {
+		t.Fatalf("code = %q", code)
+	}
+	for _, want := range []string{"Code: K7M4XR", "On the other machine:  relayium text K7M4XR", "waiting for the other side to join"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("text block %q does not contain %q", out, want)
+		}
+	}
+	if strings.Contains(out, "relayium receive") {
+		t.Errorf("a message session must never hand off `relayium receive`: %q", out)
+	}
+	// srv is a self-hosted origin: no install.sh exists there to curl.
+	if strings.Contains(out, "install.sh") {
+		t.Errorf("install line should be omitted for a non-default server: %q", out)
+	}
+}
+
+// Logged out, the text remedy has to name the text command. `send`'s copy tells
+// the user to pass a code to `relayium send <file> <code>` and offers
+// `relayium up` as the browser alternative — neither exists for a message
+// session, which is live-only and has no file to upload.
+func TestMintCodeForTextNotLoggedInNamesTheTextCommand(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var errb bytes.Buffer
+	_, err := mintCode(context.Background(), "wss://relayium.com", &errb, mintForText)
+	if err == nil {
+		t.Fatal("want an error when not logged in")
+	}
+	msg := err.Error()
+	for _, want := range []string{"relayium login", "relayium text <code>"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error %q does not mention %q", msg, want)
+		}
+	}
+	for _, unwanted := range []string{"relayium send", "relayium up"} {
+		if strings.Contains(msg, unwanted) {
+			t.Errorf("the text remedy must not send the user to %q: %q", unwanted, msg)
+		}
+	}
+	if errb.Len() != 0 {
+		t.Errorf("nothing should be printed when minting never happened: %q", errb.String())
+	}
+}
+
+// Self-host: the login remedy must carry --server, or it stores credentials for
+// relayium.com and the next mint is refused for the same reason all over again.
+func TestMintCodeForTextNotLoggedInAgainstASelfHostedServer(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var errb bytes.Buffer
+	_, err := mintCode(context.Background(), "ws://192.168.1.9:8080/ws", &errb, mintForText)
+	if err == nil {
+		t.Fatal("want an error when not logged in")
+	}
+	if !strings.Contains(err.Error(), "relayium login --server http://192.168.1.9:8080") {
+		t.Errorf("want a self-host login remedy carrying --server, got %q", err)
+	}
+}
+
+// The stored access token goes to the server that issued it and nowhere else —
+// the same rule `send` follows, restated for text because the refusal lives in
+// the shared path and a purpose-specific bypass would be invisible here.
+func TestMintCodeForTextRefusesForeignServer(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfgDir, err := resolveConfigDir("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cloud.Save(cfgDir, cloud.Creds{Server: "https://relayium.com", AccessToken: "rlm_cli_abc"}); err != nil {
+		t.Fatal(err)
+	}
+	var errb bytes.Buffer
+	_, err = mintCode(context.Background(), "wss://someone-elses-host.example", &errb, mintForText)
+	if err == nil || !strings.Contains(err.Error(), "logged in to https://relayium.com") {
+		t.Fatalf("want a server-mismatch refusal, got %v", err)
 	}
 }
 
@@ -231,16 +332,17 @@ func TestMintCodeRefusesForeignServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	var errb bytes.Buffer
-	_, err = mintCode(context.Background(), "wss://someone-elses-host.example", &errb)
+	_, err = mintCode(context.Background(), "wss://someone-elses-host.example", &errb, mintForSend)
 	if err == nil || !strings.Contains(err.Error(), "logged in to https://relayium.com") {
 		t.Fatalf("want a server-mismatch refusal, got %v", err)
 	}
 }
 
 // mintCodeWithCreds saves rlm_cli_abc creds pointed at srv, then calls
-// mintCode against it. A small helper shared by the response-branch tests
-// below so each one only has to state its handler and its assertion.
-func mintCodeWithCreds(t *testing.T, srv *httptest.Server) (string, error, string) {
+// mintCode against it for the given purpose. A small helper shared by the
+// response-branch tests below so each one only has to state its handler and its
+// assertion.
+func mintCodeWithCreds(t *testing.T, srv *httptest.Server, p mintPurpose) (string, error, string) {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	cfgDir, err := resolveConfigDir("")
@@ -251,7 +353,7 @@ func mintCodeWithCreds(t *testing.T, srv *httptest.Server) (string, error, strin
 		t.Fatal(err)
 	}
 	var errb bytes.Buffer
-	code, err := mintCode(context.Background(), srv.URL, &errb)
+	code, err := mintCode(context.Background(), srv.URL, &errb, p)
 	return code, err, errb.String()
 }
 
@@ -264,7 +366,7 @@ func TestMintCodeUnauthorized(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err, _ := mintCodeWithCreds(t, srv)
+	_, err, _ := mintCodeWithCreds(t, srv, mintForSend)
 	if err == nil {
 		t.Fatal("want an error on 401")
 	}
@@ -282,7 +384,7 @@ func TestMintCodeRateLimited(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err, _ := mintCodeWithCreds(t, srv)
+	_, err, _ := mintCodeWithCreds(t, srv, mintForSend)
 	if err == nil {
 		t.Fatal("want an error on 429")
 	}
@@ -306,7 +408,7 @@ func TestMintCodeTTLLineForNormalExpiry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err, out := mintCodeWithCreds(t, srv)
+	_, err, out := mintCodeWithCreds(t, srv, mintForSend)
 	if err != nil {
 		t.Fatalf("mintCode: %v", err)
 	}
@@ -326,7 +428,7 @@ func TestMintCodeOmitsTTLClauseWhenServerDoesNotReportExpiry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err, out := mintCodeWithCreds(t, srv)
+	_, err, out := mintCodeWithCreds(t, srv, mintForSend)
 	if err != nil {
 		t.Fatalf("mintCode: %v", err)
 	}

@@ -74,25 +74,29 @@ func runText(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	if len(rest) < 1 {
-		fmt.Fprintln(stderr, "usage: relayium text <code>   — both ends run `relayium text` with the same code")
-		return 2
-	}
 	if len(rest) > 1 {
 		fmt.Fprintf(stderr, "relayium text takes one code, got %d arguments: %q\n", len(rest), rest)
 		return 2
 	}
-	code := rest[0]
 
-	// Shape first, and ahead of the SAS/TTY gate: a mistyped code should be
-	// reported as a mistyped code rather than masked by a complaint about --yes.
-	// rzvous.Join checks this too (that is the authoritative copy); this check is
-	// what guarantees a made-up code never reaches the network at all.
-	if !signal.ValidCodeFormat(code) {
-		fmt.Fprintf(stderr,
-			"pairing code %q is not a valid code: codes are %d characters from %s, last %d minutes, and are issued by the server — one cannot be made up\n",
-			code, signal.CodeLen, signal.CodeAlphabet, signal.CodeTTLSeconds/60)
-		return 2
+	// No code means "mint one", exactly as with `send`. Before that existed, the
+	// only way to get a code for a message session was to start a `send` on a
+	// throwaway file, copy the code and kill the sender before it took one of the
+	// room's two places -- a workaround that read like a bug and behaved like one
+	// if you were slow with Ctrl-C.
+	var code string
+	if len(rest) == 1 {
+		code = rest[0]
+		// Shape first, and ahead of the SAS/TTY gate: a mistyped code should be
+		// reported as a mistyped code rather than masked by a complaint about --yes.
+		// rzvous.Join checks this too (that is the authoritative copy); this check is
+		// what guarantees a made-up code never reaches the network at all.
+		if !signal.ValidCodeFormat(code) {
+			fmt.Fprintf(stderr,
+				"pairing code %q is not a valid code: codes are %d characters from %s, last %d minutes, and are issued by the server — one cannot be made up\n",
+				code, signal.CodeLen, signal.CodeAlphabet, signal.CodeTTLSeconds/60)
+			return 2
+		}
 	}
 
 	tty := textStdinIsTTY()
@@ -104,6 +108,18 @@ func runText(args []string, stdout, stderr io.Writer) int {
 
 	ctx, cancel := context.WithTimeout(context.Background(), textSessionTimeout)
 	defer cancel()
+
+	// Minted only after both gates above have passed, for the reason `send`
+	// mints after its manifest builds: a code starts its expiry clock the moment
+	// it exists, so a run that was going to be refused anyway must not spend one
+	// -- nor make an authenticated request on behalf of a session that will
+	// never open.
+	if code == "" {
+		if code, err = mintCode(ctx, f.server, stderr, mintForText); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+	}
 
 	// crossFlags.verify means "prompt to confirm the SAS", and confirmSAS has
 	// already inverted the default for text: interactive confirms, --yes or a

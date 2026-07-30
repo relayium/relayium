@@ -78,15 +78,15 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Browser: Nachricht an ein Online-Gerät senden</h2>
       <p>Öffne relayium.com auf beiden Geräten. Im selben Netz erscheinen sie automatisch; über verschiedene Netze erzeugst du auf der Cross-Network-Seite einen Browser-Code und trittst im zweiten Browser bei.</p>
       <ul><li>Wähle auf der Gerätekarte „Nachricht senden“. Vor der Annahme sieht der Empfänger weder Inhalt noch Eingabefeld.</li><li>Vergleiche den sechsstelligen Prüfcode (SAS) auf beiden Bildschirmen, füge Text ein und sende mit ⌘/Strg+Enter.</li><li>Solange die Sitzung offen ist, können beide Seiten mehrere Nachrichten senden und empfangene Inhalte kopieren.</li></ul>
-      <h2>CLI: denselben ausgegebenen Code auf beiden Rechnern nutzen</h2>
-      <p>Der CLI-Befehl text tritt nur einem vorhandenen sechsstelligen Code bei und erzeugt keinen. Starte derzeit relayium send mit einer winzigen temporären Datei, kopiere den ausgegebenen Code und beende den Sender sofort mit Strg-C. Ein wartender Sender belegt einen der zwei Plätze im Raum und muss daher beendet werden.</p>
-      <p>Starte danach auf beiden Rechnern relayium text mit diesem Code. Interaktiv ist jede Zeile eine Nachricht und beide Seiten bestätigen standardmäßig den SAS. Mehrzeilige oder bytegenaue Eingabe wird als eine Nachricht gepiped und braucht --yes, weil kein Terminal für die Bestätigung vorhanden ist.</p>
-      <pre><code># Get a five-minute CLI code (relayium login is required once)
-printf x &gt; /tmp/relayium-code.txt
-relayium send /tmp/relayium-code.txt
-# Copy the printed code, then press Ctrl-C before either text client starts.
+      <h2>CLI: auf einem Rechner einen Code erzeugen, auf dem anderen beitreten</h2>
+      <p>Starte auf einem Rechner relayium text ohne Code. Der Befehl erzeugt mit deinem Konto einen sechsstelligen Code, gibt genau den Befehl aus, den der andere Rechner ausführen soll, und wartet in der Sitzung auf ihn. Keine temporäre Datei, kein zusätzlicher Prozess, der beendet werden müsste.</p>
+      <p>Starte auf dem anderen Rechner relayium text mit diesem Code. Interaktiv ist jede Zeile eine Nachricht und beide Seiten bestätigen standardmäßig den SAS. Mehrzeilige oder bytegenaue Eingabe wird als eine Nachricht gepiped und braucht --yes, weil kein Terminal für die Bestätigung vorhanden ist.</p>
+      <pre><code># One machine mints the code and waits (relayium login is required once)
+relayium text
+# Code: K7M4XR   (valid 5 minutes)
+# On the other machine:  relayium text K7M4XR
 
-# Run this on both machines
+# The other machine joins that code
 relayium text K7M4XR
 
 # Send one multiline message exactly as copied (macOS)
@@ -94,7 +94,7 @@ pbpaste | relayium text K7M4XR --yes
 
 # Or pipe a file on any shell
 cat snippet.txt | relayium text K7M4XR --yes</code></pre>
-      <ul><li>CLI-Codes gelten fünf Minuten und verbinden nur CLI mit CLI; Browser und CLI sind nicht interoperabel.</li><li>Nur das Erzeugen des Codes benötigt ein angemeldetes Konto. Beide text-Clients treten dem bereits ausgegebenen Code bei.</li><li>--yes überspringt die interaktive SAS-Bestätigung; prüfe die Sitzung vorher auf einem anderen vertrauenswürdigen Weg.</li></ul>
+      <ul><li>CLI-Codes gelten fünf Minuten und verbinden nur CLI mit CLI; Browser und CLI sind nicht interoperabel.</li><li>Nur der Rechner, der den Code erzeugt, braucht ein angemeldetes Konto. Der Rechner, der dem ausgegebenen Code beitritt, muss sich nicht anmelden.</li><li>--yes überspringt die interaktive SAS-Bestätigung; prüfe die Sitzung vorher auf einem anderen vertrauenswürdigen Weg.</li></ul>
       <h2>Was Textübertragung ist — und was nicht</h2>
       <p>Der Inhalt bleibt UTF-8-Klartext mit Leerzeichen, Tabs, Leerzeilen und Zeilenumbrüchen. Relayium führt nichts aus, rendert kein Markdown, verlinkt nichts und erstellt keine Vorschau.</p>
       <ul><li>Beide Geräte müssen gleichzeitig online sein. Es gibt keine Offline-Zustellung, Inbox, Kontakte oder synchronisierte Chat-Historie.</li><li>Der Verlauf lebt nur lokal in der offenen Sitzung und verschwindet beim Ende oder Neuladen. Der Server speichert keine Nachrichtentexte.</li><li>Eine Nachricht darf höchstens 65.536 UTF-8-Bytes groß sein. Größere Inhalte sendest du als Datei.</li></ul>

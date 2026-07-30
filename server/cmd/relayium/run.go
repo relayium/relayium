@@ -21,8 +21,9 @@ usage:
   relayium send <src...> [code]              send to a peer over a pairing code (cross-network)
                                              (omit the code to mint one; requires login)
   relayium receive <code> [destdir]          receive such a transfer
-  relayium text <code> [--yes]               ephemeral encrypted messages with a peer
-                                             (both ends run this; pipe stdin for exact multiline)
+  relayium text [code] [--yes]               ephemeral encrypted messages with a peer
+                                             (both ends run this; omit the code to mint one,
+                                              which requires login; pipe stdin for exact multiline)
   relayium serve [--dir D] [--port N] [--once]   listen for daemon-direct pushes
                                              (in a terminal, approve each new peer on first push)
   relayium id                                print this host's fingerprint
