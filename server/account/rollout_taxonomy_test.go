@@ -54,6 +54,76 @@ func TestDecideFleetDoesNotRecommandAPassedOverNode(t *testing.T) {
 	}
 }
 
+// Critical fix: a passed-over result must be scoped to the rollout that
+// produced it, not read as a permanent property of the node. Nothing but
+// CommandNodeUpdate ever clears nodes.update_result, and an excluded node is
+// -- by construction -- never re-commanded, so it can never clear its own
+// flag. Without scoping, a node that reported "unreachable" once for an
+// earlier, now-superseded target would sit out EVERY rollout this track ever
+// runs again, forever, with no admin action able to fix it short of hand-
+// editing the database. Here n1 never moved past v1.0.0 and still carries
+// "unreachable" from a v2.0.0 attempt; a brand-new rollout to v3.0.0 must
+// treat it as a fresh candidate. See passedOverResult.
+func TestDecideFleetDoesNotExcludeAResultFromAnEarlierTarget(t *testing.T) {
+	tr := fleetTrackAt("v3.0.0", "rolling", "", "")
+	nodes := []NodeSnapshot{
+		{ID: "n1", Version: "v1.0.0", LastSeenAt: 2000, UpdateStartedAt: 100, UpdateResult: "unreachable"},
+	}
+	got := decideFleet(tr, nodes, 2000)
+	if got.Action != "update" || got.NodeID != "n1" {
+		t.Fatalf("a passed-over result from an earlier target excluded n1 from the new rollout: %+v", got)
+	}
+}
+
+// Due-diligence companion to the test above: scoping must survive MULTIPLE
+// stage transitions within the SAME still-active rollout, not just the
+// "nobody picked yet" case. tr.StageStartedAt is rewritten on every fleet
+// stage transition (a fleet stage is one node's turn, unlike a BYO batch), so
+// a scoping check that compares directly against it would un-exclude n1 the
+// moment n2's own turn begins -- reintroducing the ping-pong
+// TestDecideFleetDoesNotRecommandAPassedOverNode exists to stop, just one hop
+// later. FirstNodeID ("n1", the established canary) anchors this rollout's
+// epoch instead, and does not move just because a later, non-canary node
+// (n2) also passes over.
+func TestDecideFleetScopingSurvivesALaterNodesTurn(t *testing.T) {
+	tr := RolloutTrack{Track: "fleet", TargetVersion: "v2.0.0", Status: "rolling",
+		CurrentNodeID: "n2", FirstNodeID: "n1", StageStartedAt: 2000}
+	nodes := []NodeSnapshot{
+		// n1 passed over first, in this same rollout, before n2's turn began.
+		{ID: "n1", Version: "v1.0.0", LastSeenAt: 3000, UpdateStartedAt: 1000, UpdateResult: "unreachable"},
+		// n2 is current and has ALSO just passed over -- tr.StageStartedAt (2000)
+		// now postdates n1's UpdateStartedAt (1000).
+		{ID: "n2", Version: "v1.0.0", LastSeenAt: 3000, UpdateStartedAt: 2000, UpdateResult: "unreachable"},
+	}
+	got := decideFleet(tr, nodes, 3000)
+	if got.Action == "update" && got.NodeID == "n1" {
+		t.Fatalf("n1 was re-picked after a LATER node's turn began, not an earlier target: %+v", got)
+	}
+	if got.Action != "complete" {
+		t.Fatalf("both nodes have passed over within this rollout; want complete, got %+v", got)
+	}
+}
+
+// Regression guard for the fix above: "failed" must never join
+// passedOverResult's exclusion set. Unlike "skipped"/"unreachable", "failed"
+// only ever excludes a node by HALTING the track while that node is current
+// (see the branch above); if it also excluded by result, a "failed" left
+// over from an earlier, superseded rollout would strand the node exactly
+// like the bug this task fixes, and -- because a halt always takes the track
+// out of "rolling" first -- there is no reachable state where a NON-current
+// node's "failed" belongs to the rollout in flight for it to legitimately
+// exclude.
+func TestDecideFleetDoesNotExcludeAFailedNode(t *testing.T) {
+	tr := fleetTrackAt("v2.0.0", "rolling", "", "")
+	nodes := []NodeSnapshot{
+		{ID: "n1", Version: "v1.0.0", LastSeenAt: 2000, UpdateStartedAt: 1000, UpdateResult: "failed"},
+	}
+	got := decideFleet(tr, nodes, 2000)
+	if got.Action != "update" || got.NodeID != "n1" {
+		t.Fatalf("a non-current node's 'failed' result must not exclude it from candidacy: %+v", got)
+	}
+}
+
 // The half that must not loosen.
 func TestDecideFleetStillHaltsOnVerificationFailure(t *testing.T) {
 	tr := fleetTrackAt("v2.0.0", "rolling", "n1", "n1")

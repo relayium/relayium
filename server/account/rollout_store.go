@@ -340,9 +340,9 @@ func (s *SQLiteStore) BumpNodeUpdateAttempts(ctx context.Context, nodeID string)
 }
 
 // SetNodeUpdateResult records the outcome a node reported for the update it was
-// last commanded ("ok" | "failed" | "rolled_back" | "skipped"). It is written
-// before any rollout decision is taken, so a report is never lost to a
-// subsequent decision error.
+// last commanded ("ok" | "failed" | "rolled_back" | "skipped" | "unreachable").
+// It is written before any rollout decision is taken, so a report is never
+// lost to a subsequent decision error.
 func (s *SQLiteStore) SetNodeUpdateResult(ctx context.Context, nodeID, result string) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET update_result = ? WHERE id = ?`, result, nodeID)

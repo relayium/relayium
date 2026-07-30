@@ -47,7 +47,7 @@ type fleetNodeInput struct {
 	IsCanary    bool
 	// UpdateResult is nodes.update_result for this node, i.e. what it last
 	// reported back. Two of its values are decisions in decideFleet, not
-	// clocks, and they sit ABOVE every clock it runs (rollout_fleet.go:228,
+	// clocks, and they sit ABOVE every clock it runs (rollout_fleet.go:224,
 	// :248), so the panel cannot classify without it.
 	UpdateResult    string
 	UpdateStartedAt int64
