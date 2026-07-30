@@ -89,17 +89,31 @@ func TestUpdateClassifiesMissingAssetAsFetch(t *testing.T) {
 // The signature file is downloaded too, so a host that cannot serve IT is also
 // a fetch failure. Getting this wrong is the whole bug: an unreachable node
 // would keep halting the fleet through the signature path.
-func TestUpdateClassifiesMissingSignatureAsFetch(t *testing.T) {
-	err := updateAgainst(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if filepath.Base(r.URL.Path) == "checksums.txt.sig" {
-			http.NotFound(w, r)
-			return
-		}
-		// Anything else: serve bytes so the run reaches the signature step.
-		w.Write([]byte("x"))
+//
+// Exercised against verifyReleaseSignature directly rather than through Update.
+// Reaching that step via Update would require serving a real archive AND a
+// checksums.txt whose hash matches it, because verifyChecksum runs first —
+// setup that tests the harness rather than the classification.
+func TestVerifyReleaseSignatureClassifiesAMissingSigAsFetch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
 	}))
+	defer srv.Close()
+	tmp := t.TempDir()
+	sums := filepath.Join(tmp, "checksums.txt")
+	if err := os.WriteFile(sums, []byte("whatever\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	o := Options{Repo: "relayium/relayium", DownloadBase: srv.URL, HTTP: srv.Client()}
+	err := verifyReleaseSignature(context.Background(), o, srv.URL, tmp, sums, io.Discard)
+	if err == nil {
+		t.Fatal("expected a missing signature to be an error")
+	}
 	if !errors.Is(err, ErrFetch) {
-		t.Fatalf("err = %v, want ErrFetch", err)
+		t.Fatalf("err = %v, want ErrFetch — an unreachable host must not read as a verification failure", err)
+	}
+	if errors.Is(err, ErrVerify) {
+		t.Fatalf("a signature that could not be downloaded is not a failed verification: %v", err)
 	}
 }
 
