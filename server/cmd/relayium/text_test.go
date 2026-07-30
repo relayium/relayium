@@ -675,3 +675,121 @@ func TestInstallDeadlineWrapsAFailure(t *testing.T) {
 		t.Fatalf("err = %v, want it to name what failed", err)
 	}
 }
+
+// ── TTY detection ────────────────────────────────────────────────────────────
+// The old check was `fi.Mode()&os.ModeCharDevice != 0`, which is true for EVERY
+// character device. It therefore called `relayium text CODE < /dev/null`
+// interactive: the SAS prompt would go to nobody, and the received bytes would be
+// newline-framed instead of exact. These pin the real semantics.
+
+func TestIsTerminalFileRejectsCharacterDevices(t *testing.T) {
+	for _, name := range []string{os.DevNull, "/dev/zero"} {
+		f, err := os.Open(name)
+		if err != nil {
+			t.Skipf("%s not openable here: %v", name, err)
+		}
+		// It really is a character device -- otherwise this proves nothing.
+		fi, err := f.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.Mode()&os.ModeCharDevice == 0 {
+			f.Close()
+			t.Skipf("%s is not a character device on this platform", name)
+		}
+		got := isTerminalFile(f)
+		f.Close()
+		if got {
+			t.Errorf("isTerminalFile(%s) = true; a character device is not a terminal", name)
+		}
+	}
+}
+
+// The precise regression: the old heuristic said yes to /dev/null, the new check
+// says no. Asserting the difference keeps the bug from being reintroduced as a
+// "simplification".
+func TestTheOldCharDeviceHeuristicDisagreesOnDevNull(t *testing.T) {
+	f, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Skipf("%s not openable: %v", os.DevNull, err)
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldSaysTerminal := fi.Mode()&os.ModeCharDevice != 0
+	if !oldSaysTerminal {
+		t.Skip("this platform does not report /dev/null as a character device")
+	}
+	if isTerminalFile(f) {
+		t.Fatal("isTerminalFile still agrees with the old heuristic on /dev/null")
+	}
+}
+
+func TestIsTerminalFileRejectsRegularFilesAndPipes(t *testing.T) {
+	reg, err := os.CreateTemp(t.TempDir(), "stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reg.Close()
+	if isTerminalFile(reg) {
+		t.Error("a regular file is not a terminal")
+	}
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+	if isTerminalFile(r) {
+		t.Error("a pipe is not a terminal")
+	}
+}
+
+// The positive case needs a real terminal, which only exists when the suite runs
+// with a controlling tty. Skipped rather than faked where there is none: a stub
+// would assert the stub, not the behaviour.
+func TestIsTerminalFileAcceptsARealTerminal(t *testing.T) {
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		t.Skipf("no controlling terminal here: %v", err)
+	}
+	defer tty.Close()
+	if !isTerminalFile(tty) {
+		t.Fatal("isTerminalFile(/dev/tty) = false; a real terminal must be detected")
+	}
+}
+
+// The injectable seams must keep working exactly as before.
+func TestTTYSeamsRemainInjectable(t *testing.T) {
+	withStdin(t, "piped body", false)
+	if textStdinIsTTY() {
+		t.Fatal("the injected TTY answer was ignored")
+	}
+	b, err := io.ReadAll(textStdin())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != "piped body" {
+		t.Fatalf("injected stdin = %q", b)
+	}
+}
+
+// And the production var must use the fixed logic, not merely the helper: this
+// swaps the real os.Stdin, which is what osStdin() reads.
+func TestTextStdinIsTTYUsesTheRealTerminalCheck(t *testing.T) {
+	devNull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Skipf("%s not openable: %v", os.DevNull, err)
+	}
+	defer devNull.Close()
+	saved := os.Stdin
+	os.Stdin = devNull
+	t.Cleanup(func() { os.Stdin = saved })
+
+	if textStdinIsTTY() {
+		t.Fatal("textStdinIsTTY() said /dev/null is a terminal — the piped path would never be taken")
+	}
+}

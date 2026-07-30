@@ -119,7 +119,12 @@ async function deriveResumeAuth(tx: Bytes, rx: Bytes): Promise<CryptoKey> {
   input.set(domain, 0);
   input.set(a, domain.length);
   input.set(b, domain.length + a.length);
-  const raw = sodiumSync().crypto_generichash(32, input) as Bytes;
+  // `null` key = unkeyed BLAKE2b, byte-identical to omitting the argument; the
+  // resolved libsodium-wrappers types mark it required, so pass it explicitly the
+  // way commitKey/sas/textKeyBytes already do. Pinned by a vector test: the derived
+  // key still reproduces crypto-vectors.json's resumeAuth.mac, which the Swift port
+  // pins independently.
+  const raw = sodiumSync().crypto_generichash(32, input, null) as Bytes;
   return crypto.subtle.importKey("raw", raw, { name: "HMAC", hash: "SHA-256" }, false, [
     "sign",
     "verify",
@@ -152,8 +157,7 @@ export function textKeyBytes(sessionKey: Uint8Array): Uint8Array {
   input.set(sessionKey, domain.length);
   // `null` key = unkeyed BLAKE2b, byte-identical to omitting the argument; the
   // resolved libsodium-wrappers types mark it required, so pass it (same as
-  // commitKey/sas). deriveResumeAuth above omits it and is a live svelte-check
-  // error on this file — not this change's to fix, but not one to copy either.
+  // commitKey/sas/deriveResumeAuth).
   return sodiumSync().crypto_generichash(32, input, null) as Bytes;
 }
 
@@ -179,9 +183,12 @@ export async function verifyResume(
   mac: string | undefined,
 ): Promise<boolean> {
   if (!mac) return false;
-  let sig: Uint8Array;
+  // Explicitly ArrayBuffer-backed: Web Crypto's BufferSource rejects the generic
+  // `Uint8Array<ArrayBufferLike>` that Uint8Array.from infers, and every buffer in
+  // this file is ArrayBuffer-backed at runtime (never SharedArrayBuffer).
+  let sig: Bytes;
   try {
-    sig = Uint8Array.from(atob(mac), (c) => c.charCodeAt(0));
+    sig = Uint8Array.from(atob(mac), (c) => c.charCodeAt(0)) as Bytes;
   } catch {
     return false;
   }

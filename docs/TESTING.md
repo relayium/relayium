@@ -526,17 +526,16 @@ this fails immediately rather than after a pairing timeout.
 #### 10c. Piped with `--yes`: exact bytes, including multiline
 
 Both sides must be **non-interactive**, or the receiver frames each message as a
-line and the comparison fails. Redirect stdin from a **regular file** — not
-`/dev/null`, which is a character device and is therefore detected as a terminal:
+line and the comparison fails. Any redirected stdin qualifies — a file, a pipe or
+`/dev/null` — because the terminal check asks the OS whether the descriptor is a
+terminal rather than whether it is a character device:
 
 ```bash
 # prepare on A
 printf '  \tif x:\n\n\t\tprint("你好 🌍")\n  trailing   ' > /tmp/msg.txt
-# prepare on B
-: > /tmp/empty.txt
 
-# machine B first (stdin: an empty regular file, so it runs in piped mode)
-relayium text K7M4XR --yes < /tmp/empty.txt > /tmp/got.txt
+# machine B first (stdin redirected, so it runs in piped mode)
+relayium text K7M4XR --yes < /dev/null > /tmp/got.txt
 
 # machine A
 relayium text K7M4XR --yes < /tmp/msg.txt
@@ -556,7 +555,7 @@ ends, which is what lets both terminate.
 
 ```bash
 # machine A
-relayium text K7M4XR --yes < /tmp/empty.txt
+relayium text K7M4XR --yes < /dev/null
 # machine B
 relayium receive K7M4XR
 ```

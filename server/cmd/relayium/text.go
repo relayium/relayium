@@ -10,6 +10,8 @@ import (
 	"os"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/relayium/relayium/internal/rzvous"
 	"github.com/relayium/relayium/internal/signal"
 	"github.com/relayium/relayium/internal/xfer"
@@ -45,15 +47,22 @@ func (f textFlags) confirmSAS(tty bool) bool { return tty && !f.yes }
 // environments: never block a job on a human who is not there.
 func (f textFlags) allowUnverified(tty bool) bool { return tty || f.yes }
 
+// isTerminalFile reports whether f is a real terminal.
+//
+// Deliberately NOT `fi.Mode()&os.ModeCharDevice != 0`: /dev/null, /dev/zero and
+// every other character device satisfy that, so the heuristic calls
+// `relayium text CODE < /dev/null` interactive -- it would prompt a human who is
+// not there and frame its output as lines instead of exact bytes. x/term asks the
+// OS the actual question (a terminal-only ioctl), is already a direct dependency
+// of this module, and answers correctly on Windows too.
+func isTerminalFile(f *os.File) bool { return term.IsTerminal(int(f.Fd())) }
+
 // stdin and the TTY answer come through vars because runText's signature carries
 // only stdout/stderr. Swapping them is what lets the piped path be driven in a
 // test with no terminal and no network.
 var (
 	textStdin      = func() io.Reader { return osStdin() }
-	textStdinIsTTY = func() bool {
-		fi, err := osStdin().Stat()
-		return err == nil && fi.Mode()&os.ModeCharDevice != 0
-	}
+	textStdinIsTTY = func() bool { return isTerminalFile(osStdin()) }
 )
 
 // Whole-session ceiling, same as send/receive: the peer may never arrive.

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
-import { ready, textKeyBytes, TEXT_KEY_DOMAIN, seal } from "./crypto";
+import { ready, textKeyBytes, TEXT_KEY_DOMAIN, seal, generateKeyPair, deriveSession, signResume, verifyResume } from "./crypto";
 import { TextSender, TEXT_MAX_BYTES, KIND_TEXT_ENC } from "./text-wire";
 
 // The Swift port is verified against fixtures generated HERE, by the web
@@ -72,6 +72,36 @@ describe("text vectors (web is the generator, Swift the consumer)", () => {
   it("pins the per-direction counter starting at zero", async () => {
     const v = load(WIRE) as unknown as { text?: { frames: { seq: number }[] } };
     expect(v.text!.frames.map((f) => f.seq)).toEqual([0, 1, 2]);
+  });
+
+  // deriveResumeAuth is unexported and yields a non-extractable CryptoKey, so it is
+  // pinned transitively: derive a session from the fixture keypairs, sign the
+  // fixture payload with the resulting key, and require the committed mac. Swift
+  // pins the same mac from resumeAuth.keyHex, so the two ports cross-check.
+  //
+  // This is what makes passing the explicit `null` key to crypto_generichash
+  // provably semantics-preserving rather than merely plausible.
+  it("still derives the committed resume-auth key", async () => {
+    const v = load(CRYPTO) as unknown as {
+      alice: { pub: string; sec: string };
+      bob: { pub: string };
+      resumeAuth: { payload: string; mac: string };
+    };
+    const alice = { publicKey: unhex(v.alice.pub), privateKey: unhex(v.alice.sec) };
+    const keys = await deriveSession("initiator", alice, unhex(v.bob.pub));
+    expect(await signResume(keys.resumeAuth, v.resumeAuth.payload)).toBe(v.resumeAuth.mac);
+    expect(await verifyResume(keys.resumeAuth, v.resumeAuth.payload, v.resumeAuth.mac)).toBe(true);
+  });
+
+  // verifyResume's base64 decode is the other typecheck site that moved; a
+  // malformed tag must still be a refusal rather than a throw.
+  it("still refuses a malformed or absent resume tag", async () => {
+    const a = generateKeyPair();
+    const b = generateKeyPair();
+    const keys = await deriveSession("initiator", a, b.publicKey);
+    expect(await verifyResume(keys.resumeAuth, "p", undefined)).toBe(false);
+    expect(await verifyResume(keys.resumeAuth, "p", "not-base64!!")).toBe(false);
+    expect(await verifyResume(keys.resumeAuth, "p", "")).toBe(false);
   });
 
   // Old fixture entries must keep working untouched: the Swift file-stream tests
