@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>在设备之间发送文本、链接和命令 · Relayium</title>
+    <meta name="description" content="用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线、不经服务器存储，浏览器和 CLI 都能用。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-text-between-devices/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
+    <meta property="og:title" content="在设备之间发送文本、链接和命令" />
+    <meta property="og:description" content="用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线、不经服务器存储，浏览器和 CLI 都能用。" />
+    <meta property="og:url" content="https://relayium.com/zh/how-to/send-text-between-devices/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="在设备之间发送文本、链接和命令" />
+    <meta name="twitter:description" content="用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线、不经服务器存储，浏览器和 CLI 都能用。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在设备之间发送文本、链接和命令","description":"用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线、不经服务器存储，浏览器和 CLI 都能用。","inLanguage":"zh-Hans","datePublished":"2026-07-30","dateModified":"2026-07-30","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"在设备之间发送文本、链接和命令"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 能读取或恢复我的消息吗？","acceptedAnswer":{"@type":"Answer","text":"不能。消息内容只在两台设备之间端到端加密，Relayium 从不存储。实时会话一旦结束，服务器上没有可恢复的副本。"}},{"@type":"Question","name":"一端用浏览器、另一端用 CLI 可以吗？","acceptedAnswer":{"@type":"Answer","text":"不可以。浏览器与 CLI 使用不同的传输和配对握手。请使用两台浏览器，或两端都使用 CLI。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
+.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs [aria-current]{color:var(--text)}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">在设备之间发送文本、链接和命令</span></nav>
+      <h1>在设备之间发送文本、链接和命令</h1>
+      <p class="updated">最近更新: 2026-07-30</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-text-between-devices/">English</a><a href="/zh/how-to/send-text-between-devices/" aria-current="true">中文</a><a href="/ja/how-to/send-text-between-devices/">日本語</a><a href="/ko/how-to/send-text-between-devices/">한국어</a><a href="/de/how-to/send-text-between-devices/">Deutsch</a><a href="/fr/how-to/send-text-between-devices/">Français</a><a href="/ar/how-to/send-text-between-devices/">العربية</a><a href="/es/how-to/send-text-between-devices/">Español</a><a href="/pt/how-to/send-text-between-devices/">Português</a></nav>
+      <p class="lead">Relayium 不只能传文件，也能传适合剪贴板的内容：手机上的网址、要在另一台电脑执行的命令，或一整段多行代码。消息端到端加密，只存在于当前在线会话中，Relayium 从不存储。</p>
+      <p class="lead">浏览器和命令行都支持文本，但它们是两套独立传输，不能加入彼此的配对码。下面任选一种方式，两端保持一致。</p>
+      <h2>浏览器：给在线设备发送消息</h2>
+      <p>在两台设备上打开 relayium.com。同一网络的设备会自动出现；不同网络时，在跨网络页面创建浏览器配对码，再让另一台浏览器加入。</p>
+      <ul><li>在对端卡片上选择“发送消息”；接收方接受之前，消息正文和输入框都不会出现。</li><li>核对两块屏幕上的 6 位校验码（SAS），然后输入或粘贴文本，用 ⌘/Ctrl+Enter 发送。</li><li>会话保持打开时，双方都能连续发送多条消息，也能对收到的任意消息点“复制”。</li></ul>
+      <h2>CLI：两台机器使用同一个已签发配对码</h2>
+      <p>CLI 的 text 命令只加入已有的 6 位配对码，不会自行生成。当前需要先用一个很小的临时文件启动 relayium send，复制它打印的配对码，然后立刻按 Ctrl-C 停掉发送进程。等待中的 sender 会占用双人房间的一个位置，所以必须先停掉。</p>
+      <p>随后两台机器都用该码运行 relayium text。交互模式每行是一条消息，并默认要求双方确认 SAS；多行或要求逐字节保真的内容请通过管道作为一条消息发送，因为此时没有终端可确认 SAS，所以必须显式加 --yes。</p>
+      <pre><code># Get a five-minute CLI code (relayium login is required once)
+printf x &gt; /tmp/relayium-code.txt
+relayium send /tmp/relayium-code.txt
+# Copy the printed code, then press Ctrl-C before either text client starts.
+
+# Run this on both machines
+relayium text K7M4XR
+
+# Send one multiline message exactly as copied (macOS)
+pbpaste | relayium text K7M4XR --yes
+
+# Or pipe a file on any shell
+cat snippet.txt | relayium text K7M4XR --yes</code></pre>
+      <ul><li>CLI 配对码有效期 5 分钟，只能 CLI 对 CLI；浏览器码不能让浏览器与 CLI 互连。</li><li>只有生成配对码需要已登录账号；两端 text 客户端只是加入已经签发的码。</li><li>--yes 会跳过交互式 SAS 确认，使用前应通过其他可信方式核对会话。</li></ul>
+      <h2>文本传输是什么，也不是什么</h2>
+      <p>Relayium 把正文当作 UTF-8 纯文本，保留空格、制表符、空行和换行；不会执行内容、渲染 Markdown、自动识别链接或生成预览。</p>
+      <ul><li>两台设备必须同时在线；没有离线投递、收件箱、联系人或同步聊天记录。</li><li>历史只存在于当前本地会话，结束会话或刷新页面后消失；服务器从不保存消息正文。</li><li>每条消息最多 65,536 个 UTF-8 字节；更大的内容请作为文件发送。</li></ul>
+      <h2>常见问题</h2>
+      <h3>Relayium 能读取或恢复我的消息吗？</h3>
+      <p>不能。消息内容只在两台设备之间端到端加密，Relayium 从不存储。实时会话一旦结束，服务器上没有可恢复的副本。</p>
+      <h3>一端用浏览器、另一端用 CLI 可以吗？</h3>
+      <p>不可以。浏览器与 CLI 使用不同的传输和配对握手。请使用两台浏览器，或两端都使用 CLI。</p>
+      <div class="ctacard">
+        <p>在两台在线设备上打开 Relayium，把下一段原本要“发给自己”的内容直接传过去。</p>
+        <a class="cta" href="/">立即发送文本</a>
+      </div>
+      <h2>继续阅读</h2>
+      <ul class="related"><li><a href="/zh/guides/transfer-files-from-terminal/">用 Relayium CLI 从终端传输文件</a></li><li><a href="/zh/guides/send-a-file-to-someone/">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi/">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files/">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/apps/">应用</a>
+        <a href="/zh/guides/">使用指南</a>
+        <a href="/zh/privacy/">隐私政策</a>
+        <a href="/pricing">价格</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

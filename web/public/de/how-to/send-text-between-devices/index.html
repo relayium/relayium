@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Text, Links und Befehle zwischen Geräten senden · Relayium</title>
+    <meta name="description" content="Mit Relayium Text, Links, Befehle und mehrzeiligen Code zwischen Geräten übertragen — Ende-zu-Ende-verschlüsselt, nur online und nie auf dem Server gespeichert." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/de/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-text-between-devices/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
+    <meta property="og:title" content="Text, Links und Befehle zwischen Geräten senden" />
+    <meta property="og:description" content="Mit Relayium Text, Links, Befehle und mehrzeiligen Code zwischen Geräten übertragen — Ende-zu-Ende-verschlüsselt, nur online und nie auf dem Server gespeichert." />
+    <meta property="og:url" content="https://relayium.com/de/how-to/send-text-between-devices/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
+    <meta property="og:locale" content="de_DE" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Text, Links und Befehle zwischen Geräten senden" />
+    <meta name="twitter:description" content="Mit Relayium Text, Links, Befehle und mehrzeiligen Code zwischen Geräten übertragen — Ende-zu-Ende-verschlüsselt, nur online und nie auf dem Server gespeichert." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Text, Links und Befehle zwischen Geräten senden","description":"Mit Relayium Text, Links, Befehle und mehrzeiligen Code zwischen Geräten übertragen — Ende-zu-Ende-verschlüsselt, nur online und nie auf dem Server gespeichert.","inLanguage":"de","datePublished":"2026-07-30","dateModified":"2026-07-30","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/de/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/de/"},{"@type":"ListItem","position":2,"name":"Anleitungen","item":"https://relayium.com/de/guides/"},{"@type":"ListItem","position":3,"name":"Text, Links und Befehle zwischen Geräten senden"}]},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Kann Relayium meine Nachrichten lesen oder wiederherstellen?","acceptedAnswer":{"@type":"Answer","text":"Nein. Der Inhalt ist zwischen den Geräten Ende-zu-Ende-verschlüsselt und wird nicht gespeichert. Nach Sitzungsende gibt es keine Serverkopie."}},{"@type":"Question","name":"Kann eine Seite den Browser und die andere die CLI nutzen?","acceptedAnswer":{"@type":"Answer","text":"Nein. Transport und Kopplung sind verschieden. Verwende zwei Browser oder zwei CLI-Clients."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
+.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs [aria-current]{color:var(--text)}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">Text, Links und Befehle zwischen Geräten senden</span></nav>
+      <h1>Text, Links und Befehle zwischen Geräten senden</h1>
+      <p class="updated">Zuletzt aktualisiert: 2026-07-30</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-text-between-devices/">English</a><a href="/zh/how-to/send-text-between-devices/">中文</a><a href="/ja/how-to/send-text-between-devices/">日本語</a><a href="/ko/how-to/send-text-between-devices/">한국어</a><a href="/de/how-to/send-text-between-devices/" aria-current="true">Deutsch</a><a href="/fr/how-to/send-text-between-devices/">Français</a><a href="/ar/how-to/send-text-between-devices/">العربية</a><a href="/es/how-to/send-text-between-devices/">Español</a><a href="/pt/how-to/send-text-between-devices/">Português</a></nav>
+      <p class="lead">Relayium überträgt neben Dateien auch Inhalte für die Zwischenablage: eine URL vom Handy, einen Befehl für einen anderen Rechner oder mehrzeiligen Code. Nachrichten sind Ende-zu-Ende-verschlüsselt, existieren nur in der laufenden Sitzung und werden nie von Relayium gespeichert.</p>
+      <p class="lead">Browser und CLI unterstützen beide Text, verwenden aber getrennte Transportwege und können den Kopplungscode der jeweils anderen Seite nicht nutzen. Verwende an beiden Enden dieselbe Variante.</p>
+      <h2>Browser: Nachricht an ein Online-Gerät senden</h2>
+      <p>Öffne relayium.com auf beiden Geräten. Im selben Netz erscheinen sie automatisch; über verschiedene Netze erzeugst du auf der Cross-Network-Seite einen Browser-Code und trittst im zweiten Browser bei.</p>
+      <ul><li>Wähle auf der Gerätekarte „Nachricht senden“. Vor der Annahme sieht der Empfänger weder Inhalt noch Eingabefeld.</li><li>Vergleiche den sechsstelligen Prüfcode (SAS) auf beiden Bildschirmen, füge Text ein und sende mit ⌘/Strg+Enter.</li><li>Solange die Sitzung offen ist, können beide Seiten mehrere Nachrichten senden und empfangene Inhalte kopieren.</li></ul>
+      <h2>CLI: denselben ausgegebenen Code auf beiden Rechnern nutzen</h2>
+      <p>Der CLI-Befehl text tritt nur einem vorhandenen sechsstelligen Code bei und erzeugt keinen. Starte derzeit relayium send mit einer winzigen temporären Datei, kopiere den ausgegebenen Code und beende den Sender sofort mit Strg-C. Ein wartender Sender belegt einen der zwei Plätze im Raum und muss daher beendet werden.</p>
+      <p>Starte danach auf beiden Rechnern relayium text mit diesem Code. Interaktiv ist jede Zeile eine Nachricht und beide Seiten bestätigen standardmäßig den SAS. Mehrzeilige oder bytegenaue Eingabe wird als eine Nachricht gepiped und braucht --yes, weil kein Terminal für die Bestätigung vorhanden ist.</p>
+      <pre><code># Get a five-minute CLI code (relayium login is required once)
+printf x &gt; /tmp/relayium-code.txt
+relayium send /tmp/relayium-code.txt
+# Copy the printed code, then press Ctrl-C before either text client starts.
+
+# Run this on both machines
+relayium text K7M4XR
+
+# Send one multiline message exactly as copied (macOS)
+pbpaste | relayium text K7M4XR --yes
+
+# Or pipe a file on any shell
+cat snippet.txt | relayium text K7M4XR --yes</code></pre>
+      <ul><li>CLI-Codes gelten fünf Minuten und verbinden nur CLI mit CLI; Browser und CLI sind nicht interoperabel.</li><li>Nur das Erzeugen des Codes benötigt ein angemeldetes Konto. Beide text-Clients treten dem bereits ausgegebenen Code bei.</li><li>--yes überspringt die interaktive SAS-Bestätigung; prüfe die Sitzung vorher auf einem anderen vertrauenswürdigen Weg.</li></ul>
+      <h2>Was Textübertragung ist — und was nicht</h2>
+      <p>Der Inhalt bleibt UTF-8-Klartext mit Leerzeichen, Tabs, Leerzeilen und Zeilenumbrüchen. Relayium führt nichts aus, rendert kein Markdown, verlinkt nichts und erstellt keine Vorschau.</p>
+      <ul><li>Beide Geräte müssen gleichzeitig online sein. Es gibt keine Offline-Zustellung, Inbox, Kontakte oder synchronisierte Chat-Historie.</li><li>Der Verlauf lebt nur lokal in der offenen Sitzung und verschwindet beim Ende oder Neuladen. Der Server speichert keine Nachrichtentexte.</li><li>Eine Nachricht darf höchstens 65.536 UTF-8-Bytes groß sein. Größere Inhalte sendest du als Datei.</li></ul>
+      <h2>Häufige Fragen</h2>
+      <h3>Kann Relayium meine Nachrichten lesen oder wiederherstellen?</h3>
+      <p>Nein. Der Inhalt ist zwischen den Geräten Ende-zu-Ende-verschlüsselt und wird nicht gespeichert. Nach Sitzungsende gibt es keine Serverkopie.</p>
+      <h3>Kann eine Seite den Browser und die andere die CLI nutzen?</h3>
+      <p>Nein. Transport und Kopplung sind verschieden. Verwende zwei Browser oder zwei CLI-Clients.</p>
+      <div class="ctacard">
+        <p>Öffne Relayium auf zwei Online-Geräten und übertrage den nächsten Inhalt direkt statt ihn dir selbst zu schicken.</p>
+        <a class="cta" href="/">Jetzt Text senden</a>
+      </div>
+      <h2>Weiterlesen</h2>
+      <ul class="related"><li><a href="/de/guides/transfer-files-from-terminal/">Dateien mit der Relayium CLI vom Terminal aus übertragen</a></li><li><a href="/de/guides/send-a-file-to-someone/">Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden</a></li><li><a href="/de/how-to/send-files-on-the-same-wifi/">Dateien zwischen Geräten im selben WLAN senden</a></li><li><a href="/de/guides/how-relayium-encrypts-your-files/">Wie Relayium deine Dateien Ende-zu-Ende verschlüsselt</a></li><li><a href="/de/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=de">← Relayium</a>
+        <a href="/de/apps/">Apps</a>
+        <a href="/de/guides/">Anleitungen</a>
+        <a href="/de/privacy/">Datenschutz</a>
+        <a href="/pricing">Preise</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

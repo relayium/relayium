@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>端末間でテキスト、リンク、コマンドを送る · Relayium</title>
+    <meta name="description" content="Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化、同時オンライン限定、サーバー保存なし。ブラウザと CLI に対応。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ja/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-text-between-devices/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
+    <meta property="og:title" content="端末間でテキスト、リンク、コマンドを送る" />
+    <meta property="og:description" content="Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化、同時オンライン限定、サーバー保存なし。ブラウザと CLI に対応。" />
+    <meta property="og:url" content="https://relayium.com/ja/how-to/send-text-between-devices/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="端末間でテキスト、リンク、コマンドを送る" />
+    <meta name="twitter:description" content="Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化、同時オンライン限定、サーバー保存なし。ブラウザと CLI に対応。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"端末間でテキスト、リンク、コマンドを送る","description":"Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化、同時オンライン限定、サーバー保存なし。ブラウザと CLI に対応。","inLanguage":"ja","datePublished":"2026-07-30","dateModified":"2026-07-30","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"端末間でテキスト、リンク、コマンドを送る"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"Relayium はメッセージを読んだり復元できますか？","acceptedAnswer":{"@type":"Answer","text":"できません。内容は端末間でエンドツーエンド暗号化され、保存されません。セッション終了後にサーバーから復元できるコピーはありません。"}},{"@type":"Question","name":"片方をブラウザ、片方を CLI にできますか？","acceptedAnswer":{"@type":"Answer","text":"できません。転送方式とペアリング方式が異なります。ブラウザ同士、または CLI 同士で使ってください。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
+.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs [aria-current]{color:var(--text)}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">端末間でテキスト、リンク、コマンドを送る</span></nav>
+      <h1>端末間でテキスト、リンク、コマンドを送る</h1>
+      <p class="updated">最終更新: 2026-07-30</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-text-between-devices/">English</a><a href="/zh/how-to/send-text-between-devices/">中文</a><a href="/ja/how-to/send-text-between-devices/" aria-current="true">日本語</a><a href="/ko/how-to/send-text-between-devices/">한국어</a><a href="/de/how-to/send-text-between-devices/">Deutsch</a><a href="/fr/how-to/send-text-between-devices/">Français</a><a href="/ar/how-to/send-text-between-devices/">العربية</a><a href="/es/how-to/send-text-between-devices/">Español</a><a href="/pt/how-to/send-text-between-devices/">Português</a></nav>
+      <p class="lead">Relayium はファイルだけでなく、スマートフォンの URL、別の PC で使うコマンド、複数行のコードなど、クリップボード向けの内容も運べます。メッセージはエンドツーエンド暗号化され、ライブセッション内だけに存在し、Relayium は保存しません。</p>
+      <p class="lead">ブラウザと CLI の両方がテキストに対応しますが、別々の転送方式であり、互いのペアリングコードには参加できません。両端で同じ方式を選んでください。</p>
+      <h2>ブラウザ：オンライン端末へメッセージを送る</h2>
+      <p>両方の端末で relayium.com を開きます。同じネットワークなら自動表示され、別ネットワークならクロスネットワーク画面でブラウザ用コードを作り、もう一方のブラウザで参加します。</p>
+      <ul><li>相手のカードで「メッセージを送信」を選びます。受信側が承認するまで本文も入力欄も表示されません。</li><li>両画面の 6 桁の確認コード（SAS）を比べ、入力または貼り付け後に ⌘/Ctrl+Enter で送信します。</li><li>セッション中は双方が複数のメッセージを送り、受信メッセージをコピーできます。</li></ul>
+      <h2>CLI：両方のマシンで同じ発行済みコードを使う</h2>
+      <p>CLI の text は既存の 6 文字コードへ参加するだけで、発行はしません。現状は小さな一時ファイルで relayium send を開始し、表示されたコードを控え、すぐ Ctrl-C で sender を止めます。待機中の sender は 2 人部屋の 1 席を使うため、停止が必須です。</p>
+      <p>両方でそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、既定で SAS 確認を求めます。複数行や正確な stdin はパイプで 1 メッセージとして送り、端末プロンプトがないため --yes を付けます。</p>
+      <pre><code># Get a five-minute CLI code (relayium login is required once)
+printf x &gt; /tmp/relayium-code.txt
+relayium send /tmp/relayium-code.txt
+# Copy the printed code, then press Ctrl-C before either text client starts.
+
+# Run this on both machines
+relayium text K7M4XR
+
+# Send one multiline message exactly as copied (macOS)
+pbpaste | relayium text K7M4XR --yes
+
+# Or pipe a file on any shell
+cat snippet.txt | relayium text K7M4XR --yes</code></pre>
+      <ul><li>CLI コードは 5 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。</li><li>コード発行だけはログイン済みアカウントが必要で、2 つの text クライアントは発行済みコードへ参加します。</li><li>--yes は対話的な SAS 確認を省くため、別の信頼できる手段で確認してください。</li></ul>
+      <h2>テキスト転送の範囲</h2>
+      <p>本文は UTF-8 のプレーンテキストです。空白、タブ、空行、改行を保持し、実行、Markdown 描画、リンク化、プレビューはしません。</p>
+      <ul><li>両端が同時にオンラインである必要があります。オフライン配信、受信箱、連絡先、同期チャット履歴はありません。</li><li>履歴は開いているローカルセッションだけにあり、終了や再読み込みで消えます。サーバーは本文を保存しません。</li><li>1 メッセージは UTF-8 で 65,536 バイトまで。それ以上はファイルとして送ってください。</li></ul>
+      <h2>よくある質問</h2>
+      <h3>Relayium はメッセージを読んだり復元できますか？</h3>
+      <p>できません。内容は端末間でエンドツーエンド暗号化され、保存されません。セッション終了後にサーバーから復元できるコピーはありません。</p>
+      <h3>片方をブラウザ、片方を CLI にできますか？</h3>
+      <p>できません。転送方式とペアリング方式が異なります。ブラウザ同士、または CLI 同士で使ってください。</p>
+      <div class="ctacard">
+        <p>オンラインの 2 台で Relayium を開き、次に自分宛てへ送るはずだった内容を直接移しましょう。</p>
+        <a class="cta" href="/">テキストを送る</a>
+      </div>
+      <h2>関連記事</h2>
+      <ul class="related"><li><a href="/ja/guides/transfer-files-from-terminal/">Relayium CLI でターミナルからファイルを転送する</a></li><li><a href="/ja/guides/send-a-file-to-someone/">Relayium CLI でネットワークを越えて誰かにファイルを送る</a></li><li><a href="/ja/how-to/send-files-on-the-same-wifi/">同じ Wi-Fi 上の端末間でファイルを送る</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files/">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ja">← Relayium</a>
+        <a href="/ja/apps/">アプリ</a>
+        <a href="/ja/guides/">ガイド</a>
+        <a href="/ja/privacy/">プライバシーポリシー</a>
+        <a href="/pricing">料金</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

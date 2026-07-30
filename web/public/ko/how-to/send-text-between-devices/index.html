@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>기기 사이에서 텍스트, 링크, 명령 보내기 · Relayium</title>
+    <meta name="description" content="Relayium으로 텍스트, 링크, 명령과 여러 줄 코드를 기기 사이에 전송하세요. 종단간 암호화, 동시 온라인 전용, 서버 저장 없음, 브라우저와 CLI 지원." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ko/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-text-between-devices/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
+    <meta property="og:title" content="기기 사이에서 텍스트, 링크, 명령 보내기" />
+    <meta property="og:description" content="Relayium으로 텍스트, 링크, 명령과 여러 줄 코드를 기기 사이에 전송하세요. 종단간 암호화, 동시 온라인 전용, 서버 저장 없음, 브라우저와 CLI 지원." />
+    <meta property="og:url" content="https://relayium.com/ko/how-to/send-text-between-devices/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="기기 사이에서 텍스트, 링크, 명령 보내기" />
+    <meta name="twitter:description" content="Relayium으로 텍스트, 링크, 명령과 여러 줄 코드를 기기 사이에 전송하세요. 종단간 암호화, 동시 온라인 전용, 서버 저장 없음, 브라우저와 CLI 지원." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"기기 사이에서 텍스트, 링크, 명령 보내기","description":"Relayium으로 텍스트, 링크, 명령과 여러 줄 코드를 기기 사이에 전송하세요. 종단간 암호화, 동시 온라인 전용, 서버 저장 없음, 브라우저와 CLI 지원.","inLanguage":"ko","datePublished":"2026-07-30","dateModified":"2026-07-30","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"기기 사이에서 텍스트, 링크, 명령 보내기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Relayium이 메시지를 읽거나 복구할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 내용은 기기 사이에서 종단간 암호화되고 저장되지 않습니다. 세션이 끝나면 서버에서 복구할 사본이 없습니다."}},{"@type":"Question","name":"한쪽은 브라우저, 다른 쪽은 CLI를 쓸 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 전송과 페어링 방식이 다릅니다. 브라우저 두 개 또는 CLI 두 개를 사용하세요."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
+.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs [aria-current]{color:var(--text)}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">기기 사이에서 텍스트, 링크, 명령 보내기</span></nav>
+      <h1>기기 사이에서 텍스트, 링크, 명령 보내기</h1>
+      <p class="updated">최근 업데이트: 2026-07-30</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-text-between-devices/">English</a><a href="/zh/how-to/send-text-between-devices/">中文</a><a href="/ja/how-to/send-text-between-devices/">日本語</a><a href="/ko/how-to/send-text-between-devices/" aria-current="true">한국어</a><a href="/de/how-to/send-text-between-devices/">Deutsch</a><a href="/fr/how-to/send-text-between-devices/">Français</a><a href="/ar/how-to/send-text-between-devices/">العربية</a><a href="/es/how-to/send-text-between-devices/">Español</a><a href="/pt/how-to/send-text-between-devices/">Português</a></nav>
+      <p class="lead">Relayium은 파일뿐 아니라 휴대폰의 URL, 다른 컴퓨터에서 쓸 명령, 여러 줄 코드처럼 클립보드에 맞는 내용도 옮깁니다. 메시지는 종단간 암호화되고 현재 세션에만 존재하며 Relayium은 저장하지 않습니다.</p>
+      <p class="lead">브라우저와 CLI 모두 텍스트를 지원하지만 서로 다른 전송 방식이므로 상대 방식의 페어링 코드에 참여할 수 없습니다. 양쪽에서 같은 방식을 사용하세요.</p>
+      <h2>브라우저: 온라인 기기에 메시지 보내기</h2>
+      <p>두 기기에서 relayium.com을 엽니다. 같은 네트워크에서는 자동으로 나타나고, 다른 네트워크에서는 교차 네트워크 페이지에서 브라우저 코드를 만든 뒤 다른 브라우저가 참여합니다.</p>
+      <ul><li>상대 카드에서 “메시지 보내기”를 선택합니다. 수신자가 수락하기 전에는 본문이나 작성기가 나타나지 않습니다.</li><li>두 화면의 6자리 확인 코드(SAS)를 비교한 뒤 입력하거나 붙여 넣고 ⌘/Ctrl+Enter로 보냅니다.</li><li>세션이 열린 동안 양쪽에서 여러 메시지를 보내고 받은 메시지를 복사할 수 있습니다.</li></ul>
+      <h2>CLI: 두 컴퓨터에서 같은 발급 코드를 사용</h2>
+      <p>CLI text 명령은 기존 6자리 코드에 참여할 뿐 코드를 만들지 않습니다. 현재는 작은 임시 파일로 relayium send를 시작해 출력된 코드를 복사하고 즉시 Ctrl-C로 sender를 중지해야 합니다. 기다리는 sender가 2인 방 한 자리를 차지하므로 반드시 중지하세요.</p>
+      <p>양쪽에서 그 코드로 relayium text를 실행합니다. 대화형 모드는 한 줄을 한 메시지로 보내고 기본적으로 SAS 확인을 요구합니다. 여러 줄 또는 정확한 stdin은 파이프로 한 메시지로 보내며 터미널 확인이 없으므로 --yes를 붙입니다.</p>
+      <pre><code># Get a five-minute CLI code (relayium login is required once)
+printf x &gt; /tmp/relayium-code.txt
+relayium send /tmp/relayium-code.txt
+# Copy the printed code, then press Ctrl-C before either text client starts.
+
+# Run this on both machines
+relayium text K7M4XR
+
+# Send one multiline message exactly as copied (macOS)
+pbpaste | relayium text K7M4XR --yes
+
+# Or pipe a file on any shell
+cat snippet.txt | relayium text K7M4XR --yes</code></pre>
+      <ul><li>CLI 코드는 5분 동안 유효하고 CLI끼리만 연결합니다. 브라우저와 CLI는 서로 연결되지 않습니다.</li><li>코드 발급에만 로그인 계정이 필요하며 두 text 클라이언트는 이미 발급된 코드에 참여합니다.</li><li>--yes는 대화형 SAS 확인을 건너뛰므로 다른 신뢰할 수 있는 방법으로 세션을 확인하세요.</li></ul>
+      <h2>텍스트 전송의 범위</h2>
+      <p>본문은 UTF-8 일반 텍스트입니다. 공백, 탭, 빈 줄과 줄바꿈을 보존하며 실행, Markdown 렌더링, 링크 변환, 미리보기를 하지 않습니다.</p>
+      <ul><li>두 기기가 동시에 온라인이어야 합니다. 오프라인 전달, 받은편지함, 연락처, 동기화된 채팅 기록은 없습니다.</li><li>기록은 열린 로컬 세션에만 있고 종료하거나 새로고침하면 사라집니다. 서버는 본문을 저장하지 않습니다.</li><li>메시지 하나는 UTF-8 65,536바이트까지입니다. 더 크면 파일로 보내세요.</li></ul>
+      <h2>자주 묻는 질문</h2>
+      <h3>Relayium이 메시지를 읽거나 복구할 수 있나요?</h3>
+      <p>아니요. 내용은 기기 사이에서 종단간 암호화되고 저장되지 않습니다. 세션이 끝나면 서버에서 복구할 사본이 없습니다.</p>
+      <h3>한쪽은 브라우저, 다른 쪽은 CLI를 쓸 수 있나요?</h3>
+      <p>아니요. 전송과 페어링 방식이 다릅니다. 브라우저 두 개 또는 CLI 두 개를 사용하세요.</p>
+      <div class="ctacard">
+        <p>온라인 기기 두 대에서 Relayium을 열고 다음에 자신에게 보낼 내용을 바로 옮겨 보세요.</p>
+        <a class="cta" href="/">텍스트 보내기</a>
+      </div>
+      <h2>더 읽기</h2>
+      <ul class="related"><li><a href="/ko/guides/transfer-files-from-terminal/">Relayium CLI로 터미널에서 파일 전송하기</a></li><li><a href="/ko/guides/send-a-file-to-someone/">Relayium CLI로 네트워크를 넘어 상대에게 파일 보내기</a></li><li><a href="/ko/how-to/send-files-on-the-same-wifi/">같은 Wi-Fi에 있는 기기끼리 파일 보내기</a></li><li><a href="/ko/guides/how-relayium-encrypts-your-files/">Relayium이 파일을 종단간 암호화하는 방식</a></li><li><a href="/ko/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ko">← Relayium</a>
+        <a href="/ko/apps/">앱</a>
+        <a href="/ko/guides/">가이드</a>
+        <a href="/ko/privacy/">개인정보 처리방침</a>
+        <a href="/pricing">요금제</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

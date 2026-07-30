@@ -1,0 +1,474 @@
+// How-to: move clipboard-shaped text between devices without turning Relayium
+// into stored chat. Browser and CLI pairing are separate, non-interoperable
+// transports; the shared product contract is online-only, session-scoped text.
+
+const commands = `# Get a five-minute CLI code (relayium login is required once)
+printf x > /tmp/relayium-code.txt
+relayium send /tmp/relayium-code.txt
+# Copy the printed code, then press Ctrl-C before either text client starts.
+
+# Run this on both machines
+relayium text K7M4XR
+
+# Send one multiline message exactly as copied (macOS)
+pbpaste | relayium text K7M4XR --yes
+
+# Or pipe a file on any shell
+cat snippet.txt | relayium text K7M4XR --yes`;
+
+function article(c) {
+  return {
+    title: c.title,
+    description: c.description,
+    updatedLabel: c.updatedLabel,
+    lead: c.lead,
+    sections: [
+      {
+        heading: c.browserHeading,
+        body: [c.browserBody],
+        bullets: c.browserSteps,
+      },
+      {
+        heading: c.cliHeading,
+        body: c.cliBody,
+        code: [commands],
+        bullets: c.cliNotes,
+      },
+      {
+        heading: c.boundariesHeading,
+        body: [c.boundariesBody],
+        bullets: c.boundaries,
+      },
+    ],
+    faq: {
+      heading: c.faqHeading,
+      items: c.faq,
+    },
+    cta: { text: c.ctaText, button: c.ctaButton, href: "/" },
+    relatedHeading: c.relatedHeading,
+  };
+}
+
+const en = article({
+  title: "Send text, links and commands between devices",
+  description:
+    "Move text, links, commands and multiline code between devices with Relayium — end-to-end encrypted, online-only, never stored, in the browser or CLI.",
+  updatedLabel: "Last updated",
+  lead: [
+    "Relayium can move clipboard-shaped content as well as files: a URL from your phone, a command for another computer, or a multiline code block. Messages are end-to-end encrypted and exist only inside the live session; Relayium never stores them.",
+    "The browser and command-line client each support text, but they are separate transports and cannot join each other's pairing codes. Choose one flow below and use it on both ends.",
+  ],
+  browserHeading: "Browser: send a message to an online device",
+  browserBody:
+    "Open relayium.com on both devices. Devices on the same network appear automatically; for different networks, create a browser pairing code from the cross-network page and join it in the other browser.",
+  browserSteps: [
+    "On the peer card, choose “Send a message”; the recipient must accept before any message content or composer appears.",
+    "Compare the six-digit verification code (SAS) on both screens, then type or paste text. Use ⌘/Ctrl+Enter to send.",
+    "Each side can send several messages and use Copy on any received message while the session remains open.",
+  ],
+  cliHeading: "CLI: use the same issued code on both machines",
+  cliBody: [
+    "The CLI text command joins an existing six-character code; it does not mint one. Today, obtain a code by starting relayium send with a tiny temporary file, copy the printed code, and immediately stop that sender with Ctrl-C. A waiting sender occupies one of the code room's two places, so stopping it is required.",
+    "Run relayium text with that code on both machines. Interactive mode sends one line per message and asks both people to confirm the SAS. For multiline or byte-exact stdin, pipe it as one message and pass --yes because no terminal is available for the SAS prompt.",
+  ],
+  cliNotes: [
+    "CLI codes last five minutes and are CLI-to-CLI only; browser codes cannot connect a browser to the CLI.",
+    "Only minting the code needs a signed-in account. Both text clients join the already-issued code.",
+    "--yes skips the interactive SAS confirmation, so compare the session another trusted way before using it.",
+  ],
+  boundariesHeading: "What text transfer is — and is not",
+  boundariesBody:
+    "Relayium treats the body as UTF-8 plain text. It preserves spaces, tabs, blank lines and line breaks, and does not execute, render Markdown, linkify or preview the content.",
+  boundaries: [
+    "Both devices must be online together. There is no offline delivery, inbox, contact list or synchronized chat history.",
+    "History is local to the open session and disappears when it ends or the page reloads; the server never stores message bodies.",
+    "One message is at most 65,536 UTF-8 bytes. For anything larger, send it as a file instead.",
+  ],
+  faqHeading: "Frequently asked questions",
+  faq: [
+    {
+      q: "Can Relayium read or recover my messages?",
+      a: "No. Message content is end-to-end encrypted between the two devices and is never stored by Relayium. If the live session ends, there is no server copy to recover.",
+    },
+    {
+      q: "Can I use a browser on one end and the CLI on the other?",
+      a: "No. Browser and CLI text sessions use different transports and pairing handshakes. Use two browsers or two CLI clients.",
+    },
+  ],
+  ctaText: "Open Relayium on two online devices and move the next thing you would otherwise send to yourself.",
+  ctaButton: "Send text now",
+  relatedHeading: "Keep reading",
+});
+
+const zh = article({
+  title: "在设备之间发送文本、链接和命令",
+  description:
+    "用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线、不经服务器存储，浏览器和 CLI 都能用。",
+  updatedLabel: "最近更新",
+  lead: [
+    "Relayium 不只能传文件，也能传适合剪贴板的内容：手机上的网址、要在另一台电脑执行的命令，或一整段多行代码。消息端到端加密，只存在于当前在线会话中，Relayium 从不存储。",
+    "浏览器和命令行都支持文本，但它们是两套独立传输，不能加入彼此的配对码。下面任选一种方式，两端保持一致。",
+  ],
+  browserHeading: "浏览器：给在线设备发送消息",
+  browserBody:
+    "在两台设备上打开 relayium.com。同一网络的设备会自动出现；不同网络时，在跨网络页面创建浏览器配对码，再让另一台浏览器加入。",
+  browserSteps: [
+    "在对端卡片上选择“发送消息”；接收方接受之前，消息正文和输入框都不会出现。",
+    "核对两块屏幕上的 6 位校验码（SAS），然后输入或粘贴文本，用 ⌘/Ctrl+Enter 发送。",
+    "会话保持打开时，双方都能连续发送多条消息，也能对收到的任意消息点“复制”。",
+  ],
+  cliHeading: "CLI：两台机器使用同一个已签发配对码",
+  cliBody: [
+    "CLI 的 text 命令只加入已有的 6 位配对码，不会自行生成。当前需要先用一个很小的临时文件启动 relayium send，复制它打印的配对码，然后立刻按 Ctrl-C 停掉发送进程。等待中的 sender 会占用双人房间的一个位置，所以必须先停掉。",
+    "随后两台机器都用该码运行 relayium text。交互模式每行是一条消息，并默认要求双方确认 SAS；多行或要求逐字节保真的内容请通过管道作为一条消息发送，因为此时没有终端可确认 SAS，所以必须显式加 --yes。",
+  ],
+  cliNotes: [
+    "CLI 配对码有效期 5 分钟，只能 CLI 对 CLI；浏览器码不能让浏览器与 CLI 互连。",
+    "只有生成配对码需要已登录账号；两端 text 客户端只是加入已经签发的码。",
+    "--yes 会跳过交互式 SAS 确认，使用前应通过其他可信方式核对会话。",
+  ],
+  boundariesHeading: "文本传输是什么，也不是什么",
+  boundariesBody:
+    "Relayium 把正文当作 UTF-8 纯文本，保留空格、制表符、空行和换行；不会执行内容、渲染 Markdown、自动识别链接或生成预览。",
+  boundaries: [
+    "两台设备必须同时在线；没有离线投递、收件箱、联系人或同步聊天记录。",
+    "历史只存在于当前本地会话，结束会话或刷新页面后消失；服务器从不保存消息正文。",
+    "每条消息最多 65,536 个 UTF-8 字节；更大的内容请作为文件发送。",
+  ],
+  faqHeading: "常见问题",
+  faq: [
+    {
+      q: "Relayium 能读取或恢复我的消息吗？",
+      a: "不能。消息内容只在两台设备之间端到端加密，Relayium 从不存储。实时会话一旦结束，服务器上没有可恢复的副本。",
+    },
+    {
+      q: "一端用浏览器、另一端用 CLI 可以吗？",
+      a: "不可以。浏览器与 CLI 使用不同的传输和配对握手。请使用两台浏览器，或两端都使用 CLI。",
+    },
+  ],
+  ctaText: "在两台在线设备上打开 Relayium，把下一段原本要“发给自己”的内容直接传过去。",
+  ctaButton: "立即发送文本",
+  relatedHeading: "继续阅读",
+});
+
+const ja = article({
+  title: "端末間でテキスト、リンク、コマンドを送る",
+  description:
+    "Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化、同時オンライン限定、サーバー保存なし。ブラウザと CLI に対応。",
+  updatedLabel: "最終更新",
+  lead: [
+    "Relayium はファイルだけでなく、スマートフォンの URL、別の PC で使うコマンド、複数行のコードなど、クリップボード向けの内容も運べます。メッセージはエンドツーエンド暗号化され、ライブセッション内だけに存在し、Relayium は保存しません。",
+    "ブラウザと CLI の両方がテキストに対応しますが、別々の転送方式であり、互いのペアリングコードには参加できません。両端で同じ方式を選んでください。",
+  ],
+  browserHeading: "ブラウザ：オンライン端末へメッセージを送る",
+  browserBody:
+    "両方の端末で relayium.com を開きます。同じネットワークなら自動表示され、別ネットワークならクロスネットワーク画面でブラウザ用コードを作り、もう一方のブラウザで参加します。",
+  browserSteps: [
+    "相手のカードで「メッセージを送信」を選びます。受信側が承認するまで本文も入力欄も表示されません。",
+    "両画面の 6 桁の確認コード（SAS）を比べ、入力または貼り付け後に ⌘/Ctrl+Enter で送信します。",
+    "セッション中は双方が複数のメッセージを送り、受信メッセージをコピーできます。",
+  ],
+  cliHeading: "CLI：両方のマシンで同じ発行済みコードを使う",
+  cliBody: [
+    "CLI の text は既存の 6 文字コードへ参加するだけで、発行はしません。現状は小さな一時ファイルで relayium send を開始し、表示されたコードを控え、すぐ Ctrl-C で sender を止めます。待機中の sender は 2 人部屋の 1 席を使うため、停止が必須です。",
+    "両方でそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、既定で SAS 確認を求めます。複数行や正確な stdin はパイプで 1 メッセージとして送り、端末プロンプトがないため --yes を付けます。",
+  ],
+  cliNotes: [
+    "CLI コードは 5 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。",
+    "コード発行だけはログイン済みアカウントが必要で、2 つの text クライアントは発行済みコードへ参加します。",
+    "--yes は対話的な SAS 確認を省くため、別の信頼できる手段で確認してください。",
+  ],
+  boundariesHeading: "テキスト転送の範囲",
+  boundariesBody:
+    "本文は UTF-8 のプレーンテキストです。空白、タブ、空行、改行を保持し、実行、Markdown 描画、リンク化、プレビューはしません。",
+  boundaries: [
+    "両端が同時にオンラインである必要があります。オフライン配信、受信箱、連絡先、同期チャット履歴はありません。",
+    "履歴は開いているローカルセッションだけにあり、終了や再読み込みで消えます。サーバーは本文を保存しません。",
+    "1 メッセージは UTF-8 で 65,536 バイトまで。それ以上はファイルとして送ってください。",
+  ],
+  faqHeading: "よくある質問",
+  faq: [
+    { q: "Relayium はメッセージを読んだり復元できますか？", a: "できません。内容は端末間でエンドツーエンド暗号化され、保存されません。セッション終了後にサーバーから復元できるコピーはありません。" },
+    { q: "片方をブラウザ、片方を CLI にできますか？", a: "できません。転送方式とペアリング方式が異なります。ブラウザ同士、または CLI 同士で使ってください。" },
+  ],
+  ctaText: "オンラインの 2 台で Relayium を開き、次に自分宛てへ送るはずだった内容を直接移しましょう。",
+  ctaButton: "テキストを送る",
+  relatedHeading: "関連記事",
+});
+
+const ko = article({
+  title: "기기 사이에서 텍스트, 링크, 명령 보내기",
+  description:
+    "Relayium으로 텍스트, 링크, 명령과 여러 줄 코드를 기기 사이에 전송하세요. 종단간 암호화, 동시 온라인 전용, 서버 저장 없음, 브라우저와 CLI 지원.",
+  updatedLabel: "최근 업데이트",
+  lead: [
+    "Relayium은 파일뿐 아니라 휴대폰의 URL, 다른 컴퓨터에서 쓸 명령, 여러 줄 코드처럼 클립보드에 맞는 내용도 옮깁니다. 메시지는 종단간 암호화되고 현재 세션에만 존재하며 Relayium은 저장하지 않습니다.",
+    "브라우저와 CLI 모두 텍스트를 지원하지만 서로 다른 전송 방식이므로 상대 방식의 페어링 코드에 참여할 수 없습니다. 양쪽에서 같은 방식을 사용하세요.",
+  ],
+  browserHeading: "브라우저: 온라인 기기에 메시지 보내기",
+  browserBody:
+    "두 기기에서 relayium.com을 엽니다. 같은 네트워크에서는 자동으로 나타나고, 다른 네트워크에서는 교차 네트워크 페이지에서 브라우저 코드를 만든 뒤 다른 브라우저가 참여합니다.",
+  browserSteps: [
+    "상대 카드에서 “메시지 보내기”를 선택합니다. 수신자가 수락하기 전에는 본문이나 작성기가 나타나지 않습니다.",
+    "두 화면의 6자리 확인 코드(SAS)를 비교한 뒤 입력하거나 붙여 넣고 ⌘/Ctrl+Enter로 보냅니다.",
+    "세션이 열린 동안 양쪽에서 여러 메시지를 보내고 받은 메시지를 복사할 수 있습니다.",
+  ],
+  cliHeading: "CLI: 두 컴퓨터에서 같은 발급 코드를 사용",
+  cliBody: [
+    "CLI text 명령은 기존 6자리 코드에 참여할 뿐 코드를 만들지 않습니다. 현재는 작은 임시 파일로 relayium send를 시작해 출력된 코드를 복사하고 즉시 Ctrl-C로 sender를 중지해야 합니다. 기다리는 sender가 2인 방 한 자리를 차지하므로 반드시 중지하세요.",
+    "양쪽에서 그 코드로 relayium text를 실행합니다. 대화형 모드는 한 줄을 한 메시지로 보내고 기본적으로 SAS 확인을 요구합니다. 여러 줄 또는 정확한 stdin은 파이프로 한 메시지로 보내며 터미널 확인이 없으므로 --yes를 붙입니다.",
+  ],
+  cliNotes: [
+    "CLI 코드는 5분 동안 유효하고 CLI끼리만 연결합니다. 브라우저와 CLI는 서로 연결되지 않습니다.",
+    "코드 발급에만 로그인 계정이 필요하며 두 text 클라이언트는 이미 발급된 코드에 참여합니다.",
+    "--yes는 대화형 SAS 확인을 건너뛰므로 다른 신뢰할 수 있는 방법으로 세션을 확인하세요.",
+  ],
+  boundariesHeading: "텍스트 전송의 범위",
+  boundariesBody:
+    "본문은 UTF-8 일반 텍스트입니다. 공백, 탭, 빈 줄과 줄바꿈을 보존하며 실행, Markdown 렌더링, 링크 변환, 미리보기를 하지 않습니다.",
+  boundaries: [
+    "두 기기가 동시에 온라인이어야 합니다. 오프라인 전달, 받은편지함, 연락처, 동기화된 채팅 기록은 없습니다.",
+    "기록은 열린 로컬 세션에만 있고 종료하거나 새로고침하면 사라집니다. 서버는 본문을 저장하지 않습니다.",
+    "메시지 하나는 UTF-8 65,536바이트까지입니다. 더 크면 파일로 보내세요.",
+  ],
+  faqHeading: "자주 묻는 질문",
+  faq: [
+    { q: "Relayium이 메시지를 읽거나 복구할 수 있나요?", a: "아니요. 내용은 기기 사이에서 종단간 암호화되고 저장되지 않습니다. 세션이 끝나면 서버에서 복구할 사본이 없습니다." },
+    { q: "한쪽은 브라우저, 다른 쪽은 CLI를 쓸 수 있나요?", a: "아니요. 전송과 페어링 방식이 다릅니다. 브라우저 두 개 또는 CLI 두 개를 사용하세요." },
+  ],
+  ctaText: "온라인 기기 두 대에서 Relayium을 열고 다음에 자신에게 보낼 내용을 바로 옮겨 보세요.",
+  ctaButton: "텍스트 보내기",
+  relatedHeading: "더 읽기",
+});
+
+const de = article({
+  title: "Text, Links und Befehle zwischen Geräten senden",
+  description:
+    "Mit Relayium Text, Links, Befehle und mehrzeiligen Code zwischen Geräten übertragen — Ende-zu-Ende-verschlüsselt, nur online und nie auf dem Server gespeichert.",
+  updatedLabel: "Zuletzt aktualisiert",
+  lead: [
+    "Relayium überträgt neben Dateien auch Inhalte für die Zwischenablage: eine URL vom Handy, einen Befehl für einen anderen Rechner oder mehrzeiligen Code. Nachrichten sind Ende-zu-Ende-verschlüsselt, existieren nur in der laufenden Sitzung und werden nie von Relayium gespeichert.",
+    "Browser und CLI unterstützen beide Text, verwenden aber getrennte Transportwege und können den Kopplungscode der jeweils anderen Seite nicht nutzen. Verwende an beiden Enden dieselbe Variante.",
+  ],
+  browserHeading: "Browser: Nachricht an ein Online-Gerät senden",
+  browserBody:
+    "Öffne relayium.com auf beiden Geräten. Im selben Netz erscheinen sie automatisch; über verschiedene Netze erzeugst du auf der Cross-Network-Seite einen Browser-Code und trittst im zweiten Browser bei.",
+  browserSteps: [
+    "Wähle auf der Gerätekarte „Nachricht senden“. Vor der Annahme sieht der Empfänger weder Inhalt noch Eingabefeld.",
+    "Vergleiche den sechsstelligen Prüfcode (SAS) auf beiden Bildschirmen, füge Text ein und sende mit ⌘/Strg+Enter.",
+    "Solange die Sitzung offen ist, können beide Seiten mehrere Nachrichten senden und empfangene Inhalte kopieren.",
+  ],
+  cliHeading: "CLI: denselben ausgegebenen Code auf beiden Rechnern nutzen",
+  cliBody: [
+    "Der CLI-Befehl text tritt nur einem vorhandenen sechsstelligen Code bei und erzeugt keinen. Starte derzeit relayium send mit einer winzigen temporären Datei, kopiere den ausgegebenen Code und beende den Sender sofort mit Strg-C. Ein wartender Sender belegt einen der zwei Plätze im Raum und muss daher beendet werden.",
+    "Starte danach auf beiden Rechnern relayium text mit diesem Code. Interaktiv ist jede Zeile eine Nachricht und beide Seiten bestätigen standardmäßig den SAS. Mehrzeilige oder bytegenaue Eingabe wird als eine Nachricht gepiped und braucht --yes, weil kein Terminal für die Bestätigung vorhanden ist.",
+  ],
+  cliNotes: [
+    "CLI-Codes gelten fünf Minuten und verbinden nur CLI mit CLI; Browser und CLI sind nicht interoperabel.",
+    "Nur das Erzeugen des Codes benötigt ein angemeldetes Konto. Beide text-Clients treten dem bereits ausgegebenen Code bei.",
+    "--yes überspringt die interaktive SAS-Bestätigung; prüfe die Sitzung vorher auf einem anderen vertrauenswürdigen Weg.",
+  ],
+  boundariesHeading: "Was Textübertragung ist — und was nicht",
+  boundariesBody:
+    "Der Inhalt bleibt UTF-8-Klartext mit Leerzeichen, Tabs, Leerzeilen und Zeilenumbrüchen. Relayium führt nichts aus, rendert kein Markdown, verlinkt nichts und erstellt keine Vorschau.",
+  boundaries: [
+    "Beide Geräte müssen gleichzeitig online sein. Es gibt keine Offline-Zustellung, Inbox, Kontakte oder synchronisierte Chat-Historie.",
+    "Der Verlauf lebt nur lokal in der offenen Sitzung und verschwindet beim Ende oder Neuladen. Der Server speichert keine Nachrichtentexte.",
+    "Eine Nachricht darf höchstens 65.536 UTF-8-Bytes groß sein. Größere Inhalte sendest du als Datei.",
+  ],
+  faqHeading: "Häufige Fragen",
+  faq: [
+    { q: "Kann Relayium meine Nachrichten lesen oder wiederherstellen?", a: "Nein. Der Inhalt ist zwischen den Geräten Ende-zu-Ende-verschlüsselt und wird nicht gespeichert. Nach Sitzungsende gibt es keine Serverkopie." },
+    { q: "Kann eine Seite den Browser und die andere die CLI nutzen?", a: "Nein. Transport und Kopplung sind verschieden. Verwende zwei Browser oder zwei CLI-Clients." },
+  ],
+  ctaText: "Öffne Relayium auf zwei Online-Geräten und übertrage den nächsten Inhalt direkt statt ihn dir selbst zu schicken.",
+  ctaButton: "Jetzt Text senden",
+  relatedHeading: "Weiterlesen",
+});
+
+const fr = article({
+  title: "Envoyer du texte, des liens et des commandes entre appareils",
+  description:
+    "Transférez texte, liens, commandes et code multiligne avec Relayium — chiffré de bout en bout, uniquement en ligne et jamais stocké sur le serveur.",
+  updatedLabel: "Dernière mise à jour",
+  lead: [
+    "Relayium transporte aussi le contenu du presse-papiers : une URL du téléphone, une commande pour un autre ordinateur ou un bloc de code multiligne. Les messages sont chiffrés de bout en bout, n'existent que dans la session active et ne sont jamais stockés par Relayium.",
+    "Le navigateur et la CLI prennent en charge le texte, mais utilisent des transports séparés et ne peuvent pas rejoindre leurs codes respectifs. Utilisez la même méthode aux deux extrémités.",
+  ],
+  browserHeading: "Navigateur : envoyer un message à un appareil en ligne",
+  browserBody:
+    "Ouvrez relayium.com sur les deux appareils. Sur le même réseau ils apparaissent automatiquement ; sinon créez un code navigateur sur la page interréseau et rejoignez-le dans l'autre navigateur.",
+  browserSteps: [
+    "Choisissez « Envoyer un message » sur la carte du pair. Avant acceptation, le destinataire ne voit ni contenu ni zone de saisie.",
+    "Comparez le code de vérification à six chiffres (SAS), saisissez ou collez le texte, puis envoyez avec ⌘/Ctrl+Entrée.",
+    "Tant que la session reste ouverte, chaque côté peut envoyer plusieurs messages et copier ceux qu'il reçoit.",
+  ],
+  cliHeading: "CLI : utiliser le même code émis sur les deux machines",
+  cliBody: [
+    "La commande CLI text rejoint un code existant à six caractères mais n'en crée pas. Pour l'instant, lancez relayium send avec un minuscule fichier temporaire, copiez le code affiché puis arrêtez aussitôt l'envoi avec Ctrl-C. Un sender en attente occupe l'une des deux places de la salle et doit donc être arrêté.",
+    "Lancez ensuite relayium text avec ce code sur les deux machines. En mode interactif, chaque ligne est un message et le SAS doit être confirmé. Pour du texte multiligne ou exact, utilisez un pipe en un seul message avec --yes, car aucun terminal ne peut afficher la confirmation.",
+  ],
+  cliNotes: [
+    "Les codes CLI durent cinq minutes et relient uniquement deux CLI ; navigateur et CLI ne sont pas interopérables.",
+    "Seule la création du code exige un compte connecté. Les deux clients text rejoignent le code déjà émis.",
+    "--yes ignore la confirmation interactive du SAS ; vérifiez la session par un autre moyen fiable.",
+  ],
+  boundariesHeading: "Ce que le transfert de texte est — et n'est pas",
+  boundariesBody:
+    "Le contenu reste du texte brut UTF-8, avec espaces, tabulations, lignes vides et retours à la ligne. Relayium ne l'exécute pas, ne rend pas le Markdown, ne crée ni lien ni aperçu.",
+  boundaries: [
+    "Les deux appareils doivent être en ligne ensemble. Pas de livraison hors ligne, boîte de réception, contacts ou historique synchronisé.",
+    "L'historique est local à la session ouverte et disparaît à sa fermeture ou au rechargement. Le serveur ne stocke aucun corps de message.",
+    "Un message est limité à 65 536 octets UTF-8. Envoyez les contenus plus grands sous forme de fichier.",
+  ],
+  faqHeading: "Questions fréquentes",
+  faq: [
+    { q: "Relayium peut-il lire ou récupérer mes messages ?", a: "Non. Le contenu est chiffré de bout en bout entre les appareils et n'est jamais stocké. Une session fermée ne laisse aucune copie serveur." },
+    { q: "Puis-je utiliser le navigateur d'un côté et la CLI de l'autre ?", a: "Non. Les transports et associations diffèrent. Utilisez deux navigateurs ou deux clients CLI." },
+  ],
+  ctaText: "Ouvrez Relayium sur deux appareils en ligne et transférez directement ce que vous vous seriez envoyé à vous-même.",
+  ctaButton: "Envoyer du texte",
+  relatedHeading: "Continuer la lecture",
+});
+
+const ar = article({
+  title: "إرسال النصوص والروابط والأوامر بين الأجهزة",
+  description:
+    "انقل النصوص والروابط والأوامر والشيفرة متعددة الأسطر عبر Relayium — بتشفير من الطرف إلى الطرف، أثناء اتصال الجهازين فقط، ومن دون تخزين على الخادم.",
+  updatedLabel: "آخر تحديث",
+  lead: [
+    "ينقل Relayium محتوى الحافظة إلى جانب الملفات: رابطًا من الهاتف، أو أمرًا لجهاز آخر، أو شيفرة متعددة الأسطر. الرسائل مشفّرة من الطرف إلى الطرف، ولا توجد إلا داخل الجلسة الحية، ولا يخزنها Relayium.",
+    "يدعم المتصفح وسطر الأوامر النصوص، لكنهما وسيلتا نقل منفصلتان ولا يمكن لإحداهما الانضمام برمز الأخرى. استخدم الوسيلة نفسها في الطرفين.",
+  ],
+  browserHeading: "المتصفح: إرسال رسالة إلى جهاز متصل",
+  browserBody:
+    "افتح relayium.com على الجهازين. تظهر الأجهزة على الشبكة نفسها تلقائيًا؛ وعبر شبكتين أنشئ رمز متصفح من صفحة النقل بين الشبكات وانضم إليه من المتصفح الآخر.",
+  browserSteps: [
+    "اختر «إرسال رسالة» من بطاقة الطرف الآخر. لا يظهر النص أو مربع الكتابة للمستلم قبل أن يقبل.",
+    "قارن رمز التحقق ذي الأرقام الستة (SAS) على الشاشتين، ثم اكتب أو الصق وأرسل باستخدام ⌘/Ctrl+Enter.",
+    "ما دامت الجلسة مفتوحة يستطيع الطرفان إرسال عدة رسائل ونسخ أي رسالة مستلمة.",
+  ],
+  cliHeading: "سطر الأوامر: استخدام الرمز الصادر نفسه على الجهازين",
+  cliBody: [
+    "ينضم أمر text إلى رمز موجود من ستة محارف ولا يصدر رمزًا. حاليًا ابدأ relayium send بملف مؤقت صغير، وانسخ الرمز المطبوع، ثم أوقف المرسل فورًا بـ Ctrl-C. المرسل المنتظر يشغل أحد مقعدي الغرفة، لذلك يجب إيقافه.",
+    "شغّل relayium text بالرمز نفسه على الجهازين. في الوضع التفاعلي كل سطر رسالة ويُطلب تأكيد SAS افتراضيًا. أرسل النص متعدد الأسطر أو الدقيق عبر pipe كرسالة واحدة مع --yes لأن الطرفية غير متاحة للتأكيد.",
+  ],
+  cliNotes: [
+    "رمز CLI صالح لخمس دقائق ويربط CLI بـ CLI فقط؛ لا يتوافق المتصفح مع CLI.",
+    "إصدار الرمز وحده يحتاج حسابًا مسجل الدخول، أما عميلا text فينضمان إلى الرمز الصادر.",
+    "--yes يتجاوز تأكيد SAS التفاعلي؛ تحقق من الجلسة بوسيلة موثوقة أخرى.",
+  ],
+  boundariesHeading: "حدود نقل النصوص",
+  boundariesBody:
+    "يظل المحتوى نص UTF-8 عاديًا مع المسافات وعلامات الجدولة والأسطر الفارغة وفواصل الأسطر. لا ينفذه Relayium ولا يعرض Markdown ولا يحوله إلى روابط أو معاينات.",
+  boundaries: [
+    "يجب أن يكون الجهازان متصلين معًا. لا يوجد تسليم دون اتصال أو صندوق وارد أو جهات اتصال أو سجل محادثة متزامن.",
+    "السجل محلي للجلسة المفتوحة ويختفي عند انتهائها أو تحديث الصفحة. لا يخزن الخادم نص الرسالة.",
+    "الحد الأقصى للرسالة 65,536 بايت UTF-8. أرسل المحتوى الأكبر كملف.",
+  ],
+  faqHeading: "الأسئلة الشائعة",
+  faq: [
+    { q: "هل يستطيع Relayium قراءة رسائلي أو استعادتها؟", a: "لا. المحتوى مشفّر بين الجهازين ولا يُخزن. بعد انتهاء الجلسة لا توجد نسخة على الخادم لاستعادتها." },
+    { q: "هل يمكن استخدام المتصفح في طرف وCLI في الآخر؟", a: "لا. النقل والاقتران مختلفان. استخدم متصفحين أو عميلَي CLI." },
+  ],
+  ctaText: "افتح Relayium على جهازين متصلين وانقل مباشرة ما كنت سترسله إلى نفسك.",
+  ctaButton: "إرسال نص الآن",
+  relatedHeading: "تابع القراءة",
+});
+
+const es = article({
+  title: "Enviar texto, enlaces y comandos entre dispositivos",
+  description:
+    "Transfiere texto, enlaces, comandos y código multilínea con Relayium: cifrado de extremo a extremo, solo mientras ambos están en línea y nunca almacenado.",
+  updatedLabel: "Última actualización",
+  lead: [
+    "Relayium también mueve contenido de portapapeles: una URL del teléfono, un comando para otro ordenador o código multilínea. Los mensajes están cifrados de extremo a extremo, existen solo en la sesión activa y Relayium nunca los almacena.",
+    "El navegador y la CLI admiten texto, pero usan transportes separados y no pueden unirse con el código del otro. Usa el mismo método en ambos extremos.",
+  ],
+  browserHeading: "Navegador: enviar un mensaje a un dispositivo en línea",
+  browserBody:
+    "Abre relayium.com en ambos dispositivos. En la misma red aparecen automáticamente; en redes distintas crea un código de navegador en la página entre redes y únete desde el otro navegador.",
+  browserSteps: [
+    "Elige «Enviar un mensaje» en la tarjeta del par. Antes de aceptar, el destinatario no ve contenido ni editor.",
+    "Compara el código de verificación de seis dígitos (SAS), escribe o pega y envía con ⌘/Ctrl+Enter.",
+    "Mientras la sesión siga abierta, ambos lados pueden enviar varios mensajes y copiar cualquiera que reciban.",
+  ],
+  cliHeading: "CLI: usar el mismo código emitido en ambos equipos",
+  cliBody: [
+    "El comando text de la CLI se une a un código existente de seis caracteres, pero no lo crea. Hoy debes iniciar relayium send con un archivo temporal pequeño, copiar el código impreso y detener enseguida el sender con Ctrl-C. Un sender esperando ocupa una de las dos plazas de la sala, por eso hay que detenerlo.",
+    "Después ejecuta relayium text con ese código en ambos equipos. El modo interactivo envía una línea por mensaje y pide confirmar el SAS. Para texto multilínea o exacto, usa una tubería como un solo mensaje con --yes, porque no hay terminal para confirmar.",
+  ],
+  cliNotes: [
+    "Los códigos CLI duran cinco minutos y solo conectan CLI con CLI; navegador y CLI no son interoperables.",
+    "Solo emitir el código exige una cuenta conectada. Los dos clientes text se unen al código ya emitido.",
+    "--yes omite la confirmación interactiva del SAS; verifica la sesión por otro medio fiable.",
+  ],
+  boundariesHeading: "Qué es —y qué no es— la transferencia de texto",
+  boundariesBody:
+    "El contenido sigue siendo texto plano UTF-8, incluidos espacios, tabulaciones, líneas vacías y saltos. Relayium no lo ejecuta, no muestra Markdown, no enlaza ni crea vistas previas.",
+  boundaries: [
+    "Ambos dispositivos deben estar en línea a la vez. No hay entrega sin conexión, bandeja de entrada, contactos ni historial sincronizado.",
+    "El historial es local a la sesión abierta y desaparece al terminar o recargar. El servidor nunca almacena el cuerpo.",
+    "Cada mensaje admite hasta 65.536 bytes UTF-8. Envía el contenido mayor como archivo.",
+  ],
+  faqHeading: "Preguntas frecuentes",
+  faq: [
+    { q: "¿Puede Relayium leer o recuperar mis mensajes?", a: "No. El contenido está cifrado entre los dispositivos y nunca se almacena. Al terminar la sesión no queda copia en el servidor." },
+    { q: "¿Puedo usar navegador en un extremo y CLI en el otro?", a: "No. El transporte y el emparejamiento son distintos. Usa dos navegadores o dos clientes CLI." },
+  ],
+  ctaText: "Abre Relayium en dos dispositivos en línea y mueve directamente lo próximo que te enviarías a ti mismo.",
+  ctaButton: "Enviar texto ahora",
+  relatedHeading: "Sigue leyendo",
+});
+
+const pt = article({
+  title: "Enviar texto, links e comandos entre dispositivos",
+  description:
+    "Transfira texto, links, comandos e código multilinha com o Relayium — criptografado de ponta a ponta, apenas online e nunca armazenado no servidor.",
+  updatedLabel: "Última atualização",
+  lead: [
+    "O Relayium também move conteúdo de área de transferência: uma URL do celular, um comando para outro computador ou código multilinha. As mensagens são criptografadas de ponta a ponta, existem apenas na sessão ativa e nunca são armazenadas pelo Relayium.",
+    "O navegador e a CLI aceitam texto, mas usam transportes separados e não entram com o código um do outro. Use o mesmo método nas duas pontas.",
+  ],
+  browserHeading: "Navegador: enviar mensagem a um dispositivo online",
+  browserBody:
+    "Abra relayium.com nos dois dispositivos. Na mesma rede eles aparecem automaticamente; em redes diferentes crie um código de navegador na página entre redes e entre pelo outro navegador.",
+  browserSteps: [
+    "Escolha “Enviar uma mensagem” no cartão do par. Antes de aceitar, o destinatário não vê conteúdo nem editor.",
+    "Compare o código de verificação de seis dígitos (SAS), digite ou cole e envie com ⌘/Ctrl+Enter.",
+    "Enquanto a sessão estiver aberta, os dois lados podem enviar várias mensagens e copiar qualquer mensagem recebida.",
+  ],
+  cliHeading: "CLI: usar o mesmo código emitido nas duas máquinas",
+  cliBody: [
+    "O comando text da CLI entra em um código existente de seis caracteres, mas não cria um. Hoje, inicie relayium send com um arquivo temporário pequeno, copie o código impresso e pare imediatamente o sender com Ctrl-C. Um sender esperando ocupa uma das duas vagas da sala, por isso precisa ser parado.",
+    "Depois execute relayium text com esse código nas duas máquinas. O modo interativo envia uma linha por mensagem e pede confirmação do SAS. Para texto multilinha ou exato, use um pipe como uma mensagem com --yes, pois não há terminal para confirmar.",
+  ],
+  cliNotes: [
+    "Códigos CLI duram cinco minutos e conectam apenas CLI com CLI; navegador e CLI não são interoperáveis.",
+    "Somente emitir o código exige uma conta conectada. Os dois clientes text entram no código já emitido.",
+    "--yes pula a confirmação interativa do SAS; verifique a sessão por outro meio confiável.",
+  ],
+  boundariesHeading: "O que a transferência de texto é — e não é",
+  boundariesBody:
+    "O conteúdo permanece texto simples UTF-8, com espaços, tabulações, linhas vazias e quebras. O Relayium não executa, renderiza Markdown, cria links nem prévias.",
+  boundaries: [
+    "Os dois dispositivos precisam estar online juntos. Não há entrega offline, caixa de entrada, contatos ou histórico sincronizado.",
+    "O histórico é local à sessão aberta e desaparece ao terminar ou recarregar. O servidor nunca armazena o corpo.",
+    "Cada mensagem aceita até 65.536 bytes UTF-8. Envie conteúdo maior como arquivo.",
+  ],
+  faqHeading: "Perguntas frequentes",
+  faq: [
+    { q: "O Relayium pode ler ou recuperar minhas mensagens?", a: "Não. O conteúdo é criptografado entre os dispositivos e nunca armazenado. Ao terminar a sessão não há cópia no servidor." },
+    { q: "Posso usar navegador em uma ponta e CLI na outra?", a: "Não. Transporte e pareamento são diferentes. Use dois navegadores ou dois clientes CLI." },
+  ],
+  ctaText: "Abra o Relayium em dois dispositivos online e mova diretamente o próximo conteúdo que enviaria a si mesmo.",
+  ctaButton: "Enviar texto agora",
+  relatedHeading: "Continue lendo",
+});
+
+export default {
+  slug: "how-to/send-text-between-devices",
+  published: "2026-07-30",
+  updated: "2026-07-30",
+  langs: { en, zh, ja, ko, de, fr, ar, es, pt },
+};

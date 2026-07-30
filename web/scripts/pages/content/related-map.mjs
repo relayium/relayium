@@ -161,7 +161,7 @@ export const RELATED = {
     "guides/send-a-file-to-someone",
     "guides/receive-files-from-the-command-line",
     "guides/push-to-cloud-pull-on-another-computer",
-    "compare/croc",
+    "how-to/send-text-between-devices",
   ],
   "guides/what-is-peer-to-peer-file-transfer": [
     "guides/how-relayium-encrypts-your-files",
@@ -198,7 +198,7 @@ export const RELATED = {
   "how-to/send-files-on-the-same-wifi": [
     "how-to/airdrop-for-windows-and-android",
     "how-to/transfer-files-between-mac-and-windows",
-    "compare/localsend",
+    "how-to/send-text-between-devices",
     "guides/what-is-peer-to-peer-file-transfer",
   ],
   "how-to/send-files-pc-to-phone-wirelessly": [
@@ -212,6 +212,12 @@ export const RELATED = {
     "how-to/share-a-file-with-an-expiring-link",
     "compare/wetransfer",
     "guides/what-is-peer-to-peer-file-transfer",
+  ],
+  "how-to/send-text-between-devices": [
+    "guides/transfer-files-from-terminal",
+    "guides/send-a-file-to-someone",
+    "how-to/send-files-on-the-same-wifi",
+    "guides/how-relayium-encrypts-your-files",
   ],
   "how-to/share-a-file-with-an-expiring-link": [
     "compare/wetransfer",

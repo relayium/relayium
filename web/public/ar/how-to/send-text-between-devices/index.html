@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>إرسال النصوص والروابط والأوامر بين الأجهزة · Relayium</title>
+    <meta name="description" content="انقل النصوص والروابط والأوامر والشيفرة متعددة الأسطر عبر Relayium — بتشفير من الطرف إلى الطرف، أثناء اتصال الجهازين فقط، ومن دون تخزين على الخادم." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ar/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/send-text-between-devices/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-text-between-devices/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
+    <meta property="og:title" content="إرسال النصوص والروابط والأوامر بين الأجهزة" />
+    <meta property="og:description" content="انقل النصوص والروابط والأوامر والشيفرة متعددة الأسطر عبر Relayium — بتشفير من الطرف إلى الطرف، أثناء اتصال الجهازين فقط، ومن دون تخزين على الخادم." />
+    <meta property="og:url" content="https://relayium.com/ar/how-to/send-text-between-devices/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
+    <meta property="og:locale" content="ar_AR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="إرسال النصوص والروابط والأوامر بين الأجهزة" />
+    <meta name="twitter:description" content="انقل النصوص والروابط والأوامر والشيفرة متعددة الأسطر عبر Relayium — بتشفير من الطرف إلى الطرف، أثناء اتصال الجهازين فقط، ومن دون تخزين على الخادم." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"إرسال النصوص والروابط والأوامر بين الأجهزة","description":"انقل النصوص والروابط والأوامر والشيفرة متعددة الأسطر عبر Relayium — بتشفير من الطرف إلى الطرف، أثناء اتصال الجهازين فقط، ومن دون تخزين على الخادم.","inLanguage":"ar","datePublished":"2026-07-30","dateModified":"2026-07-30","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"إرسال النصوص والروابط والأوامر بين الأجهزة"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل يستطيع Relayium قراءة رسائلي أو استعادتها؟","acceptedAnswer":{"@type":"Answer","text":"لا. المحتوى مشفّر بين الجهازين ولا يُخزن. بعد انتهاء الجلسة لا توجد نسخة على الخادم لاستعادتها."}},{"@type":"Question","name":"هل يمكن استخدام المتصفح في طرف وCLI في الآخر؟","acceptedAnswer":{"@type":"Answer","text":"لا. النقل والاقتران مختلفان. استخدم متصفحين أو عميلَي CLI."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
+.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
+.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs [aria-current]{color:var(--text)}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo">⇌</span><a href="/?lang=ar">Relayium</a></header>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">إرسال النصوص والروابط والأوامر بين الأجهزة</span></nav>
+      <h1>إرسال النصوص والروابط والأوامر بين الأجهزة</h1>
+      <p class="updated">آخر تحديث: 2026-07-30</p>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-text-between-devices/">English</a><a href="/zh/how-to/send-text-between-devices/">中文</a><a href="/ja/how-to/send-text-between-devices/">日本語</a><a href="/ko/how-to/send-text-between-devices/">한국어</a><a href="/de/how-to/send-text-between-devices/">Deutsch</a><a href="/fr/how-to/send-text-between-devices/">Français</a><a href="/ar/how-to/send-text-between-devices/" aria-current="true">العربية</a><a href="/es/how-to/send-text-between-devices/">Español</a><a href="/pt/how-to/send-text-between-devices/">Português</a></nav>
+      <p class="lead">ينقل Relayium محتوى الحافظة إلى جانب الملفات: رابطًا من الهاتف، أو أمرًا لجهاز آخر، أو شيفرة متعددة الأسطر. الرسائل مشفّرة من الطرف إلى الطرف، ولا توجد إلا داخل الجلسة الحية، ولا يخزنها Relayium.</p>
+      <p class="lead">يدعم المتصفح وسطر الأوامر النصوص، لكنهما وسيلتا نقل منفصلتان ولا يمكن لإحداهما الانضمام برمز الأخرى. استخدم الوسيلة نفسها في الطرفين.</p>
+      <h2>المتصفح: إرسال رسالة إلى جهاز متصل</h2>
+      <p>افتح relayium.com على الجهازين. تظهر الأجهزة على الشبكة نفسها تلقائيًا؛ وعبر شبكتين أنشئ رمز متصفح من صفحة النقل بين الشبكات وانضم إليه من المتصفح الآخر.</p>
+      <ul><li>اختر «إرسال رسالة» من بطاقة الطرف الآخر. لا يظهر النص أو مربع الكتابة للمستلم قبل أن يقبل.</li><li>قارن رمز التحقق ذي الأرقام الستة (SAS) على الشاشتين، ثم اكتب أو الصق وأرسل باستخدام ⌘/Ctrl+Enter.</li><li>ما دامت الجلسة مفتوحة يستطيع الطرفان إرسال عدة رسائل ونسخ أي رسالة مستلمة.</li></ul>
+      <h2>سطر الأوامر: استخدام الرمز الصادر نفسه على الجهازين</h2>
+      <p>ينضم أمر text إلى رمز موجود من ستة محارف ولا يصدر رمزًا. حاليًا ابدأ relayium send بملف مؤقت صغير، وانسخ الرمز المطبوع، ثم أوقف المرسل فورًا بـ Ctrl-C. المرسل المنتظر يشغل أحد مقعدي الغرفة، لذلك يجب إيقافه.</p>
+      <p>شغّل relayium text بالرمز نفسه على الجهازين. في الوضع التفاعلي كل سطر رسالة ويُطلب تأكيد SAS افتراضيًا. أرسل النص متعدد الأسطر أو الدقيق عبر pipe كرسالة واحدة مع --yes لأن الطرفية غير متاحة للتأكيد.</p>
+      <pre><code># Get a five-minute CLI code (relayium login is required once)
+printf x &gt; /tmp/relayium-code.txt
+relayium send /tmp/relayium-code.txt
+# Copy the printed code, then press Ctrl-C before either text client starts.
+
+# Run this on both machines
+relayium text K7M4XR
+
+# Send one multiline message exactly as copied (macOS)
+pbpaste | relayium text K7M4XR --yes
+
+# Or pipe a file on any shell
+cat snippet.txt | relayium text K7M4XR --yes</code></pre>
+      <ul><li>رمز CLI صالح لخمس دقائق ويربط CLI بـ CLI فقط؛ لا يتوافق المتصفح مع CLI.</li><li>إصدار الرمز وحده يحتاج حسابًا مسجل الدخول، أما عميلا text فينضمان إلى الرمز الصادر.</li><li>--yes يتجاوز تأكيد SAS التفاعلي؛ تحقق من الجلسة بوسيلة موثوقة أخرى.</li></ul>
+      <h2>حدود نقل النصوص</h2>
+      <p>يظل المحتوى نص UTF-8 عاديًا مع المسافات وعلامات الجدولة والأسطر الفارغة وفواصل الأسطر. لا ينفذه Relayium ولا يعرض Markdown ولا يحوله إلى روابط أو معاينات.</p>
+      <ul><li>يجب أن يكون الجهازان متصلين معًا. لا يوجد تسليم دون اتصال أو صندوق وارد أو جهات اتصال أو سجل محادثة متزامن.</li><li>السجل محلي للجلسة المفتوحة ويختفي عند انتهائها أو تحديث الصفحة. لا يخزن الخادم نص الرسالة.</li><li>الحد الأقصى للرسالة 65,536 بايت UTF-8. أرسل المحتوى الأكبر كملف.</li></ul>
+      <h2>الأسئلة الشائعة</h2>
+      <h3>هل يستطيع Relayium قراءة رسائلي أو استعادتها؟</h3>
+      <p>لا. المحتوى مشفّر بين الجهازين ولا يُخزن. بعد انتهاء الجلسة لا توجد نسخة على الخادم لاستعادتها.</p>
+      <h3>هل يمكن استخدام المتصفح في طرف وCLI في الآخر؟</h3>
+      <p>لا. النقل والاقتران مختلفان. استخدم متصفحين أو عميلَي CLI.</p>
+      <div class="ctacard">
+        <p>افتح Relayium على جهازين متصلين وانقل مباشرة ما كنت سترسله إلى نفسك.</p>
+        <a class="cta" href="/">إرسال نص الآن</a>
+      </div>
+      <h2>تابع القراءة</h2>
+      <ul class="related"><li><a href="/ar/guides/transfer-files-from-terminal/">انقل الملفات من الطرفية باستخدام Relayium CLI</a></li><li><a href="/ar/guides/send-a-file-to-someone/">إرسال ملف إلى شخص ما عبر الشبكات باستخدام واجهة Relayium الطرفية (CLI)</a></li><li><a href="/ar/how-to/send-files-on-the-same-wifi/">إرسال الملفات بين الأجهزة على نفس شبكة Wi-Fi</a></li><li><a href="/ar/guides/how-relayium-encrypts-your-files/">كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف</a></li><li><a href="/ar/">Relayium</a></li></ul>
+      <footer>
+        <a href="/?lang=ar">← Relayium</a>
+        <a href="/ar/apps/">التطبيقات</a>
+        <a href="/ar/guides/">الأدلة</a>
+        <a href="/ar/privacy/">undefined</a>
+        <a href="/pricing">الأسعار</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>
