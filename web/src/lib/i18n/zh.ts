@@ -370,6 +370,7 @@ const zh: Messages = {
     pickWhen: [
       "传到一台你能 SSH 进去的服务器",
       "跨网络传给另一个人",
+      "双方都在线时，发送文本、链接、命令或多行代码",
       "在你自己拥有的两台服务器之间",
       "持续镜像一个文件夹，而不是一次性拷贝",
       "对端不在线——现在上传，之后再取",
@@ -668,6 +669,7 @@ const zh: Messages = {
   text: {
     panelTitle: "消息",
     open: "发送消息",
+    availabilityHint: "另一台设备在线时，可以发送端到端加密的文本、链接、命令和多行代码；消息不会被存储。",
     composePlaceholder: "输入或粘贴文本…",
     send: "发送",
     sendHint: "回车换行 · ⌘/Ctrl+回车发送",

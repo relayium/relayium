@@ -384,6 +384,7 @@ const en: Messages = {
     pickWhen: [
       "To a server you can SSH into",
       "To another person, cross-network",
+      "Send text, links, commands or multiline code while both machines are online",
       "Between two servers you own",
       "Keep a folder mirrored, not a one-shot copy",
       "The far end is offline — upload now, grab it later",
@@ -682,6 +683,7 @@ const en: Messages = {
   text: {
     panelTitle: "Message",
     open: "Send a message",
+    availabilityHint: "Another online device can receive end-to-end encrypted text, links, commands and multiline code. Messages are not stored.",
     composePlaceholder: "Type or paste text…",
     send: "Send",
     sendHint: "Enter for a new line · ⌘/Ctrl+Enter to send",

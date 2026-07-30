@@ -271,10 +271,11 @@ func runUp(args []string, stdout, stderr io.Writer) int {
 
 	link := client.DownloadLink(client.Server, id, key)
 	fmt.Fprintln(stdout, link)
-	fmt.Fprintln(stdout, "opens in a browser, or fetch it with `relayium down <link>`")
-	// Goes to stderr, not stdout: `relayium up ... | pbcopy` must keep piping a
-	// clean link. Printed after the link so it reads as a footnote rather than
-	// looking like the upload failed.
+	// Keep stdout machine-composable: `relayium up ... | pbcopy` must copy only
+	// the link. The human hint belongs on stderr and includes the exact,
+	// shell-safe command — asking someone to replace <link> wastes information
+	// the CLI already has, and the fragment must be quoted defensively.
+	fmt.Fprintf(stderr, "opens in a browser, or fetch it with `relayium down '%s'`\n", link)
 	if notice := truncatedTTLNotice(ttlSeconds, expiresAt, time.Now().Unix()); notice != "" {
 		fmt.Fprintln(stderr, notice)
 	}

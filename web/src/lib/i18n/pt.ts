@@ -370,6 +370,7 @@ const pt: Messages = {
     pickWhen: [
       "Para um servidor no qual você consegue entrar por SSH",
       "Para outra pessoa, entre redes",
+      "Enviar texto, links, comandos ou código em várias linhas enquanto os dois computadores estão online",
       "Entre dois servidores que você possui",
       "Manter uma pasta espelhada, não uma cópia única",
       "A outra ponta está offline — envie agora, pegue depois",
@@ -668,6 +669,7 @@ const pt: Messages = {
   text: {
     panelTitle: "Mensagem",
     open: "Enviar uma mensagem",
+    availabilityHint: "Outro dispositivo online pode receber texto, links, comandos e código em várias linhas com criptografia de ponta a ponta. As mensagens não são armazenadas.",
     composePlaceholder: "Digite ou cole texto…",
     send: "Enviar",
     sendHint: "Enter para uma nova linha · ⌘/Ctrl+Enter para enviar",

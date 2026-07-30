@@ -608,6 +608,7 @@ export interface Messages {
   text: {
     panelTitle: string;
     open: string; // the button that starts a session
+    availabilityHint: string; // visible before a capable peer is present; never an action
     composePlaceholder: string;
     send: string;
     sendHint: string; // must name Enter and the send chord; see the i18n test

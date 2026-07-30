@@ -67,4 +67,15 @@ func TestRunUpHappyPath(t *testing.T) {
 	if !strings.HasPrefix(out.String(), wantPrefix) {
 		t.Fatalf("want link prefix %q, got %q", wantPrefix, out.String())
 	}
+	link := strings.TrimSpace(out.String())
+	if strings.Count(out.String(), "\n") != 1 {
+		t.Fatalf("stdout must contain only the composable link, got %q", out.String())
+	}
+	wantHint := "relayium down '" + link + "'"
+	if !strings.Contains(errOut.String(), wantHint) {
+		t.Fatalf("want exact download command %q, got stderr %q", wantHint, errOut.String())
+	}
+	if strings.Contains(errOut.String(), "<link>") {
+		t.Fatalf("hint left a placeholder for a value already known: %q", errOut.String())
+	}
 }

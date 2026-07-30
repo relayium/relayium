@@ -780,6 +780,7 @@
   <section class="peers">
     <h2>{currentRoute() === "cross" ? t.crossPeersTitle : t.peersTitle}</h2>
     <QuotaNotice />
+    <p class="text-availability">💬 {t.text.availabilityHint}</p>
     {#if outbox().length && visiblePeers.length !== 1}
       <p class="share-pending">{t.sharePending(outbox().length)}</p>
     {/if}
@@ -1201,6 +1202,11 @@
   }
   .empty-lead { margin: 0; color: var(--text); font-size: 14px; max-width: 46ch; }
   .empty-cta { margin-top: var(--space-1); }
+  .text-availability {
+    margin: 0 0 var(--space-3); padding: 9px 12px;
+    border: 1px solid var(--accent-border); border-radius: 10px;
+    background: var(--accent-bg); color: var(--text); font-size: 13px; line-height: 1.45;
+  }
 
   footer {
     margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--border);

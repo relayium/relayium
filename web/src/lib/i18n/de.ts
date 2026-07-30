@@ -370,6 +370,7 @@ const de: Messages = {
     pickWhen: [
       "Zu einem Server, in den du dich per SSH einloggen kannst",
       "Zu einer anderen Person, netzwerkübergreifend",
+      "Text, Links, Befehle oder mehrzeiligen Code senden, solange beide Geräte online sind",
       "Zwischen zwei Servern, die dir gehören",
       "Einen Ordner gespiegelt halten, keine einmalige Kopie",
       "Die Gegenstelle ist offline — jetzt hochladen, später abholen",
@@ -669,6 +670,7 @@ const de: Messages = {
   text: {
     panelTitle: "Nachricht",
     open: "Nachricht senden",
+    availabilityHint: "Ein anderes Online-Gerät kann Ende-zu-Ende-verschlüsselten Text, Links, Befehle und mehrzeiligen Code empfangen. Nachrichten werden nicht gespeichert.",
     composePlaceholder: "Text eingeben oder einfügen…",
     send: "Senden",
     sendHint: "Enter für neue Zeile · ⌘/Ctrl+Enter zum Senden",

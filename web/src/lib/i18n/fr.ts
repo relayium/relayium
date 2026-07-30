@@ -370,6 +370,7 @@ const fr: Messages = {
     pickWhen: [
       "Vers un serveur accessible en SSH",
       "Vers une autre personne, entre réseaux différents",
+      "Envoyer du texte, des liens, des commandes ou du code multiligne lorsque les deux machines sont en ligne",
       "Entre deux serveurs qui vous appartiennent",
       "Garder un dossier en miroir, pas une copie ponctuelle",
       "L'autre bout est hors ligne — téléverser maintenant, récupérer plus tard",
@@ -669,6 +670,7 @@ const fr: Messages = {
   text: {
     panelTitle: "Message",
     open: "Envoyer un message",
+    availabilityHint: "Un autre appareil en ligne peut recevoir du texte, des liens, des commandes et du code multiligne chiffrés de bout en bout. Les messages ne sont pas stockés.",
     composePlaceholder: "Saisir ou coller du texte…",
     send: "Envoyer",
     sendHint: "Entrée pour une nouvelle ligne · ⌘/Ctrl+Entrée pour envoyer",

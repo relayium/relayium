@@ -370,6 +370,7 @@ const es: Messages = {
     pickWhen: [
       "A un servidor al que puedes acceder por SSH",
       "A otra persona, entre redes",
+      "Enviar texto, enlaces, comandos o código multilínea mientras ambos equipos están conectados",
       "Entre dos servidores que posees",
       "Mantener una carpeta reflejada, no una copia única",
       "El otro extremo está sin conexión — sube ahora, recógelo después",
@@ -668,6 +669,7 @@ const es: Messages = {
   text: {
     panelTitle: "Mensaje",
     open: "Enviar un mensaje",
+    availabilityHint: "Otro dispositivo conectado puede recibir texto, enlaces, comandos y código multilínea con cifrado de extremo a extremo. Los mensajes no se almacenan.",
     composePlaceholder: "Escribe o pega texto…",
     send: "Enviar",
     sendHint: "Enter para una nueva línea · ⌘/Ctrl+Enter para enviar",

@@ -261,4 +261,10 @@ describe("/cli 页的下标配对数组与代码常量等长", () => {
       }
     }
   });
+  it("把实时文本作为独立模式，并为传输页提供非空提示", () => {
+    expect(PICK_MODES.some((mode) => mode.title === "text" && mode.cmd === "relayium text <code>")).toBe(true);
+    for (const { code } of LANGS) {
+      expect(messages[code].text.availabilityHint.trim().length, `${code} 缺少文本功能提示`).toBeGreaterThan(0);
+    }
+  });
 });
