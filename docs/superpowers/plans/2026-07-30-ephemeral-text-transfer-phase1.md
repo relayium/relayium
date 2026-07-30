@@ -24,7 +24,8 @@
 - Commit messages: conventional prefixes (`feat(web):`, `fix(server):`, `docs:`), **in English**. Repo hygiene must pass: `scripts/check-production-identifiers.sh`.
 - Verification commands, run from the stated directory:
   - `cd web && npx vitest run` — web unit tests (note: `npm test` is watch mode; there is no `--run` script)
-  - `cd web && npm run check` — `svelte-check` + `tsc`
+  - `cd web && npm run check` — `svelte-check` + `tsc`. **This is already red on `main`**: `crypto.ts` reports two pre-existing errors, a 2-argument `crypto_generichash` in `deriveResumeAuth` and a `BufferSource` variance issue in the resume-tag helpers. The gate for every task is therefore "no *new* errors and no new files with problems", not a clean run. Confirmed at the start of Task 1. Do not fix them in passing — they sit on the resume-auth path.
+  - Run these **from `web/`**. The vitest shipped at the repo root resolves a different config with no jsdom environment and no `setupFiles`, so a DOM or storage assertion silently passes there. Check the banner names `.../relayium/web`.
   - `cd web && npm run build`
   - `cd server && go test ./...`
   - `cd web && npm run test:e2e` — needs a built `dist/` served by the Go server; see Task 13
@@ -1261,6 +1262,9 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
   let bytes = 0;
   let nextId = 1;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  // Serialises frame() per sender -- see send() below for why this is required
+  // and not merely tidy. Same shape as webrtc-core's outbound signal chain.
+  let sendChain: Promise<void> = Promise.resolve();
   // Page-lifetime, deliberately: a peer told "no" does not get to ask again by
   // reconnecting its channel. Reconnecting with a NEW peer id defeats this, and
   // that is accepted -- so does every other per-peer decision in the app.
@@ -1358,8 +1362,17 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
       }
       errorKey = "";
       try {
-        const frame = await sender.frame(body, keys.textSend);
-        conn.channel.send(frame);
+        // SERIALISED. TextSender.frame takes its seq synchronously before its
+        // await, so two concurrent calls get distinct seqs but may finish sealing
+        // out of order, putting the higher seq on the wire first -- which the
+        // peer correctly rejects as out-of-order and which ends the session. Two
+        // clicks of the send button is enough. See the caller contract on
+        // TextSender.frame (task 2).
+        sendChain = sendChain.then(async () => {
+          const frame = await sender.frame(body, keys!.textSend);
+          conn!.channel.send(frame);
+        });
+        await sendChain;
         record({ dir: "out", body, at: deps.now(), failed: false });
       } catch (err) {
         console.error("relayium message send error", err);
@@ -1391,7 +1404,7 @@ Step 5:
 - `openWith(peerId)` returns immediately as `"unsupported"` when `peerSupportsText(peerId)` is false — no connection is attempted;
 - otherwise `connectText`, then `"connecting"` → `"waitingAccept"` → `"open"` when the peer accepts;
 - an inbound text-generation offer sets `"incomingRequest"` and **does not attach `onmessage`**; `accept()` attaches it (buffered frames then deliver in order), `reject()` closes the connection and adds the peer to a page-lifetime refusal set;
-- `send(body)` refuses over-limit content by setting `errorKey` and adding nothing to history; on success it appends an `out` entry and sends the frame; a `send` that throws marks the entry `failed: true` rather than dropping it;
+- `send(body)` **serialises its calls through a promise chain** — this is a correctness requirement, not style: `TextSender.frame` allocates its seq before awaiting `seal`, so concurrent calls can reach the channel out of seq order and the peer will hard-fail the session. Then it refuses over-limit content by setting `errorKey` and adding nothing to history; on success it appends an `out` entry and sends the frame; a `send` that throws marks the entry `failed: true` rather than dropping it;
 - inbound frames pass through a `createRateBucket(TEXT_BURST, TEXT_PER_SEC, Date.now)`; a refusal ends the session as `"failed"` with `errorKey = "flooding"` and closes only the text connection;
 - session totals are counted and enforced against `TEXT_SESSION_MAX_MESSAGES` / `TEXT_SESSION_MAX_BYTES`;
 - history is capped at `TEXT_HISTORY_MAX`, newest kept, held in `$state` only — **never** `localStorage` or `sessionStorage`;
