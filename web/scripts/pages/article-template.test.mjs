@@ -54,10 +54,16 @@ describe("buildArticlePages", () => {
   });
 
   it("localizes the footer privacy label", () => {
-    const zh = pages.find((p) => p.path === "zh/compare/snapdrop/index.html").html;
-    expect(zh).toContain('<a href="/zh/privacy/">隐私政策</a>');
-    const en = pages.find((p) => p.path === "compare/snapdrop/index.html").html;
-    expect(en).toContain('<a href="/privacy/">Privacy</a>');
+    const labels = {
+      en: "Privacy", zh: "隐私政策", ja: "プライバシーポリシー",
+      ko: "개인정보 처리방침", de: "Datenschutz", fr: "Confidentialité",
+      ar: "الخصوصية", es: "Privacidad", pt: "Privacidade",
+    };
+    for (const [lang, label] of Object.entries(labels)) {
+      const prefix = lang === "en" ? "" : `${lang}/`;
+      const page = pages.find((p) => p.path === `${prefix}compare/snapdrop/index.html`).html;
+      expect(page).toContain(`<a href="/${prefix}privacy/">${label}</a>`);
+    }
   });
 
   it("puts a breadcrumb above the h1, and a BreadcrumbList in the graph", () => {

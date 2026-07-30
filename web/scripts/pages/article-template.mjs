@@ -7,6 +7,7 @@ import { LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, PRICING_L
 const PRIVACY_LABELS = {
   en: "Privacy", zh: "隐私政策", ja: "プライバシーポリシー",
   ko: "개인정보 처리방침", de: "Datenschutz", fr: "Confidentialité",
+  ar: "الخصوصية", es: "Privacidad", pt: "Privacidade",
 };
 
 const STYLE = `
