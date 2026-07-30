@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/relayium/relayium/internal/rzvous"
 )
 
 func TestRunSendNeedsArgs(t *testing.T) {
@@ -166,5 +168,38 @@ func TestSplitSendArgsExplainsAMadeUpCode(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}
+	}
+}
+
+// modeCommand names a mode as the command the user typed, which is what the
+// mismatch error has to say to be actionable. An unknown mode is reported as
+// unknown rather than guessed at -- fail closed, and say so.
+func TestModeCommandNamesTheCommand(t *testing.T) {
+	if got := modeCommand(rzvous.ModeText); !strings.Contains(got, "relayium text") {
+		t.Errorf("text mode = %q", got)
+	}
+	for _, m := range []string{rzvous.ModeFile, ""} {
+		got := modeCommand(m)
+		if !strings.Contains(got, "relayium send") || !strings.Contains(got, "relayium receive") {
+			t.Errorf("file mode %q = %q", m, got)
+		}
+	}
+	got := modeCommand("banana")
+	if !strings.Contains(got, "does not know") || !strings.Contains(got, `"banana"`) {
+		t.Errorf("unknown mode = %q; must say it is unknown and quote what it saw", got)
+	}
+}
+
+// The refusal is a pure consequence of ModeCompatible, so pin the pairs the
+// production path relies on: an older peer still works, a text peer does not.
+func TestCrossnetModePairs(t *testing.T) {
+	if !rzvous.ModeCompatible(rzvous.ModeFile, "") {
+		t.Error("send/receive must still pair with a peer that predates the mode field")
+	}
+	if rzvous.ModeCompatible(rzvous.ModeFile, rzvous.ModeText) {
+		t.Error("send/receive must refuse a text peer")
+	}
+	if rzvous.ModeCompatible(rzvous.ModeText, "") {
+		t.Error("text must refuse a peer that predates the mode field")
 	}
 }

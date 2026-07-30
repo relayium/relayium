@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,7 +32,22 @@ type crossFlags struct {
 // connection, wraps it in pinned TLS, prints the SAS, and returns the conn.
 // The CLI is direct-only: file bytes never pass through Relayium's servers, so
 // if no direct connection can be raced the transfer fails (there is no relay).
-func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr io.Writer) (*tls.Conn, error) {
+// mode is what this side wants the connection for (rzvous.ModeFile / ModeText). A
+// mismatch is refused before anything is dialed.
+// modeCommand names a mode the way the user meets it: as a command. An unknown
+// mode is reported as unknown rather than guessed at.
+func modeCommand(mode string) string {
+	switch mode {
+	case rzvous.ModeText:
+		return "`relayium text`"
+	case rzvous.ModeFile, "":
+		return "`relayium send`/`relayium receive`"
+	default:
+		return "something this version does not know (" + strconv.Quote(mode) + ")"
+	}
+}
+
+func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr io.Writer, mode string) (*tls.Conn, error) {
 	id, err := secure.NewIdentity()
 	if err != nil {
 		return nil, err
@@ -49,9 +65,18 @@ func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr i
 	defer ln.Close()
 	port := ln.Addr().(*net.TCPAddr).Port
 
-	hs, err := rzvous.DoHandshake(ctx, sess, id, connect.LocalCandidates(port, f.advertise))
+	hs, err := rzvous.DoHandshake(ctx, sess, id, connect.LocalCandidates(port, f.advertise), mode)
 	if err != nil {
 		return nil, err
+	}
+
+	// Refused here, before RaceDirect: a mismatch costs no TCP connection and no
+	// TLS handshake. An older peer reports "" and reads as a file peer, so this
+	// cannot refuse anything that works today. Anything outside the known set is
+	// refused too -- see rzvous.ModeCompatible.
+	if !rzvous.ModeCompatible(mode, hs.PeerMode) {
+		return nil, fmt.Errorf("the other side is running %s, not %s — both ends need the same command, on a recent enough relayium",
+			modeCommand(hs.PeerMode), modeCommand(mode))
 	}
 
 	fmt.Fprintf(stderr, "SAS: %s  (compare on both ends)\n", hs.SAS)
@@ -154,7 +179,7 @@ func runSendCross(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 	}
-	conn, err := crossnetConn(ctx, code, "sender", f, stderr)
+	conn, err := crossnetConn(ctx, code, "sender", f, stderr, rzvous.ModeFile)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -185,7 +210,7 @@ func runReceiveCross(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	conn, err := crossnetConn(ctx, code, "receiver", f, stderr)
+	conn, err := crossnetConn(ctx, code, "receiver", f, stderr, rzvous.ModeFile)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
