@@ -11,6 +11,7 @@
   import { capsSignal, recordPeerCaps, retainPeers, resetPeerCaps, peerSupportsText } from "./lib/peer-caps.svelte";
   import { createTextSession } from "./lib/text-session.svelte";
   import { createTextLink } from "./lib/text-link";
+  import { pastedText } from "./lib/paste-text";
   import MessagePanel from "./lib/MessagePanel.svelte";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
@@ -597,15 +598,31 @@
         filesFromDataTransfer(e.dataTransfer).then((picked) => { if (picked.length) session.sendFiles(peer, picked); });
       }
     };
+    // 粘贴文本 = 打开草稿框并预填，**不发送**。粘贴不是"同意发出去"，而且粘贴常常是
+    // 手误——按下发送这一步必须留给用户。作用域和拖放覆盖层一样窄：只有传输界面真的
+    // 在屏幕上、有一个明确的目标对端、那个对端声明过能收消息、而且当前不忙的时候才接手。
+    const onPaste = (e: ClipboardEvent) => {
+      if (!surfaceShown || busy) return;
+      const text = pastedText(e);
+      if (text === null) return;
+      const peer = effectiveSelected;
+      if (!peer || !peerSupportsText(peer)) return;
+      e.preventDefault();
+      textCompose = text;
+      void textSession.openWith(peer);
+    };
+
     window.addEventListener("dragenter", onEnter);
     window.addEventListener("dragover", onOver);
     window.addEventListener("dragleave", onLeave);
     window.addEventListener("drop", onWindowDrop);
+    window.addEventListener("paste", onPaste);
     return () => {
       window.removeEventListener("dragenter", onEnter);
       window.removeEventListener("dragover", onOver);
       window.removeEventListener("dragleave", onLeave);
       window.removeEventListener("drop", onWindowDrop);
+      window.removeEventListener("paste", onPaste);
     };
   });
 
