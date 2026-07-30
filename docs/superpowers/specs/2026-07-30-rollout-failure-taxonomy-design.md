@@ -63,10 +63,51 @@ improvement applies to a node only once that node is running the new build.
 The fleet gets there one release later, which is the ordinary cost of a
 node-side protocol change and not a reason to add a compatibility shim.
 
+## Passing over has to mean passing over
+
+A passed-over node must stop being a candidate. Today it does not, and the
+queue therefore never reaches the end.
+
+`decideFleet` holds a single `skipped` string — **the current node's id** — and
+the candidate filter excludes exactly that one node (`rollout_fleet.go:204`,
+`:310`). So with two nodes that both pass over:
+
+```
+n1 is current, passes over  → skipped="n1" → candidates exclude n1 → pick n2
+n2 is current, passes over  → skipped="n2" → candidates exclude n2, n1 is back → pick n1
+…
+```
+
+The track never completes and every node is re-commanded on every cycle. This
+loop **already exists** for `skipped`: a node that permanently fails a
+precondition is re-commanded forever. It has gone unnoticed because such a node
+answers locally and immediately — a version in `failed-versions` never
+downloads — so the loop is cheap churn. Route "could not fetch" into the same
+mechanism and every cycle becomes a real multi-megabyte download attempt across
+the whole fleet, every ten minutes, forever.
+
+**The exclusion is therefore by result, not by identity:**
+
+```go
+if online(n) && !onTarget(n) && !passedOver(n.UpdateResult) {
+```
+
+Safe because `CommandNodeUpdate` clears `update_result` when it commands a node,
+so a stale result cannot survive a re-command, and the retry control below
+clears it explicitly. The single `skipped` variable becomes redundant.
+
+This changes existing behaviour for `skipped` — such a node goes from
+"re-commanded forever" to "passed over once" — which is what the candidate
+filter's own comment already claims happens: *"an empty candidate set IS
+everyone online is on target (bar any node left behind)"*. It could not leave
+anyone behind. Fixing both instances together rather than adding a second
+exclusion path is deliberate: two rules for one question drift apart, which is
+the shape of nearly every defect this work has produced.
+
 ## How the track finishes
 
-A passed-over node is not a candidate, so the queue reaches the end. It must not
-report a clean completion.
+With the exclusion fixed the queue does reach the end. It must not report a
+clean completion when it got there by passing everyone over.
 
 If a release is published with a broken asset, **every** node fails to fetch,
 every one is passed over, and the queue finishes having updated nobody. A track
