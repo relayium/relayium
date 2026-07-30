@@ -537,9 +537,12 @@ func (s *Service) updateCheckEmergency(ctx context.Context, tr RolloutTrack, sna
 	// This node is done. Complete the track only when no node we have heard
 	// from recently is still behind AND still commandable — same "landed, not
 	// just elapsed" rule decideByo's final batch uses, so a straggler is never
-	// declared shipped. Nodes this release has given up on (emergencyRefusesNode)
-	// are excluded: they are never going to be commanded again, so counting them
-	// as in-progress would only keep the track armed forever.
+	// declared shipped. Nodes this release has given up on (emergencyRefusesNode:
+	// a failure, a rollback, or a pass-over belonging to this release) are
+	// excluded: they are never going to be commanded again, so counting them as
+	// in-progress would only keep the track armed forever. Completing is also
+	// what makes the outcome visible — the panel's 完成，但 N 台未更新 is derived
+	// from these same rows and only renders on a complete track.
 	cutoff := now - int64(nodeOnlineWindow/time.Second)
 	for _, n := range snaps {
 		if n.LastSeenAt >= cutoff && !selfupdate.SameVersion(n.Version, tr.TargetVersion) &&
@@ -558,13 +561,30 @@ func (s *Service) updateCheckEmergency(ctx context.Context, tr RolloutTrack, sna
 }
 
 // emergencyRefusesNode reports whether the emergency path has given up on n:
-// it reported a failure that BELONGS TO THIS RELEASE, so re-commanding it would
-// just be a reinstall loop.
+// it reported an outcome that BELONGS TO THIS RELEASE and that will not change
+// by asking again, so re-commanding it would just be a loop.
+//
+// It covers the passed-over results ("skipped", "unreachable") as well as
+// failures, and that is not symmetry for its own sake. The emergency path shares
+// no code with decideFleet, so teaching the staged ladder to pass a node over
+// left this predicate behind, and a fetch failure used to report "failed" —
+// which this already covered. Without passedOverResult here, a node that cannot
+// reach the release host is re-commanded on EVERY poll, so every poll is a fresh
+// download attempt against a host that is already failing, from every node in
+// the fleet; and because such a node also never stops counting as "still in
+// progress" below, the track stays in rolling+emergency forever, which keeps
+// blanket-commanding every node that comes back online afterwards. A pinned
+// track also never reaches 'complete', so the panel's 完成，但 N 台未更新 — the
+// one thing that reports a rollout which installed nothing — never renders.
+//
+// Giving up is the coherent behaviour, not a resignation: the emergency then
+// completes with that machine behind, the panel says so, and the per-node retry
+// becomes available once the operator has fixed the source.
 //
 // All three conditions are needed, and the third is the one that is easy to
 // leave out:
 //
-//   - a failed/rolled_back result at all;
+//   - a failed/rolled_back or passed-over result at all;
 //   - byoWasCommandedForTarget: there is a command record behind that result,
 //     and it did not start from the target itself;
 //   - UpdateStartedAt >= tr.StageStartedAt: the command it describes was issued
@@ -591,9 +611,14 @@ func (s *Service) updateCheckEmergency(ctx context.Context, tr RolloutTrack, sna
 // ResumeRolloutTrack resets it. A command issued before that instant cannot
 // have come from the release now in flight.
 func emergencyRefusesNode(n NodeSnapshot, tr RolloutTrack) bool {
-	if n.UpdateResult != "failed" && n.UpdateResult != "rolled_back" {
+	if n.UpdateResult != "failed" && n.UpdateResult != "rolled_back" &&
+		!passedOverResult(n.UpdateResult) {
 		return false
 	}
+	// The stage scope stays: a leftover result from a PREVIOUS release says
+	// nothing about this one, and treating it as "given up on" is the bug this
+	// clock was added to fix -- a machine silently sitting out every future
+	// emergency release, forever.
 	return byoCommandedByThisStage(n, tr)
 }
 

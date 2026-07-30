@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -388,6 +389,119 @@ func TestRefusedResumeDoesNotClearPassedOverResults(t *testing.T) {
 	}
 	if tr.Status != "complete" {
 		t.Errorf("a refused 继续 moved the track to %q", tr.Status)
+	}
+}
+
+// seedEmergencyUnreachable arms an emergency release on the fleet track with
+// fleet-a already on target and fleet-b online, behind, and carrying
+// "unreachable" from a command issued at commandedAt.
+func seedEmergencyUnreachable(t *testing.T, commandedAt int64) (*httptest.Server, *SQLiteStore) {
+	t.Helper()
+	ts, _, st := newUpdateCheckServer(t)
+	ctx := context.Background()
+	if err := st.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v0.9.0", Status: "rolling",
+		StageStartedAt: tNow - 200, Emergency: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for id, ver := range map[string]string{"fleet-a": "v0.9.0", "fleet-b": "v0.8.0"} {
+		if _, err := st.UpsertNode(ctx, Node{
+			ID: id, OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "s",
+			Version: ver, CreatedAt: 1, LastSeenAt: tNow,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.CommandNodeUpdate(ctx, "fleet-b", "v0.8.0", commandedAt); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetNodeUpdateResult(ctx, "fleet-b", "unreachable"); err != nil {
+		t.Fatal(err)
+	}
+	return ts, st
+}
+
+// The emergency path must give up on a node that could not FETCH the build, for
+// exactly the reasons TestEmergencyReleaseCompletesDespiteARefusedNode gives for
+// one that failed: a node still counted as "in progress" pins the track in
+// rolling+emergency forever, and a track stuck like that keeps blanket-
+// commanding every node that comes back online afterwards.
+//
+// This is a regression THIS branch introduced. Before the fetch/verify split a
+// node that could not reach the release host reported "failed", which
+// emergencyRefusesNode covers; it now reports "unreachable", which it did not.
+// The staged ladder was taught to pass such a node over — the emergency path,
+// which shares none of that code, was not.
+//
+// It also defeats the branch's own safety net: 完成，但 N 台未更新 renders on a
+// COMPLETE track, so a track pinned in rolling reports nothing at all.
+func TestEmergencyReleaseCompletesDespiteAnUnreachableNode(t *testing.T) {
+	ts, st := seedEmergencyUnreachable(t, tNow-100)
+
+	_, out := postUpdateCheck(t, ts, "fleet-secret", updateCheckReq{NodeID: "fleet-a", CurrentVersion: "v0.9.0"})
+	if out.Eligible {
+		t.Fatalf("a node already on target was told to update: %+v", out)
+	}
+	tr, ok, err := st.GetRolloutTrack(context.Background(), "fleet")
+	if err != nil || !ok {
+		t.Fatalf("GetRolloutTrack(fleet) = %v/%v", ok, err)
+	}
+	if tr.Status != "complete" {
+		t.Fatalf("a node that could not fetch held the emergency release open forever: %+v (%s)", tr, out.Reason)
+	}
+	if tr.Emergency {
+		t.Fatalf("emergency flag survived completion: %+v", tr)
+	}
+	// And the result stays on the row: it is what the panel's
+	// 完成，但 N 台未更新 count and the per-node retry are both derived from.
+	n, _, err := st.GetNode(context.Background(), "fleet-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.UpdateResult != "unreachable" {
+		t.Fatalf("the pass-over marker was erased: %q", n.UpdateResult)
+	}
+}
+
+// The other half: the node itself must stop being re-commanded. Otherwise every
+// poll is a fresh download attempt against a host that is already failing, from
+// every node in the fleet, for as long as the emergency stays armed -- which,
+// per the test above, is forever.
+func TestEmergencyReleaseDoesNotRecommandAnUnreachableNode(t *testing.T) {
+	ts, st := seedEmergencyUnreachable(t, tNow-100)
+
+	_, out := postUpdateCheck(t, ts, "fleet-secret", updateCheckReq{NodeID: "fleet-b", CurrentVersion: "v0.8.0"})
+	if out.Eligible {
+		t.Fatalf("a node that could not fetch this release was told to try again: %+v", out)
+	}
+	n, _, err := st.GetNode(context.Background(), "fleet-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.UpdateStartedAt != tNow-100 {
+		t.Fatalf("the node was re-commanded (update_started_at moved to %d)", n.UpdateStartedAt)
+	}
+}
+
+// The time scope must survive. A leftover "unreachable" from a PREVIOUS release
+// says nothing about this one, and treating it as "given up on" would recreate
+// the bug emergencyRefusesNode's stage clock was added to fix: a machine that
+// silently sits out every future emergency release forever.
+func TestEmergencyReleaseIgnoresAStaleUnreachable(t *testing.T) {
+	// Commanded long before this release's stage began.
+	ts, st := seedEmergencyUnreachable(t, tNow-10_000)
+
+	_, out := postUpdateCheck(t, ts, "fleet-secret", updateCheckReq{NodeID: "fleet-b", CurrentVersion: "v0.8.0"})
+	if !out.Eligible {
+		t.Fatalf("a stale pass-over from an older rollout excluded this node from the emergency release: %+v", out)
+	}
+	n, _, err := st.GetNode(context.Background(), "fleet-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.UpdateStartedAt != tNow || n.UpdateResult != "" {
+		t.Fatalf("the emergency release did not actually command the node: %+v", n)
 	}
 }
 
