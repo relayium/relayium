@@ -3,7 +3,7 @@ import type { Messages } from "./types";
 const de: Messages = {
   langLabel: "Sprache",
   theme: { label: "Design", system: "System", light: "Hell", dark: "Dunkel" },
-  tagline: "Ende-zu-Ende-verschlüsselte Peer-to-Peer-Dateiübertragung · der Server sieht deine Dateien nie",
+  tagline: "Ende-zu-Ende-verschlüsselte Peer-to-Peer-Übertragung für Dateien und Text · der Server sieht beides nie",
   connected: (n) => `Verbunden · dieses Gerät ${n}`,
   ipLabel: "öffentliche IP",
   connecting: "Verbindung zum Signalisierungsserver…",
@@ -47,13 +47,13 @@ const de: Messages = {
   dragSendMany: "Zum Senden auf ein Gerät ziehen",
   pickHint: (m) => `Zum Auswählen klicken · oder hierher ziehen (bis zu ${m})`,
   maxSize: (s) => `Max. ${s}`,
-  footer: "Ende-zu-Ende-verschlüsselt (X25519 + AES-256-GCM) · der Signalisierungsserver leitet nur Verbindungsdaten weiter und sieht nie Dateiinhalte",
+  footer: "Ende-zu-Ende-verschlüsselt (X25519 + AES-256-GCM) · der Signalisierungsserver leitet nur Verbindungsdaten weiter und sieht nie Dateiinhalte oder Nachrichten",
   offlineFooter: "Vor dem Hochladen im Browser mit AES-256-GCM verschlüsselt · der Server speichert nur Chiffretext, den er nicht entschlüsseln kann — der Schlüssel existiert einzig im Link.",
   busy: "Eine Übertragung läuft bereits — bitte warte, bis sie abgeschlossen ist",
   tooMany: (m, n) => `Maximal ${m} Dateien auf einmal; ${n} überzählige ignoriert`,
-  titleDefault: "Relayium — Ende-zu-Ende-verschlüsselte Dateiübertragung",
+  titleDefault: "Relayium — Ende-zu-Ende-verschlüsselte Datei- und Textübertragung",
   descDefault:
-    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug zur Dateiübertragung. Bei der Echtzeitübertragung im Browser verbinden sich im selben Netz zwei Geräte direkt und Dateien erreichen nie den Server; netzübergreifend läuft es über ein verschlüsseltes Relay, das nur Chiffretext sieht. Ohne Installation; im selben Netz ist kein Konto nötig, für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
+    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug zur Dateiübertragung. Bei der Echtzeitübertragung im Browser verbinden sich im selben Netz zwei Geräte direkt und Dateien erreichen nie den Server; netzübergreifend läuft es über ein verschlüsseltes Relay, das nur Chiffretext sieht. Ohne Installation; im selben Netz ist kein Konto nötig, für Pairing über Netzwerke hinweg meldet sich nur der Absender an. Dieselbe Verbindung überträgt auch Text — eine Notiz, einen Link, einen Befehl, einen ganzen Codeblock — solange beide Geräte online sind, und keine Nachricht wird je auf einem Server gespeichert.",
   titleCross: "Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium",
   titleOffline: "Verschlüsselter Datei-Link — jetzt hochladen, später herunterladen | Relayium",
   descCross: "Dateien mit einem 6-stelligen Code netzwerkübergreifend senden — Echtzeitübertragung, Ende-zu-Ende-verschlüsselt; der Relay-Server sieht nur Chiffretext, nie die Dateiinhalte.",
@@ -615,6 +615,7 @@ const de: Messages = {
       { icon: "⏳", title: "Wenn die andere Person nicht online ist", desc: "Erzeuge einen verschlüsselten Download-Link mit Ablaufdatum und verschick ihn; sie holt ihn ab, wann immer sie Zeit hat — und ein Link kann mehrere Empfänger bedienen." },
       { icon: "📱", title: "Handy ↔ Computer", desc: "Verschiebe Dateien zwischen deinen eigenen Geräten über Systeme und Netzwerke hinweg — scanne oder tippe einen Code zum Verbinden, ohne Cloud-Speicher oder Kabel." },
       { icon: "🔒", title: "Datenschutzsensible Einmal-Zustellung", desc: "Ende-zu-Ende-Verschlüsselung plus ein SAS-Verifizierungscode gegen MITM, mit Burn-after-read — ideal für Verträge, Ausweise oder Schlüssel." },
+      { icon: "💬", title: "Text weitergeben statt einer Datei", desc: "Ein WLAN-Passwort, ein Anmeldelink, ein Shell-Befehl, ein Stacktrace, ein Codeblock — eintippen oder einfügen, und es landet Ende-zu-Ende-verschlüsselt auf dem anderen Gerät. Beide Seiten online, nichts wird gespeichert." },
     ],
   },
   faq: {
@@ -627,6 +628,7 @@ const de: Messages = {
       { q: "Kann der Server meine Dateien sehen?", a: "Nein. Im selben Netz erreichen Echtzeitübertragungen nie den Server; netzübergreifend laufen sie über ein verschlüsseltes Relay, das nur Chiffretext weiterleitet und nichts entschlüsseln kann. Download-Links werden in deinem Browser verschlüsselt, und der Server behält nur Chiffretext, den er nicht entschlüsseln kann — der Schlüssel liegt allein bei der teilenden und der empfangenden Person." },
       { q: "Muss ich ein Konto anlegen?", a: "LAN-Übertragungen im selben Netzwerk brauchen keine Anmeldung. Netzwerkübergreifendes Senden per Pairing-Code oder Link erfordert die Anmeldung des Absenders — der Empfänger braucht nie ein Konto. Auch Download-Links erfordern die Anmeldung des Absenders, damit der verschlüsselte Chiffretext gespeichert werden kann." },
       { q: "Ist es Open Source?", a: "Ja. Das Protokolldesign sowie der gesamte Frontend- und Backend-Code liegen offen auf GitHub — frei zum Prüfen, Selbst-Hosten oder Mitwirken." },
+      { q: "Kann ich Text statt einer Datei senden?", a: "Ja — Text ist hier eine vollwertige Übertragung, kein Chat. Öffne auf einer Gerätekarte „Nachricht senden“ und tippe oder füge eine Notiz, einen Link, einen Befehl oder mehrzeiligen Code ein; es läuft Ende-zu-Ende-verschlüsselt über dieselbe Peer-Verbindung. Es ist Echtzeit, beide Geräte müssen also online sein, es gilt nur für diese eine Sitzung zwischen den beiden, und nichts wird je auf einem Server geschrieben — Relayium führt keinen Nachrichtenverlauf. Pro Nachricht sind bis zu 65.536 UTF-8-Bytes möglich; alles Größere schick als Datei." },
     ],
     home: [
       { q: "Müssen beide Geräte im selben Netzwerk sein?", a: "Die LAN-Übertragung auf der Startseite setzt voraus, dass beide Seiten im selben WLAN / lokalen Netzwerk sind. Bist du nicht im selben Netzwerk, nutze den netzübergreifenden Pairing-Code / Share-Link oder einen asynchronen Download-Link." },
@@ -660,6 +662,16 @@ const de: Messages = {
     desc: "Ist die Gegenseite online, nutze Echtzeit-Direkt (der Server sieht deine Dateien nie); wenn nicht, die asynchrone Übertragung (verschlüsselt zwischengespeichert, Abruf per Link).",
     realtimeCta: "Echtzeit-Direkt →",
     offlineCta: "Asynchron senden →",
+  },
+  homeText: {
+    title: "Nicht alles, was rüber muss, ist eine Datei",
+    sub: "Text läuft über dieselbe verschlüsselte Verbindung: eine Notiz, eine URL, ein Shell-Befehl, ein Fehlerlog, ein ganzer Codeblock. Gerät auswählen, „Nachricht senden“ öffnen, eintippen oder einfügen — nichts muss vorher als Datei gespeichert werden, und keine fremde App sitzt dazwischen.",
+    points: [
+      "Ende-zu-Ende-verschlüsselt und Peer-to-Peer, genau wie eine Dateiübertragung, und beschränkt auf diese eine Sitzung zwischen den beiden Geräten.",
+      "Echtzeit: beide Geräte müssen gleichzeitig online sein, jeweils mit geöffneter Seite.",
+      "Wird auf keinem Server gespeichert und ist weg, sobald die Sitzung endet — Relayium ist kein Chat und führt keinen Nachrichtenverlauf.",
+    ],
+    limit: (max) => `Bis zu ${max.toLocaleString()} UTF-8-Bytes pro Nachricht — alles Größere als Datei senden.`,
   },
   legal: { privacy: "Datenschutzerklärung", terms: "Nutzungsbedingungen", security: "Sicherheit", support: "Support" },
   learn: { hub: "Anleitungen" },

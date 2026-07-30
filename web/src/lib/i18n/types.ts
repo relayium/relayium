@@ -595,6 +595,19 @@ export interface Messages {
   };
   crossPitch: string; // one-line pitch under the realtime page header
   homeCross: { title: string; desc: string; realtimeCta: string; offlineCta: string }; // homepage → the two cross-network pages
+  // Homepage section that puts ephemeral text next to files instead of hiding it
+  // behind the transfer surface. It must not read as stored chat: every locale
+  // has to keep all three `points` (peer-scoped E2E · realtime, both online ·
+  // never stored) and the `limit` line, which is the only place the homepage
+  // states the per-message ceiling and the "send it as a file" escape hatch.
+  // `limit` takes TEXT_MAX_BYTES so the number tracks text-wire.ts rather than
+  // being frozen into nine translations.
+  homeText: {
+    title: string;
+    sub: string;
+    points: string[];
+    limit: (max: number) => string;
+  };
   legal: { privacy: string; terms: string; security: string; support: string };
   // Footer link label for the generated static Guides hub page.
   learn: { hub: string };

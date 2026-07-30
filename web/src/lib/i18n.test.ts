@@ -4,6 +4,7 @@ import { LANGS, detect, pageUrl, loadLang, setLang, lang, messages as liveMessag
 // The completeness checks want every language synchronously, so import the split
 // modules directly and reassemble the full record here.
 import { PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "./cli-page-data";
+import { TEXT_MAX_BYTES } from "./text-wire";
 import zh from "./i18n/zh";
 import en from "./i18n/en";
 import ja from "./i18n/ja";
@@ -15,6 +16,12 @@ import es from "./i18n/es";
 import pt from "./i18n/pt";
 
 const messages: Record<Lang, Messages> = { zh, en, ja, ko, de, fr, ar, es, pt };
+
+// TEXT_MAX_BYTES as it can legitimately be rendered across the nine locales:
+// 65,536 · 65.536 · 65 536 (plain, NBSP or narrow NBSP group separator).
+const GROUPED_MAX = new RegExp(
+  String(TEXT_MAX_BYTES).replace(/^(\d+)(\d{3})$/, "$1[.,\\s\\u00a0\\u202f]?$2")
+);
 
 describe("i18n completeness", () => {
   it("every language has nav tab labels and the cross-network method names", () => {
@@ -153,6 +160,57 @@ describe("i18n completeness", () => {
       const m = messages[code];
       expect(m.quota.warn(80), `${code}.quota.warn`).toContain("80");
       expect(m.quota.upgrade, `${code}.quota.upgrade`).toBeTruthy();
+    }
+  });
+});
+
+// 首页把文本摆到与文件并列的位置，靠的全是文案。这几条钉住的是**产品事实**而不是措辞：
+// 少一条 point、漏译一种语言、或者上限数字跟 TEXT_MAX_BYTES 脱钩，都会让首页开始承诺
+// 我们没有实现的东西（尤其"不落服务器"和"每条上限"这两条）。
+describe("homepage 文本定位文案", () => {
+  it("每种语言都有完整的 homeText 区块", () => {
+    for (const { code } of LANGS) {
+      const h = messages[code].homeText;
+      expect(h, `${code} 缺少 homeText`).toBeTruthy();
+      expect(h.title.trim().length, `${code}.homeText.title 是空的`).toBeGreaterThan(0);
+      expect(h.sub.trim().length, `${code}.homeText.sub 是空的`).toBeGreaterThan(0);
+    }
+  });
+
+  it("三条事实（会话内端到端加密 / 双方在线 / 不落服务器）一条都不能少", () => {
+    const expected = messages.en.homeText.points.length;
+    expect(expected).toBe(3);
+    for (const { code } of LANGS) {
+      const points = messages[code].homeText.points;
+      expect(points.length, `${code}.homeText.points 条数不对`).toBe(expected);
+      for (const [i, p] of points.entries()) {
+        expect(p.trim().length, `${code}.homeText.points 第 ${i} 条是空的`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("每种语言的上限文案都印出真实的 TEXT_MAX_BYTES", () => {
+    // 分组分隔符跟 locale 走（65,536 / 65.536 / 65 536），所以只要求数字本身出现。
+    for (const { code } of LANGS) {
+      expect(messages[code].homeText.limit(TEXT_MAX_BYTES), `${code}.homeText.limit`).toMatch(GROUPED_MAX);
+    }
+  });
+
+  it("每种语言的 FAQ 都回答了「能不能只发文本」，并给出真实上限", () => {
+    // 上限是硬事实：FAQ 是纯字符串（faq.items 没有函数形参），所以这里代替类型系统，
+    // 保证改了 TEXT_MAX_BYTES 就会有测试红掉，而不是让九种译文里的旧数字继续骗人。
+    for (const { code } of LANGS) {
+      const answers = messages[code].faq.items.map((q) => q.a).join("\n");
+      expect(answers, `${code}.faq.items 没有提到每条消息的字节上限`).toMatch(GROUPED_MAX);
+    }
+  });
+
+  it("faq 的四组问答在每种语言里条数一致（漏译会让某语言少一条）", () => {
+    for (const key of ["items", "home", "cross", "offline"] as const) {
+      const expected = messages.en.faq[key].length;
+      for (const { code } of LANGS) {
+        expect(messages[code].faq[key].length, `${code}.faq.${key} 条数不对`).toBe(expected);
+      }
     }
   });
 });

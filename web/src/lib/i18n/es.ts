@@ -3,7 +3,7 @@ import type { Messages } from "./types";
 const es: Messages = {
   langLabel: "Idioma",
   theme: { label: "Tema", system: "Sistema", light: "Claro", dark: "Oscuro" },
-  tagline: "Transferencia de archivos de igual a igual con cifrado de extremo a extremo · el servidor nunca ve tus archivos",
+  tagline: "Transferencia de igual a igual con cifrado de extremo a extremo, para archivos y texto · el servidor no ve ninguno de los dos",
   connected: (n) => `Conectado · este dispositivo ${n}`,
   ipLabel: "IP pública",
   connecting: "Conectando al servidor de señalización…",
@@ -47,13 +47,13 @@ const es: Messages = {
   dragSendMany: "Suelta sobre un dispositivo para enviar",
   pickHint: (m) => `Haz clic para elegir archivos · o suéltalos aquí (hasta ${m})`,
   maxSize: (s) => `Máx. ${s}`,
-  footer: "Cifrado de extremo a extremo (X25519 + AES-256-GCM) · el servidor de señalización solo retransmite la información de conexión y nunca ve el contenido de los archivos",
+  footer: "Cifrado de extremo a extremo (X25519 + AES-256-GCM) · el servidor de señalización solo retransmite la información de conexión y nunca ve el contenido de los archivos ni los mensajes",
   offlineFooter: "Cifrado en tu navegador con AES-256-GCM antes de subirlo · el servidor almacena únicamente texto cifrado que no puede descifrar — la clave de descifrado reside solo en el enlace.",
   busy: "Ya hay una transferencia en curso — espera a que termine",
   tooMany: (m, n) => `Hasta ${m} archivos a la vez; se ignoraron los ${n} adicionales`,
-  titleDefault: "Relayium — transferencia de archivos con cifrado de extremo a extremo",
+  titleDefault: "Relayium — transferencia de archivos y texto con cifrado de extremo a extremo",
   descDefault:
-    "Transferencia de archivos de código abierto y cifrada de extremo a extremo en tu navegador. En el modo en tiempo real, los archivos se transmiten directamente de dispositivo a dispositivo mediante WebRTC en tu red local, o entre redes a través de un retransmisor cifrado que solo ve texto cifrado; el modo opcional de enlace de descarga almacenado los conserva como texto cifrado de conocimiento cero que solo tú puedes descifrar.",
+    "Transferencia de archivos de código abierto y cifrada de extremo a extremo en tu navegador. En el modo en tiempo real, los archivos se transmiten directamente de dispositivo a dispositivo mediante WebRTC en tu red local, o entre redes a través de un retransmisor cifrado que solo ve texto cifrado; el modo opcional de enlace de descarga almacenado los conserva como texto cifrado de conocimiento cero que solo tú puedes descifrar. La misma conexión también lleva texto — una nota, un enlace, un comando, un bloque de código — mientras ambos dispositivos estén en línea, y ningún mensaje se almacena nunca en un servidor.",
   titleCross: "Transferencia de archivos entre redes — en tiempo real, cifrada de extremo a extremo | Relayium",
   titleOffline: "Enlace de archivo cifrado — sube ahora, descarga después | Relayium",
   descCross: "Envía archivos entre redes con un código de 6 caracteres — transferencia en tiempo real, cifrada de extremo a extremo; el retransmisor solo ve texto cifrado, nunca tus archivos.",
@@ -614,6 +614,7 @@ const es: Messages = {
       { icon: "⏳", title: "Cuando no están en línea", desc: "Genera un enlace de descarga cifrado con caducidad y envíalo; lo recogen cuando estén libres — y un solo enlace puede servir a varios destinatarios." },
       { icon: "📱", title: "Teléfono ↔ ordenador", desc: "Mueve archivos entre tus propios dispositivos a través de sistemas y redes — escanea o escribe un código para conectar, sin necesidad de una unidad en la nube ni de un cable." },
       { icon: "🔒", title: "Entrega única sensible a la privacidad", desc: "Cifrado de extremo a extremo más un código de verificación SAS contra intermediarios, con destrucción tras la lectura — ideal para contratos, documentos de identidad o claves." },
+      { icon: "💬", title: "Pasar texto, no un archivo", desc: "Una contraseña de Wi-Fi, un enlace de registro, un comando de shell, una traza de error, un bloque de código — escríbelo o pégalo y llega al otro dispositivo cifrado de extremo a extremo. Ambos lados en línea, nada almacenado." },
     ],
   },
   faq: {
@@ -626,6 +627,7 @@ const es: Messages = {
       { q: "¿Puede el servidor ver mis archivos?", a: "No. En la misma red, las transferencias en tiempo real nunca pasan por el servidor; entre redes pasan por un retransmisor cifrado, pero este solo reenvía texto cifrado y no puede descifrarlo. Los enlaces de descarga se cifran en tu navegador y el servidor conserva únicamente texto cifrado que no puede descifrar — la clave reside solo con quien comparte el enlace y el destinatario." },
       { q: "¿Tengo que crear una cuenta?", a: "Las transferencias por LAN en la misma red no necesitan inicio de sesión. Enviar entre redes mediante código de emparejamiento o enlace exige que el remitente inicie sesión — el destinatario nunca necesita una cuenta. Los enlaces de descarga también exigen que el remitente inicie sesión, para poder almacenar el texto cifrado." },
       { q: "¿Es de código abierto?", a: "Sí. El diseño del protocolo y todo el código de front-end y back-end son públicos en GitHub — libres de revisar, autoalojar o contribuir." },
+      { q: "¿Puedo enviar texto en lugar de un archivo?", a: "Sí — aquí el texto es una transferencia de primera clase, no un chat. Abre «Enviar un mensaje» en la tarjeta de un dispositivo y escribe o pega una nota, un enlace, un comando o código de varias líneas; viaja cifrado de extremo a extremo por la misma conexión entre pares. Es en tiempo real, así que ambos dispositivos tienen que estar en línea, se limita a esa única sesión entre los dos, y nada se escribe nunca en un servidor: Relayium no guarda historial de mensajes. Cada mensaje admite hasta 65.536 bytes UTF-8; si es más grande, envíalo como archivo." },
     ],
     home: [
       { q: "¿Ambos dispositivos tienen que estar en la misma red?", a: "La transferencia por LAN doméstica necesita que ambos lados estén en la misma red Wi-Fi / red local. Si no estás en la misma red, usa el código de emparejamiento / enlace para compartir entre redes, o un enlace de descarga asíncrono." },
@@ -659,6 +661,16 @@ const es: Messages = {
     desc: "Si están en línea, usa el directo en tiempo real (cifrado de extremo a extremo; el servidor nunca ve tus archivos); si no, usa la transferencia asíncrona (almacenamiento cifrado, recoge por enlace en cualquier momento).",
     realtimeCta: "Directo en tiempo real →",
     offlineCta: "Transferencia asíncrona →",
+  },
+  homeText: {
+    title: "No todo lo que necesitas mover es un archivo",
+    sub: "El texto va por la misma conexión cifrada: una nota, una URL, un comando de shell, un registro de errores, un bloque de código entero. Elige un dispositivo, abre «Enviar un mensaje», escribe o pega — no hace falta guardarlo primero como archivo ni meter otra aplicación en medio.",
+    points: [
+      "Cifrado de extremo a extremo y de igual a igual, igual que una transferencia de archivos, y limitado a esa única sesión entre los dos dispositivos.",
+      "En tiempo real: ambos dispositivos tienen que estar en línea a la vez, cada uno con la página abierta.",
+      "Nunca se almacena en ningún servidor y desaparece al terminar la sesión: Relayium no es un chat y no guarda historial de mensajes.",
+    ],
+    limit: (max) => `Hasta ${max.toLocaleString()} bytes UTF-8 por mensaje — si es más grande, envíalo como archivo.`,
   },
   legal: { privacy: "Política de privacidad", terms: "Términos del servicio", security: "Seguridad", support: "Soporte" },
   learn: { hub: "Guías" },

@@ -3,7 +3,7 @@ import type { Messages } from "./types";
 const fr: Messages = {
   langLabel: "Langue",
   theme: { label: "Thème", system: "Système", light: "Clair", dark: "Sombre" },
-  tagline: "Transfert de fichiers pair-à-pair chiffré de bout en bout · le serveur ne voit jamais vos fichiers",
+  tagline: "Transfert pair-à-pair chiffré de bout en bout, fichiers et texte · le serveur ne voit ni l'un ni l'autre",
   connected: (n) => `Connecté · cet appareil ${n}`,
   ipLabel: "IP publique",
   connecting: "Connexion au serveur de signalisation…",
@@ -47,13 +47,13 @@ const fr: Messages = {
   dragSendMany: "Déposez sur un appareil pour envoyer",
   pickHint: (m) => `Cliquez pour choisir · ou déposez ici (jusqu'à ${m})`,
   maxSize: (s) => `Max ${s}`,
-  footer: "Chiffré de bout en bout (X25519 + AES-256-GCM) · le serveur de signalisation ne relaie que les infos de connexion et ne voit jamais le contenu des fichiers",
+  footer: "Chiffré de bout en bout (X25519 + AES-256-GCM) · le serveur de signalisation ne relaie que les infos de connexion et ne voit jamais le contenu des fichiers ni les messages",
   offlineFooter: "Chiffré dans votre navigateur avec AES-256-GCM avant l'envoi · le serveur ne stocke que du texte chiffré qu'il ne peut pas déchiffrer — la clé de déchiffrement ne vit que dans le lien.",
   busy: "Un transfert est déjà en cours — veuillez attendre qu'il se termine",
   tooMany: (m, n) => `Jusqu'à ${m} fichiers à la fois ; ${n} en trop ignoré(s)`,
-  titleDefault: "Relayium — transfert de fichiers chiffré de bout en bout",
+  titleDefault: "Relayium — transfert de fichiers et de texte chiffré de bout en bout",
   descDefault:
-    "Relayium est un outil open source de transfert de fichiers chiffré de bout en bout. Lors d'un transfert en temps réel dans le navigateur, sur le même réseau deux appareils se connectent directement et les fichiers ne passent jamais par le serveur ; entre réseaux différents, cela passe par un relais chiffré qui ne voit que du texte chiffré. Sans installation ; sur le même réseau aucun compte n'est nécessaire, et pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
+    "Relayium est un outil open source de transfert de fichiers chiffré de bout en bout. Lors d'un transfert en temps réel dans le navigateur, sur le même réseau deux appareils se connectent directement et les fichiers ne passent jamais par le serveur ; entre réseaux différents, cela passe par un relais chiffré qui ne voit que du texte chiffré. Sans installation ; sur le même réseau aucun compte n'est nécessaire, et pour s'appairer entre réseaux différents, seul l'expéditeur se connecte. La même connexion transporte aussi du texte — une note, un lien, une commande, un bloc de code entier — tant que les deux appareils sont en ligne, et aucun message n'est jamais stocké sur un serveur.",
   titleCross: "Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout | Relayium",
   titleOffline: "Lien de fichier chiffré — téléversez maintenant, téléchargez plus tard | Relayium",
   descCross: "Envoyez des fichiers entre réseaux avec un code à 6 caractères — transfert en temps réel, chiffré de bout en bout ; le relais ne voit que du texte chiffré, jamais le contenu des fichiers.",
@@ -615,6 +615,7 @@ const fr: Messages = {
       { icon: "⏳", title: "Quand il n'est pas en ligne", desc: "Générez un lien de téléchargement chiffré avec une expiration et envoyez-le ; il le récupère quand il est libre — et un seul lien peut servir à plusieurs destinataires." },
       { icon: "📱", title: "Téléphone ↔ ordinateur", desc: "Déplacez des fichiers entre vos propres appareils, d'un système et d'un réseau à l'autre — scannez ou saisissez un code pour vous connecter, sans cloud ni câble." },
       { icon: "🔒", title: "Envoi unique de documents confidentiels", desc: "Chiffrement de bout en bout et code de vérification SAS contre l'interception, avec autodestruction après lecture — idéal pour les contrats, pièces d'identité ou clés." },
+      { icon: "💬", title: "Faire passer du texte, pas un fichier", desc: "Un mot de passe Wi-Fi, un lien d'inscription, une commande shell, une trace d'erreur, un bloc de code — saisissez-le ou collez-le et il arrive sur l'autre appareil, chiffré de bout en bout. Les deux côtés en ligne, rien de stocké." },
     ],
   },
   faq: {
@@ -627,6 +628,7 @@ const fr: Messages = {
       { q: "Le serveur peut-il voir mes fichiers ?", a: "Non. Sur le même réseau, les transferts en temps réel ne passent jamais par le serveur ; entre réseaux différents, ils transitent par un relais chiffré qui ne fait que relayer du texte chiffré, sans pouvoir le déchiffrer. Les liens de téléchargement sont chiffrés dans votre navigateur et le serveur ne conserve que du texte chiffré qu'il ne peut pas déchiffrer — la clé reste uniquement chez celui qui partage le lien et son destinataire." },
       { q: "Faut-il obligatoirement créer un compte ?", a: "Les transferts LAN sur le même réseau ne nécessitent aucune connexion. Envoyer d'un réseau à l'autre par code d'appairage ou lien exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte. Les liens de téléchargement exigent aussi la connexion de l'expéditeur, afin de stocker le texte chiffré." },
       { q: "Est-ce open source ?", a: "Oui. La conception du protocole ainsi que tout le code front-end et back-end sont publics sur GitHub — chacun peut les examiner, les auto-héberger ou y contribuer." },
+      { q: "Puis-je envoyer du texte plutôt qu'un fichier ?", a: "Oui — le texte est ici un transfert de plein droit, pas une messagerie. Ouvrez « Envoyer un message » sur une carte d'appareil et saisissez ou collez une note, un lien, une commande ou du code multiligne ; cela circule chiffré de bout en bout sur la même connexion pair-à-pair. C'est du temps réel, donc les deux appareils doivent être en ligne, cela ne concerne que cette session entre eux deux, et rien n'est jamais écrit sur un serveur — Relayium ne conserve aucun historique de messages. Chaque message peut atteindre 65 536 octets UTF-8 ; au-delà, envoyez-le comme fichier." },
     ],
     home: [
       { q: "Les deux appareils doivent-ils être sur le même réseau ?", a: "Le transfert en réseau local de la page d'accueil exige que les deux parties soient sur le même Wi-Fi / réseau local. Si vous n'êtes pas sur le même réseau, utilisez le code d'appairage / lien de partage du transfert inter-réseaux, ou bien un lien de téléchargement asynchrone." },
@@ -660,6 +662,16 @@ const fr: Messages = {
     desc: "S'il est en ligne, utilisez le direct en temps réel (le serveur ne voit jamais vos fichiers) ; sinon, le transfert asynchrone (stockage chiffré, récupération par lien à tout moment).",
     realtimeCta: "Direct en temps réel →",
     offlineCta: "Transfert asynchrone →",
+  },
+  homeText: {
+    title: "Ce que vous devez faire passer n'est pas toujours un fichier",
+    sub: "Le texte emprunte la même connexion chiffrée : une note, une URL, une commande shell, un journal d'erreurs, un bloc de code entier. Choisissez un appareil, ouvrez « Envoyer un message », saisissez ou collez — rien à enregistrer d'abord en fichier, aucune application tierce au milieu.",
+    points: [
+      "Chiffré de bout en bout et pair-à-pair, exactement comme un transfert de fichier, et limité à cette seule session entre les deux appareils.",
+      "En temps réel : les deux appareils doivent être en ligne en même temps, la page ouverte de chaque côté.",
+      "Jamais stocké sur un serveur, et disparu dès que la session se termine — Relayium n'est pas une messagerie et ne conserve aucun historique.",
+    ],
+    limit: (max) => `Jusqu'à ${max.toLocaleString()} octets UTF-8 par message — au-delà, envoyez-le comme fichier.`,
   },
   legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation", security: "Sécurité", support: "Assistance" },
   learn: { hub: "Guides" },

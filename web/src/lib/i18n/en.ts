@@ -3,7 +3,7 @@ import type { Messages } from "./types";
 const en: Messages = {
   langLabel: "Language",
   theme: { label: "Theme", system: "System", light: "Light", dark: "Dark" },
-  tagline: "End-to-end encrypted peer-to-peer file transfer · the server never sees your files",
+  tagline: "End-to-end encrypted peer-to-peer transfer for files and text · the server never sees either",
   connected: (n) => `Connected · this device ${n}`,
   ipLabel: "public IP",
   connecting: "Connecting to the signaling server…",
@@ -47,13 +47,13 @@ const en: Messages = {
   dragSendMany: "Drop onto a device to send",
   pickHint: (m) => `Click to choose files · or drop them here (up to ${m})`,
   maxSize: (s) => `Max ${s}`,
-  footer: "End-to-end encrypted (X25519 + AES-256-GCM) · the signaling server only relays connection info and never sees file contents",
+  footer: "End-to-end encrypted (X25519 + AES-256-GCM) · the signaling server only relays connection info and never sees file contents or messages",
   offlineFooter: "Encrypted in your browser with AES-256-GCM before upload · the server stores only ciphertext it can't decrypt — the decryption key lives solely in the link.",
   busy: "A transfer is already in progress — please wait for it to finish",
   tooMany: (m, n) => `Up to ${m} files at a time; ignored the extra ${n}`,
-  titleDefault: "Relayium — end-to-end encrypted file transfer",
+  titleDefault: "Relayium — end-to-end encrypted file and text transfer",
   descDefault:
-    "Open-source, end-to-end encrypted file transfer in your browser. In realtime mode, files stream directly device-to-device over WebRTC on your local network, or across networks through an encrypted relay that only ever sees ciphertext; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt.",
+    "Open-source, end-to-end encrypted file transfer in your browser. In realtime mode, files stream directly device-to-device over WebRTC on your local network, or across networks through an encrypted relay that only ever sees ciphertext; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt. The same connection also carries text — a note, a link, a command, a block of code — while both devices are online, and no message is ever stored on a server.",
   titleCross: "Cross-network file transfer — realtime, end-to-end encrypted | Relayium",
   titleOffline: "Encrypted file link — upload now, download later | Relayium",
   descCross: "Send files across networks with a 6-character code — realtime transfer, end-to-end encrypted; the relay only ever sees ciphertext, never your files.",
@@ -628,6 +628,7 @@ const en: Messages = {
       { icon: "⏳", title: "When they're not online", desc: "Generate an encrypted download link with an expiry and send it over; they grab it whenever they're free — and one link can serve several recipients." },
       { icon: "📱", title: "Phone ↔ computer", desc: "Move files between your own devices across systems and networks — scan or type a code to connect, no cloud drive or cable required." },
       { icon: "🔒", title: "Privacy-sensitive one-shot delivery", desc: "End-to-end encryption plus a SAS verification code against MITM, with burn-after-reading — ideal for contracts, IDs, or keys." },
+      { icon: "💬", title: "Hand over text, not a file", desc: "A Wi-Fi password, a signup link, a shell command, a stack trace, a block of code — type or paste it and it lands on the other device end-to-end encrypted. Both sides online, nothing stored." },
     ],
   },
   faq: {
@@ -640,6 +641,7 @@ const en: Messages = {
       { q: "Can the server see my files?", a: "No. On the same network, realtime transfers never touch the server; across networks they pass through an encrypted relay, but it only ever forwards ciphertext and can't decrypt it. Download links are encrypted in your browser and the server keeps only ciphertext it can't decrypt — the key lives solely with the link's sharer and recipient." },
       { q: "Do I have to create an account?", a: "LAN transfers on the same network need no sign-in. Sending across networks by pairing code or link requires the sender to sign in — the recipient never needs an account. Download links also require the sender to sign in, so the encrypted ciphertext can be stored." },
       { q: "Is it open source?", a: "Yes. The protocol design and all front-end and back-end code are public on GitHub — free to review, self-host, or contribute to." },
+      { q: "Can I send text instead of a file?", a: "Yes — text is a first-class transfer here, not a chat. Open “Send a message” on a device card and type or paste a note, a link, a command, or multiline code; it travels end-to-end encrypted over the same peer connection. It is realtime, so both devices have to be online, it is scoped to that one session between the two of them, and nothing is ever written to a server — Relayium keeps no message history. Each message can be up to 65,536 UTF-8 bytes; send anything larger as a file." },
     ],
     home: [
       { q: "Do both devices have to be on the same network?", a: "The home LAN transfer needs both sides on the same Wi-Fi / local network. If you're not on the same network, use the cross-network pairing code / share link, or an async download link instead." },
@@ -673,6 +675,16 @@ const en: Messages = {
     desc: "If they're online, use realtime direct (end-to-end encrypted; the server never sees your files); if not, use async transfer (encrypted storage, fetch by link anytime).",
     realtimeCta: "Realtime direct →",
     offlineCta: "Async transfer →",
+  },
+  homeText: {
+    title: "Not everything you need to move is a file",
+    sub: "Text goes over the same encrypted connection: a note, a URL, a shell command, an error log, a whole block of code. Pick a device, choose “Send a message”, type or paste — no file to save first, no third-party app in the middle.",
+    points: [
+      "End-to-end encrypted and peer-to-peer, exactly like a file transfer, and scoped to that one session between the two devices.",
+      "Realtime: both devices have to be online at the same time, with the page open on each.",
+      "Never stored on any server, and gone when the session ends — Relayium is not a chat and keeps no message history.",
+    ],
+    limit: (max) => `Up to ${max.toLocaleString()} UTF-8 bytes per message — send anything larger as a file.`,
   },
   legal: { privacy: "Privacy Policy", terms: "Terms of Service", security: "Security", support: "Support" },
   learn: { hub: "Guides" },

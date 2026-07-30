@@ -16,6 +16,7 @@
     "how-to/share-a-file-with-an-expiring-link", // ⏳ when they're not online
     "how-to/send-files-pc-to-phone-wirelessly", // 📱 phone ↔ computer
     "guides/how-relayium-encrypts-your-files", // 🔒 privacy-sensitive one-shot
+    "how-to/send-text-between-devices", // 💬 text, links, commands, code
   ];
   const caseHref = (i: number) => pageUrl(CASE_SLUGS[i], lang()) + "/";
 </script>
@@ -55,6 +56,10 @@
     transition: border-color .13s, box-shadow .13s;
     text-decoration: none; color: inherit;
   }
+  /* An odd number of cards would otherwise leave a hole in the last row; let the
+     trailing card span the full width instead. In the single-column layout below
+     `grid-column: 1 / -1` is already the default, so this is a no-op there. */
+  .case:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .case:hover { border-color: var(--accent-border); box-shadow: var(--shadow); }
   .case:hover h3 { color: var(--accent); }
   .case:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
