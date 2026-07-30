@@ -484,11 +484,25 @@ func resultForExitCode(code int) string {
 // AND any error carrying neither sentinel — keeps the existing
 // exitUpdateFailed, so the track still halts. This is deliberately written as
 // "if ErrFetch then advance, else halt" rather than "if ErrVerify then halt,
-// else advance": verifyReleaseSignature has paths (a missing signature file,
-// a corrupt embedded signing key) that carry neither sentinel, and a corrupt
-// embedded key would fail identically on every node in the fleet. The second
-// phrasing would read that as "not ErrVerify" and silently roll a broken
-// release across the whole fleet; the first phrasing halts it, correctly.
+// else advance": verifyReleaseSignature's corrupt-embedded-signing-key path
+// (parseECDSAPublicKey failing in selfupdate.go) carries NEITHER sentinel —
+// a bare %w — and a corrupt embedded key would fail identically on every
+// node in the fleet. The second phrasing would read that as "not ErrVerify"
+// and silently roll a broken release across the whole fleet; the first
+// phrasing halts it, correctly.
+//
+// A missing checksums.txt.sig, by contrast, IS wrapped with ErrFetch
+// (selfupdate.go's "release signature (checksums.txt.sig) not found" path),
+// and that is deliberate, not an oversight: a 404 there may equally mean
+// "this mirror doesn't carry the file" as "the release truly wasn't signed",
+// and either way the node correctly refuses to install rather than fall back
+// to running something unsigned. The consequence is that a release
+// accidentally published without its signature 404s on every node the same
+// way, classifies as fetch, and the rollout queue advances past the entire
+// fleet having installed nothing. That is caught elsewhere in this plan: a
+// later task renders a rollout that updated nobody as "完成，但 N 台未更新"
+// rather than as a clean success, so this fall-through does not silently
+// read as victory.
 func exitCodeForUpdateError(err error) int {
 	if errors.Is(err, selfupdate.ErrFetch) {
 		return exitFetchFailed
