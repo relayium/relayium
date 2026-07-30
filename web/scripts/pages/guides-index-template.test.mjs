@@ -2,6 +2,11 @@ import { describe, it, expect } from "vitest";
 import { renderGuidesIndexPage } from "./guides-index-template.mjs";
 import guidesIndex from "./content/guides-index.mjs";
 
+const TEXT_WORD = {
+  en: /\btext\b/i, zh: /文本/, ja: /テキスト/, ko: /텍스트/, de: /Text/,
+  fr: /texte/i, ar: /(?<!م)نص/, es: /texto/i, pt: /texto/i,
+};
+
 const groups = {
   guides: [{ slug: "guides/y", title: "Guide Y" }],
   howTo: [{ slug: "how-to/x", title: "Howto X" }],
@@ -29,6 +34,14 @@ describe("renderGuidesIndexPage", () => {
   it("sets canonical + hreflang for the hub", () => {
     expect(en).toContain('<link rel="canonical" href="https://relayium.com/guides/" />');
     expect(en).toContain('href="https://relayium.com/zh/guides/"');
+  });
+
+  it("positions the guides hub as files plus online-only ephemeral text in every language", () => {
+    for (const [lang, doc] of Object.entries(guidesIndex.langs)) {
+      expect(doc.description, `${lang} description`).toMatch(TEXT_WORD[lang]);
+      expect(doc.intro, `${lang} intro`).toMatch(TEXT_WORD[lang]);
+    }
+    expect(guidesIndex.langs.en.description).toMatch(/both devices are online/i);
   });
 
   it("skips an empty category", () => {
