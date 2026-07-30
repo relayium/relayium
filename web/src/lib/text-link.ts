@@ -28,6 +28,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export interface TextLinkDeps {
   signaling: () => SignalingClient;
   rtcConfig: () => RtcConfig;
+  /** 现在能不能接一场来自这个对端的会话（App 里接的是 textSession.canAcceptFrom）。
+   *
+   *  在**握手之前**问，因为等到会话状态机拿到连接再关掉，等于白跑一次 commit-reveal，
+   *  跨网络上还白占一次 TURN 分配。不传就当作允许。 */
+  canAccept?: (from: string) => boolean;
 }
 
 /** 建一条消息连接并把它包成 TextConn：完整的 commit-reveal，自己的密钥、自己的 SAS。 */
@@ -83,6 +88,13 @@ export function createTextLink(deps: TextLinkDeps) {
     listen(onOffer: (peerId: string, conn: TextConn) => void): () => void {
       return deps.signaling().onSignal((from, data) => {
         if (!isTextOffer(data)) return;
+        if (deps.canAccept && !deps.canAccept(from)) {
+          // 明确告诉对端"忙"，而不是让它等到 ICE 超时。**必须带 text 标记**，否则发起方
+          // 的 text 世代连接会把这条信令按世代丢掉，白等 30 秒；带上之后 establish 会把
+          // 它变成 PeerBusyError，发起方直接进 peerBusy。
+          deps.signaling().sendSignal(from, { busy: true, text: true });
+          return;
+        }
         void link(deps, from, "responder", data)
           .then((conn) => onOffer(from, conn))
           // 建不起来就是没这回事：会话状态机连"有人来过"都不该看到，用户也就不会

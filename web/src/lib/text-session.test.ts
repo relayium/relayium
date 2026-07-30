@@ -36,7 +36,7 @@ async function drainUntil(pred: () => boolean, maxTicks = 4000) {
   for (let i = 0; i < maxTicks && !pred(); i++) await new Promise((r) => setTimeout(r, 0));
 }
 
-async function harness(opts: { failWith?: Error; autoTick?: number; deferred?: boolean } = {}) {
+async function harness(opts: { failWith?: Error; autoTick?: number; deferred?: boolean; transferActive?: () => boolean } = {}) {
   const a = generateKeyPair();
   const b = generateKeyPair();
   const ka = await deriveSession("initiator", a, b.publicKey);
@@ -71,6 +71,7 @@ async function harness(opts: { failWith?: Error; autoTick?: number; deferred?: b
   const s = createTextSession({
     connect: connectFn,
     listen: (cb) => { listener = cb; return () => { listener = undefined; }; },
+    transferActive: opts.transferActive,
     now,
   });
   return {
@@ -367,6 +368,72 @@ describe("text session", () => {
     expect(s.active()).toBe(true);
     s.end();
     expect(s.active()).toBe(false);
+  });
+
+  // ── mutual exclusion with a file transfer ──────────────────────────────────
+  // busy() 一直是单向的：消息会话会挡住文件传输，但文件传输挡不住消息会话，因为入站
+  // 那一侧只看自己的 active()。结果是对端可以在你正在传文件的时候开一场消息会话，屏幕
+  // 上同时挂两串不同的 6 位数——而这正是那条互斥要挡的东西。
+  it("refuses an inbound request while a file transfer is active", async () => {
+    const { s, ch, inbound } = await harness({ transferActive: () => true });
+    inbound("p2", ch);
+    expect(s.status).toBe("idle");
+    expect(s.active()).toBe(false);
+    expect(ch.readyState).toBe("closed");
+    expect(ch.onmessage).toBe(null); // nothing attached, so nothing decrypted
+    expect(s.history).toEqual([]);
+    expect(s.sasCode).toBe("");      // no second SAS ever reaches the UI
+  });
+
+  it("refuses to open toward a peer while a file transfer is active", async () => {
+    const { s, connectFn } = await harness({ transferActive: () => true });
+    recordPeerCaps("p1", { caps: [CAP_TEXT] });
+    await s.openWith("p1");
+    expect(connectFn).not.toHaveBeenCalled();
+    expect(s.status).toBe("idle");
+  });
+
+  it("canAcceptFrom reports the same decision the guard makes", async () => {
+    const busy = await harness({ transferActive: () => true });
+    expect(busy.s.canAcceptFrom("p2")).toBe(false);
+
+    const free = await harness();
+    expect(free.s.canAcceptFrom("p2")).toBe(true);
+    free.inbound("p2");
+    // Already in a session: a second peer is refused.
+    expect(free.s.canAcceptFrom("p3")).toBe(false);
+  });
+
+  it("canAcceptFrom refuses a peer that was declined", async () => {
+    const { s, inbound } = await harness();
+    inbound("p2");
+    s.reject();
+    expect(s.canAcceptFrom("p2")).toBe(false);
+    expect(s.canAcceptFrom("p3")).toBe(true);
+  });
+
+  // 正面对照：没有文件传输在跑的时候，一切照旧。
+  it("accepts an inbound request normally when no transfer is active", async () => {
+    const { s, ch, inbound } = await harness({ transferActive: () => false });
+    inbound("p2", ch);
+    expect(s.status).toBe("incomingRequest");
+    expect(ch.readyState).toBe("open");
+    s.accept();
+    expect(s.status).toBe("open");
+  });
+
+  it("opens normally when no transfer is active", async () => {
+    const { s, connectFn } = await harness({ transferActive: () => false });
+    recordPeerCaps("p1", { caps: [CAP_TEXT] });
+    await s.openWith("p1");
+    expect(connectFn).toHaveBeenCalledTimes(1);
+    expect(s.status).toBe("waitingAccept");
+  });
+
+  it("works with no transferActive dep at all, so nothing existing has to pass one", async () => {
+    const { s, inbound } = await harness();
+    inbound("p2");
+    expect(s.status).toBe("incomingRequest");
   });
 
   // ── stale attempts ─────────────────────────────────────────────────────────

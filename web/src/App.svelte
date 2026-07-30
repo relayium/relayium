@@ -79,10 +79,21 @@
   // 依赖用 getter 传进去：signaling 会随房间切换整个换掉，rtcConfig 依赖中继选优
   // 的结果，两者都不能在创建时定死。
   // 消息会话。phase 1 里它和文件传输互斥，靠 textActive 让 busy() 看见它。
-  const textLink = createTextLink({ signaling: () => signaling, rtcConfig: () => rtcConfig() });
+  // textLink 和 textSession 互相引用（前者预检后者的策略，后者用前者建连），所以两边都
+  // 用 thunk 接：真正调用都发生在两者构造完之后。session 同理，它声明在下面。
+  const textLink = createTextLink({
+    signaling: () => signaling,
+    rtcConfig: () => rtcConfig(),
+    // 握手之前就问：能拒就别白跑一次 commit-reveal，也别白占一次 TURN 分配。
+    canAccept: (from) => textSession.canAcceptFrom(from),
+  });
   const textSession = createTextSession({
     connect: textLink.connect,
     listen: textLink.listen,
+    // 互斥的另一半：文件传输在跑的时候不接消息会话，否则屏幕上会同时挂两串 SAS。
+    // 这里读的是只算文件那一半的 transferActive，不是 busy()——busy() 本身读 textActive，
+    // 拿它来问会绕回自己。
+    transferActive: () => session.transferActive,
     now: () => Date.now(),
   });
   let textCompose = $state(""); // 粘贴进来的草稿，交给面板预填

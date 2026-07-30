@@ -91,6 +91,35 @@ export function wouldExceedDeclared(declared: number | undefined, offset: number
   return offset + chunkLen > (declared ?? 0);
 }
 
+/**
+ * 一条入站 offer 该走哪条路。
+ *
+ * 抽成纯函数是为了能把 pausedRecv 那条路穷举掉：真把接收端驱动到"已暂停"状态，得跑完
+ * offer→握手→manifest→接受→落盘→掉线，那样的手架测的是手架自己。同一个文件里的
+ * wouldExceedDeclared 也是同样理由导出的。
+ *
+ * **只有 resume 世代能走续传那条路。** 旧代码的快速通道排在世代判定之前、只比对端身份，
+ * 于是同一个对端的一条 text offer（粘贴一下就有）会被喂进 pausedRecv.resume()——而
+ * resume() 第一件事就是把 pausedRecv 置空、清掉续传窗口定时器，把这次续传"认领"掉。
+ * 那条 offer 没有 resume-auth 签名，会被 establish 的 accept() 丢弃，续传连接等到超时
+ * 失败；真正的 resume offer 随后到达时已无处可挂。一次粘贴永久杀掉一次本可续上的传输。
+ *
+ * 一条**全新的**文件 offer 同样不该劫持续传：它拿到的是 busy 回包（暂停中的接收本身
+ * 就让 busy() 为真），这也是它一直该拿到的东西。
+ */
+export function routeOffer(
+  msg: Pick<InboundSignal, "sdp" | "resume" | "text">,
+  ctx: { from: string; pausedFrom: string | null; busy: boolean },
+): "resume" | "receive" | "busy" | "ignore" {
+  if (msg.sdp?.type !== "offer") return "ignore";
+  const gen = signalGeneration(msg);
+  // resume 排在 busy 之前：暂停中的接收让 busy() 为真，而那条 offer 正是它在等的。
+  if (gen === "resume") return ctx.pausedFrom === ctx.from ? "resume" : "ignore";
+  // text 世代归消息监听器；别的世代（以后新增的）一律不碰。
+  if (gen !== "file") return "ignore";
+  return ctx.busy ? "busy" : "receive";
+}
+
 export function createTransferSession(deps: SessionDeps) {
   let incoming = $state<Incoming | null>(null); // pending receive awaiting accept/reject
   let recv = $state<Xfer | null>(null);
@@ -115,8 +144,10 @@ export function createTransferSession(deps: SessionDeps) {
   // SAS，同时活着就是屏幕上同时挂两串不同的数字——而那会教会用户"这串数字是装饰"，
   // 恰好毁掉 commit-reveal 全套机制唯一想保住的东西。phase 2 把两条流并到一条 link
   // 上（一次握手、一串 SAS）之后才解除这条互斥。
-  const busy = () =>
-    !!incoming || !!(recv && !recv.done) || !!(send && !send.done) || deps.textActive?.() === true;
+  // 只看文件那一半。消息那一侧要问的正是这个：拿整个 busy() 去问会绕回来——busy() 本身
+  // 就读 textActive。
+  const transferActive = () => !!incoming || !!(recv && !recv.done) || !!(send && !send.done);
+  const busy = () => transferActive() || deps.textActive?.() === true;
 
   // 方便管道内部照搬原来的写法。
   const signaling = () => deps.signaling();
@@ -126,30 +157,27 @@ export function createTransferSession(deps: SessionDeps) {
   function listenForIncoming() {
     signaling().onSignal(async (from, data) => {
       const msg = data as InboundSignal;
-      if (msg.sdp?.type !== "offer") return; // act only on offers
-      // A re-offer from a peer whose transfer dropped mid-flight is a resume, not
-      // a new receive — route it before the busy guard (busy is true here).
-      if (pausedRecv && pausedRecv.from === from) { pausedRecv.resume(msg); return; }
-      // 这条 offer 属于别的信令世代吗？resume 世代到这里说明没有 pausedRecv 可挂（游离
-      // 的 resume offer）；text 世代根本不该由这个监听器碰——它是消息会话的建连，落到
-      // beginReceive 手里会在接收端开出一个 0% 的文件接收，随后 busy() 变真把真正该处理
-      // 它的消息监听器挡在门外，发起方则一路等到 ICE 超时。
-      //
-      // 用 signalGeneration 而不是再写一次 `msg.resume || msg.text`：世代的判定只有一处
-      // 定义，下一个世代加进来的时候这里不需要被记得改。**必须**排在 pausedRecv 之后，
-      // 那条路要的正是一条 resume offer。
-      //
-      // 也刻意排在 busy() 之前：那条 busy 回包是不带世代标记的，发起方的 text 连接会按
-      // 世代把它丢掉，然后白等 30 秒——比不回更糟。
-      if (signalGeneration(msg) !== "file") return;
-      // One transfer at a time. Tell the sender we're busy so it fails fast with a
-      // clear "peer busy" message instead of waiting out its ICE timeout.
-      if (busy()) { signaling().sendSignal(from, { busy: true }); return; }
-      try {
-        await beginReceive(from, msg);
-      } catch (err) {
-        console.error("relayium receive setup error", err);
-        recv = { peer: from, dir: "recv", files: [], index: 0, sent: 0, total: 0, status: "connectFail", done: true, ok: false, speed: 0 };
+      switch (routeOffer(msg, { from, pausedFrom: pausedRecv?.from ?? null, busy: busy() })) {
+        case "ignore":
+          return;
+        case "resume":
+          // routeOffer 已经确认过世代和对端身份都对得上。
+          pausedRecv!.resume(msg);
+          return;
+        case "busy":
+          // One transfer at a time. Tell the sender we're busy so it fails fast
+          // with a clear "peer busy" message instead of waiting out its ICE
+          // timeout. 只有文件世代会走到这里——这条回包不带世代标记，别的世代的发起方
+          // 按世代会把它丢掉，等于白等一个超时。
+          signaling().sendSignal(from, { busy: true });
+          return;
+        case "receive":
+          try {
+            await beginReceive(from, msg);
+          } catch (err) {
+            console.error("relayium receive setup error", err);
+            recv = { peer: from, dir: "recv", files: [], index: 0, sent: 0, total: 0, status: "connectFail", done: true, ok: false, speed: 0 };
+          }
       }
     });
   }
@@ -788,6 +816,8 @@ export function createTransferSession(deps: SessionDeps) {
     get recvPath() { return recvPath; },
     /** 有没有传输/待确认在进行中。组件据此禁用发送入口、拦住导航。 */
     get busy() { return busy(); },
+    /** 只有文件传输在跑吗。消息会话用它来做互斥判断——它自己已经算在 busy() 里了。 */
+    get transferActive() { return transferActive(); },
 
     /** 开始路由入站 offer。信令连上之后调一次。 */
     listenForIncoming,

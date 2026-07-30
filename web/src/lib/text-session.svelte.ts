@@ -84,6 +84,12 @@ export interface TextSessionDeps {
   connect(peerId: string): Promise<TextConn>;
   /** Subscribes to inbound text-generation offers; returns an unsubscribe. */
   listen(onOffer: (peerId: string, conn: TextConn) => void): () => void;
+  /** 文件传输是否正在进行。可选，不传就是"没有"。
+   *
+   *  互斥必须是**双向**的。busy() 那一侧已经算进了消息会话，所以消息会挡住文件传输；
+   *  但入站这一侧原来只看自己的 active()，于是对端可以在你正在传文件的时候开一场消息
+   *  会话——屏幕上同时挂两串不同的 6 位 SAS，而这正是那条互斥存在的理由。 */
+  transferActive?: () => boolean;
   now(): number;
 }
 
@@ -95,6 +101,9 @@ export interface TextSession {
   readonly history: TextMessage[];
   readonly errorKey: TextErrorKey;
   listenForRequests(): void;
+  /** 现在能不能接一场来自这个对端的会话。text-link 在**握手之前**问它，好把拒绝提前到
+   *  没有代价的时候；listenForRequests 落地时再问一次（两次之间状态可能已经变了）。 */
+  canAcceptFrom(peerId: string): boolean;
   openWith(peerId: string): Promise<void>;
   accept(): void;
   reject(): void;
@@ -245,12 +254,16 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
     get history() { return history; },
     get errorKey() { return errorKey; },
 
+    canAcceptFrom,
+
     listenForRequests() {
       unlisten?.();
       unlisten = deps.listen((from, c) => {
-        // 拒绝过的对端，或者已经有一个会话在跑：直接关掉，不挂 onmessage，也就不会
-        // 有任何东西被解密或渲染。
-        if (refused.has(from) || active()) { try { c.close(); } catch { /* gone */ } return; }
+        // 拒绝过的对端、已经有会话在跑、或者正在传文件：直接关掉，不挂 onmessage，
+        // 也就不会有任何东西被解密或渲染，SAS 也不会出现在界面上。
+        // 这里再查一遍而不是信 text-link 的预检：那次预检和这次落地之间隔着一整个
+        // 握手，一次文件传输完全可能在这期间开始。
+        if (!canAcceptFrom(from)) { try { c.close(); } catch { /* gone */ } return; }
         resetSession();
         conn = c;
         keys = c.keys;
@@ -268,7 +281,7 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
       // 已经有一次尝试或一场会话在跑就直接不理。UI 那边 busy 已经把按钮禁掉了，这里
       // 是第二道：重入会 resetSession() 掉一场活着的会话的历史，而两次 openWith 交错
       // 落地还会让一条连接无人认领。
-      if (active()) return;
+      if (active() || deps.transferActive?.() === true) return;
       // 在**任何**尝试之前就挡住：跑旧版本的对端绝不能收到一条它会当成文件传输、然后
       // 等一个永远不来的 manifest 的 offer。
       if (!peerSupportsText(id)) {
@@ -356,6 +369,10 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
     clearHistory() { history = []; },
     active,
   };
+
+  function canAcceptFrom(peerId: string): boolean {
+    return !refused.has(peerId) && !active() && deps.transferActive?.() !== true;
+  }
 
   function active(): boolean {
     return status === "connecting" || status === "waitingAccept"
