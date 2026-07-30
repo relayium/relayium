@@ -4,12 +4,12 @@
 // English in every language.
 
 const en = {
-  title: "Transfer files from the terminal with the Relayium CLI",
+  title: "Transfer files and text from the terminal with the Relayium CLI",
   description:
-    "Install the free, end-to-end-encrypted Relayium CLI and move files three ways from your terminal — over your own SSH, by a pairing code across networks, or straight between two servers. Free, and file bytes never pass through our servers — and sending by pairing code needs an account, to mint the code.",
+    "Install the free, end-to-end-encrypted Relayium CLI to move files over SSH, pairing codes, or daemon-direct — and send ephemeral text while both machines are online.",
   updatedLabel: "Last updated",
   lead: [
-    "The Relayium CLI is a single small binary that moves files from your terminal — encrypted end to end, self-hostable, and completely free. It exists for the case a browser handles badly: copying files to a server you already run, pushing a build between two machines, or sending an archive to a colleague across networks without uploading it to anyone's cloud.",
+    "The Relayium CLI is a single small binary that moves files and ephemeral text from your terminal — encrypted end to end, self-hostable, and completely free. It handles copying files to a server, pushing a build between machines, sending an archive across networks, and moving a URL, command, or code snippet without first saving it as a file.",
     "Whichever way you use it, the file bytes travel directly between the two ends and never pass through Relayium's servers. This guide gets you installed and through your first transfer, then points you at the deeper how-tos for each mode.",
   ],
   sections: [
@@ -34,6 +34,18 @@ const en = {
         "push / pull — to a server you can already SSH into. Bytes travel over your SSH connection; no Relayium account.",
         "send / receive — to another person across networks, using a short pairing code the sender's CLI mints (sign in once with relayium login; the receiver never does). Direct peer-to-peer; if a direct path can't be found the transfer fails rather than routing through us.",
         "serve + push relayium:// (daemon direct) — straight between two servers you own, over pinned TLS. No relay, no SSH, no code.",
+      ],
+    },
+    {
+      heading: "Send ephemeral text",
+      body: [
+        "Run relayium text on one machine to mint a pairing code and wait, then join from the other machine with the printed code:",
+      ],
+      code: ["relayium text", "relayium text K7M4XR"],
+      bullets: [
+        "Minting the code needs relayium login; joining with a code needs no login.",
+        "Both machines must stay online. Messages are end-to-end encrypted, travel over a direct P2P (peer-to-peer) connection, and are never stored; CLI text does not use the browser TURN relay.",
+        "Each message can be at most 65,536 UTF-8 bytes. Use relayium send for anything larger.",
       ],
     },
     {
@@ -86,12 +98,12 @@ const en = {
 };
 
 const zh = {
-  title: "用 Relayium CLI 从终端传输文件",
+  title: "用 Relayium CLI 从终端传输文件与文本",
   description:
-    "安装免费、端到端加密的 Relayium CLI，从终端以三种方式传输文件——通过你自己的 SSH、跨网络使用配对码，或直接在两台服务器之间传输。免费，文件字节从不经过我们的服务器——用配对码发送需要账号，用来生成这个码。",
+    "安装免费、端到端加密的 Relayium CLI，通过 SSH、配对码或 daemon 直连传输文件，并在两台机器同时在线时发送临时文本。",
   updatedLabel: "最近更新",
   lead: [
-    "Relayium CLI 是一个体积很小的单一二进制文件，用来从终端传输文件——端到端加密、可自托管、完全免费。它解决的正是浏览器难以胜任的场景：把文件复制到你已经在运行的服务器、在两台机器之间推送一次构建产物，或者跨网络把一个压缩包发给同事而不上传到任何人的网盘。",
+    "Relayium CLI 是一个体积很小的单一二进制文件，用来从终端传输文件与临时文本——端到端加密、可自托管、完全免费。你可以把文件复制到服务器、在机器间推送构建产物、跨网络发送压缩包，也可以直接传 URL、命令或代码片段，无需先保存成文件。",
     "无论用哪种方式，文件字节都在两端之间直接传输，从不经过 Relayium 的服务器。本指南带你完成安装并走通第一次传输，然后指向每种模式更深入的操作指南。",
   ],
   sections: [
@@ -116,6 +128,18 @@ const zh = {
         "push / pull——传到一台你已能 SSH 进去的服务器。字节走你的 SSH 连接；无需 Relayium 账号。",
         "send / receive——跨网络传给另一个人，使用一个由发送方 CLI 生成的简短配对码（用 relayium login 登录一次即可；接收方无需登录）。直连点对点；如果找不到直连路径，传输会直接失败，而不会经我们中转。",
         "serve + push relayium://（daemon 直连）——直接在你拥有的两台服务器之间传输，通过证书固定的 TLS。无中继、无 SSH、无需配对码。",
+      ],
+    },
+    {
+      heading: "发送临时文本",
+      body: [
+        "在一台机器运行 relayium text 生成配对码并等待，然后在另一台机器用打印出的配对码加入：",
+      ],
+      code: ["relayium text", "relayium text K7M4XR"],
+      bullets: [
+        "生成配对码需要先执行 relayium login；持码加入无需登录。",
+        "两台机器必须同时在线。消息端到端加密，通过 P2P 点对点直连传输且绝不存储；CLI text 不使用浏览器的 TURN 中继。",
+        "单条消息最多 65,536 UTF-8 字节。更大的内容请使用 relayium send。",
       ],
     },
     {
@@ -168,12 +192,12 @@ const zh = {
 };
 
 const ja = {
-  title: "Relayium CLI でターミナルからファイルを転送する",
+  title: "Relayium CLI でターミナルからファイルとテキストを転送する",
   description:
-    "無料でエンドツーエンド暗号化された Relayium CLI をインストールし、ターミナルから3つの方法でファイルを移動しましょう。自分の SSH 経由、ネットワークをまたぐペアリングコード、または2台のサーバー間の直接転送。無料で、ファイルのバイトが当社のサーバーを通過することはありません。ペアリングコードで送るにはコード発行のためのアカウントが必要です。",
+    "無料でエンドツーエンド暗号化された Relayium CLI で、SSH・ペアリングコード・デーモン直結によるファイル転送と、両方の端末がオンライン時の一時テキスト送信を始めましょう。",
   updatedLabel: "最終更新",
   lead: [
-    "Relayium CLI はターミナルからファイルを転送する、小さな単一バイナリです。エンドツーエンドで暗号化され、セルフホスト可能で、完全に無料です。ブラウザではうまく扱えない場面のために存在します。すでに運用しているサーバーへのファイルコピー、2台のマシン間でのビルド成果物のプッシュ、あるいはネットワークをまたいで同僚にアーカイブを送る際、誰のクラウドにもアップロードせずに済みます。",
+    "Relayium CLI はターミナルからファイルと一時テキストを転送する小さな単一バイナリです。エンドツーエンド暗号化、セルフホスト可能、完全無料。サーバーへのファイルコピーやマシン間のビルド送信に加え、URL・コマンド・コード片をファイル化せずそのまま送れます。",
     "どの方法を使っても、ファイルのバイトは両端の間を直接移動し、Relayium のサーバーを通過することはありません。本ガイドではインストールから最初の転送までを案内し、その後各モードのより詳しいハウツーへ案内します。",
   ],
   sections: [
@@ -198,6 +222,18 @@ const ja = {
         "push / pull：すでに SSH でログインできるサーバーへ。バイトは SSH 接続上を流れます。Relayium アカウントは不要です。",
         "send / receive：送信側の CLI が発行する短いペアリングコードを使って、ネットワークをまたいで他の人へ（relayium login で一度サインインするだけ。受信側は不要です）。直接の P2P です。直接経路が見つからない場合、転送は当社を経由する代わりに、そのまま失敗します。",
         "serve + push relayium://（デーモン直結）：自分が所有する2台のサーバー間で、証明書ピンニング付き TLS 上を直接。リレーなし、SSH なし、コードなし。",
+      ],
+    },
+    {
+      heading: "一時テキストを送る",
+      body: [
+        "一方で relayium text を実行してペアリングコードを発行し、もう一方は表示されたコードで参加します：",
+      ],
+      code: ["relayium text", "relayium text K7M4XR"],
+      bullets: [
+        "コードの発行には relayium login が必要ですが、コードでの参加にはログイン不要です。",
+        "両方の端末がオンラインである必要があります。メッセージはエンドツーエンド暗号化された P2P 直結で流れ、保存されません。CLI text はブラウザの TURN リレーを使いません。",
+        "1メッセージは最大 65,536 UTF-8 バイトです。それより大きい内容には relayium send を使ってください。",
       ],
     },
     {
@@ -250,12 +286,12 @@ const ja = {
 };
 
 const ko = {
-  title: "Relayium CLI로 터미널에서 파일 전송하기",
+  title: "Relayium CLI로 터미널에서 파일과 텍스트 전송하기",
   description:
-    "무료로 종단간 암호화된 Relayium CLI를 설치하고, 터미널에서 세 가지 방식으로 파일을 옮기세요 — 자신의 SSH를 통해, 네트워크를 넘어 페어링 코드로, 또는 두 서버 사이에서 직접. 무료이고 파일 데이터는 절대 저희 서버를 거치지 않습니다 — 페어링 코드로 보내려면 코드 발급을 위한 계정이 필요합니다.",
+    "무료 종단간 암호화 Relayium CLI로 SSH·페어링 코드·데몬 다이렉트 파일 전송과 두 기기가 함께 온라인일 때의 일회성 텍스트 전송을 시작하세요.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "Relayium CLI는 터미널에서 파일을 옮기는 작고 단일한 바이너리입니다 — 종단간 암호화되고, 자체 호스팅이 가능하며, 완전히 무료입니다. 브라우저가 잘 처리하지 못하는 상황을 위해 존재합니다. 이미 운영 중인 서버로 파일을 복사하거나, 두 기기 사이에서 빌드 결과물을 밀어 넣거나, 네트워크를 넘어 동료에게 아카이브를 보낼 때 누구의 클라우드에도 업로드하지 않아도 됩니다.",
+    "Relayium CLI는 터미널에서 파일과 일회성 텍스트를 옮기는 작은 단일 바이너리입니다 — 종단간 암호화, 자체 호스팅 가능, 완전 무료. 서버로 파일을 복사하거나 기기 사이에 빌드를 보내고, URL·명령·코드 조각을 파일로 저장하지 않고 그대로 전송할 수 있습니다.",
     "어떤 방식을 쓰든 파일 데이터는 두 끝 사이에서 직접 이동하며 Relayium 서버를 거치지 않습니다. 이 가이드는 설치와 첫 전송까지 안내한 뒤, 각 모드별로 더 깊은 방법을 다루는 글로 안내합니다.",
   ],
   sections: [
@@ -280,6 +316,18 @@ const ko = {
         "push / pull — 이미 SSH로 접속 가능한 서버로. 데이터는 SSH 연결을 통해 오가며, Relayium 계정이 필요 없습니다.",
         "send / receive — 보내는 쪽 CLI가 발급하는 짧은 페어링 코드를 사용해 네트워크를 넘어 다른 사람에게(relayium login으로 한 번만 로그인하면 되고, 받는 쪽은 로그인하지 않습니다). 직접 P2P 방식입니다. 직접 경로를 찾을 수 없으면 저희를 거쳐 우회하는 대신 전송이 그대로 실패합니다.",
         "serve + push relayium://(데몬 다이렉트) — 직접 소유한 두 서버 사이에서, 인증서 고정 TLS를 통해 곧바로. 중계도, SSH도, 코드도 필요 없습니다.",
+      ],
+    },
+    {
+      heading: "일회성 텍스트 보내기",
+      body: [
+        "한 기기에서 relayium text로 페어링 코드를 발급하고, 다른 기기에서 출력된 코드로 참여하세요:",
+      ],
+      code: ["relayium text", "relayium text K7M4XR"],
+      bullets: [
+        "코드 발급에는 relayium login이 필요하지만 코드로 참여할 때는 로그인하지 않습니다.",
+        "두 기기가 함께 온라인이어야 합니다. 메시지는 종단간 암호화된 P2P 직결로 전송되고 저장되지 않습니다. CLI text는 브라우저 TURN 릴레이를 사용하지 않습니다.",
+        "메시지 하나는 최대 65,536 UTF-8바이트입니다. 더 큰 내용은 relayium send를 사용하세요.",
       ],
     },
     {
@@ -332,12 +380,12 @@ const ko = {
 };
 
 const de = {
-  title: "Dateien mit der Relayium CLI vom Terminal aus übertragen",
+  title: "Dateien und Text mit der Relayium CLI vom Terminal übertragen",
   description:
-    "Installiere die kostenlose, Ende-zu-Ende-verschlüsselte Relayium CLI und bewege Dateien vom Terminal aus auf drei Arten — über dein eigenes SSH, per Pairing-Code netzwerkübergreifend, oder direkt zwischen zwei Servern. Kostenlos, und die Dateibytes laufen nie über unsere Server — und das Senden per Pairing-Code braucht ein Konto, um den Code zu erzeugen.",
+    "Nutze die kostenlose, Ende-zu-Ende-verschlüsselte Relayium CLI für Dateien über SSH, Pairing-Code oder daemon-direct — und für flüchtigen Text, solange beide Rechner online sind.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "Die Relayium CLI ist ein einzelnes kleines Binary, das Dateien vom Terminal aus bewegt — Ende-zu-Ende verschlüsselt, selbst hostbar und völlig kostenlos. Sie existiert für die Fälle, die ein Browser schlecht handhabt: Dateien auf einen Server kopieren, den du bereits betreibst, einen Build zwischen zwei Maschinen pushen, oder ein Archiv netzwerkübergreifend an einen Kollegen schicken, ohne es in irgendjemandes Cloud hochzuladen.",
+    "Die Relayium CLI ist ein kleines einzelnes Binary für Dateien und flüchtigen Text im Terminal — Ende-zu-Ende-verschlüsselt, selbst hostbar und kostenlos. Kopiere Dateien auf Server, pushe Builds zwischen Maschinen oder sende URLs, Befehle und Codeausschnitte, ohne sie erst als Datei zu speichern.",
     "Egal welchen Weg du nutzt, die Dateibytes wandern direkt zwischen den beiden Enden und laufen nie über Relayiums Server. Diese Anleitung bringt dich zur Installation und durch deine erste Übertragung und verweist dich dann auf die ausführlicheren Anleitungen zu jedem Modus.",
   ],
   sections: [
@@ -362,6 +410,18 @@ const de = {
         "push / pull — zu einem Server, in den du dich bereits per SSH einloggen kannst. Die Bytes laufen über deine SSH-Verbindung; kein Relayium-Konto nötig.",
         "send / receive — an eine andere Person netzwerkübergreifend, mit einem kurzen Pairing-Code, den die CLI des Absenders erzeugt (einmalig mit relayium login anmelden; der Empfänger nie). Direktes Peer-to-Peer; findet sich kein direkter Weg, schlägt die Übertragung fehl, statt über uns umgeleitet zu werden.",
         "serve + push relayium:// (daemon-direct) — direkt zwischen zwei Servern, die dir gehören, über TLS mit Pinning. Kein Relay, kein SSH, kein Code.",
+      ],
+    },
+    {
+      heading: "Flüchtigen Text senden",
+      body: [
+        "Führe auf einem Rechner relayium text aus, um einen Pairing-Code zu erzeugen; der andere tritt mit dem ausgegebenen Code bei:",
+      ],
+      code: ["relayium text", "relayium text K7M4XR"],
+      bullets: [
+        "Das Erzeugen des Codes braucht relayium login; der Beitritt mit einem Code braucht keine Anmeldung.",
+        "Beide Rechner müssen online bleiben. Nachrichten laufen Ende-zu-Ende-verschlüsselt über eine direkte P2P-Verbindung und werden nie gespeichert. CLI text nutzt das Browser-TURN-Relay nicht.",
+        "Eine Nachricht umfasst höchstens 65.536 UTF-8-Bytes. Für größere Inhalte nutze relayium send.",
       ],
     },
     {
@@ -414,12 +474,12 @@ const de = {
 };
 
 const fr = {
-  title: "Transférer des fichiers depuis le terminal avec la CLI Relayium",
+  title: "Transférer fichiers et texte depuis le terminal avec la CLI Relayium",
   description:
-    "Installez la CLI Relayium, gratuite et chiffrée de bout en bout, et déplacez des fichiers de trois façons depuis votre terminal — via votre propre SSH, par un code d'appairage entre réseaux différents, ou directement entre deux serveurs. Gratuit, et les octets du fichier ne passent jamais par nos serveurs — et l'envoi par code d'appairage demande un compte, pour générer le code.",
+    "Utilisez la CLI Relayium gratuite et chiffrée de bout en bout pour les fichiers via SSH, code d'appairage ou daemon-direct — et le texte éphémère quand les deux machines sont en ligne.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "La CLI Relayium est un unique petit binaire qui déplace des fichiers depuis votre terminal — chiffré de bout en bout, auto-hébergeable et entièrement gratuit. Elle existe pour les cas qu'un navigateur gère mal : copier des fichiers vers un serveur que vous exploitez déjà, pousser un build entre deux machines, ou envoyer une archive à un collègue entre réseaux différents sans la téléverser dans le cloud de qui que ce soit.",
+    "La CLI Relayium est un petit binaire unique pour transférer fichiers et texte éphémère depuis le terminal — chiffré de bout en bout, auto-hébergeable et gratuit. Copiez des fichiers vers un serveur, poussez un build, ou envoyez URL, commandes et code sans les enregistrer d'abord dans un fichier.",
     "Quelle que soit la méthode utilisée, les octets du fichier voyagent directement entre les deux extrémités et ne passent jamais par les serveurs de Relayium. Ce guide vous installe et vous fait passer votre premier transfert, puis vous oriente vers les guides plus détaillés pour chaque mode.",
   ],
   sections: [
@@ -444,6 +504,18 @@ const fr = {
         "push / pull — vers un serveur où vous pouvez déjà vous connecter en SSH. Les octets transitent par votre connexion SSH ; aucun compte Relayium requis.",
         "send / receive — vers une autre personne entre réseaux différents, avec un court code d'appairage que la CLI de l'expéditeur génère (connectez-vous une fois avec relayium login ; le destinataire, jamais). Pair-à-pair direct ; si aucun chemin direct n'est trouvé, le transfert échoue plutôt que d'être routé via nos serveurs.",
         "serve + push relayium:// (daemon-direct) — directement entre deux serveurs qui vous appartiennent, via TLS avec épinglage. Pas de relais, pas de SSH, pas de code.",
+      ],
+    },
+    {
+      heading: "Envoyer du texte éphémère",
+      body: [
+        "Lancez relayium text sur une machine pour créer un code d'appairage, puis rejoignez depuis l'autre avec le code affiché :",
+      ],
+      code: ["relayium text", "relayium text K7M4XR"],
+      bullets: [
+        "Créer le code nécessite relayium login ; le rejoindre ne nécessite aucune connexion.",
+        "Les deux machines doivent rester en ligne. Les messages sont chiffrés de bout en bout, passent par une connexion P2P directe et ne sont jamais stockés. CLI text n'utilise pas le relais TURN du navigateur.",
+        "Un message fait au plus 65 536 octets UTF-8. Utilisez relayium send pour un contenu plus grand.",
       ],
     },
     {
@@ -496,12 +568,12 @@ const fr = {
 };
 
 const ar = {
-  title: "انقل الملفات من الطرفية باستخدام Relayium CLI",
+  title: "انقل الملفات والنصوص من الطرفية باستخدام Relayium CLI",
   description:
-    "ثبّت Relayium CLI المجاني والمشفّر من الطرف إلى الطرف، وانقل الملفات بثلاث طرق من طرفيتك — عبر SSH لديك، أو برمز اقتران عبر الشبكات، أو مباشرة بين خادمين. مجاني، وبايتات الملف لا تمر أبدًا عبر خوادمنا — ويلزم الحساب للإرسال برمز اقتران، كي يُصدَر الرمز.",
+    "استخدم Relayium CLI المجاني والمشفّر من الطرف إلى الطرف لنقل الملفات عبر SSH أو رمز اقتران أو daemon direct، ولإرسال نص مؤقت حين يكون الجهازان متصلين.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "‏Relayium CLI هو ملف ثنائي صغير واحد ينقل الملفات من طرفيتك — مشفّر من الطرف إلى الطرف، قابل للاستضافة الذاتية، ومجاني تمامًا. وُجد لِما يتعامل معه المتصفح بشكل سيئ: نسخ الملفات إلى خادم تُشغّله بالفعل، أو نقل نسخة بناء بين جهازين، أو إرسال أرشيف إلى زميل عبر الشبكات دون رفعه إلى سحابة أي أحد.",
+    "‏Relayium CLI ملف ثنائي صغير لنقل الملفات والنص المؤقت من الطرفية — مشفّر من الطرف إلى الطرف، قابل للاستضافة الذاتية، ومجاني. انسخ الملفات إلى خادم، أو انقل نسخة بناء، أو أرسل رابطًا أو أمرًا أو مقطع كود دون حفظه أولًا كملف.",
     "أيًا كانت الطريقة التي تستخدمها بها، تنتقل بايتات الملف مباشرة بين الطرفين ولا تمر أبدًا عبر خوادم Relayium. يوصلك هذا الدليل إلى التثبيت وإتمام أول عملية نقل لك، ثم يوجّهك إلى الأدلة الأعمق لكل وضع.",
   ],
   sections: [
@@ -526,6 +598,18 @@ const ar = {
         "‏push / pull — إلى خادم يمكنك بالفعل الدخول إليه عبر SSH. تنتقل البايتات عبر اتصال SSH لديك؛ بدون حساب Relayium.",
         "‏send / receive — إلى شخص آخر عبر الشبكات، باستخدام رمز اقتران قصير تُصدره واجهة CLI لدى المُرسِل (سجِّل الدخول مرة واحدة عبر relayium login؛ أما المُستقبِل فلا يسجّل الدخول أبدًا). من الند للند مباشرة؛ إذا تعذّر إيجاد مسار مباشر يفشل النقل بدل توجيهه عبرنا.",
         "‏serve + push relayium:// (daemon direct) — مباشرة بين خادمين تملكهما، عبر TLS مثبَّت. بدون مُرحِّل، بدون SSH، بدون رمز.",
+      ],
+    },
+    {
+      heading: "إرسال نص مؤقت",
+      body: [
+        "شغّل relayium text على جهاز لإصدار رمز اقتران، ثم انضم من الجهاز الآخر بالرمز المطبوع:",
+      ],
+      code: ["relayium text", "relayium text K7M4XR"],
+      bullets: [
+        "يتطلب إصدار الرمز relayium login؛ أما الانضمام بالرمز فلا يحتاج إلى تسجيل دخول.",
+        "يجب أن يبقى الجهازان متصلين. الرسائل مشفّرة من الطرف إلى الطرف، تمر باتصال P2P مباشر، ولا تُخزَّن أبدًا. لا يستخدم CLI text مُرحِّل TURN الخاص بالمتصفح.",
+        "الرسالة الواحدة 65,536 بايت UTF-8 كحد أقصى. استخدم relayium send للمحتوى الأكبر.",
       ],
     },
     {
@@ -578,12 +662,12 @@ const ar = {
 };
 
 const es = {
-  title: "Transfiere archivos desde la terminal con la CLI de Relayium",
+  title: "Transfiere archivos y texto desde la terminal con la CLI de Relayium",
   description:
-    "Instala la CLI de Relayium, gratis y cifrada de extremo a extremo, y mueve archivos de tres maneras desde tu terminal — por tu propio SSH, con un código de emparejamiento entre redes, o directamente entre dos servidores. Gratis, y los bytes de los archivos nunca pasan por nuestros servidores: enviar con un código de emparejamiento necesita cuenta, para generar el código.",
+    "Usa la CLI de Relayium, gratis y cifrada de extremo a extremo, para archivos por SSH, código de emparejamiento o daemon directo, y texto efímero mientras ambas máquinas están conectadas.",
   updatedLabel: "Última actualización",
   lead: [
-    "La CLI de Relayium es un único binario pequeño que mueve archivos desde tu terminal — cifrado de extremo a extremo, autoalojable y completamente gratis. Existe para el caso que un navegador maneja mal: copiar archivos a un servidor que ya administras, enviar una compilación entre dos máquinas, o mandar un archivo comprimido a un colega entre redes sin subirlo a la nube de nadie.",
+    "La CLI de Relayium es un pequeño binario para transferir archivos y texto efímero desde la terminal — cifrado de extremo a extremo, autoalojable y gratis. Copia archivos a un servidor, envía una compilación o pasa URL, comandos y código sin guardarlos antes como archivo.",
     "Sea cual sea la forma en que la uses, los bytes de los archivos viajan directamente entre los dos extremos y nunca pasan por los servidores de Relayium. Esta guía te deja instalado y con tu primera transferencia hecha, y luego te dirige a los tutoriales más detallados de cada modo.",
   ],
   sections: [
@@ -608,6 +692,18 @@ const es = {
         "push / pull — a un servidor al que ya puedes entrar por SSH. Los bytes viajan por tu conexión SSH; sin cuenta de Relayium.",
         "send / receive — a otra persona entre redes, usando un código de emparejamiento corto que genera la CLI de quien envía (inicia sesión una vez con relayium login; quien recibe, nunca). De igual a igual directo; si no se encuentra una ruta directa, la transferencia falla en lugar de enrutarse a través de nosotros.",
         "serve + push relayium:// (daemon directo) — directamente entre dos servidores que posees, sobre TLS con anclaje. Sin retransmisor, sin SSH, sin código.",
+      ],
+    },
+    {
+      heading: "Enviar texto efímero",
+      body: [
+        "Ejecuta relayium text en una máquina para generar un código de emparejamiento y únete desde la otra con el código impreso:",
+      ],
+      code: ["relayium text", "relayium text K7M4XR"],
+      bullets: [
+        "Generar el código requiere relayium login; unirse con un código no requiere iniciar sesión.",
+        "Ambas máquinas deben seguir conectadas. Los mensajes están cifrados de extremo a extremo, viajan por una conexión P2P directa y nunca se almacenan. CLI text no usa el retransmisor TURN del navegador.",
+        "Cada mensaje admite hasta 65.536 bytes UTF-8. Usa relayium send para contenido mayor.",
       ],
     },
     {
@@ -660,12 +756,12 @@ const es = {
 };
 
 const pt = {
-  title: "Transfira arquivos pelo terminal com a CLI do Relayium",
+  title: "Transfira arquivos e texto pelo terminal com a CLI do Relayium",
   description:
-    "Instale a CLI do Relayium, gratuita e com criptografia de ponta a ponta, e mova arquivos de três formas pelo seu terminal — pelo seu próprio SSH, por um código de emparelhamento entre redes, ou direto entre dois servidores. Gratuito, e os bytes dos arquivos nunca passam pelos nossos servidores — e enviar por código de emparelhamento precisa de conta, para gerar o código.",
+    "Use a CLI do Relayium, gratuita e com criptografia de ponta a ponta, para arquivos por SSH, código de emparelhamento ou daemon direto, e texto efêmero enquanto as duas máquinas estão online.",
   updatedLabel: "Última atualização",
   lead: [
-    "A CLI do Relayium é um único binário pequeno que move arquivos pelo seu terminal — com criptografia de ponta a ponta, auto-hospedável e totalmente gratuito. Ela existe para os casos com que um navegador lida mal: copiar arquivos para um servidor que você já administra, enviar um build entre duas máquinas, ou mandar um arquivo compactado para um colega entre redes sem subi-lo para a nuvem de ninguém.",
+    "A CLI do Relayium é um pequeno binário para transferir arquivos e texto efêmero pelo terminal — com criptografia de ponta a ponta, auto-hospedável e gratuito. Copie arquivos para um servidor, envie um build ou passe URLs, comandos e código sem salvar primeiro como arquivo.",
     "Seja qual for a forma que você usar, os bytes dos arquivos trafegam diretamente entre as duas pontas e nunca passam pelos servidores do Relayium. Este guia deixa você instalado e com a sua primeira transferência feita, e depois aponta para os tutoriais mais aprofundados de cada modo.",
   ],
   sections: [
@@ -690,6 +786,18 @@ const pt = {
         "push / pull — para um servidor no qual você já consegue entrar por SSH. Os bytes trafegam pela sua conexão SSH; sem conta do Relayium.",
         "send / receive — para outra pessoa entre redes, usando um código de emparelhamento curto que a CLI de quem envia gera (faça login uma vez com relayium login; quem recebe, nunca). Ponto a ponto direto; se nenhum caminho direto for encontrado, a transferência falha em vez de ser roteada por nós.",
         "serve + push relayium:// (daemon direto) — direto entre dois servidores que você possui, sobre TLS com fixação. Sem retransmissor, sem SSH, sem código.",
+      ],
+    },
+    {
+      heading: "Enviar texto efêmero",
+      body: [
+        "Execute relayium text em uma máquina para gerar um código de emparelhamento e entre na outra com o código exibido:",
+      ],
+      code: ["relayium text", "relayium text K7M4XR"],
+      bullets: [
+        "Gerar o código requer relayium login; entrar com um código não requer login.",
+        "As duas máquinas precisam ficar online. As mensagens têm criptografia de ponta a ponta, trafegam por uma conexão P2P direta e nunca são armazenadas. CLI text não usa o retransmissor TURN do navegador.",
+        "Cada mensagem pode ter até 65.536 bytes UTF-8. Use relayium send para conteúdo maior.",
       ],
     },
     {
@@ -744,6 +852,6 @@ const pt = {
 export default {
   slug: "guides/transfer-files-from-terminal",
   published: "2026-07-08",
-  updated: "2026-07-08",
+  updated: "2026-07-30",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };
