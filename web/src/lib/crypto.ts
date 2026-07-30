@@ -49,6 +49,15 @@ export interface SessionKeys {
    *  signalling (see signResume). Separate from send/recv on purpose: it signs
    *  attacker-visible plaintext, so it must not be the key protecting content. */
   resumeAuth: CryptoKey;
+  /** AEAD keys for the message stream, domain-separated from send/recv.
+   *
+   *  送文件那条流的 nonce 安全性建立在"只有一个生产者推进 seq"之上（见 transfer.ts
+   *  的 Sender.seq），而消息是**第二个**生产者：它由 UI 事件触发，和一个在 yield 处
+   *  挂起、可能永远不恢复的异步生成器交错。两个生产者共用一个密钥正是 AES-GCM 复用
+   *  nonce 的那个形状。派生出独立子密钥之后，消息流有自己从 0 开始的计数器，交错这个
+   *  问题就消失了，而不是被回答了。 */
+  textSend: CryptoKey;
+  textRecv: CryptoKey;
 }
 
 export function generateKeyPair(): KeyPair {
@@ -88,6 +97,8 @@ export async function deriveSession(
     send: await importAesKey(keys.sharedTx as Bytes),
     recv: await importAesKey(keys.sharedRx as Bytes),
     resumeAuth: await deriveResumeAuth(keys.sharedTx as Bytes, keys.sharedRx as Bytes),
+    textSend: await importAesKey(textKeyBytes(keys.sharedTx as Bytes) as Bytes),
+    textRecv: await importAesKey(textKeyBytes(keys.sharedRx as Bytes) as Bytes),
   };
 }
 
@@ -113,6 +124,37 @@ async function deriveResumeAuth(tx: Bytes, rx: Bytes): Promise<CryptoKey> {
     "sign",
     "verify",
   ]);
+}
+
+/** Domain separation for the message stream's keys. Changing this string is a
+ *  wire break: regenerate apps/RelayiumKit/Tests/Fixtures/crypto-vectors.json and
+ *  move web + Swift together (docs/protocol/relayium-crypto-v1.md). */
+export const TEXT_KEY_DOMAIN = "relayium-text-v1\0";
+
+/**
+ * The 32-byte AEAD key for ONE direction of the message stream.
+ *
+ * Unlike deriveResumeAuth this deliberately does **not** sort its inputs, and
+ * must not. That key is shared, so it has to be symmetric; these are per
+ * direction. crypto_kx already hands the peers mirrored secrets — one side's tx
+ * is the other's rx — so hashing each one locally lines the directions up with
+ * no extra round trip. Sorting would collapse both directions onto a single key
+ * and put two producers back on one nonce counter, which is the exact hazard the
+ * separate key exists to remove.
+ *
+ * The domain prefix is what stops this being a bare hash of a session secret,
+ * replayable into any other context that might later hash the same secret.
+ */
+export function textKeyBytes(sessionKey: Uint8Array): Uint8Array {
+  const domain = new TextEncoder().encode(TEXT_KEY_DOMAIN);
+  const input = new Uint8Array(domain.length + sessionKey.length);
+  input.set(domain, 0);
+  input.set(sessionKey, domain.length);
+  // `null` key = unkeyed BLAKE2b, byte-identical to omitting the argument; the
+  // resolved libsodium-wrappers types mark it required, so pass it (same as
+  // commitKey/sas). deriveResumeAuth above omits it and is a live svelte-check
+  // error on this file — not this change's to fix, but not one to copy either.
+  return sodiumSync().crypto_generichash(32, input, null) as Bytes;
 }
 
 function compareBytes(x: Uint8Array, y: Uint8Array): number {
