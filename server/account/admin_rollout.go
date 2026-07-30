@@ -836,9 +836,13 @@ func (s *Service) handleAdminRolloutRetry(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if !ok {
-		// The CAS refused: the track moved between the read above and the write.
+		// The compare-and-swap refused. Either half can be the reason — the track
+		// left 'complete', or this node stopped being passed over (it reported a
+		// result, or was removed) — between the reads above and the write. Both
+		// mean the same thing to the operator: what they were looking at is no
+		// longer true, and nothing was written.
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
-			"重试失败：该轨道刚刚发生了变化，请刷新后重试")
+			"重试失败：该轨道或该节点的状态刚刚发生了变化，本次操作没有改动任何东西，请刷新后重新确认")
 		return
 	}
 	s.WriteAudit(r, AuditRolloutRetry, "rollout:"+track,

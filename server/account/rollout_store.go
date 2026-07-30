@@ -251,14 +251,46 @@ func (s *SQLiteStore) RetryRolloutNode(ctx context.Context, track, nodeID string
 	if n != 1 {
 		return false, nil
 	}
-	// Only this node, and only if it is still passed over. The handler checks
-	// the row too; this is the same compare-and-swap discipline as the track
-	// guard above, so a node that reported a real failure in the meantime cannot
-	// have that failure erased by a click aimed at its earlier pass-over.
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE nodes SET update_result = '' WHERE id = ? AND update_result IN ('skipped', 'unreachable')`,
-		nodeID); err != nil {
+	// Only this node, only if it is still passed over, only if it belongs to
+	// THIS track's owner class, and only if it has not been removed. Every term
+	// is a guard, and RowsAffected is checked because this write is the second
+	// half of the same compare-and-swap as the track write above -- not a
+	// follow-up to it.
+	//
+	// Dropping the count check is what makes the whole method report a success it
+	// did not perform: the track commits to 'rolling' while nothing was
+	// re-admitted, and the caller audits a per-node retry that never happened.
+	// That is not cosmetic. A track set rolling has no current node
+	// (CompleteRolloutTrack clears current_node_id) and "failed" is deliberately
+	// NOT in passedOverResult, so decideFleet's next evaluation hands the build
+	// straight back to a node that failed to verify it -- as the canary. The
+	// reachable interleaving is exactly what the CAS is for: the caller prechecks
+	// the row, and the node reports a real failure before this transaction runs.
+	//
+	// owner_type is here and not only in the handler for the same reason the
+	// 'complete' condition is: the node id arrives in a form field, the two
+	// rollouts are independent, and before this term a fleet retry aimed at a
+	// user node cleared that node's result and restarted the fleet track.
+	//
+	// removed_at is a guard rather than a nicety: NodesByOwnerType filters it, so
+	// a removed node never reaches decideFleet, and restarting a finished rollout
+	// on its behalf produces a track that rolls, finds nobody and completes
+	// again -- reported to the operator as a successful retry.
+	res, err = tx.ExecContext(ctx,
+		`UPDATE nodes SET update_result = '' WHERE id = ? AND owner_type = ? AND removed_at = 0
+		   AND update_result IN `+passedOverResultsSQL,
+		nodeID, rolloutOwnerClass(track))
+	if err != nil {
 		return false, err
+	}
+	n, err = res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if n != 1 {
+		// Nothing was re-admitted, so the track must not be restarted either.
+		// The deferred Rollback undoes the status write above.
+		return false, nil
 	}
 	if err := tx.Commit(); err != nil {
 		return false, err
@@ -421,12 +453,24 @@ func (s *SQLiteStore) CommandNodeUpdate(ctx context.Context, nodeID, fromVersion
 	return err
 }
 
+// passedOverResultsSQL is the set of update_result values that mean "the queue
+// moved on without this node", as a SQL tuple. Every statement that keys on a
+// pass-over builds its IN clause from this one constant so they cannot drift from
+// each other, or from passedOverResult -- the Go predicate decideFleet reads.
+// Three enumerations of one set is exactly how this package has produced its
+// stale-comment defects; this keeps two of the three in one place, and the Go
+// predicate's doc points here.
+const passedOverResultsSQL = `('skipped', 'unreachable')`
+
 // clearPassedOverResultsSQL is shared by the two writes that hand a passed-over
 // node its candidacy back — ClearPassedOverResults (called by setTargetVersion)
 // and ResumeRolloutTrack, which runs it inside its transaction. One statement,
 // one place, so the two cannot drift into disagreeing about which results count
 // as passed over. Takes owner_type as its only parameter.
-const clearPassedOverResultsSQL = `UPDATE nodes SET update_result = '' WHERE owner_type = ? AND update_result IN ('skipped', 'unreachable')`
+//
+// RetryRolloutNode does NOT use this statement: it clears ONE node rather than an
+// owner class, and adds its own guards. It shares the value tuple above.
+const clearPassedOverResultsSQL = `UPDATE nodes SET update_result = '' WHERE owner_type = ? AND update_result IN ` + passedOverResultsSQL
 
 // ClearPassedOverResults wipes the update results that decideFleet reads as
 // "this node has already had its turn in the rollout that is running now" --

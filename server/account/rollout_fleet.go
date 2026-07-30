@@ -378,6 +378,12 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 // tr.StageStartedAt only because a BYO stage is a whole batch, held open
 // across many nodes.) With the write-side clear in place there is nothing
 // left for a read-side scope to do.
+// This set is duplicated in SQL as passedOverResultsSQL (rollout_store.go), which
+// every statement keying on a pass-over builds its IN clause from. A value added
+// here must be added there, or the writes that hand candidacy back will not clear
+// the value the reads exclude on — a node stranded out of every future rollout,
+// which is the failure mode passedOverResult's whole write-side scoping exists to
+// avoid.
 func passedOverResult(result string) bool {
 	return result == "skipped" || result == "unreachable"
 }

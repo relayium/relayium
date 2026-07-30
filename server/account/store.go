@@ -993,11 +993,17 @@ type Store interface {
 	ResumeRolloutTrack(ctx context.Context, track string, at int64) (bool, error)
 	// RetryRolloutNode gives one passed-over node its candidacy back on a
 	// COMPLETE track and sets that track rolling again, so the queue re-offers
-	// the same target version to it. The 'complete' condition is in the SQL, so
-	// a halt that lands between the caller's read and this write is never
-	// clobbered; the node row is only written after that guard matches, so a
-	// refused retry writes nothing. It touches neither target_version nor
-	// first_node_id. ok=false means the track was not complete.
+	// the same target version to it. It touches neither target_version nor
+	// first_node_id.
+	//
+	// Both conditions are compare-and-swaps in the SQL, in one transaction, and
+	// BOTH must match or nothing is written: the track must still be 'complete',
+	// and the node must still be passed over, belong to this track's owner class
+	// and not be removed. ok=false means one of them did not match — a halt that
+	// lands between the caller's read and this write is never clobbered, and a
+	// track is never left rolling with no node re-admitted (which would hand the
+	// build back to a node that reported a failure). A refused retry writes
+	// nothing at all.
 	RetryRolloutNode(ctx context.Context, track, nodeID string, at int64) (bool, error)
 	// SetRolloutEmergency arms emergency mode (release the whole track at
 	// once, skipping the staged ladder) on a track that is rolling to

@@ -91,6 +91,195 @@ func TestRetryRolloutNodeLeavesTheNodeAloneWhenItRefuses(t *testing.T) {
 	}
 }
 
+// The node write is the OTHER half of this compare-and-swap, and dropping its
+// RowsAffected check makes the whole operation report a success it did not
+// perform: the track flips to rolling, no node is re-admitted, and the handler
+// audits a per-node retry that never happened.
+//
+// The reachable interleaving is the one the CAS exists for. The handler prechecks
+// the row, and between that read and this transaction the node reports a real
+// FAILURE -- an update it was still carrying out, or another instance's rollout.
+// The WHERE clause correctly refuses to erase "failed", so the node write matches
+// no row; without checking that, the track is committed to 'rolling' anyway.
+func TestRetryRolloutNodeRefusesWhenTheNodeIsNoLongerPassedOver(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	seedRetryCase(t, store, "failed", "complete")
+
+	ok, err := store.RetryRolloutNode(ctx, "fleet", "n-x", 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Error("RetryRolloutNode reported success while re-admitting nothing")
+	}
+	tr, _, err := store.GetRolloutTrack(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Status != "complete" {
+		t.Fatalf("the track was restarted for a node that was never re-admitted: %q", tr.Status)
+	}
+}
+
+// And this is WHY that half is blocking rather than untidy. A track left
+// 'rolling' has no current node -- CompleteRolloutTrack clears current_node_id --
+// and "failed" is deliberately NOT in passedOverResult's exclusion set, so
+// decideFleet's very next evaluation hands the build straight back to the machine
+// that failed to verify it. That is the shortest path around a verification
+// failure the row guard exists to close, reached by clicking 重试 on a stale
+// panel.
+// The node here is seeded ONLINE rather than through seedRetryCase, which stamps
+// LastSeenAt: 1. That matters: decideFleet only considers online candidates, so
+// an offline fixture makes this assertion vacuous -- it would pass against the
+// broken code for the wrong reason.
+func TestRefusedRetryDoesNotLetDecideFleetRecommandTheFailedNode(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	now := time.Now().Unix()
+
+	if _, err := store.UpsertNode(ctx, Node{
+		ID: "n-x", OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "s",
+		Version: "v1.0.0", CreatedAt: 1, LastSeenAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CommandNodeUpdate(ctx, "n-x", "v1.0.0", now-600); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetNodeUpdateResult(ctx, "n-x", "failed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v2.0.0", Status: "complete", StageStartedAt: now - 3600,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sanity: with the track left rolling, this node IS a candidate. Without
+	// this the test could pass because the fixture is inert.
+	rolling := RolloutTrack{Track: "fleet", TargetVersion: "v2.0.0", Status: "rolling", StageStartedAt: now}
+	nodes, err := store.NodesByOwnerType(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := decideFleet(rolling, nodeSnapshots(nodes), now); d.Action != "update" || d.NodeID != "n-x" {
+		t.Fatalf("fixture is inert: a rolling track does not re-command this node (%+v)", d)
+	}
+
+	if _, err := store.RetryRolloutNode(ctx, "fleet", "n-x", now); err != nil {
+		t.Fatal(err)
+	}
+
+	tr, _, err := store.GetRolloutTrack(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes, err = store.NodesByOwnerType(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := decideFleet(tr, nodeSnapshots(nodes), now)
+	if d.Action == "update" && d.NodeID == "n-x" {
+		t.Fatalf("a refused retry re-commanded the node that failed verification: %+v", d)
+	}
+}
+
+// A node id that matches nothing must not restart the track either. The id
+// arrives in a form field, and "the operator's panel is stale" and "the node was
+// deregistered a moment ago" are the same case to this method.
+func TestRetryRolloutNodeRefusesAnUnknownNode(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	seedRetryCase(t, store, "unreachable", "complete")
+
+	ok, err := store.RetryRolloutNode(ctx, "fleet", "n-does-not-exist", 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Error("RetryRolloutNode reported success for a node that does not exist")
+	}
+	tr, _, err := store.GetRolloutTrack(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Status != "complete" {
+		t.Fatalf("an unknown node restarted the track: %q", tr.Status)
+	}
+}
+
+// Owner scoping belongs in the SQL, not only in the handler -- the same
+// discipline as the track guard. The two rollouts are independent, and a fleet
+// retry that could clear a user node's result would be one track editing the
+// other's rollout state.
+func TestRetryRolloutNodeRefusesANodeOfAnotherOwnerClass(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	u, err := store.UpsertUserByEmail(ctx, "storeretry@example.test", "S")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedRolloutNode(t, store, "n-user", "user", u.ID, "v1.0.0", "v1.0.0", "unreachable")
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v2.0.0", Status: "complete",
+		StageStartedAt: time.Now().Unix() - 3600,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := store.RetryRolloutNode(ctx, "fleet", "n-user", 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Error("the fleet track's retry reported success for a user node")
+	}
+	n, _, err := store.GetNode(ctx, "n-user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.UpdateResult != "unreachable" {
+		t.Errorf("the fleet track's retry cleared a user node's result: %q", n.UpdateResult)
+	}
+	tr, _, err := store.GetRolloutTrack(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Status != "complete" {
+		t.Fatalf("retrying a foreign node restarted the fleet track: %q", tr.Status)
+	}
+}
+
+// A removed node cannot be re-offered anything: NodesByOwnerType filters
+// removed_at, so it never reaches decideFleet at all. Restarting a finished
+// rollout on its behalf would be a track that rolls, finds nobody, and completes
+// again -- reported to the operator as a successful retry.
+func TestRetryRolloutNodeRefusesARemovedNode(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	seedRetryCase(t, store, "unreachable", "complete")
+	if err := store.MarkNodeRemoved(ctx, "n-x", time.Now().Unix()); err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := store.RetryRolloutNode(ctx, "fleet", "n-x", 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Error("RetryRolloutNode reported success for a removed node")
+	}
+	tr, _, err := store.GetRolloutTrack(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Status != "complete" {
+		t.Fatalf("a removed node restarted the track: %q", tr.Status)
+	}
+}
+
 // The row guard: a node that judged the build is not one click from a re-run.
 func TestRetryRefusesAFailedNode(t *testing.T) {
 	ts, _, store := newAdminSettingsServer(t)
