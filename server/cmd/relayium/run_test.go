@@ -27,6 +27,9 @@ func TestRunNoArgsShowsUsage(t *testing.T) {
 	if !strings.Contains(combined, "push") || !strings.Contains(combined, "pull") {
 		t.Fatalf("usage should list push/pull, got %q", combined)
 	}
+	if !strings.Contains(combined, "file and text transfer") {
+		t.Fatalf("usage should position both file and text transfer, got %q", combined)
+	}
 	if strings.Contains(combined, "__recv") {
 		t.Fatalf("__recv must stay hidden from usage, got %q", combined)
 	}

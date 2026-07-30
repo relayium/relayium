@@ -1,7 +1,7 @@
 {
-  "name": "Relayium — end-to-end encrypted file transfer",
+  "name": "Relayium — end-to-end encrypted file and text transfer",
   "short_name": "Relayium",
-  "description": "Open-source, end-to-end encrypted peer-to-peer file transfer in your browser. Files stream directly between devices over WebRTC and never touch the server.",
+  "description": "Open-source, end-to-end encrypted file and live ephemeral text transfer in your browser. LAN sessions connect directly; cross-network browser pairing uses a ciphertext-only relay. Text is online-only, and Relayium servers do not store message bodies.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

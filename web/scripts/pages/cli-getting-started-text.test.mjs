@@ -6,6 +6,8 @@ const TEXT_WORD = {
   en: /\btext\b/i, zh: /文本/, ja: /テキスト/, ko: /텍스트/, de: /Text/,
   fr: /texte/i, ar: /(?<!م)نص/, es: /texto/i, pt: /texto/i,
 };
+const SERVER_WORD = /server|服务器|サーバー|서버|serveur|خوادم|servidor/i;
+const RETAIN_WORD = /retain|保留|保持|보관|behalten|conserver|الاحتفاظ|conservar|guardar/i;
 
 describe("CLI getting-started guide includes ephemeral text", () => {
   it("positions files and text in every localized title and description", () => {
@@ -29,13 +31,15 @@ describe("CLI getting-started guide includes ephemeral text", () => {
       expect(copy, `${lang} mint login`).toContain("relayium login");
       expect(copy, `${lang} direct P2P`).toMatch(/P2P|peer-to-peer/i);
       expect(copy, `${lang} no browser relay`).toContain("TURN");
+      expect(copy, `${lang} server storage boundary`).toMatch(SERVER_WORD);
+      expect(copy, `${lang} endpoint retention boundary`).toMatch(RETAIN_WORD);
       expect(copy, `${lang} byte limit`).toMatch(/65[.,\s]?536/);
       expect(copy, `${lang} larger content`).toContain("relayium send");
     }
   });
 
   it("records the release date and preserves the three file modes", () => {
-    expect(article.updated).toBe("2026-07-30");
+    expect(article.updated).toBe("2026-07-31");
     const en = article.langs.en.sections.find((item) => item.heading === "The three ways it moves files");
     expect(en?.bullets.join(" ")).toContain("push / pull");
     expect(en?.bullets.join(" ")).toContain("send / receive");

@@ -49,7 +49,7 @@ export const OG_IMAGE = SITE.origin + "/og-image.jpg";
 export const OG_IMAGE_META = `<meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />`;
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />`;
 
 export function pagePath(slug, lang) {
   return lang === DEFAULT_LANG ? `${slug}/index.html` : `${lang}/${slug}/index.html`;

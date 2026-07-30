@@ -44,7 +44,7 @@ const en = {
       code: ["relayium text", "relayium text K7M4XR"],
       bullets: [
         "Minting the code needs relayium login; joining with a code needs no login.",
-        "Both machines must stay online. Messages are end-to-end encrypted, travel over a direct P2P (peer-to-peer) connection, and are never stored; CLI text does not use the browser TURN relay.",
+        "Both machines must stay online. Messages are end-to-end encrypted over a direct P2P (peer-to-peer) connection, and Relayium servers never store their bodies; CLI text does not use the browser TURN relay. Either endpoint can still copy or retain received text.",
         "Each message can be at most 65,536 UTF-8 bytes. Use relayium send for anything larger.",
       ],
     },
@@ -138,7 +138,7 @@ const zh = {
       code: ["relayium text", "relayium text K7M4XR"],
       bullets: [
         "生成配对码需要先执行 relayium login；持码加入无需登录。",
-        "两台机器必须同时在线。消息端到端加密，通过 P2P 点对点直连传输且绝不存储；CLI text 不使用浏览器的 TURN 中继。",
+        "两台机器必须同时在线。消息通过 P2P 点对点直连进行端到端加密传输，Relayium 服务器不存储消息正文；CLI text 不使用浏览器的 TURN 中继。任一端仍可复制或保留收到的文本。",
         "单条消息最多 65,536 UTF-8 字节。更大的内容请使用 relayium send。",
       ],
     },
@@ -232,7 +232,7 @@ const ja = {
       code: ["relayium text", "relayium text K7M4XR"],
       bullets: [
         "コードの発行には relayium login が必要ですが、コードでの参加にはログイン不要です。",
-        "両方の端末がオンラインである必要があります。メッセージはエンドツーエンド暗号化された P2P 直結で流れ、保存されません。CLI text はブラウザの TURN リレーを使いません。",
+        "両方の端末がオンラインである必要があります。メッセージはエンドツーエンド暗号化された P2P 直結で流れ、Relayium サーバーは本文を保存しません。CLI text はブラウザの TURN リレーを使いません。各端末は受信したテキストをコピーまたは保持できます。",
         "1メッセージは最大 65,536 UTF-8 バイトです。それより大きい内容には relayium send を使ってください。",
       ],
     },
@@ -326,7 +326,7 @@ const ko = {
       code: ["relayium text", "relayium text K7M4XR"],
       bullets: [
         "코드 발급에는 relayium login이 필요하지만 코드로 참여할 때는 로그인하지 않습니다.",
-        "두 기기가 함께 온라인이어야 합니다. 메시지는 종단간 암호화된 P2P 직결로 전송되고 저장되지 않습니다. CLI text는 브라우저 TURN 릴레이를 사용하지 않습니다.",
+        "두 기기가 함께 온라인이어야 합니다. 메시지는 종단간 암호화된 P2P 직결로 전송되며 Relayium 서버는 본문을 저장하지 않습니다. CLI text는 브라우저 TURN 릴레이를 사용하지 않습니다. 각 엔드포인트는 받은 텍스트를 복사하거나 보관할 수 있습니다.",
         "메시지 하나는 최대 65,536 UTF-8바이트입니다. 더 큰 내용은 relayium send를 사용하세요.",
       ],
     },
@@ -420,7 +420,7 @@ const de = {
       code: ["relayium text", "relayium text K7M4XR"],
       bullets: [
         "Das Erzeugen des Codes braucht relayium login; der Beitritt mit einem Code braucht keine Anmeldung.",
-        "Beide Rechner müssen online bleiben. Nachrichten laufen Ende-zu-Ende-verschlüsselt über eine direkte P2P-Verbindung und werden nie gespeichert. CLI text nutzt das Browser-TURN-Relay nicht.",
+        "Beide Rechner müssen online bleiben. Nachrichten laufen Ende-zu-Ende-verschlüsselt über eine direkte P2P-Verbindung; Relayium-Server speichern ihre Inhalte nicht. CLI text nutzt das Browser-TURN-Relay nicht. Beide Endpunkte können empfangenen Text dennoch kopieren oder behalten.",
         "Eine Nachricht umfasst höchstens 65.536 UTF-8-Bytes. Für größere Inhalte nutze relayium send.",
       ],
     },
@@ -514,7 +514,7 @@ const fr = {
       code: ["relayium text", "relayium text K7M4XR"],
       bullets: [
         "Créer le code nécessite relayium login ; le rejoindre ne nécessite aucune connexion.",
-        "Les deux machines doivent rester en ligne. Les messages sont chiffrés de bout en bout, passent par une connexion P2P directe et ne sont jamais stockés. CLI text n'utilise pas le relais TURN du navigateur.",
+        "Les deux machines doivent rester en ligne. Les messages sont chiffrés de bout en bout sur une connexion P2P directe et les serveurs Relayium ne stockent pas leur corps. CLI text n'utilise pas le relais TURN du navigateur. Chaque extrémité peut néanmoins copier ou conserver le texte reçu.",
         "Un message fait au plus 65 536 octets UTF-8. Utilisez relayium send pour un contenu plus grand.",
       ],
     },
@@ -608,7 +608,7 @@ const ar = {
       code: ["relayium text", "relayium text K7M4XR"],
       bullets: [
         "يتطلب إصدار الرمز relayium login؛ أما الانضمام بالرمز فلا يحتاج إلى تسجيل دخول.",
-        "يجب أن يبقى الجهازان متصلين. الرسائل مشفّرة من الطرف إلى الطرف، تمر باتصال P2P مباشر، ولا تُخزَّن أبدًا. لا يستخدم CLI text مُرحِّل TURN الخاص بالمتصفح.",
+        "يجب أن يبقى الجهازان متصلين. تمر الرسائل مشفّرة من الطرف إلى الطرف عبر اتصال P2P مباشر، ولا تخزّن خوادم Relayium متنها. لا يستخدم CLI text مُرحِّل TURN الخاص بالمتصفح. ومع ذلك يمكن لأي طرف نسخ النص المستلم أو الاحتفاظ به.",
         "الرسالة الواحدة 65,536 بايت UTF-8 كحد أقصى. استخدم relayium send للمحتوى الأكبر.",
       ],
     },
@@ -702,7 +702,7 @@ const es = {
       code: ["relayium text", "relayium text K7M4XR"],
       bullets: [
         "Generar el código requiere relayium login; unirse con un código no requiere iniciar sesión.",
-        "Ambas máquinas deben seguir conectadas. Los mensajes están cifrados de extremo a extremo, viajan por una conexión P2P directa y nunca se almacenan. CLI text no usa el retransmisor TURN del navegador.",
+        "Ambas máquinas deben seguir conectadas. Los mensajes están cifrados de extremo a extremo por una conexión P2P directa y los servidores de Relayium no almacenan su contenido. CLI text no usa el retransmisor TURN del navegador. Cualquiera de los extremos puede copiar o conservar el texto recibido.",
         "Cada mensaje admite hasta 65.536 bytes UTF-8. Usa relayium send para contenido mayor.",
       ],
     },
@@ -796,7 +796,7 @@ const pt = {
       code: ["relayium text", "relayium text K7M4XR"],
       bullets: [
         "Gerar o código requer relayium login; entrar com um código não requer login.",
-        "As duas máquinas precisam ficar online. As mensagens têm criptografia de ponta a ponta, trafegam por uma conexão P2P direta e nunca são armazenadas. CLI text não usa o retransmissor TURN do navegador.",
+        "As duas máquinas precisam ficar online. As mensagens têm criptografia de ponta a ponta em uma conexão P2P direta, e os servidores da Relayium não armazenam seu conteúdo. CLI text não usa o retransmissor TURN do navegador. Qualquer ponta ainda pode copiar ou guardar o texto recebido.",
         "Cada mensagem pode ter até 65.536 bytes UTF-8. Use relayium send para conteúdo maior.",
       ],
     },
@@ -852,6 +852,6 @@ const pt = {
 export default {
   slug: "guides/transfer-files-from-terminal",
   published: "2026-07-08",
-  updated: "2026-07-30",
+  updated: "2026-07-31",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

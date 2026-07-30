@@ -11,7 +11,7 @@ import (
 	"github.com/relayium/relayium/internal/xfer"
 )
 
-const usage = `relayium — file transfer
+const usage = `relayium — file and text transfer
 
 usage:
   relayium push <src...> [user@]host:dest    push files to a server you can ssh into
