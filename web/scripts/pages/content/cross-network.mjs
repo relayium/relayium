@@ -16,22 +16,22 @@ const en = {
   // src/lib/i18n/en.ts: the SPA rewrites the served <head> on boot, so the shell
   // and the app must agree or the URL has two different <head>s depending on who
   // is looking. shells.test.mjs asserts it.
-  title: "Cross-network file transfer — realtime, end-to-end encrypted | Relayium",
+  title: "Cross-network file and live text transfer — end-to-end encrypted | Relayium",
   description:
-    "Send files across networks with a 6-character code — realtime transfer, end-to-end encrypted; the relay only ever sees ciphertext, never your files.",
+    "Send files and live ephemeral text across networks with a 6-character code. The creator signs in; joining needs no account. TURN carries only end-to-end encrypted ciphertext.",
   hero: {
-    h1: "Cross-network file transfer, end-to-end encrypted",
+    h1: "Cross-network files and live text, end-to-end encrypted",
     pitch:
-      "Two devices on different networks pair with a 6-character code (or its link/QR). Files stream over an encrypted channel through a fast relay that only ever sees ciphertext — your keys never leave the two devices.",
+      "Two online devices on different networks pair with a 6-character code (or its link/QR) to send files or ephemeral text. Browser sessions use Relayium's TURN relay by design, but it only ever sees ciphertext; text message bodies are never stored by Relayium.",
     cta: "Start a transfer",
   },
   how: {
     heading: "A transfer in four steps",
     steps: [
-      "The sender signs in and mints a 6-character pairing code (or shares its join link / QR).",
-      "The receiver opens the link or enters the code — no account needed to receive.",
+      "One person signs in and mints a 6-character pairing code for a file or text session (or shares its join link / QR).",
+      "The other person opens the link or enters the code — joining with a code needs no account.",
       "Both sides verify the same 6-digit SAS on screen to rule out a man-in-the-middle.",
-      "Files stream end-to-end encrypted (AES-256-GCM per chunk) through Relayium's fast relay, which carries only ciphertext it can't read.",
+      "With both devices online, files stream and live text messages move end-to-end encrypted through TURN. Relayium never stores message bodies; one message can contain up to 65,536 UTF-8 bytes.",
     ],
   },
   why: {
@@ -47,7 +47,11 @@ const en = {
       },
       {
         title: "Relay sees only ciphertext",
-        desc: "Cross-network transfers travel through a fast relay for a reliable connection across any NAT — and it only ever carries ciphertext, never your keys or plaintext.",
+        desc: "Cross-network browser transfers use a fast TURN relay by design for reliable connections across NAT — and it only ever carries ciphertext, never your keys or plaintext.",
+      },
+      {
+        title: "Live, ephemeral text",
+        desc: "Both devices must stay online. Relayium stores no message bodies or server-side history; a receiving endpoint can still copy or retain text. Each message supports up to 65,536 UTF-8 bytes.",
       },
       {
         title: "Cross-platform",
@@ -55,7 +59,7 @@ const en = {
       },
       {
         title: "Free",
-        desc: "Free to use within a monthly relay allowance; minting a code needs the sender signed in, the receiver joins anonymously.",
+        desc: "Free to use within a monthly relay allowance; the person creating a file or text code signs in, while anyone joining with that code needs no account.",
       },
     ],
   },
@@ -76,8 +80,8 @@ const en = {
     heading: "Frequently asked questions",
     items: [
       {
-        q: "Do my files go through a server?",
-        a: "The encrypted stream travels through Relayium's relay for a reliable cross-network connection — but it's end-to-end encrypted, so the relay only ever sees ciphertext it can't read.",
+        q: "Do my files or messages go through a server?",
+        a: "Cross-network browser sessions use Relayium's TURN relay by design, but files and messages are end-to-end encrypted, so it sees only ciphertext. Relayium does not store text message bodies.",
       },
       {
         q: "Is a code required?",
@@ -85,11 +89,15 @@ const en = {
       },
       {
         q: "Do I need an account?",
-        a: "The sender signs in to mint a code; the receiver joins anonymously.",
+        a: "The person creating a pairing code for files or text signs in; anyone joining with that code needs no account.",
       },
       {
         q: "Is it end-to-end encrypted?",
         a: "Yes — X25519 + per-chunk AES-256-GCM, verified with the SAS code, so neither the relay nor the server can decrypt.",
+      },
+      {
+        q: "Can I send text as well as files?",
+        a: "Yes. While both devices are online, send live ephemeral text up to 65,536 UTF-8 bytes per message. Relayium stores no message bodies or server-side history, although either endpoint can copy or retain received text.",
       },
     ],
   },
@@ -98,22 +106,22 @@ const en = {
 };
 
 const zh = {
-  title: "跨网络文件传输——实时、端到端加密 | Relayium",
+  title: "跨网络文件与实时文本传输——端到端加密 | Relayium",
   description:
-    "用 6 字符配对码，让两台设备跨网络互传文件。端到端加密：文件经由 Relayium 的快速中继转发，中继只经手无法解密的密文；并以 SAS 校验码验证，即便中继被入侵也无法窃听。",
+    "用 6 字符配对码跨网络传输文件和实时临时文本。双方须同时在线；浏览器会按设计使用仅能看到密文的 TURN 中继。",
   hero: {
-    h1: "跨网络文件传输，端到端加密",
+    h1: "跨网络传输文件与实时文本，端到端加密",
     pitch:
-      "两台设备身处不同网络，用 6 字符配对码（或其加入链接/二维码）完成配对。文件通过加密通道流动，途经 Relayium 的快速中继转发——中继只能看到密文，密钥始终只留在两台设备之间。",
+      "两台在线设备身处不同网络时，可用 6 字符配对码（或其加入链接/二维码）传输文件或临时文本。浏览器会按设计使用 Relayium 的 TURN 中继，但中继只能看到密文；Relayium 从不存储文本正文。",
     cta: "开始传输",
   },
   how: {
     heading: "四步完成一次传输",
     steps: [
-      "发送方登录后生成一个 6 字符配对码（也可分享其加入链接/二维码）。",
-      "接收方打开链接或输入配对码即可——接收无需账号。",
+      "一方登录后为文件或文本会话生成一个 6 字符配对码（也可分享其加入链接/二维码）。",
+      "另一方打开链接或输入配对码即可——持码加入无需账号。",
       "双方核对屏幕上同一段 6 位数字 SAS 校验码（与配对码是两个不同的值），确认一致以排除中间人。",
-      "文件端到端加密流式传输（逐块 AES-256-GCM），经由 Relayium 的快速中继转发；中继只经手它无法解密的密文。",
+      "双方同时在线时，文件流和实时文本均通过 TURN 端到端加密传输。Relayium 不存储消息正文；每条消息最多 65,536 个 UTF-8 字节。",
     ],
   },
   why: {
@@ -129,7 +137,11 @@ const zh = {
       },
       {
         title: "中继只经手密文",
-        desc: "跨网络传输经由快速中继转发，以在任何 NAT 环境下都能可靠连接——中继只经手密文，从不接触你的密钥或明文。",
+        desc: "跨网络浏览器传输会按设计使用快速 TURN 中继，以在 NAT 环境下可靠连接——中继只经手密文，从不接触你的密钥或明文。",
+      },
+      {
+        title: "实时临时文本",
+        desc: "双方必须同时在线。Relayium 不存储消息正文或服务端历史；接收端仍可复制或保留文本。每条消息最多 65,536 个 UTF-8 字节。",
       },
       {
         title: "跨平台",
@@ -137,7 +149,7 @@ const zh = {
       },
       {
         title: "免费",
-        desc: "在每月中继流量额度内免费使用；生成配对码需发送方登录，接收方可匿名加入。",
+        desc: "在每月中继流量额度内免费使用；创建文件或文本配对码的一方需登录，持码加入的一方无需账号。",
       },
     ],
   },
@@ -158,8 +170,8 @@ const zh = {
     heading: "常见问题",
     items: [
       {
-        q: "文件会经过你们的服务器吗？",
-        a: "加密数据流会经由 Relayium 的中继转发，以实现跨网络的可靠连接——但由于端到端加密，中继只能看到它无法解密的密文。",
+        q: "文件或消息会经过你们的服务器吗？",
+        a: "跨网络浏览器会话会按设计使用 Relayium 的 TURN 中继，但文件和消息均为端到端加密，因此中继只能看到密文。Relayium 不存储文本正文。",
       },
       {
         q: "一定要用配对码吗？",
@@ -167,11 +179,15 @@ const zh = {
       },
       {
         q: "需要注册账号吗？",
-        a: "发送方需登录才能生成配对码；接收方可匿名加入。",
+        a: "创建文件或文本配对码的一方需登录；任何持码加入的人都无需账号。",
       },
       {
         q: "是端到端加密的吗？",
         a: "是——采用 X25519 密钥交换 + 每块 AES-256-GCM 加密，并通过 SAS 校验码核验，中继与服务器均无法解密。",
+      },
+      {
+        q: "除了文件，还能发送文本吗？",
+        a: "可以。双方在线时，可发送实时临时文本，每条最多 65,536 个 UTF-8 字节。Relayium 不存储消息正文或服务端历史，但任一端点都可复制或保留收到的文本。",
       },
     ],
   },
@@ -180,22 +196,22 @@ const zh = {
 };
 
 const ja = {
-  title: "ネットワークをまたぐファイル転送——リアルタイム・エンドツーエンド暗号化 | Relayium",
+  title: "ネットワークをまたぐファイルとライブテキスト転送——エンドツーエンド暗号化 | Relayium",
   description:
-    "6文字のペアリングコードで、異なるネットワークの2台の端末間でファイルを送受信します。エンドツーエンドで暗号化し、Relayiumの高速リレーを経由します——リレーは復号できない暗号文しか扱いません。検証コード（SAS）で照合するため、リレーが侵害されていても盗聴されません。",
+    "6文字のペアリングコードで、異なるネットワーク間のファイルと一時的なライブテキストを転送。両端末がオンラインで、ブラウザは暗号文しか見えないTURNリレーを設計どおり使用します。",
   hero: {
-    h1: "ネットワークをまたぐファイル転送、エンドツーエンド暗号化",
+    h1: "ネットワークをまたぐファイルとライブテキスト、エンドツーエンド暗号化",
     pitch:
-      "異なるネットワーク上の2台の端末が、6文字のコード（またはその参加リンク/QR）でペアリングします。ファイルは暗号化されたチャネルを通じて、Relayiumの高速リレーを経由して流れます——リレーが目にするのは暗号文だけで、鍵は常に2台の端末間にとどまります。",
+      "異なるネットワーク上のオンライン端末2台を6文字のコード（または参加リンク/QR）でペアリングし、ファイルや一時的なテキストを送ります。ブラウザは設計どおりRelayiumのTURNリレーを使いますが、リレーが見るのは暗号文だけで、Relayiumはメッセージ本文を保存しません。",
     cta: "転送を始める",
   },
   how: {
     heading: "4ステップで転送",
     steps: [
-      "送信側がサインインし、6文字のペアリングコードを発行します（参加リンク/QRの共有も可能）。",
-      "受信側はリンクを開くかコードを入力するだけ——受信にアカウントは不要です。",
+      "一方がサインインし、ファイルまたはテキスト用の6文字ペアリングコードを発行します（参加リンク/QRの共有も可能）。",
+      "もう一方はリンクを開くかコードを入力するだけ——コードでの参加にアカウントは不要です。",
       "両方の画面に表示される同じ6桁の検証コード（SAS）を照合し、中間者がいないことを確認します。",
-      "ファイルはエンドツーエンドで暗号化され（チャンクごとにAES-256-GCM）、Relayiumの高速リレーを経由してストリーミング転送されます。リレーは復号できない暗号文しか扱いません。",
+      "両端末がオンラインの間、ファイルとライブテキストはTURN経由でエンドツーエンド暗号化されます。Relayiumは本文を保存せず、1件は最大65,536 UTF-8バイトです。",
     ],
   },
   why: {
@@ -211,7 +227,11 @@ const ja = {
       },
       {
         title: "リレーは暗号文しか扱わない",
-        desc: "ネットワークをまたぐ転送は、あらゆるNAT環境でも確実に接続できるよう高速リレーを経由します——リレーが扱うのは常に暗号文のみで、鍵や平文に触れることはありません。",
+        desc: "ネットワークをまたぐブラウザ転送は、NAT越しでも確実につながるよう設計どおり高速TURNリレーを使います。リレーが扱うのは暗号文だけで、鍵や平文には触れません。",
+      },
+      {
+        title: "一時的なライブテキスト",
+        desc: "両端末がオンラインである必要があります。Relayiumは本文やサーバー側履歴を保存しませんが、受信端末はテキストをコピー・保持できます。1件は最大65,536 UTF-8バイトです。",
       },
       {
         title: "クロスプラットフォーム",
@@ -219,7 +239,7 @@ const ja = {
       },
       {
         title: "無料",
-        desc: "月々の中継トラフィック枠の範囲内で無料で利用できます。コードの発行には送信側のサインインが必要で、受信側は匿名のまま参加できます。",
+        desc: "月々の中継トラフィック枠内で無料です。ファイルまたはテキストのコードを作る側はサインインし、コードで参加する側はアカウント不要です。",
       },
     ],
   },
@@ -240,8 +260,8 @@ const ja = {
     heading: "よくある質問",
     items: [
       {
-        q: "ファイルはRelayiumのサーバーを経由しますか？",
-        a: "暗号化されたデータストリームはRelayiumのリレーを経由し、ネットワークをまたいでも確実に接続できるようにしています——ただしエンドツーエンドで暗号化されているため、リレーが目にするのは復号できない暗号文だけです。",
+        q: "ファイルやメッセージはRelayiumのサーバーを経由しますか？",
+        a: "ネットワークをまたぐブラウザセッションは設計どおりTURNリレーを使いますが、ファイルもメッセージもエンドツーエンド暗号化され、リレーが見るのは暗号文だけです。Relayiumはメッセージ本文を保存しません。",
       },
       {
         q: "コードは必須ですか？",
@@ -249,11 +269,15 @@ const ja = {
       },
       {
         q: "アカウントは必要ですか？",
-        a: "送信側はコードを発行するためにサインインが必要ですが、受信側は匿名で参加できます。",
+        a: "ファイルまたはテキストのペアリングコードを作る側はサインインが必要ですが、コードで参加する側はアカウント不要です。",
       },
       {
         q: "エンドツーエンド暗号化されていますか？",
         a: "はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、検証コード（SAS）で照合します。リレーもサーバーも復号できません。",
+      },
+      {
+        q: "ファイルだけでなくテキストも送れますか？",
+        a: "はい。両端末がオンラインの間、1件最大65,536 UTF-8バイトの一時的なライブテキストを送れます。Relayiumは本文やサーバー側履歴を保存しませんが、各端末は受信テキストをコピー・保持できます。",
       },
     ],
   },
@@ -262,22 +286,22 @@ const ja = {
 };
 
 const ko = {
-  title: "네트워크를 넘는 파일 전송 — 실시간, 종단간 암호화 | Relayium",
+  title: "네트워크를 넘는 파일 및 실시간 텍스트 전송 — 종단간 암호화 | Relayium",
   description:
-    "6자 페어링 코드로 서로 다른 네트워크에 있는 두 기기가 파일을 주고받습니다. 종단간 암호화——파일은 Relayium의 빠른 릴레이를 거치지만, 릴레이는 복호화할 수 없는 암호문만 다룹니다. 검증 코드(SAS)로 대조하므로 릴레이가 침해되어도 도청할 수 없습니다.",
+    "6자 페어링 코드로 서로 다른 네트워크 간 파일과 일시적인 실시간 텍스트를 전송합니다. 두 기기가 온라인이어야 하며 브라우저는 설계상 암호문만 보는 TURN 릴레이를 사용합니다.",
   hero: {
-    h1: "네트워크를 넘는 파일 전송, 종단간 암호화",
+    h1: "네트워크를 넘는 파일과 실시간 텍스트, 종단간 암호화",
     pitch:
-      "서로 다른 네트워크에 있는 두 기기가 6자 코드(또는 참여 링크/QR)로 페어링합니다. 파일은 암호화된 채널을 통해 Relayium의 빠른 릴레이를 거쳐 전송됩니다——릴레이는 암호문만 볼 수 있으며, 키는 항상 두 기기 사이에만 머무릅니다.",
+      "서로 다른 네트워크의 온라인 기기 두 대를 6자 코드(또는 참여 링크/QR)로 연결해 파일이나 일시적인 텍스트를 보냅니다. 브라우저는 설계상 Relayium TURN 릴레이를 사용하지만 릴레이에는 암호문만 보이며, Relayium은 메시지 본문을 저장하지 않습니다.",
     cta: "전송 시작",
   },
   how: {
     heading: "4단계로 전송",
     steps: [
-      "보내는 쪽이 로그인한 뒤 6자 페어링 코드를 생성합니다(참여 링크/QR 공유도 가능).",
-      "받는 쪽은 링크를 열거나 코드를 입력하기만 하면 됩니다 — 받는 데는 계정이 필요 없습니다.",
+      "한쪽이 로그인해 파일 또는 텍스트 세션용 6자 페어링 코드를 생성합니다(참여 링크/QR 공유도 가능).",
+      "다른 쪽은 링크를 열거나 코드를 입력합니다 — 코드로 참여할 때는 계정이 필요 없습니다.",
       "양쪽 화면에 표시되는 동일한 6자리 숫자 검증 코드(SAS, 페어링 코드와는 다른 값)를 대조해 중간자가 없는지 확인합니다.",
-      "파일은 종단간 암호화되어(청크마다 AES-256-GCM) Relayium의 빠른 릴레이를 거쳐 스트리밍됩니다. 릴레이는 복호화할 수 없는 암호문만 전달합니다.",
+      "두 기기가 온라인인 동안 파일과 실시간 텍스트는 TURN을 통해 종단간 암호화됩니다. Relayium은 메시지 본문을 저장하지 않으며 메시지 하나는 최대 65,536 UTF-8바이트입니다.",
     ],
   },
   why: {
@@ -293,7 +317,11 @@ const ko = {
       },
       {
         title: "릴레이는 암호문만 전달",
-        desc: "네트워크를 넘는 전송은 어떤 NAT 환경에서도 안정적으로 연결되도록 빠른 릴레이를 거칩니다——릴레이는 항상 암호문만 다루며, 키나 평문에는 접근하지 않습니다.",
+        desc: "네트워크를 넘는 브라우저 전송은 NAT에서도 안정적으로 연결되도록 설계상 빠른 TURN 릴레이를 사용합니다. 릴레이는 암호문만 전달하며 키나 평문에는 접근하지 않습니다.",
+      },
+      {
+        title: "일시적인 실시간 텍스트",
+        desc: "두 기기가 모두 온라인이어야 합니다. Relayium은 메시지 본문이나 서버 측 기록을 저장하지 않지만 수신 기기는 텍스트를 복사하거나 보관할 수 있습니다. 메시지 하나는 최대 65,536 UTF-8바이트입니다.",
       },
       {
         title: "크로스 플랫폼",
@@ -301,7 +329,7 @@ const ko = {
       },
       {
         title: "무료",
-        desc: "월별 릴레이 트래픽 한도 내에서 무료로 이용할 수 있습니다. 코드 생성에는 보내는 쪽의 로그인이 필요하며, 받는 쪽은 익명으로 참여합니다.",
+        desc: "월별 릴레이 트래픽 한도 내에서 무료입니다. 파일 또는 텍스트 코드를 만드는 쪽은 로그인하고, 코드로 참여하는 쪽은 계정이 필요 없습니다.",
       },
     ],
   },
@@ -322,8 +350,8 @@ const ko = {
     heading: "자주 묻는 질문",
     items: [
       {
-        q: "파일이 서버를 거치나요?",
-        a: "암호화된 데이터 스트림은 Relayium의 릴레이를 거쳐 네트워크를 넘는 안정적인 연결을 제공합니다——다만 종단간 암호화되어 있어 릴레이는 복호화할 수 없는 암호문만 볼 수 있습니다.",
+        q: "파일이나 메시지가 서버를 거치나요?",
+        a: "네트워크를 넘는 브라우저 세션은 설계상 TURN 릴레이를 사용하지만 파일과 메시지는 종단간 암호화되어 릴레이에는 암호문만 보입니다. Relayium은 메시지 본문을 저장하지 않습니다.",
       },
       {
         q: "코드가 꼭 필요한가요?",
@@ -331,11 +359,15 @@ const ko = {
       },
       {
         q: "계정이 필요한가요?",
-        a: "보내는 쪽은 코드를 생성하려면 로그인해야 하지만, 받는 쪽은 익명으로 참여합니다.",
+        a: "파일 또는 텍스트 페어링 코드를 만드는 쪽은 로그인해야 하지만 코드로 참여하는 쪽은 계정이 필요 없습니다.",
       },
       {
         q: "종단간 암호화인가요?",
         a: "네 — X25519 키 교환과 청크별 AES-256-GCM 암호화를 사용하며 검증 코드(SAS)로 대조합니다. 릴레이도 서버도 복호화할 수 없습니다.",
+      },
+      {
+        q: "파일뿐 아니라 텍스트도 보낼 수 있나요?",
+        a: "네. 두 기기가 온라인인 동안 메시지 하나당 최대 65,536 UTF-8바이트의 일시적인 실시간 텍스트를 보낼 수 있습니다. Relayium은 본문이나 서버 측 기록을 저장하지 않지만 각 기기는 받은 텍스트를 복사하거나 보관할 수 있습니다.",
       },
     ],
   },
@@ -344,22 +376,22 @@ const ko = {
 };
 
 const de = {
-  title: "Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium",
+  title: "Netzwerkübergreifende Datei- und Live-Textübertragung — Ende-zu-Ende-verschlüsselt | Relayium",
   description:
-    "Übertrage Dateien mit einem 6-Zeichen-Pairing-Code zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per Verifizierungscode (SAS), sodass selbst ein kompromittiertes Relay nicht mithören kann.",
+    "Übertrage Dateien und flüchtigen Live-Text mit einem 6-Zeichen-Code zwischen Netzwerken. Beide Geräte bleiben online; Browser nutzen absichtlich ein TURN-Relay, das nur Chiffretext sieht.",
   hero: {
-    h1: "Netzwerkübergreifende Dateiübertragung, Ende-zu-Ende-verschlüsselt",
+    h1: "Dateien und Live-Text netzwerkübergreifend, Ende-zu-Ende-verschlüsselt",
     pitch:
-      "Zwei Geräte in unterschiedlichen Netzwerken koppeln sich mit einem 6-Zeichen-Code (oder dessen Beitrittslink/QR). Dateien fließen über einen verschlüsselten Kanal durch Relayiums schnelles Relay — das Relay sieht dabei ausschließlich Chiffretext, die Schlüssel verlassen nie die beiden Geräte.",
+      "Zwei Online-Geräte in unterschiedlichen Netzwerken koppeln sich per 6-Zeichen-Code (oder Beitrittslink/QR), um Dateien oder flüchtigen Text zu senden. Browser nutzen absichtlich Relayiums TURN-Relay, das nur Chiffretext sieht; Relayium speichert keine Nachrichtentexte.",
     cta: "Übertragung starten",
   },
   how: {
     heading: "In vier Schritten übertragen",
     steps: [
-      "Der Absender meldet sich an und erzeugt einen 6-Zeichen-Pairing-Code (oder teilt dessen Beitrittslink/QR).",
-      "Der Empfänger öffnet den Link oder gibt den Code ein — zum Empfangen ist kein Konto nötig.",
+      "Eine Person meldet sich an und erzeugt einen 6-Zeichen-Pairing-Code für Dateien oder Text (oder teilt Beitrittslink/QR).",
+      "Die andere öffnet den Link oder gibt den Code ein — zum Beitreten mit Code ist kein Konto nötig.",
       "Beide Seiten vergleichen denselben 6-stelligen Verifizierungscode auf dem Bildschirm (SAS — ein anderer Wert als der Pairing-Code), um einen Man-in-the-Middle auszuschließen.",
-      "Dateien werden Ende-zu-Ende-verschlüsselt gestreamt (Block für Block mit AES-256-GCM) — über Relayiums schnelles Relay, das nur Chiffretext transportiert, den es nicht entschlüsseln kann.",
+      "Solange beide Geräte online sind, laufen Dateien und Live-Text Ende-zu-Ende-verschlüsselt über TURN. Relayium speichert keine Nachrichtentexte; eine Nachricht umfasst höchstens 65.536 UTF-8-Bytes.",
     ],
   },
   why: {
@@ -375,7 +407,11 @@ const de = {
       },
       {
         title: "Relay sieht nur Chiffretext",
-        desc: "Netzwerkübergreifende Übertragungen laufen über ein schnelles Relay, damit die Verbindung über jedes NAT hinweg zuverlässig zustande kommt — dabei transportiert es ausschließlich Chiffretext, nie deine Schlüssel oder Klartext.",
+        desc: "Netzwerkübergreifende Browser-Übertragungen nutzen absichtlich ein schnelles TURN-Relay für zuverlässige NAT-Verbindungen; es transportiert ausschließlich Chiffretext, nie Schlüssel oder Klartext.",
+      },
+      {
+        title: "Flüchtiger Live-Text",
+        desc: "Beide Geräte müssen online bleiben. Relayium speichert weder Nachrichtentexte noch serverseitigen Verlauf; ein Endgerät kann empfangenen Text dennoch kopieren oder behalten. Pro Nachricht sind 65.536 UTF-8-Bytes möglich.",
       },
       {
         title: "Plattformübergreifend",
@@ -383,7 +419,7 @@ const de = {
       },
       {
         title: "Kostenlos",
-        desc: "Kostenlos nutzbar innerhalb eines monatlichen Relay-Kontingents; für einen Code muss sich der Absender anmelden, der Empfänger tritt anonym bei.",
+        desc: "Kostenlos im monatlichen Relay-Kontingent; wer einen Datei- oder Textcode erstellt, meldet sich an, zum Beitreten mit dem Code ist kein Konto nötig.",
       },
     ],
   },
@@ -404,8 +440,8 @@ const de = {
     heading: "Häufige Fragen",
     items: [
       {
-        q: "Laufen meine Dateien über euren Server?",
-        a: "Der verschlüsselte Datenstrom läuft über Relayiums Relay, um eine zuverlässige netzwerkübergreifende Verbindung zu ermöglichen — da alles Ende-zu-Ende-verschlüsselt ist, sieht das Relay dabei nur Chiffretext, den es nicht lesen kann.",
+        q: "Laufen meine Dateien oder Nachrichten über euren Server?",
+        a: "Netzwerkübergreifende Browser-Sitzungen nutzen absichtlich Relayiums TURN-Relay. Dateien und Nachrichten sind Ende-zu-Ende-verschlüsselt, sodass es nur Chiffretext sieht. Relayium speichert keine Nachrichtentexte.",
       },
       {
         q: "Ist ein Code erforderlich?",
@@ -413,11 +449,15 @@ const de = {
       },
       {
         q: "Brauche ich ein Konto?",
-        a: "Der Absender meldet sich an, um einen Code zu erzeugen; der Empfänger tritt anonym bei.",
+        a: "Wer einen Pairing-Code für Dateien oder Text erstellt, meldet sich an; wer mit dem Code beitritt, braucht kein Konto.",
       },
       {
         q: "Ist es Ende-zu-Ende-verschlüsselt?",
         a: "Ja — X25519 plus AES-256-GCM pro Block, verifiziert mit dem Verifizierungscode; weder das Relay noch der Server können entschlüsseln.",
+      },
+      {
+        q: "Kann ich neben Dateien auch Text senden?",
+        a: "Ja. Solange beide Geräte online sind, kannst du flüchtigen Live-Text mit bis zu 65.536 UTF-8-Bytes pro Nachricht senden. Relayium speichert weder Nachrichtentexte noch serverseitigen Verlauf; beide Endgeräte können empfangenen Text kopieren oder behalten.",
       },
     ],
   },
@@ -426,22 +466,22 @@ const de = {
 };
 
 const fr = {
-  title: "Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout | Relayium",
+  title: "Transfert inter-réseaux de fichiers et de texte en direct — chiffré de bout en bout | Relayium",
   description:
-    "Envoyez des fichiers d'un appareil à l'autre entre réseaux différents avec un code d'appairage à 6 caractères. Chiffré de bout en bout — le flux transite par le relais rapide de Relayium, qui ne transporte que du texte chiffré qu'il ne peut pas lire, confirmé par un code de vérification (SAS) afin que même un relais compromis ne puisse pas espionner.",
+    "Transférez fichiers et texte éphémère en direct entre réseaux avec un code à 6 caractères. Les deux appareils restent en ligne ; le navigateur utilise volontairement un relais TURN qui ne voit que du chiffré.",
   hero: {
-    h1: "Transfert de fichiers inter-réseaux, chiffré de bout en bout",
+    h1: "Fichiers et texte en direct entre réseaux, chiffrés de bout en bout",
     pitch:
-      "Deux appareils sur des réseaux différents s'appairent avec un code à 6 caractères (ou son lien/QR). Les fichiers circulent via un canal chiffré à travers le relais rapide de Relayium — le relais ne voit jamais que du texte chiffré, les clés ne quittent jamais les deux appareils.",
+      "Deux appareils en ligne sur des réseaux différents s'appairent avec un code à 6 caractères (ou son lien/QR) pour envoyer fichiers ou texte éphémère. Le navigateur utilise volontairement le relais TURN de Relayium, qui ne voit que du chiffré ; Relayium ne stocke aucun corps de message.",
     cta: "Démarrer le transfert",
   },
   how: {
     heading: "Transférer en quatre étapes",
     steps: [
-      "L'expéditeur se connecte et génère un code d'appairage à 6 caractères (ou partage son lien d'accès/QR).",
-      "Le destinataire ouvre le lien ou saisit le code — aucun compte n'est nécessaire pour recevoir.",
+      "Une personne se connecte et génère un code à 6 caractères pour une session de fichiers ou de texte (ou partage son lien/QR).",
+      "L'autre ouvre le lien ou saisit le code — rejoindre avec un code ne nécessite aucun compte.",
       "Les deux parties comparent le même code de vérification (SAS) à 6 chiffres à l'écran pour écarter tout homme du milieu.",
-      "Les fichiers sont transférés chiffrés de bout en bout (AES-256-GCM par bloc) via le relais rapide de Relayium, qui ne transporte que du texte chiffré qu'il ne peut pas lire.",
+      "Avec les deux appareils en ligne, fichiers et texte en direct passent par TURN, chiffrés de bout en bout. Relayium ne stocke aucun corps de message ; chacun peut contenir jusqu'à 65 536 octets UTF-8.",
     ],
   },
   why: {
@@ -457,7 +497,11 @@ const fr = {
       },
       {
         title: "Le relais ne voit que du chiffré",
-        desc: "Les transferts inter-réseaux passent par un relais rapide pour garantir une connexion fiable à travers n'importe quel NAT — il ne transporte que du texte chiffré, jamais vos clés ni du texte en clair.",
+        desc: "Les transferts inter-réseaux dans le navigateur utilisent volontairement un relais TURN rapide pour traverser les NAT ; il ne transporte que du chiffré, jamais vos clés ni du texte en clair.",
+      },
+      {
+        title: "Texte éphémère en direct",
+        desc: "Les deux appareils doivent rester en ligne. Relayium ne stocke ni corps de message ni historique serveur ; un appareil peut néanmoins copier ou conserver le texte reçu. Chaque message accepte 65 536 octets UTF-8.",
       },
       {
         title: "Multiplateforme",
@@ -465,7 +509,7 @@ const fr = {
       },
       {
         title: "Gratuit",
-        desc: "Gratuit dans la limite d'un quota mensuel de trafic relais ; générer un code exige que l'expéditeur soit connecté, le destinataire rejoint de façon anonyme.",
+        desc: "Gratuit dans le quota mensuel du relais ; créer un code de fichier ou de texte exige une connexion, mais rejoindre avec ce code ne nécessite aucun compte.",
       },
     ],
   },
@@ -486,8 +530,8 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Mes fichiers passent-ils par votre serveur ?",
-        a: "Le flux chiffré transite par le relais de Relayium pour garantir une connexion inter-réseaux fiable — mais tout est chiffré de bout en bout, donc le relais ne voit jamais que du texte chiffré qu'il ne peut pas lire.",
+        q: "Mes fichiers ou messages passent-ils par votre serveur ?",
+        a: "Les sessions navigateur inter-réseaux utilisent volontairement le relais TURN de Relayium. Fichiers et messages sont chiffrés de bout en bout : il ne voit que du chiffré. Relayium ne stocke aucun corps de message.",
       },
       {
         q: "Un code est-il obligatoire ?",
@@ -495,11 +539,15 @@ const fr = {
       },
       {
         q: "Faut-il un compte ?",
-        a: "L'expéditeur se connecte pour générer un code ; le destinataire rejoint de façon anonyme.",
+        a: "La personne qui crée un code pour fichiers ou texte se connecte ; rejoindre avec ce code ne nécessite aucun compte.",
       },
       {
         q: "Est-ce chiffré de bout en bout ?",
         a: "Oui — X25519 et AES-256-GCM par bloc, confirmé avec le code de vérification (SAS) ; ni le relais ni le serveur ne peuvent déchiffrer.",
+      },
+      {
+        q: "Puis-je envoyer du texte en plus des fichiers ?",
+        a: "Oui. Tant que les deux appareils sont en ligne, envoyez du texte éphémère en direct, jusqu'à 65 536 octets UTF-8 par message. Relayium ne stocke ni corps de message ni historique serveur, mais chaque appareil peut copier ou conserver le texte reçu.",
       },
     ],
   },
@@ -508,22 +556,22 @@ const fr = {
 };
 
 const ar = {
-  title: "نقل الملفات عبر الشبكات — فوري، مُشفَّر من الطرف إلى الطرف | Relayium",
+  title: "نقل الملفات والنص المباشر عبر الشبكات — مُشفَّر من الطرف إلى الطرف | Relayium",
   description:
-    "أرسل الملفات من جهاز إلى آخر عبر شبكات مختلفة برمز اقتران مكوّن من 6 خانات. مُشفَّر من الطرف إلى الطرف — يمر التدفق عبر مُرحِّل Relayium السريع الذي لا ينقل سوى نص مُشفَّر لا يستطيع قراءته، ويُؤكَّد برمز التحقق (SAS) بحيث لا يستطيع حتى مُرحِّل مخترَق التنصّت.",
+    "أرسل الملفات والنص المباشر المؤقت بين الشبكات برمز من 6 خانات. يجب بقاء الجهازين متصلين؛ يستخدم المتصفح مُرحِّل TURN عمدًا ولا يرى سوى النص المُشفَّر.",
   hero: {
-    h1: "نقل الملفات عبر الشبكات، مُشفَّر من الطرف إلى الطرف",
+    h1: "الملفات والنص المباشر عبر الشبكات، مُشفَّران من الطرف إلى الطرف",
     pitch:
-      "يقترن جهازان على شبكتين مختلفتين برمز مكوّن من 6 خانات (أو رابطه/رمز QR الخاص به). تنتقل الملفات عبر قناة مُشفَّرة خلال مُرحِّل Relayium السريع — لا يرى المُرحِّل سوى نص مُشفَّر، والمفاتيح لا تغادر الجهازين أبدًا.",
+      "يقترن جهازان متصلان على شبكتين مختلفتين برمز من 6 خانات (أو رابط/QR) لإرسال ملفات أو نص مؤقت. يستخدم المتصفح مُرحِّل TURN الخاص بـ Relayium عمدًا، لكنه لا يرى سوى النص المُشفَّر؛ ولا يخزن Relayium نصوص الرسائل.",
     cta: "ابدأ النقل",
   },
   how: {
     heading: "انقل في أربع خطوات",
     steps: [
-      "يسجّل المُرسِل الدخول ويولّد رمز اقتران مكوّنًا من 6 خانات (أو يشارك رابط الانضمام/رمز QR الخاص به).",
-      "يفتح المُستقبِل الرابط أو يُدخل الرمز — لا حاجة إلى حساب للاستقبال.",
+      "يسجّل أحد الطرفين الدخول ويولّد رمزًا من 6 خانات لجلسة ملفات أو نص (أو يشارك رابط الانضمام/QR).",
+      "يفتح الطرف الآخر الرابط أو يُدخل الرمز — لا يحتاج الانضمام بالرمز إلى حساب.",
       "يقارن الطرفان رمز التحقق نفسه المكوّن من 6 أرقام (SAS) على الشاشة لاستبعاد أي هجوم وسيط.",
-      "تُنقل الملفات مُشفَّرة من الطرف إلى الطرف (AES-256-GCM لكل كتلة) عبر مُرحِّل Relayium السريع الذي لا ينقل سوى نص مُشفَّر لا يستطيع قراءته.",
+      "مع اتصال الجهازين، تنتقل الملفات والنصوص المباشرة مشفّرة من الطرف إلى الطرف عبر TURN. لا يخزن Relayium نص الرسالة؛ وحدّ الرسالة 65,536 بايت UTF-8.",
     ],
   },
   why: {
@@ -539,7 +587,11 @@ const ar = {
       },
       {
         title: "المُرحِّل لا يرى سوى نص مُشفَّر",
-        desc: "تمر عمليات النقل عبر الشبكات بمُرحِّل سريع لضمان اتصال موثوق عبر أي NAT — وهو لا ينقل سوى نص مُشفَّر، ولا يمسّ أبدًا مفاتيحك أو النص الصريح.",
+        desc: "تستخدم عمليات المتصفح عبر الشبكات مُرحِّل TURN سريعًا عمدًا للاتصال الموثوق عبر NAT؛ ولا ينقل إلا نصًا مُشفَّرًا، لا المفاتيح ولا النص الصريح.",
+      },
+      {
+        title: "نص مباشر ومؤقت",
+        desc: "يجب أن يبقى الجهازان متصلين. لا يخزن Relayium نصوص الرسائل أو سجلًا على الخادم، لكن جهاز الاستقبال يستطيع نسخ النص أو الاحتفاظ به. الحد 65,536 بايت UTF-8 لكل رسالة.",
       },
       {
         title: "متعدد المنصات",
@@ -547,7 +599,7 @@ const ar = {
       },
       {
         title: "مجاني",
-        desc: "مجاني ضمن حصة شهرية من حركة المُرحِّل؛ يتطلب توليد الرمز أن يكون المُرسِل مسجّلًا الدخول، بينما ينضم المُستقبِل بشكل مجهول.",
+        desc: "مجاني ضمن حصة المُرحِّل الشهرية؛ منشئ رمز الملفات أو النص يسجّل الدخول، ومن ينضم بالرمز لا يحتاج إلى حساب.",
       },
     ],
   },
@@ -568,8 +620,8 @@ const ar = {
     heading: "الأسئلة الشائعة",
     items: [
       {
-        q: "هل تمر ملفاتي عبر خادمكم؟",
-        a: "يمر التدفق المُشفَّر عبر مُرحِّل Relayium لضمان اتصال موثوق عبر الشبكات — لكن كل شيء مُشفَّر من الطرف إلى الطرف، لذا لا يرى المُرحِّل أبدًا سوى نص مُشفَّر لا يستطيع قراءته.",
+        q: "هل تمر ملفاتي أو رسائلي عبر خادمكم؟",
+        a: "تستخدم جلسات المتصفح عبر الشبكات مُرحِّل TURN عمدًا، لكن الملفات والرسائل مشفّرة من الطرف إلى الطرف، فلا يرى سوى النص المُشفَّر. ولا يخزن Relayium نصوص الرسائل.",
       },
       {
         q: "هل الرمز إلزامي؟",
@@ -577,11 +629,15 @@ const ar = {
       },
       {
         q: "هل يلزم حساب؟",
-        a: "يسجّل المُرسِل الدخول لتوليد رمز؛ بينما ينضم المُستقبِل بشكل مجهول.",
+        a: "يسجّل منشئ رمز اقتران الملفات أو النص الدخول؛ أما الانضمام بالرمز فلا يحتاج إلى حساب.",
       },
       {
         q: "هل هو مُشفَّر من الطرف إلى الطرف؟",
         a: "نعم — X25519 وAES-256-GCM لكل كتلة، مؤكَّد برمز التحقق (SAS)؛ لا يستطيع المُرحِّل ولا الخادم فك التشفير.",
+      },
+      {
+        q: "هل يمكنني إرسال نص إلى جانب الملفات؟",
+        a: "نعم. ما دام الجهازان متصلين، أرسل نصًا مباشرًا مؤقتًا حتى 65,536 بايت UTF-8 لكل رسالة. لا يخزن Relayium النص أو سجلًا على الخادم، لكن أي جهاز طرفي يمكنه نسخ النص المستلم أو الاحتفاظ به.",
       },
     ],
   },
@@ -590,22 +646,22 @@ const ar = {
 };
 
 const es = {
-  title: "Transferencia de archivos entre redes — en tiempo real, cifrada de extremo a extremo | Relayium",
+  title: "Transferencia entre redes de archivos y texto en vivo — cifrada de extremo a extremo | Relayium",
   description:
-    "Envía archivos de un dispositivo a otro entre redes distintas con un código de emparejamiento de 6 caracteres. Cifrado de extremo a extremo — el flujo pasa por el retransmisor rápido de Relayium, que solo transporta texto cifrado que no puede leer, confirmado con un código de verificación (SAS) para que ni siquiera un retransmisor comprometido pueda espiar.",
+    "Envía archivos y texto efímero en vivo entre redes con un código de 6 caracteres. Ambos dispositivos permanecen en línea; el navegador usa por diseño un retransmisor TURN que solo ve datos cifrados.",
   hero: {
-    h1: "Transferencia de archivos entre redes, cifrada de extremo a extremo",
+    h1: "Archivos y texto en vivo entre redes, cifrados de extremo a extremo",
     pitch:
-      "Dos dispositivos en redes distintas se emparejan con un código de 6 caracteres (o su enlace/QR). Los archivos circulan por un canal cifrado a través del retransmisor rápido de Relayium — el retransmisor solo ve texto cifrado, y las claves nunca salen de los dos dispositivos.",
+      "Dos dispositivos en línea en redes distintas se emparejan con un código de 6 caracteres (o su enlace/QR) para enviar archivos o texto efímero. El navegador usa por diseño el TURN de Relayium, que solo ve datos cifrados; Relayium no almacena el cuerpo de los mensajes.",
     cta: "Iniciar transferencia",
   },
   how: {
     heading: "Transferir en cuatro pasos",
     steps: [
-      "El remitente inicia sesión y genera un código de emparejamiento de 6 caracteres (o comparte su enlace de acceso/QR).",
-      "El destinatario abre el enlace o introduce el código — no hace falta cuenta para recibir.",
+      "Una persona inicia sesión y genera un código de 6 caracteres para archivos o texto (o comparte su enlace/QR).",
+      "La otra abre el enlace o introduce el código — unirse con el código no requiere cuenta.",
       "Ambas partes comparan en pantalla el mismo código de verificación (SAS) de 6 dígitos para descartar cualquier intermediario.",
-      "Los archivos se transfieren cifrados de extremo a extremo (AES-256-GCM por bloque) a través del retransmisor rápido de Relayium, que solo transporta texto cifrado que no puede leer.",
+      "Con ambos dispositivos en línea, archivos y texto en vivo viajan cifrados de extremo a extremo por TURN. Relayium no almacena el cuerpo; cada mensaje admite hasta 65.536 bytes UTF-8.",
     ],
   },
   why: {
@@ -621,7 +677,11 @@ const es = {
       },
       {
         title: "El retransmisor solo ve texto cifrado",
-        desc: "Las transferencias entre redes pasan por un retransmisor rápido para garantizar una conexión fiable a través de cualquier NAT — solo transporta texto cifrado, nunca tus claves ni texto en claro.",
+        desc: "Las transferencias del navegador entre redes usan por diseño un TURN rápido para atravesar NAT; solo lleva datos cifrados, nunca claves ni texto en claro.",
+      },
+      {
+        title: "Texto efímero en vivo",
+        desc: "Ambos dispositivos deben seguir en línea. Relayium no almacena cuerpos ni historial en el servidor; un extremo sí puede copiar o conservar el texto recibido. Cada mensaje admite 65.536 bytes UTF-8.",
       },
       {
         title: "Multiplataforma",
@@ -629,7 +689,7 @@ const es = {
       },
       {
         title: "Gratis",
-        desc: "Gratis dentro de un cupo mensual de tráfico de retransmisor; generar un código exige que el remitente haya iniciado sesión, el destinatario se une de forma anónima.",
+        desc: "Gratis dentro del cupo mensual; quien crea un código de archivos o texto inicia sesión, pero unirse con ese código no requiere cuenta.",
       },
     ],
   },
@@ -650,8 +710,8 @@ const es = {
     heading: "Preguntas frecuentes",
     items: [
       {
-        q: "¿Mis archivos pasan por el servidor de Relayium?",
-        a: "El flujo cifrado pasa por el retransmisor de Relayium para garantizar una conexión fiable entre redes — pero todo está cifrado de extremo a extremo, así que el retransmisor solo ve texto cifrado que no puede leer.",
+        q: "¿Mis archivos o mensajes pasan por el servidor?",
+        a: "Las sesiones del navegador entre redes usan por diseño el TURN de Relayium, pero archivos y mensajes están cifrados de extremo a extremo y solo ve datos cifrados. Relayium no almacena el cuerpo de los mensajes.",
       },
       {
         q: "¿Es obligatorio un código?",
@@ -659,11 +719,15 @@ const es = {
       },
       {
         q: "¿Necesito una cuenta?",
-        a: "El remitente inicia sesión para generar un código; el destinatario se une de forma anónima.",
+        a: "Quien crea un código para archivos o texto inicia sesión; unirse con ese código no requiere cuenta.",
       },
       {
         q: "¿Es cifrado de extremo a extremo?",
         a: "Sí — X25519 y AES-256-GCM por bloque, confirmado con el código de verificación (SAS); ni el retransmisor ni el servidor pueden descifrar.",
+      },
+      {
+        q: "¿Puedo enviar texto además de archivos?",
+        a: "Sí. Con ambos dispositivos en línea, envía texto efímero en vivo de hasta 65.536 bytes UTF-8 por mensaje. Relayium no almacena el cuerpo ni historial en el servidor, aunque cualquier extremo puede copiar o conservar el texto recibido.",
       },
     ],
   },
@@ -672,22 +736,22 @@ const es = {
 };
 
 const pt = {
-  title: "Transferência de arquivos entre redes — em tempo real, criptografia de ponta a ponta | Relayium",
+  title: "Transferência entre redes de arquivos e texto ao vivo — criptografia de ponta a ponta | Relayium",
   description:
-    "Envie arquivos de um dispositivo a outro entre redes diferentes com um código de emparelhamento de 6 caracteres. Criptografia de ponta a ponta — o fluxo passa pelo retransmissor rápido do Relayium, que só transporta texto cifrado que não consegue ler, confirmado com um código de verificação (SAS) para que nem mesmo um retransmissor comprometido consiga espionar.",
+    "Envie arquivos e texto efêmero ao vivo entre redes com um código de 6 caracteres. Os dois dispositivos ficam online; o navegador usa por projeto um retransmissor TURN que só vê dados cifrados.",
   hero: {
-    h1: "Transferência de arquivos entre redes, criptografia de ponta a ponta",
+    h1: "Arquivos e texto ao vivo entre redes, criptografados de ponta a ponta",
     pitch:
-      "Dois dispositivos em redes diferentes se emparelham com um código de 6 caracteres (ou seu link/QR). Os arquivos circulam por um canal criptografado através do retransmissor rápido do Relayium — o retransmissor só vê texto cifrado, e as chaves nunca saem dos dois dispositivos.",
+      "Dois dispositivos online em redes diferentes se emparelham com um código de 6 caracteres (ou link/QR) para enviar arquivos ou texto efêmero. O navegador usa por projeto o TURN do Relayium, que só vê dados cifrados; o Relayium não armazena o corpo das mensagens.",
     cta: "Iniciar transferência",
   },
   how: {
     heading: "Transferir em quatro passos",
     steps: [
-      "O remetente faz login e gera um código de emparelhamento de 6 caracteres (ou compartilha seu link de acesso/QR).",
-      "O destinatário abre o link ou digita o código — não é preciso conta para receber.",
+      "Uma pessoa faz login e gera um código de 6 caracteres para arquivos ou texto (ou compartilha seu link/QR).",
+      "A outra abre o link ou digita o código — entrar com o código não exige conta.",
       "As duas partes comparam na tela o mesmo código de verificação (SAS) de 6 dígitos para descartar qualquer intermediário.",
-      "Os arquivos são transferidos com criptografia de ponta a ponta (AES-256-GCM por bloco) através do retransmissor rápido do Relayium, que só transporta texto cifrado que não consegue ler.",
+      "Com os dois dispositivos online, arquivos e texto ao vivo passam criptografados de ponta a ponta pelo TURN. O Relayium não armazena o corpo; cada mensagem aceita até 65.536 bytes UTF-8.",
     ],
   },
   why: {
@@ -703,7 +767,11 @@ const pt = {
       },
       {
         title: "O retransmissor só vê texto cifrado",
-        desc: "As transferências entre redes passam por um retransmissor rápido para garantir uma conexão confiável através de qualquer NAT — ele só transporta texto cifrado, nunca suas chaves nem texto em claro.",
+        desc: "Transferências do navegador entre redes usam por projeto um TURN rápido para atravessar NAT; ele só leva dados cifrados, nunca chaves nem texto em claro.",
+      },
+      {
+        title: "Texto efêmero ao vivo",
+        desc: "Os dois dispositivos devem ficar online. O Relayium não armazena corpos nem histórico no servidor; um dispositivo pode copiar ou guardar o texto recebido. Cada mensagem aceita 65.536 bytes UTF-8.",
       },
       {
         title: "Multiplataforma",
@@ -711,7 +779,7 @@ const pt = {
       },
       {
         title: "Gratuito",
-        desc: "Gratuito dentro de uma cota mensal de tráfego de retransmissor; gerar um código exige que o remetente esteja com login feito, o destinatário entra de forma anônima.",
+        desc: "Gratuito dentro da cota mensal; quem cria um código de arquivos ou texto faz login, mas entrar com esse código não exige conta.",
       },
     ],
   },
@@ -732,8 +800,8 @@ const pt = {
     heading: "Perguntas frequentes",
     items: [
       {
-        q: "Meus arquivos passam pelo servidor do Relayium?",
-        a: "O fluxo criptografado passa pelo retransmissor do Relayium para garantir uma conexão confiável entre redes — mas tudo é criptografado de ponta a ponta, então o retransmissor só vê texto cifrado que não consegue ler.",
+        q: "Meus arquivos ou mensagens passam pelo servidor?",
+        a: "Sessões do navegador entre redes usam por projeto o TURN do Relayium, mas arquivos e mensagens são criptografados de ponta a ponta e ele só vê dados cifrados. O Relayium não armazena o corpo das mensagens.",
       },
       {
         q: "Um código é obrigatório?",
@@ -741,11 +809,15 @@ const pt = {
       },
       {
         q: "Preciso de uma conta?",
-        a: "O remetente faz login para gerar um código; o destinatário entra de forma anônima.",
+        a: "Quem cria um código para arquivos ou texto faz login; entrar com esse código não exige conta.",
       },
       {
         q: "É criptografia de ponta a ponta?",
         a: "Sim — X25519 e AES-256-GCM por bloco, confirmado com o código de verificação (SAS); nem o retransmissor nem o servidor conseguem descriptografar.",
+      },
+      {
+        q: "Posso enviar texto além de arquivos?",
+        a: "Sim. Com os dois dispositivos online, envie texto efêmero ao vivo de até 65.536 bytes UTF-8 por mensagem. O Relayium não armazena o corpo nem histórico no servidor, embora cada dispositivo possa copiar ou guardar o texto recebido.",
       },
     ],
   },
@@ -754,6 +826,6 @@ const pt = {
 };
 
 export default {
-  updated: "2026-07-10",
+  updated: "2026-07-31",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

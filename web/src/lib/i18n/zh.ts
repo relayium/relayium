@@ -54,9 +54,9 @@ const zh: Messages = {
   titleDefault: "Relayium — 端到端加密的文件与文本传输",
   descDefault:
     "Relayium 是浏览器里的开源、端到端加密文件与文本传输工具。文件在同一网络下直连，跨网络则经只见密文的加密中继。文本使用独立的加密点对点会话，要求双方同时在线，消息从不存到服务器。",
-  titleCross: "跨网络文件传输 — 实时端到端加密 | Relayium",
+  titleCross: "跨网络文件与实时临时文本传输 — 端到端加密 | Relayium",
   titleOffline: "加密文件链接 — 现在上传，稍后下载 | Relayium",
-  descCross: "用 6 位配对码跨网络传输文件——实时传输、端到端加密；中继服务器只能看到密文，看不到文件内容。",
+  descCross: "用 6 字符配对码跨网络传输文件与实时临时文本。创建方须登录，持码加入无需账号；TURN 仅承载端到端加密的密文。",
   descOffline: "在浏览器中加密文件后上传，生成零知识下载链接；服务器只保存无法解密的密文。",
   reconnecting: "连接已断开，正在重连…",
   confirmLeave: "当前有传输正在进行，切换会中断它。确定要继续吗？",

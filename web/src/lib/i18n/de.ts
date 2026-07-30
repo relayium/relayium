@@ -54,9 +54,9 @@ const de: Messages = {
   titleDefault: "Relayium — Ende-zu-Ende-verschlüsselte Datei- und Textübertragung",
   descDefault:
     "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug für Datei- und Textübertragung im Browser. Dateien laufen im selben Netz direkt und netzübergreifend über ein Relay, das nur Chiffretext sieht. Text nutzt eine eigene verschlüsselte P2P-Sitzung, braucht beide Geräte online und wird nie auf einem Server gespeichert.",
-  titleCross: "Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium",
+  titleCross: "Netzwerkübergreifende Datei- und Live-Textübertragung — Ende-zu-Ende-verschlüsselt | Relayium",
   titleOffline: "Verschlüsselter Datei-Link — jetzt hochladen, später herunterladen | Relayium",
-  descCross: "Dateien mit einem 6-stelligen Code netzwerkübergreifend senden — Echtzeitübertragung, Ende-zu-Ende-verschlüsselt; der Relay-Server sieht nur Chiffretext, nie die Dateiinhalte.",
+  descCross: "Dateien und flüchtigen Live-Text mit einem 6 Zeichen langen Code netzwerkübergreifend senden. Ersteller melden sich an; Beitretende brauchen kein Konto. TURN überträgt nur Ende-zu-Ende-Chiffretext.",
   descOffline: "Eine im Browser verschlüsselte Datei hochladen und einen Zero-Knowledge-Download-Link teilen; der Server speichert nur Chiffretext.",
   reconnecting: "Verbindung getrennt — neu verbinden…",
   confirmLeave: "Eine Übertragung läuft. Ein Wechsel bricht sie ab. Fortfahren?",

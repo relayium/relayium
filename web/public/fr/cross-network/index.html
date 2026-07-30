@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout | Relayium</title>
-    <meta name="description" content="Envoyez des fichiers d&#39;un appareil à l&#39;autre entre réseaux différents avec un code d&#39;appairage à 6 caractères. Chiffré de bout en bout — le flux transite par le relais rapide de Relayium, qui ne transporte que du texte chiffré qu&#39;il ne peut pas lire, confirmé par un code de vérification (SAS) afin que même un relais compromis ne puisse pas espionner." />
+    <title>Transfert inter-réseaux de fichiers et de texte en direct — chiffré de bout en bout | Relayium</title>
+    <meta name="description" content="Transférez fichiers et texte éphémère en direct entre réseaux avec un code à 6 caractères. Les deux appareils restent en ligne ; le navigateur utilise volontairement un relais TURN qui ne voit que du chiffré." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/fr/cross-network/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/cross-network" />
@@ -22,8 +22,8 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Relayium" />
-    <meta property="og:title" content="Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout | Relayium" />
-    <meta property="og:description" content="Envoyez des fichiers d&#39;un appareil à l&#39;autre entre réseaux différents avec un code d&#39;appairage à 6 caractères. Chiffré de bout en bout — le flux transite par le relais rapide de Relayium, qui ne transporte que du texte chiffré qu&#39;il ne peut pas lire, confirmé par un code de vérification (SAS) afin que même un relais compromis ne puisse pas espionner." />
+    <meta property="og:title" content="Transfert inter-réseaux de fichiers et de texte en direct — chiffré de bout en bout | Relayium" />
+    <meta property="og:description" content="Transférez fichiers et texte éphémère en direct entre réseaux avec un code à 6 caractères. Les deux appareils restent en ligne ; le navigateur utilise volontairement un relais TURN qui ne voit que du chiffré." />
     <meta property="og:url" content="https://relayium.com/fr/cross-network/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -32,10 +32,10 @@
     <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
     <meta property="og:locale" content="fr_FR" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout | Relayium" />
-    <meta name="twitter:description" content="Envoyez des fichiers d&#39;un appareil à l&#39;autre entre réseaux différents avec un code d&#39;appairage à 6 caractères. Chiffré de bout en bout — le flux transite par le relais rapide de Relayium, qui ne transporte que du texte chiffré qu&#39;il ne peut pas lire, confirmé par un code de vérification (SAS) afin que même un relais compromis ne puisse pas espionner." />
+    <meta name="twitter:title" content="Transfert inter-réseaux de fichiers et de texte en direct — chiffré de bout en bout | Relayium" />
+    <meta name="twitter:description" content="Transférez fichiers et texte éphémère en direct entre réseaux avec un code à 6 caractères. Les deux appareils restent en ligne ; le navigateur utilise volontairement un relais TURN qui ne voit que du chiffré." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout | Relayium","description":"Envoyez des fichiers d'un appareil à l'autre entre réseaux différents avec un code d'appairage à 6 caractères. Chiffré de bout en bout — le flux transite par le relais rapide de Relayium, qui ne transporte que du texte chiffré qu'il ne peut pas lire, confirmé par un code de vérification (SAS) afin que même un relais compromis ne puisse pas espionner.","url":"https://relayium.com/fr/cross-network/","inLanguage":"fr","dateModified":"2026-07-10","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Mes fichiers passent-ils par votre serveur ?","acceptedAnswer":{"@type":"Answer","text":"Le flux chiffré transite par le relais de Relayium pour garantir une connexion inter-réseaux fiable — mais tout est chiffré de bout en bout, donc le relais ne voit jamais que du texte chiffré qu'il ne peut pas lire."}},{"@type":"Question","name":"Un code est-il obligatoire ?","acceptedAnswer":{"@type":"Answer","text":"Oui : un code à 6 caractères (ou son lien d'accès/QR), valable 5 minutes, appaire les deux appareils entre réseaux différents. Le serveur le génère à partir de l'alphabet ACDEFHJKMNPRTWXY23456789 — ni 0 ni 1, pour éviter toute confusion avec O et I — vous ne pouvez donc pas en inventer un : seul un code délivré par le serveur appaire."}},{"@type":"Question","name":"Faut-il un compte ?","acceptedAnswer":{"@type":"Answer","text":"L'expéditeur se connecte pour générer un code ; le destinataire rejoint de façon anonyme."}},{"@type":"Question","name":"Est-ce chiffré de bout en bout ?","acceptedAnswer":{"@type":"Answer","text":"Oui — X25519 et AES-256-GCM par bloc, confirmé avec le code de vérification (SAS) ; ni le relais ni le serveur ne peuvent déchiffrer."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"Transfert inter-réseaux de fichiers et de texte en direct — chiffré de bout en bout | Relayium","description":"Transférez fichiers et texte éphémère en direct entre réseaux avec un code à 6 caractères. Les deux appareils restent en ligne ; le navigateur utilise volontairement un relais TURN qui ne voit que du chiffré.","url":"https://relayium.com/fr/cross-network/","inLanguage":"fr","dateModified":"2026-07-31","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Mes fichiers ou messages passent-ils par votre serveur ?","acceptedAnswer":{"@type":"Answer","text":"Les sessions navigateur inter-réseaux utilisent volontairement le relais TURN de Relayium. Fichiers et messages sont chiffrés de bout en bout : il ne voit que du chiffré. Relayium ne stocke aucun corps de message."}},{"@type":"Question","name":"Un code est-il obligatoire ?","acceptedAnswer":{"@type":"Answer","text":"Oui : un code à 6 caractères (ou son lien d'accès/QR), valable 5 minutes, appaire les deux appareils entre réseaux différents. Le serveur le génère à partir de l'alphabet ACDEFHJKMNPRTWXY23456789 — ni 0 ni 1, pour éviter toute confusion avec O et I — vous ne pouvez donc pas en inventer un : seul un code délivré par le serveur appaire."}},{"@type":"Question","name":"Faut-il un compte ?","acceptedAnswer":{"@type":"Answer","text":"La personne qui crée un code pour fichiers ou texte se connecte ; rejoindre avec ce code ne nécessite aucun compte."}},{"@type":"Question","name":"Est-ce chiffré de bout en bout ?","acceptedAnswer":{"@type":"Answer","text":"Oui — X25519 et AES-256-GCM par bloc, confirmé avec le code de vérification (SAS) ; ni le relais ni le serveur ne peuvent déchiffrer."}},{"@type":"Question","name":"Puis-je envoyer du texte en plus des fichiers ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Tant que les deux appareils sont en ligne, envoyez du texte éphémère en direct, jusqu'à 65 536 octets UTF-8 par message. Relayium ne stocke ni corps de message ni historique serveur, mais chaque appareil peut copier ou conserver le texte reçu."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -78,17 +78,17 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
     <div class="wrap">
       <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
       
-      <h1>Transfert de fichiers inter-réseaux, chiffré de bout en bout</h1>
-      <p class="pitch">Deux appareils sur des réseaux différents s&#39;appairent avec un code à 6 caractères (ou son lien/QR). Les fichiers circulent via un canal chiffré à travers le relais rapide de Relayium — le relais ne voit jamais que du texte chiffré, les clés ne quittent jamais les deux appareils.</p>
+      <h1>Fichiers et texte en direct entre réseaux, chiffrés de bout en bout</h1>
+      <p class="pitch">Deux appareils en ligne sur des réseaux différents s&#39;appairent avec un code à 6 caractères (ou son lien/QR) pour envoyer fichiers ou texte éphémère. Le navigateur utilise volontairement le relais TURN de Relayium, qui ne voit que du chiffré ; Relayium ne stocke aucun corps de message.</p>
       <a class="cta" href="/cross-network?lang=fr">Démarrer le transfert</a>
 
       <section class="reveal">
       <h2>Transférer en quatre étapes</h2>
       <ol class="steps">
-        <li>L&#39;expéditeur se connecte et génère un code d&#39;appairage à 6 caractères (ou partage son lien d&#39;accès/QR).</li>
-        <li>Le destinataire ouvre le lien ou saisit le code — aucun compte n&#39;est nécessaire pour recevoir.</li>
+        <li>Une personne se connecte et génère un code à 6 caractères pour une session de fichiers ou de texte (ou partage son lien/QR).</li>
+        <li>L&#39;autre ouvre le lien ou saisit le code — rejoindre avec un code ne nécessite aucun compte.</li>
         <li>Les deux parties comparent le même code de vérification (SAS) à 6 chiffres à l&#39;écran pour écarter tout homme du milieu.</li>
-        <li>Les fichiers sont transférés chiffrés de bout en bout (AES-256-GCM par bloc) via le relais rapide de Relayium, qui ne transporte que du texte chiffré qu&#39;il ne peut pas lire.</li>
+        <li>Avec les deux appareils en ligne, fichiers et texte en direct passent par TURN, chiffrés de bout en bout. Relayium ne stocke aucun corps de message ; chacun peut contenir jusqu&#39;à 65 536 octets UTF-8.</li>
       </ol>
       </section>
 
@@ -97,9 +97,10 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <ul class="why">
         <li><b>Chiffré de bout en bout</b> — Échange de clés X25519 et AES-256-GCM par bloc ; les clés sont négociées uniquement entre les deux appareils, ni le relais ni le serveur ne peuvent donc déchiffrer.</li>
         <li><b>SAS contre l&#39;homme du milieu</b> — Les deux écrans affichent le même code à 6 chiffres ; le faire correspondre déjoue même un relais ou un serveur de signalisation compromis.</li>
-        <li><b>Le relais ne voit que du chiffré</b> — Les transferts inter-réseaux passent par un relais rapide pour garantir une connexion fiable à travers n&#39;importe quel NAT — il ne transporte que du texte chiffré, jamais vos clés ni du texte en clair.</li>
+        <li><b>Le relais ne voit que du chiffré</b> — Les transferts inter-réseaux dans le navigateur utilisent volontairement un relais TURN rapide pour traverser les NAT ; il ne transporte que du chiffré, jamais vos clés ni du texte en clair.</li>
+        <li><b>Texte éphémère en direct</b> — Les deux appareils doivent rester en ligne. Relayium ne stocke ni corps de message ni historique serveur ; un appareil peut néanmoins copier ou conserver le texte reçu. Chaque message accepte 65 536 octets UTF-8.</li>
         <li><b>Multiplateforme</b> — Windows, macOS, Linux, Android, iOS — un navigateur moderne suffit, rien à installer.</li>
-        <li><b>Gratuit</b> — Gratuit dans la limite d&#39;un quota mensuel de trafic relais ; générer un code exige que l&#39;expéditeur soit connecté, le destinataire rejoint de façon anonyme.</li>
+        <li><b>Gratuit</b> — Gratuit dans le quota mensuel du relais ; créer un code de fichier ou de texte exige une connexion, mais rejoindre avec ce code ne nécessite aucun compte.</li>
       </ul>
       </section>
 
@@ -114,14 +115,16 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       </section>
 
       <section class="reveal"><h2>Questions fréquentes</h2>
-      <h3>Mes fichiers passent-ils par votre serveur ?</h3>
-      <p>Le flux chiffré transite par le relais de Relayium pour garantir une connexion inter-réseaux fiable — mais tout est chiffré de bout en bout, donc le relais ne voit jamais que du texte chiffré qu&#39;il ne peut pas lire.</p>
+      <h3>Mes fichiers ou messages passent-ils par votre serveur ?</h3>
+      <p>Les sessions navigateur inter-réseaux utilisent volontairement le relais TURN de Relayium. Fichiers et messages sont chiffrés de bout en bout : il ne voit que du chiffré. Relayium ne stocke aucun corps de message.</p>
       <h3>Un code est-il obligatoire ?</h3>
       <p>Oui : un code à 6 caractères (ou son lien d&#39;accès/QR), valable 5 minutes, appaire les deux appareils entre réseaux différents. Le serveur le génère à partir de l&#39;alphabet ACDEFHJKMNPRTWXY23456789 — ni 0 ni 1, pour éviter toute confusion avec O et I — vous ne pouvez donc pas en inventer un : seul un code délivré par le serveur appaire.</p>
       <h3>Faut-il un compte ?</h3>
-      <p>L&#39;expéditeur se connecte pour générer un code ; le destinataire rejoint de façon anonyme.</p>
+      <p>La personne qui crée un code pour fichiers ou texte se connecte ; rejoindre avec ce code ne nécessite aucun compte.</p>
       <h3>Est-ce chiffré de bout en bout ?</h3>
-      <p>Oui — X25519 et AES-256-GCM par bloc, confirmé avec le code de vérification (SAS) ; ni le relais ni le serveur ne peuvent déchiffrer.</p></section>
+      <p>Oui — X25519 et AES-256-GCM par bloc, confirmé avec le code de vérification (SAS) ; ni le relais ni le serveur ne peuvent déchiffrer.</p>
+      <h3>Puis-je envoyer du texte en plus des fichiers ?</h3>
+      <p>Oui. Tant que les deux appareils sont en ligne, envoyez du texte éphémère en direct, jusqu&#39;à 65 536 octets UTF-8 par message. Relayium ne stocke ni corps de message ni historique serveur, mais chaque appareil peut copier ou conserver le texte reçu.</p></section>
 
       
       <footer>

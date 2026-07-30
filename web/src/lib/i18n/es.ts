@@ -54,9 +54,9 @@ const es: Messages = {
   titleDefault: "Relayium — transferencia de archivos y texto con cifrado de extremo a extremo",
   descDefault:
     "Transferencia de archivos y texto de código abierto y cifrada de extremo a extremo en tu navegador. Los archivos van directamente en la red local o por un retransmisor que solo ve texto cifrado entre redes. El texto usa una sesión entre pares cifrada e independiente, exige ambos dispositivos en línea y nunca se almacena.",
-  titleCross: "Transferencia de archivos entre redes — en tiempo real, cifrada de extremo a extremo | Relayium",
+  titleCross: "Transferencia entre redes de archivos y texto efímero en vivo — cifrada de extremo a extremo | Relayium",
   titleOffline: "Enlace de archivo cifrado — sube ahora, descarga después | Relayium",
-  descCross: "Envía archivos entre redes con un código de 6 caracteres — transferencia en tiempo real, cifrada de extremo a extremo; el retransmisor solo ve texto cifrado, nunca tus archivos.",
+  descCross: "Envía archivos y texto efímero en vivo entre redes con un código de 6 caracteres. Quien crea el código inicia sesión; unirse no requiere cuenta. TURN solo transporta texto cifrado de extremo a extremo.",
   descOffline: "Sube un archivo cifrado en el navegador y comparte un enlace de descarga de conocimiento cero; el servidor almacena únicamente texto cifrado.",
   reconnecting: "Conexión perdida — reconectando…",
   confirmLeave: "Hay una transferencia en curso. Cambiar la interrumpirá. ¿Continuar?",

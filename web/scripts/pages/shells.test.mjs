@@ -95,7 +95,9 @@ describe("buildShells", () => {
   });
 
   it("puts the route's own prose in the crawlable body", () => {
-    expect(byFile["cross-network.html"].body).toContain("Cross-network file transfer, end-to-end encrypted");
+    expect(byFile["cross-network.html"].body).toContain(
+      "Cross-network files and live text, end-to-end encrypted",
+    );
     expect(byFile["pricing.html"].body).toContain("Simple, honest pricing");
     // The CLI hub links every CLI guide — that is the point of making it a page.
     for (const a of CLI_ARTICLES) {

@@ -54,9 +54,9 @@ const fr: Messages = {
   titleDefault: "Relayium — transfert de fichiers et de texte chiffré de bout en bout",
   descDefault:
     "Relayium est un outil open source de transfert de fichiers et de texte chiffré de bout en bout dans le navigateur. Les fichiers passent directement sur le réseau local ou par un relais qui ne voit que du texte chiffré entre réseaux. Le texte utilise une session pair-à-pair chiffrée distincte, exige les deux appareils en ligne et n'est jamais stocké.",
-  titleCross: "Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout | Relayium",
+  titleCross: "Transfert inter-réseaux de fichiers et de texte éphémère en direct — chiffré de bout en bout | Relayium",
   titleOffline: "Lien de fichier chiffré — téléversez maintenant, téléchargez plus tard | Relayium",
-  descCross: "Envoyez des fichiers entre réseaux avec un code à 6 caractères — transfert en temps réel, chiffré de bout en bout ; le relais ne voit que du texte chiffré, jamais le contenu des fichiers.",
+  descCross: "Envoyez fichiers et texte éphémère en direct entre réseaux avec un code à 6 caractères. Le créateur se connecte ; rejoindre ne requiert aucun compte. TURN ne transporte que du texte chiffré de bout en bout.",
   descOffline: "Téléversez un fichier chiffré dans votre navigateur et partagez un lien de téléchargement à divulgation nulle ; le serveur ne stocke que du texte chiffré.",
   reconnecting: "Connexion perdue — reconnexion…",
   confirmLeave: "Un transfert est en cours. Changer l'interrompra. Continuer ?",

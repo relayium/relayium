@@ -54,9 +54,9 @@ const en: Messages = {
   titleDefault: "Relayium — end-to-end encrypted file and text transfer",
   descDefault:
     "Open-source, end-to-end encrypted file and text transfer in your browser. Files stream directly on your local network or through a ciphertext-only relay across networks. Text uses a separate encrypted peer session while both devices are online and is never stored.",
-  titleCross: "Cross-network file transfer — realtime, end-to-end encrypted | Relayium",
+  titleCross: "Cross-network file and live text transfer — end-to-end encrypted | Relayium",
   titleOffline: "Encrypted file link — upload now, download later | Relayium",
-  descCross: "Send files across networks with a 6-character code — realtime transfer, end-to-end encrypted; the relay only ever sees ciphertext, never your files.",
+  descCross: "Send files and live ephemeral text across networks with a 6-character code. The creator signs in; joining needs no account. TURN carries only end-to-end encrypted ciphertext.",
   descOffline: "Upload a browser-encrypted file and share a zero-knowledge download link; the server stores only ciphertext.",
   reconnecting: "Connection lost — reconnecting…",
   confirmLeave: "A transfer is in progress. Switching will interrupt it. Continue?",

@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium</title>
-    <meta name="description" content="Übertrage Dateien mit einem 6-Zeichen-Pairing-Code zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per Verifizierungscode (SAS), sodass selbst ein kompromittiertes Relay nicht mithören kann." />
+    <title>Netzwerkübergreifende Datei- und Live-Textübertragung — Ende-zu-Ende-verschlüsselt | Relayium</title>
+    <meta name="description" content="Übertrage Dateien und flüchtigen Live-Text mit einem 6-Zeichen-Code zwischen Netzwerken. Beide Geräte bleiben online; Browser nutzen absichtlich ein TURN-Relay, das nur Chiffretext sieht." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/de/cross-network/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/cross-network" />
@@ -22,8 +22,8 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Relayium" />
-    <meta property="og:title" content="Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium" />
-    <meta property="og:description" content="Übertrage Dateien mit einem 6-Zeichen-Pairing-Code zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per Verifizierungscode (SAS), sodass selbst ein kompromittiertes Relay nicht mithören kann." />
+    <meta property="og:title" content="Netzwerkübergreifende Datei- und Live-Textübertragung — Ende-zu-Ende-verschlüsselt | Relayium" />
+    <meta property="og:description" content="Übertrage Dateien und flüchtigen Live-Text mit einem 6-Zeichen-Code zwischen Netzwerken. Beide Geräte bleiben online; Browser nutzen absichtlich ein TURN-Relay, das nur Chiffretext sieht." />
     <meta property="og:url" content="https://relayium.com/de/cross-network/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -32,10 +32,10 @@
     <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
     <meta property="og:locale" content="de_DE" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium" />
-    <meta name="twitter:description" content="Übertrage Dateien mit einem 6-Zeichen-Pairing-Code zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per Verifizierungscode (SAS), sodass selbst ein kompromittiertes Relay nicht mithören kann." />
+    <meta name="twitter:title" content="Netzwerkübergreifende Datei- und Live-Textübertragung — Ende-zu-Ende-verschlüsselt | Relayium" />
+    <meta name="twitter:description" content="Übertrage Dateien und flüchtigen Live-Text mit einem 6-Zeichen-Code zwischen Netzwerken. Beide Geräte bleiben online; Browser nutzen absichtlich ein TURN-Relay, das nur Chiffretext sieht." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium","description":"Übertrage Dateien mit einem 6-Zeichen-Pairing-Code zwischen Geräten in unterschiedlichen Netzwerken. Ende-zu-Ende-verschlüsselt — die Übertragung läuft über Relayiums schnelles Relay, das ausschließlich Chiffretext transportiert, den es nicht lesen kann. Verifiziert per Verifizierungscode (SAS), sodass selbst ein kompromittiertes Relay nicht mithören kann.","url":"https://relayium.com/de/cross-network/","inLanguage":"de","dateModified":"2026-07-10","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Laufen meine Dateien über euren Server?","acceptedAnswer":{"@type":"Answer","text":"Der verschlüsselte Datenstrom läuft über Relayiums Relay, um eine zuverlässige netzwerkübergreifende Verbindung zu ermöglichen — da alles Ende-zu-Ende-verschlüsselt ist, sieht das Relay dabei nur Chiffretext, den es nicht lesen kann."}},{"@type":"Question","name":"Ist ein Code erforderlich?","acceptedAnswer":{"@type":"Answer","text":"Ja: Ein 6-Zeichen-Code (oder dessen Beitrittslink/QR), 5 Minuten gültig, koppelt die beiden Geräte über Netzwerke hinweg. Der Server erzeugt ihn aus dem Alphabet ACDEFHJKMNPRTWXY23456789 — ohne 0 und 1, damit nichts mit O oder I verwechselt wird — du kannst dir also keinen ausdenken: nur ein vom Server ausgegebener Code koppelt."}},{"@type":"Question","name":"Brauche ich ein Konto?","acceptedAnswer":{"@type":"Answer","text":"Der Absender meldet sich an, um einen Code zu erzeugen; der Empfänger tritt anonym bei."}},{"@type":"Question","name":"Ist es Ende-zu-Ende-verschlüsselt?","acceptedAnswer":{"@type":"Answer","text":"Ja — X25519 plus AES-256-GCM pro Block, verifiziert mit dem Verifizierungscode; weder das Relay noch der Server können entschlüsseln."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"Netzwerkübergreifende Datei- und Live-Textübertragung — Ende-zu-Ende-verschlüsselt | Relayium","description":"Übertrage Dateien und flüchtigen Live-Text mit einem 6-Zeichen-Code zwischen Netzwerken. Beide Geräte bleiben online; Browser nutzen absichtlich ein TURN-Relay, das nur Chiffretext sieht.","url":"https://relayium.com/de/cross-network/","inLanguage":"de","dateModified":"2026-07-31","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Laufen meine Dateien oder Nachrichten über euren Server?","acceptedAnswer":{"@type":"Answer","text":"Netzwerkübergreifende Browser-Sitzungen nutzen absichtlich Relayiums TURN-Relay. Dateien und Nachrichten sind Ende-zu-Ende-verschlüsselt, sodass es nur Chiffretext sieht. Relayium speichert keine Nachrichtentexte."}},{"@type":"Question","name":"Ist ein Code erforderlich?","acceptedAnswer":{"@type":"Answer","text":"Ja: Ein 6-Zeichen-Code (oder dessen Beitrittslink/QR), 5 Minuten gültig, koppelt die beiden Geräte über Netzwerke hinweg. Der Server erzeugt ihn aus dem Alphabet ACDEFHJKMNPRTWXY23456789 — ohne 0 und 1, damit nichts mit O oder I verwechselt wird — du kannst dir also keinen ausdenken: nur ein vom Server ausgegebener Code koppelt."}},{"@type":"Question","name":"Brauche ich ein Konto?","acceptedAnswer":{"@type":"Answer","text":"Wer einen Pairing-Code für Dateien oder Text erstellt, meldet sich an; wer mit dem Code beitritt, braucht kein Konto."}},{"@type":"Question","name":"Ist es Ende-zu-Ende-verschlüsselt?","acceptedAnswer":{"@type":"Answer","text":"Ja — X25519 plus AES-256-GCM pro Block, verifiziert mit dem Verifizierungscode; weder das Relay noch der Server können entschlüsseln."}},{"@type":"Question","name":"Kann ich neben Dateien auch Text senden?","acceptedAnswer":{"@type":"Answer","text":"Ja. Solange beide Geräte online sind, kannst du flüchtigen Live-Text mit bis zu 65.536 UTF-8-Bytes pro Nachricht senden. Relayium speichert weder Nachrichtentexte noch serverseitigen Verlauf; beide Endgeräte können empfangenen Text kopieren oder behalten."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -78,17 +78,17 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
     <div class="wrap">
       <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
       
-      <h1>Netzwerkübergreifende Dateiübertragung, Ende-zu-Ende-verschlüsselt</h1>
-      <p class="pitch">Zwei Geräte in unterschiedlichen Netzwerken koppeln sich mit einem 6-Zeichen-Code (oder dessen Beitrittslink/QR). Dateien fließen über einen verschlüsselten Kanal durch Relayiums schnelles Relay — das Relay sieht dabei ausschließlich Chiffretext, die Schlüssel verlassen nie die beiden Geräte.</p>
+      <h1>Dateien und Live-Text netzwerkübergreifend, Ende-zu-Ende-verschlüsselt</h1>
+      <p class="pitch">Zwei Online-Geräte in unterschiedlichen Netzwerken koppeln sich per 6-Zeichen-Code (oder Beitrittslink/QR), um Dateien oder flüchtigen Text zu senden. Browser nutzen absichtlich Relayiums TURN-Relay, das nur Chiffretext sieht; Relayium speichert keine Nachrichtentexte.</p>
       <a class="cta" href="/cross-network?lang=de">Übertragung starten</a>
 
       <section class="reveal">
       <h2>In vier Schritten übertragen</h2>
       <ol class="steps">
-        <li>Der Absender meldet sich an und erzeugt einen 6-Zeichen-Pairing-Code (oder teilt dessen Beitrittslink/QR).</li>
-        <li>Der Empfänger öffnet den Link oder gibt den Code ein — zum Empfangen ist kein Konto nötig.</li>
+        <li>Eine Person meldet sich an und erzeugt einen 6-Zeichen-Pairing-Code für Dateien oder Text (oder teilt Beitrittslink/QR).</li>
+        <li>Die andere öffnet den Link oder gibt den Code ein — zum Beitreten mit Code ist kein Konto nötig.</li>
         <li>Beide Seiten vergleichen denselben 6-stelligen Verifizierungscode auf dem Bildschirm (SAS — ein anderer Wert als der Pairing-Code), um einen Man-in-the-Middle auszuschließen.</li>
-        <li>Dateien werden Ende-zu-Ende-verschlüsselt gestreamt (Block für Block mit AES-256-GCM) — über Relayiums schnelles Relay, das nur Chiffretext transportiert, den es nicht entschlüsseln kann.</li>
+        <li>Solange beide Geräte online sind, laufen Dateien und Live-Text Ende-zu-Ende-verschlüsselt über TURN. Relayium speichert keine Nachrichtentexte; eine Nachricht umfasst höchstens 65.536 UTF-8-Bytes.</li>
       </ol>
       </section>
 
@@ -97,9 +97,10 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <ul class="why">
         <li><b>Ende-zu-Ende-verschlüsselt</b> — X25519-Schlüsselaustausch und AES-256-GCM pro Block; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, weder das Relay noch der Server können entschlüsseln.</li>
         <li><b>SAS gegen Man-in-the-Middle</b> — Beide Bildschirme zeigen denselben 6-stelligen Code; stimmt er überein, ist ein Man-in-the-Middle ausgeschlossen — selbst ein kompromittiertes Relay oder ein kompromittierter Signalisierungsserver kann sich nicht einschleichen.</li>
-        <li><b>Relay sieht nur Chiffretext</b> — Netzwerkübergreifende Übertragungen laufen über ein schnelles Relay, damit die Verbindung über jedes NAT hinweg zuverlässig zustande kommt — dabei transportiert es ausschließlich Chiffretext, nie deine Schlüssel oder Klartext.</li>
+        <li><b>Relay sieht nur Chiffretext</b> — Netzwerkübergreifende Browser-Übertragungen nutzen absichtlich ein schnelles TURN-Relay für zuverlässige NAT-Verbindungen; es transportiert ausschließlich Chiffretext, nie Schlüssel oder Klartext.</li>
+        <li><b>Flüchtiger Live-Text</b> — Beide Geräte müssen online bleiben. Relayium speichert weder Nachrichtentexte noch serverseitigen Verlauf; ein Endgerät kann empfangenen Text dennoch kopieren oder behalten. Pro Nachricht sind 65.536 UTF-8-Bytes möglich.</li>
         <li><b>Plattformübergreifend</b> — Windows, macOS, Linux, Android, iOS — ein moderner Browser genügt, keine Installation nötig.</li>
-        <li><b>Kostenlos</b> — Kostenlos nutzbar innerhalb eines monatlichen Relay-Kontingents; für einen Code muss sich der Absender anmelden, der Empfänger tritt anonym bei.</li>
+        <li><b>Kostenlos</b> — Kostenlos im monatlichen Relay-Kontingent; wer einen Datei- oder Textcode erstellt, meldet sich an, zum Beitreten mit dem Code ist kein Konto nötig.</li>
       </ul>
       </section>
 
@@ -114,14 +115,16 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       </section>
 
       <section class="reveal"><h2>Häufige Fragen</h2>
-      <h3>Laufen meine Dateien über euren Server?</h3>
-      <p>Der verschlüsselte Datenstrom läuft über Relayiums Relay, um eine zuverlässige netzwerkübergreifende Verbindung zu ermöglichen — da alles Ende-zu-Ende-verschlüsselt ist, sieht das Relay dabei nur Chiffretext, den es nicht lesen kann.</p>
+      <h3>Laufen meine Dateien oder Nachrichten über euren Server?</h3>
+      <p>Netzwerkübergreifende Browser-Sitzungen nutzen absichtlich Relayiums TURN-Relay. Dateien und Nachrichten sind Ende-zu-Ende-verschlüsselt, sodass es nur Chiffretext sieht. Relayium speichert keine Nachrichtentexte.</p>
       <h3>Ist ein Code erforderlich?</h3>
       <p>Ja: Ein 6-Zeichen-Code (oder dessen Beitrittslink/QR), 5 Minuten gültig, koppelt die beiden Geräte über Netzwerke hinweg. Der Server erzeugt ihn aus dem Alphabet ACDEFHJKMNPRTWXY23456789 — ohne 0 und 1, damit nichts mit O oder I verwechselt wird — du kannst dir also keinen ausdenken: nur ein vom Server ausgegebener Code koppelt.</p>
       <h3>Brauche ich ein Konto?</h3>
-      <p>Der Absender meldet sich an, um einen Code zu erzeugen; der Empfänger tritt anonym bei.</p>
+      <p>Wer einen Pairing-Code für Dateien oder Text erstellt, meldet sich an; wer mit dem Code beitritt, braucht kein Konto.</p>
       <h3>Ist es Ende-zu-Ende-verschlüsselt?</h3>
-      <p>Ja — X25519 plus AES-256-GCM pro Block, verifiziert mit dem Verifizierungscode; weder das Relay noch der Server können entschlüsseln.</p></section>
+      <p>Ja — X25519 plus AES-256-GCM pro Block, verifiziert mit dem Verifizierungscode; weder das Relay noch der Server können entschlüsseln.</p>
+      <h3>Kann ich neben Dateien auch Text senden?</h3>
+      <p>Ja. Solange beide Geräte online sind, kannst du flüchtigen Live-Text mit bis zu 65.536 UTF-8-Bytes pro Nachricht senden. Relayium speichert weder Nachrichtentexte noch serverseitigen Verlauf; beide Endgeräte können empfangenen Text kopieren oder behalten.</p></section>
 
       
       <footer>

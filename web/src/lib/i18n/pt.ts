@@ -54,9 +54,9 @@ const pt: Messages = {
   titleDefault: "Relayium — transferência de arquivos e de texto com criptografia de ponta a ponta",
   descDefault:
     "Transferência de arquivos e texto com criptografia de ponta a ponta e código aberto no navegador. Os arquivos vão direto na rede local ou por um retransmissor que só vê texto cifrado entre redes. O texto usa uma sessão ponto a ponto criptografada e separada, exige os dois dispositivos online e nunca é armazenado.",
-  titleCross: "Transferência de arquivos entre redes — em tempo real, com criptografia de ponta a ponta | Relayium",
+  titleCross: "Transferência entre redes de arquivos e texto efêmero ao vivo — criptografada de ponta a ponta | Relayium",
   titleOffline: "Link de arquivo criptografado — envie agora, baixe depois | Relayium",
-  descCross: "Envie arquivos entre redes com um código de 6 caracteres — transferência em tempo real, com criptografia de ponta a ponta; o retransmissor só vê texto cifrado, nunca seus arquivos.",
+  descCross: "Envie arquivos e texto efêmero ao vivo entre redes com um código de 6 caracteres. Quem cria o código entra na conta; quem participa não precisa de conta. TURN transporta apenas texto cifrado de ponta a ponta.",
   descOffline: "Envie um arquivo criptografado no navegador e compartilhe um link de download de conhecimento zero; o servidor armazena apenas texto cifrado.",
   reconnecting: "Conexão perdida — reconectando…",
   confirmLeave: "Há uma transferência em andamento. Mudar vai interrompê-la. Continuar?",
