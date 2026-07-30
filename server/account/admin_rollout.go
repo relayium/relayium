@@ -636,6 +636,29 @@ func (s *Service) handleAdminRolloutPause(w http.ResponseWriter, r *http.Request
 // precisely so it cannot be blocked by the other track: see that method's doc
 // comment for why resuming byo through the gate would make an unrelated fleet
 // release silently un-resumable.
+//
+// 继续 restarts the ladder FROM THE BEGINNING — that is what the control says and
+// what ResumeRolloutTrack's field resets implement — so it must also clear the
+// results that mark a node as already passed over. The case is concrete: the
+// fleet rolls to v2, n1 reports "unreachable" off a broken mirror, n2 reports
+// "failed", the track halts. The operator fixes the mirror and presses 继续.
+// Without the clear, n1 stays excluded for the whole resumed rollout and the
+// track completes with n1 still on v1 — and 继续 cannot fix it, because the only
+// other thing that clears those results is retyping the target. That is a
+// rollout silently finishing over a machine it never updated.
+//
+// The asymmetry with "failed"/"rolled_back" is the point, not an omission:
+// ClearPassedOverResults erases only "skipped" and "unreachable". A failure is
+// the judgement that STOPPED the track, and resuming is a decision to carry on
+// past it, never a licence to forget it — decideByo's failure rate and
+// emergencyRefusesNode both still read those rows.
+//
+// Cleared BEFORE the resume, for setTargetVersion's reason: a failed clear must
+// not leave a track rolling with stale exclusions. Reversed, the operator could
+// not even retry, since the track is no longer halted for 继续 to act on. In the
+// other direction, the harm of clearing when the resume then fails is nil for a
+// still-halted track (halted tracks are inert, and the next 继续 clears again)
+// and at worst one re-offer of the build on a track that had already moved on.
 func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -644,6 +667,10 @@ func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Reques
 	track := r.PathValue("id")
 	if !validRolloutTrack(track) {
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "继续失败：未知轨道 "+track)
+		return
+	}
+	if err := s.Store().ClearPassedOverResults(r.Context(), rolloutOwnerClass(track)); err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "继续失败："+err.Error())
 		return
 	}
 	ok, err := s.Store().ResumeRolloutTrack(r.Context(), track, s.Now().Unix())

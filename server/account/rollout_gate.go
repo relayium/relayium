@@ -226,6 +226,18 @@ var ErrCorruptPreviousByoVersion = errors.New("recorded previous byo version is 
 // "skip the gate" path and no way for an operator to reach an arbitrary version
 // through it. Do not add a version parameter.
 //
+// It does NOT clear passed-over update results the way setTargetVersion does,
+// and that is a deliberate, narrow judgement rather than an oversight. The
+// exclusion those results drive is decideFleet's alone; no BYO decision path
+// reads "skipped" or "unreachable" at all (decideByo counts failures, and
+// byoResultIsFailure matches only "failed"/"rolled_back"), and this path is
+// byo-only by construction. So there is nothing here for a clear to fix today.
+// The day anyone gives the BYO ladder a pass-over rule, this becomes attempt
+// 2's stranding bug — a node excluded by a result nothing can ever clear,
+// because an excluded node is never re-commanded — and the fix is one call to
+// ClearPassedOverResults(ctx, rolloutOwnerClass("byo")) before the write below,
+// with the same before-not-after ordering setTargetVersion documents.
+//
 // It resets the same positional state SetTargetVersion's whole-row replace
 // resets, and for the same reasons documented there: ByoBatch to 0 (a surviving
 // batch re-evaluates the same nodes against the same failures and re-halts

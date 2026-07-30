@@ -312,10 +312,10 @@ func (s *SQLiteStore) NodesByOwnerType(ctx context.Context, ownerType string) ([
 //     rollout — without it decideByo's failure accounting is entirely inert
 //     (both numerator and denominator are empty) and the BYO track can never
 //     halt however bad the build is;
-//   - update_result is CLEARED, because it deliberately survives re-register
-//     and heartbeat and nothing else ever resets it: a stale "failed" from the
-//     node's previous command would otherwise be read as a failure of the
-//     command being issued right now.
+//   - update_result is CLEARED, because it survives re-register and heartbeat
+//     and the only other writer of it (ClearPassedOverResults) spares failures:
+//     a stale "failed" from the node's previous command would otherwise read as
+//     a failure of the command being issued right now.
 //   - update_attempts is reset to 0 for hygiene. Nothing reads it as a bound
 //     anymore (the fleet resume path now bounds itself by elapsed time since
 //     update_started_at, not by this counter — see Node.UpdateAttempts), but

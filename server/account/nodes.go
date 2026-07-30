@@ -575,9 +575,11 @@ func (s *Service) updateCheckEmergency(ctx context.Context, tr RolloutTrack, sna
 // dead one's".
 //
 // Without the time scope the predicate says nothing about WHICH rollout failed,
-// and nothing ever clears nodes.update_result except CommandNodeUpdate — not
-// re-register, not heartbeat, and not SetTargetVersion, which does not touch
-// node rows at all. So a node carrying a leftover "failed" from an update
+// and a failure result is never cleared out from under it: not by re-register,
+// not by heartbeat, and not by SetTargetVersion — which does now touch node
+// rows (ClearPassedOverResults), but erases only "skipped"/"unreachable", never
+// a failure. CommandNodeUpdate remains the one thing that clears the value this
+// predicate reads. So a node carrying a leftover "failed" from an update
 // attempt two releases ago was permanently excluded from every future emergency
 // release: the operator hit 紧急发布 and that machine silently sat it out, even
 // though the STAGED ladder would have re-commanded it (decideFleet/decideByo

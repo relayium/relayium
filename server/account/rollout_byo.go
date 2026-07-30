@@ -308,7 +308,11 @@ func byoOpenBatchMembers(tr RolloutTrack, nodes []NodeSnapshot) map[string]bool 
 // nodes.update_result is deliberately preserved across re-register and
 // heartbeat (UpsertNode's ON CONFLICT excludes the update_* columns, so an
 // in-flight rollout's bookkeeping is not clobbered by a node simply calling
-// register again) and nothing ever clears it except CommandNodeUpdate. Left
+// register again). The only things that ever clear it are CommandNodeUpdate and
+// ClearPassedOverResults, and the latter erases exactly the two passed-over
+// values ("skipped"/"unreachable") -- never a failure, which is what this
+// predicate reads. So for THIS check the column is still effectively
+// never-cleared, and the scoping below is still load-bearing. Left
 // unfiltered, every leftover "failed" from the PREVIOUS rollout would be
 // counted against the new one and halt it at its very first evaluation -- a
 // rollout that never commanded a single node would report a failure rate. The

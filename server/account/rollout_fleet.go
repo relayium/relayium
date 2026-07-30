@@ -84,8 +84,8 @@ type NodeSnapshot struct {
 	// was running when central last commanded it to update, written together
 	// with UpdateStartedAt. It is what lets a state machine tell a result that
 	// belongs to the current rollout from one left over from the previous
-	// one -- the update_* columns survive re-register and heartbeat; only
-	// CommandNodeUpdate and ClearPassedOverResults ever reset them.
+	// one -- the update_* columns survive re-register and heartbeat, and only
+	// CommandNodeUpdate resets THIS one (ClearPassedOverResults: update_result).
 	UpdateFromVersion string
 	UpdateResult      string // "" | "ok" | "failed" | "rolled_back" | "skipped" | "unreachable"
 }

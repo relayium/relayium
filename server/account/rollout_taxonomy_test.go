@@ -3,6 +3,8 @@ package account
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -109,6 +111,28 @@ func TestDecideFleetDoesNotRecommandAPassedOverNode(t *testing.T) {
 				t.Fatalf("everyone left is on target or passed over; want complete, got %+v", got)
 			}
 		})
+	}
+}
+
+// Regression guard: "failed" must NEVER join passedOverResult's exclusion set.
+//
+// An earlier round deleted this test on the reasoning that no reachable state
+// needs it -- "a halt always takes the track out of rolling first, so a
+// non-current node's failed can never matter". That reasoning is wrong, and the
+// state it dismissed is one button press away: ResumeRolloutTrack puts the track
+// back to "rolling" and clears current_node_id while leaving the failed node's
+// "failed" exactly where it is. The fixture below IS that state. Add "failed" to
+// passedOverResult and this track answers "complete" -- finishing over the one
+// machine that could not verify the build, silently -- instead of offering it
+// the build again, which is what 继续 means.
+func TestDecideFleetDoesNotExcludeAFailedNode(t *testing.T) {
+	tr := fleetTrackAt("v2.0.0", "rolling", "", "")
+	nodes := []NodeSnapshot{
+		{ID: "n1", Version: "v1.0.0", LastSeenAt: 2000, UpdateStartedAt: 1000, UpdateResult: "failed"},
+	}
+	got := decideFleet(tr, nodes, 2000)
+	if got.Action != "update" || got.NodeID != "n1" {
+		t.Fatalf("a resumed track finished over the node whose failure halted it: %+v", got)
 	}
 }
 
@@ -228,6 +252,86 @@ func TestSetTargetVersionClearsPassedOverResults(t *testing.T) {
 	if got["user-passed-over"] != "skipped" {
 		t.Errorf("retargeting the fleet cleared a USER node's result (%q): the two tracks must not "+
 			"reach into each other's rows", got["user-passed-over"])
+	}
+}
+
+// 继续 restarts the ladder from the beginning, so it must hand back the build to
+// the nodes this rollout passed over -- otherwise the operator's only way to
+// reach them is retyping the target version, and the resumed rollout finishes
+// over a machine it never updated.
+//
+// The scenario, end to end: the fleet is rolling to v2.0.0; n1 cannot fetch it
+// (a broken mirror) and reports "unreachable"; n2 gets the bytes and fails to
+// verify them, which halts the track. The operator fixes the mirror and presses
+// 继续. n1 must be a candidate again -- and n2's "failed" must SURVIVE, because
+// that is the judgement that stopped the track and resuming is not a licence to
+// forget it (decideByo's failure rate and emergencyRefusesNode both read it).
+func TestResumeClearsPassedOverResultsButNotFailures(t *testing.T) {
+	ts, store := newRolloutFullServer(t)
+	cookie := adminLoginCookie(t, ts)
+	ctx := context.Background()
+
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v2.0.0", Status: "halted",
+		HaltedReason: "node n2 failed to verify or install the update", StageStartedAt: tNow - 100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"n1", "n2"} {
+		if _, err := store.UpsertNode(ctx, Node{
+			ID: id, OwnerType: "fleet", URLs: []string{"turn:x:3478"}, TURNSecret: "s",
+			Version: "v1.0.0", CreatedAt: 1, LastSeenAt: tNow,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.SetNodeUpdateResult(ctx, "n1", "unreachable"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetNodeUpdateResult(ctx, "n2", "failed"); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := postAdminForm(t, ts, cookie, "/admin/rollout/fleet/resume", url.Values{})
+	body := readAll(t, resp)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("resume: want 302, got %d\n%s", resp.StatusCode, body)
+	}
+
+	nodes, err := store.NodesByOwnerType(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, n := range nodes {
+		got[n.ID] = n.UpdateResult
+	}
+	if got["n1"] != "" {
+		t.Errorf("继续 left the passed-over node carrying %q, so the resumed rollout cannot reach it",
+			got["n1"])
+	}
+	if got["n2"] != "failed" {
+		t.Errorf(`继续 erased the failure that halted the track: n2 = %q`, got["n2"])
+	}
+
+	// And the consequence the column is only a proxy for. The snapshot is
+	// narrowed to n1 on purpose: that is the moment the bug actually bites, when
+	// n1 is the last node the resumed rollout has left. Excluded, it answers
+	// "complete" -- a finished rollout over a machine still on v1.0.0.
+	tr, _, err := store.GetRolloutTrack(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var justN1 []Node
+	for _, n := range nodes {
+		if n.ID == "n1" {
+			justN1 = append(justN1, n)
+		}
+	}
+	d := decideFleet(tr, nodeSnapshots(justN1), tNow)
+	if d.Action != "update" || d.NodeID != "n1" {
+		t.Fatalf("the resumed rollout finished without ever re-offering the build to n1: %+v", d)
 	}
 }
 
