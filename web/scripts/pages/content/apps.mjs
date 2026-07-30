@@ -18,16 +18,17 @@
 const en = {
   title: "Get Relayium — apps for web, CLI, macOS & iOS",
   description:
-    "Download Relayium: use it in any browser, install the command-line tool, or get the native macOS and iOS apps (coming soon). End-to-end encrypted file transfer on every device.",
+    "Download Relayium: use it in any browser, install the command-line tool, or get the native macOS and iOS apps (coming soon). End-to-end encrypted file transfer on every device, plus ephemeral text in the web app and the CLI.",
   hero: {
     h1: "Get Relayium",
-    pitch: "One end-to-end encrypted file transfer, everywhere you work. Pick your platform.",
+    pitch:
+      "One end-to-end encrypted file transfer, everywhere you work — plus ephemeral text in the web app and the CLI. Pick your platform.",
     cta: "Open the web app",
   },
   how: {
     heading: "Which one should I use?",
     steps: [
-      "Web app — zero-install, in any modern browser on any OS.",
+      "Web app — zero-install file transfer and ephemeral text, in any modern browser on any OS.",
       "Command line — scriptable file transfers, folder sync, server backups and ephemeral text on macOS, Linux and Windows.",
       "macOS app — a real native app, coming soon.",
       "iOS app — a native iPhone & iPad app, coming to the App Store.",
@@ -38,7 +39,7 @@ const en = {
     items: [
       {
         title: "Web app",
-        desc: "Nothing to install. Open it in any modern browser on any OS and start transferring.",
+        desc: "Nothing to install. Open it in any modern browser on any OS to transfer files or send ephemeral text.",
       },
       {
         title: "Command line",
@@ -74,16 +75,16 @@ const en = {
 const zh = {
   title: "获取 Relayium——网页版、命令行、macOS 与 iOS 应用",
   description:
-    "下载 Relayium：在任意浏览器中直接使用、安装命令行工具，或获取原生 macOS 与 iOS 应用（即将推出）。端到端加密的文件传输，覆盖你的每一台设备。",
+    "下载 Relayium：在任意浏览器中直接使用、安装命令行工具，或获取原生 macOS 与 iOS 应用（即将推出）。端到端加密的文件传输覆盖你的每一台设备；临时文本可在网页版与命令行中收发。",
   hero: {
     h1: "获取 Relayium",
-    pitch: "同一套端到端加密的文件传输，随处可用。选择你的平台。",
+    pitch: "同一套端到端加密的文件传输，随处可用；临时文本可在网页版与命令行中收发。选择你的平台。",
     cta: "打开网页版",
   },
   how: {
     heading: "该用哪一个？",
     steps: [
-      "网页版——零安装，任意操作系统的现代浏览器打开即用。",
+      "网页版——零安装，任意操作系统的现代浏览器打开即用，传文件也传临时文本。",
       "命令行——可脚本化的文件传输、文件夹同步、服务器备份与临时文本，支持 macOS、Linux 与 Windows。",
       "macOS 应用——真正的原生应用，即将推出。",
       "iOS 应用——原生 iPhone 与 iPad 应用，即将登陆 App Store。",
@@ -94,7 +95,7 @@ const zh = {
     items: [
       {
         title: "网页版",
-        desc: "无需安装。在任意系统的现代浏览器中打开即可开始传输。",
+        desc: "无需安装。在任意系统的现代浏览器中打开，即可传文件，也能发临时文本。",
       },
       {
         title: "命令行",
@@ -130,16 +131,17 @@ const zh = {
 const ja = {
   title: "Relayium を入手 — ウェブ、CLI、macOS、iOS 向けアプリ",
   description:
-    "Relayium をダウンロード：任意のブラウザで使う、コマンドラインツールをインストールする、またはネイティブの macOS・iOS アプリ（近日公開）を入手。すべてのデバイスでエンドツーエンド暗号化のファイル転送を。",
+    "Relayium をダウンロード：任意のブラウザで使う、コマンドラインツールをインストールする、またはネイティブの macOS・iOS アプリ（近日公開）を入手。エンドツーエンド暗号化のファイル転送はすべてのデバイスで、一時的なテキスト送信はウェブアプリと CLI で使えます。",
   hero: {
     h1: "Relayium を入手",
-    pitch: "同じエンドツーエンド暗号化のファイル転送を、あらゆる場所で。プラットフォームを選んでください。",
+    pitch:
+      "同じエンドツーエンド暗号化のファイル転送を、あらゆる場所で。一時的なテキスト送信はウェブアプリと CLI で使えます。プラットフォームを選んでください。",
     cta: "ウェブアプリを開く",
   },
   how: {
     heading: "どれを使えばいい？",
     steps: [
-      "ウェブアプリ — インストール不要、どの OS の最新ブラウザでもすぐに使えます。",
+      "ウェブアプリ — インストール不要、どの OS の最新ブラウザでもファイル転送と一時的なテキスト送信がすぐに使えます。",
       "コマンドライン — スクリプト化できるファイル転送、フォルダー同期、サーバーバックアップ、一時的なテキスト送信。macOS、Linux、Windows で利用可能。",
       "macOS アプリ — 本物のネイティブアプリ、近日公開。",
       "iOS アプリ — ネイティブな iPhone・iPad アプリ、App Store に近日登場。",
@@ -150,7 +152,7 @@ const ja = {
     items: [
       {
         title: "ウェブアプリ",
-        desc: "インストール不要。どの OS でも最新のブラウザで開けばすぐに転送を開始できます。",
+        desc: "インストール不要。どの OS でも最新のブラウザで開けば、ファイル転送も一時的なテキスト送信もすぐに始められます。",
       },
       {
         title: "コマンドライン",
@@ -186,16 +188,16 @@ const ja = {
 const ko = {
   title: "Relayium 받기 — 웹, CLI, macOS 및 iOS 앱",
   description:
-    "Relayium 다운로드: 어떤 브라우저에서든 바로 사용하거나, 명령줄 도구를 설치하거나, 네이티브 macOS 및 iOS 앱(출시 예정)을 받으세요. 모든 기기에서 종단간 암호화 파일 전송을.",
+    "Relayium 다운로드: 어떤 브라우저에서든 바로 사용하거나, 명령줄 도구를 설치하거나, 네이티브 macOS 및 iOS 앱(출시 예정)을 받으세요. 종단간 암호화 파일 전송은 모든 기기에서, 임시 텍스트 전송은 웹 앱과 CLI에서.",
   hero: {
     h1: "Relayium 받기",
-    pitch: "하나의 종단간 암호화 파일 전송을 어디서나. 플랫폼을 선택하세요.",
+    pitch: "하나의 종단간 암호화 파일 전송을 어디서나. 임시 텍스트 전송은 웹 앱과 CLI에서 쓸 수 있습니다. 플랫폼을 선택하세요.",
     cta: "웹 앱 열기",
   },
   how: {
     heading: "어느 것을 써야 할까요?",
     steps: [
-      "웹 앱 — 설치 불필요, 어떤 OS의 최신 브라우저에서든 바로 사용.",
+      "웹 앱 — 설치 불필요, 어떤 OS의 최신 브라우저에서든 파일 전송과 임시 텍스트 전송을 바로 사용.",
       "명령줄 — 스크립트로 자동화하는 파일 전송, 폴더 동기화, 서버 백업, 임시 텍스트 전송. macOS, Linux, Windows 지원.",
       "macOS 앱 — 진짜 네이티브 앱, 출시 예정.",
       "iOS 앱 — 네이티브 iPhone·iPad 앱, App Store에 곧 출시.",
@@ -206,7 +208,7 @@ const ko = {
     items: [
       {
         title: "웹 앱",
-        desc: "설치 불필요. 어떤 OS의 최신 브라우저에서든 열어 바로 전송을 시작하세요.",
+        desc: "설치 불필요. 어떤 OS의 최신 브라우저에서든 열어 파일 전송이나 임시 텍스트 전송을 바로 시작하세요.",
       },
       {
         title: "명령줄",
@@ -242,16 +244,17 @@ const ko = {
 const de = {
   title: "Relayium holen — Apps für Web, CLI, macOS & iOS",
   description:
-    "Relayium herunterladen: in jedem Browser nutzen, das Kommandozeilen-Tool installieren oder die nativen macOS- und iOS-Apps holen (in Kürze). Ende-zu-Ende-verschlüsselte Dateiübertragung auf jedem Gerät.",
+    "Relayium herunterladen: in jedem Browser nutzen, das Kommandozeilen-Tool installieren oder die nativen macOS- und iOS-Apps holen (in Kürze). Ende-zu-Ende-verschlüsselte Dateiübertragung auf jedem Gerät, dazu flüchtiger Text in der Web-App und in der Kommandozeile.",
   hero: {
     h1: "Relayium holen",
-    pitch: "Eine Ende-zu-Ende-verschlüsselte Dateiübertragung, überall wo du arbeitest. Wähle deine Plattform.",
+    pitch:
+      "Eine Ende-zu-Ende-verschlüsselte Dateiübertragung, überall wo du arbeitest — dazu flüchtiger Text in der Web-App und in der Kommandozeile. Wähle deine Plattform.",
     cta: "Web-App öffnen",
   },
   how: {
     heading: "Welche soll ich nehmen?",
     steps: [
-      "Web-App — ohne Installation, in jedem modernen Browser auf jedem Betriebssystem.",
+      "Web-App — ohne Installation, in jedem modernen Browser auf jedem Betriebssystem: Dateien und flüchtiger Text.",
       "Kommandozeile — skriptbare Dateiübertragungen, Ordner-Sync, Server-Backups und flüchtiger Text für macOS, Linux und Windows.",
       "macOS-App — eine echte native App, in Kürze.",
       "iOS-App — eine native iPhone- & iPad-App, kommt in den App Store.",
@@ -262,7 +265,7 @@ const de = {
     items: [
       {
         title: "Web-App",
-        desc: "Nichts zu installieren. In jedem modernen Browser auf jedem Betriebssystem öffnen und loslegen.",
+        desc: "Nichts zu installieren. In jedem modernen Browser auf jedem Betriebssystem öffnen und Dateien oder flüchtigen Text übertragen.",
       },
       {
         title: "Kommandozeile",
@@ -298,16 +301,17 @@ const de = {
 const fr = {
   title: "Obtenir Relayium — applis pour le web, le CLI, macOS et iOS",
   description:
-    "Téléchargez Relayium : utilisez-le dans n'importe quel navigateur, installez l'outil en ligne de commande ou obtenez les applis natives macOS et iOS (bientôt disponibles). Transfert de fichiers chiffré de bout en bout sur chaque appareil.",
+    "Téléchargez Relayium : utilisez-le dans n'importe quel navigateur, installez l'outil en ligne de commande ou obtenez les applis natives macOS et iOS (bientôt disponibles). Transfert de fichiers chiffré de bout en bout sur chaque appareil, et texte éphémère dans l'appli web et en ligne de commande.",
   hero: {
     h1: "Obtenir Relayium",
-    pitch: "Un même transfert de fichiers chiffré de bout en bout, partout où vous travaillez. Choisissez votre plateforme.",
+    pitch:
+      "Un même transfert de fichiers chiffré de bout en bout, partout où vous travaillez — et du texte éphémère dans l'appli web et en ligne de commande. Choisissez votre plateforme.",
     cta: "Ouvrir l'appli web",
   },
   how: {
     heading: "Laquelle choisir ?",
     steps: [
-      "Appli web — sans installation, dans n'importe quel navigateur moderne, sur n'importe quel OS.",
+      "Appli web — sans installation, dans n'importe quel navigateur moderne, sur n'importe quel OS : fichiers et texte éphémère.",
       "Ligne de commande — transferts de fichiers scriptables, synchronisation de dossiers, sauvegardes de serveur et texte éphémère pour macOS, Linux et Windows.",
       "Appli macOS — une vraie appli native, bientôt disponible.",
       "Appli iOS — une appli native iPhone et iPad, bientôt sur l'App Store.",
@@ -318,7 +322,7 @@ const fr = {
     items: [
       {
         title: "Appli web",
-        desc: "Rien à installer. Ouvrez-la dans n'importe quel navigateur moderne, sur n'importe quel OS, et commencez à transférer.",
+        desc: "Rien à installer. Ouvrez-la dans n'importe quel navigateur moderne, sur n'importe quel OS, pour transférer des fichiers ou envoyer du texte éphémère.",
       },
       {
         title: "Ligne de commande",
@@ -354,16 +358,16 @@ const fr = {
 const ar = {
   title: "احصل على Relayium — تطبيقات للويب وسطر الأوامر وmacOS وiOS",
   description:
-    "نزّل Relayium: استخدمه في أي متصفح، أو ثبّت أداة سطر الأوامر، أو احصل على تطبيقَي macOS وiOS الأصليين (قريبًا). نقل ملفات مُشفَّر من الطرف إلى الطرف على كل جهاز.",
+    "نزّل Relayium: استخدمه في أي متصفح، أو ثبّت أداة سطر الأوامر، أو احصل على تطبيقَي macOS وiOS الأصليين (قريبًا). نقل ملفات مُشفَّر من الطرف إلى الطرف على كل جهاز، ونصوص عابرة في تطبيق الويب وسطر الأوامر.",
   hero: {
     h1: "احصل على Relayium",
-    pitch: "نقل ملفات واحد مُشفَّر من الطرف إلى الطرف، في كل مكان تعمل فيه. اختر منصّتك.",
+    pitch: "نقل ملفات واحد مُشفَّر من الطرف إلى الطرف، في كل مكان تعمل فيه — ونصوص عابرة في تطبيق الويب وسطر الأوامر. اختر منصّتك.",
     cta: "افتح تطبيق الويب",
   },
   how: {
     heading: "أيّها أستخدم؟",
     steps: [
-      "تطبيق الويب — دون تثبيت، في أي متصفح حديث وعلى أي نظام تشغيل.",
+      "تطبيق الويب — دون تثبيت، في أي متصفح حديث وعلى أي نظام تشغيل: ملفات ونصوص عابرة.",
       "سطر الأوامر — عمليات نقل ملفات قابلة للبرمجة، ومزامنة المجلدات، ونسخ احتياطي للخوادم، ونصوص عابرة على macOS وLinux وWindows.",
       "تطبيق macOS — تطبيق أصلي حقيقي، قريبًا.",
       "تطبيق iOS — تطبيق أصلي لـ iPhone وiPad، قريبًا على App Store.",
@@ -374,7 +378,7 @@ const ar = {
     items: [
       {
         title: "تطبيق الويب",
-        desc: "لا شيء للتثبيت. افتحه في أي متصفح حديث على أي نظام تشغيل وابدأ النقل.",
+        desc: "لا شيء للتثبيت. افتحه في أي متصفح حديث على أي نظام تشغيل لنقل الملفات أو إرسال نصوص عابرة.",
       },
       {
         title: "سطر الأوامر",
@@ -410,16 +414,17 @@ const ar = {
 const es = {
   title: "Consigue Relayium — apps para web, CLI, macOS e iOS",
   description:
-    "Descarga Relayium: úsalo en cualquier navegador, instala la herramienta de línea de comandos u obtén las apps nativas de macOS e iOS (próximamente). Transferencia de archivos cifrada de extremo a extremo en todos tus dispositivos.",
+    "Descarga Relayium: úsalo en cualquier navegador, instala la herramienta de línea de comandos u obtén las apps nativas de macOS e iOS (próximamente). Transferencia de archivos cifrada de extremo a extremo en todos tus dispositivos, y texto efímero en la app web y en la línea de comandos.",
   hero: {
     h1: "Consigue Relayium",
-    pitch: "Una misma transferencia de archivos cifrada de extremo a extremo, dondequiera que trabajes. Elige tu plataforma.",
+    pitch:
+      "Una misma transferencia de archivos cifrada de extremo a extremo, dondequiera que trabajes — y texto efímero en la app web y en la línea de comandos. Elige tu plataforma.",
     cta: "Abrir la app web",
   },
   how: {
     heading: "¿Cuál debería usar?",
     steps: [
-      "App web — sin instalación, en cualquier navegador moderno y en cualquier sistema operativo.",
+      "App web — sin instalación, en cualquier navegador moderno y en cualquier sistema operativo: archivos y texto efímero.",
       "Línea de comandos — transferencias de archivos programables, sincronización de carpetas, copias de servidores y texto efímero para macOS, Linux y Windows.",
       "App de macOS — una auténtica app nativa, próximamente.",
       "App de iOS — una app nativa para iPhone y iPad, pronto en la App Store.",
@@ -430,7 +435,7 @@ const es = {
     items: [
       {
         title: "App web",
-        desc: "Nada que instalar. Ábrela en cualquier navegador moderno, en cualquier sistema operativo, y empieza a transferir.",
+        desc: "Nada que instalar. Ábrela en cualquier navegador moderno, en cualquier sistema operativo, para transferir archivos o enviar texto efímero.",
       },
       {
         title: "Línea de comandos",
@@ -466,16 +471,17 @@ const es = {
 const pt = {
   title: "Obtenha o Relayium — apps para web, CLI, macOS e iOS",
   description:
-    "Baixe o Relayium: use em qualquer navegador, instale a ferramenta de linha de comando ou obtenha os apps nativos para macOS e iOS (em breve). Transferência de arquivos criptografada de ponta a ponta em todos os dispositivos.",
+    "Baixe o Relayium: use em qualquer navegador, instale a ferramenta de linha de comando ou obtenha os apps nativos para macOS e iOS (em breve). Transferência de arquivos criptografada de ponta a ponta em todos os dispositivos, e texto efêmero no app web e na linha de comando.",
   hero: {
     h1: "Obtenha o Relayium",
-    pitch: "Uma mesma transferência de arquivos criptografada de ponta a ponta, onde quer que você trabalhe. Escolha sua plataforma.",
+    pitch:
+      "Uma mesma transferência de arquivos criptografada de ponta a ponta, onde quer que você trabalhe — e texto efêmero no app web e na linha de comando. Escolha sua plataforma.",
     cta: "Abrir o app web",
   },
   how: {
     heading: "Qual devo usar?",
     steps: [
-      "App web — sem instalação, em qualquer navegador moderno e em qualquer sistema operacional.",
+      "App web — sem instalação, em qualquer navegador moderno e em qualquer sistema operacional: arquivos e texto efêmero.",
       "Linha de comando — transferências de arquivos programáveis, sincronização de pastas, backups de servidores e texto efêmero para macOS, Linux e Windows.",
       "App para macOS — um verdadeiro app nativo, em breve.",
       "App para iOS — um app nativo para iPhone e iPad, em breve na App Store.",
@@ -486,7 +492,7 @@ const pt = {
     items: [
       {
         title: "App web",
-        desc: "Nada para instalar. Abra em qualquer navegador moderno, em qualquer sistema, e comece a transferir.",
+        desc: "Nada para instalar. Abra em qualquer navegador moderno, em qualquer sistema, para transferir arquivos ou enviar texto efêmero.",
       },
       {
         title: "Linha de comando",

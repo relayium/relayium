@@ -338,16 +338,21 @@ const pt: Messages = {
   appsPage: {
     metaTitle: "Obtenha o Relayium — apps para web, CLI, macOS e iOS",
     metaDesc:
-      "Baixe o Relayium: use em qualquer navegador, instale a ferramenta de linha de comando ou obtenha os apps nativos para macOS e iOS (em breve). Transferência de arquivos criptografada de ponta a ponta em todos os dispositivos.",
+      "Baixe o Relayium: use em qualquer navegador, instale a ferramenta de linha de comando ou obtenha os apps nativos para macOS e iOS (em breve). Transferência de arquivos criptografada de ponta a ponta em todos os dispositivos, e texto efêmero no app web e na linha de comando.",
     heading: "Obtenha o Relayium",
-    subhead: "Uma mesma transferência de arquivos criptografada de ponta a ponta, onde quer que você trabalhe. Escolha sua plataforma.",
+    subhead:
+      "Uma mesma transferência de arquivos criptografada de ponta a ponta, onde quer que você trabalhe — e texto efêmero no app web e na linha de comando. Escolha sua plataforma.",
     availableBadge: "Disponível",
     comingSoonBadge: "Em breve",
     yourPlatformNote: (os) => `Parece que você está no ${os} — destacado abaixo.`,
     cliInstallLabel: "Instale pelo seu terminal:",
     androidNote: "No Android? Use o app web mesmo — ele roda direto no seu navegador, nada para instalar.",
     cards: {
-      web: { name: "App web", desc: "Nada para instalar. Abra em qualquer navegador moderno, em qualquer sistema, e comece a transferir.", cta: "Abrir o app web" },
+      web: {
+        name: "App web",
+        desc: "Nada para instalar. Abra em qualquer navegador moderno, em qualquer sistema, para transferir arquivos ou enviar texto efêmero.",
+        cta: "Abrir o app web",
+      },
       cli: { name: "Linha de comando", desc: "Transferências de arquivos programáveis, sincronização de pastas, backups de servidor para servidor e texto efêmero para macOS, Linux e Windows.", cta: "Docs e instalação do CLI" },
       mac: { name: "App para macOS", desc: "Um verdadeiro app nativo na barra de menus (com.relayium.mac). Assinado e notarizado para instalação com um clique — em desenvolvimento." },
       ios: { name: "App para iOS", desc: "Um app nativo para iPhone e iPad (com.relayium.app) com envio pela folha de compartilhamento. Em breve na App Store." },

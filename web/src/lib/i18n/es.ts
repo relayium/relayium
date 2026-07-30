@@ -338,16 +338,21 @@ const es: Messages = {
   appsPage: {
     metaTitle: "Consigue Relayium — apps para web, CLI, macOS e iOS",
     metaDesc:
-      "Descarga Relayium: úsalo en cualquier navegador, instala la herramienta de línea de comandos u obtén las apps nativas de macOS e iOS (próximamente). Transferencia de archivos cifrada de extremo a extremo en todos tus dispositivos.",
+      "Descarga Relayium: úsalo en cualquier navegador, instala la herramienta de línea de comandos u obtén las apps nativas de macOS e iOS (próximamente). Transferencia de archivos cifrada de extremo a extremo en todos tus dispositivos, y texto efímero en la app web y en la línea de comandos.",
     heading: "Consigue Relayium",
-    subhead: "Una misma transferencia de archivos cifrada de extremo a extremo, dondequiera que trabajes. Elige tu plataforma.",
+    subhead:
+      "Una misma transferencia de archivos cifrada de extremo a extremo, dondequiera que trabajes — y texto efímero en la app web y en la línea de comandos. Elige tu plataforma.",
     availableBadge: "Disponible",
     comingSoonBadge: "Próximamente",
     yourPlatformNote: (os) => `Parece que usas ${os} — destacado abajo.`,
     cliInstallLabel: "Instala desde tu terminal:",
     androidNote: "¿En Android? Usa la app web directamente — se ejecuta en tu navegador, sin nada que instalar.",
     cards: {
-      web: { name: "App web", desc: "Nada que instalar. Ábrela en cualquier navegador moderno, en cualquier sistema operativo, y empieza a transferir.", cta: "Abrir la app web" },
+      web: {
+        name: "App web",
+        desc: "Nada que instalar. Ábrela en cualquier navegador moderno, en cualquier sistema operativo, para transferir archivos o enviar texto efímero.",
+        cta: "Abrir la app web",
+      },
       cli: { name: "Línea de comandos", desc: "Transferencias de archivos programables, sincronización de carpetas, copias de servidor a servidor y texto efímero para macOS, Linux y Windows.", cta: "Documentación e instalación de la CLI" },
       mac: { name: "App de macOS", desc: "Una auténtica app nativa en la barra de menús (com.relayium.mac). Firmada y notarizada para instalarla con un clic — en desarrollo." },
       ios: { name: "App de iOS", desc: "Una app nativa para iPhone y iPad (com.relayium.app) con envío desde la hoja de compartir. Pronto en la App Store." },

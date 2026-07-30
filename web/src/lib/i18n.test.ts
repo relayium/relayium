@@ -367,13 +367,21 @@ const TEXT_WORD: Record<Lang, RegExp> = {
   fr: /texte/i,
   es: /texto/i,
   pt: /texto/i,
-  ar: /نص/,
+  // منصّة（平台）里就含有 نص 这两个连续字母，而"选择你的平台"恰恰是 appsPage.subhead
+  // 的结尾——直接写 /نص/ 的话，阿拉伯语那一格永远为真，等于没测。排掉前面带 م 的写法。
+  ar: /(?<!م)نص/,
 };
 
-describe("CLI 定位文案覆盖文件与临时文本", () => {
+// 同一个偏差在 /apps 上是双份的：网页版也一直能发临时文本（“发送消息”），但整页的
+// meta、副标题和网页版卡片同样只写文件。所以列表里既有 CLI 的键，也有 /apps 的页面级
+// 与网页版键——这两个平台是文本真正发布了的地方。
+describe("平台定位文案覆盖文件与临时文本", () => {
   const positioning: [string, (m: Messages) => string][] = [
     ["cli.subtitle", (m) => m.cli.subtitle],
     ["cliCallout.blurb", (m) => m.cliCallout.blurb],
+    ["appsPage.metaDesc", (m) => m.appsPage.metaDesc],
+    ["appsPage.subhead", (m) => m.appsPage.subhead],
+    ["appsPage.cards.web.desc", (m) => m.appsPage.cards.web.desc],
     ["appsPage.cards.cli.desc", (m) => m.appsPage.cards.cli.desc],
     ["cliPage.metaTitle", (m) => m.cliPage.metaTitle],
     ["cliPage.metaDesc", (m) => m.cliPage.metaDesc],

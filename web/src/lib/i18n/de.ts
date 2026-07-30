@@ -338,16 +338,21 @@ const de: Messages = {
   appsPage: {
     metaTitle: "Relayium holen — Apps für Web, CLI, macOS & iOS",
     metaDesc:
-      "Relayium herunterladen: in jedem Browser nutzen, das Kommandozeilen-Tool installieren oder die nativen macOS- und iOS-Apps holen (in Kürze). Ende-zu-Ende-verschlüsselte Dateiübertragung auf jedem Gerät.",
+      "Relayium herunterladen: in jedem Browser nutzen, das Kommandozeilen-Tool installieren oder die nativen macOS- und iOS-Apps holen (in Kürze). Ende-zu-Ende-verschlüsselte Dateiübertragung auf jedem Gerät, dazu flüchtiger Text in der Web-App und in der Kommandozeile.",
     heading: "Relayium holen",
-    subhead: "Eine Ende-zu-Ende-verschlüsselte Dateiübertragung, überall wo du arbeitest. Wähle deine Plattform.",
+    subhead:
+      "Eine Ende-zu-Ende-verschlüsselte Dateiübertragung, überall wo du arbeitest — dazu flüchtiger Text in der Web-App und in der Kommandozeile. Wähle deine Plattform.",
     availableBadge: "Verfügbar",
     comingSoonBadge: "Demnächst",
     yourPlatformNote: (os) => `Sieht aus, als wärst du auf ${os} — unten hervorgehoben.`,
     cliInstallLabel: "Im Terminal installieren:",
     androidNote: "Auf Android? Nutze einfach die Web-App — sie läuft direkt im Browser, nichts zu installieren.",
     cards: {
-      web: { name: "Web-App", desc: "Nichts zu installieren. In jedem modernen Browser auf jedem Betriebssystem öffnen und loslegen.", cta: "Web-App öffnen" },
+      web: {
+        name: "Web-App",
+        desc: "Nichts zu installieren. In jedem modernen Browser auf jedem Betriebssystem öffnen und Dateien oder flüchtigen Text übertragen.",
+        cta: "Web-App öffnen",
+      },
       cli: { name: "Kommandozeile", desc: "Skriptbare Dateiübertragungen, Ordner-Sync, Server-zu-Server-Backups und flüchtiger Text für macOS, Linux und Windows.", cta: "CLI-Doku & Installation" },
       mac: { name: "macOS-App", desc: "Eine echte native Menüleisten-App (com.relayium.mac). Signiert & notarisiert für die Ein-Klick-Installation — in Arbeit." },
       ios: { name: "iOS-App", desc: "Eine native iPhone- & iPad-App (com.relayium.app) mit Versand über das Teilen-Menü. Kommt in den App Store." },

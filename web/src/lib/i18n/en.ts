@@ -338,9 +338,10 @@ const en: Messages = {
   appsPage: {
     metaTitle: "Get Relayium — apps for web, CLI, macOS & iOS",
     metaDesc:
-      "Download Relayium: use it in any browser, install the command-line tool, or get the native macOS and iOS apps (coming soon). End-to-end encrypted file transfer on every device.",
+      "Download Relayium: use it in any browser, install the command-line tool, or get the native macOS and iOS apps (coming soon). End-to-end encrypted file transfer on every device, plus ephemeral text in the web app and the CLI.",
     heading: "Get Relayium",
-    subhead: "One end-to-end encrypted file transfer, everywhere you work. Pick your platform.",
+    subhead:
+      "One end-to-end encrypted file transfer, everywhere you work — plus ephemeral text in the web app and the CLI. Pick your platform.",
     availableBadge: "Available",
     comingSoonBadge: "Coming soon",
     yourPlatformNote: (os) => `Looks like you're on ${os} — highlighted below.`,
@@ -349,7 +350,7 @@ const en: Messages = {
     cards: {
       web: {
         name: "Web app",
-        desc: "Nothing to install. Open it in any modern browser on any OS and start transferring.",
+        desc: "Nothing to install. Open it in any modern browser on any OS to transfer files or send ephemeral text.",
         cta: "Open the web app",
       },
       cli: {

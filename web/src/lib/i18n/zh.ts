@@ -338,16 +338,16 @@ const zh: Messages = {
   appsPage: {
     metaTitle: "获取 Relayium——网页版、命令行、macOS 与 iOS 应用",
     metaDesc:
-      "下载 Relayium：在任意浏览器中直接使用、安装命令行工具，或获取原生 macOS 与 iOS 应用（即将推出）。端到端加密的文件传输，覆盖你的每一台设备。",
+      "下载 Relayium：在任意浏览器中直接使用、安装命令行工具，或获取原生 macOS 与 iOS 应用（即将推出）。端到端加密的文件传输覆盖你的每一台设备；临时文本可在网页版与命令行中收发。",
     heading: "获取 Relayium",
-    subhead: "同一套端到端加密的文件传输，随处可用。选择你的平台。",
+    subhead: "同一套端到端加密的文件传输，随处可用；临时文本可在网页版与命令行中收发。选择你的平台。",
     availableBadge: "现已可用",
     comingSoonBadge: "即将推出",
     yourPlatformNote: (os) => `看起来你在使用 ${os}——下方已高亮。`,
     cliInstallLabel: "在终端中安装：",
     androidNote: "使用安卓？直接用网页版即可——在浏览器中运行，无需安装。",
     cards: {
-      web: { name: "网页版", desc: "无需安装。在任意系统的现代浏览器中打开即可开始传输。", cta: "打开网页版" },
+      web: { name: "网页版", desc: "无需安装。在任意系统的现代浏览器中打开，即可传文件，也能发临时文本。", cta: "打开网页版" },
       cli: { name: "命令行", desc: "可脚本化的文件传输、文件夹同步、服务器间备份与临时文本，支持 macOS、Linux 与 Windows。", cta: "命令行文档与安装" },
       mac: { name: "macOS 应用", desc: "真正的原生菜单栏应用（com.relayium.mac）。已签名并公证，一键安装——正在开发中。" },
       ios: { name: "iOS 应用", desc: "原生 iPhone 与 iPad 应用（com.relayium.app），支持分享菜单发送。即将登陆 App Store。" },

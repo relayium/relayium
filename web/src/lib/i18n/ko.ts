@@ -338,16 +338,16 @@ const ko: Messages = {
   appsPage: {
     metaTitle: "Relayium 받기 — 웹, CLI, macOS 및 iOS 앱",
     metaDesc:
-      "Relayium 다운로드: 어떤 브라우저에서든 바로 사용하거나, 명령줄 도구를 설치하거나, 네이티브 macOS 및 iOS 앱(출시 예정)을 받으세요. 모든 기기에서 종단간 암호화 파일 전송을.",
+      "Relayium 다운로드: 어떤 브라우저에서든 바로 사용하거나, 명령줄 도구를 설치하거나, 네이티브 macOS 및 iOS 앱(출시 예정)을 받으세요. 종단간 암호화 파일 전송은 모든 기기에서, 임시 텍스트 전송은 웹 앱과 CLI에서.",
     heading: "Relayium 받기",
-    subhead: "하나의 종단간 암호화 파일 전송을 어디서나. 플랫폼을 선택하세요.",
+    subhead: "하나의 종단간 암호화 파일 전송을 어디서나. 임시 텍스트 전송은 웹 앱과 CLI에서 쓸 수 있습니다. 플랫폼을 선택하세요.",
     availableBadge: "사용 가능",
     comingSoonBadge: "출시 예정",
     yourPlatformNote: (os) => `${os}을(를) 사용 중인 것 같습니다 — 아래에 강조 표시했습니다.`,
     cliInstallLabel: "터미널에서 설치:",
     androidNote: "Android를 사용하시나요? 웹 앱을 그대로 사용하세요 — 브라우저에서 바로 실행되며 설치할 것이 없습니다.",
     cards: {
-      web: { name: "웹 앱", desc: "설치 불필요. 어떤 OS의 최신 브라우저에서든 열어 바로 전송을 시작하세요.", cta: "웹 앱 열기" },
+      web: { name: "웹 앱", desc: "설치 불필요. 어떤 OS의 최신 브라우저에서든 열어 파일 전송이나 임시 텍스트 전송을 바로 시작하세요.", cta: "웹 앱 열기" },
       cli: { name: "명령줄", desc: "스크립트로 자동화하는 파일 전송, 폴더 동기화, 서버 간 백업, 임시 텍스트 전송. macOS, Linux, Windows 지원.", cta: "CLI 문서 및 설치" },
       mac: { name: "macOS 앱", desc: "진짜 네이티브 메뉴 바 앱(com.relayium.mac). 서명 및 공증을 마쳐 한 번의 클릭으로 설치 — 개발 중입니다." },
       ios: { name: "iOS 앱", desc: "공유 시트 전송을 지원하는 네이티브 iPhone·iPad 앱(com.relayium.app). App Store에 곧 출시됩니다." },
