@@ -290,7 +290,14 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 {{if .Status.Label}}<span class="ro-tag{{if .Status.Alarm}} never{{end}}">{{.Status.Label}}</span>{{end}}{{if .Status.Detail}}<div style="color:var(--muted);font-size:12px">{{.Status.Detail}}</div>{{end}}{{if .InBatch}}<span class="ro-tag">本批次</span>{{end}}{{if .PassedOverReason}}<div style="color:var(--muted);font-size:12px">{{.PassedOverReason}}</div>{{end}}</td>
 <td>{{if .Online}}在线{{else}}离线{{end}}</td>
 <td>{{if .Version}}{{.Version}}{{else}}—{{end}}{{if .OnTarget}} ✓{{end}}</td>
-<td>{{if eq .Result "failed"}}<b class="never">{{.ResultText}}</b>{{else if eq .Result "rolled_back"}}<b class="never">{{.ResultText}}</b>{{else}}{{.ResultText}}{{end}}</td>
+<td>{{if eq .Result "failed"}}<b class="never">{{.ResultText}}</b>{{else if eq .Result "rolled_back"}}<b class="never">{{.ResultText}}</b>{{else}}{{.ResultText}}{{end}}
+{{/* 单台重试：两道守卫都要成立 —— 这台被越过，且整条轨道已完成。handler 会
+     重新读这两个条件，按钮不在场不等于守卫在场。 */}}
+{{if and .PassedOver (eq $.Status "complete")}}<form method="post" action="/admin/rollout/{{$.Track}}/retry" class="lim"
+  onsubmit="return confirm('重新给 {{.ID}} 下发 {{$.TargetVersion}}？该轨道会回到发布中。')">
+<input type="hidden" name="node" value="{{.ID}}">
+<button type="submit" title="只重新下发给这一台；不改目标版本">重试</button>
+</form>{{end}}</td>
 <td>{{if .UpdateFromVersion}}{{.UpdateFromVersion}}{{else}}—{{end}}</td>
 <td>{{if .UpdateStartedAt}}{{ts .UpdateStartedAt}}{{else}}—{{end}}</td>
 </tr>

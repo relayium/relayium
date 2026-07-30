@@ -209,6 +209,63 @@ func (s *SQLiteStore) ResumeRolloutTrack(ctx context.Context, track string, at i
 	return true, nil
 }
 
+// RetryRolloutNode hands ONE passed-over node back its candidacy on a track
+// that has already finished, and puts that track back to 'rolling' so the queue
+// picks it up. It is the panel's per-node 重试.
+//
+// It deliberately does not reuse ResumeRolloutTrack, which is the primitive that
+// looks closest. That one is conditional on 'halted', so it would silently no-op
+// on the complete track this exists for, and it CLEARS current_node_id and
+// first_node_id -- destroying the finished rollout's canary identity, which a
+// retry has no business touching. Nor does it touch target_version: this is a
+// second attempt at the version already in flight, not a new rollout.
+//
+// The 'complete' condition is in the SQL, not only in the handler, which makes
+// the track guard a compare-and-swap: a halt landing between the handler's read
+// and this write cannot be clobbered. A lost halt is the one write in this
+// package that must never be lost. ok=false means the track was not complete.
+//
+// Both statements are in one transaction, and the node write happens only after
+// the track CAS matched. Order alone is not enough: clearing the node first and
+// then finding the track was not complete would erase the very marker that makes
+// the node visible on the panel and eligible for this button -- the same defect
+// the resume path shipped. A refused retry writes nothing at all.
+func (s *SQLiteStore) RetryRolloutNode(ctx context.Context, track, nodeID string, at int64) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+
+	res, err := tx.ExecContext(ctx,
+		`UPDATE node_rollout SET status = 'rolling', stage_started_at = ?
+		   WHERE track = ? AND status = 'complete'`,
+		at, track)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if n != 1 {
+		return false, nil
+	}
+	// Only this node, and only if it is still passed over. The handler checks
+	// the row too; this is the same compare-and-swap discipline as the track
+	// guard above, so a node that reported a real failure in the meantime cannot
+	// have that failure erased by a click aimed at its earlier pass-over.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE nodes SET update_result = '' WHERE id = ? AND update_result IN ('skipped', 'unreachable')`,
+		nodeID); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // SetRolloutEmergency arms emergency mode on a track that is rolling to
 // expectVersion, as a compare-and-swap against what the operator saw.
 //

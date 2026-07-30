@@ -758,6 +758,97 @@ func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 
+// handleAdminRolloutRetry re-offers a finished rollout's target to ONE machine
+// the queue moved on without. It is the affordance that makes 完成，但 N 台未更新
+// actionable without an SSH session: clearing that node's result makes it a
+// candidate again, and the track goes back to rolling on the same target.
+//
+// Two guards, and they are independent — neither is expressible as the other.
+//
+// The ROW guard: only "skipped" or "unreachable". A node that reported failed or
+// rolled_back JUDGED the build, and a one-click re-run of it is a shortest path
+// around a verification failure. That decision stays with the whole-track 继续,
+// which shows the halt reason and asks for confirmation.
+//
+// The TRACK guard: only a complete track. On a halted one, retrying an innocent
+// passed-over row would restart a rollout that stopped for a reason nobody has
+// addressed — reaching the same place sideways, and the row it was aimed at is
+// not even the row that stopped it.
+//
+// The button's absence is not the guard. Both conditions are re-read here, and
+// the track condition is additionally a compare-and-swap inside
+// RetryRolloutNode, because the panel the operator clicked may be seconds stale
+// and a halt must never be lost to a retry racing it.
+func (s *Service) handleAdminRolloutRetry(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	track := r.PathValue("id")
+	if !validRolloutTrack(track) {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "重试失败：未知轨道 "+track)
+		return
+	}
+	nodeID := r.FormValue("node")
+	if nodeID == "" {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "重试失败：未指定节点")
+		return
+	}
+	n, found, err := s.Store().GetNode(r.Context(), nodeID)
+	if err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "重试失败："+err.Error())
+		return
+	}
+	if !found {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "重试失败：找不到节点 "+nodeID)
+		return
+	}
+	// The node's ownership class must match the track whose route this is. The
+	// node id arrives in a form field, and the two rollouts are independent: a
+	// fleet retry that could clear a user node's result would be one track
+	// editing the other's rollout state.
+	if n.OwnerType != rolloutOwnerClass(track) {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"重试失败：节点 "+nodeID+" 不属于该轨道")
+		return
+	}
+	if !passedOverResult(n.UpdateResult) {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"重试失败：只有被越过的节点（拿不到产物 / 已跳过）可以单台重试。"+
+				"该节点当前的结果是「"+rolloutResultText(n.UpdateResult)+"」——"+
+				"报告了失败或回滚的节点是对这个版本的判断，请用整条轨道的「继续」处理。")
+		return
+	}
+	tr, foundTrack, err := s.Store().GetRolloutTrack(r.Context(), track)
+	if err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "重试失败："+err.Error())
+		return
+	}
+	if !foundTrack || tr.Status != "complete" {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"重试失败：只有已完成的轨道可以单台重试，该轨道当前是「"+
+				rolloutStatusText(tr.Status, foundTrack)+"」。")
+		return
+	}
+	ok, err := s.Store().RetryRolloutNode(r.Context(), track, nodeID, s.Now().Unix())
+	if err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "重试失败："+err.Error())
+		return
+	}
+	if !ok {
+		// The CAS refused: the track moved between the read above and the write.
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"重试失败：该轨道刚刚发生了变化，请刷新后重试")
+		return
+	}
+	s.WriteAudit(r, AuditRolloutRetry, "rollout:"+track,
+		[]ChangeField{
+			{Field: "node", Old: nodeID + " " + n.UpdateResult, New: nodeID + " 重试"},
+			{Field: "status", Old: "complete", New: "rolling"},
+		}, StepUpNone)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
 // handleAdminRolloutEmergency releases the whole track at once: a single write
 // points the track at the target AND arms emergency mode, which makes the
 // update check bypass the staged ladder for every node of this track (see
