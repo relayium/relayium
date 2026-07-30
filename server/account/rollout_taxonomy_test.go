@@ -1,6 +1,8 @@
 package account
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -30,6 +32,62 @@ func TestDecideFleetAdvancesPastUnreachable(t *testing.T) {
 	}
 }
 
+// The test that would have caught two failed attempts at this task: drive the
+// state machine the way the real caller does and assert it CONVERGES.
+//
+// Both attempts scoped the exclusion on a clock, and both looked right in a
+// single-evaluation fixture while cycling forever in the sequence. A test that
+// evaluates once cannot see a loop; this one replays the caller's writes.
+func TestDecideFleetConvergesWhenEveryNodeFailsToFetch(t *testing.T) {
+	tr := fleetTrackAt("v2.0.0", "rolling", "", "")
+	nodes := []NodeSnapshot{
+		{ID: "n1", Version: "v1.0.0", LastSeenAt: 9000},
+		{ID: "n2", Version: "v1.0.0", LastSeenAt: 9000},
+		{ID: "n3", Version: "v1.0.0", LastSeenAt: 9000},
+	}
+	byID := func(id string) *NodeSnapshot {
+		for i := range nodes {
+			if nodes[i].ID == id {
+				return &nodes[i]
+			}
+		}
+		return nil
+	}
+	commanded := map[string]int{}
+	now := int64(1000)
+	for step := 0; step < 20; step++ {
+		d := decideFleet(tr, nodes, now)
+		switch d.Action {
+		case "update":
+			// Mirror the real caller: ClaimRolloutNode moves the track's
+			// pointers and restamps the stage; CommandNodeUpdate stamps the
+			// node and CLEARS its previous result.
+			tr.CurrentNodeID = d.NodeID
+			if d.IsFirst {
+				tr.FirstNodeID = d.NodeID
+			}
+			tr.StageStartedAt = now
+			n := byID(d.NodeID)
+			n.UpdateStartedAt, n.UpdateResult = now, ""
+			commanded[d.NodeID]++
+			if commanded[d.NodeID] > 1 {
+				t.Fatalf("step %d: %s commanded twice — the queue is cycling, not converging", step, d.NodeID)
+			}
+			// The node cannot fetch, and says so.
+			n.UpdateResult = "unreachable"
+		case "complete":
+			if len(commanded) != 3 {
+				t.Fatalf("completed after commanding %d of 3 nodes", len(commanded))
+			}
+			return
+		case "halt":
+			t.Fatalf("step %d: a fleet-wide fetch failure must not halt: %+v", step, d)
+		}
+		now += 10
+	}
+	t.Fatal("decideFleet never reached a terminal decision in 20 evaluations")
+}
+
 // The exclusion is by RESULT, not by "is the current node". With a single
 // skipped-id the queue re-commands a passed-over node as soon as some other
 // node takes the slot, which is an endless loop rather than a rollout: n1
@@ -51,76 +109,6 @@ func TestDecideFleetDoesNotRecommandAPassedOverNode(t *testing.T) {
 				t.Fatalf("everyone left is on target or passed over; want complete, got %+v", got)
 			}
 		})
-	}
-}
-
-// Critical fix: a passed-over result must be scoped to the rollout that
-// produced it, not read as a permanent property of the node. Nothing but
-// CommandNodeUpdate ever clears nodes.update_result, and an excluded node is
-// -- by construction -- never re-commanded, so it can never clear its own
-// flag. Without scoping, a node that reported "unreachable" once for an
-// earlier, now-superseded target would sit out EVERY rollout this track ever
-// runs again, forever, with no admin action able to fix it short of hand-
-// editing the database. Here n1 never moved past v1.0.0 and still carries
-// "unreachable" from a v2.0.0 attempt; a brand-new rollout to v3.0.0 must
-// treat it as a fresh candidate. See passedOverResult.
-func TestDecideFleetDoesNotExcludeAResultFromAnEarlierTarget(t *testing.T) {
-	tr := fleetTrackAt("v3.0.0", "rolling", "", "")
-	nodes := []NodeSnapshot{
-		{ID: "n1", Version: "v1.0.0", LastSeenAt: 2000, UpdateStartedAt: 100, UpdateResult: "unreachable"},
-	}
-	got := decideFleet(tr, nodes, 2000)
-	if got.Action != "update" || got.NodeID != "n1" {
-		t.Fatalf("a passed-over result from an earlier target excluded n1 from the new rollout: %+v", got)
-	}
-}
-
-// Due-diligence companion to the test above: scoping must survive MULTIPLE
-// stage transitions within the SAME still-active rollout, not just the
-// "nobody picked yet" case. tr.StageStartedAt is rewritten on every fleet
-// stage transition (a fleet stage is one node's turn, unlike a BYO batch), so
-// a scoping check that compares directly against it would un-exclude n1 the
-// moment n2's own turn begins -- reintroducing the ping-pong
-// TestDecideFleetDoesNotRecommandAPassedOverNode exists to stop, just one hop
-// later. FirstNodeID ("n1", the established canary) anchors this rollout's
-// epoch instead, and does not move just because a later, non-canary node
-// (n2) also passes over.
-func TestDecideFleetScopingSurvivesALaterNodesTurn(t *testing.T) {
-	tr := RolloutTrack{Track: "fleet", TargetVersion: "v2.0.0", Status: "rolling",
-		CurrentNodeID: "n2", FirstNodeID: "n1", StageStartedAt: 2000}
-	nodes := []NodeSnapshot{
-		// n1 passed over first, in this same rollout, before n2's turn began.
-		{ID: "n1", Version: "v1.0.0", LastSeenAt: 3000, UpdateStartedAt: 1000, UpdateResult: "unreachable"},
-		// n2 is current and has ALSO just passed over -- tr.StageStartedAt (2000)
-		// now postdates n1's UpdateStartedAt (1000).
-		{ID: "n2", Version: "v1.0.0", LastSeenAt: 3000, UpdateStartedAt: 2000, UpdateResult: "unreachable"},
-	}
-	got := decideFleet(tr, nodes, 3000)
-	if got.Action == "update" && got.NodeID == "n1" {
-		t.Fatalf("n1 was re-picked after a LATER node's turn began, not an earlier target: %+v", got)
-	}
-	if got.Action != "complete" {
-		t.Fatalf("both nodes have passed over within this rollout; want complete, got %+v", got)
-	}
-}
-
-// Regression guard for the fix above: "failed" must never join
-// passedOverResult's exclusion set. Unlike "skipped"/"unreachable", "failed"
-// only ever excludes a node by HALTING the track while that node is current
-// (see the branch above); if it also excluded by result, a "failed" left
-// over from an earlier, superseded rollout would strand the node exactly
-// like the bug this task fixes, and -- because a halt always takes the track
-// out of "rolling" first -- there is no reachable state where a NON-current
-// node's "failed" belongs to the rollout in flight for it to legitimately
-// exclude.
-func TestDecideFleetDoesNotExcludeAFailedNode(t *testing.T) {
-	tr := fleetTrackAt("v2.0.0", "rolling", "", "")
-	nodes := []NodeSnapshot{
-		{ID: "n1", Version: "v1.0.0", LastSeenAt: 2000, UpdateStartedAt: 1000, UpdateResult: "failed"},
-	}
-	got := decideFleet(tr, nodes, 2000)
-	if got.Action != "update" || got.NodeID != "n1" {
-		t.Fatalf("a non-current node's 'failed' result must not exclude it from candidacy: %+v", got)
 	}
 }
 
@@ -170,5 +158,112 @@ func TestDecideFleetEveryNodeUnreachable(t *testing.T) {
 		if n.Version == tr.TargetVersion {
 			t.Fatal("test setup wrong: no node should be on target here")
 		}
+	}
+}
+
+// The other half of the fix, and the half decideFleet cannot test: what keeps
+// the exclusion above from being PERMANENT is a write, not a read.
+// nodes.update_result outlives the rollout that produced it, and an excluded
+// node is by construction never re-commanded, so nothing but this clear could
+// ever hand it back its candidacy. Two attempts tried to scope the exclusion at
+// the read instead and both shipped an infinite re-command loop -- see
+// passedOverResult -- so this test exists to keep the surviving mechanism
+// honest.
+//
+// It also pins the owner scoping: retargeting the fleet must not touch a user
+// node, or one track would be silently editing the other's rollout state.
+func TestSetTargetVersionClearsPassedOverResults(t *testing.T) {
+	svc, store := newRolloutService(t)
+	ctx := context.Background()
+
+	u, err := store.UpsertUserByEmail(ctx, "clear@example.test", "C")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := []Node{
+		{ID: "fleet-passed-over", OwnerType: "fleet", Version: "v0.8.0"},
+		{ID: "fleet-failed", OwnerType: "fleet", Version: "v0.8.0"},
+		{ID: "user-passed-over", OwnerType: "user", OwnerUserID: u.ID, Version: "v0.8.0"},
+	}
+	for _, n := range seed {
+		n.URLs, n.TURNSecret, n.CreatedAt, n.LastSeenAt = []string{"turn:x:3478"}, "s", 1, 1
+		if _, err := store.UpsertNode(ctx, n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for id, result := range map[string]string{
+		"fleet-passed-over": "unreachable",
+		"fleet-failed":      "failed",
+		"user-passed-over":  "skipped",
+	} {
+		if err := store.SetNodeUpdateResult(ctx, id, result); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := svc.SetTargetVersion(ctx, "fleet", "v0.9.0"); err != nil {
+		t.Fatal(err)
+	}
+
+	got := map[string]string{}
+	for _, ownerType := range []string{"fleet", "user"} {
+		nodes, err := store.NodesByOwnerType(ctx, ownerType)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, n := range nodes {
+			got[n.ID] = n.UpdateResult
+		}
+	}
+	if got["fleet-passed-over"] != "" {
+		t.Errorf("a fleet node passed over by the PREVIOUS rollout still carries %q, so the new "+
+			"rollout will never offer it the build", got["fleet-passed-over"])
+	}
+	// "failed" is a halt, not a pass-over: it is the record of a build that broke
+	// a machine, and clearing it would erase the evidence rather than free a node
+	// that nothing else can free.
+	if got["fleet-failed"] != "failed" {
+		t.Errorf(`a "failed" result was cleared along with the passed-over ones: %q`, got["fleet-failed"])
+	}
+	if got["user-passed-over"] != "skipped" {
+		t.Errorf("retargeting the fleet cleared a USER node's result (%q): the two tracks must not "+
+			"reach into each other's rows", got["user-passed-over"])
+	}
+}
+
+type clearFailStore struct {
+	*SQLiteStore
+}
+
+func (s *clearFailStore) ClearPassedOverResults(context.Context, string) error {
+	return errors.New("boom: database is locked")
+}
+
+// Order of the two writes, pinned. If the clear fails and the row is written
+// anyway, the track points at a NEW target while stale results still exclude
+// nodes from it -- precisely the bug the clear exists to prevent, and now
+// unreachable by any retry because the target no longer changes. Failing the
+// whole call instead leaves the operator with an error they can act on and a
+// track that never moved.
+func TestSetTargetVersionDoesNotRetargetIfTheClearFails(t *testing.T) {
+	_, store := newRolloutService(t)
+	ctx := context.Background()
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "fleet", TargetVersion: "v0.8.0", Status: "rolling", StageStartedAt: 1000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := NewService(&clearFailStore{SQLiteStore: store}, nil, Config{})
+	if err := svc.SetTargetVersion(ctx, "fleet", "v0.9.0"); err == nil {
+		t.Fatal("a failed clear must fail the retarget, not be swallowed")
+	}
+
+	tr, _, err := store.GetRolloutTrack(ctx, "fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.TargetVersion != "v0.8.0" {
+		t.Fatalf("the track was retargeted to %q despite the clear failing", tr.TargetVersion)
 	}
 }

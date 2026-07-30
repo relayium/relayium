@@ -45,6 +45,13 @@ var ErrByoAheadOfFleet = errors.New("BYO track cannot target a version the fleet
 //     path by definition; an emergency release is a separately confirmed
 //     action (see SetEmergencyTargetVersion) and must never be inherited by
 //     the next target somebody types into the normal box.
+//
+// One piece of per-NODE state is reset alongside the row, and it is the only
+// one: the "skipped"/"unreachable" update results that mark a node as already
+// passed over. They live on the node rows rather than the track, they outlive
+// the rollout that produced them, and decideFleet excludes any node carrying
+// one — so without clearing them a node passed over once would never be
+// offered another release. See ClearPassedOverResults and passedOverResult.
 func (s *Service) SetTargetVersion(ctx context.Context, track, version string) error {
 	return s.setTargetVersion(ctx, track, version, false)
 }
@@ -123,6 +130,28 @@ func (s *Service) setTargetVersion(ctx context.Context, track, version string, e
 		// ErrByoAheadOfFleet above) and the admin simply retries. There is
 		// no interleaving that admits a byo target the fleet never
 		// completed, so no transaction is needed.
+	}
+	// Clear the results that mark a node as already passed over, BEFORE the row
+	// write. decideFleet excludes any node whose last result is
+	// "skipped"/"unreachable" for the whole of the rollout in flight, and
+	// nodes.update_result outlives that rollout — an excluded node is never
+	// re-commanded, so nothing else would ever clear it and the node would sit
+	// out every future rollout, permanently. This write is the scope: after it,
+	// a passed-over result can only belong to the rollout being started here.
+	// See passedOverResult for why the same scoping cannot be done at the read.
+	//
+	// Order matters, and this order is the safe one. If the clear succeeds and
+	// PutRolloutTrack then fails, some nodes became candidates again for a
+	// target that did not change — which is exactly the state they were in
+	// before anyone ever passed them over, and the next decision simply
+	// re-commands them. Reversed, a failed clear would leave the row pointing at
+	// a NEW target while stale results still exclude nodes from it: the bug this
+	// call exists to prevent, now baked in with no way out.
+	//
+	// rolloutOwnerClass keeps the two tracks apart: retargeting byo must not
+	// re-admit fleet nodes the fleet rollout has deliberately passed over.
+	if err := s.store.ClearPassedOverResults(ctx, rolloutOwnerClass(track)); err != nil {
+		return err
 	}
 	return s.store.PutRolloutTrack(ctx, RolloutTrack{
 		Track:           track,

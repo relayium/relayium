@@ -1006,6 +1006,12 @@ type Store interface {
 	// SetNodeUpdateResult records the outcome a node reported for the update it
 	// was last commanded.
 	SetNodeUpdateResult(ctx context.Context, nodeID, result string) error
+	// ClearPassedOverResults erases the "skipped"/"unreachable" update results
+	// of one ownership class, so a node passed over by the rollout that is
+	// ending is a candidate again for the one being started. setTargetVersion
+	// calls it, and it is what scopes decideFleet's passed-over exclusion to
+	// the current rollout — see passedOverResult.
+	ClearPassedOverResults(ctx context.Context, ownerType string) error
 	// BumpNodeUpdateAttempts increments nodes.update_attempts. No longer called
 	// by the rollout path (see Node.UpdateAttempts) — kept on the interface and
 	// the schema rather than removed, in case a future caller needs it.

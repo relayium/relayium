@@ -328,6 +328,36 @@ func (s *SQLiteStore) CommandNodeUpdate(ctx context.Context, nodeID, fromVersion
 	return err
 }
 
+// ClearPassedOverResults wipes the update results that decideFleet reads as
+// "this node has already had its turn in the rollout that is running now" --
+// "skipped" and "unreachable" -- for one ownership class of nodes.
+//
+// It is what makes passedOverResult correct as a bare one-argument predicate.
+// nodes.update_result deliberately outlives a rollout (it survives re-register
+// and heartbeat, and CommandNodeUpdate is otherwise the only thing that clears
+// it), and a node excluded by its own result is by construction never
+// re-commanded, so it could never clear its own flag: without this the first
+// pass-over would strand the node in EVERY later rollout, permanently. Scoping
+// the exclusion at the read instead was tried twice and cannot work -- see
+// passedOverResult. Clearing it at the one write that starts a new rollout can:
+// afterwards a passed-over result can only belong to the rollout in flight.
+//
+// ownerType comes from rolloutOwnerClass, so retargeting one track can never
+// clear the other track's node rows -- the fleet and byo rollouts are
+// independent, and a byo retarget must not silently re-admit a fleet node the
+// fleet rollout has already passed over.
+//
+// The other update_* columns are deliberately left alone: update_started_at and
+// update_from_version are what the silence, wedge and BYO-attribution checks
+// read, and clearing them here would make a node commanded moments before a
+// retarget look like one that was never commanded at all.
+func (s *SQLiteStore) ClearPassedOverResults(ctx context.Context, ownerType string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE nodes SET update_result = '' WHERE owner_type = ? AND update_result IN ('skipped', 'unreachable')`,
+		ownerType)
+	return err
+}
+
 // BumpNodeUpdateAttempts counts one more "carry on with the update you already
 // hold" answer for this node. No longer called by the fleet resume path (see
 // Node.UpdateAttempts) — kept, unused, per the package's schema-migration
