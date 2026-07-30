@@ -416,7 +416,7 @@ const ko: Messages = {
       "클라우드 업로드를 한 번 다운로드 후 삭제",
       "클라우드 업로드의 보관 기간, 예: 7d 또는 24h(상한은 요금제에 따름)",
       "정해진 횟수의 클라우드 다운로드를 허용한 뒤 삭제",
-      "login / up / down / send / receive를 자체 호스팅 서버로 지정",
+      "login / up / down / send / receive / text를 자체 호스팅 서버로 지정",
     ],
     trustH3: "신뢰 및 신원 파일",
     trustIntro:

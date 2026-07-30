@@ -421,7 +421,7 @@ const pt: Messages = {
       "Excluir o envio na nuvem após um único download",
       "Por quanto tempo um envio na nuvem existe, ex.: 7d ou 24h (limitado pelo seu plano)",
       "Permitir um número fixo de downloads na nuvem, depois excluir",
-      "Apontar login / up / down / send / receive para um servidor auto-hospedado",
+      "Apontar login / up / down / send / receive / text para um servidor auto-hospedado",
     ],
     trustH3: "Arquivos de confiança e identidade",
     trustIntro:

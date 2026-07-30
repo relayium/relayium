@@ -422,7 +422,7 @@ const fr: Messages = {
       "Supprimer le téléversement cloud après un seul téléchargement",
       "Durée de vie d'un téléversement cloud, p. ex. 7d ou 24h (plafonnée par votre offre)",
       "Autoriser un nombre fixe de téléchargements cloud, puis supprimer",
-      "Diriger login / up / down / send / receive vers un serveur auto-hébergé",
+      "Diriger login / up / down / send / receive / text vers un serveur auto-hébergé",
     ],
     trustH3: "Fichiers de confiance et d'identité",
     trustIntro:

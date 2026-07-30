@@ -348,6 +348,14 @@ describe("/cli 页的下标配对数组与代码常量等长", () => {
       expect(messages[code].cliPage.cloudIntro, `${code} 的账号说明遗漏 text 创建配对码`).toContain("text");
     }
   });
+  it("--server 的说明与适用命令列都包含 text", () => {
+    const serverFlag = FLAG_ROWS.findIndex((row) => row.flag === "--server <url>");
+    expect(serverFlag).toBeGreaterThanOrEqual(0);
+    expect(FLAG_ROWS[serverFlag].who).toContain("text");
+    for (const { code } of LANGS) {
+      expect(messages[code].cliPage.flagMeanings[serverFlag], `${code} 的 --server 说明遗漏 text`).toContain("text");
+    }
+  });
 });
 
 // v0.12.0 起 CLI 传的不只是文件，还有临时文本。但**定位性**文案（标题、副标题、

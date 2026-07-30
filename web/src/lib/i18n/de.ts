@@ -422,7 +422,7 @@ const de: Messages = {
       "Den Cloud-Upload nach einem einzigen Download löschen",
       "Wie lange ein Cloud-Upload lebt, z. B. 7d oder 24h (durch deinen Tarif begrenzt)",
       "Eine feste Zahl an Cloud-Downloads erlauben, dann löschen",
-      "login / up / down / send / receive auf einen selbst gehosteten Server richten",
+      "login / up / down / send / receive / text auf einen selbst gehosteten Server richten",
     ],
     trustH3: "Vertrauens- und Identitätsdateien",
     trustIntro:

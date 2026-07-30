@@ -416,7 +416,7 @@ const zh: Messages = {
       "下载一次后即删除该云端上传",
       "云端上传的存活时长，如 7d 或 24h（上限取决于套餐）",
       "允许固定次数的云端下载，之后删除",
-      "让 login / up / down / send / receive 指向自托管的服务器",
+      "让 login / up / down / send / receive / text 指向自托管的服务器",
     ],
     trustH3: "信任与身份文件",
     trustIntro:

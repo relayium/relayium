@@ -421,7 +421,7 @@ const es: Messages = {
       "Eliminar la subida a la nube tras una única descarga",
       "Cuánto vive una subida a la nube, p. ej. 7d o 24h (limitado por tu plan)",
       "Permitir un número fijo de descargas en la nube y luego eliminarla",
-      "Apuntar login / up / down / send / receive a un servidor autoalojado",
+      "Apuntar login / up / down / send / receive / text a un servidor autoalojado",
     ],
     trustH3: "Archivos de confianza e identidad",
     trustIntro:

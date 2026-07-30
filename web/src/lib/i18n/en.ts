@@ -431,7 +431,7 @@ const en: Messages = {
       "Delete the cloud upload after a single download",
       "How long a cloud upload lives, e.g. 7d or 24h (capped by your plan)",
       "Allow a fixed number of cloud downloads, then delete",
-      "Point login / up / down / send / receive at a self-hosted server",
+      "Point login / up / down / send / receive / text at a self-hosted server",
     ],
     trustH3: "Trust & identity files",
     trustIntro:
