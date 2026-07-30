@@ -1,24 +1,24 @@
 // web/scripts/pages/content/landing.mjs — localized copy for the static landing
-// pages at /<lang>/. English is the SPA at "/", so only these five langs are here.
+// pages at /<lang>/. English is the SPA at "/", so only these eight langs are here.
 // Terminology mirrors src/lib/i18n.svelte.ts for consistency.
 
 const zh = {
-  title: "Relayium — 端到端加密的点对点文件传输",
+  title: "Relayium — 端到端加密的点对点文件与文本传输",
   description:
-    "Relayium 是开源、端到端加密的文件传输工具。在浏览器里实时直传：同一网络下两台设备直连、文件不经过服务器，跨网络则经加密中继转发（中继只见密文）。无需安装，同一网络下无需账号，跨网络配对时仅发送方需登录。",
+    "Relayium 是开源、端到端加密的文件与文本传输工具。在浏览器里实时直传：同一网络下两台设备直连、文件不经过服务器，跨网络则经加密中继转发（中继只见密文）。双方都在线时，还能在另一条同样端到端加密的直连上发送临时文本消息，不存储在任何服务器上，会话结束即消失。无需安装，同一网络下无需账号，跨网络配对时仅发送方需登录。",
   hero: {
-    h1: "端到端加密的点对点文件传输",
+    h1: "端到端加密的点对点文件与文本传输",
     pitch:
-      "在浏览器里让两台设备直接相连，文件端到端加密、逐块传输；同一网络下根本不经过服务器，跨网络则经加密中继转发（中继只见密文）。无需安装、无需注册，打开网页即可开始。",
+      "在浏览器里让两台设备直接相连，文件端到端加密、逐块传输；同一网络下根本不经过服务器，跨网络则经加密中继转发（中继只见密文）。双方都在线时，还能在另一条同样加密的直连上发送临时文本——链接、命令或多行代码原样送达，不存储在任何服务器上，会话结束即消失。无需安装、无需注册，打开网页即可开始。",
     cta: "开始传输",
   },
   how: {
     heading: "四步完成一次传输",
     steps: [
       "两台设备用现代浏览器打开 relayium.com。",
-      "一方选择或拖入要发送的文件（每批最多 1,000 个）。",
+      "一方选择或拖入要发送的文件（每批最多 1,000 个）；也可以改为发送一条文本消息。",
       "双方核对屏幕上同一段 6 位校验码（SAS），确认一致以排除中间人。",
-      "建立点对点直连，文件逐块经 AES-256-GCM 加密传输，并对每个文件做 SHA-256 完整性校验。",
+      "建立点对点直连，文件逐块经 AES-256-GCM 加密传输，并对每个文件做 SHA-256 完整性校验；文本消息走另一条同样加密的直连，不写入磁盘，也不留存在服务器上。",
     ],
   },
   why: {
@@ -35,6 +35,10 @@ const zh = {
       {
         title: "SAS 防中间人",
         desc: "两边屏幕显示同一段 6 位校验码，核对一致即可排除中间人窃听，即便信令服务器被入侵也无法冒充。",
+      },
+      {
+        title: "临时加密文本",
+        desc: "双方都在线时，可以在另一条同样端到端加密的直连上发送链接、命令或多行代码。内容原样送达，单条消息最多 65,536 字节（UTF-8）；消息不存储在任何服务器上，会话结束即消失——没有离线投递，也不保留任何聊天记录。更大的内容请作为文件发送。",
       },
       {
         title: "跨平台",
@@ -87,6 +91,10 @@ const zh = {
         a: "实时传输采用流式传输，Relayium 本身不设硬性大小上限（桌面版 Chrome、Edge 直接流式落盘；Firefox、Safari 以及所有手机浏览器只能把文件攒在内存里，因此超过约 256 MB 时页面会先给出提示——这是一个刻意保守的估计值，不是实测出来的硬上限）。每批最多 1,000 个文件。",
       },
       {
+        q: "能发文字，而不只是文件吗？",
+        a: "可以。双方设备都在线时，可以在另一条同样端到端加密的直连上开启一次消息会话：链接、命令与多行代码都会原样送达，单条消息最多 65,536 字节（UTF-8）。消息不存储在任何服务器上，会话结束即消失——没有离线投递，也不会在任何地方保留记录。更大的内容请作为文件发送。",
+      },
+      {
         q: "和 Snapdrop 有什么区别？",
         a: "Relayium 在同类思路上增加了应用层端到端加密与 SAS 校验码，即使信令服务器被入侵也无法窃听或冒充，并支持跨网络传输与可选的零知识下载链接。",
       },
@@ -97,22 +105,22 @@ const zh = {
 };
 
 const ja = {
-  title: "Relayium — エンドツーエンド暗号化のP2Pファイル転送",
+  title: "Relayium — エンドツーエンド暗号化のP2Pファイル・テキスト転送",
   description:
-    "Relayiumはオープンソースでエンドツーエンド暗号化のファイル転送ツールです。ブラウザでのリアルタイム転送では、同じネットワークなら2台の端末が直結しファイルはサーバーを経由せず、ネットワークをまたぐ場合は暗号化されたリレー経由になります（リレーは暗号文しか扱いません）。インストール不要、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。",
+    "Relayiumはオープンソースでエンドツーエンド暗号化のファイル・テキスト転送ツールです。ブラウザでのリアルタイム転送では、同じネットワークなら2台の端末が直結しファイルはサーバーを経由せず、ネットワークをまたぐ場合は暗号化されたリレー経由になります（リレーは暗号文しか扱いません）。両方の端末がオンラインなら、同じくエンドツーエンド暗号化された専用の直結で一時的なテキストメッセージも送れます。メッセージはどのサーバーにも保存されず、セッション終了とともに消えます。インストール不要、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。",
   hero: {
-    h1: "エンドツーエンド暗号化のP2Pファイル転送",
+    h1: "エンドツーエンド暗号化のP2Pファイル・テキスト転送",
     pitch:
-      "ブラウザで2台の端末を直接つなぎ、ファイルはエンドツーエンド暗号化されチャンクごとに転送されます。同じネットワークではサーバーを一切経由せず、ネットワークをまたぐ場合は暗号化されたリレー経由になります（リレーは暗号文のみ）。インストールも登録も不要、ウェブページを開くだけで始められます。",
+      "ブラウザで2台の端末を直接つなぎ、ファイルはエンドツーエンド暗号化されチャンクごとに転送されます。同じネットワークではサーバーを一切経由せず、ネットワークをまたぐ場合は暗号化されたリレー経由になります（リレーは暗号文のみ）。両方の端末がオンラインなら、同じく暗号化された専用の直結で一時的なテキストも送れます——リンクやコマンド、複数行のコードがそのまま届き、どのサーバーにも保存されず、セッション終了とともに消えます。インストールも登録も不要、ウェブページを開くだけで始められます。",
     cta: "転送を始める",
   },
   how: {
     heading: "4ステップで転送",
     steps: [
       "2台の端末でモダンブラウザから relayium.com を開きます。",
-      "片方が送るファイルを選ぶかドラッグします（1回につき最大1,000個）。",
+      "片方が送るファイルを選ぶかドラッグします（1回につき最大1,000個）。テキストメッセージを送ることもできます。",
       "両方の画面に表示される同じ6桁の検証コード（SAS）を照合し、一致を確認して中間者を排除します。",
-      "P2P直結を確立し、ファイルはチャンクごとにAES-256-GCMで暗号化して転送、各ファイルはSHA-256で完全性を検証します。",
+      "P2P直結を確立し、ファイルはチャンクごとにAES-256-GCMで暗号化して転送、各ファイルはSHA-256で完全性を検証します。テキストメッセージも同じく暗号化された専用の直結を通り、ディスクにもサーバーにも残りません。",
     ],
   },
   why: {
@@ -129,6 +137,10 @@ const ja = {
       {
         title: "SASで中間者攻撃を防止",
         desc: "両方の画面に同じ6桁の検証コードが表示されます。一致を確認すれば盗聴を狙う中間者を排除でき、シグナリングサーバーが侵害されてもなりすませません。",
+      },
+      {
+        title: "一時的な暗号化テキスト",
+        desc: "両方の端末がオンラインなら、同じく暗号化された専用の直結でリンクやコマンド、複数行のコードを送れます。内容はそのまま届き、1通あたり最大65,536バイト（UTF-8）。メッセージはどのサーバーにも保存されず、セッション終了とともに消えます——オフライン配信も履歴の保存もありません。それより大きいものはファイルとして送ってください。",
       },
       {
         title: "クロスプラットフォーム",
@@ -181,6 +193,10 @@ const ja = {
         a: "リアルタイム転送はストリーミングのため、Relayium 側で決めた硬いサイズ上限はありません（デスクトップ版の Chrome・Edge はディスクへ直接ストリーミング。Firefox・Safari とすべてのモバイルブラウザはメモリ上で組み立てるため、およそ256MBを超えると事前に警告が出ます——これは実測した上限ではなく、意図的に控えめに置いた見積もりです）。1回につき最大1,000ファイルです。",
       },
       {
+        q: "ファイルだけでなくテキストも送れますか？",
+        a: "送れます。両方の端末がオンラインであれば、エンドツーエンド暗号化された専用の直結でメッセージセッションを開けます。リンクやコマンド、複数行のコードは入力したそのままの形で届き、1通あたり最大65,536バイト（UTF-8）です。メッセージはどのサーバーにも保存されず、セッションが終わると消えます——オフライン配信はなく、履歴もどこにも残りません。それより大きいものはファイルとして送ってください。",
+      },
+      {
         q: "Snapdropとの違いは？",
         a: "Relayiumはアプリケーション層のエンドツーエンド暗号化とSAS検証コードを追加しており、シグナリングサーバーが侵害されても盗聴やなりすましができません。さらにネットワークをまたぐ転送や任意のゼロ知識ダウンロードリンクにも対応します。",
       },
@@ -191,22 +207,22 @@ const ja = {
 };
 
 const ko = {
-  title: "Relayium — 종단간 암호화 P2P 파일 전송",
+  title: "Relayium — 종단간 암호화 P2P 파일·텍스트 전송",
   description:
-    "Relayium은 오픈소스이자 종단간 암호화된 파일 전송 도구입니다. 브라우저 실시간 전송에서는 같은 네트워크일 때 두 기기가 직접 연결되어 파일이 서버를 거치지 않고, 네트워크를 넘을 때는 암호화된 릴레이를 거칩니다(릴레이는 암호문만 봅니다). 설치가 필요 없고, 같은 네트워크에서는 계정도 필요 없습니다(네트워크를 넘는 페어링은 보내는 쪽 로그인만 필요).",
+    "Relayium은 오픈소스이자 종단간 암호화된 파일·텍스트 전송 도구입니다. 브라우저 실시간 전송에서는 같은 네트워크일 때 두 기기가 직접 연결되어 파일이 서버를 거치지 않고, 네트워크를 넘을 때는 암호화된 릴레이를 거칩니다(릴레이는 암호문만 봅니다). 두 기기가 모두 온라인이면 종단간 암호화된 별도의 직접 연결로 일회성 텍스트 메시지도 보낼 수 있습니다. 메시지는 어떤 서버에도 저장되지 않고 세션이 끝나면 사라집니다. 설치가 필요 없고, 같은 네트워크에서는 계정도 필요 없습니다(네트워크를 넘는 페어링은 보내는 쪽 로그인만 필요).",
   hero: {
-    h1: "종단간 암호화 P2P 파일 전송",
+    h1: "종단간 암호화 P2P 파일·텍스트 전송",
     pitch:
-      "브라우저에서 두 기기를 직접 연결하고, 파일은 종단간 암호화되어 청크 단위로 전송됩니다. 같은 네트워크에서는 서버를 전혀 거치지 않고, 네트워크를 넘을 때는 암호화된 릴레이를 거칩니다(릴레이는 암호문만 봅니다). 설치도 가입도 필요 없이 웹 페이지만 열면 시작할 수 있습니다.",
+      "브라우저에서 두 기기를 직접 연결하고, 파일은 종단간 암호화되어 청크 단위로 전송됩니다. 같은 네트워크에서는 서버를 전혀 거치지 않고, 네트워크를 넘을 때는 암호화된 릴레이를 거칩니다(릴레이는 암호문만 봅니다). 두 기기가 모두 온라인이면 종단간 암호화된 별도의 직접 연결로 일회성 텍스트도 보낼 수 있습니다 — 링크, 명령어, 여러 줄 코드가 입력한 그대로 도착하고, 어떤 서버에도 저장되지 않으며 세션이 끝나면 사라집니다. 설치도 가입도 필요 없이 웹 페이지만 열면 시작할 수 있습니다.",
     cta: "전송 시작",
   },
   how: {
     heading: "4단계로 전송",
     steps: [
       "두 기기에서 최신 브라우저로 relayium.com에 접속합니다.",
-      "한쪽이 보낼 파일을 선택하거나 끌어다 놓습니다(한 번에 최대 1,000개).",
+      "한쪽이 보낼 파일을 선택하거나 끌어다 놓습니다(한 번에 최대 1,000개). 대신 텍스트 메시지를 보낼 수도 있습니다.",
       "양쪽 화면에 표시되는 동일한 6자리 검증 코드(SAS)를 대조해 일치를 확인하고 중간자를 차단합니다.",
-      "P2P 직접 연결을 맺고, 파일은 청크마다 AES-256-GCM으로 암호화되어 전송되며 각 파일은 SHA-256으로 무결성을 검증합니다.",
+      "P2P 직접 연결을 맺고, 파일은 청크마다 AES-256-GCM으로 암호화되어 전송되며 각 파일은 SHA-256으로 무결성을 검증합니다. 텍스트 메시지도 암호화된 별도의 직접 연결을 지나며 디스크에도 서버에도 남지 않습니다.",
     ],
   },
   why: {
@@ -223,6 +239,10 @@ const ko = {
       {
         title: "SAS로 중간자 공격 차단",
         desc: "양쪽 화면에 동일한 6자리 검증 코드가 표시됩니다. 서로 대조해 도청하는 중간자를 차단할 수 있으며, 시그널링 서버가 침해되어도 가장할 수 없습니다.",
+      },
+      {
+        title: "일회성 암호화 텍스트",
+        desc: "두 기기가 모두 온라인이면 암호화된 별도의 직접 연결로 링크, 명령어, 여러 줄 코드를 보낼 수 있습니다. 내용은 그대로 도착하며 한 메시지는 최대 65,536바이트(UTF-8)입니다. 메시지는 어떤 서버에도 저장되지 않고 세션이 끝나면 사라집니다 — 오프라인 전달도, 남는 대화 기록도 없습니다. 그보다 큰 내용은 파일로 보내세요.",
       },
       {
         title: "크로스 플랫폼",
@@ -275,6 +295,10 @@ const ko = {
         a: "실시간 전송은 스트리밍 방식이라 Relayium이 정한 크기 상한은 없습니다(데스크톱 Chrome·Edge는 디스크로 바로 스트리밍하고, Firefox·Safari와 모든 모바일 브라우저는 파일을 메모리에서 조립하므로 약 256MB를 넘으면 미리 경고가 표시됩니다 — 실측한 한계가 아니라 일부러 보수적으로 잡은 추정값입니다). 한 번에 최대 1,000개 파일입니다.",
       },
       {
+        q: "파일 말고 텍스트도 보낼 수 있나요?",
+        a: "보낼 수 있습니다. 두 기기가 모두 온라인이면 종단간 암호화된 별도의 직접 연결에서 메시지 세션을 열 수 있습니다. 링크, 명령어, 여러 줄 코드가 입력한 그대로 도착하며 한 메시지는 최대 65,536바이트(UTF-8)입니다. 메시지는 어떤 서버에도 저장되지 않고 세션이 끝나면 사라집니다 — 오프라인 전달은 없고 기록도 어디에도 남지 않습니다. 그보다 큰 내용은 파일로 보내세요.",
+      },
+      {
         q: "Snapdrop과 무엇이 다른가요?",
         a: "Relayium은 애플리케이션 계층의 종단간 암호화와 SAS 검증 코드를 추가해, 시그널링 서버가 침해되어도 도청이나 위장을 할 수 없습니다. 또한 네트워크를 넘는 전송과 선택적 영지식 다운로드 링크도 지원합니다.",
       },
@@ -285,22 +309,22 @@ const ko = {
 };
 
 const de = {
-  title: "Relayium — Ende-zu-Ende-verschlüsselte P2P-Dateiübertragung",
+  title: "Relayium — Ende-zu-Ende-verschlüsselte P2P-Datei- und Textübertragung",
   description:
-    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug zur Dateiübertragung. Bei der Echtzeitübertragung im Browser verbinden sich im selben Netz zwei Geräte direkt und Dateien erreichen nie den Server; netzübergreifend läuft es über ein verschlüsseltes Relay, das nur Chiffretext sieht. Ohne Installation; im selben Netz ist kein Konto nötig, für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
+    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug für Dateien und Text. Bei der Echtzeitübertragung im Browser verbinden sich im selben Netz zwei Geräte direkt und Dateien erreichen nie den Server; netzübergreifend läuft es über ein verschlüsseltes Relay, das nur Chiffretext sieht. Sind beide Geräte online, trägt eine eigene, ebenso verschlüsselte Direktverbindung auch flüchtigen Text: Nachrichten werden auf keinem Server gespeichert und sind mit dem Ende der Sitzung weg. Ohne Installation; im selben Netz ist kein Konto nötig, für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
   hero: {
-    h1: "Ende-zu-Ende-verschlüsselte P2P-Dateiübertragung",
+    h1: "Ende-zu-Ende-verschlüsselte P2P-Datei- und Textübertragung",
     pitch:
-      "Verbinde zwei Geräte direkt im Browser; Dateien werden Ende-zu-Ende verschlüsselt und Block für Block übertragen. Im selben Netz erreichen sie nie den Server, netzübergreifend laufen sie über ein verschlüsseltes Relay, das nur Chiffretext sieht. Keine Installation, keine Registrierung — einfach die Webseite öffnen und loslegen.",
+      "Verbinde zwei Geräte direkt im Browser; Dateien werden Ende-zu-Ende verschlüsselt und Block für Block übertragen. Im selben Netz erreichen sie nie den Server, netzübergreifend laufen sie über ein verschlüsseltes Relay, das nur Chiffretext sieht. Sind beide Geräte online, geht über eine eigene, ebenso verschlüsselte Verbindung auch flüchtiger Text — Links, Befehle oder mehrzeiliger Code kommen unverändert an, werden auf keinem Server gespeichert und sind mit dem Ende der Sitzung weg. Keine Installation, keine Registrierung — einfach die Webseite öffnen und loslegen.",
     cta: "Übertragung starten",
   },
   how: {
     heading: "In vier Schritten übertragen",
     steps: [
       "Öffne relayium.com auf beiden Geräten in einem modernen Browser.",
-      "Eine Seite wählt die zu sendenden Dateien aus oder zieht sie hinein (bis zu 1.000 pro Vorgang).",
+      "Eine Seite wählt die zu sendenden Dateien aus oder zieht sie hinein (bis zu 1.000 pro Vorgang) — oder schickt stattdessen eine Textnachricht.",
       "Vergleiche auf beiden Bildschirmen denselben 6-stelligen Verifizierungscode (SAS) und bestätige die Übereinstimmung, um einen Man-in-the-Middle auszuschließen.",
-      "Eine direkte P2P-Verbindung wird aufgebaut; Dateien werden Block für Block mit AES-256-GCM verschlüsselt übertragen, jede Datei per SHA-256 auf Integrität geprüft.",
+      "Eine direkte P2P-Verbindung wird aufgebaut; Dateien werden Block für Block mit AES-256-GCM verschlüsselt übertragen, jede Datei per SHA-256 auf Integrität geprüft. Textnachrichten nehmen eine eigene, ebenso verschlüsselte Direktverbindung und landen weder auf der Festplatte noch auf einem Server.",
     ],
   },
   why: {
@@ -317,6 +341,10 @@ const de = {
       {
         title: "SAS gegen Man-in-the-Middle",
         desc: "Beide Bildschirme zeigen denselben 6-stelligen Verifizierungscode; stimmt er überein, ist ein mithörender Man-in-the-Middle ausgeschlossen — selbst ein kompromittierter Signalisierungsserver kann sich nicht ausgeben.",
+      },
+      {
+        title: "Flüchtiger verschlüsselter Text",
+        desc: "Sind beide Geräte online, schickst du über eine eigene, ebenso verschlüsselte Direktverbindung Links, Befehle oder mehrzeiligen Code. Der Inhalt kommt unverändert an, eine Nachricht umfasst höchstens 65.536 Bytes (UTF-8). Nachrichten werden auf keinem Server gespeichert und sind mit dem Ende der Sitzung weg — keine Zustellung an Offline-Geräte, kein bleibender Verlauf. Größeres schickst du als Datei.",
       },
       {
         title: "Plattformübergreifend",
@@ -369,6 +397,10 @@ const de = {
         a: "Die Echtzeitübertragung streamt die Daten, daher setzt Relayium keine harte Größengrenze (Chrome und Edge auf dem Desktop streamen direkt auf die Festplatte; Firefox, Safari und alle mobilen Browser setzen die Datei im Arbeitsspeicher zusammen, weshalb ab etwa 256 MB vorab gewarnt wird — ein bewusst konservativer Schätzwert, keine gemessene Obergrenze). Maximal 1.000 Dateien pro Vorgang.",
       },
       {
+        q: "Kann ich auch Text schicken, nicht nur Dateien?",
+        a: "Ja. Sind beide Geräte online, öffnest du eine Nachrichtensitzung über eine eigene, ebenfalls Ende-zu-Ende-verschlüsselte Direktverbindung: Links, Befehle und mehrzeiliger Code kommen genau so an, wie du sie getippt hast, mit höchstens 65.536 Bytes (UTF-8) pro Nachricht. Nachrichten werden auf keinem Server gespeichert und verschwinden am Ende der Sitzung — es gibt keine Zustellung an Offline-Geräte und nirgends einen gespeicherten Verlauf. Alles Größere schickst du als Datei.",
+      },
+      {
         q: "Was ist der Unterschied zu Snapdrop?",
         a: "Relayium ergänzt Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und einen Verifizierungscode (SAS), sodass selbst ein kompromittierter Signalisierungsserver weder mithören noch sich ausgeben kann. Zudem unterstützt es netzübergreifende Übertragungen und optionale Zero-Knowledge-Download-Links.",
       },
@@ -379,22 +411,22 @@ const de = {
 };
 
 const fr = {
-  title: "Relayium — Transfert de fichiers P2P chiffré de bout en bout",
+  title: "Relayium — Transfert P2P de fichiers et de texte chiffré de bout en bout",
   description:
-    "Relayium est un outil open source de transfert de fichiers chiffré de bout en bout. Lors d'un transfert en temps réel dans le navigateur, sur le même réseau deux appareils se connectent directement et les fichiers ne passent jamais par le serveur ; entre réseaux différents, cela passe par un relais chiffré qui ne voit que du chiffré. Sans installation ; sur le même réseau aucun compte n'est nécessaire, et pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
+    "Relayium est un outil open source de transfert de fichiers et de texte chiffré de bout en bout. Lors d'un transfert en temps réel dans le navigateur, sur le même réseau deux appareils se connectent directement et les fichiers ne passent jamais par le serveur ; entre réseaux différents, cela passe par un relais chiffré qui ne voit que du chiffré. Quand les deux appareils sont en ligne, une connexion chiffrée dédiée transporte aussi du texte éphémère : les messages ne sont stockés sur aucun serveur et disparaissent à la fin de la session. Sans installation ; sur le même réseau aucun compte n'est nécessaire, et pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
   hero: {
-    h1: "Transfert de fichiers P2P chiffré de bout en bout",
+    h1: "Transfert P2P de fichiers et de texte chiffré de bout en bout",
     pitch:
-      "Reliez deux appareils directement dans le navigateur ; les fichiers sont chiffrés de bout en bout et transférés bloc par bloc. Sur le même réseau, ils ne passent jamais par le serveur ; entre réseaux différents, ils transitent par un relais chiffré qui ne voit que du chiffré. Aucune installation, aucune inscription — ouvrez la page web et commencez.",
+      "Reliez deux appareils directement dans le navigateur ; les fichiers sont chiffrés de bout en bout et transférés bloc par bloc. Sur le même réseau, ils ne passent jamais par le serveur ; entre réseaux différents, ils transitent par un relais chiffré qui ne voit que du chiffré. Quand les deux appareils sont en ligne, une connexion dédiée, chiffrée de la même façon, transporte aussi du texte éphémère — liens, commandes ou code multiligne arrivent tels quels, ne sont stockés sur aucun serveur et disparaissent à la fin de la session. Aucune installation, aucune inscription — ouvrez la page web et commencez.",
     cta: "Démarrer le transfert",
   },
   how: {
     heading: "Transférer en quatre étapes",
     steps: [
       "Ouvrez relayium.com sur les deux appareils dans un navigateur moderne.",
-      "Un côté sélectionne ou glisse les fichiers à envoyer (jusqu'à 1 000 par lot).",
+      "Un côté sélectionne ou glisse les fichiers à envoyer (jusqu'à 1 000 par lot) — ou envoie plutôt un message texte.",
       "Comparez sur les deux écrans le même code de vérification à 6 chiffres (SAS) et confirmez la correspondance pour écarter tout homme du milieu.",
-      "Une connexion directe pair-à-pair s'établit ; les fichiers sont transférés bloc par bloc, chiffrés en AES-256-GCM, et chaque fichier est vérifié en intégrité via SHA-256.",
+      "Une connexion directe pair-à-pair s'établit ; les fichiers sont transférés bloc par bloc, chiffrés en AES-256-GCM, et chaque fichier est vérifié en intégrité via SHA-256. Les messages texte empruntent leur propre connexion chiffrée et ne touchent ni le disque ni un serveur.",
     ],
   },
   why: {
@@ -411,6 +443,10 @@ const fr = {
       {
         title: "SAS contre l'homme du milieu",
         desc: "Les deux écrans affichent le même code de vérification à 6 chiffres ; s'il correspond, tout intercepteur est écarté — même un serveur de signalisation compromis ne peut pas se faire passer pour vous.",
+      },
+      {
+        title: "Texte chiffré éphémère",
+        desc: "Quand les deux appareils sont en ligne, envoyez un lien, une commande ou du code multiligne sur une connexion chiffrée dédiée. Le contenu arrive tel quel, avec au plus 65 536 octets (UTF-8) par message. Les messages ne sont stockés sur aucun serveur et disparaissent à la fin de la session — aucune remise à un appareil hors ligne, aucun historique conservé. Au-delà, envoyez un fichier.",
       },
       {
         title: "Multiplateforme",
@@ -463,6 +499,10 @@ const fr = {
         a: "Le transfert en temps réel diffuse les données en flux, Relayium n'impose donc aucune limite stricte de taille (Chrome et Edge sur ordinateur écrivent directement sur le disque ; Firefox, Safari et tous les navigateurs mobiles assemblent le fichier en mémoire, d'où un avertissement au-delà d'environ 256 Mo — un repère volontairement prudent, pas une limite mesurée). Jusqu'à 1 000 fichiers par lot.",
       },
       {
+        q: "Puis-je envoyer du texte, et pas seulement des fichiers ?",
+        a: "Oui. Quand les deux appareils sont en ligne, vous ouvrez une session de messages sur une connexion directe dédiée, chiffrée de bout en bout : liens, commandes et code multiligne arrivent exactement tels que vous les avez saisis, avec au plus 65 536 octets (UTF-8) par message. Les messages ne sont stockés sur aucun serveur et disparaissent à la fin de la session — pas de remise à un appareil hors ligne, aucun historique conservé où que ce soit. Pour tout ce qui dépasse, envoyez un fichier.",
+      },
+      {
         q: "Quelle différence avec Snapdrop ?",
         a: "Relayium ajoute un chiffrement de bout en bout au niveau applicatif et un code de vérification SAS, si bien qu'un serveur de signalisation compromis ne peut ni écouter ni usurper. Il prend aussi en charge les transferts inter-réseaux et des liens de téléchargement optionnels à connaissance nulle.",
       },
@@ -473,22 +513,22 @@ const fr = {
 };
 
 const ar = {
-  title: "‏Relayium — نقل ملفات P2P مُشفَّر من الطرف إلى الطرف",
+  title: "‏Relayium — نقل ملفات ونصوص P2P مُشفَّر من الطرف إلى الطرف",
   description:
-    "‏Relayium أداة مفتوحة المصدر لنقل الملفات مُشفَّرة من الطرف إلى الطرف. أثناء النقل الفوري في المتصفح، يتصل جهازان على نفس الشبكة مباشرةً ولا تمر الملفات أبدًا عبر الخادم؛ أما عبر الشبكات المختلفة فتمر عبر مُرحِّل مُشفَّر لا يرى سوى نص مُشفَّر. بدون تثبيت؛ على نفس الشبكة لا حاجة لأي حساب، وللاقتران عبر الشبكات المختلفة يسجّل المُرسِل وحده الدخول.",
+    "‏Relayium أداة مفتوحة المصدر لنقل الملفات والنصوص مُشفَّرة من الطرف إلى الطرف. أثناء النقل الفوري في المتصفح، يتصل جهازان على نفس الشبكة مباشرةً ولا تمر الملفات أبدًا عبر الخادم؛ أما عبر الشبكات المختلفة فتمر عبر مُرحِّل مُشفَّر لا يرى سوى نص مُشفَّر. وحين يكون الجهازان متصلين، يحمل اتصال مباشر خاص، مُشفَّر بالطريقة نفسها، رسائل نصية عابرة: لا تُخزَّن على أي خادم وتزول بانتهاء الجلسة. بدون تثبيت؛ على نفس الشبكة لا حاجة لأي حساب، وللاقتران عبر الشبكات المختلفة يسجّل المُرسِل وحده الدخول.",
   hero: {
-    h1: "نقل ملفات من الند للند مُشفَّر من الطرف إلى الطرف",
+    h1: "نقل ملفات ونصوص من الند للند مُشفَّر من الطرف إلى الطرف",
     pitch:
-      "اربط جهازين مباشرةً في المتصفح؛ تُشفَّر الملفات من الطرف إلى الطرف وتُنقل كتلةً كتلة. على نفس الشبكة لا تمر أبدًا عبر الخادم؛ وعبر الشبكات المختلفة تمر عبر مُرحِّل مُشفَّر لا يرى سوى نص مُشفَّر. بدون تثبيت ولا تسجيل — افتح صفحة الويب وابدأ.",
+      "اربط جهازين مباشرةً في المتصفح؛ تُشفَّر الملفات من الطرف إلى الطرف وتُنقل كتلةً كتلة. على نفس الشبكة لا تمر أبدًا عبر الخادم؛ وعبر الشبكات المختلفة تمر عبر مُرحِّل مُشفَّر لا يرى سوى نص مُشفَّر. وحين يكون الجهازان متصلين، يحمل اتصال مباشر خاص، مُشفَّر كذلك، نصًا عابرًا — تصل الروابط والأوامر والشيفرة متعددة الأسطر كما هي، ولا تُخزَّن على أي خادم، وتزول بانتهاء الجلسة. بدون تثبيت ولا تسجيل — افتح صفحة الويب وابدأ.",
     cta: "ابدأ النقل",
   },
   how: {
     heading: "انقل في أربع خطوات",
     steps: [
       "افتح relayium.com على كلا الجهازين في متصفح حديث.",
-      "يختار أحد الطرفين الملفات المراد إرسالها أو يسحبها (حتى 1,000 لكل دفعة).",
+      "يختار أحد الطرفين الملفات المراد إرسالها أو يسحبها (حتى 1,000 لكل دفعة)، أو يرسل رسالة نصية بدلاً من ذلك.",
       "قارِن على الشاشتين رمز التحقق نفسه المكوّن من 6 أرقام (SAS) وأكّد تطابقه لاستبعاد أي هجوم وسيط.",
-      "يُنشأ اتصال مباشر من الند للند؛ تُنقل الملفات كتلةً كتلة مُشفَّرة بـ AES-256-GCM، ويُتحقق من سلامة كل ملف عبر SHA-256.",
+      "يُنشأ اتصال مباشر من الند للند؛ تُنقل الملفات كتلةً كتلة مُشفَّرة بـ AES-256-GCM، ويُتحقق من سلامة كل ملف عبر SHA-256. وتسلك الرسائل النصية اتصالًا مُشفَّرًا خاصًا بها فلا تصل إلى القرص ولا إلى أي خادم.",
     ],
   },
   why: {
@@ -505,6 +545,10 @@ const ar = {
       {
         title: "SAS ضد هجوم الوسيط",
         desc: "تعرض الشاشتان رمز التحقق نفسه المكوّن من 6 أرقام؛ فإن تطابق استُبعد أي متنصّت — حتى خادم الإشارة المخترَق لا يستطيع انتحال شخصيتك.",
+      },
+      {
+        title: "نص مُشفَّر عابر",
+        desc: "حين يكون الجهازان متصلين، أرسِل رابطًا أو أمرًا أو شيفرة متعددة الأسطر عبر اتصال مُشفَّر خاص بالرسائل. يصل المحتوى كما هو، وحدّ الرسالة الواحدة 65,536 بايت (UTF-8). لا تُخزَّن الرسائل على أي خادم وتزول بانتهاء الجلسة — لا تسليم إلى جهاز غير متصل ولا سجلّ محفوظ. وما زاد عن ذلك يُرسَل ملفًا.",
       },
       {
         title: "متعدد المنصات",
@@ -557,6 +601,10 @@ const ar = {
         a: "النقل الفوري يبثّ البيانات دفقًا، لذا لا يفرض Relayium أي حدّ صارم للحجم (Chrome وEdge على سطح المكتب يبثّان مباشرةً إلى القرص؛ أما Firefox وSafari وجميع متصفحات الهاتف فتجمّع الملف في الذاكرة، ولذلك يظهر تحذير عند تجاوز نحو 256 ميغابايت — وهو تقدير متحفّظ عن قصد، لا حدّ مقيس). حتى 1,000 ملف لكل دفعة.",
       },
       {
+        q: "هل يمكنني إرسال نص لا ملفات فقط؟",
+        a: "نعم. حين يكون الجهازان متصلين، تفتح جلسة رسائل على اتصال مباشر خاص مُشفَّر من الطرف إلى الطرف: تصل الروابط والأوامر والشيفرة متعددة الأسطر تمامًا كما كتبتها، بحدّ أقصى 65,536 بايت (UTF-8) للرسالة الواحدة. ولا تُخزَّن الرسائل على أي خادم وتزول بانتهاء الجلسة — لا تسليم إلى جهاز غير متصل ولا سجلّ محفوظ في أي مكان. وما زاد عن ذلك أرسِله ملفًا.",
+      },
+      {
         q: "ما الفرق عن Snapdrop؟",
         a: "يضيف Relayium تشفيرًا من الطرف إلى الطرف على مستوى التطبيق ورمز تحقق SAS، بحيث لا يستطيع خادم إشارة مخترَق التنصّت ولا الانتحال. كما يدعم النقل عبر الشبكات وروابط تنزيل اختيارية بمعرفة صفرية.",
       },
@@ -567,22 +615,22 @@ const ar = {
 };
 
 const es = {
-  title: "Relayium — Transferencia de archivos P2P cifrada de extremo a extremo",
+  title: "Relayium — Transferencia P2P de archivos y texto cifrada de extremo a extremo",
   description:
-    "Relayium es una herramienta de código abierto para transferir archivos con cifrado de extremo a extremo. En una transferencia en tiempo real dentro del navegador, en la misma red dos dispositivos se conectan directamente y los archivos nunca pasan por el servidor; entre redes distintas, todo va por un retransmisor cifrado que solo ve texto cifrado. Sin instalación; en la misma red no hace falta ninguna cuenta, y para emparejar entre redes distintas solo el remitente inicia sesión.",
+    "Relayium es una herramienta de código abierto para transferir archivos y texto con cifrado de extremo a extremo. En una transferencia en tiempo real dentro del navegador, en la misma red dos dispositivos se conectan directamente y los archivos nunca pasan por el servidor; entre redes distintas, todo va por un retransmisor cifrado que solo ve texto cifrado. Cuando ambos dispositivos están conectados, una conexión cifrada propia lleva también texto efímero: los mensajes no se guardan en ningún servidor y desaparecen al terminar la sesión. Sin instalación; en la misma red no hace falta ninguna cuenta, y para emparejar entre redes distintas solo el remitente inicia sesión.",
   hero: {
-    h1: "Transferencia de archivos P2P cifrada de extremo a extremo",
+    h1: "Transferencia P2P de archivos y texto cifrada de extremo a extremo",
     pitch:
-      "Conecta dos dispositivos directamente en el navegador; los archivos se cifran de extremo a extremo y se transfieren bloque a bloque. En la misma red nunca pasan por el servidor; entre redes distintas van por un retransmisor cifrado que solo ve texto cifrado. Sin instalación, sin registro — abre la página web y empieza.",
+      "Conecta dos dispositivos directamente en el navegador; los archivos se cifran de extremo a extremo y se transfieren bloque a bloque. En la misma red nunca pasan por el servidor; entre redes distintas van por un retransmisor cifrado que solo ve texto cifrado. Cuando ambos dispositivos están conectados, una conexión propia, cifrada igual, lleva también texto efímero: enlaces, comandos o código multilínea llegan tal cual, no se guardan en ningún servidor y desaparecen al terminar la sesión. Sin instalación, sin registro — abre la página web y empieza.",
     cta: "Iniciar transferencia",
   },
   how: {
     heading: "Transferir en cuatro pasos",
     steps: [
       "Abre relayium.com en ambos dispositivos con un navegador moderno.",
-      "Un lado selecciona o arrastra los archivos a enviar (hasta 1.000 por lote).",
+      "Un lado selecciona o arrastra los archivos a enviar (hasta 1.000 por lote), o envía un mensaje de texto en su lugar.",
       "Compara en las dos pantallas el mismo código de verificación de 6 dígitos (SAS) y confirma la coincidencia para descartar cualquier intermediario.",
-      "Se establece una conexión directa de igual a igual; los archivos se transfieren bloque a bloque, cifrados con AES-256-GCM, y se verifica la integridad de cada archivo mediante SHA-256.",
+      "Se establece una conexión directa de igual a igual; los archivos se transfieren bloque a bloque, cifrados con AES-256-GCM, y se verifica la integridad de cada archivo mediante SHA-256. Los mensajes de texto usan su propia conexión cifrada y no llegan ni al disco ni a ningún servidor.",
     ],
   },
   why: {
@@ -599,6 +647,10 @@ const es = {
       {
         title: "SAS contra el ataque de intermediario",
         desc: "Las dos pantallas muestran el mismo código de verificación de 6 dígitos; si coincide, se descarta cualquier interceptor — ni siquiera un servidor de señalización comprometido puede hacerse pasar por ti.",
+      },
+      {
+        title: "Texto cifrado efímero",
+        desc: "Cuando ambos dispositivos están conectados, envía un enlace, un comando o código multilínea por una conexión cifrada propia. El contenido llega tal cual, con un máximo de 65.536 bytes (UTF-8) por mensaje. Los mensajes no se guardan en ningún servidor y desaparecen al terminar la sesión — no hay entrega a un dispositivo desconectado ni historial que quede. Lo más grande se envía como archivo.",
       },
       {
         title: "Multiplataforma",
@@ -651,6 +703,10 @@ const es = {
         a: "La transferencia en tiempo real envía los datos en flujo, así que Relayium no impone ningún límite estricto de tamaño (Chrome y Edge de escritorio escriben directamente en el disco; Firefox, Safari y todos los navegadores móviles ensamblan el archivo en memoria, por lo que se avisa a partir de unos 256 MB — una estimación deliberadamente conservadora, no un límite medido). Hasta 1.000 archivos por lote.",
       },
       {
+        q: "¿Puedo enviar texto y no solo archivos?",
+        a: "Sí. Cuando ambos dispositivos están conectados, abres una sesión de mensajes sobre una conexión directa propia, cifrada de extremo a extremo: enlaces, comandos y código multilínea llegan exactamente como los escribiste, con un máximo de 65.536 bytes (UTF-8) por mensaje. Los mensajes no se guardan en ningún servidor y desaparecen al terminar la sesión — no hay entrega a un dispositivo desconectado ni historial guardado en ninguna parte. Para algo más grande, envía un archivo.",
+      },
+      {
         q: "¿En qué se diferencia de Snapdrop?",
         a: "Relayium añade cifrado de extremo a extremo a nivel de aplicación y un código de verificación SAS, de modo que un servidor de señalización comprometido no puede escuchar ni suplantar. Además admite transferencias entre redes y enlaces de descarga opcionales de conocimiento cero.",
       },
@@ -661,22 +717,22 @@ const es = {
 };
 
 const pt = {
-  title: "Relayium — Transferência de arquivos P2P com criptografia de ponta a ponta",
+  title: "Relayium — Transferência P2P de arquivos e texto com criptografia de ponta a ponta",
   description:
-    "O Relayium é uma ferramenta de código aberto para transferir arquivos com criptografia de ponta a ponta. Em uma transferência em tempo real no navegador, na mesma rede dois dispositivos se conectam diretamente e os arquivos nunca passam pelo servidor; entre redes diferentes, tudo passa por um retransmissor criptografado que só vê texto cifrado. Sem instalação; na mesma rede não é preciso nenhuma conta, e para emparelhar entre redes diferentes só o remetente faz login.",
+    "O Relayium é uma ferramenta de código aberto para transferir arquivos e texto com criptografia de ponta a ponta. Em uma transferência em tempo real no navegador, na mesma rede dois dispositivos se conectam diretamente e os arquivos nunca passam pelo servidor; entre redes diferentes, tudo passa por um retransmissor criptografado que só vê texto cifrado. Quando os dois dispositivos estão online, uma conexão criptografada própria leva também texto efêmero: as mensagens não ficam em nenhum servidor e desaparecem quando a sessão termina. Sem instalação; na mesma rede não é preciso nenhuma conta, e para emparelhar entre redes diferentes só o remetente faz login.",
   hero: {
-    h1: "Transferência de arquivos P2P com criptografia de ponta a ponta",
+    h1: "Transferência P2P de arquivos e texto com criptografia de ponta a ponta",
     pitch:
-      "Conecte dois dispositivos diretamente no navegador; os arquivos são criptografados de ponta a ponta e transferidos bloco a bloco. Na mesma rede nunca passam pelo servidor; entre redes diferentes passam por um retransmissor criptografado que só vê texto cifrado. Sem instalação, sem cadastro — abra a página web e comece.",
+      "Conecte dois dispositivos diretamente no navegador; os arquivos são criptografados de ponta a ponta e transferidos bloco a bloco. Na mesma rede nunca passam pelo servidor; entre redes diferentes passam por um retransmissor criptografado que só vê texto cifrado. Quando os dois dispositivos estão online, uma conexão própria, criptografada do mesmo jeito, leva também texto efêmero: links, comandos ou código em várias linhas chegam exatamente como estão, não ficam em nenhum servidor e desaparecem quando a sessão termina. Sem instalação, sem cadastro — abra a página web e comece.",
     cta: "Iniciar transferência",
   },
   how: {
     heading: "Transferir em quatro passos",
     steps: [
       "Abra relayium.com nos dois dispositivos em um navegador moderno.",
-      "Um lado seleciona ou arrasta os arquivos a enviar (até 1.000 por lote).",
+      "Um lado seleciona ou arrasta os arquivos a enviar (até 1.000 por lote), ou envia uma mensagem de texto no lugar.",
       "Compare nas duas telas o mesmo código de verificação de 6 dígitos (SAS) e confirme a correspondência para descartar qualquer intermediário.",
-      "Uma conexão direta ponto a ponto é estabelecida; os arquivos são transferidos bloco a bloco, criptografados com AES-256-GCM, e a integridade de cada arquivo é verificada por SHA-256.",
+      "Uma conexão direta ponto a ponto é estabelecida; os arquivos são transferidos bloco a bloco, criptografados com AES-256-GCM, e a integridade de cada arquivo é verificada por SHA-256. As mensagens de texto seguem por uma conexão criptografada própria e não chegam ao disco nem a nenhum servidor.",
     ],
   },
   why: {
@@ -693,6 +749,10 @@ const pt = {
       {
         title: "SAS contra o ataque de intermediário",
         desc: "As duas telas mostram o mesmo código de verificação de 6 dígitos; se coincidir, qualquer interceptador é descartado — nem mesmo um servidor de sinalização comprometido consegue se passar por você.",
+      },
+      {
+        title: "Texto criptografado efêmero",
+        desc: "Quando os dois dispositivos estão online, envie um link, um comando ou código em várias linhas por uma conexão criptografada própria. O conteúdo chega exatamente como está, com no máximo 65.536 bytes (UTF-8) por mensagem. As mensagens não ficam em nenhum servidor e desaparecem quando a sessão termina — não há entrega para um dispositivo offline nem histórico guardado. O que for maior vai como arquivo.",
       },
       {
         title: "Multiplataforma",
@@ -745,6 +805,10 @@ const pt = {
         a: "A transferência em tempo real envia os dados em fluxo, então o Relayium não impõe nenhum limite rígido de tamanho (Chrome e Edge no desktop gravam direto no disco; Firefox, Safari e todos os navegadores móveis montam o arquivo na memória, por isso há um aviso acima de cerca de 256 MB — uma estimativa deliberadamente conservadora, não um limite medido). Até 1.000 arquivos por lote.",
       },
       {
+        q: "Dá para enviar texto, não só arquivos?",
+        a: "Dá. Quando os dois dispositivos estão online, você abre uma sessão de mensagens em uma conexão direta própria, criptografada de ponta a ponta: links, comandos e código em várias linhas chegam exatamente como você digitou, com no máximo 65.536 bytes (UTF-8) por mensagem. As mensagens não ficam em nenhum servidor e desaparecem quando a sessão termina — não há entrega para um dispositivo offline nem histórico guardado em lugar nenhum. Para algo maior, envie um arquivo.",
+      },
+      {
         q: "Qual a diferença em relação ao Snapdrop?",
         a: "O Relayium acrescenta criptografia de ponta a ponta na camada de aplicação e um código de verificação SAS, de modo que um servidor de sinalização comprometido não consegue espionar nem se passar por outro. Além disso, oferece transferências entre redes e links de download opcionais de conhecimento zero.",
       },
@@ -755,6 +819,6 @@ const pt = {
 };
 
 export default {
-  updated: "2026-07-03",
+  updated: "2026-07-30",
   langs: { zh, ja, ko, de, fr, ar, es, pt },
 };

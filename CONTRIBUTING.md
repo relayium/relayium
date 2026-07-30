@@ -1,7 +1,8 @@
 # Contributing to Relayium
 
 Thanks for your interest in Relayium! It's an early-stage, open-source project building toward a
-serious next-generation file transfer protocol, and contributions of all kinds are welcome.
+serious next-generation file transfer protocol — files, plus ephemeral encrypted text between two
+peers that are both online — and contributions of all kinds are welcome.
 
 ## Ways to contribute
 
@@ -11,8 +12,9 @@ serious next-generation file transfer protocol, and contributions of all kinds a
 - **Bug reports** — open an issue with steps to reproduce, your browser/OS, and what you expected.
 - **Features and fixes** — see the roadmap in the [README](README.md#roadmap) and the design docs in
   [`docs/`](docs/) before starting larger work.
-- **Translations** — UI strings live in [`web/src/lib/i18n.svelte.ts`](web/src/lib/i18n.svelte.ts); adding or
-  improving a language is a self-contained, friendly first contribution.
+- **Translations** — one table per language in [`web/src/lib/i18n/`](web/src/lib/i18n), loaded by
+  [`web/src/lib/i18n.svelte.ts`](web/src/lib/i18n.svelte.ts); adding or improving a language is a
+  self-contained, friendly first contribution.
 - **Docs** — clarifications to the README, design spec, or test procedure.
 
 ## Development setup

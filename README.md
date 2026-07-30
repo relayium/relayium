@@ -5,8 +5,8 @@
 <h1 align="center">Relayium</h1>
 
 <p align="center">
-  <strong>Open-source, end-to-end encrypted peer-to-peer file transfer — right in your browser.</strong><br>
-  In realtime mode files stream directly between devices over WebRTC and never touch the server.
+  <strong>Open-source, end-to-end encrypted peer-to-peer file transfer — and ephemeral encrypted text — right in your browser.</strong><br>
+  In realtime mode files and messages stream directly between devices over WebRTC and never touch the server.
 </p>
 
 <p align="center">
@@ -23,6 +23,13 @@
 Relayium is a serious attempt at a **next-generation file transfer protocol**: press one button to send,
 and the software picks the best path (LAN direct → P2P → relay) while keeping everything
 **end-to-end encrypted by default** — the keys only ever exist on the sender and the receiver.
+
+The same protocol also carries **ephemeral text**. When both devices are online, a message session
+opens a peer-to-peer connection of its own — end-to-end encrypted, with its own SAS to compare — and
+carries a link, a command, or a block of multiline code instead of a file. Messages are session-scoped:
+never stored on any server, and gone when the session ends. There is no offline messaging and no
+persistent history anywhere — one message is at most **65,536 UTF-8 bytes**, delivered byte for byte,
+and anything larger is a file.
 
 This repository is **M0**, the first milestone: a **web app**. Open the page on two devices on the
 same network, pick a file, and it streams straight across — encrypted, peer-to-peer, with the
@@ -49,7 +56,8 @@ is **how seriously we take end-to-end encryption**:
 - 📡 **True peer-to-peer** — in realtime transfers, file bytes flow over the WebRTC DataChannel and **never traverse the server**. Stored download links are the one exception: the file is encrypted in your browser first, and the server holds only ciphertext it has no key for (see [docs/billing-transparency.md](docs/billing-transparency.md)).
 - 📦 **Multi-file batches** (up to 10) — streamed straight to disk; large files don't get buffered in memory.
 - ✅ **Per-file SHA-256 integrity check** on the receiving end.
-- 🌐 **6 languages** — English, 中文, 日本語, 한국어, Deutsch, Français — auto-detected, switchable.
+- 💬 **Ephemeral encrypted text** — send a link, a command, or a block of multiline code to a device that's online right now, over a peer-to-peer connection of its own that is end-to-end encrypted and SAS-verified just like a transfer. Messages are realtime and session-scoped: never stored on any server, gone when the session ends, with no offline delivery and no persistent history. At most 65,536 UTF-8 bytes per message, delivered exactly as typed; anything larger is a file.
+- 🌐 **9 languages** — English, 中文, 日本語, 한국어, Deutsch, Français, العربية, Español, Português — auto-detected, switchable.
 - ⚡ **No install, ever** — just open a URL. Realtime transfers on the same LAN need **no account** at all; cross-network transfers via a pairing code (and the join link/QR it generates) need the **sender** to sign in (the receiver never does); stored download links also require the sender to sign in.
 - 🪶 **Tiny footprint** — one static SPA + a single Go binary for signaling.
 
@@ -61,12 +69,12 @@ Prefer the terminal? Install the self-hostable, end-to-end-encrypted CLI in one 
 curl -fsSL https://relayium.com/install.sh | sh
 ```
 
-**Completely free — and direct.** The CLI connects your machines directly; file bytes never pass through Relayium's servers. Only `send`/`receive` touches our servers at all, and only for a tiny rendezvous handshake (never the file).
+**Completely free — and direct.** The CLI connects your machines directly; file and message bytes never pass through Relayium's servers. Only `send`/`receive`/`text` touches our servers at all, and only for a tiny rendezvous handshake (never the content).
 
-Three transfer modes:
+Four direct modes — three that move files, one that moves text:
 
 - **`push` / `pull` over your own SSH** — `relayium push ./photos user@host:backups/` (bytes travel over SSH; no Relayium account).
-- **`text` — ephemeral encrypted messages** — both machines run `relayium text K7M4XR` with the same code. One line per message interactively; pipe stdin (`pbpaste | relayium text K7M4XR --yes`) to send multiline content or exact bytes. End-to-end encrypted over the same pinned-TLS direct connection as a file transfer, never stored on any server, and gone when the session ends. The SAS is confirmed by default; a piped run refuses unless you pass `--yes`. One message is at most 65,536 bytes of UTF-8 — anything larger is a file.
+- **`text` — ephemeral encrypted messages** — both machines run `relayium text K7M4XR` with the same code, at the same time: it's a live session between two online machines, not a mailbox. One line per message interactively; pipe stdin (`pbpaste | relayium text K7M4XR --yes`) to send multiline content or exact bytes. End-to-end encrypted over a pinned-TLS direct connection of its own, exactly like a file transfer, never stored on any server, and gone when the session ends — no offline delivery, no history kept anywhere. The SAS is confirmed by default; a piped run refuses unless you pass `--yes`. One message is at most 65,536 bytes of UTF-8 — anything larger is a file. CLI to CLI: exactly as with file transfers, the terminal and the browser are separate transports and don't pair with each other.
 - **`send` / `receive` by pairing code** — `relayium send ./file.zip` mints a code with your account (after `relayium login`) and prints what the other end runs: `relayium receive K7M4XR`. Codes are 6 characters and last 5 minutes; the receiver needs no account. Cross-network and direct peer-to-peer — a small rendezvous handshake introduces the two ends, the file goes straight between them, no relay. Sending to someone with a browser instead? Use `relayium up` for a download link.
 - **`serve` + `push relayium://` daemon direct** — `relayium serve --dir ~/inbox` then `relayium push ./file relayium://host` (server-to-server over pinned TLS; no relay, no SSH, no code — the listener approves each new pusher on its first push and remembers it).
 
@@ -125,7 +133,7 @@ two humans can compare out of band.
 ## Security model
 
 - **Threat model:** the signaling server may passively observe or actively MITM; the network may be eavesdropped.
-  The requirement is that the server can read **no file content**, and cannot MITM as long as users compare the SAS.
+  The requirement is that the server can read **no file or message content**, and cannot MITM as long as users compare the SAS.
 - **Keys:** a fresh ephemeral X25519 keypair per transfer (persistent device identity is a later milestone);
   ECDH yields the session keys.
 - **Encryption:** each chunk is AES-256-GCM with a unique nonce. The nonce counter is **global across a batch**
@@ -134,7 +142,8 @@ two humans can compare out of band.
 - **Anti-MITM:** the SAS short code is derived from the session keys; comparing it out of band detects a
   key-swapping server.
 - **Metadata minimization:** the server only ever sees room membership (public IP), a device nickname, presence,
-  and signaling envelopes. File **contents and names** travel over the DTLS-encrypted DataChannel — never the server.
+  and signaling envelopes. File **contents and names**, and any **message text**, travel over the
+  DTLS-encrypted DataChannel — never the server, which also never stores a message.
 
 That's what the server *can't* see. For what it *does* record — TURN relay bytes, stored-transfer
 sizes, quota bookkeeping — and exactly what that's billed against, see
@@ -187,7 +196,8 @@ TURN relay that only ever sees ciphertext; this requires the sender to sign in.
 ## Roadmap
 
 - **M0 — Web MVP (this milestone):** signaling server, Svelte SPA, WebRTC transfer, app-layer E2E + SAS,
-  multi-file batches, streaming to disk, i18n.
+  multi-file batches, streaming to disk, ephemeral encrypted text between two peers that are both
+  online, i18n.
 - **M1 — Developer experience + persistent identity:** pair devices once and trust them forever (no code each
   time), directories & multi-file, resumable transfers, concurrent chunks.
 - **M2 — Cross-network relay:** TURN/relay and NAT traversal for pairing-code transfers across different
@@ -195,7 +205,7 @@ TURN relay that only ever sees ciphertext; this requires the sender to sign in.
   Encrypted temporary staging when the peer is offline is still ahead; TURN relay bandwidth is metered — see
   [`docs/billing-transparency.md`](docs/billing-transparency.md) for exactly how.)*
 - **M3 — Protocol spec + multi-client:** write the wire protocol down as a spec and reuse it from a CLI and mobile;
-  extend `send` to stdin, Docker images, the clipboard — toward "TCP between developers." *(CLI shipped — see [Command-line client](#command-line-client-cli). `relayium text` now carries clipboard-shaped content over stdin, in both an interactive and a piped form; Docker images still ahead.)*
+  extend `send` to stdin, Docker images, the clipboard — toward "TCP between developers." *(CLI shipped — see [Command-line client](#command-line-client-cli). `relayium text` now carries clipboard-shaped content over stdin, in both an interactive and a piped form, and the browser has its own message session; like file transfer, the two transports don't pair with each other. Docker images still ahead.)*
 
 **Self-hosting:** a root [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) build a
 single self-contained image (`docker compose up -d --build`). See [`docs/self-hosting.md`](docs/self-hosting.md).
@@ -213,7 +223,7 @@ relayium/
 │   ├── src/lib/signaling.ts    #   WebSocket signaling client
 │   ├── src/lib/transfer.ts     #   batch framing, chunking, integrity
 │   ├── src/lib/filesink.ts     #   stream-to-disk / directory / Blob fallback
-│   └── src/lib/i18n.svelte.ts  #   runes-driven i18n (6 languages)
+│   └── src/lib/i18n.svelte.ts  #   runes-driven i18n (9 languages)
 ├── server/                    # Go signaling server
 │   ├── main.go                 #   HTTP + WebSocket + static file serving
 │   ├── account/, ext/, httpx/, authx/, selfupdate/  #   importable outside internal/, see note below
@@ -249,6 +259,14 @@ Linux ↔ anything. Unlike AirDrop it isn't limited to Apple devices.
 **What's the file-size limit?**
 No server-imposed limit. In Chrome/Edge files stream straight to disk (size bound only by free space).
 In Firefox/Safari they're buffered in memory, so keep them under ~200 MB.
+
+**Can I send text, not just files?**
+Yes. When both devices are online you can open a message session — its own end-to-end encrypted
+peer-to-peer connection, with its own SAS to compare: links, commands, and multiline code arrive
+exactly as typed, up to 65,536 UTF-8 bytes per message. Messages are never stored on any server and
+are gone when the session ends — there's no offline messaging and no history kept anywhere. Anything
+larger goes as a file. The terminal has its own equivalent, `relayium text <code>` — CLI to CLI,
+since the two transports don't pair.
 
 **Can I send across different networks / over the internet?**
 Yes — via a pairing code, using STUN and, when a direct connection isn't possible, an encrypted TURN relay
