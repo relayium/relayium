@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"sort"
@@ -66,6 +67,20 @@ type rolloutPanelView struct {
 	NextStepLabel string
 	OnTarget      int // nodes already running TargetVersion
 	Total         int
+	// PassedOverCount is how many nodes the rollout moved on without AND that
+	// are still not on the target — the machines a finished track left behind.
+	//
+	// Derived here on every render, never stored on the track row. A stored list
+	// would go stale the instant one of those nodes updated, and this way the
+	// count heals itself; it also keeps status at three values, which a dozen
+	// call sites read as a predicate.
+	//
+	// Both halves of the condition are load-bearing. Without "not on target" a
+	// node passed over earlier that caught up later would still be counted, and
+	// the operator would go looking for a machine that is fine. It is counted
+	// over the whole track, like OnTarget/Total and unlike Nodes, which is cut
+	// to rolloutPanelMaxRows.
+	PassedOverCount int
 	// Nodes is at most rolloutPanelMaxRows rows, most relevant first; Hidden
 	// counts the rest. OnTarget/Total are always over the WHOLE track, never
 	// over the rendered slice.
@@ -142,6 +157,20 @@ type rolloutNodeView struct {
 	// rollout slot. Zero for every other row. See rollout_status.go: it
 	// DESCRIBES decideFleet's state and never re-decides it.
 	Status rolloutNodeStatus
+	// PassedOver is true when the queue moved on without this node — it could
+	// not obtain the artifact, or it declined locally. Distinct from a failure:
+	// a passed-over node made no judgement about the build, so this must never
+	// be rendered in the failure styling.
+	//
+	// Unlike Status it is set on EVERY row, not just the node holding the slot,
+	// and on tracks that are no longer rolling. That is the point: the case this
+	// exists for is a finished track, where nothing holds the slot any more and
+	// fleetNodeStatus is silent by design.
+	PassedOver bool
+	// PassedOverReason is the Chinese label for WHY, because the operator's next
+	// move differs: 拿不到产物 means fix the source and retry, 本地前置条件
+	// usually means the node had its own reason and will decline again.
+	PassedOverReason string
 }
 
 // rolloutStatusText maps the stored status onto the panel's label. An empty
@@ -165,6 +194,11 @@ func rolloutStatusText(status string, configured bool) string {
 
 // rolloutResultText maps nodes.update_result onto its label. "" is the normal
 // state for a node that was never commanded, so it must not read as an error.
+//
+// "unreachable" needs its own label rather than falling through to "—": that is
+// what a node the rollout has not reached yet renders as, and reading the two as
+// the same thing is precisely how a fleet-wide fetch failure passes for a
+// rollout that simply has not got there.
 func rolloutResultText(result string) string {
 	switch result {
 	case "ok":
@@ -175,9 +209,26 @@ func rolloutResultText(result string) string {
 		return "已回滚"
 	case "skipped":
 		return "已跳过"
+	case "unreachable":
+		return "拿不到产物"
 	default:
 		return "—"
 	}
+}
+
+// passedOverReason explains a pass-over in terms of what the operator does next,
+// which is the only reason the panel distinguishes the two values at all: a node
+// that could not fetch is waiting on something we can fix, and a node that
+// declined locally will decline again until someone opens it up. Empty for every
+// result that is not a pass-over, so it doubles as the render condition.
+func passedOverReason(result string) string {
+	switch result {
+	case "unreachable":
+		return "拿不到产物：没能取到这个版本的文件，修好来源后可以重试"
+	case "skipped":
+		return "本地前置条件未满足：该节点自己拒绝了这次更新，重试前需要先处理这台机器"
+	}
+	return ""
 }
 
 // validRolloutTrack mirrors SetTargetVersion's own track check for the paths
@@ -319,15 +370,36 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 			// to decideFleet cannot assemble the input two different ways.
 			status = fleetNodeStatus(newFleetNodeInput(tr, snaps[i], onTarget), now.Unix())
 		}
+		// passedOverResult is decideFleet's own predicate (rollout_fleet.go), so
+		// the row is marked passed over exactly when the queue would skip it —
+		// the panel cannot claim a pass-over the state machine does not make, or
+		// miss one it does.
+		passedOver := passedOverResult(n.UpdateResult)
+		if passedOver && !onTarget {
+			p.PassedOverCount++
+		}
 		rows = append(rows, rolloutNodeView{
 			ID: n.ID, Label: n.Label, Version: n.Version,
 			Online: n.LastSeenAt >= cutoff, OnTarget: onTarget,
 			UpdateFromVersion: n.UpdateFromVersion, UpdateStartedAt: n.UpdateStartedAt,
 			Result: n.UpdateResult, ResultText: rolloutResultText(n.UpdateResult),
-			Current: current,
-			Status:  status,
-			InBatch: inBatch[n.ID],
+			Current:          current,
+			Status:           status,
+			InBatch:          inBatch[n.ID],
+			PassedOver:       passedOver,
+			PassedOverReason: passedOverReason(n.UpdateResult),
 		})
+	}
+	// The terminal state Task 2 made reachable and nothing else reports: the
+	// queue ran to the end having installed nothing on some machines. status
+	// deliberately gains no fourth value for it — 已完成 is true, it is just not
+	// the whole truth, so the count is rendered INTO the same line rather than
+	// stored beside it.
+	//
+	// Only on a finished track. A rolling one may still reach those nodes, and
+	// saying "left behind" while the queue is still moving would be false.
+	if p.Status == "complete" && p.PassedOverCount > 0 {
+		p.StatusText = fmt.Sprintf("完成，但 %d 台未更新", p.PassedOverCount)
 	}
 	p.Nodes, p.Hidden = rolloutNodeRows(rows)
 	return p

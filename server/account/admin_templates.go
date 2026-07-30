@@ -287,7 +287,7 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 {{range .Nodes}}
 <tr>
 <td>{{if .Label}}<b>{{.Label}}</b> {{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span>
-{{if .Status.Label}}<span class="ro-tag{{if .Status.Alarm}} never{{end}}">{{.Status.Label}}</span>{{end}}{{if .Status.Detail}}<div style="color:var(--muted);font-size:12px">{{.Status.Detail}}</div>{{end}}{{if .InBatch}}<span class="ro-tag">本批次</span>{{end}}</td>
+{{if .Status.Label}}<span class="ro-tag{{if .Status.Alarm}} never{{end}}">{{.Status.Label}}</span>{{end}}{{if .Status.Detail}}<div style="color:var(--muted);font-size:12px">{{.Status.Detail}}</div>{{end}}{{if .InBatch}}<span class="ro-tag">本批次</span>{{end}}{{if .PassedOverReason}}<div style="color:var(--muted);font-size:12px">{{.PassedOverReason}}</div>{{end}}</td>
 <td>{{if .Online}}在线{{else}}离线{{end}}</td>
 <td>{{if .Version}}{{.Version}}{{else}}—{{end}}{{if .OnTarget}} ✓{{end}}</td>
 <td>{{if eq .Result "failed"}}<b class="never">{{.ResultText}}</b>{{else if eq .Result "rolled_back"}}<b class="never">{{.ResultText}}</b>{{else}}{{.ResultText}}{{end}}</td>

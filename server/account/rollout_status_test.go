@@ -319,6 +319,37 @@ func TestFleetNodeStatusSkippedIsNotAFailureAndIsNotTimed(t *testing.T) {
 	}
 }
 
+// "unreachable" is the same queue outcome as "skipped" and a different fact
+// about the world, so it gets its own band rather than borrowing that one: the
+// operator's next move is to fix the source and retry, not to open up the node.
+// Like skipped it is not timed and does not halt.
+func TestFleetNodeStatusUnreachableIsItsOwnBandAndIsNotTimed(t *testing.T) {
+	const now = 1_000_000
+	got := fleetNodeStatus(fleetNodeInput{
+		TrackStatus: "rolling", UpdateResult: "unreachable",
+		UpdateStartedAt: now - 300, StageStartedAt: now - 300, LastSeenAt: now,
+	}, now)
+	if got.Band != "unreachable" {
+		t.Fatalf("band = %q, want unreachable", got.Band)
+	}
+	skipped := fleetNodeStatus(fleetNodeInput{
+		TrackStatus: "rolling", UpdateResult: "skipped",
+		UpdateStartedAt: now - 300, StageStartedAt: now - 300, LastSeenAt: now,
+	}, now)
+	if got.Label == skipped.Label {
+		t.Fatalf("unreachable and skipped render the same label %q, so the panel cannot tell an operator which one it is", got.Label)
+	}
+	if !strings.Contains(got.Label, "不是失败") {
+		t.Fatalf("label = %q: a node that never got the bytes made no judgement about the build", got.Label)
+	}
+	if strings.Contains(got.Detail, "上限") || strings.Contains(got.Detail, "中止") {
+		t.Fatalf("detail = %q: an unreachable node is neither being timed nor halting the track", got.Detail)
+	}
+	if got.Overdue {
+		t.Fatalf("no clock is running on this node, so no limit can have passed: %+v", got)
+	}
+}
+
 // In the observing band a crossed limit is the window's SUCCESSFUL end: the
 // canary did its six hours and is waiting up to ten minutes for a poll. Painting
 // that the same red as a node about to be aborted is how an operator learns to
@@ -531,7 +562,7 @@ func TestPanelStatusAgreesWithDecideFleet(t *testing.T) {
 	checked := 0
 	for _, status := range []string{"rolling", "halted", "complete"} {
 		for _, emergency := range []bool{false, true} {
-			for _, result := range []string{"", "ok", "failed", "rolled_back", "skipped"} {
+			for _, result := range []string{"", "ok", "failed", "rolled_back", "skipped", "unreachable"} {
 				for _, onTarget := range []bool{false, true} {
 					// The canary is positional: the node itself, somebody else,
 					// or a track written before the field existed (both
