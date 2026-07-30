@@ -444,7 +444,8 @@ describe("定价页把临时文本纳入免费与计量边界", () => {
     const p = messages.en.pricingPage;
     expect(p.free2).toMatch(/send or text code/);
     expect(p.free2).toMatch(/joining one never/i);
-    expect(p.free3).toMatch(/never stored/i);
+    expect(p.free3).toMatch(/servers keep no message bodies or history/i);
+    expect(p.free3).toMatch(/either endpoint may retain/i);
     expect(p.a1).toMatch(/both devices online/i);
     expect(p.paid1).toMatch(/browser/i);
     expect(p.paid1).toMatch(/file or text/i);

@@ -20,20 +20,21 @@
 
 ## What is Relayium?
 
-Relayium is a serious attempt at a **next-generation file transfer protocol**: press one button to send,
-and the software picks the best path (LAN direct → P2P → relay) while keeping everything
+Relayium is a serious attempt at a **next-generation file and ephemeral text transfer protocol**:
+press one button to send, and the software picks the right path while keeping content
 **end-to-end encrypted by default** — the keys only ever exist on the sender and the receiver.
 
 The same protocol also carries **ephemeral text**. When both devices are online, a message session
 opens a peer-to-peer connection of its own — end-to-end encrypted, with its own SAS to compare — and
 carries a link, a command, or a block of multiline code instead of a file. Messages are session-scoped:
-never stored on any server, and gone when the session ends. There is no offline messaging and no
-persistent history anywhere — one message is at most **65,536 UTF-8 bytes**, delivered byte for byte,
+never stored by Relayium, and gone from its session when that session ends. There is no offline messaging
+or server-side history, though either endpoint can retain received text — one message is at most
+**65,536 UTF-8 bytes**, delivered byte for byte,
 and anything larger is a file.
 
 This repository is **M0**, the first milestone: a **web app**. Open the page on two devices on the
-same network, pick a file, and it streams straight across — encrypted, peer-to-peer, with the
-signaling server acting only as a meeting point.
+same network, pick files or start a live text session, and content moves straight across — encrypted,
+peer-to-peer, with the signaling server acting only as a meeting point.
 
 > 👉 **Try it now: [relayium.com](https://relayium.com/)** — open it on two devices on the same network.
 
@@ -53,12 +54,12 @@ is **how seriously we take end-to-end encryption**:
 
 - 🔒 **End-to-end encrypted** — per-transfer ephemeral X25519 keys → AES-256-GCM per chunk. Keys never leave the two devices.
 - 🛡️ **SAS verification code** — a 6-digit code derived from the session keys; compare it on both screens to defeat a man-in-the-middle.
-- 📡 **True peer-to-peer** — in realtime transfers, file bytes flow over the WebRTC DataChannel and **never traverse the server**. Stored download links are the one exception: the file is encrypted in your browser first, and the server holds only ciphertext it has no key for (see [docs/billing-transparency.md](docs/billing-transparency.md)).
-- 📦 **Multi-file batches** (up to 10) — streamed straight to disk; large files don't get buffered in memory.
+- 📡 **Private paths, stated precisely** — on a LAN, realtime file bytes flow directly over WebRTC. Cross-network browser sessions use a TURN relay by design, but it carries only end-to-end encrypted ciphertext; the CLI is direct-only. Stored download links are encrypted in your browser first, and the server holds only ciphertext it has no key for (see [docs/billing-transparency.md](docs/billing-transparency.md)).
+- 📦 **Multi-file batches** (up to 1,000) — streamed straight to disk where supported; other browsers may buffer in memory.
 - ✅ **Per-file SHA-256 integrity check** on the receiving end.
-- 💬 **Ephemeral encrypted text** — send a link, a command, or a block of multiline code to a device that's online right now, over a peer-to-peer connection of its own that is end-to-end encrypted and SAS-verified just like a transfer. Messages are realtime and session-scoped: never stored on any server, gone when the session ends, with no offline delivery and no persistent history. At most 65,536 UTF-8 bytes per message, delivered exactly as typed; anything larger is a file.
+- 💬 **Ephemeral encrypted text** — send a link, a command, or a block of multiline code to a device that's online right now, over a connection of its own that is end-to-end encrypted and SAS-verified just like a transfer. Relayium never stores message bodies or server-side history; either endpoint can retain received text. At most 65,536 UTF-8 bytes per message, delivered exactly as typed; anything larger is a file.
 - 🌐 **9 languages** — English, 中文, 日本語, 한국어, Deutsch, Français, العربية, Español, Português — auto-detected, switchable.
-- ⚡ **No install, ever** — just open a URL. Realtime transfers on the same LAN need **no account** at all; cross-network transfers via a pairing code (and the join link/QR it generates) need the **sender** to sign in (the receiver never does); stored download links also require the sender to sign in.
+- ⚡ **No install, ever** — just open a URL. Realtime files and text on the same LAN need **no account**; creating a cross-network file or text pairing code requires sign-in, while anyone joining with that code needs no account. Creating stored download links also requires sign-in.
 - 🪶 **Tiny footprint** — one static SPA + a single Go binary for signaling.
 
 ## Command-line client (CLI)
@@ -74,7 +75,7 @@ curl -fsSL https://relayium.com/install.sh | sh
 Four direct modes — three that move files, one that moves text:
 
 - **`push` / `pull` over your own SSH** — `relayium push ./photos user@host:backups/` (bytes travel over SSH; no Relayium account).
-- **`text` — ephemeral encrypted messages** — run `relayium text` with no code on one machine to mint a code (with your account, as `send` does); it prints the exact `relayium text K7M4XR` command the other machine runs, then waits in the live session for it. Both machines must be online at the same time: this is not a mailbox. One line per message interactively; pipe stdin (`pbpaste | relayium text K7M4XR --yes`) to send multiline content or exact bytes. End-to-end encrypted over a pinned-TLS direct connection of its own, exactly like a file transfer, never stored on any server, and gone when the session ends — no offline delivery, no history kept anywhere. The SAS is confirmed by default; a piped run refuses unless you pass `--yes`. One message is at most 65,536 bytes of UTF-8 — anything larger is a file. CLI to CLI: exactly as with file transfers, the terminal and the browser are separate transports and don't pair with each other.
+- **`text` — ephemeral encrypted messages** — run `relayium text` with no code on one machine to mint a code (with your account, as `send` does); it prints the exact `relayium text K7M4XR` command the other machine runs, then waits in the live session for it. Both machines must be online at the same time: this is not a mailbox. One line per message interactively; pipe stdin (`pbpaste | relayium text K7M4XR --yes`) to send multiline content or exact bytes. End-to-end encrypted over a pinned-TLS direct connection of its own, exactly like a file transfer; Relayium stores no message body or server-side history, though either endpoint can retain text. The SAS is confirmed by default; a piped run refuses unless you pass `--yes`. One message is at most 65,536 bytes of UTF-8 — anything larger is a file. CLI to CLI: exactly as with file transfers, the terminal and the browser are separate transports and don't pair with each other.
 - **`send` / `receive` by pairing code** — `relayium send ./file.zip` mints a code with your account (after `relayium login`) and prints what the other end runs: `relayium receive K7M4XR`. Codes are 6 characters and last 5 minutes; the receiver needs no account. Cross-network and direct peer-to-peer — a small rendezvous handshake introduces the two ends, the file goes straight between them, no relay. Sending to someone with a browser instead? Use `relayium up` for a download link.
 - **`serve` + `push relayium://` daemon direct** — `relayium serve --dir ~/inbox` then `relayium push ./file relayium://host` (server-to-server over pinned TLS; no relay, no SSH, no code — the listener approves each new pusher on its first push and remembers it).
 
@@ -91,7 +92,7 @@ Full docs at [relayium.com/cli](https://relayium.com/cli); prebuilt binaries on 
 |                          | **Relayium**            | AirDrop          | WeTransfer / Drive | Snapdrop / PairDrop |
 | ------------------------ | :---------------------: | :--------------: | :----------------: | :-----------------: |
 | Cross-platform           | ✅ any browser          | ❌ Apple only    | ✅                 | ✅                  |
-| Files never hit a server | ✅ true P2P             | ✅               | ❌ uploaded        | ✅                  |
+| Content path             | LAN direct; cross-network ciphertext relay | direct | uploaded | LAN direct |
 | End-to-end encrypted     | ✅ X25519 + AES-256-GCM | ✅               | ❌ / at rest only  | ⚠️ DTLS only        |
 | MITM verification (SAS)  | ✅ 6-digit code         | n/a              | n/a                | ❌                  |
 | No install               | ✅                      | ✅               | ⚠️ size limits      | ✅                  |
@@ -99,9 +100,9 @@ Full docs at [relayium.com/cli](https://relayium.com/cli); prebuilt binaries on 
 | Server-imposed size cap  | ❌ none                 | ❌ none          | ✅ (e.g. 2 GB free) | ❌ none             |
 | Open source              | ✅ AGPL-3.0 / Apache-2.0 | ❌               | ❌                 | ✅                  |
 
-\* Realtime transfers over the **same LAN** need no account at all. Cross-network transfers via a **pairing
-code** (and the join link/QR it generates) require the **sender** to sign in — the receiver never needs an
-account. Creating a **stored download link** also requires the sender to sign in.
+\* Realtime files and text over the **same LAN** need no account. Creating a cross-network **pairing code**
+for files or text requires sign-in; anyone joining with that code needs no account. Creating a
+**stored download link** also requires sign-in.
 
 The gap from Snapdrop/PairDrop is the **application-layer E2E + SAS**: WebRTC's DTLS fingerprints are
 exchanged *through the signaling server*, so a malicious server could MITM them. Relayium adds an
@@ -118,8 +119,8 @@ two humans can compare out of band.
 │             │                           │  relays SDP/ICE/key │                          │             │
 └──────┬──────┘                           └────────────────────┘                           └──────┬──────┘
        │                                                                                          │
-       └───────────────── WebRTC DataChannel (file bytes, end-to-end encrypted) ──────────────────┘
-                                      the file never passes through the server
+       └──────────────── WebRTC DataChannel (content, end-to-end encrypted) ─────────────────────┘
+                      LAN: direct · browser cross-network: TURN carries ciphertext only
 ```
 
 1. Both browsers connect to the signaling server over WebSocket and are grouped into a **room by public IP**.
@@ -141,9 +142,10 @@ two humans can compare out of band.
 - **Integrity:** per-chunk GCM tag **and** a per-file SHA-256 verified end-to-end.
 - **Anti-MITM:** the SAS short code is derived from the session keys; comparing it out of band detects a
   key-swapping server.
-- **Metadata minimization:** the server only ever sees room membership (public IP), a device nickname, presence,
-  and signaling envelopes. File **contents and names**, and any **message text**, travel over the
-  DTLS-encrypted DataChannel — never the server, which also never stores a message.
+- **Metadata minimization:** the server sees room membership (public IP), a device nickname, presence,
+  and signaling envelopes. On a LAN, content travels directly over the DataChannel; cross-network browser
+  TURN carries only end-to-end encrypted ciphertext; CLI transfers are direct-only. Relayium never stores
+  message bodies.
 
 That's what the server *can't* see. For what it *does* record — TURN relay bytes, stored-transfer
 sizes, quota bookkeeping — and exactly what that's billed against, see
@@ -172,7 +174,7 @@ go build -o relayium-server .
 
 Then find the machine's LAN IP (`ipconfig getifaddr en0` on macOS, `hostname -I` on Linux) and open
 `http://<LAN-IP>:8080` **on two devices on the same network**. They'll discover each other within a couple
-of seconds.
+of seconds; pick files or choose the live message mode while both devices are online.
 
 > **HTTPS note:** the Web Crypto API and streaming-to-disk require a **secure context**. `localhost` counts,
 > but any real deployment must be served over **HTTPS** (e.g. behind Caddy/nginx/Cloudflare). The live site
@@ -189,9 +191,9 @@ for an actual two-device transfer, serve the built `dist/` from the Go server as
 | Firefox        |    ✅    | Buffered in memory (Blob download) — keep files under ~200 MB.         |
 | Safari         |    ✅    | Buffered in memory (Blob download) — keep files under ~200 MB.         |
 
-Same-LAN / same-public-IP transfers work with no account. Cross-network transfers (different networks/public
-IPs) work too, via a pairing code, using STUN and — when a direct connection isn't possible — an encrypted
-TURN relay that only ever sees ciphertext; this requires the sender to sign in.
+Same-LAN / same-public-IP file and text transfers work with no account. Cross-network browser sessions use
+an encrypted TURN relay by design, which only ever sees ciphertext. Creating a cross-network file or text
+pairing code requires sign-in; joining with that code does not.
 
 ## Roadmap
 
@@ -201,7 +203,8 @@ TURN relay that only ever sees ciphertext; this requires the sender to sign in.
 - **M1 — Developer experience + persistent identity:** pair devices once and trust them forever (no code each
   time), directories & multi-file, resumable transfers, concurrent chunks.
 - **M2 — Cross-network relay:** TURN/relay and NAT traversal for pairing-code transfers across different
-  networks. *(Shipped — cross-network pairing-code transfers go through STUN/TURN, gated by sender sign-in.
+  networks. *(Shipped — browser pairing-code transfers use TURN by design; creating a code requires sign-in,
+  while joining with one does not.
   Encrypted temporary staging when the peer is offline is still ahead; TURN relay bandwidth is metered — see
   [`docs/billing-transparency.md`](docs/billing-transparency.md) for exactly how.)*
 - **M3 — Protocol spec + multi-client:** write the wire protocol down as a spec and reuse it from a CLI and mobile;
@@ -239,14 +242,15 @@ may change without notice until this note says otherwise.
 ## FAQ
 
 **Is Relayium free?**
-Yes — free and open source. No install, ever. Same-LAN realtime transfers need no
-account; cross-network transfers via a pairing code require the sender to sign in (the receiver never does);
-creating a stored download link also requires the sender to sign in. See [License](#license) for which
+Yes — free and open source. No install, ever. Same-LAN realtime files and text need no account.
+Creating a cross-network pairing code for files or text requires sign-in; joining with that code does not.
+Creating a stored download link also requires sign-in. See [License](#license) for which
 open-source license covers which part.
 
 **Do my files get uploaded to a server?**
-No. File bytes stream directly between the two devices over the WebRTC DataChannel and never pass through
-the server. The signaling server only helps the devices find each other — it never sees file contents or names.
+On a LAN, file bytes stream directly between devices over WebRTC. Cross-network browser transfers use a
+TURN relay by design, but it sees only end-to-end encrypted ciphertext, never readable files, names, or keys.
+The CLI is direct-only. Stored download links are encrypted before upload, so the server stores ciphertext.
 
 **Is it really end-to-end encrypted?**
 Yes. A per-transfer X25519 key exchange derives an AES-256-GCM key; keys exist only on the sender and
@@ -263,14 +267,14 @@ In Firefox/Safari they're buffered in memory, so keep them under ~200 MB.
 **Can I send text, not just files?**
 Yes. When both devices are online you can open a message session — its own end-to-end encrypted
 peer-to-peer connection, with its own SAS to compare: links, commands, and multiline code arrive
-exactly as typed, up to 65,536 UTF-8 bytes per message. Messages are never stored on any server and
-are gone when the session ends — there's no offline messaging and no history kept anywhere. Anything
+exactly as typed, up to 65,536 UTF-8 bytes per message. Relayium never stores message bodies or server-side
+history; there's no offline messaging, though either endpoint can retain received text. Anything
 larger goes as a file. The terminal has its own equivalent, `relayium text <code>` — CLI to CLI,
 since the two transports don't pair.
 
 **Can I send across different networks / over the internet?**
-Yes — via a pairing code, using STUN and, when a direct connection isn't possible, an encrypted TURN relay
-that only ever sees ciphertext (it can't decrypt your files). This requires the sender to sign in. See the
+Yes — via a pairing code. Browser cross-network sessions use an encrypted TURN relay by design that only
+ever sees ciphertext. Creating a file or text code requires sign-in; joining with that code does not. See the
 [Security page](https://relayium.com/security).
 
 **How is this different from Snapdrop or PairDrop?**
