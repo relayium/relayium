@@ -3,7 +3,7 @@ import type { Messages } from "./types";
 const fr: Messages = {
   langLabel: "Langue",
   theme: { label: "Thème", system: "Système", light: "Clair", dark: "Sombre" },
-  tagline: "Transfert pair-à-pair chiffré de bout en bout, fichiers et texte · le serveur ne voit ni l'un ni l'autre",
+  tagline: "Transfert de fichiers et de texte chiffré de bout en bout · serveurs et relais ne peuvent ni lire ni déchiffrer le contenu",
   connected: (n) => `Connecté · cet appareil ${n}`,
   ipLabel: "IP publique",
   connecting: "Connexion au serveur de signalisation…",
@@ -47,7 +47,7 @@ const fr: Messages = {
   dragSendMany: "Déposez sur un appareil pour envoyer",
   pickHint: (m) => `Cliquez pour choisir · ou déposez ici (jusqu'à ${m})`,
   maxSize: (s) => `Max ${s}`,
-  footer: "Chiffré de bout en bout (X25519 + AES-256-GCM) · le serveur de signalisation ne relaie que les infos de connexion et ne voit jamais le contenu des fichiers ni les messages",
+  footer: "Chiffré de bout en bout (X25519 + AES-256-GCM) · direct sur le réseau local ; entre réseaux, TURN transporte du chiffré que le relais ne peut ni lire ni déchiffrer",
   offlineFooter: "Chiffré dans votre navigateur avec AES-256-GCM avant l'envoi · le serveur ne stocke que du texte chiffré qu'il ne peut pas déchiffrer — la clé de déchiffrement ne vit que dans le lien.",
   busy: "Un transfert est déjà en cours — veuillez attendre qu'il se termine",
   tooMany: (m, n) => `Jusqu'à ${m} fichiers à la fois ; ${n} en trop ignoré(s)`,
@@ -469,12 +469,12 @@ const fr: Messages = {
     textLimitNote: "Un message fait au plus 65 536 octets UTF-8. Au-delà, c’est un fichier — utilisez relayium send.",
   },
   crossnet: {
-    realtimeTitle: "Transfert direct en temps réel",
-    realtimeSub: "Les deux en ligne · chiffré de bout en bout · le serveur ne voit jamais vos fichiers",
+    realtimeTitle: "Transfert en temps réel",
+    realtimeSub: "Les deux en ligne · réseau local direct · entre réseaux, TURN transporte du chiffré que le relais ne peut ni lire ni déchiffrer",
     realtimeFoot: "Le destinataire n'a pas besoin de compte · chiffré de bout en bout",
     signInToSend: "Connectez-vous pour envoyer d'un réseau à l'autre. La personne qui reçoit n'a jamais besoin de compte.",
-    relayQuotaWarn: "Vous avez épuisé le trafic de relais de ce mois-ci. Une connexion directe pair-à-pair fonctionne toujours — seul le relais de secours est indisponible. Il se réinitialise au début du mois prochain ; pour envoyer maintenant, utilisez un lien de téléchargement, passez à une offre supérieure pour plus de trafic de relais, ou exécutez votre propre nœud.",
-    relayQuotaFail: "Connexion directe impossible, et le trafic de relais de ce mois-ci est épuisé — aucun relais de secours. Il se réinitialise au début du mois prochain ; utilisez un lien de téléchargement, passez à une offre supérieure pour plus de trafic de relais, ou exécutez votre propre nœud.",
+    relayQuotaWarn: "Votre quota de relais mensuel est épuisé : une session navigateur inter-réseaux ne peut pas démarrer ou continuer. Les sessions sur le même réseau et les transferts directs CLI restent disponibles. Utilisez un lien de téléchargement, augmentez votre offre ou exécutez votre propre nœud.",
+    relayQuotaFail: "Votre quota de relais mensuel est épuisé : cette session navigateur inter-réseaux ne peut pas se connecter. Les sessions sur le même réseau et les transferts directs CLI ne sont pas affectés. Utilisez un lien de téléchargement, augmentez votre offre ou exécutez votre propre nœud.",
   },
   offline: {
     tagline: "Chiffré dans votre navigateur, puis stocké · le serveur ne détient que du texte chiffré",
@@ -486,11 +486,11 @@ const fr: Messages = {
     planNote: "La capacité de stockage, votre volume de transfert mensuel et la durée pendant laquelle les liens de téléchargement restent actifs dépendent de votre offre — commencez gratuitement, améliorez à tout moment :",
   },
   crossSell: {
-    realtime: { lead: "L'autre personne est en ligne maintenant ? Le direct en temps réel est plus rapide — chiffré de bout en bout, et le serveur ne voit jamais vos fichiers.", cta: "Vers le direct en temps réel →" },
+    realtime: { lead: "L'autre personne est en ligne ? En temps réel : direct sur le réseau local ; entre réseaux, TURN transporte du chiffré que le relais ne peut ni lire ni déchiffrer.", cta: "Vers le transfert en temps réel →" },
     offline: { lead: "Destinataire hors ligne ? Utilisez le transfert asynchrone — chiffrez, téléversez et laissez un lien de téléchargement, récupérable pendant plusieurs jours.", cta: "Vers le transfert asynchrone →" },
   },
   methods: {
-    realtime: { name: "⚡ Transfert direct en temps réel", sub: "Choisissez vos fichiers et obtenez un code à 6 caractères — dictez-le, envoyez le lien ou montrez le QR ; dès que l'autre appareil rejoint, le transfert démarre automatiquement.", badge: "Destinataire sans compte" },
+    realtime: { name: "⚡ Transfert en temps réel", sub: "Choisissez vos fichiers et obtenez un code à 6 caractères — dictez-le, envoyez le lien ou montrez le QR ; dès que l'autre appareil rejoint, le transfert démarre automatiquement.", badge: "Destinataire sans compte" },
     stored: { name: "📦 Lien de téléchargement", sub: "Votre navigateur chiffre puis stocke temporairement ; le destinataire télécharge quand il veut, sans session ni compte.", badge: "Même hors ligne" },
   },
   pair: {
@@ -580,12 +580,12 @@ const fr: Messages = {
   },
   howItWorks: {
     realtime: {
-      title: "Direct en temps réel, en trois étapes",
+      title: "Transfert en temps réel, en trois étapes",
       sub: "Quand les deux côtés sont en ligne, transfert en temps réel d'un réseau à l'autre — le destinataire n'a pas besoin de compte.",
       ways: [
         { icon: "📄", name: "Choisir les fichiers, obtenir un code", how: "Touchez « Envoyer des fichiers » et choisissez quoi envoyer — un code d'appairage à 6 caractères est créé automatiquement, avec lien d'accès et QR.", tag: "Connexion pour envoyer" },
         { icon: "🔢", name: "Transmettre le code", how: "Dictez-le, envoyez le lien ou montrez le QR — au choix ; l'autre personne le saisit ou l'ouvre dans n'importe quel navigateur moderne.", tag: "Codes valables 15 minutes" },
-        { icon: "⚡", name: "Le transfert démarre à l'arrivée", how: "Dès que l'autre appareil rejoint, le transfert démarre automatiquement — chiffré de bout en bout sur tout le trajet ; entre réseaux, le flux passe par un relais TURN chiffré qui ne transporte que du texte chiffré, sans rien pouvoir déchiffrer.", tag: "Le serveur ne voit jamais vos fichiers" },
+        { icon: "⚡", name: "Le transfert démarre à l'arrivée", how: "Dès que l'autre appareil rejoint, le transfert démarre automatiquement — chiffré de bout en bout sur tout le trajet ; entre réseaux, le flux passe par un relais TURN chiffré qui ne transporte que du texte chiffré, sans rien pouvoir déchiffrer.", tag: "Le relais ne peut ni lire ni déchiffrer" },
       ],
     },
     offline: {

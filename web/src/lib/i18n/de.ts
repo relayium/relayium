@@ -3,7 +3,7 @@ import type { Messages } from "./types";
 const de: Messages = {
   langLabel: "Sprache",
   theme: { label: "Design", system: "System", light: "Hell", dark: "Dunkel" },
-  tagline: "Ende-zu-Ende-verschlüsselte Peer-to-Peer-Übertragung für Dateien und Text · der Server sieht beides nie",
+  tagline: "Dateien und Text Ende-zu-Ende-verschlüsselt · Server und Relay können Klartext weder lesen noch entschlüsseln",
   connected: (n) => `Verbunden · dieses Gerät ${n}`,
   ipLabel: "öffentliche IP",
   connecting: "Verbindung zum Signalisierungsserver…",
@@ -47,7 +47,7 @@ const de: Messages = {
   dragSendMany: "Zum Senden auf ein Gerät ziehen",
   pickHint: (m) => `Zum Auswählen klicken · oder hierher ziehen (bis zu ${m})`,
   maxSize: (s) => `Max. ${s}`,
-  footer: "Ende-zu-Ende-verschlüsselt (X25519 + AES-256-GCM) · der Signalisierungsserver leitet nur Verbindungsdaten weiter und sieht nie Dateiinhalte oder Nachrichten",
+  footer: "Ende-zu-Ende-verschlüsselt (X25519 + AES-256-GCM) · im selben Netz direkt; netzwerkübergreifend trägt TURN nur Chiffretext, den Server und Relay nicht entschlüsseln können",
   offlineFooter: "Vor dem Hochladen im Browser mit AES-256-GCM verschlüsselt · der Server speichert nur Chiffretext, den er nicht entschlüsseln kann — der Schlüssel existiert einzig im Link.",
   busy: "Eine Übertragung läuft bereits — bitte warte, bis sie abgeschlossen ist",
   tooMany: (m, n) => `Maximal ${m} Dateien auf einmal; ${n} überzählige ignoriert`,
@@ -469,12 +469,12 @@ const de: Messages = {
     textLimitNote: "Eine Nachricht umfasst höchstens 65.536 Bytes UTF-8. Alles Größere ist eine Datei — nimm relayium send.",
   },
   crossnet: {
-    realtimeTitle: "Echtzeit-Direktübertragung",
-    realtimeSub: "Beide jetzt online · Ende-zu-Ende-verschlüsselt · der Server sieht deine Dateien nie",
+    realtimeTitle: "Echtzeitübertragung",
+    realtimeSub: "Beide jetzt online · Ende-zu-Ende-verschlüsselt · Server und Relay können Dateien und Nachrichten nicht entschlüsseln",
     realtimeFoot: "Empfänger braucht kein Konto · Ende-zu-Ende-verschlüsselt",
     signInToSend: "Zum netzwerkübergreifenden Senden anmelden. Die empfangende Person braucht nie ein Konto.",
-    relayQuotaWarn: "Das Relay-Kontingent dieses Monats ist aufgebraucht. Eine direkte Peer-to-Peer-Verbindung funktioniert weiterhin — nur der Relay-Rückfall steht nicht zur Verfügung. Es wird zu Beginn des nächsten Monats zurückgesetzt; um jetzt zu senden, nutze einen Download-Link, führe ein Upgrade für mehr Relay-Traffic durch oder betreibe deinen eigenen Node.",
-    relayQuotaFail: "Direkte Verbindung fehlgeschlagen, und das Relay-Kontingent dieses Monats ist aufgebraucht — kein Relay als Rückfall. Es wird zu Beginn des nächsten Monats zurückgesetzt; nutze einen Download-Link, führe ein Upgrade für mehr Relay-Traffic durch oder betreibe deinen eigenen Node.",
+    relayQuotaWarn: "Das Relay-Kontingent dieses Monats ist aufgebraucht; netzwerkübergreifende Browser-Sitzungen können bis zum Reset nächsten Monat nicht starten oder fortfahren. Sitzungen im selben Netz und direkte CLI-Wege bleiben unberührt. Nutze einen Download-Link, ein Upgrade oder deinen eigenen Node.",
+    relayQuotaFail: "Diese netzwerkübergreifende Browser-Sitzung kann wegen des aufgebrauchten Relay-Kontingents nicht verbinden. Sitzungen im selben Netz und direkte CLI-Wege bleiben unberührt. Nutze einen Download-Link, ein Upgrade oder deinen eigenen Node.",
   },
   offline: {
     tagline: "Im Browser verschlüsselt, dann zwischengespeichert · der Server hält nur Chiffretext",
@@ -486,11 +486,11 @@ const de: Messages = {
     planNote: "Wie viel du speichern kannst, dein monatliches Transfervolumen und wie lange Download-Links aktiv bleiben, hängt von deinem Tarif ab — kostenlos starten, jederzeit upgraden:",
   },
   crossSell: {
-    realtime: { lead: "Ist die andere Person gerade online? Direkt in Echtzeit ist schneller — Ende-zu-Ende-verschlüsselt, und der Server sieht deine Dateien nie.", cta: "Zur Echtzeit-Direktübertragung →" },
+    realtime: { lead: "Ist die andere Person online? Nutze die Ende-zu-Ende-verschlüsselte Echtzeitübertragung; netzwerkübergreifend trägt TURN nur Chiffretext, den es nicht entschlüsseln kann.", cta: "Zur Echtzeitübertragung →" },
     offline: { lead: "Gegenseite offline? Nutze die asynchrone Übertragung — verschlüsselt hochladen und einen Download-Link hinterlassen, tagelang abholbar.", cta: "Zur asynchronen Übertragung →" },
   },
   methods: {
-    realtime: { name: "⚡ Echtzeit-Direktübertragung", sub: "Dateien auswählen und einen 6-stelligen Code erhalten — vorlesen, als Link verschicken oder QR zeigen; sobald die Gegenseite beitritt, startet die Übertragung automatisch.", badge: "Empfänger ohne Konto" },
+    realtime: { name: "⚡ Echtzeitübertragung", sub: "Dateien auswählen und einen 6-stelligen Code erhalten — vorlesen, als Link verschicken oder QR zeigen; sobald die Gegenseite beitritt, startet die Übertragung automatisch.", badge: "Empfänger ohne Konto" },
     stored: { name: "📦 Download-Link", sub: "Dein Browser verschlüsselt und speichert zwischen; die empfangende Person lädt jederzeit herunter — ohne Sitzung, ohne Konto.", badge: "Auch offline" },
   },
   pair: {
@@ -580,12 +580,12 @@ const de: Messages = {
   },
   howItWorks: {
     realtime: {
-      title: "Echtzeit-Direkt in drei Schritten",
+      title: "Echtzeitübertragung in drei Schritten",
       sub: "Wenn beide Seiten online sind, netzwerkübergreifend in Echtzeit übertragen — der Empfänger braucht kein Konto.",
       ways: [
         { icon: "📄", name: "Dateien wählen, Code erhalten", how: "Auf „Dateien senden“ tippen und auswählen — ein 6-stelliger Pairing-Code wird automatisch erzeugt, samt Beitrittslink und QR.", tag: "Zum Senden anmelden" },
         { icon: "🔢", name: "Code an die Gegenseite geben", how: "Vorlesen, den Link schicken oder den QR zeigen — die andere Person tippt ihn ein oder öffnet ihn in einem beliebigen modernen Browser.", tag: "Codes gelten 15 Minuten" },
-        { icon: "⚡", name: "Übertragung startet beim Beitritt", how: "Sobald die Gegenseite beitritt, startet die Übertragung automatisch — durchgehend Ende-zu-Ende-verschlüsselt; netzübergreifend läuft der Strom über ein verschlüsseltes TURN-Relay, das nur Chiffretext trägt und nichts entschlüsseln kann.", tag: "Der Server sieht deine Dateien nie" },
+        { icon: "⚡", name: "Übertragung startet beim Beitritt", how: "Sobald die Gegenseite beitritt, startet die Übertragung automatisch — durchgehend Ende-zu-Ende-verschlüsselt; netzübergreifend läuft der Strom über ein verschlüsseltes TURN-Relay, das nur Chiffretext trägt und nichts entschlüsseln kann.", tag: "Das Relay kann deine Dateien nicht entschlüsseln" },
       ],
     },
     offline: {
@@ -647,7 +647,7 @@ const de: Messages = {
       { q: "Was ist der Unterschied zwischen Pairing-Code und Share-Link?", a: "Beides sind Ende-zu-Ende-verschlüsselte Echtzeitübertragungen. Ein Pairing-Code eignet sich, wenn beide gleichzeitig online sind und eine kurze Zahl mündlich oder sofort austauschen; einen Share-Link kannst du einfach verschicken, damit die Gegenseite ihn öffnet. Nimm, was praktischer ist." },
       { q: "Müssen beide Seiten gleichzeitig online sein?", a: "Ja. Eine netzübergreifende Echtzeitübertragung erfordert, dass Absender und Empfänger gleichzeitig online sind und die Seite geöffnet haben. Geht das nicht gleichzeitig, nutze einen asynchronen Download-Link — er speichert die verschlüsselte Datei, damit die Gegenseite sie später abholt." },
       { q: "Läuft der Pairing-Code ab?", a: "Ja. Ein Pairing-Code ist einmalig und kurzlebig; sobald er abläuft oder benutzt wurde, erzeugst du einen neuen, was die Chance verringert, dass ihn jemand errät." },
-      { q: "Es läuft über euer Relay — kann meine Datei durchsickern?", a: "Nein. Netzübergreifende Übertragungen laufen über ein verschlüsseltes TURN-Relay, das nur Chiffretext weiterleitet und nicht entschlüsseln kann — es sieht nie irgendwelche Dateiinhalte." },
+      { q: "Es läuft über euer Relay — kann meine Datei durchsickern?", a: "Nein. Netzübergreifende Übertragungen laufen als Ende-zu-Ende-Chiffretext über TURN; das Relay kann Dateiinhalte weder lesen noch entschlüsseln." },
       { q: "Warum meldet sich der Absender an, der Empfänger aber nicht?", a: "Netzübergreifende Verbindungen nutzen unsere Signaling- und Relay-Ressourcen (die uns Kosten verursachen), daher meldet sich der Absender zur Abrechnung und Missbrauchsvermeidung an; der Empfänger öffnet nur einen Link oder tippt einen Code ein und braucht nie ein Konto." },
       { q: "Was bestimmt die Geschwindigkeit, und wie mache ich sie schneller?", a: "Bei einer direkten Verbindung sind es die Up-/Download-Bandbreite und Latenz eurer beiden Netzwerke; über ein Relay kommt zusätzlich die Bandbreite des Relay-Nodes hinzu. Einen eigenen Node über die Kontoseite zu betreiben, kann das netzübergreifende Relaying spürbar beschleunigen — und es ist kostenlos." },
     ],

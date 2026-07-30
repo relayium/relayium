@@ -18,6 +18,10 @@ const facts = {
     endpointRetention: /endpoint|terminal|browser|recipient/i,
     turnByDesign: /through TURN by design/i,
     cannotDecrypt: /cannot decrypt|read or decrypt/i,
+    visibilityBad: /server never sees|never sees your files|never sees either/i,
+    directNameBad: /\bdirect\b/i,
+    quotaScope: /Same-network sessions and direct CLI transfers are unaffected/i,
+    quotaBad: /direct peer-to-peer connection still works|relay fallback|fall back on/i,
     bad: /never stored|gone when (?:the|this) session ends|nothing stored|nothing is ever written/i,
   },
   zh: {
@@ -26,6 +30,10 @@ const facts = {
     endpointRetention: /任一端|终端|接收端|浏览器/,
     turnByDesign: /按设计经 TURN/,
     cannotDecrypt: /无法解密|读取或解密/,
+    visibilityBad: /服务器.*看不到|服务器两者都看不到/,
+    directNameBad: /直传/,
+    quotaScope: /同一网络会话与 CLI 直连不受影响/,
+    quotaBad: /直连仍可用|中继兜底|无中继可兜底/,
     bad: /绝不存储|从不存到任何服务器|会话结束即消失|任何内容都不会写入服务器|消息不会被存储|不留存/,
   },
   ja: {
@@ -33,7 +41,11 @@ const facts = {
     noServerHistory: /サーバー側履歴を(?:保存|保持)しません|サーバー側履歴はなく/,
     endpointRetention: /端末|ブラウザ|受信側/,
     turnByDesign: /設計上TURN/,
-    cannotDecrypt: /復号できません|読んだり復号したり/,
+    cannotDecrypt: /復号でき(?:ません|ない)|読んだり復号したり/,
+    visibilityBad: /サーバー.*見られ|見えません/,
+    directNameBad: /直接/,
+    quotaScope: /同一ネットワークとCLI直結は影響を受けません/,
+    quotaBad: /P2P直結は引き続き|中継フォールバック|フォールバックする中継/,
     bad: /どのサーバーにも保存されず|セッション.*消えます|保存はされません|メッセージは保存されません|送ったら消える、保存なし/,
   },
   ko: {
@@ -41,7 +53,11 @@ const facts = {
     noServerHistory: /서버.*(?:본문이나 기록|서버 측 메시지 기록)|서버 측 기록이 없/,
     endpointRetention: /기기|터미널|브라우저|수신/,
     turnByDesign: /설계상 TURN/,
-    cannotDecrypt: /복호화할 수 없습니다|읽거나 복호화/,
+    cannotDecrypt: /복호화할 수 없|읽거나 복호화/,
+    visibilityBad: /서버.*볼 수 없|보지 못/,
+    directNameBad: /직접/,
+    quotaScope: /동일 네트워크 세션과 CLI 직접 연결은 영향을 받지 않습니다/,
+    quotaBad: /P2P 직접 연결은 계속 가능|릴레이 대체 경로|대체할 릴레이/,
     bad: /어떤 서버에도 저장되지 않고|세션이 끝나면 사라|메시지는 저장되지 않습니다|보내면 끝, 저장되지 않음/,
   },
   de: {
@@ -49,7 +65,11 @@ const facts = {
     noServerHistory: /serverseitigen (?:Nachrichten)?verlauf/i,
     endpointRetention: /Endgerät|Terminal|Browser|Empfänger/i,
     turnByDesign: /planmäßig über TURN/i,
-    cannotDecrypt: /nicht entschlüsseln|lesen oder entschlüsseln/i,
+    cannotDecrypt: /nicht entschlüsseln|lesen oder entschlüsseln|weder lesen noch entschlüsseln/i,
+    visibilityBad: /Server.*sieht.*nie|sieht deine Dateien nie/i,
+    directNameBad: /Direkt/i,
+    quotaScope: /Sitzungen im selben Netz und direkte CLI-Wege bleiben unberührt/i,
+    quotaBad: /direkte Peer-to-Peer-Verbindung funktioniert weiterhin|Relay-Rückfall|kein Relay als Rückfall/i,
     bad: /wird nie gespeichert|auf keinem Server gespeichert|Ende der Sitzung weg|nichts wird gespeichert|Nachrichten werden nicht gespeichert|Senden und weg, nichts gespeichert|nichts wird je auf einem Server geschrieben/i,
   },
   fr: {
@@ -58,6 +78,10 @@ const facts = {
     endpointRetention: /appareil|terminal|navigateur|destinataire/i,
     turnByDesign: /TURN par conception/i,
     cannotDecrypt: /lire.*déchiffrer/i,
+    visibilityBad: /serveur.*(?:ne voit jamais|ne voit ni)|ne voit jamais (?:tes|vos) fichiers/i,
+    directNameBad: /\bdirect(?:e|ement)?\b/i,
+    quotaScope: /(?:sessions sur le même réseau et les transferts directs CLI (?:restent disponibles|ne sont pas affectés))/i,
+    quotaBad: /connexion directe pair-à-pair fonctionne toujours|relais de secours|aucun relais de secours/i,
     bad: /jamais stocké|disparaît à la fin de la session|rien n'est stocké|aucun stockage nulle part/i,
   },
   ar: {
@@ -65,7 +89,11 @@ const facts = {
     noServerHistory: /لا يحفظ Relayium أجسام الرسائل أو سجلها|لا يحفظ Relayium سجلًا على الخادم/,
     endpointRetention: /الطرفين|المتصفح|المستلم|الجهاز/,
     turnByDesign: /TURN بحكم التصميم/,
-    cannotDecrypt: /قراءة.*فك تشفير|لا يستطيع.*فك تشفير|قراءتها أو فك تشفيرها/,
+    cannotDecrypt: /قراءة.*فكّ? (?:ال)?تشفير|لا يستطيع.*فكّ? (?:ال)?تشفير|قراءتها أو فك تشفيرها/,
+    visibilityBad: /الخادم.*(?:لا يرى|لن يرى)|لا يرى.*أبدًا/,
+    directNameBad: /مباشر/,
+    quotaScope: /(?:تبقى جلسات الشبكة نفسها وعمليات CLI المباشرة متاحة|لا تتأثر جلسات الشبكة نفسها وعمليات CLI المباشرة)/,
+    quotaBad: /اتصال.*مباشر.*يعمل|ترحيل احتياطي|مُرحِّل احتياطي/,
     bad: /لا تُخزَّن أبدًا|تختفي عند انتهاء الجلسة|لا يُحفظ أي شيء في أي مكان/,
   },
   es: {
@@ -74,6 +102,10 @@ const facts = {
     endpointRetention: /extremo|terminal|navegador|destinatario/i,
     turnByDesign: /TURN por diseño/i,
     cannotDecrypt: /leer.*descifrar/i,
+    visibilityBad: /servidor.*(?:nunca ve|no ve)|nunca ve (?:tus|sus) archivos/i,
+    directNameBad: /\bdirect(?:a|amente|o)?\b/i,
+    quotaScope: /(?:sesiones en la misma red y las transferencias directas por CLI (?:siguen disponibles|no se ven afectadas))/i,
+    quotaBad: /conexión directa entre pares sigue funcionando|retransmisor de respaldo|respaldo por retransmisión/i,
     bad: /nunca se almacena|desaparece al terminar la sesión|no se guarda nada en ningún sitio/i,
   },
   pt: {
@@ -81,7 +113,11 @@ const facts = {
     noServerHistory: /Relayium não guarda corpo nem histórico|Relayium não guarda histórico/i,
     endpointRetention: /ponta|terminal|navegador|destinatário/i,
     turnByDesign: /TURN por projeto/i,
-    cannotDecrypt: /não consegue (?:ler nem )?descriptografar|ler ou descriptografar/i,
+    cannotDecrypt: /não consegue(?:m)? (?:ler nem )?descriptografar|ler ou descriptografar/i,
+    visibilityBad: /servidor.*(?:nunca vê|não vê)|nunca vê (?:seus|os) arquivos/i,
+    directNameBad: /\bdiret(?:a|amente|o)?\b/i,
+    quotaScope: /(?:sessões na mesma rede e transferências diretas pela CLI (?:continuam disponíveis|não são afetadas))/i,
+    quotaBad: /conexão direta entre pares ainda funciona|retransmissor de alternativa|alternativa de retransmissão/i,
     bad: /nunca (?:é )?armazenad|desaparece quando a sessão termina|nada é guardado em lugar nenhum/i,
   },
 };
@@ -119,6 +155,41 @@ describe("localized ephemeral-text retention boundaries", () => {
       expect(messages.me.nodesTrafficHint).toMatch(expected.turnByDesign);
       expect(messages.features.items[1].title).toMatch(expected.cannotDecrypt);
       expect(messages.faq.items[3].q).toMatch(expected.cannotDecrypt);
+    });
+
+    it(`${code} avoids visibility overclaims in product-level realtime copy`, () => {
+      const expected = facts[code as keyof typeof facts];
+      const fields = [
+        messages.tagline,
+        messages.footer,
+        messages.crossnet.realtimeSub,
+        messages.crossSell.realtime.lead,
+        messages.howItWorks.realtime.ways[2].tag,
+      ];
+      for (const field of fields) {
+        expect(field, `${code}: read/decrypt boundary`).toMatch(expected.cannotDecrypt);
+        expect(field, `${code}: legacy never-sees claim`).not.toMatch(expected.visibilityBad);
+      }
+    });
+
+    it(`${code} names cross-network browser transfer without calling it direct`, () => {
+      const expected = facts[code as keyof typeof facts];
+      for (const field of [
+        messages.crossnet.realtimeTitle,
+        messages.crossSell.realtime.cta,
+        messages.methods.realtime.name,
+        messages.howItWorks.realtime.title,
+      ]) {
+        expect(field, `${code}: cross-network mode name`).not.toMatch(expected.directNameBad);
+      }
+    });
+
+    it(`${code} explains exhausted relay quota without fallback claims`, () => {
+      const expected = facts[code as keyof typeof facts];
+      for (const field of [messages.crossnet.relayQuotaWarn, messages.crossnet.relayQuotaFail]) {
+        expect(field, `${code}: unaffected paths`).toMatch(expected.quotaScope);
+        expect(field, `${code}: legacy fallback claim`).not.toMatch(expected.quotaBad);
+      }
     });
   }
 });

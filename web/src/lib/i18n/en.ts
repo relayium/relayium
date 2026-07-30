@@ -3,7 +3,7 @@ import type { Messages } from "./types";
 const en: Messages = {
   langLabel: "Language",
   theme: { label: "Theme", system: "System", light: "Light", dark: "Dark" },
-  tagline: "End-to-end encrypted peer-to-peer transfer for files and text · the server never sees either",
+  tagline: "End-to-end encrypted files and text · servers and relays cannot read or decrypt the plaintext",
   connected: (n) => `Connected · this device ${n}`,
   ipLabel: "public IP",
   connecting: "Connecting to the signaling server…",
@@ -47,7 +47,7 @@ const en: Messages = {
   dragSendMany: "Drop onto a device to send",
   pickHint: (m) => `Click to choose files · or drop them here (up to ${m})`,
   maxSize: (s) => `Max ${s}`,
-  footer: "End-to-end encrypted (X25519 + AES-256-GCM) · the signaling server only relays connection info and never sees file contents or messages",
+  footer: "End-to-end encrypted (X25519 + AES-256-GCM) · same-network sessions stay direct; cross-network TURN carries ciphertext that servers and relays cannot decrypt",
   offlineFooter: "Encrypted in your browser with AES-256-GCM before upload · the server stores only ciphertext it can't decrypt — the decryption key lives solely in the link.",
   busy: "A transfer is already in progress — please wait for it to finish",
   tooMany: (m, n) => `Up to ${m} files at a time; ignored the extra ${n}`,
@@ -478,12 +478,12 @@ const en: Messages = {
     textLimitNote: "One message is at most 65,536 bytes of UTF-8. Anything larger is a file — use relayium send.",
   },
   crossnet: {
-    realtimeTitle: "Realtime direct",
-    realtimeSub: "Both online now · live, end-to-end encrypted · the server never sees your files",
+    realtimeTitle: "Realtime transfer",
+    realtimeSub: "Both online now · live, end-to-end encrypted · servers and relays cannot decrypt files or messages",
     realtimeFoot: "Recipient needs no account · end-to-end encrypted",
     signInToSend: "Sign in to send across networks. The person receiving never needs an account.",
-    relayQuotaWarn: "You've used up this month's relay traffic. A direct peer-to-peer connection still works — only the relay fallback is unavailable. It resets at the start of next month; to send now, use a stored download link, upgrade your plan for more relay traffic, or run your own node.",
-    relayQuotaFail: "Couldn't connect directly, and this month's relay traffic is used up — no relay to fall back on. It resets at the start of next month; try a stored download link, upgrade your plan for more relay traffic, or run your own node.",
+    relayQuotaWarn: "You've used up this month's relay traffic, so cross-network browser sessions cannot start or continue until it resets next month. Same-network sessions and direct CLI transfers are unaffected. To send now, use a stored download link, upgrade for more relay traffic, or run your own node.",
+    relayQuotaFail: "This cross-network browser session cannot connect because this month's relay traffic is used up. Same-network sessions and direct CLI transfers are unaffected. Use a stored download link, upgrade for more relay traffic, or run your own node.",
   },
   offline: {
     tagline: "Encrypted in your browser, then stored · the server only ever holds ciphertext",
@@ -495,11 +495,11 @@ const en: Messages = {
     planNote: "How much you can store, your monthly transfer, and how long download links stay live depend on your plan — start free, upgrade anytime:",
   },
   crossSell: {
-    realtime: { lead: "Is the other person online right now? Realtime direct is faster — live and end-to-end encrypted, and the server never sees your files.", cta: "Go to realtime direct →" },
+    realtime: { lead: "Is the other person online right now? Use realtime end-to-end encrypted transfer; cross-network TURN carries only ciphertext it cannot decrypt.", cta: "Go to realtime transfer →" },
     offline: { lead: "Recipient not online? Use async transfer — encrypt, upload, and leave a download link they can fetch for days.", cta: "Go to async transfer →" },
   },
   methods: {
-    realtime: { name: "⚡ Realtime direct", sub: "Pick your files and get a 6-character code — read it out, send the link, or show the QR; the moment the other side joins, the transfer starts automatically.", badge: "Recipient: no account" },
+    realtime: { name: "⚡ Realtime transfer", sub: "Pick your files and get a 6-character code — read it out, send the link, or show the QR; the moment the other side joins, the transfer starts automatically.", badge: "Recipient: no account" },
     stored: { name: "📦 Download link", sub: "Your browser encrypts then stores; the recipient downloads anytime, no live session and no account needed.", badge: "Offline OK" },
   },
   pair: {
@@ -589,12 +589,12 @@ const en: Messages = {
   },
   howItWorks: {
     realtime: {
-      title: "Realtime direct, in three steps",
+      title: "Realtime transfer, in three steps",
       sub: "When both sides are online, transfer across networks in real time — the recipient needs no account.",
       ways: [
         { icon: "📄", name: "Pick files, get a code", how: "Tap “Send files” and choose what to send — a 6-character pairing code is minted automatically, along with a join link and QR.", tag: "Sign in to send" },
         { icon: "🔢", name: "Give the code to the other side", how: "Read it out, send the link, or show the QR — any of the three; they type it in or open it in any modern browser.", tag: "Codes live 15 minutes" },
-        { icon: "⚡", name: "Transfer starts on join", how: "The moment they join, the transfer starts automatically — end-to-end encrypted the whole way; across networks the stream travels through an encrypted TURN relay that only ever carries ciphertext it can't decrypt.", tag: "The server never sees your files" },
+        { icon: "⚡", name: "Transfer starts on join", how: "The moment they join, the transfer starts automatically — end-to-end encrypted the whole way; across networks the stream travels through an encrypted TURN relay that only ever carries ciphertext it can't decrypt.", tag: "The relay cannot decrypt your files" },
       ],
     },
     offline: {
@@ -656,7 +656,7 @@ const en: Messages = {
       { q: "What's the difference between a pairing code and a share link?", a: "Both are end-to-end-encrypted realtime transfers. A pairing code suits two people online at once exchanging a short number verbally or instantly; a share link can just be sent for the other side to open. Use whichever is handier." },
       { q: "Do both sides have to be online at the same time?", a: "Yes. A cross-network realtime transfer needs sender and recipient online together with the page open. If you can't be online at once, use an async download link — it stores the encrypted file for the other side to fetch later." },
       { q: "Does the pairing code expire?", a: "Yes. A pairing code is one-time and short-lived; once it expires or is used you generate a fresh one, which limits the chance of anyone guessing it." },
-      { q: "It goes through your relay — could my file leak?", a: "No. Cross-network transfers travel through an encrypted TURN relay, which only forwards ciphertext and cannot decrypt — it never sees any file contents." },
+      { q: "It goes through your relay — could my file leak?", a: "No. Cross-network transfers travel through TURN as end-to-end encrypted ciphertext; the relay cannot read or decrypt any file content." },
       { q: "Why does the sender sign in but not the recipient?", a: "Cross-network connections use our signaling and relay resources (which cost us), so the sender signs in for metering and abuse-prevention; the recipient only opens a link or types a code and never needs an account." },
       { q: "What determines speed, and how do I make it faster?", a: "On a direct link it's your two networks' up/down bandwidth and latency; via a relay it's also the relay node's bandwidth. Deploying your own node from the account page can noticeably speed up cross-network relaying — and it's free." },
     ],

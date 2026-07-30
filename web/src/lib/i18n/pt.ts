@@ -3,7 +3,7 @@ import type { Messages } from "./types";
 const pt: Messages = {
   langLabel: "Idioma",
   theme: { label: "Tema", system: "Sistema", light: "Claro", dark: "Escuro" },
-  tagline: "Transferência ponto a ponto com criptografia de ponta a ponta, de arquivos e de texto · o servidor não vê nenhum dos dois",
+  tagline: "Transferência de arquivos e texto com criptografia de ponta a ponta · servidores e retransmissores não conseguem ler nem descriptografar o conteúdo",
   connected: (n) => `Conectado · este dispositivo ${n}`,
   ipLabel: "IP público",
   connecting: "Conectando ao servidor de sinalização…",
@@ -47,7 +47,7 @@ const pt: Messages = {
   dragSendMany: "Solte sobre um dispositivo para enviar",
   pickHint: (m) => `Clique para escolher arquivos · ou solte-os aqui (até ${m})`,
   maxSize: (s) => `Máx. ${s}`,
-  footer: "Criptografia de ponta a ponta (X25519 + AES-256-GCM) · o servidor de sinalização apenas retransmite informações de conexão e nunca vê o conteúdo dos arquivos nem as mensagens",
+  footer: "Criptografia de ponta a ponta (X25519 + AES-256-GCM) · direto na rede local; entre redes, TURN leva dados cifrados que o retransmissor não consegue ler nem descriptografar",
   offlineFooter: "Criptografado no seu navegador com AES-256-GCM antes do envio · o servidor armazena apenas texto cifrado que não consegue descriptografar — a chave de descriptografia fica somente no link.",
   busy: "Já há uma transferência em andamento — aguarde ela terminar",
   tooMany: (m, n) => `Até ${m} arquivos por vez; os ${n} excedentes foram ignorados`,
@@ -468,12 +468,12 @@ const pt: Messages = {
     textLimitNote: "Uma mensagem tem no máximo 65.536 bytes UTF-8. Algo maior é um arquivo — use relayium send.",
   },
   crossnet: {
-    realtimeTitle: "Direto em tempo real",
-    realtimeSub: "Ambos online agora · criptografia de ponta a ponta · o servidor nunca vê seus arquivos",
+    realtimeTitle: "Transferência em tempo real",
+    realtimeSub: "Ambos online · rede local direta · entre redes, TURN leva dados cifrados que o retransmissor não consegue ler nem descriptografar",
     realtimeFoot: "O destinatário não precisa de conta · criptografia de ponta a ponta",
     signInToSend: "Entre para enviar entre redes. Quem recebe nunca precisa de conta.",
-    relayQuotaWarn: "Você esgotou o tráfego de retransmissão deste mês. Uma conexão ponto a ponto direta ainda funciona — só a alternativa de retransmissão fica indisponível. Ela é reiniciada no começo do próximo mês; para enviar agora, use um link de download armazenado, faça upgrade do seu plano para ter mais tráfego de retransmissão ou rode seu próprio nó.",
-    relayQuotaFail: "Não foi possível conectar diretamente, e o tráfego de retransmissão deste mês está esgotado — não há retransmissor para recorrer. Ele é reiniciado no começo do próximo mês; use um link de download armazenado, faça upgrade do seu plano para ter mais tráfego de retransmissão ou rode seu próprio nó.",
+    relayQuotaWarn: "Sua cota mensal de retransmissão acabou: uma sessão do navegador entre redes não pode começar nem continuar. Sessões na mesma rede e transferências diretas pela CLI continuam disponíveis. Use um link de download, faça upgrade ou rode seu próprio nó.",
+    relayQuotaFail: "Sua cota mensal de retransmissão acabou: esta sessão do navegador entre redes não consegue conectar. Sessões na mesma rede e transferências diretas pela CLI não são afetadas. Use um link de download, faça upgrade ou rode seu próprio nó.",
   },
   offline: {
     tagline: "Criptografado no seu navegador e então armazenado · o servidor só guarda texto cifrado",
@@ -485,11 +485,11 @@ const pt: Messages = {
     planNote: "Quanto você pode armazenar, sua transferência mensal e por quanto tempo os links de download ficam ativos dependem do seu plano — comece grátis e faça upgrade quando quiser:",
   },
   crossSell: {
-    realtime: { lead: "A outra pessoa está online agora? O direto em tempo real é mais rápido — com criptografia de ponta a ponta, e o servidor nunca vê seus arquivos.", cta: "Ir para o direto em tempo real →" },
+    realtime: { lead: "A outra pessoa está online? Em tempo real: direto na rede local; entre redes, TURN leva dados cifrados que o retransmissor não consegue ler nem descriptografar.", cta: "Ir para a transferência em tempo real →" },
     offline: { lead: "O destinatário não está online? Use a transferência assíncrona — criptografe, envie e deixe um link de download que ele pode buscar por dias.", cta: "Ir para a transferência assíncrona →" },
   },
   methods: {
-    realtime: { name: "⚡ Direto em tempo real", sub: "Escolha seus arquivos e receba um código de 6 caracteres — diga-o em voz alta, envie o link ou mostre o QR; assim que o outro lado entra, a transferência começa automaticamente.", badge: "Destinatário: sem conta" },
+    realtime: { name: "⚡ Transferência em tempo real", sub: "Escolha seus arquivos e receba um código de 6 caracteres — diga-o em voz alta, envie o link ou mostre o QR; assim que o outro lado entra, a transferência começa automaticamente.", badge: "Destinatário: sem conta" },
     stored: { name: "📦 Link de download", sub: "Seu navegador criptografa e então armazena; o destinatário baixa a qualquer momento, sem sessão ao vivo e sem conta.", badge: "Funciona offline" },
   },
   pair: {
@@ -579,12 +579,12 @@ const pt: Messages = {
   },
   howItWorks: {
     realtime: {
-      title: "Direto em tempo real, em três passos",
+      title: "Transferência em tempo real, em três passos",
       sub: "Quando os dois lados estão online, transfiram em tempo real entre redes — o destinatário não precisa de conta.",
       ways: [
         { icon: "📄", name: "Escolha os arquivos, receba um código", how: "Toque em “Enviar arquivos” e escolha o que enviar — um código de emparelhamento de 6 caracteres é criado automaticamente, junto com um link de entrada e um QR.", tag: "Entre para enviar" },
         { icon: "🔢", name: "Dê o código para o outro lado", how: "Diga-o em voz alta, envie o link ou mostre o QR — qualquer um dos três; a pessoa o digita ou o abre em qualquer navegador moderno.", tag: "Os códigos duram 15 minutos" },
-        { icon: "⚡", name: "A transferência começa ao entrar", how: "No momento em que a pessoa entra, a transferência começa automaticamente — com criptografia de ponta a ponta o tempo todo; entre redes, o fluxo passa por um retransmissor TURN criptografado que só carrega texto cifrado e não consegue descriptografar nada.", tag: "O servidor nunca vê seus arquivos" },
+        { icon: "⚡", name: "A transferência começa ao entrar", how: "No momento em que a pessoa entra, a transferência começa automaticamente — com criptografia de ponta a ponta o tempo todo; entre redes, o fluxo passa por um retransmissor TURN criptografado que só carrega texto cifrado e não consegue descriptografar nada.", tag: "O retransmissor não consegue ler nem descriptografar" },
       ],
     },
     offline: {

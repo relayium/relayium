@@ -3,7 +3,7 @@ import type { Messages } from "./types";
 const es: Messages = {
   langLabel: "Idioma",
   theme: { label: "Tema", system: "Sistema", light: "Claro", dark: "Oscuro" },
-  tagline: "Transferencia de igual a igual con cifrado de extremo a extremo, para archivos y texto · el servidor no ve ninguno de los dos",
+  tagline: "Transferencia de archivos y texto cifrada de extremo a extremo · servidores y retransmisores no pueden leer ni descifrar el contenido",
   connected: (n) => `Conectado · este dispositivo ${n}`,
   ipLabel: "IP pública",
   connecting: "Conectando al servidor de señalización…",
@@ -47,7 +47,7 @@ const es: Messages = {
   dragSendMany: "Suelta sobre un dispositivo para enviar",
   pickHint: (m) => `Haz clic para elegir archivos · o suéltalos aquí (hasta ${m})`,
   maxSize: (s) => `Máx. ${s}`,
-  footer: "Cifrado de extremo a extremo (X25519 + AES-256-GCM) · el servidor de señalización solo retransmite la información de conexión y nunca ve el contenido de los archivos ni los mensajes",
+  footer: "Cifrado de extremo a extremo (X25519 + AES-256-GCM) · directo en la red local; entre redes, TURN lleva datos cifrados que el retransmisor no puede leer ni descifrar",
   offlineFooter: "Cifrado en tu navegador con AES-256-GCM antes de subirlo · el servidor almacena únicamente texto cifrado que no puede descifrar — la clave de descifrado reside solo en el enlace.",
   busy: "Ya hay una transferencia en curso — espera a que termine",
   tooMany: (m, n) => `Hasta ${m} archivos a la vez; se ignoraron los ${n} adicionales`,
@@ -468,12 +468,12 @@ const es: Messages = {
     textLimitNote: "Un mensaje ocupa como máximo 65.536 bytes UTF-8. Cualquier cosa mayor es un archivo: usa relayium send.",
   },
   crossnet: {
-    realtimeTitle: "Directo en tiempo real",
-    realtimeSub: "Ambos en línea ahora · cifrado de extremo a extremo · el servidor nunca ve tus archivos",
+    realtimeTitle: "Transferencia en tiempo real",
+    realtimeSub: "Ambos en línea · red local directa · entre redes, TURN lleva datos cifrados que el retransmisor no puede leer ni descifrar",
     realtimeFoot: "El destinatario no necesita cuenta · cifrado de extremo a extremo",
     signInToSend: "Inicia sesión para enviar entre redes. La persona que recibe nunca necesita una cuenta.",
-    relayQuotaWarn: "Has agotado el tráfico de retransmisión de este mes. Una conexión directa de igual a igual sigue funcionando — solo el respaldo por retransmisión no está disponible. Se restablece al inicio del próximo mes; para enviar ahora, usa un enlace de descarga almacenado, mejora tu plan para obtener más tráfico de retransmisión o ejecuta tu propio nodo.",
-    relayQuotaFail: "No se pudo conectar directamente, y el tráfico de retransmisión de este mes está agotado — no hay retransmisor al que recurrir. Se restablece al inicio del próximo mes; usa un enlace de descarga almacenado, mejora tu plan para obtener más tráfico de retransmisión o ejecuta tu propio nodo.",
+    relayQuotaWarn: "Agotaste la cuota mensual de retransmisión: una sesión del navegador entre redes no puede empezar ni continuar. Las sesiones en la misma red y las transferencias directas por CLI siguen disponibles. Usa un enlace de descarga, mejora tu plan o ejecuta tu propio nodo.",
+    relayQuotaFail: "Agotaste la cuota mensual de retransmisión: esta sesión del navegador entre redes no puede conectarse. Las sesiones en la misma red y las transferencias directas por CLI no se ven afectadas. Usa un enlace de descarga, mejora tu plan o ejecuta tu propio nodo.",
   },
   offline: {
     tagline: "Cifrado en tu navegador y luego almacenado · el servidor solo conserva texto cifrado",
@@ -485,11 +485,11 @@ const es: Messages = {
     planNote: "Cuánto puedes almacenar, tu transferencia mensual y cuánto tiempo siguen activos los enlaces de descarga dependen de tu plan — empieza gratis y mejora cuando quieras:",
   },
   crossSell: {
-    realtime: { lead: "¿La otra persona está en línea ahora mismo? El directo en tiempo real es más rápido — cifrado de extremo a extremo, y el servidor nunca ve tus archivos.", cta: "Ir al directo en tiempo real →" },
+    realtime: { lead: "¿La otra persona está en línea? En tiempo real: directo en la red local; entre redes, TURN lleva datos cifrados que el retransmisor no puede leer ni descifrar.", cta: "Ir a la transferencia en tiempo real →" },
     offline: { lead: "¿El destinatario no está en línea? Usa la transferencia asíncrona — cifra, sube y deja un enlace de descarga que podrá recoger durante días.", cta: "Ir a la transferencia asíncrona →" },
   },
   methods: {
-    realtime: { name: "⚡ Directo en tiempo real", sub: "Elige tus archivos y obtén un código de 6 caracteres — léelo en voz alta, envía el enlace o muestra el QR; en cuanto el otro lado se une, la transferencia comienza automáticamente.", badge: "Destinatario: sin cuenta" },
+    realtime: { name: "⚡ Transferencia en tiempo real", sub: "Elige tus archivos y obtén un código de 6 caracteres — léelo en voz alta, envía el enlace o muestra el QR; en cuanto el otro lado se une, la transferencia comienza automáticamente.", badge: "Destinatario: sin cuenta" },
     stored: { name: "📦 Enlace de descarga", sub: "Tu navegador cifra y luego almacena; el destinatario descarga en cualquier momento, sin sesión en vivo ni cuenta.", badge: "Sin conexión, sin problema" },
   },
   pair: {
@@ -579,12 +579,12 @@ const es: Messages = {
   },
   howItWorks: {
     realtime: {
-      title: "Directo en tiempo real, en tres pasos",
+      title: "Transferencia en tiempo real, en tres pasos",
       sub: "Cuando ambos lados están en línea, transfiere en tiempo real entre redes — el destinatario no necesita cuenta.",
       ways: [
         { icon: "📄", name: "Elige archivos, obtén un código", how: "Toca «Enviar archivos» y elige qué enviar — se acuña automáticamente un código de emparejamiento de 6 caracteres, junto con un enlace para unirse y un QR.", tag: "Inicia sesión para enviar" },
         { icon: "🔢", name: "Dale el código al otro lado", how: "Léelo en voz alta, envía el enlace o muestra el QR — cualquiera de los tres; lo escriben o lo abren en cualquier navegador moderno.", tag: "Los códigos viven 15 minutos" },
-        { icon: "⚡", name: "La transferencia empieza al unirse", how: "En cuanto se unen, la transferencia comienza automáticamente — cifrada de extremo a extremo todo el camino; entre redes, el flujo pasa por un retransmisor TURN cifrado que solo transporta texto cifrado y no puede descifrar nada.", tag: "El servidor nunca ve tus archivos" },
+        { icon: "⚡", name: "La transferencia empieza al unirse", how: "En cuanto se unen, la transferencia comienza automáticamente — cifrada de extremo a extremo todo el camino; entre redes, el flujo pasa por un retransmisor TURN cifrado que solo transporta texto cifrado y no puede descifrar nada.", tag: "El retransmisor no puede leer ni descifrar" },
       ],
     },
     offline: {
