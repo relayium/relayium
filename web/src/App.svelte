@@ -8,7 +8,10 @@
   import { roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
   import type { Conn, ConnPath, RtcConfig } from "./lib/webrtc";
   import { applyRename } from "./lib/apply-rename";
-  import { capsSignal, recordPeerCaps, retainPeers, resetPeerCaps } from "./lib/peer-caps.svelte";
+  import { capsSignal, recordPeerCaps, retainPeers, resetPeerCaps, peerSupportsText } from "./lib/peer-caps.svelte";
+  import { createTextSession } from "./lib/text-session.svelte";
+  import { createTextLink } from "./lib/text-link";
+  import MessagePanel from "./lib/MessagePanel.svelte";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
   import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
@@ -74,11 +77,20 @@
   // 收发管道 + 它们的状态（send/recv/incoming/SAS/每向路径）都住在这里。
   // 依赖用 getter 传进去：signaling 会随房间切换整个换掉，rtcConfig 依赖中继选优
   // 的结果，两者都不能在创建时定死。
+  // 消息会话。phase 1 里它和文件传输互斥，靠 textActive 让 busy() 看见它。
+  const textLink = createTextLink({ signaling: () => signaling, rtcConfig: () => rtcConfig() });
+  const textSession = createTextSession({
+    connect: textLink.connect,
+    listen: textLink.listen,
+    now: () => Date.now(),
+  });
+  let textCompose = $state(""); // 粘贴进来的草稿，交给面板预填
   const session = createTransferSession({
     signaling: () => signaling,
     rtcConfig: () => rtcConfig(),
     t: () => messages[lang()],
     flash,
+    textActive: () => textSession.active(),
   });
   // 模板里读得最多的三个，取个短名字（getter 转发，响应式不丢）。
   const send = $derived(session.send);
@@ -274,6 +286,17 @@
   // itself no-ops when the tab is visible or permission wasn't granted.
   let sendNotified = false;
   let recvNotified = false;
+  // 收到消息也提醒一声，但**只带发送方的名字，永远不带正文**：通知会渲染在锁屏上、
+  // 共享的屏幕上、录屏里。边沿检测靠最后一条入站消息的 id，所以每条只提醒一次，而且
+  // clearHistory 之后不会重播。
+  let lastNotifiedMsgId = 0;
+  $effect(() => {
+    const last = textSession.history.at(-1);
+    if (!last) { lastNotifiedMsgId = 0; return; }
+    if (last.dir !== "in" || last.id <= lastNotifiedMsgId) return;
+    lastNotifiedMsgId = last.id;
+    void notifyTransfer(messages[lang()].text.newMessageFrom(nameOf(textSession.peerId)));
+  });
   $effect(() => {
     const s = send;
     if (s?.done) {
@@ -450,6 +473,7 @@
       scheduleReconnect();
     });
     session.listenForIncoming();
+    textSession.listenForRequests();
     socketRoomKey = roomCode;
     connState = "ready";
   });
@@ -505,6 +529,7 @@
     connState = "connecting";
     resetRelaySelection(); // the new room has its own relay pool + measurements
     resetPeerCaps(); // the new room has its own peers; nothing carries over
+    textSession.end(); // 换房间就是换对端，消息会话跟着结束（历史留在页面上）
     const ice = await fetchIceConfig(roomCode);
     // A rapid second switch may have started (and possibly finished) while this
     // fetch was in flight — discard the stale credentials rather than clobbering
@@ -714,6 +739,10 @@
           <input class="file-pick-input" type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
         </label>
       {/if}
+      {#if peerSupportsText(p.id)}
+        <button type="button" class="act-btn" class:disabled={busy} disabled={busy}
+          onclick={() => { textCompose = ""; void textSession.openWith(p.id); }}>💬 {t.text.open}</button>
+      {/if}
     </div>
   </li>
 {/snippet}
@@ -819,6 +848,25 @@
       {/if}
     </section>
   {/each}
+
+  <!-- 消息面板放在这个 snippet 里面，所以 LAN 那条路径和 CrossPage 都从这一处拿到它。 -->
+  {#if textSession.status !== "idle"}
+    <MessagePanel
+      status={textSession.status}
+      peerName={nameOf(textSession.peerId)}
+      sasCode={textSession.sasCode}
+      path={textSession.path}
+      history={textSession.history}
+      errorKey={textSession.errorKey}
+      prefill={textCompose}
+      onSend={(body) => void textSession.send(body)}
+      onAccept={() => textSession.accept()}
+      onReject={() => textSession.reject()}
+      onClear={() => textSession.clearHistory()}
+      onEnd={() => textSession.end()}
+      onPrefillConsumed={() => (textCompose = "")}
+    />
+  {/if}
 {/snippet}
 
   {#if surfaceShown && dragActive && dropTarget(visiblePeers.length, busy) !== "off"}
@@ -1111,6 +1159,10 @@
   }
   .act-btn:not(.disabled):hover { border-color: var(--accent-border); background: var(--accent-bg); color: var(--text-h); }
   .act-btn.disabled { cursor: not-allowed; opacity: .6; }
+  /* 这三个动作里有两个是 <label>（包着隐藏的 file input），一个是 <button>。按钮自带
+     浏览器的灰底和按钮字体，不抹掉就会和旁边两个长得不一样。 */
+  button.act-btn { background: none; font-family: inherit; }
+  button.act-btn:disabled { cursor: not-allowed; opacity: .6; }
   .peers ul.solo .peer-actions { max-width: 360px; margin-inline: auto; }
 
   .empty {
