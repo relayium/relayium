@@ -386,6 +386,66 @@ func TestRetryIsAudited(t *testing.T) {
 	}
 }
 
+// Retry is fleet-only, and not as a scope preference. decideByo's candidate set
+// is (online && !onTarget) with no reference to update_result, so byo has no
+// pass-over state: it never moves on without a node, it keeps re-offering. A byo
+// track can only be 'complete' with an off-target node if that node is OFFLINE,
+// so clearing its result re-admits nothing — the track would go rolling, find
+// nobody reachable, complete again, and the operator would be told it worked.
+func TestRetryRefusesTheByoTrack(t *testing.T) {
+	ts, _, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	ctx := context.Background()
+
+	u, err := store.UpsertUserByEmail(ctx, "byoretry@example.test", "B")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedRolloutNode(t, store, "n-byo", "user", u.ID, "v1.0.0", "v1.0.0", "unreachable")
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "byo", TargetVersion: "v2.0.0", Status: "complete",
+		StageStartedAt: time.Now().Unix() - 3600,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	postAdminForm(t, ts, cookie, "/admin/rollout/byo/retry", url.Values{"node": {"n-byo"}}).Body.Close()
+
+	n, _, _ := store.GetNode(ctx, "n-byo")
+	if n.UpdateResult != "unreachable" {
+		t.Errorf("a byo retry cleared the node's result: %q", n.UpdateResult)
+	}
+	tr, _, _ := store.GetRolloutTrack(ctx, "byo")
+	if tr.Status != "complete" {
+		t.Errorf("a byo retry restarted the byo track: %q", tr.Status)
+	}
+}
+
+// And the button must not be offered there either — a control whose only
+// possible outcome is a refusal is worse than no control, which is the rule the
+// other rollout buttons already follow.
+func TestRetryButtonIsNotRenderedOnTheByoPanel(t *testing.T) {
+	ts, _, store := newAdminSettingsServer(t)
+	cookie := adminLogin(t, ts)
+	ctx := context.Background()
+
+	u, err := store.UpsertUserByEmail(ctx, "byobtn@example.test", "B")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedRolloutNode(t, store, "n-byo", "user", u.ID, "v1.0.0", "v1.0.0", "unreachable")
+	if err := store.PutRolloutTrack(ctx, RolloutTrack{
+		Track: "byo", TargetVersion: "v2.0.0", Status: "complete",
+		StageStartedAt: time.Now().Unix() - 3600,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Contains(adminDashboardHTML(t, ts, cookie), "/admin/rollout/byo/retry") {
+		t.Fatal("the byo panel offers a retry button that can only be refused")
+	}
+}
+
 // The button follows the same two rules.
 func TestRetryButtonRenderingFollowsBothGuards(t *testing.T) {
 	for _, tc := range []struct {

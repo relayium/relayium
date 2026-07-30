@@ -789,6 +789,23 @@ func (s *Service) handleAdminRolloutRetry(w http.ResponseWriter, r *http.Request
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "重试失败：未知轨道 "+track)
 		return
 	}
+	// FLEET ONLY, and this is a correctness guard rather than a scope decision.
+	// "Passed over" is a concept only decideFleet has: decideByo's candidate set
+	// is (online && !onTarget) with no reference to update_result at all, so it
+	// never moves on without a node — it keeps re-offering, one sweep per batch
+	// window. A byo track can therefore only reach 'complete' with an off-target
+	// node if that node is OFFLINE, and clearing its result would re-admit
+	// nothing: the track would go rolling, find nobody reachable, and complete
+	// again, while the operator was told the retry succeeded.
+	//
+	// The route stays on the {id} wildcard so a stale or bookmarked byo POST gets
+	// this explanation instead of a bare 404, and so the refusal is testable.
+	if track != "fleet" {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"重试失败：单台重试只适用于机队轨。自带节点轨是按批次放行的，"+
+				"没有「被越过」这个状态——落后的节点会在下一轮自动重新收到更新。")
+		return
+	}
 	nodeID := r.FormValue("node")
 	if nodeID == "" {
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "重试失败：未指定节点")

@@ -360,10 +360,19 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 // survives re-register and heartbeat, and CommandNodeUpdate is the only thing
 // that ever clears it -- so an excluded node can never clear its own flag and
 // would sit out every future rollout forever. That objection is real, and it
-// is answered at the WRITE, not here: setTargetVersion clears
-// "skipped"/"unreachable" across the track's owner class in the same
-// operation that repoints the target (see ClearPassedOverResults), so a
-// passed-over result can only ever belong to the rollout currently running.
+// is answered at the WRITE, not here. Three writes hand candidacy back, and
+// between them a passed-over result can only ever belong to the rollout
+// currently running:
+//
+//   - setTargetVersion, in the same operation that repoints the target, across
+//     the track's owner class (see ClearPassedOverResults);
+//   - ResumeRolloutTrack, inside its transaction, because 继续 restarts the
+//     ladder from the beginning;
+//   - RetryRolloutNode, for ONE node on a finished track.
+//
+// Adding a fourth way to start or restart a rollout means adding the clear to
+// it as well; without it, that path strands every node this rollout passed
+// over.
 //
 // Do NOT reintroduce a rollout scope as an argument to this predicate. Two
 // attempts did, and both shipped an infinite re-command loop, because
@@ -374,16 +383,15 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 // which reassertFirst does on exactly the event a pass-over is. Anchoring on
 // either one therefore moves under the very event the scope has to survive,
 // un-excludes the node that passed over one hop earlier, and picks it again.
-// (byoResultIsFailure CAN scope on
-// tr.StageStartedAt only because a BYO stage is a whole batch, held open
-// across many nodes.) With the write-side clear in place there is nothing
-// left for a read-side scope to do.
-// This set is duplicated in SQL as passedOverResultsSQL (rollout_store.go), which
-// every statement keying on a pass-over builds its IN clause from. A value added
-// here must be added there, or the writes that hand candidacy back will not clear
-// the value the reads exclude on — a node stranded out of every future rollout,
-// which is the failure mode passedOverResult's whole write-side scoping exists to
-// avoid.
+// (byoResultIsFailure CAN scope on tr.StageStartedAt only because a BYO stage
+// is a whole batch, held open across many nodes.) With the write-side clear in
+// place there is nothing left for a read-side scope to do.
+//
+// This set is duplicated in SQL as passedOverResultsSQL (rollout_store.go),
+// which every statement keying on a pass-over builds its IN clause from. A
+// value added here must be added there too, or the writes above will not clear
+// the value these reads exclude on -- a node stranded out of every future
+// rollout, which is the exact failure the write-side scoping exists to avoid.
 func passedOverResult(result string) bool {
 	return result == "skipped" || result == "unreachable"
 }
