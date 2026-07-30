@@ -105,7 +105,7 @@
     .brand .word { display: none; }
     .util { margin-inline-start: auto; gap: var(--space-2); }
     .tabs { margin: 0; order: 3; width: 100%; }
-    .tab { flex: 1; }
+    .tab { flex: 1; min-width: 0; padding-inline: var(--space-2); }
     /* Trim the selects so brand + all three controls fit one row on small phones. */
     .lang { padding-inline: 8px 24px; max-width: 40vw; }
   }

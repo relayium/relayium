@@ -12,8 +12,8 @@ const es: Messages = {
   guideTitle: "Cómo usar",
   step1: "Abre esta página en otro dispositivo o navegador dentro de la misma red (los dispositivos que comparten una IP pública forman una misma «sala»).",
   step2: "Ambos dispositivos aparecerán entonces en la lista de «Dispositivos cercanos» más abajo.",
-  step3: (m) => `Haz clic en la tarjeta de un dispositivo para elegir archivos, o arrastra archivos sobre ella (hasta ${m} a la vez).`,
-  step4: "El destinatario hace clic en «Aceptar»; en cuanto ambos códigos de verificación coinciden, comienza la transferencia.",
+  step3: (m) => `Elige archivos en la tarjeta de un dispositivo (hasta ${m}) o «Enviar un mensaje» para texto, enlaces, comandos o código.`,
+  step4: "El destinatario acepta; si ambos códigos de verificación coinciden, comienza la transferencia de archivos o la sesión de texto.",
   hint: "Se recomienda Chrome (transmite archivos grandes directamente al disco y te permite elegir una carpeta de destino para varios archivos, sin usar memoria). Si los dispositivos conectados al mismo router no se ven entre sí, desactiva el «aislamiento de AP / aislamiento de clientes» del router.",
   requestHead: (n, c, s) => `📥 ${n} quiere enviar ${c} archivo(s) · ${s} en total`,
   codeLabel: "Código de verificación",
@@ -53,7 +53,7 @@ const es: Messages = {
   tooMany: (m, n) => `Hasta ${m} archivos a la vez; se ignoraron los ${n} adicionales`,
   titleDefault: "Relayium — transferencia de archivos y texto con cifrado de extremo a extremo",
   descDefault:
-    "Transferencia de archivos de código abierto y cifrada de extremo a extremo en tu navegador. En el modo en tiempo real, los archivos se transmiten directamente de dispositivo a dispositivo mediante WebRTC en tu red local, o entre redes a través de un retransmisor cifrado que solo ve texto cifrado; el modo opcional de enlace de descarga almacenado los conserva como texto cifrado de conocimiento cero que solo tú puedes descifrar. La misma conexión también lleva texto — una nota, un enlace, un comando, un bloque de código — mientras ambos dispositivos estén en línea, y ningún mensaje se almacena nunca en un servidor.",
+    "Transferencia de archivos y texto de código abierto y cifrada de extremo a extremo en tu navegador. Los archivos van directamente en la red local o por un retransmisor que solo ve texto cifrado entre redes. El texto usa una sesión entre pares cifrada e independiente, exige ambos dispositivos en línea y nunca se almacena.",
   titleCross: "Transferencia de archivos entre redes — en tiempo real, cifrada de extremo a extremo | Relayium",
   titleOffline: "Enlace de archivo cifrado — sube ahora, descarga después | Relayium",
   descCross: "Envía archivos entre redes con un código de 6 caracteres — transferencia en tiempo real, cifrada de extremo a extremo; el retransmisor solo ve texto cifrado, nunca tus archivos.",
@@ -561,11 +561,11 @@ const es: Messages = {
   },
   features: {
     title: "Por qué Relayium",
-    sub: "Privacidad ante todo, de igual a igual y de código abierto: la transferencia de archivos como debe ser.",
+    sub: "Privacidad ante todo, de igual a igual y de código abierto: la transferencia de archivos y texto como debe ser.",
     secureLink: "Ve cómo se cifra y se protege contra intermediarios →",
     items: [
       { title: "Cifrado de extremo a extremo", desc: "X25519 + AES-256-GCM; las claves se negocian solo entre los dos dispositivos y el servidor no puede descifrar." },
-      { title: "El servidor nunca ve tus archivos", desc: "En el modo en tiempo real, los bytes fluyen por WebRTC — directamente de dispositivo a dispositivo en tu red, o a través de un retransmisor cifrado que solo ve texto cifrado entre redes; el modo opcional de enlace de descarga almacena únicamente texto cifrado de conocimiento cero." },
+      { title: "El servidor nunca ve tus archivos ni mensajes", desc: "Los datos en tiempo real fluyen por WebRTC — directamente en tu red o por un retransmisor que solo ve texto cifrado entre redes. El texto nunca se almacena; los enlaces opcionales solo guardan el archivo cifrado de conocimiento cero." },
       { title: "Comprobación contra intermediarios", desc: "Ambas pantallas muestran el mismo código (SAS); compruébalo en las dos para descartar a un intermediario que esté espiando." },
       { title: "Multiplataforma", desc: "Windows, macOS, Linux, Android, iOS — cualquier navegador moderno, nada que instalar." },
       { title: "Código abierto y auditable", desc: "El protocolo y todo el código son públicos en GitHub — cualquiera puede revisarlo, autoalojarlo o contribuir." },
@@ -627,7 +627,7 @@ const es: Messages = {
       { q: "¿Puede el servidor ver mis archivos?", a: "No. En la misma red, las transferencias en tiempo real nunca pasan por el servidor; entre redes pasan por un retransmisor cifrado, pero este solo reenvía texto cifrado y no puede descifrarlo. Los enlaces de descarga se cifran en tu navegador y el servidor conserva únicamente texto cifrado que no puede descifrar — la clave reside solo con quien comparte el enlace y el destinatario." },
       { q: "¿Tengo que crear una cuenta?", a: "Las transferencias por LAN en la misma red no necesitan inicio de sesión. Enviar entre redes mediante código de emparejamiento o enlace exige que el remitente inicie sesión — el destinatario nunca necesita una cuenta. Los enlaces de descarga también exigen que el remitente inicie sesión, para poder almacenar el texto cifrado." },
       { q: "¿Es de código abierto?", a: "Sí. El diseño del protocolo y todo el código de front-end y back-end son públicos en GitHub — libres de revisar, autoalojar o contribuir." },
-      { q: "¿Puedo enviar texto en lugar de un archivo?", a: "Sí — aquí el texto es una transferencia de primera clase, no un chat. Abre «Enviar un mensaje» en la tarjeta de un dispositivo y escribe o pega una nota, un enlace, un comando o código de varias líneas; viaja cifrado de extremo a extremo por la misma conexión entre pares. Es en tiempo real, así que ambos dispositivos tienen que estar en línea, se limita a esa única sesión entre los dos, y nada se escribe nunca en un servidor: Relayium no guarda historial de mensajes. Cada mensaje admite hasta 65.536 bytes UTF-8; si es más grande, envíalo como archivo." },
+      { q: "¿Puedo enviar texto en lugar de un archivo?", a: "Sí — aquí el texto es una transferencia de primera clase, no un chat. Abre «Enviar un mensaje» en la tarjeta de un dispositivo y escribe o pega una nota, un enlace, un comando o código de varias líneas; viaja cifrado de extremo a extremo por una conexión entre pares independiente. Es en tiempo real, así que ambos dispositivos tienen que estar en línea, se limita a esa única sesión entre los dos, y nada se escribe nunca en un servidor: Relayium no guarda historial de mensajes. Cada mensaje admite hasta 65.536 bytes UTF-8; si es más grande, envíalo como archivo." },
     ],
     home: [
       { q: "¿Ambos dispositivos tienen que estar en la misma red?", a: "La transferencia por LAN doméstica necesita que ambos lados estén en la misma red Wi-Fi / red local. Si no estás en la misma red, usa el código de emparejamiento / enlace para compartir entre redes, o un enlace de descarga asíncrono." },
@@ -664,7 +664,7 @@ const es: Messages = {
   },
   homeText: {
     title: "No todo lo que necesitas mover es un archivo",
-    sub: "El texto va por la misma conexión cifrada: una nota, una URL, un comando de shell, un registro de errores, un bloque de código entero. Elige un dispositivo, abre «Enviar un mensaje», escribe o pega — no hace falta guardarlo primero como archivo ni meter otra aplicación en medio.",
+    sub: "El texto usa una conexión entre pares cifrada e independiente: una nota, una URL, un comando de shell, un registro de errores, un bloque de código entero. Elige un dispositivo, abre «Enviar un mensaje», escribe o pega — no hace falta guardarlo primero como archivo ni meter otra aplicación en medio.",
     points: [
       "Cifrado de extremo a extremo y de igual a igual, igual que una transferencia de archivos, y limitado a esa única sesión entre los dos dispositivos.",
       "En tiempo real: ambos dispositivos tienen que estar en línea a la vez, cada uno con la página abierta.",

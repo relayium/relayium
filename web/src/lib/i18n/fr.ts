@@ -12,8 +12,8 @@ const fr: Messages = {
   guideTitle: "Comment ça marche",
   step1: "Ouvrez cette page sur un autre appareil ou navigateur du même réseau (les appareils partageant une IP publique forment une même « salle »).",
   step2: "Les deux appareils apparaissent alors dans la liste « Appareils à proximité » ci-dessous.",
-  step3: (m) => `Cliquez sur la carte d'un appareil pour choisir des fichiers, ou faites-les glisser dessus (jusqu'à ${m} à la fois).`,
-  step4: "Le destinataire clique sur « Accepter » ; une fois les deux codes de vérification identiques, le transfert démarre.",
+  step3: (m) => `Choisissez des fichiers sur la carte d'un appareil (jusqu'à ${m}) ou « Envoyer un message » pour du texte, des liens, des commandes ou du code.`,
+  step4: "Le destinataire accepte ; si les deux codes de vérification correspondent, le transfert de fichiers ou la session texte démarre.",
   hint: "Chrome est recommandé (diffuse les gros fichiers directement sur le disque et permet de choisir un dossier de destination pour plusieurs fichiers, sans utiliser la mémoire). Si des appareils sur le même routeur ne se voient pas, désactivez « l'isolation AP / isolation des clients » du routeur.",
   requestHead: (n, c, s) => `📥 ${n} veut envoyer ${c} fichier(s) · ${s} au total`,
   codeLabel: "Code de vérification",
@@ -53,7 +53,7 @@ const fr: Messages = {
   tooMany: (m, n) => `Jusqu'à ${m} fichiers à la fois ; ${n} en trop ignoré(s)`,
   titleDefault: "Relayium — transfert de fichiers et de texte chiffré de bout en bout",
   descDefault:
-    "Relayium est un outil open source de transfert de fichiers chiffré de bout en bout. Lors d'un transfert en temps réel dans le navigateur, sur le même réseau deux appareils se connectent directement et les fichiers ne passent jamais par le serveur ; entre réseaux différents, cela passe par un relais chiffré qui ne voit que du texte chiffré. Sans installation ; sur le même réseau aucun compte n'est nécessaire, et pour s'appairer entre réseaux différents, seul l'expéditeur se connecte. La même connexion transporte aussi du texte — une note, un lien, une commande, un bloc de code entier — tant que les deux appareils sont en ligne, et aucun message n'est jamais stocké sur un serveur.",
+    "Relayium est un outil open source de transfert de fichiers et de texte chiffré de bout en bout dans le navigateur. Les fichiers passent directement sur le réseau local ou par un relais qui ne voit que du texte chiffré entre réseaux. Le texte utilise une session pair-à-pair chiffrée distincte, exige les deux appareils en ligne et n'est jamais stocké.",
   titleCross: "Transfert de fichiers inter-réseaux — temps réel, chiffré de bout en bout | Relayium",
   titleOffline: "Lien de fichier chiffré — téléversez maintenant, téléchargez plus tard | Relayium",
   descCross: "Envoyez des fichiers entre réseaux avec un code à 6 caractères — transfert en temps réel, chiffré de bout en bout ; le relais ne voit que du texte chiffré, jamais le contenu des fichiers.",
@@ -562,11 +562,11 @@ const fr: Messages = {
   },
   features: {
     title: "Pourquoi Relayium",
-    sub: "Confidentialité d'abord, pair-à-pair, open source — le transfert de fichiers tel qu'il devrait être.",
+    sub: "Confidentialité d'abord, pair-à-pair, open source — le transfert de fichiers et de texte tel qu'il devrait être.",
     secureLink: "Voir comment c'est chiffré et protégé du MITM →",
     items: [
       { title: "Chiffré de bout en bout", desc: "X25519 + AES-256-GCM ; les clés sont négociées uniquement entre les deux appareils et le serveur ne peut pas déchiffrer." },
-      { title: "Le serveur ne voit jamais vos fichiers", desc: "En mode temps réel, les octets circulent via WebRTC — directement d'appareil à appareil sur le même réseau, ou via un relais chiffré qui ne voit que du texte chiffré entre réseaux différents ; le mode lien de téléchargement optionnel ne stocke que du texte chiffré à divulgation nulle." },
+      { title: "Le serveur ne voit ni fichiers ni messages", desc: "Les données temps réel circulent via WebRTC — directement sur le réseau local ou par un relais qui ne voit que du texte chiffré entre réseaux. Le texte n'est jamais stocké ; les liens optionnels ne gardent que le fichier chiffré à divulgation nulle." },
       { title: "Vérification anti-interception", desc: "Les deux écrans affichent le même code (SAS) ; comparez-le pour écarter une attaque de l'homme du milieu." },
       { title: "Multiplateforme", desc: "Windows, macOS, Linux, Android, iOS — n'importe quel navigateur moderne, rien à installer." },
       { title: "Open source et auditable", desc: "Le protocole et tout le code sont publics sur GitHub — chacun peut l'examiner, l'auto-héberger ou y contribuer." },
@@ -628,7 +628,7 @@ const fr: Messages = {
       { q: "Le serveur peut-il voir mes fichiers ?", a: "Non. Sur le même réseau, les transferts en temps réel ne passent jamais par le serveur ; entre réseaux différents, ils transitent par un relais chiffré qui ne fait que relayer du texte chiffré, sans pouvoir le déchiffrer. Les liens de téléchargement sont chiffrés dans votre navigateur et le serveur ne conserve que du texte chiffré qu'il ne peut pas déchiffrer — la clé reste uniquement chez celui qui partage le lien et son destinataire." },
       { q: "Faut-il obligatoirement créer un compte ?", a: "Les transferts LAN sur le même réseau ne nécessitent aucune connexion. Envoyer d'un réseau à l'autre par code d'appairage ou lien exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte. Les liens de téléchargement exigent aussi la connexion de l'expéditeur, afin de stocker le texte chiffré." },
       { q: "Est-ce open source ?", a: "Oui. La conception du protocole ainsi que tout le code front-end et back-end sont publics sur GitHub — chacun peut les examiner, les auto-héberger ou y contribuer." },
-      { q: "Puis-je envoyer du texte plutôt qu'un fichier ?", a: "Oui — le texte est ici un transfert de plein droit, pas une messagerie. Ouvrez « Envoyer un message » sur une carte d'appareil et saisissez ou collez une note, un lien, une commande ou du code multiligne ; cela circule chiffré de bout en bout sur la même connexion pair-à-pair. C'est du temps réel, donc les deux appareils doivent être en ligne, cela ne concerne que cette session entre eux deux, et rien n'est jamais écrit sur un serveur — Relayium ne conserve aucun historique de messages. Chaque message peut atteindre 65 536 octets UTF-8 ; au-delà, envoyez-le comme fichier." },
+      { q: "Puis-je envoyer du texte plutôt qu'un fichier ?", a: "Oui — le texte est ici un transfert de plein droit, pas une messagerie. Ouvrez « Envoyer un message » sur une carte d'appareil et saisissez ou collez une note, un lien, une commande ou du code multiligne ; cela circule chiffré de bout en bout sur une connexion pair-à-pair distincte. C'est du temps réel, donc les deux appareils doivent être en ligne, cela ne concerne que cette session entre eux deux, et rien n'est jamais écrit sur un serveur — Relayium ne conserve aucun historique de messages. Chaque message peut atteindre 65 536 octets UTF-8 ; au-delà, envoyez-le comme fichier." },
     ],
     home: [
       { q: "Les deux appareils doivent-ils être sur le même réseau ?", a: "Le transfert en réseau local de la page d'accueil exige que les deux parties soient sur le même Wi-Fi / réseau local. Si vous n'êtes pas sur le même réseau, utilisez le code d'appairage / lien de partage du transfert inter-réseaux, ou bien un lien de téléchargement asynchrone." },
@@ -665,7 +665,7 @@ const fr: Messages = {
   },
   homeText: {
     title: "Ce que vous devez faire passer n'est pas toujours un fichier",
-    sub: "Le texte emprunte la même connexion chiffrée : une note, une URL, une commande shell, un journal d'erreurs, un bloc de code entier. Choisissez un appareil, ouvrez « Envoyer un message », saisissez ou collez — rien à enregistrer d'abord en fichier, aucune application tierce au milieu.",
+    sub: "Le texte emprunte une connexion pair-à-pair chiffrée distincte : une note, une URL, une commande shell, un journal d'erreurs, un bloc de code entier. Choisissez un appareil, ouvrez « Envoyer un message », saisissez ou collez — rien à enregistrer d'abord en fichier, aucune application tierce au milieu.",
     points: [
       "Chiffré de bout en bout et pair-à-pair, exactement comme un transfert de fichier, et limité à cette seule session entre les deux appareils.",
       "En temps réel : les deux appareils doivent être en ligne en même temps, la page ouverte de chaque côté.",

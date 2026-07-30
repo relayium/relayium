@@ -132,9 +132,9 @@ describe("applyShell", () => {
 
   it("swaps both regions", () => {
     expect(out).toContain(`<title>${en.pricingPage.title} · Relayium</title>`);
-    expect(out).not.toContain("<title>Relayium — End-to-end encrypted P2P file transfer</title>");
+    expect(out).not.toContain("<title>Relayium — Encrypted P2P file and text transfer</title>");
     expect(out).toContain("Simple, honest pricing");
-    expect(out).not.toContain("Relayium — End-to-end encrypted peer-to-peer file transfer</h1>");
+    expect(out).not.toContain("Relayium — End-to-end encrypted peer-to-peer file and text transfer</h1>");
   });
 
   it("keeps everything outside the markers — the app must still boot", () => {
@@ -172,5 +172,12 @@ describe("product facts stay in sync across sources", () => {
       expect(claims.length, name).toBeGreaterThan(0);
       expect(new Set(claims), name).toEqual(new Set([formatted]));
     }
+  });
+
+  it("positions the homepage as file plus online-only ephemeral text", () => {
+    expect(indexHtml).toContain("P2P file and text transfer");
+    expect(indexHtml).toContain("both devices are online");
+    expect(indexHtml).toContain("never stored on a server");
+    expect(indexHtml).toContain("65,536 UTF-8 bytes");
   });
 });

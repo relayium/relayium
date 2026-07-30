@@ -205,6 +205,27 @@ describe("homepage 文本定位文案", () => {
     }
   });
 
+  it("不把 Phase 1 文本会话写成复用文件传输的同一条连接", () => {
+    // 当前实现为文本建立独立 peer connection、独立握手与 SAS。Phase 2 才计划
+    // 让文件和文本共享 PeerLink；在那之前，「同一条连接」是安全语义错误。
+    const forbidden: Record<Lang, RegExp> = {
+      en: /same (?:encrypted |peer )?connection/i,
+      zh: /同一条.*连接/u,
+      ja: /同じ.*接続/u,
+      ko: /같은 P2P 연결/u,
+      de: /dieselbe.*verbindung/iu,
+      fr: /même connexion/iu,
+      ar: /(?:الاتصال|اتصال).*نفسه/u,
+      es: /misma conexión/iu,
+      pt: /mesma conexão/iu,
+    };
+    for (const { code } of LANGS) {
+      const m = messages[code];
+      const copy = [m.descDefault || "", m.homeText.sub, ...m.faq.items.map((q) => q.a)].join("\n");
+      expect(copy, `${code} 把文本错误描述成复用文件连接`).not.toMatch(forbidden[code]);
+    }
+  });
+
   it("faq 的四组问答在每种语言里条数一致（漏译会让某语言少一条）", () => {
     for (const key of ["items", "home", "cross", "offline"] as const) {
       const expected = messages.en.faq[key].length;

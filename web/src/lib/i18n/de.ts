@@ -12,8 +12,8 @@ const de: Messages = {
   guideTitle: "So funktioniert’s",
   step1: "Öffne diese Seite auf einem anderen Gerät oder Browser im selben Netzwerk (Geräte mit derselben öffentlichen IP bilden einen „Raum“).",
   step2: "Beide Geräte erscheinen dann in der Liste „Geräte in der Nähe“ unten.",
-  step3: (m) => `Klicke auf eine Gerätekarte, um Dateien auszuwählen, oder zieh Dateien darauf (bis zu ${m} auf einmal).`,
-  step4: "Der Empfänger klickt auf „Annehmen“; sobald beide Verifizierungscodes übereinstimmen, beginnt die Übertragung.",
+  step3: (m) => `Wähle auf einer Gerätekarte Dateien (bis zu ${m} auf einmal) oder „Nachricht senden“ für Text, Links, Befehle oder Code.`,
+  step4: "Der Empfänger nimmt an; stimmen beide Verifizierungscodes überein, startet die Dateiübertragung oder Textsitzung.",
   hint: "Chrome wird empfohlen (streamt große Dateien direkt auf die Festplatte und lässt dich bei mehreren Dateien einen Zielordner wählen, ohne Speicher zu belegen). Wenn sich Geräte am selben Router nicht sehen, deaktiviere die „AP-Isolierung / Client-Isolierung“ des Routers.",
   requestHead: (n, c, s) => `📥 ${n} möchte ${c} Datei(en) senden · ${s} gesamt`,
   codeLabel: "Verifizierungscode",
@@ -53,7 +53,7 @@ const de: Messages = {
   tooMany: (m, n) => `Maximal ${m} Dateien auf einmal; ${n} überzählige ignoriert`,
   titleDefault: "Relayium — Ende-zu-Ende-verschlüsselte Datei- und Textübertragung",
   descDefault:
-    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug zur Dateiübertragung. Bei der Echtzeitübertragung im Browser verbinden sich im selben Netz zwei Geräte direkt und Dateien erreichen nie den Server; netzübergreifend läuft es über ein verschlüsseltes Relay, das nur Chiffretext sieht. Ohne Installation; im selben Netz ist kein Konto nötig, für Pairing über Netzwerke hinweg meldet sich nur der Absender an. Dieselbe Verbindung überträgt auch Text — eine Notiz, einen Link, einen Befehl, einen ganzen Codeblock — solange beide Geräte online sind, und keine Nachricht wird je auf einem Server gespeichert.",
+    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug für Datei- und Textübertragung im Browser. Dateien laufen im selben Netz direkt und netzübergreifend über ein Relay, das nur Chiffretext sieht. Text nutzt eine eigene verschlüsselte P2P-Sitzung, braucht beide Geräte online und wird nie auf einem Server gespeichert.",
   titleCross: "Netzwerkübergreifende Dateiübertragung — Echtzeit, Ende-zu-Ende-verschlüsselt | Relayium",
   titleOffline: "Verschlüsselter Datei-Link — jetzt hochladen, später herunterladen | Relayium",
   descCross: "Dateien mit einem 6-stelligen Code netzwerkübergreifend senden — Echtzeitübertragung, Ende-zu-Ende-verschlüsselt; der Relay-Server sieht nur Chiffretext, nie die Dateiinhalte.",
@@ -562,11 +562,11 @@ const de: Messages = {
   },
   features: {
     title: "Warum Relayium",
-    sub: "Datenschutz zuerst, Peer-to-Peer, Open Source — Dateiübertragung, wie sie sein sollte.",
+    sub: "Datenschutz zuerst, Peer-to-Peer, Open Source — Datei- und Textübertragung, wie sie sein sollte.",
     secureLink: "So wird verschlüsselt und vor MITM geschützt →",
     items: [
       { title: "Ende-zu-Ende-verschlüsselt", desc: "X25519 + AES-256-GCM; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, der Server kann nicht entschlüsseln." },
-      { title: "Der Server sieht deine Dateien nie", desc: "Im Echtzeitmodus fließen die Bytes per WebRTC — im selben Netz direkt von Gerät zu Gerät und nie über den Server, netzübergreifend über ein verschlüsseltes Relay, das nur Chiffretext sieht; der optionale Download-Link-Modus speichert nur Zero-Knowledge-Chiffretext." },
+      { title: "Der Server sieht weder Dateien noch Nachrichten", desc: "Echtzeitdaten fließen per WebRTC — im selben Netz direkt, netzübergreifend durch ein Relay, das nur Chiffretext sieht. Text wird nie gespeichert; optionale Download-Links speichern nur Zero-Knowledge-Dateichiffretext." },
       { title: "Prüfung auf Man-in-the-Middle", desc: "Beide Bildschirme zeigen denselben Code (SAS); vergleiche ihn, um einen mithörenden MITM auszuschließen." },
       { title: "Plattformübergreifend", desc: "Windows, macOS, Linux, Android, iOS — jeder moderne Browser, nichts zu installieren." },
       { title: "Open Source & prüfbar", desc: "Das Protokoll und der gesamte Code liegen offen auf GitHub — jeder kann sie prüfen, selbst hosten oder mitwirken." },
@@ -628,7 +628,7 @@ const de: Messages = {
       { q: "Kann der Server meine Dateien sehen?", a: "Nein. Im selben Netz erreichen Echtzeitübertragungen nie den Server; netzübergreifend laufen sie über ein verschlüsseltes Relay, das nur Chiffretext weiterleitet und nichts entschlüsseln kann. Download-Links werden in deinem Browser verschlüsselt, und der Server behält nur Chiffretext, den er nicht entschlüsseln kann — der Schlüssel liegt allein bei der teilenden und der empfangenden Person." },
       { q: "Muss ich ein Konto anlegen?", a: "LAN-Übertragungen im selben Netzwerk brauchen keine Anmeldung. Netzwerkübergreifendes Senden per Pairing-Code oder Link erfordert die Anmeldung des Absenders — der Empfänger braucht nie ein Konto. Auch Download-Links erfordern die Anmeldung des Absenders, damit der verschlüsselte Chiffretext gespeichert werden kann." },
       { q: "Ist es Open Source?", a: "Ja. Das Protokolldesign sowie der gesamte Frontend- und Backend-Code liegen offen auf GitHub — frei zum Prüfen, Selbst-Hosten oder Mitwirken." },
-      { q: "Kann ich Text statt einer Datei senden?", a: "Ja — Text ist hier eine vollwertige Übertragung, kein Chat. Öffne auf einer Gerätekarte „Nachricht senden“ und tippe oder füge eine Notiz, einen Link, einen Befehl oder mehrzeiligen Code ein; es läuft Ende-zu-Ende-verschlüsselt über dieselbe Peer-Verbindung. Es ist Echtzeit, beide Geräte müssen also online sein, es gilt nur für diese eine Sitzung zwischen den beiden, und nichts wird je auf einem Server geschrieben — Relayium führt keinen Nachrichtenverlauf. Pro Nachricht sind bis zu 65.536 UTF-8-Bytes möglich; alles Größere schick als Datei." },
+      { q: "Kann ich Text statt einer Datei senden?", a: "Ja — Text ist hier eine vollwertige Übertragung, kein Chat. Öffne auf einer Gerätekarte „Nachricht senden“ und tippe oder füge eine Notiz, einen Link, einen Befehl oder mehrzeiligen Code ein; es läuft Ende-zu-Ende-verschlüsselt über eine eigene Peer-Verbindung. Es ist Echtzeit, beide Geräte müssen also online sein, es gilt nur für diese eine Sitzung zwischen den beiden, und nichts wird je auf einem Server geschrieben — Relayium führt keinen Nachrichtenverlauf. Pro Nachricht sind bis zu 65.536 UTF-8-Bytes möglich; alles Größere schick als Datei." },
     ],
     home: [
       { q: "Müssen beide Geräte im selben Netzwerk sein?", a: "Die LAN-Übertragung auf der Startseite setzt voraus, dass beide Seiten im selben WLAN / lokalen Netzwerk sind. Bist du nicht im selben Netzwerk, nutze den netzübergreifenden Pairing-Code / Share-Link oder einen asynchronen Download-Link." },
@@ -665,7 +665,7 @@ const de: Messages = {
   },
   homeText: {
     title: "Nicht alles, was rüber muss, ist eine Datei",
-    sub: "Text läuft über dieselbe verschlüsselte Verbindung: eine Notiz, eine URL, ein Shell-Befehl, ein Fehlerlog, ein ganzer Codeblock. Gerät auswählen, „Nachricht senden“ öffnen, eintippen oder einfügen — nichts muss vorher als Datei gespeichert werden, und keine fremde App sitzt dazwischen.",
+    sub: "Text läuft über eine eigene verschlüsselte Peer-Verbindung: eine Notiz, eine URL, ein Shell-Befehl, ein Fehlerlog, ein ganzer Codeblock. Gerät auswählen, „Nachricht senden“ öffnen, eintippen oder einfügen — nichts muss vorher als Datei gespeichert werden, und keine fremde App sitzt dazwischen.",
     points: [
       "Ende-zu-Ende-verschlüsselt und Peer-to-Peer, genau wie eine Dateiübertragung, und beschränkt auf diese eine Sitzung zwischen den beiden Geräten.",
       "Echtzeit: beide Geräte müssen gleichzeitig online sein, jeweils mit geöffneter Seite.",

@@ -30,9 +30,9 @@
          route-invariant tags (icons, manifest, theme-color) OUTSIDE the markers,
          and keep the marker comments themselves byte-exact. -->
     <!-- SEO-HEAD -->
-    <title>Relayium — End-to-end encrypted P2P file transfer</title>
-    <meta name="description" content="Open-source, end-to-end encrypted file transfer in your browser. In realtime mode, files stream directly device-to-device over WebRTC on your local network, or across networks through an encrypted relay that only ever sees ciphertext; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt." />
-    <meta name="keywords" content="file transfer, end-to-end encryption, peer-to-peer, P2P, WebRTC, secure file sharing, send files between devices, open source, AirDrop alternative, Snapdrop alternative, Pairdrop alternative" />
+    <title>Relayium — Encrypted P2P file and text transfer</title>
+    <meta name="description" content="Send files, links, commands and multiline text between devices with end-to-end encryption. Realtime text is online-only and never stored; no install required." />
+    <meta name="keywords" content="file transfer, text transfer, clipboard sharing, end-to-end encryption, peer-to-peer, P2P, WebRTC, secure file sharing, send files between devices, open source, AirDrop alternative, Snapdrop alternative, Pairdrop alternative" />
     <meta name="author" content="Relayium" />
     <meta name="application-name" content="Relayium" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
@@ -51,14 +51,14 @@
     <!-- Open Graph (Facebook, WeChat, LinkedIn, Slack, Telegram, …) -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Relayium" />
-    <meta property="og:title" content="Relayium — End-to-end encrypted P2P file transfer" />
-    <meta property="og:description" content="Open-source, end-to-end encrypted file transfer in your browser. In realtime mode, files stream directly device-to-device over WebRTC on your local network, or across networks through an encrypted relay that only ever sees ciphertext; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt." />
+    <meta property="og:title" content="Relayium — Encrypted P2P file and text transfer" />
+    <meta property="og:description" content="Send files, links, commands and multiline text between devices with end-to-end encryption. Realtime text is online-only and never stored." />
     <meta property="og:url" content="https://relayium.com/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file and text transfer" />
     <meta property="og:locale" content="en_US" />
     <meta property="og:locale:alternate" content="zh_CN" />
     <meta property="og:locale:alternate" content="ja_JP" />
@@ -71,10 +71,10 @@
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Relayium — End-to-end encrypted P2P file transfer" />
-    <meta name="twitter:description" content="Open-source, end-to-end encrypted file transfer in your browser. In realtime mode, files stream directly device-to-device over WebRTC on your local network, or across networks through an encrypted relay that only ever sees ciphertext; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt." />
+    <meta name="twitter:title" content="Relayium — Encrypted P2P file and text transfer" />
+    <meta name="twitter:description" content="Send files, links, commands and multiline text between devices with end-to-end encryption. Realtime text is online-only and never stored." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <meta name="twitter:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file transfer" />
+    <meta name="twitter:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file and text transfer" />
 
     <!-- Structured data -->
     <script type="application/ld+json">
@@ -85,12 +85,12 @@
             "@type": ["WebApplication", "SoftwareApplication"],
             "@id": "https://relayium.com/#app",
             "name": "Relayium",
-            "alternateName": "Relayium — secure P2P file transfer",
+            "alternateName": "Relayium — secure P2P file and text transfer",
             "url": "https://relayium.com/",
-            "description": "Open-source, end-to-end encrypted file transfer in your browser. In realtime mode, files stream directly device-to-device over WebRTC on your local network, or across networks through an encrypted relay that only ever sees ciphertext; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt.",
-            "abstract": "Send files directly between two devices in the browser — end-to-end encrypted, peer-to-peer, with no install and no file stored on a server in realtime mode (LAN and pairing-code transfers need no account); an optional stored download-link mode keeps them as zero-knowledge ciphertext until expiry or first download, and creating share or download links requires the sender to sign in.",
+            "description": "Send files, links, commands and multiline text between devices with end-to-end encryption. Realtime text is online-only and never stored; no install required.",
+            "abstract": "Transfer files and ephemeral text between devices in the browser with end-to-end encryption and no install. Files move directly on a local network or through a ciphertext-only relay across networks; an optional stored-link mode keeps files as zero-knowledge ciphertext. Text uses its own live peer session, requires both devices online, and is never stored.",
             "applicationCategory": "UtilitiesApplication",
-            "applicationSubCategory": "File transfer",
+            "applicationSubCategory": "File and text transfer",
             "operatingSystem": "Web (Chrome, Edge, Firefox, Safari; desktop and mobile)",
             "browserRequirements": "Requires a modern browser with WebRTC over HTTPS",
             "softwareVersion": "M0",
@@ -104,6 +104,7 @@
             "featureList": [
               "End-to-end encryption (X25519 + AES-256-GCM)",
               "Realtime transfer over WebRTC — on a local network files stream directly device-to-device and never touch the server; across networks they go through an encrypted relay that only ever sees ciphertext; optional stored download links are zero-knowledge encrypted (AES-256-GCM, key only in URL fragment)",
+              "Ephemeral text, links, commands and multiline code over a separate encrypted peer session — both devices online, no server storage or persistent history, up to 65,536 UTF-8 bytes per message",
               "Short verification code (SAS) to detect man-in-the-middle",
               "Multi-file transfer (up to 1,000 files per batch) with streaming to disk",
               "Per-file SHA-256 integrity check",
@@ -145,6 +146,11 @@
               },
               {
                 "@type": "Question",
+                "name": "Can I send text instead of a file?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes. Open a live message session between two online devices to send text, links, commands or multiline code. It is end-to-end encrypted over its own peer connection, never stored on a server, and has no offline delivery or persistent history. Each message can be up to 65,536 UTF-8 bytes." }
+              },
+              {
+                "@type": "Question",
                 "name": "What is the file-size limit?",
                 "acceptedAnswer": { "@type": "Answer", "text": "There is no server-imposed limit. In Chrome and Edge, files stream directly to disk so size is not constrained by memory. In Firefox and Safari, files are buffered in memory, so keep them under about 200 MB." }
               },
@@ -173,10 +179,10 @@
     <!-- SEO-BODY -->
     <noscript>
       <main>
-        <h1>Relayium — End-to-end encrypted peer-to-peer file transfer</h1>
+        <h1>Relayium — End-to-end encrypted peer-to-peer file and text transfer</h1>
         <p>
           <strong>Relayium</strong> is an open-source, end-to-end encrypted,
-          peer-to-peer (P2P) file transfer tool that runs entirely in your
+          peer-to-peer (P2P) file and text transfer tool that runs entirely in your
           browser. In realtime mode, files stream directly from one device to
           another over a WebRTC DataChannel — on the same network they
           <strong>never touch any server</strong>; across networks they pass
@@ -188,18 +194,26 @@
           over the LAN or a pairing code need no account; creating a share link
           or a stored download link requires the sender to sign in.
         </p>
+        <p>
+          For text, open a separate live peer session and send a note, link,
+          command or multiline code block while both devices are online.
+          Messages are end-to-end encrypted, never stored on a server, and
+          disappear with the session; there is no offline delivery or persistent
+          history. Each message can be up to 65,536 UTF-8 bytes.
+        </p>
 
         <h2>How it works</h2>
         <ol>
           <li>Open <a href="https://relayium.com/">relayium.com</a> on two devices on the same network — they discover each other automatically.</li>
-          <li>Pick a file or drag and drop (up to 1,000 at once); the receiver accepts.</li>
+          <li>Pick files (up to 1,000 at once), or choose “Send a message” for text; the receiver accepts.</li>
           <li>Both screens show a 6-digit verification code — compare it to rule out a man-in-the-middle.</li>
-          <li>The file streams device-to-device, end-to-end encrypted, and is verified with a per-file SHA-256 hash.</li>
+          <li>Files or text move end-to-end encrypted; files also receive a per-file SHA-256 integrity check.</li>
         </ol>
 
         <h2>Why Relayium</h2>
         <ul>
           <li><strong>End-to-end encrypted</strong> — per-transfer X25519 key exchange and AES-256-GCM; keys never leave the two devices.</li>
+          <li><strong>Files and ephemeral text</strong> — send links, commands and multiline code without first making a file; text is online-only and never stored.</li>
           <li><strong>Peer-to-peer on your network (realtime mode)</strong> — on the same network, file bytes flow over WebRTC directly between devices and never pass through the server, which only helps the devices find each other; across networks they pass only through an encrypted relay that sees nothing but ciphertext. An optional stored download-link mode keeps files as zero-knowledge ciphertext only you can decrypt.</li>
           <li><strong>Man-in-the-middle protection</strong> — a 6-digit Short Authentication String (SAS) on top of WebRTC's DTLS.</li>
           <li><strong>Cross-platform</strong> — works between Windows, macOS, Linux, Android and iOS through any modern browser (Chrome, Edge, Firefox, Safari).</li>
@@ -218,6 +232,8 @@
         <p>Yes — free and open source (AGPL-3.0), with no installation. Realtime transfers (LAN or pairing code) need no account; creating a share link or a stored download link requires the sender to sign in.</p>
         <h3>Do my files get uploaded to a server?</h3>
         <p>On the same network: no — files stream directly between the two devices over WebRTC and never touch the server. Across networks the connection may go through an encrypted relay that only ever sees ciphertext. There is also an optional stored download-link mode where your browser encrypts files before upload and the server stores only zero-knowledge ciphertext (AES-256-GCM, key only in the URL fragment).</p>
+        <h3>Can I send text instead of a file?</h3>
+        <p>Yes. Two online devices can open a separate end-to-end encrypted message session for text, links, commands or multiline code. Relayium never stores the messages, and there is no offline delivery or persistent history. Each message can be up to 65,536 UTF-8 bytes; send anything larger as a file.</p>
         <h3>Is it end-to-end encrypted?</h3>
         <p>Yes — X25519 key exchange and AES-256-GCM, with keys that never leave the two devices, plus a 6-digit code to detect man-in-the-middle attacks.</p>
         <h3>Can I send files between different operating systems?</h3>

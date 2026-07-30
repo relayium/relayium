@@ -32,15 +32,6 @@ const generated = new Set(
   })
 );
 
-// KNOWN DEBT, not an exemption to keep. The text use-case card has to link at the
-// text guide, but that guide is authored in the static-page generator, which the
-// text-positioning slice deliberately does not touch — so the card points at a
-// slug that does not exist yet and 404s until the article lands. Listing it here
-// keeps the "every card resolves" guard alive for the other cards instead of
-// deleting the assertion outright, and the test below fails the moment the
-// article appears, which is the signal to delete the entry.
-const PENDING_ARTICLES = new Set(["how-to/send-text-between-devices"]);
-
 describe("homepage use-case cards", () => {
   it("has one target slug per card", () => {
     expect(slugs.length).toBeGreaterThan(0);
@@ -51,15 +42,7 @@ describe("homepage use-case cards", () => {
 
   it("points every card at an article that is actually generated", () => {
     expect(generated.size).toBeGreaterThan(30);
-    expect(slugs.filter((s) => !generated.has(s) && !PENDING_ARTICLES.has(s))).toEqual([]);
-  });
-
-  it("keeps PENDING_ARTICLES honest: every entry is a card, and none has landed", () => {
-    // A stale entry would silently re-open the 404 hole for a real typo, and an
-    // entry whose article now exists means the card works and the exemption
-    // should go.
-    expect([...PENDING_ARTICLES].filter((s) => !slugs.includes(s))).toEqual([]);
-    expect([...PENDING_ARTICLES].filter((s) => generated.has(s))).toEqual([]);
+    expect(slugs.filter((s) => !generated.has(s))).toEqual([]);
   });
 
   it("has a text card, pointing at the text guide", () => {

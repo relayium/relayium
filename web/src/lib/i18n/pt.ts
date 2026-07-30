@@ -12,8 +12,8 @@ const pt: Messages = {
   guideTitle: "Como usar",
   step1: "Abra esta página em outro dispositivo ou navegador na mesma rede (dispositivos que compartilham um IP público formam uma mesma “sala”).",
   step2: "Os dois dispositivos aparecem então na lista “Dispositivos próximos” abaixo.",
-  step3: (m) => `Clique no cartão de um dispositivo para escolher arquivos, ou arraste arquivos até ele (até ${m} por vez).`,
-  step4: "O destinatário clica em “Aceitar”; assim que os dois códigos de verificação coincidirem, a transferência começa.",
+  step3: (m) => `Escolha arquivos no cartão de um dispositivo (até ${m}) ou “Enviar uma mensagem” para texto, links, comandos ou código.`,
+  step4: "O destinatário aceita; quando os dois códigos de verificação coincidem, começa a transferência de arquivos ou a sessão de texto.",
   hint: "Recomendamos o Chrome (transmite arquivos grandes direto para o disco e permite escolher uma pasta de destino para vários arquivos, sem usar memória). Se dispositivos no mesmo roteador não se enxergarem, desative o “isolamento de AP / isolamento de clientes” do roteador.",
   requestHead: (n, c, s) => `📥 ${n} quer enviar ${c} arquivo(s) · ${s} no total`,
   codeLabel: "Código de verificação",
@@ -53,7 +53,7 @@ const pt: Messages = {
   tooMany: (m, n) => `Até ${m} arquivos por vez; os ${n} excedentes foram ignorados`,
   titleDefault: "Relayium — transferência de arquivos e de texto com criptografia de ponta a ponta",
   descDefault:
-    "Transferência de arquivos com criptografia de ponta a ponta, de código aberto, no seu navegador. No modo em tempo real, os arquivos fluem diretamente de dispositivo para dispositivo via WebRTC na sua rede local, ou entre redes por um retransmissor criptografado que só vê texto cifrado; o modo opcional de link de download armazenado os mantém como texto cifrado de conhecimento zero que só você pode descriptografar. A mesma conexão também leva texto — uma nota, um link, um comando, um bloco de código — enquanto os dois dispositivos estiverem online, e nenhuma mensagem é armazenada em servidor algum.",
+    "Transferência de arquivos e texto com criptografia de ponta a ponta e código aberto no navegador. Os arquivos vão direto na rede local ou por um retransmissor que só vê texto cifrado entre redes. O texto usa uma sessão ponto a ponto criptografada e separada, exige os dois dispositivos online e nunca é armazenado.",
   titleCross: "Transferência de arquivos entre redes — em tempo real, com criptografia de ponta a ponta | Relayium",
   titleOffline: "Link de arquivo criptografado — envie agora, baixe depois | Relayium",
   descCross: "Envie arquivos entre redes com um código de 6 caracteres — transferência em tempo real, com criptografia de ponta a ponta; o retransmissor só vê texto cifrado, nunca seus arquivos.",
@@ -561,11 +561,11 @@ const pt: Messages = {
   },
   features: {
     title: "Por que o Relayium",
-    sub: "Privacidade em primeiro lugar, ponto a ponto, código aberto — transferência de arquivos como deveria ser.",
+    sub: "Privacidade em primeiro lugar, ponto a ponto, código aberto — transferência de arquivos e texto como deveria ser.",
     secureLink: "Veja como é criptografada e protegida contra intermediário →",
     items: [
       { title: "Criptografia de ponta a ponta", desc: "X25519 + AES-256-GCM; as chaves são negociadas apenas entre os dois dispositivos e o servidor não consegue descriptografar." },
-      { title: "O servidor nunca vê seus arquivos", desc: "No modo em tempo real, os bytes fluem por WebRTC — diretamente de dispositivo para dispositivo na sua rede, ou por um retransmissor criptografado que só vê texto cifrado entre redes; o modo opcional de link de download armazena apenas texto cifrado de conhecimento zero." },
+      { title: "O servidor nunca vê seus arquivos nem mensagens", desc: "Os dados em tempo real fluem por WebRTC — direto na sua rede ou por um retransmissor que só vê texto cifrado entre redes. O texto nunca é armazenado; links opcionais guardam apenas o arquivo cifrado de conhecimento zero." },
       { title: "Verificação contra intermediário", desc: "As duas telas mostram o mesmo código (SAS); confira-o para descartar um intermediário bisbilhoteiro." },
       { title: "Multiplataforma", desc: "Windows, macOS, Linux, Android, iOS — qualquer navegador moderno, nada para instalar." },
       { title: "Código aberto e auditável", desc: "O protocolo e todo o código são públicos no GitHub — qualquer pessoa pode revisar, auto-hospedar ou contribuir." },
@@ -627,7 +627,7 @@ const pt: Messages = {
       { q: "O servidor consegue ver meus arquivos?", a: "Não. Na mesma rede, as transferências em tempo real nunca passam pelo servidor; entre redes, elas passam por um retransmissor criptografado, mas ele só encaminha texto cifrado e não consegue descriptografá-lo. Os links de download são criptografados no seu navegador e o servidor guarda apenas texto cifrado que não consegue descriptografar — a chave fica somente com quem compartilha o link e com o destinatário." },
       { q: "Preciso criar uma conta?", a: "Transferências em LAN na mesma rede não exigem login. Enviar entre redes por código de emparelhamento ou link exige que o remetente entre — o destinatário nunca precisa de conta. Os links de download também exigem que o remetente entre, para que o texto cifrado possa ser armazenado." },
       { q: "É de código aberto?", a: "Sim. O design do protocolo e todo o código de front-end e back-end são públicos no GitHub — livre para revisar, auto-hospedar ou contribuir." },
-      { q: "Posso enviar texto em vez de um arquivo?", a: "Sim — aqui o texto é uma transferência de primeira classe, não um chat. Abra “Enviar uma mensagem” no cartão de um dispositivo e digite ou cole uma nota, um link, um comando ou código de várias linhas; ele trafega com criptografia de ponta a ponta pela mesma conexão ponto a ponto. É em tempo real, então os dois dispositivos precisam estar online, vale apenas para aquela sessão entre os dois, e nada é jamais gravado em servidor — o Relayium não guarda histórico de mensagens. Cada mensagem aceita até 65.536 bytes UTF-8; se for maior, envie como arquivo." },
+      { q: "Posso enviar texto em vez de um arquivo?", a: "Sim — aqui o texto é uma transferência de primeira classe, não um chat. Abra “Enviar uma mensagem” no cartão de um dispositivo e digite ou cole uma nota, um link, um comando ou código de várias linhas; ele trafega com criptografia de ponta a ponta por uma conexão ponto a ponto separada. É em tempo real, então os dois dispositivos precisam estar online, vale apenas para aquela sessão entre os dois, e nada é jamais gravado em servidor — o Relayium não guarda histórico de mensagens. Cada mensagem aceita até 65.536 bytes UTF-8; se for maior, envie como arquivo." },
     ],
     home: [
       { q: "Os dois dispositivos precisam estar na mesma rede?", a: "A transferência em LAN doméstica exige que os dois lados estejam no mesmo Wi-Fi / rede local. Se você não está na mesma rede, use o código de emparelhamento / link de compartilhamento entre redes, ou um link de download assíncrono." },
@@ -664,7 +664,7 @@ const pt: Messages = {
   },
   homeText: {
     title: "Nem tudo o que você precisa passar é um arquivo",
-    sub: "O texto vai pela mesma conexão criptografada: uma nota, uma URL, um comando de shell, um log de erro, um bloco de código inteiro. Escolha um dispositivo, abra “Enviar uma mensagem”, digite ou cole — sem precisar salvar como arquivo primeiro e sem um aplicativo de terceiros no meio.",
+    sub: "O texto usa uma conexão ponto a ponto criptografada e separada: uma nota, uma URL, um comando de shell, um log de erro, um bloco de código inteiro. Escolha um dispositivo, abra “Enviar uma mensagem”, digite ou cole — sem precisar salvar como arquivo primeiro e sem um aplicativo de terceiros no meio.",
     points: [
       "Com criptografia de ponta a ponta e ponto a ponto, exatamente como uma transferência de arquivo, e restrito àquela única sessão entre os dois dispositivos.",
       "Em tempo real: os dois dispositivos precisam estar online ao mesmo tempo, cada um com a página aberta.",

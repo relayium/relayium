@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="web/public/og-image.jpg" alt="Relayium — end-to-end encrypted peer-to-peer file transfer" width="640">
+  <img src="web/public/og-image.jpg" alt="Relayium — end-to-end encrypted peer-to-peer file and text transfer" width="640">
 </p>
 
 <h1 align="center">Relayium</h1>
 
 <p align="center">
   <strong>Open-source, end-to-end encrypted peer-to-peer file transfer — and ephemeral encrypted text — right in your browser.</strong><br>
-  In realtime mode files and messages stream directly between devices over WebRTC and never touch the server.
+  On a LAN, realtime files and messages move directly between devices; across networks, an encrypted relay forwards only ciphertext it cannot read.
 </p>
 
 <p align="center">
@@ -69,7 +69,7 @@ Prefer the terminal? Install the self-hostable, end-to-end-encrypted CLI in one 
 curl -fsSL https://relayium.com/install.sh | sh
 ```
 
-**Completely free — and direct.** The CLI connects your machines directly; file and message bytes never pass through Relayium's servers. Only `send`/`receive`/`text` touches our servers at all, and only for a tiny rendezvous handshake (never the content).
+**Completely free — and direct.** The CLI connects your machines directly; file and message bytes never pass through Relayium's servers. Among the direct modes below, only `send`/`receive`/`text` touch our servers, and only for a tiny rendezvous handshake (never the content).
 
 Four direct modes — three that move files, one that moves text:
 

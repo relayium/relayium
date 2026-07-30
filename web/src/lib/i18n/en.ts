@@ -12,8 +12,8 @@ const en: Messages = {
   guideTitle: "How to use",
   step1: "Open this page on another device or browser on the same network (devices sharing a public IP form one “room”).",
   step2: "Both devices then appear in the “Nearby devices” list below.",
-  step3: (m) => `Click a device card to choose files, or drag files onto it (up to ${m} at a time).`,
-  step4: "The recipient clicks “Accept”; once both verification codes match, the transfer begins.",
+  step3: (m) => `Choose files on a device card (up to ${m} at a time), or choose “Send a message” for text, links, commands or code.`,
+  step4: "The recipient accepts; once both verification codes match, the file transfer or text session begins.",
   hint: "Chrome is recommended (streams large files straight to disk and lets you pick a target folder for multiple files, without using memory). If devices on the same router can’t see each other, turn off the router’s “AP isolation / client isolation”.",
   requestHead: (n, c, s) => `📥 ${n} wants to send ${c} file(s) · ${s} total`,
   codeLabel: "Verification code",
@@ -53,7 +53,7 @@ const en: Messages = {
   tooMany: (m, n) => `Up to ${m} files at a time; ignored the extra ${n}`,
   titleDefault: "Relayium — end-to-end encrypted file and text transfer",
   descDefault:
-    "Open-source, end-to-end encrypted file transfer in your browser. In realtime mode, files stream directly device-to-device over WebRTC on your local network, or across networks through an encrypted relay that only ever sees ciphertext; the optional stored download-link mode keeps them as zero-knowledge ciphertext only you can decrypt. The same connection also carries text — a note, a link, a command, a block of code — while both devices are online, and no message is ever stored on a server.",
+    "Open-source, end-to-end encrypted file and text transfer in your browser. Files stream directly on your local network or through a ciphertext-only relay across networks. Text uses a separate encrypted peer session while both devices are online and is never stored.",
   titleCross: "Cross-network file transfer — realtime, end-to-end encrypted | Relayium",
   titleOffline: "Encrypted file link — upload now, download later | Relayium",
   descCross: "Send files across networks with a 6-character code — realtime transfer, end-to-end encrypted; the relay only ever sees ciphertext, never your files.",
@@ -575,11 +575,11 @@ const en: Messages = {
   },
   features: {
     title: "Why Relayium",
-    sub: "Privacy-first, peer-to-peer, open source — file transfer the way it should be.",
+    sub: "Privacy-first, peer-to-peer, open source — file and text transfer the way it should be.",
     secureLink: "See how it's encrypted and MITM-protected →",
     items: [
       { title: "End-to-end encrypted", desc: "X25519 + AES-256-GCM; keys are negotiated only between the two devices and the server can't decrypt." },
-      { title: "The server never sees your files", desc: "In realtime mode, bytes flow over WebRTC — directly device-to-device on your network, or through an encrypted relay that only ever sees ciphertext across networks; the optional download-link mode stores only zero-knowledge ciphertext." },
+      { title: "The server never sees your files or messages", desc: "Realtime bytes flow over WebRTC — directly on your network or through a ciphertext-only relay across networks. Text is never stored; optional download links store only zero-knowledge file ciphertext." },
       { title: "Man-in-the-middle check", desc: "Both screens show the same code (SAS); match it to rule out an eavesdropping MITM." },
       { title: "Cross-platform", desc: "Windows, macOS, Linux, Android, iOS — any modern browser, nothing to install." },
       { title: "Open source & auditable", desc: "The protocol and all the code are public on GitHub — anyone can review it, self-host, or contribute." },
@@ -641,7 +641,7 @@ const en: Messages = {
       { q: "Can the server see my files?", a: "No. On the same network, realtime transfers never touch the server; across networks they pass through an encrypted relay, but it only ever forwards ciphertext and can't decrypt it. Download links are encrypted in your browser and the server keeps only ciphertext it can't decrypt — the key lives solely with the link's sharer and recipient." },
       { q: "Do I have to create an account?", a: "LAN transfers on the same network need no sign-in. Sending across networks by pairing code or link requires the sender to sign in — the recipient never needs an account. Download links also require the sender to sign in, so the encrypted ciphertext can be stored." },
       { q: "Is it open source?", a: "Yes. The protocol design and all front-end and back-end code are public on GitHub — free to review, self-host, or contribute to." },
-      { q: "Can I send text instead of a file?", a: "Yes — text is a first-class transfer here, not a chat. Open “Send a message” on a device card and type or paste a note, a link, a command, or multiline code; it travels end-to-end encrypted over the same peer connection. It is realtime, so both devices have to be online, it is scoped to that one session between the two of them, and nothing is ever written to a server — Relayium keeps no message history. Each message can be up to 65,536 UTF-8 bytes; send anything larger as a file." },
+      { q: "Can I send text instead of a file?", a: "Yes — text is a first-class transfer here, not a chat. Open “Send a message” on a device card and type or paste a note, a link, a command, or multiline code; it travels end-to-end encrypted over its own peer connection. It is realtime, so both devices have to be online, it is scoped to that one session between the two of them, and nothing is ever written to a server — Relayium keeps no message history. Each message can be up to 65,536 UTF-8 bytes; send anything larger as a file." },
     ],
     home: [
       { q: "Do both devices have to be on the same network?", a: "The home LAN transfer needs both sides on the same Wi-Fi / local network. If you're not on the same network, use the cross-network pairing code / share link, or an async download link instead." },
@@ -678,7 +678,7 @@ const en: Messages = {
   },
   homeText: {
     title: "Not everything you need to move is a file",
-    sub: "Text goes over the same encrypted connection: a note, a URL, a shell command, an error log, a whole block of code. Pick a device, choose “Send a message”, type or paste — no file to save first, no third-party app in the middle.",
+    sub: "Text gets its own encrypted peer connection: a note, a URL, a shell command, an error log, a whole block of code. Pick a device, choose “Send a message”, type or paste — no file to save first, no third-party app in the middle.",
     points: [
       "End-to-end encrypted and peer-to-peer, exactly like a file transfer, and scoped to that one session between the two devices.",
       "Realtime: both devices have to be online at the same time, with the page open on each.",
