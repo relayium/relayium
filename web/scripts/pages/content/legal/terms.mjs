@@ -2,18 +2,18 @@
 const en = {
   title: "Terms of Service",
   description:
-    "The terms for using Relayium — an open-source, end-to-end encrypted peer-to-peer file transfer service. The core service is free; optional paid plans are available.",
+    "The terms for using Relayium — an open-source service for end-to-end encrypted file and real-time text transfers between devices. The core service is free; optional paid plans are available.",
   updatedLabel: "Last updated",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "Privacy Policy",
   lead: [
-    "By using Relayium you agree to these terms. Relayium is an open-source service that lets you send files directly between devices, end-to-end encrypted. The core service is free; some optional plans are paid — see Subscriptions and billing.",
+    "By using Relayium you agree to these terms. Relayium is an open-source service that lets you send files and real-time text between devices, end-to-end encrypted. The core service is free; some optional plans are paid — see Subscriptions and billing.",
   ],
   sections: [
     {
       heading: "The service",
       body: [
-        "Relayium transfers files peer-to-peer between devices. The core service is free and its source code is open source under the AGPL-3.0 license. Optional paid plans raise storage, transfer, and retention limits — see Subscriptions and billing.",
+        "Relayium transfers end-to-end encrypted files and real-time text between devices. The core service is free and its source code is open source under the AGPL-3.0 license. Optional paid plans raise storage, transfer, and retention limits — see Subscriptions and billing.",
       ],
     },
     {
@@ -34,7 +34,7 @@ const en = {
     {
       heading: "Accounts",
       body: [
-        "Same-network (LAN) transfers need no account. Sending across networks with a pairing code requires the sender to sign in — the person receiving never needs an account. Creating a stored download link also requires an account. You are responsible for keeping access to your email and account secure. You can delete your account and its data at any time from your account settings, in the app or on the web. Deletion starts a 30-day grace period during which you can undo it by signing back in; after that, your account and personal data are permanently removed.",
+        "Same-network (LAN) transfers need no account. Creating a pairing code for a cross-network file or text transfer requires signing in; joining with a pairing code does not require an account. Creating a stored download link also requires an account. You are responsible for keeping access to your email and account secure. You can delete your account and its data at any time from your account settings, in the app or on the web. Deletion starts a 30-day grace period during which you can undo it by signing back in; after that, your account and personal data are permanently removed.",
       ],
     },
     {
@@ -60,6 +60,12 @@ const en = {
         "Subscriptions bought inside the iOS app are sold and billed by Apple through in-app purchase, charged to your Apple ID.",
         "They renew automatically unless you turn off auto-renewal at least 24 hours before the current period ends.",
         "Manage or cancel an Apple-billed subscription in your Apple ID account settings — we cannot cancel or refund it for you. Refunds for App Store purchases are handled by Apple.",
+      ],
+    },
+    {
+      heading: "Real-time text",
+      body: [
+        "Real-time text transfer works only while both devices are online. Messages are end-to-end encrypted and have no offline delivery or server-side history. On the web, cross-network sessions may carry encrypted traffic through a TURN relay; the relay cannot read the message content.",
       ],
     },
     {
@@ -113,17 +119,17 @@ const en = {
 
 const zh = {
   title: "服务条款",
-  description: "使用 Relayium 的条款——一项开源、端到端加密的点对点文件传输服务。核心服务免费，另有可选的付费套餐。",
+  description: "使用 Relayium 的条款——一项开源、端到端加密的设备间文件与实时文本传输服务。核心服务免费，另有可选的付费套餐。",
   updatedLabel: "最后更新",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "隐私政策",
   lead: [
-    "使用 Relayium 即表示你同意本条款。Relayium 是一项开源服务，让你在设备之间直接、端到端加密地发送文件。核心服务免费，部分可选套餐需付费——详见「订阅与计费」。",
+    "使用 Relayium 即表示你同意本条款。Relayium 是一项开源服务，让你在设备之间端到端加密地发送文件与实时文本。核心服务免费，部分可选套餐需付费——详见「订阅与计费」。",
   ],
   sections: [
     {
       heading: "服务说明",
-      body: ["Relayium 在设备之间点对点传输文件。核心服务免费，其源代码以 AGPL-3.0 许可证开源。可选的付费套餐可提高存储、传输与保留时长上限——详见「订阅与计费」。"],
+      body: ["Relayium 在设备之间端到端加密地传输文件与实时文本。核心服务免费，其源代码以 AGPL-3.0 许可证开源。可选的付费套餐可提高存储、传输与保留时长上限——详见「订阅与计费」。"],
     },
     {
       heading: "使用资格",
@@ -143,7 +149,7 @@ const zh = {
     {
       heading: "账号",
       body: [
-        "同一网络（局域网）内的传输无需账号。跨网络使用配对码传输时，需要发送方登录——接收方始终无需账号。创建暂存下载链接同样需要账号。你有责任妥善保管你的邮箱和账号访问权限。你可以随时在账号设置中（网页或 App 内）删除你的账号及其数据。删除会进入 30 天宽限期，期间你可重新登录撤销；之后你的账号及个人数据将被永久移除。",
+        "同一网络（局域网）内的传输无需账号。为跨网络文件或文本传输创建配对码时需要登录；持配对码加入无需账号。创建暂存下载链接同样需要账号。你有责任妥善保管你的邮箱和账号访问权限。你可以随时在账号设置中（网页或 App 内）删除你的账号及其数据。删除会进入 30 天宽限期，期间你可重新登录撤销；之后你的账号及个人数据将被永久移除。",
       ],
     },
     {
@@ -169,6 +175,12 @@ const zh = {
         "在 iOS App 内购买的订阅由 Apple 通过应用内购买销售并计费，从你的 Apple ID 扣款。",
         "除非你在当前周期结束前至少 24 小时关闭自动续订，否则订阅将自动续订。",
         "请在你的 Apple ID 账号设置中管理或取消由 Apple 计费的订阅——我们无法为你取消或退款。App Store 购买的退款由 Apple 处理。",
+      ],
+    },
+    {
+      heading: "实时文本",
+      body: [
+        "实时文本传输仅在双方设备均在线时工作。消息采用端到端加密，不支持离线投递，也不在服务器端保留历史记录。网页端跨网络会话可能通过 TURN 中继传输密文；中继无法读取消息内容。",
       ],
     },
     {
@@ -221,18 +233,18 @@ const zh = {
 const ja = {
   title: "利用規約",
   description:
-    "Relayium の利用規約——オープンソースのエンドツーエンドで暗号化されたピアツーピアのファイル転送サービスです。コア機能は無料で、オプションの有料プランもご利用いただけます。",
+    "Relayium の利用規約——デバイス間でファイルとリアルタイムテキストをエンドツーエンド暗号化して転送するオープンソースサービスです。コア機能は無料で、オプションの有料プランもご利用いただけます。",
   updatedLabel: "最終更新",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "プライバシーポリシー",
   lead: [
-    "本サービスをご利用いただいた時点で、お客様は本規約に同意したものとみなされます。Relayium は、デバイス間で直接かつエンドツーエンドで暗号化されたファイル送信を可能にする、オープンソースのサービスです。コア機能は無料で、一部のオプションプランは有料です——詳細は「サブスクリプションと請求」をご覧ください。",
+    "本サービスをご利用いただいた時点で、お客様は本規約に同意したものとみなされます。Relayium は、デバイス間でエンドツーエンドで暗号化されたファイルとリアルタイムテキストの送信を可能にする、オープンソースのサービスです。コア機能は無料で、一部のオプションプランは有料です——詳細は「サブスクリプションと請求」をご覧ください。",
   ],
   sections: [
     {
       heading: "サービスについて",
       body: [
-        "Relayium はデバイス間でピアツーピアでファイルを転送します。コア機能は無料で、そのソースコードは AGPL-3.0 ライセンスのもとオープンソースとして公開されています。オプションの有料プランでは、ストレージ、転送、保存期間の上限を引き上げることができます——詳細は「サブスクリプションと請求」をご覧ください。",
+        "Relayium はデバイス間でファイルとリアルタイムテキストをエンドツーエンド暗号化して転送します。コア機能は無料で、そのソースコードは AGPL-3.0 ライセンスのもとオープンソースとして公開されています。オプションの有料プランでは、ストレージ、転送、保存期間の上限を引き上げることができます——詳細は「サブスクリプションと請求」をご覧ください。",
       ],
     },
     {
@@ -253,7 +265,7 @@ const ja = {
     {
       heading: "アカウント",
       body: [
-        "同一ネットワーク（LAN）内の転送はアカウント不要です。ペアリングコードを使ってネットワークをまたいで送信する場合は、送信者のサインインが必要です——受信者はアカウント不要のままです。保存型ダウンロードリンクの作成にもアカウントが必要です。メールアドレスとアカウントへのアクセスを安全に保つ責任はお客様にあります。アカウントとそのデータは、アプリまたはウェブのアカウント設定からいつでも削除できます。削除を行うと 30 日間の猶予期間が始まり、その間に再度サインインすることで削除を取り消すことができます。その後、アカウントと個人データは完全に削除されます。",
+        "同一ネットワーク（LAN）内の転送はアカウント不要です。ネットワークをまたぐファイルまたはテキスト転送用のペアリングコードを作成するにはサインインが必要ですが、コードを使って参加する側はアカウント不要です。保存型ダウンロードリンクの作成にもアカウントが必要です。メールアドレスとアカウントへのアクセスを安全に保つ責任はお客様にあります。アカウントとそのデータは、アプリまたはウェブのアカウント設定からいつでも削除できます。削除を行うと 30 日間の猶予期間が始まり、その間に再度サインインすることで削除を取り消すことができます。その後、アカウントと個人データは完全に削除されます。",
       ],
     },
     {
@@ -279,6 +291,12 @@ const ja = {
         "iOS アプリ内で購入したサブスクリプションは、アプリ内課金を通じて Apple が販売・請求し、お客様の Apple ID に課金されます。",
         "現在の期間終了の少なくとも 24 時間前に自動更新をオフにしない限り、自動的に更新されます。",
         "Apple が請求するサブスクリプションの管理・解約は、お客様の Apple ID のアカウント設定から行ってください——当社がお客様に代わって解約や返金を行うことはできません。App Store 購入の返金は Apple が対応します。",
+      ],
+    },
+    {
+      heading: "リアルタイムテキスト",
+      body: [
+        "リアルタイムテキスト転送は、両方のデバイスがオンラインの間だけ機能します。メッセージはエンドツーエンドで暗号化され、オフライン配信やサーバー側の履歴はありません。ウェブでは、ネットワークをまたぐセッションの暗号化された通信が TURN リレーを通る場合がありますが、リレーはメッセージ内容を読み取れません。",
       ],
     },
     {
@@ -333,18 +351,18 @@ const ja = {
 const ko = {
   title: "이용약관",
   description:
-    "Relayium 이용약관 — 오픈소스 종단간 암호화 P2P 파일 전송 서비스입니다. 핵심 서비스는 무료이며, 선택적인 유료 플랜을 이용할 수 있습니다.",
+    "Relayium 이용약관 — 기기 간 파일 및 실시간 텍스트를 종단간 암호화하여 전송하는 오픈소스 서비스입니다. 핵심 서비스는 무료이며, 선택적인 유료 플랜을 이용할 수 있습니다.",
   updatedLabel: "최종 업데이트",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "개인정보 처리방침",
   lead: [
-    "Relayium을 사용함으로써 귀하는 이 약관에 동의하는 것으로 간주됩니다. Relayium은 기기 간에 직접 종단간 암호화된 파일 전송을 지원하는 오픈소스 서비스입니다. 핵심 서비스는 무료이며, 일부 선택적 플랜은 유료입니다 — 자세한 내용은 ‘구독 및 결제’를 참고하세요.",
+    "Relayium을 사용함으로써 귀하는 이 약관에 동의하는 것으로 간주됩니다. Relayium은 기기 간에 종단간 암호화된 파일과 실시간 텍스트 전송을 지원하는 오픈소스 서비스입니다. 핵심 서비스는 무료이며, 일부 선택적 플랜은 유료입니다 — 자세한 내용은 ‘구독 및 결제’를 참고하세요.",
   ],
   sections: [
     {
       heading: "서비스 소개",
       body: [
-        "Relayium은 기기 간에 P2P로 파일을 전송합니다. 핵심 서비스는 무료이며 소스 코드는 AGPL-3.0 라이선스 하에 오픈소스로 공개되어 있습니다. 선택적 유료 플랜을 이용하면 저장 용량, 전송량, 보관 기간 한도를 늘릴 수 있습니다 — 자세한 내용은 ‘구독 및 결제’를 참고하세요.",
+        "Relayium은 기기 간에 파일과 실시간 텍스트를 종단간 암호화하여 전송합니다. 핵심 서비스는 무료이며 소스 코드는 AGPL-3.0 라이선스 하에 오픈소스로 공개되어 있습니다. 선택적 유료 플랜을 이용하면 저장 용량, 전송량, 보관 기간 한도를 늘릴 수 있습니다 — 자세한 내용은 ‘구독 및 결제’를 참고하세요.",
       ],
     },
     {
@@ -365,7 +383,7 @@ const ko = {
     {
       heading: "계정",
       body: [
-        "동일 네트워크(LAN) 내 전송은 계정이 필요 없습니다. 페어링 코드로 네트워크를 넘나들며 전송하려면 발신자가 로그인해야 합니다——수신자는 여전히 계정이 필요 없습니다. 저장형 다운로드 링크를 만드는 데도 계정이 필요합니다. 이메일 주소와 계정에 대한 접근을 안전하게 관리할 책임은 귀하에게 있습니다. 귀하는 앱 또는 웹의 계정 설정에서 언제든지 계정과 그 데이터를 삭제할 수 있습니다. 삭제를 시작하면 30일의 유예 기간이 시작되며, 이 기간 동안 다시 로그인하여 삭제를 취소할 수 있습니다. 그 이후에는 계정과 개인 데이터가 영구적으로 삭제됩니다.",
+        "동일 네트워크(LAN) 내 전송은 계정이 필요 없습니다. 네트워크 간 파일 또는 텍스트 전송용 페어링 코드를 만들려면 로그인해야 하지만, 코드를 가지고 참여하는 쪽은 계정이 필요 없습니다. 저장형 다운로드 링크를 만드는 데도 계정이 필요합니다. 이메일 주소와 계정에 대한 접근을 안전하게 관리할 책임은 귀하에게 있습니다. 귀하는 앱 또는 웹의 계정 설정에서 언제든지 계정과 그 데이터를 삭제할 수 있습니다. 삭제를 시작하면 30일의 유예 기간이 시작되며, 이 기간 동안 다시 로그인하여 삭제를 취소할 수 있습니다. 그 이후에는 계정과 개인 데이터가 영구적으로 삭제됩니다.",
       ],
     },
     {
@@ -391,6 +409,12 @@ const ko = {
         "iOS 앱 내에서 구매한 구독은 인앱 구매를 통해 Apple이 판매 및 청구하며, 귀하의 Apple ID로 청구됩니다.",
         "현재 기간이 끝나기 최소 24시간 전에 자동 갱신을 끄지 않는 한 자동으로 갱신됩니다.",
         "Apple이 청구하는 구독은 귀하의 Apple ID 계정 설정에서 관리하거나 취소하세요 — 당사는 이를 대신 취소하거나 환불할 수 없습니다. App Store 구매에 대한 환불은 Apple이 처리합니다.",
+      ],
+    },
+    {
+      heading: "실시간 텍스트",
+      body: [
+        "실시간 텍스트 전송은 두 기기가 모두 온라인일 때만 작동합니다. 메시지는 종단간 암호화되며 오프라인 전달이나 서버 측 기록은 없습니다. 웹에서는 네트워크 간 세션의 암호화된 트래픽이 TURN 릴레이를 통과할 수 있지만, 릴레이는 메시지 내용을 읽을 수 없습니다.",
       ],
     },
     {
@@ -445,18 +469,18 @@ const ko = {
 const de = {
   title: "Nutzungsbedingungen",
   description:
-    "Die Nutzungsbedingungen für Relayium — einen quelloffenen, Ende-zu-Ende-verschlüsselten Peer-to-Peer-Dateiübertragungsdienst. Der Kerndienst ist kostenlos; optionale kostenpflichtige Pläne sind verfügbar.",
+    "Die Nutzungsbedingungen für Relayium — einen quelloffenen Dienst für Ende-zu-Ende-verschlüsselte Datei- und Echtzeittextübertragungen zwischen Geräten. Der Kerndienst ist kostenlos; optionale kostenpflichtige Pläne sind verfügbar.",
   updatedLabel: "Zuletzt aktualisiert",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "Datenschutzerklärung",
   lead: [
-    "Durch die Nutzung von Relayium stimmen Sie diesen Bedingungen zu. Relayium ist ein quelloffener Dienst, der es Ihnen ermöglicht, Dateien direkt zwischen Geräten Ende-zu-Ende-verschlüsselt zu senden. Der Kerndienst ist kostenlos; einige optionale Pläne sind kostenpflichtig — siehe Abonnements und Abrechnung.",
+    "Durch die Nutzung von Relayium stimmen Sie diesen Bedingungen zu. Relayium ist ein quelloffener Dienst, mit dem Sie Dateien und Echtzeittext Ende-zu-Ende-verschlüsselt zwischen Geräten senden können. Der Kerndienst ist kostenlos; einige optionale Pläne sind kostenpflichtig — siehe Abonnements und Abrechnung.",
   ],
   sections: [
     {
       heading: "Der Dienst",
       body: [
-        "Relayium überträgt Dateien Peer-to-Peer zwischen Geräten. Der Kerndienst ist kostenlos und sein Quellcode ist unter der AGPL-3.0-Lizenz quelloffen. Optionale kostenpflichtige Pläne erhöhen die Grenzwerte für Speicher, Übertragung und Aufbewahrung — siehe Abonnements und Abrechnung.",
+        "Relayium überträgt Dateien und Echtzeittext Ende-zu-Ende-verschlüsselt zwischen Geräten. Der Kerndienst ist kostenlos und sein Quellcode ist unter der AGPL-3.0-Lizenz quelloffen. Optionale kostenpflichtige Pläne erhöhen die Grenzwerte für Speicher, Übertragung und Aufbewahrung — siehe Abonnements und Abrechnung.",
       ],
     },
     {
@@ -477,7 +501,7 @@ const de = {
     {
       heading: "Konten",
       body: [
-        "Übertragungen im selben Netzwerk (LAN) benötigen kein Konto. Für den Versand über Netzwerke hinweg per Pairing-Code muss sich die sendende Person anmelden — die empfangende Person benötigt weiterhin kein Konto. Auch das Erstellen eines gespeicherten Download-Links erfordert ein Konto. Sie sind dafür verantwortlich, den Zugang zu Ihrer E-Mail-Adresse und Ihrem Konto zu sichern. Sie können Ihr Konto und die zugehörigen Daten jederzeit in den Kontoeinstellungen in der App oder im Web löschen. Mit der Löschung beginnt eine 30-tägige Karenzzeit, innerhalb derer Sie sie durch erneutes Anmelden rückgängig machen können; danach werden Ihr Konto und Ihre personenbezogenen Daten dauerhaft entfernt.",
+        "Übertragungen im selben Netzwerk (LAN) benötigen kein Konto. Für das Erstellen eines Pairing-Codes für eine netzwerkübergreifende Datei- oder Textübertragung ist eine Anmeldung erforderlich; der Beitritt mit einem Pairing-Code erfordert kein Konto. Auch das Erstellen eines gespeicherten Download-Links erfordert ein Konto. Sie sind dafür verantwortlich, den Zugang zu Ihrer E-Mail-Adresse und Ihrem Konto zu sichern. Sie können Ihr Konto und die zugehörigen Daten jederzeit in den Kontoeinstellungen in der App oder im Web löschen. Mit der Löschung beginnt eine 30-tägige Karenzzeit, innerhalb derer Sie sie durch erneutes Anmelden rückgängig machen können; danach werden Ihr Konto und Ihre personenbezogenen Daten dauerhaft entfernt.",
       ],
     },
     {
@@ -503,6 +527,12 @@ const de = {
         "Abonnements, die innerhalb der iOS-App gekauft werden, werden von Apple über In-App-Käufe verkauft und abgerechnet und Ihrer Apple-ID belastet.",
         "Sie verlängern sich automatisch, sofern Sie die automatische Verlängerung nicht mindestens 24 Stunden vor Ablauf des aktuellen Zeitraums deaktivieren.",
         "Verwalten oder kündigen Sie ein von Apple abgerechnetes Abonnement in Ihren Apple-ID-Kontoeinstellungen — wir können es nicht für Sie kündigen oder erstatten. Erstattungen für App-Store-Käufe werden von Apple bearbeitet.",
+      ],
+    },
+    {
+      heading: "Echtzeittext",
+      body: [
+        "Echtzeittextübertragungen funktionieren nur, solange beide Geräte online sind. Nachrichten sind Ende-zu-Ende-verschlüsselt; es gibt weder Offline-Zustellung noch einen serverseitigen Verlauf. Im Web kann der verschlüsselte Datenverkehr netzwerkübergreifender Sitzungen über ein TURN-Relay laufen; das Relay kann den Nachrichteninhalt nicht lesen.",
       ],
     },
     {
@@ -557,18 +587,18 @@ const de = {
 const fr = {
   title: "Conditions d'utilisation",
   description:
-    "Les conditions d'utilisation de Relayium — un service de transfert de fichiers pair à pair, open source et chiffré de bout en bout. Le service de base est gratuit ; des offres payantes optionnelles sont disponibles.",
+    "Les conditions d'utilisation de Relayium — un service open source de transfert de fichiers et de texte en temps réel entre appareils, chiffré de bout en bout. Le service de base est gratuit ; des offres payantes optionnelles sont disponibles.",
   updatedLabel: "Dernière mise à jour",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "Politique de confidentialité",
   lead: [
-    "En utilisant Relayium, vous acceptez ces conditions. Relayium est un service open source qui vous permet d'envoyer des fichiers directement entre appareils, chiffrés de bout en bout. Le service de base est gratuit ; certaines offres optionnelles sont payantes — voir Abonnements et facturation.",
+    "En utilisant Relayium, vous acceptez ces conditions. Relayium est un service open source qui vous permet d'envoyer des fichiers et du texte en temps réel entre appareils, chiffrés de bout en bout. Le service de base est gratuit ; certaines offres optionnelles sont payantes — voir Abonnements et facturation.",
   ],
   sections: [
     {
       heading: "Le service",
       body: [
-        "Relayium transfère des fichiers de pair à pair entre appareils. Le service de base est gratuit et son code source est open source sous licence AGPL-3.0. Les offres payantes optionnelles augmentent les limites de stockage, de transfert et de conservation — voir Abonnements et facturation.",
+        "Relayium transfère des fichiers et du texte en temps réel entre appareils, chiffrés de bout en bout. Le service de base est gratuit et son code source est open source sous licence AGPL-3.0. Les offres payantes optionnelles augmentent les limites de stockage, de transfert et de conservation — voir Abonnements et facturation.",
       ],
     },
     {
@@ -589,7 +619,7 @@ const fr = {
     {
       heading: "Comptes",
       body: [
-        "Les transferts sur le même réseau (local) ne nécessitent aucun compte. L'envoi entre réseaux différents via un code d'appairage exige que l'expéditeur se connecte — la personne qui reçoit n'a jamais besoin de compte. La création d'un lien de téléchargement stocké exige elle aussi un compte. Vous êtes responsable de la sécurisation de l'accès à votre adresse e-mail et à votre compte. Vous pouvez supprimer votre compte et ses données à tout moment depuis les paramètres de votre compte, dans l'application ou sur le web. La suppression déclenche un délai de grâce de 30 jours pendant lequel vous pouvez l'annuler en vous reconnectant ; passé ce délai, votre compte et vos données personnelles sont définitivement supprimés.",
+        "Les transferts sur le même réseau (local) ne nécessitent aucun compte. La création d'un code d'appairage pour un transfert de fichier ou de texte entre réseaux exige une connexion ; rejoindre avec un code d'appairage ne nécessite aucun compte. La création d'un lien de téléchargement stocké exige elle aussi un compte. Vous êtes responsable de la sécurisation de l'accès à votre adresse e-mail et à votre compte. Vous pouvez supprimer votre compte et ses données à tout moment depuis les paramètres de votre compte, dans l'application ou sur le web. La suppression déclenche un délai de grâce de 30 jours pendant lequel vous pouvez l'annuler en vous reconnectant ; passé ce délai, votre compte et vos données personnelles sont définitivement supprimés.",
       ],
     },
     {
@@ -615,6 +645,12 @@ const fr = {
         "Les abonnements achetés dans l'application iOS sont vendus et facturés par Apple via un achat intégré, débité sur votre identifiant Apple.",
         "Ils se renouvellent automatiquement sauf si vous désactivez le renouvellement automatique au moins 24 heures avant la fin de la période en cours.",
         "Gérez ou annulez un abonnement facturé par Apple dans les paramètres de votre compte identifiant Apple — nous ne pouvons pas l'annuler ni le rembourser à votre place. Les remboursements pour les achats sur l'App Store sont gérés par Apple.",
+      ],
+    },
+    {
+      heading: "Texte en temps réel",
+      body: [
+        "Le transfert de texte en temps réel fonctionne uniquement lorsque les deux appareils sont en ligne. Les messages sont chiffrés de bout en bout, sans livraison hors ligne ni historique côté serveur. Sur le web, les sessions entre réseaux peuvent faire transiter leur trafic chiffré par un relais TURN ; ce relais ne peut pas lire le contenu des messages.",
       ],
     },
     {
@@ -669,18 +705,18 @@ const fr = {
 const ar = {
   title: "شروط الخدمة",
   description:
-    "شروط استخدام Relayium — خدمة نقل ملفات من الند للند مفتوحة المصدر ومُشفَّرة من الطرف إلى الطرف. الخدمة الأساسية مجانية؛ وتتوفر خطط مدفوعة اختيارية.",
+    "شروط استخدام Relayium — خدمة مفتوحة المصدر لنقل الملفات والنصوص الفورية بين الأجهزة بتشفير من الطرف إلى الطرف. الخدمة الأساسية مجانية؛ وتتوفر خطط مدفوعة اختيارية.",
   updatedLabel: "آخر تحديث",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "سياسة الخصوصية",
   lead: [
-    "باستخدامك Relayium فإنك توافق على هذه الشروط. Relayium خدمة مفتوحة المصدر تتيح لك إرسال الملفات مباشرةً بين الأجهزة، مُشفَّرة من الطرف إلى الطرف. الخدمة الأساسية مجانية؛ وبعض الخطط الاختيارية مدفوعة — راجع «الاشتراكات والفوترة».",
+    "باستخدامك Relayium فإنك توافق على هذه الشروط. Relayium خدمة مفتوحة المصدر تتيح لك إرسال الملفات والنصوص الفورية بين الأجهزة، مُشفَّرة من الطرف إلى الطرف. الخدمة الأساسية مجانية؛ وبعض الخطط الاختيارية مدفوعة — راجع «الاشتراكات والفوترة».",
   ],
   sections: [
     {
       heading: "الخدمة",
       body: [
-        "تنقل Relayium الملفات من الند للند بين الأجهزة. الخدمة الأساسية مجانية وشِفرتها المصدرية مفتوحة المصدر بموجب رخصة AGPL-3.0. تتيح الخطط المدفوعة الاختيارية رفع حدود التخزين والنقل والاحتفاظ بالبيانات — راجع «الاشتراكات والفوترة».",
+        "تنقل Relayium الملفات والنصوص الفورية بين الأجهزة بتشفير من الطرف إلى الطرف. الخدمة الأساسية مجانية وشِفرتها المصدرية مفتوحة المصدر بموجب رخصة AGPL-3.0. تتيح الخطط المدفوعة الاختيارية رفع حدود التخزين والنقل والاحتفاظ بالبيانات — راجع «الاشتراكات والفوترة».",
       ],
     },
     {
@@ -701,7 +737,7 @@ const ar = {
     {
       heading: "الحسابات",
       body: [
-        "لا تتطلب عمليات النقل على نفس الشبكة (الشبكة المحلية) أي حساب. أما الإرسال عبر الشبكات باستخدام رمز الاقتران فيتطلب من المُرسِل تسجيل الدخول — ولا يحتاج المُستقبِل إطلاقًا إلى حساب. كما يتطلب إنشاء رابط تنزيل مُخزَّن حسابًا. وأنت مسؤول عن الحفاظ على أمان الوصول إلى بريدك الإلكتروني وحسابك. يمكنك حذف حسابك وبياناته في أي وقت من إعدادات حسابك، في التطبيق أو على الويب. يبدأ الحذف فترة سماح مدتها 30 يومًا يمكنك خلالها التراجع عنه بتسجيل الدخول مجددًا؛ وبعد ذلك، تُزال بياناتك الشخصية وحسابك نهائيًا.",
+        "لا تتطلب عمليات النقل على نفس الشبكة (الشبكة المحلية) أي حساب. يتطلب إنشاء رمز اقتران لنقل ملف أو نص عبر الشبكات تسجيل الدخول؛ أما الانضمام باستخدام رمز اقتران فلا يتطلب حسابًا. كما يتطلب إنشاء رابط تنزيل مُخزَّن حسابًا. وأنت مسؤول عن الحفاظ على أمان الوصول إلى بريدك الإلكتروني وحسابك. يمكنك حذف حسابك وبياناته في أي وقت من إعدادات حسابك، في التطبيق أو على الويب. يبدأ الحذف فترة سماح مدتها 30 يومًا يمكنك خلالها التراجع عنه بتسجيل الدخول مجددًا؛ وبعد ذلك، تُزال بياناتك الشخصية وحسابك نهائيًا.",
       ],
     },
     {
@@ -727,6 +763,12 @@ const ar = {
         "الاشتراكات المُشتراة داخل تطبيق iOS تبيعها وتُفوترها Apple عبر الشراء داخل التطبيق، وتُخصَم من مُعرِّف Apple الخاص بك.",
         "تُجدَّد تلقائيًا ما لم تُوقِف التجديد التلقائي قبل 24 ساعة على الأقل من انتهاء الفترة الحالية.",
         "أدِر أو ألغِ اشتراكًا تُفوتِره Apple من إعدادات حساب مُعرِّف Apple الخاص بك — إذ لا يمكننا إلغاءه أو استرداد قيمته نيابةً عنك. تتولى Apple عمليات استرداد مشتريات App Store.",
+      ],
+    },
+    {
+      heading: "النصوص الفورية",
+      body: [
+        "لا يعمل نقل النصوص الفورية إلا عندما يكون الجهازان متصلين بالإنترنت. الرسائل مُشفَّرة من الطرف إلى الطرف، ولا تتوفر لها خدمة تسليم دون اتصال أو سجل على الخادم. على الويب، قد تمر حركة المرور المُشفَّرة للجلسات عبر الشبكات من خلال مُرحِّل TURN؛ ولا يستطيع المُرحِّل قراءة محتوى الرسائل.",
       ],
     },
     {
@@ -781,18 +823,18 @@ const ar = {
 const es = {
   title: "Términos del servicio",
   description:
-    "Los términos para usar Relayium: un servicio de transferencia de archivos de igual a igual, de código abierto y cifrado de extremo a extremo. El servicio básico es gratuito; hay planes de pago opcionales disponibles.",
+    "Los términos para usar Relayium: un servicio de código abierto para transferir archivos y texto en tiempo real entre dispositivos, cifrado de extremo a extremo. El servicio básico es gratuito; hay planes de pago opcionales disponibles.",
   updatedLabel: "Última actualización",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "Política de privacidad",
   lead: [
-    "Al usar Relayium aceptas estos términos. Relayium es un servicio de código abierto que te permite enviar archivos directamente entre dispositivos, cifrados de extremo a extremo. El servicio básico es gratuito; algunos planes opcionales son de pago — consulta Suscripciones y facturación.",
+    "Al usar Relayium aceptas estos términos. Relayium es un servicio de código abierto que te permite enviar archivos y texto en tiempo real entre dispositivos, cifrados de extremo a extremo. El servicio básico es gratuito; algunos planes opcionales son de pago — consulta Suscripciones y facturación.",
   ],
   sections: [
     {
       heading: "El servicio",
       body: [
-        "Relayium transfiere archivos de igual a igual entre dispositivos. El servicio básico es gratuito y su código fuente es de código abierto bajo la licencia AGPL-3.0. Los planes de pago opcionales aumentan los límites de almacenamiento, transferencia y retención — consulta Suscripciones y facturación.",
+        "Relayium transfiere archivos y texto en tiempo real entre dispositivos, cifrados de extremo a extremo. El servicio básico es gratuito y su código fuente es de código abierto bajo la licencia AGPL-3.0. Los planes de pago opcionales aumentan los límites de almacenamiento, transferencia y retención — consulta Suscripciones y facturación.",
       ],
     },
     {
@@ -813,7 +855,7 @@ const es = {
     {
       heading: "Cuentas",
       body: [
-        "Las transferencias en la misma red (red local) no necesitan cuenta. Enviar entre redes con un código de emparejamiento requiere que el remitente inicie sesión: la persona que recibe nunca necesita una cuenta. Crear un enlace de descarga almacenado también requiere una cuenta. Eres responsable de mantener seguro el acceso a tu correo electrónico y a tu cuenta. Puedes eliminar tu cuenta y sus datos en cualquier momento desde los ajustes de tu cuenta, en la aplicación o en la web. La eliminación inicia un período de gracia de 30 días durante el cual puedes deshacerla volviendo a iniciar sesión; transcurrido ese plazo, tu cuenta y tus datos personales se eliminan de forma permanente.",
+        "Las transferencias en la misma red (red local) no necesitan cuenta. Crear un código de emparejamiento para transferir archivos o texto entre redes requiere iniciar sesión; unirse con un código de emparejamiento no requiere cuenta. Crear un enlace de descarga almacenado también requiere una cuenta. Eres responsable de mantener seguro el acceso a tu correo electrónico y a tu cuenta. Puedes eliminar tu cuenta y sus datos en cualquier momento desde los ajustes de tu cuenta, en la aplicación o en la web. La eliminación inicia un período de gracia de 30 días durante el cual puedes deshacerla volviendo a iniciar sesión; transcurrido ese plazo, tu cuenta y tus datos personales se eliminan de forma permanente.",
       ],
     },
     {
@@ -839,6 +881,12 @@ const es = {
         "Las suscripciones compradas dentro de la aplicación de iOS son vendidas y facturadas por Apple mediante compras dentro de la aplicación, con cargo a tu Apple ID.",
         "Se renuevan automáticamente a menos que desactives la renovación automática al menos 24 horas antes de que finalice el período actual.",
         "Gestiona o cancela una suscripción facturada por Apple en los ajustes de tu cuenta de Apple ID — no podemos cancelarla ni reembolsarla en tu nombre. Los reembolsos de compras del App Store los gestiona Apple.",
+      ],
+    },
+    {
+      heading: "Texto en tiempo real",
+      body: [
+        "La transferencia de texto en tiempo real solo funciona mientras ambos dispositivos están en línea. Los mensajes están cifrados de extremo a extremo y no tienen entrega sin conexión ni historial en el servidor. En la web, las sesiones entre redes pueden enviar tráfico cifrado a través de un relé TURN; el relé no puede leer el contenido de los mensajes.",
       ],
     },
     {
@@ -893,18 +941,18 @@ const es = {
 const pt = {
   title: "Termos de Serviço",
   description:
-    "Os termos para usar a Relayium — um serviço de transferência de arquivos ponto a ponto, de código aberto e com criptografia de ponta a ponta. O serviço principal é gratuito; há planos pagos opcionais disponíveis.",
+    "Os termos para usar a Relayium — um serviço de código aberto para transferir arquivos e texto em tempo real entre dispositivos, com criptografia de ponta a ponta. O serviço principal é gratuito; há planos pagos opcionais disponíveis.",
   updatedLabel: "Última atualização",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "Política de Privacidade",
   lead: [
-    "Ao usar a Relayium, você concorda com estes termos. A Relayium é um serviço de código aberto que permite enviar arquivos diretamente entre dispositivos, com criptografia de ponta a ponta. O serviço principal é gratuito; alguns planos opcionais são pagos — veja Assinaturas e cobrança.",
+    "Ao usar a Relayium, você concorda com estes termos. A Relayium é um serviço de código aberto que permite enviar arquivos e texto em tempo real entre dispositivos, com criptografia de ponta a ponta. O serviço principal é gratuito; alguns planos opcionais são pagos — veja Assinaturas e cobrança.",
   ],
   sections: [
     {
       heading: "O serviço",
       body: [
-        "A Relayium transfere arquivos ponto a ponto entre dispositivos. O serviço principal é gratuito e seu código-fonte é de código aberto sob a licença AGPL-3.0. Planos pagos opcionais aumentam os limites de armazenamento, transferência e retenção — veja Assinaturas e cobrança.",
+        "A Relayium transfere arquivos e texto em tempo real entre dispositivos, com criptografia de ponta a ponta. O serviço principal é gratuito e seu código-fonte é de código aberto sob a licença AGPL-3.0. Planos pagos opcionais aumentam os limites de armazenamento, transferência e retenção — veja Assinaturas e cobrança.",
       ],
     },
     {
@@ -925,7 +973,7 @@ const pt = {
     {
       heading: "Contas",
       body: [
-        "As transferências na mesma rede (rede local) não precisam de conta. Enviar entre redes com um código de emparelhamento exige que o remetente faça login — quem recebe nunca precisa de uma conta. Criar um link de download armazenado também exige uma conta. Você é responsável por manter seguro o acesso ao seu e-mail e à sua conta. Você pode excluir sua conta e seus dados a qualquer momento nas configurações da conta, no aplicativo ou na web. A exclusão inicia um período de carência de 30 dias durante o qual você pode desfazê-la voltando a fazer login; depois disso, sua conta e seus dados pessoais são removidos permanentemente.",
+        "As transferências na mesma rede (rede local) não precisam de conta. Criar um código de emparelhamento para uma transferência de arquivo ou texto entre redes exige login; entrar com um código de emparelhamento não exige conta. Criar um link de download armazenado também exige uma conta. Você é responsável por manter seguro o acesso ao seu e-mail e à sua conta. Você pode excluir sua conta e seus dados a qualquer momento nas configurações da conta, no aplicativo ou na web. A exclusão inicia um período de carência de 30 dias durante o qual você pode desfazê-la voltando a fazer login; depois disso, sua conta e seus dados pessoais são removidos permanentemente.",
       ],
     },
     {
@@ -951,6 +999,12 @@ const pt = {
         "As assinaturas compradas dentro do aplicativo iOS são vendidas e cobradas pela Apple por meio de compra no aplicativo, debitadas do seu Apple ID.",
         "Elas se renovam automaticamente, a menos que você desative a renovação automática pelo menos 24 horas antes do fim do período atual.",
         "Gerencie ou cancele uma assinatura cobrada pela Apple nas configurações da sua conta Apple ID — não podemos cancelá-la ou reembolsá-la por você. Reembolsos de compras na App Store são tratados pela Apple.",
+      ],
+    },
+    {
+      heading: "Texto em tempo real",
+      body: [
+        "A transferência de texto em tempo real funciona apenas enquanto os dois dispositivos estão online. As mensagens têm criptografia de ponta a ponta e não contam com entrega offline nem histórico no servidor. Na web, sessões entre redes podem enviar tráfego criptografado por um relé TURN; o relé não consegue ler o conteúdo das mensagens.",
       ],
     },
     {

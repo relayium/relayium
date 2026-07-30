@@ -2,25 +2,25 @@
 const en = {
   title: "Privacy Policy",
   description:
-    "How Relayium handles your data: realtime direct transfers go peer-to-peer and never touch our servers; the stored download-link mode keeps files zero-knowledge encrypted. Accounts are optional and store only an email and display name.",
+    "How Relayium handles files and ephemeral text: content is end-to-end encrypted, live message bodies are never stored by Relayium, and stored download links keep files zero-knowledge encrypted.",
   updatedLabel: "Last updated",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "Terms of Service",
   lead: [
-    "Relayium is built so that your files stay yours. Realtime direct transfers go peer-to-peer, end-to-end encrypted, and never pass through our servers; the optional stored download-link mode uses zero-knowledge encryption — the server holds only ciphertext it cannot read.",
+    "Relayium is built so that your files and ephemeral text stay yours. Local browser sessions are direct; cross-network browser sessions may carry end-to-end encrypted ciphertext through TURN; CLI text is direct-only; and stored download links hold only zero-knowledge encrypted file ciphertext.",
     "This page explains the little data the service does handle, and the data it deliberately never sees.",
   ],
   sections: [
     {
-      heading: "Local-network transfers collect nothing",
+      heading: "Local-network content is not stored",
       body: [
-        "When you transfer files between devices on the same network, no account is needed and the service stores nothing about you. The signaling server only helps the two devices find each other; the file bytes flow device-to-device over an encrypted WebRTC channel.",
+        "When you transfer files or exchange text between devices on the same network, no account is needed and Relayium does not store the content. The signaling service temporarily handles connection metadata such as IP addresses, room membership, device names, presence, capabilities, and WebRTC negotiation so the devices can connect directly.",
       ],
     },
     {
       heading: "What an account stores (only if you sign in)",
       body: [
-        "Same-network (LAN) transfers need no account. Sending across networks with a pairing code requires the sender to sign in — the person receiving never needs an account. Creating a stored download link also requires signing in. If you sign in, we store the minimum needed to run an account:",
+        "Same-network (LAN) sessions need no account. To create a cross-network pairing code for a browser or CLI session, the code creator must sign in; the person joining with that code does not need an account. Creating a stored download link also requires signing in. If you sign in, we store the minimum needed to run an account:",
       ],
       bullets: [
         "Your email address and a display name.",
@@ -41,18 +41,19 @@ const en = {
       ],
     },
     {
-      heading: "What we never collect",
-      body: ["The service is designed so that the following never reach our servers:"],
+      heading: "Content we cannot read",
+      body: ["Relayium servers never receive the following in plaintext and cannot decrypt them:"],
       bullets: [
         "The contents of your files.",
         "The names of your files.",
+        "The bodies of your live text messages.",
         "Your encryption keys.",
       ],
     },
     {
       heading: "Cross-network relay (TURN)",
       body: [
-        "Browser transfers across networks are relayed through a TURN server by design, not only as a fallback when a direct connection fails. The relay still cannot read your files — they remain end-to-end encrypted. We record the number of relayed bytes per account, to enforce a monthly relay allowance and prevent abuse — we never inspect what is relayed, only the byte count.",
+        "Cross-network browser file and text sessions use a TURN server by design. TURN carries only end-to-end encrypted ciphertext and transport metadata. We attribute relayed-byte totals and timestamps to the code creator's account for quotas and abuse prevention, without inspecting message or file plaintext. CLI text is direct-only and does not use or count against TURN. Live text requires both participants to be online; Relayium provides no offline delivery or server-side message history, though either endpoint may copy or retain what it receives.",
       ],
     },
     {
@@ -128,24 +129,24 @@ const en = {
 const zh = {
   title: "隐私政策",
   description:
-    "Relayium 如何处理你的数据：实时直连传输以点对点方式进行，绝不经过我们的服务器；暂存下载链接模式保持文件零知识加密。账号是可选的，仅存储邮箱与显示名。",
+    "Relayium 如何处理文件与临时文本：内容采用端到端加密，Relayium 不存储实时消息正文，暂存下载链接中的文件保持零知识加密。",
   updatedLabel: "最后更新",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "服务条款",
   lead: [
-    "Relayium 的设计宗旨是让你的文件始终属于你。实时直连传输以点对点方式进行，端到端加密，绝不经过我们的服务器；可选的暂存下载链接模式采用零知识加密——服务器仅存储无法解读的密文。",
+    "Relayium 的设计宗旨是让你的文件与临时文本始终属于你。浏览器局域网会话直接连接；跨网络浏览器会话可能通过 TURN 传输端到端加密的密文；CLI 文本仅直连；暂存下载链接只保存零知识加密的文件密文。",
     "本页说明本服务确实会处理的少量数据，以及它刻意从不接触的数据。",
   ],
   sections: [
     {
-      heading: "局域网传输不收集任何数据",
+      heading: "局域网内容不会被存储",
       body: [
-        "在同一网络下的设备之间传输文件时，无需账号，服务也不会存储任何关于你的信息。信令服务器只帮助两台设备相互发现；文件字节通过加密的 WebRTC 通道在设备之间直接流动。",
+        "在同一网络下的设备之间传输文件或交换文本时，无需账号，Relayium 也不会存储内容。为帮助设备直接连接，信令服务会临时处理 IP 地址、房间成员、设备名、在线状态、能力信息及 WebRTC 协商等连接元数据。",
       ],
     },
     {
       heading: "账号会存储什么（仅在你登录时）",
-      body: ["同一网络（局域网）内的传输无需账号。跨网络使用配对码传输时，需要发送方登录——接收方始终无需账号。创建暂存下载链接同样需要登录。如果你登录，我们只存储运行账号所必需的最少信息："],
+      body: ["同一网络（局域网）内的会话无需账号。为浏览器或 CLI 跨网络会话创建配对码时，创建端必须登录；持码加入的一端无需账号。创建暂存下载链接同样需要登录。如果你登录，我们只存储运行账号所必需的最少信息："],
       bullets: [
         "你的邮箱地址和显示名。",
         "你使用的登录方式（通过 Apple 登录、Google、邮箱魔法链接，或邮箱+密码）。魔法链接令牌只以哈希形式存储，绝不明文保存；如果你设置了密码，我们只存储其 bcrypt 哈希值，绝不存储密码本身。如果你使用「通过 Apple 登录」并选择 Apple 的私密邮件转发，我们只会看到该转发地址。",
@@ -165,14 +166,14 @@ const zh = {
       ],
     },
     {
-      heading: "我们绝不收集什么",
-      body: ["本服务的设计确保以下内容绝不会到达我们的服务器："],
-      bullets: ["你的文件内容。", "你的文件名。", "你的加密密钥。"],
+      heading: "我们无法读取的内容",
+      body: ["以下内容不会以明文到达 Relayium 服务器，服务器也无法解密："],
+      bullets: ["你的文件内容。", "你的文件名。", "你的实时文本消息正文。", "你的加密密钥。"],
     },
     {
       heading: "跨网络中继（TURN）",
       body: [
-        "浏览器的跨网络传输按设计经 TURN 服务器中继，而不只是在直连失败时才回退到中继。中继依然无法读取你的文件——它们始终保持端到端加密。我们按账号记录中继字节数，用于执行每月中继额度限制并防止滥用——我们绝不检查中继的内容，只记录字节数。",
+        "浏览器的跨网络文件与文本会话按设计使用 TURN。TURN 只承载端到端加密的密文和传输元数据。为执行配额并防止滥用，我们把中继字节总量与时间戳归属到配对码创建端的账号，但不检查消息或文件明文。CLI 文本仅直连，不使用 TURN，也不计入 TURN 用量。实时文本要求双方同时在线；Relayium 不提供离线投递或服务器端消息历史，但任一端都可能复制或保留收到的内容。",
       ],
     },
     {
@@ -246,25 +247,25 @@ const zh = {
 const ja = {
   title: "プライバシーポリシー",
   description:
-    "Relayium がお客様のデータを扱う方法：リアルタイム直接転送はピアツーピアかつエンドツーエンド暗号化で行われ、当社のサーバーを通過しません。一時保存ダウンロードリンク機能はファイルをゼロ知識暗号化で保護します。アカウントは任意で、メールアドレスと表示名のみを保存します。",
+    "Relayium がファイルと一時テキストを扱う方法：コンテンツはエンドツーエンド暗号化され、Relayium はライブメッセージ本文を保存せず、一時保存ダウンロードリンクのファイルはゼロ知識暗号化されます。",
   updatedLabel: "最終更新",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "利用規約",
   lead: [
-    "Relayium は、ファイルが常にお客様のものであり続けるよう設計されています。リアルタイムの直接転送はピアツーピアかつエンドツーエンド暗号化で行われ、当社のサーバーを通過しません——オプションの一時保存ダウンロードリンク機能はゼロ知識暗号化を使用するため、サーバーには解読不能な暗号文のみが保存されます。",
+    "Relayium はファイルと一時テキストがお客様のものであり続けるよう設計されています。ブラウザのローカルセッションは直接接続し、ネットワークをまたぐブラウザセッションは TURN 経由でエンドツーエンド暗号化された暗号文を運ぶ場合があります。CLI テキストは直接接続のみで、一時保存リンクにはゼロ知識暗号化されたファイル暗号文だけが保存されます。",
     "このページでは、本サービスが実際に扱う少量のデータと、意図的に取得しないデータについて説明します。",
   ],
   sections: [
     {
-      heading: "ローカルネットワーク転送ではデータを収集しません",
+      heading: "ローカルネットワークのコンテンツは保存されません",
       body: [
-        "同じネットワーク上のデバイス間でファイルを転送する場合、アカウントは不要で、サービスはお客様に関する情報を一切保存しません。シグナリングサーバーは 2 台のデバイスが互いを見つけるのを助けるだけで、ファイルの実体は暗号化された WebRTC チャネルを通じてデバイス間で直接やり取りされます。",
+        "同じネットワーク上でファイルを転送またはテキストを交換する場合、アカウントは不要で、Relayium はコンテンツを保存しません。デバイスを直接接続するため、シグナリングサービスは IP アドレス、ルーム参加、デバイス名、プレゼンス、機能、WebRTC 交渉などの接続メタデータを一時的に処理します。",
       ],
     },
     {
       heading: "アカウントに保存される情報（サインインした場合のみ）",
       body: [
-        "同一ネットワーク（LAN）内の転送はアカウント不要です。ペアリングコードを使ってネットワークをまたいで送信する場合は、送信者のサインインが必要です——受信者はアカウント不要のままです。保存型ダウンロードリンクの作成にもサインインが必要です。サインインした場合、アカウントの運用に必要な最小限の情報のみを保存します：",
+        "同一ネットワーク（LAN）のセッションはアカウント不要です。ブラウザまたは CLI のクロスネットワークセッション用ペアリングコードを作成する側はサインインが必要ですが、コードで参加する側はアカウント不要です。保存型ダウンロードリンクの作成にもサインインが必要です。サインインした場合、アカウントの運用に必要な最小限の情報のみを保存します：",
       ],
       bullets: [
         "メールアドレスと表示名。",
@@ -285,18 +286,19 @@ const ja = {
       ],
     },
     {
-      heading: "収集しない情報",
-      body: ["本サービスは設計上、以下の情報が当社のサーバーに届くことはありません："],
+      heading: "当社が読み取れないコンテンツ",
+      body: ["以下は平文で Relayium サーバーに届かず、サーバーは復号できません："],
       bullets: [
         "ファイルの内容。",
         "ファイルの名前。",
+        "ライブテキストメッセージの本文。",
         "暗号化キー。",
       ],
     },
     {
       heading: "クロスネットワーク中継（TURN）",
       body: [
-        "ブラウザでネットワークをまたぐ転送は、直接接続が失敗したときのフォールバックとしてではなく、設計上つねに TURN サーバーを経由して中継されます。中継サーバーがお客様のファイルを読み取ることはできません——エンドツーエンド暗号化が維持されます。月間中継割り当ての管理と不正利用の防止のため、中継バイト数はアカウントごとに記録します——中継内容を検査することはなく、記録するのはバイト数のみです。",
+        "ブラウザのクロスネットワークのファイルおよびテキストセッションは設計上 TURN を使用します。TURN が運ぶのはエンドツーエンド暗号化された暗号文と転送メタデータのみです。クォータと不正利用防止のため、中継バイト合計とタイムスタンプをコード作成者のアカウントに関連付けますが、メッセージやファイルの平文は検査しません。CLI テキストは直接接続のみで TURN を使用せず、TURN 使用量にも算入されません。ライブテキストには双方のオンラインが必要で、Relayium はオフライン配信やサーバー側履歴を提供しませんが、各端末は受信内容をコピーまたは保持できます。",
       ],
     },
     {
@@ -372,25 +374,25 @@ const ja = {
 const ko = {
   title: "개인정보 처리방침",
   description:
-    "Relayium이 데이터를 처리하는 방식: 실시간 직접 전송은 P2P로 이루어지며 저희 서버를 거치지 않습니다. 임시 보관 다운로드 링크 기능은 파일을 영지식 암호화로 보호합니다. 계정은 선택 사항이며 이메일 주소와 표시 이름만 저장합니다.",
+    "Relayium이 파일과 임시 텍스트를 처리하는 방식: 콘텐츠는 종단간 암호화되고, Relayium은 실시간 메시지 본문을 저장하지 않으며, 임시 다운로드 링크의 파일은 영지식 암호화됩니다.",
   updatedLabel: "최종 업데이트",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "이용약관",
   lead: [
-    "Relayium은 파일이 항상 사용자의 것으로 남도록 설계되었습니다. 실시간 직접 전송은 P2P로 이루어지며, 종단간 암호화가 적용되어 저희 서버를 통과하지 않습니다——선택적 임시 보관 다운로드 링크 기능은 영지식 암호화를 사용하여 서버에는 해독할 수 없는 암호문만 저장됩니다.",
+    "Relayium은 파일과 임시 텍스트가 사용자의 것으로 남도록 설계되었습니다. 브라우저의 로컬 세션은 직접 연결되고, 네트워크 간 브라우저 세션은 TURN을 통해 종단간 암호화된 암호문을 전송할 수 있습니다. CLI 텍스트는 직접 연결만 사용하며, 임시 다운로드 링크에는 영지식 암호화된 파일 암호문만 저장됩니다.",
     "이 페이지에서는 서비스가 실제로 처리하는 소량의 데이터와 의도적으로 수집하지 않는 데이터를 설명합니다.",
   ],
   sections: [
     {
-      heading: "로컬 네트워크 전송은 아무것도 수집하지 않습니다",
+      heading: "로컬 네트워크 콘텐츠는 저장되지 않습니다",
       body: [
-        "동일한 네트워크상의 기기 간에 파일을 전송할 때는 계정이 필요하지 않으며 서비스는 사용자에 관한 어떤 정보도 저장하지 않습니다. 시그널링 서버는 두 기기가 서로를 찾도록 도울 뿐이며, 파일 데이터는 암호화된 WebRTC 채널을 통해 기기 간에 직접 전송됩니다.",
+        "같은 네트워크에서 파일을 전송하거나 텍스트를 교환할 때는 계정이 필요 없고 Relayium은 콘텐츠를 저장하지 않습니다. 기기를 직접 연결하기 위해 시그널링 서비스는 IP 주소, 방 참여, 기기 이름, 접속 상태, 기능 및 WebRTC 협상 같은 연결 메타데이터를 일시적으로 처리합니다.",
       ],
     },
     {
       heading: "계정에 저장되는 정보(로그인한 경우에만)",
       body: [
-        "동일 네트워크(LAN) 내 전송은 계정이 필요 없습니다. 페어링 코드로 네트워크를 넘나들며 전송하려면 발신자가 로그인해야 합니다——수신자는 여전히 계정이 필요 없습니다. 저장형 다운로드 링크를 만드는 데도 로그인이 필요합니다. 로그인하면 계정 운영에 필요한 최소한의 정보만 저장합니다:",
+        "동일 네트워크(LAN) 세션은 계정이 필요 없습니다. 브라우저 또는 CLI 네트워크 간 세션의 페어링 코드를 만드는 쪽은 로그인해야 하지만, 코드를 가지고 참여하는 쪽은 계정이 필요 없습니다. 저장형 다운로드 링크를 만드는 데도 로그인이 필요합니다. 로그인하면 계정 운영에 필요한 최소한의 정보만 저장합니다:",
       ],
       bullets: [
         "이메일 주소와 표시 이름.",
@@ -411,18 +413,19 @@ const ko = {
       ],
     },
     {
-      heading: "절대 수집하지 않는 정보",
-      body: ["서비스는 다음 정보가 저희 서버에 도달하지 않도록 설계되어 있습니다:"],
+      heading: "저희가 읽을 수 없는 콘텐츠",
+      body: ["다음 내용은 평문으로 Relayium 서버에 도달하지 않으며 서버는 이를 복호화할 수 없습니다:"],
       bullets: [
         "파일 내용.",
         "파일 이름.",
+        "실시간 텍스트 메시지 본문.",
         "암호화 키.",
       ],
     },
     {
       heading: "크로스 네트워크 릴레이(TURN)",
       body: [
-        "브라우저의 네트워크 간 전송은 직접 연결이 실패했을 때의 대체 수단이 아니라 설계상 TURN 서버를 통해 중계됩니다. 릴레이 서버는 여전히 파일을 읽을 수 없습니다——종단간 암호화가 유지됩니다. 월간 릴레이 허용량을 적용하고 남용을 방지하기 위해 계정별로 릴레이된 바이트 수를 기록합니다——중계 내용은 절대 검사하지 않으며, 오직 바이트 수만 기록합니다.",
+        "브라우저의 네트워크 간 파일 및 텍스트 세션은 설계상 TURN을 사용합니다. TURN은 종단간 암호화된 암호문과 전송 메타데이터만 운반합니다. 할당량 적용과 남용 방지를 위해 중계 바이트 합계와 타임스탬프를 코드 생성자의 계정에 연결하지만, 메시지나 파일 평문은 검사하지 않습니다. CLI 텍스트는 직접 연결만 사용하며 TURN을 사용하거나 TURN 사용량에 포함되지 않습니다. 실시간 텍스트에는 양쪽이 동시에 온라인이어야 하며 Relayium은 오프라인 전송이나 서버 측 메시지 기록을 제공하지 않지만, 각 엔드포인트는 받은 내용을 복사하거나 보관할 수 있습니다.",
       ],
     },
     {
@@ -498,25 +501,25 @@ const ko = {
 const de = {
   title: "Datenschutzerklärung",
   description:
-    "Wie Relayium mit Ihren Daten umgeht: Echtzeit-Direktübertragungen werden Peer-to-Peer übertragen und berühren nie unsere Server; der Modus für zwischengespeicherte Download-Links hält Dateien Zero-Knowledge-verschlüsselt. Konten sind optional und speichern nur eine E-Mail-Adresse und einen Anzeigenamen.",
+    "Wie Relayium Dateien und temporären Text behandelt: Inhalte sind Ende-zu-Ende-verschlüsselt, Relayium speichert keine Live-Nachrichtentexte und Dateien in Download-Links bleiben Zero-Knowledge-verschlüsselt.",
   updatedLabel: "Zuletzt aktualisiert",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "Nutzungsbedingungen",
   lead: [
-    "Relayium ist so konzipiert, dass Ihre Dateien Ihnen gehören. Echtzeit-Direktübertragungen erfolgen Peer-to-Peer, Ende-zu-Ende-verschlüsselt, und passieren nie unsere Server — der optionale Modus für zwischengespeicherte Download-Links verwendet Zero-Knowledge-Verschlüsselung, sodass der Server nur Chiffretext speichert, den er nicht lesen kann.",
+    "Relayium ist so konzipiert, dass Ihre Dateien und temporären Texte Ihnen gehören. Lokale Browsersitzungen sind direkt; netzwerkübergreifende Browsersitzungen können Ende-zu-Ende-verschlüsselten Chiffretext über TURN übertragen; CLI-Text ist ausschließlich direkt; Download-Links speichern nur Zero-Knowledge-verschlüsselten Datei-Chiffretext.",
     "Diese Seite erläutert, mit welchen wenigen Daten der Dienst tatsächlich umgeht und welche Daten er bewusst nie einsieht.",
   ],
   sections: [
     {
-      heading: "Lokale Netzwerkübertragungen erfassen keine Daten",
+      heading: "Inhalte im lokalen Netzwerk werden nicht gespeichert",
       body: [
-        "Wenn Sie Dateien zwischen Geräten im selben Netzwerk übertragen, wird kein Konto benötigt und der Dienst speichert nichts über Sie. Der Signalisierungsserver hilft lediglich dabei, dass sich die beiden Geräte finden; die Dateidaten fließen über einen verschlüsselten WebRTC-Kanal direkt von Gerät zu Gerät.",
+        "Wenn Sie im selben Netzwerk Dateien übertragen oder Text austauschen, ist kein Konto nötig und Relayium speichert die Inhalte nicht. Damit sich die Geräte direkt verbinden können, verarbeitet der Signalisierungsdienst vorübergehend Verbindungsmetadaten wie IP-Adressen, Raumteilnahme, Gerätenamen, Anwesenheit, Fähigkeiten und WebRTC-Aushandlung.",
       ],
     },
     {
       heading: "Was ein Konto speichert (nur wenn Sie angemeldet sind)",
       body: [
-        "Übertragungen im selben Netzwerk (LAN) benötigen kein Konto. Für den Versand über Netzwerke hinweg per Pairing-Code muss sich die sendende Person anmelden — die empfangende Person benötigt weiterhin kein Konto. Auch das Erstellen eines gespeicherten Download-Links erfordert eine Anmeldung. Bei einer Anmeldung speichern wir nur das für den Kontobetrieb notwendige Minimum:",
+        "Sitzungen im selben Netzwerk (LAN) benötigen kein Konto. Wer einen Pairing-Code für eine netzwerkübergreifende Browser- oder CLI-Sitzung erstellt, muss sich anmelden; wer mit dem Code beitritt, benötigt kein Konto. Auch das Erstellen eines gespeicherten Download-Links erfordert eine Anmeldung. Bei einer Anmeldung speichern wir nur das für den Kontobetrieb notwendige Minimum:",
       ],
       bullets: [
         "Ihre E-Mail-Adresse und ein Anzeigename.",
@@ -537,18 +540,19 @@ const de = {
       ],
     },
     {
-      heading: "Was wir niemals erfassen",
-      body: ["Der Dienst ist so gestaltet, dass Folgendes unsere Server nie erreicht:"],
+      heading: "Inhalte, die wir nicht lesen können",
+      body: ["Folgendes erreicht Relayium-Server nie im Klartext und kann von ihnen nicht entschlüsselt werden:"],
       bullets: [
         "Den Inhalt Ihrer Dateien.",
         "Die Namen Ihrer Dateien.",
+        "Den Inhalt Ihrer Live-Textnachrichten.",
         "Ihre Verschlüsselungsschlüssel.",
       ],
     },
     {
       heading: "Netzwerkübergreifende Weiterleitung (TURN)",
       body: [
-        "Netzwerkübergreifende Übertragungen im Browser werden konstruktionsbedingt über einen TURN-Server weitergeleitet, nicht erst als Rückfall, wenn keine direkte Verbindung zustande kommt. Die Weiterleitung kann Ihre Dateien dennoch nicht lesen — sie bleiben Ende-zu-Ende-verschlüsselt. Wir erfassen die Anzahl weitergeleiteter Bytes pro Konto, um ein monatliches Weiterleitungskontingent durchzusetzen und Missbrauch zu verhindern — wir sehen niemals ein, was weitergeleitet wird, sondern nur die Byte-Anzahl.",
+        "Netzwerkübergreifende Datei- und Textsitzungen im Browser verwenden konstruktionsbedingt TURN. TURN transportiert nur Ende-zu-Ende-verschlüsselten Chiffretext und Transportmetadaten. Für Kontingente und Missbrauchsschutz ordnen wir Gesamtzahl und Zeitstempel der weitergeleiteten Bytes dem Konto der Code-Erstellung zu, ohne Nachrichten- oder Datei-Klartext zu prüfen. CLI-Text ist ausschließlich direkt, verwendet kein TURN und zählt nicht zur TURN-Nutzung. Live-Text setzt voraus, dass beide Seiten online sind; Relayium bietet keine Offline-Zustellung oder serverseitige Nachrichtenhistorie, aber beide Endpunkte können empfangene Inhalte kopieren oder behalten.",
       ],
     },
     {
@@ -624,25 +628,25 @@ const de = {
 const fr = {
   title: "Politique de confidentialité",
   description:
-    "Comment Relayium traite vos données : les transferts directs en temps réel s'effectuent de pair à pair et ne passent jamais par nos serveurs ; le mode de liens de téléchargement stockés maintient les fichiers chiffrés à divulgation nulle. Les comptes sont facultatifs et ne stockent qu'une adresse e-mail et un nom d'affichage.",
+    "Comment Relayium traite les fichiers et le texte éphémère : le contenu est chiffré de bout en bout, Relayium ne stocke pas le corps des messages en direct et les liens de téléchargement conservent les fichiers chiffrés à divulgation nulle.",
   updatedLabel: "Dernière mise à jour",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "Conditions d'utilisation",
   lead: [
-    "Relayium est conçu pour que vos fichiers restent les vôtres. Les transferts directs en temps réel s'effectuent de pair à pair, chiffrés de bout en bout, et ne passent jamais par nos serveurs ; le mode optionnel de liens de téléchargement stockés utilise un chiffrement à divulgation nulle — le serveur ne conserve que du chiffré qu'il ne peut pas lire.",
+    "Relayium est conçu pour que vos fichiers et textes éphémères restent les vôtres. Les sessions locales du navigateur sont directes ; les sessions inter-réseaux du navigateur peuvent transporter du chiffré de bout en bout via TURN ; le texte CLI est uniquement direct ; les liens de téléchargement ne stockent que du chiffré de fichier à divulgation nulle.",
     "Cette page explique les quelques données que le service traite effectivement, et celles qu'il ne voit délibérément jamais.",
   ],
   sections: [
     {
-      heading: "Les transferts sur réseau local ne collectent rien",
+      heading: "Le contenu du réseau local n'est pas stocké",
       body: [
-        "Lorsque vous transférez des fichiers entre appareils sur le même réseau, aucun compte n'est nécessaire et le service ne stocke rien vous concernant. Le serveur de signalisation aide simplement les deux appareils à se trouver mutuellement ; les données de fichiers circulent directement d'appareil à appareil via un canal WebRTC chiffré.",
+        "Lorsque vous transférez des fichiers ou échangez du texte sur le même réseau, aucun compte n'est nécessaire et Relayium ne stocke pas le contenu. Pour connecter directement les appareils, le service de signalisation traite temporairement des métadonnées de connexion telles que les adresses IP, l'appartenance au salon, les noms d'appareils, la présence, les capacités et la négociation WebRTC.",
       ],
     },
     {
       heading: "Ce que stocke un compte (uniquement si vous vous connectez)",
       body: [
-        "Les transferts sur le même réseau (local) ne nécessitent aucun compte. L'envoi entre réseaux différents via un code d'appairage exige que l'expéditeur se connecte — la personne qui reçoit n'a jamais besoin de compte. La création d'un lien de téléchargement stocké exige elle aussi une connexion. En cas de connexion, nous stockons le strict minimum nécessaire au fonctionnement du compte :",
+        "Les sessions sur le même réseau (local) ne nécessitent aucun compte. La personne qui crée un code d'appairage pour une session inter-réseaux du navigateur ou de la CLI doit se connecter ; celle qui rejoint avec ce code n'a pas besoin de compte. La création d'un lien de téléchargement stocké exige aussi une connexion. Nous stockons alors le strict minimum nécessaire au fonctionnement du compte :",
       ],
       bullets: [
         "Votre adresse e-mail et un nom d'affichage.",
@@ -663,18 +667,19 @@ const fr = {
       ],
     },
     {
-      heading: "Ce que nous ne collectons jamais",
-      body: ["Le service est conçu pour que les éléments suivants n'atteignent jamais nos serveurs :"],
+      heading: "Le contenu que nous ne pouvons pas lire",
+      body: ["Les éléments suivants n'atteignent jamais les serveurs Relayium en clair et ne peuvent pas être déchiffrés par eux :"],
       bullets: [
         "Le contenu de vos fichiers.",
         "Les noms de vos fichiers.",
+        "Le corps de vos messages texte en direct.",
         "Vos clés de chiffrement.",
       ],
     },
     {
       heading: "Relais inter-réseau (TURN)",
       body: [
-        "Les transferts entre réseaux différents dans le navigateur sont relayés via un serveur TURN par conception, et non seulement en repli lorsqu'une connexion directe échoue. Le relais ne peut toujours pas lire vos fichiers — ils restent chiffrés de bout en bout. Nous enregistrons le nombre d'octets relayés par compte, afin d'appliquer un quota de relais mensuel et de prévenir les abus — nous n'inspectons jamais ce qui est relayé, seulement le nombre d'octets.",
+        "Les sessions de fichiers et de texte inter-réseaux du navigateur utilisent TURN par conception. TURN ne transporte que du chiffré de bout en bout et des métadonnées de transport. Pour les quotas et la prévention des abus, nous associons le total d'octets relayés et les horodatages au compte du créateur du code, sans inspecter le texte clair des messages ou fichiers. Le texte CLI est uniquement direct, n'utilise pas TURN et ne compte pas dans son usage. Le texte en direct exige que les deux personnes soient en ligne ; Relayium ne fournit ni livraison hors ligne ni historique serveur, mais chaque terminal peut copier ou conserver ce qu'il reçoit.",
       ],
     },
     {
@@ -750,25 +755,25 @@ const fr = {
 const ar = {
   title: "سياسة الخصوصية",
   description:
-    "كيف تتعامل Relayium مع بياناتك: عمليات النقل المباشر الفوري تتم من الند للند ولا تمرّ مطلقًا عبر خوادمنا؛ ووضع رابط التنزيل المُخزَّن يُبقي الملفات مُشفَّرة بمعرفة صفرية. الحسابات اختيارية ولا تخزّن سوى عنوان بريد إلكتروني واسم عرض.",
+    "كيف تتعامل Relayium مع الملفات والنص المؤقت: يُشفَّر المحتوى من الطرف إلى الطرف، ولا تخزّن Relayium نصوص الرسائل المباشرة، وتبقى ملفات روابط التنزيل مُشفَّرة بمعرفة صفرية.",
   updatedLabel: "آخر تحديث",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "شروط الخدمة",
   lead: [
-    "صُمِّمت Relayium بحيث تظل ملفاتك مِلكًا لك. عمليات النقل المباشر الفوري تتم من الند للند، ومُشفَّرة من الطرف إلى الطرف، ولا تمرّ مطلقًا عبر خوادمنا؛ ووضع رابط التنزيل المُخزَّن الاختياري يستخدم التشفير بمعرفة صفرية — إذ لا يحتفظ الخادم إلا بنص مُشفَّر لا يستطيع قراءته.",
+    "صُمِّمت Relayium بحيث تظل ملفاتك ونصوصك المؤقتة مِلكًا لك. جلسات المتصفح المحلية مباشرة؛ وقد تحمل جلسات المتصفح عبر الشبكات نصًا مُشفَّرًا من الطرف إلى الطرف عبر TURN؛ ونص CLI مباشر فقط؛ ولا تحتفظ روابط التنزيل إلا بنص ملفات مُشفَّر بمعرفة صفرية.",
     "توضّح هذه الصفحة البيانات القليلة التي تتعامل معها الخدمة فعلًا، والبيانات التي لا تراها عن قصد أبدًا.",
   ],
   sections: [
     {
-      heading: "عمليات النقل على الشبكة المحلية لا تجمع أي شيء",
+      heading: "لا يُخزَّن محتوى الشبكة المحلية",
       body: [
-        "عندما تنقل الملفات بين الأجهزة على نفس الشبكة، لا حاجة إلى حساب ولا تخزّن الخدمة أي شيء عنك. يقتصر دور خادم الإشارة على مساعدة الجهازين على العثور على أحدهما الآخر؛ أما بايتات الملف فتتدفق من جهاز إلى جهاز عبر قناة WebRTC مُشفَّرة.",
+        "عند نقل الملفات أو تبادل النص بين أجهزة على الشبكة نفسها، لا حاجة إلى حساب ولا تخزّن Relayium المحتوى. ولمساعدة الأجهزة على الاتصال مباشرة، تعالج خدمة الإشارة مؤقتًا بيانات اتصال وصفية مثل عناوين IP وعضوية الغرفة وأسماء الأجهزة والحضور والقدرات وتفاوض WebRTC.",
       ],
     },
     {
       heading: "ما الذي يخزّنه الحساب (فقط في حال تسجيل الدخول)",
       body: [
-        "لا تتطلب عمليات النقل على نفس الشبكة (الشبكة المحلية) أي حساب. أما الإرسال عبر الشبكات باستخدام رمز الاقتران فيتطلب من المُرسِل تسجيل الدخول — ولا يحتاج المُستقبِل إطلاقًا إلى حساب. كما يتطلب إنشاء رابط تنزيل مُخزَّن تسجيل الدخول. إذا سجّلت الدخول، فإننا نخزّن الحد الأدنى اللازم لتشغيل الحساب:",
+        "لا تتطلب الجلسات على الشبكة المحلية أي حساب. يجب على من ينشئ رمز اقتران لجلسة متصفح أو CLI عبر الشبكات تسجيل الدخول؛ ولا يحتاج من ينضم بالرمز إلى حساب. كما يتطلب إنشاء رابط تنزيل مُخزَّن تسجيل الدخول. إذا سجّلت الدخول، فإننا نخزّن الحد الأدنى اللازم لتشغيل الحساب:",
       ],
       bullets: [
         "عنوان بريدك الإلكتروني واسم عرض.",
@@ -789,18 +794,19 @@ const ar = {
       ],
     },
     {
-      heading: "ما الذي لا نجمعه أبدًا",
-      body: ["صُمِّمت الخدمة بحيث لا يصل ما يلي مطلقًا إلى خوادمنا:"],
+      heading: "المحتوى الذي لا نستطيع قراءته",
+      body: ["لا يصل ما يلي إلى خوادم Relayium كنص صريح ولا تستطيع الخوادم فك تشفيره:"],
       bullets: [
         "محتويات ملفاتك.",
         "أسماء ملفاتك.",
+        "نصوص رسائلك المباشرة.",
         "مفاتيح التشفير الخاصة بك.",
       ],
     },
     {
       heading: "المُرحِّل عبر الشبكات (TURN)",
       body: [
-        "تُرحَّل عمليات النقل عبر الشبكات في المتصفح عبر خادم TURN بحكم التصميم، لا كخيار احتياطي عند فشل الاتصال المباشر فحسب. ومع ذلك لا يستطيع المُرحِّل قراءة ملفاتك — فهي تظل مُشفَّرة من الطرف إلى الطرف. نسجّل عدد البايتات المُرحَّلة لكل حساب لفرض حصة ترحيل شهرية ومنع إساءة الاستخدام — ولا نفحص أبدًا ما يُرحَّل، بل نسجّل عدد البايتات فقط.",
+        "تستخدم جلسات الملفات والنص عبر الشبكات في المتصفح TURN بحكم التصميم. لا يحمل TURN سوى النص المُشفَّر من الطرف إلى الطرف وبيانات النقل الوصفية. ولأغراض الحصص ومنع الإساءة، نربط إجمالي البايتات المُرحَّلة وطوابعها الزمنية بحساب منشئ الرمز، من دون فحص النص الصريح للرسائل أو الملفات. نص CLI مباشر فقط ولا يستخدم TURN أو يُحتسب ضمنه. يتطلب النص المباشر اتصال الطرفين بالإنترنت؛ ولا توفر Relayium تسليمًا دون اتصال أو سجل رسائل على الخادم، لكن يمكن لأي طرف نسخ ما يستلمه أو الاحتفاظ به.",
       ],
     },
     {
@@ -876,25 +882,25 @@ const ar = {
 const es = {
   title: "Política de privacidad",
   description:
-    "Cómo Relayium gestiona tus datos: las transferencias directas en tiempo real se realizan de igual a igual y nunca pasan por nuestros servidores; el modo de enlace de descarga almacenado mantiene los archivos cifrados con conocimiento cero. Las cuentas son opcionales y solo almacenan un correo electrónico y un nombre para mostrar.",
+    "Cómo Relayium gestiona archivos y texto efímero: el contenido se cifra de extremo a extremo, Relayium no almacena el cuerpo de los mensajes en directo y los enlaces de descarga mantienen los archivos cifrados con conocimiento cero.",
   updatedLabel: "Última actualización",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "Términos del servicio",
   lead: [
-    "Relayium está diseñado para que tus archivos sigan siendo tuyos. Las transferencias directas en tiempo real se realizan de igual a igual, cifradas de extremo a extremo, y nunca pasan por nuestros servidores; el modo opcional de enlace de descarga almacenado utiliza cifrado de conocimiento cero: el servidor solo conserva texto cifrado que no puede leer.",
+    "Relayium está diseñado para que tus archivos y textos efímeros sigan siendo tuyos. Las sesiones locales del navegador son directas; las sesiones entre redes pueden transportar texto cifrado de extremo a extremo por TURN; el texto CLI es solo directo; y los enlaces de descarga solo almacenan archivos cifrados con conocimiento cero.",
     "Esta página explica los pocos datos que el servicio sí gestiona, y los datos que deliberadamente nunca ve.",
   ],
   sections: [
     {
-      heading: "Las transferencias en red local no recopilan nada",
+      heading: "El contenido de la red local no se almacena",
       body: [
-        "Cuando transfieres archivos entre dispositivos de la misma red, no se necesita ninguna cuenta y el servicio no almacena nada sobre ti. El servidor de señalización solo ayuda a que los dos dispositivos se encuentren entre sí; los bytes del archivo fluyen de dispositivo a dispositivo a través de un canal WebRTC cifrado.",
+        "Al transferir archivos o intercambiar texto entre dispositivos de la misma red, no necesitas cuenta y Relayium no almacena el contenido. Para conectar los dispositivos directamente, el servicio de señalización trata temporalmente metadatos de conexión como direcciones IP, miembros de la sala, nombres de dispositivo, presencia, capacidades y negociación WebRTC.",
       ],
     },
     {
       heading: "Qué almacena una cuenta (solo si inicias sesión)",
       body: [
-        "Las transferencias en la misma red (red local) no necesitan cuenta. Enviar entre redes con un código de emparejamiento requiere que el remitente inicie sesión: la persona que recibe nunca necesita una cuenta. Crear un enlace de descarga almacenado también requiere iniciar sesión. Si inicias sesión, almacenamos lo mínimo necesario para gestionar una cuenta:",
+        "Las sesiones en la misma red local no necesitan cuenta. Quien crea un código de emparejamiento para una sesión entre redes del navegador o CLI debe iniciar sesión; quien se une con el código no necesita cuenta. Crear un enlace de descarga almacenado también requiere iniciar sesión. Si inicias sesión, almacenamos lo mínimo necesario para gestionar una cuenta:",
       ],
       bullets: [
         "Tu dirección de correo electrónico y un nombre para mostrar.",
@@ -915,18 +921,19 @@ const es = {
       ],
     },
     {
-      heading: "Qué nunca recopilamos",
-      body: ["El servicio está diseñado para que lo siguiente nunca llegue a nuestros servidores:"],
+      heading: "Contenido que no podemos leer",
+      body: ["Lo siguiente nunca llega en texto claro a los servidores de Relayium y estos no pueden descifrarlo:"],
       bullets: [
         "El contenido de tus archivos.",
         "Los nombres de tus archivos.",
+        "El cuerpo de tus mensajes de texto en directo.",
         "Tus claves de cifrado.",
       ],
     },
     {
       heading: "Retransmisión entre redes (TURN)",
       body: [
-        "Las transferencias entre redes en el navegador se retransmiten a través de un servidor TURN por diseño, y no solo como recurso alternativo cuando falla una conexión directa. El retransmisor sigue sin poder leer tus archivos: permanecen cifrados de extremo a extremo. Registramos el número de bytes retransmitidos por cuenta, para aplicar una asignación mensual de retransmisión y evitar el abuso; nunca inspeccionamos lo que se retransmite, solo el recuento de bytes.",
+        "Las sesiones de archivos y texto entre redes del navegador usan TURN por diseño. TURN solo transporta texto cifrado de extremo a extremo y metadatos de transporte. Para las cuotas y la prevención de abusos, asociamos el total de bytes retransmitidos y sus marcas de tiempo a la cuenta que creó el código, sin inspeccionar el texto claro de mensajes o archivos. El texto CLI es solo directo, no usa TURN ni cuenta en su consumo. El texto en directo requiere que ambas partes estén conectadas; Relayium no ofrece entrega sin conexión ni historial de mensajes en el servidor, aunque cada extremo puede copiar o conservar lo recibido.",
       ],
     },
     {
@@ -1002,25 +1009,25 @@ const es = {
 const pt = {
   title: "Política de Privacidade",
   description:
-    "Como a Relayium lida com seus dados: as transferências diretas em tempo real são feitas ponto a ponto e nunca passam pelos nossos servidores; o modo de link de download armazenado mantém os arquivos criptografados com conhecimento zero. As contas são opcionais e armazenam apenas um e-mail e um nome de exibição.",
+    "Como a Relayium lida com arquivos e texto temporário: o conteúdo é criptografado de ponta a ponta, a Relayium não armazena o corpo das mensagens ao vivo e os links de download mantêm os arquivos criptografados com conhecimento zero.",
   updatedLabel: "Última atualização",
-  updated: "2026-07-21",
+  updated: "2026-07-31",
   otherDocLabel: "Termos de Serviço",
   lead: [
-    "A Relayium foi criada para que seus arquivos continuem sendo seus. As transferências diretas em tempo real são feitas ponto a ponto, com criptografia de ponta a ponta, e nunca passam pelos nossos servidores; o modo opcional de link de download armazenado usa criptografia de conhecimento zero — o servidor guarda apenas texto cifrado que não consegue ler.",
+    "A Relayium foi criada para que seus arquivos e textos temporários continuem sendo seus. As sessões locais do navegador são diretas; sessões entre redes podem transportar texto cifrado de ponta a ponta por TURN; o texto da CLI é somente direto; e os links de download guardam apenas arquivos cifrados com conhecimento zero.",
     "Esta página explica os poucos dados que o serviço de fato processa e os dados que ele deliberadamente nunca vê.",
   ],
   sections: [
     {
-      heading: "As transferências na rede local não coletam nada",
+      heading: "O conteúdo da rede local não é armazenado",
       body: [
-        "Quando você transfere arquivos entre dispositivos na mesma rede, nenhuma conta é necessária e o serviço não armazena nada sobre você. O servidor de sinalização apenas ajuda os dois dispositivos a se encontrarem; os bytes do arquivo fluem de dispositivo para dispositivo por um canal WebRTC criptografado.",
+        "Ao transferir arquivos ou trocar texto entre dispositivos na mesma rede, você não precisa de conta e a Relayium não armazena o conteúdo. Para conectar os dispositivos diretamente, o serviço de sinalização processa temporariamente metadados de conexão como endereços IP, participação na sala, nomes de dispositivos, presença, recursos e negociação WebRTC.",
       ],
     },
     {
       heading: "O que uma conta armazena (somente se você fizer login)",
       body: [
-        "As transferências na mesma rede (rede local) não precisam de conta. Enviar entre redes com um código de emparelhamento exige que o remetente faça login — quem recebe nunca precisa de uma conta. Criar um link de download armazenado também exige fazer login. Se você fizer login, armazenamos o mínimo necessário para operar uma conta:",
+        "As sessões na mesma rede local não precisam de conta. Quem cria um código de emparelhamento para uma sessão entre redes do navegador ou da CLI deve fazer login; quem entra com o código não precisa de conta. Criar um link de download armazenado também exige login. Se você fizer login, armazenamos o mínimo necessário para operar uma conta:",
       ],
       bullets: [
         "Seu endereço de e-mail e um nome de exibição.",
@@ -1041,18 +1048,19 @@ const pt = {
       ],
     },
     {
-      heading: "O que nunca coletamos",
-      body: ["O serviço foi projetado para que o seguinte nunca chegue aos nossos servidores:"],
+      heading: "Conteúdo que não podemos ler",
+      body: ["O seguinte nunca chega em texto claro aos servidores da Relayium e não pode ser descriptografado por eles:"],
       bullets: [
         "O conteúdo dos seus arquivos.",
         "Os nomes dos seus arquivos.",
+        "O corpo das suas mensagens de texto ao vivo.",
         "Suas chaves de criptografia.",
       ],
     },
     {
       heading: "Retransmissão entre redes (TURN)",
       body: [
-        "As transferências entre redes no navegador são retransmitidas por um servidor TURN por decisão de projeto, e não apenas como recurso alternativo quando uma conexão direta falha. O retransmissor ainda não consegue ler seus arquivos — eles permanecem com criptografia de ponta a ponta. Registramos o número de bytes retransmitidos por conta, para aplicar uma cota mensal de retransmissão e evitar abusos — nunca inspecionamos o que é retransmitido, apenas a contagem de bytes.",
+        "As sessões de arquivos e texto entre redes no navegador usam TURN por projeto. O TURN transporta apenas texto cifrado de ponta a ponta e metadados de transporte. Para cotas e prevenção de abusos, associamos o total de bytes retransmitidos e os horários à conta de quem criou o código, sem inspecionar o texto claro de mensagens ou arquivos. O texto da CLI é somente direto, não usa TURN nem conta em seu uso. O texto ao vivo exige que ambas as partes estejam online; a Relayium não oferece entrega offline nem histórico no servidor, embora qualquer ponta possa copiar ou guardar o que recebeu.",
       ],
     },
     {

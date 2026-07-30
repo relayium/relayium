@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>隐私政策 · Relayium</title>
-    <meta name="description" content="Relayium 如何处理你的数据：实时直连传输以点对点方式进行，绝不经过我们的服务器；暂存下载链接模式保持文件零知识加密。账号是可选的，仅存储邮箱与显示名。" />
+    <meta name="description" content="Relayium 如何处理文件与临时文本：内容采用端到端加密，Relayium 不存储实时消息正文，暂存下载链接中的文件保持零知识加密。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/privacy/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/privacy/" />
@@ -20,7 +20,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"隐私政策 · Relayium","description":"Relayium 如何处理你的数据：实时直连传输以点对点方式进行，绝不经过我们的服务器；暂存下载链接模式保持文件零知识加密。账号是可选的，仅存储邮箱与显示名。","url":"https://relayium.com/zh/privacy/","inLanguage":"zh-Hans","dateModified":"2026-07-21","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"隐私政策 · Relayium","description":"Relayium 如何处理文件与临时文本：内容采用端到端加密，Relayium 不存储实时消息正文，暂存下载链接中的文件保持零知识加密。","url":"https://relayium.com/zh/privacy/","inLanguage":"zh-Hans","dateModified":"2026-07-31","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -44,15 +44,15 @@ footer a{color:var(--text-h);text-decoration:none}
     <div class="wrap">
       <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
       <h1>隐私政策</h1>
-      <p class="updated">最后更新: 2026-07-21</p>
+      <p class="updated">最后更新: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/privacy/">English</a><a href="/zh/privacy/" aria-current="true">中文</a><a href="/ja/privacy/">日本語</a><a href="/ko/privacy/">한국어</a><a href="/de/privacy/">Deutsch</a><a href="/fr/privacy/">Français</a><a href="/ar/privacy/">العربية</a><a href="/es/privacy/">Español</a><a href="/pt/privacy/">Português</a></nav>
-      <p>Relayium 的设计宗旨是让你的文件始终属于你。实时直连传输以点对点方式进行，端到端加密，绝不经过我们的服务器；可选的暂存下载链接模式采用零知识加密——服务器仅存储无法解读的密文。</p>
+      <p>Relayium 的设计宗旨是让你的文件与临时文本始终属于你。浏览器局域网会话直接连接；跨网络浏览器会话可能通过 TURN 传输端到端加密的密文；CLI 文本仅直连；暂存下载链接只保存零知识加密的文件密文。</p>
       <p>本页说明本服务确实会处理的少量数据，以及它刻意从不接触的数据。</p>
-      <h2>局域网传输不收集任何数据</h2><p>在同一网络下的设备之间传输文件时，无需账号，服务也不会存储任何关于你的信息。信令服务器只帮助两台设备相互发现；文件字节通过加密的 WebRTC 通道在设备之间直接流动。</p>
-      <h2>账号会存储什么（仅在你登录时）</h2><p>同一网络（局域网）内的传输无需账号。跨网络使用配对码传输时，需要发送方登录——接收方始终无需账号。创建暂存下载链接同样需要登录。如果你登录，我们只存储运行账号所必需的最少信息：</p><ul><li>你的邮箱地址和显示名。</li><li>你使用的登录方式（通过 Apple 登录、Google、邮箱魔法链接，或邮箱+密码）。魔法链接令牌只以哈希形式存储，绝不明文保存；如果你设置了密码，我们只存储其 bcrypt 哈希值，绝不存储密码本身。如果你使用「通过 Apple 登录」并选择 Apple 的私密邮件转发，我们只会看到该转发地址。</li><li>登录会话，保存在安全的 httpOnly cookie 中。</li><li>你注册的设备，以一个随机设备 id 和设备名（例如你的平台名称）的形式。</li></ul>
+      <h2>局域网内容不会被存储</h2><p>在同一网络下的设备之间传输文件或交换文本时，无需账号，Relayium 也不会存储内容。为帮助设备直接连接，信令服务会临时处理 IP 地址、房间成员、设备名、在线状态、能力信息及 WebRTC 协商等连接元数据。</p>
+      <h2>账号会存储什么（仅在你登录时）</h2><p>同一网络（局域网）内的会话无需账号。为浏览器或 CLI 跨网络会话创建配对码时，创建端必须登录；持码加入的一端无需账号。创建暂存下载链接同样需要登录。如果你登录，我们只存储运行账号所必需的最少信息：</p><ul><li>你的邮箱地址和显示名。</li><li>你使用的登录方式（通过 Apple 登录、Google、邮箱魔法链接，或邮箱+密码）。魔法链接令牌只以哈希形式存储，绝不明文保存；如果你设置了密码，我们只存储其 bcrypt 哈希值，绝不存储密码本身。如果你使用「通过 Apple 登录」并选择 Apple 的私密邮件转发，我们只会看到该转发地址。</li><li>登录会话，保存在安全的 httpOnly cookie 中。</li><li>你注册的设备，以一个随机设备 id 和设备名（例如你的平台名称）的形式。</li></ul>
       <h2>暂存传输（下载链接）</h2><p>使用可选的暂存下载链接功能时，你的浏览器在文件离开设备前即以 AES-256-GCM 加密。解密密钥仅存在于链接的 URL 片段（# 部分）中，绝不发送至服务器。这意味着：</p><ul><li>服务器仅存储密文，无法读取你的文件内容、文件名或密钥。</li><li>我们记录密文大小和时间戳（上传时间、有效期）用于配额管理和清理。</li><li>密文在到期或首次完整下载（阅后即焚）时自动删除，以较早发生者为准。</li></ul>
-      <h2>我们绝不收集什么</h2><p>本服务的设计确保以下内容绝不会到达我们的服务器：</p><ul><li>你的文件内容。</li><li>你的文件名。</li><li>你的加密密钥。</li></ul>
-      <h2>跨网络中继（TURN）</h2><p>浏览器的跨网络传输按设计经 TURN 服务器中继，而不只是在直连失败时才回退到中继。中继依然无法读取你的文件——它们始终保持端到端加密。我们按账号记录中继字节数，用于执行每月中继额度限制并防止滥用——我们绝不检查中继的内容，只记录字节数。</p>
+      <h2>我们无法读取的内容</h2><p>以下内容不会以明文到达 Relayium 服务器，服务器也无法解密：</p><ul><li>你的文件内容。</li><li>你的文件名。</li><li>你的实时文本消息正文。</li><li>你的加密密钥。</li></ul>
+      <h2>跨网络中继（TURN）</h2><p>浏览器的跨网络文件与文本会话按设计使用 TURN。TURN 只承载端到端加密的密文和传输元数据。为执行配额并防止滥用，我们把中继字节总量与时间戳归属到配对码创建端的账号，但不检查消息或文件明文。CLI 文本仅直连，不使用 TURN，也不计入 TURN 用量。实时文本要求双方同时在线；Relayium 不提供离线投递或服务器端消息历史，但任一端都可能复制或保留收到的内容。</p>
       <h2>Cookie 与本地存储</h2><p>我们使用一个会话 cookie 来保持你的登录状态。在你浏览器的本地存储中，我们保存一个随机设备 id，以便识别你注册过的设备。我们不使用广告或追踪 cookie。</p>
       <h2>第三方服务</h2><p>只有在你选择使用时，才会涉及少数第三方：</p><ul><li>Google——如果你用 Google 登录，我们会获取你的邮箱和基本资料以创建账号。</li><li>Apple——如果你使用「通过 Apple 登录」，我们会获取一个稳定标识符，以及你选择分享的邮箱（或 Apple 的私密转发地址）。</li><li>Stripe——我们在网页端订阅的支付处理方，详见「支付」。</li><li>Apple——在 iOS App 内通过应用内购买订阅时的处理方，详见「支付」。</li><li>邮件发送服务商——用于发送账号邮件，如魔法链接登录与验证邮件。</li></ul>
       <h2>支付</h2><p>只有在你购买付费套餐时才会涉及支付数据。我们绝不接收或存储你的完整卡号。</p><ul><li>在网页端，支付由 Stripe 处理。卡片信息提交给 Stripe，而非我们；我们只拿到一个客户标识和由此产生的订阅状态。</li><li>在 iOS App 内，订阅通过 Apple 应用内购买完成。Apple 从你的 Apple ID 处理支付；我们只获知你持有一个有效订阅。</li><li>就你的账号而言，我们只存储你当前的套餐、订阅状态、计费周期与周期起止日期——绝不存储卡片数据。</li></ul>

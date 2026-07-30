@@ -12,7 +12,7 @@ describe("legal content", () => {
   for (const [name, doc] of Object.entries(docs)) {
     it(`${name} declares its slug`, () => expect(doc.slug).toBe(name));
 
-    it(`${name} has all 6 languages`, () => {
+    it(`${name} has all 9 languages`, () => {
       expect(Object.keys(doc.langs).sort()).toEqual([...LANGS].sort());
     });
 
