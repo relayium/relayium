@@ -4,6 +4,7 @@
 //   connectResume() —— 掉线重连，纯传输，另一个信令世代
 import type { SignalingClient } from "./signaling";
 import { commitKey, randomNonce, verifyCommit } from "./crypto";
+import { CAP_TEXT } from "./peer-caps.svelte";
 import { establish } from "./webrtc-core";
 import { classifyPath } from "./webrtc-core";
 import type { Conn, ConnPath, InboundSignal, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
@@ -12,12 +13,22 @@ import type { Conn, ConnPath, InboundSignal, Reveal, RtcConfig, SignalAuth } fro
 export { DEFAULT_ICE, PeerBusyError, classifyPath } from "./webrtc-core";
 export type { Conn, ConnPath, InboundSignal, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
 
-interface ConnectOpts {
+/** What this build advertises to its peers. A list rather than a flag so a later
+ *  capability needs no new field on the wire. See peer-caps.svelte.ts for why the
+ *  authoritative announcement is at the roster level and this one is only the
+ *  per-connection confirmation. */
+export const LOCAL_CAPS: readonly string[] = [CAP_TEXT];
+
+export interface ConnectOpts {
   signaling: SignalingClient;
   peerId: string;
   selfKey: Uint8Array;
   role: "initiator" | "responder";
   onPeerKey: (k: Uint8Array) => void;
+  /** The peer's advertised capabilities, from its offer or answer — so both sides
+   *  know them before the channel opens. Non-string entries are filtered out; a
+   *  peer that sends no caps never fires this. */
+  onPeerCaps?: (caps: string[]) => void;
   config?: RtcConfig;
   initialSignal?: InboundSignal;
   /** Notified whenever the peer connection changes state. Lets the UI surface a
@@ -148,14 +159,20 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
     initialSignal: opts.initialSignal,
     onStateChange: opts.onStateChange,
 
-    // The commit rides along with every offer/answer we send.
-    sdpExtra: () => ({ commit: selfCommit }),
+    // The commit rides along with every offer/answer we send; caps ride with it
+    // as the per-connection confirmation of the roster-level hello.
+    sdpExtra: () => ({ commit: selfCommit, caps: [...LOCAL_CAPS] }),
 
     // Must run *before* the SDP is handled: answering an offer sends our commit,
     // and the peer's commit has to be recorded by then or a reveal that arrives
     // in the same burst has nothing to verify against.
     beforeSdp: (msg) => {
       if (msg.commit) peerCommit = unb64(msg.commit);
+      // Peer-authored: only report a well-formed list, and never let a bad one
+      // throw in here — this runs inside the inbound signalling chain.
+      if (Array.isArray(msg.caps)) {
+        opts.onPeerCaps?.(msg.caps.filter((c): c is string => typeof c === "string"));
+      }
     },
 
     // Initiator now holds the responder's commit → safe to reveal our key.

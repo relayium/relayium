@@ -54,6 +54,19 @@ export interface InboundSignal {
   /** Peer renamed itself; the roster entry for that peer id should be updated to
    *  this display name. Opaque to the WebRTC handlers (like relayRtt/busy). */
   rename?: string;
+  /** Capabilities the peer advertises, e.g. ["text/1"]. Rides the offer/answer
+   *  as the per-connection confirmation of the roster-level hello in
+   *  peer-caps.svelte.ts, and is opaque to the handlers here.
+   *
+   *  **Deliberately outside authPayload** — see its comment below: the field list
+   *  is explicit so that adding one here cannot change what a resume tag covers.
+   *  A hint, never a security input. */
+  caps?: string[];
+  /** Marks a signal as belonging to a message session's connection rather than a
+   *  file transfer's, the same way `resume` marks the resume generation. Declared
+   *  here so the type is one place; the generation filter that acts on it lands
+   *  with connectText. */
+  text?: boolean;
 }
 
 /** The peer declined a fresh offer because it is mid-transfer (one at a time).

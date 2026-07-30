@@ -8,6 +8,7 @@
   import { roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
   import type { Conn, ConnPath, RtcConfig } from "./lib/webrtc";
   import { applyRename } from "./lib/apply-rename";
+  import { capsSignal, recordPeerCaps, retainPeers, resetPeerCaps } from "./lib/peer-caps.svelte";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
   import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
@@ -143,6 +144,14 @@
     if (!signaling || Object.keys(myRelayRtt).length === 0) return;
     for (const p of peers) if (p.id !== selfId) signaling.sendSignal(p.id, { relayRtt: myRelayRtt });
   }
+  // Tell each peer what this build can do, so we know before ever offering a
+  // connection. Same envelope as the relay-RTT broadcast above; peers that do not
+  // understand it ignore it, and a peer that never announces is treated as not
+  // supporting messages rather than probed for it.
+  function broadcastCaps() {
+    if (!signaling) return;
+    for (const p of peers) if (p.id !== selfId) signaling.sendSignal(p.id, capsSignal());
+  }
   async function startRelayMeasurement() {
     if (relayPool.length === 0) return;
     const epoch = relayMeasureEpoch;
@@ -156,6 +165,10 @@
   // here (broadcasts fire on measure-done and on peer-join instead), so there is no
   // ping-pong loop.
   function onPeerRelayRtt(from: string, data: unknown) {
+    // A capability hello shares this envelope but is neither of the two things
+    // below. The WebRTC handlers ignore it too (it carries no sdp/ice), which is
+    // why it needs no generation tag.
+    if (recordPeerCaps(from, data)) return;
     const d = data as { relayRtt?: Record<string, number>; rename?: string };
     const m = d.relayRtt;
     if (m && from !== selfId) {
@@ -420,7 +433,7 @@
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = undefined; }
     });
     // A peer (re)appearing is our cue to (re)send our relay measurements to it.
-    signaling.onPeers((p) => { peers = p; broadcastRelayRtt(); });
+    signaling.onPeers((p) => { peers = p; retainPeers(p.map((x) => x.id)); broadcastRelayRtt(); broadcastCaps(); });
     signaling.onSignal(onPeerRelayRtt); // capture peers' relay-RTT maps (ignored by the WebRTC handlers)
     startRelayMeasurement(); // background; the choice is usually ready before a transfer
     signaling.onClose(() => {
@@ -491,6 +504,7 @@
     session.reset();
     connState = "connecting";
     resetRelaySelection(); // the new room has its own relay pool + measurements
+    resetPeerCaps(); // the new room has its own peers; nothing carries over
     const ice = await fetchIceConfig(roomCode);
     // A rapid second switch may have started (and possibly finished) while this
     // fetch was in flight — discard the stale credentials rather than clobbering

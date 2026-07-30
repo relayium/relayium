@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { connect, connectResume, classifyPath, summarizeStats, PeerBusyError, type InboundSignal } from "./webrtc";
+import { connect, connectResume, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, type InboundSignal } from "./webrtc";
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, deriveSession, signResume, verifyResume, type SessionKeys } from "./crypto";
 import { sas } from "./crypto";
@@ -444,6 +444,127 @@ describe("resume signalling is bound to the session keys", () => {
     // The responder never answers a tampered offer, so no channel is ever built.
     expect(hub.sent.R.some((m) => m.sdp?.type === "answer")).toBe(false);
     iP.catch(() => {});
+    rP.catch(() => {});
+  });
+});
+
+describe("capability piggyback", () => {
+  // ── THE compatibility gate for the whole text feature ──────────────────────
+  // authPayload lists its fields explicitly (webrtc-core.ts) precisely so that
+  // adding a field to InboundSignal cannot change what a resume tag covers. If
+  // this drifts, an old and a new client compute different tags for the same
+  // offer and every resume across a rolling deploy breaks.
+  const BASE: InboundSignal = { sdp: { type: "offer", sdp: "v=0" } };
+  const EXPECTED =
+    '{"sdpType":"offer","sdp":"v=0","candidate":null,"sdpMid":null,"sdpMLineIndex":null,"usernameFragment":null}';
+
+  it("authPayload output is byte-for-byte what it was before caps existed", () => {
+    expect(authPayload(BASE)).toBe(EXPECTED);
+  });
+
+  it("authPayload ignores caps and the text generation tag", () => {
+    expect(authPayload({ ...BASE, caps: ["text/1"] })).toBe(EXPECTED);
+    expect(authPayload({ ...BASE, text: true })).toBe(EXPECTED);
+    expect(authPayload({ ...BASE, caps: ["text/1"], text: true })).toBe(EXPECTED);
+    // An ICE signal carrying caps must be unaffected too.
+    const ice: InboundSignal = { ice: { candidate: "cand", sdpMid: "0", sdpMLineIndex: 0 } };
+    expect(authPayload({ ...ice, caps: ["text/1"] })).toBe(authPayload(ice));
+  });
+
+  // The property that actually matters, with the real HMAC: a tag computed by a
+  // peer that has never heard of caps still verifies against the payload a
+  // caps-carrying signal produces.
+  it("a resume tag computed without caps verifies against a signal carrying them", async () => {
+    const a = await pairAuth();
+    const tagFromOldPeer = await a.I.sign(authPayload(BASE));
+    const withCaps: InboundSignal = { ...BASE, caps: ["text/1"], auth: tagFromOldPeer };
+    expect(await a.R.verify(authPayload(withCaps), withCaps.auth)).toBe(true);
+  });
+
+  it("and the reverse: a tag computed with caps verifies for a peer that ignores them", async () => {
+    const a = await pairAuth();
+    const withCaps: InboundSignal = { ...BASE, caps: ["text/1"] };
+    const tagFromNewPeer = await a.I.sign(authPayload(withCaps));
+    expect(await a.R.verify(authPayload(BASE), tagFromNewPeer)).toBe(true);
+  });
+
+  it("advertises text/1", () => {
+    expect(LOCAL_CAPS).toContain("text/1");
+  });
+
+  it("carries caps on the offer and on the answer, and reports the peer's", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const iKey = generateKeyPair();
+    const rKey = generateKeyPair();
+    let iSaw: string[] | undefined;
+    let rSaw: string[] | undefined;
+
+    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {}, onPeerCaps: (c) => (rSaw = c) });
+    const iP = connect({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {}, onPeerCaps: (c) => (iSaw = c) });
+    await flush();
+
+    const offer = hub.sent.I.find((m) => m.sdp?.type === "offer");
+    const answer = hub.sent.R.find((m) => m.sdp?.type === "answer");
+    expect(offer?.caps).toEqual([...LOCAL_CAPS]);
+    expect(answer?.caps).toEqual([...LOCAL_CAPS]);
+    // Both sides know the peer's capabilities before the channel opens.
+    expect(iSaw).toEqual([...LOCAL_CAPS]);
+    expect(rSaw).toEqual([...LOCAL_CAPS]);
+
+    openAll();
+    const [ic, rc] = await Promise.all([iP, rP]);
+    ic.close();
+    rc.close();
+  });
+
+  it("still completes the handshake against a peer that sends no caps", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const iKey = generateKeyPair();
+    const rKey = generateKeyPair();
+    let iSaw: string[] | undefined;
+    // Stand in for a peer on the current release: strip caps in flight.
+    hub.setIntercept((d) => { const { caps: _drop, ...rest } = d; return rest as InboundSignal; });
+
+    let iPeer: Uint8Array | undefined;
+    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
+    const iP = connect({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: (k) => (iPeer = k), onPeerCaps: (c) => (iSaw = c) });
+    await flush();
+
+    // The SAS handshake is unaffected; we simply learn nothing about caps.
+    expect(iPeer && Array.from(iPeer)).toEqual(Array.from(rKey.publicKey));
+    expect(iSaw).toBeUndefined();
+
+    openAll();
+    const [ic, rc] = await Promise.all([iP, rP]);
+    ic.close();
+    rc.close();
+  });
+
+  it("filters a malformed caps array off the wire before reporting it", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const rKey = generateKeyPair();
+    let rSaw: string[] | undefined;
+    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {}, onPeerCaps: (c) => (rSaw = c) });
+    await flush();
+    hub.inject("R", "I", { sdp: { type: "offer", sdp: "v=0" }, caps: [1, "text/1", null] as unknown as string[] });
+    await flush();
+    expect(rSaw).toEqual(["text/1"]);
+    rP.catch(() => {});
+  });
+
+  it("does not report caps when the field is not an array", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const rKey = generateKeyPair();
+    let called = false;
+    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {}, onPeerCaps: () => (called = true) });
+    await flush();
+    hub.inject("R", "I", { sdp: { type: "offer", sdp: "v=0" }, caps: "text/1" as unknown as string[] });
+    await flush();
+    expect(called).toBe(false);
     rP.catch(() => {});
   });
 });
