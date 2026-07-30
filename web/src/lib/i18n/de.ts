@@ -329,10 +329,10 @@ const de: Messages = {
   nav: { lanTab: "LAN", crossTab: "Echtzeit", offlineTab: "Asynchron", cliTab: "CLI", appsTab: "Apps" },
   crossTitle: "Echtzeit-Direkt",
   offlineTitle: "Asynchron senden",
-  cli: { subtitle: "Dateien vom Terminal übertragen — Ende-zu-Ende-verschlüsselt, selbst hostbar." },
+  cli: { subtitle: "Dateien und flüchtigen Text vom Terminal übertragen — Ende-zu-Ende-verschlüsselt, selbst hostbar." },
   cliCallout: {
     heading: "Lieber das Terminal?",
-    blurb: "Installiere eine selbst hostbare, Ende-zu-Ende-verschlüsselte Transfer-CLI mit einem Befehl.",
+    blurb: "Installiere mit einem Befehl eine selbst hostbare, Ende-zu-Ende-verschlüsselte CLI für Dateien und flüchtigen Text.",
     cta: "CLI entdecken →",
   },
   appsPage: {
@@ -348,25 +348,25 @@ const de: Messages = {
     androidNote: "Auf Android? Nutze einfach die Web-App — sie läuft direkt im Browser, nichts zu installieren.",
     cards: {
       web: { name: "Web-App", desc: "Nichts zu installieren. In jedem modernen Browser auf jedem Betriebssystem öffnen und loslegen.", cta: "Web-App öffnen" },
-      cli: { name: "Kommandozeile", desc: "Skriptbare Übertragungen, Ordner-Sync und Server-zu-Server-Backups für macOS, Linux und Windows.", cta: "CLI-Doku & Installation" },
+      cli: { name: "Kommandozeile", desc: "Skriptbare Dateiübertragungen, Ordner-Sync, Server-zu-Server-Backups und flüchtiger Text für macOS, Linux und Windows.", cta: "CLI-Doku & Installation" },
       mac: { name: "macOS-App", desc: "Eine echte native Menüleisten-App (com.relayium.mac). Signiert & notarisiert für die Ein-Klick-Installation — in Arbeit." },
       ios: { name: "iOS-App", desc: "Eine native iPhone- & iPad-App (com.relayium.app) mit Versand über das Teilen-Menü. Kommt in den App Store." },
     },
   },
   cliPage: {
-    metaTitle: "Relayium CLI — verschlüsselte Dateiübertragung im Terminal",
+    metaTitle: "Relayium CLI — verschlüsselte Datei- und Textübertragung im Terminal",
     metaDesc:
-      "Eine einzige Binärdatei für macOS, Linux und Windows: Dateien über dein eigenes SSH kopieren, per Pairing-Code senden, Server-zu-Server übertragen, Ordner spiegeln oder jetzt hochladen und später abholen. Kostenlos und quelloffen.",
+      "Eine einzige Binärdatei für macOS, Linux und Windows: Dateien über dein eigenes SSH kopieren, per Pairing-Code senden, Server-zu-Server übertragen, Ordner spiegeln, flüchtigen Text schicken oder jetzt hochladen und später abholen. Kostenlos und quelloffen.",
     badges: ["Kostenloses P2P", "Ende-zu-Ende-verschlüsselt", "Selbst hostbar"],
     freenote:
-      "Bei push/pull, send/receive und daemon-direct gehen Dateien direkt zwischen den Rechnern und laufen nie über Relayiums Server — nur ein kleiner Rendezvous-Handshake tut das, und auch nur bei send/receive. Die Ausnahme ist Cloud up/down: Dabei wird deine Datei Ende-zu-Ende-verschlüsselt gespeichert, damit ein anderer Rechner sie später abholen kann.",
+      "Bei push/pull, send/receive, text und daemon-direct gehen deine Daten direkt zwischen den Rechnern und laufen nie über Relayiums Server — nur ein kleiner Rendezvous-Handshake tut das, und auch nur bei send/receive und text. Die Ausnahme ist Cloud up/down: Dabei wird deine Datei Ende-zu-Ende-verschlüsselt gespeichert, damit ein anderer Rechner sie später abholen kann.",
     installH2: "Installation",
     installIntro: "Ein Befehl lädt ein vorgebautes Binary für dein Betriebssystem herunter und legt es in deinen PATH:",
     installReleases: "Vorgebautes Binary von der Releases-Seite herunterladen →",
     installBuild: "Oder aus dem Quellcode bauen:",
     installHelp: "Führe dann relayium --help aus, um alle Befehle zu sehen.",
     whichH2: "Welcher Modus?",
-    whichIntro: "Relayium überträgt Dateien auf mehrere Arten. Wähle danach, wo die Gegenstelle ist — und ob sie gerade online ist:",
+    whichIntro: "Relayium überträgt Dateien — und flüchtigen Text — auf mehrere Arten. Wähle danach, wo die Gegenstelle ist, und ob sie gerade online ist:",
     pickWhen: [
       "Zu einem Server, in den du dich per SSH einloggen kannst",
       "Zu einer anderen Person, netzwerkübergreifend",

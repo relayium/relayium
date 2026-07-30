@@ -329,10 +329,10 @@ const ja: Messages = {
   nav: { lanTab: "LAN", crossTab: "リアルタイム", offlineTab: "非同期", cliTab: "CLI", appsTab: "アプリ" },
   crossTitle: "リアルタイム直接転送",
   offlineTitle: "非同期転送",
-  cli: { subtitle: "ターミナルからファイルを転送 — エンドツーエンド暗号化、セルフホスト可能。" },
+  cli: { subtitle: "ターミナルからファイルと一時的なテキストを転送 — エンドツーエンド暗号化、セルフホスト可能。" },
   cliCallout: {
     heading: "ターミナル派ですか？",
-    blurb: "エンドツーエンド暗号化・セルフホスト可能な転送 CLI を 1 コマンドでインストール。",
+    blurb: "ファイルも一時的なテキストも送れる、エンドツーエンド暗号化・セルフホスト可能な CLI を 1 コマンドでインストール。",
     cta: "CLI を見る →",
   },
   appsPage: {
@@ -348,25 +348,25 @@ const ja: Messages = {
     androidNote: "Android をお使いですか？ ウェブアプリをそのままどうぞ — ブラウザで動作し、インストールは不要です。",
     cards: {
       web: { name: "ウェブアプリ", desc: "インストール不要。どの OS でも最新のブラウザで開けばすぐに転送を開始できます。", cta: "ウェブアプリを開く" },
-      cli: { name: "コマンドライン", desc: "スクリプト化できる転送、フォルダ同期、サーバー間バックアップに対応。macOS、Linux、Windows で利用可能。", cta: "CLI のドキュメントとインストール" },
+      cli: { name: "コマンドライン", desc: "スクリプト化できるファイル転送、フォルダ同期、サーバー間バックアップ、一時的なテキスト送信に対応。macOS、Linux、Windows で利用可能。", cta: "CLI のドキュメントとインストール" },
       mac: { name: "macOS アプリ", desc: "本物のネイティブなメニューバーアプリ（com.relayium.mac）。署名・公証済みでワンクリックインストール — 開発中です。" },
       ios: { name: "iOS アプリ", desc: "共有シートからの送信に対応したネイティブな iPhone・iPad アプリ（com.relayium.app）。App Store に近日登場。" },
     },
   },
   cliPage: {
-    metaTitle: "Relayium CLI — ターミナルから暗号化ファイル転送",
+    metaTitle: "Relayium CLI — ターミナルから暗号化ファイル・テキスト転送",
     metaDesc:
-      "macOS・Linux・Windows 対応の単一バイナリ。自分の SSH 経由でのコピー、ペアリングコードでの送信、サーバー間の直接転送、フォルダの同期、先にアップロードして後で取得——すべて無料・オープンソースです。",
+      "macOS・Linux・Windows 対応の単一バイナリ。自分の SSH 経由でのコピー、ペアリングコードでの送信、サーバー間の直接転送、フォルダの同期、一時的なテキストの送信、先にアップロードして後で取得——すべて無料・オープンソースです。",
     badges: ["無料の P2P", "エンドツーエンド暗号化", "セルフホスト可能"],
     freenote:
-      "push/pull、send/receive、デーモン直結では、ファイルはマシン間を直接移動し、Relayium のサーバーを経由しません——通過するのは send/receive 時の小さなランデブーハンドシェイクだけです。唯一の例外はクラウド up/down で、ファイルをエンドツーエンド暗号化して保存し、別のマシンが後で取得できるようにします。",
+      "push/pull、send/receive、text、デーモン直結では、データはマシン間を直接移動し、Relayium のサーバーを経由しません——通過するのは send/receive と text の小さなランデブーハンドシェイクだけです。唯一の例外はクラウド up/down で、ファイルをエンドツーエンド暗号化して保存し、別のマシンが後で取得できるようにします。",
     installH2: "インストール",
     installIntro: "1 つのコマンドでお使いの OS 向けのビルド済みバイナリをダウンロードし、PATH に配置します:",
     installReleases: "リリースページからビルド済みバイナリをダウンロード →",
     installBuild: "またはソースからビルド:",
     installHelp: "その後 relayium --help を実行するとすべてのコマンドを確認できます。",
     whichH2: "どのモードを使う？",
-    whichIntro: "Relayium にはいくつかの転送方法があります。相手先がどこにいるか、そして今オンラインかどうかで選んでください:",
+    whichIntro: "Relayium はファイルも一時的なテキストも、いくつかの方法で送れます。相手先がどこにいるか、そして今オンラインかどうかで選んでください:",
     pickWhen: [
       "SSH でログインできるサーバーへ",
       "ネットワークをまたいで他の人へ",

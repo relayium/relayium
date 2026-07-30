@@ -329,10 +329,10 @@ const pt: Messages = {
   nav: { lanTab: "LAN", crossTab: "Tempo real", offlineTab: "Assíncrono", cliTab: "CLI", appsTab: "Apps" },
   crossTitle: "Direto em tempo real",
   offlineTitle: "Transferência assíncrona",
-  cli: { subtitle: "Transfira arquivos do seu terminal — com criptografia de ponta a ponta, auto-hospedável." },
+  cli: { subtitle: "Transfira arquivos e texto efêmero do seu terminal — com criptografia de ponta a ponta, auto-hospedável." },
   cliCallout: {
     heading: "Prefere o terminal?",
-    blurb: "Instale uma CLI de transferência auto-hospedável e com criptografia de ponta a ponta em um único comando.",
+    blurb: "Instale em um único comando uma CLI auto-hospedável e com criptografia de ponta a ponta, para arquivos e texto efêmero.",
     cta: "Conheça a CLI →",
   },
   appsPage: {
@@ -348,25 +348,25 @@ const pt: Messages = {
     androidNote: "No Android? Use o app web mesmo — ele roda direto no seu navegador, nada para instalar.",
     cards: {
       web: { name: "App web", desc: "Nada para instalar. Abra em qualquer navegador moderno, em qualquer sistema, e comece a transferir.", cta: "Abrir o app web" },
-      cli: { name: "Linha de comando", desc: "Transferências programáveis, sincronização de pastas e backups de servidor para servidor para macOS, Linux e Windows.", cta: "Docs e instalação do CLI" },
+      cli: { name: "Linha de comando", desc: "Transferências de arquivos programáveis, sincronização de pastas, backups de servidor para servidor e texto efêmero para macOS, Linux e Windows.", cta: "Docs e instalação do CLI" },
       mac: { name: "App para macOS", desc: "Um verdadeiro app nativo na barra de menus (com.relayium.mac). Assinado e notarizado para instalação com um clique — em desenvolvimento." },
       ios: { name: "App para iOS", desc: "Um app nativo para iPhone e iPad (com.relayium.app) com envio pela folha de compartilhamento. Em breve na App Store." },
     },
   },
   cliPage: {
-    metaTitle: "CLI do Relayium — transferência de arquivos criptografada no terminal",
+    metaTitle: "CLI do Relayium — transferência criptografada de arquivos e texto no terminal",
     metaDesc:
-      "Um único binário para macOS, Linux e Windows: copie pelo seu próprio SSH, envie com um código de emparelhamento, transfira de servidor para servidor, espelhe uma pasta, ou envie agora e baixe depois. Grátis e de código aberto.",
+      "Um único binário para macOS, Linux e Windows: copie pelo seu próprio SSH, envie com um código de emparelhamento, transfira de servidor para servidor, espelhe uma pasta, envie texto efêmero, ou envie agora e baixe depois. Grátis e de código aberto.",
     badges: ["P2P gratuito", "Criptografia de ponta a ponta", "Auto-hospedável"],
     freenote:
-      "Em push/pull, send/receive e daemon direto, os arquivos vão diretamente entre as máquinas e nunca passam pelos servidores do Relayium — apenas um pequeno handshake de encontro passa, e só no send/receive. A exceção é o cloud up/down, que armazena seu arquivo com criptografia de ponta a ponta para que outra máquina possa buscá-lo depois.",
+      "Em push/pull, send/receive, text e daemon direto, seus dados vão diretamente entre as máquinas e nunca passam pelos servidores do Relayium — apenas um pequeno handshake de encontro passa, e só no send/receive e no text. A exceção é o cloud up/down, que armazena seu arquivo com criptografia de ponta a ponta para que outra máquina possa buscá-lo depois.",
     installH2: "Instalar",
     installIntro: "Um comando baixa um binário pré-compilado para o seu sistema operacional e o coloca no seu PATH:",
     installReleases: "Baixe um binário pré-compilado na página de releases →",
     installBuild: "Ou compile a partir do código-fonte:",
     installHelp: "Depois execute relayium --help para ver todos os comandos.",
     whichH2: "Qual modo?",
-    whichIntro: "O Relayium move arquivos de algumas maneiras. Escolha pelo lugar onde está a outra ponta — e se ela está online agora:",
+    whichIntro: "O Relayium move arquivos — e texto efêmero — de algumas maneiras. Escolha pelo lugar onde está a outra ponta, e se ela está online agora:",
     pickWhen: [
       "Para um servidor no qual você consegue entrar por SSH",
       "Para outra pessoa, entre redes",

@@ -329,10 +329,10 @@ const en: Messages = {
   nav: { lanTab: "LAN", crossTab: "Realtime", offlineTab: "Async", cliTab: "CLI", appsTab: "Apps" },
   crossTitle: "Realtime direct",
   offlineTitle: "Async transfer",
-  cli: { subtitle: "Transfer files from your terminal — end-to-end encrypted, self-hostable." },
+  cli: { subtitle: "Transfer files and ephemeral text from your terminal — end-to-end encrypted, self-hostable." },
   cliCallout: {
     heading: "Prefer the terminal?",
-    blurb: "Install a self-hostable, end-to-end-encrypted transfer CLI in one command.",
+    blurb: "Install a self-hostable, end-to-end-encrypted CLI for files and ephemeral text in one command.",
     cta: "Explore the CLI →",
   },
   appsPage: {
@@ -354,7 +354,7 @@ const en: Messages = {
       },
       cli: {
         name: "Command line",
-        desc: "Scriptable transfers, folder sync and server-to-server backups for macOS, Linux and Windows.",
+        desc: "Scriptable file transfers, folder sync, server-to-server backups and ephemeral text for macOS, Linux and Windows.",
         cta: "CLI docs & install",
       },
       mac: {
@@ -368,19 +368,19 @@ const en: Messages = {
     },
   },
   cliPage: {
-    metaTitle: "Relayium CLI — encrypted file transfer from the terminal",
+    metaTitle: "Relayium CLI — encrypted file and text transfer from the terminal",
     metaDesc:
-      "A single binary for macOS, Linux and Windows: copy files over your own SSH, send by pairing code, push server-to-server, mirror a folder, or upload now and pull later. Free and open source.",
+      "A single binary for macOS, Linux and Windows: copy files over your own SSH, send by pairing code, push server-to-server, mirror a folder, share ephemeral text, or upload now and pull later. Free and open source.",
     badges: ["Free P2P", "End-to-end encrypted", "Self-hostable"],
     freenote:
-      "In push/pull, send/receive and daemon-direct, files go straight between machines and never touch Relayium's servers — only a tiny rendezvous handshake does, and only for send/receive. The exception is cloud up/down, which stores your file end-to-end encrypted so another machine can fetch it later.",
+      "In push/pull, send/receive, text and daemon-direct, your data goes straight between machines and never touches Relayium's servers — only a tiny rendezvous handshake does, and only for send/receive and text. The exception is cloud up/down, which stores your file end-to-end encrypted so another machine can fetch it later.",
     installH2: "Install",
     installIntro: "One command downloads a prebuilt binary for your OS and puts it on your PATH:",
     installReleases: "Download a prebuilt binary from the releases page →",
     installBuild: "Or build from source:",
     installHelp: "Then run relayium --help to see every command.",
     whichH2: "Which mode?",
-    whichIntro: "Relayium moves files a few ways. Pick by where the other end is — and whether it's online right now:",
+    whichIntro: "Relayium moves files — and ephemeral text — a few ways. Pick by where the other end is, and whether it's online right now:",
     pickWhen: [
       "To a server you can SSH into",
       "To another person, cross-network",

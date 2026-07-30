@@ -349,3 +349,57 @@ describe("/cli 页的下标配对数组与代码常量等长", () => {
     }
   });
 });
+
+// v0.12.0 起 CLI 传的不只是文件，还有临时文本。但**定位性**文案（标题、副标题、
+// meta、平台卡片）当时全都停留在"从终端传文件"上——功能已经发布，介绍它的那句话
+// 却还在描述上一个版本。这类偏差是静默的：模式小节里写着 text，读者却在页面顶部
+// 和搜索结果里读到"只能传文件"，而没有任何测试会因此变红。
+//
+// 所以这里把"这几个键必须提到文本"钉住。用每种语言各自的词（而不是统一匹配 Latin
+// 的 "text"）：命令名 text 在九种语言里都是原样出现的，若拿它当判据，一句纯粹讲
+// send/receive 的话也能蒙混过关。
+const TEXT_WORD: Record<Lang, RegExp> = {
+  en: /\btext\b/i,
+  zh: /文本/,
+  ja: /テキスト/,
+  ko: /텍스트/,
+  de: /Text/,
+  fr: /texte/i,
+  es: /texto/i,
+  pt: /texto/i,
+  ar: /نص/,
+};
+
+describe("CLI 定位文案覆盖文件与临时文本", () => {
+  const positioning: [string, (m: Messages) => string][] = [
+    ["cli.subtitle", (m) => m.cli.subtitle],
+    ["cliCallout.blurb", (m) => m.cliCallout.blurb],
+    ["appsPage.cards.cli.desc", (m) => m.appsPage.cards.cli.desc],
+    ["cliPage.metaTitle", (m) => m.cliPage.metaTitle],
+    ["cliPage.metaDesc", (m) => m.cliPage.metaDesc],
+    ["cliPage.whichIntro", (m) => m.cliPage.whichIntro],
+  ];
+  for (const [label, pick] of positioning) {
+    it(`${label}：每种语言都提到文本，而不只是文件`, () => {
+      for (const { code } of LANGS) {
+        expect(pick(messages[code]), `${code} 的 ${label} 仍然只讲文件`).toMatch(TEXT_WORD[code]);
+      }
+    });
+  }
+
+  it("freenote 把 text 列进不经过服务器的模式", () => {
+    // 这一条只能匹配命令名：freenote 列的是子命令（push/pull、send/receive…），
+    // 本来就不该在里面翻译成"文本"。
+    for (const { code } of LANGS) {
+      expect(messages[code].cliPage.freenote, `${code} 的 freenote 漏掉了 text`).toContain("text");
+    }
+  });
+
+  it("原生 macOS / iOS 卡片不跟着宣称支持文本（代码里还没有）", () => {
+    for (const { code } of LANGS) {
+      const { mac, ios } = messages[code].appsPage.cards;
+      expect(mac.desc, `${code} 的 macOS 卡片宣称了未实现的文本能力`).not.toMatch(TEXT_WORD[code]);
+      expect(ios.desc, `${code} 的 iOS 卡片宣称了未实现的文本能力`).not.toMatch(TEXT_WORD[code]);
+    }
+  });
+});

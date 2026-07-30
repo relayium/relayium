@@ -329,10 +329,10 @@ const ko: Messages = {
   nav: { lanTab: "LAN 전송", crossTab: "실시간 직접 전송", offlineTab: "비동기 전송", cliTab: "CLI", appsTab: "앱" },
   crossTitle: "실시간 직접 전송",
   offlineTitle: "비동기 전송",
-  cli: { subtitle: "터미널에서 파일 전송 — 종단간 암호화, 자체 호스팅 가능." },
+  cli: { subtitle: "터미널에서 파일과 임시 텍스트 전송 — 종단간 암호화, 자체 호스팅 가능." },
   cliCallout: {
     heading: "터미널을 선호하시나요?",
-    blurb: "종단간 암호화, 자체 호스팅 가능한 전송 CLI를 명령어 하나로 설치하세요.",
+    blurb: "파일과 임시 텍스트를 모두 보내는, 종단간 암호화·자체 호스팅 가능한 CLI를 명령어 하나로 설치하세요.",
     cta: "CLI 살펴보기 →",
   },
   appsPage: {
@@ -348,25 +348,25 @@ const ko: Messages = {
     androidNote: "Android를 사용하시나요? 웹 앱을 그대로 사용하세요 — 브라우저에서 바로 실행되며 설치할 것이 없습니다.",
     cards: {
       web: { name: "웹 앱", desc: "설치 불필요. 어떤 OS의 최신 브라우저에서든 열어 바로 전송을 시작하세요.", cta: "웹 앱 열기" },
-      cli: { name: "명령줄", desc: "스크립트로 자동화하는 전송, 폴더 동기화, 서버 간 백업. macOS, Linux, Windows 지원.", cta: "CLI 문서 및 설치" },
+      cli: { name: "명령줄", desc: "스크립트로 자동화하는 파일 전송, 폴더 동기화, 서버 간 백업, 임시 텍스트 전송. macOS, Linux, Windows 지원.", cta: "CLI 문서 및 설치" },
       mac: { name: "macOS 앱", desc: "진짜 네이티브 메뉴 바 앱(com.relayium.mac). 서명 및 공증을 마쳐 한 번의 클릭으로 설치 — 개발 중입니다." },
       ios: { name: "iOS 앱", desc: "공유 시트 전송을 지원하는 네이티브 iPhone·iPad 앱(com.relayium.app). App Store에 곧 출시됩니다." },
     },
   },
   cliPage: {
-    metaTitle: "Relayium CLI — 터미널에서 하는 암호화 파일 전송",
+    metaTitle: "Relayium CLI — 터미널에서 하는 암호화 파일·텍스트 전송",
     metaDesc:
-      "macOS·Linux·Windows용 단일 바이너리. 내 SSH로 복사하고, 페어링 코드로 보내고, 서버 간 직접 전송하고, 폴더를 미러링하고, 먼저 올린 뒤 나중에 받으세요. 무료 오픈소스입니다.",
+      "macOS·Linux·Windows용 단일 바이너리. 내 SSH로 복사하고, 페어링 코드로 보내고, 서버 간 직접 전송하고, 폴더를 미러링하고, 임시 텍스트를 보내고, 먼저 올린 뒤 나중에 받으세요. 무료 오픈소스입니다.",
     badges: ["무료 P2P", "종단간 암호화", "자체 호스팅 가능"],
     freenote:
-      "push/pull, send/receive, 데몬 다이렉트에서는 파일이 두 기기 사이를 직접 오가며 Relayium 서버를 거치지 않습니다 — 오직 작은 랑데부 핸드셰이크만, 그것도 send/receive에서만 서버를 거칩니다. 유일한 예외는 클라우드 up/down으로, 파일을 종단간 암호화해 저장하여 다른 기기가 나중에 가져갈 수 있게 합니다.",
+      "push/pull, send/receive, text, 데몬 다이렉트에서는 데이터가 두 기기 사이를 직접 오가며 Relayium 서버를 거치지 않습니다 — 오직 작은 랑데부 핸드셰이크만, 그것도 send/receive와 text에서만 서버를 거칩니다. 유일한 예외는 클라우드 up/down으로, 파일을 종단간 암호화해 저장하여 다른 기기가 나중에 가져갈 수 있게 합니다.",
     installH2: "설치",
     installIntro: "명령어 하나로 사용 중인 OS용 사전 빌드된 바이너리를 내려받아 PATH에 등록합니다:",
     installReleases: "릴리스 페이지에서 사전 빌드된 바이너리 내려받기 →",
     installBuild: "또는 소스에서 직접 빌드하기:",
     installHelp: "이후 relayium --help로 모든 명령어를 확인하세요.",
     whichH2: "어떤 모드를 쓸까?",
-    whichIntro: "Relayium은 파일을 여러 방식으로 옮깁니다. 상대가 어디에 있는지, 그리고 지금 온라인인지에 따라 선택하세요:",
+    whichIntro: "Relayium은 파일과 임시 텍스트를 여러 방식으로 옮깁니다. 상대가 어디에 있는지, 그리고 지금 온라인인지에 따라 선택하세요:",
     pickWhen: [
       "SSH로 접속 가능한 서버로 보낼 때",
       "네트워크가 다른 상대방에게 보낼 때",

@@ -95,13 +95,13 @@ export const pricing = {
 export const cli = {
   // title/description mirror cliPage.metaTitle / metaDesc exactly — see the note
   // on `pricing` above.
-  title: "Relayium CLI — encrypted file transfer from the terminal",
+  title: "Relayium CLI — encrypted file and text transfer from the terminal",
   description:
-    "A single binary for macOS, Linux and Windows: copy files over your own SSH, send by pairing code, push server-to-server, mirror a folder, or upload now and pull later. Free and open source.",
+    "A single binary for macOS, Linux and Windows: copy files over your own SSH, send by pairing code, push server-to-server, mirror a folder, share ephemeral text, or upload now and pull later. Free and open source.",
   hero: {
     h1: "Relayium CLI",
     pitch:
-      "Free peer-to-peer, end-to-end encrypted, self-hostable. In push/pull, send/receive and daemon-direct, files go straight between machines and never touch Relayium's servers — only a tiny rendezvous handshake does, and only for send/receive. The exception is cloud up/down, which stores your file end-to-end encrypted so another machine can fetch it later.",
+      "Free peer-to-peer, end-to-end encrypted, self-hostable. In push/pull, send/receive, text and daemon-direct, your data goes straight between machines and never touches Relayium's servers — only a tiny rendezvous handshake does, and only for send/receive and text. The exception is cloud up/down, which stores your file end-to-end encrypted so another machine can fetch it later.",
     cta: "Install the CLI",
   },
   how: {
@@ -123,6 +123,10 @@ export const cli = {
       {
         title: "send / receive — by pairing code",
         desc: "Send to another person across networks. After relayium login, run send with no code: the CLI mints a 6-character pairing code (no 0 or 1), good for 5 minutes, and prints the command the other end runs — you pass that on out of band. The receiver needs no account. The connection is direct peer-to-peer: only a small rendezvous handshake passes through Relayium — the file bytes never do. Both terminals print a 6-digit SAS code to rule out a man-in-the-middle.",
+      },
+      {
+        title: "text — ephemeral messages",
+        desc: "Share a snippet, a link or a command instead of a file. One machine runs relayium text to mint a pairing code — that side needs relayium login — and the other joins with the printed relayium text CODE, which needs no login. Both ends stay online for the session: it is its own end-to-end encrypted peer-to-peer session, the messages are never stored on any server, and one message is at most 65,536 bytes of UTF-8. Anything larger is a file.",
       },
       {
         title: "daemon direct — server to server",
@@ -156,7 +160,7 @@ export const cli = {
     items: [
       {
         q: "Does the CLI cost anything?",
-        a: "No. push/pull, send/receive, daemon-direct and sync connect the two ends directly, so there is nothing to meter. Sending by pairing code needs an account so the server can mint the code — receiving never does — but it still costs nothing. Only cloud up/down draws on your account's storage and traffic allowance.",
+        a: "No. push/pull, send/receive, text, daemon-direct and sync connect the two ends directly, so there is nothing to meter. Sending by pairing code needs an account so the server can mint the code — receiving never does — but it still costs nothing. Only cloud up/down draws on your account's storage and traffic allowance.",
       },
       {
         q: "Which platforms does it run on?",

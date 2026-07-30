@@ -329,10 +329,10 @@ const zh: Messages = {
   nav: { lanTab: "局域网传输", crossTab: "实时直传", offlineTab: "异步传输", cliTab: "CLI", appsTab: "应用" },
   crossTitle: "实时直传",
   offlineTitle: "异步传输",
-  cli: { subtitle: "在终端里传文件 —— 端到端加密，可自托管。" },
+  cli: { subtitle: "在终端里传文件和临时文本 —— 端到端加密，可自托管。" },
   cliCallout: {
     heading: "更喜欢命令行？",
-    blurb: "一行命令装上端到端加密、可自托管的传输 CLI。",
+    blurb: "一行命令装上端到端加密、可自托管的 CLI，传文件也传临时文本。",
     cta: "了解 CLI →",
   },
   appsPage: {
@@ -348,25 +348,25 @@ const zh: Messages = {
     androidNote: "使用安卓？直接用网页版即可——在浏览器中运行，无需安装。",
     cards: {
       web: { name: "网页版", desc: "无需安装。在任意系统的现代浏览器中打开即可开始传输。", cta: "打开网页版" },
-      cli: { name: "命令行", desc: "可脚本化的传输、文件夹同步与服务器间备份，支持 macOS、Linux 与 Windows。", cta: "命令行文档与安装" },
+      cli: { name: "命令行", desc: "可脚本化的文件传输、文件夹同步、服务器间备份与临时文本，支持 macOS、Linux 与 Windows。", cta: "命令行文档与安装" },
       mac: { name: "macOS 应用", desc: "真正的原生菜单栏应用（com.relayium.mac）。已签名并公证，一键安装——正在开发中。" },
       ios: { name: "iOS 应用", desc: "原生 iPhone 与 iPad 应用（com.relayium.app），支持分享菜单发送。即将登陆 App Store。" },
     },
   },
   cliPage: {
-    metaTitle: "Relayium 命令行——在终端里加密传文件",
+    metaTitle: "Relayium 命令行——在终端里加密传文件与文本",
     metaDesc:
-      "一个二进制文件，支持 macOS、Linux 与 Windows：走你自己的 SSH 收发文件、用配对码发给别人、服务器之间直推、镜像整个文件夹，或先上传稍后再取。免费开源。",
+      "一个二进制文件，支持 macOS、Linux 与 Windows：走你自己的 SSH 收发文件、用配对码发给别人、服务器之间直推、镜像整个文件夹、发送临时文本，或先上传稍后再取。免费开源。",
     badges: ["免费 P2P", "端到端加密", "可自托管"],
     freenote:
-      "在 push/pull、send/receive 和 daemon 直连中，文件直接在机器之间传输，绝不经过 Relayium 的服务器——只有一次很小的会合握手会经过，且仅用于 send/receive。唯一的例外是云端 up/down：它把你的文件端到端加密后存下，好让另一台机器之后取回。",
+      "在 push/pull、send/receive、text 和 daemon 直连中，数据直接在机器之间传输，绝不经过 Relayium 的服务器——只有一次很小的会合握手会经过，且仅用于 send/receive 与 text。唯一的例外是云端 up/down：它把你的文件端到端加密后存下，好让另一台机器之后取回。",
     installH2: "安装",
     installIntro: "一行命令即可下载适配你操作系统的预编译二进制，并加入 PATH：",
     installReleases: "从发布页下载预编译二进制 →",
     installBuild: "或从源码构建：",
     installHelp: "然后运行 relayium --help 查看所有命令。",
     whichH2: "选哪种模式？",
-    whichIntro: "Relayium 有几种传输方式。按对方在哪、以及此刻是否在线来选：",
+    whichIntro: "Relayium 传文件、也传临时文本，方式有几种。按对方在哪、以及此刻是否在线来选：",
     pickWhen: [
       "传到一台你能 SSH 进去的服务器",
       "跨网络传给另一个人",

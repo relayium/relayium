@@ -28,7 +28,7 @@ const en = {
     heading: "Which one should I use?",
     steps: [
       "Web app — zero-install, in any modern browser on any OS.",
-      "Command line — scriptable transfers, folder sync and server backups on macOS, Linux and Windows.",
+      "Command line — scriptable file transfers, folder sync, server backups and ephemeral text on macOS, Linux and Windows.",
       "macOS app — a real native app, coming soon.",
       "iOS app — a native iPhone & iPad app, coming to the App Store.",
     ],
@@ -42,7 +42,7 @@ const en = {
       },
       {
         title: "Command line",
-        desc: "Scriptable transfers, folder sync and server-to-server backups for macOS, Linux and Windows.",
+        desc: "Scriptable file transfers, folder sync, server-to-server backups and ephemeral text for macOS, Linux and Windows.",
       },
       {
         title: "macOS app",
@@ -84,7 +84,7 @@ const zh = {
     heading: "该用哪一个？",
     steps: [
       "网页版——零安装，任意操作系统的现代浏览器打开即用。",
-      "命令行——可脚本化的传输、文件夹同步与服务器备份，支持 macOS、Linux 与 Windows。",
+      "命令行——可脚本化的文件传输、文件夹同步、服务器备份与临时文本，支持 macOS、Linux 与 Windows。",
       "macOS 应用——真正的原生应用，即将推出。",
       "iOS 应用——原生 iPhone 与 iPad 应用，即将登陆 App Store。",
     ],
@@ -98,7 +98,7 @@ const zh = {
       },
       {
         title: "命令行",
-        desc: "可脚本化的传输、文件夹同步与服务器间备份，支持 macOS、Linux 与 Windows。",
+        desc: "可脚本化的文件传输、文件夹同步、服务器间备份与临时文本，支持 macOS、Linux 与 Windows。",
       },
       {
         title: "macOS 应用",
@@ -140,7 +140,7 @@ const ja = {
     heading: "どれを使えばいい？",
     steps: [
       "ウェブアプリ — インストール不要、どの OS の最新ブラウザでもすぐに使えます。",
-      "コマンドライン — スクリプト化できる転送、フォルダー同期、サーバーバックアップ。macOS、Linux、Windows で利用可能。",
+      "コマンドライン — スクリプト化できるファイル転送、フォルダー同期、サーバーバックアップ、一時的なテキスト送信。macOS、Linux、Windows で利用可能。",
       "macOS アプリ — 本物のネイティブアプリ、近日公開。",
       "iOS アプリ — ネイティブな iPhone・iPad アプリ、App Store に近日登場。",
     ],
@@ -154,7 +154,7 @@ const ja = {
       },
       {
         title: "コマンドライン",
-        desc: "スクリプト化できる転送、フォルダー同期、サーバー間バックアップに対応。macOS、Linux、Windows で利用可能。",
+        desc: "スクリプト化できるファイル転送、フォルダー同期、サーバー間バックアップ、一時的なテキスト送信に対応。macOS、Linux、Windows で利用可能。",
       },
       {
         title: "macOS アプリ",
@@ -196,7 +196,7 @@ const ko = {
     heading: "어느 것을 써야 할까요?",
     steps: [
       "웹 앱 — 설치 불필요, 어떤 OS의 최신 브라우저에서든 바로 사용.",
-      "명령줄 — 스크립트로 자동화하는 전송, 폴더 동기화, 서버 백업. macOS, Linux, Windows 지원.",
+      "명령줄 — 스크립트로 자동화하는 파일 전송, 폴더 동기화, 서버 백업, 임시 텍스트 전송. macOS, Linux, Windows 지원.",
       "macOS 앱 — 진짜 네이티브 앱, 출시 예정.",
       "iOS 앱 — 네이티브 iPhone·iPad 앱, App Store에 곧 출시.",
     ],
@@ -210,7 +210,7 @@ const ko = {
       },
       {
         title: "명령줄",
-        desc: "스크립트로 자동화하는 전송, 폴더 동기화, 서버 간 백업. macOS, Linux, Windows 지원.",
+        desc: "스크립트로 자동화하는 파일 전송, 폴더 동기화, 서버 간 백업, 임시 텍스트 전송. macOS, Linux, Windows 지원.",
       },
       {
         title: "macOS 앱",
@@ -252,7 +252,7 @@ const de = {
     heading: "Welche soll ich nehmen?",
     steps: [
       "Web-App — ohne Installation, in jedem modernen Browser auf jedem Betriebssystem.",
-      "Kommandozeile — skriptbare Übertragungen, Ordner-Sync und Server-Backups für macOS, Linux und Windows.",
+      "Kommandozeile — skriptbare Dateiübertragungen, Ordner-Sync, Server-Backups und flüchtiger Text für macOS, Linux und Windows.",
       "macOS-App — eine echte native App, in Kürze.",
       "iOS-App — eine native iPhone- & iPad-App, kommt in den App Store.",
     ],
@@ -266,7 +266,7 @@ const de = {
       },
       {
         title: "Kommandozeile",
-        desc: "Skriptbare Übertragungen, Ordner-Sync und Server-zu-Server-Backups für macOS, Linux und Windows.",
+        desc: "Skriptbare Dateiübertragungen, Ordner-Sync, Server-zu-Server-Backups und flüchtiger Text für macOS, Linux und Windows.",
       },
       {
         title: "macOS-App",
@@ -308,7 +308,7 @@ const fr = {
     heading: "Laquelle choisir ?",
     steps: [
       "Appli web — sans installation, dans n'importe quel navigateur moderne, sur n'importe quel OS.",
-      "Ligne de commande — transferts scriptables, synchronisation de dossiers et sauvegardes de serveur pour macOS, Linux et Windows.",
+      "Ligne de commande — transferts de fichiers scriptables, synchronisation de dossiers, sauvegardes de serveur et texte éphémère pour macOS, Linux et Windows.",
       "Appli macOS — une vraie appli native, bientôt disponible.",
       "Appli iOS — une appli native iPhone et iPad, bientôt sur l'App Store.",
     ],
@@ -322,7 +322,7 @@ const fr = {
       },
       {
         title: "Ligne de commande",
-        desc: "Transferts scriptables, synchronisation de dossiers et sauvegardes de serveur à serveur pour macOS, Linux et Windows.",
+        desc: "Transferts de fichiers scriptables, synchronisation de dossiers, sauvegardes de serveur à serveur et texte éphémère pour macOS, Linux et Windows.",
       },
       {
         title: "Appli macOS",
@@ -364,7 +364,7 @@ const ar = {
     heading: "أيّها أستخدم؟",
     steps: [
       "تطبيق الويب — دون تثبيت، في أي متصفح حديث وعلى أي نظام تشغيل.",
-      "سطر الأوامر — عمليات نقل قابلة للبرمجة، ومزامنة المجلدات، ونسخ احتياطي للخوادم على macOS وLinux وWindows.",
+      "سطر الأوامر — عمليات نقل ملفات قابلة للبرمجة، ومزامنة المجلدات، ونسخ احتياطي للخوادم، ونصوص عابرة على macOS وLinux وWindows.",
       "تطبيق macOS — تطبيق أصلي حقيقي، قريبًا.",
       "تطبيق iOS — تطبيق أصلي لـ iPhone وiPad، قريبًا على App Store.",
     ],
@@ -378,7 +378,7 @@ const ar = {
       },
       {
         title: "سطر الأوامر",
-        desc: "عمليات نقل قابلة للبرمجة، ومزامنة المجلدات، ونسخ احتياطي من خادم إلى خادم لأنظمة macOS وLinux وWindows.",
+        desc: "عمليات نقل ملفات قابلة للبرمجة، ومزامنة المجلدات، ونسخ احتياطي من خادم إلى خادم، ونصوص عابرة لأنظمة macOS وLinux وWindows.",
       },
       {
         title: "تطبيق macOS",
@@ -420,7 +420,7 @@ const es = {
     heading: "¿Cuál debería usar?",
     steps: [
       "App web — sin instalación, en cualquier navegador moderno y en cualquier sistema operativo.",
-      "Línea de comandos — transferencias programables, sincronización de carpetas y copias de servidores para macOS, Linux y Windows.",
+      "Línea de comandos — transferencias de archivos programables, sincronización de carpetas, copias de servidores y texto efímero para macOS, Linux y Windows.",
       "App de macOS — una auténtica app nativa, próximamente.",
       "App de iOS — una app nativa para iPhone y iPad, pronto en la App Store.",
     ],
@@ -434,7 +434,7 @@ const es = {
       },
       {
         title: "Línea de comandos",
-        desc: "Transferencias programables, sincronización de carpetas y copias de servidor a servidor para macOS, Linux y Windows.",
+        desc: "Transferencias de archivos programables, sincronización de carpetas, copias de servidor a servidor y texto efímero para macOS, Linux y Windows.",
       },
       {
         title: "App de macOS",
@@ -476,7 +476,7 @@ const pt = {
     heading: "Qual devo usar?",
     steps: [
       "App web — sem instalação, em qualquer navegador moderno e em qualquer sistema operacional.",
-      "Linha de comando — transferências programáveis, sincronização de pastas e backups de servidores para macOS, Linux e Windows.",
+      "Linha de comando — transferências de arquivos programáveis, sincronização de pastas, backups de servidores e texto efêmero para macOS, Linux e Windows.",
       "App para macOS — um verdadeiro app nativo, em breve.",
       "App para iOS — um app nativo para iPhone e iPad, em breve na App Store.",
     ],
@@ -490,7 +490,7 @@ const pt = {
       },
       {
         title: "Linha de comando",
-        desc: "Transferências programáveis, sincronização de pastas e backups de servidor para servidor para macOS, Linux e Windows.",
+        desc: "Transferências de arquivos programáveis, sincronização de pastas, backups de servidor para servidor e texto efêmero para macOS, Linux e Windows.",
       },
       {
         title: "App para macOS",

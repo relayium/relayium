@@ -329,10 +329,10 @@ const es: Messages = {
   nav: { lanTab: "LAN", crossTab: "Tiempo real", offlineTab: "Asíncrono", cliTab: "CLI", appsTab: "Apps" },
   crossTitle: "Directo en tiempo real",
   offlineTitle: "Transferencia asíncrona",
-  cli: { subtitle: "Transfiere archivos desde tu terminal — cifrados de extremo a extremo, autoalojables." },
+  cli: { subtitle: "Transfiere archivos y texto efímero desde tu terminal — cifrado de extremo a extremo, autoalojable." },
   cliCallout: {
     heading: "¿Prefieres la terminal?",
-    blurb: "Instala una CLI de transferencia autoalojable y cifrada de extremo a extremo con un solo comando.",
+    blurb: "Instala con un solo comando una CLI autoalojable y cifrada de extremo a extremo, para archivos y texto efímero.",
     cta: "Explora la CLI →",
   },
   appsPage: {
@@ -348,25 +348,25 @@ const es: Messages = {
     androidNote: "¿En Android? Usa la app web directamente — se ejecuta en tu navegador, sin nada que instalar.",
     cards: {
       web: { name: "App web", desc: "Nada que instalar. Ábrela en cualquier navegador moderno, en cualquier sistema operativo, y empieza a transferir.", cta: "Abrir la app web" },
-      cli: { name: "Línea de comandos", desc: "Transferencias programables, sincronización de carpetas y copias de servidor a servidor para macOS, Linux y Windows.", cta: "Documentación e instalación de la CLI" },
+      cli: { name: "Línea de comandos", desc: "Transferencias de archivos programables, sincronización de carpetas, copias de servidor a servidor y texto efímero para macOS, Linux y Windows.", cta: "Documentación e instalación de la CLI" },
       mac: { name: "App de macOS", desc: "Una auténtica app nativa en la barra de menús (com.relayium.mac). Firmada y notarizada para instalarla con un clic — en desarrollo." },
       ios: { name: "App de iOS", desc: "Una app nativa para iPhone y iPad (com.relayium.app) con envío desde la hoja de compartir. Pronto en la App Store." },
     },
   },
   cliPage: {
-    metaTitle: "CLI de Relayium — transferencia de archivos cifrada desde la terminal",
+    metaTitle: "CLI de Relayium — transferencia cifrada de archivos y texto desde la terminal",
     metaDesc:
-      "Un único binario para macOS, Linux y Windows: copia por tu propio SSH, envía con un código de emparejamiento, transfiere de servidor a servidor, replica una carpeta, o sube ahora y descarga después. Gratis y de código abierto.",
+      "Un único binario para macOS, Linux y Windows: copia por tu propio SSH, envía con un código de emparejamiento, transfiere de servidor a servidor, replica una carpeta, envía texto efímero, o sube ahora y descarga después. Gratis y de código abierto.",
     badges: ["P2P gratis", "Cifrado de extremo a extremo", "Autoalojable"],
     freenote:
-      "En push/pull, send/receive y daemon directo, los archivos van directamente entre máquinas y nunca pasan por los servidores de Relayium — solo lo hace un pequeño handshake con el punto de encuentro, y únicamente para send/receive. La excepción es up/down en la nube, que almacena tu archivo cifrado de extremo a extremo para que otra máquina pueda recuperarlo después.",
+      "En push/pull, send/receive, text y daemon directo, tus datos van directamente entre máquinas y nunca pasan por los servidores de Relayium — solo lo hace un pequeño handshake con el punto de encuentro, y únicamente para send/receive y text. La excepción es up/down en la nube, que almacena tu archivo cifrado de extremo a extremo para que otra máquina pueda recuperarlo después.",
     installH2: "Instalar",
     installIntro: "Un comando descarga un binario precompilado para tu sistema operativo y lo coloca en tu PATH:",
     installReleases: "Descarga un binario precompilado desde la página de versiones →",
     installBuild: "O compila desde el código fuente:",
     installHelp: "Luego ejecuta relayium --help para ver todos los comandos.",
     whichH2: "¿Qué modo?",
-    whichIntro: "Relayium mueve archivos de varias maneras. Elige según dónde esté el otro extremo — y si está en línea ahora mismo:",
+    whichIntro: "Relayium mueve archivos — y texto efímero — de varias maneras. Elige según dónde esté el otro extremo, y si está en línea ahora mismo:",
     pickWhen: [
       "A un servidor al que puedes acceder por SSH",
       "A otra persona, entre redes",

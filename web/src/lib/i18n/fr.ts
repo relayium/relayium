@@ -329,10 +329,10 @@ const fr: Messages = {
   nav: { lanTab: "LAN", crossTab: "Temps réel", offlineTab: "Asynchrone", cliTab: "CLI", appsTab: "Applis" },
   crossTitle: "Direct en temps réel",
   offlineTitle: "Transfert asynchrone",
-  cli: { subtitle: "Transférez des fichiers depuis votre terminal — chiffré de bout en bout, auto-hébergeable." },
+  cli: { subtitle: "Transférez des fichiers et du texte éphémère depuis votre terminal — chiffré de bout en bout, auto-hébergeable." },
   cliCallout: {
     heading: "Vous préférez le terminal ?",
-    blurb: "Installez une CLI de transfert chiffrée de bout en bout et auto-hébergeable en une seule commande.",
+    blurb: "Installez en une seule commande une CLI chiffrée de bout en bout et auto-hébergeable, pour les fichiers comme pour le texte éphémère.",
     cta: "Découvrir la CLI →",
   },
   appsPage: {
@@ -348,25 +348,25 @@ const fr: Messages = {
     androidNote: "Sous Android ? Utilisez l'appli web — elle tourne directement dans votre navigateur, rien à installer.",
     cards: {
       web: { name: "Appli web", desc: "Rien à installer. Ouvrez-la dans n'importe quel navigateur moderne, sur n'importe quel OS, et commencez à transférer.", cta: "Ouvrir l'appli web" },
-      cli: { name: "Ligne de commande", desc: "Transferts scriptables, synchronisation de dossiers et sauvegardes de serveur à serveur pour macOS, Linux et Windows.", cta: "Doc & installation de la CLI" },
+      cli: { name: "Ligne de commande", desc: "Transferts de fichiers scriptables, synchronisation de dossiers, sauvegardes de serveur à serveur et texte éphémère pour macOS, Linux et Windows.", cta: "Doc & installation de la CLI" },
       mac: { name: "Appli macOS", desc: "Une vraie appli native dans la barre de menus (com.relayium.mac). Signée et notarisée pour une installation en un clic — en cours de développement." },
       ios: { name: "Appli iOS", desc: "Une appli native iPhone et iPad (com.relayium.app) avec envoi via la feuille de partage. Bientôt sur l'App Store." },
     },
   },
   cliPage: {
-    metaTitle: "CLI Relayium — transfert de fichiers chiffré depuis le terminal",
+    metaTitle: "CLI Relayium — transfert de fichiers et de texte chiffré depuis le terminal",
     metaDesc:
-      "Un seul binaire pour macOS, Linux et Windows : copiez via votre propre SSH, envoyez avec un code d'appairage, transférez de serveur à serveur, synchronisez un dossier, ou déposez maintenant pour récupérer plus tard. Libre et open source.",
+      "Un seul binaire pour macOS, Linux et Windows : copiez via votre propre SSH, envoyez avec un code d'appairage, transférez de serveur à serveur, synchronisez un dossier, envoyez du texte éphémère, ou déposez maintenant pour récupérer plus tard. Libre et open source.",
     badges: ["P2P gratuit", "Chiffré de bout en bout", "Auto-hébergeable"],
     freenote:
-      "Avec push/pull, send/receive et daemon-direct, les fichiers vont directement entre les machines et ne passent jamais par les serveurs de Relayium — seule une petite poignée de main de rendez-vous y transite, et uniquement pour send/receive. L'exception est le cloud up/down, qui stocke votre fichier chiffré de bout en bout pour qu'une autre machine puisse le récupérer plus tard.",
+      "Avec push/pull, send/receive, text et daemon-direct, vos données vont directement entre les machines et ne passent jamais par les serveurs de Relayium — seule une petite poignée de main de rendez-vous y transite, et uniquement pour send/receive et text. L'exception est le cloud up/down, qui stocke votre fichier chiffré de bout en bout pour qu'une autre machine puisse le récupérer plus tard.",
     installH2: "Installation",
     installIntro: "Une seule commande télécharge un binaire précompilé pour votre OS et l'ajoute à votre PATH :",
     installReleases: "Télécharger un binaire précompilé depuis la page des releases →",
     installBuild: "Ou compiler depuis les sources :",
     installHelp: "Puis lancez relayium --help pour voir toutes les commandes.",
     whichH2: "Quel mode choisir ?",
-    whichIntro: "Relayium déplace les fichiers de plusieurs façons. Choisissez selon où se trouve l'autre bout — et s'il est en ligne en ce moment :",
+    whichIntro: "Relayium déplace les fichiers — et le texte éphémère — de plusieurs façons. Choisissez selon où se trouve l'autre bout — et s'il est en ligne en ce moment :",
     pickWhen: [
       "Vers un serveur accessible en SSH",
       "Vers une autre personne, entre réseaux différents",
