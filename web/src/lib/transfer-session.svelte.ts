@@ -62,6 +62,9 @@ export interface SessionDeps {
   t: () => Messages;
   /** 一条转瞬即逝的提示（"对方忙""文件太多"）。 */
   flash: (msg: string) => void;
+  /** 消息会话是否正在进行。可选，不传就是"没有"——所以现有调用方和测试一行都不用改。
+   *  见 busy()。 */
+  textActive?: () => boolean;
 }
 
 // 掉线之后每一侧还愿意等多久重连并续传，超时就判这次传输失败。
@@ -108,7 +111,12 @@ export function createTransferSession(deps: SessionDeps) {
   let pausedRecv: { from: string; resume: (offer: InboundSignal) => void } | null = null;
   let activeConn: Conn | null = null; // latest live connection — the ?debug=1 panel polls its stats
 
-  const busy = () => !!incoming || !!(recv && !recv.done) || !!(send && !send.done);
+  // 消息会话和文件传输在 phase 1 里**互斥**：两者各跑一次完整握手，各有自己的 6 位
+  // SAS，同时活着就是屏幕上同时挂两串不同的数字——而那会教会用户"这串数字是装饰"，
+  // 恰好毁掉 commit-reveal 全套机制唯一想保住的东西。phase 2 把两条流并到一条 link
+  // 上（一次握手、一串 SAS）之后才解除这条互斥。
+  const busy = () =>
+    !!incoming || !!(recv && !recv.done) || !!(send && !send.done) || deps.textActive?.() === true;
 
   // 方便管道内部照搬原来的写法。
   const signaling = () => deps.signaling();
