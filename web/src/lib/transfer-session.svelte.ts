@@ -11,7 +11,7 @@
 // 导出一个 let 只会把当时的快照值发出去，组件永远不会重渲染。
 import { generateKeyPair, deriveSession, sas, signResume, verifyResume, type SessionKeys } from "./crypto";
 import type { SignalingClient } from "./signaling";
-import { connect, connectResume, PeerBusyError, type InboundSignal, type Conn, type ConnPath, type RtcConfig, type SignalAuth } from "./webrtc";
+import { connect, connectResume, PeerBusyError, signalGeneration, type InboundSignal, type Conn, type ConnPath, type RtcConfig, type SignalAuth } from "./webrtc";
 import {
   Sender,
   Receiver,
@@ -130,7 +130,18 @@ export function createTransferSession(deps: SessionDeps) {
       // A re-offer from a peer whose transfer dropped mid-flight is a resume, not
       // a new receive — route it before the busy guard (busy is true here).
       if (pausedRecv && pausedRecv.from === from) { pausedRecv.resume(msg); return; }
-      if (msg.resume) return; // a stray resume offer with nothing paused to attach to
+      // 这条 offer 属于别的信令世代吗？resume 世代到这里说明没有 pausedRecv 可挂（游离
+      // 的 resume offer）；text 世代根本不该由这个监听器碰——它是消息会话的建连，落到
+      // beginReceive 手里会在接收端开出一个 0% 的文件接收，随后 busy() 变真把真正该处理
+      // 它的消息监听器挡在门外，发起方则一路等到 ICE 超时。
+      //
+      // 用 signalGeneration 而不是再写一次 `msg.resume || msg.text`：世代的判定只有一处
+      // 定义，下一个世代加进来的时候这里不需要被记得改。**必须**排在 pausedRecv 之后，
+      // 那条路要的正是一条 resume offer。
+      //
+      // 也刻意排在 busy() 之前：那条 busy 回包是不带世代标记的，发起方的 text 连接会按
+      // 世代把它丢掉，然后白等 30 秒——比不回更糟。
+      if (signalGeneration(msg) !== "file") return;
       // One transfer at a time. Tell the sender we're busy so it fails fast with a
       // clear "peer busy" message instead of waiting out its ICE timeout.
       if (busy()) { signaling().sendSignal(from, { busy: true }); return; }
