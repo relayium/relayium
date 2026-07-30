@@ -10,7 +10,11 @@ func fleetTrackAt(target, status, current, first string) RolloutTrack {
 		CurrentNodeID: current, FirstNodeID: first, StageStartedAt: 1000}
 }
 
-// The change: a node that could not fetch does not stop the fleet.
+// The change: a node that could not fetch does not stop the fleet, and the
+// queue moves ON. Asserting only "not halt" would pass against the old code,
+// which returned "wait" while the node sat inside its canary window -- the
+// distinction this task exists to create is wait-versus-advance, so the
+// assertion has to be the positive one.
 func TestDecideFleetAdvancesPastUnreachable(t *testing.T) {
 	tr := fleetTrackAt("v2.0.0", "rolling", "n1", "n1")
 	nodes := []NodeSnapshot{
@@ -18,8 +22,35 @@ func TestDecideFleetAdvancesPastUnreachable(t *testing.T) {
 		{ID: "n2", Version: "v1.0.0", LastSeenAt: 2000},
 	}
 	got := decideFleet(tr, nodes, 2000)
-	if got.Action == "halt" {
-		t.Fatalf("a node that could not fetch halted the fleet: %+v", got)
+	if got.Action != "update" {
+		t.Fatalf("want the queue to move on to the next node, got %+v", got)
+	}
+	if got.NodeID != "n2" {
+		t.Fatalf("want n2 commanded next, got %+v", got)
+	}
+}
+
+// The exclusion is by RESULT, not by "is the current node". With a single
+// skipped-id the queue re-commands a passed-over node as soon as some other
+// node takes the slot, which is an endless loop rather than a rollout: n1
+// passes over, n2 is picked, n2 passes over, n1 is no longer excluded, n1 is
+// picked again. Here n1 already passed over and is NOT current.
+func TestDecideFleetDoesNotRecommandAPassedOverNode(t *testing.T) {
+	for _, result := range []string{"unreachable", "skipped"} {
+		t.Run(result, func(t *testing.T) {
+			tr := fleetTrackAt("v2.0.0", "rolling", "", "")
+			nodes := []NodeSnapshot{
+				{ID: "n1", Version: "v1.0.0", LastSeenAt: 2000, UpdateStartedAt: 1000, UpdateResult: result},
+				{ID: "n2", Version: "v2.0.0", LastSeenAt: 2000, UpdateResult: "ok"},
+			}
+			got := decideFleet(tr, nodes, 2000)
+			if got.Action == "update" && got.NodeID == "n1" {
+				t.Fatalf("re-commanded a node that already passed over: %+v", got)
+			}
+			if got.Action != "complete" {
+				t.Fatalf("everyone left is on target or passed over; want complete, got %+v", got)
+			}
+		})
 	}
 }
 
@@ -61,10 +92,10 @@ func TestDecideFleetEveryNodeUnreachable(t *testing.T) {
 		{ID: "n2", Version: "v1.0.0", LastSeenAt: 2000, UpdateStartedAt: 1000, UpdateResult: "unreachable"},
 	}
 	got := decideFleet(tr, nodes, 2000)
-	if got.Action == "halt" {
-		t.Fatalf("a fleet-wide fetch failure should finish the queue, not halt: %+v", got)
+	if got.Action != "complete" {
+		t.Fatalf("a fleet-wide fetch failure must finish the queue, got %+v", got)
 	}
-	// Whatever it returns, no node is on target -- Task 4 renders that.
+	// And it finished having updated nobody, which is what Task 4 renders.
 	for _, n := range nodes {
 		if n.Version == tr.TargetVersion {
 			t.Fatal("test setup wrong: no node should be on target here")

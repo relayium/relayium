@@ -198,10 +198,6 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 	firstPick := tr.CurrentNodeID == "" &&
 		(tr.FirstNodeID == "" || !selfupdate.SameVersion(byID[tr.FirstNodeID].Version, tr.TargetVersion))
 
-	// skipped is the current node's ID when it reported "skipped": it stays
-	// behind the target version forever, so it must be kept out of the
-	// candidate set below or the queue would just re-pick it in a loop.
-	var skipped string
 	// reassertFirst re-points the canary at whoever is picked next, because the
 	// node currently recorded as canary is ending its turn WITHOUT ever having
 	// run the build (it reported "skipped"). FirstNodeID is written when a node
@@ -249,8 +245,7 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 		// guessing "not the canary" would silently cut a live rollout's 6h
 		// observation to 30 minutes. Every defence here must fail LONG.
 		canary := cur.ID == tr.FirstNodeID || tr.FirstNodeID == ""
-		if cur.UpdateResult == "skipped" || cur.UpdateResult == "unreachable" {
-			skipped = cur.ID
+		if passedOverResult(cur.UpdateResult) {
 			reassertFirst = canary
 		} else {
 			if cur.UpdateStartedAt != 0 && now-cur.LastSeenAt > updateSilenceLimit {
@@ -303,11 +298,23 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 	}
 
 	// One pass: the nodes eligible to be updated next are exactly the online
-	// ones not yet on target, so an empty candidate set IS "everyone online is
-	// on target (bar any node left behind)" -- the completion condition.
+	// ones not yet on target and not already passed over, so an empty
+	// candidate set IS "everyone online is on target (bar any node left
+	// behind)" -- the completion condition.
+	//
+	// Excluding by RESULT rather than by "is this the current node" is the
+	// difference between a rollout and an infinite loop: a single skipped-id
+	// (the previous approach) only ever named the most recently current node,
+	// so a node that passed over on an earlier turn stopped being excluded
+	// the instant some OTHER node took the slot -- n1 passes over, n2 is
+	// picked, n2 passes over, n1 is no longer excluded, n1 is picked again,
+	// forever. Checking the node's own last-reported result instead excludes
+	// every passed-over node at once, for good. This is safe against a stale
+	// result surviving a re-command: CommandNodeUpdate clears update_result
+	// when it commands a node, and the retry path clears it explicitly too.
 	var candidates []NodeSnapshot
 	for _, n := range nodes {
-		if online(n) && !onTarget(n) && n.ID != skipped {
+		if online(n) && !onTarget(n) && !passedOverResult(n.UpdateResult) {
 			candidates = append(candidates, n)
 		}
 	}
@@ -335,6 +342,15 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 		})
 	}
 	return RolloutDecision{Action: "update", NodeID: candidates[0].ID, IsFirst: firstPick || reassertFirst}
+}
+
+// passedOverResult reports whether result marks a node whose turn is over
+// without ever reaching the target version: "skipped" (declined the update)
+// or "unreachable" (could not fetch it). Such a node must be excluded from
+// the candidate set for the rest of the rollout, not merely while it happens
+// to be the current node -- see the candidate-filter comment in decideFleet.
+func passedOverResult(result string) bool {
+	return result == "skipped" || result == "unreachable"
 }
 
 // canaryRank orders NodeSnapshot.ActiveTransfers for the canary sort: a real
