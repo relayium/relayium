@@ -65,6 +65,10 @@ func TestByoMayTargetAVersionTheFleetCompleted(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// The node is part of the precondition, not decoration: the gate asks the
+	// machines, not just the track row, because a track can complete having
+	// installed nothing. See TestByoGateRefusesAVersionNoFleetNodeRan.
+	seedRolloutNode(t, store, "f1", "fleet", "", "v0.9.0", "v0.8.0", "ok")
 	if err := svc.SetTargetVersion(ctx, "byo", "v0.9.0"); err != nil {
 		t.Errorf("SetTargetVersion(byo, v0.9.0) after the fleet completed it: %v", err)
 	}
@@ -223,6 +227,9 @@ func TestHaltedByoTrackMayJumpToANewerCompletedVersion(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// A fleet machine actually on v0.9.0 — the gate's second condition. Without
+	// it this fixture describes a fleet that completed without installing.
+	seedRolloutNode(t, store, "f1", "fleet", "", "v0.9.0", "v0.8.0", "ok")
 
 	if err := svc.SetTargetVersion(ctx, "byo", "v0.9.0"); err != nil {
 		t.Fatalf("halted BYO track jumping to v0.9.0: %v", err)

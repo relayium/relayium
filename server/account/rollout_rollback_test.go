@@ -20,12 +20,16 @@ func TestByoRollbackToPreviousVersionWhileFleetIsMidRollout(t *testing.T) {
 	svc, store := newRolloutService(t)
 	ctx := context.Background()
 
-	// Fleet completed v1.0.0; byo follows it (no previous recorded yet).
+	// Fleet completed v1.0.0; byo follows it (no previous recorded yet). The
+	// fleet node moves with each completion because the gate checks that a
+	// machine we own actually RAN the version, not just that the track row says
+	// complete — a track can complete having installed nothing.
 	if err := store.PutRolloutTrack(ctx, RolloutTrack{
 		Track: "fleet", TargetVersion: "v1.0.0", Status: "complete",
 	}); err != nil {
 		t.Fatal(err)
 	}
+	seedRolloutNode(t, store, "f1", "fleet", "", "v1.0.0", "v0.9.0", "ok")
 	if err := svc.SetTargetVersion(ctx, "byo", "v1.0.0"); err != nil {
 		t.Fatal(err)
 	}
@@ -35,6 +39,7 @@ func TestByoRollbackToPreviousVersionWhileFleetIsMidRollout(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	seedRolloutNode(t, store, "f1", "fleet", "", "v1.1.0", "v1.0.0", "ok")
 	if err := svc.SetTargetVersion(ctx, "byo", "v1.1.0"); err != nil {
 		t.Fatal(err)
 	}
@@ -93,6 +98,10 @@ func TestByoRollbackRefusedWithoutARecordedPreviousVersion(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// Satisfies the gate's second condition (a fleet machine ran v1.0.0) so this
+	// setup step is not itself refused; the subject under test is the missing
+	// rollback history.
+	seedRolloutNode(t, store, "f1", "fleet", "", "v1.0.0", "v0.9.0", "ok")
 	if err := svc.SetTargetVersion(ctx, "byo", "v1.0.0"); err != nil {
 		t.Fatal(err)
 	}

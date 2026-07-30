@@ -213,6 +213,7 @@ func TestResultForExitCode(t *testing.T) {
 		exitUsage:         "",
 		exitAlreadyFailed: "skipped",
 		exitPrecondition:  "skipped",
+		exitFetchFailed:   "unreachable",
 	}
 	for code, want := range cases {
 		if got := resultForExitCode(code); got != want {

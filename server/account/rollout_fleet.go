@@ -84,10 +84,10 @@ type NodeSnapshot struct {
 	// was running when central last commanded it to update, written together
 	// with UpdateStartedAt. It is what lets a state machine tell a result that
 	// belongs to the current rollout from one left over from the previous
-	// one -- the update_* columns survive re-register and heartbeat and nothing
-	// clears them (see byoResultIsFailure).
+	// one -- the update_* columns survive re-register and heartbeat, and only
+	// CommandNodeUpdate resets THIS one (ClearPassedOverResults: update_result).
 	UpdateFromVersion string
-	UpdateResult      string // "" | "ok" | "failed" | "rolled_back" | "skipped"
+	UpdateResult      string // "" | "ok" | "failed" | "rolled_back" | "skipped" | "unreachable"
 }
 
 // RolloutDecision is what decideFleet says to do next.
@@ -133,12 +133,12 @@ type RolloutDecision struct {
 //     wait until updateSilenceLimit, then halt. Never fall through to
 //     picking another node -- see below.
 //     b. its last reported UpdateResult is "failed" or "rolled_back" -> halt
-//     c. its last reported UpdateResult is "skipped" -> its turn is over and
-//     it will never reach the target: fall through to step 3/4 so the
-//     queue advances, leaving the node behind for a human. If the SKIPPED
-//     node was the recorded canary, IsFirst is re-asserted on whoever is
-//     picked next, because a node that never installed the build cannot
-//     have observed it (see reassertFirst).
+//     c. its last reported UpdateResult is "skipped" or "unreachable" -> its
+//     turn is over and it will never reach the target: fall through to
+//     step 3/4 so the queue advances, leaving the node behind for a human.
+//     If that node was the recorded canary, IsFirst is re-asserted on
+//     whoever is picked next, because a node that never installed the
+//     build cannot have observed it (see reassertFirst).
 //     d. it has gone silent (no heartbeat) for longer than updateSilenceLimit
 //     since it was commanded to update -> halt (possible brick). If it
 //     never even recorded an update start, tr.StageStartedAt is the
@@ -198,16 +198,12 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 	firstPick := tr.CurrentNodeID == "" &&
 		(tr.FirstNodeID == "" || !selfupdate.SameVersion(byID[tr.FirstNodeID].Version, tr.TargetVersion))
 
-	// skipped is the current node's ID when it reported "skipped": it stays
-	// behind the target version forever, so it must be kept out of the
-	// candidate set below or the queue would just re-pick it in a loop.
-	var skipped string
 	// reassertFirst re-points the canary at whoever is picked next, because the
 	// node currently recorded as canary is ending its turn WITHOUT ever having
-	// run the build (it reported "skipped"). FirstNodeID is written when a node
-	// is PICKED, not when it INSTALLS, so leaving it in place would burn the 6h
-	// slot on a node that observed nothing and give the first node to actually
-	// run the new build only 30 minutes.
+	// run the build (it reported "skipped" or "unreachable"). FirstNodeID is
+	// written when a node is PICKED, not when it INSTALLS, so leaving it in
+	// place would burn the 6h slot on a node that observed nothing and give
+	// the first node to actually run the new build only 30 minutes.
 	var reassertFirst bool
 
 	if tr.CurrentNodeID != "" {
@@ -226,17 +222,21 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 				Reason: fmt.Sprintf("node %s vanished since update started", tr.CurrentNodeID)}
 		}
 		if cur.UpdateResult == "failed" || cur.UpdateResult == "rolled_back" {
-			verb := "failed to update"
+			verb := "failed to verify or install the update"
 			if cur.UpdateResult == "rolled_back" {
 				verb = "rolled back"
 			}
 			return RolloutDecision{Action: "halt", Reason: fmt.Sprintf("node %s %s", cur.ID, verb)}
 		}
 		// "skipped" means the node declined this update (already on a newer
-		// build, pinned, whatever) and will NEVER reach the target version. It
-		// is not a failure, so we must not halt -- but waiting for a version
-		// it will never report would wedge the whole track forever. Its stage
-		// is over: fall through so the queue advances without it.
+		// build, pinned, whatever) and will NEVER reach the target version.
+		// "unreachable" means the node could not even fetch the build -- bytes
+		// never arrived, so there is nothing to verify and nothing that could
+		// have installed wrong. Neither is a failure of the RELEASE, so neither
+		// halts -- but waiting for a version that will never be reported would
+		// wedge the whole track forever on one machine's network. Both share
+		// the same "this node's turn is over" handling: fall through so the
+		// queue advances without it.
 		//
 		// canary is whether the node in flight holds this rollout's 6h slot.
 		// FirstNodeID == "" while a node IS in flight is a track written before
@@ -245,8 +245,7 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 		// guessing "not the canary" would silently cut a live rollout's 6h
 		// observation to 30 minutes. Every defence here must fail LONG.
 		canary := cur.ID == tr.FirstNodeID || tr.FirstNodeID == ""
-		if cur.UpdateResult == "skipped" {
-			skipped = cur.ID
+		if passedOverResult(cur.UpdateResult) {
 			reassertFirst = canary
 		} else {
 			if cur.UpdateStartedAt != 0 && now-cur.LastSeenAt > updateSilenceLimit {
@@ -299,11 +298,26 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 	}
 
 	// One pass: the nodes eligible to be updated next are exactly the online
-	// ones not yet on target, so an empty candidate set IS "everyone online is
-	// on target (bar any node left behind)" -- the completion condition.
+	// ones not yet on target and not already passed over, so an empty
+	// candidate set IS "everyone online is on target (bar any node left
+	// behind)" -- the completion condition.
+	//
+	// Excluding by RESULT rather than by "is this the current node" is the
+	// difference between a rollout and an infinite loop: a single skipped-id
+	// (an earlier approach) only ever named the most recently current node,
+	// so a node that passed over on an earlier turn stopped being excluded
+	// the instant some OTHER node took the slot -- n1 passes over, n2 is
+	// picked, n2 passes over, n1 is no longer excluded, n1 is picked again,
+	// forever. Checking the node's own last-reported result instead excludes
+	// every passed-over node from this rollout at once, so the queue drains
+	// monotonically and reaches "complete" even when every node fails to
+	// fetch (TestDecideFleetConvergesWhenEveryNodeFailsToFetch drives exactly
+	// that sequence). What keeps "at once" from meaning "forever" is not a
+	// rule here but a WRITE elsewhere: setTargetVersion clears the tainted
+	// results when a track is repointed -- see passedOverResult.
 	var candidates []NodeSnapshot
 	for _, n := range nodes {
-		if online(n) && !onTarget(n) && n.ID != skipped {
+		if online(n) && !onTarget(n) && !passedOverResult(n.UpdateResult) {
 			candidates = append(candidates, n)
 		}
 	}
@@ -315,8 +329,9 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 	// any order run to run -- hence the fleetHash tie-break, which makes the
 	// pick fully deterministic even when transfer counts are identical (an
 	// entirely idle fleet, or one whose nodes report no load signal at all).
-	// A re-asserted canary (the recorded one skipped) is picked the same way a
-	// first canary is: fewest active transfers, least to lose.
+	// A re-asserted canary (the recorded one passed over -- skipped or
+	// unreachable) is picked the same way a first canary is: fewest active
+	// transfers, least to lose.
 	if firstPick || reassertFirst {
 		sort.Slice(candidates, func(i, j int) bool {
 			ri, rj := canaryRank(candidates[i].ActiveTransfers), canaryRank(candidates[j].ActiveTransfers)
@@ -331,6 +346,54 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 		})
 	}
 	return RolloutDecision{Action: "update", NodeID: candidates[0].ID, IsFirst: firstPick || reassertFirst}
+}
+
+// passedOverResult reports whether an update result marks the node that
+// reported it as having had its turn without ever reaching the target
+// version: "skipped" (declined the update) or "unreachable" (could not fetch
+// it). Such a node is excluded from the candidate set for the rest of this
+// rollout, not merely while it happens to be the current node -- see the
+// candidate-filter comment in decideFleet.
+//
+// IT TAKES THE RESULT AND NOTHING ELSE, ON PURPOSE. The obvious objection is
+// that nodes.update_result outlives the rollout that produced it -- it
+// survives re-register and heartbeat, and CommandNodeUpdate is the only thing
+// that ever clears it -- so an excluded node can never clear its own flag and
+// would sit out every future rollout forever. That objection is real, and it
+// is answered at the WRITE, not here. Three writes hand candidacy back, and
+// between them a passed-over result can only ever belong to the rollout
+// currently running:
+//
+//   - setTargetVersion, in the same operation that repoints the target, across
+//     the track's owner class (see ClearPassedOverResults);
+//   - ResumeRolloutTrack, inside its transaction, because 继续 restarts the
+//     ladder from the beginning;
+//   - RetryRolloutNode, for ONE node on a finished track.
+//
+// Adding a fourth way to start or restart a rollout means adding the clear to
+// it as well; without it, that path strands every node this rollout passed
+// over.
+//
+// Do NOT reintroduce a rollout scope as an argument to this predicate. Two
+// attempts did, and both shipped an infinite re-command loop, because
+// decideFleet can see no clock that is stable across a rollout: a fleet
+// "stage" is one node's turn, so tr.StageStartedAt is restamped by every
+// ClaimRolloutNode; and the caller writes the newly picked node into
+// FirstNodeID whenever IsFirst comes back set (updateCheckFleet in nodes.go),
+// which reassertFirst does on exactly the event a pass-over is. Anchoring on
+// either one therefore moves under the very event the scope has to survive,
+// un-excludes the node that passed over one hop earlier, and picks it again.
+// (byoResultIsFailure CAN scope on tr.StageStartedAt only because a BYO stage
+// is a whole batch, held open across many nodes.) With the write-side clear in
+// place there is nothing left for a read-side scope to do.
+//
+// This set is duplicated in SQL as passedOverResultsSQL (rollout_store.go),
+// which every statement keying on a pass-over builds its IN clause from. A
+// value added here must be added there too, or the writes above will not clear
+// the value these reads exclude on -- a node stranded out of every future
+// rollout, which is the exact failure the write-side scoping exists to avoid.
+func passedOverResult(result string) bool {
+	return result == "skipped" || result == "unreachable"
 }
 
 // canaryRank orders NodeSnapshot.ActiveTransfers for the canary sort: a real

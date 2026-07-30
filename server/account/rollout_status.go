@@ -18,8 +18,8 @@ import (
 // rolloutNodeStatus is what the panel prints for the node holding the fleet
 // rollout slot.
 type rolloutNodeStatus struct {
-	Band   string // "" | "installing" | "not-started" | "observing" | "failed" | "skipped"
-	Label  string // 安装中 / 等待节点开始 / 观察中 / 更新失败 / 已回滚 / 已跳过（不是失败）
+	Band   string // "" | "installing" | "not-started" | "observing" | "failed" | "skipped" | "unreachable"
+	Label  string // 安装中 / 等待节点开始 / 观察中 / 更新失败 / 已回滚 / 已跳过（不是失败）/ 拿不到产物（不是失败）
 	Detail string // the applicable clock, in words
 	// Overdue is true once the limit that applies to this band has passed. It
 	// is NOT "the track has halted": both state machines are evaluated only
@@ -47,7 +47,7 @@ type fleetNodeInput struct {
 	IsCanary    bool
 	// UpdateResult is nodes.update_result for this node, i.e. what it last
 	// reported back. Two of its values are decisions in decideFleet, not
-	// clocks, and they sit ABOVE every clock it runs (rollout_fleet.go:228,
+	// clocks, and they sit ABOVE every clock it runs (rollout_fleet.go:224,
 	// :248), so the panel cannot classify without it.
 	UpdateResult    string
 	UpdateStartedAt int64
@@ -150,6 +150,25 @@ func fleetNodeStatus(in fleetNodeInput, now int64) rolloutNodeStatus {
 		return rolloutNodeStatus{
 			Band: "skipped", Label: "已跳过（不是失败）",
 			Detail: "该节点跳过了本次更新，不会装到目标版本；队列将在下一次轮询时越过它继续，这台机器留给人处理。",
+			Alarm:  true,
+		}
+	}
+	// decideFleet treats "unreachable" the same way for queue purposes -- the
+	// node never obtained the artifact, so its stage is over and the queue
+	// advances -- but it is a DIFFERENT fact about the world, and the operator's
+	// next move differs: the build is fine, this machine's path to it is not.
+	//
+	// Alarm is set, for the same reason the skipped band above sets it and NOT
+	// because a fetch failure is an emergency: nothing is being timed here, the
+	// queue is about to move on, and this machine is then left behind on the old
+	// version until a human retries it. A band with no Alarm and no Overdue is
+	// this panel's way of saying "a clock is running and it is fine", which is
+	// false here -- TestPanelStatusAgreesWithDecideFleet pins exactly that: the
+	// panel may not be calm about a node decideFleet is about to act on.
+	if in.UpdateResult == "unreachable" {
+		return rolloutNodeStatus{
+			Band: "unreachable", Label: "拿不到产物（不是失败）",
+			Detail: "该节点没能取到这个版本的文件，因此没有安装；队列将在下一次轮询时越过它继续。这说明的是这台机器到发布来源的路径，而不是这个版本本身。",
 			Alarm:  true,
 		}
 	}

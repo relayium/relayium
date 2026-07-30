@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -50,6 +51,12 @@ const defaultBinPath = "/usr/local/bin/relayium-node"
 //	                                      restart; old binary restored
 //	7 exitNotHealthy      -> rolled_back  new binary ran but never heartbeated in
 //	                                      the health window; old binary restored
+//	8 exitFetchFailed     -> unreachable  the artifact could not be OBTAINED
+//	                                      (DNS, TLS, a reset, a 404); says
+//	                                      nothing about the release itself, so
+//	                                      central advances the rollout queue
+//	                                      past this node instead of halting the
+//	                                      fleet for one machine's network
 //
 // Codes are API: renumbering one silently rewrites history in central's queue.
 const (
@@ -60,6 +67,11 @@ const (
 	exitUpdateFailed  = 5
 	exitRestartFailed = 6
 	exitNotHealthy    = 7
+	// exitFetchFailed: the artifact could not be OBTAINED (DNS, TLS, a reset,
+	// a 404). Distinct from exitUpdateFailed because it says nothing about the
+	// release -- central advances the rollout queue past this node instead of
+	// halting the fleet for one machine's network. See selfupdate.ErrFetch.
+	exitFetchFailed = 8
 )
 
 // nodeAssetPrefix / nodeBinaryName name the NODE's release artifact:
@@ -437,15 +449,19 @@ const pendingResultFile = "pending-update-result"
 
 // resultForExitCode maps a run's exit code onto the closed set of result
 // strings central accepts (updateResults in nodes.go: ok/failed/rolled_back/
-// skipped), matching the exit-code table above exactly. exitAlreadyFailed and
-// exitPrecondition map to "skipped": decideFleet has a dedicated branch whose
-// whole purpose is advancing the rollout queue past a node that will never
-// reach the target, WITHOUT halting — central needs that signal, or a node
-// refusing locally (a version already in failed-versions, a stray .prev) just
-// keeps heartbeating happily until the 15-minute silence check halts the
-// entire fleet rollout for a human, instead of skipping one node. Only
-// exitUsage (bad flags; nothing was even parsed enough to attempt anything)
-// has genuinely nothing to tell central and maps to "".
+// skipped/unreachable), matching the exit-code table above exactly.
+// exitAlreadyFailed and exitPrecondition map to "skipped": decideFleet has a
+// dedicated branch whose whole purpose is advancing the rollout queue past a
+// node that will never reach the target, WITHOUT halting — central needs that
+// signal, or a node refusing locally (a version already in failed-versions, a
+// stray .prev) just keeps heartbeating happily until the 15-minute silence
+// check halts the entire fleet rollout for a human, instead of skipping one
+// node. exitFetchFailed maps to "unreachable" for the same shape of reason:
+// the artifact was never obtained, which says nothing about the release, so
+// the queue advances past this node instead of halting the fleet for one
+// machine's network (see exitCodeForUpdateError). Only exitUsage (bad flags;
+// nothing was even parsed enough to attempt anything) has genuinely nothing
+// to tell central and maps to "".
 func resultForExitCode(code int) string {
 	switch code {
 	case exitOK:
@@ -456,9 +472,42 @@ func resultForExitCode(code int) string {
 		return "rolled_back"
 	case exitAlreadyFailed, exitPrecondition:
 		return "skipped"
+	case exitFetchFailed:
+		return "unreachable"
 	default:
 		return ""
 	}
+}
+
+// exitCodeForUpdateError classifies a selfupdate.Update failure. Only the
+// fetch case is special: everything else — including a verification failure,
+// AND any error carrying neither sentinel — keeps the existing
+// exitUpdateFailed, so the track still halts. This is deliberately written as
+// "if ErrFetch then advance, else halt" rather than "if ErrVerify then halt,
+// else advance": verifyReleaseSignature's corrupt-embedded-signing-key path
+// (parseECDSAPublicKey failing in selfupdate.go) carries NEITHER sentinel —
+// a bare %w — and a corrupt embedded key would fail identically on every
+// node in the fleet. The second phrasing would read that as "not ErrVerify"
+// and silently roll a broken release across the whole fleet; the first
+// phrasing halts it, correctly.
+//
+// A missing checksums.txt.sig, by contrast, IS wrapped with ErrFetch
+// (selfupdate.go's "release signature (checksums.txt.sig) not found" path),
+// and that is deliberate, not an oversight: a 404 there may equally mean
+// "this mirror doesn't carry the file" as "the release truly wasn't signed",
+// and either way the node correctly refuses to install rather than fall back
+// to running something unsigned. The consequence is that a release
+// accidentally published without its signature 404s on every node the same
+// way, classifies as fetch, and the rollout queue advances past the entire
+// fleet having installed nothing. That is caught elsewhere in this plan: a
+// later task renders a rollout that updated nobody as "完成，但 N 台未更新"
+// rather than as a clean success, so this fall-through does not silently
+// read as victory.
+func exitCodeForUpdateError(err error) int {
+	if errors.Is(err, selfupdate.ErrFetch) {
+		return exitFetchFailed
+	}
+	return exitUpdateFailed
 }
 
 // recordPendingResult persists code's result for the next poll to send. A
@@ -561,9 +610,12 @@ func runUpdateWith(uc updateConfig, svc serviceCtl, window, poll time.Duration, 
 	from, to, changed, err := selfupdate.Update(context.Background(), updateOptions(uc), stdout)
 	if err != nil {
 		// Verification or download failed — the live binary was never touched.
+		// exitCodeForUpdateError tells the two apart so central can advance the
+		// queue past a node that merely could not reach the artifact, while
+		// still halting on anything that says the release itself is bad.
 		fmt.Fprintf(stderr, "update to %s failed, binary untouched: %v\n", uc.TargetTag, err)
 		os.Remove(backupPath(uc.BinPath)) // nothing to roll back to; don't leave a stray .prev
-		return exitUpdateFailed
+		return exitCodeForUpdateError(err)
 	}
 	if !changed {
 		fmt.Fprintf(stdout, "already on %s, nothing to do\n", to)

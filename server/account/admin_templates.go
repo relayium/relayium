@@ -287,10 +287,19 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 {{range .Nodes}}
 <tr>
 <td>{{if .Label}}<b>{{.Label}}</b> {{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span>
-{{if .Status.Label}}<span class="ro-tag{{if .Status.Alarm}} never{{end}}">{{.Status.Label}}</span>{{end}}{{if .Status.Detail}}<div style="color:var(--muted);font-size:12px">{{.Status.Detail}}</div>{{end}}{{if .InBatch}}<span class="ro-tag">本批次</span>{{end}}</td>
+{{if .Status.Label}}<span class="ro-tag{{if .Status.Alarm}} never{{end}}">{{.Status.Label}}</span>{{end}}{{if .Status.Detail}}<div style="color:var(--muted);font-size:12px">{{.Status.Detail}}</div>{{end}}{{if .InBatch}}<span class="ro-tag">本批次</span>{{end}}{{if .PassedOverReason}}<div style="color:var(--muted);font-size:12px">{{.PassedOverReason}}</div>{{end}}</td>
 <td>{{if .Online}}在线{{else}}离线{{end}}</td>
 <td>{{if .Version}}{{.Version}}{{else}}—{{end}}{{if .OnTarget}} ✓{{end}}</td>
-<td>{{if eq .Result "failed"}}<b class="never">{{.ResultText}}</b>{{else if eq .Result "rolled_back"}}<b class="never">{{.ResultText}}</b>{{else}}{{.ResultText}}{{end}}</td>
+<td>{{if eq .Result "failed"}}<b class="never">{{.ResultText}}</b>{{else if eq .Result "rolled_back"}}<b class="never">{{.ResultText}}</b>{{else}}{{.ResultText}}{{end}}
+{{/* 单台重试：三个条件都要成立 —— 机队轨、这台被越过、整条轨道已完成。
+     只有机队轨有「被越过」这个概念（decideByo 的候选集不看 update_result），
+     自带节点轨上这个按钮什么也做不到。handler 会重新读全部条件，按钮不在场
+     不等于守卫在场。 */}}
+{{if and (eq $.Track "fleet") .PassedOver (eq $.Status "complete")}}<form method="post" action="/admin/rollout/{{$.Track}}/retry" class="lim"
+  onsubmit="return confirm('重新给 {{.ID}} 下发 {{$.TargetVersion}}？该轨道会回到发布中。')">
+<input type="hidden" name="node" value="{{.ID}}">
+<button type="submit" title="把这台重新放回发布队列；不改目标版本">重试</button>
+</form>{{end}}</td>
 <td>{{if .UpdateFromVersion}}{{.UpdateFromVersion}}{{else}}—{{end}}</td>
 <td>{{if .UpdateStartedAt}}{{ts .UpdateStartedAt}}{{else}}—{{end}}</td>
 </tr>

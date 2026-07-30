@@ -36,6 +36,12 @@ const (
 	AuditRolloutResume    = "rollout.resume"
 	AuditRolloutRollback  = "rollout.rollback"
 	AuditRolloutEmergency = "rollout.emergency"
+	// AuditRolloutRetry is the per-node 重试 on a finished rollout. Its own
+	// action for the same reason as the four above: it restarts a track that had
+	// already stopped, aimed at ONE machine, and "who re-opened a completed
+	// rollout, and for which node" is exactly the question an incident review
+	// asks. Collapsing it into rollout.resume would lose the node.
+	AuditRolloutRetry = "rollout.retry"
 	// AuditReleaseRollout is the release-notice "发布到机队" button. It funnels
 	// into the exact same SetTargetVersion write as AuditRolloutTarget (the
 	// hand-typed fleet-target form), and gets a SEPARATE action anyway — same
@@ -64,7 +70,7 @@ var auditActions = []string{
 	AuditNodeLabel, AuditNodeDraining, AuditNodeRestore, AuditNodeRemove, AuditNodeDeregister,
 	AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete,
 	AuditRolloutTarget, AuditRolloutPause, AuditRolloutResume,
-	AuditRolloutRollback, AuditRolloutEmergency,
+	AuditRolloutRollback, AuditRolloutEmergency, AuditRolloutRetry,
 	AuditReleaseRollout, AuditReleaseDismiss,
 }
 

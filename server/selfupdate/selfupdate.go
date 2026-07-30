@@ -37,6 +37,23 @@ const (
 	defaultDownloadBase = "https://github.com"
 )
 
+// ErrFetch and ErrVerify classify why an update did not happen, because the
+// fleet's reaction to the two is opposite.
+//
+// ErrFetch means the bytes could not be OBTAINED -- DNS, TLS, a reset, a 404.
+// It says nothing about the release: it is a property of this machine's path to
+// the host. A 404 is deliberately on this side; a mirror may simply not carry a
+// file, and the node refuses to install either way.
+//
+// ErrVerify means the bytes ARRIVED and did not check out -- a checksum
+// mismatch, or a signature that does not verify against the key compiled into
+// this binary. That is either a broken release or something serving bytes it
+// should not be, and it is the one category here that can be a security event.
+var (
+	ErrFetch  = errors.New("selfupdate: could not fetch release artifact")
+	ErrVerify = errors.New("selfupdate: release artifact failed verification")
+)
+
 // Options configures an update run. Repo/CurrentVersion/GOOS/GOARCH/TargetPath
 // describe what to fetch and what to replace; APIBase, DownloadBase and HTTP
 // are overridable so tests can point at an httptest server.
@@ -290,15 +307,15 @@ func Update(ctx context.Context, o Options, progress io.Writer) (from, to string
 	fmt.Fprintf(progress, "Downloading %s (%s)...\n", asset, tag)
 	archivePath := filepath.Join(tmp, asset)
 	if err := download(ctx, o, base+"/"+asset, archivePath); err != nil {
-		return o.CurrentVersion, tag, false, fmt.Errorf("download %s: %w", asset, err)
+		return o.CurrentVersion, tag, false, fmt.Errorf("download %s: %w: %w", asset, ErrFetch, err)
 	}
 	sumsPath := filepath.Join(tmp, "checksums.txt")
 	if err := download(ctx, o, base+"/checksums.txt", sumsPath); err != nil {
-		return o.CurrentVersion, tag, false, fmt.Errorf("download checksums: %w", err)
+		return o.CurrentVersion, tag, false, fmt.Errorf("download checksums: %w: %w", ErrFetch, err)
 	}
 
 	if err := verifyChecksum(archivePath, asset, sumsPath); err != nil {
-		return o.CurrentVersion, tag, false, err
+		return o.CurrentVersion, tag, false, fmt.Errorf("%w: %w", ErrVerify, err)
 	}
 	if err := verifyReleaseSignature(ctx, o, base, tmp, sumsPath, progress); err != nil {
 		return o.CurrentVersion, tag, false, err
@@ -407,7 +424,7 @@ func verifyReleaseSignature(ctx context.Context, o Options, base, tmp, sumsPath 
 			fmt.Fprintln(progress, "WARNING: release signature not found; verifying checksum only (RELAYIUM_UPDATE_ALLOW_UNSIGNED=1).")
 			return nil
 		}
-		return fmt.Errorf("release signature (checksums.txt.sig) not found — refusing to install a possibly-unsigned build; set RELAYIUM_UPDATE_ALLOW_UNSIGNED=1 to override: %w", err)
+		return fmt.Errorf("release signature (checksums.txt.sig) not found — refusing to install a possibly-unsigned build; set RELAYIUM_UPDATE_ALLOW_UNSIGNED=1 to override: %w: %w", ErrFetch, err)
 	}
 	sums, err := os.ReadFile(sumsPath)
 	if err != nil {
@@ -418,7 +435,7 @@ func verifyReleaseSignature(ctx context.Context, o Options, base, tmp, sumsPath 
 		return err
 	}
 	if err := verifyECDSASignature(pub, sums, sig); err != nil {
-		return fmt.Errorf("release signature verification failed — refusing to install: %w", err)
+		return fmt.Errorf("release signature verification failed — refusing to install: %w: %w", ErrVerify, err)
 	}
 	fmt.Fprintln(progress, "Verified release signature.")
 	return nil

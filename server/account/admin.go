@@ -570,6 +570,10 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.Handle("POST /admin/rollout/byo/rollback-previous", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutByoRollbackPrevious)))
 	mux.Handle("POST /admin/rollout/{id}/pause", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutPause)))
 	mux.Handle("POST /admin/rollout/{id}/resume", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutResume)))
+	// 单台重试：只对「已完成但这台没更新」的节点开放，不改目标版本。它走
+	// {id} 通配而不是写死 fleet —— 面板模板两条轨道共用，写死会让 byo 面板
+	// 渲染出一个必然 404 的按钮。两道守卫都在 handler 里复查。
+	mux.Handle("POST /admin/rollout/{id}/retry", s.CSRFGuard(http.HandlerFunc(s.handleAdminRolloutRetry)))
 	// 紧急发布跳过分批、对整条轨道一次性放行 —— 没有金丝雀能再兜住这次发布了，
 	// 所以它和删除节点一样走 RequireStepUp：确认页展示 diff、校验第二因子、
 	// 由 HandleAdminConfirm 落审计。

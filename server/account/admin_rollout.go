@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"sort"
@@ -66,6 +67,20 @@ type rolloutPanelView struct {
 	NextStepLabel string
 	OnTarget      int // nodes already running TargetVersion
 	Total         int
+	// PassedOverCount is how many nodes the rollout moved on without AND that
+	// are still not on the target — the machines a finished track left behind.
+	//
+	// Derived here on every render, never stored on the track row. A stored list
+	// would go stale the instant one of those nodes updated, and this way the
+	// count heals itself; it also keeps status at three values, which a dozen
+	// call sites read as a predicate.
+	//
+	// Both halves of the condition are load-bearing. Without "not on target" a
+	// node passed over earlier that caught up later would still be counted, and
+	// the operator would go looking for a machine that is fine. It is counted
+	// over the whole track, like OnTarget/Total and unlike Nodes, which is cut
+	// to rolloutPanelMaxRows.
+	PassedOverCount int
 	// Nodes is at most rolloutPanelMaxRows rows, most relevant first; Hidden
 	// counts the rest. OnTarget/Total are always over the WHOLE track, never
 	// over the rendered slice.
@@ -142,6 +157,20 @@ type rolloutNodeView struct {
 	// rollout slot. Zero for every other row. See rollout_status.go: it
 	// DESCRIBES decideFleet's state and never re-decides it.
 	Status rolloutNodeStatus
+	// PassedOver is true when the queue moved on without this node — it could
+	// not obtain the artifact, or it declined locally. Distinct from a failure:
+	// a passed-over node made no judgement about the build, so this must never
+	// be rendered in the failure styling.
+	//
+	// Unlike Status it is set on EVERY row, not just the node holding the slot,
+	// and on tracks that are no longer rolling. That is the point: the case this
+	// exists for is a finished track, where nothing holds the slot any more and
+	// fleetNodeStatus is silent by design.
+	PassedOver bool
+	// PassedOverReason is the Chinese label for WHY, because the operator's next
+	// move differs: 拿不到产物 means fix the source and retry, 本地前置条件
+	// usually means the node had its own reason and will decline again.
+	PassedOverReason string
 }
 
 // rolloutStatusText maps the stored status onto the panel's label. An empty
@@ -165,6 +194,11 @@ func rolloutStatusText(status string, configured bool) string {
 
 // rolloutResultText maps nodes.update_result onto its label. "" is the normal
 // state for a node that was never commanded, so it must not read as an error.
+//
+// "unreachable" needs its own label rather than falling through to "—": that is
+// what a node the rollout has not reached yet renders as, and reading the two as
+// the same thing is precisely how a fleet-wide fetch failure passes for a
+// rollout that simply has not got there.
 func rolloutResultText(result string) string {
 	switch result {
 	case "ok":
@@ -175,9 +209,26 @@ func rolloutResultText(result string) string {
 		return "已回滚"
 	case "skipped":
 		return "已跳过"
+	case "unreachable":
+		return "拿不到产物"
 	default:
 		return "—"
 	}
+}
+
+// passedOverReason explains a pass-over in terms of what the operator does next,
+// which is the only reason the panel distinguishes the two values at all: a node
+// that could not fetch is waiting on something we can fix, and a node that
+// declined locally will decline again until someone opens it up. Empty for every
+// result that is not a pass-over, so it doubles as the render condition.
+func passedOverReason(result string) string {
+	switch result {
+	case "unreachable":
+		return "拿不到产物：没能取到这个版本的文件，修好来源后可以重试"
+	case "skipped":
+		return "本地前置条件未满足：该节点自己拒绝了这次更新，重试前需要先处理这台机器"
+	}
+	return ""
 }
 
 // validRolloutTrack mirrors SetTargetVersion's own track check for the paths
@@ -319,15 +370,36 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 			// to decideFleet cannot assemble the input two different ways.
 			status = fleetNodeStatus(newFleetNodeInput(tr, snaps[i], onTarget), now.Unix())
 		}
+		// passedOverResult is decideFleet's own predicate (rollout_fleet.go), so
+		// the row is marked passed over exactly when the queue would skip it —
+		// the panel cannot claim a pass-over the state machine does not make, or
+		// miss one it does.
+		passedOver := passedOverResult(n.UpdateResult)
+		if passedOver && !onTarget {
+			p.PassedOverCount++
+		}
 		rows = append(rows, rolloutNodeView{
 			ID: n.ID, Label: n.Label, Version: n.Version,
 			Online: n.LastSeenAt >= cutoff, OnTarget: onTarget,
 			UpdateFromVersion: n.UpdateFromVersion, UpdateStartedAt: n.UpdateStartedAt,
 			Result: n.UpdateResult, ResultText: rolloutResultText(n.UpdateResult),
-			Current: current,
-			Status:  status,
-			InBatch: inBatch[n.ID],
+			Current:          current,
+			Status:           status,
+			InBatch:          inBatch[n.ID],
+			PassedOver:       passedOver,
+			PassedOverReason: passedOverReason(n.UpdateResult),
 		})
+	}
+	// The terminal state Task 2 made reachable and nothing else reports: the
+	// queue ran to the end having installed nothing on some machines. status
+	// deliberately gains no fourth value for it — 已完成 is true, it is just not
+	// the whole truth, so the count is rendered INTO the same line rather than
+	// stored beside it.
+	//
+	// Only on a finished track. A rolling one may still reach those nodes, and
+	// saying "left behind" while the queue is still moving would be false.
+	if p.Status == "complete" && p.PassedOverCount > 0 {
+		p.StatusText = fmt.Sprintf("完成，但 %d 台未更新", p.PassedOverCount)
 	}
 	p.Nodes, p.Hidden = rolloutNodeRows(rows)
 	return p
@@ -636,6 +708,32 @@ func (s *Service) handleAdminRolloutPause(w http.ResponseWriter, r *http.Request
 // precisely so it cannot be blocked by the other track: see that method's doc
 // comment for why resuming byo through the gate would make an unrelated fleet
 // release silently un-resumable.
+//
+// 继续 restarts the ladder FROM THE BEGINNING — that is what the control says and
+// what ResumeRolloutTrack's field resets implement — so it must also clear the
+// results that mark a node as already passed over. The case is concrete: the
+// fleet rolls to v2, n1 reports "unreachable" off a broken mirror, n2 reports
+// "failed", the track halts. The operator fixes the mirror and presses 继续.
+// Without the clear, n1 stays excluded for the whole resumed rollout and the
+// track completes with n1 still on v1 — and 继续 cannot fix it, because the only
+// other thing that clears those results is retyping the target. That is a
+// rollout silently finishing over a machine it never updated.
+//
+// The asymmetry with "failed"/"rolled_back" is the point, not an omission: the
+// clear erases only "skipped" and "unreachable". A failure is the judgement that
+// STOPPED the track, and resuming is a decision to carry on past it, never a
+// licence to forget it — decideByo's failure rate and emergencyRefusesNode both
+// still read those rows.
+//
+// The clear is NOT a separate call here. It happens inside ResumeRolloutTrack's
+// transaction, conditional on the status compare-and-swap having matched, and it
+// has to: a 继续 this handler goes on to REFUSE with 400 must leave the track
+// exactly as it found it. The reachable case is a track that has completed —
+// every node passed over is now an ordinary outcome — with a stale panel still
+// offering the control. Clearing there would erase the markers the panel's
+// finished-but-incomplete count and the per-node retry guard are both derived
+// from, destroying the report and the repair affordance for precisely the nodes
+// that need them, while telling the operator nothing happened.
 func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Request) {
 	if !s.isAdminReq(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -657,6 +755,118 @@ func (s *Service) handleAdminRolloutResume(w http.ResponseWriter, r *http.Reques
 	}
 	s.WriteAudit(r, AuditRolloutResume, "rollout:"+track,
 		[]ChangeField{{Field: "status", Old: "halted", New: "rolling"}}, StepUpNone)
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// handleAdminRolloutRetry re-offers a finished rollout's target to ONE machine
+// the queue moved on without. It is the affordance that makes 完成，但 N 台未更新
+// actionable without an SSH session: clearing that node's result makes it a
+// candidate again, and the track goes back to rolling on the same target.
+//
+// Two guards, and they are independent — neither is expressible as the other.
+//
+// The ROW guard: only "skipped" or "unreachable". A node that reported failed or
+// rolled_back JUDGED the build, and a one-click re-run of it is a shortest path
+// around a verification failure. That decision stays with the whole-track 继续,
+// which shows the halt reason and asks for confirmation.
+//
+// The TRACK guard: only a complete track. On a halted one, retrying an innocent
+// passed-over row would restart a rollout that stopped for a reason nobody has
+// addressed — reaching the same place sideways, and the row it was aimed at is
+// not even the row that stopped it.
+//
+// The button's absence is not the guard. Both conditions are re-read here, and
+// the track condition is additionally a compare-and-swap inside
+// RetryRolloutNode, because the panel the operator clicked may be seconds stale
+// and a halt must never be lost to a retry racing it.
+func (s *Service) handleAdminRolloutRetry(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	track := r.PathValue("id")
+	if !validRolloutTrack(track) {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "重试失败：未知轨道 "+track)
+		return
+	}
+	// FLEET ONLY, and this is a correctness guard rather than a scope decision.
+	// "Passed over" is a concept only decideFleet has: decideByo's candidate set
+	// is (online && !onTarget) with no reference to update_result at all, so it
+	// never moves on without a node — it keeps re-offering, one sweep per batch
+	// window. A byo track can therefore only reach 'complete' with an off-target
+	// node if that node is OFFLINE, and clearing its result would re-admit
+	// nothing: the track would go rolling, find nobody reachable, and complete
+	// again, while the operator was told the retry succeeded.
+	//
+	// The route stays on the {id} wildcard so a stale or bookmarked byo POST gets
+	// this explanation instead of a bare 404, and so the refusal is testable.
+	if track != "fleet" {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"重试失败：单台重试只适用于机队轨。自带节点轨是按批次放行的，"+
+				"没有「被越过」这个状态——落后的节点会在下一轮自动重新收到更新。")
+		return
+	}
+	nodeID := r.FormValue("node")
+	if nodeID == "" {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "重试失败：未指定节点")
+		return
+	}
+	n, found, err := s.Store().GetNode(r.Context(), nodeID)
+	if err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "重试失败："+err.Error())
+		return
+	}
+	if !found {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "重试失败：找不到节点 "+nodeID)
+		return
+	}
+	// The node's ownership class must match the track whose route this is. The
+	// node id arrives in a form field, and the two rollouts are independent: a
+	// fleet retry that could clear a user node's result would be one track
+	// editing the other's rollout state.
+	if n.OwnerType != rolloutOwnerClass(track) {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"重试失败：节点 "+nodeID+" 不属于该轨道")
+		return
+	}
+	if !passedOverResult(n.UpdateResult) {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"重试失败：只有被越过的节点（拿不到产物 / 已跳过）可以单台重试。"+
+				"该节点当前的结果是「"+rolloutResultText(n.UpdateResult)+"」——"+
+				"报告了失败或回滚的节点是对这个版本的判断，请用整条轨道的「继续」处理。")
+		return
+	}
+	tr, foundTrack, err := s.Store().GetRolloutTrack(r.Context(), track)
+	if err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "重试失败："+err.Error())
+		return
+	}
+	if !foundTrack || tr.Status != "complete" {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"重试失败：只有已完成的轨道可以单台重试，该轨道当前是「"+
+				rolloutStatusText(tr.Status, foundTrack)+"」。")
+		return
+	}
+	ok, err := s.Store().RetryRolloutNode(r.Context(), track, nodeID, s.Now().Unix())
+	if err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "重试失败："+err.Error())
+		return
+	}
+	if !ok {
+		// The compare-and-swap refused. Either half can be the reason — the track
+		// left 'complete', or this node stopped being passed over (it reported a
+		// result, or was removed) — between the reads above and the write. Both
+		// mean the same thing to the operator: what they were looking at is no
+		// longer true, and nothing was written.
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"重试失败：该轨道或该节点的状态刚刚发生了变化，本次操作没有改动任何东西，请刷新后重新确认")
+		return
+	}
+	s.WriteAudit(r, AuditRolloutRetry, "rollout:"+track,
+		[]ChangeField{
+			{Field: "node", Old: nodeID + " " + n.UpdateResult, New: nodeID + " 重试"},
+			{Field: "status", Old: "complete", New: "rolling"},
+		}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
 

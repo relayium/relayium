@@ -12,6 +12,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -255,11 +256,18 @@ func TestUpdateRejectsWrongSignature(t *testing.T) {
 	defer srv.Close()
 
 	target := writeTarget(t, "OLD")
-	if _, _, changed, err := Update(context.Background(), baseOpts(srv, target), io.Discard); err == nil || changed {
+	_, _, changed, err := Update(context.Background(), baseOpts(srv, target), io.Discard)
+	if err == nil || changed {
 		t.Fatal("must reject a signature that doesn't match the embedded key")
 	}
 	if got, _ := os.ReadFile(target); string(got) != "OLD" {
 		t.Fatalf("target must be untouched on a bad signature, got %q", got)
+	}
+	if !errors.Is(err, ErrVerify) {
+		t.Fatalf("a signature that does not verify must be ErrVerify, got %v", err)
+	}
+	if errors.Is(err, ErrFetch) {
+		t.Fatalf("a signature that downloaded and failed to verify is not a fetch failure: %v", err)
 	}
 }
 

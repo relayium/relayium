@@ -984,11 +984,27 @@ type Store interface {
 	AdvanceByoBatch(ctx context.Context, track, expectTargetVersion string, fromBatch, toBatch int, at int64) (bool, error)
 	// ResumeRolloutTrack restarts a HALTED track on the version it already
 	// targets, resetting the staging fields (batch, in-flight/canary node,
-	// emergency) that would otherwise make it re-halt immediately. It touches
-	// one track's row and reads nothing else — resuming one track must never
-	// be able to fail because of the other. ok=false means the track was not
-	// halted (already rolling, or complete).
+	// emergency) that would otherwise make it re-halt immediately, and clearing
+	// this track's passed-over node results in the same transaction so 继续
+	// really does restart the ladder from the beginning. It reads no other
+	// track — resuming one track must never be able to fail because of the
+	// other. ok=false means the track was not halted (already rolling, or
+	// complete) and NOTHING was written, node rows included.
 	ResumeRolloutTrack(ctx context.Context, track string, at int64) (bool, error)
+	// RetryRolloutNode gives one passed-over node its candidacy back on a
+	// COMPLETE track and sets that track rolling again, so the queue re-offers
+	// the same target version to it. It touches neither target_version nor
+	// first_node_id.
+	//
+	// Both conditions are compare-and-swaps in the SQL, in one transaction, and
+	// BOTH must match or nothing is written: the track must still be 'complete',
+	// and the node must still be passed over, belong to this track's owner class
+	// and not be removed. ok=false means one of them did not match — a halt that
+	// lands between the caller's read and this write is never clobbered, and a
+	// track is never left rolling with no node re-admitted (which would hand the
+	// build back to a node that reported a failure). A refused retry writes
+	// nothing at all.
+	RetryRolloutNode(ctx context.Context, track, nodeID string, at int64) (bool, error)
 	// SetRolloutEmergency arms emergency mode (release the whole track at
 	// once, skipping the staged ladder) on a track that is rolling to
 	// expectVersion — a compare-and-swap against exactly what the admin
@@ -1006,6 +1022,13 @@ type Store interface {
 	// SetNodeUpdateResult records the outcome a node reported for the update it
 	// was last commanded.
 	SetNodeUpdateResult(ctx context.Context, nodeID, result string) error
+	// ClearPassedOverResults erases the "skipped"/"unreachable" update results
+	// of one ownership class, so a node passed over by the rollout that is
+	// ending is a candidate again for the one being started. setTargetVersion
+	// calls it; ResumeRolloutTrack performs the same erase inside its own
+	// transaction. Together they are what scopes decideFleet's passed-over
+	// exclusion to the current rollout — see passedOverResult.
+	ClearPassedOverResults(ctx context.Context, ownerType string) error
 	// BumpNodeUpdateAttempts increments nodes.update_attempts. No longer called
 	// by the rollout path (see Node.UpdateAttempts) — kept on the interface and
 	// the schema rather than removed, in case a future caller needs it.
