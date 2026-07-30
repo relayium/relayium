@@ -350,6 +350,222 @@ async function earlyFailureScenario(browser) {
  */
 const GLOBAL_TIMEOUT_MS = 15 * 60_000;
 
+// ── 消息会话：两个真标签页之间发一条真消息 ──────────────────────────────────
+/**
+ * The message payload. Every character in it is here for a reason:
+ * leading spaces + a tab, a tab-indented block, a blank line, CJK, Arabic (RTL),
+ * an astral emoji, and trailing spaces. If any layer trims, normalises or
+ * collapses, this is where it shows.
+ *
+ * No `\r`: a textarea's value normalises CRLF on some paths, so including one
+ * would test the DOM's newline handling rather than ours.
+ */
+const MSG_BODY = "  \tif x:\n\n\t\tprint('\u4f60\u597d \u0645\u0631\u062d\u0628\u0627 \ud83c\udf0d')\n   \n  trailing   ";
+/** Content that would become markup if anything ever stopped escaping. */
+const MSG_INJECTION = '<script>alert(1)</script><img src=x onerror=alert(2)>';
+
+/** The only <button> among the peer actions — the file/folder controls are <label>s.
+ *  Structural rather than text- or emoji-matched, so nine translations and an icon
+ *  change cannot break it. */
+const MSG_OPEN_BTN = ".peer-actions button";
+
+const utf8Hex = (s) => [...Buffer.from(s, "utf8")].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+/**
+ * 覆盖消息会话里单元测试碰不到的那一段：真 caps 名册通告 → 真 text 世代 offer →
+ * 真 commit-reveal（自己的 SAS）→ 真 DataChannel → kind 9 帧 → 渲染。
+ *
+ * 断言四件事，缺一条都可能是假绿：
+ *  1. 两个标签页在消息面板里显示的 SAS **一致**（和文件那一幕同一个性质）；
+ *  2. 收到的正文和发出的**逐字节一致**（比 UTF-8 十六进制，不比字符串）；
+ *  3. 同意之前**一个正文节点都没有**；
+ *  4. 一段长得像脚本的内容渲染成文本，`.msg-body` 里**没有**任何元素。
+ */
+async function messageScenario(browser) {
+  const a = await newTab(browser, BASE + "/");
+  const b = await newTab(browser, BASE + "/");
+
+  const peersSeen = "document.querySelectorAll('.pname').length > 0";
+  await a.waitFor(peersSeen, "tab A to see tab B on the radar", 30_000);
+  await b.waitFor(peersSeen, "tab B to see tab A on the radar", 30_000);
+
+  // 等消息按钮出现 —— 这是"名册层的 caps 通告已经到了"的**正向**信号。后面那一幕
+  // 断言它不出现，靠的就是这里证明过它本来会出现。
+  await a.waitFor(`!!document.querySelector('${MSG_OPEN_BTN}')`, "the message control to appear once caps arrived", 30_000);
+  await b.waitFor(`!!document.querySelector('${MSG_OPEN_BTN}')`, "the message control on tab B too", 30_000);
+  ok("both tabs advertised text/1 and offered a message control");
+
+  await a.evaluate(`(() => { document.querySelector('${MSG_OPEN_BTN}').click(); return true; })()`);
+
+  // 收方先看到请求卡片，而且**此刻不能有任何正文**。
+  await b.waitFor("!!document.querySelector('.msgpanel')", "tab B to show the message request", 40_000);
+  const bodiesBeforeConsent = await b.evaluate("document.querySelectorAll('.msg-body').length");
+  if (bodiesBeforeConsent !== 0) {
+    throw new Error(`tab B rendered ${bodiesBeforeConsent} message bodies BEFORE consent`);
+  }
+  const hasComposerBeforeConsent = await b.evaluate("!!document.querySelector('.msgpanel textarea')");
+  if (hasComposerBeforeConsent) throw new Error("tab B showed a composer before accepting");
+  ok("the request card showed no content and no composer before consent");
+
+  const acceptMsg = ".msgpanel .act button.btn-primary";
+  await b.waitFor(`!!document.querySelector('${acceptMsg}')`, "the accept control on the request card");
+  await b.evaluate(`(() => { document.querySelector('${acceptMsg}').click(); return true; })()`);
+
+  // 两边都进 open：发起方靠 ACCEPT 字节翻状态，收方本地翻。用 composer 的出现当信号。
+  await a.waitFor("!!document.querySelector('.msgpanel textarea')", "tab A's composer (session open)", 40_000);
+  await b.waitFor("!!document.querySelector('.msgpanel textarea')", "tab B's composer (session open)");
+  ok("both tabs opened the message session");
+
+  // SAS：消息会话在 phase 1 里跑自己的握手，所以它有自己的一串码 —— 但两边必须一致。
+  const msgSas = `(() => { const c = document.querySelector('.msgpanel .sas code'); return c ? c.textContent.trim() : ''; })()`;
+  const sas = { a: "", b: "" };
+  for (let i = 0; i < 200 && !(sas.a && sas.b); i++) {
+    sas.a ||= (await a.evaluate(msgSas)) || "";
+    sas.b ||= (await b.evaluate(msgSas)) || "";
+    if (!(sas.a && sas.b)) await sleep(50);
+  }
+  if (!sas.a || !sas.b) throw new Error(`never observed the message SAS on both tabs (a=${sas.a || "-"}, b=${sas.b || "-"})`);
+  if (sas.a !== sas.b) throw new Error(`message SAS mismatch: ${sas.a} vs ${sas.b}`);
+  if (!/^\d{6}$/.test(sas.a)) throw new Error(`message SAS is not a 6-digit code: ${JSON.stringify(sas.a)}`);
+  ok(`both tabs showed the same message SAS (${sas.a})`);
+
+  // 发一条：真的往 textarea 里写、真的点发送。
+  const send = async (tab, body) => {
+    await tab.evaluate(`(() => {
+      const ta = document.querySelector('.msgpanel textarea');
+      if (!ta) throw new Error('no composer');
+      ta.value = ${JSON.stringify(body)};
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`);
+    // 字节计数器必须跟着动 —— 它显示的就是限制在比的那个数。
+    const counted = await tab.evaluate("(() => { const c = document.querySelector('.byte-count'); return c ? c.textContent : ''; })()");
+    if (!counted) throw new Error("the byte counter is missing from the composer");
+    await tab.evaluate(`(() => {
+      const btn = document.querySelector('.msgpanel button.send');
+      if (!btn) throw new Error('no send button');
+      if (btn.disabled) throw new Error('send is disabled for a body inside the limit');
+      btn.click();
+      return true;
+    })()`);
+  };
+
+  await send(a, MSG_BODY);
+  await b.waitFor("document.querySelectorAll('.msg-body').length >= 1", "tab B to render the message", 40_000);
+
+  // 逐字节比对：把页面里的 textContent 编成 UTF-8 十六进制再比，不比字符串 ——
+  // 一次规范化（比如把组合字符合成）在字符串比较下可能相等，在字节下不会。
+  const gotHex = await b.evaluate(`(() => {
+    const el = document.querySelector('.msg-body');
+    const bytes = new TextEncoder().encode(el.textContent);
+    return [...bytes].map(x => x.toString(16).padStart(2, '0')).join('');
+  })()`);
+  const wantHex = utf8Hex(MSG_BODY);
+  if (gotHex !== wantHex) {
+    throw new Error(`message body is not byte-identical\n      got  ${gotHex}\n      want ${wantHex}`);
+  }
+  ok(`the received body is byte-identical (${wantHex.length / 2} UTF-8 bytes, incl. tabs, a blank line, CJK, Arabic and an emoji)`);
+
+  // dir="auto" 是阿拉伯语正文在英文界面下读得对的原因。
+  const dirs = await b.evaluate("[...document.querySelectorAll('.msg-body')].map(e => e.getAttribute('dir'))");
+  if (!dirs.every((d) => d === "auto")) throw new Error(`message bodies must carry dir="auto", got ${JSON.stringify(dirs)}`);
+  ok('every rendered body carries dir="auto"');
+
+  // 长得像脚本的内容：必须是文本节点，`.msg-body` 里不能有任何元素。
+  await send(a, MSG_INJECTION);
+  await b.waitFor("document.querySelectorAll('.msg-body').length >= 2", "tab B to render the script-like message", 40_000);
+  const injected = await b.evaluate(`(() => {
+    const bodies = [...document.querySelectorAll('.msg-body')];
+    const el = bodies.find(e => e.textContent.includes('alert'));
+    return {
+      found: !!el,
+      text: el ? el.textContent : '',
+      childElements: el ? el.querySelectorAll('*').length : -1,
+      scriptsAnywhere: document.querySelectorAll('.msgpanel script, .msgpanel img').length,
+    };
+  })()`);
+  if (!injected.found) throw new Error("the script-like message never rendered");
+  if (injected.text !== MSG_INJECTION) {
+    throw new Error(`script-like content was altered\n      got  ${JSON.stringify(injected.text)}\n      want ${JSON.stringify(MSG_INJECTION)}`);
+  }
+  if (injected.childElements !== 0) {
+    throw new Error(`.msg-body contains ${injected.childElements} child element(s); it must be a text node only`);
+  }
+  if (injected.scriptsAnywhere !== 0) {
+    throw new Error(`the panel contains ${injected.scriptsAnywhere} script/img element(s) from message content`);
+  }
+  ok("script-like content rendered as literal text, with no element created");
+
+  const errs = [...a.errors, ...b.errors].filter((e) => !/401|Failed to load resource/.test(e));
+  if (errs.length) throw new Error(`console errors during the message session:\n    ${errs.join("\n    ")}`);
+  ok("no console errors during the message session");
+
+  await browser.send("Target.closeTarget", { targetId: a.targetId });
+  await browser.send("Target.closeTarget", { targetId: b.targetId });
+}
+
+/**
+ * 把一个标签页的 caps 名册通告掐掉，模拟一个**跑旧版本的对端**：它从不声明 text/1。
+ *
+ * 对面那一页因此不该出现消息按钮 —— 这正是"新端永远不去骚扰旧端"的那条保证
+ * （见 relayium-text-v1.md 的 capability negotiation）。掐的是 WebSocket.send 里
+ * 那一类帧，而不是改应用代码：旧端在网络上的表现就是这样。
+ */
+const SUPPRESS_CAPS = `
+  window.__capsSuppressed = 0;
+  (() => {
+    const realSend = WebSocket.prototype.send;
+    WebSocket.prototype.send = function (data) {
+      if (typeof data === "string") {
+        try {
+          const e = JSON.parse(data);
+          if (e && e.type === "signal" && e.data && Array.isArray(e.data.caps)) {
+            window.__capsSuppressed++;
+            return; // 旧端根本不会发这一帧
+          }
+        } catch { /* 不是 JSON，照发 */ }
+      }
+      return realSend.call(this, data);
+    };
+  })();
+`;
+
+async function capsSuppressedScenario(browser) {
+  // old: 从不通告 caps。fresh: 正常的一页，它是被观察的那一方。
+  const oldPeer = await newTab(browser, BASE + "/", SUPPRESS_CAPS);
+  const fresh = await newTab(browser, BASE + "/");
+
+  const peersSeen = "document.querySelectorAll('.pname').length > 0";
+  await fresh.waitFor(peersSeen, "the fresh tab to see the old peer", 30_000);
+  await oldPeer.waitFor(peersSeen, "the old peer to see the fresh tab", 30_000);
+
+  // 确认掐真的生效了 —— 否则这一幕会因为"根本没发过 caps"而假绿。
+  const suppressed = await oldPeer.evaluate("window.__capsSuppressed");
+  if (!(suppressed > 0)) throw new Error("the caps announcement was never suppressed; this scenario proves nothing");
+  ok(`the old peer suppressed ${suppressed} caps announcement(s)`);
+
+  // 绝对断言要给足时间：上一幕已经证明按钮**会**在 30s 内出现，所以在这里连续
+  // 采样 8 秒都没有，才算真的没有。
+  const deadline = Date.now() + 8_000;
+  while (Date.now() < deadline) {
+    if (await fresh.evaluate(`!!document.querySelector('${MSG_OPEN_BTN}')`)) {
+      throw new Error("the fresh tab offered a message control to a peer that never announced text/1");
+    }
+    await sleep(250);
+  }
+  ok("no message control was offered to a peer that never announced text/1");
+
+  // 而且旧端那一侧不该冒出任何"接收失败"之类的卡片，也不该有报错。
+  const oldErrs = oldPeer.errors.filter((e) => !/401|Failed to load resource/.test(e));
+  if (oldErrs.length) throw new Error(`the old peer logged errors:\n    ${oldErrs.join("\n    ")}`);
+  const spurious = await oldPeer.evaluate("document.querySelectorAll('.xfer.bad, .msgpanel').length");
+  if (spurious !== 0) throw new Error(`the old peer showed ${spurious} unexpected transfer/message card(s)`);
+  ok("the old peer saw no spurious card and logged no errors");
+
+  await browser.send("Target.closeTarget", { targetId: oldPeer.targetId });
+  await browser.send("Target.closeTarget", { targetId: fresh.targetId });
+}
+
 async function main() {
   // 前置检查：服务器在不在，dist 是不是新的（旧 dist 会测出一个假绿）。
   const health = await fetch(`${BASE}/healthz`).then((r) => r.text()).catch(() => "");
@@ -537,6 +753,10 @@ async function main() {
     await earlyFailureScenario(browser);
     await sleep(1000);
     await resumeScenario(browser);
+    await sleep(1000);
+    await messageScenario(browser);
+    await sleep(1000);
+    await capsSuppressedScenario(browser);
 
 
     console.log("\n\x1b[32mLAN transfer E2E passed\x1b[0m\n");

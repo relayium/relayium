@@ -322,3 +322,260 @@ with `-redis-addr <host:port>` and matching TURN flags.
    transferring). The recorded event carries no account attribution.
 3. **Idempotency:** restarting the Go server (re-subscribing) does not double-count
    an already-recorded session (alloc_id dedup).
+
+---
+
+## Ephemeral encrypted text transfer `[MANUAL]`
+
+Phase 1 of the messaging feature (spec:
+`docs/superpowers/specs/2026-07-30-ephemeral-text-transfer-design.md`; wire:
+`docs/protocol/relayium-text-v1.md`).
+
+Gates 1–3 and 5–9 are browser-side; gate 4 needs two builds; gate 10 needs two
+machines with the CLI. The browser scenarios that *can* be automated already are —
+`web/e2e/lan-transfer.mjs` covers matching SAS, byte-exact multibyte content,
+literal rendering of script-like content, and the suppressed-caps case. What
+remains here is what a headless harness cannot reach: two real devices, an older
+build, OS notifications, a screen reader, and two live CLI processes.
+
+Prerequisites: `cd web && npm run build`, then
+`cd server && RELAYIUM_ADDR=:8099 go run .`, and two devices on the same LAN
+reaching that host over a secure context (HTTPS, or `localhost`).
+
+The payload used throughout, chosen so any trimming or normalisation shows:
+
+```
+  <TAB>if x:
+<blank line>
+<TAB><TAB>print('你好 مرحبا 🌍')
+   <blank line, three leading spaces>
+  trailing<3 spaces>
+```
+
+### 1. Two devices, LAN — byte fidelity
+
+1. Open `/` on both devices; wait until each shows the other on the radar.
+2. On device A press **💬 Send a message** on B's card. On B, **Accept**.
+3. Paste the payload above into A's composer and press ⌘/Ctrl+Enter.
+
+**Expect:** B renders it with indentation, the blank lines and the emoji visually
+identical to A's composer — tabs shown as tabs, not collapsed to one space.
+Then press **Copy** on B's message and paste into an editor: the result must be
+byte-identical, including the two trailing spaces. A `diff` against a file
+containing the original payload must report no differences.
+
+### 2. Cross-network room — relay path, one SAS, ten minutes
+
+1. On A open `/cross-network`, sign in, mint a code. Join it from B via the link.
+2. Open a message session and exchange several messages over ten minutes.
+
+**Expect:** the path badge in the message panel reads **relay** (cross-network
+forces `iceTransportPolicy: "relay"`); the 6-digit code shown on A and B is
+**identical**; messages still send after ten minutes of light use, and the session
+has not silently ended. Note the idle timeout is 10 minutes of **no** traffic, so
+keep exchanging a message every few minutes — a session that dies while in use is
+a failure.
+
+### 3. Consent
+
+Everything here is observable in the UI. Note that the composer only exists once a
+session is **open** — there is deliberately no way to type before the peer accepts,
+so this gate checks the absence of a composer rather than trying to send early.
+
+1. From A, press the message control on B's card. **Do not accept on B yet.**
+2. Inspect **B**: the card names the peer ("… wants to send you a message"), shows a
+   6-digit code with the compare-on-both-devices prompt, and offers **Accept** and
+   **Decline**.
+
+   **Expect on B:** no message body anywhere in the panel, and **no composer** —
+   nothing to type into, so no content can exist before consent.
+3. Inspect **A**: the panel says it is waiting for the other device to accept.
+
+   **Expect on A:** also **no composer** — A cannot type or send until B accepts.
+4. Press **Decline** on B.
+
+   **Expect:** B's panel disappears. A reports that the other device declined —
+   specifically that, not a generic connection failure.
+5. From A, open a session again. This time press **Accept** on B.
+
+   **Expect:** a composer appears on **both** sides and the state reads as open.
+   Send a message from A to B and another from B to A; each arrives on the other
+   side. The 6-digit code is identical on both, and is a **new** code, because this
+   is a new session with a new handshake.
+
+### 4. Old peer — the compatibility case that matters most
+
+Serve the **previous release**'s `dist/` to one device (e.g. check out the commit
+before this branch, `npm run build`, and serve it on a second port), and this
+branch's build to the other.
+
+**Expect, in this order of importance:**
+1. The **new** device offers **no** message control for the old peer — it never
+   announced `text/1`.
+2. The **old** device shows **no** spurious card of any kind: no failed receive, no
+   0% transfer, no error banner. Check its DevTools console: no exceptions.
+3. A **file** transfer between the two still completes byte-exactly in both
+   directions, and a mid-transfer resume still works.
+
+Point 3 is the one that would matter most if it broke, because the file path is
+what people already depend on.
+
+### 5. Mutual exclusion
+
+1. Start a large file transfer from A to B and accept it on B.
+2. While it is running, on A press the message control for B (if enabled) and on B
+   try the same toward A.
+
+**Expect:** the message control is disabled while a transfer is in flight, and any
+inbound message offer is refused as **busy** rather than opening a session. At no
+point are **two different 6-digit codes** on screen at once — that is the specific
+confusion the exclusion exists to prevent.
+
+### 6. Ephemerality
+
+1. Exchange several messages, then reload the page.
+2. Open DevTools → Application → Local Storage and Session Storage.
+
+**Expect:** history is empty after the reload. Neither storage contains any
+message body — search both for a distinctive string from your payload and get zero
+hits. Note the transfer history panel *is* `localStorage`-backed; messages must not
+appear in it. Also confirm the composer is empty after reload (no form
+restoration).
+
+### 7. Notification
+
+1. Grant notification permission, open a session, background the tab.
+2. Have the peer send a message.
+
+**Expect:** an OS notification naming the **sender** and containing **no part of
+the message body**. A notification renders on lock screens, shared displays and
+screen recordings, so a body there would leak content outside the session.
+
+### 8. Screen reader and keyboard
+
+With VoiceOver (macOS: ⌘F5) on the message panel:
+
+**Expect:** each arriving message is announced **once** — not re-announced on every
+re-render, and the byte counter is not announced at all as it changes.
+By keyboard only: Tab reaches the composer, the send button, and every per-message
+copy control, each with an audible name. In the composer, **Enter inserts a
+newline and does not send**; ⌘/Ctrl+Enter sends. Focus rings are visible on every
+control.
+
+### 9. RTL
+
+Switch the UI language to **العربية**.
+
+**Expect:** the panel mirrors (controls and alignment move to the right), and a
+message body containing Latin text still reads **left-to-right** inside the
+mirrored layout — each body carries `dir="auto"` independently of the UI
+direction. Send an Arabic body and confirm it reads right-to-left. Neither
+direction may cause horizontal page scrolling.
+
+### 10. CLI — two live processes
+
+Two machines with this branch's binary:
+`cd server && go build -o relayium ./cmd/relayium`.
+
+#### Minting a code, and why you must stop the minter
+
+`/api/pair` requires an account, so on the minting machine run `relayium login`
+first. There is no standalone mint command — `relayium send` mints as a side
+effect, prints the code, and *then* joins the code's room to wait:
+
+```bash
+printf 'x' > /tmp/mint.txt
+relayium send /tmp/mint.txt
+# Code: K7M4XR   (valid 5 minutes)
+# On the other machine:  relayium receive K7M4XR
+# waiting for the receiver…
+```
+
+**Stop that process (Ctrl-C) as soon as the code is printed, before starting any
+`text` client.** A code room holds exactly **two** peers; a sender left waiting
+occupies one of them, and the second `relayium text` would be refused. The code
+itself lives on the server for its 5-minute TTL and stays valid after you stop the
+sender.
+
+For the same reason, make sure the previous pair of processes has **exited** before
+starting the next sub-test, and mint a fresh code if more than five minutes have
+passed.
+
+#### 10a. Interactive: SAS prompted by default
+
+```bash
+# machine A                        # machine B
+relayium text K7M4XR               relayium text K7M4XR
+```
+
+**Expect:** both print `SAS: NNNNNN  (compare on both ends)` and **prompt for
+confirmation** — unlike `send`, where `--verify` opts in. The two codes match.
+Answer `y` on both. A line typed on either side appears on the other. Ctrl-D on
+either side ends the session cleanly on both, with no hang and no stack trace.
+
+#### 10b. Piped without `--yes`: refused before the network
+
+```bash
+printf 'hello' | relayium text K7M4XR; echo "exit=$?"
+```
+
+**Expect:** non-zero exit; a message saying stdin is not a terminal so there is
+nobody to prompt, and naming `--yes` as the opt-out. No connection is attempted, so
+this fails immediately rather than after a pairing timeout.
+
+#### 10c. Piped with `--yes`: exact bytes, including multiline
+
+Both sides must be **non-interactive**, or the receiver frames each message as a
+line and the comparison fails. Redirect stdin from a **regular file** — not
+`/dev/null`, which is a character device and is therefore detected as a terminal:
+
+```bash
+# prepare on A
+printf '  \tif x:\n\n\t\tprint("你好 🌍")\n  trailing   ' > /tmp/msg.txt
+# prepare on B
+: > /tmp/empty.txt
+
+# machine B first (stdin: an empty regular file, so it runs in piped mode)
+relayium text K7M4XR --yes < /tmp/empty.txt > /tmp/got.txt
+
+# machine A
+relayium text K7M4XR --yes < /tmp/msg.txt
+
+# then on B
+diff /tmp/msg.txt /tmp/got.txt && echo "byte-identical"
+```
+
+**Expect:** `diff` reports no differences — the piped form adds nothing, not even a
+trailing newline. Both processes exit 0 without hanging.
+
+Two things that are correct but look odd: B's empty stdin means B sends one **empty
+message** to A, which A prints as nothing; and each side half-closes when its stdin
+ends, which is what lets both terminate.
+
+#### 10d. Mode mismatch: refused, and never a silent empty success
+
+```bash
+# machine A
+relayium text K7M4XR --yes < /tmp/empty.txt
+# machine B
+relayium receive K7M4XR
+```
+
+**Expect:** a **mode mismatch** error naming both commands — "the other side is
+running `relayium send`/`relayium receive`, not `relayium text`" — raised **before
+any TLS connection**. Both sides exit non-zero.
+
+The critical part: B must **not** report a completed transfer of zero files, and no
+file may be written in B's destination directory. A silent empty success is exactly
+the failure the handshake-level mode check exists to prevent, so check B's output
+and `ls` its working directory.
+
+#### 10e. Over the limit: refused, with the alternative named
+
+```bash
+head -c 70000 /dev/zero | tr '\0' a | relayium text K7M4XR --yes; echo "exit=$?"
+```
+
+**Expect:** non-zero exit; an error naming the byte count (70 000) and the
+65 536-byte limit, and pointing at `relayium send`. Nothing is sent — the peer sees
+no message at all.
