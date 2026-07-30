@@ -15,19 +15,19 @@ export const pricing = {
   // title + " · Relayium", and pricingPage.subtitle) — see the note in shells.mjs.
   title: "Simple, honest pricing · Relayium",
   description:
-    "Same-network transfers are always free. Cross-network relay and cloud storage run on a monthly allowance — every account gets one, and paid plans raise it. You can also stay 100% free by running your own node.",
+    "Same-network file and live-text transfers are always free. Cross-network browser relay and cloud storage run on a monthly allowance — every account gets one, and paid plans raise it. You can also stay 100% free by running your own node.",
   hero: {
     h1: "Simple, honest pricing",
     pitch:
-      "Same-network transfers are always free. Cross-network relay and cloud storage run on a monthly allowance — every account gets one, and paid plans raise it. You can also stay 100% free by running your own node.",
+      "Same-network file and live-text transfers are always free. Cross-network browser relay and cloud storage run on a monthly allowance — every account gets one, and paid plans raise it. You can also stay 100% free by running your own node.",
     cta: "See the plans",
   },
   how: {
     heading: "Always free",
     steps: [
       "Local network (LAN) transfers — instant, no account needed.",
-      "Direct peer-to-peer transfers with the CLI — over your own SSH, daemon-direct, or a pairing code — with nothing metered. Only minting a send pairing code needs an account; receiving never does.",
-      "End-to-end encrypted, no file-size limits, and your files go straight between devices — they never touch our servers.",
+      "Direct peer-to-peer CLI transfers — files over your own SSH, daemon-direct, or a pairing code, plus ephemeral text by pairing code — with nothing metered. Minting a send or text code needs an account; joining one never does.",
+      "End-to-end encrypted: files have no size limit, while live text is never stored. On direct paths, your files and messages go straight between devices — they never touch our servers.",
     ],
   },
   why: {
@@ -35,7 +35,7 @@ export const pricing = {
     items: [
       {
         title: "Relay bandwidth",
-        desc: "Cross-network transfers in the browser run through an encrypted relay, so they connect through strict firewalls and NATs. Every account gets a free monthly allowance; paid plans raise it. This uses real bandwidth.",
+        desc: "Cross-network file or text transfers in the browser can run through an encrypted relay, so they connect through strict firewalls and NATs. Every account gets a free monthly allowance; paid plans raise it. This uses real bandwidth.",
       },
       {
         title: "Temporary cloud storage",
@@ -65,11 +65,11 @@ export const pricing = {
     items: [
       {
         q: "Is it really free?",
-        a: "Yes. Same-network transfers and direct CLI transfers are end-to-end encrypted, unlimited, and completely free — you don't even need an account to receive one. Cross-network relay and cloud storage draw on a monthly allowance that every account gets, Free included; you pay only when you need more.",
+        a: "Yes. Same-network file or live-text transfers and direct CLI transfers are end-to-end encrypted and completely free — you don't even need an account to receive a file or join a text session. Files are unlimited in size; ephemeral text requires both devices online and is never stored. Cross-network browser relay and cloud storage draw on a monthly allowance that every account gets, Free included; you pay only when you need more.",
       },
       {
         q: "What's the difference between direct and relayed transfers?",
-        a: "A direct transfer sends your file straight from one device to the other — fastest, and free; that's how same-network browser transfers and the CLI work. Cross-network browser transfers go through an encrypted relay so they connect reliably through strict firewalls and NATs — the relay only ever carries ciphertext, and the bandwidth it uses is what your monthly allowance and paid plans cover.",
+        a: "A direct transfer sends files or live text straight from one device to the other — fastest, and free; that's how same-network browser transfers and the CLI work. Cross-network browser transfers can go through an encrypted relay so they connect reliably through strict firewalls and NATs — the relay only ever carries ciphertext, and the bandwidth it uses is what your monthly allowance and paid plans cover.",
       },
       {
         q: "Why is there a paid tier at all?",

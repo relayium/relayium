@@ -380,7 +380,7 @@ const TEXT_WORD: Record<Lang, RegExp> = {
   ar: /(?<!م)نص/,
 };
 
-// 同一个偏差在 /apps 上是双份的：网页版也一直能发临时文本（“发送消息”），但整页的
+// 同一个偏差在 /apps 上是双份的：网页版现在也能发临时文本（“发送消息”），但整页的
 // meta、副标题和网页版卡片同样只写文件。所以列表里既有 CLI 的键，也有 /apps 的页面级
 // 与网页版键——这两个平台是文本真正发布了的地方。
 describe("平台定位文案覆盖文件与临时文本", () => {
@@ -417,5 +417,36 @@ describe("平台定位文案覆盖文件与临时文本", () => {
       expect(mac.desc, `${code} 的 macOS 卡片宣称了未实现的文本能力`).not.toMatch(TEXT_WORD[code]);
       expect(ios.desc, `${code} 的 iOS 卡片宣称了未实现的文本能力`).not.toMatch(TEXT_WORD[code]);
     }
+  });
+});
+
+describe("定价页把临时文本纳入免费与计量边界", () => {
+  const pricingCopy: [string, (m: Messages) => string][] = [
+    ["subtitle", (m) => m.pricingPage.subtitle],
+    ["freeLead", (m) => m.pricingPage.freeLead],
+    ["free2", (m) => m.pricingPage.free2],
+    ["free3", (m) => m.pricingPage.free3],
+    ["freeWhy", (m) => m.pricingPage.freeWhy],
+    ["paid1", (m) => m.pricingPage.paid1],
+    ["a1", (m) => m.pricingPage.a1],
+    ["a2", (m) => m.pricingPage.a2],
+  ];
+
+  for (const [label, pick] of pricingCopy) {
+    it(`${label}：每种语言都明确覆盖文本`, () => {
+      for (const { code } of LANGS) {
+        expect(pick(messages[code]), `${code}.pricingPage.${label} 仍然只讲文件`).toMatch(TEXT_WORD[code]);
+      }
+    });
+  }
+
+  it("英文文案保持文本传输和计费的关键边界", () => {
+    const p = messages.en.pricingPage;
+    expect(p.free2).toMatch(/send or text code/);
+    expect(p.free2).toMatch(/joining one never/i);
+    expect(p.free3).toMatch(/never stored/i);
+    expect(p.a1).toMatch(/both devices online/i);
+    expect(p.paid1).toMatch(/browser/i);
+    expect(p.paid1).toMatch(/file or text/i);
   });
 });

@@ -2,7 +2,7 @@
 // positioning guard in src/lib/i18n.test.ts ("平台定位文案覆盖文件与临时文本").
 //
 // `relayium text` shipped in v0.12.0, so the CLI moves files AND ephemeral text;
-// the web app has always done both. The prerendered surfaces say so in the
+// the web app now does both. The prerendered surfaces say so in the
 // places a crawler (and a no-JS reader) sees first: the /cli shell's
 // <title>/description/pitch, and the /apps download hub — its own
 // description/pitch plus the web and CLI entries, in all nine locales. All of
