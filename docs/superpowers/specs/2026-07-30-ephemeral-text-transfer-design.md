@@ -333,6 +333,26 @@ the plaintext before sealing. The composer's counter shows the same number the
 limit uses — a character count would let a Chinese or emoji message be refused
 after the user was told it fit.
 
+### Flow control
+
+The file stream needs its elaborate credit scheme because it paces a sender
+against a receiver's disk (`transfer.ts:59-66`). Messages need none of it: they
+are at most 64 KiB, produced at human speed, and never written to disk, so there
+is no slow consumer to pace against and nothing to ACK. Adding a credit loop
+would also mean adding acknowledgements, which are one small step from delivery
+receipts — excluded by the invariants.
+
+What is still required is the SCTP-level guard the file path also respects. The
+sender checks `bufferedAmount` before handing over a frame and, above
+`TEXT_SEND_BUFFER_MAX` (1 MiB — sixteen maximum-size messages), refuses the send
+and reports it rather than queueing without bound. A peer that has stopped
+draining is a peer whose session is over, and the alternative is a growing buffer
+of plaintext the user believes was delivered.
+
+The receiver's protection is the rate bucket in the limits table, not a window.
+It bounds how fast a hostile peer can drive rendering and history growth, which
+is the actual threat on this stream.
+
 ### Ordering, duplication, reconnect
 
 The text channel is reliable and ordered, so within a session messages arrive
@@ -565,12 +585,24 @@ to. This asymmetry is the existing design, applied consistently.
 `parseArgs` (`flagperm.go:91-98`, and added to the parser enumeration in
 `flagperm_test.go:151`). No code mints one the way `send` does
 (`sendpair.go:90-128`); a code joins. Flags mirror `parseCrossFlags`
-(`--server`, `--advertise`, `--verify`).
+(`--server`, `--advertise`), plus `--yes` in place of `--verify` — see *SAS*
+below, where the polarity is deliberately inverted.
 
 Interactive on a TTY: lines from stdin are messages, received messages print to
 stdout, EOF ends the session. Non-interactive: stdin is read to EOF and sent as
 one message, which is the `send`-to-stdin shape the roadmap named and the form a
 script or a CI job wants.
+
+**The interactive reader is line-oriented, and that is a limitation of the
+reader, not of the wire.** A terminal has no way to distinguish "newline inside
+this message" from "send this message" without inventing a terminator or a
+modifier key, and inventing either would make the common case worse to serve the
+rare one. So a multiline block goes through the pipe form —
+`pbpaste | relayium text CODE`, a heredoc, `cat snippet.py | relayium text CODE`
+— which preserves it byte for byte, exactly as the web composer does. The frame
+format is identical either way; only the reader differs. This is written down
+because the alternative reading — that the CLI cannot carry multiline content —
+is wrong and would otherwise be inferred.
 
 **Capability negotiation belongs in the handshake.** `hsMsg`
 (`internal/rzvous/handshake.go:20-26`) gains an optional `mode` field on the
