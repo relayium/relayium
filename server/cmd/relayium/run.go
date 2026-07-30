@@ -21,6 +21,8 @@ usage:
   relayium send <src...> [code]              send to a peer over a pairing code (cross-network)
                                              (omit the code to mint one; requires login)
   relayium receive <code> [destdir]          receive such a transfer
+  relayium text <code> [--yes]               ephemeral encrypted messages with a peer
+                                             (both ends run this; pipe stdin for exact multiline)
   relayium serve [--dir D] [--port N] [--once]   listen for daemon-direct pushes
                                              (in a terminal, approve each new peer on first push)
   relayium id                                print this host's fingerprint
@@ -38,6 +40,7 @@ flags (after the subcommand):
   -i <file>       ssh identity file
   -p <port>       ssh port
   --no-resume     disable resuming partial files
+  --yes           skip the SAS confirmation prompt (text; for scripts)
   --config-dir D  identity/trust directory (daemon direct; default ~/.config/relayium)
 `
 
@@ -65,6 +68,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runSendCross(args[1:], stdout, stderr)
 	case "receive":
 		return runReceiveCross(args[1:], stdout, stderr)
+	case "text":
+		return runText(args[1:], stdout, stderr)
 	case "serve":
 		return runServe(args[1:], stdout, stderr)
 	case "id":

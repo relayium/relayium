@@ -66,6 +66,7 @@ curl -fsSL https://relayium.com/install.sh | sh
 Three transfer modes:
 
 - **`push` / `pull` over your own SSH** — `relayium push ./photos user@host:backups/` (bytes travel over SSH; no Relayium account).
+- **`text` — ephemeral encrypted messages** — both machines run `relayium text K7M4XR` with the same code. One line per message interactively; pipe stdin (`pbpaste | relayium text K7M4XR --yes`) to send multiline content or exact bytes. End-to-end encrypted over the same pinned-TLS direct connection as a file transfer, never stored on any server, and gone when the session ends. The SAS is confirmed by default; a piped run refuses unless you pass `--yes`. One message is at most 65,536 bytes of UTF-8 — anything larger is a file.
 - **`send` / `receive` by pairing code** — `relayium send ./file.zip` mints a code with your account (after `relayium login`) and prints what the other end runs: `relayium receive K7M4XR`. Codes are 6 characters and last 5 minutes; the receiver needs no account. Cross-network and direct peer-to-peer — a small rendezvous handshake introduces the two ends, the file goes straight between them, no relay. Sending to someone with a browser instead? Use `relayium up` for a download link.
 - **`serve` + `push relayium://` daemon direct** — `relayium serve --dir ~/inbox` then `relayium push ./file relayium://host` (server-to-server over pinned TLS; no relay, no SSH, no code — the listener approves each new pusher on its first push and remembers it).
 
@@ -194,7 +195,7 @@ TURN relay that only ever sees ciphertext; this requires the sender to sign in.
   Encrypted temporary staging when the peer is offline is still ahead; TURN relay bandwidth is metered — see
   [`docs/billing-transparency.md`](docs/billing-transparency.md) for exactly how.)*
 - **M3 — Protocol spec + multi-client:** write the wire protocol down as a spec and reuse it from a CLI and mobile;
-  extend `send` to stdin, Docker images, the clipboard — toward "TCP between developers." *(CLI shipped — see [Command-line client](#command-line-client-cli); stdin/Docker/clipboard still ahead.)*
+  extend `send` to stdin, Docker images, the clipboard — toward "TCP between developers." *(CLI shipped — see [Command-line client](#command-line-client-cli). `relayium text` now carries clipboard-shaped content over stdin, in both an interactive and a piped form; Docker images still ahead.)*
 
 **Self-hosting:** a root [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) build a
 single self-contained image (`docker compose up -d --build`). See [`docs/self-hosting.md`](docs/self-hosting.md).

@@ -39,13 +39,14 @@ export const FLAG_ROWS = [
   { flag: "-i <file>", who: "push / pull / sync" },
   { flag: "-p <n>", who: "push / pull / sync" },
   { flag: "--verify", who: "send / receive" },
+  { flag: "--yes", who: "text" },
   { flag: "--delete", who: "sync" },
   { flag: "--watch", who: "sync" },
   { flag: "--allow-delete", who: "serve" },
   { flag: "--burn", who: "up" },
   { flag: "--ttl <dur>", who: "up" },
   { flag: "--max-downloads <n>", who: "up" },
-  { flag: "--server <url>", who: "login / up / down / send / receive" },
+  { flag: "--server <url>", who: "login / up / down / send / receive / text" },
 ] as const;
 
 /** 本地信任材料的文件名。说明在 t.cliPage.fileDescs。 */

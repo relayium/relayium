@@ -409,6 +409,7 @@ const fr: Messages = {
       "Fichier d'identité SSH (clé)",
       "Port SSH",
       "Exiger la confirmation du code SAS avant le transfert",
+      "Ignore la confirmation du SAS (sessions `text` scriptées).",
       "Refléter les suppressions de la source vers le récepteur",
       "Continuer de s'exécuter et resynchroniser à chaque changement",
       "Autoriser le --delete d'un expéditeur sync à réellement supprimer des fichiers",
@@ -454,6 +455,12 @@ const fr: Messages = {
       "Le lien est le même que celui du site : un lien up s'ouvre dans un navigateur, et un lien de partage créé sur relayium.com peut être récupéré avec down.",
     cloudPrivacyNote:
       "Chiffré de bout en bout : la clé ne voyage que dans le fragment #k= du lien et n'atteint jamais le serveur, qui stocke le texte chiffré (noms de fichiers compris). Perdez le lien et le fichier est irrécupérable.",
+    textH2: "text — messages éphémères",
+    textTag: "sans compte",
+    textIntro: "Les deux machines lancent la même commande avec le même code. Les messages sont chiffrés de bout en bout, jamais stockés sur un serveur, et disparaissent à la fin de la session.",
+    textPipeNote: "Le mode interactif envoie une ligne par message. Pour du contenu multiligne ou des octets exacts, utilisez un tube — le format réseau est identique, seule la lecture de stdin diffère.",
+    textSasNote: "Le SAS est confirmé par défaut. Un appel via tube n’a personne à interroger : il refuse de démarrer sauf si vous passez --yes après avoir comparé le code autrement.",
+    textLimitNote: "Un message fait au plus 65 536 octets UTF-8. Au-delà, c’est un fichier — utilisez relayium send.",
   },
   crossnet: {
     realtimeTitle: "Transfert direct en temps réel",

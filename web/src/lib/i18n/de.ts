@@ -409,6 +409,7 @@ const de: Messages = {
       "SSH-Identitätsdatei (Key)",
       "SSH-Port",
       "Bestätigung des SAS-Codes vor der Übertragung verlangen",
+      "Überspringt die SAS-Bestätigung (für `text` in Skripten).",
       "Löschungen von der Quelle zum Empfänger spiegeln",
       "Weiterlaufen und bei jeder Änderung neu synchronisieren",
       "Erlaubt, dass --delete eines sync-Senders tatsächlich Dateien löscht",
@@ -454,6 +455,12 @@ const de: Messages = {
       "Der Link ist derselbe, den die Website verwendet: ein up-Link öffnet sich im Browser, und ein auf relayium.com erstellter Freigabelink lässt sich mit down abholen.",
     cloudPrivacyNote:
       "Ende-zu-Ende-verschlüsselt: der Schlüssel steckt nur im #k=-Fragment des Links und erreicht den Server nie, der Chiffretext (samt Dateinamen) speichert. Verlierst du den Link, ist die Datei unwiederbringlich.",
+    textH2: "text — flüchtige Nachrichten",
+    textTag: "kein Konto",
+    textIntro: "Beide Maschinen führen denselben Befehl mit demselben Code aus. Nachrichten sind Ende-zu-Ende verschlüsselt, werden auf keinem Server gespeichert und sind mit dem Ende der Sitzung weg.",
+    textPipeNote: "Der interaktive Modus sendet eine Zeile pro Nachricht. Für mehrzeilige Inhalte oder exakte Bytes nutze stattdessen eine Pipe — das Wire-Format ist identisch, nur das Lesen von stdin unterscheidet sich.",
+    textSasNote: "Der SAS wird standardmäßig bestätigt. Ein Pipe-Aufruf hat niemanden zum Fragen und verweigert daher den Start, sofern du nicht --yes übergibst, nachdem du den Code anders verglichen hast.",
+    textLimitNote: "Eine Nachricht umfasst höchstens 65.536 Bytes UTF-8. Alles Größere ist eine Datei — nimm relayium send.",
   },
   crossnet: {
     realtimeTitle: "Echtzeit-Direktübertragung",

@@ -457,6 +457,13 @@ export interface Messages {
     cloudLoginNote: string;
     cloudInteropNote: string;
     cloudPrivacyNote: string;
+    // `relayium text` — ephemeral encrypted messages between two machines.
+    textH2: string;
+    textTag: string;
+    textIntro: string;
+    textPipeNote: string;
+    textSasNote: string;
+    textLimitNote: string;
   };
   crossnet: {
     realtimeTitle: string;

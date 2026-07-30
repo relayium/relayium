@@ -161,6 +161,21 @@ func TestSubcommandParsersAcceptTrailingFlags(t *testing.T) {
 			t.Fatalf("operands = %q", rest)
 		}
 	})
+	t.Run("text flags", func(t *testing.T) {
+		f, rest, err := parseTextFlags([]string{"K7M4XR", "--yes", "--server", "wss://example.invalid"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !f.yes {
+			t.Fatal("--yes not parsed after the operand")
+		}
+		if f.server != "wss://example.invalid" {
+			t.Fatalf("server = %q", f.server)
+		}
+		if !reflect.DeepEqual(rest, []string{"K7M4XR"}) {
+			t.Fatalf("operands = %q", rest)
+		}
+	})
 	t.Run("send/receive cross flags", func(t *testing.T) {
 		f, rest, err := parseCrossFlags([]string{"./release.zip", "428571", "--verify"})
 		if err != nil {

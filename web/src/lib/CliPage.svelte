@@ -42,6 +42,11 @@ relayium authorize 74318e3b…`;
   // 变成了编译期约束（见该文件的 SameLength）。
   const osBadge = "macOS · Linux · Windows";
   const syncCmd = "relayium sync ./site relayium://receiver.example.com --delete --watch";
+  const textCmd = `# both machines, same code — one line per message, Ctrl-D to end
+relayium text K7M4XR`;
+  const textPipeCmd = `# exact bytes, including multiline: pipe it
+pbpaste | relayium text K7M4XR --yes
+cat snippet.py | relayium text K7M4XR --yes`;
   const loginCmd = "relayium login   # opens relayium.com/device — enter the code to bind this machine";
   const upCmd = `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…
@@ -145,6 +150,21 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     <h2>{t.cliPage.syncH2}</h2>
     <p>{t.cliPage.syncNote}</p>
     <CommandBlock code={syncCmd} title="sync a folder" />
+  </div>
+
+  <!-- Text (ephemeral messages) -->
+  <div class="mode">
+    <div class="mode-head">
+      <span class="g" aria-hidden="true">💬</span>
+      <h2>{t.cliPage.textH2}</h2>
+      <span class="tag">{t.cliPage.textTag}</span>
+    </div>
+    <p>{t.cliPage.textIntro}</p>
+    <CommandBlock code={textCmd} title="text · both machines" />
+    <p>{t.cliPage.textPipeNote}</p>
+    <CommandBlock code={textPipeCmd} title="text · exact bytes" />
+    <p>{t.cliPage.textSasNote}</p>
+    <p>{t.cliPage.textLimitNote}</p>
   </div>
 
   <!-- Cloud (async, account) -->

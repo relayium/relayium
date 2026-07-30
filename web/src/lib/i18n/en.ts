@@ -422,6 +422,7 @@ const en: Messages = {
       "SSH identity (key) file",
       "SSH port",
       "Require confirming the SAS code before transferring",
+      "Skip the SAS confirmation prompt (scripted `text` sessions).",
       "Mirror deletions from source to the receiver",
       "Keep running and re-sync on any change",
       "Permit a sync sender's --delete to actually remove files",
@@ -467,6 +468,12 @@ const en: Messages = {
       "The link is the same one the website uses: an up link opens in a browser, and a share link made on relayium.com can be pulled with down.",
     cloudPrivacyNote:
       "End-to-end encrypted: the key rides only in the link's #k= fragment and never reaches the server, which stores ciphertext (file names included). Lose the link and the file is unrecoverable.",
+    textH2: "text — ephemeral messages",
+    textTag: "no account",
+    textIntro: "Both machines run the same command with the same code. Messages are end-to-end encrypted, never stored on any server, and gone when the session ends.",
+    textPipeNote: "Interactive mode sends one line per message. For multiline content or exact bytes, pipe it instead — the wire is identical, only the way stdin is read differs.",
+    textSasNote: "The SAS is confirmed by default. A piped run has nobody to prompt, so it refuses unless you pass --yes after comparing the code another way.",
+    textLimitNote: "One message is at most 65,536 bytes of UTF-8. Anything larger is a file — use relayium send.",
   },
   crossnet: {
     realtimeTitle: "Realtime direct",

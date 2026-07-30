@@ -408,6 +408,7 @@ const es: Messages = {
       "Archivo de identidad (clave) SSH",
       "Puerto SSH",
       "Exigir confirmar el código SAS antes de transferir",
+      "Omite la confirmación del SAS (sesiones `text` en scripts).",
       "Reflejar las eliminaciones del origen en el receptor",
       "Seguir en ejecución y volver a sincronizar ante cualquier cambio",
       "Permitir que el --delete de un emisor de sync elimine archivos realmente",
@@ -453,6 +454,12 @@ const es: Messages = {
       "El enlace es el mismo que usa el sitio web: un enlace de up se abre en un navegador, y un enlace para compartir creado en relayium.com puede recuperarse con down.",
     cloudPrivacyNote:
       "Cifrado de extremo a extremo: la clave viaja solo en el fragmento #k= del enlace y nunca llega al servidor, que almacena texto cifrado (nombres de archivo incluidos). Si pierdes el enlace, el archivo es irrecuperable.",
+    textH2: "text — mensajes efímeros",
+    textTag: "sin cuenta",
+    textIntro: "Las dos máquinas ejecutan el mismo comando con el mismo código. Los mensajes están cifrados de extremo a extremo, nunca se guardan en ningún servidor y desaparecen al terminar la sesión.",
+    textPipeNote: "El modo interactivo envía una línea por mensaje. Para contenido multilínea o bytes exactos, usa una tubería: el formato de red es idéntico, solo cambia cómo se lee stdin.",
+    textSasNote: "El SAS se confirma por omisión. Una ejecución con tubería no tiene a quién preguntar, así que se niega a empezar salvo que pases --yes tras comparar el código por otra vía.",
+    textLimitNote: "Un mensaje ocupa como máximo 65.536 bytes UTF-8. Cualquier cosa mayor es un archivo: usa relayium send.",
   },
   crossnet: {
     realtimeTitle: "Directo en tiempo real",
