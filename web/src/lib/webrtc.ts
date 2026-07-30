@@ -7,11 +7,11 @@ import { commitKey, randomNonce, verifyCommit } from "./crypto";
 import { CAP_TEXT } from "./peer-caps.svelte";
 import { establish } from "./webrtc-core";
 import { classifyPath } from "./webrtc-core";
-import type { Conn, ConnPath, InboundSignal, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
+import type { Conn, ConnPath, Generation, InboundSignal, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
 
 // 传输层的类型/工具从这里再导出：调用方只认 "./webrtc" 这一个入口，拆分是内部事。
-export { DEFAULT_ICE, PeerBusyError, classifyPath } from "./webrtc-core";
-export type { Conn, ConnPath, InboundSignal, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
+export { DEFAULT_ICE, PeerBusyError, classifyPath, signalGeneration } from "./webrtc-core";
+export type { Conn, ConnPath, Generation, InboundSignal, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
 
 /** What this build advertises to its peers. A list rather than a flag so a later
  *  capability needs no new field on the wire. See peer-caps.svelte.ts for why the
@@ -132,7 +132,24 @@ function unb64(s: string): Uint8Array {
  * selfKey/selfNonce。为什么这一步才让 6 位 SAS 挡得住恶意信令服务器的中间人，
  * 见 crypto.ts 的注释。
  */
-export async function connect(opts: ConnectOpts): Promise<Conn> {
+export function connect(opts: ConnectOpts): Promise<Conn> {
+  return handshakeConnect(opts, "file");
+}
+
+/**
+ * 为**消息会话**建连。跑的是完整的 commit-reveal（不是 resume），所以它协商出自己的
+ * 会话密钥和自己的 6 位 SAS——消息面板显示的就是那一串。
+ *
+ * 它跑在自己的信令世代上：一条 text 世代的 offer 永远不会落到 listenForIncoming 手里
+ * （否则对端会当成一次文件传输开始收，然后等一个永远不来的 manifest），一条文件 offer
+ * 也永远不会落到消息监听器手里。phase 1 里消息会话和文件传输本来就互斥（busy()），
+ * 但世代隔离让那条互斥是一道**保证**，而不是一场竞态。
+ */
+export function connectText(opts: ConnectOpts): Promise<Conn> {
+  return handshakeConnect(opts, "text");
+}
+
+async function handshakeConnect(opts: ConnectOpts, generation: Generation): Promise<Conn> {
   const { signaling, peerId, selfKey, role, onPeerKey } = opts;
 
   const selfNonce = randomNonce();
@@ -143,18 +160,27 @@ export async function connect(opts: ConnectOpts): Promise<Conn> {
 
   // Disclose our real key + nonce. Guarded to once: an ICE-restart answer would
   // otherwise re-trigger this after the SAS is already fixed.
+  //
+  // 这一条**绕过了 establish 的 send()**（reveal 不是 SDP/ICE，钩子也拿不到那个闭包），
+  // 所以世代标记得在这里自己盖上。resume 世代不跑 commit-reveal，从来没有 reveal 要发，
+  // 所以这个绕行以前无关紧要；有了第三个**也跑握手**的世代之后，漏掉标记的后果是对端
+  // 按世代把它过滤掉，握手永远完不成。
   function sendReveal() {
     if (revealSent) return;
     revealSent = true;
-    signaling.sendSignal(peerId, {
-      reveal: { key: b64(selfKey), nonce: b64(selfNonce) },
-    });
+    const msg: InboundSignal = { reveal: { key: b64(selfKey), nonce: b64(selfNonce) } };
+    if (generation === "text") msg.text = true;
+    signaling.sendSignal(peerId, msg);
   }
 
   return establish({
     signaling,
     peerId,
     role,
+    generation,
+    // Keeps "connection failed" and "text connection failed" apart in logs and
+    // tests; the file generation keeps its existing unlabelled wording.
+    label: generation === "text" ? "text" : undefined,
     config: opts.config,
     initialSignal: opts.initialSignal,
     onStateChange: opts.onStateChange,
@@ -232,5 +258,5 @@ interface ResumeOpts {
  * 密钥"，而那正是用户当时用 SAS 核对过的东西。
  */
 export async function connectResume(opts: ResumeOpts): Promise<Conn> {
-  return establish({ ...opts, resume: true, label: "resume" });
+  return establish({ ...opts, generation: "resume", label: "resume" });
 }

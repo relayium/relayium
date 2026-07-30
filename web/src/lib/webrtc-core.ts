@@ -169,6 +169,30 @@ export function authPayload(msg: InboundSignal): string {
   });
 }
 
+/**
+ * Which concurrent connection a signal belongs to.
+ *
+ * Two or three can be alive on one signalling link at once — a dying transfer and
+ * its resume, a transfer and a message session — and each must ignore the others'
+ * SDP. `"file"` is the untagged generation, which is what every already-deployed
+ * peer sends and what this code has always sent.
+ */
+export type Generation = "file" | "resume" | "text";
+
+/**
+ * A signal's generation, from its tags.
+ *
+ * `resume` takes precedence when both are present. Nothing produces that
+ * combination today (a message session does not resume), and pinning the order
+ * makes it a decision rather than an accident; whoever teaches a message session
+ * to resume has to revisit it here.
+ */
+export function signalGeneration(msg: InboundSignal): Generation {
+  if (msg.resume) return "resume";
+  if (msg.text) return "text";
+  return "file";
+}
+
 export interface CoreOpts extends CoreHooks {
   signaling: SignalingClient;
   peerId: string;
@@ -176,9 +200,11 @@ export interface CoreOpts extends CoreHooks {
   config?: RtcConfig;
   initialSignal?: InboundSignal;
   onStateChange?: (state: RTCPeerConnectionState) => void;
-  /** true = 重连世代。**双向**生效：外发信令一律带 `resume: true`，入站信令也只
-   *  收带这个标记的。掉线重连时两个世代同时活着，靠它互不串台。 */
-  resume?: boolean;
+  /** 这条连接属于哪个信令世代。**双向**生效：外发信令一律盖上这个世代的标记，入站
+   *  信令也只收同一个世代的。掉线重连时原连接和它的替身同时活着；消息会话和文件传输
+   *  也可能同时活着——靠它互不串台。默认 "file"，也就是所有旧版本对端发的那种无标记
+   *  信令。 */
+  generation?: Generation;
   /** 错误文案前缀，让 "connection failed" 和 "resume connection failed" 在日志和
    *  测试里可区分。 */
   label?: string;
@@ -188,19 +214,22 @@ export interface CoreOpts extends CoreHooks {
 }
 
 export async function establish(opts: CoreOpts): Promise<Conn> {
-  const { signaling, peerId, role, resume = false } = opts;
+  const { signaling, peerId, role, generation = "file" } = opts;
   const what = opts.label ? `${opts.label} connection` : "connection";
   const pc = new RTCPeerConnection(opts.config ?? DEFAULT_ICE);
 
-  /** 给外发信令盖上世代标记。 */
-  const tag = <T extends object>(msg: T): T & { resume?: boolean } =>
-    resume ? { ...msg, resume: true } : msg;
+  /** 给外发信令盖上世代标记。"file" 不盖任何标记——旧版本对端看到的字节因此和
+   *  这套世代命名之前完全一致。 */
+  const tag = <T extends object>(msg: T): T & { resume?: boolean; text?: boolean } =>
+    generation === "resume" ? { ...msg, resume: true }
+    : generation === "text" ? { ...msg, text: true }
+    : msg;
 
   // 外发信令统一走这里：盖世代标记 → 签名 → 发。签名是异步的，所以用一条串行链
   // 保序——offer 之后紧跟的 ICE 候选如果因为签名耗时反超到 offer 前面，对端会把它
   // 当作"remoteDescription 之前到达的候选"丢掉。
   let sendChain: Promise<void> = Promise.resolve();
-  function send(msg: Omit<InboundSignal, "resume" | "auth">) {
+  function send(msg: Omit<InboundSignal, "resume" | "text" | "auth">) {
     sendChain = sendChain
       .then(async () => {
         const out: InboundSignal = tag(msg);
@@ -287,7 +316,7 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
   let recvChain: Promise<void> = Promise.resolve();
   const off = signaling.onSignal((from, data) => {
     const msg = data as InboundSignal;
-    if (from !== peerId || !!msg.resume !== resume) return; // 别的世代的信令不是我们的
+    if (from !== peerId || signalGeneration(msg) !== generation) return; // 别的世代的信令不是我们的
     // The peer is mid-transfer and won't answer — stop waiting for a channel that
     // will never open and report it as "peer busy". A no-op once opened.
     if (msg.busy) { if (!opened) failReady(new PeerBusyError()); return; }

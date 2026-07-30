@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { connect, connectResume, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, type InboundSignal } from "./webrtc";
+import { connect, connectResume, connectText, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, type InboundSignal } from "./webrtc";
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, deriveSession, signResume, verifyResume, type SessionKeys } from "./crypto";
 import { sas } from "./crypto";
-import { authPayload, type SignalAuth } from "./webrtc-core";
+import { authPayload, signalGeneration, type SignalAuth } from "./webrtc-core";
 
 // ── Minimal RTCPeerConnection / RTCDataChannel doubles ───────────────────────
 // Enough surface for connect()'s offer/answer + commit-then-reveal state machine.
@@ -565,6 +565,170 @@ describe("capability piggyback", () => {
     hub.inject("R", "I", { sdp: { type: "offer", sdp: "v=0" }, caps: "text/1" as unknown as string[] });
     await flush();
     expect(called).toBe(false);
+    rP.catch(() => {});
+  });
+});
+
+describe("signalling generations", () => {
+  it("classifies each generation from its tags", () => {
+    expect(signalGeneration({})).toBe("file");
+    expect(signalGeneration({ sdp: { type: "offer", sdp: "v=0" } })).toBe("file");
+    expect(signalGeneration({ resume: true })).toBe("resume");
+    expect(signalGeneration({ text: true })).toBe("text");
+  });
+
+  // Untagged is the file generation, which is what every already-deployed peer
+  // sends. A falsy tag must not read as its generation either.
+  it("treats an absent or falsy tag as the file generation", () => {
+    expect(signalGeneration({ resume: false })).toBe("file");
+    expect(signalGeneration({ text: false })).toBe("file");
+    expect(signalGeneration({ resume: false, text: false })).toBe("file");
+  });
+
+  // Pinned so the precedence is a decision rather than an accident. Phase 1
+  // never produces both (connectText does not resume); phase 2 must revisit this
+  // if it resumes a message session.
+  it("gives resume precedence when both tags are present", () => {
+    expect(signalGeneration({ resume: true, text: true })).toBe("resume");
+  });
+
+  it("still tags a resume connection's outbound signals", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const a = await pairAuth();
+    const iP = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    await flush();
+    const offer = hub.sent.I.find((m) => m.sdp?.type === "offer");
+    expect(offer?.resume).toBe(true);
+    expect(offer?.text).toBeUndefined();
+    iP.catch(() => {});
+  });
+
+  // The compatibility assertion: a file-generation signal is byte-identical to
+  // what this code sent before generations were named, so an older peer sees no
+  // new field at all.
+  it("leaves a file connection's outbound signals untagged", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const iKey = generateKeyPair();
+    const iP = connect({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    await flush();
+    for (const m of hub.sent.I) {
+      expect("resume" in m).toBe(false);
+      expect("text" in m).toBe(false);
+    }
+    expect(hub.sent.I.some((m) => m.sdp?.type === "offer")).toBe(true);
+    iP.catch(() => {});
+  });
+
+  it("tags a text connection's outbound signals and completes its own handshake", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const iKey = generateKeyPair();
+    const rKey = generateKeyPair();
+    let iPeer: Uint8Array | undefined;
+    let rPeer: Uint8Array | undefined;
+
+    const rP = connectText({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: (k) => (rPeer = k) });
+    const iP = connectText({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: (k) => (iPeer = k) });
+    await flush();
+
+    // A full commit-reveal, not a resume: both sides learn the peer's real key
+    // and agree a SAS of their own.
+    expect(iPeer && Array.from(iPeer)).toEqual(Array.from(rKey.publicKey));
+    expect(rPeer && Array.from(rPeer)).toEqual(Array.from(iKey.publicKey));
+    expect(sas(iKey.publicKey, iPeer!)).toBe(sas(rKey.publicKey, rPeer!));
+    // Every signal it sends is tagged.
+    expect(hub.sent.I.length).toBeGreaterThan(0);
+    for (const m of hub.sent.I) expect(m.text).toBe(true);
+    for (const m of hub.sent.R) expect(m.text).toBe(true);
+
+    openAll();
+    const [ic, rc] = await Promise.all([iP, rP]);
+    ic.close();
+    rc.close();
+  });
+
+  // The MITM defence is not weakened by running on its own generation: the same
+  // commit-reveal, so the same refusal. Shaped after the file-path MITM test
+  // above -- the responder rejects mid-flush, so the expectation is attached
+  // before the flush rather than after it.
+  it("aborts a text connection on a commitment mismatch, like the file one", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const iKey = generateKeyPair();
+    const rKey = generateKeyPair();
+    const attacker = generateKeyPair();
+    const attackerB64 = btoa(String.fromCharCode(...attacker.publicKey));
+    hub.setIntercept((d) => (d.reveal ? { ...d, reveal: { ...d.reveal, key: attackerB64 } } : d));
+
+    let rPeer: Uint8Array | undefined;
+    const rP = connectText({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: (k) => (rPeer = k) });
+    const iP = connectText({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    const rejected = expect(rP).rejects.toThrow(/commitment|MITM/);
+
+    await flush();
+    await rejected;
+    expect(rPeer).toBeUndefined();
+
+    openAll();
+    try { (await iP).close(); } catch { /* also rejected -- fine */ }
+  });
+
+  // The same property webrtc.test.ts already pins for resume, now across the
+  // pair that matters: without it, a text offer lands in listenForIncoming and
+  // starts a file receive on the peer.
+  it("does not cross-route between a live file connection and a live text one", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const iFileKey = generateKeyPair();
+    const iTextKey = generateKeyPair();
+    const rFileKey = generateKeyPair();
+    const rTextKey = generateKeyPair();
+
+    // Both generations listening on the same signalling link, at the same time.
+    const rFile = connect({ signaling: hub.R, peerId: "I", selfKey: rFileKey.publicKey, role: "responder", onPeerKey: () => {} });
+    const rText = connectText({ signaling: hub.R, peerId: "I", selfKey: rTextKey.publicKey, role: "responder", onPeerKey: () => {} });
+
+    const iFile = connect({ signaling: hub.I, peerId: "R", selfKey: iFileKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    await flush();
+    // Exactly one answer, from the file side, and it is untagged.
+    const answers1 = hub.sent.R.filter((m) => m.sdp?.type === "answer");
+    expect(answers1.length).toBe(1);
+    expect(answers1[0].text).toBeUndefined();
+
+    const iText = connectText({ signaling: hub.I, peerId: "R", selfKey: iTextKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    await flush();
+    const answers2 = hub.sent.R.filter((m) => m.sdp?.type === "answer");
+    expect(answers2.length).toBe(2);
+    expect(answers2.filter((m) => m.text === true).length).toBe(1);
+    expect(answers2.filter((m) => m.text === undefined).length).toBe(1);
+
+    openAll();
+    for (const p of [rFile, rText, iFile, iText]) (await p.catch(() => null))?.close();
+  });
+
+  it("a text-tagged offer never reaches a file connection", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const rKey = generateKeyPair();
+    const rP = connect({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
+    await flush();
+    hub.inject("R", "I", { sdp: { type: "offer", sdp: "v=0" }, text: true, commit: btoa("c".repeat(32)) });
+    await flush();
+    expect(hub.sent.R.length).toBe(0);
+    rP.catch(() => {});
+  });
+
+  it("an untagged offer never reaches a text connection", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const rKey = generateKeyPair();
+    const rP = connectText({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
+    await flush();
+    hub.inject("R", "I", { sdp: { type: "offer", sdp: "v=0" }, commit: btoa("c".repeat(32)) });
+    await flush();
+    expect(hub.sent.R.length).toBe(0);
     rP.catch(() => {});
   });
 });
