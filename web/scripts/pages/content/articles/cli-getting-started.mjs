@@ -73,11 +73,11 @@ const en = {
     items: [
       {
         q: "Does the CLI cost anything?",
-        a: "No. The CLI is completely free. It connects your machines directly and never proxies your file bytes through Relayium, so there is nothing to meter and nothing to pay.",
+        a: "No. The CLI is completely free. Direct file and text bytes never pass through a Relayium relay, so there is nothing to meter and nothing to pay.",
       },
       {
         q: "Do I need a Relayium account?",
-        a: "To send, and for cloud up. push / pull uses your own SSH and daemon direct uses public-key trust between your servers, so neither needs an account. send is different: only the server can mint a pairing code, and only for a signed-in account, so the sender runs relayium login once — a send given a code you were handed mints nothing and needs no login. The receiver never signs in.",
+        a: "To mint a pairing code with send or text, and for cloud up. push / pull uses your own SSH and daemon direct uses public-key trust, so neither needs an account. A server mints pairing codes only for a signed-in account, so the creator runs relayium login once; joining with a code you were handed needs no login. A receive user never signs in.",
       },
       {
         q: "Which operating systems are supported?",
@@ -167,11 +167,11 @@ const zh = {
     items: [
       {
         q: "CLI 要收费吗？",
-        a: "不收费。CLI 完全免费。它直接连接你的机器，从不代理你的文件字节经过 Relayium，因此没有什么可计量，也没有什么可付费。",
+        a: "不收费。CLI 完全免费。直连的文件与文本字节都不经过 Relayium 中继，因此没有什么可计量，也没有什么可付费。",
       },
       {
         q: "需要 Relayium 账号吗？",
-        a: "send 需要，云端 up 也需要。push / pull 用你自己的 SSH，daemon 直连在你的服务器之间使用公钥信任，这两者都不需要账号。send 不一样：配对码只能由服务器签发，而且只签发给已登录的账号，所以发送方要先运行一次 relayium login——如果用的是别人给你的码，则不需要登录。接收方始终无需登录。",
+        a: "send 或 text 生成配对码时需要账号，云端 up 也需要。push / pull 使用你自己的 SSH，daemon 直连使用公钥信任，都无需账号。服务器只为已登录账号签发配对码，因此创建端先运行一次 relayium login；持别人给你的码加入无需登录，receive 接收方也始终无需登录。",
       },
       {
         q: "支持哪些操作系统？",
@@ -261,11 +261,11 @@ const ja = {
     items: [
       {
         q: "CLI に料金はかかりますか？",
-        a: "いいえ。CLI は完全に無料です。マシン同士を直接つなぎ、ファイルのバイトを Relayium 経由でプロキシすることは決してないため、計測するものも支払うものもありません。",
+        a: "いいえ。CLI は完全に無料です。直接転送されるファイルとテキストのバイトは Relayium のリレーを通らないため、計測するものも支払うものもありません。",
       },
       {
         q: "Relayium アカウントは必要ですか？",
-        a: "send と、クラウドの up で必要です。push / pull は自分の SSH を使い、デーモン直結はサーバー間の公開鍵による信頼を使うので、どちらもアカウントは不要です。send は違います。ペアリングコードを発行できるのはサーバーだけで、しかもサインイン済みのアカウントに対してだけなので、送信側は一度 relayium login を実行します。渡されたコードを使う send は発行を行わないので不要です。受信側がサインインすることはありません。",
+        a: "send または text でペアリングコードを発行するときと、クラウドの up で必要です。push / pull とデーモン直結には不要です。サーバーはログイン済みアカウントにだけコードを発行するため、作成側は一度 relayium login を実行します。渡されたコードで参加する側はログイン不要で、receive 側もサインインしません。",
       },
       {
         q: "どのオペレーティングシステムに対応していますか？",
@@ -355,11 +355,11 @@ const ko = {
     items: [
       {
         q: "CLI 사용에 비용이 드나요?",
-        a: "아니요. CLI는 완전히 무료입니다. 기기를 직접 연결하며 파일 데이터를 Relayium을 거쳐 프록시하는 일이 결코 없으므로, 계량할 것도 지불할 것도 없습니다.",
+        a: "아니요. CLI는 완전히 무료입니다. 직접 전송되는 파일과 텍스트 데이터는 Relayium 릴레이를 거치지 않으므로 계량할 것도 지불할 것도 없습니다.",
       },
       {
         q: "Relayium 계정이 필요한가요?",
-        a: "send할 때와 클라우드 up에 필요합니다. push / pull은 자신의 SSH를 사용하고 데몬 다이렉트는 서버 간 공개키 신뢰를 사용하므로 둘 다 계정이 필요 없습니다. send는 다릅니다. 페어링 코드는 서버만, 그것도 로그인된 계정에만 발급할 수 있으므로 보내는 쪽이 relayium login을 한 번 실행합니다. 건네받은 코드를 쓰는 send는 발급을 하지 않으므로 필요 없습니다. 받는 쪽은 절대 로그인하지 않습니다.",
+        a: "send 또는 text로 페어링 코드를 발급할 때와 클라우드 up에 필요합니다. push / pull과 데몬 다이렉트에는 계정이 필요 없습니다. 서버는 로그인된 계정에만 코드를 발급하므로 생성 측이 relayium login을 한 번 실행합니다. 전달받은 코드로 참여하는 쪽과 receive 수신자는 로그인하지 않습니다.",
       },
       {
         q: "어떤 운영체제를 지원하나요?",
@@ -449,11 +449,11 @@ const de = {
     items: [
       {
         q: "Kostet die CLI etwas?",
-        a: "Nein. Die CLI ist völlig kostenlos. Sie verbindet deine Maschinen direkt und leitet deine Dateibytes nie über Relayium um, also gibt es nichts zu messen und nichts zu bezahlen.",
+        a: "Nein. Die CLI ist völlig kostenlos. Direkt übertragene Datei- und Textbytes laufen nie über ein Relayium-Relay, also gibt es nichts zu messen und nichts zu bezahlen.",
       },
       {
         q: "Brauche ich ein Relayium-Konto?",
-        a: "Zum Senden und für Cloud-up. push / pull nutzt dein eigenes SSH und daemon-direct nutzt Public-Key-Vertrauen zwischen deinen Servern, beide brauchen also kein Konto. send ist anders: Einen Pairing-Code kann nur der Server erzeugen, und nur für ein angemeldetes Konto, also führt der Absender einmal relayium login aus — mit einem übergebenen Code entfällt das. Der Empfänger meldet sich nie an.",
+        a: "Zum Erzeugen eines Pairing-Codes mit send oder text und für Cloud-up. push / pull und daemon-direct brauchen kein Konto. Der Server erzeugt Codes nur für angemeldete Konten, daher führt die erstellende Seite einmal relayium login aus. Wer mit einem erhaltenen Code beitritt, braucht keine Anmeldung; auch receive meldet sich nie an.",
       },
       {
         q: "Welche Betriebssysteme werden unterstützt?",
@@ -543,11 +543,11 @@ const fr = {
     items: [
       {
         q: "La CLI coûte-t-elle quelque chose ?",
-        a: "Non. La CLI est entièrement gratuite. Elle connecte vos machines directement et ne fait jamais transiter les octets de vos fichiers par Relayium, donc il n'y a rien à mesurer ni à payer.",
+        a: "Non. La CLI est entièrement gratuite. Les octets de fichiers et de texte transférés directement ne passent jamais par un relais Relayium ; il n'y a donc rien à mesurer ni à payer.",
       },
       {
         q: "Ai-je besoin d'un compte Relayium ?",
-        a: "Pour send et pour le up cloud. push / pull utilise votre propre SSH et daemon-direct utilise une confiance par clé publique entre vos serveurs, donc ni l'un ni l'autre ne nécessite de compte. send est différent : seul le serveur peut générer un code d'appairage, et seulement pour un compte connecté, donc l'expéditeur lance une fois relayium login — inutile si on lui passe un code déjà émis. Le destinataire ne se connecte jamais.",
+        a: "Pour créer un code d'appairage avec send ou text, et pour le up cloud. push / pull et daemon-direct ne nécessitent aucun compte. Le serveur ne crée des codes que pour un compte connecté : le créateur lance donc relayium login une fois. Rejoindre avec un code reçu ne demande aucune connexion ; receive non plus.",
       },
       {
         q: "Quels systèmes d'exploitation sont pris en charge ?",
@@ -637,11 +637,11 @@ const ar = {
     items: [
       {
         q: "هل يكلّف CLI أي شيء؟",
-        a: "لا. إن CLI مجاني تمامًا. يصل بين أجهزتك مباشرة ولا يمرّر بايتات ملفاتك عبر Relayium أبدًا، فلا شيء لقياسه ولا شيء لدفعه.",
+        a: "لا. إن CLI مجاني تمامًا. لا تمر بايتات الملفات والنصوص المنقولة مباشرة عبر مُرحِّل Relayium، فلا شيء لقياسه ولا شيء لدفعه.",
       },
       {
         q: "هل أحتاج إلى حساب Relayium؟",
-        a: "للإرسال ولـ up السحابي. يستخدم push / pull الـ SSH لديك، ويستخدم daemon direct الثقة بالمفتاح العام بين خوادمك، فلا يتطلب أيٌّ منهما حسابًا. أما send فمختلف: لا يستطيع إصدار رمز الاقتران إلا الخادم، ولحساب مسجَّل الدخول فقط، لذا يشغّل المُرسِل relayium login مرة واحدة — ولا يلزم ذلك إن مرّرت له رمزًا جاهزًا. والمُستقبِل لا يسجّل الدخول أبدًا.",
+        a: "لإصدار رمز اقتران عبر send أو text، ولـ up السحابي. لا يحتاج push / pull ولا daemon direct إلى حساب. لا يصدر الخادم الرموز إلا لحساب مسجّل الدخول، لذا يشغّل منشئ الرمز relayium login مرة واحدة. أما الانضمام برمز مستلَم وreceive فلا يحتاجان إلى تسجيل دخول.",
       },
       {
         q: "ما أنظمة التشغيل المدعومة؟",
@@ -731,11 +731,11 @@ const es = {
     items: [
       {
         q: "¿La CLI cuesta algo?",
-        a: "No. La CLI es completamente gratis. Conecta tus máquinas directamente y nunca hace de intermediario para los bytes de tus archivos a través de Relayium, así que no hay nada que medir ni nada que pagar.",
+        a: "No. La CLI es completamente gratis. Los bytes de archivos y texto transferidos directamente nunca pasan por un retransmisor de Relayium, así que no hay nada que medir ni pagar.",
       },
       {
         q: "¿Necesito una cuenta de Relayium?",
-        a: "Para enviar y para el up en la nube. push / pull usa tu propio SSH y daemon directo usa confianza por clave pública entre tus servidores, así que ninguno requiere cuenta. send es distinto: solo el servidor puede generar un código de emparejamiento, y solo para una cuenta con sesión iniciada, así que quien envía ejecuta relayium login una vez; no hace falta si le pasas un código ya emitido. Quien recibe no inicia sesión nunca.",
+        a: "Para generar un código de emparejamiento con send o text, y para el up en la nube. push / pull y daemon directo no requieren cuenta. El servidor solo genera códigos para una cuenta con sesión iniciada, así que quien lo crea ejecuta relayium login una vez. Unirse con un código recibido y usar receive no requiere iniciar sesión.",
       },
       {
         q: "¿Qué sistemas operativos son compatibles?",
@@ -825,11 +825,11 @@ const pt = {
     items: [
       {
         q: "A CLI custa alguma coisa?",
-        a: "Não. A CLI é totalmente gratuita. Ela conecta suas máquinas diretamente e nunca faz proxy dos bytes dos seus arquivos pelo Relayium, então não há nada a medir nem nada a pagar.",
+        a: "Não. A CLI é totalmente gratuita. Os bytes de arquivos e texto transferidos diretamente nunca passam por um retransmissor do Relayium, então não há nada a medir nem pagar.",
       },
       {
         q: "Preciso de uma conta do Relayium?",
-        a: "Para enviar e para o up na nuvem. O push / pull usa o seu próprio SSH e o daemon direto usa confiança por chave pública entre os seus servidores, então nenhum dos dois exige conta. O send é diferente: só o servidor pode gerar um código de emparelhamento, e apenas para uma conta logada, então quem envia roda relayium login uma vez; não é preciso se você passar um código já emitido. Quem recebe nunca faz login.",
+        a: "Para gerar um código de emparelhamento com send ou text, e para o up na nuvem. push / pull e daemon direto não exigem conta. O servidor só gera códigos para uma conta logada, então quem cria roda relayium login uma vez. Entrar com um código recebido e usar receive não requer login.",
       },
       {
         q: "Quais sistemas operacionais são compatíveis?",

@@ -41,4 +41,18 @@ describe("CLI getting-started guide includes ephemeral text", () => {
     expect(en?.bullets.join(" ")).toContain("send / receive");
     expect(en?.bullets.join(" ")).toContain("daemon direct");
   });
+
+  it("keeps the account FAQ aligned with text code minting", () => {
+    for (const lang of LANGS) {
+      const faq = article.langs[lang].faq.items.find((item) => item.q.includes("account")
+        || item.q.includes("账号") || item.q.includes("アカウント")
+        || item.q.includes("계정") || item.q.includes("Konto")
+        || item.q.includes("compte") || item.q.includes("حساب")
+        || item.q.includes("cuenta") || item.q.includes("conta"));
+      expect(faq, `${lang} account FAQ`).toBeTruthy();
+      expect(faq.a, `${lang} account FAQ`).toContain("send");
+      expect(faq.a, `${lang} account FAQ`).toContain("text");
+      expect(faq.a, `${lang} account FAQ`).toContain("relayium login");
+    }
+  });
 });
