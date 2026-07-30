@@ -304,10 +304,13 @@ Files are safe there because content only lands after an explicit accept
 *render* — a harassment surface with no equivalent today.
 
 So: the **arrival of a text-tagged connection** surfaces as a request naming the
-peer and showing **no content** — in phase 2, the arrival of a `relayium-text`
-channel. The receiver does not attach `onmessage` until the user accepts; frames
-the peer sends immediately queue in the channel and are delivered when the
-handler is attached, so nothing is lost and nothing is rendered early. On accept,
+peer and showing **no content** — in phase 2, the arrival of a `relayium-text` channel. The
+receiver does not attach `onmessage` until the user accepts, and attaches it
+**before** replying ACCEPT: a DataChannel message dispatched with no listener is
+dropped rather than replayed, so the reverse order would lose the peer's first
+message. A peer that sends before ACCEPT has its frames dropped undecrypted —
+the safe direction, and self-punishing, since the consumed seq makes its next
+frame out of order. On accept,
 the session is open and messages flow freely in both directions with no further
 prompting. On reject, the connection is closed and further text-tagged offers
 from that peer are refused on arrival for the life of the page. Accepting is

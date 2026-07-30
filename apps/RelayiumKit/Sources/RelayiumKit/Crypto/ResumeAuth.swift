@@ -28,3 +28,24 @@ public func verifyResume(key: [UInt8], payload: String, mac: String?) -> Bool {
         using: SymmetricKey(data: key)
     )
 }
+
+// ── message stream keys ──────────────────────────────────────────────────────
+
+/// Domain separation for the message stream's AEAD keys. Any change here is a
+/// wire break: regenerate the fixtures and move web + Swift together.
+public let TEXT_KEY_DOMAIN = Array("relayium-text-v1\u{0}".utf8)
+
+/// 32-byte AEAD key for ONE direction of the message stream.
+///
+/// Unlike `deriveResumeAuth` this deliberately does NOT sort its input, and must
+/// not: that key is shared between the peers so it has to be symmetric, while
+/// these are per direction. crypto_kx hands the peers mirrored secrets -- one
+/// side's tx is the other's rx -- so hashing each one locally already lines the
+/// directions up with no extra round trip. Sorting would collapse both directions
+/// onto a single key and put two producers on one nonce counter.
+///
+/// The domain prefix is what stops this being a bare hash of a session secret,
+/// replayable into any other context that hashes the same secret.
+public func deriveTextKey(sessionKey: [UInt8]) -> [UInt8] {
+    genericHash(TEXT_KEY_DOMAIN + sessionKey, outputLength: 32)
+}

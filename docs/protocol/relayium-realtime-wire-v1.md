@@ -14,8 +14,15 @@ transport and handshake are defined elsewhere.
 - 4 RESUME_START (plaintext, sender→recv) — `{"index","offset","seq"}`.
 - 5 RESUME_REQ   (plaintext, recv→sender) — `{"index","offset"}` (non-negative ints only).
 - 6 ACK          (plaintext, recv→sender) — Float64 BE cumulative bytes durably written. 13 bytes.
+- 9 TEXT_ENC   — one ephemeral message, sealed with a DERIVED subkey and its own
+  per-direction counter, NOT the session key or this seq space. Byte layout is the
+  same `[kind][seq][sealed]`; everything else about it is
+  relayium-text-v1.md's business.
 - 2 DONE_LEGACY / 3 BATCH_LEGACY — REJECTED (peer on an older version); never parsed.
 - Single-byte control (recv→sender): 0xfe ACCEPT, 0xff REJECT, 0xfd COMPLETE.
+  ACCEPT/REJECT are reused unchanged as the message session's consent handshake
+  (relayium-text-v1.md); COMPLETE has no meaning there. A 1-byte control frame is
+  structurally disjoint from any 5-byte-header frame, so the two never collide.
 
 ## Seal
 - AES-256-GCM with the 32-byte session key; nonce = nonceFromSeq(seq) (4 zero
@@ -38,6 +45,10 @@ transport and handshake are defined elsewhere.
   FLOW_ACK_INTERVAL = 512 KiB: the receiver ACKs at least this often.
 
 ## Ordering / errors
+- An unknown kind is a hard error in every implementation (web, Swift, and the
+  Go CLI's own separate wire). That is why a new kind is never sent
+  speculatively: kind 9 is gated on the capability handshake, or an older peer
+  fails the whole transfer on the frame it does not recognise.
 - Receiver enforces BATCH/CHUNK/DONE seq == expected (monotonic); any mismatch,
   tamper (GCM auth fail), or legacy kind is a hard error (fail closed).
 - The wire `seq` is uint32 (max 2^32-1); a RESUME_START announcing a `seq` at

@@ -192,9 +192,14 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
     touch();
   }
 
-  /** 只有在 accept() 之后才挂上——这就是"同意之前不渲染任何内容"是结构性的而不是
-   *  一条渲染代码得一直记着的规则。对端提前发的帧留在通道缓冲里，挂上的那一刻按序
-   *  送达，一条不丢。 */
+  /** 只有在 accept() 之后才挂上——这就是"同意之前不渲染任何内容"是结构性的，而不是
+   *  一条渲染代码得一直记着的规则。
+   *
+   *  代价要说清楚：DataChannel 的 message 事件在没有监听器的时候是**直接丢掉**的，
+   *  没有重放。所以在用户同意之前对端发来的帧会丢——这正是安全的那个方向（未经同意的
+   *  内容根本不会被解密），但也意味着 accept() 里的顺序是有讲究的：先挂监听器，再发
+   *  ACCEPT。反过来的话，一个反应极快的对端在我们挂上之前就把第一条消息发出来了，那
+   *  一条就没了。 */
   function attachInbound(c: TextConn) {
     c.channel.onmessage = (e) => queue(e.data);
   }
@@ -350,10 +355,16 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
 
     accept() {
       if (status !== "incomingRequest" || !conn) return;
-      try { conn.channel.send(ACCEPT); } catch { /* gone; onclose will finish */ }
-      attachInbound(conn);
+      // 顺序是有意的：**先挂监听器，再发 ACCEPT**。对端看到 ACCEPT 的那一刻就可能把
+      // 第一条消息发出来，而没有监听器时到达的 message 事件是被丢掉的，不会重放——
+      // 反过来写就会丢掉对方的第一条消息。
+      //
+      // 同意这件事本身不受影响：这段代码只有在用户点了接受之后才会跑，在那之前什么都
+      // 没挂上，所以未经同意的内容依然不可能被解密或渲染。
       status = "open";
       touch();
+      attachInbound(conn);
+      try { conn.channel.send(ACCEPT); } catch { /* gone; onclose will finish */ }
     },
 
     reject() {

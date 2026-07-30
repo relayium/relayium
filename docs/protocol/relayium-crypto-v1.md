@@ -36,3 +36,15 @@ Source of truth for the Swift port. Any change requires regenerating
 - Used as HMAC-SHA-256 key.
 - `signResume(key,payload)` = base64(HMAC-SHA256(key, utf8(payload))).
 - `verifyResume(key,payload,mac)` = constant-time verify; absent/malformed mac = false.
+- The signed payload is a FIXED field list (see relayium-handshake-v1.md). Adding a
+  field to a signal must not change it, or old and new peers compute different tags.
+
+## Message-stream keys (AES-256-GCM, per direction)
+- Domain = ASCII "relayium-text-v1\0" (18 bytes incl. trailing NUL).
+- `textSend` = `crypto_generichash(32, domain || sharedTx)`.
+- `textRecv` = `crypto_generichash(32, domain || sharedRx)`.
+- **Not sorted**, unlike the resume-auth key: that one is shared and must be
+  symmetric, these are per direction, and crypto_kx already mirrors tx/rx so
+  hashing each locally lines the two sides up. Sorting would collapse both
+  directions onto one key and put two producers on one nonce counter.
+- Rationale and the frame that uses them: relayium-text-v1.md.

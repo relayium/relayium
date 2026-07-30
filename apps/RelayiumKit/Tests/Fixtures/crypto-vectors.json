@@ -28,5 +28,12 @@
     "keyHex": "2e1adead068eb24b6a158434dee123d018a587efac6e27be8b118e21c3d3395a",
     "payload": "resume:offset=1024",
     "mac": "JgQyp9ssoyo5ILlPNMFSYqXp6lQSy9P+91fd9N6hSQc="
+  },
+  "textKeys": {
+    "domain": "relayium-text-v1\u0000",
+    "aliceTextSend": "9b58401ebdbfa35beff6fc39ae86322a329f0b9beb0aa1e92f0c48196a583c9e",
+    "aliceTextRecv": "47871b64c3fbe3ee52d139bc02d02b24e9804aa82ca416bb08295a080ed54630",
+    "bobTextSend": "47871b64c3fbe3ee52d139bc02d02b24e9804aa82ca416bb08295a080ed54630",
+    "bobTextRecv": "9b58401ebdbfa35beff6fc39ae86322a329f0b9beb0aa1e92f0c48196a583c9e"
   }
 }

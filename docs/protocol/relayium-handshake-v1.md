@@ -14,6 +14,12 @@ cannot MITM the 6-digit SAS. Hashes raw bytes only (never JSON).
 - Reveal: `{"reveal": {"key": <base64 selfPub>, "nonce": <base64 selfNonce>}}` — a
   separate signal, sent once.
 - base64 is standard (RFC 4648, with padding — btoa/atob).
+- Capabilities: `{"caps": [<string>,…]}` — merged alongside `commit` on every SDP
+  offer/answer. Optional and lenient: absent is not an error (every peer predating
+  it sends none), a non-array is ignored, non-string entries are dropped. It is a
+  HINT, never a security input, and it is deliberately OUTSIDE the resume-auth
+  signed payload so adding it cannot change any resume tag. The authoritative
+  announcement is at the roster level, not here — see relayium-text-v1.md.
 
 ## Sequence
 1. Both compute selfCommit. The initiator sends an SDP offer carrying its commit;

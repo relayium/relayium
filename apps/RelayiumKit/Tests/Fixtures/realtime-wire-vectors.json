@@ -48,5 +48,27 @@
       "name": "bc.txt",
       "path": "subdir/c.txt"
     }
-  ]
+  ],
+  "text": {
+    "kind": 9,
+    "maxBytes": 65536,
+    "keyHex": "7006ef36a5f62f92dbfa01bdef3ddb3e5edb1cda4517679539b0491d97d5eade",
+    "frames": [
+      {
+        "seq": 0,
+        "body": "relayium message",
+        "frameHex": "0900000000d560d748d04fe94863afec7ee39da128417aea7c0e986e2c2caa29799c493558"
+      },
+      {
+        "seq": 1,
+        "body": "你好 مرحبا 🌍 é",
+        "frameHex": "090000000113c9f52e84d3af5814c87538e04eb5164aa2f6bdb58133e7b35fd948a132616203ad0430ec5e37e4d7f8"
+      },
+      {
+        "seq": 2,
+        "body": "  \tif x:\n\n\t\tprintf %s hello\n   \r\n  trailing   ",
+        "frameHex": "09000000029ac427891d9785b07af268c1b3c955a09afaf173659d89867455c1996be0dc5aaebb71480906a543e5c72aa571092f02f53d140eafaa64a92845faa10cde"
+      }
+    ]
+  }
 }

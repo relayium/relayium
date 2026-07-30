@@ -265,7 +265,7 @@ describe("text session", () => {
     expect(ch.onmessage).toBe(null);
   });
 
-  it("delivers frames buffered before acceptance, in order, once accepted", async () => {
+  it("delivers the peer's messages in order once accepted", async () => {
     const { s, ch, ka, inbound } = await harness();
     inbound("p2");
     s.accept();
@@ -434,6 +434,71 @@ describe("text session", () => {
     const { s, inbound } = await harness();
     inbound("p2");
     expect(s.status).toBe("incomingRequest");
+  });
+
+  // ── the ACCEPT ordering ────────────────────────────────────────────────────
+  // acceptEchoesAFrame dispatches a peer frame SYNCHRONOUSLY from inside
+  // channel.send(ACCEPT), which is the real race: the peer can answer the instant
+  // it sees ACCEPT. A DataChannel message event dispatched with no listener
+  // attached is dropped -- there is no replay -- so sending ACCEPT before
+  // installing the handler loses the peer's first message. With send-then-attach
+  // this test sees an empty history.
+  function acceptEchoesAFrame(frame: ArrayBuffer) {
+    const ch = fakeChannel();
+    const realSend = ch.send.bind(ch);
+    ch.send = (b: ArrayBuffer | Uint8Array) => {
+      realSend(b);
+      const bytes = b instanceof Uint8Array ? b : new Uint8Array(b);
+      if (bytes.length === 1 && bytes[0] === 0xfe) {
+        // No listener yet? Then it is gone, exactly as the transport would.
+        ch.onmessage?.({ data: frame });
+      }
+    };
+    return ch;
+  }
+
+  it("installs the inbound handler before sending ACCEPT, so the first message survives", async () => {
+    const { s, ka, kb, inbound } = await harness();
+    const peer = new TextSender();
+    const first = await peer.frame("the peer's very first message", ka.textSend);
+    void kb;
+    const ch = acceptEchoesAFrame(first.buffer as ArrayBuffer);
+
+    inbound("p2", ch);
+    expect(ch.onmessage).toBe(null); // nothing attached before consent
+    s.accept();
+    await settle();
+
+    expect(s.history.map((m) => m.body)).toEqual(["the peer's very first message"]);
+    expect(oneByte(ch.sent[0])).toBe(0xfe); // ACCEPT still went out
+    expect(s.status).toBe("open");
+  });
+
+  // The invariant the ordering change must not weaken: before the user accepts,
+  // nothing is attached, so a peer that sends early has its content dropped rather
+  // than decrypted or rendered.
+  it("drops a pre-consent frame rather than rendering it", async () => {
+    const { s, ka, ch, inbound } = await harness();
+    const peer = new TextSender();
+    const early = await peer.frame("sent before consent", ka.textSend);
+
+    inbound("p2", ch);
+    expect(ch.onmessage).toBe(null);
+    // The transport would have nowhere to deliver this; assert we never render it.
+    expect(s.history).toEqual([]);
+    expect(s.status).toBe("incomingRequest");
+
+    // After consent the session works normally -- the early frame is simply gone,
+    // which is the safe direction.
+    s.accept();
+    ch.onmessage!({ data: (await peer.frame("after consent", ka.textSend)).buffer as ArrayBuffer });
+    await settle();
+    // seq 0 was burned by the dropped frame, so the receiver rejects seq 1 as
+    // out-of-order: a peer that jumps the gun breaks its own session, and does so
+    // loudly rather than by silently losing content.
+    expect(s.status).toBe("failed");
+    expect(s.history.map((m) => m.body)).not.toContain("sent before consent");
+    void early;
   });
 
   // ── stale attempts ─────────────────────────────────────────────────────────

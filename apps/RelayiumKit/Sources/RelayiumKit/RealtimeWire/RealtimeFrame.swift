@@ -9,6 +9,10 @@ public enum RealtimeKind {
     public static let ack: UInt8 = 6
     public static let batchEnc: UInt8 = 7
     public static let doneEnc: UInt8 = 8
+    /// One ephemeral message, sealed under the message stream's own key with its
+    /// own per-direction counter. Distinct from every file kind above so a stray
+    /// frame can never be read as a chunk. See docs/protocol/relayium-text-v1.md.
+    public static let text: UInt8 = 9
 }
 
 public enum RealtimeControl: UInt8 { case accept = 0xfe, reject = 0xff, complete = 0xfd }
@@ -16,6 +20,8 @@ public enum RealtimeControl: UInt8 { case accept = 0xfe, reject = 0xff, complete
 public let CHUNK_SIZE = 192 * 1024
 public let MAX_FILES = 1000
 public let MANIFEST_MAX_BYTES = 200 * 1024
+/// One message, one frame, no chunking. Mirrors the web's TEXT_MAX_BYTES.
+public let TEXT_MAX_BYTES = 64 * 1024
 public let CHUNK_OVERHEAD = 5 + 16
 public let FLOW_WINDOW = 8 << 20
 public let FLOW_ACK_INTERVAL = 512 * 1024

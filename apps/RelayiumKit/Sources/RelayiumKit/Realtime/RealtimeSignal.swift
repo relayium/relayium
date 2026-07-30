@@ -46,6 +46,23 @@ public func parseICE(_ data: JSONValue) -> (candidate: String, sdpMid: String?, 
     return (candidate, sdpMid, sdpMLineIndex)
 }
 
+/// Capabilities this build advertises, merged alongside `sdp`/`commit` the way
+/// webrtc.ts's `sdpExtra` does. A hint, never a security input: the signalling
+/// relay sees every frame and can strip or forge it, which can only deny a
+/// message session, never downgrade one -- the message key is derived, not
+/// negotiated.
+public func capsField(_ caps: [String]) -> JSONValue {
+    .object(["caps": .array(caps.map(JSONValue.string))])
+}
+
+/// The peer's advertised capabilities, parsed leniently: absent is not an error
+/// (every already-deployed peer sends none), a non-array is ignored, and
+/// non-string entries are dropped rather than trusted.
+public func peerCaps(from data: JSONValue) -> [String] {
+    guard case let .object(o) = data, case let .array(items)? = o["caps"] else { return [] }
+    return items.compactMap { if case let .string(s) = $0 { return s } else { return nil } }
+}
+
 public func parseBusy(_ data: JSONValue) -> Bool {
     guard case let .object(o) = data, case let .bool(b)? = o["busy"] else { return false }
     return b
