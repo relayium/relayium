@@ -87,7 +87,7 @@ type NodeSnapshot struct {
 	// one -- the update_* columns survive re-register and heartbeat and nothing
 	// clears them (see byoResultIsFailure).
 	UpdateFromVersion string
-	UpdateResult      string // "" | "ok" | "failed" | "rolled_back" | "skipped"
+	UpdateResult      string // "" | "ok" | "failed" | "rolled_back" | "skipped" | "unreachable"
 }
 
 // RolloutDecision is what decideFleet says to do next.
@@ -133,12 +133,12 @@ type RolloutDecision struct {
 //     wait until updateSilenceLimit, then halt. Never fall through to
 //     picking another node -- see below.
 //     b. its last reported UpdateResult is "failed" or "rolled_back" -> halt
-//     c. its last reported UpdateResult is "skipped" -> its turn is over and
-//     it will never reach the target: fall through to step 3/4 so the
-//     queue advances, leaving the node behind for a human. If the SKIPPED
-//     node was the recorded canary, IsFirst is re-asserted on whoever is
-//     picked next, because a node that never installed the build cannot
-//     have observed it (see reassertFirst).
+//     c. its last reported UpdateResult is "skipped" or "unreachable" -> its
+//     turn is over and it will never reach the target: fall through to
+//     step 3/4 so the queue advances, leaving the node behind for a human.
+//     If that node was the recorded canary, IsFirst is re-asserted on
+//     whoever is picked next, because a node that never installed the
+//     build cannot have observed it (see reassertFirst).
 //     d. it has gone silent (no heartbeat) for longer than updateSilenceLimit
 //     since it was commanded to update -> halt (possible brick). If it
 //     never even recorded an update start, tr.StageStartedAt is the
@@ -226,17 +226,21 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 				Reason: fmt.Sprintf("node %s vanished since update started", tr.CurrentNodeID)}
 		}
 		if cur.UpdateResult == "failed" || cur.UpdateResult == "rolled_back" {
-			verb := "failed to update"
+			verb := "failed to verify or install the update"
 			if cur.UpdateResult == "rolled_back" {
 				verb = "rolled back"
 			}
 			return RolloutDecision{Action: "halt", Reason: fmt.Sprintf("node %s %s", cur.ID, verb)}
 		}
 		// "skipped" means the node declined this update (already on a newer
-		// build, pinned, whatever) and will NEVER reach the target version. It
-		// is not a failure, so we must not halt -- but waiting for a version
-		// it will never report would wedge the whole track forever. Its stage
-		// is over: fall through so the queue advances without it.
+		// build, pinned, whatever) and will NEVER reach the target version.
+		// "unreachable" means the node could not even fetch the build -- bytes
+		// never arrived, so there is nothing to verify and nothing that could
+		// have installed wrong. Neither is a failure of the RELEASE, so neither
+		// halts -- but waiting for a version that will never be reported would
+		// wedge the whole track forever on one machine's network. Both share
+		// the same "this node's turn is over" handling: fall through so the
+		// queue advances without it.
 		//
 		// canary is whether the node in flight holds this rollout's 6h slot.
 		// FirstNodeID == "" while a node IS in flight is a track written before
@@ -245,7 +249,7 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 		// guessing "not the canary" would silently cut a live rollout's 6h
 		// observation to 30 minutes. Every defence here must fail LONG.
 		canary := cur.ID == tr.FirstNodeID || tr.FirstNodeID == ""
-		if cur.UpdateResult == "skipped" {
+		if cur.UpdateResult == "skipped" || cur.UpdateResult == "unreachable" {
 			skipped = cur.ID
 			reassertFirst = canary
 		} else {
