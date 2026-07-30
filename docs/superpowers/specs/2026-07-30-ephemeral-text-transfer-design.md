@@ -86,16 +86,48 @@ exit, navigation, idle timeout, or explicit end. File transfers become
 
 `sendFiles` and `beginReceive` keep their present shape and their present wire
 bytes; they take a link instead of calling `connect()`. `busy()` continues to
-gate concurrent **transfers**; it does not gate the link, which is what lets a
-message be sent during a file transfer.
+gate concurrent **transfers**; it stops gating the session, which is what would
+let a message be sent during a file transfer.
 
 This is the largest single change in the feature and it is where the risk lives:
 `transfer-session.svelte.ts` is 797 lines holding the nonce discipline, the
 resume checkpointing and the flow-control gates, and it has **no unit test** —
-`transfer-session.test.ts` is 28 lines covering `wouldExceedDeclared` alone. The
-implementation plan therefore performs the extraction as a behaviour-preserving
-step of its own, gated on the existing codec tests and on `e2e/lan-transfer.mjs`,
-before a single byte of text exists.
+`transfer-session.test.ts` is 28 lines covering `wouldExceedDeclared` alone.
+
+### Phasing: the refactor is not in phase 1
+
+`PeerLink` is the end state, and phase 1 does not build it. Rewriting that file
+to ship the first message would put the riskiest change in the repository and an
+entirely new feature in the same release, with the file's own test coverage
+unable to tell them apart if something broke.
+
+**Phase 1** gives messaging its **own** connection: its own `connect()`, its own
+commit-reveal, its own keys, its own SAS, and a single DataChannel from an
+unmodified `establish()`. Its signals are tagged `text: true` and filtered by
+generation, reusing exactly the mechanism that already keeps a dying connection
+and its replacement from cross-routing each other's SDP (`webrtc-core.ts:277`).
+No second channel, no `ondatachannel` change, no line of the file transfer path
+touched.
+
+A message session and a file transfer are therefore **mutually exclusive** in
+phase 1, enforced by folding the text session into `busy()`
+(`transfer-session.svelte.ts:111`), which already refuses a local send and
+answers `{busy: true}` to a peer. The two-SAS objection is fully answered by
+that exclusion: only one session exists at a time, so only one code is ever on
+screen. What is deferred is only the *concurrency* — sending a message while a
+file is in flight — which is a convenience, not one of the invariants.
+
+**Phase 2** extracts `PeerLink`, moves both streams onto one handshake and one
+SAS, adds the labelled second DataChannel, and lifts the exclusion. It is a
+behaviour-preserving refactor plus a deletion, planned separately and gated on
+the existing codec suite, `webrtc.test.ts`'s two-party hub and a full
+`e2e/lan-transfer.mjs` run.
+
+Two things in phase 1 exist **only** so phase 2 changes no bytes on the wire:
+the derived text subkey (which a dedicated connection does not strictly need,
+since no file frames share its key) and frame kind 9 (which a dedicated channel
+does not strictly need either). Paying for both now means the wire, the protocol
+docs and the Swift fixtures are written once.
 
 ### Text is its own stream, not a new kind of file frame
 
@@ -125,8 +157,9 @@ the interleaving question disappear rather than answering it.
 It also keeps the file stream's bytes **identical** to today, which is what makes
 the Swift and web file implementations compatible across this change.
 
-**A separate DataChannel.** Label `relayium-text`, alongside the existing
-`relayium`.
+**A separate DataChannel — in phase 2.** Label `relayium-text`, alongside the
+existing `relayium`. Phase 1's dedicated connection already gives text a channel
+of its own; this is what happens when the two streams move onto one connection.
 
 The reason is head-of-line blocking. The sender may hold `FLOW_WINDOW` = 8 MiB
 of unacked frames (`transfer.ts:67`) *and* up to `BUFFERED_LOW` = 8 MiB in the
@@ -190,6 +223,27 @@ either — and it arrives on a different channel regardless.
 
 ### Capability negotiation, and what it is not
 
+Capabilities have to be known **before a connection is attempted**, not during
+its handshake. `listenForIncoming` acts on *any* inbound offer
+(`transfer-session.svelte.ts:121`) and immediately begins a file receive, so a
+connection opened for messaging is, to an older peer, a file offer whose manifest
+never arrives — it waits, and its 45 s stall watchdog fails it (`:283-285`).
+Caps carried on that connection's own SDP arrive too late to prevent the thing
+they exist to prevent.
+
+So there are two announcements, and they do different jobs.
+
+**A roster-level hello, which is the one that protects old peers.** A bare
+`signal` frame carrying `{caps: ["text/1"]}` is sent to each peer on joining a
+room and on roster change. This is the established pattern, not a new one: relay
+RTT maps travel exactly this way (`App.svelte:142-168`), and `rename` rides the
+same envelope as a field the WebRTC handlers ignore. A peer that never announces
+is treated as not supporting text, and no messaging connection is ever opened
+toward it. The cost is a few dozen bytes against the per-connection
+`maxSignalBytes` budget of 1 MiB (`internal/signal/connlimit.go:12`), which the
+RTT broadcast already draws on.
+
+**The SDP-carried copy, which is the authoritative per-connection one.**
 `InboundSignal` gains `caps?: string[]`, attached by `sdpExtra` next to the
 commit:
 
@@ -249,18 +303,20 @@ Files are safe there because content only lands after an explicit accept
 (`transfer-session.svelte.ts:243-286`). Unsolicited text would arrive and
 *render* — a harassment surface with no equivalent today.
 
-So: an inbound `relayium-text` channel surfaces as a request naming the peer and
-showing **no content**. The receiver does not attach `onmessage` until the user
-accepts — frames the peer sends immediately queue in the channel and are
-delivered when the handler is attached, so nothing is lost and nothing is
-rendered early. On accept, the session is open and messages flow freely in both
-directions with no further prompting. On reject, the channel is closed and
-further text channels from that peer are closed on arrival for the life of the
-page. Accepting is per-session and is not remembered anywhere.
+So: the **arrival of a text-tagged connection** surfaces as a request naming the
+peer and showing **no content** — in phase 2, the arrival of a `relayium-text`
+channel. The receiver does not attach `onmessage` until the user accepts; frames
+the peer sends immediately queue in the channel and are delivered when the
+handler is attached, so nothing is lost and nothing is rendered early. On accept,
+the session is open and messages flow freely in both directions with no further
+prompting. On reject, the connection is closed and further text-tagged offers
+from that peer are refused on arrival for the life of the page. Accepting is
+per-session and is not remembered anywhere.
 
-Using the channel's arrival as the request — rather than the first frame — is
-what makes "no content before consent" structural instead of a rule the rendering
-code has to keep remembering.
+Using the *connection's* arrival as the request — rather than the first frame —
+is what makes "no content before consent" structural instead of a rule the
+rendering code has to keep remembering. It also means the SAS is on screen before
+any message is, which is the order the user needs it in.
 
 ### Limits
 
@@ -289,22 +345,23 @@ signaling (`transfer.ts:106-146`, `webrtc.ts:200-218`). A message is at most
 64 KiB, sent or not sent. Adding a resume path would add unauthenticated
 plaintext to the wire in exchange for nothing.
 
-What text *does* do is ride whichever peer connection the link currently holds.
-The file path's resume already re-establishes one without re-running the
-handshake, reusing the keys the user SAS-verified and authenticating the new
-signalling with an HMAC derived from them (`webrtc.ts:200-218`,
-`transfer-session.svelte.ts:336`, `:344`). Because the text subkeys are derived
-from those same session keys and the text counters are monotonic and owned by the
-link, **an authenticated resume carries the message session forward** onto the new
-connection with its counters unbroken — no rewind, no nonce reuse, and the SAS the
-user checked still describes the peer. A new text channel is created on the new
-connection; the session, the history and the counters are the same session.
+**In phase 1 a dropped connection ends the message session outright.** The text
+connection does not use `connectResume`. Locally-held history stays visible,
+marked ended; the composer is disabled; a new session can be started, and it will
+show a new SAS because it is a new handshake. Messages queued but unsent are
+reported unsent — never silently dropped, and never silently resent, because a
+resend the user did not ask for is a message delivered twice.
 
-A drop that is **not** resumed ends the message session. Locally-held history
-stays visible, marked ended; the composer is disabled; a new session can be
-started, and it will show a new SAS because it is a new handshake. Messages queued
-but unsent are reported unsent — never silently dropped, and never silently
-resent, because a resend the user did not ask for is a message delivered twice.
+In phase 2 the message session inherits the link's resume for free, and should.
+That path re-establishes a connection without re-running the handshake, reusing
+the keys the user SAS-verified and authenticating the new signalling with an HMAC
+derived from them (`webrtc.ts:200-218`, `transfer-session.svelte.ts:336`, `:344`).
+Because the text subkeys derive from those same session keys and the text counters
+are monotonic and owned by the link, an authenticated resume can carry the session
+forward with its counters unbroken — no rewind, no nonce reuse, and the SAS the
+user checked still describes the peer. This is the second reason the subkey and
+the frame kind are paid for in phase 1: the resumed session must not need a
+different wire.
 
 Server-side reality reinforces this: a peer that loses its **signaling** socket
 gets a **new peer id** on reconnect (`internal/signal/client.go:97`,
@@ -624,12 +681,18 @@ that matters: `authPayload` output must be **unchanged** by the presence of
 single assertion standing between this change and broken resumes across a rolling
 deploy.
 
-**The extraction, by the tests that already exist.** `PeerLink` lands with no
-behavioural change, verified by the current codec suite, `webrtc.test.ts`'s
-two-party hub (`webrtc.test.ts:50-102`, which uses the real HMAC derivation) and a
-full `e2e/lan-transfer.mjs` run. There is no unit test of `createTransferSession`
-today, which is exactly why this step is separated from the feature rather than
-bundled with it.
+**The file path, proven untouched.** Phase 1 changes no byte of it, so the
+guarantee is available as an assertion rather than as a claim: the existing codec
+suite and `webrtc.test.ts`'s two-party hub (`webrtc.test.ts:50-102`, which uses
+the real HMAC derivation) must pass unmodified, and a full `e2e/lan-transfer.mjs`
+run must still complete its byte-exact transfer and its mid-transfer resume. Any
+diff to `transfer.ts` or to `transfer-session.svelte.ts` beyond folding the text
+session into `busy()` is a signal that the phase boundary was crossed.
+
+**Generation isolation, the way resume already tests it.** `webrtc.test.ts:297-349`
+pins that a resume generation and the original cannot cross-route SDP. The
+`text: true` generation gets the equivalent: a text-tagged offer must not reach
+`listenForIncoming`, and a file offer must not reach the message listener.
 
 **The Go handshake, against the real hub.** `startHub`
 (`internal/rzvous/rzvous_test.go:19-39`) runs the real `signal.ServeWS`;
