@@ -109,6 +109,7 @@ func TestUpdateExitCodesAreDistinct(t *testing.T) {
 		"exitUpdateFailed":  exitUpdateFailed,
 		"exitRestartFailed": exitRestartFailed,
 		"exitNotHealthy":    exitNotHealthy,
+		"exitFetchFailed":   exitFetchFailed,
 	} {
 		if other, dup := seen[code]; dup {
 			t.Errorf("%s and %s share exit code %d", name, other, code)
@@ -118,7 +119,9 @@ func TestUpdateExitCodesAreDistinct(t *testing.T) {
 }
 
 // The already-failed refusal and a download failure are different outcomes for
-// central (skipped vs failed) and must report different codes.
+// central (skipped vs unreachable) and must report different codes. The
+// download failure here is a connection refused -- the artifact was never
+// obtained, so it classifies as exitFetchFailed, not exitUpdateFailed.
 func TestRunUpdateWithReportsAlreadyFailedAndDownloadFailureDistinctly(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "relayium-node")
@@ -140,7 +143,7 @@ func TestRunUpdateWithReportsAlreadyFailedAndDownloadFailureDistinctly(t *testin
 		StateDir: dir, BinPath: bin, TargetTag: "v9.9.9", Repo: updateRepo,
 		APIBase: "http://127.0.0.1:1", DownloadBase: "http://127.0.0.1:1",
 	}, &fakeSvc{}, 50*time.Millisecond, 5*time.Millisecond, &out, &errBuf)
-	if dl != exitUpdateFailed {
-		t.Errorf("download-failure code = %d, want %d", dl, exitUpdateFailed)
+	if dl != exitFetchFailed {
+		t.Errorf("download-failure code = %d, want %d", dl, exitFetchFailed)
 	}
 }

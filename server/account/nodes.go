@@ -287,7 +287,13 @@ type updateCheckResp struct {
 // is rejected rather than stored: the rollout state machines branch on these
 // exact strings, so an unrecognised value would silently read as "no result
 // yet" and a real failure could go uncounted.
-var updateResults = map[string]bool{"ok": true, "failed": true, "rolled_back": true, "skipped": true}
+//
+// "unreachable" (a node that never obtained the artifact — DNS, TLS, a reset)
+// is accepted here before any node can send it: central deploys on every push
+// to main, while nodes only pick up a new binary when a rollout reaches them,
+// so this map is always live well before the first node capable of reporting
+// the value exists.
+var updateResults = map[string]bool{"ok": true, "failed": true, "rolled_back": true, "skipped": true, "unreachable": true}
 
 // handleUpdateCheck is the rollout state machines' only mouth: the node's root
 // updater polls it, and central answers with the target version and whether
