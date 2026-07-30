@@ -446,7 +446,7 @@ const zh: Messages = {
     cloudH2: "云端——现在上传，稍后下载",
     cloudTag: "账号 · 异步",
     cloudIntro:
-      "从一台机器上传，之后随时在另一台下载——两者无需同时在线。用到账号的是 up 和 send 两个命令：up 用来存文件，send 用来生成配对码——先 relayium login 一次，两者都能用。如果 send 用的是别人给你的码，它不生成新码，也就不需要登录。下载无需账号，push/pull、daemon 直连和 sync 也从不需要。",
+      "从一台机器上传，之后随时在另一台下载——两者无需同时在线。up 需要账号；send 或 text 不带配对码、要生成新码时也需要账号。使用打印出来的配对码加入 send 或 text 无需登录；down、push/pull、daemon 直连和 sync 同样不需要。",
     cloudBody:
       "up 在本地加密文件、上传密文，并打印一个取件链接。用保留 flag 控制它存活多久（不给则用你账号的默认）：--burn（下载一次）、--ttl 7d（固定时间，上限取决于套餐）、--max-downloads 5（固定次数）。在另一台机器上，把链接交给 down——无需登录。",
     cloudLoginNote:
@@ -456,8 +456,8 @@ const zh: Messages = {
     cloudPrivacyNote:
       "端到端加密：密钥只在链接的 #k= 片段里，从不到达服务器，服务器只存密文（含文件名）。链接一丢，文件就无法找回。",
     textH2: "text —— 阅后即焚的消息",
-    textTag: "无需账号",
-    textIntro: "两台机器用同一个码跑同一条命令。消息端到端加密，不存储在任何服务器上，会话结束即消失。",
+    textTag: "生成端：账号 · 加入端：无需账号",
+    textIntro: "一台机器运行 relayium text 生成配对码并等待，另一台运行打印出来的 relayium text 配对码命令加入；两端需同时在线。消息端到端加密，不存储在任何服务器上，会话结束即消失。",
     textPipeNote: "交互模式一行一条消息。要发多行内容或保证字节原样，改用管道——线上的帧格式完全一样，只是读 stdin 的方式不同。",
     textSasNote: "SAS 默认需要确认。管道模式没有人可以提示，所以它会拒绝执行，除非你用别的方式核对过码之后加上 --yes。",
     textLimitNote: "单条消息最多 65,536 字节 UTF-8。更大的东西是文件，用 relayium send。",

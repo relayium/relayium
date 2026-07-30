@@ -447,7 +447,7 @@ const fr: Messages = {
     cloudH2: "Cloud — téléverser maintenant, télécharger plus tard",
     cloudTag: "compte · asynchrone",
     cloudIntro:
-      "Téléversez depuis une machine et téléchargez sur une autre quand vous voulez — les deux n'ont jamais besoin d'être en ligne en même temps. up et send sont les deux commandes qui utilisent votre compte : up pour stocker le fichier, send pour générer un code d'appairage — lancez relayium login une fois et les deux fonctionnent. Un send auquel vous passez un code qu'on vous a donné n'en génère aucun et ne demande pas de connexion. Le téléchargement ne demande aucun compte, et push/pull, daemon-direct et sync jamais.",
+      "Téléversez depuis une machine et téléchargez sur une autre quand vous voulez — les deux n'ont jamais besoin d'être en ligne en même temps. up exige un compte, tout comme send ou text sans code lorsqu'ils en créent un. Rejoindre send ou text avec le code affiché ne demande aucune connexion ; down, push/pull, daemon-direct et sync non plus.",
     cloudBody:
       "up chiffre les fichiers localement, téléverse le texte chiffré et affiche un lien de récupération. Ajoutez un drapeau de rétention pour contrôler sa durée de vie (sinon la valeur par défaut de votre compte s'applique) : --burn (un téléchargement), --ttl 7d (durée fixe, plafonnée par votre offre) ou --max-downloads 5 (nombre fixe). Sur l'autre machine, passez le lien à down — aucune connexion requise.",
     cloudLoginNote:
@@ -457,8 +457,8 @@ const fr: Messages = {
     cloudPrivacyNote:
       "Chiffré de bout en bout : la clé ne voyage que dans le fragment #k= du lien et n'atteint jamais le serveur, qui stocke le texte chiffré (noms de fichiers compris). Perdez le lien et le fichier est irrécupérable.",
     textH2: "text — messages éphémères",
-    textTag: "sans compte",
-    textIntro: "Les deux machines lancent la même commande avec le même code. Les messages sont chiffrés de bout en bout, jamais stockés sur un serveur, et disparaissent à la fin de la session.",
+    textTag: "création : compte · connexion : sans compte",
+    textIntro: "Sur une machine, relayium text crée un code et attend ; l'autre rejoint avec la commande relayium text CODE affichée. Les deux restent en ligne. Les messages sont chiffrés de bout en bout, jamais stockés sur un serveur, et disparaissent à la fin de la session.",
     textPipeNote: "Le mode interactif envoie une ligne par message. Pour du contenu multiligne ou des octets exacts, utilisez un tube — le format réseau est identique, seule la lecture de stdin diffère.",
     textSasNote: "Le SAS est confirmé par défaut. Un appel via tube n’a personne à interroger : il refuse de démarrer sauf si vous passez --yes après avoir comparé le code autrement.",
     textLimitNote: "Un message fait au plus 65 536 octets UTF-8. Au-delà, c’est un fichier — utilisez relayium send.",

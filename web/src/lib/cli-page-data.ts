@@ -24,7 +24,7 @@ export type SameLength<T extends readonly unknown[]> = { -readonly [K in keyof T
 export const PICK_MODES = [
   { g: "🔑", title: "push / pull", cmd: "relayium push … user@host:path" },
   { g: "🔗", title: "send / receive", cmd: "relayium send … / receive <code>" },
-  { g: "💬", title: "text", cmd: "relayium text <code>" },
+  { g: "💬", title: "text", cmd: "relayium text [code]" },
   { g: "🖧", title: "daemon direct", cmd: "relayium push … relayium://host" },
   { g: "🔁", title: "sync", cmd: "relayium sync … relayium://host" },
   { g: "☁️", title: "up / down", cmd: "relayium up … / down <link>" },

@@ -164,7 +164,7 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
       <span class="tag">{t.cliPage.textTag}</span>
     </div>
     <p>{t.cliPage.textIntro}</p>
-    <CommandBlock code={textCmd} title="text · both machines" />
+    <CommandBlock code={textCmd} title="text · mint and join" />
     <p>{t.cliPage.textPipeNote}</p>
     <CommandBlock code={textPipeCmd} title="text · exact bytes" />
     <p>{t.cliPage.textSasNote}</p>

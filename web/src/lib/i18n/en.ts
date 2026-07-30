@@ -460,7 +460,7 @@ const en: Messages = {
     cloudH2: "Cloud — upload now, download later",
     cloudTag: "account · async",
     cloudIntro:
-      "Upload from one machine and download on another whenever you like — the two never need to be online at the same time. up and send are the two commands that use your account: up to store the file, send to mint a pairing code — run relayium login once and both work. A send given a code you were handed mints nothing and needs no login. Downloading needs no account, and push/pull, daemon-direct and sync never do.",
+      "Upload from one machine and download on another whenever you like — the two never need to be online at the same time. An account is required by up, and when send or text runs without a code to mint one. Joining send or text with a printed code needs no login; neither do down, push/pull, daemon-direct or sync.",
     cloudBody:
       "up encrypts the files locally, uploads the ciphertext, and prints a claim link. Add a retention flag to control how long it lives (otherwise your account's default applies): --burn (one download), --ttl 7d (a fixed time, capped by your plan), or --max-downloads 5 (a fixed count). On the other machine, hand the link to down — no login needed.",
     cloudLoginNote:
@@ -470,8 +470,8 @@ const en: Messages = {
     cloudPrivacyNote:
       "End-to-end encrypted: the key rides only in the link's #k= fragment and never reaches the server, which stores ciphertext (file names included). Lose the link and the file is unrecoverable.",
     textH2: "text — ephemeral messages",
-    textTag: "no account",
-    textIntro: "Both machines run the same command with the same code. Messages are end-to-end encrypted, never stored on any server, and gone when the session ends.",
+    textTag: "mint: account · join: no account",
+    textIntro: "On one machine, relayium text mints a code and waits; the other joins with the printed relayium text CODE command. Both stay online. Messages are end-to-end encrypted, never stored on any server, and gone when the session ends.",
     textPipeNote: "Interactive mode sends one line per message. For multiline content or exact bytes, pipe it instead — the wire is identical, only the way stdin is read differs.",
     textSasNote: "The SAS is confirmed by default. A piped run has nobody to prompt, so it refuses unless you pass --yes after comparing the code another way.",
     textLimitNote: "One message is at most 65,536 bytes of UTF-8. Anything larger is a file — use relayium send.",

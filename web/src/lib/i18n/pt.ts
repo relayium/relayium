@@ -446,7 +446,7 @@ const pt: Messages = {
     cloudH2: "Nuvem — envie agora, baixe depois",
     cloudTag: "conta · assíncrono",
     cloudIntro:
-      "Envie de uma máquina e baixe em outra quando quiser — as duas nunca precisam estar online ao mesmo tempo. up e send são os dois comandos que usam a sua conta: o up para guardar o arquivo, o send para gerar um código de emparelhamento — execute relayium login uma vez e os dois funcionam. Um send ao qual você passa um código que lhe deram não gera nenhum e não precisa de login. Baixar não precisa de conta, e push/pull, daemon direto e sync nunca precisam.",
+      "Envie de uma máquina e baixe em outra quando quiser — as duas nunca precisam estar online ao mesmo tempo. up precisa de uma conta, assim como send ou text sem código quando criam um novo. Entrar em send ou text com o código impresso não exige login; down, push/pull, daemon direto e sync também não.",
     cloudBody:
       "up criptografa os arquivos localmente, envia o texto cifrado e imprime um link de resgate. Adicione uma flag de retenção para controlar por quanto tempo ele existe (caso contrário, aplica-se o padrão da sua conta): --burn (um download), --ttl 7d (um tempo fixo, limitado pelo seu plano) ou --max-downloads 5 (uma contagem fixa). Na outra máquina, passe o link para down — sem login.",
     cloudLoginNote:
@@ -456,8 +456,8 @@ const pt: Messages = {
     cloudPrivacyNote:
       "Criptografia de ponta a ponta: a chave viaja apenas no fragmento #k= do link e nunca chega ao servidor, que armazena texto cifrado (nomes de arquivos incluídos). Perca o link e o arquivo é irrecuperável.",
     textH2: "text — mensagens efêmeras",
-    textTag: "sem conta",
-    textIntro: "As duas máquinas executam o mesmo comando com o mesmo código. As mensagens são criptografadas de ponta a ponta, nunca ficam em nenhum servidor e desaparecem quando a sessão termina.",
+    textTag: "emitir: conta · entrar: sem conta",
+    textIntro: "Em uma máquina, relayium text emite um código e espera; a outra entra com o comando impresso relayium text CODE. As duas permanecem online. As mensagens são criptografadas de ponta a ponta, nunca ficam em nenhum servidor e desaparecem quando a sessão termina.",
     textPipeNote: "O modo interativo envia uma linha por mensagem. Para conteúdo multilinha ou bytes exatos, use um pipe — o formato na rede é idêntico, só muda como o stdin é lido.",
     textSasNote: "O SAS é confirmado por padrão. Uma execução com pipe não tem a quem perguntar, então recusa iniciar a menos que você passe --yes depois de comparar o código de outra forma.",
     textLimitNote: "Uma mensagem tem no máximo 65.536 bytes UTF-8. Algo maior é um arquivo — use relayium send.",

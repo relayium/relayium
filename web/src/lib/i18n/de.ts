@@ -447,7 +447,7 @@ const de: Messages = {
     cloudH2: "Cloud — jetzt hochladen, später herunterladen",
     cloudTag: "Konto · asynchron",
     cloudIntro:
-      "Von einem Rechner hochladen und auf einem anderen herunterladen, wann immer du willst — die beiden müssen nie gleichzeitig online sein. up und send sind die beiden Befehle, die dein Konto nutzen: up, um die Datei zu speichern, send, um einen Pairing-Code zu erzeugen — einmal relayium login, dann geht beides. Ein send mit einem Code, den man dir gegeben hat, erzeugt keinen und braucht keine Anmeldung. Das Herunterladen braucht kein Konto, und push/pull, daemon-direct und sync nie.",
+      "Von einem Rechner hochladen und auf einem anderen herunterladen, wann immer du willst — die beiden müssen nie gleichzeitig online sein. up braucht ein Konto; ebenso send oder text ohne Code, wenn sie einen neuen Code erzeugen. Wer einem ausgegebenen Code mit send oder text beitritt, braucht keine Anmeldung; down, push/pull, daemon-direct und sync ebenfalls nicht.",
     cloudBody:
       "up verschlüsselt die Dateien lokal, lädt den Chiffretext hoch und gibt einen Abhol-Link aus. Steuere mit einem Aufbewahrungs-Flag die Lebensdauer (sonst gilt die Vorgabe deines Kontos): --burn (ein Download), --ttl 7d (feste Zeit, durch deinen Tarif begrenzt) oder --max-downloads 5 (feste Anzahl). Auf dem anderen Rechner gibst du den Link einfach an down — keine Anmeldung nötig.",
     cloudLoginNote:
@@ -457,8 +457,8 @@ const de: Messages = {
     cloudPrivacyNote:
       "Ende-zu-Ende-verschlüsselt: der Schlüssel steckt nur im #k=-Fragment des Links und erreicht den Server nie, der Chiffretext (samt Dateinamen) speichert. Verlierst du den Link, ist die Datei unwiederbringlich.",
     textH2: "text — flüchtige Nachrichten",
-    textTag: "kein Konto",
-    textIntro: "Beide Maschinen führen denselben Befehl mit demselben Code aus. Nachrichten sind Ende-zu-Ende verschlüsselt, werden auf keinem Server gespeichert und sind mit dem Ende der Sitzung weg.",
+    textTag: "Erzeugen: Konto · Beitreten: kein Konto",
+    textIntro: "Auf einem Rechner erzeugt relayium text einen Code und wartet; der andere tritt mit dem ausgegebenen Befehl relayium text CODE bei. Beide bleiben online. Nachrichten sind Ende-zu-Ende verschlüsselt, werden auf keinem Server gespeichert und sind mit dem Ende der Sitzung weg.",
     textPipeNote: "Der interaktive Modus sendet eine Zeile pro Nachricht. Für mehrzeilige Inhalte oder exakte Bytes nutze stattdessen eine Pipe — das Wire-Format ist identisch, nur das Lesen von stdin unterscheidet sich.",
     textSasNote: "Der SAS wird standardmäßig bestätigt. Ein Pipe-Aufruf hat niemanden zum Fragen und verweigert daher den Start, sofern du nicht --yes übergibst, nachdem du den Code anders verglichen hast.",
     textLimitNote: "Eine Nachricht umfasst höchstens 65.536 Bytes UTF-8. Alles Größere ist eine Datei — nimm relayium send.",
