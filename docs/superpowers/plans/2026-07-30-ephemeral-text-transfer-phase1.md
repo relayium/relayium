@@ -1454,7 +1454,7 @@ git commit -m "feat(web): message session state machine, exclusive with a transf
 **Interfaces:**
 - Produces, consumed by Task 7: `Messages["text"]` with keys
   `panelTitle`, `open`, `composePlaceholder`, `send`, `sendHint`, `byteCount: (used: number, max: number) => string`,
-  `tooLong: (max: number) => string`, `useFileInstead`, `requestHead: (name: string) => string`,
+  `tooLong`, `useFileInstead`, `connecting`, `requestHead: (name: string) => string`,
   `accept`, `reject`, `waitingAccept`, `open_`, `ended`, `failed`, `refused`, `unsupported`, `peerBusy`,
   `flooding`, `copy`, `copied`, `clear`, `clearConfirm`, `emptyHistory`, `you`, `peer: (name: string) => string`,
   `newMessageFrom: (name: string) => string`, `ephemeralNote`, `clipboardNote`, `sasCompare`
@@ -1504,7 +1504,11 @@ In `web/src/lib/i18n/types.ts`, add to `Messages` (following the nested-namespac
     send: string;
     sendHint: string;             // "Enter for a new line, ⌘/Ctrl+Enter to send"
     byteCount: (used: number, max: number) => string;
-    tooLong: (max: number) => string;
+    // The six keys TextErrorKey can name MUST be plain strings: the panel renders
+    // them as t.text[errorKey], and a parameterised one would print "function…".
+    // The byte limit is deliberately not named in this copy -- the composer's
+    // byteCount counter sits beside it and already shows the number.
+    tooLong: string;
     useFileInstead: string;
     requestHead: (name: string) => string;
     accept: string;
@@ -1892,7 +1896,7 @@ Create `web/src/lib/MessagePanel.svelte`. Presentational and prop-driven — the
         <button class="btn btn-primary send" disabled={overLimit || draft === ""}
                 onclick={() => { onSend(draft); draft = ""; }}>{t.text.send}</button>
       </div>
-      {#if overLimit}<p class="over">{t.text.tooLong(TEXT_MAX_BYTES)} {t.text.useFileInstead}</p>{/if}
+      {#if overLimit}<p class="over">{t.text.tooLong} {t.text.useFileInstead}</p>{/if}
     {/if}
 
     {#if errorKey}<p class="bad">{t.text[errorKey]}</p>{/if}
@@ -1906,7 +1910,7 @@ Create `web/src/lib/MessagePanel.svelte`. Presentational and prop-driven — the
 </section>
 ```
 
-`stateText(t, status)` maps a `TextStatus` to `t.text.*` (`waitingAccept`, `open_`, `ended`, `failed`, `refused`, `unsupported`, `peerBusy`), and `pathLabel` is imported from the helper `App.svelte:640` already uses — extract it to a small module if it is still local. `onClear` confirms with `t.text.clearConfirm` at the call site in `App.svelte`, reusing `ConfirmModal.svelte`.
+`stateText(t, status)` maps a `TextStatus` to `t.text.*` (`connecting`, `waitingAccept`, `open_`, `ended`, `failed`, `refused`, `unsupported`, `peerBusy`; `idle` renders nothing and `incomingRequest` uses `requestHead`), and `pathLabel` is imported from the helper `App.svelte:640` already uses — extract it to a small module if it is still local. `onClear` confirms with `t.text.clearConfirm` at the call site in `App.svelte`, reusing `ConfirmModal.svelte`.
 
 Everything else the tests require:
 

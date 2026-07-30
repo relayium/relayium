@@ -27,6 +27,44 @@ describe("i18n completeness", () => {
     }
   });
 
+  // 编译期的完整性靠 `npm run check`（Messages 是硬接口），但 CI 不跑它，所以运行时
+  // 这一道才是真正会拦住漏翻的。
+  it("每种语言都有完整的 text 命名空间", () => {
+    // errorKey 能取到的那几个键**必须是纯字符串**：面板直接 {t.text[errorKey]} 渲染，
+    // 取到一个函数就会把 "function..." 印到页面上。见 TextErrorKey。
+    const errorKeys = ["tooLong", "flooding", "unsupported", "peerBusy", "failed", "refused"] as const;
+    const plainKeys = [
+      "panelTitle", "open", "connecting", "composePlaceholder", "send", "sendHint",
+      "useFileInstead", "accept", "reject", "waitingAccept", "open_", "ended",
+      "copy", "copied", "clear", "clearConfirm", "emptyHistory", "you",
+      "ephemeralNote", "clipboardNote", "sasCompare", ...errorKeys,
+    ] as const;
+    for (const { code } of LANGS) {
+      const m = messages[code].text;
+      expect(m, `${code} 缺少 text 命名空间`).toBeTruthy();
+      for (const k of plainKeys) {
+        const v = (m as Record<string, unknown>)[k];
+        expect(typeof v, `${code}.text.${k} 应该是字符串`).toBe("string");
+        expect((v as string).trim().length, `${code}.text.${k} 是空的`).toBeGreaterThan(0);
+      }
+      // 带参数的三条：确认参数真的被用上了，而不是被翻译时丢掉。
+      // 分组分隔符跟运行时 locale 走，所以别把逗号钉死——只要求两个数字都出现。
+      expect(m.byteCount(10, 65536), `${code}.text.byteCount`).toMatch(/\b10\b/);
+      expect(m.byteCount(10, 65536), `${code}.text.byteCount`).toMatch(/65[.,\s\u00a0]?536/);
+      expect(m.requestHead("Alice"), `${code}.text.requestHead`).toContain("Alice");
+      expect(m.newMessageFrom("Alice"), `${code}.text.newMessageFrom`).toContain("Alice");
+      expect(m.peer("Alice"), `${code}.text.peer`).toContain("Alice");
+    }
+  });
+
+  // 发送快捷键和"回车换行"这条约定是内容保真的一部分：提示文案里必须真的提到回车，
+  // 否则用户会以为回车就是发送，而这个功能的全部意义是保留多行。
+  it("每种语言的 sendHint 都提到回车与发送快捷键", () => {
+    for (const { code } of LANGS) {
+      expect(messages[code].text.sendHint, `${code}.text.sendHint`).toMatch(/⌘|Ctrl/);
+    }
+  });
+
   it("every language has the stored-transfer + download strings", () => {
     for (const { code } of LANGS) {
       const m = messages[code];

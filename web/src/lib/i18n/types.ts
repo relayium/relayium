@@ -596,6 +596,49 @@ export interface Messages {
   historyEmpty: string;
   historyClear: string;
   historyKeep: string;
+  // Ephemeral encrypted messages. In-memory only — nothing here is ever written to
+  // localStorage, unlike the transfer history above.
+  text: {
+    panelTitle: string;
+    open: string; // the button that starts a session
+    composePlaceholder: string;
+    send: string;
+    sendHint: string; // must name Enter and the send chord; see the i18n test
+    byteCount: (used: number, max: number) => string;
+    useFileInstead: string;
+    requestHead: (name: string) => string;
+    accept: string;
+    reject: string;
+    // ── session states ──
+    connecting: string;
+    waitingAccept: string;
+    open_: string; // the state "open"; `open` above is the button
+    ended: string;
+    // ── terminal errors, addressed by TextErrorKey ──
+    // These six are indexed as t.text[errorKey] by the panel, so every one of them
+    // MUST be a plain string. A parameterised one would render as "function…".
+    // The byte limit is not named here on purpose: the composer's byteCount
+    // counter sits next to this line and already shows it, and two copies of the
+    // same number drift apart.
+    tooLong: string;
+    flooding: string;
+    unsupported: string;
+    peerBusy: string;
+    failed: string;
+    refused: string;
+    // ── history ──
+    copy: string;
+    copied: string;
+    clear: string;
+    clearConfirm: string;
+    emptyHistory: string;
+    you: string;
+    peer: (name: string) => string;
+    newMessageFrom: (name: string) => string; // OS notification: the name, never a body
+    ephemeralNote: string;
+    clipboardNote: string;
+    sasCompare: string;
+  };
 }
 
 export function legalUrl(slug: "privacy" | "terms" | "security" | "support", l: Lang): string {
