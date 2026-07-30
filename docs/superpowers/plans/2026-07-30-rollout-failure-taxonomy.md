@@ -918,3 +918,69 @@ Four things here are the shape that produced eight defects in the past week — 
 - **The signature download is a fetch, not a verification.** If it classifies as `ErrVerify`, an unreachable node still halts the fleet through that path and the whole change is inert for its motivating case.
 - **Retry's two guards are independent.** Check both are enforced in the handler, not only rendered on the button, and that neither is expressed as the other.
 - **This plan asserts things about `decideFleet`'s skipped branch, `updateResults`, the admin route style and the panel helpers.** Check each against the file. The most expensive error of the week was a design built on an unverified claim about existing code.
+
+---
+
+### Task 6: the BYO gate must check what it claims to certify
+
+**Independent of Tasks 4 and 5 — it can be done in any order relative to them, but it must land before this branch merges.**
+
+**Files:**
+- Modify: `server/account/rollout_gate.go` (the BYO branch of `setTargetVersion`)
+- Modify: `server/account/store.go` + `server/account/rollout_store.go` (one query, if none fits)
+- Create: `server/account/rollout_gate_byo_test.go`
+
+**Why.** `setTargetVersion`'s BYO branch admits a BYO target when the fleet track is `complete` on that same version. Its doc calls the certified property *"the fleet track has ALREADY COMPLETED this version"* and says the ordering is "the entire justification for auto-updating machines we don't own."
+
+`complete` does not carry that meaning — it means the queue ran out of candidates. With passing-over fixed, a release published with a broken asset fails on every fleet node, all are passed over, and the track completes on a version **no machine we own ever ran a byte of**. The gate would then point users' machines at it.
+
+This is a protection this branch removed by accident: before the passing-over fix, the re-command loop meant a track with two or more passed-over nodes never completed, so the gate was shielded by a bug.
+
+**The fix belongs at the gate, not at `decideFleet`.** `complete` has always meant "the queue finished" — `skipped` could already produce a completion with a node left behind. Changing what the producer emits to suit one consumer's misreading would leave the misreading in place for the next consumer.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `server/account/rollout_gate_byo_test.go`. Seed a fleet track `complete` at `v2.0.0`, and fleet nodes that are **not** on `v2.0.0` (e.g. all carrying `"unreachable"` and still on `v1.0.0`). Assert `SetTargetVersion(ctx, "byo", "v2.0.0")` returns `ErrByoAheadOfFleet` and that the BYO track is untouched.
+
+Then the positive case, which matters just as much — a suite of refusals passes against a gate that refuses everything: with at least one fleet node actually on `v2.0.0`, the same call **succeeds** and the BYO track is retargeted.
+
+Add the empty-fleet case: no fleet nodes at all, fleet track `complete` at `v2.0.0` → refused. An empty fleet has certified nothing.
+
+- [ ] **Step 2: Run them to verify they fail**
+
+Run: `cd server && go test ./account/ -run TestByoGate -v`
+Expected: the two refusal cases FAIL (the gate admits today); the positive case passes.
+
+- [ ] **Step 3: Implement**
+
+In `setTargetVersion`'s BYO branch, after the existing `fleet.Status != "complete" || !SameVersion(...)` check, add: at least one fleet node is running that version. **One node, not a proportion** — the question is "did a machine we own actually run this build", which is a yes/no, and a percentage would be a threshold to tune with no principled value on a six-machine fleet.
+
+Read what node-listing the store already offers before adding a query; `rolloutOwnerClass("fleet")` gives the owner type. Keep the refusal inside `ErrByoAheadOfFleet` so the admin sees one coherent message, and make the message say which condition failed — "completed" and "no node is actually running it" send an operator to different places.
+
+Preserve the existing comment block's reasoning and extend it rather than replacing it: the ordering property it describes is still the point, the check is what makes it true.
+
+- [ ] **Step 4: Run the tests**
+
+Run: `cd server && go build ./... && go vet ./account/ && go test ./account/` then `go test ./...`
+Expected: PASS. Pre-existing BYO gate tests must still pass — if one fails, read it before touching it, because it may be seeding a fleet track without any node on the version and relying on today's looser gate.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add server/account/rollout_gate.go server/account/store.go \
+        server/account/rollout_store.go server/account/rollout_gate_byo_test.go
+git commit -m "fix(rollout): the byo gate checks the fleet actually ran the build
+
+The gate admitted a byo target when the fleet track was complete on that
+version, and its doc calls that 'the entire justification for auto-updating
+machines we don't own'. But complete means the queue ran out of candidates: with
+passing-over fixed, a release with a broken asset fails on every fleet node, all
+are passed over, and the track completes on a build no machine we own ever ran.
+
+Fixed at the gate rather than at decideFleet. complete has always meant the
+queue finished -- skipped could already leave a node behind -- so changing what
+the producer emits to suit one consumer's misreading would leave the misreading
+in place for the next one.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
+```
