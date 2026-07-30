@@ -14,16 +14,40 @@ const NO_LOGIN = {
   pt: /não (?:precisam de|exigem) login/i,
 };
 
-const NEVER_STORED = {
-  en: /never stored/i,
-  zh: /绝不存储/,
-  ja: /保存されません/,
-  ko: /저장되지 않습니다/,
-  de: /nie gespeichert/i,
-  fr: /jamais stockés/i,
-  ar: /لا تُخزَّن أبدًا/,
-  es: /nunca se almacenan/i,
-  pt: /nunca são armazenadas/i,
+const NO_SERVER_HISTORY = {
+  en: /Neither Relayium nor your self-hosted server stores message bodies or server-side history/i,
+  zh: /不保存消息正文或服务端历史/,
+  ja: /メッセージ本文やサーバー側の履歴を保存しません/,
+  ko: /메시지 본문이나 서버 측 기록을 저장하지 않/,
+  de: /Weder Relayium noch Ihr selbst gehosteter Server speichern Nachrichteninhalte oder einen serverseitigen Verlauf/i,
+  fr: /Ni Relayium ni votre serveur auto-hébergé ne stockent le corps des messages ou un historique côté serveur/i,
+  ar: /لا تخزّن Relayium ولا خادمك المستضاف ذاتيًا متون الرسائل أو سجلًا على الخادم/,
+  es: /Ni Relayium ni tu servidor autoalojado guardan el cuerpo de los mensajes ni un historial del servidor/i,
+  pt: /Nem o Relayium nem o servidor auto-hospedado armazenam o corpo das mensagens ou um histórico no servidor/i,
+};
+
+const ENDPOINT_CAN_RETAIN = {
+  en: /terminal or recipient can copy or retain/i,
+  zh: /终端或接收方都可以.*复制或留存/,
+  ja: /端末または受信者も.*コピーまたは保持/,
+  ko: /터미널이나 수신자든.*복사하거나 보관/,
+  de: /Terminals beziehungsweise der Empfänger können.*kopieren oder aufbewahren/i,
+  fr: /terminal ou destinataire peut copier ou conserver/i,
+  ar: /طرفية أو مستلم نسخ النص أو الاحتفاظ به/,
+  es: /terminales o el destinatario puede copiar o conservar/i,
+  pt: /terminal ou destinatário pode copiar ou guardar/i,
+};
+
+const OLD_ABSOLUTE = {
+  en: /messages?.*never stored/i,
+  zh: /消息.*绝不存储/,
+  ja: /メッセージ.*保存されません/,
+  ko: /메시지.*저장되지 않습니다/,
+  de: /Nachrichten.*nie gespeichert/i,
+  fr: /messages.*jamais stockés/i,
+  ar: /الرسائل.*لا تُخزَّن أبدًا/,
+  es: /mensajes.*nunca se almacenan/i,
+  pt: /mensagens.*nunca são armazenadas/i,
 };
 
 const ONLINE = {
@@ -79,17 +103,28 @@ describe("self-hosting guide documents CLI text against a custom server", () => 
       expect(prose).toMatch(/P2P|peer-to-peer/i);
       expect(prose).toContain("TURN");
       expect(prose).toMatch(NO_LOGIN[lang]);
-      expect(prose).toMatch(NEVER_STORED[lang]);
+      expect(prose).toMatch(NO_SERVER_HISTORY[lang]);
+      expect(prose).toMatch(ENDPOINT_CAN_RETAIN[lang]);
+      expect(prose).not.toMatch(OLD_ABSOLUTE[lang]);
       expect(prose).toMatch(ONLINE[lang]);
       expect(prose).toMatch(NO_TURN[lang]);
 
       const faq = doc.faq.items.map((item) => item.a).join(" ");
       expect(faq).toContain("text");
       expect(faq).toMatch(NO_LOGIN[lang]);
+
+      const storageFaq = doc.faq.items.find((item) => item.a.includes("RELAYIUM_BLOB_DIR"));
+      expect(storageFaq, `${lang} has no self-hosted data-storage FAQ`).toBeTruthy();
+      expect(storageFaq.a).toMatch(
+        /endpoint|接收端|受信端末|수신 기기|Empfangsgeräte|appareils destinataires|طرف المستلم|dispositivos receptores|destinatários/i,
+      );
+      expect(storageFaq.a).not.toMatch(
+        /anywhere|任何地方|どこにも|어디에도|nirgendwo|nulle part|في أي مكان|ningún sitio|lugar nenhum/i,
+      );
     });
   }
 
   it("carries the current article update date", () => {
-    expect(article.updated).toBe("2026-07-30");
+    expect(article.updated).toBe("2026-07-31");
   });
 });

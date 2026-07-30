@@ -61,7 +61,7 @@ const en = {
       ],
       bullets: [
         "The CLI is free either way — --server changes which rendezvous server it talks to for the pairing-code handshake. send or text without a code mints one against that server, and cloud up stores under an account on it, so sign in there first with relayium login --server https://your-domain. receive, down, and text with the printed code need no login.",
-        "Both text peers must stay online. Messages use their own end-to-end encrypted, direct peer-to-peer session and are never stored; CLI text is direct-only and does not use the browser's TURN relay.",
+        "Both text peers must stay online. Messages use their own end-to-end encrypted, direct peer-to-peer session; CLI text is direct-only and does not use the browser's TURN relay. Neither Relayium nor your self-hosted server stores message bodies or server-side history, but either terminal or recipient can copy or retain text after receiving it.",
         "push/pull (over your own SSH) and serve + daemon-direct push relayium://host don't touch relayium.com at all, self-hosted or not — they connect straight to the remote you specify.",
       ],
     },
@@ -83,7 +83,7 @@ const en = {
       },
       {
         q: "What data does my self-hosted server store?",
-        a: "A SQLite database (accounts, sessions) at RELAYIUM_DB and, for stored/link-based transfers, encrypted blobs at RELAYIUM_BLOB_DIR that the server itself cannot decrypt. Realtime peer-to-peer transfers aren't stored anywhere — the server only relays the signaling handshake.",
+        a: "A SQLite database (accounts, sessions) at RELAYIUM_DB and, for stored/link-based transfers, encrypted blobs at RELAYIUM_BLOB_DIR that the server itself cannot decrypt. The server keeps no realtime file or message body and only relays the signaling handshake; receiving endpoints can still save files or retain text.",
       },
     ],
   },
@@ -151,7 +151,7 @@ const zh = {
       ],
       bullets: [
         "无论用哪个服务器，CLI 都是免费的——--server 只是改变了配对码握手所连接的会合服务器。send 或 text 不带码运行时会在该服务器生成配对码，云端 up 也存到那台服务器上的账号下，所以要先用 relayium login --server https://your-domain 在那边登录；receive、down，以及使用打印配对码加入的 text 都无需登录。",
-        "text 两端必须同时在线。消息使用独立的端到端加密 P2P 直连会话，绝不存储；CLI text 只支持直连，不使用网页版的 TURN 中继。",
+        "text 两端必须同时在线。消息使用独立的端到端加密 P2P 直连会话；CLI text 只支持直连，不使用网页版的 TURN 中继。Relayium 和你的自托管服务器都不保存消息正文或服务端历史，但任一终端或接收方都可以在收到文本后复制或留存。",
         "push/pull（走你自己的 SSH）以及 serve + daemon 直连的 push relayium://host，无论是否自托管都完全不会接触 relayium.com——它们直接连到你指定的远程地址。",
       ],
     },
@@ -173,7 +173,7 @@ const zh = {
       },
       {
         q: "我自托管的服务器会存储哪些数据？",
-        a: "一个位于 RELAYIUM_DB 的 SQLite 数据库（账号、会话），以及——对于存储型/链接型传输——位于 RELAYIUM_BLOB_DIR 的加密数据块，服务器自己也无法解密它们。实时点对点传输完全不会被存储在任何地方——服务器只转发信令握手。",
+        a: "一个位于 RELAYIUM_DB 的 SQLite 数据库（账号、会话），以及——对于存储型/链接型传输——位于 RELAYIUM_BLOB_DIR 的加密数据块，服务器自己也无法解密它们。服务器不保存实时文件或消息正文，只转发信令握手；接收端仍可保存文件或留存文本。",
       },
     ],
   },
@@ -241,7 +241,7 @@ const ja = {
       ],
       bullets: [
         "どちらのサーバーを使っても CLI は無料です——--server はペアリングコードのハンドシェイク先を変更するだけです。send または text をコードなしで実行するとそのサーバーでコードを発行し、クラウドの up もそのサーバー上のアカウントに保存するため、先に relayium login --server https://your-domain でサインインしてください。receive、down、表示されたコードで参加する text はログイン不要です。",
-        "text の両端は同時にオンラインである必要があります。メッセージは独立したエンドツーエンド暗号化 P2P 直結セッションを使い、保存されません。CLI text は直結専用で、ブラウザ版の TURN リレーは使いません。",
+        "text の両端は同時にオンラインである必要があります。メッセージは独立したエンドツーエンド暗号化 P2P 直結セッションを使います。CLI text は直結専用で、ブラウザ版の TURN リレーは使いません。Relayium もセルフホストしたサーバーもメッセージ本文やサーバー側の履歴を保存しませんが、どちらの端末または受信者も受信後のテキストをコピーまたは保持できます。",
         "push/pull（自分の SSH 経由）や、serve とデーモン直結の push relayium://host は、セルフホストかどうかにかかわらず relayium.com に一切触れません——指定したリモートに直接接続します。",
       ],
     },
@@ -263,7 +263,7 @@ const ja = {
       },
       {
         q: "セルフホストしたサーバーはどんなデータを保存しますか？",
-        a: "RELAYIUM_DB にある SQLite データベース（アカウント、セッション）と、保存型/リンク型の転送については RELAYIUM_BLOB_DIR にある暗号化されたブロブ——これはサーバー自身も復号できません。リアルタイムの P2P 転送はどこにも保存されません——サーバーはシグナリングのハンドシェイクを中継するだけです。",
+        a: "RELAYIUM_DB にある SQLite データベース（アカウント、セッション）と、保存型/リンク型の転送については RELAYIUM_BLOB_DIR にある暗号化されたブロブ——これはサーバー自身も復号できません。サーバーはリアルタイムのファイルやメッセージ本文を保存せず、シグナリングのハンドシェイクだけを中継しますが、受信端末はファイルやテキストを保持できます。",
       },
     ],
   },
@@ -331,7 +331,7 @@ const ko = {
       ],
       bullets: [
         "어느 서버를 쓰든 CLI는 무료입니다 — --server는 페어링 코드 핸드셰이크 서버만 바꿉니다. send나 text를 코드 없이 실행하면 그 서버에서 코드를 발급하고, 클라우드 up도 그 서버 계정에 저장하므로 먼저 relayium login --server https://your-domain으로 로그인하세요. receive, down, 출력된 코드로 참여하는 text는 로그인이 필요 없습니다.",
-        "text 양쪽은 동시에 온라인이어야 합니다. 메시지는 별도의 종단간 암호화 P2P 직접 연결 세션을 사용하며 저장되지 않습니다. CLI text는 직접 연결 전용이며 브라우저의 TURN 릴레이를 사용하지 않습니다.",
+        "text 양쪽은 동시에 온라인이어야 합니다. 메시지는 별도의 종단간 암호화 P2P 직접 연결 세션을 사용합니다. CLI text는 직접 연결 전용이며 브라우저의 TURN 릴레이를 사용하지 않습니다. Relayium과 자체 호스팅 서버는 메시지 본문이나 서버 측 기록을 저장하지 않지만, 어느 터미널이나 수신자든 받은 텍스트를 복사하거나 보관할 수 있습니다.",
         "push/pull(자신의 SSH를 통한)과 serve + 데몬 다이렉트의 push relayium://host는 자체 호스팅 여부와 무관하게 relayium.com에 전혀 닿지 않습니다 — 지정한 원격지에 직접 연결됩니다.",
       ],
     },
@@ -353,7 +353,7 @@ const ko = {
       },
       {
         q: "자체 호스팅한 서버는 어떤 데이터를 저장하나요?",
-        a: "RELAYIUM_DB에 있는 SQLite 데이터베이스(계정, 세션)와, 저장형/링크형 전송의 경우 RELAYIUM_BLOB_DIR에 있는 암호화된 블롭 — 이는 서버 자신도 복호화할 수 없습니다. 실시간 P2P 전송은 어디에도 저장되지 않습니다 — 서버는 시그널링 핸드셰이크만 중계할 뿐입니다.",
+        a: "RELAYIUM_DB에 있는 SQLite 데이터베이스(계정, 세션)와, 저장형/링크형 전송의 경우 RELAYIUM_BLOB_DIR에 있는 암호화된 블롭 — 이는 서버 자신도 복호화할 수 없습니다. 서버는 실시간 파일이나 메시지 본문을 저장하지 않고 시그널링 핸드셰이크만 중계하지만, 수신 기기는 파일이나 텍스트를 보관할 수 있습니다.",
       },
     ],
   },
@@ -421,7 +421,7 @@ const de = {
       ],
       bullets: [
         "Egal welchen Server sie nutzt, die CLI ist kostenlos — --server ändert nur den Rendezvous-Server. send oder text ohne Code erzeugen dort einen Code, und Cloud-up speichert unter einem Konto auf ihm; melde dich daher zuerst mit relayium login --server https://your-domain an. receive, down und text mit dem ausgegebenen Code brauchen keine Anmeldung.",
-        "Beide text-Gegenstellen müssen gleichzeitig online bleiben. Nachrichten laufen über eine eigene Ende-zu-Ende-verschlüsselte direkte P2P-Sitzung und werden nie gespeichert. CLI text ist rein direkt und nutzt nicht das TURN-Relay der Web-App.",
+        "Beide text-Gegenstellen müssen gleichzeitig online bleiben. Nachrichten laufen über eine eigene Ende-zu-Ende-verschlüsselte direkte P2P-Sitzung. CLI text ist rein direkt und nutzt nicht das TURN-Relay der Web-App. Weder Relayium noch Ihr selbst gehosteter Server speichern Nachrichteninhalte oder einen serverseitigen Verlauf; beide Terminals beziehungsweise der Empfänger können empfangenen Text jedoch kopieren oder aufbewahren.",
         "push/pull (über dein eigenes SSH) sowie serve + daemon-direct push relayium://host berühren relayium.com überhaupt nicht, selbst gehostet oder nicht — sie verbinden sich direkt mit der von dir angegebenen Gegenstelle.",
       ],
     },
@@ -443,7 +443,7 @@ const de = {
       },
       {
         q: "Welche Daten speichert mein selbst gehosteter Server?",
-        a: "Eine SQLite-Datenbank (Konten, Sessions) unter RELAYIUM_DB und, bei gespeicherten/link-basierten Übertragungen, verschlüsselte Blobs unter RELAYIUM_BLOB_DIR, die der Server selbst nicht entschlüsseln kann. Echtzeit-Peer-to-Peer-Übertragungen werden nirgendwo gespeichert — der Server leitet nur den Signaling-Handshake weiter.",
+        a: "Eine SQLite-Datenbank (Konten, Sessions) unter RELAYIUM_DB und, bei gespeicherten/link-basierten Übertragungen, verschlüsselte Blobs unter RELAYIUM_BLOB_DIR, die der Server selbst nicht entschlüsseln kann. Der Server speichert keine Echtzeit-Dateien oder Nachrichteninhalte und leitet nur den Signaling-Handshake weiter; Empfangsgeräte können Dateien oder Text dennoch behalten.",
       },
     ],
   },
@@ -511,7 +511,7 @@ const fr = {
       ],
       bullets: [
         "Quel que soit le serveur utilisé, la CLI est gratuite — --server ne change que le serveur de rendez-vous. send ou text sans code y génèrent un code, et up y stocke sous un compte ; connectez-vous donc d'abord avec relayium login --server https://your-domain. receive, down et text avec le code affiché ne nécessitent aucune connexion.",
-        "Les deux extrémités de text doivent rester en ligne. Les messages utilisent leur propre session P2P directe chiffrée de bout en bout et ne sont jamais stockés. Le text de la CLI est exclusivement direct et n'utilise pas le relais TURN de l'appli web.",
+        "Les deux extrémités de text doivent rester en ligne. Les messages utilisent leur propre session P2P directe chiffrée de bout en bout. Le text de la CLI est exclusivement direct et n'utilise pas le relais TURN de l'appli web. Ni Relayium ni votre serveur auto-hébergé ne stockent le corps des messages ou un historique côté serveur, mais chaque terminal ou destinataire peut copier ou conserver le texte après réception.",
         "push/pull (via votre propre SSH) ainsi que serve + le push daemon-direct relayium://host ne touchent jamais relayium.com, auto-hébergé ou non — ils se connectent directement à la machine distante que vous indiquez.",
       ],
     },
@@ -533,7 +533,7 @@ const fr = {
       },
       {
         q: "Quelles données mon serveur auto-hébergé stocke-t-il ?",
-        a: "Une base SQLite (comptes, sessions) sous RELAYIUM_DB et, pour les transferts stockés/basés sur un lien, des blobs chiffrés sous RELAYIUM_BLOB_DIR que le serveur lui-même ne peut pas déchiffrer. Les transferts pair-à-pair en temps réel ne sont stockés nulle part — le serveur ne fait que relayer la poignée de main de signalisation.",
+        a: "Une base SQLite (comptes, sessions) sous RELAYIUM_DB et, pour les transferts stockés/basés sur un lien, des blobs chiffrés sous RELAYIUM_BLOB_DIR que le serveur lui-même ne peut pas déchiffrer. Le serveur ne conserve aucun fichier ni corps de message en temps réel et ne fait que relayer la poignée de main de signalisation ; les appareils destinataires peuvent néanmoins garder les fichiers ou le texte.",
       },
     ],
   },
@@ -601,7 +601,7 @@ const ar = {
       ],
       bullets: [
         "الـ CLI مجاني في كلتا الحالتين — ‎--server‎ يغيّر خادم التعارف فقط. يصدر send أو text بلا رمز رمزًا من ذلك الخادم، ويخزّن up السحابي تحت حساب عليه، لذا سجّل الدخول أولًا بـ ‎relayium login --server https://your-domain‎. أما receive وdown وtext مع الرمز المطبوع فلا تحتاج إلى تسجيل دخول.",
-        "يجب أن يبقى طرفا text متصلين معًا. تستخدم الرسائل جلسة P2P مباشرة مستقلة ومشفّرة من الطرف إلى الطرف ولا تُخزَّن أبدًا. text في CLI مباشر فقط ولا يستخدم مُرحِّل TURN الخاص بتطبيق الويب.",
+        "يجب أن يبقى طرفا text متصلين معًا. تستخدم الرسائل جلسة P2P مباشرة مستقلة ومشفّرة من الطرف إلى الطرف. text في CLI مباشر فقط ولا يستخدم مُرحِّل TURN الخاص بتطبيق الويب. لا تخزّن Relayium ولا خادمك المستضاف ذاتيًا متون الرسائل أو سجلًا على الخادم، لكن يمكن لأي طرفية أو مستلم نسخ النص أو الاحتفاظ به بعد استلامه.",
         "‏push/pull (عبر SSH الخاص بك) وserve + دفع daemon direct عبر push relayium://host لا يلمسان relayium.com إطلاقًا، سواء بالاستضافة الذاتية أم لا — يتصلان مباشرةً بالجهاز البعيد الذي تحدده.",
       ],
     },
@@ -623,7 +623,7 @@ const ar = {
       },
       {
         q: "ما البيانات التي يخزّنها خادمي المُستضاف ذاتيًا؟",
-        a: "قاعدة بيانات SQLite (الحسابات، الجلسات) في RELAYIUM_DB، و — لعمليات النقل المُخزَّنة/المبنية على رابط — كتل مشفَّرة في RELAYIUM_BLOB_DIR لا يستطيع الخادم نفسه فكّ تشفيرها. عمليات النقل الفوري من الند للند لا تُخزَّن في أي مكان — يرحّل الخادم مصافحة الإشارة فقط.",
+        a: "قاعدة بيانات SQLite (الحسابات، الجلسات) في RELAYIUM_DB، و — لعمليات النقل المُخزَّنة/المبنية على رابط — كتل مشفَّرة في RELAYIUM_BLOB_DIR لا يستطيع الخادم نفسه فكّ تشفيرها. لا يحفظ الخادم ملفات النقل الفوري أو أجسام الرسائل، بل يرحّل مصافحة الإشارة فقط؛ ويمكن للطرف المستلم حفظ الملفات أو الاحتفاظ بالنص.",
       },
     ],
   },
@@ -691,7 +691,7 @@ const es = {
       ],
       bullets: [
         "La CLI es gratis en cualquier caso — --server solo cambia el servidor de punto de encuentro. send o text sin código generan uno allí, y up guarda bajo una cuenta en ese servidor, así que inicia sesión primero con relayium login --server https://your-domain. receive, down y text con el código impreso no necesitan iniciar sesión.",
-        "Ambos extremos de text deben permanecer en línea. Los mensajes usan su propia sesión P2P directa cifrada de extremo a extremo y nunca se almacenan. text en la CLI es solo directo y no usa el relé TURN de la app web.",
+        "Ambos extremos de text deben permanecer en línea. Los mensajes usan su propia sesión P2P directa cifrada de extremo a extremo. text en la CLI es solo directo y no usa el relé TURN de la app web. Ni Relayium ni tu servidor autoalojado guardan el cuerpo de los mensajes ni un historial del servidor, pero cualquiera de los terminales o el destinatario puede copiar o conservar el texto después de recibirlo.",
         "push/pull (por tu propio SSH) y serve + el push daemon directo relayium://host no tocan relayium.com en absoluto, te autoalojes o no — se conectan directamente al remoto que indiques.",
       ],
     },
@@ -713,7 +713,7 @@ const es = {
       },
       {
         q: "¿Qué datos almacena mi servidor autoalojado?",
-        a: "Una base de datos SQLite (cuentas, sesiones) en RELAYIUM_DB y, para las transferencias almacenadas/basadas en enlace, blobs cifrados en RELAYIUM_BLOB_DIR que el propio servidor no puede descifrar. Las transferencias de igual a igual en tiempo real no se almacenan en ningún sitio — el servidor solo retransmite el handshake de señalización.",
+        a: "Una base de datos SQLite (cuentas, sesiones) en RELAYIUM_DB y, para las transferencias almacenadas/basadas en enlace, blobs cifrados en RELAYIUM_BLOB_DIR que el propio servidor no puede descifrar. El servidor no guarda archivos en tiempo real ni cuerpos de mensajes y solo retransmite el handshake de señalización; los dispositivos receptores sí pueden conservar archivos o texto.",
       },
     ],
   },
@@ -781,7 +781,7 @@ const pt = {
       ],
       bullets: [
         "A CLI é gratuita em qualquer dos casos — --server apenas muda o servidor de encontro. send ou text sem código geram um código nele, e up guarda sob uma conta nesse servidor, então entre primeiro com relayium login --server https://your-domain. receive, down e text com o código impresso não precisam de login.",
-        "As duas pontas de text precisam permanecer online. As mensagens usam uma sessão P2P direta própria, criptografada de ponta a ponta, e nunca são armazenadas. text na CLI é apenas direto e não usa o retransmissor TURN do app web.",
+        "As duas pontas de text precisam permanecer online. As mensagens usam uma sessão P2P direta própria, criptografada de ponta a ponta. text na CLI é apenas direto e não usa o retransmissor TURN do app web. Nem o Relayium nem o servidor auto-hospedado armazenam o corpo das mensagens ou um histórico no servidor, mas qualquer terminal ou destinatário pode copiar ou guardar o texto depois de recebê-lo.",
         "push/pull (pelo seu próprio SSH) e serve + o push daemon direto relayium://host não tocam o relayium.com em nada, com ou sem auto-hospedagem — eles se conectam diretamente ao remoto que você especificar.",
       ],
     },
@@ -803,7 +803,7 @@ const pt = {
       },
       {
         q: "Quais dados o meu servidor auto-hospedado armazena?",
-        a: "Um banco de dados SQLite (contas, sessões) em RELAYIUM_DB e, para transferências armazenadas/baseadas em link, blobs criptografados em RELAYIUM_BLOB_DIR que o próprio servidor não consegue descriptografar. Transferências ponto a ponto em tempo real não são armazenadas em lugar nenhum — o servidor apenas retransmite o handshake de sinalização.",
+        a: "Um banco de dados SQLite (contas, sessões) em RELAYIUM_DB e, para transferências armazenadas/baseadas em link, blobs criptografados em RELAYIUM_BLOB_DIR que o próprio servidor não consegue descriptografar. O servidor não guarda arquivos em tempo real nem corpos de mensagens e apenas retransmite o handshake de sinalização; os destinatários ainda podem salvar arquivos ou reter texto.",
       },
     ],
   },
@@ -818,6 +818,6 @@ const pt = {
 export default {
   slug: "guides/self-host-relayium",
   published: "2026-07-09",
-  updated: "2026-07-30",
+  updated: "2026-07-31",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }, selfHostInstall),
 };

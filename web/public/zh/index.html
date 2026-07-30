@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Relayium — 端到端加密的点对点文件与文本传输</title>
-    <meta name="description" content="Relayium 是开源、端到端加密的文件与文本传输工具。在浏览器里实时直传：同一网络下两台设备直连、文件不经过服务器，跨网络则经加密中继转发（中继只见密文）。双方都在线时，还能在另一条同样端到端加密的直连上发送临时文本消息，不存储在任何服务器上，会话结束即消失。无需安装，同一网络下无需账号，跨网络配对时仅发送方需登录。" />
+    <meta name="description" content="Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Relayium — 端到端加密的点对点文件与文本传输" />
-    <meta property="og:description" content="Relayium 是开源、端到端加密的文件与文本传输工具。在浏览器里实时直传：同一网络下两台设备直连、文件不经过服务器，跨网络则经加密中继转发（中继只见密文）。双方都在线时，还能在另一条同样端到端加密的直连上发送临时文本消息，不存储在任何服务器上，会话结束即消失。无需安装，同一网络下无需账号，跨网络配对时仅发送方需登录。" />
+    <meta property="og:description" content="Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。" />
     <meta property="og:url" content="https://relayium.com/zh/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Relayium — 端到端加密的点对点文件与文本传输" />
-    <meta name="twitter:description" content="Relayium 是开源、端到端加密的文件与文本传输工具。在浏览器里实时直传：同一网络下两台设备直连、文件不经过服务器，跨网络则经加密中继转发（中继只见密文）。双方都在线时，还能在另一条同样端到端加密的直连上发送临时文本消息，不存储在任何服务器上，会话结束即消失。无需安装，同一网络下无需账号，跨网络配对时仅发送方需登录。" />
+    <meta name="twitter:description" content="Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":["WebApplication","SoftwareApplication"],"name":"Relayium","url":"https://relayium.com/zh/","description":"Relayium 是开源、端到端加密的文件与文本传输工具。在浏览器里实时直传：同一网络下两台设备直连、文件不经过服务器，跨网络则经加密中继转发（中继只见密文）。双方都在线时，还能在另一条同样端到端加密的直连上发送临时文本消息，不存储在任何服务器上，会话结束即消失。无需安装，同一网络下无需账号，跨网络配对时仅发送方需登录。","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"inLanguage":"zh-Hans"},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"免费吗？","acceptedAnswer":{"@type":"Answer","text":"免费。Relayium 采用 AGPL-3.0 许可开源，完全无任何费用；同一网络下实时传输无需登录，跨网络配对码传输仅发送方需登录，接收方始终无需账号。"}},{"@type":"Question","name":"文件会上传到服务器吗？","acceptedAnswer":{"@type":"Answer","text":"同一网络下实时直传的文件根本不经过服务器；跨网络时经加密中继转发，中继也只能看到密文。仅当你改用可选的下载链接时，浏览器会先加密再上传，服务器只保存无法解密的密文，密钥只存在于链接里。"}},{"@type":"Question","name":"是端到端加密的吗？","acceptedAnswer":{"@type":"Answer","text":"是。采用 X25519 密钥交换加每块 AES-256-GCM 加密，密钥只在两台设备之间协商，服务器无法解密任何内容。"}},{"@type":"Question","name":"能跨系统传吗？","acceptedAnswer":{"@type":"Answer","text":"能。只要有现代浏览器，Windows、macOS、Linux、Android、iOS 之间都能互传，无需安装 App。"}},{"@type":"Question","name":"文件有大小限制吗？","acceptedAnswer":{"@type":"Answer","text":"实时传输采用流式传输，Relayium 本身不设硬性大小上限（桌面版 Chrome、Edge 直接流式落盘；Firefox、Safari 以及所有手机浏览器只能把文件攒在内存里，因此超过约 256 MB 时页面会先给出提示——这是一个刻意保守的估计值，不是实测出来的硬上限）。每批最多 1,000 个文件。"}},{"@type":"Question","name":"能发文字，而不只是文件吗？","acceptedAnswer":{"@type":"Answer","text":"可以。双方设备都在线时，可以在另一条同样端到端加密的直连上开启一次消息会话：链接、命令与多行代码都会原样送达，单条消息最多 65,536 字节（UTF-8）。消息不存储在任何服务器上，会话结束即消失——没有离线投递，也不会在任何地方保留记录。更大的内容请作为文件发送。"}},{"@type":"Question","name":"和 Snapdrop 有什么区别？","acceptedAnswer":{"@type":"Answer","text":"Relayium 在同类思路上增加了应用层端到端加密与 SAS 校验码，即使信令服务器被入侵也无法窃听或冒充，并支持跨网络传输与可选的零知识下载链接。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":["WebApplication","SoftwareApplication"],"name":"Relayium","url":"https://relayium.com/zh/","description":"Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"inLanguage":"zh-Hans"},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"免费吗？","acceptedAnswer":{"@type":"Answer","text":"免费。Relayium 采用 AGPL-3.0 许可开源，完全无任何费用；同一网络下实时传输无需登录，跨网络配对码传输仅发送方需登录，接收方始终无需账号。"}},{"@type":"Question","name":"文件会上传到服务器吗？","acceptedAnswer":{"@type":"Answer","text":"同一网络下实时直传的文件根本不经过服务器；跨网络时经加密中继转发，中继也只能看到密文。仅当你改用可选的下载链接时，浏览器会先加密再上传，服务器只保存无法解密的密文，密钥只存在于链接里。"}},{"@type":"Question","name":"是端到端加密的吗？","acceptedAnswer":{"@type":"Answer","text":"是。采用 X25519 密钥交换加每块 AES-256-GCM 加密，密钥只在两台设备之间协商，服务器无法解密任何内容。"}},{"@type":"Question","name":"能跨系统传吗？","acceptedAnswer":{"@type":"Answer","text":"能。只要有现代浏览器，Windows、macOS、Linux、Android、iOS 之间都能互传，无需安装 App。"}},{"@type":"Question","name":"文件有大小限制吗？","acceptedAnswer":{"@type":"Answer","text":"实时传输采用流式传输，Relayium 本身不设硬性大小上限（桌面版 Chrome、Edge 直接流式落盘；Firefox、Safari 以及所有手机浏览器只能把文件攒在内存里，因此超过约 256 MB 时页面会先给出提示——这是一个刻意保守的估计值，不是实测出来的硬上限）。每批最多 1,000 个文件。"}},{"@type":"Question","name":"能发文字，而不只是文件吗？","acceptedAnswer":{"@type":"Answer","text":"双方同时在线时，可发送链接、命令或多行代码。每条消息最多 65,536 字节（UTF-8）；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。没有离线投递，更大的内容请作为文件发送。"}},{"@type":"Question","name":"和 Snapdrop 有什么区别？","acceptedAnswer":{"@type":"Answer","text":"Relayium 在同类思路上增加了应用层端到端加密与 SAS 校验码，即使信令服务器被入侵也无法窃听或冒充，并支持跨网络传输与可选的零知识下载链接。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -79,7 +79,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <nav class="langbar" aria-label="Language"><a href="/">English</a><a href="/zh/" aria-current="true">中文</a><a href="/ja/">日本語</a><a href="/ko/">한국어</a><a href="/de/">Deutsch</a><a href="/fr/">Français</a><a href="/ar/">العربية</a><a href="/es/">Español</a><a href="/pt/">Português</a></nav>
       <h1>端到端加密的点对点文件与文本传输</h1>
-      <p class="pitch">在浏览器里让两台设备直接相连，文件端到端加密、逐块传输；同一网络下根本不经过服务器，跨网络则经加密中继转发（中继只见密文）。双方都在线时，还能在另一条同样加密的直连上发送临时文本——链接、命令或多行代码原样送达，不存储在任何服务器上，会话结束即消失。无需安装、无需注册，打开网页即可开始。</p>
+      <p class="pitch">Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。</p>
       <a class="cta" href="/?lang=zh">开始传输</a>
 
       <section class="reveal">
@@ -88,7 +88,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <li>两台设备用现代浏览器打开 relayium.com。</li>
         <li>一方选择或拖入要发送的文件（每批最多 1,000 个）；也可以改为发送一条文本消息。</li>
         <li>双方核对屏幕上同一段 6 位校验码（SAS），确认一致以排除中间人。</li>
-        <li>建立点对点直连，文件逐块经 AES-256-GCM 加密传输，并对每个文件做 SHA-256 完整性校验；文本消息走另一条同样加密的直连，不写入磁盘，也不留存在服务器上。</li>
+        <li>文件逐块经 AES-256-GCM 加密传输，并以 SHA-256 校验完整性；临时文本使用独立的端到端加密会话。双方须同时在线，Relayium 服务器不保存消息正文或服务端历史，但端点可以留存文本。</li>
       </ol>
       </section>
 
@@ -98,7 +98,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <li><b>端到端加密</b> — X25519 密钥交换 + 每块 AES-256-GCM 加密，密钥只在两台设备间协商，服务器无从解密。</li>
         <li><b>真正点对点</b> — 同一网络下文件通过加密的 WebRTC 通道在设备之间直接流动、根本不经过我们的服务器；跨网络时经加密中继转发，中继也只能看到密文。</li>
         <li><b>SAS 防中间人</b> — 两边屏幕显示同一段 6 位校验码，核对一致即可排除中间人窃听，即便信令服务器被入侵也无法冒充。</li>
-        <li><b>临时加密文本</b> — 双方都在线时，可以在另一条同样端到端加密的直连上发送链接、命令或多行代码。内容原样送达，单条消息最多 65,536 字节（UTF-8）；消息不存储在任何服务器上，会话结束即消失——没有离线投递，也不保留任何聊天记录。更大的内容请作为文件发送。</li>
+        <li><b>临时加密文本</b> — 双方同时在线时，可发送链接、命令或多行代码。每条消息最多 65,536 字节（UTF-8）；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。没有离线投递，更大的内容请作为文件发送。</li>
         <li><b>跨平台</b> — Windows、macOS、Linux、Android、iOS——只要有现代浏览器就能用，无需安装任何 App。</li>
         <li><b>免费开源</b> — AGPL-3.0 许可，协议与全部前后端代码都在 GitHub 公开；同一网络下实时传输免登录，跨网络配对码传输仅发送方需登录。</li>
       </ul>
@@ -129,7 +129,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <h3>文件有大小限制吗？</h3>
       <p>实时传输采用流式传输，Relayium 本身不设硬性大小上限（桌面版 Chrome、Edge 直接流式落盘；Firefox、Safari 以及所有手机浏览器只能把文件攒在内存里，因此超过约 256 MB 时页面会先给出提示——这是一个刻意保守的估计值，不是实测出来的硬上限）。每批最多 1,000 个文件。</p>
       <h3>能发文字，而不只是文件吗？</h3>
-      <p>可以。双方设备都在线时，可以在另一条同样端到端加密的直连上开启一次消息会话：链接、命令与多行代码都会原样送达，单条消息最多 65,536 字节（UTF-8）。消息不存储在任何服务器上，会话结束即消失——没有离线投递，也不会在任何地方保留记录。更大的内容请作为文件发送。</p>
+      <p>双方同时在线时，可发送链接、命令或多行代码。每条消息最多 65,536 字节（UTF-8）；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。没有离线投递，更大的内容请作为文件发送。</p>
       <h3>和 Snapdrop 有什么区别？</h3>
       <p>Relayium 在同类思路上增加了应用层端到端加密与 SAS 校验码，即使信令服务器被入侵也无法窃听或冒充，并支持跨网络传输与可选的零知识下载链接。</p>
       </section>

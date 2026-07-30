@@ -27,7 +27,7 @@ export const pricing = {
     steps: [
       "Local network (LAN) transfers — instant, no account needed.",
       "Direct peer-to-peer CLI transfers — files over your own SSH, daemon-direct, or a pairing code, plus ephemeral text by pairing code — with nothing metered. Minting a send or text code needs an account; joining one never does.",
-      "End-to-end encrypted: files have no size limit, while live text is never stored. On direct paths, your files and messages go straight between devices — they never touch our servers.",
+      "End-to-end encrypted: files have no size limit, while live text needs both ends online and leaves no message bodies or server-side history on Relayium servers — each device can still copy or keep what it receives. On direct paths, your files and messages go straight between devices — they never touch our servers.",
     ],
   },
   why: {
@@ -65,7 +65,7 @@ export const pricing = {
     items: [
       {
         q: "Is it really free?",
-        a: "Yes. Same-network file or live-text transfers and direct CLI transfers are end-to-end encrypted and completely free — you don't even need an account to receive a file or join a text session. Files are unlimited in size; ephemeral text requires both devices online and is never stored. Cross-network browser relay and cloud storage draw on a monthly allowance that every account gets, Free included; you pay only when you need more.",
+        a: "Yes. Same-network file or live-text transfers and direct CLI transfers are end-to-end encrypted and completely free — you don't even need an account to receive a file or join a text session. Files are unlimited in size; ephemeral text requires both devices online, and Relayium servers keep no message bodies or server-side history — though each device can copy or keep the text it receives. Cross-network browser relay and cloud storage draw on a monthly allowance that every account gets, Free included; you pay only when you need more.",
       },
       {
         q: "What's the difference between direct and relayed transfers?",
@@ -126,7 +126,7 @@ export const cli = {
       },
       {
         title: "text — ephemeral messages",
-        desc: "Share a snippet, a link or a command instead of a file. One machine runs relayium text to mint a pairing code — that side needs relayium login — and the other joins with the printed relayium text CODE, which needs no login. Both ends stay online for the session: it is its own end-to-end encrypted peer-to-peer session, the messages are never stored on any server, and one message is at most 65,536 bytes of UTF-8. Anything larger is a file.",
+        desc: "Share a snippet, a link or a command instead of a file. One machine runs relayium text to mint a pairing code — that side needs relayium login — and the other joins with the printed relayium text CODE, which needs no login. Both ends stay online for the session: it is its own end-to-end encrypted peer-to-peer session, Relayium servers keep no message bodies and no server-side history — the machine on the other end can of course copy or keep what it receives — and one message is at most 65,536 bytes of UTF-8. Anything larger is a file.",
       },
       {
         title: "daemon direct — server to server",

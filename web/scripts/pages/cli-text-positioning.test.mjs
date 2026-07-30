@@ -93,6 +93,12 @@ describe("/cli shell covers files and ephemeral text", () => {
     expect(item.desc).toContain("relayium text CODE");
     expect(item.desc).toMatch(/no login|no account/i);
     expect(item.desc).toContain("65,536");
-    expect(item.desc).toMatch(/never stored/i);
+    // Both ends online, nothing kept server-side — and the honest caveat that
+    // the other machine can keep what it receives. "never stored on any
+    // server" claimed more than the protocol delivers.
+    expect(item.desc).toMatch(/both ends stay online/i);
+    expect(item.desc).toMatch(/no message bodies and no server-side history/i);
+    expect(item.desc).toMatch(/copy or keep/i);
+    expect(item.desc).not.toMatch(/never stored|persistent history/i);
   });
 });

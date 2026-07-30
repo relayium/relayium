@@ -179,7 +179,22 @@ describe("product facts stay in sync across sources", () => {
   it("positions the homepage as file plus online-only ephemeral text", () => {
     expect(indexHtml).toContain("P2P file and text transfer");
     expect(indexHtml).toContain("both devices are online");
-    expect(indexHtml).toContain("never stored on a server");
+    expect(indexHtml).toContain("Relayium servers keep no message bodies");
     expect(indexHtml).toContain("65,536 UTF-8 bytes");
+  });
+
+  it("states the ephemeral-text boundary without overclaiming for the endpoints", () => {
+    // "never stored" / "no persistent history" were absolutes about the whole
+    // system, but the only thing Relayium controls is its own servers: the
+    // receiving device holds plaintext and may copy or keep it. Every surface
+    // a crawler reads — meta, JSON-LD, noscript prose — has to say so.
+    expect(indexHtml).not.toMatch(/never stor|persistent history|not stored/i);
+    expect(indexHtml).toMatch(/no server-side history/);
+    expect(indexHtml).toContain("use an encrypted TURN relay by design");
+    expect(indexHtml).not.toContain("Across networks the connection may go through");
+    // Endpoint retention, said out loud rather than left to inference.
+    expect(indexHtml).toMatch(/copy or keep|copying or saving/i);
+    // The per-message cap is a protocol fact and must survive the rewording.
+    expect(indexHtml.match(/65,536 UTF-8 bytes/g)?.length).toBeGreaterThanOrEqual(4);
   });
 });

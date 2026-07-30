@@ -4,12 +4,10 @@
 
 const zh = {
   title: "Relayium — 端到端加密的点对点文件与文本传输",
-  description:
-    "Relayium 是开源、端到端加密的文件与文本传输工具。在浏览器里实时直传：同一网络下两台设备直连、文件不经过服务器，跨网络则经加密中继转发（中继只见密文）。双方都在线时，还能在另一条同样端到端加密的直连上发送临时文本消息，不存储在任何服务器上，会话结束即消失。无需安装，同一网络下无需账号，跨网络配对时仅发送方需登录。",
+  description: "Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。",
   hero: {
     h1: "端到端加密的点对点文件与文本传输",
-    pitch:
-      "在浏览器里让两台设备直接相连，文件端到端加密、逐块传输；同一网络下根本不经过服务器，跨网络则经加密中继转发（中继只见密文）。双方都在线时，还能在另一条同样加密的直连上发送临时文本——链接、命令或多行代码原样送达，不存储在任何服务器上，会话结束即消失。无需安装、无需注册，打开网页即可开始。",
+    pitch: "Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。",
     cta: "开始传输",
   },
   how: {
@@ -18,7 +16,7 @@ const zh = {
       "两台设备用现代浏览器打开 relayium.com。",
       "一方选择或拖入要发送的文件（每批最多 1,000 个）；也可以改为发送一条文本消息。",
       "双方核对屏幕上同一段 6 位校验码（SAS），确认一致以排除中间人。",
-      "建立点对点直连，文件逐块经 AES-256-GCM 加密传输，并对每个文件做 SHA-256 完整性校验；文本消息走另一条同样加密的直连，不写入磁盘，也不留存在服务器上。",
+      "文件逐块经 AES-256-GCM 加密传输，并以 SHA-256 校验完整性；临时文本使用独立的端到端加密会话。双方须同时在线，Relayium 服务器不保存消息正文或服务端历史，但端点可以留存文本。",
     ],
   },
   why: {
@@ -38,7 +36,7 @@ const zh = {
       },
       {
         title: "临时加密文本",
-        desc: "双方都在线时，可以在另一条同样端到端加密的直连上发送链接、命令或多行代码。内容原样送达，单条消息最多 65,536 字节（UTF-8）；消息不存储在任何服务器上，会话结束即消失——没有离线投递，也不保留任何聊天记录。更大的内容请作为文件发送。",
+        desc: "双方同时在线时，可发送链接、命令或多行代码。每条消息最多 65,536 字节（UTF-8）；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。没有离线投递，更大的内容请作为文件发送。",
       },
       {
         title: "跨平台",
@@ -92,7 +90,7 @@ const zh = {
       },
       {
         q: "能发文字，而不只是文件吗？",
-        a: "可以。双方设备都在线时，可以在另一条同样端到端加密的直连上开启一次消息会话：链接、命令与多行代码都会原样送达，单条消息最多 65,536 字节（UTF-8）。消息不存储在任何服务器上，会话结束即消失——没有离线投递，也不会在任何地方保留记录。更大的内容请作为文件发送。",
+        a: "双方同时在线时，可发送链接、命令或多行代码。每条消息最多 65,536 字节（UTF-8）；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。没有离线投递，更大的内容请作为文件发送。",
       },
       {
         q: "和 Snapdrop 有什么区别？",
@@ -106,12 +104,10 @@ const zh = {
 
 const ja = {
   title: "Relayium — エンドツーエンド暗号化のP2Pファイル・テキスト転送",
-  description:
-    "Relayiumはオープンソースでエンドツーエンド暗号化のファイル・テキスト転送ツールです。ブラウザでのリアルタイム転送では、同じネットワークなら2台の端末が直結しファイルはサーバーを経由せず、ネットワークをまたぐ場合は暗号化されたリレー経由になります（リレーは暗号文しか扱いません）。両方の端末がオンラインなら、同じくエンドツーエンド暗号化された専用の直結で一時的なテキストメッセージも送れます。メッセージはどのサーバーにも保存されず、セッション終了とともに消えます。インストール不要、同じネットワークならアカウントも不要です（ネットワークをまたぐペアリングは送信側のサインインのみ必要）。",
+  description: "Relayiumはオープンソースでインストール不要の、エンドツーエンド暗号化されたファイル・テキスト転送ツールです。同じネットワークではファイルを直接転送し、ネットワークをまたぐブラウザは設計どおりTURNリレーを使います。リレーが見るのはエンドツーエンド暗号化された暗号文だけです。一時テキストは両端末がオンラインである必要があり、Relayiumサーバーは本文やサーバー側履歴を保存しませんが、ブラウザや受信端末はテキストをコピー・保持できます。同じネットワークではアカウント不要です。ネットワークをまたぐペアリングコードの作成にはサインインが必要ですが、コードでの参加には不要です。",
   hero: {
     h1: "エンドツーエンド暗号化のP2Pファイル・テキスト転送",
-    pitch:
-      "ブラウザで2台の端末を直接つなぎ、ファイルはエンドツーエンド暗号化されチャンクごとに転送されます。同じネットワークではサーバーを一切経由せず、ネットワークをまたぐ場合は暗号化されたリレー経由になります（リレーは暗号文のみ）。両方の端末がオンラインなら、同じく暗号化された専用の直結で一時的なテキストも送れます——リンクやコマンド、複数行のコードがそのまま届き、どのサーバーにも保存されず、セッション終了とともに消えます。インストールも登録も不要、ウェブページを開くだけで始められます。",
+    pitch: "Relayiumはオープンソースでインストール不要の、エンドツーエンド暗号化されたファイル・テキスト転送ツールです。同じネットワークではファイルを直接転送し、ネットワークをまたぐブラウザは設計どおりTURNリレーを使います。リレーが見るのはエンドツーエンド暗号化された暗号文だけです。一時テキストは両端末がオンラインである必要があり、Relayiumサーバーは本文やサーバー側履歴を保存しませんが、ブラウザや受信端末はテキストをコピー・保持できます。同じネットワークではアカウント不要です。ネットワークをまたぐペアリングコードの作成にはサインインが必要ですが、コードでの参加には不要です。",
     cta: "転送を始める",
   },
   how: {
@@ -120,7 +116,7 @@ const ja = {
       "2台の端末でモダンブラウザから relayium.com を開きます。",
       "片方が送るファイルを選ぶかドラッグします（1回につき最大1,000個）。テキストメッセージを送ることもできます。",
       "両方の画面に表示される同じ6桁の検証コード（SAS）を照合し、一致を確認して中間者を排除します。",
-      "P2P直結を確立し、ファイルはチャンクごとにAES-256-GCMで暗号化して転送、各ファイルはSHA-256で完全性を検証します。テキストメッセージも同じく暗号化された専用の直結を通り、ディスクにもサーバーにも残りません。",
+      "ファイルはAES-256-GCMでチャンクごとに暗号化し、SHA-256で完全性を検証します。一時テキストは独立したエンドツーエンド暗号化セッションを使います。両端末がオンラインで、サーバーは本文や履歴を保存しませんが、端末は保持できます。",
     ],
   },
   why: {
@@ -140,7 +136,7 @@ const ja = {
       },
       {
         title: "一時的な暗号化テキスト",
-        desc: "両方の端末がオンラインなら、同じく暗号化された専用の直結でリンクやコマンド、複数行のコードを送れます。内容はそのまま届き、1通あたり最大65,536バイト（UTF-8）。メッセージはどのサーバーにも保存されず、セッション終了とともに消えます——オフライン配信も履歴の保存もありません。それより大きいものはファイルとして送ってください。",
+        desc: "両端末がオンラインの間、リンク、コマンド、複数行コードを送れます。1件最大65,536バイト（UTF-8）。Relayiumサーバーは本文やサーバー側履歴を保存しませんが、ブラウザや受信端末はコピー・保持できます。オフライン配信はなく、より大きい内容はファイルで送ります。",
       },
       {
         title: "クロスプラットフォーム",
@@ -194,7 +190,7 @@ const ja = {
       },
       {
         q: "ファイルだけでなくテキストも送れますか？",
-        a: "送れます。両方の端末がオンラインであれば、エンドツーエンド暗号化された専用の直結でメッセージセッションを開けます。リンクやコマンド、複数行のコードは入力したそのままの形で届き、1通あたり最大65,536バイト（UTF-8）です。メッセージはどのサーバーにも保存されず、セッションが終わると消えます——オフライン配信はなく、履歴もどこにも残りません。それより大きいものはファイルとして送ってください。",
+        a: "両端末がオンラインの間、リンク、コマンド、複数行コードを送れます。1件最大65,536バイト（UTF-8）。Relayiumサーバーは本文やサーバー側履歴を保存しませんが、ブラウザや受信端末はコピー・保持できます。オフライン配信はなく、より大きい内容はファイルで送ります。",
       },
       {
         q: "Snapdropとの違いは？",
@@ -208,12 +204,10 @@ const ja = {
 
 const ko = {
   title: "Relayium — 종단간 암호화 P2P 파일·텍스트 전송",
-  description:
-    "Relayium은 오픈소스이자 종단간 암호화된 파일·텍스트 전송 도구입니다. 브라우저 실시간 전송에서는 같은 네트워크일 때 두 기기가 직접 연결되어 파일이 서버를 거치지 않고, 네트워크를 넘을 때는 암호화된 릴레이를 거칩니다(릴레이는 암호문만 봅니다). 두 기기가 모두 온라인이면 종단간 암호화된 별도의 직접 연결로 일회성 텍스트 메시지도 보낼 수 있습니다. 메시지는 어떤 서버에도 저장되지 않고 세션이 끝나면 사라집니다. 설치가 필요 없고, 같은 네트워크에서는 계정도 필요 없습니다(네트워크를 넘는 페어링은 보내는 쪽 로그인만 필요).",
+  description: "Relayium은 설치가 필요 없는 오픈 소스 종단간 암호화 파일·텍스트 전송 도구입니다. 같은 네트워크에서는 파일이 직접 전송되고, 네트워크를 넘는 브라우저는 설계상 TURN을 사용해 암호문만 중계합니다. 텍스트는 두 기기가 온라인이어야 하며 서버는 본문이나 기록을 저장하지 않지만 기기는 보관할 수 있습니다.",
   hero: {
     h1: "종단간 암호화 P2P 파일·텍스트 전송",
-    pitch:
-      "브라우저에서 두 기기를 직접 연결하고, 파일은 종단간 암호화되어 청크 단위로 전송됩니다. 같은 네트워크에서는 서버를 전혀 거치지 않고, 네트워크를 넘을 때는 암호화된 릴레이를 거칩니다(릴레이는 암호문만 봅니다). 두 기기가 모두 온라인이면 종단간 암호화된 별도의 직접 연결로 일회성 텍스트도 보낼 수 있습니다 — 링크, 명령어, 여러 줄 코드가 입력한 그대로 도착하고, 어떤 서버에도 저장되지 않으며 세션이 끝나면 사라집니다. 설치도 가입도 필요 없이 웹 페이지만 열면 시작할 수 있습니다.",
+    pitch: "Relayium은 설치가 필요 없는 오픈 소스 종단간 암호화 파일·텍스트 전송 도구입니다. 같은 네트워크에서는 파일이 직접 전송되고, 네트워크를 넘는 브라우저는 설계상 TURN을 사용해 암호문만 중계합니다. 텍스트는 두 기기가 온라인이어야 하며 서버는 본문이나 기록을 저장하지 않지만 기기는 보관할 수 있습니다.",
     cta: "전송 시작",
   },
   how: {
@@ -222,7 +216,7 @@ const ko = {
       "두 기기에서 최신 브라우저로 relayium.com에 접속합니다.",
       "한쪽이 보낼 파일을 선택하거나 끌어다 놓습니다(한 번에 최대 1,000개). 대신 텍스트 메시지를 보낼 수도 있습니다.",
       "양쪽 화면에 표시되는 동일한 6자리 검증 코드(SAS)를 대조해 일치를 확인하고 중간자를 차단합니다.",
-      "P2P 직접 연결을 맺고, 파일은 청크마다 AES-256-GCM으로 암호화되어 전송되며 각 파일은 SHA-256으로 무결성을 검증합니다. 텍스트 메시지도 암호화된 별도의 직접 연결을 지나며 디스크에도 서버에도 남지 않습니다.",
+      "파일은 AES-256-GCM으로 암호화하고 SHA-256으로 확인합니다. 텍스트는 별도 암호화 세션을 사용하며 두 기기가 온라인이어야 합니다. 서버는 본문이나 기록을 저장하지 않지만 기기는 보관할 수 있습니다.",
     ],
   },
   why: {
@@ -242,7 +236,7 @@ const ko = {
       },
       {
         title: "일회성 암호화 텍스트",
-        desc: "두 기기가 모두 온라인이면 암호화된 별도의 직접 연결로 링크, 명령어, 여러 줄 코드를 보낼 수 있습니다. 내용은 그대로 도착하며 한 메시지는 최대 65,536바이트(UTF-8)입니다. 메시지는 어떤 서버에도 저장되지 않고 세션이 끝나면 사라집니다 — 오프라인 전달도, 남는 대화 기록도 없습니다. 그보다 큰 내용은 파일로 보내세요.",
+        desc: "두 기기가 온라인인 동안 최대 65,536바이트(UTF-8)의 텍스트를 보냅니다. 서버는 본문이나 기록을 저장하지 않지만 브라우저나 수신 기기는 복사·보관할 수 있습니다. 오프라인 전달은 없습니다.",
       },
       {
         title: "크로스 플랫폼",
@@ -296,7 +290,7 @@ const ko = {
       },
       {
         q: "파일 말고 텍스트도 보낼 수 있나요?",
-        a: "보낼 수 있습니다. 두 기기가 모두 온라인이면 종단간 암호화된 별도의 직접 연결에서 메시지 세션을 열 수 있습니다. 링크, 명령어, 여러 줄 코드가 입력한 그대로 도착하며 한 메시지는 최대 65,536바이트(UTF-8)입니다. 메시지는 어떤 서버에도 저장되지 않고 세션이 끝나면 사라집니다 — 오프라인 전달은 없고 기록도 어디에도 남지 않습니다. 그보다 큰 내용은 파일로 보내세요.",
+        a: "두 기기가 온라인인 동안 최대 65,536바이트(UTF-8)의 텍스트를 보냅니다. 서버는 본문이나 기록을 저장하지 않지만 브라우저나 수신 기기는 복사·보관할 수 있습니다. 오프라인 전달은 없습니다.",
       },
       {
         q: "Snapdrop과 무엇이 다른가요?",
@@ -310,12 +304,10 @@ const ko = {
 
 const de = {
   title: "Relayium — Ende-zu-Ende-verschlüsselte P2P-Datei- und Textübertragung",
-  description:
-    "Relayium ist ein quelloffenes, Ende-zu-Ende-verschlüsseltes Werkzeug für Dateien und Text. Bei der Echtzeitübertragung im Browser verbinden sich im selben Netz zwei Geräte direkt und Dateien erreichen nie den Server; netzübergreifend läuft es über ein verschlüsseltes Relay, das nur Chiffretext sieht. Sind beide Geräte online, trägt eine eigene, ebenso verschlüsselte Direktverbindung auch flüchtigen Text: Nachrichten werden auf keinem Server gespeichert und sind mit dem Ende der Sitzung weg. Ohne Installation; im selben Netz ist kein Konto nötig, für Pairing über Netzwerke hinweg meldet sich nur der Absender an.",
+  description: "Relayium ist quelloffen und installationsfrei. Dateien laufen im selben Netz direkt; netzwerkübergreifende Browser nutzen TURN bewusst und das Relay sieht nur Chiffretext. Text verlangt beide Geräte online. Server speichern weder Nachrichtentexte noch Verlauf, Endgeräte können Text behalten.",
   hero: {
     h1: "Ende-zu-Ende-verschlüsselte P2P-Datei- und Textübertragung",
-    pitch:
-      "Verbinde zwei Geräte direkt im Browser; Dateien werden Ende-zu-Ende verschlüsselt und Block für Block übertragen. Im selben Netz erreichen sie nie den Server, netzübergreifend laufen sie über ein verschlüsseltes Relay, das nur Chiffretext sieht. Sind beide Geräte online, geht über eine eigene, ebenso verschlüsselte Verbindung auch flüchtiger Text — Links, Befehle oder mehrzeiliger Code kommen unverändert an, werden auf keinem Server gespeichert und sind mit dem Ende der Sitzung weg. Keine Installation, keine Registrierung — einfach die Webseite öffnen und loslegen.",
+    pitch: "Relayium ist quelloffen und installationsfrei. Dateien laufen im selben Netz direkt; netzwerkübergreifende Browser nutzen TURN bewusst und das Relay sieht nur Chiffretext. Text verlangt beide Geräte online. Server speichern weder Nachrichtentexte noch Verlauf, Endgeräte können Text behalten.",
     cta: "Übertragung starten",
   },
   how: {
@@ -324,7 +316,7 @@ const de = {
       "Öffne relayium.com auf beiden Geräten in einem modernen Browser.",
       "Eine Seite wählt die zu sendenden Dateien aus oder zieht sie hinein (bis zu 1.000 pro Vorgang) — oder schickt stattdessen eine Textnachricht.",
       "Vergleiche auf beiden Bildschirmen denselben 6-stelligen Verifizierungscode (SAS) und bestätige die Übereinstimmung, um einen Man-in-the-Middle auszuschließen.",
-      "Eine direkte P2P-Verbindung wird aufgebaut; Dateien werden Block für Block mit AES-256-GCM verschlüsselt übertragen, jede Datei per SHA-256 auf Integrität geprüft. Textnachrichten nehmen eine eigene, ebenso verschlüsselte Direktverbindung und landen weder auf der Festplatte noch auf einem Server.",
+      "Dateien werden mit AES-256-GCM verschlüsselt und per SHA-256 geprüft. Text nutzt eine eigene verschlüsselte Sitzung; beide Geräte bleiben online. Server speichern weder Nachrichtentexte noch Verlauf, Endgeräte können Text behalten.",
     ],
   },
   why: {
@@ -344,7 +336,7 @@ const de = {
       },
       {
         title: "Flüchtiger verschlüsselter Text",
-        desc: "Sind beide Geräte online, schickst du über eine eigene, ebenso verschlüsselte Direktverbindung Links, Befehle oder mehrzeiligen Code. Der Inhalt kommt unverändert an, eine Nachricht umfasst höchstens 65.536 Bytes (UTF-8). Nachrichten werden auf keinem Server gespeichert und sind mit dem Ende der Sitzung weg — keine Zustellung an Offline-Geräte, kein bleibender Verlauf. Größeres schickst du als Datei.",
+        desc: "Sind beide Geräte online, lassen sich bis zu 65.536 Bytes (UTF-8) pro Nachricht senden. Server speichern weder Nachrichtentexte noch Verlauf, Browser oder Empfänger können Text kopieren oder behalten. Keine Offline-Zustellung.",
       },
       {
         title: "Plattformübergreifend",
@@ -398,7 +390,7 @@ const de = {
       },
       {
         q: "Kann ich auch Text schicken, nicht nur Dateien?",
-        a: "Ja. Sind beide Geräte online, öffnest du eine Nachrichtensitzung über eine eigene, ebenfalls Ende-zu-Ende-verschlüsselte Direktverbindung: Links, Befehle und mehrzeiliger Code kommen genau so an, wie du sie getippt hast, mit höchstens 65.536 Bytes (UTF-8) pro Nachricht. Nachrichten werden auf keinem Server gespeichert und verschwinden am Ende der Sitzung — es gibt keine Zustellung an Offline-Geräte und nirgends einen gespeicherten Verlauf. Alles Größere schickst du als Datei.",
+        a: "Sind beide Geräte online, lassen sich bis zu 65.536 Bytes (UTF-8) pro Nachricht senden. Server speichern weder Nachrichtentexte noch Verlauf, Browser oder Empfänger können Text kopieren oder behalten. Keine Offline-Zustellung.",
       },
       {
         q: "Was ist der Unterschied zu Snapdrop?",
@@ -413,11 +405,11 @@ const de = {
 const fr = {
   title: "Relayium — Transfert P2P de fichiers et de texte chiffré de bout en bout",
   description:
-    "Relayium est un outil open source de transfert de fichiers et de texte chiffré de bout en bout. Lors d'un transfert en temps réel dans le navigateur, sur le même réseau deux appareils se connectent directement et les fichiers ne passent jamais par le serveur ; entre réseaux différents, cela passe par un relais chiffré qui ne voit que du chiffré. Quand les deux appareils sont en ligne, une connexion chiffrée dédiée transporte aussi du texte éphémère : les messages ne sont stockés sur aucun serveur et disparaissent à la fin de la session. Sans installation ; sur le même réseau aucun compte n'est nécessaire, et pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
+    "Relayium est open source et sans installation. Sur le même réseau, les fichiers passent directement ; entre réseaux, le navigateur utilise TURN par conception et le relais ne voit que du chiffré. Le texte exige les deux appareils en ligne. Relayium ne conserve ni corps de message ni historique serveur, mais les appareils peuvent garder le texte.",
   hero: {
     h1: "Transfert P2P de fichiers et de texte chiffré de bout en bout",
     pitch:
-      "Reliez deux appareils directement dans le navigateur ; les fichiers sont chiffrés de bout en bout et transférés bloc par bloc. Sur le même réseau, ils ne passent jamais par le serveur ; entre réseaux différents, ils transitent par un relais chiffré qui ne voit que du chiffré. Quand les deux appareils sont en ligne, une connexion dédiée, chiffrée de la même façon, transporte aussi du texte éphémère — liens, commandes ou code multiligne arrivent tels quels, ne sont stockés sur aucun serveur et disparaissent à la fin de la session. Aucune installation, aucune inscription — ouvrez la page web et commencez.",
+      "Sur le réseau local, les fichiers passent directement ; entre réseaux, TURN transporte uniquement du chiffré. Les deux appareils restent en ligne pour le texte. Relayium ne conserve ni corps de message ni historique serveur, mais le navigateur ou le destinataire peut garder le texte.",
     cta: "Démarrer le transfert",
   },
   how: {
@@ -426,7 +418,7 @@ const fr = {
       "Ouvrez relayium.com sur les deux appareils dans un navigateur moderne.",
       "Un côté sélectionne ou glisse les fichiers à envoyer (jusqu'à 1 000 par lot) — ou envoie plutôt un message texte.",
       "Comparez sur les deux écrans le même code de vérification à 6 chiffres (SAS) et confirmez la correspondance pour écarter tout homme du milieu.",
-      "Une connexion directe pair-à-pair s'établit ; les fichiers sont transférés bloc par bloc, chiffrés en AES-256-GCM, et chaque fichier est vérifié en intégrité via SHA-256. Les messages texte empruntent leur propre connexion chiffrée et ne touchent ni le disque ni un serveur.",
+      "Les fichiers sont chiffrés en AES-256-GCM et vérifiés par SHA-256. Le texte utilise une session chiffrée distincte ; les deux appareils restent en ligne. Relayium ne conserve ni corps ni historique, mais les appareils peuvent garder le texte.",
     ],
   },
   why: {
@@ -446,7 +438,7 @@ const fr = {
       },
       {
         title: "Texte chiffré éphémère",
-        desc: "Quand les deux appareils sont en ligne, envoyez un lien, une commande ou du code multiligne sur une connexion chiffrée dédiée. Le contenu arrive tel quel, avec au plus 65 536 octets (UTF-8) par message. Les messages ne sont stockés sur aucun serveur et disparaissent à la fin de la session — aucune remise à un appareil hors ligne, aucun historique conservé. Au-delà, envoyez un fichier.",
+        desc: "Les deux appareils en ligne peuvent échanger jusqu'à 65 536 octets (UTF-8) par message. Relayium ne conserve ni corps ni historique serveur, mais les appareils peuvent garder le texte. Pas de remise hors ligne.",
       },
       {
         title: "Multiplateforme",
@@ -500,7 +492,7 @@ const fr = {
       },
       {
         q: "Puis-je envoyer du texte, et pas seulement des fichiers ?",
-        a: "Oui. Quand les deux appareils sont en ligne, vous ouvrez une session de messages sur une connexion directe dédiée, chiffrée de bout en bout : liens, commandes et code multiligne arrivent exactement tels que vous les avez saisis, avec au plus 65 536 octets (UTF-8) par message. Les messages ne sont stockés sur aucun serveur et disparaissent à la fin de la session — pas de remise à un appareil hors ligne, aucun historique conservé où que ce soit. Pour tout ce qui dépasse, envoyez un fichier.",
+        a: "Oui. Les deux appareils en ligne peuvent échanger jusqu'à 65 536 octets (UTF-8) par message. Relayium ne conserve ni corps ni historique serveur, mais le destinataire peut garder le texte. Pas de remise hors ligne.",
       },
       {
         q: "Quelle différence avec Snapdrop ?",
@@ -515,11 +507,11 @@ const fr = {
 const ar = {
   title: "‏Relayium — نقل ملفات ونصوص P2P مُشفَّر من الطرف إلى الطرف",
   description:
-    "‏Relayium أداة مفتوحة المصدر لنقل الملفات والنصوص مُشفَّرة من الطرف إلى الطرف. أثناء النقل الفوري في المتصفح، يتصل جهازان على نفس الشبكة مباشرةً ولا تمر الملفات أبدًا عبر الخادم؛ أما عبر الشبكات المختلفة فتمر عبر مُرحِّل مُشفَّر لا يرى سوى نص مُشفَّر. وحين يكون الجهازان متصلين، يحمل اتصال مباشر خاص، مُشفَّر بالطريقة نفسها، رسائل نصية عابرة: لا تُخزَّن على أي خادم وتزول بانتهاء الجلسة. بدون تثبيت؛ على نفس الشبكة لا حاجة لأي حساب، وللاقتران عبر الشبكات المختلفة يسجّل المُرسِل وحده الدخول.",
+    "‏Relayium مفتوح المصدر ولا يتطلب تثبيتًا. تنتقل الملفات مباشرةً محليًا؛ وعبر الشبكات يستخدم المتصفح TURN بحكم التصميم ولا يرى المُرحِّل سوى النص المشفَّر. يتطلب النص اتصال الجهازين. لا تحفظ خوادم Relayium أجسام الرسائل أو سجلها، لكن يمكن للطرفين الاحتفاظ بالنص.",
   hero: {
     h1: "نقل ملفات ونصوص من الند للند مُشفَّر من الطرف إلى الطرف",
     pitch:
-      "اربط جهازين مباشرةً في المتصفح؛ تُشفَّر الملفات من الطرف إلى الطرف وتُنقل كتلةً كتلة. على نفس الشبكة لا تمر أبدًا عبر الخادم؛ وعبر الشبكات المختلفة تمر عبر مُرحِّل مُشفَّر لا يرى سوى نص مُشفَّر. وحين يكون الجهازان متصلين، يحمل اتصال مباشر خاص، مُشفَّر كذلك، نصًا عابرًا — تصل الروابط والأوامر والشيفرة متعددة الأسطر كما هي، ولا تُخزَّن على أي خادم، وتزول بانتهاء الجلسة. بدون تثبيت ولا تسجيل — افتح صفحة الويب وابدأ.",
+      "تنتقل الملفات مباشرةً محليًا؛ وعبر الشبكات يحمل TURN نصًا مشفَّرًا فقط. يبقى الجهازان متصلين للنص. لا يحفظ Relayium أجسام الرسائل أو سجلها، لكن يمكن للمتصفح أو المستلم الاحتفاظ بالنص.",
     cta: "ابدأ النقل",
   },
   how: {
@@ -528,7 +520,7 @@ const ar = {
       "افتح relayium.com على كلا الجهازين في متصفح حديث.",
       "يختار أحد الطرفين الملفات المراد إرسالها أو يسحبها (حتى 1,000 لكل دفعة)، أو يرسل رسالة نصية بدلاً من ذلك.",
       "قارِن على الشاشتين رمز التحقق نفسه المكوّن من 6 أرقام (SAS) وأكّد تطابقه لاستبعاد أي هجوم وسيط.",
-      "يُنشأ اتصال مباشر من الند للند؛ تُنقل الملفات كتلةً كتلة مُشفَّرة بـ AES-256-GCM، ويُتحقق من سلامة كل ملف عبر SHA-256. وتسلك الرسائل النصية اتصالًا مُشفَّرًا خاصًا بها فلا تصل إلى القرص ولا إلى أي خادم.",
+      "تُشفَّر الملفات بـ AES-256-GCM وتُفحص بـ SHA-256. يستخدم النص جلسة مشفَّرة مستقلة ويبقى الجهازان متصلين. لا يحفظ Relayium أجسام الرسائل أو سجلها، لكن يمكن للطرفين الاحتفاظ بالنص.",
     ],
   },
   why: {
@@ -548,7 +540,7 @@ const ar = {
       },
       {
         title: "نص مُشفَّر عابر",
-        desc: "حين يكون الجهازان متصلين، أرسِل رابطًا أو أمرًا أو شيفرة متعددة الأسطر عبر اتصال مُشفَّر خاص بالرسائل. يصل المحتوى كما هو، وحدّ الرسالة الواحدة 65,536 بايت (UTF-8). لا تُخزَّن الرسائل على أي خادم وتزول بانتهاء الجلسة — لا تسليم إلى جهاز غير متصل ولا سجلّ محفوظ. وما زاد عن ذلك يُرسَل ملفًا.",
+        desc: "مع اتصال الجهازين، أرسل حتى 65,536 بايت (UTF-8) لكل رسالة. لا يحفظ Relayium أجسام الرسائل أو سجلها، لكن يمكن للطرفين الاحتفاظ بالنص. لا تسليم دون اتصال.",
       },
       {
         title: "متعدد المنصات",
@@ -602,7 +594,7 @@ const ar = {
       },
       {
         q: "هل يمكنني إرسال نص لا ملفات فقط؟",
-        a: "نعم. حين يكون الجهازان متصلين، تفتح جلسة رسائل على اتصال مباشر خاص مُشفَّر من الطرف إلى الطرف: تصل الروابط والأوامر والشيفرة متعددة الأسطر تمامًا كما كتبتها، بحدّ أقصى 65,536 بايت (UTF-8) للرسالة الواحدة. ولا تُخزَّن الرسائل على أي خادم وتزول بانتهاء الجلسة — لا تسليم إلى جهاز غير متصل ولا سجلّ محفوظ في أي مكان. وما زاد عن ذلك أرسِله ملفًا.",
+        a: "نعم. مع اتصال الجهازين، أرسل حتى 65,536 بايت (UTF-8) لكل رسالة. لا يحفظ Relayium أجسام الرسائل أو سجلها، لكن يمكن للمستلم الاحتفاظ بالنص. لا تسليم دون اتصال.",
       },
       {
         q: "ما الفرق عن Snapdrop؟",
@@ -617,11 +609,11 @@ const ar = {
 const es = {
   title: "Relayium — Transferencia P2P de archivos y texto cifrada de extremo a extremo",
   description:
-    "Relayium es una herramienta de código abierto para transferir archivos y texto con cifrado de extremo a extremo. En una transferencia en tiempo real dentro del navegador, en la misma red dos dispositivos se conectan directamente y los archivos nunca pasan por el servidor; entre redes distintas, todo va por un retransmisor cifrado que solo ve texto cifrado. Cuando ambos dispositivos están conectados, una conexión cifrada propia lleva también texto efímero: los mensajes no se guardan en ningún servidor y desaparecen al terminar la sesión. Sin instalación; en la misma red no hace falta ninguna cuenta, y para emparejar entre redes distintas solo el remitente inicia sesión.",
+    "Relayium es de código abierto y no requiere instalación. En la red local los archivos van directos; entre redes el navegador usa TURN por diseño y el retransmisor solo ve datos cifrados. El texto exige ambos dispositivos conectados. Relayium no guarda cuerpos ni historial, pero los extremos pueden conservar texto.",
   hero: {
     h1: "Transferencia P2P de archivos y texto cifrada de extremo a extremo",
     pitch:
-      "Conecta dos dispositivos directamente en el navegador; los archivos se cifran de extremo a extremo y se transfieren bloque a bloque. En la misma red nunca pasan por el servidor; entre redes distintas van por un retransmisor cifrado que solo ve texto cifrado. Cuando ambos dispositivos están conectados, una conexión propia, cifrada igual, lleva también texto efímero: enlaces, comandos o código multilínea llegan tal cual, no se guardan en ningún servidor y desaparecen al terminar la sesión. Sin instalación, sin registro — abre la página web y empieza.",
+      "En la red local los archivos van directos; entre redes TURN lleva solo datos cifrados. Ambos dispositivos siguen conectados para el texto. Relayium no guarda cuerpos ni historial, pero el navegador o destinatario puede conservarlo.",
     cta: "Iniciar transferencia",
   },
   how: {
@@ -630,7 +622,7 @@ const es = {
       "Abre relayium.com en ambos dispositivos con un navegador moderno.",
       "Un lado selecciona o arrastra los archivos a enviar (hasta 1.000 por lote), o envía un mensaje de texto en su lugar.",
       "Compara en las dos pantallas el mismo código de verificación de 6 dígitos (SAS) y confirma la coincidencia para descartar cualquier intermediario.",
-      "Se establece una conexión directa de igual a igual; los archivos se transfieren bloque a bloque, cifrados con AES-256-GCM, y se verifica la integridad de cada archivo mediante SHA-256. Los mensajes de texto usan su propia conexión cifrada y no llegan ni al disco ni a ningún servidor.",
+      "Los archivos se cifran con AES-256-GCM y se verifican con SHA-256. El texto usa una sesión cifrada independiente y ambos dispositivos siguen conectados. Relayium no guarda cuerpos ni historial, pero los extremos pueden conservarlo.",
     ],
   },
   why: {
@@ -650,7 +642,7 @@ const es = {
       },
       {
         title: "Texto cifrado efímero",
-        desc: "Cuando ambos dispositivos están conectados, envía un enlace, un comando o código multilínea por una conexión cifrada propia. El contenido llega tal cual, con un máximo de 65.536 bytes (UTF-8) por mensaje. Los mensajes no se guardan en ningún servidor y desaparecen al terminar la sesión — no hay entrega a un dispositivo desconectado ni historial que quede. Lo más grande se envía como archivo.",
+        desc: "Con ambos dispositivos conectados, envía hasta 65.536 bytes (UTF-8) por mensaje. Relayium no guarda cuerpos ni historial, pero los extremos pueden conservar texto. No hay entrega sin conexión.",
       },
       {
         title: "Multiplataforma",
@@ -704,7 +696,7 @@ const es = {
       },
       {
         q: "¿Puedo enviar texto y no solo archivos?",
-        a: "Sí. Cuando ambos dispositivos están conectados, abres una sesión de mensajes sobre una conexión directa propia, cifrada de extremo a extremo: enlaces, comandos y código multilínea llegan exactamente como los escribiste, con un máximo de 65.536 bytes (UTF-8) por mensaje. Los mensajes no se guardan en ningún servidor y desaparecen al terminar la sesión — no hay entrega a un dispositivo desconectado ni historial guardado en ninguna parte. Para algo más grande, envía un archivo.",
+        a: "Sí. Con ambos dispositivos conectados, envía hasta 65.536 bytes (UTF-8) por mensaje. Relayium no guarda cuerpos ni historial, pero el destinatario puede conservar texto. No hay entrega sin conexión.",
       },
       {
         q: "¿En qué se diferencia de Snapdrop?",
@@ -719,11 +711,11 @@ const es = {
 const pt = {
   title: "Relayium — Transferência P2P de arquivos e texto com criptografia de ponta a ponta",
   description:
-    "O Relayium é uma ferramenta de código aberto para transferir arquivos e texto com criptografia de ponta a ponta. Em uma transferência em tempo real no navegador, na mesma rede dois dispositivos se conectam diretamente e os arquivos nunca passam pelo servidor; entre redes diferentes, tudo passa por um retransmissor criptografado que só vê texto cifrado. Quando os dois dispositivos estão online, uma conexão criptografada própria leva também texto efêmero: as mensagens não ficam em nenhum servidor e desaparecem quando a sessão termina. Sem instalação; na mesma rede não é preciso nenhuma conta, e para emparelhar entre redes diferentes só o remetente faz login.",
+    "O Relayium é uma ferramenta de código aberto, sem instalação, para transferir arquivos e texto com criptografia de ponta a ponta. Na mesma rede os arquivos vão direto; entre redes o navegador usa TURN por projeto e o retransmissor só vê dados cifrados. O texto exige os dois dispositivos online. O Relayium não guarda corpo nem histórico no servidor, mas as pontas podem reter o texto. Criar um código entre redes exige login; entrar com ele não.",
   hero: {
     h1: "Transferência P2P de arquivos e texto com criptografia de ponta a ponta",
     pitch:
-      "Conecte dois dispositivos diretamente no navegador; os arquivos são criptografados de ponta a ponta e transferidos bloco a bloco. Na mesma rede nunca passam pelo servidor; entre redes diferentes passam por um retransmissor criptografado que só vê texto cifrado. Quando os dois dispositivos estão online, uma conexão própria, criptografada do mesmo jeito, leva também texto efêmero: links, comandos ou código em várias linhas chegam exatamente como estão, não ficam em nenhum servidor e desaparecem quando a sessão termina. Sem instalação, sem cadastro — abra a página web e comece.",
+      "Transfira arquivos e texto com criptografia de ponta a ponta e sem instalação. Na mesma rede os arquivos vão direto; entre redes o navegador usa TURN por projeto e o retransmissor só vê dados cifrados. O texto exige os dois dispositivos online; o Relayium não guarda corpo nem histórico no servidor, mas as pontas podem retê-lo.",
     cta: "Iniciar transferência",
   },
   how: {
@@ -732,7 +724,7 @@ const pt = {
       "Abra relayium.com nos dois dispositivos em um navegador moderno.",
       "Um lado seleciona ou arrasta os arquivos a enviar (até 1.000 por lote), ou envia uma mensagem de texto no lugar.",
       "Compare nas duas telas o mesmo código de verificação de 6 dígitos (SAS) e confirme a correspondência para descartar qualquer intermediário.",
-      "Uma conexão direta ponto a ponto é estabelecida; os arquivos são transferidos bloco a bloco, criptografados com AES-256-GCM, e a integridade de cada arquivo é verificada por SHA-256. As mensagens de texto seguem por uma conexão criptografada própria e não chegam ao disco nem a nenhum servidor.",
+      "Os arquivos são criptografados em blocos com AES-256-GCM e verificados com SHA-256; o texto usa uma sessão criptografada separada. Os dois dispositivos ficam online. O Relayium não guarda corpo nem histórico no servidor, mas as pontas podem reter texto.",
     ],
   },
   why: {
@@ -752,7 +744,7 @@ const pt = {
       },
       {
         title: "Texto criptografado efêmero",
-        desc: "Quando os dois dispositivos estão online, envie um link, um comando ou código em várias linhas por uma conexão criptografada própria. O conteúdo chega exatamente como está, com no máximo 65.536 bytes (UTF-8) por mensagem. As mensagens não ficam em nenhum servidor e desaparecem quando a sessão termina — não há entrega para um dispositivo offline nem histórico guardado. O que for maior vai como arquivo.",
+        desc: "Com os dois dispositivos online, envie links, comandos e código em várias linhas, até 65.536 bytes (UTF-8) por mensagem. O Relayium não guarda corpo nem histórico no servidor, mas o navegador ou destinatário pode copiar ou reter o texto. Não há entrega offline; conteúdos maiores vão como arquivo.",
       },
       {
         title: "Multiplataforma",
@@ -806,7 +798,7 @@ const pt = {
       },
       {
         q: "Dá para enviar texto, não só arquivos?",
-        a: "Dá. Quando os dois dispositivos estão online, você abre uma sessão de mensagens em uma conexão direta própria, criptografada de ponta a ponta: links, comandos e código em várias linhas chegam exatamente como você digitou, com no máximo 65.536 bytes (UTF-8) por mensagem. As mensagens não ficam em nenhum servidor e desaparecem quando a sessão termina — não há entrega para um dispositivo offline nem histórico guardado em lugar nenhum. Para algo maior, envie um arquivo.",
+        a: "Dá. Com os dois dispositivos online, envie links, comandos e código em várias linhas, até 65.536 bytes (UTF-8) por mensagem. O Relayium não guarda corpo nem histórico no servidor, mas o navegador ou destinatário pode copiar ou reter o texto. Não há entrega offline; para algo maior, envie um arquivo.",
       },
       {
         q: "Qual a diferença em relação ao Snapdrop?",
@@ -818,7 +810,66 @@ const pt = {
   footer: { privacy: "Privacidade", terms: "Termos de Serviço", security: "Segurança" },
 };
 
+// Keep the repeated ephemeral-text privacy boundary identical across each
+// product-level surface. File-specific copy above remains unchanged.
+const TEXT_BOUNDARY = {
+  zh: {
+    summary: "Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。",
+    step: "文件逐块经 AES-256-GCM 加密传输，并以 SHA-256 校验完整性；临时文本使用独立的端到端加密会话。双方须同时在线，Relayium 服务器不保存消息正文或服务端历史，但端点可以留存文本。",
+    detail: "双方同时在线时，可发送链接、命令或多行代码。每条消息最多 65,536 字节（UTF-8）；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。没有离线投递，更大的内容请作为文件发送。",
+  },
+  ja: {
+    summary: "Relayiumはオープンソースでインストール不要の、エンドツーエンド暗号化されたファイル・テキスト転送ツールです。同じネットワークではファイルを直接転送し、ネットワークをまたぐブラウザは設計どおりTURNリレーを使います。リレーが見るのはエンドツーエンド暗号化された暗号文だけです。一時テキストは両端末がオンラインである必要があり、Relayiumサーバーは本文やサーバー側履歴を保存しませんが、ブラウザや受信端末はテキストをコピー・保持できます。同じネットワークではアカウント不要です。ネットワークをまたぐペアリングコードの作成にはサインインが必要ですが、コードでの参加には不要です。",
+    step: "ファイルはAES-256-GCMでチャンクごとに暗号化し、SHA-256で完全性を検証します。一時テキストは独立したエンドツーエンド暗号化セッションを使います。両端末がオンラインで、サーバーは本文や履歴を保存しませんが、端末は保持できます。",
+    detail: "両端末がオンラインの間、リンク、コマンド、複数行コードを送れます。1件最大65,536バイト（UTF-8）。Relayiumサーバーは本文やサーバー側履歴を保存しませんが、ブラウザや受信端末はコピー・保持できます。オフライン配信はなく、より大きい内容はファイルで送ります。",
+  },
+  ko: {
+    summary: "Relayium은 설치가 필요 없는 오픈 소스 종단간 암호화 파일·텍스트 전송 도구입니다. 같은 네트워크에서는 파일을 직접 전송하고, 네트워크를 넘는 브라우저는 설계상 TURN 릴레이를 사용합니다. 릴레이에는 종단간 암호화된 암호문만 보입니다. 일회성 텍스트는 두 기기가 모두 온라인이어야 하며 Relayium 서버는 메시지 본문이나 서버 측 기록을 저장하지 않지만 브라우저나 수신 기기는 텍스트를 복사·보관할 수 있습니다. 같은 네트워크에서는 계정이 필요 없고, 네트워크 간 페어링 코드 생성에는 로그인이 필요하지만 코드로 참여할 때는 필요 없습니다.",
+    step: "파일은 청크별 AES-256-GCM으로 암호화하고 SHA-256으로 무결성을 확인합니다. 일회성 텍스트는 별도의 종단간 암호화 세션을 사용합니다. 두 기기가 온라인이어야 하며 서버는 본문이나 기록을 저장하지 않지만 기기는 보관할 수 있습니다.",
+    detail: "두 기기가 온라인인 동안 링크, 명령어, 여러 줄 코드를 보낼 수 있습니다. 메시지 하나는 최대 65,536바이트(UTF-8)입니다. Relayium 서버는 본문이나 서버 측 기록을 저장하지 않지만 브라우저나 수신 기기는 복사·보관할 수 있습니다. 오프라인 전달은 없으며 더 큰 내용은 파일로 보냅니다.",
+  },
+  de: {
+    summary: "Relayium ist ein quelloffenes, installationsfreies Werkzeug für Ende-zu-Ende-verschlüsselte Datei- und Textübertragung. Im selben Netz laufen Dateien direkt; netzwerkübergreifende Browser-Sitzungen nutzen TURN bewusst und das Relay sieht nur Ende-zu-Ende-verschlüsselten Chiffretext. Flüchtiger Text verlangt beide Geräte online. Relayium-Server speichern weder Nachrichtentexte noch serverseitigen Verlauf, Browser oder Empfänger können Text jedoch kopieren oder behalten. Im selben Netz ist kein Konto nötig; das Erstellen eines netzwerkübergreifenden Codes erfordert eine Anmeldung, der Beitritt mit dem Code nicht.",
+    step: "Dateien werden blockweise mit AES-256-GCM verschlüsselt und per SHA-256 geprüft; flüchtiger Text nutzt eine eigene Ende-zu-Ende-verschlüsselte Sitzung. Beide Geräte bleiben online. Der Server speichert weder Nachrichtentexte noch Verlauf, Endgeräte können Text behalten.",
+    detail: "Sind beide Geräte online, lassen sich Links, Befehle und mehrzeiliger Code senden. Höchstens 65.536 Bytes (UTF-8) pro Nachricht. Relayium-Server speichern weder Nachrichtentexte noch serverseitigen Verlauf, Browser oder Empfänger können Text aber kopieren oder behalten. Keine Offline-Zustellung; Größeres geht als Datei.",
+  },
+  fr: {
+    summary: "Relayium est un outil open source, sans installation, de transfert de fichiers et de texte chiffré de bout en bout. Sur le même réseau, les fichiers passent directement. Entre réseaux, le navigateur utilise TURN par conception et le relais ne voit que du chiffré de bout en bout. Le texte éphémère exige les deux appareils en ligne. Les serveurs Relayium ne conservent ni corps de message ni historique serveur, mais le navigateur ou le destinataire peut copier ou garder le texte. Aucun compte n'est requis sur le même réseau ; créer un code inter-réseaux exige une connexion, le rejoindre avec ce code non.",
+    step: "Les fichiers sont chiffrés bloc par bloc en AES-256-GCM et vérifiés par SHA-256 ; le texte éphémère utilise une session chiffrée distincte. Les deux appareils restent en ligne. Le serveur ne conserve ni corps ni historique, mais les appareils peuvent garder le texte.",
+    detail: "Avec les deux appareils en ligne, envoyez liens, commandes et code multiligne, jusqu'à 65 536 octets (UTF-8) par message. Les serveurs Relayium ne conservent ni corps de message ni historique serveur, mais le navigateur ou le destinataire peut copier ou garder le texte. Pas de remise hors ligne ; au-delà, envoyez un fichier.",
+  },
+  ar: {
+    summary: "Relayium أداة مفتوحة المصدر ولا تتطلب تثبيتًا لنقل الملفات والنصوص بتشفير من الطرف إلى الطرف. تنتقل الملفات مباشرةً على الشبكة نفسها؛ وعبر الشبكات يستخدم المتصفح TURN بحكم التصميم، ولا يرى المُرحِّل سوى نص مشفَّر من الطرف إلى الطرف. يتطلب النص العابر اتصال الجهازين. لا تحفظ خوادم Relayium أجسام الرسائل أو سجلًا على الخادم، لكن يمكن للمتصفح أو المستلم نسخ النص أو الاحتفاظ به. لا يلزم حساب على الشبكة نفسها؛ يتطلب إنشاء رمز اقتران عبر الشبكات تسجيل الدخول، أما الانضمام بالرمز فلا يتطلب حسابًا.",
+    step: "تُشفَّر الملفات كتلةً كتلة بـ AES-256-GCM وتُفحص بـ SHA-256؛ ويستخدم النص العابر جلسة مستقلة مشفَّرة من الطرف إلى الطرف. يبقى الجهازان متصلين. لا يحفظ الخادم أجسام الرسائل أو سجلها، لكن يمكن للطرفين الاحتفاظ بالنص.",
+    detail: "حين يكون الجهازان متصلين، أرسِل الروابط والأوامر والشيفرة متعددة الأسطر، حتى 65,536 بايت (UTF-8) لكل رسالة. لا تحفظ خوادم Relayium أجسام الرسائل أو سجلًا على الخادم، لكن يمكن للمتصفح أو المستلم نسخ النص أو الاحتفاظ به. لا تسليم دون اتصال؛ وما زاد يُرسل ملفًا.",
+  },
+  es: {
+    summary: "Relayium es una herramienta de código abierto, sin instalación, para transferir archivos y texto con cifrado de extremo a extremo. En la misma red, los archivos van directos. Entre redes, el navegador usa TURN por diseño y el retransmisor solo ve datos cifrados de extremo a extremo. El texto efímero exige ambos dispositivos conectados. Los servidores de Relayium no guardan cuerpos ni historial, pero el navegador o destinatario puede copiar o conservar el texto. En la misma red no hace falta cuenta; crear un código entre redes exige iniciar sesión, unirse con él no.",
+    step: "Los archivos se cifran por bloques con AES-256-GCM y se verifican con SHA-256; el texto efímero usa una sesión cifrada independiente. Ambos dispositivos siguen conectados. El servidor no guarda cuerpos ni historial, pero los extremos pueden conservar el texto.",
+    detail: "Con ambos dispositivos conectados, envía enlaces, comandos y código multilínea, hasta 65.536 bytes (UTF-8) por mensaje. Los servidores de Relayium no guardan cuerpos ni historial, pero el navegador o destinatario puede copiar o conservar el texto. No hay entrega sin conexión; lo más grande va como archivo.",
+  },
+  pt: {
+    summary: "O Relayium é uma ferramenta de código aberto, sem instalação, para transferir arquivos e texto com criptografia de ponta a ponta. Na mesma rede, os arquivos vão direto. Entre redes, o navegador usa TURN por projeto e o retransmissor só vê dados criptografados de ponta a ponta. O texto efêmero exige os dois dispositivos online. Os servidores Relayium não guardam corpo nem histórico, mas o navegador ou destinatário pode copiar ou reter o texto. Na mesma rede não é preciso conta; criar um código entre redes exige login, entrar com ele não.",
+    step: "Os arquivos são criptografados em blocos com AES-256-GCM e verificados com SHA-256; o texto efêmero usa uma sessão criptografada separada. Os dois dispositivos ficam online. O servidor não guarda corpo nem histórico, mas as pontas podem reter texto.",
+    detail: "Com os dois dispositivos online, envie links, comandos e código em várias linhas, até 65.536 bytes (UTF-8) por mensagem. Os servidores Relayium não guardam corpo nem histórico, mas o navegador ou destinatário pode copiar ou reter o texto. Não há entrega offline; conteúdos maiores vão como arquivo.",
+  },
+};
+
+const landingLangs = { zh, ja, ko, de, fr, ar, es, pt };
+for (const [lang, doc] of Object.entries(landingLangs)) {
+  const copy = TEXT_BOUNDARY[lang];
+  doc.description = copy.summary;
+  doc.hero.pitch = copy.summary;
+  doc.how.steps[3] = copy.step;
+  doc.why.items[3].desc = copy.detail;
+  const textFaq = doc.faq.items[5];
+  if (!textFaq?.a || !/65(?:,|\.| )536/.test(textFaq.a)) {
+    throw new Error(`landing ${lang}: text FAQ moved or lost its byte limit`);
+  }
+  textFaq.a = copy.detail;
+}
+
 export default {
-  updated: "2026-07-30",
-  langs: { zh, ja, ko, de, fr, ar, es, pt },
+  updated: "2026-07-31",
+  langs: landingLangs,
 };
