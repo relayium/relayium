@@ -22,7 +22,7 @@ export const LANGS: { code: Lang; label: string }[] = [
 export interface HowSection {
   title: string;
   sub: string;
-  ways: { icon: string; name: string; how: string; tag: string }[];
+  ways: { name: string; how: string; tag: string }[];
 }
 
 export interface Messages {
@@ -584,7 +584,7 @@ export interface Messages {
   useCases: {
     title: string;
     sub: string;
-    items: { icon: string; title: string; desc: string }[];
+    items: { title: string; desc: string }[];
   };
   faq: {
     title: string;

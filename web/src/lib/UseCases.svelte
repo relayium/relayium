@@ -1,6 +1,7 @@
 <script lang="ts">
   import { lang, messages, pageUrl, type Messages } from "./i18n.svelte";
   import { reveal } from "./reveal";
+  import Icon, { type IconName } from "./Icon.svelte";
   const t = $derived<Messages>(messages[lang()]);
 
   // The four cards are the most self-identifying thing on the homepage — a
@@ -18,6 +19,7 @@
     "guides/how-relayium-encrypts-your-files", // 🔒 privacy-sensitive one-shot
     "how-to/send-text-between-devices", // 💬 text, links, commands, code
   ];
+  const CASE_ICONS: readonly IconName[] = ["globe", "clock", "devices", "lock", "message"];
   const caseHref = (i: number) => pageUrl(CASE_SLUGS[i], lang()) + "/";
 </script>
 
@@ -29,7 +31,7 @@
   <div class="grid">
     {#each t.useCases.items as c, i (c.title)}
       <a class="case reveal" href={caseHref(i)} use:reveal={{ delay: i * 60 }}>
-        <span class="icon" aria-hidden="true">{c.icon}</span>
+        <span class="icon" aria-hidden="true"><Icon name={CASE_ICONS[i]} size={22} /></span>
         <div class="body">
           <h3>{c.title}</h3>
           <p>{c.desc}</p>
@@ -65,7 +67,8 @@
   .case:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .icon {
     flex: none; width: 44px; height: 44px; line-height: 44px; text-align: center;
-    font-size: 24px; border-radius: var(--radius-sm); background: var(--accent-bg);
+    display: grid; place-items: center; color: var(--accent);
+    border-radius: var(--radius-sm); background: var(--accent-bg);
   }
   .body { min-width: 0; }
   .case h3 { margin: 2px 0 var(--space-2); font-size: var(--fs-body); color: var(--text-h); font-weight: 600; }

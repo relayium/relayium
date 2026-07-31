@@ -1,9 +1,14 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { reveal } from "./reveal";
+  import Icon, { type IconName } from "./Icon.svelte";
   let { variant }: { variant: "realtime" | "offline" } = $props();
   const t = $derived<Messages>(messages[lang()]);
   const sec = $derived(t.howItWorks[variant]);
+  const icons: Record<"realtime" | "offline", readonly [IconName, IconName, IconName]> = {
+    realtime: ["link", "pairing-code", "bolt"],
+    offline: ["lock", "link", "download"],
+  };
 </script>
 
 <section class="how" aria-label={sec.title}>
@@ -15,7 +20,7 @@
     {#each sec.ways as w, i (w.name)}
       <li class="way reveal" use:reveal={{ delay: i * 70 }}>
         <span class="step">{i + 1}</span>
-        <span class="icon" aria-hidden="true">{w.icon}</span>
+        <span class="icon" aria-hidden="true"><Icon name={icons[variant][i]} size={24} /></span>
         <h3>{w.name}</h3>
         <p>{w.how}</p>
         <span class="tag">{w.tag}</span>
@@ -47,7 +52,7 @@
     border-radius: 50%; font-size: 13px; font-weight: 600;
     color: var(--accent); background: var(--accent-bg);
   }
-  .icon { font-size: 28px; line-height: 1; }
+  .icon { color: var(--accent); }
   .way h3 { margin: 2px 0 0; font-size: var(--fs-body); color: var(--text-h); font-weight: 600; }
   .way p { margin: 0; font-size: var(--fs-xs); line-height: 1.55; color: var(--text); }
   .tag {

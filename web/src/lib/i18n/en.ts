@@ -501,7 +501,7 @@ const en: Messages = {
   },
   methods: {
     realtime: { name: "Realtime transfer", sub: "Pick your files and get a 6-character code — read it out, send the link, or show the QR; the moment the other side joins, the transfer starts automatically.", badge: "Recipient: no account" },
-    stored: { name: "📦 Download link", sub: "Your browser encrypts then stores; the recipient downloads anytime, no live session and no account needed.", badge: "Offline OK" },
+    stored: { name: "Download link", sub: "Your browser encrypts then stores; the recipient downloads anytime, no live session and no account needed.", badge: "Offline OK" },
   },
   pair: {
     sendCode: "Create a pairing code",
@@ -593,18 +593,18 @@ const en: Messages = {
       title: "Realtime transfer, in three steps",
       sub: "When both sides are online, transfer across networks in real time — the recipient needs no account.",
       ways: [
-        { icon: "🔗", name: "Create a pairing code", how: "Sign in and create a 6-character pairing code, together with a join link and QR. You choose what to send after the other device joins.", tag: "The creator signs in" },
-        { icon: "🔢", name: "Give the code to the other side", how: "Read it out, send the link, or show the QR — any of the three; they type it in or open it in any modern browser.", tag: "Codes live 5 minutes" },
-        { icon: "⚡", name: "Choose files or text", how: "After they join, choose up to 1,000 files on their device card, or choose “Send a message” for online text. Compare the SAS, then send end-to-end encrypted ciphertext through TURN.", tag: "The relay cannot read or decrypt either" },
+        { name: "Create a pairing code", how: "Sign in and create a 6-character pairing code, together with a join link and QR. You choose what to send after the other device joins.", tag: "The creator signs in" },
+        { name: "Give the code to the other side", how: "Read it out, send the link, or show the QR — any of the three; they type it in or open it in any modern browser.", tag: "Codes live 5 minutes" },
+        { name: "Choose files or text", how: "After they join, choose up to 1,000 files on their device card, or choose “Send a message” for online text. Compare the SAS, then send end-to-end encrypted ciphertext through TURN.", tag: "The relay cannot read or decrypt either" },
       ],
     },
     offline: {
       title: "Async transfer, in three steps",
       sub: "Send even when they're offline: encrypt and store now, they fetch by link later.",
       ways: [
-        { icon: "🔒", name: "Sign in and pick files", how: "Files are encrypted with AES-256-GCM in your browser before upload — the server only ever stores ciphertext it cannot decrypt.", tag: "Zero-knowledge" },
-        { icon: "🔗", name: "Create the download link", how: "Set an expiry from 1 hour up to 14 days, depending on your plan, or burn-after-reading; the decryption key lives in the link's # fragment and is never sent to the server.", tag: "Expiry you control" },
-        { icon: "📥", name: "They download anytime", how: "Send them the link; no account and no waiting online — they decrypt and download right in the browser.", tag: "No account for recipients" },
+        { name: "Sign in and pick files", how: "Files are encrypted with AES-256-GCM in your browser before upload — the server only ever stores ciphertext it cannot decrypt.", tag: "Zero-knowledge" },
+        { name: "Create the download link", how: "Set an expiry from 1 hour up to 14 days, depending on your plan, or burn-after-reading; the decryption key lives in the link's # fragment and is never sent to the server.", tag: "Expiry you control" },
+        { name: "They download anytime", how: "Send them the link; no account and no waiting online — they decrypt and download right in the browser.", tag: "No account for recipients" },
       ],
     },
   },
@@ -612,8 +612,8 @@ const en: Messages = {
     title: "Which mode to choose",
     sub: "“Realtime transfer” is for when both are online now; “Download link” is for picking up later.",
     colFeature: "Aspect",
-    colRealtime: "⚡ Realtime",
-    colStored: "📦 Download link",
+    colRealtime: "Realtime",
+    colStored: "Download link",
     rows: [
       { label: "Sign-in needed", realtime: "Cross-network file/text code creator signs in; joiner needs no account", stored: "Download-link creator signs in" },
       { label: "Recipient online?", realtime: "Yes — both online at once", stored: "No — download asynchronously" },
@@ -626,11 +626,11 @@ const en: Messages = {
     title: "Built for these moments",
     sub: "From remote collaboration to privacy-sensitive one-shot delivery.",
     items: [
-      { icon: "🌍", title: "Send big files across the world", desc: "Fire a multi-gigabyte video, design file, or dataset straight to a colleague or family member abroad — streamed to disk, no memory bloat, no quality loss." },
-      { icon: "⏳", title: "When they're not online", desc: "Generate an encrypted download link with an expiry and send it over; they grab it whenever they're free — and one link can serve several recipients." },
-      { icon: "📱", title: "Phone ↔ computer", desc: "Move files between your own devices across systems and networks — scan or type a code to connect, no cloud drive or cable required." },
-      { icon: "🔒", title: "Privacy-sensitive one-shot delivery", desc: "End-to-end encryption plus a SAS verification code against MITM, with burn-after-reading — ideal for contracts, IDs, or keys." },
-      { icon: "💬", title: "Hand over text, not a file", desc: "A Wi-Fi password, a signup link, a shell command, a stack trace, a block of code — type or paste it and it lands on the other device end-to-end encrypted. Both sides stay online; Relayium keeps no server-side history, but the recipient can retain it." },
+      { title: "Send big files across the world", desc: "Fire a multi-gigabyte video, design file, or dataset straight to a colleague or family member abroad — streamed to disk, no memory bloat, no quality loss." },
+      { title: "When they're not online", desc: "Generate an encrypted download link with an expiry and send it over; they grab it whenever they're free — and one link can serve several recipients." },
+      { title: "Phone ↔ computer", desc: "Move files between your own devices across systems and networks — scan or type a code to connect, no cloud drive or cable required." },
+      { title: "Privacy-sensitive one-shot delivery", desc: "End-to-end encryption plus a SAS verification code against MITM, with burn-after-reading — ideal for contracts, IDs, or keys." },
+      { title: "Hand over text, not a file", desc: "A Wi-Fi password, a signup link, a shell command, a stack trace, a block of code — type or paste it and it lands on the other device end-to-end encrypted. Both sides stay online; Relayium keeps no server-side history, but the recipient can retain it." },
     ],
   },
   faq: {

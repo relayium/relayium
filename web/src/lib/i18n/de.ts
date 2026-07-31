@@ -491,7 +491,7 @@ const de: Messages = {
   },
   methods: {
     realtime: { name: "Echtzeitübertragung", sub: "Dateien auswählen und einen 6-stelligen Code erhalten — vorlesen, als Link verschicken oder QR zeigen; sobald die Gegenseite beitritt, startet die Übertragung automatisch.", badge: "Empfänger ohne Konto" },
-    stored: { name: "📦 Download-Link", sub: "Dein Browser verschlüsselt und speichert zwischen; die empfangende Person lädt jederzeit herunter — ohne Sitzung, ohne Konto.", badge: "Auch offline" },
+    stored: { name: "Download-Link", sub: "Dein Browser verschlüsselt und speichert zwischen; die empfangende Person lädt jederzeit herunter — ohne Sitzung, ohne Konto.", badge: "Auch offline" },
   },
   pair: {
     sendCode: "Pairing-Code erstellen",
@@ -583,18 +583,18 @@ const de: Messages = {
       title: "Echtzeitübertragung in drei Schritten",
       sub: "Wenn beide Seiten online sind, netzwerkübergreifend in Echtzeit übertragen — der Empfänger braucht kein Konto.",
       ways: [
-        { icon: "🔗", name: "Pairing-Code erstellen", how: "Melde dich an und erstelle einen 6-stelligen Pairing-Code samt Beitrittslink und QR. Was du sendest, wählst du erst, wenn das andere Gerät beigetreten ist.", tag: "Der Ersteller meldet sich an" },
-        { icon: "🔢", name: "Code an die Gegenseite geben", how: "Vorlesen, den Link schicken oder den QR zeigen — die andere Person tippt ihn ein oder öffnet ihn in einem beliebigen modernen Browser.", tag: "Codes gelten 5 Minuten" },
-        { icon: "⚡", name: "Dateien oder Text wählen", how: "Nach dem Beitritt wählst du auf der Gerätekarte bis zu 1.000 Dateien oder „Nachricht senden“ für Onlinetext. Vergleicht den SAS; danach läuft der Inhalt Ende-zu-Ende-verschlüsselt über TURN.", tag: "Das Relay kann beides weder lesen noch entschlüsseln" },
+        { name: "Pairing-Code erstellen", how: "Melde dich an und erstelle einen 6-stelligen Pairing-Code samt Beitrittslink und QR. Was du sendest, wählst du erst, wenn das andere Gerät beigetreten ist.", tag: "Der Ersteller meldet sich an" },
+        { name: "Code an die Gegenseite geben", how: "Vorlesen, den Link schicken oder den QR zeigen — die andere Person tippt ihn ein oder öffnet ihn in einem beliebigen modernen Browser.", tag: "Codes gelten 5 Minuten" },
+        { name: "Dateien oder Text wählen", how: "Nach dem Beitritt wählst du auf der Gerätekarte bis zu 1.000 Dateien oder „Nachricht senden“ für Onlinetext. Vergleicht den SAS; danach läuft der Inhalt Ende-zu-Ende-verschlüsselt über TURN.", tag: "Das Relay kann beides weder lesen noch entschlüsseln" },
       ],
     },
     offline: {
       title: "Asynchron senden in drei Schritten",
       sub: "Senden, auch wenn die Gegenseite offline ist: jetzt verschlüsselt ablegen, später per Link abholen.",
       ways: [
-        { icon: "🔒", name: "Anmelden und Dateien wählen", how: "Dateien werden vor dem Upload im Browser mit AES-256-GCM verschlüsselt — der Server speichert durchgehend nur Chiffretext, den er nicht entschlüsseln kann.", tag: "Zero-Knowledge" },
-        { icon: "🔗", name: "Download-Link erzeugen", how: "Ablauf von 1 Stunde bis zu 14 Tagen, je nach Tarif, oder Burn-after-read; der Schlüssel steckt im #-Fragment des Links und erreicht den Server nie.", tag: "Ablauf selbst bestimmen" },
-        { icon: "📥", name: "Abholen, wann es passt", how: "Schick den Link — kein Konto, kein Online-Warten: entschlüsselt und heruntergeladen wird direkt im Browser.", tag: "Empfänger ohne Konto" },
+        { name: "Anmelden und Dateien wählen", how: "Dateien werden vor dem Upload im Browser mit AES-256-GCM verschlüsselt — der Server speichert durchgehend nur Chiffretext, den er nicht entschlüsseln kann.", tag: "Zero-Knowledge" },
+        { name: "Download-Link erzeugen", how: "Ablauf von 1 Stunde bis zu 14 Tagen, je nach Tarif, oder Burn-after-read; der Schlüssel steckt im #-Fragment des Links und erreicht den Server nie.", tag: "Ablauf selbst bestimmen" },
+        { name: "Abholen, wann es passt", how: "Schick den Link — kein Konto, kein Online-Warten: entschlüsselt und heruntergeladen wird direkt im Browser.", tag: "Empfänger ohne Konto" },
       ],
     },
   },
@@ -602,8 +602,8 @@ const de: Messages = {
     title: "Welcher Modus passt",
     sub: "„Echtzeitübertragung“ ist für jetzt, wenn beide online sind; „Download-Link“ ist zum späteren Abholen.",
     colFeature: "Aspekt",
-    colRealtime: "⚡ Echtzeit",
-    colStored: "📦 Download-Link",
+    colRealtime: "Echtzeit",
+    colStored: "Download-Link",
     rows: [
       { label: "Anmeldung nötig", realtime: "Ersteller eines Netzwerk-Datei-/Textcodes meldet sich an; Beitritt ohne Konto", stored: "Ersteller des Download-Links meldet sich an" },
       { label: "Empfänger online?", realtime: "Ja — beide gleichzeitig online", stored: "Nein — asynchron herunterladen" },
@@ -616,11 +616,11 @@ const de: Messages = {
     title: "Für genau diese Momente gemacht",
     sub: "Von Remote-Zusammenarbeit bis zur datenschutzsensiblen Einmal-Zustellung.",
     items: [
-      { icon: "🌍", title: "Große Dateien um die Welt senden", desc: "Schick ein mehrere Gigabyte großes Video, eine Design-Datei oder einen Datensatz direkt an Kollegen oder Familie im Ausland — direkt auf die Festplatte gestreamt, ohne Speicher-Overhead, ohne Qualitätsverlust." },
-      { icon: "⏳", title: "Wenn die andere Person nicht online ist", desc: "Erzeuge einen verschlüsselten Download-Link mit Ablaufdatum und verschick ihn; sie holt ihn ab, wann immer sie Zeit hat — und ein Link kann mehrere Empfänger bedienen." },
-      { icon: "📱", title: "Handy ↔ Computer", desc: "Verschiebe Dateien zwischen deinen eigenen Geräten über Systeme und Netzwerke hinweg — scanne oder tippe einen Code zum Verbinden, ohne Cloud-Speicher oder Kabel." },
-      { icon: "🔒", title: "Datenschutzsensible Einmal-Zustellung", desc: "Ende-zu-Ende-Verschlüsselung plus ein SAS-Verifizierungscode gegen MITM, mit Burn-after-read — ideal für Verträge, Ausweise oder Schlüssel." },
-      { icon: "💬", title: "Text weitergeben statt einer Datei", desc: "Text landet Ende-zu-Ende-verschlüsselt auf dem anderen Gerät. Beide Seiten bleiben online; Relayium führt keinen serverseitigen Verlauf, aber der Empfänger kann den Text behalten." },
+      { title: "Große Dateien um die Welt senden", desc: "Schick ein mehrere Gigabyte großes Video, eine Design-Datei oder einen Datensatz direkt an Kollegen oder Familie im Ausland — direkt auf die Festplatte gestreamt, ohne Speicher-Overhead, ohne Qualitätsverlust." },
+      { title: "Wenn die andere Person nicht online ist", desc: "Erzeuge einen verschlüsselten Download-Link mit Ablaufdatum und verschick ihn; sie holt ihn ab, wann immer sie Zeit hat — und ein Link kann mehrere Empfänger bedienen." },
+      { title: "Handy ↔ Computer", desc: "Verschiebe Dateien zwischen deinen eigenen Geräten über Systeme und Netzwerke hinweg — scanne oder tippe einen Code zum Verbinden, ohne Cloud-Speicher oder Kabel." },
+      { title: "Datenschutzsensible Einmal-Zustellung", desc: "Ende-zu-Ende-Verschlüsselung plus ein SAS-Verifizierungscode gegen MITM, mit Burn-after-read — ideal für Verträge, Ausweise oder Schlüssel." },
+      { title: "Text weitergeben statt einer Datei", desc: "Text landet Ende-zu-Ende-verschlüsselt auf dem anderen Gerät. Beide Seiten bleiben online; Relayium führt keinen serverseitigen Verlauf, aber der Empfänger kann den Text behalten." },
     ],
   },
   faq: {

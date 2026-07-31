@@ -25,7 +25,7 @@ export const PICK_MODES = [
   { g: "🔑", title: "push / pull", cmd: "relayium push … user@host:path" },
   { g: "🔗", title: "send / receive", cmd: "relayium send … / receive <code>" },
   { g: "💬", title: "text", cmd: "relayium text [code]" },
-  { g: "🖧", title: "daemon direct", cmd: "relayium push … relayium://host" },
+  { g: "network", title: "daemon direct", cmd: "relayium push … relayium://host" },
   { g: "🔁", title: "sync", cmd: "relayium sync … relayium://host" },
   { g: "☁️", title: "up / down", cmd: "relayium up … / down <link>" },
 ] as const;
@@ -58,7 +58,7 @@ export const GUIDES = [
   { slug: "guides/transfer-files-from-terminal", icon: "🚀" },
   { slug: "guides/back-up-a-server-over-ssh", icon: "🔑" },
   { slug: "guides/send-a-file-to-someone", icon: "🔗" },
-  { slug: "guides/server-to-server-transfers", icon: "🖧" },
+  { slug: "guides/server-to-server-transfers", icon: "network" },
   { slug: "guides/sync-a-large-folder-between-servers", icon: "🔁" },
   { slug: "guides/push-to-cloud-pull-on-another-computer", icon: "☁️" },
 ] as const;

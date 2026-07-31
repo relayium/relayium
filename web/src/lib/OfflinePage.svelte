@@ -13,6 +13,7 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate, PRICING_PATH } from "./router.svelte";
   import PageFooter from "./PageFooter.svelte";
+  import Icon from "./Icon.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
   const cloudGuideSlug = "guides/push-to-cloud-pull-on-another-computer";
@@ -31,7 +32,10 @@
 
   <div class="cards">
     <section class="ui-card ui-card-raised ui-stack">
-      <div class="ui-card-head"><h2>{t.methods.stored.name}</h2><span class="ui-badge">{t.methods.stored.badge}</span></div>
+      <div class="ui-card-head">
+        <h2 class="mode-title"><Icon name="package" size={18} /><span>{t.methods.stored.name}</span></h2>
+        <span class="ui-badge">{t.methods.stored.badge}</span>
+      </div>
       <p class="ui-card-sub">{t.methods.stored.sub}</p>
       {#if session().user}
         <StoredUpload />
@@ -74,6 +78,8 @@
   .offlinepage { position: relative; }
 
   .cards { max-inline-size: 720px; margin-inline: auto; }
+
+  .mode-title { display: flex; align-items: center; gap: var(--space-2); }
 
   .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding-block: var(--space-2); }
   .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; }

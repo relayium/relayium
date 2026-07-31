@@ -1,6 +1,7 @@
 <script lang="ts">
   import { navigate, CROSS_PATH, OFFLINE_PATH } from "./router.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
+  import Icon from "./Icon.svelte";
   const t = $derived<Messages>(messages[lang()]);
 </script>
 
@@ -15,9 +16,9 @@
     <div class="row header" role="row">
       <span class="cell feat" role="columnheader">{t.compare.colFeature}</span>
       <a class="cell rt head-link" role="columnheader" href={CROSS_PATH}
-         onclick={(e) => { e.preventDefault(); navigate("cross"); }}>{t.compare.colRealtime}</a>
+         onclick={(e) => { e.preventDefault(); navigate("cross"); }}><Icon name="bolt" /> <span>{t.compare.colRealtime}</span></a>
       <a class="cell st head-link" role="columnheader" href={OFFLINE_PATH}
-         onclick={(e) => { e.preventDefault(); navigate("offline"); }}>{t.compare.colStored}</a>
+         onclick={(e) => { e.preventDefault(); navigate("offline"); }}><Icon name="package" /> <span>{t.compare.colStored}</span></a>
     </div>
     {#each t.compare.rows as r (r.label)}
       <div class="row" role="row">
@@ -54,7 +55,7 @@
   .row.header .cell { font-weight: 600; color: var(--text-h); background: var(--code-bg); font-size: var(--fs-sm); }
   .row:not(.header):hover { background: var(--accent-bg); }
 
-  .head-link { text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  .head-link { display: flex; align-items: center; gap: var(--space-2); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
   .head-link:hover { color: var(--accent); }
 
   @media (max-width: 640px) {

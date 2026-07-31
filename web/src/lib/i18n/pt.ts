@@ -490,7 +490,7 @@ const pt: Messages = {
   },
   methods: {
     realtime: { name: "Transferência em tempo real", sub: "Escolha seus arquivos e receba um código de 6 caracteres — diga-o em voz alta, envie o link ou mostre o QR; assim que o outro lado entra, a transferência começa automaticamente.", badge: "Destinatário: sem conta" },
-    stored: { name: "📦 Link de download", sub: "Seu navegador criptografa e então armazena; o destinatário baixa a qualquer momento, sem sessão ao vivo e sem conta.", badge: "Funciona offline" },
+    stored: { name: "Link de download", sub: "Seu navegador criptografa e então armazena; o destinatário baixa a qualquer momento, sem sessão ao vivo e sem conta.", badge: "Funciona offline" },
   },
   pair: {
     sendCode: "Criar um código de emparelhamento",
@@ -582,18 +582,18 @@ const pt: Messages = {
       title: "Transferência em tempo real, em três passos",
       sub: "Quando os dois lados estão online, transfiram em tempo real entre redes — o destinatário não precisa de conta.",
       ways: [
-        { icon: "🔗", name: "Crie um código de emparelhamento", how: "Entre e crie um código de 6 caracteres com link de entrada e QR. Escolha o que enviar depois que o outro aparelho participar.", tag: "O criador faz login" },
-        { icon: "🔢", name: "Dê o código para o outro lado", how: "Diga-o em voz alta, envie o link ou mostre o QR — qualquer um dos três; a pessoa o digita ou o abre em qualquer navegador moderno.", tag: "Os códigos duram 5 minutos" },
-        { icon: "⚡", name: "Escolha arquivos ou texto", how: "Quando a pessoa entrar, escolha até 1.000 arquivos no cartão dela ou “Enviar mensagem” para texto online. Compare o SAS e envie o conteúdo criptografado de ponta a ponta pelo TURN.", tag: "O retransmissor não consegue ler nem descriptografar nenhum" },
+        { name: "Crie um código de emparelhamento", how: "Entre e crie um código de 6 caracteres com link de entrada e QR. Escolha o que enviar depois que o outro aparelho participar.", tag: "O criador faz login" },
+        { name: "Dê o código para o outro lado", how: "Diga-o em voz alta, envie o link ou mostre o QR — qualquer um dos três; a pessoa o digita ou o abre em qualquer navegador moderno.", tag: "Os códigos duram 5 minutos" },
+        { name: "Escolha arquivos ou texto", how: "Quando a pessoa entrar, escolha até 1.000 arquivos no cartão dela ou “Enviar mensagem” para texto online. Compare o SAS e envie o conteúdo criptografado de ponta a ponta pelo TURN.", tag: "O retransmissor não consegue ler nem descriptografar nenhum" },
       ],
     },
     offline: {
       title: "Transferência assíncrona, em três passos",
       sub: "Envie mesmo quando o outro estiver offline: criptografe e armazene agora, ele busca pelo link depois.",
       ways: [
-        { icon: "🔒", name: "Entre e escolha os arquivos", how: "Os arquivos são criptografados com AES-256-GCM no seu navegador antes do envio — o servidor só armazena texto cifrado que não consegue descriptografar.", tag: "Conhecimento zero" },
-        { icon: "🔗", name: "Crie o link de download", how: "Defina um prazo de validade de 1 hora até 14 dias, dependendo do seu plano, ou autodestruição após a leitura; a chave de descriptografia fica no fragmento # do link e nunca é enviada ao servidor.", tag: "Prazo que você controla" },
-        { icon: "📥", name: "A pessoa baixa a qualquer hora", how: "Envie o link a ela; sem conta e sem esperar online — ela descriptografa e baixa direto no navegador.", tag: "Sem conta para destinatários" },
+        { name: "Entre e escolha os arquivos", how: "Os arquivos são criptografados com AES-256-GCM no seu navegador antes do envio — o servidor só armazena texto cifrado que não consegue descriptografar.", tag: "Conhecimento zero" },
+        { name: "Crie o link de download", how: "Defina um prazo de validade de 1 hora até 14 dias, dependendo do seu plano, ou autodestruição após a leitura; a chave de descriptografia fica no fragmento # do link e nunca é enviada ao servidor.", tag: "Prazo que você controla" },
+        { name: "A pessoa baixa a qualquer hora", how: "Envie o link a ela; sem conta e sem esperar online — ela descriptografa e baixa direto no navegador.", tag: "Sem conta para destinatários" },
       ],
     },
   },
@@ -601,8 +601,8 @@ const pt: Messages = {
     title: "Qual modo escolher",
     sub: "“Transferência em tempo real” é para quando os dois estão online agora; “Link de download” é para pegar depois.",
     colFeature: "Aspecto",
-    colRealtime: "⚡ Transferência em tempo real",
-    colStored: "📦 Link de download",
+    colRealtime: "Transferência em tempo real",
+    colStored: "Link de download",
     rows: [
       { label: "Precisa entrar", realtime: "Quem cria um código para arquivos ou texto entra; quem participa não precisa", stored: "Quem cria o link entra" },
       { label: "Destinatário online?", realtime: "Sim — ambos online ao mesmo tempo", stored: "Não — baixe de forma assíncrona" },
@@ -615,11 +615,11 @@ const pt: Messages = {
     title: "Feito para estes momentos",
     sub: "Da colaboração remota à entrega única sensível à privacidade.",
     items: [
-      { icon: "🌍", title: "Envie arquivos grandes pelo mundo", desc: "Dispare um vídeo, arquivo de design ou conjunto de dados de vários gigabytes direto para um colega ou familiar no exterior — transmitido para o disco, sem inchaço de memória, sem perda de qualidade." },
-      { icon: "⏳", title: "Quando a pessoa não está online", desc: "Gere um link de download criptografado com prazo de validade e envie-o; ela o pega quando estiver livre — e um link pode servir a vários destinatários." },
-      { icon: "📱", title: "Celular ↔ computador", desc: "Mova arquivos entre seus próprios dispositivos, entre sistemas e redes — escaneie ou digite um código para conectar, sem precisar de nuvem ou cabo." },
-      { icon: "🔒", title: "Entrega única sensível à privacidade", desc: "Criptografia de ponta a ponta mais um código de verificação SAS contra intermediário, com autodestruição após a leitura — ideal para contratos, documentos ou chaves." },
-      { icon: "💬", title: "Passar um texto, não um arquivo", desc: "Senha, link, comando ou código: criptografado de ponta a ponta. Os dois ficam online; o Relayium não guarda histórico, mas o destinatário pode reter o texto." },
+      { title: "Envie arquivos grandes pelo mundo", desc: "Dispare um vídeo, arquivo de design ou conjunto de dados de vários gigabytes direto para um colega ou familiar no exterior — transmitido para o disco, sem inchaço de memória, sem perda de qualidade." },
+      { title: "Quando a pessoa não está online", desc: "Gere um link de download criptografado com prazo de validade e envie-o; ela o pega quando estiver livre — e um link pode servir a vários destinatários." },
+      { title: "Celular ↔ computador", desc: "Mova arquivos entre seus próprios dispositivos, entre sistemas e redes — escaneie ou digite um código para conectar, sem precisar de nuvem ou cabo." },
+      { title: "Entrega única sensível à privacidade", desc: "Criptografia de ponta a ponta mais um código de verificação SAS contra intermediário, com autodestruição após a leitura — ideal para contratos, documentos ou chaves." },
+      { title: "Passar um texto, não um arquivo", desc: "Senha, link, comando ou código: criptografado de ponta a ponta. Os dois ficam online; o Relayium não guarda histórico, mas o destinatário pode reter o texto." },
     ],
   },
   faq: {

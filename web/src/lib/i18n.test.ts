@@ -34,7 +34,13 @@ describe("i18n completeness", () => {
       expect(m.methods.realtime.name, `${code}.methods.realtime.name is trimmed`).toBe(m.methods.realtime.name.trim());
       expect(m.crossnet.realtimeTitle, `${code}.crossnet.realtimeTitle owns no presentation glyph`).not.toContain("⚡");
       expect(m.crossnet.realtimeTitle, `${code}.crossnet.realtimeTitle is trimmed`).toBe(m.crossnet.realtimeTitle.trim());
+      expect(m.compare.colRealtime, `${code}.compare.colRealtime owns no presentation glyph`).not.toContain("⚡");
+      expect(m.compare.colStored, `${code}.compare.colStored owns no presentation glyph`).not.toContain("📦");
+      expect(m.compare.colRealtime, `${code}.compare.colRealtime is trimmed`).toBe(m.compare.colRealtime.trim());
+      expect(m.compare.colStored, `${code}.compare.colStored is trimmed`).toBe(m.compare.colStored.trim());
       expect(m.methods.stored.name, `${code}.methods.stored.name`).toBeTruthy();
+      expect(m.methods.stored.name, `${code}.methods.stored.name owns no presentation glyph`).not.toContain("📦");
+      expect(m.methods.stored.name, `${code}.methods.stored.name is trimmed`).toBe(m.methods.stored.name.trim());
     }
   });
 

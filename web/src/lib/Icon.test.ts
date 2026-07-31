@@ -28,10 +28,26 @@ const geometry: Record<IconName, string[]> = {
   ],
   folder: ["M3.5 7.2a1 1 0 0 1 1-1h4l2 2.2h9a1 1 0 0 1 1 1v9.1a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"],
   message: ["M5 5.2h14a1.8 1.8 0 0 1 1.8 1.8v8.2A1.8 1.8 0 0 1 19 17H14l-2 3-2-3H5a1.8 1.8 0 0 1-1.8-1.8V7A1.8 1.8 0 0 1 5 5.2z"],
+  link: [
+    "M9.5 14.5 8 16a4 4 0 0 1-5.7-5.7l2.2-2.2a4 4 0 0 1 5.7 0",
+    "m14.5 9.5 1.5-1.5a4 4 0 0 1 5.7 5.7l-2.2 2.2a4 4 0 0 1-5.7 0",
+    "m8.5 15.5 7-7",
+  ],
+  "pairing-code": ["M9 4 7 20M17 4l-2 16M4 9h16M3 15h16"],
+  lock: ["M7 10V7a5 5 0 0 1 10 0v3", "M5 10h14v10H5z", "M12 14v2"],
+  download: ["M12 3v11m0 0-4-4m4 4 4-4", "M5 16v4h14v-4"],
+  package: ["m4 7.5 8-4.5 8 4.5v9L12 21l-8-4.5z", "m4 7.5 8 4.5 8-4.5M12 12v9M8 5.25l8 4.5"],
+  globe: ["M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0zM3 12h18", "M12 3c2.6 2.5 4 5.5 4 9s-1.4 6.5-4 9c-2.6-2.5-4-5.5-4-9s1.4-6.5 4-9z"],
+  clock: ["M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", "M12 7v5l3 2"],
+  devices: ["M2 5h12v8.5H2zM6.5 17h5M9 13.5V17", "M15.5 8H22v11.5h-6.5zM18 17.5h1.5"],
+  network: ["M12 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM6 17a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM18 17a2 2 0 1 1 0 4 2 2 0 0 1 0-4z", "M12 7v4m0 0-6 6m6-6 6 6"],
+  nearby: ["M12 15.6a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8z", "M8.4 14a5 5 0 0 1 7.2 0M5.6 11a9 9 0 0 1 12.8 0"],
+  shield: ["M12 3l7 3v5c0 4.4-3 7.9-7 9.8C8 18.9 5 15.4 5 11V6zM9 12l2 2 4-4"],
+  "file-download": ["M7 3.5h6l4 4v12a.8.8 0 0 1-.8.8H7a.8.8 0 0 1-.8-.8V4.3A.8.8 0 0 1 7 3.5zM13 3.5v4h4", "M11.5 11v5.5m0 0-2-2m2 2 2-2"],
 };
 
 describe("Icon", () => {
-  it.each<IconName>(["bolt", "file", "folder", "message"])("renders the %s geometry", (name) => {
+  it.each(Object.keys(geometry) as IconName[])("renders the %s geometry", (name) => {
     const svg = render(name);
     expect(target.querySelectorAll("svg")).toHaveLength(1);
     expect([...svg.querySelectorAll("path")].map((path) => path.getAttribute("d"))).toEqual(geometry[name]);
@@ -47,6 +63,12 @@ describe("Icon", () => {
     const path = render("message").querySelector("path")!.getAttribute("d")!;
     // The lower edge runs to x=14, then symmetrically through x=12 to x=10.
     expect(path).toContain("H14l-2 3-2-3H5");
+  });
+
+  it("keeps the nearby endpoint as the original solid dot", () => {
+    const dot = render("nearby").querySelector("path")!;
+    expect(dot.getAttribute("fill")).toBe("currentColor");
+    expect(dot.getAttribute("stroke")).toBe("none");
   });
 
   it("is always decorative and cannot receive focus", () => {

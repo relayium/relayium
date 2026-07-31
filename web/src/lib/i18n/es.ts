@@ -490,7 +490,7 @@ const es: Messages = {
   },
   methods: {
     realtime: { name: "Transferencia en tiempo real", sub: "Elige tus archivos y obtén un código de 6 caracteres — léelo en voz alta, envía el enlace o muestra el QR; en cuanto el otro lado se une, la transferencia comienza automáticamente.", badge: "Destinatario: sin cuenta" },
-    stored: { name: "📦 Enlace de descarga", sub: "Tu navegador cifra y luego almacena; el destinatario descarga en cualquier momento, sin sesión en vivo ni cuenta.", badge: "Sin conexión, sin problema" },
+    stored: { name: "Enlace de descarga", sub: "Tu navegador cifra y luego almacena; el destinatario descarga en cualquier momento, sin sesión en vivo ni cuenta.", badge: "Sin conexión, sin problema" },
   },
   pair: {
     sendCode: "Crear un código de emparejamiento",
@@ -582,18 +582,18 @@ const es: Messages = {
       title: "Transferencia en tiempo real, en tres pasos",
       sub: "Cuando ambos lados están en línea, transfiere en tiempo real entre redes — el destinatario no necesita cuenta.",
       ways: [
-        { icon: "🔗", name: "Crea un código de emparejamiento", how: "Inicia sesión y crea un código de 6 caracteres, con enlace para unirse y QR. Elige qué enviar después de que se una el otro dispositivo.", tag: "El creador inicia sesión" },
-        { icon: "🔢", name: "Dale el código al otro lado", how: "Léelo en voz alta, envía el enlace o muestra el QR — cualquiera de los tres; lo escriben o lo abren en cualquier navegador moderno.", tag: "Los códigos viven 5 minutos" },
-        { icon: "⚡", name: "Elige archivos o texto", how: "Cuando se una, elige hasta 1.000 archivos en su tarjeta o «Enviar un mensaje» para texto en línea. Compara el SAS y envía el contenido cifrado de extremo a extremo por TURN.", tag: "El retransmisor no puede leer ni descifrar ninguno" },
+        { name: "Crea un código de emparejamiento", how: "Inicia sesión y crea un código de 6 caracteres, con enlace para unirse y QR. Elige qué enviar después de que se una el otro dispositivo.", tag: "El creador inicia sesión" },
+        { name: "Dale el código al otro lado", how: "Léelo en voz alta, envía el enlace o muestra el QR — cualquiera de los tres; lo escriben o lo abren en cualquier navegador moderno.", tag: "Los códigos viven 5 minutos" },
+        { name: "Elige archivos o texto", how: "Cuando se una, elige hasta 1.000 archivos en su tarjeta o «Enviar un mensaje» para texto en línea. Compara el SAS y envía el contenido cifrado de extremo a extremo por TURN.", tag: "El retransmisor no puede leer ni descifrar ninguno" },
       ],
     },
     offline: {
       title: "Transferencia asíncrona, en tres pasos",
       sub: "Envía incluso cuando están sin conexión: cifra y almacena ahora, ellos lo recogen por enlace después.",
       ways: [
-        { icon: "🔒", name: "Inicia sesión y elige archivos", how: "Los archivos se cifran con AES-256-GCM en tu navegador antes de subirlos — el servidor solo almacena texto cifrado que no puede descifrar.", tag: "Conocimiento cero" },
-        { icon: "🔗", name: "Crea el enlace de descarga", how: "Establece una caducidad de 1 hora hasta 14 días, según tu plan, o la destrucción tras la lectura; la clave de descifrado reside en el fragmento # del enlace y nunca se envía al servidor.", tag: "Caducidad que tú controlas" },
-        { icon: "📥", name: "Ellos descargan en cualquier momento", how: "Envíales el enlace; sin cuenta y sin esperar en línea — descifran y descargan directamente en el navegador.", tag: "Sin cuenta para los destinatarios" },
+        { name: "Inicia sesión y elige archivos", how: "Los archivos se cifran con AES-256-GCM en tu navegador antes de subirlos — el servidor solo almacena texto cifrado que no puede descifrar.", tag: "Conocimiento cero" },
+        { name: "Crea el enlace de descarga", how: "Establece una caducidad de 1 hora hasta 14 días, según tu plan, o la destrucción tras la lectura; la clave de descifrado reside en el fragmento # del enlace y nunca se envía al servidor.", tag: "Caducidad que tú controlas" },
+        { name: "Ellos descargan en cualquier momento", how: "Envíales el enlace; sin cuenta y sin esperar en línea — descifran y descargan directamente en el navegador.", tag: "Sin cuenta para los destinatarios" },
       ],
     },
   },
@@ -601,8 +601,8 @@ const es: Messages = {
     title: "Qué modo elegir",
     sub: "La «Transferencia en tiempo real» es para cuando ambos están en línea ahora; el «Enlace de descarga» es para recoger después.",
     colFeature: "Aspecto",
-    colRealtime: "⚡ Transferencia en tiempo real",
-    colStored: "📦 Enlace de descarga",
+    colRealtime: "Transferencia en tiempo real",
+    colStored: "Enlace de descarga",
     rows: [
       { label: "¿Necesita inicio de sesión?", realtime: "Quien crea un código para archivos o texto inicia sesión; quien se une no la necesita", stored: "Quien crea el enlace inicia sesión" },
       { label: "¿Destinatario en línea?", realtime: "Sí — ambos en línea a la vez", stored: "No — descarga de forma asíncrona" },
@@ -615,11 +615,11 @@ const es: Messages = {
     title: "Pensado para estos momentos",
     sub: "Desde la colaboración remota hasta la entrega única sensible a la privacidad.",
     items: [
-      { icon: "🌍", title: "Envía archivos grandes por todo el mundo", desc: "Dispara un vídeo, un archivo de diseño o un conjunto de datos de varios gigabytes directamente a un colega o familiar en el extranjero — transmitido al disco, sin saturar la memoria, sin pérdida de calidad." },
-      { icon: "⏳", title: "Cuando no están en línea", desc: "Genera un enlace de descarga cifrado con caducidad y envíalo; lo recogen cuando estén libres — y un solo enlace puede servir a varios destinatarios." },
-      { icon: "📱", title: "Teléfono ↔ ordenador", desc: "Mueve archivos entre tus propios dispositivos a través de sistemas y redes — escanea o escribe un código para conectar, sin necesidad de una unidad en la nube ni de un cable." },
-      { icon: "🔒", title: "Entrega única sensible a la privacidad", desc: "Cifrado de extremo a extremo más un código de verificación SAS contra intermediarios, con destrucción tras la lectura — ideal para contratos, documentos de identidad o claves." },
-      { icon: "💬", title: "Pasar texto, no un archivo", desc: "Contraseña, enlace, comando o código: cifrado de extremo a extremo. Ambos siguen en línea; Relayium no guarda historial, pero el destinatario puede conservarlo." },
+      { title: "Envía archivos grandes por todo el mundo", desc: "Dispara un vídeo, un archivo de diseño o un conjunto de datos de varios gigabytes directamente a un colega o familiar en el extranjero — transmitido al disco, sin saturar la memoria, sin pérdida de calidad." },
+      { title: "Cuando no están en línea", desc: "Genera un enlace de descarga cifrado con caducidad y envíalo; lo recogen cuando estén libres — y un solo enlace puede servir a varios destinatarios." },
+      { title: "Teléfono ↔ ordenador", desc: "Mueve archivos entre tus propios dispositivos a través de sistemas y redes — escanea o escribe un código para conectar, sin necesidad de una unidad en la nube ni de un cable." },
+      { title: "Entrega única sensible a la privacidad", desc: "Cifrado de extremo a extremo más un código de verificación SAS contra intermediarios, con destrucción tras la lectura — ideal para contratos, documentos de identidad o claves." },
+      { title: "Pasar texto, no un archivo", desc: "Contraseña, enlace, comando o código: cifrado de extremo a extremo. Ambos siguen en línea; Relayium no guarda historial, pero el destinatario puede conservarlo." },
     ],
   },
   faq: {

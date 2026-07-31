@@ -18,6 +18,8 @@ const LOCALES = { en, zh, ja, ko, de, fr, ar, es, pt };
 // honest without exporting an array purely for the test.
 const src = readFileSync(join(import.meta.dirname, "UseCases.svelte"), "utf8");
 const slugs = [...src.matchAll(/^\s{4}"([a-z-]+\/[a-z-]+)",/gm)].map((m) => m[1]);
+const iconBlock = src.match(/const CASE_ICONS:[^=]+?\=\s*\[([^\]]+)\]/s)?.[1] ?? "";
+const icons = [...iconBlock.matchAll(/"([a-z-]+)"/g)].map((m) => m[1]);
 
 // Read as text rather than imported: the module names do not track the slugs
 // (guides/how-relayium-encrypts-your-files lives in
@@ -35,6 +37,7 @@ const generated = new Set(
 describe("homepage use-case cards", () => {
   it("has one target slug per card", () => {
     expect(slugs.length).toBeGreaterThan(0);
+    expect(icons).toHaveLength(slugs.length);
     for (const [code, m] of Object.entries(LOCALES)) {
       expect.soft(m.useCases.items.length, `locale ${code}`).toBe(slugs.length);
     }

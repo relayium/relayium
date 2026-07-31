@@ -35,7 +35,6 @@ describe("pairing-code expiry copy", () => {
 
     for (const [lang, messages] of Object.entries(locales)) {
       const [create, , choose] = messages.howItWorks.realtime.ways;
-      expect(create.icon, `${lang}: create first`).toBe("🔗");
       expect(create.how, `${lang}: six-character code`).toMatch(/6/);
       expect(choose.how, `${lang}: batch cap`).toMatch(/1(?:[,\s. ]*)000/);
       expect(choose.how, `${lang}: text option`).toMatch(textTokens[lang]);

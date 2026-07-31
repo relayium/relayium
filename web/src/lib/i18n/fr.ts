@@ -491,7 +491,7 @@ const fr: Messages = {
   },
   methods: {
     realtime: { name: "Transfert en temps réel", sub: "Choisissez vos fichiers et obtenez un code à 6 caractères — dictez-le, envoyez le lien ou montrez le QR ; dès que l'autre appareil rejoint, le transfert démarre automatiquement.", badge: "Destinataire sans compte" },
-    stored: { name: "📦 Lien de téléchargement", sub: "Votre navigateur chiffre puis stocke temporairement ; le destinataire télécharge quand il veut, sans session ni compte.", badge: "Même hors ligne" },
+    stored: { name: "Lien de téléchargement", sub: "Votre navigateur chiffre puis stocke temporairement ; le destinataire télécharge quand il veut, sans session ni compte.", badge: "Même hors ligne" },
   },
   pair: {
     sendCode: "Créer un code d'appairage",
@@ -583,18 +583,18 @@ const fr: Messages = {
       title: "Transfert en temps réel, en trois étapes",
       sub: "Quand les deux côtés sont en ligne, transfert en temps réel d'un réseau à l'autre — le destinataire n'a pas besoin de compte.",
       ways: [
-        { icon: "🔗", name: "Créer un code d'appairage", how: "Connectez-vous et créez un code à 6 caractères, avec lien de participation et QR. Vous choisirez le contenu après l'arrivée de l'autre appareil.", tag: "Le créateur se connecte" },
-        { icon: "🔢", name: "Transmettre le code", how: "Dictez-le, envoyez le lien ou montrez le QR — au choix ; l'autre personne le saisit ou l'ouvre dans n'importe quel navigateur moderne.", tag: "Codes valables 5 minutes" },
-        { icon: "⚡", name: "Choisir fichiers ou texte", how: "Après son arrivée, choisissez jusqu'à 1 000 fichiers sur sa carte, ou « Envoyer un message » pour du texte en ligne. Comparez le SAS, puis le contenu traverse TURN chiffré de bout en bout.", tag: "Le relais ne peut ni lire ni déchiffrer les deux" },
+        { name: "Créer un code d'appairage", how: "Connectez-vous et créez un code à 6 caractères, avec lien de participation et QR. Vous choisirez le contenu après l'arrivée de l'autre appareil.", tag: "Le créateur se connecte" },
+        { name: "Transmettre le code", how: "Dictez-le, envoyez le lien ou montrez le QR — au choix ; l'autre personne le saisit ou l'ouvre dans n'importe quel navigateur moderne.", tag: "Codes valables 5 minutes" },
+        { name: "Choisir fichiers ou texte", how: "Après son arrivée, choisissez jusqu'à 1 000 fichiers sur sa carte, ou « Envoyer un message » pour du texte en ligne. Comparez le SAS, puis le contenu traverse TURN chiffré de bout en bout.", tag: "Le relais ne peut ni lire ni déchiffrer les deux" },
       ],
     },
     offline: {
       title: "Transfert asynchrone, en trois étapes",
       sub: "Envoyez même hors ligne : chiffrez et stockez maintenant, récupération par lien plus tard.",
       ways: [
-        { icon: "🔒", name: "Se connecter et choisir les fichiers", how: "Les fichiers sont chiffrés en AES-256-GCM dans votre navigateur avant l'envoi — le serveur ne stocke jamais que du texte chiffré indéchiffrable.", tag: "À divulgation nulle" },
-        { icon: "🔗", name: "Créer le lien de téléchargement", how: "Expiration de 1 heure à 14 jours maximum, selon votre offre, ou autodestruction après lecture ; la clé de déchiffrement vit dans le fragment # du lien et n'atteint jamais le serveur.", tag: "Expiration maîtrisée" },
-        { icon: "📥", name: "Récupération à tout moment", how: "Envoyez le lien — ni compte ni attente en ligne : le déchiffrement et le téléchargement se font directement dans le navigateur.", tag: "Sans compte pour le destinataire" },
+        { name: "Se connecter et choisir les fichiers", how: "Les fichiers sont chiffrés en AES-256-GCM dans votre navigateur avant l'envoi — le serveur ne stocke jamais que du texte chiffré indéchiffrable.", tag: "À divulgation nulle" },
+        { name: "Créer le lien de téléchargement", how: "Expiration de 1 heure à 14 jours maximum, selon votre offre, ou autodestruction après lecture ; la clé de déchiffrement vit dans le fragment # du lien et n'atteint jamais le serveur.", tag: "Expiration maîtrisée" },
+        { name: "Récupération à tout moment", how: "Envoyez le lien — ni compte ni attente en ligne : le déchiffrement et le téléchargement se font directement dans le navigateur.", tag: "Sans compte pour le destinataire" },
       ],
     },
   },
@@ -602,8 +602,8 @@ const fr: Messages = {
     title: "Quel mode choisir",
     sub: "« Transfert en temps réel » quand les deux sont en ligne maintenant ; « Lien de téléchargement » pour récupérer plus tard.",
     colFeature: "Critère",
-    colRealtime: "⚡ Transfert en temps réel",
-    colStored: "📦 Lien de téléchargement",
+    colRealtime: "Transfert en temps réel",
+    colStored: "Lien de téléchargement",
     rows: [
       { label: "Connexion requise", realtime: "Le créateur d'un code fichier ou texte se connecte ; la personne qui le rejoint n'en a pas besoin", stored: "Le créateur du lien se connecte" },
       { label: "Destinataire en ligne ?", realtime: "Oui — les deux en ligne en même temps", stored: "Non — téléchargement asynchrone" },
@@ -616,11 +616,11 @@ const fr: Messages = {
     title: "Pensé pour ces moments",
     sub: "De la collaboration à distance à l'envoi unique de documents confidentiels.",
     items: [
-      { icon: "🌍", title: "Envoyer de gros fichiers à l'autre bout du monde", desc: "Expédiez une vidéo de plusieurs gigaoctets, un fichier de conception ou un jeu de données directement à un collègue ou un proche à l'étranger — diffusé directement sur le disque, sans saturer la mémoire ni perdre en qualité." },
-      { icon: "⏳", title: "Quand il n'est pas en ligne", desc: "Générez un lien de téléchargement chiffré avec une expiration et envoyez-le ; il le récupère quand il est libre — et un seul lien peut servir à plusieurs destinataires." },
-      { icon: "📱", title: "Téléphone ↔ ordinateur", desc: "Déplacez des fichiers entre vos propres appareils, d'un système et d'un réseau à l'autre — scannez ou saisissez un code pour vous connecter, sans cloud ni câble." },
-      { icon: "🔒", title: "Envoi unique de documents confidentiels", desc: "Chiffrement de bout en bout et code de vérification SAS contre l'interception, avec autodestruction après lecture — idéal pour les contrats, pièces d'identité ou clés." },
-      { icon: "💬", title: "Faire passer du texte, pas un fichier", desc: "Mot de passe Wi-Fi, lien, commande ou code : saisissez ou collez, chiffré de bout en bout. Les deux côtés restent en ligne ; Relayium ne garde aucun historique serveur, mais le destinataire peut conserver le texte." },
+      { title: "Envoyer de gros fichiers à l'autre bout du monde", desc: "Expédiez une vidéo de plusieurs gigaoctets, un fichier de conception ou un jeu de données directement à un collègue ou un proche à l'étranger — diffusé directement sur le disque, sans saturer la mémoire ni perdre en qualité." },
+      { title: "Quand il n'est pas en ligne", desc: "Générez un lien de téléchargement chiffré avec une expiration et envoyez-le ; il le récupère quand il est libre — et un seul lien peut servir à plusieurs destinataires." },
+      { title: "Téléphone ↔ ordinateur", desc: "Déplacez des fichiers entre vos propres appareils, d'un système et d'un réseau à l'autre — scannez ou saisissez un code pour vous connecter, sans cloud ni câble." },
+      { title: "Envoi unique de documents confidentiels", desc: "Chiffrement de bout en bout et code de vérification SAS contre l'interception, avec autodestruction après lecture — idéal pour les contrats, pièces d'identité ou clés." },
+      { title: "Faire passer du texte, pas un fichier", desc: "Mot de passe Wi-Fi, lien, commande ou code : saisissez ou collez, chiffré de bout en bout. Les deux côtés restent en ligne ; Relayium ne garde aucun historique serveur, mais le destinataire peut conserver le texte." },
     ],
   },
   faq: {

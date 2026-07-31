@@ -2,6 +2,7 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate, PRICING_PATH } from "./router.svelte";
   import CommandBlock from "./CommandBlock.svelte";
+  import Icon from "./Icon.svelte";
   import { PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "./cli-page-data";
   const t = $derived<Messages>(messages[lang()]);
   const repo = "https://github.com/relayium/relayium";
@@ -94,7 +95,9 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     <div class="pick">
       {#each PICK_MODES as p, i (p.title)}
         <div class="pick-card">
-          <span class="g" aria-hidden="true">{p.g}</span>
+          <span class="g" aria-hidden="true">
+            {#if p.g === "network"}<Icon name="network" size={22} />{:else}{p.g}{/if}
+          </span>
           <h3>{p.title}</h3>
           <p>{t.cliPage.pickWhen[i]}</p>
           <code>{p.cmd}</code>
@@ -128,7 +131,7 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
   <!-- Mode 3 -->
   <div class="mode">
     <div class="mode-head">
-      <span class="g" aria-hidden="true">🖧</span>
+      <span class="g" aria-hidden="true"><Icon name="network" size={22} /></span>
       <h2>{t.cliPage.mode3Title}</h2>
       <span class="tag free">{t.cliPage.mode3Tag}</span>
     </div>
@@ -194,7 +197,9 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     <div class="guide-cards">
       {#each GUIDES as g, i (g.slug)}
         <a class="guide-card" href={guideUrl(g.slug)}>
-          <span class="g" aria-hidden="true">{g.icon}</span>
+          <span class="g" aria-hidden="true">
+            {#if g.icon === "network"}<Icon name="network" size={22} />{:else}{g.icon}{/if}
+          </span>
           <span class="gt">{t.cliPage.guides[i]}</span>
           <span class="arr" aria-hidden="true">→</span>
         </a>
@@ -347,6 +352,9 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     background: var(--surface);
   }
   .pick-card .g {
+    display: flex;
+    align-items: center;
+    min-height: 26px;
     font-size: 22px;
   }
   .pick-card h3 {
