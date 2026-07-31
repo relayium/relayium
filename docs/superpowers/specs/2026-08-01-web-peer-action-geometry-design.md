@@ -1,7 +1,7 @@
 # Web peer action geometry — batch 4
 
 Date: 2026-08-01
-Status: implemented and locally validated; production delivery pending.
+Status: implemented, reviewed, and production-validated.
 Scope owner: Web (`web/src`, focused LAN E2E). No server, protocol, routing,
 i18n-string or icon-system changes.
 
