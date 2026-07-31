@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const llms = readFileSync(resolve(process.cwd(), "public/llms.txt"), "utf8");
+const homepage = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
+const readme = readFileSync(resolve(process.cwd(), "../README.md"), "utf8");
 
 describe("llms.txt file and ephemeral text product facts", () => {
   it("positions text as online-only, bounded, and not server-stored", () => {
@@ -33,5 +35,19 @@ describe("llms.txt file and ephemeral text product facts", () => {
     expect(llms).toContain("CLI text is direct-only and does not use TURN");
     expect(llms).not.toMatch(/(?:file|message|realtime) bytes (?:never|do not) touch the server/i);
     expect(llms).not.toMatch(/all realtime transfers .*need no account/i);
+  });
+
+  it("keeps the buffered-browser warning consistent across crawler sources", () => {
+    for (const [name, copy] of [
+      ["llms.txt", llms],
+      ["index.html", homepage],
+      ["README.md", readme],
+    ]) {
+      expect(copy, `${name}: warning threshold`).toContain("256 MB");
+      expect(copy, `${name}: no stale recommendation`).not.toMatch(/(?:under|about) ~?200 MB/i);
+    }
+    expect(llms).toMatch(/conservative estimate, not a hard limit/i);
+    expect(homepage).toMatch(/conservative estimate, not a hard limit/i);
+    expect(readme).toMatch(/conservative estimate, not a hard limit/i);
   });
 });

@@ -190,8 +190,8 @@ for an actual two-device transfer, serve the built `dist/` from the Go server as
 | Browser        | Transfer | Large files                                                            |
 | -------------- | :------: | ---------------------------------------------------------------------- |
 | Chrome / Edge  |    ✅    | Streamed to disk via `showSaveFilePicker` / `showDirectoryPicker`.     |
-| Firefox        |    ✅    | Buffered in memory (Blob download) — keep files under ~200 MB.         |
-| Safari         |    ✅    | Buffered in memory (Blob download) — keep files under ~200 MB.         |
+| Firefox        |    ✅    | Buffered in memory; Relayium warns above ~256 MB (a conservative estimate, not a hard limit). |
+| Safari         |    ✅    | Buffered in memory; Relayium warns above ~256 MB (a conservative estimate, not a hard limit). |
 
 Same-LAN / same-public-IP file and text transfers work with no account. Cross-network browser sessions use
 an encrypted TURN relay by design, which only ever sees ciphertext. Creating a cross-network file or text
@@ -264,7 +264,7 @@ Linux ↔ anything. Unlike AirDrop it isn't limited to Apple devices.
 
 **What's the file-size limit?**
 No server-imposed limit. In Chrome/Edge files stream straight to disk (size bound only by free space).
-In Firefox/Safari they're buffered in memory, so keep them under ~200 MB.
+In Firefox/Safari they're buffered in memory, so Relayium warns above roughly 256 MB — a deliberately conservative estimate, not a hard limit.
 
 **Can I send text, not just files?**
 Yes. When both devices are online you can open a message session — its own end-to-end encrypted

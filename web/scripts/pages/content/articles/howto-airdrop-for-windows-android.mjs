@@ -38,7 +38,7 @@ const en = {
     {
       heading: "What's actually protecting the file",
       body: [
-        "Both modes above are realtime transfers, and both use the same encryption: an X25519 key exchange derives a key used for per-chunk AES-256-GCM, negotiated only between the two devices. Both sides display the same 6-digit verification code (a Short Authentication String) so you can confirm no one is sitting in the middle, and each file is checked end-to-end with a SHA-256 hash.",
+        "Both modes above are realtime transfers, and both use the same encryption: an X25519 key exchange derives a key used for per-chunk AES-256-GCM, negotiated only between the two devices. Both sides display the same 6-digit verification code (a Short Authentication String) so you can verify that the derived key was not replaced: the signalling server or a TURN relay has not impersonated either endpoint or terminated the application-layer end-to-end encryption. On cross-network transfers, TURN still remains in the data path, but it carries only ciphertext and is not an encryption endpoint. Each file is checked end-to-end with a SHA-256 hash.",
         "Nothing is stored on a server in this mode — it exists only for the duration of the transfer. Relayium is open source under the AGPL-3.0 license at github.com/relayium/relayium, so the mechanics are auditable rather than a black box.",
       ],
     },
@@ -114,7 +114,7 @@ const zh = {
     {
       heading: "真正保护文件的是什么",
       body: [
-        "上面两种模式都是实时传输，用的是同一套加密：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，只在两台设备之间协商完成。两端会显示同一段 6 位校验码（SAS），你可据此确认没有人插在中间；每个文件还会用 SHA-256 做端到端校验。",
+        "上面两种模式都是实时传输，用的是同一套加密：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，只在两台设备之间协商完成。两端会显示同一段 6 位校验码（SAS），你可据此确认协商出的密钥未被替换：信令服务器或 TURN 中继没有冒充任一端点，也没有终止应用层端到端加密。跨网络传输时 TURN 仍在数据路径中，但只承载密文，并不是加密端点。每个文件还会用 SHA-256 做端到端校验。",
         "这种模式下服务器不会保存任何东西——一切只在传输期间存在。Relayium 采用 AGPL-3.0 许可开源，代码公开在 github.com/relayium/relayium，机制可审计，而非黑箱。",
       ],
     },
@@ -190,7 +190,7 @@ const ja = {
     {
       heading: "実際にファイルを守っているもの",
       body: [
-        "上記どちらのモードもリアルタイム転送で、同じ暗号化方式を使います：X25519 の鍵交換で導出した鍵をチャンクごとの AES-256-GCM に使い、2台の端末の間だけで協議されます。両端が同じ6桁の検証コード（ショート認証文字列、SAS）を表示するので、間に誰もいないことを確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
+        "上記どちらのモードもリアルタイム転送で、同じ暗号化方式を使います：X25519 の鍵交換で導出した鍵をチャンクごとの AES-256-GCM に使い、2台の端末の間だけで協議されます。両端が同じ6桁の検証コード（ショート認証文字列、SAS）を表示するので、導出された鍵が置き換えられていないこと、つまりシグナリングサーバーや TURN リレーがどちらかの端末になりすましたり、アプリケーション層のエンドツーエンド暗号化を終端したりしていないことを確認できます。ネットワークをまたぐ転送では TURN は引き続きデータ経路上にありますが、運ぶのは暗号文だけで、暗号化の端点ではありません。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
         "このモードではサーバーに何も保存されません。存在するのは転送中の間だけです。Relayium は AGPL-3.0 ライセンスのオープンソースで、コードは github.com/relayium/relayium にあり、ブラックボックスではなく仕組みを検証できます。",
       ],
     },
@@ -266,7 +266,7 @@ const ko = {
     {
       heading: "실제로 파일을 지키는 것",
       body: [
-        "위 두 모드 모두 실시간 전송이며, 같은 암호화 방식을 씁니다: X25519 키 교환으로 도출한 키를 블록별 AES-256-GCM에 사용하며, 오직 두 기기 사이에서만 협상됩니다. 양쪽이 동일한 6자리 검증 코드(짧은 인증 문자열, SAS)를 표시하므로 사이에 아무도 없음을 확인할 수 있고, 각 파일은 SHA-256 해시로 종단간 검증됩니다.",
+        "위 두 모드 모두 실시간 전송이며, 같은 암호화 방식을 씁니다: X25519 키 교환으로 도출한 키를 블록별 AES-256-GCM에 사용하며, 오직 두 기기 사이에서만 협상됩니다. 양쪽이 동일한 6자리 검증 코드(짧은 인증 문자열, SAS)를 표시하므로 도출된 키가 바뀌지 않았는지, 즉 시그널링 서버나 TURN 릴레이가 어느 한쪽 엔드포인트를 사칭하거나 애플리케이션 계층의 종단간 암호화를 종료하지 않았는지 확인할 수 있습니다. 네트워크 간 전송에서는 TURN이 여전히 데이터 경로에 있지만 암호문만 운반하며 암호화 엔드포인트가 아닙니다. 각 파일은 SHA-256 해시로 종단간 검증됩니다.",
         "이 모드에서는 서버에 아무것도 저장되지 않습니다 — 전송이 이루어지는 동안만 존재합니다. Relayium은 AGPL-3.0 라이선스로 오픈소스이며 코드는 github.com/relayium/relayium에 있어, 블랙박스가 아니라 검증 가능한 구조입니다.",
       ],
     },
@@ -342,7 +342,7 @@ const de = {
     {
       heading: "Was die Datei tatsächlich schützt",
       body: [
-        "Beide obigen Modi sind Echtzeitübertragungen und nutzen dieselbe Verschlüsselung: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, ausgehandelt nur zwischen den beiden Geräten. Beide Seiten zeigen denselben sechsstelligen Verifizierungscode (einen Short Authentication String), sodass du bestätigen kannst, dass niemand dazwischensitzt, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft.",
+        "Beide obigen Modi sind Echtzeitübertragungen und nutzen dieselbe Verschlüsselung: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, ausgehandelt nur zwischen den beiden Geräten. Beide Seiten zeigen denselben sechsstelligen Verifizierungscode (einen Short Authentication String), damit du prüfen kannst, dass der abgeleitete Schlüssel nicht ausgetauscht wurde: Weder der Signalisierungsserver noch ein TURN-Relay hat sich als einer der Endpunkte ausgegeben oder die Ende-zu-Ende-Verschlüsselung der Anwendungsschicht beendet. Bei netzübergreifenden Übertragungen bleibt TURN im Datenpfad, transportiert aber nur Chiffretext und ist kein Verschlüsselungsendpunkt. Jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft.",
         "In diesem Modus wird nichts auf einem Server gespeichert — es existiert nur für die Dauer der Übertragung. Relayium ist quelloffen unter der AGPL-3.0-Lizenz auf github.com/relayium/relayium, die Mechanik ist also prüfbar statt eine Blackbox.",
       ],
     },
@@ -418,7 +418,7 @@ const fr = {
     {
       heading: "Ce qui protège réellement le fichier",
       body: [
-        "Les deux modes ci-dessus sont des transferts en temps réel et utilisent le même chiffrement : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, négocié uniquement entre les deux appareils. Les deux côtés affichent le même code de vérification à 6 chiffres (une chaîne d'authentification courte), ce qui vous permet de confirmer que personne ne s'intercale, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256.",
+        "Les deux modes ci-dessus sont des transferts en temps réel et utilisent le même chiffrement : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, négocié uniquement entre les deux appareils. Les deux côtés affichent le même code de vérification à 6 chiffres (une chaîne d'authentification courte), ce qui permet de vérifier que la clé dérivée n'a pas été remplacée : ni le serveur de signalisation ni un relais TURN ne s'est fait passer pour l'un des appareils ou n'a terminé le chiffrement de bout en bout de la couche applicative. Lors d'un transfert entre réseaux, TURN reste bien sur le chemin des données, mais ne transporte que du texte chiffré et n'est pas un point de terminaison du chiffrement. Chaque fichier est vérifié de bout en bout par une empreinte SHA-256.",
         "Rien n'est stocké sur un serveur dans ce mode — il n'existe que pour la durée du transfert. Relayium est open source sous licence AGPL-3.0 sur github.com/relayium/relayium, la mécanique est donc auditable plutôt qu'une boîte noire.",
       ],
     },
@@ -494,7 +494,7 @@ const ar = {
     {
       heading: "ما الذي يحمي الملف فعليًا",
       body: [
-        "كلا الوضعين أعلاه نقل فوري، وكلاهما يستخدم التشفير نفسه: تبادل مفاتيح X25519 يشتق مفتاحًا يُستخدم في AES-256-GCM لكل كتلة، ويُتفاوض عليه بين الجهازين فقط. ويعرض الطرفان رمز التحقق نفسه المكوَّن من 6 أرقام (سلسلة مصادقة قصيرة، SAS) كي تتأكد من عدم وجود أحد في المنتصف، ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
+        "كلا الوضعين أعلاه نقل فوري، وكلاهما يستخدم التشفير نفسه: تبادل مفاتيح X25519 يشتق مفتاحًا يُستخدم في AES-256-GCM لكل كتلة، ويُتفاوض عليه بين الجهازين فقط. ويعرض الطرفان رمز التحقق نفسه المكوَّن من 6 أرقام (سلسلة مصادقة قصيرة، SAS) كي تتأكد من أن المفتاح المشتق لم يُستبدل: فلم ينتحل خادم الإشارات أو مُرحِّل TURN شخصية أي من الطرفين، ولم يُنهِ التشفير من الطرف إلى الطرف في طبقة التطبيق. وفي النقل بين الشبكات يظل TURN ضمن مسار البيانات، لكنه لا يحمل سوى النص المُشفَّر وليس نقطة نهاية للتشفير. ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
         "لا يُخزَّن أي شيء على خادم في هذا الوضع — فهو لا يوجد إلا طوال مدة النقل. وRelayium مفتوح المصدر بموجب رخصة AGPL-3.0 على github.com/relayium/relayium، فآليته قابلة للتدقيق وليست صندوقًا أسود.",
       ],
     },
@@ -570,7 +570,7 @@ const es = {
     {
       heading: "Qué protege realmente el archivo",
       body: [
-        "Ambos modos anteriores son transferencias en tiempo real, y ambos usan el mismo cifrado: un intercambio de claves X25519 deriva una clave que se usa para AES-256-GCM por bloque, negociada solo entre los dos dispositivos. Ambos lados muestran el mismo código de verificación de 6 dígitos (una Short Authentication String) para que puedas confirmar que nadie está en medio, y cada archivo se comprueba de extremo a extremo con un hash SHA-256.",
+        "Ambos modos anteriores son transferencias en tiempo real, y ambos usan el mismo cifrado: un intercambio de claves X25519 deriva una clave que se usa para AES-256-GCM por bloque, negociada solo entre los dos dispositivos. Ambos lados muestran el mismo código de verificación de 6 dígitos (una Short Authentication String) para comprobar que la clave derivada no se ha sustituido: ni el servidor de señalización ni un retransmisor TURN han suplantado a ninguno de los extremos ni han terminado el cifrado de extremo a extremo de la capa de aplicación. En transferencias entre redes, TURN sigue estando en la ruta de los datos, pero solo transporta texto cifrado y no es un extremo del cifrado. Cada archivo se comprueba de extremo a extremo con un hash SHA-256.",
         "En este modo no se almacena nada en un servidor — existe solo durante la transferencia. Relayium es de código abierto bajo la licencia AGPL-3.0 en github.com/relayium/relayium, así que su mecánica es auditable en lugar de una caja negra.",
       ],
     },
@@ -646,7 +646,7 @@ const pt = {
     {
       heading: "O que realmente protege o arquivo",
       body: [
-        "Ambos os modos acima são transferências em tempo real, e ambos usam a mesma criptografia: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM por bloco, negociada apenas entre os dois dispositivos. Os dois lados exibem o mesmo código de verificação de 6 dígitos (uma Short Authentication String) para que você possa confirmar que ninguém está no meio, e cada arquivo é verificado de ponta a ponta com um hash SHA-256.",
+        "Ambos os modos acima são transferências em tempo real, e ambos usam a mesma criptografia: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM por bloco, negociada apenas entre os dois dispositivos. Os dois lados exibem o mesmo código de verificação de 6 dígitos (uma Short Authentication String) para verificar que a chave derivada não foi substituída: nem o servidor de sinalização nem um retransmissor TURN se passaram por qualquer uma das pontas ou encerraram a criptografia de ponta a ponta da camada de aplicação. Em transferências entre redes, o TURN continua no caminho dos dados, mas só transporta texto cifrado e não é uma ponta da criptografia. Cada arquivo é verificado de ponta a ponta com um hash SHA-256.",
         "Nesse modo, nada é armazenado em um servidor — existe apenas durante a transferência. O Relayium é de código aberto sob a licença AGPL-3.0 em github.com/relayium/relayium, então a mecânica é auditável em vez de uma caixa-preta.",
       ],
     },
@@ -693,6 +693,6 @@ const pt = {
 export default {
   slug: "how-to/airdrop-for-windows-and-android",
   published: "2026-07-09",
-  updated: "2026-07-09",
+  updated: "2026-07-31",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };
