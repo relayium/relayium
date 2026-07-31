@@ -44,7 +44,7 @@ const en = {
       heading: "Folder sync and a verification code you check twice",
       body: [
         "croc sends a batch of files and exits — send it again to update the other side, with no notion of what should be removed. Relayium's CLI adds relayium sync, an incremental one-way mirror over either transport above: it only moves what changed, --delete removes files on the destination that disappeared from the source (a daemon only honors it if it was started with --allow-delete, so a receiver has to opt in), and --watch keeps re-syncing in real time as files change, with no cron job needed.",
-        "For a one-off cross-network transfer, relayium send / receive plays the same role as croc's code phrase, pairing two computers by a short code. It's direct peer-to-peer, and it prints a short verification code (a Short Authentication String) on both ends so you can visually confirm nobody sat in the middle before any bytes move — worth noting honestly: this mode is direct-only, so if the two ends can't find a direct path it fails rather than falling back to a relay.",
+        "For a one-off cross-network transfer, relayium send / receive plays the same role as croc's code phrase, pairing two computers by a short code. It's direct peer-to-peer, and it prints a short verification code (a Short Authentication String) on both ends. Comparing it out of band confirms that the pinned TLS certificate fingerprints were not substituted and the rendezvous service did not impersonate either endpoint; it authenticates the endpoints, not every network hop. This mode is direct-only, so if the two ends can't find a direct path it fails rather than falling back to a relay.",
       ],
       code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
@@ -141,7 +141,7 @@ const zh = {
       heading: "文件夹同步，以及一段你要核对两遍的验证码",
       body: [
         "croc 发送一批文件后就退出——要更新对方就得再发一次，而且没有「该删除什么」的概念。Relayium CLI 增加了 relayium sync，在上面两种传输方式之上做增量单向镜像：只传发生变化的内容；--delete 会删除目标端上源端已经消失的文件（daemon 只有在以 --allow-delete 启动时才会执行，接收方必须自己选择开启）；--watch 会在文件变化时实时持续重新同步，不需要额外的定时任务。",
-        "对于一次性的跨网络传输，relayium send / receive 扮演的角色和 croc 的暗号短语一样，用一个简短的代码配对两台电脑。它是直连点对点的，并且会在两端都打印一段简短的验证码（Short Authentication String），你可以在传输开始前肉眼核对两边是否一致，确认没有人插在中间——需要老实说明的是：这个模式是纯直连的，如果两端找不到直连路径，传输会直接失败，而不会退回到中继。",
+        "对于一次性的跨网络传输，relayium send / receive 扮演的角色和 croc 的暗号短语一样，用一个简短的代码配对两台电脑。它是直连点对点的，并且会在两端都打印一段简短的验证码（Short Authentication String）。通过带外方式核对它，可以确认固定的 TLS 证书指纹没有被替换、会合服务没有冒充任一端；它认证的是端点，而不是网络路径上的每一跳。这个模式是纯直连的，如果两端找不到直连路径，传输会直接失败，而不会退回到中继。",
       ],
       code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
@@ -236,7 +236,7 @@ const ja = {
       heading: "フォルダ同期と、二重に確認する検証コード",
       body: [
         "croc はファイルのバッチを送って終了します。相手側を更新するには再度送るしかなく、何を削除すべきかという概念もありません。Relayium CLI は relayium sync を追加し、上記どちらの転送方式の上でも動く増分の一方向ミラーリングを行います。変化した分だけを送り、--delete はソース側から消えたファイルを宛先側からも削除します（daemon は --allow-delete 付きで起動している場合のみこれに従うため、受信側が自らオプトインする必要があります）。--watch はファイルの変化に応じてリアルタイムに再同期し続け、cron ジョブは不要です。",
-        "一回限りのネットワークをまたぐ転送では、relayium send / receive が croc のコードフレーズと同じ役割を果たし、短いコードで2台のコンピュータをペアリングします。直接の P2P で行われ、両端に短い検証コード（ショート認証文字列、SAS）を表示するので、バイトが動き出す前に誰も間に入っていないことを目視で確認できます。正直に言うべき点として、このモードは直接接続専用なので、両端が直接経路を見つけられない場合はリレーにフォールバックせず、そのまま失敗します。",
+        "一回限りのネットワークをまたぐ転送では、relayium send / receive が croc のコードフレーズと同じ役割を果たし、短いコードで2台のコンピュータをペアリングします。直接の P2P で行われ、両端に短い検証コード（ショート認証文字列、SAS）を表示します。帯域外で照合すると、固定された TLS 証明書フィンガープリントが差し替えられておらず、ランデブーサービスがどちらのエンドポイントにもなりすましていないことを確認できます。これはエンドポイントを認証するもので、ネットワーク経路上のすべてのホップを証明するものではありません。このモードは直接接続専用なので、両端が直接経路を見つけられない場合はリレーにフォールバックせず、そのまま失敗します。",
       ],
       code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
@@ -331,7 +331,7 @@ const ko = {
       heading: "폴더 동기화, 그리고 두 번 대조하는 검증 코드",
       body: [
         "croc은 파일 묶음을 보내고 종료합니다 — 상대 쪽을 갱신하려면 다시 보내야 하고, 무엇을 삭제해야 하는지에 대한 개념이 없습니다. Relayium CLI는 relayium sync를 더해, 위의 두 전송 방식 위에서 증분 단방향 미러링을 합니다. 변경된 것만 옮기고, --delete는 소스에서 사라진 파일을 대상에서도 삭제합니다(데몬은 --allow-delete로 시작된 경우에만 이를 따르므로, 수신 측이 직접 선택해야 합니다). --watch는 파일이 바뀔 때마다 실시간으로 계속 재동기화하며, cron 작업이 필요 없습니다.",
-        "일회성 네트워크 간 전송에서는 relayium send / receive가 croc의 코드 문구와 같은 역할을 하며, 짧은 코드로 두 컴퓨터를 페어링합니다. 직접 P2P 방식이며, 바이트가 움직이기 전에 양쪽 모두에 짧은 검증 코드(Short Authentication String)를 표시해 중간에 아무도 없는지 눈으로 확인할 수 있게 합니다 — 솔직히 짚어야 할 점은, 이 모드는 직접 연결 전용이라 두 끝이 직접 경로를 찾지 못하면 릴레이로 대체되지 않고 그대로 실패한다는 것입니다.",
+        "일회성 네트워크 간 전송에서는 relayium send / receive가 croc의 코드 문구와 같은 역할을 하며, 짧은 코드로 두 컴퓨터를 페어링합니다. 직접 P2P 방식이며 양쪽에 짧은 검증 코드(Short Authentication String)를 표시합니다. 이를 대역 외로 비교하면 고정된 TLS 인증서 지문이 바뀌지 않았고 랑데부 서비스가 어느 끝점도 사칭하지 않았음을 확인할 수 있습니다. 이는 끝점을 인증하는 것이지 네트워크 경로의 모든 홉을 증명하는 것은 아닙니다. 이 모드는 직접 연결 전용이라 두 끝이 직접 경로를 찾지 못하면 릴레이로 대체되지 않고 그대로 실패합니다.",
       ],
       code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
@@ -426,7 +426,7 @@ const de = {
       heading: "Ordner-Sync und ein Code, den du zweimal prüfst",
       body: [
         "croc sendet eine Reihe von Dateien und beendet sich dann — um die Gegenseite zu aktualisieren, musst du erneut senden; einen Begriff davon, was gelöscht werden soll, gibt es dabei nicht. Die Relayium CLI fügt relayium sync hinzu, einen inkrementellen Einweg-Spiegel über einen der beiden obigen Transportwege: Es bewegt nur, was sich geändert hat; --delete entfernt Dateien am Ziel, die auf der Quelle verschwunden sind (ein Daemon befolgt das nur, wenn er mit --allow-delete gestartet wurde, der Empfänger muss also selbst zustimmen); --watch synchronisiert bei Dateiänderungen laufend in Echtzeit neu, kein Cron-Job nötig.",
-        "Für eine einmalige netzwerkübergreifende Übertragung spielt relayium send / receive dieselbe Rolle wie crocs Code-Phrase und koppelt zwei Rechner über einen kurzen Code. Es ist direktes Peer-to-Peer und zeigt auf beiden Seiten einen kurzen Verifizierungscode (einen Short Authentication String), sodass du vor dem ersten übertragenen Byte visuell bestätigen kannst, dass niemand dazwischensitzt — ehrlich anzumerken: Dieser Modus ist rein direkt, findet er keinen direkten Pfad, schlägt die Übertragung fehl, statt auf ein Relay auszuweichen.",
+        "Für eine einmalige netzwerkübergreifende Übertragung spielt relayium send / receive dieselbe Rolle wie crocs Code-Phrase und koppelt zwei Rechner über einen kurzen Code. Es ist direktes Peer-to-Peer und zeigt auf beiden Seiten einen kurzen Verifizierungscode (einen Short Authentication String). Der Vergleich außerhalb des Kanals bestätigt, dass die angehefteten TLS-Zertifikatsfingerabdrücke nicht ausgetauscht wurden und der Rendezvous-Dienst keinen Endpunkt imitiert hat; er authentifiziert die Endpunkte, nicht jeden Netzwerk-Hop. Dieser Modus ist rein direkt: Findet er keinen direkten Pfad, schlägt die Übertragung fehl, statt auf ein Relay auszuweichen.",
       ],
       code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
@@ -521,7 +521,7 @@ const fr = {
       heading: "Synchronisation de dossiers, et un code de vérification à comparer deux fois",
       body: [
         "croc envoie un lot de fichiers puis se termine — pour mettre à jour l'autre côté, il faut renvoyer, sans aucune notion de ce qui devrait être supprimé. La CLI Relayium ajoute relayium sync, un miroir incrémental à sens unique sur l'un ou l'autre des transports ci-dessus : il ne déplace que ce qui a changé ; --delete supprime sur la destination les fichiers disparus de la source (un daemon ne le respecte que s'il a été lancé avec --allow-delete, le destinataire doit donc explicitement l'accepter) ; --watch continue de resynchroniser en temps réel à chaque changement, sans tâche cron nécessaire.",
-        "Pour un transfert ponctuel entre réseaux différents, relayium send / receive joue le même rôle que la phrase-code de croc, en appairant deux ordinateurs par un court code. C'est du pair-à-pair direct, et un court code de vérification (un Short Authentication String) s'affiche des deux côtés pour confirmer visuellement, avant que le moindre octet ne bouge, que personne ne s'est glissé au milieu — à noter honnêtement : ce mode est exclusivement direct, donc si les deux extrémités ne trouvent pas de chemin direct, le transfert échoue plutôt que de basculer vers un relais.",
+        "Pour un transfert ponctuel entre réseaux différents, relayium send / receive joue le même rôle que la phrase-code de croc, en appairant deux ordinateurs par un court code. C'est du pair-à-pair direct, et un court code de vérification (un Short Authentication String) s'affiche des deux côtés. Le comparer hors bande confirme que les empreintes des certificats TLS épinglés n'ont pas été substituées et que le service de rendez-vous n'a usurpé aucune extrémité ; il authentifie les extrémités, pas chaque saut réseau. Ce mode est exclusivement direct : si les deux extrémités ne trouvent pas de chemin direct, le transfert échoue plutôt que de basculer vers un relais.",
       ],
       code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
@@ -616,7 +616,7 @@ const ar = {
       heading: "مزامنة المجلدات ورمز تحقق تُدقّقه مرّتين",
       body: [
         "يُرسل croc دفعةً من الملفات ثم يخرج — أرسِلها ثانيةً لتحديث الطرف الآخر، دون أي مفهوم لما ينبغي حذفه. وتضيف واجهة Relayium أمر relayium sync، وهو مرآة تزايدية أحادية الاتجاه فوق أيٍّ من وسيلتَي النقل أعلاه: لا ينقل إلا ما تغيّر، و‏--delete يحذف من الوجهة الملفات التي اختفت من المصدر (لا يحترمه الـ daemon إلا إذا بدأ بـ --allow-delete، فعلى المُستقبِل أن يوافق صراحةً)، و‏--watch يُبقي المزامنة تتكرّر آنيًّا مع تغيّر الملفات، دون الحاجة إلى مهمّة cron.",
-        "أمّا للنقل العابر للشبكات لمرّة واحدة، فإنّ relayium send / receive يؤدّي الدور نفسه الذي تؤدّيه عبارة croc الرمزية، إذ يقرن حاسوبين برمز قصير. وهو من الند للند مباشرةً، ويطبع رمز تحقق قصيرًا (سلسلة مصادقة قصيرة) على الطرفين كي تؤكّد بصريًّا أنّ لا أحد جلس في المنتصف قبل أن تتحرّك أي بايتات — ويجدر قول هذا بصدق: هذا الوضع مباشر فقط، فإذا لم يجد الطرفان مسارًا مباشرًا فشل بدلًا من التراجع إلى مُرحِّل.",
+        "أمّا للنقل العابر للشبكات لمرّة واحدة، فإنّ relayium send / receive يؤدّي الدور نفسه الذي تؤدّيه عبارة croc الرمزية، إذ يقرن حاسوبين برمز قصير. وهو من الند للند مباشرةً، ويطبع رمز تحقق قصيرًا (سلسلة مصادقة قصيرة) على الطرفين. تؤكد مقارنته خارج القناة أن بصمات شهادات TLS المثبّتة لم تُستبدل وأن خدمة الالتقاء لم تنتحل شخصية أي طرف؛ فهو يصادق على الطرفين، لا على كل قفزة في مسار الشبكة. هذا الوضع مباشر فقط، فإذا لم يجد الطرفان مسارًا مباشرًا فشل بدلًا من التراجع إلى مُرحِّل.",
       ],
       code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
@@ -713,7 +713,7 @@ const es = {
       heading: "Sincronización de carpetas y un código de verificación que compruebas dos veces",
       body: [
         "croc envía un lote de archivos y termina — envíalo otra vez para actualizar el otro lado, sin ninguna noción de qué debería eliminarse. La CLI de Relayium añade relayium sync, un espejo incremental de un solo sentido sobre cualquiera de los dos transportes anteriores: solo mueve lo que cambió, --delete elimina en el destino los archivos que desaparecieron del origen (un daemon solo lo respeta si se inició con --allow-delete, así que un receptor tiene que optar por ello), y --watch mantiene la resincronización en tiempo real a medida que los archivos cambian, sin necesidad de una tarea cron.",
-        "Para una transferencia puntual entre redes, relayium send / receive cumple el mismo papel que la frase clave de croc, emparejando dos ordenadores con un código corto. Es de igual a igual directo, e imprime un código de verificación corto (una Short Authentication String) en ambos extremos para que confirmes visualmente que nadie se interpuso antes de que se mueva ningún byte — vale la pena señalarlo con honestidad: este modo es solo directo, así que si los dos extremos no encuentran un camino directo, falla en lugar de recurrir a un retransmisor.",
+        "Para una transferencia puntual entre redes, relayium send / receive cumple el mismo papel que la frase clave de croc, emparejando dos ordenadores con un código corto. Es de igual a igual directo e imprime un código de verificación corto (una Short Authentication String) en ambos extremos. Compararlo fuera de banda confirma que las huellas de los certificados TLS fijados no fueron sustituidas y que el servicio de encuentro no suplantó a ninguno de los extremos; autentica los extremos, no cada salto de la ruta de red. Este modo es solo directo: si los dos extremos no encuentran un camino directo, falla en lugar de recurrir a un retransmisor.",
       ],
       code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
@@ -810,7 +810,7 @@ const pt = {
       heading: "Sincronização de pastas e um código de verificação que você confere duas vezes",
       body: [
         "croc envia um lote de arquivos e sai — envie de novo para atualizar o outro lado, sem nenhuma noção do que deveria ser removido. A CLI do Relayium acrescenta relayium sync, um espelho incremental de mão única sobre qualquer um dos dois transportes acima: ele só move o que mudou, --delete remove no destino os arquivos que sumiram da origem (um daemon só o respeita se foi iniciado com --allow-delete, então um receptor precisa optar por isso), e --watch mantém a ressincronização em tempo real conforme os arquivos mudam, sem necessidade de uma tarefa cron.",
-        "Para uma transferência pontual entre redes, relayium send / receive cumpre o mesmo papel que a frase-código do croc, emparelhando dois computadores por um código curto. É ponto a ponto direto, e imprime um código de verificação curto (uma Short Authentication String) nas duas pontas para você confirmar visualmente que ninguém se meteu no meio antes que qualquer byte se mova — vale registrar com honestidade: este modo é só direto, então se as duas pontas não encontrarem um caminho direto, ele falha em vez de recorrer a um retransmissor.",
+        "Para uma transferência pontual entre redes, relayium send / receive cumpre o mesmo papel que a frase-código do croc, emparelhando dois computadores por um código curto. É ponto a ponto direto e imprime um código de verificação curto (uma Short Authentication String) nas duas pontas. Compará-lo fora de banda confirma que as impressões digitais dos certificados TLS fixados não foram substituídas e que o serviço de encontro não se passou por nenhuma das pontas; ele autentica as pontas, não cada salto da rota de rede. Este modo é só direto: se as duas pontas não encontrarem um caminho direto, ele falha em vez de recorrer a um retransmissor.",
       ],
       code: ["relayium sync ./photos user@your-server:backups/photos --delete --watch"],
     },
@@ -871,6 +871,6 @@ const pt = {
 export default {
   slug: "compare/croc",
   published: "2026-07-09",
-  updated: "2026-07-12",
+  updated: "2026-07-31",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

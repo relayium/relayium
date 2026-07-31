@@ -36,7 +36,7 @@ const en = {
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
-        "The connection is direct, peer-to-peer, and end-to-end encrypted; both terminals print the same SAS (short authentication string) once connected — compare it with the sender to be sure no one is in the middle.",
+        "The connection is direct, peer-to-peer, and end-to-end encrypted; both terminals print the same SAS (short authentication string) once connected. Compare it out of band to confirm that the pinned TLS certificate fingerprints were not substituted and the rendezvous service did not impersonate either endpoint. The SAS authenticates the endpoints; it does not prove every network hop.",
         "No destination given: files land in the current directory.",
         "Same direct-only rule as send: if no direct path can be found between the two networks, the transfer fails rather than routing through a relay.",
         "This is the CLI's own pairing-code protocol — CLI codes pair CLI to CLI. It doesn't interoperate with the browser's pairing code or QR flow at relayium.com today; that's a possible future addition, not something you can rely on yet. If you only have a browser, ask the sender for a relayium up download link instead.",
@@ -147,7 +147,7 @@ const zh = {
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
-        "连接是直接点对点、端到端加密的；一旦连上，两边的终端会打印出同一个 SAS（简短认证串）——和发送方对一下，确保中间没有人。",
+        "连接是直接点对点、端到端加密的；一旦连上，两边的终端会打印出同一个 SAS（简短认证串）。通过带外方式与发送方核对，可以确认固定的 TLS 证书指纹没有被替换、会合服务没有冒充任一端。SAS 认证的是端点，并不证明网络路径上的每一跳。",
         "不指定目标目录时，文件会落到当前目录。",
         "和 send 一样只走直连：如果两个网络之间找不到直连路径，传输会失败，而不会经中继转发。",
         "这是 CLI 自己的配对码协议——CLI 的码只能和 CLI 配对。目前和 relayium.com 浏览器端的配对码或二维码流程互不通用；未来也许会支持，但现在还不能指望。如果你手上只有浏览器，请让发送方改用 relayium up 给你一个下载链接。",
@@ -260,7 +260,7 @@ const ja = {
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
-        "接続は直接のピアツーピアでエンドツーエンドに暗号化されています。接続後、両方のターミナルに同じ SAS（short authentication string）が表示されます——送信側と見比べて、中間に誰もいないことを確認してください。",
+        "接続は直接のピアツーピアでエンドツーエンドに暗号化されています。接続後、両方のターミナルに同じ SAS（short authentication string）が表示されます。送信側と帯域外で照合すると、固定された TLS 証明書フィンガープリントが差し替えられておらず、ランデブーサービスがどちらのエンドポイントにもなりすましていないことを確認できます。SAS はエンドポイントを認証するもので、ネットワーク経路上のすべてのホップを証明するものではありません。",
         "宛先を指定しない場合、ファイルはカレントディレクトリに置かれます。",
         "send と同じく直接接続のみのルールです。2つのネットワークの間に直接の経路が見つからなければ、リレー経由で送るのではなく転送が失敗します。",
         "これは CLI 独自のペアリングコード・プロトコルです——CLI のコードは CLI 同士でしかペアリングできません。現時点では relayium.com のブラウザ側のペアリングコードや QR フローとは相互運用しません。将来追加される可能性はありますが、今はまだ頼れるものではありません。ブラウザしかない場合は、代わりに relayium up のダウンロードリンクを送ってもらってください。",
@@ -371,7 +371,7 @@ const ko = {
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
-        "연결은 직접적인 피어투피어이며 종단간 암호화됩니다. 연결되면 양쪽 터미널에 동일한 SAS(짧은 인증 문자열)가 출력됩니다——발신자와 비교해 중간에 아무도 없는지 확인하세요.",
+        "연결은 직접적인 피어투피어이며 종단간 암호화됩니다. 연결되면 양쪽 터미널에 동일한 SAS(짧은 인증 문자열)가 출력됩니다. 발신자와 대역 외로 비교하면 고정된 TLS 인증서 지문이 바뀌지 않았고 랑데부 서비스가 어느 끝점도 사칭하지 않았음을 확인할 수 있습니다. SAS는 끝점을 인증하는 것이지 네트워크 경로의 모든 홉을 증명하는 것은 아닙니다.",
         "목적지를 지정하지 않으면 파일은 현재 디렉터리에 저장됩니다.",
         "send와 동일하게 직접 연결만 지원합니다. 두 네트워크 사이에 직접 경로를 찾을 수 없으면 릴레이를 거치는 대신 전송이 실패합니다.",
         "이것은 CLI 자체의 페어링 코드 프로토콜입니다——CLI 코드는 CLI끼리만 페어링됩니다. 현재 relayium.com 브라우저 쪽의 페어링 코드나 QR 흐름과는 상호 운용되지 않습니다. 향후 추가될 수는 있지만 지금은 기대할 수 없습니다. 브라우저밖에 없다면 보내는 쪽에 relayium up 다운로드 링크를 대신 요청하세요.",
@@ -484,7 +484,7 @@ const de = {
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
-        "Die Verbindung ist direkt, peer-to-peer und Ende-zu-Ende verschlüsselt; sobald sie steht, geben beide Terminals denselben SAS (Short Authentication String) aus — vergleiche ihn mit dem Sender, um sicherzugehen, dass niemand dazwischensitzt.",
+        "Die Verbindung ist direkt, peer-to-peer und Ende-zu-Ende verschlüsselt; sobald sie steht, geben beide Terminals denselben SAS (Short Authentication String) aus. Vergleiche ihn außerhalb des Kanals mit dem Sender, um zu bestätigen, dass die angehefteten TLS-Zertifikatsfingerabdrücke nicht ausgetauscht wurden und der Rendezvous-Dienst keinen Endpunkt imitiert hat. Der SAS authentifiziert die Endpunkte; er beweist nicht jeden Netzwerk-Hop.",
         "Ohne angegebenes Ziel landen die Dateien im aktuellen Verzeichnis.",
         "Dieselbe Nur-direkt-Regel wie bei send: Findet sich kein direkter Pfad zwischen den beiden Netzwerken, schlägt die Übertragung fehl, statt über ein Relay geleitet zu werden.",
         "Das ist das eigene Pairing-Code-Protokoll der CLI — CLI-Codes koppeln CLI mit CLI. Es arbeitet heute nicht mit dem Pairing-Code oder QR-Ablauf des Browsers auf relayium.com zusammen. Das könnte irgendwann kommen, ist aber momentan nicht etwas, worauf du dich verlassen kannst. Hast du nur einen Browser, bitte den Absender stattdessen um einen Download-Link via relayium up.",
@@ -597,7 +597,7 @@ const fr = {
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
-        "La connexion est directe, pair-à-pair, et chiffrée de bout en bout ; une fois connectés, les deux terminaux affichent le même SAS (short authentication string) — comparez-le avec l'expéditeur pour être sûrs que personne n'est au milieu.",
+        "La connexion est directe, pair-à-pair et chiffrée de bout en bout ; une fois connectés, les deux terminaux affichent le même SAS (short authentication string). Comparez-le hors bande avec l'expéditeur pour confirmer que les empreintes des certificats TLS épinglés n'ont pas été substituées et que le service de rendez-vous n'a usurpé aucune extrémité. Le SAS authentifie les extrémités ; il ne prouve pas chaque saut réseau.",
         "Sans destination indiquée, les fichiers atterrissent dans le répertoire courant.",
         "Même règle de connexion directe uniquement que pour send : si aucun chemin direct n'est trouvé entre les deux réseaux, le transfert échoue plutôt que de transiter par un relais.",
         "C'est le protocole de code de jumelage propre à la CLI — un code CLI ne se jumelle qu'avec une autre CLI. Il n'est pas interopérable aujourd'hui avec le code de jumelage ou le flux QR du navigateur sur relayium.com ; c'est un ajout possible à l'avenir, pas encore quelque chose sur quoi compter. Si vous n'avez qu'un navigateur, demandez plutôt à l'expéditeur un lien de téléchargement relayium up.",
@@ -710,7 +710,7 @@ const ar = {
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
-        "الاتصال مباشر ومن الند للند ومشفَّر من الطرف إلى الطرف؛ يطبع الطرفان الرمز SAS نفسه (سلسلة المصادقة القصيرة) بمجرد الاتصال — قارنه مع المُرسِل لتتأكد ألا أحد في المنتصف.",
+        "الاتصال مباشر ومن الند للند ومشفَّر من الطرف إلى الطرف؛ يطبع الطرفان الرمز SAS نفسه (سلسلة المصادقة القصيرة) بمجرد الاتصال. قارنه مع المُرسِل خارج القناة لتأكيد أن بصمات شهادات TLS المثبّتة لم تُستبدل وأن خدمة الالتقاء لم تنتحل شخصية أي طرف. يصادق SAS على الطرفين؛ ولا يثبت كل قفزة في مسار الشبكة.",
         "بلا وجهة محددة: تصل الملفات إلى المجلد الحالي.",
         "القاعدة نفسها كما في send، الاتصال المباشر فقط: إن لم يُعثر على مسار مباشر بين الشبكتين، يفشل النقل بدل توجيهه عبر مُرحِّل.",
         "هذا هو بروتوكول رمز الاقتران في الـ CLI — ورموز CLI تقترن بـ CLI فقط. لا يتوافق اليوم مع رمز اقتران المتصفح أو تدفق QR في relayium.com؛ ذلك إضافة مستقبلية محتملة، لا شيء تعتمد عليه بعد. إن لم يكن لديك سوى متصفح، اطلب من المُرسِل رابط تنزيل عبر relayium up بدلًا من ذلك.",
@@ -823,7 +823,7 @@ const es = {
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
-        "La conexión es directa, de igual a igual y cifrada de extremo a extremo; ambos terminales imprimen el mismo SAS (cadena de autenticación corta) una vez conectados — compáralo con el remitente para asegurarte de que nadie está en el medio.",
+        "La conexión es directa, de igual a igual y cifrada de extremo a extremo; ambos terminales imprimen el mismo SAS (cadena de autenticación corta) una vez conectados. Compáralo fuera de banda con el remitente para confirmar que las huellas de los certificados TLS fijados no fueron sustituidas y que el servicio de encuentro no suplantó a ninguno de los extremos. El SAS autentica los extremos; no demuestra cada salto de la ruta de red.",
         "Sin destino indicado: los archivos caen en el directorio actual.",
         "La misma regla de solo directo que send: si no puede hallarse ninguna ruta directa entre las dos redes, la transferencia falla en lugar de enrutarse por un retransmisor.",
         "Este es el propio protocolo de código de emparejamiento de la CLI — un código de la CLI solo se empareja con otra CLI. Hoy no interopera con el código de emparejamiento del navegador ni con el flujo de QR en relayium.com; eso es una posible adición futura, no algo en lo que puedas confiar todavía. Si solo tienes navegador, pídele al remitente un enlace de descarga de relayium up.",
@@ -936,7 +936,7 @@ const pt = {
 relayium receive K7M4XR ./downloads`,
       ],
       bullets: [
-        "A conexão é direta, ponto a ponto e criptografada de ponta a ponta; ambos os terminais imprimem o mesmo SAS (cadeia de autenticação curta) assim que conectados — compare-o com o remetente para ter certeza de que ninguém está no meio.",
+        "A conexão é direta, ponto a ponto e criptografada de ponta a ponta; ambos os terminais imprimem o mesmo SAS (cadeia de autenticação curta) assim que conectados. Compare-o fora de banda com quem envia para confirmar que as impressões digitais dos certificados TLS fixados não foram substituídas e que o serviço de encontro não se passou por nenhuma das pontas. O SAS autentica as pontas; não prova cada salto da rota de rede.",
         "Sem destino indicado: os arquivos caem no diretório atual.",
         "A mesma regra de somente direto que o send: se nenhum caminho direto puder ser encontrado entre as duas redes, a transferência falha em vez de ser roteada por um retransmissor.",
         "Este é o protocolo de código de emparelhamento próprio da CLI — um código da CLI só emparelha com outra CLI. Hoje ele não interopera com o código de emparelhamento do navegador nem com o fluxo de QR em relayium.com; isso é uma possível adição futura, não algo com que você possa contar ainda. Se você só tem navegador, peça a quem envia um link de download do relayium up.",
@@ -1019,6 +1019,6 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
 export default {
   slug: "guides/receive-files-from-the-command-line",
   published: "2026-07-09",
-  updated: "2026-07-09",
+  updated: "2026-07-31",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };
