@@ -500,7 +500,7 @@ const en: Messages = {
     offline: { lead: "Recipient not online? Use async transfer — encrypt, upload, and leave a download link they can fetch for days.", cta: "Go to async transfer →" },
   },
   methods: {
-    realtime: { name: "⚡ Realtime transfer", sub: "Pick your files and get a 6-character code — read it out, send the link, or show the QR; the moment the other side joins, the transfer starts automatically.", badge: "Recipient: no account" },
+    realtime: { name: "Realtime transfer", sub: "Pick your files and get a 6-character code — read it out, send the link, or show the QR; the moment the other side joins, the transfer starts automatically.", badge: "Recipient: no account" },
     stored: { name: "📦 Download link", sub: "Your browser encrypts then stores; the recipient downloads anytime, no live session and no account needed.", badge: "Offline OK" },
   },
   pair: {

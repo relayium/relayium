@@ -11,6 +11,7 @@
   import { formatSize } from "./format";
   import { folderUploadSupported } from "./platform";
   import { session } from "./auth.svelte";
+  import Icon from "./Icon.svelte";
 
   let { roomCode = "", expired = false, relayDenied = "", requireLogin }:
     { roomCode?: string; expired?: boolean; relayDenied?: string; requireLogin?: () => void } = $props();
@@ -172,12 +173,12 @@
   {:else if session().user}
     <div class="choices">
       <label class="btn btn-primary" class:disabled={busy}>
-        📄 {t.sendFile}
+        <Icon name="file" size={18} /> {t.sendFile}
         <input class="file-pick-input" type="file" multiple disabled={busy} onchange={pickAndSend} />
       </label>
       {#if folderUploadSupported}
         <label class="btn btn-primary" class:disabled={busy}>
-          📁 {t.sendFolder}
+          <Icon name="folder" size={18} /> {t.sendFolder}
           <input class="file-pick-input" type="file" webkitdirectory multiple disabled={busy} onchange={pickAndSend} />
         </label>
       {/if}

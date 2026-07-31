@@ -14,6 +14,7 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { setLoginOpen } from "./login.svelte";
   import PageFooter from "./PageFooter.svelte";
+  import Icon from "./Icon.svelte";
 
   let { roomCode = "", linkDead = false, showTransfer = false, relayDenied = "", transferSurface, dismissLan }:
     { roomCode?: string; linkDead?: boolean; showTransfer?: boolean; relayDenied?: string; transferSurface?: Snippet; dismissLan?: () => void } = $props();
@@ -53,7 +54,7 @@
     {#if showTransfer && transferSurface}
       <!-- Active realtime transfer — one focused card, regardless of how they connected -->
       <section class="ui-card ui-card-raised ui-stack active">
-        <h2>⚡ {t.crossnet.realtimeTitle}</h2>
+        <h2 class="realtime-heading"><span class="realtime-icon" aria-hidden="true"><Icon name="bolt" size={18} /></span><span>{t.crossnet.realtimeTitle}</span></h2>
         <p class="ui-card-sub">{t.crossnet.realtimeSub}</p>
         {@render transferSurface()}
         <p class="foot">{t.crossnet.realtimeFoot}</p>
@@ -62,7 +63,7 @@
     {:else if roomCode}
       <!-- In a code room (minter waiting, or recipient who joined via code/link) -->
       <section class="ui-card ui-card-raised ui-stack active">
-        <div class="ui-card-head"><h2>{t.methods.realtime.name}</h2></div>
+        <div class="ui-card-head"><h2 class="realtime-heading"><span class="realtime-icon" aria-hidden="true"><Icon name="bolt" size={18} /></span><span>{t.methods.realtime.name}</span></h2></div>
         <p class="ui-card-sub">{t.methods.realtime.sub}</p>
         <CodePairing {roomCode} expired={linkDead} {relayDenied} />
         <button class="btn btn-ghost btn-sm startover" onclick={startOver}>{t.startOver}</button>
@@ -70,7 +71,7 @@
     {:else}
       <!-- Realtime transfer — the only method on this page (stored moved to /offline-transfer) -->
       <section class="ui-card ui-card-raised ui-stack">
-        <div class="ui-card-head"><h2>{t.methods.realtime.name}</h2><span class="ui-badge ui-badge-ok">{t.methods.realtime.badge}</span></div>
+        <div class="ui-card-head"><h2 class="realtime-heading"><span class="realtime-icon" aria-hidden="true"><Icon name="bolt" size={18} /></span><span>{t.methods.realtime.name}</span></h2><span class="ui-badge ui-badge-ok">{t.methods.realtime.badge}</span></div>
         <p class="ui-card-sub">{t.methods.realtime.sub}</p>
         <CodePairing requireLogin={() => setLoginOpen(true)} />
       </section>
@@ -107,6 +108,9 @@
   }
 
   .cards { display: grid; grid-template-columns: 1fr; gap: var(--space-4); max-inline-size: 720px; margin-inline: auto; align-items: stretch; }
+
+  .realtime-heading { display: inline-flex; align-items: flex-start; gap: var(--space-2); min-inline-size: 0; }
+  .realtime-icon { flex: none; color: var(--accent); margin-block-start: 1px; }
 
   .startover { align-self: center; margin-block-start: 2px; flex: none; }
   .foot { margin-block: var(--space-1) 0; font-size: 12px; color: var(--text); text-align: center; }

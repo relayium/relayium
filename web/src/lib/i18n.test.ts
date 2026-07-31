@@ -30,6 +30,10 @@ describe("i18n completeness", () => {
       expect(m.nav.lanTab, `${code}.nav.lanTab`).toBeTruthy();
       expect(m.nav.crossTab, `${code}.nav.crossTab`).toBeTruthy();
       expect(m.methods.realtime.name, `${code}.methods.realtime.name`).toBeTruthy();
+      expect(m.methods.realtime.name, `${code}.methods.realtime.name owns no presentation glyph`).not.toContain("⚡");
+      expect(m.methods.realtime.name, `${code}.methods.realtime.name is trimmed`).toBe(m.methods.realtime.name.trim());
+      expect(m.crossnet.realtimeTitle, `${code}.crossnet.realtimeTitle owns no presentation glyph`).not.toContain("⚡");
+      expect(m.crossnet.realtimeTitle, `${code}.crossnet.realtimeTitle is trimmed`).toBe(m.crossnet.realtimeTitle.trim());
       expect(m.methods.stored.name, `${code}.methods.stored.name`).toBeTruthy();
     }
   });

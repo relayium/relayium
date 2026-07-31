@@ -489,7 +489,7 @@ const es: Messages = {
     offline: { lead: "¿El destinatario no está en línea? Usa la transferencia asíncrona — cifra, sube y deja un enlace de descarga que podrá recoger durante días.", cta: "Ir a la transferencia asíncrona →" },
   },
   methods: {
-    realtime: { name: "⚡ Transferencia en tiempo real", sub: "Elige tus archivos y obtén un código de 6 caracteres — léelo en voz alta, envía el enlace o muestra el QR; en cuanto el otro lado se une, la transferencia comienza automáticamente.", badge: "Destinatario: sin cuenta" },
+    realtime: { name: "Transferencia en tiempo real", sub: "Elige tus archivos y obtén un código de 6 caracteres — léelo en voz alta, envía el enlace o muestra el QR; en cuanto el otro lado se une, la transferencia comienza automáticamente.", badge: "Destinatario: sin cuenta" },
     stored: { name: "📦 Enlace de descarga", sub: "Tu navegador cifra y luego almacena; el destinatario descarga en cualquier momento, sin sesión en vivo ni cuenta.", badge: "Sin conexión, sin problema" },
   },
   pair: {

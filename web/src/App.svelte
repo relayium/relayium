@@ -13,6 +13,7 @@
   import { createTextLink } from "./lib/text-link";
   import { pastedText } from "./lib/paste-text";
   import MessagePanel from "./lib/MessagePanel.svelte";
+  import Icon from "./lib/Icon.svelte";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
   import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
@@ -797,7 +798,7 @@
          等于看不见。 -->
     <div class="peer-actions">
       <label class="btn btn-secondary btn-sm pa-files" class:is-disabled={busy}>
-        <span class="pa-icon" aria-hidden="true">📄</span><span class="pa-label" id={`send-file-label-${p.id}`}>{t.sendFile}</span>
+        <span class="pa-icon" aria-hidden="true"><Icon name="file" /></span><span class="pa-label" id={`send-file-label-${p.id}`}>{t.sendFile}</span>
         <input class="file-pick-input" id={`pick-${p.id}`} type="file" multiple disabled={busy}
           aria-labelledby={`send-file-label-${p.id}`}
           aria-describedby={`peer-target-${p.id}`}
@@ -806,14 +807,14 @@
       </label>
       {#if folderUploadSupported}
         <label class="btn btn-secondary btn-sm" class:is-disabled={busy}>
-          <span class="pa-icon" aria-hidden="true">📁</span><span class="pa-label">{t.sendFolder}</span>
+          <span class="pa-icon" aria-hidden="true"><Icon name="folder" /></span><span class="pa-label">{t.sendFolder}</span>
           <input class="file-pick-input" type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
         </label>
       {/if}
       {#if peerSupportsText(p.id)}
         <button type="button" class="btn btn-secondary btn-sm" disabled={busy}
           onclick={() => { textCompose = ""; void textSession.openWith(p.id); }}>
-          <span class="pa-icon" aria-hidden="true">💬</span><span class="pa-label">{t.text.open}</span>
+          <span class="pa-icon" aria-hidden="true"><Icon name="message" /></span><span class="pa-label">{t.text.open}</span>
         </button>
       {/if}
     </div>
@@ -879,7 +880,10 @@
          delayed the primary task; with no peer visible there is no such action,
          so it says nothing actionable at all. -->
     {#if visiblePeers.length > 0}
-      <p class="ui-callout text-availability">💬 {t.text.availabilityHint}</p>
+      <p class="ui-callout text-availability">
+        <span class="text-availability-icon" aria-hidden="true"><Icon name="message" /></span>
+        <span>{t.text.availabilityHint}</span>
+      </p>
     {/if}
   </section>
 
@@ -1276,10 +1280,14 @@
   .empty-lead { margin: 0; color: var(--text); font-size: 14px; max-width: 46ch; }
   .empty-cta { margin-top: var(--space-1); }
   /* Passive availability/privacy information → the neutral shared callout.
-     It was accent-tinted, which spent the brand colour on a sentence that asks
-     nothing of the user. It now trails the peer card it describes, so its
-     margin flipped sides. */
-  .text-availability { margin-block: var(--space-3) 0; }
+     The surface stays neutral because the sentence asks nothing of the user;
+     only its small workflow glyph uses the accent. It now trails the peer card
+     it describes, so its margin flipped sides. */
+  .text-availability {
+    display: flex; align-items: flex-start; gap: var(--space-2);
+    margin-block: var(--space-3) 0;
+  }
+  .text-availability-icon { flex: none; color: var(--accent); margin-block-start: 1px; }
 
   footer {
     margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--border);

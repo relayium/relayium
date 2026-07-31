@@ -807,6 +807,7 @@ async function main() {
       const action = input?.parentElement;
       const header = document.querySelector('.peer .pcard');
       const labels = [...document.querySelectorAll('.peer-actions .pa-label')];
+      const icons = [...document.querySelectorAll('.peer-actions .pa-icon')];
       const namedBy = input?.getAttribute('aria-labelledby') || '';
       const describedBy = input?.getAttribute('aria-describedby') || '';
       return {
@@ -820,6 +821,8 @@ async function main() {
         inputId: input?.id || '',
         messageButtons: document.querySelectorAll('.peer-actions button').length,
         labelRects: labels.map(label => label.getClientRects().length),
+        iconSvgs: icons.map(icon => icon.querySelectorAll('svg').length),
+        iconText: icons.map(icon => icon.textContent?.trim() || ''),
       };
     })()`);
     if (
@@ -827,7 +830,9 @@ async function main() {
       fileAction.namedByText !== fileAction.visibleLabel ||
       !fileAction.describedBy || !fileAction.describedByExists ||
       fileAction.headerFor !== fileAction.inputId ||
-      fileAction.messageButtons !== 1 || fileAction.labelRects.some((n) => n !== 1)
+      fileAction.messageButtons !== 1 || fileAction.labelRects.some((n) => n !== 1) ||
+      fileAction.iconSvgs.length !== 3 || fileAction.iconSvgs.some((n) => n !== 1) ||
+      fileAction.iconText.some(Boolean)
     ) {
       throw new Error(`peer file-action accessibility contract failed: ${JSON.stringify(fileAction)}`);
     }

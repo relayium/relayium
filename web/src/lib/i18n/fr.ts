@@ -490,7 +490,7 @@ const fr: Messages = {
     offline: { lead: "Destinataire hors ligne ? Utilisez le transfert asynchrone — chiffrez, téléversez et laissez un lien de téléchargement, récupérable pendant plusieurs jours.", cta: "Vers le transfert asynchrone →" },
   },
   methods: {
-    realtime: { name: "⚡ Transfert en temps réel", sub: "Choisissez vos fichiers et obtenez un code à 6 caractères — dictez-le, envoyez le lien ou montrez le QR ; dès que l'autre appareil rejoint, le transfert démarre automatiquement.", badge: "Destinataire sans compte" },
+    realtime: { name: "Transfert en temps réel", sub: "Choisissez vos fichiers et obtenez un code à 6 caractères — dictez-le, envoyez le lien ou montrez le QR ; dès que l'autre appareil rejoint, le transfert démarre automatiquement.", badge: "Destinataire sans compte" },
     stored: { name: "📦 Lien de téléchargement", sub: "Votre navigateur chiffre puis stocke temporairement ; le destinataire télécharge quand il veut, sans session ni compte.", badge: "Même hors ligne" },
   },
   pair: {

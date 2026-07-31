@@ -25,3 +25,9 @@ server/relayium-node
 # Production ops (moved to the private relayium-ops repo; must never be
 # re-committed here — nginx/coturn configs and the systemd unit are private)
 deploy/
+
+# Local browser evidence and auxiliary worktrees are machine-scoped scratch,
+# never product source. Named Playwright sessions may create the directory at
+# either the repository root or a package working directory.
+.playwright-cli/
+.worktrees/

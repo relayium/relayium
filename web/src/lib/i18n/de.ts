@@ -490,7 +490,7 @@ const de: Messages = {
     offline: { lead: "Gegenseite offline? Nutze die asynchrone Übertragung — verschlüsselt hochladen und einen Download-Link hinterlassen, tagelang abholbar.", cta: "Zur asynchronen Übertragung →" },
   },
   methods: {
-    realtime: { name: "⚡ Echtzeitübertragung", sub: "Dateien auswählen und einen 6-stelligen Code erhalten — vorlesen, als Link verschicken oder QR zeigen; sobald die Gegenseite beitritt, startet die Übertragung automatisch.", badge: "Empfänger ohne Konto" },
+    realtime: { name: "Echtzeitübertragung", sub: "Dateien auswählen und einen 6-stelligen Code erhalten — vorlesen, als Link verschicken oder QR zeigen; sobald die Gegenseite beitritt, startet die Übertragung automatisch.", badge: "Empfänger ohne Konto" },
     stored: { name: "📦 Download-Link", sub: "Dein Browser verschlüsselt und speichert zwischen; die empfangende Person lädt jederzeit herunter — ohne Sitzung, ohne Konto.", badge: "Auch offline" },
   },
   pair: {
