@@ -584,7 +584,7 @@ const fr: Messages = {
       sub: "Quand les deux côtés sont en ligne, transfert en temps réel d'un réseau à l'autre — le destinataire n'a pas besoin de compte.",
       ways: [
         { icon: "📄", name: "Choisir les fichiers, obtenir un code", how: "Touchez « Envoyer des fichiers » et choisissez quoi envoyer — un code d'appairage à 6 caractères est créé automatiquement, avec lien d'accès et QR.", tag: "Connexion pour envoyer" },
-        { icon: "🔢", name: "Transmettre le code", how: "Dictez-le, envoyez le lien ou montrez le QR — au choix ; l'autre personne le saisit ou l'ouvre dans n'importe quel navigateur moderne.", tag: "Codes valables 15 minutes" },
+        { icon: "🔢", name: "Transmettre le code", how: "Dictez-le, envoyez le lien ou montrez le QR — au choix ; l'autre personne le saisit ou l'ouvre dans n'importe quel navigateur moderne.", tag: "Codes valables 5 minutes" },
         { icon: "⚡", name: "Le transfert démarre à l'arrivée", how: "Dès que l'autre appareil rejoint, le transfert démarre automatiquement — chiffré de bout en bout sur tout le trajet ; entre réseaux, le flux passe par un relais TURN chiffré qui ne transporte que du texte chiffré, sans rien pouvoir déchiffrer.", tag: "Le relais ne peut ni lire ni déchiffrer" },
       ],
     },

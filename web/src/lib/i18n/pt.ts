@@ -583,7 +583,7 @@ const pt: Messages = {
       sub: "Quando os dois lados estão online, transfiram em tempo real entre redes — o destinatário não precisa de conta.",
       ways: [
         { icon: "📄", name: "Escolha os arquivos, receba um código", how: "Toque em “Enviar arquivos” e escolha o que enviar — um código de emparelhamento de 6 caracteres é criado automaticamente, junto com um link de entrada e um QR.", tag: "Entre para enviar" },
-        { icon: "🔢", name: "Dê o código para o outro lado", how: "Diga-o em voz alta, envie o link ou mostre o QR — qualquer um dos três; a pessoa o digita ou o abre em qualquer navegador moderno.", tag: "Os códigos duram 15 minutos" },
+        { icon: "🔢", name: "Dê o código para o outro lado", how: "Diga-o em voz alta, envie o link ou mostre o QR — qualquer um dos três; a pessoa o digita ou o abre em qualquer navegador moderno.", tag: "Os códigos duram 5 minutos" },
         { icon: "⚡", name: "A transferência começa ao entrar", how: "No momento em que a pessoa entra, a transferência começa automaticamente — com criptografia de ponta a ponta o tempo todo; entre redes, o fluxo passa por um retransmissor TURN criptografado que só carrega texto cifrado e não consegue descriptografar nada.", tag: "O retransmissor não consegue ler nem descriptografar" },
       ],
     },

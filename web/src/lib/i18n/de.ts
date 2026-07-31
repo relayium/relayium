@@ -584,7 +584,7 @@ const de: Messages = {
       sub: "Wenn beide Seiten online sind, netzwerkübergreifend in Echtzeit übertragen — der Empfänger braucht kein Konto.",
       ways: [
         { icon: "📄", name: "Dateien wählen, Code erhalten", how: "Auf „Dateien senden“ tippen und auswählen — ein 6-stelliger Pairing-Code wird automatisch erzeugt, samt Beitrittslink und QR.", tag: "Zum Senden anmelden" },
-        { icon: "🔢", name: "Code an die Gegenseite geben", how: "Vorlesen, den Link schicken oder den QR zeigen — die andere Person tippt ihn ein oder öffnet ihn in einem beliebigen modernen Browser.", tag: "Codes gelten 15 Minuten" },
+        { icon: "🔢", name: "Code an die Gegenseite geben", how: "Vorlesen, den Link schicken oder den QR zeigen — die andere Person tippt ihn ein oder öffnet ihn in einem beliebigen modernen Browser.", tag: "Codes gelten 5 Minuten" },
         { icon: "⚡", name: "Übertragung startet beim Beitritt", how: "Sobald die Gegenseite beitritt, startet die Übertragung automatisch — durchgehend Ende-zu-Ende-verschlüsselt; netzübergreifend läuft der Strom über ein verschlüsseltes TURN-Relay, das nur Chiffretext trägt und nichts entschlüsseln kann.", tag: "Das Relay kann deine Dateien nicht entschlüsseln" },
       ],
     },

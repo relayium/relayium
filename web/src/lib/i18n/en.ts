@@ -593,7 +593,7 @@ const en: Messages = {
       sub: "When both sides are online, transfer across networks in real time — the recipient needs no account.",
       ways: [
         { icon: "📄", name: "Pick files, get a code", how: "Tap “Send files” and choose what to send — a 6-character pairing code is minted automatically, along with a join link and QR.", tag: "Sign in to send" },
-        { icon: "🔢", name: "Give the code to the other side", how: "Read it out, send the link, or show the QR — any of the three; they type it in or open it in any modern browser.", tag: "Codes live 15 minutes" },
+        { icon: "🔢", name: "Give the code to the other side", how: "Read it out, send the link, or show the QR — any of the three; they type it in or open it in any modern browser.", tag: "Codes live 5 minutes" },
         { icon: "⚡", name: "Transfer starts on join", how: "The moment they join, the transfer starts automatically — end-to-end encrypted the whole way; across networks the stream travels through an encrypted TURN relay that only ever carries ciphertext it can't decrypt.", tag: "The relay cannot decrypt your files" },
       ],
     },
