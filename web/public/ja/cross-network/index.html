@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="ネットワークをまたぐファイルとライブテキスト転送——エンドツーエンド暗号化 | Relayium" />
     <meta name="twitter:description" content="6文字のペアリングコードで、異なるネットワーク間のファイルと一時的なライブテキストを転送。両端末がオンラインで、ブラウザは暗号文しか見えないTURNリレーを設計どおり使用します。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"ネットワークをまたぐファイルとライブテキスト転送——エンドツーエンド暗号化 | Relayium","description":"6文字のペアリングコードで、異なるネットワーク間のファイルと一時的なライブテキストを転送。両端末がオンラインで、ブラウザは暗号文しか見えないTURNリレーを設計どおり使用します。","url":"https://relayium.com/ja/cross-network/","inLanguage":"ja","dateModified":"2026-07-31","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ファイルやメッセージはRelayiumのサーバーを経由しますか？","acceptedAnswer":{"@type":"Answer","text":"ネットワークをまたぐブラウザセッションは設計どおりTURNリレーを使いますが、ファイルもメッセージもエンドツーエンド暗号化され、リレーが見るのは暗号文だけです。Relayiumはメッセージ本文を保存しません。"}},{"@type":"Question","name":"コードは必須ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。6文字のコード（またはその参加リンク/QR）は5分間有効で、ネットワークをまたぐ2台の端末をペアリングします。コードはサーバーが文字集合 ACDEFHJKMNPRTWXY23456789 から発行します——0 と 1 は O・I と紛らわしいため含みません——ので、自分で考えて作ることはできません。サーバーが発行したコードだけがペアリングできます。"}},{"@type":"Question","name":"アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"ファイルまたはテキストのペアリングコードを作る側はサインインが必要ですが、コードで参加する側はアカウント不要です。"}},{"@type":"Question","name":"エンドツーエンド暗号化されていますか？","acceptedAnswer":{"@type":"Answer","text":"はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、検証コード（SAS）で照合します。リレーもサーバーも復号できません。"}},{"@type":"Question","name":"ファイルだけでなくテキストも送れますか？","acceptedAnswer":{"@type":"Answer","text":"はい。両端末がオンラインの間、1件最大65,536 UTF-8バイトの一時的なライブテキストを送れます。Relayiumは本文やサーバー側履歴を保存しませんが、各端末は受信テキストをコピー・保持できます。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"ネットワークをまたぐファイルとライブテキスト転送——エンドツーエンド暗号化 | Relayium","description":"6文字のペアリングコードで、異なるネットワーク間のファイルと一時的なライブテキストを転送。両端末がオンラインで、ブラウザは暗号文しか見えないTURNリレーを設計どおり使用します。","url":"https://relayium.com/ja/cross-network/","inLanguage":"ja","dateModified":"2026-07-31","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ファイルやメッセージはRelayiumのサーバーを経由しますか？","acceptedAnswer":{"@type":"Answer","text":"ネットワークをまたぐブラウザセッションは設計どおりTURNリレーを使いますが、ファイルもメッセージもエンドツーエンド暗号化され、リレーが見るのは暗号文だけです。Relayiumはメッセージ本文を保存しません。"}},{"@type":"Question","name":"コードは必須ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。6文字のコード（またはその参加リンク/QR）は5分間有効で、ネットワークをまたぐ2台の端末をペアリングします。コードはサーバーが文字集合 ACDEFHJKMNPRTWXY23456789 から発行します——0 と 1 は O・I と紛らわしいため含みません——ので、自分で考えて作ることはできません。サーバーが発行したコードだけがペアリングできます。"}},{"@type":"Question","name":"アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"ファイルまたはテキストのペアリングコードを作る側はサインインが必要ですが、コードで参加する側はアカウント不要です。"}},{"@type":"Question","name":"エンドツーエンド暗号化されていますか？","acceptedAnswer":{"@type":"Answer","text":"はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使います。SASを別経路で照合すると、エンドポイント公開鍵が置き換えられず、シグナリングサービスやTURNリレーが端末になりすましてアプリ層E2EEを終端していないことを確認できます。TURNは経路上に残る場合も暗号文だけを運びます。"}},{"@type":"Question","name":"ファイルだけでなくテキストも送れますか？","acceptedAnswer":{"@type":"Answer","text":"はい。両端末がオンラインの間、1件最大65,536 UTF-8バイトの一時的なライブテキストを送れます。Relayiumは本文やサーバー側履歴を保存しませんが、各端末は受信テキストをコピー・保持できます。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -87,7 +87,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <ol class="steps">
         <li>一方がサインインし、ファイルまたはテキスト用の6文字ペアリングコードを発行します（参加リンク/QRの共有も可能）。</li>
         <li>もう一方はリンクを開くかコードを入力するだけ——コードでの参加にアカウントは不要です。</li>
-        <li>両方の画面に表示される同じ6桁の検証コード（SAS）を照合し、中間者がいないことを確認します。</li>
+        <li>両端で6桁の検証コード（SAS）を別経路で照合します。一致すればX25519エンドポイント公開鍵が置き換えられておらず、シグナリングサービスやTURNリレーが端末になりすましてアプリ層E2EEを終端していないことを確認できます。TURNはネットワーク経路上に残り、暗号文だけを運ぶ場合があります。</li>
         <li>両端末がオンラインの間、ファイルとライブテキストはTURN経由でエンドツーエンド暗号化されます。Relayiumは本文を保存せず、1件は最大65,536 UTF-8バイトです。</li>
       </ol>
       </section>
@@ -96,7 +96,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <h2>Relayiumが選ばれる理由</h2>
       <ul class="why">
         <li><b>エンドツーエンド暗号化</b> — X25519鍵交換とチャンクごとのAES-256-GCM。鍵は2台の端末間だけでネゴシエートされ、リレーもサーバーも復号できません。</li>
-        <li><b>SASで中間者攻撃を防止</b> — 両方の画面に同じ6桁のコードが表示されます。一致を確認すれば、リレーやシグナリングサーバーが侵害されていても中間者攻撃を防げます。</li>
+        <li><b>SASで中間者攻撃を防止</b> — 6桁のSASを別経路で照合し、X25519エンドポイント公開鍵が置き換えられていないことを確認します。シグナリングサービスやTURNリレーによる端末のなりすましを検出しますが、ネットワーク経路にTURNがないことを証明するものではありません。TURNは暗号文だけを運びます。</li>
         <li><b>リレーは暗号文しか扱わない</b> — ネットワークをまたぐブラウザ転送は、NAT越しでも確実につながるよう設計どおり高速TURNリレーを使います。リレーが扱うのは暗号文だけで、鍵や平文には触れません。</li>
         <li><b>一時的なライブテキスト</b> — 両端末がオンラインである必要があります。Relayiumは本文やサーバー側履歴を保存しませんが、受信端末はテキストをコピー・保持できます。1件は最大65,536 UTF-8バイトです。</li>
         <li><b>クロスプラットフォーム</b> — Windows・macOS・Linux・Android・iOS——モダンブラウザさえあればインストール不要です。</li>
@@ -110,7 +110,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <h3>AirDropとの比較</h3>
       <p>AirDropはApple製品同士、かつ近接している場合に限られます。RelayiumはブラウザだけでWindows・Android・iPhone・Macをネットワークをまたいでエンドツーエンド暗号化しながらペアリングできます。</p>
       <h3>Snapdrop / PairDropとの比較</h3>
-      <p>それらは同一ネットワーク限定です。Relayiumはネットワークをまたぐペアリングに加え、アプリケーション層のエンドツーエンド暗号化と検証コード（SAS）を備え、リレーやシグナリングサーバーが侵害されていても盗聴できません。</p>
+      <p>それらは同一ネットワーク限定です。Relayiumはネットワークをまたぐペアリング、アプリ層E2EE、X25519エンドポイント公開鍵の置換を検出する別経路のSAS照合を備えます。侵害されたリレーやシグナリングサーバーが密かに端末になりすましてE2EEを終端することを防ぎ、TURNは経路上で暗号文だけを運びます。</p>
       </div>
       </section>
 
@@ -122,7 +122,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <h3>アカウントは必要ですか？</h3>
       <p>ファイルまたはテキストのペアリングコードを作る側はサインインが必要ですが、コードで参加する側はアカウント不要です。</p>
       <h3>エンドツーエンド暗号化されていますか？</h3>
-      <p>はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、検証コード（SAS）で照合します。リレーもサーバーも復号できません。</p>
+      <p>はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使います。SASを別経路で照合すると、エンドポイント公開鍵が置き換えられず、シグナリングサービスやTURNリレーが端末になりすましてアプリ層E2EEを終端していないことを確認できます。TURNは経路上に残る場合も暗号文だけを運びます。</p>
       <h3>ファイルだけでなくテキストも送れますか？</h3>
       <p>はい。両端末がオンラインの間、1件最大65,536 UTF-8バイトの一時的なライブテキストを送れます。Relayiumは本文やサーバー側履歴を保存しませんが、各端末は受信テキストをコピー・保持できます。</p></section>
 

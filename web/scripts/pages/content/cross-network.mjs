@@ -30,7 +30,7 @@ const en = {
     steps: [
       "One person signs in and mints a 6-character pairing code for a file or text session (or shares its join link / QR).",
       "The other person opens the link or enters the code — joining with a code needs no account.",
-      "Both sides verify the same 6-digit SAS on screen to rule out a man-in-the-middle.",
+      "Both sides compare the same 6-digit SAS out of band. A match confirms the X25519 endpoint public keys were not substituted, so the signaling service or TURN relay did not impersonate either endpoint or terminate the app-layer E2EE. TURN can still remain in the network path, carrying only ciphertext.",
       "With both devices online, files stream and live text messages move end-to-end encrypted through TURN. Relayium never stores message bodies; one message can contain up to 65,536 UTF-8 bytes.",
     ],
   },
@@ -43,7 +43,7 @@ const en = {
       },
       {
         title: "SAS anti-MITM",
-        desc: "Both screens show the same 6-digit code; matching it defeats even a compromised relay or signaling server.",
+        desc: "Compare the 6-digit SAS out of band to confirm the X25519 endpoint public keys were not substituted. A match detects a signaling service or TURN relay impersonating an endpoint; it does not prove TURN is absent from the network path, where it carries only ciphertext.",
       },
       {
         title: "Relay sees only ciphertext",
@@ -72,7 +72,7 @@ const en = {
       },
       {
         title: "vs Snapdrop / PairDrop",
-        body: "Those are same-network only; Relayium adds cross-network pairing plus app-layer E2E + a SAS code, so even a compromised relay or signaling server can't eavesdrop.",
+        body: "Those are same-network only; Relayium adds cross-network pairing, app-layer E2E and an out-of-band SAS check for X25519 endpoint-key substitution. A compromised relay or signaling server cannot silently impersonate an endpoint or terminate that encryption; TURN still carries ciphertext in the network path.",
       },
     ],
   },
@@ -93,7 +93,7 @@ const en = {
       },
       {
         q: "Is it end-to-end encrypted?",
-        a: "Yes — X25519 + per-chunk AES-256-GCM, verified with the SAS code, so neither the relay nor the server can decrypt.",
+        a: "Yes — X25519 + per-chunk AES-256-GCM. Comparing the SAS out of band confirms the endpoint public keys were not substituted, so the signaling service or TURN relay did not impersonate either endpoint or terminate the app-layer E2EE. TURN can still be in the network path, carrying only ciphertext.",
       },
       {
         q: "Can I send text as well as files?",
@@ -120,7 +120,7 @@ const zh = {
     steps: [
       "一方登录后为文件或文本会话生成一个 6 字符配对码（也可分享其加入链接/二维码）。",
       "另一方打开链接或输入配对码即可——持码加入无需账号。",
-      "双方核对屏幕上同一段 6 位数字 SAS 校验码（与配对码是两个不同的值），确认一致以排除中间人。",
+      "双方通过带外渠道核对同一段 6 位数字 SAS 校验码（与配对码是两个不同的值）。一致表示 X25519 端点公钥未被替换，信令服务或 TURN 中继没有冒充任一端点或终止应用层端到端加密；TURN 仍可处于网络路径中，但只承载密文。",
       "双方同时在线时，文件流和实时文本均通过 TURN 端到端加密传输。Relayium 不存储消息正文；每条消息最多 65,536 个 UTF-8 字节。",
     ],
   },
@@ -133,7 +133,7 @@ const zh = {
       },
       {
         title: "SAS 防中间人",
-        desc: "两边屏幕显示同一段 6 位数字校验码，核对一致即可排除中间人——即便中继或信令服务器被入侵也无法得逞。",
+        desc: "通过带外渠道核对 6 位 SAS，可确认 X25519 端点公钥未被替换，并检测信令服务或 TURN 中继冒充端点。它并不证明网络路径中没有 TURN；TURN 仍可能在路径中，但只承载密文。",
       },
       {
         title: "中继只经手密文",
@@ -162,7 +162,7 @@ const zh = {
       },
       {
         title: "对比 Snapdrop / PairDrop",
-        body: "它们仅限同一网络内使用；Relayium 在此之上增加了跨网络配对，以及应用层端到端加密 + SAS 校验码，即便中继或信令服务器被入侵也无法窃听。",
+        body: "它们仅限同一网络内使用；Relayium 增加了跨网络配对、应用层端到端加密，以及通过带外 SAS 检测 X25519 端点公钥替换。被入侵的中继或信令服务器无法悄悄冒充端点或终止这层加密；TURN 仍在网络路径中承载密文。",
       },
     ],
   },
@@ -183,7 +183,7 @@ const zh = {
       },
       {
         q: "是端到端加密的吗？",
-        a: "是——采用 X25519 密钥交换 + 每块 AES-256-GCM 加密，并通过 SAS 校验码核验，中继与服务器均无法解密。",
+        a: "是——采用 X25519 密钥交换 + 每块 AES-256-GCM 加密。通过带外渠道核对 SAS 可确认端点公钥未被替换，信令服务或 TURN 中继没有冒充任一端点或终止应用层端到端加密；TURN 仍可处于网络路径中，但只承载密文。",
       },
       {
         q: "除了文件，还能发送文本吗？",
@@ -210,7 +210,7 @@ const ja = {
     steps: [
       "一方がサインインし、ファイルまたはテキスト用の6文字ペアリングコードを発行します（参加リンク/QRの共有も可能）。",
       "もう一方はリンクを開くかコードを入力するだけ——コードでの参加にアカウントは不要です。",
-      "両方の画面に表示される同じ6桁の検証コード（SAS）を照合し、中間者がいないことを確認します。",
+      "両端で6桁の検証コード（SAS）を別経路で照合します。一致すればX25519エンドポイント公開鍵が置き換えられておらず、シグナリングサービスやTURNリレーが端末になりすましてアプリ層E2EEを終端していないことを確認できます。TURNはネットワーク経路上に残り、暗号文だけを運ぶ場合があります。",
       "両端末がオンラインの間、ファイルとライブテキストはTURN経由でエンドツーエンド暗号化されます。Relayiumは本文を保存せず、1件は最大65,536 UTF-8バイトです。",
     ],
   },
@@ -223,7 +223,7 @@ const ja = {
       },
       {
         title: "SASで中間者攻撃を防止",
-        desc: "両方の画面に同じ6桁のコードが表示されます。一致を確認すれば、リレーやシグナリングサーバーが侵害されていても中間者攻撃を防げます。",
+        desc: "6桁のSASを別経路で照合し、X25519エンドポイント公開鍵が置き換えられていないことを確認します。シグナリングサービスやTURNリレーによる端末のなりすましを検出しますが、ネットワーク経路にTURNがないことを証明するものではありません。TURNは暗号文だけを運びます。",
       },
       {
         title: "リレーは暗号文しか扱わない",
@@ -252,7 +252,7 @@ const ja = {
       },
       {
         title: "Snapdrop / PairDropとの比較",
-        body: "それらは同一ネットワーク限定です。Relayiumはネットワークをまたぐペアリングに加え、アプリケーション層のエンドツーエンド暗号化と検証コード（SAS）を備え、リレーやシグナリングサーバーが侵害されていても盗聴できません。",
+        body: "それらは同一ネットワーク限定です。Relayiumはネットワークをまたぐペアリング、アプリ層E2EE、X25519エンドポイント公開鍵の置換を検出する別経路のSAS照合を備えます。侵害されたリレーやシグナリングサーバーが密かに端末になりすましてE2EEを終端することを防ぎ、TURNは経路上で暗号文だけを運びます。",
       },
     ],
   },
@@ -273,7 +273,7 @@ const ja = {
       },
       {
         q: "エンドツーエンド暗号化されていますか？",
-        a: "はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使い、検証コード（SAS）で照合します。リレーもサーバーも復号できません。",
+        a: "はい——X25519鍵交換とチャンクごとのAES-256-GCM暗号化を使います。SASを別経路で照合すると、エンドポイント公開鍵が置き換えられず、シグナリングサービスやTURNリレーが端末になりすましてアプリ層E2EEを終端していないことを確認できます。TURNは経路上に残る場合も暗号文だけを運びます。",
       },
       {
         q: "ファイルだけでなくテキストも送れますか？",
@@ -300,7 +300,7 @@ const ko = {
     steps: [
       "한쪽이 로그인해 파일 또는 텍스트 세션용 6자 페어링 코드를 생성합니다(참여 링크/QR 공유도 가능).",
       "다른 쪽은 링크를 열거나 코드를 입력합니다 — 코드로 참여할 때는 계정이 필요 없습니다.",
-      "양쪽 화면에 표시되는 동일한 6자리 숫자 검증 코드(SAS, 페어링 코드와는 다른 값)를 대조해 중간자가 없는지 확인합니다.",
+      "양쪽이 별도 채널로 동일한 6자리 검증 코드(SAS, 페어링 코드와는 다른 값)를 대조합니다. 일치하면 X25519 끝점 공개 키가 바뀌지 않았고 시그널링 서비스나 TURN 릴레이가 어느 끝점도 사칭하거나 애플리케이션 계층 E2EE를 종료하지 않았음을 확인합니다. TURN은 네트워크 경로에 남아 암호문만 운반할 수 있습니다.",
       "두 기기가 온라인인 동안 파일과 실시간 텍스트는 TURN을 통해 종단간 암호화됩니다. Relayium은 메시지 본문을 저장하지 않으며 메시지 하나는 최대 65,536 UTF-8바이트입니다.",
     ],
   },
@@ -313,7 +313,7 @@ const ko = {
       },
       {
         title: "SAS로 중간자 공격 차단",
-        desc: "양쪽 화면에 동일한 6자리 코드가 표시됩니다. 서로 대조하면 릴레이나 시그널링 서버가 침해되어도 중간자 공격을 막을 수 있습니다.",
+        desc: "별도 채널로 6자리 SAS를 대조해 X25519 끝점 공개 키가 바뀌지 않았는지 확인합니다. 시그널링 서비스나 TURN 릴레이의 끝점 사칭을 탐지하지만, 네트워크 경로에 TURN이 없다는 뜻은 아닙니다. TURN은 암호문만 운반합니다.",
       },
       {
         title: "릴레이는 암호문만 전달",
@@ -342,7 +342,7 @@ const ko = {
       },
       {
         title: "Snapdrop / PairDrop과 비교",
-        body: "이들은 같은 네트워크에서만 동작합니다. Relayium은 네트워크를 넘는 페어링에 더해 애플리케이션 계층의 종단간 암호화와 검증 코드(SAS)를 갖춰, 릴레이나 시그널링 서버가 침해되어도 도청할 수 없습니다.",
+        body: "이들은 같은 네트워크에서만 동작합니다. Relayium은 네트워크 간 페어링, 애플리케이션 계층 E2EE, X25519 끝점 공개 키 교체를 탐지하는 별도 채널 SAS 확인을 제공합니다. 침해된 릴레이나 시그널링 서버가 몰래 끝점을 사칭해 E2EE를 종료할 수 없으며, TURN은 경로에서 암호문만 운반합니다.",
       },
     ],
   },
@@ -363,7 +363,7 @@ const ko = {
       },
       {
         q: "종단간 암호화인가요?",
-        a: "네 — X25519 키 교환과 청크별 AES-256-GCM 암호화를 사용하며 검증 코드(SAS)로 대조합니다. 릴레이도 서버도 복호화할 수 없습니다.",
+        a: "네 — X25519 키 교환과 청크별 AES-256-GCM 암호화를 사용합니다. 별도 채널로 SAS를 대조하면 끝점 공개 키가 바뀌지 않았고 시그널링 서비스나 TURN 릴레이가 어느 끝점도 사칭하거나 애플리케이션 계층 E2EE를 종료하지 않았음을 확인합니다. TURN은 경로에 남아도 암호문만 운반합니다.",
       },
       {
         q: "파일뿐 아니라 텍스트도 보낼 수 있나요?",
@@ -390,7 +390,7 @@ const de = {
     steps: [
       "Eine Person meldet sich an und erzeugt einen 6-Zeichen-Pairing-Code für Dateien oder Text (oder teilt Beitrittslink/QR).",
       "Die andere öffnet den Link oder gibt den Code ein — zum Beitreten mit Code ist kein Konto nötig.",
-      "Beide Seiten vergleichen denselben 6-stelligen Verifizierungscode auf dem Bildschirm (SAS — ein anderer Wert als der Pairing-Code), um einen Man-in-the-Middle auszuschließen.",
+      "Beide Seiten vergleichen denselben 6-stelligen Verifizierungscode (SAS — nicht den Pairing-Code) über einen unabhängigen Kanal. Eine Übereinstimmung bestätigt, dass die öffentlichen X25519-Endpunktschlüssel nicht ersetzt wurden und weder Signalisierungsdienst noch TURN-Relay einen Endpunkt imitiert oder die E2E-Verschlüsselung der Anwendung terminiert haben. TURN kann weiter im Netzwerkpfad liegen und transportiert dort nur Chiffretext.",
       "Solange beide Geräte online sind, laufen Dateien und Live-Text Ende-zu-Ende-verschlüsselt über TURN. Relayium speichert keine Nachrichtentexte; eine Nachricht umfasst höchstens 65.536 UTF-8-Bytes.",
     ],
   },
@@ -403,7 +403,7 @@ const de = {
       },
       {
         title: "SAS gegen Man-in-the-Middle",
-        desc: "Beide Bildschirme zeigen denselben 6-stelligen Code; stimmt er überein, ist ein Man-in-the-Middle ausgeschlossen — selbst ein kompromittiertes Relay oder ein kompromittierter Signalisierungsserver kann sich nicht einschleichen.",
+        desc: "Der Abgleich des 6-stelligen SAS über einen unabhängigen Kanal bestätigt, dass die öffentlichen X25519-Endpunktschlüssel nicht ersetzt wurden. Er erkennt, wenn Signalisierungsdienst oder TURN-Relay einen Endpunkt imitieren, beweist aber nicht, dass TURN im Netzwerkpfad fehlt; dort transportiert es nur Chiffretext.",
       },
       {
         title: "Relay sieht nur Chiffretext",
@@ -432,7 +432,7 @@ const de = {
       },
       {
         title: "Gegenüber Snapdrop / PairDrop",
-        body: "Diese funktionieren nur im selben Netzwerk; Relayium ergänzt netzwerkübergreifendes Koppeln plus Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und den Verifizierungscode (SAS), sodass selbst ein kompromittiertes Relay oder ein kompromittierter Signalisierungsserver nicht mithören kann.",
+        body: "Diese funktionieren nur im selben Netzwerk; Relayium ergänzt netzwerkübergreifendes Koppeln, E2E-Verschlüsselung auf Anwendungsebene und einen SAS-Abgleich über einen unabhängigen Kanal, der ersetzte öffentliche X25519-Endpunktschlüssel erkennt. Ein kompromittiertes Relay oder ein Signalisierungsserver kann so nicht unbemerkt einen Endpunkt imitieren und die E2E-Verschlüsselung terminieren; TURN bleibt mit Chiffretext im Netzwerkpfad.",
       },
     ],
   },
@@ -453,7 +453,7 @@ const de = {
       },
       {
         q: "Ist es Ende-zu-Ende-verschlüsselt?",
-        a: "Ja — X25519 plus AES-256-GCM pro Block, verifiziert mit dem Verifizierungscode; weder das Relay noch der Server können entschlüsseln.",
+        a: "Ja — X25519 plus AES-256-GCM pro Block. Der SAS-Abgleich über einen unabhängigen Kanal bestätigt, dass die öffentlichen Endpunktschlüssel nicht ersetzt wurden und weder Signalisierungsdienst noch TURN-Relay einen Endpunkt imitiert oder die E2E-Verschlüsselung der Anwendung terminiert haben. TURN kann im Netzwerkpfad bleiben und transportiert nur Chiffretext.",
       },
       {
         q: "Kann ich neben Dateien auch Text senden?",
@@ -480,7 +480,7 @@ const fr = {
     steps: [
       "Une personne se connecte et génère un code à 6 caractères pour une session de fichiers ou de texte (ou partage son lien/QR).",
       "L'autre ouvre le lien ou saisit le code — rejoindre avec un code ne nécessite aucun compte.",
-      "Les deux parties comparent le même code de vérification (SAS) à 6 chiffres à l'écran pour écarter tout homme du milieu.",
+      "Les deux parties comparent le même code de vérification (SAS) à 6 chiffres par un canal indépendant. S'il correspond, les clés publiques X25519 des terminaux n'ont pas été remplacées : ni le service de signalisation ni le relais TURN n'a usurpé un terminal ou terminé le chiffrement E2E applicatif. TURN peut rester sur le chemin réseau, où il ne transporte que du texte chiffré.",
       "Avec les deux appareils en ligne, fichiers et texte en direct passent par TURN, chiffrés de bout en bout. Relayium ne stocke aucun corps de message ; chacun peut contenir jusqu'à 65 536 octets UTF-8.",
     ],
   },
@@ -493,7 +493,7 @@ const fr = {
       },
       {
         title: "SAS contre l'homme du milieu",
-        desc: "Les deux écrans affichent le même code à 6 chiffres ; le faire correspondre déjoue même un relais ou un serveur de signalisation compromis.",
+        desc: "Comparez le SAS à 6 chiffres par un canal indépendant pour confirmer que les clés publiques X25519 des terminaux n'ont pas été remplacées. Cela détecte l'usurpation d'un terminal par le service de signalisation ou le relais TURN, sans prouver l'absence de TURN sur le chemin réseau, où il ne transporte que du texte chiffré.",
       },
       {
         title: "Le relais ne voit que du chiffré",
@@ -522,7 +522,7 @@ const fr = {
       },
       {
         title: "Face à Snapdrop / PairDrop",
-        body: "Ceux-ci ne fonctionnent que sur le même réseau ; Relayium ajoute l'appairage inter-réseaux ainsi qu'un chiffrement de bout en bout au niveau applicatif et un code de vérification (SAS), si bien qu'un relais ou un serveur de signalisation compromis ne peut pas espionner.",
+        body: "Ceux-ci ne fonctionnent que sur le même réseau ; Relayium ajoute l'appairage inter-réseaux, le chiffrement E2E applicatif et une comparaison SAS par canal indépendant qui détecte le remplacement des clés publiques X25519 des terminaux. Un relais ou serveur de signalisation compromis ne peut pas usurper silencieusement un terminal et terminer ce chiffrement ; TURN reste sur le chemin avec uniquement du texte chiffré.",
       },
     ],
   },
@@ -543,7 +543,7 @@ const fr = {
       },
       {
         q: "Est-ce chiffré de bout en bout ?",
-        a: "Oui — X25519 et AES-256-GCM par bloc, confirmé avec le code de vérification (SAS) ; ni le relais ni le serveur ne peuvent déchiffrer.",
+        a: "Oui — X25519 et AES-256-GCM par bloc. Comparer le SAS par un canal indépendant confirme que les clés publiques des terminaux n'ont pas été remplacées et que ni le service de signalisation ni le relais TURN n'a usurpé un terminal ou terminé le chiffrement E2E applicatif. TURN peut rester sur le chemin réseau, avec uniquement du texte chiffré.",
       },
       {
         q: "Puis-je envoyer du texte en plus des fichiers ?",
@@ -570,7 +570,7 @@ const ar = {
     steps: [
       "يسجّل أحد الطرفين الدخول ويولّد رمزًا من 6 خانات لجلسة ملفات أو نص (أو يشارك رابط الانضمام/QR).",
       "يفتح الطرف الآخر الرابط أو يُدخل الرمز — لا يحتاج الانضمام بالرمز إلى حساب.",
-      "يقارن الطرفان رمز التحقق نفسه المكوّن من 6 أرقام (SAS) على الشاشة لاستبعاد أي هجوم وسيط.",
+      "يقارن الطرفان رمز التحقق نفسه المكوّن من 6 أرقام (SAS) عبر قناة مستقلة. يؤكد التطابق أن مفاتيح X25519 العامة للطرفين لم تُستبدل، وأن خدمة الإشارة أو مُرحِّل TURN لم تنتحل شخصية أي طرف أو تُنهِ تشفير طبقة التطبيق من الطرف إلى الطرف. وقد يظل TURN ضمن مسار الشبكة، لكنه لا يحمل سوى النص المشفر.",
       "مع اتصال الجهازين، تنتقل الملفات والنصوص المباشرة مشفّرة من الطرف إلى الطرف عبر TURN. لا يخزن Relayium نص الرسالة؛ وحدّ الرسالة 65,536 بايت UTF-8.",
     ],
   },
@@ -583,7 +583,7 @@ const ar = {
       },
       {
         title: "SAS ضد هجوم الوسيط",
-        desc: "تعرض الشاشتان الرمز نفسه المكوّن من 6 أرقام؛ ومطابقته تُحبط حتى مُرحِّلًا أو خادم إشارة مخترَقًا.",
+        desc: "قارن رمز SAS المكوّن من 6 أرقام عبر قناة مستقلة للتأكد من عدم استبدال مفاتيح X25519 العامة للطرفين. يكشف ذلك انتحال خدمة الإشارة أو مُرحِّل TURN لأي طرف، لكنه لا يثبت غياب TURN عن مسار الشبكة؛ فهو لا يحمل هناك سوى النص المشفر.",
       },
       {
         title: "المُرحِّل لا يرى سوى نص مُشفَّر",
@@ -612,7 +612,7 @@ const ar = {
       },
       {
         title: "مقابل Snapdrop / PairDrop",
-        body: "هذان يعملان على نفس الشبكة فقط؛ يضيف Relayium الاقتران عبر الشبكات إضافةً إلى تشفير من الطرف إلى الطرف على مستوى التطبيق ورمز التحقق (SAS)، بحيث لا يستطيع مُرحِّل أو خادم إشارة مخترَق التنصّت.",
+        body: "هذان يعملان على الشبكة نفسها فقط؛ يضيف Relayium الاقتران عبر الشبكات وتشفير طبقة التطبيق من الطرف إلى الطرف ومقارنة SAS عبر قناة مستقلة لكشف استبدال مفاتيح X25519 العامة للطرفين. لا يستطيع مُرحِّل أو خادم إشارة مخترَق انتحال طرف بصمت وإنهاء هذا التشفير؛ ويظل TURN في المسار حاملاً النص المشفر فقط.",
       },
     ],
   },
@@ -633,7 +633,7 @@ const ar = {
       },
       {
         q: "هل هو مُشفَّر من الطرف إلى الطرف؟",
-        a: "نعم — X25519 وAES-256-GCM لكل كتلة، مؤكَّد برمز التحقق (SAS)؛ لا يستطيع المُرحِّل ولا الخادم فك التشفير.",
+        a: "نعم — X25519 وAES-256-GCM لكل كتلة. تؤكد مقارنة SAS عبر قناة مستقلة أن المفاتيح العامة للطرفين لم تُستبدل وأن خدمة الإشارة أو مُرحِّل TURN لم تنتحل شخصية أي طرف أو تُنهِ تشفير طبقة التطبيق من الطرف إلى الطرف. وقد يبقى TURN في مسار الشبكة حاملاً النص المشفر فقط.",
       },
       {
         q: "هل يمكنني إرسال نص إلى جانب الملفات؟",
@@ -660,7 +660,7 @@ const es = {
     steps: [
       "Una persona inicia sesión y genera un código de 6 caracteres para archivos o texto (o comparte su enlace/QR).",
       "La otra abre el enlace o introduce el código — unirse con el código no requiere cuenta.",
-      "Ambas partes comparan en pantalla el mismo código de verificación (SAS) de 6 dígitos para descartar cualquier intermediario.",
+      "Ambas partes comparan el mismo código de verificación (SAS) de 6 dígitos por un canal independiente. Si coincide, confirma que las claves públicas X25519 de los extremos no fueron sustituidas y que ni el servicio de señalización ni el retransmisor TURN suplantaron un extremo o terminaron el E2EE de la aplicación. TURN puede seguir en la ruta de red, llevando solo datos cifrados.",
       "Con ambos dispositivos en línea, archivos y texto en vivo viajan cifrados de extremo a extremo por TURN. Relayium no almacena el cuerpo; cada mensaje admite hasta 65.536 bytes UTF-8.",
     ],
   },
@@ -673,7 +673,7 @@ const es = {
       },
       {
         title: "SAS contra el ataque de intermediario",
-        desc: "Las dos pantallas muestran el mismo código de 6 dígitos; hacerlo coincidir frustra incluso a un retransmisor o un servidor de señalización comprometido.",
+        desc: "Compara el SAS de 6 dígitos por un canal independiente para confirmar que las claves públicas X25519 de los extremos no fueron sustituidas. Detecta la suplantación de un extremo por el servicio de señalización o TURN, pero no demuestra que TURN esté ausente de la ruta de red, donde solo lleva datos cifrados.",
       },
       {
         title: "El retransmisor solo ve texto cifrado",
@@ -702,7 +702,7 @@ const es = {
       },
       {
         title: "Frente a Snapdrop / PairDrop",
-        body: "Estos solo funcionan en la misma red; Relayium añade el emparejamiento entre redes junto con un cifrado de extremo a extremo a nivel de aplicación y un código de verificación (SAS), de modo que un retransmisor o un servidor de señalización comprometido no puede espiar.",
+        body: "Estos solo funcionan en la misma red; Relayium añade emparejamiento entre redes, E2EE de aplicación y una comparación SAS por un canal independiente que detecta la sustitución de claves públicas X25519 de los extremos. Un retransmisor o servidor de señalización comprometido no puede suplantar en silencio un extremo y terminar ese cifrado; TURN sigue en la ruta con datos cifrados.",
       },
     ],
   },
@@ -723,7 +723,7 @@ const es = {
       },
       {
         q: "¿Es cifrado de extremo a extremo?",
-        a: "Sí — X25519 y AES-256-GCM por bloque, confirmado con el código de verificación (SAS); ni el retransmisor ni el servidor pueden descifrar.",
+        a: "Sí — X25519 y AES-256-GCM por bloque. Comparar el SAS por un canal independiente confirma que las claves públicas de los extremos no fueron sustituidas y que ni el servicio de señalización ni TURN suplantaron un extremo o terminaron el E2EE de la aplicación. TURN puede seguir en la ruta de red, llevando solo datos cifrados.",
       },
       {
         q: "¿Puedo enviar texto además de archivos?",
@@ -750,7 +750,7 @@ const pt = {
     steps: [
       "Uma pessoa faz login e gera um código de 6 caracteres para arquivos ou texto (ou compartilha seu link/QR).",
       "A outra abre o link ou digita o código — entrar com o código não exige conta.",
-      "As duas partes comparam na tela o mesmo código de verificação (SAS) de 6 dígitos para descartar qualquer intermediário.",
+      "As duas partes comparam o mesmo código de verificação (SAS) de 6 dígitos por um canal independente. Se coincidir, confirma que as chaves públicas X25519 das pontas não foram substituídas e que nem o serviço de sinalização nem o retransmissor TURN se passaram por uma ponta ou terminaram a E2EE da aplicação. O TURN pode continuar no caminho de rede, levando apenas dados cifrados.",
       "Com os dois dispositivos online, arquivos e texto ao vivo passam criptografados de ponta a ponta pelo TURN. O Relayium não armazena o corpo; cada mensagem aceita até 65.536 bytes UTF-8.",
     ],
   },
@@ -763,7 +763,7 @@ const pt = {
       },
       {
         title: "SAS contra o ataque de intermediário",
-        desc: "As duas telas mostram o mesmo código de 6 dígitos; fazê-lo coincidir frustra até mesmo um retransmissor ou um servidor de sinalização comprometido.",
+        desc: "Compare o SAS de 6 dígitos por um canal independente para confirmar que as chaves públicas X25519 das pontas não foram substituídas. Isso detecta quando o serviço de sinalização ou o TURN se passa por uma ponta, mas não prova que o TURN esteja ausente do caminho de rede, onde só leva dados cifrados.",
       },
       {
         title: "O retransmissor só vê texto cifrado",
@@ -792,7 +792,7 @@ const pt = {
       },
       {
         title: "Comparado ao Snapdrop / PairDrop",
-        body: "Esses só funcionam na mesma rede; o Relayium acrescenta o emparelhamento entre redes, além de uma criptografia de ponta a ponta na camada de aplicação e um código de verificação (SAS), de modo que um retransmissor ou um servidor de sinalização comprometido não consegue espionar.",
+        body: "Esses só funcionam na mesma rede; o Relayium acrescenta emparelhamento entre redes, E2EE da aplicação e uma comparação SAS por canal independente que detecta a substituição das chaves públicas X25519 das pontas. Um retransmissor ou servidor de sinalização comprometido não pode se passar silenciosamente por uma ponta e terminar essa criptografia; o TURN continua no caminho com dados cifrados.",
       },
     ],
   },
@@ -813,7 +813,7 @@ const pt = {
       },
       {
         q: "É criptografia de ponta a ponta?",
-        a: "Sim — X25519 e AES-256-GCM por bloco, confirmado com o código de verificação (SAS); nem o retransmissor nem o servidor conseguem descriptografar.",
+        a: "Sim — X25519 e AES-256-GCM por bloco. Comparar o SAS por um canal independente confirma que as chaves públicas das pontas não foram substituídas e que nem o serviço de sinalização nem o TURN se passaram por uma ponta ou terminaram a E2EE da aplicação. O TURN pode continuar no caminho de rede, levando apenas dados cifrados.",
       },
       {
         q: "Posso enviar texto além de arquivos?",
