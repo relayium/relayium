@@ -10,7 +10,7 @@ const en = {
   updatedLabel: "Last updated",
   lead: [
     "Sending a project isn't the same as sending a file — you have a folder full of subfolders, and copy-pasting each piece individually loses the structure that makes it useful. Zipping it first works, but it means a detour through a compression tool before you can even start.",
-    "Relayium lets you pick a folder directly and send it as-is. The browser walks the whole tree, keeps every relative path intact, and streams it to the other side — whether that ends up peer-to-peer with nothing stored, or as a link you can leave for later.",
+    "Relayium lets you pick a folder and send it as-is. The browser walks the whole tree, keeps every relative path intact, and either streams it live — direct over WebRTC on the same LAN or as end-to-end ciphertext over TURN across networks — without a server-side realtime copy or history, or creates a stored link you can leave for later.",
   ],
   sections: [
     {
@@ -35,7 +35,7 @@ const en = {
     {
       heading: "Realtime, or a link for later",
       body: [
-        "If you can both be online at the same time, send the folder directly — it goes peer-to-peer and nothing is stored on any server in between. This is the fastest path and needs no account if you're on the same network; sending across networks with a pairing code just needs the sender to sign in, and the receiver never needs an account at all.",
+        "If you can both be online at the same time, send the folder in realtime. On the same LAN, WebRTC connects directly; across networks, the browser uses TURN by design to carry end-to-end encrypted ciphertext that the relay cannot read or decrypt. Relayium keeps no server-side realtime copy or transfer history. Same-network transfer needs no account; across networks the pairing-code creator signs in, while the person joining never needs an account.",
         "If the other person isn't around right now, create a stored link instead. Your browser encrypts the folder's files before upload with a random AES-256-GCM key that only ever lives in the link itself, so the server holds ciphertext it can't read. Creating a link needs the sender to sign in; set it to expire in 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan, or make it burn after the first download.",
       ],
     },
@@ -79,7 +79,7 @@ const zh = {
   updatedLabel: "最近更新",
   lead: [
     "发送一个项目和发送一个文件不是一回事——你手上是一个套着子文件夹的文件夹，一个一个复制粘贴会丢掉让它有意义的结构。先打包压缩也行，但那意味着在开始传输之前要先绕道用一个压缩工具。",
-    "Relayium 让你直接选中文件夹整体发送。浏览器会遍历整棵目录树，完整保留每个文件的相对路径，然后把它流式传给对方——无论最终是点对点、什么都不存，还是生成一个可以留到以后取用的链接。",
+    "Relayium 让你选中文件夹整体发送。浏览器会遍历整棵目录树、保留每个相对路径，并选择实时传输——同一局域网内 WebRTC 直连，跨网络经 TURN 承载端到端密文——且不保留服务器端实时副本或历史；也可以生成稍后取用的存储链接。",
   ],
   sections: [
     {
@@ -104,7 +104,7 @@ const zh = {
     {
       heading: "实时传输，或留个链接稍后取",
       body: [
-        "如果双方能同时在线，直接发送文件夹即可——它走点对点，中途不会存在任何服务器上。这是最快的方式，同一网络下不需要账号；跨网络用配对码发送只需要发送方登录一下，接收方任何情况下都不需要账号。",
+        "如果双方能同时在线，就实时发送文件夹。同一局域网内 WebRTC 直连；跨网络浏览器按设计使用 TURN 承载端到端加密的密文，中继无法读取或解密。Relayium 不保留服务器端实时副本或传输历史。同一网络无需账号；跨网络时配对码创建者登录，加入的一方始终无需账号。",
         "如果对方现在不在，可以改为创建一个存储链接。你的浏览器会在上传前用一把只存在于链接本身的随机 AES-256-GCM 密钥加密文件夹里的文件，服务器只保存它读不懂的密文。创建链接需要发送方登录；可以设置 1 小时、1 天、3 天、7 天或最长 14 天后过期（上限取决于套餐），也可以设置为首次下载后即焚。",
       ],
     },
@@ -148,7 +148,7 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "プロジェクトを送ることは、ファイルを送ることとは違います。手元にあるのはサブフォルダの入ったフォルダで、ひとつずつコピー&ペーストすると、それを役立つものにしている構造が失われてしまいます。先に圧縮しておく手もありますが、転送を始める前に圧縮ツールへ寄り道することになります。",
-    "Relayium ならフォルダをそのまま選んで送信できます。ブラウザがディレクトリツリー全体をたどり、各ファイルの相対パスをそのまま保ち、相手側へストリーミングします。最終的にサーバーに何も残らない P2P になるか、あとで受け取れるリンクになるかは選べます。",
+    "Relayium ならフォルダをそのまま選んで送信できます。ブラウザはツリー全体と相対パスを保ち、同じ LAN では WebRTC で直接、ネットワークをまたぐ場合は TURN でエンドツーエンド暗号文としてライブ転送し、サーバー側のリアルタイムコピーや履歴を残しません。または後で受け取れる保存リンクを作れます。",
   ],
   sections: [
     {
@@ -173,7 +173,7 @@ const ja = {
     {
       heading: "今すぐリアルタイムで、または後で取れるリンクを",
       body: [
-        "双方が同時にオンラインになれるなら、フォルダを直接送りましょう。P2P で流れ、途中どのサーバーにも何も保存されません。これが最も速い方法で、同じネットワークならアカウントは不要です。ネットワークをまたいでペアリングコードで送る場合も送信側がサインインするだけで、受信側はどちらの場合もアカウント不要です。",
+        "双方が同時にオンラインなら、フォルダをリアルタイムで送れます。同じ LAN では WebRTC が直接接続し、ネットワークをまたぐブラウザは設計上 TURN で、リレーが読み取りも復号もできないエンドツーエンド暗号文を運びます。Relayium はサーバー側のリアルタイムコピーや転送履歴を保持しません。同じネットワークはアカウント不要で、ネットワークをまたぐ場合はペアリングコードの作成者がサインインし、参加者は不要です。",
         "相手が今いない場合は、代わりに保存リンクを作成できます。ブラウザはアップロード前に、そのリンク自体にしか存在しないランダムな AES-256-GCM 鍵でフォルダ内のファイルを暗号化するため、サーバーは読めない暗号文だけを保持します。リンクの作成には送信側のサインインが必要です。有効期限は1時間・1日・3日・7日・最長14日（プランによる）から選ぶか、初回ダウンロード後に消去する設定にもできます。",
       ],
     },
@@ -217,7 +217,7 @@ const ko = {
   updatedLabel: "마지막 업데이트",
   lead: [
     "프로젝트를 보내는 것은 파일 하나를 보내는 것과 다릅니다. 손에 든 건 하위 폴더가 잔뜩 있는 폴더이고, 하나씩 복사-붙여넣기하면 그것을 쓸모 있게 만드는 구조가 사라져 버립니다. 먼저 압축해도 되지만, 그러면 전송을 시작하기 전에 압축 도구를 거쳐야 합니다.",
-    "Relayium은 폴더를 그대로 선택해 보낼 수 있게 해줍니다. 브라우저가 디렉터리 트리 전체를 훑으며 모든 파일의 상대 경로를 그대로 유지한 채 상대에게 스트리밍합니다. 결과적으로 아무것도 저장되지 않는 P2P가 되든, 나중에 받을 수 있게 남겨두는 링크가 되든 마찬가지입니다.",
+    "Relayium은 폴더를 그대로 선택해 보낼 수 있게 해줍니다. 브라우저가 전체 트리와 상대 경로를 유지하고, 같은 LAN에서는 WebRTC로 직접, 네트워크를 넘을 때는 TURN으로 종단간 암호문을 실시간 전송하며 서버 측 실시간 복사본이나 기록을 남기지 않습니다. 또는 나중에 받을 저장 링크를 만들 수 있습니다.",
   ],
   sections: [
     {
@@ -242,7 +242,7 @@ const ko = {
     {
       heading: "지금 실시간으로, 또는 나중을 위해 링크로",
       body: [
-        "양쪽이 동시에 온라인일 수 있다면 폴더를 직접 보내세요. P2P로 전달되며 그 사이 어떤 서버에도 아무것도 저장되지 않습니다. 이것이 가장 빠른 방법이며, 같은 네트워크에서는 계정이 필요 없습니다. 네트워크를 넘어 페어링 코드로 보낼 때도 보내는 쪽이 로그인만 하면 되고, 받는 쪽은 어느 경우든 계정이 전혀 필요 없습니다.",
+        "양쪽이 동시에 온라인이면 폴더를 실시간으로 보내세요. 같은 LAN에서는 WebRTC가 직접 연결하고, 네트워크를 넘는 브라우저는 설계상 TURN으로 릴레이가 읽거나 복호화할 수 없는 종단간 암호문을 운반합니다. Relayium은 서버 측 실시간 복사본이나 전송 기록을 보관하지 않습니다. 같은 네트워크는 계정이 필요 없고, 네트워크를 넘을 때는 페어링 코드 생성자가 로그인하며 참가자는 계정이 필요 없습니다.",
         "상대가 지금 없다면 대신 저장 링크를 만들 수 있습니다. 브라우저는 업로드 전에 그 링크에만 존재하는 무작위 AES-256-GCM 키로 폴더 안의 파일을 암호화하므로, 서버는 읽을 수 없는 암호문만 보관합니다. 링크 생성에는 보내는 쪽의 로그인이 필요합니다. 1시간·1일·3일·7일·최대 14일(요금제에 따라 다름) 중 만료 시점을 정하거나, 첫 다운로드 후 소각되도록 설정할 수도 있습니다.",
       ],
     },
@@ -286,7 +286,7 @@ const de = {
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Ein Projekt zu senden ist nicht dasselbe wie eine Datei zu senden — man hat einen Ordner voller Unterordner, und jedes Stück einzeln zu kopieren zerstört genau die Struktur, die ihn brauchbar macht. Vorher zu zippen funktioniert, bedeutet aber einen Umweg über ein Kompressionswerkzeug, bevor man überhaupt anfangen kann.",
-    "Relayium lässt dich einen Ordner direkt auswählen und so senden, wie er ist. Der Browser durchläuft den ganzen Verzeichnisbaum, behält jeden relativen Pfad bei und streamt ihn zur Gegenseite — egal ob am Ende Peer-to-Peer ohne Speicherung dabei herauskommt oder ein Link, den du für später hinterlässt.",
+    "Relayium lässt dich einen Ordner auswählen und unverändert senden. Der Browser erhält Baum und relative Pfade und streamt live — im selben LAN direkt per WebRTC, netzübergreifend als Ende-zu-Ende-Chiffretext über TURN — ohne serverseitige Echtzeitkopie oder Historie; alternativ erstellt er einen gespeicherten Link für später.",
   ],
   sections: [
     {
@@ -311,7 +311,7 @@ const de = {
     {
       heading: "Jetzt in Echtzeit oder als Link für später",
       body: [
-        "Können beide Seiten gleichzeitig online sein, sende den Ordner direkt — er läuft Peer-to-Peer, und dazwischen wird nichts auf irgendeinem Server gespeichert. Das ist der schnellste Weg und braucht im selben Netz kein Konto; beim Senden über Netzwerke hinweg per Pairing-Code muss sich nur der Absender anmelden, und die empfangende Person braucht in keinem Fall ein Konto.",
+        "Sind beide Seiten gleichzeitig online, sende den Ordner in Echtzeit. Im selben LAN verbindet WebRTC direkt; netzübergreifende Browser nutzen TURN planmäßig für Ende-zu-Ende-Chiffretext, den das Relay weder lesen noch entschlüsseln kann. Relayium bewahrt keine serverseitige Echtzeitkopie oder Übertragungshistorie auf. Im selben Netz ist kein Konto nötig; netzübergreifend meldet sich die Person an, die den Pairing-Code erstellt, die beitretende Person nie.",
         "Ist die andere Person gerade nicht da, erstelle stattdessen einen gespeicherten Link. Dein Browser verschlüsselt die Dateien des Ordners vor dem Upload mit einem zufälligen AES-256-GCM-Schlüssel, der nur im Link selbst existiert, sodass der Server Chiffretext hält, den er nicht lesen kann. Das Erstellen eines Links erfordert die Anmeldung des Absenders; lege eine Gültigkeit von 1 Stunde, 1 Tag, 3 Tagen, 7 Tagen oder bis zu 14 Tagen je nach Tarif fest, oder lass ihn nach dem ersten Download verfallen.",
       ],
     },
@@ -355,7 +355,7 @@ const fr = {
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Envoyer un projet, ce n'est pas comme envoyer un fichier : vous avez un dossier plein de sous-dossiers, et copier-coller chaque élément un par un détruit la structure qui le rend utile. Le zipper d'abord fonctionne, mais cela impose un détour par un outil de compression avant même de pouvoir commencer.",
-    "Relayium vous laisse choisir un dossier directement et l'envoyer tel quel. Le navigateur parcourt toute l'arborescence, conserve le chemin relatif de chaque fichier, et le diffuse vers l'autre côté — que cela se termine en pair-à-pair sans rien stocker, ou en un lien que vous laissez pour plus tard.",
+    "Relayium vous laisse choisir un dossier et l'envoyer tel quel. Le navigateur conserve toute l'arborescence et diffuse en direct — directement par WebRTC sur le même LAN, ou sous forme de texte chiffré de bout en bout via TURN entre réseaux — sans copie ni historique temps réel côté serveur ; il peut aussi créer un lien stocké pour plus tard.",
   ],
   sections: [
     {
@@ -380,7 +380,7 @@ const fr = {
     {
       heading: "En temps réel maintenant, ou un lien pour plus tard",
       body: [
-        "Si vous pouvez être en ligne en même temps tous les deux, envoyez le dossier directement — il passe en pair-à-pair et rien n'est stocké sur un serveur entre les deux. C'est la voie la plus rapide et elle ne demande aucun compte sur le même réseau ; envoyer entre réseaux différents avec un code d'appairage exige seulement que l'expéditeur se connecte, et le destinataire n'a jamais besoin de compte.",
+        "Si vous êtes en ligne en même temps, envoyez le dossier en temps réel. Sur le même LAN, WebRTC se connecte directement ; entre réseaux, les navigateurs utilisent TURN par conception pour transporter un texte chiffré de bout en bout que le relais ne peut ni lire ni déchiffrer. Relayium ne conserve aucune copie côté serveur ni aucun historique temps réel. Aucun compte n'est requis sur le même réseau ; entre réseaux, la personne qui crée le code se connecte, celle qui rejoint n'en a jamais besoin.",
         "Si l'autre personne n'est pas disponible maintenant, créez plutôt un lien stocké. Votre navigateur chiffre les fichiers du dossier avant l'envoi avec une clé AES-256-GCM aléatoire qui ne vit que dans le lien lui-même, de sorte que le serveur conserve un texte chiffré qu'il ne peut pas lire. Créer un lien exige que l'expéditeur se connecte ; réglez son expiration à 1 heure, 1 jour, 3 jours, 7 jours ou jusqu'à 14 jours selon votre offre, ou faites-le s'autodétruire après le premier téléchargement.",
       ],
     },
@@ -424,7 +424,7 @@ const ar = {
   updatedLabel: "آخر تحديث",
   lead: [
     "إرسال مشروع ليس كإرسال ملف — فلديك مجلد مليء بالمجلدات الفرعية، ونسخ كل قطعة ولصقها على حدة يفقدك البنية التي تجعله مفيدًا. الضغط أولًا يفي بالغرض، لكنه يعني مرورًا جانبيًا بأداة ضغط قبل أن تتمكن حتى من البدء.",
-    "يتيح لك Relayium اختيار مجلد مباشرةً وإرساله كما هو. يجتاز المتصفح الشجرة كاملة، ويُبقي كل مسار نسبي سليمًا، ويبثّه إلى الجانب الآخر — سواء انتهى الأمر بنقل من الند للند دون تخزين أي شيء، أو برابط تتركه لوقت لاحق.",
+    "يتيح لك Relayium اختيار مجلد وإرساله كما هو. يحافظ المتصفح على الشجرة والمسارات النسبية، ويبثه حيًا — مباشرةً عبر WebRTC داخل شبكة LAN نفسها، أو كنص مشفّر من الطرف إلى الطرف عبر TURN بين الشبكات — بلا نسخة فورية أو سجل على الخادم؛ أو ينشئ رابطًا مُخزّنًا لوقت لاحق.",
   ],
   sections: [
     {
@@ -449,7 +449,7 @@ const ar = {
     {
       heading: "فوريًا، أو رابط لوقت لاحق",
       body: [
-        "إن أمكنكما أن تكونا متصلين في الوقت نفسه، أرسِل المجلد مباشرةً — يمرّ من الند للند ولا يُخزَّن شيء على أي خادم بينكما. هذا المسار الأسرع ولا يحتاج إلى حساب إن كنتما على نفس الشبكة؛ أما الإرسال عبر الشبكات برمز اقتران فيتطلب فقط أن يسجّل المُرسِل الدخول، والمُستقبِل لا يحتاج أبدًا إلى حساب على الإطلاق.",
+        "إن كنتما متصلين في الوقت نفسه، فأرسل المجلد فوريًا. داخل شبكة LAN نفسها يتصل WebRTC مباشرةً؛ وعبر الشبكات تستخدم المتصفحات TURN حسب التصميم لنقل نص مشفّر من الطرف إلى الطرف لا يستطيع المُرحِّل قراءته أو فك تشفيره. لا يحتفظ Relayium بنسخة فورية أو سجل نقل على الخادم. لا يلزم حساب داخل الشبكة نفسها؛ وعبر الشبكات يسجل منشئ رمز الاقتران الدخول ولا يحتاج المنضم إلى حساب.",
         "إن لم يكن الشخص الآخر متاحًا الآن، فأنشئ رابطًا مُخزَّنًا بدلًا من ذلك. يشفّر متصفحك ملفات المجلد قبل الرفع بمفتاح AES-256-GCM عشوائي لا يعيش إلا في الرابط نفسه، فيحمل الخادم نصًا مُشفَّرًا لا يستطيع قراءته. يتطلب إنشاء رابط أن يسجّل المُرسِل الدخول؛ اضبطه لينتهي بعد ساعة واحدة، أو يوم واحد، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب خطتك، أو اجعله يحترق بعد أول تنزيل.",
       ],
     },
@@ -493,7 +493,7 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "Enviar un proyecto no es lo mismo que enviar un archivo — tienes una carpeta llena de subcarpetas, y copiar y pegar cada pieza por separado pierde la estructura que la hace útil. Comprimirla primero funciona, pero implica un rodeo por una herramienta de compresión antes siquiera de poder empezar.",
-    "Relayium te deja elegir una carpeta directamente y enviarla tal cual. El navegador recorre todo el árbol, mantiene intacta cada ruta relativa y la transmite al otro lado — tanto si acaba siendo de igual a igual sin nada almacenado, como un enlace que puedes dejar para más tarde.",
+    "Relayium te deja elegir una carpeta y enviarla tal cual. El navegador conserva todo el árbol y transmite en vivo — directamente por WebRTC en la misma LAN, o como texto cifrado de extremo a extremo por TURN entre redes — sin copia ni historial en tiempo real del lado del servidor; también puede crear un enlace almacenado para después.",
   ],
   sections: [
     {
@@ -518,7 +518,7 @@ const es = {
     {
       heading: "En tiempo real, o un enlace para más tarde",
       body: [
-        "Si ambos lados pueden estar en línea a la vez, envía la carpeta directamente — va de igual a igual y nada se almacena en ningún servidor por el camino. Esta es la vía más rápida y no necesita cuenta si ambos lados están en la misma red; enviar entre redes con un código de emparejamiento solo requiere que el remitente inicie sesión, y quien recibe nunca necesita cuenta en absoluto.",
+        "Si ambos lados están en línea, envía la carpeta en tiempo real. En la misma LAN, WebRTC conecta directamente; entre redes, los navegadores usan TURN por diseño para transportar texto cifrado de extremo a extremo que el retransmisor no puede leer ni descifrar. Relayium no conserva copia del lado del servidor ni historial en tiempo real. En la misma red no hace falta cuenta; entre redes inicia sesión quien crea el código y quien se une nunca la necesita.",
         "Si la otra persona no está disponible ahora mismo, crea en su lugar un enlace almacenado. Tu navegador cifra los archivos de la carpeta antes de subirlos con una clave AES-256-GCM aleatoria que solo vive en el propio enlace, de modo que el servidor guarda texto cifrado que no puede leer. Crear un enlace requiere que el remitente inicie sesión; configúralo para que caduque en 1 hora, 1 día, 3 días, 7 días o hasta 14 días según tu plan, o haz que se destruya tras la primera descarga.",
       ],
     },
@@ -562,7 +562,7 @@ const pt = {
   updatedLabel: "Última atualização",
   lead: [
     "Enviar um projeto não é a mesma coisa que enviar um arquivo — você tem uma pasta cheia de subpastas, e copiar e colar cada pedaço separadamente perde a estrutura que a torna útil. Compactar antes funciona, mas significa um desvio por uma ferramenta de compressão antes mesmo de conseguir começar.",
-    "O Relayium deixa você escolher uma pasta diretamente e enviá-la como está. O navegador percorre toda a árvore, mantém cada caminho relativo intacto e a transmite para o outro lado — seja acabando em ponto a ponto sem nada armazenado, seja como um link que você deixa para depois.",
+    "O Relayium deixa você escolher uma pasta e enviá-la como está. O navegador preserva toda a árvore e transmite ao vivo — diretamente por WebRTC na mesma LAN, ou como texto cifrado de ponta a ponta por TURN entre redes — sem cópia nem histórico em tempo real no servidor; também pode criar um link armazenado para depois.",
   ],
   sections: [
     {
@@ -587,7 +587,7 @@ const pt = {
     {
       heading: "Em tempo real, ou um link para depois",
       body: [
-        "Se as duas partes puderem estar online ao mesmo tempo, envie a pasta diretamente — ela vai ponto a ponto e nada é armazenado em nenhum servidor no meio. Este é o caminho mais rápido e não precisa de conta se os dois lados estão na mesma rede; enviar entre redes com um código de emparelhamento só exige que o remetente faça login, e quem recebe nunca precisa de conta alguma.",
+        "Se as duas partes estiverem online, envie a pasta em tempo real. Na mesma LAN, o WebRTC conecta diretamente; entre redes, os navegadores usam TURN por design para transportar texto cifrado de ponta a ponta que o retransmissor não consegue ler nem descriptografar. O Relayium não mantém cópia no servidor nem histórico em tempo real. Na mesma rede não é preciso conta; entre redes entra quem cria o código e quem participa nunca precisa de uma.",
         "Se a outra pessoa não estiver por perto agora, crie um link armazenado em vez disso. Seu navegador criptografa os arquivos da pasta antes do upload com uma chave AES-256-GCM aleatória que só existe no próprio link, de modo que o servidor guarda texto cifrado que não consegue ler. Criar um link exige que o remetente faça login; defina para expirar em 1 hora, 1 dia, 3 dias, 7 dias ou até 14 dias conforme o seu plano, ou faça-o se autodestruir após o primeiro download.",
       ],
     },

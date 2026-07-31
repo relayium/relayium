@@ -74,7 +74,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="updated">最近更新: 2026-07-09</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder/">English</a><a href="/zh/how-to/send-a-folder/" aria-current="true">中文</a><a href="/ja/how-to/send-a-folder/">日本語</a><a href="/ko/how-to/send-a-folder/">한국어</a><a href="/de/how-to/send-a-folder/">Deutsch</a><a href="/fr/how-to/send-a-folder/">Français</a><a href="/ar/how-to/send-a-folder/">العربية</a><a href="/es/how-to/send-a-folder/">Español</a><a href="/pt/how-to/send-a-folder/">Português</a></nav>
       <p class="lead">发送一个项目和发送一个文件不是一回事——你手上是一个套着子文件夹的文件夹，一个一个复制粘贴会丢掉让它有意义的结构。先打包压缩也行，但那意味着在开始传输之前要先绕道用一个压缩工具。</p>
-      <p class="lead">Relayium 让你直接选中文件夹整体发送。浏览器会遍历整棵目录树，完整保留每个文件的相对路径，然后把它流式传给对方——无论最终是点对点、什么都不存，还是生成一个可以留到以后取用的链接。</p>
+      <p class="lead">Relayium 让你选中文件夹整体发送。浏览器会遍历整棵目录树、保留每个相对路径，并选择实时传输——同一局域网内 WebRTC 直连，跨网络经 TURN 承载端到端密文——且不保留服务器端实时副本或历史；也可以生成稍后取用的存储链接。</p>
       <h2>选文件夹，而不是一堆散文件</h2>
       <p>不必一个个选文件，直接选中文件夹本身即可。Relayium 会在浏览器里遍历整个目录树，保留每个文件的相对路径——子文件夹、嵌套的子文件夹，全都保留——所以对方收到的东西和你出发时的目录结构一致。</p>
       <p>目前这在桌面版 Chrome、Edge 和 Firefox 上可用。在 iOS 上不行：iPhone 和 iPad 上 Safari 的文件选择器没有办法选中文件夹，只能选单个文件，所以发送文件夹暂时是桌面端的功能。</p>
@@ -83,7 +83,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>文件夹如何送达取决于接收端的浏览器。Chrome 和 Edge 可以把文件直接写入接收者选定的目录，文件夹会原样出现在磁盘上——不需要额外步骤。</p>
       <p>Firefox 和 Safari 没有这个能力，所以它们收到的是一个仅存储（不压缩）的 .zip 压缩包，解压后就是完全相同的文件夹结构。它保持在 4 GiB 以内（不支持 ZIP64），这足以覆盖绝大多数项目文件夹和照片、文档集合——如果更大，就拆成两次发送。</p>
       <h2>实时传输，或留个链接稍后取</h2>
-      <p>如果双方能同时在线，直接发送文件夹即可——它走点对点，中途不会存在任何服务器上。这是最快的方式，同一网络下不需要账号；跨网络用配对码发送只需要发送方登录一下，接收方任何情况下都不需要账号。</p>
+      <p>如果双方能同时在线，就实时发送文件夹。同一局域网内 WebRTC 直连；跨网络浏览器按设计使用 TURN 承载端到端加密的密文，中继无法读取或解密。Relayium 不保留服务器端实时副本或传输历史。同一网络无需账号；跨网络时配对码创建者登录，加入的一方始终无需账号。</p>
       <p>如果对方现在不在，可以改为创建一个存储链接。你的浏览器会在上传前用一把只存在于链接本身的随机 AES-256-GCM 密钥加密文件夹里的文件，服务器只保存它读不懂的密文。创建链接需要发送方登录；可以设置 1 小时、1 天、3 天、7 天或最长 14 天后过期（上限取决于套餐），也可以设置为首次下载后即焚。</p>
       <h2>常见问题</h2>
       <h3>能从 iPhone 或 iPad 发送文件夹吗？</h3>

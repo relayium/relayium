@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="什么是点对点（P2P）文件传输？" />
     <meta name="twitter:description" content="用大白话讲清 P2P 文件传输：它和先上传到服务器有何不同、WebRTC 如何找到直连路径，以及它为什么更私密、更快。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"什么是点对点（P2P）文件传输？","description":"用大白话讲清 P2P 文件传输：它和先上传到服务器有何不同、WebRTC 如何找到直连路径，以及它为什么更私密、更快。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/what-is-peer-to-peer-file-transfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"什么是点对点（P2P）文件传输？"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"点对点和端到端加密是一回事吗？","acceptedAnswer":{"@type":"Answer","text":"两者相关但并不相同。P2P 描述的是网络路径——字节直接在两台设备之间流动。加密描述的是这些字节对中间任何人是否可读。Relayium 的实时传输两者兼具：无论走的是直连还是「经过中继但已加密」的路径，文件都是端到端封装的。"}},{"@type":"Question","name":"P2P 传输会经过服务器吗？","acceptedAnswer":{"@type":"Answer","text":"一个小型信令服务器会帮两台设备找到彼此的地址——但它只会看到连接建立所需的信息，从不涉及文件字节。在浏览器里跨网络传输时，TURN 中继会按设计转发加密后的文件数据，但即便如此，它处理的也只是它无法解密的密文。"}},{"@type":"Question","name":"直连为什么一开始就会失败？","acceptedAnswer":{"@type":"Answer","text":"有些网络——常见于较严格的企业防火墙或某些移动运营商的 NAT——其构造方式使得仅凭外部信息根本无法找出一条可达的地址。与其在每次传输时都花二十来秒把这件事试出来，Relayium 的浏览器端干脆让所有跨网络传输一开始就走中继——所以承载它们的是中继，而不是一次失败的直连尝试。"}},{"@type":"Question","name":"走中继时，P2P 传输会变慢吗？","acceptedAnswer":{"@type":"Answer","text":"会增加一些延迟，因为中继是数据要经过的一跳额外路径，而且是共享服务器而非专用服务器。但总体上仍然比先上传再下载要快，因为不需要等文件完全落到服务器上，下载端才能开始。"}},{"@type":"Question","name":"P2P 传输是否双方都需要账号？","acceptedAnswer":{"@type":"Answer","text":"同一网络下的两台设备完全不需要账号。跨网络用配对码发送时，需要发送方登录，但无论哪种方式，接收方都不需要账号。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"什么是点对点（P2P）文件传输？","description":"用大白话讲清 P2P 文件传输：它和先上传到服务器有何不同、WebRTC 如何找到直连路径，以及它为什么更私密、更快。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/what-is-peer-to-peer-file-transfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"什么是点对点（P2P）文件传输？"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"点对点和端到端加密是一回事吗？","acceptedAnswer":{"@type":"Answer","text":"两者相关但并不相同。P2P 描述端点之间的通信，并不保证每一跳都直连；TURN 也可能承载流量。加密描述中间方能否读取。Relayium 在同一局域网使用 WebRTC 直连，跨网络使用端到端加密的 TURN，中继无法读取或解密内容。"}},{"@type":"Question","name":"P2P 传输会经过服务器吗？","acceptedAnswer":{"@type":"Answer","text":"一个小型信令服务器会帮两台设备找到彼此的地址——但它只会看到连接建立所需的信息，从不涉及文件字节。在浏览器里跨网络传输时，TURN 中继会按设计转发加密后的文件数据，但即便如此，它处理的也只是它无法解密的密文。"}},{"@type":"Question","name":"直连为什么一开始就会失败？","acceptedAnswer":{"@type":"Answer","text":"有些网络——常见于较严格的企业防火墙或某些移动运营商的 NAT——其构造方式使得仅凭外部信息根本无法找出一条可达的地址。与其在每次传输时都花二十来秒把这件事试出来，Relayium 的浏览器端干脆让所有跨网络传输一开始就走中继——所以承载它们的是中继，而不是一次失败的直连尝试。"}},{"@type":"Question","name":"走中继时，P2P 传输会变慢吗？","acceptedAnswer":{"@type":"Answer","text":"会增加一些延迟，因为中继是数据要经过的一跳额外路径，而且是共享服务器而非专用服务器。但总体上仍然比先上传再下载要快，因为不需要等文件完全落到服务器上，下载端才能开始。"}},{"@type":"Question","name":"P2P 传输是否双方都需要账号？","acceptedAnswer":{"@type":"Answer","text":"同一网络下的两台设备完全不需要账号。跨网络用配对码发送时，需要发送方登录，但无论哪种方式，接收方都不需要账号。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -74,28 +74,28 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="updated">最近更新: 2026-07-09</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer/">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer/" aria-current="true">中文</a><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">日本語</a><a href="/ko/guides/what-is-peer-to-peer-file-transfer/">한국어</a><a href="/de/guides/what-is-peer-to-peer-file-transfer/">Deutsch</a><a href="/fr/guides/what-is-peer-to-peer-file-transfer/">Français</a><a href="/ar/guides/what-is-peer-to-peer-file-transfer/">العربية</a><a href="/es/guides/what-is-peer-to-peer-file-transfer/">Español</a><a href="/pt/guides/what-is-peer-to-peer-file-transfer/">Português</a></nav>
       <p class="lead">「点对点」这个词经常被随意使用，但对文件传输来说，它的确切含义是：文件直接从一台设备到另一台设备，而不是先上传到某家公司的服务器再下载下来。中间没有一站可以停留、可能留下副本。</p>
-      <p class="lead">这听起来很简单，但互联网原本并不是为了让两台随机设备直接找到彼此并对话而设计的——大多数连接都藏在路由器和防火墙后面，这些设备从一开始就没打算被外部直接访问到。本文用通俗的语言讲清直连究竟是怎么建立的、什么时候建立不了，以及这对隐私和速度意味着什么。全文会以 Relayium 作为具体例子，因为它正是这套机制的一个真实实现。</p>
+      <p class="lead">听起来很简单，但实际路径并不相同。本文先解释通用 WebRTC/ICE 中 TURN 可作为后备的概念，再明确区分 Relayium 的实现：局域网浏览器 WebRTC 直连、跨网络浏览器按设计使用 TURN、CLI 仅直连。</p>
       <h2>P2P 与常见做法的区别：省掉中间那一站</h2>
       <p>大多数「发送文件」工具的工作方式是上传：文件从你的设备上传到公司的服务器，存放在那里，对方再从服务器下载下来。这是两跳，而且有一段时间，你文件的完整副本会存放在别人的存储上——即便之后会被删除。</p>
       <p>点对点传输省掉了这一站。一旦你的设备和对方设备之间建立起连接，文件的字节就直接经这一跳流动，不再经过别处。没有服务器端的副本需要存储、需要保护，也不需要日后再删除，因为它压根没有被上传过。</p>
-      <ul><li>基于上传的传输：你的设备到服务器再到对方设备——两跳，中间有一份存储的副本。</li><li>点对点传输：你的设备直接到对方设备——一跳，什么都不存储。</li><li>在 Relayium 中，这就是实时模式：双方打开网站、建立连接，文件就在浏览器之间直接流动。</li></ul>
+      <ul><li>基于上传的传输：你的设备到服务器再到对方设备——两跳，中间有一份存储的副本。</li><li>点对点传输：你的设备直接到对方设备——一跳，什么都不存储。</li><li>Relayium 的实时浏览器模式有两条路径：同一局域网内 WebRTC 直连；跨网络则按设计使用 TURN 承载端到端加密的密文，并且不保留服务器端内容副本或历史。</li></ul>
       <h2>两台设备到底如何找到彼此：STUN</h2>
       <p>这里有一个不太直观的地方：你的设备几乎肯定不知道自己在公网上看起来是什么地址——它藏在家用路由器或运营商的网络地址转换（NAT）后面，这层机制会把它隐藏在一个共享的公网 IP 之后，并动态地重新分配端口。对方设备也处于同样的处境。双方都无法在不先弄清楚「什么地址才能真正连到对方」之前，直接「拨号」找到对方。</p>
       <p>这正是 STUN（NAT 会话穿越工具）的用途。每台设备会向一个轻量的 STUN 服务器简短地问一个问题：「你看到我是从哪个地址、哪个端口过来的？」答案告诉它自己对外可见的地址——不涉及文件，不涉及任何内容，只是足够描述一条能连回它的路径的网络信息。双方交换这些信息（通过一个只承载连接建立细节、从不承载文件字节的信令步骤），然后尝试直接打通到对方地址的路径。在很多真实场景中——尤其是同一个 Wi-Fi 下的两台设备，或者行为可预测的 NAT——这一步就能成功，从而建立起完全直连的连接。</p>
-      <ul><li>STUN 始终只获取和交换网络地址——从不涉及文件内容、文件名或加密密钥。</li><li>Relayium 用的是 WebRTC 来实现这一步，这正是现代浏览器内置用于视频通话的直连技术——这里被重新用来传输文件字节而非视频画面。</li><li>同一网络下的两台设备（不需要配对码）通常连得最直接，因为往往根本没有 NAT 挡在中间。</li></ul>
+      <ul><li>STUN 始终只获取和交换网络地址——从不涉及文件内容、文件名或加密密钥。</li><li>Relayium 在同一局域网的浏览器会话中直接使用 WebRTC；跨网络浏览器路径则有意使用中继。CLI 是另一条仅直连路径，无法直连时会失败，而不会中继文件字节。</li><li>同一网络下的两台设备（不需要配对码）通常连得最直接，因为往往根本没有 NAT 挡在中间。</li></ul>
       <h2>找不到直连路径时：TURN 中继</h2>
       <p>有时 STUN 还不够。有些 NAT——尤其是较严格的企业网络或某些移动运营商——行为难以预测，仅凭外部信息根本无法找出一条直连路径。如果双方设备都处在这类 NAT 之后，真正意义上的直连就是不可能的；总得有什么东西居中转发流量。</p>
-      <p>这正是 TURN（借助中继穿越 NAT）的作用：当直连路径失败时，双方设备都会连接到一个兜底的中继服务器。这与其说是一种权宜之计或对隐私的妥协，不如说是某些网络结构本身决定的必然情况——但值得说清楚它到底能看到什么、看不到什么。在 Relayium 中，文件在到达中继之前就已经端到端加密完毕，因此中继始终只转发密文——一段它没有钥匙打开的封装数据。它只负责搬运字节，无法读懂内容。</p>
-      <ul><li>同一网络下 Relayium 让设备直连；跨网络时默认走 TURN 中继，因为那种场景下直连路径往往根本找不到。</li><li>中继只转发密文；它从不掌握解密密钥，无法读取文件内容、文件名或其中的任何其他信息。</li><li>一次传输走的是直连还是中继，都能在 Relayium 的连接诊断信息里看到，供好奇的人自行核实。</li></ul>
+      <p>在通用 WebRTC/ICE 设计里，TURN 可以在直连失败时作为后备中继。Relayium 浏览器端的选择更明确：同一局域网使用 WebRTC 直连，所有跨网络会话从一开始就使用 TURN。文件到达中继前已端到端加密，因此中继只承载密文，无法读取或解密内容。</p>
+      <ul><li>同一网络下 Relayium 让设备直连；跨网络时默认走 TURN 中继，因为那种场景下直连路径往往根本找不到。</li><li>中继只转发密文；它从不掌握解密密钥，无法读取文件内容、文件名或其中的任何其他信息。</li><li>Relayium CLI 是独立的仅直连路径：它从不中继文件字节，无法建立直连时会直接失败。</li></ul>
       <h2>为什么这很重要：隐私与速度</h2>
       <p>隐私方面的道理很直接：当文件的字节只经过一跳、直接在两台设备之间流动时，就不存在一个服务器端的存储环节，让副本可能停留、被记录，或被别人访问——因为它压根没被放在那里过。这与「我们承诺以后会删除」是结构上完全不同的保证。</p>
       <p>速度方面的道理也是一样。先上传再下载的传输需要两次穿越网络——上行一次，下行一次——而且经常需要等发送方完全上传完，接收方才能开始下载。而直连只穿越网络一次，数据可以在两台设备之间持续流动，速度取决于两端中较慢的那条连接，中间没有服务器限制吞吐量或增加额外延迟。</p>
       <h2>Relayium 是如何把这些拼起来的</h2>
       <p>在同一网络下的两台设备上打开 relayium.com，它们通常会自动找到彼此——不需要账号，不需要配对码，也无需安装任何东西；这就是局域网场景，很多时候甚至用不上 STUN。要跨网络发给不同网络上的人，则用配对码：发送方登录、生成一个配对码（或分享链接，也可选择扫描二维码），对方加入之后，传输经加密 TURN 中继完成——这是穿透难以预测的 NAT 最可靠的一条路，中继也只经手密文；接收方始终不需要账号。</p>
-      <p>无论哪种方式，一旦连接建立，一批最多 1,000 个文件就会直接经这条连接流动，每个文件都独立用 SHA-256 哈希校验，确保到手的和发出的分毫不差。如果实时传输做不到——比如对方不在线——那就是一种确实不同的模式（零知识存储链接），不属于点对点，值得单独理解。</p>
+      <p>实时路径建立后，每批最多 1,000 个文件会沿选定路径持续流动，每个文件都独立用 SHA-256 校验。Relayium 不保留服务器端实时内容副本或传输历史。对方离线时使用的零知识存储链接是另一种模式，并非实时 P2P 会话。</p>
       <h2>常见问题</h2>
       <h3>点对点和端到端加密是一回事吗？</h3>
-      <p>两者相关但并不相同。P2P 描述的是网络路径——字节直接在两台设备之间流动。加密描述的是这些字节对中间任何人是否可读。Relayium 的实时传输两者兼具：无论走的是直连还是「经过中继但已加密」的路径，文件都是端到端封装的。</p>
+      <p>两者相关但并不相同。P2P 描述端点之间的通信，并不保证每一跳都直连；TURN 也可能承载流量。加密描述中间方能否读取。Relayium 在同一局域网使用 WebRTC 直连，跨网络使用端到端加密的 TURN，中继无法读取或解密内容。</p>
       <h3>P2P 传输会经过服务器吗？</h3>
       <p>一个小型信令服务器会帮两台设备找到彼此的地址——但它只会看到连接建立所需的信息，从不涉及文件字节。在浏览器里跨网络传输时，TURN 中继会按设计转发加密后的文件数据，但即便如此，它处理的也只是它无法解密的密文。</p>
       <h3>直连为什么一开始就会失败？</h3>
@@ -105,7 +105,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>P2P 传输是否双方都需要账号？</h3>
       <p>同一网络下的两台设备完全不需要账号。跨网络用配对码发送时，需要发送方登录，但无论哪种方式，接收方都不需要账号。</p>
       <div class="ctacard">
-        <p>想亲身感受一下？在两台设备上打开 Relayium，看着一条直连连接实时建立起来。</p>
+        <p>想亲身体验？在两台设备上打开 Relayium，开始一次加密的实时会话。</p>
         <a class="cta" href="/?lang=zh">立即试用 Relayium</a>
       </div>
       <h2>继续阅读</h2>

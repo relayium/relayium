@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { LANGS } from "./shared.mjs";
 import expiringLink from "./content/articles/howto-share-file-expiring-link.mjs";
+import folder from "./content/articles/howto-send-a-folder.mjs";
 import largeFiles from "./content/articles/howto-large-files-without-cloud.mjs";
+import p2pGuide from "./content/articles/guides-what-is-p2p-file-transfer.mjs";
 import safetyGuide from "./content/articles/guides-is-it-safe.mjs";
 
 const ARTICLES = {
   "expiring-link": expiringLink,
+  folder,
   "large-files": largeFiles,
+  "p2p-guide": p2pGuide,
   safety: safetyGuide,
 };
 
@@ -62,15 +66,27 @@ const CANNOT_READ_OR_DECRYPT = {
 };
 
 const NO_REALTIME_RETENTION = {
-  en: /(?:no server-side copy|no .*realtime history|stores? no realtime content)/i,
-  zh: /(?:不保留服务器端副本|不存储实时内容|服务器端内容副本)/,
-  ja: /(?:サーバー側のコピー|リアルタイム内容).*(?:保持しません|残りません|残しません)/,
-  ko: /(?:서버 측 복사본|실시간 내용).*(?:보관하지|남지|저장하지)/,
-  de: /(?:keine serverseitige Kopie|keine Echtzeitinhalte|keine .*Echtzeithistorie)/i,
+  en: /(?:no server-side (?:realtime )?copy|no .*realtime history|stores? no realtime content)/i,
+  zh: /(?:不保留服务器端(?:实时)?副本|不存储实时内容|服务器端内容副本)/,
+  ja: /(?:サーバー側の(?:リアルタイム)?コピー|リアルタイム内容).*(?:保持しません|残りません|残しません)/,
+  ko: /(?:서버 측 (?:실시간 )?복사본|실시간 내용).*(?:보관하지|남지|저장하지)/,
+  de: /(?:keine serverseitige (?:Echtzeit)?kopie|keine Echtzeitinhalte|keine .*Echtzeithistorie)/i,
   fr: /(?:aucune copie côté serveur|aucun contenu ni historique temps réel|aucune copie de contenu)/i,
-  ar: /(?:لا يحتفظ .*بنسخة على الخادم|لا يخزن .*محتوى فوري|لا تبقى نسخة محتوى)/u,
-  es: /(?:no conserva copia del lado del servidor|no almacena contenido ni historial|no queda copia de contenido)/i,
-  pt: /(?:não mantém cópia no servidor|não armazena conteúdo nem histórico|não fica cópia de conteúdo)/i,
+  ar: /(?:لا يحتفظ .*بنسخة .*على الخادم|لا يخزن .*محتوى فوري|لا تبقى نسخة محتوى)/u,
+  es: /(?:no conserva copia (?:del lado del servidor|de contenido)|no almacena contenido ni historial|no queda copia de contenido)/i,
+  pt: /(?:não mantém cópia (?:no servidor|de conteúdo)|não armazena conteúdo nem histórico|não fica cópia de conteúdo)/i,
+};
+
+const CLI_DIRECT_ONLY = {
+  en: /CLI (?:remains|is).*direct-only/i,
+  zh: /CLI.*仅直连/,
+  ja: /CLI.*直接接続専用/,
+  ko: /CLI.*직접 연결 전용/,
+  de: /CLI.*direct-only/i,
+  fr: /CLI.*direct-only/i,
+  ar: /CLI.*مباشرة فقط/u,
+  es: /CLI.*direct-only/i,
+  pt: /CLI.*direct-only/i,
 };
 
 describe("article realtime path claims", () => {
@@ -105,5 +121,20 @@ describe("article realtime path claims", () => {
     expect(copy).not.toMatch(/never lands on a server in between/i);
     expect(copy).not.toMatch(/realtime direct transfer/i);
     expect(copy).not.toMatch(/multi-gigabyte file the direct way/i);
+  });
+
+  it("separates generic TURN fallback from Relayium's deliberate routes and direct-only CLI", () => {
+    for (const lang of LANGS) {
+      const copy = text(p2pGuide.langs[lang]);
+      expect(copy, `p2p-guide [${lang}] must describe the CLI as direct-only`).toMatch(
+        CLI_DIRECT_ONLY[lang],
+      );
+    }
+
+    const turnExplanation = p2pGuide.langs.en.sections[2].body[1];
+    expect(turnExplanation).toMatch(/general WebRTC\/ICE design/i);
+    expect(turnExplanation).toMatch(/cross-network session uses TURN from the start/i);
+    expect(turnExplanation).toMatch(/cannot read or decrypt/i);
+    expect(p2pGuide.langs.en.cta.text).not.toMatch(/direct connection/i);
   });
 });

@@ -11,7 +11,7 @@ const en = {
   updatedLabel: "Last updated",
   lead: [
     "\"Peer-to-peer\" gets used loosely, so here's what it actually means for a file transfer: your file goes straight from one device to the other, not up to a company's server and back down. No stop in the middle where a copy could sit.",
-    "That sounds simple, but the internet isn't built for two random devices to just find each other and talk directly — most connections are hidden behind routers and firewalls that were never designed to be reached from outside. This page explains, in plain terms, how a direct connection actually gets made, when it can't be made, and what that means for your privacy and speed. Relayium is used as the concrete example throughout, since it's a working implementation of exactly this.",
+    "That sounds simple, but routes differ in practice. This page first explains generic WebRTC/ICE, where TURN can be a fallback, then separates Relayium's actual choices: LAN browser WebRTC is direct, cross-network browser sessions use TURN by design, and the CLI is direct-only.",
   ],
   sections: [
     {
@@ -23,7 +23,7 @@ const en = {
       bullets: [
         "Upload-based transfer: your device to a server to their device — two hops, a stored copy in between.",
         "Peer-to-peer transfer: your device straight to their device — one hop, nothing stored.",
-        "In Relayium, this is realtime mode: open the site on both devices, connect, and the file streams directly, browser to browser.",
+        "Relayium's realtime browser mode has two paths: WebRTC is direct on the same LAN, while cross-network sessions use TURN by design to carry end-to-end encrypted ciphertext without keeping a server-side content copy or history.",
       ],
     },
     {
@@ -34,7 +34,7 @@ const en = {
       ],
       bullets: [
         "STUN only ever learns and shares network addresses — never file contents, filenames, or encryption keys.",
-        "Relayium uses WebRTC for this, the same direct-connection technology built into every modern browser for video calls — repurposed here to move file bytes instead of video frames.",
+        "Relayium uses WebRTC directly for same-LAN browser sessions. Its cross-network browser path is deliberately relayed, while the CLI remains direct-only and fails rather than relaying file bytes.",
         "Two devices on the same network (no code needed) typically connect the most directly of all, since there's often no NAT in the way at all.",
       ],
     },
@@ -42,12 +42,12 @@ const en = {
       heading: "When a direct path can't be found: the TURN relay",
       body: [
         "Sometimes STUN isn't enough. Some NATs — especially on stricter corporate networks or certain mobile carriers — are unpredictable enough that no direct path can be discovered from outside information alone. If both devices are behind that kind of NAT, a genuinely direct connection just isn't possible; something has to relay the traffic in between.",
-        "That's what TURN (Traversal Using Relays around NAT) is: a fallback relay server that both devices connect to when a direct path fails. It's not a workaround or a compromise on privacy so much as a necessity of how some networks are built — but it's worth being precise about what it does and doesn't see. In Relayium, the file is already encrypted end-to-end before it reaches the relay, so the relay only ever forwards ciphertext — sealed data it has no key to open. It moves bytes; it cannot read them.",
+        "In a general WebRTC/ICE design, TURN (Traversal Using Relays around NAT) can be the fallback relay when a direct path fails. Relayium's browser app makes a more deliberate choice: same-LAN sessions use direct WebRTC, while every cross-network session uses TURN from the start. The file is encrypted end-to-end before reaching the relay, so it carries only ciphertext and cannot read or decrypt the content.",
       ],
       bullets: [
         "On the same network Relayium connects devices directly; across networks it uses the TURN relay by default, because a direct path so often can't be found there.",
         "The relay forwards ciphertext only; it never has the decryption key and can't read file contents, filenames, or anything else about what's inside.",
-        "Whether a given transfer went direct or through a relay is visible in Relayium's connection diagnostics, for anyone curious to check.",
+        "Relayium CLI transfers are a separate direct-only path: they never relay file bytes and fail if a direct connection cannot be made.",
       ],
     },
     {
@@ -61,7 +61,7 @@ const en = {
       heading: "How Relayium puts this together",
       body: [
         "Open relayium.com on two devices on the same network and they typically find each other automatically — no account, no code, nothing to install; that's the LAN case where STUN often isn't even needed. Sending across the internet to someone on a different network uses a pairing code: the sender signs in, generates a code (or shares a link, with an optional QR code to scan), and once the other person joins, the transfer runs over an encrypted TURN relay — the reliable path across unpredictable NATs, and it only ever carries ciphertext — while the receiver never needs an account.",
-        "Either way, once the connection is open, up to 1,000 files in a batch stream directly across it, each independently verified with a SHA-256 hash so you know what arrived matches exactly what was sent. If real-time isn't possible — say, the other person is offline — that's a genuinely different mode (a zero-knowledge stored link), not peer-to-peer, and worth understanding separately.",
+        "Once the realtime path is open, up to 1,000 files stream continuously over the selected route, each independently verified with a SHA-256 hash. Relayium keeps no server-side realtime content copy or transfer history. If the other person is offline, a zero-knowledge stored link is a genuinely different mode, not a realtime P2P session.",
       ],
     },
   ],
@@ -70,7 +70,7 @@ const en = {
     items: [
       {
         q: "Is peer-to-peer the same as end-to-end encrypted?",
-        a: "They're related but not identical. P2P describes the network path — bytes going directly between two devices. Encryption describes whether those bytes are unreadable to anyone in between. Relayium's realtime transfers are both: a direct (or relayed-but-encrypted) path, with the file sealed end-to-end regardless of which path it takes.",
+        a: "They're related but not identical. P2P describes communication between endpoints, but it does not guarantee that every network hop is direct; TURN may carry the traffic. Encryption describes whether intermediaries can read it. Relayium uses direct WebRTC on the same LAN and end-to-end encrypted TURN across networks, where the relay cannot read or decrypt the content.",
       },
       {
         q: "Does a P2P transfer ever touch a server at all?",
@@ -91,7 +91,7 @@ const en = {
     ],
   },
   cta: {
-    text: "Curious what it feels like? Open Relayium on two devices and watch a direct connection form in real time.",
+    text: "Curious what it feels like? Open Relayium on two devices and start an encrypted realtime session.",
     button: "Try Relayium now",
   },
   relatedHeading: "Keep reading",
@@ -104,7 +104,7 @@ const zh = {
   updatedLabel: "最近更新",
   lead: [
     "「点对点」这个词经常被随意使用，但对文件传输来说，它的确切含义是：文件直接从一台设备到另一台设备，而不是先上传到某家公司的服务器再下载下来。中间没有一站可以停留、可能留下副本。",
-    "这听起来很简单，但互联网原本并不是为了让两台随机设备直接找到彼此并对话而设计的——大多数连接都藏在路由器和防火墙后面，这些设备从一开始就没打算被外部直接访问到。本文用通俗的语言讲清直连究竟是怎么建立的、什么时候建立不了，以及这对隐私和速度意味着什么。全文会以 Relayium 作为具体例子，因为它正是这套机制的一个真实实现。",
+    "听起来很简单，但实际路径并不相同。本文先解释通用 WebRTC/ICE 中 TURN 可作为后备的概念，再明确区分 Relayium 的实现：局域网浏览器 WebRTC 直连、跨网络浏览器按设计使用 TURN、CLI 仅直连。",
   ],
   sections: [
     {
@@ -116,7 +116,7 @@ const zh = {
       bullets: [
         "基于上传的传输：你的设备到服务器再到对方设备——两跳，中间有一份存储的副本。",
         "点对点传输：你的设备直接到对方设备——一跳，什么都不存储。",
-        "在 Relayium 中，这就是实时模式：双方打开网站、建立连接，文件就在浏览器之间直接流动。",
+        "Relayium 的实时浏览器模式有两条路径：同一局域网内 WebRTC 直连；跨网络则按设计使用 TURN 承载端到端加密的密文，并且不保留服务器端内容副本或历史。",
       ],
     },
     {
@@ -127,7 +127,7 @@ const zh = {
       ],
       bullets: [
         "STUN 始终只获取和交换网络地址——从不涉及文件内容、文件名或加密密钥。",
-        "Relayium 用的是 WebRTC 来实现这一步，这正是现代浏览器内置用于视频通话的直连技术——这里被重新用来传输文件字节而非视频画面。",
+        "Relayium 在同一局域网的浏览器会话中直接使用 WebRTC；跨网络浏览器路径则有意使用中继。CLI 是另一条仅直连路径，无法直连时会失败，而不会中继文件字节。",
         "同一网络下的两台设备（不需要配对码）通常连得最直接，因为往往根本没有 NAT 挡在中间。",
       ],
     },
@@ -135,12 +135,12 @@ const zh = {
       heading: "找不到直连路径时：TURN 中继",
       body: [
         "有时 STUN 还不够。有些 NAT——尤其是较严格的企业网络或某些移动运营商——行为难以预测，仅凭外部信息根本无法找出一条直连路径。如果双方设备都处在这类 NAT 之后，真正意义上的直连就是不可能的；总得有什么东西居中转发流量。",
-        "这正是 TURN（借助中继穿越 NAT）的作用：当直连路径失败时，双方设备都会连接到一个兜底的中继服务器。这与其说是一种权宜之计或对隐私的妥协，不如说是某些网络结构本身决定的必然情况——但值得说清楚它到底能看到什么、看不到什么。在 Relayium 中，文件在到达中继之前就已经端到端加密完毕，因此中继始终只转发密文——一段它没有钥匙打开的封装数据。它只负责搬运字节，无法读懂内容。",
+        "在通用 WebRTC/ICE 设计里，TURN 可以在直连失败时作为后备中继。Relayium 浏览器端的选择更明确：同一局域网使用 WebRTC 直连，所有跨网络会话从一开始就使用 TURN。文件到达中继前已端到端加密，因此中继只承载密文，无法读取或解密内容。",
       ],
       bullets: [
         "同一网络下 Relayium 让设备直连；跨网络时默认走 TURN 中继，因为那种场景下直连路径往往根本找不到。",
         "中继只转发密文；它从不掌握解密密钥，无法读取文件内容、文件名或其中的任何其他信息。",
-        "一次传输走的是直连还是中继，都能在 Relayium 的连接诊断信息里看到，供好奇的人自行核实。",
+        "Relayium CLI 是独立的仅直连路径：它从不中继文件字节，无法建立直连时会直接失败。",
       ],
     },
     {
@@ -154,7 +154,7 @@ const zh = {
       heading: "Relayium 是如何把这些拼起来的",
       body: [
         "在同一网络下的两台设备上打开 relayium.com，它们通常会自动找到彼此——不需要账号，不需要配对码，也无需安装任何东西；这就是局域网场景，很多时候甚至用不上 STUN。要跨网络发给不同网络上的人，则用配对码：发送方登录、生成一个配对码（或分享链接，也可选择扫描二维码），对方加入之后，传输经加密 TURN 中继完成——这是穿透难以预测的 NAT 最可靠的一条路，中继也只经手密文；接收方始终不需要账号。",
-        "无论哪种方式，一旦连接建立，一批最多 1,000 个文件就会直接经这条连接流动，每个文件都独立用 SHA-256 哈希校验，确保到手的和发出的分毫不差。如果实时传输做不到——比如对方不在线——那就是一种确实不同的模式（零知识存储链接），不属于点对点，值得单独理解。",
+        "实时路径建立后，每批最多 1,000 个文件会沿选定路径持续流动，每个文件都独立用 SHA-256 校验。Relayium 不保留服务器端实时内容副本或传输历史。对方离线时使用的零知识存储链接是另一种模式，并非实时 P2P 会话。",
       ],
     },
   ],
@@ -163,7 +163,7 @@ const zh = {
     items: [
       {
         q: "点对点和端到端加密是一回事吗？",
-        a: "两者相关但并不相同。P2P 描述的是网络路径——字节直接在两台设备之间流动。加密描述的是这些字节对中间任何人是否可读。Relayium 的实时传输两者兼具：无论走的是直连还是「经过中继但已加密」的路径，文件都是端到端封装的。",
+        a: "两者相关但并不相同。P2P 描述端点之间的通信，并不保证每一跳都直连；TURN 也可能承载流量。加密描述中间方能否读取。Relayium 在同一局域网使用 WebRTC 直连，跨网络使用端到端加密的 TURN，中继无法读取或解密内容。",
       },
       {
         q: "P2P 传输会经过服务器吗？",
@@ -184,7 +184,7 @@ const zh = {
     ],
   },
   cta: {
-    text: "想亲身感受一下？在两台设备上打开 Relayium，看着一条直连连接实时建立起来。",
+    text: "想亲身体验？在两台设备上打开 Relayium，开始一次加密的实时会话。",
     button: "立即试用 Relayium",
   },
   relatedHeading: "继续阅读",
@@ -197,7 +197,7 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "「P2P」という言葉はあいまいに使われがちですが、ファイル転送における本当の意味はこうです。ファイルは会社のサーバーに一度アップロードされてからダウンロードされるのではなく、一台のデバイスからもう一台へ直接送られます。途中にコピーが留まりうる寄り道はありません。",
-    "簡単そうに聞こえますが、インターネットはもともと2台の見知らぬデバイスが勝手に見つけ合って直接話せるようには作られていません——ほとんどの接続はルーターやファイアウォールの内側に隠れていて、外部から到達されることを想定していないのです。このページでは、直接接続が実際にどう確立されるのか、確立できないときはどうなるのか、それがプライバシーと速度にとって何を意味するのかを平易な言葉で説明します。具体例として全編で Relayium を取り上げますが、これはまさにこの仕組みを実装したサービスだからです。",
+    "単純に聞こえますが、実際の経路は同じではありません。このページではまず TURN が予備になり得る一般的な WebRTC/ICE を説明し、そのうえで Relayium の実装を区別します。同じ LAN のブラウザは WebRTC 直結、ネットワーク間ブラウザは設計上 TURN、CLI は直接接続専用です。",
   ],
   sections: [
     {
@@ -209,7 +209,7 @@ const ja = {
       bullets: [
         "アップロード方式：手元のデバイス → サーバー → 相手のデバイス——2ホップで、途中に保存されたコピーがある。",
         "P2P 方式：手元のデバイス → 相手のデバイス——1ホップで、何も保存されない。",
-        "Relayium ではこれがリアルタイムモードにあたります。両方のデバイスでサイトを開いて接続すれば、ファイルはブラウザ間で直接ストリーミングされます。",
+        "Relayium のリアルタイムブラウザモードには2つの経路があります。同じ LAN では WebRTC が直接接続し、ネットワークをまたぐ場合は設計上 TURN でエンドツーエンド暗号文を運び、サーバー側の内容コピーや履歴は残しません。",
       ],
     },
     {
@@ -220,7 +220,7 @@ const ja = {
       ],
       bullets: [
         "STUN が扱うのはネットワークアドレスの取得と交換のみです——ファイルの中身やファイル名、暗号鍵は一切扱いません。",
-        "Relayium はこれに WebRTC を使います。現代のあらゆるブラウザにビデオ通話用として組み込まれている同じ直接接続技術を、映像フレームの代わりにファイルのバイトを運ぶために転用しています。",
+        "Relayium は同じ LAN のブラウザセッションで WebRTC を直接使用します。ネットワークをまたぐブラウザ経路は意図的にリレーされます。一方 CLI は直接接続のみで、接続できなければファイルをリレーせず失敗します。",
         "同じネットワーク上の2台（コード不要）は、多くの場合そもそも間に NAT がないため、最も直接的につながる傾向があります。",
       ],
     },
@@ -228,12 +228,12 @@ const ja = {
       heading: "直接経路が見つからないとき：TURN リレー",
       body: [
         "STUN だけでは足りないこともあります。一部の NAT——特に厳しい企業ネットワークや一部の通信キャリア——は挙動が予測できず、外部から得られる情報だけでは到達可能なアドレスを発見できないことがあります。両方のデバイスがそうした NAT の内側にある場合、本当の意味での直接接続は不可能で、何かが間でトラフィックを中継する必要があります。",
-        "それが TURN（NAT 越えのためのリレー利用）です。直接経路が失敗したときに両デバイスが接続する予備のリレーサーバーです。これは回避策やプライバシーの妥協というより、一部のネットワークの構造そのものが要求する必然と言えます——ただし、それが何を見て何を見ないのかは正確に説明する価値があります。Relayium では、ファイルはリレーに届く前にすでにエンドツーエンドで暗号化されているため、リレーが転送するのは常に暗号文だけです——開ける鍵を持たない封印されたデータです。バイトを運ぶだけで、読むことはできません。",
+        "一般的な WebRTC/ICE では、TURN は直接経路が失敗した際の予備リレーになり得ます。Relayium のブラウザアプリはより明示的で、同じ LAN は WebRTC で直接、ネットワークをまたぐ全セッションは最初から TURN を使います。ファイルはリレー到達前にエンドツーエンド暗号化されるため、リレーは暗号文だけを運び、読み取りも復号もできません。",
       ],
       bullets: [
         "同一ネットワークでは Relayium はデバイス同士を直接つなぎます。ネットワークをまたぐ場合は、直接経路が見つからないことが多いため、既定で TURN リレーを使います。",
         "リレーは暗号文だけを転送します。復号鍵を持つことは決してなく、ファイルの中身もファイル名も、中に含まれる他の情報も読めません。",
-        "ある転送が直接だったかリレー経由だったかは、確認したい人であれば Relayium の接続診断情報から見ることができます。",
+        "Relayium CLI は別の直接接続専用経路です。ファイルのバイトをリレーせず、直接接続できなければ失敗します。",
       ],
     },
     {
@@ -247,7 +247,7 @@ const ja = {
       heading: "Relayium はこれをどう組み合わせているか",
       body: [
         "同じネットワーク上の2台で relayium.com を開くと、たいていは自動的に見つけ合います——アカウントもコードも不要、インストールするものも何もありません。これがローカルネットワークのケースで、多くの場合 STUN すら不要です。異なるネットワーク上の相手にインターネット越しに送る場合はペアリングコードを使います。送信者がサインインしてコードを生成する（または QR コードのオプション付きでリンクを共有する）と、相手が参加した時点で、転送は暗号化 TURN リレー経由で行われます——予測しづらい NAT を越える最も確実な経路で、リレーが扱うのは暗号文だけです。受信者はアカウント不要のままです。",
-        "いずれの場合も、接続が開けば最大1,000ファイルのバッチがその接続を直接流れ、それぞれが SHA-256 ハッシュで個別に検証されるので、届いたものが送られたものと正確に一致しているか分かります。リアルタイムが不可能な場合——たとえば相手がオフラインの場合——は、それは本当に別のモード（ゼロ知識の保存リンク）であり、P2P ではないので、別に理解しておく価値があります。",
+        "リアルタイム経路が開けば、最大1,000ファイルが選択された経路を継続的に流れ、各ファイルを SHA-256 で検証します。Relayium はサーバー側のリアルタイム内容コピーや転送履歴を保持しません。相手がオフラインなら、ゼロ知識の保存リンクという別モードを使います。",
       ],
     },
   ],
@@ -256,7 +256,7 @@ const ja = {
     items: [
       {
         q: "P2P とエンドツーエンド暗号化は同じことですか？",
-        a: "関連はしていますが同じではありません。P2P はネットワーク経路——バイトが2台のデバイス間を直接移動すること——を指します。暗号化は、そのバイトが途中の誰にとっても読めないかどうかを指します。Relayium のリアルタイム転送は両方を備えています。どちらの経路を取るかに関わらず、ファイルは直接（またはリレー経由だが暗号化された）経路上で、エンドツーエンドで封印されています。",
+        a: "関連はしていますが同じではありません。P2P は端点間の通信を表し、全ホップが直接とは限りません。TURN がトラフィックを運ぶこともあります。暗号化は中間者が読めるかを表します。Relayium は同じ LAN で WebRTC 直結、ネットワークをまたぐ場合はエンドツーエンド暗号化 TURN を使い、リレーは読み取りも復号もできません。",
       },
       {
         q: "P2P 転送はそもそもサーバーに触れることがあるのですか？",
@@ -277,7 +277,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "実際にどんな感じか気になりますか？2台のデバイスで Relayium を開いて、直接接続がリアルタイムに形成される様子を見てみてください。",
+    text: "実際に試してみませんか？2台のデバイスで Relayium を開き、暗号化されたリアルタイムセッションを始めてください。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -290,7 +290,7 @@ const ko = {
   updatedLabel: "마지막 업데이트",
   lead: [
     "\"P2P\"라는 말은 느슨하게 쓰이곤 하지만, 파일 전송에서 실제로 의미하는 바는 이렇습니다. 파일이 어느 회사의 서버로 올라갔다가 다시 내려오는 게 아니라, 한 기기에서 다른 기기로 곧장 이동한다는 뜻입니다. 중간에 사본이 머무를 수 있는 정거장이 없습니다.",
-    "간단해 보이지만, 인터넷은 원래 임의의 두 기기가 서로를 알아서 찾아 직접 대화하도록 설계되지 않았습니다. 대부분의 연결은 라우터와 방화벽 뒤에 숨어 있고, 이들은 애초에 외부에서 도달되도록 만들어지지 않았습니다. 이 페이지는 직접 연결이 실제로 어떻게 만들어지는지, 만들어지지 못할 때는 어떻게 되는지, 그것이 프라이버시와 속도에 어떤 의미인지를 쉬운 말로 설명합니다. 전체적으로 Relayium을 구체적인 예시로 사용하는데, 바로 이 메커니즘을 실제로 구현한 서비스이기 때문입니다.",
+    "단순해 보이지만 실제 경로는 서로 다릅니다. 이 페이지는 먼저 TURN이 대체 경로가 될 수 있는 일반 WebRTC/ICE 개념을 설명한 뒤 Relayium의 구현을 구분합니다. 같은 LAN 브라우저는 WebRTC 직접 연결, 네트워크 간 브라우저는 설계상 TURN, CLI는 직접 연결 전용입니다.",
   ],
   sections: [
     {
@@ -302,7 +302,7 @@ const ko = {
       bullets: [
         "업로드 기반 전송: 내 기기 → 서버 → 상대 기기. 두 번의 이동, 그 사이에 저장된 사본.",
         "P2P 전송: 내 기기 → 상대 기기. 한 번의 이동, 아무것도 저장되지 않음.",
-        "Relayium에서는 이것이 실시간 모드입니다. 두 기기 모두에서 사이트를 열고 연결하면 파일이 브라우저 간에 직접 스트리밍됩니다.",
+        "Relayium의 실시간 브라우저 모드에는 두 경로가 있습니다. 같은 LAN에서는 WebRTC가 직접 연결하고, 네트워크를 넘을 때는 설계상 TURN으로 종단간 암호문을 운반하며 서버 측 내용 복사본이나 기록을 남기지 않습니다.",
       ],
     },
     {
@@ -313,7 +313,7 @@ const ko = {
       ],
       bullets: [
         "STUN은 오직 네트워크 주소만 알아내고 주고받습니다. 파일 내용이나 파일 이름, 암호화 키는 절대 다루지 않습니다.",
-        "Relayium은 이를 위해 WebRTC를 사용합니다. 모든 현대 브라우저에 화상 통화용으로 내장된 것과 같은 직접 연결 기술을, 영상 프레임 대신 파일 바이트를 옮기는 데 재사용한 것입니다.",
+        "Relayium은 같은 LAN의 브라우저 세션에서 WebRTC를 직접 사용합니다. 네트워크를 넘는 브라우저 경로는 의도적으로 릴레이됩니다. CLI는 직접 연결 전용이며 연결할 수 없으면 파일 바이트를 릴레이하지 않고 실패합니다.",
         "같은 네트워크에 있는 두 기기(코드 불필요)는 대개 그 사이에 NAT 자체가 없는 경우가 많아 가장 직접적으로 연결되는 경향이 있습니다.",
       ],
     },
@@ -321,12 +321,12 @@ const ko = {
       heading: "직접 경로를 찾지 못할 때: TURN 릴레이",
       body: [
         "때로는 STUN만으로 부족합니다. 일부 NAT은 예측하기 어렵게 동작해서, 외부 정보만으로는 도달 가능한 주소를 전혀 발견할 수 없는 경우가 있습니다. 특히 엄격한 기업 네트워크나 일부 이동통신사가 그렇습니다. 두 기기 모두 그런 종류의 NAT 뒤에 있다면 진정한 의미의 직접 연결은 불가능하며, 무언가가 그 사이에서 트래픽을 중계해야 합니다.",
-        "그것이 TURN(NAT 우회를 위한 릴레이 사용)입니다. 직접 경로가 실패했을 때 두 기기가 모두 연결하는 대체 릴레이 서버입니다. 이는 우회책이나 프라이버시 타협이라기보다, 일부 네트워크가 구축된 방식이 요구하는 필연에 가깝습니다. 다만 그것이 무엇을 보고 무엇을 보지 못하는지는 정확히 짚어볼 가치가 있습니다. Relayium에서는 파일이 릴레이에 도달하기 전에 이미 종단간 암호화되어 있으므로, 릴레이는 항상 암호문만 전달합니다. 열 수 있는 키가 없는 봉인된 데이터입니다. 바이트를 옮길 뿐, 읽을 수는 없습니다.",
+        "일반 WebRTC/ICE 설계에서 TURN은 직접 경로가 실패할 때 대체 릴레이가 될 수 있습니다. Relayium 브라우저 앱은 더 명확하게 같은 LAN은 WebRTC로 직접 연결하고, 네트워크를 넘는 모든 세션은 처음부터 TURN을 사용합니다. 파일은 릴레이 전에 종단간 암호화되므로 릴레이는 암호문만 운반하며 읽거나 복호화할 수 없습니다.",
       ],
       bullets: [
         "같은 네트워크에서는 Relayium이 기기를 직접 연결합니다. 네트워크를 넘을 때는 직접 경로를 찾지 못하는 경우가 워낙 많아 기본적으로 TURN 릴레이를 사용합니다.",
         "릴레이는 암호문만 전달합니다. 복호화 키를 절대 갖지 않으며, 파일 내용도 파일 이름도 그 안의 다른 어떤 정보도 읽을 수 없습니다.",
-        "특정 전송이 직접 연결이었는지 릴레이를 거쳤는지는 궁금한 사람이라면 Relayium의 연결 진단 정보에서 확인할 수 있습니다.",
+        "Relayium CLI는 별도의 직접 연결 전용 경로입니다. 파일 바이트를 릴레이하지 않으며 직접 연결할 수 없으면 실패합니다.",
       ],
     },
     {
@@ -340,7 +340,7 @@ const ko = {
       heading: "Relayium이 이를 어떻게 조합하는가",
       body: [
         "같은 네트워크에 있는 두 기기에서 relayium.com을 열면 보통 자동으로 서로를 찾습니다. 계정도, 코드도 필요 없고, 설치할 것도 없습니다. 이것이 LAN 상황이며, 많은 경우 STUN조차 필요하지 않습니다. 다른 네트워크에 있는 사람에게 인터넷 너머로 보낼 때는 페어링 코드를 사용합니다. 발신자가 로그인해서 코드를 생성하면(또는 스캔할 수 있는 QR 코드 옵션과 함께 링크를 공유하면), 상대방이 참여하는 순간 전송은 암호화된 TURN 릴레이를 통해 이뤄집니다. 이는 예측하기 어려운 NAT을 넘는 가장 확실한 경로이며, 릴레이는 암호문만 나릅니다. 수신자는 여전히 계정이 필요 없습니다.",
-        "어느 경우든 연결이 열리면 최대 1,000개 파일이 그 연결을 통해 직접 스트리밍되며, 각 파일은 개별적으로 SHA-256 해시로 검증되어 도착한 것이 보낸 것과 정확히 일치하는지 확인합니다. 실시간이 불가능한 경우, 예를 들어 상대방이 오프라인인 경우는 정말로 다른 모드(영지식 저장 링크)이지 P2P가 아니며, 별도로 이해할 가치가 있습니다.",
+        "실시간 경로가 열리면 최대 1,000개 파일이 선택된 경로를 따라 계속 흐르고 각 파일을 SHA-256으로 검증합니다. Relayium은 서버 측 실시간 내용 복사본이나 전송 기록을 보관하지 않습니다. 상대가 오프라인이면 영지식 저장 링크라는 별도 모드를 사용합니다.",
       ],
     },
   ],
@@ -349,7 +349,7 @@ const ko = {
     items: [
       {
         q: "P2P와 종단간 암호화는 같은 것인가요?",
-        a: "관련은 있지만 같지는 않습니다. P2P는 네트워크 경로, 즉 바이트가 두 기기 사이를 직접 이동하는 것을 가리킵니다. 암호화는 그 바이트가 중간의 누구에게도 읽히지 않는지를 가리킵니다. Relayium의 실시간 전송은 둘 다에 해당합니다. 어느 경로를 거치든, 파일은 종단간으로 봉인되어 있습니다.",
+        a: "관련은 있지만 같지는 않습니다. P2P는 끝점 간 통신을 뜻하며 모든 네트워크 홉이 직접이라는 보장은 없습니다. TURN이 트래픽을 운반할 수도 있습니다. 암호화는 중간자가 읽을 수 있는지를 뜻합니다. Relayium은 같은 LAN에서 WebRTC로 직접 연결하고, 네트워크를 넘을 때는 종단간 암호화 TURN을 사용하며 릴레이는 읽거나 복호화할 수 없습니다.",
       },
       {
         q: "P2P 전송이 애초에 서버를 거치기는 하나요?",
@@ -370,7 +370,7 @@ const ko = {
     ],
   },
   cta: {
-    text: "직접 느껴보고 싶으신가요? 두 기기에서 Relayium을 열고 직접 연결이 실시간으로 만들어지는 것을 지켜보세요.",
+    text: "직접 사용해 보세요. 두 기기에서 Relayium을 열고 암호화된 실시간 세션을 시작하세요.",
     button: "지금 Relayium 사용해보기",
   },
   relatedHeading: "계속 읽기",
@@ -383,7 +383,7 @@ const de = {
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "„Peer-to-Peer“ wird oft locker verwendet, aber bei einer Dateiübertragung bedeutet es konkret: Deine Datei geht direkt von einem Gerät zum anderen — nicht auf den Server eines Unternehmens hoch und wieder herunter. Kein Zwischenstopp, an dem eine Kopie liegen bleiben könnte.",
-    "Das klingt einfach, aber das Internet ist nicht dafür gebaut, dass zwei beliebige Geräte sich einfach finden und direkt miteinander sprechen — die meisten Verbindungen verstecken sich hinter Routern und Firewalls, die nie dafür ausgelegt waren, von außen erreicht zu werden. Diese Seite erklärt in einfachen Worten, wie eine direkte Verbindung tatsächlich zustande kommt, wann das nicht möglich ist und was das für deine Privatsphäre und Geschwindigkeit bedeutet. Relayium dient dabei durchgehend als konkretes Beispiel, denn es ist eine funktionierende Umsetzung genau dieses Mechanismus.",
+    "Das klingt einfach, doch die tatsächlichen Pfade unterscheiden sich. Diese Seite erklärt zuerst allgemeines WebRTC/ICE, bei dem TURN als Ausweichweg dienen kann, und trennt dann Relayiums Umsetzung: Browser-WebRTC ist im selben LAN direkt, netzübergreifend wird TURN planmäßig genutzt, und die CLI ist direct-only.",
   ],
   sections: [
     {
@@ -395,7 +395,7 @@ const de = {
       bullets: [
         "Upload-basierte Übertragung: dein Gerät zu einem Server zum Gerät der anderen Person — zwei Hops, dazwischen eine gespeicherte Kopie.",
         "Peer-to-Peer-Übertragung: dein Gerät direkt zum Gerät der anderen Person — ein Hop, nichts wird gespeichert.",
-        "Bei Relayium ist das der Echtzeitmodus: Beide Geräte öffnen die Seite, verbinden sich, und die Datei streamt direkt von Browser zu Browser.",
+        "Relayiums Echtzeit-Browsermodus hat zwei Pfade: Im selben LAN verbindet WebRTC direkt; netzübergreifend transportiert TURN planmäßig Ende-zu-Ende-Chiffretext, ohne eine serverseitige Inhaltskopie oder Historie zu behalten.",
       ],
     },
     {
@@ -406,7 +406,7 @@ const de = {
       ],
       bullets: [
         "STUN lernt und teilt ausschließlich Netzwerkadressen — nie Dateiinhalte, Dateinamen oder Verschlüsselungsschlüssel.",
-        "Relayium nutzt dafür WebRTC, dieselbe Direktverbindungstechnologie, die in jedem modernen Browser für Videoanrufe eingebaut ist — hier zweckentfremdet, um Dateibytes statt Videobilder zu bewegen.",
+        "Relayium nutzt WebRTC direkt für Browser-Sitzungen im selben LAN. Der netzübergreifende Browserpfad wird bewusst über ein Relay geführt. Die CLI bleibt direct-only und scheitert, statt Dateibytes weiterzuleiten.",
         "Zwei Geräte im selben Netzwerk (kein Code nötig) verbinden sich meist am direktesten von allen, weil oft überhaupt kein NAT im Weg steht.",
       ],
     },
@@ -414,12 +414,12 @@ const de = {
       heading: "Wenn kein direkter Pfad gefunden werden kann: das TURN-Relay",
       body: [
         "Manchmal reicht STUN nicht aus. Manche NATs — besonders bei strengeren Unternehmensnetzwerken oder bestimmten Mobilfunkanbietern — verhalten sich so unvorhersehbar, dass sich allein aus außen zugänglichen Informationen kein direkter Pfad ermitteln lässt. Sitzen beide Geräte hinter dieser Art von NAT, ist eine wirklich direkte Verbindung schlicht nicht möglich; etwas muss den Verkehr dazwischen weiterleiten.",
-        "Dafür gibt es TURN (Traversal Using Relays around NAT): einen Ausweich-Relay-Server, mit dem sich beide Geräte verbinden, wenn ein direkter Pfad scheitert. Das ist weniger ein Workaround oder ein Kompromiss bei der Privatsphäre als vielmehr eine Notwendigkeit, die sich daraus ergibt, wie manche Netzwerke aufgebaut sind — es lohnt sich aber, genau zu sagen, was es sieht und was nicht. Bei Relayium ist die Datei bereits Ende-zu-Ende verschlüsselt, bevor sie das Relay erreicht, sodass das Relay stets nur Chiffretext weiterleitet — versiegelte Daten, für die es keinen Schlüssel besitzt. Es transportiert Bytes; lesen kann es sie nicht.",
+        "In einem allgemeinen WebRTC/ICE-Design kann TURN das Ausweich-Relay sein, wenn ein direkter Pfad scheitert. Relayiums Browser-App entscheidet bewusster: Im selben LAN läuft WebRTC direkt, alle netzübergreifenden Sitzungen nutzen TURN von Anfang an. Die Datei ist vorher Ende-zu-Ende verschlüsselt; das Relay transportiert nur Chiffretext und kann den Inhalt weder lesen noch entschlüsseln.",
       ],
       bullets: [
         "Im selben Netz verbindet Relayium die Geräte direkt; netzübergreifend nutzt es standardmäßig das TURN-Relay, weil sich dort so oft kein direkter Pfad finden lässt.",
         "Das Relay leitet ausschließlich Chiffretext weiter; es besitzt nie den Entschlüsselungsschlüssel und kann weder Dateiinhalte noch Dateinamen noch sonst etwas über den Inhalt lesen.",
-        "Ob eine bestimmte Übertragung direkt oder über ein Relay lief, ist in Relayiums Verbindungsdiagnose sichtbar, für alle, die es nachprüfen möchten.",
+        "Relayiums CLI ist ein separater direct-only Pfad: Sie leitet niemals Dateibytes weiter und scheitert, wenn keine direkte Verbindung möglich ist.",
       ],
     },
     {
@@ -433,7 +433,7 @@ const de = {
       heading: "Wie Relayium das zusammenfügt",
       body: [
         "Öffnen zwei Geräte im selben Netzwerk relayium.com, finden sie sich meist automatisch — kein Konto, kein Code, nichts zu installieren; das ist der LAN-Fall, in dem STUN oft nicht einmal gebraucht wird. Für den Versand über das Internet an jemanden in einem anderen Netzwerk kommt ein Pairing-Code zum Einsatz: Der Absender meldet sich an, erzeugt einen Code (oder teilt einen Link, wahlweise mit QR-Code zum Scannen), und sobald die andere Person beitritt, läuft die Übertragung über ein verschlüsseltes TURN-Relay — der zuverlässige Weg durch unvorhersehbare NATs, und es trägt ausschließlich Chiffretext. Der Empfänger braucht weiterhin kein Konto.",
-        "So oder so: Sobald die Verbindung steht, streamen bis zu 1.000 Dateien in einem Stapel direkt darüber, jede einzeln mit einem SHA-256-Hash geprüft, sodass du weißt, dass das Angekommene exakt dem Gesendeten entspricht. Ist Echtzeit nicht möglich — etwa weil die andere Person offline ist —, handelt es sich um einen wirklich anderen Modus (einen Zero-Knowledge-Speicherlink), nicht um Peer-to-Peer, und das ist es wert, separat verstanden zu werden.",
+        "Sobald der Echtzeitpfad steht, streamen bis zu 1.000 Dateien fortlaufend über die gewählte Route, jede per SHA-256 geprüft. Relayium behält keine serverseitige Echtzeit-Inhaltskopie oder Übertragungshistorie. Ist die andere Person offline, ist ein Zero-Knowledge-Speicherlink ein eigener Modus.",
       ],
     },
   ],
@@ -442,7 +442,7 @@ const de = {
     items: [
       {
         q: "Ist Peer-to-Peer dasselbe wie Ende-zu-Ende-Verschlüsselung?",
-        a: "Beides hängt zusammen, ist aber nicht identisch. P2P beschreibt den Netzwerkpfad — Bytes, die direkt zwischen zwei Geräten fließen. Verschlüsselung beschreibt, ob diese Bytes für alle dazwischen unlesbar sind. Relayiums Echtzeitübertragungen sind beides: ein direkter (oder über ein Relay geführter, aber verschlüsselter) Pfad, bei dem die Datei unabhängig vom gewählten Pfad Ende-zu-Ende versiegelt ist.",
+        a: "Beides hängt zusammen, ist aber nicht identisch. P2P beschreibt die Kommunikation zwischen Endpunkten, garantiert aber nicht, dass jeder Netzwerk-Hop direkt ist; TURN kann den Verkehr tragen. Verschlüsselung bestimmt, ob Vermittler ihn lesen können. Relayium nutzt im selben LAN direktes WebRTC und netzübergreifend Ende-zu-Ende-verschlüsseltes TURN, das der Relay weder lesen noch entschlüsseln kann.",
       },
       {
         q: "Berührt eine P2P-Übertragung überhaupt jemals einen Server?",
@@ -463,7 +463,7 @@ const de = {
     ],
   },
   cta: {
-    text: "Neugierig, wie sich das anfühlt? Öffne Relayium auf zwei Geräten und beobachte, wie sich eine direkte Verbindung in Echtzeit aufbaut.",
+    text: "Neugierig? Öffne Relayium auf zwei Geräten und starte eine verschlüsselte Echtzeitsitzung.",
     button: "Relayium jetzt ausprobieren",
   },
   relatedHeading: "Weiterlesen",
@@ -476,7 +476,7 @@ const fr = {
   updatedLabel: "Dernière mise à jour",
   lead: [
     "« Pair-à-pair » est une expression employée un peu librement, alors voici ce qu'elle signifie vraiment pour un transfert de fichiers : votre fichier va directement d'un appareil à l'autre, et non vers le serveur d'une entreprise avant d'en redescendre. Aucune étape intermédiaire où une copie pourrait rester.",
-    "Cela paraît simple, mais Internet n'a pas été conçu pour que deux appareils quelconques se trouvent tout seuls et se parlent directement — la plupart des connexions se cachent derrière des routeurs et des pare-feu jamais prévus pour être atteints de l'extérieur. Cette page explique, en termes simples, comment une connexion directe s'établit réellement, quand elle ne le peut pas, et ce que cela signifie pour votre vie privée et la vitesse. Relayium sert d'exemple concret tout au long du texte, puisqu'il s'agit d'une implémentation fonctionnelle exactement de ce mécanisme.",
+    "Cela paraît simple, mais les chemins réels diffèrent. Cette page explique d'abord le WebRTC/ICE général, où TURN peut servir de secours, puis distingue l'implémentation de Relayium : WebRTC navigateur est direct sur le même LAN, TURN est utilisé par conception entre réseaux, et le CLI est direct-only.",
   ],
   sections: [
     {
@@ -488,7 +488,7 @@ const fr = {
       bullets: [
         "Transfert par téléversement : votre appareil vers un serveur vers l'appareil de l'autre — deux sauts, une copie stockée entre les deux.",
         "Transfert pair-à-pair : votre appareil directement vers l'appareil de l'autre — un seul saut, rien de stocké.",
-        "Chez Relayium, c'est le mode temps réel : ouvrez le site sur les deux appareils, connectez-les, et le fichier circule directement, navigateur à navigateur.",
+        "Le mode navigateur temps réel de Relayium a deux voies : WebRTC est direct sur le même LAN ; entre réseaux, TURN transporte par conception du texte chiffré de bout en bout, sans copie ni historique de contenu côté serveur.",
       ],
     },
     {
@@ -499,7 +499,7 @@ const fr = {
       ],
       bullets: [
         "STUN n'apprend et ne partage jamais que des adresses réseau — jamais le contenu des fichiers, leurs noms, ni les clés de chiffrement.",
-        "Relayium utilise WebRTC pour cela, la même technologie de connexion directe intégrée à tous les navigateurs modernes pour les appels vidéo — détournée ici pour déplacer des octets de fichier plutôt que des images vidéo.",
+        "Relayium utilise WebRTC directement pour les sessions navigateur sur le même LAN. La voie navigateur entre réseaux est délibérément relayée. Le CLI reste direct-only et échoue au lieu de relayer les octets du fichier.",
         "Deux appareils sur le même réseau (aucun code requis) se connectent généralement le plus directement de tous, car il n'y a souvent aucun NAT en travers du chemin.",
       ],
     },
@@ -507,12 +507,12 @@ const fr = {
       heading: "Quand aucun chemin direct ne peut être trouvé : le relais TURN",
       body: [
         "Parfois, STUN ne suffit pas. Certains NAT — en particulier sur des réseaux d'entreprise plus stricts ou chez certains opérateurs mobiles — sont suffisamment imprévisibles pour qu'aucun chemin direct ne puisse être découvert à partir des seules informations externes. Si les deux appareils se trouvent derrière ce genre de NAT, une connexion réellement directe est tout simplement impossible ; quelque chose doit relayer le trafic entre les deux.",
-        "C'est le rôle de TURN (Traversal Using Relays around NAT) : un serveur relais de secours auquel les deux appareils se connectent lorsqu'un chemin direct échoue. Ce n'est pas tant un contournement ou un compromis sur la vie privée qu'une nécessité liée à la façon dont certains réseaux sont construits — mais il vaut la peine d'être précis sur ce qu'il voit et ne voit pas. Chez Relayium, le fichier est déjà chiffré de bout en bout avant d'atteindre le relais, si bien que celui-ci ne transmet toujours que du texte chiffré — des données scellées dont il n'a pas la clé. Il déplace des octets ; il ne peut pas les lire.",
+        "Dans une conception WebRTC/ICE générale, TURN peut être le relais de secours lorsqu'un chemin direct échoue. L'application navigateur Relayium choisit explicitement WebRTC direct sur le même LAN et TURN dès le départ pour toutes les sessions entre réseaux. Le fichier est déjà chiffré de bout en bout : le relais ne transporte que du texte chiffré et ne peut ni lire ni déchiffrer le contenu.",
       ],
       bullets: [
         "Sur le même réseau, Relayium relie les appareils directement ; entre réseaux, il utilise le relais TURN par défaut, car un chemin direct y est si souvent introuvable.",
         "Le relais ne transmet que du texte chiffré ; il ne possède jamais la clé de déchiffrement et ne peut lire ni le contenu des fichiers, ni leurs noms, ni rien d'autre à leur sujet.",
-        "Le fait qu'un transfert donné soit passé en direct ou via un relais est visible dans les diagnostics de connexion de Relayium, pour qui souhaite vérifier.",
+        "Le CLI Relayium est une voie direct-only distincte : il ne relaie jamais les octets du fichier et échoue si aucune connexion directe n'est possible.",
       ],
     },
     {
@@ -526,7 +526,7 @@ const fr = {
       heading: "Comment Relayium assemble tout cela",
       body: [
         "Ouvrez relayium.com sur deux appareils du même réseau et ils se trouvent généralement automatiquement — pas de compte, pas de code, rien à installer ; c'est le cas du réseau local, où STUN n'est souvent même pas nécessaire. Pour envoyer sur Internet vers quelqu'un sur un autre réseau, on utilise un code d'appairage : l'expéditeur se connecte, génère un code (ou partage un lien, avec en option un QR code à scanner), et dès que l'autre personne rejoint, le transfert passe par un relais TURN chiffré — la voie fiable à travers des NAT imprévisibles, et il ne transporte que du texte chiffré ; le destinataire n'a toujours besoin d'aucun compte.",
-        "Dans tous les cas, une fois la connexion ouverte, jusqu'à 1 000 fichiers d'un même lot circulent directement dessus, chacun vérifié indépendamment par un hachage SHA-256, afin que vous sachiez que ce qui est arrivé correspond exactement à ce qui a été envoyé. Si le temps réel n'est pas possible — par exemple si l'autre personne est hors ligne —, il s'agit d'un mode réellement différent (un lien stocké à divulgation nulle), pas de pair-à-pair, et cela vaut la peine d'être compris séparément.",
+        "Une fois la voie temps réel ouverte, jusqu'à 1 000 fichiers circulent en continu sur la route choisie, chacun vérifié par SHA-256. Relayium ne conserve aucune copie de contenu ni aucun historique temps réel côté serveur. Si l'autre personne est hors ligne, le lien stocké à divulgation nulle est un mode distinct.",
       ],
     },
   ],
@@ -535,7 +535,7 @@ const fr = {
     items: [
       {
         q: "Le pair-à-pair est-il la même chose que le chiffrement de bout en bout ?",
-        a: "Les deux sont liés mais pas identiques. Le P2P décrit le chemin réseau — des octets circulant directement entre deux appareils. Le chiffrement décrit si ces octets sont illisibles pour quiconque se trouverait entre les deux. Les transferts en temps réel de Relayium réunissent les deux : un chemin direct (ou relayé mais chiffré), avec un fichier scellé de bout en bout quel que soit le chemin emprunté.",
+        a: "Les deux sont liés mais pas identiques. Le P2P décrit la communication entre terminaux sans garantir que chaque saut réseau soit direct ; TURN peut transporter le trafic. Le chiffrement détermine si un intermédiaire peut le lire. Relayium utilise WebRTC direct sur le même LAN et TURN chiffré de bout en bout entre réseaux, que le relais ne peut ni lire ni déchiffrer.",
       },
       {
         q: "Un transfert P2P touche-t-il quand même un serveur ?",
@@ -556,7 +556,7 @@ const fr = {
     ],
   },
   cta: {
-    text: "Curieux de voir l'effet que ça fait ? Ouvrez Relayium sur deux appareils et observez une connexion directe se former en temps réel.",
+    text: "Curieux ? Ouvrez Relayium sur deux appareils et démarrez une session temps réel chiffrée.",
     button: "Essayer Relayium maintenant",
   },
   relatedHeading: "À lire ensuite",
@@ -569,7 +569,7 @@ const ar = {
   updatedLabel: "آخر تحديث",
   lead: [
     "يُستخدم مصطلح «من الند للند» بشكل فضفاض، وإليك ما يعنيه فعليًا في نقل الملفات: ينتقل ملفك مباشرةً من جهاز إلى آخر، لا صعودًا إلى خادم شركة ونزولًا منه. لا محطة في المنتصف يمكن أن تستقر فيها نسخة.",
-    "يبدو ذلك بسيطًا، لكن الإنترنت لم يُبنَ لكي يعثر جهازان عشوائيان على بعضهما ويتحادثا مباشرةً — فمعظم الاتصالات مخفية خلف موجّهات وجدران حماية لم تُصمَّم قط للوصول إليها من الخارج. تشرح هذه الصفحة، بعبارات مبسّطة، كيف يُنشأ الاتصال المباشر فعليًا، ومتى يتعذّر إنشاؤه، وماذا يعني ذلك لخصوصيتك وسرعتك. ويُستخدم Relayium بوصفه المثال الملموس في كل المقال، لأنه تطبيق عملي لهذا الأمر بالضبط.",
+    "يبدو ذلك بسيطًا، لكن المسارات الفعلية تختلف. تشرح الصفحة أولًا WebRTC/ICE العام حيث يمكن أن يكون TURN احتياطيًا، ثم تميّز تنفيذ Relayium: WebRTC في المتصفح مباشر داخل شبكة LAN نفسها، وTURN مستخدم حسب التصميم عبر الشبكات، وCLI مباشرة فقط.",
   ],
   sections: [
     {
@@ -581,7 +581,7 @@ const ar = {
       bullets: [
         "النقل القائم على الرفع: من جهازك إلى خادم إلى جهازهم — قفزتان، ونسخة مُخزَّنة بينهما.",
         "النقل من الند للند: من جهازك مباشرةً إلى جهازهم — قفزة واحدة، ولا شيء يُخزَّن.",
-        "في Relayium، هذا هو الوضع الفوري: افتح الموقع على الجهازين، واتصل، ويُبَثّ الملف مباشرةً من متصفح إلى متصفح.",
+        "لوضع Relayium الفوري في المتصفح مساران: يتصل WebRTC مباشرةً داخل شبكة LAN نفسها؛ وعبر الشبكات يحمل TURN حسب التصميم نصًا مشفّرًا من الطرف إلى الطرف بلا نسخة محتوى أو سجل فوري على الخادم.",
       ],
     },
     {
@@ -592,7 +592,7 @@ const ar = {
       ],
       bullets: [
         "لا يعرف STUN ويشارك سوى عناوين الشبكة — ولا يعرف قط محتويات الملفات أو أسماءها أو مفاتيح التشفير.",
-        "يستخدم Relayium تقنية WebRTC لهذا الغرض، وهي تقنية الاتصال المباشر نفسها المدمجة في كل متصفح حديث لمكالمات الفيديو — أُعيد توظيفها هنا لنقل بايتات الملفات بدلًا من إطارات الفيديو.",
+        "يستخدم Relayium تقنية WebRTC مباشرةً لجلسات المتصفح داخل شبكة LAN نفسها. أما مسار المتصفح عبر الشبكات فيُرحّل عمدًا. وتظل CLI مباشرة فقط، فتفشل بدلًا من ترحيل بايتات الملف.",
         "جهازان على الشبكة نفسها (دون حاجة إلى رمز) يتصلان عادةً على النحو الأكثر مباشرةً بينها جميعًا، إذ لا يوجد غالبًا أي NAT يعترض الطريق.",
       ],
     },
@@ -600,12 +600,12 @@ const ar = {
       heading: "حين يتعذّر العثور على مسار مباشر: مُرحِّل TURN",
       body: [
         "أحيانًا لا يكفي STUN. فبعض أنواع NAT — لا سيما على شبكات الشركات الأكثر صرامةً أو لدى بعض مشغّلي الهاتف المحمول — يصعب التنبؤ بها إلى حدٍّ يجعل من المستحيل اكتشاف مسار مباشر من المعلومات الخارجية وحدها. وإذا كان كلا الجهازين خلف هذا النوع من NAT، فإن الاتصال المباشر حقًا يكون ببساطة غير ممكن؛ ولا بد لشيء أن يُرحِّل حركة البيانات بينهما.",
-        "هذا هو TURN (الاجتياز باستخدام المُرحِّلات حول NAT): خادم مُرحِّل احتياطي يتصل به الجهازان حين يفشل المسار المباشر. وهو ليس حيلة التفافية أو تنازلًا عن الخصوصية بقدر ما هو ضرورة تفرضها طريقة بناء بعض الشبكات — لكن من الجدير التدقيق في ما يراه وما لا يراه. في Relayium، يكون الملف مُشفَّرًا من الطرف إلى الطرف مسبقًا قبل أن يصل إلى المُرحِّل، فلا يُمرِّر المُرحِّل سوى نص مُشفَّر — بيانات مختومة لا يملك مفتاحًا لفتحها. إنه ينقل البايتات؛ ولا يستطيع قراءتها.",
+        "في تصميم WebRTC/ICE عام، يمكن أن يكون TURN مُرحِّلًا احتياطيًا عند فشل المسار المباشر. أما تطبيق Relayium في المتصفح فيختار بوضوح WebRTC المباشر داخل شبكة LAN نفسها وTURN منذ البداية لكل الجلسات عبر الشبكات. يُشفّر الملف من الطرف إلى الطرف قبل وصوله، فلا يحمل المُرحِّل إلا نصًا مشفّرًا ولا يستطيع قراءة المحتوى أو فك تشفيره.",
       ],
       bullets: [
         "على الشبكة نفسها يصل Relayium بين الأجهزة مباشرةً؛ أمّا عبر الشبكات فيستخدم مُرحِّل TURN افتراضيًّا، لأن المسار المباشر كثيرًا ما يتعذّر إيجاده هناك.",
         "يمرّر المُرحِّل نصًا مُشفَّرًا فقط؛ ولا يملك قط مفتاح فك التشفير ولا يستطيع قراءة محتويات الملفات أو أسمائها أو أي شيء آخر عمّا بداخلها.",
-        "أما إن كان نقل معيّن قد جرى مباشرةً أم عبر مُرحِّل فيمكن رؤيته في تشخيصات الاتصال في Relayium، لكل من يرغب في التحقق.",
+        "CLI في Relayium مسار منفصل مباشر فقط: لا يرحّل بايتات الملف أبدًا ويفشل إن تعذّر إنشاء اتصال مباشر.",
       ],
     },
     {
@@ -619,7 +619,7 @@ const ar = {
       heading: "كيف يجمع Relayium هذا كله",
       body: [
         "افتح relayium.com على جهازين على الشبكة نفسها فيعثر كل منهما على الآخر تلقائيًا في العادة — دون حساب ودون رمز ودون أي شيء يُثبَّت؛ تلك هي حالة الشبكة المحلية التي لا يكون STUN فيها ضروريًا غالبًا. أما الإرسال عبر الإنترنت إلى شخص على شبكة مختلفة فيستخدم رمز اقتران: يسجّل المُرسِل الدخول، ويولّد رمزًا (أو يشارك رابطًا، مع رمز QR اختياري للمسح)، وما إن ينضم الشخص الآخر حتى يجري النقل عبر مُرحِّل TURN مشفَّر — وهو المسار الموثوق عبر شبكات NAT التي يصعب التنبؤ بها، ولا يحمل إلا نصًا مُشفَّرًا — ويبقى المُستقبِل بلا حاجة إلى حساب.",
-        "في كلتا الحالتين، ما إن يُفتح الاتصال حتى يُبَثّ ما يصل إلى 1000 ملف في دفعة واحدة مباشرةً عبره، ويُتحقَّق من كل منها على حدة بتجزئة SHA-256 كي تعرف أن ما وصل يطابق تمامًا ما أُرسل. وإذا تعذّر الوضع الفوري — كأن يكون الشخص الآخر غير متصل — فذلك وضع مختلف حقًا (رابط مُخزَّن بمعرفة صفرية)، لا نقل من الند للند، ويستحق أن يُفهَم على حدة.",
+        "عند فتح المسار الفوري، يتدفق ما يصل إلى 1000 ملف باستمرار عبر الطريق المختار ويُفحص كل ملف بـ SHA-256. لا يحتفظ Relayium بنسخة محتوى فورية أو سجل نقل على الخادم. وإذا كان الطرف الآخر غير متصل، فالرابط المُخزّن بمعرفة صفرية وضع منفصل.",
       ],
     },
   ],
@@ -628,7 +628,7 @@ const ar = {
     items: [
       {
         q: "هل النقل من الند للند هو نفسه التشفير من الطرف إلى الطرف؟",
-        a: "هما مترابطان لكنهما ليسا متطابقين. فـ P2P يصف مسار الشبكة — بايتات تنتقل مباشرةً بين جهازين. أما التشفير فيصف ما إذا كانت تلك البايتات غير قابلة للقراءة لأي أحد في المنتصف. والنقل الفوري في Relayium يجمع الاثنين: مسار مباشر (أو عبر مُرحِّل لكنه مُشفَّر)، مع ختم الملف من الطرف إلى الطرف بصرف النظر عن المسار الذي يسلكه.",
+        a: "هما مترابطان لكنهما ليسا متطابقين. يصف P2P الاتصال بين النهايات ولا يضمن أن تكون كل قفزة مباشرة؛ فقد يحمل TURN الحركة. ويحدد التشفير إن كان الوسيط يستطيع قراءتها. يستخدم Relayium WebRTC مباشرةً داخل شبكة LAN نفسها وTURN مشفّرًا من الطرف إلى الطرف عبر الشبكات، ولا يستطيع المُرحِّل قراءته أو فك تشفيره.",
       },
       {
         q: "هل يمرّ النقل من الند للند بأي خادم على الإطلاق؟",
@@ -649,7 +649,7 @@ const ar = {
     ],
   },
   cta: {
-    text: "أتتساءل كيف يبدو الأمر؟ افتح Relayium على جهازين وشاهد اتصالًا مباشرًا يتكوّن في الوقت الفوري.",
+    text: "هل تريد التجربة؟ افتح Relayium على جهازين وابدأ جلسة فورية مشفّرة.",
     button: "جرّب Relayium الآن",
   },
   relatedHeading: "تابع القراءة",
@@ -662,7 +662,7 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "«De igual a igual» se usa de forma imprecisa, así que esto es lo que realmente significa para una transferencia de archivos: tu archivo va directamente de un dispositivo al otro, no sube al servidor de una empresa y vuelve a bajar. No hay parada intermedia donde pueda quedarse una copia.",
-    "Suena sencillo, pero internet no está hecho para que dos dispositivos cualesquiera simplemente se encuentren y hablen directamente: la mayoría de las conexiones se esconden detrás de routers y cortafuegos que nunca se diseñaron para ser alcanzados desde fuera. Esta página explica, en términos claros, cómo se establece realmente una conexión directa, cuándo no puede establecerse y qué significa eso para tu privacidad y tu velocidad. Se usa Relayium como ejemplo concreto a lo largo de todo el texto, ya que es una implementación funcional de exactamente esto.",
+    "Suena sencillo, pero las rutas reales difieren. Esta página explica primero WebRTC/ICE en general, donde TURN puede ser una vía de reserva, y luego separa la implementación de Relayium: WebRTC del navegador es directo en la misma LAN, TURN se usa por diseño entre redes y el CLI es direct-only.",
   ],
   sections: [
     {
@@ -674,7 +674,7 @@ const es = {
       bullets: [
         "Transferencia basada en subida: de tu dispositivo a un servidor y luego a su dispositivo — dos saltos, una copia almacenada en medio.",
         "Transferencia de igual a igual: de tu dispositivo directamente a su dispositivo — un salto, nada almacenado.",
-        "En Relayium, esto es el modo en tiempo real: abre el sitio en ambos dispositivos, conéctalos y el archivo se transmite directamente, de navegador a navegador.",
+        "El modo en tiempo real del navegador de Relayium tiene dos vías: WebRTC es directo en la misma LAN; entre redes, TURN transporta por diseño texto cifrado de extremo a extremo sin conservar copia ni historial de contenido del lado del servidor.",
       ],
     },
     {
@@ -685,7 +685,7 @@ const es = {
       ],
       bullets: [
         "STUN solo llega a conocer y compartir direcciones de red — nunca el contenido de los archivos, sus nombres ni las claves de cifrado.",
-        "Relayium usa WebRTC para esto, la misma tecnología de conexión directa integrada en todos los navegadores modernos para las videollamadas — reutilizada aquí para mover bytes de archivos en lugar de fotogramas de vídeo.",
+        "Relayium usa WebRTC directamente para sesiones del navegador en la misma LAN. La vía del navegador entre redes se retransmite deliberadamente. El CLI sigue siendo direct-only y falla en vez de retransmitir bytes del archivo.",
         "Dos dispositivos en la misma red (sin necesidad de código) suelen conectarse de la forma más directa de todas, ya que a menudo no hay ningún NAT de por medio.",
       ],
     },
@@ -693,12 +693,12 @@ const es = {
       heading: "Cuando no se encuentra un camino directo: el retransmisor TURN",
       body: [
         "A veces STUN no basta. Algunos NAT — especialmente en redes corporativas más estrictas o en ciertos operadores móviles — son lo bastante impredecibles como para que no pueda descubrirse ningún camino directo solo con la información externa. Si ambos dispositivos están detrás de ese tipo de NAT, una conexión genuinamente directa simplemente no es posible; algo tiene que retransmitir el tráfico en medio.",
-        "Para eso está TURN (Traversal Using Relays around NAT): un servidor de retransmisión de reserva al que ambos dispositivos se conectan cuando falla un camino directo. No es tanto un truco o un compromiso con la privacidad como una necesidad derivada de cómo están construidas algunas redes — pero conviene ser precisos sobre qué ve y qué no. En Relayium, el archivo ya está cifrado de extremo a extremo antes de llegar al retransmisor, así que el retransmisor solo reenvía texto cifrado — datos sellados que no tiene ninguna clave para abrir. Mueve bytes; no puede leerlos.",
+        "En un diseño WebRTC/ICE general, TURN puede ser el retransmisor de reserva cuando falla una vía directa. La aplicación web de Relayium elige explícitamente WebRTC directo en la misma LAN y TURN desde el inicio para todas las sesiones entre redes. El archivo ya está cifrado de extremo a extremo, así que el retransmisor solo transporta texto cifrado y no puede leer ni descifrar el contenido.",
       ],
       bullets: [
         "En la misma red, Relayium conecta los dispositivos directamente; entre redes usa el retransmisor TURN por defecto, porque allí muy a menudo no hay ninguna ruta directa.",
         "El retransmisor solo reenvía texto cifrado; nunca tiene la clave de descifrado y no puede leer el contenido de los archivos, sus nombres ni ninguna otra cosa sobre lo que hay dentro.",
-        "Si una transferencia concreta fue directa o pasó por un retransmisor puede verse en los diagnósticos de conexión de Relayium, para quien tenga la curiosidad de comprobarlo.",
+        "El CLI de Relayium es una vía direct-only separada: nunca retransmite bytes del archivo y falla si no puede establecer una conexión directa.",
       ],
     },
     {
@@ -712,7 +712,7 @@ const es = {
       heading: "Cómo lo junta todo Relayium",
       body: [
         "Abre relayium.com en dos dispositivos de la misma red y normalmente se encuentran automáticamente — sin cuenta, sin código, nada que instalar; ese es el caso de la red local, donde a menudo ni siquiera hace falta STUN. Para enviar a través de internet a alguien en una red distinta se usa un código de emparejamiento: el remitente inicia sesión, genera un código (o comparte un enlace, con un código QR opcional para escanear) y, en cuanto la otra persona se une, la transferencia va por un retransmisor TURN cifrado: la vía fiable a través de NAT impredecibles, y solo transporta texto cifrado; el destinatario sigue sin necesitar cuenta.",
-        "Sea como sea, una vez abierta la conexión, hasta 1.000 archivos por lote se transmiten directamente por ella, cada uno verificado de forma independiente con un hash SHA-256 para que sepas que lo que llega coincide exactamente con lo que se envió. Si el tiempo real no es posible — por ejemplo, si la otra persona está desconectada —, eso es un modo genuinamente distinto (un enlace almacenado de conocimiento cero), no de igual a igual, y vale la pena entenderlo por separado.",
+        "Una vez abierta la vía en tiempo real, hasta 1.000 archivos fluyen continuamente por la ruta elegida y cada uno se verifica con SHA-256. Relayium no conserva copia de contenido ni historial en tiempo real del lado del servidor. Si la otra persona está desconectada, el enlace almacenado de conocimiento cero es un modo separado.",
       ],
     },
   ],
@@ -721,7 +721,7 @@ const es = {
     items: [
       {
         q: "¿Es lo mismo de igual a igual que cifrado de extremo a extremo?",
-        a: "Están relacionados, pero no son idénticos. P2P describe el camino de red — bytes que van directamente entre dos dispositivos. El cifrado describe si esos bytes son ilegibles para cualquiera que esté en medio. Las transferencias en tiempo real de Relayium son ambas cosas: un camino directo (o retransmitido pero cifrado), con el archivo sellado de extremo a extremo sea cual sea el camino que tome.",
+        a: "Están relacionados, pero no son idénticos. P2P describe la comunicación entre extremos sin garantizar que cada salto de red sea directo; TURN puede transportar el tráfico. El cifrado determina si un intermediario puede leerlo. Relayium usa WebRTC directo en la misma LAN y TURN cifrado de extremo a extremo entre redes, que el retransmisor no puede leer ni descifrar.",
       },
       {
         q: "¿Una transferencia P2P llega a tocar algún servidor?",
@@ -742,7 +742,7 @@ const es = {
     ],
   },
   cta: {
-    text: "¿Con curiosidad por ver cómo se siente? Abre Relayium en dos dispositivos y observa cómo se forma una conexión directa en tiempo real.",
+    text: "¿Quieres probarlo? Abre Relayium en dos dispositivos e inicia una sesión cifrada en tiempo real.",
     button: "Prueba Relayium ahora",
   },
   relatedHeading: "Seguir leyendo",
@@ -755,7 +755,7 @@ const pt = {
   updatedLabel: "Última atualização",
   lead: [
     "“Ponto a ponto” é usado de forma imprecisa, então aqui está o que realmente significa para uma transferência de arquivos: seu arquivo vai direto de um dispositivo para o outro, e não sobe para o servidor de uma empresa e desce de volta. Não há parada no meio onde uma cópia poderia ficar.",
-    "Parece simples, mas a internet não foi feita para que dois dispositivos quaisquer simplesmente se encontrem e conversem diretamente — a maioria das conexões se esconde atrás de roteadores e firewalls que nunca foram projetados para serem alcançados de fora. Esta página explica, em termos claros, como uma conexão direta é realmente estabelecida, quando ela não pode ser estabelecida e o que isso significa para sua privacidade e velocidade. O Relayium é usado como exemplo concreto ao longo de todo o texto, já que é uma implementação funcional exatamente disso.",
+    "Parece simples, mas os caminhos reais diferem. Esta página explica primeiro WebRTC/ICE em geral, onde o TURN pode ser uma rota de reserva, e depois separa a implementação do Relayium: o WebRTC do navegador é direto na mesma LAN, o TURN é usado por design entre redes e a CLI é direct-only.",
   ],
   sections: [
     {
@@ -767,7 +767,7 @@ const pt = {
       bullets: [
         "Transferência baseada em upload: do seu dispositivo para um servidor e depois para o dispositivo dela — dois saltos, uma cópia armazenada no meio.",
         "Transferência ponto a ponto: do seu dispositivo direto para o dispositivo dela — um salto, nada armazenado.",
-        "No Relayium, isso é o modo em tempo real: abra o site nos dois dispositivos, conecte-os e o arquivo é transmitido diretamente, de navegador para navegador.",
+        "O modo em tempo real do navegador do Relayium tem dois caminhos: o WebRTC é direto na mesma LAN; entre redes, o TURN transporta por design texto cifrado de ponta a ponta sem manter cópia nem histórico de conteúdo no servidor.",
       ],
     },
     {
@@ -778,7 +778,7 @@ const pt = {
       ],
       bullets: [
         "O STUN só chega a conhecer e compartilhar endereços de rede — nunca o conteúdo dos arquivos, seus nomes ou as chaves de criptografia.",
-        "O Relayium usa WebRTC para isso, a mesma tecnologia de conexão direta embutida em todos os navegadores modernos para chamadas de vídeo — reaproveitada aqui para mover bytes de arquivos em vez de quadros de vídeo.",
+        "O Relayium usa WebRTC diretamente para sessões do navegador na mesma LAN. O caminho do navegador entre redes é retransmitido de propósito. A CLI continua direct-only e falha em vez de retransmitir bytes do arquivo.",
         "Dois dispositivos na mesma rede (sem necessidade de código) costumam se conectar da forma mais direta de todas, já que muitas vezes não há nenhum NAT no caminho.",
       ],
     },
@@ -786,12 +786,12 @@ const pt = {
       heading: "Quando um caminho direto não pode ser encontrado: o retransmissor TURN",
       body: [
         "Às vezes o STUN não basta. Alguns NATs — especialmente em redes corporativas mais rígidas ou em certas operadoras móveis — são imprevisíveis o suficiente para que nenhum caminho direto possa ser descoberto apenas com a informação externa. Se ambos os dispositivos estiverem atrás desse tipo de NAT, uma conexão genuinamente direta simplesmente não é possível; algo tem que retransmitir o tráfego no meio.",
-        "É para isso que existe o TURN (Traversal Using Relays around NAT): um servidor de retransmissão de reserva ao qual ambos os dispositivos se conectam quando um caminho direto falha. Não é tanto um truque ou uma concessão de privacidade quanto uma necessidade decorrente de como algumas redes são construídas — mas vale ser preciso sobre o que ele vê e o que não vê. No Relayium, o arquivo já está criptografado de ponta a ponta antes de chegar ao retransmissor, então o retransmissor só encaminha texto cifrado — dados lacrados cuja chave ele não possui. Ele move bytes; não pode lê-los.",
+        "Em um projeto WebRTC/ICE geral, o TURN pode ser o retransmissor de reserva quando um caminho direto falha. O aplicativo web do Relayium escolhe explicitamente WebRTC direto na mesma LAN e TURN desde o início para todas as sessões entre redes. O arquivo já está criptografado de ponta a ponta, então o retransmissor só transporta texto cifrado e não consegue ler nem descriptografar o conteúdo.",
       ],
       bullets: [
         "Na mesma rede, o Relayium conecta os dispositivos diretamente; entre redes ele usa o retransmissor TURN por padrão, porque ali muitas vezes não há caminho direto.",
         "O retransmissor só encaminha texto cifrado; ele nunca tem a chave de descriptografia e não pode ler o conteúdo dos arquivos, seus nomes nem qualquer outra coisa sobre o que há dentro.",
-        "Se uma transferência específica foi direta ou passou por um retransmissor pode ser visto nos diagnósticos de conexão do Relayium, para quem tiver curiosidade de conferir.",
+        "A CLI do Relayium é um caminho direct-only separado: nunca retransmite bytes do arquivo e falha se não conseguir estabelecer uma conexão direta.",
       ],
     },
     {
@@ -805,7 +805,7 @@ const pt = {
       heading: "Como o Relayium junta tudo isso",
       body: [
         "Abra relayium.com em dois dispositivos na mesma rede e normalmente eles se encontram automaticamente — sem conta, sem código, nada para instalar; esse é o caso da rede local, em que muitas vezes o STUN nem é necessário. Para enviar pela internet a alguém em outra rede, usa-se um código de emparelhamento: o remetente entra, gera um código (ou compartilha um link, com um código QR opcional para escanear) e, assim que a outra pessoa entra, a transferência corre por um retransmissor TURN criptografado: o caminho confiável através de NATs imprevisíveis, e ele só carrega texto cifrado; o destinatário continua sem precisar de conta.",
-        "De todo modo, uma vez aberta a conexão, até 1.000 arquivos por lote são transmitidos diretamente por ela, cada um verificado de forma independente com um hash SHA-256 para que você saiba que o que chega corresponde exatamente ao que foi enviado. Se o tempo real não for possível — digamos, a outra pessoa está offline —, isso é um modo genuinamente diferente (um link armazenado de conhecimento zero), não ponto a ponto, e vale entender à parte.",
+        "Uma vez aberto o caminho em tempo real, até 1.000 arquivos fluem continuamente pela rota escolhida e cada um é verificado com SHA-256. O Relayium não mantém cópia de conteúdo nem histórico em tempo real no servidor. Se a outra pessoa estiver offline, o link armazenado de conhecimento zero é um modo separado.",
       ],
     },
   ],
@@ -814,7 +814,7 @@ const pt = {
     items: [
       {
         q: "Ponto a ponto é a mesma coisa que criptografia de ponta a ponta?",
-        a: "Estão relacionados, mas não são idênticos. P2P descreve o caminho de rede — bytes indo diretamente entre dois dispositivos. A criptografia descreve se esses bytes são ilegíveis para qualquer um no meio. As transferências em tempo real do Relayium são as duas coisas: um caminho direto (ou retransmitido, mas criptografado), com o arquivo selado de ponta a ponta independentemente do caminho que ele tome.",
+        a: "Estão relacionados, mas não são idênticos. P2P descreve a comunicação entre pontas sem garantir que cada salto de rede seja direto; o TURN pode transportar o tráfego. A criptografia determina se um intermediário consegue lê-lo. O Relayium usa WebRTC direto na mesma LAN e TURN criptografado de ponta a ponta entre redes, que o retransmissor não consegue ler nem descriptografar.",
       },
       {
         q: "Uma transferência P2P chega a tocar em algum servidor?",
@@ -835,7 +835,7 @@ const pt = {
     ],
   },
   cta: {
-    text: "Curioso para ver como é? Abra o Relayium em dois dispositivos e veja uma conexão direta se formar em tempo real.",
+    text: "Quer experimentar? Abra o Relayium em dois dispositivos e inicie uma sessão criptografada em tempo real.",
     button: "Experimente o Relayium agora",
   },
   relatedHeading: "Continue lendo",
