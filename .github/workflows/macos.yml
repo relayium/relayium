@@ -129,7 +129,7 @@ jobs:
           set -euo pipefail
           app="$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app"
           codesign --verify --strict --verbose=2 "$app"
-          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/Relayium" || {
+          lipo "$app/Contents/MacOS/Relayium" -verify_arch arm64 x86_64 || {
             echo "::error::Release executable is not universal (arm64 + x86_64)"; exit 1; }
           signature_details="$(codesign -d --verbose=4 "$app" 2>&1)"
           printf '%s\n' "$signature_details"
