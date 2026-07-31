@@ -93,6 +93,12 @@ signing needs Xcode holding a logged-in Apple account, which a GitHub runner doe
 not have, so CI is manual regardless — and keychain ACL behaviour is sensitive to
 the signing identity, so the two must not diverge.
 
+Release also sets `CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO`. Xcode otherwise
+injects `com.apple.security.get-task-allow = true` even into this manually signed
+Release `build`, making the shipped app attachable by a debugger. The macOS CI
+job rejects that entitlement and separately proves the Hardened Runtime flag is
+present. Debug keeps Xcode's normal injection so local debugging still works.
+
 A provisioning profile is **required**, and the reason is worth knowing before
 you go looking for a way around it: it is the price of the
 `keychain-access-groups` entitlement, not of Developer ID signing. Removing those
@@ -101,6 +107,25 @@ cleanly with no profile at all. See "Provisioning profile" below.
 
 **Notarization, Sparkle, `.dmg` and the `/apps` page flip remain R1-G5.** Nothing
 here produces an artifact for a user.
+
+### Link handoff and notifications
+
+The G4 app-side foundation is present:
+
+- production `/d/<id>#k=…` links are validated and route to the Link tab;
+- `/cross-network#c=…` links validate and prefill the Direct tab without
+  automatically replacing an active session;
+- transfer completion notifications contain no filenames, links, pairing
+  codes, or keys, and are delivered only while the app is inactive.
+
+`com.apple.developer.associated-domains` is intentionally not in
+`Relayium.entitlements` yet. The current Developer ID provisioning profile does
+not authorize it, so adding it now would break every signed CI build. Before the
+final G4 activation, enable Associated Domains for `com.relayium.mac`, reissue
+the `Relayium Mac` Developer ID profile, update the CI profile secret, then add
+`applinks:relayium.com`, configure the production AASA app ID, and run real
+Finder/Safari handoff tests. Until then the parser and routing are covered by
+`swift test`, but HTTPS links continue to open in the browser.
 
 ### Manual acceptance
 

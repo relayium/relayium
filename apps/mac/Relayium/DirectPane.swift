@@ -10,11 +10,6 @@ struct DirectPane: View {
     @ObservedObject var model: RealtimeSessionModel
     let token: String
 
-    /// The pairing alphabet excludes I, O, 1 and 0 (web/src/lib/pair-code.ts).
-    private static let alphabet = Set("ACDEFHJKMNPRTWXY23456789")
-    private static let codeLength = 6
-
-    @State private var typedCode = ""
     @State private var picked: [URL] = []
 
     var body: some View {
@@ -77,12 +72,12 @@ struct DirectPane: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Receive").font(.headline)
                 HStack {
-                    TextField("Code", text: $typedCode)
+                    TextField("Code", text: $model.joinCode)
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 140)
-                        .onChange(of: typedCode) { _ in filterCode() }
-                    Button("Join") { Task { await model.join(code: typedCode) } }
-                        .disabled(typedCode.count != Self.codeLength)
+                        .onChange(of: model.joinCode) { model.updateJoinCode($0) }
+                    Button("Join") { Task { await model.join(code: model.joinCode) } }
+                        .disabled(!model.canJoin)
                 }
             }
         }
@@ -138,13 +133,6 @@ struct DirectPane: View {
     }
 
     // MARK: - actions
-
-    /// Filters to the pairing alphabet as it is typed. Rejecting after the fact
-    /// teaches nothing; filtering shows the rule.
-    private func filterCode() {
-        let cleaned = typedCode.uppercased().filter { Self.alphabet.contains($0) }
-        typedCode = String(cleaned.prefix(Self.codeLength))
-    }
 
     private func chooseFiles() {
         let panel = NSOpenPanel()

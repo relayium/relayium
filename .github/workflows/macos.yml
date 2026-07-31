@@ -106,6 +106,8 @@ jobs:
           set -euo pipefail
           app="$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app"
           codesign --verify --strict --verbose=2 "$app"
+          codesign -d --verbose=4 "$app" 2>&1 | grep -q 'flags=.*runtime' || {
+            echo "::error::Hardened Runtime flag missing from the signed build"; exit 1; }
           ents="$(codesign -d --entitlements - --xml "$app" | plutil -convert xml1 -o - -)"
           printf '%s\n' "$ents"
           printf '%s' "$ents" | grep -q 'com.apple.security.app-sandbox' || {
@@ -114,6 +116,15 @@ jobs:
           # means the team never applied, and the app would fail at runtime.
           printf '%s' "$ents" | grep -q '7PVYUG4YQS.com.relayium.shared' || {
             echo "::error::keychain access group missing or unexpanded in the signed build"; exit 1; }
+          get_task_allow="$(
+            printf '%s' "$ents" \
+              | plutil -extract com.apple.security.get-task-allow raw -o - - 2>/dev/null \
+              || true
+          )"
+          if [ "$get_task_allow" = "true" ]; then
+            echo "::error::Release build carries get-task-allow — it must not ship debuggable"
+            exit 1
+          fi
       - name: Remove signing keychain
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true

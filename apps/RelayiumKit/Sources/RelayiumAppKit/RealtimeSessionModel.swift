@@ -45,6 +45,9 @@ public final class RealtimeSessionModel: ObservableObject {
     @Published public private(set) var state: RealtimeState = .idle
     /// Files named by the incoming manifest, shown while transferring.
     @Published public private(set) var incoming: [FileMeta] = []
+    /// Shared with the view so an OS handoff can prefill the same field without
+    /// auto-joining or replacing an active connection.
+    @Published public var joinCode: String = ""
     /// Where a received transfer is written. The pane sets it from a save panel.
     public var saveDirectory: URL = FileManager.default
         .urls(for: .downloadsDirectory, in: .userDomainMask).first
@@ -79,6 +82,12 @@ public final class RealtimeSessionModel: ObservableObject {
         case .idle, .failed, .completed: return false
         default: return true
         }
+    }
+
+    public var canJoin: Bool { isCompletePairingCode(joinCode) }
+
+    public func updateJoinCode(_ raw: String) {
+        joinCode = normalizedPairingCode(raw)
     }
 
     // MARK: - starting a session

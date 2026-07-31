@@ -94,6 +94,15 @@ final class RealtimeSessionModelTests: XCTestCase {
 
     // MARK: - joining and ICE
 
+    func testJoinCodeUsesTheSameFilteringAsADeepLink() {
+        let m = makeModel()
+        m.updateJoinCode("k7 i-m3x90")
+        XCTAssertEqual(m.joinCode, "K7M3X9")
+        XCTAssertTrue(m.canJoin)
+        m.updateJoinCode("K7M3")
+        XCTAssertFalse(m.canJoin)
+    }
+
     func testJoinFetchesICEWithTheCode() async {
         let m = makeModel()
         await m.join(code: "K7M3X9")

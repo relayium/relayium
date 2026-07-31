@@ -30,6 +30,7 @@ final class TransferQuitGuard: NSObject, NSApplicationDelegate {
 struct RelayiumApp: App {
     @NSApplicationDelegateAdaptor(TransferQuitGuard.self) private var quitGuard
     @StateObject private var session = AppEnvironment.makeSession()
+    @StateObject private var deepLinks = AppDeepLinkRouter()
     // App-scoped rather than view-scoped: a transfer must survive the window's
     // view tree being rebuilt, and the quit guard has to be able to ask whether
     // one is running.
@@ -44,6 +45,7 @@ struct RelayiumApp: App {
         WindowGroup(id: "main") {
             ContentView()
                 .environmentObject(session)
+                .environmentObject(deepLinks)
                 .environmentObject(uploadModel)
                 .environmentObject(downloadModel)
                 .environmentObject(realtimeModel)
@@ -60,6 +62,7 @@ struct RelayiumApp: App {
                         realtimeModel.cancel()
                     }
                 }
+                .onOpenURL { deepLinks.open($0) }
         }
         .defaultSize(width: 420, height: 460)
 

@@ -3,12 +3,17 @@ import RelayiumKit
 import RelayiumAppKit
 
 struct ContentView: View {
+    private enum Tab: Hashable { case direct, link, account }
+
     @EnvironmentObject private var session: AccountSession
+    @EnvironmentObject private var deepLinks: AppDeepLinkRouter
     @EnvironmentObject private var uploadModel: CloudUploadModel
     @EnvironmentObject private var downloadModel: CloudDownloadModel
     @EnvironmentObject private var realtimeModel: RealtimeSessionModel
     @State private var showDownload = false
     @State private var showDirect = false
+    @State private var selectedTab: Tab = .direct
+    private let notifier = TransferNotifier()
 
     var body: some View {
         Group {
@@ -75,12 +80,13 @@ struct ContentView: View {
                 // Three tabs split by intent rather than transport: the
                 // distinction a user makes is whether the other person is there
                 // right now, and that is exactly the line between the two.
-                TabView {
+                TabView(selection: $selectedTab) {
                     ScrollView {
                         DirectPane(model: realtimeModel, token: session.bearerToken ?? "")
                             .padding()
                     }
                     .tabItem { Label("Direct", systemImage: "bolt.horizontal") }
+                    .tag(Tab.direct)
 
                     ScrollView {
                         VStack(alignment: .leading, spacing: 20) {
@@ -98,16 +104,66 @@ struct ContentView: View {
                         }
                     }
                     .tabItem { Label("Link", systemImage: "link") }
+                    .tag(Tab.link)
 
                     ScrollView {
                         AccountView(user: user, usage: usage).padding()
                     }
                     .tabItem { Label("Account", systemImage: "person.crop.circle") }
+                    .tag(Tab.account)
                 }
             }
         }
         .frame(minWidth: 380, minHeight: 420)
         .padding()
+        .onReceive(deepLinks.$pending.compactMap { $0 }) { route($0) }
+        .onChange(of: uploadModel.state) { state in
+            switch state {
+            case .uploading:
+                notifier.prepare()
+            case .done:
+                notifier.completed("Your encrypted download link is ready.")
+            default:
+                break
+            }
+        }
+        .onChange(of: downloadModel.state) { state in
+            switch state {
+            case .downloading:
+                notifier.prepare()
+            case .done(let urls):
+                notifier.completed("\(urls.count) file\(urls.count == 1 ? " is" : "s are") ready.")
+            default:
+                break
+            }
+        }
+        .onChange(of: realtimeModel.state) { state in
+            switch state {
+            case .minting, .joining, .connecting, .transferring:
+                notifier.prepare()
+            case .completed(let urls):
+                notifier.completed(urls.isEmpty
+                    ? "Your files reached the other device."
+                    : "\(urls.count) file\(urls.count == 1 ? " is" : "s are") ready.")
+            default:
+                break
+            }
+        }
+    }
+
+    private func route(_ link: AppDeepLink) {
+        switch link {
+        case .download(let url):
+            selectedTab = .link
+            showDownload = true
+            downloadModel.linkText = url.absoluteString
+            downloadModel.resolve()
+        case .realtime(let code):
+            selectedTab = .direct
+            showDirect = true
+            if let code { realtimeModel.updateJoinCode(code) }
+        }
+        deepLinks.consume()
     }
 
     /// The error to show on the form, or `nil` while there is nothing to report.
