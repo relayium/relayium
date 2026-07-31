@@ -123,8 +123,19 @@ The output path must not already exist. The image contains `Relayium.app` and an
 `Applications` shortcut; the script refuses a different bundle identifier or an
 invalid source/copied signature.
 
-**The acceptance artifact is not a user release.** Notarization and stapling,
-Sparkle, public release publication, and the `/apps` page flip remain R1-G5.
+**The default acceptance artifact is not a user release.** A manual run of the
+`macos` workflow can set its `notarize` input to submit the signed DMG to
+Apple, retain the submission metadata and full notarization log, staple and
+validate the ticket, run a Gatekeeper assessment, and regenerate the checksum.
+The default is deliberately off so ordinary pushes do not consume Apple's
+daily submission allowance.
+
+The manual notarization path requires three additional GitHub Actions secrets:
+`MACOS_NOTARY_KEY_P8_BASE64`, `MACOS_NOTARY_KEY_ID`, and
+`MACOS_NOTARY_ISSUER_ID`. Creation and rotation steps live in the
+`macos-signing` runbook in relayium-ops. A notarized workflow artifact is still
+not published automatically; Sparkle, public release publication, and the
+`/apps` page flip remain separately controlled R1-G5 work.
 
 ### Link handoff and notifications
 

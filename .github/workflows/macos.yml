@@ -12,6 +12,12 @@ on:
       - 'apps/**'
       - '.github/workflows/macos.yml'
   workflow_dispatch:
+    inputs:
+      notarize:
+        description: 'Submit the signed DMG to Apple, staple it, and run Gatekeeper verification'
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   # No secrets, so this runs on pull requests from forks like any other check.
@@ -137,9 +143,37 @@ jobs:
           apps/mac/scripts/package-dmg.sh \
             "$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app" \
             "$RUNNER_TEMP/Relayium.dmg"
-      # This is a CI acceptance artifact, not a public release. Public
-      # distribution remains gated on Apple notarization and stapling.
-      - name: Upload signed DMG acceptance artifact
+      # Notarization is deliberately opt-in rather than part of every push:
+      # Apple limits daily submissions, and an accepted build is a release
+      # candidate rather than ordinary compile evidence.
+      - name: Materialize notarization API key
+        if: github.event_name == 'workflow_dispatch' && inputs.notarize
+        env:
+          NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "$NOTARY_KEY_P8_BASE64" ] || [ -z "$NOTARY_KEY_ID" ] || [ -z "$NOTARY_ISSUER_ID" ]; then
+            echo "::error::MACOS_NOTARY_KEY_P8_BASE64 / MACOS_NOTARY_KEY_ID / MACOS_NOTARY_ISSUER_ID are not set — see the macos-signing runbook in relayium-ops"
+            exit 1
+          fi
+          ( umask 077; printf '%s' "$NOTARY_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/notary-key.p8" )
+          mkdir -p "$RUNNER_TEMP/notarization"
+      - name: Notarize, staple, and assess DMG
+        if: github.event_name == 'workflow_dispatch' && inputs.notarize
+        env:
+          MACOS_NOTARY_KEY_PATH: ${{ runner.temp }}/notary-key.p8
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          apps/mac/scripts/notarize-dmg.sh \
+            "$RUNNER_TEMP/Relayium.dmg" \
+            "$RUNNER_TEMP/notarization"
+      # Without the manual notarize input this remains a CI acceptance artifact,
+      # not a public release. Public publication and the /apps page flip are
+      # separate, explicitly controlled G5 steps.
+      - name: Upload signed DMG artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: relayium-macos-${{ github.sha }}
@@ -148,6 +182,19 @@ jobs:
             ${{ runner.temp }}/Relayium.dmg.sha256
           if-no-files-found: error
           retention-days: 14
+      # Preserve Apple's rejection details even when the notarization step
+      # fails. A rejected DMG itself is deliberately not uploaded.
+      - name: Upload notarization evidence
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.notarize
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-macos-notarization-${{ github.sha }}
+          path: ${{ runner.temp }}/notarization
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Remove notarization API key
+        if: always()
+        run: rm -P "$RUNNER_TEMP/notary-key.p8" 2>/dev/null || true
       - name: Remove signing keychain
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
