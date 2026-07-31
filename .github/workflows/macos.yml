@@ -23,6 +23,11 @@ on:
         required: true
         default: false
         type: boolean
+      validate_sparkle_key:
+        description: 'Sign a disposable appcast entry and prove the update key matches the app'
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   # No secrets, so this runs on pull requests from forks like any other check.
@@ -189,6 +194,41 @@ jobs:
             "$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app" \
             "$RUNNER_TEMP/Relayium.dmg" \
             "Developer ID Application"
+      # This is a disposable acceptance check, not release publication. Sparkle
+      # refuses to add an EdDSA enclosure signature when the supplied private
+      # key does not derive the SUPublicEDKey embedded in the mounted app.
+      - name: Validate Sparkle update-signing key
+        if: github.event_name == 'workflow_dispatch' && inputs.validate_sparkle_key
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.MACOS_SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "::error::MACOS_SPARKLE_PRIVATE_KEY is not set"
+            exit 1
+          fi
+          tools="$RUNNER_TEMP/dd/SourcePackages/artifacts/sparkle/Sparkle/bin"
+          validation_dir="$RUNNER_TEMP/sparkle-key-validation"
+          log="$RUNNER_TEMP/sparkle-key-validation.log"
+          mkdir "$validation_dir"
+          cp "$RUNNER_TEMP/Relayium.dmg" "$validation_dir/Relayium.dmg"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" \
+            | "$tools/generate_appcast" \
+                --ed-key-file - \
+                --download-url-prefix "https://relayium.com/apps/macos/" \
+                "$validation_dir" > "$log" 2>&1
+          appcast="$validation_dir/appcast.xml"
+          [ -s "$appcast" ] || {
+            echo "::error::Sparkle did not generate a validation appcast"; exit 1; }
+          grep -q '<enclosure ' "$appcast" || {
+            echo "::error::Validation appcast has no release enclosure"; exit 1; }
+          grep -q 'sparkle:edSignature=' "$appcast" || {
+            echo "::error::The secret does not match the app's embedded Sparkle public key"; exit 1; }
+          if grep -q 'does not match key EdDSA' "$log"; then
+            echo "::error::The secret does not match the app's embedded Sparkle public key"
+            exit 1
+          fi
+          echo "Sparkle update-signing key matches the app and signed a disposable enclosure"
       # Notarization is deliberately opt-in rather than part of every push:
       # Apple limits daily submissions, and an accepted build is a release
       # candidate rather than ordinary compile evidence.

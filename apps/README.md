@@ -145,6 +145,12 @@ The manual notarization path requires three additional GitHub Actions secrets:
 uploading software or consuming a submission; this is the safe check after
 credential creation or rotation.
 
+The manual workflow's `validate_sparkle_key` mode uses
+`MACOS_SPARKLE_PRIVATE_KEY` only through the official Sparkle tool's standard
+input. It generates a disposable appcast from the signed DMG and requires an
+EdDSA enclosure signature, proving that the secret derives the public key
+embedded in the app. It publishes nothing and never prints the private key.
+
 ### Updates
 
 Sparkle 2.9.4 is pinned through Swift Package Manager. The application menu
