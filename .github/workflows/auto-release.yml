@@ -40,7 +40,7 @@ jobs:
       # Third-party actions are pinned to a full commit SHA (with the
       # human-readable version in a trailing comment) so a compromised or
       # retagged upstream release can't silently change what runs here.
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: main
           fetch-depth: 0   # tags and full history: both are inputs below
@@ -76,7 +76,19 @@ jobs:
           #
           # This is not hypothetical: at the time this gate was added, main had
           # 52 commits since v0.11.1 and not one of them touched server/.
-          rel="$(git diff --name-only "$last"..HEAD -- server/ | head -1)"
+          # Ask git the yes/no question directly. Piping a potentially long
+          # name list into `head` under pipefail can turn "changed" into exit
+          # 141 when git receives SIGPIPE.
+          if git diff --quiet "$last"..HEAD -- server/; then
+            rel=""
+          else
+            diff_status=$?
+            if [ "$diff_status" -ne 1 ]; then
+              echo "::error::git diff failed while checking release scope"
+              exit "$diff_status"
+            fi
+            rel="changed"
+          fi
           if [ -z "$rel" ] && [ "${{ inputs.force }}" != "true" ]; then
             {
               echo "### Nothing to release"

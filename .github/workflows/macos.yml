@@ -21,7 +21,7 @@ jobs:
       # Third-party actions are pinned to a full commit SHA (with the
       # human-readable version in a trailing comment) so a compromised or
       # retagged upstream release can't silently change what runs here.
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # Recorded in the log so a future failure can be compared against the
       # toolchain that produced the last green run.
       - name: Toolchain versions
@@ -40,7 +40,7 @@ jobs:
     runs-on: macos-15
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # Materialize the Developer ID identity into a throwaway keychain. Fails
       # loudly if the secrets are unset so a build is never silently produced
       # unsigned once signing is expected.
@@ -140,7 +140,7 @@ jobs:
       # This is a CI acceptance artifact, not a public release. Public
       # distribution remains gated on Apple notarization and stapling.
       - name: Upload signed DMG acceptance artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: relayium-macos-${{ github.sha }}
           path: |
