@@ -147,14 +147,13 @@ The G4 app-side foundation is present:
 - transfer completion notifications contain no filenames, links, pairing
   codes, or keys, and are delivered only while the app is inactive.
 
-`com.apple.developer.associated-domains` is intentionally not in
-`Relayium.entitlements` yet. The current Developer ID provisioning profile does
-not authorize it, so adding it now would break every signed CI build. Before the
-final G4 activation, enable Associated Domains for `com.relayium.mac`, reissue
-the `Relayium Mac` Developer ID profile, update the CI profile secret, then add
-`applinks:relayium.com`, configure the production AASA app ID, and run real
-Finder/Safari handoff tests. Until then the parser and routing are covered by
-`swift test`, but HTTPS links continue to open in the browser.
+The app is signed with
+`com.apple.developer.associated-domains = applinks:relayium.com`, and the
+production AASA names `7PVYUG4YQS.com.relayium.mac` for `/d/*` and
+`/cross-network`. CI verifies the expanded entitlement so a stale provisioning
+profile cannot silently turn HTTPS handoff back off. Link parsing and routing
+are covered by `swift test`; real Finder/Safari handoff remains part of release
+acceptance because macOS and Apple's AASA cache participate in that path.
 
 ### Manual acceptance
 

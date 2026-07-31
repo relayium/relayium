@@ -126,6 +126,8 @@ jobs:
           # means the team never applied, and the app would fail at runtime.
           printf '%s' "$ents" | grep -q '7PVYUG4YQS.com.relayium.shared' || {
             echo "::error::keychain access group missing or unexpanded in the signed build"; exit 1; }
+          printf '%s' "$ents" | grep -q 'applinks:relayium.com' || {
+            echo "::error::relayium.com Associated Domain missing from the signed build"; exit 1; }
           get_task_allow="$(
             printf '%s' "$ents" \
               | plutil -extract com.apple.security.get-task-allow raw -o - - 2>/dev/null \
