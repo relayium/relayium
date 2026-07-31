@@ -582,9 +582,9 @@ const es: Messages = {
       title: "Transferencia en tiempo real, en tres pasos",
       sub: "Cuando ambos lados están en línea, transfiere en tiempo real entre redes — el destinatario no necesita cuenta.",
       ways: [
-        { icon: "📄", name: "Elige archivos, obtén un código", how: "Toca «Enviar archivos» y elige qué enviar — se acuña automáticamente un código de emparejamiento de 6 caracteres, junto con un enlace para unirse y un QR.", tag: "Inicia sesión para enviar" },
+        { icon: "🔗", name: "Crea un código de emparejamiento", how: "Inicia sesión y crea un código de 6 caracteres, con enlace para unirse y QR. Elige qué enviar después de que se una el otro dispositivo.", tag: "El creador inicia sesión" },
         { icon: "🔢", name: "Dale el código al otro lado", how: "Léelo en voz alta, envía el enlace o muestra el QR — cualquiera de los tres; lo escriben o lo abren en cualquier navegador moderno.", tag: "Los códigos viven 5 minutos" },
-        { icon: "⚡", name: "La transferencia empieza al unirse", how: "En cuanto se unen, la transferencia comienza automáticamente — cifrada de extremo a extremo todo el camino; entre redes, el flujo pasa por un retransmisor TURN cifrado que solo transporta texto cifrado y no puede descifrar nada.", tag: "El retransmisor no puede leer ni descifrar" },
+        { icon: "⚡", name: "Elige archivos o texto", how: "Cuando se una, elige hasta 1.000 archivos en su tarjeta o «Enviar un mensaje» para texto en línea. Compara el SAS y envía el contenido cifrado de extremo a extremo por TURN.", tag: "El retransmisor no puede leer ni descifrar ninguno" },
       ],
     },
     offline: {

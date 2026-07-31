@@ -583,9 +583,9 @@ const fr: Messages = {
       title: "Transfert en temps réel, en trois étapes",
       sub: "Quand les deux côtés sont en ligne, transfert en temps réel d'un réseau à l'autre — le destinataire n'a pas besoin de compte.",
       ways: [
-        { icon: "📄", name: "Choisir les fichiers, obtenir un code", how: "Touchez « Envoyer des fichiers » et choisissez quoi envoyer — un code d'appairage à 6 caractères est créé automatiquement, avec lien d'accès et QR.", tag: "Connexion pour envoyer" },
+        { icon: "🔗", name: "Créer un code d'appairage", how: "Connectez-vous et créez un code à 6 caractères, avec lien de participation et QR. Vous choisirez le contenu après l'arrivée de l'autre appareil.", tag: "Le créateur se connecte" },
         { icon: "🔢", name: "Transmettre le code", how: "Dictez-le, envoyez le lien ou montrez le QR — au choix ; l'autre personne le saisit ou l'ouvre dans n'importe quel navigateur moderne.", tag: "Codes valables 5 minutes" },
-        { icon: "⚡", name: "Le transfert démarre à l'arrivée", how: "Dès que l'autre appareil rejoint, le transfert démarre automatiquement — chiffré de bout en bout sur tout le trajet ; entre réseaux, le flux passe par un relais TURN chiffré qui ne transporte que du texte chiffré, sans rien pouvoir déchiffrer.", tag: "Le relais ne peut ni lire ni déchiffrer" },
+        { icon: "⚡", name: "Choisir fichiers ou texte", how: "Après son arrivée, choisissez jusqu'à 1 000 fichiers sur sa carte, ou « Envoyer un message » pour du texte en ligne. Comparez le SAS, puis le contenu traverse TURN chiffré de bout en bout.", tag: "Le relais ne peut ni lire ni déchiffrer les deux" },
       ],
     },
     offline: {

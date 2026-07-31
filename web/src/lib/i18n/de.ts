@@ -583,9 +583,9 @@ const de: Messages = {
       title: "Echtzeitübertragung in drei Schritten",
       sub: "Wenn beide Seiten online sind, netzwerkübergreifend in Echtzeit übertragen — der Empfänger braucht kein Konto.",
       ways: [
-        { icon: "📄", name: "Dateien wählen, Code erhalten", how: "Auf „Dateien senden“ tippen und auswählen — ein 6-stelliger Pairing-Code wird automatisch erzeugt, samt Beitrittslink und QR.", tag: "Zum Senden anmelden" },
+        { icon: "🔗", name: "Pairing-Code erstellen", how: "Melde dich an und erstelle einen 6-stelligen Pairing-Code samt Beitrittslink und QR. Was du sendest, wählst du erst, wenn das andere Gerät beigetreten ist.", tag: "Der Ersteller meldet sich an" },
         { icon: "🔢", name: "Code an die Gegenseite geben", how: "Vorlesen, den Link schicken oder den QR zeigen — die andere Person tippt ihn ein oder öffnet ihn in einem beliebigen modernen Browser.", tag: "Codes gelten 5 Minuten" },
-        { icon: "⚡", name: "Übertragung startet beim Beitritt", how: "Sobald die Gegenseite beitritt, startet die Übertragung automatisch — durchgehend Ende-zu-Ende-verschlüsselt; netzübergreifend läuft der Strom über ein verschlüsseltes TURN-Relay, das nur Chiffretext trägt und nichts entschlüsseln kann.", tag: "Das Relay kann deine Dateien nicht entschlüsseln" },
+        { icon: "⚡", name: "Dateien oder Text wählen", how: "Nach dem Beitritt wählst du auf der Gerätekarte bis zu 1.000 Dateien oder „Nachricht senden“ für Onlinetext. Vergleicht den SAS; danach läuft der Inhalt Ende-zu-Ende-verschlüsselt über TURN.", tag: "Das Relay kann beides weder lesen noch entschlüsseln" },
       ],
     },
     offline: {

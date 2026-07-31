@@ -19,4 +19,34 @@ describe("pairing-code expiry copy", () => {
       expect(tag, lang).not.toMatch(/15/);
     }
   });
+
+  it("teaches the real post-join file-or-text flow in every locale", () => {
+    const textTokens: Record<string, RegExp> = {
+      en: /text/i,
+      zh: /文本/,
+      ja: /テキスト/,
+      ko: /텍스트/,
+      de: /Text/i,
+      fr: /texte/i,
+      ar: /نص/u,
+      es: /texto/i,
+      pt: /texto/i,
+    };
+
+    for (const [lang, messages] of Object.entries(locales)) {
+      const [create, , choose] = messages.howItWorks.realtime.ways;
+      expect(create.icon, `${lang}: create first`).toBe("🔗");
+      expect(create.how, `${lang}: six-character code`).toMatch(/6/);
+      expect(choose.how, `${lang}: batch cap`).toMatch(/1(?:[,\s. ]*)000/);
+      expect(choose.how, `${lang}: text option`).toMatch(textTokens[lang]);
+      expect(choose.how, `${lang}: SAS`).toMatch(/SAS/i);
+      expect(choose.how, `${lang}: TURN`).toMatch(/TURN/i);
+    }
+
+    expect(en.howItWorks.realtime.ways[0].name).toBe("Create a pairing code");
+    expect(en.howItWorks.realtime.ways[2].name).toBe("Choose files or text");
+    expect(JSON.stringify(en.howItWorks.realtime.ways)).not.toMatch(
+      /Pick files, get a code|Transfer starts on join|starts automatically/i,
+    );
+  });
 });
