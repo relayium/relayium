@@ -72,12 +72,49 @@ private final class TextStubConnection: RealtimePeerConnection, @unchecked Senda
     }
 }
 
+private actor TextIdleGate {
+    private var released = false
+    private var started = false
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+    private var startContinuations: [CheckedContinuation<Void, Never>] = []
+    private var requestedNanoseconds: [UInt64] = []
+
+    func wait(nanoseconds: UInt64) async {
+        started = true
+        requestedNanoseconds.append(nanoseconds)
+        let startContinuations = self.startContinuations
+        self.startContinuations = []
+        for continuation in startContinuations { continuation.resume() }
+        guard !released else { return }
+        await withCheckedContinuation { continuations.append($0) }
+    }
+
+    func waitUntilStarted() async {
+        guard !started else { return }
+        await withCheckedContinuation { startContinuations.append($0) }
+    }
+
+    func release() {
+        released = true
+        let continuations = self.continuations
+        self.continuations = []
+        for continuation in continuations { continuation.resume() }
+    }
+
+    func requestedDurations() -> [UInt64] { requestedNanoseconds }
+}
+
 @MainActor
 final class RealtimeTextSessionModelTests: XCTestCase {
     private var clock: TimeInterval = 100
     private var connection = TextStubConnection()
 
-    private func makeModel(idleSeconds: TimeInterval = 600) -> RealtimeTextSessionModel {
+    private func makeModel(
+        idleSeconds: TimeInterval = 600,
+        idleSleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
+            try? await Task.sleep(nanoseconds: nanoseconds)
+        }
+    ) -> RealtimeTextSessionModel {
         clock = 100
         connection = TextStubConnection()
         let peer = connection
@@ -86,6 +123,7 @@ final class RealtimeTextSessionModelTests: XCTestCase {
             iceClient: TextStubICE(),
             now: { [weak self] in self?.clock ?? 0 },
             idleSeconds: idleSeconds,
+            idleSleep: idleSleep,
             makeConnection: { _, _, _ in peer }
         )
     }
@@ -93,6 +131,15 @@ final class RealtimeTextSessionModelTests: XCTestCase {
     private func settle() async {
         await Task.yield()
         await Task.yield()
+    }
+
+    private func waitUntilEnded(_ model: RealtimeTextSessionModel) async {
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if case .ended = model.state { return }
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTFail("idle did not end: \(model.state)")
     }
 
     private func openInitiator(_ model: RealtimeTextSessionModel) async {
@@ -217,16 +264,22 @@ final class RealtimeTextSessionModelTests: XCTestCase {
     }
 
     func testVerificationScreenEndsAfterIdleLimit() async {
-        let model = makeModel(idleSeconds: 0.01)
+        let idleGate = TextIdleGate()
+        let model = makeModel(
+            idleSeconds: 42,
+            idleSleep: { nanoseconds in await idleGate.wait(nanoseconds: nanoseconds) }
+        )
         await model.join(code: "K7M3X9", role: .initiator)
         connection.onSAS?("six-words")
         connection.onOpen?()
         await settle()
         guard case .verifying = model.state else { return XCTFail("got \(model.state)") }
 
-        try? await Task.sleep(nanoseconds: 30_000_000)
-        await settle()
-        guard case .ended = model.state else { return XCTFail("idle did not end: \(model.state)") }
+        await idleGate.waitUntilStarted()
+        let requestedDurations = await idleGate.requestedDurations()
+        XCTAssertEqual(requestedDurations, [42_000_000_000])
+        await idleGate.release()
+        await waitUntilEnded(model)
     }
 
     func testChannelOpeningBeforeSASStillWaitsForVerificationPhrase() async {
@@ -365,7 +418,10 @@ final class RealtimeTextSessionModelTests: XCTestCase {
     }
 
     func testIdleEndsOpenSessionAndClearHistoryDoesNotTouchConnection() async {
-        let model = makeModel(idleSeconds: 0.01)
+        let idleGate = TextIdleGate()
+        let model = makeModel(
+            idleSleep: { nanoseconds in await idleGate.wait(nanoseconds: nanoseconds) }
+        )
         await openInitiator(model)
         connection.onText?("temporary", 30)
         await settle()
@@ -374,9 +430,9 @@ final class RealtimeTextSessionModelTests: XCTestCase {
         XCTAssertTrue(model.history.isEmpty)
         guard case .open = model.state else { return XCTFail("clear ended session") }
 
-        try? await Task.sleep(nanoseconds: 30_000_000)
-        await settle()
-        guard case .ended = model.state else { return XCTFail("idle did not end: \(model.state)") }
+        await idleGate.waitUntilStarted()
+        await idleGate.release()
+        await waitUntilEnded(model)
     }
 
     func testEndingKeepsHistoryVisibleUntilClearOrNewSession() async {

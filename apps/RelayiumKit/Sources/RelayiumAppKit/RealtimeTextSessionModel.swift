@@ -48,6 +48,7 @@ public final class RealtimeTextSessionModel: ObservableObject {
     private let makeConnection: (_ code: String, _ role: Role, _ ice: ICEConfig) async throws -> RealtimePeerConnection
     private let now: () -> TimeInterval
     private let idleSeconds: TimeInterval
+    private let idleSleep: @Sendable (_ nanoseconds: UInt64) async -> Void
 
     private var connection: RealtimePeerConnection?
     private var role: Role = .responder
@@ -69,11 +70,15 @@ public final class RealtimeTextSessionModel: ObservableObject {
                 iceClient: ICEConfigClient,
                 now: @escaping () -> TimeInterval = { Date().timeIntervalSince1970 },
                 idleSeconds: TimeInterval = TEXT_IDLE_SECONDS,
+                idleSleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
+                    try? await Task.sleep(nanoseconds: nanoseconds)
+                },
                 makeConnection: @escaping (String, Role, ICEConfig) async throws -> RealtimePeerConnection) {
         self.pairClient = pairClient
         self.iceClient = iceClient
         self.now = now
         self.idleSeconds = idleSeconds
+        self.idleSleep = idleSleep
         self.makeConnection = makeConnection
         self.lastRefill = now()
     }
@@ -380,8 +385,9 @@ public final class RealtimeTextSessionModel: ObservableObject {
         idleTask?.cancel()
         let g = generation
         let nanoseconds = UInt64(max(0, idleSeconds) * 1_000_000_000)
+        let idleSleep = self.idleSleep
         idleTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: nanoseconds)
+            await idleSleep(nanoseconds)
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 self?.apply(g) { model in
