@@ -24,7 +24,7 @@ const en = {
       heading: "Where they differ: the file lives on a server",
       body: [
         "With WeTransfer, your file is uploaded to its servers, stored there for a while, and downloaded from there. The free tier caps each transfer at 2 GB, and the link points at a copy sitting on infrastructure you do not control. The transfer is encrypted in transit and at rest, but it is not zero-knowledge: the service holds the keys and could, in principle, read the file.",
-        "Relayium's realtime mode does not keep a server-side file copy or transfer history, so there is no server-side size cap to hit. On the same LAN the browsers connect directly; across networks they use a TURN relay by design, which carries end-to-end encrypted ciphertext but cannot read or decrypt the plaintext. On top of WebRTC, Relayium adds its own layer: an X25519 key exchange derives a key for per-chunk AES-256-GCM, both devices show a matching 6-digit verification code (SAS) to rule out a man-in-the-middle, and each file is checked end-to-end with a SHA-256 hash.",
+        "Relayium's realtime mode does not keep a server-side file copy or transfer history, so there is no server-side size cap to hit. On the same LAN the browsers connect directly; across networks they use a TURN relay by design, which carries end-to-end encrypted ciphertext but cannot read or decrypt the plaintext. On top of WebRTC, Relayium adds its own layer: an X25519 key exchange derives a key for per-chunk AES-256-GCM, both devices compare a matching 6-digit verification code (SAS) out of band to detect substituted endpoint public keys or endpoint impersonation, and each file is checked end-to-end with a SHA-256 hash.",
       ],
     },
     {
@@ -101,7 +101,7 @@ const zh = {
       heading: "差异所在：文件存在服务器上",
       body: [
         "用 WeTransfer 时，你的文件会上传到它的服务器、在那里存放一段时间，再从那里下载。免费档每次传输上限 2 GB，链接指向的是放在你无法掌控的基础设施上的一份副本。传输在通道内和静态存储时都有加密，但它不是零知识的：服务方持有密钥，原则上可以读取文件。",
-        "Relayium 的实时模式不在服务端保留文件副本或传输历史，因此不存在服务端大小上限。同一局域网内浏览器直连；跨网络浏览器按设计使用 TURN 中继，TURN 承载端到端加密的密文，但无法读取或解密明文。在 WebRTC 传输之上，Relayium 再加一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密；两台设备显示一致的 6 位校验码（SAS）以排除中间人；每个文件都用 SHA-256 做端到端校验。",
+        "Relayium 的实时模式不在服务端保留文件副本或传输历史，因此不存在服务端大小上限。同一局域网内浏览器直连；跨网络浏览器按设计使用 TURN 中继，TURN 承载端到端加密的密文，但无法读取或解密明文。在 WebRTC 传输之上，Relayium 再加一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密；两台设备通过带外渠道核对一致的 6 位校验码（SAS），以检测端点公钥替换或端点冒充；每个文件都用 SHA-256 做端到端校验。",
       ],
     },
     {

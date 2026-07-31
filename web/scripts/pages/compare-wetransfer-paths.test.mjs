@@ -104,4 +104,14 @@ describe("WeTransfer comparison realtime paths", () => {
       for (const text of guardedFields(article.langs[lang]))
         expect(norm(text), `${lang}: ${text}`).not.toMatch(STALE[lang]);
   });
+
+  it("describes the two absolute SAS claims as endpoint-key checks", () => {
+    const en = article.langs.en.sections[1].body[1];
+    const zh = article.langs.zh.sections[1].body[1];
+
+    expect(en).toMatch(/compare.+SAS.+out of band.+endpoint public keys.+endpoint impersonation/is);
+    expect(en).not.toMatch(/rule out a man-in-the-middle/i);
+    expect(zh).toMatch(/带外渠道.+SAS.+端点公钥替换.+端点冒充/s);
+    expect(zh).not.toMatch(/排除中间人/);
+  });
 });
