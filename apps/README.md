@@ -108,20 +108,27 @@ you go looking for a way around it: it is the price of the
 four lines from `Relayium.entitlements` makes the same tree build and sign
 cleanly with no profile at all. See "Provisioning profile" below.
 
-The signed-build CI job packages the signed Release app into a compressed
+The signed-build CI job builds the Release app for the generic macOS destination
+and verifies that the executable contains both `arm64` and `x86_64`. It then
+re-signs Sparkle's nested installer helpers leaf-to-root with Relayium's
+Developer ID identity, packages the app into a compressed, Developer ID-signed
 `Relayium.dmg`, mounts it, verifies the copied app's signature, and retains the
-DMG plus its SHA-256 checksum as a 14-day acceptance artifact. The same path can
-be run locally:
+DMG plus its SHA-256 checksum as a 14-day acceptance artifact. The same packaging
+path can be run locally:
 
 ```sh
 apps/mac/scripts/package-dmg.sh \
   /path/to/Release/Relayium.app \
-  /path/to/Relayium.dmg
+  /path/to/Relayium.dmg \
+  "Developer ID Application: Name (TEAMID)"
 ```
 
 The output path must not already exist. The image contains `Relayium.app` and an
 `Applications` shortcut; the script refuses a different bundle identifier or an
-invalid source/copied signature.
+invalid source/copied signature. The signing identity is optional only for local
+development images; CI and every notarization candidate supply it. The
+notarization script rejects an unsigned or untimestamped DMG before uploading it
+to Apple.
 
 **The default acceptance artifact is not a user release.** A manual run of the
 `macos` workflow can set its `notarize` input to submit the signed DMG to
@@ -136,9 +143,27 @@ The manual notarization path requires three additional GitHub Actions secrets:
 `macos-signing` runbook in relayium-ops. A manual run can enable
 `validate_notary_credentials` to authenticate with `notarytool history` without
 uploading software or consuming a submission; this is the safe check after
-credential creation or rotation. A notarized workflow artifact is still not
-published automatically; Sparkle, public release publication, and the `/apps`
-page flip remain separately controlled R1-G5 work.
+credential creation or rotation.
+
+### Updates
+
+Sparkle 2.9.4 is pinned through Swift Package Manager. The application menu
+exposes **Check for Updates…**, and the app enables Sparkle's required
+Installer.xpc service with the two documented sandbox Mach service exceptions.
+It already has outbound network access, so the optional Downloader service is
+not enabled.
+
+`https://relayium.com/apps/macos/appcast.xml` is the configured update feed. It
+is intentionally a valid feed with no release enclosure until the first public
+macOS release exists; this prevents a pre-release build from offering an
+unpublished artifact. Update archives use the Relayium Sparkle Ed25519 public
+key embedded in `Info.plist`. The matching private key stays in Keychain and
+must be backed up and installed as a GitHub Actions secret before automated
+appcast publication.
+
+A notarized workflow artifact is still not published automatically. Public
+release publication, the first signed appcast enclosure, and the `/apps` page
+flip remain separately controlled R1-G5 work.
 
 ### Link handoff and notifications
 

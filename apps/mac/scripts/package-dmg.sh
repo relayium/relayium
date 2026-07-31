@@ -3,16 +3,17 @@
 set -Eeuo pipefail
 
 usage() {
-  echo "Usage: $0 /path/to/Relayium.app /path/to/Relayium.dmg" >&2
+  echo "Usage: $0 /path/to/Relayium.app /path/to/Relayium.dmg [signing-identity]" >&2
 }
 
-if [ "$#" -ne 2 ]; then
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
   usage
   exit 64
 fi
 
 app_input="$1"
 output_input="$2"
+signing_identity="${3:-}"
 
 if [ ! -d "$app_input" ] || [ "${app_input##*.}" != "app" ]; then
   echo "error: app input must be an existing .app bundle: $app_input" >&2
@@ -81,6 +82,17 @@ hdiutil create \
   -srcfolder "$stage_dir" \
   -format UDZO \
   "$dmg_work"
+
+if [ -n "$signing_identity" ]; then
+  codesign --force --sign "$signing_identity" --timestamp "$dmg_work"
+  codesign --verify --strict --verbose=2 "$dmg_work"
+  dmg_signature="$(codesign -d --verbose=4 "$dmg_work" 2>&1)"
+  if ! printf '%s\n' "$dmg_signature" | grep -q '^Timestamp='; then
+    echo "error: signed disk image has no secure timestamp" >&2
+    exit 65
+  fi
+fi
+
 hdiutil verify "$dmg_work"
 
 hdiutil attach \

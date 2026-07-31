@@ -16,6 +16,18 @@ test "$1" = "verify"
 test -f "$2"
 EOF
 
+cat > "$mock_bin/codesign" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+if [ "$1" = "-d" ]; then
+  if [ "${MOCK_UNSIGNED:-false}" = true ]; then
+    printf 'Signature=adhoc\n'
+    exit 0
+  fi
+  printf 'Timestamp=Jul 31, 2026 at 09:00:00\n'
+fi
+EOF
+
 cat > "$mock_bin/spctl" <<'EOF'
 #!/bin/bash
 set -euo pipefail
@@ -48,7 +60,7 @@ case "$1 $2" in
 esac
 EOF
 
-chmod +x "$mock_bin/hdiutil" "$mock_bin/spctl" "$mock_bin/xcrun"
+chmod +x "$mock_bin/codesign" "$mock_bin/hdiutil" "$mock_bin/spctl" "$mock_bin/xcrun"
 
 key="$work_dir/AuthKey_TEST.p8"
 printf 'private-key-placeholder\n' > "$key"
@@ -91,5 +103,25 @@ test -s "$rejected_evidence/submission.json"
 test -s "$rejected_evidence/notarization-log.json"
 test ! -e "$rejected_dmg.sha256"
 test "$(cat "$rejected_dmg")" = "signed-dmg"
+
+unsigned_dmg="$work_dir/unsigned.dmg"
+unsigned_evidence="$work_dir/unsigned-evidence"
+printf 'unsigned-dmg\n' > "$unsigned_dmg"
+mkdir "$unsigned_evidence"
+
+set +e
+PATH="$mock_bin:$PATH" \
+MOCK_UNSIGNED=true \
+MACOS_NOTARY_KEY_PATH="$key" \
+MACOS_NOTARY_KEY_ID="TESTKEY1234" \
+MACOS_NOTARY_ISSUER_ID="11111111-2222-3333-4444-555555555555" \
+  "$script_dir/notarize-dmg.sh" "$unsigned_dmg" "$unsigned_evidence" \
+  >"$work_dir/unsigned.stdout" 2>"$work_dir/unsigned.stderr"
+result=$?
+set -e
+
+test "$result" -eq 65
+grep -Fq "disk image has no secure timestamp" "$work_dir/unsigned.stderr"
+test ! -e "$unsigned_evidence/submission.json"
 
 echo "notarize-dmg tests passed"

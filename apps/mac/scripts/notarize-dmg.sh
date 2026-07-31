@@ -50,7 +50,15 @@ if [ -e "$submission_json" ] || [ -e "$notary_log" ]; then
   exit 73
 fi
 
-# Reject a malformed image before consuming one of Apple's daily submissions.
+# Reject a malformed or unsigned image before consuming one of Apple's daily
+# submissions. A notarization ticket can be issued for an unsigned container,
+# but Gatekeeper's top-level DMG assessment then reports "no usable signature."
+codesign --verify --strict --verbose=2 "$dmg"
+dmg_signature="$(codesign -d --verbose=4 "$dmg" 2>&1)"
+if ! printf '%s\n' "$dmg_signature" | grep -q '^Timestamp='; then
+  echo "error: disk image has no secure timestamp" >&2
+  exit 65
+fi
 hdiutil verify "$dmg"
 
 submit_result=0

@@ -8,14 +8,34 @@
 
 /* Begin PBXBuildFile section */
 		A100000000000000000000B2 /* RelayiumKit in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000B1 /* RelayiumKit */; };
+		A100000000000000000000C2 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000C1 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A100000000000000000000A4 /* Relayium.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Relayium.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A100000000000000000000C3 /* Exceptions for "Relayium" folder in "Relayium" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A100000000000000000000A5 /* Relayium */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		A100000000000000000000AF /* Relayium */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Relayium; sourceTree = "<group>"; };
+		A100000000000000000000AF /* Relayium */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A100000000000000000000C3 /* Exceptions for "Relayium" folder in "Relayium" target */,
+			);
+			explicitFileTypes = {};
+			explicitFolders = ();
+			path = Relayium;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -24,6 +44,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A100000000000000000000B2 /* RelayiumKit in Frameworks */,
+				A100000000000000000000C2 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -67,6 +88,7 @@
 			name = Relayium;
 			packageProductDependencies = (
 				A100000000000000000000B1 /* RelayiumKit */,
+				A100000000000000000000C1 /* Sparkle */,
 			);
 			productName = Relayium;
 			productReference = A100000000000000000000A4 /* Relayium.app */;
@@ -98,6 +120,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A100000000000000000000B0 /* XCLocalSwiftPackageReference "../RelayiumKit" */,
+				A100000000000000000000C0 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A100000000000000000000A3 /* Products */;
@@ -143,8 +166,8 @@
 				DEVELOPMENT_TEAM = 7PVYUG4YQS;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Relayium/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -174,8 +197,8 @@
 				DEVELOPMENT_TEAM = 7PVYUG4YQS;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Relayium/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -334,10 +357,26 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		A100000000000000000000C0 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.9.4;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		A100000000000000000000B1 /* RelayiumKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RelayiumKit;
+		};
+		A100000000000000000000C1 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000000C0 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

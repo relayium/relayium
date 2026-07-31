@@ -42,6 +42,10 @@ jobs:
       - name: swift test
         working-directory: apps/RelayiumKit
         run: swift test
+      - name: Release script tests
+        run: |
+          apps/mac/scripts/test-resign-sparkle.sh
+          apps/mac/scripts/test-notarize-dmg.sh
 
   # Needs the signing certificate, so it cannot run where secrets are
   # unavailable. This repository is public: a fork's pull request cannot read
@@ -107,8 +111,16 @@ jobs:
       - name: Build (signed, Release)
         run: |
           xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
-            -destination 'platform=macOS' -configuration Release \
+            -destination 'generic/platform=macOS' -configuration Release \
             -derivedDataPath "$RUNNER_TEMP/dd" build
+      # Sparkle's prebuilt helpers carry distribution-inappropriate ad-hoc
+      # signatures. A normal `build` does not replace those nested signatures,
+      # so re-sign leaf-to-root and then restore the app's outer resource seal.
+      - name: Re-sign Sparkle distribution components
+        run: |
+          apps/mac/scripts/resign-sparkle.sh \
+            "$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app" \
+            "Developer ID Application"
       # The reason this job exists. An entitlement regression compiles fine and
       # passes swift test; it shows up as a runtime Keychain failure weeks later
       # on somebody's machine.
@@ -117,12 +129,27 @@ jobs:
           set -euo pipefail
           app="$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app"
           codesign --verify --strict --verbose=2 "$app"
+          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/Relayium" || {
+            echo "::error::Release executable is not universal (arm64 + x86_64)"; exit 1; }
           signature_details="$(codesign -d --verbose=4 "$app" 2>&1)"
           printf '%s\n' "$signature_details"
           printf '%s\n' "$signature_details" | grep -q 'flags=.*runtime' || {
             echo "::error::Hardened Runtime flag missing from the signed build"; exit 1; }
           printf '%s\n' "$signature_details" | grep -q '^Timestamp=' || {
             echo "::error::Secure timestamp missing from the signed build"; exit 1; }
+          sparkle="$app/Contents/Frameworks/Sparkle.framework/Versions/B"
+          for component in \
+            "$sparkle/Autoupdate" \
+            "$sparkle/Updater.app" \
+            "$sparkle/XPCServices/Installer.xpc" \
+            "$sparkle/XPCServices/Downloader.xpc"; do
+            details="$(codesign -d --verbose=4 "$component" 2>&1)"
+            printf '%s\n' "$details"
+            printf '%s\n' "$details" | grep -q 'TeamIdentifier=7PVYUG4YQS' || {
+              echo "::error::Sparkle component is not signed by the Relayium team: $component"; exit 1; }
+            printf '%s\n' "$details" | grep -q '^Timestamp=' || {
+              echo "::error::Sparkle component has no secure timestamp: $component"; exit 1; }
+          done
           ents="$(codesign -d --entitlements - --xml "$app" | plutil -convert xml1 -o - -)"
           printf '%s\n' "$ents"
           printf '%s' "$ents" | grep -q 'com.apple.security.app-sandbox' || {
@@ -133,6 +160,17 @@ jobs:
             echo "::error::keychain access group missing or unexpanded in the signed build"; exit 1; }
           printf '%s' "$ents" | grep -q 'applinks:relayium.com' || {
             echo "::error::relayium.com Associated Domain missing from the signed build"; exit 1; }
+          printf '%s' "$ents" | grep -q 'com.relayium.mac-spks' || {
+            echo "::error::Sparkle installer server entitlement missing from the signed build"; exit 1; }
+          printf '%s' "$ents" | grep -q 'com.relayium.mac-spki' || {
+            echo "::error::Sparkle installer client entitlement missing from the signed build"; exit 1; }
+          [ "$(plutil -extract SUEnableInstallerLauncherService raw -o - "$app/Contents/Info.plist")" = true ] || {
+            echo "::error::Sparkle Installer.xpc is not enabled"; exit 1; }
+          [ "$(plutil -extract SUFeedURL raw -o - "$app/Contents/Info.plist")" = \
+            "https://relayium.com/apps/macos/appcast.xml" ] || {
+            echo "::error::Sparkle feed URL is missing or unexpected"; exit 1; }
+          [ -n "$(plutil -extract SUPublicEDKey raw -o - "$app/Contents/Info.plist")" ] || {
+            echo "::error::Sparkle EdDSA public key is missing"; exit 1; }
           get_task_allow="$(
             printf '%s' "$ents" \
               | plutil -extract com.apple.security.get-task-allow raw -o - - 2>/dev/null \
@@ -149,7 +187,8 @@ jobs:
         run: |
           apps/mac/scripts/package-dmg.sh \
             "$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app" \
-            "$RUNNER_TEMP/Relayium.dmg"
+            "$RUNNER_TEMP/Relayium.dmg" \
+            "Developer ID Application"
       # Notarization is deliberately opt-in rather than part of every push:
       # Apple limits daily submissions, and an accepted build is a release
       # candidate rather than ordinary compile evidence.

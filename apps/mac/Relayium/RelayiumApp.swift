@@ -1,5 +1,35 @@
 import SwiftUI
+import Sparkle
 import RelayiumAppKit
+
+/// Keeps the SwiftUI command enabled state in sync with Sparkle's updater.
+///
+/// `canCheckForUpdates` is KVO-backed rather than SwiftUI state, so reading it
+/// directly from a button would leave the menu disabled state stale.
+@MainActor
+final class CheckForUpdatesViewModel: ObservableObject {
+    @Published var canCheckForUpdates = false
+
+    init(updater: SPUUpdater) {
+        updater.publisher(for: \.canCheckForUpdates)
+            .assign(to: &$canCheckForUpdates)
+    }
+}
+
+struct CheckForUpdatesView: View {
+    @ObservedObject private var model: CheckForUpdatesViewModel
+    private let updater: SPUUpdater
+
+    init(updater: SPUUpdater) {
+        self.updater = updater
+        model = CheckForUpdatesViewModel(updater: updater)
+    }
+
+    var body: some View {
+        Button("Check for Updates…", action: updater.checkForUpdates)
+            .disabled(!model.canCheckForUpdates)
+    }
+}
 
 /// Refuses a silent exit while a transfer is running.
 ///
@@ -28,6 +58,11 @@ final class TransferQuitGuard: NSObject, NSApplicationDelegate {
 
 @main
 struct RelayiumApp: App {
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true,
+        updaterDelegate: nil,
+        userDriverDelegate: nil
+    )
     @NSApplicationDelegateAdaptor(TransferQuitGuard.self) private var quitGuard
     @StateObject private var session = AppEnvironment.makeSession()
     @StateObject private var deepLinks = AppDeepLinkRouter()
@@ -65,6 +100,11 @@ struct RelayiumApp: App {
                 .onOpenURL { deepLinks.open($0) }
         }
         .defaultSize(width: 420, height: 460)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesView(updater: updaterController.updater)
+            }
+        }
 
         // Residency. In G1 this shows connection-independent state only; it exists
         // now so G3's persistent signaling socket has a home that does not require
