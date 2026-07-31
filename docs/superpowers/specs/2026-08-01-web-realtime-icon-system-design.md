@@ -1,7 +1,7 @@
 # Web realtime icon system — batch 4b
 
 Date: 2026-08-01
-Status: implemented, reviewed, and locally validated; production delivery pending.
+Status: implemented, reviewed, and production-validated.
 Scope owner: Web realtime transfer presentation. No protocol, route, state,
 dependency, bitmap asset, marketing-icon or native-client changes.
 
