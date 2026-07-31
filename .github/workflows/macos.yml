@@ -18,6 +18,11 @@ on:
         required: true
         default: false
         type: boolean
+      validate_notary_credentials:
+        description: 'Authenticate to Apple without submitting software'
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   # No secrets, so this runs on pull requests from forks like any other check.
@@ -149,7 +154,7 @@ jobs:
       # Apple limits daily submissions, and an accepted build is a release
       # candidate rather than ordinary compile evidence.
       - name: Materialize notarization API key
-        if: github.event_name == 'workflow_dispatch' && inputs.notarize
+        if: github.event_name == 'workflow_dispatch' && (inputs.notarize || inputs.validate_notary_credentials)
         env:
           NOTARY_KEY_P8_BASE64: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
           NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
@@ -162,6 +167,20 @@ jobs:
           fi
           ( umask 077; printf '%s' "$NOTARY_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/notary-key.p8" )
           mkdir -p "$RUNNER_TEMP/notarization"
+      # `history` exercises the same key/key-ID/issuer authentication as a
+      # submission but performs no upload and consumes no notarization quota.
+      - name: Validate notarization credentials without submitting
+        if: github.event_name == 'workflow_dispatch' && inputs.validate_notary_credentials
+        env:
+          MACOS_NOTARY_KEY_PATH: ${{ runner.temp }}/notary-key.p8
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          xcrun notarytool history \
+            --key "$MACOS_NOTARY_KEY_PATH" \
+            --key-id "$MACOS_NOTARY_KEY_ID" \
+            --issuer "$MACOS_NOTARY_ISSUER_ID" \
+            --output-format json > /dev/null
       - name: Notarize, staple, and assess DMG
         if: github.event_name == 'workflow_dispatch' && inputs.notarize
         env:

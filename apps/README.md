@@ -133,9 +133,12 @@ daily submission allowance.
 The manual notarization path requires three additional GitHub Actions secrets:
 `MACOS_NOTARY_KEY_P8_BASE64`, `MACOS_NOTARY_KEY_ID`, and
 `MACOS_NOTARY_ISSUER_ID`. Creation and rotation steps live in the
-`macos-signing` runbook in relayium-ops. A notarized workflow artifact is still
-not published automatically; Sparkle, public release publication, and the
-`/apps` page flip remain separately controlled R1-G5 work.
+`macos-signing` runbook in relayium-ops. A manual run can enable
+`validate_notary_credentials` to authenticate with `notarytool history` without
+uploading software or consuming a submission; this is the safe check after
+credential creation or rotation. A notarized workflow artifact is still not
+published automatically; Sparkle, public release publication, and the `/apps`
+page flip remain separately controlled R1-G5 work.
 
 ### Link handoff and notifications
 
