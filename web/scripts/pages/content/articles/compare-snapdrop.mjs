@@ -16,7 +16,7 @@ const en = {
     {
       heading: "What they have in common",
       body: [
-        "All three run entirely in a modern web browser with nothing to install, and all three use WebRTC to move file bytes directly between two devices instead of parking them on a server.",
+        "All three run entirely in a modern web browser with nothing to install. On the same LAN, all three use WebRTC to move file bytes directly between two devices instead of parking them on a server.",
         "On the same local network they can discover nearby devices automatically, so sending a photo from a laptop to a phone in the same room is a couple of taps in any of them.",
       ],
     },
@@ -35,14 +35,14 @@ const en = {
       heading: "Where Relayium differs: application-layer end-to-end encryption",
       body: [
         "Plain WebRTC is encrypted in transit by DTLS, and that is real protection against a passive network eavesdropper. But the DTLS fingerprints that authenticate each side are exchanged through the signaling server. A malicious or compromised signaling server can substitute its own fingerprints and sit invisibly in the middle — a classic man-in-the-middle attack that DTLS alone does not stop.",
-        "Relayium adds a second, independent encryption layer on top of the WebRTC channel: an X25519 key exchange derives a key used for per-chunk AES-256-GCM, and that key is never sent to any server. To detect a man-in-the-middle, both devices display the same 6-digit Short Authentication String (SAS); if the codes match, no server sits between you. Each file is also verified end-to-end with a SHA-256 hash.",
+        "Relayium adds a second, independent encryption layer on top of the WebRTC channel: an X25519 key exchange derives a key used for per-chunk AES-256-GCM, and that key is never sent to any server. To detect a man-in-the-middle, both devices display the same 6-digit Short Authentication String (SAS); if the codes match, no server has impersonated either endpoint or terminated the application-layer encryption. Each file is also verified end-to-end with a SHA-256 hash.",
       ],
     },
     {
       heading: "Beyond the LAN",
       body: [
-        "Relayium is designed to work across networks, not only on the same Wi-Fi. You can connect two devices with a pairing code (or the join link it generates), and the transfer still runs end-to-end encrypted from browser to browser.",
-        "Across networks the encrypted stream travels over a TURN relay — but the relay only ever sees ciphertext, so the transfer stays end-to-end encrypted. There is also an optional stored download-link mode: your browser encrypts the files with AES-256-GCM and the decryption key lives only in the URL fragment, so the server stores zero-knowledge ciphertext it cannot read. On the same network, no account is needed; sending across networks with a pairing code requires the sender to sign in — the person receiving never needs an account, and the same is true for stored download links. Transfers that drop mid-way can resume instead of restarting.",
+        "Relayium is designed to work across networks, not only on the same Wi-Fi. Browser transfers connect directly on the same LAN; a cross-network pairing-code session uses a TURN relay by design while remaining end-to-end encrypted from browser to browser.",
+        "Across networks the TURN relay carries only ciphertext that it cannot read or decrypt, and Relayium keeps no server-side copy or history of the realtime content. There is also an optional stored download-link mode: your browser encrypts the files with AES-256-GCM and the decryption key lives only in the URL fragment, so the server stores zero-knowledge ciphertext it cannot read. On the same network, no account is needed; creating a cross-network pairing code requires the creator to sign in, while the person joining never needs an account. Creating a stored download link also requires sign-in. Transfers that drop mid-way can resume instead of restarting.",
       ],
     },
     {
@@ -73,7 +73,7 @@ const en = {
       },
       {
         q: "Is there a performance difference?",
-        a: "In practice, no meaningful one. All three make a direct WebRTC connection, so throughput is bounded by your network. Relayium's extra AES-256-GCM layer runs in the browser and its overhead is negligible next to the network transfer itself.",
+        a: "On the same LAN, all three use a direct WebRTC path and performance is usually similar. Across networks, Relayium uses TURN by design, so relay location and capacity can affect latency and throughput. Its extra AES-256-GCM layer runs in the browser and normally adds little overhead compared with the network path.",
       },
     ],
   },
@@ -91,13 +91,13 @@ const zh = {
   updatedLabel: "最近更新",
   lead: [
     "Snapdrop 及其活跃维护的分支 PairDrop 是浏览器免安装文件分享的先驱，成熟、好用、体验优秀——Relayium 是在同样的思路上继续深化，而不是否定它们。",
-    "本文客观对比这三者：它们的共同点、Snapdrop 与 PairDrop 更强的地方，以及 Relayium 的不同之处。一句话概括：Relayium 的重点是加密强度与跨网络直连，而不是取代局域网里已经好用的方案。",
+    "本文客观对比这三者：它们的共同点、Snapdrop 与 PairDrop 更强的地方，以及 Relayium 的不同之处。一句话概括：Relayium 的重点是加密强度与跨网络可达性，而不是取代局域网里已经好用的方案。",
   ],
   sections: [
     {
       heading: "它们的共同点",
       body: [
-        "三者都完全运行在现代浏览器里，无需安装任何软件；也都用 WebRTC 让文件字节在两台设备之间直接流动，而不是先存到服务器上。",
+        "三者都完全运行在现代浏览器里，无需安装任何软件。在同一局域网内，三者都用 WebRTC 让文件字节在两台设备之间直接流动，而不是先存到服务器上。",
         "在同一局域网内，它们都能自动发现附近的设备，所以在同一个房间里把照片从笔记本发到手机，任何一个都只需点几下。",
       ],
     },
@@ -116,14 +116,14 @@ const zh = {
       heading: "Relayium 的不同：应用层端到端加密",
       body: [
         "裸用 WebRTC 时，传输加密只靠 DTLS，这对被动的网络窃听者确实是有效保护。但用于验证双方身份的 DTLS 指纹是经由信令服务器交换的。恶意或被入侵的信令服务器可以替换成自己的指纹，隐形地插在中间——这正是 DTLS 本身无法阻止的中间人攻击。",
-        "Relayium 在 WebRTC 通道之上再加了一层独立加密：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，而这把密钥从不发送给任何服务器。为发现中间人，两台设备会显示同一段 6 位校验码（SAS）；只要两边一致，就说明没有服务器插在中间。每个文件还会用 SHA-256 做端到端完整性校验。",
+        "Relayium 在 WebRTC 通道之上再加了一层独立加密：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，而这把密钥从不发送给任何服务器。为发现中间人，两台设备会显示同一段 6 位校验码（SAS）；只要两边一致，就说明没有服务器冒充任一端或终止应用层加密。每个文件还会用 SHA-256 做端到端完整性校验。",
       ],
     },
     {
       heading: "走出局域网",
       body: [
-        "Relayium 从设计上就支持跨网络工作，而不只是同一个 Wi-Fi。你可以用配对码（或它生成的加入链接）连接两台设备，只要条件允许，传输依然点对点直连。",
-        "跨网络时加密数据流经 TURN 中继转发——但中继只能看到密文，因此传输始终保持端到端加密。此外还有可选的存储下载链接模式：浏览器先用 AES-256-GCM 加密文件，解密密钥只存在于 URL 片段里，服务器只保存无法解读的零知识密文。同一网络下无需账号；跨网络用配对码传输则需要发送方登录——接收方无论哪种方式都无需账号，存储下载链接也同样需要发送方登录。中途断开的传输可以断点续传，而不必从头再来。",
+        "Relayium 从设计上就支持跨网络工作，而不只是同一个 Wi-Fi。浏览器传输在同一局域网内直接连接；跨网络配对码会话则按设计使用 TURN 中继，同时始终保持浏览器到浏览器的端到端加密。",
+        "跨网络时，TURN 中继只承载自己无法读取或解密的密文，Relayium 也不会在服务器端保留实时内容副本或历史。此外还有可选的存储下载链接模式：浏览器先用 AES-256-GCM 加密文件，解密密钥只存在于 URL 片段里，服务器只保存无法解读的零知识密文。同一网络下无需账号；创建跨网络配对码需要创建者登录，而加入者无需账号。创建存储下载链接也需要登录。中途断开的传输可以断点续传，而不必从头再来。",
       ],
     },
     {
@@ -154,7 +154,7 @@ const zh = {
       },
       {
         q: "性能上有差异吗？",
-        a: "实际上没有明显差异。三者都建立 WebRTC 直连，吞吐取决于你的网络。Relayium 多出的 AES-256-GCM 加密在浏览器里完成，其开销相比网络传输本身可以忽略不计。",
+        a: "在同一局域网内，三者都使用 WebRTC 直连，性能通常相近。跨网络时 Relayium 按设计使用 TURN，因此中继的位置与容量会影响延迟和吞吐。额外的 AES-256-GCM 加密在浏览器里完成，相比网络路径通常只增加少量开销。",
       },
     ],
   },
@@ -178,7 +178,7 @@ const ja = {
     {
       heading: "共通しているところ",
       body: [
-        "3つとも最新のブラウザだけで動作し、インストールは不要です。いずれも WebRTC を使い、ファイルのバイトをサーバーに置くのではなく2台の端末間で直接やり取りします。",
+        "3つとも最新のブラウザだけで動作し、インストールは不要です。同じ LAN 内では、いずれも WebRTC を使い、ファイルのバイトをサーバーに置くのではなく2台の端末間で直接やり取りします。",
         "同じローカルネットワークでは近くの端末を自動的に発見できるため、同じ部屋でノートPCからスマホへ写真を送るのは、どれを使っても数タップです。",
       ],
     },
@@ -197,14 +197,14 @@ const ja = {
       heading: "Relayium の違い：アプリケーション層のエンドツーエンド暗号化",
       body: [
         "素の WebRTC は DTLS によって転送中は暗号化され、受動的な盗聴者に対しては確かな保護になります。しかし双方を認証する DTLS フィンガープリントはシグナリングサーバー経由で交換されます。悪意ある、あるいは侵害されたシグナリングサーバーは自分のフィンガープリントに差し替え、見えない形で間に入り込めます。これは DTLS だけでは防げない典型的な中間者攻撃です。",
-        "Relayium は WebRTC チャネルの上に、独立した2つ目の暗号化層を加えます。X25519 の鍵交換で導出した鍵をチャンクごとの AES-256-GCM に使い、その鍵はどのサーバーにも送られません。中間者を検出するため、両方の端末が同じ6桁のショート認証文字列（SAS）を表示します。コードが一致すれば、間にサーバーはいません。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
+        "Relayium は WebRTC チャネルの上に、独立した2つ目の暗号化層を加えます。X25519 の鍵交換で導出した鍵をチャンクごとの AES-256-GCM に使い、その鍵はどのサーバーにも送られません。中間者を検出するため、両方の端末が同じ6桁のショート認証文字列（SAS）を表示します。コードが一致すれば、サーバーがどちらかの端末になりすましたり、アプリケーション層の暗号化を終端したりしていないことを確認できます。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
       ],
     },
     {
       heading: "LAN を越えて",
       body: [
-        "Relayium は同じ Wi-Fi だけでなく、ネットワークをまたいで動くよう設計されています。ペアリングコード（またはそれが生成する参加リンク）で2台の端末を接続でき、可能な限り転送は P2P で直接行われます。",
-        "ネットワークをまたぐときは暗号化ストリームが TURN リレーを経由しますが、リレーが見るのは暗号文だけなので、転送はエンドツーエンド暗号化のままです。任意の保存型ダウンロードリンクもあります。ブラウザが AES-256-GCM でファイルを暗号化し、復号鍵は URL フラグメントにだけ存在するため、サーバーは読めないゼロ知識の暗号文を保存します。同じネットワークならアカウントは不要です。ネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要です。受信側はどちらの場合もアカウント不要で、保存型ダウンロードリンクの作成にも送信側のサインインが必要です。途中で切れた転送は最初からではなく再開できます。",
+        "Relayium は同じ Wi-Fi だけでなく、ネットワークをまたいで動くよう設計されています。ブラウザ転送は同じ LAN 内なら直接接続し、ネットワークをまたぐペアリングコードのセッションは設計上 TURN リレーを使いながら、ブラウザ間のエンドツーエンド暗号化を維持します。",
+        "ネットワークをまたぐとき、TURN リレーが運ぶのは自身では読み取りも復号もできない暗号文だけで、Relayium はリアルタイム内容のサーバー側コピーや履歴を残しません。任意の保存型ダウンロードリンクもあります。ブラウザが AES-256-GCM でファイルを暗号化し、復号鍵は URL フラグメントにだけ存在するため、サーバーは読めないゼロ知識の暗号文を保存します。同じネットワークならアカウントは不要です。ネットワークをまたぐペアリングコードの作成者はサインインが必要ですが、参加者にはアカウントが要りません。保存型ダウンロードリンクの作成にもサインインが必要です。途中で切れた転送は最初からではなく再開できます。",
       ],
     },
     {
@@ -235,7 +235,7 @@ const ja = {
       },
       {
         q: "性能に違いはありますか？",
-        a: "実際には意味のある違いはありません。3つとも WebRTC の直接接続を行うため、スループットはネットワークで決まります。Relayium の追加の AES-256-GCM 層はブラウザ内で動作し、そのオーバーヘッドはネットワーク転送そのものに比べて無視できます。",
+        a: "同じ LAN 内では3つとも WebRTC の直接経路を使うため、性能は通常ほぼ同じです。ネットワークをまたぐ場合、Relayium は設計上 TURN を使うので、リレーの場所と容量が遅延やスループットに影響します。追加の AES-256-GCM 層はブラウザ内で動作し、ネットワーク経路に比べて通常は小さな負荷です。",
       },
     ],
   },
@@ -259,7 +259,7 @@ const ko = {
     {
       heading: "공통점",
       body: [
-        "셋 다 최신 웹 브라우저에서 설치 없이 완전히 동작하며, 모두 WebRTC를 사용해 파일 바이트를 서버에 두지 않고 두 기기 사이에서 직접 주고받습니다.",
+        "셋 다 최신 웹 브라우저에서 설치 없이 완전히 동작합니다. 같은 LAN에서는 모두 WebRTC를 사용해 파일 바이트를 서버에 두지 않고 두 기기 사이에서 직접 주고받습니다.",
         "같은 로컬 네트워크에서는 근처 기기를 자동으로 찾을 수 있어, 같은 방에서 노트북에서 휴대폰으로 사진을 보내는 일은 어느 것을 써도 몇 번의 탭이면 됩니다.",
       ],
     },
@@ -278,14 +278,14 @@ const ko = {
       heading: "Relayium의 차이: 애플리케이션 계층 종단간 암호화",
       body: [
         "순수 WebRTC는 DTLS로 전송 중 암호화되며, 수동적 도청자에 대해서는 실질적인 보호가 됩니다. 하지만 양쪽을 인증하는 DTLS 지문은 시그널링 서버를 거쳐 교환됩니다. 악의적이거나 침해된 시그널링 서버는 자신의 지문으로 바꿔치기해 보이지 않게 중간에 끼어들 수 있습니다. 이것이 DTLS만으로는 막을 수 없는 전형적인 중간자 공격입니다.",
-        "Relayium은 WebRTC 채널 위에 독립적인 두 번째 암호화 계층을 더합니다. X25519 키 교환으로 도출한 키를 청크별 AES-256-GCM에 사용하며, 이 키는 어떤 서버에도 전송되지 않습니다. 중간자를 탐지하기 위해 두 기기가 동일한 6자리 짧은 인증 문자열(SAS)을 표시합니다. 코드가 일치하면 사이에 서버가 없다는 뜻입니다. 각 파일은 SHA-256 해시로 종단간 검증됩니다.",
+        "Relayium은 WebRTC 채널 위에 독립적인 두 번째 암호화 계층을 더합니다. X25519 키 교환으로 도출한 키를 청크별 AES-256-GCM에 사용하며, 이 키는 어떤 서버에도 전송되지 않습니다. 중간자를 탐지하기 위해 두 기기가 동일한 6자리 짧은 인증 문자열(SAS)을 표시합니다. 코드가 일치하면 서버가 어느 한쪽을 사칭하거나 애플리케이션 계층 암호화를 종료하지 않았음을 확인할 수 있습니다. 각 파일은 SHA-256 해시로 종단간 검증됩니다.",
       ],
     },
     {
       heading: "LAN을 넘어서",
       body: [
-        "Relayium은 같은 Wi-Fi뿐 아니라 네트워크를 넘나들며 작동하도록 설계되었습니다. 페어링 코드(또는 그것이 생성하는 참여 링크)로 두 기기를 연결할 수 있고, 가능한 경우 전송은 여전히 P2P로 직접 이루어집니다.",
-        "네트워크를 넘을 때는 암호화된 스트림이 TURN 릴레이를 거치지만, 릴레이는 암호문만 볼 수 있어 전송은 종단간 암호화를 유지합니다. 선택적인 저장형 다운로드 링크 모드도 있습니다. 브라우저가 AES-256-GCM으로 파일을 암호화하고 복호화 키는 URL 프래그먼트에만 존재하므로, 서버는 읽을 수 없는 영지식 암호문을 저장합니다. 같은 네트워크에서는 계정이 필요 없습니다. 페어링 코드로 네트워크를 넘어 보낼 때는 보내는 쪽의 로그인이 필요합니다 — 받는 쪽은 어느 경우든 계정이 필요 없고, 저장형 다운로드 링크 생성에도 보내는 쪽의 로그인이 필요합니다. 도중에 끊긴 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.",
+        "Relayium은 같은 Wi-Fi뿐 아니라 네트워크를 넘나들며 작동하도록 설계되었습니다. 브라우저 전송은 같은 LAN에서 직접 연결하고, 네트워크를 넘는 페어링 코드 세션은 설계상 TURN 릴레이를 사용하면서 브라우저 간 종단간 암호화를 유지합니다.",
+        "네트워크를 넘을 때 TURN 릴레이는 자신이 읽거나 복호화할 수 없는 암호문만 운반하며, Relayium은 실시간 콘텐츠의 서버 측 사본이나 기록을 남기지 않습니다. 선택적인 저장형 다운로드 링크 모드도 있습니다. 브라우저가 AES-256-GCM으로 파일을 암호화하고 복호화 키는 URL 프래그먼트에만 존재하므로, 서버는 읽을 수 없는 영지식 암호문을 저장합니다. 같은 네트워크에서는 계정이 필요 없습니다. 네트워크를 넘는 페어링 코드를 만드는 사람은 로그인해야 하지만 참여자는 계정이 필요 없습니다. 저장형 다운로드 링크 생성에도 로그인이 필요합니다. 도중에 끊긴 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.",
       ],
     },
     {
@@ -316,7 +316,7 @@ const ko = {
       },
       {
         q: "성능 차이가 있나요?",
-        a: "실제로는 의미 있는 차이가 없습니다. 셋 다 WebRTC 직접 연결을 하므로 처리량은 네트워크에 의해 결정됩니다. Relayium의 추가 AES-256-GCM 계층은 브라우저에서 동작하며 그 오버헤드는 네트워크 전송 자체에 비해 무시할 만합니다.",
+        a: "같은 LAN에서는 셋 다 WebRTC 직접 경로를 사용해 성능이 대체로 비슷합니다. 네트워크를 넘을 때 Relayium은 설계상 TURN을 사용하므로 릴레이 위치와 용량이 지연 시간과 처리량에 영향을 줄 수 있습니다. 추가 AES-256-GCM 계층은 브라우저에서 동작하며 네트워크 경로에 비해 보통 작은 오버헤드만 더합니다.",
       },
     ],
   },
@@ -340,7 +340,7 @@ const de = {
     {
       heading: "Was sie gemeinsam haben",
       body: [
-        "Alle drei laufen vollständig in einem modernen Webbrowser ohne Installation, und alle drei nutzen WebRTC, um Datei-Bytes direkt zwischen zwei Geräten zu bewegen, statt sie auf einem Server abzulegen.",
+        "Alle drei laufen vollständig in einem modernen Webbrowser ohne Installation. Im selben LAN nutzen alle drei WebRTC, um Datei-Bytes direkt zwischen zwei Geräten zu bewegen, statt sie auf einem Server abzulegen.",
         "Im selben lokalen Netz erkennen sie nahe Geräte automatisch, sodass das Senden eines Fotos vom Laptop zum Handy im selben Raum bei jedem von ihnen nur ein paar Tipps ist.",
       ],
     },
@@ -359,14 +359,14 @@ const de = {
       heading: "Worin sich Relayium unterscheidet: Ende-zu-Ende-Verschlüsselung auf Anwendungsebene",
       body: [
         "Reines WebRTC ist beim Transport durch DTLS verschlüsselt, und das ist echter Schutz gegen einen passiven Netzwerk-Lauscher. Aber die DTLS-Fingerabdrücke, die jede Seite authentifizieren, werden über den Signalisierungsserver ausgetauscht. Ein bösartiger oder kompromittierter Signalisierungsserver kann eigene Fingerabdrücke einschleusen und sich unsichtbar dazwischensetzen — ein klassischer Man-in-the-Middle-Angriff, den DTLS allein nicht verhindert.",
-        "Relayium fügt über dem WebRTC-Kanal eine zweite, unabhängige Verschlüsselungsschicht hinzu: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, und dieser Schlüssel wird nie an einen Server gesendet. Um einen Man-in-the-Middle zu erkennen, zeigen beide Geräte denselben sechsstelligen Short Authentication String (SAS) an; stimmen die Codes überein, sitzt kein Server dazwischen. Jede Datei wird zudem per SHA-256-Hash Ende-zu-Ende geprüft.",
+        "Relayium fügt über dem WebRTC-Kanal eine zweite, unabhängige Verschlüsselungsschicht hinzu: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, und dieser Schlüssel wird nie an einen Server gesendet. Um einen Man-in-the-Middle zu erkennen, zeigen beide Geräte denselben sechsstelligen Short Authentication String (SAS) an; stimmen die Codes überein, hat sich kein Server als einer der Endpunkte ausgegeben oder die Verschlüsselung der Anwendungsschicht terminiert. Jede Datei wird zudem per SHA-256-Hash Ende-zu-Ende geprüft.",
       ],
     },
     {
       heading: "Über das LAN hinaus",
       body: [
-        "Relayium ist darauf ausgelegt, netzwerkübergreifend zu funktionieren, nicht nur im selben WLAN. Du kannst zwei Geräte per Pairing-Code (oder den erzeugten Beitrittslink) verbinden, und die Übertragung läuft nach Möglichkeit weiterhin direkt Peer-to-Peer.",
-        "Netzübergreifend läuft der verschlüsselte Datenstrom über ein TURN-Relay — doch das Relay sieht nur Chiffretext, sodass die Übertragung Ende-zu-Ende-verschlüsselt bleibt. Es gibt außerdem einen optionalen Modus mit gespeichertem Download-Link: Der Browser verschlüsselt die Dateien mit AES-256-GCM, und der Entschlüsselungsschlüssel liegt nur im URL-Fragment, sodass der Server nur Zero-Knowledge-Chiffretext speichert, den er nicht lesen kann. Im selben Netz ist kein Konto nötig; beim Senden über Netzwerke hinweg per Pairing-Code muss sich der Absender anmelden — der Empfänger braucht in beiden Fällen kein Konto, ebenso wenig wie bei gespeicherten Download-Links, die ebenfalls die Anmeldung des Absenders erfordern. Abgebrochene Übertragungen können fortgesetzt statt neu gestartet werden.",
+        "Relayium ist darauf ausgelegt, netzwerkübergreifend zu funktionieren, nicht nur im selben WLAN. Browser-Übertragungen verbinden sich im selben LAN direkt; eine netzwerkübergreifende Pairing-Code-Sitzung nutzt konstruktionsbedingt ein TURN-Relay und bleibt dabei zwischen den Browsern Ende-zu-Ende-verschlüsselt.",
+        "Netzübergreifend transportiert das TURN-Relay nur Chiffretext, den es weder lesen noch entschlüsseln kann, und Relayium bewahrt keine serverseitige Kopie oder Historie der Echtzeitinhalte auf. Es gibt außerdem einen optionalen Modus mit gespeichertem Download-Link: Der Browser verschlüsselt die Dateien mit AES-256-GCM, und der Entschlüsselungsschlüssel liegt nur im URL-Fragment, sodass der Server nur Zero-Knowledge-Chiffretext speichert, den er nicht lesen kann. Im selben Netz ist kein Konto nötig; der Ersteller eines netzwerkübergreifenden Pairing-Codes muss sich anmelden, der Beitretende braucht kein Konto. Auch das Erstellen eines gespeicherten Download-Links erfordert eine Anmeldung. Abgebrochene Übertragungen können fortgesetzt statt neu gestartet werden.",
       ],
     },
     {
@@ -397,7 +397,7 @@ const de = {
       },
       {
         q: "Gibt es einen Leistungsunterschied?",
-        a: "In der Praxis keinen nennenswerten. Alle drei bauen eine direkte WebRTC-Verbindung auf, der Durchsatz ist also durch dein Netzwerk begrenzt. Relayiums zusätzliche AES-256-GCM-Schicht läuft im Browser, und ihr Aufwand ist neben der Netzwerkübertragung selbst vernachlässigbar.",
+        a: "Im selben LAN nutzen alle drei einen direkten WebRTC-Pfad, daher ist die Leistung meist ähnlich. Netzwerkübergreifend nutzt Relayium konstruktionsbedingt TURN, sodass Standort und Kapazität des Relays Latenz und Durchsatz beeinflussen können. Die zusätzliche AES-256-GCM-Schicht läuft im Browser und verursacht gegenüber dem Netzwerkpfad normalerweise nur geringen Aufwand.",
       },
     ],
   },
@@ -421,7 +421,7 @@ const fr = {
     {
       heading: "Ce qu'ils ont en commun",
       body: [
-        "Les trois fonctionnent entièrement dans un navigateur moderne, sans rien à installer, et tous utilisent WebRTC pour déplacer les octets de fichiers directement entre deux appareils plutôt que de les stocker sur un serveur.",
+        "Les trois fonctionnent entièrement dans un navigateur moderne, sans rien à installer. Sur le même LAN, tous utilisent WebRTC pour déplacer les octets de fichiers directement entre deux appareils plutôt que de les stocker sur un serveur.",
         "Sur le même réseau local, ils peuvent découvrir automatiquement les appareils proches, si bien qu'envoyer une photo d'un ordinateur portable à un téléphone dans la même pièce ne prend que quelques touches avec n'importe lequel.",
       ],
     },
@@ -440,14 +440,14 @@ const fr = {
       heading: "Là où Relayium diffère : chiffrement de bout en bout au niveau applicatif",
       body: [
         "Le WebRTC brut est chiffré en transit par DTLS, ce qui protège réellement contre une écoute réseau passive. Mais les empreintes DTLS qui authentifient chaque partie sont échangées via le serveur de signalisation. Un serveur de signalisation malveillant ou compromis peut y substituer ses propres empreintes et s'intercaler de façon invisible — une attaque de l'homme du milieu classique que DTLS seul n'empêche pas.",
-        "Relayium ajoute une seconde couche de chiffrement indépendante par-dessus le canal WebRTC : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n'est jamais envoyée à aucun serveur. Pour détecter un homme du milieu, les deux appareils affichent la même chaîne d'authentification courte (SAS) à 6 chiffres ; si les codes concordent, aucun serveur ne s'intercale. Chaque fichier est aussi vérifié de bout en bout par une empreinte SHA-256.",
+        "Relayium ajoute une seconde couche de chiffrement indépendante par-dessus le canal WebRTC : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n'est jamais envoyée à aucun serveur. Pour détecter un homme du milieu, les deux appareils affichent la même chaîne d'authentification courte (SAS) à 6 chiffres ; si les codes concordent, aucun serveur n'a usurpé l'identité d'un appareil ni terminé le chiffrement de la couche applicative. Chaque fichier est aussi vérifié de bout en bout par une empreinte SHA-256.",
       ],
     },
     {
       heading: "Au-delà du réseau local",
       body: [
-        "Relayium est conçu pour fonctionner entre réseaux, pas seulement sur le même Wi-Fi. Vous pouvez connecter deux appareils par code d'appairage (ou le lien de participation qu'il génère), et le transfert reste en pair-à-pair direct chaque fois que possible.",
-        "Entre réseaux, le flux chiffré passe par un relais TURN — mais le relais ne voit que du texte chiffré, donc le transfert reste chiffré de bout en bout. Il existe aussi un mode optionnel de lien de téléchargement stocké : le navigateur chiffre les fichiers en AES-256-GCM et la clé de déchiffrement ne vit que dans le fragment de l'URL, si bien que le serveur ne stocke qu'un texte chiffré à divulgation nulle qu'il ne peut pas lire. Sur le même réseau, aucun compte n'est nécessaire ; envoyer entre réseaux différents avec un code d'appairage exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte, et il en va de même pour les liens de téléchargement stockés. Les transferts interrompus en cours de route peuvent reprendre au lieu de tout recommencer.",
+        "Relayium est conçu pour fonctionner entre réseaux, pas seulement sur le même Wi-Fi. Les transferts entre navigateurs se connectent directement sur le même LAN ; une session par code d'appairage entre réseaux utilise un relais TURN par conception tout en restant chiffrée de bout en bout entre les navigateurs.",
+        "Entre réseaux, le relais TURN ne transporte que du texte chiffré qu'il ne peut ni lire ni déchiffrer, et Relayium ne conserve aucune copie ni aucun historique du contenu en temps réel côté serveur. Il existe aussi un mode optionnel de lien de téléchargement stocké : le navigateur chiffre les fichiers en AES-256-GCM et la clé de déchiffrement ne vit que dans le fragment de l'URL, si bien que le serveur ne stocke qu'un texte chiffré à divulgation nulle qu'il ne peut pas lire. Sur le même réseau, aucun compte n'est nécessaire ; le créateur d'un code d'appairage entre réseaux doit se connecter, tandis que la personne qui rejoint n'a besoin d'aucun compte. La création d'un lien de téléchargement stocké exige aussi une connexion. Les transferts interrompus en cours de route peuvent reprendre au lieu de tout recommencer.",
       ],
     },
     {
@@ -478,7 +478,7 @@ const fr = {
       },
       {
         q: "Y a-t-il une différence de performance ?",
-        a: "En pratique, aucune notable. Les trois établissent une connexion WebRTC directe, le débit est donc limité par votre réseau. La couche AES-256-GCM supplémentaire de Relayium s'exécute dans le navigateur et son coût est négligeable face au transfert réseau lui-même.",
+        a: "Sur le même LAN, les trois utilisent un chemin WebRTC direct et leurs performances sont généralement proches. Entre réseaux, Relayium utilise TURN par conception : l'emplacement et la capacité du relais peuvent donc affecter la latence et le débit. La couche AES-256-GCM supplémentaire s'exécute dans le navigateur et ajoute normalement peu de coût face au chemin réseau.",
       },
     ],
   },
@@ -502,7 +502,7 @@ const ar = {
     {
       heading: "ما تشترك فيه",
       body: [
-        "الثلاثة جميعًا تعمل بالكامل في متصفح ويب حديث دون أي شيء لتثبيته، وكلها تستخدم WebRTC لنقل بايتات الملفات مباشرةً بين جهازين بدلًا من ركنها على خادم.",
+        "الثلاثة جميعًا تعمل بالكامل في متصفح ويب حديث دون أي شيء لتثبيته. وعلى شبكة LAN نفسها تستخدم كلها WebRTC لنقل بايتات الملفات مباشرةً بين جهازين بدلًا من ركنها على خادم.",
         "على نفس الشبكة المحلية يمكنها اكتشاف الأجهزة القريبة تلقائيًا، فإرسال صورة من حاسوب محمول إلى هاتف في الغرفة نفسها لا يتطلب سوى نقرتين في أيٍّ منها.",
       ],
     },
@@ -521,14 +521,14 @@ const ar = {
       heading: "أين يختلف Relayium: التشفير من الطرف إلى الطرف على طبقة التطبيق",
       body: [
         "WebRTC العادي مُشفَّر أثناء النقل بواسطة DTLS، وهذه حماية حقيقية ضد متنصّت سلبي على الشبكة. لكن بصمات DTLS التي تصادق على كل طرف تُتبادَل عبر خادم الإشارة. يمكن لخادم إشارة خبيث أو مخترَق أن يستبدل بصماته الخاصة ويجلس بلا مرئية في المنتصف — هجوم وسيط كلاسيكي لا يوقفه DTLS وحده.",
-        "يضيف Relayium طبقة تشفير ثانية مستقلة فوق قناة WebRTC: يشتق تبادل مفاتيح X25519 مفتاحًا يُستخدم لـ AES-256-GCM لكل كتلة، ولا يُرسَل هذا المفتاح أبدًا إلى أي خادم. ولاكتشاف الوسيط، يعرض كلا الجهازين نفس رمز التحقق القصير المكوّن من 6 أرقام (SAS)؛ فإن تطابق الرمزان، فلا خادم يجلس بينكما. كما يُتحقق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
+        "يضيف Relayium طبقة تشفير ثانية مستقلة فوق قناة WebRTC: يشتق تبادل مفاتيح X25519 مفتاحًا يُستخدم لـ AES-256-GCM لكل كتلة، ولا يُرسَل هذا المفتاح أبدًا إلى أي خادم. ولاكتشاف الوسيط، يعرض كلا الجهازين نفس رمز التحقق القصير المكوّن من 6 أرقام (SAS)؛ فإن تطابق الرمزان، لم ينتحل أي خادم هوية أحد الطرفين ولم يُنهِ تشفير طبقة التطبيق. كما يُتحقق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
       ],
     },
     {
       heading: "ما وراء الشبكة المحلية",
       body: [
-        "صُمّم Relayium للعمل عبر الشبكات، لا على نفس Wi-Fi فقط. يمكنك ربط جهازين برمز اقتران (أو برابط الانضمام الذي يولّده)، ويظل النقل يجري من الند للند مباشرةً كلما أمكن.",
-        "وعبر الشبكات يمرّ التدفق المُشفَّر على مُرحِّل TURN — لكن المُرحِّل لا يرى سوى نص مُشفَّر، فيظل النقل مُشفَّرًا من الطرف إلى الطرف. وهناك أيضًا وضع رابط التنزيل المُخزَّن الاختياري: يشفّر متصفحك الملفات بـ AES-256-GCM ويعيش مفتاح فك التشفير في جزء الـ URL فقط، فيخزّن الخادم نصًا مُشفَّرًا بمعرفة صفرية لا يستطيع قراءته. على نفس الشبكة، لا حاجة إلى حساب؛ والإرسال عبر الشبكات برمز اقتران يتطلب من المُرسِل تسجيل الدخول — أما من يستقبل فلا يحتاج أبدًا إلى حساب، وينطبق الأمر نفسه على روابط التنزيل المُخزَّنة. النقلات التي تنقطع في منتصفها يمكنها الاستئناف بدلًا من إعادة البدء.",
+        "صُمّم Relayium للعمل عبر الشبكات، لا على نفس Wi-Fi فقط. تتصل عمليات النقل في المتصفح مباشرةً على شبكة LAN نفسها؛ أما جلسة رمز الاقتران عبر الشبكات فتستخدم مُرحِّل TURN بحكم التصميم مع بقاء التشفير من الطرف إلى الطرف بين المتصفحين.",
+        "وعبر الشبكات لا يحمل مُرحِّل TURN سوى نص مُشفَّر لا يستطيع قراءته أو فك تشفيره، ولا يحتفظ Relayium بنسخة أو سجل لمحتوى النقل الفوري على الخادم. وهناك أيضًا وضع رابط التنزيل المُخزَّن الاختياري: يشفّر متصفحك الملفات بـ AES-256-GCM ويعيش مفتاح فك التشفير في جزء الـ URL فقط، فيخزّن الخادم نصًا مُشفَّرًا بمعرفة صفرية لا يستطيع قراءته. على نفس الشبكة، لا حاجة إلى حساب؛ ويجب على منشئ رمز الاقتران عبر الشبكات تسجيل الدخول، بينما لا يحتاج المنضم إلى حساب. كما يتطلب إنشاء رابط تنزيل مُخزَّن تسجيل الدخول. النقلات التي تنقطع في منتصفها يمكنها الاستئناف بدلًا من إعادة البدء.",
       ],
     },
     {
@@ -559,7 +559,7 @@ const ar = {
       },
       {
         q: "هل هناك فرق في الأداء؟",
-        a: "عمليًا، لا فرق ذا قيمة. الثلاثة جميعًا تُنشئ اتصال WebRTC مباشرًا، فالإنتاجية محدودة بشبكتك. تعمل طبقة AES-256-GCM الإضافية في Relayium داخل المتصفح، وحملها ضئيل بجانب نقل الشبكة نفسه.",
+        a: "على شبكة LAN نفسها تستخدم الخدمات الثلاث مسار WebRTC مباشرًا، لذا يكون الأداء متقاربًا عادةً. وعبر الشبكات يستخدم Relayium مُرحِّل TURN بحكم التصميم، لذلك قد يؤثر موقع المُرحِّل وسعته في زمن الاستجابة والإنتاجية. تعمل طبقة AES-256-GCM الإضافية داخل المتصفح ولا تضيف عادةً سوى حمل قليل مقارنة بمسار الشبكة.",
       },
     ],
   },
@@ -583,7 +583,7 @@ const es = {
     {
       heading: "Qué tienen en común",
       body: [
-        "Los tres se ejecutan por completo en un navegador web moderno sin nada que instalar, y los tres usan WebRTC para mover los bytes de los archivos directamente entre dos dispositivos en lugar de aparcarlos en un servidor.",
+        "Los tres se ejecutan por completo en un navegador web moderno sin nada que instalar. En la misma LAN, los tres usan WebRTC para mover los bytes de los archivos directamente entre dos dispositivos en lugar de aparcarlos en un servidor.",
         "En la misma red local pueden descubrir dispositivos cercanos automáticamente, así que enviar una foto de un portátil a un teléfono en la misma habitación son un par de toques en cualquiera de ellos.",
       ],
     },
@@ -602,14 +602,14 @@ const es = {
       heading: "En qué se diferencia Relayium: cifrado de extremo a extremo en la capa de aplicación",
       body: [
         "El WebRTC simple está cifrado en tránsito por DTLS, y eso es protección real frente a un fisgón pasivo de la red. Pero las huellas DTLS que autentican a cada lado se intercambian a través del servidor de señalización. Un servidor de señalización malicioso o comprometido puede sustituir sus propias huellas y colocarse invisiblemente en medio: un ataque de intermediario clásico que DTLS por sí solo no detiene.",
-        "Relayium añade una segunda capa de cifrado independiente sobre el canal WebRTC: un intercambio de claves X25519 deriva una clave usada para AES-256-GCM por bloque, y esa clave nunca se envía a ningún servidor. Para detectar a un intermediario, ambos dispositivos muestran el mismo código de verificación de 6 dígitos (SAS); si los códigos coinciden, no hay ningún servidor entre las dos partes. Cada archivo también se verifica de extremo a extremo con un hash SHA-256.",
+        "Relayium añade una segunda capa de cifrado independiente sobre el canal WebRTC: un intercambio de claves X25519 deriva una clave usada para AES-256-GCM por bloque, y esa clave nunca se envía a ningún servidor. Para detectar a un intermediario, ambos dispositivos muestran el mismo código de verificación de 6 dígitos (SAS); si los códigos coinciden, ningún servidor ha suplantado a uno de los extremos ni ha terminado el cifrado de la capa de aplicación. Cada archivo también se verifica de extremo a extremo con un hash SHA-256.",
       ],
     },
     {
       heading: "Más allá de la red local",
       body: [
-        "Relayium está diseñado para funcionar entre redes, no solo en el mismo Wi-Fi. Puedes conectar dos dispositivos con un código de emparejamiento (o el enlace de unión que genera), y la transferencia sigue yendo directamente de igual a igual siempre que sea posible.",
-        "Entre redes, el flujo cifrado viaja por un retransmisor TURN, pero el retransmisor solo ve texto cifrado, así que la transferencia sigue cifrada de extremo a extremo. También hay un modo opcional de enlace de descarga almacenado: tu navegador cifra los archivos con AES-256-GCM y la clave de descifrado vive solo en el fragmento de la URL, así que el servidor almacena texto cifrado de conocimiento cero que no puede leer. En la misma red no hace falta cuenta; enviar entre redes con un código de emparejamiento exige que el remitente inicie sesión; quien recibe nunca necesita cuenta, y lo mismo vale para los enlaces de descarga almacenados. Las transferencias que se cortan a mitad pueden reanudarse en lugar de empezar de nuevo.",
+        "Relayium está diseñado para funcionar entre redes, no solo en el mismo Wi-Fi. Las transferencias del navegador se conectan directamente en la misma LAN; una sesión con código de emparejamiento entre redes usa un retransmisor TURN por diseño y mantiene el cifrado de extremo a extremo entre navegadores.",
+        "Entre redes, el retransmisor TURN solo transporta texto cifrado que no puede leer ni descifrar, y Relayium no conserva copia ni historial del contenido en tiempo real en el servidor. También hay un modo opcional de enlace de descarga almacenado: tu navegador cifra los archivos con AES-256-GCM y la clave de descifrado vive solo en el fragmento de la URL, así que el servidor almacena texto cifrado de conocimiento cero que no puede leer. En la misma red no hace falta cuenta; quien crea un código de emparejamiento entre redes debe iniciar sesión, mientras que quien se une no necesita cuenta. Crear un enlace de descarga almacenado también exige iniciar sesión. Las transferencias que se cortan a mitad pueden reanudarse en lugar de empezar de nuevo.",
       ],
     },
     {
@@ -640,7 +640,7 @@ const es = {
       },
       {
         q: "¿Hay diferencia de rendimiento?",
-        a: "En la práctica, ninguna significativa. Los tres establecen una conexión WebRTC directa, así que el rendimiento lo limita tu red. La capa AES-256-GCM extra de Relayium corre en el navegador y su sobrecoste es insignificante frente a la propia transferencia de red.",
+        a: "En la misma LAN, los tres usan una ruta WebRTC directa y el rendimiento suele ser parecido. Entre redes, Relayium usa TURN por diseño, por lo que la ubicación y capacidad del retransmisor pueden afectar a la latencia y al rendimiento. La capa AES-256-GCM extra corre en el navegador y normalmente añade poco coste frente a la ruta de red.",
       },
     ],
   },
@@ -664,7 +664,7 @@ const pt = {
     {
       heading: "O que têm em comum",
       body: [
-        "Os três rodam inteiramente num navegador web moderno sem nada para instalar, e os três usam WebRTC para mover os bytes dos arquivos diretamente entre dois dispositivos em vez de estacioná-los num servidor.",
+        "Os três rodam inteiramente num navegador web moderno sem nada para instalar. Na mesma LAN, todos usam WebRTC para mover os bytes dos arquivos diretamente entre dois dispositivos em vez de estacioná-los num servidor.",
         "Na mesma rede local eles conseguem descobrir dispositivos próximos automaticamente, então enviar uma foto de um notebook para um celular na mesma sala são alguns toques em qualquer um deles.",
       ],
     },
@@ -683,14 +683,14 @@ const pt = {
       heading: "Onde o Relayium difere: criptografia de ponta a ponta na camada de aplicação",
       body: [
         "O WebRTC puro é criptografado em trânsito pelo DTLS, e isso é proteção real contra um bisbilhoteiro passivo da rede. Mas as impressões digitais DTLS que autenticam cada lado são trocadas através do servidor de sinalização. Um servidor de sinalização malicioso ou comprometido pode substituir suas próprias impressões e se colocar invisivelmente no meio — um ataque de intermediário clássico que o DTLS sozinho não impede.",
-        "O Relayium adiciona uma segunda camada de criptografia independente sobre o canal WebRTC: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM por bloco, e essa chave nunca é enviada a nenhum servidor. Para detectar um intermediário, ambos os dispositivos exibem o mesmo código de verificação de 6 dígitos (SAS); se os códigos coincidem, não há nenhum servidor entre vocês. Cada arquivo também é verificado de ponta a ponta com um hash SHA-256.",
+        "O Relayium adiciona uma segunda camada de criptografia independente sobre o canal WebRTC: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM por bloco, e essa chave nunca é enviada a nenhum servidor. Para detectar um intermediário, ambos os dispositivos exibem o mesmo código de verificação de 6 dígitos (SAS); se os códigos coincidem, nenhum servidor se passou por uma das pontas nem terminou a criptografia da camada de aplicação. Cada arquivo também é verificado de ponta a ponta com um hash SHA-256.",
       ],
     },
     {
       heading: "Além da rede local",
       body: [
-        "O Relayium foi projetado para funcionar entre redes, não só no mesmo Wi-Fi. Você pode conectar dois dispositivos com um código de emparelhamento (ou o link de entrada que ele gera), e a transferência continua indo diretamente ponto a ponto sempre que possível.",
-        "Entre redes, o fluxo criptografado viaja por um retransmissor TURN — mas o retransmissor só vê texto cifrado, então a transferência permanece criptografada de ponta a ponta. Há também um modo opcional de link de download armazenado: seu navegador criptografa os arquivos com AES-256-GCM e a chave de descriptografia vive só no fragmento da URL, então o servidor armazena texto cifrado de conhecimento zero que não consegue ler. Na mesma rede não é preciso conta; enviar entre redes com um código de emparelhamento exige que o remetente entre; quem recebe nunca precisa de conta, e o mesmo vale para os links de download armazenados. Transferências que caem no meio podem retomar em vez de começar de novo.",
+        "O Relayium foi projetado para funcionar entre redes, não só no mesmo Wi-Fi. As transferências do navegador se conectam diretamente na mesma LAN; uma sessão por código de emparelhamento entre redes usa um retransmissor TURN por projeto e mantém a criptografia de ponta a ponta entre navegadores.",
+        "Entre redes, o retransmissor TURN transporta apenas texto cifrado que não consegue ler nem descriptografar, e o Relayium não mantém cópia nem histórico do conteúdo em tempo real no servidor. Há também um modo opcional de link de download armazenado: seu navegador criptografa os arquivos com AES-256-GCM e a chave de descriptografia vive só no fragmento da URL, então o servidor armazena texto cifrado de conhecimento zero que não consegue ler. Na mesma rede não é preciso conta; quem cria um código de emparelhamento entre redes precisa entrar, enquanto quem participa não precisa de conta. Criar um link de download armazenado também exige login. Transferências que caem no meio podem retomar em vez de começar de novo.",
       ],
     },
     {
@@ -721,7 +721,7 @@ const pt = {
       },
       {
         q: "Há diferença de desempenho?",
-        a: "Na prática, nenhuma relevante. Os três fazem uma conexão WebRTC direta, então a taxa de transferência é limitada pela sua rede. A camada AES-256-GCM extra do Relayium roda no navegador e seu custo é insignificante diante da própria transferência de rede.",
+        a: "Na mesma LAN, os três usam um caminho WebRTC direto e o desempenho costuma ser parecido. Entre redes, o Relayium usa TURN por projeto, então a localização e a capacidade do retransmissor podem afetar a latência e a taxa de transferência. A camada AES-256-GCM extra roda no navegador e normalmente acrescenta pouco custo diante do caminho de rede.",
       },
     ],
   },
@@ -735,6 +735,6 @@ const pt = {
 export default {
   slug: "compare/snapdrop",
   published: "2026-07-03",
-  updated: "2026-07-03",
+  updated: "2026-07-31",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };
