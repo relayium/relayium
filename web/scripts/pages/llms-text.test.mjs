@@ -37,6 +37,13 @@ describe("llms.txt file and ephemeral text product facts", () => {
     expect(llms).not.toMatch(/all realtime transfers .*need no account/i);
   });
 
+  it("keeps browser and CLI SAS constructions protocol-specific", () => {
+    expect(llms).toContain("derived from the two X25519 endpoint public keys");
+    expect(llms).toContain("derived from the two pinned TLS certificate fingerprints");
+    expect(llms).toContain("authenticate endpoints rather than proving that no server or TURN relay exists");
+    expect(llms).not.toMatch(/SAS\) is derived from the session keys/i);
+  });
+
   it("keeps the buffered-browser warning consistent across crawler sources", () => {
     for (const [name, copy] of [
       ["llms.txt", llms],
