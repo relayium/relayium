@@ -105,7 +105,10 @@ async function newTab(browser, url, initScript) {
         throw new Error(`page stopped responding (evaluate exceeded ${EVAL_TIMEOUT_MS}ms) — its main thread is blocked`);
       }),
     ]);
-    if (r.exceptionDetails) throw new Error(`evaluate failed: ${r.exceptionDetails.text} — ${expression}`);
+    if (r.exceptionDetails) {
+      const detail = r.exceptionDetails.exception?.description ?? r.exceptionDetails.exception?.value ?? r.exceptionDetails.text;
+      throw new Error(`evaluate failed: ${detail} — ${expression}`);
+    }
     return r.result?.value;
   };
   const waitFor = async (expression, what, timeoutMs = 45_000) => {
@@ -117,6 +120,44 @@ async function newTab(browser, url, initScript) {
     }
   };
   return { send, evaluate, waitFor, errors, targetId, sessionId };
+}
+
+async function setWideViewport(tab, width = 1440, height = 900) {
+  await tab.send("Emulation.setDeviceMetricsOverride", {
+    width,
+    height,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+}
+
+const FORCE_UNSUPPORTED =
+  "Object.defineProperty(window, 'isSecureContext', { get: () => false });";
+
+async function unsupportedLayoutScenario(browser) {
+  const tab = await newTab(browser, BASE + "/", FORCE_UNSUPPORTED);
+  await setWideViewport(tab);
+  await tab.waitFor("!!document.querySelector('.banner')", "the unsupported-browser banner");
+  const layout = await tab.evaluate(`(() => {
+    const workspace = document.querySelector('.lan-workspace');
+    return {
+      display: getComputedStyle(workspace).display,
+      twoColClass: workspace.classList.contains('two-col'),
+      compactHero: document.querySelector('.hero').classList.contains('workspace'),
+      banner: !!document.querySelector('.lan-task .banner'),
+      peers: !!document.querySelector('.lan-task .peers'),
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  })()`);
+  if (
+    layout.display === "grid" || layout.twoColClass || layout.compactHero ||
+    !layout.banner || layout.peers || layout.overflow !== 0
+  ) {
+    throw new Error(`unsupported LAN layout contract failed: ${JSON.stringify(layout)}`);
+  }
+  if (tab.errors.length) throw new Error(`unsupported LAN layout logged errors: ${tab.errors.join(" | ")}`);
+  ok("unsupported browsers kept the established single-column failure layout");
+  await browser.send("Target.closeTarget", { targetId: tab.targetId });
 }
 
 // 收方页面的桩：把"另存为"换成一个把字节攒进内存并算 SHA-256 的假句柄。
@@ -209,6 +250,8 @@ async function resumeScenario(browser) {
 
   const sender = await newTab(browser, BASE + "/", PC_TRACKER + GEN);
   const receiver = await newTab(browser, BASE + "/", PC_TRACKER + GEN + SAVE_STUB);
+  await setWideViewport(sender);
+  await setWideViewport(receiver);
   const peersSeen = "document.querySelectorAll('.pname').length > 0";
   await sender.waitFor(peersSeen, "peers (resume scenario)");
   await receiver.waitFor(peersSeen, "peers (resume scenario)");
@@ -384,6 +427,8 @@ const utf8Hex = (s) => [...Buffer.from(s, "utf8")].map((b) => b.toString(16).pad
 async function messageScenario(browser) {
   const a = await newTab(browser, BASE + "/");
   const b = await newTab(browser, BASE + "/");
+  await setWideViewport(a);
+  await setWideViewport(b);
 
   const peersSeen = "document.querySelectorAll('.pname').length > 0";
   await a.waitFor(peersSeen, "tab A to see tab B on the radar", 30_000);
@@ -414,6 +459,22 @@ async function messageScenario(browser) {
   // 两边都进 open：发起方靠 ACCEPT 字节翻状态，收方本地翻。用 composer 的出现当信号。
   await a.waitFor("!!document.querySelector('.msgpanel textarea')", "tab A's composer (session open)", 40_000);
   await b.waitFor("!!document.querySelector('.msgpanel textarea')", "tab B's composer (session open)");
+  const messageLayout = await a.evaluate(`(() => {
+    const panel = document.querySelector('.msgpanel');
+    const sas = panel.querySelector('.sas');
+    return {
+      pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      panelOverflow: panel.scrollWidth - panel.clientWidth,
+      sasOverflow: sas.scrollWidth - sas.clientWidth,
+      taskWidth: document.querySelector('.lan-task').getBoundingClientRect().width,
+    };
+  })()`);
+  if (
+    messageLayout.pageOverflow !== 0 || messageLayout.panelOverflow > 1 ||
+    messageLayout.sasOverflow > 1 || messageLayout.taskWidth < 800
+  ) {
+    throw new Error(`wide message panel overflowed: ${JSON.stringify(messageLayout)}`);
+  }
   ok("both tabs opened the message session");
 
   // SAS：消息会话在 phase 1 里跑自己的握手，所以它有自己的一串码 —— 但两边必须一致。
@@ -620,6 +681,73 @@ async function main() {
 
     // ── 两个标签页进同一个房间（都是 127.0.0.1，服务器按来源 IP 归组）────────
     const sender = await newTab(browser, BASE + "/");
+    // Batch-3 desktop-workspace contract. Keep the sender wide for the whole
+    // transfer so requests/progress/completion exercise the real two-column path,
+    // not merely a static screenshot. The later scenarios still cover Chrome's
+    // default single-column viewport independently.
+    await setWideViewport(sender);
+    await sender.waitFor(
+      "!!document.querySelector('.lan-workspace') && getComputedStyle(document.querySelector('.lan-workspace')).display === 'grid'",
+      "the wide LAN identity/task workspace",
+    );
+    await sender.waitFor("!!document.querySelector('.statusbar .ip')", "wide LAN connection metadata");
+    const wideWorkspace = await sender.evaluate(`(() => {
+      const rect = (selector) => {
+        const el = document.querySelector(selector);
+        if (!el) throw new Error(selector + ' missing');
+        const r = el.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, width: r.width };
+      };
+      const status = document.querySelector('.statusbar');
+      const ip = status.querySelector('.ip');
+      const originalIP = ip.textContent;
+      // Deliberately one unbreakable token wider than the rail content box. A
+      // shorter, space-separated sample would pass even if overflow-wrap were
+      // removed, making this regression guard a false positive.
+      ip.textContent = 'public IP ::ffff:2001:0db8:85a3:0000:0000:8a2e:0370:7334:192.0.2.128';
+      const statusRect = status.getBoundingClientRect();
+      const ipRect = ip.getBoundingClientRect();
+      const ipInside = ipRect.left >= statusRect.left - 1 && ipRect.right <= statusRect.right + 1;
+      ip.textContent = originalIP;
+      return {
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        hero: rect('.hero'),
+        task: rect('.lan-task'),
+        empty: rect('.empty'),
+        history: rect('.history'),
+        h1s: document.querySelectorAll('h1').length,
+        logo: getComputedStyle(document.querySelector('.hero .logo')).display,
+        ipInside,
+      };
+    })()`);
+    if (
+      wideWorkspace.overflow !== 0 ||
+      Math.abs(wideWorkspace.hero.top - wideWorkspace.task.top) > 2 ||
+      wideWorkspace.task.top > 180 ||
+      wideWorkspace.task.width < 800 ||
+      wideWorkspace.empty.width < 600 ||
+      wideWorkspace.empty.width > 641 ||
+      wideWorkspace.history.bottom > 900 ||
+      wideWorkspace.h1s !== 1 ||
+      wideWorkspace.logo !== "none" ||
+      !wideWorkspace.ipInside
+    ) {
+      throw new Error(`wide LAN workspace contract failed: ${JSON.stringify(wideWorkspace)}`);
+    }
+    ok("the wide LAN workspace exposed the task in the first viewport without overflow");
+
+    await setWideViewport(sender, 1180);
+    const boundary = await sender.evaluate(`({
+      display: getComputedStyle(document.querySelector('.lan-workspace')).display,
+      taskWidth: document.querySelector('.lan-task').getBoundingClientRect().width,
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    })`);
+    if (boundary.display !== "grid" || boundary.taskWidth < 735 || boundary.overflow !== 0) {
+      throw new Error(`1180px LAN workspace boundary failed: ${JSON.stringify(boundary)}`);
+    }
+    await setWideViewport(sender);
+    ok("the 1180px workspace boundary retained a usable task column");
+
     // Batch-2 chooser contract, zero peers: the live scanning signal belongs
     // inside the empty state and is compact/decorative; no selectable blip or
     // second full radar may precede the CTA.
@@ -638,6 +766,7 @@ async function main() {
     ok("the zero-peer state used one compact scanner and no selectable radar");
 
     const receiver = await newTab(browser, BASE + "/", SAVE_STUB);
+    await setWideViewport(receiver);
 
     const peersSeen = `(() => {
       const names = [...document.querySelectorAll('.pname')].map(e => e.textContent);
@@ -672,6 +801,12 @@ async function main() {
       }
     }
     ok("both one-peer states used PeerLink followed by one actionable peer card");
+
+    const widePeerCard = await sender.evaluate("document.querySelector('.peers li.peer').getBoundingClientRect().width");
+    if (widePeerCard < 500 || widePeerCard > 561) {
+      throw new Error(`wide LAN peer card track contract failed: ${widePeerCard}px`);
+    }
+    ok("the wide LAN selected-peer action stayed on one usable track");
 
     // 首页折叠线以下的营销区块是懒加载的（HomeSections）。它在首屏之外，坏掉了
     // 不会有任何报错——页面只是从此少了一半内容。这里明确等它出现。
@@ -721,6 +856,16 @@ async function main() {
     // 确认卡片上必须显示文件名 —— 它是用户做信任决策的地方。
     const cardText = await receiver.evaluate("document.body.innerText");
     if (!cardText.includes(FILE_NAME)) throw new Error("the confirmation card never showed the filename");
+    const requestLayout = await receiver.evaluate(`(() => {
+      const card = document.querySelector('.request');
+      return {
+        pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        cardOverflow: card.scrollWidth - card.clientWidth,
+      };
+    })()`);
+    if (requestLayout.pageOverflow !== 0 || requestLayout.cardOverflow > 1) {
+      throw new Error(`wide incoming request overflowed: ${JSON.stringify(requestLayout)}`);
+    }
     ok("receiver got the confirmation card with the filename");
 
     await receiver.evaluate(`(() => { (${acceptBtn}).click(); return true; })()`);
@@ -759,6 +904,15 @@ async function main() {
     const doneText = `/完成|Done|Sent|Received|完了|완료|Fertig|Terminé|اكتمل|Completado|Concluído/i.test(document.body.innerText)`;
     await sender.waitFor(doneText, "the sender's card to report completion");
     await receiver.waitFor(doneText, "the receiver's card to report completion");
+    for (const [who, tab] of [["sender", sender], ["receiver", receiver]]) {
+      const doneLayout = await tab.evaluate(`({
+        pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        cardOverflows: [...document.querySelectorAll('.xfer')].map(card => card.scrollWidth - card.clientWidth),
+      })`);
+      if (doneLayout.pageOverflow !== 0 || doneLayout.cardOverflows.some((n) => n > 1)) {
+        throw new Error(`${who} wide completed transfer overflowed: ${JSON.stringify(doneLayout)}`);
+      }
+    }
     ok("both cards report completion");
 
     // SAS：两边算出来的短认证码必须一致（中间人防护里用户看得见的那一半）。
@@ -781,6 +935,8 @@ async function main() {
     // 变得不确定，而这一幕要的是一对一。
     await browser.send("Target.closeTarget", { targetId: sender.targetId });
     await browser.send("Target.closeTarget", { targetId: receiver.targetId });
+    await sleep(1000);
+    await unsupportedLayoutScenario(browser);
     await sleep(1000);
     await earlyFailureScenario(browser);
     await sleep(1000);

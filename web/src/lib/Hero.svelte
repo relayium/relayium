@@ -1,8 +1,8 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
   import Logo from "./Logo.svelte";
-  let { connState, unsupported, selfName, selfIP, onRename }:
-    { connState: "connecting" | "ready" | "reconnecting"; unsupported: boolean; selfName: string; selfIP: string; onRename: (name: string) => void } = $props();
+  let { connState, unsupported, selfName, selfIP, onRename, workspace = false }:
+    { connState: "connecting" | "ready" | "reconnecting"; unsupported: boolean; selfName: string; selfIP: string; onRename: (name: string) => void; workspace?: boolean } = $props();
   const t = $derived<Messages>(messages[lang()]);
 
   // Inline rename: click the device name to edit it in place. Every locale's
@@ -30,7 +30,7 @@
   }
 </script>
 
-<header class="hero">
+<header class="hero" class:workspace>
   <div class="logo"><Logo size={64} /></div>
   <h1>Relayium</h1>
   <p class="tagline">{t.tagline}</p>
@@ -177,8 +177,39 @@
     .name-btn { min-width: 0; max-inline-size: 100%; overflow-wrap: anywhere; }
     /* Its own row, indented past the status dot so it reads as metadata about
        the sentence above rather than a fragment of it. */
-    .meta { padding-inline-start: calc(8px + var(--space-2)); }
+    .meta {
+      min-width: 0; max-inline-size: 100%; flex-wrap: wrap;
+      padding-inline-start: calc(8px + var(--space-2));
+    }
     .meta .sep { display: none; }
-    .ip { font-size: var(--fs-xs); }
+    .ip { min-width: 0; font-size: var(--fs-xs); overflow-wrap: anywhere; }
+  }
+
+  /* At the wide LAN-workspace breakpoint the nav has already rendered the full
+     logo + wordmark. Reuse the proven mobile masthead as a compact "this device"
+     rail while preserving the page's unique h1 and every rename/status behavior. */
+  @media (min-width: 1180px) {
+    .hero.workspace { text-align: start; padding-top: 0; }
+    .hero.workspace .logo { display: none; }
+    .hero.workspace h1 { font-size: 23px; letter-spacing: -0.8px; margin-block-end: var(--space-1); }
+    .hero.workspace .tagline {
+      font-size: var(--fs-sm); line-height: 1.55;
+      max-width: none; margin-inline: 0;
+    }
+    .hero.workspace .statusbar {
+      display: flex; flex-direction: column; align-items: flex-start;
+      gap: var(--space-1); box-sizing: border-box; inline-size: 100%;
+      margin-top: var(--space-5); border-radius: var(--radius-sm);
+      padding: var(--space-3);
+    }
+    .hero.workspace .conn { max-inline-size: 100%; flex-wrap: wrap; overflow-wrap: anywhere; }
+    .hero.workspace .name-btn { min-width: 0; max-inline-size: 100%; overflow-wrap: anywhere; }
+    .hero.workspace .name-edit { max-inline-size: 100%; box-sizing: border-box; }
+    .hero.workspace .meta {
+      min-width: 0; max-inline-size: 100%; flex-wrap: wrap;
+      padding-inline-start: calc(8px + var(--space-2));
+    }
+    .hero.workspace .meta .sep { display: none; }
+    .hero.workspace .ip { min-width: 0; font-size: var(--fs-xs); overflow-wrap: anywhere; }
   }
 </style>

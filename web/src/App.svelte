@@ -1003,40 +1003,49 @@
       <MagicLink />
     {/await}
   {:else}
-    <Hero {connState} {unsupported} {selfName} {selfIP} onRename={commitName} />
+    {#if notice}
+      <div class="toast" role="status" aria-live="polite">{notice}</div>
+    {/if}
 
-  {#if notice}
-    <div class="toast" role="status" aria-live="polite">{notice}</div>
-  {/if}
+    <!-- Wide LAN is an identity/task workspace. Keep the whole transferSurface in
+         one task column: its chooser, requests, progress and message states are a
+         single workflow, and Cross renders the same snippet with different chrome. -->
+    <div class="lan-workspace" class:two-col={!unsupported}>
+      <Hero {connState} {unsupported} {selfName} {selfIP} onRename={commitName} workspace={!unsupported} />
 
-  {#if unsupported}
-    <div class="ui-callout ui-callout-danger banner">{t.unsupported}</div>
-  {:else}
-    {@render transferSurface()}
-
-    <section class="ui-card history">
-      <details>
-        <summary>{t.historyTitle}</summary>
-        {#if history.length}
-          <ul class="filelist">
-            {#each history as e (e.id)}
-              <li>
-                <span class="fname">{e.direction === "send" ? "↑" : "↓"} {e.name} · {e.peer}</span>
-                <span class="fsize">{formatSize(e.size)} · {historyWhen(e.at)}</span>
-              </li>
-            {/each}
-          </ul>
-          <button type="button" class="btn btn-ghost btn-sm history-clear" onclick={clearHistoryPanel}>{t.historyClear}</button>
+      <div class="lan-task">
+        {#if unsupported}
+          <div class="ui-callout ui-callout-danger banner">{t.unsupported}</div>
         {:else}
-          <p class="history-empty">{t.historyEmpty}</p>
-        {/if}
-        <label class="history-keep">
-          <input type="checkbox" checked={historyKeep} onchange={toggleHistoryKeep} />
-          {t.historyKeep}
-        </label>
-      </details>
-    </section>
+          {@render transferSurface()}
 
+          <section class="ui-card history">
+            <details>
+              <summary>{t.historyTitle}</summary>
+              {#if history.length}
+                <ul class="filelist">
+                  {#each history as e (e.id)}
+                    <li>
+                      <span class="fname">{e.direction === "send" ? "↑" : "↓"} {e.name} · {e.peer}</span>
+                      <span class="fsize">{formatSize(e.size)} · {historyWhen(e.at)}</span>
+                    </li>
+                  {/each}
+                </ul>
+                <button type="button" class="btn btn-ghost btn-sm history-clear" onclick={clearHistoryPanel}>{t.historyClear}</button>
+              {:else}
+                <p class="history-empty">{t.historyEmpty}</p>
+              {/if}
+              <label class="history-keep">
+                <input type="checkbox" checked={historyKeep} onchange={toggleHistoryKeep} />
+                {t.historyKeep}
+              </label>
+            </details>
+          </section>
+        {/if}
+      </div>
+    </div>
+
+  {#if !unsupported}
     <!-- 折叠线以下的营销区块：懒加载，深链访客（/d/<id>、/me…）不必为首页长文案
          付下载成本。await 里不放占位骨架——它在首屏之外，加载期间什么都不显示比
          闪一块灰更安稳。 -->
@@ -1082,6 +1091,35 @@
     padding: 0 20px 48px;
     box-sizing: border-box;
     text-align: start;
+  }
+
+  /* The desktop LAN route is an application workspace once there is enough room
+     for a proven-wide activity column. Cross also renders transferSurface, so every
+     chooser override stays anchored below .lan-workspace to prevent style leakage. */
+  @media (min-width: 1180px) {
+    .lan-workspace {
+      margin-block-start: var(--space-5);
+    }
+    .lan-workspace.two-col {
+      display: grid;
+      grid-template-columns: 340px minmax(0, 1fr);
+      column-gap: var(--space-7);
+      align-items: start;
+    }
+    .lan-task { min-width: 0; }
+    .lan-workspace.two-col .peers { margin-top: 0; }
+    .lan-workspace.two-col .empty {
+      box-sizing: border-box;
+      inline-size: 100%;
+      max-inline-size: 640px;
+    }
+    /* LAN renders one selected action card even when the radar contains several
+       choices. A single fixed track prevents auto-fill from turning it into a
+       narrow orphan; Cross keeps its real multi-card grid. */
+    .lan-workspace.two-col .peers ul,
+    .lan-workspace.two-col .peers ul.solo {
+      grid-template-columns: minmax(0, 560px);
+    }
   }
 
   /* In-app section headings stay modest; marketing sections use the larger global --fs-h2. */
