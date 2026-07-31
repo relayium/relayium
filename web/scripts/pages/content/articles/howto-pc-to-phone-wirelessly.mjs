@@ -73,7 +73,7 @@ const en = {
       },
       {
         q: "Is it secure to send files this way?",
-        a: "Yes. On top of the browser's transport encryption, Relayium adds its own layer: an X25519 key exchange derives a key used for per-chunk AES-256-GCM, and that key never touches a server. Both devices show the same 6-digit code (SAS) so you can confirm no one is in the middle, and each file is verified end-to-end with a SHA-256 hash.",
+        a: "Yes. On top of the browser's transport encryption, Relayium adds its own layer: an X25519 key exchange derives a key used for per-chunk AES-256-GCM, and that key never touches a server. A matching 6-digit code (SAS) confirms the keys weren't replaced: a server or relay has not impersonated either endpoint or terminated the application-layer end-to-end encryption. Across networks, the TURN relay still sits in the transfer path, but it only forwards ciphertext it cannot decrypt. Each file is also verified end-to-end with a SHA-256 hash.",
       },
     ],
   },
@@ -154,7 +154,7 @@ const zh = {
       },
       {
         q: "这样传文件安全吗？",
-        a: "安全。在浏览器的传输加密之上，Relayium 再加了一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不接触服务器。两台设备会显示同一段 6 位校验码（SAS），你可以据此确认没有人插在中间；每个文件还会用 SHA-256 做端到端校验。",
+        a: "安全。在浏览器的传输加密之上，Relayium 再加了一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不接触服务器。两台设备的 6 位校验码（SAS）一致，能确认密钥未被替换：服务器或中继没有冒充任一端，也没有终止应用层端到端加密。跨网络时，TURN 中继仍处于传输路径上，但只转发无法解密的密文。每个文件还会用 SHA-256 做端到端校验。",
       },
     ],
   },
@@ -235,7 +235,7 @@ const ja = {
       },
       {
         q: "この方法でファイルを送っても安全ですか？",
-        a: "はい。ブラウザの転送暗号化に加えて、Relayium は独自の層を重ねます。X25519 の鍵交換で導出した鍵をチャンクごとの AES-256-GCM に使い、その鍵はサーバーに触れません。両方の端末が同じ6桁のコード（SAS）を表示するので、間に誰もいないことを確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
+        a: "はい。ブラウザの転送暗号化に加えて、Relayium は独自の層を重ねます。X25519 の鍵交換で導出した鍵をチャンクごとの AES-256-GCM に使い、その鍵はサーバーに触れません。両端末の6桁のコード（SAS）が一致すれば、鍵が差し替えられておらず、サーバーやリレーがどちらかの端末になりすましたり、アプリケーション層のエンドツーエンド暗号化を終端したりしていないことを確認できます。ネットワークをまたぐ場合、TURN リレーは引き続き転送経路上にありますが、復号できない暗号文だけを転送します。各ファイルは SHA-256 ハッシュでもエンドツーエンドに検証されます。",
       },
     ],
   },
@@ -316,7 +316,7 @@ const ko = {
       },
       {
         q: "이렇게 파일을 보내도 안전한가요?",
-        a: "네. 브라우저의 전송 암호화 위에 Relayium은 자체 계층을 더합니다. X25519 키 교환으로 도출한 키를 블록별 AES-256-GCM에 쓰며, 이 키는 서버에 닿지 않습니다. 두 기기가 동일한 6자리 코드(SAS)를 표시해 중간에 아무도 없음을 확인할 수 있고, 각 파일은 SHA-256 해시로 종단간 검증됩니다.",
+        a: "네. 브라우저의 전송 암호화 위에 Relayium은 자체 계층을 더합니다. X25519 키 교환으로 도출한 키를 블록별 AES-256-GCM에 쓰며, 이 키는 서버에 닿지 않습니다. 두 기기의 6자리 코드(SAS)가 일치하면 키가 바뀌지 않았으며 서버나 릴레이가 어느 한쪽 끝점으로 위장하거나 애플리케이션 계층 종단간 암호화를 종료하지 않았음을 확인할 수 있습니다. 네트워크를 넘을 때 TURN 릴레이는 여전히 전송 경로에 있지만, 복호화할 수 없는 암호문만 전달합니다. 각 파일은 SHA-256 해시로도 종단간 검증됩니다.",
       },
     ],
   },
@@ -397,7 +397,7 @@ const de = {
       },
       {
         q: "Ist es sicher, Dateien so zu senden?",
-        a: "Ja. Zusätzlich zur Transportverschlüsselung des Browsers legt Relayium eine eigene Schicht darüber: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, und dieser Schlüssel erreicht nie einen Server. Beide Geräte zeigen denselben sechsstelligen Code (SAS), sodass du bestätigen kannst, dass niemand dazwischensitzt, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft.",
+        a: "Ja. Zusätzlich zur Transportverschlüsselung des Browsers legt Relayium eine eigene Schicht darüber: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, und dieser Schlüssel erreicht nie einen Server. Stimmen die sechsstelligen Codes (SAS) beider Geräte überein, bestätigt das, dass die Schlüssel nicht ausgetauscht wurden: Ein Server oder Relay hat sich weder als einer der Endpunkte ausgegeben noch die Ende-zu-Ende-Verschlüsselung der Anwendungsschicht beendet. Netzwerkübergreifend bleibt das TURN-Relay im Übertragungspfad, leitet aber nur Chiffretext weiter, den es nicht entschlüsseln kann. Jede Datei wird außerdem per SHA-256-Hash Ende-zu-Ende geprüft.",
       },
     ],
   },
@@ -478,7 +478,7 @@ const fr = {
       },
       {
         q: "Est-ce sûr d'envoyer des fichiers ainsi ?",
-        a: "Oui. Par-dessus le chiffrement de transport du navigateur, Relayium ajoute sa propre couche : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n'atteint jamais un serveur. Les deux appareils affichent le même code à 6 chiffres (SAS) pour confirmer que personne ne s'intercale, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256.",
+        a: "Oui. Par-dessus le chiffrement de transport du navigateur, Relayium ajoute sa propre couche : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n'atteint jamais un serveur. La concordance des codes à 6 chiffres (SAS) confirme que les clés n'ont pas été substituées : aucun serveur ou relais ne s'est fait passer pour l'un des terminaux ni n'a terminé le chiffrement de bout en bout de la couche applicative. Entre réseaux, le relais TURN reste sur le trajet du transfert, mais ne transmet que du texte chiffré qu'il ne peut pas déchiffrer. Chaque fichier est aussi vérifié de bout en bout par une empreinte SHA-256.",
       },
     ],
   },
@@ -559,7 +559,7 @@ const ar = {
       },
       {
         q: "هل من الآمن إرسال الملفات بهذه الطريقة؟",
-        a: "نعم. فوق تشفير النقل الذي يوفّره المتصفح، يضيف Relayium طبقته الخاصة: يشتقّ تبادل مفاتيح X25519 مفتاحًا يُستخدَم لتشفير AES-256-GCM لكل كتلة، وهذا المفتاح لا يلمس خادمًا أبدًا. يعرض كلا الجهازين الرمز نفسه المكوَّن من 6 أرقام (SAS) لتتأكّد من عدم وجود أحد في المنتصف، ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
+        a: "نعم. فوق تشفير النقل الذي يوفّره المتصفح، يضيف Relayium طبقته الخاصة: يشتقّ تبادل مفاتيح X25519 مفتاحًا يُستخدَم لتشفير AES-256-GCM لكل كتلة، وهذا المفتاح لا يلمس خادمًا أبدًا. يؤكد تطابق الرمز المكوَّن من 6 أرقام (SAS) أن المفاتيح لم تُستبدل: فلم ينتحل خادم أو مُرحِّل شخصية أي من الطرفين ولم يُنهِ التشفير من الطرف إلى الطرف على مستوى التطبيق. وعبر الشبكات يظل مُرحِّل TURN ضمن مسار النقل، لكنه لا يمرر إلا نصًا مشفّرًا لا يستطيع فك تشفيره. ويُتحقَّق أيضًا من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
       },
     ],
   },
@@ -640,7 +640,7 @@ const es = {
       },
       {
         q: "¿Es seguro enviar archivos así?",
-        a: "Sí. Además del cifrado de transporte del navegador, Relayium añade su propia capa: un intercambio de claves X25519 deriva una clave usada para AES-256-GCM por bloque, y esa clave nunca toca un servidor. Ambos dispositivos muestran el mismo código de 6 dígitos (SAS) para que confirmes que nadie está en medio, y cada archivo se verifica de extremo a extremo con un hash SHA-256.",
+        a: "Sí. Además del cifrado de transporte del navegador, Relayium añade su propia capa: un intercambio de claves X25519 deriva una clave usada para AES-256-GCM por bloque, y esa clave nunca toca un servidor. La coincidencia de los códigos de 6 dígitos (SAS) confirma que las claves no se sustituyeron: ningún servidor o retransmisor se hizo pasar por uno de los extremos ni terminó el cifrado de extremo a extremo de la capa de aplicación. Entre redes, el retransmisor TURN sigue en la ruta de transferencia, pero solo reenvía texto cifrado que no puede descifrar. Cada archivo también se verifica de extremo a extremo con un hash SHA-256.",
       },
     ],
   },
@@ -721,7 +721,7 @@ const pt = {
       },
       {
         q: "É seguro enviar arquivos assim?",
-        a: "Sim. Além da criptografia de transporte do navegador, o Relayium adiciona a sua própria camada: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM por bloco, e essa chave nunca toca um servidor. Ambos os dispositivos mostram o mesmo código de 6 dígitos (SAS) para você confirmar que ninguém está no meio, e cada arquivo é verificado de ponta a ponta com um hash SHA-256.",
+        a: "Sim. Além da criptografia de transporte do navegador, o Relayium adiciona a sua própria camada: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM por bloco, e essa chave nunca toca um servidor. A coincidência dos códigos de 6 dígitos (SAS) confirma que as chaves não foram substituídas: nenhum servidor ou retransmissor se fez passar por uma das pontas nem encerrou a criptografia de ponta a ponta da camada de aplicação. Entre redes, o retransmissor TURN continua no caminho da transferência, mas só encaminha texto cifrado que não consegue descriptografar. Cada arquivo também é verificado de ponta a ponta com um hash SHA-256.",
       },
     ],
   },
@@ -735,6 +735,6 @@ const pt = {
 export default {
   slug: "how-to/send-files-pc-to-phone-wirelessly",
   published: "2026-07-03",
-  updated: "2026-07-03",
+  updated: "2026-07-31",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

@@ -10,7 +10,7 @@ const en = {
   updatedLabel: "Last updated",
   lead: [
     "Macs and PCs don't speak the same file-sharing language out of the box. AirDrop is Apple-only, Windows' network sharing wants both machines on a matching workgroup or domain, and neither one is exactly friendly to set up in five minutes when you just want to move one folder of project files from a MacBook to a Windows desktop.",
-    "Relayium sidesteps the whole compatibility question. Open the same page in a browser on the Mac and on the Windows PC, and the files travel directly between them — end-to-end encrypted, nothing to install on either operating system. On the same network no account is needed at all; sending across the internet with a pairing code only asks the sender to sign in. Here's exactly how it works in both directions.",
+    "Relayium sidesteps the whole compatibility question. Open the same page on both computers: on the same LAN the end-to-end encrypted files travel directly, while across networks a TURN relay carries ciphertext it cannot read or decrypt and keeps no realtime content copy or history. Nothing needs installing; the creator signs in for cross-network pairing, while the person joining never needs an account. Here's exactly how it works in both directions.",
   ],
   sections: [
     {
@@ -33,7 +33,7 @@ const en = {
         "On the Mac, open relayium.com in the browser. On the Windows PC, open the same address.",
         "Each machine appears as a nearby device to the other — no Windows workgroup setup, no macOS file sharing to enable.",
         "On the sending computer, tap the other one, then pick the files (or a whole folder) to send.",
-        "Both screens show the same short verification code. Check that it matches on both — that confirms the connection is direct between your two machines, not routed through anything in between.",
+        "Both screens show the same short verification code. Check that it matches on both — that confirms both machines joined the same end-to-end encrypted session; it does not prove which network path carries the ciphertext.",
         "Accept on the receiving side and the transfer starts immediately, streaming straight to disk.",
       ],
     },
@@ -114,7 +114,7 @@ const zh = {
   updatedLabel: "最近更新",
   lead: [
     "Mac 和 PC 天生就不说同一种文件共享语言。AirDrop 只属于苹果生态，Windows 的网络共享又要求两台机器加入匹配的工作组或域，两者都不是那种能在五分钟内搞定的东西——而你可能只是想把 MacBook 上一个项目文件夹搬到 Windows 台式机上。",
-    "Relayium 绕开了这整套兼容性难题。在 Mac 和 Windows 电脑的浏览器里打开同一个页面，文件就在它们之间直接传输——端到端加密，两个系统都无需安装任何东西。同一网络下完全不用账号；跨互联网用配对码发送时只需发送方登录一下。下面详细说明两个方向的具体做法。",
+    "Relayium 绕开了这整套兼容性难题。在两台电脑上打开同一个页面：同一局域网内，端到端加密的文件会直接传输；跨网络时，TURN 中继只搬运它无法读取或解密的密文，也不保留实时内容副本或历史。两个系统都无需安装；跨网络配对由创建者登录，加入者始终无需账号。下面详细说明两个方向的具体做法。",
   ],
   sections: [
     {
@@ -135,7 +135,7 @@ const zh = {
         "在 Mac 上，用浏览器打开 relayium.com；在 Windows PC 上，打开同一个地址。",
         "两台机器会互相显示为附近的设备——不用设置 Windows 工作组，也不用开启 macOS 文件共享。",
         "在发送方电脑上点击另一台，然后选择要发送的文件（或整个文件夹）。",
-        "两边屏幕会显示同一段简短的校验码。核对两边是否一致——这能确认连接是在你的两台机器之间直连的，没有经过中间的任何环节。",
+        "两边屏幕会显示同一段简短的校验码。核对两边是否一致——它确认两台电脑加入了同一个端到端加密会话，并不证明密文采用了哪条网络路径。",
         "在接收方确认接收，传输立即开始，直接流式写入磁盘。",
       ],
     },
@@ -214,7 +214,7 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "Mac と PC は、そのままではファイル共有の言葉が違います。AirDrop は Apple 専用、Windows のネットワーク共有は両方の端末が一致するワークグループやドメインに入っている必要があり、どちらも5分でさっと設定できるものではありません。MacBook 上のプロジェクトフォルダを1つ、Windows デスクトップに移したいだけなのに。",
-    "Relayium はその互換性の問題をまるごと回避します。Mac と Windows パソコンのブラウザで同じページを開けば、ファイルはその間で直接転送されます。エンドツーエンド暗号化で、どちらの OS にもインストールは不要です。同じネットワークならアカウントすら不要で、ペアリングコードでインターネット越しに送る場合も送信側がサインインするだけです。以下、両方向の具体的な手順を説明します。",
+    "Relayium はその互換性の問題をまるごと回避します。両方のパソコンで同じページを開くと、同じ LAN 内ではエンドツーエンド暗号化されたファイルが直接転送され、ネットワークをまたぐ場合は TURN リレーが読取りも復号もできない暗号文だけを運び、リアルタイム内容のコピーや履歴を残しません。インストールは不要で、ネットワーク越しのペアリングでは作成者がサインインし、参加者にはアカウントが不要です。以下、両方向の具体的な手順を説明します。",
   ],
   sections: [
     {
@@ -237,7 +237,7 @@ const ja = {
         "Mac でブラウザから relayium.com を開きます。Windows パソコンでも同じアドレスを開きます。",
         "各端末はもう一方に近くの端末として表示されます。Windows のワークグループ設定も、macOS のファイル共有を有効にする必要もありません。",
         "送信側のパソコンでもう一方をタップし、送るファイル（またはフォルダ丸ごと）を選びます。",
-        "両方の画面に同じ短い検証コードが表示されます。両方で一致するか確認してください。これは接続が2台のパソコンの間で直接行われており、途中で何も経由していないことを確認するものです。",
+        "両方の画面に同じ短い検証コードが表示されます。一致するか確認してください。これは2台が同じエンドツーエンド暗号化セッションに参加したことを確認するもので、暗号文が通るネットワーク経路を証明するものではありません。",
         "受信側で承認すると転送がすぐに始まり、ディスクへ直接ストリーミングされます。",
       ],
     },
@@ -316,7 +316,7 @@ const ko = {
   updatedLabel: "마지막 업데이트",
   lead: [
     "Mac과 PC는 기본적으로 같은 파일 공유 언어를 쓰지 않습니다. AirDrop은 애플 전용이고, Windows의 네트워크 공유는 두 기기가 일치하는 작업 그룹이나 도메인에 있어야 하는데, 둘 다 5분 만에 뚝딱 설정할 수 있는 것이 아닙니다 — MacBook의 프로젝트 폴더 하나를 Windows 데스크톱으로 옮기고 싶을 뿐인데도 말이죠.",
-    "Relayium은 이 호환성 문제 전체를 우회합니다. Mac과 Windows PC의 브라우저에서 같은 페이지를 열면 파일이 그 사이에서 직접 전송됩니다 — 종단간 암호화, 두 운영체제 모두 설치할 것이 없습니다. 같은 네트워크에서는 계정조차 필요 없고, 페어링 코드로 인터넷 너머로 보낼 때도 보내는 쪽이 로그인만 하면 됩니다. 아래에서 양방향의 정확한 방법을 설명합니다.",
+    "Relayium은 이 호환성 문제 전체를 우회합니다. 두 컴퓨터에서 같은 페이지를 열면 같은 LAN에서는 종단간 암호화된 파일이 직접 전송되고, 네트워크를 넘을 때는 TURN 릴레이가 읽거나 복호화할 수 없는 암호문만 전달하며 실시간 콘텐츠 사본이나 기록을 남기지 않습니다. 설치는 필요 없고, 네트워크 간 페어링에서는 생성자가 로그인하며 참가자는 계정이 필요 없습니다. 아래에서 양방향의 정확한 방법을 설명합니다.",
   ],
   sections: [
     {
@@ -339,7 +339,7 @@ const ko = {
         "Mac에서 브라우저로 relayium.com을 엽니다. Windows PC에서도 같은 주소를 엽니다.",
         "각 기기가 상대에게 근처 기기로 나타납니다 — Windows 작업 그룹 설정도, macOS 파일 공유 활성화도 필요 없습니다.",
         "보내는 컴퓨터에서 다른 쪽을 탭한 다음, 보낼 파일(또는 폴더 전체)을 고릅니다.",
-        "양쪽 화면에 같은 짧은 검증 코드가 표시됩니다. 양쪽이 일치하는지 확인하세요 — 이는 두 컴퓨터 사이의 연결이 직접적이며 중간에 아무것도 거치지 않았음을 확인해 줍니다.",
+        "양쪽 화면에 같은 짧은 검증 코드가 표시됩니다. 일치하는지 확인하세요 — 두 컴퓨터가 같은 종단간 암호화 세션에 참여했음을 확인할 뿐, 암호문이 어떤 네트워크 경로로 이동하는지는 증명하지 않습니다.",
         "받는 쪽에서 수락하면 전송이 즉시 시작되어 디스크로 곧바로 스트리밍됩니다.",
       ],
     },
@@ -418,7 +418,7 @@ const de = {
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Mac und PC sprechen von Haus aus nicht dieselbe Sprache, wenn es um Dateifreigabe geht. AirDrop ist Apple vorbehalten, die Netzwerkfreigabe von Windows verlangt, dass beide Rechner in einer passenden Arbeitsgruppe oder Domäne sind, und beides lässt sich nicht eben in fünf Minuten einrichten — dabei willst du vielleicht nur einen Projektordner vom MacBook auf den Windows-Desktop bringen.",
-    "Relayium umgeht dieses ganze Kompatibilitätsproblem. Öffne dieselbe Seite im Browser auf dem Mac und auf dem Windows-PC, und die Dateien wandern direkt zwischen ihnen — Ende-zu-Ende-verschlüsselt, auf keinem der beiden Betriebssysteme ist etwas zu installieren. Im selben Netz ist überhaupt kein Konto nötig; beim Senden über das Internet per Pairing-Code muss sich nur der Absender anmelden. Hier die genauen Schritte in beide Richtungen.",
+    "Relayium umgeht dieses ganze Kompatibilitätsproblem. Öffne dieselbe Seite auf beiden Rechnern: Im selben LAN werden die Ende-zu-Ende-verschlüsselten Dateien direkt übertragen; netzübergreifend transportiert ein TURN-Relay nur Chiffretext, den es weder lesen noch entschlüsseln kann, und behält weder Echtzeitinhalte noch einen Verlauf. Installiert werden muss nichts; beim netzübergreifenden Pairing meldet sich der Ersteller an, die beitretende Person braucht nie ein Konto. Hier die genauen Schritte in beide Richtungen.",
   ],
   sections: [
     {
@@ -441,7 +441,7 @@ const de = {
         "Öffne auf dem Mac relayium.com im Browser. Öffne auf dem Windows-PC dieselbe Adresse.",
         "Jeder Rechner erscheint beim anderen als Gerät in der Nähe — keine Windows-Arbeitsgruppe einzurichten, keine macOS-Dateifreigabe zu aktivieren.",
         "Tippe auf dem sendenden Rechner den anderen an und wähle die Dateien (oder einen ganzen Ordner) zum Senden.",
-        "Beide Bildschirme zeigen denselben kurzen Verifizierungscode. Vergleiche ihn auf beiden Seiten — das bestätigt, dass die Verbindung direkt zwischen deinen zwei Rechnern besteht und nichts dazwischengeschaltet ist.",
+        "Beide Bildschirme zeigen denselben kurzen Verifizierungscode. Vergleiche ihn auf beiden Seiten — er bestätigt, dass beide Rechner derselben Ende-zu-Ende-verschlüsselten Sitzung beigetreten sind, nicht welchen Netzwerkweg der Chiffretext nimmt.",
         "Bestätige auf der empfangenden Seite, und die Übertragung startet sofort und streamt direkt auf die Festplatte.",
       ],
     },
@@ -522,7 +522,7 @@ const fr = {
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Mac et PC ne parlent pas nativement le même langage de partage de fichiers. AirDrop est réservé à Apple, le partage réseau de Windows exige que les deux machines soient dans un groupe de travail ou un domaine compatible, et aucun des deux ne se configure vraiment en cinq minutes — alors que vous voulez peut-être juste déplacer un dossier de projet d'un MacBook vers un PC de bureau Windows.",
-    "Relayium contourne tout ce problème de compatibilité. Ouvrez la même page dans le navigateur sur le Mac et sur le PC Windows, et les fichiers voyagent directement entre eux — chiffrés de bout en bout, rien à installer sur aucun des deux systèmes d'exploitation. Sur le même réseau, aucun compte n'est nécessaire du tout ; pour envoyer via Internet avec un code d'appairage, l'expéditeur n'a qu'à se connecter. Voici la marche à suivre exacte dans les deux sens.",
+    "Relayium contourne tout ce problème de compatibilité. Ouvrez la même page sur les deux ordinateurs : sur le même LAN, les fichiers chiffrés de bout en bout passent directement ; entre réseaux, un relais TURN ne transporte que du texte chiffré qu'il ne peut ni lire ni déchiffrer, sans conserver de copie ni d'historique du contenu en temps réel. Rien à installer ; pour l'appairage entre réseaux, le créateur se connecte et la personne qui rejoint n'a jamais besoin de compte. Voici la marche à suivre exacte dans les deux sens.",
   ],
   sections: [
     {
@@ -545,7 +545,7 @@ const fr = {
         "Sur le Mac, ouvrez relayium.com dans le navigateur. Sur le PC Windows, ouvrez la même adresse.",
         "Chaque machine apparaît sur l'autre comme un appareil à proximité — aucun groupe de travail Windows à configurer, aucun partage de fichiers macOS à activer.",
         "Sur l'ordinateur qui envoie, touchez l'autre, puis choisissez les fichiers (ou un dossier entier) à envoyer.",
-        "Les deux écrans affichent le même code de vérification court. Vérifiez qu'il correspond des deux côtés — cela confirme que la connexion est directe entre vos deux machines, sans rien d'intercalé.",
+        "Les deux écrans affichent le même code de vérification court. Vérifiez qu'il correspond : il confirme que les deux machines ont rejoint la même session chiffrée de bout en bout, pas le chemin réseau emprunté par le texte chiffré.",
         "Acceptez du côté récepteur, et le transfert démarre immédiatement, en flux direct vers le disque.",
       ],
     },
@@ -626,7 +626,7 @@ const ar = {
   updatedLabel: "آخر تحديث",
   lead: [
     "لا يتكلم جهازا Mac وPC اللغة نفسها لمشاركة الملفات جاهزَين. فـ AirDrop حكرٌ على Apple، ومشاركة الشبكة في Windows تريد أن يكون الجهازان في مجموعة عمل أو نطاق متطابق، وأيٌّ منهما ليس سهل الإعداد تمامًا في خمس دقائق حين تريد فقط نقل مجلد واحد من ملفات مشروع من MacBook إلى سطح مكتب Windows.",
-    "يتجاوز Relayium مسألة التوافق برمّتها. افتح الصفحة نفسها في متصفح على الـ Mac وعلى حاسوب Windows، وتنتقل الملفات مباشرةً بينهما — مشفَّرة من الطرف إلى الطرف، لا شيء لتثبيته على أي من نظامَي التشغيل. على نفس الشبكة لا حاجة إلى حساب على الإطلاق؛ والإرسال عبر الإنترنت برمز اقتران يطلب من المُرسِل فقط تسجيل الدخول. إليك تحديدًا كيف يعمل الأمر في كلا الاتجاهين.",
+    "يتجاوز Relayium مسألة التوافق برمّتها. افتح الصفحة نفسها على الجهازين: داخل شبكة LAN نفسها تنتقل الملفات المشفَّرة من الطرف إلى الطرف مباشرةً، وعبر الشبكات ينقل مُرحِّل TURN نصًا مشفّرًا لا يستطيع قراءته أو فك تشفيره ولا يحتفظ بنسخة أو سجل للمحتوى الآني. لا حاجة إلى تثبيت شيء؛ يسجّل منشئ الاقتران عبر الشبكات الدخول، ولا يحتاج المنضم إلى حساب. إليك تحديدًا كيف يعمل الأمر في كلا الاتجاهين.",
   ],
   sections: [
     {
@@ -649,7 +649,7 @@ const ar = {
         "على الـ Mac، افتح relayium.com في المتصفح. وعلى حاسوب Windows، افتح العنوان نفسه.",
         "يظهر كل جهاز للآخر كجهاز قريب — لا إعداد لمجموعة عمل Windows، ولا مشاركة ملفات macOS لتفعيلها.",
         "على الحاسوب المُرسِل، انقر على الآخر، ثم اختر الملفات (أو مجلدًا كاملًا) للإرسال.",
-        "تُظهِر الشاشتان رمز التحقق القصير نفسه. تحقق من تطابقه على الجهازين — فذلك يؤكد أن الاتصال مباشر بين جهازيك، وغير موجَّه عبر أي شيء في المنتصف.",
+        "تُظهِر الشاشتان رمز التحقق القصير نفسه. تحقق من تطابقه — فهو يؤكد انضمام الجهازين إلى جلسة واحدة مشفَّرة من الطرف إلى الطرف، ولا يثبت مسار الشبكة الذي يحمله النص المشفّر.",
         "اقبل على الطرف المستقبِل فيبدأ النقل فورًا، بثًّا مباشرًا إلى القرص.",
       ],
     },
@@ -730,7 +730,7 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "Los Mac y los PC no hablan el mismo idioma de uso compartido de archivos de fábrica. AirDrop es solo de Apple, el uso compartido de red de Windows quiere que ambas máquinas estén en un grupo de trabajo o dominio coincidente, y ninguna de las dos es precisamente fácil de configurar en cinco minutos cuando solo quieres mover una carpeta de archivos de proyecto de un MacBook a un equipo de escritorio con Windows.",
-    "Relayium esquiva toda la cuestión de la compatibilidad. Abre la misma página en un navegador en el Mac y en el PC con Windows, y los archivos viajan directamente entre ellos — cifrados de extremo a extremo, nada que instalar en ninguno de los dos sistemas operativos. En la misma red no hace falta cuenta alguna; enviar por internet con un código de emparejamiento solo pide al remitente iniciar sesión. Aquí tienes exactamente cómo funciona en ambas direcciones.",
+    "Relayium esquiva toda la cuestión de la compatibilidad. Abre la misma página en ambos ordenadores: en la misma LAN los archivos cifrados de extremo a extremo viajan directamente; entre redes, un relé TURN solo transporta texto cifrado que no puede leer ni descifrar y no conserva copia ni historial del contenido en tiempo real. No hay nada que instalar; en el emparejamiento entre redes inicia sesión el creador y quien se une nunca necesita cuenta. Aquí tienes exactamente cómo funciona en ambas direcciones.",
   ],
   sections: [
     {
@@ -753,7 +753,7 @@ const es = {
         "En el Mac, abre relayium.com en el navegador. En el PC con Windows, abre la misma dirección.",
         "Cada máquina aparece como un dispositivo cercano para la otra — sin configurar un grupo de trabajo de Windows, sin habilitar el uso compartido de archivos de macOS.",
         "En el ordenador que envía, haz clic en el otro y luego elige los archivos (o una carpeta entera) a enviar.",
-        "Ambas pantallas muestran el mismo código de verificación corto. Comprueba que coincide en las dos — eso confirma que la conexión es directa entre tus dos máquinas, sin pasar por nada en medio.",
+        "Ambas pantallas muestran el mismo código de verificación corto. Comprueba que coincide: confirma que ambas máquinas se unieron a la misma sesión cifrada de extremo a extremo, no la ruta de red que transporta el texto cifrado.",
         "Acepta en el lado que recibe y la transferencia empieza de inmediato, transmitiendo directamente al disco.",
       ],
     },
@@ -834,7 +834,7 @@ const pt = {
   updatedLabel: "Última atualização",
   lead: [
     "Macs e PCs não falam a mesma língua de compartilhamento de arquivos de fábrica. O AirDrop é só da Apple, o compartilhamento de rede do Windows exige que as duas máquinas estejam em um grupo de trabalho ou domínio compatível, e nenhum dos dois é exatamente fácil de configurar em cinco minutos quando você só quer mover uma pasta de arquivos de projeto de um MacBook para um desktop com Windows.",
-    "O Relayium contorna toda a questão da compatibilidade. Abra a mesma página em um navegador no Mac e no PC com Windows, e os arquivos viajam diretamente entre eles — criptografados de ponta a ponta, nada para instalar em nenhum dos dois sistemas operacionais. Na mesma rede não é preciso conta alguma; enviar pela internet com um código de emparelhamento só pede que o remetente faça login. Veja exatamente como funciona nos dois sentidos.",
+    "O Relayium contorna toda a questão da compatibilidade. Abra a mesma página nos dois computadores: na mesma LAN os arquivos criptografados de ponta a ponta viajam diretamente; entre redes, um retransmissor TURN só transporta texto cifrado que não consegue ler nem descriptografar e não mantém cópia nem histórico do conteúdo em tempo real. Não há nada para instalar; no emparelhamento entre redes o criador faz login e quem entra nunca precisa de conta. Veja exatamente como funciona nos dois sentidos.",
   ],
   sections: [
     {
@@ -857,7 +857,7 @@ const pt = {
         "No Mac, abra o relayium.com no navegador. No PC com Windows, abra o mesmo endereço.",
         "Cada máquina aparece para a outra como um dispositivo próximo — nenhum grupo de trabalho do Windows para configurar, nenhum compartilhamento de arquivos do macOS para ativar.",
         "No computador que envia, toque no outro e depois escolha os arquivos (ou uma pasta inteira) para enviar.",
-        "As duas telas mostram o mesmo código de verificação curto. Confira se ele coincide dos dois lados — isso confirma que a conexão é direta entre suas duas máquinas, sem passar por nada no meio.",
+        "As duas telas mostram o mesmo código de verificação curto. Confira se ele coincide: isso confirma que as duas máquinas entraram na mesma sessão criptografada de ponta a ponta, não a rota de rede que transporta o texto cifrado.",
         "Aceite no lado que recebe e a transferência começa imediatamente, transmitindo direto para o disco.",
       ],
     },
@@ -934,6 +934,6 @@ const pt = {
 export default {
   slug: "how-to/transfer-files-between-mac-and-windows",
   published: "2026-07-09",
-  updated: "2026-07-09",
+  updated: "2026-07-31",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

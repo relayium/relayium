@@ -8,10 +8,10 @@
 const en = {
   title: "Send files between two computers over the internet",
   description:
-    "A step-by-step guide to sending files directly between two computers over the internet — peer-to-peer, no cloud upload, no install, and end-to-end encrypted the whole way.",
+    "A step-by-step guide to browser-to-browser file transfer: direct on the same LAN, or end-to-end encrypted over TURN across networks, with no cloud upload or install.",
   updatedLabel: "Last updated",
   lead: [
-    "Sending a file to another computer usually means uploading it somewhere first — a cloud drive, an email attachment, a chat app — and hoping the recipient can get it back out again. Relayium skips that step: it connects your browser directly to theirs, wherever in the world they are, and streams the file straight across.",
+    "Sending a file to another computer usually means uploading it somewhere first — a cloud drive, an email attachment, a chat app — and hoping the recipient can get it back out again. Relayium skips that storage step: browsers connect directly on the same LAN, while cross-network transfers use a TURN relay that carries only end-to-end encrypted ciphertext and keeps no server-side realtime content copy or history.",
     "This guide covers both cases — two computers on the same network, and two computers on completely different networks (different homes, offices, countries) — and shows exactly what each side needs to do.",
   ],
   sections: [
@@ -62,7 +62,7 @@ const en = {
     items: [
       {
         q: "Is it really peer-to-peer, or does the file pass through a server?",
-        a: "It is peer-to-peer in the sense that matters: the file streams browser to browser and is never stored on a server. On the same network the two browsers connect directly to each other. A cross-network pairing-code transfer is carried by a TURN relay by design — the reliable route through the firewalls and NATs that usually block a direct path — but that relay only ever passes encrypted ciphertext through in flight, never the readable file.",
+        a: "It is peer-to-peer in the sense that matters: the file streams browser to browser and is never stored on a server. On the same LAN the two browsers connect directly to each other. A cross-network pairing-code transfer uses TURN by design, but the relay only forwards end-to-end encrypted ciphertext in flight: it cannot read or decrypt the file and keeps no server-side realtime content copy or history.",
       },
       {
         q: "Do both people need an account?",
@@ -88,10 +88,10 @@ const en = {
 const zh = {
   title: "如何通过互联网在两台电脑之间传文件",
   description:
-    "一步步教你在两台电脑之间通过互联网直接传文件——点对点直连，不用上传到云端，不用安装软件，全程端到端加密。",
+    "一步步教你用浏览器在两台电脑间传文件：同一局域网直连，跨网络则经 TURN 传送端到端加密密文；不用上传网盘，也不用安装软件。",
   updatedLabel: "最近更新",
   lead: [
-    "给另一台电脑发文件，通常得先把它传到某个地方——网盘、邮件附件、聊天软件——然后指望对方能顺利取出来。Relayium 省掉了这一步：它把你的浏览器和对方的浏览器直接连起来，不管对方身处世界哪个角落，文件就直接流过去。",
+    "给另一台电脑发文件，通常得先把它传到某个地方——网盘、邮件附件、聊天软件——然后指望对方能顺利取出来。Relayium 省掉了存储这一步：同一局域网内浏览器彼此直连；跨网络时则由 TURN 中继承载端到端加密密文，服务器端不保留实时内容副本或历史。",
     "本文覆盖两种情况——两台电脑在同一网络，以及两台电脑处于完全不同的网络（不同的家、不同的办公室、不同的国家）——并说明双方各自需要做什么。",
   ],
   sections: [
@@ -142,7 +142,7 @@ const zh = {
     items: [
       {
         q: "这真的是点对点直连吗，会经过服务器吗？",
-        a: "在真正关键的那一点上，它就是点对点：文件从一个浏览器流向另一个浏览器，从不存储在服务器上。同一网络下两个浏览器彼此直连。而跨网络的配对码传输按设计经由 TURN 中继承载——这是穿过那些通常挡住直连的防火墙和 NAT 的可靠路径——但中继只是在传输过程中转发加密密文，从来看不到可读的文件。",
+        a: "在真正关键的那一点上，它就是点对点：文件从一个浏览器流向另一个浏览器，从不存储在服务器上。同一局域网内两个浏览器彼此直连；跨网络配对码传输则按设计使用 TURN。中继只转发端到端加密密文，无法读取或解密文件，也不保留服务器端实时内容副本或历史。",
       },
       {
         q: "双方都需要账号吗？",
@@ -168,10 +168,10 @@ const zh = {
 const ja = {
   title: "インターネット経由で2台のPC間にファイルを送る方法",
   description:
-    "インターネットを介して2台のパソコン間で直接ファイルを送る手順ガイド。P2P直接接続、クラウドへのアップロード不要、インストール不要、全行程エンドツーエンド暗号化。",
+    "ブラウザ間でファイルを送る手順ガイド。同じ LAN では直接接続し、ネットワークをまたぐ場合は TURN でエンドツーエンド暗号文を運びます。クラウドへのアップロードもインストールも不要です。",
   updatedLabel: "最終更新",
   lead: [
-    "別のパソコンにファイルを送るには、たいていまずどこかにアップロードして（クラウドドライブ、メールの添付、チャットアプリ）、相手が無事に取り出せることを願うことになります。Relayium はその手順を省きます。世界のどこにいても、手元のブラウザと相手のブラウザを直接つなぎ、ファイルをそのまま流します。",
+    "別のパソコンにファイルを送るには、たいていまずどこかにアップロードして（クラウドドライブ、メールの添付、チャットアプリ）、相手が無事に取り出せることを願うことになります。Relayium はその保存手順を省きます。同じ LAN ではブラウザ同士が直接接続し、ネットワークをまたぐ転送は TURN リレーがエンドツーエンド暗号文だけを運び、サーバー側にリアルタイム内容のコピーや履歴を残しません。",
     "本ガイドは2つのケース、すなわち同じネットワーク上の2台と、まったく別のネットワーク（別の家、別のオフィス、別の国）にある2台を扱い、それぞれの側が何をすればよいかを正確に示します。",
   ],
   sections: [
@@ -222,7 +222,7 @@ const ja = {
     items: [
       {
         q: "本当に P2P 直接接続ですか、それともファイルはサーバーを経由しますか？",
-        a: "肝心な意味では P2P です。ファイルはブラウザからブラウザへ流れ、サーバーに保存されることはありません。同じネットワーク上なら2つのブラウザは互いに直接つながります。ネットワークをまたぐペアリングコードでの転送は、設計上つねに TURN リレーが運びます。直接経路をたいてい塞いでしまうファイアウォールや NAT を越えて確実につながる経路です。ただし、そのリレーが通すのは通信中の暗号文だけで、読めるファイルが渡ることはありません。",
+        a: "肝心な意味では P2P です。ファイルはブラウザからブラウザへ流れ、サーバーに保存されることはありません。同じ LAN では2つのブラウザが直接接続し、ネットワークをまたぐペアリングコード転送は設計上 TURN を使います。リレーが運ぶのはエンドツーエンド暗号文だけで、ファイルを読み取りも復号もできず、サーバー側にリアルタイム内容のコピーや履歴を残しません。",
       },
       {
         q: "双方ともアカウントが必要ですか？",
@@ -248,10 +248,10 @@ const ja = {
 const ko = {
   title: "인터넷으로 컴퓨터 두 대 사이에 파일 보내는 방법",
   description:
-    "인터넷을 통해 두 컴퓨터 사이에서 파일을 직접 보내는 단계별 가이드 — P2P 직접 연결, 클라우드 업로드 없이, 설치 없이, 전 과정 종단간 암호화.",
+    "브라우저 사이에서 파일을 보내는 단계별 가이드. 같은 LAN에서는 직접 연결하고, 네트워크를 넘을 때는 TURN으로 종단간 암호문을 전달합니다. 클라우드 업로드와 설치가 필요 없습니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
-    "다른 컴퓨터에 파일을 보내려면 보통 먼저 어딘가에 올려야 합니다 — 클라우드 드라이브, 메일 첨부, 채팅 앱 — 그리고 상대가 무사히 다시 꺼낼 수 있길 바라야 합니다. Relayium은 이 단계를 건너뜁니다. 세상 어디에 있든 내 브라우저와 상대의 브라우저를 직접 연결해 파일을 곧장 흘려보냅니다.",
+    "다른 컴퓨터에 파일을 보내려면 보통 먼저 어딘가에 올려야 합니다 — 클라우드 드라이브, 메일 첨부, 채팅 앱 — 그리고 상대가 무사히 다시 꺼낼 수 있길 바라야 합니다. Relayium은 이 저장 단계를 건너뜁니다. 같은 LAN에서는 브라우저끼리 직접 연결하고, 네트워크를 넘는 전송은 TURN 릴레이가 종단간 암호문만 운반하며 서버 측에 실시간 내용 복사본이나 기록을 남기지 않습니다.",
     "이 가이드는 두 가지 경우 — 같은 네트워크의 컴퓨터 두 대, 그리고 완전히 다른 네트워크(다른 집, 다른 사무실, 다른 나라)에 있는 컴퓨터 두 대 — 를 모두 다루고, 각 쪽이 정확히 무엇을 해야 하는지 보여줍니다.",
   ],
   sections: [
@@ -302,7 +302,7 @@ const ko = {
     items: [
       {
         q: "정말로 P2P 직접 연결인가요, 아니면 파일이 서버를 거치나요?",
-        a: "중요한 의미에서는 P2P가 맞습니다. 파일은 브라우저에서 브라우저로 흐르며 서버에 저장되지 않습니다. 같은 네트워크에서는 두 브라우저가 서로 직접 연결됩니다. 네트워크를 넘는 페어링 코드 전송은 설계상 TURN 릴레이가 실어 나릅니다 — 직접 경로를 대개 막아버리는 방화벽과 NAT를 통과해 확실히 연결되는 경로입니다 — 하지만 그 릴레이는 오가는 암호문만 통과시킬 뿐, 읽을 수 있는 파일은 결코 보지 못합니다.",
+        a: "중요한 의미에서는 P2P가 맞습니다. 파일은 브라우저에서 브라우저로 흐르며 서버에 저장되지 않습니다. 같은 LAN에서는 두 브라우저가 직접 연결되고, 네트워크를 넘는 페어링 코드 전송은 설계상 TURN을 사용합니다. 릴레이는 종단간 암호문만 전달하므로 파일을 읽거나 복호화할 수 없고, 서버 측에 실시간 내용 복사본이나 기록을 보관하지 않습니다.",
       },
       {
         q: "양쪽 모두 계정이 필요한가요?",
@@ -328,10 +328,10 @@ const ko = {
 const de = {
   title: "Dateien über das Internet zwischen zwei Computern senden",
   description:
-    "Eine Schritt-für-Schritt-Anleitung, um Dateien direkt über das Internet zwischen zwei Computern zu senden — Peer-to-Peer, kein Cloud-Upload, keine Installation, durchgehend Ende-zu-Ende-verschlüsselt.",
+    "Eine Schritt-für-Schritt-Anleitung für Browser-zu-Browser-Dateien: im selben LAN direkt, netzübergreifend Ende-zu-Ende-verschlüsselt über TURN — ohne Cloud-Upload oder Installation.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
-    "Eine Datei an einen anderen Computer zu senden bedeutet normalerweise, sie zuerst irgendwohin hochzuladen — eine Cloud, einen E-Mail-Anhang, eine Chat-App — und zu hoffen, dass der Empfänger sie wieder herunterbekommt. Relayium überspringt diesen Schritt: Es verbindet deinen Browser direkt mit dem des Empfängers, egal wo auf der Welt er sich befindet, und überträgt die Datei direkt.",
+    "Eine Datei an einen anderen Computer zu senden bedeutet normalerweise, sie zuerst irgendwohin hochzuladen — eine Cloud, einen E-Mail-Anhang, eine Chat-App — und zu hoffen, dass der Empfänger sie wieder herunterbekommt. Relayium überspringt diesen Speicherschritt: Im selben LAN verbinden sich die Browser direkt; netzübergreifend trägt ein TURN-Relay nur Ende-zu-Ende-verschlüsselten Chiffretext und behält weder eine serverseitige Echtzeitkopie noch einen Verlauf.",
     "Diese Anleitung deckt beide Fälle ab — zwei Computer im selben Netzwerk und zwei Computer in völlig unterschiedlichen Netzwerken (verschiedene Wohnungen, Büros, Länder) — und zeigt genau, was jede Seite tun muss.",
   ],
   sections: [
@@ -382,7 +382,7 @@ const de = {
     items: [
       {
         q: "Ist es wirklich Peer-to-Peer, oder läuft die Datei über einen Server?",
-        a: "In dem Sinn, auf den es ankommt, ja: Die Datei wird von Browser zu Browser gestreamt und nie auf einem Server gespeichert. Im selben Netzwerk verbinden sich die beiden Browser direkt miteinander. Eine netzübergreifende Übertragung per Pairing-Code trägt von Grund auf ein TURN-Relay — der verlässliche Weg durch die Firewalls und NATs, die einen direkten Pfad meist blockieren —, aber dieses Relay reicht im Betrieb nur verschlüsselten Chiffretext weiter, nie die lesbare Datei.",
+        a: "In dem Sinn, auf den es ankommt, ja: Die Datei wird von Browser zu Browser gestreamt und nie auf einem Server gespeichert. Im selben LAN verbinden sich die Browser direkt; netzübergreifend nutzt der Pairing-Code TURN. Das Relay leitet nur Ende-zu-Ende-verschlüsselten Chiffretext weiter, kann die Datei weder lesen noch entschlüsseln und behält weder eine serverseitige Echtzeitkopie noch einen Verlauf.",
       },
       {
         q: "Brauchen beide Seiten ein Konto?",
@@ -408,10 +408,10 @@ const de = {
 const fr = {
   title: "Envoyer des fichiers entre deux ordinateurs par Internet",
   description:
-    "Un guide pas à pas pour envoyer des fichiers directement entre deux ordinateurs par Internet — pair-à-pair, sans envoi vers le cloud, sans installation, chiffré de bout en bout tout du long.",
+    "Un guide pas à pas pour transférer des fichiers de navigateur à navigateur : liaison directe sur le même LAN, ou relais TURN chiffré de bout en bout entre réseaux, sans cloud ni installation.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Envoyer un fichier à un autre ordinateur signifie généralement le téléverser quelque part au préalable — un cloud, une pièce jointe d'e-mail, une appli de messagerie — puis espérer que le destinataire pourra le récupérer. Relayium saute cette étape : il connecte votre navigateur directement à celui du destinataire, où qu'il se trouve dans le monde, et fait transiter le fichier directement.",
+    "Envoyer un fichier à un autre ordinateur signifie généralement le téléverser quelque part au préalable — un cloud, une pièce jointe d'e-mail, une appli de messagerie — puis espérer que le destinataire pourra le récupérer. Relayium saute cette étape de stockage : sur le même LAN, les navigateurs se connectent directement ; entre réseaux, un relais TURN ne porte que du texte chiffré de bout en bout et ne conserve ni copie côté serveur ni historique temps réel.",
     "Ce guide couvre les deux cas — deux ordinateurs sur le même réseau, et deux ordinateurs sur des réseaux complètement différents (domiciles, bureaux, pays différents) — et montre exactement ce que chaque côté doit faire.",
   ],
   sections: [
@@ -462,7 +462,7 @@ const fr = {
     items: [
       {
         q: "Est-ce vraiment du pair-à-pair, ou le fichier passe-t-il par un serveur ?",
-        a: "C'est du pair-à-pair au sens qui compte : le fichier transite d'un navigateur à l'autre et n'est jamais stocké sur un serveur. Sur le même réseau, les deux navigateurs se connectent directement l'un à l'autre. Entre réseaux, un transfert par code d'appairage est porté par un relais TURN, par conception — la voie qui aboutit de façon fiable à travers les pare-feux et les NAT qui bloquent d'ordinaire tout chemin direct — mais ce relais ne fait passer que du texte chiffré au vol, jamais le fichier lisible.",
+        a: "C'est du pair-à-pair au sens qui compte : le fichier transite d'un navigateur à l'autre et n'est jamais stocké sur un serveur. Sur le même LAN, les navigateurs se connectent directement ; entre réseaux, le code d'appairage utilise TURN par conception. Le relais ne transmet que du texte chiffré de bout en bout, ne peut ni lire ni déchiffrer le fichier, et ne conserve ni copie côté serveur ni historique temps réel.",
       },
       {
         q: "Les deux personnes ont-elles besoin d'un compte ?",
@@ -488,10 +488,10 @@ const fr = {
 const ar = {
   title: "إرسال الملفات بين حاسوبين عبر الإنترنت",
   description:
-    "دليل تفصيلي خطوة بخطوة لإرسال الملفات مباشرة بين حاسوبين عبر الإنترنت — من الند للند، دون رفع إلى السحابة، دون تثبيت، ومشفَّر من الطرف إلى الطرف طوال الطريق.",
+    "دليل لنقل الملفات بين متصفحين: اتصال مباشر على شبكة LAN نفسها، أو نقل مشفَّر من الطرف إلى الطرف عبر TURN بين الشبكات، دون رفع سحابي أو تثبيت.",
   updatedLabel: "آخر تحديث",
   lead: [
-    "إرسال ملف إلى حاسوب آخر يعني عادةً رفعه إلى مكان ما أولًا — قرص سحابي، مرفق بريد إلكتروني، تطبيق محادثة — والأمل في أن يتمكن المُستقبِل من إخراجه مجددًا. يتخطى Relayium هذه الخطوة: فهو يربط متصفحك مباشرةً بمتصفح الطرف الآخر، أينما كان في العالم، ويبث الملف عبره مباشرةً.",
+    "إرسال ملف إلى حاسوب آخر يعني عادةً رفعه إلى مكان ما أولًا — قرص سحابي، مرفق بريد إلكتروني، تطبيق محادثة — والأمل في أن يتمكن المُستقبِل من إخراجه مجددًا. يتخطى Relayium خطوة التخزين هذه: يتصل المتصفحان مباشرةً على شبكة LAN نفسها؛ وعبر الشبكات لا يحمل مُرحِّل TURN سوى نص مشفَّر من الطرف إلى الطرف، ولا يحتفظ بنسخة محتوى فوري أو سجل على الخادم.",
     "يغطي هذا الدليل كلتا الحالتين — حاسوبان على نفس الشبكة، وحاسوبان على شبكتين مختلفتين تمامًا (منازل، مكاتب، بلدان مختلفة) — ويوضح بالضبط ما يحتاج كل طرف إلى فعله.",
   ],
   sections: [
@@ -542,7 +542,7 @@ const ar = {
     items: [
       {
         q: "هل هو فعلًا من الند للند، أم يمرّ الملف عبر خادم؟",
-        a: "هو من الند للند بالمعنى الذي يهم: يُبَث الملف من متصفح إلى آخر ولا يُخزَّن أبدًا على أي خادم. على الشبكة نفسها يتصل المتصفحان ببعضهما مباشرةً. أما النقل عبر الشبكات برمز اقتران فيحمله مُرحِّل TURN بحكم التصميم — وهو المسار الذي ينجح بموثوقية عبر جدران الحماية وأنواع NAT التي تحجب المسار المباشر عادةً — لكن ذلك المُرحِّل لا يمرّر إلا نصًا مُشفَّرًا أثناء العبور، ولا يرى الملف المقروء أبدًا.",
+        a: "هو من الند للند بالمعنى الذي يهم: يُبَث الملف من متصفح إلى آخر ولا يُخزَّن على خادم. على شبكة LAN نفسها يتصل المتصفحان مباشرةً؛ وعبر الشبكات يستخدم رمز الاقتران TURN بحكم التصميم. لا يمرّر المُرحِّل إلا نصًا مشفَّرًا من الطرف إلى الطرف، فلا يستطيع قراءة الملف أو فك تشفيره، ولا يحتفظ بنسخة محتوى فوري أو سجل على الخادم.",
       },
       {
         q: "هل يحتاج كلا الشخصين إلى حساب؟",
@@ -568,10 +568,10 @@ const ar = {
 const es = {
   title: "Enviar archivos entre dos ordenadores por Internet",
   description:
-    "Una guía paso a paso para enviar archivos directamente entre dos ordenadores por Internet — de igual a igual, sin subir a la nube, sin instalar nada y cifrado de extremo a extremo de principio a fin.",
+    "Una guía para transferir archivos de navegador a navegador: conexión directa en la misma LAN, o TURN cifrado de extremo a extremo entre redes, sin subir a la nube ni instalar nada.",
   updatedLabel: "Última actualización",
   lead: [
-    "Enviar un archivo a otro ordenador suele significar subirlo primero a algún sitio — un disco en la nube, un adjunto de correo, una aplicación de chat — y esperar que el destinatario pueda recuperarlo. Relayium se salta ese paso: conecta tu navegador directamente con el suyo, esté donde esté en el mundo, y transmite el archivo directamente de un lado a otro.",
+    "Enviar un archivo a otro ordenador suele significar subirlo primero a algún sitio — un disco en la nube, un adjunto de correo, una aplicación de chat — y esperar que el destinatario pueda recuperarlo. Relayium se salta ese paso de almacenamiento: en la misma LAN los navegadores conectan directamente; entre redes, un retransmisor TURN solo lleva texto cifrado de extremo a extremo y no conserva copia de contenido ni historial en el servidor.",
     "Esta guía cubre ambos casos — dos ordenadores en la misma red, y dos ordenadores en redes completamente distintas (distintas casas, oficinas, países) — y muestra exactamente qué debe hacer cada lado.",
   ],
   sections: [
@@ -622,7 +622,7 @@ const es = {
     items: [
       {
         q: "¿Es realmente de igual a igual, o el archivo pasa por un servidor?",
-        a: "Es de igual a igual en el sentido que importa: el archivo se transmite de un navegador al otro y nunca se almacena en un servidor. En la misma red, los dos navegadores se conectan directamente entre sí. Una transferencia entre redes con código de emparejamiento la lleva un retransmisor TURN por diseño — la vía que conecta de forma fiable a través de los cortafuegos y NAT que suelen bloquear cualquier ruta directa — pero ese retransmisor solo deja pasar texto cifrado en tránsito, nunca el archivo legible.",
+        a: "Es de igual a igual en el sentido que importa: el archivo pasa de un navegador al otro y nunca se almacena en un servidor. En la misma LAN los navegadores conectan directamente; entre redes, el código de emparejamiento usa TURN por diseño. El retransmisor solo lleva texto cifrado de extremo a extremo, no puede leer ni descifrar el archivo y no conserva copia de contenido ni historial en el servidor.",
       },
       {
         q: "¿Ambas personas necesitan una cuenta?",
@@ -648,10 +648,10 @@ const es = {
 const pt = {
   title: "Enviar arquivos entre dois computadores pela Internet",
   description:
-    "Um guia passo a passo para enviar arquivos diretamente entre dois computadores pela Internet — ponto a ponto, sem upload para a nuvem, sem instalação e com criptografia de ponta a ponta o tempo todo.",
+    "Um guia para transferir arquivos entre navegadores: conexão direta na mesma LAN ou TURN criptografado de ponta a ponta entre redes, sem upload para a nuvem nem instalação.",
   updatedLabel: "Última atualização",
   lead: [
-    "Enviar um arquivo para outro computador normalmente significa enviá-lo primeiro para algum lugar — um drive na nuvem, um anexo de e-mail, um aplicativo de chat — e torcer para que o destinatário consiga recuperá-lo. O Relayium pula essa etapa: ele conecta o seu navegador diretamente ao dele, onde quer que ele esteja no mundo, e transmite o arquivo direto de um lado ao outro.",
+    "Enviar um arquivo para outro computador normalmente significa enviá-lo primeiro para algum lugar — um drive na nuvem, um anexo de e-mail, um aplicativo de chat — e torcer para que o destinatário consiga recuperá-lo. O Relayium pula essa etapa de armazenamento: na mesma LAN os navegadores se conectam diretamente; entre redes, um retransmissor TURN só leva texto cifrado de ponta a ponta e não mantém cópia de conteúdo nem histórico no servidor.",
     "Este guia cobre os dois casos — dois computadores na mesma rede, e dois computadores em redes completamente diferentes (casas, escritórios, países diferentes) — e mostra exatamente o que cada lado precisa fazer.",
   ],
   sections: [
@@ -702,7 +702,7 @@ const pt = {
     items: [
       {
         q: "É realmente ponto a ponto, ou o arquivo passa por um servidor?",
-        a: "É ponto a ponto no sentido que importa: o arquivo é transmitido de um navegador para o outro e nunca é armazenado em um servidor. Na mesma rede, os dois navegadores se conectam diretamente um ao outro. Já uma transferência entre redes por código de emparelhamento é carregada por um retransmissor TURN, por decisão de projeto — o caminho que conecta de forma confiável através dos firewalls e NATs que costumam bloquear qualquer rota direta — mas esse retransmissor só deixa passar texto cifrado em trânsito, nunca o arquivo legível.",
+        a: "É ponto a ponto no sentido que importa: o arquivo passa de um navegador para o outro e nunca é armazenado em um servidor. Na mesma LAN os navegadores se conectam diretamente; entre redes, o código de emparelhamento usa TURN por decisão de projeto. O retransmissor só leva texto cifrado de ponta a ponta, não consegue ler nem descriptografar o arquivo e não mantém cópia de conteúdo nem histórico no servidor.",
       },
       {
         q: "As duas pessoas precisam de conta?",
@@ -728,6 +728,6 @@ const pt = {
 export default {
   slug: "how-to/send-files-between-two-computers-over-the-internet",
   published: "2026-07-09",
-  updated: "2026-07-09",
+  updated: "2026-07-31",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

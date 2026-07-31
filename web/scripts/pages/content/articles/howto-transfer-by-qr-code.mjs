@@ -32,7 +32,7 @@ const en = {
       heading: "What happens after the scan",
       body: [
         "Scanning only gets the two devices into the same room; the transfer itself is unchanged from any other pairing-code session. The two browsers derive a shared key with an X25519 key exchange and encrypt every chunk with AES-256-GCM, then send those chunks over a WebRTC channel carried by a TURN relay.",
-        "Both screens show the same six-digit verification code (SAS) — glance at both and confirm they match before trusting the connection; it's how you catch a malicious relay standing in the middle. A pairing-code transfer always takes that relay route rather than hunting for a direct path first: across two networks a direct path usually isn't there at all, and probing for one would hold the connection up for around 20 seconds before it settled on the relay anyway. The relay only ever forwards ciphertext — it holds no key, so it never sees your files. Each file is checked end-to-end with a SHA-256 hash, and a dropped connection can resume instead of restarting.",
+        "Both screens show the same six-digit verification code (SAS) — glance at both and confirm they match before trusting the connection. A match confirms the keys weren't replaced: a server or relay has not impersonated either endpoint or terminated the application-layer end-to-end encryption. A pairing-code transfer always takes that relay route rather than hunting for a direct path first: across two networks a direct path usually isn't there at all, and probing for one would hold the connection up for around 20 seconds before it settled on the relay anyway. The relay only ever forwards ciphertext — it holds no key, so it never sees your files. Each file is checked end-to-end with a SHA-256 hash, and a dropped connection can resume instead of restarting.",
       ],
     },
     {
@@ -103,7 +103,7 @@ const zh = {
       heading: "扫码之后发生了什么",
       body: [
         "扫码只是让两台设备进到同一个房间；传输本身和其他任何配对码会话完全一样。两边浏览器用 X25519 密钥交换协商出共享密钥，用 AES-256-GCM 对每个数据块加密，再把这些数据块通过架在 TURN 中继上的 WebRTC 通道发出去。",
-        "两块屏幕会显示同一段六位数字校验码（SAS）——扫一眼两边，确认一致后再信任这条连接；这正是发现中间人恶意中继的办法。配对码传输一律走这条中继路径，而不是先去试直连：跨越两个网络时直连路径通常根本不存在，先探一遍只会让连接卡住二十秒左右，最后仍旧落到中继上。中继只转发密文——它没有密钥，永远看不到你的文件内容。每个文件都会用 SHA-256 哈希做端到端完整性校验，中途断开也能续传而不必重来。",
+        "两块屏幕会显示同一段六位数字校验码（SAS）——扫一眼两边，确认一致后再信任这条连接。校验码一致能确认密钥未被替换：服务器或中继没有冒充任一端，也没有终止应用层端到端加密。配对码传输一律走这条中继路径，而不是先去试直连：跨越两个网络时直连路径通常根本不存在，先探一遍只会让连接卡住二十秒左右，最后仍旧落到中继上。中继只转发密文——它没有密钥，永远看不到你的文件内容。每个文件都会用 SHA-256 哈希做端到端完整性校验，中途断开也能续传而不必重来。",
       ],
     },
     {
@@ -174,7 +174,7 @@ const ja = {
       heading: "スキャン後に起きること",
       body: [
         "スキャンは2台の端末を同じルームに入れるだけで、転送そのものは他のペアリングコードのセッションと変わりません。両端末は X25519 鍵交換で共有鍵を導出し、各チャンクを AES-256-GCM で暗号化したうえで、TURN リレー上に張られた WebRTC チャネルで送り出します。",
-        "両方の画面に同じ6桁の検証コード（SAS）が表示されるので、両方を見比べて一致を確認してから接続を信頼してください。これが、間に悪意あるリレーが入り込んでいないかを見抜く方法です。ペアリングコードによる転送は、まず直接経路を探すのではなく必ずこのリレー経由で行われます。ネットワークをまたぐ場合、直接経路はそもそも存在しないことがほとんどで、探しに行けば接続確立が20秒ほど止まったあげく結局リレーに落ち着くからです。リレーが転送するのは暗号文だけで、鍵を持たないためファイルの中身を見ることはありません。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証され、接続が切れても最初からではなく再開できます。",
+        "両方の画面に同じ6桁の検証コード（SAS）が表示されるので、両方を見比べて一致を確認してから接続を信頼してください。一致すれば鍵が差し替えられておらず、サーバーやリレーがどちらかの端末になりすましたり、アプリケーション層のエンドツーエンド暗号化を終端したりしていないことを確認できます。ペアリングコードによる転送は、まず直接経路を探すのではなく必ずこのリレー経由で行われます。ネットワークをまたぐ場合、直接経路はそもそも存在しないことがほとんどで、探しに行けば接続確立が20秒ほど止まったあげく結局リレーに落ち着くからです。リレーが転送するのは暗号文だけで、鍵を持たないためファイルの中身を見ることはありません。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証され、接続が切れても最初からではなく再開できます。",
       ],
     },
     {
@@ -245,7 +245,7 @@ const ko = {
       heading: "스캔 후 일어나는 일",
       body: [
         "스캔은 두 기기를 같은 방에 넣어줄 뿐, 전송 자체는 다른 페어링 코드 세션과 다르지 않습니다. 두 기기는 X25519 키 교환으로 공유 키를 도출하고 각 청크를 AES-256-GCM으로 암호화한 뒤, TURN 릴레이 위에 놓인 WebRTC 채널로 내보냅니다.",
-        "두 화면 모두 같은 6자리 숫자 검증 코드(SAS)를 보여주므로, 둘 다 확인해 일치하는지 본 뒤에 연결을 신뢰하세요 — 이것이 중간에 악의적인 릴레이가 끼어들었는지 잡아내는 방법입니다. 페어링 코드 전송은 직접 경로를 먼저 찾아보는 대신 언제나 이 릴레이를 거칩니다. 네트워크를 넘을 때는 직접 경로가 아예 없는 경우가 대부분이고, 굳이 찾아보면 연결이 20초쯤 붙들려 있다가 결국 릴레이로 가게 되기 때문입니다. 릴레이는 암호문만 전달하고 키를 갖지 않으므로 파일 내용은 절대 보지 못합니다. 각 파일은 SHA-256 해시로 종단간 검증되며, 연결이 끊겨도 처음부터가 아니라 이어서 재개할 수 있습니다.",
+        "두 화면 모두 같은 6자리 숫자 검증 코드(SAS)를 보여주므로, 둘 다 확인해 일치하는지 본 뒤에 연결을 신뢰하세요. 코드가 일치하면 키가 바뀌지 않았으며 서버나 릴레이가 어느 한쪽 끝점으로 위장하거나 애플리케이션 계층 종단간 암호화를 종료하지 않았음을 확인할 수 있습니다. 페어링 코드 전송은 직접 경로를 먼저 찾아보는 대신 언제나 이 릴레이를 거칩니다. 네트워크를 넘을 때는 직접 경로가 아예 없는 경우가 대부분이고, 굳이 찾아보면 연결이 20초쯤 붙들려 있다가 결국 릴레이로 가게 되기 때문입니다. 릴레이는 암호문만 전달하고 키를 갖지 않으므로 파일 내용은 절대 보지 못합니다. 각 파일은 SHA-256 해시로 종단간 검증되며, 연결이 끊겨도 처음부터가 아니라 이어서 재개할 수 있습니다.",
       ],
     },
     {
@@ -316,7 +316,7 @@ const de = {
       heading: "Was nach dem Scannen passiert",
       body: [
         "Scannen bringt die beiden Geräte lediglich in denselben Raum; die Übertragung selbst unterscheidet sich nicht von jeder anderen Pairing-Code-Sitzung. Die beiden Browser leiten mit einem X25519-Schlüsselaustausch einen gemeinsamen Schlüssel ab, verschlüsseln jeden Block mit AES-256-GCM und schicken ihn über einen WebRTC-Kanal, der auf einem TURN-Relay aufsetzt.",
-        "Beide Bildschirme zeigen denselben sechsstelligen Verifizierungscode (SAS) — vergleiche beide und bestätige die Übereinstimmung, bevor du der Verbindung vertraust; so entlarvt man ein böswilliges Relay in der Mitte. Eine Übertragung per Pairing-Code nimmt immer diesen Relay-Weg, statt zuerst nach einem direkten Pfad zu suchen: Über zwei Netzwerke hinweg gibt es meist gar keinen, und die Suche würde den Verbindungsaufbau rund 20 Sekunden aufhalten, bevor er ohnehin beim Relay endet. Das Relay leitet ausschließlich Chiffretext weiter — es besitzt keinen Schlüssel und sieht deine Dateien nie. Jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft, und eine unterbrochene Verbindung kann fortgesetzt statt neu gestartet werden.",
+        "Beide Bildschirme zeigen denselben sechsstelligen Verifizierungscode (SAS) — vergleiche beide und bestätige die Übereinstimmung, bevor du der Verbindung vertraust. Eine Übereinstimmung bestätigt, dass die Schlüssel nicht ausgetauscht wurden: Ein Server oder Relay hat sich weder als einer der Endpunkte ausgegeben noch die Ende-zu-Ende-Verschlüsselung der Anwendungsschicht beendet. Eine Übertragung per Pairing-Code nimmt immer diesen Relay-Weg, statt zuerst nach einem direkten Pfad zu suchen: Über zwei Netzwerke hinweg gibt es meist gar keinen, und die Suche würde den Verbindungsaufbau rund 20 Sekunden aufhalten, bevor er ohnehin beim Relay endet. Das Relay leitet ausschließlich Chiffretext weiter — es besitzt keinen Schlüssel und sieht deine Dateien nie. Jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft, und eine unterbrochene Verbindung kann fortgesetzt statt neu gestartet werden.",
       ],
     },
     {
@@ -387,7 +387,7 @@ const fr = {
       heading: "Ce qui se passe après le scan",
       body: [
         "Scanner ne fait qu'amener les deux appareils dans la même salle ; le transfert lui-même ne diffère en rien de n'importe quelle autre session par code d'appairage. Les deux navigateurs dérivent une clé partagée via un échange de clés X25519, chiffrent chaque bloc avec AES-256-GCM, puis les envoient sur un canal WebRTC porté par un relais TURN.",
-        "Les deux écrans affichent le même code de vérification à six chiffres (SAS) — comparez-les et confirmez qu'il concorde avant de faire confiance à la connexion ; c'est ainsi qu'on repère un relais malveillant placé au milieu. Un transfert par code d'appairage emprunte toujours cette voie du relais au lieu de chercher d'abord un chemin direct : entre deux réseaux, il n'y en a généralement aucun, et le chercher retarderait l'établissement de la connexion d'une vingtaine de secondes avant d'aboutir malgré tout au relais. Le relais ne transmet que du texte chiffré — il ne détient aucune clé et ne voit jamais vos fichiers. Chaque fichier est vérifié de bout en bout par une empreinte SHA-256, et une connexion interrompue peut reprendre au lieu de tout recommencer.",
+        "Les deux écrans affichent le même code de vérification à six chiffres (SAS) — comparez-les et confirmez qu'il concorde avant de faire confiance à la connexion. Une concordance confirme que les clés n'ont pas été substituées : aucun serveur ou relais ne s'est fait passer pour l'un des terminaux ni n'a terminé le chiffrement de bout en bout de la couche applicative. Un transfert par code d'appairage emprunte toujours cette voie du relais au lieu de chercher d'abord un chemin direct : entre deux réseaux, il n'y en a généralement aucun, et le chercher retarderait l'établissement de la connexion d'une vingtaine de secondes avant d'aboutir malgré tout au relais. Le relais ne transmet que du texte chiffré — il ne détient aucune clé et ne voit jamais vos fichiers. Chaque fichier est vérifié de bout en bout par une empreinte SHA-256, et une connexion interrompue peut reprendre au lieu de tout recommencer.",
       ],
     },
     {
@@ -458,7 +458,7 @@ const ar = {
       heading: "ما يحدث بعد المسح",
       body: [
         "المسح يُدخل الجهازين إلى الغرفة نفسها فحسب؛ أما النقل نفسه فلا يتغير عن أي جلسة رمز اقتران أخرى. يشتقّ المتصفحان مفتاحًا مشتركًا بتبادل مفاتيح X25519، ويشفّران كل جزء بـ AES-256-GCM، ثم يرسلانه عبر قناة WebRTC محمولة على مُرحِّل TURN.",
-        "تعرض الشاشتان نفس رمز التحقق المؤلف من ست خانات رقمية (SAS) — ألقِ نظرة على كليهما وأكّد تطابقهما قبل أن تثق بالاتصال؛ هكذا تكشف مُرحِّلًا خبيثًا يقف في المنتصف. والنقل عبر رمز اقتران يسلك دائمًا طريق المُرحِّل هذا بدل البحث أولًا عن مسار مباشر: فبين شبكتين مختلفتين لا وجود لمسار مباشر في الغالب، والبحث عنه يعطّل إنشاء الاتصال نحو عشرين ثانية ثم ينتهي إلى المُرحِّل على أي حال. ولا يُمرِّر المُرحِّل سوى نص مُشفَّر — فهو بلا مفتاح، ولا يرى ملفاتك أبدًا. يُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256، ويمكن للاتصال المنقطع أن يُستأنف بدلًا من البدء من جديد.",
+        "تعرض الشاشتان نفس رمز التحقق المؤلف من ست خانات رقمية (SAS) — ألقِ نظرة على كليهما وأكّد تطابقهما قبل أن تثق بالاتصال. يؤكد التطابق أن المفاتيح لم تُستبدل: فلم ينتحل خادم أو مُرحِّل شخصية أي من الطرفين ولم يُنهِ التشفير من الطرف إلى الطرف على مستوى التطبيق. والنقل عبر رمز اقتران يسلك دائمًا طريق المُرحِّل هذا بدل البحث أولًا عن مسار مباشر: فبين شبكتين مختلفتين لا وجود لمسار مباشر في الغالب، والبحث عنه يعطّل إنشاء الاتصال نحو عشرين ثانية ثم ينتهي إلى المُرحِّل على أي حال. ولا يُمرِّر المُرحِّل سوى نص مُشفَّر — فهو بلا مفتاح، ولا يرى ملفاتك أبدًا. يُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256، ويمكن للاتصال المنقطع أن يُستأنف بدلًا من البدء من جديد.",
       ],
     },
     {
@@ -529,7 +529,7 @@ const es = {
       heading: "Qué ocurre tras el escaneo",
       body: [
         "Escanear solo mete a los dos dispositivos en la misma sala; la transferencia en sí no cambia respecto a cualquier otra sesión con código de emparejamiento. Los dos navegadores derivan una clave compartida con un intercambio de claves X25519, cifran cada fragmento con AES-256-GCM y lo envían por un canal WebRTC que se apoya en un retransmisor TURN.",
-        "Ambas pantallas muestran el mismo código de verificación de seis dígitos (SAS) — echa un vistazo a los dos y confirma que coinciden antes de confiar en la conexión; así es como detectas un retransmisor malicioso en el medio. Una transferencia con código de emparejamiento toma siempre esa vía del retransmisor en lugar de buscar antes una ruta directa: entre dos redes normalmente no la hay, y buscarla retrasaría el establecimiento de la conexión unos veinte segundos para acabar igualmente en el retransmisor. El retransmisor solo reenvía texto cifrado — no tiene ninguna clave y nunca ve tus archivos. Cada archivo se verifica de extremo a extremo con un hash SHA-256, y una conexión caída puede reanudarse en lugar de reiniciarse.",
+        "Ambas pantallas muestran el mismo código de verificación de seis dígitos (SAS) — echa un vistazo a los dos y confirma que coinciden antes de confiar en la conexión. Una coincidencia confirma que las claves no se sustituyeron: ningún servidor o retransmisor se hizo pasar por uno de los extremos ni terminó el cifrado de extremo a extremo de la capa de aplicación. Una transferencia con código de emparejamiento toma siempre esa vía del retransmisor en lugar de buscar antes una ruta directa: entre dos redes normalmente no la hay, y buscarla retrasaría el establecimiento de la conexión unos veinte segundos para acabar igualmente en el retransmisor. El retransmisor solo reenvía texto cifrado — no tiene ninguna clave y nunca ve tus archivos. Cada archivo se verifica de extremo a extremo con un hash SHA-256, y una conexión caída puede reanudarse en lugar de reiniciarse.",
       ],
     },
     {
@@ -600,7 +600,7 @@ const pt = {
       heading: "O que acontece depois do escaneamento",
       body: [
         "Escanear apenas coloca os dois dispositivos na mesma sala; a transferência em si não muda em relação a qualquer outra sessão com código de emparelhamento. Os dois navegadores derivam uma chave compartilhada com uma troca de chaves X25519, criptografam cada bloco com AES-256-GCM e o enviam por um canal WebRTC apoiado em um retransmissor TURN.",
-        "As duas telas mostram o mesmo código de verificação de seis dígitos (SAS) — olhe os dois e confirme que coincidem antes de confiar na conexão; é assim que você pega um retransmissor malicioso no meio. Uma transferência por código de emparelhamento segue sempre por esse retransmissor em vez de procurar antes um caminho direto: entre duas redes normalmente não existe nenhum, e procurá-lo atrasaria a conexão em uns vinte segundos para terminar no retransmissor de qualquer jeito. O retransmissor só encaminha texto cifrado — não tem chave nenhuma e nunca vê seus arquivos. Cada arquivo é verificado de ponta a ponta com um hash SHA-256, e uma conexão interrompida pode ser retomada em vez de recomeçar.",
+        "As duas telas mostram o mesmo código de verificação de seis dígitos (SAS) — olhe os dois e confirme que coincidem antes de confiar na conexão. A coincidência confirma que as chaves não foram substituídas: nenhum servidor ou retransmissor se fez passar por uma das pontas nem encerrou a criptografia de ponta a ponta da camada de aplicação. Uma transferência por código de emparelhamento segue sempre por esse retransmissor em vez de procurar antes um caminho direto: entre duas redes normalmente não existe nenhum, e procurá-lo atrasaria a conexão em uns vinte segundos para terminar no retransmissor de qualquer jeito. O retransmissor só encaminha texto cifrado — não tem chave nenhuma e nunca vê seus arquivos. Cada arquivo é verificado de ponta a ponta com um hash SHA-256, e uma conexão interrompida pode ser retomada em vez de recomeçar.",
       ],
     },
     {
@@ -646,6 +646,6 @@ const pt = {
 export default {
   slug: "how-to/transfer-files-by-scanning-a-qr-code",
   published: "2026-07-09",
-  updated: "2026-07-09",
+  updated: "2026-07-31",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

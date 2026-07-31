@@ -10,7 +10,7 @@ const en = {
   updatedLabel: "Last updated",
   lead: [
     "Android and iPhone do not share an AirDrop, so moving a few photos or a video between them usually means a USB cable, a chat app that compresses your images, or a round-trip through some cloud drive. All three are slower and more fiddly than they should be.",
-    "Relayium skips all of that. Both phones open the same web page, find each other, and the files travel directly between them — end-to-end encrypted, no app to install. On the same network no account is needed; sending across networks with a pairing code just asks the sender to sign in. This guide walks through it step by step.",
+    "Relayium skips all of that. Both phones open the same page: on the same LAN the end-to-end encrypted files travel directly, while across networks a TURN relay carries ciphertext it cannot read or decrypt and keeps no realtime content copy or history. No app is needed; the creator signs in for cross-network pairing, while the person joining never needs an account. This guide walks through it step by step.",
   ],
   sections: [
     {
@@ -33,7 +33,7 @@ const en = {
         "On both the Android phone and the iPhone, open relayium.com in the browser.",
         "Each device shows up as a nearby device on the other. On the sending phone, tap the receiving one.",
         "Pick the files to send — up to 1,000 per batch — or just drag them in.",
-        "Both screens show the same 6-digit code. Check that they match; this is the verification code that proves no server has slipped in between you.",
+        "Both screens show the same 6-digit code. Check that they match; it confirms both phones joined the same end-to-end encrypted session, not which network path carries the ciphertext.",
         "Accept on the receiving iPhone and the files transfer directly, then save to your device.",
       ],
     },
@@ -95,7 +95,7 @@ const zh = {
   updatedLabel: "最近更新",
   lead: [
     "安卓和 iPhone 之间没有互通的 AirDrop，所以在两者间传几张照片或一段视频，往往只能靠 USB 数据线、会压缩画质的聊天软件，或者绕一圈网盘上传下载。三种方式都比本该有的更慢、更折腾。",
-    "Relayium 把这些统统省掉。两台手机打开同一个网页，彼此发现，文件就在它们之间直接传输——端到端加密、无需安装应用。同一网络下无需账号；跨网络用配对码传输只需发送方登录一下。本文一步步带你完成。",
+    "Relayium 把这些统统省掉。两台手机打开同一个网页：同一局域网内，端到端加密的文件会直接传输；跨网络时，TURN 中继只搬运它无法读取或解密的密文，也不保留实时内容副本或历史。无需安装应用；跨网络配对由创建者登录，加入者始终无需账号。本文一步步带你完成。",
   ],
   sections: [
     {
@@ -118,7 +118,7 @@ const zh = {
         "在安卓手机和 iPhone 上，都在浏览器里打开 relayium.com。",
         "每台设备都会作为附近的设备出现在另一台上。在发送方手机上，点击接收方那台。",
         "选择要发送的文件——每批最多 1,000 个——或者直接拖进去。",
-        "两边屏幕会显示同一段 6 位校验码。核对它们是否一致；这段校验码证明没有服务器插在你们中间。",
+        "两边屏幕会显示同一段 6 位校验码。核对它们是否一致；它确认两台手机加入了同一个端到端加密会话，并不证明密文采用了哪条网络路径。",
         "在接收方 iPhone 上确认接收，文件就会直接传过来，随后保存到设备里。",
       ],
     },
@@ -180,7 +180,7 @@ const ja = {
   updatedLabel: "最終更新",
   lead: [
     "Android と iPhone は AirDrop を共有していないため、写真を数枚や動画を1本やり取りするだけでも、USB ケーブル、画質を圧縮するチャットアプリ、あるいはクラウドドライブへのアップロードとダウンロードの往復に頼りがちです。どれも本来より遅く、面倒です。",
-    "Relayium はそれをすべて省きます。2台のスマホが同じ Web ページを開き、互いを見つけ、ファイルは端末間で直接転送されます。エンドツーエンド暗号化で、アプリのインストールは不要です。同じネットワークならアカウントも不要で、ネットワークをまたいでペアリングコードで送る場合も送信側がサインインするだけです。本記事で手順を順に説明します。",
+    "Relayium はそれをすべて省きます。2台のスマホで同じページを開くと、同じ LAN 内ではエンドツーエンド暗号化されたファイルが直接転送され、ネットワークをまたぐ場合は TURN リレーが読取りも復号もできない暗号文だけを運び、リアルタイム内容のコピーや履歴を残しません。アプリは不要で、ネットワーク越しのペアリングでは作成者がサインインし、参加者にはアカウントが不要です。本記事で手順を順に説明します。",
   ],
   sections: [
     {
@@ -203,7 +203,7 @@ const ja = {
         "Android 端末と iPhone の両方で、ブラウザから relayium.com を開きます。",
         "各端末はもう一方に近くの端末として表示されます。送信側のスマホで、受信側をタップします。",
         "送るファイルを選ぶか（1バッチ最大1,000個）、そのままドラッグして入れます。",
-        "両方の画面に同じ6桁のコードが表示されます。一致するか確認してください。これは、間にサーバーが入り込んでいないことを示す検証コードです。",
+        "両方の画面に同じ6桁のコードが表示されます。一致するか確認してください。これは2台が同じエンドツーエンド暗号化セッションに参加したことを確認するもので、暗号文が通るネットワーク経路を証明するものではありません。",
         "受信側の iPhone で承認するとファイルが直接転送され、端末に保存されます。",
       ],
     },
@@ -265,7 +265,7 @@ const ko = {
   updatedLabel: "마지막 업데이트",
   lead: [
     "안드로이드와 아이폰은 AirDrop을 공유하지 않아, 사진 몇 장이나 동영상 하나를 옮기는 데도 보통 USB 케이블, 이미지를 압축하는 채팅 앱, 아니면 클라우드 드라이브를 오가는 업로드와 다운로드에 기대게 됩니다. 셋 다 마땅히 그래야 하는 것보다 느리고 번거롭습니다.",
-    "Relayium은 그 모든 것을 건너뜁니다. 두 휴대폰이 같은 웹 페이지를 열고 서로를 찾으면 파일이 기기 사이에서 직접 전송됩니다 — 종단간 암호화, 앱 설치 불필요. 같은 네트워크에서는 계정도 필요 없고, 페어링 코드로 네트워크를 넘어 보낼 때도 보내는 쪽이 로그인만 하면 됩니다. 이 글에서 단계별로 안내합니다.",
+    "Relayium은 그 모든 것을 건너뜁니다. 두 휴대폰에서 같은 페이지를 열면 같은 LAN에서는 종단간 암호화된 파일이 직접 전송되고, 네트워크를 넘을 때는 TURN 릴레이가 읽거나 복호화할 수 없는 암호문만 전달하며 실시간 콘텐츠 사본이나 기록을 남기지 않습니다. 앱은 필요 없고, 네트워크 간 페어링에서는 생성자가 로그인하며 참가자는 계정이 필요 없습니다. 이 글에서 단계별로 안내합니다.",
   ],
   sections: [
     {
@@ -288,7 +288,7 @@ const ko = {
         "안드로이드 폰과 아이폰 모두에서 브라우저로 relayium.com을 엽니다.",
         "각 기기는 상대에게 근처 기기로 나타납니다. 보내는 폰에서 받는 쪽을 탭합니다.",
         "보낼 파일을 고릅니다 — 배치당 최대 1,000개 — 또는 그냥 끌어다 놓습니다.",
-        "양쪽 화면에 같은 6자리 코드가 표시됩니다. 일치하는지 확인하세요. 이 코드는 사이에 서버가 끼어들지 않았음을 증명하는 검증 코드입니다.",
+        "양쪽 화면에 같은 6자리 코드가 표시됩니다. 일치하는지 확인하세요. 두 휴대폰이 같은 종단간 암호화 세션에 참여했음을 확인할 뿐, 암호문이 어떤 네트워크 경로로 이동하는지는 증명하지 않습니다.",
         "받는 아이폰에서 수락하면 파일이 직접 전송되고, 기기에 저장됩니다.",
       ],
     },
@@ -350,7 +350,7 @@ const de = {
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Android und iPhone teilen sich kein AirDrop, also bedeutet es, ein paar Fotos oder ein Video zu übertragen, meist ein USB-Kabel, eine Chat-App, die deine Bilder komprimiert, oder einen Umweg über irgendeine Cloud. Alle drei sind langsamer und umständlicher, als sie sein müssten.",
-    "Relayium spart dir all das. Beide Handys öffnen dieselbe Webseite, finden sich und die Dateien wandern direkt zwischen ihnen — Ende-zu-Ende-verschlüsselt, keine App zu installieren. Im selben Netz ist kein Konto nötig; beim Senden über Netzwerke hinweg per Pairing-Code muss sich nur der Absender anmelden. Diese Anleitung führt dich Schritt für Schritt hindurch.",
+    "Relayium spart dir all das. Beide Handys öffnen dieselbe Seite: Im selben LAN werden die Ende-zu-Ende-verschlüsselten Dateien direkt übertragen; netzübergreifend transportiert ein TURN-Relay nur Chiffretext, den es weder lesen noch entschlüsseln kann, und behält weder Echtzeitinhalte noch einen Verlauf. Eine App ist nicht nötig; beim netzübergreifenden Pairing meldet sich der Ersteller an, die beitretende Person braucht nie ein Konto. Diese Anleitung führt dich Schritt für Schritt hindurch.",
   ],
   sections: [
     {
@@ -373,7 +373,7 @@ const de = {
         "Öffne auf dem Android-Handy und dem iPhone jeweils relayium.com im Browser.",
         "Jedes Gerät erscheint beim anderen als Gerät in der Nähe. Tippe auf dem sendenden Handy das empfangende an.",
         "Wähle die Dateien zum Senden — bis zu 1.000 pro Stapel — oder zieh sie einfach hinein.",
-        "Beide Bildschirme zeigen denselben sechsstelligen Code. Prüfe, ob sie übereinstimmen; das ist der Verifizierungscode, der belegt, dass sich kein Server dazwischengeschoben hat.",
+        "Beide Bildschirme zeigen denselben sechsstelligen Code. Prüfe, ob sie übereinstimmen; er bestätigt, dass beide Handys derselben Ende-zu-Ende-verschlüsselten Sitzung beigetreten sind, nicht welchen Netzwerkweg der Chiffretext nimmt.",
         "Bestätige auf dem empfangenden iPhone, dann werden die Dateien direkt übertragen und auf deinem Gerät gespeichert.",
       ],
     },
@@ -435,7 +435,7 @@ const fr = {
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Android et iPhone ne partagent pas d'AirDrop, donc déplacer quelques photos ou une vidéo entre eux passe le plus souvent par un câble USB, une messagerie qui compresse vos images, ou un aller-retour via un espace cloud. Les trois sont plus lents et plus pénibles qu'ils ne devraient l'être.",
-    "Relayium fait l'impasse sur tout cela. Les deux téléphones ouvrent la même page web, se trouvent, et les fichiers voyagent directement entre eux — chiffrés de bout en bout, aucune application à installer. Sur le même réseau, aucun compte n'est nécessaire ; pour envoyer entre réseaux différents avec un code d'appairage, l'expéditeur n'a qu'à se connecter. Ce guide vous accompagne pas à pas.",
+    "Relayium fait l'impasse sur tout cela. Les deux téléphones ouvrent la même page : sur le même LAN, les fichiers chiffrés de bout en bout passent directement ; entre réseaux, un relais TURN ne transporte que du texte chiffré qu'il ne peut ni lire ni déchiffrer, sans conserver de copie ni d'historique du contenu en temps réel. Aucune application à installer ; pour l'appairage entre réseaux, le créateur se connecte et la personne qui rejoint n'a jamais besoin de compte. Ce guide vous accompagne pas à pas.",
   ],
   sections: [
     {
@@ -458,7 +458,7 @@ const fr = {
         "Sur le téléphone Android et sur l'iPhone, ouvrez relayium.com dans le navigateur.",
         "Chaque appareil apparaît sur l'autre comme un appareil à proximité. Sur le téléphone qui envoie, touchez celui qui reçoit.",
         "Choisissez les fichiers à envoyer — jusqu'à 1 000 par lot — ou faites-les simplement glisser.",
-        "Les deux écrans affichent le même code à 6 chiffres. Vérifiez qu'il concorde ; c'est le code de vérification qui prouve qu'aucun serveur ne s'est intercalé entre vous.",
+        "Les deux écrans affichent le même code à 6 chiffres. Vérifiez qu'il concorde : il confirme que les deux téléphones ont rejoint la même session chiffrée de bout en bout, pas le chemin réseau emprunté par le texte chiffré.",
         "Acceptez sur l'iPhone qui reçoit, les fichiers se transfèrent directement, puis enregistrez-les sur votre appareil.",
       ],
     },
@@ -520,7 +520,7 @@ const ar = {
   updatedLabel: "آخر تحديث",
   lead: [
     "لا يشترك Android وiPhone في AirDrop، لذا فإن نقل بضع صور أو مقطع فيديو بينهما يعني عادةً كابل USB، أو تطبيق محادثة يضغط صورك، أو رحلة ذهاب وإياب عبر أحد أقراص السحابة. والثلاثة جميعًا أبطأ وأكثر إزعاجًا مما ينبغي.",
-    "يتخطى Relayium كل ذلك. يفتح الهاتفان الصفحة نفسها، ويعثر كل منهما على الآخر، وتنتقل الملفات مباشرةً بينهما — مُشفَّرة من الطرف إلى الطرف، دون تطبيق يُثبَّت. على نفس الشبكة لا حاجة إلى حساب؛ والإرسال عبر الشبكات برمز اقتران يتطلب فقط أن يسجّل المُرسِل الدخول. يرشدك هذا الدليل خطوة بخطوة.",
+    "يتخطى Relayium كل ذلك. يفتح الهاتفان الصفحة نفسها: داخل شبكة LAN نفسها تنتقل الملفات المشفَّرة من الطرف إلى الطرف مباشرةً، وعبر الشبكات ينقل مُرحِّل TURN نصًا مشفّرًا لا يستطيع قراءته أو فك تشفيره ولا يحتفظ بنسخة أو سجل للمحتوى الآني. لا حاجة إلى تطبيق؛ يسجّل منشئ الاقتران عبر الشبكات الدخول، ولا يحتاج المنضم إلى حساب. يرشدك هذا الدليل خطوة بخطوة.",
   ],
   sections: [
     {
@@ -543,7 +543,7 @@ const ar = {
         "على كل من هاتف Android وiPhone، افتح relayium.com في المتصفح.",
         "يظهر كل جهاز على الآخر بوصفه جهازًا قريبًا. على الهاتف المُرسِل، انقر على الهاتف المُستقبِل.",
         "اختر الملفات المراد إرسالها — حتى 1,000 ملف في كل دفعة — أو اسحبها إلى الداخل ببساطة.",
-        "تعرض الشاشتان رمز التحقق نفسه المكوَّن من 6 أرقام. تأكد من تطابقهما؛ فهذا رمز التحقق الذي يثبت أنه لم يتسلل خادم بينكما.",
+        "تعرض الشاشتان رمز التحقق نفسه المكوَّن من 6 أرقام. تأكد من تطابقهما؛ فهو يؤكد انضمام الهاتفين إلى جلسة واحدة مشفَّرة من الطرف إلى الطرف، ولا يثبت مسار الشبكة الذي يحمله النص المشفّر.",
         "اقبل على iPhone المُستقبِل، فتُنقَل الملفات مباشرةً، ثم احفظها على جهازك.",
       ],
     },
@@ -605,7 +605,7 @@ const es = {
   updatedLabel: "Última actualización",
   lead: [
     "Android y iPhone no comparten un AirDrop, así que mover unas fotos o un vídeo entre ellos suele implicar un cable USB, una app de chat que comprime tus imágenes, o un viaje de ida y vuelta por algún disco en la nube. Los tres son más lentos y engorrosos de lo que deberían.",
-    "Relayium se salta todo eso. Ambos teléfonos abren la misma página web, se encuentran y los archivos viajan directamente entre ellos — cifrados de extremo a extremo, sin app que instalar. En la misma red no hace falta cuenta; enviar entre redes con un código de emparejamiento solo le pide al remitente que inicie sesión. Esta guía lo explica paso a paso.",
+    "Relayium se salta todo eso. Ambos teléfonos abren la misma página: en la misma LAN los archivos cifrados de extremo a extremo viajan directamente; entre redes, un relé TURN solo transporta texto cifrado que no puede leer ni descifrar y no conserva copia ni historial del contenido en tiempo real. No hay app que instalar; en el emparejamiento entre redes inicia sesión el creador y quien se une nunca necesita cuenta. Esta guía lo explica paso a paso.",
   ],
   sections: [
     {
@@ -628,7 +628,7 @@ const es = {
         "Tanto en el teléfono Android como en el iPhone, abre relayium.com en el navegador.",
         "Cada dispositivo aparece como un dispositivo cercano en el otro. En el teléfono que envía, toca el que recibe.",
         "Elige los archivos a enviar — hasta 1.000 por lote — o simplemente arrástralos.",
-        "Ambas pantallas muestran el mismo código de 6 dígitos. Comprueba que coinciden; este es el código de verificación que prueba que ningún servidor se ha colado entre los dos dispositivos.",
+        "Ambas pantallas muestran el mismo código de 6 dígitos. Comprueba que coinciden: confirma que ambos teléfonos se unieron a la misma sesión cifrada de extremo a extremo, no la ruta de red que transporta el texto cifrado.",
         "Acepta en el iPhone que recibe y los archivos se transfieren directamente, luego guárdalos en tu dispositivo.",
       ],
     },
@@ -690,7 +690,7 @@ const pt = {
   updatedLabel: "Última atualização",
   lead: [
     "Android e iPhone não compartilham um AirDrop, então mover algumas fotos ou um vídeo entre eles geralmente significa um cabo USB, um app de conversa que comprime suas imagens, ou uma ida e volta por algum drive na nuvem. Os três são mais lentos e mais trabalhosos do que deveriam ser.",
-    "O Relayium pula tudo isso. Os dois celulares abrem a mesma página web, se encontram e os arquivos viajam diretamente entre eles — criptografados de ponta a ponta, sem app para instalar. Na mesma rede não é preciso conta; enviar entre redes com um código de emparelhamento apenas pede que o remetente entre. Este guia mostra passo a passo.",
+    "O Relayium pula tudo isso. Os dois celulares abrem a mesma página: na mesma LAN os arquivos criptografados de ponta a ponta viajam diretamente; entre redes, um retransmissor TURN só transporta texto cifrado que não consegue ler nem descriptografar e não mantém cópia nem histórico do conteúdo em tempo real. Não há app para instalar; no emparelhamento entre redes o criador faz login e quem entra nunca precisa de conta. Este guia mostra passo a passo.",
   ],
   sections: [
     {
@@ -713,7 +713,7 @@ const pt = {
         "Tanto no celular Android quanto no iPhone, abra relayium.com no navegador.",
         "Cada dispositivo aparece como um dispositivo próximo no outro. No celular que envia, toque no que recebe.",
         "Escolha os arquivos a enviar — até 1.000 por lote — ou simplesmente arraste-os.",
-        "As duas telas mostram o mesmo código de 6 dígitos. Confira se eles coincidem; este é o código de verificação que prova que nenhum servidor se meteu entre os dois.",
+        "As duas telas mostram o mesmo código de 6 dígitos. Confira se eles coincidem: isso confirma que os dois celulares entraram na mesma sessão criptografada de ponta a ponta, não a rota de rede que transporta o texto cifrado.",
         "Aceite no iPhone que recebe e os arquivos são transferidos diretamente, depois salve-os no seu dispositivo.",
       ],
     },
@@ -771,6 +771,6 @@ const pt = {
 export default {
   slug: "how-to/transfer-files-android-to-iphone",
   published: "2026-07-03",
-  updated: "2026-07-03",
+  updated: "2026-07-31",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };
