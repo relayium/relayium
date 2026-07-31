@@ -82,8 +82,8 @@ public final class CloudUploadModel: ObservableObject {
                 let sources: [PlaintextSource] = try urls.map { try FileURLSource(url: $0) }
                 let outcome = try await self.uploader.upload(
                     sources: sources,
-                    burnAfterRead: await self.burnAfterRead,
-                    ttl: await self.ttl,
+                    burnAfterRead: self.burnAfterRead,
+                    ttl: self.ttl,
                     token: token,
                     onProgress: { sent, total in
                         Task { @MainActor in self.report(sent: sent, total: total, g: g) }

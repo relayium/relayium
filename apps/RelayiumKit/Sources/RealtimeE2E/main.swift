@@ -52,7 +52,7 @@ final class E2EPeer {
         self.counterpart = (isSender ? "receiver-" : "sender-") + runTag
         signaling = SignalingClient.connect(wsBase: wsBase, code: code, name: name)
         signaling.onSelfId = { [self] id, ip in selfId = id; log("\(name): self=\(id) ip=\(ip)") }
-        signaling.onClose = { [self] in log("\(name): signaling closed") }
+        signaling.onClose = { [name] in log("\(name): signaling closed") }
         signaling.onPeers = { [self] peers in
             guard conn == nil, let peer = peers.first(where: { $0.name == counterpart }) else {
                 log("\(name): roster \(peers.map(\.name)) — waiting for \(counterpart)")
