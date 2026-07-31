@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか · Relayium</title>
-    <meta name="description" content="Relayium と Nextcloud を公平に比較。Nextcloud は長期保存に向く本格的なセルフホスト型クラウド基盤、Relayium は転送そのものに特化したツールです。P2P 直送、またはゼロ知識で暗号化される期限付きリンクに加え、軽量な単一コンテナのセルフホストも用意しています。" />
+    <meta name="description" content="Relayium と Nextcloud を公平に比較。Nextcloud は長期保存向けのセルフホスト型クラウド、Relayium はサーバー側のリアルタイム内容コピーを保存しない転送ツールです。LAN は直接、ネットワーク間ブラウザは読めない E2E 暗号文を TURN で運び、期限付きゼロ知識リンクも使えます。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/compare/nextcloud/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/compare/nextcloud/" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか" />
-    <meta property="og:description" content="Relayium と Nextcloud を公平に比較。Nextcloud は長期保存に向く本格的なセルフホスト型クラウド基盤、Relayium は転送そのものに特化したツールです。P2P 直送、またはゼロ知識で暗号化される期限付きリンクに加え、軽量な単一コンテナのセルフホストも用意しています。" />
+    <meta property="og:description" content="Relayium と Nextcloud を公平に比較。Nextcloud は長期保存向けのセルフホスト型クラウド、Relayium はサーバー側のリアルタイム内容コピーを保存しない転送ツールです。LAN は直接、ネットワーク間ブラウザは読めない E2E 暗号文を TURN で運び、期限付きゼロ知識リンクも使えます。" />
     <meta property="og:url" content="https://relayium.com/ja/compare/nextcloud/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="ja_JP" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか" />
-    <meta name="twitter:description" content="Relayium と Nextcloud を公平に比較。Nextcloud は長期保存に向く本格的なセルフホスト型クラウド基盤、Relayium は転送そのものに特化したツールです。P2P 直送、またはゼロ知識で暗号化される期限付きリンクに加え、軽量な単一コンテナのセルフホストも用意しています。" />
+    <meta name="twitter:description" content="Relayium と Nextcloud を公平に比較。Nextcloud は長期保存向けのセルフホスト型クラウド、Relayium はサーバー側のリアルタイム内容コピーを保存しない転送ツールです。LAN は直接、ネットワーク間ブラウザは読めない E2E 暗号文を TURN で運び、期限付きゼロ知識リンクも使えます。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか","description":"Relayium と Nextcloud を公平に比較。Nextcloud は長期保存に向く本格的なセルフホスト型クラウド基盤、Relayium は転送そのものに特化したツールです。P2P 直送、またはゼロ知識で暗号化される期限付きリンクに加え、軽量な単一コンテナのセルフホストも用意しています。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-07-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/compare/nextcloud/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"Relayium ではなく Nextcloud を使うべきですか？","acceptedAnswer":{"@type":"Answer","text":"写真、文書、チーム共有ドライブなど、ファイルの恒久的で同期された置き場所が欲しいなら、はい、それこそまさに Nextcloud が作られた目的です。Relayium はその代替品ではなく、1人から別の1人へ素早く、プライベートにファイルを渡すという、より狭い仕事のためのものです。"}},{"@type":"Question","name":"Relayium は Nextcloud のようにファイルを保存しますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。リアルタイムモードでは何もどこにも保存されません。ファイルは2台の端末のあいだをストリーミングで流れ、サーバーに書き込まれることはありません。保存リンクは、期限切れ（1時間から最長14日、プランによる）になるか、閲覧後削除で1回ダウンロードされるまでの間だけゼロ知識の暗号文を保持し、Nextcloud の共有のように無期限には保存されません。"}},{"@type":"Question","name":"アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"同一ネットワークなら不要です。ペアリングコードでネットワークをまたいで送る場合や、保存リンクを作成する場合は送信側のサインインが必要です。受信側はどちらの場合もアカウント不要です。一方 Nextcloud は、アクセスするすべてのユーザーにアカウント（またはアカウント保有者が作成した共有リンク）が必要です。"}},{"@type":"Question","name":"Relayium もセルフホストできますか？","acceptedAnswer":{"@type":"Answer","text":"できます。Nextcloud の複数サービスから成る構成とは違い、Relayium のサーバーは単一のコンテナです。1つの docker compose コマンドだけでシステム全体が起動し、ネットワークをまたぐ NAT 越え用の任意の TURN リレープロファイルもあります。"}},{"@type":"Question","name":"Relayium は無料ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。AGPL-3.0 ライセンスの無料オープンソースで、有料プランはありません。Nextcloud のコアサーバーソフトウェアも無料でオープンソースですが、Nextcloud GmbH による一部のホスティングとサポートは有料です。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか","description":"Relayium と Nextcloud を公平に比較。Nextcloud は長期保存向けのセルフホスト型クラウド、Relayium はサーバー側のリアルタイム内容コピーを保存しない転送ツールです。LAN は直接、ネットワーク間ブラウザは読めない E2E 暗号文を TURN で運び、期限付きゼロ知識リンクも使えます。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/compare/nextcloud/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"Relayium ではなく Nextcloud を使うべきですか？","acceptedAnswer":{"@type":"Answer","text":"写真、文書、チーム共有ドライブなど、ファイルの恒久的で同期された置き場所が欲しいなら、はい、それこそまさに Nextcloud が作られた目的です。Relayium はその代替品ではなく、1人から別の1人へ素早く、プライベートにファイルを渡すという、より狭い仕事のためのものです。"}},{"@type":"Question","name":"Relayium は Nextcloud のようにファイルを保存しますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイムではサーバー側内容コピーや履歴を保存しません。LAN は直接、ネットワーク間 TURN は読取り・復号不能な暗号文です。保存リンクは期限切れまたは即焚までのゼロ知識暗号文で、Nextcloud のような無期限保存ではありません。"}},{"@type":"Question","name":"アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"同一ネットワークなら不要です。ペアリングコードでネットワークをまたいで送る場合や、保存リンクを作成する場合は送信側のサインインが必要です。受信側はどちらの場合もアカウント不要です。一方 Nextcloud は、アクセスするすべてのユーザーにアカウント（またはアカウント保有者が作成した共有リンク）が必要です。"}},{"@type":"Question","name":"Relayium もセルフホストできますか？","acceptedAnswer":{"@type":"Answer","text":"できます。Nextcloud の複数サービスから成る構成とは違い、Relayium のサーバーは単一のコンテナです。1つの docker compose コマンドだけでシステム全体が起動し、ネットワークをまたぐ NAT 越え用の任意の TURN リレープロファイルもあります。"}},{"@type":"Question","name":"Relayium は無料ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。AGPL-3.0 ライセンスの無料オープンソースで、有料プランはありません。Nextcloud のコアサーバーソフトウェアも無料でオープンソースですが、Nextcloud GmbH による一部のホスティングとサポートは有料です。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -71,31 +71,31 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか</span></nav>
       <h1>Relayium と Nextcloud の比較：ファイル送信にどちらを選ぶか</h1>
-      <p class="updated">最終更新: 2026-07-09</p>
+      <p class="updated">最終更新: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/nextcloud/">English</a><a href="/zh/compare/nextcloud/">中文</a><a href="/ja/compare/nextcloud/" aria-current="true">日本語</a><a href="/ko/compare/nextcloud/">한국어</a><a href="/de/compare/nextcloud/">Deutsch</a><a href="/fr/compare/nextcloud/">Français</a><a href="/ar/compare/nextcloud/">العربية</a><a href="/es/compare/nextcloud/">Español</a><a href="/pt/compare/nextcloud/">Português</a></nav>
       <p class="lead">Nextcloud は、セルフホストを Google Drive や Dropbox の本物の代替にしました。自分のファイル、あらゆる端末をまたぐ同期、自分のカレンダーと連絡先。そのすべてが自分の管理するドメインの下で動きます。これは正真正銘、強力なソフトウェアであり、ファイルの恒久的な置き場所が欲しいなら、Nextcloud はまさに適した道具です。</p>
-      <p class="lead">本記事はこの2つを公平に比較します。Nextcloud はデータを長期的に保存し同期し続けるために作られており、その守備範囲こそが強みですが、その分、実際のセットアップと運用コストも伴います。Web サーバー、データベース、PHP ランタイム、そしてコア本体とインストール済みアプリへの継続的なアップデートです。Relayium が解決するのはもっと狭い問題です。ファイルを1人から別の1人へ渡すことです。直接転送で何も保存しないか、期限付きのリンクを使うかのどちらかです。永続的なクラウドストレージが必要なら Nextcloud の方が向いています。ファイルを移動したいだけなら、Relayium の方が軽量です。</p>
+      <p class="lead">Nextcloud は Web、DB、PHP と継続保守を伴う長期保存・同期基盤です。Relayium は受け渡しに絞り、リアルタイムではサーバー側内容コピーを保存せず、ブラウザは LAN で直接、ネットワーク間で暗号化 TURN を使います。期限付きゼロ知識リンクも選べます。永続保存は Nextcloud、移動だけなら Relayium が軽量です。</p>
       <h2>Nextcloud が優れている点</h2>
       <p>Nextcloud は完結したセルフホスト型クラウドスイートです。デスクトップとモバイルの同期クライアントを備えたファイルストレージ、カレンダー、連絡先、オフィススイート、チャット、その上に大規模なアプリエコシステムが乗っています。一度立ち上げれば、プライベートな Google Workspace のように動作します。ファイルはそこに恒久的に置かれ、端末間で自動同期され、いつでも利用できます。</p>
       <p>これは「ファイルを送る」こととは根本的に違う仕事です。データの恒久的で共有された置き場所（チーム共有ドライブ、写真ライブラリ、家庭や会社が長期的にファイルを保管する場所）が欲しいなら、Nextcloud が正しい選択です。</p>
       <h2>違いはどこか：ストレージ基盤 vs 転送ツール</h2>
       <p>Nextcloud は多くのことをこなす分、それを運用するということは本格的なアプリケーション基盤を運用することを意味します。Web サーバー、データベース（MySQL、PostgreSQL、または SQLite）、PHP ランタイム、定期実行される cron ジョブ、そしてコア本体とインストールした各アプリへの継続的なアップデートです。得られるものを考えれば妥当な対価ですが、それは継続的な作業であり、保管するすべてのもののストレージ容量計画も自分で行うことになります。</p>
-      <p>Relayium はストレージ基盤になろうとはしません。ファイルを一箇所から別の場所へ移動すること（リアルタイムのピアツーピア、あるいは期限付きのリンク）に範囲を絞っています。セルフホスト時のサーバー側は単一のコンテナです。アプリを提供する1つの Go バイナリが、小さな SQLite データベースと、保存型リンクについては自身も読めない暗号化ブロブを保持します。このコマンドがセットアップのすべてで、任意のプロファイルを追加すればネットワークをまたぐ NAT 越え用の TURN リレーも加わります。ファイルを A から B へ渡すことだけが目的なら、運用し続けるものはずっと少なくて済みます。</p>
+      <p>Relayium はストレージ基盤ではありません。リアルタイムではサーバー側内容コピーを保存せず、LAN は直接、ネットワーク間はリレーが読取り・復号できない E2E 暗号文の TURN です。セルフホストは SQLite と読めない保存リンク暗号文を持つ単一 Go コンテナで、任意の TURN profile を追加できます。</p>
       <pre><code>docker compose up -d --build</code></pre>
-      <h2>P2P 直送、何も保存されない</h2>
-      <p>Relayium のリアルタイムモードは暗号化されたピアツーピアのチャネルを通じてファイルを2台の端末間で直接送ります。Nextcloud にはこれに相当する機能がありません。すべての Nextcloud の共有は、まず自分のサーバーにアップロードされ、そこからダウンロードされるからです。X25519 の鍵交換が AES-256-GCM 用の鍵を導出し、両方の端末が一致する6桁の検証コード（SAS）を表示して中間者を排除し、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。</p>
+      <h2>リアルタイム転送、サーバー側内容コピーなし</h2>
+      <p>Relayium リアルタイムはサーバー側内容コピーを保存しません。LAN は直接、ネットワーク間 TURN は読取り・復号できない E2E 暗号文だけを運びます。Nextcloud 共有はサーバーを使います。Relayium は X25519/AES-256-GCM、6桁 SAS、SHA-256 を使います。</p>
       <p>同一ネットワークならアカウントは一切不要です。両方の端末で relayium.com を開き、最大1,000ファイルを選び、コードを照合して送ります。ペアリングコードでネットワークをまたいで送る場合は送信側のサインインが必要です。受信側はどちらの場合もアカウント不要です。途中で接続が切れても、転送は最初からではなく再開されます。同一ネットワークならファイルは2台の端末のあいだを直接流れ、ネットワークをまたぐ場合は設計上、暗号化された TURN リレーを経由します。リレーが中継するのは暗号文だけで、鍵は持ちません。</p>
       <h2>受信側がオフラインのとき：ゼロ知識の保存リンク</h2>
       <p>リアルタイム転送には双方が同時にオンラインである必要があり、ここは Nextcloud の常駐サーバーが本当に優れている点です。Relayium もこのケースをカバーします。プライバシーを犠牲にせずにです。ブラウザがランダムな AES-256-GCM 鍵を生成し、何も端末から出ていく前にそれでファイルを暗号化し、鍵は URL フラグメント（# の後の、ブラウザがサーバーに決して送らない部分）にだけ存在します。サーバーは復号できない暗号文だけを保存します。</p>
       <p>こうした保存リンクの作成には送信側のサインインが必要です。受信側はダウンロードにアカウントが要りません。各リンクは1時間、1日、3日、7日、最長14日（プランによる）で期限切れになるよう設定でき、あるいは最初の完全なダウンロード後に消去するよう設定できます。Nextcloud の共有のような恒久的な置き場所ではなく、消えることを前提としています。</p>
       <h2>機能の一覧比較</h2>
       <p>最も重要な違いを並べて示します。</p>
-      <ul><li>目的：Nextcloud は永続的で同期されたストレージのための完全なクラウド基盤、Relayium は直接転送や期限付きリンクに特化したツール。</li><li>ファイルの置き場所：Nextcloud は望む限りファイルをサーバーに保管します。Relayium のリアルタイムモードは何も保存せず、保存リンクは期限切れになるか1回のダウンロード後に消去されます。</li><li>セルフホストの重さ：Nextcloud は Web サーバー、データベース、PHP ランタイム、継続的なアプリ更新が必要です。Relayium のセルフホストは単一コンテナ（docker compose up -d --build）に加え、ネットワークをまたぐ転送用の任意の TURN リレーだけで済みます。</li><li>アカウント：Nextcloud はアクセスするすべてのユーザーにアカウントが必要です。Relayium は同一ネットワークの転送にはアカウント不要で、ネットワークをまたぐペアリングや保存リンクは送信側のサインインだけが必要、受信側は決して不要です。</li><li>暗号化：Relayium のリアルタイムモードは6桁の SAS コード付きのエンドツーエンド暗号化です。同一ネットワークならサーバーに一切触れず、ネットワークをまたぐ場合もリレーが中継するのは鍵を持たない暗号文だけで、保存リンクはランダムな鍵が URL フラグメントだけに存在するゼロ知識です。Nextcloud の共有は自分のサーバーへのアップロードとそこからのダウンロードを経由し、通信中は TLS で保護され、保存時の暗号化は自分の設定次第です。</li><li>費用と開放性：Relayium は無料で AGPL-3.0 ライセンス、github.com/relayium/relayium にあります。Nextcloud のサーバーソフトウェアも無料でオープンソース（AGPL）ですが、Nextcloud GmbH やパートナーによる有料のホスティングとサポートも利用できます。</li></ul>
+      <ul><li>目的：Nextcloud は永続同期ストレージ、Relayium はサーバー側内容コピーなしのリアルタイム転送または期限付きリンク。</li><li>置き場所：Nextcloud はサーバー保存。Relayium は LAN 直接またはネットワーク間 TURN 暗号文で、サーバー側履歴なし。保存リンクは期限切れか即焚です。</li><li>セルフホストの重さ：Nextcloud は Web サーバー、データベース、PHP ランタイム、継続的なアプリ更新が必要です。Relayium のセルフホストは単一コンテナ（docker compose up -d --build）に加え、ネットワークをまたぐ転送用の任意の TURN リレーだけで済みます。</li><li>アカウント：Nextcloud はアクセスするすべてのユーザーにアカウントが必要です。Relayium は同一ネットワークの転送にはアカウント不要で、ネットワークをまたぐペアリングや保存リンクは送信側のサインインだけが必要、受信側は決して不要です。</li><li>暗号化：Relayium は E2E と6桁 SAS。LAN 内容は直接、ネットワーク間 TURN は読取り・復号不能な暗号文で、信号メタデータは処理されます。保存リンクはゼロ知識。Nextcloud は自分のサーバー、TLS、設定した保存時暗号化を使います。</li><li>費用と開放性：Relayium は無料で AGPL-3.0 ライセンス、github.com/relayium/relayium にあります。Nextcloud のサーバーソフトウェアも無料でオープンソース（AGPL）ですが、Nextcloud GmbH やパートナーによる有料のホスティングとサポートも利用できます。</li></ul>
       <h2>よくある質問</h2>
       <h3>Relayium ではなく Nextcloud を使うべきですか？</h3>
       <p>写真、文書、チーム共有ドライブなど、ファイルの恒久的で同期された置き場所が欲しいなら、はい、それこそまさに Nextcloud が作られた目的です。Relayium はその代替品ではなく、1人から別の1人へ素早く、プライベートにファイルを渡すという、より狭い仕事のためのものです。</p>
       <h3>Relayium は Nextcloud のようにファイルを保存しますか？</h3>
-      <p>いいえ。リアルタイムモードでは何もどこにも保存されません。ファイルは2台の端末のあいだをストリーミングで流れ、サーバーに書き込まれることはありません。保存リンクは、期限切れ（1時間から最長14日、プランによる）になるか、閲覧後削除で1回ダウンロードされるまでの間だけゼロ知識の暗号文を保持し、Nextcloud の共有のように無期限には保存されません。</p>
+      <p>リアルタイムではサーバー側内容コピーや履歴を保存しません。LAN は直接、ネットワーク間 TURN は読取り・復号不能な暗号文です。保存リンクは期限切れまたは即焚までのゼロ知識暗号文で、Nextcloud のような無期限保存ではありません。</p>
       <h3>アカウントは必要ですか？</h3>
       <p>同一ネットワークなら不要です。ペアリングコードでネットワークをまたいで送る場合や、保存リンクを作成する場合は送信側のサインインが必要です。受信側はどちらの場合もアカウント不要です。一方 Nextcloud は、アクセスするすべてのユーザーにアカウント（またはアカウント保有者が作成した共有リンク）が必要です。</p>
       <h3>Relayium もセルフホストできますか？</h3>
@@ -103,11 +103,11 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Relayium は無料ですか？</h3>
       <p>はい。AGPL-3.0 ライセンスの無料オープンソースで、有料プランはありません。Nextcloud のコアサーバーソフトウェアも無料でオープンソースですが、Nextcloud GmbH による一部のホスティングとサポートは有料です。</p>
       <div class="ctacard">
-        <p>ファイルを直接送るか、期限付きのゼロ知識リンクを共有しましょう。同じネットワークならクラウドストレージのアカウントは不要です。</p>
+        <p>リアルタイムでファイルを送るか、期限付きゼロ知識リンクを共有しましょう。同じネットワークならクラウドアカウント不要です。</p>
         <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
       </div>
       <h2>続けて読む</h2>
-      <ul class="related"><li><a href="/ja/guides/self-host-relayium/">Relayium をセルフホスト：自分専用のファイル・テキスト転送サーバーを運用</a></li><li><a href="/ja/guides/bring-your-own-node/">Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う</a></li><li><a href="/ja/compare/dropbox/">Relayium と Dropbox の比較：1ファイルの送信をもっと直接に</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link/">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <ul class="related"><li><a href="/ja/guides/self-host-relayium/">Relayium をセルフホスト：自分専用のファイル・テキスト転送サーバーを運用</a></li><li><a href="/ja/guides/bring-your-own-node/">Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う</a></li><li><a href="/ja/compare/dropbox/">Relayium と Dropbox の比較：1ファイルを送る</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link/">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/">Relayium</a></li></ul>
       <footer>
         <a href="/?lang=ja">← Relayium</a>
         <a href="/ja/apps/">アプリ</a>

@@ -610,6 +610,6 @@ const pt = {
 export default {
   slug: "compare/firefox-send",
   published: "2026-07-09",
-  updated: "2026-07-09",
+  updated: "2026-07-31",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

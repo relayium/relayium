@@ -844,6 +844,6 @@ const pt = {
 export default {
   slug: "guides/what-is-peer-to-peer-file-transfer",
   published: "2026-07-09",
-  updated: "2026-07-09",
+  updated: "2026-07-31",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

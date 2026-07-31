@@ -469,6 +469,6 @@ const pt = article({
 export default {
   slug: "how-to/send-text-between-devices",
   published: "2026-07-30",
-  updated: "2026-07-30",
+  updated: "2026-07-31",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };
