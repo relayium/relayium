@@ -32,6 +32,7 @@ private final class StubConnection: RealtimePeerConnection, @unchecked Sendable 
     var onFileChunk: (([UInt8]) -> Void)?
     var onProgress: ((Int) -> Void)?
     var onDone: ((Bool) -> Void)?
+    var onText: ((String, Int) -> Void)?
     var onControl: ((RealtimeControl) -> Void)?
     var onClose: (() -> Void)?
     var onError: ((Error) -> Void)?
@@ -40,10 +41,19 @@ private final class StubConnection: RealtimePeerConnection, @unchecked Sendable 
     private(set) var closeCount = 0
     private(set) var sentMetas: [FileMeta] = []
     private(set) var completeCount = 0
+    private(set) var acceptCount = 0
+    private(set) var rejectCount = 0
 
     func start() { started = true }
     func send(sources: [PlaintextSource], metas: [FileMeta]) { sentMetas = metas }
+    func accept() { acceptCount += 1 }
+    func reject() { rejectCount += 1 }
     func complete() { completeCount += 1 }
+    func confirmTextSAS() {}
+    func acceptText() {}
+    func rejectText() {}
+    func sendText(_ body: String, completion: @escaping (Error?) -> Void) { completion(nil) }
+    var textBufferedAmount: UInt64 { 0 }
     func close() { closeCount += 1 }
 }
 
@@ -150,11 +160,95 @@ final class RealtimeSessionModelTests: XCTestCase {
         conn.onSAS?("x")
         await settle()
         m.rejectSAS()
+        XCTAssertEqual(conn.rejectCount, 1)
         XCTAssertEqual(conn.closeCount, 1)
         guard case .idle = m.state else { return XCTFail("got \(m.state)") }
     }
 
+    func testPeerRejectWhileVerifyingDoesNotLeaveFakeProgress() async {
+        let m = makeModel()
+        await m.join(code: "K7M3X9")
+        conn.onSAS?("x")
+        await settle()
+
+        conn.onControl?(.reject)
+        conn.onClose?()
+        await settle()
+        guard case let .failed(message) = m.state else {
+            return XCTFail("got \(m.state)")
+        }
+        XCTAssertTrue(message.lowercased().contains("declined"))
+    }
+
+    func testDisconnectWhileVerifyingFailsInsteadOfHanging() async {
+        let m = makeModel()
+        await m.join(code: "K7M3X9")
+        conn.onSAS?("x")
+        await settle()
+
+        conn.onClose?()
+        await settle()
+        guard case .failed = m.state else { return XCTFail("got \(m.state)") }
+    }
+
     // MARK: - receiving
+
+    func testReceiverKeepsSASGateAndSendsAcceptOnlyAfterConfirmation() async throws {
+        let m = makeModel()
+        m.saveDirectory = try tempDir()
+        await m.join(code: "K7M3X9")
+        conn.onSAS?("brave-otter-lamp")
+        await settle()
+
+        conn.onManifest?([FileMeta(name: "a.txt", size: 3)])
+        await settle()
+        guard case let .verifying(sas) = m.state else {
+            return XCTFail("manifest bypassed the SAS gate: \(m.state)")
+        }
+        XCTAssertEqual(sas, "brave-otter-lamp")
+        XCTAssertEqual(conn.acceptCount, 0, "accepted before the user confirmed the SAS")
+
+        m.confirmSAS()
+        guard case .transferring = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertEqual(conn.acceptCount, 1)
+    }
+
+    func testReceiverConfirmedBeforeManifestAcceptsWhenManifestArrives() async throws {
+        let m = makeModel()
+        m.saveDirectory = try tempDir()
+        await m.join(code: "K7M3X9")
+        conn.onSAS?("x")
+        await settle()
+        m.confirmSAS()
+        XCTAssertEqual(conn.acceptCount, 0)
+
+        conn.onManifest?([FileMeta(name: "a.txt", size: 3)])
+        await settle()
+        XCTAssertEqual(conn.acceptCount, 1)
+        guard case let .transferring(done, total) = m.state else {
+            return XCTFail("got \(m.state)")
+        }
+        XCTAssertEqual(done, 0)
+        XCTAssertEqual(total, 3)
+    }
+
+    func testReceiverWriterFailureRejectsAndClosesBeforeTransfer() async {
+        let m = makeModel()
+        m.saveDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("missing-\(UUID().uuidString)")
+        await m.join(code: "K7M3X9")
+        conn.onSAS?("x")
+        await settle()
+        m.confirmSAS()
+
+        conn.onManifest?([FileMeta(name: "a.txt", size: 3)])
+        await settle()
+
+        XCTAssertEqual(conn.rejectCount, 1)
+        XCTAssertEqual(conn.acceptCount, 0)
+        XCTAssertEqual(conn.closeCount, 1)
+        guard case .failed = m.state else { return XCTFail("got \(m.state)") }
+    }
 
     func testWritesIncomingFilesAndCompletes() async throws {
         let dir = try tempDir()

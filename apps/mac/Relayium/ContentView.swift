@@ -10,6 +10,7 @@ struct ContentView: View {
     @EnvironmentObject private var uploadModel: CloudUploadModel
     @EnvironmentObject private var downloadModel: CloudDownloadModel
     @EnvironmentObject private var realtimeModel: RealtimeSessionModel
+    @EnvironmentObject private var realtimeTextModel: RealtimeTextSessionModel
     @State private var showDownload = false
     @State private var showDirect = false
     @State private var selectedTab: Tab = .direct
@@ -48,7 +49,11 @@ struct ContentView: View {
                     // above LoginView — its @State has to survive every
                     // transition through this branch.
                     DisclosureGroup("I have a pairing code", isExpanded: $showDirect) {
-                        DirectPane(model: realtimeModel, token: "")
+                        DirectHubPane(
+                            fileModel: realtimeModel,
+                            textModel: realtimeTextModel,
+                            token: ""
+                        )
                     }
                 }
             case .unavailable(let message):
@@ -82,7 +87,11 @@ struct ContentView: View {
                 // right now, and that is exactly the line between the two.
                 TabView(selection: $selectedTab) {
                     ScrollView {
-                        DirectPane(model: realtimeModel, token: session.bearerToken ?? "")
+                        DirectHubPane(
+                            fileModel: realtimeModel,
+                            textModel: realtimeTextModel,
+                            token: session.bearerToken ?? ""
+                        )
                             .padding()
                     }
                     .tabItem { Label("Direct", systemImage: "bolt.horizontal") }
@@ -149,6 +158,23 @@ struct ContentView: View {
                 break
             }
         }
+        .onChange(of: realtimeTextModel.state) { state in
+            switch state {
+            case .minting, .showingCode, .joining, .connecting, .verifying,
+                 .waitingAccept, .incomingRequest, .open:
+                notifier.prepare()
+            default:
+                break
+            }
+        }
+        .onChange(of: realtimeTextModel.history.last?.id) { messageID in
+            guard messageID != nil,
+                  realtimeTextModel.history.last?.direction == .incoming else { return }
+            notifier.completed(
+                "A new encrypted message arrived.",
+                title: "Relayium message"
+            )
+        }
     }
 
     private func route(_ link: AppDeepLink) {
@@ -161,7 +187,13 @@ struct ContentView: View {
         case .realtime(let code):
             selectedTab = .direct
             showDirect = true
-            if let code { realtimeModel.updateJoinCode(code) }
+            if let code {
+                // Pairing codes intentionally do not reveal whether the sender
+                // chose files or text. Populate both panes so the user's intent
+                // choice never hides a valid deep link in the other field.
+                realtimeModel.updateJoinCode(code)
+                realtimeTextModel.updateJoinCode(code)
+            }
         }
         deepLinks.consume()
     }

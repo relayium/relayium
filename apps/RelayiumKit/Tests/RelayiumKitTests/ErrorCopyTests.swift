@@ -87,6 +87,35 @@ final class ErrorCopyTests: XCTestCase {
             let m = ErrorCopy.message(for: e)
             XCTAssertFalse(m.contains("RealtimeSenderError"), "no copy for \(e)")
         }
+
+        let connection: [RealtimeConnection.ConnectionError] = [
+            .peerBusy, .unsupportedPeer, .peerConnectionFailed, .notReady,
+            .alreadySending, .rejected, .timedOut, .textSendBufferFull,
+            .textSendFailed, .textReceiveBufferFull,
+        ]
+        for e in connection {
+            let m = ErrorCopy.message(for: e)
+            XCTAssertFalse(m.contains("ConnectionError"), "no copy for \(e)")
+        }
+
+        let factory: [RealtimeConnectionFactory.FactoryError] = [
+            .noPeerAppeared, .unsupportedPeer,
+        ]
+        for e in factory {
+            let m = ErrorCopy.message(for: e)
+            XCTAssertFalse(m.contains("FactoryError"), "no copy for \(e)")
+        }
+
+        let text: [RealtimeTextError] = [
+            .invalidKey, .messageTooLarge(bytes: 1, limit: 0),
+            .sequenceExhausted, .malformedFrame, .wrongKind,
+            .outOfOrder(expected: 0, actual: 1), .authenticationFailed,
+            .invalidUTF8(bytes: 1),
+        ]
+        for e in text {
+            let m = ErrorCopy.message(for: e)
+            XCTAssertFalse(m.contains("RealtimeTextError"), "no copy for \(e)")
+        }
     }
 
     /// A missing link has three plausible causes and the copy must not assert one.

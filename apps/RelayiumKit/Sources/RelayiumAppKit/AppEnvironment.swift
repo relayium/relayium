@@ -86,6 +86,24 @@ public enum AppEnvironment {
     }
 
     @MainActor
+    public static func makeRealtimeTextModel(baseURL: URL = productionBaseURL) -> RealtimeTextSessionModel {
+        RealtimeTextSessionModel(
+            pairClient: HTTPPairClient(baseURL: baseURL),
+            iceClient: HTTPICEClient(baseURL: baseURL),
+            makeConnection: { code, role, servers in
+                try await RealtimeConnectionFactory.make(
+                    code: code,
+                    role: role,
+                    config: servers,
+                    baseURL: baseURL,
+                    deviceName: deviceName(),
+                    mode: .text
+                )
+            }
+        )
+    }
+
+    @MainActor
     public static func makeBrowserLoginModel(baseURL: URL = productionBaseURL) -> BrowserLoginModel {
         BrowserLoginModel(client: HTTPDeviceAuthClient(baseURL: baseURL))
     }

@@ -21,7 +21,7 @@ import RelayiumKit
 ///
 /// 1. The alternative is not a symmetric choice, it is no choice. With the
 ///    map published only on completion, the 4 s probe timeout overruns the
-///    800 ms deadline whenever any relay is silent, and both peers fall back —
+///    old 800 ms deadline whenever any relay is silent, and both peers fall back —
 ///    every time. A feature that agrees perfectly and never runs is worth less
 ///    than one that agrees usually.
 /// 2. Disagreement degrades rather than fails. Both sides still allocate on a
@@ -92,7 +92,7 @@ public final class RelayNegotiator: @unchecked Sendable {
     /// Each relay is recorded and broadcast the moment it answers, rather than
     /// once the whole pool has settled. That ordering is what makes the
     /// feature reachable at all: probes time out at 4 s and `waitForChoice`'s
-    /// deadline upstream is 800 ms, so a map published only on completion
+    /// deadline upstream used to be 800 ms, so a map published only on completion
     /// arrives five times too late whenever any one relay is silent — on both
     /// peers, on every transfer. Publishing per probe means our fast relays are
     /// on the wire, and in the peer's hands, inside the budget.
@@ -216,7 +216,7 @@ public final class RelayNegotiator: @unchecked Sendable {
     ///
     /// The deadline is the other way out, and it is what keeps the reason
     /// measurement went incremental intact: a 4 s straggler still cannot stop
-    /// the 800 ms budget from producing an answer, it just cannot force a
+    /// the old 800 ms budget from producing an answer, it just cannot force a
     /// premature one either.
     ///
     /// Deliberately NOT a `withTaskGroup` racing a continuation-waiting child
@@ -251,7 +251,7 @@ public final class RelayNegotiator: @unchecked Sendable {
     /// line the design's acceptance list asks for: without the two maps
     /// alongside the chosen id there is no way to tell a relay that won from a
     /// relay that was the only one measured, and no way to replace
-    /// `relayChoiceDeadline`'s 800 ms guess with a number.
+    /// `relayChoiceDeadline`'s original 800 ms guess with a number.
     public func maps() -> (mine: [String: Int], theirs: [String: Int]) {
         lock.lock(); defer { lock.unlock() }
         return (mine, theirs)

@@ -13,6 +13,8 @@ public protocol RealtimePeerConnection: AnyObject {
     var onFileChunk: (([UInt8]) -> Void)? { get set }
     var onProgress: ((Int) -> Void)? { get set }
     var onDone: ((Bool) -> Void)? { get set }
+    /// One authenticated kind-9 message and its framed byte count.
+    var onText: ((String, Int) -> Void)? { get set }
     /// Accept/reject/complete. `complete` is how a sender — which never
     /// receives a DONE frame of its own — learns the batch landed.
     var onControl: ((RealtimeControl) -> Void)? { get set }
@@ -21,8 +23,16 @@ public protocol RealtimePeerConnection: AnyObject {
 
     func start()
     func send(sources: [PlaintextSource], metas: [FileMeta])
+    func accept()
+    func reject()
     /// Tell the peer the whole batch arrived and verified (CTRL_COMPLETE).
     func complete()
+    /// Latch local SAS confirmation before an initiator may decrypt text.
+    func confirmTextSAS()
+    func acceptText()
+    func rejectText()
+    func sendText(_ body: String, completion: @escaping (Error?) -> Void)
+    var textBufferedAmount: UInt64 { get }
     func close()
 }
 
@@ -63,6 +73,8 @@ public final class RealtimeSessionModel: ObservableObject {
     private var connection: RealtimePeerConnection?
     private var writer: ManifestWriter?
     private var pendingSend: (sources: [PlaintextSource], metas: [FileMeta])?
+    private var pendingReceive = false
+    private var sasConfirmed = false
     private var totalBytes = 0
     /// Operation identity: a callback from a session the user has left must not
     /// repaint a screen they have moved past.
@@ -156,9 +168,17 @@ public final class RealtimeSessionModel: ObservableObject {
 
     public func confirmSAS() {
         guard case .verifying = state else { return }
-        state = .transferring(done: 0, total: totalBytes)
+        sasConfirmed = true
         if let p = pendingSend {
+            state = .transferring(done: 0, total: totalBytes)
             connection?.send(sources: p.sources, metas: p.metas)
+        } else if pendingReceive {
+            state = .transferring(done: 0, total: totalBytes)
+            connection?.accept()
+        } else {
+            // The peer may not have staged its manifest yet. Keep progress on
+            // screen; `onManifest` will install the writer and send ACCEPT.
+            state = .transferring(done: 0, total: 0)
         }
     }
 
@@ -166,6 +186,7 @@ public final class RealtimeSessionModel: ObservableObject {
     /// phrase is what a man-in-the-middle looks like, and offering "try again"
     /// on the same connection would invite accepting it the second time.
     public func rejectSAS() {
+        connection?.reject()
         teardown()
         state = .idle
     }
@@ -180,17 +201,33 @@ public final class RealtimeSessionModel: ObservableObject {
 
     private func wire(_ c: RealtimePeerConnection, generation g: Int) {
         c.onSAS = { [weak self] sas in
-            Task { @MainActor in self?.apply(g) { $0.state = .verifying(sas: sas) } }
+            Task { @MainActor in
+                self?.apply(g) {
+                    $0.sasConfirmed = false
+                    $0.state = .verifying(sas: sas)
+                }
+            }
         }
         c.onManifest = { [weak self] metas in
             Task { @MainActor in
                 self?.apply(g) { m in
                     m.incoming = metas
                     m.totalBytes = metas.reduce(0) { $0 + $1.size }
-                    m.state = .transferring(done: 0, total: m.totalBytes)
-                    m.writer = try? ManifestWriter(
-                        directory: m.saveDirectory,
-                        files: metas.map { WritableFile(name: $0.name, size: $0.size) })
+                    do {
+                        m.writer = try ManifestWriter(
+                            directory: m.saveDirectory,
+                            files: metas.map { WritableFile(name: $0.name, size: $0.size) })
+                        m.pendingReceive = true
+                        if m.sasConfirmed {
+                            m.state = .transferring(done: 0, total: m.totalBytes)
+                            m.connection?.accept()
+                        }
+                    } catch {
+                        m.connection?.reject()
+                        m.writer?.discard()
+                        m.teardown()
+                        m.state = .failed(ErrorCopy.message(for: error))
+                    }
                 }
             }
         }
@@ -224,10 +261,17 @@ public final class RealtimeSessionModel: ObservableObject {
         c.onControl = { [weak self] control in
             Task { @MainActor in
                 self?.apply(g) { m in
-                    // The sending half's terminal state. `.accept`/`.reject` are
-                    // consumed inside the connection's send path.
-                    guard case .complete = control else { return }
-                    m.state = .completed([])
+                    switch control {
+                    case .complete:
+                        m.state = .completed([])
+                    case .reject:
+                        m.writer?.discard()
+                        m.state = .failed(
+                            ErrorCopy.message(for: RealtimeConnection.ConnectionError.rejected)
+                        )
+                    case .accept:
+                        break
+                    }
                 }
             }
         }
@@ -242,7 +286,7 @@ public final class RealtimeSessionModel: ObservableObject {
         c.onClose = { [weak self] in
             Task { @MainActor in
                 self?.apply(g) { m in
-                    if case .transferring = m.state {
+                    if m.isBusy {
                         m.writer?.discard()
                         m.state = .failed("The other device disconnected.")
                     }
@@ -263,6 +307,8 @@ public final class RealtimeSessionModel: ObservableObject {
         connection = nil
         writer = nil
         pendingSend = nil
+        pendingReceive = false
+        sasConfirmed = false
         incoming = []
     }
 }

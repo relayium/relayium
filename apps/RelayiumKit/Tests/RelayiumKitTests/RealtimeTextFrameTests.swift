@@ -121,6 +121,28 @@ final class RealtimeTextFrameTests: XCTestCase {
         XCTAssertEqual(try receiver.receive(frame: valid, key: key), "valid")
     }
 
+    func testReceiverRejectsOversizeBeforeOpenAndDoesNotAdvance() throws {
+        let oversizedPlaintext = [UInt8](repeating: 0x61, count: TEXT_MAX_BYTES + 1)
+        let oversized = realtimeFrame(
+            kind: RealtimeKind.text,
+            seq: 0,
+            payload: seal(key: key, seq: 0, plaintext: oversizedPlaintext)
+        )
+        let valid = realtimeFrame(
+            kind: RealtimeKind.text,
+            seq: 0,
+            payload: seal(key: key, seq: 0, plaintext: Array("valid".utf8))
+        )
+        let receiver = RealtimeTextReceiver()
+        XCTAssertThrowsError(try receiver.receive(frame: oversized, key: key)) {
+            XCTAssertEqual(
+                $0 as? RealtimeTextError,
+                .messageTooLarge(bytes: TEXT_MAX_BYTES + 1, limit: TEXT_MAX_BYTES)
+            )
+        }
+        XCTAssertEqual(try receiver.receive(frame: valid, key: key), "valid")
+    }
+
     func testInvalidKeyFailsSafelyWithoutConsumingSequence() throws {
         let sender = RealtimeTextSender()
         XCTAssertThrowsError(try sender.frame(body: "secret", key: [])) {
@@ -134,5 +156,23 @@ final class RealtimeTextFrameTests: XCTestCase {
             XCTAssertEqual($0 as? RealtimeTextError, .invalidKey)
         }
         XCTAssertEqual(try receiver.receive(frame: frame, key: key), "first")
+    }
+
+    func testTransportRefusalDoesNotConsumeSequence() throws {
+        let sender = RealtimeTextSender()
+        var refused: [UInt8] = []
+        let queued = try sender.enqueueFrame(body: "not queued", key: key) { frame in
+            refused = frame
+            return false
+        }
+        XCTAssertFalse(queued)
+        XCTAssertEqual(Array(refused[1...4]), [0, 0, 0, 0])
+
+        let next = try sender.frame(body: "still zero", key: key)
+        XCTAssertEqual(Array(next[1...4]), [0, 0, 0, 0])
+        XCTAssertEqual(
+            try RealtimeTextReceiver().receive(frame: next, key: key),
+            "still zero"
+        )
     }
 }

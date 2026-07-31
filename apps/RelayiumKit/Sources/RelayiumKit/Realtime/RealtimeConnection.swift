@@ -1,4 +1,5 @@
 import Foundation
+import os
 import WebRTC
 
 /// Runs `RTCInitializeSSL()` exactly once for the process (a Swift file-scope
@@ -48,9 +49,14 @@ public func webrtcAvailable() -> Bool {
 /// WebRTC-internal thread and never assumed to be the main thread — hop to your
 /// own queue in the callback if you touch UI.
 public final class RealtimeConnection: NSObject {
+    private static let iceLog = Logger(subsystem: "com.relayium", category: "ice")
+    private static let textLog = Logger(subsystem: "com.relayium", category: "text")
     public enum ConnectionError: Error, Equatable {
         /// The peer declined the offer because it is already mid-transfer.
         case peerBusy
+        /// A text connection reached SDP without the peer confirming exact
+        /// capability text/1. Never send kind 9 speculatively to an old peer.
+        case unsupportedPeer
         /// The underlying `RTCPeerConnection` reached `.failed`.
         case peerConnectionFailed
         /// An operation (e.g. `send`) was attempted before the handshake/channel
@@ -68,6 +74,9 @@ public final class RealtimeConnection: NSObject {
         /// The receiver never accepted the batch, or stalled mid-transfer
         /// without acking, for longer than the wait deadline.
         case timedOut
+        case textSendBufferFull
+        case textSendFailed
+        case textReceiveBufferFull
     }
 
     // MARK: Public callbacks
@@ -87,6 +96,8 @@ public final class RealtimeConnection: NSObject {
     public var onProgress: ((Int) -> Void)?
     /// A DONE frame arrived; the payload is whether its integrity hash matched.
     public var onDone: ((Bool) -> Void)?
+    /// One authenticated text body and its framed byte count.
+    public var onText: ((String, Int) -> Void)?
     /// A raw (unencrypted) control byte — accept/reject/complete — arrived.
     /// Interpreting it is left to the caller; this class only transports it.
     public var onControl: ((RealtimeControl) -> Void)?
@@ -99,6 +110,8 @@ public final class RealtimeConnection: NSObject {
     private let signaling: SignalingClient
     private let peerId: String
     private let role: Role
+    private let generation: RealtimeGeneration
+    private let localCapabilities: [String]
     private let handshake: HandshakeState
 
     /// Every delegate callback (WebRTC's own threads) and every signal handler
@@ -119,6 +132,8 @@ public final class RealtimeConnection: NSObject {
     private var keys: SessionKeys?
     private var peerKeyDelivered = false
     private var receiver: RealtimeReceiver?
+    private var textSender: RealtimeTextSender?
+    private var textReceiver: RealtimeTextReceiver?
     private var sendWindow = SendWindow()
     private var ackPacer = AckPacer()
     private var written = 0
@@ -133,11 +148,39 @@ public final class RealtimeConnection: NSObject {
     /// `web/src/lib/transfer-session.svelte.ts`'s `accepted` promise).
     private var accepted = false
     private var rejected = false
+    private var pendingControls: [RealtimeControl] = []
+    /// Initiators may learn peer consent before their user finishes comparing
+    /// the SAS. Hold ciphertext only; local confirmation drains it in order.
+    private var pendingTextFrames: [Data] = []
+    private var pendingTextBytes = 0
+    private var textSASConfirmedLocally = false
+    /// Set before responder ACCEPT is sent, so inbound decryption is enabled
+    /// before the initiator can react to that control frame.
+    private var textAcceptedLocally = false
 
-    public init(signaling: SignalingClient, peerId: String, role: Role, iceServers: [RTCIceServer], iceTransportPolicy: RTCIceTransportPolicy = .all) {
+    public static let textSendBufferMaximum: UInt64 = 1 << 20
+    /// Match the session's token-bucket burst: a peer that sends a 21st frame
+    /// before verification is not allowed to turn deferred delivery into a
+    /// post-confirmation rate-limit failure.
+    private static let pendingTextFrameMaximum = 20
+    private static let pendingTextByteMaximum = 4 << 20
+
+    public var textBufferedAmount: UInt64 {
+        queue.sync { channel?.bufferedAmount ?? 0 }
+    }
+
+    public init(signaling: SignalingClient,
+                peerId: String,
+                role: Role,
+                iceServers: [RTCIceServer],
+                iceTransportPolicy: RTCIceTransportPolicy = .all,
+                generation: RealtimeGeneration = .file,
+                localCapabilities: [String] = []) {
         self.signaling = signaling
         self.peerId = peerId
         self.role = role
+        self.generation = generation
+        self.localCapabilities = localCapabilities
         self.handshake = HandshakeState(role: role)
         ensureRTCSSL()
         self.factory = RTCPeerConnectionFactory()
@@ -155,7 +198,8 @@ public final class RealtimeConnection: NSObject {
         self.pc = factory.peerConnection(with: config, constraints: constraints, delegate: self)
 
         signaling.onSignal = { [weak self] from, data in
-            guard let self, from == self.peerId else { return }
+            guard let self, from == self.peerId,
+                  signalGeneration(data) == self.generation else { return }
             self.queue.async { self.handleSignal(data) }
         }
     }
@@ -199,7 +243,13 @@ public final class RealtimeConnection: NSObject {
                         }
                         self.signaling.sendSignal(
                             to: self.peerId,
-                            data: sdpSignal(kind: "offer", sdp: sdp.sdp, commit: self.handshake.selfCommitBase64)
+                            data: sdpSignal(
+                                kind: "offer",
+                                sdp: sdp.sdp,
+                                commit: self.handshake.selfCommitBase64,
+                                generation: self.generation,
+                                caps: self.localCapabilities
+                            )
                         )
                     }
                 }
@@ -227,7 +277,13 @@ public final class RealtimeConnection: NSObject {
                         }
                         self.signaling.sendSignal(
                             to: self.peerId,
-                            data: sdpSignal(kind: "answer", sdp: sdp.sdp, commit: self.handshake.selfCommitBase64)
+                            data: sdpSignal(
+                                kind: "answer",
+                                sdp: sdp.sdp,
+                                commit: self.handshake.selfCommitBase64,
+                                generation: self.generation,
+                                caps: self.localCapabilities
+                            )
                         )
                     }
                 }
@@ -248,6 +304,12 @@ public final class RealtimeConnection: NSObject {
         }
 
         if let (type, sdp) = parseSDP(data) {
+            if generation == .text, !peerKeyDelivered,
+               !peerCaps(from: data).contains("text/1") {
+                onError?(ConnectionError.unsupportedPeer)
+                closeLocked()
+                return
+            }
             let desc = RTCSessionDescription(type: type == "offer" ? .offer : .answer, sdp: sdp)
             pc.setRemoteDescription(desc) { [weak self] error in
                 guard let self else { return }
@@ -261,13 +323,22 @@ public final class RealtimeConnection: NSObject {
                         self.createAndSendAnswer()
                     } else if type == "answer" {
                         // Initiator now holds the responder's commit — safe to reveal.
-                        self.signaling.sendSignal(to: self.peerId, data: revealField(self.handshake.reveal()))
+                        self.signaling.sendSignal(
+                            to: self.peerId,
+                            data: taggedSignal(
+                                revealField(self.handshake.reveal()),
+                                generation: self.generation
+                            )
+                        )
                     }
                 }
             }
         }
 
         if let ice = parseICE(data) {
+            Self.iceLog.notice(
+                "remote candidate generation=\(String(describing: self.generation), privacy: .public) relay=\(ice.candidate.contains(" typ relay"), privacy: .public)"
+            )
             let candidate = RTCIceCandidate(sdp: ice.candidate, sdpMLineIndex: ice.sdpMLineIndex ?? 0, sdpMid: ice.sdpMid)
             pc.add(candidate) { _ in
                 // A candidate arriving before remoteDescription is set, or after
@@ -279,13 +350,24 @@ public final class RealtimeConnection: NSObject {
             do {
                 let result = try handshake.verifyPeerReveal(reveal)
                 keys = result.keys
-                receiver = RealtimeReceiver(sessionKey: result.keys.recv)
+                if generation == .text {
+                    textSender = RealtimeTextSender()
+                    textReceiver = RealtimeTextReceiver()
+                } else {
+                    receiver = RealtimeReceiver(sessionKey: result.keys.recv)
+                }
                 peerKeyDelivered = true
                 onSAS?(result.sas)
                 // Responder learns the peer key from the reveal and only now
                 // discloses its own; the initiator already revealed on the answer.
                 if role == .responder {
-                    signaling.sendSignal(to: peerId, data: revealField(handshake.reveal()))
+                    signaling.sendSignal(
+                        to: peerId,
+                        data: taggedSignal(
+                            revealField(handshake.reveal()),
+                            generation: generation
+                        )
+                    )
                 }
                 maybeSignalOpen()
             } catch {
@@ -306,6 +388,12 @@ public final class RealtimeConnection: NSObject {
     private func maybeSignalOpen() {
         guard !openedSignaled, keys != nil, let channel, channel.readyState == .open else { return }
         openedSignaled = true
+        for control in pendingControls {
+            _ = channel.sendData(
+                RTCDataBuffer(data: Data([control.rawValue]), isBinary: true)
+            )
+        }
+        pendingControls = []
         onOpen?()
     }
 
@@ -320,11 +408,28 @@ public final class RealtimeConnection: NSObject {
         }
         if let control = parseControl(bytes) {
             switch control {
-            case .accept: accepted = true
+            case .accept:
+                accepted = true
+                drainPendingTextFramesIfReady()
             case .reject: rejected = true
             case .complete: break
             }
             onControl?(control)
+            return
+        }
+        if generation == .text {
+            if role == .initiator, accepted, !textSASConfirmedLocally {
+                guard pendingTextFrames.count < Self.pendingTextFrameMaximum,
+                      pendingTextBytes + data.count <= Self.pendingTextByteMaximum else {
+                    onError?(ConnectionError.textReceiveBufferFull)
+                    closeLocked()
+                    return
+                }
+                pendingTextFrames.append(data)
+                pendingTextBytes += data.count
+            } else {
+                processTextFrame(bytes)
+            }
             return
         }
         guard let receiver else { return } // handshake not complete yet — drop
@@ -352,6 +457,36 @@ public final class RealtimeConnection: NSObject {
         }
     }
 
+    private func processTextFrame(_ bytes: [UInt8]) {
+        // Before consent or local SAS confirmation, inspect no plaintext.
+        let mayReceive = (role == .responder && textAcceptedLocally)
+            || (role == .initiator && accepted && textSASConfirmedLocally)
+        guard mayReceive, let keys, let textReceiver else { return }
+        do {
+            let body = try textReceiver.receive(
+                frame: bytes,
+                key: deriveTextKey(sessionKey: keys.recv)
+            )
+            onText?(body, bytes.count)
+        } catch {
+            Self.textLog.error(
+                "receive failed error=\(String(describing: error), privacy: .public) frameBytes=\(bytes.count, privacy: .private)"
+            )
+            onError?(error)
+            closeLocked()
+        }
+    }
+
+    private func drainPendingTextFramesIfReady() {
+        guard role == .initiator, accepted, textSASConfirmedLocally else { return }
+        let frames = pendingTextFrames
+        pendingTextFrames = []
+        pendingTextBytes = 0
+        for frame in frames where !closed {
+            processTextFrame([UInt8](frame))
+        }
+    }
+
     // MARK: - Receiver control replies
 
     /// The receiver accepts the incoming batch: sends CTRL_ACCEPT so the sender
@@ -363,11 +498,45 @@ public final class RealtimeConnection: NSObject {
     /// The receiver signals it received and verified the whole batch (CTRL_COMPLETE).
     public func complete() { sendControl(.complete) }
 
+    public func confirmTextSAS() {
+        queue.async { [weak self] in
+            guard let self, self.generation == .text, self.role == .initiator,
+                  !self.closed else { return }
+            self.textSASConfirmedLocally = true
+            self.drainPendingTextFramesIfReady()
+        }
+    }
+
+    public func acceptText() {
+        queue.async { [weak self] in
+            guard let self, self.generation == .text, self.role == .responder,
+                  !self.closed else { return }
+            self.textAcceptedLocally = true
+            self.sendControlLocked(.accept)
+        }
+    }
+
+    public func rejectText() {
+        queue.async { [weak self] in
+            guard let self, self.generation == .text, !self.closed else { return }
+            self.sendControlLocked(.reject)
+            self.closeLocked()
+        }
+    }
+
     private func sendControl(_ c: RealtimeControl) {
         queue.async { [weak self] in
-            guard let self, let ch = self.channel, !self.closed else { return }
-            _ = ch.sendData(RTCDataBuffer(data: Data([c.rawValue]), isBinary: true))
+            self?.sendControlLocked(c)
         }
+    }
+
+    private func sendControlLocked(_ c: RealtimeControl) {
+        guard let ch = channel, !closed else { return }
+        guard ch.readyState == .open else {
+            if !pendingControls.contains(c) { pendingControls.append(c) }
+            return
+        }
+        _ = ch.sendData(RTCDataBuffer(data: Data([c.rawValue]), isBinary: true))
     }
 
     // MARK: - Send
@@ -394,6 +563,48 @@ public final class RealtimeConnection: NSObject {
             return
         }
         sendQueue.async { [weak self] in self?.streamOnSendQueue(sources: sources, metas: metas) }
+    }
+
+    /// Queue ownership serializes the sender's nonce/order state even when the
+    /// UI submits twice in quick succession.
+    public func sendText(_ body: String, completion: @escaping (Error?) -> Void) {
+        queue.async { [weak self] in
+            guard let self, self.generation == .text, !self.closed,
+                  let channel = self.channel, channel.readyState == .open,
+                  let keys = self.keys, let sender = self.textSender else {
+                completion(ConnectionError.notReady)
+                return
+            }
+            let maySend = (self.role == .initiator
+                && self.accepted
+                && self.textSASConfirmedLocally)
+                || (self.role == .responder && self.textAcceptedLocally)
+            guard maySend else {
+                completion(ConnectionError.notReady)
+                return
+            }
+            guard channel.bufferedAmount <= Self.textSendBufferMaximum else {
+                completion(ConnectionError.textSendBufferFull)
+                return
+            }
+            do {
+                let sent = try sender.enqueueFrame(
+                    body: body,
+                    key: deriveTextKey(sessionKey: keys.send)
+                ) { frame in
+                    channel.sendData(
+                        RTCDataBuffer(data: Data(frame), isBinary: true)
+                    )
+                }
+                guard sent else {
+                    completion(ConnectionError.textSendFailed)
+                    return
+                }
+                completion(nil)
+            } catch {
+                completion(error)
+            }
+        }
     }
 
     /// The only send path. A whole-transfer twin taking `[(FileMeta, [UInt8])]`
@@ -548,16 +759,34 @@ extension RealtimeConnection: RTCPeerConnectionDelegate {
 
     public func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
 
-    public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {}
+    public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {
+        Self.iceLog.notice(
+            "connection state generation=\(String(describing: self.generation), privacy: .public) state=\(String(describing: newState), privacy: .public)"
+        )
+    }
 
-    public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {}
+    public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {
+        Self.iceLog.notice(
+            "gathering state generation=\(String(describing: self.generation), privacy: .public) state=\(String(describing: newState), privacy: .public)"
+        )
+    }
 
     public func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
+        Self.iceLog.notice(
+            "local candidate generation=\(String(describing: self.generation), privacy: .public) relay=\(candidate.sdp.contains(" typ relay"), privacy: .public)"
+        )
         queue.async { [weak self] in
             guard let self, !self.closed else { return }
             self.signaling.sendSignal(
                 to: self.peerId,
-                data: iceSignal(candidate.sdp, sdpMid: candidate.sdpMid, sdpMLineIndex: candidate.sdpMLineIndex)
+                data: taggedSignal(
+                    iceSignal(
+                        candidate.sdp,
+                        sdpMid: candidate.sdpMid,
+                        sdpMLineIndex: candidate.sdpMLineIndex
+                    ),
+                    generation: self.generation
+                )
             )
         }
     }

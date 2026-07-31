@@ -72,6 +72,48 @@ public enum ErrorCopy {
                 return "“\(name)” changed while it was being sent, so the transfer was stopped. Try again."
             }
         }
+        if let e = error as? RealtimeConnection.ConnectionError {
+            switch e {
+            case .peerBusy:
+                return "The other device is already in a transfer. Wait for it to finish, then try again."
+            case .unsupportedPeer:
+                return "The other device does not support encrypted text sessions yet. It may need updating."
+            case .peerConnectionFailed, .notReady:
+                return "The private connection could not be opened. Check both devices are online, then try again."
+            case .alreadySending:
+                return "This connection is already sending. Start a new session for another transfer."
+            case .rejected:
+                return "The other device declined this transfer."
+            case .timedOut:
+                return "The other device stopped responding, so the session ended."
+            case .textSendBufferFull:
+                return "The connection is catching up. Wait a moment, then send the message again."
+            case .textSendFailed:
+                return "The encrypted message could not be sent. Try it again."
+            case .textReceiveBufferFull:
+                return "The other device sent too much before verification finished, so the session was closed."
+            }
+        }
+        if let e = error as? RealtimeConnectionFactory.FactoryError {
+            switch e {
+            case .noPeerAppeared:
+                return "Nobody joined before the pairing code expired. Create a new code and try again."
+            case .unsupportedPeer:
+                return "The other device does not support encrypted text sessions yet. It may need updating."
+            }
+        }
+        if let e = error as? RealtimeTextError {
+            switch e {
+            case .authenticationFailed:
+                return "The encrypted message failed its integrity check, so it was discarded and the session was closed."
+            case .outOfOrder:
+                return "The connection dropped or reordered a message, so the session was closed without showing it."
+            case .messageTooLarge:
+                return "The other device sent a message larger than this version supports, so the session was closed."
+            case .invalidKey, .malformedFrame, .wrongKind, .sequenceExhausted, .invalidUTF8:
+                return "The other device sent an invalid encrypted message, so it was discarded and the session was closed."
+            }
+        }
         if let e = error as? DeviceAuthOutcomeError {
             switch e {
             case .denied:

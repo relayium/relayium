@@ -29,6 +29,21 @@ public final class RealtimeTextSender {
     /// Validation happens before the sequence is consumed, so a refused
     /// oversized message does not create an unrecoverable gap.
     public func frame(body: String, key: [UInt8]) throws -> [UInt8] {
+        var result: [UInt8] = []
+        _ = try enqueueFrame(body: body, key: key) { frame in
+            result = frame
+            return true
+        }
+        return result
+    }
+
+    /// Builds and offers one frame to the transport, consuming its nonce only
+    /// if the transport accepted the bytes. `RTCDataChannel.sendData` can refuse
+    /// a frame synchronously; advancing in that case would make the next
+    /// successfully queued frame an unrecoverable sequence gap at the peer.
+    func enqueueFrame(body: String,
+                      key: [UInt8],
+                      enqueue: ([UInt8]) -> Bool) throws -> Bool {
         guard key.count == 32 else { throw RealtimeTextError.invalidKey }
         let plaintext = Array(body.utf8)
         guard plaintext.count <= TEXT_MAX_BYTES else {
@@ -40,8 +55,10 @@ public final class RealtimeTextSender {
 
         let sequence = UInt32(nextSequence)
         let ciphertext = seal(key: key, seq: nextSequence, plaintext: plaintext)
+        let frame = realtimeFrame(kind: RealtimeKind.text, seq: sequence, payload: ciphertext)
+        guard enqueue(frame) else { return false }
         nextSequence += 1
-        return realtimeFrame(kind: RealtimeKind.text, seq: sequence, payload: ciphertext)
+        return true
     }
 }
 
@@ -60,6 +77,12 @@ public final class RealtimeTextReceiver {
         guard key.count == 32 else { throw RealtimeTextError.invalidKey }
         guard frame.count >= 5 + 16 else { throw RealtimeTextError.malformedFrame }
         guard frame[0] == RealtimeKind.text else { throw RealtimeTextError.wrongKind }
+        guard frame.count <= TEXT_MAX_BYTES + 5 + 16 else {
+            throw RealtimeTextError.messageTooLarge(
+                bytes: frame.count - (5 + 16),
+                limit: TEXT_MAX_BYTES
+            )
+        }
 
         let actual = (UInt32(frame[1]) << 24)
             | (UInt32(frame[2]) << 16)

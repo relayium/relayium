@@ -17,6 +17,69 @@ final class RealtimeSignalTests: XCTestCase {
     func testBusy() { XCTAssertTrue(parseBusy(busySignal())); XCTAssertFalse(parseBusy(sdpSignal(kind:"offer",sdp:"x",commit:nil))) }
 }
 
+// ── signalling generations ───────────────────────────────────────────────────
+extension RealtimeSignalTests {
+    func testGenerationDefaultsToFileAndTagsRoundTrip() {
+        XCTAssertEqual(signalGeneration(.object([:])), .file)
+        XCTAssertEqual(signalGeneration(.null), .file)
+        XCTAssertEqual(signalGeneration(taggedSignal(.object(["ice": .object([:])]), generation: .file)), .file)
+        XCTAssertEqual(signalGeneration(taggedSignal(.object(["ice": .object([:])]), generation: .resume)), .resume)
+        XCTAssertEqual(signalGeneration(taggedSignal(.object(["ice": .object([:])]), generation: .text)), .text)
+    }
+
+    func testResumeWinsOverTextOnAmbiguousUntrustedSignal() {
+        XCTAssertEqual(
+            signalGeneration(.object(["resume": .bool(true), "text": .bool(true)])),
+            .resume
+        )
+        XCTAssertEqual(signalGeneration(.object(["resume": .bool(false), "text": .bool(true)])), .text)
+        XCTAssertEqual(signalGeneration(.object(["text": .string("true")])), .file)
+    }
+
+    func testTextSDPCarriesCommitCapabilityAndGenerationTogether() {
+        let signal = sdpSignal(
+            kind: "offer",
+            sdp: "v=0",
+            commit: "Yw==",
+            generation: .text,
+            caps: ["text/1"]
+        )
+        XCTAssertEqual(signalGeneration(signal), .text)
+        XCTAssertEqual(peerCaps(from: signal), ["text/1"])
+        XCTAssertEqual(peerCommit(from: signal), "Yw==")
+        XCTAssertEqual(parseSDP(signal)?.type, "offer")
+        XCTAssertEqual(parseSDP(signal)?.sdp, "v=0")
+    }
+
+    func testLegacyFileSDPShapeIsUnchangedWhenNoCapsRequested() {
+        XCTAssertEqual(
+            sdpSignal(kind: "offer", sdp: "v=0", commit: "Yw=="),
+            .object([
+                "sdp": .object(["type": .string("offer"), "sdp": .string("v=0")]),
+                "commit": .string("Yw=="),
+            ])
+        )
+    }
+
+    func testBusyAndRevealCanCarryTextGeneration() {
+        let busy = taggedSignal(busySignal(), generation: .text)
+        XCTAssertTrue(parseBusy(busy))
+        XCTAssertEqual(signalGeneration(busy), .text)
+
+        let reveal = taggedSignal(.object(["reveal": .string("opaque")]), generation: .text)
+        XCTAssertEqual(signalGeneration(reveal), .text)
+        guard case let .object(fields) = reveal else { return XCTFail("not an object") }
+        XCTAssertEqual(fields["reveal"], .string("opaque"))
+    }
+
+    func testAddingNoCapsPreservesInputAndMalformedCapsNeverGrantSupport() {
+        let original = taggedSignal(busySignal(), generation: .text)
+        XCTAssertEqual(addingCaps([], to: original), original)
+        XCTAssertEqual(peerCaps(from: .object(["caps": .array([.string("text/01"), .number(1)])])), ["text/01"])
+        XCTAssertFalse(peerCaps(from: .object(["caps": .array([.string("text/01")])])).contains("text/1"))
+    }
+}
+
 // ── capability piggyback ─────────────────────────────────────────────────────
 extension RealtimeSignalTests {
     func testCapsFieldRoundTrips() {

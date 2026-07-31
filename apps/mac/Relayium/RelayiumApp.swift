@@ -72,6 +72,7 @@ struct RelayiumApp: App {
     @StateObject private var uploadModel = AppEnvironment.makeUploadModel()
     @StateObject private var downloadModel = AppEnvironment.makeDownloadModel()
     @StateObject private var realtimeModel = AppEnvironment.makeRealtimeModel()
+    @StateObject private var realtimeTextModel = AppEnvironment.makeRealtimeTextModel()
 
     var body: some Scene {
         // Identified so the menu bar can reopen it: closing the last window does
@@ -84,17 +85,20 @@ struct RelayiumApp: App {
                 .environmentObject(uploadModel)
                 .environmentObject(downloadModel)
                 .environmentObject(realtimeModel)
+                .environmentObject(realtimeTextModel)
                 .task { await session.restore() }
                 .task {
                     // Wired here rather than at init: the delegate is created by
                     // the adaptor before the StateObjects exist.
                     quitGuard.isTransferRunning = {
-                        uploadModel.isBusy || downloadModel.isBusy || realtimeModel.isBusy
+                        uploadModel.isBusy || downloadModel.isBusy
+                            || realtimeModel.isBusy || realtimeTextModel.isBusy
                     }
                     quitGuard.cancelTransfers = {
                         uploadModel.cancel()
                         downloadModel.cancel()
                         realtimeModel.cancel()
+                        realtimeTextModel.end()
                     }
                 }
                 .onOpenURL { deepLinks.open($0) }

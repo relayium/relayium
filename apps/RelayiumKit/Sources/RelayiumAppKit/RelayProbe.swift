@@ -22,7 +22,7 @@ public enum RelayProbe {
     /// Streaming rather than returning a map is the whole point. Draining the
     /// group first meant the caller saw nothing until the SLOWEST relay
     /// finished — so a single silent relay pinned the map at the full 4 s
-    /// timeout, while `relayChoiceDeadline` upstream is 800 ms. One
+    /// timeout, while the old `relayChoiceDeadline` upstream was 800 ms. One
     /// unreachable relay in a pool of six therefore cost every transfer its
     /// entire relay-choice budget and produced nothing for it. Publishing per
     /// probe means a slow relay costs only its own absence.

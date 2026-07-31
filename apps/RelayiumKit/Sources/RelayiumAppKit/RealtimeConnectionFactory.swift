@@ -14,6 +14,28 @@ public enum RealtimeConnectionFactory {
     public enum FactoryError: Error, Equatable {
         /// Nobody joined the code before the wait ran out.
         case noPeerAppeared
+        /// The peer did not advertise exact capability text/1. A text offer is
+        /// never sent speculatively because an old peer reads it as a file offer.
+        case unsupportedPeer
+    }
+
+    public enum Mode: Equatable {
+        case file
+        case text
+
+        var generation: RealtimeGeneration {
+            switch self {
+            case .file: return .file
+            case .text: return .text
+            }
+        }
+
+        var localCapabilities: [String] {
+            switch self {
+            case .file: return []
+            case .text: return ["text/1"]
+            }
+        }
     }
 
     /// `wss://…` for the same origin the rest of the app talks to.
@@ -26,15 +48,16 @@ public enum RealtimeConnectionFactory {
     /// How long a connection waits for the two peers' relay measurements to
     /// meet before giving up and using the advertised servers.
     ///
-    /// 800 ms is a guess. Nobody has measured this fleet's round trips from a
-    /// real client, and this constant is the first thing to revisit once
-    /// someone has — see the design doc's note.
-    public static let relayChoiceDeadline: TimeInterval = 0.8
+    /// Live macOS↔browser measurements take about 4.1–4.3 seconds when part of
+    /// the six-relay pool times out. The browser publishes only after that
+    /// whole measurement completes, so five seconds covers the observed cycle
+    /// without falling back to a random, potentially unreachable legacy TURN.
+    public static let relayChoiceDeadline: TimeInterval = 5
 
     /// The relay choice is the only thing this package logs, and it is here
     /// because the design's acceptance list asks for it by name: "the chosen
-    /// relay id, and both RTT maps, are logged once per session so the 800 ms
-    /// constant can be replaced with a measured value".
+    /// relay id, and both RTT maps, are logged once per session so the relay
+    /// deadline can stay grounded in measured values".
     ///
     /// It is also the only way anyone finds out the feature is not working.
     /// Every failure path falls back silently and on purpose, so a pool that
@@ -60,6 +83,18 @@ public enum RealtimeConnectionFactory {
                                .joined(separator: ",")
     }
 
+    /// Cross-network code rooms must not spend the ICE timeout trying direct
+    /// candidates before using the TURN credentials they were issued. This is
+    /// the native equivalent of the web client's `hasTurnServer` check.
+    private static func hasTURN(_ servers: [ICEServerConfig]) -> Bool {
+        servers.contains { server in
+            server.urls.contains { url in
+                let scheme = url.lowercased()
+                return scheme.hasPrefix("turn:") || scheme.hasPrefix("turns:")
+            }
+        }
+    }
+
     /// The last step of `make`: turn a settled relay choice into a live
     /// connection. Injected, because everything *above* it — the ordering, the
     /// fallback, the buffer-and-replay — is the part that has repeatedly been
@@ -73,13 +108,18 @@ public enum RealtimeConnectionFactory {
                                    _ peerId: String,
                                    _ role: Role,
                                    _ iceServers: [ICEServerConfig],
-                                   _ relayOnly: Bool) -> RealtimePeerConnection
+                                   _ relayOnly: Bool,
+                                   _ generation: RealtimeGeneration,
+                                   _ localCapabilities: [String]) -> RealtimePeerConnection
 
     /// The real one. The only place WebRTC's types enter this file's flow.
-    static let liveConnection: ConnectionBuilder = { signaling, peerId, role, servers, relayOnly in
+    static let liveConnection: ConnectionBuilder = {
+        signaling, peerId, role, servers, relayOnly, generation, localCapabilities in
         RealtimeConnection(signaling: signaling, peerId: peerId, role: role,
                            iceServers: servers.map(rtcServer),
-                           iceTransportPolicy: relayOnly ? .relay : .all)
+                           iceTransportPolicy: relayOnly ? .relay : .all,
+                           generation: generation,
+                           localCapabilities: localCapabilities)
     }
 
     /// Unchanged for callers: `AppEnvironment` still calls exactly this.
@@ -89,6 +129,7 @@ public enum RealtimeConnectionFactory {
                             config: ICEConfig,
                             baseURL: URL,
                             deviceName: String,
+                            mode: Mode = .file,
                             peerTimeout: TimeInterval = 120) async throws -> RealtimePeerConnection {
         try await make(role: role,
                        config: config,
@@ -99,6 +140,7 @@ public enum RealtimeConnectionFactory {
                        measure: { pool, publish in
                            await RelayProbe.measureAll(pool, publish: publish)
                        },
+                       mode: mode,
                        build: liveConnection)
     }
 
@@ -114,6 +156,7 @@ public enum RealtimeConnectionFactory {
                      peerTimeout: TimeInterval,
                      choiceDeadline: TimeInterval,
                      measure: @escaping RelayNegotiator.Measure,
+                     mode: Mode = .file,
                      build: ConnectionBuilder) async throws -> RealtimePeerConnection {
         // Start measuring immediately: the sender is about to spend real time
         // waiting for a peer, and that window is free.
@@ -123,8 +166,8 @@ public enum RealtimeConnectionFactory {
         // can't decode — i.e. every real WebRTC signal. This handler is the
         // only thing installed until RealtimeConnection exists below, and the
         // window is the whole span from here to there: the firstPeer wait plus
-        // the relay-choice wait, so up to peerTimeout (120 s) + 800 ms, not
-        // the 800 ms alone. Both halves are real. A peer can join the room and
+        // the relay-choice wait, so up to peerTimeout (120 s) + 5 s, not
+        // the 5 s alone. Both halves are real. A peer can join the room and
         // send its offer before its own roster callback has resolved ours, and
         // a peer whose relay wait resolves instantly — the web client never
         // blocks on the choice, and neither does a native peer with an empty
@@ -132,13 +175,54 @@ public enum RealtimeConnectionFactory {
         // in arrival order, and replayed into the real handler once it exists;
         // nothing is decided or discarded at this layer.
         let pending = PendingSignals()
+        let capabilities = PeerCapabilities()
         signaling.onSignal = { from, data in
             negotiator.handleSignal(from: from, data: data)
+            capabilities.record(peerId: from, signal: data)
             pending.append((from, data))
         }
         negotiator.start()
 
-        let peerId = try await firstPeer(on: signaling, timeout: peerTimeout)
+        let peerId = try await firstPeer(
+            on: signaling,
+            timeout: peerTimeout,
+            onPeer: { peerId in
+                guard !mode.localCapabilities.isEmpty else { return }
+                signaling.sendSignal(to: peerId, data: capsField(mode.localCapabilities))
+            }
+        )
+        if mode == .text {
+            // The roster callback and the far side's capability subscription
+            // can cross during room join. Repeat a small, bounded number of
+            // one-way hellos; never reply to an inbound hello, so this cannot
+            // form a ping-pong loop. A final hello after observing support
+            // confirms our side to a peer whose first subscription was late.
+            let capabilityRetry = Task {
+                for delay: UInt64 in [250_000_000, 1_000_000_000] {
+                    try? await Task.sleep(nanoseconds: delay)
+                    guard !Task.isCancelled else { return }
+                    signaling.sendSignal(
+                        to: peerId,
+                        data: capsField(mode.localCapabilities)
+                    )
+                }
+            }
+            let supported = await waitForCapability(
+                "text/1",
+                peerId: peerId,
+                in: capabilities,
+                timeout: min(peerTimeout, 5)
+            )
+            capabilityRetry.cancel()
+            guard supported else {
+                signaling.close()
+                throw FactoryError.unsupportedPeer
+            }
+            signaling.sendSignal(
+                to: peerId,
+                data: capsField(mode.localCapabilities)
+            )
+        }
         negotiator.peerJoined(peerId)
 
         let waitBegan = Date()
@@ -154,7 +238,7 @@ public enum RealtimeConnectionFactory {
         // measuring.
         //
         // `measured` is "unfinished" rather than a number when our own
-        // measurement had not completed before the wait ended: logging 800ms
+        // measurement had not completed before the wait ended: logging 5s
         // (or whatever the deadline was) as if it were our probe time would
         // read as "measurement takes about this long", when the true story is
         // "a straggler relay was still outstanding and the deadline cut it
@@ -176,9 +260,10 @@ public enum RealtimeConnectionFactory {
                    mine=[\(describe(maps.mine), privacy: .public)] \
                    theirs=[\(describe(maps.theirs), privacy: .public)]
                    """)
-        // Relay-only only when a relay was actually chosen. Falling back to the
-        // advertised set means possibly no relay at all (a LAN room), and
-        // forcing .relay there would leave ICE with nothing to gather.
+        // A chosen pool entry is always TURN. The advertised fallback can be
+        // either TURN (a cross-network code room) or STUN-only (LAN), so match
+        // the web client: force relay-only whenever the actual server set
+        // contains TURN, but leave STUN-only fallback on `.all`.
         //
         // Constructed last on purpose: this call takes over signaling.onSignal,
         // which the negotiator needed until now. Hoisting it above the wait
@@ -186,9 +271,12 @@ public enum RealtimeConnectionFactory {
         // which is why `build` is a seam, and why
         // RealtimeConnectionFactoryTests pins this ordering by asserting on
         // which servers arrive here.
+        let selectedServers = chosen?.iceServers ?? config.iceServers
         let connection = build(signaling, peerId, role,
-                               chosen?.iceServers ?? config.iceServers,
-                               chosen != nil)
+                               selectedServers,
+                               chosen != nil || hasTURN(selectedServers),
+                               mode.generation,
+                               mode.localCapabilities)
         // `signaling.onSignal` is now RealtimeConnection's own handler (wired
         // at the end of its init) — it filters on peerId and hops to its own
         // queue, so replaying a stray relay-RTT message here is a harmless
@@ -217,7 +305,8 @@ public enum RealtimeConnectionFactory {
     /// shape as `RelayNegotiator.waitForChoice` and `RelayProbe`'s
     /// `FirstRelayCandidate`, which carry this fix for the same reason.
     static func firstPeer(on signaling: SignalingClient,
-                          timeout: TimeInterval) async throws -> String {
+                          timeout: TimeInterval,
+                          onPeer: @escaping (String) -> Void = { _ in }) async throws -> String {
         let box = ResumeOnce()
         return try await withCheckedThrowingContinuation { cont in
             signaling.onPeers = { peers in
@@ -234,7 +323,10 @@ public enum RealtimeConnectionFactory {
                 // which is the only roster we actually want.
                 guard let mine = signaling.selfId,
                       let other = peers.first(where: { $0.id != mine }) else { return }
-                box.resume { cont.resume(returning: other.id) }
+                box.resume {
+                    onPeer(other.id)
+                    cont.resume(returning: other.id)
+                }
             }
             signaling.onClose = {
                 box.resume { cont.resume(throwing: FactoryError.noPeerAppeared) }
@@ -244,6 +336,22 @@ public enum RealtimeConnectionFactory {
                 box.resume { cont.resume(throwing: FactoryError.noPeerAppeared) }
             }
         }
+    }
+
+    /// Waits for an exact roster-level capability without blocking the
+    /// signalling callback queue. The bounded polling interval is deliberately
+    /// tiny compared with WebRTC setup and exists only around a lock-protected
+    /// in-memory hint; it sends no traffic.
+    static func waitForCapability(_ capability: String,
+                                  peerId: String,
+                                  in capabilities: PeerCapabilities,
+                                  timeout: TimeInterval) async -> Bool {
+        let deadline = Date().addingTimeInterval(max(0, timeout))
+        while Date() < deadline {
+            if capabilities.supports(capability, peerId: peerId) { return true }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        return capabilities.supports(capability, peerId: peerId)
     }
 }
 
@@ -299,6 +407,34 @@ final class PendingSignals: @unchecked Sendable {
         let out = items
         items = []
         return out
+    }
+}
+
+/// Exact capability hints observed during the factory's pending-signal window.
+/// Hints are never authentication input; they only prevent sending an
+/// unsupported wire kind to an older peer.
+final class PeerCapabilities: @unchecked Sendable {
+    private let lock = NSLock()
+    private var byPeer: [String: Set<String>] = [:]
+
+    func record(peerId: String, signal: JSONValue) {
+        guard case let .object(fields) = signal,
+              case let .array(items)? = fields["caps"] else { return }
+        let caps = items.compactMap { item -> String? in
+            if case let .string(value) = item { return value }
+            return nil
+        }
+        lock.lock()
+        // A capability hello is a snapshot, not an additive grant. In
+        // particular, an empty later hello must revoke an earlier text/1
+        // announcement just as the web capability roster does.
+        byPeer[peerId] = Set(caps)
+        lock.unlock()
+    }
+
+    func supports(_ capability: String, peerId: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return byPeer[peerId]?.contains(capability) == true
     }
 }
 

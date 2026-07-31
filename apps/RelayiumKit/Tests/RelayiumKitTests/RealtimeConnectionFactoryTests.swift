@@ -98,6 +98,7 @@ final class RealtimeConnectionFactoryTests: XCTestCase {
     // MARK: make()
 
     private static let legacy = ICEServerConfig(urls: ["stun:legacy.example:3478"])
+    private static let legacyTURN = ICEServerConfig(urls: ["turn:legacy.example:3478"])
     private static let near = RelayEntry(id: "near",
                                          iceServers: [ICEServerConfig(urls: ["turn:near.example:3478"])])
 
@@ -108,6 +109,7 @@ final class RealtimeConnectionFactoryTests: XCTestCase {
     /// for rather than slept on — so a test can fire socket traffic knowing it
     /// will be seen.
     private func runMake(pool: [RelayEntry],
+                         advertised: [ICEServerConfig]? = nil,
                          choiceDeadline: TimeInterval,
                          measure: @escaping RelayNegotiator.Measure,
                          drive: @escaping (FakeWebSocketChannel) async -> Void)
@@ -120,12 +122,12 @@ final class RealtimeConnectionFactoryTests: XCTestCase {
         let task = Task { [sig] in
             try await RealtimeConnectionFactory.make(
                 role: .initiator,
-                config: ICEConfig(iceServers: [Self.legacy], relays: pool),
+                config: ICEConfig(iceServers: advertised ?? [Self.legacy], relays: pool),
                 signaling: sig,
                 peerTimeout: 5,
                 choiceDeadline: choiceDeadline,
                 measure: measure,
-                build: { signaling, peerId, _, servers, relayOnly in
+                build: { signaling, peerId, _, servers, relayOnly, _, _ in
                     record.note(servers: servers, relayOnly: relayOnly, peerId: peerId)
                     return RecordingConnection(signaling: signaling)
                 })
@@ -189,6 +191,22 @@ final class RealtimeConnectionFactoryTests: XCTestCase {
         XCTAssertEqual(record.relayOnly, false)
     }
 
+    /// A code-room fallback contains TURN even when relay-pool measurement did
+    /// not converge. It must still be relay-only, matching the browser path;
+    /// otherwise native ICE can spend about 20 seconds on impossible direct
+    /// checks and fail before using the valid fallback relay.
+    func testTurnFallbackIsRelayOnlyWhenPoolDoesNotConverge() async throws {
+        let (_, record) = try await runMake(
+            pool: [Self.near],
+            advertised: [Self.legacyTURN],
+            choiceDeadline: 0,
+            measure: { _, _ in },
+            drive: { ch in self.joinPeer(ch) })
+
+        XCTAssertEqual(record.servers?.map(\.urls), [["turn:legacy.example:3478"]])
+        XCTAssertEqual(record.relayOnly, true)
+    }
+
     /// The buffer-and-replay path, end to end. A signal that lands while the
     /// relay choice is still pending must reach the connection's own handler
     /// once that handler exists — in arrival order, none dropped.
@@ -222,6 +240,113 @@ final class RealtimeConnectionFactoryTests: XCTestCase {
             return XCTFail("got \(conn.received)")
         }
         XCTAssertNotNil(last["sdp"], "the offer must be the second thing replayed, not the first")
+    }
+
+    // MARK: text capability gate
+
+    func testPeerCapabilitiesMatchExactlyAndIgnoreMalformedHints() {
+        let store = PeerCapabilities()
+        store.record(peerId: "p1", signal: .object(["caps": .string("text/1")]))
+        XCTAssertFalse(store.supports("text/1", peerId: "p1"))
+
+        store.record(
+            peerId: "p1",
+            signal: .object(["caps": .array([.string("text/01"), .number(1)])])
+        )
+        XCTAssertFalse(store.supports("text/1", peerId: "p1"))
+        XCTAssertTrue(store.supports("text/01", peerId: "p1"))
+        XCTAssertFalse(store.supports("text/01", peerId: "p2"))
+
+        store.record(peerId: "p1", signal: capsField(["text/1"]))
+        XCTAssertTrue(store.supports("text/1", peerId: "p1"))
+
+        store.record(peerId: "p1", signal: capsField([]))
+        XCTAssertFalse(
+            store.supports("text/1", peerId: "p1"),
+            "a later capability snapshot must revoke an earlier announcement"
+        )
+    }
+
+    func testCapabilityWaitObservesALaterAnnouncement() async {
+        let store = PeerCapabilities()
+        let waiting = Task {
+            await RealtimeConnectionFactory.waitForCapability(
+                "text/1",
+                peerId: "p1",
+                in: store,
+                timeout: 1
+            )
+        }
+        await Task.yield()
+        store.record(peerId: "p1", signal: capsField(["text/1"]))
+        let supported = await waiting.value
+        XCTAssertTrue(supported)
+    }
+
+    func testCapabilityWaitTimesOutForAnOldPeer() async {
+        let store = PeerCapabilities()
+        let supported = await RealtimeConnectionFactory.waitForCapability(
+            "text/1",
+            peerId: "old",
+            in: store,
+            timeout: 0.02
+        )
+        XCTAssertFalse(supported)
+    }
+
+    func testTextModeCarriesGenerationAndExactLocalCapabilityToBuilder() async throws {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+        let record = TextBuildRecord()
+        let task = Task {
+            try await RealtimeConnectionFactory.make(
+                role: .initiator,
+                config: ICEConfig(iceServers: [Self.legacy], relays: []),
+                signaling: sig,
+                peerTimeout: 1,
+                choiceDeadline: 0,
+                measure: { _, _ in },
+                mode: .text,
+                build: { signaling, _, _, _, _, generation, caps in
+                    record.generation = generation
+                    record.capabilities = caps
+                    record.capabilityAnnouncedBeforeBuild = ch.sent.contains { text in
+                        guard let envelope = try? JSONDecoder().decode(
+                            Envelope.self,
+                            from: Data(text.utf8)
+                        ) else { return false }
+                        return envelope.to == "other-2"
+                            && envelope.data.map(peerCaps(from:)) == ["text/1"]
+                    }
+                    return RecordingConnection(signaling: signaling)
+                }
+            )
+        }
+
+        while sig.onPeers == nil { await Task.yield() }
+        joinPeer(ch)
+        ch.fireText(#"{"type":"signal","from":"other-2","data":{"caps":["text/1"]}}"#)
+        _ = try await task.value
+
+        XCTAssertEqual(record.generation, .text)
+        XCTAssertEqual(record.capabilities, ["text/1"])
+        XCTAssertTrue(
+            record.capabilityAnnouncedBeforeBuild,
+            "roster-level capability must be announced before the connection can offer text"
+        )
+        let envelopes = ch.sent.compactMap {
+            try? JSONDecoder().decode(Envelope.self, from: Data($0.utf8))
+        }
+        let capabilityAnnouncements = envelopes.filter {
+            $0.to == "other-2"
+                && $0.data.map(peerCaps(from:)) == ["text/1"]
+        }
+        XCTAssertGreaterThanOrEqual(
+            capabilityAnnouncements.count,
+            2,
+            "native must announce on roster and once more after observing peer support"
+        )
     }
 }
 
@@ -263,13 +388,21 @@ private final class RecordingConnection: RealtimePeerConnection, @unchecked Send
     var onFileChunk: (([UInt8]) -> Void)?
     var onProgress: ((Int) -> Void)?
     var onDone: ((Bool) -> Void)?
+    var onText: ((String, Int) -> Void)?
     var onControl: ((RealtimeControl) -> Void)?
     var onClose: (() -> Void)?
     var onError: ((Error) -> Void)?
 
     func start() {}
     func send(sources: [PlaintextSource], metas: [FileMeta]) {}
+    func accept() {}
+    func reject() {}
     func complete() {}
+    func confirmTextSAS() {}
+    func acceptText() {}
+    func rejectText() {}
+    func sendText(_ body: String, completion: @escaping (Error?) -> Void) { completion(nil) }
+    var textBufferedAmount: UInt64 { 0 }
     func close() {}
 }
 
@@ -281,5 +414,24 @@ private final class ErrorBox: @unchecked Sendable {
     var value: Error? {
         get { lock.lock(); defer { lock.unlock() }; return stored }
         set { lock.lock(); stored = newValue; lock.unlock() }
+    }
+}
+
+private final class TextBuildRecord: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _generation: RealtimeGeneration?
+    private var _capabilities: [String] = []
+    private var _capabilityAnnouncedBeforeBuild = false
+    var generation: RealtimeGeneration? {
+        get { lock.lock(); defer { lock.unlock() }; return _generation }
+        set { lock.lock(); _generation = newValue; lock.unlock() }
+    }
+    var capabilities: [String] {
+        get { lock.lock(); defer { lock.unlock() }; return _capabilities }
+        set { lock.lock(); _capabilities = newValue; lock.unlock() }
+    }
+    var capabilityAnnouncedBeforeBuild: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _capabilityAnnouncedBeforeBuild }
+        set { lock.lock(); _capabilityAnnouncedBeforeBuild = newValue; lock.unlock() }
     }
 }

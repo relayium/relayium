@@ -14,13 +14,13 @@ final class TransferNotifier {
         }
     }
 
-    func completed(_ body: String) {
+    func completed(_ body: String, title: String = "Relayium transfer complete") {
         guard !NSApp.isActive else { return }
         center.getNotificationSettings { [center] settings in
             guard settings.authorizationStatus == .authorized ||
                     settings.authorizationStatus == .provisional else { return }
             let content = UNMutableNotificationContent()
-            content.title = "Relayium transfer complete"
+            content.title = title
             content.body = body
             content.sound = .default
             let request = UNNotificationRequest(
