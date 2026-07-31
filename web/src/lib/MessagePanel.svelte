@@ -82,7 +82,7 @@
   }
 </script>
 
-<section class="card msgpanel">
+<section class="ui-card ui-stack msgpanel">
   <h2>{t.text.panelTitle}</h2>
 
   {#if status === "incomingRequest"}
@@ -109,7 +109,10 @@
     <ol class="msglist" role="log" aria-live="polite">
       {#each history as m (m.id)}
         <li class="msg" class:out={m.dir === "out"} class:failed={m.failed}>
-          <span class="who">{m.dir === "out" ? t.text.you : t.text.peer(peerName)}</span>
+          <span class="who">
+            {m.dir === "out" ? t.text.you : t.text.peer(peerName)}
+            {#if m.failed}<span class="failed-label">{t.status.sendFail}</span>{/if}
+          </span>
           <time>{new Date(m.at).toLocaleTimeString()}</time>
           <!-- 转义过的文本节点。dir="auto" 让阿拉伯语正文在英文界面下也读得对，
                而界面本身的方向由 dir(lang()) 管，两者互不干涉。 -->
@@ -163,13 +166,15 @@
 </section>
 
 <style>
-  .msgpanel { display: flex; flex-direction: column; gap: var(--space-3); text-align: start; }
+  /* 卡片外壳（.ui-card）、SAS 盒子（.sas）、链路徽章（.path/.dot）现在都来自
+     app.css 里的共享原语。以前这三样在本组件里要么重复、要么根本没写——`.card`
+     只存在于 App.svelte 的**局部**样式里，跨不过组件边界，所以这个面板一直是没
+     边框、没背景、标题按 30px 营销尺寸渲染的。 */
+  .msgpanel { text-align: start; margin-block-end: var(--space-4); }
   .req { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
   .sess { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--fs-sm); }
   .sess .pname { font-weight: 600; color: var(--text-h); }
   .sess .state { color: var(--text); }
-  .sas { font-size: var(--fs-sm); }
-  .sas code { font-family: var(--mono); letter-spacing: 0.12em; }
 
   /* 消息列表在自己的盒子里滚动，页面本身永远不会横向滚动。 */
   .msglist {
@@ -194,8 +199,11 @@
     background: var(--surface);
   }
   .msg.out { background: var(--accent-bg); border-color: var(--accent-border); }
+  /* Keep a solid danger edge as a redundant visual cue; .failed-label carries
+     the localized, non-colour-only state for sighted and assistive-tech users. */
   .msg.failed { border-color: var(--danger); }
-  .who { grid-area: who; font-size: var(--fs-xs); font-weight: 600; color: var(--text-h); }
+  .who { grid-area: who; display: inline-flex; flex-wrap: wrap; gap: var(--space-1); font-size: var(--fs-xs); font-weight: 600; color: var(--text-h); }
+  .failed-label { color: var(--danger); }
   time { grid-area: time; font-size: var(--fs-xs); color: var(--text); opacity: 0.7; }
   .copy { grid-area: copy; font-size: var(--fs-xs); }
 
@@ -215,11 +223,12 @@
   .empty { font-size: var(--fs-sm); color: var(--text); opacity: 0.8; }
 
   textarea {
-    width: 100%;
+    inline-size: 100%;
     box-sizing: border-box;
     resize: vertical;
     padding: var(--space-2);
-    border: 1px solid var(--border);
+    /* 输入框是控件，边框要过 3:1；--border 在暗色下是 1.36:1。 */
+    border: 1px solid var(--control-border);
     border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--text-h);
@@ -249,9 +258,6 @@
     white-space: nowrap;
     border: 0;
   }
-
-  /* 已有的 44px 触控目标规则。 */
-  @media (pointer: coarse) {
-    .copy, .send, .act .btn { min-height: 44px; }
-  }
+  /* 44px 触控目标现在由 app.css 里 `.btn` 的全局 coarse-pointer 规则统一提供
+     （这三个控件都是 .btn），不再每个组件抄一份。 */
 </style>

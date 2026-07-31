@@ -17,6 +17,40 @@
   --surface: #ffffff;
   --surface-2: #faf9f6;
   --danger: #c0392b;
+
+  /* ── Semantic control/surface/focus/status tokens ─────────────────────────
+     --border stays what it always was: a NON-interactive edge (card rims,
+     dividers, table rules). Interactive controls get --control-border instead,
+     because --border is 1.27:1 in light and 1.36:1 in dark — far under the 3:1
+     WCAG 1.4.11 floor for a control boundary. Measured for --control-border:
+     light #8b8792 → 3.51:1 on #fff, 3.34:1 on --surface-2;
+     dark  #6b7280 → 3.70:1 on --bg, 3.47:1 on --surface. */
+  --control-bg: #faf9f6;
+  --control-border: #8b8792;
+  --control-border-hover: var(--accent);
+  /* Neutral inset note. Deliberately NOT accent-tinted: accent means "primary
+     action / selection / state", not "here is some text". */
+  --callout-bg: var(--surface-2);
+  --callout-border: var(--border);
+  /* Elevation for a raised card. Neutral — the accent-tinted card shadow that
+     used to be copied into CrossPage/OfflinePage made every large surface read
+     as branded. */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 10px 24px -18px rgb(0 0 0 / 0.30);
+  --focus: var(--accent);
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  /* Status. Every value used as TEXT clears 4.5:1 against its own theme's
+     background; the literals these replace failed in one theme each (e.g.
+     #16a34a was 3.30:1 on white, #d97706 3.19:1, #2563eb 3.46:1 on dark). */
+  --ok: #15803d;
+  --ok-bg: rgb(34 197 94 / 0.12);
+  --ok-border: rgb(21 128 61 / 0.45);
+  --danger-bg: rgb(192 57 43 / 0.10);
+  --danger-border: rgb(192 57 43 / 0.45);
+  --path-lan: #15803d;
+  --path-p2p: #2563eb;
+  --path-relay: #b45309;
+
   --radius: 14px;
   --radius-sm: 9px;
   --fs-display: 56px;
@@ -78,6 +112,17 @@
     --surface: #1c1d25;
     --surface-2: #1a1b22;
     --danger: #ff6b6b;
+    --control-bg: #23252f;
+    --control-border: #6b7280;
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.30), 0 10px 24px -18px rgb(0 0 0 / 0.60);
+    --ok: #4ade80;
+    --ok-bg: rgb(74 222 128 / 0.14);
+    --ok-border: rgb(74 222 128 / 0.42);
+    --danger-bg: rgb(255 107 107 / 0.14);
+    --danger-border: rgb(255 107 107 / 0.45);
+    --path-lan: #4ade80;
+    --path-p2p: #60a5fa;
+    --path-relay: #fbbf24;
     color-scheme: dark;
   }
 }
@@ -97,6 +142,17 @@
   --surface: #1c1d25;
   --surface-2: #1a1b22;
   --danger: #ff6b6b;
+  --control-bg: #23252f;
+  --control-border: #6b7280;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.30), 0 10px 24px -18px rgb(0 0 0 / 0.60);
+  --ok: #4ade80;
+  --ok-bg: rgb(74 222 128 / 0.14);
+  --ok-border: rgb(74 222 128 / 0.42);
+  --danger-bg: rgb(255 107 107 / 0.14);
+  --danger-border: rgb(255 107 107 / 0.45);
+  --path-lan: #4ade80;
+  --path-p2p: #60a5fa;
+  --path-relay: #fbbf24;
   color-scheme: dark;
 }
 /* Forced light: the base :root palette already applies; just pin color-scheme so
@@ -165,37 +221,54 @@ code {
   box-sizing: border-box;
 }
 
-/* Keyboard-focus ring — applies site-wide; the completeness gap vs. hover-only. */
+/* Keyboard-focus ring — applies site-wide; the completeness gap vs. hover-only.
+   No border-radius here: it used to set `border-radius: 3px`, which squares off
+   a rounded control *while it is focused*. Left alone, the outline follows each
+   control's own radius, which is what it should do. */
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 3px;
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
 }
 
 /* Shared button system. Components apply e.g. class="btn btn-primary" and drop
    their own bespoke button rules. Lives in global CSS so it crosses component
-   scope boundaries. */
+   scope boundaries.
+   Hierarchy: .btn (= neutral/secondary) · .btn-primary · .btn-ghost · .btn-link,
+   with .btn-sm / .btn-block as orthogonal modifiers. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box; /* so .btn-block's 100% is the *outer* width */
   gap: var(--space-2);
   font: inherit;
   font-size: var(--fs-sm);
   line-height: 1;
   padding: 10px 18px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface-2);
+  /* --control-border, not --border: a control's boundary carries the affordance
+     and has to clear 3:1. With --border the dark peer-action controls were
+     1.36:1 — visually absent. */
+  border: 1px solid var(--control-border);
+  background: var(--control-bg);
   color: var(--text-h);
   cursor: pointer;
   transition: border-color .13s, background .13s, box-shadow .13s, filter .13s, transform .05s;
 }
-.btn:hover { border-color: var(--accent-border); box-shadow: var(--shadow); }
-.btn:active { transform: translateY(1px); }
-.btn:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; transform: none; }
+.btn:not(:disabled):not(.is-disabled):not(.disabled):hover {
+  border-color: var(--control-border-hover);
+  box-shadow: var(--shadow);
+}
+.btn:not(:disabled):not(.is-disabled):not(.disabled):active { transform: translateY(1px); }
+/* .is-disabled is the label-shaped twin of :disabled for the peer actions.
+   .disabled keeps the existing CodePairing label contract on the same behavior. */
+.btn:disabled,
+.btn.is-disabled,
+.btn.disabled { opacity: .55; cursor: not-allowed; box-shadow: none; transform: none; }
+/* Explicit name for the neutral tier, so intent is writable in markup. */
+.btn-secondary { background: var(--control-bg); border-color: var(--control-border); color: var(--text-h); }
 .btn-primary { background: var(--grad-accent); border-color: transparent; color: #fff; }
-.btn-primary:hover {
+.btn-primary:not(:disabled):not(.is-disabled):not(.disabled):hover {
   filter: brightness(1.07);
   box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--accent) 60%, transparent);
 }
@@ -204,7 +277,140 @@ code {
   border: none; background: none; box-shadow: none;
   padding: var(--space-1); color: var(--text); text-decoration: underline;
 }
-.btn-link:hover { color: var(--text-h); box-shadow: none; border: none; }
+.btn-link:not(:disabled):not(.is-disabled):not(.disabled):hover {
+  color: var(--text-h); box-shadow: none; border: none;
+}
+/* Compact tier for in-card controls (close/cancel, "start over", action rows). */
+.btn-sm { font-size: var(--fs-xs); padding-block: 7px; padding-inline: 10px; }
+/* Fills its slot: full width when stacked, equal share inside a flex row. */
+.btn-block { flex: 1 1 auto; inline-size: 100%; }
+/* One global touch-target floor instead of a copy per component. */
+@media (pointer: coarse) {
+  .btn { min-block-size: 44px; }
+}
+
+/* ── Surfaces ────────────────────────────────────────────────────────────────
+   `ui-` prefixed on purpose. Bare `.card` / `.badge` are already in use with
+   different meanings in AppsPage, PricingPage, PlanCard and HowToSteps — pages
+   this batch does not own — so a global under those names would restyle them by
+   accident. The prefix IS the contract: nothing opts in without asking.
+
+   .ui-card carries no margin; spacing belongs to whatever is laying the cards
+   out (a grid gap, or the caller's own margin). */
+.ui-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding-block: var(--space-4);
+  padding-inline: var(--space-5);
+  background: var(--surface);
+}
+/* Bound to the .ui-card contract, and to a DIRECT child, so it is neither a
+   global heading reset nor a rule that reaches into whatever component the card
+   happens to be wrapping. (The title-plus-badge row gets the same treatment via
+   .ui-card-head > h2 below.) */
+.ui-card > h2 { font-size: var(--fs-h3); margin: 0; }
+/* The roomier, elevated tier — page-level content cards. */
+.ui-card-raised { padding: var(--space-5); box-shadow: var(--shadow-card); }
+/* Vertical rhythm inside a card. Separate from .ui-card because App's status
+   cards lay themselves out and only the content cards want the stack. */
+.ui-stack { display: flex; flex-direction: column; gap: var(--space-3); }
+/* State, and only state, gets the accent. Always written compounded with
+   .ui-card so these short words can never match anything on their own; the
+   names match what App.svelte's transfer card already emits (and what
+   web/e2e/lan-transfer.mjs selects on: `.xfer.bad`). */
+.ui-card.active { border-color: var(--accent-border); }
+.ui-card.ok { border-color: var(--ok); }
+.ui-card.bad { border-color: var(--danger-border); }
+
+/* ── Badges ──────────────────────────────────────────────────────────────────
+   Theme-aware through tokens only. The previous copy keyed its dark variant off
+   @media (prefers-color-scheme: dark), which is wrong for an app whose theme is
+   an explicit data-theme attribute: a forced-light user on a dark OS got the
+   dark badge, and a forced-dark user on a light OS did not. */
+.ui-badge {
+  flex: none;
+  font-size: 11.5px;
+  padding-block: 3px;
+  padding-inline: 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  color: var(--text);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+}
+.ui-badge-ok { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-border); }
+
+/* ── Callouts ────────────────────────────────────────────────────────────────
+   An inset note. Neutral by default; the accent variant is for something that
+   wants a decision, the danger variant for a hard failure. */
+.ui-callout {
+  border: 1px solid var(--callout-border);
+  border-radius: var(--radius-sm);
+  padding-block: var(--space-2);
+  padding-inline: var(--space-3);
+  background: var(--callout-bg);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+.ui-callout-accent { background: var(--accent-bg); border-color: var(--accent-border); }
+.ui-callout-danger { background: var(--danger-bg); border-color: var(--danger-border); color: var(--text-h); }
+
+/* ── Page + card headers ─────────────────────────────────────────────────────
+   Was duplicated byte-for-byte in CrossPage and OfflinePage. */
+.ui-page-head { text-align: center; padding-block: var(--space-3) var(--space-5); }
+/* Intentional page-header size — smaller than the marketing hero (--fs-display). */
+.ui-page-head h1 { font-size: 34px; margin-block: 0 var(--space-2); letter-spacing: -1px; }
+.ui-page-head .tagline { color: var(--text); font-size: var(--fs-body); max-inline-size: 44ch; margin-inline: auto; }
+.ui-page-head .pitch {
+  color: var(--text); font-size: var(--fs-xs); max-inline-size: 52ch;
+  margin-block: var(--space-3) 0; margin-inline: auto; line-height: 1.55;
+}
+/* Card title with a trailing badge. */
+.ui-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.ui-card-head > h2 { font-size: var(--fs-h3); margin: 0; margin-inline-end: auto; }
+.ui-card-sub { margin: 0; font-size: var(--fs-xs); color: var(--text); line-height: 1.5; }
+
+/* ── Short verification code (SAS) ───────────────────────────────────────────
+   Global rather than `ui-`-prefixed because MessagePanel.test.ts and
+   web/e2e/lan-transfer.mjs select on `.sas` / `.sas code`; App.svelte and
+   MessagePanel.svelte are its only users in the repo. Accent-tinted in both
+   places now — comparing this code IS the security step, and in the message
+   panel it used to render as plain body text. */
+.sas {
+  font-size: var(--fs-sm);
+  padding-block: var(--space-2);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+}
+.sas code {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  background: transparent;
+  padding-inline: 2px;
+}
+
+/* ── Connection-path badge ───────────────────────────────────────────────────
+   A coloured dot + label: green LAN, blue P2P, orange relay. Same name reason as
+   .sas. `.dot` is NOT promoted on its own — Hero, MePage and CliPage each use a
+   `.dot` that means something else — so the rule is bound to its parent. */
+.path { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.path .dot {
+  inline-size: 7px; block-size: 7px; border-radius: 999px;
+  background: currentColor; flex: none;
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+@keyframes dot-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+.path-lan { color: var(--path-lan); }
+.path-p2p { color: var(--path-p2p); }
+.path-relay { color: var(--path-relay); }
+@media (prefers-reduced-motion: reduce) {
+  .path .dot { animation: none; }
+}
 
 /* ── Motion system ───────────────────────────────────────────────────────────
    Shared keyframes + a scroll-reveal contract. Components either use the .reveal

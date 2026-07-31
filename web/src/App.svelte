@@ -759,16 +759,20 @@
         onclick={(e) => { if (outbox().length) { e.preventDefault(); session.sendFiles(p.id, takeOutbox()); } }}
         onchange={(e) => pickFile(e, p.id)} />
     </label>
+    <!-- 这三个动作共用全局 .btn 原语（其中两个是包着隐藏 file input 的 <label>，
+         :disabled 对 label 不生效，所以停用态走 .is-disabled）。以前它们是本组件
+         里自成一套的 .act-btn：透明底 + --border 描边，在暗色下边框只有 1.36:1，
+         等于看不见。 -->
     <div class="peer-actions">
-      <label class="act-btn" class:disabled={busy} for={`pick-${p.id}`}>📄 {t.sendFile}</label>
+      <label class="btn btn-secondary btn-sm btn-block" class:is-disabled={busy} for={`pick-${p.id}`}>📄 {t.sendFile}</label>
       {#if folderUploadSupported}
-        <label class="act-btn" class:disabled={busy}>
+        <label class="btn btn-secondary btn-sm btn-block" class:is-disabled={busy}>
           📁 {t.sendFolder}
           <input class="file-pick-input" type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
         </label>
       {/if}
       {#if peerSupportsText(p.id)}
-        <button type="button" class="act-btn" class:disabled={busy} disabled={busy}
+        <button type="button" class="btn btn-secondary btn-sm btn-block" disabled={busy}
           onclick={() => { textCompose = ""; void textSession.openWith(p.id); }}>💬 {t.text.open}</button>
       {/if}
     </div>
@@ -780,12 +784,12 @@
   <section class="peers">
     <h2>{currentRoute() === "cross" ? t.crossPeersTitle : t.peersTitle}</h2>
     <QuotaNotice />
-    <p class="text-availability">💬 {t.text.availabilityHint}</p>
+    <p class="ui-callout text-availability">💬 {t.text.availabilityHint}</p>
     {#if outbox().length && visiblePeers.length !== 1}
-      <p class="share-pending">{t.sharePending(outbox().length)}</p>
+      <p class="ui-callout share-pending">{t.sharePending(outbox().length)}</p>
     {/if}
     {#if pendingPeer}
-      <div class="confirm-send" role="alertdialog" aria-live="polite">
+      <div class="ui-callout ui-callout-accent confirm-send" role="alertdialog" aria-live="polite">
         <span>{t.confirmRecv(nameOf(pendingPeer.id))}</span>
         <button class="btn btn-primary" onclick={confirmSend}>{t.confirmRecvSend}</button>
         <button class="btn" onclick={cancelSend}>{t.confirmRecvCancel}</button>
@@ -824,7 +828,7 @@
   </section>
 
   {#if incoming}
-    <section class="card request">
+    <section class="ui-card request">
       <div class="req-head">{t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total))}</div>
       <ul class="filelist">
         {#each incoming.files as f}
@@ -847,14 +851,14 @@
 
   {#each [send, recv].filter(Boolean) as x (x!.dir)}
     {@const xf = x as Xfer}
-    <section class="card xfer" class:ok={xf.done && xf.ok} class:bad={xf.done && !xf.ok} out:fade={{ duration: 300 }}>
+    <section class="ui-card xfer" class:ok={xf.done && xf.ok} class:bad={xf.done && !xf.ok} out:fade={{ duration: 300 }}>
       <div class="xfer-head">
         <span class="label">{xf.dir === "send" ? t.sendTo(nameOf(xf.peer)) : t.recvFrom(nameOf(xf.peer))}</span>
         {#if xf.files.length}<span class="count">{xf.files.length > 1 ? t.fileCounter(xf.index + 1, xf.files.length) : xf.files[0].name}</span>{/if}
         {#if xf.done}
-          <button class="x" onclick={() => (xf.dir === "send" ? session.dismissSend(xf) : session.dismissRecv(xf))} aria-label={t.close}>✕</button>
+          <button class="btn btn-sm x" onclick={() => (xf.dir === "send" ? session.dismissSend(xf) : session.dismissRecv(xf))} aria-label={t.close}>✕</button>
         {:else}
-          <button class="x cancel" onclick={() => session.abort(xf.dir)}>{t.cancel}</button>
+          <button class="btn btn-sm x cancel" onclick={() => session.abort(xf.dir)}>{t.cancel}</button>
         {/if}
       </div>
       <div class="status" aria-live="polite">
@@ -862,7 +866,7 @@
         {#if session.sasCode && !xf.done} · {t.codeLabel} <code>{session.sasCode}</code>{/if}
       </div>
       {#if xf.done && !xf.ok && xf.status === "connectFail" && relayDenied === "quota"}
-        <p class="quota-note">{t.crossnet.relayQuotaFail}</p>
+        <p class="ui-callout quota-note">{t.crossnet.relayQuotaFail}</p>
       {/if}
       {#if !xf.done}
         {@const path = xf.dir === "send" ? session.sendPath : session.recvPath}
@@ -959,11 +963,11 @@
   {/if}
 
   {#if unsupported}
-    <div class="banner error">{t.unsupported}</div>
+    <div class="ui-callout ui-callout-danger banner">{t.unsupported}</div>
   {:else}
     {@render transferSurface()}
 
-    <section class="card history">
+    <section class="ui-card history">
       <details>
         <summary>{t.historyTitle}</summary>
         {#if history.length}
@@ -975,7 +979,7 @@
               </li>
             {/each}
           </ul>
-          <button type="button" class="btn btn-ghost history-clear" onclick={clearHistoryPanel}>{t.historyClear}</button>
+          <button type="button" class="btn btn-ghost btn-sm history-clear" onclick={clearHistoryPanel}>{t.historyClear}</button>
         {:else}
           <p class="history-empty">{t.historyEmpty}</p>
         {/if}
@@ -1046,27 +1050,24 @@
     border: 1px solid var(--accent-border); box-shadow: var(--shadow);
   }
 
-  .banner.error {
-    margin-top: 24px; padding: 16px; border-radius: 12px; text-align: center;
-    color: var(--text-h); background: var(--accent-bg); border: 1px solid var(--accent-border);
+  /* Sizing/placement only — the surface comes from .ui-callout.ui-callout-danger.
+     It used to be accent-tinted, which made a hard "your browser can't do this"
+     failure read like a promo strip. */
+  .banner {
+    margin-block-start: var(--space-5); padding: var(--space-4);
+    border-radius: var(--radius-sm); text-align: center; font-size: var(--fs-sm);
   }
 
-
-
-  .card {
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 16px 18px;
-    margin-bottom: 16px;
-    background: var(--social-bg);
-  }
-  .card.ok { border-color: #2ecc71; animation: card-ok-pop .55s ease-out; }
+  /* The card surface, and its ok/bad state borders, are the shared .ui-card
+     primitive now (app.css). What stays here is App-specific: the one-shot
+     success pulse, and the accent treatment for a request that wants an answer. */
+  .ui-card { margin-block-end: var(--space-4); }
+  .ui-card.ok { animation: card-ok-pop .55s ease-out; }
   @keyframes card-ok-pop {
     0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, .45); }
     100% { box-shadow: 0 0 0 7px rgba(46, 204, 113, 0); }
   }
-  .card.bad { border-color: var(--accent-border); }
-  .card.request { border-color: var(--accent-border); background: var(--accent-bg); }
+  .ui-card.request { border-color: var(--accent-border); background: var(--accent-bg); }
 
   .req-head { font-size: 15px; margin-bottom: 10px; }
   .filelist { list-style: none; margin: 0 0 12px; padding: 0; max-height: 200px; overflow: auto; }
@@ -1078,78 +1079,45 @@
   .history summary { cursor: pointer; font-weight: 600; color: var(--text-h); }
   .history .filelist { margin-top: 12px; }
   .history-empty { margin: 12px 0 0; font-size: 13.5px; color: var(--text); }
-  .history-clear { margin-top: 4px; font-size: 13px; padding: 6px 12px; }
+  .history-clear { margin-block-start: var(--space-1); }
   .history-keep {
     display: flex; align-items: center; gap: 8px;
-    margin-top: 12px; font-size: 13px; color: var(--muted); cursor: pointer;
+    margin-block-start: 12px; font-size: 13px; color: var(--text); cursor: pointer;
   }
   .history-keep input { cursor: pointer; }
-  .sas {
-    font-size: 13.5px; margin-bottom: 14px; padding: 10px 12px;
-    border-radius: 10px; background: var(--accent-bg); border: 1px solid var(--accent-border);
-  }
-  .sas code { font-size: 16px; font-weight: 700; letter-spacing: 1px; background: transparent; padding: 0 2px; }
-
+  /* .sas itself is a shared primitive (app.css) — the verification box looks the
+     same here and in the message panel. Only the stacking gap is local. */
+  .sas { margin-block-end: 14px; }
 
   .xfer-head { display: flex; align-items: center; gap: 10px; }
   .xfer-head .label { color: var(--accent); font-size: 14px; font-weight: 500; white-space: nowrap; }
   .xfer-head .count { color: var(--text); font-size: 13px; margin-inline-start: auto; word-break: break-all; text-align: end; }
-  button.x {
-    margin-inline-start: 8px; padding: 2px 8px; font: inherit; font-size: var(--fs-xs);
-    border-radius: 7px; cursor: pointer; border: 1px solid var(--border);
-    background: var(--bg); color: var(--text);
-    transition: color .13s, box-shadow .13s;
-  }
-  button.x:hover { color: var(--text-h); box-shadow: var(--shadow); }
-  /* The in-progress variant is a labelled "Cancel" rather than a bare ✕. */
-  button.x.cancel { padding: 2px 12px; }
-  button.x.cancel:hover { color: var(--accent); border-color: var(--accent-border); }
-  /* On touch devices, grow the close/cancel and folder-pick hit areas to the ~44px
-     minimum comfortable tap target (visual padding stays modest via flex centring). */
-  @media (pointer: coarse) {
-    button.x { min-height: 44px; padding-inline: 14px; }
-    .act-btn { min-height: 44px; }
-  }
-  .status { font-size: 13.5px; color: var(--text); margin: 8px 0 10px; }
-  .xfer .quota-note {
-    margin: var(--space-2) 0 0; font-size: var(--fs-xs); line-height: 1.5;
-    color: var(--text-h);
-    border: 1px solid var(--accent-border); border-radius: var(--radius-sm);
-    padding: var(--space-2) var(--space-3); background: var(--accent-bg);
-  }
+  /* Close (✕) / Cancel share the .btn primitive; only their position and the
+     cancel-specific hover colour are local. */
+  .x { margin-inline-start: var(--space-2); flex: none; }
+  .x.cancel:hover { color: var(--accent); }
+  .status { font-size: 13.5px; color: var(--text); margin-block: 8px 10px; }
+  .xfer .quota-note { margin-block: var(--space-2) 0; }
   /* A translucent sheen sweeps across the filled portion so an in-flight transfer
      reads as actively moving, not stalled. The fill only renders while !done. */
   .meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 12.5px; color: var(--text); }
   .meta-right { display: inline-flex; align-items: center; gap: 12px; }
-  /* Connection-path badge: a coloured dot + label. Green LAN, blue P2P, orange relay. */
-  .path { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-  .path .dot {
-    width: 7px; height: 7px; border-radius: 999px; background: currentColor; flex: none;
-    animation: dot-pulse 1.2s ease-in-out infinite;
-  }
-  @keyframes dot-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+  /* The connection-path badge (.path / .dot / .path-lan|p2p|relay) is shared with
+     MessagePanel and lives in app.css — it used to exist only here, so the panel
+     rendered the same markup with no dot at all. */
   @media (prefers-reduced-motion: reduce) {
-    .path .dot { animation: none; }
-    .card.ok { animation: none; }
+    .ui-card.ok { animation: none; }
   }
-  .path-lan { color: #16a34a; }
-  .path-p2p { color: #2563eb; }
-  .path-relay { color: #d97706; }
 
   .peers { margin-top: var(--space-7); }
   .peers h2 { font-size: 20px; }
-  .share-pending {
-    margin: 0 0 12px; padding: 10px 14px; border-radius: 10px;
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-    color: var(--text); font-size: 14px;
-  }
+  /* Both notices use the shared .ui-callout; the queued-share hint is neutral
+     (it is information) and the send confirmation is accent (it wants a
+     decision). Only spacing/layout is local. */
+  .share-pending { margin-block: 0 12px; }
   .confirm-send {
-    margin: 0 0 12px; padding: 10px 14px; border-radius: 10px;
+    margin-block: 0 12px;
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-    color: var(--text); font-size: 14px;
   }
   .confirm-send span { flex: 1 1 auto; }
   .peers ul {
@@ -1161,8 +1129,10 @@
   .peers ul.solo { grid-template-columns: 1fr; }
   .peers ul.solo .peer { border-style: solid; border-color: var(--accent-border); background: var(--accent-bg); }
   .peers ul.solo .peer .pcard { justify-content: center; padding: 20px; }
+  /* --control-border, not --border: the peer card is an interactive drop/pick
+     target, so its dashed outline is a control boundary and has to clear 3:1. */
   .peer {
-    border: 1.5px dashed var(--border); border-radius: 14px;
+    border: 1.5px dashed var(--control-border); border-radius: 14px;
     transition: border-color .15s, background .15s;
   }
   .peer:not(.disabled):hover, .peer:global(.drag) { border-color: var(--accent-border); background: var(--accent-bg); }
@@ -1179,20 +1149,11 @@
   .peers ul.solo .pname { font-size: 17px; }
   .pname { color: var(--text-h); font-weight: 500; font-size: 16px; }
   .pick { color: var(--text); font-size: 13px; }
-  .peer-actions { display: flex; gap: 8px; margin: 0 12px 10px; }
-  .act-btn {
-    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
-    padding: 7px; border-radius: 9px;
-    border: 1px solid var(--border); font-size: 13px; color: var(--text); cursor: pointer;
-    transition: border-color .15s, background .15s, color .15s;
-  }
-  .act-btn:not(.disabled):hover { border-color: var(--accent-border); background: var(--accent-bg); color: var(--text-h); }
-  .act-btn.disabled { cursor: not-allowed; opacity: .6; }
-  /* 这三个动作里有两个是 <label>（包着隐藏的 file input），一个是 <button>。按钮自带
-     浏览器的灰底和按钮字体，不抹掉就会和旁边两个长得不一样。 */
-  button.act-btn { background: none; font-family: inherit; }
-  button.act-btn:disabled { cursor: not-allowed; opacity: .6; }
-  .peers ul.solo .peer-actions { max-width: 360px; margin-inline: auto; }
+  /* 行布局；三个控件本身是 .btn btn-secondary btn-sm btn-block（见 app.css），
+     hover/active/disabled/focus 全部与站点其它按钮一致。 */
+  .peer-actions { display: flex; gap: 8px; margin-block: 0 10px; margin-inline: 12px; }
+  .peer-actions .btn { gap: 6px; }
+  .peers ul.solo .peer-actions { max-inline-size: 360px; margin-inline: auto; }
 
   .empty {
     display: flex; flex-direction: column; align-items: center; gap: var(--space-3);
@@ -1202,11 +1163,10 @@
   }
   .empty-lead { margin: 0; color: var(--text); font-size: 14px; max-width: 46ch; }
   .empty-cta { margin-top: var(--space-1); }
-  .text-availability {
-    margin: 0 0 var(--space-3); padding: 9px 12px;
-    border: 1px solid var(--accent-border); border-radius: 10px;
-    background: var(--accent-bg); color: var(--text); font-size: 13px; line-height: 1.45;
-  }
+  /* Passive availability/privacy information → the neutral shared callout.
+     It was accent-tinted, which spent the brand colour on a sentence that asks
+     nothing of the user. */
+  .text-availability { margin-block: 0 var(--space-3); }
 
   footer {
     margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--border);

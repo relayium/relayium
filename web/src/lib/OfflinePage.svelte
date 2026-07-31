@@ -23,16 +23,16 @@
   <!-- Sign-in for this login-gated flow lives in the top nav (Nav.svelte renders
        the Account control for cross/offline/me); the two free pages never show
        an account concept at all. -->
-  <header class="cn-head">
+  <header class="ui-page-head">
     <h1>{t.offlineTitle}</h1>
     <p class="tagline">{t.offline.tagline}</p>
     <p class="pitch">{t.offline.pitch}</p>
   </header>
 
   <div class="cards">
-    <section class="card">
-      <div class="mhead"><h2>{t.methods.stored.name}</h2><span class="badge">{t.methods.stored.badge}</span></div>
-      <p class="cardsub">{t.methods.stored.sub}</p>
+    <section class="ui-card ui-card-raised ui-stack">
+      <div class="ui-card-head"><h2>{t.methods.stored.name}</h2><span class="ui-badge">{t.methods.stored.badge}</span></div>
+      <p class="ui-card-sub">{t.methods.stored.sub}</p>
       {#if session().user}
         <StoredUpload />
       {:else}
@@ -69,34 +69,17 @@
 </section>
 
 <style>
+  /* Layout only — the header, card surface, title row, sub-copy and badge come
+     from the shared primitives in app.css (same set CrossPage uses). */
   .offlinepage { position: relative; }
 
-  .cn-head { text-align: center; padding: var(--space-3) 0 var(--space-5); }
-  /* Mirrors CrossPage's page-header scale — smaller than the marketing hero. */
-  .cn-head h1 { font-size: 34px; margin: 0 0 var(--space-2); letter-spacing: -1px; }
-  .cn-head .tagline { color: var(--text); font-size: var(--fs-body); max-width: 44ch; margin: 0 auto; }
-  .cn-head .pitch { color: var(--text); font-size: var(--fs-xs); max-width: 52ch; margin: var(--space-3) auto 0; line-height: 1.55; }
+  .cards { max-inline-size: 720px; margin-inline: auto; }
 
-  .cards { max-width: 720px; margin: 0 auto; }
-  .card {
-    border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-5);
-    background: var(--surface); display: flex; flex-direction: column; gap: var(--space-3);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 12px 32px -18px color-mix(in srgb, var(--accent) 22%, transparent);
-  }
-  .card h2 { font-size: var(--fs-h3); margin: 0; }
-  .cardsub { margin: 0; font-size: var(--fs-xs); color: var(--text); line-height: 1.5; }
-  .mhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
-  .mhead h2 { margin-inline-end: auto; }
-  .badge {
-    flex: none; font-size: 11.5px; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
-    color: var(--text); background: var(--code-bg); border: 1px solid var(--border);
-  }
-
-  .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
+  .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding-block: var(--space-2); }
   .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; }
 
   .cli-note {
-    max-width: 720px; margin: var(--space-4) auto 0; text-align: center;
+    max-inline-size: 720px; margin-block: var(--space-4) 0; margin-inline: auto; text-align: center;
     font-size: var(--fs-xs); color: var(--text); line-height: 1.55;
   }
   .cli-note a { color: var(--accent); text-decoration: none; white-space: nowrap; }

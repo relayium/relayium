@@ -110,6 +110,7 @@ describe("MessagePanel", () => {
     expect(items[0].classList.contains("out")).toBe(false);
     expect(items[1].classList.contains("out")).toBe(true);
     expect(items[2].classList.contains("failed")).toBe(true);
+    expect(items[2].textContent).toContain(messages.en.status.sendFail);
   });
 
   // ── composer ───────────────────────────────────────────────────────────────
@@ -199,6 +200,35 @@ describe("MessagePanel", () => {
     const badge = target.querySelector(".path")!;
     expect(badge.classList.contains("path-lan")).toBe(true);
     expect(badge.textContent).toContain(messages.en.pathLan);
+    // The dot is drawn by the shared `.path .dot` rule in app.css. It used to be
+    // styled ONLY inside App.svelte's scoped <style>, which does not cross a
+    // component boundary — so this element rendered as an invisible nothing here.
+    expect(badge.querySelector(".dot")).not.toBe(null);
+  });
+
+  // The panel's shell is the shared `.ui-card` primitive. Before, it asked for
+  // `.card`, which is defined in App.svelte's *scoped* style block and therefore
+  // never applied to this component: no border, no surface, no padding, and an
+  // <h2> falling through to the 30px marketing heading size.
+  it("uses the shared card primitive for its shell", () => {
+    open();
+    const panel = target.querySelector(".msgpanel")!;
+    expect(panel.classList.contains("ui-card")).toBe(true);
+    expect(panel.querySelector("h2")).not.toBe(null);
+  });
+
+  it("keeps the panel's shared visual contracts in the global stylesheet", async () => {
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync("src/app.css", "utf8");
+    expect(css).toMatch(/\.ui-card\s*\{/);
+    expect(css).toMatch(/\.path \.dot\s*\{[^}]*inline-size:\s*7px/s);
+    expect(css).toMatch(/\.sas\s*\{/);
+    expect(css).toMatch(/\.btn:not\(:disabled\):not\(\.is-disabled\):not\(\.disabled\):hover/);
+    expect(css).toMatch(/\.btn-primary:not\(:disabled\):not\(\.is-disabled\):not\(\.disabled\):hover/);
+    expect(css).toMatch(/\.btn-link:not\(:disabled\):not\(\.is-disabled\):not\(\.disabled\):hover/);
+
+    const component = readFileSync("src/lib/MessagePanel.svelte", "utf8");
+    expect(component).toMatch(/\.msg\.failed\s*\{[^}]*border-color:\s*var\(--danger\)/s);
   });
 
   it("renders each session state from its own string", () => {

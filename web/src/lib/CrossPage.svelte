@@ -41,7 +41,7 @@
 
 <section class="crosspage page-enter">
 
-  <header class="cn-head">
+  <header class="ui-page-head">
     <h1>{t.crossTitle}</h1>
     <p class="tagline">{t.tagline}</p>
     {#if !inRoom}
@@ -52,26 +52,26 @@
   <div class="cards">
     {#if showTransfer && transferSurface}
       <!-- Active realtime transfer — one focused card, regardless of how they connected -->
-      <section class="card focus">
+      <section class="ui-card ui-card-raised ui-stack active">
         <h2>⚡ {t.crossnet.realtimeTitle}</h2>
-        <p class="cardsub">{t.crossnet.realtimeSub}</p>
+        <p class="ui-card-sub">{t.crossnet.realtimeSub}</p>
         {@render transferSurface()}
         <p class="foot">{t.crossnet.realtimeFoot}</p>
-        <button class="startover" onclick={startOver}>{t.startOver}</button>
+        <button class="btn btn-ghost btn-sm startover" onclick={startOver}>{t.startOver}</button>
       </section>
     {:else if roomCode}
       <!-- In a code room (minter waiting, or recipient who joined via code/link) -->
-      <section class="card focus">
-        <div class="mhead"><h2>{t.methods.realtime.name}</h2></div>
-        <p class="cardsub">{t.methods.realtime.sub}</p>
+      <section class="ui-card ui-card-raised ui-stack active">
+        <div class="ui-card-head"><h2>{t.methods.realtime.name}</h2></div>
+        <p class="ui-card-sub">{t.methods.realtime.sub}</p>
         <CodePairing {roomCode} expired={linkDead} {relayDenied} />
-        <button class="startover" onclick={startOver}>{t.startOver}</button>
+        <button class="btn btn-ghost btn-sm startover" onclick={startOver}>{t.startOver}</button>
       </section>
     {:else}
       <!-- Realtime transfer — the only method on this page (stored moved to /offline-transfer) -->
-      <section class="card">
-        <div class="mhead"><h2>{t.methods.realtime.name}</h2><span class="badge ok">{t.methods.realtime.badge}</span></div>
-        <p class="cardsub">{t.methods.realtime.sub}</p>
+      <section class="ui-card ui-card-raised ui-stack">
+        <div class="ui-card-head"><h2>{t.methods.realtime.name}</h2><span class="ui-badge ui-badge-ok">{t.methods.realtime.badge}</span></div>
+        <p class="ui-card-sub">{t.methods.realtime.sub}</p>
         <CodePairing requireLogin={() => setLoginOpen(true)} />
       </section>
     {/if}
@@ -94,40 +94,13 @@
 </section>
 
 <style>
+  /* Layout only. The page header, the card surface, its title/sub/badge and the
+     "start over" control are all shared primitives now (app.css): .ui-page-head,
+     .ui-card{,-raised,-head,-sub}, .ui-stack, .ui-badge, .btn. */
   .crosspage { position: relative; }
 
-  .cn-head { text-align: center; padding: var(--space-3) 0 var(--space-5); }
-  /* Intentional page-header size — smaller than the marketing hero (--fs-display). */
-  .cn-head h1 { font-size: 34px; margin: 0 0 var(--space-2); letter-spacing: -1px; }
-  .cn-head .tagline { color: var(--text); font-size: var(--fs-body); max-width: 44ch; margin: 0 auto; }
-  .cn-head .pitch { color: var(--text); font-size: var(--fs-xs); max-width: 52ch; margin: var(--space-3) auto 0; line-height: 1.55; }
+  .cards { display: grid; grid-template-columns: 1fr; gap: var(--space-4); max-inline-size: 720px; margin-inline: auto; align-items: stretch; }
 
-  .cards { display: grid; grid-template-columns: 1fr; gap: var(--space-4); max-width: 720px; margin: 0 auto; align-items: stretch; }
-  .card {
-    border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-5);
-    background: var(--surface); display: flex; flex-direction: column; gap: var(--space-3);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 12px 32px -18px color-mix(in srgb, var(--accent) 22%, transparent);
-  }
-  .card h2 { font-size: var(--fs-h3); margin: 0; }
-  .cardsub { margin: 0; font-size: var(--fs-xs); color: var(--text); line-height: 1.5; }
-
-  .mhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
-  .mhead h2 { margin-inline-end: auto; }
-  .badge {
-    flex: none; font-size: 11.5px; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
-    color: var(--text); background: var(--code-bg); border: 1px solid var(--border);
-  }
-  .badge.ok { color: #1f9d55; background: rgba(46, 204, 113, .12); border-color: rgba(46, 204, 113, .35); }
-  @media (prefers-color-scheme: dark) {
-    .badge.ok { color: #4ade80; background: rgba(46, 204, 113, .16); border-color: rgba(46, 204, 113, .4); }
-  }
-
-  .startover {
-    align-self: center; margin-top: 2px;
-    font: inherit; font-size: var(--fs-xs); padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); cursor: pointer;
-    background: none; border: 1px solid var(--border); color: var(--text);
-    transition: border-color .13s, color .13s;
-  }
-  .startover:hover { border-color: var(--accent-border); color: var(--text-h); }
-  .foot { margin: var(--space-1) 0 0; font-size: 12px; color: var(--text); text-align: center; }
+  .startover { align-self: center; margin-block-start: 2px; flex: none; }
+  .foot { margin-block: var(--space-1) 0; font-size: 12px; color: var(--text); text-align: center; }
 </style>
