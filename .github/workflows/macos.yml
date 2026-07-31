@@ -106,8 +106,12 @@ jobs:
           set -euo pipefail
           app="$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app"
           codesign --verify --strict --verbose=2 "$app"
-          codesign -d --verbose=4 "$app" 2>&1 | grep -q 'flags=.*runtime' || {
+          signature_details="$(codesign -d --verbose=4 "$app" 2>&1)"
+          printf '%s\n' "$signature_details"
+          printf '%s\n' "$signature_details" | grep -q 'flags=.*runtime' || {
             echo "::error::Hardened Runtime flag missing from the signed build"; exit 1; }
+          printf '%s\n' "$signature_details" | grep -q '^Timestamp=' || {
+            echo "::error::Secure timestamp missing from the signed build"; exit 1; }
           ents="$(codesign -d --entitlements - --xml "$app" | plutil -convert xml1 -o - -)"
           printf '%s\n' "$ents"
           printf '%s' "$ents" | grep -q 'com.apple.security.app-sandbox' || {
@@ -125,6 +129,25 @@ jobs:
             echo "::error::Release build carries get-task-allow — it must not ship debuggable"
             exit 1
           fi
+      # Exercise the exact packaging path intended for release: the script
+      # verifies the source signature, mounts the finished image, and verifies
+      # the copied app again before emitting its checksum.
+      - name: Package and verify DMG
+        run: |
+          apps/mac/scripts/package-dmg.sh \
+            "$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app" \
+            "$RUNNER_TEMP/Relayium.dmg"
+      # This is a CI acceptance artifact, not a public release. Public
+      # distribution remains gated on Apple notarization and stapling.
+      - name: Upload signed DMG acceptance artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: relayium-macos-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/Relayium.dmg
+            ${{ runner.temp }}/Relayium.dmg.sha256
+          if-no-files-found: error
+          retention-days: 14
       - name: Remove signing keychain
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true

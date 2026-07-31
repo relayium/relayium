@@ -97,7 +97,10 @@ Release also sets `CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO`. Xcode otherwise
 injects `com.apple.security.get-task-allow = true` even into this manually signed
 Release `build`, making the shipped app attachable by a debugger. The macOS CI
 job rejects that entitlement and separately proves the Hardened Runtime flag is
-present. Debug keeps Xcode's normal injection so local debugging still works.
+present. Release also sets `OTHER_CODE_SIGN_FLAGS = --timestamp`; both CI and
+the DMG packager reject a signature without Apple's secure `Timestamp`. Debug
+keeps Xcode's normal base-entitlement injection and does not require the release
+timestamp server, so local debugging still works.
 
 A provisioning profile is **required**, and the reason is worth knowing before
 you go looking for a way around it: it is the price of the
@@ -105,8 +108,23 @@ you go looking for a way around it: it is the price of the
 four lines from `Relayium.entitlements` makes the same tree build and sign
 cleanly with no profile at all. See "Provisioning profile" below.
 
-**Notarization, Sparkle, `.dmg` and the `/apps` page flip remain R1-G5.** Nothing
-here produces an artifact for a user.
+The signed-build CI job packages the signed Release app into a compressed
+`Relayium.dmg`, mounts it, verifies the copied app's signature, and retains the
+DMG plus its SHA-256 checksum as a 14-day acceptance artifact. The same path can
+be run locally:
+
+```sh
+apps/mac/scripts/package-dmg.sh \
+  /path/to/Release/Relayium.app \
+  /path/to/Relayium.dmg
+```
+
+The output path must not already exist. The image contains `Relayium.app` and an
+`Applications` shortcut; the script refuses a different bundle identifier or an
+invalid source/copied signature.
+
+**The acceptance artifact is not a user release.** Notarization and stapling,
+Sparkle, public release publication, and the `/apps` page flip remain R1-G5.
 
 ### Link handoff and notifications
 
