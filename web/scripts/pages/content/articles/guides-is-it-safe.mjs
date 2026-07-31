@@ -62,7 +62,7 @@ const en = {
       body: [
         "For a live transfer, with both people online at once, Relayium generates a fresh X25519 key pair on each device and derives a shared AES-256-GCM key that exists only inside the two browsers — it's never sent to Relayium's own servers. A short on-screen verification code (a SAS) lets both sides confirm the keys weren't swapped by a dishonest server in the middle, and each file's SHA-256 hash is checked end to end so a corrupted transfer doesn't arrive looking fine. The mechanics of exactly how that works are covered in more depth in \"How Relayium encrypts your files end-to-end\", if you want to go further than this page.",
         "When the recipient isn't online yet, a stored download link uses a genuinely different, zero-knowledge design: your browser generates a random AES-256-GCM key and encrypts the files with it before anything uploads. That key is never sent to the server — it lives only in the link's URL fragment, the part after #, which browsers never transmit. The server ends up holding ciphertext it has no way to decrypt, plus an expiry you choose: 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan, or burn after the first completed download.",
-        "Across networks, where a direct path often can't be found at all, the encrypted stream runs over a TURN relay — and that relay only ever sees ciphertext too, never a readable file.",
+        "Across networks, Relayium's browser app uses TURN by design: the relay carries end-to-end encrypted ciphertext, but it never receives the key and cannot read or decrypt the file.",
         "None of this asks you to trust a claim on faith: Relayium's client and server code is open source under the AGPL-3.0 license, so it can be read and audited rather than taken on faith.",
       ],
       bullets: [
@@ -96,7 +96,7 @@ const en = {
       },
       {
         q: "Does Relayium keep a copy of my files?",
-        a: "In realtime mode, no — the file streams directly between the two browsers and nothing is stored. For a stored link, the server holds only encrypted ciphertext it cannot read, until the link expires or is downloaded once if you chose burn-after-read.",
+        a: "In realtime mode, Relayium keeps no server-side copy or transfer history: WebRTC is direct on the same LAN, while cross-network browser sessions use TURN by design to carry end-to-end encrypted ciphertext the relay cannot read or decrypt. For a stored link, the server holds only encrypted ciphertext it cannot read, until the link expires or is downloaded once if you chose burn-after-read.",
       },
       {
         q: "Do I need an account to send or receive a file?",
@@ -168,7 +168,7 @@ const zh = {
       body: [
         "在一次双方同时在线的实时传输中，Relayium 会让每台设备各生成一对全新的 X25519 密钥，再各自推导出同一把只存在于两个浏览器内部的 AES-256-GCM 共享密钥——它从不会发送给 Relayium 自己的服务器。屏幕上显示的那段简短校验码（SAS）能让双方确认密钥没有被中间不诚实的服务器调包；每个文件的 SHA-256 哈希也会做端到端核对，这样一次损坏的传输不会看起来「一切正常」。想知道这背后具体是怎么运作的，可以接着读《Relayium 如何对文件端到端加密》，那篇讲得更深入。",
         "当接收方还不在线时，存储下载链接采用的是另一套零知识方案：你的浏览器会生成一把随机的 AES-256-GCM 密钥，在任何内容上传之前就用它把文件加密好。这把密钥从不会发给服务器——它只存在于链接的 URL 片段里，也就是 # 号之后、浏览器从不发送的那部分。服务器最终持有的是它无法解密的密文，外加一个由你选择的有效期：1 小时、1 天、3 天、7 天，最长 14 天（上限取决于你的套餐），或者阅后即焚（首次完整下载后即删除）。",
-        "跨网络传输往往根本打不通直连，这时加密后的数据流会经 TURN 中继转发——而这个中继同样始终只看得到密文，从来看不到可读的文件。",
+        "跨网络时，Relayium 浏览器端按设计使用 TURN：中继承载端到端加密的密文，但从未拿到密钥，无法读取或解密文件。",
         "这些都不需要你单凭信任去接受：Relayium 的客户端和服务器代码都以 AGPL-3.0 许可证开源，谁都可以阅读和审查，而不必只是相信宣传。",
       ],
       bullets: [
@@ -202,7 +202,7 @@ const zh = {
       },
       {
         q: "Relayium 会保留我的文件副本吗？",
-        a: "实时模式下不会——文件直接在两个浏览器之间流动，什么都不会被存储。对于存储链接，服务器只持有它无法读取的密文，直到链接过期；如果你选了「阅后即焚」，则在首次完整下载之后立即删除。",
+        a: "实时模式下，Relayium 不保留服务器端副本或传输历史：同一局域网内 WebRTC 直连，跨网络浏览器则按设计经 TURN 承载端到端加密的密文，中继无法读取或解密。对于存储链接，服务器只持有它无法读取的密文，直到链接过期；如果你选了「阅后即焚」，则在首次完整下载之后立即删除。",
       },
       {
         q: "发送或接收文件需要账号吗？",
@@ -274,7 +274,7 @@ const ja = {
       body: [
         "双方が同時にオンラインであるリアルタイム転送では、Relayium は各デバイスに新しい X25519 鍵ペアを生成させ、両ブラウザの内部にのみ存在する共有 AES-256-GCM 鍵を導出します。この鍵が Relayium 自身のサーバーに送られることはありません。画面に表示される短い検証コード（SAS）によって、双方は鍵が中間の不正なサーバーによってすり替えられていないことを確認でき、各ファイルの SHA-256 ハッシュがエンドツーエンドで照合されるため、破損した転送が何ごともなかったように見えることはありません。この仕組みの詳細をさらに知りたい場合は、より深く解説した「Relayium がファイルをエンドツーエンドで暗号化する仕組み」をご覧ください。",
         "受信者がまだオンラインでないとき、保存型のダウンロードリンクは本当に異なるゼロ知識方式を使います。ブラウザがランダムな AES-256-GCM 鍵を生成し、何かがアップロードされる前にそれでファイルを暗号化します。この鍵はサーバーには一切送られません。リンクの URL フラグメント、つまり # の後ろの部分にのみ存在し、ブラウザはこの部分を決して送信しません。結果としてサーバーが持つのは、復号する術のない暗号文と、選んだ有効期限（1時間、1日、3日、7日、プランに応じて最長14日、または最初のダウンロード完了後に消去）だけです。",
-        "ネットワークをまたぐ転送では、そもそも直接経路が見つからないことが多いため、暗号化されたストリームは TURN リレーを経由します。そのリレーもやはり暗号文しか見ることがなく、読める形のファイルを見ることは決してありません。",
+        "ネットワークをまたぐ場合、Relayium のブラウザアプリは設計上 TURN を使用します。リレーはエンドツーエンド暗号文を運びますが、鍵を受け取らないため、ファイルを読み取ることも復号することもできません。",
         "これらのどれについても、主張を鵜呑みにする必要はありません。Relayium のクライアントとサーバーのコードは AGPL-3.0 ライセンスのもとオープンソースで公開されており、宣伝を信じるのではなく、誰でも読んで監査できます。",
       ],
       bullets: [
@@ -308,7 +308,7 @@ const ja = {
       },
       {
         q: "Relayium は私のファイルのコピーを保持しますか？",
-        a: "リアルタイムモードでは保持しません。ファイルは2つのブラウザ間を直接ストリーミングされ、何も保存されません。保存リンクの場合、サーバーが持つのは読むことのできない暗号文だけで、リンクが期限切れになるか、「閲覧後削除」を選んでいれば一度ダウンロードされるまでの間だけ保持されます。",
+        a: "リアルタイムモードでは、Relayium はサーバー側のコピーや転送履歴を保持しません。同じ LAN では WebRTC で直接接続し、ネットワークをまたぐブラウザセッションは設計上 TURN で、リレーが読み取りも復号もできないエンドツーエンド暗号文を運びます。保存リンクの場合、サーバーが持つのは読むことのできない暗号文だけで、リンクが期限切れになるか、「閲覧後削除」を選んでいれば一度ダウンロードされるまでの間だけ保持されます。",
       },
       {
         q: "ファイルの送受信にアカウントは必要ですか？",
@@ -380,7 +380,7 @@ const ko = {
       body: [
         "양쪽이 동시에 온라인 상태인 실시간 전송에서, Relayium은 각 기기에서 새로운 X25519 키 쌍을 만들고, 두 브라우저 내부에만 존재하는 공유 AES-256-GCM 키를 도출합니다——이 키는 Relayium 자체 서버로 전송되는 일이 없습니다. 화면에 표시되는 짧은 검증 코드(SAS)를 통해 양쪽 모두 중간의 부정직한 서버가 키를 바꿔치기하지 않았음을 확인할 수 있고, 각 파일의 SHA-256 해시가 종단간으로 대조되므로 손상된 전송이 문제없어 보이게 도착하는 일이 없습니다. 이 원리가 정확히 어떻게 작동하는지 더 깊이 알고 싶다면 \"Relayium이 파일을 종단간 암호화하는 방식\"에서 더 자세히 다룹니다.",
         "수신자가 아직 온라인이 아닐 때, 저장형 다운로드 링크는 진짜로 다른 영지식 방식을 사용합니다. 브라우저는 무작위 AES-256-GCM 키를 생성하고, 무언가 업로드되기 전에 그것으로 파일을 암호화합니다. 이 키는 서버로 전혀 전송되지 않습니다——링크의 URL 프래그먼트, 즉 # 뒤의 부분에만 존재하며, 브라우저는 이 부분을 절대 전송하지 않습니다. 결국 서버가 갖게 되는 것은 복호화할 방법이 없는 암호문과, 직접 선택한 만료 기한(1시간, 1일, 3일, 7일, 요금제에 따라 최대 14일, 또는 첫 다운로드 완료 후 삭제)뿐입니다.",
-        "네트워크를 넘는 전송에서 암호화된 스트림은 TURN 릴레이를 거칩니다(그런 환경에서는 직접 경로가 아예 열리지 않는 경우가 많습니다)——그리고 그 릴레이 역시 언제나 암호문만 보며, 읽을 수 있는 파일을 보는 일은 결코 없습니다.",
+        "네트워크를 넘을 때 Relayium 브라우저 앱은 설계상 TURN을 사용합니다. 릴레이는 종단간 암호문을 운반하지만 키를 받지 않으므로 파일을 읽거나 복호화할 수 없습니다.",
         "이 중 어느 것도 주장을 그냥 믿으라고 요구하지 않습니다. Relayium의 클라이언트와 서버 코드는 AGPL-3.0 라이선스로 공개되어 있어, 홍보 문구를 믿는 대신 누구나 읽고 감사할 수 있습니다.",
       ],
       bullets: [
@@ -414,7 +414,7 @@ const ko = {
       },
       {
         q: "Relayium이 제 파일 사본을 보관하나요?",
-        a: "실시간 모드에서는 아닙니다——파일은 두 브라우저 사이에서 직접 스트리밍되며 아무것도 저장되지 않습니다. 저장 링크의 경우, 서버는 읽을 수 없는 암호문만 가지고 있으며, 링크가 만료되거나 '열람 후 삭제'를 선택했다면 한 번 다운로드된 후까지만 보관합니다.",
+        a: "실시간 모드에서 Relayium은 서버 측 복사본이나 전송 기록을 보관하지 않습니다. 같은 LAN에서는 WebRTC로 직접 연결하고, 네트워크를 넘는 브라우저 세션은 설계상 TURN으로 릴레이가 읽거나 복호화할 수 없는 종단간 암호문을 운반합니다. 저장 링크의 경우, 서버는 읽을 수 없는 암호문만 가지고 있으며, 링크가 만료되거나 '열람 후 삭제'를 선택했다면 한 번 다운로드된 후까지만 보관합니다.",
       },
       {
         q: "파일을 보내거나 받으려면 계정이 필요한가요?",
@@ -486,7 +486,7 @@ const de = {
       body: [
         "Bei einer Live-Übertragung, bei der beide Seiten gleichzeitig online sind, erzeugt Relayium auf jedem Gerät ein frisches X25519-Schlüsselpaar und leitet einen gemeinsamen AES-256-GCM-Schlüssel ab, der nur innerhalb der beiden Browser existiert — er wird nie an Relayiums eigene Server gesendet. Ein kurzer, auf dem Bildschirm angezeigter Verifizierungscode (ein SAS) lässt beide Seiten bestätigen, dass die Schlüssel nicht von einem unehrlichen Server in der Mitte ausgetauscht wurden, und der SHA-256-Hash jeder Datei wird Ende-zu-Ende geprüft, sodass eine beschädigte Übertragung nicht unauffällig ankommt. Wie das genau funktioniert, wird ausführlicher in „Wie Relayium deine Dateien Ende-zu-Ende verschlüsselt“ beschrieben, falls du tiefer einsteigen möchtest.",
         "Ist der Empfänger noch nicht online, nutzt ein gespeicherter Download-Link ein wirklich anderes, Zero-Knowledge-Design: Dein Browser erzeugt einen zufälligen AES-256-GCM-Schlüssel und verschlüsselt die Dateien damit, bevor überhaupt etwas hochgeladen wird. Dieser Schlüssel wird nie an den Server gesendet — er lebt nur im URL-Fragment des Links, dem Teil nach dem #, den Browser nie übertragen. Der Server besitzt am Ende nur Chiffretext, den er nicht entschlüsseln kann, plus ein von dir gewähltes Ablaufdatum: 1 Stunde, 1 Tag, 3 Tage, 7 Tage, bis zu 14 Tage je nach Tarif, oder Löschung nach dem ersten vollständigen Download.",
-        "Netzübergreifend, wo sich ohnehin oft kein direkter Pfad finden lässt, läuft der verschlüsselte Datenstrom über ein TURN-Relay — und auch dieses Relay sieht stets nur Chiffretext, nie eine lesbare Datei.",
+        "Netzübergreifend nutzt Relayiums Browser-App TURN planmäßig: Das Relay transportiert Ende-zu-Ende-verschlüsselten Chiffretext, erhält aber nie den Schlüssel und kann die Datei weder lesen noch entschlüsseln.",
         "Nichts davon verlangt, dass du einer Behauptung einfach glaubst: Relayiums Client- und Servercode ist unter der AGPL-3.0-Lizenz quelloffen und kann gelesen und geprüft werden, statt bloß geglaubt zu werden.",
       ],
       bullets: [
@@ -520,7 +520,7 @@ const de = {
       },
       {
         q: "Behält Relayium eine Kopie meiner Dateien?",
-        a: "Im Echtzeitmodus nicht — die Datei wird direkt zwischen den beiden Browsern gestreamt, und nichts wird gespeichert. Bei einem gespeicherten Link besitzt der Server nur verschlüsselten Chiffretext, den er nicht lesen kann, bis der Link abläuft oder, wenn du Burn-after-read gewählt hast, einmal heruntergeladen wurde.",
+        a: "Im Echtzeitmodus bewahrt Relayium keine serverseitige Kopie oder Übertragungshistorie auf: Im selben LAN verbindet WebRTC direkt; netzübergreifende Browser-Sitzungen nutzen planmäßig TURN für Ende-zu-Ende-verschlüsselten Chiffretext, den das Relay weder lesen noch entschlüsseln kann. Bei einem gespeicherten Link besitzt der Server nur verschlüsselten Chiffretext, den er nicht lesen kann, bis der Link abläuft oder, wenn du Burn-after-read gewählt hast, einmal heruntergeladen wurde.",
       },
       {
         q: "Brauche ich ein Konto, um eine Datei zu senden oder zu empfangen?",
@@ -592,7 +592,7 @@ const fr = {
       body: [
         "Pour un transfert en direct, avec les deux personnes en ligne en même temps, Relayium génère une nouvelle paire de clés X25519 sur chaque appareil et dérive une clé AES-256-GCM partagée qui n'existe qu'à l'intérieur des deux navigateurs — elle n'est jamais envoyée aux serveurs de Relayium eux-mêmes. Un court code de vérification affiché à l'écran (un SAS) permet aux deux parties de confirmer que les clés n'ont pas été substituées par un serveur malhonnête au milieu, et le hachage SHA-256 de chaque fichier est vérifié de bout en bout, si bien qu'un transfert corrompu n'arrive pas en paraissant intact. Le détail exact de ce mécanisme est expliqué plus en profondeur dans « Comment Relayium chiffre vos fichiers de bout en bout », si vous voulez aller plus loin que cette page.",
         "Quand le destinataire n'est pas encore en ligne, un lien de téléchargement stocké utilise un mécanisme réellement différent, à divulgation nulle : votre navigateur génère une clé AES-256-GCM aléatoire et l'utilise pour chiffrer les fichiers avant tout envoi. Cette clé n'est jamais envoyée au serveur — elle ne vit que dans le fragment d'URL du lien, la partie après le #, que les navigateurs ne transmettent jamais. Le serveur finit par détenir uniquement du texte chiffré qu'il n'a aucun moyen de déchiffrer, plus une expiration que vous choisissez : 1 heure, 1 jour, 3 jours, 7 jours, jusqu'à 14 jours selon votre offre, ou autodestruction après le premier téléchargement complet.",
-        "Entre réseaux, où un chemin direct est de toute façon souvent introuvable, le flux chiffré passe par un relais TURN — et ce relais aussi ne voit toujours que du texte chiffré, jamais un fichier lisible.",
+        "Entre réseaux, l'application navigateur Relayium utilise TURN par conception : le relais transporte du texte chiffré de bout en bout, mais ne reçoit jamais la clé et ne peut ni lire ni déchiffrer le fichier.",
         "Rien de tout cela ne vous demande de croire une affirmation sur parole : le code client et serveur de Relayium est open source sous licence AGPL-3.0, et peut donc être lu et audité plutôt que simplement cru.",
       ],
       bullets: [
@@ -626,7 +626,7 @@ const fr = {
       },
       {
         q: "Relayium conserve-t-il une copie de mes fichiers ?",
-        a: "En mode temps réel, non — le fichier circule directement entre les deux navigateurs et rien n'est stocké. Pour un lien stocké, le serveur ne détient que du texte chiffré qu'il ne peut pas lire, jusqu'à ce que le lien expire ou soit téléchargé une fois si vous avez choisi l'autodestruction après lecture.",
+        a: "En mode temps réel, Relayium ne conserve aucune copie côté serveur ni aucun historique de transfert : sur le même LAN, WebRTC se connecte directement ; entre réseaux, les sessions navigateur utilisent TURN par conception pour transporter un texte chiffré de bout en bout que le relais ne peut ni lire ni déchiffrer. Pour un lien stocké, le serveur ne détient que du texte chiffré qu'il ne peut pas lire, jusqu'à ce que le lien expire ou soit téléchargé une fois si vous avez choisi l'autodestruction après lecture.",
       },
       {
         q: "Ai-je besoin d'un compte pour envoyer ou recevoir un fichier ?",
@@ -698,7 +698,7 @@ const ar = {
       body: [
         "في النقل الفوري، مع وجود الطرفين متصلَين في آن واحد، يولّد Relayium زوج مفاتيح X25519 جديدًا على كل جهاز ويشتقّ مفتاح AES-256-GCM مشتركًا موجودًا فقط داخل المتصفحَين — ولا يُرسَل أبدًا إلى خوادم Relayium نفسها. ويتيح رمز تحقق قصير على الشاشة (SAS) للطرفين تأكيد أن المفاتيح لم تُستبدَل من قِبَل خادم غير نزيه في المنتصف، وتُفحَص تجزئة SHA-256 لكل ملف من الطرف إلى الطرف حتى لا يصل نقل تالف وهو يبدو سليمًا. أما تفاصيل كيفية عمل ذلك بالضبط فتُشرَح بعمق أكبر في «كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف»، إن أردت التعمّق أكثر من هذه الصفحة.",
         "حين لا يكون المُستقبِل متصلًا بعد، يستخدم رابط التنزيل المُخزَّن تصميمًا مختلفًا فعلًا بمعرفة صفرية: يولّد متصفحك مفتاح AES-256-GCM عشوائيًا ويشفّر به الملفات قبل رفع أي شيء. لا يُرسَل هذا المفتاح إلى الخادم أبدًا — بل يوجد فقط في جزء عنوان الرابط (URL fragment)، وهو الجزء الذي يلي #، والذي لا ترسله المتصفحات أبدًا. ينتهي الأمر بالخادم حاملًا نصًا مُشفَّرًا لا سبيل له إلى فك تشفيره، إضافة إلى مدة انتهاء صلاحية تختارها أنت: ساعة واحدة، أو يوم واحد، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب باقتك، أو الحذف بعد أول تنزيل مكتمل.",
-        "عبر الشبكات، حيث يتعذّر إيجاد مسار مباشر في الغالب أصلًا، يمرّ التدفق المُشفَّر على مُرحِّل TURN — وهذا المُرحِّل أيضًا لا يرى سوى النص المُشفَّر، ولا يرى أبدًا ملفًا قابلًا للقراءة.",
+        "عبر الشبكات يستخدم تطبيق Relayium في المتصفح TURN حسب التصميم: ينقل المُرحِّل نصًا مشفّرًا من الطرف إلى الطرف، لكنه لا يتلقى المفتاح أبدًا ولا يستطيع قراءة الملف أو فك تشفيره.",
         "لا يطلب أيٌّ من هذا أن تصدّق ادّعاءً على عِلّاته: شيفرة عميل Relayium وخادمه مفتوحة المصدر بموجب رخصة AGPL-3.0، فيمكن قراءتها وتدقيقها بدلًا من تصديقها على عِلّاته.",
       ],
       bullets: [
@@ -732,7 +732,7 @@ const ar = {
       },
       {
         q: "هل يحتفظ Relayium بنسخة من ملفاتي؟",
-        a: "في الوضع الفوري، لا — إذ يُبَثّ الملف مباشرة بين المتصفحَين ولا يُخزَّن شيء. أما بالنسبة لرابط مُخزَّن، فيحتفظ الخادم فقط بنص مُشفَّر لا يستطيع قراءته، إلى أن تنتهي صلاحية الرابط أو يُنزَّل مرة واحدة إذا اخترت الحذف بعد القراءة.",
+        a: "في الوضع الفوري لا يحتفظ Relayium بنسخة على الخادم أو بسجل للنقل: داخل شبكة LAN نفسها يتصل WebRTC مباشرةً، أما جلسات المتصفح عبر الشبكات فتستخدم TURN حسب التصميم لنقل نص مشفّر من الطرف إلى الطرف لا يستطيع المُرحِّل قراءته أو فك تشفيره. أما بالنسبة لرابط مُخزَّن، فيحتفظ الخادم فقط بنص مُشفَّر لا يستطيع قراءته، إلى أن تنتهي صلاحية الرابط أو يُنزَّل مرة واحدة إذا اخترت الحذف بعد القراءة.",
       },
       {
         q: "هل أحتاج إلى حساب لإرسال ملف أو استقباله؟",
@@ -804,7 +804,7 @@ const es = {
       body: [
         "Para una transferencia en vivo, con ambas personas en línea a la vez, Relayium genera un nuevo par de claves X25519 en cada dispositivo y deriva una clave AES-256-GCM compartida que existe solo dentro de los dos navegadores — nunca se envía a los propios servidores de Relayium. Un breve código de verificación en pantalla (un SAS) permite a ambos lados confirmar que las claves no fueron sustituidas por un servidor deshonesto en medio, y el hash SHA-256 de cada archivo se comprueba de extremo a extremo para que una transferencia corrupta no llegue con buen aspecto. Los detalles exactos de cómo funciona eso se tratan con más profundidad en «Cómo Relayium cifra tus archivos de extremo a extremo», si quieres ir más allá de esta página.",
         "Cuando el destinatario aún no está en línea, un enlace de descarga almacenado usa un diseño genuinamente distinto, de conocimiento cero: tu navegador genera una clave AES-256-GCM aleatoria y cifra los archivos con ella antes de que se suba nada. Esa clave nunca se envía al servidor — vive solo en el fragmento de la URL del enlace, la parte tras el #, que los navegadores nunca transmiten. El servidor acaba guardando texto cifrado que no tiene forma de descifrar, más una caducidad que tú eliges: 1 hora, 1 día, 3 días, 7 días, hasta 14 días según tu plan, o destrucción tras la primera descarga completada.",
-        "Entre redes, donde a menudo no hay ninguna ruta directa posible, el flujo cifrado va por un retransmisor TURN — y ese retransmisor también ve siempre solo texto cifrado, nunca un archivo legible.",
+        "Entre redes, la aplicación web de Relayium usa TURN por diseño: el retransmisor transporta texto cifrado de extremo a extremo, pero nunca recibe la clave y no puede leer ni descifrar el archivo.",
         "Nada de esto te pide confiar en una afirmación por fe: el código de cliente y servidor de Relayium es de código abierto bajo la licencia AGPL-3.0, así que puede leerse y auditarse en lugar de aceptarse por fe.",
       ],
       bullets: [
@@ -838,7 +838,7 @@ const es = {
       },
       {
         q: "¿Guarda Relayium una copia de mis archivos?",
-        a: "En modo tiempo real, no — el archivo se transmite directamente entre los dos navegadores y no se almacena nada. Para un enlace almacenado, el servidor guarda solo texto cifrado que no puede leer, hasta que el enlace caduca o se descarga una vez si elegiste la destrucción tras la lectura.",
+        a: "En modo tiempo real, Relayium no conserva copia del lado del servidor ni historial de transferencia: en la misma LAN, WebRTC conecta directamente; entre redes, las sesiones del navegador usan TURN por diseño para transportar texto cifrado de extremo a extremo que el retransmisor no puede leer ni descifrar. Para un enlace almacenado, el servidor guarda solo texto cifrado que no puede leer, hasta que el enlace caduca o se descarga una vez si elegiste la destrucción tras la lectura.",
       },
       {
         q: "¿Necesito una cuenta para enviar o recibir un archivo?",
@@ -910,7 +910,7 @@ const pt = {
       body: [
         "Para uma transferência ao vivo, com as duas pessoas online ao mesmo tempo, o Relayium gera um novo par de chaves X25519 em cada dispositivo e deriva uma chave AES-256-GCM compartilhada que existe apenas dentro dos dois navegadores — ela nunca é enviada aos próprios servidores do Relayium. Um curto código de verificação na tela (um SAS) permite que ambos os lados confirmem que as chaves não foram substituídas por um servidor desonesto no meio, e o hash SHA-256 de cada arquivo é verificado de ponta a ponta para que uma transferência corrompida não chegue parecendo intacta. Os detalhes exatos de como isso funciona são abordados com mais profundidade em “Como o Relayium criptografa seus arquivos de ponta a ponta”, se você quiser ir além desta página.",
         "Quando o destinatário ainda não está online, um link de download armazenado usa um design genuinamente diferente, de conhecimento zero: seu navegador gera uma chave AES-256-GCM aleatória e criptografa os arquivos com ela antes que qualquer coisa seja enviada. Essa chave nunca é enviada ao servidor — ela vive apenas no fragmento da URL do link, a parte depois do #, que os navegadores nunca transmitem. O servidor acaba guardando texto cifrado que não tem como descriptografar, mais uma expiração que você escolhe: 1 hora, 1 dia, 3 dias, 7 dias, até 14 dias conforme o seu plano, ou autodestruição após o primeiro download concluído.",
-        "Entre redes, onde muitas vezes não há caminho direto possível, o fluxo criptografado passa por um retransmissor TURN — e esse retransmissor também vê sempre apenas texto cifrado, nunca um arquivo legível.",
+        "Entre redes, o aplicativo web do Relayium usa TURN por design: o retransmissor transporta texto cifrado de ponta a ponta, mas nunca recebe a chave e não consegue ler nem descriptografar o arquivo.",
         "Nada disso pede que você acredite em uma afirmação às cegas: o código de cliente e servidor do Relayium é de código aberto sob a licença AGPL-3.0, então pode ser lido e auditado em vez de aceito às cegas.",
       ],
       bullets: [
@@ -944,7 +944,7 @@ const pt = {
       },
       {
         q: "O Relayium mantém uma cópia dos meus arquivos?",
-        a: "No modo tempo real, não — o arquivo é transmitido diretamente entre os dois navegadores e nada é armazenado. Para um link armazenado, o servidor guarda apenas texto cifrado que não consegue ler, até o link expirar ou ser baixado uma vez, se você escolheu a autodestruição após a leitura.",
+        a: "No modo em tempo real, o Relayium não mantém cópia no servidor nem histórico de transferência: na mesma LAN, o WebRTC conecta diretamente; entre redes, as sessões do navegador usam TURN por design para transportar texto cifrado de ponta a ponta que o retransmissor não consegue ler nem descriptografar. Para um link armazenado, o servidor guarda apenas texto cifrado que não consegue ler, até o link expirar ou ser baixado uma vez, se você escolheu a autodestruição após a leitura.",
       },
       {
         q: "Preciso de uma conta para enviar ou receber um arquivo?",

@@ -17,7 +17,7 @@ const en = {
     {
       heading: "Stored links vs. realtime: when to use which",
       body: [
-        "Relayium's realtime mode streams a file directly between two open browser tabs — fast, and nothing is stored anywhere, but both people need to be online together. A stored, expiring link flips that trade-off: your browser does the encryption and uploads the result once, and the recipient can open the link minutes, hours, or days later, on their own time.",
+        "Relayium's realtime mode streams a file live between two open browser tabs: WebRTC is direct on the same LAN, while cross-network browser sessions use TURN by design to carry end-to-end encrypted ciphertext that the relay cannot read or decrypt. Relayium keeps no server-side copy or realtime history, but both people need to be online together. A stored, expiring link flips that trade-off: your browser does the encryption and uploads the result once, and the recipient can open the link minutes, hours, or days later, on their own time.",
         "Use a stored link when you don't know exactly when the other person will be free, when you're sending the same file to more than one person, or when you just want something you can paste into an email or chat and be done with it.",
       ],
     },
@@ -97,7 +97,7 @@ const zh = {
     {
       heading: "存储链接与实时传输：该用哪个",
       body: [
-        "Relayium 的实时模式在两个打开着的浏览器标签之间直接传文件——很快，也不在任何地方留存，但双方得同时在线。存储型的过期链接正好反过来：你的浏览器负责加密，把结果上传一次，收件人可以在几分钟、几小时甚至几天后，按自己的时间打开链接。",
+        "Relayium 的实时模式会在两个打开着的浏览器标签之间实时传文件：同一局域网内由 WebRTC 直连，跨网络浏览器会按设计经 TURN 承载端到端加密的密文，中继无法读取或解密。Relayium 不保留服务器端副本或实时历史，但双方得同时在线。存储型的过期链接正好反过来：你的浏览器负责加密，把结果上传一次，收件人可以在几分钟、几小时甚至几天后，按自己的时间打开链接。",
         "如果你不确定对方什么时候有空、要把同一个文件发给不止一个人，或者只是想粘一条链接进邮件或聊天窗口就了事，那就用存储链接。",
       ],
     },
@@ -170,7 +170,7 @@ const ja = {
     {
       heading: "保存型リンク vs リアルタイム：どちらを使うか",
       body: [
-        "Relayium のリアルタイムモードは、開いている2つのブラウザタブの間で直接ファイルを転送します。速く、どこにも保存されませんが、双方が同時にオンラインである必要があります。保存型の期限付きリンクはその逆です。ブラウザが暗号化を行い結果を一度アップロードすれば、受信者は数分後、数時間後、あるいは数日後でも、自分の都合でリンクを開けます。",
+        "Relayium のリアルタイムモードは、開いている2つのブラウザタブ間でファイルをライブ転送します。同じ LAN では WebRTC で直接接続し、ネットワークをまたぐブラウザセッションは設計上 TURN を使って、リレーが読み取りも復号もできないエンドツーエンド暗号文を運びます。Relayium はサーバー側のコピーやリアルタイム履歴を保持しませんが、双方が同時にオンラインである必要があります。保存型の期限付きリンクはその逆です。ブラウザが暗号化を行い結果を一度アップロードすれば、受信者は数分後、数時間後、あるいは数日後でも、自分の都合でリンクを開けます。",
         "相手がいつ空くか分からないとき、同じファイルを複数人に送りたいとき、あるいはメールやチャットに貼り付けてそれで終わりにしたいときに、保存型リンクを使ってください。",
       ],
     },
@@ -243,7 +243,7 @@ const ko = {
     {
       heading: "저장 링크 vs 실시간: 어느 쪽을 써야 할까",
       body: [
-        "Relayium의 실시간 모드는 열려 있는 두 브라우저 탭 사이에서 파일을 직접 전송합니다. 빠르고 어디에도 저장되지 않지만, 양쪽이 동시에 온라인이어야 합니다. 저장형 만료 링크는 그 반대입니다. 브라우저가 암호화를 수행하고 결과를 한 번 업로드하면, 수신자는 몇 분, 몇 시간, 심지어 며칠 뒤에도 자기 시간에 맞춰 링크를 열 수 있습니다.",
+        "Relayium의 실시간 모드는 열려 있는 두 브라우저 탭 사이에서 파일을 실시간으로 전송합니다. 같은 LAN에서는 WebRTC로 직접 연결하고, 네트워크를 넘는 브라우저 세션은 설계상 TURN을 사용해 릴레이가 읽거나 복호화할 수 없는 종단간 암호문을 운반합니다. Relayium은 서버 측 복사본이나 실시간 기록을 보관하지 않지만, 양쪽이 동시에 온라인이어야 합니다. 저장형 만료 링크는 그 반대입니다. 브라우저가 암호화를 수행하고 결과를 한 번 업로드하면, 수신자는 몇 분, 몇 시간, 심지어 며칠 뒤에도 자기 시간에 맞춰 링크를 열 수 있습니다.",
         "상대가 언제 시간이 날지 모를 때, 같은 파일을 여러 사람에게 보낼 때, 아니면 그냥 이메일이나 채팅에 붙여넣고 끝내고 싶을 때 저장 링크를 사용하세요.",
       ],
     },
@@ -316,7 +316,7 @@ const de = {
     {
       heading: "Gespeicherte Links vs. Echtzeit: wann was nutzen",
       body: [
-        "Relayiums Echtzeitmodus überträgt eine Datei direkt zwischen zwei geöffneten Browser-Tabs — schnell, und nirgendwo gespeichert, aber beide Personen müssen gleichzeitig online sein. Ein gespeicherter, ablaufender Link kehrt diesen Kompromiss um: Dein Browser übernimmt die Verschlüsselung und lädt das Ergebnis einmal hoch, und die empfangende Person kann den Link Minuten, Stunden oder Tage später öffnen, zu ihrer eigenen Zeit.",
+        "Relayiums Echtzeitmodus streamt eine Datei live zwischen zwei geöffneten Browser-Tabs: Im selben LAN verbindet WebRTC direkt; netzübergreifende Browser-Sitzungen nutzen planmäßig TURN, das Ende-zu-Ende-verschlüsselten Chiffretext transportiert, den das Relay weder lesen noch entschlüsseln kann. Relayium bewahrt keine serverseitige Kopie oder Echtzeithistorie auf, aber beide Personen müssen gleichzeitig online sein. Ein gespeicherter, ablaufender Link kehrt diesen Kompromiss um: Dein Browser übernimmt die Verschlüsselung und lädt das Ergebnis einmal hoch, und die empfangende Person kann den Link Minuten, Stunden oder Tage später öffnen, zu ihrer eigenen Zeit.",
         "Nutze einen gespeicherten Link, wenn du nicht genau weißt, wann die andere Person Zeit hat, wenn du dieselbe Datei an mehr als eine Person senden willst, oder wenn du einfach etwas willst, das du in eine E-Mail oder einen Chat einfügen kannst und fertig bist.",
       ],
     },
@@ -396,7 +396,7 @@ const fr = {
     {
       heading: "Lien stocké ou temps réel : lequel choisir",
       body: [
-        "Le mode temps réel de Relayium transfère un fichier directement entre deux onglets de navigateur ouverts — rapide, et rien n'est stocké nulle part, mais les deux personnes doivent être en ligne en même temps. Un lien stocké et à expiration renverse cet équilibre : votre navigateur se charge du chiffrement et téléverse le résultat une seule fois, et le destinataire peut ouvrir le lien des minutes, des heures ou des jours plus tard, à son propre rythme.",
+        "Le mode temps réel de Relayium diffuse un fichier en direct entre deux onglets ouverts : sur le même LAN, WebRTC établit une connexion directe ; entre réseaux, les sessions navigateur utilisent TURN par conception pour transporter un texte chiffré de bout en bout que le relais ne peut ni lire ni déchiffrer. Relayium ne conserve aucune copie côté serveur ni aucun historique temps réel, mais les deux personnes doivent être en ligne en même temps. Un lien stocké et à expiration renverse cet équilibre : votre navigateur se charge du chiffrement et téléverse le résultat une seule fois, et le destinataire peut ouvrir le lien des minutes, des heures ou des jours plus tard, à son propre rythme.",
         "Utilisez un lien stocké quand vous ne savez pas exactement quand l'autre personne sera disponible, quand vous envoyez le même fichier à plusieurs personnes, ou quand vous voulez simplement quelque chose à coller dans un e-mail ou un chat et à oublier ensuite.",
       ],
     },
@@ -476,7 +476,7 @@ const ar = {
     {
       heading: "الروابط المُخزَّنة مقابل الوضع الفوري: متى تستخدم كلًا منهما",
       body: [
-        "يبث وضع Relayium الفوري ملفًا مباشرةً بين علامتي تبويب متصفح مفتوحتين — سريع، ولا شيء يُخزَّن في أي مكان، لكن يلزم أن يكون كلا الشخصين متصلين معًا. الرابط المُخزَّن المنتهي الصلاحية يقلب هذه المقايضة: يقوم متصفحك بالتشفير ويرفع النتيجة مرة واحدة، ويمكن للمُستقبِل فتح الرابط بعد دقائق أو ساعات أو أيام، في وقته الخاص.",
+        "يبث وضع Relayium الفوري ملفًا حيًا بين علامتي تبويب مفتوحتين: داخل شبكة LAN نفسها يتصل WebRTC مباشرةً، أما جلسات المتصفح عبر الشبكات فتستخدم TURN حسب التصميم لنقل نص مشفّر من الطرف إلى الطرف لا يستطيع المُرحِّل قراءته أو فك تشفيره. لا يحتفظ Relayium بنسخة على الخادم أو بسجل للنقل الفوري، لكن يلزم أن يكون كلا الشخصين متصلين معًا. الرابط المُخزَّن المنتهي الصلاحية يقلب هذه المقايضة: يقوم متصفحك بالتشفير ويرفع النتيجة مرة واحدة، ويمكن للمُستقبِل فتح الرابط بعد دقائق أو ساعات أو أيام، في وقته الخاص.",
         "استخدم رابطًا مُخزَّنًا عندما لا تعرف بالضبط متى سيكون الطرف الآخر متفرغًا، أو عندما ترسل الملف نفسه إلى أكثر من شخص، أو عندما تريد فقط شيئًا تلصقه في بريد إلكتروني أو محادثة وتنتهي منه.",
       ],
     },
@@ -556,7 +556,7 @@ const es = {
     {
       heading: "Enlaces almacenados vs. tiempo real: cuándo usar cada uno",
       body: [
-        "El modo en tiempo real de Relayium transmite un archivo directamente entre dos pestañas de navegador abiertas — rápido, y sin que nada quede almacenado en ninguna parte, pero ambas personas deben estar en línea a la vez. Un enlace almacenado y con caducidad le da la vuelta a ese equilibrio: tu navegador se encarga del cifrado y sube el resultado una sola vez, y el destinatario puede abrir el enlace minutos, horas o días después, a su propio ritmo.",
+        "El modo en tiempo real de Relayium transmite un archivo en vivo entre dos pestañas abiertas: en la misma LAN, WebRTC conecta directamente; entre redes, las sesiones del navegador usan TURN por diseño para transportar texto cifrado de extremo a extremo que el retransmisor no puede leer ni descifrar. Relayium no conserva copia del lado del servidor ni historial en tiempo real, pero ambas personas deben estar en línea a la vez. Un enlace almacenado y con caducidad le da la vuelta a ese equilibrio: tu navegador se encarga del cifrado y sube el resultado una sola vez, y el destinatario puede abrir el enlace minutos, horas o días después, a su propio ritmo.",
         "Usa un enlace almacenado cuando no sabes exactamente cuándo estará libre la otra persona, cuando envías el mismo archivo a más de una persona, o cuando simplemente quieres algo que puedas pegar en un correo o chat y olvidarte del asunto.",
       ],
     },
@@ -636,7 +636,7 @@ const pt = {
     {
       heading: "Links armazenados vs. tempo real: quando usar cada um",
       body: [
-        "O modo em tempo real do Relayium transmite um arquivo diretamente entre duas abas de navegador abertas — rápido, e nada fica armazenado em lugar nenhum, mas as duas pessoas precisam estar online ao mesmo tempo. Um link armazenado e com validade inverte esse compromisso: o seu navegador faz a criptografia e envia o resultado uma única vez, e o destinatário pode abrir o link minutos, horas ou dias depois, no próprio tempo.",
+        "O modo em tempo real do Relayium transmite um arquivo ao vivo entre duas abas abertas: na mesma LAN, o WebRTC conecta diretamente; entre redes, as sessões do navegador usam TURN por design para transportar texto cifrado de ponta a ponta que o retransmissor não consegue ler nem descriptografar. O Relayium não mantém cópia no servidor nem histórico em tempo real, mas as duas pessoas precisam estar online ao mesmo tempo. Um link armazenado e com validade inverte esse compromisso: o seu navegador faz a criptografia e envia o resultado uma única vez, e o destinatário pode abrir o link minutos, horas ou dias depois, no próprio tempo.",
         "Use um link armazenado quando não souber exatamente quando a outra pessoa estará livre, quando estiver enviando o mesmo arquivo para mais de uma pessoa, ou quando simplesmente quiser algo que você possa colar em um e-mail ou chat e pronto.",
       ],
     },

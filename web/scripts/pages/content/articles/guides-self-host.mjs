@@ -18,7 +18,7 @@ const en = {
     {
       heading: "Why self-host",
       body: [
-        "Relayium's realtime transfers are already peer-to-peer and end-to-end encrypted, so the server never sees your file bytes there. But it does hold your account, and — for stored/link-based transfers — ciphertext blobs and a small SQLite database. Self-hosting means that data lives on infrastructure you control, under your own domain, with nobody else's operational decisions in the loop.",
+        "Relayium's realtime transfers are end-to-end encrypted. A self-hosted TURN relay may carry ciphertext bytes, and the server handles signaling metadata, but neither can read or decrypt file plaintext; neither the server nor relay stores a server-side copy or history of realtime content. The server does hold your account and — for stored/link-based transfers — ciphertext blobs and a small SQLite database. Self-hosting means that data lives on infrastructure you control, under your own domain, with nobody else's operational decisions in the loop.",
         "Because the project is AGPL-3.0-licensed and open source (github.com/relayium/relayium), you can read exactly what the server does before you trust it with anything, and fork or modify it freely.",
       ],
     },
@@ -108,7 +108,7 @@ const zh = {
     {
       heading: "为什么要自托管",
       body: [
-        "Relayium 的实时传输本身就是点对点、端到端加密的，服务器在这个过程中根本看不到你的文件字节。但服务器确实保存着你的账号，以及——对于存储型/链接型传输——密文数据块和一个小型 SQLite 数据库。自托管意味着这些数据存放在你自己掌控的基础设施上，挂在你自己的域名下，不受其他任何人的运维决策影响。",
+        "Relayium 的实时传输采用端到端加密。自托管的 TURN 中继可能承载密文字节，服务器也会处理信令元数据，但两者都无法读取或解密文件明文；服务器和中继均不保存实时内容的服务端副本或历史。服务器确实保存着你的账号，以及——对于存储型/链接型传输——密文数据块和一个小型 SQLite 数据库。自托管意味着这些数据存放在你自己掌控的基础设施上，挂在你自己的域名下，不受其他任何人的运维决策影响。",
         "由于该项目采用 AGPL-3.0 许可并且开源（github.com/relayium/relayium），你可以在信任它之前先读清楚服务端到底做了什么，也可以自由 fork 或修改它。",
       ],
     },
@@ -198,7 +198,7 @@ const ja = {
     {
       heading: "なぜセルフホストするのか",
       body: [
-        "Relayium のリアルタイム転送はもともと P2P かつエンドツーエンドで暗号化されているため、その過程でサーバーがファイルのバイトを目にすることはありません。しかしサーバーはアカウントを保持し、また保存型/リンク型の転送については、暗号化されたブロブと小さな SQLite データベースを保持します。セルフホストとは、そのデータが自分が管理するインフラ上に、自分のドメインの下に置かれ、他人の運用判断が介在しないということです。",
+        "Relayium のリアルタイム転送はエンドツーエンドで暗号化されています。セルフホストした TURN リレーは暗号文のバイトを運ぶことがあり、サーバーはシグナリングのメタデータを処理しますが、どちらもファイルの平文を読んだり復号したりできません。サーバーもリレーも、リアルタイム内容のサーバー側コピーや履歴を保存しません。サーバーはアカウントを保持し、また保存型/リンク型の転送については、暗号化されたブロブと小さな SQLite データベースを保持します。セルフホストとは、そのデータが自分が管理するインフラ上に、自分のドメインの下に置かれ、他人の運用判断が介在しないということです。",
         "このプロジェクトは AGPL-3.0 ライセンスでオープンソース（github.com/relayium/relayium）なので、何かを任せる前にサーバーが正確に何をしているかを読んで確認でき、自由に fork したり改変したりできます。",
       ],
     },
@@ -288,7 +288,7 @@ const ko = {
     {
       heading: "왜 자체 호스팅을 하나",
       body: [
-        "Relayium의 실시간 전송은 원래부터 P2P이자 종단간 암호화되어 있어, 그 과정에서 서버는 파일 데이터를 전혀 보지 못합니다. 하지만 서버는 계정을 보관하며, 저장형/링크형 전송의 경우 암호화된 블롭과 작은 SQLite 데이터베이스도 보관합니다. 자체 호스팅이란 그 데이터가 직접 통제하는 인프라 위에, 자신의 도메인 아래 놓이고, 다른 누구의 운영 판단도 개입하지 않는다는 뜻입니다.",
+        "Relayium의 실시간 전송은 종단간 암호화됩니다. 자체 호스팅한 TURN 릴레이는 암호문 바이트를 운반할 수 있고 서버는 시그널링 메타데이터를 처리하지만, 어느 쪽도 파일 평문을 읽거나 복호화할 수 없습니다. 서버와 릴레이 모두 실시간 내용의 서버 측 사본이나 기록을 저장하지 않습니다. 서버는 계정을 보관하며, 저장형/링크형 전송의 경우 암호화된 블롭과 작은 SQLite 데이터베이스도 보관합니다. 자체 호스팅이란 그 데이터가 직접 통제하는 인프라 위에, 자신의 도메인 아래 놓이고, 다른 누구의 운영 판단도 개입하지 않는다는 뜻입니다.",
         "이 프로젝트는 AGPL-3.0 라이선스로 오픈소스(github.com/relayium/relayium)이므로, 무언가를 맡기기 전에 서버가 정확히 무엇을 하는지 직접 읽어볼 수 있고, 자유롭게 fork하거나 수정할 수도 있습니다.",
       ],
     },
@@ -378,7 +378,7 @@ const de = {
     {
       heading: "Warum selbst hosten",
       body: [
-        "Relayiums Echtzeit-Übertragungen sind bereits Peer-to-Peer und Ende-zu-Ende verschlüsselt, sodass der Server dabei nie deine Dateibytes sieht. Er hält aber dein Konto und — bei gespeicherten/link-basierten Übertragungen — verschlüsselte Blobs sowie eine kleine SQLite-Datenbank. Selbst hosten bedeutet, dass diese Daten auf Infrastruktur liegen, die du kontrollierst, unter deiner eigenen Domain, ohne dass fremde Betriebsentscheidungen mitspielen.",
+        "Relayiums Echtzeit-Übertragungen sind Ende-zu-Ende verschlüsselt. Ein selbst gehostetes TURN-Relay kann verschlüsselte Bytes transportieren und der Server verarbeitet Signalisierungsmetadaten, doch beide können Dateiklartext weder lesen noch entschlüsseln; weder Server noch Relay speichern eine serverseitige Kopie oder Historie von Echtzeitinhalten. Der Server hält aber dein Konto und — bei gespeicherten/link-basierten Übertragungen — verschlüsselte Blobs sowie eine kleine SQLite-Datenbank. Selbst hosten bedeutet, dass diese Daten auf Infrastruktur liegen, die du kontrollierst, unter deiner eigenen Domain, ohne dass fremde Betriebsentscheidungen mitspielen.",
         "Da das Projekt AGPL-3.0-lizenziert und Open Source ist (github.com/relayium/relayium), kannst du genau nachlesen, was der Server tut, bevor du ihm irgendetwas anvertraust, und ihn frei forken oder verändern.",
       ],
     },
@@ -468,7 +468,7 @@ const fr = {
     {
       heading: "Pourquoi s'auto-héberger",
       body: [
-        "Les transferts en temps réel de Relayium sont déjà pair-à-pair et chiffrés de bout en bout, donc le serveur ne voit jamais les octets de vos fichiers dans ce cas. Mais il conserve bien votre compte et — pour les transferts stockés/basés sur un lien — des blobs chiffrés ainsi qu'une petite base SQLite. S'auto-héberger signifie que ces données vivent sur une infrastructure que vous contrôlez, sous votre propre domaine, sans que les décisions opérationnelles de quelqu'un d'autre n'interviennent.",
+        "Les transferts en temps réel de Relayium sont chiffrés de bout en bout. Un relais TURN auto-hébergé peut transporter des octets chiffrés et le serveur traite des métadonnées de signalisation, mais aucun des deux ne peut lire ni déchiffrer le contenu en clair des fichiers ; ni le serveur ni le relais ne stockent de copie ou d'historique côté serveur du contenu en temps réel. Le serveur conserve toutefois votre compte et — pour les transferts stockés/basés sur un lien — des blobs chiffrés ainsi qu'une petite base SQLite. S'auto-héberger signifie que ces données vivent sur une infrastructure que vous contrôlez, sous votre propre domaine, sans que les décisions opérationnelles de quelqu'un d'autre n'interviennent.",
         "Le projet étant sous licence AGPL-3.0 et open source (github.com/relayium/relayium), vous pouvez lire exactement ce que fait le serveur avant de lui confier quoi que ce soit, et le forker ou le modifier librement.",
       ],
     },
@@ -558,7 +558,7 @@ const ar = {
     {
       heading: "لماذا الاستضافة الذاتية",
       body: [
-        "عمليات النقل الفوري في Relayium من الند للند ومشفَّرة من الطرف إلى الطرف أصلًا، لذا لا يرى الخادم بايتات ملفك هناك أبدًا. لكنه يحتفظ بحسابك، و — لعمليات النقل المُخزَّنة/المبنية على رابط — بكتل نص مُشفَّر وقاعدة بيانات SQLite صغيرة. الاستضافة الذاتية تعني أن تعيش تلك البيانات على بنية تتحكم فيها أنت، تحت نطاقك الخاص، دون أن تتدخل قرارات تشغيل أحد آخر.",
+        "عمليات النقل الفوري في Relayium مشفَّرة من الطرف إلى الطرف. قد يحمل مُرحِّل TURN المستضاف ذاتيًا بايتات مشفَّرة، ويعالج الخادم بيانات الإشارة الوصفية، لكن لا يمكن لأي منهما قراءة النص الصريح للملف أو فك تشفيره؛ ولا يخزّن الخادم أو المُرحِّل نسخة أو سجلًا على الخادم للمحتوى الفوري. ويحتفظ الخادم بحسابك، و — لعمليات النقل المُخزَّنة/المبنية على رابط — بكتل نص مُشفَّر وقاعدة بيانات SQLite صغيرة. الاستضافة الذاتية تعني أن تعيش تلك البيانات على بنية تتحكم فيها أنت، تحت نطاقك الخاص، دون أن تتدخل قرارات تشغيل أحد آخر.",
         "لأن المشروع مرخَّص بموجب AGPL-3.0 ومفتوح المصدر (github.com/relayium/relayium)، يمكنك أن تقرأ بالضبط ما يفعله الخادم قبل أن تأتمنه على أي شيء، وأن تنسخه (fork) أو تعدّله بحرية.",
       ],
     },
@@ -648,7 +648,7 @@ const es = {
     {
       heading: "Por qué autoalojar",
       body: [
-        "Las transferencias en tiempo real de Relayium ya son de igual a igual y cifradas de extremo a extremo, así que el servidor nunca ve los bytes de tu archivo ahí. Pero sí guarda tu cuenta y — para las transferencias almacenadas/basadas en enlace — blobs de texto cifrado y una pequeña base de datos SQLite. Autoalojar significa que esos datos viven en infraestructura que tú controlas, bajo tu propio dominio, sin las decisiones operativas de nadie más de por medio.",
+        "Las transferencias en tiempo real de Relayium están cifradas de extremo a extremo. Un retransmisor TURN autoalojado puede transportar bytes cifrados y el servidor procesa metadatos de señalización, pero ninguno puede leer ni descifrar el texto en claro de los archivos; ni el servidor ni el retransmisor guardan una copia o historial del contenido en tiempo real en el servidor. El servidor sí guarda tu cuenta y — para las transferencias almacenadas/basadas en enlace — blobs de texto cifrado y una pequeña base de datos SQLite. Autoalojar significa que esos datos viven en infraestructura que tú controlas, bajo tu propio dominio, sin las decisiones operativas de nadie más de por medio.",
         "Como el proyecto tiene licencia AGPL-3.0 y es de código abierto (github.com/relayium/relayium), puedes leer exactamente qué hace el servidor antes de confiarle nada, y bifurcarlo o modificarlo libremente.",
       ],
     },
@@ -738,7 +738,7 @@ const pt = {
     {
       heading: "Por que auto-hospedar",
       body: [
-        "As transferências em tempo real do Relayium já são ponto a ponto e com criptografia de ponta a ponta, então o servidor nunca vê os bytes do seu arquivo ali. Mas ele guarda sua conta e — para transferências armazenadas/baseadas em link — blobs de texto cifrado e um pequeno banco de dados SQLite. Auto-hospedar significa que esses dados ficam em infraestrutura que você controla, sob seu próprio domínio, sem as decisões operacionais de mais ninguém envolvidas.",
+        "As transferências em tempo real do Relayium têm criptografia de ponta a ponta. Um retransmissor TURN auto-hospedado pode transportar bytes cifrados e o servidor processa metadados de sinalização, mas nenhum deles pode ler ou descriptografar o texto simples dos arquivos; nem o servidor nem o retransmissor armazenam uma cópia ou histórico do conteúdo em tempo real no servidor. O servidor guarda sua conta e — para transferências armazenadas/baseadas em link — blobs de texto cifrado e um pequeno banco de dados SQLite. Auto-hospedar significa que esses dados ficam em infraestrutura que você controla, sob seu próprio domínio, sem as decisões operacionais de mais ninguém envolvidas.",
         "Como o projeto tem licença AGPL-3.0 e é de código aberto (github.com/relayium/relayium), você pode ler exatamente o que o servidor faz antes de confiar qualquer coisa a ele, e fazer fork ou modificá-lo livremente.",
       ],
     },

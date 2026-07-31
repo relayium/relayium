@@ -86,6 +86,18 @@ const TEXT_WORD = {
   pt: /texto/i,
 };
 
+const SELF_HOST_PRIVACY = {
+  en: /ciphertext bytes.*signaling metadata.*neither can read or decrypt file plaintext.*server-side copy or history/i,
+  zh: /密文字节.*信令元数据.*无法读取或解密文件明文.*服务端副本或历史/,
+  ja: /暗号文のバイト.*シグナリングのメタデータ.*平文を読んだり復号.*サーバー側コピーや履歴/,
+  ko: /암호문 바이트.*시그널링 메타데이터.*파일 평문을 읽거나 복호화.*서버 측 사본이나 기록/,
+  de: /verschlüsselte Bytes.*Signalisierungsmetadaten.*Dateiklartext weder lesen noch entschlüsseln.*serverseitige Kopie oder Historie/i,
+  fr: /octets chiffrés.*métadonnées de signalisation.*lire ni déchiffrer.*copie ou d'historique côté serveur/i,
+  ar: /بايتات مشفَّرة.*بيانات الإشارة الوصفية.*قراءة النص الصريح للملف أو فك تشفيره.*نسخة أو سجلًا على الخادم/,
+  es: /bytes cifrados.*metadatos de señalización.*leer ni descifrar el texto en claro.*copia o historial.*en el servidor/i,
+  pt: /bytes cifrados.*metadados de sinalização.*ler ou descriptografar o texto simples.*cópia ou histórico.*no servidor/i,
+};
+
 describe("self-hosting guide documents CLI text against a custom server", () => {
   for (const lang of LANGS) {
     it(`${lang}: gives both copy-ready text commands and preserves the protocol facts`, () => {
@@ -120,6 +132,13 @@ describe("self-hosting guide documents CLI text against a custom server", () => 
       );
       expect(storageFaq.a).not.toMatch(
         /anywhere|任何地方|どこにも|어디에도|nirgendwo|nulle part|في أي مكان|ningún sitio|lugar nenhum/i,
+      );
+
+      const whySelfHost = doc.sections[0].body.join(" ");
+      expect(whySelfHost).toContain("TURN");
+      expect(whySelfHost).toMatch(SELF_HOST_PRIVACY[lang]);
+      expect(whySelfHost).not.toMatch(
+        /never sees your file bytes|根本看不到你的文件字节|ファイルのバイトを目にすることはありません|파일 데이터를 전혀 보지 못합니다|nie deine Dateibytes sieht|ne voit jamais les octets|لا يرى الخادم بايتات ملفك|nunca ve los bytes|nunca vê os bytes/i,
       );
     });
   }

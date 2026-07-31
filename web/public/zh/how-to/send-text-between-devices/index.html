@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>在设备之间发送文本、链接和命令 · Relayium</title>
-    <meta name="description" content="用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线、不经服务器存储，浏览器和 CLI 都能用。" />
+    <meta name="description" content="用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线；Relayium 服务器不保存消息正文或服务端历史，但任一端都可留存收到的文本。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/how-to/send-text-between-devices/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-text-between-devices/" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="在设备之间发送文本、链接和命令" />
-    <meta property="og:description" content="用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线、不经服务器存储，浏览器和 CLI 都能用。" />
+    <meta property="og:description" content="用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线；Relayium 服务器不保存消息正文或服务端历史，但任一端都可留存收到的文本。" />
     <meta property="og:url" content="https://relayium.com/zh/how-to/send-text-between-devices/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="在设备之间发送文本、链接和命令" />
-    <meta name="twitter:description" content="用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线、不经服务器存储，浏览器和 CLI 都能用。" />
+    <meta name="twitter:description" content="用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线；Relayium 服务器不保存消息正文或服务端历史，但任一端都可留存收到的文本。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在设备之间发送文本、链接和命令","description":"用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线、不经服务器存储，浏览器和 CLI 都能用。","inLanguage":"zh-Hans","datePublished":"2026-07-30","dateModified":"2026-07-30","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"在设备之间发送文本、链接和命令"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 能读取或恢复我的消息吗？","acceptedAnswer":{"@type":"Answer","text":"不能。消息内容只在两台设备之间端到端加密，Relayium 从不存储。实时会话一旦结束，服务器上没有可恢复的副本。"}},{"@type":"Question","name":"一端用浏览器、另一端用 CLI 可以吗？","acceptedAnswer":{"@type":"Answer","text":"不可以。浏览器与 CLI 使用不同的传输和配对握手。请使用两台浏览器，或两端都使用 CLI。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在设备之间发送文本、链接和命令","description":"用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线；Relayium 服务器不保存消息正文或服务端历史，但任一端都可留存收到的文本。","inLanguage":"zh-Hans","datePublished":"2026-07-30","dateModified":"2026-07-30","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"在设备之间发送文本、链接和命令"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 能读取或恢复我的消息吗？","acceptedAnswer":{"@type":"Answer","text":"不能。消息内容在两台设备之间端到端加密，Relayium 服务器不保存消息正文或服务端历史。任一端都可复制或留存收到的文本；实时会话结束后，Relayium 没有可恢复的服务器副本。"}},{"@type":"Question","name":"一端用浏览器、另一端用 CLI 可以吗？","acceptedAnswer":{"@type":"Answer","text":"不可以。浏览器与 CLI 使用不同的传输和配对握手。请使用两台浏览器，或两端都使用 CLI。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -73,7 +73,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h1>在设备之间发送文本、链接和命令</h1>
       <p class="updated">最近更新: 2026-07-30</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-text-between-devices/">English</a><a href="/zh/how-to/send-text-between-devices/" aria-current="true">中文</a><a href="/ja/how-to/send-text-between-devices/">日本語</a><a href="/ko/how-to/send-text-between-devices/">한국어</a><a href="/de/how-to/send-text-between-devices/">Deutsch</a><a href="/fr/how-to/send-text-between-devices/">Français</a><a href="/ar/how-to/send-text-between-devices/">العربية</a><a href="/es/how-to/send-text-between-devices/">Español</a><a href="/pt/how-to/send-text-between-devices/">Português</a></nav>
-      <p class="lead">Relayium 不只能传文件，也能传适合剪贴板的内容：手机上的网址、要在另一台电脑执行的命令，或一整段多行代码。消息端到端加密，只存在于当前在线会话中，Relayium 从不存储。</p>
+      <p class="lead">Relayium 不只能传文件，也能传适合剪贴板的内容：手机上的网址、要在另一台电脑执行的命令，或一整段多行代码。消息端到端加密；Relayium 服务器不保存消息正文或服务端历史，但任一端都能复制或留存收到的文本。</p>
       <p class="lead">浏览器和命令行都支持文本，但它们是两套独立传输，不能加入彼此的配对码。下面任选一种方式，两端保持一致。</p>
       <h2>浏览器：给在线设备发送消息</h2>
       <p>在两台设备上打开 relayium.com。同一网络的设备会自动出现；不同网络时，在跨网络页面创建浏览器配对码，再让另一台浏览器加入。</p>
@@ -100,7 +100,7 @@ cat snippet.txt | relayium text K7M4XR --yes</code></pre>
       <ul><li>两台设备必须同时在线；没有离线投递、收件箱、联系人或同步聊天记录。</li><li>历史只存在于当前本地会话，结束会话或刷新页面后消失；服务器从不保存消息正文。</li><li>每条消息最多 65,536 个 UTF-8 字节；更大的内容请作为文件发送。</li></ul>
       <h2>常见问题</h2>
       <h3>Relayium 能读取或恢复我的消息吗？</h3>
-      <p>不能。消息内容只在两台设备之间端到端加密，Relayium 从不存储。实时会话一旦结束，服务器上没有可恢复的副本。</p>
+      <p>不能。消息内容在两台设备之间端到端加密，Relayium 服务器不保存消息正文或服务端历史。任一端都可复制或留存收到的文本；实时会话结束后，Relayium 没有可恢复的服务器副本。</p>
       <h3>一端用浏览器、另一端用 CLI 可以吗？</h3>
       <p>不可以。浏览器与 CLI 使用不同的传输和配对握手。请使用两台浏览器，或两端都使用 CLI。</p>
       <div class="ctacard">

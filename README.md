@@ -25,8 +25,10 @@ press one button to send, and the software picks the right path while keeping co
 **end-to-end encrypted by default** — the keys only ever exist on the sender and the receiver.
 
 The same protocol also carries **ephemeral text**. When both devices are online, a message session
-opens a peer-to-peer connection of its own — end-to-end encrypted, with its own SAS to compare — and
-carries a link, a command, or a block of multiline code instead of a file. Messages are session-scoped:
+opens an independent end-to-end encrypted connection with its own SAS to compare, and carries a link,
+a command, or a block of multiline code instead of a file. On a LAN, browser messages move directly;
+cross-network browser sessions use TURN that carries only ciphertext; CLI text is direct-only.
+Messages are session-scoped:
 never stored by Relayium, and gone from its session when that session ends. There is no offline messaging
 or server-side history, though either endpoint can retain received text — one message is at most
 **65,536 UTF-8 bytes**, delivered byte for byte,

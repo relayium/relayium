@@ -68,7 +68,7 @@
         <button class="startover" onclick={startOver}>{t.startOver}</button>
       </section>
     {:else}
-      <!-- Realtime direct — the only method on this page (stored moved to /offline-transfer) -->
+      <!-- Realtime transfer — the only method on this page (stored moved to /offline-transfer) -->
       <section class="card">
         <div class="mhead"><h2>{t.methods.realtime.name}</h2><span class="badge ok">{t.methods.realtime.badge}</span></div>
         <p class="cardsub">{t.methods.realtime.sub}</p>

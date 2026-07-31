@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>端末間でテキスト、リンク、コマンドを送る · Relayium</title>
-    <meta name="description" content="Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化、同時オンライン限定、サーバー保存なし。ブラウザと CLI に対応。" />
+    <meta name="description" content="Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化かつ同時オンライン限定で、Relayium サーバーはメッセージ本文やサーバー側履歴を保存しませんが、各端末は受信テキストを保持できます。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/how-to/send-text-between-devices/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-text-between-devices/" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="端末間でテキスト、リンク、コマンドを送る" />
-    <meta property="og:description" content="Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化、同時オンライン限定、サーバー保存なし。ブラウザと CLI に対応。" />
+    <meta property="og:description" content="Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化かつ同時オンライン限定で、Relayium サーバーはメッセージ本文やサーバー側履歴を保存しませんが、各端末は受信テキストを保持できます。" />
     <meta property="og:url" content="https://relayium.com/ja/how-to/send-text-between-devices/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="ja_JP" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="端末間でテキスト、リンク、コマンドを送る" />
-    <meta name="twitter:description" content="Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化、同時オンライン限定、サーバー保存なし。ブラウザと CLI に対応。" />
+    <meta name="twitter:description" content="Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化かつ同時オンライン限定で、Relayium サーバーはメッセージ本文やサーバー側履歴を保存しませんが、各端末は受信テキストを保持できます。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"端末間でテキスト、リンク、コマンドを送る","description":"Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化、同時オンライン限定、サーバー保存なし。ブラウザと CLI に対応。","inLanguage":"ja","datePublished":"2026-07-30","dateModified":"2026-07-30","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"端末間でテキスト、リンク、コマンドを送る"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"Relayium はメッセージを読んだり復元できますか？","acceptedAnswer":{"@type":"Answer","text":"できません。内容は端末間でエンドツーエンド暗号化され、保存されません。セッション終了後にサーバーから復元できるコピーはありません。"}},{"@type":"Question","name":"片方をブラウザ、片方を CLI にできますか？","acceptedAnswer":{"@type":"Answer","text":"できません。転送方式とペアリング方式が異なります。ブラウザ同士、または CLI 同士で使ってください。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"端末間でテキスト、リンク、コマンドを送る","description":"Relayium でテキスト、リンク、コマンド、複数行コードを端末間転送。エンドツーエンド暗号化かつ同時オンライン限定で、Relayium サーバーはメッセージ本文やサーバー側履歴を保存しませんが、各端末は受信テキストを保持できます。","inLanguage":"ja","datePublished":"2026-07-30","dateModified":"2026-07-30","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"端末間でテキスト、リンク、コマンドを送る"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"Relayium はメッセージを読んだり復元できますか？","acceptedAnswer":{"@type":"Answer","text":"できません。内容は端末間でエンドツーエンド暗号化され、Relayium サーバーは本文やサーバー側履歴を保存しません。各端末は受信テキストを保持できますが、セッション終了後に Relayium から復元できるサーバーコピーはありません。"}},{"@type":"Question","name":"片方をブラウザ、片方を CLI にできますか？","acceptedAnswer":{"@type":"Answer","text":"できません。転送方式とペアリング方式が異なります。ブラウザ同士、または CLI 同士で使ってください。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
@@ -73,7 +73,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h1>端末間でテキスト、リンク、コマンドを送る</h1>
       <p class="updated">最終更新: 2026-07-30</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-text-between-devices/">English</a><a href="/zh/how-to/send-text-between-devices/">中文</a><a href="/ja/how-to/send-text-between-devices/" aria-current="true">日本語</a><a href="/ko/how-to/send-text-between-devices/">한국어</a><a href="/de/how-to/send-text-between-devices/">Deutsch</a><a href="/fr/how-to/send-text-between-devices/">Français</a><a href="/ar/how-to/send-text-between-devices/">العربية</a><a href="/es/how-to/send-text-between-devices/">Español</a><a href="/pt/how-to/send-text-between-devices/">Português</a></nav>
-      <p class="lead">Relayium はファイルだけでなく、スマートフォンの URL、別の PC で使うコマンド、複数行のコードなど、クリップボード向けの内容も運べます。メッセージはエンドツーエンド暗号化され、ライブセッション内だけに存在し、Relayium は保存しません。</p>
+      <p class="lead">Relayium はファイルだけでなく、スマートフォンの URL、別の PC で使うコマンド、複数行のコードなど、クリップボード向けの内容も運べます。メッセージはエンドツーエンド暗号化され、Relayium サーバーは本文やサーバー側履歴を保存しませんが、各端末は受信テキストをコピーまたは保持できます。</p>
       <p class="lead">ブラウザと CLI の両方がテキストに対応しますが、別々の転送方式であり、互いのペアリングコードには参加できません。両端で同じ方式を選んでください。</p>
       <h2>ブラウザ：オンライン端末へメッセージを送る</h2>
       <p>両方の端末で relayium.com を開きます。同じネットワークなら自動表示され、別ネットワークならクロスネットワーク画面でブラウザ用コードを作り、もう一方のブラウザで参加します。</p>
@@ -100,7 +100,7 @@ cat snippet.txt | relayium text K7M4XR --yes</code></pre>
       <ul><li>両端が同時にオンラインである必要があります。オフライン配信、受信箱、連絡先、同期チャット履歴はありません。</li><li>履歴は開いているローカルセッションだけにあり、終了や再読み込みで消えます。サーバーは本文を保存しません。</li><li>1 メッセージは UTF-8 で 65,536 バイトまで。それ以上はファイルとして送ってください。</li></ul>
       <h2>よくある質問</h2>
       <h3>Relayium はメッセージを読んだり復元できますか？</h3>
-      <p>できません。内容は端末間でエンドツーエンド暗号化され、保存されません。セッション終了後にサーバーから復元できるコピーはありません。</p>
+      <p>できません。内容は端末間でエンドツーエンド暗号化され、Relayium サーバーは本文やサーバー側履歴を保存しません。各端末は受信テキストを保持できますが、セッション終了後に Relayium から復元できるサーバーコピーはありません。</p>
       <h3>片方をブラウザ、片方を CLI にできますか？</h3>
       <p>できません。転送方式とペアリング方式が異なります。ブラウザ同士、または CLI 同士で使ってください。</p>
       <div class="ctacard">

@@ -26,6 +26,7 @@
 // × nine locales = 45 injections, 45 caught, zero false positives on the corpus.
 import { describe, it } from "vitest";
 import { LANGS } from "./shared.mjs";
+import firefoxSend from "./content/articles/compare-firefox-send.mjs";
 
 // The whole content tree, by glob rather than a hand-kept list, so a new file is
 // covered the day it lands. It used to be ./content/articles/*.mjs only, and the
@@ -413,5 +414,30 @@ describe("content claims about pairing codes, accounts and the relay", () => {
     };
     const trigger = LANGS.filter((l) => claimsRelayIsAFallback(DENIALS[l], l));
     if (trigger.length) throw new Error(`relay-fallback rule false-positives on a denial in: ${trigger.join(", ")}`);
+  });
+});
+
+describe("comparison articles describe realtime transport precisely", () => {
+  const CANNOT_READ_OR_DECRYPT = {
+    en: /cannot read or decrypt/i,
+    zh: /无法读取或解密/,
+    ja: /読んだり復号したりできません/,
+    ko: /읽거나 복호화할 수 없습니다/,
+    de: /weder lesen noch entschlüsseln/i,
+    fr: /ni lire ni déchiffrer/i,
+    ar: /لا يستطيع قراءة.+أو فك تشفيره/,
+    es: /no puede leer ni descifrar/i,
+    pt: /não consegue ler nem descriptografar/i,
+  };
+
+  it("distinguishes LAN direct from cross-network TURN in every Firefox Send locale", () => {
+    const bad = [];
+    for (const lang of LANGS) {
+      const text = norm(firefoxSend.langs[lang].sections[3].body[0]);
+      if (!/TURN/i.test(text)) bad.push(`${lang}: missing TURN`);
+      if (!CANNOT_READ_OR_DECRYPT[lang].test(text))
+        bad.push(`${lang}: does not say TURN cannot read or decrypt plaintext`);
+    }
+    if (bad.length) throw new Error(`imprecise Firefox Send realtime claims:\n  ${bad.join("\n  ")}`);
   });
 });
