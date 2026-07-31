@@ -55,7 +55,7 @@ is **how seriously we take end-to-end encryption**:
 ## Features
 
 - 🔒 **End-to-end encrypted** — per-transfer ephemeral X25519 keys → AES-256-GCM per chunk. Keys never leave the two devices.
-- 🛡️ **SAS verification code** — a 6-digit code derived from the session keys; compare it on both screens to defeat a man-in-the-middle.
+- 🛡️ **SAS verification code** — browsers compare a code derived from the X25519 endpoint public keys; the CLI compares one derived from the pinned TLS certificate fingerprints. Matching it out of band detects endpoint impersonation or key substitution.
 - 📡 **Private paths, stated precisely** — on a LAN, realtime file bytes flow directly over WebRTC. Cross-network browser sessions use a TURN relay by design, but it carries only end-to-end encrypted ciphertext; the CLI is direct-only. Stored download links are encrypted in your browser first, and the server holds only ciphertext it has no key for (see [docs/billing-transparency.md](docs/billing-transparency.md)).
 - 📦 **Multi-file batches** (up to 1,000) — streamed straight to disk where supported; other browsers may buffer in memory.
 - ✅ **Per-file SHA-256 integrity check** on the receiving end.
@@ -128,22 +128,25 @@ two humans can compare out of band.
 1. Both browsers connect to the signaling server over WebSocket and are grouped into a **room by public IP**.
 2. The sender creates a WebRTC offer (carrying its X25519 public key); the server relays it to the receiver.
 3. ICE candidates are exchanged, the DataChannel opens, and both sides derive shared session keys via ECDH.
-4. Both screens show a **SAS code** derived from those keys — the humans compare it to rule out a MITM.
+4. Both screens show a **SAS code** derived from the X25519 endpoint public keys — comparing it out of
+   band detects endpoint impersonation or key substitution.
 5. The receiver explicitly **accepts** (this click is the user gesture that lets the browser stream to disk).
 6. The sender chunks each file, encrypts every chunk with AES-256-GCM, and streams it over the DataChannel;
    the receiver decrypts, writes to disk, and verifies SHA-256 per file.
 
 ## Security model
 
-- **Threat model:** the signaling server may passively observe or actively MITM; the network may be eavesdropped.
-  The requirement is that the server can read **no file or message content**, and cannot MITM as long as users compare the SAS.
+- **Threat model:** the signaling server may passively observe or try to impersonate either endpoint; the
+  network may be eavesdropped. The server can read **no file or message content**, and a browser SAS
+  compared out of band detects X25519 endpoint-key substitution. The CLI uses a separate SAS derived from
+  the two pinned TLS certificate fingerprints to detect endpoint impersonation during rendezvous.
 - **Keys:** a fresh ephemeral X25519 keypair per transfer (persistent device identity is a later milestone);
   ECDH yields the session keys.
 - **Encryption:** each chunk is AES-256-GCM with a unique nonce. The nonce counter is **global across a batch**
   (it never resets per file), so no nonce is ever reused under a session key.
 - **Integrity:** per-chunk GCM tag **and** a per-file SHA-256 verified end-to-end.
-- **Anti-MITM:** the SAS short code is derived from the session keys; comparing it out of band detects a
-  key-swapping server.
+- **Anti-MITM:** the browser SAS is derived from the two X25519 endpoint public keys; comparing it out of
+  band detects endpoint impersonation or key substitution.
 - **Metadata minimization:** the server sees room membership (public IP), a device nickname, presence,
   and signaling envelopes. On a LAN, content travels directly over the DataChannel; cross-network browser
   TURN carries only end-to-end encrypted ciphertext; CLI transfers are direct-only. Relayium never stores
