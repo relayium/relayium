@@ -33,15 +33,20 @@ describe("device guide path and SAS precision", () => {
 
   it("describes SAS as endpoint-key authentication, not a relay-free path", () => {
     for (const lang of LANGS) {
+      expect(JSON.stringify(computers.langs[lang]), `${lang}: computer SAS`).toMatch(/SAS/i);
       expect(JSON.stringify(pcPhone.langs[lang]), `${lang}: PC-phone SAS`).toMatch(/SAS/i);
       expect(JSON.stringify(qrCode.langs[lang]), `${lang}: QR SAS`).toMatch(/SAS/i);
     }
 
+    const computersEn = JSON.stringify(computers.langs.en);
     const pcPhoneEn = JSON.stringify(pcPhone.langs.en);
     const qrEn = JSON.stringify(qrCode.langs.en);
+    expect(computersEn).toMatch(/keys were not replaced/i);
+    expect(computersEn).toMatch(/does not prove which network path/i);
     expect(pcPhoneEn).toMatch(/has not impersonated either endpoint/i);
     expect(qrEn).toMatch(/keys weren't replaced/i);
     expect(qrEn).toMatch(/has not impersonated either endpoint/i);
+    expect(computersEn).not.toMatch(/with no one in between/i);
     expect(pcPhoneEn).not.toMatch(/confirm no one is in the middle/i);
     expect(qrEn).not.toMatch(/catch a malicious relay standing in the middle/i);
   });
