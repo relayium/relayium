@@ -209,7 +209,7 @@
         <ol>
           <li>Open <a href="https://relayium.com/">relayium.com</a> on two devices on the same network — they discover each other automatically.</li>
           <li>Pick files (up to 1,000 at once), or choose “Send a message” for text; the receiver accepts.</li>
-          <li>Both screens show a 6-digit verification code — compare it to rule out a man-in-the-middle.</li>
+          <li>Both screens show a 6-digit verification code — compare it out of band to detect X25519 endpoint public-key substitution or a signaling server impersonating an endpoint and terminating the application-layer end-to-end encryption. This authenticates the endpoints; it does not prove that the network path contains no server or TURN relay.</li>
           <li>Files or text move end-to-end encrypted; files also receive a per-file SHA-256 integrity check.</li>
         </ol>
 

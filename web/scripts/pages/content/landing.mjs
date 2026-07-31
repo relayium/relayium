@@ -15,7 +15,7 @@ const zh = {
     steps: [
       "两台设备用现代浏览器打开 relayium.com。",
       "一方选择或拖入要发送的文件（每批最多 1,000 个）；也可以改为发送一条文本消息。",
-      "双方核对屏幕上同一段 6 位校验码（SAS），确认一致以排除中间人。",
+      "双方通过带外渠道核对屏幕上同一段 6 位校验码（SAS）。一致的校验码可检测 X25519 端点公钥是否被替换，或信令服务器是否冒充端点并终止应用层端到端加密；它不证明网络路径中没有服务器或 TURN 中继。",
       "文件逐块经 AES-256-GCM 加密传输，并以 SHA-256 校验完整性；临时文本使用独立的端到端加密会话。双方须同时在线，Relayium 服务器不保存消息正文或服务端历史，但端点可以留存文本。",
     ],
   },
@@ -32,7 +32,7 @@ const zh = {
       },
       {
         title: "SAS 防中间人",
-        desc: "两边屏幕显示同一段 6 位校验码，核对一致即可排除中间人窃听，即便信令服务器被入侵也无法冒充。",
+        desc: "通过带外渠道核对两边屏幕上的 6 位校验码，可检测 X25519 端点公钥替换，或信令服务器冒充端点并终止应用层端到端加密。SAS 验证端点，不证明网络路径中没有服务器或 TURN 中继。",
       },
       {
         title: "临时加密文本",
@@ -57,7 +57,7 @@ const zh = {
       },
       {
         title: "对比 Snapdrop / PairDrop",
-        body: "Snapdrop 与 PairDrop 是同类先驱。Relayium 在其基础上加了应用层端到端加密与 SAS 校验码：即便信令服务器是恶意的，也无法对你发起中间人攻击。",
+        body: "Snapdrop 与 PairDrop 是同类先驱。Relayium 在其基础上增加了应用层端到端加密与 SAS 校验码；经带外核对后，SAS 可检测 X25519 端点公钥替换，或恶意信令服务器冒充端点并终止应用层端到端加密，但不证明网络路径中没有服务器或 TURN 中继。",
       },
       {
         title: "对比 WeTransfer / 网盘",
@@ -94,7 +94,7 @@ const zh = {
       },
       {
         q: "和 Snapdrop 有什么区别？",
-        a: "Relayium 在同类思路上增加了应用层端到端加密与 SAS 校验码，即使信令服务器被入侵也无法窃听或冒充，并支持跨网络传输与可选的零知识下载链接。",
+        a: "Relayium 在同类思路上增加了应用层端到端加密与 SAS 校验码。经带外核对后，SAS 可检测 X25519 端点公钥替换，或被入侵的信令服务器冒充端点并终止应用层端到端加密；它不证明网络路径中没有服务器或 TURN 中继。Relayium 还支持跨网络传输与可选的零知识下载链接。",
       },
     ],
   },
@@ -115,7 +115,7 @@ const ja = {
     steps: [
       "2台の端末でモダンブラウザから relayium.com を開きます。",
       "片方が送るファイルを選ぶかドラッグします（1回につき最大1,000個）。テキストメッセージを送ることもできます。",
-      "両方の画面に表示される同じ6桁の検証コード（SAS）を照合し、一致を確認して中間者を排除します。",
+      "両方の画面に表示される同じ6桁の検証コード（SAS）を別の通信手段で照合します。一致すれば、X25519エンドポイント公開鍵の差し替えや、シグナリングサーバーがエンドポイントになりすましてアプリケーション層のエンドツーエンド暗号化を終端する試みを検出できます。ネットワーク経路にサーバーやTURNリレーがないことを証明するものではありません。",
       "ファイルはAES-256-GCMでチャンクごとに暗号化し、SHA-256で完全性を検証します。一時テキストは独立したエンドツーエンド暗号化セッションを使います。両端末がオンラインで、サーバーは本文や履歴を保存しませんが、端末は保持できます。",
     ],
   },
@@ -132,7 +132,7 @@ const ja = {
       },
       {
         title: "SASで中間者攻撃を防止",
-        desc: "両方の画面に同じ6桁の検証コードが表示されます。一致を確認すれば盗聴を狙う中間者を排除でき、シグナリングサーバーが侵害されてもなりすませません。",
+        desc: "別の通信手段で6桁のコードを照合すると、X25519エンドポイント公開鍵の差し替えや、シグナリングサーバーによるエンドポイントのなりすましとアプリケーション層E2EEの終端を検出できます。SASはエンドポイントを認証するもので、経路上にサーバーやTURNリレーがないことの証明ではありません。",
       },
       {
         title: "一時的な暗号化テキスト",
@@ -157,7 +157,7 @@ const ja = {
       },
       {
         title: "Snapdrop / PairDropとの比較",
-        body: "SnapdropとPairDropは同種の先駆けです。Relayiumはその上にアプリケーション層のエンドツーエンド暗号化とSAS検証コードを追加。シグナリングサーバーが悪意を持っていても中間者攻撃はできません。",
+        body: "SnapdropとPairDropは同種の先駆けです。Relayiumはアプリケーション層のエンドツーエンド暗号化とSAS検証コードを追加しています。別の通信手段でSASを照合すれば、X25519エンドポイント公開鍵の差し替えや、悪意あるシグナリングサーバーによるエンドポイントのなりすましとアプリケーション層E2EEの終端を検出できますが、経路上にサーバーやTURNリレーがないことは証明しません。",
       },
       {
         title: "WeTransfer / クラウドストレージとの比較",
@@ -194,7 +194,7 @@ const ja = {
       },
       {
         q: "Snapdropとの違いは？",
-        a: "Relayiumはアプリケーション層のエンドツーエンド暗号化とSAS検証コードを追加しており、シグナリングサーバーが侵害されても盗聴やなりすましができません。さらにネットワークをまたぐ転送や任意のゼロ知識ダウンロードリンクにも対応します。",
+        a: "Relayiumはアプリケーション層のエンドツーエンド暗号化とSAS検証コードを追加しています。別の通信手段でSASを照合すれば、X25519エンドポイント公開鍵の差し替えや、侵害されたシグナリングサーバーによるエンドポイントのなりすましとアプリケーション層E2EEの終端を検出できます。SASは経路上にサーバーやTURNリレーがないことを証明しません。さらにネットワークをまたぐ転送や任意のゼロ知識ダウンロードリンクにも対応します。",
       },
     ],
   },
@@ -215,7 +215,7 @@ const ko = {
     steps: [
       "두 기기에서 최신 브라우저로 relayium.com에 접속합니다.",
       "한쪽이 보낼 파일을 선택하거나 끌어다 놓습니다(한 번에 최대 1,000개). 대신 텍스트 메시지를 보낼 수도 있습니다.",
-      "양쪽 화면에 표시되는 동일한 6자리 검증 코드(SAS)를 대조해 일치를 확인하고 중간자를 차단합니다.",
+      "양쪽 화면의 동일한 6자리 검증 코드(SAS)를 별도 채널로 대조합니다. 코드가 일치하면 X25519 끝점 공개 키 교체나 시그널링 서버가 끝점을 사칭해 애플리케이션 계층 종단간 암호화를 종료하려는 시도를 탐지할 수 있습니다. 네트워크 경로에 서버나 TURN 릴레이가 없음을 증명하지는 않습니다.",
       "파일은 AES-256-GCM으로 암호화하고 SHA-256으로 확인합니다. 텍스트는 별도 암호화 세션을 사용하며 두 기기가 온라인이어야 합니다. 서버는 본문이나 기록을 저장하지 않지만 기기는 보관할 수 있습니다.",
     ],
   },
@@ -232,7 +232,7 @@ const ko = {
       },
       {
         title: "SAS로 중간자 공격 차단",
-        desc: "양쪽 화면에 동일한 6자리 검증 코드가 표시됩니다. 서로 대조해 도청하는 중간자를 차단할 수 있으며, 시그널링 서버가 침해되어도 가장할 수 없습니다.",
+        desc: "별도 채널로 6자리 코드를 대조하면 X25519 끝점 공개 키 교체나 시그널링 서버의 끝점 사칭 및 애플리케이션 계층 종단간 암호화 종료를 탐지할 수 있습니다. SAS는 끝점을 인증하며 네트워크 경로에 서버나 TURN 릴레이가 없음을 증명하지 않습니다.",
       },
       {
         title: "일회성 암호화 텍스트",
@@ -257,7 +257,7 @@ const ko = {
       },
       {
         title: "Snapdrop / PairDrop과 비교",
-        body: "Snapdrop과 PairDrop은 같은 부류의 선구자입니다. Relayium은 여기에 애플리케이션 계층의 종단간 암호화와 SAS 검증 코드를 더했습니다. 시그널링 서버가 악의적이어도 중간자 공격을 할 수 없습니다.",
+        body: "Snapdrop과 PairDrop은 같은 부류의 선구자입니다. Relayium은 애플리케이션 계층 종단간 암호화와 SAS 검증 코드를 더했습니다. 별도 채널로 SAS를 대조하면 X25519 끝점 공개 키 교체나 악의적인 시그널링 서버의 끝점 사칭 및 애플리케이션 계층 종단간 암호화 종료를 탐지할 수 있지만, 네트워크 경로에 서버나 TURN 릴레이가 없음을 증명하지는 않습니다.",
       },
       {
         title: "WeTransfer / 클라우드 드라이브와 비교",
@@ -294,7 +294,7 @@ const ko = {
       },
       {
         q: "Snapdrop과 무엇이 다른가요?",
-        a: "Relayium은 애플리케이션 계층의 종단간 암호화와 SAS 검증 코드를 추가해, 시그널링 서버가 침해되어도 도청이나 위장을 할 수 없습니다. 또한 네트워크를 넘는 전송과 선택적 영지식 다운로드 링크도 지원합니다.",
+        a: "Relayium은 애플리케이션 계층 종단간 암호화와 SAS 검증 코드를 추가합니다. 별도 채널로 SAS를 대조하면 X25519 끝점 공개 키 교체나 침해된 시그널링 서버의 끝점 사칭 및 애플리케이션 계층 종단간 암호화 종료를 탐지할 수 있습니다. SAS는 네트워크 경로에 서버나 TURN 릴레이가 없음을 증명하지 않습니다. 또한 네트워크를 넘는 전송과 선택적 영지식 다운로드 링크도 지원합니다.",
       },
     ],
   },
@@ -315,7 +315,7 @@ const de = {
     steps: [
       "Öffne relayium.com auf beiden Geräten in einem modernen Browser.",
       "Eine Seite wählt die zu sendenden Dateien aus oder zieht sie hinein (bis zu 1.000 pro Vorgang) — oder schickt stattdessen eine Textnachricht.",
-      "Vergleiche auf beiden Bildschirmen denselben 6-stelligen Verifizierungscode (SAS) und bestätige die Übereinstimmung, um einen Man-in-the-Middle auszuschließen.",
+      "Vergleiche den 6-stelligen Verifizierungscode (SAS) beider Bildschirme über einen unabhängigen Kanal. Eine Übereinstimmung erkennt ausgetauschte öffentliche X25519-Endpunktschlüssel oder einen Signalisierungsserver, der einen Endpunkt imitiert und die Ende-zu-Ende-Verschlüsselung der Anwendung beendet; sie beweist nicht, dass der Netzwerkpfad frei von Servern oder TURN-Relays ist.",
       "Dateien werden mit AES-256-GCM verschlüsselt und per SHA-256 geprüft. Text nutzt eine eigene verschlüsselte Sitzung; beide Geräte bleiben online. Server speichern weder Nachrichtentexte noch Verlauf, Endgeräte können Text behalten.",
     ],
   },
@@ -332,7 +332,7 @@ const de = {
       },
       {
         title: "SAS gegen Man-in-the-Middle",
-        desc: "Beide Bildschirme zeigen denselben 6-stelligen Verifizierungscode; stimmt er überein, ist ein mithörender Man-in-the-Middle ausgeschlossen — selbst ein kompromittierter Signalisierungsserver kann sich nicht ausgeben.",
+        desc: "Der Vergleich des 6-stelligen Codes über einen unabhängigen Kanal erkennt ausgetauschte öffentliche X25519-Endpunktschlüssel oder einen Signalisierungsserver, der einen Endpunkt imitiert und die Ende-zu-Ende-Verschlüsselung der Anwendung beendet. SAS authentifiziert die Endpunkte; es beweist nicht, dass im Netzwerkpfad keine Server oder TURN-Relays liegen.",
       },
       {
         title: "Flüchtiger verschlüsselter Text",
@@ -357,7 +357,7 @@ const de = {
       },
       {
         title: "Gegenüber Snapdrop / PairDrop",
-        body: "Snapdrop und PairDrop sind Vorreiter derselben Art. Relayium ergänzt sie um Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und einen Verifizierungscode (SAS): Selbst ein bösartiger Signalisierungsserver kann keinen Man-in-the-Middle-Angriff durchführen.",
+        body: "Snapdrop und PairDrop sind Vorreiter derselben Art. Relayium ergänzt Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und einen Verifizierungscode (SAS). Über einen unabhängigen Kanal verglichen erkennt SAS ausgetauschte öffentliche X25519-Endpunktschlüssel oder einen bösartigen Signalisierungsserver, der einen Endpunkt imitiert und die Anwendungsverschlüsselung beendet; es beweist nicht, dass der Netzwerkpfad frei von Servern oder TURN-Relays ist.",
       },
       {
         title: "Gegenüber WeTransfer / Cloud-Speicher",
@@ -394,7 +394,7 @@ const de = {
       },
       {
         q: "Was ist der Unterschied zu Snapdrop?",
-        a: "Relayium ergänzt Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und einen Verifizierungscode (SAS), sodass selbst ein kompromittierter Signalisierungsserver weder mithören noch sich ausgeben kann. Zudem unterstützt es netzübergreifende Übertragungen und optionale Zero-Knowledge-Download-Links.",
+        a: "Relayium ergänzt Ende-zu-Ende-Verschlüsselung auf Anwendungsebene und einen Verifizierungscode (SAS). Über einen unabhängigen Kanal verglichen erkennt SAS ausgetauschte öffentliche X25519-Endpunktschlüssel oder einen kompromittierten Signalisierungsserver, der einen Endpunkt imitiert und die Anwendungsverschlüsselung beendet. Es beweist nicht, dass im Netzwerkpfad keine Server oder TURN-Relays liegen. Zudem unterstützt Relayium netzübergreifende Übertragungen und optionale Zero-Knowledge-Download-Links.",
       },
     ],
   },
@@ -417,7 +417,7 @@ const fr = {
     steps: [
       "Ouvrez relayium.com sur les deux appareils dans un navigateur moderne.",
       "Un côté sélectionne ou glisse les fichiers à envoyer (jusqu'à 1 000 par lot) — ou envoie plutôt un message texte.",
-      "Comparez sur les deux écrans le même code de vérification à 6 chiffres (SAS) et confirmez la correspondance pour écarter tout homme du milieu.",
+      "Comparez le code de vérification à 6 chiffres (SAS) des deux écrans par un canal indépendant. Une correspondance détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation qui usurpe une extrémité et termine le chiffrement applicatif de bout en bout ; elle ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau.",
       "Les fichiers sont chiffrés en AES-256-GCM et vérifiés par SHA-256. Le texte utilise une session chiffrée distincte ; les deux appareils restent en ligne. Relayium ne conserve ni corps ni historique, mais les appareils peuvent garder le texte.",
     ],
   },
@@ -434,7 +434,7 @@ const fr = {
       },
       {
         title: "SAS contre l'homme du milieu",
-        desc: "Les deux écrans affichent le même code de vérification à 6 chiffres ; s'il correspond, tout intercepteur est écarté — même un serveur de signalisation compromis ne peut pas se faire passer pour vous.",
+        desc: "Comparer le code à 6 chiffres par un canal indépendant détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation qui usurpe une extrémité et termine le chiffrement applicatif de bout en bout. Le SAS authentifie les extrémités ; il ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau.",
       },
       {
         title: "Texte chiffré éphémère",
@@ -459,7 +459,7 @@ const fr = {
       },
       {
         title: "Face à Snapdrop / PairDrop",
-        body: "Snapdrop et PairDrop sont des pionniers du même genre. Relayium y ajoute un chiffrement de bout en bout au niveau applicatif et un code de vérification SAS : même un serveur de signalisation malveillant ne peut pas monter d'attaque de l'homme du milieu.",
+        body: "Snapdrop et PairDrop sont des pionniers du même genre. Relayium ajoute un chiffrement de bout en bout au niveau applicatif et un code de vérification SAS. Comparé par un canal indépendant, le SAS détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation malveillant qui usurpe une extrémité et termine ce chiffrement ; il ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau.",
       },
       {
         title: "Face à WeTransfer / stockage en ligne",
@@ -496,7 +496,7 @@ const fr = {
       },
       {
         q: "Quelle différence avec Snapdrop ?",
-        a: "Relayium ajoute un chiffrement de bout en bout au niveau applicatif et un code de vérification SAS, si bien qu'un serveur de signalisation compromis ne peut ni écouter ni usurper. Il prend aussi en charge les transferts inter-réseaux et des liens de téléchargement optionnels à connaissance nulle.",
+        a: "Relayium ajoute un chiffrement de bout en bout au niveau applicatif et un code de vérification SAS. Comparé par un canal indépendant, le SAS détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation compromis qui usurpe une extrémité et termine ce chiffrement. Il ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau. Relayium prend aussi en charge les transferts inter-réseaux et des liens de téléchargement optionnels à connaissance nulle.",
       },
     ],
   },
@@ -519,7 +519,7 @@ const ar = {
     steps: [
       "افتح relayium.com على كلا الجهازين في متصفح حديث.",
       "يختار أحد الطرفين الملفات المراد إرسالها أو يسحبها (حتى 1,000 لكل دفعة)، أو يرسل رسالة نصية بدلاً من ذلك.",
-      "قارِن على الشاشتين رمز التحقق نفسه المكوّن من 6 أرقام (SAS) وأكّد تطابقه لاستبعاد أي هجوم وسيط.",
+      "قارِن رمز التحقق المكوّن من 6 أرقام (SAS) على الشاشتين عبر قناة مستقلة. يكشف التطابق استبدال مفاتيح X25519 العامة للطرفين، أو انتحال خادم الإشارة لأحد الطرفين وإنهاء التشفير من الطرف إلى الطرف على مستوى التطبيق؛ لكنه لا يثبت خلو مسار الشبكة من الخوادم أو مُرحِّلات TURN.",
       "تُشفَّر الملفات بـ AES-256-GCM وتُفحص بـ SHA-256. يستخدم النص جلسة مشفَّرة مستقلة ويبقى الجهازان متصلين. لا يحفظ Relayium أجسام الرسائل أو سجلها، لكن يمكن للطرفين الاحتفاظ بالنص.",
     ],
   },
@@ -536,7 +536,7 @@ const ar = {
       },
       {
         title: "SAS ضد هجوم الوسيط",
-        desc: "تعرض الشاشتان رمز التحقق نفسه المكوّن من 6 أرقام؛ فإن تطابق استُبعد أي متنصّت — حتى خادم الإشارة المخترَق لا يستطيع انتحال شخصيتك.",
+        desc: "تكشف مقارنة الرمز المكوّن من 6 أرقام عبر قناة مستقلة استبدال مفاتيح X25519 العامة للطرفين، أو انتحال خادم الإشارة لأحد الطرفين وإنهاء التشفير من الطرف إلى الطرف على مستوى التطبيق. يصادق SAS على الطرفين، ولا يثبت خلو مسار الشبكة من الخوادم أو مُرحِّلات TURN.",
       },
       {
         title: "نص مُشفَّر عابر",
@@ -561,7 +561,7 @@ const ar = {
       },
       {
         title: "مقابل Snapdrop / PairDrop",
-        body: "Snapdrop وPairDrop روّاد من النوع نفسه. يضيف Relayium فوقهما تشفيرًا من الطرف إلى الطرف على مستوى التطبيق ورمز تحقق SAS: حتى خادم الإشارة الخبيث لا يستطيع شنّ هجوم وسيط.",
+        body: "Snapdrop وPairDrop روّاد من النوع نفسه. يضيف Relayium تشفيرًا من الطرف إلى الطرف على مستوى التطبيق ورمز تحقق SAS. عند مقارنته عبر قناة مستقلة، يكشف SAS استبدال مفاتيح X25519 العامة للطرفين، أو انتحال خادم إشارة خبيث لأحد الطرفين وإنهاء تشفير التطبيق؛ لكنه لا يثبت خلو مسار الشبكة من الخوادم أو مُرحِّلات TURN.",
       },
       {
         title: "مقابل WeTransfer / التخزين السحابي",
@@ -598,7 +598,7 @@ const ar = {
       },
       {
         q: "ما الفرق عن Snapdrop؟",
-        a: "يضيف Relayium تشفيرًا من الطرف إلى الطرف على مستوى التطبيق ورمز تحقق SAS، بحيث لا يستطيع خادم إشارة مخترَق التنصّت ولا الانتحال. كما يدعم النقل عبر الشبكات وروابط تنزيل اختيارية بمعرفة صفرية.",
+        a: "يضيف Relayium تشفيرًا من الطرف إلى الطرف على مستوى التطبيق ورمز تحقق SAS. عند مقارنته عبر قناة مستقلة، يكشف SAS استبدال مفاتيح X25519 العامة للطرفين، أو انتحال خادم إشارة مخترَق لأحد الطرفين وإنهاء تشفير التطبيق. ولا يثبت خلو مسار الشبكة من الخوادم أو مُرحِّلات TURN. كما يدعم Relayium النقل عبر الشبكات وروابط تنزيل اختيارية بمعرفة صفرية.",
       },
     ],
   },
@@ -621,7 +621,7 @@ const es = {
     steps: [
       "Abre relayium.com en ambos dispositivos con un navegador moderno.",
       "Un lado selecciona o arrastra los archivos a enviar (hasta 1.000 por lote), o envía un mensaje de texto en su lugar.",
-      "Compara en las dos pantallas el mismo código de verificación de 6 dígitos (SAS) y confirma la coincidencia para descartar cualquier intermediario.",
+      "Compara por un canal independiente el código de verificación de 6 dígitos (SAS) de ambas pantallas. Una coincidencia detecta la sustitución de claves públicas X25519 de los extremos, o que el servidor de señalización suplante un extremo y termine el cifrado de extremo a extremo de la aplicación; no demuestra que no haya servidores o relés TURN en la ruta de red.",
       "Los archivos se cifran con AES-256-GCM y se verifican con SHA-256. El texto usa una sesión cifrada independiente y ambos dispositivos siguen conectados. Relayium no guarda cuerpos ni historial, pero los extremos pueden conservarlo.",
     ],
   },
@@ -638,7 +638,7 @@ const es = {
       },
       {
         title: "SAS contra el ataque de intermediario",
-        desc: "Las dos pantallas muestran el mismo código de verificación de 6 dígitos; si coincide, se descarta cualquier interceptor — ni siquiera un servidor de señalización comprometido puede hacerse pasar por ti.",
+        desc: "Comparar el código de 6 dígitos por un canal independiente detecta la sustitución de claves públicas X25519 de los extremos, o que el servidor de señalización suplante un extremo y termine el cifrado de extremo a extremo de la aplicación. El SAS autentica los extremos; no demuestra que no haya servidores o relés TURN en la ruta de red.",
       },
       {
         title: "Texto cifrado efímero",
@@ -663,7 +663,7 @@ const es = {
       },
       {
         title: "Frente a Snapdrop / PairDrop",
-        body: "Snapdrop y PairDrop son pioneros del mismo tipo. Relayium les añade cifrado de extremo a extremo a nivel de aplicación y un código de verificación SAS: incluso un servidor de señalización malicioso no puede montar un ataque de intermediario.",
+        body: "Snapdrop y PairDrop son pioneros del mismo tipo. Relayium añade cifrado de extremo a extremo a nivel de aplicación y un código de verificación SAS. Comparado por un canal independiente, el SAS detecta la sustitución de claves públicas X25519 de los extremos, o que un servidor de señalización malicioso suplante un extremo y termine el cifrado de la aplicación; no demuestra que no haya servidores o relés TURN en la ruta de red.",
       },
       {
         title: "Frente a WeTransfer / almacenamiento en la nube",
@@ -700,7 +700,7 @@ const es = {
       },
       {
         q: "¿En qué se diferencia de Snapdrop?",
-        a: "Relayium añade cifrado de extremo a extremo a nivel de aplicación y un código de verificación SAS, de modo que un servidor de señalización comprometido no puede escuchar ni suplantar. Además admite transferencias entre redes y enlaces de descarga opcionales de conocimiento cero.",
+        a: "Relayium añade cifrado de extremo a extremo a nivel de aplicación y un código de verificación SAS. Comparado por un canal independiente, el SAS detecta la sustitución de claves públicas X25519 de los extremos, o que un servidor de señalización comprometido suplante un extremo y termine el cifrado de la aplicación. No demuestra que no haya servidores o relés TURN en la ruta de red. Relayium también admite transferencias entre redes y enlaces de descarga opcionales de conocimiento cero.",
       },
     ],
   },
@@ -723,7 +723,7 @@ const pt = {
     steps: [
       "Abra relayium.com nos dois dispositivos em um navegador moderno.",
       "Um lado seleciona ou arrasta os arquivos a enviar (até 1.000 por lote), ou envia uma mensagem de texto no lugar.",
-      "Compare nas duas telas o mesmo código de verificação de 6 dígitos (SAS) e confirme a correspondência para descartar qualquer intermediário.",
+      "Compare por um canal independente o código de verificação de 6 dígitos (SAS) das duas telas. A correspondência detecta a substituição das chaves públicas X25519 das pontas, ou o servidor de sinalização se passando por uma ponta e encerrando a criptografia de ponta a ponta da aplicação; ela não prova que não há servidores ou retransmissores TURN na rota de rede.",
       "Os arquivos são criptografados em blocos com AES-256-GCM e verificados com SHA-256; o texto usa uma sessão criptografada separada. Os dois dispositivos ficam online. O Relayium não guarda corpo nem histórico no servidor, mas as pontas podem reter texto.",
     ],
   },
@@ -740,7 +740,7 @@ const pt = {
       },
       {
         title: "SAS contra o ataque de intermediário",
-        desc: "As duas telas mostram o mesmo código de verificação de 6 dígitos; se coincidir, qualquer interceptador é descartado — nem mesmo um servidor de sinalização comprometido consegue se passar por você.",
+        desc: "Comparar o código de 6 dígitos por um canal independente detecta a substituição das chaves públicas X25519 das pontas, ou o servidor de sinalização se passando por uma ponta e encerrando a criptografia de ponta a ponta da aplicação. O SAS autentica as pontas; não prova que não há servidores ou retransmissores TURN na rota de rede.",
       },
       {
         title: "Texto criptografado efêmero",
@@ -765,7 +765,7 @@ const pt = {
       },
       {
         title: "Comparado ao Snapdrop / PairDrop",
-        body: "Snapdrop e PairDrop são pioneiros do mesmo tipo. O Relayium acrescenta a eles criptografia de ponta a ponta na camada de aplicação e um código de verificação SAS: mesmo um servidor de sinalização malicioso não consegue montar um ataque de intermediário.",
+        body: "Snapdrop e PairDrop são pioneiros do mesmo tipo. O Relayium acrescenta criptografia de ponta a ponta na camada de aplicação e um código de verificação SAS. Comparado por um canal independente, o SAS detecta a substituição das chaves públicas X25519 das pontas, ou um servidor de sinalização malicioso se passando por uma ponta e encerrando a criptografia da aplicação; não prova que não há servidores ou retransmissores TURN na rota de rede.",
       },
       {
         title: "Comparado ao WeTransfer / armazenamento na nuvem",
@@ -802,7 +802,7 @@ const pt = {
       },
       {
         q: "Qual a diferença em relação ao Snapdrop?",
-        a: "O Relayium acrescenta criptografia de ponta a ponta na camada de aplicação e um código de verificação SAS, de modo que um servidor de sinalização comprometido não consegue espionar nem se passar por outro. Além disso, oferece transferências entre redes e links de download opcionais de conhecimento zero.",
+        a: "O Relayium acrescenta criptografia de ponta a ponta na camada de aplicação e um código de verificação SAS. Comparado por um canal independente, o SAS detecta a substituição das chaves públicas X25519 das pontas, ou um servidor de sinalização comprometido se passando por uma ponta e encerrando a criptografia da aplicação. Não prova que não há servidores ou retransmissores TURN na rota de rede. O Relayium também oferece transferências entre redes e links de download opcionais de conhecimento zero.",
       },
     ],
   },
