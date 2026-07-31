@@ -802,11 +802,156 @@ async function main() {
     }
     ok("both one-peer states used PeerLink followed by one actionable peer card");
 
+    const fileAction = await sender.evaluate(`(() => {
+      const input = document.querySelector('.peer-actions .pa-files > .file-pick-input');
+      const action = input?.parentElement;
+      const header = document.querySelector('.peer .pcard');
+      const labels = [...document.querySelectorAll('.peer-actions .pa-label')];
+      const namedBy = input?.getAttribute('aria-labelledby') || '';
+      const describedBy = input?.getAttribute('aria-describedby') || '';
+      return {
+        exists: !!input,
+        namedBy,
+        visibleLabel: action?.querySelector('.pa-label')?.textContent?.trim() || '',
+        namedByText: document.getElementById(namedBy)?.textContent?.trim() || '',
+        describedBy,
+        describedByExists: !!document.getElementById(describedBy),
+        headerFor: header?.htmlFor || '',
+        inputId: input?.id || '',
+        messageButtons: document.querySelectorAll('.peer-actions button').length,
+        labelRects: labels.map(label => label.getClientRects().length),
+      };
+    })()`);
+    if (
+      !fileAction.exists || !fileAction.namedBy || !fileAction.visibleLabel ||
+      fileAction.namedByText !== fileAction.visibleLabel ||
+      !fileAction.describedBy || !fileAction.describedByExists ||
+      fileAction.headerFor !== fileAction.inputId ||
+      fileAction.messageButtons !== 1 || fileAction.labelRects.some((n) => n !== 1)
+    ) {
+      throw new Error(`peer file-action accessibility contract failed: ${JSON.stringify(fileAction)}`);
+    }
+    ok("the peer file action owned its picker and visible-label accessible name");
+
+    // Put focus on the real preceding tab stop, then use a genuine keyboard Tab.
+    // Programmatic input.focus() would not prove the :focus-visible ring that the
+    // visible label receives through :has().
+    const focusSetup = await sender.evaluate(`(() => {
+      const input = document.querySelector('.peer-actions .pa-files > .file-pick-input');
+      const candidates = [...document.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+        .filter(el => el.getClientRects().length || el === input);
+      const index = candidates.indexOf(input);
+      const previous = candidates[index - 1];
+      previous?.focus();
+      return { index, previous: previous?.tagName || '', focused: document.activeElement === previous };
+    })()`);
+    if (focusSetup.index < 1 || !focusSetup.focused) {
+      throw new Error(`could not establish peer picker keyboard order: ${JSON.stringify(focusSetup)}`);
+    }
+    await sender.send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    await sender.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+    const keyboardFocus = await sender.evaluate(`(() => {
+      const input = document.querySelector('.peer-actions .pa-files > .file-pick-input');
+      const action = input?.parentElement;
+      return {
+        input: document.activeElement === input,
+        visible: input?.matches(':focus-visible') || false,
+        actionRing: action?.matches(':has(> .file-pick-input:focus-visible)') || false,
+      };
+    })()`);
+    if (!keyboardFocus.input || !keyboardFocus.visible || !keyboardFocus.actionRing) {
+      throw new Error(`peer picker focus-visible contract failed: ${JSON.stringify(keyboardFocus)}`);
+    }
+    ok("a real Tab focused the picker and painted the ring on its visible file action");
+
+    // Exercise the rules that are easiest to accidentally defeat with scoped CSS:
+    // the coarse-pointer floor, the three narrow rows and long localized labels.
+    await sender.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+    await setWideViewport(sender, 390, 844);
+    for (const code of ["en", "fr", "pt", "de", "ar", "zh", "ja", "ko", "es"]) {
+      await sender.evaluate(`(() => {
+        const select = document.querySelector('select.lang');
+        select.value = ${JSON.stringify(code)};
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      })()`);
+      await sender.waitFor(`document.documentElement.lang === ${JSON.stringify(code)}`, `${code} locale to render`);
+      const narrow = await sender.evaluate(`(() => {
+        const actions = [...document.querySelectorAll('.peer-actions > .btn')];
+        const rects = actions.map(el => el.getBoundingClientRect());
+        const labels = actions.map(el => el.querySelector('.pa-label'));
+        return {
+          coarse: matchMedia('(pointer: coarse)').matches,
+          count: actions.length,
+          heights: rects.map(r => r.height),
+          widths: rects.map(r => r.width),
+          tops: rects.map(r => Math.round(r.top)),
+          labelRects: labels.map(el => el?.getClientRects().length || 0),
+          fileBottom: rects[0]?.bottom || Infinity,
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      })()`);
+      if (
+        !narrow.coarse || narrow.count !== 3 ||
+        narrow.heights.some((n) => n < 43.5) || new Set(narrow.tops).size !== 3 ||
+        Math.max(...narrow.widths) - narrow.widths[0] > 1 ||
+        narrow.labelRects.some((n) => n !== 1) ||
+        narrow.fileBottom > 844 || narrow.overflow !== 0
+      ) {
+        throw new Error(`${code} narrow peer-action geometry failed: ${JSON.stringify(narrow)}`);
+      }
+    }
+    await setWideViewport(sender, 430, 844);
+    for (const code of ["en", "fr", "pt", "de", "ar", "zh", "ja", "ko", "es"]) {
+      await sender.evaluate(`(() => {
+        const select = document.querySelector('select.lang');
+        select.value = ${JSON.stringify(code)};
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      })()`);
+      await sender.waitFor(`document.documentElement.lang === ${JSON.stringify(code)}`, `${code} shared-row locale to render`);
+      const shared = await sender.evaluate(`(() => {
+        const actions = [...document.querySelectorAll('.peer-actions > .btn')];
+        const rects = actions.map(el => el.getBoundingClientRect());
+        return {
+          heights: rects.map(r => r.height),
+          widths: rects.map(r => r.width),
+          tops: rects.map(r => Math.round(r.top)),
+          labelRects: actions.map(el => el.querySelector('.pa-label')?.getClientRects().length || 0),
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      })()`);
+      if (
+        shared.tops.length !== 3 || shared.tops[0] === shared.tops[1] || shared.tops[1] !== shared.tops[2] ||
+        shared.widths[1] < 165 || shared.widths[2] < 165 ||
+        shared.heights.some((n) => n < 43.5) || shared.labelRects.some((n) => n !== 1) ||
+        shared.overflow !== 0
+      ) {
+        throw new Error(`${code} shared peer-action row failed: ${JSON.stringify(shared)}`);
+      }
+    }
+    await sender.evaluate(`(() => {
+      const select = document.querySelector('select.lang');
+      select.value = 'en';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+    await sender.waitFor("document.documentElement.lang === 'en'", "English locale to return");
+    await sender.send("Emulation.setTouchEmulationEnabled", { enabled: false });
+    await setWideViewport(sender);
+    ok("all nine locales kept honest 390px rows and unbroken 430px shared rows with 44px touch targets");
+
     const widePeerCard = await sender.evaluate("document.querySelector('.peers li.peer').getBoundingClientRect().width");
     if (widePeerCard < 500 || widePeerCard > 561) {
       throw new Error(`wide LAN peer card track contract failed: ${widePeerCard}px`);
     }
-    ok("the wide LAN selected-peer action stayed on one usable track");
+    await setWideViewport(sender, 1180);
+    const boundaryPeerCard = await sender.evaluate("document.querySelector('.peers li.peer').getBoundingClientRect().width");
+    if (boundaryPeerCard < 500 || boundaryPeerCard > 561) {
+      throw new Error(`1180px LAN peer card track contract failed: ${boundaryPeerCard}px`);
+    }
+    await setWideViewport(sender);
+    ok("the 1180px and 1440px LAN selected-peer action stayed on one capped track");
 
     // 首页折叠线以下的营销区块是懒加载的（HomeSections）。它在首屏之外，坏掉了
     // 不会有任何报错——页面只是从此少了一半内容。这里明确等它出现。

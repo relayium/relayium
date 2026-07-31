@@ -780,35 +780,41 @@
     ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove("drag")}
     ondrop={(e) => { e.stopPropagation(); if (busy) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
   >
-    <label class="pcard">
+    <label class="pcard" for={`pick-${p.id}`}>
       <span class="pavatar" class:big={solo}>{p.name.slice(0, 1).toUpperCase()}</span>
       <span class="ptext">
         {#if solo}
-          <span class="pname">{t.pickSendTo(p.name)}</span>
+          <span class="pname" id={`peer-target-${p.id}`}>{t.pickSendTo(p.name)}</span>
         {:else}
-          <span class="pname">{p.name}</span>
+          <span class="pname" id={`peer-target-${p.id}`}>{p.name}</span>
           <span class="pick">{t.pickHint(MAX_FILES)}</span>
         {/if}
       </span>
-      <input class="file-pick-input" id={`pick-${p.id}`} type="file" multiple disabled={busy}
-        onclick={(e) => { if (outbox().length) { e.preventDefault(); session.sendFiles(p.id, takeOutbox()); } }}
-        onchange={(e) => pickFile(e, p.id)} />
     </label>
     <!-- 这三个动作共用全局 .btn 原语（其中两个是包着隐藏 file input 的 <label>，
          :disabled 对 label 不生效，所以停用态走 .is-disabled）。以前它们是本组件
          里自成一套的 .act-btn：透明底 + --border 描边，在暗色下边框只有 1.36:1，
          等于看不见。 -->
     <div class="peer-actions">
-      <label class="btn btn-secondary btn-sm btn-block" class:is-disabled={busy} for={`pick-${p.id}`}>📄 {t.sendFile}</label>
+      <label class="btn btn-secondary btn-sm pa-files" class:is-disabled={busy}>
+        <span class="pa-icon" aria-hidden="true">📄</span><span class="pa-label" id={`send-file-label-${p.id}`}>{t.sendFile}</span>
+        <input class="file-pick-input" id={`pick-${p.id}`} type="file" multiple disabled={busy}
+          aria-labelledby={`send-file-label-${p.id}`}
+          aria-describedby={`peer-target-${p.id}`}
+          onclick={(e) => { if (outbox().length) { e.preventDefault(); session.sendFiles(p.id, takeOutbox()); } }}
+          onchange={(e) => pickFile(e, p.id)} />
+      </label>
       {#if folderUploadSupported}
-        <label class="btn btn-secondary btn-sm btn-block" class:is-disabled={busy}>
-          📁 {t.sendFolder}
+        <label class="btn btn-secondary btn-sm" class:is-disabled={busy}>
+          <span class="pa-icon" aria-hidden="true">📁</span><span class="pa-label">{t.sendFolder}</span>
           <input class="file-pick-input" type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
         </label>
       {/if}
       {#if peerSupportsText(p.id)}
-        <button type="button" class="btn btn-secondary btn-sm btn-block" disabled={busy}
-          onclick={() => { textCompose = ""; void textSession.openWith(p.id); }}>💬 {t.text.open}</button>
+        <button type="button" class="btn btn-secondary btn-sm" disabled={busy}
+          onclick={() => { textCompose = ""; void textSession.openWith(p.id); }}>
+          <span class="pa-icon" aria-hidden="true">💬</span><span class="pa-label">{t.text.open}</span>
+        </button>
       {/if}
     </div>
   </li>
@@ -816,8 +822,11 @@
 
 {#snippet transferSurface()}
   {@const solo = visiblePeers.length === 1}
-  <section class="peers">
-    <h2>{currentRoute() === "cross" ? t.crossPeersTitle : t.peersTitle}</h2>
+  <section class="peers" class:cross={currentRoute() === "cross"}>
+    <!-- A pairing room currently has one remote target (the signalling room cap
+         is two participants). Cross without roomCode is the LAN auto-surface,
+         where “Nearby devices” remains truthful for one or many peers. -->
+    <h2>{currentRoute() === "cross" && roomCode ? t.crossPeersTitle : t.peersTitle}</h2>
     <QuotaNotice />
     {#if outbox().length && visiblePeers.length !== 1}
       <p class="ui-callout share-pending">{t.sharePending(outbox().length)}</p>
@@ -1113,13 +1122,6 @@
       inline-size: 100%;
       max-inline-size: 640px;
     }
-    /* LAN renders one selected action card even when the radar contains several
-       choices. A single fixed track prevents auto-fill from turning it into a
-       narrow orphan; Cross keeps its real multi-card grid. */
-    .lan-workspace.two-col .peers ul,
-    .lan-workspace.two-col .peers ul.solo {
-      grid-template-columns: minmax(0, 560px);
-    }
   }
 
   /* In-app section headings stay modest; marketing sections use the larger global --fs-h2. */
@@ -1200,6 +1202,9 @@
   @media (max-width: 700px) {
     .peers { margin-top: var(--space-5); }
   }
+  /* Cross already lives in a .ui-stack; the homepage's Hero-to-task margin would
+     otherwise add another 48px on top of that parent gap. */
+  .peers.cross { margin-top: 0; }
   .peers h2 { font-size: 20px; }
   /* Both notices use the shared .ui-callout; the queued-share hint is neutral
      (it is information) and the send confirmation is accent (it wants a
@@ -1213,15 +1218,19 @@
   .peers ul {
     list-style: none; padding: 0; margin: 0;
     display: grid; gap: 12px;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    grid-template-columns: minmax(0, 1fr);
+    max-inline-size: 560px;
   }
+  /* Cross is already constrained by its 720px page card and benefits from using
+     the full 672px inner measure; LAN keeps the Batch-3 560px action measure. */
+  .peers.cross ul { max-inline-size: none; }
   /* A single connected peer (typical cross-network) reads as one prominent send target. */
-  .peers ul.solo { grid-template-columns: 1fr; }
   .peers ul.solo .peer { border-style: solid; border-color: var(--accent-border); background: var(--accent-bg); }
   .peers ul.solo .peer .pcard { justify-content: center; padding: 20px; }
   /* --control-border, not --border: the peer card is an interactive drop/pick
      target, so its dashed outline is a control boundary and has to clear 3:1. */
   .peer {
+    position: relative;
     border: 1.5px dashed var(--control-border); border-radius: 14px;
     transition: border-color .15s, background .15s;
   }
@@ -1239,10 +1248,23 @@
   .peers ul.solo .pname { font-size: 17px; }
   .pname { color: var(--text-h); font-weight: 500; font-size: 16px; }
   .pick { color: var(--text); font-size: 13px; }
-  /* 行布局；三个控件本身是 .btn btn-secondary btn-sm btn-block（见 app.css），
-     hover/active/disabled/focus 全部与站点其它按钮一致。 */
-  .peer-actions { display: flex; gap: 8px; margin-block: 0 10px; margin-inline: 12px; }
+  /* Files is the stable primary row. Capability-gated secondary actions share a
+     row only when both have enough room for the longest localized labels; flex
+     naturally fills the row when folder or text is absent. */
+  .peer-actions {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-block: 0 10px; margin-inline: 12px;
+  }
+  .peer-actions > .btn { flex: 1 1 165px; min-block-size: 36px; }
+  .peer-actions > .pa-files { flex-basis: 100%; }
   .peer-actions .btn { gap: 6px; }
+  .pa-icon { flex: none; }
+  .pa-label { min-inline-size: 0; overflow-wrap: anywhere; }
+  /* The scoped desktop floor above is more specific than global .btn, so repeat
+     the shared touch contract at the same local specificity. */
+  @media (pointer: coarse) {
+    .peer-actions > .btn { min-block-size: 44px; }
+  }
   .peers ul.solo .peer-actions { max-inline-size: 360px; margin-inline: auto; }
 
   .empty {
