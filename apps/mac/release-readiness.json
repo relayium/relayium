@@ -1,0 +1,53 @@
+{
+  "approved": false,
+  "capabilities": [
+    {
+      "id": "realtime-files-cross-network",
+      "required": true,
+      "implemented": true,
+      "evidence": "DirectPane + RealtimeSessionModel; browser/native E2E coverage"
+    },
+    {
+      "id": "cloud-files",
+      "required": true,
+      "implemented": true,
+      "evidence": "UploadPane/DownloadPane + CloudUploadModel/CloudDownloadModel tests"
+    },
+    {
+      "id": "ephemeral-text",
+      "required": true,
+      "implemented": false,
+      "evidence": "Wire kind/key domain exist, but no send/receive model or macOS UI"
+    },
+    {
+      "id": "folder-transfer",
+      "required": true,
+      "implemented": false,
+      "evidence": "DirectPane and UploadPane explicitly reject directories"
+    },
+    {
+      "id": "lan-nearby-devices",
+      "required": true,
+      "implemented": false,
+      "evidence": "Kit supports an empty-code LAN room, but the macOS app exposes pairing codes only"
+    },
+    {
+      "id": "native-receive-residency",
+      "required": true,
+      "implemented": false,
+      "evidence": "Menu bar keeps the process alive, but no persistent incoming-transfer listener is started"
+    },
+    {
+      "id": "account-devices-and-stored-files",
+      "required": true,
+      "implemented": false,
+      "evidence": "AccountView shows plan/usage only; device and stored-file management remain web-only"
+    },
+    {
+      "id": "native-drag-drop-and-finder",
+      "required": true,
+      "implemented": false,
+      "evidence": "Cloud upload accepts file drag-in and receive can reveal in Finder; direct drag-in, folders, and drag-out are missing"
+    }
+  ]
+}

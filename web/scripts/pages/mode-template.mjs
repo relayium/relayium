@@ -75,11 +75,14 @@ function body(slug, lang, doc, articleLinks) {
         .map((a) => `<li><a href="${urlPath(a.slug, lang)}">${esc(a.title)}</a></li>`)
         .join("")}</ul>`
     : "";
+  const nativeDownload = doc.nativeDownload
+    ? `\n      <a class="cta" href="${esc(doc.nativeDownload.href)}">${esc(doc.nativeDownload.label)}</a>`
+    : "";
 
   return `
       <h1>${esc(doc.hero.h1)}</h1>
       <p class="pitch">${esc(doc.hero.pitch)}</p>
-      <a class="cta" href="/${slug}?lang=${lang}">${esc(doc.hero.cta)}</a>
+      <a class="cta" href="/${slug}?lang=${lang}">${esc(doc.hero.cta)}</a>${nativeDownload}
 
       <section class="reveal">
       <h2>${esc(doc.how.heading)}</h2>

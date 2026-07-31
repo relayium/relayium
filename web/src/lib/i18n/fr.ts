@@ -338,7 +338,7 @@ const fr: Messages = {
   appsPage: {
     metaTitle: "Obtenir Relayium — applis pour le web, la CLI, macOS et iOS",
     metaDesc:
-      "Téléchargez Relayium : utilisez-le dans n'importe quel navigateur, installez l'outil en ligne de commande ou obtenez les applis natives macOS et iOS (bientôt disponibles). Transfert de fichiers chiffré de bout en bout sur chaque appareil, et texte éphémère dans l'appli web et en ligne de commande.",
+      "Téléchargez Relayium : utilisez-le dans n'importe quel navigateur, installez l'outil en ligne de commande ou choisissez une appli native. Transfert de fichiers chiffré de bout en bout sur chaque appareil, et texte éphémère dans l'appli web et en ligne de commande.",
     heading: "Obtenir Relayium",
     subhead:
       "Un même transfert de fichiers chiffré de bout en bout, partout où vous travaillez — et du texte éphémère dans l'appli web et en ligne de commande. Choisissez votre plateforme.",
@@ -354,7 +354,7 @@ const fr: Messages = {
         cta: "Ouvrir l'appli web",
       },
       cli: { name: "Ligne de commande", desc: "Transferts de fichiers scriptables, synchronisation de dossiers, sauvegardes de serveur à serveur et texte éphémère pour macOS, Linux et Windows.", cta: "Doc & installation de la CLI" },
-      mac: { name: "Appli macOS", desc: "Une vraie appli native dans la barre de menus (com.relayium.mac). Signée et notarisée pour une installation en un clic — en cours de développement." },
+      mac: { name: "Appli macOS", desc: "Une vraie appli native dans la barre de menus (com.relayium.mac), signée et notarisée pour une installation en un clic.", cta: "Télécharger pour macOS" },
       ios: { name: "Appli iOS", desc: "Une appli native iPhone et iPad (com.relayium.app) avec envoi via la feuille de partage. Bientôt sur l'App Store." },
     },
   },

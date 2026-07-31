@@ -2,6 +2,7 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate, CLI_PATH } from "./router.svelte";
   import { detectPlatform, type Platform } from "./platform";
+  import releases from "../../native-releases.json";
 
   const t = $derived<Messages>(messages[lang()]);
   const installCmd = "curl -fsSL https://relayium.com/install.sh | sh";
@@ -56,12 +57,18 @@
       <a class="cta" href={CLI_PATH} onclick={openCli}>{t.appsPage.cards.cli.cta}</a>
     </article>
 
-    <!-- macOS (coming soon) -->
-    <article class="card soon" class:me={highlightId === "mac"}>
-      <div class="badge">{t.appsPage.comingSoonBadge}</div>
+    <!-- macOS: the release manifest flips this atomically with the appcast. -->
+    <article class="card" class:soon={!releases.macos.available} class:me={highlightId === "mac"}>
+      <div class="badge" class:on={releases.macos.available}>
+        {releases.macos.available ? t.appsPage.availableBadge : t.appsPage.comingSoonBadge}
+      </div>
       <h2>{t.appsPage.cards.mac.name}</h2>
       <p>{t.appsPage.cards.mac.desc}</p>
-      <button class="cta" type="button" disabled>{t.appsPage.comingSoonBadge}</button>
+      {#if releases.macos.available && releases.macos.downloadUrl}
+        <a class="cta" href={releases.macos.downloadUrl}>{t.appsPage.cards.mac.cta}</a>
+      {:else}
+        <button class="cta" type="button" disabled>{t.appsPage.comingSoonBadge}</button>
+      {/if}
     </article>
 
     <!-- iOS (coming soon) -->

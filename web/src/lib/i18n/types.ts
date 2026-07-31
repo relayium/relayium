@@ -378,7 +378,8 @@ export interface Messages {
   cli: { subtitle: string };
   cliCallout: { heading: string; blurb: string; cta: string };
   // /apps downloads/apps hub page (AppsPage.svelte). One end-to-end encrypted
-  // transfer across web, CLI, macOS & iOS; mac/ios cards are "coming soon" (no cta).
+  // transfer across web, CLI, macOS & iOS. The release manifest decides whether
+  // the macOS CTA is live; iOS remains "coming soon".
   appsPage: {
     metaTitle: string; // <title> for /apps (page-meta.ts)
     metaDesc: string; // <meta description> for /apps
@@ -392,7 +393,7 @@ export interface Messages {
     cards: {
       web: { name: string; desc: string; cta: string };
       cli: { name: string; desc: string; cta: string };
-      mac: { name: string; desc: string }; // no cta — coming soon
+      mac: { name: string; desc: string; cta: string };
       ios: { name: string; desc: string }; // no cta — coming soon
     };
   };

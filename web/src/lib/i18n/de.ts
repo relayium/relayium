@@ -338,7 +338,7 @@ const de: Messages = {
   appsPage: {
     metaTitle: "Relayium holen — Apps für Web, CLI, macOS & iOS",
     metaDesc:
-      "Relayium herunterladen: in jedem Browser nutzen, das Kommandozeilen-Tool installieren oder die nativen macOS- und iOS-Apps holen (in Kürze). Ende-zu-Ende-verschlüsselte Dateiübertragung auf jedem Gerät, dazu flüchtiger Text in der Web-App und in der Kommandozeile.",
+      "Relayium herunterladen: in jedem Browser nutzen, das Kommandozeilen-Tool installieren oder eine native App wählen. Ende-zu-Ende-verschlüsselte Dateiübertragung auf jedem Gerät, dazu flüchtiger Text in der Web-App und in der Kommandozeile.",
     heading: "Relayium holen",
     subhead:
       "Eine Ende-zu-Ende-verschlüsselte Dateiübertragung, überall wo du arbeitest — dazu flüchtiger Text in der Web-App und in der Kommandozeile. Wähle deine Plattform.",
@@ -354,7 +354,7 @@ const de: Messages = {
         cta: "Web-App öffnen",
       },
       cli: { name: "Kommandozeile", desc: "Skriptbare Dateiübertragungen, Ordner-Sync, Server-zu-Server-Backups und flüchtiger Text für macOS, Linux und Windows.", cta: "CLI-Doku & Installation" },
-      mac: { name: "macOS-App", desc: "Eine echte native Menüleisten-App (com.relayium.mac). Signiert & notarisiert für die Ein-Klick-Installation — in Arbeit." },
+      mac: { name: "macOS-App", desc: "Eine echte native Menüleisten-App (com.relayium.mac), signiert und notarisiert für die Ein-Klick-Installation.", cta: "Für macOS herunterladen" },
       ios: { name: "iOS-App", desc: "Eine native iPhone- & iPad-App (com.relayium.app) mit Versand über das Teilen-Menü. Kommt in den App Store." },
     },
   },

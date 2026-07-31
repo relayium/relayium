@@ -28,6 +28,16 @@ on:
         required: true
         default: false
         type: boolean
+      release_version:
+        description: 'Stage immutable public-release metadata for this app version (for example 1.0)'
+        required: false
+        default: ''
+        type: string
+      publish_release:
+        description: 'Publish the versioned GitHub Release and deliver its appcast/download metadata to main'
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   # No secrets, so this runs on pull requests from forks like any other check.
@@ -51,6 +61,7 @@ jobs:
         run: |
           apps/mac/scripts/test-resign-sparkle.sh
           apps/mac/scripts/test-notarize-dmg.sh
+          apps/mac/scripts/test-release-readiness.sh
 
   # Needs the signing certificate, so it cannot run where secrets are
   # unavailable. This repository is public: a fork's pull request cannot read
@@ -61,6 +72,27 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Validate release request
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          NOTARIZE: ${{ inputs.notarize }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release }}
+        run: |
+          set -euo pipefail
+          if [ -n "$RELEASE_VERSION" ]; then
+            printf '%s' "$RELEASE_VERSION" | grep -Eq '^[0-9]+(\.[0-9]+){1,2}$' || {
+              echo "::error::release_version is not a supported app version"; exit 1; }
+            [ "$NOTARIZE" = true ] || {
+              echo "::error::release_version requires notarize=true so Sparkle signs the final stapled DMG"; exit 1; }
+          fi
+          if [ "$PUBLISH_RELEASE" = true ]; then
+            [ -n "$RELEASE_VERSION" ] || {
+              echo "::error::publish_release requires release_version"; exit 1; }
+            [ "$GITHUB_REF" = "refs/heads/main" ] || {
+              echo "::error::public macOS releases must run from main"; exit 1; }
+            node apps/mac/scripts/check-release-readiness.mjs --require-approved
+          fi
       # Materialize the Developer ID identity into a throwaway keychain. Fails
       # loudly if the secrets are unset so a build is never silently produced
       # unsigned once signing is expected.
@@ -88,8 +120,13 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
             -s -k "$keychain_pw" "$keychain" > /dev/null
           # Put it on the search list without evicting the default keychain.
-          security list-keychains -d user -s "$keychain" \
-            $(security list-keychains -d user | tr -d '"')
+          current_keychains=()
+          while IFS= read -r current; do
+            current="${current#\"}"
+            current="${current%\"}"
+            current_keychains+=("$current")
+          done < <(security list-keychains -d user)
+          security list-keychains -d user -s "$keychain" "${current_keychains[@]}"
           rm -P "$certfile"
           security find-identity -v -p codesigning "$keychain"
       # keychain-access-groups is the entitlement that makes a profile
@@ -270,6 +307,48 @@ jobs:
           apps/mac/scripts/notarize-dmg.sh \
             "$RUNNER_TEMP/Relayium.dmg" \
             "$RUNNER_TEMP/notarization"
+      # A public feed must sign the final stapled bytes, not the pre-notarized
+      # package. The staging script also pins the enclosure to the immutable
+      # macos-v<VERSION> release URL and emits the single web manifest that
+      # flips the /apps card.
+      - name: Stage public release metadata
+        if: github.event_name == 'workflow_dispatch' && inputs.release_version != ''
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.MACOS_SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "::error::MACOS_SPARKLE_PRIVATE_KEY is not set"
+            exit 1
+          fi
+          app="$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app"
+          built_version="$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")"
+          if [ "$built_version" != "$RELEASE_VERSION" ]; then
+            echo "::error::release_version $RELEASE_VERSION does not match the built app version $built_version"
+            exit 1
+          fi
+          tools="$RUNNER_TEMP/dd/SourcePackages/artifacts/sparkle/Sparkle/bin"
+          generated="$RUNNER_TEMP/generated-appcast"
+          staged="$RUNNER_TEMP/release-web"
+          mkdir -p "$generated" "$staged/public/apps/macos"
+          cp "$RUNNER_TEMP/Relayium.dmg" "$generated/Relayium.dmg"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" \
+            | "$tools/generate_appcast" \
+                --ed-key-file - \
+                --download-url-prefix \
+                  "https://github.com/${GITHUB_REPOSITORY}/releases/download/macos-v${RELEASE_VERSION}/" \
+                "$generated"
+          cp web/native-releases.json "$staged/native-releases.json"
+          cp web/public/apps/macos/appcast.xml "$staged/public/apps/macos/appcast.xml"
+          node web/scripts/stage-macos-release.mjs \
+            --version "$RELEASE_VERSION" \
+            --appcast "$generated/appcast.xml" \
+            --web-root "$staged" \
+            --repository "$GITHUB_REPOSITORY"
+          grep -Fq "url=\"https://github.com/${GITHUB_REPOSITORY}/releases/download/macos-v${RELEASE_VERSION}/Relayium.dmg\"" \
+            "$staged/public/apps/macos/appcast.xml"
+          grep -q 'sparkle:edSignature="[^"]' "$staged/public/apps/macos/appcast.xml"
       # Without the manual notarize input this remains a CI acceptance artifact,
       # not a public release. Public publication and the /apps page flip are
       # separate, explicitly controlled G5 steps.
@@ -280,6 +359,8 @@ jobs:
           path: |
             ${{ runner.temp }}/Relayium.dmg
             ${{ runner.temp }}/Relayium.dmg.sha256
+            ${{ runner.temp }}/release-web/native-releases.json
+            ${{ runner.temp }}/release-web/public/apps/macos/appcast.xml
           if-no-files-found: error
           retention-days: 14
       # Preserve Apple's rejection details even when the notarization step
@@ -298,3 +379,103 @@ jobs:
       - name: Remove signing keychain
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+
+  # This job is the only holder of repository write permission. Ordinary
+  # signed builds, credential checks, and notarization candidates cannot
+  # publish anything.
+  publish:
+    needs: [test, signed-build]
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: relayium-macos-${{ github.sha }}
+          path: ${{ runner.temp }}/release
+      - name: Verify publication artifacts
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          release="$RUNNER_TEMP/release"
+          cd "$release"
+          shasum -a 256 -c Relayium.dmg.sha256
+          expected="https://github.com/${GITHUB_REPOSITORY}/releases/download/macos-v${RELEASE_VERSION}/Relayium.dmg"
+          [ "$(jq -r '.macos.available' release-web/native-releases.json)" = true ]
+          [ "$(jq -r '.macos.version' release-web/native-releases.json)" = "$RELEASE_VERSION" ]
+          [ "$(jq -r '.macos.build' release-web/native-releases.json)" -gt 0 ]
+          [ "$(jq -r '.macos.downloadUrl' release-web/native-releases.json)" = "$expected" ]
+          grep -Fq "url=\"$expected\"" release-web/public/apps/macos/appcast.xml
+          grep -q 'sparkle:edSignature="[^"]' release-web/public/apps/macos/appcast.xml
+      - name: Publish immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          tag="macos-v${RELEASE_VERSION}"
+          release="$RUNNER_TEMP/release"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            release_state="$(
+              gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+                --json isDraft,isPrerelease \
+                --jq '[.isDraft, .isPrerelease] | @tsv'
+            )"
+            [ "$release_state" = $'false\tfalse' ] || {
+              echo "::error::$tag exists but is not a public, stable release"; exit 1; }
+            git fetch --quiet origin "refs/tags/$tag:refs/tags/$tag"
+            [ "$(git rev-list -n 1 "$tag")" = "$GITHUB_SHA" ] || {
+              echo "::error::$tag already targets a different commit"; exit 1; }
+            existing="$RUNNER_TEMP/existing-release"
+            mkdir "$existing"
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+              --pattern Relayium.dmg --pattern Relayium.dmg.sha256 \
+              --pattern appcast.xml --dir "$existing"
+            cmp "$release/Relayium.dmg" "$existing/Relayium.dmg"
+            cmp "$release/Relayium.dmg.sha256" "$existing/Relayium.dmg.sha256"
+            cmp "$release/release-web/public/apps/macos/appcast.xml" "$existing/appcast.xml"
+            echo "Existing $tag contains the identical release; continuing metadata recovery."
+          else
+            gh release create "$tag" \
+              "$release/Relayium.dmg" \
+              "$release/Relayium.dmg.sha256" \
+              "$release/release-web/public/apps/macos/appcast.xml#appcast.xml" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Relayium for macOS ${RELEASE_VERSION}" \
+              --notes "Signed, notarized universal macOS release. The disk image passed Apple notarization, stapling, and Gatekeeper assessment in workflow run ${GITHUB_RUN_ID}."
+          fi
+      - name: Deliver appcast and download metadata to main
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::workflow commit is no longer an ancestor of main"; exit 1; }
+          git checkout --detach origin/main
+          cp "$RUNNER_TEMP/release/release-web/native-releases.json" web/native-releases.json
+          cp "$RUNNER_TEMP/release/release-web/public/apps/macos/appcast.xml" \
+            web/public/apps/macos/appcast.xml
+          cd web
+          npm ci
+          npm run check
+          npm test -- --run
+          npm run build
+          cd ..
+          git diff --check
+          if git diff --quiet -- web/native-releases.json web/public/apps/macos/appcast.xml web/public; then
+            echo "Release metadata is already present on main."
+            exit 0
+          fi
+          git config user.name "relayium-release[bot]"
+          git config user.email "github@relayium.com"
+          git add web/native-releases.json web/public/apps/macos/appcast.xml web/public
+          git commit -m "release(mac): publish ${RELEASE_VERSION}"
+          git push origin HEAD:main

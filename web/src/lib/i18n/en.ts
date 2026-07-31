@@ -338,7 +338,7 @@ const en: Messages = {
   appsPage: {
     metaTitle: "Get Relayium — apps for web, CLI, macOS & iOS",
     metaDesc:
-      "Download Relayium: use it in any browser, install the command-line tool, or get the native macOS and iOS apps (coming soon). End-to-end encrypted file transfer on every device, plus ephemeral text in the web app and the CLI.",
+      "Download Relayium: use it in any browser, install the command-line tool, or choose a native app. End-to-end encrypted file transfer on every device, plus ephemeral text in the web app and the CLI.",
     heading: "Get Relayium",
     subhead:
       "One end-to-end encrypted file transfer, everywhere you work — plus ephemeral text in the web app and the CLI. Pick your platform.",
@@ -360,7 +360,8 @@ const en: Messages = {
       },
       mac: {
         name: "macOS app",
-        desc: "A true native menu-bar app (com.relayium.mac). Signed & notarized for a one-click install — in the works.",
+        desc: "A true native menu-bar app (com.relayium.mac), signed and notarized for a one-click install.",
+        cta: "Download for macOS",
       },
       ios: {
         name: "iOS app",
