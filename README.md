@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://relayium.com/"><img src="https://img.shields.io/badge/live%20demo-relayium.com-aa3bff" alt="Live demo"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0%20%2F%20Apache--2.0-blue" alt="License: AGPL-3.0 (server, web) / Apache-2.0 (apps)"></a>
-  <img src="https://img.shields.io/badge/status-M0%20MVP-orange" alt="Status: M0 MVP">
+  <img src="https://img.shields.io/badge/status-active%20development-2ea44f" alt="Status: Active development">
   <img src="https://img.shields.io/badge/built%20with-Go%20%C2%B7%20Svelte%20%C2%B7%20WebRTC-2ea44f" alt="Built with Go, Svelte, WebRTC">
 </p>
 
@@ -34,11 +34,14 @@ or server-side history, though either endpoint can retain received text — one 
 **65,536 UTF-8 bytes**, delivered byte for byte,
 and anything larger is a file.
 
-This repository is **M0**, the first milestone: a **web app**. Open the page on two devices on the
-same network, pick files or start a live text session, and content moves straight across — encrypted,
-peer-to-peer, with the signaling server acting only as a meeting point.
+Relayium is in **active, pre-1.0 development**. The production web app and CLI
+are live. A universal macOS app has passed Developer ID signing, Apple
+notarization, and Gatekeeper validation and is being prepared for its first
+public release. iOS development is next and has not started.
 
-> 👉 **Try it now: [relayium.com](https://relayium.com/)** — open it on two devices on the same network.
+> 👉 **Try it now: [relayium.com](https://relayium.com/)** — use two devices on
+> the same LAN without an account, or sign in to create a cross-network pairing
+> code.
 
 ## Why not just use Snapdrop / PairDrop?
 
@@ -49,8 +52,9 @@ is **how seriously we take end-to-end encryption**:
   signaling server*, so a malicious server could MITM them. Relayium adds an **X25519 + AEAD layer on top
   of the DataChannel** — keys never reach the server — and a **short verification code (SAS)** so two humans
   can detect a key-swapping server out of band.
-- **A protocol, not just a page.** The crypto layer is deliberately decoupled from transport, so the same
-  encryption will back a future CLI and mobile clients (see the roadmap).
+- **A protocol, not just a page.** The crypto layer is deliberately decoupled
+  from transport. It already backs the shipped CLI and the macOS release
+  candidate; iOS is next (see [Delivery status](#delivery-status)).
 
 ## Features
 
@@ -61,8 +65,8 @@ is **how seriously we take end-to-end encryption**:
 - ✅ **Per-file SHA-256 integrity check** on the receiving end.
 - 💬 **Ephemeral encrypted text** — send a link, a command, or a block of multiline code to a device that's online right now, over a connection of its own that is end-to-end encrypted and SAS-verified just like a transfer. Relayium never stores message bodies or server-side history; either endpoint can retain received text. At most 65,536 UTF-8 bytes per message, delivered exactly as typed; anything larger is a file.
 - 🌐 **9 languages** — English, 中文, 日本語, 한국어, Deutsch, Français, العربية, Español, Português — auto-detected, switchable.
-- ⚡ **No install, ever** — just open a URL. Realtime files and text on the same LAN need **no account**; creating a cross-network file or text pairing code requires sign-in, while anyone joining with that code needs no account. Creating stored download links also requires sign-in.
-- 🪶 **Tiny footprint** — one static SPA + a single Go binary for signaling.
+- ⚡ **Browser-first** — just open a URL; installing the CLI is optional. Realtime files and text on the same LAN need **no account**; creating a cross-network file or text pairing code requires sign-in, while anyone joining with that code needs no account. Creating stored download links also requires sign-in.
+- 🪶 **Self-hostable footprint** — one static SPA + a single Go server binary, with optional CLI and node binaries.
 
 ## Command-line client (CLI)
 
@@ -158,8 +162,9 @@ sizes, quota bookkeeping — and exactly what that's billed against, see
 account of the metering and billing paths, so the privacy claim above is something you can verify
 rather than take on faith.
 
-> ⚠️ This is an early MVP and has **not** had an independent security audit. Don't rely on it for high-stakes
-> threats yet. Issues and review are very welcome.
+> ⚠️ Relayium is pre-1.0 and has **not** had an independent security audit.
+> Don't rely on it for high-stakes threats yet. Issues and review are very
+> welcome.
 
 ## Quick start (run it locally)
 
@@ -200,20 +205,24 @@ Same-LAN / same-public-IP file and text transfers work with no account. Cross-ne
 an encrypted TURN relay by design, which only ever sees ciphertext. Creating a cross-network file or text
 pairing code requires sign-in; joining with that code does not.
 
-## Roadmap
+## Delivery status
 
-- **M0 — Web MVP (this milestone):** signaling server, Svelte SPA, WebRTC transfer, app-layer E2E + SAS,
-  multi-file batches, streaming to disk, ephemeral encrypted text between two peers that are both
-  online, i18n.
-- **M1 — Developer experience + persistent identity:** pair devices once and trust them forever (no code each
-  time), directories & multi-file, resumable transfers, concurrent chunks.
-- **M2 — Cross-network relay:** TURN/relay and NAT traversal for pairing-code transfers across different
-  networks. *(Shipped — browser pairing-code transfers use TURN by design; creating a code requires sign-in,
-  while joining with one does not.
-  Encrypted temporary staging when the peer is offline is still ahead; TURN relay bandwidth is metered — see
-  [`docs/billing-transparency.md`](docs/billing-transparency.md) for exactly how.)*
-- **M3 — Protocol spec + multi-client:** write the wire protocol down as a spec and reuse it from a CLI and mobile;
-  extend `send` to stdin, Docker images, the clipboard — toward "TCP between developers." *(CLI shipped — see [Command-line client](#command-line-client-cli). `relayium text` now carries clipboard-shaped content over stdin, in both an interactive and a piped form, and the browser has its own message session; like file transfer, the two transports don't pair with each other. Docker images still ahead.)*
+- **Web — live:** LAN and cross-network realtime file/text transfer, encrypted
+  stored download links, accounts and usage controls, and nine languages are
+  deployed at [relayium.com](https://relayium.com/).
+- **CLI and nodes — live:** published binaries provide pairing-code file/text
+  transfer, encrypted upload/download links, SSH and daemon-direct transfer,
+  folder sync, self-hosting, and managed relay/storage nodes.
+- **macOS — release candidate:** the universal app supports account access,
+  realtime sending and receiving, trusted link handoff, notifications, and a
+  signed Sparkle update foundation. Its DMG is Developer ID-signed, accepted by
+  Apple notarization, stapled, and Gatekeeper-validated; public release and the
+  website download switch are still pending.
+- **iOS — not started:** the shared Swift package and native product design are
+  in place, but the iOS app itself has not begun implementation.
+- **Next:** publish and validate the first macOS release, then build iOS;
+  persistent device identity, resumable transfer, broader protocol
+  documentation, and additional distribution formats remain future work.
 
 **Self-hosting:** a root [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) build a
 single self-contained image (`docker compose up -d --build`). See [`docs/self-hosting.md`](docs/self-hosting.md).
@@ -247,7 +256,7 @@ may change without notice until this note says otherwise.
 ## FAQ
 
 **Is Relayium free?**
-Yes — free and open source. No install, ever. Same-LAN realtime files and text need no account.
+Yes — free and open source. The browser app needs no install. Same-LAN realtime files and text need no account.
 Creating a cross-network pairing code for files or text requires sign-in; joining with that code does not.
 Creating a stored download link also requires sign-in. See [License](#license) for which
 open-source license covers which part.

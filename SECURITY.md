@@ -3,13 +3,15 @@
 Relayium's whole reason to exist is end-to-end encryption, so we take security reports seriously and
 appreciate responsible disclosure.
 
-> ⚠️ **Status:** Relayium is an early MVP (**M0**) and has **not** undergone an independent security audit.
-> Please do not rely on it for high-stakes threats yet.
+> ⚠️ **Status:** Relayium is under active, pre-1.0 development and has **not**
+> undergone an independent security audit. Please do not rely on it for
+> high-stakes threats yet.
 
 ## Supported versions
 
-The project is pre-1.0 and moves fast. Only the **latest `main`** (and the live deployment at
-[relayium.com](https://relayium.com/)) is supported for security fixes.
+The project is pre-1.0 and moves fast. Only the **latest `main`**, latest
+published release, and live deployment at
+[relayium.com](https://relayium.com/) are supported for security fixes.
 
 ## Reporting a vulnerability
 
@@ -46,7 +48,7 @@ Especially valuable areas to scrutinize:
 Out of scope for now (known limitations, documented in [`docs/TESTING.md`](docs/TESTING.md)):
 
 - Denial-of-service against the public demo's signaling server.
-- Persistent device identity (not implemented yet — M1).
+- Persistent device identity (not implemented yet).
 
 ## Disclosure
 

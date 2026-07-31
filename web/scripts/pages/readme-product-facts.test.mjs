@@ -8,7 +8,7 @@ const prose = readme.replace(/\s+/g, " ");
 describe("README product facts", () => {
   it("defines Relayium as file plus ephemeral text transfer", () => {
     expect(readme).toContain("next-generation file and ephemeral text transfer protocol");
-    expect(readme).toContain("pick files or start a live text session");
+    expect(readme).toContain("The same protocol also carries **ephemeral text**");
     expect(readme).toContain("65,536 UTF-8 bytes");
     expect(readme).toContain("Multi-file batches** (up to 1,000)");
   });
