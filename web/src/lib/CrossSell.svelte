@@ -27,4 +27,13 @@
   }
   .xsell p { margin: 0; font-size: var(--fs-xs); color: var(--text); line-height: 1.55; flex: 1 1 300px; }
   .xsell .btn { white-space: nowrap; text-decoration: none; }
+  @media (max-width: 700px) {
+    /* Portuguese and German CTAs are wider than the 263px content box at 320.
+       This is a real link label, so wrap it deliberately instead of letting its
+       nowrap min-content width push the whole Cross page sideways. */
+    .xsell .btn {
+      inline-size: 100%; max-inline-size: 100%;
+      white-space: normal; text-align: center;
+    }
+  }
 </style>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { formatSize } from "./lib/format";
   import { fade } from "svelte/transition";
   import { ready } from "./lib/crypto";
@@ -32,6 +32,7 @@
   import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard, PRICING_PATH } from "./lib/router.svelte";
   import Hero from "./lib/Hero.svelte";
   import DeviceRadar from "./lib/DeviceRadar.svelte";
+  import PeerLink from "./lib/PeerLink.svelte";
   import QuotaNotice from "./lib/QuotaNotice.svelte";
   import ReceiveActions from "./lib/ReceiveActions.svelte";
   import DebugPanel from "./lib/DebugPanel.svelte";
@@ -214,6 +215,40 @@
       : visiblePeers.some((p) => p.id === selectedPeerId) ? selectedPeerId : "",
   );
   const selectedPeer = $derived(visiblePeers.find((p) => p.id === effectiveSelected) ?? null);
+
+  // The chooser only renders a selector when there is something to choose. One
+  // peer needs no radar (effectiveSelected already picked it), zero peers need no
+  // blip surface at all — both cases were spending the largest block on the page
+  // to say nothing. Rolling this back means rendering <DeviceRadar> unconditionally
+  // again; no transfer, protocol or peer-card behaviour depends on it.
+  const chooser = $derived<"empty" | "link" | "radar">(
+    visiblePeers.length === 0 ? "empty" : visiblePeers.length === 1 ? "link" : "radar",
+  );
+
+  // Selecting a blip in the multi-peer radar reveals a card that can sit below the
+  // fold on a phone, so bring it into view. Only ever from an explicit blip click —
+  // the automatic single-peer selection must never move the page under the user.
+  //
+  // The scroll is instant rather than smooth. Measured in Chrome 1xx on this page
+  // (headless *and* headful): scrollIntoView({block:"nearest", behavior:"smooth"})
+  // scrolls by zero, while the identical call with behavior:"auto" scrolls
+  // correctly — smooth scrolling itself is fine there (window.scrollTo smooth
+  // works), so it is specific to this call. An animation preference must not be
+  // able to swallow the reveal entirely, and `block: "nearest"` already moves the
+  // minimum distance possible. This also makes the reduced-motion requirement
+  // unconditional instead of a branch.
+  let peerCardList = $state<HTMLElement | undefined>(undefined);
+  async function selectFromRadar(id: string) {
+    // The full radar only renders with multiple peers. Re-check at the event
+    // boundary for the narrow race where peers disappear after render but before
+    // the queued click is handled; automatic one-peer selection never calls here.
+    const wasMultiple = visiblePeers.length >= 2;
+    selectedPeerId = id;
+    if (!wasMultiple) return;
+    await tick();
+    peerCardList?.scrollIntoView?.({ block: "nearest" });
+  }
+
   const busy = $derived(session.busy);
   // The realtime surface auto-appears whenever a LAN peer is visible, but there's
   // no room to leave — so "Start over" there sets this flag to fall back to the
@@ -784,7 +819,6 @@
   <section class="peers">
     <h2>{currentRoute() === "cross" ? t.crossPeersTitle : t.peersTitle}</h2>
     <QuotaNotice />
-    <p class="ui-callout text-availability">💬 {t.text.availabilityHint}</p>
     {#if outbox().length && visiblePeers.length !== 1}
       <p class="ui-callout share-pending">{t.sharePending(outbox().length)}</p>
     {/if}
@@ -796,19 +830,26 @@
       </div>
     {/if}
     {#if currentRoute() === "lan"}
-      <DeviceRadar
-        peers={visiblePeers}
-        {selfName}
-        selectedId={effectiveSelected}
-        onSelect={(id) => (selectedPeerId = id)}
-      />
-      {#if visiblePeers.length === 0}
+      {#if chooser === "empty"}
+        <!-- The scanning signal lives inside the empty state rather than above a
+             second card repeating the same absence. -->
         <div class="empty">
+          <DeviceRadar peers={[]} {selfName} selectedId="" onSelect={selectFromRadar} compact />
           <p class="empty-lead">{t.emptyPeers}</p>
           <button class="btn btn-ghost empty-cta" onclick={() => navigate("cross")}>{t.emptyCrossCta}</button>
         </div>
-      {:else if selectedPeer}
-        <ul class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, busy) === "pick"}>
+      {:else if chooser === "link"}
+        <PeerLink {selfName} peerName={visiblePeers[0].name} />
+      {:else}
+        <DeviceRadar
+          peers={visiblePeers}
+          {selfName}
+          selectedId={effectiveSelected}
+          onSelect={selectFromRadar}
+        />
+      {/if}
+      {#if selectedPeer}
+        <ul bind:this={peerCardList} class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, busy) === "pick"}>
           {@render peerCard(selectedPeer, solo)}
         </ul>
       {/if}
@@ -824,6 +865,12 @@
           {/each}
         </ul>
       {/if}
+    {/if}
+    <!-- Sits with the message action it describes. Above the chooser it merely
+         delayed the primary task; with no peer visible there is no such action,
+         so it says nothing actionable at all. -->
+    {#if visiblePeers.length > 0}
+      <p class="ui-callout text-availability">💬 {t.text.availabilityHint}</p>
     {/if}
   </section>
 
@@ -1110,6 +1157,11 @@
   }
 
   .peers { margin-top: var(--space-7); }
+  /* 48px of separation is desktop rhythm; on a phone it is a third of the
+     distance between the masthead and the send action. */
+  @media (max-width: 700px) {
+    .peers { margin-top: var(--space-5); }
+  }
   .peers h2 { font-size: 20px; }
   /* Both notices use the shared .ui-callout; the queued-share hint is neutral
      (it is information) and the send confirmation is accent (it wants a
@@ -1165,8 +1217,9 @@
   .empty-cta { margin-top: var(--space-1); }
   /* Passive availability/privacy information → the neutral shared callout.
      It was accent-tinted, which spent the brand colour on a sentence that asks
-     nothing of the user. */
-  .text-availability { margin-block: 0 var(--space-3); }
+     nothing of the user. It now trails the peer card it describes, so its
+     margin flipped sides. */
+  .text-availability { margin-block: var(--space-3) 0; }
 
   footer {
     margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--border);

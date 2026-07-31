@@ -98,6 +98,13 @@
      "start over" control are all shared primitives now (app.css): .ui-page-head,
      .ui-card{,-raised,-head,-sub}, .ui-stack, .ui-badge, .btn. */
   .crosspage { position: relative; }
+  @media (max-width: 700px) {
+    /* Localized headings include long German/Portuguese compound words. At 320px
+       their min-content width used to push the whole document 9–13px sideways;
+       inherit a last-resort break opportunity only where it is needed, leaving
+       desktop flex/grid intrinsic sizing unchanged. */
+    .crosspage { overflow-wrap: anywhere; }
+  }
 
   .cards { display: grid; grid-template-columns: 1fr; gap: var(--space-4); max-inline-size: 720px; margin-inline: auto; align-items: stretch; }
 

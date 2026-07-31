@@ -620,6 +620,23 @@ async function main() {
 
     // ── 两个标签页进同一个房间（都是 127.0.0.1，服务器按来源 IP 归组）────────
     const sender = await newTab(browser, BASE + "/");
+    // Batch-2 chooser contract, zero peers: the live scanning signal belongs
+    // inside the empty state and is compact/decorative; no selectable blip or
+    // second full radar may precede the CTA.
+    await sender.waitFor(
+      "!!document.querySelector('.empty .radar.compact')",
+      "the zero-peer compact scanning state (close other LAN test pages if this times out)",
+    );
+    const zeroChooser = await sender.evaluate(`({
+      compact: document.querySelectorAll('.empty .radar.compact').length,
+      blips: document.querySelectorAll('.empty button.blip').length,
+      full: document.querySelectorAll('.peers > .radar:not(.compact)').length,
+    })`);
+    if (zeroChooser.compact !== 1 || zeroChooser.blips !== 0 || zeroChooser.full !== 0) {
+      throw new Error(`zero-peer chooser contract failed: ${JSON.stringify(zeroChooser)}`);
+    }
+    ok("the zero-peer state used one compact scanner and no selectable radar");
+
     const receiver = await newTab(browser, BASE + "/", SAVE_STUB);
 
     const peersSeen = `(() => {
@@ -640,6 +657,21 @@ async function main() {
     }
     await receiver.waitFor(peersSeen, "the receiver to see the sender on the radar");
     ok("both tabs joined the room and discovered each other");
+
+    // Exactly one peer is already selected by App's effectiveSelected rule, so
+    // the chooser must be inert PeerLink decoration followed by the existing
+    // actionable peer card — never a redundant radar button.
+    for (const [who, tab] of [["sender", sender], ["receiver", receiver]]) {
+      const oneChooser = await tab.evaluate(`({
+        links: document.querySelectorAll('.peerlink').length,
+        radars: document.querySelectorAll('.peers > .radar').length,
+        peerCards: document.querySelectorAll('.peers .pname').length,
+      })`);
+      if (oneChooser.links !== 1 || oneChooser.radars !== 0 || oneChooser.peerCards !== 1) {
+        throw new Error(`${who} one-peer chooser contract failed: ${JSON.stringify(oneChooser)}`);
+      }
+    }
+    ok("both one-peer states used PeerLink followed by one actionable peer card");
 
     // 首页折叠线以下的营销区块是懒加载的（HomeSections）。它在首屏之外，坏掉了
     // 不会有任何报错——页面只是从此少了一半内容。这里明确等它出现。

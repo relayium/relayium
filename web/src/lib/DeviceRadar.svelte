@@ -6,15 +6,30 @@
   import { blipPos } from "./radar-layout";
   import { messages, lang, type Messages } from "./i18n.svelte";
 
-  let { peers, selfName, selectedId, onSelect }:
-    { peers: Peer[]; selfName: string; selectedId: string; onSelect: (id: string) => void } = $props();
+  // `compact` is presentation only: a smaller scope for the "still scanning, no
+  // peers yet" signal inside the empty state. Blips, labels, pressed state and
+  // callbacks are identical in both sizes.
+  let { peers, selfName, selectedId, onSelect, compact = false }:
+    { peers: Peer[]; selfName: string; selectedId: string; onSelect: (id: string) => void; compact?: boolean } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
   const crowded = $derived(peers.length >= 4);
   const initial = $derived((selfName || "?").slice(0, 1).toUpperCase());
+  // In its only compact production use there are no peers: the scope is a
+  // decorative scanning signal next to explicit empty-state copy. Do not expose
+  // a second empty "Nearby devices" group immediately after the section heading.
+  // If a future caller combines compact with peers, it remains an accessible
+  // labelled group so focusable blips are never hidden from assistive technology.
+  const decorative = $derived(compact && peers.length === 0);
 </script>
 
-<div class="radar" role="group" aria-label={t.peersTitle}>
+<div
+  class="radar"
+  class:compact
+  role={decorative ? undefined : "group"}
+  aria-label={decorative ? undefined : t.peersTitle}
+  aria-hidden={decorative ? "true" : undefined}
+>
   <div class="scope" aria-hidden="true">
     <span class="ring r1"></span>
     <span class="ring r2"></span>
@@ -48,6 +63,13 @@
     width: min(300px, 82vw);
     aspect-ratio: 1;
     margin: var(--space-4) auto var(--space-3);
+  }
+  /* Compact: the same scope at a size that signals "scanning" without spending
+     half a phone viewport on a selector with nothing to select. */
+  .radar.compact { width: 120px; margin: 0 auto; }
+  .radar.compact .cdot {
+    width: 24px; height: 24px; font-size: var(--fs-xs);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
   }
   .scope {
     position: absolute;
