@@ -29,9 +29,10 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
       # Materialize the release signing key (RELAYIUM_RELEASE_KEY secret, a PEM
       # EC private key) to a 0600 temp file. goreleaser's `signs` block signs
       # checksums.txt with it via openssl. Fails loudly if the secret is unset so

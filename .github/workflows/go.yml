@@ -28,10 +28,11 @@ jobs:
       # human-readable version in a trailing comment) so a compromised or
       # retagged upstream release can't silently change what runs here.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           # Single source of truth for the toolchain version, same as release.yml.
           go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
       # Recorded in the log so a future failure can be compared against the
       # toolchain that produced the last green run.
       - name: Toolchain version
@@ -62,9 +63,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
       # If this ever goes red intermittently, do not paper over it with a retry:
       # a flaky test here is usually a real timing assumption. The first one
       # found was a test seeding an exemption window from wall time and then
