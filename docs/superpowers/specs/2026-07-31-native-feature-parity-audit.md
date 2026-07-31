@@ -24,7 +24,7 @@ The practical meaning of "synchronized" is:
 |---|---|---|---|
 | Cross-network realtime files | Pairing code/link, sender auth, receiver anonymous | `DirectPane` + `RealtimeSessionModel` | Implemented |
 | Stored encrypted links | Upload/download, TTL, delete-after-read, anonymous receive | `UploadPane`, `DownloadPane`, resumable Kit paths | Implemented |
-| Ephemeral realtime text | Web text composer/history-in-session; text wire v1 | Kit reserves frame kind 9 and text key domain, but no macOS text model or UI | **Blocking gap** |
+| Ephemeral realtime text | Web text composer/history-in-session; text wire v1 | `RealtimeTextPane` + `RealtimeTextSessionModel` over `text/1`-negotiated kind-9 frames, in-memory-only history | Implemented |
 | Folder transfer | Folder picker/drop, relative paths, multi-file preservation | Both macOS pickers reject directories; comments call recursion out of scope | **Blocking gap** |
 | LAN nearby transfer | Nearby-device room and direct browser flow | Kit can join the empty-code LAN room, but the app exposes pairing codes only and has no nearby-device UI | **Blocking gap** |
 | Account plan and usage | Personal center meters and plan | `AccountView` | Implemented |

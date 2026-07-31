@@ -16,8 +16,8 @@
     {
       "id": "ephemeral-text",
       "required": true,
-      "implemented": false,
-      "evidence": "Wire kind/key domain exist, but no send/receive model or macOS UI"
+      "implemented": true,
+      "evidence": "RealtimeTextPane + RealtimeTextSessionModel send/receive over text/1-negotiated kind-9 frames; RealtimeTextFrameTests/RealtimeTextSessionModelTests cover wire interop, consent gating, and history limits"
     },
     {
       "id": "folder-transfer",
