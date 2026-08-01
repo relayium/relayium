@@ -628,6 +628,164 @@ async function capsSuppressedScenario(browser) {
 }
 
 /**
+ * /apps is a release surface, not a four-item wishlist. Executable choices must
+ * stay ahead of future products, and a half-finished native release must not
+ * leak a dead control. Exercise the real bundled manifest plus the responsive,
+ * translated layout here; component tests cover the released/half-filled seams.
+ */
+async function appsHierarchyScenario(browser) {
+  const tab = await newTab(browser, BASE + "/apps");
+  await setWideViewport(tab);
+  await tab.waitFor("!!document.querySelector('#app-web')", "apps hierarchy to render");
+
+  const desktop = await tab.evaluate(`(() => {
+    const contrast = (a, b) => {
+      const lum = (value) => value.match(/[\\d.]+/g).slice(0, 3).map(Number).map((v) => {
+        v /= 255;
+        return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;
+      }).reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
+      const x = lum(a), y = lum(b);
+      return (Math.max(x, y) + .05) / (Math.min(x, y) + .05);
+    };
+    const futureMetrics = () => [...document.querySelectorAll('.future-card')].map((card) => {
+      const el = card.querySelector('.card-desc');
+      const foreground = getComputedStyle(el).color;
+      let parent = el, background = '';
+      while (parent) {
+        const candidate = getComputedStyle(parent).backgroundColor;
+        if (candidate !== 'rgba(0, 0, 0, 0)' && candidate !== 'transparent') {
+          background = candidate;
+          break;
+        }
+        parent = parent.parentElement;
+      }
+      return { contrast: contrast(foreground, background), opacity: parseFloat(getComputedStyle(card).opacity) };
+    });
+    const root = document.documentElement;
+    const originalTheme = root.getAttribute('data-theme');
+    root.dataset.theme = 'light';
+    const lightFuture = futureMetrics();
+    root.dataset.theme = 'dark';
+    const darkFuture = futureMetrics();
+    if (originalTheme === null) root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', originalTheme);
+
+    const resolveColor = (value) => {
+      const probe = document.createElement('span');
+      probe.style.color = value;
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
+    const platformCard = document.querySelector('.app-card.is-platform');
+    return {
+      headings: [...document.querySelectorAll('h1, h2, h3')].map((el) => el.tagName),
+      available: [...document.querySelectorAll('.available-grid .app-card')].map((el) => el.id),
+      future: [...document.querySelectorAll('.future-grid .app-card')].map((el) => el.id),
+      actions: [...document.querySelectorAll('.available-grid .cta')].map((el) => el.getAttribute('href')),
+      futureControls: document.querySelectorAll('.future-card a, .future-card button, .future-card [disabled]').length,
+      sharedCards: document.querySelectorAll('.app-card.ui-card').length,
+      lightFuture,
+      darkFuture,
+      platformMarker: {
+        id: platformCard?.id,
+        border: platformCard ? getComputedStyle(platformCard).borderTopColor : '',
+        neutral: resolveColor('var(--control-border)'),
+        accent: resolveColor('var(--accent-border)'),
+      },
+      pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  })()`);
+  if (
+    JSON.stringify(desktop.available) !== JSON.stringify(["app-web", "app-cli"]) ||
+    JSON.stringify(desktop.future) !== JSON.stringify(["app-mac", "app-ios"]) ||
+    desktop.headings.filter((tag) => tag === "H1").length !== 1 ||
+    desktop.headings.filter((tag) => tag === "H2").length !== 2 ||
+    desktop.headings.filter((tag) => tag === "H3").length !== 4 ||
+    JSON.stringify(desktop.actions) !== JSON.stringify(["/", "/cli"]) || desktop.futureControls !== 0 ||
+    desktop.sharedCards !== 4 ||
+    [...desktop.lightFuture, ...desktop.darkFuture].some((metric) => metric.contrast < 4.5 || metric.opacity !== 1) ||
+    !desktop.platformMarker.id || desktop.platformMarker.border !== desktop.platformMarker.neutral ||
+    desktop.platformMarker.border === desktop.platformMarker.accent ||
+    desktop.pageOverflow !== 0
+  ) {
+    throw new Error(`desktop apps hierarchy contract failed: ${JSON.stringify(desktop)}`);
+  }
+
+  await tab.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+  await setWideViewport(tab, 390, 844);
+  const locales = ["zh", "en", "ja", "ko", "de", "fr", "ar", "es", "pt"];
+  const mobile = [];
+  for (const code of locales) {
+    await tab.evaluate(`(() => {
+      const select = document.querySelector('select.lang');
+      select.value = ${JSON.stringify(code)};
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+    await tab.waitFor(`document.documentElement.lang === ${JSON.stringify(code)}`, `${code} apps locale`);
+    mobile.push(await tab.evaluate(`(() => {
+      const cmd = document.querySelector('.cmd');
+      const cmdRect = cmd.getBoundingClientRect();
+      const codeRect = cmd.querySelector('code').getBoundingClientRect();
+      const elements = [...document.querySelectorAll('.app-card, .cta, .cmd')];
+      return {
+        lang: document.documentElement.lang,
+        dir: document.documentElement.dir,
+        pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        elementOverflow: elements.some((el) => {
+          const rect = el.getBoundingClientRect();
+          return rect.left < -.5 || rect.right > innerWidth + .5;
+        }),
+        minAction: Math.min(...[...document.querySelectorAll('.cta')].map((el) => el.getBoundingClientRect().height)),
+        futureControls: document.querySelectorAll('.future-card a, .future-card button, .future-card [disabled]').length,
+        command: {
+          dir: cmd.dir,
+          tabIndex: cmd.tabIndex,
+          scrollLeft: cmd.scrollLeft,
+          codeStartsAt: codeRect.left - cmdRect.left,
+        },
+      };
+    })()`));
+  }
+  const bad = mobile.filter((m) =>
+    m.pageOverflow !== 0 || m.elementOverflow || m.minAction < 44 || m.futureControls !== 0 ||
+    m.command.dir !== "ltr" || m.command.tabIndex !== 0 || m.command.scrollLeft !== 0 || m.command.codeStartsAt < 0 ||
+    (m.lang === "ar" ? m.dir !== "rtl" : m.dir !== "ltr")
+  );
+  if (bad.length) throw new Error(`mobile apps hierarchy contract failed: ${JSON.stringify(bad)}`);
+
+  // Put keyboard focus on the preceding Web CTA, then reach the command with a
+  // real Tab key event. This catches invalid focus-token declarations that a
+  // programmatic .focus() does not expose through :focus-visible.
+  await tab.evaluate("document.querySelector('#app-web .cta').focus()");
+  await tab.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+  await tab.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+  const keyboard = await tab.evaluate(`(() => {
+    const cmd = document.querySelector('.cmd');
+    const style = getComputedStyle(cmd);
+    return { active: document.activeElement === cmd, outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
+  })()`);
+  if (!keyboard.active || keyboard.outlineStyle !== "solid" || parseFloat(keyboard.outlineWidth) < 2) {
+    throw new Error(`apps command keyboard focus contract failed: ${JSON.stringify(keyboard)}`);
+  }
+
+  await tab.evaluate(`(() => {
+    const select = document.querySelector('select.lang');
+    select.value = 'en';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  await tab.waitFor("document.documentElement.lang === 'en'", "English locale after the apps sweep");
+
+  const errs = tab.errors.filter((e) => !/401|Failed to load resource/.test(e));
+  if (errs.length) throw new Error(`apps page logged errors:\n    ${errs.join("\n    ")}`);
+  ok("apps separated executable choices from native futures across all nine locales");
+  await browser.send("Target.closeTarget", { targetId: tab.targetId });
+}
+
+/**
  * 定价页是购买入口：真正的方案必须先于长解释出现，而且这个层级要在九种语言和
  * RTL 下仍然成立。它跟 LAN 传输共享同一份全局样式，因此放在完整浏览器回归里，
  * 避免一个只在 jsdom 里通过的 DOM 顺序测试掩盖真实折叠线/溢出回归。
@@ -763,6 +921,7 @@ async function main() {
 
     console.log(`\nLAN transfer E2E against ${BASE}`);
 
+    await appsHierarchyScenario(browser);
     await pricingHierarchyScenario(browser);
 
     // ── 两个标签页进同一个房间（都是 127.0.0.1，服务器按来源 IP 归组）────────

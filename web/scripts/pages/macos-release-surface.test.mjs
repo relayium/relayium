@@ -6,15 +6,21 @@ import apps from "./content/apps.mjs";
 
 describe("macOS release surface", () => {
   it("keeps the SPA download state tied to the canonical manifest", async () => {
-    const [component, manifestText] = await Promise.all([
+    const [component, app, manifestText] = await Promise.all([
       readFile(resolve(process.cwd(), "src/lib/AppsPage.svelte"), "utf8"),
+      readFile(resolve(process.cwd(), "src/App.svelte"), "utf8"),
       readFile(resolve(process.cwd(), "native-releases.json"), "utf8"),
     ]);
     const manifest = JSON.parse(manifestText);
 
     expect(component).toContain('import releases from "../../native-releases.json"');
-    expect(component).toContain("releases.macos.available");
-    expect(component).toContain("releases.macos.downloadUrl");
+    // AppsPage accepts a test seam, but its production default remains the one
+    // canonical build-time manifest. Availability fails closed unless both the
+    // release bit and an exact URL are present, then the card moves sections.
+    expect(component).toContain("macRelease = releases.macos");
+    expect(component).toContain("macRelease.available === true && !!macRelease.downloadUrl");
+    expect(component).toMatch(/macAvailable\s*\?\s*macRelease\.downloadUrl!/);
+    expect(app.match(/<AppsPage\b[^>]*>/g)).toEqual(["<AppsPage />"]);
     expect(component).toContain("t.appsPage.cards.mac.cta");
     expect(manifest.macos.available).toBe(false);
     expect(manifest.macos.build).toBeNull();
