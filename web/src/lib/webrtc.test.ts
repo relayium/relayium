@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { connect, connectResume, connectText, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, type InboundSignal } from "./webrtc";
+import { connect, connectLink, connectResume, connectText, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, type InboundSignal } from "./webrtc";
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, deriveSession, signResume, verifyResume, type SessionKeys } from "./crypto";
 import { sas } from "./crypto";
@@ -16,6 +16,7 @@ class FakeDataChannel {
   onopen: (() => void) | null = null;
   onmessage: ((ev: unknown) => void) | null = null;
   onclose: (() => void) | null = null;
+  constructor(readonly label = "relayium") {}
   send() {}
   close() { this.readyState = "closed"; }
   _open() { this.readyState = "open"; this.onopen?.(); }
@@ -24,21 +25,31 @@ class FakeDataChannel {
 const instances: FakePC[] = [];
 
 class FakePC {
+  static inboundLabels: string[] = ["relayium"];
   onicecandidate: ((e: unknown) => void) | null = null;
   ondatachannel: ((e: { channel: FakeDataChannel }) => void) | null = null;
   onconnectionstatechange: (() => void) | null = null;
   connectionState = "new";
   channel: FakeDataChannel | null = null;
+  channels: FakeDataChannel[] = [];
   constructor() { instances.push(this); }
-  createDataChannel() { this.channel = new FakeDataChannel(); return this.channel; }
+  createDataChannel(label: string) {
+    const ch = new FakeDataChannel(label);
+    this.channels.push(ch);
+    this.channel ??= ch;
+    return ch;
+  }
   async createOffer() { return { type: "offer", sdp: "offer" }; }
   async createAnswer() { return { type: "answer", sdp: "answer" }; }
   async setLocalDescription() {}
   async setRemoteDescription(desc: { type: string }) {
     if (desc.type === "offer" && this.ondatachannel) {
-      const ch = new FakeDataChannel();
-      this.channel = ch;
-      this.ondatachannel({ channel: ch });
+      for (const label of FakePC.inboundLabels) {
+        const ch = new FakeDataChannel(label);
+        this.channels.push(ch);
+        this.channel ??= ch;
+        this.ondatachannel({ channel: ch });
+      }
     }
   }
   async addIceCandidate() {}
@@ -81,7 +92,9 @@ function makeHub() {
 }
 
 const flush = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0)); };
-const openAll = () => instances.forEach((pc) => { if (pc.channel && pc.channel.readyState !== "open") pc.channel._open(); });
+const openAll = () => instances.forEach((pc) => {
+  for (const ch of pc.channels) if (ch.readyState !== "open") ch._open();
+});
 
 // A real pair of SignalAuths: two ephemeral keypairs run through the same
 // crypto_kx exchange the first (SAS-verified) connection would have done. Using
@@ -102,7 +115,11 @@ async function pairAuth(): Promise<{ I: SignalAuth; R: SignalAuth; iKeys: Sessio
 }
 
 beforeAll(async () => { await ready(); });
-afterEach(() => { instances.length = 0; vi.unstubAllGlobals(); });
+afterEach(() => {
+  instances.length = 0;
+  FakePC.inboundLabels = ["relayium"];
+  vi.unstubAllGlobals();
+});
 
 describe("webrtc commit-then-reveal handshake", () => {
   it("delivers each peer's real key and yields a matching SAS", async () => {
@@ -575,6 +592,7 @@ describe("signalling generations", () => {
     expect(signalGeneration({ sdp: { type: "offer", sdp: "v=0" } })).toBe("file");
     expect(signalGeneration({ resume: true })).toBe("resume");
     expect(signalGeneration({ text: true })).toBe("text");
+    expect(signalGeneration({ link: true })).toBe("link");
   });
 
   // Untagged is the file generation, which is what every already-deployed peer
@@ -583,13 +601,48 @@ describe("signalling generations", () => {
     expect(signalGeneration({ resume: false })).toBe("file");
     expect(signalGeneration({ text: false })).toBe("file");
     expect(signalGeneration({ resume: false, text: false })).toBe("file");
+    expect(signalGeneration({ link: false })).toBe("file");
   });
 
   // Pinned so the precedence is a decision rather than an accident. Phase 1
   // never produces both (connectText does not resume); phase 2 must revisit this
   // if it resumes a message session.
-  it("gives resume precedence when both tags are present", () => {
-    expect(signalGeneration({ resume: true, text: true })).toBe("resume");
+  it("pins resume > link > text precedence when tags overlap", () => {
+    expect(signalGeneration({ resume: true, link: true, text: true })).toBe("resume");
+    expect(signalGeneration({ link: true, text: true })).toBe("link");
+  });
+
+  it("opens both link channels through DCEP and resolves only after both are open", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    FakePC.inboundLabels = ["relayium-text", "relayium"]; // reverse arrival is intentional
+    const hub = makeHub();
+    const iKey = generateKeyPair();
+    const rKey = generateKeyPair();
+
+    const rP = connectLink({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
+    const iP = connectLink({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    await flush();
+
+    expect(instances).toHaveLength(2);
+    expect(instances.find((pc) => pc.channels.some((ch) => ch.label === "relayium-text"))?.channels.map((ch) => ch.label))
+      .toEqual(expect.arrayContaining(["relayium", "relayium-text"]));
+    for (const m of [...hub.sent.I, ...hub.sent.R]) expect(m.link).toBe(true);
+
+    // Opening only the primary lane must not resolve the link.
+    for (const pc of instances) pc.channels.find((ch) => ch.label === "relayium")?._open();
+    let settled = false;
+    void Promise.all([iP, rP]).then(() => (settled = true));
+    await flush();
+    expect(settled).toBe(false);
+
+    for (const pc of instances) pc.channels.find((ch) => ch.label === "relayium-text")?._open();
+    const [ic, rc] = await Promise.all([iP, rP]);
+    expect(ic.channel.label).toBe("relayium");
+    expect(ic.getChannel("relayium-text")?.label).toBe("relayium-text");
+    expect(rc.channel.label).toBe("relayium");
+    expect(rc.getChannel("relayium-text")?.label).toBe("relayium-text");
+    ic.close();
+    rc.close();
   });
 
   it("still tags a resume connection's outbound signals", async () => {

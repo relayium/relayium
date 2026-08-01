@@ -67,6 +67,10 @@ export interface InboundSignal {
    *  here so the type is one place; the generation filter that acts on it lands
    *  with connectText. */
   text?: boolean;
+  /** Marks the unified file+text link generation. It is sent only to peers that
+   *  announced the roster-level `link/1` capability; older peers treat unknown
+   *  offers as legacy file offers, so the tag alone is not a compatibility gate. */
+  link?: boolean;
 }
 
 /** The peer declined a fresh offer because it is mid-transfer (one at a time).
@@ -87,6 +91,10 @@ export type ConnPath = "lan" | "p2p" | "relay" | "unknown";
 
 export interface Conn {
   channel: RTCDataChannel;
+  /** Exact-label lookup for connections that carry more than one logical lane.
+   *  Legacy callers keep using `channel`, which is always the first requested
+   *  label (and defaults to `relayium`). */
+  getChannel(label: string): RTCDataChannel | undefined;
   /** Tear down the peer connection and stop listening for this peer's signals. */
   close(): void;
   /** The live ICE path, read from getStats() on demand. */
@@ -177,7 +185,7 @@ export function authPayload(msg: InboundSignal): string {
  * SDP. `"file"` is the untagged generation, which is what every already-deployed
  * peer sends and what this code has always sent.
  */
-export type Generation = "file" | "resume" | "text";
+export type Generation = "file" | "resume" | "text" | "link";
 
 /**
  * A signal's generation, from its tags.
@@ -189,6 +197,7 @@ export type Generation = "file" | "resume" | "text";
  */
 export function signalGeneration(msg: InboundSignal): Generation {
   if (msg.resume) return "resume";
+  if (msg.link) return "link";
   if (msg.text) return "text";
   return "file";
 }
@@ -211,17 +220,29 @@ export interface CoreOpts extends CoreHooks {
   /** 给这条连接的信令加**对端认证**。不传 = 不认证（connect() 就不传：它自己跑
    *  commit-reveal）。传了就是双向强制：外发全签，入站没签或签不对的一律丢弃。 */
   auth?: SignalAuth;
+  /** Reliable ordered DataChannels required before this connection is ready.
+   *  The initiator opens them through DCEP; the responder collects them by exact
+   *  label, so arrival order is irrelevant. Defaults to the legacy single lane.
+   *  Keep this list small: every label consumes an SCTP stream in each direction. */
+  channelLabels?: readonly string[];
 }
 
 export async function establish(opts: CoreOpts): Promise<Conn> {
   const { signaling, peerId, role, generation = "file" } = opts;
   const what = opts.label ? `${opts.label} connection` : "connection";
   const pc = new RTCPeerConnection(opts.config ?? DEFAULT_ICE);
+  const channelLabels = opts.channelLabels ?? ["relayium"];
+  if (channelLabels.length === 0 || new Set(channelLabels).size !== channelLabels.length
+      || channelLabels.some((label) => !label)) {
+    try { pc.close(); } catch { /* constructor succeeded; close is best effort */ }
+    throw new Error("relayium: channel labels must be non-empty and unique");
+  }
 
   /** 给外发信令盖上世代标记。"file" 不盖任何标记——旧版本对端看到的字节因此和
    *  这套世代命名之前完全一致。 */
-  const tag = <T extends object>(msg: T): T & { resume?: boolean; text?: boolean } =>
+  const tag = <T extends object>(msg: T): T & { resume?: boolean; text?: boolean; link?: boolean } =>
     generation === "resume" ? { ...msg, resume: true }
+    : generation === "link" ? { ...msg, link: true }
     : generation === "text" ? { ...msg, text: true }
     : msg;
 
@@ -229,7 +250,7 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
   // 保序——offer 之后紧跟的 ICE 候选如果因为签名耗时反超到 offer 前面，对端会把它
   // 当作"remoteDescription 之前到达的候选"丢掉。
   let sendChain: Promise<void> = Promise.resolve();
-  function send(msg: Omit<InboundSignal, "resume" | "text" | "auth">) {
+  function send(msg: Omit<InboundSignal, "resume" | "text" | "link" | "auth">) {
     sendChain = sendChain
       .then(async () => {
         const out: InboundSignal = tag(msg);
@@ -243,27 +264,39 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     if (e.candidate) send({ ice: e.candidate });
   };
 
-  let channel: RTCDataChannel;
+  const channels = new Map<string, RTCDataChannel>();
   let opened = false;
   let failReady!: (err: Error) => void;
-  const ready = new Promise<RTCDataChannel>((resolve, reject) => {
+  const ready = new Promise<Map<string, RTCDataChannel>>((resolve, reject) => {
     failReady = reject;
-    const open = (ch: RTCDataChannel) => { opened = true; resolve(ch); };
     const arm = (ch: RTCDataChannel) => {
       ch.binaryType = "arraybuffer";
       ch.bufferedAmountLowThreshold = BUFFERED_LOW;
     };
+    const maybeOpen = () => {
+      if (opened || channels.size !== channelLabels.length) return;
+      for (const label of channelLabels) {
+        if (channels.get(label)?.readyState !== "open") return;
+      }
+      opened = true;
+      resolve(channels);
+    };
+    const collect = (ch: RTCDataChannel) => {
+      if (!channelLabels.includes(ch.label) || channels.has(ch.label)) {
+        // An unexpected or duplicate lane can never satisfy this connection.
+        // Close only that channel; the required set may still arrive normally.
+        try { ch.close(); } catch { /* already gone */ }
+        return;
+      }
+      channels.set(ch.label, ch);
+      arm(ch);
+      if (ch.readyState === "open") maybeOpen();
+      else ch.onopen = maybeOpen;
+    };
     if (role === "initiator") {
-      channel = pc.createDataChannel("relayium");
-      arm(channel);
-      channel.onopen = () => open(channel);
+      for (const label of channelLabels) collect(pc.createDataChannel(label));
     } else {
-      pc.ondatachannel = (ev) => {
-        channel = ev.channel;
-        arm(channel);
-        if (channel.readyState === "open") open(channel);
-        else channel.onopen = () => open(channel);
-      };
+      pc.ondatachannel = (ev) => collect(ev.channel);
     }
   });
 
@@ -365,10 +398,13 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
   }
 
   try {
-    const openChannel = await ready;
+    const openChannels = await ready;
     clearTimeout(connectTimer);
+    const primary = openChannels.get(channelLabels[0]);
+    if (!primary) throw new Error("relayium: primary data channel missing");
     return {
-      channel: openChannel,
+      channel: primary,
+      getChannel: (label) => openChannels.get(label),
       close,
       path: (): Promise<ConnPath> => pc.getStats().then(classifyPath),
       stats: () => pc.getStats(),

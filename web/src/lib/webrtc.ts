@@ -149,6 +149,13 @@ export function connectText(opts: ConnectOpts): Promise<Conn> {
   return handshakeConnect(opts, "text");
 }
 
+/** Establishes the trust layer for a mixed file+text link. Capability gating and
+ *  ownership live in the link coordinator; keeping this transport primitive free
+ *  of roster state makes it testable and prevents it from advertising early. */
+export function connectLink(opts: ConnectOpts): Promise<Conn> {
+  return handshakeConnect(opts, "link");
+}
+
 async function handshakeConnect(opts: ConnectOpts, generation: Generation): Promise<Conn> {
   const { signaling, peerId, selfKey, role, onPeerKey } = opts;
 
@@ -170,6 +177,7 @@ async function handshakeConnect(opts: ConnectOpts, generation: Generation): Prom
     revealSent = true;
     const msg: InboundSignal = { reveal: { key: b64(selfKey), nonce: b64(selfNonce) } };
     if (generation === "text") msg.text = true;
+    if (generation === "link") msg.link = true;
     signaling.sendSignal(peerId, msg);
   }
 
@@ -180,7 +188,8 @@ async function handshakeConnect(opts: ConnectOpts, generation: Generation): Prom
     generation,
     // Keeps "connection failed" and "text connection failed" apart in logs and
     // tests; the file generation keeps its existing unlabelled wording.
-    label: generation === "text" ? "text" : undefined,
+    label: generation === "text" ? "text" : generation === "link" ? "link" : undefined,
+    channelLabels: generation === "link" ? ["relayium", "relayium-text"] : undefined,
     config: opts.config,
     initialSignal: opts.initialSignal,
     onStateChange: opts.onStateChange,
