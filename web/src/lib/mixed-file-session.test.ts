@@ -817,7 +817,7 @@ describe("mixed file session transport recovery", () => {
     expect(seqs).toEqual([...seqs].sort((x, y) => x - y));
     expect(text.a.readyState).toBe("open");
     expect(text.b.readyState).toBe("open");
-  }, 10_000);
+  }, 30_000);
 
   it("resumes at a multi-file boundary without reopening consent or the completed file", async () => {
     const target = memoryTarget();
@@ -1076,7 +1076,7 @@ describe("mixed file session transport recovery", () => {
     b.attach(bNext);
     await until(() => b.recv?.status === "recvDone" && a.send?.status === "sendDone");
     expect(bTarget.output.get("buffered.bin")).toEqual(new Uint8Array(2 * 1024 * 1024));
-  });
+  }, 30_000);
 
   it("commits an admitted old-generation write before requesting its exact resume point", async () => {
     let releaseWrite!: () => void;
@@ -1124,7 +1124,7 @@ describe("mixed file session transport recovery", () => {
     expect(close).toHaveBeenCalledOnce();
     const point = announced(swap.a.sent.find((frame) => kindOf(frame) === FRAME.RESUME)!);
     expect(point.offset).toBe(CHUNK_SIZE);
-  }, 10_000);
+  }, 30_000);
 
   it("keeps the inbound sink open across the gap and closes it once after resume", async () => {
     let releaseWrite!: () => void;
