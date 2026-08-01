@@ -1,7 +1,7 @@
 # Web pricing decision hierarchy — batch 6
 
 Date: 2026-08-01
-Status: implemented and locally validated.
+Status: implemented and production validated.
 Scope owner: Web pricing page, shared Pricing component, and Pricing-route
 account-control visibility. No API, Stripe rule, plan relation, checkout,
 account-state, route, or pricing-copy meaning change.
