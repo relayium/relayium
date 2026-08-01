@@ -109,8 +109,9 @@ describe("Nav utility controls", () => {
     expect(target.querySelectorAll(".util select").length).toBeGreaterThanOrEqual(2);
   });
 
-  // Unchanged by this batch: the account control belongs to the login-gated
-  // flows only. This test exists to catch it silently spreading to every route.
+  // The account control belongs to flows whose primary action requires an
+  // account. Pricing must include it: otherwise its "Sign in to upgrade"
+  // recovery text has no executable action on that route.
   it("shows the account control only on the login-gated routes", () => {
     stubAccountFetches();
     expect(target.querySelector(".account")).toBeNull();
@@ -120,6 +121,10 @@ describe("Nav utility controls", () => {
     expect(target.querySelector(".account")).toBeNull();
 
     navigate("cross");
+    flushSync();
+    expect(target.querySelector(".account")).not.toBeNull();
+
+    navigate("pricing");
     flushSync();
     expect(target.querySelector(".account")).not.toBeNull();
 

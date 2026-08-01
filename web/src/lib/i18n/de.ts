@@ -127,6 +127,8 @@ const de: Messages = {
   billing: {
     monthly: "Monatlich",
     yearly: "Jährlich",
+    cycleLabel: "Abrechnungszeitraum",
+    loadingPlans: "Tarife werden geladen…",
     perMonth: "/Monat",
     perYear: "/Jahr",
     free: "Kostenlos",

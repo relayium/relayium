@@ -16,11 +16,11 @@
   ];
 
   // The account control only appears on the login-gated flows (async storage,
-  // realtime pairing, personal center) — the same set that used to render their
-  // own top-right Account row. Rendering it here folds it into the nav bar so it
-  // no longer sits on a lonely row of its own.
+  // realtime pairing, pricing, personal center) — the same set that needs an
+  // account for its primary action. Rendering it here folds it into the nav bar
+  // so it no longer sits on a lonely row of its own.
   const showAccount = $derived(
-    currentRoute() === "cross" || currentRoute() === "offline" || currentRoute() === "me",
+    currentRoute() === "cross" || currentRoute() === "offline" || currentRoute() === "pricing" || currentRoute() === "me",
   );
 
   // Mobile mode rail. The five tabs keep their natural width and the row scrolls

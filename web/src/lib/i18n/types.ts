@@ -157,6 +157,8 @@ export interface Messages {
   billing: {
     monthly: string; // billing-cycle toggle: monthly option
     yearly: string; // billing-cycle toggle: yearly option
+    cycleLabel: string; // accessible name of the billing-cycle button group
+    loadingPlans: string; // status announced while GET /api/plans is pending
     perMonth: string; // price suffix, e.g. "$9.00/mo"
     perYear: string; // price suffix, e.g. "$90.00/yr"
     free: string; // price shown for the free tier

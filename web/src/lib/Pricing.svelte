@@ -27,6 +27,10 @@
   const initialCycle = (): "monthly" | "yearly" =>
     session().user?.billingCycle === "yearly" ? "yearly" : "monthly";
   let cycle = $state<"monthly" | "yearly">(initialCycle());
+  // /api/plans is in flight. This component now sits in the first viewport of
+  // /pricing, so "no tiers yet" must read as loading rather than as an empty
+  // decision area — see the skeleton grid below.
+  let loadingPlans = $state(true);
   let loadError = $state("");
   let checkoutError = $state("");
   let changeMsg = $state("");
@@ -47,9 +51,16 @@
     try {
       const res = await fetch("/api/plans");
       if (!res.ok) throw new Error("bad status");
-      tiers = await res.json();
+      const loaded = await res.json();
+      // An empty active-plan set is a valid 200 response from the server, but it
+      // is not a usable pricing decision. Treat it like a load failure instead
+      // of leaving the cycle control above an unexplained empty grid.
+      if (!Array.isArray(loaded) || loaded.length === 0) throw new Error("no active plans");
+      tiers = loaded as Tier[];
     } catch {
       loadError = t.billing.loadError;
+    } finally {
+      loadingPlans = false;
     }
   });
 
@@ -201,20 +212,32 @@
 
 <div class="pricing">
   <div class="toggle-row">
-    <div class="toggle" role="group" aria-label="Billing cycle">
-      <button type="button" class="toggle-btn" class:active={cycle === "monthly"} onclick={() => (cycle = "monthly")}>
+    <div class="toggle" role="group" aria-label={t.billing.cycleLabel}>
+      <button
+        type="button"
+        class="toggle-btn"
+        class:active={cycle === "monthly"}
+        aria-pressed={cycle === "monthly"}
+        onclick={() => (cycle = "monthly")}
+      >
         {t.billing.monthly}
       </button>
-      <button type="button" class="toggle-btn" class:active={cycle === "yearly"} onclick={() => (cycle = "yearly")}>
+      <button
+        type="button"
+        class="toggle-btn"
+        class:active={cycle === "yearly"}
+        aria-pressed={cycle === "yearly"}
+        onclick={() => (cycle = "yearly")}
+      >
         {t.billing.yearly}
       </button>
     </div>
     <span class="save-badge">{t.billing.save2mo}</span>
   </div>
 
-  {#if loadError}<p class="err">{loadError}</p>{/if}
-  {#if checkoutError}<p class="err">{checkoutError}</p>{/if}
-  {#if changeMsg}<p class="ok-note">{changeMsg}</p>{/if}
+  {#if loadError}<p class="err ui-callout ui-callout-danger" role="alert">{loadError}</p>{/if}
+  {#if checkoutError}<p class="err ui-callout ui-callout-danger" role="alert">{checkoutError}</p>{/if}
+  {#if changeMsg}<p class="ok-note ui-callout ui-callout-accent" role="status">{changeMsg}</p>{/if}
 
   {#if scheduledPlanId && scheduledTier}
     <div class="sched-banner">
@@ -225,59 +248,83 @@
     </div>
   {/if}
 
-  <div class="tiers">
-    {#each tiers as tier (tier.id)}
-      <div class="tier" class:popular={tier.id === POPULAR_ID} class:is-current={tier.id === currentPlanId}>
-        {#if tier.id === POPULAR_ID}<div class="ribbon">{t.billing.popular}</div>{/if}
-        <h3 class="tier-name">{tier.name}</h3>
-        {#if isFree(tier)}
-          <div class="tier-price">{t.billing.free}</div>
-        {:else}
-          <div class="tier-price">
-            {formatPrice(priceCents(tier))}
-            <span class="tier-suffix">{cycle === "monthly" ? t.billing.perMonth : t.billing.perYear}</span>
-          </div>
-        {/if}
-        <ul class="tier-caps">
-          <li>{t.billing.storage}: {formatSize(tier.storageBytes)}</li>
-          <li>{t.billing.traffic}: {formatSize(tier.trafficBytes)}</li>
-          <li>{t.billing.retention}: {formatRetention(tier.retentionSecs)}</li>
-        </ul>
+  {#if loadingPlans}
+    <!-- Decorative placeholders only: same grid footprint so the decision area
+         doesn't jump when the real tiers land. aria-hidden + no focusable
+         content, so the status line below is the only thing announced. -->
+    <p class="load-status" role="status">{t.billing.loadingPlans}</p>
+    <div class="tiers" aria-hidden="true">
+      {#each [0, 1, 2, 3] as i (i)}
+        <div class="tier tier-skeleton ui-card ui-stack">
+          <span class="sk sk-name"></span>
+          <span class="sk sk-price"></span>
+          <span class="sk sk-line"></span>
+          <span class="sk sk-line"></span>
+          <span class="sk sk-line"></span>
+          <span class="sk sk-cta"></span>
+        </div>
+      {/each}
+    </div>
+  {:else if !loadError}
+    <!-- Skipped entirely on a load failure: the danger callout above is the
+         explanation, and an empty grid underneath it would only read as a bug. -->
+    <div class="tiers">
+      {#each tiers as tier (tier.id)}
+        <div class="tier ui-card ui-stack" class:popular={tier.id === POPULAR_ID} class:is-current={tier.id === currentPlanId}>
+          {#if tier.id === POPULAR_ID}<div class="ribbon ui-badge">{t.billing.popular}</div>{/if}
+          <h3 class="tier-name">{tier.name}</h3>
+          {#if isFree(tier)}
+            <div class="tier-price">{t.billing.free}</div>
+          {:else}
+            <div class="tier-price">
+              <!-- Prices are USD literals (Stripe charges USD). In an RTL locale
+                   a bare "$9.00" would reorder around the sign and the decimal
+                   separator, so the amount is its own LTR bidi isolate. -->
+              <bdi dir="ltr">{formatPrice(priceCents(tier))}</bdi>
+              <span class="tier-suffix">{cycle === "monthly" ? t.billing.perMonth : t.billing.perYear}</span>
+            </div>
+          {/if}
+          <ul class="tier-caps">
+            <li>{t.billing.storage}: {formatSize(tier.storageBytes)}</li>
+            <li>{t.billing.traffic}: {formatSize(tier.trafficBytes)}</li>
+            <li>{t.billing.retention}: {formatRetention(tier.retentionSecs)}</li>
+          </ul>
 
-        {#if relation(tier) === "current"}
-          <div class="current-badge">{isFree(tier) ? t.billing.currentFree : t.billing.current}</div>
-        {:else if tier.id === scheduledPlanId}
-          <div class="current-badge">{t.billing.scheduledBadge}</div>
-        {:else if isFree(tier)}
-          {#if isSubscribed}
-            <!-- A paid subscriber viewing Free: this is their downgrade/cancel
-                 path. Free has no Stripe price, so it goes through the portal
-                 (period-end cancel), not change-plan. -->
+          {#if relation(tier) === "current"}
+            <div class="current-badge">{isFree(tier) ? t.billing.currentFree : t.billing.current}</div>
+          {:else if tier.id === scheduledPlanId}
+            <div class="current-badge">{t.billing.scheduledBadge}</div>
+          {:else if isFree(tier)}
+            {#if isSubscribed}
+              <!-- A paid subscriber viewing Free: this is their downgrade/cancel
+                   path. Free has no Stripe price, so it goes through the portal
+                   (period-end cancel), not change-plan. -->
+              <button
+                type="button"
+                class="btn btn-primary"
+                disabled={portalBusy}
+                onclick={openPortal}
+              >
+                {t.billing.downgradeToFree}
+              </button>
+            {:else}
+              <div class="tier-note">{t.billing.free}</div>
+            {/if}
+          {:else}
             <button
               type="button"
               class="btn btn-primary"
-              disabled={portalBusy}
-              onclick={openPortal}
+              disabled={!purchasable(tier) || busyPlanId === tier.id}
+              onclick={() => act(tier)}
             >
-              {t.billing.downgradeToFree}
+              {ctaLabel(tier)}
             </button>
-          {:else}
-            <div class="tier-note">{t.billing.free}</div>
+            {#if !purchasable(tier)}<div class="tier-note">{t.billing.notAvailable}</div>{/if}
           {/if}
-        {:else}
-          <button
-            type="button"
-            class="btn btn-primary"
-            disabled={!purchasable(tier) || busyPlanId === tier.id}
-            onclick={() => act(tier)}
-          >
-            {ctaLabel(tier)}
-          </button>
-          {#if !purchasable(tier)}<div class="tier-note">{t.billing.notAvailable}</div>{/if}
-        {/if}
-      </div>
-    {/each}
-  </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
 </div>
 
 {#if modalTier}
@@ -285,6 +332,9 @@
 {/if}
 
 <style>
+  /* Surfaces, badges and callouts come from app.css (.ui-card, .ui-stack,
+     .ui-badge, .ui-callout*). What stays here is layout, the accent treatment
+     the ribbon needs on top of .ui-badge, and the price hierarchy. */
   .pricing { display: flex; flex-direction: column; gap: var(--space-4); }
   .toggle-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
   .toggle { display: inline-flex; gap: var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px; width: fit-content; }
@@ -293,28 +343,57 @@
     background: none; color: var(--text); font: inherit; font-size: var(--fs-xs); cursor: pointer;
   }
   .toggle-btn.active { background: var(--social-bg); color: var(--text-h); }
+  /* Same touch floor .btn gets globally: on /pricing this control is now the
+     first thing a phone user reaches for. */
+  @media (pointer: coarse) {
+    .toggle-btn { min-block-size: 44px; padding-inline: var(--space-4); }
+  }
   .save-badge { font-size: var(--fs-xs); color: var(--accent); font-weight: 600; }
+  .load-status { font-size: var(--fs-xs); color: var(--text); margin: 0; }
   .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); }
-  .tier { position: relative; border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
+  /* min-inline-size:0 so a long localized tier name can't blow the grid track
+     out past the page measure. */
+  .tier { position: relative; min-inline-size: 0; }
   .tier.popular { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .tier.is-current { border-color: var(--text-h); }
+  /* .ui-badge gives it the pill shape and metrics; only the accent fill and the
+     "hangs off the card's top edge" placement are local. */
   .ribbon {
-    position: absolute; top: -10px; inset-inline-end: var(--space-3);
-    background: var(--accent); color: #fff; font-size: 11px; font-weight: 600;
-    padding: 2px 8px; border-radius: var(--radius-sm);
+    position: absolute; inset-block-start: -10px; inset-inline-end: var(--space-3);
+    background: var(--accent); border-color: transparent; color: #fff; font-weight: 600;
   }
-  .tier-name { margin: 0; font-size: var(--fs-sm); color: var(--text-h); }
-  .tier-price { font-size: var(--fs-lg, 1.25rem); font-weight: 600; color: var(--text-h); }
+  .tier-name { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
+  /* The paid price is the decision, so it is the largest type on the page after
+     the h1. Tabular numerals keep the column of prices aligned as the cycle
+     flips between 2- and 3-digit amounts. */
+  .tier-price {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px;
+    font-size: var(--fs-h2); line-height: 1.1; font-weight: 600; color: var(--text-h);
+    font-variant-numeric: tabular-nums;
+  }
   .tier-suffix { font-size: var(--fs-xs); font-weight: 400; color: var(--text); }
   .tier-caps { list-style: none; margin: 0; padding: 0; font-size: var(--fs-xs); color: var(--text); display: flex; flex-direction: column; gap: 2px; }
   .tier-note { font-size: var(--fs-xs); color: var(--text); }
   .current-badge { font-size: var(--fs-xs); font-weight: 600; color: var(--text-h); padding: var(--space-1) 0; }
-  .err { color: var(--danger); font-size: 12px; margin: 0; }
-  .ok-note { color: var(--accent); font-size: 12px; margin: 0; }
+  .err { color: var(--danger); margin: 0; }
+  .ok-note { color: var(--text-h); margin: 0; }
   .sched-banner {
     display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
     padding: var(--space-2) var(--space-3); border: 1px solid var(--border);
     border-radius: var(--radius-sm); background: var(--social-bg); font-size: var(--fs-xs);
   }
   .sched-banner span { color: var(--text-h); }
+
+  /* Loading placeholders. Purely decorative (the parent is aria-hidden), sized
+     to roughly the real card so the grid doesn't reflow on arrival. */
+  .sk { display: block; border-radius: var(--radius-sm); background: var(--border); }
+  .sk-name { block-size: 18px; inline-size: 45%; }
+  .sk-price { block-size: 32px; inline-size: 65%; }
+  .sk-line { block-size: 12px; inline-size: 80%; }
+  .sk-cta { block-size: 38px; inline-size: 100%; margin-block-start: var(--space-1); }
+  .tier-skeleton { animation: sk-pulse 1.4s ease-in-out infinite; }
+  @keyframes sk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+  @media (prefers-reduced-motion: reduce) {
+    .tier-skeleton { animation: none; }
+  }
 </style>

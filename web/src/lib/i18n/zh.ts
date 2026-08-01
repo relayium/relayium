@@ -127,6 +127,8 @@ const zh: Messages = {
   billing: {
     monthly: "按月",
     yearly: "按年",
+    cycleLabel: "计费周期",
+    loadingPlans: "正在加载套餐…",
     perMonth: "/月",
     perYear: "/年",
     free: "免费",

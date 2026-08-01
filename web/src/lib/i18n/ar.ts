@@ -182,6 +182,8 @@ const ar: Messages = {
   billing: {
     monthly: "شهري",
     yearly: "سنوي",
+    cycleLabel: "دورة الفوترة",
+    loadingPlans: "جارٍ تحميل الباقات…",
     perMonth: "/شهر",
     perYear: "/سنة",
     free: "مجاني",

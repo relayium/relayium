@@ -627,6 +627,90 @@ async function capsSuppressedScenario(browser) {
   await browser.send("Target.closeTarget", { targetId: fresh.targetId });
 }
 
+/**
+ * 定价页是购买入口：真正的方案必须先于长解释出现，而且这个层级要在九种语言和
+ * RTL 下仍然成立。它跟 LAN 传输共享同一份全局样式，因此放在完整浏览器回归里，
+ * 避免一个只在 jsdom 里通过的 DOM 顺序测试掩盖真实折叠线/溢出回归。
+ */
+async function pricingHierarchyScenario(browser) {
+  const tab = await newTab(browser, BASE + "/pricing");
+  await setWideViewport(tab);
+  await tab.waitFor("!!document.querySelector('.tier:not(.tier-skeleton)')", "pricing tiers to load");
+
+  const desktop = await tab.evaluate(`(() => {
+    const first = document.querySelector('.tier').getBoundingClientRect();
+    const price = getComputedStyle(document.querySelector('.tier-price:has(bdi)'));
+    const title = getComputedStyle(document.querySelector('.head h1'));
+    return {
+      firstTierY: first.top + scrollY,
+      pricePx: parseFloat(price.fontSize),
+      titlePx: parseFloat(title.fontSize),
+      pricingBeforeExplainer:
+        !!(document.querySelector('.pricing').compareDocumentPosition(document.querySelector('.explainer')) & Node.DOCUMENT_POSITION_FOLLOWING),
+      accountControl: !!document.querySelector('.account'),
+      pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  })()`);
+  if (
+    desktop.firstTierY >= 700 || desktop.pricePx !== 30 || desktop.titlePx !== 34 ||
+    !desktop.pricingBeforeExplainer || !desktop.accountControl || desktop.pageOverflow !== 0
+  ) {
+    throw new Error(`desktop pricing hierarchy contract failed: ${JSON.stringify(desktop)}`);
+  }
+
+  await tab.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+  await setWideViewport(tab, 390, 844);
+  const locales = ["zh", "en", "ja", "ko", "de", "fr", "ar", "es", "pt"];
+  const mobile = [];
+  for (const code of locales) {
+    await tab.evaluate(`(() => {
+      const select = document.querySelector('select.lang');
+      select.value = ${JSON.stringify(code)};
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+    await tab.waitFor(`document.documentElement.lang === ${JSON.stringify(code)}`, `${code} pricing locale`);
+    mobile.push(await tab.evaluate(`(() => {
+      const first = document.querySelector('.tier').getBoundingClientRect();
+      return {
+        lang: document.documentElement.lang,
+        dir: document.documentElement.dir,
+        firstTierY: first.top + scrollY,
+        pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        cardOverflows: [...document.querySelectorAll('.tier')].map((el) => el.scrollWidth - el.clientWidth),
+        controlOverflows: [...document.querySelectorAll('.toggle-btn, .tier .btn')].map((el) => el.scrollWidth - el.clientWidth),
+        cycleTargets: [...document.querySelectorAll('.toggle-btn')].map((el) => Math.round(el.getBoundingClientRect().height)),
+        priceIsolates: [...document.querySelectorAll('.tier-price bdi')].map((el) => el.getAttribute('dir')),
+      };
+    })()`));
+  }
+  const bad = mobile.filter((m) =>
+    m.firstTierY >= 1000 || m.pageOverflow !== 0 ||
+    m.cardOverflows.some((n) => n > 1) || m.controlOverflows.some((n) => n > 1) ||
+    m.cycleTargets.some((n) => n < 44) || m.priceIsolates.some((dir) => dir !== "ltr") ||
+    (m.lang === "ar" ? m.dir !== "rtl" : m.dir !== "ltr")
+  );
+  if (bad.length) throw new Error(`mobile pricing hierarchy contract failed: ${JSON.stringify(bad)}`);
+
+  // Locale is persisted in localStorage and therefore shared by every later tab
+  // in this Chrome profile. Restore the suite's English baseline before closing
+  // the pricing tab; otherwise the real transfer scenario inherits Portuguese
+  // (the last sweep entry) and its language-specific action matching becomes an
+  // accidental dependency of this unrelated layout check.
+  await tab.evaluate(`(() => {
+    const select = document.querySelector('select.lang');
+    select.value = 'en';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  await tab.waitFor("document.documentElement.lang === 'en'", "English locale after the pricing sweep");
+
+  const errs = tab.errors.filter((e) => !/401|Failed to load resource/.test(e));
+  if (errs.length) throw new Error(`pricing page logged errors:\n    ${errs.join("\n    ")}`);
+  ok("pricing exposed real tiers early across all nine locales with honest touch targets");
+  await browser.send("Target.closeTarget", { targetId: tab.targetId });
+}
+
 async function main() {
   // 前置检查：服务器在不在，dist 是不是新的（旧 dist 会测出一个假绿）。
   const health = await fetch(`${BASE}/healthz`).then((r) => r.text()).catch(() => "");
@@ -678,6 +762,8 @@ async function main() {
     }
 
     console.log(`\nLAN transfer E2E against ${BASE}`);
+
+    await pricingHierarchyScenario(browser);
 
     // ── 两个标签页进同一个房间（都是 127.0.0.1，服务器按来源 IP 归组）────────
     const sender = await newTab(browser, BASE + "/");

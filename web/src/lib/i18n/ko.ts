@@ -127,6 +127,8 @@ const ko: Messages = {
   billing: {
     monthly: "월간",
     yearly: "연간",
+    cycleLabel: "결제 주기",
+    loadingPlans: "요금제를 불러오는 중…",
     perMonth: "/월",
     perYear: "/년",
     free: "무료",

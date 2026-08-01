@@ -54,6 +54,9 @@
   --radius: 14px;
   --radius-sm: 9px;
   --fs-display: 56px;
+  /* Page-header h1 (.ui-page-head h1) — one step below the marketing hero. Named
+     so a page can reason about "the largest type here" without hard-coding 34. */
+  --fs-page-title: 34px;
   --fs-h2: 30px;
   --fs-h3: 18px;
   --fs-body: 16px;
@@ -360,7 +363,7 @@ code {
    Was duplicated byte-for-byte in CrossPage and OfflinePage. */
 .ui-page-head { text-align: center; padding-block: var(--space-3) var(--space-5); }
 /* Intentional page-header size — smaller than the marketing hero (--fs-display). */
-.ui-page-head h1 { font-size: 34px; margin-block: 0 var(--space-2); letter-spacing: -1px; }
+.ui-page-head h1 { font-size: var(--fs-page-title); margin-block: 0 var(--space-2); letter-spacing: -1px; }
 .ui-page-head .tagline { color: var(--text); font-size: var(--fs-body); max-inline-size: 44ch; margin-inline: auto; }
 .ui-page-head .pitch {
   color: var(--text); font-size: var(--fs-xs); max-inline-size: 52ch;

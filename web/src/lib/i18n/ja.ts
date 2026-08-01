@@ -127,6 +127,8 @@ const ja: Messages = {
   billing: {
     monthly: "月払い",
     yearly: "年払い",
+    cycleLabel: "請求サイクル",
+    loadingPlans: "プランを読み込み中…",
     perMonth: "/月",
     perYear: "/年",
     free: "無料",
