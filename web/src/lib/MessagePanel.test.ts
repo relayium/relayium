@@ -195,6 +195,30 @@ describe("MessagePanel", () => {
     expect(target.querySelector(".sas")).toBe(null);
   });
 
+  // On a unified `link/1` workspace the link owns one SAS and the workspace header
+  // renders it. A second copy here would present the same authentication step
+  // twice, which is precisely what the one-SAS product rule forbids.
+  it("renders no verification code at all when the workspace header owns it", () => {
+    for (const status of ["open", "waitingAccept", "incomingRequest"] as const) {
+      open({ status, showSas: false });
+      expect(target.querySelectorAll(".sas"), status).toHaveLength(0);
+      expect(target.textContent, status).not.toContain("123456");
+      // The one-shot reveal still has somewhere to point.
+      const anchor = target.querySelector(".reveal-anchor");
+      expect(anchor, status).not.toBe(null);
+      expect(anchor!.getAttribute("aria-hidden"), status).toBe("true");
+      unmount(app!);
+      app = undefined;
+      target.innerHTML = "";
+    }
+  });
+
+  it("keeps its own SAS by default so the legacy surface is unchanged", () => {
+    open({ status: "incomingRequest" });
+    expect(target.querySelectorAll(".sas")).toHaveLength(1);
+    expect(target.querySelector(".reveal-anchor")).toBe(null);
+  });
+
   it("shows the connection path badge", () => {
     open();
     const badge = target.querySelector(".path")!;

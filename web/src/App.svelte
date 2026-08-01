@@ -20,6 +20,7 @@
   import { MAX_FILES } from "./lib/transfer";
   import { createTransferSession, type Xfer } from "./lib/transfer-session.svelte";
   import { createPeerWorkspace, type PeerWorkspace } from "./lib/peer-workspace.svelte";
+  import { createActivityAnnouncer, type ActivityEdge } from "./lib/activity-announcement";
   import { recordTransfer, loadHistory, clearHistory, historyEnabled, setHistoryEnabled, type HistEntry } from "./lib/history";
   import { fetchIceConfig, hasTurnServer, measureRelays, pickRelay, type RelayEntry } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
@@ -37,6 +38,8 @@
   import PeerLink from "./lib/PeerLink.svelte";
   import QuotaNotice from "./lib/QuotaNotice.svelte";
   import ReceiveActions from "./lib/ReceiveActions.svelte";
+  import WorkspaceHeader from "./lib/WorkspaceHeader.svelte";
+  import QueuedBatches from "./lib/QueuedBatches.svelte";
   import DebugPanel from "./lib/DebugPanel.svelte";
 
   // Route pages are code-split and loaded on first navigation, so they stay out of
@@ -437,20 +440,38 @@
   // card is activity-first, but only a fresh decision-bearing edge gets one
   // minimal reveal. Progress and terminal updates never move the page again.
   type ActivityRevealTarget = "pending" | "incoming" | "file" | "text";
-  type ActivityReveal = { key: string; target: ActivityRevealTarget; announcement: string };
+  // `lead` is the edge itself; the verification code is kept apart from it so a
+  // unified workspace can decide whether this edge still needs to say the code.
+  // A legacy surface always appends it, exactly as before.
+  type ActivityReveal = ActivityEdge & {
+    key: string;
+    target: ActivityRevealTarget;
+  };
   let pendingReveal = $state<HTMLElement | undefined>(undefined);
   let incomingReveal = $state<HTMLElement | undefined>(undefined);
   let fileReveal = $state<HTMLElement | undefined>(undefined);
   let textReveal = $state<HTMLElement | undefined>(undefined);
   let activityAnnouncement = $state("");
   let revealedActivity = "";
+  // The pinned trust header, kept so a reveal can measure it at the instant it
+  // scrolls. Every cheaper option was measured and found wrong on a real tab: a
+  // hardcoded reserve assumed 196px against a real 274px, and a ResizeObserver
+  // binding still reported 54px — the header before the SAS row arrives — while
+  // the reveal was already scrolling, leaving the consent card 121px behind it.
+  let headEl = $state<HTMLElement | undefined>(undefined);
+  // One link is one authentication step, so a unified workspace reads its code
+  // out once and then leaves it visible in the persistent header instead of
+  // repeating it for the file lane and again for text. The rule — and the fact
+  // that its memory is scoped to *this* link, not to six digits that a later
+  // link could repeat — lives in activity-announcement.ts, where it is tested.
+  const announcer = createActivityAnnouncer();
 
   function activityReveal(): ActivityReveal | null {
     if (pendingPeer) {
       return {
         key: `pending:${pendingPeer.id}`,
         target: "pending",
-        announcement: t.confirmRecv(nameOf(pendingPeer.id)),
+        lead: t.confirmRecv(nameOf(pendingPeer.id)),
       };
     }
     if (incoming && workspace.sasCode) {
@@ -459,7 +480,9 @@
         // progress card; that state transition must not reveal a second time.
         key: `file:recv:${incoming.from}`,
         target: "incoming",
-        announcement: `${t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total))}. ${t.codeLabel} ${workspace.sasCode}. ${t.codeCompare}`,
+        lead: t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total)),
+        sas: workspace.sasCode,
+        sasCompare: t.codeCompare,
       };
     }
     const file = [send, recv].find((x) => x && !x.done && workspace.sasCode);
@@ -467,7 +490,9 @@
       return {
         key: `file:${file.dir}:${file.peer}`,
         target: "file",
-        announcement: `${statusText(t, file)}. ${t.codeLabel} ${workspace.sasCode}. ${t.codeCompare}`,
+        lead: statusText(t, file),
+        sas: workspace.sasCode,
+        sasCompare: t.codeCompare,
       };
     }
     if (
@@ -480,7 +505,9 @@
       return {
         key: `text:${activeText.status}:${activeText.peerId}`,
         target: "text",
-        announcement: `${lead}. ${t.codeLabel} ${activeText.sasCode}. ${t.text.sasCompare}`,
+        lead,
+        sas: activeText.sasCode,
+        sasCompare: t.text.sasCompare,
       };
     }
     return null;
@@ -496,6 +523,14 @@
   $effect(() => {
     const candidate = activityReveal();
     if (!candidate) {
+      // Load-bearing for more than tidiness: the reveal key is peer+lane and
+      // carries no link generation, so a second link to the same peer computes
+      // the SAME key. This reset is what stops the guard below from swallowing
+      // that new link's authentication edge. It is reachable on every relink
+      // because a link cannot be replaced in place — peer-link's establish()
+      // refuses while one is current — and with no link there is no SAS, so no
+      // sas-bearing candidate survives the gap. e2e/mixed-link.mjs drives that
+      // exact sequence with a consent left pending across the teardown.
       revealedActivity = "";
       return;
     }
@@ -506,12 +541,47 @@
       await tick();
       const current = activityReveal();
       if (!current || current.key !== candidate.key) return;
-      activityAnnouncement = current.announcement;
+      // Legacy surfaces keep the previous "<edge>. Code <sas>. <compare>"
+      // sentence verbatim; only a mixed link ever drops the code, and only after
+      // this same link already said it.
+      activityAnnouncement = announcer.announce(current, {
+        mixed: workspace.usingMixed,
+        linkGeneration: workspace.linkGeneration,
+        codeLabel: t.codeLabel,
+      });
       await tick();
       // Intentionally instant. Smooth scrollIntoView has measured as a zero-scroll
       // no-op in Chrome on this page, while nearest+auto reveals correctly and
       // satisfies reduced-motion without a preference branch.
-      revealElement(current.target)?.scrollIntoView?.({ block: "nearest" });
+      //
+      // "nearest" is the legacy behaviour and stays that way: it scrolls the
+      // minimum, so a decision that is already on screen never moves the page.
+      //
+      // A unified workspace cannot use it. Its anchor sits inside a card whose
+      // consent buttons are below the fold, and "nearest" does nothing at all for
+      // an anchor that is itself already visible — measured on a real 390x844
+      // tab: scrollY 13, Accept/Decline at 879. So place the anchor explicitly,
+      // just below a header measured HERE. Both numbers are read in the same
+      // synchronous block as the scroll, which is the only way they can describe
+      // the same frame: the header grows by its SAS row (54px → 188px) in the
+      // very update that produces this edge.
+      const target = revealElement(current.target);
+      if (workspace.usingMixed && target && headEl) {
+        const gap = 12; // --space-3
+        // Clear the box the anchor belongs to, not just the anchor. MessagePanel
+        // keeps its anchor INSIDE the card, within its padding, so aligning the
+        // anchor alone left the card's top edge 5px behind the header. The
+        // markers App places itself are siblings ahead of their card, where the
+        // two tops coincide and this min() changes nothing.
+        const anchorTop = target.getBoundingClientRect().top;
+        const box = target.closest(".ui-card, .ui-callout");
+        const visualTop = box ? Math.min(anchorTop, box.getBoundingClientRect().top) : anchorTop;
+        const top = visualTop + window.scrollY
+          - headEl.getBoundingClientRect().height - gap;
+        window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+      } else {
+        target?.scrollIntoView?.({ block: "nearest" });
+      }
     })();
   });
 
@@ -908,11 +978,28 @@
 {#snippet transferSurface()}
   {@const solo = visiblePeers.length === 1}
   {@const revealFile = [send, recv].find((x) => x && !x.done && workspace.sasCode)}
-  {@const hasActivity = !!pendingPeer || !!incoming || !!send || !!recv || activeText.status !== "idle"}
+  {@const mixed = workspace.usingMixed}
+  {@const hasActivity = !!pendingPeer || !!incoming || !!send || !!recv || activeText.status !== "idle" || mixed}
   <!-- This live node exists before an event occurs; mounting a live region and
        its message in the same update is not announced reliably. Protected text
        bodies never enter it. -->
   <div class="activity-announcement" role="status" aria-live="polite" aria-atomic="true">{activityAnnouncement}</div>
+
+  <!-- One authenticated link, one trust header. Peer name, link state, the single
+       path label, the single SAS and the explicit Disconnect live here and only
+       here; every lane card below deliberately renders none of them again. Legacy
+       peers (workspace.usingMixed === false) keep their untouched per-surface
+       chrome, because link/1 is still unadvertised. -->
+  {#if mixed}
+    <WorkspaceHeader
+      peerName={nameOf(workspace.linkPeerId)}
+      status={workspace.linkStatus}
+      sasCode={workspace.sasCode}
+      path={workspace.linkPath}
+      onDisconnect={() => workspace.disconnect()}
+      bind:element={headEl}
+    />
+  {/if}
 
   {#if pendingPeer}
     <div class="activity-reveal-marker" bind:this={pendingReveal} aria-hidden="true"></div>
@@ -924,6 +1011,14 @@
   {/if}
 
   {#if incoming}
+    <!-- The unified workspace already shows this link's one SAS in its header, so
+         the consent card carries no second code — only this anchor. It sits at the
+         TOP of the card, not where the code used to be: the reveal aligns it just
+         under the pinned header, and anchoring mid-card would instead scroll the
+         filenames (what the user is consenting to) up behind that header. -->
+    {#if mixed}
+      <div class="activity-reveal-marker" bind:this={incomingReveal} aria-hidden="true"></div>
+    {/if}
     <section class="ui-card request">
       <div class="req-head">{t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total))}</div>
       <ul class="filelist">
@@ -931,7 +1026,7 @@
           <li><span class="fname">{f.name}</span><span class="fsize">{formatSize(f.size)}</span></li>
         {/each}
       </ul>
-      {#if workspace.sasCode}
+      {#if !mixed && workspace.sasCode}
         <div class="sas activity-reveal-target" bind:this={incomingReveal}>{t.codeLabel} <code>{workspace.sasCode}</code> — {t.codeCompare}</div>
       {/if}
       <!-- 收/拒按钮住在 ReceiveActions 里，因为大批次的内存提示必须拦在这一下
@@ -962,13 +1057,17 @@
       </div>
       <div class="status" aria-live="polite">
         {statusText(t, xf)}
-        {#if workspace.sasCode && !xf.done} · {t.codeLabel} <code>{workspace.sasCode}</code>{/if}
+        <!-- A mixed link's code belongs to the link, not to this batch: the header
+             above owns it. Repeating it per card is what the one-SAS rule forbids. -->
+        {#if workspace.sasCode && !xf.done && !mixed} · {t.codeLabel} <code>{workspace.sasCode}</code>{/if}
       </div>
       {#if xf.done && !xf.ok && xf.status === "connectFail" && relayDenied === "quota"}
         <p class="ui-callout quota-note">{t.crossnet.relayQuotaFail}</p>
       {/if}
+      <!-- Same rule for the path badge: one link, one path label, and it is in the
+           header. Legacy keeps its per-direction badge. -->
       {#if !xf.done}
-        {@const path = xf.dir === "send" ? workspace.sendPath : workspace.recvPath}
+        {@const path = mixed ? undefined : xf.dir === "send" ? workspace.sendPath : workspace.recvPath}
         <div class="progress-bar" role="progressbar" aria-valuenow={pct(xf)} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{pct(xf)}%"></div></div>
         <div class="meta">
           <span>{pct(xf)}% · {formatSize(xf.sent)} / {formatSize(xf.total)}</span>
@@ -981,13 +1080,24 @@
     </section>
   {/each}
 
+  <!-- Picking more files during a transfer queues instead of disabling the file
+       control, so that queue has to be visible and cancellable rather than an
+       invisible backlog. Mixed links only: the legacy path has no queue. -->
+  {#if mixed && workspace.queuedBatches.length}
+    <QueuedBatches
+      batches={workspace.queuedBatches}
+      onCancel={(id) => workspace.cancelQueuedBatch(id)}
+    />
+  {/if}
+
   <!-- 消息面板放在这个 snippet 里面，所以 LAN 那条路径和 CrossPage 都从这一处拿到它。 -->
   {#if activeText.status !== "idle"}
     <MessagePanel
       status={activeText.status}
       peerName={nameOf(activeText.peerId)}
       sasCode={activeText.sasCode}
-      path={workspace.textPath}
+      showSas={!mixed}
+      path={mixed ? undefined : workspace.textPath}
       history={activeText.history}
       errorKey={activeText.errorKey}
       prefill={textCompose}
@@ -1307,6 +1417,12 @@
     scroll-margin-block-start: calc(64px + var(--space-3));
     overflow-anchor: none;
   }
+  /* A unified workspace deliberately gets NO extra rule here, and its markers
+     carry no extra class. Its reveal does not go through scrollIntoView at all:
+     scroll-margin is resolved from whatever the stylesheet says, and the trust
+     header's height is not a constant a stylesheet can know — it depends on
+     locale, on width, and on whether the link has produced its code yet. The
+     reveal scrolls explicitly instead, measuring the header in the same block. */
   .activity-reveal-target {
     scroll-margin-block-start: calc(64px + var(--space-3));
     overflow-anchor: none;

@@ -24,7 +24,11 @@ describe("active transfer visibility contract", () => {
   it("uses a persistent polite announcement and a non-focusing, instant reveal", () => {
     const effect = app.slice(app.indexOf("$effect(() => {", app.indexOf("function revealElement(")), app.indexOf("// ── ?debug=1"));
     expect(surface).toContain('role="status" aria-live="polite" aria-atomic="true"');
-    expect(effect).toContain('scrollIntoView?.({ block: "nearest" })');
+    // The legacy surface still scrolls the minimum, so a decision already on
+    // screen never moves the page. Only the unified workspace, whose pinned
+    // header makes "nearest" a no-op for an already-visible anchor, takes the
+    // explicit branch — see workspace-presentation.test.ts.
+    expect(effect).toContain('target?.scrollIntoView?.({ block: "nearest" })');
     expect(effect).not.toMatch(/\.focus\s*\(/);
     expect(effect).not.toMatch(/behavior:\s*["']smooth/);
     expect(surface).not.toContain('role="alertdialog"');

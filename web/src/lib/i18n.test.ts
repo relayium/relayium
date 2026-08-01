@@ -75,6 +75,34 @@ describe("i18n completeness", () => {
     }
   });
 
+  // 统一工作区的表头把"一条链路 = 一个 SAS"这条产品规则摆在屏幕上。它按 PeerLinkStatus
+  // 直接索引状态串，所以这五个键**必须是纯字符串**——取到函数就会把 "function…" 印出来。
+  it("every language has the unified peer-workspace strings", () => {
+    const stateKeys = [
+      "stateIdle", "stateRequesting", "stateConnecting", "stateOpen", "stateFailed",
+    ] as const;
+    const plainKeys = [
+      "heading", "disconnect", "lanesNote", "queuedHint", "queuedRemove", ...stateKeys,
+    ] as const;
+    for (const { code } of LANGS) {
+      const m = messages[code].workspace;
+      expect(m, `${code} is missing the workspace namespace`).toBeTruthy();
+      for (const k of plainKeys) {
+        const v = (m as Record<string, unknown>)[k];
+        expect(typeof v, `${code}.workspace.${k} should be a string`).toBe("string");
+        expect((v as string).trim().length, `${code}.workspace.${k} is empty`).toBeGreaterThan(0);
+      }
+      // The five link states must read as five distinct things, or the header
+      // would say "connected" while the link is still being negotiated.
+      expect(new Set(stateKeys.map((k) => m[k])).size, `${code}.workspace states are distinct`)
+        .toBe(stateKeys.length);
+      expect(m.peer("Alice"), `${code}.workspace.peer`).toContain("Alice");
+      expect(m.queuedTitle(3), `${code}.workspace.queuedTitle`).toMatch(/\b3\b/);
+      expect(m.queuedFiles(3), `${code}.workspace.queuedFiles`).toMatch(/\b3\b/);
+      expect(m.queuedFiles(1), `${code}.workspace.queuedFiles`).toMatch(/\b1\b/);
+    }
+  });
+
   // 发送快捷键和"回车换行"这条约定是内容保真的一部分：提示文案里必须真的提到回车，
   // 否则用户会以为回车就是发送，而这个功能的全部意义是保留多行。
   it("每种语言的 sendHint 都提到回车与发送快捷键", () => {

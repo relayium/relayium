@@ -4,7 +4,7 @@
 //   connectResume() —— 掉线重连，纯传输，另一个信令世代
 import type { SignalingClient } from "./signaling";
 import { commitKey, randomNonce, verifyCommit } from "./crypto";
-import { CAP_TEXT } from "./peer-caps.svelte";
+import { advertisedCaps } from "./peer-caps.svelte";
 import { establish } from "./webrtc-core";
 import { classifyPath } from "./webrtc-core";
 import type { Conn, ConnPath, Generation, InboundSignal, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
@@ -16,8 +16,9 @@ export type { Conn, ConnPath, Generation, InboundSignal, Reveal, RtcConfig, Sign
 /** What this build advertises to its peers. A list rather than a flag so a later
  *  capability needs no new field on the wire. See peer-caps.svelte.ts for why the
  *  authoritative announcement is at the roster level and this one is only the
- *  per-connection confirmation. */
-export const LOCAL_CAPS: readonly string[] = [CAP_TEXT];
+ *  per-connection confirmation — and for the build-time seam that decides the
+ *  contents. Derived from that one source so the two announcements cannot drift. */
+export const LOCAL_CAPS: readonly string[] = advertisedCaps();
 /** One maximum encrypted manifest plus lifecycle overhead. This is deliberately
  *  much smaller than the file flow-control window: pre-attachment traffic has
  *  not reached a content-consent state yet. */

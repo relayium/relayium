@@ -22,13 +22,40 @@ export const CAP_TEXT = "text/1";
  *  and compatibility tests can land without exposing a half-built protocol. */
 export const CAP_LINK = "link/1";
 
+/**
+ * Build-time E2E seam, and the ONLY way link/1 can be advertised today.
+ *
+ * Written as a plain member access on purpose: Vite substitutes exactly this
+ * form at build time, so a default build folds it to the literal `false` and
+ * ships no way to flip it — no query parameter, no stored setting, no exported
+ * setter, nothing a user or a page script can reach. Optional chaining here
+ * would leave a live property lookup in the bundle instead of a constant.
+ * Turning it on requires rebuilding with `VITE_RELAYIUM_LINK_E2E=1` — see
+ * `npm run build:link-e2e`, which exists purely to feed `e2e/mixed-link.mjs`
+ * and is never what a release builds.
+ *
+ * Advertisement stays off in every shipped build until the coordinator, both
+ * lanes and recovery are ready together; this seam does not change that gate,
+ * it only lets two real browser tabs reach the path before the gate opens.
+ */
+const LINK_E2E: boolean = import.meta.env.VITE_RELAYIUM_LINK_E2E === "1";
+
+/** What this build announces, at the roster level and (via LOCAL_CAPS) in its
+ *  SDP confirmation. The argument exists so a test can exercise the enabled
+ *  branch without a second bundle; production callers never pass one. */
+export function advertisedCaps(linkE2E: boolean = LINK_E2E): readonly string[] {
+  return linkE2E ? [CAP_TEXT, CAP_LINK] : [CAP_TEXT];
+}
+
+/** What each peer in the room has told us it supports. Reactive: the peer cards
+ *  re-render when a hello arrives. */
 let announced = $state<Record<string, string[]>>({});
 
 /** The frame we send to each peer on joining a room and on roster change.
  *  A fresh array each call: the caller must not be able to mutate what we
  *  advertise to the next peer. */
 export function capsSignal(): { caps: string[] } {
-  return { caps: [CAP_TEXT] };
+  return { caps: [...advertisedCaps()] };
 }
 
 /**

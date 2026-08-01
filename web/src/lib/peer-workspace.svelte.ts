@@ -4,6 +4,8 @@
 
 import { createMixedSession, type MixedSession, type MixedSessionDeps } from "./mixed-session.svelte";
 import { peerSupportsLink } from "./peer-caps.svelte";
+import type { QueuedFileBatch } from "./mixed-file-session.svelte";
+import type { PeerLinkStatus } from "./peer-link.svelte";
 import type { PickedFile } from "./drag";
 import type { TextSession } from "./text-session.svelte";
 import type { Incoming, TransferSession, Xfer } from "./transfer-session.svelte";
@@ -47,6 +49,21 @@ export interface PeerWorkspace {
   readonly usingMixed: boolean;
   readonly blocksLegacyInbound: boolean;
   readonly warnsOnLeave: boolean;
+  /** The one link the unified workspace header describes. "" outside mixed mode. */
+  readonly linkPeerId: string;
+  readonly linkStatus: PeerLinkStatus;
+  /** Identity of the current link, changing on every establishment and teardown.
+   *  A surface that says something once per link (the announced verification
+   *  code) keys off this rather than off the code itself, so a later link is
+   *  never mistaken for the current one because six digits happened to repeat. */
+  readonly linkGeneration: number;
+  /** The link's single connection path. The legacy surfaces keep their own
+   *  per-direction labels; a mixed link has exactly one. */
+  readonly linkPath: ConnPath | undefined;
+  /** Local file batches waiting for the lane. Always empty on the legacy path,
+   *  which has no queue at all. */
+  readonly queuedBatches: readonly QueuedFileBatch[];
+  cancelQueuedBatch(id: number): void;
   routes(peerId: string): boolean;
   blocksNewIntent(peerId: string): boolean;
   sendFiles(peerId: string, files: PickedFile[]): void;
@@ -169,6 +186,16 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     get usingMixed() { return usingMixed(); },
     get blocksLegacyInbound() { return blocksLegacyInbound(); },
     get warnsOnLeave() { return deps.legacyFiles.busy || mixed.active(); },
+    get linkPeerId() { return usingMixed() ? mixed.peerId : ""; },
+    get linkStatus() { return mixed.status; },
+    get linkGeneration() { return mixed.linkGeneration; },
+    get linkPath() { return usingMixed() ? mixed.path ?? undefined : undefined; },
+    get queuedBatches() { return usingMixed() ? mixed.file.queued : []; },
+    cancelQueuedBatch(id) {
+      // Deliberately unconditional: the legacy path never populates this queue,
+      // so there is nothing for a stray id to cancel there.
+      mixed.file.cancelQueued(id);
+    },
     routes,
     blocksNewIntent,
     sendFiles(peerId, files) {

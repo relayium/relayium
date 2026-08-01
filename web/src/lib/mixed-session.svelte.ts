@@ -51,6 +51,11 @@ export interface MixedSession {
   readonly text: MixedTextSession;
   readonly link: MixedPeerLink | null;
   readonly status: PeerLinkStatus;
+  /** Bumped on every link publish — establishment and teardown alike — so two
+   *  different links never share a value even when their SAS digits collide.
+   *  Consumers use it to tell "still the same authentication step" apart from
+   *  "a new one that happens to look identical". */
+  readonly linkGeneration: number;
   readonly peerId: string;
   readonly sasCode: string;
   readonly path: ConnPath | null;
@@ -73,6 +78,9 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
   let file!: MixedFileSession;
   let text!: MixedTextSession;
   let path = $state<ConnPath | null>(null);
+  // Distinct from pathGeneration: that one is an internal guard against a stale
+  // path sample, this one is the link identity consumers observe.
+  let linkGeneration = $state(0);
   let pathGeneration = 0;
   let lastActivity = now();
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -150,6 +158,11 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
   }
 
   function onLinkChange(link: MixedPeerLink | null, _status: PeerLinkStatus, captured?: CapturedLinkFrames) {
+    // Every publish, including a teardown and including a close that had nothing
+    // to close. Over-counting only ever costs a consumer one repeated
+    // announcement; under-counting would silently reuse a retired link's
+    // identity, which is the failure this counter exists to prevent.
+    linkGeneration++;
     pathGeneration++;
     if (!link) {
       clearIdle();
@@ -221,6 +234,7 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
     get text() { return text; },
     get link() { return manager.current; },
     get status() { return manager.status; },
+    get linkGeneration() { return linkGeneration; },
     get peerId() { return manager.current?.peerId || text.peerId || file.send?.peer || ""; },
     get sasCode() { return manager.current?.sas ?? ""; },
     get path() { return path; },

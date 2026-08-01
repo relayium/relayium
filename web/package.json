@@ -11,7 +11,9 @@
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
     "gen:pages": "node scripts/gen-pages.mjs",
     "test": "vitest",
-    "test:e2e": "node e2e/lan-transfer.mjs"
+    "test:e2e": "node e2e/lan-transfer.mjs",
+    "build:link-e2e": "node scripts/gen-pages.mjs && VITE_RELAYIUM_LINK_E2E=1 vite build --outDir dist-link-e2e --emptyOutDir",
+    "test:e2e:mixed": "node e2e/mixed-link.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.1.2",

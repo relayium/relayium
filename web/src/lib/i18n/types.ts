@@ -623,6 +623,29 @@ export interface Messages {
   historyEmpty: string;
   historyClear: string;
   historyKeep: string;
+  // Unified peer workspace (`link/1`). One authenticated link carries both the
+  // file and the text lane, so exactly one header owns the peer name, link state,
+  // path badge, verification code and disconnect action. Legacy peers never reach
+  // these strings — they keep the separate file and message surfaces.
+  workspace: {
+    heading: string; // accessible name of the trust header region
+    peer: (name: string) => string;
+    disconnect: string; // closes both lanes and erases the link keys
+    // ── link states, addressed by PeerLinkStatus ──
+    // All five MUST be plain strings; the header indexes them by status.
+    stateIdle: string;
+    stateRequesting: string;
+    stateConnecting: string;
+    stateOpen: string;
+    stateFailed: string;
+    // Explains why one code covers files and messages at once.
+    lanesNote: string;
+    // ── queued outbound file batches ──
+    queuedTitle: (count: number) => string;
+    queuedHint: string;
+    queuedRemove: string;
+    queuedFiles: (count: number) => string;
+  };
   // Ephemeral encrypted messages. In-memory only — nothing here is ever written to
   // localStorage, unlike the transfer history above.
   text: {

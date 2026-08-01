@@ -223,3 +223,85 @@ describe("peer workspace capability routing", () => {
     h.workspace.stop();
   });
 });
+
+// What the unified workspace header and queue render is derived entirely from
+// these getters, so the "one link, one SAS, one path, one disconnect" rule and the
+// "legacy is untouched" rule are both testable without a DOM.
+describe("peer workspace unified presentation surface", () => {
+  it("exposes no link header source at all on the legacy path", () => {
+    const h = setup();
+    expect(h.workspace.usingMixed).toBe(false);
+    expect(h.workspace.linkPeerId).toBe("");
+    expect(h.workspace.linkPath).toBeUndefined();
+    expect(h.workspace.queuedBatches).toHaveLength(0);
+    // The legacy surfaces keep their own SAS and per-direction paths.
+    expect(h.workspace.sasCode).toBe("legacy-file");
+    expect(h.workspace.text).toBe(h.legacyText);
+    h.workspace.stop();
+  });
+
+  it("names one peer, one link state, one SAS and one path for a mixed link", async () => {
+    const h = setup();
+    const link = await h.workspace.mixed.ensure("z");
+    expect(h.workspace.usingMixed).toBe(true);
+    expect(h.workspace.linkPeerId).toBe("z");
+    expect(h.workspace.linkStatus).toBe("open");
+    expect(h.workspace.sasCode).toBe(link.sas);
+    expect(h.workspace.sasCode).not.toBe("legacy-file");
+    // The path is sampled asynchronously; one macrotask is enough for the mock.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(h.workspace.linkPath).toBe("lan");
+    h.workspace.stop();
+  });
+
+  it("gives each link its own identity so a repeated SAS is still a new step", async () => {
+    const h = setup();
+    const seen = [h.workspace.linkGeneration];
+    const first = await h.workspace.mixed.ensure("z");
+    seen.push(h.workspace.linkGeneration);
+    h.workspace.disconnect();
+    seen.push(h.workspace.linkGeneration);
+    const second = await h.workspace.mixed.ensure("z");
+    seen.push(h.workspace.linkGeneration);
+
+    expect(second).not.toBe(first);
+    // Four distinct values for idle → open → torn down → open again. A surface
+    // that says something once per link keys off this, so two links can never be
+    // confused with each other even if their six digits collide.
+    expect(new Set(seen).size).toBe(seen.length);
+    h.workspace.stop();
+  });
+
+  it("publishes queued file batches and cancels one by id", async () => {
+    const h = setup();
+    await h.workspace.mixed.ensure("z");
+    const pick = (name: string) => [{ file: new File(["x"], name) }];
+    // The first selection takes the lane; the second must queue rather than
+    // disable the file control, and that queue has to be visible.
+    h.workspace.sendFiles("z", pick("first.txt"));
+    h.workspace.sendFiles("z", pick("second.txt"));
+    expect(h.workspace.queuedBatches.map((b) => b.files[0].name)).toEqual(["second.txt"]);
+
+    h.workspace.cancelQueuedBatch(h.workspace.queuedBatches[0].id);
+    expect(h.workspace.queuedBatches).toHaveLength(0);
+    h.workspace.stop();
+  });
+
+  it("keeps file and text intent independent for the linked peer and blocks others", async () => {
+    const h = setup();
+    await h.workspace.openText("z");
+    const link = h.workspace.mixed.link!;
+    link.textChannel.onmessage?.({ data: ACCEPT.buffer.slice(0) } as MessageEvent);
+    expect(h.workspace.mixed.text.status).toBe("open");
+
+    // An open conversation must not disable picking more files for the same peer…
+    expect(h.workspace.blocksNewIntent("z")).toBe(false);
+    h.workspace.sendFiles("z", [{ file: new File(["x"], "x.txt") }]);
+    expect(h.workspace.mixed.file.active()).toBe(true);
+    // …and a file batch must not close the conversation.
+    expect(h.workspace.mixed.text.status).toBe("open");
+    // Every other peer stays blocked while the one global link slot is taken.
+    expect(h.workspace.blocksNewIntent("old")).toBe(true);
+    h.workspace.stop();
+  });
+});

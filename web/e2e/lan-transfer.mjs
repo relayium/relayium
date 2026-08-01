@@ -13,123 +13,18 @@
  * 用法：node e2e/lan-transfer.mjs [--url http://localhost:8099] [--keep]
  *   前置：web 已 build，且 Go 服务器在 --url 上跑着（它同时兜 SPA 和 /ws）。
  */
-import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
+// CDP 客户端、标签页把手、浏览器生命周期和另存为桩都在 harness.mjs 里，和
+// mixed-link.mjs 共用同一份——两个脚本的超时语义和挂死检测必须是同一套。
+import {
+  OBSERVE_CAPS, SAVE_STUB, argFlag, argPresent, fail, launchBrowser, newTab, ok,
+  requireServer, setWideViewport, sleep, withWatchdog,
+} from "./harness.mjs";
 
-const args = process.argv.slice(2);
-const flag = (name, dflt) => {
-  const i = args.indexOf(name);
-  return i >= 0 ? args[i + 1] : dflt;
-};
-const BASE = flag("--url", "http://localhost:8099");
-const CHROME =
-  process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const BASE = argFlag("--url", "http://localhost:8099");
 const DEBUG_PORT = 9444;
 const FILE_NAME = "e2e-payload.bin";
 const FILE_BYTES = 3 * 1024 * 1024 + 12345; // 跨多个 192KiB 分块，且末块不对齐
-
-// ── 一个够用的 CDP 客户端（不引第三方依赖）───────────────────────────────────
-function cdp(wsUrl) {
-  const ws = new WebSocket(wsUrl);
-  let id = 0;
-  const pending = new Map();
-  const handlers = [];
-  const open = new Promise((res, rej) => {
-    ws.onopen = res;
-    ws.onerror = rej;
-  });
-  ws.onmessage = (m) => {
-    const d = JSON.parse(m.data);
-    if (d.id && pending.has(d.id)) {
-      const { resolve, reject } = pending.get(d.id);
-      pending.delete(d.id);
-      d.error ? reject(new Error(JSON.stringify(d.error))) : resolve(d.result);
-    } else if (d.method) handlers.forEach((h) => h(d));
-  };
-  return {
-    open,
-    on: (h) => handlers.push(h),
-    send: (method, params = {}, sessionId) =>
-      new Promise((resolve, reject) => {
-        const i = ++id;
-        pending.set(i, { resolve, reject });
-        ws.send(JSON.stringify({ id: i, method, params, sessionId }));
-      }),
-    close: () => ws.close(),
-  };
-}
-
-/** 一个标签页的把手：evaluate / 等条件 / 收集 console 错误。 */
-async function newTab(browser, url, initScript) {
-  const { targetId } = await browser.send("Target.createTarget", { url: "about:blank" });
-  const { sessionId } = await browser.send("Target.attachToTarget", { targetId, flatten: true });
-  const errors = [];
-  browser.on((msg) => {
-    if (msg.sessionId !== sessionId) return;
-    if (msg.method === "Runtime.exceptionThrown") {
-      const d = msg.params.exceptionDetails;
-      errors.push(
-        [d?.text, d?.exception?.description ?? d?.exception?.value, d?.url && `${d.url}:${d.lineNumber}`]
-          .filter(Boolean).join(" | "),
-      );
-    }
-    if (msg.method === "Runtime.consoleAPICalled" && msg.params.type === "error") {
-      errors.push(msg.params.args.map((a) => a.value ?? a.description ?? "").join(" "));
-    }
-  });
-  const send = (m, p) => browser.send(m, p, sessionId);
-  await send("Runtime.enable");
-  await send("Page.enable");
-  await send("DOM.enable");
-  if (initScript) await send("Page.addScriptToEvaluateOnNewDocument", { source: initScript });
-  await send("Page.navigate", { url });
-
-  // 每一次 evaluate 都带独立超时。**这是必须的**：页面主线程一旦被卡死（正是这套
-  // 用例想抓的那类故障），CDP 的 evaluate 永远不返回，于是下面 waitFor 的超时判断
-  // 根本轮不到执行——整个测试挂死，而挂死看起来和"还在跑"一模一样。宁可报一条
-  // "页面没响应"，也不要一个永远不结束的 CI 任务。
-  const EVAL_TIMEOUT_MS = 30_000;
-  const evaluate = async (expression) => {
-    const r = await Promise.race([
-      send("Runtime.evaluate", {
-        expression,
-        returnByValue: true,
-        awaitPromise: true,
-        userGesture: true, // 收方的"接受"必须带用户手势，保存对话框才允许打开
-      }),
-      sleep(EVAL_TIMEOUT_MS).then(() => {
-        throw new Error(`page stopped responding (evaluate exceeded ${EVAL_TIMEOUT_MS}ms) — its main thread is blocked`);
-      }),
-    ]);
-    if (r.exceptionDetails) {
-      const detail = r.exceptionDetails.exception?.description ?? r.exceptionDetails.exception?.value ?? r.exceptionDetails.text;
-      throw new Error(`evaluate failed: ${detail} — ${expression}`);
-    }
-    return r.result?.value;
-  };
-  const waitFor = async (expression, what, timeoutMs = 45_000) => {
-    const deadline = Date.now() + timeoutMs;
-    for (;;) {
-      if (await evaluate(expression)) return;
-      if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-      await sleep(250);
-    }
-  };
-  return { send, evaluate, waitFor, errors, targetId, sessionId };
-}
-
-async function setWideViewport(tab, width = 1440, height = 900) {
-  await tab.send("Emulation.setDeviceMetricsOverride", {
-    width,
-    height,
-    deviceScaleFactor: 1,
-    mobile: false,
-  });
-}
 
 const FORCE_UNSUPPORTED =
   "Object.defineProperty(window, 'isSecureContext', { get: () => false });";
@@ -159,26 +54,6 @@ async function unsupportedLayoutScenario(browser) {
   ok("unsupported browsers kept the established single-column failure layout");
   await browser.send("Target.closeTarget", { targetId: tab.targetId });
 }
-
-// 收方页面的桩：把"另存为"换成一个把字节攒进内存并算 SHA-256 的假句柄。
-// 这是整个脚本里唯一一处偏离真实运行的地方。
-const SAVE_STUB = `
-  window.__e2e = { chunks: [], bytes: 0, closed: false, name: "" };
-  window.showSaveFilePicker = async ({ suggestedName }) => {
-    window.__e2e.name = suggestedName;
-    return {
-      createWritable: async () => ({
-        write: async (chunk) => {
-          window.__e2e.chunks.push(chunk.slice());
-          window.__e2e.bytes += chunk.byteLength;
-        },
-        close: async () => { window.__e2e.closed = true; },
-      }),
-    };
-  };
-  // 目录选择器也桩掉：万一批量分支被走到，别弹出真对话框把测试挂住。
-  window.showDirectoryPicker = async () => { throw new Error("e2e: directory picker not stubbed"); };
-`;
 
 /**
  * 记录页面创建过的每一个 RTCPeerConnection，并给出一个"把此刻活着的那些判死"的开关。
@@ -312,12 +187,6 @@ async function resumeScenario(browser) {
   await browser.send("Target.closeTarget", { targetId: receiver.targetId });
 }
 
-const ok = (label) => console.log(`  \x1b[32m✓\x1b[0m ${label}`);
-const fail = (label, err) => {
-  console.error(`  \x1b[31m✗\x1b[0m ${label}\n    ${err?.stack ?? err}`);
-  process.exitCode = 1;
-};
-
 /**
  * 故障注入：让收方的 RTCPeerConnection 在数据通道打开**之前**就 failed。
  *
@@ -383,14 +252,7 @@ async function earlyFailureScenario(browser) {
   await browser.send("Target.closeTarget", { targetId: receiver.targetId });
 }
 
-/**
- * 全局看门狗。
- *
- * 单看 evaluate 的超时不够：卡住的可能是 CDP 的任意一次往返（建标签页、关标签页、
- * 附加会话），任何一处永不返回都会让整个套件静默挂死——而"挂死"在 CI 里和"还在跑"
- * 长得一模一样，比一条红色失败糟得多。实测踩过：破坏版让收方主线程卡死之后，套件
- * 跑了 9 分钟还没有任何输出。
- */
+/** 全局看门狗的时限。为什么必须有一个，见 harness.mjs 的 withWatchdog。 */
 const GLOBAL_TIMEOUT_MS = 15 * 60_000;
 
 // ── 消息会话：两个真标签页之间发一条真消息 ──────────────────────────────────
@@ -425,8 +287,10 @@ const utf8Hex = (s) => [...Buffer.from(s, "utf8")].map((b) => b.toString(16).pad
  *  4. 一段长得像脚本的内容渲染成文本，`.msg-body` 里**没有**任何元素。
  */
 async function messageScenario(browser) {
-  const a = await newTab(browser, BASE + "/");
-  const b = await newTab(browser, BASE + "/");
+  // 顺带钉住"默认构建通告什么"。这一幕本来就要等 caps 到达，探针不额外花任何时间，
+  // 而它守的是一条比消息本身更硬的规矩：link/1 还没做完，默认产物里就不能出现它。
+  const a = await newTab(browser, BASE + "/", OBSERVE_CAPS);
+  const b = await newTab(browser, BASE + "/", OBSERVE_CAPS);
   await setWideViewport(a, 390, 844);
   await setWideViewport(b, 390, 844);
 
@@ -439,6 +303,25 @@ async function messageScenario(browser) {
   await a.waitFor(`!!document.querySelector('${MSG_OPEN_BTN}')`, "the message control to appear once caps arrived", 30_000);
   await b.waitFor(`!!document.querySelector('${MSG_OPEN_BTN}')`, "the message control on tab B too", 30_000);
   ok("both tabs advertised text/1 and offered a message control");
+
+  // 默认产物必须**只**通告 text/1。link/1 的两条通道、协调器和恢复还没一起做完，
+  // 所以任何一个把它漏进默认构建的改动（比如把 e2e 的构建旗标写死成开）都要在这里
+  // 变成红色，而不是安静地把一个半成品协议放出去。
+  for (const [who, tab] of [["A", a], ["B", b]]) {
+    const advertised = await tab.evaluate("window.__advertisedCaps");
+    if (!Array.isArray(advertised) || advertised.length === 0) {
+      throw new Error(`tab ${who} never sent a roster capability hello; this check proves nothing`);
+    }
+    if (JSON.stringify(advertised) !== JSON.stringify(["text/1"])) {
+      throw new Error(`the default build advertised ${JSON.stringify(advertised)}, want ["text/1"]`);
+    }
+  }
+  // 而且默认构建里那套统一工作区一个节点都不该挂出来。
+  const unifiedNodes = await a.evaluate("document.querySelectorAll('.workspace-head, .queued').length");
+  if (unifiedNodes !== 0) {
+    throw new Error(`the default build rendered ${unifiedNodes} unified-workspace node(s)`);
+  }
+  ok("the default build advertised only text/1 and rendered no unified workspace");
 
   await a.evaluate(`(() => {
     const button = document.querySelector('${MSG_OPEN_BTN}');
@@ -1019,54 +902,12 @@ async function pricingHierarchyScenario(browser) {
 
 async function main() {
   // 前置检查：服务器在不在，dist 是不是新的（旧 dist 会测出一个假绿）。
-  const health = await fetch(`${BASE}/healthz`).then((r) => r.text()).catch(() => "");
-  if (health.trim() !== "ok") {
-    throw new Error(`no server at ${BASE} — start it with: cd server && RELAYIUM_ADDR=:8099 go run .`);
-  }
+  await requireServer(BASE, "start it with: cd server && RELAYIUM_ADDR=:8099 go run .");
 
-  // 先收掉上一轮跑崩/被 kill 掉留下的浏览器。它们的标签页还挂着 WebSocket，而服务器
-  // 有每 IP 的并发 /ws 上限——攒够几个之后新标签页会**静默地**连不上信令，表现成
-  // "两边互相看不见"，和真回归一模一样。这一步不是洁癖，是在保证失败信号可信。
+  // launchBrowser 负责 pkill 残留、临时 profile 和等 CDP 端口；收尾还在下面的 finally。
+  const session = await launchBrowser({ debugPort: DEBUG_PORT, keep: argPresent("--keep") });
+  const browser = session.browser;
   try {
-    spawn("pkill", ["-f", `remote-debugging-port=${DEBUG_PORT}`], { stdio: "ignore" });
-    await sleep(800);
-  } catch { /* 没有残留就没得可杀 */ }
-
-  const profile = mkdtempSync(join(tmpdir(), "relayium-e2e-"));
-  const chrome = spawn(
-    CHROME,
-    [
-      "--headless=new",
-      `--remote-debugging-port=${DEBUG_PORT}`,
-      `--user-data-dir=${profile}`,
-      "--no-first-run",
-      "--no-default-browser-check",
-      // Chrome 默认把本机 IP 藏成 mDNS（.local）候选，而无头环境里没有 mDNS
-      // 解析器 —— 两个标签页于是永远配不出可用的候选对，ICE 直接 failed。
-      // 关掉这个隐藏策略，host 候选就是真的 127.0.0.1，本机直连立刻成立。
-      "--disable-features=WebRtcHideLocalIpsWithMdns",
-      "--use-fake-ui-for-media-stream",
-      "--use-fake-device-for-media-stream",
-      "about:blank",
-    ],
-    { stdio: "ignore" },
-  );
-
-  let browser;
-  try {
-    // 等 CDP 端口起来。
-    for (let i = 0; ; i++) {
-      try {
-        const v = await fetch(`http://127.0.0.1:${DEBUG_PORT}/json/version`).then((r) => r.json());
-        browser = cdp(v.webSocketDebuggerUrl);
-        await browser.open;
-        break;
-      } catch (e) {
-        if (i > 40) throw e;
-        await sleep(250);
-      }
-    }
-
     console.log(`\nLAN transfer E2E against ${BASE}`);
 
     await authLandingScenario(browser);
@@ -1591,22 +1432,8 @@ async function main() {
   } catch (err) {
     fail("LAN transfer E2E", err);
   } finally {
-    browser?.close();
-    chrome.kill();
-    await sleep(500); // 让 Chrome 先把 profile 目录里的文件句柄放掉
-    if (!args.includes("--keep")) {
-      try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }
-      catch { /* 临时目录，留着也无妨 */ }
-    }
+    await session.close();
   }
 }
 
-await Promise.race([
-  main(),
-  sleep(GLOBAL_TIMEOUT_MS).then(() => {
-    console.error(`  \x1b[31m✗\x1b[0m LAN transfer E2E\n    hard timeout after ${GLOBAL_TIMEOUT_MS / 60000} min — something hung; see the notes on the global watchdog`);
-    process.exit(1);
-  }),
-]);
-// 收尾：main 的 finally 已经收过浏览器，这里只是确保进程不被 CDP 的 socket 挂住。
-process.exit(process.exitCode ?? 0);
+await withWatchdog("LAN transfer E2E", GLOBAL_TIMEOUT_MS, main);

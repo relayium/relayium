@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  CAP_LINK, CAP_TEXT, capsSignal, recordPeerCaps, peerSupportsLink, peerSupportsText,
-  retainPeers, resetPeerCaps,
+  CAP_LINK, CAP_TEXT, advertisedCaps, capsSignal, recordPeerCaps, peerSupportsLink,
+  peerSupportsText, retainPeers, resetPeerCaps,
 } from "./peer-caps.svelte";
 import { LOCAL_CAPS } from "./webrtc";
 
@@ -24,6 +24,20 @@ describe("peer caps", () => {
     // coordinator, both lanes and recovery all ship together.
     expect(capsSignal().caps).not.toContain(CAP_LINK);
     expect(LOCAL_CAPS).not.toContain(CAP_LINK);
+  });
+
+  it("keeps link/1 behind the build-time E2E seam, off by default", () => {
+    // The default is what every shipped bundle gets: no environment is read at
+    // runtime, so this is not something a page, a user or a relay can change.
+    expect(advertisedCaps()).toEqual([CAP_TEXT]);
+    expect(advertisedCaps(false)).toEqual([CAP_TEXT]);
+    // And the enabled branch really is the two-capability announcement the mixed
+    // browser E2E depends on — asserted here so that path cannot rot unnoticed
+    // while it has no default-build coverage.
+    expect(advertisedCaps(true)).toEqual([CAP_TEXT, CAP_LINK]);
+    // Both announcements come from this one source, so the roster hello and the
+    // per-connection SDP confirmation cannot disagree about what we support.
+    expect([...LOCAL_CAPS]).toEqual([...advertisedCaps()]);
   });
 
   it("tracks exact link support independently from text", () => {

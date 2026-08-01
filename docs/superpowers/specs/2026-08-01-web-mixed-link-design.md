@@ -310,10 +310,68 @@ suppression, peer/room teardown, and independent same-peer file/text controls.
 The existing legacy file, resume, text and old-peer browser scenarios remain the
 production path and pass unchanged.
 
-`link/1` is still absent from both roster and SDP capability advertisements.
-Dual-lane file resume, mobile-background text barrier policy, replacement of a
-poisoned text channel, the polished unified workspace and target-browser close
-semantics remain advertisement gates rather than being implied by this wiring.
+In every default and release build `link/1` is absent from both roster and SDP
+capability advertisements. Dual-lane file resume, mobile-background text barrier
+policy, replacement of a poisoned text channel, the polished unified workspace
+and target-browser close semantics remain advertisement gates rather than being
+implied by this wiring.
+
+### Implementation checkpoint: unified workspace presentation, capability still off
+
+The `workspace.usingMixed` branch now renders one persistent trust header holding
+the peer name, link state, the single path label, the single SAS and an explicit
+disconnect. No file or text lane card repeats any of them: the progress card drops
+its inline code and path badge, the incoming-consent card keeps only a reveal
+anchor, and `MessagePanel` gains a `showSas` prop that defaults to the unchanged
+legacy behavior. The polite live region announces a mixed link's SAS on the first
+consent edge only, instead of once for the file lane and again for text. Queued
+outbound batches are rendered with per-batch cancel controls, so picking files
+during a transfer produces a visible queue rather than a disabled control. Files
+and text remain independently usable for the linked peer while every other peer
+stays blocked.
+
+In every default and release build `link/1` is absent from `capsSignal()` and
+`LOCAL_CAPS` — the checkpoint below adds an opt-in, build-time-only seam that
+turns it on for the dedicated E2E bundle and nothing else — so the legacy file,
+resume, text and old-peer surfaces remain the production path and are unchanged.
+Dual-lane file resume, the mobile-background text barrier policy and replacement
+of a poisoned text channel remain advertisement gates.
+
+### Implementation checkpoint: announcement lifetime, and a browser path to the unified workspace
+
+The once-per-link announcement rule moved out of `App.svelte` into
+`activity-announcement.ts`, and its memory is now keyed on link identity rather
+than on the six digits. `MixedSession` publishes a `linkGeneration` that changes
+on every establishment and teardown; `PeerWorkspace` re-exports it. A second link
+whose SAS collides with the first is therefore a new authentication step and is
+read out again, which the previous digit-keyed dedupe would have swallowed —
+silently, and only for the screen-reader user who most needs to hear it.
+
+Both capability announcements now come from one source, `advertisedCaps()`, whose
+only enabling input is the build-time constant `VITE_RELAYIUM_LINK_E2E`. Vite
+folds it to `false` in every default build, so nothing shipped exposes a runtime
+switch; `npm run build:link-e2e` emits a separate `dist-link-e2e` (deliberately
+not `dist/`) for `e2e/mixed-link.mjs`. That opt-in browser suite drives two real
+tabs through establishment, the one-SAS presentation rule, the 390 px consent
+geometry, the sticky header over a long manifest, a visible cancellable queue, a
+rejected file batch, an accepted text conversation with byte-identical content,
+320 px / RTL / dark layout, and explicit disconnect on both sides. The default
+browser suite gained the matching negative assertion: a shipped build advertises
+only `text/1` and renders no unified-workspace node.
+
+One scenario there exists purely to guard an ordering hazard. The reveal dedupe
+key is peer+lane and carries no link generation, so a second link to the same
+peer computes an identical key; if that key survived the teardown it would
+suppress the new link's authentication edge before the announcer was ever
+consulted. It cannot, because a link is never replaced in place — `establish()`
+refuses while one is current — and every SAS-bearing reveal candidate is gated on
+a SAS that comes from the link, so the gap always yields a null candidate that
+clears the key. The suite pins this by leaving a file consent *unanswered*,
+killing its link, and relinking to the same peer: the fresh code must be read out
+again. Deleting the one-line reset makes exactly that assertion fail.
+
+Advertisement itself is unchanged: still off, still gated on the remaining items
+above.
 
 ## Acceptance matrix
 

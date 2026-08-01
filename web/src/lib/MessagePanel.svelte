@@ -13,13 +13,19 @@
   import type { ConnPath } from "./webrtc";
 
   let {
-    status, peerName, sasCode, path, history, errorKey, prefill = "", revealTarget = $bindable(),
+    status, peerName, sasCode, path, history, errorKey, prefill = "", showSas = true,
+    revealTarget = $bindable(),
     onSend, onAccept, onReject, onClear, onEnd, onPrefillConsumed,
   }: {
     status: TextStatus;
     peerName: string;
     sasCode: string;
     path?: ConnPath;
+    /** False on a unified (`link/1`) workspace: the link owns exactly one SAS and
+     *  the workspace header already renders it. A second copy here would present
+     *  the same authentication step twice and invite a "which one do I compare?"
+     *  mistake. The panel then renders NO verification code at all. */
+    showSas?: boolean;
     history: TextMessage[];
     errorKey: TextErrorKey;
     prefill?: string;
@@ -84,13 +90,20 @@
 </script>
 
 <section class="ui-card ui-stack msgpanel">
+  {#if !showSas}
+    <!-- 统一工作区里 SAS 只在顶部那一处渲染，这个面板没有验证框可滚。用一个零高度
+         锚点接住那次一次性 reveal，指向会话顶部——和 App.svelte 的活动锚点同一套做法。 -->
+    <div class="reveal-anchor" bind:this={revealTarget} aria-hidden="true"></div>
+  {/if}
   <h2>{t.text.panelTitle}</h2>
 
   {#if status === "incomingRequest"}
     <!-- 这里一个字的正文都不渲染，而且也解不开：会话的 onmessage 在 accept() 之前
          根本没挂上（见 text-session）。SAS 先到屏幕上，消息才可能到。 -->
     <p class="req">{t.text.requestHead(peerName)}</p>
-    <div class="sas" bind:this={revealTarget}>{t.codeLabel} <code>{sasCode}</code> — {t.text.sasCompare}</div>
+    {#if showSas}
+      <div class="sas" bind:this={revealTarget}>{t.codeLabel} <code>{sasCode}</code> — {t.text.sasCompare}</div>
+    {/if}
     <div class="act">
       <button type="button" class="btn btn-primary" onclick={onAccept}>{t.text.accept}</button>
       <button type="button" class="btn btn-ghost" onclick={onReject}>{t.text.reject}</button>
@@ -103,7 +116,7 @@
         <span class="path path-{path}"><i class="dot" aria-hidden="true"></i>{pathLabel(t, path)}</span>
       {/if}
     </div>
-    {#if sasCode && status !== "ended"}
+    {#if sasCode && status !== "ended" && showSas}
       <div class="sas" bind:this={revealTarget}>{t.codeLabel} <code>{sasCode}</code> — {t.text.sasCompare}</div>
     {/if}
 
@@ -174,6 +187,17 @@
   .msgpanel { text-align: start; margin-block-end: var(--space-4); }
   .sas {
     scroll-margin-block-start: calc(64px + var(--space-3));
+    overflow-anchor: none;
+  }
+  /* Zero-height reveal anchor for the no-SAS (unified workspace) case. No
+     scroll-margin: clearing the sticky workspace header that owns the SAS is
+     App's job, and it does it by measuring that header at scroll time — its
+     height is not a constant a stylesheet can know. The negative margin cancels
+     the .ui-stack gap a zero-height flex item would otherwise still add above
+     the title. */
+  .reveal-anchor {
+    block-size: 0;
+    margin-block-end: calc(-1 * var(--space-3));
     overflow-anchor: none;
   }
   .req { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
