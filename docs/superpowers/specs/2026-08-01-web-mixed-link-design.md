@@ -115,6 +115,39 @@ the winner answers the losing manifest with BUSY. Each queued intent is replayed
 at most once when the lane becomes idle. Bidirectional simultaneous file batches,
 which require batch-scoped ACK/COMPLETE frames, are not part of this version.
 
+The legacy file path used closing the whole PeerConnection as its sender-side
+batch-abort marker. A reusable link instead adds sender-to-receiver `BATCH_ABORT`
+(`0xf8`). It is an ordered barrier after every protected frame the sender emitted
+for that batch. A receiver that rejects or cancels after data starts sends REJECT,
+continues authenticating and discarding already-admitted frames, and does not
+release the lane until BATCH_ABORT arrives. The sender stops producing protected
+frames and emits BATCH_ABORT after seeing that REJECT. The drain is bounded by the
+remaining declared bytes and a 30-second inactivity deadline refreshed only by
+authenticated drain progress; failure poisons only the file lane. An accepted
+receive also has a 60-second no-progress watchdog. A sender consent timeout emits
+BATCH_ABORT rather than silently abandoning a manifest, and an abort also removes
+a glare-parked inbound offer before it can become a stale prompt. After the ordered
+abort, the receiver resets the abandoned file's integrity accumulator but keeps
+its monotonically advanced nonce sequence. This preserves
+the link-owned receiver nonce sequence without writing or displaying rejected
+content. A queued glare loser is replayed once; a second BUSY is a visible terminal
+busy result, never an unbounded automatic retry.
+
+Receiver-side flow-control ACKs are accepted only when they strictly advance and
+do not exceed bytes actually sent in the current batch. Every batch resets its
+ACK cursor. This prevents a delayed or forged cumulative ACK from opening the new
+batch's entire receive window. The same upper bound applies to the legacy one-shot
+file path. A reusable receiver admits at most two flow-control windows of protected
+frames into its serialized JavaScript work queue; exceeding that bound fails only
+the file lane instead of allowing an uncooperative peer to grow memory without a
+bound. `Receiver.resumeAt()` may move the nonce sequence forward over sent-but-lost
+frames but must never move it backwards.
+
+An authenticated DONE whose integrity chain does not match is not COMPLETE. The
+receiver shows integrity failure, sends REJECT, and retains the lane until the
+sender's ordered BATCH_ABORT resets the abandoned file accumulator. This prevents
+the sender from reporting success for a file the receiver rejected.
+
 ### Text lane
 
 A long-lived link no longer has a new connection offer to imply a text request.
@@ -220,7 +253,11 @@ survives every transport generation that reuses the same link-owned codecs. If a
 outbound crypto operation consumes a nonce while its transport generation is
 being replaced, or an already-admitted inbound frame cannot reach the receiver
 codec, that codec is also poisoned: silently dropping either sequence would make
-a later conversation fail out of order. Because `DataChannel.send()` only queues
+a later conversation fail out of order. Failure state is generation-scoped: a
+stale async operation may poison and close its own old codec, but cannot erase a
+replacement link's queue, consent prompt, sink or UI state. Attaching or detaching
+a replacement while a file batch is active explicitly retires and closes that old
+file lane. Because `DataChannel.send()` only queues
 bytes, a transport close with protected bytes still buffered poisons the sender
 codec as well; lifecycle-only buffered bytes do not.
 

@@ -23,6 +23,7 @@ import {
   parseResumeReq,
   resumePointInRange,
   ackFrame,
+  advanceAck,
   parseAck,
   FLOW_WINDOW,
   FLOW_ACK_INTERVAL,
@@ -546,10 +547,14 @@ export function createTransferSession(deps: SessionDeps) {
     // time the ack advanced — flush() uses it as a liveness signal so it waits for a
     // slow-but-alive receiver instead of closing on a fixed short timeout.
     let acked = 0;
+    let sentHighWater = 0;
     let ackedAt = Date.now();
     let ackWaiter: (() => void) | null = null;
     const onAck = (n: number) => {
-      if (n > acked) { acked = n; ackedAt = Date.now(); const w = ackWaiter; ackWaiter = null; w?.(); }
+      const next = advanceAck(acked, sentHighWater, n);
+      if (next !== acked) {
+        acked = next; ackedAt = Date.now(); const w = ackWaiter; ackWaiter = null; w?.();
+      }
     };
     // Block until the receiver's acks let us send more (or it goes silent — then
     // throw so the send loop treats it as a drop and resumes/fails, not hangs).
@@ -619,13 +624,20 @@ export function createTransferSession(deps: SessionDeps) {
           ackedAt = Date.now();
           const start = Date.now();
           let sent = base, idx = rp.index;
+          // A resume checkpoint starts a new transport window. Delayed ACKs from
+          // the abandoned attempt must not open credit beyond this attempt's
+          // newly emitted bytes.
+          sentHighWater = sent;
           let lastUiAt = 0; // UI progress throttle — see UI_TICK_MS
           for await (const frame of sender.dataFrames(files, keys, rp)) {
             if (lost) throw new Error("connection lost during resume");
             await backpressure(rconn.channel);
             await creditGate(sent); // don't outrun the receiver's durable writes
             rconn.channel.send(frame);
-            if (frame[0] === FRAME.CHUNK) sent += frame.byteLength - CHUNK_OVERHEAD;
+            if (frame[0] === FRAME.CHUNK) {
+              sent += frame.byteLength - CHUNK_OVERHEAD;
+              sentHighWater = Math.max(sentHighWater, sent);
+            }
             else if (frame[0] === FRAME.DONE) idx++;
             const now = Date.now();
             if (now - lastUiAt >= UI_TICK_MS) {
@@ -708,7 +720,10 @@ export function createTransferSession(deps: SessionDeps) {
         await backpressure(conn.channel);
         await creditGate(sent); // don't outrun the receiver's durable writes
         conn.channel.send(frame);
-        if (frame[0] === FRAME.CHUNK) sent += frame.byteLength - CHUNK_OVERHEAD;
+        if (frame[0] === FRAME.CHUNK) {
+          sent += frame.byteLength - CHUNK_OVERHEAD;
+          sentHighWater = Math.max(sentHighWater, sent);
+        }
         else if (frame[0] === FRAME.DONE) idx++;
         const now = Date.now();
         if (now - lastUiAt >= UI_TICK_MS) {

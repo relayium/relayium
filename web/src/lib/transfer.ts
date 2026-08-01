@@ -73,11 +73,25 @@ const CTRL_ACCEPT = 0xfe;
 const CTRL_REJECT = 0xff;
 const CTRL_COMPLETE = 0xfd; // receiver got and verified the whole batch
 const CTRL_BUSY = 0xf9; // mixed-link file lane is occupied; retry/queue, not a refusal
+// Sender -> receiver ordered barrier for a reusable mixed-link file lane. The
+// legacy transport expressed this by closing the whole PeerConnection; a
+// long-lived link must end only the current batch so the independent text lane
+// and later file batches remain usable.
+const CTRL_BATCH_ABORT = 0xf8;
 
 export const ACCEPT = new Uint8Array([CTRL_ACCEPT]);
 export const REJECT = new Uint8Array([CTRL_REJECT]);
 export const COMPLETE = new Uint8Array([CTRL_COMPLETE]);
 export const FILE_BUSY = new Uint8Array([CTRL_BUSY]);
+export const BATCH_ABORT = new Uint8Array([CTRL_BATCH_ABORT]);
+
+/** Sender -> receiver batch-abort barrier. It is deliberately separate from
+ * controlKind(): all frames decoded there flow in the opposite direction and
+ * refer to our outbound batch. */
+export function isBatchAbort(buf: ArrayBuffer): boolean {
+  const b = new Uint8Array(buf);
+  return b.length === 1 && b[0] === CTRL_BATCH_ABORT;
+}
 
 /** Decode a receiver->sender control frame; returns null for anything else. */
 export function controlKind(buf: ArrayBuffer): "accept" | "reject" | "complete" | "busy" | null {
@@ -104,6 +118,13 @@ export function parseAck(buf: ArrayBuffer): number | null {
   const b = new Uint8Array(buf);
   if (b.length !== 13 || b[0] !== KIND_ACK) return null;
   return new DataView(b.buffer, b.byteOffset + 5).getFloat64(0);
+}
+
+/** Advance a batch-local cumulative ACK only within bytes this attempt has
+ * actually emitted. This shared gate keeps legacy and reusable file lanes from
+ * diverging on delayed or forged acknowledgements. */
+export function advanceAck(acked: number, sent: number, candidate: number): number {
+  return candidate > acked && candidate <= sent ? candidate : acked;
 }
 
 /** Receiver->sender resume request: the last point the receiver durably has. */
@@ -254,9 +275,22 @@ export class Receiver {
     return this.hash.slice();
   }
 
+  /** An ordered BATCH_ABORT has authenticated every emitted frame for the old
+   * batch. Reset only its per-file integrity accumulator; the global nonce
+   * sequence deliberately continues across the reusable link. */
+  abortBatch(): void {
+    this.hash = new Uint8Array(32);
+  }
+
   /** Restore the chain hash to a checkpoint and align the nonce counter to the
    *  sender's resumed start seq. Called before feeding resumed chunks. */
   resumeAt(chain: Uint8Array, seq: number): void {
+    // A resume may skip forward over sent-but-lost frames, but must never move
+    // the receive nonce backwards: that would make an old ciphertext valid
+    // again under the same key and sequence number.
+    if (!isIndex(seq) || seq < this.expectedSeq) {
+      throw new Error("relayium: resume sequence moved backwards");
+    }
     this.hash = chain.slice();
     this.expectedSeq = seq;
   }

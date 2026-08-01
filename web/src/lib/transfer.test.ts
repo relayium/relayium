@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { ready, generateKeyPair, deriveSession } from "./crypto";
 import {
   Sender, Receiver, FRAME, CHUNK_SIZE, CHUNK_OVERHEAD, FLOW_WINDOW, FLOW_ACK_INTERVAL,
-  ACCEPT, REJECT, COMPLETE, FILE_BUSY, ackFrame, controlKind, parseAck, parseResumeReq,
+  ACCEPT, REJECT, COMPLETE, FILE_BUSY, BATCH_ABORT, ackFrame, advanceAck, controlKind, isBatchAbort, parseAck, parseResumeReq,
   resumePointInRange, type ResumePoint,
 } from "./transfer";
 
@@ -336,17 +336,36 @@ describe("flow-control ack frame", () => {
 });
 
 describe("mixed-link file lifecycle controls", () => {
+  it("advances cumulative ACKs only through bytes emitted by the current attempt", () => {
+    expect(advanceAck(10, 20, 15)).toBe(15);
+    expect(advanceAck(10, 20, 10)).toBe(10);
+    expect(advanceAck(10, 20, 9)).toBe(10);
+    expect(advanceAck(10, 20, Number.MAX_SAFE_INTEGER)).toBe(10);
+  });
+
   it("recognises the busy frame without colliding with existing controls", () => {
     expect(controlKind(ACCEPT.buffer as ArrayBuffer)).toBe("accept");
     expect(controlKind(REJECT.buffer as ArrayBuffer)).toBe("reject");
     expect(controlKind(COMPLETE.buffer as ArrayBuffer)).toBe("complete");
     expect(controlKind(FILE_BUSY.buffer as ArrayBuffer)).toBe("busy");
-    expect(new Set([ACCEPT[0], REJECT[0], COMPLETE[0], FILE_BUSY[0]]).size).toBe(4);
+    expect(isBatchAbort(BATCH_ABORT.buffer as ArrayBuffer)).toBe(true);
+    expect(new Set([ACCEPT[0], REJECT[0], COMPLETE[0], FILE_BUSY[0], BATCH_ABORT[0]]).size).toBe(5);
   });
 
   it("requires an exact one-byte control frame", () => {
     expect(controlKind(new Uint8Array([FILE_BUSY[0], 0]).buffer)).toBeNull();
     expect(controlKind(new Uint8Array([]).buffer)).toBeNull();
+    expect(isBatchAbort(new Uint8Array([BATCH_ABORT[0], 0]).buffer)).toBe(false);
+    expect(controlKind(BATCH_ABORT.buffer as ArrayBuffer)).toBeNull();
+  });
+
+  it("never rewinds the receiver nonce during resume", async () => {
+    const { ka, kb } = await session();
+    const sender = new Sender();
+    const receiver = new Receiver();
+    await receiver.feed(await sender.batchFrame([{ name: "a", size: 1 }], ka), kb);
+    expect(() => receiver.resumeAt(new Uint8Array(32), 0)).toThrow(/moved backwards/);
+    expect(() => receiver.resumeAt(new Uint8Array(32), 2)).not.toThrow();
   });
 });
 
