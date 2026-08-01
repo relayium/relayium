@@ -56,6 +56,8 @@ function setup() {
   let joined = true;
   let unsupported = false;
   let peers = ["a", "z", "old"];
+  // Never let a triggered transport rebuild reach a real RTCPeerConnection.
+  const resume = vi.fn((_opts: { signal?: AbortSignal }) => new Promise<Conn>(() => {}));
   const workspace = createPeerWorkspace({
     selfId: () => selfId,
     joined: () => joined,
@@ -67,9 +69,10 @@ function setup() {
     legacyText,
     supportsLink: (peerId) => peerId !== "old",
     connect,
+    resume,
   });
   return {
-    workspace, legacyFiles, legacyText, sent, connect,
+    workspace, legacyFiles, legacyText, sent, connect, resume,
     inject(from: string, data: InboundSignal) {
       for (const listener of [...listeners]) listener(from, data);
     },
@@ -302,6 +305,47 @@ describe("peer workspace unified presentation surface", () => {
     expect(h.workspace.mixed.text.status).toBe("open");
     // Every other peer stays blocked while the one global link slot is taken.
     expect(h.workspace.blocksNewIntent("old")).toBe(true);
+    h.workspace.stop();
+  });
+});
+
+// An interrupted link is still a link. The exclusion that keeps a mixed link and
+// a legacy transfer from ever coexisting has to hold across the gap too —
+// otherwise the window in which the link is defenceless is exactly the window in
+// which a legacy inbound offer could claim the same peer.
+describe("peer workspace during a mixed transport gap", () => {
+  async function interrupted() {
+    const h = setup();
+    await h.workspace.mixed.ensure("z");
+    h.workspace.mixed.file.enqueue("z", [{ file: new File(["held"], "held.txt") }]);
+    await vi.waitFor(() => expect(h.workspace.mixed.file.send?.status).toBe("waitingAccept"));
+    h.connect.mock.calls[0][0].onStateChange?.("failed");
+    expect(h.workspace.linkStatus).toBe("interrupted");
+    return h;
+  }
+
+  it("keeps blocking every legacy inbound generation while interrupted", async () => {
+    const h = await interrupted();
+
+    expect(h.workspace.usingMixed).toBe(true);
+    expect(h.workspace.blocksLegacyInbound).toBe(true);
+    expect(h.workspace.warnsOnLeave).toBe(true);
+    expect(h.workspace.linkPeerId).toBe("z");
+    // The workspace still owns this peer, so no legacy path can start for it.
+    expect(h.workspace.blocksNewIntent("old")).toBe(true);
+    h.workspace.stop();
+  });
+
+  it("disconnects and cancels recovery when the peer leaves during the gap", async () => {
+    const h = await interrupted();
+
+    h.setPeers(["a", "old"]);
+    h.workspace.syncPeers();
+
+    expect(h.workspace.mixed.link).toBeNull();
+    expect(h.workspace.linkStatus).toBe("idle");
+    expect(h.workspace.blocksLegacyInbound).toBe(false);
+    expect(h.resume.mock.calls[0][0].signal?.aborted).toBe(true);
     h.workspace.stop();
   });
 });

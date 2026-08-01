@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { deriveSession, generateKeyPair, ready } from "./crypto";
-import { createMixedFileSession } from "./mixed-file-session.svelte";
+import { createMixedFileSession, MIXED_FILE_GAP_TIMEOUT_MS } from "./mixed-file-session.svelte";
 import type { SaveTarget } from "./filesink";
 import type { MixedPeerLink } from "./peer-link.svelte";
 import {
@@ -30,7 +30,7 @@ interface FakeChannel {
   onclose: (() => void) | null;
   onbufferedamountlow: (() => void) | null;
   send(data: string | Blob | ArrayBuffer | ArrayBufferView): void;
-  close: ReturnType<typeof vi.fn>;
+  close: ReturnType<typeof vi.fn<() => void>>;
 }
 
 function channelPair() {
@@ -97,6 +97,7 @@ async function harness(opts: {
   consentTimeoutMs?: number;
   receiveStallMs?: number;
   drainTimeoutMs?: number;
+  gapTimeoutMs?: number;
 } = {}) {
   const aKey = generateKeyPair();
   const bKey = generateKeyPair();
@@ -132,23 +133,28 @@ async function harness(opts: {
     textSender: new TextSender(),
     textReceiver: new TextReceiver(),
   };
+  // ensureLink mirrors the coordinator: it hands back whichever link is current,
+  // so a rebuild replaces what a queued batch will launch onto.
+  const links = { a: aLink, b: bLink };
   const a = createMixedFileSession({
-    ensureLink: vi.fn(async () => aLink),
+    ensureLink: vi.fn(async () => links.a),
     pickSaveTarget: opts.pickA ?? (async () => aTarget),
     consentTimeoutMs: opts.consentTimeoutMs,
     receiveStallMs: opts.receiveStallMs,
     drainTimeoutMs: opts.drainTimeoutMs,
+    gapTimeoutMs: opts.gapTimeoutMs,
   });
   const b = createMixedFileSession({
-    ensureLink: vi.fn(async () => bLink),
+    ensureLink: vi.fn(async () => links.b),
     pickSaveTarget: opts.pickB ?? (async () => bTarget),
     consentTimeoutMs: opts.consentTimeoutMs,
     receiveStallMs: opts.receiveStallMs,
     drainTimeoutMs: opts.drainTimeoutMs,
+    gapTimeoutMs: opts.gapTimeoutMs,
   });
   a.attach(aLink);
   b.attach(bLink);
-  return { a, b, aLink, bLink, file, text, aTarget, bTarget };
+  return { a, b, aLink, bLink, links, file, text, aTarget, bTarget };
 }
 
 async function until(check: () => boolean, timeout = 4_000) {
@@ -726,5 +732,399 @@ describe("mixed file session", () => {
     text.b.send(new Uint8Array([7]));
     await until(() => received.mock.calls.length === 1);
     expect(new Uint8Array(received.mock.calls[0][0].data)).toEqual(new Uint8Array([7]));
+  });
+});
+
+// A transport gap on the file lane is repairable, and this is where that claim
+// is either true or a bug: the codecs survive, so anything this lane gets wrong
+// about its own sequence is wrong for the rest of the link's life.
+describe("mixed file session transport recovery", () => {
+  /** Model an authenticated transport rebuild: brand-new channels, the same peer
+   *  and the SAME four codec objects. That identity is replaceTransport's whole
+   *  contract, and it is what tells a rebuild apart from a new link. */
+  function rebuild(
+    aLink: MixedPeerLink,
+    bLink: MixedPeerLink,
+    links?: { a: MixedPeerLink; b: MixedPeerLink },
+  ) {
+    const swap = channelPair();
+    const aNext = { ...aLink, fileChannel: swap.a as unknown as RTCDataChannel };
+    const bNext = { ...bLink, fileChannel: swap.b as unknown as RTCDataChannel };
+    if (links) { links.a = aNext; links.b = bNext; }
+    return { swap, aNext, bNext };
+  }
+
+  const kindOf = (frame: ArrayBuffer) => new Uint8Array(frame)[0];
+  const isProtected = (frame: ArrayBuffer) =>
+    kindOf(frame) === FRAME.BATCH || kindOf(frame) === FRAME.CHUNK || kindOf(frame) === FRAME.DONE;
+  const seqOf = (frame: ArrayBuffer) => new DataView(frame).getUint32(1);
+  const announced = (frame: ArrayBuffer) =>
+    JSON.parse(new TextDecoder().decode(new Uint8Array(frame).slice(5))) as
+      { index: number; offset: number; seq: number };
+
+  it("fails the interrupted batch, then runs the next one byte-exactly on a new transport", async () => {
+    const { a, b, aLink, bLink, links, file, text, bTarget } = await harness();
+    a.enqueue("b", [{ file: new File([new Uint8Array(3 * 1024 * 1024)], "interrupted.bin") }]);
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => a.send?.status === "sending" && (b.recv?.sent ?? 0) > 0);
+
+    // Both ends observe the drop. Neither lane is poisoned by it.
+    file.a.close();
+    file.b.close();
+    await until(() => a.send?.done === true && b.recv?.done === true);
+    expect(a.send?.status).toBe("sendFail");
+    expect(b.recv?.status).toBe("recvFail");
+    expect(a.errorKey).toBe("");
+    expect(b.errorKey).toBe("");
+
+    const { swap, aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+    expect(a.errorKey).toBe("");
+    expect(b.errorKey).toBe("");
+
+    a.enqueue("b", picked("after-gap.txt", "recovered byte exactly"));
+    await until(() => b.incoming?.files[0].name === "after-gap.txt");
+    b.accept();
+    await until(() => b.recv?.status === "recvDone" && a.send?.status === "sendDone");
+    expect([...bTarget.output.get("after-gap.txt")!]).toEqual(bytes("recovered byte exactly"));
+
+    // Exactly one announcement, before the generation's first protected frame,
+    // naming the seq that frame actually carries.
+    const resumes = swap.a.sent.filter((frame) => kindOf(frame) === FRAME.RESUME);
+    expect(resumes).toHaveLength(1);
+    expect(swap.a.sent.findIndex((frame) => kindOf(frame) === FRAME.RESUME)).toBe(0);
+    const point = announced(resumes[0]);
+    expect(point.index).toBe(0);
+    expect(point.offset).toBe(0);
+    expect(seqOf(swap.a.sent.find(isProtected)!)).toBe(point.seq);
+
+    // One nonce sequence for the link's life: unique and strictly increasing
+    // across BOTH transport generations.
+    const seqs = [...file.a.sent, ...swap.a.sent].filter(isProtected).map(seqOf);
+    expect(new Set(seqs).size).toBe(seqs.length);
+    expect(seqs).toEqual([...seqs].sort((x, y) => x - y));
+    expect(text.a.readyState).toBe("open");
+    expect(text.b.readyState).toBe("open");
+  });
+
+  it("announces realignment once per generation, not once per batch", async () => {
+    const { a, b, aLink, bLink, links, file } = await harness();
+    file.a.close();
+    file.b.close();
+    const { swap, aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+
+    a.enqueue("b", picked("first.txt", "one"));
+    await until(() => b.incoming?.files[0].name === "first.txt");
+    b.accept();
+    await until(() => b.recv?.status === "recvDone");
+    a.enqueue("b", picked("second.txt", "two"));
+    await until(() => b.incoming?.files[0].name === "second.txt");
+    b.accept();
+    await until(() => b.recv?.files[0].name === "second.txt" && b.recv.status === "recvDone");
+
+    expect(swap.a.sent.filter((frame) => kindOf(frame) === FRAME.RESUME)).toHaveLength(1);
+  });
+
+  it("fails the lane on a protected frame that skips realignment after a gap", async () => {
+    const { b, aLink, bLink, links, file, text } = await harness();
+    file.b.close();
+    const { swap, bNext } = rebuild(aLink, bLink, links);
+    b.attach(bNext);
+
+    // A peer that just carries on where it left off. Its sequence may well line
+    // up, but this side cannot prove what it dropped in the gap.
+    swap.a.send(await aLink.fileSender.batchFrame([{ name: "sneaky.txt", size: 1 }], aLink.keys));
+
+    await until(() => b.errorKey === "failed");
+    expect(b.incoming).toBeNull();
+    expect(text.b.readyState).toBe("open");
+  });
+
+  it("fails the lane on a second realignment inside one generation", async () => {
+    const { a, b, aLink, bLink, links, file } = await harness();
+    file.a.close();
+    file.b.close();
+    const { swap, aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+    a.enqueue("b", picked("ok.txt", "fine"));
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => b.recv?.status === "recvDone");
+
+    swap.a.send(aLink.fileSender.resumeStartFrame({ index: 0, offset: 0 }));
+
+    await until(() => b.errorKey === "failed");
+  });
+
+  it("fails the lane on a realignment that claims a byte-level resume point", async () => {
+    const { b, aLink, bLink, links, file, text } = await harness();
+    file.b.close();
+    const { swap, bNext } = rebuild(aLink, bLink, links);
+    b.attach(bNext);
+
+    // Byte-level continuation is the next slice. Until then the only acceptable
+    // announcement is the batch-free origin.
+    swap.a.send(aLink.fileSender.resumeStartFrame({ index: 2, offset: 4096 }));
+
+    await until(() => b.errorKey === "failed");
+    expect(text.b.readyState).toBe("open");
+  });
+
+  it("never rewinds the receive nonce for a backwards realignment", async () => {
+    const { a, b, aLink, bLink, links, file } = await harness();
+    a.enqueue("b", picked("first.txt", "advance the sequence"));
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => b.recv?.status === "recvDone");
+    file.a.close();
+    file.b.close();
+    const { swap, aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+
+    // A forged announcement from a sequence that has already been spent.
+    swap.a.send(new Sender().resumeStartFrame({ index: 0, offset: 0 }));
+
+    await until(() => b.errorKey === "failed");
+    // The receiver still refuses to go back: an old ciphertext cannot be made
+    // valid again under the same key and sequence number.
+    expect(() => bLink.fileReceiver.resumeAt(new Uint8Array(32), 0)).toThrow(/backwards/);
+  });
+
+  it("keeps the codecs reusable when protected bytes were still buffered at the gap", async () => {
+    const { a, b, aLink, bLink, links, file, bTarget } = await harness();
+    const send = file.a.send;
+    let dropped = false;
+    file.a.send = function (data) {
+      send.call(this, data);
+      if (dropped || typeof data === "string" || data instanceof Blob) return;
+      const view = data instanceof ArrayBuffer
+        ? new Uint8Array(data)
+        : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+      if (view[0] !== FRAME.CHUNK) return;
+      dropped = true;
+      // Drop synchronously after the first protected frame enters the SCTP send
+      // buffer. This makes the race deterministic instead of polling a transient
+      // `sending` UI state that a fast in-memory channel can skip between ticks.
+      file.a.bufferedAmount = 512 * 1024;
+      file.a.close();
+      file.b.close();
+    };
+    a.enqueue("b", [{ file: new File([new Uint8Array(2 * 1024 * 1024)], "buffered.bin") }]);
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => a.send?.done === true);
+    expect(dropped).toBe(true);
+
+    expect(a.errorKey).toBe("");
+    const { aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+    a.enqueue("b", picked("after-buffered.txt", "still works"));
+    await until(() => b.incoming?.files[0].name === "after-buffered.txt");
+    b.accept();
+    await until(() => b.recv?.status === "recvDone");
+    expect([...bTarget.output.get("after-buffered.txt")!]).toEqual(bytes("still works"));
+  });
+
+  it("drops frames admitted but never fed, without poisoning, and stays byte-exact", async () => {
+    let releaseWrite!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseWrite = resolve; });
+    let picks = 0;
+    const stalled: SaveTarget = {
+      label: "stalled",
+      async file() { return { async write() { await gate; }, async close() {} }; },
+    };
+    const finalTarget = memoryTarget();
+    const { a, b, aLink, bLink, links, file } = await harness({
+      pickB: async () => (++picks === 1 ? stalled : finalTarget),
+    });
+    a.enqueue("b", [{ file: new File([new Uint8Array(4 * 1024 * 1024)], "stalled.bin") }]);
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => a.send?.status === "sending");
+    // The receive chain is blocked on the first write, so later frames sit in it
+    // admitted-but-unfed when the transport dies.
+    await until(() => file.b.sent.length > 0 || (a.send?.sent ?? 0) > 0);
+
+    file.a.close();
+    file.b.close();
+    releaseWrite();
+    await until(() => a.send?.done === true && b.recv?.done === true);
+    expect(a.errorKey).toBe("");
+    expect(b.errorKey).toBe("");
+
+    const { aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+    a.enqueue("b", picked("after-drop.txt", "exact"));
+    await until(() => b.incoming?.files[0].name === "after-drop.txt");
+    b.accept();
+    await until(() => b.recv?.status === "recvDone");
+    expect([...finalTarget.output.get("after-drop.txt")!]).toEqual(bytes("exact"));
+  }, 10_000);
+
+  it("closes the inbound sink once, after the in-flight write, never beside it", async () => {
+    let releaseWrite!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseWrite = resolve; });
+    const events: string[] = [];
+    const target: SaveTarget = {
+      label: "slow",
+      async file() {
+        return {
+          async write() { events.push("write-start"); await gate; events.push("write-end"); },
+          async close() { events.push("close"); },
+        };
+      },
+    };
+    const { a, b, file } = await harness({ pickB: async () => target });
+    a.enqueue("b", [{ file: new File([new Uint8Array(2 * 1024 * 1024)], "gap.bin") }]);
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => events.includes("write-start"));
+
+    file.b.close();
+    file.a.close();
+    expect(events).toEqual(["write-start"]);
+    releaseWrite();
+    await until(() => events.includes("close"));
+    expect(events).toEqual(["write-start", "write-end", "close"]);
+  }, 10_000);
+
+  it("unblocks a sender parked on flow-control credit as soon as the transport dies", async () => {
+    let releaseWrite!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseWrite = resolve; });
+    const stalled: SaveTarget = {
+      label: "stalled",
+      async file() { return { async write() { await gate; }, async close() {} }; },
+    };
+    const { a, b, file } = await harness({ pickB: async () => stalled });
+    a.enqueue("b", [{ file: new File([new Uint8Array(24 * 1024 * 1024)], "window.bin") }]);
+    await until(() => !!b.incoming);
+    b.accept();
+    // Fill the flow window so the sender is waiting on credit that will never come.
+    const onWire = () => file.a.sent
+      .filter((frame) => new Uint8Array(frame)[0] === FRAME.CHUNK)
+      .reduce((sum, frame) => sum + frame.byteLength - CHUNK_OVERHEAD, 0);
+    await until(() => onWire() >= FLOW_WINDOW);
+
+    file.a.close();
+    // Far below the 60 s stall timeout: a parked send must not wait it out.
+    await until(() => a.send?.status === "sendFail", 2_000);
+    releaseWrite();
+  }, 15_000);
+
+  it("keeps a pre-gap send that resolves late inert against the rebuilt generation", async () => {
+    const { a, b, aLink, bLink, links, file, text, bTarget } = await harness();
+    let releaseManifest!: () => void;
+    const manifestGate = new Promise<void>((resolve) => { releaseManifest = resolve; });
+    const original = aLink.fileSender.batchFrame.bind(aLink.fileSender);
+    const batchFrame = vi.spyOn(aLink.fileSender, "batchFrame").mockImplementation(async (...args) => {
+      const frame = await original(...args);
+      await manifestGate;
+      return frame;
+    });
+    a.enqueue("b", picked("crossing.txt", "never sent"));
+    await until(() => batchFrame.mock.calls.length === 1);
+
+    // The gap crosses manifest encryption: a nonce is burned for a frame that
+    // never leaves this side.
+    file.a.close();
+    file.b.close();
+    const { aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+    releaseManifest();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // The stale send neither poisons the reused codecs nor re-suspends the
+    // rebuilt lane.
+    expect(a.errorKey).toBe("");
+    expect(a.send?.status).toBe("sendFail");
+    batchFrame.mockRestore();
+
+    a.enqueue("b", picked("after-crossing.txt", "burned nonce repaired"));
+    await until(() => b.incoming?.files[0].name === "after-crossing.txt");
+    b.accept();
+    await until(() => b.recv?.status === "recvDone");
+    expect([...bTarget.output.get("after-crossing.txt")!]).toEqual(bytes("burned nonce repaired"));
+    expect(text.a.readyState).toBe("open");
+  });
+
+  it("fails the lane, and only the lane, when no replacement arrives in time", async () => {
+    const { a, b, file, text, bLink } = await harness({ gapTimeoutMs: 30 });
+    a.enqueue("b", picked("orphan.txt", "x"));
+    await until(() => !!b.incoming);
+    file.b.close();
+
+    await until(() => b.errorKey === "failed");
+    expect(text.b.readyState).toBe("open");
+    expect(bLink.conn.close).not.toHaveBeenCalled();
+    a.reset();
+  });
+
+  it("bounds the gap with a deliberately longer timeout than the link's own window", () => {
+    expect(MIXED_FILE_GAP_TIMEOUT_MS).toBe(120_000);
+  });
+
+  it("records recovery intent at the gap, and clears it only on replacement", async () => {
+    const { a, b, aLink, bLink, links, file } = await harness();
+    expect(a.needsRecovery()).toBe(false);
+
+    a.enqueue("b", picked("intent.txt", "x"));
+    await until(() => !!b.incoming);
+    file.a.close();
+
+    // active() is already terminal here — which is exactly why the marker exists.
+    expect(a.active()).toBe(false);
+    expect(a.needsRecovery()).toBe(true);
+    a.suspend(); // idempotent second entry, from the coordinator
+    expect(a.needsRecovery()).toBe(true);
+
+    const { aNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    expect(a.needsRecovery()).toBe(false);
+    b.reset();
+  });
+
+  it("does not claim recovery for an idle lane, and a double suspend is one gap", async () => {
+    const { a, b, file } = await harness();
+    a.suspend();
+    a.suspend();
+    file.a.close(); // the real onclose, after the coordinator already suspended
+
+    expect(a.needsRecovery()).toBe(false);
+    expect(a.errorKey).toBe("");
+    expect(a.active()).toBe(false);
+    b.reset();
+  });
+
+  it("holds a queued batch through the gap and launches it on the replacement", async () => {
+    const { a, b, aLink, bLink, links, file, bTarget } = await harness();
+    a.enqueue("b", picked("gap-queued.txt", "queued through the gap"));
+    await until(() => !!b.incoming);
+    b.reject();
+    await until(() => !b.incoming);
+    file.a.close();
+    file.b.close();
+    // Enqueued while there is no transport at all.
+    a.enqueue("b", picked("mid-gap.txt", "enqueued mid gap"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(a.queued).toHaveLength(1);
+    expect(a.needsRecovery()).toBe(true);
+
+    const { aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+    await until(() => b.incoming?.files[0].name === "mid-gap.txt");
+    b.accept();
+    await until(() => b.recv?.status === "recvDone");
+    expect([...bTarget.output.get("mid-gap.txt")!]).toEqual(bytes("enqueued mid gap"));
+    expect(a.queued).toHaveLength(0);
   });
 });

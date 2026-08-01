@@ -8,9 +8,11 @@ import { Receiver, Sender } from "./transfer";
 import { TextReceiver, TextSender } from "./text-wire";
 import {
   LINK_CAPTURE_MAX_BYTES,
+  authPayload,
   connectLink,
   connectResumeLink,
   PeerBusyError,
+  signalGeneration,
   type Conn,
   type InboundSignal,
   type RtcConfig,
@@ -21,8 +23,14 @@ import type { SignalingClient } from "./signaling";
 export const LINK_REQUEST_TIMEOUT_MS = 30_000;
 export const LINK_REQUEST_RETRY_MS = 3_000;
 export const LINK_AUTH_TIMEOUT_MS = 30_000;
+/** How long a link may stay `interrupted` with no transport under it. Matches the
+ *  legacy one-shot resume window: the peer that dropped is the same peer, and a
+ *  user who walked away should not leave an authenticated link half-alive. */
+export const LINK_RECOVERY_WINDOW_MS = 90_000;
+/** Backoff between initiator rebuild attempts inside that window. */
+export const LINK_RECOVERY_RETRY_MS = 1_500;
 
-export type PeerLinkStatus = "idle" | "requesting" | "connecting" | "open" | "failed";
+export type PeerLinkStatus = "idle" | "requesting" | "connecting" | "open" | "interrupted" | "failed";
 
 export interface CapturedLinkFrames {
   readonly file: readonly ArrayBuffer[];
@@ -94,6 +102,15 @@ export class LinkReplaceStaleError extends Error {
   }
 }
 
+/** An interrupted link found no replacement transport inside
+ *  LINK_RECOVERY_WINDOW_MS. The link is torn down; nothing about it survives. */
+export class LinkRecoveryTimeoutError extends Error {
+  constructor() {
+    super("relayium: mixed link recovery timed out");
+    this.name = "LinkRecoveryTimeoutError";
+  }
+}
+
 export interface PeerLinkDeps {
   selfId: () => string;
   signaling: () => SignalingClient;
@@ -114,6 +131,18 @@ export interface PeerLinkDeps {
     status: PeerLinkStatus,
     captured?: CapturedLinkFrames,
   ) => void;
+  /**
+   * The single policy decision for a dead transport, asked exactly once per
+   * `Conn`, while the link is still current and before anything is published.
+   *
+   * Returning true holds the link: it stays `current` with its keys, SAS and
+   * four codecs untouched while a replacement transport is built under it.
+   * Returning false (or omitting the hook) reproduces the unconditional
+   * teardown. The manager owns the mechanism — window, retries, `ensure()`
+   * joining — and deliberately none of the policy: only the lane owner knows
+   * whether there was work worth reconnecting for.
+   */
+  onTransportLost?: (link: MixedPeerLink) => boolean;
 }
 
 export function isLinkOffer(data: unknown): data is InboundSignal {
@@ -224,8 +253,32 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     timer: ReturnType<typeof setTimeout>;
     retry: ReturnType<typeof setInterval>;
   } | null = null;
+  /** A link held with no transport under it, plus the bounded driver rebuilding
+   *  one. `promise` is what `ensure()` hands to a lane intent raised mid-gap, so
+   *  that intent lands on the rebuilt link instead of attaching to a dead one. */
+  let recovering: {
+    peerId: string;
+    link: MixedPeerLink;
+    promise: Promise<MixedPeerLink>;
+    resolve: (link: MixedPeerLink) => void;
+    reject: (err: unknown) => void;
+    timer: ReturnType<typeof setTimeout>;
+    attemptTimer?: ReturnType<typeof setTimeout>;
+  } | null = null;
   const timedOutPeers = new Set<string>();
-  let token = 0;
+  // Establishment and rebuild are independent async lifecycles with independent
+  // staleness. Sharing one counter made a retrying recovery driver able to
+  // invalidate an establishment's post-await checks (and vice versa).
+  let linkToken = 0;
+  let replaceToken = 0;
+  /** The Conn whose terminal callback has already been handled. A transport
+   *  reports `failed` and then `closed`; closing it here reports `closed` again.
+   *  All of that is one gap. */
+  let terminalConn: Conn | null = null;
+  /** One inbound resume offer at a time may hold the rebuild slot while its tag
+   *  is verified, so two offers arriving in the same burst cannot both start a
+   *  PeerConnection into the same lanes. */
+  let verifyingResume = false;
   let unlisten: (() => void) | null = null;
 
   function publish(
@@ -233,6 +286,10 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     nextStatus: PeerLinkStatus,
     captured?: CapturedLinkFrames,
   ) {
+    // Any publish ends the gap: a replacement resolves the driver through
+    // settleRecovery below, and a teardown can never be recovered from.
+    if (!next) failRecovery(new Error("relayium: mixed link torn down during recovery"));
+    terminalConn = null;
     current = next;
     status = nextStatus;
     if (next) deps.onLinkChange?.(next, nextStatus, captured);
@@ -257,6 +314,131 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     }
   }
 
+  function clearRecoveryTimers(r: NonNullable<typeof recovering>) {
+    clearTimeout(r.timer);
+    if (r.attemptTimer !== undefined) clearTimeout(r.attemptTimer);
+    r.attemptTimer = undefined;
+  }
+
+  function failRecovery(err: unknown) {
+    const r = recovering;
+    if (!r) return;
+    recovering = null;
+    clearRecoveryTimers(r);
+    r.reject(err);
+  }
+
+  function settleRecovery(link: MixedPeerLink) {
+    const r = recovering;
+    if (!r || r.peerId !== link.peerId) return;
+    recovering = null;
+    clearRecoveryTimers(r);
+    r.resolve(link);
+  }
+
+  function expireRecovery(r: NonNullable<typeof recovering>) {
+    if (recovering !== r) return;
+    const stale = replacing;
+    failRecovery(new LinkRecoveryTimeoutError());
+    if (current === r.link && status === "interrupted") {
+      publish(null, "failed");
+      try { r.link.conn.close(); } catch { /* already gone */ }
+    }
+    // A rebuild still in flight has lost its reason to exist. Its own staleness
+    // checks would reject it anyway; aborting stops it waiting out ICE first.
+    stale?.controller.abort();
+  }
+
+  /** Initiator side of the rebuild: retry until the window closes. The responder
+   *  runs no driver at all — it answers the initiator's authenticated offer, so
+   *  there is no rebuild glare and no new signal type. */
+  function driveRecovery(r: NonNullable<typeof recovering>) {
+    if (recovering !== r || current !== r.link || status !== "interrupted") return;
+    void replaceTransport(r.peerId).catch(() => {
+      if (recovering !== r) return;
+      r.attemptTimer = setTimeout(() => {
+        r.attemptTimer = undefined;
+        driveRecovery(r);
+      }, LINK_RECOVERY_RETRY_MS);
+    });
+  }
+
+  function beginRecovery(link: MixedPeerLink) {
+    failRecovery(new Error("relayium: superseded mixed link recovery"));
+    let resolve!: (next: MixedPeerLink) => void;
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<MixedPeerLink>((res, rej) => { resolve = res; reject = rej; });
+    // The driver owns this promise's lifetime; a consumer may never ask for it.
+    void promise.catch(() => {});
+    const r: NonNullable<typeof recovering> = {
+      peerId: link.peerId,
+      link,
+      promise,
+      resolve,
+      reject,
+      timer: setTimeout(() => expireRecovery(r), LINK_RECOVERY_WINDOW_MS),
+    };
+    recovering = r;
+    // The establishment role, not a freshly computed one: both sides keep the
+    // deterministic offerer/responder split their first connection produced.
+    if (link.role === "initiator") driveRecovery(r);
+  }
+
+  /**
+   * The one place a dead transport is turned into a decision.
+   *
+   * Called from establishment and from a rebuild alike, and only while the dying
+   * `Conn` is still the current link's. A stale transport's terminal callback
+   * therefore cannot tear down a newer one, and the `failed`-then-`closed` pair a
+   * dying PeerConnection emits is one gap, not two.
+   */
+  function handleTerminalTransport(link: MixedPeerLink, conn: Conn, next: "failed" | "closed") {
+    if (current !== link || link.conn !== conn || terminalConn === conn) return;
+    terminalConn = conn;
+    let hold = false;
+    try { hold = deps.onTransportLost?.(link) === true; }
+    catch (err) { console.error("relayium link transport-loss policy error", err); }
+    if (!hold) {
+      publish(null, next === "failed" ? "failed" : "idle");
+      try { conn.close(); } catch { /* terminal already */ }
+      return;
+    }
+    // Held: the link stays current with its keys, SAS and codecs untouched. Only
+    // the dead connection is released, and closing it re-enters here inertly.
+    status = "interrupted";
+    try { conn.close(); } catch { /* terminal already */ }
+    beginRecovery(link);
+  }
+
+  /**
+   * Consume an inbound resume-generation offer for an interrupted link.
+   *
+   * The tag is verified HERE, against this link's own `resumeAuth`, before the
+   * offer is allowed to consume the single rebuild slot. connectResumeLink would
+   * verify it too, but only after it has already allocated a PeerConnection and
+   * begun ICE — and only after this manager committed to that offer being the
+   * rebuild. Anything that does not verify is dropped in silence: answering
+   * would tell a signalling relay which peer holds a live link.
+   */
+  async function handleResumeOffer(from: string, msg: InboundSignal) {
+    const link = current;
+    if (verifyingResume || replacing) return;
+    if (!link || link.peerId !== from || status !== "interrupted") return;
+    if (linkRole(deps.selfId(), from) !== "responder") return;
+    if (typeof msg.auth !== "string") return;
+    verifyingResume = true;
+    try {
+      const ok = await verifyResume(link.keys.resumeAuth, authPayload(msg), msg.auth);
+      // The gap may have ended (or been replaced) while the MAC was computed.
+      if (!ok || current !== link || status !== "interrupted" || replacing) return;
+      void replaceTransport(from, msg).catch(() => {});
+    } catch (err) {
+      console.error("relayium link resume verification error", err);
+    } finally {
+      verifyingResume = false;
+    }
+  }
+
   async function establish(
     peerId: string,
     role: "initiator" | "responder",
@@ -276,7 +458,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       clearInterval(requested.retry);
     }
 
-    const mine = ++token;
+    const mine = ++linkToken;
     const controller = new AbortController();
     let conn: Conn | undefined;
     status = "connecting";
@@ -301,9 +483,8 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
           if (next !== "failed" && next !== "closed") return;
           transportTerminal = true;
           rejectPeer(new Error(`relayium: transport ${next} during authentication`));
-          if (conn && current?.peerId === peerId && current.conn === conn) {
-            publish(null, next === "failed" ? "failed" : "idle");
-            try { conn.close(); } catch { /* terminal already */ }
+          if (conn && current && current.peerId === peerId && current.conn === conn) {
+            handleTerminalTransport(current, conn, next);
           }
         },
       });
@@ -342,7 +523,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         );
       });
       const keys = await deriveSession(role, self, peerPublic);
-      if (capture.overflow || transportTerminal || mine !== token) {
+      if (capture.overflow || transportTerminal || mine !== linkToken) {
         throw new Error("relayium: incomplete or superseded mixed link");
       }
       const link: MixedPeerLink = {
@@ -356,7 +537,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         textSender: new TextSender(),
         textReceiver: new TextReceiver(),
       };
-      if (mine !== token) {
+      if (mine !== linkToken) {
         throw new Error("relayium: superseded mixed link");
       }
       const captured = capture.take();
@@ -375,7 +556,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     })().catch((cause) => {
       try { conn?.close(); } catch { /* already gone */ }
       const err = cause instanceof PeerBusyError ? new LinkBusyError() : cause;
-      if (mine === token) status = "failed";
+      if (mine === linkToken) status = "failed";
       finishRequest(peerId, undefined, err);
       throw err;
     }).finally(() => {
@@ -429,7 +610,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         : Promise.reject(new LinkBusyError());
     }
 
-    const mine = ++token;
+    const mine = ++replaceToken;
     const controller = new AbortController();
     let conn: Conn | undefined;
     // The role that produced this link's keys. Both sides therefore keep the
@@ -456,9 +637,8 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
           // failure path below closes it; afterwards `current.conn` identifies
           // whether this callback belongs to the live transport or to one this
           // link has already replaced.
-          if (!conn || current?.peerId !== peerId || current.conn !== conn) return;
-          publish(null, next === "failed" ? "failed" : "idle");
-          try { conn.close(); } catch { /* terminal already */ }
+          if (!conn || !current || current.peerId !== peerId || current.conn !== conn) return;
+          handleTerminalTransport(current, conn, next);
         },
       });
       const fileChannel = conn.getChannel("relayium");
@@ -467,7 +647,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       // Capture starts before anything can await again, so a peer that speaks
       // first on the rebuilt lanes cannot outrun lane attachment.
       const capture = beginCapture(conn, fileChannel, textChannel);
-      if (controller.signal.aborted || mine !== token || current !== link) {
+      if (controller.signal.aborted || mine !== replaceToken || current !== link) {
         throw new LinkReplaceStaleError();
       }
       if (transportTerminal) throw new Error("relayium: rebuilt mixed link transport is terminal");
@@ -509,6 +689,9 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       // transport, a terminal state observed during attachment). Never hand back
       // a link the manager no longer holds.
       if (current !== next) throw new LinkReplaceStaleError();
+      // The gap is over for everyone: an intent that joined mid-gap through
+      // ensure() resolves onto this exact link, never a second one.
+      settleRecovery(next);
       return next;
     })().catch((cause) => {
       // Never touch `current` here: unless the link was explicitly failed above,
@@ -544,7 +727,9 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
   }
 
   function closeManager() {
-    token++;
+    linkToken++;
+    replaceToken++;
+    failRecovery(new Error("relayium: link closed"));
     const link = current;
     const pending = opening;
     const pendingReplace = replacing;
@@ -570,6 +755,15 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         const msg = data as InboundSignal;
         if (msg.link === true && msg.busy === true) {
           finishRequest(from, undefined, new LinkBusyError());
+          return;
+        }
+        // A rebuild offer for an interrupted link. Deliberately first: it shares
+        // the `resume` generation with a legacy one-shot file resume, and the
+        // only thing that separates the two is the tag each verifies under. An
+        // offer that is not for this link's peer, not for an interrupted link,
+        // or not signed by this link's keys is dropped without a reply.
+        if (signalGeneration(msg) === "resume" && msg.sdp?.type === "offer") {
+          void handleResumeOffer(from, msg);
           return;
         }
         if (isLinkRequest(data)) {
@@ -617,9 +811,13 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
 
     ensure(peerId: string): Promise<MixedPeerLink> {
       if (!supports(peerId)) return Promise.reject(new UnsupportedLinkError());
-      if (current) return current.peerId === peerId
-        ? Promise.resolve(current)
-        : Promise.reject(new LinkBusyError());
+      if (current) {
+        if (current.peerId !== peerId) return Promise.reject(new LinkBusyError());
+        // Mid-gap intent joins the rebuild instead of attaching to the dead
+        // transport the held link still points at.
+        if (recovering && recovering.peerId === peerId) return recovering.promise;
+        return Promise.resolve(current);
+      }
       if (opening) return opening.peerId === peerId
         ? opening.promise
         : Promise.reject(new LinkBusyError());

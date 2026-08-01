@@ -426,6 +426,118 @@ gates are unchanged too: dual-lane file resume actually driven by a coordinator,
 the mobile-background text barrier policy, replacement of a poisoned text
 channel, and target-browser `bufferedAmount`-at-close semantics.
 
+### Implementation checkpoint: a transport drop no longer destroys the link, capability still off
+
+The rebuild primitive now has a trigger. `PeerLinkManager` gained one status,
+`interrupted`, and one policy hook, `onTransportLost(link)`, asked exactly once
+per dead `Conn` while the link is still current. Returning true holds the link:
+it stays current with the same `SessionKeys`, the same SAS and the same four
+codecs while a replacement transport is built underneath it. Returning false, or
+omitting the hook, reproduces the previous unconditional teardown byte for byte.
+Only the link's establishment role offers a rebuild; the responder waits, so
+there is no rebuild glare and no new signal type. The gap is bounded by
+`LINK_RECOVERY_WINDOW_MS` (90 s) with `LINK_RECOVERY_RETRY_MS` (1.5 s) between
+initiator attempts, and `close()`, `stop()`, peer departure and window expiry all
+cancel the driver and publish exactly one teardown. `ensure()` called during the
+gap returns the recovery promise, so an intent raised mid-gap resolves onto the
+rebuilt link instead of attaching to a dead one. `establish()` and
+`replaceTransport()` no longer share a staleness counter.
+
+An inbound resume offer is verified **in the manager**, against that link's own
+`resumeAuth` and over the shared `authPayload`, before it may consume the single
+rebuild slot — strictly tighter than letting the connection primitive discover a
+bad tag after it has already allocated a PeerConnection. An offer with no tag, a
+non-string tag, a tag from another session's keys, a tag over different bytes, an
+offer from a peer that is not the link's, or one for a link that is not
+interrupted is dropped in silence; answering would tell a signalling relay which
+peer holds a link. Two offers in one burst produce one rebuild. Because a mixed
+resume offer and a legacy one-shot file resume share the `resume` generation, the
+tag — not the tag vocabulary — is what separates them; `blocksLegacyInbound`
+stays true across the gap, so the two still cannot coexist for one peer.
+
+**The coordinator's recovery decision is recorded, not sampled.** Both lanes are
+suspended first, unconditionally and idempotently, and only then asked whether
+they needed recovery. Each lane records that answer at the instant it first
+enters the gap, whichever call gets there first. This is not a refinement:
+`RTCDataChannel.onclose` may run a lane's own suspend before the
+`RTCPeerConnection` reaches a terminal state, and after that suspend the lane's
+public `active()` already reads terminal — so a coordinator that inspected
+`active()` at policy time would tear down a link that was mid-transfer, on
+exactly the browsers that report the channel first. An idle drop still tears down
+as before; active file or text work, and a merely queued file batch, all hold.
+The held link is not bumped to a new `linkGeneration` and does not re-announce
+its SAS, because it is the same authentication step. The idle timer cannot close
+an interrupted link.
+
+**The file lane is now explicitly not poisoned by a transport close (I4).** The
+rule that "a transport close with protected bytes still buffered poisons the
+sender codec" is narrowed to the **text** lane only. The file protocol has a
+forward-only nonce *and* a sender-announced resume point; text has neither. In
+its place the file lane carries one new protocol rule, using the existing
+`KIND_RESUME_START` frame and `Receiver.resumeAt()` — no wire vocabulary changes:
+
+> **I2.** For every file-lane transport generation after the first, each
+> direction emits exactly one `RESUME_START` before its first protected frame in
+> that generation, and the peer requires exactly one before it will accept a
+> protected frame.
+
+The announced point in this slice is always the batch-free origin
+`{index: 0, offset: 0, seq}`. That single announcement repairs every gap
+condition this slice can produce: an outbound nonce consumed for a frame that
+never left the buffer, a frame buffered at close, an inbound frame admitted to
+the receive chain but never fed, and the missing `BATCH_ABORT` for the
+interrupted batch — the generation boundary *is* that ordered barrier, because no
+frame from a retired transport can arrive on the next one. A missing, duplicate,
+non-origin or backwards announcement fails the lane, and `resumeAt()` still
+refuses to move the receive nonce backwards, so a forged plaintext announcement
+can only push a receiver forward into frames it cannot decrypt — denial of
+service, never nonce reuse and never an integrity bypass. This removes the
+target-browser `bufferedAmount`-at-close advertisement gate **for the file lane**;
+text still needs it.
+
+Two ordering hazards were found while pinning this and are worth stating, because
+neither is visible from the state machine alone. First, a retired outbound run is
+not inert: its `dataFrames` generator reserves its nonce inside async work, so it
+can still advance the sender sequence *after* a gap failed its batch — and if the
+next generation had already announced its resume point, that announcement would be
+one seq short and the peer would reject the first chunk after it. No batch now
+starts, and therefore no announcement is emitted, until every earlier outbound run
+has returned and can burn nothing more. Second, a receive task retired mid-flight
+by the gap fails simply because the gap cleared the state it was about to touch;
+poisoning on that path would poison the codecs the replacement is still using.
+Poison on a stale path is now keyed on codec identity, which is the only thing
+that distinguishes "an old transport generation of the live lane" from "a dead
+link's codecs".
+
+The text lane's gap behaviour is unchanged and now reachable without a link
+teardown: the conversation ends visibly, the transcript is kept, nothing is
+replayed, the SAS is kept, and protected bytes buffered at the close or admitted
+but never fed still poison the text codecs only — a later conversation is
+permitted exactly when neither fired, while the file lane keeps working.
+
+What this slice deliberately does **not** do: resume bytes. The interrupted batch
+fails visibly on both sides and the user re-sends; the retry then runs on the same
+link with continuous sequences. Receiver checkpoints, `RESUME_REQ`, sink
+continuity across the gap and ACK/window rebase are the next slice, and they plug
+into I2's branch.
+
+One consequence needs a product answer rather than more code: an explicitly
+disconnecting peer is indistinguishable from a network drop, so the other side
+holds its workspace for up to the full 90 s window and answers a fresh link offer
+from that peer with `busy` for its duration. Holding symmetrically is required —
+if one side tore down while the other rebuilt, the rebuild offer would arrive at a
+peer with no link and both sides would end up with nothing — so the fix is an
+explicit "leaving" signal or a visible cancel during recovery, both stage-4 work.
+The opt-in browser suite now waits that window out deliberately.
+
+`link/1` remains absent from `capsSignal()` and `LOCAL_CAPS` in every default and
+release build, and the default browser suite's negative assertion is unchanged.
+The remaining advertisement gates are: byte-level dual-lane file resume, the
+mobile-background policy for both the 90 s recovery window and the 30 s text END
+barrier, replacement of a poisoned text channel, target-browser
+`bufferedAmount`-at-close semantics for the **text** lane, and a product answer to
+the explicit-disconnect window above.
+
 ## Acceptance matrix
 
 - One link sends file → text → files → text → file with one PeerConnection, one

@@ -47,8 +47,15 @@ const KIND_RESUME_START = 4; // sender->receiver (plaintext): {index, offset, se
 const KIND_RESUME_REQ = 5; // receiver->sender (plaintext): {index, offset} — the last durably-written point
 const KIND_ACK = 6; // receiver->sender (plaintext): cumulative bytes durably written — flow-control credit
 
-/** Frame kinds, exported so the UI can read a frame's type for progress tracking. */
-export const FRAME = { CHUNK: KIND_CHUNK, DONE: KIND_DONE_ENC, BATCH: KIND_BATCH_ENC } as const;
+/** Frame kinds, exported so the UI can read a frame's type for progress tracking.
+ *  RESUME is plaintext and consumes no nonce; it is listed here so a lane can
+ *  recognise the one frame it must accept while its sequence is unaligned. */
+export const FRAME = {
+  CHUNK: KIND_CHUNK,
+  DONE: KIND_DONE_ENC,
+  BATCH: KIND_BATCH_ENC,
+  RESUME: KIND_RESUME_START,
+} as const;
 
 /** A resume checkpoint: the receiver has durably written `offset` bytes of file
  *  `index`; the sender continues from there. */

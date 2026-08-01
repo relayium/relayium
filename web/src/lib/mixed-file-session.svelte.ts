@@ -32,6 +32,21 @@ export const MIXED_FILE_CONSENT_TIMEOUT_MS = 10 * 60_000;
 export const MIXED_FILE_DRAIN_TIMEOUT_MS = 30_000;
 export const MIXED_FILE_REPLAY_DELAY_MS = 250;
 export const MIXED_FILE_RECEIVE_STALL_MS = 60_000;
+/** How long this lane will sit in a transport gap with no replacement channel.
+ *  Deliberately longer than the link-level recovery window so link teardown wins
+ *  that race and a lane-only channel close still has a bounded, fail-closed end. */
+export const MIXED_FILE_GAP_TIMEOUT_MS = 120_000;
+
+/** A protected frame could not enter the channel because the transport is gone,
+ *  not because this codec did anything wrong. Distinct from a lane failure: the
+ *  burned nonce is repaired by the next generation's RESUME_START (I2), so the
+ *  caller unwinds into the gap instead of poisoning a reusable codec pair. */
+class TransportGapError extends Error {
+  constructor() {
+    super("relayium: mixed file lane transport gap");
+    this.name = "TransportGapError";
+  }
+}
 
 const UI_TICK_MS = 150;
 const SEND_STALL_MS = 60_000;
@@ -102,6 +117,7 @@ export interface MixedFileSessionDeps {
   consentTimeoutMs?: number;
   receiveStallMs?: number;
   drainTimeoutMs?: number;
+  gapTimeoutMs?: number;
   /** Link owner uses lane traffic to refresh its idle lease. */
   onActivity?(): void;
 }
@@ -115,6 +131,19 @@ export interface MixedFileSession {
   readonly errorKey: FileLaneErrorKey;
   attach(link: MixedPeerLink): void;
   detach(): void;
+  /** Enter a transport gap: fail the in-flight batch visibly, stop the pump and
+   *  arm per-generation sequence realignment, WITHOUT poisoning the link-owned
+   *  codecs. Idempotent, so the lane's own `onclose` and the coordinator's
+   *  explicit call cannot double-fire whichever order the browser picks. */
+  suspend(): void;
+  /** Did this lane have work in flight when its channel first entered a gap?
+   *
+   *  Sampled inside `suspend()` — never read off `active()` afterwards. By the
+   *  time a coordinator observes a dead PeerConnection, `RTCDataChannel.onclose`
+   *  may already have run `suspend()` and cleared exactly the state the
+   *  coordinator would have inspected. Cleared only by a successful replacement
+   *  or final teardown. */
+  needsRecovery(): boolean;
   enqueue(peerId: string, picked: PickedFile[]): void;
   accept(): void;
   reject(): void;
@@ -132,6 +161,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   const consentTimeoutMs = deps.consentTimeoutMs ?? MIXED_FILE_CONSENT_TIMEOUT_MS;
   const receiveStallMs = deps.receiveStallMs ?? MIXED_FILE_RECEIVE_STALL_MS;
   const drainTimeoutMs = deps.drainTimeoutMs ?? MIXED_FILE_DRAIN_TIMEOUT_MS;
+  const gapTimeoutMs = deps.gapTimeoutMs ?? MIXED_FILE_GAP_TIMEOUT_MS;
 
   let link = $state.raw<MixedPeerLink | null>(null);
   let incoming = $state.raw<Incoming | null>(null);
@@ -145,6 +175,18 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   let outbound: Outbound | null = null;
   let inbound: Inbound | null = null;
   let launching: LocalBatch | null = null;
+  /**
+   * How many outbound runs have not finished unwinding.
+   *
+   * A retired run is not harmless: its `dataFrames` generator does async work
+   * (slice, chain hash, seal) and reserves its nonce inside that work, so it can
+   * still advance the sender sequence after a gap failed its batch. If the next
+   * generation announced its resume point in that window, the announcement would
+   * be one seq short and the peer would reject the first chunk that followed.
+   * So no batch starts — and therefore no RESUME_START is emitted — until every
+   * earlier run has returned and can burn nothing more.
+   */
+  let outboundRunning = 0;
   let pumpToken = 0;
   let pendingInbound: { link: MixedPeerLink; files: FileMeta[]; total: number } | null = null;
   let recvChain: Promise<void> = Promise.resolve();
@@ -153,9 +195,24 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   let closeHandler: (() => void) | null = null;
   let consentTimer: ReturnType<typeof setTimeout> | undefined;
   let replayTimer: ReturnType<typeof setTimeout> | undefined;
-  let protectedTransportGeneration: number | null = null;
+  let gapTimer: ReturnType<typeof setTimeout> | undefined;
   let queuedInboundBytes = 0;
+  /** In a transport gap: nothing may be sent and no batch may launch. */
+  let suspended = false;
+  /** I2 (realignment invariant), sender half: the next batch on this link must
+   *  announce where its sequence resumes before it consumes another nonce. */
+  let resyncOut = false;
+  /** I2, receiver half: exactly one RESUME_START is required, and accepted, per
+   *  transport generation after the first — and nothing protected before it. */
+  let resyncIn: "none" | "required" = "none";
+  /** See MixedFileSession.needsRecovery. */
+  let recoveryIntent = false;
   const poisonedCodecs = new WeakSet<object>();
+
+  /** Work in flight right now. Deliberately distinct from `needsRecovery()`,
+   *  which answers the historical question a gap makes unanswerable here. */
+  const active = () => !!outbound || !!inbound || !!pendingInbound || !!launching
+    || queued.length > 0;
 
   const lanePoisoned = (candidate = link) => !!candidate
     && (poisonedCodecs.has(candidate.fileSender) || poisonedCodecs.has(candidate.fileReceiver));
@@ -173,13 +230,15 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     closeHandler = null;
   }
 
-  function closeSinkAfterReceiveChain(current: Inbound) {
+  function closeSinkAfterReceiveChain(current: Inbound, poisonOnError = true) {
     // Retirement closes/poisons this generation before returning, so no later
     // task can legitimately touch its sink. The promise need not become the
     // current generation's recvChain (which attach may reset to another codec).
+    // On a transport gap the same serialization applies, but a failing sink says
+    // nothing about the codec sequence, so it must not poison a reusable one.
     void recvChain.then(() => closeSink(current)).catch((err) => {
       console.error("relayium mixed file sink retirement error", err);
-      poison(current.link);
+      if (poisonOnError) poison(current.link);
     });
   }
 
@@ -188,8 +247,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       ? outbound : null;
     const oldInbound = inbound?.link === candidate && inbound.generation === expectedGeneration
       ? inbound : null;
-    const hadActiveWireState = !!oldOutbound || !!oldInbound || pendingInbound?.link === candidate
-      || protectedTransportGeneration === expectedGeneration;
+    const hadActiveWireState = !!oldOutbound || !!oldInbound || pendingInbound?.link === candidate;
     if (!hadActiveWireState) return;
 
     clearInboundTimers();
@@ -209,7 +267,6 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       closeSinkAfterReceiveChain(oldInbound);
     }
     if (pendingInbound?.link === candidate) pendingInbound = null;
-    if (protectedTransportGeneration === expectedGeneration) protectedTransportGeneration = null;
     poison(candidate);
     try { candidate.fileChannel.close(); } catch { /* already terminal */ }
   }
@@ -219,6 +276,77 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     consentTimer = undefined;
     if (inbound?.drainTimer) clearTimeout(inbound.drainTimer);
     if (inbound?.receiveTimer) clearTimeout(inbound.receiveTimer);
+  }
+
+  function clearGapTimer() {
+    if (gapTimer !== undefined) clearTimeout(gapTimer);
+    gapTimer = undefined;
+  }
+
+  function armGapTimer() {
+    clearGapTimer();
+    const candidate = link;
+    const expectedGeneration = generation;
+    if (!candidate) return;
+    gapTimer = setTimeout(() => {
+      gapTimer = undefined;
+      // No replacement arrived. A lane that can neither send nor realign is not
+      // reusable, so end it explicitly rather than leaving it apparently idle.
+      if (suspended && link === candidate && generation === expectedGeneration) {
+        markLaneFailed(candidate, "recvFail", expectedGeneration);
+      }
+    }, gapTimeoutMs);
+  }
+
+  /**
+   * A transport gap on this lane. See MixedFileSession.suspend.
+   *
+   * The batch in flight fails visibly, but nothing here poisons: the file
+   * protocol has a forward-only nonce AND a sender-announced resume point, so a
+   * frame that was buffered at close, admitted but never fed, or encrypted but
+   * never sent is repaired by the next generation's single RESUME_START. Bumping
+   * `generation` retires the dead transport's handlers, timers and already-queued
+   * receive tasks in one step, so none of them can act on the replacement.
+   */
+  function suspend() {
+    const candidate = link;
+    if (!candidate || suspended || lanePoisoned(candidate)) return;
+    suspended = true;
+    // Sampled BEFORE anything below mutates lane state: this is the whole point
+    // of the marker. `active()` after this call is deliberately a different
+    // question ("is there work now") from the one recovery needs to answer.
+    recoveryIntent = recoveryIntent || active();
+    const expectedGeneration = generation;
+    const oldOutbound = outbound?.link === candidate && outbound.generation === expectedGeneration
+      ? outbound : null;
+    const oldInbound = inbound?.link === candidate && inbound.generation === expectedGeneration
+      ? inbound : null;
+    clearInboundTimers();
+    if (oldOutbound) {
+      oldOutbound.cancelRequested = true;
+      oldOutbound.decide("reject");
+      oldOutbound.complete();
+      // Unblock waitForCredit/waitForBuffer immediately; neither may wait out its
+      // 60 s stall timer on a transport that no longer exists.
+      oldOutbound.creditWake?.();
+      oldOutbound.terminal = true;
+      outbound = null;
+      if (send && !send.done) send = { ...send, status: "sendFail", done: true, ok: false, speed: 0 };
+    }
+    if (oldInbound) {
+      inbound = null;
+      incoming = null;
+      if (recv && !recv.done) recv = { ...recv, status: "recvFail", done: true, ok: false, speed: 0 };
+      // FileSink forbids a close concurrent with a write, so this serializes
+      // behind whatever the receive chain already admitted.
+      closeSinkAfterReceiveChain(oldInbound, false);
+    }
+    pendingInbound = null;
+    detachHandlers();
+    generation++;
+    resyncOut = true;
+    resyncIn = "required";
+    armGapTimer();
   }
 
   function markLaneFailed(
@@ -232,6 +360,13 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     if (candidate !== link || expectedGeneration !== generation) return;
     errorKey = "failed";
     clearInboundTimers();
+    clearGapTimer();
+    suspended = false;
+    // A lane that ended for a protocol reason has nothing left to reconnect for,
+    // so it must stop asking the link to be held on its behalf.
+    recoveryIntent = false;
+    resyncOut = false;
+    resyncIn = "none";
     clearTimeout(replayTimer);
     replayTimer = undefined;
     pendingInbound = null;
@@ -252,9 +387,37 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     const failedInbound = inbound;
     inbound = null;
     queued = [];
-    protectedTransportGeneration = null;
     if (failedInbound) closeSinkAfterReceiveChain(failedInbound);
     try { candidate.fileChannel.close(); } catch { /* already terminal */ }
+  }
+
+  /** Does this candidate carry the codecs the lane is using right now? A
+   *  transport replacement preserves them by contract, so this is what separates
+   *  "an old transport generation of the LIVE lane" (repairable by realignment)
+   *  from "a dead link's codecs" (poison, as before). */
+  const sharesCodecs = (candidate: MixedPeerLink) => !!link
+    && link.fileSender === candidate.fileSender
+    && link.fileReceiver === candidate.fileReceiver;
+
+  /**
+   * Why a frame could not reach the wire.
+   *
+   * - `gap`: the live lane has no transport. Enter/stay in the gap; the next
+   *   generation's RESUME_START repairs whatever this frame consumed.
+   * - `stale`: an older generation of the same codecs, already retired by a gap.
+   *   It must be completely inert — it may neither poison nor suspend a lane
+   *   that has since been rebuilt and is working.
+   * - `failed`: anything else. The codec cannot prove continuity; poison it.
+   */
+  function sendFailure(
+    candidate: MixedPeerLink,
+    expectedGeneration: number,
+  ): "gap" | "stale" | "failed" {
+    if (lanePoisoned(candidate)) return "failed";
+    if (candidate === link && expectedGeneration === generation) {
+      return suspended || candidate.fileChannel.readyState !== "open" ? "gap" : "failed";
+    }
+    return sharesCodecs(candidate) ? "stale" : "failed";
   }
 
   function sendControl(
@@ -263,10 +426,8 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     expectedGeneration = generation,
   ): boolean {
     if (!candidate || candidate !== link || expectedGeneration !== generation || lanePoisoned(candidate)) return false;
-    if (candidate.fileChannel.readyState !== "open") return false;
+    if (suspended || candidate.fileChannel.readyState !== "open") return false;
     try {
-      if (candidate.fileChannel.bufferedAmount === 0
-          && protectedTransportGeneration === expectedGeneration) protectedTransportGeneration = null;
       candidate.fileChannel.send(frame);
       deps.onActivity?.();
       return true;
@@ -282,9 +443,14 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     expectedGeneration = generation,
   ): boolean {
     if (sendControl(frame, candidate, expectedGeneration)) return true;
-    // Losing a lifecycle barrier makes the next unscoped batch ambiguous. Do not
-    // optimistically reuse this file lane.
-    markLaneFailed(candidate, "recvFail", expectedGeneration);
+    const failure = sendFailure(candidate, expectedGeneration);
+    // A barrier lost to a dead transport is not ambiguous: no frame from a
+    // retired generation can arrive on the next one, so the generation boundary
+    // IS the ordered barrier. Neither case may poison a reusable codec.
+    if (failure === "gap") suspend();
+    // Losing a lifecycle barrier on a live transport makes the next unscoped
+    // batch ambiguous. Do not optimistically reuse this file lane.
+    else if (failure === "failed") markLaneFailed(candidate, "recvFail", expectedGeneration);
     return false;
   }
 
@@ -294,19 +460,23 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     expectedGeneration: number,
   ) {
     if (candidate !== link || expectedGeneration !== generation
-        || lanePoisoned(candidate) || candidate.fileChannel.readyState !== "open") {
-      // batchFrame/dataFrames already consumed a sender nonce. If the resulting
-      // frame cannot enter this ordered channel, this codec can no longer prove
-      // continuity and must not be reused.
+        || lanePoisoned(candidate) || suspended
+        || candidate.fileChannel.readyState !== "open") {
+      const failure = sendFailure(candidate, expectedGeneration);
+      // batchFrame/dataFrames already consumed a sender nonce. The peer never
+      // saw the frame, but the next generation's RESUME_START announces the new
+      // start seq, so the burn is repaired rather than terminal.
+      if (failure === "gap") suspend();
+      if (failure !== "failed") throw new TransportGapError();
+      // A poisoned or genuinely orphaned codec has no realignment path: it can no
+      // longer prove continuity and must not be reused.
       markLaneFailed(candidate, "sendFail", expectedGeneration);
       throw new Error("relayium: protected file frame could not enter the channel");
     }
-    protectedTransportGeneration = expectedGeneration;
     try {
       candidate.fileChannel.send(frame);
       deps.onActivity?.();
     } catch (err) {
-      protectedTransportGeneration = null;
       markLaneFailed(candidate, "sendFail", expectedGeneration);
       throw err;
     }
@@ -321,7 +491,6 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   }
 
   function handleControl(buf: ArrayBuffer) {
-    if (link?.fileChannel.bufferedAmount === 0) protectedTransportGeneration = null;
     const current = outbound;
     if (!current || current.link !== link || current.generation !== generation || current.terminal) return;
 
@@ -357,6 +526,22 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     }
   }
 
+  /**
+   * How to treat a failure raised by an already-admitted receive task.
+   *
+   * The live generation poisons, as it always has (I5). A generation a gap
+   * retired must not: its task can fail simply because the gap cleared the state
+   * it was about to touch, and the codecs it names are the ones the replacement
+   * is using right now. Realignment covers whatever it left behind.
+   */
+  function failReceive(candidate: MixedPeerLink, expectedGeneration: number) {
+    if (candidate === link && expectedGeneration === generation) {
+      markLaneFailed(candidate, "recvFail", expectedGeneration);
+      return;
+    }
+    if (!sharesCodecs(candidate)) poison(candidate);
+  }
+
   function queueInbound(buf: ArrayBuffer, candidate: MixedPeerLink, expectedGeneration: number) {
     queuedInboundBytes += buf.byteLength;
     if (queuedInboundBytes > FLOW_WINDOW * 2) {
@@ -367,9 +552,11 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     const task = recvChain.then(async () => {
       if (lanePoisoned(candidate)) return;
       // The frame was admitted in wire order. Skipping feed after a link/session
-      // switch would strand the link-owned receiver sequence.
+      // switch would strand the link-owned receiver sequence — UNLESS the codecs
+      // survived, in which case the peer's mandatory RESUME_START realigns the
+      // sequence past everything this generation admitted but never fed (I2).
       if (candidate !== link || expectedGeneration !== generation) {
-        poison(candidate);
+        if (!link || link.fileReceiver !== candidate.fileReceiver) poison(candidate);
         return;
       }
       const kind = new Uint8Array(buf)[0];
@@ -382,6 +569,13 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
           && (!inbound || (inbound.phase !== "receiving" && inbound.phase !== "draining"))) {
         throw new Error("relayium: protected file content arrived before consent");
       }
+      // I2: after a gap this side's sequence is unaligned, so exactly one frame
+      // is acceptable until the peer says where it resumed. A protected frame
+      // here would either fail to decrypt or, worse, decrypt at a sequence this
+      // side cannot prove was never used.
+      if (resyncIn === "required" && kind !== FRAME.RESUME) {
+        throw new Error("relayium: protected file frame before resume realignment");
+      }
       const out = await candidate.fileReceiver.feed(new Uint8Array(buf), candidate.keys);
       await handleInboundOutput(candidate, out);
     }).finally(() => {
@@ -391,10 +585,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     });
     recvChain = task.catch((err) => {
       console.error("relayium mixed file receive error", err);
-      if (candidate === link && expectedGeneration === generation) {
-        markLaneFailed(candidate, "recvFail", expectedGeneration);
-      }
-      else poison(candidate);
+      failReceive(candidate, expectedGeneration);
     });
   }
 
@@ -420,7 +611,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     });
     recvChain = task.catch((err) => {
       console.error("relayium mixed file abort error", err);
-      if (candidate === link) markLaneFailed(candidate, "recvFail", expectedGeneration);
+      failReceive(candidate, expectedGeneration);
     });
   }
 
@@ -459,9 +650,24 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     out: Awaited<ReturnType<MixedPeerLink["fileReceiver"]["feed"]>>,
   ) {
     if (out.resume) {
-      // Authenticated transport replacement is deliberately a later stage. A
-      // resume marker on the initial long-lived channel is not valid.
-      throw new Error("relayium: unexpected file resume marker on live link");
+      // I2, receiver half. Exactly one announcement, only in the state that
+      // expects one. A duplicate, or one on a live aligned lane, is a protocol
+      // failure — that narrowness is what keeps a forged plaintext frame from
+      // being a free sequence jump at any moment the peer chooses.
+      if (resyncIn !== "required") {
+        throw new Error("relayium: unexpected file resume marker on live link");
+      }
+      // This slice resumes batches, not bytes: the interrupted batch is already
+      // failed, so the only valid announced point is the batch-free origin.
+      if (out.resume.index !== 0 || out.resume.offset !== 0) {
+        throw new Error("relayium: unsupported file resume point");
+      }
+      // resumeAt refuses a backwards seq, so the worst a forged announcement can
+      // do is push this receiver forward into frames it can no longer decrypt —
+      // a denial of service, never nonce reuse and never an integrity bypass.
+      candidate.fileReceiver.resumeAt(new Uint8Array(32), out.resume.seq);
+      resyncIn = "none";
+      return;
     }
     if (out.batch) {
       const files = out.batch.files;
@@ -801,7 +1007,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   }
 
   async function waitForCredit(current: Outbound) {
-    while (!current.cancelRequested && !current.remoteStop
+    while (!current.cancelRequested && !current.remoteStop && !current.terminal
         && current.sentBytes - current.acked > FLOW_WINDOW) {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -818,6 +1024,11 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   }
 
   async function waitForBuffer(channel: RTCDataChannel, current: Outbound) {
+    // A batch retired by a gap must not park here: the bytes still buffered on a
+    // dead channel will never drain, and the wake this would have used was
+    // already spent. Waiting out the stall timeout would hold the next batch —
+    // and its realignment announcement — for a full minute.
+    if (current.cancelRequested || current.remoteStop || current.terminal) return;
     if (channel.bufferedAmount <= channel.bufferedAmountLowThreshold) return;
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -864,7 +1075,20 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
 
   async function runOutbound(current: Outbound, decision: Promise<Decision>, completed: Promise<void>) {
     const { batch, link: candidate, generation: expectedGeneration } = current;
+    outboundRunning++;
     try {
+      // I2, sender half. Emitted lazily and before the first nonce this
+      // generation consumes, so the announced seq is exactly the one the next
+      // protected frame will carry. A second batch in the same generation emits
+      // nothing — the receiver would reject it.
+      if (resyncOut) {
+        if (!sendBarrier(
+          candidate.fileSender.resumeStartFrame({ index: 0, offset: 0 }),
+          candidate,
+          expectedGeneration,
+        )) return;
+        resyncOut = false;
+      }
       const frame = await candidate.fileSender.batchFrame(batch.files, candidate.keys);
       // Even if glare/cancel crossed encryption, put the nonce-consuming manifest
       // on the ordered channel before its ABORT barrier.
@@ -952,15 +1176,24 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         return;
       }
       if (!current.gotComplete) throw new Error("relayium: file batch ended without COMPLETE");
-      if (protectedTransportGeneration === expectedGeneration) protectedTransportGeneration = null;
       if (send) send = { ...send, status: "sendDone", done: true, ok: true, speed: 0 };
     } catch (err) {
-      console.error("relayium mixed file send error", err);
-      if (outbound === current && !lanePoisoned(candidate)) {
-        markLaneFailed(candidate, "sendFail", expectedGeneration);
+      if (err instanceof TransportGapError) {
+        // The throw site already entered the gap (or was inert because a
+        // replacement had moved on). Deliberately nothing here: this batch is
+        // failed and its codecs stay reusable.
+      } else {
+        console.error("relayium mixed file send error", err);
+        if (outbound === current && !lanePoisoned(candidate)) {
+          markLaneFailed(candidate, "sendFail", expectedGeneration);
+        }
       }
     } finally {
-      finishOutbound(current);
+      outboundRunning--;
+      // A run retired by a gap has no lane state left to finish, but the lane may
+      // have become runnable the moment it stopped being able to burn a nonce.
+      if (outbound === current) finishOutbound(current);
+      else pump();
     }
   }
 
@@ -1002,7 +1235,8 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   }
 
   function pump() {
-    if (outbound || inbound || pendingInbound || launching || lanePoisoned() || queued.length === 0) return;
+    if (suspended || outbound || outboundRunning > 0 || inbound || pendingInbound || launching
+        || lanePoisoned() || queued.length === 0) return;
     const batch = queued[0];
     queued = queued.slice(1);
     launching = batch;
@@ -1017,7 +1251,11 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         const candidate = await deps.ensureLink(batch.peerId);
         if (expectedPumpToken !== pumpToken) return;
         launching = null;
-        if (outbound || inbound || pendingInbound) {
+        // `suspended` included deliberately: ensureLink can hand back the held
+        // link itself while its transport is gone (a lane-only channel close on
+        // a live PeerConnection), and a batch must never launch into that. A run
+        // still unwinding requeues too; its own finally re-pumps.
+        if (suspended || outbound || outboundRunning > 0 || inbound || pendingInbound) {
           queued = [batch, ...queued];
           return;
         }
@@ -1046,14 +1284,28 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   function attach(candidate: MixedPeerLink) {
     if (link === candidate && messageHandler) return;
     const previous = link;
-    const previousGeneration = generation;
+    // "Same link, new transport" is not "new link, new codecs", and link-object
+    // identity cannot tell them apart. The codec pair can: replaceTransport's
+    // whole contract is that these are the SAME objects, so retiring them here
+    // would poison the very lane the rebuild exists to preserve (F1/F2).
+    const replacement = !!previous
+      && previous.peerId === candidate.peerId
+      && previous.fileSender === candidate.fileSender
+      && previous.fileReceiver === candidate.fileReceiver;
     if (previous) {
-      detachHandlers();
-      retireActiveState(previous, previousGeneration);
+      if (replacement) suspend();
+      else {
+        detachHandlers();
+        retireActiveState(previous, generation);
+      }
     }
     generation++;
     link = candidate;
-    protectedTransportGeneration = null;
+    clearGapTimer();
+    suspended = false;
+    // A replacement is the only thing that answers the question the marker
+    // records, so it is the only thing that may clear it.
+    recoveryIntent = false;
     queuedInboundBytes = 0;
     candidate.fileChannel.binaryType = "arraybuffer";
     if (recvChainOwner !== candidate.fileReceiver) {
@@ -1075,13 +1327,21 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     };
     closeHandler = () => {
       if (candidate !== link || expectedGeneration !== generation) return;
-      // An idle close is still terminal for this link-owned codec pair. Keeping
-      // it apparently reusable would make the next batch consume a nonce only to
-      // discover that its ordered transport no longer exists.
-      markLaneFailed(candidate, outbound ? "sendFail" : "recvFail", expectedGeneration);
+      // A channel close is a transport gap, not a codec failure — and it may
+      // arrive either before or after the PeerConnection's own terminal
+      // callback. Routing both orders into one idempotent suspend() removes the
+      // ordering race instead of assuming a browser callback order.
+      suspend();
     };
     candidate.fileChannel.onmessage = messageHandler;
     candidate.fileChannel.onclose = closeHandler;
+    // A replacement whose lane is already dead is not a recovery. Re-entering the
+    // gap detaches the handlers again, so the coordinator's attachment check
+    // fails the link closed rather than launching a batch into nothing.
+    if (candidate.fileChannel.readyState !== "open") {
+      if (replacement) suspend();
+      return;
+    }
     // External reattachment may make a preserved queue runnable. Deferring keeps
     // pump()'s own attach(candidate) path from launching a second batch before
     // startBatch() reserves the lane in the current call stack.
@@ -1091,6 +1351,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   function detach() {
     const previous = link;
     const previousGeneration = generation;
+    clearGapTimer();
     detachHandlers();
     if (previous) retireActiveState(previous, previousGeneration);
     if (launching) {
@@ -1105,7 +1366,12 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     }
     generation++;
     link = null;
-    protectedTransportGeneration = null;
+    // Final teardown for this lane's link: the marker has no one left to answer
+    // it, and a later link brings its own codecs and its own aligned sequence.
+    suspended = false;
+    recoveryIntent = false;
+    resyncOut = false;
+    resyncIn = "none";
     queuedInboundBytes = 0;
   }
 
@@ -1119,6 +1385,8 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
 
     attach,
     detach,
+    suspend,
+    needsRecovery() { return recoveryIntent; },
 
     enqueue(peerId, picked) {
       const chosen = picked.slice(0, MAX_FILES);
@@ -1195,7 +1463,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     },
     dismissSend(x) { if (send === x) send = null; },
     dismissRecv(x) { if (recv === x) recv = null; },
-    active() { return !!outbound || !!inbound || !!pendingInbound || !!launching || queued.length > 0; },
+    active,
     reset() {
       pumpToken++;
       clearTimeout(replayTimer);
@@ -1214,7 +1482,6 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       recv = null;
       send = null;
       errorKey = "";
-      protectedTransportGeneration = null;
     },
   };
 }

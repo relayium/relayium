@@ -1,11 +1,14 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { deriveSession, generateKeyPair, ready, signResume, verifyResume } from "./crypto";
 import {
-  LINK_AUTH_TIMEOUT_MS, LINK_REQUEST_RETRY_MS, LINK_REQUEST_TIMEOUT_MS,
-  LinkAuthenticationTimeoutError, LinkBusyError, LinkRequestTimeoutError,
+  LINK_AUTH_TIMEOUT_MS, LINK_RECOVERY_RETRY_MS, LINK_RECOVERY_WINDOW_MS,
+  LINK_REQUEST_RETRY_MS, LINK_REQUEST_TIMEOUT_MS,
+  LinkAuthenticationTimeoutError, LinkBusyError, LinkRecoveryTimeoutError,
+  LinkRequestTimeoutError,
   LinkReplaceStaleError, LinkReplaceUnavailableError,
   UnsupportedLinkError, createPeerLinkManager,
   isLinkOffer, isLinkRequest, linkRole,
+  type MixedPeerLink,
   type PeerLinkDeps,
 } from "./peer-link.svelte";
 import { LINK_CAPTURE_MAX_BYTES, connectLink, connectResumeLink, type Conn, type InboundSignal } from "./webrtc";
@@ -1111,6 +1114,411 @@ describe("mixed link transport replacement", () => {
     release();
     await rejected;
     expect(manager.current).toBe(other);
+    manager.stop();
+  });
+});
+
+// A transport drop no longer destroys the link. What is pinned here is the whole
+// decision surface around that: WHO may hold a link, WHO may offer its
+// replacement, WHAT a signalling relay can do with a `resume` offer while the
+// link is defenceless, and that every wait is bounded and cancellable.
+describe("mixed link transport recovery", () => {
+  /** An open link plus the seams needed to drop its transport underneath it. */
+  async function linked(
+    over: Partial<PeerLinkDeps> = {},
+    selfId = "a",
+    peerId = "b",
+  ) {
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const events: { status: string; peerId: string | null }[] = [];
+    const lost: string[] = [];
+    let hold = true;
+    const manager = createPeerLinkManager({
+      selfId: () => selfId,
+      signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }),
+      supportsLink: () => true,
+      connect: transport.connect,
+      onLinkChange(link, status) { events.push({ status, peerId: link?.peerId ?? null }); },
+      onTransportLost(link) { lost.push(link.peerId); return hold; },
+      ...over,
+    });
+    manager.listen();
+    let link: MixedPeerLink;
+    if (linkRole(selfId, peerId) === "initiator") link = await manager.ensure(peerId);
+    else {
+      const waiting = manager.ensure(peerId);
+      sig.inject(peerId, { link: true, sdp: { type: "offer", sdp: "v=0" } });
+      link = await waiting;
+    }
+    return {
+      sig, transport, manager, link, events, lost,
+      drop: (state: "failed" | "closed" = "failed") =>
+        transport.connect.mock.calls[0][0].onStateChange?.(state),
+      setHold(next: boolean) { hold = next; },
+    };
+  }
+
+  /** A rebuild seam that never resolves, so the interrupted state can be
+   *  observed without the driver immediately ending it. */
+  const stalled = () => rebuild({ gate: new Promise<void>(() => {}) });
+
+  /** An authenticated inbound rebuild offer for `link`. */
+  async function resumeOffer(link: MixedPeerLink, sdp = "rebuild", key = link.keys.resumeAuth) {
+    const offer: InboundSignal = { resume: true, sdp: { type: "offer", sdp } };
+    offer.auth = await signResume(key, authPayload(offer));
+    return offer;
+  }
+
+  it("holds the link, its SAS and its codecs when a lane owner asks for recovery", async () => {
+    const seam = stalled();
+    const { manager, link, events, lost, drop } = await linked({ resume: seam.resume });
+
+    drop("failed");
+
+    expect(manager.current).toBe(link);
+    expect(manager.status).toBe("interrupted");
+    expect(lost).toEqual(["b"]);
+    // No teardown was published: the lanes keep the link they already own.
+    expect(events).toEqual([{ status: "open", peerId: "b" }]);
+    // The dead connection is still released.
+    expect(link.conn.close).toHaveBeenCalledOnce();
+    manager.stop();
+  });
+
+  it.each<[string, Pick<PeerLinkDeps, "onTransportLost">]>([
+    ["a hook that declines", { onTransportLost: () => false }],
+    ["no hook at all", { onTransportLost: undefined }],
+    ["a hook that throws", { onTransportLost() { throw new Error("policy exploded"); } }],
+  ])("tears the link down exactly as before with %s", async (_name, over) => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { manager, link, events, drop } = await linked(over);
+
+    drop("failed");
+
+    expect(manager.current).toBeNull();
+    expect(manager.status).toBe("failed");
+    expect(link.conn.close).toHaveBeenCalledOnce();
+    expect(events).toEqual([
+      { status: "open", peerId: "b" },
+      { status: "failed", peerId: null },
+    ]);
+    errors.mockRestore();
+    manager.stop();
+  });
+
+  it("asks the policy once per dead transport, not once per callback", async () => {
+    const seam = stalled();
+    const { manager, lost, drop } = await linked({ resume: seam.resume });
+
+    // A dying PeerConnection reports failed and then closed; closing it here
+    // reports closed again. All of that is one gap.
+    drop("failed");
+    drop("closed");
+    drop("failed");
+
+    expect(lost).toEqual(["b"]);
+    expect(manager.status).toBe("interrupted");
+    manager.stop();
+  });
+
+  it("drives the rebuild from the initiator and republishes the same link identity", async () => {
+    const seam = rebuild();
+    const { manager, link, transport, drop } = await linked({ resume: seam.resume });
+
+    drop("failed");
+    await vi.waitFor(() => expect(manager.status).toBe("open"));
+
+    const next = manager.current!;
+    expect(next).not.toBe(link);
+    expect(next.keys).toBe(link.keys);
+    expect(next.sas).toBe(link.sas);
+    expect(next.role).toBe(link.role);
+    expect(next.fileSender).toBe(link.fileSender);
+    expect(next.fileReceiver).toBe(link.fileReceiver);
+    expect(next.textSender).toBe(link.textSender);
+    expect(next.textReceiver).toBe(link.textReceiver);
+    // No second commit-reveal, so no second SAS can exist.
+    expect(transport.connect).toHaveBeenCalledTimes(1);
+    expect(seam.resume).toHaveBeenCalledTimes(1);
+    expect(seam.calls[0].role).toBe("initiator");
+    manager.stop();
+  });
+
+  it("retries a failed rebuild attempt on a bounded backoff", async () => {
+    vi.useFakeTimers();
+    let attempts = 0;
+    const conns: Conn[] = [];
+    const resume = vi.fn(async (): Promise<Conn> => {
+      if (++attempts === 1) throw new Error("relayium: ICE went nowhere");
+      const { conn } = rebuiltConn();
+      conns.push(conn);
+      return conn;
+    });
+    const { manager, link, drop } = await linked({ resume });
+
+    drop("failed");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(attempts).toBe(1);
+    expect(manager.status).toBe("interrupted");
+
+    await vi.advanceTimersByTimeAsync(LINK_RECOVERY_RETRY_MS);
+    expect(attempts).toBe(2);
+    expect(manager.status).toBe("open");
+    expect(manager.current?.keys).toBe(link.keys);
+    manager.stop();
+  });
+
+  it("fails closed when the window expires, and rejects the joined intent", async () => {
+    vi.useFakeTimers();
+    const resume = vi.fn(async (): Promise<Conn> => { throw new Error("no route"); });
+    const { manager, link, events, drop } = await linked({ resume });
+
+    drop("failed");
+    const joined = manager.ensure("b");
+    const rejected = expect(joined).rejects.toBeInstanceOf(LinkRecoveryTimeoutError);
+    await vi.advanceTimersByTimeAsync(LINK_RECOVERY_WINDOW_MS);
+    await rejected;
+
+    expect(manager.current).toBeNull();
+    expect(manager.status).toBe("failed");
+    expect(events).toEqual([
+      { status: "open", peerId: "b" },
+      { status: "failed", peerId: null },
+    ]);
+    expect(link.conn.close).toHaveBeenCalled();
+    // Nothing keeps running after the window closed.
+    const attempts = resume.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(LINK_RECOVERY_WINDOW_MS);
+    expect(resume.mock.calls.length).toBe(attempts);
+    manager.stop();
+  });
+
+  it("never offers from the responder; it rebuilds from a verified inbound offer", async () => {
+    const seam = rebuild();
+    const { manager, link, sig, drop } = await linked({ resume: seam.resume }, "z", "a");
+    const beforeDrop = sig.sent.length;
+
+    drop("failed");
+    await tick();
+    // The larger peer id waits. It emits nothing at all, so two peers can never
+    // both offer a replacement and there is no rebuild glare to resolve.
+    expect(seam.resume).not.toHaveBeenCalled();
+    expect(sig.sent).toHaveLength(beforeDrop);
+
+    const offer = await resumeOffer(link);
+    sig.inject("a", offer);
+    await vi.waitFor(() => expect(manager.status).toBe("open"));
+    expect(seam.resume).toHaveBeenCalledTimes(1);
+    expect(seam.calls[0].initialSignal).toBe(offer);
+    expect(seam.calls[0].role).toBe("responder");
+    expect(manager.current?.keys).toBe(link.keys);
+    expect(manager.current?.sas).toBe(link.sas);
+    manager.stop();
+  });
+
+  it.each([
+    ["carries no auth tag", async (link: MixedPeerLink) => {
+      const offer = await resumeOffer(link);
+      delete offer.auth;
+      return offer;
+    }],
+    ["carries a non-string auth tag", async (link: MixedPeerLink) => ({
+      ...await resumeOffer(link), auth: 1 as unknown as string,
+    })],
+    ["is signed under another session's key", async () => {
+      const attacker = generateKeyPair();
+      const victim = generateKeyPair();
+      const foreign = await deriveSession("initiator", attacker, victim.publicKey);
+      const offer: InboundSignal = { resume: true, sdp: { type: "offer", sdp: "hijack" } };
+      offer.auth = await signResume(foreign.resumeAuth, authPayload(offer));
+      return offer;
+    }],
+    ["is signed over different bytes", async (link: MixedPeerLink) => {
+      const signed = await resumeOffer(link, "original");
+      return { ...signed, sdp: { type: "offer" as const, sdp: "swapped" } };
+    }],
+  ])("ignores a rebuild offer that %s", async (_name, build) => {
+    const seam = rebuild();
+    const { manager, link, sig, drop } = await linked({ resume: seam.resume }, "z", "a");
+    drop("failed");
+    const before = sig.sent.length;
+
+    sig.inject("a", await build(link));
+    await tick();
+
+    expect(seam.resume).not.toHaveBeenCalled();
+    expect(manager.status).toBe("interrupted");
+    expect(manager.current).toBe(link);
+    // Silent: answering would tell a signalling relay which peer holds a link.
+    expect(sig.sent).toHaveLength(before);
+    manager.stop();
+  });
+
+  it("ignores a rebuild offer from a peer that is not the link's", async () => {
+    const seam = rebuild();
+    const { manager, link, sig, drop } = await linked({ resume: seam.resume }, "z", "a");
+    drop("failed");
+
+    sig.inject("stranger", await resumeOffer(link));
+    await tick();
+
+    expect(seam.resume).not.toHaveBeenCalled();
+    expect(manager.status).toBe("interrupted");
+    manager.stop();
+  });
+
+  it("ignores a rebuild offer for a healthy link", async () => {
+    const seam = rebuild();
+    const { manager, link, sig } = await linked({ resume: seam.resume }, "z", "a");
+
+    // A signalling MITM cannot move a working link onto a transport it chose.
+    sig.inject("a", await resumeOffer(link));
+    await tick();
+
+    expect(seam.resume).not.toHaveBeenCalled();
+    expect(manager.status).toBe("open");
+    expect(manager.current).toBe(link);
+    manager.stop();
+  });
+
+  it("consumes at most one rebuild offer even when two arrive together", async () => {
+    const seam = rebuild();
+    const { manager, link, sig, drop } = await linked({ resume: seam.resume }, "z", "a");
+    drop("failed");
+
+    const first = await resumeOffer(link, "first");
+    const second = await resumeOffer(link, "second");
+    sig.inject("a", first);
+    sig.inject("a", second);
+    await vi.waitFor(() => expect(manager.status).toBe("open"));
+    await tick();
+
+    expect(seam.resume).toHaveBeenCalledTimes(1);
+    expect(seam.calls[0].initialSignal).toBe(first);
+    manager.stop();
+  });
+
+  it("closes a rebuild that lands after its window already expired", async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    const seam = rebuild({ gate: new Promise<void>((resolve) => { release = resolve; }) });
+    const { manager, events, drop } = await linked({ resume: seam.resume });
+
+    drop("failed");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(seam.resume).toHaveBeenCalledTimes(1);
+    expect(seam.calls[0].signal?.aborted).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(LINK_RECOVERY_WINDOW_MS);
+    expect(manager.current).toBeNull();
+    expect(seam.calls[0].signal?.aborted).toBe(true);
+
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(seam.conns[0].close).toHaveBeenCalledOnce();
+    expect(manager.current).toBeNull();
+    expect(events).toEqual([
+      { status: "open", peerId: "b" },
+      { status: "failed", peerId: null },
+    ]);
+    manager.stop();
+  });
+
+  it.each(["close", "stop"] as const)("cancels recovery and its timers on %s()", async (how) => {
+    vi.useFakeTimers();
+    const seam = stalled();
+    const { manager, link, events, drop } = await linked({ resume: seam.resume });
+    drop("failed");
+    const joined = manager.ensure("b");
+    const rejected = expect(joined).rejects.toThrow(/closed/);
+
+    manager[how]();
+    await rejected;
+
+    expect(manager.current).toBeNull();
+    expect(manager.status).toBe("idle");
+    expect(events).toEqual([
+      { status: "open", peerId: "b" },
+      { status: "idle", peerId: null },
+    ]);
+    expect(seam.calls[0].signal?.aborted).toBe(true);
+    // The window timer is gone: nothing publishes a second teardown later.
+    await vi.advanceTimersByTimeAsync(LINK_RECOVERY_WINDOW_MS * 2);
+    expect(events).toHaveLength(2);
+    expect(link.conn.close).toHaveBeenCalled();
+  });
+
+  it("resolves a mid-gap intent onto the rebuilt link, never onto a second one", async () => {
+    let release!: () => void;
+    const seam = rebuild({ gate: new Promise<void>((resolve) => { release = resolve; }) });
+    const { manager, link, transport, drop } = await linked({ resume: seam.resume });
+
+    drop("failed");
+    const joined = manager.ensure("b");
+    release();
+    const resolved = await joined;
+
+    expect(resolved).toBe(manager.current);
+    expect(resolved).not.toBe(link);
+    expect(resolved.sas).toBe(link.sas);
+    expect(resolved.keys).toBe(link.keys);
+    expect(resolved.fileSender).toBe(link.fileSender);
+    // One authentication step, one transport rebuild, no second connection.
+    expect(transport.connect).toHaveBeenCalledTimes(1);
+    expect(seam.resume).toHaveBeenCalledTimes(1);
+    manager.stop();
+  });
+
+  it("answers a fresh link offer with busy while interrupted", async () => {
+    const seam = stalled();
+    const { manager, link, sig, drop } = await linked({ resume: seam.resume }, "z", "a");
+    drop("failed");
+
+    sig.inject("a", { link: true, sdp: { type: "offer", sdp: "second-link" } });
+
+    expect(sig.sent.at(-1)).toEqual({ to: "a", data: { busy: true, link: true } });
+    expect(manager.current).toBe(link);
+    expect(manager.status).toBe("interrupted");
+    manager.stop();
+  });
+
+  it("keeps a retrying rebuild from invalidating a later establishment", async () => {
+    vi.useFakeTimers();
+    const resume = vi.fn(async (): Promise<Conn> => { throw new Error("no route"); });
+    const { manager, transport, drop } = await linked({ resume });
+
+    drop("failed");
+    await vi.advanceTimersByTimeAsync(LINK_RECOVERY_RETRY_MS * 3);
+    expect(resume.mock.calls.length).toBeGreaterThan(1);
+    await vi.advanceTimersByTimeAsync(LINK_RECOVERY_WINDOW_MS);
+    expect(manager.current).toBeNull();
+
+    const fresh = await manager.ensure("b");
+    expect(manager.current).toBe(fresh);
+    expect(manager.status).toBe("open");
+    expect(transport.connect).toHaveBeenCalledTimes(2);
+    manager.stop();
+  });
+
+  it("recovers again from a second gap on the rebuilt transport", async () => {
+    const seam = rebuild();
+    const { manager, link, lost, drop } = await linked({ resume: seam.resume });
+
+    drop("failed");
+    await vi.waitFor(() => expect(manager.status).toBe("open"));
+    // The replacement's own transport now dies. It is the current one, so this
+    // is a new gap — and the retired transport's callbacks stay inert.
+    seam.calls[0].onStateChange?.("failed");
+    expect(manager.status).toBe("interrupted");
+    drop("closed");
+    expect(manager.status).toBe("interrupted");
+    expect(lost).toEqual(["b", "b"]);
+
+    await vi.waitFor(() => expect(manager.status).toBe("open"));
+    expect(manager.current?.keys).toBe(link.keys);
+    expect(seam.resume).toHaveBeenCalledTimes(2);
     manager.stop();
   });
 });

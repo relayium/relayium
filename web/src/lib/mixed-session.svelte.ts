@@ -101,7 +101,9 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
   function armIdle() {
     clearIdle();
     if (!manager?.current) return;
-    const activeLane = file.active() || text.active();
+    // A held link has no transport under it, so an idle close would race the
+    // bounded recovery window for the same link — and win, silently.
+    const activeLane = file.active() || text.active() || manager.status === "interrupted";
     const remaining = Math.max(0, lastActivity + idleMs - now());
     // Pending consent and active work are leases in their own right. Recheck on
     // a bounded cadence; never close in the middle of either lane's state machine.
@@ -116,7 +118,7 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
   function onIdleTimer() {
     idleTimer = undefined;
     if (!manager.current) return;
-    if (file.active() || text.active()) {
+    if (manager.status === "interrupted" || file.active() || text.active()) {
       lastActivity = now();
       armIdle();
       return;
@@ -201,6 +203,32 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
     deps.onLinkState?.(link, _status);
   }
 
+  /**
+   * The link-level recovery policy: hold a dropped link only when a lane had
+   * work worth reconnecting for.
+   *
+   * Both lanes are suspended FIRST, unconditionally and idempotently, and only
+   * then asked whether they need recovery. That order is what makes this
+   * independent of browser callback ordering: `RTCDataChannel.onclose` may run a
+   * lane's own suspend before the PeerConnection reaches a terminal state, and
+   * after that the lane's public `active()` already reads terminal. Each lane
+   * therefore records its own intent at the instant it first enters the gap —
+   * whichever call gets there first — and this reads that recorded answer.
+   *
+   * An idle drop is deliberately NOT held: reconnecting one would silently keep
+   * a verification decision alive across a connection the user never saw
+   * re-established. It tears down exactly as before, and the next intent builds
+   * a fresh link with a fresh SAS.
+   */
+  function onTransportLost(): boolean {
+    file.suspend();
+    text.suspend();
+    // `path` is deliberately left as observed and `linkGeneration` is NOT bumped
+    // while held: this is the same authentication step on a new transport, not a
+    // new one, so the SAS must not be announced again.
+    return file.needsRecovery() || text.needsRecovery();
+  }
+
   const ensureLink = (peerId: string) => manager.ensure(peerId);
   file = createMixedFileSession({
     ensureLink,
@@ -219,6 +247,7 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
     connect: deps.connect,
     resume: deps.resume,
     onLinkChange,
+    onTransportLost,
   });
 
   function close(clearFileState: boolean) {
@@ -252,7 +281,8 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
     },
     active() {
       return manager.status === "requesting" || manager.status === "connecting"
-        || manager.status === "open" || file.active() || text.active();
+        || manager.status === "open" || manager.status === "interrupted"
+        || file.active() || text.active();
     },
     start() {
       if (listening) return;

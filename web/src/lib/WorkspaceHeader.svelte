@@ -36,7 +36,10 @@
   function stateText(m: Messages, s: LinkStatus): string {
     switch (s) {
       case "requesting": return m.workspace.stateRequesting;
-      case "connecting": return m.workspace.stateConnecting;
+      // A held link is rebuilding its transport under the SAME authentication
+      // step, so it must not read as a new connection or as a failure. A state
+      // of its own is stage-4 work; reusing this string adds no locale churn.
+      case "connecting": case "interrupted": return m.workspace.stateConnecting;
       case "open": return m.workspace.stateOpen;
       case "failed": return m.workspace.stateFailed;
       default: return m.workspace.stateIdle;

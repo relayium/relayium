@@ -895,3 +895,122 @@ describe("mixed text session", () => {
     expect(file.readyState).toBe("open");
   });
 });
+
+// Text is the lane that cannot repair a sequence gap: it has no forward-only
+// nonce and no sender-announced resume point. So a transport gap here must end
+// the conversation, keep the transcript, and stay fail-closed about any frame it
+// cannot account for — even though the link itself now survives.
+describe("mixed text session transport gaps", () => {
+  it("ends an open conversation, keeps the transcript, and permits a later one", async () => {
+    const { session, link, text, peerKeys, flush } = await harness();
+    session.attach(link);
+    text.dispatch(TEXT_REQUEST);
+    session.accept();
+    await flush();
+    const peer = new TextSender();
+    text.dispatch(await peer.frame("before the drop", peerKeys.textSend));
+    await flush();
+    expect(session.status).toBe("open");
+    const sentBefore = text.sent.length;
+
+    session.suspend();
+
+    expect(session.status).toBe("ended");
+    expect(session.history.at(-1)).toMatchObject({ body: "before the drop" });
+    expect(session.needsRecovery()).toBe(true);
+    // Nothing is announced across a transport that is already gone.
+    expect(text.sent).toHaveLength(sentBefore);
+    expect(text.readyState).toBe("open");
+
+    // A replacement transport reopens the lane with the same codecs.
+    const next = fakeChannel();
+    const rebuilt = { ...link, textChannel: next as unknown as RTCDataChannel };
+    session.attach(rebuilt);
+    expect(session.needsRecovery()).toBe(false);
+    expect(session.history.at(-1)).toMatchObject({ body: "before the drop" });
+    next.dispatch(TEXT_REQUEST);
+    expect(session.status).toBe("incomingRequest");
+  });
+
+  it("is idempotent, and a double entry is one gap", async () => {
+    const { session, link, text } = await harness();
+    session.attach(link);
+    text.dispatch(TEXT_REQUEST);
+    session.accept();
+    await Promise.resolve();
+
+    session.suspend();
+    const status = session.status;
+    session.suspend();
+    text.onclose?.(); // the real callback, after the coordinator already suspended
+
+    expect(session.status).toBe(status);
+    expect(session.needsRecovery()).toBe(true);
+  });
+
+  it("claims no recovery for an idle lane", async () => {
+    const { session, link } = await harness();
+    session.attach(link);
+
+    session.suspend();
+
+    expect(session.needsRecovery()).toBe(false);
+    expect(session.status).toBe("idle");
+  });
+
+  it("poisons the text codecs when protected bytes were still buffered", async () => {
+    const { session, link, text, file, flush } = await harness();
+    session.attach(link);
+    text.dispatch(TEXT_REQUEST);
+    session.accept();
+    await flush();
+    await session.send("may never have left");
+    await flush();
+    // DataChannel.send() only enqueues; this side cannot prove the peer saw it.
+    text.bufferedAmount = 64;
+
+    session.suspend();
+
+    expect(session.status).toBe("failed");
+    expect(session.errorKey).toBe("failed");
+    // The poison is keyed on the codecs, so it survives the replacement.
+    const next = fakeChannel();
+    session.attach({ ...link, textChannel: next as unknown as RTCDataChannel });
+    expect(session.status).toBe("failed");
+    next.dispatch(TEXT_REQUEST);
+    expect(session.status).toBe("failed");
+    expect(next.sent).toHaveLength(0);
+    // The independent file lane is untouched by any of it.
+    expect(file.readyState).toBe("open");
+  });
+
+  it("poisons the text codecs when an admitted frame was never fed", async () => {
+    let releaseFeed!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseFeed = resolve; });
+    const { session, link, text, file, peerKeys, flush } = await harness();
+    session.attach(link);
+    text.dispatch(TEXT_REQUEST);
+    session.accept();
+    await flush();
+    const original = link.textReceiver.feed.bind(link.textReceiver);
+    vi.spyOn(link.textReceiver, "feed").mockImplementation(async (...args) => {
+      await gate;
+      return original(...args);
+    });
+    const peer = new TextSender();
+    text.dispatch(await peer.frame("first", peerKeys.textSend));
+    text.dispatch(await peer.frame("admitted but unfed", peerKeys.textSend));
+    await Promise.resolve();
+
+    session.suspend();
+    releaseFeed();
+    await flush();
+
+    const next = fakeChannel();
+    session.attach({ ...link, textChannel: next as unknown as RTCDataChannel });
+    expect(session.status).toBe("failed");
+    next.dispatch(TEXT_REQUEST);
+    expect(session.status).toBe("failed");
+    expect(file.readyState).toBe("open");
+  });
+});

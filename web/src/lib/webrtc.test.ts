@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { connect, connectLink, connectResume, connectResumeLink, connectText, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, LINK_CAPTURE_MAX_BYTES, LINK_CHANNEL_LABELS, type InboundSignal } from "./webrtc";
+import { connect, connectLink, connectResume, connectResumeLink, connectText, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, LINK_CAPTURE_MAX_BYTES, LINK_CHANNEL_LABELS, authPayload as reExportedAuthPayload, type InboundSignal } from "./webrtc";
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, deriveSession, signResume, verifyResume, type SessionKeys } from "./crypto";
 import { sas } from "./crypto";
@@ -1049,5 +1049,14 @@ describe("signalling generations", () => {
     await flush();
     expect(hub.sent.R.length).toBe(0);
     rP.catch(() => {});
+  });
+});
+
+describe("resume signal authentication surface", () => {
+  it("re-exports the one authPayload, so a verifier cannot re-derive the bytes", () => {
+    // A caller that pre-verifies an inbound resume offer has to cover EXACTLY the
+    // bytes the connection primitive will sign. Sharing the function, rather than
+    // the field list, is what makes that structural instead of a convention.
+    expect(reExportedAuthPayload).toBe(authPayload);
   });
 });

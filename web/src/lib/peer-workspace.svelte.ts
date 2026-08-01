@@ -125,6 +125,9 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
         && !isSuppressed(peerId);
     },
     connect: deps.connect,
+    // Forwarded for the same reason `connect` is: a transport rebuild is now
+    // actually triggered, so the seam has to reach the manager that drives it.
+    resume: deps.resume,
     pickSaveTarget: deps.pickSaveTarget,
     requestNotify: deps.requestNotify,
     now,

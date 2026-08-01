@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { generateKeyPair, ready } from "./crypto";
-import { createMixedSession } from "./mixed-session.svelte";
+import { createMixedSession, type MixedSessionDeps } from "./mixed-session.svelte";
 import { TEXT_REQUEST } from "./text-wire";
 import type { SignalingClient } from "./signaling";
 import type { Conn, InboundSignal } from "./webrtc";
@@ -273,5 +273,245 @@ describe("mixed session coordinator", () => {
     expect(link.fileChannel.onmessage).toBeNull();
     expect(link.textChannel.onmessage).toBeNull();
     expect(h.conns[0].close).toHaveBeenCalledOnce();
+  });
+});
+
+// The coordinator owns exactly one recovery decision: is this dropped transport
+// worth holding a link for? Everything here is about making that decision
+// independent of the order in which the browser reports the drop.
+describe("mixed session transport recovery", () => {
+  /** A replacement transport with fresh channels, shaped like connectResumeLink's. */
+  function rebuiltTransport() {
+    const file = channel("relayium");
+    const text = channel("relayium-text");
+    const conn: Conn = {
+      channel: file,
+      getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
+      close: vi.fn(),
+      path: async () => "p2p",
+      stats: async () => new Map() as unknown as RTCStatsReport,
+    };
+    return { conn, file, text };
+  }
+
+  function session(opts: { resume?: MixedSessionDeps["resume"] } = {}) {
+    const h = harness();
+    const mixed = createMixedSession({
+      selfId: () => "a",
+      signaling: () => h.signaling,
+      rtcConfig: () => ({ iceServers: [] }),
+      supportsLink: () => true,
+      connect: h.connect,
+      resume: opts.resume,
+    });
+    return {
+      h, mixed,
+      drop: (state: "failed" | "closed" = "failed") =>
+        h.connect.mock.calls[0][0].onStateChange?.(state),
+    };
+  }
+
+  /** A rebuild seam that never resolves, so the held state can be observed. */
+  const stalledResume = () =>
+    vi.fn((_opts: { signal?: AbortSignal }) => new Promise<Conn>(() => {}));
+
+  const picked = (name: string, body: string) => [{ file: new File([body], name) }];
+
+  async function inFlightBatch(mixed: ReturnType<typeof createMixedSession>) {
+    mixed.file.enqueue("b", picked("held.txt", "payload"));
+    await vi.waitFor(() => expect(mixed.file.send?.status).toBe("waitingAccept"));
+  }
+
+  it.each([
+    ["the data channels close first", "channel" as const],
+    ["the peer connection goes terminal first", "pc" as const],
+  ])("holds a link with lane work in flight when %s", async (_name, order) => {
+    const { h, mixed, drop } = session({ resume: stalledResume() });
+    const link = await mixed.ensure("b");
+    await inFlightBatch(mixed);
+    const generation = mixed.linkGeneration;
+
+    // RTCDataChannel.onclose may run a lane's own suspend before the
+    // RTCPeerConnection reaches a terminal state. After that suspend the lane's
+    // public active() already reads terminal, so a coordinator that sampled it
+    // there would tear down a link that was mid-transfer.
+    if (order === "channel") {
+      link.fileChannel.onclose?.(new Event("close"));
+      link.textChannel.onclose?.(new Event("close"));
+    }
+    drop("failed");
+    if (order === "pc") {
+      link.fileChannel.onclose?.(new Event("close"));
+      link.textChannel.onclose?.(new Event("close"));
+    }
+
+    expect(mixed.status).toBe("interrupted");
+    expect(mixed.link).toBe(link);
+    expect(mixed.sasCode).toBe(link.sas);
+    // Same authentication step: nothing re-announces the SAS while held.
+    expect(mixed.linkGeneration).toBe(generation);
+    // The interrupted batch fails visibly rather than hanging.
+    expect(mixed.file.send?.status).toBe("sendFail");
+    expect(mixed.file.send?.done).toBe(true);
+    expect(h.conns[0].close).toHaveBeenCalled();
+    mixed.stop();
+  });
+
+  it.each([
+    ["the data channels close first", "channel" as const],
+    ["the peer connection goes terminal first", "pc" as const],
+  ])("still tears an idle link down when %s", async (_name, order) => {
+    const { h, mixed, drop } = session({ resume: stalledResume() });
+    const link = await mixed.ensure("b");
+
+    if (order === "channel") {
+      link.fileChannel.onclose?.(new Event("close"));
+      link.textChannel.onclose?.(new Event("close"));
+    }
+    drop("failed");
+    if (order === "pc") {
+      link.fileChannel.onclose?.(new Event("close"));
+      link.textChannel.onclose?.(new Event("close"));
+    }
+
+    expect(mixed.status).toBe("failed");
+    expect(mixed.link).toBeNull();
+    expect(mixed.file.link).toBeNull();
+    expect(mixed.text.link).toBeNull();
+    expect(mixed.path).toBeNull();
+    expect(h.conns[0].close).toHaveBeenCalledOnce();
+    mixed.stop();
+  });
+
+  it("holds a link whose only work is a queued file batch", async () => {
+    const { mixed, drop } = session({ resume: stalledResume() });
+    await mixed.ensure("b");
+    await inFlightBatch(mixed);
+    mixed.file.enqueue("b", picked("queued.txt", "later"));
+    expect(mixed.file.queued).toHaveLength(1);
+
+    drop("failed");
+
+    expect(mixed.status).toBe("interrupted");
+    expect(mixed.file.queued).toHaveLength(1);
+    mixed.stop();
+  });
+
+  it("holds a link whose only work is an open text conversation", async () => {
+    const { mixed, drop } = session({ resume: stalledResume() });
+    const link = await mixed.ensure("b");
+    link.textChannel.onmessage?.({ data: TEXT_REQUEST.buffer.slice(0) } as MessageEvent);
+    expect(mixed.text.status).toBe("incomingRequest");
+    mixed.text.accept();
+    await flush();
+
+    drop("failed");
+
+    expect(mixed.status).toBe("interrupted");
+    // A gap ends the conversation visibly and keeps the transcript.
+    expect(mixed.text.status).toBe("ended");
+    mixed.stop();
+  });
+
+  it("re-owns both lanes on the rebuilt transport and leaves the old ones silent", async () => {
+    const rebuilt = rebuiltTransport();
+    const { h, mixed, drop } = session({ resume: vi.fn(async () => rebuilt.conn) });
+    const link = await mixed.ensure("b");
+    await inFlightBatch(mixed);
+    const generation = mixed.linkGeneration;
+
+    drop("failed");
+    await vi.waitFor(() => expect(mixed.status).toBe("open"));
+
+    const next = mixed.link!;
+    expect(next).not.toBe(link);
+    expect(mixed.file.link).toBe(next);
+    expect(mixed.text.link).toBe(next);
+    expect(next.sas).toBe(link.sas);
+    expect(mixed.sasCode).toBe(link.sas);
+    expect(next.keys).toBe(link.keys);
+    expect(next.fileSender).toBe(link.fileSender);
+    expect(next.fileReceiver).toBe(link.fileReceiver);
+    expect(next.textSender).toBe(link.textSender);
+    expect(next.textReceiver).toBe(link.textReceiver);
+    expect(next.fileChannel.onmessage).toBeTypeOf("function");
+    expect(next.textChannel.onmessage).toBeTypeOf("function");
+    expect(link.fileChannel.onmessage).toBeNull();
+    expect(link.textChannel.onmessage).toBeNull();
+    // A completed replacement IS a publish, so the identity counter moves.
+    expect(mixed.linkGeneration).toBeGreaterThan(generation);
+    await flush();
+    expect(mixed.path).toBe("p2p");
+    expect(h.conns[0].close).toHaveBeenCalled();
+    mixed.stop();
+  });
+
+  it("launches a batch enqueued during the gap only after recovery", async () => {
+    let release!: (conn: Conn) => void;
+    const gate = new Promise<Conn>((resolve) => { release = resolve; });
+    const rebuilt = rebuiltTransport();
+    const { mixed, drop } = session({ resume: vi.fn(() => gate) });
+    await mixed.ensure("b");
+    await inFlightBatch(mixed);
+
+    drop("failed");
+    expect(mixed.status).toBe("interrupted");
+    mixed.file.enqueue("b", picked("after-gap.txt", "queued mid gap"));
+    await flush();
+    // Nothing may enter a transport that does not exist.
+    expect(mixed.file.queued).toHaveLength(1);
+    expect((rebuilt.file as unknown as { send: ReturnType<typeof vi.fn> }).send).not.toHaveBeenCalled();
+
+    release(rebuilt.conn);
+    await vi.waitFor(() => expect(mixed.file.queued).toHaveLength(0));
+    await vi.waitFor(() =>
+      expect((rebuilt.file as unknown as { send: ReturnType<typeof vi.fn> }).send).toHaveBeenCalled());
+    mixed.stop();
+  });
+
+  it("cancels recovery on explicit disconnect and closes everything once", async () => {
+    const resume = stalledResume();
+    const { h, mixed, drop } = session({ resume });
+    const link = await mixed.ensure("b");
+    await inFlightBatch(mixed);
+
+    drop("failed");
+    expect(mixed.status).toBe("interrupted");
+    mixed.disconnect();
+
+    expect(mixed.status).toBe("idle");
+    expect(mixed.link).toBeNull();
+    expect(mixed.file.link).toBeNull();
+    expect(mixed.text.link).toBeNull();
+    expect(link.fileChannel.onmessage).toBeNull();
+    expect(link.textChannel.onmessage).toBeNull();
+    expect(h.conns[0].close).toHaveBeenCalled();
+    expect(resume.mock.calls[0][0].signal?.aborted).toBe(true);
+  });
+
+  it("never lets the idle timer close an interrupted link", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const h = harness();
+    const mixed = createMixedSession({
+      selfId: () => "a",
+      signaling: () => h.signaling,
+      rtcConfig: () => ({ iceServers: [] }),
+      supportsLink: () => true,
+      connect: h.connect,
+      resume: stalledResume(),
+      idleMs: 1_000,
+    });
+    const link = await mixed.ensure("b");
+    await inFlightBatch(mixed);
+    h.connect.mock.calls[0][0].onStateChange?.("failed");
+    expect(mixed.status).toBe("interrupted");
+
+    // The link is current but has no transport; an idle close here would win a
+    // race against the bounded recovery window, silently.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(mixed.link).toBe(link);
+    expect(mixed.status).toBe("interrupted");
+    mixed.stop();
   });
 });

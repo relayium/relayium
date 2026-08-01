@@ -48,6 +48,17 @@ export interface MixedTextSession {
   readonly link: MixedPeerLink | null;
   attach(link: MixedPeerLink): void;
   detach(): void;
+  /** Enter a transport gap. Ends an open conversation visibly, keeps the
+   *  transcript, replays nothing, and applies the text lane's stricter poison
+   *  rules — a protected frame buffered at close or admitted but never fed
+   *  leaves this side unable to prove its sequence, and text has neither a
+   *  forward-only nonce nor a sender-announced resume point to repair it with.
+   *  Idempotent: the coordinator's call and a real `onclose` are one gap. */
+  suspend(): void;
+  /** Did this lane have a live conversation when its channel first entered a
+   *  gap? Recorded inside `suspend()`, because after it the public status is
+   *  already terminal. See MixedFileSession.needsRecovery. */
+  needsRecovery(): boolean;
   openWith(peerId: string): Promise<void>;
   accept(): void;
   reject(): void;
@@ -97,6 +108,8 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
   // to preserve the link-owned sender nonce, but is recorded as failed.
   let outboundEpoch = 0;
   let protectedTransportPending = false;
+  let suspended = false;
+  let recoveryIntent = false;
   const poisonedCodecs = new WeakSet<object>();
   let sendChainOwner: object | null = null;
   let recvChainOwner: object | null = null;
@@ -200,6 +213,24 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
     if (link.textChannel.onclose === closeHandler) link.textChannel.onclose = null;
     messageHandler = null;
     closeHandler = null;
+  }
+
+  /** See MixedTextSession.suspend. */
+  function suspend() {
+    const expectedLink = link;
+    if (!expectedLink || suspended) return;
+    suspended = true;
+    // Sampled before anything below moves status to `ended` or `failed`.
+    recoveryIntent = recoveryIntent || active();
+    if (protectedTransportPending && expectedLink.textChannel.bufferedAmount > 0) {
+      // DataChannel.send() only enqueues. If bytes remain buffered at close,
+      // the sender nonce may have advanced without the peer seeing the frame.
+      markFailed(status === "failed" && errorKey ? errorKey : "failed", expectedLink);
+    }
+    attempt++;
+    generation++;
+    if (!poisoned(expectedLink)) markTransportInterrupted(expectedLink);
+    detachHandlers();
   }
 
   function enqueueControl(
@@ -449,6 +480,9 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
       : "idle";
     errorKey = "";
     transportInterrupted = false;
+    suspended = false;
+    // A replacement transport answers the question the marker recorded.
+    recoveryIntent = false;
     if (previousSender !== next.textSender) sendChain = Promise.resolve();
     if (previousReceiver !== next.textReceiver) recvChain = Promise.resolve();
     sendChainOwner = next.textSender;
@@ -484,18 +518,8 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
     };
     closeHandler = () => {
       if (link !== next || generation !== attachedGeneration) return;
-      if (protectedTransportPending && next.textChannel.bufferedAmount > 0) {
-        // DataChannel.send() only enqueues. If bytes remain buffered at close,
-        // the sender nonce may have advanced without the peer seeing the frame.
-        markFailed(status === "failed" && errorKey ? errorKey : "failed", next);
-      }
-      attempt++;
-      generation++;
-      if (!poisoned(next)) markTransportInterrupted(next);
-      next.textChannel.onmessage = null;
-      next.textChannel.onclose = null;
-      messageHandler = null;
-      closeHandler = null;
+      // Either callback order reaches the same idempotent gap entry.
+      suspend();
     };
     next.textChannel.onmessage = messageHandler;
     next.textChannel.onclose = closeHandler;
@@ -598,6 +622,8 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
     get errorKey() { return errorKey; },
     get link() { return link; },
     attach,
+    suspend,
+    needsRecovery() { return recoveryIntent; },
     detach() {
       attempt++;
       generation++;
@@ -609,6 +635,8 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
       lateAcceptBudget = null;
       link = null;
       sasCode = "";
+      suspended = false;
+      recoveryIntent = false;
       if (active()) status = "ended";
     },
     openWith,

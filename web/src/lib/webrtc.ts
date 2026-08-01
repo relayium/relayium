@@ -10,7 +10,10 @@ import { classifyPath } from "./webrtc-core";
 import type { Conn, ConnPath, Generation, InboundSignal, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
 
 // 传输层的类型/工具从这里再导出：调用方只认 "./webrtc" 这一个入口，拆分是内部事。
-export { DEFAULT_ICE, PeerBusyError, classifyPath, signalGeneration } from "./webrtc-core";
+// authPayload is re-exported so a caller that owns a session's keys can verify an
+// inbound resume signal BEFORE handing it to a connection primitive — the exact
+// bytes a tag covers must come from one place, never be re-derived at a call site.
+export { DEFAULT_ICE, PeerBusyError, authPayload, classifyPath, signalGeneration } from "./webrtc-core";
 export type { Conn, ConnPath, Generation, InboundSignal, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
 
 /** What this build advertises to its peers. A list rather than a flag so a later

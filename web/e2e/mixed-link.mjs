@@ -501,7 +501,12 @@ async function mixedScenario(browser) {
   }
 
   await a.evaluate(`(() => { document.querySelector('${HEAD} .wh-disconnect').click(); return true; })()`);
-  await b.waitFor(`!document.querySelector('${HEAD}')`, "the link under the pending consent to die", 90_000);
+  // 这一步现在**很慢**，而且必须慢：B 手上挂着一张待决同意卡 = 该链路有活儿，所以
+  // 传输一断 B 会把链路**留住**（status=interrupted）并等一个永远不会来的重建 offer
+  // ——A 是显式断开的，它不会再发。等到 LINK_RECOVERY_WINDOW_MS(90s) 走完，B 才
+  // 失败关闭。把这个超时调回 90s 会变成一场必现的竞态，不是把测试变快。
+  // 顺带地，这一等也是"留住的链路确实有界、确实会自己收干净"在真浏览器里的唯一验证。
+  await b.waitFor(`!document.querySelector('${HEAD}')`, "the held link to time out and die", 150_000);
   await b.waitFor("!document.querySelector('.request')", "the pending consent to die with its link");
 
   // 同一个对端、同一条通道 → 第二条链路会算出**同一个** reveal 键。
