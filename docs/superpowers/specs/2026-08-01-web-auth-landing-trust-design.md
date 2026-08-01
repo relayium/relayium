@@ -1,7 +1,7 @@
 # Web authentication landing trust surfaces — batch 8
 
 Date: 2026-08-01
-Status: locally validated; awaiting production rollout verification.
+Status: production validated at `e82c65249c25b719a11e7db2fe81b864760f6ccc`.
 Scope owner: `/magic-link`, `/verify-email`, and `/reset-password` presentation,
 semantics, private-route head consistency, localization, and regression coverage;
 the same private-head correction also covers the existing `/me` and `/d/*` routes.
@@ -97,8 +97,7 @@ The emailed-token routes are also repeated in the generic and Bingbot
 
 ## Local validation evidence
 
-- Vitest: 117 files passed, 1 skipped; 1,225 tests passed, 1 skipped before the
-  crawler-policy assertion was added, followed by focused/full revalidation.
+- Vitest: 117 files passed, 1 skipped; 1,226 tests passed, 1 skipped.
 - `svelte-check` and TypeScript: zero errors and zero warnings.
 - Isolated full browser E2E: passed auth landings, nine locales, private metadata,
   file transfer/resume, text transfer, and old-peer capability compatibility.
@@ -107,6 +106,11 @@ The emailed-token routes are also repeated in the generic and Bingbot
 - Claude Opus independently inspected the implementation and security boundaries;
   its useful late findings (redirect-timer teardown and the missing Magic Link
   crawler disallow) were incorporated before delivery.
+- Production served exact assets `index-tKMTH6yd.js`, `index-Cpt-MCF4.css`,
+  `AuthLanding-ED16MFNy.js`, `MagicLink-B_91i3hZ.js`,
+  `VerifyEmail-B70VwT76.js`, and `ResetPassword-BBLCS63h.js`. Fresh Chrome
+  confirmed token scrubbing without auth POST, private metadata, visible labels,
+  nine-locale 320px geometry, dark Arabic RTL, and public-head restoration.
 
 ## Explicit non-goals
 
