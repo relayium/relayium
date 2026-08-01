@@ -300,6 +300,7 @@ const pt: Messages = {
     privacyBody: "Os dados e a configuração que você envia só podem ser usados por você. Prometemos — e reforçamos isso na engenharia — que ninguém mais pode acessar ou usar seus dados ou a configuração do seu nó.",
   },
   verifyEmail: {
+    title: "Verifique seu e-mail",
     confirmPrompt: "Digite a senha que você escolheu para verificar sua conta.",
     confirmBtn: "Verificar conta",
     noPasswordLink: "Cadastrei-me sem senha",
@@ -310,6 +311,8 @@ const pt: Messages = {
     backHome: "Voltar ao início",
   },
   resetPassword: {
+    title: "Redefina sua senha",
+    lead: "Escolha uma nova senha para sua conta Relayium.",
     noToken: "Este link é inválido.",
     minHint: "Pelo menos 8 caracteres",
     submitBtn: "Redefinir senha",
@@ -319,7 +322,7 @@ const pt: Messages = {
     backHome: "Voltar ao início",
   },
   magicLink: {
-    title: "Entrar no Relayium",
+    title: "Entrar",
     lead: "Você abriu seu link de acesso. Confirme abaixo para concluir o login neste dispositivo.",
     cta: "Entrar",
     working: "Entrando…",
@@ -542,6 +545,7 @@ const pt: Messages = {
     bigNote: "Estes arquivos são grandes: se quem recebe abrir o link no celular, ou no Firefox ou Safari, o navegador precisa manter o arquivo inteiro na memória e o download pode falhar. Recomende o Chrome/Edge em um computador, ou a ferramenta de linha de comando.",
   },
   download: {
+    title: "Link de download criptografado",
     loading: "Lendo o link…",
     files: "Arquivos para baixar",
     summary: (c, s) => `${c} arquivo${c === 1 ? "" : "s"} · ${s} no total`,

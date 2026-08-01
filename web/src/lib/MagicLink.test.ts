@@ -35,6 +35,10 @@ describe("MagicLink 页面", () => {
     const { app } = render();
     await new Promise((r) => setTimeout(r, 20));
     expect(fetchMock, "页面一加载就消费了令牌").not.toHaveBeenCalled();
+    expect(document.querySelectorAll("h1")).toHaveLength(1);
+    expect(document.querySelector("h1")?.textContent).toBe("Sign in");
+    expect(document.querySelector(".auth-card")?.classList.contains("ui-card")).toBe(true);
+    expect(document.querySelector(".auth-card")?.classList.contains("ui-stack")).toBe(true);
     unmount(app);
   });
 

@@ -3,27 +3,29 @@
   // On success the server has already set the session cookie (verifyEmail's
   // postForUser updates auth.svelte's session store too), so this page just
   // shows a brief confirmation and hands off to the app home.
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { verifyEmail, resendVerification } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate } from "./router.svelte";
+  import AuthLanding from "./AuthLanding.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
 
-  type Phase = "confirm" | "checking" | "success" | "no-token" | "invalid";
-  let phase = $state<Phase>("checking");
+  type Phase = "boot" | "confirm" | "checking" | "success" | "no-token" | "invalid";
+  let phase = $state<Phase>("boot");
   // The token is kept out of the URL (stripped on mount) and confirmed with the
   // password the user chose at signup — proving they set it so the server keeps
   // it, rather than a victim's click activating an attacker's password.
   let token = $state("");
   let password = $state("");
+  let redirectTimer: ReturnType<typeof setTimeout> | undefined;
 
   async function runVerify() {
     phase = "checking";
     const res = await verifyEmail(token, password);
     if (res.ok) {
       phase = "success";
-      setTimeout(() => navigate("lan"), 1200);
+      redirectTimer = setTimeout(() => navigate("lan"), 1200);
     } else {
       phase = "invalid";
     }
@@ -35,6 +37,19 @@
   let resendEmail = $state("");
   let resendDisabled = $state(false);
   let resendAck = $state(false);
+  let resendTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const status = $derived(
+    phase === "confirm" ? t.verifyEmail.confirmPrompt
+      : phase === "checking" ? t.verifyEmail.checking
+      : phase === "success" ? t.verifyEmail.successBody
+      : phase === "no-token" ? t.verifyEmail.noToken
+      : phase === "invalid" ? t.verifyEmail.invalidTitle
+      : "",
+  );
+  const tone = $derived<"neutral" | "success" | "danger">(
+    phase === "success" ? "success" : phase === "invalid" || phase === "no-token" ? "danger" : "neutral",
+  );
 
   async function onResend() {
     if (resendDisabled || !resendEmail) return;
@@ -43,7 +58,7 @@
     try {
       await resendVerification(resendEmail);
     } finally {
-      setTimeout(() => { resendDisabled = false; }, 30_000);
+      resendTimer = setTimeout(() => { resendDisabled = false; }, 30_000);
     }
   }
 
@@ -58,84 +73,51 @@
     // auto-verifying — see the token/password rationale above.
     phase = "confirm";
   });
+
+  onDestroy(() => {
+    if (resendTimer) clearTimeout(resendTimer);
+    if (redirectTimer) clearTimeout(redirectTimer);
+  });
 </script>
 
-<section class="verify page-enter">
+<AuthLanding title={t.verifyEmail.title} {status} {tone}>
   {#if phase === "confirm"}
-    <p class="msg">{t.verifyEmail.confirmPrompt}</p>
-    <form class="confirm" onsubmit={(e) => { e.preventDefault(); runVerify(); }}>
-      <input type="password" name="password" autocomplete="current-password"
-             bind:value={password} placeholder={t.account.password} />
-      <button type="submit" class="btn btn-primary">{t.verifyEmail.confirmBtn}</button>
+    <form class="auth-form" onsubmit={(e) => { e.preventDefault(); runVerify(); }}>
+      <div class="ui-field">
+        <label for="verify-password">{t.account.password}</label>
+        <input class="ui-input" id="verify-password" type="password" name="password" autocomplete="current-password"
+               bind:value={password} />
+      </div>
+      <button type="submit" class="btn btn-primary auth-action">{t.verifyEmail.confirmBtn}</button>
     </form>
-    <button type="button" class="btn-link" onclick={() => runVerify()}>{t.verifyEmail.noPasswordLink}</button>
-  {:else if phase === "checking"}
-    <p class="msg">{t.verifyEmail.checking}</p>
-  {:else if phase === "success"}
-    <p class="msg">{t.verifyEmail.successBody}</p>
+    <button type="button" class="btn btn-link auth-link" onclick={() => runVerify()}>{t.verifyEmail.noPasswordLink}</button>
   {:else if phase === "no-token"}
-    <p class="msg err">{t.verifyEmail.noToken}</p>
-    <button type="button" class="btn-link" onclick={() => navigate("lan")}>{t.verifyEmail.backHome}</button>
-  {:else}
-    <p class="msg err">{t.verifyEmail.invalidTitle}</p>
+    <button type="button" class="btn btn-ghost auth-action" onclick={() => navigate("lan")}>{t.verifyEmail.backHome}</button>
+  {:else if phase === "invalid"}
     <p class="hint">{t.account.checkSpamHint}</p>
-    <form class="resend" onsubmit={(e) => { e.preventDefault(); onResend(); }}>
-      <input type="email" name="email" autocomplete="username" bind:value={resendEmail} placeholder={t.account.email} />
-      {#if resendAck}<p class="hint">{t.account.resendVerificationSent}</p>{/if}
-      <button type="submit" class="btn btn-primary" disabled={resendDisabled || !resendEmail}>
+    <form class="auth-form" onsubmit={(e) => { e.preventDefault(); onResend(); }}>
+      <div class="ui-field">
+        <label for="resend-email">{t.account.email}</label>
+        <input class="ui-input" id="resend-email" type="email" name="email" autocomplete="username" bind:value={resendEmail} />
+      </div>
+      {#if resendAck}<p class="hint" role="status">{t.account.resendVerificationSent}</p>{/if}
+      <button type="submit" class="btn btn-primary auth-action" disabled={resendDisabled || !resendEmail}>
         {t.account.resendVerificationBtn}
       </button>
     </form>
-    <button type="button" class="btn-link" onclick={() => navigate("lan")}>{t.verifyEmail.backHome}</button>
+    <button type="button" class="btn btn-link auth-link" onclick={() => navigate("lan")}>{t.verifyEmail.backHome}</button>
   {/if}
-</section>
+</AuthLanding>
 
 <style>
-  .verify {
-    max-width: 420px;
-    margin: var(--space-8) auto;
-    padding: var(--space-6) var(--space-5);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    align-items: center;
-  }
-  .msg { color: var(--text-h); font-size: var(--fs-body); margin: 0; }
-  .msg.err { color: var(--danger); }
-  .resend, .confirm {
+  .auth-form {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
     width: 100%;
   }
-  .confirm input {
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    font: inherit;
-    background: var(--social-bg);
-    color: var(--text-h);
-  }
-  .resend input {
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    font: inherit;
-    background: var(--social-bg);
-    color: var(--text-h);
-  }
-  .hint { color: var(--text); font-size: var(--fs-xs); margin: 0; }
-  .btn-link {
-    font: inherit;
-    font-size: var(--fs-xs);
-    background: none;
-    border: 0;
-    color: var(--accent);
-    cursor: pointer;
-    padding: var(--space-1) 0;
-  }
+  .hint { color: var(--text); font-size: var(--fs-xs); margin: 0 0 var(--space-3); line-height: 1.5; }
+  .auth-action { inline-size: 100%; }
+  .auth-link { margin-block-start: var(--space-2); }
+  @media (pointer: coarse) { .auth-action, .auth-link { min-block-size: 44px; } }
 </style>

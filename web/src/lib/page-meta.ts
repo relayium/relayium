@@ -2,16 +2,20 @@ import type { Route } from "./router.svelte";
 import { CROSS_PATH, OFFLINE_PATH, PRICING_PATH, APPS_PATH, CLI_PATH } from "./router.svelte";
 import type { Messages } from "./i18n/types";
 
-// pageMeta returns the per-route <title> + <meta description> + canonical path.
-// Only the two cross-network product modes get bespoke copy; every other route
-// uses the default home title/description. canonicalPath lets the SPA point its
-// <link rel=canonical>/og:url at the route's own URL instead of always "/", so
-// /cross-network and /offline-transfer index as themselves rather than folding
-// into the homepage.
+export interface PageMeta {
+  title: string;
+  description: string;
+  /** null for private/noindex routes, which must not inherit a public canonical. */
+  canonicalPath: string | null;
+}
+
+// pageMeta returns each route's <title>, description and canonical contract.
+// Public product routes point canonical/og:url at their own URL; private app and
+// token routes use null so they cannot inherit the homepage's discovery links.
 export function pageMeta(
   route: Route,
   m: Messages
-): { title: string; description: string; canonicalPath: string } {
+): PageMeta {
   if (route === "cross") return { title: m.titleCross, description: m.descCross, canonicalPath: CROSS_PATH };
   if (route === "offline") return { title: m.titleOffline, description: m.descOffline, canonicalPath: OFFLINE_PATH };
   if (route === "pricing") return { title: `${m.pricingPage.title} · Relayium`, description: m.pricingPage.subtitle, canonicalPath: PRICING_PATH };
@@ -22,6 +26,11 @@ export function pageMeta(
   // HTML; without this branch the SPA overwrote that back to "/" on boot, which
   // is exactly what a rendering crawler reads.
   if (route === "cli") return { title: m.cliPage.metaTitle, description: m.cliPage.metaDesc, canonicalPath: CLI_PATH };
+  if (route === "verify-email") return { title: `${m.verifyEmail.title} · Relayium`, description: m.verifyEmail.confirmPrompt, canonicalPath: null };
+  if (route === "reset-password") return { title: `${m.resetPassword.title} · Relayium`, description: m.resetPassword.lead, canonicalPath: null };
+  if (route === "magic-link") return { title: `${m.magicLink.title} · Relayium`, description: m.magicLink.lead, canonicalPath: null };
+  if (route === "me") return { title: `${m.me.title} · Relayium`, description: m.me.loginRequired, canonicalPath: null };
+  if (route === "download") return { title: `${m.download.title} · Relayium`, description: m.download.loading, canonicalPath: null };
   return { title: m.titleDefault, description: m.descDefault ?? m.titleDefault, canonicalPath: "/" };
 }
 
@@ -56,10 +65,75 @@ const CLUSTERED_PATHS = new Set(["/", CROSS_PATH, OFFLINE_PATH, APPS_PATH]);
 // that is the form the static pages use to reference each other, and an
 // alternate that redirects is a non-reciprocal cluster. English keeps its
 // slash-less SPA route (there is no /cross-network/ directory).
-export function altHreflangs(canonicalPath: string): { hreflang: string; path: string }[] {
-  if (!CLUSTERED_PATHS.has(canonicalPath)) return [];
+export function altHreflangs(canonicalPath: string | null): { hreflang: string; path: string }[] {
+  if (!canonicalPath || !CLUSTERED_PATHS.has(canonicalPath)) return [];
   return HREFLANG_PREFIX.map(([hreflang, prefix]) => ({
     hreflang,
     path: canonicalPath === "/" ? prefix + "/" : prefix + canonicalPath + (prefix ? "/" : ""),
   }));
+}
+
+/** Apply reactive SPA metadata without letting a public route's canonical or
+ * hreflang cluster leak into a private route. Every removal has a matching
+ * create path so private → public client navigation restores the public head. */
+export function applyHeadMeta(doc: Document, meta: PageMeta, origin: string): void {
+  doc.title = meta.title;
+
+  let description = doc.querySelector<HTMLMetaElement>('meta[name="description"]');
+  if (!description) {
+    description = doc.createElement("meta");
+    description.name = "description";
+    doc.head.appendChild(description);
+  }
+  description.content = meta.description;
+
+  let robots = doc.querySelector<HTMLMetaElement>('meta[name="robots"]');
+  if (!robots) {
+    robots = doc.createElement("meta");
+    robots.name = "robots";
+    doc.head.appendChild(robots);
+  }
+  robots.content = meta.canonicalPath
+    ? "index, follow, max-image-preview:large, max-snippet:-1"
+    : "noindex, nofollow";
+
+  let canonical = doc.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  let ogUrl = doc.querySelector<HTMLMetaElement>('meta[property="og:url"]');
+  if (meta.canonicalPath) {
+    const href = origin + meta.canonicalPath;
+    if (!canonical) {
+      canonical = doc.createElement("link");
+      canonical.rel = "canonical";
+      doc.head.appendChild(canonical);
+    }
+    canonical.href = href;
+    if (!ogUrl) {
+      ogUrl = doc.createElement("meta");
+      ogUrl.setAttribute("property", "og:url");
+      doc.head.appendChild(ogUrl);
+    }
+    ogUrl.content = href;
+  } else {
+    canonical?.remove();
+    ogUrl?.remove();
+  }
+
+  const stale = new Map(
+    [...doc.head.querySelectorAll<HTMLLinkElement>('link[rel="alternate"][hreflang]')].map((link) => [
+      link.getAttribute("hreflang"),
+      link,
+    ]),
+  );
+  for (const { hreflang, path } of altHreflangs(meta.canonicalPath)) {
+    let link = stale.get(hreflang);
+    if (!link) {
+      link = doc.createElement("link");
+      link.rel = "alternate";
+      link.setAttribute("hreflang", hreflang);
+      doc.head.appendChild(link);
+    }
+    link.href = origin + path;
+    stale.delete(hreflang);
+  }
+  for (const link of stale.values()) link.remove();
 }

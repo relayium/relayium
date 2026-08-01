@@ -27,6 +27,7 @@ describe("i18n completeness", () => {
   it("every language has nav tab labels and the cross-network method names", () => {
     for (const { code } of LANGS) {
       const m = messages[code];
+      expect(m.verifyEmail.title, `${code}.verifyEmail.title`).toBeTruthy();
       expect(m.nav.lanTab, `${code}.nav.lanTab`).toBeTruthy();
       expect(m.nav.crossTab, `${code}.nav.crossTab`).toBeTruthy();
       expect(m.methods.realtime.name, `${code}.methods.realtime.name`).toBeTruthy();
@@ -147,9 +148,13 @@ describe("i18n completeness", () => {
       expect(m.verifyEmail.noToken, `${code}.verifyEmail.noToken`).toBeTruthy();
       expect(m.verifyEmail.invalidTitle, `${code}.verifyEmail.invalidTitle`).toBeTruthy();
       expect(m.resetPassword.noToken, `${code}.resetPassword.noToken`).toBeTruthy();
+      expect(m.resetPassword.title, `${code}.resetPassword.title`).toBeTruthy();
+      expect(m.resetPassword.lead, `${code}.resetPassword.lead`).toBeTruthy();
       expect(m.resetPassword.submitBtn, `${code}.resetPassword.submitBtn`).toBeTruthy();
       expect(m.resetPassword.successBody, `${code}.resetPassword.successBody`).toBeTruthy();
       expect(m.resetPassword.invalidBody, `${code}.resetPassword.invalidBody`).toBeTruthy();
+      expect(m.magicLink.title, `${code}.magicLink.title`).toBeTruthy();
+      expect(m.download.title, `${code}.download.title`).toBeTruthy();
     }
   });
 

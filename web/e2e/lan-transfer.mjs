@@ -627,6 +627,111 @@ async function capsSuppressedScenario(browser) {
   await browser.send("Target.closeTarget", { targetId: fresh.targetId });
 }
 
+/** Private email landings share one trust surface, but keep independent auth
+ * state machines. Fake tokens are never submitted here: the browser scenario
+ * verifies presentation, URL scrubbing, private head metadata and responsive
+ * geometry; component tests own the request/security transitions. */
+async function authLandingScenario(browser) {
+  const tab = await newTab(browser, BASE + "/magic-link?token=e2e-presentation-only");
+  await setWideViewport(tab);
+  await tab.waitFor("!!document.querySelector('.auth-card h1')", "magic-link trust surface");
+  const magic = await tab.evaluate(`(() => ({
+    path: location.pathname,
+    search: location.search,
+    title: document.title,
+    h1: [...document.querySelectorAll('.auth-card h1')].map((el) => el.textContent.trim()),
+    headingPx: parseFloat(getComputedStyle(document.querySelector('.auth-card h1')).fontSize),
+    sharedCard: document.querySelector('.auth-card').classList.contains('ui-card'),
+    canonical: document.querySelector('link[rel="canonical"]')?.href || null,
+    alternates: document.querySelectorAll('link[rel="alternate"][hreflang]').length,
+    robots: document.querySelector('meta[name="robots"]')?.content || '',
+  }))()`);
+  if (
+    magic.path !== "/magic-link" || magic.search !== "" ||
+    JSON.stringify(magic.h1) !== JSON.stringify(["Sign in"]) || magic.headingPx !== 30 ||
+    !magic.sharedCard || magic.canonical !== null || magic.alternates !== 0 ||
+    magic.robots !== "noindex, nofollow"
+  ) throw new Error(`magic-link landing contract failed: ${JSON.stringify(magic)}`);
+
+  for (const [route, labels] of [
+    ["verify-email", ["verify-password"]],
+    ["reset-password", ["reset-new-password", "reset-confirm-password"]],
+  ]) {
+    await tab.evaluate(`location.href = ${JSON.stringify(`${BASE}/${route}?token=e2e-presentation-only`)}`);
+    await tab.waitFor(`location.pathname === '/${route}' && !!document.querySelector('.auth-card h1')`, `${route} trust surface`);
+    const state = await tab.evaluate(`(() => ({
+      search: location.search,
+      h1s: document.querySelectorAll('.auth-card h1').length,
+      labelTargets: [...document.querySelectorAll('.ui-field > label')].map((el) => el.htmlFor),
+      inputBorders: [...document.querySelectorAll('.ui-input')].map((el) => getComputedStyle(el).borderTopColor),
+      neutralBorder: (() => { const p = document.createElement('span'); p.style.color = 'var(--control-border)'; document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; })(),
+      canonical: document.querySelector('link[rel="canonical"]')?.href || null,
+      alternates: document.querySelectorAll('link[rel="alternate"][hreflang]').length,
+    }))()`);
+    if (
+      state.search !== "" || state.h1s !== 1 ||
+      JSON.stringify(state.labelTargets) !== JSON.stringify(labels) ||
+      state.inputBorders.some((color) => color !== state.neutralBorder) ||
+      state.canonical !== null || state.alternates !== 0
+    ) throw new Error(`${route} landing contract failed: ${JSON.stringify(state)}`);
+  }
+
+  await tab.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+  await setWideViewport(tab, 320, 844);
+  const locales = ["zh", "en", "ja", "ko", "de", "fr", "ar", "es", "pt"];
+  const mobile = [];
+  for (const code of locales) {
+    await tab.evaluate(`(() => {
+      const select = document.querySelector('select.lang');
+      select.value = ${JSON.stringify(code)};
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    await tab.waitFor(`document.documentElement.lang === ${JSON.stringify(code)}`, `${code} auth locale`);
+    mobile.push(await tab.evaluate(`(() => {
+      const card = document.querySelector('.auth-card').getBoundingClientRect();
+      const action = document.querySelector('.auth-action').getBoundingClientRect();
+      return {
+        lang: document.documentElement.lang,
+        dir: document.documentElement.dir,
+        pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        cardLeft: card.left,
+        cardRight: card.right,
+        actionHeight: action.height,
+        h1s: document.querySelectorAll('.auth-card h1').length,
+      };
+    })()`));
+  }
+  const bad = mobile.filter((m) =>
+    m.pageOverflow !== 0 || m.cardLeft < -.5 || m.cardRight > 320.5 ||
+    m.actionHeight < 44 || m.h1s !== 1 || (m.lang === "ar" ? m.dir !== "rtl" : m.dir !== "ltr")
+  );
+  if (bad.length) throw new Error(`mobile auth landing contract failed: ${JSON.stringify(bad)}`);
+
+  await tab.evaluate(`(() => {
+    const select = document.querySelector('select.lang');
+    select.value = 'en';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await tab.waitFor("document.documentElement.lang === 'en'", "English locale after auth sweep");
+  await tab.evaluate("([...document.querySelectorAll('nav button, nav a')].find((element) => element.textContent.trim() === 'LAN'))?.click()");
+  await tab.waitFor("location.pathname === '/'", "auth landing to return to LAN");
+  const publicHead = await tab.evaluate(`(() => ({
+    canonical: document.querySelector('link[rel="canonical"]')?.href || null,
+    og: document.querySelector('meta[property="og:url"]')?.content || null,
+    alternates: document.querySelectorAll('link[rel="alternate"][hreflang]').length,
+    robots: document.querySelector('meta[name="robots"]')?.content || '',
+  }))()`);
+  if (
+    publicHead.canonical !== `${BASE}/` || publicHead.og !== `${BASE}/` ||
+    publicHead.alternates !== 10 || !publicHead.robots.startsWith("index, follow")
+  ) throw new Error(`private-to-public head restoration failed: ${JSON.stringify(publicHead)}`);
+
+  const errs = tab.errors.filter((e) => !/401|Failed to load resource/.test(e));
+  if (errs.length) throw new Error(`auth landing pages logged errors:\n    ${errs.join("\n    ")}`);
+  ok("auth landings stayed named, private, labelled and responsive across all nine locales");
+  await browser.send("Target.closeTarget", { targetId: tab.targetId });
+}
+
 /**
  * /apps is a release surface, not a four-item wishlist. Executable choices must
  * stay ahead of future products, and a half-finished native release must not
@@ -921,6 +1026,7 @@ async function main() {
 
     console.log(`\nLAN transfer E2E against ${BASE}`);
 
+    await authLandingScenario(browser);
     await appsHierarchyScenario(browser);
     await pricingHierarchyScenario(browser);
 

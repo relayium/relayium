@@ -341,6 +341,7 @@ export interface Messages {
   };
   // /verify-email — landing page for the emailed verification link (?token=).
   verifyEmail: {
+    title: string; // visible h1 and private-route title source
     confirmPrompt: string; // ask the user to confirm their signup password before verifying
     confirmBtn: string; // submit the confirm-password form
     noPasswordLink: string; // "I signed up without a password" — verify passwordless
@@ -352,6 +353,8 @@ export interface Messages {
   };
   // /reset-password — landing page for the emailed reset link (?token=).
   resetPassword: {
+    title: string; // visible h1 and private-route title source
+    lead: string; // valid-token form introduction
     noToken: string; // opened without a ?token= param
     minHint: string; // client-side password-length hint under the new-password field
     submitBtn: string;
@@ -542,6 +545,7 @@ export interface Messages {
     bigNote: string;
   };
   download: {
+    title: string; // private download route title source
     loading: string;
     files: string;
     summary: (count: number, size: string) => string; // file count + total size

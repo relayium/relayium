@@ -300,6 +300,7 @@ const de: Messages = {
     privacyBody: "Die von dir übermittelten Daten und Konfigurationen sind ausschließlich für dich nutzbar. Wir versprechen — und setzen es technisch durch —, dass niemand sonst auf deine Daten oder Node-Konfiguration zugreifen oder sie nutzen kann.",
   },
   verifyEmail: {
+    title: "E-Mail-Adresse bestätigen",
     confirmPrompt: "Gib das gewählte Passwort ein, um die Verifizierung abzuschließen.",
     confirmBtn: "Konto verifizieren",
     noPasswordLink: "Ich habe mich ohne Passwort registriert",
@@ -310,6 +311,8 @@ const de: Messages = {
     backHome: "Zurück zur Startseite",
   },
   resetPassword: {
+    title: "Passwort zurücksetzen",
+    lead: "Lege ein neues Passwort für dein Relayium-Konto fest.",
     noToken: "Dieser Link ist ungültig.",
     minHint: "Mindestens 8 Zeichen",
     submitBtn: "Passwort zurücksetzen",
@@ -319,7 +322,7 @@ const de: Messages = {
     backHome: "Zurück zur Startseite",
   },
   magicLink: {
-    title: "Bei Relayium anmelden",
+    title: "Anmelden",
     lead: "Du hast deinen Anmeldelink geöffnet. Bestätige unten, um die Anmeldung auf diesem Gerät abzuschließen.",
     cta: "Anmelden",
     working: "Anmeldung läuft…",
@@ -543,6 +546,7 @@ const de: Messages = {
     bigNote: "Diese Dateien sind groß: Öffnet die empfangende Person den Link auf einem Handy oder in Firefox bzw. Safari, muss der Browser die ganze Datei im Speicher halten und der Download kann fehlschlagen. Empfiehl Chrome/Edge auf einem Computer oder die Kommandozeile.",
   },
   download: {
+    title: "Verschlüsselter Download-Link",
     loading: "Link wird gelesen…",
     files: "Herunterzuladende Dateien",
     summary: (c, s) => `${c} Datei${c === 1 ? "" : "en"} · ${s} gesamt`,

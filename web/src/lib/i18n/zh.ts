@@ -300,6 +300,7 @@ const zh: Messages = {
     privacyBody: "你提交的数据和配置只为你自己所用。我们承诺、也从工程上保证：任何其他人都无法访问或使用你的数据与节点配置。",
   },
   verifyEmail: {
+    title: "验证邮箱",
     confirmPrompt: "输入你注册时设置的密码以完成验证。",
     confirmBtn: "验证账号",
     noPasswordLink: "我注册时没有设置密码",
@@ -310,6 +311,8 @@ const zh: Messages = {
     backHome: "返回首页",
   },
   resetPassword: {
+    title: "重置密码",
+    lead: "为你的 Relayium 账号设置一个新密码。",
     noToken: "链接无效。",
     minHint: "至少 8 位字符",
     submitBtn: "重置密码",
@@ -319,7 +322,7 @@ const zh: Messages = {
     backHome: "返回首页",
   },
   magicLink: {
-    title: "登录 Relayium",
+    title: "登录",
     lead: "你打开了登录链接。点击下面的按钮，在这台设备上完成登录。",
     cta: "登录",
     working: "登录中…",
@@ -537,6 +540,7 @@ const zh: Messages = {
     bigNote: "这批文件较大：接收方如果在手机上、或用 Firefox、Safari 打开链接，浏览器必须把整个文件读进内存，下载可能失败。建议对方用电脑上的 Chrome/Edge，或者命令行工具。",
   },
   download: {
+    title: "加密下载链接",
     loading: "正在读取链接…",
     files: "待下载文件",
     summary: (c, s) => `共 ${c} 个文件 · 合计 ${s}`,

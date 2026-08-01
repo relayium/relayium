@@ -300,6 +300,7 @@ const ja: Messages = {
     privacyBody: "送信されたデータと設定を利用できるのはご本人だけです。他の誰もそのデータやノード設定にアクセス・利用できないことを、当社は約束し、技術的にも保証します。",
   },
   verifyEmail: {
+    title: "メールアドレスを確認",
     confirmPrompt: "登録時に設定したパスワードを入力して認証を完了してください。",
     confirmBtn: "アカウントを認証",
     noPasswordLink: "パスワードなしで登録しました",
@@ -310,6 +311,8 @@ const ja: Messages = {
     backHome: "ホームに戻る",
   },
   resetPassword: {
+    title: "パスワードをリセット",
+    lead: "Relayiumアカウントの新しいパスワードを設定してください。",
     noToken: "リンクが無効です。",
     minHint: "8 文字以上",
     submitBtn: "パスワードを再設定",
@@ -319,7 +322,7 @@ const ja: Messages = {
     backHome: "ホームに戻る",
   },
   magicLink: {
-    title: "Relayium にサインイン",
+    title: "サインイン",
     lead: "サインインリンクを開きました。下のボタンを押すと、この端末でのサインインが完了します。",
     cta: "サインイン",
     working: "サインインしています…",
@@ -542,6 +545,7 @@ const ja: Messages = {
     bigNote: "ファイルが大きめです：受信者がスマホや Firefox・Safari でリンクを開くと、ブラウザはファイル全体をメモリに保持する必要があり、ダウンロードに失敗することがあります。パソコンの Chrome・Edge、またはコマンドラインツールをおすすめしてください。",
   },
   download: {
+    title: "暗号化ダウンロードリンク",
     loading: "リンクを読み込み中…",
     files: "ダウンロードするファイル",
     summary: (c, s) => `${c} 個のファイル · 合計 ${s}`,

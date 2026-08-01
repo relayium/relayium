@@ -300,6 +300,7 @@ const en: Messages = {
     privacyBody: "The data and config you submit are only ever usable by you. We promise — and enforce it in the engineering — that no one else can access or use your data or node configuration.",
   },
   verifyEmail: {
+    title: "Verify your email",
     confirmPrompt: "Enter the password you chose to finish verifying your account.",
     confirmBtn: "Verify account",
     noPasswordLink: "I signed up without a password",
@@ -310,6 +311,8 @@ const en: Messages = {
     backHome: "Back to home",
   },
   resetPassword: {
+    title: "Reset your password",
+    lead: "Choose a new password for your Relayium account.",
     noToken: "This link is invalid.",
     minHint: "At least 8 characters",
     submitBtn: "Reset password",
@@ -319,7 +322,7 @@ const en: Messages = {
     backHome: "Back to home",
   },
   magicLink: {
-    title: "Sign in to Relayium",
+    title: "Sign in",
     lead: "You opened your sign-in link. Confirm below to finish signing in on this device.",
     cta: "Sign in",
     working: "Signing in…",
@@ -553,6 +556,7 @@ const en: Messages = {
     bigNote: "These files are large: if the recipient opens the link on a phone, or in Firefox or Safari, the browser has to hold the whole file in memory and the download may fail. Suggest Chrome/Edge on a computer, or the command-line tool.",
   },
   download: {
+    title: "Encrypted download link",
     loading: "Reading the link…",
     files: "Files to download",
     summary: (c, s) => `${c} file${c === 1 ? "" : "s"} · ${s} total`,

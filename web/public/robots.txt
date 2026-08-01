@@ -12,6 +12,7 @@ Disallow: /admin
 Disallow: /d/
 Disallow: /verify-email
 Disallow: /reset-password
+Disallow: /magic-link
 
 # ── AI / LLM crawlers: explicitly allowed so Relayium can be cited in answers ──
 # NOTE: a crawler obeys only its most specific matching group, so the groups below
@@ -59,6 +60,7 @@ Disallow: /admin
 Disallow: /d/
 Disallow: /verify-email
 Disallow: /reset-password
+Disallow: /magic-link
 
 # Apple (Apple Intelligence / Siri)
 User-agent: Applebot

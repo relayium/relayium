@@ -178,9 +178,9 @@ function stubBody(doc) {
 const NOINDEX_ROUTES = [
   { file: "me.html", hero: "Personal center", pitch: "Sign in to see your transfers, stored files and nodes." },
   { file: "d.html", hero: "Encrypted download link", pitch: "This page decrypts a file in your browser using the key in the link. JavaScript is required." },
-  { file: "verify-email.html", hero: "Verify your email", pitch: "Open this page with JavaScript enabled to finish verifying your email address." },
-  { file: "reset-password.html", hero: "Reset your password", pitch: "Open this page with JavaScript enabled to choose a new password." },
-  { file: "magic-link.html", hero: "Sign in", pitch: "Open this page with JavaScript enabled to finish signing in." },
+  { file: "verify-email.html", hero: "Verify your email", pitch: "Enter the password you chose to finish verifying your account." },
+  { file: "reset-password.html", hero: "Reset your password", pitch: "Choose a new password for your Relayium account." },
+  { file: "magic-link.html", hero: "Sign in", pitch: "You opened your sign-in link. Confirm below to finish signing in on this device." },
   { file: "share-target.html", hero: "Shared files", pitch: "Files shared into Relayium from your device land here. JavaScript is required." },
 ];
 

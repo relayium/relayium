@@ -9,23 +9,36 @@
   // 两个后果：用户点开时看到"链接已过期"，以及一个活着的登录态被交给了第三方的扫描
   // 基础设施。挂载即自动提交会把这道防线原样搬回去——**别这么做**，扫描器执行 JS
   // 的情形并不罕见。
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { completeMagicLink } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate } from "./router.svelte";
+  import AuthLanding from "./AuthLanding.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
 
-  type Phase = "confirm" | "working" | "success" | "invalid" | "no-token";
-  let phase = $state<Phase>("no-token");
+  type Phase = "boot" | "confirm" | "working" | "success" | "invalid" | "no-token";
+  let phase = $state<Phase>("boot");
   let token = "";
+  let redirectTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const status = $derived(
+    phase === "success" ? t.magicLink.done
+      : phase === "invalid" ? t.magicLink.expired
+      : phase === "no-token" ? t.magicLink.noToken
+      : phase === "boot" ? ""
+      : t.magicLink.lead,
+  );
+  const tone = $derived<"neutral" | "success" | "danger">(
+    phase === "success" ? "success" : phase === "invalid" || phase === "no-token" ? "danger" : "neutral",
+  );
 
   onMount(() => {
     const tok = new URLSearchParams(location.search).get("token");
     // 立刻把令牌从 URL 里抹掉：留着它会进浏览器历史，也会在之后的导航里通过
     // Referer 漏出去。与 /verify-email、/reset-password 同一套做法。
     if (tok) history.replaceState(null, "", location.pathname);
-    if (!tok) return;
+    if (!tok) { phase = "no-token"; return; }
     token = tok;
     phase = "confirm";
   });
@@ -36,7 +49,7 @@
     const res = await completeMagicLink(token);
     if (res.ok) {
       phase = "success";
-      setTimeout(() => navigate("lan"), 900);
+      redirectTimer = setTimeout(() => navigate("lan"), 900);
       return;
     }
     if (res.pendingDeletion && res.reactivateToken) {
@@ -48,35 +61,23 @@
     }
     phase = "invalid";
   }
+
+  onDestroy(() => {
+    if (redirectTimer) clearTimeout(redirectTimer);
+  });
 </script>
 
-<section class="magic page-enter">
-  <h1>{t.magicLink.title}</h1>
-
-  {#if phase === "no-token"}
-    <p class="lead">{t.magicLink.noToken}</p>
+<AuthLanding title={t.magicLink.title} {status} {tone}>
+  {#if phase === "no-token" || phase === "invalid"}
     <button class="btn btn-ghost" onclick={() => navigate("lan")}>{t.magicLink.home}</button>
-  {:else if phase === "invalid"}
-    <p class="lead">{t.magicLink.expired}</p>
-    <button class="btn btn-ghost" onclick={() => navigate("lan")}>{t.magicLink.home}</button>
-  {:else if phase === "success"}
-    <p class="lead ok">{t.magicLink.done}</p>
-  {:else}
-    <p class="lead">{t.magicLink.lead}</p>
-    <button class="btn btn-primary" disabled={phase === "working"} onclick={signIn}>
+  {:else if phase === "confirm" || phase === "working"}
+    <button class="btn btn-primary auth-action" disabled={phase === "working"} onclick={signIn}>
       {phase === "working" ? t.magicLink.working : t.magicLink.cta}
     </button>
   {/if}
-</section>
+</AuthLanding>
 
 <style>
-  .magic {
-    max-width: 460px;
-    margin: 0 auto;
-    padding: var(--space-7) var(--space-4);
-    text-align: center;
-  }
-  h1 { margin: 0 0 var(--space-3); font-size: var(--fs-lg); color: var(--text-h); }
-  .lead { margin: 0 0 var(--space-5); color: var(--text); line-height: 1.6; }
-  .ok { color: #2ecc71; }
+  .auth-action { inline-size: 100%; }
+  @media (pointer: coarse) { .auth-action { min-block-size: 44px; } }
 </style>

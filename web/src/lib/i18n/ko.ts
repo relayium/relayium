@@ -300,6 +300,7 @@ const ko: Messages = {
     privacyBody: "제출한 데이터와 설정은 오직 본인만 사용할 수 있습니다. 다른 누구도 본인의 데이터나 노드 설정에 접근하거나 사용할 수 없음을 약속하고, 엔지니어링으로도 보장합니다.",
   },
   verifyEmail: {
+    title: "이메일 인증",
     confirmPrompt: "가입 시 설정한 비밀번호를 입력해 인증을 완료하세요.",
     confirmBtn: "계정 인증",
     noPasswordLink: "비밀번호 없이 가입했습니다",
@@ -310,6 +311,8 @@ const ko: Messages = {
     backHome: "홈으로",
   },
   resetPassword: {
+    title: "비밀번호 재설정",
+    lead: "Relayium 계정에 사용할 새 비밀번호를 설정하세요.",
     noToken: "링크가 유효하지 않습니다.",
     minHint: "8자 이상",
     submitBtn: "비밀번호 재설정",
@@ -319,7 +322,7 @@ const ko: Messages = {
     backHome: "홈으로",
   },
   magicLink: {
-    title: "Relayium에 로그인",
+    title: "로그인",
     lead: "로그인 링크를 열었습니다. 아래 버튼을 눌러 이 기기에서 로그인을 완료하세요.",
     cta: "로그인",
     working: "로그인 중…",
@@ -537,6 +540,7 @@ const ko: Messages = {
     bigNote: "파일이 큽니다: 받는 사람이 휴대폰에서, 또는 Firefox나 Safari로 링크를 열면 브라우저가 파일 전체를 메모리에 담아야 해서 다운로드가 실패할 수 있습니다. 컴퓨터의 Chrome/Edge나 명령줄 도구를 권해 주세요.",
   },
   download: {
+    title: "암호화된 다운로드 링크",
     loading: "링크를 읽는 중…",
     files: "다운로드할 파일",
     summary: (c, s) => `파일 ${c}개 · 합계 ${s}`,

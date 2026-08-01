@@ -317,6 +317,37 @@ code {
 /* Vertical rhythm inside a card. Separate from .ui-card because App's status
    cards lay themselves out and only the content cards want the stack. */
 .ui-stack { display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* A persistent-label form field. Placeholders may offer an example, but they
+   are never the field's only name: they disappear as soon as the user types. */
+.ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  text-align: start;
+}
+.ui-field > label {
+  color: var(--text-h);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.ui-input {
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-block-size: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  background: var(--control-bg);
+  color: var(--text-h);
+  font: inherit;
+}
+.ui-field-hint {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+}
 /* State, and only state, gets the accent. Always written compounded with
    .ui-card so these short words can never match anything on their own; the
    names match what App.svelte's transfer card already emits (and what

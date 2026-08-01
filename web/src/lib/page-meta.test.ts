@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pageMeta, altHreflangs } from "./page-meta";
+import { applyHeadMeta, pageMeta, altHreflangs } from "./page-meta";
 import { CROSS_PATH, OFFLINE_PATH, APPS_PATH, CLI_PATH, PRICING_PATH } from "./router.svelte";
 // `messages` in i18n.svelte is populated lazily (code-split per language), so it's
 // empty at import time in a test — import the English table directly instead,
@@ -74,6 +74,42 @@ describe("pageMeta cli route", () => {
     expect(c.description).toBe(m.cliPage.metaDesc);
     expect(c.canonicalPath).toBe(CLI_PATH);
     expect(c.title).not.toBe(m.titleDefault);
+  });
+});
+
+describe("private route metadata", () => {
+  it("gives every noindex app route its own title and no canonical", () => {
+    expect(pageMeta("verify-email", m)).toMatchObject({ title: `${m.verifyEmail.title} · Relayium`, canonicalPath: null });
+    expect(pageMeta("reset-password", m)).toMatchObject({ title: `${m.resetPassword.title} · Relayium`, canonicalPath: null });
+    expect(pageMeta("magic-link", m)).toMatchObject({ title: `${m.magicLink.title} · Relayium`, canonicalPath: null });
+    expect(pageMeta("me", m)).toMatchObject({ title: `${m.me.title} · Relayium`, canonicalPath: null });
+    expect(pageMeta("download", m)).toMatchObject({ title: `${m.download.title} · Relayium`, canonicalPath: null });
+  });
+
+  it("emits no hreflang cluster for a private route", () => {
+    expect(altHreflangs(null)).toEqual([]);
+  });
+
+  it("clears public discovery links on private entry and recreates them on return", () => {
+    document.head.innerHTML = `
+      <meta name="description" content="old">
+      <link rel="canonical" href="https://relayium.com/">
+      <meta property="og:url" content="https://relayium.com/">
+      <link rel="alternate" hreflang="en" href="https://relayium.com/">
+    `;
+
+    applyHeadMeta(document, pageMeta("verify-email", m), "https://relayium.com");
+    expect(document.title).toBe(`${m.verifyEmail.title} · Relayium`);
+    expect(document.querySelector('link[rel="canonical"]')).toBeNull();
+    expect(document.querySelector('meta[property="og:url"]')).toBeNull();
+    expect(document.querySelectorAll('link[rel="alternate"][hreflang]')).toHaveLength(0);
+    expect(document.querySelector('meta[name="robots"]')?.getAttribute("content")).toBe("noindex, nofollow");
+
+    applyHeadMeta(document, pageMeta("lan", m), "https://relayium.com");
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://relayium.com/");
+    expect(document.querySelector('meta[property="og:url"]')?.getAttribute("content")).toBe("https://relayium.com/");
+    expect(document.querySelectorAll('link[rel="alternate"][hreflang]')).toHaveLength(10);
+    expect(document.querySelector('meta[name="robots"]')?.getAttribute("content")).toContain("index, follow");
   });
 });
 

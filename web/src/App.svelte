@@ -23,7 +23,7 @@
   import { fetchIceConfig, hasTurnServer, measureRelays, pickRelay, type RelayEntry } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
   import { lang, dir, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
-  import { pageMeta, altHreflangs } from "./lib/page-meta";
+  import { applyHeadMeta, pageMeta } from "./lib/page-meta";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
   import { shouldConfirmBeforeSend } from "./lib/confirm-send";
@@ -286,36 +286,10 @@
   // on navigation, and the hot path only touches document.title.
   $effect(() => {
     const meta = pageMeta(currentRoute(), messages[lang()]);
-    const md = document.querySelector('meta[name="description"]');
-    if (md) md.setAttribute("content", meta.description);
-    const canon = location.origin + meta.canonicalPath;
-    document.querySelector('link[rel="canonical"]')?.setAttribute("href", canon);
-    document.querySelector('meta[property="og:url"]')?.setAttribute("content", canon);
-    // Repoint the hreflang alternates at this route's own localized URLs; index.html
-    // hard-codes the homepage cluster, which is wrong for /cross-network & /offline-transfer.
-    // Routes with no localized twin (/pricing, /cli) get an EMPTY list, and the
-    // stale tags are removed rather than left pointing at /zh/pricing — a page
-    // that does not exist. Client-side navigation goes both ways, so the tags
-    // are re-created when the user lands back on a clustered route.
-    const alts = altHreflangs(meta.canonicalPath);
-    const stale = new Map(
-      [...document.head.querySelectorAll('link[rel="alternate"][hreflang]')].map((l) => [
-        l.getAttribute("hreflang"),
-        l,
-      ]),
-    );
-    for (const { hreflang, path } of alts) {
-      let link = stale.get(hreflang);
-      if (!link) {
-        link = document.createElement("link");
-        link.setAttribute("rel", "alternate");
-        link.setAttribute("hreflang", hreflang);
-        document.head.appendChild(link);
-      }
-      link.setAttribute("href", location.origin + path);
-      stale.delete(hreflang);
-    }
-    for (const link of stale.values()) link.remove();
+    // Upsert public canonical/og:url elements and remove them for private routes;
+    // likewise replace or clear the hreflang cluster. Keeping this symmetric is
+    // what makes private → public client navigation restore the public head.
+    applyHeadMeta(document, meta, location.origin);
   });
 
   // Reflect transfer progress in the tab title (follows the language switch), and

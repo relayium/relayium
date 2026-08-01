@@ -300,6 +300,7 @@ const es: Messages = {
     privacyBody: "Los datos y la configuración que envías solo pueden ser usados por ti. Prometemos — y lo hacemos cumplir en la ingeniería — que nadie más puede acceder ni usar tus datos o la configuración de tu nodo.",
   },
   verifyEmail: {
+    title: "Verifica tu correo electrónico",
     confirmPrompt: "Introduce la contraseña que elegiste para verificar tu cuenta.",
     confirmBtn: "Verificar cuenta",
     noPasswordLink: "Me registré sin contraseña",
@@ -310,6 +311,8 @@ const es: Messages = {
     backHome: "Volver al inicio",
   },
   resetPassword: {
+    title: "Restablece tu contraseña",
+    lead: "Elige una nueva contraseña para tu cuenta de Relayium.",
     noToken: "Este enlace no es válido.",
     minHint: "Al menos 8 caracteres",
     submitBtn: "Restablecer contraseña",
@@ -319,7 +322,7 @@ const es: Messages = {
     backHome: "Volver al inicio",
   },
   magicLink: {
-    title: "Inicia sesión en Relayium",
+    title: "Inicia sesión",
     lead: "Has abierto tu enlace de acceso. Confirma abajo para terminar de iniciar sesión en este dispositivo.",
     cta: "Iniciar sesión",
     working: "Iniciando sesión…",
@@ -542,6 +545,7 @@ const es: Messages = {
     bigNote: "Estos archivos son grandes: si quien los recibe abre el enlace en un móvil, o en Firefox o Safari, el navegador debe mantener el archivo entero en memoria y la descarga puede fallar. Recomiéndale Chrome/Edge en un ordenador, o la herramienta de línea de comandos.",
   },
   download: {
+    title: "Enlace de descarga cifrado",
     loading: "Leyendo el enlace…",
     files: "Archivos para descargar",
     summary: (c, s) => `${c} archivo${c === 1 ? "" : "s"} · ${s} en total`,

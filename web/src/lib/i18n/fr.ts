@@ -300,6 +300,7 @@ const fr: Messages = {
     privacyBody: "Les données et la configuration que vous soumettez ne sont utilisables que par vous. Nous promettons — et le garantissons techniquement — que personne d'autre ne peut accéder à vos données ou à la configuration de votre nœud, ni les utiliser.",
   },
   verifyEmail: {
+    title: "Vérifier votre adresse e-mail",
     confirmPrompt: "Saisissez le mot de passe choisi pour vérifier votre compte.",
     confirmBtn: "Vérifier le compte",
     noPasswordLink: "Je me suis inscrit sans mot de passe",
@@ -310,6 +311,8 @@ const fr: Messages = {
     backHome: "Retour à l'accueil",
   },
   resetPassword: {
+    title: "Réinitialiser votre mot de passe",
+    lead: "Choisissez un nouveau mot de passe pour votre compte Relayium.",
     noToken: "Ce lien n'est pas valide.",
     minHint: "Au moins 8 caractères",
     submitBtn: "Réinitialiser le mot de passe",
@@ -319,7 +322,7 @@ const fr: Messages = {
     backHome: "Retour à l'accueil",
   },
   magicLink: {
-    title: "Se connecter à Relayium",
+    title: "Se connecter",
     lead: "Vous avez ouvert votre lien de connexion. Confirmez ci-dessous pour terminer la connexion sur cet appareil.",
     cta: "Se connecter",
     working: "Connexion…",
@@ -543,6 +546,7 @@ const fr: Messages = {
     bigNote: "Ces fichiers sont volumineux : si le destinataire ouvre le lien sur un téléphone, ou dans Firefox ou Safari, le navigateur doit garder tout le fichier en mémoire et le téléchargement peut échouer. Conseillez-lui Chrome/Edge sur un ordinateur, ou l'outil en ligne de commande.",
   },
   download: {
+    title: "Lien de téléchargement chiffré",
     loading: "Lecture du lien…",
     files: "Fichiers à télécharger",
     summary: (c, s) => `${c} fichier${c === 1 ? "" : "s"} · ${s} au total`,

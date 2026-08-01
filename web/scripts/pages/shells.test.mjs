@@ -13,6 +13,7 @@ import en from "../../src/lib/i18n/en";
 const read = (p) => readFileSync(resolve(process.cwd(), p), "utf8");
 const indexHtml = read("index.html");
 const llmsTxt = read("public/llms.txt");
+const robotsTxt = read("public/robots.txt");
 const transferTs = read("src/lib/transfer.ts");
 
 const shells = buildShells({
@@ -26,6 +27,14 @@ const shells = buildShells({
   cliArticles: CLI_ARTICLES,
 });
 const byFile = Object.fromEntries(shells.map((s) => [s.file, s]));
+
+describe("private route crawler policy", () => {
+  it("keeps every emailed-token landing out of search crawler queues", () => {
+    for (const route of ["/verify-email", "/reset-password", "/magic-link"]) {
+      expect(robotsTxt.match(new RegExp(`^Disallow: ${route}$`, "gm")), route).toHaveLength(2);
+    }
+  });
+});
 
 describe("index.html shell markers", () => {
   it("carries both marker pairs, byte-exact", () => {
@@ -94,6 +103,11 @@ describe("buildShells", () => {
     }
   });
 
+  it("keeps the private shell titles aligned with their rendered page headings", () => {
+    expect(byFile["me.html"].head).toContain(`<title>${en.me.title} · Relayium</title>`);
+    expect(byFile["d.html"].head).toContain(`<title>${en.download.title} · Relayium</title>`);
+  });
+
   it("puts the route's own prose in the crawlable body", () => {
     expect(byFile["cross-network.html"].body).toContain(
       "Cross-network files and live text, end-to-end encrypted",
@@ -116,6 +130,9 @@ describe("buildShells", () => {
       "apps.html": [en.appsPage.metaTitle, en.appsPage.metaDesc],
       "cli.html": [en.cliPage.metaTitle, en.cliPage.metaDesc],
       "pricing.html": [`${en.pricingPage.title} · Relayium`, en.pricingPage.subtitle],
+      "verify-email.html": [`${en.verifyEmail.title} · Relayium`, en.verifyEmail.confirmPrompt],
+      "reset-password.html": [`${en.resetPassword.title} · Relayium`, en.resetPassword.lead],
+      "magic-link.html": [`${en.magicLink.title} · Relayium`, en.magicLink.lead],
     };
     for (const [file, [title, description]] of Object.entries(want)) {
       expect(byFile[file].head, file).toContain(`<title>${esc(title)}</title>`);
