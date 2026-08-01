@@ -72,18 +72,21 @@ export const FLOW_ACK_INTERVAL = 512 * 1024; // receiver acks at least this ofte
 const CTRL_ACCEPT = 0xfe;
 const CTRL_REJECT = 0xff;
 const CTRL_COMPLETE = 0xfd; // receiver got and verified the whole batch
+const CTRL_BUSY = 0xf9; // mixed-link file lane is occupied; retry/queue, not a refusal
 
 export const ACCEPT = new Uint8Array([CTRL_ACCEPT]);
 export const REJECT = new Uint8Array([CTRL_REJECT]);
 export const COMPLETE = new Uint8Array([CTRL_COMPLETE]);
+export const FILE_BUSY = new Uint8Array([CTRL_BUSY]);
 
 /** Decode a receiver->sender control frame; returns null for anything else. */
-export function controlKind(buf: ArrayBuffer): "accept" | "reject" | "complete" | null {
+export function controlKind(buf: ArrayBuffer): "accept" | "reject" | "complete" | "busy" | null {
   const b = new Uint8Array(buf);
   if (b.length !== 1) return null;
   if (b[0] === CTRL_ACCEPT) return "accept";
   if (b[0] === CTRL_REJECT) return "reject";
   if (b[0] === CTRL_COMPLETE) return "complete";
+  if (b[0] === CTRL_BUSY) return "busy";
   return null;
 }
 

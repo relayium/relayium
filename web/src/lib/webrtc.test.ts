@@ -122,6 +122,35 @@ afterEach(() => {
 });
 
 describe("webrtc commit-then-reveal handshake", () => {
+  it("cancels an in-progress connection and closes its peer connection", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const controller = new AbortController();
+    const p = connect({
+      signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
+      role: "initiator", onPeerKey: () => {}, signal: controller.signal,
+    });
+    const rejected = expect(p).rejects.toMatchObject({ name: "AbortError" });
+    await flush();
+    controller.abort();
+    await rejected;
+    expect(instances[0].connectionState).toBe("closed");
+  });
+
+  it("does not send an offer when already cancelled", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const controller = new AbortController();
+    controller.abort();
+    const p = connect({
+      signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
+      role: "initiator", onPeerKey: () => {}, signal: controller.signal,
+    });
+    await expect(p).rejects.toMatchObject({ name: "AbortError" });
+    expect(hub.sent.I).toEqual([]);
+    expect(instances[0].connectionState).toBe("closed");
+  });
+
   it("delivers each peer's real key and yields a matching SAS", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
@@ -142,6 +171,31 @@ describe("webrtc commit-then-reveal handshake", () => {
 
     openAll();
     const [ic, rc] = await Promise.all([iP, rP]);
+    ic.close();
+    rc.close();
+  });
+
+  it("removes its abort listener once establishment succeeds", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    const rKey = generateKeyPair();
+    const iKey = generateKeyPair();
+    const rP = connect({
+      signaling: hub.R, peerId: "I", selfKey: rKey.publicKey,
+      role: "responder", onPeerKey: () => {},
+    });
+    const iP = connect({
+      signaling: hub.I, peerId: "R", selfKey: iKey.publicKey,
+      role: "initiator", onPeerKey: () => {}, signal: controller.signal,
+    });
+    await flush();
+    openAll();
+    const [ic, rc] = await Promise.all([iP, rP]);
+    expect(remove.mock.calls.some(([type]) => type === "abort")).toBe(true);
+    controller.abort();
+    expect(instances[1].connectionState).not.toBe("closed");
     ic.close();
     rc.close();
   });

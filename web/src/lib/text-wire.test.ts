@@ -2,8 +2,9 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { ready, generateKeyPair, deriveSession, seal } from "./crypto";
 import {
   TextSender, TextReceiver, KIND_TEXT_ENC, TEXT_MAX_BYTES, TEXT_FRAME_OVERHEAD,
-  textByteLength, isTextFrame,
+  TEXT_REQUEST, TEXT_END, textByteLength, isTextFrame, textLifecycleKind,
 } from "./text-wire";
+import { ACCEPT, REJECT, COMPLETE, FILE_BUSY } from "./transfer";
 
 beforeAll(async () => { await ready(); });
 
@@ -24,6 +25,20 @@ const seqOf = (f: Uint8Array) => new DataView(f.buffer, f.byteOffset).getUint32(
 const GNARLY = "  \tif x:\n\n\t\tprint('你好 🌍')\n   \r\n  trailing   ";
 
 describe("text wire", () => {
+  it("recognises exact mixed-link conversation lifecycle frames", () => {
+    expect(textLifecycleKind(TEXT_REQUEST.buffer as ArrayBuffer)).toBe("request");
+    expect(textLifecycleKind(ACCEPT.buffer as ArrayBuffer)).toBe("accept");
+    expect(textLifecycleKind(REJECT.buffer as ArrayBuffer)).toBe("reject");
+    expect(textLifecycleKind(TEXT_END.buffer as ArrayBuffer)).toBe("end");
+    expect(new Set([
+      ACCEPT[0], REJECT[0], COMPLETE[0], FILE_BUSY[0], TEXT_REQUEST[0], TEXT_END[0],
+    ]).size).toBe(6);
+    expect(isTextFrame(TEXT_REQUEST.buffer as ArrayBuffer)).toBe(false);
+    expect(isTextFrame(TEXT_END.buffer as ArrayBuffer)).toBe(false);
+    expect(textLifecycleKind(new Uint8Array([TEXT_REQUEST[0], 0]).buffer)).toBeNull();
+    expect(textLifecycleKind(new Uint8Array([]).buffer)).toBeNull();
+  });
+
   it("round-trips gnarly content byte for byte", async () => {
     const { ka, kb } = await pair();
     const got = await new TextReceiver().feed(

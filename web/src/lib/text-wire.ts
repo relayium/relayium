@@ -25,6 +25,25 @@ export const TEXT_MAX_BYTES = 64 * 1024;
 /** Per-frame wire overhead: 5-byte header + 16-byte AES-GCM tag. */
 export const TEXT_FRAME_OVERHEAD = 5 + 16;
 
+// Mixed-link text-lane lifecycle. ACCEPT/REJECT remain the shared 0xfe/0xff
+// bytes from transfer.ts; the DataChannel label scopes their meaning.
+const CTRL_TEXT_REQUEST = 0xfa;
+const CTRL_TEXT_END = 0xfb;
+const CTRL_ACCEPT = 0xfe;
+const CTRL_REJECT = 0xff;
+export const TEXT_REQUEST = new Uint8Array([CTRL_TEXT_REQUEST]);
+export const TEXT_END = new Uint8Array([CTRL_TEXT_END]);
+
+export function textLifecycleKind(buf: ArrayBuffer): "request" | "accept" | "reject" | "end" | null {
+  const b = new Uint8Array(buf);
+  if (b.length !== 1) return null;
+  if (b[0] === CTRL_TEXT_REQUEST) return "request";
+  if (b[0] === CTRL_ACCEPT) return "accept";
+  if (b[0] === CTRL_REJECT) return "reject";
+  if (b[0] === CTRL_TEXT_END) return "end";
+  return null;
+}
+
 const enc = new TextEncoder();
 // fatal: invalid UTF-8 must fail loudly. A U+FFFD replacement character would
 // corrupt content while reporting success, and "opaque valid Unicode" is a

@@ -18,6 +18,9 @@
 /** The one capability this version advertises. Versioned so a later, wire-
  *  incompatible message format can be introduced without ambiguity. */
 export const CAP_TEXT = "text/1";
+/** Unified two-lane Web link. Defined before it is advertised so the coordinator
+ *  and compatibility tests can land without exposing a half-built protocol. */
+export const CAP_LINK = "link/1";
 
 let announced = $state<Record<string, string[]>>({});
 
@@ -51,6 +54,11 @@ export function recordPeerCaps(peerId: string, data: unknown): boolean {
  *  read as this one. */
 export function peerSupportsText(peerId: string): boolean {
   return (announced[peerId] ?? []).includes(CAP_TEXT);
+}
+
+/** Exact match; callers must never infer link support from text/1. */
+export function peerSupportsLink(peerId: string): boolean {
+  return (announced[peerId] ?? []).includes(CAP_LINK);
 }
 
 /** Drop announcements for peers no longer in the roster. A reconnecting peer is

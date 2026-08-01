@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  CAP_TEXT, capsSignal, recordPeerCaps, peerSupportsText, retainPeers, resetPeerCaps,
+  CAP_LINK, CAP_TEXT, capsSignal, recordPeerCaps, peerSupportsLink, peerSupportsText,
+  retainPeers, resetPeerCaps,
 } from "./peer-caps.svelte";
+import { LOCAL_CAPS } from "./webrtc";
 
 beforeEach(() => { resetPeerCaps(); });
 
@@ -18,6 +20,26 @@ describe("peer caps", () => {
   it("announces exactly our capability list", () => {
     expect(capsSignal()).toEqual({ caps: [CAP_TEXT] });
     expect(CAP_TEXT).toBe("text/1");
+    // Capability advertisement is the release switch. Keep it off until the
+    // coordinator, both lanes and recovery all ship together.
+    expect(capsSignal().caps).not.toContain(CAP_LINK);
+    expect(LOCAL_CAPS).not.toContain(CAP_LINK);
+  });
+
+  it("tracks exact link support independently from text", () => {
+    recordPeerCaps("link-only", { caps: [CAP_LINK] });
+    recordPeerCaps("text-only", { caps: [CAP_TEXT] });
+    recordPeerCaps("future", { caps: ["link/2"] });
+    expect(peerSupportsLink("link-only")).toBe(true);
+    expect(peerSupportsText("link-only")).toBe(false);
+    expect(peerSupportsLink("text-only")).toBe(false);
+    expect(peerSupportsLink("future")).toBe(false);
+  });
+
+  it("records text and link support together", () => {
+    recordPeerCaps("both", { caps: [CAP_TEXT, CAP_LINK] });
+    expect(peerSupportsText("both")).toBe(true);
+    expect(peerSupportsLink("both")).toBe(true);
   });
 
   it("hands out a fresh array, so a caller cannot mutate what we announce", () => {

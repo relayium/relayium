@@ -35,6 +35,8 @@ export interface ConnectOpts {
    *  drop as a failed transfer instead of hanging forever. "failed"/"closed" are
    *  terminal; a transient "disconnected" triggers an automatic ICE restart. */
   onStateChange?: (state: RTCPeerConnectionState) => void;
+  /** Abort only while establishing; an opened connection is closed via Conn. */
+  signal?: AbortSignal;
 }
 
 /** One end of the selected ICE pair. `address`/`port` are omitted unless the
@@ -193,6 +195,7 @@ async function handshakeConnect(opts: ConnectOpts, generation: Generation): Prom
     config: opts.config,
     initialSignal: opts.initialSignal,
     onStateChange: opts.onStateChange,
+    signal: opts.signal,
 
     // The commit rides along with every offer/answer we send; caps ride with it
     // as the per-connection confirmation of the roster-level hello.
@@ -247,6 +250,7 @@ interface ResumeOpts {
   config?: RtcConfig;
   initialSignal?: InboundSignal;
   onStateChange?: (state: RTCPeerConnectionState) => void;
+  signal?: AbortSignal;
 }
 
 /**

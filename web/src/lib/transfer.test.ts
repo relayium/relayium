@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { ready, generateKeyPair, deriveSession } from "./crypto";
 import {
   Sender, Receiver, FRAME, CHUNK_SIZE, CHUNK_OVERHEAD, FLOW_WINDOW, FLOW_ACK_INTERVAL,
-  ackFrame, parseAck, parseResumeReq, resumePointInRange, type ResumePoint,
+  ACCEPT, REJECT, COMPLETE, FILE_BUSY, ackFrame, controlKind, parseAck, parseResumeReq,
+  resumePointInRange, type ResumePoint,
 } from "./transfer";
 
 beforeAll(async () => { await ready(); });
@@ -332,6 +333,21 @@ describe("flow-control ack frame", () => {
     expect(maxAhead).toBeLessThanOrEqual(FLOW_WINDOW + CHUNK_SIZE); // bounded receiver memory
     expect(maxAhead).toBeGreaterThan(FLOW_WINDOW - CHUNK_SIZE); // window actually engaged (test is meaningful)
   }, 30_000);
+});
+
+describe("mixed-link file lifecycle controls", () => {
+  it("recognises the busy frame without colliding with existing controls", () => {
+    expect(controlKind(ACCEPT.buffer as ArrayBuffer)).toBe("accept");
+    expect(controlKind(REJECT.buffer as ArrayBuffer)).toBe("reject");
+    expect(controlKind(COMPLETE.buffer as ArrayBuffer)).toBe("complete");
+    expect(controlKind(FILE_BUSY.buffer as ArrayBuffer)).toBe("busy");
+    expect(new Set([ACCEPT[0], REJECT[0], COMPLETE[0], FILE_BUSY[0]]).size).toBe(4);
+  });
+
+  it("requires an exact one-byte control frame", () => {
+    expect(controlKind(new Uint8Array([FILE_BUSY[0], 0]).buffer)).toBeNull();
+    expect(controlKind(new Uint8Array([]).buffer)).toBeNull();
+  });
 });
 
 // commit-reveal 挡的是「信令中继改写 SDP 指纹做 DTLS 中间人」。那种攻击者推不出会话

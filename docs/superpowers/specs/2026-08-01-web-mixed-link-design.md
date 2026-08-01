@@ -134,15 +134,32 @@ failure ends that batch but not the text lane.
 
 ## Link glare, lifetime and recovery
 
-At most one link is active globally. If both devices initiate simultaneously,
-the lexicographically smaller peer ID is the link initiator. The larger-ID side
-closes its outbound attempt, answers the winning offer and replays its queued user
-intent exactly once after the link opens. A link offer from another peer receives
-a generation-matched busy response.
+At most one link is active globally. The lexicographically smaller peer ID is the
+only side allowed to create the link offer. When the larger-ID side acts first it
+sends a content-free `{ "linkRequest": true }` signal; the smaller side then
+offers. A simultaneous action therefore converges before SDP exists instead of
+creating two PeerConnections in the same generation and trying to untangle their
+signals afterward. A pending request reserves the one global link slot for that
+peer; a link request or offer from another peer receives a generation-matched
+busy response and cannot displace the first intent. The request is retried while
+waiting because signalling sends during a socket reconnect are best-effort, and
+ends with a typed timeout. The first late offer from a timed-out request is
+refused with a generation-matched busy response and consumes the stale marker;
+a later explicit offer may retry, so a failed UI action cannot unexpectedly open
+a link while the peer also cannot be black-holed for the rest of the page session.
+The request is capability-gated and is not a security input: forging it can at
+most trigger or suppress a connection attempt. Resource admission is checked
+before accepting it; file and text consent remain separate. Each side queues its
+initiating user intent and replays it exactly once after the link opens.
 
 The 10-minute idle timer moves to link scope. Any lane traffic, active transfer or
 pending consent refreshes it; the timer cannot interrupt a file transfer. Room
 change, peer departure and explicit disconnect close both lanes and erase keys.
+Disconnecting while ICE or commit-reveal is still in progress aborts that attempt
+immediately, removes its signal listener and prevents a late connection from
+competing with a retry. If SCTP opens but the peer-key reveal never arrives, a
+separate bounded authentication timeout closes the transport and makes the link
+retryable rather than leaving the workspace permanently in `connecting`.
 
 If transport fails during a file batch, rebuild one peer connection with both
 channels through the authenticated resume generation. Existing file checkpoint,
@@ -201,7 +218,7 @@ recovery behavior are complete enough to honor `link/1`.
   consent; no protected body is decrypted or rendered before its own acceptance.
 - A malformed text frame does not interrupt an active file batch, and a failed
   file batch does not erase a valid text conversation.
-- Simultaneous link creation and simultaneous file offers converge
+- Simultaneous link requests and simultaneous file offers converge
   deterministically without duplicate intent replay.
 - File transfer drop/resume preserves SAS, exact bytes and nonce/checkpoint state;
   the text conversation ends explicitly and can be reopened afterward.

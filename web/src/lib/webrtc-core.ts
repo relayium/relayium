@@ -71,6 +71,10 @@ export interface InboundSignal {
    *  announced the roster-level `link/1` capability; older peers treat unknown
    *  offers as legacy file offers, so the tag alone is not a compatibility gate. */
   link?: boolean;
+  /** Content-free request asking the deterministic (lower peer-id) offerer to
+   *  establish a link. Not a generation tag and not authenticated; capability
+   *  gating limits it to the same denial-of-service class as a forged caps hello. */
+  linkRequest?: boolean;
 }
 
 /** The peer declined a fresh offer because it is mid-transfer (one at a time).
@@ -209,6 +213,9 @@ export interface CoreOpts extends CoreHooks {
   config?: RtcConfig;
   initialSignal?: InboundSignal;
   onStateChange?: (state: RTCPeerConnectionState) => void;
+  /** Cancels an in-progress establishment immediately. Once a Conn has been
+   *  returned, callers use Conn.close() instead. */
+  signal?: AbortSignal;
   /** 这条连接属于哪个信令世代。**双向**生效：外发信令一律盖上这个世代的标记，入站
    *  信令也只收同一个世代的。掉线重连时原连接和它的替身同时活着；消息会话和文件传输
    *  也可能同时活着——靠它互不串台。默认 "file"，也就是所有旧版本对端发的那种无标记
@@ -299,12 +306,21 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
       pc.ondatachannel = (ev) => collect(ev.channel);
     }
   });
+  // Establishment can fail while createOffer/setLocalDescription is still
+  // pending, before execution reaches `await ready`. Mark the rejection as
+  // observed now; the later await still receives and propagates the same error.
+  void ready.catch(() => {});
 
   const connectTimer = setTimeout(() => {
     if (!opened) failReady(new Error(`relayium: ${what} timed out`));
   }, CONNECT_TIMEOUT_MS);
 
+  let abortListener: (() => void) | undefined;
+  let closed = false;
   function close() {
+    if (closed) return;
+    closed = true;
+    if (abortListener) opts.signal?.removeEventListener("abort", abortListener);
     off();
     try { pc.close(); } catch { /* already closed */ }
   }
@@ -358,6 +374,15 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
       .catch((err) => console.error(`relayium ${what} signal error`, err));
   });
 
+  abortListener = () => {
+    const err = new Error("relayium: connection aborted");
+    err.name = "AbortError";
+    if (!opened) failReady(err);
+    close();
+  };
+  opts.signal?.addEventListener("abort", abortListener, { once: true });
+  if (opts.signal?.aborted) abortListener();
+
   // A transient "disconnected" (a NAT rebinding, a brief network blip) often
   // recovers on its own, and an ICE restart forces fresh candidate gathering to
   // speed that up. Only the initiator drives renegotiation; guard to one attempt
@@ -387,21 +412,31 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     if (state === "closed" || state === "failed") off();
   };
 
-  if (role === "initiator") {
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    send({ sdp: offer, ...opts.sdpExtra?.() });
-  } else if (opts.initialSignal) {
-    // The signal that got us here goes through the same check as every later
-    // one — it is the resume OFFER, i.e. exactly the message L3 is about.
-    await accept(opts.initialSignal);
-  }
-
   try {
+    if (!opts.signal?.aborted) {
+      if (role === "initiator") {
+        const offer = await pc.createOffer();
+        if (opts.signal?.aborted) throw Object.assign(new Error("relayium: connection aborted"), { name: "AbortError" });
+        await pc.setLocalDescription(offer);
+        send({ sdp: offer, ...opts.sdpExtra?.() });
+      } else if (opts.initialSignal) {
+        // The signal that got us here goes through the same check as every later
+        // one — it is the resume OFFER, i.e. exactly the message L3 is about.
+        recvChain = recvChain.then(() => accept(opts.initialSignal!));
+        await recvChain;
+      }
+    }
     const openChannels = await ready;
     clearTimeout(connectTimer);
+    if (opts.signal?.aborted) {
+      const err = new Error("relayium: connection aborted");
+      err.name = "AbortError";
+      throw err;
+    }
     const primary = openChannels.get(channelLabels[0]);
     if (!primary) throw new Error("relayium: primary data channel missing");
+    if (abortListener) opts.signal?.removeEventListener("abort", abortListener);
+    abortListener = undefined;
     return {
       channel: primary,
       getChannel: (label) => openChannels.get(label),
