@@ -23,6 +23,10 @@ export const LOCAL_CAPS: readonly string[] = advertisedCaps();
  *  much smaller than the file flow-control window: pre-attachment traffic has
  *  not reached a content-consent state yet. */
 export const LINK_CAPTURE_MAX_BYTES = 256 * 1024;
+/** The exact lane labels a mixed link carries, in primary-first order. One
+ *  constant so the first connection and an authenticated transport resume can
+ *  never disagree about which SCTP streams make up a link. */
+export const LINK_CHANNEL_LABELS: readonly string[] = ["relayium", "relayium-text"];
 
 export interface ConnectOpts {
   signaling: SignalingClient;
@@ -196,7 +200,7 @@ async function handshakeConnect(opts: ConnectOpts, generation: Generation): Prom
     // Keeps "connection failed" and "text connection failed" apart in logs and
     // tests; the file generation keeps its existing unlabelled wording.
     label: generation === "text" ? "text" : generation === "link" ? "link" : undefined,
-    channelLabels: generation === "link" ? ["relayium", "relayium-text"] : undefined,
+    channelLabels: generation === "link" ? LINK_CHANNEL_LABELS : undefined,
     captureBeforeReadyBytes: generation === "link" ? LINK_CAPTURE_MAX_BYTES : undefined,
     config: opts.config,
     initialSignal: opts.initialSignal,
@@ -278,4 +282,44 @@ interface ResumeOpts {
  */
 export async function connectResume(opts: ResumeOpts): Promise<Conn> {
   return establish({ ...opts, generation: "resume", label: "resume" });
+}
+
+/**
+ * Re-establish BOTH lanes of an existing mixed link, WITHOUT re-running the
+ * commit-reveal handshake — connectResume's dual-channel sibling.
+ *
+ * The whole reason this is a separate entry point rather than an option on
+ * connectResume is that the two differ in exactly one thing that must never be
+ * decided at a call site by accident: how many SCTP streams make up a working
+ * connection. A link whose text lane never opened is not a degraded link, it is
+ * a link that cannot honour `link/1` — so this waits for the complete
+ * label-keyed set (arrival order is irrelevant) instead of resolving on the
+ * first channel and letting the caller discover the missing lane later.
+ *
+ * Everything else is deliberately identical to connectResume, including the
+ * `resume` signalling generation and the mandatory `auth`: this path runs no
+ * commit-reveal, so possession of the first connection's session keys — the
+ * ones the user compared as a SAS — is what proves the offer came from the same
+ * peer. The link keeps its one SessionKeys, its one SAS and its four codecs;
+ * only the transport underneath is rebuilt (see the link's Trust and nonce
+ * invariants).
+ *
+ * Both lanes capture from the moment each channel is collected, bounded by the
+ * same LINK_CAPTURE_MAX_BYTES the first connection uses: the peer may start
+ * sending on the resumed file lane while this side's text lane is still
+ * completing DCEP, and those frames belong to codecs that already exist.
+ *
+ * Sharing the `resume` generation with connectResume is deliberate and safe:
+ * two resume connections alive at once (a legacy file transfer's and a link's)
+ * each verify under their OWN session's keys, so neither can consume the other's
+ * offer — the auth tag, not the tag vocabulary, is what separates them.
+ */
+export async function connectResumeLink(opts: ResumeOpts): Promise<Conn> {
+  return establish({
+    ...opts,
+    generation: "resume",
+    label: "resume link",
+    channelLabels: LINK_CHANNEL_LABELS,
+    captureBeforeReadyBytes: LINK_CAPTURE_MAX_BYTES,
+  });
 }

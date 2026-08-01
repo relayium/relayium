@@ -373,6 +373,59 @@ again. Deleting the one-line reset makes exactly that assertion fail.
 Advertisement itself is unchanged: still off, still gated on the remaining items
 above.
 
+### Implementation checkpoint: an authenticated dual-lane transport rebuild, still untriggered and capability still off
+
+The link can now be moved onto a new transport without becoming a new link.
+`connectResumeLink()` is `connectResume()`'s dual-lane sibling: the same
+transport-only `resume` signalling generation, the same mandatory `resumeAuth`
+tag on every SDP and ICE message, but it establishes the exact labels `relayium`
+and `relayium-text` and is not usable until both are open. Both lanes capture
+from the instant each channel is collected, under the same combined
+`LINK_CAPTURE_MAX_BYTES` bound the first connection uses, because the peer may
+speak on a rebuilt file lane while this side's text lane is still completing
+DCEP — and on a rebuild those frames belong to codecs that already exist. The
+legacy `connectResume()` is untouched: still one lane, still no capture, so a
+resumed one-shot file transfer never waits for a channel an older peer will
+never open.
+
+`PeerLinkManager.replaceTransport(peerId, offer?)` is the bounded operation on
+top of it. The link it publishes reuses the *same objects* — one `SessionKeys`,
+one SAS, one `Sender`, `Receiver`, `TextSender` and `TextReceiver` — and
+replaces only the `Conn` and the two channels, so no `(content key, direction)`
+sequence restarts and no second SAS can exist. It rebuilds under the role the
+link was established with, so the deterministic offerer/responder split survives
+a rebuild. It refuses a call for any peer other than the current link's, refuses
+when no link is current, and serialises a duplicate call onto the rebuild
+already in flight rather than racing a second PeerConnection into the same
+lanes.
+
+It fails closed. A transport missing either lane, a cancellation, a completion
+that arrives after its link stopped being current, and a transport that reached
+a terminal state before it could be attached all close the rebuilt transport and
+publish nothing, leaving the caller's link exactly as it was. Capture overflow
+additionally fails the whole link, because a dropped admitted frame is the one
+thing the reused receiver codecs cannot survive.
+
+The replacement is published atomically through the existing `onLinkChange`
+boundary, so both lanes attach to it — retiring whatever the old transport was
+carrying — before a single captured frame replays and before the old `Conn` is
+closed. Closing that old transport therefore cannot publish null over the link
+that is already live: a terminal callback only acts when it still owns
+`current.conn`. The same rule makes a stale rebuild inert against a newer one.
+
+Nothing triggers any of this yet, and mixed file lane state is unchanged. The
+coordinator that decides *when* to resume — and that must therefore keep a
+dropped link current long enough to rebuild it, rather than tearing it down on
+the first terminal transport callback as it does today — is stage 3. So
+**recovery of an active file batch across a transport drop is still a gate, not
+a delivered capability**: checkpoint, chain, flow-control and nonce continuation
+across the gap remain unwritten and untested end to end. `link/1` stays absent
+from `capsSignal()` and `LOCAL_CAPS` in every default and release build; the
+opt-in `VITE_RELAYIUM_LINK_E2E` bundle is unchanged. The remaining advertisement
+gates are unchanged too: dual-lane file resume actually driven by a coordinator,
+the mobile-background text barrier policy, replacement of a poisoned text
+channel, and target-browser `bufferedAmount`-at-close semantics.
+
 ## Acceptance matrix
 
 - One link sends file → text → files → text → file with one PeerConnection, one

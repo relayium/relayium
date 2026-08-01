@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { connect, connectLink, connectResume, connectText, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, LINK_CAPTURE_MAX_BYTES, type InboundSignal } from "./webrtc";
+import { connect, connectLink, connectResume, connectResumeLink, connectText, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, LINK_CAPTURE_MAX_BYTES, LINK_CHANNEL_LABELS, type InboundSignal } from "./webrtc";
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, deriveSession, signResume, verifyResume, type SessionKeys } from "./crypto";
 import { sas } from "./crypto";
@@ -447,6 +447,189 @@ describe("connectResume", () => {
     pc.onconnectionstatechange?.();
     expect(seen).toContain("connected");
     c.close();
+  });
+});
+
+// connectResumeLink is connectResume for a mixed link: the same transport-only
+// generation and the same mandatory signalling authentication, but a connection
+// is not usable until BOTH lanes exist. The tests below pin that difference in
+// both directions — the link path must never resolve on one lane, and the legacy
+// path must never grow a second one.
+describe("connectResumeLink", () => {
+  it("rebuilds both lanes with no commit/reveal and resolves only when both open", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    FakePC.inboundLabels = ["relayium-text", "relayium"]; // reverse arrival is intentional
+    const hub = makeHub();
+    const a = await pairAuth();
+    const rP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    const iP = connectResumeLink({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    await flush();
+
+    // No key material on the wire: the link keeps the SessionKeys and the SAS
+    // the first connection anchored.
+    for (const side of ["I", "R"] as const) {
+      expect(hub.sent[side].some((m) => m.commit || m.reveal)).toBe(false);
+    }
+
+    let settled = false;
+    void Promise.all([iP, rP]).then(() => (settled = true));
+    for (const pc of instances) pc.channels.find((ch) => ch.label === "relayium")?._open();
+    await flush();
+    expect(settled).toBe(false); // one lane is not a link
+
+    for (const pc of instances) pc.channels.find((ch) => ch.label === "relayium-text")?._open();
+    const [ic, rc] = await Promise.all([iP, rP]);
+    for (const c of [ic, rc]) {
+      expect(c.channel.label).toBe("relayium");
+      expect(c.getChannel("relayium")?.label).toBe("relayium");
+      expect(c.getChannel("relayium-text")?.label).toBe("relayium-text");
+    }
+    expect([...LINK_CHANNEL_LABELS]).toEqual(["relayium", "relayium-text"]);
+    ic.close();
+    rc.close();
+  });
+
+  it("signs and tags every outgoing signal exactly like the legacy resume path", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    FakePC.inboundLabels = [...LINK_CHANNEL_LABELS];
+    const hub = makeHub();
+    const a = await pairAuth();
+    const rP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    const iP = connectResumeLink({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    await flush();
+    openAll();
+    const [ic, rc] = await Promise.all([iP, rP]);
+
+    for (const side of ["I", "R"] as const) {
+      expect(hub.sent[side].length).toBeGreaterThan(0);
+      expect(hub.sent[side].every((m) => m.resume === true)).toBe(true);
+      expect(hub.sent[side].every((m) => typeof m.auth === "string" && m.auth.length > 0)).toBe(true);
+    }
+    // And the tags verify under the peer's mirrored key — the SDP and ICE of a
+    // rebuilt link are bound to the session the user already compared.
+    for (const m of hub.sent.I) expect(await a.R.verify(authPayload(m), m.auth)).toBe(true);
+    for (const m of hub.sent.R) expect(await a.I.verify(authPayload(m), m.auth)).toBe(true);
+    ic.close();
+    rc.close();
+  });
+
+  it("never answers a resume-link offer signed with another session's key", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    FakePC.inboundLabels = [...LINK_CHANNEL_LABELS];
+    const hub = makeHub();
+    const a = await pairAuth();
+    const other = await pairAuth(); // a signalling relay running its own exchange
+    const rP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    await flush();
+
+    const forged: InboundSignal = { sdp: { type: "offer", sdp: "mitm" }, resume: true };
+    forged.auth = await other.I.sign(authPayload(forged));
+    hub.inject("R", "I", forged);
+    const untagged: InboundSignal = { sdp: { type: "offer", sdp: "mitm2" }, resume: true };
+    hub.inject("R", "I", untagged);
+    await flush();
+    expect(hub.sent.R.length).toBe(0); // neither was ever answered
+
+    const genuine: InboundSignal = { sdp: { type: "offer", sdp: "real" }, resume: true };
+    genuine.auth = await a.I.sign(authPayload(genuine));
+    hub.inject("R", "I", genuine);
+    await flush();
+    expect(hub.sent.R.some((m) => m.sdp?.type === "answer")).toBe(true);
+    openAll();
+    (await rP).close();
+  });
+
+  it("captures each lane from collection and drains it exactly once", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const a = await pairAuth();
+    const iP = connectResumeLink({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    await flush();
+    const pc = instances[0];
+    const file = pc.channels.find((ch) => ch.label === "relayium")!;
+    const text = pc.channels.find((ch) => ch.label === "relayium-text")!;
+    // The peer speaks on the rebuilt file lane while the text lane is still
+    // completing DCEP. Those frames belong to codecs that already exist.
+    file._open();
+    file._message(new Uint8Array([1]).buffer);
+    file._message(new Uint8Array([2]).buffer);
+    text._open();
+    text._message(new Uint8Array([9]).buffer);
+
+    const conn = await iP;
+    expect(conn.takeCaptured?.("relayium").frames.map((f) => [...new Uint8Array(f)]))
+      .toEqual([[1], [2]]);
+    expect(conn.takeCaptured?.("relayium-text").frames.map((f) => [...new Uint8Array(f)]))
+      .toEqual([[9]]);
+    expect(conn.takeCaptured?.("relayium").frames).toEqual([]); // no replay
+    conn.close();
+  });
+
+  it("bounds that capture and reports overflow instead of truncating silently", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const a = await pairAuth();
+    const iP = connectResumeLink({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    await flush();
+    const pc = instances[0];
+    const file = pc.channels.find((ch) => ch.label === "relayium")!;
+    file._open();
+    file._message(new ArrayBuffer(LINK_CAPTURE_MAX_BYTES + 1));
+    pc.channels.find((ch) => ch.label === "relayium-text")!._open();
+    const conn = await iP;
+    expect(conn.takeCaptured?.("relayium")).toEqual({ frames: [], overflow: true });
+    expect(conn.takeCaptured?.("relayium-text")).toEqual({ frames: [], overflow: true });
+    conn.close();
+  });
+
+  // Both kinds of resume ride the same generation tag, so what keeps them apart
+  // is the auth tag alone. Two of them alive on one signalling link — a legacy
+  // file transfer's and a link's — must not consume each other's offers.
+  it("cannot be cross-routed with a legacy resume on the same signalling link", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    FakePC.inboundLabels = [...LINK_CHANNEL_LABELS];
+    const hub = makeHub();
+    const legacy = await pairAuth();
+    const linked = await pairAuth();
+    const legacyP = connectResume({ signaling: hub.R, peerId: "I", role: "responder", auth: legacy.R });
+    const linkP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: linked.R });
+    await flush();
+
+    const offer: InboundSignal = { sdp: { type: "offer", sdp: "link-rebuild" }, resume: true };
+    offer.auth = await linked.I.sign(authPayload(offer));
+    hub.inject("R", "I", offer);
+    await flush();
+    // Exactly one of the two answered it, and it was the link's connection —
+    // the legacy one never even got as far as collecting a channel.
+    expect(hub.sent.R.filter((m) => m.sdp?.type === "answer")).toHaveLength(1);
+    expect(instances[0].channels).toHaveLength(0);
+    expect(instances[1].channels.map((ch) => ch.label)).toEqual([...LINK_CHANNEL_LABELS]);
+
+    const foreign: InboundSignal = { sdp: { type: "offer", sdp: "foreign" }, resume: true };
+    foreign.auth = await (await pairAuth()).I.sign(authPayload(foreign));
+    hub.inject("R", "I", foreign);
+    await flush();
+    expect(hub.sent.R.filter((m) => m.sdp?.type === "answer")).toHaveLength(1);
+    legacyP.catch(() => {});
+    linkP.catch(() => {});
+  });
+
+  // The legacy contract, asserted next to the new one: connectResume still opens
+  // exactly one lane and still captures nothing. A resumed one-shot file
+  // transfer must not start waiting for a text channel an older peer never opens.
+  it("leaves the legacy connectResume single-lane and capture-free", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const a = await pairAuth();
+    const p = connectResume({ signaling: hub.I, peerId: "R", role: "initiator", auth: a.I });
+    await flush();
+    expect(instances[0].channels.map((ch) => ch.label)).toEqual(["relayium"]);
+    openAll();
+    const conn = await p;
+    expect(conn.channel.label).toBe("relayium");
+    expect(conn.getChannel("relayium-text")).toBeUndefined();
+    expect(conn.takeCaptured).toBeUndefined();
+    conn.close();
   });
 });
 

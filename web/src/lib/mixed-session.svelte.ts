@@ -36,6 +36,7 @@ export interface MixedSessionDeps {
   /** Resource admission only; content consent remains lane-local. */
   canAcceptLink?(peerId: string): boolean;
   connect?: PeerLinkDeps["connect"];
+  resume?: PeerLinkDeps["resume"];
   pickSaveTarget?: MixedFileSessionDeps["pickSaveTarget"];
   requestNotify?: MixedFileSessionDeps["requestNotify"];
   now?: () => number;
@@ -176,6 +177,11 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
     }
     // This callback runs synchronously inside manager establishment, before the
     // ensure promise resolves or an inbound request is replayed by either peer.
+    // An authenticated transport replacement arrives the same way: a link object
+    // carrying the same keys, SAS and codecs but new channels, published before
+    // the old transport is closed. Both lanes therefore re-attach — retiring
+    // whatever the retired transport was carrying — before any captured frame
+    // from the new one replays.
     file.attach(link);
     text.attach(link);
     if (!link.fileChannel.onmessage || !link.textChannel.onmessage) {
@@ -211,6 +217,7 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
     supportsLink: supports,
     canAcceptLink: deps.canAcceptLink,
     connect: deps.connect,
+    resume: deps.resume,
     onLinkChange,
   });
 

@@ -1,12 +1,15 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { generateKeyPair, ready } from "./crypto";
+import { deriveSession, generateKeyPair, ready, signResume, verifyResume } from "./crypto";
 import {
   LINK_AUTH_TIMEOUT_MS, LINK_REQUEST_RETRY_MS, LINK_REQUEST_TIMEOUT_MS,
   LinkAuthenticationTimeoutError, LinkBusyError, LinkRequestTimeoutError,
+  LinkReplaceStaleError, LinkReplaceUnavailableError,
   UnsupportedLinkError, createPeerLinkManager,
   isLinkOffer, isLinkRequest, linkRole,
+  type PeerLinkDeps,
 } from "./peer-link.svelte";
-import { connectLink, type Conn, type InboundSignal } from "./webrtc";
+import { LINK_CAPTURE_MAX_BYTES, connectLink, connectResumeLink, type Conn, type InboundSignal } from "./webrtc";
+import { authPayload } from "./webrtc-core";
 import type { SignalingClient } from "./signaling";
 import { FLOW_WINDOW } from "./transfer";
 
@@ -48,6 +51,49 @@ function transportHarness() {
   });
   return { connect, conns };
 }
+
+/** A rebuilt transport, shaped like what connectResumeLink returns: two open
+ *  lanes plus whatever the primitive captured before the caller could attach. */
+function rebuiltConn(opts: {
+  lanes?: "both" | "fileOnly";
+  captured?: { file?: ArrayBuffer[]; text?: ArrayBuffer[]; overflow?: boolean };
+} = {}) {
+  const file = { label: "relayium", readyState: "open" } as RTCDataChannel;
+  const text = { label: "relayium-text", readyState: "open" } as RTCDataChannel;
+  const pending = {
+    relayium: [...(opts.captured?.file ?? [])],
+    "relayium-text": [...(opts.captured?.text ?? [])],
+  } as Record<string, ArrayBuffer[]>;
+  const conn: Conn = {
+    channel: file,
+    getChannel: (label) =>
+      label === "relayium" ? file
+      : label === "relayium-text" && opts.lanes !== "fileOnly" ? text
+      : undefined,
+    takeCaptured: opts.captured
+      ? (label: string) => ({ frames: pending[label]?.splice(0) ?? [], overflow: opts.captured?.overflow === true })
+      : undefined,
+    close: vi.fn(), path: async () => "lan",
+    stats: async () => new Map() as unknown as RTCStatsReport,
+  };
+  return { conn, file, text };
+}
+
+/** The connectResumeLink seam, with the calls it saw and the transports it made. */
+function rebuild(opts: Parameters<typeof rebuiltConn>[0] & { gate?: Promise<unknown> } = {}) {
+  const calls: Parameters<typeof connectResumeLink>[0][] = [];
+  const conns: Conn[] = [];
+  const resume = vi.fn(async (o: Parameters<typeof connectResumeLink>[0]): Promise<Conn> => {
+    calls.push(o);
+    if (opts.gate) await opts.gate;
+    const { conn } = rebuiltConn(opts);
+    conns.push(conn);
+    return conn;
+  });
+  return { resume, calls, conns };
+}
+
+const bytes = (...values: number[]) => new Uint8Array(values).buffer;
 
 const tick = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
 
@@ -652,6 +698,18 @@ describe("mixed peer link ownership", () => {
     manager.stop();
   });
 
+  it("has no transport replacement to make before a link exists", async () => {
+    const sig = signalingHarness();
+    const manager = createPeerLinkManager({
+      selfId: () => "a", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transportHarness().connect, resume: rebuild().resume,
+    });
+    await expect(manager.replaceTransport("b")).rejects.toBeInstanceOf(LinkReplaceUnavailableError);
+    expect(manager.replacingTransport).toBe(false);
+    manager.stop();
+  });
+
   it("replaces its signal listener instead of duplicating it", async () => {
     const sig = signalingHarness();
     const transport = transportHarness();
@@ -665,6 +723,394 @@ describe("mixed peer link ownership", () => {
     sig.inject("z", { link: true, linkRequest: true });
     await tick();
     expect(transport.connect).toHaveBeenCalledTimes(1);
+    manager.stop();
+  });
+});
+
+// A transport replacement is the one operation allowed to change a live link.
+// Everything it must NOT change — the keys, the SAS, the four codecs and their
+// nonce sequences — is exactly what makes a link a link, so most of these tests
+// are identity assertions rather than behaviour assertions.
+describe("mixed link transport replacement", () => {
+  async function opened(over: Partial<PeerLinkDeps> = {}) {
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const events: { status: string; peerId: string | null }[] = [];
+    const manager = createPeerLinkManager({
+      selfId: () => "a", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+      onLinkChange(link, status) { events.push({ status, peerId: link?.peerId ?? null }); },
+      ...over,
+    });
+    const link = await manager.ensure("b");
+    return { sig, transport, manager, link, events };
+  }
+
+  it("reuses the keys, the SAS and all four codecs, replacing only the transport", async () => {
+    const seam = rebuild();
+    const { manager, link, transport } = await opened({ resume: seam.resume });
+
+    const next = await manager.replaceTransport("b");
+
+    expect(next).not.toBe(link);
+    expect(manager.current).toBe(next);
+    expect(next.peerId).toBe("b");
+    // Only these three change.
+    expect(next.conn).toBe(seam.conns[0]);
+    expect(next.conn).not.toBe(link.conn);
+    expect(next.fileChannel).not.toBe(link.fileChannel);
+    expect(next.textChannel).not.toBe(link.textChannel);
+    expect(next.fileChannel.label).toBe("relayium");
+    expect(next.textChannel.label).toBe("relayium-text");
+    // Everything the link owns is the SAME OBJECT, not an equal one.
+    expect(next.keys).toBe(link.keys);
+    expect(next.sas).toBe(link.sas);
+    expect(next.role).toBe(link.role);
+    expect(next.fileSender).toBe(link.fileSender);
+    expect(next.fileReceiver).toBe(link.fileReceiver);
+    expect(next.textSender).toBe(link.textSender);
+    expect(next.textReceiver).toBe(link.textReceiver);
+    // No second commit-reveal: a rebuilt transport never re-authenticates and so
+    // can never present a second SAS.
+    expect(transport.connect).toHaveBeenCalledTimes(1);
+    expect(seam.resume).toHaveBeenCalledTimes(1);
+    // The old transport is retired, exactly once.
+    expect(link.conn.close).toHaveBeenCalledOnce();
+    expect(manager.replacingTransport).toBe(false);
+    manager.stop();
+  });
+
+  it("keeps every codec's nonce sequence continuous across the replacement", async () => {
+    const seam = rebuild();
+    const { manager, link } = await opened({ resume: seam.resume });
+
+    const before = await link.textSender.frame("one", link.keys.textSend);
+    const next = await manager.replaceTransport("b");
+    const after = await next.textSender.frame("two", next.keys.textSend);
+
+    expect(new DataView(before.buffer, before.byteOffset).getUint32(1)).toBe(0);
+    expect(new DataView(after.buffer, after.byteOffset).getUint32(1)).toBe(1);
+    manager.stop();
+  });
+
+  it("authenticates the rebuild with the link's existing resumeAuth key", async () => {
+    const seam = rebuild();
+    const { manager, link } = await opened({ resume: seam.resume });
+    const offer: InboundSignal = { link: true, resume: true, sdp: { type: "offer", sdp: "rebuild" } };
+
+    await manager.replaceTransport("b", offer);
+
+    const call = seam.calls[0];
+    expect(call.peerId).toBe("b");
+    expect(call.initialSignal).toBe(offer);
+    expect(call.config).toEqual({ iceServers: [] });
+    expect(call.signal).toBeInstanceOf(AbortSignal);
+    // What it signs with is the link's key, not a fresh one: a tag this
+    // connection produces verifies under the link's resumeAuth and vice versa.
+    const payload = authPayload(offer);
+    expect(await verifyResume(link.keys.resumeAuth, payload, await call.auth.sign(payload))).toBe(true);
+    expect(await call.auth.verify(payload, await signResume(link.keys.resumeAuth, payload))).toBe(true);
+    // And a signalling relay that ran its own key exchange cannot produce one.
+    const attacker = generateKeyPair();
+    const victim = generateKeyPair();
+    const foreign = await deriveSession("initiator", attacker, victim.publicKey);
+    expect(await call.auth.verify(payload, await signResume(foreign.resumeAuth, payload))).toBe(false);
+    expect(await call.auth.verify(payload, undefined)).toBe(false);
+    manager.stop();
+  });
+
+  it("rebuilds with the offerer role the link was established under", async () => {
+    const initiating = rebuild();
+    const asInitiator = await opened({ resume: initiating.resume });
+    await asInitiator.manager.replaceTransport("b");
+    expect(asInitiator.link.role).toBe("initiator");
+    expect(initiating.calls[0].role).toBe("initiator");
+    expect(initiating.calls[0].role).toBe(linkRole("a", "b"));
+    asInitiator.manager.stop();
+
+    // The larger peer id answers, on the first connection and on every rebuild.
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const answering = rebuild();
+    const manager = createPeerLinkManager({
+      selfId: () => "z", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect, resume: answering.resume,
+    });
+    manager.listen();
+    const waiting = manager.ensure("a");
+    sig.inject("a", { link: true, sdp: { type: "offer", sdp: "v=0" } });
+    const link = await waiting;
+    expect(link.role).toBe("responder");
+    await manager.replaceTransport("a");
+    expect(answering.calls[0].role).toBe("responder");
+    expect(answering.calls[0].role).toBe(linkRole("z", "a"));
+    manager.stop();
+  });
+
+  it("hands both lanes' early frames to the owner in FIFO order, before it can be raced", async () => {
+    const seam = rebuild({
+      captured: { file: [bytes(1), bytes(2)], text: [bytes(9)] },
+    });
+    const attached: string[] = [];
+    const replayed: { file: number[]; text: number[] } = { file: [], text: [] };
+    const { manager, link } = await opened({
+      resume: seam.resume,
+      onLinkChange(next, status, captured) {
+        if (!next) { attached.push(`${status}:none`); return; }
+        attached.push(`${status}:${next.peerId}`);
+        // The lane owner attaches here; only then are the captured frames its
+        // problem. Replay through the handler it just installed.
+        next.fileChannel.onmessage = (event: MessageEvent) => replayed.file.push(new Uint8Array(event.data)[0]);
+        next.textChannel.onmessage = (event: MessageEvent) => replayed.text.push(new Uint8Array(event.data)[0]);
+        for (const frame of captured?.file ?? []) next.fileChannel.onmessage?.({ data: frame } as MessageEvent);
+        for (const frame of captured?.text ?? []) next.textChannel.onmessage?.({ data: frame } as MessageEvent);
+      },
+    });
+
+    const next = await manager.replaceTransport("b");
+    expect(attached).toEqual(["open:b", "open:b"]);
+    expect(replayed).toEqual({ file: [1, 2], text: [9] });
+    // The capture sinks are detached before the owner runs, so a second drain
+    // cannot replay the same frame into the codecs.
+    expect(next.conn.takeCaptured?.("relayium").frames).toEqual([]);
+    expect(link.conn.close).toHaveBeenCalledOnce();
+    manager.stop();
+  });
+
+  it("leaves no capture sink behind when the owner attaches nothing", async () => {
+    const seam = rebuild({ captured: { file: [bytes(1)] } });
+    const { manager } = await opened({ resume: seam.resume, onLinkChange() {} });
+    const next = await manager.replaceTransport("b");
+    expect(next.fileChannel.onmessage).toBeNull();
+    expect(next.textChannel.onmessage).toBeNull();
+    manager.stop();
+  });
+
+  it("refuses a rebuild for a peer that is not the current link's", async () => {
+    const seam = rebuild();
+    const { manager, link } = await opened({ resume: seam.resume });
+    await expect(manager.replaceTransport("c")).rejects.toBeInstanceOf(LinkReplaceUnavailableError);
+    expect(seam.resume).not.toHaveBeenCalled();
+    expect(manager.current).toBe(link);
+    expect(link.conn.close).not.toHaveBeenCalled();
+    manager.stop();
+  });
+
+  it("serializes a duplicate rebuild onto the one already in flight", async () => {
+    let release!: () => void;
+    const seam = rebuild({ gate: new Promise<void>((resolve) => { release = resolve; }) });
+    const { manager, link } = await opened({ resume: seam.resume });
+
+    const first = manager.replaceTransport("b");
+    const second = manager.replaceTransport("b");
+    expect(manager.replacingTransport).toBe(true);
+    release();
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).toBe(b);
+    expect(seam.resume).toHaveBeenCalledTimes(1);
+    expect(manager.current).toBe(a);
+    expect(link.conn.close).toHaveBeenCalledOnce();
+    manager.stop();
+  });
+
+  it("fails closed, keeping the link, when the rebuilt transport is missing a lane", async () => {
+    const seam = rebuild({ lanes: "fileOnly" });
+    const { manager, link, events } = await opened({ resume: seam.resume });
+
+    await expect(manager.replaceTransport("b")).rejects.toThrow(/incomplete/);
+    expect(seam.conns[0].close).toHaveBeenCalledOnce();
+    // A half-built replacement is not a reason to throw away a link that is
+    // still current; the caller may retry.
+    expect(manager.current).toBe(link);
+    expect(link.conn.close).not.toHaveBeenCalled();
+    expect(events).toEqual([{ status: "open", peerId: "b" }]);
+    expect(manager.replacingTransport).toBe(false);
+    manager.stop();
+  });
+
+  it("fails the whole link when the rebuild's capture overflows", async () => {
+    const seam = rebuild({
+      captured: { file: [new ArrayBuffer(LINK_CAPTURE_MAX_BYTES + 1)], overflow: true },
+    });
+    const { manager, link, events } = await opened({ resume: seam.resume });
+
+    // Dropped admitted frames are the one thing the reused receiver codecs
+    // cannot survive, so this is not a retryable transport failure.
+    await expect(manager.replaceTransport("b")).rejects.toThrow(/capture overflow/);
+    expect(manager.current).toBeNull();
+    expect(manager.status).toBe("failed");
+    expect(link.conn.close).toHaveBeenCalledOnce();
+    expect(seam.conns[0].close).toHaveBeenCalledOnce();
+    expect(events).toEqual([{ status: "open", peerId: "b" }, { status: "failed", peerId: null }]);
+    manager.stop();
+  });
+
+  it("fails closed when a lane owner cannot attach the replacement", async () => {
+    const seam = rebuild();
+    let established = false;
+    const { manager, link } = await opened({
+      resume: seam.resume,
+      onLinkChange(next) {
+        if (!next) return;
+        if (established) throw new Error("attach failed");
+        established = true;
+      },
+    });
+
+    await expect(manager.replaceTransport("b")).rejects.toThrow("attach failed");
+    expect(manager.current).toBeNull();
+    expect(manager.status).toBe("failed");
+    expect(seam.conns[0].close).toHaveBeenCalledOnce();
+    expect(link.conn.close).toHaveBeenCalledOnce();
+    manager.stop();
+  });
+
+  it("never publishes a rebuilt transport that died before it could be attached", async () => {
+    const conns: Conn[] = [];
+    // The transport opens both lanes and then goes terminal in the same turn, so
+    // the only teardown callback it will ever fire has already fired.
+    const resume = vi.fn(async (o: Parameters<typeof connectResumeLink>[0]): Promise<Conn> => {
+      const { conn } = rebuiltConn();
+      conns.push(conn);
+      o.onStateChange?.("failed");
+      return conn;
+    });
+    const { manager, link, events } = await opened({ resume });
+
+    await expect(manager.replaceTransport("b")).rejects.toThrow(/terminal/);
+    expect(conns[0].close).toHaveBeenCalledOnce();
+    expect(manager.current).toBe(link);
+    expect(events).toEqual([{ status: "open", peerId: "b" }]);
+    manager.stop();
+  });
+
+  it("chains replacements without letting an earlier one disturb a later one", async () => {
+    const seam = rebuild();
+    const { manager, link, events } = await opened({ resume: seam.resume });
+
+    const second = await manager.replaceTransport("b");
+    const third = await manager.replaceTransport("b");
+
+    expect(manager.current).toBe(third);
+    expect(third.keys).toBe(link.keys);
+    expect(third.textSender).toBe(link.textSender);
+    expect(third.fileReceiver).toBe(link.fileReceiver);
+    expect(seam.conns[0].close).toHaveBeenCalledOnce(); // retired by the third
+    expect(link.conn.close).toHaveBeenCalledOnce();
+    // The middle transport's own terminal callback now belongs to nothing.
+    seam.calls[0].onStateChange?.("closed");
+    expect(manager.current).toBe(third);
+    expect(events).toEqual([
+      { status: "open", peerId: "b" },
+      { status: "open", peerId: "b" },
+      { status: "open", peerId: "b" },
+    ]);
+    expect(second).not.toBe(third);
+    manager.stop();
+  });
+
+  it("does not hand back a replacement the manager stopped holding during attachment", async () => {
+    const seam = rebuild();
+    let attached = 0;
+    const { manager, link } = await opened({
+      resume: seam.resume,
+      onLinkChange(next) {
+        if (!next || ++attached < 2) return;
+        // A lane owner's attachment killed the transport it was just handed.
+        seam.calls[0].onStateChange?.("failed");
+      },
+    });
+
+    await expect(manager.replaceTransport("b")).rejects.toBeInstanceOf(LinkReplaceStaleError);
+    expect(manager.current).toBeNull();
+    expect(manager.status).toBe("failed");
+    expect(seam.conns[0].close).toHaveBeenCalled();
+    expect(link.conn.close).toHaveBeenCalledOnce();
+    manager.stop();
+  });
+
+  it("cancels a rebuild in flight and closes the transport that arrives late", async () => {
+    let release!: () => void;
+    const seam = rebuild({ gate: new Promise<void>((resolve) => { release = resolve; }) });
+    const { manager, link } = await opened({ resume: seam.resume });
+
+    const pending = manager.replaceTransport("b");
+    const rejected = expect(pending).rejects.toBeInstanceOf(LinkReplaceStaleError);
+    manager.close();
+    expect(seam.calls[0].signal?.aborted).toBe(true);
+    release();
+    await rejected;
+    expect(seam.conns[0].close).toHaveBeenCalledOnce();
+    expect(link.conn.close).toHaveBeenCalledOnce();
+    expect(manager.current).toBeNull();
+    expect(manager.status).toBe("idle");
+  });
+
+  it("closes a rebuild that completes after its link was torn down", async () => {
+    let release!: () => void;
+    const seam = rebuild({ gate: new Promise<void>((resolve) => { release = resolve; }) });
+    const { manager, transport, link } = await opened({ resume: seam.resume });
+
+    const pending = manager.replaceTransport("b");
+    const rejected = expect(pending).rejects.toBeInstanceOf(LinkReplaceStaleError);
+    // The link the caller asked to rebuild stops being current mid-flight.
+    transport.connect.mock.calls[0][0].onStateChange?.("failed");
+    expect(manager.current).toBeNull();
+    release();
+    await rejected;
+    expect(seam.conns[0].close).toHaveBeenCalledOnce();
+    expect(link.conn.close).toHaveBeenCalledOnce();
+    expect(manager.current).toBeNull();
+    manager.stop();
+  });
+
+  it("never lets the retired transport's terminal callback tear down the replacement", async () => {
+    const seam = rebuild();
+    const { manager, transport, link, events } = await opened({ resume: seam.resume });
+    const next = await manager.replaceTransport("b");
+
+    // The old PeerConnection reports what closing it always reports. It is not
+    // the link's transport any more, so it publishes nothing.
+    transport.connect.mock.calls[0][0].onStateChange?.("closed");
+    transport.connect.mock.calls[0][0].onStateChange?.("failed");
+    expect(manager.current).toBe(next);
+    expect(manager.status).toBe("open");
+    expect(events).toEqual([{ status: "open", peerId: "b" }, { status: "open", peerId: "b" }]);
+    expect(seam.conns[0].close).not.toHaveBeenCalled();
+    expect(link.conn.close).toHaveBeenCalledOnce();
+    manager.stop();
+  });
+
+  it("does publish a teardown when the replacement's own transport dies", async () => {
+    const seam = rebuild();
+    const { manager, events } = await opened({ resume: seam.resume });
+    await manager.replaceTransport("b");
+
+    seam.calls[0].onStateChange?.("failed");
+    expect(manager.current).toBeNull();
+    expect(manager.status).toBe("failed");
+    expect(seam.conns[0].close).toHaveBeenCalledOnce();
+    expect(events.at(-1)).toEqual({ status: "failed", peerId: null });
+    manager.stop();
+  });
+
+  it("keeps the one-link bound: a rebuild for another peer's link is busy, not silent", async () => {
+    let release!: () => void;
+    const seam = rebuild({ gate: new Promise<void>((resolve) => { release = resolve; }) });
+    const { manager, transport } = await opened({ resume: seam.resume });
+
+    const pending = manager.replaceTransport("b");
+    const rejected = expect(pending).rejects.toBeInstanceOf(LinkReplaceStaleError);
+    // While that rebuild is in flight the link drops and another peer's link
+    // takes the single slot.
+    transport.connect.mock.calls[0][0].onStateChange?.("closed");
+    const other = await manager.ensure("c");
+    await expect(manager.replaceTransport("c")).rejects.toBeInstanceOf(LinkBusyError);
+    release();
+    await rejected;
+    expect(manager.current).toBe(other);
     manager.stop();
   });
 });

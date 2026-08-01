@@ -197,6 +197,65 @@ describe("mixed session coordinator", () => {
     mixed.stop();
   });
 
+  // The coordinator side of an authenticated transport rebuild. Nothing triggers
+  // one yet; what is pinned here is that when the manager publishes a
+  // replacement, both lanes own it before a single captured frame is replayed.
+  it("re-attaches both lanes to a replaced transport before replaying its capture", async () => {
+    const h = harness();
+    const file = channel("relayium");
+    const text = channel("relayium-text");
+    const captured: Record<string, ArrayBuffer[]> = {
+      relayium: [],
+      "relayium-text": [TEXT_REQUEST.buffer.slice(0)],
+    };
+    const rebuilt: Conn = {
+      channel: file,
+      getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
+      takeCaptured: (label) => ({ frames: captured[label].splice(0), overflow: false }),
+      close: vi.fn(),
+      path: async () => "p2p",
+      stats: async () => new Map() as unknown as RTCStatsReport,
+    };
+    const resume = vi.fn(async () => rebuilt);
+    const mixed = createMixedSession({
+      selfId: () => "a",
+      signaling: () => h.signaling,
+      rtcConfig: () => ({ iceServers: [] }),
+      supportsLink: () => true,
+      connect: h.connect,
+      resume,
+    });
+
+    const link = await mixed.ensure("b");
+    const generation = mixed.linkGeneration;
+    const next = await mixed.manager.replaceTransport("b");
+
+    expect(mixed.link).toBe(next);
+    expect(mixed.file.link).toBe(next);
+    expect(mixed.text.link).toBe(next);
+    // One link, one SAS, one set of codecs — across the transport gap.
+    expect(next.keys).toBe(link.keys);
+    expect(next.sas).toBe(link.sas);
+    expect(mixed.sasCode).toBe(link.sas);
+    expect(next.fileSender).toBe(link.fileSender);
+    expect(next.fileReceiver).toBe(link.fileReceiver);
+    expect(next.textSender).toBe(link.textSender);
+    expect(next.textReceiver).toBe(link.textReceiver);
+    // The new lanes are owned and the retired ones are silent.
+    expect(next.fileChannel.onmessage).toBeTypeOf("function");
+    expect(next.textChannel.onmessage).toBeTypeOf("function");
+    expect(link.fileChannel.onmessage).toBeNull();
+    expect(link.textChannel.onmessage).toBeNull();
+    // The frame the peer sent on the rebuilt text lane before this side could
+    // attach was not lost, and it reached the lane, not the capture sink.
+    expect(mixed.text.status).toBe("incomingRequest");
+    expect(mixed.linkGeneration).toBeGreaterThan(generation);
+    expect(h.conns[0].close).toHaveBeenCalledOnce();
+    await flush();
+    expect(mixed.path).toBe("p2p");
+    mixed.stop();
+  });
+
   it("explicit disconnect detaches both lanes before closing their shared transport", async () => {
     const h = harness();
     const mixed = createMixedSession({
