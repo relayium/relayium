@@ -99,6 +99,9 @@ export interface Conn {
    *  Legacy callers keep using `channel`, which is always the first requested
    *  label (and defaults to `relayium`). */
   getChannel(label: string): RTCDataChannel | undefined;
+  /** Atomically detach and drain frames captured from the moment this channel
+   *  was collected. Present only when pre-ready capture was requested. */
+  takeCaptured?(label: string): { frames: readonly ArrayBuffer[]; overflow: boolean };
   /** Tear down the peer connection and stop listening for this peer's signals. */
   close(): void;
   /** The live ICE path, read from getStats() on demand. */
@@ -232,6 +235,9 @@ export interface CoreOpts extends CoreHooks {
    *  label, so arrival order is irrelevant. Defaults to the legacy single lane.
    *  Keep this list small: every label consumes an SCTP stream in each direction. */
   channelLabels?: readonly string[];
+  /** Combined byte ceiling for frames retained before application handlers are
+   *  attached. Zero/absent preserves the legacy no-capture behavior. */
+  captureBeforeReadyBytes?: number;
 }
 
 export async function establish(opts: CoreOpts): Promise<Conn> {
@@ -272,6 +278,14 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
   };
 
   const channels = new Map<string, RTCDataChannel>();
+  const captures = new Map<string, {
+    channel: RTCDataChannel;
+    frames: ArrayBuffer[];
+    handler: (event: MessageEvent) => void;
+  }>();
+  const captureLimit = opts.captureBeforeReadyBytes ?? 0;
+  let capturedBytes = 0;
+  let captureOverflow = false;
   let opened = false;
   let failReady!: (err: Error) => void;
   const ready = new Promise<Map<string, RTCDataChannel>>((resolve, reject) => {
@@ -279,6 +293,27 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     const arm = (ch: RTCDataChannel) => {
       ch.binaryType = "arraybuffer";
       ch.bufferedAmountLowThreshold = BUFFERED_LOW;
+      if (captureLimit > 0) {
+        const frames: ArrayBuffer[] = [];
+        const handler = (event: MessageEvent) => {
+          if (captureOverflow) return;
+          const data = event.data;
+          const frame = data instanceof ArrayBuffer
+            ? data
+            : ArrayBuffer.isView(data)
+              ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
+              : null;
+          if (!frame) return;
+          if (capturedBytes + frame.byteLength > captureLimit) {
+            captureOverflow = true;
+            return;
+          }
+          capturedBytes += frame.byteLength;
+          frames.push(frame);
+        };
+        captures.set(ch.label, { channel: ch, frames, handler });
+        ch.onmessage = handler;
+      }
     };
     const maybeOpen = () => {
       if (opened || channels.size !== channelLabels.length) return;
@@ -321,6 +356,10 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     if (closed) return;
     closed = true;
     if (abortListener) opts.signal?.removeEventListener("abort", abortListener);
+    for (const capture of captures.values()) {
+      if (capture.channel.onmessage === capture.handler) capture.channel.onmessage = null;
+    }
+    captures.clear();
     off();
     try { pc.close(); } catch { /* already closed */ }
   }
@@ -440,6 +479,15 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     return {
       channel: primary,
       getChannel: (label) => openChannels.get(label),
+      takeCaptured: captureLimit > 0
+        ? (label: string) => {
+            const capture = captures.get(label);
+            if (!capture) return { frames: [], overflow: captureOverflow };
+            if (capture.channel.onmessage === capture.handler) capture.channel.onmessage = null;
+            captures.delete(label);
+            return { frames: [...capture.frames], overflow: captureOverflow };
+          }
+        : undefined,
       close,
       path: (): Promise<ConnPath> => pc.getStats().then(classifyPath),
       stats: () => pc.getStats(),

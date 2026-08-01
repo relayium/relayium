@@ -133,7 +133,6 @@ async function harness(opts: {
     textReceiver: new TextReceiver(),
   };
   const a = createMixedFileSession({
-    selfId: () => "a",
     ensureLink: vi.fn(async () => aLink),
     pickSaveTarget: opts.pickA ?? (async () => aTarget),
     consentTimeoutMs: opts.consentTimeoutMs,
@@ -141,7 +140,6 @@ async function harness(opts: {
     drainTimeoutMs: opts.drainTimeoutMs,
   });
   const b = createMixedFileSession({
-    selfId: () => "b",
     ensureLink: vi.fn(async () => bLink),
     pickSaveTarget: opts.pickB ?? (async () => bTarget),
     consentTimeoutMs: opts.consentTimeoutMs,
@@ -307,7 +305,7 @@ describe("mixed file session", () => {
     // Recreate only B with the notification seam while preserving the live link.
     b.detach();
     const receiver = createMixedFileSession({
-      selfId: () => "b", ensureLink: async () => bLink,
+      ensureLink: async () => bLink,
       pickSaveTarget: pick, requestNotify: notify,
     });
     receiver.attach(bLink);
@@ -349,13 +347,14 @@ describe("mixed file session", () => {
     let resolveLink!: (link: MixedPeerLink) => void;
     const linkGate = new Promise<MixedPeerLink>((resolve) => { resolveLink = resolve; });
     const larger = createMixedFileSession({
-      selfId: () => "b",
       ensureLink: () => linkGate,
       pickSaveTarget: async () => bTarget,
     });
     larger.attach(bLink);
 
     larger.enqueue("a", picked("larger.txt", "B"));
+    // Glare ownership comes from the authenticated link role, so a signalling
+    // reconnect cannot flip it by temporarily clearing the roster self id.
     a.enqueue("b", picked("smaller.txt", "A"));
     await until(() => larger.incoming?.files[0].name === "smaller.txt");
     expect(larger.queued[0]?.replayed).toBe(true);
@@ -403,7 +402,7 @@ describe("mixed file session", () => {
     const batchFrame = vi.spyOn(aLink.fileSender, "batchFrame");
     let resolveLink!: (link: MixedPeerLink) => void;
     const gate = new Promise<MixedPeerLink>((resolve) => { resolveLink = resolve; });
-    const session = createMixedFileSession({ selfId: () => "a", ensureLink: () => gate });
+    const session = createMixedFileSession({ ensureLink: () => gate });
     session.enqueue("b", picked("cancel-connect.txt", "x"));
     expect(session.send?.status).toBe("connecting");
     session.cancel("send");

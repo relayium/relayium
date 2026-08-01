@@ -297,6 +297,24 @@ Each stage must leave legacy file, resume, text and old-peer E2E scenarios green
 Capability advertisement must not ship until the receiver, both lanes and
 recovery behavior are complete enough to honor `link/1`.
 
+### Implementation checkpoint: coordinator wired, capability still off
+
+The capability-off coordinator and App routing boundary are now implemented.
+The transport captures a combined, bounded 256 KiB from the instant each mixed
+DataChannel is collected, atomically hands those frames to the link owner, and
+fails the whole link on overflow or incomplete dual-lane attachment. This closes
+the cross-stream DCEP ordering window where one lane may receive data before its
+sibling opens. One workspace now owns exact-capability routing, mixed/legacy
+resource exclusion, one SAS/path source, link-level idle, explicit disconnect
+suppression, peer/room teardown, and independent same-peer file/text controls.
+The existing legacy file, resume, text and old-peer browser scenarios remain the
+production path and pass unchanged.
+
+`link/1` is still absent from both roster and SDP capability advertisements.
+Dual-lane file resume, mobile-background text barrier policy, replacement of a
+poisoned text channel, the polished unified workspace and target-browser close
+semantics remain advertisement gates rather than being implied by this wiring.
+
 ## Acceptance matrix
 
 - One link sends file → text → files → text → file with one PeerConnection, one

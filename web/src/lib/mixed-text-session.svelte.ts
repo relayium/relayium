@@ -35,6 +35,8 @@ import { createRateBucket } from "./rate-bucket";
 export interface MixedTextSessionDeps {
   ensureLink(peerId: string): Promise<MixedPeerLink>;
   now(): number;
+  /** Link owner uses authenticated-lane traffic to refresh its idle lease. */
+  onActivity?(): void;
 }
 
 export interface MixedTextSession {
@@ -215,6 +217,7 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
       }
       if (expectedLink.textChannel.bufferedAmount === 0) protectedTransportPending = false;
       expectedLink.textChannel.send(frame);
+      deps.onActivity?.();
       onSent?.();
     });
     sendChain = task.catch((err) => {
@@ -384,6 +387,7 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
 
   function onData(data: unknown) {
     if (!(data instanceof ArrayBuffer)) return;
+    deps.onActivity?.();
     if (poisoned()) return;
     const lifecycle = textLifecycleKind(data);
     if (lifecycle) {
@@ -665,6 +669,7 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
           }
           if (expectedLink.textChannel.bufferedAmount === 0) protectedTransportPending = false;
           expectedLink.textChannel.send(frame);
+          deps.onActivity?.();
           protectedTransportPending = true;
           record({
             dir: "out",

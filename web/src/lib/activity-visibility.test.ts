@@ -15,7 +15,7 @@ describe("active transfer visibility contract", () => {
     expect(surface.indexOf("{#if pendingPeer}")).toBeLessThan(peers);
     expect(surface.indexOf("{#if incoming}")).toBeLessThan(peers);
     expect(surface.indexOf("{#each [send, recv].filter(Boolean)")).toBeLessThan(peers);
-    expect(surface.indexOf('{#if textSession.status !== "idle"}')).toBeLessThan(peers);
+    expect(surface.indexOf('{#if activeText.status !== "idle"}')).toBeLessThan(peers);
     expect(surface.match(/<MessagePanel\b/g)).toHaveLength(1);
     // CSS visual ordering would leave keyboard and reading order broken.
     expect(styles).not.toMatch(/\border\s*:/);
@@ -35,9 +35,9 @@ describe("active transfer visibility contract", () => {
 
   it("reveals only verification and consent edges, never progress or terminal states", () => {
     const reveal = app.slice(app.indexOf("function activityReveal()"), app.indexOf("function revealElement("));
-    expect(reveal).toContain('textSession.status === "waitingAccept"');
-    expect(reveal).toContain('textSession.status === "incomingRequest"');
-    expect(reveal).toContain("!x.done && session.sasCode");
+    expect(reveal).toContain('activeText.status === "waitingAccept"');
+    expect(reveal).toContain('activeText.status === "incomingRequest"');
+    expect(reveal).toContain("!x.done && workspace.sasCode");
     expect(reveal.match(/key: `file:recv:\$\{/g)).toHaveLength(1);
     expect(reveal).not.toMatch(/receiving|sending|finishing|ended|failed|refused/);
   });

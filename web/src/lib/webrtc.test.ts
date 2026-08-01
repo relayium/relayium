@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { connect, connectLink, connectResume, connectText, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, type InboundSignal } from "./webrtc";
+import { connect, connectLink, connectResume, connectText, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, LINK_CAPTURE_MAX_BYTES, type InboundSignal } from "./webrtc";
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, deriveSession, signResume, verifyResume, type SessionKeys } from "./crypto";
 import { sas } from "./crypto";
@@ -20,6 +20,7 @@ class FakeDataChannel {
   send() {}
   close() { this.readyState = "closed"; }
   _open() { this.readyState = "open"; this.onopen?.(); }
+  _message(data: ArrayBuffer) { this.onmessage?.({ data }); }
 }
 
 const instances: FakePC[] = [];
@@ -684,6 +685,9 @@ describe("signalling generations", () => {
 
     // Opening only the primary lane must not resolve the link.
     for (const pc of instances) pc.channels.find((ch) => ch.label === "relayium")?._open();
+    for (const pc of instances) {
+      pc.channels.find((ch) => ch.label === "relayium")?._message(new Uint8Array([1, 2, 3]).buffer);
+    }
     let settled = false;
     void Promise.all([iP, rP]).then(() => (settled = true));
     await flush();
@@ -695,8 +699,33 @@ describe("signalling generations", () => {
     expect(ic.getChannel("relayium-text")?.label).toBe("relayium-text");
     expect(rc.channel.label).toBe("relayium");
     expect(rc.getChannel("relayium-text")?.label).toBe("relayium-text");
+    // The primary lane had a sink before its sibling opened; draining it is
+    // atomic and a second drain cannot replay the same frame.
+    expect(ic.takeCaptured?.("relayium").frames.map((f) => [...new Uint8Array(f)]))
+      .toEqual([[1, 2, 3]]);
+    expect(ic.takeCaptured?.("relayium").frames).toEqual([]);
+    expect(rc.takeCaptured?.("relayium").frames.map((f) => [...new Uint8Array(f)]))
+      .toEqual([[1, 2, 3]]);
     ic.close();
     rc.close();
+  });
+
+  it("bounds pre-ready mixed capture independently of the file flow window", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const iP = connectLink({
+      signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
+      role: "initiator", onPeerKey: () => {},
+    });
+    await flush();
+    const pc = instances[0];
+    const file = pc.channels.find((ch) => ch.label === "relayium")!;
+    file._open();
+    file._message(new ArrayBuffer(LINK_CAPTURE_MAX_BYTES + 1));
+    pc.channels.find((ch) => ch.label === "relayium-text")!._open();
+    const conn = await iP;
+    expect(conn.takeCaptured?.("relayium")).toEqual({ frames: [], overflow: true });
+    conn.close();
   });
 
   it("still tags a resume connection's outbound signals", async () => {

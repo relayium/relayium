@@ -6,7 +6,14 @@ import { deriveSession, generateKeyPair, sas, type SessionKeys } from "./crypto"
 import { peerSupportsLink } from "./peer-caps.svelte";
 import { Receiver, Sender } from "./transfer";
 import { TextReceiver, TextSender } from "./text-wire";
-import { connectLink, PeerBusyError, type Conn, type InboundSignal, type RtcConfig } from "./webrtc";
+import {
+  LINK_CAPTURE_MAX_BYTES,
+  connectLink,
+  PeerBusyError,
+  type Conn,
+  type InboundSignal,
+  type RtcConfig,
+} from "./webrtc";
 import type { SignalingClient } from "./signaling";
 
 export const LINK_REQUEST_TIMEOUT_MS = 30_000;
@@ -14,6 +21,11 @@ export const LINK_REQUEST_RETRY_MS = 3_000;
 export const LINK_AUTH_TIMEOUT_MS = 30_000;
 
 export type PeerLinkStatus = "idle" | "requesting" | "connecting" | "open" | "failed";
+
+export interface CapturedLinkFrames {
+  readonly file: readonly ArrayBuffer[];
+  readonly text: readonly ArrayBuffer[];
+}
 
 export interface MixedPeerLink {
   readonly peerId: string;
@@ -69,6 +81,13 @@ export interface PeerLinkDeps {
   canAcceptLink?: (peerId: string) => boolean;
   /** Test seam. Production always uses the full commit-reveal connectLink. */
   connect?: typeof connectLink;
+  /** Synchronous lifecycle hook. Consumers use this to attach lane handlers
+   *  before an inbound peer can race its first protected application frame. */
+  onLinkChange?: (
+    link: MixedPeerLink | null,
+    status: PeerLinkStatus,
+    captured?: CapturedLinkFrames,
+  ) => void;
 }
 
 export function isLinkOffer(data: unknown): data is InboundSignal {
@@ -113,6 +132,30 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
   const timedOutPeers = new Set<string>();
   let token = 0;
   let unlisten: (() => void) | null = null;
+
+  function publish(
+    next: MixedPeerLink | null,
+    nextStatus: PeerLinkStatus,
+    captured?: CapturedLinkFrames,
+  ) {
+    current = next;
+    status = nextStatus;
+    if (next) deps.onLinkChange?.(next, nextStatus, captured);
+    else {
+      // Terminal cleanup must still abort/close the transport even if a UI-side
+      // observer misbehaves. Open-time attachment errors remain fail-closed.
+      try { deps.onLinkChange?.(null, nextStatus); }
+      catch (err) { console.error("relayium link teardown observer error", err); }
+    }
+  }
+
+  function asArrayBuffer(data: unknown): ArrayBuffer | null {
+    if (data instanceof ArrayBuffer) return data;
+    if (ArrayBuffer.isView(data)) {
+      return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+    }
+    return null;
+  }
 
   function finishRequest(peerId: string, link?: MixedPeerLink, err?: unknown) {
     if (!requested || requested.peerId !== peerId) return;
@@ -172,12 +215,41 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
           transportTerminal = true;
           rejectPeer(new Error(`relayium: transport ${next} during authentication`));
           if (conn && current?.peerId === peerId && current.conn === conn) {
-            current = null;
-            status = next === "failed" ? "failed" : "idle";
+            publish(null, next === "failed" ? "failed" : "idle");
             try { conn.close(); } catch { /* terminal already */ }
           }
         },
       });
+      const fileChannel = conn.getChannel("relayium");
+      const textChannel = conn.getChannel("relayium-text");
+      if (!fileChannel || !textChannel) throw new Error("relayium: incomplete mixed link");
+      // Production connectLink has captured each channel since collection, even
+      // while its sibling was still completing DCEP. Test seams without that
+      // primitive start here; both paths then continue through authentication.
+      const earlyFile = conn.takeCaptured?.("relayium");
+      const earlyText = conn.takeCaptured?.("relayium-text");
+      const capturedFile: ArrayBuffer[] = [...(earlyFile?.frames ?? [])];
+      const capturedText: ArrayBuffer[] = [...(earlyText?.frames ?? [])];
+      let capturedBytes = capturedFile.reduce((sum, frame) => sum + frame.byteLength, 0)
+        + capturedText.reduce((sum, frame) => sum + frame.byteLength, 0);
+      let captureOverflow = earlyFile?.overflow === true || earlyText?.overflow === true
+        || capturedBytes > LINK_CAPTURE_MAX_BYTES;
+      const capture = (sink: ArrayBuffer[]) => (event: MessageEvent) => {
+        const frame = asArrayBuffer(event.data);
+        if (!frame || captureOverflow) return;
+        if (capturedBytes + frame.byteLength > LINK_CAPTURE_MAX_BYTES) {
+          captureOverflow = true;
+          return;
+        }
+        capturedBytes += frame.byteLength;
+        sink.push(frame);
+      };
+      fileChannel.binaryType = "arraybuffer";
+      textChannel.binaryType = "arraybuffer";
+      const fileCapture = capture(capturedFile);
+      const textCapture = capture(capturedText);
+      fileChannel.onmessage = fileCapture;
+      textChannel.onmessage = textCapture;
       // SCTP opening and commit/reveal delivery are independent. A channel can
       // therefore open after the peer's reveal was lost; never let that strand
       // the manager in `connecting` forever.
@@ -206,9 +278,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         );
       });
       const keys = await deriveSession(role, self, peerPublic);
-      const fileChannel = conn.getChannel("relayium");
-      const textChannel = conn.getChannel("relayium-text");
-      if (!fileChannel || !textChannel || transportTerminal || mine !== token) {
+      if (captureOverflow || transportTerminal || mine !== token) {
         throw new Error("relayium: incomplete or superseded mixed link");
       }
       const link: MixedPeerLink = {
@@ -225,8 +295,24 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       if (mine !== token) {
         throw new Error("relayium: superseded mixed link");
       }
-      current = link;
-      status = "open";
+      // Freeze and detach the sinks before consumer code runs. If a lane refuses
+      // attachment, replay can no longer feed the live array back into itself.
+      if (fileChannel.onmessage === fileCapture) fileChannel.onmessage = null;
+      if (textChannel.onmessage === textCapture) textChannel.onmessage = null;
+      const captured: CapturedLinkFrames = {
+        file: [...capturedFile],
+        text: [...capturedText],
+      };
+      try {
+        publish(link, "open", captured);
+      } catch (err) {
+        // A coordinator that cannot attach both lanes must not leave behind a
+        // manager-visible link with no valid application owner.
+        current = null;
+        status = "failed";
+        try { deps.onLinkChange?.(null, "failed"); } catch { /* original error wins */ }
+        throw err;
+      }
       finishRequest(peerId, link);
       return link;
     })().catch((cause) => {
@@ -267,11 +353,10 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     token++;
     const link = current;
     const pending = opening;
-    current = null;
     opening = null;
     if (requested) finishRequest(requested.peerId, undefined, new Error("relayium: link closed"));
     timedOutPeers.clear();
-    status = "idle";
+    publish(null, "idle");
     pending?.controller.abort();
     try { link?.conn.close(); } catch { /* already gone */ }
   }

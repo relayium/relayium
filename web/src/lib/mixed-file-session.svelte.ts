@@ -95,7 +95,6 @@ interface Inbound {
 }
 
 export interface MixedFileSessionDeps {
-  selfId(): string;
   ensureLink(peerId: string): Promise<MixedPeerLink>;
   pickSaveTarget?(files: FileMeta[]): Promise<SaveTarget>;
   requestNotify?(): void;
@@ -103,6 +102,8 @@ export interface MixedFileSessionDeps {
   consentTimeoutMs?: number;
   receiveStallMs?: number;
   drainTimeoutMs?: number;
+  /** Link owner uses lane traffic to refresh its idle lease. */
+  onActivity?(): void;
 }
 
 export interface MixedFileSession {
@@ -267,6 +268,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       if (candidate.fileChannel.bufferedAmount === 0
           && protectedTransportGeneration === expectedGeneration) protectedTransportGeneration = null;
       candidate.fileChannel.send(frame);
+      deps.onActivity?.();
       return true;
     } catch {
       markLaneFailed(candidate, "recvFail", expectedGeneration);
@@ -302,6 +304,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     protectedTransportGeneration = expectedGeneration;
     try {
       candidate.fileChannel.send(frame);
+      deps.onActivity?.();
     } catch (err) {
       protectedTransportGeneration = null;
       markLaneFailed(candidate, "sendFail", expectedGeneration);
@@ -564,7 +567,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       return;
     }
     if (launching) {
-      if (deps.selfId() < candidate.peerId || launching.peerId !== candidate.peerId) {
+      if (candidate.role === "initiator" || launching.peerId !== candidate.peerId) {
         sendBarrier(FILE_BUSY, candidate);
         return;
       }
@@ -581,7 +584,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     }
     const current = outbound;
     if (current && !current.terminal) {
-      if (deps.selfId() < candidate.peerId) {
+      if (candidate.role === "initiator") {
         // Deterministic keeper: the smaller room peer ID keeps its outbound.
         sendBarrier(FILE_BUSY, candidate);
         return;
@@ -1034,7 +1037,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         pump();
       }
     };
-    if (batch.replayed && deps.selfId() > batch.peerId) {
+    if (batch.replayed && link?.peerId === batch.peerId && link.role === "responder") {
       clearTimeout(replayTimer);
       replayTimer = setTimeout(() => { replayTimer = undefined; void launch(); }, MIXED_FILE_REPLAY_DELAY_MS);
     } else void launch();
@@ -1062,6 +1065,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     messageHandler = (event) => {
       const buf = asBuffer(event.data);
       if (!buf || candidate !== link || expectedGeneration !== generation) return;
+      deps.onActivity?.();
       if (parseAck(buf) !== null || controlKind(buf) !== null) {
         // Receiver->sender controls must not wait behind slow inbound disk writes,
         // or our independent outbound flow-control window can deadlock.

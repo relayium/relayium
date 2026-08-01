@@ -18,6 +18,10 @@ export type { Conn, ConnPath, Generation, InboundSignal, Reveal, RtcConfig, Sign
  *  authoritative announcement is at the roster level and this one is only the
  *  per-connection confirmation. */
 export const LOCAL_CAPS: readonly string[] = [CAP_TEXT];
+/** One maximum encrypted manifest plus lifecycle overhead. This is deliberately
+ *  much smaller than the file flow-control window: pre-attachment traffic has
+ *  not reached a content-consent state yet. */
+export const LINK_CAPTURE_MAX_BYTES = 256 * 1024;
 
 export interface ConnectOpts {
   signaling: SignalingClient;
@@ -192,6 +196,7 @@ async function handshakeConnect(opts: ConnectOpts, generation: Generation): Prom
     // tests; the file generation keeps its existing unlabelled wording.
     label: generation === "text" ? "text" : generation === "link" ? "link" : undefined,
     channelLabels: generation === "link" ? ["relayium", "relayium-text"] : undefined,
+    captureBeforeReadyBytes: generation === "link" ? LINK_CAPTURE_MAX_BYTES : undefined,
     config: opts.config,
     initialSignal: opts.initialSignal,
     onStateChange: opts.onStateChange,

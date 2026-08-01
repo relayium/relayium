@@ -19,6 +19,7 @@
   import { requestNotifyPermission, notifyTransfer } from "./lib/notify";
   import { MAX_FILES } from "./lib/transfer";
   import { createTransferSession, type Xfer } from "./lib/transfer-session.svelte";
+  import { createPeerWorkspace, type PeerWorkspace } from "./lib/peer-workspace.svelte";
   import { recordTransfer, loadHistory, clearHistory, historyEnabled, setHistoryEnabled, type HistEntry } from "./lib/history";
   import { fetchIceConfig, hasTurnServer, measureRelays, pickRelay, type RelayEntry } from "./lib/ice";
   import type { Peer } from "./lib/protocol";
@@ -75,7 +76,6 @@
   let selfId = $state("");
   let selfIP = $state("");
   let peers = $state<Peer[]>([]);
-  let sasCode = $state("");
 
   // 收发管道 + 它们的状态（send/recv/incoming/SAS/每向路径）都住在这里。
   // 依赖用 getter 传进去：signaling 会随房间切换整个换掉，rtcConfig 依赖中继选优
@@ -95,7 +95,7 @@
     // 互斥的另一半：文件传输在跑的时候不接消息会话，否则屏幕上会同时挂两串 SAS。
     // 这里读的是只算文件那一半的 transferActive，不是 busy()——busy() 本身读 textActive，
     // 拿它来问会绕回自己。
-    transferActive: () => session.transferActive,
+    transferActive: () => session.transferActive || workspace?.blocksLegacyInbound === true,
     now: () => Date.now(),
   });
   let textCompose = $state(""); // 粘贴进来的草稿，交给面板预填
@@ -104,12 +104,24 @@
     rtcConfig: () => rtcConfig(),
     t: () => messages[lang()],
     flash,
-    textActive: () => textSession.active(),
+    textActive: () => textSession.active() || workspace?.blocksLegacyInbound === true,
+  });
+  const workspace: PeerWorkspace = createPeerWorkspace({
+    selfId: () => selfId,
+    joined: () => joinedRoom,
+    peerIds: () => peers.map((peer) => peer.id),
+    unsupported: () => unsupported,
+    signaling: () => signaling,
+    rtcConfig: () => rtcConfig(),
+    legacyFiles: session,
+    legacyText: textSession,
+    requestNotify: requestNotifyPermission,
   });
   // 模板里读得最多的三个，取个短名字（getter 转发，响应式不丢）。
-  const send = $derived(session.send);
-  const recv = $derived(session.recv);
-  const incoming = $derived(session.incoming);
+  const send = $derived(workspace.send);
+  const recv = $derived(workspace.recv);
+  const incoming = $derived(workspace.incoming);
+  const activeText = $derived(workspace.text);
 
   // Client-local "recent transfers" log (localStorage-backed, this device only).
   // Refreshed after each recorded completion and on clear — never read live from
@@ -250,7 +262,10 @@
     peerCardList?.scrollIntoView?.({ block: "nearest" });
   }
 
-  const busy = $derived(session.busy);
+  const busy = $derived(workspace.warnsOnLeave);
+  const dropBusy = $derived(
+    visiblePeers.length === 0 || visiblePeers.every((peer) => workspace.blocksNewIntent(peer.id)),
+  );
   // The realtime surface auto-appears whenever a LAN peer is visible, but there's
   // no room to leave — so "Start over" there sets this flag to fall back to the
   // method choices instead. An in-flight transfer (busy) always wins over it, and
@@ -313,11 +328,11 @@
   // clearHistory 之后不会重播。
   let lastNotifiedMsgId = 0;
   $effect(() => {
-    const last = textSession.history.at(-1);
+    const last = activeText.history.at(-1);
     if (!last) { lastNotifiedMsgId = 0; return; }
     if (last.dir !== "in" || last.id <= lastNotifiedMsgId) return;
     lastNotifiedMsgId = last.id;
-    void notifyTransfer(messages[lang()].text.newMessageFrom(nameOf(textSession.peerId)));
+    void notifyTransfer(messages[lang()].text.newMessageFrom(nameOf(activeText.peerId)));
   });
   $effect(() => {
     const s = send;
@@ -359,14 +374,14 @@
   $effect(() => {
     const s = send;
     if (s?.done && s.ok) {
-      const timer = setTimeout(() => session.dismissSend(s), DISMISS_MS);
+      const timer = setTimeout(() => workspace.dismissSend(s), DISMISS_MS);
       return () => clearTimeout(timer);
     }
   });
   $effect(() => {
     const r = recv;
     if (r?.done && r.ok) {
-      const timer = setTimeout(() => session.dismissRecv(r), DISMISS_MS);
+      const timer = setTimeout(() => workspace.dismissRecv(r), DISMISS_MS);
       return () => clearTimeout(timer);
     }
   });
@@ -388,10 +403,11 @@
   let dismissedPeerId = $state<string | null>(null);
 
   $effect(() => {
-    if (outbox().length && surfaceShown && !busy && visiblePeers.length === 1) {
+    if (outbox().length && surfaceShown && visiblePeers.length === 1
+      && !workspace.blocksNewIntent(visiblePeers[0].id)) {
       const peer = visiblePeers[0];
       if (!shouldConfirmBeforeSend(roomCode)) {
-        session.sendFiles(peer.id, takeOutbox()); // LAN: unchanged frictionless auto-send
+        workspace.sendFiles(peer.id, takeOutbox()); // LAN: unchanged frictionless auto-send
         return;
       }
       // Code room: surface a confirmation bar instead of auto-sending, so a
@@ -406,7 +422,7 @@
     if (pendingPeer) {
       const id = pendingPeer.id;
       pendingPeer = null;
-      session.sendFiles(id, takeOutbox());
+      workspace.sendFiles(id, takeOutbox());
     }
   }
   function cancelSend() {
@@ -437,34 +453,34 @@
         announcement: t.confirmRecv(nameOf(pendingPeer.id)),
       };
     }
-    if (incoming && session.sasCode) {
+    if (incoming && workspace.sasCode) {
       return {
         // Keep the same identity after Accept turns `incoming` into the recv
         // progress card; that state transition must not reveal a second time.
         key: `file:recv:${incoming.from}`,
         target: "incoming",
-        announcement: `${t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total))}. ${t.codeLabel} ${session.sasCode}. ${t.codeCompare}`,
+        announcement: `${t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total))}. ${t.codeLabel} ${workspace.sasCode}. ${t.codeCompare}`,
       };
     }
-    const file = [send, recv].find((x) => x && !x.done && session.sasCode);
+    const file = [send, recv].find((x) => x && !x.done && workspace.sasCode);
     if (file) {
       return {
         key: `file:${file.dir}:${file.peer}`,
         target: "file",
-        announcement: `${statusText(t, file)}. ${t.codeLabel} ${session.sasCode}. ${t.codeCompare}`,
+        announcement: `${statusText(t, file)}. ${t.codeLabel} ${workspace.sasCode}. ${t.codeCompare}`,
       };
     }
     if (
-      textSession.sasCode &&
-      (textSession.status === "waitingAccept" || textSession.status === "incomingRequest")
+      activeText.sasCode &&
+      (activeText.status === "waitingAccept" || activeText.status === "incomingRequest")
     ) {
-      const lead = textSession.status === "incomingRequest"
-        ? t.text.requestHead(nameOf(textSession.peerId))
+      const lead = activeText.status === "incomingRequest"
+        ? t.text.requestHead(nameOf(activeText.peerId))
         : t.text.waitingAccept;
       return {
-        key: `text:${textSession.status}:${textSession.peerId}`,
+        key: `text:${activeText.status}:${activeText.peerId}`,
         target: "text",
-        announcement: `${lead}. ${t.codeLabel} ${textSession.sasCode}. ${t.text.sasCompare}`,
+        announcement: `${lead}. ${t.codeLabel} ${activeText.sasCode}. ${t.text.sasCompare}`,
       };
     }
     return null;
@@ -528,6 +544,7 @@
     return () => {
       window.removeEventListener("popstate", onPopState);
       wake.destroy(); // 摘掉它自己挂的 visibilitychange
+      workspace.stop();
     };
   });
 
@@ -561,7 +578,13 @@
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = undefined; }
     });
     // A peer (re)appearing is our cue to (re)send our relay measurements to it.
-    signaling.onPeers((p) => { peers = p; retainPeers(p.map((x) => x.id)); broadcastRelayRtt(); broadcastCaps(); });
+    signaling.onPeers((p) => {
+      peers = p;
+      retainPeers(p.map((x) => x.id));
+      workspace.syncPeers();
+      broadcastRelayRtt();
+      broadcastCaps();
+    });
     signaling.onSignal(onPeerRelayRtt); // capture peers' relay-RTT maps (ignored by the WebRTC handlers)
     startRelayMeasurement(); // background; the choice is usually ready before a transfer
     signaling.onClose(() => {
@@ -579,6 +602,7 @@
     });
     session.listenForIncoming();
     textSession.listenForRequests();
+    workspace.start();
     socketRoomKey = roomCode;
     connState = "ready";
   });
@@ -624,6 +648,7 @@
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = undefined; }
     reconnectAttempt = 0; // a deliberate room switch is not an outage — don't inherit its backoff
     session.abortAll();
+    workspace.resetRoom();
     peers = [];
     selfId = "";
     selfIP = "";
@@ -697,23 +722,24 @@
       e.preventDefault();
       dragDepth = 0;
       dragActive = false;
-      if (surfaceShown && dropTarget(visiblePeers.length, busy) === "send" && e.dataTransfer) {
+      if (surfaceShown && dropTarget(visiblePeers.length, dropBusy) === "send" && e.dataTransfer) {
         const peer = visiblePeers[0].id;
-        filesFromDataTransfer(e.dataTransfer).then((picked) => { if (picked.length) session.sendFiles(peer, picked); });
+        filesFromDataTransfer(e.dataTransfer).then((picked) => { if (picked.length) workspace.sendFiles(peer, picked); });
       }
     };
     // 粘贴文本 = 打开草稿框并预填，**不发送**。粘贴不是"同意发出去"，而且粘贴常常是
     // 手误——按下发送这一步必须留给用户。作用域和拖放覆盖层一样窄：只有传输界面真的
     // 在屏幕上、有一个明确的目标对端、那个对端声明过能收消息、而且当前不忙的时候才接手。
     const onPaste = (e: ClipboardEvent) => {
-      if (!surfaceShown || busy) return;
+      if (!surfaceShown) return;
       const text = pastedText(e);
       if (text === null) return;
       const peer = effectiveSelected;
-      if (!peer || !peerSupportsText(peer)) return;
+      if (!peer || workspace.blocksNewIntent(peer)
+        || (!workspace.routes(peer) && !peerSupportsText(peer))) return;
       e.preventDefault();
       textCompose = text;
-      void textSession.openWith(peer);
+      void workspace.openText(peer);
     };
 
     window.addEventListener("dragenter", onEnter);
@@ -816,7 +842,7 @@
 
   function pickFile(e: Event, peerId: string) {
     const input = e.currentTarget as HTMLInputElement;
-    if (input.files?.length) session.sendFiles(peerId, pickedFromInput(input.files));
+    if (input.files?.length) workspace.sendFiles(peerId, pickedFromInput(input.files));
     input.value = ""; // allow re-picking the same files
   }
   function onDrop(e: DragEvent, peerId: string) {
@@ -825,18 +851,19 @@
     if (!e.dataTransfer) return;
     // Kick off entry extraction now (it captures DataTransfer items synchronously
     // before its first await), then send once the folder tree is flattened.
-    filesFromDataTransfer(e.dataTransfer).then((picked) => { if (picked.length) session.sendFiles(peerId, picked); });
+    filesFromDataTransfer(e.dataTransfer).then((picked) => { if (picked.length) workspace.sendFiles(peerId, picked); });
   }
 </script>
 
 <main>
 {#snippet peerCard(p: Peer, solo: boolean)}
+  {@const intentBlocked = workspace.blocksNewIntent(p.id)}
   <li
     class="peer"
-    class:disabled={busy}
-    ondragover={(e) => { e.preventDefault(); if (!busy) (e.currentTarget as HTMLElement).classList.add("drag"); }}
+    class:disabled={intentBlocked}
+    ondragover={(e) => { e.preventDefault(); if (!intentBlocked) (e.currentTarget as HTMLElement).classList.add("drag"); }}
     ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove("drag")}
-    ondrop={(e) => { e.stopPropagation(); if (busy) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
+    ondrop={(e) => { e.stopPropagation(); if (intentBlocked) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
   >
     <label class="pcard" for={`pick-${p.id}`}>
       <span class="pavatar" class:big={solo}>{p.name.slice(0, 1).toUpperCase()}</span>
@@ -854,23 +881,23 @@
          里自成一套的 .act-btn：透明底 + --border 描边，在暗色下边框只有 1.36:1，
          等于看不见。 -->
     <div class="peer-actions">
-      <label class="btn btn-secondary btn-sm pa-files" class:is-disabled={busy}>
+      <label class="btn btn-secondary btn-sm pa-files" class:is-disabled={intentBlocked}>
         <span class="pa-icon" aria-hidden="true"><Icon name="file" /></span><span class="pa-label" id={`send-file-label-${p.id}`}>{t.sendFile}</span>
-        <input class="file-pick-input" id={`pick-${p.id}`} type="file" multiple disabled={busy}
+        <input class="file-pick-input" id={`pick-${p.id}`} type="file" multiple disabled={intentBlocked}
           aria-labelledby={`send-file-label-${p.id}`}
           aria-describedby={`peer-target-${p.id}`}
-          onclick={(e) => { if (outbox().length) { e.preventDefault(); session.sendFiles(p.id, takeOutbox()); } }}
+          onclick={(e) => { if (outbox().length) { e.preventDefault(); workspace.sendFiles(p.id, takeOutbox()); } }}
           onchange={(e) => pickFile(e, p.id)} />
       </label>
       {#if folderUploadSupported}
-        <label class="btn btn-secondary btn-sm" class:is-disabled={busy}>
+        <label class="btn btn-secondary btn-sm" class:is-disabled={intentBlocked}>
           <span class="pa-icon" aria-hidden="true"><Icon name="folder" /></span><span class="pa-label">{t.sendFolder}</span>
-          <input class="file-pick-input" type="file" webkitdirectory multiple disabled={busy} onchange={(e) => pickFile(e, p.id)} />
+          <input class="file-pick-input" type="file" webkitdirectory multiple disabled={intentBlocked} onchange={(e) => pickFile(e, p.id)} />
         </label>
       {/if}
-      {#if peerSupportsText(p.id)}
-        <button type="button" class="btn btn-secondary btn-sm" disabled={busy}
-          onclick={() => { textCompose = ""; void textSession.openWith(p.id); }}>
+      {#if workspace.routes(p.id) || peerSupportsText(p.id)}
+        <button type="button" class="btn btn-secondary btn-sm" disabled={intentBlocked}
+          onclick={() => { textCompose = ""; void workspace.openText(p.id); }}>
           <span class="pa-icon" aria-hidden="true"><Icon name="message" /></span><span class="pa-label">{t.text.open}</span>
         </button>
       {/if}
@@ -880,8 +907,8 @@
 
 {#snippet transferSurface()}
   {@const solo = visiblePeers.length === 1}
-  {@const revealFile = [send, recv].find((x) => x && !x.done && session.sasCode)}
-  {@const hasActivity = !!pendingPeer || !!incoming || !!send || !!recv || textSession.status !== "idle"}
+  {@const revealFile = [send, recv].find((x) => x && !x.done && workspace.sasCode)}
+  {@const hasActivity = !!pendingPeer || !!incoming || !!send || !!recv || activeText.status !== "idle"}
   <!-- This live node exists before an event occurs; mounting a live region and
        its message in the same update is not announced reliably. Protected text
        bodies never enter it. -->
@@ -904,16 +931,16 @@
           <li><span class="fname">{f.name}</span><span class="fsize">{formatSize(f.size)}</span></li>
         {/each}
       </ul>
-      {#if session.sasCode}
-        <div class="sas activity-reveal-target" bind:this={incomingReveal}>{t.codeLabel} <code>{session.sasCode}</code> — {t.codeCompare}</div>
+      {#if workspace.sasCode}
+        <div class="sas activity-reveal-target" bind:this={incomingReveal}>{t.codeLabel} <code>{workspace.sasCode}</code> — {t.codeCompare}</div>
       {/if}
       <!-- 收/拒按钮住在 ReceiveActions 里，因为大批次的内存提示必须拦在这一下
            点击之前：接受即用户手势，pickSaveTarget 在同一个手势里开选择器。 -->
       <ReceiveActions
         files={incoming.files}
         total={incoming.total}
-        onAccept={() => session.accept()}
-        onReject={() => session.reject()}
+        onAccept={() => workspace.acceptFile()}
+        onReject={() => workspace.rejectFile()}
       />
     </section>
   {/if}
@@ -928,20 +955,20 @@
         <span class="label">{xf.dir === "send" ? t.sendTo(nameOf(xf.peer)) : t.recvFrom(nameOf(xf.peer))}</span>
         {#if xf.files.length}<span class="count">{xf.files.length > 1 ? t.fileCounter(xf.index + 1, xf.files.length) : xf.files[0].name}</span>{/if}
         {#if xf.done}
-          <button class="btn btn-sm x" onclick={() => (xf.dir === "send" ? session.dismissSend(xf) : session.dismissRecv(xf))} aria-label={t.close}>✕</button>
+          <button class="btn btn-sm x" onclick={() => (xf.dir === "send" ? workspace.dismissSend(xf) : workspace.dismissRecv(xf))} aria-label={t.close}>✕</button>
         {:else}
-          <button class="btn btn-sm x cancel" onclick={() => session.abort(xf.dir)}>{t.cancel}</button>
+          <button class="btn btn-sm x cancel" onclick={() => workspace.abortFile(xf.dir)}>{t.cancel}</button>
         {/if}
       </div>
       <div class="status" aria-live="polite">
         {statusText(t, xf)}
-        {#if session.sasCode && !xf.done} · {t.codeLabel} <code>{session.sasCode}</code>{/if}
+        {#if workspace.sasCode && !xf.done} · {t.codeLabel} <code>{workspace.sasCode}</code>{/if}
       </div>
       {#if xf.done && !xf.ok && xf.status === "connectFail" && relayDenied === "quota"}
         <p class="ui-callout quota-note">{t.crossnet.relayQuotaFail}</p>
       {/if}
       {#if !xf.done}
-        {@const path = xf.dir === "send" ? session.sendPath : session.recvPath}
+        {@const path = xf.dir === "send" ? workspace.sendPath : workspace.recvPath}
         <div class="progress-bar" role="progressbar" aria-valuenow={pct(xf)} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{pct(xf)}%"></div></div>
         <div class="meta">
           <span>{pct(xf)}% · {formatSize(xf.sent)} / {formatSize(xf.total)}</span>
@@ -955,21 +982,21 @@
   {/each}
 
   <!-- 消息面板放在这个 snippet 里面，所以 LAN 那条路径和 CrossPage 都从这一处拿到它。 -->
-  {#if textSession.status !== "idle"}
+  {#if activeText.status !== "idle"}
     <MessagePanel
-      status={textSession.status}
-      peerName={nameOf(textSession.peerId)}
-      sasCode={textSession.sasCode}
-      path={textSession.path}
-      history={textSession.history}
-      errorKey={textSession.errorKey}
+      status={activeText.status}
+      peerName={nameOf(activeText.peerId)}
+      sasCode={activeText.sasCode}
+      path={workspace.textPath}
+      history={activeText.history}
+      errorKey={activeText.errorKey}
       prefill={textCompose}
       bind:revealTarget={textReveal}
-      onSend={(body) => void textSession.send(body)}
-      onAccept={() => textSession.accept()}
-      onReject={() => textSession.reject()}
-      onClear={() => textSession.clearHistory()}
-      onEnd={() => textSession.end()}
+      onSend={(body) => void workspace.sendText(body)}
+      onAccept={() => workspace.acceptText()}
+      onReject={() => workspace.rejectText()}
+      onClear={() => workspace.clearText()}
+      onEnd={() => workspace.endText()}
       onPrefillConsumed={() => (textCompose = "")}
     />
   {/if}
@@ -1003,7 +1030,7 @@
         />
       {/if}
       {#if selectedPeer}
-        <ul bind:this={peerCardList} class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, busy) === "pick"}>
+        <ul bind:this={peerCardList} class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, dropBusy) === "pick"}>
           {@render peerCard(selectedPeer, solo)}
         </ul>
       {/if}
@@ -1013,7 +1040,7 @@
           <p class="empty-lead">{t.emptyPeers}</p>
         </div>
       {:else}
-        <ul class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, busy) === "pick"}>
+        <ul class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, dropBusy) === "pick"}>
           {#each visiblePeers as p (p.id)}
             {@render peerCard(p, solo)}
           {/each}
@@ -1032,10 +1059,10 @@
   </section>
 {/snippet}
 
-  {#if surfaceShown && dragActive && dropTarget(visiblePeers.length, busy) !== "off"}
+  {#if surfaceShown && dragActive && dropTarget(visiblePeers.length, dropBusy) !== "off"}
     <div class="dropzone" transition:fade={{ duration: 140 }}>
       <div class="dropzone-inner">
-        {dropTarget(visiblePeers.length, busy) === "send"
+        {dropTarget(visiblePeers.length, dropBusy) === "send"
           ? t.dragSendOne(visiblePeers[0].name)
           : t.dragSendMany}
       </div>
@@ -1156,7 +1183,7 @@
 
 {#if debugOn}
   <DebugPanel
-    conn={session.conn}
+    conn={workspace.conn}
     relayPool={relayPool}
     selectedRelayId={selectedRelayId}
     myRelayRtt={myRelayRtt}

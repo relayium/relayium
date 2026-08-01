@@ -8,6 +8,7 @@ import {
 } from "./peer-link.svelte";
 import { connectLink, type Conn, type InboundSignal } from "./webrtc";
 import type { SignalingClient } from "./signaling";
+import { FLOW_WINDOW } from "./transfer";
 
 beforeAll(async () => { await ready(); });
 afterEach(() => { vi.useRealTimers(); });
@@ -92,6 +93,106 @@ describe("mixed peer link ownership", () => {
     expect(transport.connect).toHaveBeenCalledTimes(1);
     expect(sig.sent).toEqual([]);
     manager.stop();
+  });
+
+  it("publishes an opened link synchronously before ensure resolves", async () => {
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const events: string[] = [];
+    const manager = createPeerLinkManager({
+      selfId: () => "a", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+      onLinkChange(link, status) {
+        events.push(`${status}:${link?.peerId ?? "none"}`);
+        if (link) link.fileChannel.onmessage = vi.fn();
+      },
+    });
+
+    const pending = manager.ensure("b").then((link) => {
+      events.push(`resolved:${link.peerId}`);
+      expect(link.fileChannel.onmessage).toBeTypeOf("function");
+    });
+    await pending;
+    expect(events).toEqual(["open:b", "resolved:b"]);
+    manager.stop();
+    expect(events).toEqual(["open:b", "resolved:b", "idle:none"]);
+  });
+
+  it("captures pre-attachment frames FIFO within each lane", async () => {
+    const sig = signalingHarness();
+    const seen: { file: number[]; text: number[] } = { file: [], text: [] };
+    const connect = vi.fn(async (opts: Parameters<typeof connectLink>[0]): Promise<Conn> => {
+      const file = { label: "relayium", readyState: "open" } as RTCDataChannel;
+      const text = { label: "relayium-text", readyState: "open" } as RTCDataChannel;
+      const conn: Conn = {
+        channel: file,
+        getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
+        close: vi.fn(), path: async () => "lan",
+        stats: async () => new Map() as unknown as RTCStatsReport,
+      };
+      setTimeout(() => {
+        file.onmessage?.({ data: new Uint8Array([1]).buffer } as MessageEvent);
+        text.onmessage?.({ data: new Uint8Array([7]).buffer } as MessageEvent);
+        file.onmessage?.({ data: new Uint8Array([2]).buffer } as MessageEvent);
+        opts.onPeerKey(generateKeyPair().publicKey);
+      }, 0);
+      return conn;
+    });
+    const manager = createPeerLinkManager({
+      selfId: () => "a", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true, connect,
+      onLinkChange(link, _status, captured) {
+        if (!link || !captured) return;
+        seen.file = captured.file.map((frame) => new Uint8Array(frame)[0]);
+        seen.text = captured.text.map((frame) => new Uint8Array(frame)[0]);
+      },
+    });
+    await manager.ensure("b");
+    expect(seen).toEqual({ file: [1, 2], text: [7] });
+    manager.stop();
+  });
+
+  it("fails closed when the pre-attachment capture exceeds one flow window", async () => {
+    const sig = signalingHarness();
+    let conn!: Conn;
+    const connect = vi.fn(async (opts: Parameters<typeof connectLink>[0]): Promise<Conn> => {
+      const file = { label: "relayium", readyState: "open" } as RTCDataChannel;
+      const text = { label: "relayium-text", readyState: "open" } as RTCDataChannel;
+      conn = {
+        channel: file,
+        getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
+        close: vi.fn(), path: async () => "lan",
+        stats: async () => new Map() as unknown as RTCStatsReport,
+      };
+      setTimeout(() => {
+        file.onmessage?.({ data: new ArrayBuffer(FLOW_WINDOW + 1) } as MessageEvent);
+        opts.onPeerKey(generateKeyPair().publicKey);
+      }, 0);
+      return conn;
+    });
+    const manager = createPeerLinkManager({
+      selfId: () => "a", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true, connect,
+    });
+    await expect(manager.ensure("b")).rejects.toThrow("incomplete or superseded mixed link");
+    expect(manager.current).toBeNull();
+    expect(conn.close).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed when the synchronous lane owner cannot attach", async () => {
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const manager = createPeerLinkManager({
+      selfId: () => "a", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+      onLinkChange(link) { if (link) throw new Error("attach failed"); },
+    });
+    await expect(manager.ensure("b")).rejects.toThrow("attach failed");
+    expect(manager.current).toBeNull();
+    expect(manager.status).toBe("failed");
+    expect(transport.conns[0].close).toHaveBeenCalledOnce();
   });
 
   it("requests the deterministic offerer and resolves from its inbound offer", async () => {
@@ -205,6 +306,22 @@ describe("mixed peer link ownership", () => {
     expect(transport.conns[0].close).toHaveBeenCalledOnce();
     await manager.ensure("b");
     expect(transport.connect).toHaveBeenCalledTimes(2);
+    manager.stop();
+  });
+
+  it("publishes terminal transport loss to lane owners", async () => {
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const events: string[] = [];
+    const manager = createPeerLinkManager({
+      selfId: () => "a", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+      onLinkChange(link, status) { events.push(`${status}:${link?.peerId ?? "none"}`); },
+    });
+    await manager.ensure("b");
+    transport.connect.mock.calls[0][0].onStateChange?.("failed");
+    expect(events).toEqual(["open:b", "failed:none"]);
     manager.stop();
   });
 
