@@ -1,7 +1,7 @@
 # Web Apps executable hierarchy — batch 7
 
 Date: 2026-08-01
-Status: locally validated implementation.
+Status: production validated.
 Scope owner: `/apps` SPA information hierarchy, shared primitive adoption, and
 component/browser regression coverage. No route, release, download, appcast,
 native-client, SEO-copy, analytics, navigation, or footer behavior change.
