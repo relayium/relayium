@@ -1,7 +1,7 @@
 # Web verification and consent visibility — batch 9
 
 Date: 2026-08-01
-Status: implemented and locally validated; production validation pending.
+Status: implemented, delivered and production validated.
 Scope owner: the shared Web realtime transfer surface used by LAN and cross-
 network/direct sessions, including file and ephemeral-text verification and
 consent placement, conditional reveal behavior, and regression coverage. No
@@ -150,6 +150,25 @@ controls remain the source of action. The live announcement is supplementary.
   active card.
 - Browser review covers all nine locales at phone width plus dark Arabic RTL.
   Existing full file, resume, text and old-peer E2E scenarios remain green.
+
+## Delivery and production evidence
+
+- Delivered on 2026-08-01 as exact public SHA
+  `0c0e9cf6acded55aa2b40224df13b4e84c0aa400`; repository-hygiene run
+  `30683215303` passed.
+- Production served the exact final main assets `index-wfw_giFb.js` and
+  `index-v9jAsopI.css`, and `/healthz` returned `ok`.
+- A fresh production Chrome session at 390×844 established a real two-tab text
+  session. Both devices showed SAS `674560`; the sender SAS occupied y=381–452,
+  the receiver SAS y=389–460 and its consent controls ended at y=508. Both panels
+  preceded peer selection in the DOM, had zero horizontal overflow, moved no focus
+  into activity, and exposed localized polite announcements containing the SAS.
+- The same tabs then created and explicitly rejected a real file request. Both
+  devices showed SAS `927379`; the sender verification status occupied y=288–339,
+  the receiver SAS y=399–470 and consent controls ended at y=520. The same DOM,
+  overflow, focus and announcement contracts held. No file was accepted or saved.
+  Console output was limited to the known Cloudflare Insights CSP rejection. The
+  dedicated production browser was closed afterward.
 
 ## Explicit non-goals
 
