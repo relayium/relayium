@@ -427,8 +427,8 @@ const utf8Hex = (s) => [...Buffer.from(s, "utf8")].map((b) => b.toString(16).pad
 async function messageScenario(browser) {
   const a = await newTab(browser, BASE + "/");
   const b = await newTab(browser, BASE + "/");
-  await setWideViewport(a);
-  await setWideViewport(b);
+  await setWideViewport(a, 390, 844);
+  await setWideViewport(b, 390, 844);
 
   const peersSeen = "document.querySelectorAll('.pname').length > 0";
   await a.waitFor(peersSeen, "tab A to see tab B on the radar", 30_000);
@@ -440,7 +440,12 @@ async function messageScenario(browser) {
   await b.waitFor(`!!document.querySelector('${MSG_OPEN_BTN}')`, "the message control on tab B too", 30_000);
   ok("both tabs advertised text/1 and offered a message control");
 
-  await a.evaluate(`(() => { document.querySelector('${MSG_OPEN_BTN}').click(); return true; })()`);
+  await a.evaluate(`(() => {
+    const button = document.querySelector('${MSG_OPEN_BTN}');
+    button.focus();
+    button.click();
+    return true;
+  })()`);
 
   // 收方先看到请求卡片，而且**此刻不能有任何正文**。
   await b.waitFor("!!document.querySelector('.msgpanel')", "tab B to show the message request", 40_000);
@@ -451,6 +456,44 @@ async function messageScenario(browser) {
   const hasComposerBeforeConsent = await b.evaluate("!!document.querySelector('.msgpanel textarea')");
   if (hasComposerBeforeConsent) throw new Error("tab B showed a composer before accepting");
   ok("the request card showed no content and no composer before consent");
+
+  // The next required security step must replace the peer card as the visible
+  // task on a phone. Real DOM order matters for reading/keyboard order, and the
+  // reveal must not focus an accept/send action on the user's behalf.
+  await a.waitFor("!!document.querySelector('.msgpanel .sas code')", "tab A's mobile message SAS");
+  await b.waitFor("!!document.querySelector('.msgpanel .sas code')", "tab B's mobile message SAS");
+  const mobileMessageGeometry = async (tab) => tab.evaluate(`(() => {
+    const panel = document.querySelector('.msgpanel');
+    const peers = document.querySelector('.peers');
+    const sas = panel.querySelector('.sas').getBoundingClientRect();
+    const actions = [...panel.querySelectorAll('.act button')].map((el) => el.getBoundingClientRect());
+    const active = document.activeElement;
+    return {
+      sas: { top: sas.top, bottom: sas.bottom },
+      actionBottoms: actions.map((r) => r.bottom),
+      panelBeforePeers: !!(panel.compareDocumentPosition(peers) & Node.DOCUMENT_POSITION_FOLLOWING),
+      activityFocused: panel.contains(active),
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      viewport: window.visualViewport?.height ?? innerHeight,
+      announcement: document.querySelector('.activity-announcement')?.textContent ?? '',
+    };
+  })()`);
+  const mobileMessage = { a: await mobileMessageGeometry(a), b: await mobileMessageGeometry(b) };
+  for (const [who, layout] of Object.entries(mobileMessage)) {
+    if (
+      layout.sas.top < 0 || layout.sas.bottom > layout.viewport ||
+      layout.actionBottoms.some((n) => n > layout.viewport) ||
+      !layout.panelBeforePeers || layout.activityFocused || layout.overflow !== 0 ||
+      !/\d{6}/.test(layout.announcement)
+    ) {
+      throw new Error(`${who} mobile message verification visibility failed: ${JSON.stringify(layout)}`);
+    }
+  }
+  ok("both 390px message views promoted SAS/consent before peers without focusing an action");
+
+  // Keep the established wide-workspace contract below in the same real session.
+  await setWideViewport(a);
+  await setWideViewport(b);
 
   const acceptMsg = ".msgpanel .act button.btn-primary";
   await b.waitFor(`!!document.querySelector('${acceptMsg}')`, "the accept control on the request card");
@@ -1321,7 +1364,65 @@ async function main() {
     );
     ok("the lazy home sections rendered on the LAN page");
 
+    // A long manifest used to reveal a zero-height marker at the request card's
+    // top. The marker could already be visible while the capped, scrollable file
+    // list still pushed the actual SAS and consent buttons below the phone fold.
+    // Exercise that exact edge before the byte-integrity transfer, then reject it
+    // so the established single-file payload remains independently verifiable.
+    await setWideViewport(sender, 390, 844);
+    await setWideViewport(receiver, 390, 844);
+    await sender.evaluate(`(() => {
+      const input = document.querySelector('.file-pick-input');
+      if (!input) throw new Error('no file input for long-manifest visibility check');
+      const dt = new DataTransfer();
+      for (let i = 0; i < 40; i++) {
+        dt.items.add(new File(
+          ['x'],
+          'verification-boundary-' + String(i).padStart(2, '0') + '-with-a-deliberately-long-name.txt',
+          { type: 'text/plain' },
+        ));
+      }
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+    await receiver.waitFor("!!document.querySelector('.request .sas code')", "the long-manifest mobile SAS", 40_000);
+    const longManifestLayout = await receiver.evaluate(`(() => {
+      const card = document.querySelector('.request');
+      const sas = card.querySelector('.sas').getBoundingClientRect();
+      const actions = [...card.querySelectorAll('button')].map((el) => el.getBoundingClientRect());
+      return {
+        files: card.querySelectorAll('.filelist li').length,
+        sas: { top: sas.top, bottom: sas.bottom },
+        actionBottoms: actions.map((r) => r.bottom),
+        viewport: window.visualViewport?.height ?? innerHeight,
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      };
+    })()`);
+    if (
+      longManifestLayout.files !== 40 ||
+      longManifestLayout.sas.top < 0 || longManifestLayout.sas.bottom > longManifestLayout.viewport ||
+      longManifestLayout.actionBottoms.some((n) => n > longManifestLayout.viewport) ||
+      longManifestLayout.overflow !== 0
+    ) {
+      throw new Error(`long-manifest mobile verification visibility failed: ${JSON.stringify(longManifestLayout)}`);
+    }
+    await receiver.evaluate(`(() => {
+      const reject = document.querySelector('.request .btn-ghost');
+      if (!reject) throw new Error('long-manifest reject action missing');
+      reject.click();
+      return true;
+    })()`);
+    await receiver.waitFor("!document.querySelector('.request')", "the rejected long manifest to close");
+    await sender.waitFor("!!document.querySelector('.xfer .x:not(.cancel)')", "the sender to observe long-manifest rejection");
+    ok("a 40-file request kept its SAS and consent actions inside the 390px viewport");
+
     // ── 发送：真的往那个 file input 里塞一个文件（CDP 的原生入口）──────────
+    // Reproduce the phone flow that motivated this batch. The initiating picker
+    // begins below the first viewport; once the exchange gains a SAS, both sides
+    // must promote the activity card and reveal its security step.
+    await setWideViewport(sender, 390, 844);
+    await setWideViewport(receiver, 390, 844);
     const payload = randomBytes(FILE_BYTES);
     const expected = createHash("sha256").update(payload).digest("hex");
 
@@ -1357,6 +1458,44 @@ async function main() {
     // 确认卡片上必须显示文件名 —— 它是用户做信任决策的地方。
     const cardText = await receiver.evaluate("document.body.innerText");
     if (!cardText.includes(FILE_NAME)) throw new Error("the confirmation card never showed the filename");
+    await sender.waitFor("!!document.querySelector('.xfer .status code')", "the sender's mobile file SAS");
+    await receiver.waitFor("!!document.querySelector('.request .sas code')", "the receiver's mobile file SAS");
+    const mobileFileGeometry = async (tab, selector) => tab.evaluate(`(() => {
+      const card = document.querySelector(${JSON.stringify(selector)});
+      const peers = document.querySelector('.peers');
+      const sas = card.querySelector('.sas, .status').getBoundingClientRect();
+      const actions = [...card.querySelectorAll('button')].map((el) => el.getBoundingClientRect());
+      return {
+        card: (() => { const r = card.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; })(),
+        sas: { top: sas.top, bottom: sas.bottom },
+        actionBottoms: actions.map((r) => r.bottom),
+        cardBeforePeers: !!(card.compareDocumentPosition(peers) & Node.DOCUMENT_POSITION_FOLLOWING),
+        activityFocused: card.contains(document.activeElement),
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        viewport: window.visualViewport?.height ?? innerHeight,
+        announcement: document.querySelector('.activity-announcement')?.textContent ?? '',
+      };
+    })()`);
+    const mobileFile = {
+      sender: await mobileFileGeometry(sender, ".xfer"),
+      receiver: await mobileFileGeometry(receiver, ".request"),
+    };
+    for (const [who, layout] of Object.entries(mobileFile)) {
+      if (
+        layout.sas.top < 0 || layout.sas.bottom > layout.viewport ||
+        layout.actionBottoms.some((n) => n > layout.viewport) ||
+        !layout.cardBeforePeers || layout.activityFocused || layout.overflow !== 0 ||
+        !/\d{6}/.test(layout.announcement)
+      ) {
+        throw new Error(`${who} mobile file verification visibility failed: ${JSON.stringify(layout)}`);
+      }
+    }
+    ok("both 390px file views promoted SAS/consent before peers without focusing an action");
+
+    // Continue the large-payload correctness checks in the established wide
+    // workspace so this addition does not reduce the existing desktop coverage.
+    await setWideViewport(sender);
+    await setWideViewport(receiver);
     const requestLayout = await receiver.evaluate(`(() => {
       const card = document.querySelector('.request');
       return {

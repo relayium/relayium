@@ -13,7 +13,7 @@
   import type { ConnPath } from "./webrtc";
 
   let {
-    status, peerName, sasCode, path, history, errorKey, prefill = "",
+    status, peerName, sasCode, path, history, errorKey, prefill = "", revealTarget = $bindable(),
     onSend, onAccept, onReject, onClear, onEnd, onPrefillConsumed,
   }: {
     status: TextStatus;
@@ -23,6 +23,7 @@
     history: TextMessage[];
     errorKey: TextErrorKey;
     prefill?: string;
+    revealTarget?: HTMLElement;
     onSend: (body: string) => void;
     onAccept: () => void;
     onReject: () => void;
@@ -89,7 +90,7 @@
     <!-- 这里一个字的正文都不渲染，而且也解不开：会话的 onmessage 在 accept() 之前
          根本没挂上（见 text-session）。SAS 先到屏幕上，消息才可能到。 -->
     <p class="req">{t.text.requestHead(peerName)}</p>
-    <div class="sas">{t.codeLabel} <code>{sasCode}</code> — {t.text.sasCompare}</div>
+    <div class="sas" bind:this={revealTarget}>{t.codeLabel} <code>{sasCode}</code> — {t.text.sasCompare}</div>
     <div class="act">
       <button type="button" class="btn btn-primary" onclick={onAccept}>{t.text.accept}</button>
       <button type="button" class="btn btn-ghost" onclick={onReject}>{t.text.reject}</button>
@@ -103,7 +104,7 @@
       {/if}
     </div>
     {#if sasCode && status !== "ended"}
-      <div class="sas">{t.codeLabel} <code>{sasCode}</code> — {t.text.sasCompare}</div>
+      <div class="sas" bind:this={revealTarget}>{t.codeLabel} <code>{sasCode}</code> — {t.text.sasCompare}</div>
     {/if}
 
     <ol class="msglist" role="log" aria-live="polite">
@@ -171,6 +172,10 @@
      只存在于 App.svelte 的**局部**样式里，跨不过组件边界，所以这个面板一直是没
      边框、没背景、标题按 30px 营销尺寸渲染的。 */
   .msgpanel { text-align: start; margin-block-end: var(--space-4); }
+  .sas {
+    scroll-margin-block-start: calc(64px + var(--space-3));
+    overflow-anchor: none;
+  }
   .req { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
   .sess { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--fs-sm); }
   .sess .pname { font-weight: 600; color: var(--text-h); }

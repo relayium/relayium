@@ -416,6 +416,89 @@
     }
   }
 
+  // A newly actionable verification/consent step must not appear silently below
+  // the phone viewport. Keep this separate from visual ordering: every activity
+  // card is activity-first, but only a fresh decision-bearing edge gets one
+  // minimal reveal. Progress and terminal updates never move the page again.
+  type ActivityRevealTarget = "pending" | "incoming" | "file" | "text";
+  type ActivityReveal = { key: string; target: ActivityRevealTarget; announcement: string };
+  let pendingReveal = $state<HTMLElement | undefined>(undefined);
+  let incomingReveal = $state<HTMLElement | undefined>(undefined);
+  let fileReveal = $state<HTMLElement | undefined>(undefined);
+  let textReveal = $state<HTMLElement | undefined>(undefined);
+  let activityAnnouncement = $state("");
+  let revealedActivity = "";
+
+  function activityReveal(): ActivityReveal | null {
+    if (pendingPeer) {
+      return {
+        key: `pending:${pendingPeer.id}`,
+        target: "pending",
+        announcement: t.confirmRecv(nameOf(pendingPeer.id)),
+      };
+    }
+    if (incoming && session.sasCode) {
+      return {
+        // Keep the same identity after Accept turns `incoming` into the recv
+        // progress card; that state transition must not reveal a second time.
+        key: `file:recv:${incoming.from}`,
+        target: "incoming",
+        announcement: `${t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total))}. ${t.codeLabel} ${session.sasCode}. ${t.codeCompare}`,
+      };
+    }
+    const file = [send, recv].find((x) => x && !x.done && session.sasCode);
+    if (file) {
+      return {
+        key: `file:${file.dir}:${file.peer}`,
+        target: "file",
+        announcement: `${statusText(t, file)}. ${t.codeLabel} ${session.sasCode}. ${t.codeCompare}`,
+      };
+    }
+    if (
+      textSession.sasCode &&
+      (textSession.status === "waitingAccept" || textSession.status === "incomingRequest")
+    ) {
+      const lead = textSession.status === "incomingRequest"
+        ? t.text.requestHead(nameOf(textSession.peerId))
+        : t.text.waitingAccept;
+      return {
+        key: `text:${textSession.status}:${textSession.peerId}`,
+        target: "text",
+        announcement: `${lead}. ${t.codeLabel} ${textSession.sasCode}. ${t.text.sasCompare}`,
+      };
+    }
+    return null;
+  }
+
+  function revealElement(target: ActivityRevealTarget): HTMLElement | undefined {
+    if (target === "pending") return pendingReveal;
+    if (target === "incoming") return incomingReveal;
+    if (target === "file") return fileReveal;
+    return textReveal;
+  }
+
+  $effect(() => {
+    const candidate = activityReveal();
+    if (!candidate) {
+      revealedActivity = "";
+      return;
+    }
+    if (candidate.key === revealedActivity) return;
+    revealedActivity = candidate.key;
+    activityAnnouncement = "";
+    void (async () => {
+      await tick();
+      const current = activityReveal();
+      if (!current || current.key !== candidate.key) return;
+      activityAnnouncement = current.announcement;
+      await tick();
+      // Intentionally instant. Smooth scrollIntoView has measured as a zero-scroll
+      // no-op in Chrome on this page, while nearest+auto reveals correctly and
+      // satisfies reduced-motion without a preference branch.
+      revealElement(current.target)?.scrollIntoView?.({ block: "nearest" });
+    })();
+  });
+
   // ── ?debug=1 diagnostics ─────────────────────────────────────────────────────────
   // Read-only WebRTC stats surfaced in-page (phones have no dev console). Never
   // auto-uploaded — the user copies what to share. ?debug=1 turns it on and REMEMBERS
@@ -797,7 +880,101 @@
 
 {#snippet transferSurface()}
   {@const solo = visiblePeers.length === 1}
-  <section class="peers" class:cross={currentRoute() === "cross"}>
+  {@const revealFile = [send, recv].find((x) => x && !x.done && session.sasCode)}
+  {@const hasActivity = !!pendingPeer || !!incoming || !!send || !!recv || textSession.status !== "idle"}
+  <!-- This live node exists before an event occurs; mounting a live region and
+       its message in the same update is not announced reliably. Protected text
+       bodies never enter it. -->
+  <div class="activity-announcement" role="status" aria-live="polite" aria-atomic="true">{activityAnnouncement}</div>
+
+  {#if pendingPeer}
+    <div class="activity-reveal-marker" bind:this={pendingReveal} aria-hidden="true"></div>
+    <div class="ui-callout ui-callout-accent confirm-send">
+      <span>{t.confirmRecv(nameOf(pendingPeer.id))}</span>
+      <button class="btn btn-primary" onclick={confirmSend}>{t.confirmRecvSend}</button>
+      <button class="btn" onclick={cancelSend}>{t.confirmRecvCancel}</button>
+    </div>
+  {/if}
+
+  {#if incoming}
+    <section class="ui-card request">
+      <div class="req-head">{t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total))}</div>
+      <ul class="filelist">
+        {#each incoming.files as f}
+          <li><span class="fname">{f.name}</span><span class="fsize">{formatSize(f.size)}</span></li>
+        {/each}
+      </ul>
+      {#if session.sasCode}
+        <div class="sas activity-reveal-target" bind:this={incomingReveal}>{t.codeLabel} <code>{session.sasCode}</code> — {t.codeCompare}</div>
+      {/if}
+      <!-- 收/拒按钮住在 ReceiveActions 里，因为大批次的内存提示必须拦在这一下
+           点击之前：接受即用户手势，pickSaveTarget 在同一个手势里开选择器。 -->
+      <ReceiveActions
+        files={incoming.files}
+        total={incoming.total}
+        onAccept={() => session.accept()}
+        onReject={() => session.reject()}
+      />
+    </section>
+  {/if}
+
+  {#each [send, recv].filter(Boolean) as x (x!.dir)}
+    {@const xf = x as Xfer}
+    {#if revealFile?.dir === xf.dir}
+      <div class="activity-reveal-marker" bind:this={fileReveal} aria-hidden="true"></div>
+    {/if}
+    <section class="ui-card xfer" class:ok={xf.done && xf.ok} class:bad={xf.done && !xf.ok} out:fade={{ duration: 300 }}>
+      <div class="xfer-head">
+        <span class="label">{xf.dir === "send" ? t.sendTo(nameOf(xf.peer)) : t.recvFrom(nameOf(xf.peer))}</span>
+        {#if xf.files.length}<span class="count">{xf.files.length > 1 ? t.fileCounter(xf.index + 1, xf.files.length) : xf.files[0].name}</span>{/if}
+        {#if xf.done}
+          <button class="btn btn-sm x" onclick={() => (xf.dir === "send" ? session.dismissSend(xf) : session.dismissRecv(xf))} aria-label={t.close}>✕</button>
+        {:else}
+          <button class="btn btn-sm x cancel" onclick={() => session.abort(xf.dir)}>{t.cancel}</button>
+        {/if}
+      </div>
+      <div class="status" aria-live="polite">
+        {statusText(t, xf)}
+        {#if session.sasCode && !xf.done} · {t.codeLabel} <code>{session.sasCode}</code>{/if}
+      </div>
+      {#if xf.done && !xf.ok && xf.status === "connectFail" && relayDenied === "quota"}
+        <p class="ui-callout quota-note">{t.crossnet.relayQuotaFail}</p>
+      {/if}
+      {#if !xf.done}
+        {@const path = xf.dir === "send" ? session.sendPath : session.recvPath}
+        <div class="progress-bar" role="progressbar" aria-valuenow={pct(xf)} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{pct(xf)}%"></div></div>
+        <div class="meta">
+          <span>{pct(xf)}% · {formatSize(xf.sent)} / {formatSize(xf.total)}</span>
+          <span class="meta-right">
+            {#if path}<span class="path path-{path}"><i class="dot"></i>{pathLabel(t, path)}</span>{/if}
+            {#if xf.speed > 0}<span>{formatSpeed(xf.speed)}{#if formatEta(xf)} · {formatEta(xf)}{/if}</span>{/if}
+          </span>
+        </div>
+      {/if}
+    </section>
+  {/each}
+
+  <!-- 消息面板放在这个 snippet 里面，所以 LAN 那条路径和 CrossPage 都从这一处拿到它。 -->
+  {#if textSession.status !== "idle"}
+    <MessagePanel
+      status={textSession.status}
+      peerName={nameOf(textSession.peerId)}
+      sasCode={textSession.sasCode}
+      path={textSession.path}
+      history={textSession.history}
+      errorKey={textSession.errorKey}
+      prefill={textCompose}
+      bind:revealTarget={textReveal}
+      onSend={(body) => void textSession.send(body)}
+      onAccept={() => textSession.accept()}
+      onReject={() => textSession.reject()}
+      onClear={() => textSession.clearHistory()}
+      onEnd={() => textSession.end()}
+      onPrefillConsumed={() => (textCompose = "")}
+    />
+  {/if}
+
+  <section class="peers" class:cross={currentRoute() === "cross"} class:after-activity={hasActivity}>
     <!-- A pairing room currently has one remote target (the signalling room cap
          is two participants). Cross without roomCode is the LAN auto-surface,
          where “Nearby devices” remains truthful for one or many peers. -->
@@ -805,13 +982,6 @@
     <QuotaNotice />
     {#if outbox().length && visiblePeers.length !== 1}
       <p class="ui-callout share-pending">{t.sharePending(outbox().length)}</p>
-    {/if}
-    {#if pendingPeer}
-      <div class="ui-callout ui-callout-accent confirm-send" role="alertdialog" aria-live="polite">
-        <span>{t.confirmRecv(nameOf(pendingPeer.id))}</span>
-        <button class="btn btn-primary" onclick={confirmSend}>{t.confirmRecvSend}</button>
-        <button class="btn" onclick={cancelSend}>{t.confirmRecvCancel}</button>
-      </div>
     {/if}
     {#if currentRoute() === "lan"}
       {#if chooser === "empty"}
@@ -860,80 +1030,6 @@
       </p>
     {/if}
   </section>
-
-  {#if incoming}
-    <section class="ui-card request">
-      <div class="req-head">{t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total))}</div>
-      <ul class="filelist">
-        {#each incoming.files as f}
-          <li><span class="fname">{f.name}</span><span class="fsize">{formatSize(f.size)}</span></li>
-        {/each}
-      </ul>
-      {#if session.sasCode}
-        <div class="sas">{t.codeLabel} <code>{session.sasCode}</code> — {t.codeCompare}</div>
-      {/if}
-      <!-- 收/拒按钮住在 ReceiveActions 里，因为大批次的内存提示必须拦在这一下
-           点击之前：接受即用户手势，pickSaveTarget 在同一个手势里开选择器。 -->
-      <ReceiveActions
-        files={incoming.files}
-        total={incoming.total}
-        onAccept={() => session.accept()}
-        onReject={() => session.reject()}
-      />
-    </section>
-  {/if}
-
-  {#each [send, recv].filter(Boolean) as x (x!.dir)}
-    {@const xf = x as Xfer}
-    <section class="ui-card xfer" class:ok={xf.done && xf.ok} class:bad={xf.done && !xf.ok} out:fade={{ duration: 300 }}>
-      <div class="xfer-head">
-        <span class="label">{xf.dir === "send" ? t.sendTo(nameOf(xf.peer)) : t.recvFrom(nameOf(xf.peer))}</span>
-        {#if xf.files.length}<span class="count">{xf.files.length > 1 ? t.fileCounter(xf.index + 1, xf.files.length) : xf.files[0].name}</span>{/if}
-        {#if xf.done}
-          <button class="btn btn-sm x" onclick={() => (xf.dir === "send" ? session.dismissSend(xf) : session.dismissRecv(xf))} aria-label={t.close}>✕</button>
-        {:else}
-          <button class="btn btn-sm x cancel" onclick={() => session.abort(xf.dir)}>{t.cancel}</button>
-        {/if}
-      </div>
-      <div class="status" aria-live="polite">
-        {statusText(t, xf)}
-        {#if session.sasCode && !xf.done} · {t.codeLabel} <code>{session.sasCode}</code>{/if}
-      </div>
-      {#if xf.done && !xf.ok && xf.status === "connectFail" && relayDenied === "quota"}
-        <p class="ui-callout quota-note">{t.crossnet.relayQuotaFail}</p>
-      {/if}
-      {#if !xf.done}
-        {@const path = xf.dir === "send" ? session.sendPath : session.recvPath}
-        <div class="progress-bar" role="progressbar" aria-valuenow={pct(xf)} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{pct(xf)}%"></div></div>
-        <div class="meta">
-          <span>{pct(xf)}% · {formatSize(xf.sent)} / {formatSize(xf.total)}</span>
-          <span class="meta-right">
-            {#if path}<span class="path path-{path}"><i class="dot"></i>{pathLabel(t, path)}</span>{/if}
-            {#if xf.speed > 0}<span>{formatSpeed(xf.speed)}{#if formatEta(xf)} · {formatEta(xf)}{/if}</span>{/if}
-          </span>
-        </div>
-      {/if}
-    </section>
-  {/each}
-
-  <!-- 消息面板放在这个 snippet 里面，所以 LAN 那条路径和 CrossPage 都从这一处拿到它。 -->
-  {#if textSession.status !== "idle"}
-    <MessagePanel
-      status={textSession.status}
-      peerName={nameOf(textSession.peerId)}
-      sasCode={textSession.sasCode}
-      path={textSession.path}
-      history={textSession.history}
-      errorKey={textSession.errorKey}
-      prefill={textCompose}
-      onSend={(body) => void textSession.send(body)}
-      onAccept={() => textSession.accept()}
-      onReject={() => textSession.reject()}
-      onClear={() => textSession.clearHistory()}
-      onEnd={() => textSession.end()}
-      onPrefillConsumed={() => (textCompose = "")}
-    />
-  {/if}
 {/snippet}
 
   {#if surfaceShown && dragActive && dropTarget(visiblePeers.length, busy) !== "off"}
@@ -1174,7 +1270,31 @@
     .ui-card.ok { animation: none; }
   }
 
-  .peers { margin-top: var(--space-7); }
+  /* Exclude the old peer control from browser scroll anchoring: when an activity
+     card is inserted above it, the explicit one-shot reveal below is the only
+     source of scroll movement across Chrome/Firefox/Safari. */
+  .peers { margin-top: var(--space-7); overflow-anchor: none; }
+  .peers.after-activity { margin-top: var(--space-4); }
+  .activity-reveal-marker {
+    block-size: 0;
+    scroll-margin-block-start: calc(64px + var(--space-3));
+    overflow-anchor: none;
+  }
+  .activity-reveal-target {
+    scroll-margin-block-start: calc(64px + var(--space-3));
+    overflow-anchor: none;
+  }
+  .activity-announcement {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
   /* 48px of separation is desktop rhythm; on a phone it is a third of the
      distance between the masthead and the send action. */
   @media (max-width: 700px) {
