@@ -11,6 +11,7 @@ import type { MixedPeerLink } from "./peer-link.svelte";
 import {
   ACCEPT,
   BATCH_ABORT,
+  CHUNK_SIZE,
   CHUNK_OVERHEAD,
   COMPLETE,
   FILE_BUSY,
@@ -23,8 +24,13 @@ import {
   advanceAck,
   controlKind,
   isBatchAbort,
+  isResumeReq,
   parseAck,
+  parseResumeReq,
+  resumePointInRange,
+  resumeReqFrame,
   type FileMeta,
+  type ResumePoint,
 } from "./transfer";
 import { wouldExceedDeclared } from "./transfer-session.svelte";
 
@@ -66,7 +72,7 @@ interface LocalBatch extends QueuedFileBatch {
   readonly picked: PickedFile[];
 }
 
-type OutboundPhase = "offering" | "waitingAccept" | "sending" | "finishing";
+type OutboundPhase = "offering" | "waitingAccept" | "sending" | "finishing" | "resuming";
 type Decision = "accept" | "reject" | "busy" | "yield" | "timeout";
 
 interface Outbound {
@@ -82,15 +88,25 @@ interface Outbound {
   creditWake: (() => void) | null;
   decide: (decision: Decision) => void;
   complete: () => void;
+  completed: Promise<void>;
   gotComplete: boolean;
   terminal: boolean;
+  resumeRequest: ResumePoint | null;
+  resumeStarted: boolean;
+  /** Furthest logical point that entered an authenticated transport. A resume
+   *  request beyond it can only have been forged or corrupted. */
+  produced: ResumePoint;
 }
 
-type InboundPhase = "prompt" | "picking" | "receiving" | "draining";
+type InboundPhase = "prompt" | "picking" | "receiving" | "resuming" | "draining";
+
+interface ReceiveCheckpoint extends ResumePoint {
+  chain: Uint8Array;
+}
 
 interface Inbound {
-  readonly link: MixedPeerLink;
-  readonly generation: number;
+  link: MixedPeerLink;
+  generation: number;
   readonly files: FileMeta[];
   readonly total: number;
   phase: InboundPhase;
@@ -103,6 +119,10 @@ interface Inbound {
   startedAt: number;
   lastUiAt: number;
   lastAckSent: number;
+  speedBase: number;
+  checkpoint: ReceiveCheckpoint;
+  targetFinalized: boolean;
+  cancelRequested: boolean;
   drainLimit: number;
   drained: number;
   drainTimer?: ReturnType<typeof setTimeout>;
@@ -131,10 +151,10 @@ export interface MixedFileSession {
   readonly errorKey: FileLaneErrorKey;
   attach(link: MixedPeerLink): void;
   detach(): void;
-  /** Enter a transport gap: fail the in-flight batch visibly, stop the pump and
-   *  arm per-generation sequence realignment, WITHOUT poisoning the link-owned
-   *  codecs. Idempotent, so the lane's own `onclose` and the coordinator's
-   *  explicit call cannot double-fire whichever order the browser picks. */
+  /** Enter a transport gap: pause a consented transfer at its durable checkpoint,
+   *  stop the pump and arm
+   *  per-generation sequence realignment WITHOUT poisoning the link-owned codecs.
+   *  Idempotent, so lane and coordinator close callbacks cannot double-fire. */
   suspend(): void;
   /** Did this lane have work in flight when its channel first entered a gap?
    *
@@ -196,6 +216,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   let consentTimer: ReturnType<typeof setTimeout> | undefined;
   let replayTimer: ReturnType<typeof setTimeout> | undefined;
   let gapTimer: ReturnType<typeof setTimeout> | undefined;
+  let resumeTimer: ReturnType<typeof setTimeout> | undefined;
   let queuedInboundBytes = 0;
   /** In a transport gap: nothing may be sent and no batch may launch. */
   let suspended = false;
@@ -274,8 +295,52 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   function clearInboundTimers() {
     clearTimeout(consentTimer);
     consentTimer = undefined;
+    clearTimeout(resumeTimer);
+    resumeTimer = undefined;
     if (inbound?.drainTimer) clearTimeout(inbound.drainTimer);
     if (inbound?.receiveTimer) clearTimeout(inbound.receiveTimer);
+  }
+
+  function resetCompletion(current: Outbound) {
+    let complete!: () => void;
+    current.completed = new Promise<void>((resolve) => { complete = resolve; });
+    current.complete = complete;
+    current.gotComplete = false;
+  }
+
+  function batchOffset(files: FileMeta[], point: ResumePoint): number {
+    return files.slice(0, point.index).reduce((sum, file) => sum + file.size, 0) + point.offset;
+  }
+
+  function pointAtOrBefore(candidate: ResumePoint, frontier: ResumePoint): boolean {
+    return candidate.index < frontier.index
+      || (candidate.index === frontier.index && candidate.offset <= frontier.offset);
+  }
+
+  function advanceProduced(current: Outbound, point: ResumePoint) {
+    if (pointAtOrBefore(current.produced, point)) current.produced = point;
+  }
+
+  function validResumeRequest(current: Outbound, point: ResumePoint): boolean {
+    const sizes = current.batch.files.map((file) => file.size);
+    if (!resumePointInRange(point, sizes) || !pointAtOrBefore(point, current.produced)) return false;
+    // Sender.dataFrames hashes fixed source chunks. Every honest durable
+    // checkpoint is therefore either a chunk boundary or the exact file end.
+    const size = sizes[point.index];
+    return point.offset === size || point.offset % CHUNK_SIZE === 0;
+  }
+
+  function armOutboundResumeTimer(current: Outbound) {
+    clearTimeout(resumeTimer);
+    const candidate = current.link;
+    const expectedGeneration = current.generation;
+    resumeTimer = setTimeout(() => {
+      resumeTimer = undefined;
+      if (outbound === current && current.phase === "resuming"
+          && candidate === link && expectedGeneration === generation) {
+        markLaneFailed(candidate, "sendFail", expectedGeneration);
+      }
+    }, receiveStallMs);
   }
 
   function clearGapTimer() {
@@ -301,12 +366,10 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   /**
    * A transport gap on this lane. See MixedFileSession.suspend.
    *
-   * The batch in flight fails visibly, but nothing here poisons: the file
-   * protocol has a forward-only nonce AND a sender-announced resume point, so a
-   * frame that was buffered at close, admitted but never fed, or encrypted but
-   * never sent is repaired by the next generation's single RESUME_START. Bumping
-   * `generation` retires the dead transport's handlers, timers and already-queued
-   * receive tasks in one step, so none of them can act on the replacement.
+   * A consented batch pauses in place. Its source files, destination sink and
+   * last durable receive checkpoint survive; only the dead transport generation
+   * retires. Pre-consent work still fails closed because no byte-level checkpoint
+   * contract exists before ACCEPT.
    */
   function suspend() {
     const candidate = link;
@@ -323,27 +386,44 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       ? inbound : null;
     clearInboundTimers();
     if (oldOutbound) {
-      oldOutbound.cancelRequested = true;
-      oldOutbound.decide("reject");
-      oldOutbound.complete();
-      // Unblock waitForCredit/waitForBuffer immediately; neither may wait out its
-      // 60 s stall timer on a transport that no longer exists.
-      oldOutbound.creditWake?.();
-      oldOutbound.terminal = true;
-      outbound = null;
-      if (send && !send.done) send = { ...send, status: "sendFail", done: true, ok: false, speed: 0 };
+      if (oldOutbound.phase === "sending" || oldOutbound.phase === "finishing"
+          || oldOutbound.phase === "resuming") {
+        oldOutbound.phase = "resuming";
+        oldOutbound.resumeRequest = null;
+        oldOutbound.resumeStarted = false;
+        // Unblock credit, buffer and completion waits. The old run observes the
+        // generation mismatch and retires without finishing this batch.
+        oldOutbound.creditWake?.();
+        oldOutbound.complete();
+        if (send && !send.done) send = { ...send, status: "resuming", speed: 0 };
+      } else {
+        oldOutbound.cancelRequested = true;
+        oldOutbound.decide("reject");
+        oldOutbound.complete();
+        oldOutbound.creditWake?.();
+        oldOutbound.terminal = true;
+        outbound = null;
+        if (send && !send.done) send = { ...send, status: "sendFail", done: true, ok: false, speed: 0 };
+      }
     }
     if (oldInbound) {
-      inbound = null;
-      incoming = null;
-      if (recv && !recv.done) recv = { ...recv, status: "recvFail", done: true, ok: false, speed: 0 };
-      // FileSink forbids a close concurrent with a write, so this serializes
-      // behind whatever the receive chain already admitted.
-      closeSinkAfterReceiveChain(oldInbound, false);
+      if (oldInbound.phase === "receiving" || oldInbound.phase === "resuming") {
+        oldInbound.phase = "resuming";
+        incoming = null;
+        if (recv && !recv.done) recv = { ...recv, status: "resuming", speed: 0 };
+      } else {
+        inbound = null;
+        incoming = null;
+        if (recv && !recv.done) recv = { ...recv, status: "recvFail", done: true, ok: false, speed: 0 };
+        // A picker or prompt has no durable byte contract to resume.
+        closeSinkAfterReceiveChain(oldInbound, false);
+      }
     }
     pendingInbound = null;
     detachHandlers();
     generation++;
+    if (oldOutbound && outbound === oldOutbound) oldOutbound.generation = generation;
+    if (oldInbound && inbound === oldInbound) oldInbound.generation = generation;
     resyncOut = true;
     resyncIn = "required";
     armGapTimer();
@@ -494,6 +574,26 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     const current = outbound;
     if (!current || current.link !== link || current.generation !== generation || current.terminal) return;
 
+    if (isResumeReq(buf)) {
+      const point = parseResumeReq(buf);
+      if (current.phase !== "resuming" || current.resumeRequest || !point
+          || !validResumeRequest(current, point)) {
+        markLaneFailed(current.link, "sendFail", current.generation);
+        return;
+      }
+      if (current.cancelRequested) {
+        clearTimeout(resumeTimer);
+        resumeTimer = undefined;
+        if (!sendBarrier(BATCH_ABORT, current.link, current.generation)) return;
+        send = null;
+        finishOutbound(current);
+        return;
+      }
+      current.resumeRequest = point;
+      maybeResumeOutbound();
+      return;
+    }
+
     const ack = parseAck(buf);
     if (ack !== null) {
       // ACK has no batch ID. Clamp it to bytes actually emitted in this batch so
@@ -514,6 +614,13 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     if (kind === "accept" && current.phase === "waitingAccept") current.decide("accept");
     else if (kind === "reject") {
       if (current.phase === "waitingAccept") current.decide("reject");
+      else if (current.phase === "resuming") {
+        current.remoteStop = true;
+        current.creditWake?.();
+        current.complete();
+        if (send) send = { ...send, status: "rejected", done: true, ok: false, speed: 0 };
+        finishOutbound(current);
+      }
       else if (current.phase === "sending" || current.phase === "finishing") {
         current.remoteStop = true;
         current.creditWake?.();
@@ -602,7 +709,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       }
       if (inbound.phase === "draining" || inbound.phase === "prompt" || inbound.phase === "picking") {
         finishInbound(false);
-      } else if (inbound.phase === "receiving") {
+      } else if (inbound.phase === "receiving" || inbound.phase === "resuming") {
         const current = inbound;
         recv = recv ? { ...recv, status: "recvFail", done: true, ok: false, speed: 0 } : null;
         await closeSink(current);
@@ -619,12 +726,18 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     && current.link === link
     && current.generation === generation
     && current.phase === "receiving";
+  const stillOwned = (current: Inbound) => inbound === current
+    && (current.phase === "receiving" || current.phase === "resuming");
   const isDraining = (current: Inbound) => inbound === current && current.phase === "draining";
 
   function refreshReceiveWatchdog(current: Inbound) {
     clearTimeout(current.receiveTimer);
     current.receiveTimer = setTimeout(() => {
       if (stillReceiving(current)) beginDrain(current, "recvFail", true);
+      else if (inbound === current && current.phase === "resuming"
+          && current.link === link && current.generation === generation) {
+        markLaneFailed(current.link, "recvFail", current.generation);
+      }
     }, receiveStallMs);
   }
 
@@ -657,15 +770,33 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       if (resyncIn !== "required") {
         throw new Error("relayium: unexpected file resume marker on live link");
       }
-      // This slice resumes batches, not bytes: the interrupted batch is already
-      // failed, so the only valid announced point is the batch-free origin.
-      if (out.resume.index !== 0 || out.resume.offset !== 0) {
-        throw new Error("relayium: unsupported file resume point");
+      const current = inbound;
+      if (current?.phase === "resuming" || (current?.phase === "draining" && current.cancelRequested)) {
+        const checkpoint = current.checkpoint;
+        if (current.link !== candidate || current.generation !== generation
+            || out.resume.index !== checkpoint.index || out.resume.offset !== checkpoint.offset) {
+          throw new Error("relayium: resume announcement did not match durable checkpoint");
+        }
+        candidate.fileReceiver.resumeAt(checkpoint.chain, out.resume.seq);
+        if (current.phase === "resuming") {
+          current.fileIndex = checkpoint.index;
+          current.fileOffset = checkpoint.offset;
+          current.got = batchOffset(current.files, checkpoint);
+          current.lastAckSent = current.got;
+          current.speedBase = current.got;
+          current.startedAt = now();
+          current.phase = "receiving";
+          if (recv && !recv.done) recv = { ...recv, sent: current.got, index: current.fileIndex, status: "receiving", speed: 0 };
+          refreshReceiveWatchdog(current);
+        }
+      } else {
+        // An idle direction still needs one generation alignment before its next
+        // batch. With no preserved sink, only the batch-free origin is valid.
+        if (out.resume.index !== 0 || out.resume.offset !== 0) {
+          throw new Error("relayium: resume point without an active batch");
+        }
+        candidate.fileReceiver.resumeAt(new Uint8Array(32), out.resume.seq);
       }
-      // resumeAt refuses a backwards seq, so the worst a forged announcement can
-      // do is push this receiver forward into frames it can no longer decrypt —
-      // a denial of service, never nonce reuse and never an integrity bypass.
-      candidate.fileReceiver.resumeAt(new Uint8Array(32), out.resume.seq);
       resyncIn = "none";
       return;
     }
@@ -704,9 +835,22 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         return;
       }
       await current.sink.write(out.chunk);
-      if (!stillReceiving(current)) return;
+      // The write may have crossed a transport replacement. It is nevertheless
+      // durable and was already authenticated in the old FIFO chain, so commit
+      // it to the checkpoint before deciding whether the old generation may
+      // publish progress or send an ACK.
+      if (!stillOwned(current)) return;
       current.got += out.chunk.length;
       current.fileOffset += out.chunk.length;
+      current.checkpoint = {
+        index: current.fileIndex,
+        offset: current.fileOffset,
+        chain: candidate.fileReceiver.snapshotChain(),
+      };
+      if (!stillReceiving(current)) {
+        publishReceive(current);
+        return;
+      }
       if (current.got - current.lastAckSent >= FLOW_ACK_INTERVAL) {
         current.lastAckSent = current.got;
         sendControl(ackFrame(current.got), candidate, current.generation);
@@ -739,11 +883,19 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
           return;
         }
         current.sink = nextSink;
+        current.checkpoint = {
+          index: current.fileIndex,
+          offset: 0,
+          chain: new Uint8Array(32),
+        };
         refreshReceiveWatchdog(current);
         publishReceive(current, true);
         return;
       }
-      await current.target?.done?.();
+      if (!current.targetFinalized) {
+        await current.target?.done?.();
+        current.targetFinalized = true;
+      }
       if (!stillReceiving(current)) return;
       const finished: Xfer = {
         peer: candidate.peerId,
@@ -821,6 +973,10 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       startedAt: 0,
       lastUiAt: 0,
       lastAckSent: 0,
+      speedBase: 0,
+      checkpoint: { index: 0, offset: 0, chain: new Uint8Array(32) },
+      targetFinalized: false,
+      cancelRequested: false,
       drainLimit: total,
       drained: 0,
     };
@@ -964,7 +1120,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       ...recv,
       index: Math.min(current.fileIndex, current.files.length - 1),
       sent: current.got,
-      speed: elapsed > 0 ? current.got / elapsed : 0,
+      speed: elapsed > 0 ? (current.got - current.speedBase) / elapsed : 0,
     };
   }
 
@@ -1007,7 +1163,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   }
 
   async function waitForCredit(current: Outbound) {
-    while (!current.cancelRequested && !current.remoteStop && !current.terminal
+    while (current.phase !== "resuming" && !current.cancelRequested && !current.remoteStop && !current.terminal
         && current.sentBytes - current.acked > FLOW_WINDOW) {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -1028,7 +1184,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     // dead channel will never drain, and the wake this would have used was
     // already spent. Waiting out the stall timeout would hold the next batch —
     // and its realignment announcement — for a full minute.
-    if (current.cancelRequested || current.remoteStop || current.terminal) return;
+    if (current.phase === "resuming" || current.cancelRequested || current.remoteStop || current.terminal) return;
     if (channel.bufferedAmount <= channel.bufferedAmountLowThreshold) return;
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -1073,7 +1229,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     }
   }
 
-  async function runOutbound(current: Outbound, decision: Promise<Decision>, completed: Promise<void>) {
+  async function runOutbound(current: Outbound, decision: Promise<Decision>) {
     const { batch, link: candidate, generation: expectedGeneration } = current;
     outboundRunning++;
     try {
@@ -1137,8 +1293,19 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         if (!current.cancelRequested && !current.remoteStop) await waitForCredit(current);
         await waitForBuffer(candidate.fileChannel, current);
         sendProtected(data, candidate, expectedGeneration);
-        if (data[0] === FRAME.CHUNK) current.sentBytes += data.byteLength - CHUNK_OVERHEAD;
-        else if (data[0] === FRAME.DONE) index++;
+        if (data[0] === FRAME.CHUNK) {
+          current.sentBytes += data.byteLength - CHUNK_OVERHEAD;
+          advanceProduced(current, {
+            index,
+            offset: current.sentBytes - batchOffset(batch.files, { index, offset: 0 }),
+          });
+        } else if (data[0] === FRAME.DONE) {
+          const finished = index;
+          index++;
+          advanceProduced(current, index < batch.files.length
+            ? { index, offset: 0 }
+            : { index: finished, offset: batch.files[finished].size });
+        }
         const t = now();
         if (send && t - lastUiAt >= UI_TICK_MS) {
           lastUiAt = t;
@@ -1168,7 +1335,10 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         status: "finishing",
         speed: 0,
       };
-      await completeWithin(completed, COMPLETE_TIMEOUT_MS);
+      await completeWithin(current.completed, COMPLETE_TIMEOUT_MS);
+      if (candidate !== link || expectedGeneration !== generation) {
+        throw new TransportGapError();
+      }
       if (current.cancelRequested || current.remoteStop) {
         if (!sendBarrier(BATCH_ABORT, candidate, expectedGeneration)) return;
         if (current.cancelRequested) send = null;
@@ -1180,8 +1350,8 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     } catch (err) {
       if (err instanceof TransportGapError) {
         // The throw site already entered the gap (or was inert because a
-        // replacement had moved on). Deliberately nothing here: this batch is
-        // failed and its codecs stay reusable.
+        // replacement had moved on). Deliberately nothing here: a consented
+        // batch stays owned by `outbound` and resumes after this run unwinds.
       } else {
         console.error("relayium mixed file send error", err);
         if (outbound === current && !lanePoisoned(candidate)) {
@@ -1192,9 +1362,118 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       outboundRunning--;
       // A run retired by a gap has no lane state left to finish, but the lane may
       // have become runnable the moment it stopped being able to burn a nonce.
-      if (outbound === current) finishOutbound(current);
+      if (outbound === current && current.phase !== "resuming") finishOutbound(current);
+      else if (outbound === current) maybeResumeOutbound();
       else pump();
     }
+  }
+
+  async function runOutboundResume(current: Outbound, point: ResumePoint) {
+    const { batch, link: candidate, generation: expectedGeneration } = current;
+    outboundRunning++;
+    try {
+      if (!sendBarrier(candidate.fileSender.resumeStartFrame(point), candidate, expectedGeneration)) return;
+      if (candidate !== link || expectedGeneration !== generation || suspended) {
+        throw new TransportGapError();
+      }
+      resyncOut = false;
+      current.phase = "sending";
+      const base = batchOffset(batch.files, point);
+      current.sentBytes = base;
+      current.acked = base;
+      if (send && !send.done) {
+        send = { ...send, status: "sending", sent: base, index: point.index, speed: 0 };
+      }
+
+      const startedAt = now();
+      let index = point.index;
+      let fileOffset = point.offset;
+      let lastUiAt = 0;
+      for await (const data of candidate.fileSender.dataFrames(
+        batch.picked.map((picked) => picked.file),
+        candidate.keys,
+        point,
+      )) {
+        if (!current.cancelRequested && !current.remoteStop) await waitForCredit(current);
+        await waitForBuffer(candidate.fileChannel, current);
+        sendProtected(data, candidate, expectedGeneration);
+        if (data[0] === FRAME.CHUNK) {
+          const bytes = data.byteLength - CHUNK_OVERHEAD;
+          current.sentBytes += bytes;
+          fileOffset += bytes;
+          advanceProduced(current, { index, offset: fileOffset });
+        } else if (data[0] === FRAME.DONE) {
+          const finished = index;
+          index++;
+          fileOffset = 0;
+          advanceProduced(current, index < batch.files.length
+            ? { index, offset: 0 }
+            : { index: finished, offset: batch.files[finished].size });
+        }
+        const t = now();
+        if (send && t - lastUiAt >= UI_TICK_MS) {
+          lastUiAt = t;
+          const elapsed = (t - startedAt) / 1000;
+          send = {
+            ...send,
+            sent: Math.min(batch.total, current.sentBytes),
+            index: Math.min(index, batch.files.length - 1),
+            speed: elapsed > 0 ? (current.sentBytes - base) / elapsed : 0,
+          };
+        }
+        if (current.cancelRequested || current.remoteStop) break;
+      }
+
+      if (current.cancelRequested || current.remoteStop) {
+        if (!sendBarrier(BATCH_ABORT, candidate, expectedGeneration)) return;
+        if (current.cancelRequested) send = null;
+        else if (send) send = { ...send, status: "rejected", done: true, ok: false, speed: 0 };
+        return;
+      }
+
+      current.phase = "finishing";
+      if (send) send = {
+        ...send,
+        sent: batch.total,
+        index: Math.max(0, batch.files.length - 1),
+        status: "finishing",
+        speed: 0,
+      };
+      await completeWithin(current.completed, COMPLETE_TIMEOUT_MS);
+      if (candidate !== link || expectedGeneration !== generation) {
+        throw new TransportGapError();
+      }
+      if (!current.gotComplete) throw new Error("relayium: resumed file batch ended without COMPLETE");
+      if (send) send = { ...send, status: "sendDone", done: true, ok: true, speed: 0 };
+    } catch (err) {
+      if (!(err instanceof TransportGapError)) {
+        console.error("relayium mixed file resume error", err);
+        if (outbound === current && !lanePoisoned(candidate)) {
+          markLaneFailed(candidate, "sendFail", expectedGeneration);
+        }
+      }
+    } finally {
+      outboundRunning--;
+      current.resumeStarted = false;
+      if (outbound === current && current.phase !== "resuming") finishOutbound(current);
+      else if (outbound === current) maybeResumeOutbound();
+      else pump();
+    }
+  }
+
+  function maybeResumeOutbound() {
+    const current = outbound;
+    if (!current || current.phase !== "resuming" || current.resumeStarted
+        || !current.resumeRequest || outboundRunning > 0 || suspended
+        || current.link !== link || current.generation !== generation
+        || current.link.fileChannel.readyState !== "open") return;
+    const point = current.resumeRequest;
+    current.resumeRequest = null;
+    current.resumeStarted = true;
+    clearTimeout(resumeTimer);
+    resumeTimer = undefined;
+    resetCompletion(current);
+    void runOutboundResume(current, point);
   }
 
   function startBatch(batch: LocalBatch, candidate: MixedPeerLink) {
@@ -1215,8 +1494,12 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       creditWake: null,
       decide,
       complete,
+      completed,
       gotComplete: false,
       terminal: false,
+      resumeRequest: null,
+      resumeStarted: false,
+      produced: { index: 0, offset: 0 },
     };
     outbound = current;
     send = {
@@ -1231,7 +1514,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       ok: false,
       speed: 0,
     };
-    void runOutbound(current, decision, completed);
+    void runOutbound(current, decision);
   }
 
   function pump() {
@@ -1314,11 +1597,19 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     }
     errorKey = lanePoisoned(candidate) ? "failed" : "";
     const expectedGeneration = generation;
+    const resumingOutbound = replacement && outbound?.phase === "resuming" ? outbound : null;
+    const resumingInbound = replacement && inbound?.phase === "resuming" ? inbound : null;
+    if (resumingOutbound) {
+      resumingOutbound.link = candidate;
+      resumingOutbound.generation = expectedGeneration;
+      resumingOutbound.resumeRequest = null;
+      resumingOutbound.resumeStarted = false;
+    }
     messageHandler = (event) => {
       const buf = asBuffer(event.data);
       if (!buf || candidate !== link || expectedGeneration !== generation) return;
       deps.onActivity?.();
-      if (parseAck(buf) !== null || controlKind(buf) !== null) {
+      if (parseAck(buf) !== null || controlKind(buf) !== null || isResumeReq(buf)) {
         // Receiver->sender controls must not wait behind slow inbound disk writes,
         // or our independent outbound flow-control window can deadlock.
         handleControl(buf);
@@ -1342,6 +1633,38 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       if (replacement) suspend();
       return;
     }
+    if (resumingOutbound) armOutboundResumeTimer(resumingOutbound);
+    if (resumingInbound) {
+      // An old task may already have authenticated a chunk and be inside the
+      // durable sink.write(). Let the whole admitted FIFO settle before reading
+      // the checkpoint; tasks that had not reached feed() are generation-gated
+      // and cannot enter it. The request therefore names exactly the durable
+      // prefix, never a speculative one.
+      const admitted = recvChain;
+      void admitted.then(() => {
+        if (inbound !== resumingInbound || link !== candidate
+            || generation !== expectedGeneration || suspended
+            || resumingInbound.phase !== "resuming") return;
+        resumingInbound.link = candidate;
+        resumingInbound.generation = expectedGeneration;
+        if (resumingInbound.cancelRequested) {
+          if (!sendControl(REJECT, candidate, expectedGeneration)) return;
+          candidate.fileReceiver.abortBatch();
+          const closeTask = recvChain.then(() => closeSink(resumingInbound));
+          recvChain = closeTask.then(() => {
+            if (inbound === resumingInbound) finishInbound(false);
+          }).catch((err) => {
+            console.error("relayium mixed file resumed cancellation error", err);
+            if (inbound === resumingInbound) markLaneFailed(candidate, "recvFail", expectedGeneration);
+          });
+          return;
+        }
+        const checkpoint = resumingInbound.checkpoint;
+        if (!sendControl(resumeReqFrame(checkpoint.index, checkpoint.offset), candidate, expectedGeneration)) return;
+        refreshReceiveWatchdog(resumingInbound);
+      });
+    }
+    maybeResumeOutbound();
     // External reattachment may make a preserved queue runnable. Deferring keeps
     // pump()'s own attach(candidate) path from launching a second batch before
     // startBatch() reserves the lane in the current call stack.
@@ -1438,6 +1761,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         outbound.creditWake?.();
         if (outbound.phase === "waitingAccept") outbound.decide("reject");
         if (outbound.phase === "finishing") outbound.complete();
+        if (outbound.phase === "resuming") send = null;
       } else if (dir === "send" && launching) {
         pumpToken++;
         clearTimeout(replayTimer);
@@ -1448,6 +1772,15 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       } else if (dir === "recv" && inbound) {
         if (inbound.phase === "prompt" || inbound.phase === "picking") rejectInbound(inbound);
         else if (inbound.phase === "receiving") beginDrain(inbound, "recvFail", true);
+        else if (inbound.phase === "resuming") {
+          inbound.cancelRequested = true;
+          if (!suspended && inbound.link === link && inbound.generation === generation
+              && inbound.link.fileChannel.readyState === "open") {
+            beginDrain(inbound, "recvFail", true);
+          } else if (recv && !recv.done) {
+            recv = { ...recv, status: "recvFail", done: true, ok: false, speed: 0 };
+          }
+        }
       }
     },
 

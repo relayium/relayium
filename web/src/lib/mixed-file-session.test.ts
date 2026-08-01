@@ -8,6 +8,7 @@ import {
   ACCEPT,
   COMPLETE,
   CHUNK_OVERHEAD,
+  CHUNK_SIZE,
   FILE_BUSY,
   FLOW_WINDOW,
   Receiver,
@@ -16,6 +17,7 @@ import {
   FRAME,
   ackFrame,
   isBatchAbort,
+  resumeReqFrame,
 } from "./transfer";
 import { TextReceiver, TextSender } from "./text-wire";
 
@@ -762,19 +764,30 @@ describe("mixed file session transport recovery", () => {
     JSON.parse(new TextDecoder().decode(new Uint8Array(frame).slice(5))) as
       { index: number; offset: number; seq: number };
 
-  it("fails the interrupted batch, then runs the next one byte-exactly on a new transport", async () => {
+  it("resumes the interrupted batch byte-exactly on a new transport", async () => {
     const { a, b, aLink, bLink, links, file, text, bTarget } = await harness();
+    let releaseSource!: () => void;
+    const sourceGate = new Promise<void>((resolve) => { releaseSource = resolve; });
+    const originalFrames = aLink.fileSender.dataFrames.bind(aLink.fileSender);
+    vi.spyOn(aLink.fileSender, "dataFrames").mockImplementation(async function* (...args) {
+      let held = false;
+      for await (const frame of originalFrames(...args)) {
+        yield frame;
+        if (!held && frame[0] === FRAME.CHUNK) { held = true; await sourceGate; }
+      }
+    });
     a.enqueue("b", [{ file: new File([new Uint8Array(3 * 1024 * 1024)], "interrupted.bin") }]);
     await until(() => !!b.incoming);
     b.accept();
-    await until(() => a.send?.status === "sending" && (b.recv?.sent ?? 0) > 0);
+    await until(() => (b.recv?.sent ?? 0) > 0);
 
     // Both ends observe the drop. Neither lane is poisoned by it.
     file.a.close();
     file.b.close();
-    await until(() => a.send?.done === true && b.recv?.done === true);
-    expect(a.send?.status).toBe("sendFail");
-    expect(b.recv?.status).toBe("recvFail");
+    releaseSource();
+    await until(() => a.send?.status === "resuming" && b.recv?.status === "resuming");
+    expect(a.send?.done).toBe(false);
+    expect(b.recv?.done).toBe(false);
     expect(a.errorKey).toBe("");
     expect(b.errorKey).toBe("");
 
@@ -784,11 +797,8 @@ describe("mixed file session transport recovery", () => {
     expect(a.errorKey).toBe("");
     expect(b.errorKey).toBe("");
 
-    a.enqueue("b", picked("after-gap.txt", "recovered byte exactly"));
-    await until(() => b.incoming?.files[0].name === "after-gap.txt");
-    b.accept();
     await until(() => b.recv?.status === "recvDone" && a.send?.status === "sendDone");
-    expect([...bTarget.output.get("after-gap.txt")!]).toEqual(bytes("recovered byte exactly"));
+    expect(bTarget.output.get("interrupted.bin")).toEqual(new Uint8Array(3 * 1024 * 1024));
 
     // Exactly one announcement, before the generation's first protected frame,
     // naming the seq that frame actually carries.
@@ -797,7 +807,7 @@ describe("mixed file session transport recovery", () => {
     expect(swap.a.sent.findIndex((frame) => kindOf(frame) === FRAME.RESUME)).toBe(0);
     const point = announced(resumes[0]);
     expect(point.index).toBe(0);
-    expect(point.offset).toBe(0);
+    expect(point.offset).toBeGreaterThan(0);
     expect(seqOf(swap.a.sent.find(isProtected)!)).toBe(point.seq);
 
     // One nonce sequence for the link's life: unique and strictly increasing
@@ -807,6 +817,145 @@ describe("mixed file session transport recovery", () => {
     expect(seqs).toEqual([...seqs].sort((x, y) => x - y));
     expect(text.a.readyState).toBe("open");
     expect(text.b.readyState).toBe("open");
+  }, 10_000);
+
+  it("resumes at a multi-file boundary without reopening consent or the completed file", async () => {
+    const target = memoryTarget();
+    const done = vi.fn();
+    target.done = done;
+    const pick = vi.fn(async () => target);
+    const { a, b, aLink, bLink, links, file } = await harness({ pickB: pick });
+    let releaseSource!: () => void;
+    const sourceGate = new Promise<void>((resolve) => { releaseSource = resolve; });
+    const originalFrames = aLink.fileSender.dataFrames.bind(aLink.fileSender);
+    vi.spyOn(aLink.fileSender, "dataFrames").mockImplementation(async function* (...args) {
+      let held = false;
+      for await (const frame of originalFrames(...args)) {
+        yield frame;
+        if (!held && frame[0] === FRAME.DONE) { held = true; await sourceGate; }
+      }
+    });
+    a.enqueue("b", [
+      { file: new File(["first"], "first.txt") },
+      { file: new File(["second"], "second.txt") },
+    ]);
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => target.output.has("first.txt") && b.recv?.index === 1);
+    file.a.close();
+    file.b.close();
+    releaseSource();
+    await until(() => a.send?.status === "resuming" && b.recv?.status === "resuming");
+
+    const { swap, aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+    await until(() => a.send?.status === "sendDone" && b.recv?.status === "recvDone");
+
+    expect([...target.output.get("first.txt")!]).toEqual(bytes("first"));
+    expect([...target.output.get("second.txt")!]).toEqual(bytes("second"));
+    expect(pick).toHaveBeenCalledOnce();
+    expect(done).toHaveBeenCalledOnce();
+    const point = announced(swap.a.sent.find((frame) => kindOf(frame) === FRAME.RESUME)!);
+    expect(point).toMatchObject({ index: 1, offset: 0 });
+  });
+
+  it("honors receiver cancellation during the gap without resuming protected bytes", async () => {
+    const target = memoryTarget();
+    const pick = vi.fn(async () => target);
+    const { a, b, aLink, bLink, links, file } = await harness({ pickB: pick });
+    let releaseSource!: () => void;
+    const sourceGate = new Promise<void>((resolve) => { releaseSource = resolve; });
+    const originalFrames = aLink.fileSender.dataFrames.bind(aLink.fileSender);
+    vi.spyOn(aLink.fileSender, "dataFrames").mockImplementation(async function* (...args) {
+      let held = false;
+      for await (const frame of originalFrames(...args)) {
+        yield frame;
+        if (!held && frame[0] === FRAME.CHUNK) { held = true; await sourceGate; }
+      }
+    });
+    a.enqueue("b", [{ file: new File([new Uint8Array(3 * CHUNK_SIZE)], "cancel-gap.bin") }]);
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => (b.recv?.sent ?? 0) >= CHUNK_SIZE);
+    file.a.close();
+    file.b.close();
+    releaseSource();
+    await until(() => a.send?.status === "resuming" && b.recv?.status === "resuming");
+    b.cancel("recv");
+    expect(b.recv?.status).toBe("recvFail");
+
+    const { swap, aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+    await until(() => a.send?.status === "rejected" && !a.active() && !b.active());
+
+    expect(pick).toHaveBeenCalledOnce();
+    expect(target.output.get("cancel-gap.bin")?.length).toBe(CHUNK_SIZE);
+    expect(swap.a.sent.filter((frame) => kindOf(frame) === FRAME.RESUME)).toHaveLength(0);
+  });
+
+  it("rejects a forged resume request beyond the sender's authenticated frontier", async () => {
+    const { a, b, aLink, bLink, links, file, text } = await harness();
+    const originalSend = file.a.send;
+    let dropped = false;
+    file.a.send = function (data) {
+      originalSend.call(this, data);
+      if (dropped || typeof data === "string" || data instanceof Blob) return;
+      const view = data instanceof ArrayBuffer
+        ? new Uint8Array(data)
+        : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+      if (view[0] !== FRAME.CHUNK) return;
+      dropped = true;
+      file.a.close();
+      file.b.close();
+    };
+    a.enqueue("b", [{ file: new File([new Uint8Array(4 * CHUNK_SIZE)], "frontier.bin") }]);
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => a.send?.status === "resuming");
+
+    const { swap, aNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    // In range and chunk-aligned, but the old transport admitted only one chunk.
+    swap.b.send(resumeReqFrame(0, 2 * CHUNK_SIZE));
+
+    await until(() => a.errorKey === "failed");
+    expect(text.a.readyState).toBe("open");
+    expect(swap.a.sent.filter((frame) => kindOf(frame) === FRAME.RESUME)).toHaveLength(0);
+    b.reset();
+  });
+
+  it("rejects a resume announcement that differs from the durable sink checkpoint", async () => {
+    const { a, b, aLink, bLink, links, file, text } = await harness();
+    let releaseSource!: () => void;
+    const sourceGate = new Promise<void>((resolve) => { releaseSource = resolve; });
+    const originalFrames = aLink.fileSender.dataFrames.bind(aLink.fileSender);
+    vi.spyOn(aLink.fileSender, "dataFrames").mockImplementation(async function* (...args) {
+      let held = false;
+      for await (const frame of originalFrames(...args)) {
+        yield frame;
+        if (!held && frame[0] === FRAME.CHUNK) { held = true; await sourceGate; }
+      }
+    });
+    a.enqueue("b", [{ file: new File([new Uint8Array(3 * CHUNK_SIZE)], "checkpoint.bin") }]);
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => (b.recv?.sent ?? 0) >= CHUNK_SIZE);
+    file.a.close();
+    file.b.close();
+    releaseSource();
+    await until(() => b.recv?.status === "resuming");
+
+    const { swap, bNext } = rebuild(aLink, bLink, links);
+    b.attach(bNext);
+    // The receiver asks for its non-zero durable prefix. A signalling attacker
+    // cannot substitute an earlier point and make the append-only sink duplicate.
+    swap.a.send(aLink.fileSender.resumeStartFrame({ index: 0, offset: 0 }));
+
+    await until(() => b.errorKey === "failed");
+    expect(text.b.readyState).toBe("open");
+    a.reset();
   });
 
   it("announces realignment once per generation, not once per batch", async () => {
@@ -861,14 +1010,14 @@ describe("mixed file session transport recovery", () => {
     await until(() => b.errorKey === "failed");
   });
 
-  it("fails the lane on a realignment that claims a byte-level resume point", async () => {
+  it("fails the lane on a byte-level realignment without an active batch", async () => {
     const { b, aLink, bLink, links, file, text } = await harness();
     file.b.close();
     const { swap, bNext } = rebuild(aLink, bLink, links);
     b.attach(bNext);
 
-    // Byte-level continuation is the next slice. Until then the only acceptable
-    // announcement is the batch-free origin.
+    // Byte points are meaningful only when they exactly match a preserved sink
+    // checkpoint. An idle direction still accepts only the batch-free origin.
     swap.a.send(aLink.fileSender.resumeStartFrame({ index: 2, offset: 4096 }));
 
     await until(() => b.errorKey === "failed");
@@ -918,58 +1067,66 @@ describe("mixed file session transport recovery", () => {
     a.enqueue("b", [{ file: new File([new Uint8Array(2 * 1024 * 1024)], "buffered.bin") }]);
     await until(() => !!b.incoming);
     b.accept();
-    await until(() => a.send?.done === true);
+    await until(() => a.send?.status === "resuming");
     expect(dropped).toBe(true);
 
     expect(a.errorKey).toBe("");
     const { aNext, bNext } = rebuild(aLink, bLink, links);
     a.attach(aNext);
     b.attach(bNext);
-    a.enqueue("b", picked("after-buffered.txt", "still works"));
-    await until(() => b.incoming?.files[0].name === "after-buffered.txt");
-    b.accept();
-    await until(() => b.recv?.status === "recvDone");
-    expect([...bTarget.output.get("after-buffered.txt")!]).toEqual(bytes("still works"));
+    await until(() => b.recv?.status === "recvDone" && a.send?.status === "sendDone");
+    expect(bTarget.output.get("buffered.bin")).toEqual(new Uint8Array(2 * 1024 * 1024));
   });
 
-  it("drops frames admitted but never fed, without poisoning, and stays byte-exact", async () => {
+  it("commits an admitted old-generation write before requesting its exact resume point", async () => {
     let releaseWrite!: () => void;
     const gate = new Promise<void>((resolve) => { releaseWrite = resolve; });
-    let picks = 0;
+    const chunks: Uint8Array[] = [];
+    const close = vi.fn();
+    let writeStarted = false;
     const stalled: SaveTarget = {
       label: "stalled",
-      async file() { return { async write() { await gate; }, async close() {} }; },
+      async file() {
+        return {
+          async write(chunk) { writeStarted = true; await gate; chunks.push(chunk.slice()); },
+          async close() { close(); },
+        };
+      },
     };
-    const finalTarget = memoryTarget();
+    const pick = vi.fn(async () => stalled);
     const { a, b, aLink, bLink, links, file } = await harness({
-      pickB: async () => (++picks === 1 ? stalled : finalTarget),
+      pickB: pick,
     });
     a.enqueue("b", [{ file: new File([new Uint8Array(4 * 1024 * 1024)], "stalled.bin") }]);
     await until(() => !!b.incoming);
     b.accept();
-    await until(() => a.send?.status === "sending");
+    await until(() => writeStarted);
     // The receive chain is blocked on the first write, so later frames sit in it
     // admitted-but-unfed when the transport dies.
-    await until(() => file.b.sent.length > 0 || (a.send?.sent ?? 0) > 0);
+    expect((a.send?.sent ?? 0) > 0 || a.send?.status === "finishing").toBe(true);
 
     file.a.close();
     file.b.close();
     releaseWrite();
-    await until(() => a.send?.done === true && b.recv?.done === true);
+    await until(() => a.send?.status === "resuming" && b.recv?.status === "resuming");
     expect(a.errorKey).toBe("");
     expect(b.errorKey).toBe("");
 
-    const { aNext, bNext } = rebuild(aLink, bLink, links);
+    const { swap, aNext, bNext } = rebuild(aLink, bLink, links);
     a.attach(aNext);
     b.attach(bNext);
-    a.enqueue("b", picked("after-drop.txt", "exact"));
-    await until(() => b.incoming?.files[0].name === "after-drop.txt");
-    b.accept();
-    await until(() => b.recv?.status === "recvDone");
-    expect([...finalTarget.output.get("after-drop.txt")!]).toEqual(bytes("exact"));
+    await until(() => b.recv?.status === "recvDone" && a.send?.status === "sendDone");
+    const joined = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+    let offset = 0;
+    for (const chunk of chunks) { joined.set(chunk, offset); offset += chunk.length; }
+    expect(joined).toEqual(new Uint8Array(4 * 1024 * 1024));
+    expect(pick).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    const point = announced(swap.a.sent.find((frame) => kindOf(frame) === FRAME.RESUME)!);
+    expect(point.offset).toBe(CHUNK_SIZE);
   }, 10_000);
 
-  it("closes the inbound sink once, after the in-flight write, never beside it", async () => {
+  it("keeps the inbound sink open across the gap and closes it once after resume", async () => {
     let releaseWrite!: () => void;
     const gate = new Promise<void>((resolve) => { releaseWrite = resolve; });
     const events: string[] = [];
@@ -982,7 +1139,7 @@ describe("mixed file session transport recovery", () => {
         };
       },
     };
-    const { a, b, file } = await harness({ pickB: async () => target });
+    const { a, b, aLink, bLink, links, file } = await harness({ pickB: async () => target });
     a.enqueue("b", [{ file: new File([new Uint8Array(2 * 1024 * 1024)], "gap.bin") }]);
     await until(() => !!b.incoming);
     b.accept();
@@ -992,8 +1149,14 @@ describe("mixed file session transport recovery", () => {
     file.a.close();
     expect(events).toEqual(["write-start"]);
     releaseWrite();
-    await until(() => events.includes("close"));
-    expect(events).toEqual(["write-start", "write-end", "close"]);
+    await until(() => events.includes("write-end"));
+    expect(events).not.toContain("close");
+    const { aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+    await until(() => b.recv?.status === "recvDone" && a.send?.status === "sendDone");
+    expect(events.at(-1)).toBe("close");
+    expect(events.filter((event) => event === "close")).toHaveLength(1);
   }, 10_000);
 
   it("unblocks a sender parked on flow-control credit as soon as the transport dies", async () => {
@@ -1003,7 +1166,7 @@ describe("mixed file session transport recovery", () => {
       label: "stalled",
       async file() { return { async write() { await gate; }, async close() {} }; },
     };
-    const { a, b, file } = await harness({ pickB: async () => stalled });
+    const { a, b, aLink, bLink, links, file } = await harness({ pickB: async () => stalled });
     a.enqueue("b", [{ file: new File([new Uint8Array(24 * 1024 * 1024)], "window.bin") }]);
     await until(() => !!b.incoming);
     b.accept();
@@ -1014,9 +1177,14 @@ describe("mixed file session transport recovery", () => {
     await until(() => onWire() >= FLOW_WINDOW);
 
     file.a.close();
+    file.b.close();
     // Far below the 60 s stall timeout: a parked send must not wait it out.
-    await until(() => a.send?.status === "sendFail", 2_000);
+    await until(() => a.send?.status === "resuming", 2_000);
     releaseWrite();
+    const { aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+    await until(() => a.send?.status === "sendDone" && b.recv?.status === "recvDone", 10_000);
   }, 15_000);
 
   it("keeps a pre-gap send that resolves late inert against the rebuilt generation", async () => {

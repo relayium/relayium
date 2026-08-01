@@ -54,6 +54,16 @@ const MSG_OPEN_BTN = ".peer-actions button";
 const FILE_INPUT = ".peer-actions .pa-files > .file-pick-input";
 const HEAD = ".workspace-head";
 const HEAD_SAS = ".workspace-head .sas code";
+const TRACK_PEER_CONNECTIONS = `
+  window.__e2ePeerConnections = [];
+  window.RTCPeerConnection = new Proxy(window.RTCPeerConnection, {
+    construct(Target, args, NewTarget) {
+      const pc = Reflect.construct(Target, args, NewTarget);
+      window.__e2ePeerConnections.push(pc);
+      return pc;
+    },
+  });
+`;
 
 let shotIndex = 0;
 async function screenshot(tab, name) {
@@ -185,8 +195,8 @@ const setTheme = async (tab, value) => {
 async function mixedScenario(browser) {
   // A 发起，B 收（另存为被桩掉）。两边都装上只读的 caps 探针：跑任何断言之前先确认
   // 这个产物真的通告了 link/1。
-  const a = await newTab(browser, BASE + "/", OBSERVE_CAPS);
-  const b = await newTab(browser, BASE + "/", OBSERVE_CAPS + SAVE_STUB);
+  const a = await newTab(browser, BASE + "/", OBSERVE_CAPS + TRACK_PEER_CONNECTIONS);
+  const b = await newTab(browser, BASE + "/", OBSERVE_CAPS + SAVE_STUB + TRACK_PEER_CONNECTIONS);
   await setWideViewport(a, 390, 844);
   await setWideViewport(b, 390, 844);
 
@@ -348,7 +358,97 @@ async function mixedScenario(browser) {
   }
   ok("declining a file batch ended the batch and left the one link open");
 
-  // ── 五、同一条链路上开消息：同意后真的收发正文 ───────────────────────────
+  // ── 五、真传输断线后从 durable checkpoint 续传，不重新同意 ───────────────
+  const RESUME_BYTES = 5 * 1024 * 1024 + 73;
+  await b.evaluate(`(() => {
+    window.__e2e.chunks = [];
+    window.__e2e.bytes = 0;
+    window.__e2e.closed = false;
+    window.__e2e.name = '';
+    window.__e2e.opens = 0;
+    window.__e2e.writeDelayMs = 20;
+    return true;
+  })()`);
+  await a.evaluate(`(() => {
+    const input = document.querySelector('${FILE_INPUT}');
+    const body = new Uint8Array(${RESUME_BYTES});
+    for (let i = 0; i < body.length; i++) body[i] = (i * 31 + 7) % 251;
+    const dt = new DataTransfer();
+    dt.items.add(new File([body], 'resume-on-the-same-link.bin'));
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  await b.waitFor("!!document.querySelector('.request')", "the resumable file consent card", 40_000);
+  await b.evaluate("(() => { document.querySelector('.request .btn-primary').click(); return true; })()");
+  await b.waitFor(
+    "window.__e2e.bytes >= 393216 && !window.__e2e.closed",
+    "at least two durable chunks before the forced transport gap",
+    40_000,
+  );
+  const pcCounts = {
+    a: await a.evaluate("window.__e2ePeerConnections.length"),
+    b: await b.evaluate("window.__e2ePeerConnections.length"),
+  };
+  // This is a transport failure, not the product's explicit disconnect button:
+  // both managers must hold the authenticated link and rebuild its two channels.
+  // Chrome's direct pc.close() closes DataChannels but does not dispatch the
+  // connectionstatechange event a real terminal network path emits, so invoke
+  // the already-installed native handler after connectionState becomes closed.
+  await Promise.all([
+    a.evaluate("(() => { const pc = window.__e2ePeerConnections.at(-1); pc.close(); pc.onconnectionstatechange?.(); return true; })()"),
+    b.evaluate("(() => { const pc = window.__e2ePeerConnections.at(-1); pc.close(); pc.onconnectionstatechange?.(); return true; })()"),
+  ]);
+  await a.waitFor(
+    "document.querySelector('.xfer .status')?.textContent.includes('resume')",
+    "the sender to visibly enter resume",
+    20_000,
+  );
+  await b.waitFor(
+    "document.querySelector('.xfer .status')?.textContent.includes('resume')",
+    "the receiver to visibly enter resume",
+    20_000,
+  );
+  await b.waitFor(
+    `window.__e2e.closed && window.__e2e.bytes === ${RESUME_BYTES}`,
+    "the resumed destination to close at the exact declared size",
+    90_000,
+  );
+  await a.waitFor(
+    "!!document.querySelector('.xfer.ok') && !document.querySelector('.xfer .progress-bar')",
+    "the resumed sender to complete",
+    40_000,
+  );
+  const resumed = await b.evaluate(`(() => {
+    let offset = 0;
+    let mismatch = -1;
+    for (const chunk of window.__e2e.chunks) {
+      for (let i = 0; i < chunk.length; i++, offset++) {
+        if (mismatch < 0 && chunk[i] !== (offset * 31 + 7) % 251) mismatch = offset;
+      }
+    }
+    return {
+      bytes: window.__e2e.bytes,
+      opens: window.__e2e.opens,
+      closed: window.__e2e.closed,
+      mismatch,
+      requests: document.querySelectorAll('.request').length,
+      peerConnections: window.__e2ePeerConnections.length,
+    };
+  })()`);
+  if (
+    resumed.bytes !== RESUME_BYTES || resumed.opens !== 1 || !resumed.closed ||
+    resumed.mismatch !== -1 || resumed.requests !== 0
+  ) {
+    throw new Error(`byte-resume contract failed: ${JSON.stringify({ ...resumed, before: pcCounts })}`);
+  }
+  for (const [who, tab] of [["tab A", a], ["tab B", b]]) {
+    const code = await oneSas(tab, who, "after a byte-level file resume");
+    if (code !== sasA) throw new Error(`${who} changed SAS while resuming: ${code} vs ${sasA}`);
+  }
+  ok(`a ${RESUME_BYTES}-byte file resumed exactly on rebuilt channels, with one picker and unchanged SAS`);
+
+  // ── 六、同一条链路上开消息：同意后真的收发正文 ───────────────────────────
   await a.evaluate(`(() => {
     const button = document.querySelector('${MSG_OPEN_BTN}');
     if (!button) throw new Error('no message control on the peer card');
@@ -411,7 +511,7 @@ async function mixedScenario(browser) {
   }
   ok(`text was exchanged byte-identically on the same link, still under one SAS (${sasA})`);
 
-  // ── 六、320px、RTL 和深色：最窄的屏幕上头部仍然是可读、可操作、不溢出的 ────
+  // ── 七、320px、RTL 和深色：最窄的屏幕上头部仍然是可读、可操作、不溢出的 ────
   const painted = {};
   for (const variant of [
     { name: "320-ltr-light", width: 320, locale: "en", theme: "light", rtl: false },
@@ -473,7 +573,7 @@ async function mixedScenario(browser) {
   await setTheme(b, "system");
   await setWideViewport(b, 390, 844);
 
-  // ── 七、一次"活过了自己那条链路"的待决同意 ──────────────────────────────
+  // ── 八、一次"活过了自己那条链路"的待决同意 ──────────────────────────────
   //
   // 这一幕针对的是一个很具体的怀疑：App 的 revealReveal 去重键是
   // `file:recv:<peer>`，**不含**链路世代。同一个对端、同一条通道，第二条链路算出来
@@ -530,7 +630,7 @@ async function mixedScenario(browser) {
   await b.evaluate("(() => { document.querySelector('.request .btn-ghost').click(); return true; })()");
   await b.waitFor("!document.querySelector('.request')", "the fresh link's consent to close");
 
-  // ── 八、显式断开：整个工作区收掉，两边都收掉 ────────────────────────────
+  // ── 九、显式断开：整个工作区收掉，两边都收掉 ────────────────────────────
   await a.evaluate(`(() => { document.querySelector('${HEAD} .wh-disconnect').click(); return true; })()`);
   await a.waitFor(`!document.querySelector('${HEAD}')`, "tab A's workspace to tear down");
   // 对端不是靠一帧"我要断开"知道的，而是靠传输真的塌掉（DTLS 关闭 / ICE 失联）。

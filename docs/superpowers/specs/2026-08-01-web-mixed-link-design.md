@@ -521,6 +521,45 @@ link with continuous sequences. Receiver checkpoints, `RESUME_REQ`, sink
 continuity across the gap and ACK/window rebase are the next slice, and they plug
 into I2's branch.
 
+### Implementation checkpoint: byte-exact file continuation, capability still off
+
+The next slice is now implemented. Once file consent has been granted, a transport
+gap pauses the batch instead of retiring it. The receiver keeps the same selected
+`SaveTarget` and open `FileSink`, and checkpoints `{index, offset, chain}` only
+after `sink.write()` resolves. A write already authenticated by the old generation
+is allowed to finish in the shared receive FIFO and advances that checkpoint;
+frames admitted behind it but not yet fed are generation-gated away. The
+replacement therefore cannot either omit a durable byte or append one twice.
+
+After that old FIFO settles, the receiver sends `RESUME_REQ(index, offset)`. The
+sender accepts it only when the point is inside the original manifest, is an
+honest fixed-chunk boundary or exact file end, and does not exceed the furthest
+logical point actually admitted to an authenticated transport. It then sends the
+generation's single `RESUME_START` with the same point and the next forward-only
+nonce. The receiver requires an exact match with its own durable checkpoint,
+restores the saved chain through `resumeAt()`, and only then accepts protected
+chunks. A forged earlier point cannot duplicate an append-only sink; a forged
+later point cannot make the sender skip unsent source bytes; a backwards nonce is
+still rejected.
+
+Flow control rebases both cumulative cursors to the checkpoint: the sender opens
+one new `FLOW_WINDOW` from the durable batch offset, while the receiver's next ACK
+is measured from that same offset. Delayed or forged ACKs remain clamped to bytes
+emitted by the current attempt. Multi-file boundaries resume at the next file's
+zero offset, finalisation remains one-shot, and a lost final `COMPLETE` can replay
+the last encrypted DONE without reopening the picker or finalising the target
+twice. The sender waits for every retired async run to stop reserving nonces before
+it answers the request.
+
+The opt-in real-browser suite now forces both live PeerConnections through a full
+terminal event during a 5,242,953-byte file. It proves a replacement transport on
+both peers, one save-picker invocation, no second consent, exact byte content, one
+unchanged SAS and continued use of the text lane. That run exposed a presentation
+bug as well: transport replacement used to advance `linkGeneration`, which made
+the next lane edge re-announce the unchanged SAS. Authentication identity now
+advances only on establishment/teardown, never when the same keys, codecs and SAS
+move to new channels.
+
 One consequence needs a product answer rather than more code: an explicitly
 disconnecting peer is indistinguishable from a network drop, so the other side
 holds its workspace for up to the full 90 s window and answers a fresh link offer
@@ -532,8 +571,8 @@ The opt-in browser suite now waits that window out deliberately.
 
 `link/1` remains absent from `capsSignal()` and `LOCAL_CAPS` in every default and
 release build, and the default browser suite's negative assertion is unchanged.
-The remaining advertisement gates are: byte-level dual-lane file resume, the
-mobile-background policy for both the 90 s recovery window and the 30 s text END
+The remaining advertisement gates are: the mobile-background policy for both the
+90 s recovery window and the 30 s text END
 barrier, replacement of a poisoned text channel, target-browser
 `bufferedAmount`-at-close semantics for the **text** lane, and a product answer to
 the explicit-disconnect window above.

@@ -136,12 +136,16 @@ export async function setWideViewport(tab, width = 1440, height = 900) {
 // 收方页面的桩：把"另存为"换成一个把字节攒进内存并算 SHA-256 的假句柄。
 // 这是整个脚本里唯一一处偏离真实运行的地方。
 export const SAVE_STUB = `
-  window.__e2e = { chunks: [], bytes: 0, closed: false, name: "" };
+  window.__e2e = { chunks: [], bytes: 0, closed: false, name: "", opens: 0, writeDelayMs: 0 };
   window.showSaveFilePicker = async ({ suggestedName }) => {
     window.__e2e.name = suggestedName;
+    window.__e2e.opens++;
     return {
       createWritable: async () => ({
         write: async (chunk) => {
+          if (window.__e2e.writeDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, window.__e2e.writeDelayMs));
+          }
           window.__e2e.chunks.push(chunk.slice());
           window.__e2e.bytes += chunk.byteLength;
         },

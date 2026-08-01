@@ -52,10 +52,9 @@ export interface MixedSession {
   readonly text: MixedTextSession;
   readonly link: MixedPeerLink | null;
   readonly status: PeerLinkStatus;
-  /** Bumped on every link publish — establishment and teardown alike — so two
-   *  different links never share a value even when their SAS digits collide.
-   *  Consumers use it to tell "still the same authentication step" apart from
-   *  "a new one that happens to look identical". */
+  /** Bumped when the authenticated link changes — establishment and teardown,
+   *  but not an authenticated transport replacement that preserves its keys,
+   *  codecs and SAS. Consumers use it to separate authentication steps. */
   readonly linkGeneration: number;
   readonly peerId: string;
   readonly sasCode: string;
@@ -82,6 +81,7 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
   // Distinct from pathGeneration: that one is an internal guard against a stale
   // path sample, this one is the link identity consumers observe.
   let linkGeneration = $state(0);
+  let publishedLink: MixedPeerLink | null = null;
   let pathGeneration = 0;
   let lastActivity = now();
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -161,11 +161,20 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
   }
 
   function onLinkChange(link: MixedPeerLink | null, _status: PeerLinkStatus, captured?: CapturedLinkFrames) {
-    // Every publish, including a teardown and including a close that had nothing
-    // to close. Over-counting only ever costs a consumer one repeated
-    // announcement; under-counting would silently reuse a retired link's
-    // identity, which is the failure this counter exists to prevent.
-    linkGeneration++;
+    const transportReplacement = !!link && !!publishedLink
+      && link.peerId === publishedLink.peerId
+      && link.keys === publishedLink.keys
+      && link.fileSender === publishedLink.fileSender
+      && link.fileReceiver === publishedLink.fileReceiver
+      && link.textSender === publishedLink.textSender
+      && link.textReceiver === publishedLink.textReceiver;
+    // A rebuilt transport is still the same authentication step. Incrementing
+    // here would make the live-region announcer read an unchanged SAS again on
+    // the next lane edge. Teardown and a later establishment both advance, so
+    // two genuinely different links cannot share an identity even if their six
+    // displayed digits collide.
+    if (!transportReplacement) linkGeneration++;
+    publishedLink = link;
     pathGeneration++;
     if (!link) {
       clearIdle();
@@ -211,8 +220,8 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
    * then asked whether they need recovery. That order is what makes this
    * independent of browser callback ordering: `RTCDataChannel.onclose` may run a
    * lane's own suspend before the PeerConnection reaches a terminal state, and
-   * after that the lane's public `active()` already reads terminal. Each lane
-   * therefore records its own intent at the instant it first enters the gap —
+   * after that a pre-consent file or text state may already read terminal through
+   * public `active()`. Each lane therefore records its own intent at the gap —
    * whichever call gets there first — and this reads that recorded answer.
    *
    * An idle drop is deliberately NOT held: reconnecting one would silently keep

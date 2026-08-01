@@ -249,7 +249,9 @@ describe("mixed session coordinator", () => {
     // The frame the peer sent on the rebuilt text lane before this side could
     // attach was not lost, and it reached the lane, not the capture sink.
     expect(mixed.text.status).toBe("incomingRequest");
-    expect(mixed.linkGeneration).toBeGreaterThan(generation);
+    // Same keys/codecs/SAS means the replacement is not a new authentication
+    // step and must not make assistive output announce the code again.
+    expect(mixed.linkGeneration).toBe(generation);
     expect(h.conns[0].close).toHaveBeenCalledOnce();
     await flush();
     expect(mixed.path).toBe("p2p");
@@ -438,8 +440,9 @@ describe("mixed session transport recovery", () => {
     expect(next.textChannel.onmessage).toBeTypeOf("function");
     expect(link.fileChannel.onmessage).toBeNull();
     expect(link.textChannel.onmessage).toBeNull();
-    // A completed replacement IS a publish, so the identity counter moves.
-    expect(mixed.linkGeneration).toBeGreaterThan(generation);
+    // A completed replacement is a transport publish, but still the same
+    // authenticated link identity.
+    expect(mixed.linkGeneration).toBe(generation);
     await flush();
     expect(mixed.path).toBe("p2p");
     expect(h.conns[0].close).toHaveBeenCalled();

@@ -167,6 +167,13 @@ export function parseResumeReq(buf: ArrayBuffer): ResumePoint | null {
   }
 }
 
+/** True for the receiver->sender resume-request frame kind, including malformed
+ * payloads. Callers use this to fail closed instead of routing malformed control
+ * bytes into the protected receiver stream. */
+export function isResumeReq(buf: ArrayBuffer): boolean {
+  return new Uint8Array(buf)[0] === KIND_RESUME_REQ;
+}
+
 /** 非负安全整数。NaN / Infinity / 负数 / 小数 / 非数字全部落在外面。 */
 function isIndex(n: unknown): n is number {
   return typeof n === "number" && Number.isSafeInteger(n) && n >= 0;
