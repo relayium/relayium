@@ -14,7 +14,7 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), "utf8");
 const indexHtml = read("index.html");
 const llmsTxt = read("public/llms.txt");
 const robotsTxt = read("public/robots.txt");
-const transferTs = read("src/lib/transfer.ts");
+const manifestTs = read("src/lib/manifest.ts");
 
 const shells = buildShells({
   modes: [
@@ -173,7 +173,7 @@ describe("product facts stay in sync across sources", () => {
   // MAX_FILES = 1000 in the app — a 100× discrepancy that AI answer engines
   // were free to quote either way. These files are hand-written, so this test
   // is the only thing keeping them honest.
-  const maxFiles = Number(transferTs.match(/export const MAX_FILES = (\d+)/)[1]);
+  const maxFiles = Number(manifestTs.match(/export const MAX_FILES = (\d+)/)[1]);
   const formatted = maxFiles.toLocaleString("en-US");
 
   it("states the same batch cap in index.html and llms.txt", () => {

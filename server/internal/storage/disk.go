@@ -51,6 +51,33 @@ func NewDiskStore(dir string) (*DiskStore, error) {
 	return &DiskStore{dir: dir}, nil
 }
 
+// Ready proves the configured blob directory is writable now, not merely that
+// it existed at process startup. The private, random file is removed before the
+// probe returns, including on close failure.
+func (d *DiskStore) Ready() error {
+	if d == nil {
+		return errors.New("storage: disk store is not open")
+	}
+	f, err := os.CreateTemp(d.dir, ".ready-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	defer os.Remove(name)
+	if _, err := f.Write([]byte{0}); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // keyLock returns the stripe mutex guarding same-key mutations.
 func (d *DiskStore) keyLock(key string) *sync.Mutex {
 	var h uint32 = 2166136261

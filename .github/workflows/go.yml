@@ -3,8 +3,8 @@ name: go
 # repo-hygiene only greps for leaked production identifiers, and release.yml
 # runs on tags — so a Go change could be green on every check while failing to
 # compile. It was deployed on the strength of whatever the author happened to
-# run locally, and this repository's auto-deploy has no binary rollback: a
-# server that fails to start stays failed until someone pushes a fix forward.
+# run locally; the gate remains mandatory even though deploy now also rolls a
+# failed binary/web swap back automatically.
 on:
   push:
     paths:
@@ -48,6 +48,9 @@ jobs:
       - name: go test
         working-directory: server
         run: go test ./...
+      - name: govulncheck
+        working-directory: server
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
 
   # Central runs concurrent goroutines against shared state by design — the GC
   # sweep, the metering worker, the node storage prober — and the failure mode

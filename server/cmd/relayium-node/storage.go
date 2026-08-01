@@ -41,6 +41,14 @@ func newBlobHandler(ds *storage.DiskStore, secret string, lim *limits, diskUsed 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		if err := ds.Ready(); err != nil {
+			http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
+	})
 	authed := func(h func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -203,6 +211,9 @@ func registerDownloadRoutes(mux *http.ServeMux, ds *storage.DiskStore, secret st
 		// Expose the length/range headers so streaming JS can read them cross-origin.
 		h.Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
 		h.Set("Content-Type", "application/octet-stream")
+		h.Set("Cache-Control", "private, no-store")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Content-Disposition", "attachment")
 		// ServeContent gives Range/206/Accept-Ranges for free (resumable download).
 		if rs, ok := rc.(io.ReadSeeker); ok {
 			http.ServeContent(cw, r, key, time.Time{}, rs)
@@ -225,6 +236,14 @@ func newDownloadHandler(ds *storage.DiskStore, secret string, guard *replayGuard
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		if err := ds.Ready(); err != nil {
+			http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 	})
 	registerDownloadRoutes(mux, ds, secret, guard, receipt)
 	return mux

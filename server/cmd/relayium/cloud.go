@@ -60,24 +60,45 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// runLogout clears the locally stored credentials. This is local-only: there
-// is no CLI self-revoke endpoint, so the access token on the server remains
-// valid until the user deletes the device from the web devices page. That
-// keeps logout usable offline and avoids a network round-trip on every
-// logout, at the cost of the token staying live server-side until revoked
-// through the browser.
+// runLogout revokes the current bearer credential before clearing it locally.
+// --local-only is the explicit offline escape hatch; without it, a failed
+// server revocation preserves the local credential so the user can retry.
 func runLogout(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("logout", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var localOnly bool
+	fs.BoolVar(&localOnly, "local-only", false, "clear local credentials without revoking the server token")
+	if err := parseArgs(fs, args); err != nil {
+		return 2
+	}
 	cfgDir, err := resolveConfigDir("")
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	creds, ok, err := cloud.Load(cfgDir)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if ok && !localOnly {
+		client := cloud.NewClient(creds.Server)
+		client.Token = creds.AccessToken
+		if err := client.Logout(context.Background()); err != nil {
+			fmt.Fprintf(stderr, "could not revoke server token: %v\n", err)
+			fmt.Fprintln(stderr, "credentials were kept; retry or use `relayium logout --local-only` if the server is permanently unavailable")
+			return 1
+		}
+	}
 	if err := cloud.Clear(cfgDir); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	fmt.Fprintln(stdout, "logged out (local credentials cleared)")
-	fmt.Fprintln(stdout, "note: this device's token still works until you delete it from the web devices page")
+	if localOnly && ok {
+		fmt.Fprintln(stdout, "logged out locally (server token was not revoked)")
+	} else {
+		fmt.Fprintln(stdout, "logged out")
+	}
 	return 0
 }
 

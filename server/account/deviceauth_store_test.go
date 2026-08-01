@@ -59,6 +59,33 @@ func TestCLITokenLookup(t *testing.T) {
 	}
 }
 
+func TestDeleteCLITokenRevokesOnlyPresentedToken(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	u, err := st.UpsertUserByEmail(ctx, "logout-token@example.com", "Logout User")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := st.UpsertDevice(ctx, Device{ID: "logout-device", UserID: u.ID, Name: "CLI", Kind: "cli", CreatedAt: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{"one", "two"} {
+		if err := st.CreateCLIToken(ctx, CLIToken{TokenHash: authx.HashToken(raw), UserID: u.ID, DeviceID: d.ID, CreatedAt: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.DeleteCLIToken(ctx, authx.HashToken("one")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok, _ := st.GetCLITokenUser(ctx, authx.HashToken("one")); ok {
+		t.Fatal("deleted token remains valid")
+	}
+	if _, _, ok, _ := st.GetCLITokenUser(ctx, authx.HashToken("two")); !ok {
+		t.Fatal("logout revoked another device token")
+	}
+}
+
 // Deleting a CLI device is the token-revocation path: DELETE /api/devices/{id}
 // does a bare DELETE FROM devices, which (with FKs on) would fail the
 // cli_tokens.device_id constraint unless it cascades. ON DELETE CASCADE makes

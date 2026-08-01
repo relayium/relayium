@@ -2,7 +2,7 @@ import Foundation
 import Clibsodium
 
 public enum StoredWireError: Error, Equatable {
-    case invalidKey, frameTooLarge, truncatedStream, lengthMismatch
+    case invalidKey, invalidManifest, frameTooLarge, truncatedStream, lengthMismatch
 }
 
 /// base64url, no padding (libsodium URLSAFE_NO_PADDING): standard base64 then

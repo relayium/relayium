@@ -76,6 +76,7 @@ public final class RealtimeSessionModel: ObservableObject {
     private var pendingReceive = false
     private var sasConfirmed = false
     private var totalBytes = 0
+    private var completedIncomingFiles = 0
     /// Operation identity: a callback from a session the user has left must not
     /// repaint a screen they have moved past.
     private var generation = 0
@@ -160,8 +161,14 @@ public final class RealtimeSessionModel: ObservableObject {
 
     /// Queued until the SAS is confirmed — see `confirmSAS`.
     public func stageSend(sources: [PlaintextSource], metas: [FileMeta]) {
+        guard sources.count == metas.count, let total = try? validateRealtimeFiles(metas) else {
+            pendingSend = nil
+            totalBytes = 0
+            state = .failed("The selected file list is invalid. Choose the files again.")
+            return
+        }
         pendingSend = (sources, metas)
-        totalBytes = metas.reduce(0) { $0 + $1.size }
+        totalBytes = total
     }
 
     // MARK: - the SAS gate
@@ -173,13 +180,36 @@ public final class RealtimeSessionModel: ObservableObject {
             state = .transferring(done: 0, total: totalBytes)
             connection?.send(sources: p.sources, metas: p.metas)
         } else if pendingReceive {
-            state = .transferring(done: 0, total: totalBytes)
-            connection?.accept()
+            startPendingReceive()
         } else {
             // The peer may not have staged its manifest yet. Keep progress on
             // screen; `onManifest` will install the writer and send ACCEPT.
             state = .transferring(done: 0, total: 0)
         }
+    }
+
+    private func startPendingReceive() {
+        guard pendingReceive else { return }
+        do {
+            writer = try ManifestWriter(
+                directory: saveDirectory,
+                files: incoming.map { WritableFile(name: $0.name, size: $0.size) })
+            completedIncomingFiles = 0
+            state = .transferring(done: 0, total: totalBytes)
+            connection?.accept()
+        } catch {
+            connection?.reject()
+            writer?.discard()
+            teardown()
+            state = .failed(ErrorCopy.message(for: error))
+        }
+    }
+
+    private func failReceive(_ error: Error) {
+        connection?.reject()
+        writer?.discard()
+        teardown()
+        state = .failed(ErrorCopy.message(for: error))
     }
 
     /// Closes the connection rather than returning to a picker. A mismatched
@@ -211,28 +241,30 @@ public final class RealtimeSessionModel: ObservableObject {
         c.onManifest = { [weak self] metas in
             Task { @MainActor in
                 self?.apply(g) { m in
-                    m.incoming = metas
-                    m.totalBytes = metas.reduce(0) { $0 + $1.size }
                     do {
-                        m.writer = try ManifestWriter(
-                            directory: m.saveDirectory,
-                            files: metas.map { WritableFile(name: $0.name, size: $0.size) })
+                        m.totalBytes = try validateRealtimeFiles(metas)
+                        m.incoming = metas
                         m.pendingReceive = true
                         if m.sasConfirmed {
-                            m.state = .transferring(done: 0, total: m.totalBytes)
-                            m.connection?.accept()
+                            m.startPendingReceive()
                         }
                     } catch {
-                        m.connection?.reject()
-                        m.writer?.discard()
-                        m.teardown()
-                        m.state = .failed(ErrorCopy.message(for: error))
+                        m.failReceive(error)
                     }
                 }
             }
         }
         c.onFileChunk = { [weak self] bytes in
-            Task { @MainActor in self?.apply(g) { try? $0.writer?.write(bytes) } }
+            Task { @MainActor in
+                self?.apply(g) { m in
+                    do {
+                        guard let writer = m.writer else { throw DownloadDestinationError.incomplete }
+                        try writer.write(bytes)
+                    } catch {
+                        m.failReceive(error)
+                    }
+                }
+            }
         }
         c.onProgress = { [weak self] done in
             Task { @MainActor in
@@ -245,16 +277,28 @@ public final class RealtimeSessionModel: ObservableObject {
                     guard ok else {
                         // The DONE hash did not match what arrived. Files that
                         // look complete are worse than none.
-                        m.writer?.discard()
-                        m.state = .failed(ErrorCopy.message(for: RealtimeError.tamper))
+                        m.failReceive(RealtimeError.tamper)
                         return
                     }
-                    let urls = (try? m.writer?.finish()) ?? nil
+                    m.completedIncomingFiles += 1
+                    guard m.completedIncomingFiles <= m.incoming.count else {
+                        m.failReceive(DownloadDestinationError.exceedsManifest)
+                        return
+                    }
+                    guard m.completedIncomingFiles == m.incoming.count else { return }
+                    let urls: [URL]
+                    do {
+                        guard let writer = m.writer else { throw DownloadDestinationError.incomplete }
+                        urls = try writer.finish()
+                    } catch {
+                        m.failReceive(error)
+                        return
+                    }
                     // Only once the bytes are actually on disk, matching the
                     // web receiver (transfer-session.svelte.ts:458). The sender
                     // has no DONE frame of its own and waits on exactly this.
                     m.connection?.complete()
-                    m.state = .completed(urls ?? [])
+                    m.state = .completed(urls)
                 }
             }
         }
@@ -308,6 +352,7 @@ public final class RealtimeSessionModel: ObservableObject {
         writer = nil
         pendingSend = nil
         pendingReceive = false
+        completedIncomingFiles = 0
         sasConfirmed = false
         incoming = []
     }

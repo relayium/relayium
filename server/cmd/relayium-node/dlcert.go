@@ -5,7 +5,12 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 )
+
+const nodeReadHeaderTimeout = 10 * time.Second
+const nodeIdleTimeout = 120 * time.Second
+const nodeMaxHeaderBytes = 1 << 20
 
 // downloadServer builds the public download listener from an already-validated
 // certificate. It exists so the certificate choice and the server that serves it
@@ -21,9 +26,12 @@ import (
 // MinVersion stays at TLS 1.2 for Cloudflare origin compatibility.
 func downloadServer(addr string, cert tls.Certificate, h http.Handler) *http.Server {
 	return &http.Server{
-		Addr:      addr,
-		Handler:   h,
-		TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12},
+		Addr:              addr,
+		Handler:           h,
+		TLSConfig:         &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12},
+		ReadHeaderTimeout: nodeReadHeaderTimeout,
+		IdleTimeout:       nodeIdleTimeout,
+		MaxHeaderBytes:    nodeMaxHeaderBytes,
 	}
 }
 

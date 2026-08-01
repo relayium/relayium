@@ -74,7 +74,9 @@ private func escapeJSONString(_ s: String) -> String {
 }
 
 public func encryptManifest(key: [UInt8], _ m: StoredManifest) throws -> [UInt8] {
-    seal(key: key, seq: 0, plaintext: try manifestJSON(m))
+    do { try validateManifestFiles(m.files) }
+    catch { throw StoredWireError.invalidManifest }
+    return seal(key: key, seq: 0, plaintext: try manifestJSON(m))
 }
 
 public func decryptManifest(key: [UInt8], _ ct: [UInt8]) throws -> StoredManifest {
@@ -82,5 +84,7 @@ public func decryptManifest(key: [UInt8], _ ct: [UInt8]) throws -> StoredManifes
         throw StoredWireError.truncatedStream   // auth failure / corrupt manifest
     }
     let m = try JSONDecoder().decode(StoredManifest.self, from: Data(pt))
+    do { try validateManifestFiles(m.files) }
+    catch { throw StoredWireError.invalidManifest }
     return StoredManifest(files: sanitizeNames(m.files))
 }

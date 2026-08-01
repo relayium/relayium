@@ -32,4 +32,14 @@ final class StoredManifestTests: XCTestCase {
         ct[ct.count - 1] ^= 0x01              // flip a tag byte
         XCTAssertThrowsError(try decryptManifest(key: v.hex("keyHex"), ct))
     }
+
+    func testManifestValidationRejectsRemoteCrashInputs() throws {
+        XCTAssertThrowsError(try validateManifestFiles([]))
+        XCTAssertThrowsError(try validateManifestFiles([ManifestFile(name: "a", size: -1)]))
+        XCTAssertThrowsError(try validateManifestFiles([
+            ManifestFile(name: "a", size: MANIFEST_MAX_SAFE_INTEGER),
+            ManifestFile(name: "b", size: 1),
+        ]))
+        XCTAssertEqual(try validateManifestFiles([ManifestFile(name: "a", size: 2)]), 2)
+    }
 }

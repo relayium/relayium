@@ -16,6 +16,7 @@ public enum RealtimeError: Error, Equatable {
     case legacyPeer
     case unknownKind(UInt8)
     case malformed
+    case lengthMismatch
 }
 
 /// Receive side of the RealtimeWire protocol: dispatches on frame kind,
@@ -35,6 +36,9 @@ public final class RealtimeReceiver {
     /// Running per-file chain hash, reset after each DONE (a batch can carry
     /// more than one file, each with its own chain).
     private var hash = [UInt8](repeating: 0, count: 32)
+    private var files: [FileMeta]?
+    private var fileIndex = 0
+    private var receivedInFile = 0
 
     public init(sessionKey: [UInt8]) {
         self.sessionKey = sessionKey
@@ -55,21 +59,40 @@ public final class RealtimeReceiver {
             expectedSeq += 1
             switch kind {
             case RealtimeKind.batchEnc:
+                guard files == nil else { throw RealtimeError.malformed }
                 guard let decoded = try? JSONDecoder().decode(BatchPayload.self, from: Data(plain)) else {
                     throw RealtimeError.malformed
                 }
+                guard (try? validateRealtimeFiles(decoded.files)) != nil else {
+                    throw RealtimeError.malformed
+                }
+                files = decoded.files
+                fileIndex = 0
+                receivedInFile = 0
                 // 文件名由发送端任意构造，接收方的确认卡片正是用户做信任决策的地方：
                 // 在这个唯一入口把双向控制符洗掉。
                 return .batch(decoded.files.map(sanitizeFileMeta))
             case RealtimeKind.chunk:
+                guard let files, fileIndex < files.count,
+                      plain.count <= files[fileIndex].size - receivedInFile else {
+                    throw RealtimeError.lengthMismatch
+                }
+                receivedInFile += plain.count
                 hash = chainHash(hash, plain)
                 return .chunk(plain)
             default: // doneEnc
+                guard let files, fileIndex < files.count,
+                      receivedInFile == files[fileIndex].size else {
+                    throw RealtimeError.lengthMismatch
+                }
                 guard let done = try? JSONDecoder().decode(DonePayload.self, from: Data(plain)) else {
                     throw RealtimeError.malformed
                 }
                 let ok = done.sha256 == hexEncoded(hash)
                 hash = [UInt8](repeating: 0, count: 32) // reset chain for the next file in the batch
+                fileIndex += 1
+                receivedInFile = 0
+                if fileIndex == files.count { self.files = nil }
                 return .done(ok: ok)
             }
 

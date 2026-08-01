@@ -26,6 +26,15 @@ type SQLiteStore struct {
 	rdb *sql.DB
 }
 
+// Ping verifies the live writer connection used by account mutations. It is
+// intentionally small and side-effect free so /readyz can call it frequently.
+func (s *SQLiteStore) Ping(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return errors.New("sqlite: store is not open")
+	}
+	return s.db.PingContext(ctx)
+}
+
 // reader returns the read pool for heavy reads, falling back to the writer
 // connection when there is no separate pool (:memory:).
 func (s *SQLiteStore) reader() *sql.DB {
@@ -804,7 +813,7 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 }
 
 // backfillCanonicalEmail populates canonical_email for any row that still lacks
-// it (canonical_email=''). Scoped to those rows so it can run on every boot as a
+// it (when canonical_email is empty). Scoped to those rows so it can run on every boot as a
 // crash-safe idempotent no-op once migrated: a new row already has its canonical
 // set at INSERT (InsertUserDedupedByCanonical), so only unmigrated legacy rows
 // match.
@@ -1224,8 +1233,8 @@ func (s *SQLiteStore) SetUserStripeCustomer(ctx context.Context, userID, custome
 	return err
 }
 
-// SetUserStripeSubscription records the user's canonical subscription id (''
-// clears it). Used by the webhook dedup to know which subscription is the one
+// SetUserStripeSubscription records the user's canonical subscription id; an
+// empty value clears it. Used by the webhook dedup to know which subscription is the one
 // that drives the plan.
 func (s *SQLiteStore) SetUserStripeSubscription(ctx context.Context, userID, subID string) error {
 	_, err := s.db.ExecContext(ctx,
@@ -4075,6 +4084,14 @@ func (s *SQLiteStore) GetCLITokenUser(ctx context.Context, tokenHash string) (st
 func (s *SQLiteStore) TouchCLIToken(ctx context.Context, tokenHash string, at int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE cli_tokens SET last_seen_at = ? WHERE token_hash = ?`, at, tokenHash)
+	return err
+}
+
+// DeleteCLIToken revokes exactly one bearer credential. Logout uses the hash
+// of the presented token, so signing out one CLI/native device does not revoke
+// the user's other devices.
+func (s *SQLiteStore) DeleteCLIToken(ctx context.Context, tokenHash string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM cli_tokens WHERE token_hash = ?`, tokenHash)
 	return err
 }
 

@@ -36,6 +36,8 @@ public final class RealtimeSender {
     /// plaintext length, so a borderline manifest can't slip past the check
     /// here only to blow up on `seal`.
     public func batchFrame(_ files: [FileMeta]) throws -> [UInt8] {
+        do { try validateRealtimeFiles(files) }
+        catch { throw RealtimeSenderError.invalidManifest }
         let payload = try manifestJSON(files)
         if payload.count + 16 > MANIFEST_MAX_BYTES {
             throw RealtimeSenderError.manifestTooLarge
@@ -90,11 +92,15 @@ public final class RealtimeSender {
 }
 
 public enum RealtimeSenderError: Error, Equatable {
+    case invalidManifest
     case manifestTooLarge
     /// A source ran out before the manifest said it should. Sending anyway
     /// would ship a DONE hash covering fewer bytes than the receiver expects,
     /// failing at the very end of a transfer that looked fine throughout.
     case sourceShorterThanDeclared(name: String)
+    /// A file grew after selection. Its extra bytes are not covered by the
+    /// manifest the receiver approved and must not be sent under that consent.
+    case sourceLongerThanDeclared(name: String)
 }
 
 private extension Array where Element == UInt8 {

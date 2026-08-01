@@ -36,6 +36,18 @@ public struct AccountClient {
         }
     }
 
+    /// Revoke exactly the bearer presented by this native client. A 401 is
+    /// idempotent success: the token is already absent or invalid.
+    public func logout(token: String) async throws {
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/auth/logout"))
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (_, resp) = try await send(req)
+        guard resp.statusCode == 200 || resp.statusCode == 401 else {
+            throw AccountError.server(status: resp.statusCode)
+        }
+    }
+
     func send(_ req: URLRequest) async throws -> (Data, HTTPURLResponse) {
         do {
             let (data, resp) = try await session.data(for: req)

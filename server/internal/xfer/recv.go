@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -32,9 +34,28 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 	if _, err := ReadJSON(rw, &m); err != nil {
 		return Report{}, err
 	}
+	if err := validateManifest(destDir, m); err != nil {
+		return Report{}, err
+	}
+	// A one-shot receive must never silently replace files already owned by the
+	// user. `sync` is the explicit overwrite/mirror operation; ordinary push
+	// refuses collisions before telling the sender to stream any bytes.
+	if !hello.Sync {
+		for _, f := range m.Files {
+			dest, err := safeJoin(destDir, f.Path)
+			if err != nil {
+				return Report{}, err
+			}
+			if _, err := os.Lstat(dest); err == nil {
+				return Report{}, fmt.Errorf("destination already exists: %s", f.Path)
+			} else if !os.IsNotExist(err) {
+				return Report{}, err
+			}
+		}
+	}
 
 	rs := ResumeState{}
-	if hello.Sync {
+	if hello.Sync && !opts.NoResume {
 		rs = syncStateFor(destDir, m)
 	} else if !opts.NoResume {
 		rs = resumeStateFor(destDir, m)
@@ -42,12 +63,25 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 	if err := WriteJSON(rw, MsgResume, rs); err != nil {
 		return Report{}, err
 	}
+	resumeOffsets := make(map[int]int64, len(rs.Entries))
+	for _, entry := range rs.Entries {
+		resumeOffsets[entry.Index] = entry.Have
+	}
+	skipped := make(map[int]struct{}, len(rs.Skip))
+	for _, index := range rs.Skip {
+		skipped[index] = struct{}{}
+	}
+	expectedIndices := make([]int, 0, len(m.Files)-len(rs.Skip))
+	for index := range m.Files {
+		if _, ok := skipped[index]; !ok {
+			expectedIndices = append(expectedIndices, index)
+		}
+	}
 
 	var rep Report
 	var res Result
 	res.OK = true
-	expected := len(m.Files) - len(rs.Skip)
-	for k := 0; k < expected; k++ {
+	for k, expectedIndex := range expectedIndices {
 		var fs FileStart
 		if _, err := ReadJSON(rw, &fs); err != nil {
 			return rep, err
@@ -58,21 +92,37 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 		if fs.Index < 0 || fs.Index >= len(m.Files) {
 			return rep, fmt.Errorf("file index %d out of range [0,%d)", fs.Index, len(m.Files))
 		}
+		if fs.Index != expectedIndex {
+			return rep, fmt.Errorf("file %d arrived out of manifest order at position %d (want %d)", fs.Index, k, expectedIndex)
+		}
 		f := m.Files[fs.Index]
+		expectedOffset := resumeOffsets[fs.Index]
+		if fs.Offset != expectedOffset {
+			return rep, fmt.Errorf("file offset %d does not match negotiated offset %d for %q", fs.Offset, expectedOffset, f.Path)
+		}
 		dest, err := safeJoin(destDir, f.Path)
 		if err != nil {
 			return rep, err
 		}
-		sum, werr := writeFileBody(rw, destDir, dest, f, fs.Offset)
+		sum, staged, werr := writeFileBody(rw, destDir, dest, f, fs.Offset)
 
 		var fh FileHash
 		if _, err := ReadJSON(rw, &fh); err != nil {
 			return rep, err
 		}
 		if werr != nil || fh.SHA256 != sum {
+			if staged != "" {
+				_ = os.Remove(staged)
+			}
 			res.OK = false
 			res.Failed = append(res.Failed, f.Path)
 		} else {
+			if err := installStaged(staged, dest, hello.Sync); err != nil {
+				_ = os.Remove(staged)
+				res.OK = false
+				res.Failed = append(res.Failed, f.Path)
+				continue
+			}
 			if hello.Sync {
 				// Preserve the source mtime so a later sync can skip this file.
 				tm := time.Unix(f.ModTime, 0)
@@ -104,6 +154,57 @@ func Receive(rw io.ReadWriter, destDir string, opts RecvOpts) (Report, error) {
 
 	rep.Failed = res.Failed
 	return rep, WriteJSON(rw, MsgResult, res)
+}
+
+// installStaged atomically installs a verified file. Sync is an explicit
+// replacement operation. Ordinary receive uses a hard link so a destination
+// created after preflight wins the race and is never overwritten.
+func installStaged(staged, dest string, allowReplace bool) error {
+	if allowReplace {
+		return os.Rename(staged, dest)
+	}
+	if err := os.Link(staged, dest); err != nil {
+		return err
+	}
+	// The no-clobber install is complete once the hard link exists. Cleanup of
+	// the private staging name is best-effort: reporting a failed transfer here
+	// would be false (and could prompt a resend) even though the verified
+	// destination is already durable and visible.
+	_ = os.Remove(staged)
+	return nil
+}
+
+const maxManifestFiles = 1000
+const maxManifestPathBytes = 4096
+
+func validateManifest(destDir string, m Manifest) error {
+	if len(m.Files) > maxManifestFiles {
+		return fmt.Errorf("manifest contains too many files: %d", len(m.Files))
+	}
+	seen := make(map[string]struct{}, len(m.Files))
+	var total int64
+	for i, f := range m.Files {
+		if f.Path == "" || len([]byte(f.Path)) > maxManifestPathBytes {
+			return fmt.Errorf("invalid manifest path at index %d", i)
+		}
+		if f.Size < 0 || total > math.MaxInt64-f.Size {
+			return fmt.Errorf("invalid manifest size at index %d", i)
+		}
+		total += f.Size
+		p, err := safeJoin(destDir, f.Path)
+		if err != nil {
+			return err
+		}
+		key := filepath.Clean(p)
+		if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+			key = strings.ToLower(key)
+		}
+		if _, ok := seen[key]; ok {
+			return fmt.Errorf("duplicate destination in manifest: %q", f.Path)
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
 }
 
 // deleteExtras removes regular files under destDir whose relative path is not in
@@ -211,49 +312,67 @@ func syncStateFor(destDir string, m Manifest) ResumeState {
 
 // writeFileBody reads exactly f.Size-offset bytes from rw, writes them at the
 // given offset in dest, and returns the SHA-256 (hex) of the full file.
-func writeFileBody(rw io.Reader, base, dest string, f FileEntry, offset int64) (string, error) {
+func writeFileBody(rw io.Reader, base, dest string, f FileEntry, offset int64) (string, string, error) {
 	dir := filepath.Dir(dest)
+	if info, err := os.Lstat(dest); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return "", "", fmt.Errorf("refusing symlink destination %q", dest)
+	} else if err != nil && !os.IsNotExist(err) {
+		return "", "", err
+	}
 	// Defense in depth beyond safeJoin's lexical check and the leaf O_NOFOLLOW: a
 	// pre-planted symlinked *directory* under destDir could still redirect the
 	// write outside it. mkdirAllWithin verifies the deepest existing ancestor
 	// stays within destDir BEFORE MkdirAll can follow it (a symlink must already
 	// exist to be followed); the post-create ensureWithin is the backstop.
 	if err := mkdirAllWithin(base, dir); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err := ensureWithin(base, dir); err != nil {
-		return "", err
+		return "", "", err
 	}
-	flag := os.O_CREATE | os.O_WRONLY | oNoFollow
-	if offset == 0 {
-		flag |= os.O_TRUNC
-	}
-	out, err := os.OpenFile(dest, flag, os.FileMode(f.Mode))
+	out, err := os.CreateTemp(dir, ".relayium-recv-*")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	defer out.Close()
+	staged := out.Name()
+	keep := false
+	defer func() {
+		_ = out.Close()
+		if !keep {
+			_ = os.Remove(staged)
+		}
+	}()
+	// Mode is peer-controlled. Preserve only ordinary rwx permission bits;
+	// never install setuid/setgid/sticky or other special mode flags.
+	if err := out.Chmod(os.FileMode(f.Mode) & os.ModePerm); err != nil {
+		return "", "", err
+	}
 
 	h := sha256.New()
 	if offset > 0 {
 		existing, err := os.Open(dest)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
-		if _, err := io.CopyN(h, existing, offset); err != nil {
+		prefix := io.MultiWriter(out, h)
+		if _, err := io.CopyN(prefix, existing, offset); err != nil {
 			existing.Close()
-			return "", err
+			return "", "", err
 		}
 		existing.Close()
-		if _, err := out.Seek(offset, io.SeekStart); err != nil {
-			return "", err
-		}
 	}
 	mw := io.MultiWriter(out, h)
 	if _, err := io.CopyN(mw, rw, f.Size-offset); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	if err := out.Sync(); err != nil {
+		return "", "", err
+	}
+	if err := out.Close(); err != nil {
+		return "", "", err
+	}
+	keep = true
+	return hex.EncodeToString(h.Sum(nil)), staged, nil
 }
 
 // safeJoin joins a relative manifest path onto destDir, rejecting any path that

@@ -108,6 +108,18 @@ final class RealtimeFrameProducerTests: XCTestCase {
         }
     }
 
+    func testFileLongerThanManifestIsRejected() throws {
+        let key = [UInt8](repeating: 4, count: 32)
+        let s = RealtimeSender(sessionKey: key)
+        _ = try s.batchFrame([FileMeta(name: "x", size: 2)])
+        let p = RealtimeFrameProducer(sender: s,
+                                      sources: [DataSource(name: "x", bytes: [1, 2, 3])],
+                                      declaredSizes: [2])
+        XCTAssertThrowsError(try drain(p)) { err in
+            XCTAssertEqual(err as? RealtimeSenderError, .sourceLongerThanDeclared(name: "x"))
+        }
+    }
+
     func testDrainsToNilAndStaysNil() throws {
         let s = RealtimeSender(sessionKey: [UInt8](repeating: 2, count: 32))
         let p = RealtimeFrameProducer(sender: s, sources: [DataSource(name: "s", bytes: [1])])

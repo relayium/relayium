@@ -93,7 +93,9 @@ func TestByoOwnNodeDirectDownloadIsFree(t *testing.T) {
 
 	client := ts.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	resp, err := client.Get(ts.URL + "/api/files/bf/blob")
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/files/bf/blob", nil)
+	req.Header.Set("X-Relayium-Direct-Download", "1")
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -108,6 +110,32 @@ func TestByoOwnNodeDirectDownloadIsFree(t *testing.T) {
 	// FREE: central pays nothing, so the owner is NOT metered.
 	if _, d, _ := store.MonthlyUsage(ctx, owner.ID, periodOf(svc.now().Unix())); d != 0 {
 		t.Fatalf("BYO own-node direct download must NOT be metered, got download=%d want 0", d)
+	}
+}
+
+func TestByoCustomDomainBrowserRequestStaysSameOrigin(t *testing.T) {
+	ts, svc, store, _ := newFileServer(t)
+	svc.SetDirectDownload(true)
+	ctx := context.Background()
+	owner, _ := store.UpsertUserByEmail(ctx, "web-byo@example.com", "")
+	_, _ = store.UpsertNode(ctx, Node{
+		ID: "webbyo", OwnerType: "user", OwnerUserID: owner.ID, StorageEnabled: true,
+		StorageURL: "https://internal.byo", StorageSecret: "bs",
+		DownloadURL: "https://files.example.net", CreatedAt: 1, LastSeenAt: time.Now().Unix(),
+	})
+	_ = store.CreateStoredFile(ctx, StoredFile{
+		ID: "webfile", UserID: owner.ID, BlobKey: "key", EncManifest: []byte("m"), Size: 1,
+		NodeID: "webbyo", CreatedAt: 1, ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	})
+	client := ts.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := client.Get(ts.URL + "/api/files/webfile/blob")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusFound {
+		t.Fatalf("browser-compatible request must not redirect outside CSP: %s", resp.Header.Get("Location"))
 	}
 }
 

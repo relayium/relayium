@@ -138,6 +138,14 @@ func (c *Client) DeviceStart(ctx context.Context) (DeviceStart, error) {
 	}, nil
 }
 
+// Logout revokes the currently configured bearer token on the server.
+func (c *Client) Logout(ctx context.Context) error {
+	if c.Token == "" {
+		return nil
+	}
+	return c.postJSON(ctx, "/api/auth/logout", nil, nil)
+}
+
 type devicePollRequest struct {
 	DeviceCode string `json:"device_code"`
 }

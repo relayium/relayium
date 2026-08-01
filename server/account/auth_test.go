@@ -71,6 +71,33 @@ func TestRequireAuthBearer(t *testing.T) {
 	}
 }
 
+func TestBearerLogoutRevokesPresentedToken(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	u, err := s.store.UpsertUserByEmail(ctx, "logout@example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dev, err := s.store.UpsertDevice(ctx, Device{ID: authx.NewID(), UserID: u.ID, Name: "native", Kind: "cli", CreatedAt: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := "rlm_cli_" + authx.RandToken()
+	if err := s.store.CreateCLIToken(ctx, CLIToken{TokenHash: authx.HashToken(raw), UserID: u.ID, DeviceID: dev.ID, CreatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+raw)
+	rec := httptest.NewRecorder()
+	s.handleLogout(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("logout status = %d", rec.Code)
+	}
+	if _, _, ok, err := s.store.GetCLITokenUser(ctx, authx.HashToken(raw)); err != nil || ok {
+		t.Fatalf("token remains after logout: ok=%v err=%v", ok, err)
+	}
+}
+
 // TestUserFromAuthResolvesBothCredentials pins the resolution RequireAuth is
 // built on, now that a root-mux handler (POST /api/pair) needs the user without
 // the wrapper's 401-and-stop behaviour. The frozen-account case is the one that

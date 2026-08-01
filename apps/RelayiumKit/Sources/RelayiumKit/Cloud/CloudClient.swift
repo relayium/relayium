@@ -70,7 +70,9 @@ extension CloudClient {
         var chunkStream: AsyncThrowingStream<Data, Error>
         var attempt = 0
         while true {
-            let (http, stream) = try await streamedChunks(URLRequest(url: blobURL))
+            var request = URLRequest(url: blobURL)
+            request.setValue("1", forHTTPHeaderField: "X-Relayium-Direct-Download")
+            let (http, stream) = try await streamedChunks(request)
             let code = http.statusCode
             if code == 403 && attempt == 0 { attempt += 1; continue }
             if code == 404 { throw CloudError.notFound }

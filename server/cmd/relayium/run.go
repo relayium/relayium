@@ -29,7 +29,7 @@ usage:
   relayium id                                print this host's fingerprint
   relayium authorize <fingerprint>          pre-authorize a pusher (for non-interactive serve)
   relayium login [--server URL]             log in to the cloud (device code flow)
-  relayium logout                           clear local cloud credentials
+  relayium logout [--local-only]            revoke and clear cloud credentials
   relayium whoami                           show the logged-in cloud account
   relayium up <path...> [--burn] [--ttl D] [--max-downloads N]
                                              encrypt client-side and upload to the cloud

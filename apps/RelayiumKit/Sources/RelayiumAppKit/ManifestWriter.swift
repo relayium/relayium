@@ -12,6 +12,10 @@ import RelayiumKit
 public enum DownloadDestinationError: Error, Equatable {
     case directoryExists(name: String)
     case unsafeName(String)
+    case duplicateName(String)
+    case fileExists(name: String)
+    case exceedsManifest
+    case incomplete
 }
 
 /// One entry of an incoming transfer, in the only two fields the writer needs.
@@ -62,7 +66,32 @@ final class ManifestWriter {
     init(directory: URL, files: [WritableFile]) throws {
         self.directory = directory
         self.files = sanitizeNames(files.map { ManifestFile(name: $0.name, size: $0.size) })
-        try openCurrent()
+        do {
+            try validateManifestFiles(self.files)
+            try preflightDestinations()
+            try openCurrent()
+        } catch {
+            discard()
+            throw error
+        }
+    }
+
+    private func preflightDestinations() throws {
+        var seen = Set<String>()
+        for file in files {
+            let component = safePathComponent(file.name)
+            let key = component.precomposedStringWithCanonicalMapping.lowercased()
+            guard seen.insert(key).inserted else {
+                throw DownloadDestinationError.duplicateName(component)
+            }
+            let url = directory.appendingPathComponent(component)
+            guard url.deletingLastPathComponent().standardized.path == directory.standardized.path else {
+                throw DownloadDestinationError.unsafeName(file.name)
+            }
+            if FileManager.default.fileExists(atPath: url.path) {
+                throw DownloadDestinationError.fileExists(name: component)
+            }
+        }
     }
 
     convenience init(directory: URL, manifest: StoredManifest) throws {
@@ -80,7 +109,17 @@ final class ManifestWriter {
             guard url.deletingLastPathComponent().standardized.path == directory.standardized.path else {
                 throw DownloadDestinationError.unsafeName(files[index].name)
             }
-            FileManager.default.createFile(atPath: url.path, contents: nil)
+            // `.withoutOverwriting` gives this the exclusive-create property the
+            // preflight alone cannot: a file created in the race between check
+            // and open is refused rather than truncated.
+            do {
+                try Data().write(to: url, options: .withoutOverwriting)
+            } catch {
+                if (error as NSError).code == CocoaError.fileWriteFileExists.rawValue {
+                    throw DownloadDestinationError.fileExists(name: url.lastPathComponent)
+                }
+                throw error
+            }
             urls.append(url)
             writtenInCurrent = 0
             if files[index].size > 0 {
@@ -93,6 +132,8 @@ final class ManifestWriter {
     }
 
     func write(_ bytes: [UInt8]) throws {
+        guard !bytes.isEmpty else { return }
+        guard index < files.count else { throw DownloadDestinationError.exceedsManifest }
         var off = 0
         while off < bytes.count, index < files.count {
             let remaining = files[index].size - writtenInCurrent
@@ -103,16 +144,20 @@ final class ManifestWriter {
                 off += take
             }
             if writtenInCurrent >= files[index].size {
+                try handle?.synchronize()
                 try handle?.close()
                 handle = nil
                 index += 1
                 try openCurrent()
             }
         }
+        if off != bytes.count { throw DownloadDestinationError.exceedsManifest }
     }
 
     func finish() throws -> [URL] {
-        try handle?.close()
+        guard index == files.count, handle == nil else {
+            throw DownloadDestinationError.incomplete
+        }
         handle = nil
         return urls
     }

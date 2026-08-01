@@ -77,3 +77,21 @@ func TestNodeRegisterNonHttpsDownloadURLDropped(t *testing.T) {
 		t.Fatalf("non-https DownloadURL must be dropped, got %q", got.DownloadURL)
 	}
 }
+
+func TestNodeRegisterDownloadURLWithCredentialsOrQueryDropped(t *testing.T) {
+	for _, bad := range []string{
+		"https://user:pass@node.example.com",
+		"https://node.example.com?target=other",
+		"https://node.example.com#fragment",
+	} {
+		s := nodeService(t, "fleet-secret")
+		resp := registerNode(t, s, "fleet-secret", nodeRegisterReq{
+			TURNSecret: "sek", URLs: []string{"turn:1.2.3.4:3478"}, Capabilities: []string{"storage"},
+			StorageURL: "https://1.2.3.4:8081", StorageSecret: "ss", DownloadURL: bad,
+		})
+		got, _, _ := s.store.GetNode(context.Background(), resp.NodeID)
+		if got.DownloadURL != "" {
+			t.Fatalf("unsafe DownloadURL %q persisted", bad)
+		}
+	}
+}

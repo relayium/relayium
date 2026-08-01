@@ -74,3 +74,52 @@ func TestRunLoginHappyPath(t *testing.T) {
 		t.Fatalf("whoami after login: code=%d out=%q", code, who.String())
 	}
 }
+
+func TestRunLogoutRevokesBeforeClearing(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/auth/logout" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfgDir, _ := resolveConfigDir("")
+	if err := cloud.Save(cfgDir, cloud.Creds{Server: srv.URL, AccessToken: "rlm_cli_logout", AccountEmail: "a@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if code := runLogout(nil, &out, &errOut); code != 0 {
+		t.Fatalf("logout code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
+	}
+	if gotAuth != "Bearer rlm_cli_logout" {
+		t.Fatalf("Authorization = %q", gotAuth)
+	}
+	if _, ok, err := cloud.Load(cfgDir); err != nil || ok {
+		t.Fatalf("credentials still present: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestRunLogoutKeepsCredentialsWhenRevokeFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfgDir, _ := resolveConfigDir("")
+	if err := cloud.Save(cfgDir, cloud.Creds{Server: srv.URL, AccessToken: "keep", AccountEmail: "a@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if code := runLogout(nil, &out, &out); code == 0 {
+		t.Fatalf("failed revoke reported success: %q", out.String())
+	}
+	if _, ok, err := cloud.Load(cfgDir); err != nil || !ok {
+		t.Fatalf("credentials should remain for retry: ok=%v err=%v", ok, err)
+	}
+}

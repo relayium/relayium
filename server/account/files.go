@@ -462,7 +462,13 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	// a PROXIED own-node download below, which central does pay for and therefore
 	// meters.) The BYO user opted in by advertising a DownloadURL, exposing their
 	// node's address to downloaders.
-	if directCapable && directNode.OwnerType == "user" && directNode.OwnerUserID == sf.UserID {
+	// A browser page is constrained by the app's deliberately narrow CSP and
+	// cannot fetch an arbitrary BYO hostname. Native/CLI clients explicitly opt
+	// into that cross-origin redirect; the Web client omits the header and stays
+	// on the functional same-origin proxy path. Fleet hosts are under
+	// *.relayium.com and remain CSP-compatible without the opt-in.
+	byoDirectRequested := r.Header.Get("X-Relayium-Direct-Download") == "1"
+	if directCapable && directNode.OwnerType == "user" && directNode.OwnerUserID == sf.UserID && byoDirectRequested {
 		s.redirectToNode(w, r, directNode, sf.BlobKey)
 		return
 	}

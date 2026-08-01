@@ -66,4 +66,23 @@ final class RealtimeReceiverTests: XCTestCase {
         let frame = [UInt8(4), 0,0,0,0] + json
         XCTAssertThrowsError(try r.feed(frame)) { XCTAssertEqual($0 as? RealtimeError, .malformed) }
     }
+
+    func testRejectsChunksBeyondDeclaredSizeAndShortDone() throws {
+        let key = [UInt8](repeating: 0x44, count: 32)
+
+        let tooLongSender = RealtimeSender(sessionKey: key)
+        let tooLongReceiver = RealtimeReceiver(sessionKey: key)
+        _ = try tooLongReceiver.feed(tooLongSender.batchFrame([FileMeta(name: "a", size: 1)]))
+        XCTAssertThrowsError(try tooLongReceiver.feed(tooLongSender.nextChunkFrame([1, 2]))) {
+            XCTAssertEqual($0 as? RealtimeError, .lengthMismatch)
+        }
+
+        let shortSender = RealtimeSender(sessionKey: key)
+        let shortReceiver = RealtimeReceiver(sessionKey: key)
+        _ = try shortReceiver.feed(shortSender.batchFrame([FileMeta(name: "a", size: 2)]))
+        _ = try shortReceiver.feed(shortSender.nextChunkFrame([1]))
+        XCTAssertThrowsError(try shortReceiver.feed(shortSender.nextDoneFrame(hash: chainHash([UInt8](repeating: 0, count: 32), [1])))) {
+            XCTAssertEqual($0 as? RealtimeError, .lengthMismatch)
+        }
+    }
 }

@@ -67,6 +67,15 @@ final class AccountClientTests: XCTestCase {
             XCTAssertEqual($0 as? AccountError, .invalidCredentials)
         }
     }
+
+    func testLogoutSendsBearer() async throws {
+        StubURLProtocol.stub = .init(status: 200, body: Data(), check: { req in
+            XCTAssertEqual(req.url?.path, "/api/auth/logout")
+            XCTAssertEqual(req.httpMethod, "POST")
+            XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer rlm_cli_TESTTOKEN")
+        })
+        try await client().logout(token: "rlm_cli_TESTTOKEN")
+    }
 }
 
 /// Small async throwing-assert helper (XCTAssertThrowsError has no async form).

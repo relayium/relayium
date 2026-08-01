@@ -13,9 +13,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 )
 
 const ChunkSize = 192 * 1024
+const MaxFiles = 1000
+const MaxFileNameBytes = 1024
+const MaxSafeInteger int64 = 9_007_199_254_740_991
 
 // MaxFrameCT caps a single ciphertext frame: a full plaintext chunk + 16-byte
 // GCM tag + slack. The length prefix is attacker-controlled, so this bounds how
@@ -67,6 +71,9 @@ func gcm(key []byte) (cipher.AEAD, error) {
 }
 
 func EncryptManifest(key []byte, m Manifest) ([]byte, error) {
+	if err := ValidateManifest(m); err != nil {
+		return nil, err
+	}
 	pt, err := json.Marshal(m)
 	if err != nil {
 		return nil, err
@@ -91,7 +98,30 @@ func DecryptManifest(key, ct []byte) (Manifest, error) {
 	if err := json.Unmarshal(pt, &m); err != nil {
 		return Manifest{}, err
 	}
+	if err := ValidateManifest(m); err != nil {
+		return Manifest{}, err
+	}
 	return m, nil
+}
+
+// ValidateManifest is the trust boundary for decrypted sender-controlled
+// metadata. AEAD proves who constructed the bytes; it does not make negative,
+// overflowing, empty, or resource-exhausting declarations safe to consume.
+func ValidateManifest(m Manifest) error {
+	if len(m.Files) == 0 || len(m.Files) > MaxFiles {
+		return fmt.Errorf("storecrypto: invalid manifest file count %d", len(m.Files))
+	}
+	var total int64
+	for i, f := range m.Files {
+		if f.Name == "" || len([]byte(f.Name)) > MaxFileNameBytes {
+			return fmt.Errorf("storecrypto: invalid file name at index %d", i)
+		}
+		if f.Size < 0 || f.Size > MaxSafeInteger || total > math.MaxInt64-f.Size || total+f.Size > MaxSafeInteger {
+			return fmt.Errorf("storecrypto: invalid file size at index %d", i)
+		}
+		total += f.Size
+	}
+	return nil
 }
 
 // FrameChunk encrypts one plaintext chunk at seq and returns uint32BE(len)||ct.

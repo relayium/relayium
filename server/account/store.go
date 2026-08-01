@@ -1075,6 +1075,7 @@ type Store interface {
 	CreateCLIToken(ctx context.Context, t CLIToken) error
 	GetCLITokenUser(ctx context.Context, tokenHash string) (userID, deviceID string, ok bool, err error)
 	TouchCLIToken(ctx context.Context, tokenHash string, at int64) error
+	DeleteCLIToken(ctx context.Context, tokenHash string) error
 	// plans (billing phase-1)
 	ListPlans(ctx context.Context) ([]Plan, error)
 	GetPlan(ctx context.Context, id string) (Plan, bool, error)

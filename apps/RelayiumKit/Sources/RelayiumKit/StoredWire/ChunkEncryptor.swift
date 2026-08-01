@@ -27,17 +27,31 @@ public struct DataSource: PlaintextSource {
 public struct FileURLSource: PlaintextSource {
     public let name: String
     public let size: Int
-    private let handle: FileHandle
+    private let url: URL
+    private var handle: FileHandle?
+    private var finished = false
 
     public init(url: URL) throws {
         self.name = url.lastPathComponent
         let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
         self.size = (attrs[.size] as? Int) ?? 0
-        self.handle = try FileHandle(forReadingFrom: url)
+        self.url = url
+        // Verify access now so staging is all-or-nothing, then close immediately:
+        // a user may select up to MAX_FILES and waiting for the peer must not hold
+        // one descriptor per file.
+        let probe = try FileHandle(forReadingFrom: url)
+        try probe.close()
     }
 
     public mutating func read(_ max: Int) throws -> [UInt8] {
-        guard let d = try handle.read(upToCount: max) else { return [] }
+        guard !finished else { return [] }
+        if handle == nil { handle = try FileHandle(forReadingFrom: url) }
+        guard let d = try handle?.read(upToCount: max), !d.isEmpty else {
+            try handle?.close()
+            handle = nil
+            finished = true
+            return []
+        }
         return [UInt8](d)
     }
 }

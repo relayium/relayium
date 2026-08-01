@@ -99,6 +99,31 @@ final class CloudDownloadModelTests: XCTestCase {
                        "a sanitized name must stay inside the destination directory")
     }
 
+    func testWriterRefusesExistingAndDuplicateDestinationsWithoutTouchingThem() throws {
+        let dir = try tempDir()
+        let existing = dir.appendingPathComponent("same.txt")
+        try Data("keep".utf8).write(to: existing)
+        XCTAssertThrowsError(try ManifestWriter(directory: dir, files: [WritableFile(name: "same.txt", size: 1)]))
+        XCTAssertEqual(try String(contentsOf: existing), "keep")
+
+        XCTAssertThrowsError(try ManifestWriter(directory: dir, files: [
+            WritableFile(name: "one/same.bin", size: 1),
+            WritableFile(name: "two/same.bin", size: 1),
+        ]))
+    }
+
+    func testWriterRejectsExcessAndIncompleteStreams() throws {
+        let dir = try tempDir()
+        let excess = try ManifestWriter(directory: dir, files: [WritableFile(name: "a", size: 1)])
+        XCTAssertThrowsError(try excess.write([1, 2]))
+        excess.discard()
+
+        let short = try ManifestWriter(directory: dir, files: [WritableFile(name: "b", size: 2)])
+        try short.write([1])
+        XCTAssertThrowsError(try short.finish())
+        short.discard()
+    }
+
     /// A malformed link fails before any network call, with copy that says so.
     func testResolveRejectsAMalformedLinkWithoutNetwork() {
         let m = CloudDownloadModel(client: CloudClient(baseURL: URL(string: "https://example.invalid")!))

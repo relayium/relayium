@@ -1,12 +1,68 @@
 package xfer
 
 import (
+	"bytes"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestReceiveRefusesExistingDestinationWithoutTruncating(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(dest, []byte("keep me"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var rw bytes.Buffer
+	if err := WriteJSON(&rw, MsgHello, Hello{Version: WireVersion, Mode: "push"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteJSON(&rw, MsgManifest, Manifest{Files: []FileEntry{{Path: "a.txt", Size: 3}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Receive(&rw, dir, RecvOpts{}); err == nil {
+		t.Fatal("ordinary receive accepted an existing destination")
+	}
+	if got, _ := os.ReadFile(dest); string(got) != "keep me" {
+		t.Fatalf("existing destination changed: %q", got)
+	}
+}
+
+func TestReceiveRejectsUnnegotiatedOffset(t *testing.T) {
+	var rw bytes.Buffer
+	if err := WriteJSON(&rw, MsgHello, Hello{Version: WireVersion, Mode: "push"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteJSON(&rw, MsgManifest, Manifest{Files: []FileEntry{{Path: "a.txt", Size: 3}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteJSON(&rw, MsgFileStart, FileStart{Index: 0, Offset: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Receive(&rw, t.TempDir(), RecvOpts{NoResume: true}); err == nil {
+		t.Fatal("Receive accepted an offset it did not advertise")
+	}
+}
+
+func TestReceiveRejectsFilesOutOfManifestOrder(t *testing.T) {
+	var rw bytes.Buffer
+	if err := WriteJSON(&rw, MsgHello, Hello{Version: WireVersion, Mode: "push"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteJSON(&rw, MsgManifest, Manifest{Files: []FileEntry{
+		{Path: "a.txt", Size: 0}, {Path: "b.txt", Size: 0},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteJSON(&rw, MsgFileStart, FileStart{Index: 1, Offset: 0}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Receive(&rw, t.TempDir(), RecvOpts{NoResume: true}); err == nil {
+		t.Fatal("Receive accepted files out of manifest order")
+	}
+}
 
 // safeJoin must accept the documented default destDirs — "." (relayium serve's
 // default --dir and receive's default destdir) and any trailing-slash path —

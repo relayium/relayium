@@ -364,10 +364,24 @@ func (s *Service) handleMagicVerify(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
+	var revokeErr error
 	if c, err := r.Cookie(sessionCookie); err == nil {
-		_ = s.store.RevokeSession(r.Context(), c.Value)
+		revokeErr = s.store.RevokeSession(r.Context(), c.Value)
+	}
+	const bearerPrefix = "Bearer "
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, bearerPrefix) {
+		raw := strings.TrimSpace(h[len(bearerPrefix):])
+		if raw != "" {
+			if err := s.store.DeleteCLIToken(r.Context(), authx.HashToken(raw)); err != nil {
+				revokeErr = err
+			}
+		}
 	}
 	s.clearSessionCookie(w)
+	if revokeErr != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

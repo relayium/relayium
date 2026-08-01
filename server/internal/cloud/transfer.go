@@ -326,6 +326,30 @@ type manifestWriter struct {
 	paths     []string // paths written so far, in manifest order
 }
 
+// prepare resolves the whole batch before creating its first file. This makes
+// path collisions and pre-existing user files an all-or-nothing refusal rather
+// than something discovered after earlier entries have already been written.
+func (w *manifestWriter) prepare() error {
+	seen := make(map[string]struct{}, len(w.files))
+	for _, f := range w.files {
+		path, err := safeJoin(w.destDir, f.Name)
+		if err != nil {
+			return err
+		}
+		key := filepath.Clean(path)
+		if _, ok := seen[key]; ok {
+			return fmt.Errorf("duplicate destination in manifest: %q", f.Name)
+		}
+		seen[key] = struct{}{}
+		if _, err := os.Lstat(path); err == nil {
+			return fmt.Errorf("destination already exists: %s", path)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
 // openNext opens files starting at idx, creating (and immediately closing)
 // any zero-size entries along the way — since no ciphertext bytes exist for
 // them — until it finds one with bytes left to receive, or exhausts the
@@ -354,7 +378,7 @@ func (w *manifestWriter) openNext() error {
 		}
 		// O_NOFOLLOW refuses a symlink at the leaf, so a pre-planted
 		// notes.txt -> /outside symlink can't be followed and overwritten.
-		fh, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC|oNoFollow, 0o644)
+		fh, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL|oNoFollow, 0o644)
 		if err != nil {
 			return err
 		}
@@ -561,6 +585,9 @@ func (c *Client) Download(ctx context.Context, id, keyB64Url, destDir string) ([
 	// last whole frame the Decryptor accepted. The writer and Decryptor persist
 	// across reconnects so the output files keep filling in place.
 	w := &manifestWriter{destDir: destDir, files: manifest.Files}
+	if err := w.prepare(); err != nil {
+		return nil, fmt.Errorf("cloud: prepare destination: %w", err)
+	}
 	dec := storecrypto.NewDecryptor(key)
 	var written int64
 	defer func() { w.closeAll() }()
@@ -578,6 +605,7 @@ func (c *Client) Download(ctx context.Context, id, keyB64Url, destDir string) ([
 	reset := func() {
 		priorPaths = append(priorPaths, w.paths...)
 		w.closeAll()
+		removePartials(w, nil)
 		w = &manifestWriter{destDir: destDir, files: manifest.Files}
 		dec = storecrypto.NewDecryptor(key)
 		written = 0
@@ -688,6 +716,10 @@ func (c *Client) streamBlob(ctx context.Context, httpc *http.Client, idPath stri
 	if start > 0 {
 		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", start))
 	}
+	// CLI is not subject to browser CSP and can safely follow a BYO user's
+	// custom-domain direct-download redirect. The Web client deliberately omits
+	// this opt-in and stays on central's same-origin proxy path.
+	req.Header.Set("X-Relayium-Direct-Download", "1")
 	resp, err := httpc.Do(req)
 	if err != nil {
 		return err // transport error — retryable

@@ -55,7 +55,7 @@ public enum ErrorCopy {
             switch e {
             case .tamper:
                 return "The data that arrived didn't match what the sender described, so it was discarded. Ask them to send it again."
-            case .outOfOrder, .malformed:
+            case .outOfOrder, .malformed, .lengthMismatch:
                 return "The connection dropped part of the transfer. Nothing was saved — try again."
             case .legacyPeer:
                 return "The other device is running an older version that can't complete this transfer. It needs updating."
@@ -67,9 +67,13 @@ public enum ErrorCopy {
             switch e {
             case .manifestTooLarge:
                 return "Too many files at once for a single transfer. Send them in smaller batches."
+            case .invalidManifest:
+                return "The selected files could not be described safely, so the transfer was not started."
             case .sourceShorterThanDeclared(let name):
                 // Almost always a file edited or deleted mid-send.
                 return "“\(name)” changed while it was being sent, so the transfer was stopped. Try again."
+            case .sourceLongerThanDeclared(let name):
+                return "“\(name)” grew after it was selected, so bytes outside the approved file list were not sent. Choose it again and retry."
             }
         }
         if let e = error as? RealtimeConnection.ConnectionError {
@@ -133,6 +137,12 @@ public enum ErrorCopy {
                 return "“\(name)” already exists here — this link was downloaded to this folder before. Choose another folder: the app won't merge into an existing one, because it can't tell a half-finished download from your own files."
             case .unsafeName(let name):
                 return "The link describes a file named “\(name)” that would be written outside the folder you chose, so nothing was saved. Ask the sender for a new link."
+            case .duplicateName(let name):
+                return "The transfer contains more than one file named “\(name)”, so nothing was saved. Ask the sender to rename one of them."
+            case .fileExists(let name):
+                return "“\(name)” already exists in the destination. Choose another folder; Relayium will not overwrite it."
+            case .exceedsManifest, .incomplete:
+                return "The received byte count did not match the file list, so the incomplete files were discarded. Ask the sender to try again."
             }
         }
         if let e = error as? CloudError {
@@ -164,7 +174,7 @@ public enum ErrorCopy {
             switch e {
             case .invalidKey:
                 return "That link's key is malformed — it was probably copied incompletely."
-            case .frameTooLarge, .truncatedStream, .lengthMismatch:
+            case .invalidManifest, .frameTooLarge, .truncatedStream, .lengthMismatch:
                 // Not transient: the bytes did not match the manifest. Inviting a
                 // retry would send the user back for the same corrupt data.
                 return "The downloaded data didn't match what the link described, so it was discarded. Ask the sender for a new link."

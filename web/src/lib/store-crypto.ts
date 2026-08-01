@@ -3,6 +3,7 @@
 // reusing the same nonce-from-counter scheme as transfer.ts. The key lives only
 // in the URL fragment; the server stores opaque ciphertext.
 import { sanitizeNames } from "./filename";
+import { validateManifestFiles } from "./manifest";
 
 type Bytes = Uint8Array<ArrayBuffer>;
 
@@ -69,6 +70,7 @@ export function decodeKey(s: string): Bytes {
 }
 
 export async function encryptManifest(key: CryptoKey, m: StoredManifest): Promise<Bytes> {
+  validateManifestFiles(m?.files);
   const pt = enc.encode(JSON.stringify(m)) as Bytes;
   const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce(0) }, key, pt);
   return new Uint8Array(ct);
@@ -79,7 +81,7 @@ export async function decryptManifest(key: CryptoKey, ct: Uint8Array): Promise<S
   const m = JSON.parse(dec.decode(new Uint8Array(pt))) as StoredManifest;
   // 文件名由上传者任意构造，服务端只见密文、无从校验：在解密这个唯一入口把
   // 双向控制符洗掉（理由见 filename.ts），下载页和落盘名都用洗过的值。
-  return { ...m, files: sanitizeNames(m.files) };
+  return { ...m, files: sanitizeNames(validateManifestFiles(m?.files)) };
 }
 
 // length-prefixed frame: uint32BE(len(ct)) || ct.

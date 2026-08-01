@@ -34,7 +34,7 @@ func TestResumeSkipsAlreadyReceivedPrefix(t *testing.T) {
 	// Instrument the sender to record the offset it starts from.
 	var sentTail int64
 	go func() {
-		_, err := Send(cSend, m, srcs, SendOpts{Progress: func(_ string, sent, _ int64) {
+		_, err := Send(cSend, m, srcs, SendOpts{Sync: true, Progress: func(_ string, sent, _ int64) {
 			sentTail = sent
 		}})
 		cSend.Close()
@@ -90,7 +90,7 @@ func TestNoResumeForcesFullResend(t *testing.T) {
 	cSend, cRecv := net.Pipe()
 	errc := make(chan error, 1)
 	go func() {
-		_, err := Send(cSend, m, srcs, SendOpts{})
+		_, err := Send(cSend, m, srcs, SendOpts{Sync: true})
 		cSend.Close()
 		errc <- err
 	}()

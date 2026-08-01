@@ -11,6 +11,7 @@ struct DirectPane: View {
     let token: String
 
     @State private var picked: [URL] = []
+    @State private var stagingError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -44,6 +45,11 @@ struct DirectPane: View {
 
             if case let .failed(message) = model.state {
                 Text(message)
+                    .font(.callout).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let stagingError {
+                Text(stagingError)
                     .font(.callout).foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -138,7 +144,10 @@ struct DirectPane: View {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false      // folder recursion is out of scope
-        if panel.runModal() == .OK { picked = panel.urls }
+        if panel.runModal() == .OK {
+            picked = panel.urls
+            stagingError = nil
+        }
     }
 
     private func mintAndWait() async {
@@ -148,13 +157,26 @@ struct DirectPane: View {
     }
 
     private func stageAndJoin(code: String) {
+        guard !picked.isEmpty, picked.count <= MAX_FILES else {
+            stagingError = "Choose between 1 and \(MAX_FILES) files."
+            model.cancel()
+            return
+        }
         var sources: [PlaintextSource] = []
         var metas: [FileMeta] = []
-        for url in picked {
-            guard let s = try? FileURLSource(url: url) else { continue }
-            sources.append(s)
-            metas.append(FileMeta(name: s.name, size: s.size))
+        do {
+            for url in picked {
+                let s = try FileURLSource(url: url)
+                sources.append(s)
+                metas.append(FileMeta(name: s.name, size: s.size))
+            }
+            _ = try validateRealtimeFiles(metas)
+        } catch {
+            stagingError = "Couldn't open every selected file. Nothing was sent. \(error.localizedDescription)"
+            model.cancel()
+            return
         }
+        stagingError = nil
         model.stageSend(sources: sources, metas: metas)
         Task { await model.join(code: code, role: .initiator) }
     }

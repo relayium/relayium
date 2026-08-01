@@ -476,6 +476,11 @@ export function createTransferSession(deps: SessionDeps) {
       }
       if (out.done) {
         lastActivity = Date.now();
+        if (fileOffset !== manifest[fileIndex]?.size) {
+          if (sink) { try { await sink.close(); } catch { /* already invalid */ } }
+          failRecv("integrityFail");
+          return;
+        }
         if (sink) await sink.close();
         allOk = allOk && out.done.ok;
         fileIndex++;

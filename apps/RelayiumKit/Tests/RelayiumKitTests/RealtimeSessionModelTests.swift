@@ -207,6 +207,8 @@ final class RealtimeSessionModelTests: XCTestCase {
         }
         XCTAssertEqual(sas, "brave-otter-lamp")
         XCTAssertEqual(conn.acceptCount, 0, "accepted before the user confirmed the SAS")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: m.saveDirectory.appendingPathComponent("a.txt").path),
+                       "receiving a manifest must not touch disk before SAS consent")
 
         m.confirmSAS()
         guard case .transferring = m.state else { return XCTFail("got \(m.state)") }
@@ -264,6 +266,9 @@ final class RealtimeSessionModelTests: XCTestCase {
         conn.onFileChunk?([5])
         conn.onDone?(true)
         await settle()
+        guard case .transferring = m.state else { return XCTFail("completed before every file DONE: \(m.state)") }
+        conn.onDone?(true)
+        await settle()
         guard case let .completed(urls) = m.state else { return XCTFail("got \(m.state)") }
         XCTAssertEqual(try Data(contentsOf: urls[0]), Data([1, 2, 3]))
         XCTAssertEqual(try Data(contentsOf: urls[1]), Data([4, 5]))
@@ -277,7 +282,7 @@ final class RealtimeSessionModelTests: XCTestCase {
     /// "The other device disconnected."
     func testSenderCompletesOnTheCompleteControl() async {
         let m = makeModel()
-        m.stageSend(sources: [], metas: [FileMeta(name: "a.txt", size: 3)])
+        m.stageSend(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])], metas: [FileMeta(name: "a.txt", size: 3)])
         await m.join(code: "K7M3X9", role: .initiator)
         conn.onSAS?("x")
         await settle()
@@ -291,7 +296,7 @@ final class RealtimeSessionModelTests: XCTestCase {
     /// a send, not a failure.
     func testPeerDisconnectAfterCompleteIsNotAFailure() async {
         let m = makeModel()
-        m.stageSend(sources: [], metas: [FileMeta(name: "a.txt", size: 3)])
+        m.stageSend(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])], metas: [FileMeta(name: "a.txt", size: 3)])
         await m.join(code: "K7M3X9", role: .initiator)
         conn.onSAS?("x")
         await settle()

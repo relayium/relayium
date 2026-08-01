@@ -49,7 +49,7 @@ public final class AccountSession: ObservableObject {
     public var bearerToken: String? { sessionToken }
 
     /// Operation identity. Being `@MainActor` serializes each *step*, not each
-    /// operation: a load has two suspension points and `logOut()` is synchronous,
+    /// operation: a load has suspension points and `logOut()` may overlap it,
     /// so a sign-out lands *between* a load's awaits routinely — sign out while a
     /// refresh is in flight, or while "Try again" is waiting out URLSession's 60s
     /// timeout. Without identity the late completion writes `.ready` on top and
@@ -179,12 +179,24 @@ public final class AccountSession: ObservableObject {
         await loadAccount(token: token, generation: g)
     }
 
-    public func logOut() {
+    public func logOut() async {
         // Bumping the generation is the load-bearing half: an in-flight refresh or
         // sign-in must not be able to resume afterwards and undo this.
-        _ = beginOperation()
-        // A keychain clear failure must not strand the user in a signed-in UI: the
-        // in-memory session is gone either way.
+        let g = beginOperation()
+        let token = sessionToken
+        if let token {
+            do {
+                try await client.logout(token: token)
+                guard !superseded(g) else { return }
+            } catch {
+                // Keep the token so the user can retry revocation. Merely deleting
+                // Keychain state here would leave a still-valid server credential
+                // that can no longer be self-revoked from this device.
+                guard !Task.isCancelled, !superseded(g) else { return }
+                state = .unavailable(message: "Could not securely sign out. The credential was kept so you can retry.")
+                return
+            }
+        }
         sessionToken = nil
         try? tokenStore.clear()
         isStale = false

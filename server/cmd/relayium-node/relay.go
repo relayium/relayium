@@ -263,8 +263,11 @@ func run(c config, st nodeState) error {
 		// must not still be spendable on the other.
 		dlGuard := newReplayGuard()
 		blobSrv := &http.Server{
-			Addr:    fmt.Sprintf(":%d", c.StoragePort),
-			Handler: newBlobHandler(ds, storageSecret, lim, diskUsed, diskFull, dlGuard),
+			Addr:              fmt.Sprintf(":%d", c.StoragePort),
+			Handler:           newBlobHandler(ds, storageSecret, lim, diskUsed, diskFull, dlGuard),
+			ReadHeaderTimeout: nodeReadHeaderTimeout,
+			IdleTimeout:       nodeIdleTimeout,
+			MaxHeaderBytes:    nodeMaxHeaderBytes,
 			TLSConfig: &tls.Config{
 				Certificates: []tls.Certificate{id.TLSCert},
 				MinVersion:   tls.VersionTLS13,

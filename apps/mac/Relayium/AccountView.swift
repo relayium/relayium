@@ -48,7 +48,7 @@ struct AccountView: View {
             HStack {
                 Button("Refresh") { Task { await session.refresh() } }
                 Spacer()
-                Button("Sign out") { session.logOut() }
+                Button("Sign out") { Task { await session.logOut() } }
             }
         }
     }

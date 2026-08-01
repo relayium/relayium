@@ -38,7 +38,8 @@ func validNodeID(id string) bool {
 // the bar for a node's public DownloadURL, since central redirects clients to it.
 func isHTTPSURL(s string) bool {
 	u, err := url.Parse(s)
-	return err == nil && u.Scheme == "https" && u.Host != ""
+	return err == nil && u.Scheme == "https" && u.Host != "" && u.User == nil &&
+		u.RawQuery == "" && u.Fragment == ""
 }
 
 // nodeHeartbeatInterval is the seconds a node waits between heartbeats. The

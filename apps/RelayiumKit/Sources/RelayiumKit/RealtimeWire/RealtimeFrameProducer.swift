@@ -43,23 +43,39 @@ public final class RealtimeFrameProducer {
     }
 
     private func nextFrame() throws -> [UInt8]? {
+        guard sources.count == declaredSizes.count else {
+            throw RealtimeSenderError.invalidManifest
+        }
         while index < sources.count {
+            guard index < declaredSizes.count, declaredSizes[index] >= 0 else {
+                throw RealtimeSenderError.invalidManifest
+            }
             if pendingDone {
                 let f = sender.nextDoneFrame(hash: hash)
                 peakHeldBytes = max(peakHeldBytes, f.count)
                 advance()
                 return f
             }
-            let chunk = try sources[index].read(CHUNK_SIZE)
+            let remaining = declaredSizes[index] - readInCurrent
+            if remaining == 0 {
+                // Selection and transmission are separated by user confirmation
+                // and pairing. Detect a file that grew in that interval instead
+                // of silently sending bytes outside the authenticated manifest.
+                if !(try sources[index].read(1)).isEmpty {
+                    throw RealtimeSenderError.sourceLongerThanDeclared(name: sources[index].name)
+                }
+                pendingDone = true
+                continue
+            }
+            let chunk = try sources[index].read(min(CHUNK_SIZE, remaining))
             if chunk.isEmpty {
                 // End of this file. A source that stopped short of what the
                 // manifest declared would otherwise send a DONE whose hash
                 // covers fewer bytes than the receiver is expecting.
-                guard readInCurrent == declaredSizes[index] else {
-                    throw RealtimeSenderError.sourceShorterThanDeclared(name: sources[index].name)
-                }
-                pendingDone = true
-                continue
+                throw RealtimeSenderError.sourceShorterThanDeclared(name: sources[index].name)
+            }
+            guard chunk.count <= remaining else {
+                throw RealtimeSenderError.sourceLongerThanDeclared(name: sources[index].name)
             }
             readInCurrent += chunk.count
             hash = chainHash(hash, chunk)

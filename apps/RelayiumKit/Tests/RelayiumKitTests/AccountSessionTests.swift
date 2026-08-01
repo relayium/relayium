@@ -176,7 +176,7 @@ final class AccountSessionTests: XCTestCase {
         try routeLoggedIn(loginBody: try fixture("login-success"))
         let s = session(store: store)
         await s.logIn(email: "a@b.co", password: "pw")
-        s.logOut()
+        await s.logOut()
         XCTAssertEqual(s.state, .loggedOut)
         XCTAssertFalse(s.isStale)
         XCTAssertNil(try store.load())
@@ -236,8 +236,8 @@ final class AccountSessionTests: XCTestCase {
 
     // MARK: - Operation identity
     //
-    // Being @MainActor serializes each step, not each operation: `logOut()` is
-    // synchronous and a load has two suspension points, so a sign-out lands
+    // Being @MainActor serializes each step, not each operation: `logOut()` and
+    // a load both suspend, so a sign-out lands
     // *between* a load's awaits whenever the server is slow — which is exactly
     // when the user reaches for Sign out. These are the interleavings; the
     // `RequestGate` below holds a response open so they are deterministic.
@@ -256,13 +256,16 @@ final class AccountSessionTests: XCTestCase {
             switch req.url?.path {
             case "/api/me":       gate.hold(); return .init(status: 200, body: me)
             case "/api/me/usage": return .init(status: 200, body: usage)
+            case "/api/auth/logout": return .init(status: 200, body: Data())
             default:              return .init(status: 500)
             }
         }
         let refreshing = Task { await s.refresh() }
         await gate.reached()
-        s.logOut()          // user signs out while the refresh is in flight
+        let loggingOut = Task { await s.logOut() } // user signs out while refresh is in flight
+        await Task.yield()        // let logout claim the newer operation generation
         gate.release()
+        await loggingOut.value
         await refreshing.value
 
         XCTAssertEqual(s.state, .loggedOut, "a completed refresh must not undo an explicit sign-out")
@@ -285,7 +288,7 @@ final class AccountSessionTests: XCTestCase {
         let s = session(store: store)
         let signingIn = Task { await s.logIn(email: "a@b.co", password: "pw") }
         await gate.reached()
-        s.logOut()
+        await s.logOut()
         gate.release()
         await signingIn.value
 

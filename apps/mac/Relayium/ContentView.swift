@@ -63,7 +63,7 @@ struct ContentView: View {
                     Text(message).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     Button("Try again") { Task { await session.refresh() } }
                         .keyboardShortcut(.defaultAction)
-                    Button("Sign out") { session.logOut() }.buttonStyle(.link)
+                    Button("Sign out") { Task { await session.logOut() } }.buttonStyle(.link)
                 }
             case .emailUnverified(let email):
                 noticeView(
@@ -215,7 +215,7 @@ struct ContentView: View {
             Text(title).font(.headline)
             Text(body).multilineTextAlignment(.center).foregroundStyle(.secondary)
             Button(actionTitle) { NSWorkspace.shared.open(url) }
-            Button("Back to sign in") { session.logOut() }.buttonStyle(.link)
+            Button("Back to sign in") { Task { await session.logOut() } }.buttonStyle(.link)
         }
     }
 }

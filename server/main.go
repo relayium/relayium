@@ -322,11 +322,34 @@ func main() {
 	go downloadLimiter.Run(context.Background(), time.Minute)
 
 	store, dbErr := account.OpenSQLite(*dbPath)
+	var readyBlobs *storage.DiskStore
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
+	})
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if dbErr != nil || store == nil {
+			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := store.Ping(ctx); err != nil {
+			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if readyBlobs == nil {
+			http.Error(w, "blob storage unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if err := readyBlobs.Ready(); err != nil {
+			http.Error(w, "blob storage unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ready"))
 	})
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
@@ -454,7 +477,7 @@ func main() {
 		// cross-network rendezvous code needs an account for attribution. The
 		// owner may authenticate with a session cookie (web) or a CLI bearer
 		// token — pairUser accepts either.
-		mux.HandleFunc("POST /api/pair", signal.PairHandler(pairReg, pairLimiter, ipx, pairUser(acct)))
+		mux.Handle("POST /api/pair", acct.CSRFGuard(signal.PairHandler(pairReg, pairLimiter, ipx, pairUser(acct))))
 		// Relay-node register/heartbeat: bearer-authenticated (not cookie/CSRF),
 		// so mounted directly on the root mux like /api/pair above. No-op when
 		// NodeToken is unset.
@@ -462,6 +485,7 @@ func main() {
 		if disk, derr := storage.NewDiskStore(*blobDir); derr != nil {
 			log.Printf("WARNING: open blob dir %q: %v — stored transfers disabled", *blobDir, derr)
 		} else {
+			readyBlobs = disk
 			acct.SetBlobStore(disk)
 			// M3b: global disk soft cap over the blob volume (0 = disabled).
 			if *blobDiskMax > 0 {

@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -88,8 +89,8 @@ var errStorageURLNotProbeable = errors.New("storage URL not probeable")
 // both by the on-demand check button and by StorageProber's sweep, so the two
 // can never disagree about what "reachable" means.
 //
-// Any HTTP response — even a 404 from an older node without /healthz — proves
-// reachability; only a dial/timeout error means unreachable.
+// Readiness requires a 2xx from /readyz. During a rolling upgrade only, a 404
+// falls back to the legacy /healthz endpoint; explicit non-ready responses fail.
 func (s *Service) ProbeNodeStorage(ctx context.Context, n Node) error {
 	if n.StorageURL == "" {
 		return errStorageURLNotProbeable
@@ -113,8 +114,8 @@ func (s *Service) ProbeNodeStorage(ctx context.Context, n Node) error {
 	client := &http.Client{Timeout: nodeProbeTimeout, Transport: tr}
 	pctx, cancel := context.WithTimeout(ctx, nodeProbeTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(pctx, http.MethodGet,
-		strings.TrimRight(n.StorageURL, "/")+"/healthz", nil)
+	base := strings.TrimRight(n.StorageURL, "/")
+	req, err := http.NewRequestWithContext(pctx, http.MethodGet, base+"/readyz", nil)
 	if err != nil {
 		return err
 	}
@@ -123,6 +124,26 @@ func (s *Service) ProbeNodeStorage(ctx context.Context, n Node) error {
 		return err
 	}
 	res.Body.Close()
+	if res.StatusCode >= 200 && res.StatusCode < 300 {
+		return nil
+	}
+	// Rolling-upgrade compatibility: an older node does not have /readyz yet.
+	// Fall back only for 404; any explicit readiness failure remains a failure.
+	if res.StatusCode != http.StatusNotFound {
+		return fmt.Errorf("node readiness returned HTTP %d", res.StatusCode)
+	}
+	legacyReq, err := http.NewRequestWithContext(pctx, http.MethodGet, base+"/healthz", nil)
+	if err != nil {
+		return err
+	}
+	legacy, err := client.Do(legacyReq)
+	if err != nil {
+		return err
+	}
+	legacy.Body.Close()
+	if legacy.StatusCode < 200 || legacy.StatusCode >= 300 {
+		return fmt.Errorf("node health returned HTTP %d", legacy.StatusCode)
+	}
 	return nil
 }
 

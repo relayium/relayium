@@ -87,6 +87,9 @@ func TestPublicDownloadHandlerHidesBlobAPI(t *testing.T) {
 	if resp, _ := http.Get(srv.URL + "/healthz"); resp == nil || resp.StatusCode != 200 {
 		t.Fatal("public handler must serve /healthz")
 	}
+	if resp, _ := http.Get(srv.URL + "/readyz"); resp == nil || resp.StatusCode != 200 {
+		t.Fatal("public handler must serve storage readiness")
+	}
 	// /dl with a valid token works.
 	tok := dltoken.Sign(secret, "pk", time.Now().Unix()+60, "n")
 	if resp, _ := http.Get(srv.URL + "/dl/pk?t=" + tok); resp == nil || resp.StatusCode != 200 {
@@ -187,6 +190,15 @@ func TestDLEndpointCORS(t *testing.T) {
 	exp := strings.ToLower(resp.Header.Get("Access-Control-Expose-Headers"))
 	if !strings.Contains(exp, "content-length") || !strings.Contains(exp, "accept-ranges") {
 		t.Fatalf("GET must expose length/range headers to JS, got %q", resp.Header.Get("Access-Control-Expose-Headers"))
+	}
+	if got := resp.Header.Get("Cache-Control"); !strings.Contains(got, "no-store") {
+		t.Fatalf("direct ciphertext response must not be cached, got %q", got)
+	}
+	if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatal("direct ciphertext response must disable MIME sniffing")
+	}
+	if resp.Header.Get("Content-Disposition") != "attachment" {
+		t.Fatal("direct ciphertext response must be an attachment")
 	}
 }
 

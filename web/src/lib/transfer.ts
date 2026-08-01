@@ -1,5 +1,8 @@
 import { seal, open, type SessionKeys } from "./crypto";
 import { sanitizeNames } from "./filename";
+import { MAX_FILES, validateManifestFiles } from "./manifest";
+
+export { MAX_FILES } from "./manifest";
 
 // Frames flow into DataChannel.send() and Web Crypto, which require an
 // explicitly ArrayBuffer-backed `Uint8Array` rather than the generic
@@ -13,7 +16,6 @@ type Bytes = Uint8Array<ArrayBuffer>;
 export const CHUNK_SIZE = 192 * 1024;
 // Raised from 10 to accommodate folder sends. The real ceiling is the manifest
 // frame size (guarded below), not this count.
-export const MAX_FILES = 1000;
 // The manifest travels as a single plaintext DataChannel message; keep it well
 // under the 256 KiB max-message-size. Long relative paths make this the true
 // limit on how many files a batch can carry.
@@ -314,10 +316,11 @@ export class Receiver {
       const plain = await open(keys.recv, seq, payload); // throws on tamper
       this.expectedSeq++;
       const batch = JSON.parse(dec.decode(plain)) as Manifest;
+      const files = validateManifestFiles<FileMeta>(batch?.files);
       // 文件名由发送端任意构造，而接收方的确认卡片正是用户做信任决策的地方：
       // 在这个唯一入口把双向控制符洗掉，下游的 UI/历史记录/落盘名就都拿的是
       // 洗过的值（散在模板里逐处调用必然漏一个）。
-      return { batch: { ...batch, files: sanitizeNames(batch.files) } };
+      return { batch: { ...batch, files: sanitizeNames(files) } };
     }
     if (kind === KIND_RESUME_START) {
       // The App restores the chain snapshot and calls resumeAt(); we just surface
