@@ -79,6 +79,7 @@ export function isLinkOffer(data: unknown): data is InboundSignal {
 
 export function isLinkRequest(data: unknown): data is InboundSignal {
   return !!data && typeof data === "object"
+    && (data as InboundSignal).link === true
     && (data as InboundSignal).linkRequest === true
     && !(data as InboundSignal).sdp;
 }
@@ -152,7 +153,14 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     const promise = (async () => {
       const self = generateKeyPair();
       let resolvePeer!: (key: Uint8Array) => void;
-      const peerKey = new Promise<Uint8Array>((resolve) => (resolvePeer = resolve));
+      let rejectPeer!: (err: unknown) => void;
+      const peerKey = new Promise<Uint8Array>((resolve, reject) => {
+        resolvePeer = resolve;
+        rejectPeer = reject;
+      });
+      // The terminal callback can run before openTransport resolves and before
+      // the bounded authentication await is installed below.
+      void peerKey.catch(() => {});
       let transportTerminal = false;
       conn = await openTransport({
         signaling: deps.signaling(), peerId, selfKey: self.publicKey, role,
@@ -162,6 +170,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         onStateChange: (next) => {
           if (next !== "failed" && next !== "closed") return;
           transportTerminal = true;
+          rejectPeer(new Error(`relayium: transport ${next} during authentication`));
           if (conn && current?.peerId === peerId && current.conn === conn) {
             current = null;
             status = next === "failed" ? "failed" : "idle";
@@ -247,7 +256,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       timedOutPeers.add(peerId);
       finishRequest(peerId, undefined, new LinkRequestTimeoutError());
     }, LINK_REQUEST_TIMEOUT_MS);
-    const send = () => deps.signaling().sendSignal(peerId, { linkRequest: true });
+    const send = () => deps.signaling().sendSignal(peerId, { linkRequest: true, link: true });
     const retry = setInterval(send, LINK_REQUEST_RETRY_MS);
     requested = { peerId, promise, resolve, reject, timer, retry };
     send();
@@ -261,6 +270,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     current = null;
     opening = null;
     if (requested) finishRequest(requested.peerId, undefined, new Error("relayium: link closed"));
+    timedOutPeers.clear();
     status = "idle";
     pending?.controller.abort();
     try { link?.conn.close(); } catch { /* already gone */ }

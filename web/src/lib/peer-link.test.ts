@@ -57,8 +57,9 @@ describe("mixed peer link ownership", () => {
   });
 
   it("recognises only exact content-free link requests and fresh link offers", () => {
-    expect(isLinkRequest({ linkRequest: true })).toBe(true);
-    expect(isLinkRequest({ linkRequest: true, sdp: { type: "offer" } })).toBe(false);
+    expect(isLinkRequest({ link: true, linkRequest: true })).toBe(true);
+    expect(isLinkRequest({ linkRequest: true })).toBe(false);
+    expect(isLinkRequest({ link: true, linkRequest: true, sdp: { type: "offer" } })).toBe(false);
     expect(isLinkOffer({ link: true, sdp: { type: "offer" } })).toBe(true);
     expect(isLinkOffer({ link: true, resume: true, sdp: { type: "offer" } })).toBe(false);
     expect(isLinkOffer({ link: true, sdp: { type: "answer" } })).toBe(false);
@@ -104,7 +105,7 @@ describe("mixed peer link ownership", () => {
     manager.listen();
 
     const waiting = manager.ensure("a");
-    expect(sig.sent).toEqual([{ to: "a", data: { linkRequest: true } }]);
+    expect(sig.sent).toEqual([{ to: "a", data: { linkRequest: true, link: true } }]);
     expect(transport.connect).not.toHaveBeenCalled();
     const offer: InboundSignal = { link: true, sdp: { type: "offer", sdp: "v=0" } };
     sig.inject("a", offer);
@@ -125,8 +126,8 @@ describe("mixed peer link ownership", () => {
       connect: transport.connect,
     });
     manager.listen();
-    sig.inject("z", { linkRequest: true });
-    sig.inject("z", { linkRequest: true });
+    sig.inject("z", { link: true, linkRequest: true });
+    sig.inject("z", { link: true, linkRequest: true });
     const link = await manager.ensure("z");
     expect(transport.connect).toHaveBeenCalledTimes(1);
     expect(link.role).toBe("initiator");
@@ -217,7 +218,7 @@ describe("mixed peer link ownership", () => {
     });
     manager.listen();
     const waiting = manager.ensure("a");
-    sig.inject("z", { linkRequest: true });
+    sig.inject("z", { link: true, linkRequest: true });
     expect(sig.sent).toContainEqual({ to: "z", data: { busy: true, link: true } });
     expect(transport.connect).not.toHaveBeenCalled();
     sig.inject("a", { link: true, sdp: { type: "offer", sdp: "v=0" } });
@@ -240,6 +241,23 @@ describe("mixed peer link ownership", () => {
     expect(manager.status).toBe("failed");
     void manager.ensure("a").catch(() => {});
     expect(sig.sent.filter((s) => s.to === "a" && s.data.linkRequest)).toHaveLength(2);
+    manager.stop();
+  });
+
+  it("does not let a third-party busy response cancel another peer's request", async () => {
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const manager = createPeerLinkManager({
+      selfId: () => "z", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+    });
+    manager.listen();
+    const waiting = manager.ensure("a");
+    sig.inject("other", { link: true, busy: true });
+    sig.inject("a", { link: true, sdp: { type: "offer", sdp: "v=0" } });
+    await expect(waiting).resolves.toMatchObject({ peerId: "a" });
+    expect(transport.connect).toHaveBeenCalledOnce();
     manager.stop();
   });
 
@@ -298,7 +316,7 @@ describe("mixed peer link ownership", () => {
       canAcceptLink: () => false, connect: transport.connect,
     });
     manager.listen();
-    sig.inject("z", { linkRequest: true });
+    sig.inject("z", { link: true, linkRequest: true });
     expect(sig.sent).toEqual([{ to: "z", data: { busy: true, link: true } }]);
     expect(transport.connect).not.toHaveBeenCalled();
     manager.stop();
@@ -345,6 +363,82 @@ describe("mixed peer link ownership", () => {
     expect(conn.close).toHaveBeenCalledOnce();
     expect(manager.current).toBeNull();
     expect(manager.status).toBe("failed");
+    manager.stop();
+  });
+
+  it("fails authentication immediately when the opened transport becomes terminal", async () => {
+    const sig = signalingHarness();
+    let stateChange: ((state: RTCPeerConnectionState) => void) | undefined;
+    const file = { label: "relayium" } as RTCDataChannel;
+    const text = { label: "relayium-text" } as RTCDataChannel;
+    const conn: Conn = {
+      channel: file,
+      getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
+      close: vi.fn(), path: async () => "lan",
+      stats: async () => new Map() as unknown as RTCStatsReport,
+    };
+    const connect = vi.fn(async (opts: Parameters<typeof connectLink>[0]) => {
+      stateChange = opts.onStateChange;
+      return conn;
+    });
+    const manager = createPeerLinkManager({
+      selfId: () => "a", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true, connect,
+    });
+    const pending = manager.ensure("b");
+    const rejected = expect(pending).rejects.toThrow(/transport failed/);
+    await tick();
+    stateChange!("failed");
+    await rejected;
+    expect(conn.close).toHaveBeenCalledOnce();
+    expect(manager.status).toBe("failed");
+    manager.stop();
+  });
+
+  it("observes a terminal authentication failure fired before transport resolution", async () => {
+    const sig = signalingHarness();
+    const file = { label: "relayium" } as RTCDataChannel;
+    const text = { label: "relayium-text" } as RTCDataChannel;
+    const conn: Conn = {
+      channel: file,
+      getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
+      close: vi.fn(), path: async () => "lan",
+      stats: async () => new Map() as unknown as RTCStatsReport,
+    };
+    const connect = vi.fn(async (opts: Parameters<typeof connectLink>[0]) => {
+      opts.onStateChange?.("failed");
+      return conn;
+    });
+    const manager = createPeerLinkManager({
+      selfId: () => "a", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true, connect,
+    });
+    await expect(manager.ensure("b")).rejects.toThrow(/transport failed/);
+    expect(conn.close).toHaveBeenCalledOnce();
+    expect(manager.current).toBeNull();
+    expect(manager.status).toBe("failed");
+    manager.stop();
+  });
+
+  it("clears a late-offer marker on explicit manager close", async () => {
+    vi.useFakeTimers();
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const manager = createPeerLinkManager({
+      selfId: () => "z", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+    });
+    manager.listen();
+    const pending = manager.ensure("a");
+    const rejected = expect(pending).rejects.toBeInstanceOf(LinkRequestTimeoutError);
+    await vi.advanceTimersByTimeAsync(LINK_REQUEST_TIMEOUT_MS);
+    await rejected;
+    manager.close();
+    sig.inject("a", { link: true, sdp: { type: "offer", sdp: "fresh" } });
+    await tick();
+    expect(transport.connect).toHaveBeenCalledOnce();
+    expect(sig.sent.at(-1)?.data.busy).not.toBe(true);
     manager.stop();
   });
 
@@ -451,7 +545,7 @@ describe("mixed peer link ownership", () => {
     });
     manager.listen();
     manager.listen();
-    sig.inject("z", { linkRequest: true });
+    sig.inject("z", { link: true, linkRequest: true });
     await tick();
     expect(transport.connect).toHaveBeenCalledTimes(1);
     manager.stop();

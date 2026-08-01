@@ -122,10 +122,47 @@ Add text-lane `REQUEST` (`0xfa`) and `END` (`0xfb`):
 
 `REQUEST → ACCEPT | REJECT → kind-9 messages → END`
 
-The recipient attaches the protected-message handler only after the user accepts,
-and attaches it before sending ACCEPT. END closes only the text conversation, not
-the DataChannel or link. Reopening sends a new REQUEST but reuses the link-scoped
-text codecs, so nonce sequences continue.
+The recipient enables protected-message delivery only after the user accepts,
+and does so before sending ACCEPT. The always-attached lane demultiplexer rejects
+or drains protected frames according to conversation state. END closes only the
+text conversation, not the DataChannel or link. Reopening sends a new REQUEST but
+reuses the link-scoped text codecs, so nonce sequences continue.
+
+The lane control demultiplexer is always attached, but it never decrypts or stores
+protected content before consent. A kind-9 frame received while the conversation
+is not open is a hard text-lane protocol failure: the text DataChannel closes and
+cannot reopen on that link, while the file lane remains usable. In particular,
+content sent after REJECT can never be carried into a later acceptance. Because
+END is directional, a side that sends END continues authenticating and accounting
+for the prior conversation's already-in-flight frames, but discards their plaintext
+until the peer's symmetric END acknowledgement. The acknowledgement is emitted
+once per remote END and therefore cannot loop; its ordered arrival closes the drain
+window. An ordered REJECT also closes a pending local-END window; because that
+REJECT was already sent before a crossing peer END, the refusing side does not
+emit a redundant acknowledgement that could collide with a newly reopened
+conversation. The drain window has a 30-second timeout that starts only after END
+enters the ordered channel; expiry hard-fails only the text lane because safely
+reusing its codec sequence can no longer be proven. An incoming prompt ended
+before ACCEPT sends REJECT as its complete ordered barrier, needs no drain window,
+and may reopen immediately without a stale END acknowledgement cancelling the new
+REQUEST. Those frames are never rendered or carried into a later acceptance. A
+remote END cancels queued messages before they consume a nonce; encryption already
+in flight is sent only to preserve sequence continuity and is shown locally as
+failed. An unanswered outbound REQUEST expires after ten minutes by sending END;
+an unanswered inbound prompt expires with REJECT. Neither closes the peer link. A
+later REQUEST is a new consent decision even when the same user rejected an earlier
+conversation. Lifecycle frames are rate-limited independently from protected
+messages; protected message count and byte ceilings are prepared for a new
+conversation at REQUEST time and become usable only after that conversation is
+accepted.
+
+Because lifecycle frames do not yet carry conversation IDs, an END from the
+peer's immediately preceding attempt can cross a newly emitted REQUEST. If a
+subsequent ACCEPT arrives after that END, the receiver authenticates and discards
+the crossing attempt's protected frames until its following ordered END instead
+of displaying them or poisoning the reusable codec. This is a fail-closed bridge
+for the one-RTT ambiguity; adding authenticated conversation IDs remains the
+cleaner future wire revision.
 
 Files may transfer while the text lane is open, and text may be sent while a file
 is transferring. Backpressure and `bufferedAmount` checks are lane-local. A hard
@@ -136,10 +173,11 @@ failure ends that batch but not the text lane.
 
 At most one link is active globally. The lexicographically smaller peer ID is the
 only side allowed to create the link offer. When the larger-ID side acts first it
-sends a content-free `{ "linkRequest": true }` signal; the smaller side then
-offers. A simultaneous action therefore converges before SDP exists instead of
-creating two PeerConnections in the same generation and trying to untangle their
-signals afterward. A pending request reserves the one global link slot for that
+sends a content-free `{ "link": true, "linkRequest": true }` signal; the smaller
+side then offers. A simultaneous action therefore converges before SDP exists
+instead of creating two PeerConnections in the same generation and trying to
+untangle their signals afterward. A pending request reserves the one global link
+slot for that
 peer; a link request or offer from another peer receives a generation-matched
 busy response and cannot displace the first intent. The request is retried while
 waiting because signalling sends during a socket reconnect are best-effort, and
@@ -161,6 +199,14 @@ competing with a retry. If SCTP opens but the peer-key reveal never arrives, a
 separate bounded authentication timeout closes the transport and makes the link
 retryable rather than leaving the workspace permanently in `connecting`.
 
+Closing a text-channel generation after lifecycle flooding does not poison its
+codecs. The stage-3 coordinator must request and attach a replacement text
+channel before offering another conversation; the lane module deliberately does
+not create transports on its own. Before advertising `link/1`, stage 3 must also
+provide `canAcceptLink`, choose a mobile-background policy for the conservative
+30-second END barrier, and validate how target browsers report `bufferedAmount`
+when a DataChannel closes so an unsent protected frame cannot escape codec poison.
+
 If transport fails during a file batch, rebuild one peer connection with both
 channels through the authenticated resume generation. Existing file checkpoint,
 chain, flow-control and nonce state continue unchanged. The current text
@@ -168,7 +214,15 @@ conversation ends visibly on transport loss and its local transcript remains;
 text messages receive no delivery acknowledgement or replay. After file recovery,
 the user may open a new text conversation on the resumed link. Text sequence
 resynchronisation is deliberately deferred because it would weaken the current
-rule that any sequence gap is a hard error.
+rule that any sequence gap is a hard error. A transport-only close maps an active
+conversation to a visible ended state and retains the link SAS. Protocol poison
+survives every transport generation that reuses the same link-owned codecs. If an
+outbound crypto operation consumes a nonce while its transport generation is
+being replaced, or an already-admitted inbound frame cannot reach the receiver
+codec, that codec is also poisoned: silently dropping either sequence would make
+a later conversation fail out of order. Because `DataChannel.send()` only queues
+bytes, a transport close with protected bytes still buffered poisons the sender
+codec as well; lifecycle-only buffered bytes do not.
 
 ## Unified workspace UI
 
