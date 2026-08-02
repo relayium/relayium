@@ -106,6 +106,27 @@ public enum ErrorCopy {
                 return "The other device does not support encrypted text sessions yet. It may need updating."
             }
         }
+        if let e = error as? NearbyError {
+            switch e {
+            case .notScanning:
+                return "Relayium stopped looking for nearby devices, so that one is no longer available. Scan again, then pick it."
+            case .noAnswer:
+                // Recovery steps, not a diagnosis: the roster proves the two
+                // devices reached the same rendezvous, so "you're not on the
+                // same network" would be a claim this code cannot make. What it
+                // can say is what makes a device answer — a listening peer,
+                // which today means relayium.com — and where to go instead.
+                return "That device didn't answer. Open relayium.com on it, keep that page open, and pick it again. A pairing code works instead, and is the way to receive on this Mac."
+            }
+        }
+        if let e = error as? RealtimeStagingError {
+            switch e {
+            case .fileCount:
+                return "Choose between 1 and \(MAX_FILES) files."
+            case .unreadable:
+                return "Couldn't open every selected file, so nothing was sent. Choose the files again."
+            }
+        }
         if let e = error as? RealtimeTextError {
             switch e {
             case .authenticationFailed:

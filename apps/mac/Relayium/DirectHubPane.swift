@@ -1,16 +1,21 @@
 import SwiftUI
 import RelayiumAppKit
 
-/// Explicit intent selection: pairing codes do not encode whether the user
-/// means files or text, so the native app must never guess.
+/// Explicit intent selection: neither a pairing code nor a roster entry encodes
+/// whether the user means files or text, so the native app must never guess.
 struct DirectHubPane: View {
     private enum Mode: Hashable { case files, text }
 
     @ObservedObject var fileModel: RealtimeSessionModel
     @ObservedObject var textModel: RealtimeTextSessionModel
     @EnvironmentObject private var verification: VerificationPreference
+    @EnvironmentObject private var discovery: LanDiscoveryModel
     let token: String
     @State private var mode: Mode = .files
+    /// True while the nearby pane is showing a live session. The pairing-code
+    /// section is hidden then: both drive the SAME model, so leaving it up
+    /// would render one session twice, each with its own Cancel.
+    @State private var nearbySession = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -19,14 +24,23 @@ struct DirectHubPane: View {
                 Text("Text").tag(Mode.text)
             }
             .pickerStyle(.segmented)
-            .disabled(fileModel.isBusy || textModel.isBusy)
-            .accessibilityHint("Choose what this pairing code session will transfer.")
+            .disabled(fileModel.isBusy || textModel.isBusy || nearbySession)
+            .accessibilityHint("Choose what this session will transfer.")
 
-            switch mode {
-            case .files:
-                DirectPane(model: fileModel, token: token)
-            case .text:
-                RealtimeTextPane(model: textModel, token: token)
+            NearbyPane(discovery: discovery,
+                       fileModel: fileModel,
+                       textModel: textModel,
+                       intent: mode == .files ? .files : .text,
+                       sessionActive: $nearbySession)
+
+            if !nearbySession {
+                Divider()
+                switch mode {
+                case .files:
+                    DirectPane(model: fileModel, token: token)
+                case .text:
+                    RealtimeTextPane(model: textModel, token: token)
+                }
             }
 
             Divider()

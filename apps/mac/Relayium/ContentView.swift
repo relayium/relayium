@@ -45,10 +45,12 @@ struct ContentView: View {
                     }
                     // Same reasoning one transport over: joining a code needs no
                     // account (the server only gates minting, because the code's
-                    // owner pays for relayed traffic). Appended, never inserted
+                    // owner pays for relayed traffic), and a nearby transfer
+                    // needs one even less — the code-less room mints nothing and
+                    // `/api/ice` answers it STUN-only. Appended, never inserted
                     // above LoginView — its @State has to survive every
                     // transition through this branch.
-                    DisclosureGroup("I have a pairing code", isExpanded: $showDirect) {
+                    DisclosureGroup("Nearby device or pairing code", isExpanded: $showDirect) {
                         DirectHubPane(
                             fileModel: realtimeModel,
                             textModel: realtimeTextModel,

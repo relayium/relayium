@@ -288,6 +288,124 @@ public enum RealtimeConnectionFactory {
         return connection
     }
 
+    // MARK: - same-network (no pairing code)
+
+    /// Builds a connection to a device the user picked out of the code-less
+    /// room's roster.
+    ///
+    /// Differs from `make` in the three ways that matter, and each of them is
+    /// the reason this is a separate entry point rather than a flag:
+    ///
+    /// * There is no `firstPeer` wait. The code-less room is keyed by the
+    ///   server-observed public IP and can hold more than two members, so
+    ///   "whoever is not me" is not an answer — the peer id comes from an
+    ///   explicit choice the user made against a roster they saw.
+    /// * The socket belongs to the discovery model and outlives this call, so
+    ///   nothing here closes it. `make` owns its socket and does.
+    /// * The room has no pairing code, so there are no TURN credentials to
+    ///   have and no relay pool to choose from. `nearbyICEServers` keeps only
+    ///   STUN, so even a server that answered a code-less `/api/ice` with
+    ///   relay credentials could not spend anybody's relay quota from here.
+    public static func connectNearby(signaling: SignalingClient,
+                                     peerId: String,
+                                     role: Role,
+                                     config: ICEConfig,
+                                     mode: Mode = .file,
+                                     capabilityTimeout: TimeInterval = 5)
+        async throws -> RealtimePeerConnection {
+        try await connectNearby(signaling: signaling,
+                                peerId: peerId,
+                                role: role,
+                                config: config,
+                                mode: mode,
+                                capabilityTimeout: capabilityTimeout,
+                                build: liveConnection)
+    }
+
+    /// The same seam `make` has, for the same reason: everything above the
+    /// peer connection is testable, the peer connection itself is not.
+    static func connectNearby(signaling: SignalingClient,
+                              peerId: String,
+                              role: Role,
+                              config: ICEConfig,
+                              mode: Mode,
+                              capabilityTimeout: TimeInterval,
+                              build: ConnectionBuilder) async throws -> RealtimePeerConnection {
+        // Defensive: the discovery model only ever hands over an id it just
+        // listed, but an empty id would reach WebRTC as a dial to nobody and
+        // surface as a bare NSError.
+        guard !peerId.isEmpty else { throw FactoryError.noPeerAppeared }
+
+        // Same buffer-and-replay as `make`: the chosen peer can answer our
+        // capability hello — or send its own SDP — before the connection
+        // object below exists, and a dropped offer stalls the session with no
+        // error at all.
+        let pending = PendingSignals()
+        let capabilities = PeerCapabilities()
+        signaling.onSignal = { from, data in
+            capabilities.record(peerId: from, signal: data)
+            pending.append((from, data))
+        }
+
+        if mode == .text {
+            signaling.sendSignal(to: peerId, data: capsField(mode.localCapabilities))
+            // Bounded one-way retries, never a reply to an inbound hello, so
+            // this cannot become a ping-pong. Same shape as `make`.
+            let capabilityRetry = Task {
+                for delay: UInt64 in [250_000_000, 1_000_000_000] {
+                    try? await Task.sleep(nanoseconds: delay)
+                    guard !Task.isCancelled else { return }
+                    signaling.sendSignal(to: peerId, data: capsField(mode.localCapabilities))
+                }
+            }
+            let supported = await waitForCapability("text/1",
+                                                    peerId: peerId,
+                                                    in: capabilities,
+                                                    timeout: capabilityTimeout)
+            capabilityRetry.cancel()
+            guard supported else {
+                // Unhook, do NOT close: this socket is the discovery model's
+                // roster feed, and the user is expected to pick another device
+                // on it. `make`'s equivalent path closes because the socket is
+                // its own.
+                signaling.onSignal = nil
+                throw FactoryError.unsupportedPeer
+            }
+            signaling.sendSignal(to: peerId, data: capsField(mode.localCapabilities))
+        }
+
+        let connection = build(signaling, peerId, role,
+                               nearbyICEServers(config.iceServers),
+                               false,        // never relay-only: STUN-only, host candidates are the point
+                               mode.generation,
+                               mode.localCapabilities)
+        for (from, data) in pending.drain() {
+            signaling.onSignal?(from, data)
+        }
+        return connection
+    }
+
+    /// STUN only, credentials dropped.
+    ///
+    /// A code-less `/api/ice` is STUN-only by construction today
+    /// (`server/account/turn.go` gates every relay branch on a valid code), so
+    /// on the happy path this changes nothing. It exists so that the
+    /// same-network path cannot start consuming relay bandwidth because a
+    /// server-side change made that response fatter — the guarantee is a
+    /// property of the client, not a promise about the server.
+    static func nearbyICEServers(_ servers: [ICEServerConfig]) -> [ICEServerConfig] {
+        servers.compactMap { server in
+            let stun = server.urls.filter {
+                let url = $0.lowercased()
+                return url.hasPrefix("stun:") || url.hasPrefix("stuns:")
+            }
+            guard !stun.isEmpty else { return nil }
+            // Credentials only ever authenticate to TURN; carrying them past
+            // here would be the one way a nearby connection could use a relay.
+            return ICEServerConfig(urls: stun)
+        }
+    }
+
     /// Resumes on the first peer the room reports, and only once — a second
     /// `onPeers` callback must not resume a continuation that already fired.
     /// Internal rather than private so the roster logic can be tested without

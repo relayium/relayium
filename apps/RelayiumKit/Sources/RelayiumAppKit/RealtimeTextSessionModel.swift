@@ -46,6 +46,12 @@ public final class RealtimeTextSessionModel: ObservableObject {
     private let pairClient: PairCodeClient
     private let iceClient: ICEConfigClient
     private let makeConnection: (_ code: String, _ role: Role, _ ice: ICEConfig) async throws -> RealtimePeerConnection
+    /// The same-network variant: an id the user picked off a roster instead of
+    /// a code. `@MainActor` because the socket it reaches for lives on
+    /// `LanDiscoveryModel`.
+    private let makeNearbyConnection: @MainActor (_ peerId: String, _ role: Role, _ ice: ICEConfig) async throws -> RealtimePeerConnection
+    /// How long a nearby connect waits for the chosen device to answer.
+    private let nearbyAnswerTimeout: TimeInterval
     /// Read when the SAS lands, not captured at init: the user may flip the
     /// preference between sessions. Default OFF — see `VerificationPreference`.
     private let requiresVerification: () -> Bool
@@ -77,6 +83,10 @@ public final class RealtimeTextSessionModel: ObservableObject {
                 idleSleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
                     try? await Task.sleep(nanoseconds: nanoseconds)
                 },
+                nearbyAnswerTimeout: TimeInterval = 30,
+                makeNearbyConnection: @escaping @MainActor (String, Role, ICEConfig) async throws -> RealtimePeerConnection = { _, _, _ in
+                    throw NearbyError.notScanning
+                },
                 makeConnection: @escaping (String, Role, ICEConfig) async throws -> RealtimePeerConnection) {
         self.pairClient = pairClient
         self.iceClient = iceClient
@@ -84,6 +94,8 @@ public final class RealtimeTextSessionModel: ObservableObject {
         self.now = now
         self.idleSeconds = idleSeconds
         self.idleSleep = idleSleep
+        self.nearbyAnswerTimeout = nearbyAnswerTimeout
+        self.makeNearbyConnection = makeNearbyConnection
         self.makeConnection = makeConnection
         self.lastRefill = now()
     }
@@ -152,6 +164,61 @@ public final class RealtimeTextSessionModel: ObservableObject {
                 state = .unsupported
             } else {
                 state = .failed(ErrorCopy.message(for: error))
+            }
+        }
+    }
+
+    /// Same-network message session with a device the user picked off the
+    /// roster. No code is minted, none is joined, and no bearer token is
+    /// involved — see `RealtimeSessionModel.connectNearby` for why `code: ""`
+    /// is the whole mechanism rather than a placeholder.
+    public func connectNearby(peerId: String, role: Role = .initiator) async {
+        beginAttempt()
+        let g = generation
+        self.role = role
+        // Deliberately left empty: `rejectedCodes` keys off the code a session
+        // was started from, and a nearby session has none. `reject()` already
+        // guards on that.
+        activeCode = ""
+        state = .connecting
+        do {
+            let ice = try await iceClient.fetch(code: "")
+            guard g == generation else { return }
+            let peer = try await makeNearbyConnection(peerId, role, ice)
+            guard g == generation else { peer.close(); return }
+            wire(peer, generation: g)
+            connection = peer
+            peer.start()
+            armAnswerTimeout()
+        } catch {
+            guard g == generation else { return }
+            if error as? RealtimeConnectionFactory.FactoryError == .unsupportedPeer {
+                state = .unsupported
+            } else {
+                state = .failed(ErrorCopy.message(for: error))
+            }
+        }
+    }
+
+    /// Bounds a nearby connect the way `firstPeer`'s timeout bounds a code
+    /// join: the peer is already known, so nothing else ever gives up on a
+    /// device that is simply not listening.
+    ///
+    /// Reuses the idle-timer slot on purpose — `touch()` replaces it the moment
+    /// the session becomes interactive, so the two can never both be live.
+    private func armAnswerTimeout() {
+        idleTask?.cancel()
+        let g = generation
+        let nanoseconds = UInt64(max(0, nearbyAnswerTimeout) * 1_000_000_000)
+        let idleSleep = self.idleSleep
+        idleTask = Task { [weak self] in
+            await idleSleep(nanoseconds)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.apply(g) { model in
+                    guard case .connecting = model.state else { return }
+                    model.finish(.failed(ErrorCopy.message(for: NearbyError.noAnswer)))
+                }
             }
         }
     }

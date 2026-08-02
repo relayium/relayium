@@ -73,9 +73,22 @@ public enum AppEnvironment {
         )
     }
 
+    /// The same-network room: the hub's code-less room, which it keys by the
+    /// public IP it observes. No code is minted and none is sent — the empty
+    /// `code` IS the mechanism (`SignalingClient.connect` omits the query item).
+    @MainActor
+    public static func makeLanDiscoveryModel(baseURL: URL = productionBaseURL) -> LanDiscoveryModel {
+        LanDiscoveryModel(connect: {
+            SignalingClient.connect(wsBase: RealtimeConnectionFactory.signalingBase(baseURL),
+                                    code: "",
+                                    name: deviceName())
+        })
+    }
+
     @MainActor
     public static func makeRealtimeModel(baseURL: URL = productionBaseURL,
-                                        verification: VerificationPreference) -> RealtimeSessionModel {
+                                        verification: VerificationPreference,
+                                        nearby: LanDiscoveryModel) -> RealtimeSessionModel {
         RealtimeSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
             iceClient: HTTPICEClient(baseURL: baseURL),
@@ -83,6 +96,15 @@ public enum AppEnvironment {
             // preference must take effect on the next connection, not the next
             // app launch.
             requiresVerification: { verification.requiresSASConfirmation },
+            // Reuses the socket the roster came from: reconnecting would earn a
+            // new peer id and a room the user never saw. Read at call time, so
+            // a device picked before discovery stopped fails cleanly instead of
+            // dialling through a dead socket.
+            makeNearbyConnection: { peerId, role, servers in
+                guard let signaling = nearby.client else { throw NearbyError.notScanning }
+                return try await RealtimeConnectionFactory.connectNearby(
+                    signaling: signaling, peerId: peerId, role: role, config: servers)
+            },
             makeConnection: { code, role, servers in
                 try await RealtimeConnectionFactory.make(
                     code: code, role: role, config: servers,
@@ -92,11 +114,18 @@ public enum AppEnvironment {
 
     @MainActor
     public static func makeRealtimeTextModel(baseURL: URL = productionBaseURL,
-                                            verification: VerificationPreference) -> RealtimeTextSessionModel {
+                                            verification: VerificationPreference,
+                                            nearby: LanDiscoveryModel) -> RealtimeTextSessionModel {
         RealtimeTextSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
             iceClient: HTTPICEClient(baseURL: baseURL),
             requiresVerification: { verification.requiresSASConfirmation },
+            makeNearbyConnection: { peerId, role, servers in
+                guard let signaling = nearby.client else { throw NearbyError.notScanning }
+                return try await RealtimeConnectionFactory.connectNearby(
+                    signaling: signaling, peerId: peerId, role: role, config: servers,
+                    mode: .text)
+            },
             makeConnection: { code, role, servers in
                 try await RealtimeConnectionFactory.make(
                     code: code,

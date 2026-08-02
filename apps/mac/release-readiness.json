@@ -29,7 +29,7 @@
       "id": "lan-nearby-devices",
       "required": true,
       "implemented": false,
-      "evidence": "Kit supports an empty-code LAN room, but the macOS app exposes pairing codes only"
+      "evidence": "Outgoing only. NearbyPane + LanDiscoveryModel join the code-less room (STUN-only /api/ice, no mint, no auth, works signed out) and send files or text to a device the user picks by peer id; LanDiscoveryTests/NearbyTransferTests cover self-exclusion, no auto-select, duplicate names, stale selection and TURN exclusion. Still blocked: the app cannot RECEIVE from a nearby device — no passive listener for an unsolicited inbound offer and no responder session lifecycle/UI for one (the advanced-verification gate would apply only when that preference is on), the same missing machinery as native-receive-residency, so the far side must be a peer that listens — relayium.com today"
     },
     {
       "id": "native-receive-residency",

@@ -22,25 +22,11 @@ struct DirectPane: View {
                 ProgressView("Creating a code…").controlSize(.small)
             case let .showingCode(code, expiresAt):
                 showing(code: code, expiresAt: expiresAt)
-            case .joining, .connecting:
-                VStack(alignment: .leading, spacing: 8) {
-                    ProgressView("Connecting…").controlSize(.small)
-                    Button("Cancel") { model.cancel() }
-                }
-            case let .verifying(sas):
-                verifying(sas)
-            case let .transferring(done, total):
-                transferring(done: done, total: total)
-            case let .completed(urls):
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Transfer complete").font(.subheadline.weight(.semibold))
-                    if !urls.isEmpty {
-                        Button("Reveal in Finder") {
-                            NSWorkspace.shared.activateFileViewerSelecting(urls)
-                        }
-                    }
-                    Button("Done") { model.cancel() }.buttonStyle(.link)
-                }
+            case .joining, .connecting, .verifying, .transferring, .completed:
+                // Shared with the nearby pane: everything past "a peer has been
+                // reached" is identical whether the peer came from a code or
+                // from the same-network roster.
+                RealtimeFileSessionView(model: model)
             }
 
             if case let .failed(message) = model.state {
@@ -104,43 +90,6 @@ struct DirectPane: View {
         }
     }
 
-    // MARK: - the SAS gate
-
-    /// Reached only with advanced verification ON. With it off the model goes
-    /// straight from `connecting` to `transferring`, so this view is simply
-    /// never built — the gate is a model state, not a hidden button here.
-    private func verifying(_ sas: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Check this matches").font(.subheadline.weight(.semibold))
-            Text(sas)
-                .font(.system(size: 26, weight: .semibold, design: .monospaced))
-                .textSelection(.enabled)
-            Text("The other device should be showing exactly this. If it isn't, someone may be intercepting the connection.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            // Equally weighted on purpose: a visually secondary reject is a
-            // reject nobody presses, on the one screen where pressing it is the
-            // entire point.
-            HStack {
-                Button("They match") { model.confirmSAS() }
-                    .buttonStyle(.borderedProminent)
-                Button("They don't match") { model.rejectSAS() }
-            }
-        }
-    }
-
-    private func transferring(done: Int, total: Int) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ProgressView(value: total > 0 ? Double(done) / Double(total) : 0)
-            Text(total > 0 ? "\(done * 100 / total)%" : "Starting…")
-                .font(.caption).foregroundStyle(.secondary)
-            ForEach(model.incoming, id: \.name) { f in
-                Text(safeDisplayName(f.name)).font(.caption).foregroundStyle(.secondary)
-            }
-            Button("Cancel") { model.cancel() }
-        }
-    }
-
     // MARK: - actions
 
     private func chooseFiles() {
@@ -160,27 +109,16 @@ struct DirectPane: View {
     }
 
     private func stageAndJoin(code: String) {
-        guard !picked.isEmpty, picked.count <= MAX_FILES else {
-            stagingError = "Choose between 1 and \(MAX_FILES) files."
-            model.cancel()
-            return
-        }
-        var sources: [PlaintextSource] = []
-        var metas: [FileMeta] = []
+        let staged: (sources: [PlaintextSource], metas: [FileMeta])
         do {
-            for url in picked {
-                let s = try FileURLSource(url: url)
-                sources.append(s)
-                metas.append(FileMeta(name: s.name, size: s.size))
-            }
-            _ = try validateRealtimeFiles(metas)
+            staged = try stageRealtimeFiles(picked)
         } catch {
-            stagingError = "Couldn't open every selected file. Nothing was sent. \(error.localizedDescription)"
+            stagingError = ErrorCopy.message(for: error)
             model.cancel()
             return
         }
         stagingError = nil
-        model.stageSend(sources: sources, metas: metas)
+        model.stageSend(sources: staged.sources, metas: staged.metas)
         Task { await model.join(code: code, role: .initiator) }
     }
 }

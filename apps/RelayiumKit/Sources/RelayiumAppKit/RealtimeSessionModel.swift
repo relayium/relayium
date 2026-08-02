@@ -78,6 +78,14 @@ public final class RealtimeSessionModel: ObservableObject {
     /// and waiting for the other device to appear on the code — there is no peer
     /// id to construct one with until then.
     private let makeConnection: (_ code: String, _ role: Role, _ iceServers: ICEConfig) async throws -> RealtimePeerConnection
+    /// The same-network variant: the peer id is already known (the user picked
+    /// it off a roster) and the socket already exists, so this takes an id
+    /// rather than a code. `@MainActor` because the socket it reaches for lives
+    /// on `LanDiscoveryModel`.
+    private let makeNearbyConnection: @MainActor (_ peerId: String, _ role: Role, _ iceServers: ICEConfig) async throws -> RealtimePeerConnection
+    /// How long a nearby connect waits for the chosen device to answer.
+    private let nearbyAnswerTimeout: TimeInterval
+    private let sleep: @Sendable (UInt64) async -> Void
     /// Read at the moment the SAS arrives, not captured at init: the user may
     /// flip the preference between sessions without restarting the app.
     private let requiresVerification: () -> Bool
@@ -103,14 +111,25 @@ public final class RealtimeSessionModel: ObservableObject {
     /// Operation identity: a callback from a session the user has left must not
     /// repaint a screen they have moved past.
     private var generation = 0
+    private var answerTimeout: Task<Void, Never>?
 
     public init(pairClient: PairCodeClient,
                 iceClient: ICEConfigClient,
                 requiresVerification: @escaping () -> Bool = { false },
+                nearbyAnswerTimeout: TimeInterval = 30,
+                sleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
+                    try? await Task.sleep(nanoseconds: nanoseconds)
+                },
+                makeNearbyConnection: @escaping @MainActor (String, Role, ICEConfig) async throws -> RealtimePeerConnection = { _, _, _ in
+                    throw NearbyError.notScanning
+                },
                 makeConnection: @escaping (String, Role, ICEConfig) async throws -> RealtimePeerConnection) {
         self.pairClient = pairClient
         self.iceClient = iceClient
         self.requiresVerification = requiresVerification
+        self.nearbyAnswerTimeout = nearbyAnswerTimeout
+        self.sleep = sleep
+        self.makeNearbyConnection = makeNearbyConnection
         self.makeConnection = makeConnection
     }
 
@@ -179,6 +198,63 @@ public final class RealtimeSessionModel: ObservableObject {
         }
     }
 
+    /// Same-network send: the peer id came from a roster entry the user picked,
+    /// not from a code anybody typed.
+    ///
+    /// Nothing here mints, and nothing here needs a bearer token: the room is
+    /// keyed by the public IP the server observes, and `/api/ice` without a code
+    /// answers STUN-only to anyone. That is precisely why this works signed out,
+    /// and why `code: ""` below is load-bearing rather than a placeholder.
+    public func connectNearby(peerId: String, role: Role = .initiator) async {
+        generation += 1
+        let g = generation
+        state = .connecting
+        do {
+            let servers = try await iceClient.fetch(code: "")
+            guard g == generation else { return }
+            let c = try await makeNearbyConnection(peerId, role, servers)
+            guard g == generation else { c.close(); return }
+            wire(c, generation: g)
+            connection = c
+            c.start()
+            armAnswerTimeout(generation: g)
+        } catch {
+            guard g == generation else { return }
+            state = .failed(ErrorCopy.message(for: error))
+        }
+    }
+
+    /// Nothing else bounds a nearby connect. The code path spends its wait
+    /// inside `firstPeer`, which times out; here the peer is already known, so
+    /// a device that is not listening for incoming offers — or whose user never
+    /// answers — leaves the pane on "Connecting…" for as long as the app runs.
+    private func armAnswerTimeout(generation g: Int) {
+        cancelAnswerTimeout()
+        let sleep = self.sleep
+        let nanoseconds = UInt64(max(0, nearbyAnswerTimeout) * 1_000_000_000)
+        answerTimeout = Task { [weak self] in
+            await sleep(nanoseconds)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.apply(g) { m in
+                    // Anything that got as far as a SAS or a manifest has moved
+                    // out of `.connecting`; only a silent peer is still here.
+                    guard case .connecting = m.state else { return }
+                    m.teardown()
+                    m.state = .failed(ErrorCopy.message(for: NearbyError.noAnswer))
+                }
+            }
+        }
+    }
+
+    /// One place, so "the connect is over" and "the timer is gone" cannot drift
+    /// apart. Called the moment the state leaves `.connecting`, and again by
+    /// `teardown`.
+    private func cancelAnswerTimeout() {
+        answerTimeout?.cancel()
+        answerTimeout = nil
+    }
+
     private func isShowing(_ code: String) -> Bool {
         if case let .showingCode(shown, _) = state { return shown == code }
         return false
@@ -211,6 +287,12 @@ public final class RealtimeSessionModel: ObservableObject {
     private func advanceWhenReady() {
         guard connectionOpened, !sasCode.isEmpty else { return }
         guard case .connecting = state else { return }
+        // The device answered. Drop the give-up timer here rather than letting
+        // it wake up half a minute later and find a state guard: a live SAS
+        // gate that a user is reading, or a running transfer, must not have a
+        // pending task whose only defence is that it checks `state` — the next
+        // person to touch either of them has no reason to know it exists.
+        cancelAnswerTimeout()
         if requiresVerification() {
             sasConfirmed = false
             state = .verifying(sas: sasCode)
@@ -413,6 +495,7 @@ public final class RealtimeSessionModel: ObservableObject {
 
     private func teardown() {
         generation += 1
+        cancelAnswerTimeout()
         connection?.close()
         connection = nil
         writer = nil

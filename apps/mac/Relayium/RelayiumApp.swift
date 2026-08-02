@@ -75,18 +75,26 @@ struct RelayiumApp: App {
     // toggles it, so a change applies to the next session of either kind
     // without a relaunch.
     @StateObject private var verification: VerificationPreference
+    // One discovery model for the whole app: it owns a single room socket, and
+    // both realtime models build their nearby connections on that same socket.
+    @StateObject private var lanDiscovery: LanDiscoveryModel
     @StateObject private var realtimeModel: RealtimeSessionModel
     @StateObject private var realtimeTextModel: RealtimeTextSessionModel
 
     @MainActor
     init() {
-        // The models need the preference at construction (they read it through
-        // a closure), and a @StateObject default value cannot reference another
-        // property — so both are built here against one shared instance.
+        // The models need the preference and the discovery model at
+        // construction (they read both through closures), and a @StateObject
+        // default value cannot reference another property — so all of them are
+        // built here against one shared instance of each.
         let prefs = VerificationPreference()
+        let nearby = AppEnvironment.makeLanDiscoveryModel()
         _verification = StateObject(wrappedValue: prefs)
-        _realtimeModel = StateObject(wrappedValue: AppEnvironment.makeRealtimeModel(verification: prefs))
-        _realtimeTextModel = StateObject(wrappedValue: AppEnvironment.makeRealtimeTextModel(verification: prefs))
+        _lanDiscovery = StateObject(wrappedValue: nearby)
+        _realtimeModel = StateObject(
+            wrappedValue: AppEnvironment.makeRealtimeModel(verification: prefs, nearby: nearby))
+        _realtimeTextModel = StateObject(
+            wrappedValue: AppEnvironment.makeRealtimeTextModel(verification: prefs, nearby: nearby))
     }
 
     var body: some Scene {
@@ -102,6 +110,7 @@ struct RelayiumApp: App {
                 .environmentObject(realtimeModel)
                 .environmentObject(realtimeTextModel)
                 .environmentObject(verification)
+                .environmentObject(lanDiscovery)
                 .task { await session.restore() }
                 .task {
                     // Wired here rather than at init: the delegate is created by
