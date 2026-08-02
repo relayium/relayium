@@ -230,6 +230,11 @@ const en: Messages = {
     warn: (pct) => `You've used ${pct}% of this month's quota`,
     upgrade: "Upgrade",
   },
+  appUpdate: {
+    ready: "A new version of Relayium is ready.",
+    refresh: "Refresh now",
+    busy: "Finish your current work or download and send any queued files first — refreshing now would interrupt them.",
+  },
   me: {
     title: "Personal center",
     back: "← Back to home",

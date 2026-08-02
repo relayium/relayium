@@ -279,6 +279,16 @@ export interface Messages {
     warn: (pct: number) => string; // 用量达 80% 时的提醒
     upgrade: string; // 提醒条上的按钮文案
   };
+  // 发版后仍开着的旧标签页会一直跑旧代码，全站更新提示条就是收口（见
+  // app-update.svelte.ts）。ready 会进 aria-live 区域，三句都不含任何受保护内容。
+  appUpdate: {
+    ready: string; // 已装好一份更新的构建
+    refresh: string; // 按钮文案；永远只由用户点，绝不自动刷新
+    // 按钮停用时说明为什么、以及要先做什么。刷新会打断的东西不止「文件传输」：还有
+    // 在途的流式下载（新版本正因此被压着没放行）、活着的链接、开着的消息会话、以及
+    // 只存在于内存里的待发队列。所以这句必须写得够宽，不能只提传输。
+    busy: string;
+  };
   me: {
     title: string;
     back: string; // link back to the home page

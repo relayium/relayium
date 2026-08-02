@@ -411,6 +411,12 @@ async function openSwStream(name: string, cd: string): Promise<FileSink> {
       s?.ok();
     } else if (t === "stream-serving") {
       clearTimeout(serveTimer); // iframe 的请求到了 SW，这条流真的在供
+    } else if (t === "stream-refused") {
+      // SW 已经预约退休（新版本马上顶上，见 sw-template 的 retireIfIdle），它不会再
+      // 收新流。**不是**用户取消，所以不能报 SinkCancelledError：那会让下载页把一次
+      // 换版说成用户自己的操作。归到可重试的传输问题，pickSaveTarget 收到它会立刻
+      // 回落到内存分支，这次下载照常完成。
+      fail(new SinkTransportError("service worker is being replaced; not accepting new streams"));
     } else if (t === "cancel") {
       fail(new SinkCancelledError("download cancelled in the browser"));
     }
@@ -532,6 +538,16 @@ async function attemptPicker<T>(what: string, run: () => Promise<T>): Promise<T 
  */
 function fallbackIsSafe(files: FileMetaLite[], opts: SaveOptions): boolean {
   if (files.length === 1 && opts.swStream && swStreamReady()) return true;
+  return memoryFallbackIsSafe(files);
+}
+
+/**
+ * 只剩内存分支（Blob / ZIP）时，这一批扛不扛得住。
+ *
+ * 和 warnsAboutMemory 用同一个阈值、同一个估算，边界也一样（`<=` 安全）——不然会
+ * 出现「接收前提示说没问题、真跑起来却拒绝」这种自相矛盾。
+ */
+function memoryFallbackIsSafe(files: FileMetaLite[]): boolean {
   const total = files.reduce((n, f) => n + f.size, 0);
   return memoryPeakBytes(files, total) <= LARGE_DOWNLOAD_WARN_BYTES;
 }
@@ -699,8 +715,21 @@ export async function pickSaveTarget(files: FileMetaLite[], opts: SaveOptions = 
         },
       };
     } catch {
-      // 握手没成（SW 刚被换掉/回收）。别把下载弄死，落到下面的内存分支——
-      // 代价只是本该无提示的一次下载吃了内存。
+      // 握手没成：SW 刚被换掉/回收，或者它已经交接过、正当场拒收新流（见
+      // sw-template 的 retireIfIdle / stream-refused）。
+      //
+      // 回落到内存分支**只有这一批本来就够小时才诚实**。canStreamToDisk 早就对下载页
+      // 说过「这次是流式落盘」，于是 memWarn 那道提示根本没出现过；这时候再默默攒一个
+      // 256 MiB 以上的 Blob，用户等来的是一个被系统回收的标签页——而且是在一条他被
+      // 明确告知会流式落盘的路径上。宁可如实失败并给他重试入口（下载页把这类归到
+      // swFail：字节一个都没错，只是没交到磁盘）。
+      //
+      // 这条规矩和桌面上选择器坏掉那条是同一条，见上面的 pickerBroke / fallbackIsSafe。
+      if (!memoryFallbackIsSafe(files)) {
+        throw new SaveUnavailableError(
+          "the service worker refused to stream this download and it is too large to hold in memory",
+        );
+      }
     }
   }
 

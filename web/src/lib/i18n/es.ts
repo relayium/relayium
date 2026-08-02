@@ -230,6 +230,11 @@ const es: Messages = {
     warn: (pct) => `Has usado el ${pct} % de tu cuota mensual`,
     upgrade: "Mejorar plan",
   },
+  appUpdate: {
+    ready: "Hay una nueva versión de Relayium lista.",
+    refresh: "Actualizar ahora",
+    busy: "Termina primero lo que estás haciendo o tu descarga y envía los archivos en cola: actualizar ahora los interrumpiría.",
+  },
   me: {
     title: "Centro personal",
     back: "← Volver al inicio",

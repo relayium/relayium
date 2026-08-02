@@ -47,6 +47,7 @@ vi.mock("./filesink", async (orig) => {
 import DownloadPage from "./DownloadPage.svelte";
 import { loadLang, messages } from "./i18n.svelte";
 import { LARGE_DOWNLOAD_WARN_BYTES, SinkTransportError, probeStreamSupport, swStreamReady } from "./filesink";
+import { refreshHolds, resetAppUpdate } from "./app-update.svelte";
 
 let target: HTMLDivElement;
 let app: unknown;
@@ -116,6 +117,7 @@ afterEach(() => {
   target?.remove();
   restorePickers();
   vi.unstubAllGlobals();
+  resetAppUpdate(); // 别把一个没释放的闸门漏给别的用例
 });
 
 const BIG = LARGE_DOWNLOAD_WARN_BYTES + 1;
@@ -186,7 +188,7 @@ describe("DownloadPage 大文件内存提示", () => {
 
 /** jsdom 没有 service worker。这是 filesink.test.ts 那套替身的下载页版本：
  *  除了握手，还替 SW 自动回 ack / closed，好让整条下载真的跑完。 */
-function stubServiceWorker() {
+function stubServiceWorker(o: { refuses?: boolean } = {}) {
   const listeners: Record<string, ((e: unknown) => void)[]> = {};
   const ports: MessagePort[] = [];
   const sw = {
@@ -195,6 +197,12 @@ function stubServiceWorker() {
         const msg = m as Record<string, unknown>;
         const port = transfer?.[0] as MessagePort | undefined;
         if (msg.type === "stream-probe" && port) port.postMessage({ type: "stream-probe-ok" });
+        if (msg.type === "stream-open" && port && o.refuses) {
+          // 已交接的 SW 当场拒收新流（sw-template 的 retireIfIdle 置闩之后）。
+          ports.push(port);
+          port.postMessage({ type: "stream-refused", reason: "updating" });
+          return;
+        }
         if (msg.type === "stream-open" && port) {
           ports.push(port);
           port.onmessage = (e) => {
@@ -243,6 +251,41 @@ describe("DownloadPage × service worker 流式落盘", () => {
       expect(target.querySelector(".memwarn"), "SW 能流式落盘就不该再吓唬用户").toBeNull();
       expect(s.opened.length, "必须真的向 SW 登记了一条流").toBe(1);
       expect(downloadBlob).toHaveBeenCalledTimes(1);
+    } finally { s.restore(); }
+  });
+
+  // SW 已经把 skip-waiting 交接出去、正在拒收新流（sw-template 的 retireIfIdle）。
+  // 这一批的内存提示**从来没出现过**，因为 canStreamToDisk 说了这次是流式落盘——
+  // 所以绝不能默默改成攒一个 256 MiB 以上的 Blob，那是一次标签页被系统回收。
+  it("SW 拒收新流 + 大文件：如实报错并给重试，不静默改成内存下载", async () => {
+    const s = stubServiceWorker({ refuses: true });
+    probeStreamSupport();
+    await until(swStreamReady);
+    try {
+      await mountPage({ canStream: false, files: [{ name: "big.mp4", size: BIG }] });
+      await clickDownload();
+      await until(() => !!target.querySelector(".error"));
+
+      const err = target.querySelector(".error");
+      expect(err, "拒收之后必须说出来").not.toBeNull();
+      expect(err!.textContent!.trim()).toBe(messages.en.download.swFail);
+      expect(err!.textContent!.trim()).not.toBe(messages.en.download.decryptFail);
+      expect(target.querySelector(".btn-primary"), "换版是暂时的，重试有意义").not.toBeNull();
+      expect(downloadBlob, "一个字节都不该取").not.toHaveBeenCalled();
+    } finally { s.restore(); }
+  });
+
+  it("SW 拒收新流 + 小文件：安静回落到内存下载，照常完成", async () => {
+    const s = stubServiceWorker({ refuses: true });
+    probeStreamSupport();
+    await until(swStreamReady);
+    try {
+      await mountPage({ canStream: false, files: [{ name: "small.txt", size: SMALL }] });
+      await clickDownload();
+      await until(() => downloadBlob.mock.calls.length > 0);
+
+      expect(downloadBlob).toHaveBeenCalledTimes(1);
+      expect(target.querySelector(".error"), "小文件回落不是故障").toBeNull();
     } finally { s.restore(); }
   });
 
@@ -333,5 +376,78 @@ describe("DownloadPage 收尾与错误归因", () => {
 
     expect(target.querySelector(".error")!.textContent!.trim()).toBe(messages.en.download.decryptFail);
     expect(target.querySelector(".btn-primary"), "解密失败重试没有意义").toBeNull();
+  });
+});
+
+// 刷新会把这次下载整个丢掉、从零重来。这条路完全在 workspace 之外
+// （warnsOnLeave 看不见它），所以全站更新提示条只能靠这个显式闸门知道现在不能刷。
+describe("DownloadPage × 更新刷新闸门", () => {
+  it("从选保存位置到收尾全程占住闸门，完成后释放", async () => {
+    let finish!: () => void;
+    downloadBlob.mockImplementation(() => new Promise<void>((r) => (finish = r)));
+    await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+    expect(refreshHolds(), "还没点下载就不该占").toBe(0);
+
+    await clickDownload();
+    expect(refreshHolds(), "取字节期间必须占住").toBe(1);
+
+    finish();
+    await until(() => refreshHolds() === 0);
+    expect(refreshHolds()).toBe(0);
+  });
+
+  it("下载失败也释放闸门", async () => {
+    downloadBlob.mockRejectedValue(new SinkTransportError("boom"));
+    await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+    await clickDownload();
+
+    expect(target.querySelector(".error"), "确实是失败那条路").not.toBeNull();
+    expect(refreshHolds(), "错误路径漏放会让按钮永远是灰的").toBe(0);
+  });
+
+  it("用户取消保存位置也释放闸门", async () => {
+    const w = window as unknown as Record<string, unknown>;
+    const had = "showSaveFilePicker" in w;
+    w.showSaveFilePicker = async () => { throw Object.assign(new Error("abort"), { name: "AbortError" }); };
+    try {
+      await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+      await clickDownload();
+      expect(downloadBlob, "取消了就没取字节").not.toHaveBeenCalled();
+      expect(refreshHolds()).toBe(0);
+    } finally { if (!had) delete w.showSaveFilePicker; }
+  });
+
+  // 只显示内存提示的那一次一个字节都还没取，刷新毫无代价——占住闸门是错的。
+  it("只显示内存提示时不占闸门", async () => {
+    await mountPage({ canStream: false, files: [{ name: "big.mp4", size: BIG }] });
+    await clickDownload();
+
+    expect(target.querySelector(".memwarn")).not.toBeNull();
+    expect(downloadBlob).not.toHaveBeenCalled();
+    expect(refreshHolds()).toBe(0);
+  });
+});
+
+// 拿写入端也会失败（blobSink 构造、ZIP writer、目录句柄）。这一步以前在 try 之外，
+// 异常直接从 runDownload 逃走：页面永远停在进度条上一句话都不说，刷新闸门也一直被
+// 占着。现在归成保存故障，可重试。
+describe("DownloadPage 拿写入端失败", () => {
+  it("如实报成可重试的保存故障，并释放刷新闸门，不再挂在进度条上", async () => {
+    injectedTarget = {
+      label: "test",
+      file: async () => { throw new Error("sink construction failed"); },
+    };
+    await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+    await clickDownload();
+    await until(() => !!target.querySelector(".error"));
+
+    const err = target.querySelector(".error");
+    expect(err, "不能只留一个不动的进度条").not.toBeNull();
+    expect(err!.textContent!.trim()).toBe(messages.en.download.swFail);
+    expect(err!.textContent!.trim()).not.toBe(messages.en.download.decryptFail);
+    expect(target.querySelector(".btn-primary"), "保存失败可重试").not.toBeNull();
+    expect(target.querySelector(".bar"), "不该停在 downloading").toBeNull();
+    expect(refreshHolds(), "漏放会让刷新按钮永远是灰的").toBe(0);
+    expect(downloadBlob, "根本没走到取字节").not.toHaveBeenCalled();
   });
 });

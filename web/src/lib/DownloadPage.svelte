@@ -4,6 +4,7 @@
   import { decryptManifest, type StoredManifest } from "./store-crypto";
   import { pickSaveTarget, canStreamToDisk, LARGE_DOWNLOAD_WARN_BYTES, SaveCancelledError, SinkCancelledError, SinkTransportError, type SaveOptions, type SaveTarget, type FileSink } from "./filesink";
   import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages } from "./i18n.svelte";
+  import { holdRefresh } from "./app-update.svelte";
   import ThemeSelect from "./ThemeSelect.svelte";
   import { formatRemaining, formatSize } from "./format";
 
@@ -95,6 +96,35 @@
       return; // 一个字节都还没取
     }
     memWarn = false;
+    // 从这里到这个函数结束是「刷新会毁掉东西」的那一段：保存位置一旦选好、字节一旦
+    // 开始落，刷新就等于把这次下载整个丢掉从零再来。全站更新提示条据此禁用刷新按钮
+    // （见 app-update 的 holdRefresh）——这条路完全在 workspace 之外，warnsOnLeave
+    // 看不见它。**只显示内存提示的那次早退不占闸门**：那时候一个字节都还没取。
+    const releaseRefresh = holdRefresh();
+    try {
+      await runDownload();
+    } finally {
+      releaseRefresh();
+    }
+  }
+
+  /**
+   * 拿一个文件的写入端。失败（blobSink 构造、ZIP writer、目录句柄）归成
+   * SinkTransportError：字节一个都没错，只是没地方落，和 SW 落盘故障是同一类，
+   * 下面的归因会把它说成可重试的保存问题，而不是「密钥错误或文件损坏」。
+   */
+  async function openSink(t: SaveTarget, m: StoredManifest, i: number): Promise<FileSink> {
+    try {
+      return await t.file(m.files[i].name, m.files[i].size);
+    } catch (e) {
+      throw new SinkTransportError(`could not open a save sink: ${(e as Error)?.message ?? "unknown"}`);
+    }
+  }
+
+  /** startDownload 的破坏性那一段。单独拆出来只为让 holdRefresh 的释放落在一个
+   *  finally 上，而不用给下面每一条 return / catch 各补一次。 */
+  async function runDownload() {
+    if (!manifest || !key) return;
     let target: SaveTarget;
     try {
       target = await pickSaveTarget(manifest.files.map((f) => ({ name: f.name, size: f.size })), SAVE_OPTS);
@@ -112,8 +142,13 @@
     // Plaintext is the concatenation of all files; split by manifest sizes.
     let fileIdx = 0;
     let intoFile = 0;
-    let sink: FileSink | null = manifest.files.length ? await target.file(manifest.files[0].name, manifest.files[0].size) : null;
+    let sink: FileSink | null = null;
     try {
+      // 第一个 sink 以前在 try **之外**：blobSink / ZIP / 目录句柄任何一个构造失败，
+      // 异常都直接从这个函数逃出去，页面永远停在进度条上，一句话都不说（而且更新
+      // 提示条的刷新闸门也跟着一直被占着）。openSink 把它归成保存故障，交给下面
+      // 已有的归因：可重试，不是「密钥错误或文件损坏」。
+      sink = manifest.files.length ? await openSink(target, manifest, 0) : null;
       await downloadBlob(
         id,
         key,
@@ -127,7 +162,7 @@
               if (sink) await sink.close();
               fileIdx++;
               intoFile = 0;
-              sink = fileIdx < manifest!.files.length ? await target.file(manifest!.files[fileIdx].name, manifest!.files[fileIdx].size) : null;
+              sink = fileIdx < manifest!.files.length ? await openSink(target, manifest!, fileIdx) : null;
             }
           }
         },

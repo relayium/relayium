@@ -230,6 +230,11 @@ const zh: Messages = {
     warn: (pct) => `本月配额已用 ${pct}%`,
     upgrade: "升级套餐",
   },
+  appUpdate: {
+    ready: "Relayium 有新版本了。",
+    refresh: "立即刷新",
+    busy: "请先完成手上的操作或下载，并发完排队中的文件——现在刷新会把它们全部中断。",
+  },
   me: {
     title: "个人中心",
     back: "← 返回首页",

@@ -230,6 +230,11 @@ const fr: Messages = {
     warn: (pct) => `Vous avez utilisé ${pct} % de votre quota mensuel`,
     upgrade: "Passer à l'offre supérieure",
   },
+  appUpdate: {
+    ready: "Une nouvelle version de Relayium est prête.",
+    refresh: "Actualiser maintenant",
+    busy: "Terminez d'abord ce que vous faites ou votre téléchargement et envoyez les fichiers en attente : actualiser maintenant les interromprait.",
+  },
   me: {
     title: "Espace personnel",
     back: "← Retour à l'accueil",

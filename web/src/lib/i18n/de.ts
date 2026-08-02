@@ -230,6 +230,11 @@ const de: Messages = {
     warn: (pct) => `Du hast ${pct} % deines Monatskontingents verbraucht`,
     upgrade: "Upgrade",
   },
+  appUpdate: {
+    ready: "Eine neue Version von Relayium ist bereit.",
+    refresh: "Jetzt neu laden",
+    busy: "Beende zuerst deine laufende Arbeit oder deinen Download und sende wartende Dateien — ein Neuladen würde sie unterbrechen.",
+  },
   me: {
     title: "Mein Bereich",
     back: "← Zurück zur Startseite",

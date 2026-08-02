@@ -69,7 +69,7 @@ function stubPickers(o: { save?: boolean; dir?: boolean }): () => void {
 
 /** jsdom 没有 service worker，只能整个假造。照 share-target.test.ts 的 stubCaches
  *  路子：一个能被测试当作「SW 那一侧」驱动的最小替身。 */
-function stubServiceWorker(o: { controller?: boolean; supports?: boolean } = {}) {
+function stubServiceWorker(o: { controller?: boolean; supports?: boolean; refuses?: boolean } = {}) {
   const listeners: Record<string, ((e: unknown) => void)[]> = {};
   type Opened = { port: MessagePort; msg: Record<string, unknown> };
   const opened: Opened[] = [];
@@ -92,7 +92,9 @@ function stubServiceWorker(o: { controller?: boolean; supports?: boolean } = {})
         }
         if (msg.type === "stream-open" && port) {
           opened.push({ port, msg });
-          port.postMessage({ type: "stream-ready" }); // 真 SW 在 openStream 末尾发的
+          // 已预约退休的 SW 当场拒收新流（sw-template 的 retireIfIdle 之后），
+          // 否则就是正常握手 —— 真 SW 在 openStream 末尾发 stream-ready。
+          port.postMessage(o.refuses ? { type: "stream-refused", reason: "updating" } : { type: "stream-ready" });
         }
       },
     };
@@ -122,7 +124,7 @@ async function until(cond: () => boolean): Promise<void> {
 }
 
 /** 装好 SW 替身并跑完探测握手。 */
-async function readySW(o: { controller?: boolean; supports?: boolean } = {}) {
+async function readySW(o: { controller?: boolean; supports?: boolean; refuses?: boolean } = {}) {
   const s = stubServiceWorker(o);
   probeStreamSupport();
   await until(swStreamReady);
@@ -246,6 +248,63 @@ describe("canStreamToDisk", () => {
       const target = await pickSaveTarget([{ name: "a.bin", size: 1 }], SW_ON);
       expect(target.label).toBe("已选择目标文件夹");
     } finally { s.restore(); restore(); }
+  });
+
+  // SW 已经预约退休（新版本马上顶上，见 sw-template 的 retireIfIdle）时会当场拒收
+  // 新流。这一拒必须是**立刻**的：握手超时是 5 秒，靠超时兜就等于让用户对着一个不
+  // 动的按钮干等 5 秒；而且这次下载本身不能丢——回落到内存分支照常完成。
+  it("SW 预约退休后拒收新流：立刻回落到内存分支，不等握手超时", async () => {
+    const restore = stubPickers({}); // 没有 File System Access API，SW 分支是首选
+    const s = await readySW({ refuses: true });
+    try {
+      expect(canStreamToDisk(1, SW_ON)).toBe(true); // 探测仍然说「能流式」
+      const target = await pickSaveTarget([{ name: "a.bin", size: 1 }], SW_ON);
+      expect(target.label).toBe("将逐个下载到默认下载目录"); // 内存分支接住了
+      expect(s.opened.length, "确实尝试过开流，是被 SW 拒的").toBe(1);
+    } finally { s.restore(); restore(); }
+  }, 2_000); // 超时短于 STREAM_OPEN_TIMEOUT_MS(5s)：靠握手超时兜住就会红
+
+  // 大文件走的是同一条拒绝路径，但**不能**悄悄回落。canStreamToDisk 已经对下载页说
+  // 过「这次是流式落盘」，于是那道 256 MiB 的内存提示根本没出现过；这时候再默默攒一个
+  // 更大的 Blob，用户等来的是一个被系统回收的标签页——而且是在一条他被明确告知会流式
+  // 落盘的路径上。桌面上选择器坏掉走的是同一条规矩（fallbackIsSafe）。
+  //
+  // 边界必须和 warnsAboutMemory 逐字一致（`<=` 安全），否则会出现「接收前说没问题、
+  // 真跑起来却拒绝」这种自相矛盾。
+  describe("SW 拒收后的内存回落边界", () => {
+    async function pickWithRefusingSW(size: number) {
+      const restore = stubPickers({});
+      const s = await readySW({ refuses: true });
+      try {
+        return await pickSaveTarget([{ name: "big.bin", size }], SW_ON);
+      } finally { s.restore(); restore(); }
+    }
+
+    it("阈值以下：照常回落到内存分支", async () => {
+      const target = await pickWithRefusingSW(LARGE_DOWNLOAD_WARN_BYTES - 1);
+      expect(target.label).toBe("将逐个下载到默认下载目录");
+    }, 2_000);
+
+    it("正好等于阈值：仍然回落（和 warnsAboutMemory 的 `>` 同一个边界）", async () => {
+      const target = await pickWithRefusingSW(LARGE_DOWNLOAD_WARN_BYTES);
+      expect(target.label).toBe("将逐个下载到默认下载目录");
+      expect(warnsAboutMemory(flat([LARGE_DOWNLOAD_WARN_BYTES]), LARGE_DOWNLOAD_WARN_BYTES)).toBe(false);
+    }, 2_000);
+
+    it("超过阈值：如实抛 SaveUnavailableError，一个字节都不往内存里塞", async () => {
+      await expect(pickWithRefusingSW(LARGE_DOWNLOAD_WARN_BYTES + 1)).rejects.toBeInstanceOf(
+        SaveUnavailableError,
+      );
+    }, 2_000);
+
+    // 下载页据此分流：取消 = 静默回到按钮那一屏，其余 = 报错 + 重试入口。
+    // 这一条绝不能被当成取消，那样用户会看到「按了下载什么都没发生」。
+    it("归到可重试的保存故障，不是用户取消", async () => {
+      const err = await pickWithRefusingSW(LARGE_DOWNLOAD_WARN_BYTES + 1).catch((e) => e);
+      expect(err).toBeInstanceOf(SaveUnavailableError);
+      expect(err).not.toBeInstanceOf(SaveCancelledError);
+      expect(saveFailureStatus(err)).toBe("saveFail");
+    }, 2_000);
   });
 });
 

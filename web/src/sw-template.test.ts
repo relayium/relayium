@@ -8,7 +8,7 @@
 // 这比"读源码文本比对分支顺序"强得多：那种断言有过一次实测到的假阴性
 //（`src.indexOf("STREAM_ROUTE)")` 会先撞上 openStream 里的同名匹配，把流式分支
 // 挪到 navigate 之后仍然全绿）。下面的用例改成真发一个 mode:"navigate" 的请求。
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { STREAM_ROUTE, streamURL, contentDisposition } from "./lib/sw-stream";
@@ -31,11 +31,26 @@ function loadSW() {
 
   const listeners: Record<string, ((e: unknown) => void)[]> = {};
   const skipWaitingCalls: number[] = [];
+  // self.skipWaiting() 返回 promise，处理器要用 event.waitUntil 包住它——真 SW 就是
+  // 这样，桩返回 undefined 的话那一步永远测不到。
+  let skipWaitingResolve: () => void = () => {};
+  const skipWaitingDone = new Promise<void>((r) => (skipWaitingResolve = r));
+  // 换版协调（retireIfIdle）要读 self.registration.waiting 并给它发 skip-waiting，
+  // 所以 registration 必须是真的可驱动的，不能是空实现。
+  type PortLike = { postMessage(m: unknown): void; close?: () => void };
+  const waitingPosts: { msg: { type?: string }; port: PortLike | null }[] = [];
+  const registration: {
+    waiting: { postMessage(m: { type?: string }, transfer?: PortLike[]): void } | null;
+  } = { waiting: null };
   const swSelf = {
     location: { origin: ORIGIN },
     addEventListener: (t: string, f: (e: unknown) => void) => void (listeners[t] ||= []).push(f),
-    skipWaiting: () => void skipWaitingCalls.push(1),
+    skipWaiting: () => {
+      skipWaitingCalls.push(1);
+      return skipWaitingDone;
+    },
     clients: { claim: async () => {} },
+    registration,
   };
   // caches / fetch 大多只是为了让脚本能加载；缓存写入这一项是真的被断言的，
   // 所以 put 记账而不是空实现。
@@ -54,6 +69,7 @@ function loadSW() {
     delete: async () => true,
     match: async () => undefined,
   };
+  const waitUntils: Promise<unknown>[] = [];
   const fetchStub = async () => new Response("from network");
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   new Function("self", "caches", "fetch", src)(swSelf, cachesStub, fetchStub);
@@ -62,6 +78,31 @@ function loadSW() {
     put,
     shareEntries,
     skipWaitingCalls,
+    /** 这个 SW 递给等待中版本的消息，连同它一起转移过去的回执端口。 */
+    waitingPosts,
+    /** 让 self.skipWaiting() 返回的那个 promise 兑现（真 SW 里就是激活落地）。 */
+    finishSkipWaiting: skipWaitingResolve,
+    /**
+     * 装上/摘掉一个 waiting 版本。
+     *   present —— 本版或更新的构建：收到 skip-waiting 会通过转移来的端口回执
+     *   silent  —— 回滚部署留下的更旧构建：认识 skip-waiting，但不回执
+     *   absent  —— 没有等待中的版本
+     *   throws  —— 递交时抛（worker 已经没了）
+     */
+    setWaiting(mode: "present" | "silent" | "absent" | "throws" = "present") {
+      if (mode === "absent") { registration.waiting = null; return; }
+      if (mode === "throws") {
+        registration.waiting = { postMessage() { throw new Error("worker gone"); } };
+        return;
+      }
+      registration.waiting = {
+        postMessage: (m, transfer) => {
+          const port = transfer?.[0] ?? null;
+          waitingPosts.push({ msg: m, port });
+          if (mode === "present" && port) port.postMessage({ type: "skip-waiting-ack" });
+        },
+      };
+    },
     /** 触发 activate（并 await 它 waitUntil 的那个 promise）。 */
     async activate() {
       let done: Promise<unknown> = Promise.resolve();
@@ -84,9 +125,15 @@ function loadSW() {
       for (const f of listeners.fetch || []) f(e);
       return answer;
     },
-    /** 发一个 message 事件（带可选的 MessagePort）。 */
-    message(data: unknown, ports: MessagePort[] = []) {
-      for (const f of listeners.message || []) f({ data, ports });
+    /** 这个 SW 交给 message 事件 waitUntil 的那些 promise。真 ExtendableMessageEvent
+     *  有 waitUntil，没有它浏览器可以在处理器返回后立刻把 SW 掐掉。 */
+    waitUntils,
+    /** 发一个 message 事件（带可选的 MessagePort）。origin 省略时是 undefined，
+     *  和多数实现给同源客户端的行为一致（有的给空串，有的给真实 origin）。 */
+    message(data: unknown, ports: unknown[] = [], origin?: string) {
+      for (const f of listeners.message || []) {
+        f({ data, ports, origin, waitUntil: (p: Promise<unknown>) => void waitUntils.push(p) });
+      }
     },
   };
 }
@@ -309,6 +356,30 @@ describe("sw-template message 分派", () => {
     expect(seen[0].type).toBe("stream-probe-ok");
   });
 
+  // 这条通道能触发换版，不该只靠「反正只有同源页面发得进来」这个默认。
+  // origin 为空/缺省时放行（部分实现对同源客户端就是空串）。
+  it("非同源的 message 一律不理（retire-if-idle / skip-waiting 也不例外）", async () => {
+    const sw = loadSW();
+    sw.setWaiting();
+    const ch = new MessageChannel();
+    const seen: unknown[] = [];
+    ch.port1.onmessage = (e) => seen.push(e.data);
+
+    sw.message({ type: "retire-if-idle" }, [ch.port2], "https://evil.example");
+    sw.message({ type: "skip-waiting" }, [], "https://evil.example");
+    await tick();
+
+    expect(seen).toEqual([]);
+    expect(handedOver(sw)).toEqual([]);
+    expect(sw.skipWaitingCalls.length).toBe(0);
+  });
+
+  it("显式同源的 message 正常处理", async () => {
+    const sw = loadSW();
+    sw.message({ type: "skip-waiting" }, [], ORIGIN);
+    expect(sw.skipWaitingCalls.length).toBe(1);
+  });
+
   it("登记路径必须落在 STREAM_ROUTE 下，否则不登记", async () => {
     const sw = loadSW();
     const ch = new MessageChannel();
@@ -355,6 +426,318 @@ describe("sw-template 换版时机", () => {
     await sw.install();
     sw.message({ type: "skip-waiting" });
     expect(sw.skipWaitingCalls.length).toBe(1);
+  });
+});
+
+/** 递给等待中版本的消息（去掉随行的端口，MessagePort 进不了 toEqual）。 */
+const handedOver = (sw: ReturnType<typeof loadSW>) => sw.waitingPosts.map((p) => p.msg);
+
+// 换版协调必须由**旧的 active SW** 自己做：只有它看得见全局 streams 表，也只有在
+// 它这一个事件任务里，「查表 → 置闩 → 递交」之间才没有别的标签页能插进来的空窗。
+describe("sw-template 退休协调（retire-if-idle）", () => {
+  /** 发一次 retire-if-idle，返回收到的回执类型。 */
+  async function retire(sw: ReturnType<typeof loadSW>, origin?: string) {
+    const ch = new MessageChannel();
+    const seen: { type: string }[] = [];
+    ch.port1.onmessage = (e) => seen.push(e.data as { type: string });
+    sw.message({ type: "retire-if-idle" }, [ch.port2], origin);
+    await until(() => seen.length > 0);
+    return seen[0]?.type;
+  }
+
+  it("空闲时预约退休并把 skip-waiting 发给等待中的版本", async () => {
+    const sw = loadSW();
+    sw.setWaiting();
+
+    expect(await retire(sw)).toBe("retire-ok");
+    expect(handedOver(sw)).toEqual([{ type: "skip-waiting" }]);
+  });
+
+  it("有流在途时拒绝退休，也绝不放行", async () => {
+    const sw = loadSW();
+    sw.setWaiting();
+    openStream(sw); // 可能是**另一个标签页**开的：本 SW 的表是唯一一份全局真相
+
+    expect(await retire(sw)).toBe("retire-busy");
+    expect(handedOver(sw)).toEqual([]);
+  });
+
+  it("流收尾之后又肯退休了", async () => {
+    const sw = loadSW();
+    sw.setWaiting();
+    const s = openStream(sw);
+    await sw.fetch({ url: s.url, mode: "navigate" })!;
+    expect(await retire(sw)).toBe("retire-busy");
+
+    s.page.postMessage({ type: "close" });
+    await until(() => s.seen.some((m) => m.type === "closed" || m.type === "cancel"));
+
+    expect(await retire(sw)).toBe("retire-ok");
+    expect(handedOver(sw)).toEqual([{ type: "skip-waiting" }]);
+  });
+
+  // 这一条就是 BLOCKER A 说的那次数据丢失：查询和放行分成两步时，别的标签页会在
+  // 中间那一瞬登记一条注定被掐死的流。预约之后 openStream 必须当场拒。
+  it("预约之后新来的 stream-open 被立刻明确拒掉，而不是开出一条注定断掉的流", async () => {
+    const sw = loadSW();
+    sw.setWaiting();
+    expect(await retire(sw)).toBe("retire-ok");
+
+    // 「另一个标签页」在放行之后才来开流。
+    const late = openStream(sw, "late.bin");
+    await until(() => late.seen.length > 0);
+
+    expect(late.seen.map((m) => m.type)).toEqual(["stream-refused"]);
+    expect(late.seen.map((m) => m.type)).not.toContain("stream-ready");
+    // 而且它确实没被登记：真去取那个路径只会拿到 404，不会拿到半条流。
+    expect((await sw.fetch({ url: late.url, mode: "navigate" })!).status).toBe(404);
+  });
+
+  it("预约之前开的流不受影响，照常供流", async () => {
+    const sw = loadSW();
+    sw.setWaiting();
+    const s = openStream(sw);
+    await until(() => s.seen.some((m) => m.type === "stream-ready"));
+    // 有流在途，所以这次退休本来就会被拒——先确认它没被预约。
+    expect(await retire(sw)).toBe("retire-busy");
+
+    const res = await sw.fetch({ url: s.url, mode: "navigate" })!;
+    expect(res.status).toBe(200);
+  });
+
+  // 没有 waiting 版本却预约，等于把这个 SW 的流式下载永久关掉，而换版一次也不会发生。
+  it("没有等待中的版本时什么都不预约", async () => {
+    const sw = loadSW();
+    sw.setWaiting("absent");
+
+    expect(await retire(sw)).toBe("retire-none");
+
+    // 预约没生效：后面的流照常开得出来。
+    const s = openStream(sw);
+    await until(() => s.seen.length > 0);
+    expect(s.seen.map((m) => m.type)).toContain("stream-ready");
+  });
+
+  it("放行时抛异常就解除预约并如实回报", async () => {
+    const sw = loadSW();
+    sw.setWaiting("throws");
+
+    expect(await retire(sw)).toBe("retire-none");
+
+    // 关键是没有留下一个「预约了却没人接班」的 SW：流式下载必须还能用。
+    const s = openStream(sw);
+    await until(() => s.seen.length > 0);
+    expect(s.seen.map((m) => m.type)).toContain("stream-ready");
+  });
+
+  // 多标签页会各发各的。重复请求是幂等的：状态已经是「预约中」，再放行一次无害，
+  // 每一个请求方都必须拿到回执，否则它会一直等到超时、误以为对面是旧 SW。
+  it("重复请求都拿到回执，放行是幂等的", async () => {
+    const sw = loadSW();
+    sw.setWaiting();
+
+    expect(await retire(sw)).toBe("retire-ok");
+    expect(await retire(sw)).toBe("retire-ok");
+
+    expect(handedOver(sw)).toEqual([{ type: "skip-waiting" }, { type: "skip-waiting" }]);
+  });
+
+  it("非同源的退休请求既不回执也不放行", async () => {
+    const sw = loadSW();
+    sw.setWaiting();
+    const ch = new MessageChannel();
+    const seen: unknown[] = [];
+    ch.port1.onmessage = (e) => seen.push(e.data);
+
+    sw.message({ type: "retire-if-idle" }, [ch.port2], "https://evil.example");
+    await tick();
+
+    expect(seen).toEqual([]);
+    expect(handedOver(sw)).toEqual([]);
+  });
+
+  // 等待中的那一份收到递交时该做的两件事。真 SW 里这段代码和上面是同一个文件——
+  // 换版之后角色互换，所以这里驱动的就是它未来会跑的那条路径。
+  it("收到 skip-waiting 的一方会回执，并用 waitUntil 包住 skipWaiting()", async () => {
+    const sw = loadSW();
+    const ch = new MessageChannel();
+    const seen: { type: string }[] = [];
+    ch.port1.onmessage = (e) => seen.push(e.data as { type: string });
+
+    sw.message({ type: "skip-waiting" }, [ch.port2]);
+
+    await until(() => seen.length > 0);
+    expect(seen.map((m) => m.type)).toEqual(["skip-waiting-ack"]);
+    expect(sw.skipWaitingCalls.length).toBe(1);
+
+    // waitUntil 拿到的必须是 skipWaiting() 那个 promise：没包住的话浏览器可以在
+    // 处理器返回后就判本 worker 空闲，把还没落地的激活一起丢掉。
+    expect(sw.waitUntils.length).toBe(1);
+    let settled = false;
+    void sw.waitUntils[0].then(() => (settled = true));
+    await tick();
+    expect(settled).toBe(false); // 激活还没落地
+
+    sw.finishSkipWaiting();
+    await tick();
+    expect(settled).toBe(true);
+  });
+
+  it("兼容路径那种不带端口的 skip-waiting 照样激活", async () => {
+    const sw = loadSW();
+    sw.message({ type: "skip-waiting" }); // 页面直接发的，没有回执端口
+    expect(sw.skipWaitingCalls.length).toBe(1);
+    expect(sw.waitUntils.length).toBe(1);
+  });
+});
+
+// BLOCKER C：retiring 是**单向闩**，本实例内没有任何计时器能把它翻回去。
+//
+// 这一组用同步投递的 MessageChannel 替身 + 假计时器，才能同时看见 SW 内部那条回执
+// 通道的开闭和计时器数量——jsdom 真的 MessagePort 在假计时器下根本不投递。
+describe("sw-template 退休闩与资源回收", () => {
+  /** SW 内部（以及本组用例自己）建的所有通道，用来断言端口有没有被关掉。 */
+  let channels: { port1: { closed: boolean }; port2: { closed: boolean } }[] = [];
+
+  function installSyncChannels() {
+    class FakePort {
+      other: FakePort | null = null;
+      onmessage: ((e: { data: unknown }) => void) | null = null;
+      closed = false;
+      postMessage(data: unknown) {
+        if (this.closed || this.other?.closed) return;
+        this.other?.onmessage?.({ data });
+      }
+      close() { this.closed = true; }
+    }
+    class FakeChannel {
+      port1 = new FakePort();
+      port2 = new FakePort();
+      constructor() {
+        this.port1.other = this.port2;
+        this.port2.other = this.port1;
+        channels.push(this);
+      }
+    }
+    vi.stubGlobal("MessageChannel", FakeChannel);
+  }
+
+  /** 同步版的 retire：替身立刻投递，不需要等宏任务。 */
+  function retireSync(sw: ReturnType<typeof loadSW>) {
+    const before = channels.length;
+    const ch = new MessageChannel();
+    const seen: { type: string }[] = [];
+    (ch.port1 as unknown as { onmessage: (e: { data: unknown }) => void }).onmessage = (e) =>
+      seen.push(e.data as { type: string });
+    sw.message({ type: "retire-if-idle" }, [ch.port2]);
+    // 请求自己那条通道排在 before，SW 为递交新建的那条（如果有）排在它后面。
+    return { verdict: seen[0]?.type, handoverChannel: channels[before + 1] };
+  }
+
+  beforeEach(() => {
+    channels = [];
+    vi.useFakeTimers();
+    installSyncChannels();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("回执到手就清掉计时器、关掉端口", () => {
+    const sw = loadSW();
+    sw.setWaiting("present"); // 本版或更新的构建，会回执
+
+    const { verdict, handoverChannel } = retireSync(sw);
+
+    expect(verdict).toBe("retire-ok");
+    expect(handoverChannel.port1.closed).toBe(true);
+    expect(vi.getTimerCount()).toBe(0); // 回执路径也清了那个 5s 的表
+    expect(sw.waitUntils.length).toBe(1);
+  });
+
+  it("对面不回执时，超时那条路一样清干净", async () => {
+    const sw = loadSW();
+    sw.setWaiting("silent"); // 回滚部署留下的更旧构建：认识 skip-waiting，不回执
+
+    const { verdict, handoverChannel } = retireSync(sw);
+    expect(verdict).toBe("retire-ok");
+    expect(handoverChannel.port1.closed).toBe(false);
+    expect(vi.getTimerCount()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(handoverChannel.port1.closed).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  // 页面每 15s 就再请求一次；久等的换版能攒出几十次。
+  it("重复请求不累积计时器和端口", () => {
+    const sw = loadSW();
+    sw.setWaiting("present");
+
+    for (let i = 0; i < 20; i++) retireSync(sw);
+
+    expect(handedOver(sw).length).toBe(20); // 每次都重发了递交
+    expect(vi.getTimerCount()).toBe(0);
+    expect(channels.filter((c) => c.port1.closed).length).toBe(20); // SW 那 20 条全关了
+  });
+
+  it("递交抛异常时立刻收干净，并且把闩放回去", () => {
+    const sw = loadSW();
+    sw.setWaiting("throws");
+
+    const { verdict } = retireSync(sw);
+
+    expect(verdict).toBe("retire-none");
+    expect(vi.getTimerCount()).toBe(0); // 没留下 5s 的空等
+    // 闩确实放回去了：什么都没递出去，就不会有任何激活来掐这条流。
+    const s = openStream(sw);
+    expect(s.seen.map((m) => m.type)).toContain("stream-ready");
+  });
+
+  // 上一版用一个 15s 宽限计时器兜底解除，这是错的：递出去的 skipWaiting 随时可能
+  // 生效，没有任何本地状态能证明它不会。
+  it("交接之后没有任何计时器能把闩翻回去", async () => {
+    const sw = loadSW();
+    sw.setWaiting("present");
+    expect(retireSync(sw).verdict).toBe("retire-ok");
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000); // 十分钟，远超任何宽限期
+
+    const s = openStream(sw, "late.bin");
+    expect(s.seen.map((m) => m.type)).toEqual(["stream-refused"]);
+  });
+
+  // 先排的计时器后触发，正是上一版会漏的顺序：早的那个会把晚置的闩解掉。
+  it("早排的计时器不会解掉后来那次请求置的闩", async () => {
+    const sw = loadSW();
+    sw.setWaiting("silent"); // 不回执，所以两次请求各留一个真的会触发的计时器
+
+    expect(retireSync(sw).verdict).toBe("retire-ok");
+    await vi.advanceTimersByTimeAsync(4_000); // 第一个还没到期
+    expect(retireSync(sw).verdict).toBe("retire-ok"); // 第二次请求，又排一个
+    await vi.advanceTimersByTimeAsync(2_000); // 第一个到期了，第二个还没
+
+    const s = openStream(sw, "between.bin");
+    expect(s.seen.map((m) => m.type)).toEqual(["stream-refused"]);
+
+    await vi.advanceTimersByTimeAsync(10_000); // 第二个也到期
+    const s2 = openStream(sw, "after.bin");
+    expect(s2.seen.map((m) => m.type)).toEqual(["stream-refused"]);
+    expect(vi.getTimerCount()).toBe(0); // 两个都清干净了
+  });
+
+  it("没有 MessageChannel 时不带回执照样递交", () => {
+    const sw = loadSW();
+    sw.setWaiting("present");
+    vi.stubGlobal("MessageChannel", class { constructor() { throw new Error("nope"); } });
+
+    const ch = { postMessage: () => {}, close: () => {} };
+    sw.message({ type: "retire-if-idle" }, [ch]);
+
+    expect(handedOver(sw)).toEqual([{ type: "skip-waiting" }]);
+    expect(sw.waitingPosts[0].port).toBeNull(); // 没有端口可带
   });
 });
 

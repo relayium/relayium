@@ -43,6 +43,7 @@
   import WorkspaceHeader from "./lib/WorkspaceHeader.svelte";
   import QueuedBatches from "./lib/QueuedBatches.svelte";
   import DebugPanel from "./lib/DebugPanel.svelte";
+  import UpdateNotice from "./lib/UpdateNotice.svelte";
 
   // Route pages are code-split and loaded on first navigation, so they stay out of
   // the initial bundle (the LAN transfer home path is what loads first). The import
@@ -1401,6 +1402,20 @@
   {/if}
   {/if}
 </main>
+
+<!-- Global and route-independent on purpose: it sits outside <main>'s route
+     branches, so a deploy that lands while the user is on /d/<id>, /me or the
+     pricing page is just as visible as on the transfer page. It renders nothing
+     until a genuinely newer service worker has installed (never on this
+     device's first install). See app-update.svelte.ts for what it can and
+     cannot reach — in particular, it cannot help a tab that is still executing
+     an older build; it makes the NEXT deploy visible.
+
+     `busy` is the workspace half of "a reload would destroy this": a live link,
+     an in-flight transfer or an open message session. The notice folds in the
+     queued outbox itself (a global store) and disables its refresh action for
+     either. -->
+<UpdateNotice {busy} />
 
 {#if debugOn}
   <DebugPanel

@@ -8,6 +8,7 @@
   import { hasFiles, filesFromDataTransfer } from "./drag";
   import { rememberUploadKey } from "./upload-keys";
   import { LARGE_DOWNLOAD_WARN_BYTES } from "./filesink";
+  import { holdRefresh } from "./app-update.svelte";
   import { session } from "./auth.svelte";
   import { fetchUsage } from "./usage.svelte";
   import { allowedTtls, clampTtl } from "./ttl-options";
@@ -143,6 +144,10 @@
     progress = 0;
     phase = "encrypting";
     controller = new AbortController();
+    // 刷新会把这次上传整个丢掉，连带那把只存在于本机内存里的零知识密钥（它要等
+    // 上传成功才 rememberUploadKey）。这条路完全在 workspace 之外，warnsOnLeave
+    // 看不见它，所以显式占住全站更新提示条的刷新闸门。见 app-update 的 holdRefresh。
+    const releaseRefresh = holdRefresh();
     try {
       const out = await uploadFileResumable(files, { burnAfterRead: burn, ttl }, (p) => {
         // The bar tracks whichever phase is live.
@@ -161,6 +166,7 @@
       else if (e2 instanceof UploadError && e2.status === 429) err = t.stored.errQuota;
       else err = t.stored.errUpload;
     } finally {
+      releaseRefresh();
       busy = false;
       controller = null;
     }

@@ -230,6 +230,11 @@ const ko: Messages = {
     warn: (pct) => `이번 달 할당량의 ${pct}%를 사용했습니다`,
     upgrade: "업그레이드",
   },
+  appUpdate: {
+    ready: "Relayium의 새 버전이 준비되었습니다.",
+    refresh: "지금 새로고침",
+    busy: "진행 중인 작업이나 다운로드를 마치고 대기 중인 파일을 먼저 보내 주세요. 지금 새로고침하면 모두 중단됩니다.",
+  },
   me: {
     title: "마이페이지",
     back: "← 홈으로",

@@ -15,6 +15,7 @@ vi.mock("./upload-keys", () => ({ rememberUploadKey: () => {} }));
 import StoredUpload from "./StoredUpload.svelte";
 import { loadLang } from "./i18n.svelte";
 import { LARGE_DOWNLOAD_WARN_BYTES } from "./filesink";
+import { refreshHolds, resetAppUpdate } from "./app-update.svelte";
 
 let target: HTMLDivElement;
 let app: unknown;
@@ -51,6 +52,7 @@ afterEach(() => {
   app = null;
   target?.remove();
   vi.unstubAllGlobals();
+  resetAppUpdate(); // 别把一个没释放的闸门漏给别的用例
 });
 
 describe("StoredUpload 大文件提醒", () => {
@@ -87,5 +89,55 @@ describe("StoredUpload 大文件提醒", () => {
 
     await pick([1024]);
     expect(target.querySelector(".bignote")).toBeNull();
+  });
+});
+
+// 刷新会把这次上传整个丢掉，连带那把只存在于本机内存里的零知识密钥（要等上传成功
+// 才 rememberUploadKey）。这条路完全在 workspace 之外，warnsOnLeave 看不见它，所以
+// 全站更新提示条只能靠这个显式闸门知道「现在不能刷」。
+describe("StoredUpload × 更新刷新闸门", () => {
+  it("上传全程占住闸门，成功后释放", async () => {
+    let finish!: (v: unknown) => void;
+    uploadFileResumable.mockImplementation(() => new Promise((r) => (finish = r)));
+    await mountUpload();
+    expect(refreshHolds(), "还没开始上传就不该占").toBe(0);
+
+    await pick([1024]);
+    expect(refreshHolds(), "上传在途必须占住").toBe(1);
+
+    finish({ id: "abc", key: "zzz", expiresAt: 0 });
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+    expect(refreshHolds()).toBe(0);
+  });
+
+  it("上传失败也释放闸门", async () => {
+    uploadFileResumable.mockRejectedValue(new Error("network"));
+    await mountUpload();
+    await pick([1024]);
+
+    expect(target.querySelector(".err, .error"), "确实是失败那条路").not.toBeNull();
+    expect(refreshHolds(), "错误路径漏放会让按钮永远是灰的").toBe(0);
+  });
+
+  it("用户取消也释放闸门", async () => {
+    let reject!: (e: unknown) => void;
+    uploadFileResumable.mockImplementation(() => new Promise((_, rj) => (reject = rj)));
+    await mountUpload();
+    await pick([1024]);
+    expect(refreshHolds()).toBe(1);
+
+    (target.querySelector(".cancel, .btn-ghost") as HTMLButtonElement | null)?.click();
+    reject(new Error("aborted"));
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+
+    expect(refreshHolds()).toBe(0);
+  });
+
+  it("空选择直接早退，不占闸门", async () => {
+    await mountUpload();
+    await pick([]);
+    expect(refreshHolds()).toBe(0);
   });
 });

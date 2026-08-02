@@ -24,11 +24,49 @@ const STREAM_ROUTE = "__STREAM_ROUTE__"; // e.g. "/__stream__/" — see lib/sw-s
  */
 const streams = new Map();
 
+/**
+ * 已交接：本 SW 已经把 skip-waiting 成功递给了等待中的新版本，随时可能被顶掉。
+ *
+ * 换版的协调**必须由这个 SW 自己做**，因为只有它看得见上面这张全局 streams 表——
+ * 页面手里那个计数只覆盖它自己那个 Window。页面「先查一次、再自己去 post
+ * skip-waiting」的两步做法有一个真实的空窗：两步之间别的标签页登记一条流，那条流
+ * 就会随旧 SW 一起被掐死。retireIfIdle 把「查表 + 置位 + 递交」放进同一个事件任务，
+ * 中间不 await，别的任务插不进来。
+ *
+ * 置位之后 openStream 一律立刻拒（见那里）：这时候开出来的流注定活不过换版。
+ *
+ * **这是一个单向闩，本实例内永不解除。** 之前用一个宽限计时器兜底解除，那是错的：
+ * 递出去的 skipWaiting 随时可能生效，没有任何本地状态能证明它不会；计时器一解除，
+ * 就又能收下一条注定被掐死的流。而且重复请求会各自排一个没人管的计时器，早排的那个
+ * 会把晚置位的闩解掉——顺序一乱就直接漏。
+ *
+ * 那怎么恢复？靠 SW 自己的生命周期，不靠计时器：
+ *   - 交接成功且激活落地 → 本实例被终止，闩随之消失；
+ *   - 激活迟迟不落地 → 页面每 15s 再请求一次，retireIfIdle 会**重发**一遍递交
+ *     （幂等），等待中的版本被唤醒后照样激活；
+ *   - 等待中的版本被丢弃（更新被取代等）→ 页面那边 reg.waiting 也变空，轮询停止，
+ *     本 SW 随即空闲（约 30s）被浏览器回收，下一个实例是干净的 false。
+ * 也就是说：闩为真的整段时间里，交接确实还悬着——拒收新流正是那时候该做的事。
+ */
+let retiring = false;
+
+/**
+ * 等待中的版本回执 skip-waiting-ack 的上限。
+ *
+ * 只用来给 event.waitUntil 一个有界的 promise，**不参与任何状态解除**。没有它，
+ * 浏览器可能在消息处理器返回后立刻把本 SW 掐掉，刚 post 出去的递交就被丢在半路；
+ * 有它，本 SW 至少活到对面收下为止。收不到回执也不代表没交接——回滚部署时等待中的
+ * 那份可能是**更旧**的构建，它认识 skip-waiting 但不认识这个回执端口，照样会激活。
+ */
+const HANDOVER_ACK_TIMEOUT_MS = 5_000;
+
 // 装完**不自动** skipWaiting。旧 SW 一被顶掉，它全局作用域里的 streams 注册表就
 // 随之消失，正在落盘的流式下载会在下一个 chunk 上永远等不到 ack——发版恰好撞上
-// 一次大文件下载就是一次静默的下载失败。改成由页面在确认自己没有在途流式下载时
-// 发 skip-waiting 来放行（见 share-target.ts 的 activateWhenIdle）；页面全关掉时
-// 浏览器也会自然激活等待中的版本。
+// 一次大文件下载就是一次静默的下载失败。改成由页面在确认空闲后向**当前 active 的**
+// SW 发 retire-if-idle，由它自己查全局 streams 表、置闩、把 skip-waiting 递给等待中
+// 的版本（见下面的 retireIfIdle 和 share-target.ts 的 activateWhenIdle）。页面只数得
+// 到自己那个 Window，所以这一步必须放在 SW 这一侧才覆盖得到别的标签页。
+// 页面全关掉时浏览器也会自然激活等待中的版本。
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)));
 });
@@ -151,11 +189,19 @@ function fill(req, res) {
   return res;
 }
 
-// 页面 → SW 的控制通道。只认两种消息，其余一律忽略（同源页面才能发到这里，
-// 但保持严格没有坏处）。
+// 页面 → SW 的控制通道。只认下面几种消息，其余一律忽略。
+//
+// 同源检查是显式的，不靠"反正只有同源页面发得进来"这个默认：这条通道能触发换版
+// （retire-if-idle / skip-waiting），不该依赖别处的默认值来保证。
+// e.origin 在部分实现里对同源客户端是空串，所以只在它非空时才比对。
 self.addEventListener("message", (e) => {
+  if (e.origin && e.origin !== self.location.origin) return;
   const d = e.data;
   if (!d || typeof d !== "object") return;
+  if (d.type === "retire-if-idle") {
+    retireIfIdle(e);
+    return;
+  }
   if (d.type === "stream-probe") {
     // 能力探测。页面用它确认「正在控制我的这个 SW 认识流式路由」——光看
     // navigator.serviceWorker.controller 非空不够：部署换版期间控制页面的可能
@@ -164,13 +210,139 @@ self.addEventListener("message", (e) => {
     return;
   }
   if (d.type === "skip-waiting") {
-    // 页面确认此刻没有在途流式下载，放行换版。见 install 里不自动 skipWaiting 的注释。
-    self.skipWaiting();
+    // 这一条是**等待中的那一份**收到的：旧 active SW 确认全局没有在途流式下载之后
+    // 把它递过来（见 retireIfIdle）。页面在兼容路径上也会直接发这一条。
+    //
+    // 先回执再 skipWaiting：回执让递交方知道交接确实到手，也让它的 waitUntil 有个
+    // 终点。端口是可选的——旧版本的递交方不带端口。
+    if (e.ports[0]) { try { e.ports[0].postMessage({ type: "skip-waiting-ack" }); } catch {} }
+    // waitUntil 包住 skipWaiting()：它返回的是 promise，不包的话浏览器可以在处理器
+    // 返回后就把本 worker 判为空闲、连同这个没落地的激活一起丢掉。
+    const p = self.skipWaiting();
+    if (e.waitUntil && p && typeof p.then === "function") e.waitUntil(p.catch(() => {}));
     return;
   }
   if (d.type === "stream-ping") return; // 保活空包：收到即刷新 SW 的空闲计时器
   if (d.type === "stream-open") openStream(d, e.ports[0]);
 });
+
+/**
+ * 把 skip-waiting 递给等待中的版本，并让本 SW 至少活到对面收下为止。
+ *
+ * 回执端口只有两个作用：给 waitUntil 一个有界的终点，以及让测试能断言「交接确实
+ * 到手了」。它**不参与任何状态判断**——收不到回执不等于没交接（见
+ * HANDOVER_ACK_TIMEOUT_MS 里回滚部署那一段）。
+ *
+ * postMessage 抛出去由调用方接：那才是「一个字节都没递出去」的唯一凭据。
+ */
+function handOver(waiting, event) {
+  let ch = null;
+  try {
+    ch = new MessageChannel();
+  } catch {
+    ch = null; // 极端环境没有 MessageChannel：不带回执照样递交
+  }
+  if (!ch) {
+    waiting.postMessage({ type: "skip-waiting" });
+    return;
+  }
+
+  // finish 幂等，且回执和超时**两条路都**收干净：页面每 15s 就会再请求一次，
+  // 每一次都会走到这里；只要有一条路漏掉 clearTimeout / close，一次久等的换版就能
+  // 攒出几十个计时器和端口。
+  let settled = false;
+  let timer;
+  let resolveAcked;
+  const acked = new Promise((r) => { resolveAcked = r; });
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    try { ch.port1.close(); } catch {}
+    resolveAcked();
+  };
+  ch.port1.onmessage = (ev) => {
+    if (ev.data && ev.data.type === "skip-waiting-ack") finish();
+  };
+  // 有界即可。这个计时器只喂 waitUntil，超时什么状态都不改。
+  timer = setTimeout(finish, HANDOVER_ACK_TIMEOUT_MS);
+
+  try {
+    waiting.postMessage({ type: "skip-waiting" }, [ch.port2]);
+  } catch (err) {
+    finish(); // 一个字节都没递出去，别留着计时器和端口空等 5 秒
+    throw err; // 交给 retireIfIdle：只有这条路才允许把闩放回去
+  }
+  // 不包 waitUntil 的话，浏览器可以在本处理器返回后立刻判本 SW 空闲并终止它，
+  // 刚 post 出去的递交就丢在半路——页面下一轮还得重来。
+  if (event && typeof event.waitUntil === "function") event.waitUntil(acked);
+}
+
+/**
+ * 换版协调的原子那一步：全局没人在下载就置闩并把 skip-waiting 递给等待中的版本。
+ *
+ * 决策段全程同步，**中间一个 await 都没有**。这正是它存在的理由：SW 是单线程事件
+ * 循环，「查 streams 表 → 置 retiring → 递交」全落在同一个任务里，别的标签页的
+ * stream-open 只能排在这个任务前面或后面，插不进中间。排在后面的会被 openStream
+ * 立刻拒掉（那时 retiring 已为真），而不是开出一条注定被换版掐断的流。
+ *
+ * 状态迁移（retiring 是单向闩，本实例内只有一个方向）：
+ *   none    --有流在途--------------------▶ none，回 retire-busy
+ *   none    --没有等待中的版本------------▶ none，回 retire-none
+ *   none    --递交抛异常（什么都没递出去）-▶ none，回 retire-none
+ *   none    --递交成功--------------------▶ RETIRED，回 retire-ok
+ *   RETIRED --再来一次请求----------------▶ RETIRED，重发递交（幂等），回 retire-ok
+ *   RETIRED --本实例被终止/回收-----------▶ （新实例）none
+ * RETIRED 期间 openStream 一律拒。没有任何计时器能把它翻回去——上一版用宽限计时器
+ * 兜底解除，重复请求会各自排一个没人管的计时器，早排的能把晚置的闩解掉，解掉之后
+ * 收下的流又会被那次仍然悬着的激活掐死。
+ *
+ * 回执一定发，页面据此决定停表还是继续轮询：
+ *   retire-ok   —— 已交接，等 controllerchange
+ *   retire-busy —— 有流在途（可能在别的标签页），等会儿再来
+ *   retire-none —— 没有可交接的对象，什么都没做
+ * 没有回执的第四种是**这一版之前的 SW**：它压根不认识这条消息，页面靠超时识别，
+ * 走兼容路径（见 share-target.ts）。
+ */
+function retireIfIdle(event) {
+  const port = event && event.ports ? event.ports[0] : null;
+  const reply = (type) => { if (port) { try { port.postMessage({ type }); } catch {} } };
+  let waiting = null;
+  try {
+    waiting = self.registration && self.registration.waiting;
+  } catch {
+    waiting = null; // registration 读不到
+  }
+
+  // 已经交接过：闩不动，只把递交重发一遍。等待中的那份可能被浏览器终止过、上一条
+  // 消息也可能丢了，重发是让它最终激活的唯一手段，而且是幂等的。
+  if (retiring) {
+    try {
+      if (waiting) handOver(waiting, event);
+    } catch {
+      /* 重发失败无所谓：闩已经在了，下一轮再来 */
+    }
+    return reply("retire-ok");
+  }
+
+  // 有流在途就不动。这里数的是**全局**的表，覆盖本 SW 控制的所有标签页——页面
+  // 自己那个计数做不到这一点，这也正是协调要放在 SW 这一侧的原因。
+  if (streams.size > 0) return reply("retire-busy");
+  // 没人接班就不置闩：置了却没有新版本上来，等于白白关掉本实例的流式下载，而换版
+  // 一次也不会发生。
+  if (!waiting) return reply("retire-none");
+
+  retiring = true; // ← 先置闩，再递交。顺序反过来就又有那个空窗了。
+  try {
+    handOver(waiting, event);
+  } catch {
+    // 一个字节都没递出去，没有任何激活会发生。这是唯一能安全把闩放回去的分支，
+    // 而且它是同步的——不存在「晚到的计时器把闩解掉」这回事。
+    retiring = false;
+    return reply("retire-none");
+  }
+  reply("retire-ok");
+}
 
 /**
  * 登记一条流。流在这里就建好（而不是等 fetch 到来），这样页面可以立刻开始写，
@@ -182,6 +354,14 @@ self.addEventListener("message", (e) => {
  */
 function openStream(d, port) {
   if (!port || typeof d.path !== "string" || !d.path.startsWith(STREAM_ROUTE)) return;
+  if (retiring) {
+    // 已预约退休：这条流一开出来就会随本 SW 一起消失，页面会在下一个 chunk 上等一个
+    // 永远不来的 ack。立刻、明确地拒掉——页面据此马上回落到内存分支（见 filesink
+    // 的 pickSaveTarget），代价只是这一次下载吃内存，而不是干等 5 秒握手超时、更不是
+    // 一次断在半路的下载。
+    port.postMessage({ type: "stream-refused", reason: "updating" });
+    return;
+  }
   const entry = {
     port,
     headers: streamHeaders(d.headers),
