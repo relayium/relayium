@@ -577,6 +577,84 @@ barrier, replacement of a poisoned text channel, target-browser
 `bufferedAmount`-at-close semantics for the **text** lane, and a product answer to
 the explicit-disconnect window above.
 
+### Implementation checkpoint: an authenticated departure, capability still off
+
+The explicit-disconnect window above now has its answer. A peer that leaves on
+purpose says so, with one content-free signal on the existing `link` generation:
+
+```
+{ "link": true, "leave": true, "auth": "<base64 HMAC>" }
+```
+
+Those three keys are the whole message, and the receiver enforces that by exact
+shape before anything else runs. The strictness is not tidiness. This generation
+is shared with link establishment, whose signal filter selects on generation
+alone, so a `commit` would be recorded by `connectLink`'s `beforeSdp`, a `caps`
+array would reach `onPeerCaps`, a `busy` would fail a connecting link, and
+`sdp`/`ice` would be handled outright. An allow-listed shape is what makes the
+signal provably inert everywhere except in the one handler that owns it.
+
+The tag is keyed by the link's own `resumeAuth` — the same key that authenticates
+a transport rebuild, and the only proof a signalling relay cannot forge — but it
+covers a **separate** canonical payload, `linkLeavePayload(from, to)`:
+
+```
+{"kind":"link-leave","from":"<sender>","to":"<recipient>"}
+```
+
+Deliberately not `authPayload`. A message with no SDP and no ICE renders one
+constant `authPayload` string for the entire life of a link: a tag with no
+direction, replayable either way once seen. The `kind` field also makes the two
+payload spaces disjoint, so a signature over one can never be honoured as a
+signature over the other; `from`/`to` make a reflected leave verify the reversed
+tuple and fail. Cross-link replay needs no nonce, because a later link never
+shares `resumeAuth`. `authPayload`'s bytes are unchanged, exactly as its explicit
+field list promises, so a rolling deploy computes identical resume tags.
+
+**Only the user's own disconnect announces.** An idle close, a room reset, a peer
+that left the roster and page teardown all tear down in silence: none of them is
+the user saying "I am done with this peer", and an idle drop is not held by the
+peer anyway. Local teardown stays fully synchronous — the signing and the send
+are fired inside the same call and never awaited — so Web Crypto or a
+reconnecting socket can neither delay nor block a disconnect.
+
+The receiver runs every cheap check before it will spend an HMAC: exact shape, the
+fixed 44-character padded-base64 length of a SHA-256 tag, a link is current, the
+sender is that link's peer, the status is `open` or
+`interrupted`, and the per-link attempt budget is not exhausted. One verification
+may be in flight at a time, so a burst costs one HMAC rather than one per
+message, and `LINK_LEAVE_MAX_ATTEMPTS` (8) bounds the whole authenticated link's
+lifetime. Anything that does not verify is dropped in **silence**, for the reason
+a bad resume offer is: a reply would tell a signalling relay which peer holds a
+live link. On success the manager runs its ordinary close, which cancels the
+recovery window, the retry driver and any rebuild in flight, and publishes
+exactly one teardown — no echo, no second event.
+
+Identity across the await is the subtle part, and it is **not** the link object.
+`replaceTransport` publishes a different object carrying the same `SessionKeys`,
+SAS and four codecs; that is one authentication step, and a leave verified
+against those keys is still about that link. Acceptance is therefore gated on the
+authenticated-link token plus peer plus `SessionKeys` identity plus an allowed
+status — never on the captured object, which a replacement landing mid-HMAC would
+have invalidated. A fresh link, even to the same peer with a colliding SAS,
+derives new keys and advances the token, so a stale result cannot touch it.
+
+The whole control is **best effort and fails open to the status quo**. A leave
+that is lost, suppressed by a relay, or arrives after the budget is spent simply
+does not arrive, and the peer falls back to the bounded 90 s recovery window
+exactly as before. Nothing depends on it for correctness; it only removes a wait.
+The opt-in browser suite's pending-consent disconnect now expects a prompt remote
+teardown instead of deliberately waiting that window out, while the window's own
+boundedness — expiry, cancellation and the absence of a second teardown — stays
+pinned by the manager's fake-timer unit tests.
+
+`link/1` is still absent from `capsSignal()` and `LOCAL_CAPS` in every default
+and release build. The remaining advertisement gates are unchanged except that
+the explicit-disconnect product answer is now delivered: the mobile-background
+policy for the 90 s recovery window and the 30 s text END barrier, replacement of
+a poisoned text channel, and target-browser `bufferedAmount`-at-close semantics
+for the **text** lane.
+
 ## Acceptance matrix
 
 - One link sends file → text → files → text → file with one PeerConnection, one

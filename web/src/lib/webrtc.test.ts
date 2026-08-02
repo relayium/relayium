@@ -3,7 +3,7 @@ import { connect, connectLink, connectResume, connectResumeLink, connectText, cl
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, deriveSession, signResume, verifyResume, type SessionKeys } from "./crypto";
 import { sas } from "./crypto";
-import { authPayload, signalGeneration, type SignalAuth } from "./webrtc-core";
+import { authPayload, linkLeavePayload, signalGeneration, type SignalAuth } from "./webrtc-core";
 
 // ── Minimal RTCPeerConnection / RTCDataChannel doubles ───────────────────────
 // Enough surface for connect()'s offer/answer + commit-then-reveal state machine.
@@ -455,6 +455,75 @@ describe("connectResume", () => {
 // is not usable until BOTH lanes exist. The tests below pin that difference in
 // both directions — the link path must never resolve on one lane, and the legacy
 // path must never grow a second one.
+// The leave signal rides the `link` generation, so every handler that filters by
+// generation alone — which is all of them — sees it. What keeps it harmless is
+// that it carries nothing any of them acts on, and that its tag covers bytes no
+// other signal can produce.
+describe("link leave signal domain", () => {
+  it("is a distinct canonical payload that binds direction", () => {
+    expect(linkLeavePayload("a", "b")).toBe('{"kind":"link-leave","from":"a","to":"b"}');
+    // Reversing the tuple is a different string, so a reflected leave fails.
+    expect(linkLeavePayload("a", "b")).not.toBe(linkLeavePayload("b", "a"));
+  });
+
+  it("can never collide with an authPayload string", () => {
+    // authPayload always starts with sdpType; a leave payload always starts with
+    // kind. Even the degenerate all-null resume payload is a different string.
+    expect(linkLeavePayload("a", "b")).not.toBe(authPayload({ link: true, leave: true }));
+    expect(authPayload({ link: true, leave: true })).toBe(
+      '{"sdpType":null,"sdp":null,"candidate":null,"sdpMid":null,"sdpMLineIndex":null,"usernameFragment":null}',
+    );
+  });
+
+  it("a tag over one payload never verifies against the other", async () => {
+    const a = await pairAuth();
+    const leaveTag = await a.I.sign(linkLeavePayload("I", "R"));
+    expect(await a.R.verify(authPayload({ link: true, leave: true }), leaveTag)).toBe(false);
+    const resumeTag = await a.I.sign(authPayload({ link: true, leave: true }));
+    expect(await a.R.verify(linkLeavePayload("I", "R"), resumeTag)).toBe(false);
+  });
+
+  // The real reason for the strict shape: a link establishment in flight for the
+  // same peer receives this message too. It must do absolutely nothing there.
+  it("is inert against a link establishment in flight for the same peer", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    FakePC.inboundLabels = [...LINK_CHANNEL_LABELS];
+    const hub = makeHub();
+    const iKey = generateKeyPair();
+    const rKey = generateKeyPair();
+    let iPeer: Uint8Array | undefined;
+    let rPeer: Uint8Array | undefined;
+    const capsSeen: string[][] = [];
+
+    const rP = connectLink({
+      signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder",
+      onPeerKey: (k) => (rPeer = k), onPeerCaps: (c) => capsSeen.push(c),
+    });
+    const iP = connectLink({
+      signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator",
+      onPeerKey: (k) => (iPeer = k),
+    });
+
+    // Mid-handshake, from the peer this connection is talking to.
+    hub.inject("R", "I", { link: true, leave: true, auth: "not-a-real-tag" });
+    await flush();
+    hub.inject("R", "I", { link: true, leave: true, auth: "not-a-real-tag" });
+    await flush();
+
+    // The handshake is untouched: same keys, same SAS, no extra caps report.
+    expect(iPeer && Array.from(iPeer)).toEqual(Array.from(rKey.publicKey));
+    expect(rPeer && Array.from(rPeer)).toEqual(Array.from(iKey.publicKey));
+    expect(sas(iKey.publicKey, iPeer!)).toBe(sas(rKey.publicKey, rPeer!));
+    expect(capsSeen).toHaveLength(1);
+    expect(capsSeen[0]).toEqual([...LOCAL_CAPS]);
+
+    openAll();
+    const [ic, rc] = await Promise.all([iP, rP]);
+    ic.close();
+    rc.close();
+  });
+});
+
 describe("connectResumeLink", () => {
   it("rebuilds both lanes with no commit/reveal and resolves only when both open", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
@@ -745,6 +814,13 @@ describe("capability piggyback", () => {
 
   it("advertises text/1", () => {
     expect(LOCAL_CAPS).toContain("text/1");
+  });
+
+  // Adding `leave` to InboundSignal must be exactly as inert as adding `caps`
+  // was. If this drifts, every resume across a rolling deploy breaks.
+  it("authPayload ignores the leave marker", () => {
+    expect(authPayload({ ...BASE, leave: true })).toBe(EXPECTED);
+    expect(authPayload({ ...BASE, link: true, leave: true })).toBe(EXPECTED);
   });
 
   it("carries caps on the offer and on the answer, and reports the peer's", async () => {

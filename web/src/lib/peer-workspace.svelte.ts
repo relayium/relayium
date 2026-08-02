@@ -275,7 +275,10 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     disconnect() {
       const peerId = mixed.link?.peerId || mixed.peerId;
       if (peerId) suppressedUntil.set(peerId, now() + EXPLICIT_DISCONNECT_SUPPRESS_MS);
-      mixed.disconnect();
+      // The only caller that announces. `syncPeers` (the peer already left the
+      // room), `resetRoom` and `stop` all tear down silently: there is nobody to
+      // tell, or no user decision to report.
+      mixed.disconnect({ announce: true });
     },
     resetRoom() {
       suppressedUntil.clear();

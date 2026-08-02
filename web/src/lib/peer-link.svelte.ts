@@ -11,6 +11,7 @@ import {
   authPayload,
   connectLink,
   connectResumeLink,
+  linkLeavePayload,
   PeerBusyError,
   signalGeneration,
   type Conn,
@@ -29,6 +30,14 @@ export const LINK_AUTH_TIMEOUT_MS = 30_000;
 export const LINK_RECOVERY_WINDOW_MS = 90_000;
 /** Backoff between initiator rebuild attempts inside that window. */
 export const LINK_RECOVERY_RETRY_MS = 1_500;
+/** SHA-256 HMAC is 32 bytes, encoded by signResume as padded base64. Checking
+ *  this before atob/HMAC also bounds the cost of each allowed verification. */
+export const LINK_LEAVE_AUTH_LENGTH = 44;
+/** How many leave signals one authenticated link will ever spend an HMAC on.
+ *  A leave is terminal, so a genuine peer needs one; the budget exists purely so
+ *  a replayed or forged tag cannot buy unbounded verification work. Exhausting
+ *  it costs nothing real — the link simply falls back to the recovery window. */
+export const LINK_LEAVE_MAX_ATTEMPTS = 8;
 
 export type PeerLinkStatus = "idle" | "requesting" | "connecting" | "open" | "interrupted" | "failed";
 
@@ -158,6 +167,33 @@ export function isLinkRequest(data: unknown): data is InboundSignal {
     && !(data as InboundSignal).sdp;
 }
 
+/** Every key a leave signal is allowed to carry. */
+const LEAVE_KEYS = ["link", "leave", "auth"];
+
+/**
+ * Recognise a leave signal by exact shape, before anything cryptographic runs.
+ *
+ * The allow-list is the point, not a formality. This message rides the `link`
+ * generation, which means an establishment in flight for the same peer sees it
+ * too (`establish()` filters by generation, not by message kind). A `commit`
+ * would be recorded by connectLink's `beforeSdp`, a `caps` array would reach
+ * `onPeerCaps`, a `busy` would fail a connecting link, and `sdp`/`ice` would be
+ * handled outright. Requiring exactly `{ link, leave, auth }` makes the signal
+ * inert everywhere except here — and makes that property testable.
+ */
+export function isLinkLeave(data: unknown): data is InboundSignal & { auth: string } {
+  if (!data || typeof data !== "object") return false;
+  const d = data as Record<string, unknown>;
+  if (d.link !== true || d.leave !== true || typeof d.auth !== "string"
+      || d.auth.length !== LINK_LEAVE_AUTH_LENGTH) return false;
+  const keys = Object.keys(d);
+  if (keys.length !== LEAVE_KEYS.length) return false;
+  for (const key of keys) {
+    if (!LEAVE_KEYS.includes(key)) return false;
+  }
+  return true;
+}
+
 /** Both peers compute the same transport role without creating competing SDP. */
 export function linkRole(selfId: string, peerId: string): "initiator" | "responder" {
   return selfId < peerId ? "initiator" : "responder";
@@ -279,6 +315,21 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
    *  is verified, so two offers arriving in the same burst cannot both start a
    *  PeerConnection into the same lanes. */
   let verifyingResume = false;
+  /**
+   * Identity of the current AUTHENTICATED link, not of the link object.
+   *
+   * `replaceTransport` publishes a different object carrying the same keys, SAS
+   * and codecs; that is the same authentication step and must not invalidate
+   * work started before it. Establishment and teardown do advance this, so a
+   * stale async result can never be accepted by a later link — even one to the
+   * same peer, whose SAS may even collide.
+   */
+  let authGeneration = 0;
+  /** One leave verification at a time; the rest of a burst is dropped without
+   *  spending budget, so a flood costs one HMAC, not one per message. */
+  let verifyingLeave = false;
+  /** Spent HMACs on inbound leave signals for the current authenticated link. */
+  let leaveAttempts = 0;
   let unlisten: (() => void) | null = null;
 
   function publish(
@@ -289,6 +340,16 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     // Any publish ends the gap: a replacement resolves the driver through
     // settleRecovery below, and a teardown can never be recovered from.
     if (!next) failRecovery(new Error("relayium: mixed link torn down during recovery"));
+    // Same peer AND same SessionKeys object is exactly `replaceTransport`'s
+    // contract, and nothing else can produce it: two different links always
+    // derive two different key objects. Anything else is a new authentication
+    // step (or the end of one), so the leave budget starts over with it.
+    const sameLink = !!next && !!current
+      && current.peerId === next.peerId && current.keys === next.keys;
+    if (!sameLink) {
+      authGeneration++;
+      leaveAttempts = 0;
+    }
     terminalConn = null;
     current = next;
     status = nextStatus;
@@ -436,6 +497,77 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       console.error("relayium link resume verification error", err);
     } finally {
       verifyingResume = false;
+    }
+  }
+
+  /**
+   * Consume an authenticated "I am leaving" signal for the current link.
+   *
+   * Without it, an explicit disconnect is indistinguishable from a network drop:
+   * the peer holds an unrecoverable link for the whole recovery window, answers
+   * that peer's fresh offers with `busy` for its duration, and (as initiator)
+   * spends real ICE/TURN allocations rebuilding toward a browser that has gone.
+   *
+   * Every cheap check runs BEFORE the HMAC — shape, current link, peer, status,
+   * budget — so a forged or replayed signal cannot buy verification work. A
+   * signal that does not verify is dropped in silence, for the same reason a bad
+   * resume offer is: answering would tell a signalling relay which peer holds a
+   * live link. Losing the signal entirely is safe by construction; it degrades
+   * to exactly the recovery-window behaviour that exists today.
+   */
+  async function handleLeave(from: string, msg: InboundSignal & { auth: string }) {
+    if (verifyingLeave) return;
+    const link = current;
+    if (!link || link.peerId !== from) return;
+    if (status !== "open" && status !== "interrupted") return;
+    if (leaveAttempts >= LINK_LEAVE_MAX_ATTEMPTS) return;
+    leaveAttempts++;
+    // Identity is the authenticated link, NOT this object: a transport
+    // replacement may publish a new one with the same keys and codecs while the
+    // MAC is computed, and that is still the link this leave is about.
+    const token = authGeneration;
+    const keys = link.keys;
+    verifyingLeave = true;
+    try {
+      const ok = await verifyResume(
+        keys.resumeAuth,
+        linkLeavePayload(from, deps.selfId()),
+        msg.auth,
+      );
+      if (!ok || authGeneration !== token) return;
+      const live = current;
+      if (!live || live.peerId !== from || live.keys !== keys) return;
+      if (status !== "open" && status !== "interrupted") return;
+      // The peer is gone on purpose. Cancel recovery and any rebuild in flight,
+      // publish exactly one teardown, and send nothing back.
+      closeManager();
+    } catch (err) {
+      console.error("relayium link leave verification error", err);
+    } finally {
+      verifyingLeave = false;
+    }
+  }
+
+  /**
+   * Tell the peer this side is leaving on purpose. Best effort by design.
+   *
+   * The signing key, peer and signalling client are all captured synchronously,
+   * because the caller tears the link down in the same tick and must not wait
+   * for Web Crypto or for a reconnecting socket. A leave that never arrives is
+   * not a failure mode of its own: the peer falls back to the recovery window.
+   */
+  function announceLeave(link: MixedPeerLink) {
+    // Nothing here may throw into the teardown that follows it. Telling the peer
+    // is a courtesy; ending the user's own session is not.
+    try {
+      const peerId = link.peerId;
+      const client = deps.signaling();
+      const payload = linkLeavePayload(deps.selfId(), peerId);
+      void signResume(link.keys.resumeAuth, payload)
+        .then((auth) => { client.sendSignal(peerId, { link: true, leave: true, auth }); })
+        .catch((err) => console.error("relayium link leave announce error", err));
+    } catch (err) {
+      console.error("relayium link leave announce error", err);
     }
   }
 
@@ -726,7 +858,16 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     return promise;
   }
 
-  function closeManager() {
+  /**
+   * Tear the whole link down.
+   *
+   * `announce` is reserved for an explicit user disconnect. An idle close, a
+   * room reset, a peer that left the roster and page teardown all stay silent:
+   * none of them is the user saying "I am done with this peer", and an idle drop
+   * is not held by the peer anyway.
+   */
+  function closeManager(announce = false) {
+    if (announce && current) announceLeave(current);
     linkToken++;
     replaceToken++;
     failRecovery(new Error("relayium: link closed"));
@@ -755,6 +896,13 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         const msg = data as InboundSignal;
         if (msg.link === true && msg.busy === true) {
           finishRequest(from, undefined, new LinkBusyError());
+          return;
+        }
+        // An authenticated departure. Checked by exact shape first, so a message
+        // that merely claims to be one cannot also smuggle SDP, ICE, a commit or
+        // a caps list past the handlers that share this generation.
+        if (isLinkLeave(data)) {
+          void handleLeave(from, data);
           return;
         }
         // A rebuild offer for an interrupted link. Deliberately first: it shares
@@ -834,7 +982,9 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
 
     replaceTransport,
 
-    close: closeManager,
+    /** `announce` sends the authenticated leave signal first. Explicit user
+     *  disconnect only — see closeManager. */
+    close(options?: { announce?: boolean }) { closeManager(options?.announce === true); },
 
     stop() {
       unlisten?.();

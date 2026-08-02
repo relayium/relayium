@@ -47,9 +47,9 @@ export interface InboundSignal {
    *  sender fail fast with a "peer busy" message instead of waiting out the ICE
    *  timeout and mislabelling it a connection failure. */
   busy?: boolean;
-  /** base64 HMAC over this message's SDP/ICE payload, keyed by a value derived
-   *  from the session keys (see SignalAuth). Present only on resume signalling,
-   *  where there is no commit-reveal handshake to anchor the peer's identity. */
+  /** base64 HMAC keyed by a value derived from the session keys (see SignalAuth).
+   *  Covers authPayload on resume signalling and the separately domain-separated
+   *  linkLeavePayload on an explicit mixed-link departure. */
   auth?: string;
   /** Peer renamed itself; the roster entry for that peer id should be updated to
    *  this display name. Opaque to the WebRTC handlers (like relayRtt/busy). */
@@ -75,6 +75,13 @@ export interface InboundSignal {
    *  establish a link. Not a generation tag and not authenticated; capability
    *  gating limits it to the same denial-of-service class as a forged caps hello. */
   linkRequest?: boolean;
+  /** "I am leaving this link on purpose." Rides the `link` generation and is
+   *  authenticated with the link's `resumeAuth` over `linkLeavePayload` — never
+   *  over `authPayload`, which carries no direction and would be one constant
+   *  string for a message with no SDP or ICE. A leave signal carries exactly
+   *  `{ link, leave, auth }` and nothing else: any extra field would be visible
+   *  to the establishment handlers that share this generation. */
+  leave?: boolean;
 }
 
 /** The peer declined a fresh offer because it is mid-transfer (one at a time).
@@ -182,6 +189,25 @@ export function authPayload(msg: InboundSignal): string {
     sdpMLineIndex: msg.ice?.sdpMLineIndex ?? null,
     usernameFragment: msg.ice?.usernameFragment ?? null,
   });
+}
+
+/**
+ * The exact bytes a link-leave tag covers.
+ *
+ * Deliberately NOT `authPayload`. A leave message has no SDP and no ICE, so
+ * `authPayload` would render one constant string for the whole life of a link —
+ * a tag with no direction, replayable in either direction once observed. The
+ * `kind` field also makes this string unreachable from `authPayload`, whose
+ * output always begins with `sdpType`, so a signature over one can never be
+ * mistaken for a signature over the other.
+ *
+ * `from`/`to` are the room peer ids as each side knows them, so a relay that
+ * reflects a leave back at its sender verifies the reversed tuple and fails.
+ * Cross-link replay needs no nonce here: the key is `resumeAuth`, which a later
+ * link never shares.
+ */
+export function linkLeavePayload(from: string, to: string): string {
+  return JSON.stringify({ kind: "link-leave", from, to });
 }
 
 /**

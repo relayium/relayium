@@ -13,7 +13,7 @@ import type { Conn, ConnPath, Generation, InboundSignal, Reveal, RtcConfig, Sign
 // authPayload is re-exported so a caller that owns a session's keys can verify an
 // inbound resume signal BEFORE handing it to a connection primitive — the exact
 // bytes a tag covers must come from one place, never be re-derived at a call site.
-export { DEFAULT_ICE, PeerBusyError, authPayload, classifyPath, signalGeneration } from "./webrtc-core";
+export { DEFAULT_ICE, PeerBusyError, authPayload, classifyPath, linkLeavePayload, signalGeneration } from "./webrtc-core";
 export type { Conn, ConnPath, Generation, InboundSignal, Reveal, RtcConfig, SignalAuth } from "./webrtc-core";
 
 /** What this build advertises to its peers. A list rather than a flag so a later

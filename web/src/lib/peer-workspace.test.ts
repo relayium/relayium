@@ -183,6 +183,30 @@ describe("peer workspace capability routing", () => {
     h.workspace.stop();
   });
 
+  // The workspace is the only place that knows which teardown was a user
+  // decision. `syncPeers` (the peer already left the room), `resetRoom` and
+  // `stop` must not claim to be one.
+  it("announces only the user's own disconnect", async () => {
+    const h = setup();
+    const leaves = () => h.sent.filter((frame) => frame.data.leave === true);
+
+    await h.workspace.mixed.ensure("z");
+    h.workspace.disconnect();
+    await vi.waitFor(() => expect(leaves()).toHaveLength(1));
+    expect(leaves()[0].to).toBe("z");
+
+    await h.workspace.mixed.ensure("z");
+    h.workspace.resetRoom();
+    await h.workspace.mixed.ensure("z");
+    h.setPeers(["a"]);
+    h.workspace.syncPeers();
+    await h.workspace.mixed.ensure("z");
+    h.workspace.stop();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(leaves()).toHaveLength(1);
+  });
+
   it("does not let a mixed file-only link steal an ended legacy transcript", async () => {
     const h = setup();
     h.setLegacyText("ended", false);

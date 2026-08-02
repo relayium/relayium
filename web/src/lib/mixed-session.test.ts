@@ -276,6 +276,77 @@ describe("mixed session coordinator", () => {
     expect(link.textChannel.onmessage).toBeNull();
     expect(h.conns[0].close).toHaveBeenCalledOnce();
   });
+
+  // Only the user's own disconnect tells the peer anything. Everything else that
+  // ends a link — the idle timer, a room reset, page teardown — is either not a
+  // decision the peer needs, or has nobody left to tell.
+  describe("announcing an explicit departure", () => {
+    const leaves = (sent: { data: InboundSignal }[]) =>
+      sent.filter((m) => m.data.leave === true);
+
+    async function opened() {
+      const h = harness();
+      const mixed = createMixedSession({
+        selfId: () => "a",
+        signaling: () => h.signaling,
+        rtcConfig: () => ({ iceServers: [] }),
+        supportsLink: () => true,
+        connect: h.connect,
+        idleMs: 1_000,
+      });
+      await mixed.ensure("b");
+      return { h, mixed };
+    }
+
+    it("announces on an explicit, announcing disconnect and stays synchronous", async () => {
+      const { h, mixed } = await opened();
+      mixed.disconnect({ announce: true });
+      // The link is already gone; the signal is still being signed.
+      expect(mixed.link).toBeNull();
+      expect(leaves(h.sent)).toHaveLength(0);
+
+      await vi.waitFor(() => expect(leaves(h.sent)).toHaveLength(1));
+      expect(leaves(h.sent)[0]).toEqual({
+        to: "b",
+        data: { link: true, leave: true, auth: expect.any(String) },
+      });
+    });
+
+    it.each<[string, (m: ReturnType<typeof createMixedSession>) => void]>([
+      ["a plain disconnect", (m) => m.disconnect()],
+      ["an explicitly silent disconnect", (m) => m.disconnect({ announce: false })],
+      ["stop", (m) => m.stop()],
+    ])("stays silent on %s", async (_name, act) => {
+      const { h, mixed } = await opened();
+      act(mixed);
+      await flush();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(leaves(h.sent)).toHaveLength(0);
+    });
+
+    it("stays silent when the idle timer closes the link", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(0);
+      const h = harness();
+      const mixed = createMixedSession({
+        selfId: () => "a",
+        signaling: () => h.signaling,
+        rtcConfig: () => ({ iceServers: [] }),
+        supportsLink: () => true,
+        connect: h.connect,
+        idleMs: 1_000,
+      });
+      await mixed.ensure("b");
+
+      vi.setSystemTime(5_000);
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(mixed.link).toBeNull();
+      expect(leaves(h.sent)).toHaveLength(0);
+      mixed.stop();
+      vi.useRealTimers();
+    });
+  });
 });
 
 // The coordinator owns exactly one recovery decision: is this dropped transport

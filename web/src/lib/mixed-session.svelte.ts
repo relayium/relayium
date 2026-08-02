@@ -63,7 +63,11 @@ export interface MixedSession {
   ensure(peerId: string): Promise<MixedPeerLink>;
   active(): boolean;
   start(): void;
-  disconnect(): void;
+  /** `announce` tells the peer this is a deliberate departure, so it can stop
+   *  holding the link instead of waiting out the recovery window. Reserved for
+   *  the user's own disconnect action: a room reset, a peer that left the roster
+   *  and page teardown are not that. */
+  disconnect(options?: { announce?: boolean }): void;
   stop(): void;
 }
 
@@ -259,7 +263,7 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
     onTransportLost,
   });
 
-  function close(clearFileState: boolean) {
+  function close(clearFileState: boolean, announce = false) {
     clearIdle();
     clearPathTimer();
     // Remove lane handlers first, so closing the shared Conn is not mistaken for
@@ -268,7 +272,10 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
     if (clearFileState) file.reset();
     else file.detach();
     text.detach();
-    manager.close();
+    // Synchronous end to end. The leave signal is signed and sent inside this
+    // call but never awaited, so the user's disconnect cannot be delayed — or
+    // held open — by Web Crypto or by the signalling socket.
+    manager.close({ announce });
     pathGeneration++;
     path = null;
   }
@@ -298,7 +305,7 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
       listening = true;
       manager.listen();
     },
-    disconnect() { close(true); },
+    disconnect(options) { close(true, options?.announce === true); },
     stop() {
       listening = false;
       clearIdle();

@@ -614,12 +614,16 @@ async function mixedScenario(browser) {
   }
 
   await a.evaluate(`(() => { document.querySelector('${HEAD} .wh-disconnect').click(); return true; })()`);
-  // 这一步现在**很慢**，而且必须慢：B 手上挂着一张待决同意卡 = 该链路有活儿，所以
-  // 传输一断 B 会把链路**留住**（status=interrupted）并等一个永远不会来的重建 offer
-  // ——A 是显式断开的，它不会再发。等到 LINK_RECOVERY_WINDOW_MS(90s) 走完，B 才
-  // 失败关闭。把这个超时调回 90s 会变成一场必现的竞态，不是把测试变快。
-  // 顺带地，这一等也是"留住的链路确实有界、确实会自己收干净"在真浏览器里的唯一验证。
-  await b.waitFor(`!document.querySelector('${HEAD}')`, "the held link to time out and die", 150_000);
+  // B 手上挂着一张待决同意卡 = 该链路有活儿，所以传输一断 B 本来会把链路**留住**
+  // （status=interrupted）等一个永远不会来的重建 offer——A 是显式断开的，它不会再发。
+  // 现在 A 在断开的同一次调用里发出了一条认证过的 leave 信令，B 因此立刻拆掉，而不是
+  // 白等满 LINK_RECOVERY_WINDOW_MS(90s)。这里给的余量是给信令往返和 HMAC 的，不是
+  // 给那个窗口的：如果 leave 丢了或没被认可，这一步会退化成 90s，超时就会抓到。
+  //
+  // 窗口本身"有界、会取消、只发一次拆除"由 peer-link.test.ts 的假时钟用例钉住
+  // （"leaves no timer or retry behind after an honoured leave" 及其邻居），
+  // 不再靠在真浏览器里干等 90 秒来证明。
+  await b.waitFor(`!document.querySelector('${HEAD}')`, "the announced departure to tear the held link down", 30_000);
   await b.waitFor("!document.querySelector('.request')", "the pending consent to die with its link");
 
   // 同一个对端、同一条通道 → 第二条链路会算出**同一个** reveal 键。
@@ -646,8 +650,9 @@ async function mixedScenario(browser) {
   // ── 九、显式断开：整个工作区收掉，两边都收掉 ────────────────────────────
   await a.evaluate(`(() => { document.querySelector('${HEAD} .wh-disconnect').click(); return true; })()`);
   await a.waitFor(`!document.querySelector('${HEAD}')`, "tab A's workspace to tear down");
-  // 对端不是靠一帧"我要断开"知道的，而是靠传输真的塌掉（DTLS 关闭 / ICE 失联）。
-  // 那一段有真实的传播时间，所以这里的窗口比本地那一条宽得多。
+  // 对端有两条路知道：A 断开时发出的那条认证 leave 信令，以及传输真的塌掉
+  // （DTLS 关闭 / ICE 失联）。两条都有真实的传播时间，而且此刻 B 没有活跃的
+  // lane、本来就不会留住链路，所以这里的窗口只是宽余量，不是在等谁超时。
   await b.waitFor(`!document.querySelector('${HEAD}')`, "tab B's workspace to tear down", 90_000);
   for (const [who, tab] of [["tab A", a], ["tab B", b]]) {
     const after = await tab.evaluate(`({

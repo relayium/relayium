@@ -1,18 +1,19 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { deriveSession, generateKeyPair, ready, signResume, verifyResume } from "./crypto";
 import {
-  LINK_AUTH_TIMEOUT_MS, LINK_RECOVERY_RETRY_MS, LINK_RECOVERY_WINDOW_MS,
+  LINK_AUTH_TIMEOUT_MS, LINK_LEAVE_AUTH_LENGTH, LINK_LEAVE_MAX_ATTEMPTS, LINK_RECOVERY_RETRY_MS,
+  LINK_RECOVERY_WINDOW_MS,
   LINK_REQUEST_RETRY_MS, LINK_REQUEST_TIMEOUT_MS,
   LinkAuthenticationTimeoutError, LinkBusyError, LinkRecoveryTimeoutError,
   LinkRequestTimeoutError,
   LinkReplaceStaleError, LinkReplaceUnavailableError,
   UnsupportedLinkError, createPeerLinkManager,
-  isLinkOffer, isLinkRequest, linkRole,
+  isLinkLeave, isLinkOffer, isLinkRequest, linkRole,
   type MixedPeerLink,
   type PeerLinkDeps,
 } from "./peer-link.svelte";
 import { LINK_CAPTURE_MAX_BYTES, connectLink, connectResumeLink, type Conn, type InboundSignal } from "./webrtc";
-import { authPayload } from "./webrtc-core";
+import { authPayload, linkLeavePayload } from "./webrtc-core";
 import type { SignalingClient } from "./signaling";
 import { FLOW_WINDOW } from "./transfer";
 
@@ -1520,5 +1521,515 @@ describe("mixed link transport recovery", () => {
     expect(manager.current?.keys).toBe(link.keys);
     expect(seam.resume).toHaveBeenCalledTimes(2);
     manager.stop();
+  });
+});
+
+// An explicit disconnect used to be indistinguishable from a network drop, so
+// the peer held an unrecoverable link for the whole 90 s recovery window. This
+// is the one signal that tells it apart — and the one signal that can therefore
+// end another peer's session, which is why nearly all of this file is about what
+// must NOT be honoured.
+describe("mixed link explicit leave", () => {
+  async function linked(
+    over: Partial<PeerLinkDeps> = {},
+    selfId = "a",
+    peerId = "b",
+  ) {
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const events: { status: string; peerId: string | null }[] = [];
+    const manager = createPeerLinkManager({
+      selfId: () => selfId,
+      signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }),
+      supportsLink: () => true,
+      connect: transport.connect,
+      onLinkChange(link, status) { events.push({ status, peerId: link?.peerId ?? null }); },
+      onTransportLost: () => true,
+      ...over,
+    });
+    manager.listen();
+    let link: MixedPeerLink;
+    if (linkRole(selfId, peerId) === "initiator") link = await manager.ensure(peerId);
+    else {
+      const waiting = manager.ensure(peerId);
+      sig.inject(peerId, { link: true, sdp: { type: "offer", sdp: "v=0" } });
+      link = await waiting;
+    }
+    return {
+      sig, transport, manager, link, events,
+      drop: (state: "failed" | "closed" = "failed") =>
+        transport.connect.mock.calls[0][0].onStateChange?.(state),
+    };
+  }
+
+  /** Exactly what a departing peer puts on the wire. */
+  async function leaveFrom(
+    link: MixedPeerLink,
+    from = "b",
+    to = "a",
+    key: CryptoKey = link.keys.resumeAuth,
+  ): Promise<InboundSignal> {
+    return { link: true, leave: true, auth: await signResume(key, linkLeavePayload(from, to)) };
+  }
+
+  /** Web Crypto resolves off the microtask queue, so a leave verification needs
+   *  real task turns to settle — not just `await Promise.resolve()`. */
+  const settle = async () => {
+    for (let i = 0; i < 10; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+
+  describe("shape", () => {
+    it("accepts only the three-key content-free form", () => {
+      const auth = "A".repeat(LINK_LEAVE_AUTH_LENGTH);
+      expect(isLinkLeave({ link: true, leave: true, auth })).toBe(true);
+      expect(isLinkLeave({ auth, leave: true, link: true })).toBe(true); // key order
+    });
+
+    it.each<[string, unknown]>([
+      ["no auth", { link: true, leave: true }],
+      ["numeric auth", { link: true, leave: true, auth: 1 }],
+      ["null auth", { link: true, leave: true, auth: null }],
+      ["object auth", { link: true, leave: true, auth: { mac: "m" } }],
+      ["short auth", { link: true, leave: true, auth: "A".repeat(LINK_LEAVE_AUTH_LENGTH - 1) }],
+      ["oversized auth", { link: true, leave: true, auth: "A".repeat(1 << 20) }],
+      ["truthy but not true link", { link: 1, leave: true, auth: "m" }],
+      ["truthy but not true leave", { link: true, leave: "yes", auth: "m" }],
+      ["no link tag", { leave: true, auth: "m" }],
+      ["not an object", "leave"],
+      ["null", null],
+    ])("rejects %s", (_name, data) => {
+      expect(isLinkLeave(data)).toBe(false);
+    });
+
+    // Every one of these fields is acted on by a handler that shares the `link`
+    // generation: sdp/ice are handled outright, commit is recorded by
+    // connectLink's beforeSdp, caps reach onPeerCaps, busy fails a connecting
+    // link, and the generation tags would re-route the message entirely.
+    it.each([
+      "sdp", "ice", "commit", "reveal", "caps", "busy", "linkRequest",
+      "resume", "text", "rename",
+    ])("rejects a leave smuggling %s", (field) => {
+      expect(isLinkLeave({
+        link: true, leave: true, auth: "A".repeat(LINK_LEAVE_AUTH_LENGTH), [field]: true,
+      })).toBe(false);
+    });
+  });
+
+  describe("announcing", () => {
+    it("signs the departure with the link's resumeAuth and closes synchronously", async () => {
+      const { manager, link, sig, events } = await linked();
+      const before = sig.sent.length;
+
+      manager.close({ announce: true });
+
+      // Teardown does not wait for Web Crypto or for the socket.
+      expect(manager.current).toBeNull();
+      expect(manager.status).toBe("idle");
+      expect(events).toEqual([
+        { status: "open", peerId: "b" },
+        { status: "idle", peerId: null },
+      ]);
+      expect(sig.sent).toHaveLength(before);
+
+      await settle();
+      const out = sig.sent.at(-1)!;
+      expect(out.to).toBe("b");
+      expect(Object.keys(out.data).sort()).toEqual(["auth", "leave", "link"]);
+      expect(out.data.link).toBe(true);
+      expect(out.data.leave).toBe(true);
+      expect(await verifyResume(
+        link.keys.resumeAuth, linkLeavePayload("a", "b"), out.data.auth,
+      )).toBe(true);
+      // Signed in this side's direction only: the peer verifies (from, to) as it
+      // sees them, so this tag cannot be reflected back to end our own link.
+      expect(await verifyResume(
+        link.keys.resumeAuth, linkLeavePayload("b", "a"), out.data.auth,
+      )).toBe(false);
+      manager.stop();
+    });
+
+    it("announces a departure from a held link too", async () => {
+      const seam = rebuild({ gate: new Promise<void>(() => {}) });
+      const { manager, link, sig, drop } = await linked({ resume: seam.resume });
+      drop("failed");
+      expect(manager.status).toBe("interrupted");
+
+      manager.close({ announce: true });
+      await settle();
+
+      const out = sig.sent.at(-1)!;
+      expect(out.data.leave).toBe(true);
+      expect(await verifyResume(
+        link.keys.resumeAuth, linkLeavePayload("a", "b"), out.data.auth,
+      )).toBe(true);
+      expect(seam.calls[0].signal?.aborted).toBe(true);
+      manager.stop();
+    });
+
+    it("still disconnects when the announcement itself cannot be made", async () => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      const sig = signalingHarness();
+      const transport = transportHarness();
+      let live = true;
+      const manager = createPeerLinkManager({
+        selfId: () => "a",
+        signaling: () => {
+          if (!live) throw new Error("signalling socket is gone");
+          return sig.signaling;
+        },
+        rtcConfig: () => ({ iceServers: [] }),
+        supportsLink: () => true,
+        connect: transport.connect,
+      });
+      manager.listen();
+      const link = await manager.ensure("b");
+      live = false;
+
+      manager.close({ announce: true });
+
+      expect(manager.current).toBeNull();
+      expect(manager.status).toBe("idle");
+      expect(link.conn.close).toHaveBeenCalledOnce();
+      errors.mockRestore();
+    });
+
+    it.each<[string, (m: ReturnType<typeof createPeerLinkManager>) => void]>([
+      ["an ordinary close", (m) => m.close()],
+      ["an explicit non-announcing close", (m) => m.close({ announce: false })],
+      ["stop", (m) => m.stop()],
+    ])("stays silent on %s", async (_name, act) => {
+      const { manager, sig } = await linked();
+      const before = sig.sent.length;
+      act(manager);
+      await settle();
+      expect(sig.sent.slice(before)).toEqual([]);
+      manager.stop();
+    });
+  });
+
+  describe("honouring", () => {
+    it("tears the link down on an authenticated leave and echoes nothing", async () => {
+      const { manager, link, sig, events } = await linked();
+      const before = sig.sent.length;
+
+      sig.inject("b", await leaveFrom(link));
+      await settle();
+
+      expect(manager.current).toBeNull();
+      expect(manager.status).toBe("idle");
+      expect(link.conn.close).toHaveBeenCalledOnce();
+      expect(events).toEqual([
+        { status: "open", peerId: "b" },
+        { status: "idle", peerId: null },
+      ]);
+      // Silence is the point: a reply would tell a relay which peer holds a link.
+      expect(sig.sent.slice(before)).toEqual([]);
+      manager.stop();
+    });
+
+    it("cancels a held link, its recovery driver and the rebuild in flight", async () => {
+      const seam = rebuild({ gate: new Promise<void>(() => {}) });
+      const { manager, link, sig, events, drop } = await linked({ resume: seam.resume });
+      drop("failed");
+      expect(manager.status).toBe("interrupted");
+      // An intent raised mid-gap is waiting on the recovery promise.
+      const joined = manager.ensure("b");
+      const rejects = expect(joined).rejects.toThrow();
+
+      sig.inject("b", await leaveFrom(link));
+      await settle();
+
+      expect(manager.current).toBeNull();
+      expect(manager.status).toBe("idle");
+      expect(seam.calls[0].signal?.aborted).toBe(true);
+      await rejects;
+      expect(events).toEqual([
+        { status: "open", peerId: "b" },
+        { status: "idle", peerId: null },
+      ]);
+      manager.stop();
+    });
+
+    it("leaves no timer or retry behind after an honoured leave", async () => {
+      vi.useFakeTimers();
+      const settleFake = async () => {
+        for (let i = 0; i < 10; i++) await vi.advanceTimersByTimeAsync(1);
+      };
+      const resume = vi.fn(async (): Promise<Conn> => { throw new Error("no route"); });
+      const { manager, link, sig, events, drop } = await linked({ resume });
+      drop("failed");
+      await settleFake();
+      const attempts = resume.mock.calls.length;
+
+      sig.inject("b", await leaveFrom(link));
+      await settleFake();
+      expect(manager.current).toBeNull();
+
+      // Neither the 90 s window timer nor the 1.5 s retry driver survives, so
+      // there is no second teardown and no rebuild toward a peer that has gone.
+      await vi.advanceTimersByTimeAsync(LINK_RECOVERY_WINDOW_MS * 2);
+      expect(events).toEqual([
+        { status: "open", peerId: "b" },
+        { status: "idle", peerId: null },
+      ]);
+      expect(resume.mock.calls.length).toBe(attempts);
+      manager.stop();
+      vi.useRealTimers();
+    });
+
+    // The correction that matters: a transport replacement publishes a DIFFERENT
+    // link object carrying the SAME keys, SAS and codecs. That is one
+    // authentication step, so a leave verified against those keys is still about
+    // this link. Comparing the captured object would silently drop it.
+    it("honours a leave for a link that has since moved to a replacement transport", async () => {
+      const seam = rebuild();
+      const { manager, link, sig, drop } = await linked({ resume: seam.resume });
+      drop("failed");
+      await vi.waitFor(() => expect(manager.status).toBe("open"));
+      const replaced = manager.current!;
+      expect(replaced).not.toBe(link);
+      expect(replaced.keys).toBe(link.keys);
+
+      sig.inject("b", await leaveFrom(link));
+      await settle();
+
+      expect(manager.current).toBeNull();
+      expect(manager.status).toBe("idle");
+      manager.stop();
+    });
+
+    // Same property, with the replacement landing while the MAC is in flight.
+    // Deliberately asserted without pinning which side wins: both interleavings
+    // must end in exactly one teardown and one closed transport.
+    it("survives a replacement published while the leave is being verified", async () => {
+      let release!: () => void;
+      const seam = rebuild({ gate: new Promise<void>((resolve) => { release = resolve; }) });
+      const { manager, link, sig, events, drop } = await linked({ resume: seam.resume });
+      drop("failed");
+      await settle();
+      expect(seam.resume).toHaveBeenCalledTimes(1);
+
+      sig.inject("b", await leaveFrom(link));
+      release();
+      await settle();
+
+      expect(manager.current).toBeNull();
+      expect(manager.status).toBe("idle");
+      expect(events.filter((e) => e.status === "idle")).toHaveLength(1);
+      expect(seam.conns[0].close).toHaveBeenCalled();
+      manager.stop();
+    });
+
+    it("honours a duplicate leave exactly once", async () => {
+      const { manager, link, sig, events } = await linked();
+      const leave = await leaveFrom(link);
+
+      sig.inject("b", leave);
+      sig.inject("b", leave);
+      await settle();
+      sig.inject("b", leave);
+      await settle();
+
+      expect(manager.current).toBeNull();
+      expect(events.filter((e) => e.status === "idle")).toHaveLength(1);
+      expect(link.conn.close).toHaveBeenCalledOnce();
+      manager.stop();
+    });
+  });
+
+  describe("refusing", () => {
+    /** Every rejection has the same visible outcome: nothing at all. */
+    async function survives(
+      make: (link: MixedPeerLink) => Promise<InboundSignal>,
+      from = "b",
+    ) {
+      const { manager, link, sig, events } = await linked();
+      const before = sig.sent.length;
+      sig.inject(from, await make(link));
+      await settle();
+      expect(manager.current).toBe(link);
+      expect(manager.status).toBe("open");
+      expect(events).toEqual([{ status: "open", peerId: "b" }]);
+      expect(sig.sent.slice(before)).toEqual([]);
+      manager.stop();
+    }
+
+    it("drops a leave with no tag", async () => {
+      await survives(async () => ({ link: true, leave: true }));
+    });
+
+    it("drops a leave with a non-string tag", async () => {
+      await survives(async () => ({ link: true, leave: true, auth: 7 } as unknown as InboundSignal));
+    });
+
+    it("drops a malformed tag", async () => {
+      await survives(async () => ({ link: true, leave: true, auth: "!!! not base64 !!!" }));
+    });
+
+    it("drops a tag from another session's keys", async () => {
+      const attacker = generateKeyPair();
+      const victim = generateKeyPair();
+      const foreign = await deriveSession("initiator", attacker, victim.publicKey);
+      await survives((link) => leaveFrom(link, "b", "a", foreign.resumeAuth));
+    });
+
+    // The reason linkLeavePayload exists: a tag over the resume payload — the
+    // one every rebuild signal already carries — must not end a link.
+    it("drops a tag computed over the resume payload instead of the leave payload", async () => {
+      await survives(async (link) => ({
+        link: true,
+        leave: true,
+        auth: await signResume(link.keys.resumeAuth, authPayload({ link: true, leave: true })),
+      }));
+    });
+
+    // Both sides hold the same resumeAuth, so direction is the only thing that
+    // stops a relay from reflecting our own departure back at us.
+    it("drops our own leave reflected back at us", async () => {
+      await survives((link) => leaveFrom(link, "a", "b"));
+    });
+
+    it("drops a leave from a peer that is not the link's", async () => {
+      await survives((link) => leaveFrom(link, "z", "a"), "z");
+    });
+
+    it("drops a leave replayed onto a fresh link to the same peer", async () => {
+      const { manager, link, sig } = await linked();
+      const stale = await leaveFrom(link);
+
+      manager.close();
+      const fresh = await manager.ensure("b");
+      expect(fresh.keys).not.toBe(link.keys);
+
+      sig.inject("b", stale);
+      await settle();
+
+      expect(manager.current).toBe(fresh);
+      expect(manager.status).toBe("open");
+      manager.stop();
+    });
+
+    it("does not apply an old link's in-flight verification to a fresh link", async () => {
+      const { manager, link, sig } = await linked();
+      const stale = await leaveFrom(link);
+      let release!: (ok: boolean) => void;
+      const held = new Promise<boolean>((resolve) => { release = resolve; });
+      const verify = vi.spyOn(crypto.subtle, "verify").mockReturnValue(held);
+
+      try {
+        // handleLeave reaches the held Web Crypto operation synchronously. The
+        // old link then ends and a new authenticated link to the same peer is
+        // fully published before that old result is allowed to continue.
+        sig.inject("b", stale);
+        expect(verify).toHaveBeenCalledOnce();
+        manager.close();
+        const fresh = await manager.ensure("b");
+        expect(fresh.keys).not.toBe(link.keys);
+
+        release(true);
+        await settle();
+
+        expect(manager.current).toBe(fresh);
+        expect(manager.status).toBe("open");
+      } finally {
+        verify.mockRestore();
+        manager.stop();
+      }
+    });
+
+    it("drops a leave once the link is already gone", async () => {
+      const { manager, link, sig, events } = await linked();
+      const leave = await leaveFrom(link);
+      manager.close();
+
+      sig.inject("b", leave);
+      await settle();
+
+      expect(manager.current).toBeNull();
+      expect(events.filter((e) => e.status === "idle")).toHaveLength(1);
+      manager.stop();
+    });
+
+    it("spends one HMAC on a whole burst, not one per message", async () => {
+      const { manager, link, sig } = await linked();
+      const bad: InboundSignal = {
+        link: true, leave: true, auth: "A".repeat(LINK_LEAVE_AUTH_LENGTH),
+      };
+
+      for (let i = 0; i < 200; i++) sig.inject("b", bad);
+      await settle();
+      expect(manager.current).toBe(link);
+
+      // Only the first message of the burst held the verification slot, so the
+      // budget still has room for the genuine departure behind it.
+      sig.inject("b", await leaveFrom(link));
+      await settle();
+      expect(manager.current).toBeNull();
+      manager.stop();
+    });
+
+    it("stops verifying after a bounded number of attempts", async () => {
+      const { manager, link, sig } = await linked();
+      const bad: InboundSignal = {
+        link: true, leave: true, auth: "A".repeat(LINK_LEAVE_AUTH_LENGTH),
+      };
+
+      for (let i = 0; i < LINK_LEAVE_MAX_ATTEMPTS; i++) {
+        sig.inject("b", bad);
+        await settle();
+      }
+      expect(manager.current).toBe(link);
+
+      // The budget is spent for this link's lifetime. A genuine departure is now
+      // ignored too — and degrades to exactly the recovery window that existed
+      // before this signal, which is the whole reason the budget is safe.
+      sig.inject("b", await leaveFrom(link));
+      await settle();
+      expect(manager.current).toBe(link);
+      manager.stop();
+    });
+
+    it("gives a new link to the same peer a fresh attempt budget", async () => {
+      const { manager, link, sig } = await linked();
+      const bad: InboundSignal = {
+        link: true, leave: true, auth: "A".repeat(LINK_LEAVE_AUTH_LENGTH),
+      };
+      for (let i = 0; i < LINK_LEAVE_MAX_ATTEMPTS; i++) {
+        sig.inject("b", bad);
+        await settle();
+      }
+      manager.close();
+
+      const fresh = await manager.ensure("b");
+      sig.inject("b", await leaveFrom(fresh));
+      await settle();
+
+      expect(manager.current).toBeNull();
+      manager.stop();
+    });
+
+    // A transport replacement is the same authentication step, so it must NOT
+    // hand a flooding peer a fresh budget.
+    it("does not refresh the budget on a transport replacement", async () => {
+      const seam = rebuild();
+      const { manager, link, sig, drop } = await linked({ resume: seam.resume });
+      const bad: InboundSignal = {
+        link: true, leave: true, auth: "A".repeat(LINK_LEAVE_AUTH_LENGTH),
+      };
+      for (let i = 0; i < LINK_LEAVE_MAX_ATTEMPTS; i++) {
+        sig.inject("b", bad);
+        await settle();
+      }
+
+      drop("failed");
+      await vi.waitFor(() => expect(manager.status).toBe("open"));
+      expect(manager.current).not.toBe(link);
+
+      sig.inject("b", await leaveFrom(link));
+      await settle();
+      expect(manager.current).not.toBeNull();
+      manager.stop();
+    });
   });
 });
