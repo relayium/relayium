@@ -26,6 +26,31 @@ final class StoredManifestTests: XCTestCase {
         let expected = "{\"files\":[{\"name\":\"a\\\"b\\\\c\",\"size\":0}]}"
         XCTAssertEqual(bytes, Array(expected.utf8))
     }
+    /// Folder hierarchy rides inside `name`, and a forward slash must NOT be
+    /// escaped — Go's `encoding/json` does not escape it and neither does JS's
+    /// `JSON.stringify`, so a nested manifest serialises identically in all
+    /// three. The identical literal is asserted in
+    /// `server/internal/cloud/transfer_folder_interop_test.go`'s
+    /// `TestNestedManifestJSONBytes`; if either side drifts, both tests fail.
+    func testNestedManifestJSONMatchesTheGoAndWebBytes() throws {
+        let bytes = try manifestJSON(StoredManifest(files: [
+            ManifestFile(name: "trip/day1/a.txt", size: 3),
+            ManifestFile(name: "loose.txt", size: 0),
+        ]))
+        let expected = #"{"files":[{"name":"trip/day1/a.txt","size":3},{"name":"loose.txt","size":0}]}"#
+        XCTAssertEqual(String(decoding: bytes, as: UTF8.self), expected)
+    }
+
+    /// A nested manifest survives the real encrypt/decrypt round trip, and its
+    /// slashes come back intact — the display sanitizer must not treat them as
+    /// characters to strip.
+    func testNestedManifestRoundTripsThroughEncryption() throws {
+        let key = [UInt8](repeating: 7, count: 32)
+        let m = StoredManifest(files: [ManifestFile(name: "trip/day1/a.txt", size: 3)])
+        let back = try decryptManifest(key: key, try encryptManifest(key: key, m))
+        XCTAssertEqual(back.files.map(\.name), ["trip/day1/a.txt"])
+    }
+
     func testDecryptManifestThrowsOnTamper() throws {
         let v = try Vectors.load("store-wire-vectors")
         var ct = v.hex("manifest.ctHex")

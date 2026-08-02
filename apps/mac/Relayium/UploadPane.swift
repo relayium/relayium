@@ -6,6 +6,11 @@ struct UploadPane: View {
     @ObservedObject var model: CloudUploadModel
     let token: String
 
+    /// The pane owns the selection; the model owns what is being uploaded. They
+    /// are kept in step through `model.pick`, so the model still refuses an
+    /// oversized file and still has something to return to after a cancel.
+    @StateObject private var selection = SelectionStore()
+
     private let ttlLabels: [Int: String] = [
         3600: "1 hour", 86400: "1 day", 259200: "3 days",
         604800: "7 days", 1209600: "14 days",
@@ -16,9 +21,10 @@ struct UploadPane: View {
             Text("Send files").font(.headline)
             switch model.state {
             case .idle:
-                dropZone(hint: "Drag files here, or click to choose")
-            case .picked(let urls):
-                dropZone(hint: "\(urls.count) file\(urls.count == 1 ? "" : "s") ready")
+                dropZone(hint: "Drop files or folders here, or click to choose")
+            case .picked:
+                dropZone(hint: selection.summary ?? "Ready")
+                Button("Clear") { selection.clear() }.buttonStyle(.link)
                 options
                 Button("Send") { model.start(token: token) }
                     .buttonStyle(.borderedProminent)
@@ -46,7 +52,21 @@ struct UploadPane: View {
                 Button("Send another") { model.reset() }.buttonStyle(.link)
             case .failed(let message):
                 Text(message).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
                 Button("Try again") { model.reset() }
+            }
+        }
+        // The store owns "what the user chose"; the model owns "what is being
+        // uploaded". Pushing on every revision keeps them one fact rather than
+        // two — including the empty case, which has to reach `clearSelection`
+        // and not `reset` (reset deliberately restores the last selection).
+        .onChange(of: selection.revision) { _ in
+            if let expanded = selection.selection {
+                model.pick(expanded)
+            } else if let message = selection.error {
+                model.fail(message)
+            } else {
+                model.clearSelection()
             }
         }
     }
@@ -64,40 +84,14 @@ struct UploadPane: View {
     }
 
     private func dropZone(hint: String) -> some View {
-        RoundedRectangle(cornerRadius: 10)
-            .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-            .foregroundStyle(.secondary)
-            .frame(height: 110)
-            .overlay(Text(hint).foregroundStyle(.secondary))
-            .contentShape(Rectangle())
-            .onTapGesture { chooseFiles() }
-            .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-                Task { @MainActor in
-                    var urls: [URL] = []
-                    for p in providers {
-                        guard let item = try? await p.loadItem(forTypeIdentifier: UTType.fileURL.identifier),
-                              let data = item as? Data,
-                              let url = URL(dataRepresentation: data, relativeTo: nil) else { continue }
-                        // Directories are out of scope this round: the manifest is
-                        // a flat file list, and recursing raises collision and
-                        // symlink questions that belong to their own round.
-                        var isDir: ObjCBool = false
-                        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
-                           !isDir.boolValue {
-                            urls.append(url)
-                        }
-                    }
-                    if !urls.isEmpty { model.pick(urls) }
-                }
-                return true
+        VStack(alignment: .leading, spacing: 6) {
+            FileDropZone(store: selection, isBusy: model.isBusy) {
+                Text(hint)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-    }
-
-    private func chooseFiles() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false      // folder recursion is out of scope
-        panel.canChooseFiles = true
-        if panel.runModal() == .OK { model.pick(panel.urls) }
+            Button("Choose Files or Folders…") { chooseFilesOrFolders(into: selection) }
+        }
     }
 }

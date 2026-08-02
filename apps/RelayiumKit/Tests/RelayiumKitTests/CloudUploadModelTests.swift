@@ -78,8 +78,8 @@ final class CloudUploadModelTests: XCTestCase {
         let url = sized(10, name: "a.bin")
         m.pick([url])
         m.cancel()
-        guard case .picked(let urls) = m.state else { return XCTFail("expected .picked, got \(m.state)") }
-        XCTAssertEqual(urls, [url])
+        guard case .picked(let files) = m.state else { return XCTFail("expected .picked, got \(m.state)") }
+        XCTAssertEqual(files.map(\.url), [url])
         XCTAssertFalse(m.isBusy)
     }
 
@@ -100,8 +100,8 @@ final class CloudUploadModelTests: XCTestCase {
         m.pick([url])
         m.applyOutcome(UploadOutcome(id: "x", expiresAt: 1, keyB64url: "K"))
         m.reset()
-        guard case .picked(let urls) = m.state else { return XCTFail("got \(m.state)") }
-        XCTAssertEqual(urls, [url])
+        guard case .picked(let files) = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertEqual(files.map(\.url), [url])
     }
 
     /// A callback from a superseded upload must not repaint a screen the user

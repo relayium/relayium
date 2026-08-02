@@ -16,7 +16,9 @@ public func allowedTTLs(retentionSecs: Int64) -> [Int] {
 
 public enum UploadState: Equatable {
     case idle
-    case picked([URL])
+    /// The expanded file list, not the roots: a folder is only "picked" once we
+    /// know what is in it, and `.picked([])` must be unreachable.
+    case picked([SelectedFile])
     case uploading(sent: Int, total: Int)
     case done(link: String, expiresAt: Int64)
     case failed(String)
@@ -36,7 +38,7 @@ public final class CloudUploadModel: ObservableObject {
     private var task: Task<Void, Never>?
     /// The files the user chose, kept so cancel() and reset() can return to a
     /// state they can act from instead of making them choose again.
-    private var lastPicked: [URL] = []
+    private var lastPicked: [SelectedFile] = []
     /// Operation identity, as in AccountSession: a late callback from a
     /// superseded upload must not repaint a screen the user has moved past.
     private var generation = 0
@@ -56,30 +58,57 @@ public final class CloudUploadModel: ObservableObject {
         if !ttlChoices.contains(ttl) { ttl = ttlChoices.last ?? 3600 }
     }
 
+    /// Roots the user chose or dropped — files, folders, or a mix. Folders are
+    /// expanded here, before anything is uploaded, so the per-file size gate and
+    /// the file-count bound apply to what is actually going to be sent rather
+    /// than to the handful of items that were selected.
     public func pick(_ urls: [URL]) {
+        let selection: FileSelection
+        do { selection = try expandSelection(urls) }
+        catch {
+            state = .failed(ErrorCopy.message(for: error))
+            return
+        }
+        pick(selection)
+    }
+
+    public func pick(_ selection: FileSelection) {
+        // A live upload is sending the bytes the CURRENT list describes.
+        // Replacing it mid-flight would leave the progress bar, the manifest and
+        // the files disagreeing. The panes disable their pickers while busy;
+        // this is the guard that does not depend on a redraw.
+        guard !isBusy else { return }
         if maxFileSize > 0 {
-            for u in urls {
-                let attrs = try? FileManager.default.attributesOfItem(atPath: u.path)
+            for file in selection.files {
+                let attrs = try? FileManager.default.attributesOfItem(atPath: file.url.path)
                 let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
                 if size > maxFileSize {
-                    state = .failed("\(u.lastPathComponent) is larger than this server accepts.")
+                    state = .failed("\(file.name) is larger than this server accepts.")
                     return
                 }
             }
         }
-        lastPicked = urls
-        state = .picked(urls)
+        guard !selection.files.isEmpty else {
+            state = .failed(ErrorCopy.message(for: FileSelectionError.noFiles))
+            return
+        }
+        lastPicked = selection.files
+        state = .picked(selection.files)
     }
 
     public func start(token: String) {
-        guard case .picked(let urls) = state else { return }
+        guard case .picked(let files) = state else { return }
         generation += 1
         let g = generation
         state = .uploading(sent: 0, total: 0)
         task = Task { [weak self] in
             guard let self else { return }
             do {
-                let sources: [PlaintextSource] = try urls.map { try FileURLSource(url: $0) }
+                // Through `stageCloudFiles`, not a second copy of it: the rule
+                // that folder hierarchy rides in `ManifestFile.name` has to have
+                // exactly one implementation, or the native upload and the thing
+                // its interop test pins drift apart.
+                let sources = try stageCloudFiles(files)
                 let outcome = try await self.uploader.upload(
                     sources: sources,
                     burnAfterRead: self.burnAfterRead,
@@ -104,6 +133,17 @@ public final class CloudUploadModel: ObservableObject {
         task = nil
         generation += 1
         state = lastPicked.isEmpty ? .idle : .picked(lastPicked)
+    }
+
+    /// Forget the selection entirely — what "Clear" means. Distinct from
+    /// `reset`, which deliberately keeps it so a failure does not make the user
+    /// choose everything again. Refuses mid-upload: the bytes being sent are the
+    /// ones this list describes.
+    public func clearSelection() {
+        guard !isBusy else { return }
+        generation += 1
+        lastPicked = []
+        state = .idle
     }
 
     /// Back to a state the user can start from, after a success or a failure.
@@ -132,6 +172,14 @@ public final class CloudUploadModel: ObservableObject {
     func fail(_ error: Error, g: Int) {
         guard g == generation else { return }
         state = .failed(ErrorCopy.message(for: error))
+    }
+
+    /// A failure raised outside the upload — an unreadable selection, say. Not
+    /// applied mid-upload: a picker error must not repaint a live transfer.
+    public func fail(_ message: String) {
+        guard !isBusy else { return }
+        generation += 1
+        state = .failed(message)
     }
 
     /// Split out so the link construction is testable without a transfer.

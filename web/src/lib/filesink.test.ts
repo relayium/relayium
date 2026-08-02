@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { splitExtension, nextAvailableName, canStreamToDisk, asksWhereToSave, pickSaveTarget, memoryPeakBytes, warnsAboutMemory, LARGE_DOWNLOAD_WARN_BYTES, probeStreamSupport, swStreamReady, saveFailureStatus, SaveCancelledError, SaveUnavailableError } from "./filesink";
+import { splitExtension, nextAvailableName, canStreamToDisk, asksWhereToSave, pickSaveTarget, memoryPeakBytes, warnsAboutMemory, isNestedFolderBatch, isFlatSingleFile, LARGE_DOWNLOAD_WARN_BYTES, probeStreamSupport, swStreamReady, saveFailureStatus, SaveCancelledError, SaveUnavailableError, type FileMetaLite } from "./filesink";
 import { STREAM_ROUTE, contentDisposition } from "./sw-stream";
 
 describe("splitExtension", () => {
@@ -162,36 +162,39 @@ describe("swStreamReady", () => {
   });
 });
 
+/** N flat files — what the count-based assertions used to pass as a bare number. */
+const flatN = (count: number) =>
+  Array.from({ length: count }, (_, i) => ({ name: `f${i}.bin`, size: 1 }));
 describe("canStreamToDisk", () => {
   it("returns false with no File System Access API at all (Firefox/Safari/手机)", () => {
     const restore = stubPickers({});
     try {
-      expect(canStreamToDisk(1)).toBe(false);
-      expect(canStreamToDisk(5)).toBe(false);
+      expect(canStreamToDisk(flatN(1))).toBe(false);
+      expect(canStreamToDisk(flatN(5))).toBe(false);
     } finally { restore(); }
   });
 
   it("returns true for both single and multi file when both pickers exist (桌面 Chrome/Edge)", () => {
     const restore = stubPickers({ save: true, dir: true });
     try {
-      expect(canStreamToDisk(1)).toBe(true);
-      expect(canStreamToDisk(5)).toBe(true);
+      expect(canStreamToDisk(flatN(1))).toBe(true);
+      expect(canStreamToDisk(flatN(5))).toBe(true);
     } finally { restore(); }
   });
 
   it("with only showSaveFilePicker, streams a single file but not a batch", () => {
     const restore = stubPickers({ save: true });
     try {
-      expect(canStreamToDisk(1)).toBe(true);
-      expect(canStreamToDisk(2)).toBe(false);
+      expect(canStreamToDisk(flatN(1))).toBe(true);
+      expect(canStreamToDisk(flatN(2))).toBe(false);
     } finally { restore(); }
   });
 
   it("with only showDirectoryPicker, streams both — pickSaveTarget falls through to the folder branch", () => {
     const restore = stubPickers({ dir: true });
     try {
-      expect(canStreamToDisk(1)).toBe(true);
-      expect(canStreamToDisk(3)).toBe(true);
+      expect(canStreamToDisk(flatN(1))).toBe(true);
+      expect(canStreamToDisk(flatN(3))).toBe(true);
     } finally { restore(); }
   });
 
@@ -199,8 +202,8 @@ describe("canStreamToDisk", () => {
     const restore = stubPickers({});
     const s = await readySW();
     try {
-      expect(canStreamToDisk(1, SW_ON)).toBe(true);
-      expect(canStreamToDisk(2, SW_ON)).toBe(false);
+      expect(canStreamToDisk(flatN(1), SW_ON)).toBe(true);
+      expect(canStreamToDisk(flatN(2), SW_ON)).toBe(false);
     } finally { s.restore(); restore(); }
   });
 
@@ -218,7 +221,7 @@ describe("canStreamToDisk", () => {
             const target = await pickSaveTarget(files, SW_ON);
             const streamed = !memoryLabels.has(target.label);
             expect(streamed, `caps=${JSON.stringify(caps)} sw=${sw} count=${count} label=${target.label}`)
-              .toBe(canStreamToDisk(count, SW_ON));
+              .toBe(canStreamToDisk(files, SW_ON));
           } finally { s?.restore(); restore(); }
         }
       }
@@ -233,7 +236,7 @@ describe("canStreamToDisk", () => {
     const restore = stubPickers({}); // Firefox/Safari/手机：没有 File System Access API
     const s = await readySW(); // SW 完全就绪 —— 唯一挡住它的只能是那个开关
     try {
-      expect(canStreamToDisk(1)).toBe(false);
+      expect(canStreamToDisk(flatN(1))).toBe(false);
       const target = await pickSaveTarget([{ name: "a.bin", size: 1 }]);
       expect(target.label, "没传开关就必须落回既有的内存分支").toBe("将逐个下载到默认下载目录");
       // 内存提示同样要照旧出现：实时路那条提示不能被 SW 分支悄悄摘掉。
@@ -257,7 +260,7 @@ describe("canStreamToDisk", () => {
     const restore = stubPickers({}); // 没有 File System Access API，SW 分支是首选
     const s = await readySW({ refuses: true });
     try {
-      expect(canStreamToDisk(1, SW_ON)).toBe(true); // 探测仍然说「能流式」
+      expect(canStreamToDisk(flatN(1), SW_ON)).toBe(true); // 探测仍然说「能流式」
       const target = await pickSaveTarget([{ name: "a.bin", size: 1 }], SW_ON);
       expect(target.label).toBe("将逐个下载到默认下载目录"); // 内存分支接住了
       expect(s.opened.length, "确实尝试过开流，是被 SW 拒的").toBe(1);
@@ -468,9 +471,9 @@ describe("手机：一次选择器都不开", () => {
     restoreUA = stubUA(ANDROID_UA);
     const restore = stubPickers({ save: true, dir: true }); // 属性都在 —— 手机上不算数
     try {
-      expect(asksWhereToSave(1)).toBe(false);
-      expect(asksWhereToSave(4)).toBe(false);
-      expect(canStreamToDisk(1)).toBe(false);
+      expect(asksWhereToSave(flatN(1))).toBe(false);
+      expect(asksWhereToSave(flatN(4))).toBe(false);
+      expect(canStreamToDisk(flatN(1))).toBe(false);
       // 内存提示是这条路上唯一的保护，绝不能被「属性存在」悄悄摘掉。
       expect(warnsAboutMemory(flat([LARGE_DOWNLOAD_WARN_BYTES + 1]), LARGE_DOWNLOAD_WARN_BYTES + 1)).toBe(true);
     } finally { restore(); }
@@ -530,7 +533,7 @@ describe("桌面：选择器坏了（非取消的失败）", () => {
       const target = await pickSaveTarget([{ name: "b.bin", size: 1 }]);
       expect(target.label, "上一批的失败不该污染这一批").toBe("已选择保存位置");
       expect(good.calls.save).toBe(1);
-      expect(asksWhereToSave(1)).toBe(true);
+      expect(asksWhereToSave(flatN(1))).toBe(true);
     } finally { good.restore(); }
   });
 
@@ -579,16 +582,16 @@ describe("桌面：真正的用户取消", () => {
     const p = stubBrokenPickers({ err: abortError() });
     try {
       await pickSaveTarget([{ name: "a.bin", size: 1 }]).catch(() => {});
-      expect(asksWhereToSave(1)).toBe(true);
-      expect(canStreamToDisk(1)).toBe(true);
+      expect(asksWhereToSave(flatN(1))).toBe(true);
+      expect(canStreamToDisk(flatN(1))).toBe(true);
     } finally { p.restore(); }
   });
 
   it("桌面（属性存在）仍然按能流式落盘算 —— 既有行为逐字不变", () => {
     const restore = stubPickers({ save: true, dir: true });
     try {
-      expect(asksWhereToSave(1)).toBe(true);
-      expect(canStreamToDisk(5)).toBe(true);
+      expect(asksWhereToSave(flatN(1))).toBe(true);
+      expect(canStreamToDisk(flatN(5))).toBe(true);
     } finally { restore(); }
   });
 });
@@ -906,5 +909,175 @@ describe("warnsAboutMemory", () => {
       expect(warnsAboutMemory(flat([half]), half)).toBe(false);
       expect(warnsAboutMemory(folder([half]), half)).toBe(true);
     } finally { restore(); }
+  });
+});
+
+// --- 带目录层级的单文件 -------------------------------------------------------
+//
+// 一个文件夹里只有一个文件（solo/only.txt）曾经是整个决策模型的盲区：两条单文件
+// 分支（Save As 与 SW 流）只看 `length === 1`，于是桌面 Chrome 落出一个孤零零的
+// only.txt，Firefox 打出一个保留 solo/ 的 ZIP —— 同一批文件，三种浏览器三种形状。
+// 下面每一条都盯着「层级有没有活下来」，而不是「有没有报错」。
+describe("带目录层级的单文件", () => {
+  const nested = () => [{ name: "only.txt", size: 1, path: "solo/only.txt" }];
+
+  it("判定谓词本身：单文件 + 路径 = 文件夹批次，不是扁平单文件", () => {
+    expect(isNestedFolderBatch(nested())).toBe(true);
+    expect(isFlatSingleFile(nested())).toBe(false);
+    expect(isFlatSingleFile([{ name: "a.bin", size: 1 }])).toBe(true);
+    // path 存在但不含 "/" 的，是发送方给了一个平铺路径，不算树。
+    expect(isFlatSingleFile([{ name: "a.bin", size: 1, path: "a.bin" }])).toBe(true);
+  });
+
+  it("两个选择器都在（桌面 Chrome）：走目录选择器，solo/ 保住", async () => {
+    const restore = stubPickers({ save: true, dir: true });
+    try {
+      const dirs: string[] = [];      // 被要求建出来的目录层
+      const probes: string[] = [];    // create:false 的存在性探测
+      const opened: string[] = [];    // create:true 真正建出来的文件
+      let overflowed = false;
+      const w = window as unknown as Record<string, unknown>;
+
+      // 这个替身必须区分 create:false 与 create:true。
+      //
+      // directoryTarget 先用 create:false 探一次「这个名字被占了吗」，占了就用
+      // nextAvailableName 换一个再探。一个**永远返回句柄**的替身于是让每个候选名
+      // 都显示为已占用，而候选名是无限的（"only (1).txt"、"only (2).txt"…）——
+      // 循环永远出不来。那不是超时，是一个把 worker 跑满 CPU 的死循环，从外面看
+      // 只像 vitest 卡在收集阶段。
+      const dirHandle: Record<string, unknown> = {
+        getFileHandle: async (n: string, o: { create: boolean }) => {
+          if (!o.create) {
+            probes.push(n);
+            // 上限即断言：真实路径只探一次。探爆了就当作「不存在」把循环放出来，
+            // 并留下证据 —— 于是替身写坏时这条用例是**失败**，不是挂死。
+            if (probes.length > 4) overflowed = true;
+            throw Object.assign(new Error("NotFoundError"), { name: "NotFoundError" });
+          }
+          opened.push(n);
+          return { createWritable: async () => ({ write: async () => {}, close: async () => {} }) };
+        },
+        getDirectoryHandle: async (n: string) => { dirs.push(n); return dirHandle; },
+      };
+      w.showDirectoryPicker = async () => dirHandle;
+
+      const target = await pickSaveTarget(nested());
+      expect(target.label, "带路径的单文件不能走 Save As").toBe("已选择目标文件夹");
+      const sink = await target.file("only.txt", 1, "solo/only.txt");
+      await sink.close();
+
+      expect(overflowed, "存在性探测失控了 —— 替身没有区分 create:false").toBe(false);
+      expect(probes, "空目录里只该探一次").toEqual(["only.txt"]);
+      expect(dirs, "solo/ 必须被建出来").toEqual(["solo"]);
+      expect(opened, "文件落在 solo/ 里，名字不变").toEqual(["only.txt"]);
+    } finally { restore(); }
+  });
+
+  it("只有 Save As、没有目录选择器：宁可打 ZIP 也不丢掉 solo/", async () => {
+    const restore = stubPickers({ save: true });
+    try {
+      const target = await pickSaveTarget(nested());
+      expect(target.label).toBe("将打包为 ZIP 下载");
+      expect(target.done, "ZIP 目标靠 done 才产出文件").toBeTypeOf("function");
+    } finally { restore(); }
+  });
+
+  it("没有 FSA 但 SW 就绪：走 ZIP，不走 SW 单文件流", async () => {
+    const restore = stubPickers({});
+    const s = await readySW();
+    try {
+      expect(swStreamReady(), "前提：SW 确实就绪，挡住它的只能是路径").toBe(true);
+      const target = await pickSaveTarget(nested(), SW_ON);
+      expect(target.label, "SW 流是一条字节流，会把 solo/ 丢掉").toBe("将打包为 ZIP 下载");
+    } finally { s.restore(); restore(); }
+  });
+
+  // 「扁平单文件仍然走 SW 流」不在这里重复断言：上面 canStreamToDisk 那一组已经
+  // 真跑过那条分支。在这里再开一个 SW 目标只会多留一份 keepalive interval 和一次
+  // iframe 导航（sink 从来没人 close），对本组要证明的事（**带路径**的单文件不进
+  // 那条分支）一点覆盖都不增加。
+
+  it("canStreamToDisk / asksWhereToSave 与真实分支一致", async () => {
+    const noFsa = stubPickers({});
+    const s = await readySW();
+    try {
+      // 没有目录选择器时它落到 ZIP：既不是流式落盘，也不会弹选择器。
+      expect(canStreamToDisk(nested(), SW_ON)).toBe(false);
+      expect(asksWhereToSave(nested())).toBe(false);
+    } finally { s.restore(); noFsa(); }
+
+    const saveOnly = stubPickers({ save: true });
+    try {
+      // Save As 存在也不算数：带路径的单文件用不了它。
+      expect(asksWhereToSave(nested())).toBe(false);
+      expect(canStreamToDisk(nested())).toBe(false);
+    } finally { saveOnly(); }
+
+    const dir = stubPickers({ dir: true });
+    try {
+      expect(asksWhereToSave(nested())).toBe(true);
+      expect(canStreamToDisk(nested())).toBe(true);
+    } finally { dir(); }
+  });
+
+  it("内存提示不再被数量判定吞掉：ZIP 的 2× 峰值要能触发提示", async () => {
+    const restore = stubPickers({});
+    const s = await readySW();
+    try {
+      const big = LARGE_DOWNLOAD_WARN_BYTES * 0.6;
+      const one = [{ name: "big.bin", size: big, path: "solo/big.bin" }];
+      // 总量没过线，但 ZIP 峰值 1.2× 过了 —— 而按数量问会答「SW 能流式」并静音。
+      expect(warnsAboutMemory(one, big, SW_ON), "带路径的单文件必须按 ZIP 估算").toBe(true);
+      expect(warnsAboutMemory([{ name: "big.bin", size: big }], big, SW_ON),
+        "扁平单文件照旧不提示").toBe(false);
+    } finally { s.restore(); restore(); }
+  });
+
+  it("选择器坏掉时不把带路径的单文件当成「SW 安全」而悄悄塞进内存", async () => {
+    // 坏的必须是**目录**选择器：带路径的单文件根本走不到 Save As，把
+    // showSaveFilePicker 弄坏在这条路上是碰不到的，那样的用例只是看起来在测东西。
+    const p = stubBrokenPickers({ save: false, err: new Error("SecurityError") });
+    const s = await readySW();
+    try {
+      expect(swStreamReady(), "前提：SW 就绪 —— fallbackIsSafe 必须仍然拒绝").toBe(true);
+      const huge = LARGE_DOWNLOAD_WARN_BYTES * 2;
+      await expect(pickSaveTarget([{ name: "b.bin", size: huge, path: "solo/b.bin" }], SW_ON))
+        .rejects.toBeInstanceOf(SaveUnavailableError);
+    } finally { s.restore(); p.restore(); }
+  });
+
+  it("每一种能力组合下，判定与真实分支都不许分叉（含带路径的单文件）", async () => {
+    const memoryLabels = new Set(["将打包为 ZIP 下载", "将逐个下载到默认下载目录"]);
+    // **只有带路径的形状**。扁平的两种由上面既有的矩阵覆盖，而在这里再跑一遍
+    // flatSingle + SW 会在每次循环里开一个没人 close 的 SW 目标（keepalive
+    // interval + iframe 导航），把这条用例变成一个会拖住整个 runner 的东西。
+    // 文件夹批次永远进不了 SW 分支，所以这一组不会留下任何流。
+    const batches: Record<string, FileMetaLite[]> = {
+      nestedSingle: nested(),
+      nestedMulti: [
+        { name: "a.bin", size: 1, path: "trip/a.bin" },
+        { name: "b.bin", size: 1, path: "trip/b.bin" },
+      ],
+    };
+    for (const caps of [{}, { save: true }, { dir: true }, { save: true, dir: true }]) {
+      for (const sw of [false, true]) {
+        for (const [shape, files] of Object.entries(batches)) {
+          const restore = stubPickers(caps);
+          const s = sw ? await readySW() : null;
+          try {
+            const target = await pickSaveTarget(files, SW_ON);
+            const streamed = !memoryLabels.has(target.label);
+            const where = `caps=${JSON.stringify(caps)} sw=${sw} shape=${shape} label=${target.label}`;
+            expect(streamed, where).toBe(canStreamToDisk(files, SW_ON));
+            // 而且层级永远不会因为分支不同而消失：只要是文件夹批次，落点要么是
+            // 目录句柄要么是 ZIP，绝不会是单文件字节流。
+            if (isNestedFolderBatch(files)) {
+              expect(target.label, `层级丢失: ${where}`).not.toBe("已选择保存位置");
+              expect(target.label, `层级丢失: ${where}`).not.toBe("将流式下载到默认下载目录");
+            }
+          } finally { s?.restore(); restore(); }
+        }
+      }
+    }
   });
 });

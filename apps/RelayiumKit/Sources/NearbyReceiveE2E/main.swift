@@ -99,6 +99,21 @@ let payload = Array("passive nearby receive :: the quick brown fox jumps over 01
 /// where a fixed name would silently overwrite the previous run's evidence — and
 /// leave a file nobody can attribute to a particular run.
 let fileName = "nearby-receive-e2e-\(runTag).txt"
+/// The flat single-file offer `--send-to` mode uses, unchanged.
+let flatBatch: [(meta: FileMeta, bytes: [UInt8])] = [
+    (FileMeta(name: fileName, size: payload.count, path: nil), payload),
+]
+/// The in-process offer: a loose file beside a two-level folder, i.e. a batch
+/// with no single root — so the receiver has to build its fallback container AND
+/// reconstruct the nested paths inside it. Distinct bytes per file, so a writer
+/// that split the stream at the wrong boundary cannot pass.
+let treeRoot = "tree-\(runTag)"
+let mixedBatch: [(meta: FileMeta, bytes: [UInt8])] = [
+    (FileMeta(name: fileName, size: payload.count, path: nil), payload),
+    (FileMeta(name: "a.bin", size: 3, path: "\(treeRoot)/day1/a.bin"), [0xA1, 0xA2, 0xA3]),
+    (FileMeta(name: "b.bin", size: 0, path: "\(treeRoot)/day1/empty/b.bin"), []),
+    (FileMeta(name: "c.bin", size: 5, path: "\(treeRoot)/day2/c.bin"), [1, 2, 3, 4, 5]),
+]
 // Same-machine peers pair on host candidates; a public STUN helps gathering on
 // some networks. No TURN: the receiving side is STUN-only by construction and a
 // relay would make this test prove the wrong thing.
@@ -185,7 +200,16 @@ final class Sender: @unchecked Sendable {
 
     /// Phase 1: an unsolicited FILE offer. Nothing on the far side is expecting
     /// it and nobody there clicks anything.
-    func sendFile(to peerId: String) {
+    ///
+    /// `batch` is what the offer carries. The in-process run sends a MIXED batch
+    /// — a loose file beside a two-level folder — so the live path proves the
+    /// thing unit tests cannot: that a real peer's `FileMeta.path` survives
+    /// signalling, the handshake, the DataChannel and the receiver's writer as a
+    /// rebuilt directory tree with the right bytes in the right leaves.
+    /// `--send-to` mode keeps the single flat file, because that one lands in
+    /// somebody's real Downloads folder and the printed cleanup line has to stay
+    /// exactly true.
+    func sendFile(to peerId: String, batch: [(meta: FileMeta, bytes: [UInt8])]) {
         let connection = RealtimeConnection(signaling: signaling, peerId: peerId,
                                             role: .initiator, iceServers: senderICE)
         lock.lock(); fileConnection = connection; lock.unlock()
@@ -200,8 +224,8 @@ final class Sender: @unchecked Sendable {
             // connection's own callback queue.
             DispatchQueue.global().async {
                 connection.send(
-                    sources: [DataSource(name: fileName, bytes: payload)],
-                    metas: [FileMeta(name: fileName, size: payload.count, path: nil)])
+                    sources: batch.map { DataSource(name: $0.meta.name, bytes: $0.bytes) },
+                    metas: batch.map(\.meta))
             }
         }
         connection.onControl = { [weak self] control in
@@ -447,7 +471,7 @@ func runAgainstLiveApp(_ deviceName: String) async {
         outcome.finish("FAIL: \"\(deviceName)\" is not in the code-less room")
         return
     }
-    sender.sendFile(to: peerId)
+    sender.sendFile(to: peerId, batch: flatBatch)
     guard await waitFor("the far side to report the batch complete", seconds: 60,
                         { sender.sawComplete }) else {
         outcome.finish("FAIL: the far side never confirmed the transfer")
@@ -488,8 +512,11 @@ Task { @MainActor in
     }
 
     // ── phase 1: an unsolicited file offer ───────────────────────────────────
-    log("phase 1: offering files with nobody expecting it")
-    sender.sendFile(to: peerId)
+    // A MIXED batch: one loose file plus a two-level folder, so this proves the
+    // production receive path rebuilds a directory tree from `FileMeta.path`
+    // rather than merely writing N files.
+    log("phase 1: offering a loose file and a nested folder with nobody expecting it")
+    sender.sendFile(to: peerId, batch: mixedBatch)
     guard await waitFor("the receive to complete", seconds: 60, {
         if case .completed = receiver.fileModel.state { return true }
         if case .failed = receiver.fileModel.state { return true }
@@ -504,15 +531,37 @@ Task { @MainActor in
         receiver.teardown()
         return
     }
-    let written = urls.first.flatMap { try? Data(contentsOf: $0) }
-    let bytesMatch = written.map { [UInt8]($0) == payload } ?? false
+    // Where the batch landed. A multi-root batch has no folder name to take, so
+    // the receiver builds its own container; everything is asserted RELATIVE to
+    // that, which is also how a wrong container (or none) shows up as a failure
+    // rather than as a path that happens to contain the right suffix.
+    let container = receiver.fileModel.receivedContainer
+    let base = (container ?? receiver.saveDirectory).standardized.path
+    let relativePaths = urls.map { url -> String in
+        let p = url.standardized.path
+        return p.hasPrefix(base + "/") ? String(p.dropFirst(base.count + 1)) : p
+    }
+    // Manifest order, with the folder rebuilt — not four files side by side.
+    let expectedPaths = mixedBatch.map { $0.meta.path ?? $0.meta.name }
+    let pathsMatch = relativePaths == expectedPaths
+    // Every file's bytes, not just the first: a writer that split the stream one
+    // byte off would still produce the right count of files with the right names.
+    let bytesMatch = zip(urls, mixedBatch).allSatisfy { url, entry in
+        (try? Data(contentsOf: url)).map { [UInt8]($0) == entry.bytes } ?? false
+    } && urls.count == mixedBatch.count
+    // The drag-out payload is the container, so the whole tree can leave in one
+    // piece rather than being flattened at the destination.
+    let dragMatch = receiver.fileModel.received?.dragURLs == [container].compactMap { $0 }
     let fileSASMatch = !receiver.fileModel.sasCode.isEmpty
         && receiver.fileModel.sasCode == sender.fileSAS
-    log("phase 1: urls=\(urls.count) bytesMatch=\(bytesMatch) sasMatch=\(fileSASMatch) "
+    log("phase 1: urls=\(urls.count) container=\(container?.lastPathComponent ?? "nil") "
+        + "paths=\(relativePaths) pathsMatch=\(pathsMatch) bytesMatch=\(bytesMatch) "
+        + "dragMatch=\(dragMatch) sasMatch=\(fileSASMatch) "
         + "receiverSAS=\(receiver.fileModel.sasCode) senderSAS=\(sender.fileSAS ?? "nil") "
         + "senderSawComplete=\(sender.sawComplete)")
-    guard bytesMatch, fileSASMatch, sender.sawComplete else {
-        outcome.finish("FAIL: phase 1 bytes=\(bytesMatch) sas=\(fileSASMatch) complete=\(sender.sawComplete)")
+    guard pathsMatch, bytesMatch, dragMatch, fileSASMatch, sender.sawComplete else {
+        outcome.finish("FAIL: phase 1 paths=\(pathsMatch) bytes=\(bytesMatch) drag=\(dragMatch) "
+                       + "sas=\(fileSASMatch) complete=\(sender.sawComplete)")
         receiver.teardown()
         return
     }

@@ -28,11 +28,12 @@ vi.mock("./store-crypto", () => ({
 }));
 
 /**
- * filesink 默认走真实实现（上面那些用例靠的就是它真跑分支）。只有需要盯住
- * 「SaveTarget.done 到底有没有被调用」的用例才用 injectTarget 顶掉 pickSaveTarget ——
- * DownloadPage 今天喂给 pickSaveTarget 的 FileMetaLite 不带 path，够不到 ZIP 分支，
- * 而 ZIP 分支是全仓唯一带 done 的目标。契约必须有守卫，否则等哪天下载页支持文件夹
- * （第 2 步的流式 ZIP）时，done 漏调会表现为「显示完成但什么都没下载下来」。
+ * filesink 默认走真实实现（上面那些用例靠的就是它真跑分支）。需要盯住
+ * 「SaveTarget.done / t.file 的入参」的用例用 injectTarget 顶掉 pickSaveTarget。
+ *
+ * 注意：下载页现在会把带 "/" 的清单 name 拆成 {name, path} 再喂下去，所以文件夹
+ * 清单是真的能走到 ZIP 分支的（见下面「文件夹清单」那一组）。done 漏调会表现为
+ * 「显示完成但什么都没下载下来」，所以那条契约仍然要守。
  */
 let injectedTarget: unknown = null;
 vi.mock("./filesink", async (orig) => {
@@ -46,7 +47,7 @@ vi.mock("./filesink", async (orig) => {
 
 import DownloadPage from "./DownloadPage.svelte";
 import { loadLang, messages } from "./i18n.svelte";
-import { LARGE_DOWNLOAD_WARN_BYTES, SinkTransportError, probeStreamSupport, swStreamReady } from "./filesink";
+import { LARGE_DOWNLOAD_WARN_BYTES, SinkTransportError, probeStreamSupport, swStreamReady, pickSaveTarget } from "./filesink";
 import { refreshHolds, resetAppUpdate } from "./app-update.svelte";
 
 let target: HTMLDivElement;
@@ -96,6 +97,22 @@ async function clickDownload(sel = ".btn-primary") {
   flushSync();
   await new Promise((r) => setTimeout(r, 0));
   flushSync();
+}
+
+/** 让 downloadBlob 交付清单声明的全部字节。
+ *
+ *  生产里这是**不变量**而不是巧合：downloadBlob 没拿到 expectedBytes 时会从
+ *  加密清单算出明文总量，并在 resolve 之前用 StoreDecryptor.end(expected) 核对，
+ *  对不上就抛。所以「声明了 1 MiB 却一个字节都不交付」是替身独有的形状，下载页
+ *  收尾时按「和链接描述的不一致」拒绝它是对的。需要真跑完一次下载的用例用这个，
+ *  别让替身违反它自己依赖的契约。 */
+function deliverDeclaredBytes(files: { name: string; size: number }[]) {
+  const total = files.reduce((n, f) => n + f.size, 0);
+  downloadBlob.mockImplementation(
+    async (_id: unknown, _k: unknown, onPt: (p: Uint8Array) => Promise<void>) => {
+      if (total > 0) await onPt(new Uint8Array(total));
+    },
+  );
 }
 
 beforeEach(() => {
@@ -280,7 +297,9 @@ describe("DownloadPage × service worker 流式落盘", () => {
     probeStreamSupport();
     await until(swStreamReady);
     try {
-      await mountPage({ canStream: false, files: [{ name: "small.txt", size: SMALL }] });
+      const files = [{ name: "small.txt", size: SMALL }];
+      deliverDeclaredBytes(files);
+      await mountPage({ canStream: false, files });
       await clickDownload();
       await until(() => downloadBlob.mock.calls.length > 0);
 
@@ -302,10 +321,252 @@ describe("DownloadPage × service worker 流式落盘", () => {
 
   it("SW 不可用 + 小文件：走既有 blobSink，下载照常完成", async () => {
     probeStreamSupport();
-    await mountPage({ canStream: false, files: [{ name: "small.txt", size: SMALL }] });
+    const files = [{ name: "small.txt", size: SMALL }];
+    deliverDeclaredBytes(files);
+    await mountPage({ canStream: false, files });
     await clickDownload();
     expect(downloadBlob).toHaveBeenCalledTimes(1);
     expect(target.querySelector(".error"), "回落不该报错").toBeNull();
+  });
+});
+
+// 存储清单是冻结的，没有 path 字段：文件夹层级写在 name 里（"trip/day1/a.txt"）。
+// Go CLI 的 walkUploadPaths 一直这么发，macOS 原生端现在也这么发 —— 所以下载页
+// 必须能把它还原成一棵树，而不是把整串 name 当文件名。
+describe("DownloadPage 文件夹清单", () => {
+  const FOLDER = [
+    { name: "trip/day1/a.txt", size: 3 },
+    { name: "trip/b.txt", size: 2 },
+  ];
+
+  it("把带 / 的 name 拆成 {叶子名, 相对路径} 再喂给 sink —— 否则层级只能靠运气", async () => {
+    const seen: { name: string; path?: string }[] = [];
+    injectedTarget = {
+      label: "test",
+      file: async (name: string, _size: number, path?: string) => {
+        seen.push({ name, path });
+        return { write: async () => {}, close: async () => {} };
+      },
+      done: async () => {},
+    };
+    downloadBlob.mockImplementation(async (_id: unknown, _k: unknown, onPt: (p: Uint8Array) => Promise<void>) => {
+      await onPt(new Uint8Array([1, 2, 3, 4, 5]));
+    });
+    await mountPage({ canStream: false, files: FOLDER });
+    await clickDownload();
+    await until(() => seen.length === 2);
+    expect(seen).toEqual([
+      { name: "a.txt", path: "trip/day1/a.txt" },
+      { name: "b.txt", path: "trip/b.txt" },
+    ]);
+  });
+
+  it("没有 File System Access 时真的选中 ZIP 分支 —— 这正是层级丢失的那一步", async () => {
+    // 以前 f.path 恒为 undefined，pickSaveTarget 判不出这是文件夹，于是逐个
+    // a.download="trip/day1/a.txt"，浏览器把它压成一个平铺文件名。
+    //
+    // 断言落在 pickSaveTarget 真实返回的目标上，而不是「页面显示完成了」：
+    // 两条分支都会显示完成，只有目标本身能区分。喂给它的正是页面自己算出的
+    // 那份 spec（上一条用例已经钉住了 spec 的形状）。
+    const restore = stubPickers(false);
+    try {
+      const folderTarget = await pickSaveTarget(
+        [{ name: "a.txt", size: 3, path: "trip/day1/a.txt" },
+         { name: "b.txt", size: 2, path: "trip/b.txt" }],
+        { swStream: false },
+      );
+      expect(folderTarget.done, "文件夹批次必须走 ZIP —— 它是唯一带 done 的目标").toBeTypeOf("function");
+
+      const flatTarget = await pickSaveTarget([{ name: "a.bin", size: 1 }], { swStream: false });
+      expect(flatTarget.done, "扁平批次仍然逐个下载，没有 done").toBeUndefined();
+    } finally {
+      restore();
+    }
+  });
+
+  it("扁平清单不受影响：仍然不带 path，仍然逐个下载", async () => {
+    const seen: { name: string; path?: string }[] = [];
+    injectedTarget = {
+      label: "test",
+      file: async (name: string, _size: number, path?: string) => {
+        seen.push({ name, path });
+        return { write: async () => {}, close: async () => {} };
+      },
+      done: async () => {},
+    };
+    downloadBlob.mockImplementation(async (_id: unknown, _k: unknown, onPt: (p: Uint8Array) => Promise<void>) => {
+      await onPt(new Uint8Array([1]));
+    });
+    await mountPage({ canStream: false, files: [{ name: "a.bin", size: 1 }] });
+    await clickDownload();
+    await until(() => seen.length === 1);
+    expect(seen).toEqual([{ name: "a.bin", path: undefined }]);
+  });
+
+  // 一个文件夹里只有一个文件：整条决策链上最容易丢层级的形状。清单只有一条
+  // 记录，所以「单文件」的两条快路（Save As、SW 单文件流）都会抢走它，而两条都
+  // 交付一个纯文件名 —— solo/ 就此消失。这条用例走的是真的 StoredManifest。
+  it("一个文件的文件夹：solo/ 必须活下来，不能被当成单文件", async () => {
+    const seen: { name: string; path?: string }[] = [];
+    injectedTarget = {
+      label: "test",
+      file: async (name: string, _size: number, path?: string) => {
+        seen.push({ name, path });
+        return { write: async () => {}, close: async () => {} };
+      },
+      done: async () => {},
+    };
+    downloadBlob.mockImplementation(async (_id: unknown, _k: unknown, onPt: (p: Uint8Array) => Promise<void>) => {
+      await onPt(new Uint8Array([1, 2, 3]));
+    });
+    await mountPage({ canStream: false, files: [{ name: "solo/only.txt", size: 3 }] });
+    await clickDownload();
+    await until(() => seen.length === 1);
+    expect(seen).toEqual([{ name: "only.txt", path: "solo/only.txt" }]);
+  });
+
+  it("一个文件的文件夹在真实分支上也不走单文件快路", async () => {
+    // 不注入目标，让 pickSaveTarget 真跑：桌面 Chrome（两个选择器都在）必须落到
+    // 目录选择器，而不是 Save As —— 后者只收一个文件名，装不下 solo/。
+    const restore = stubPickers(true);
+    try {
+      const folderTarget = await pickSaveTarget(
+        [{ name: "only.txt", size: 3, path: "solo/only.txt" }], { swStream: false },
+      );
+      expect(folderTarget.label).toBe("已选择目标文件夹");
+      expect(folderTarget.label).not.toBe("已选择保存位置");
+    } finally { restore(); }
+  });
+
+  // --- 零字节文件的收尾顺序 -------------------------------------------------
+  //
+  // 密文流里没有零字节文件的帧，所以 downloadBlob 根本不会为它们回调。而推进
+  // fileIdx 的循环条件是「手里还有字节」，于是尾部的零字节条目一个都建不出来，
+  // target.done() 却照跑、页面照样显示「完成」—— 用户拿到一个少了文件的文件夹，
+  // 还被告知一切正常。
+  //
+  // 断言落在**顺序**上而不只是数量：done 必须排在每一个 close 之后，否则 ZIP
+  // 会在文件还没收尾时就被拼出来。
+
+  /** 记录 open/close/done 的先后。sink 的 close 记成 `close:<name>`。 */
+  function recordingTarget(log: string[]) {
+    return {
+      label: "test",
+      file: async (name: string, _size: number, path?: string) => {
+        log.push(`open:${path ?? name}`);
+        return {
+          write: async () => {},
+          close: async () => { log.push(`close:${path ?? name}`); },
+        };
+      },
+      done: async () => { log.push("done"); },
+    };
+  }
+
+  it("整份清单都是零字节文件：每个都要建出来并 close，done 排在最后", async () => {
+    const log: string[] = [];
+    injectedTarget = recordingTarget(log);
+    // 一次明文回调都不发 —— 密文流里没有它们的帧，这就是真实行为。
+    downloadBlob.mockImplementation(async () => {});
+    await mountPage({
+      canStream: false,
+      files: [
+        { name: "solo/a.txt", size: 0 },
+        { name: "solo/b.txt", size: 0 },
+        { name: "solo/c.txt", size: 0 },
+      ],
+    });
+    await clickDownload();
+    await until(() => log.includes("done"));
+
+    expect(log).toEqual([
+      "open:solo/a.txt", "close:solo/a.txt",
+      "open:solo/b.txt", "close:solo/b.txt",
+      "open:solo/c.txt", "close:solo/c.txt",
+      "done",
+    ]);
+    expect(target.querySelector(".ok"), "页面必须真的到达完成态").not.toBeNull();
+  });
+
+  it("一个非空文件后面跟着多个零字节文件：后面的也要建出来", async () => {
+    const log: string[] = [];
+    injectedTarget = recordingTarget(log);
+    // 只有非空文件那 3 个字节会来。
+    downloadBlob.mockImplementation(async (_id: unknown, _k: unknown, onPt: (p: Uint8Array) => Promise<void>) => {
+      await onPt(new Uint8Array([1, 2, 3]));
+    });
+    await mountPage({
+      canStream: false,
+      files: [
+        { name: "trip/first.bin", size: 3 },
+        { name: "trip/empty1.bin", size: 0 },
+        { name: "trip/empty2.bin", size: 0 },
+        { name: "trip/empty3.bin", size: 0 },
+      ],
+    });
+    await clickDownload();
+    await until(() => log.includes("done"));
+
+    expect(log).toEqual([
+      "open:trip/first.bin", "close:trip/first.bin",
+      "open:trip/empty1.bin", "close:trip/empty1.bin",
+      "open:trip/empty2.bin", "close:trip/empty2.bin",
+      "open:trip/empty3.bin", "close:trip/empty3.bin",
+      "done",
+    ]);
+    expect(target.querySelector(".ok")).not.toBeNull();
+  });
+
+  it("零字节文件夹在中间和结尾都能正确收尾，且没有文件被 close 两次", async () => {
+    const log: string[] = [];
+    injectedTarget = recordingTarget(log);
+    downloadBlob.mockImplementation(async (_id: unknown, _k: unknown, onPt: (p: Uint8Array) => Promise<void>) => {
+      // 分两次到达，边界正好落在中间那个空文件上 —— 守住「有字节驱动」与
+      // 「没字节驱动」两条路交界处的重复收尾。
+      await onPt(new Uint8Array([1]));
+      await onPt(new Uint8Array([2]));
+    });
+    await mountPage({
+      canStream: false,
+      files: [
+        { name: "mix/a.bin", size: 1 },
+        { name: "mix/gap.bin", size: 0 },
+        { name: "mix/b.bin", size: 1 },
+        { name: "mix/tail.bin", size: 0 },
+      ],
+    });
+    await clickDownload();
+    await until(() => log.includes("done"));
+
+    expect(log).toEqual([
+      "open:mix/a.bin", "close:mix/a.bin",
+      "open:mix/gap.bin", "close:mix/gap.bin",
+      "open:mix/b.bin", "close:mix/b.bin",
+      "open:mix/tail.bin", "close:mix/tail.bin",
+      "done",
+    ]);
+    const closes = log.filter((l) => l.startsWith("close:"));
+    expect(new Set(closes).size, "同一个文件被 close 了两次").toBe(closes.length);
+  });
+
+  it("恶意 name 不能逃出选中的目录：../ 段在拆解时就被丢掉", async () => {
+    const seen: { name: string; path?: string }[] = [];
+    injectedTarget = {
+      label: "test",
+      file: async (name: string, _size: number, path?: string) => {
+        seen.push({ name, path });
+        return { write: async () => {}, close: async () => {} };
+      },
+      done: async () => {},
+    };
+    downloadBlob.mockImplementation(async (_id: unknown, _k: unknown, onPt: (p: Uint8Array) => Promise<void>) => {
+      await onPt(new Uint8Array([1]));
+    });
+    await mountPage({ canStream: false, files: [{ name: "../../etc/passwd", size: 1 }] });
+    await clickDownload();
+    await until(() => seen.length === 1);
+    expect(seen[0].path).toBe("etc/passwd");
+    expect(seen[0].name).toBe("passwd");
   });
 });
 
@@ -317,7 +578,9 @@ describe("DownloadPage 收尾与错误归因", () => {
       file: async () => ({ write: async () => {}, close: async () => {} }),
       done,
     };
-    await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+    const files = [{ name: "a.bin", size: SMALL }];
+    deliverDeclaredBytes(files);
+    await mountPage({ canStream: false, files });
     await clickDownload();
     await until(() => done.mock.calls.length > 0);
     expect(done, "不调用 done：界面显示完成，磁盘上什么都没有").toHaveBeenCalledTimes(1);

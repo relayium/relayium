@@ -25,7 +25,7 @@ struct NearbyPane: View {
     /// model twice.
     @Binding var sessionActive: Bool
 
-    @State private var picked: [URL] = []
+    @StateObject private var selection = SelectionStore()
     @State private var stagingError: String?
 
     private var busy: Bool { fileModel.isBusy || textModel.isBusy }
@@ -61,6 +61,12 @@ struct NearbyPane: View {
 
             receiving
 
+            // Staging is deliberately ABOVE and independent of the roster: a
+            // drop must never be the thing that picks a device. Choosing what to
+            // send and choosing who to send it to are two separate acts, and
+            // only pressing Send combines them.
+            if intent == .files { filesToSend }
+
             if case let .reconnecting(message) = discovery.state {
                 Text(message).font(.callout).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
@@ -84,6 +90,30 @@ struct NearbyPane: View {
             if let stagingError {
                 Text(stagingError).font(.callout).foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// What will be sent, staged before — and independently of — the device it
+    /// will be sent to.
+    @ViewBuilder
+    private var filesToSend: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            FileDropZone(store: selection, isBusy: busy) {
+                Text(selection.summary
+                     ?? "Drop files or folders here, or click to choose. Nothing is sent until you pick a device below and press Send.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let message = selection.error {
+                Text(message).font(.callout).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !selection.isEmpty {
+                Button("Clear") { selection.clear() }
+                    .buttonStyle(.link)
+                    .disabled(busy)
             }
         }
     }
@@ -188,15 +218,13 @@ struct NearbyPane: View {
             Text("Send to \(device.label)").font(.subheadline.weight(.semibold))
             switch intent {
             case .files:
-                Text(picked.isEmpty ? "Choose files, then send them straight to that device."
-                                    : "\(picked.count) file\(picked.count == 1 ? "" : "s") ready.")
+                Text(selection.summary.map { "\($0). Send it straight to that device." }
+                     ?? "Add files or folders above, then send them straight to that device.")
                     .font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Button("Choose Files…") { chooseFiles() }
-                    Button("Send") { sendFiles() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(picked.isEmpty || busy)
-                }
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Send") { sendFiles() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selection.isEmpty || busy)
             case .text:
                 Text("Opens an end-to-end encrypted message session. Nothing is stored on Relayium.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -245,17 +273,11 @@ struct NearbyPane: View {
 
     // MARK: - actions
 
-    private func chooseFiles() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false      // folder recursion is out of scope
-        if panel.runModal() == .OK {
-            picked = panel.urls
-            stagingError = nil
-        }
-    }
-
     private func sendFiles() {
+        // A second press while the first send is still setting up would stage a
+        // second batch over the first and dial again. The button is disabled
+        // while busy; this is the guard that does not depend on a redraw.
+        guard !busy else { return }
         // Re-read rather than capturing the device at render time: the roster
         // is live, and a device that left between the list being drawn and this
         // button being pressed must not be dialled by a stale id.
@@ -263,9 +285,13 @@ struct NearbyPane: View {
             stagingError = "That device is no longer nearby. Pick another one."
             return
         }
+        guard let expanded = selection.selection else {
+            stagingError = selection.error ?? "Add files or folders to send first."
+            return
+        }
         let staged: (sources: [PlaintextSource], metas: [FileMeta])
         do {
-            staged = try stageRealtimeFiles(picked)
+            staged = try stageRealtimeFiles(expanded.files)
         } catch {
             stagingError = ErrorCopy.message(for: error)
             return
@@ -291,7 +317,7 @@ struct NearbyPane: View {
         case .files: fileModel.cancel()
         case .text: textModel.reset()
         }
-        picked = []
+        selection.clear()
         sessionActive = false
     }
 }

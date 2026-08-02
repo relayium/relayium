@@ -203,3 +203,72 @@ describe("ReceiveActions 实时接收的内存提示", () => {
     expect(onAccept).not.toHaveBeenCalled();
   });
 });
+
+// --- 带目录层级的单文件：卡片说的话必须和真的会发生的事一致 -------------------
+//
+// 只有一个文件、但它在一个文件夹里（solo/only.txt）。这一批以前会被当成「单文件」，
+// 于是卡片按「有 showSaveFilePicker」承诺了一个保存位置选择器 —— 而真实路径根本
+// 弹不出选择器：带路径的单文件走不了 Save As，没有目录选择器时它被打成 ZIP 落到
+// 下载目录。用户看着「浏览器会问你把文件存到哪里」，然后什么都没弹出来。
+describe("ReceiveActions × 带目录层级的单文件", () => {
+  /** 只装 Save As，不装目录选择器 —— 正是承诺落空的那台机器。 */
+  function stubSaveOnly(): () => void {
+    const w = window as unknown as Record<string, unknown>;
+    const had = { save: "showSaveFilePicker" in w, dir: "showDirectoryPicker" in w };
+    w.showSaveFilePicker = async () => ({});
+    delete w.showDirectoryPicker;
+    return () => {
+      if (!had.save) delete w.showSaveFilePicker;
+      if (!had.dir) delete w.showDirectoryPicker;
+    };
+  }
+
+  const nestedSingle = [{ name: "only.txt", size: SMALL, path: "solo/only.txt" }];
+  const hint = () => target.querySelector(".savehint")!.textContent!.trim();
+
+  it("只有 Save As 时不再承诺选择器 —— 真实结果是 ZIP 落到下载目录", async () => {
+    await loadLang("en");
+    restorePickers = stubSaveOnly();
+    target = document.createElement("div");
+    document.body.appendChild(target);
+    app = mount(ReceiveActions, {
+      target,
+      props: { files: nestedSingle, total: SMALL, retry: false, onAccept, onReject },
+    });
+    flushSync();
+    expect(hint()).toBe(t().recvSaveHintDownload);
+    expect(hint()).not.toBe(t().recvSaveHintPicker);
+  });
+
+  it("扁平单文件在同一台机器上照旧承诺选择器 —— 只收紧带路径的那一类", async () => {
+    await loadLang("en");
+    restorePickers = stubSaveOnly();
+    target = document.createElement("div");
+    document.body.appendChild(target);
+    app = mount(ReceiveActions, {
+      target,
+      props: {
+        files: [{ name: "only.txt", size: SMALL }],
+        total: SMALL, retry: false, onAccept, onReject,
+      },
+    });
+    flushSync();
+    expect(hint()).toBe(t().recvSaveHintPicker);
+  });
+
+  it("有目录选择器时确实会问存哪里（那条路真的弹选择器）", async () => {
+    await mountActions({ canStream: true, files: nestedSingle });
+    expect(hint()).toBe(t().recvSaveHintPicker);
+  });
+
+  it("内存提示按 ZIP 的 2× 峰值算，不再被「单文件」判定摘掉", async () => {
+    // 总量没过线，2× 之后过了。以前按数量问会答「能流式落盘」并把提示吞掉。
+    const size = LARGE_DOWNLOAD_WARN_BYTES * 0.6;
+    await mountActions({
+      canStream: false,
+      files: [{ name: "big.bin", size, path: "solo/big.bin" }],
+    });
+    expect(target.querySelector(".memwarn"), "带路径的单文件必须按 ZIP 估算").not.toBeNull();
+    expect(byText(t().accept), "提示状态下接收按钮不该存在").toBeUndefined();
+  });
+});

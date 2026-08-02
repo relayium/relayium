@@ -67,6 +67,14 @@ public final class RealtimeSessionModel: ObservableObject {
     /// shown. Turning the preference on must not require a renegotiation, and a
     /// UI that wants to display the code outside the blocking gate can read it.
     @Published public private(set) var sasCode: String = ""
+    /// The directory this receive created for a folder transfer, if any.
+    ///
+    /// Kept beside `state` rather than folded into `.completed` so the existing
+    /// `case completed([URL])` — and every test that matches on it — keeps
+    /// meaning exactly what it did: the files that were written. What this adds
+    /// is the ONE item Finder should be handed for a foldered result; see
+    /// `receivedPayload`.
+    @Published public private(set) var receivedContainer: URL?
     /// Where a received transfer is written. The pane sets it from a save panel.
     public var saveDirectory: URL = FileManager.default
         .urls(for: .downloadsDirectory, in: .userDomainMask).first
@@ -96,7 +104,9 @@ public final class RealtimeSessionModel: ObservableObject {
 
     private var connection: RealtimePeerConnection?
     private var writer: ManifestWriter?
-    private var pendingSend: (sources: [PlaintextSource], metas: [FileMeta])?
+    /// Carries its own total so a retry can restore `totalBytes` — which is
+    /// shared with the inbound direction — without recomputing the manifest.
+    private var pendingSend: (sources: [PlaintextSource], metas: [FileMeta], totalBytes: Int)?
     private var pendingReceive = false
     private var sasConfirmed = false
     /// The DataChannel is open. Tracked because `onSAS` fires on the SIGNALLING
@@ -150,6 +160,17 @@ public final class RealtimeSessionModel: ObservableObject {
     }
 
     public var canJoin: Bool { isCompletePairingCode(joinCode) }
+
+    /// Reveal/drag-out targets for a finished receive, or nil.
+    ///
+    /// Only ever non-nil in `.completed`, which is reached only after the
+    /// writer's `finish()` returned — so nothing here is a promise of a file
+    /// that is still being written. A sender's `.completed([])` (it received
+    /// nothing) yields nil rather than an empty drag source.
+    public var received: ReceivedPayload? {
+        guard case let .completed(urls) = state, !urls.isEmpty else { return nil }
+        return receivedPayload(files: urls, container: receivedContainer)
+    }
 
     public func updateJoinCode(_ raw: String) {
         joinCode = normalizedPairingCode(raw)
@@ -347,7 +368,7 @@ public final class RealtimeSessionModel: ObservableObject {
             state = .failed("The selected file list is invalid. Choose the files again.")
             return
         }
-        pendingSend = (sources, metas)
+        pendingSend = (sources, metas, total)
         totalBytes = total
     }
 
@@ -400,9 +421,19 @@ public final class RealtimeSessionModel: ObservableObject {
     private func startPendingReceive() {
         guard pendingReceive else { return }
         do {
-            writer = try ManifestWriter(
-                directory: saveDirectory,
-                files: incoming.map { WritableFile(name: $0.name, size: $0.size) })
+            // A FOLDER receive gets its own directory; a flat batch keeps
+            // landing straight in the save destination, exactly as before. See
+            // `openReceiveWriter` for why the merge is refused.
+            //
+            // The fallback name is per session rather than fixed: a realtime
+            // transfer has no id, and two multi-root folder receives in a row
+            // must not race for the same directory name.
+            let opened = try openReceiveWriter(
+                parent: saveDirectory,
+                files: incoming.map { WritableFile(name: $0.name, size: $0.size, path: $0.path) },
+                fallbackName: "relayium-\(String(UUID().uuidString.prefix(8)).lowercased())")
+            writer = opened.writer
+            receivedContainer = opened.container
             completedIncomingFiles = 0
             state = .transferring(done: 0, total: totalBytes)
             connection?.accept()
@@ -581,23 +612,62 @@ public final class RealtimeSessionModel: ObservableObject {
     /// session must not inherit any of it.
     private func retirePreviousConnection() {
         generation += 1
-        cancelAnswerTimeout()
-        connection?.close()
-        connection = nil
+        releaseConnectionState()
+        // `totalBytes` is shared by both directions, and `releaseConnectionState`
+        // has just dropped whatever the inbound side put there. Restore what the
+        // staged send declared, so a retry's progress bar is still its own.
+        totalBytes = pendingSend?.totalBytes ?? 0
     }
 
-    private func teardown() {
-        generation += 1
+    /// Everything that belongs to ONE connection: the connection, the handshake
+    /// readiness that authorised it, and any receive it had started.
+    ///
+    /// All of it, not just the connection. A direct retry after a terminal
+    /// failure — `join()` again on the same model — used to keep `sasCode`,
+    /// `connectionOpened` and `sasConfirmed` from the dead session, so the very
+    /// first callback of the NEW one could satisfy `advanceWhenReady` on the old
+    /// session's readiness: one peer's `onOpen` combined with a different peer's
+    /// SAS. It also kept `pendingReceive` and `incoming`, so the retry could
+    /// install the PREVIOUS peer's manifest and send ACCEPT for files the new
+    /// peer had never offered.
+    ///
+    /// What is deliberately preserved is `pendingSend`: the files the local user
+    /// staged are the whole point of retrying, and re-picking them is not a
+    /// safety measure. `teardown` clears that too, because an unsolicited
+    /// inbound session must not inherit anything the local user staged.
+    private func releaseConnectionState() {
         cancelAnswerTimeout()
         connection?.close()
         connection = nil
-        writer = nil
-        pendingSend = nil
+        // A COMPLETED receive's files belong to the user now — release the
+        // writer without discarding, or retrying would delete what just
+        // arrived. A partial one's files are debris under a name the user was
+        // shown, so those go.
+        if case .completed = state {
+            writer = nil
+        } else {
+            writer?.discard()
+            writer = nil
+        }
+        sasCode = ""
+        sasConfirmed = false
+        connectionOpened = false
         pendingReceive = false
         completedIncomingFiles = 0
-        sasConfirmed = false
-        sasCode = ""
-        connectionOpened = false
         incoming = []
+        receivedContainer = nil
+    }
+
+    /// `retirePreviousConnection` plus the staged outbound selection.
+    ///
+    /// The extra clear is a rule rather than hygiene: `proceedAfterVerification`
+    /// sends whatever is pending, so a session nobody chose — `acceptNearby`
+    /// answering an unsolicited offer — must not inherit files the local user
+    /// staged for somebody else.
+    private func teardown() {
+        generation += 1
+        releaseConnectionState()
+        pendingSend = nil
+        totalBytes = 0
     }
 }

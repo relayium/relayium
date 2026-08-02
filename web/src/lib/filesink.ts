@@ -174,14 +174,38 @@ export const LARGE_DOWNLOAD_WARN_BYTES = 256 * 1024 * 1024; // 256 MiB
  * 大到本该提示的批次不会被悄悄塞进内存，而是如实失败。
  *
  * 多文件走的是目录选择器那条路：拿到目录句柄后每个文件仍是原生流式写入，同样
- * 不吃内存。所以单文件看 showSaveFilePicker（拿不到则回落到目录选择器），
- * 多文件只看 showDirectoryPicker。
+ * 不吃内存。所以**扁平**单文件看 showSaveFilePicker（拿不到则回落到目录选择器），
+ * 其余（多文件，以及带目录层级的单文件）只看 showDirectoryPicker。
  *
  * opts 必须和传给 pickSaveTarget 的那一份**一致**，否则这个提前问法就问的是另一条路。
  */
-export function canStreamToDisk(fileCount: number, opts: SaveOptions = {}): boolean {
-  if (asksWhereToSave(fileCount)) return true;
-  return fileCount === 1 && !!opts.swStream && swStreamReady();
+export function canStreamToDisk(files: FileMetaLite[], opts: SaveOptions = {}): boolean {
+  if (asksWhereToSave(files)) return true;
+  return isFlatSingleFile(files) && !!opts.swStream && swStreamReady();
+}
+
+/**
+ * 这一批是不是一棵文件夹树（任何一个 path 含 "/"）。
+ *
+ * **判分支的唯一依据**，pickSaveTarget 的 ZIP 分支、memoryPeakBytes 的 2× 估算、
+ * 单文件分支的排除条件全都问它。以前这条判断在三处各写一遍
+ * `files.some(f => f.path?.includes("/"))`，而单文件的两条分支（Save As 与 SW 流）
+ * 干脆只看 `length === 1` 从来不问路径 —— 于是 `solo/only.txt` 在桌面 Chrome 上
+ * 落成一个孤零零的 only.txt，solo/ 没了。同一批文件在不同浏览器里得到不同的树，
+ * 这是最难被用户发现、也最难被我们复现的一类错。
+ */
+export function isNestedFolderBatch(files: FileMetaLite[]): boolean {
+  return files.some((f) => f.path && f.path.includes("/"));
+}
+
+/**
+ * 单文件**而且**不带目录层级 —— 也就是「可以整批当成一个字节流交付」的那一批。
+ *
+ * 单文件分支（Save As、SW 流）的准入条件必须是它而不是 `length === 1`：一个带
+ * 路径的单文件是一棵一层的树，把它交给一条字节流就等于把这层目录扔掉。
+ */
+export function isFlatSingleFile(files: FileMetaLite[]): boolean {
+  return files.length === 1 && !isNestedFolderBatch(files);
 }
 
 /**
@@ -197,10 +221,12 @@ export function canStreamToDisk(fileCount: number, opts: SaveOptions = {}): bool
  * 所以直接把 canStreamToDisk 定义在它上面，两者不可能各自漂移。SW 流那条路不问
  * 位置、直接落到下载目录，因此不在这里。
  */
-export function asksWhereToSave(fileCount: number): boolean {
+export function asksWhereToSave(files: FileMetaLite[]): boolean {
   if (!pickersAllowed()) return false;
   const w = window as unknown as SavePickerWindow;
-  if (fileCount === 1 && w.showSaveFilePicker) return true;
+  // 带路径的单文件走不到 Save As（那会丢掉目录层级），它要的是目录选择器 ——
+  // 所以这里问的是 isFlatSingleFile 而不是 length === 1，与 pickSaveTarget 逐字一致。
+  if (isFlatSingleFile(files) && w.showSaveFilePicker) return true;
   return !!w.showDirectoryPicker;
 }
 
@@ -487,7 +513,7 @@ async function openSwStream(name: string, cd: string): Promise<FileSink> {
  * 系统性偏低。filesink.test.ts 里有一条用例真跑 pickSaveTarget 比对 label。
  */
 export function memoryPeakBytes(files: FileMetaLite[], totalBytes: number): number {
-  return files.some((f) => f.path && f.path.includes("/")) ? totalBytes * 2 : totalBytes;
+  return isNestedFolderBatch(files) ? totalBytes * 2 : totalBytes;
 }
 
 /**
@@ -498,7 +524,9 @@ export function memoryPeakBytes(files: FileMetaLite[], totalBytes: number): numb
  * 估计值，再拆一个只是多一个同样没底的数字。
  */
 export function warnsAboutMemory(files: FileMetaLite[], totalBytes: number, opts: SaveOptions = {}): boolean {
-  if (canStreamToDisk(files.length, opts)) return false;
+  // 整个 files 传进去，不是 files.length：带路径的单文件在没有目录选择器时会打成
+  // ZIP（峰值 2×），而按数量问的 canStreamToDisk 会答「能流式落盘」并把提示吞掉。
+  if (canStreamToDisk(files, opts)) return false;
   return memoryPeakBytes(files, totalBytes) > LARGE_DOWNLOAD_WARN_BYTES;
 }
 
@@ -537,7 +565,10 @@ async function attemptPicker<T>(what: string, run: () => Promise<T>): Promise<T 
  * 流式落盘的路径上。宁可失败并让他重试。
  */
 function fallbackIsSafe(files: FileMetaLite[], opts: SaveOptions): boolean {
-  if (files.length === 1 && opts.swStream && swStreamReady()) return true;
+  // 只有**扁平**单文件才能靠 SW 兜底。带路径的单文件根本进不了 SW 分支（那会丢
+  // 掉目录层级），它真正的退路是 ZIP —— 把它算成「SW 安全」会让一批大文件夹在
+  // 选择器坏掉之后被悄悄塞进内存。
+  if (isFlatSingleFile(files) && opts.swStream && swStreamReady()) return true;
   return memoryFallbackIsSafe(files);
 }
 
@@ -651,7 +682,10 @@ export async function pickSaveTarget(files: FileMetaLite[], opts: SaveOptions = 
   let pickerBroke = false;
 
   if (pickersAllowed()) {
-    if (files.length === 1 && w.showSaveFilePicker) {
+    // **扁平**单文件才用 Save As：它交付的是一个文件名，容不下 solo/only.txt 里的
+    // solo/。带路径的单文件因此跳过这里，落到下面的目录选择器，由
+    // directoryTarget 的 safeSegments(path || name) 把目录建出来。
+    if (isFlatSingleFile(files) && w.showSaveFilePicker) {
       // Open the Save As dialog now, while the gesture is live.
       const writable = await attemptPicker("showSaveFilePicker", async () => {
         const handle = await w.showSaveFilePicker!({ suggestedName: files[0].name });
@@ -696,13 +730,17 @@ export async function pickSaveTarget(files: FileMetaLite[], opts: SaveOptions = 
   // 改了现有分支的行为。所以这条只服务真正没有 FSA 的浏览器——Firefox / Safari /
   // 所有手机，也正是这一步想覆盖的人群。
   //
-  // 只接单文件：SW 流是一条字节流，多文件仍走目录句柄或 ZIP。单文件即使带着
-  // 文件夹路径也走这里，落盘就是那个文件本身（丢掉一层只有它自己的目录）——
-  // 比为了一个文件打一个 ZIP 更接近用户想要的东西。
+  // 只接**扁平**单文件：SW 流是一条字节流，交付的是一个文件名。
+  //
+  // 这里曾经写着「单文件即使带着文件夹路径也走这里，落盘就是那个文件本身（丢掉
+  // 一层只有它自己的目录）—— 比为了一个文件打一个 ZIP 更接近用户想要的东西」。
+  // 那是文件夹传输存在之前的判断，现在它是个 bug：发送方明确发了一棵树，接收方
+  // 却按浏览器的不同拿到不同的形状。宁可为一个文件打一个 ZIP，也不要让同一批
+  // 文件在 Chrome、Firefox、手机上落出三种结果。多文件仍走目录句柄或 ZIP。
   //
   // opts.swStream 是显式开关，只有下载页打开；实时接收路（App.svelte）一律走不到
   // 这里，理由见 SaveOptions 的注释（ack ≠ 已落盘，与那条路的 durability 语义冲突）。
-  if (files.length === 1 && opts.swStream && swStreamReady()) {
+  if (isFlatSingleFile(files) && opts.swStream && swStreamReady()) {
     try {
       const sink = await openSwStream(files[0].name, contentDisposition(files[0].name));
       let used = false;
@@ -736,7 +774,7 @@ export async function pickSaveTarget(files: FileMetaLite[], opts: SaveOptions = 
   // No File System Access API (Firefox/Safari). A folder send can't stream to
   // disk here, and per-file downloads would lose the tree, so bundle the batch
   // into one ZIP that preserves paths. Flat batches keep per-file downloads.
-  if (files.some((f) => f.path && f.path.includes("/"))) {
+  if (isNestedFolderBatch(files)) {
     const zip = new ZipWriter();
     const topDir = files.find((f) => f.path?.includes("/"))!.path!.split("/")[0];
     return {

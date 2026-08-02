@@ -158,12 +158,66 @@ public enum ErrorCopy {
                 return "“\(name)” already exists here — this link was downloaded to this folder before. Choose another folder: the app won't merge into an existing one, because it can't tell a half-finished download from your own files."
             case .unsafeName(let name):
                 return "The link describes a file named “\(name)” that would be written outside the folder you chose, so nothing was saved. Ask the sender for a new link."
-            case .duplicateName(let name):
-                return "The transfer contains more than one file named “\(name)”, so nothing was saved. Ask the sender to rename one of them."
             case .fileExists(let name):
                 return "“\(name)” already exists in the destination. Choose another folder; Relayium will not overwrite it."
             case .exceedsManifest, .incomplete:
                 return "The received byte count did not match the file list, so the incomplete files were discarded. Ask the sender to try again."
+            case .systemError(let code):
+                // Names the two a user can actually act on and keeps the number
+                // for everything else — "something went wrong" on a full disk
+                // sends people looking in the wrong place.
+                if code == ENOSPC {
+                    return "There isn't enough free space to save this transfer, so nothing was saved. Free up space and try again."
+                }
+                if code == EACCES || code == EPERM {
+                    return "Relayium isn't allowed to write to that folder, so nothing was saved. Choose another folder."
+                }
+                return "The destination folder couldn't be written to (error \(code)), so nothing was saved. Try another folder."
+            }
+        }
+        if let e = error as? ManifestPathError {
+            switch e {
+            case .unsafePath(let path):
+                // Names the path rather than saying "invalid": on the receiving
+                // end this is the one message that lets the user tell a broken
+                // sender from an attempt to write outside the folder they chose.
+                return "The other device described a file at “\(path)”, which would be written outside the folder you chose. Nothing was saved."
+            case .duplicatePath(let path):
+                return "The transfer contains more than one file at “\(path)” — on this Mac those are the same file — so nothing was saved. Ask the sender to rename one of them."
+            case .pathCollision(let path):
+                return "The transfer wants “\(path)” to be both a file and a folder, which cannot exist at once, so nothing was saved. Ask the sender to try again."
+            }
+        }
+        if let e = error as? PlaintextSourceError {
+            switch e {
+            case .unreadable(let name):
+                return "Couldn't open “\(name)”, so nothing was sent. Check the file still exists and you have permission to read it."
+            case .readFailed(let name, _):
+                return "Reading “\(name)” failed part-way through, so the transfer was stopped. The other device discarded the incomplete file."
+            case .tooManyOpenFiles(let limit):
+                // Says what to do rather than naming a rlimit: the actionable
+                // half is "send fewer files at once".
+                return "This Mac ran out of open-file handles part-way through your selection (its limit is \(limit)). Relayium holds every selected file open so the exact files you chose are the ones that get sent, so send them in smaller batches."
+            }
+        }
+        if let e = error as? FileSelectionError {
+            switch e {
+            case .noFiles:
+                // Distinct from the count error on purpose: "choose between 1
+                // and 1000 files" is baffling advice for someone who did choose
+                // a folder — it just has nothing in it.
+                return "There are no files to send. An empty folder can't be transferred on its own — the file list has no way to describe a folder with nothing in it."
+            case .tooManyFiles:
+                return "That selection holds more than \(MAX_FILES) files. Send fewer files, or zip the folder first."
+            case .unreadable(let name):
+                return "Couldn't read “\(name)”, so nothing was sent. Check the item still exists and you have permission to open it."
+            case .symbolicLink(let name):
+                // Neither choice is silent: following the link would send a
+                // different tree (possibly from outside what was selected) and
+                // skipping it would send an incomplete one without saying so.
+                return "“\(name)” is a symbolic link. Relayium won't follow it — that could send files from outside what you chose — and won't skip it silently either. Remove it from the selection, or send the real folder it points at."
+            case .pathTooLong(let path):
+                return "The path “\(path)” is too long to describe in a transfer. Send from a shallower folder, or shorten the names."
             }
         }
         if let e = error as? CloudError {

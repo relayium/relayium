@@ -10,7 +10,7 @@ struct DirectPane: View {
     @ObservedObject var model: RealtimeSessionModel
     let token: String
 
-    @State private var picked: [URL] = []
+    @StateObject private var selection = SelectionStore()
     @State private var stagingError: String?
 
     var body: some View {
@@ -48,14 +48,25 @@ struct DirectPane: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Send").font(.headline)
-                Text(picked.isEmpty ? "Choose files, then create a code for the other device."
-                                    : "\(picked.count) file\(picked.count == 1 ? "" : "s") ready.")
-                    .font(.caption).foregroundStyle(.secondary)
+                FileDropZone(store: selection, isBusy: model.isBusy) {
+                    Text(selection.summary
+                         ?? "Drop files or folders here, or click to choose. Then create a code for the other device.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let message = selection.error {
+                    Text(message).font(.callout).foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 HStack {
-                    Button("Choose Files…") { chooseFiles() }
+                    Button("Choose Files or Folders…") { chooseFilesOrFolders(into: selection) }
+                    if !selection.isEmpty {
+                        Button("Clear") { selection.clear() }.buttonStyle(.link)
+                    }
                     Button("Create a code") { Task { await mintAndWait() } }
                         .buttonStyle(.borderedProminent)
-                        .disabled(picked.isEmpty)
+                        .disabled(selection.isEmpty)
                 }
             }
 
@@ -92,16 +103,6 @@ struct DirectPane: View {
 
     // MARK: - actions
 
-    private func chooseFiles() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false      // folder recursion is out of scope
-        if panel.runModal() == .OK {
-            picked = panel.urls
-            stagingError = nil
-        }
-    }
-
     private func mintAndWait() async {
         await model.mintCode(token: token)
         guard case let .showingCode(code, _) = model.state else { return }
@@ -109,9 +110,14 @@ struct DirectPane: View {
     }
 
     private func stageAndJoin(code: String) {
+        guard let expanded = selection.selection else {
+            stagingError = selection.error ?? "Choose files or folders to send first."
+            model.cancel()
+            return
+        }
         let staged: (sources: [PlaintextSource], metas: [FileMeta])
         do {
-            staged = try stageRealtimeFiles(picked)
+            staged = try stageRealtimeFiles(expanded.files)
         } catch {
             stagingError = ErrorCopy.message(for: error)
             model.cancel()

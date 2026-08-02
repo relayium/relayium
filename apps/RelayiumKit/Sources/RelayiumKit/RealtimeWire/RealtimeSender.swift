@@ -91,6 +91,24 @@ public final class RealtimeSender {
     }
 }
 
+/// Byte size of the sealed BATCH frame payload `files` would produce.
+///
+/// Public so staging can apply `MANIFEST_MAX_BYTES` BEFORE a connection is
+/// opened. `batchFrame` enforces the same bound, but it runs after signalling,
+/// after the handshake and after the peer has been dialled — for a folder send,
+/// where the manifest carries a relative path per file, that is far too late to
+/// tell the user their selection does not fit.
+public func realtimeManifestSealedSize(_ files: [FileMeta]) throws -> Int {
+    try manifestJSON(files).count + 16   // + AES-GCM tag, as batchFrame compares
+}
+
+/// Throws `manifestTooLarge` when `files` cannot be sent as one BATCH frame.
+public func validateRealtimeManifestSize(_ files: [FileMeta]) throws {
+    if try realtimeManifestSealedSize(files) > MANIFEST_MAX_BYTES {
+        throw RealtimeSenderError.manifestTooLarge
+    }
+}
+
 public enum RealtimeSenderError: Error, Equatable {
     case invalidManifest
     case manifestTooLarge

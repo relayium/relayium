@@ -40,7 +40,12 @@
   let forced = $state(false);
   const warn = $derived(!forced && warnsAboutMemory(files, total));
   // 与 pickSaveTarget 实际会走的分支同一套条件（filesink 里同一个函数回答两边）。
-  const willAsk = $derived(asksWhereToSave(files.length));
+  //
+  // 传整个 files 而不是 files.length：一个带目录层级的单文件（solo/only.txt）没有
+  // 目录选择器时会被打成 ZIP 落到下载目录，而按数量问只会看到「单文件 +
+  // showSaveFilePicker 存在」并答「会问你存哪里」—— 卡片承诺了一个永远不会弹出来
+  // 的选择器，正是这条文案当初被加进来要解决的那种事故。
+  const willAsk = $derived(asksWhereToSave(files));
 
   function acceptAnyway() {
     forced = true;

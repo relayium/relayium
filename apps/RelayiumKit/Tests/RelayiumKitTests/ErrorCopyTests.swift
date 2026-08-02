@@ -159,6 +159,47 @@ final class ErrorCopyTests: XCTestCase {
         XCTAssertTrue(m.contains("../escape.txt"))
     }
 
+    /// Every path-policy and selection refusal has to reach real copy rather
+    /// than the type-name fallback — these are the messages a user sees when a
+    /// folder send or receive is refused, and "Something went wrong
+    /// (ManifestPathError)" is not one.
+    func testFolderTransferRefusalsAllHaveCopy() {
+        let cases: [Error] = [
+            ManifestPathError.unsafePath("../escape.txt"),
+            ManifestPathError.duplicatePath("t/a.txt"),
+            ManifestPathError.pathCollision("t/a/b"),
+            FileSelectionError.noFiles,
+            FileSelectionError.tooManyFiles,
+            FileSelectionError.unreadable("gone.txt"),
+            FileSelectionError.symbolicLink("box/out"),
+            FileSelectionError.pathTooLong("deep/…"),
+        ]
+        for e in cases {
+            let m = ErrorCopy.message(for: e)
+            XCTAssertFalse(m.isEmpty, "no copy for \(e)")
+            XCTAssertFalse(m.contains("Error)"), "\(e) fell through to the type-name fallback: \(m)")
+        }
+    }
+
+    /// The refusal names the offending path, so the user can find and remove it
+    /// rather than re-picking everything and hoping.
+    func testFolderRefusalsNameTheOffendingItem() {
+        XCTAssertTrue(ErrorCopy.message(for: ManifestPathError.unsafePath("../escape.txt"))
+            .contains("../escape.txt"))
+        XCTAssertTrue(ErrorCopy.message(for: FileSelectionError.symbolicLink("box/out"))
+            .contains("box/out"))
+        XCTAssertTrue(ErrorCopy.message(for: FileSelectionError.unreadable("gone.txt"))
+            .contains("gone.txt"))
+    }
+
+    /// An empty folder gets its own answer. "Choose between 1 and 1000 files"
+    /// is baffling advice for someone who did choose a folder.
+    func testEmptySelectionSaysWhyAnEmptyFolderCannotBeSent() {
+        let m = ErrorCopy.message(for: FileSelectionError.noFiles)
+        XCTAssertTrue(m.lowercased().contains("empty folder"), m)
+        XCTAssertNotEqual(m, ErrorCopy.message(for: RealtimeStagingError.fileCount))
+    }
+
     // The realtime rounds route ConnectionError, HandshakeError, RealtimeError and bare
     // WebRTC NSErrors through one ((Error) -> Void). The fallback must already be total.
     func testUnknownErrorStillProducesActionableText() {

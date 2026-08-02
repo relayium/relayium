@@ -24,8 +24,14 @@ struct DownloadPane: View {
                 let total = manifest.files.reduce(0) { $0 + $1.size }
                 Text("\(manifest.files.count) file\(manifest.files.count == 1 ? "" : "s") · \(ByteCountFormatter.string(fromByteCount: Int64(total), countStyle: .file))")
                     .font(.subheadline.weight(.semibold))
-                ForEach(manifest.files, id: \.name) { f in
-                    Text(safeDisplayName(f.name)).font(.caption).foregroundStyle(.secondary)
+                // By index, not by name: a folder upload keeps its hierarchy in
+                // `name`, so two entries can share a leaf and duplicate ids
+                // would silently drop a row from the list the user is deciding
+                // on.
+                ForEach(Array(manifest.files.enumerated()), id: \.offset) { _, f in
+                    Text(safeDisplayName(f.name))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
                 }
                 if burn {
                     // Stated before it costs something, not as a footnote after.
@@ -42,8 +48,8 @@ struct DownloadPane: View {
             case .done(let urls):
                 Text("Saved \(urls.count) file\(urls.count == 1 ? "" : "s")")
                     .font(.subheadline.weight(.semibold))
-                Button("Reveal in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting(urls)
+                if let payload = model.received {
+                    ReceivedResultView(payload: payload)
                 }
             case .failed(let message):
                 Text(message).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)

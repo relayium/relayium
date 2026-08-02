@@ -408,6 +408,248 @@ final class RealtimeSessionModelTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: urls[1]), Data([4, 5]))
     }
 
+    /// A folder receive, end to end through the model: the tree is rebuilt under
+    /// a container named after the folder that was sent, and that container —
+    /// not the loose files — is what Finder gets handed.
+    func testFolderReceiveRebuildsTheTreeUnderItsOwnContainer() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([
+            FileMeta(name: "a.txt", size: 3, path: "trip/day1/a.txt"),
+            FileMeta(name: "b.txt", size: 2, path: "trip/b.txt"),
+        ])
+        conn.onFileChunk?([1, 2, 3])
+        conn.onDone?(true)
+        await settle()
+        conn.onFileChunk?([4, 5])
+        conn.onDone?(true)
+        await settle()
+        guard case let .completed(urls) = m.state else { return XCTFail("got \(m.state)") }
+        let base = dir.standardized.path
+        XCTAssertEqual(urls.map { String($0.standardized.path.dropFirst(base.count + 1)) },
+                       ["trip/day1/a.txt", "trip/b.txt"])
+        XCTAssertEqual(try Data(contentsOf: urls[0]), Data([1, 2, 3]))
+        XCTAssertEqual(try Data(contentsOf: urls[1]), Data([4, 5]))
+        let container = try XCTUnwrap(m.receivedContainer)
+        XCTAssertEqual(container.lastPathComponent, "trip")
+        XCTAssertEqual(m.received?.dragURLs, [container])
+    }
+
+    // MARK: - a retry inherits nothing from the session it replaced
+
+    /// A retry must reach readiness on its OWN two callbacks.
+    ///
+    /// `advanceWhenReady` needs both a SAS and an open DataChannel. Retiring a
+    /// connection used to leave `sasCode` and `connectionOpened` set, so the
+    /// very first callback of the new session could combine with the dead one's
+    /// state and clear the transfer — one peer's `onOpen` plus a different
+    /// peer's SAS.
+    func testARetryNeedsItsOwnSASAndOpenNotThePreviousSessions() async {
+        let m = makeModel()
+        await m.join(code: "483920")
+        conn.onSAS?("old-sas")
+        conn.onOpen?()
+        await settle()
+        guard case .verifying = m.state else { return XCTFail("got \(m.state)") }
+
+        // The session dies and the user retries directly.
+        await m.join(code: "483920")
+        XCTAssertEqual(m.sasCode, "", "the dead session's SAS survived the retry")
+        guard case .connecting = m.state else { return XCTFail("got \(m.state)") }
+
+        // Only the SAS: not enough on its own.
+        conn.onSAS?("new-sas")
+        await settle()
+        guard case .connecting = m.state else {
+            return XCTFail("advanced on a SAS alone: \(m.state)")
+        }
+        // Now the channel opens too.
+        conn.onOpen?()
+        await settle()
+        guard case .verifying(let sas) = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertEqual(sas, "new-sas")
+    }
+
+    /// The same, with the two callbacks in the other order — they genuinely
+    /// arrive either way, and the fix must not depend on which comes first.
+    func testARetryNeedsItsOwnSASAndOpenInTheOtherOrder() async {
+        let m = makeModel()
+        await m.join(code: "483920")
+        conn.onSAS?("old-sas")
+        conn.onOpen?()
+        await settle()
+
+        await m.join(code: "483920")
+        conn.onOpen?()
+        await settle()
+        guard case .connecting = m.state else {
+            return XCTFail("advanced on an open alone, using the old SAS: \(m.state)")
+        }
+        conn.onSAS?("new-sas")
+        await settle()
+        guard case .verifying = m.state else { return XCTFail("got \(m.state)") }
+    }
+
+    /// A retry must not install — or ACCEPT — the previous peer's manifest.
+    ///
+    /// `pendingReceive` and `incoming` used to survive the retirement, so
+    /// confirming the SAS on the NEW connection ran `startPendingReceive` for
+    /// files the new peer had never offered, and sent it CTRL_ACCEPT.
+    func testARetryCannotInheritOrAcceptThePreviousPendingReceive() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "483920")
+        conn.onSAS?("old")
+        conn.onOpen?()
+        await settle()
+        // The manifest lands while the user is still reading the SAS gate, so
+        // the receive is pending but not started.
+        conn.onManifest?([FileMeta(name: "theirs.txt", size: 4)])
+        await settle()
+        XCTAssertEqual(m.incoming.count, 1)
+
+        await m.join(code: "483920")
+        XCTAssertTrue(m.incoming.isEmpty, "the previous peer's manifest survived the retry")
+
+        conn.onSAS?("new")
+        conn.onOpen?()
+        await settle()
+        let acceptsBefore = conn.acceptCount
+        m.confirmSAS()
+        await settle()
+        XCTAssertEqual(conn.acceptCount, acceptsBefore,
+                       "the retry ACCEPTed a manifest the new peer never sent")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), [],
+                       "the retry created files for the previous peer's manifest")
+    }
+
+    /// A retry keeps the staged outbound selection — re-picking files is not a
+    /// safety measure, and it is the whole reason a user retries — including the
+    /// byte total the progress bar is drawn from.
+    func testARetryKeepsTheStagedSendAndItsTotal() async {
+        let m = makeModel(verify: false)
+        m.stageSend(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])],
+                    metas: [FileMeta(name: "a.txt", size: 3)])
+        await m.join(code: "483920", role: .initiator)
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+
+        await m.join(code: "483920", role: .initiator)
+        conn.onSAS?("y")
+        conn.onOpen?()
+        await settle()
+        guard case .transferring(_, let total) = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertEqual(total, 3, "the staged send's byte total was lost across the retry")
+        XCTAssertEqual(conn.sentMetas.map(\.name), ["a.txt"])
+    }
+
+    /// Retrying after a partial receive removes the debris; retrying after a
+    /// COMPLETED one must not delete what the user just received.
+    func testARetryDiscardsAPartialReceiveButKeepsACompletedOne() async throws {
+        let partialDir = try tempDir()
+        let m = makeModel(verify: false)
+        m.saveDirectory = partialDir
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        conn.onManifest?([FileMeta(name: "half.bin", size: 9)])
+        conn.onFileChunk?([1, 2, 3])
+        await settle()
+        await m.join(code: "483920")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: partialDir.path), [],
+                       "a partial receive was left on disk by the retry")
+
+        let doneDir = try tempDir()
+        let m2 = makeModel(verify: false)
+        m2.saveDirectory = doneDir
+        await m2.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        conn.onManifest?([FileMeta(name: "whole.bin", size: 2)])
+        conn.onFileChunk?([7, 8])
+        conn.onDone?(true)
+        await settle()
+        guard case .completed = m2.state else { return XCTFail("got \(m2.state)") }
+        await m2.join(code: "483920")
+        XCTAssertEqual(try Data(contentsOf: doneDir.appendingPathComponent("whole.bin")),
+                       Data([7, 8]), "the retry deleted a completed receive")
+    }
+
+    /// A new session does not inherit the last one's container.
+    ///
+    /// `received` is gated on `.completed`, so nothing surfaces a stale one
+    /// today; clearing it at the point the previous connection is retired is
+    /// what keeps that true rather than incidental.
+    func testANewSessionDoesNotInheritTheLastOnesContainer() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([FileMeta(name: "a.txt", size: 1, path: "trip/a.txt")])
+        conn.onFileChunk?([1])
+        conn.onDone?(true)
+        await settle()
+        XCTAssertNotNil(m.receivedContainer)
+
+        await m.join(code: "483920")
+        XCTAssertNil(m.receivedContainer, "a new session inherited the previous container")
+        XCTAssertNil(m.received)
+    }
+
+    /// A hostile manifest path is refused before anything is written, the peer
+    /// is told, and the destination the user chose is left exactly as it was.
+    func testFolderReceiveRefusesATraversingPathWithoutWriting() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([FileMeta(name: "a.txt", size: 3, path: "../escape.txt")])
+        await settle()
+        guard case .failed = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertEqual(conn.rejectCount, 1)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), [])
+        XCTAssertNil(m.received)
+    }
+
+    /// A flat receive is unchanged — no container, and the drag payload is the
+    /// files themselves.
+    func testFlatReceiveStillLandsDirectlyWithNoContainer() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([FileMeta(name: "a.txt", size: 1)])
+        conn.onFileChunk?([1])
+        conn.onDone?(true)
+        await settle()
+        guard case let .completed(urls) = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertNil(m.receivedContainer)
+        XCTAssertEqual(m.received?.dragURLs, urls)
+        XCTAssertEqual(urls[0].deletingLastPathComponent().standardized.path, dir.standardized.path)
+    }
+
     // MARK: - the sender's end of a transfer
 
     /// A sender never receives a DONE frame — its own — so CTRL_COMPLETE is the

@@ -28,13 +28,14 @@ struct RealtimeFileSessionView: View {
             verifying(sas)
         case let .transferring(done, total):
             transferring(done: done, total: total)
-        case let .completed(urls):
+        case .completed:
             VStack(alignment: .leading, spacing: 8) {
                 Text("Transfer complete").font(.subheadline.weight(.semibold))
-                if !urls.isEmpty {
-                    Button("Reveal in Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting(urls)
-                    }
+                // Only a RECEIVE has a payload. A sender reaches `.completed`
+                // with no URLs of its own, and offering it a drag source would
+                // be offering files it never wrote.
+                if let payload = model.received {
+                    ReceivedResultView(payload: payload)
                 }
                 Button("Done") { model.cancel() }.buttonStyle(.link)
             }
@@ -69,8 +70,14 @@ struct RealtimeFileSessionView: View {
             ProgressView(value: total > 0 ? Double(done) / Double(total) : 0)
             Text(total > 0 ? "\(done * 100 / total)%" : "Starting…")
                 .font(.caption).foregroundStyle(.secondary)
-            ForEach(model.incoming, id: \.name) { f in
-                Text(safeDisplayName(f.name)).font(.caption).foregroundStyle(.secondary)
+            // Keyed by index: a folder legitimately contains two files with the
+            // same leaf name in different subdirectories, and `id: \.name` would
+            // collapse them into one row (and warn about duplicate ids). The
+            // relative path is what the user needs to see anyway.
+            ForEach(Array(model.incoming.enumerated()), id: \.offset) { _, f in
+                Text(safeDisplayName(f.path ?? f.name))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
             }
             Button("Cancel") { model.cancel() }
         }
