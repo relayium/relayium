@@ -960,7 +960,7 @@ async function mobileRelayFallbackScenario(browser) {
   `;
   // A real Pixel-class Android: touch viewport plus the UA the app would see.
   const ANDROID_UA =
-    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36";
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.0 Mobile Safari/537.36";
 
   const phone = await newTab(browser, BASE + "/", POOL_ONLY_ICE + SAVE_STUB);
   await phone.send("Network.enable");
