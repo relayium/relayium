@@ -436,17 +436,30 @@ async function mixedScenario(browser) {
       peerConnections: window.__e2ePeerConnections.length,
     };
   })()`);
+  const senderPcs = await a.evaluate("window.__e2ePeerConnections.length");
   if (
     resumed.bytes !== RESUME_BYTES || resumed.opens !== 1 || !resumed.closed ||
     resumed.mismatch !== -1 || resumed.requests !== 0
   ) {
     throw new Error(`byte-resume contract failed: ${JSON.stringify({ ...resumed, before: pcCounts })}`);
   }
+  // The point of this scene is that the bytes crossed a *new* transport. Without
+  // this assertion a run where the forced close never actually killed either
+  // PeerConnection would still pass every check above, and the whole scenario
+  // would quietly degrade into a plain uninterrupted transfer.
+  if (senderPcs <= pcCounts.a || resumed.peerConnections <= pcCounts.b) {
+    throw new Error(`no replacement PeerConnection was built: ${JSON.stringify({
+      a: { before: pcCounts.a, after: senderPcs },
+      b: { before: pcCounts.b, after: resumed.peerConnections },
+    })}`);
+  }
   for (const [who, tab] of [["tab A", a], ["tab B", b]]) {
     const code = await oneSas(tab, who, "after a byte-level file resume");
     if (code !== sasA) throw new Error(`${who} changed SAS while resuming: ${code} vs ${sasA}`);
   }
-  ok(`a ${RESUME_BYTES}-byte file resumed exactly on rebuilt channels, with one picker and unchanged SAS`);
+  ok(`a ${RESUME_BYTES}-byte file resumed exactly on rebuilt PeerConnections `
+    + `(A ${pcCounts.a}→${senderPcs}, B ${pcCounts.b}→${resumed.peerConnections}), `
+    + "with one picker and unchanged SAS");
 
   // ── 六、同一条链路上开消息：同意后真的收发正文 ───────────────────────────
   await a.evaluate(`(() => {

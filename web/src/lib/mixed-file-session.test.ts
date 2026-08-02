@@ -895,6 +895,209 @@ describe("mixed file session transport recovery", () => {
     expect(swap.a.sent.filter((frame) => kindOf(frame) === FRAME.RESUME)).toHaveLength(0);
   });
 
+  it("ends a batch the peer already rejected when the gap crosses that answer", async () => {
+    const { a, b, aLink, bLink, links, file, text, bTarget } = await harness();
+    let releaseSource!: () => void;
+    const sourceGate = new Promise<void>((resolve) => { releaseSource = resolve; });
+    const originalFrames = aLink.fileSender.dataFrames.bind(aLink.fileSender);
+    const frames = vi.spyOn(aLink.fileSender, "dataFrames").mockImplementation(async function* (...args) {
+      let held = false;
+      for await (const frame of originalFrames(...args)) {
+        yield frame;
+        if (!held && frame[0] === FRAME.CHUNK) { held = true; await sourceGate; }
+      }
+    });
+    a.enqueue("b", [{ file: new File([new Uint8Array(3 * CHUNK_SIZE)], "answered-in-gap.bin") }]);
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => (b.recv?.sent ?? 0) >= CHUNK_SIZE);
+
+    // The receiver stops on a live transport, so its REJECT really does reach the
+    // sender — the sender is just parked in source I/O and has not acted on it.
+    b.cancel("recv");
+    await until(() => file.b.sent.some((frame) => kindOf(frame) === REJECT[0]));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    file.a.close();
+    file.b.close();
+    releaseSource();
+
+    // A rejected batch has no resume point to wait for. Ending it on the answer
+    // it already holds is what keeps the lane out of an unanswerable wait.
+    await until(() => a.send?.done === true);
+    expect(a.send?.status).toBe("rejected");
+    expect(a.errorKey).toBe("");
+    expect(b.errorKey).toBe("");
+    expect(a.active()).toBe(false);
+
+    frames.mockRestore();
+    const { swap, aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+    a.enqueue("b", picked("after-reject.txt", "the lane survived the answer"));
+    await until(() => b.incoming?.files[0].name === "after-reject.txt");
+    b.accept();
+    await until(() => b.recv?.status === "recvDone");
+
+    expect([...bTarget.output.get("after-reject.txt")!]).toEqual(bytes("the lane survived the answer"));
+    expect(a.errorKey).toBe("");
+    expect(swap.a.sent.filter((frame) => kindOf(frame) === FRAME.RESUME)).toHaveLength(1);
+    expect(text.a.readyState).toBe("open");
+  }, 15_000);
+
+  it("keeps a completed batch successful when the gap crosses the observed answer", async () => {
+    const { a, b, aLink, bLink, links, file, text, bTarget } = await harness();
+    const send = file.b.send;
+    let cut = false;
+    file.b.send = function (data) {
+      send.call(this, data);
+      if (cut || typeof data === "string" || data instanceof Blob) return;
+      const view = data instanceof ArrayBuffer
+        ? new Uint8Array(data)
+        : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+      if (view[0] !== COMPLETE[0]) return;
+      cut = true;
+      // FakeChannel delivers in a microtask. Queueing the close after it makes
+      // the sender observe COMPLETE first, while still crossing the async
+      // completion continuation with the transport gap.
+      queueMicrotask(() => {
+        file.a.close();
+        file.b.close();
+      });
+    };
+
+    a.enqueue("b", picked("answered-complete.txt", "durably complete"));
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => cut && a.send?.done === true);
+
+    expect(a.send?.status).toBe("sendDone");
+    expect(a.send?.ok).toBe(true);
+    expect(b.recv?.status).toBe("recvDone");
+    expect([...bTarget.output.get("answered-complete.txt")!]).toEqual(bytes("durably complete"));
+    expect(a.errorKey).toBe("");
+    expect(a.active()).toBe(false);
+
+    const { swap, aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+    a.enqueue("b", picked("after-complete.txt", "the successful lane survived"));
+    await until(() => b.incoming?.files[0].name === "after-complete.txt");
+    b.accept();
+    await until(() => a.send?.status === "sendDone" && b.recv?.status === "recvDone");
+
+    expect([...bTarget.output.get("after-complete.txt")!]).toEqual(bytes("the successful lane survived"));
+    expect(swap.a.sent.filter((frame) => kindOf(frame) === FRAME.RESUME)).toHaveLength(1);
+    expect(text.a.readyState).toBe("open");
+  });
+
+  it("fails only the batch when its resume request never arrives, and realigns the next one", async () => {
+    const { a, b, aLink, bLink, links, file, text, bTarget } = await harness({ receiveStallMs: 300 });
+    // The receiver's COMPLETE is lost in the gap. It finished and released its
+    // lane, so no resume request can ever come for the batch the sender still
+    // holds — the one legitimate way to reach the resume-wait deadline.
+    const send = file.b.send;
+    let cut = false;
+    file.b.send = function (data) {
+      send.call(this, data);
+      if (cut || typeof data === "string" || data instanceof Blob) return;
+      const view = data instanceof ArrayBuffer
+        ? new Uint8Array(data)
+        : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+      if (view[0] !== COMPLETE[0]) return;
+      cut = true;
+      file.a.close();
+      file.b.close();
+    };
+    a.enqueue("b", picked("lost-complete.txt", "written but unacknowledged"));
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => cut && a.send?.status === "resuming");
+    expect(b.recv?.status).toBe("recvDone");
+    expect([...bTarget.output.get("lost-complete.txt")!]).toEqual(bytes("written but unacknowledged"));
+
+    const { swap, aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+
+    await until(() => a.send?.done === true);
+    expect(a.send?.status).toBe("sendFail");
+    // Nothing about an unanswered request proves the sequence is unusable, so
+    // the failure is scoped to the batch and the lane keeps its realignment.
+    expect(a.errorKey).toBe("");
+    expect(a.active()).toBe(false);
+    expect(swap.a.readyState).toBe("open"); // the replacement lane was not torn down
+
+    a.enqueue("b", picked("after-timeout.txt", "the lane still works"));
+    await until(() => b.incoming?.files[0].name === "after-timeout.txt");
+    b.accept();
+    await until(() => b.recv?.status === "recvDone");
+
+    expect([...bTarget.output.get("after-timeout.txt")!]).toEqual(bytes("the lane still works"));
+    expect(swap.a.sent.filter((frame) => kindOf(frame) === FRAME.RESUME)).toHaveLength(1);
+    expect(swap.a.sent.findIndex((frame) => kindOf(frame) === FRAME.RESUME)).toBe(0);
+    expect(b.errorKey).toBe("");
+    expect(text.a.readyState).toBe("open");
+  }, 15_000);
+
+  it("keeps exactly one sink per file when the gap crosses the next file's async open", async () => {
+    const opens: string[] = [];
+    const output = new Map<string, Uint8Array>();
+    let releaseOpen!: () => void;
+    const openGate = new Promise<void>((resolve) => { releaseOpen = resolve; });
+    const done = vi.fn();
+    const target: SaveTarget = {
+      label: "gated",
+      done,
+      async file(name) {
+        opens.push(name);
+        if (opens.length === 2) await openGate;
+        const chunks: Uint8Array[] = [];
+        return {
+          async write(chunk) { chunks.push(chunk.slice()); },
+          async close() {
+            const size = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            const joined = new Uint8Array(size);
+            let offset = 0;
+            for (const chunk of chunks) { joined.set(chunk, offset); offset += chunk.length; }
+            // Model a real save target: a name is never handed out twice, so a
+            // second open of the same file is visible as a suffixed duplicate
+            // instead of silently overwriting the first.
+            output.set(output.has(name) ? `${name} (1)` : name, joined);
+          },
+        };
+      },
+    };
+    const { a, b, aLink, bLink, links, file } = await harness({ pickB: async () => target });
+    a.enqueue("b", [
+      { file: new File(["first file"], "first.txt") },
+      { file: new File(["second file"], "second.txt") },
+    ]);
+    await until(() => !!b.incoming);
+    b.accept();
+    // Parked inside the second file's open: the sink exists, the batch does not
+    // know about it yet, and the transport dies exactly there.
+    await until(() => opens.length === 2);
+
+    file.a.close();
+    file.b.close();
+    releaseOpen();
+    await until(() => a.send?.status === "resuming" && b.recv?.status === "resuming");
+
+    const { swap, aNext, bNext } = rebuild(aLink, bLink, links);
+    a.attach(aNext);
+    b.attach(bNext);
+    await until(() => a.send?.status === "sendDone" && b.recv?.status === "recvDone");
+
+    expect(opens).toEqual(["first.txt", "second.txt"]);
+    expect([...output.keys()]).toEqual(["first.txt", "second.txt"]);
+    expect([...output.get("first.txt")!]).toEqual(bytes("first file"));
+    expect([...output.get("second.txt")!]).toEqual(bytes("second file"));
+    expect(done).toHaveBeenCalledOnce();
+    const point = announced(swap.a.sent.find((frame) => kindOf(frame) === FRAME.RESUME)!);
+    expect(point).toMatchObject({ index: 1, offset: 0 });
+  }, 15_000);
+
   it("rejects a forged resume request beyond the sender's authenticated frontier", async () => {
     const { a, b, aLink, bLink, links, file, text } = await harness();
     const originalSend = file.a.send;

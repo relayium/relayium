@@ -5,6 +5,7 @@
 // all consume one monotonically increasing nonce sequence in each direction.
 
 import type { PickedFile } from "./drag";
+import type { StatusKey } from "./i18n.svelte";
 import { pickSaveTarget as defaultPickSaveTarget, type FileSink, type SaveTarget } from "./filesink";
 import type { Incoming, Xfer } from "./transfer-session.svelte";
 import type { MixedPeerLink } from "./peer-link.svelte";
@@ -330,6 +331,24 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     return point.offset === size || point.offset % CHUNK_SIZE === 0;
   }
 
+  /**
+   * End one outbound batch without ending its lane.
+   *
+   * Every caller here has a reusable codec pair: the peer answered, or its answer
+   * can no longer arrive, while the sequence itself is intact and the generation's
+   * pending realignment still repairs whatever the gap burned. So this reports the
+   * batch's own outcome and leaves `resyncOut`, the queue and the link alone.
+   * `final === null` is the local-cancel outcome: no card at all.
+   */
+  function endOutboundBatch(current: Outbound, final: { status: StatusKey; ok: boolean } | null) {
+    current.decide("reject");
+    current.complete();
+    current.creditWake?.();
+    current.terminal = true;
+    if (!final) send = null;
+    else if (send && !send.done) send = { ...send, ...final, done: true, speed: 0 };
+  }
+
   function armOutboundResumeTimer(current: Outbound) {
     clearTimeout(resumeTimer);
     const candidate = current.link;
@@ -338,7 +357,13 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       resumeTimer = undefined;
       if (outbound === current && current.phase === "resuming"
           && candidate === link && expectedGeneration === generation) {
-        markLaneFailed(candidate, "sendFail", expectedGeneration);
+        // Only this batch failed. Nothing proves the lane is unusable: no byte was
+        // lost, the codecs are the ones the replacement is already using, and the
+        // realignment this generation owes is still unspent. Poisoning here would
+        // let one unanswered request end a link that is otherwise working, so the
+        // next batch gets to announce the origin and carry on.
+        endOutboundBatch(current, { status: "sendFail", ok: false });
+        finishOutbound(current);
       }
     }, receiveStallMs);
   }
@@ -386,8 +411,15 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       ? inbound : null;
     clearInboundTimers();
     if (oldOutbound) {
-      if (oldOutbound.phase === "sending" || oldOutbound.phase === "finishing"
-          || oldOutbound.phase === "resuming") {
+      const consented = oldOutbound.phase === "sending" || oldOutbound.phase === "finishing"
+        || oldOutbound.phase === "resuming";
+      // A decision the peer has already given is not pending work. Parking such a
+      // batch in `resuming` would wait for a RESUME_REQ that by definition cannot
+      // come — a peer that rejected or completed this batch has no checkpoint left
+      // to ask from — and would end in a timeout rather than in the answer it
+      // already holds.
+      const answered = oldOutbound.remoteStop || oldOutbound.gotComplete;
+      if (consented && !answered) {
         oldOutbound.phase = "resuming";
         oldOutbound.resumeRequest = null;
         oldOutbound.resumeStarted = false;
@@ -396,14 +428,19 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         oldOutbound.creditWake?.();
         oldOutbound.complete();
         if (send && !send.done) send = { ...send, status: "resuming", speed: 0 };
-      } else {
-        oldOutbound.cancelRequested = true;
-        oldOutbound.decide("reject");
-        oldOutbound.complete();
-        oldOutbound.creditWake?.();
-        oldOutbound.terminal = true;
+      } else if (consented) {
+        // Same precedence as the live path: an explicit local stop outranks a
+        // remote answer, and losing the transport must not change that.
+        if (oldOutbound.cancelRequested) endOutboundBatch(oldOutbound, null);
+        else if (oldOutbound.gotComplete) endOutboundBatch(oldOutbound, { status: "sendDone", ok: true });
+        else endOutboundBatch(oldOutbound, { status: "rejected", ok: false });
         outbound = null;
-        if (send && !send.done) send = { ...send, status: "sendFail", done: true, ok: false, speed: 0 };
+      } else {
+        // Pre-consent: no byte-level checkpoint contract exists yet, so there is
+        // nothing to resume and the batch fails closed.
+        oldOutbound.cancelRequested = true;
+        endOutboundBatch(oldOutbound, { status: "sendFail", ok: false });
+        outbound = null;
       }
     }
     if (oldInbound) {
@@ -878,7 +915,14 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
           current.files[current.fileIndex].size,
           current.files[current.fileIndex].path,
         );
-        if (!stillReceiving(current)) {
+        // A gap crossing this open is not a reason to throw the sink away. The
+        // batch still owns it, and `SaveTarget.file()` is not idempotent: closing
+        // this one would leave an empty file behind and make the resumed DONE open
+        // the same name a second time — an empty original plus a suffixed
+        // duplicate. Committing it, together with the next file's zero
+        // checkpoint, is exactly the durable state the resume request must name.
+        // Cancellation, detach and any terminal loss of ownership still close it.
+        if (!stillOwned(current) || current.cancelRequested) {
           try { await nextSink.close(); } catch { /* cancelled path owns status */ }
           return;
         }
@@ -888,6 +932,9 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
           offset: 0,
           chain: new Uint8Array(32),
         };
+        // Progress and the no-progress watchdog belong to a live generation only:
+        // a paused batch is governed by the gap timer until its replacement.
+        if (!stillReceiving(current)) return;
         refreshReceiveWatchdog(current);
         publishReceive(current, true);
         return;
