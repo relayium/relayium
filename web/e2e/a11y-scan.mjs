@@ -69,9 +69,12 @@ const TARGETS = [
   { id: "static/notfound/en", url: "/404.html", ready: "h1", viewport: DESKTOP, scheme: "light" },
 
   // ── SPA：必须等真组件挂上来 ────────────────────────────────────────────
-  { id: "spa/landing/desktop-light", url: "/", ready: ".lan-workspace", viewport: DESKTOP, scheme: "light" },
-  { id: "spa/landing/mobile-dark", url: "/", ready: ".lan-workspace", viewport: MOBILE, scheme: "dark",
-    note: "同一个页面的另一套令牌：深色的对比度和浅色是两回事" },
+  // 首页折叠线以下的内容是一个动态 import。等首屏 .lan-workspace 只在本地快磁盘上
+  // 偶然把它一起扫到；生产网络会少掉整个营销区块却照样显示全绿。等懒加载块里的
+  // 稳定 heading，才代表这一个目标的完整 DOM 已经到齐。
+  { id: "spa/landing/desktop-light", url: "/", ready: "#home-text-title", viewport: DESKTOP, scheme: "light" },
+  { id: "spa/landing/mobile-dark", url: "/", ready: "#home-text-title", viewport: MOBILE, scheme: "dark",
+    note: "同一个完整页面的另一套令牌：深色的对比度和浅色是两回事" },
   { id: "spa/cross-network", url: "/cross-network", ready: ".crosspage", viewport: DESKTOP, scheme: "light" },
   { id: "spa/pricing", url: "/pricing", ready: ".pricing-page", viewport: DESKTOP, scheme: "light" },
   { id: "spa/apps", url: "/apps", ready: ".apps", viewport: DESKTOP, scheme: "light" },

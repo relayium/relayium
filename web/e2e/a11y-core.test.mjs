@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -69,5 +69,17 @@ describe("accessibility allowlist policy", () => {
     expect(result.failures).toHaveLength(1);
     expect(result.failures[0].node.target).toBe(".other");
     expect(loaded.entries[0].matched).toBe(1);
+  });
+});
+
+describe("scanner target readiness", () => {
+  it("waits for the landing page's lazy content, not only its eager workspace", () => {
+    // On localhost the dynamic chunk often arrives before axe starts, which made
+    // `.lan-workspace` look sufficient. Production proved it was a timing race:
+    // the same scan omitted the whole below-the-fold component and 36 decisions.
+    const source = readFileSync(join(import.meta.dirname, "a11y-scan.mjs"), "utf8");
+    for (const id of ["spa/landing/desktop-light", "spa/landing/mobile-dark"]) {
+      expect(source).toMatch(new RegExp(`id: "${id}"[^\\n]+ready: "#home-text-title"`));
+    }
   });
 });
