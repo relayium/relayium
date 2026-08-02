@@ -1,4 +1,7 @@
-import type { SameLength, PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "../cli-page-data";
+// 显式 .js 后缀：vite-plugin-pwa.ts 会 import 本文件取 LANGS（构建期要按语言清单校验
+// precache 覆盖），于是本文件也进了 tsconfig.node.json 的 nodenext 程序，那里的相对
+// 导入必须带扩展名。这是纯类型导入，打包时整条被抹掉。
+import type { SameLength, PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "../cli-page-data.js";
 
 // Pure i18n types and locale-independent helpers. No message data and no
 // runtime state live here, so language tables and the reactive facade can both

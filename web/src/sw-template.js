@@ -20,9 +20,9 @@ const STREAM_ROUTE = "__STREAM_ROUTE__"; // e.g. "/__stream__/" — see lib/sw-s
  * 服务器上也早已不存在：真机复现过，标题变了、路由内容一片空白。而更新提示条的全部
  * 承诺就是「你可以先把手上的事做完再刷新」——旧壳被删掉，这句承诺就是假的。
  *
- * 为什么是 2 而不是无限：当前 precache 41 条约 0.89 MiB，三代合计约 2.7 MiB（外加
- * 运行时回填的语言包）。两代旧壳刚好覆盖 A→B→C 这种连着发版/紧急修复的节奏，再多
- * 就是在为无限期的陈旧页面付存储，那不是这条闸门要解决的问题。
+ * 为什么是 2 而不是无限：precache 现在把九个语言目录也算进去，一代约 1.43 MiB，
+ * 三代合计约 4.3 MiB（原始字节）。两代旧壳刚好覆盖 A→B→C 这种连着发版/紧急修复的
+ * 节奏，再多就是在为无限期的陈旧页面付存储，那不是这条闸门要解决的问题。
  */
 const KEEP_OLD_SHELLS = 2;
 
@@ -235,10 +235,10 @@ self.addEventListener("fetch", (e) => {
 
   if (url.origin === self.location.origin) {
     // Cache-first for our own hashed, immutable assets, and fill the cache on a
-    // miss. Without the fill, anything outside the precache list (the language
-    // chunks, most notably) would go to the network forever and the app would
-    // break the moment it went offline — the precache list is deliberately
-    // narrow, so the runtime fill is what makes that narrowing safe.
+    // miss. The precache covers every JS/CSS this build emitted (language
+    // catalogues included — see vite-plugin-pwa.ts), so the fill is the safety
+    // net for whatever falls outside it: a chunk a later build adds without a
+    // new SW, and anything hashed that the precache list happens not to name.
     //
     // 当前这一代优先，找不到才回退到保留的旧壳（新→旧）：还开着的旧页面靠这条
     // 回退才拿得到它自己那代的懒加载 chunk，而 site.webmanifest 这种每代同名的

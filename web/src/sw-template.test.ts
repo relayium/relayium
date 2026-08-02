@@ -503,10 +503,12 @@ describe("sw-template message 分派", () => {
 
 describe("sw-template 运行时缓存回填", () => {
   it("precache 之外的带 hash 资源，未命中取网络后写回缓存", async () => {
-    // 语言包（9 个，约 460KB）故意不进 precache——见 vite-plugin-pwa.ts。没有这个
-    // 回填，它们就永远只走网络，离线时整个应用起不来，那条排除就成了纯损失。
+    // precache 现在覆盖本次构建产出的**全部** JS/CSS（语言目录也在内，见
+    // vite-plugin-pwa.ts）。回填是给落在名单之外的东西兜底的：后一次构建新加、
+    // 但 SW 还没换代的 chunk，以及任何带 hash 却恰好没被列进名单的资源。用一个
+    // 中性的文件名，别再暗示语言包是靠回填才活着的。
     const sw = loadSW();
-    const url = ORIGIN + "/assets/en-CLd7DiBC.js";
+    const url = ORIGIN + "/assets/LateChunk-Kd93Ba01.js";
     const res = await sw.fetch({ url })!;
     expect(await res.text()).toBe("from network"); // 响应体仍原样交给页面
     await until(() => sw.put.length > 0);
