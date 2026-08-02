@@ -177,6 +177,34 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
     poisonedCodecs.add(candidate.textReceiver);
   }
 
+  /**
+   * Enter the lane's terminal state, and withdraw its claim on the link.
+   *
+   * `suspend()` records `recoveryIntent` from a conversation that was live when
+   * the channel entered a gap, and the coordinator holds the whole link for up
+   * to LINK_RECOVERY_WINDOW_MS on the strength of that answer. Once this lane is
+   * terminal there is nothing a replacement transport could restore — poisoned
+   * codecs make `attach()` refuse one outright — so continuing to claim recovery
+   * would spend that window, and the initiator's ICE/TURN allocations with it,
+   * on a lane that is over. The file lane has withdrawn the same way since
+   * markLaneFailed; this is that rule, for text.
+   *
+   * Deliberately NOT reachable from `suspend()` or `markTransportInterrupted()`
+   * directly: an ordinary transport gap — including the one a DataChannel
+   * `onclose` reports before the PeerConnection's own terminal callback — must
+   * keep the intent it just recorded. Only a lane that has additionally proven
+   * itself unrecoverable passes through here.
+   *
+   * Callers are already responsible for reaching this only for the live lane
+   * (see the link/generation guards on every async path), which is the same
+   * discipline the status assignment below has always relied on.
+   */
+  function markTerminal(key: TextErrorKey) {
+    status = "failed";
+    errorKey = key;
+    recoveryIntent = false;
+  }
+
   function markFailed(
     key: TextErrorKey = "failed",
     expectedLink = link,
@@ -188,8 +216,7 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
     inboundDrain = null;
     lateAcceptBudget = null;
     if (expectedLink && poison) poisonCodecs(expectedLink);
-    status = "failed";
-    errorKey = key;
+    markTerminal(key);
     try { expectedLink?.textChannel.close(); } catch { /* lane already terminal */ }
   }
 
@@ -445,10 +472,12 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
   function attach(next: MixedPeerLink) {
     if (link === next) {
       // Coordinators may idempotently re-attach. Do not let that hide a closed
-      // channel or leave handlers displaced by another consumer.
+      // channel or leave handlers displaced by another consumer. This is also
+      // how a reopen lands while the manager still holds this exact link — its
+      // PeerConnection never died — so the answer is terminal, not a gap: the
+      // same object cannot be the replacement transport its own marker asks for.
       if (next.textChannel.readyState !== "open") {
-        status = "failed";
-        errorKey = "failed";
+        markTerminal("failed");
         return;
       }
       if (messageHandler) next.textChannel.onmessage = messageHandler;
@@ -500,14 +529,12 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
       nextId = 1;
     }
     if (poisoned(next)) {
-      status = "failed";
-      errorKey = "failed";
+      markTerminal("failed");
       try { next.textChannel.close(); } catch { /* already terminal */ }
       return;
     }
     if (next.textChannel.readyState !== "open") {
-      status = "failed";
-      errorKey = "failed";
+      markTerminal("failed");
       return;
     }
     next.textChannel.binaryType = "arraybuffer";
@@ -534,8 +561,7 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
     }
     peerId = id;
     if (poisoned()) {
-      status = "failed";
-      errorKey = "failed";
+      markTerminal("failed");
       return;
     }
     const mine = ++attempt;
@@ -546,8 +572,7 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
       if (mine !== attempt) return;
       attach(opened);
       if (poisoned(opened) || opened.textChannel.readyState !== "open") {
-        status = "failed";
-        errorKey = "failed";
+        markTerminal("failed");
         return;
       }
       if ((status as TextStatus) === "incomingRequest") {
@@ -574,8 +599,11 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
         return;
       }
       console.error("relayium mixed text link error", err);
-      status = "failed";
-      errorKey = "failed";
+      // `mine !== attempt` above already stopped a stale attempt from writing
+      // here at all, and the only rejection that can reach this line while a
+      // link is still held is the recovery promise — which settles together with
+      // the teardown that has already detached this lane.
+      markTerminal("failed");
     }
   }
 

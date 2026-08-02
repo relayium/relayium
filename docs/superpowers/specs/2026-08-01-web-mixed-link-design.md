@@ -469,6 +469,17 @@ The held link is not bumped to a new `linkGeneration` and does not re-announce
 its SAS, because it is the same authentication step. The idle timer cannot close
 an interrupted link.
 
+Recorded is not the same as permanent. A lane that afterwards proves it has
+nothing a replacement transport could restore — poisoned codecs, which make
+`attach()` refuse a replacement outright, or an idempotent re-attach that finds
+its own channel closed — **withdraws** its claim, exactly as the file lane has
+since `markLaneFailed`. Only that withdrawal may unrecord the marker: an ordinary
+gap, including the `onclose`-before-terminal one this section exists for, keeps
+it. Each lane withdraws only its own claim, so a link with a dead text lane and a
+live file batch is still held for the file lane. Without this, a text lane whose
+gap poisoned it would keep asking for a 90 s window — and, on the initiator, real
+ICE/TURN allocations — for a conversation that can never come back.
+
 **The file lane is now explicitly not poisoned by a transport close (I4).** The
 rule that "a transport close with protected bytes still buffered poisons the
 sender codec" is narrowed to the **text** lane only. The file protocol has a

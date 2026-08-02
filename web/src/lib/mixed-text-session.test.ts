@@ -1014,3 +1014,161 @@ describe("mixed text session transport gaps", () => {
     expect(file.readyState).toBe("open");
   });
 });
+
+// `needsRecovery()` is the one question the coordinator asks this lane before it
+// decides to hold a dropped link for up to 90 s. The marker is recorded inside
+// suspend() precisely because a lane reads terminal immediately afterwards — so
+// the only thing that may unrecord it is the lane discovering it has nothing a
+// replacement transport could ever restore. The file lane has said this since
+// markLaneFailed; the text lane must say it too, without breaking the ordinary
+// gap the marker exists for.
+describe("mixed text session recovery intent", () => {
+  /** An accepted conversation with one protected frame already queued. */
+  async function conversing() {
+    const h = await harness();
+    h.session.attach(h.link);
+    h.text.dispatch(TEXT_REQUEST);
+    h.session.accept();
+    await h.flush();
+    return h;
+  }
+
+  it("keeps the intent an ordinary gap recorded", async () => {
+    const { session, text } = await conversing();
+
+    // The real callback order this exists for: the DataChannel reports closed
+    // before the PeerConnection reaches a terminal state.
+    text.readyState = "closed";
+    text.onclose?.();
+
+    expect(session.status).toBe("ended");
+    expect(session.needsRecovery()).toBe(true);
+  });
+
+  // Same gap, one byte different: this one poisons, so no replacement transport
+  // can bring the lane back and the link must not be held on its behalf.
+  it("drops the intent when the gap itself poisons the lane", async () => {
+    const { session, text, file, flush } = await conversing();
+    await session.send("may never have left");
+    await flush();
+    text.bufferedAmount = 64;
+
+    text.readyState = "closed";
+    text.onclose?.();
+
+    expect(session.status).toBe("failed");
+    expect(session.needsRecovery()).toBe(false);
+    expect(file.readyState).toBe("open");
+  });
+
+  it("drops the intent when a retired async send poisons the lane", async () => {
+    let releaseFrame!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseFrame = resolve; });
+    const { session, link, text, flush } = await conversing();
+    const original = link.textSender.frame.bind(link.textSender);
+    vi.spyOn(link.textSender, "frame").mockImplementation(async (...args) => {
+      await gate;
+      return original(...args);
+    });
+
+    void session.send("still inside Web Crypto");
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    // An ordinary gap first: at this instant the intent is genuinely correct.
+    text.readyState = "closed";
+    text.onclose?.();
+    expect(session.needsRecovery()).toBe(true);
+
+    // The retired run then consumes its nonce and poisons the codecs, which is
+    // what makes the recorded intent unanswerable.
+    releaseFrame();
+    await flush();
+
+    expect(session.status).toBe("failed");
+    expect(session.needsRecovery()).toBe(false);
+  });
+
+  it("drops the intent when reopening finds the same link's channel closed", async () => {
+    const { session, text, ensureLink } = await conversing();
+    text.readyState = "closed";
+    text.onclose?.();
+    expect(session.needsRecovery()).toBe(true);
+
+    // The public path: the manager still holds this exact link (its
+    // PeerConnection never died), so ensureLink hands back the same object.
+    await session.openWith("peer");
+
+    expect(ensureLink).toHaveBeenCalled();
+    expect(session.status).toBe("failed");
+    expect(session.needsRecovery()).toBe(false);
+  });
+
+  // The same answer, one layer lower. A coordinator may re-attach the exact link
+  // it already owns, and that object can never be the replacement transport its
+  // own marker is asking for — so the idempotent re-attach must withdraw the
+  // claim rather than inherit it.
+  it("drops the intent when re-attached to the same link with a closed channel", async () => {
+    const { session, link, text } = await conversing();
+    text.readyState = "closed";
+    text.onclose?.();
+    expect(session.needsRecovery()).toBe(true);
+
+    session.attach(link);
+
+    expect(session.status).toBe("failed");
+    expect(session.needsRecovery()).toBe(false);
+  });
+
+  // The contrast that keeps the branch above honest: an idempotent re-attach of
+  // a still-open channel is not an answer to anything and must change nothing.
+  it("keeps the intent when re-attached to the same link with a live channel", async () => {
+    const { session, link, text } = await conversing();
+    // The coordinator's own suspend, before any channel callback: the transport
+    // is going away but this channel object still reads open.
+    session.suspend();
+    expect(session.needsRecovery()).toBe(true);
+    expect(text.readyState).toBe("open");
+
+    session.attach(link);
+
+    expect(session.needsRecovery()).toBe(true);
+  });
+
+  it("lets a stale link's poison clear only its own intent", async () => {
+    let releaseFrame!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseFrame = resolve; });
+    const { session, link, text, flush } = await conversing();
+    const original = link.textSender.frame.bind(link.textSender);
+    vi.spyOn(link.textSender, "frame").mockImplementation(async (...args) => {
+      await gate;
+      return original(...args);
+    });
+    void session.send("belongs to the old link");
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    text.readyState = "closed";
+    text.onclose?.();
+
+    // A genuinely different link — new codecs, not a transport replacement.
+    const fresh = fakeChannel();
+    const other: MixedPeerLink = {
+      ...link,
+      textChannel: fresh as unknown as RTCDataChannel,
+      textSender: new TextSender(),
+      textReceiver: new TextReceiver(),
+    };
+    session.attach(other);
+    fresh.dispatch(TEXT_REQUEST);
+    session.accept();
+    await flush();
+    fresh.readyState = "closed";
+    fresh.onclose?.();
+    expect(session.needsRecovery()).toBe(true);
+
+    releaseFrame();
+    await flush();
+
+    // The old run poisoned the codecs it owned and nothing else.
+    expect(session.needsRecovery()).toBe(true);
+    expect(session.status).toBe("ended");
+  });
+});

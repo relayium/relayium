@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { generateKeyPair, ready } from "./crypto";
 import { createMixedSession, type MixedSessionDeps } from "./mixed-session.svelte";
+import type { MixedPeerLink } from "./peer-link.svelte";
 import { TEXT_REQUEST } from "./text-wire";
 import type { SignalingClient } from "./signaling";
 import type { Conn, InboundSignal } from "./webrtc";
@@ -483,6 +484,74 @@ describe("mixed session transport recovery", () => {
     expect(mixed.status).toBe("interrupted");
     // A gap ends the conversation visibly and keeps the transcript.
     expect(mixed.text.status).toBe("ended");
+    mixed.stop();
+  });
+
+  /** An accepted inbound conversation on the link's text lane. */
+  async function conversing(mixed: ReturnType<typeof createMixedSession>, link: MixedPeerLink) {
+    link.textChannel.onmessage?.({ data: TEXT_REQUEST.buffer.slice(0) } as MessageEvent);
+    expect(mixed.text.status).toBe("incomingRequest");
+    mixed.text.accept();
+    await flush();
+    expect(mixed.text.status).toBe("open");
+  }
+
+  // The channel-close-before-PC-terminal order again, but for the text lane and
+  // with the two outcomes that must stay apart. Both scenarios reach
+  // onTransportLost with a text conversation that was live when its channel
+  // closed; only one of them has anything left that a rebuild could restore.
+  it("holds a link when the text channel closes before the peer connection", async () => {
+    const { mixed, drop } = session({ resume: stalledResume() });
+    const link = await mixed.ensure("b");
+    await conversing(mixed, link);
+
+    link.textChannel.onclose?.(new Event("close"));
+    drop("failed");
+
+    expect(mixed.status).toBe("interrupted");
+    expect(mixed.link).toBe(link);
+    expect(mixed.text.status).toBe("ended");
+    mixed.stop();
+  });
+
+  it("does not hold a link whose only text work the gap itself destroyed", async () => {
+    const { h, mixed, drop } = session({ resume: stalledResume() });
+    const link = await mixed.ensure("b");
+    await conversing(mixed, link);
+    await mixed.text.send("may never have left");
+    await flush();
+    // DataChannel.send() only enqueues, so this side cannot prove the peer saw
+    // the frame: the gap poisons the text codecs, and no replacement transport
+    // can revive them. Holding the link would burn the whole 90 s window — and,
+    // on the initiator, real ICE/TURN allocations — for a lane that is over.
+    (link.textChannel as unknown as { bufferedAmount: number }).bufferedAmount = 64;
+
+    link.textChannel.onclose?.(new Event("close"));
+    drop("failed");
+
+    expect(mixed.text.status).toBe("failed");
+    expect(mixed.status).toBe("failed");
+    expect(mixed.link).toBeNull();
+    expect(h.conns[0].close).toHaveBeenCalled();
+    mixed.stop();
+  });
+
+  it("still holds a link for the file lane when only the text lane is terminal", async () => {
+    const { mixed, drop } = session({ resume: stalledResume() });
+    const link = await mixed.ensure("b");
+    await conversing(mixed, link);
+    await mixed.text.send("may never have left");
+    await flush();
+    (link.textChannel as unknown as { bufferedAmount: number }).bufferedAmount = 64;
+    await inFlightBatch(mixed);
+
+    link.textChannel.onclose?.(new Event("close"));
+    drop("failed");
+
+    // The text lane withdrew only its own claim. The file lane's is untouched.
+    expect(mixed.text.status).toBe("failed");
+    expect(mixed.status).toBe("interrupted");
+    expect(mixed.link).toBe(link);
     mixed.stop();
   });
 
