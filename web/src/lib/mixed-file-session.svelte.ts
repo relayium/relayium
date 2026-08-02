@@ -6,7 +6,7 @@
 
 import type { PickedFile } from "./drag";
 import type { StatusKey } from "./i18n.svelte";
-import { pickSaveTarget as defaultPickSaveTarget, type FileSink, type SaveTarget } from "./filesink";
+import { pickSaveTarget as defaultPickSaveTarget, saveFailureStatus, SaveCancelledError, type FileSink, type SaveTarget } from "./filesink";
 import type { Incoming, Xfer } from "./transfer-session.svelte";
 import type { MixedPeerLink } from "./peer-link.svelte";
 import {
@@ -125,6 +125,14 @@ interface Inbound {
   checkpoint: ReceiveCheckpoint;
   targetFinalized: boolean;
   cancelRequested: boolean;
+  /**
+   * 同意窗口在选择器还开着的时候就走完了。
+   *
+   * 发送端用**同一个** consentTimeoutMs 等回答，超时就发 BATCH_ABORT。窗口一过，
+   * 这次同意提示无论如何都不能再变回可点击的 —— 否则用户点下的是一个对面早已
+   * 放弃的批次。用于 retryConsent 的判定。
+   */
+  consentExpired: boolean;
   drainLimit: number;
   drained: number;
   drainTimer?: ReturnType<typeof setTimeout>;
@@ -1025,6 +1033,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       checkpoint: { index: 0, offset: 0, chain: new Uint8Array(32) },
       targetFinalized: false,
       cancelRequested: false,
+      consentExpired: false,
       drainLimit: total,
       drained: 0,
     };
@@ -1032,8 +1041,21 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     incoming = { from: candidate.peerId, files, total };
     recv = null;
     clearTimeout(consentTimer);
+    // 一个窗口，绝不续期：发送端用同一个 consentTimeoutMs 等回答。选择器开着时
+    // 窗口走完只能记下来（此刻 rejectInbound 会和一个还可能返回目标的选择器打架），
+    // 由 retryConsent 据此拒绝把提示放回可点击状态。
     consentTimer = setTimeout(() => {
-      if (inbound === current && current.phase === "prompt") rejectInbound(current);
+      if (inbound !== current) return;
+      if (current.phase === "prompt") rejectInbound(current);
+      else if (current.phase === "picking") {
+        current.consentExpired = true;
+        // The sender has reached the same deadline and is about to put its
+        // ordered BATCH_ABORT on the wire. Hide the now-dead consent action
+        // immediately, but leave ownership to that barrier: sending a late
+        // ACCEPT or REJECT here could be mistaken for the next batch because
+        // those control frames intentionally carry no batch id.
+        incoming = null;
+      }
     }, consentTimeoutMs);
   }
 
@@ -1042,13 +1064,21 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     void targetPromise.then(async (target) => {
       if (inbound !== current || current.link !== link || current.phase !== "picking"
           || current.link.fileChannel.readyState !== "open") return;
+      // The picker may resolve just after the shared consent deadline. The
+      // sender has already timed out and queued BATCH_ABORT, so neither ACCEPT
+      // nor REJECT is safe now: either untagged control could land after the
+      // sender starts a later batch and answer the wrong manifest. Wait for the
+      // ordered abort barrier to retire this inbound instead.
+      if (current.consentExpired) return;
       deps.requestNotify?.();
       current.target = target;
       try {
         current.sink = await target.file(current.files[0].name, current.files[0].size, current.files[0].path);
       } catch (err) {
+        // 已经挑好了目标，倒在开第一个文件上（目录分支的 getFileHandle /
+        // createWritable）。这是保存失败，不是用户取消——别赖到用户头上。
         console.error("relayium mixed file save-target error", err);
-        rejectInbound(current, "noSave");
+        rejectInbound(current, "saveFail");
         return;
       }
       if (inbound !== current || current.phase !== "picking" || current.link !== link) {
@@ -1075,12 +1105,43 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       };
       if (!sendBarrier(ACCEPT, current.link, current.generation)) return;
     }, (err) => {
+      // 只有 SaveCancelledError 才是「用户自己取消了保存位置」（桌面独有——手机
+      // 那条选择器分支整条关着）。别的 reject 是保存这一段坏了，如实报 saveFail。
       console.error("relayium mixed file picker error", err);
-      if (inbound === current) rejectInbound(current, "noSave");
+      if (inbound !== current) return;
+      // As in the success arm above, once the shared deadline passed we must
+      // emit no untagged answer. BATCH_ABORT owns retirement from here.
+      if (current.consentExpired) return;
+      if (err instanceof SaveCancelledError && retryConsent(current)) return;
+      rejectInbound(current, saveFailureStatus(err));
     });
   }
 
-  function rejectInbound(current: Inbound, status?: "noSave") {
+  /**
+   * 桌面上用户在选择器里按了取消 → 把同意提示原样放回去，让他再点一次。
+   *
+   * 之所以**协议上是安全的**：ACCEPT 之前这条 lane 上属于这一批的东西只有发送端
+   * 那份 manifest，接收端一个字节都没往回发。回到 prompt 不改变任何序号、nonce、
+   * 世代或流控游标，发送端仍停在自己的 waitingAccept 里等同一个答复。
+   *
+   * 之所以**不续期**：发送端用同一个 consentTimeoutMs 等，超时就 BATCH_ABORT。所以
+   * 提示保留的是**原来那个**截止时刻（consentTimer 一直没被清掉，仍会在原时刻开火
+   * 并自动拒绝）；窗口已经走完的（consentExpired）就不再放回，如实按取消收场。
+   *
+   * 其余任何一处对不上——链路换了、世代换了、通道不再是 open——都不放回：那时这次
+   * 同意本来就已经作废，放回去等于让用户点一个不存在的批次。
+   */
+  function retryConsent(current: Inbound): boolean {
+    if (current.phase !== "picking" || current.consentExpired) return false;
+    if (current.link !== link || current.generation !== generation) return false;
+    if (current.link.fileChannel.readyState !== "open") return false;
+    if (!incoming) return false;
+    current.phase = "prompt";
+    incoming = { ...incoming, retry: true };
+    return true;
+  }
+
+  function rejectInbound(current: Inbound, status?: "noSave" | "saveFail") {
     if (inbound !== current) return;
     clearTimeout(consentTimer);
     consentTimer = undefined;

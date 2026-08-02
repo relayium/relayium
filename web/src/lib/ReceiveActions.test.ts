@@ -38,6 +38,7 @@ function stubPickers(on: boolean): () => void {
 async function mountActions(o: {
   canStream: boolean;
   files: { name: string; size: number; path?: string }[];
+  retry?: boolean;
 }) {
   await loadLang("en");
   restorePickers = stubPickers(o.canStream);
@@ -46,7 +47,7 @@ async function mountActions(o: {
   document.body.appendChild(target);
   app = mount(ReceiveActions, {
     target,
-    props: { files: o.files, total, onAccept, onReject },
+    props: { files: o.files, total, retry: o.retry === true, onAccept, onReject },
   });
   flushSync();
 }
@@ -60,10 +61,26 @@ const SMALL = 1024 * 1024;
 const flat = (size: number) => [{ name: "big.mp4", size }];
 const folder = (size: number) => [{ name: "big.mp4", size, path: "trip/big.mp4" }];
 
+/** 把 navigator.userAgent 换成手机的；返回还原函数。 */
+function stubUA(ua: string): () => void {
+  const had = Object.getOwnPropertyDescriptor(navigator, "userAgent");
+  Object.defineProperty(navigator, "userAgent", { value: ua, configurable: true });
+  return () => {
+    if (had) Object.defineProperty(navigator, "userAgent", had);
+    else delete (navigator as unknown as Record<string, unknown>).userAgent;
+  };
+}
+
+const ANDROID_UA =
+  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.0 Mobile Safari/537.36";
+
+let restoreUA: () => void;
+
 beforeEach(() => {
   onAccept = vi.fn();
   onReject = vi.fn();
   restorePickers = () => {};
+  restoreUA = () => {};
 });
 
 afterEach(() => {
@@ -71,6 +88,7 @@ afterEach(() => {
   app = null;
   target?.remove();
   restorePickers();
+  restoreUA();
 });
 
 describe("ReceiveActions 实时接收的内存提示", () => {
@@ -124,6 +142,56 @@ describe("ReceiveActions 实时接收的内存提示", () => {
 
     await mountActions({ canStream: false, files: folder(half) });
     expect(target.querySelector(".memwarn"), "ZIP 分支峰值 2×，越线").not.toBeNull();
+  });
+
+  // 用户的原话是「没看到任何选择器，也不知道该怎么选」。所以点之前必须先说清楚
+  // 点下去会发生什么，而且这句话得跟着真实分支走，不能跟着「API 属性在不在」走。
+  it("桌面（选择器可用）：先告诉用户会弹出保存位置选择器", async () => {
+    await mountActions({ canStream: true, files: flat(SMALL) });
+    const hint = target.querySelector(".savehint");
+    expect(hint?.textContent!.trim()).toBe(t().recvSaveHintPicker);
+  });
+
+  it("没有 File System Access API：先告诉用户会保存到下载目录", async () => {
+    await mountActions({ canStream: false, files: flat(SMALL) });
+    expect(target.querySelector(".savehint")?.textContent!.trim()).toBe(t().recvSaveHintDownload);
+  });
+
+  it("手机上即使属性存在也说「保存到下载目录」——手机上一次选择器都不开，事实就是如此", async () => {
+    restoreUA = stubUA(ANDROID_UA);
+    await mountActions({ canStream: true, files: flat(SMALL) }); // 两个选择器属性都在
+    expect(target.querySelector(".savehint")?.textContent!.trim()).toBe(t().recvSaveHintDownload);
+  });
+
+  it("手机 + 大批次：内存提示不再被「选择器属性存在」悄悄摘掉", async () => {
+    // 事故设备上的真实组合：showSaveFilePicker 存在（于是旧代码判定能流式落盘、
+    // 不提示），实际却走内存分支。最需要提示的设备恰好一句都没有。
+    restoreUA = stubUA(ANDROID_UA);
+    await mountActions({ canStream: true, files: folder(BIG) });
+    expect(target.querySelector(".memwarn"), "手机上未经证实的选择器不该关掉内存提示").not.toBeNull();
+    expect(byText(t().accept)).toBeUndefined();
+  });
+
+  // 桌面上按了取消之后卡片会**原地再问一次**。如果它长得和第一次一模一样，用户
+  // 就只会看到「什么都没发生」，而这正是「一次误按返回键把整次传输判死」的另一
+  // 张脸：这次传输其实还活着，界面必须说出来。
+  it("重问一次：换成「你取消了，还能再来」，接收按钮照旧可用", async () => {
+    await mountActions({ canStream: true, files: flat(SMALL), retry: true });
+    const hint = target.querySelector(".savehint");
+    expect(hint?.textContent!.trim()).toBe(t().recvSaveRetry);
+    // 活动区域一直在（见组件注释），所以这次文案替换才播报得出来。
+    expect(hint?.getAttribute("role")).toBe("status");
+    byText(t().accept)!.click();
+    flushSync();
+    expect(onAccept).toHaveBeenCalledTimes(1);
+  });
+
+  it("重问一次时拒绝仍然可用", async () => {
+    await mountActions({ canStream: true, files: flat(SMALL), retry: true });
+    byText(t().decline)!.click();
+    flushSync();
+    expect(onReject).toHaveBeenCalledTimes(1);
+    expect(onAccept).not.toHaveBeenCalled();
   });
 
   it("提示状态下拒绝仍然可用，且不触发接收", async () => {

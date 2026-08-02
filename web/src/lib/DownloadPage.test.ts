@@ -295,6 +295,36 @@ describe("DownloadPage 收尾与错误归因", () => {
     expect(target.querySelector(".btn-primary"), "传输故障必须可重试").not.toBeNull();
   });
 
+  it("保存位置选不出来（且这一批不能安全塞进内存）要如实报出来，不是按了下载什么都没发生", async () => {
+    // 桌面上选择器坏掉的那一批：点击之前的文案基于「属性存在」说了「浏览器会问你
+    // 存哪里」，于是用户没看到内存提示。这时静默退回按钮那一屏，用户只会以为
+    // 自己没点中。
+    const w = window as unknown as Record<string, unknown>;
+    const had = "showSaveFilePicker" in w;
+    w.showSaveFilePicker = async () => { throw new Error("SecurityError"); };
+    try {
+      await mountPage({ canStream: false, files: [{ name: "big.bin", size: LARGE_DOWNLOAD_WARN_BYTES + 1 }] });
+      await clickDownload();
+      const err = target.querySelector(".error");
+      expect(err, "保存这一段用不了必须说出来").not.toBeNull();
+      expect(err!.textContent!.trim()).toBe(messages.en.download.swFail);
+      expect(target.querySelector(".btn-primary"), "换个浏览器/重试是有意义的").not.toBeNull();
+      expect(downloadBlob, "一个字节都不该取").not.toHaveBeenCalled();
+    } finally { if (!had) delete w.showSaveFilePicker; }
+  });
+
+  it("用户自己取消保存位置：回到按钮那一屏，不报错", async () => {
+    const w = window as unknown as Record<string, unknown>;
+    const had = "showSaveFilePicker" in w;
+    w.showSaveFilePicker = async () => { throw Object.assign(new Error("abort"), { name: "AbortError" }); };
+    try {
+      await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+      await clickDownload();
+      expect(target.querySelector(".error"), "取消不是故障").toBeNull();
+      expect(downloadBlob).not.toHaveBeenCalled();
+    } finally { if (!had) delete w.showSaveFilePicker; }
+  });
+
   it("真正的解密失败仍然是「密钥错误或文件损坏」，且不给重试按钮", async () => {
     // 守住反面：别为了修归因把所有失败都变成「可重试的传输问题」。
     downloadBlob.mockRejectedValue(new Error("bad tag"));

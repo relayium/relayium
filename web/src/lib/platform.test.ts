@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectPlatform } from "./platform";
+import { detectPlatform, mobileFromUA } from "./platform";
 
 describe("detectPlatform", () => {
   it("detects iOS (iPhone and iPad)", () => {
@@ -29,5 +29,31 @@ describe("detectPlatform", () => {
   it("falls back to unknown", () => {
     expect(detectPlatform("")).toBe("unknown");
     expect(detectPlatform("some-random-agent")).toBe("unknown");
+  });
+});
+
+// 这个判断只喂给一处：filesink 在没有实测证据时该不该相信 File System Access
+// 选择器。所以宁可多认（多一次内存提示），不可漏认（在弹不出选择器的设备上
+// 声称能流式落盘，然后一声不吭地把整批攒进内存）。
+describe("mobileFromUA", () => {
+  it("认出 Android 手机与平板（平板 UA 里没有 'Mobile'）", () => {
+    expect(mobileFromUA("Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/140 Mobile Safari/537.36")).toBe(true);
+    expect(mobileFromUA("Mozilla/5.0 (Linux; Android 13; SM-X710) Chrome/140 Safari/537.36")).toBe(true);
+  });
+  it("认出 iPhone/iPad，以及桌面模式的 iPadOS", () => {
+    expect(mobileFromUA("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")).toBe(true);
+    expect(mobileFromUA("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)")).toBe(true);
+    expect(mobileFromUA("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", undefined, 5)).toBe(true);
+  });
+  it("桌面浏览器不算", () => {
+    expect(mobileFromUA("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/140 Safari/537.36")).toBe(false);
+    expect(mobileFromUA("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140 Safari/537.36")).toBe(false);
+    expect(mobileFromUA("Mozilla/5.0 (X11; Linux x86_64) Firefox/128.0")).toBe(false);
+    expect(mobileFromUA("")).toBe(false);
+  });
+  it("UA-CH 的 mobile 位只在为 true 时采信：Android 平板报的是 false，仍要按手机算", () => {
+    expect(mobileFromUA("some-random-agent", true)).toBe(true);
+    expect(mobileFromUA("Mozilla/5.0 (Linux; Android 13; SM-X710) Chrome/140 Safari/537.36", false)).toBe(true);
+    expect(mobileFromUA("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140", false)).toBe(false);
   });
 });

@@ -1071,6 +1071,7 @@
       <ReceiveActions
         files={incoming.files}
         total={incoming.total}
+        retry={incoming.retry === true}
         onAccept={() => workspace.acceptFile()}
         onReject={() => workspace.rejectFile()}
       />

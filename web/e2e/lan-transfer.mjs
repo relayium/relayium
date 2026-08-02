@@ -263,6 +263,272 @@ async function earlyFailureScenario(browser) {
   await browser.send("Target.closeTarget", { targetId: receiver.targetId });
 }
 
+/**
+ * 收方桩件的公共部分：把浏览器下载那条回落路截下来做字节比对。
+ *
+ * 不 fetch(blob:) 取字节，因为线上那套 CSP 的 connect-src 不放行 blob:，测试会死在
+ * 桩件上而不是产品上；Blob 本体在 createObjectURL 那一刻直接留住。
+ */
+const DOWNLOAD_TRAP = `
+  window.__e2e = Object.assign(window.__e2e || {}, { names: [], blobs: [] });
+  const realCreate = URL.createObjectURL.bind(URL);
+  URL.createObjectURL = (obj) => { window.__e2e.blobs.push(obj); return realCreate(obj); };
+  const realClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () {
+    if (!this.download) return realClick.call(this);
+    window.__e2e.names.push(this.download);
+    return undefined; // 别让无头浏览器真的开一个下载
+  };
+`;
+
+/** 发送一个可预测的字节序列，收方按同一个公式逐字节校验。 */
+const sendPayload = (tab, name, bytes) => tab.evaluate(`(() => {
+  const input = document.querySelector('.file-pick-input');
+  const bytes = new Uint8Array(${bytes});
+  for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 31 + 7) & 0xff;
+  const dt = new DataTransfer();
+  dt.items.add(new File([bytes], ${JSON.stringify(name)}, { type: 'application/octet-stream' }));
+  input.files = dt.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+})()`);
+
+const ACCEPT_BTN = `[...document.querySelectorAll('button')].find(b => /接受|Accept|受け取|수락|Annehmen|Accepter|قبول|Aceptar/i.test(b.textContent))`;
+const CANCEL_WORDS = /取消|cancel|abgebrochen|annul|キャンセル|취소|cancelad|أُلغ/i;
+
+/** 收方拿到的第一个 Blob 与发送端写的序列逐字节比对。 */
+const readDownload = (tab) => tab.evaluate(`(async () => {
+  const buf = new Uint8Array(await window.__e2e.blobs[0].arrayBuffer());
+  let firstBad = -1;
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] !== ((i * 31 + 7) & 0xff)) { firstBad = i; break; }
+  }
+  return {
+    name: window.__e2e.names[0],
+    pickerCalls: window.__e2e.pickerCalls,
+    firstBad,
+    bytes: buf.length,
+    status: (document.querySelector('.xfer .status')?.textContent ?? '').trim(),
+  };
+})()`);
+
+/**
+ * 手机：**一次保存选择器都不开**，文件走浏览器下载并且逐字节到手。
+ *
+ * 真机证据有两种坏法，而且同一台设备上遇到哪一种不可预测：安卓自带浏览器上
+ * `showSaveFilePicker` 属性在、调用却给不出任何可用的选择界面，接收当场卡死；
+ * 安卓版 Chrome 确实弹得出文件夹选择器，但那是个系统页面，一次误触返回键就把
+ * 整次接收取消掉，只有正正好点中「选择此文件夹」才算成功。
+ *
+ * 所以手机上那条分支整条关掉。这一幕问的正是这个确定性：**选择器属性齐全、而且
+ * 真调用就真能给出句柄**的情况下，调用次数必须是 0 —— 于是「0 次」不可能是失败
+ * 回落的副作用，只可能是我们主动没开。单元测试只能钉住 filesink 那一层；
+ * App.svelte 里的这条局域网接收管道只有这个脚本走得到。
+ */
+async function mobileNoPickerScenario(browser) {
+  const NAME = "e2e-mobile-download.bin";
+  const BYTES = 96 * 1024;
+  // 关键：这两个选择器是**能用的**。它们一旦被调用就会成功并把字节吃掉，于是
+  // 「pickerCalls 为 0 且 Blob 里有完整字节」是一个不可能被蒙混过去的组合。
+  const WORKING_PICKERS = `
+    window.__e2e = { pickerCalls: 0, pickedBytes: 0 };
+    const writable = {
+      write: async (chunk) => { window.__e2e.pickedBytes += chunk.byteLength; },
+      close: async () => {},
+    };
+    const fileHandle = { createWritable: async () => writable };
+    const dirHandle = {
+      getFileHandle: async () => fileHandle,
+      getDirectoryHandle: async () => dirHandle,
+    };
+    window.showSaveFilePicker = async () => { window.__e2e.pickerCalls++; return fileHandle; };
+    window.showDirectoryPicker = async () => { window.__e2e.pickerCalls++; return dirHandle; };
+  ` + DOWNLOAD_TRAP;
+  const ANDROID_UA =
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.0 Mobile Safari/537.36";
+
+  const sender = await newTab(browser, BASE + "/");
+  const receiver = await newTab(browser, BASE + "/", WORKING_PICKERS);
+  await receiver.send("Network.enable");
+  await receiver.send("Network.setUserAgentOverride", { userAgent: ANDROID_UA, platform: "Linux armv8l" });
+  await setWideViewport(sender);
+  await setWideViewport(receiver);
+  const peersSeen = "document.querySelectorAll('.pname').length > 0";
+  await sender.waitFor(peersSeen, "peers (mobile no-picker scenario)", 30_000);
+  await receiver.waitFor(peersSeen, "peers (mobile no-picker scenario)", 30_000);
+
+  await sendPayload(sender, NAME, BYTES);
+  await receiver.waitFor(`!!(${ACCEPT_BTN})`, "the receive confirmation card (mobile)", 40_000);
+
+  // 点之前必须先说清楚点下去会发生什么，而且手机上那句话只有一个正确答案：
+  // 文件会保存到浏览器的下载目录。用户报的原话是「没看到任何选择器，也不知道
+  // 该怎么选」——那句话缺的就是这一行。
+  const hint = await receiver.evaluate("(document.querySelector('.savehint')?.textContent ?? '').trim()");
+  if (!hint) throw new Error("the receive card never told the user what accepting would do");
+  if (!/下载|Download|ダウンロード|다운로드|téléchargement|descargas|downloads|التنزيلات/i.test(hint)) {
+    throw new Error(`on a phone the card must promise the Downloads folder, got ${JSON.stringify(hint)}`);
+  }
+
+  await receiver.evaluate(`(() => { (${ACCEPT_BTN}).click(); return true; })()`);
+  await receiver.waitFor("window.__e2e.names.length === 1", "the browser download to deliver the file", 60_000);
+
+  const got = await readDownload(receiver);
+  if (got.pickerCalls !== 0) {
+    throw new Error(
+      `a phone opened ${got.pickerCalls} save picker(s) — this is the reported failure: ` +
+      `the built-in browser shows no usable chooser, and Chrome's folder page cancels the whole ` +
+      `transfer on an accidental Back`,
+    );
+  }
+  if (got.bytes !== BYTES) throw new Error(`browser download delivered ${got.bytes} bytes, want ${BYTES}`);
+  if (got.firstBad !== -1) throw new Error(`browser download delivered corrupted bytes (first mismatch at ${got.firstBad})`);
+  if (got.name !== NAME) throw new Error(`browser download saved ${got.name}, want ${NAME}`);
+  if (!got.status) throw new Error("the receiver card showed no status at all after the transfer");
+  if (CANCEL_WORDS.test(got.status)) {
+    throw new Error(`a phone receive was reported as a cancellation: ${JSON.stringify(got.status)}`);
+  }
+  const picked = await receiver.evaluate("window.__e2e.pickedBytes");
+  if (picked !== 0) throw new Error(`bytes went through a picker handle on a phone (${picked})`);
+  ok(`a phone with working save pickers opened none of them and still received ${got.bytes} exact bytes`);
+
+  const bad = [...sender.errors, ...receiver.errors].filter((e) => /ReferenceError|TypeError|is not a function/.test(e));
+  if (bad.length) throw new Error(`the mobile download path raised real errors:\n    ${bad.join("\n    ")}`);
+
+  await browser.send("Target.closeTarget", { targetId: sender.targetId });
+  await browser.send("Target.closeTarget", { targetId: receiver.targetId });
+}
+
+/**
+ * 桌面：在保存选择器里按取消**不是**这次接收的终局。
+ *
+ * 取消发生在 ACCEPT 之前，此刻线路上属于这一批的东西只有发送端那份 manifest，
+ * 接收端一个字节都没往回发。所以同意卡片原地换一句话再问一次，发送端仍停在
+ * waitingAccept —— 一次误按 Esc/返回不该把整次传输判死。
+ *
+ * 第二幕：非取消的失败（NotAllowedError）不是用户的选择，它照常回落到浏览器
+ * 下载并把字节送到，绝不能被写成「已取消」。
+ */
+async function desktopPickerCancelScenario(browser) {
+  const NAME = "e2e-desktop-retry.bin";
+  const BYTES = 96 * 1024;
+  // 第一次调用抛 AbortError（用户按了取消），第二次给一个真能写的句柄。
+  const CANCEL_THEN_ACCEPT = `
+    window.__e2e = { pickerCalls: 0, chunks: [], closed: false, name: "" };
+    window.showSaveFilePicker = async ({ suggestedName }) => {
+      window.__e2e.pickerCalls++;
+      if (window.__e2e.pickerCalls === 1) {
+        const err = new Error("The user aborted a request.");
+        err.name = "AbortError";
+        throw err;
+      }
+      window.__e2e.name = suggestedName;
+      return {
+        createWritable: async () => ({
+          write: async (chunk) => { window.__e2e.chunks.push(chunk.slice()); },
+          close: async () => { window.__e2e.closed = true; },
+        }),
+      };
+    };
+    window.showDirectoryPicker = async () => { throw new Error("e2e: directory picker not stubbed"); };
+  `;
+
+  const sender = await newTab(browser, BASE + "/");
+  const receiver = await newTab(browser, BASE + "/", CANCEL_THEN_ACCEPT);
+  await setWideViewport(sender);
+  await setWideViewport(receiver);
+  const peersSeen = "document.querySelectorAll('.pname').length > 0";
+  await sender.waitFor(peersSeen, "peers (desktop cancel scenario)", 30_000);
+  await receiver.waitFor(peersSeen, "peers (desktop cancel scenario)", 30_000);
+
+  await sendPayload(sender, NAME, BYTES);
+  await receiver.waitFor(`!!(${ACCEPT_BTN})`, "the receive confirmation card (desktop)", 40_000);
+  const firstHint = await receiver.evaluate("(document.querySelector('.savehint')?.textContent ?? '').trim()");
+  if (!firstHint) throw new Error("the receive card never told the user what accepting would do");
+
+  await receiver.evaluate(`(() => { (${ACCEPT_BTN}).click(); return true; })()`);
+
+  // 取消之后卡片必须还在，而且必须**说出来**——否则用户只看到「什么都没发生」。
+  await receiver.waitFor(
+    "!!document.querySelector('.savehint.retry')",
+    "the consent card to come back after a cancelled save dialog",
+    20_000,
+  );
+  const afterCancel = await receiver.evaluate(`(() => ({
+    pickerCalls: window.__e2e.pickerCalls,
+    canAccept: !!(${ACCEPT_BTN}),
+    retryText: (document.querySelector('.savehint.retry')?.textContent ?? '').trim(),
+    terminal: [...document.querySelectorAll('.xfer .status')].map(n => n.textContent.trim()).filter(t => /✗/.test(t)),
+  }))()`);
+  if (afterCancel.pickerCalls !== 1) throw new Error(`expected exactly one picker call, got ${afterCancel.pickerCalls}`);
+  if (!afterCancel.canAccept) throw new Error("a cancelled save dialog left no way to accept again");
+  if (!afterCancel.retryText) throw new Error("the card came back but said nothing about the cancellation");
+  if (afterCancel.terminal.length) {
+    throw new Error(`one Back/Escape produced a terminal failure: ${JSON.stringify(afterCancel.terminal)}`);
+  }
+
+  // 发送端还在等同一个答复：重新点「接收」就是一次全新手势、一次全新的选择器。
+  await receiver.evaluate(`(() => { (${ACCEPT_BTN}).click(); return true; })()`);
+  await receiver.waitFor("window.__e2e.closed === true", "the retried save to complete", 60_000);
+  const saved = await receiver.evaluate(`(() => {
+    const total = window.__e2e.chunks.reduce((n, c) => n + c.byteLength, 0);
+    const buf = new Uint8Array(total);
+    let at = 0;
+    for (const c of window.__e2e.chunks) { buf.set(new Uint8Array(c), at); at += c.byteLength; }
+    let firstBad = -1;
+    for (let i = 0; i < buf.length; i++) {
+      if (buf[i] !== ((i * 31 + 7) & 0xff)) { firstBad = i; break; }
+    }
+    return { bytes: total, firstBad, name: window.__e2e.name, pickerCalls: window.__e2e.pickerCalls };
+  })()`);
+  if (saved.pickerCalls !== 2) throw new Error(`the retry did not open a fresh picker (calls: ${saved.pickerCalls})`);
+  if (saved.bytes !== BYTES) throw new Error(`the retried save wrote ${saved.bytes} bytes, want ${BYTES}`);
+  if (saved.firstBad !== -1) throw new Error(`the retried save wrote corrupted bytes (first mismatch at ${saved.firstBad})`);
+  if (saved.name !== NAME) throw new Error(`the retried save suggested ${saved.name}, want ${NAME}`);
+  ok(`a cancelled desktop save dialog stayed retryable and the retry wrote ${saved.bytes} exact bytes`);
+
+  await browser.send("Target.closeTarget", { targetId: sender.targetId });
+  await browser.send("Target.closeTarget", { targetId: receiver.targetId });
+
+  // ── 第二幕：非取消的失败照常回落，绝不写成「已取消」。 ──────────────────
+  const FAIL_NAME = "e2e-desktop-fallback.bin";
+  const BROKEN_PICKER = `
+    window.__e2e = { pickerCalls: 0 };
+    window.showSaveFilePicker = async () => {
+      window.__e2e.pickerCalls++;
+      throw Object.assign(new Error("write access denied"), { name: "NotAllowedError" });
+    };
+    window.showDirectoryPicker = async () => { throw new Error("e2e: directory picker not stubbed"); };
+  ` + DOWNLOAD_TRAP;
+
+  const sender2 = await newTab(browser, BASE + "/");
+  const receiver2 = await newTab(browser, BASE + "/", BROKEN_PICKER);
+  await setWideViewport(sender2);
+  await setWideViewport(receiver2);
+  await sender2.waitFor(peersSeen, "peers (desktop fallback scenario)", 30_000);
+  await receiver2.waitFor(peersSeen, "peers (desktop fallback scenario)", 30_000);
+
+  await sendPayload(sender2, FAIL_NAME, BYTES);
+  await receiver2.waitFor(`!!(${ACCEPT_BTN})`, "the receive confirmation card (desktop fallback)", 40_000);
+  await receiver2.evaluate(`(() => { (${ACCEPT_BTN}).click(); return true; })()`);
+  await receiver2.waitFor("window.__e2e.names.length === 1", "the browser-download fallback to deliver the file", 60_000);
+
+  const fell = await readDownload(receiver2);
+  if (fell.pickerCalls !== 1) throw new Error(`expected exactly one picker attempt, got ${fell.pickerCalls}`);
+  if (fell.bytes !== BYTES) throw new Error(`fallback delivered ${fell.bytes} bytes, want ${BYTES}`);
+  if (fell.firstBad !== -1) throw new Error(`fallback delivered corrupted bytes (first mismatch at ${fell.firstBad})`);
+  if (fell.name !== FAIL_NAME) throw new Error(`fallback downloaded ${fell.name}, want ${FAIL_NAME}`);
+  if (CANCEL_WORDS.test(fell.status)) {
+    throw new Error(`a broken picker was reported as the user's cancellation: ${JSON.stringify(fell.status)}`);
+  }
+  ok(`a desktop picker that fails without the user's input still delivered ${fell.bytes} exact bytes`);
+
+  const bad2 = [...sender2.errors, ...receiver2.errors].filter((e) => /ReferenceError|TypeError|is not a function/.test(e));
+  if (bad2.length) throw new Error(`the desktop fallback path raised real errors:\n    ${bad2.join("\n    ")}`);
+
+  await browser.send("Target.closeTarget", { targetId: sender2.targetId });
+  await browser.send("Target.closeTarget", { targetId: receiver2.targetId });
+}
+
 /** 全局看门狗的时限。为什么必须有一个，见 harness.mjs 的 withWatchdog。 */
 const GLOBAL_TIMEOUT_MS = 15 * 60_000;
 
@@ -1853,6 +2119,10 @@ async function main() {
     await unsupportedLayoutScenario(browser);
     await sleep(1000);
     await earlyFailureScenario(browser);
+    await sleep(1000);
+    await mobileNoPickerScenario(browser);
+    await sleep(1000);
+    await desktopPickerCancelScenario(browser);
     await sleep(1000);
     await resumeScenario(browser);
     await sleep(1000);

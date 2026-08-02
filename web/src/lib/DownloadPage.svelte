@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { fetchMeta, downloadBlob, parseDownloadKey, keyFromFragment, DownloadNetworkError } from "./stored-file";
   import { decryptManifest, type StoredManifest } from "./store-crypto";
-  import { pickSaveTarget, canStreamToDisk, LARGE_DOWNLOAD_WARN_BYTES, SinkCancelledError, SinkTransportError, type SaveOptions, type SaveTarget, type FileSink } from "./filesink";
+  import { pickSaveTarget, canStreamToDisk, LARGE_DOWNLOAD_WARN_BYTES, SaveCancelledError, SinkCancelledError, SinkTransportError, type SaveOptions, type SaveTarget, type FileSink } from "./filesink";
   import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages } from "./i18n.svelte";
   import ThemeSelect from "./ThemeSelect.svelte";
   import { formatRemaining, formatSize } from "./format";
@@ -98,8 +98,14 @@
     let target: SaveTarget;
     try {
       target = await pickSaveTarget(manifest.files.map((f) => ({ name: f.name, size: f.size })), SAVE_OPTS);
-    } catch {
-      return; // user cancelled the save picker
+    } catch (e) {
+      // 用户自己取消保存位置：什么都没发生，回到按钮那一屏就是最诚实的表达。
+      if (e instanceof SaveCancelledError) return;
+      // 保存这一段用不了（选择器坏了，而这一批大到不能安全塞进内存）。这时静默
+      // 返回会让用户看到「按了下载什么都没发生」；如实报出来并给重试入口。
+      pageState = "error";
+      errKey = "swFail";
+      return;
     }
     pageState = "downloading";
     progress = 0;

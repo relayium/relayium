@@ -36,12 +36,25 @@ import {
   type ResumePoint,
 } from "./transfer";
 import { lastForegroundAt, stalled } from "./foreground";
-import { pickSaveTarget, type SaveTarget, type FileSink } from "./filesink";
+import { pickSaveTarget, saveFailureStatus, SaveCancelledError, type SaveTarget, type FileSink } from "./filesink";
 import { requestNotifyPermission } from "./notify";
 import type { PickedFile } from "./drag";
 import type { Messages, StatusKey } from "./i18n.svelte";
 
-export interface Incoming { from: string; files: FileMeta[]; total: number }
+export interface Incoming {
+  from: string;
+  files: FileMeta[];
+  total: number;
+  /**
+   * 上一次「接收」被用户在保存位置选择器里取消了，这张卡片是**重新问一次**。
+   *
+   * 只有桌面会出现（手机不开选择器）。置位的前提是这次取消**没有**在线路上留下
+   * 任何东西：发送端仍停在 waitingAccept，重新点「接收」就是一次全新的用户手势、
+   * 一次全新的选择器。界面据此换一句话，否则用户点了取消之后只会看到卡片原地
+   * 不动，不知道自己还能不能再来一次。
+   */
+  retry?: boolean;
+}
 
 export interface Xfer {
   peer: string;
@@ -316,7 +329,19 @@ export function createTransferSession(deps: SessionDeps) {
         requestNotifyPermission();
       } catch (err) {
         console.error("relayium save-target error", err);
-        recv = r = { ...r, status: "noSave", done: true, ok: false };
+        // 用户自己在选择器里按了取消（桌面独有；手机不开选择器）。此刻线路上**什么
+        // 都没发生**：ACCEPT/REJECT 一个都没发出去，发送端仍停在 waitingAccept，而它
+        // 那一侧除了通道关闭之外没有别的超时。所以这不是终局——把同意卡片留在原地，
+        // 用户再点一次「接收」就是一次全新手势、一次全新的选择器。一次误按返回/Esc
+        // 不该把整次传输判死。
+        if (err instanceof SaveCancelledError && !r.done && !cancelled
+            && conn!.channel.readyState === "open") {
+          incoming = { ...req, retry: true };
+          return;
+        }
+        // 剩下的是真失败：「保存这一段坏了」和「用户取消」必须分开报。全按取消报
+        // 是这次线上事故的第二半——用户既没得选，还被告知是自己取消的。
+        recv = r = { ...r, status: saveFailureStatus(err), done: true, ok: false };
         incoming = null;
         try { conn!.channel.send(REJECT); } catch { /* gone */ }
         conn!.close();
@@ -327,7 +352,21 @@ export function createTransferSession(deps: SessionDeps) {
       // receive down — do NOT resurrect it as "receiving" over a dead channel.
       if (r.done || cancelled) return;
       fileIndex = 0; got = 0; start = Date.now();
-      await openSink(); // prepare file 0 (also covers a leading zero-byte file)
+      // prepare file 0 (also covers a leading zero-byte file). This can fail on
+      // its own after a perfectly good pick — the directory branch only touches
+      // the disk here (getFileHandle/createWritable). Unguarded it left the card
+      // frozen on the accept prompt with an unhandled rejection in the console;
+      // it is a save failure, and never the user's cancellation.
+      try {
+        await openSink();
+      } catch (err) {
+        console.error("relayium open-sink error", err);
+        recv = r = { ...r, status: "saveFail", done: true, ok: false };
+        incoming = null;
+        try { conn!.channel.send(REJECT); } catch { /* gone */ }
+        conn!.close();
+        return;
+      }
       // Tell the sender we're ready. On an already-closed channel this throws
       // InvalidStateError — surface a failure the user can dismiss/retry instead
       // of freezing at "receiving 0%" with a dead cancel button.

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { splitExtension, nextAvailableName, canStreamToDisk, pickSaveTarget, memoryPeakBytes, warnsAboutMemory, LARGE_DOWNLOAD_WARN_BYTES, probeStreamSupport, swStreamReady } from "./filesink";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { splitExtension, nextAvailableName, canStreamToDisk, asksWhereToSave, pickSaveTarget, memoryPeakBytes, warnsAboutMemory, LARGE_DOWNLOAD_WARN_BYTES, probeStreamSupport, swStreamReady, saveFailureStatus, SaveCancelledError, SaveUnavailableError } from "./filesink";
 import { STREAM_ROUTE, contentDisposition } from "./sw-stream";
 
 describe("splitExtension", () => {
@@ -246,6 +246,302 @@ describe("canStreamToDisk", () => {
       const target = await pickSaveTarget([{ name: "a.bin", size: 1 }], SW_ON);
       expect(target.label).toBe("已选择目标文件夹");
     } finally { s.restore(); restore(); }
+  });
+});
+
+// --- 手机：选择器分支整条关闭 -----------------------------------------------
+//
+// 线上事故（Android 真机，实时与局域网两条路都复现），两种坏法都来自真机：
+//  1. 安卓自带浏览器：`showSaveFilePicker` 属性在，调用它却给不出任何可用的选择
+//     界面，接收当场卡死；
+//  2. 安卓版 Chrome：确实弹得出文件夹选择器，但那是个系统页面，一次误触返回键
+//     就把整次接收取消掉，只有正正好点中「选择此文件夹」才算成功。
+//
+// 两种都不是可用的保存流程，而且同一台设备上会遇到哪一种并不可预测。所以手机上
+// 一次选择器都不开：走浏览器下载，接收前就明说文件落到下载目录。这一组用例钉的
+// 就是这个确定性 —— **属性齐全时选择器调用次数必须是 0**，而文件必须逐字节到手。
+
+const ANDROID_UA =
+  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.0 Mobile Safari/537.36";
+const IPHONE_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+
+/** 把 navigator.userAgent 换成手机的；返回还原函数。 */
+function stubUA(ua: string): () => void {
+  const had = Object.getOwnPropertyDescriptor(navigator, "userAgent");
+  Object.defineProperty(navigator, "userAgent", { value: ua, configurable: true });
+  return () => {
+    if (had) Object.defineProperty(navigator, "userAgent", had);
+    else delete (navigator as unknown as Record<string, unknown>).userAgent;
+  };
+}
+
+const abortError = (msg = "The user aborted a request.") => {
+  const e = new Error(msg);
+  e.name = "AbortError";
+  return e;
+};
+
+/**
+ * 装一对**能用**的选择器，并数调用次数。
+ *
+ * 手机那一组要的正是这个组合：属性齐全、而且真调用就真能拿到句柄 —— 于是
+ * 「calls 为 0」只可能来自我们主动不调用，不可能是失败后回落的副作用。
+ */
+function stubCountedPickers(o: { save?: boolean; dir?: boolean } = { save: true, dir: true }) {
+  const w = window as unknown as Record<string, unknown>;
+  const had = { save: "showSaveFilePicker" in w, dir: "showDirectoryPicker" in w };
+  const calls = { save: 0, dir: 0 };
+  const writable = { write: async () => {}, close: async () => {} };
+  const fileHandle = { createWritable: async () => writable };
+  const dirHandle = {
+    getFileHandle: async () => fileHandle,
+    getDirectoryHandle: async () => dirHandle,
+  };
+  if (o.save) w.showSaveFilePicker = async () => { calls.save++; return fileHandle; };
+  if (o.dir) w.showDirectoryPicker = async () => { calls.dir++; return dirHandle; };
+  return {
+    calls,
+    restore: () => {
+      if (!had.save) delete w.showSaveFilePicker;
+      if (!had.dir) delete w.showDirectoryPicker;
+    },
+  };
+}
+
+/** 装一对**存在但会失败**的选择器（桌面那一组用）。 */
+function stubBrokenPickers(o: { save?: boolean; dir?: boolean; err: Error }) {
+  const w = window as unknown as Record<string, unknown>;
+  const had = { save: "showSaveFilePicker" in w, dir: "showDirectoryPicker" in w };
+  const calls = { save: 0, dir: 0 };
+  if (o.save !== false) w.showSaveFilePicker = async () => { calls.save++; throw o.err; };
+  if (o.dir !== false) w.showDirectoryPicker = async () => { calls.dir++; throw o.err; };
+  return {
+    calls,
+    restore: () => {
+      if (!had.save) delete w.showSaveFilePicker;
+      if (!had.dir) delete w.showDirectoryPicker;
+    },
+  };
+}
+
+/**
+ * 把 Blob 下载那条回落路截下来，取回真正交给用户的字节。
+ *
+ * 下载分支是 `URL.createObjectURL(blob)` + 一次 <a download> 点击，jsdom 两样都不
+ * 实现下载语义，但 Blob 本体是真的 —— 所以字节比对是真的。
+ */
+function captureDownloads() {
+  const realCreate = URL.createObjectURL;
+  const realRevoke = URL.revokeObjectURL;
+  const realClick = HTMLAnchorElement.prototype.click;
+  const files: { name: string; blob: Blob }[] = [];
+  let pending: Blob | null = null;
+  (URL as unknown as Record<string, unknown>).createObjectURL = (obj: Blob) => {
+    pending = obj;
+    return "blob:relayium-test";
+  };
+  (URL as unknown as Record<string, unknown>).revokeObjectURL = () => {};
+  HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+    if (this.download && pending) files.push({ name: this.download, blob: pending });
+    pending = null;
+  };
+  return {
+    files,
+    restore: () => {
+      (URL as unknown as Record<string, unknown>).createObjectURL = realCreate;
+      (URL as unknown as Record<string, unknown>).revokeObjectURL = realRevoke;
+      HTMLAnchorElement.prototype.click = realClick;
+    },
+  };
+}
+
+const payload = (n: number) => Uint8Array.from({ length: n }, (_, i) => (i * 31 + 7) & 0xff);
+
+describe("手机：一次选择器都不开", () => {
+  let restoreUA: () => void = () => {};
+  afterEach(() => restoreUA());
+
+  for (const [name, ua] of [["Android", ANDROID_UA], ["iOS", IPHONE_UA]] as const) {
+    it(`${name}：选择器属性齐全也一次都不调用，文件逐字节走浏览器下载`, async () => {
+      restoreUA = stubUA(ua);
+      const p = stubCountedPickers();
+      const dl = captureDownloads();
+      try {
+        const bytes = payload(4096);
+        const target = await pickSaveTarget([{ name: "a.bin", size: bytes.length }]);
+        expect(target.label).toBe("将逐个下载到默认下载目录");
+        expect(p.calls, "手机上任何选择器都不许被调用").toEqual({ save: 0, dir: 0 });
+
+        const sink = await target.file("a.bin", bytes.length);
+        await sink.write(bytes);
+        await sink.close();
+
+        expect(dl.files.map((f) => f.name)).toEqual(["a.bin"]);
+        const got = new Uint8Array(await dl.files[0].blob.arrayBuffer());
+        expect(got.length).toBe(bytes.length);
+        expect([...got]).toEqual([...bytes]);
+      } finally { dl.restore(); p.restore(); }
+    });
+  }
+
+  it("多文件批次同样不开目录选择器", async () => {
+    restoreUA = stubUA(ANDROID_UA);
+    const p = stubCountedPickers();
+    try {
+      const target = await pickSaveTarget(flat([1, 2, 3]));
+      expect(target.label).toBe("将逐个下载到默认下载目录");
+      expect(p.calls).toEqual({ save: 0, dir: 0 });
+    } finally { p.restore(); }
+  });
+
+  it("文件夹批次走 ZIP，也不开目录选择器", async () => {
+    restoreUA = stubUA(ANDROID_UA);
+    const p = stubCountedPickers();
+    try {
+      const target = await pickSaveTarget(folder([1, 2]));
+      expect(target.label).toBe("将打包为 ZIP 下载");
+      expect(p.calls).toEqual({ save: 0, dir: 0 });
+    } finally { p.restore(); }
+  });
+
+  it("接收前的文案说的就是实际会发生的事：不问位置，落到下载目录", () => {
+    restoreUA = stubUA(ANDROID_UA);
+    const restore = stubPickers({ save: true, dir: true }); // 属性都在 —— 手机上不算数
+    try {
+      expect(asksWhereToSave(1)).toBe(false);
+      expect(asksWhereToSave(4)).toBe(false);
+      expect(canStreamToDisk(1)).toBe(false);
+      // 内存提示是这条路上唯一的保护，绝不能被「属性存在」悄悄摘掉。
+      expect(warnsAboutMemory(flat([LARGE_DOWNLOAD_WARN_BYTES + 1]), LARGE_DOWNLOAD_WARN_BYTES + 1)).toBe(true);
+    } finally { restore(); }
+  });
+
+  it("手机上永远走不到「用户取消」这条路 —— 那条状态只属于桌面", async () => {
+    restoreUA = stubUA(ANDROID_UA);
+    const p = stubBrokenPickers({ err: abortError() }); // 调用就会抛，但没人会调用它
+    try {
+      const target = await pickSaveTarget([{ name: "a.bin", size: 1 }]);
+      expect(target.label).toBe("将逐个下载到默认下载目录");
+      expect(p.calls).toEqual({ save: 0, dir: 0 });
+    } finally { p.restore(); }
+  });
+});
+
+describe("桌面：选择器坏了（非取消的失败）", () => {
+  it("单文件：非 Abort 的失败回落到浏览器下载，而不是把这次接收判死", async () => {
+    const p = stubBrokenPickers({ err: Object.assign(new Error("nope"), { name: "NotAllowedError" }) });
+    try {
+      const target = await pickSaveTarget([{ name: "a.bin", size: 1 }]);
+      expect(target.label).toBe("将逐个下载到默认下载目录");
+      expect(p.calls.save, "桌面上要真的试一次").toBe(1);
+      expect(p.calls.dir, "第一个选择器已经花掉了这次点击的手势，别再抛一次").toBe(0);
+    } finally { p.restore(); }
+  });
+
+  it("选择器弹出来了，createWritable 才失败 —— 依然是回落，不是用户取消", async () => {
+    const w = window as unknown as Record<string, unknown>;
+    const had = "showSaveFilePicker" in w;
+    w.showSaveFilePicker = async () => ({
+      createWritable: async () => { throw new Error("NotAllowedError: write access denied"); },
+    });
+    try {
+      const target = await pickSaveTarget([{ name: "a.bin", size: 1 }]);
+      expect(target.label).toBe("将逐个下载到默认下载目录");
+    } finally { if (!had) delete w.showSaveFilePicker; }
+  });
+
+  it("文件夹批次：目录选择器坏了时回落到 ZIP", async () => {
+    const p = stubBrokenPickers({ save: false, err: new Error("SecurityError") });
+    try {
+      const target = await pickSaveTarget(folder([1, 2]));
+      expect(target.label).toBe("将打包为 ZIP 下载");
+      expect(p.calls.dir).toBe(1);
+    } finally { p.restore(); }
+  });
+
+  it("坏掉之后没有留下任何会话级状态：下一批照旧完整地再试一次", async () => {
+    const broken = stubBrokenPickers({ err: new Error("SecurityError") });
+    try {
+      await pickSaveTarget([{ name: "a.bin", size: 1 }]);
+      expect(broken.calls.save).toBe(1);
+    } finally { broken.restore(); }
+    const good = stubCountedPickers();
+    try {
+      const target = await pickSaveTarget([{ name: "b.bin", size: 1 }]);
+      expect(target.label, "上一批的失败不该污染这一批").toBe("已选择保存位置");
+      expect(good.calls.save).toBe(1);
+      expect(asksWhereToSave(1)).toBe(true);
+    } finally { good.restore(); }
+  });
+
+  it("回落会撑爆内存的大批次：如实失败，不悄悄塞进内存", async () => {
+    // 点击之前 asksWhereToSave 说了「浏览器会问你存哪里」，于是用户没看到内存
+    // 提示。选择器随后坏掉就退到 Blob = 在一条被告知会流式落盘的路径上把整批攒进
+    // 内存，用户等来的是被系统回收的标签页。宁可报错让他重试。
+    const p = stubBrokenPickers({ err: new Error("SecurityError") });
+    try {
+      const big = flat([LARGE_DOWNLOAD_WARN_BYTES + 1]);
+      await expect(pickSaveTarget(big)).rejects.toBeInstanceOf(SaveUnavailableError);
+      // 归因是「保存失败」，不是「用户取消」。
+      await expect(pickSaveTarget(big).catch((e) => saveFailureStatus(e))).resolves.toBe("saveFail");
+    } finally { p.restore(); }
+  });
+
+  it("SW 流还能用时，大批次照旧回落 —— 那条路是真落盘，不吃内存", async () => {
+    const p = stubBrokenPickers({ err: new Error("SecurityError") });
+    const s = await readySW();
+    try {
+      const target = await pickSaveTarget(flat([LARGE_DOWNLOAD_WARN_BYTES + 1]), SW_ON);
+      expect(target.label).toBe("将流式下载到默认下载目录");
+    } finally { s.restore(); p.restore(); }
+  });
+});
+
+describe("桌面：真正的用户取消", () => {
+  it("AbortError 就是取消：抛 SaveCancelledError，这次接收必须停下来问一次", async () => {
+    // 桌面上 AbortError 没有第二种含义。那些「界面没弹出来也抛 AbortError」的设备
+    // 全是手机，而手机连调用都不会发生 —— 所以这里不需要任何计时启发式。
+    const p = stubBrokenPickers({ err: abortError() });
+    try {
+      await expect(pickSaveTarget([{ name: "a.bin", size: 1 }])).rejects.toBeInstanceOf(SaveCancelledError);
+      expect(p.calls.dir, "取消不是故障，别再拿目录选择器骚扰用户一次").toBe(0);
+    } finally { p.restore(); }
+  });
+
+  it("多文件批次在目录选择器上取消同样是取消", async () => {
+    const p = stubBrokenPickers({ save: false, err: abortError() });
+    try {
+      await expect(pickSaveTarget(flat([1, 2]))).rejects.toBeInstanceOf(SaveCancelledError);
+    } finally { p.restore(); }
+  });
+
+  it("取消之后能力探测不变 —— 取消不是故障", async () => {
+    const p = stubBrokenPickers({ err: abortError() });
+    try {
+      await pickSaveTarget([{ name: "a.bin", size: 1 }]).catch(() => {});
+      expect(asksWhereToSave(1)).toBe(true);
+      expect(canStreamToDisk(1)).toBe(true);
+    } finally { p.restore(); }
+  });
+
+  it("桌面（属性存在）仍然按能流式落盘算 —— 既有行为逐字不变", () => {
+    const restore = stubPickers({ save: true, dir: true });
+    try {
+      expect(asksWhereToSave(1)).toBe(true);
+      expect(canStreamToDisk(5)).toBe(true);
+    } finally { restore(); }
+  });
+});
+
+describe("saveFailureStatus", () => {
+  it("只有 SaveCancelledError 才算用户取消", () => {
+    expect(saveFailureStatus(new SaveCancelledError("x"))).toBe("noSave");
+  });
+  it("其余一律是保存失败 —— 包括名字长得像取消的 AbortError", () => {
+    expect(saveFailureStatus(abortError())).toBe("saveFail");
+    expect(saveFailureStatus(new Error("boom"))).toBe("saveFail");
+    expect(saveFailureStatus(undefined)).toBe("saveFail");
   });
 });
 

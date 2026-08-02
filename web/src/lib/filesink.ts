@@ -1,5 +1,6 @@
 import { ZipWriter, safeSegments } from "./zip";
 import { streamURL, contentDisposition } from "./sw-stream";
+import { isMobileBrowser } from "./platform";
 
 /**
  * 一个文件的写入端。
@@ -37,6 +38,67 @@ export class SinkTransportError extends Error {
     super(message);
     this.name = "SinkTransportError";
   }
+}
+
+/**
+ * 用户在保存位置选择器里**自己**取消了这次接收/下载。
+ *
+ * 只可能来自桌面：手机上根本不开选择器（见 pickersAllowed），所以这条路手机永远
+ * 走不到。调用方据此把「用户取消」和「保存这一段坏了」分开报，并且**只有**取消
+ * 才可以把接收卡片留在原地等一次重试。
+ */
+export class SaveCancelledError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SaveCancelledError";
+  }
+}
+
+/**
+ * 选择器坏了，而这一批**不能**安全地退到内存分支。
+ *
+ * 「回落」不等于「安全」：一批 2 GiB 的文件退到 Blob 分支就是把整批攒进内存，
+ * 而用户之所以没看到内存提示，恰恰是因为点击之前 asksWhereToSave 说了「浏览器
+ * 会问你存哪里」。这种时候如实失败，比一声不吭地把标签页拖到被系统回收好。
+ * 判定见 fallbackIsSafe。
+ */
+export class SaveUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SaveUnavailableError";
+  }
+}
+
+/**
+ * 保存目标出问题时该给用户看哪一条状态。
+ *
+ * 两条接收路（transfer-session 的局域网路径与 mixed-file-session 的实时路径）
+ * 共用这一个判定，免得各自归因、慢慢跑偏 —— 这次线上事故就是「所有失败一律
+ * 算成用户取消」造成的：Android 上选择器一个界面都没弹就 reject，用户看到的
+ * 却是「未选择保存位置，已取消」，既没有选择器也没有文件，还被告知是自己取消的。
+ */
+export function saveFailureStatus(err: unknown): "noSave" | "saveFail" {
+  return err instanceof SaveCancelledError ? "noSave" : "saveFail";
+}
+
+/**
+ * 这台设备上允不允许开 File System Access 选择器。
+ *
+ * **手机一律不开，哪怕属性存在。** 这不是保守估计，是真机证据：
+ *  - 安卓自带浏览器（各家 ROM 的 WebView 壳）上 `showSaveFilePicker` 存在，调用
+ *    却根本给不出可用的选择界面，用户当场卡死；
+ *  - 安卓版 Chrome 确实弹得出文件夹选择器，但那个界面是一个系统级页面，一次误触
+ *    返回键就把整次接收连同选择一起取消掉 —— 而「返回」在手机上是最容易误触的
+ *    手势，只有正正好点中「选择此文件夹」才算成功。
+ *
+ * 两种都不是可用的保存流程，而且**同一台设备上会不会出问题不可预测**，于是界面
+ * 说的话和实际发生的事必然对不上。所以手机这条路整条关掉：一律走浏览器下载
+ * （Blob/ZIP），接收前就明说文件会落到下载目录 —— 确定、可预期、可解释。
+ *
+ * 桌面不变：原生选择器是那里最好的体验（真流式落盘，不吃内存）。
+ */
+function pickersAllowed(): boolean {
+  return !isMobileBrowser();
 }
 
 /**
@@ -101,9 +163,15 @@ export const LARGE_DOWNLOAD_WARN_BYTES = 256 * 1024 * 1024; // 256 MiB
  * 这一批文件在当前浏览器里能不能流式写盘（而不是先攒进内存）。
  *
  * 必须与下面 pickSaveTarget 的分支选择保持一致——它是同一套条件的提前问法，
- * 供下载页在开始下载前判断要不要提示。两者不一致就意味着下载页会在一条其实
- * 能落盘的路径上误报，或者更糟：在内存路径上一声不吭。filesink.test.ts 里有
- * 一条用例真跑 pickSaveTarget 逐个组合比对，专门守这个耦合。
+ * 供下载页在开始下载前判断要不要提示。filesink.test.ts 里有一条用例真跑
+ * pickSaveTarget 逐个组合比对，专门守这个耦合。
+ *
+ * 手机上答的一定是 false：那里整条选择器分支都不开（见 pickersAllowed），真实
+ * 路径就是内存分支，所以最需要内存提示的设备一定拿得到提示。
+ *
+ * 桌面上唯一的缺口是选择器**存在却坏掉**的那一批：提示必须在点击之前问出来，
+ * 那时还没人试过选择器。这个缺口由 pickSaveTarget 的 fallbackIsSafe 兜住 ——
+ * 大到本该提示的批次不会被悄悄塞进内存，而是如实失败。
  *
  * 多文件走的是目录选择器那条路：拿到目录句柄后每个文件仍是原生流式写入，同样
  * 不吃内存。所以单文件看 showSaveFilePicker（拿不到则回落到目录选择器），
@@ -112,10 +180,28 @@ export const LARGE_DOWNLOAD_WARN_BYTES = 256 * 1024 * 1024; // 256 MiB
  * opts 必须和传给 pickSaveTarget 的那一份**一致**，否则这个提前问法就问的是另一条路。
  */
 export function canStreamToDisk(fileCount: number, opts: SaveOptions = {}): boolean {
+  if (asksWhereToSave(fileCount)) return true;
+  return fileCount === 1 && !!opts.swStream && swStreamReady();
+}
+
+/**
+ * 点「接收」之后，浏览器会不会弹出一个让用户挑保存位置的选择器。
+ *
+ * 接收前的文案就靠它二选一：弹选择器 → 「会让你选择保存位置」；不弹 → 「保存到
+ * 浏览器的下载目录」。用户报的这次事故里最刺眼的一句是「没看到任何选择器，也不
+ * 知道该怎么选」—— 界面从来没说过点下去会发生什么。
+ *
+ * 必须与 pickSaveTarget 真正会走的分支**逐条**对齐：手机上先被 pickersAllowed
+ * 一票否决，所以那里恒为 false，而 pickSaveTarget 在手机上也确实一次选择器都不开。
+ * 与 canStreamToDisk 是同一套条件的两个问法（选择器分支既问位置也流式落盘），
+ * 所以直接把 canStreamToDisk 定义在它上面，两者不可能各自漂移。SW 流那条路不问
+ * 位置、直接落到下载目录，因此不在这里。
+ */
+export function asksWhereToSave(fileCount: number): boolean {
+  if (!pickersAllowed()) return false;
   const w = window as unknown as SavePickerWindow;
   if (fileCount === 1 && w.showSaveFilePicker) return true;
-  if (w.showDirectoryPicker) return true;
-  return fileCount === 1 && !!opts.swStream && swStreamReady();
+  return !!w.showDirectoryPicker;
 }
 
 // --- service worker 流式下载 -------------------------------------------------
@@ -410,6 +496,46 @@ export function warnsAboutMemory(files: FileMetaLite[], totalBytes: number, opts
   return memoryPeakBytes(files, totalBytes) > LARGE_DOWNLOAD_WARN_BYTES;
 }
 
+/**
+ * 试一次 File System Access 选择器（**只在桌面**被调用）。
+ *
+ * 抛 SaveCancelledError = 用户按了取消。桌面上 `AbortError` 就是取消，没有别的
+ * 含义 —— 那些「属性在、界面弹不出来也抛 AbortError」的设备全是手机，而手机在
+ * pickersAllowed 那一层就已经整条关掉了。所以这里不需要任何计时启发式：曾经用
+ * 耗时去猜「这是不是真的取消」，猜错的两个方向都伤人，而且同一台机器上还不稳定。
+ *
+ * 返回 null = 选择器坏了（非取消的失败，含 createWritable 失败）。调用方按
+ * pickSaveTarget 里的规则处理：能安全回落就回落，不能就如实失败。
+ */
+async function attemptPicker<T>(what: string, run: () => Promise<T>): Promise<T | null> {
+  try {
+    return await run();
+  } catch (err) {
+    if ((err as { name?: string } | null)?.name === "AbortError") {
+      throw new SaveCancelledError(`save picker cancelled by the user (${what})`);
+    }
+    console.warn(`relayium: ${what} failed, falling back to a browser download`, err);
+    return null;
+  }
+}
+
+/**
+ * 选择器坏掉之后，退到剩下的分支**安不安全**。
+ *
+ * 安全 = 这一批不会被整个攒进内存。SW 流那条路真落盘，安全；剩下的 ZIP / Blob
+ * 分支只有在批次小到本来就不会触发内存提示时才安全。
+ *
+ * 这个判断是桌面上唯一的诚实性缺口的补丁：接收前的文案基于「属性存在」说了
+ * 「浏览器会问你存哪里」，于是用户没看到内存提示；如果选择器随后坏掉就悄悄
+ * 退到内存，用户等来的会是一个被系统回收的标签页 —— 而且是在一条他被告知会
+ * 流式落盘的路径上。宁可失败并让他重试。
+ */
+function fallbackIsSafe(files: FileMetaLite[], opts: SaveOptions): boolean {
+  if (files.length === 1 && opts.swStream && swStreamReady()) return true;
+  const total = files.reduce((n, f) => n + f.size, 0);
+  return memoryPeakBytes(files, total) <= LARGE_DOWNLOAD_WARN_BYTES;
+}
+
 function nativeSink(writable: FsWritable): FileSink {
   return { write: (c) => writable.write(c), close: () => writable.close() };
 }
@@ -443,77 +569,108 @@ function blobSink(name: string): FileSink {
   };
 }
 
+/** 用户挑好的目录 → 这一批的写入端。原样搬出 pickSaveTarget，只是为了让选择器
+ *  那一层能在「拿到句柄」和「回落」之间干净地二选一。 */
+function directoryTarget(root: FsDirHandle): SaveTarget {
+  // Never silently clobber: dedupe both against files already on disk and
+  // against earlier files in this same batch ("name (1).ext", "name (2).ext", …).
+  // Dedup is scoped per destination directory, keyed by full relative path.
+  const claimed = new Set<string>();
+  const existsInDir = async (d: FsDirHandle, n: string): Promise<boolean> => {
+    try {
+      await d.getFileHandle(n, { create: false });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  // Resolve (creating as needed) the nested subdirectory a relative path lives in.
+  const dirFor = async (segments: string[]): Promise<FsDirHandle> => {
+    let d = root;
+    for (const seg of segments) d = await d.getDirectoryHandle(seg, { create: true });
+    return d;
+  };
+  return {
+    label: "已选择目标文件夹",
+    file: async (name, _size, path) => {
+      // safeSegments drops any ".."/absolute components so a hostile peer
+      // path can't escape the chosen directory (matches the ZIP sink).
+      const segs = safeSegments(path || name);
+      const base = segs.pop() ?? name;
+      const dir = segs.length ? await dirFor(segs) : root;
+      const prefix = segs.join("/");
+      const key = (n: string) => (prefix ? `${prefix}/${n}` : n);
+      // Resolve claimed-in-batch synchronously, then probe the folder; loop in
+      // case a probed variant is itself already on disk.
+      let unique = nextAvailableName(base, (n) => claimed.has(key(n)));
+      while (await existsInDir(dir, unique)) {
+        claimed.add(key(unique)); // force the next candidate past this on-disk name
+        unique = nextAvailableName(base, (n) => claimed.has(key(n)));
+      }
+      claimed.add(key(unique));
+      const fh = await dir.getFileHandle(unique, { create: true });
+      return nativeSink(await fh.createWritable());
+    },
+  };
+}
+
 /**
  * Open a save destination for a batch. MUST be called from a user gesture
  * (e.g. a click handler) so the underlying picker is allowed to open.
  *
- * - 1 file + File System Access API → a familiar "Save As" dialog, streamed to disk.
- * - >1 file + API → one directory picker; files stream into the chosen folder.
+ * - 桌面 + 1 file + File System Access API → a familiar "Save As" dialog, streamed to disk.
+ * - 桌面 + >1 file + API → one directory picker; files stream into the chosen folder.
  * - 1 file + opts.swStream + a SW that owns this page → streamed to disk via the SW.
- * - No API (Firefox/Safari) → in-memory Blob, downloaded per file on completion.
+ * - 手机，或没有 API（Firefox/Safari）→ in-memory Blob/ZIP, downloaded on completion.
+ *
+ * **手机上一次选择器都不开**（见 pickersAllowed）：那里的选择器要么根本弹不出
+ * 可用界面，要么是一个误触返回键就整批取消的系统页面。手机因此永远走不到
+ * SaveCancelledError 这条路，行为是确定的、和接收前的文案逐字一致的。
+ *
+ * 桌面上选择器坏掉（非取消的 reject、createWritable 失败）就往下落，除非这一批
+ * 大到不能安全塞进内存 —— 那时抛 SaveUnavailableError。见 fallbackIsSafe。
  */
 export async function pickSaveTarget(files: FileMetaLite[], opts: SaveOptions = {}): Promise<SaveTarget> {
   const w = window as unknown as SavePickerWindow;
+  let pickerBroke = false;
 
-  if (files.length === 1 && w.showSaveFilePicker) {
-    // Open the Save As dialog now, while the gesture is live.
-    const handle = await w.showSaveFilePicker({ suggestedName: files[0].name });
-    const writable = await handle.createWritable();
-    const sink = nativeSink(writable);
-    let used = false;
-    return {
-      label: "已选择保存位置",
-      file: async () => {
-        if (used) throw new Error("single-file target already consumed");
-        used = true;
-        return sink;
-      },
-    };
+  if (pickersAllowed()) {
+    if (files.length === 1 && w.showSaveFilePicker) {
+      // Open the Save As dialog now, while the gesture is live.
+      const writable = await attemptPicker("showSaveFilePicker", async () => {
+        const handle = await w.showSaveFilePicker!({ suggestedName: files[0].name });
+        return handle.createWritable();
+      });
+      if (writable) {
+        const sink = nativeSink(writable);
+        let used = false;
+        return {
+          label: "已选择保存位置",
+          file: async () => {
+            if (used) throw new Error("single-file target already consumed");
+            used = true;
+            return sink;
+          },
+        };
+      }
+      // 这套 API 已经证明是坏的，别再拿目录选择器试第二次：点击那一下的
+      // transient activation 早被第一个选择器花掉了，第二个只会再抛一次，
+      // 而用户看到的是两个凭空冒出来又消失的对话框。
+      pickerBroke = true;
+    }
+
+    if (!pickerBroke && w.showDirectoryPicker) {
+      // Grant folder access now; per-file handles afterwards need no further gesture.
+      const root = await attemptPicker("showDirectoryPicker", () => w.showDirectoryPicker!());
+      if (root) return directoryTarget(root);
+      pickerBroke = true;
+    }
   }
 
-  if (w.showDirectoryPicker) {
-    // Grant folder access now; per-file handles afterwards need no further gesture.
-    const root = await w.showDirectoryPicker();
-    // Never silently clobber: dedupe both against files already on disk and
-    // against earlier files in this same batch ("name (1).ext", "name (2).ext", …).
-    // Dedup is scoped per destination directory, keyed by full relative path.
-    const claimed = new Set<string>();
-    const existsInDir = async (d: FsDirHandle, n: string): Promise<boolean> => {
-      try {
-        await d.getFileHandle(n, { create: false });
-        return true;
-      } catch {
-        return false;
-      }
-    };
-    // Resolve (creating as needed) the nested subdirectory a relative path lives in.
-    const dirFor = async (segments: string[]): Promise<FsDirHandle> => {
-      let d = root;
-      for (const seg of segments) d = await d.getDirectoryHandle(seg, { create: true });
-      return d;
-    };
-    return {
-      label: "已选择目标文件夹",
-      file: async (name, _size, path) => {
-        // safeSegments drops any ".."/absolute components so a hostile peer
-        // path can't escape the chosen directory (matches the ZIP sink).
-        const segs = safeSegments(path || name);
-        const base = segs.pop() ?? name;
-        const dir = segs.length ? await dirFor(segs) : root;
-        const prefix = segs.join("/");
-        const key = (n: string) => (prefix ? `${prefix}/${n}` : n);
-        // Resolve claimed-in-batch synchronously, then probe the folder; loop in
-        // case a probed variant is itself already on disk.
-        let unique = nextAvailableName(base, (n) => claimed.has(key(n)));
-        while (await existsInDir(dir, unique)) {
-          claimed.add(key(unique)); // force the next candidate past this on-disk name
-          unique = nextAvailableName(base, (n) => claimed.has(key(n)));
-        }
-        claimed.add(key(unique));
-        const fh = await dir.getFileHandle(unique, { create: true });
-        return nativeSink(await fh.createWritable());
-      },
-    };
+  if (pickerBroke && !fallbackIsSafe(files, opts)) {
+    throw new SaveUnavailableError(
+      "the save picker failed and this batch is too large to hold in memory",
+    );
   }
 
   // 没有 File System Access API，但 SW 在管着这一页：让 SW 造一个流式响应，

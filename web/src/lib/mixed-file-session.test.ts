@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CHROME_MAX_MESSAGE_BYTES } from "./wire-limit";
 import { deriveSession, generateKeyPair, ready, type SessionKeys } from "./crypto";
 import { createMixedFileSession, MIXED_FILE_GAP_TIMEOUT_MS } from "./mixed-file-session.svelte";
-import type { SaveTarget } from "./filesink";
+import { SaveCancelledError, type SaveTarget } from "./filesink";
 import type { MixedPeerLink } from "./peer-link.svelte";
 import {
   BATCH_ABORT,
@@ -98,6 +98,9 @@ async function harness(opts: {
   pickA?: (files: { name: string; size: number }[]) => Promise<SaveTarget>;
   pickB?: (files: { name: string; size: number }[]) => Promise<SaveTarget>;
   consentTimeoutMs?: number;
+  /** B 侧单独的同意窗口。默认与 A 侧同值（真实部署就是同一个常量）；只有那条
+   *  「接收端的窗口先走完」的用例需要把两侧岔开，好在发送端放弃之前观察接收端。 */
+  consentTimeoutMsB?: number;
   receiveStallMs?: number;
   drainTimeoutMs?: number;
   gapTimeoutMs?: number;
@@ -150,7 +153,7 @@ async function harness(opts: {
   const b = createMixedFileSession({
     ensureLink: vi.fn(async () => links.b),
     pickSaveTarget: opts.pickB ?? (async () => bTarget),
-    consentTimeoutMs: opts.consentTimeoutMs,
+    consentTimeoutMs: opts.consentTimeoutMsB ?? opts.consentTimeoutMs,
     receiveStallMs: opts.receiveStallMs,
     drainTimeoutMs: opts.drainTimeoutMs,
     gapTimeoutMs: opts.gapTimeoutMs,
@@ -311,6 +314,155 @@ describe("mixed file session", () => {
     await until(() => b.recv?.done === true);
     expect(bTarget.output.has("no.txt")).toBe(false);
     expect([...bTarget.output.get("yes.txt")!]).toEqual(bytes("accepted"));
+  });
+
+  // 线上事故的实时那一半：手机上选择器一个界面都没弹就 reject，接收卡片却写着
+  // 「未选择保存位置，已取消」。这三条把归因钉死 —— 只有用户真的取消才叫取消。
+  it("reports a picker that never presented UI as a save failure, not the user's cancellation", async () => {
+    const pick = vi.fn(async () => { throw Object.assign(new Error("no chooser"), { name: "NotAllowedError" }); });
+    const { a, b } = await harness({ pickB: pick });
+    a.enqueue("b", picked("android.txt", "payload"));
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => b.recv?.done === true);
+    expect(b.recv?.status).toBe("saveFail");
+    // 发送端拿到的仍是一个干净的拒绝：REJECT 就是完整的顺序屏障，通道照旧可用。
+    await until(() => a.send?.done === true);
+    expect(a.send?.status).toBe("rejected");
+    expect(b.incoming).toBeNull();
+  });
+
+  // 桌面上一次误按返回键/Esc 不该把整次接收判死。ACCEPT 之前这条 lane 上属于这一
+  // 批的东西只有发送端那份 manifest，接收端一个字节都没往回发 —— 所以回到同意提示
+  // 不动任何序号/nonce/世代/流控游标，发送端仍停在自己的 waitingAccept 里。
+  it("re-asks after a genuine picker cancellation and the retry delivers the exact bytes", async () => {
+    let attempts = 0;
+    let good: SaveTarget | undefined;
+    const pick = vi.fn(async () => {
+      attempts++;
+      if (attempts === 1) throw new SaveCancelledError("cancelled by the user");
+      return good!;
+    });
+    const h = await harness({ pickB: pick });
+    good = h.bTarget;
+    const { a, b } = h;
+    a.enqueue("b", picked("retried.txt", "payload"));
+    await until(() => !!b.incoming);
+
+    b.accept();
+    // 取消没有把提示变成失败卡片：它原地换了一句话，等第二次点击。
+    await until(() => b.incoming?.retry === true);
+    expect(b.recv, "取消不是一次失败的接收").toBeNull();
+    expect(a.send?.done, "发送端必须还在等同一个答复").toBeFalsy();
+    expect(a.send?.status).toBe("waitingAccept");
+
+    b.accept();
+    await until(() => b.recv?.done === true);
+    expect(b.recv?.ok).toBe(true);
+    expect(pick).toHaveBeenCalledTimes(2);
+    expect([...h.bTarget.output.get("retried.txt")!]).toEqual(bytes("payload"));
+    await until(() => a.send?.done === true && a.send.ok === true);
+  });
+
+  it("still lets the user decline after a cancellation put the prompt back", async () => {
+    const pick = vi.fn(async () => { throw new SaveCancelledError("cancelled by the user"); });
+    const { a, b } = await harness({ pickB: pick });
+    a.enqueue("b", picked("nope.txt", "payload"));
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => b.incoming?.retry === true);
+    b.reject();
+    await until(() => a.send?.status === "rejected");
+    expect(b.incoming).toBeNull();
+  });
+
+  // 同意窗口是发送端和接收端共用的同一个 consentTimeoutMs。窗口一过，发送端已经
+  // BATCH_ABORT 了这一批，把提示放回可点击状态就是让用户点一个不存在的批次。
+  // 这时不假装还能重试 —— 如实报「取消」并收场。
+  it("does not re-ask once the consent window has run out during the pick", async () => {
+    let rejectPick!: (err: unknown) => void;
+    const pick = vi.fn(() => new Promise<SaveTarget>((_, reject) => { rejectPick = reject; }));
+    // 两侧共用同一个 consentTimeoutMs。窗口一过，发送端就 BATCH_ABORT 了这一批，
+    // 接收端的 consentExpired 也已经置位 —— 迟到的取消不能把提示放回可点击状态，
+    // 否则用户点下的 ACCEPT 会发给一个早已放弃这一批的发送端。
+    const { a, b } = await harness({ consentTimeoutMs: 60, pickB: pick });
+    a.enqueue("b", picked("late.txt", "payload"));
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => a.send?.done === true); // 发送端的窗口尽头 —— 也是接收端的
+    expect(a.send?.status).toBe("rejected");
+
+    rejectPick(new SaveCancelledError("cancelled by the user"));
+    // 迟到的取消一句话都不许说：提示不回来，也不冒出一张能再点的卡片。
+    await until(() => pick.mock.calls.length === 1);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(b.incoming, "窗口已经关了，这张提示不能再回来").toBeNull();
+    expect(b.recv?.done !== false, "不能留下一个还在转的接收").toBe(true);
+  });
+
+  it("refuses to re-ask from its own expiry alone, before the sender's abort can arrive", async () => {
+    // 上一条里提示是被发送端的 BATCH_ABORT 收走的。真实链路上那个 abort 要走一个
+    // 往返，而接收端自己的窗口在同一时刻就已经到点了 —— 中间这一小段，取消如果
+    // 把提示放回去，用户点下的 ACCEPT 就发给了一个已经放弃这一批的发送端。
+    // 两侧窗口在这里被故意岔开，好把那一小段拉开成可观察的。
+    let rejectPick!: (err: unknown) => void;
+    const pick = vi.fn(() => new Promise<SaveTarget>((_, reject) => { rejectPick = reject; }));
+    const { a, b } = await harness({ consentTimeoutMs: 30_000, consentTimeoutMsB: 60, pickB: pick });
+    a.enqueue("b", picked("racy.txt", "payload"));
+    await until(() => !!b.incoming);
+    b.accept();
+    // 纯排序屏障，不是对耗时的断言：定时器只会晚到，不会早到，所以过了这一点
+    // B 那个 60ms 的窗口一定已经开过火了。发送端的 30s 窗口还早得很。
+    const startedAt = Date.now();
+    await until(() => Date.now() - startedAt > 300);
+    expect(a.send?.done, "发送端还没放弃 —— 这正是要观察的那一小段").toBeFalsy();
+
+    rejectPick(new SaveCancelledError("cancelled by the user"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // 过期以后 ACCEPT / REJECT 都不能再发：它们没有 batch id，迟到后可能回答发送端
+    // 的下一批。接收端只隐藏失效提示，等发送端有序的 BATCH_ABORT 收尾。
+    expect(b.incoming).toBeNull();
+    expect(a.send?.status, "迟到的取消不能发 REJECT 回去").toBe("waitingAccept");
+    a.cancel("send");
+    await until(() => b.incoming === null);
+  });
+
+  it("never sends a late ACCEPT when the picker succeeds after consent expiry", async () => {
+    let resolvePick!: (target: SaveTarget) => void;
+    const pick = vi.fn(() => new Promise<SaveTarget>((resolve) => { resolvePick = resolve; }));
+    const h = await harness({ consentTimeoutMs: 30_000, consentTimeoutMsB: 60, pickB: pick });
+    const { a, b } = h;
+    a.enqueue("b", picked("too-late.txt", "payload"));
+    await until(() => !!b.incoming);
+    b.accept();
+
+    const startedAt = Date.now();
+    await until(() => Date.now() - startedAt > 300);
+    expect(b.incoming, "本地截止时刻一过就应隐藏失效的接收按钮").toBeNull();
+    expect(a.send?.status).toBe("waitingAccept");
+
+    resolvePick(h.bTarget);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(a.send?.status, "迟到的目标绝不能为当前或下一批发 ACCEPT").toBe("waitingAccept");
+    expect(h.bTarget.output.has("too-late.txt"), "过期目标不能开始写文件").toBe(false);
+
+    a.cancel("send");
+    await until(() => b.incoming === null);
+  });
+
+  it("reports a target that fails to open the first file as a save failure", async () => {
+    // 选择器给了目标，倒在写盘的第一步（目录分支的 getFileHandle/createWritable）。
+    const pick = vi.fn(async () => ({
+      label: "broken",
+      file: async () => { throw new Error("createWritable: NotAllowedError"); },
+    } as SaveTarget));
+    const { a, b } = await harness({ pickB: pick });
+    a.enqueue("b", picked("unwritable.txt", "payload"));
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => b.recv?.done === true);
+    expect(b.recv?.status).toBe("saveFail");
+    await until(() => a.send?.status === "rejected");
   });
 
   it("opens the save picker synchronously and asks notification permission only after it resolves", async () => {

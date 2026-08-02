@@ -55,6 +55,16 @@ export interface Messages {
   // download.memWarn* 讲的是「这个链接」，实时接收没有链接，措辞不能复用。
   recvMemWarn: (size: string) => string;
   recvMemWarnAccept: string; // 按钮：仍要接收
+  // 点「接收」之前告诉用户点下去会发生什么。二选一，由 filesink 的 asksWhereToSave
+  // 决定：会弹保存位置选择器 / 直接落到浏览器的下载目录。线上事故里用户说的
+  // 「没看到任何选择器，也不知道该怎么选」，缺的就是这一句。
+  // 手机上恒为后者，因为那里整条选择器分支都关着 —— 文案与实际行为逐字一致。
+  recvSaveHintPicker: string;
+  recvSaveHintDownload: string;
+  // 上一次接收被用户在保存选择器里取消了，同意卡片正在**再问一次**（桌面独有）。
+  // 那次取消在线路上什么都没留下，所以这不是失败文案，而是「还能再来一次」。
+  // 必须说清楚传输还活着，否则按了取消的用户只会看到卡片原地不动。
+  recvSaveRetry: string;
   sendTo: (name: string) => string;
   recvFrom: (name: string) => string;
   fileCounter: (i: number, n: number) => string;
@@ -105,7 +115,13 @@ export interface Messages {
     integrityFail: string;
     recvFail: string;
     resuming: string; // connection dropped mid-transfer, reconnecting to resume
+    // 用户自己在保存位置选择器里取消了，**而且这次同意已经救不回来**（链路换了、
+    // 同意窗口走完了、通道关了）。取消本身通常不走到这里：卡片会原地再问一次，
+    // 见 recvSaveRetry。
+    // **只有**用户取消才用这句：把「浏览器的保存这一段坏了」也说成用户取消，等于
+    // 让用户去找一个不存在的选择器（线上事故就是这么来的）。那一种用下面的 saveFail。
     noSave: string;
+    saveFail: string; // 保存这一段失败（选择器坏了、写盘被拒），不是用户的选择
     connectFail: string;
     peerBusy: string; // the peer refused the offer because it's already in a transfer
   };
