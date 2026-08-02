@@ -935,7 +935,35 @@
     ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove("drag")}
     ondrop={(e) => { e.stopPropagation(); if (intentBlocked) { e.preventDefault(); flash(messages[lang()].busy); return; } onDrop(e, p.id); }}
   >
-    <label class="pcard" for={`pick-${p.id}`}>
+    <!-- The whole card is a pointer/touch shortcut to the primary picker below —
+         not a second <label> for it. It used to be `<label for={pick-…}>`, which
+         left one input associated with two labels (this card plus the .pa-files
+         wrapper): axe flags form-field-multiple-labels and every AT gets to pick
+         a different name. The name belongs to the visible action ("Send files");
+         this card's text is *who* the files go to, which is already wired up as
+         the input's aria-describedby.
+         svelte-ignore: the keyboard path is deliberately not duplicated here. The
+         real <input> is itself the tab stop for this action, so a key handler on
+         the card would be a second control for the same thing. -->
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <div
+      class="pcard"
+      onclick={(e) => {
+        // A click that ends a selection drag over the peer name is not a tap. The
+        // <label> this replaces suppressed its activation in exactly that case,
+        // and "I was selecting the name" is the one way opening a file chooser
+        // here can surprise someone. A stale selection cannot block the shortcut:
+        // mousedown collapses it before this ever runs.
+        const picked = getSelection();
+        if (intentBlocked || (picked && !picked.isCollapsed && picked.containsNode(e.currentTarget as Node, true))) return;
+        const input = document.getElementById(`pick-${p.id}`) as HTMLInputElement | null;
+        // Native label activation focuses its control before opening the picker.
+        // Preserve that continuation point for pointer/keyboard mixed use without
+        // letting a clipped 1px input scroll the page.
+        input?.focus({ preventScroll: true, focusVisible: false });
+        input?.click();
+      }}
+    >
       <span class="pavatar" class:big={solo}>{p.name.slice(0, 1).toUpperCase()}</span>
       <span class="ptext">
         {#if solo}
@@ -945,7 +973,7 @@
           <span class="pick">{t.pickHint(MAX_FILES)}</span>
         {/if}
       </span>
-    </label>
+    </div>
     <!-- 这三个动作共用全局 .btn 原语（其中两个是包着隐藏 file input 的 <label>，
          :disabled 对 label 不生效，所以停用态走 .is-disabled）。以前它们是本组件
          里自成一套的 .act-btn：透明底 + --border 描边，在暗色下边框只有 1.36:1，

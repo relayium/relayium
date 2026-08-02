@@ -146,6 +146,53 @@ describe("dialogs announce what they are", () => {
   });
 });
 
+describe("the peer card is a pointer shortcut, not a second label", () => {
+  // The primary picker used to be claimed by two labels at once: the whole peer
+  // card (`<label class="pcard" for={pick-…}>`) and the visible "Send files"
+  // action that wraps the input. One input, two labels — axe reports
+  // form-field-multiple-labels and each AT is free to announce a different name.
+  // The card keeps its pointer/touch behavior through a click that forwards to
+  // the same input, so nothing about the visible affordance changes.
+  const source = readFileSync(resolve(import.meta.dirname, "..", "App.svelte"), "utf8");
+  const card = /<div\b[^>]*class="pcard"[\s\S]*?<\/div>/.exec(source)?.[0] ?? "";
+  const picker = /<input class="file-pick-input" id=\{`pick-\$\{p\.id\}`\}[\s\S]*?\/>/.exec(source)?.[0] ?? "";
+
+  it("leaves the picker with exactly one label — the visible action that names it", () => {
+    expect(card).not.toBe("");
+    expect(card).not.toMatch(/\bfor=/);
+    expect(source).not.toMatch(/<label[^>]*class="pcard"/);
+    // The single surviving association is the implicit one: the .pa-files label
+    // wraps the input, and its .pa-label span is the accessible name.
+    expect(source).toMatch(/<label class="btn btn-secondary btn-sm pa-files"[\s\S]*?<input class="file-pick-input"/);
+  });
+
+  it("still points the card at that same picker on pointer input", () => {
+    expect(card).toMatch(/onclick=/);
+    expect(card).toMatch(/getElementById\(`pick-\$\{p\.id\}`\) as HTMLInputElement/);
+    expect(card).toMatch(/input\?\.focus\(\{ preventScroll: true, focusVisible: false \}\)/);
+    expect(card).toMatch(/input\?\.click\(\)/);
+    // A busy peer must not be able to open the chooser or flush the outbox, and a
+    // click that only ended a selection drag is not a tap — both are what the
+    // <label> used to do for free.
+    expect(card).toMatch(/if \(intentBlocked \|\|/);
+    expect(card).toMatch(/!picked\.isCollapsed && picked\.containsNode\(/);
+  });
+
+  it("gives the card no keyboard path of its own, so the input stays the only tab stop", () => {
+    expect(card).not.toBe("");
+    expect(card).not.toMatch(/onkey/i);
+    expect(card).not.toMatch(/tabindex/i);
+    expect(card).not.toMatch(/role=/);
+  });
+
+  it("keeps the visible action as the name and the peer as the description", () => {
+    expect(picker).toMatch(/aria-labelledby=\{`send-file-label-\$\{p\.id\}`\}/);
+    expect(picker).toMatch(/aria-describedby=\{`peer-target-\$\{p\.id\}`\}/);
+    expect(source).toMatch(/<span class="pa-label" id=\{`send-file-label-\$\{p\.id\}`\}>\{t\.sendFile\}</);
+    expect(source).toMatch(/<span class="pname" id=\{`peer-target-\$\{p\.id\}`\}>/);
+  });
+});
+
 describe("scrollable code regions are reachable by keyboard", () => {
   it("makes the command block a focus stop named by its visible title", () => {
     const root = render(CommandBlock, { code: "curl -fsSL https://relayium.com/install.sh | sh", title: "install" });

@@ -1051,10 +1051,14 @@ async function main() {
     }
     ok("both one-peer states used PeerLink followed by one actionable peer card");
 
+    // The picker must be claimed by exactly one label — the visible action that
+    // names it. The peer card used to be a second `<label for>` for the same
+    // input, which is what axe reports as form-field-multiple-labels: the name
+    // then depends on which of the two a given AT happens to prefer.
     const fileAction = await sender.evaluate(`(() => {
       const input = document.querySelector('.peer-actions .pa-files > .file-pick-input');
       const action = input?.parentElement;
-      const header = document.querySelector('.peer .pcard');
+      const card = document.querySelector('.peer .pcard');
       const labels = [...document.querySelectorAll('.peer-actions .pa-label')];
       const icons = [...document.querySelectorAll('.peer-actions .pa-icon')];
       const namedBy = input?.getAttribute('aria-labelledby') || '';
@@ -1066,7 +1070,12 @@ async function main() {
         namedByText: document.getElementById(namedBy)?.textContent?.trim() || '',
         describedBy,
         describedByExists: !!document.getElementById(describedBy),
-        headerFor: header?.htmlFor || '',
+        labelCount: input?.labels?.length ?? -1,
+        labelIsAction: input?.labels?.[0] === action,
+        cardTag: card?.tagName || '',
+        cardFor: card?.getAttribute('for') || '',
+        cardTabbable: !!card?.querySelector('a[href], button, input, select, textarea, [tabindex]'),
+        cardIsTabStop: card?.matches('a[href], button, input, select, textarea, [tabindex]') || false,
         inputId: input?.id || '',
         messageButtons: document.querySelectorAll('.peer-actions button').length,
         labelRects: labels.map(label => label.getClientRects().length),
@@ -1078,14 +1087,16 @@ async function main() {
       !fileAction.exists || !fileAction.namedBy || !fileAction.visibleLabel ||
       fileAction.namedByText !== fileAction.visibleLabel ||
       !fileAction.describedBy || !fileAction.describedByExists ||
-      fileAction.headerFor !== fileAction.inputId ||
+      fileAction.labelCount !== 1 || !fileAction.labelIsAction ||
+      fileAction.cardTag !== "DIV" || fileAction.cardFor !== "" ||
+      fileAction.cardTabbable || fileAction.cardIsTabStop || !fileAction.inputId ||
       fileAction.messageButtons !== 1 || fileAction.labelRects.some((n) => n !== 1) ||
       fileAction.iconSvgs.length !== 3 || fileAction.iconSvgs.some((n) => n !== 1) ||
       fileAction.iconText.some(Boolean)
     ) {
       throw new Error(`peer file-action accessibility contract failed: ${JSON.stringify(fileAction)}`);
     }
-    ok("the peer file action owned its picker and visible-label accessible name");
+    ok("the peer file action was the picker's one label and its visible accessible name");
 
     // Put focus on the real preceding tab stop, then use a genuine keyboard Tab.
     // Programmatic input.focus() would not prove the :focus-visible ring that the
@@ -1117,6 +1128,89 @@ async function main() {
       throw new Error(`peer picker focus-visible contract failed: ${JSON.stringify(keyboardFocus)}`);
     }
     ok("a real Tab focused the picker and painted the ring on its visible file action");
+
+    // Losing the `<label for>` must not lose the shortcut it paid for: the whole
+    // card and the visible action both still activate the same one input. The
+    // guard counts that activation and cancels it — letting a real file chooser
+    // open would block this tab for the rest of the run.
+    const forwardingTargets = await sender.evaluate(`(() => {
+      const input = document.querySelector('.peer-actions .pa-files > .file-pick-input');
+      const card = document.querySelector('.peer .pcard');
+      const action = document.querySelector('.peer-actions .pa-files');
+      const center = (el) => {
+        const r = el?.getBoundingClientRect();
+        return r && r.width > 0 && r.height > 0 ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+      };
+      window.__peerPickerHits = 0;
+      window.__peerPickerGuard = (e) => { window.__peerPickerHits++; e.preventDefault(); };
+      input.addEventListener('click', window.__peerPickerGuard, true);
+      return { card: center(card), action: center(action), cardNestsInput: card.contains(input) };
+    })()`);
+    if (!forwardingTargets.card || !forwardingTargets.action || forwardingTargets.cardNestsInput) {
+      throw new Error(`peer pointer targets were not rendered independently: ${JSON.stringify(forwardingTargets)}`);
+    }
+    const trustedClick = async ({ x, y }) => {
+      await sender.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+      await sender.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1 });
+      await sender.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1 });
+    };
+    await trustedClick(forwardingTargets.card);
+    const afterCard = await sender.evaluate(`(() => {
+      const input = document.querySelector('.peer-actions .pa-files > .file-pick-input');
+      const action = input?.parentElement;
+      return {
+        hits: window.__peerPickerHits,
+        focused: document.activeElement === input,
+        focusVisible: input?.matches(':focus-visible') || false,
+        actionRing: action?.matches(':has(> .file-pick-input:focus-visible)') || false,
+      };
+    })()`);
+    await trustedClick(forwardingTargets.action);
+    const afterAction = await sender.evaluate("window.__peerPickerHits");
+    const forwarding = await sender.evaluate(`(() => {
+      const input = document.querySelector('.peer-actions .pa-files > .file-pick-input');
+      const card = document.querySelector('.peer .pcard');
+      const beforeSelection = window.__peerPickerHits;
+      // A click that only ends a selection drag over the peer name must not open
+      // a chooser — the <label> this replaced suppressed that activation itself.
+      const range = document.createRange();
+      range.selectNodeContents(card.querySelector('.pname'));
+      const sel = getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      card.click();
+      const viaSelectionDrag = window.__peerPickerHits - beforeSelection;
+      sel.removeAllRanges();
+      card.click();
+      const afterSelectionCleared = window.__peerPickerHits - beforeSelection - viaSelectionDrag;
+      input.removeEventListener('click', window.__peerPickerGuard, true);
+      delete window.__peerPickerGuard;
+      delete window.__peerPickerHits;
+      return { viaSelectionDrag, afterSelectionCleared };
+    })()`);
+    if (
+      afterCard.hits !== 1 || !afterCard.focused || afterCard.focusVisible || afterCard.actionRing ||
+      afterAction - afterCard.hits !== 1 ||
+      forwarding.viaSelectionDrag !== 0 || forwarding.afterSelectionCleared !== 1 ||
+      forwardingTargets.cardNestsInput
+    ) {
+      throw new Error(`peer pointer shortcut contract failed: ${JSON.stringify({ afterCard, viaAction: afterAction - afterCard.hits, ...forwarding })}`);
+    }
+    ok(
+      "both the whole peer card and its visible action still open the same picker on pointer input" +
+      " (card focus retained without a keyboard-only ring)",
+    );
+
+    // Scoped at the peer list rather than the document: this is a named check on
+    // one control, added next to the structural assertions above. The full-page
+    // live scans elsewhere in this file keep their document scope.
+    const peerAxe = await scanLiveState(sender, "peer card with the primary file picker", { context: ".peers" });
+    // scanLiveState already throws on every violation. This explicit check is for
+    // the rule's current incomplete/manual-review classification.
+    const multiLabel = peerAxe.incomplete.filter((r) => r.id === "form-field-multiple-labels");
+    if (multiLabel.length) {
+      throw new Error(`the primary picker is still claimed by more than one label: ${JSON.stringify(multiLabel)}`);
+    }
 
     // Exercise the rules that are easiest to accidentally defeat with scoped CSS:
     // the coarse-pointer floor, the three narrow rows and long localized labels.
