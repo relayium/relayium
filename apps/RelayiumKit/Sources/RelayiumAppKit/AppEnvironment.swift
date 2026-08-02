@@ -88,7 +88,8 @@ public enum AppEnvironment {
     @MainActor
     public static func makeRealtimeModel(baseURL: URL = productionBaseURL,
                                         verification: VerificationPreference,
-                                        nearby: LanDiscoveryModel) -> RealtimeSessionModel {
+                                        nearby: LanDiscoveryModel,
+                                        inboundRoom: InboundRoom) -> RealtimeSessionModel {
         RealtimeSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
             iceClient: HTTPICEClient(baseURL: baseURL),
@@ -105,6 +106,16 @@ public enum AppEnvironment {
                 return try await RealtimeConnectionFactory.connectNearby(
                     signaling: signaling, peerId: peerId, role: role, config: servers)
             },
+            // Inbound: the peer id came from an offer, and `InboundRoom` holds
+            // the exact socket it arrived on — never "the current room", which
+            // is a different socket, with different peer ids, the moment a drop
+            // and a reconnect land inside the setup window. Same STUN-only
+            // rules, no code, no mint.
+            makeInboundConnection: { peerId, servers in
+                guard let signaling = inboundRoom.signaling else { throw NearbyError.notScanning }
+                return try RealtimeConnectionFactory.acceptNearby(
+                    signaling: signaling, peerId: peerId, config: servers)
+            },
             makeConnection: { code, role, servers in
                 try await RealtimeConnectionFactory.make(
                     code: code, role: role, config: servers,
@@ -115,7 +126,8 @@ public enum AppEnvironment {
     @MainActor
     public static func makeRealtimeTextModel(baseURL: URL = productionBaseURL,
                                             verification: VerificationPreference,
-                                            nearby: LanDiscoveryModel) -> RealtimeTextSessionModel {
+                                            nearby: LanDiscoveryModel,
+                                            inboundRoom: InboundRoom) -> RealtimeTextSessionModel {
         RealtimeTextSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
             iceClient: HTTPICEClient(baseURL: baseURL),
@@ -125,6 +137,11 @@ public enum AppEnvironment {
                 return try await RealtimeConnectionFactory.connectNearby(
                     signaling: signaling, peerId: peerId, role: role, config: servers,
                     mode: .text)
+            },
+            makeInboundConnection: { peerId, servers in
+                guard let signaling = inboundRoom.signaling else { throw NearbyError.notScanning }
+                return try RealtimeConnectionFactory.acceptNearby(
+                    signaling: signaling, peerId: peerId, config: servers, mode: .text)
             },
             makeConnection: { code, role, servers in
                 try await RealtimeConnectionFactory.make(
@@ -137,6 +154,22 @@ public enum AppEnvironment {
                 )
             }
         )
+    }
+
+    /// Background receive, wired to the one room socket the discovery model
+    /// owns. Registering itself as the observer is what makes the listener
+    /// survive a reconnect: every new socket needs a new subscription.
+    @MainActor
+    public static func makeNearbyReceiveModel(fileModel: RealtimeSessionModel,
+                                              textModel: RealtimeTextSessionModel,
+                                              discovery: LanDiscoveryModel,
+                                              inboundRoom: InboundRoom) -> NearbyReceiveModel {
+        let receive = NearbyReceiveModel(fileModel: fileModel, textModel: textModel,
+                                         room: inboundRoom)
+        discovery.observer = receive
+        receive.observe(discovery)
+        receive.roomStateChanged(discovery.state)
+        return receive
     }
 
     @MainActor

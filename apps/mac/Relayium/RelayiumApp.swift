@@ -69,8 +69,8 @@ struct RelayiumApp: App {
     // App-scoped rather than view-scoped: a transfer must survive the window's
     // view tree being rebuilt, and the quit guard has to be able to ask whether
     // one is running.
-    @StateObject private var uploadModel = AppEnvironment.makeUploadModel()
-    @StateObject private var downloadModel = AppEnvironment.makeDownloadModel()
+    @StateObject private var uploadModel: CloudUploadModel
+    @StateObject private var downloadModel: CloudDownloadModel
     // One preference object shared by both realtime models and the UI that
     // toggles it, so a change applies to the next session of either kind
     // without a relaunch.
@@ -80,6 +80,10 @@ struct RelayiumApp: App {
     @StateObject private var lanDiscovery: LanDiscoveryModel
     @StateObject private var realtimeModel: RealtimeSessionModel
     @StateObject private var realtimeTextModel: RealtimeTextSessionModel
+    // Background receive and the notifications it needs are app-scoped for the
+    // same reason the transfer models are: both have to outlive the window.
+    @StateObject private var nearbyReceive: NearbyReceiveModel
+    @StateObject private var notifications: TransferNotificationCenter
 
     @MainActor
     init() {
@@ -89,12 +93,31 @@ struct RelayiumApp: App {
         // built here against one shared instance of each.
         let prefs = VerificationPreference()
         let nearby = AppEnvironment.makeLanDiscoveryModel()
+        // Holds the exact socket an inbound attempt is being built on, so the
+        // two models' inbound builders cannot reach for a room the offer never
+        // came from. Owned by the receive model; the session models only read it.
+        let inboundRoom = InboundRoom()
+        let files = AppEnvironment.makeRealtimeModel(
+            verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
+        let text = AppEnvironment.makeRealtimeTextModel(
+            verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
+        let receive = AppEnvironment.makeNearbyReceiveModel(
+            fileModel: files, textModel: text, discovery: nearby, inboundRoom: inboundRoom)
+        let uploads = AppEnvironment.makeUploadModel()
+        let downloads = AppEnvironment.makeDownloadModel()
         _verification = StateObject(wrappedValue: prefs)
         _lanDiscovery = StateObject(wrappedValue: nearby)
-        _realtimeModel = StateObject(
-            wrappedValue: AppEnvironment.makeRealtimeModel(verification: prefs, nearby: nearby))
-        _realtimeTextModel = StateObject(
-            wrappedValue: AppEnvironment.makeRealtimeTextModel(verification: prefs, nearby: nearby))
+        _realtimeModel = StateObject(wrappedValue: files)
+        _realtimeTextModel = StateObject(wrappedValue: text)
+        _nearbyReceive = StateObject(wrappedValue: receive)
+        _uploadModel = StateObject(wrappedValue: uploads)
+        _downloadModel = StateObject(wrappedValue: downloads)
+        _notifications = StateObject(wrappedValue: TransferNotificationCenter(
+            uploadModel: uploads,
+            downloadModel: downloads,
+            fileModel: files,
+            textModel: text,
+            receiveModel: receive))
     }
 
     var body: some Scene {
@@ -111,7 +134,17 @@ struct RelayiumApp: App {
                 .environmentObject(realtimeTextModel)
                 .environmentObject(verification)
                 .environmentObject(lanDiscovery)
+                .environmentObject(nearbyReceive)
                 .task { await session.restore() }
+                .task {
+                    // Both idempotent, and both app-scoped rather than
+                    // window-scoped: residency is what makes this Mac reachable,
+                    // and it outlives every window (MenuBarExtra keeps the
+                    // process up). A second window must not reopen the room
+                    // socket, and must never override an explicit pause.
+                    notifications.start()
+                    lanDiscovery.startResident()
+                }
                 .task {
                     // Wired here rather than at init: the delegate is created by
                     // the adaptor before the StateObjects exist.
@@ -135,11 +168,15 @@ struct RelayiumApp: App {
             }
         }
 
-        // Residency. In G1 this shows connection-independent state only; it exists
-        // now so G3's persistent signaling socket has a home that does not require
-        // restructuring the app around it later.
+        // Residency. This is the surface the persistent room socket reports
+        // through: with the window closed it is the only place the user can see
+        // whether this Mac is actually able to receive, and the only way back to
+        // the app.
         MenuBarExtra("Relayium", systemImage: "paperplane") {
-            MenuBarView().environmentObject(session)
+            MenuBarView()
+                .environmentObject(session)
+                .environmentObject(nearbyReceive)
+                .environmentObject(lanDiscovery)
         }
     }
 }

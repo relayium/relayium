@@ -430,6 +430,73 @@ final class NearbySessionModelTests: XCTestCase {
         guard case .transferring = model.state else { return XCTFail("got \(model.state)") }
     }
 
+    /// Every other timer test injects a fake sleep, which is exactly how the
+    /// REAL one went untested — and the real one aborted the process.
+    ///
+    /// An `async` closure literal in a default-argument position is miscompiled
+    /// in unoptimised builds: when the task that ran it completes, the task
+    /// allocator's LIFO discipline is violated and the runtime calls `abort()`
+    /// with "freed pointer was not the last allocation". Both the answer timeout
+    /// firing and the answer timeout being cancelled reach that completion, so a
+    /// Debug build crashed on every nearby transfer. Optimised builds were fine,
+    /// which is why the release gates never saw it.
+    ///
+    /// This test builds the models the way the app does — no injected sleep at
+    /// all — and lets a short real timer run to completion. See `realSleep`.
+    func testTheRealTimerCompletesWithoutTrippingTheTaskAllocator() async {
+        let peer = StubPeer()
+        let model = RealtimeSessionModel(
+            pairClient: RecordingPair(),
+            iceClient: RecordingICE(),
+            nearbyAnswerTimeout: 0.001,
+            makeNearbyConnection: { _, _, _ in peer },
+            makeConnection: { _, _, _ in peer })
+        await model.connectNearby(peerId: "chosen-7")
+        for _ in 0..<500 {
+            if case .failed = model.state { break }
+            await settle()
+        }
+        guard case .failed = model.state else { return XCTFail("got \(model.state)") }
+
+        // And the cancellation half of the same path: the device answers, the
+        // timer is cancelled, and the cancelled task still has to complete
+        // cleanly.
+        let answered = StubPeer()
+        let live = RealtimeSessionModel(
+            pairClient: RecordingPair(),
+            iceClient: RecordingICE(),
+            nearbyAnswerTimeout: 600,
+            makeNearbyConnection: { _, _, _ in answered },
+            makeConnection: { _, _, _ in answered })
+        await live.connectNearby(peerId: "chosen-7")
+        answered.onSAS?("123456")
+        answered.onOpen?()
+        for _ in 0..<200 { await settle() }
+        guard case .transferring = live.state else { return XCTFail("got \(live.state)") }
+    }
+
+    /// The text model's idle timer has the same shape and the same exposure:
+    /// `touch()` arms it on every session that becomes interactive.
+    func testTheRealTextIdleTimerCompletesWithoutTrippingTheTaskAllocator() async {
+        let peer = StubPeer()
+        let model = RealtimeTextSessionModel(
+            pairClient: RecordingPair(),
+            iceClient: RecordingICE(),
+            requiresVerification: { false },
+            idleSeconds: 0.001,
+            nearbyAnswerTimeout: 600,
+            makeNearbyConnection: { _, _, _ in peer },
+            makeConnection: { _, _, _ in peer })
+        await model.connectNearby(peerId: "chosen-7")
+        peer.onSAS?("123456")
+        peer.onOpen?()
+        for _ in 0..<500 {
+            if model.state == .ended { break }
+            await settle()
+        }
+        XCTAssertEqual(model.state, .ended, "the idle timer has to fire, and survive doing so")
+    }
+
     /// Regression guard for the code flow: it still mints, still fetches ICE
     /// for the code it is joining, and is untouched by any of the above.
     func testThePairingCodeFlowIsUnchanged() async {

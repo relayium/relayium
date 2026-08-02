@@ -46,5 +46,18 @@ let package = Package(
             ],
             path: "Sources/RealtimeE2E"
         ),
+        // Live PASSIVE-RECEIVE E2E: an unsolicited offer answered by the app's
+        // own residency + listener + session model, rather than by two peers a
+        // harness built. Depends on RelayiumAppKit for exactly that reason.
+        // Run manually: `swift run NearbyReceiveE2E`. Needs the network.
+        .executableTarget(
+            name: "NearbyReceiveE2E",
+            dependencies: [
+                "RelayiumKit",
+                "RelayiumAppKit",
+                .product(name: "WebRTC", package: "WebRTC"),
+            ],
+            path: "Sources/NearbyReceiveE2E"
+        ),
     ]
 )

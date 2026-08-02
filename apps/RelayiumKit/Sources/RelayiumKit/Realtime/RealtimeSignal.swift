@@ -8,7 +8,7 @@ import Foundation
 /// nested inside it. `commit`/`reveal` parsing itself is *not* reimplemented
 /// here — see `peerCommit`/`peerReveal` in Handshake/HandshakeMessage.swift.
 
-/// Independent signalling generations sharing one pairing-code room.
+/// Independent signalling generations sharing one signalling room.
 ///
 /// Untagged is deliberately `file`: every already-deployed peer sends that
 /// shape. Resume wins if an untrusted signal sets both flags, matching the web
@@ -17,13 +17,57 @@ public enum RealtimeGeneration: Equatable {
     case file
     case resume
     case text
+    /// The web's combined file+text peer link (`webrtc-core.ts`'s `"link"`).
+    ///
+    /// This client never opens one — it advertises no link capability, so a web
+    /// peer falls back to the file/text generations. The case exists so a `link`
+    /// signal is *recognised as not ours* instead of being read as an untagged
+    /// file signal, which is what the three-case version did: a link offer would
+    /// have been answered as a file transfer that then waits for a manifest
+    /// nobody is going to send.
+    case link
 }
 
 public func signalGeneration(_ data: JSONValue) -> RealtimeGeneration {
     guard case let .object(fields) = data else { return .file }
+    // Same precedence as web/src/lib/webrtc-core.ts's signalGeneration.
     if case .bool(true)? = fields["resume"] { return .resume }
+    if case .bool(true)? = fields["link"] { return .link }
     if case .bool(true)? = fields["text"] { return .text }
     return .file
+}
+
+/// The exact capability a text session requires of its peer, in both
+/// directions. Not a security input — the relay sees and could forge every
+/// frame — but a text offer without it means the peer cannot decode kind-9
+/// frames, so answering one produces a session that can never carry a message.
+public let TEXT_CAPABILITY = "text/1"
+
+/// Which generation an inbound signal opens a *new* responder session for, or
+/// `nil` if it opens none.
+///
+/// Mirrors the web's `routeOffer`/`isTextOffer` pair, and every clause is a way
+/// a background listener goes wrong:
+///
+/// * Only a real SDP **offer** starts a session. An answer, an ICE candidate or
+///   a reveal belongs to a connection that already exists; treating one as a new
+///   session both loses the frame and spends a connection on nothing.
+/// * `resume` re-attaches to a paused transfer this client does not implement,
+///   and `link` is the web's own generation. Neither is a new session here, and
+///   answering either would strand the initiator on a wire it is not speaking.
+/// * A `text` offer must carry exact `text/1`. Anything else fails closed:
+///   silence is the truthful answer to a dialect we cannot speak, and a `busy`
+///   reply would tell the peer to try again later, which is not what is wrong.
+public func inboundOfferGeneration(_ data: JSONValue) -> RealtimeGeneration? {
+    guard parseSDP(data)?.type == "offer" else { return nil }
+    switch signalGeneration(data) {
+    case .file:
+        return .file
+    case .text:
+        return peerCaps(from: data).contains(TEXT_CAPABILITY) ? .text : nil
+    case .resume, .link:
+        return nil
+    }
 }
 
 /// Applies the generation tag to any outbound signal. File stays byte-for-byte
@@ -37,6 +81,11 @@ public func taggedSignal(_ data: JSONValue, generation: RealtimeGeneration) -> J
         fields["resume"] = .bool(true)
     case .text:
         fields["text"] = .bool(true)
+    case .link:
+        // Never produced by this client (nothing constructs a `.link`
+        // connection); present so the mapping stays total and a future link
+        // implementation cannot silently emit untagged file signals.
+        fields["link"] = .bool(true)
     }
     return .object(fields)
 }

@@ -10,6 +10,7 @@ struct DirectHubPane: View {
     @ObservedObject var textModel: RealtimeTextSessionModel
     @EnvironmentObject private var verification: VerificationPreference
     @EnvironmentObject private var discovery: LanDiscoveryModel
+    @EnvironmentObject private var receive: NearbyReceiveModel
     let token: String
     @State private var mode: Mode = .files
     /// True while the nearby pane is showing a live session. The pairing-code
@@ -28,6 +29,7 @@ struct DirectHubPane: View {
             .accessibilityHint("Choose what this session will transfer.")
 
             NearbyPane(discovery: discovery,
+                       receive: receive,
                        fileModel: fileModel,
                        textModel: textModel,
                        intent: mode == .files ? .files : .text,
@@ -46,6 +48,24 @@ struct DirectHubPane: View {
             Divider()
             verificationSetting
         }
+        // A session nobody asked for decides its own kind, so the picker has to
+        // follow it rather than the other way round. `task(id:)` rather than
+        // `onChange`, because this window may have been closed when the session
+        // started and rebuilt — with `mode` back at its default — while it is
+        // still running.
+        .task(id: receive.activeKind) { followIncoming() }
+    }
+
+    /// Puts an incoming session on screen in the surface that can render it.
+    /// Without this, a file transfer arriving while the picker sat on Text shows
+    /// the text pane's idle state and the transfer is invisible — and switching
+    /// the picker by hand would be blocked, because it is disabled while busy.
+    private func followIncoming() {
+        guard let kind = receive.activeKind else { return }
+        mode = (kind == .file) ? .files : .text
+        // The pairing-code section is hidden while this is true: both drive the
+        // SAME models, and leaving it up would render one session twice.
+        nearbySession = true
     }
 
     /// Placed here rather than inside either pane: it applies to both kinds of

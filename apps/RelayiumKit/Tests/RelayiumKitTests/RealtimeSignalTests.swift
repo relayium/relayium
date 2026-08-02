@@ -27,6 +27,24 @@ extension RealtimeSignalTests {
         XCTAssertEqual(signalGeneration(taggedSignal(.object(["ice": .object([:])]), generation: .text)), .text)
     }
 
+    /// The web has a fourth generation (`link`, its combined file+text peer
+    /// link). Reading it as untagged — which three cases did — means answering a
+    /// link offer as a file transfer and then waiting for a manifest that is
+    /// never coming.
+    func testTheWebsLinkGenerationIsRecognisedRatherThanReadAsAFileSignal() {
+        XCTAssertEqual(signalGeneration(.object(["link": .bool(true)])), .link)
+        XCTAssertEqual(
+            signalGeneration(.object(["link": .bool(true), "text": .bool(true)])),
+            .link,
+            "same precedence as web/src/lib/webrtc-core.ts")
+        XCTAssertEqual(
+            signalGeneration(.object(["resume": .bool(true), "link": .bool(true)])),
+            .resume)
+        XCTAssertEqual(
+            signalGeneration(taggedSignal(.object(["ice": .object([:])]), generation: .link)),
+            .link)
+    }
+
     func testResumeWinsOverTextOnAmbiguousUntrustedSignal() {
         XCTAssertEqual(
             signalGeneration(.object(["resume": .bool(true), "text": .bool(true)])),
@@ -116,5 +134,61 @@ extension RealtimeSignalTests {
         XCTAssertEqual(peerCommit(from: merged), "Yw==")
         XCTAssertEqual(parseSDP(merged)?.sdp, "v=0\r\n")
         XCTAssertEqual(peerCaps(from: merged), ["text/1"])
+    }
+}
+
+// ── which inbound signals open a new responder session ───────────────────────
+//
+// This is the classifier a persistent listener runs on every frame the room
+// delivers, so every case below is a way an always-on receiver goes wrong.
+extension RealtimeSignalTests {
+    private func offer(generation: RealtimeGeneration, caps: [String] = []) -> JSONValue {
+        sdpSignal(kind: "offer", sdp: "v=0", commit: "Yw==", generation: generation, caps: caps)
+    }
+
+    func testAnUntaggedOfferIsAFileOffer() {
+        XCTAssertEqual(inboundOfferGeneration(offer(generation: .file)), .file)
+        // Legacy peers send no commit and no caps at all.
+        XCTAssertEqual(
+            inboundOfferGeneration(.object(["sdp": .object(["type": .string("offer"),
+                                                            "sdp": .string("v=0")])])),
+            .file)
+    }
+
+    /// Only an OFFER starts a session. An answer, a candidate or a reveal
+    /// belongs to a connection that already exists; treating one as a new
+    /// session spends a connection on nothing and loses the frame.
+    func testOnlyARealOfferOpensASession() {
+        XCTAssertNil(inboundOfferGeneration(sdpSignal(kind: "answer", sdp: "v=0", commit: nil)))
+        XCTAssertNil(inboundOfferGeneration(iceSignal("candidate:1 1 udp", sdpMid: "0", sdpMLineIndex: 0)))
+        XCTAssertNil(inboundOfferGeneration(.object(["reveal": .string("opaque")])))
+        XCTAssertNil(inboundOfferGeneration(busySignal()))
+        XCTAssertNil(inboundOfferGeneration(capsField(["text/1"])))
+        XCTAssertNil(inboundOfferGeneration(.object([:])))
+        XCTAssertNil(inboundOfferGeneration(.null))
+        // A malformed sdp object is not an offer either.
+        XCTAssertNil(inboundOfferGeneration(.object(["sdp": .string("offer")])))
+    }
+
+    /// A resume offer re-attaches to a paused transfer this client does not
+    /// implement, and `link` is the web's own generation. Answering either
+    /// strands the initiator on a wire this side is not speaking.
+    func testResumeAndLinkOffersAreNotNewSessions() {
+        XCTAssertNil(inboundOfferGeneration(offer(generation: .resume)))
+        XCTAssertNil(inboundOfferGeneration(offer(generation: .link)))
+        XCTAssertNil(inboundOfferGeneration(offer(generation: .link, caps: ["text/1"])),
+                     "a link offer is not rescued by carrying the text capability")
+    }
+
+    /// A text offer must carry exact `text/1` — the same requirement the
+    /// connection enforces on the wire. Fail closed: silence, not busy, because
+    /// "try again later" is not what is wrong with a peer we cannot decode.
+    func testATextOfferNeedsTheExactCapability() {
+        XCTAssertEqual(inboundOfferGeneration(offer(generation: .text, caps: ["text/1"])), .text)
+        XCTAssertNil(inboundOfferGeneration(offer(generation: .text)))
+        XCTAssertNil(inboundOfferGeneration(offer(generation: .text, caps: ["text/2"])))
+        XCTAssertNil(inboundOfferGeneration(offer(generation: .text, caps: ["Text/1"])),
+                     "the capability is exact, not case-folded")
+        XCTAssertNil(inboundOfferGeneration(offer(generation: .text, caps: ["text/1x"])))
     }
 }

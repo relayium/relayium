@@ -33,7 +33,7 @@ public enum RealtimeConnectionFactory {
         var localCapabilities: [String] {
             switch self {
             case .file: return []
-            case .text: return ["text/1"]
+            case .text: return [TEXT_CAPABILITY]
             }
         }
     }
@@ -176,10 +176,36 @@ public enum RealtimeConnectionFactory {
         // nothing is decided or discarded at this layer.
         let pending = PendingSignals()
         let capabilities = PeerCapabilities()
-        signaling.onSignal = { from, data in
+        // Tokenised like every other claim on this slot, so the ordering below
+        // is enforced rather than merely intended: `build` supersedes this
+        // handler, and nothing here can clear the connection's.
+        let temporarySlot = signaling.installSignalHandler { from, data in
             negotiator.handleSignal(from: from, data: data)
             capabilities.record(peerId: from, signal: data)
             pending.append((from, data))
+        }
+        // Every exit that is not "a connection took over" has to undo the two
+        // things installing that handler did, and neither undoes itself:
+        //
+        // * The closure retains `negotiator`, which retains `signaling`, which
+        //   holds the closure — a cycle. Nothing below drops it on a throw, so
+        //   `SignalingClient.deinit` (and with it `channel.close()`) never ran:
+        //   the WebSocket for a `make` that timed out waiting for a peer stayed
+        //   open for the life of the process, once per failed attempt.
+        // * This entry point OWNS its socket — it built it with
+        //   `SignalingClient.connect` — so on failure it is this function's job
+        //   to close it. `connectNearby` deliberately does the opposite, because
+        //   there the socket belongs to the discovery model.
+        //
+        // Ownership-safe: `removeSignalHandler` is a no-op once `build` has
+        // superseded this claim, so a late failure can never unhook a live
+        // connection's handler.
+        var connectionTookOver = false
+        defer {
+            if !connectionTookOver {
+                signaling.removeSignalHandler(temporarySlot)
+                signaling.close()
+            }
         }
         negotiator.start()
 
@@ -214,10 +240,9 @@ public enum RealtimeConnectionFactory {
                 timeout: min(peerTimeout, 5)
             )
             capabilityRetry.cancel()
-            guard supported else {
-                signaling.close()
-                throw FactoryError.unsupportedPeer
-            }
+            // The `defer` above closes the socket, so this path no longer does
+            // it itself — a second `close()` would fire `onClose` twice.
+            guard supported else { throw FactoryError.unsupportedPeer }
             signaling.sendSignal(
                 to: peerId,
                 data: capsField(mode.localCapabilities)
@@ -282,6 +307,7 @@ public enum RealtimeConnectionFactory {
         // queue, so replaying a stray relay-RTT message here is a harmless
         // no-op. Nothing needs to be filtered before replaying: everything
         // buffered above goes through, in the order it originally arrived.
+        connectionTookOver = true
         for (from, data) in pending.drain() {
             signaling.onSignal?(from, data)
         }
@@ -342,9 +368,21 @@ public enum RealtimeConnectionFactory {
         // error at all.
         let pending = PendingSignals()
         let capabilities = PeerCapabilities()
-        signaling.onSignal = { from, data in
+        // Tokenised: this socket is the discovery model's shared roster feed, so
+        // the failure path below must give back only *this* claim. A bare
+        // `onSignal = nil` there would also delete the handler of a connection
+        // that had since been built on the same socket.
+        let temporarySlot = signaling.installSignalHandler { from, data in
             capabilities.record(peerId: from, signal: data)
             pending.append((from, data))
+        }
+        // Same shape as `make`, minus the close: this socket is the discovery
+        // model's roster feed and the user is expected to pick another device on
+        // it, so a failed attempt must leave the room joined. Only the claim on
+        // the slot is given back, and only if it is still ours.
+        var connectionTookOver = false
+        defer {
+            if !connectionTookOver { signaling.removeSignalHandler(temporarySlot) }
         }
 
         if mode == .text {
@@ -363,14 +401,8 @@ public enum RealtimeConnectionFactory {
                                                     in: capabilities,
                                                     timeout: capabilityTimeout)
             capabilityRetry.cancel()
-            guard supported else {
-                // Unhook, do NOT close: this socket is the discovery model's
-                // roster feed, and the user is expected to pick another device
-                // on it. `make`'s equivalent path closes because the socket is
-                // its own.
-                signaling.onSignal = nil
-                throw FactoryError.unsupportedPeer
-            }
+            // Unhooked by the `defer` above, and deliberately NOT closed.
+            guard supported else { throw FactoryError.unsupportedPeer }
             signaling.sendSignal(to: peerId, data: capsField(mode.localCapabilities))
         }
 
@@ -379,10 +411,57 @@ public enum RealtimeConnectionFactory {
                                false,        // never relay-only: STUN-only, host candidates are the point
                                mode.generation,
                                mode.localCapabilities)
+        connectionTookOver = true
         for (from, data) in pending.drain() {
             signaling.onSignal?(from, data)
         }
         return connection
+    }
+
+    // MARK: - same-network (inbound, unsolicited)
+
+    /// Builds the responder for an offer this Mac did not ask for.
+    ///
+    /// Deliberately the *smallest* of the three entry points, and synchronous:
+    /// everything `connectNearby` spends time on has already happened by the
+    /// time an offer lands.
+    ///
+    /// * There is no peer to wait for — the offer names it (`from`).
+    /// * There is no capability handshake — a text offer carries `text/1`
+    ///   alongside its SDP or it is not a text offer at all
+    ///   (`inboundOfferGeneration`), and this side's answer carries ours.
+    /// * There is no buffering here. The caller — the persistent router that
+    ///   classified the offer — has been buffering since before this call, and
+    ///   replays into `signaling.onSignal` once this returns. A second buffer
+    ///   installed here would capture the same live frames the router is already
+    ///   capturing and deliver every one of them twice.
+    ///
+    /// What it keeps from `connectNearby` is what the security boundary is made
+    /// of: the roster socket is reused rather than reconnected, no code is
+    /// minted or joined, and `nearbyICEServers` drops every TURN URL and
+    /// credential so an inbound session cannot spend relay quota either.
+    public static func acceptNearby(signaling: SignalingClient,
+                                    peerId: String,
+                                    config: ICEConfig,
+                                    mode: Mode = .file) throws -> RealtimePeerConnection {
+        try acceptNearby(signaling: signaling, peerId: peerId, config: config,
+                         mode: mode, build: liveConnection)
+    }
+
+    /// The same seam the other two entry points have, for the same reason.
+    static func acceptNearby(signaling: SignalingClient,
+                             peerId: String,
+                             config: ICEConfig,
+                             mode: Mode,
+                             build: ConnectionBuilder) throws -> RealtimePeerConnection {
+        // An offer whose `from` is empty is not a peer; it would reach WebRTC as
+        // a dial to nobody and surface as a bare NSError.
+        guard !peerId.isEmpty else { throw FactoryError.noPeerAppeared }
+        return build(signaling, peerId, .responder,
+                     nearbyICEServers(config.iceServers),
+                     false,        // never relay-only: STUN-only, host candidates are the point
+                     mode.generation,
+                     mode.localCapabilities)
     }
 
     /// STUN only, credentials dropped.
@@ -426,6 +505,21 @@ public enum RealtimeConnectionFactory {
                           timeout: TimeInterval,
                           onPeer: @escaping (String) -> Void = { _ in }) async throws -> String {
         let box = ResumeOnce()
+        // The wait borrows two of the client's callback slots; when it ends they
+        // go back. Not tidiness — a leak. Both closures are stored ON
+        // `signaling`, and they capture whatever the caller handed in:
+        // `make`'s `onPeer` captures `signaling` strongly to send its capability
+        // hello. Leaving them installed is therefore a cycle that survives every
+        // exit from `make`, so the client is never deallocated, its `deinit`
+        // never runs, and the WebSocket it owns stays open for the life of the
+        // process — once per call, on success as well as on failure.
+        //
+        // Weak-capturing inside these closures cannot fix that: the strong
+        // reference is in the caller's closure, not this one.
+        defer {
+            signaling.onPeers = nil
+            signaling.onClose = nil
+        }
         return try await withCheckedThrowingContinuation { cont in
             signaling.onPeers = { peers in
                 // The hub sends the WHOLE room roster to every member,

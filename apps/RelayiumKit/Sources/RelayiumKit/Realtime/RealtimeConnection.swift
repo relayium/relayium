@@ -197,12 +197,23 @@ public final class RealtimeConnection: NSObject {
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         self.pc = factory.peerConnection(with: config, constraints: constraints, delegate: self)
 
-        signaling.onSignal = { [weak self] from, data in
+        // Claimed with a token rather than by assigning `onSignal`, so that
+        // `closeLocked`/`deinit` can hand the slot back without being able to
+        // erase a *newer* connection's handler. Two connections overlap on one
+        // socket routinely — the nearby room's socket is shared and a session
+        // ends while the next is already being built — and this side of that
+        // race is unordered: an old connection's close, or its deallocation, can
+        // land at any point after the new one installed itself.
+        self.signalToken = signaling.installSignalHandler { [weak self] from, data in
             guard let self, from == self.peerId,
                   signalGeneration(data) == self.generation else { return }
             self.queue.async { self.handleSignal(data) }
         }
     }
+
+    /// Which installation of `signaling.onSignal` is ours. Written once, here in
+    /// `init` before any other thread can reach this object, and only ever read.
+    private var signalToken: SignalHandlerToken?
 
     // MARK: - start
 
@@ -717,14 +728,26 @@ public final class RealtimeConnection: NSObject {
         channel = nil
         pc?.delegate = nil
         pc?.close()
-        signaling.onSignal = nil
+        releaseSignalSlot()
         onClose?()
+    }
+
+    /// Give the slot back, but only if it is still ours. A connection that
+    /// closes after a newer one has claimed the socket must leave that newer
+    /// handler alone — clearing it strands the new session, which then waits
+    /// forever for an answer nobody will route to it.
+    private func releaseSignalSlot() {
+        guard let signalToken else { return }
+        signaling.removeSignalHandler(signalToken)
     }
 
     /// Safety net for a caller that drops its last reference without calling
     /// `close()`: makes sure WebRTC's `pc`/`channel` never hold `self` as a
     /// (non-ARC-tracked, from the C++ layer's point of view) delegate past this
-    /// instance's lifetime, and that `signaling` can't invoke a dead handler.
+    /// instance's lifetime, and that the signalling slot is handed back if it is
+    /// still ours. The handler itself captures `self` weakly, so a slot we no
+    /// longer own was never a route into a dead object — the reason to release
+    /// here is to leave the socket answerable, not to defuse a dangling call.
     ///
     /// Deliberately does NOT call `close()`/`closeLocked()` via `queue`:
     /// `close()`'s `queue.async { [weak self] ... }` forms a *new* weak
@@ -744,7 +767,7 @@ public final class RealtimeConnection: NSObject {
         channel = nil
         pc?.delegate = nil
         pc?.close()
-        signaling.onSignal = nil
+        releaseSignalSlot()
     }
 }
 

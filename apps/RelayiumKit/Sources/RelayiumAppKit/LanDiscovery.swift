@@ -34,13 +34,36 @@ public struct NearbyDevice: Identifiable, Equatable {
 }
 
 public enum LanDiscoveryState: Equatable {
+    /// Not resident: the app is tearing down, or nothing has started it yet.
     case off
+    /// The user turned receiving off. Truthful and sticky — nothing reconnects
+    /// until they turn it back on.
+    case paused
     /// Socket opening/open, no `welcome` yet — the roster cannot be trusted to
     /// exclude us, so nothing is listed.
-    case scanning
+    case connecting
     /// Joined the room: the roster is meaningful, though possibly empty.
     case joined
-    case failed(String)
+    /// The socket dropped and a bounded-backoff retry is scheduled. Not a
+    /// terminal state: a resident app that stops retrying is an app that is
+    /// silently no longer reachable.
+    case reconnecting(String)
+}
+
+/// Notified when the room socket is replaced or lost.
+///
+/// The reason this is a protocol rather than the discovery model simply owning
+/// the listener: reconnecting mints a *new* `SignalingClient` (and a new peer
+/// id), so anything subscribed to inbound signals has to re-subscribe on every
+/// socket. Handing that responsibility to an observer keeps the roster model
+/// ignorant of what receiving is, and keeps exactly one socket in the room.
+@MainActor
+public protocol NearbyRoomObserver: AnyObject {
+    /// A new socket is live. Any subscription to the previous one is already
+    /// invalid; register again on this one.
+    func roomDidConnect(_ signaling: SignalingClient)
+    /// The socket is gone — dropped, paused or stopped.
+    func roomDidDisconnect()
 }
 
 /// Turns a raw room roster into the list the user picks from.
@@ -91,14 +114,21 @@ public func nearbyDevices(roster: [Peer], selfId: String) -> [NearbyDevice] {
 /// putting a full opaque id in front of the user.
 func shortPeerID(_ id: String) -> String { String(id.suffix(6)) }
 
-/// Joins the same-network rendezvous room and keeps the roster the user picks
-/// from.
+/// Joins the same-network rendezvous room, keeps the roster the user picks
+/// from, and keeps that one socket alive for as long as the app is resident.
 ///
 /// This is NOT Bonjour/mDNS and does not look at the local network at all: it
 /// joins the hub's code-less room, which the server keys by the public IP it
 /// observes. Devices behind the same NAT therefore see each other — and so, in
 /// principle, does anything else sharing that address, which is why nothing
 /// here ever selects a peer on the user's behalf.
+///
+/// Residency is why this model, and not the pane, owns the lifecycle: the room
+/// membership is what makes this Mac reachable, so it has to outlive the window
+/// (`MenuBarExtra` keeps the process up) and it has to survive a dropped socket.
+/// Exactly one socket exists at a time — two would put this Mac in the room
+/// twice, under two peer ids, and every other device would see it as two
+/// devices.
 @MainActor
 public final class LanDiscoveryModel: ObservableObject {
     @Published public private(set) var state: LanDiscoveryState = .off
@@ -114,38 +144,120 @@ public final class LanDiscoveryModel: ObservableObject {
     /// would only invalidate views that must not depend on it.
     public private(set) var client: SignalingClient?
 
+    /// Re-subscribed on every socket. Weak: the observer (the receive model)
+    /// outlives individual sockets and must not be kept alive by this one.
+    public weak var observer: NearbyRoomObserver?
+
     public var selectedDevice: NearbyDevice? { devices.first { $0.id == selectedId } }
+    /// A socket exists or is being opened. `reconnecting` is deliberately false:
+    /// the roster is empty and unmaintained during the gap, and a UI that claims
+    /// otherwise is showing devices that may not be there.
     public var isScanning: Bool {
         switch state {
-        case .scanning, .joined: return true
-        case .off, .failed: return false
+        case .connecting, .joined: return true
+        case .off, .paused, .reconnecting: return false
         }
     }
 
+    public var isPaused: Bool { isPausedByUser }
+
+    /// Bounded backoff. It stops growing rather than stopping altogether: the
+    /// common cause is a network this Mac will rejoin (sleep, Wi-Fi change), and
+    /// a listener that gives up permanently is a listener that silently stops
+    /// receiving. One retry every 30 s against a rendezvous socket is not a load
+    /// worth trading that for.
+    static let reconnectBackoff: [TimeInterval] = [1, 2, 5, 10, 20, 30]
+
     private let connect: () -> SignalingClient
+    private let sleep: @Sendable (UInt64) async -> Void
     private var roster: [Peer] = []
     private var selfId = ""
     /// Operation identity: a callback from a socket the user has stopped must
-    /// not repopulate a roster they closed. Same pattern as
-    /// `RealtimeSessionModel.generation`.
+    /// not repopulate a roster they closed, and a retry timer armed for a socket
+    /// epoch that has since been replaced must not open a second one. Same
+    /// pattern as `RealtimeSessionModel.generation`.
     private var generation = 0
+    private var isResident = false
+    private var isPausedByUser = false
+    private var reconnectAttempt = 0
+    private var reconnectTask: Task<Void, Never>?
 
-    public init(connect: @escaping () -> SignalingClient) {
+    public init(connect: @escaping () -> SignalingClient,
+                // Optional rather than a defaulted closure literal — see
+                // `realSleep`. `nil` means the real timer.
+                sleep: (@Sendable (UInt64) async -> Void)? = nil) {
         self.connect = connect
+        self.sleep = sleep ?? realSleep
     }
 
+    /// Join the room and stay in it. Idempotent, and deliberately refuses to
+    /// override an explicit pause — the app calls this on every launch and on
+    /// every window that appears, and none of those is a decision to start
+    /// receiving again.
+    public func startResident() {
+        guard !isResident else { return }
+        isResident = true
+        guard !isPausedByUser else {
+            state = .paused
+            return
+        }
+        reconnectAttempt = 0
+        openSocket()
+    }
+
+    /// Join now, from a clean slate. Distinct from `startResident` in that it
+    /// always reopens: the explicit "look again" action, and what the tests
+    /// drive.
     public func start() {
-        // Also the reset: `stop` bumps the generation and closes any previous
-        // socket, so a second Scan cannot end up with two live rooms.
-        stop()
+        isResident = true
+        isPausedByUser = false
+        reconnectAttempt = 0
+        openSocket()
+    }
+
+    /// The user turned receiving off. Sticky across reconnects and relaunched
+    /// windows; only `resume` undoes it.
+    public func pause() {
+        guard !isPausedByUser else { return }
+        isPausedByUser = true
+        teardown()
+        state = .paused
+    }
+
+    public func resume() {
+        guard isPausedByUser else { return }
+        isPausedByUser = false
+        reconnectAttempt = 0
+        guard isResident else {
+            state = .off
+            return
+        }
+        openSocket()
+    }
+
+    /// Leave the room and stay out of it. Not the pause the user sees — this is
+    /// teardown.
+    public func stop() {
+        isResident = false
+        teardown()
+        state = .off
+    }
+
+    private func openSocket() {
+        // `teardown` bumps the generation and closes any previous socket first,
+        // so no path through here can end up with two live rooms.
+        teardown()
         let g = generation
-        state = .scanning
+        state = .connecting
         let socket = connect()
         socket.onSelfId = { [weak self] id, _ in
             Task { @MainActor in
                 self?.apply(g) { model in
                     model.selfId = id
                     model.state = .joined
+                    // A join is what proves the retry worked; anything short of
+                    // it and the next drop should not start from zero again.
+                    model.reconnectAttempt = 0
                     model.refresh()
                 }
             }
@@ -162,17 +274,23 @@ public final class LanDiscoveryModel: ObservableObject {
             Task { @MainActor in self?.apply(g) { $0.dropped() } }
         }
         client = socket
+        observer?.roomDidConnect(socket)
     }
 
-    public func stop() {
+    /// Everything that ends a socket epoch. Bumps first, so the `close()` below
+    /// — which fires `onClose` synchronously on some channels — cannot be read
+    /// as a drop worth reconnecting from.
+    private func teardown() {
         generation += 1
+        reconnectTask?.cancel()
+        reconnectTask = nil
         client?.close()
         client = nil
+        observer?.roomDidDisconnect()
         roster = []
         selfId = ""
         devices = []
         selectedId = nil
-        state = .off
     }
 
     /// The user picked a row. Rejects anything that is not currently in the
@@ -204,14 +322,46 @@ public final class LanDiscoveryModel: ObservableObject {
     }
 
     private func dropped() {
-        // Bump first: nothing from the dead socket may repaint this.
+        // Bump first: nothing from the dead socket may repaint this, and the
+        // retry armed below is identified by the epoch that follows.
         generation += 1
+        reconnectTask?.cancel()
+        reconnectTask = nil
         client = nil
+        observer?.roomDidDisconnect()
         roster = []
         selfId = ""
         devices = []
         selectedId = nil
-        state = .failed("Lost the connection to Relayium's device rendezvous. Scan again.")
+        guard isResident, !isPausedByUser else {
+            state = isPausedByUser ? .paused : .off
+            return
+        }
+        state = .reconnecting(
+            "Lost the connection to Relayium's device rendezvous. Reconnecting…")
+        scheduleReconnect()
+    }
+
+    private func scheduleReconnect() {
+        let index = min(reconnectAttempt, Self.reconnectBackoff.count - 1)
+        let delay = Self.reconnectBackoff[index]
+        reconnectAttempt += 1
+        let g = generation
+        let sleep = self.sleep
+        reconnectTask = Task { [weak self] in
+            await sleep(UInt64(max(0, delay) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self else { return }
+                // A stale timer: the epoch it was armed for has been replaced by
+                // a stop, a pause, or a manual restart that already reopened.
+                guard g == self.generation, self.isResident, !self.isPausedByUser else { return }
+                // Cleared before `openSocket`, whose `teardown` would otherwise
+                // cancel the very task running this line.
+                self.reconnectTask = nil
+                self.openSocket()
+            }
+        }
     }
 
     private func apply(_ g: Int, _ body: (LanDiscoveryModel) -> Void) {

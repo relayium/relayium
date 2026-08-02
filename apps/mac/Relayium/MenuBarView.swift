@@ -4,6 +4,8 @@ import RelayiumAppKit
 
 struct MenuBarView: View {
     @EnvironmentObject private var session: AccountSession
+    @EnvironmentObject private var receive: NearbyReceiveModel
+    @EnvironmentObject private var discovery: LanDiscoveryModel
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -28,9 +30,21 @@ struct MenuBarView: View {
             Text("Not signed in")
         }
         Divider()
+        // What background receive is actually doing. With the window closed this
+        // is the only place it is visible, and "ready" has to be a claim the app
+        // can back up — hence a state per case rather than one optimistic label.
+        Text(receiveStatus)
+        if receive.state == .paused {
+            Button("Resume receiving from nearby devices") { discovery.resume() }
+        } else {
+            Button("Pause receiving from nearby devices") { discovery.pause() }
+                .disabled(isReceiving)
+        }
+        Divider()
         // The window can be closed while the app keeps running, so this is the
-        // only way back to it. Spec'd in "Menu-bar residency".
-        Button("Open Relayium") {
+        // only way back to it — including back to a session that arrived while
+        // it was closed. Spec'd in "Menu-bar residency".
+        Button(isReceiving ? "Open Relayium to see this transfer" : "Open Relayium") {
             activateApp()
             openWindow(id: "main")
         }
@@ -41,6 +55,34 @@ struct MenuBarView: View {
         Divider()
         Button("Quit Relayium") { NSApplication.shared.terminate(nil) }
             .keyboardShortcut("q")
+    }
+
+    private var isReceiving: Bool {
+        if case .active = receive.state { return true }
+        return false
+    }
+
+    /// Deliberately never says "ready" for a state that is not. A dropped socket
+    /// says it is reconnecting, because during that gap this Mac genuinely
+    /// cannot be reached and a user who is waiting for a file needs to know it
+    /// is the app, not the sender.
+    private var receiveStatus: String {
+        switch receive.state {
+        case .off:
+            return "Nearby receiving: off"
+        case .paused:
+            return "Nearby receiving: paused"
+        case .connecting:
+            return "Nearby receiving: joining…"
+        case .ready:
+            return "Nearby receiving: ready"
+        case .reconnecting:
+            return "Nearby receiving: reconnecting…"
+        case .active(.file):
+            return "Receiving files from a nearby device…"
+        case .active(.text):
+            return "A nearby message session is open"
+        }
     }
 
     /// Clicking a menu-bar item does not bring the app forward, so the reopened

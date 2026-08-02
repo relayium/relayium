@@ -83,6 +83,10 @@ public final class RealtimeSessionModel: ObservableObject {
     /// rather than a code. `@MainActor` because the socket it reaches for lives
     /// on `LanDiscoveryModel`.
     private let makeNearbyConnection: @MainActor (_ peerId: String, _ role: Role, _ iceServers: ICEConfig) async throws -> RealtimePeerConnection
+    /// The inbound half: a responder for an offer that arrived on its own. No
+    /// role parameter, because there is only one role an unsolicited offer can
+    /// be answered in.
+    private let makeInboundConnection: @MainActor (_ peerId: String, _ iceServers: ICEConfig) async throws -> RealtimePeerConnection
     /// How long a nearby connect waits for the chosen device to answer.
     private let nearbyAnswerTimeout: TimeInterval
     private let sleep: @Sendable (UInt64) async -> Void
@@ -117,10 +121,13 @@ public final class RealtimeSessionModel: ObservableObject {
                 iceClient: ICEConfigClient,
                 requiresVerification: @escaping () -> Bool = { false },
                 nearbyAnswerTimeout: TimeInterval = 30,
-                sleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
-                    try? await Task.sleep(nanoseconds: nanoseconds)
-                },
+                // Optional rather than a defaulted closure literal — see
+                // `realSleep`. `nil` means the real timer.
+                sleep: (@Sendable (UInt64) async -> Void)? = nil,
                 makeNearbyConnection: @escaping @MainActor (String, Role, ICEConfig) async throws -> RealtimePeerConnection = { _, _, _ in
+                    throw NearbyError.notScanning
+                },
+                makeInboundConnection: @escaping @MainActor (String, ICEConfig) async throws -> RealtimePeerConnection = { _, _ in
                     throw NearbyError.notScanning
                 },
                 makeConnection: @escaping (String, Role, ICEConfig) async throws -> RealtimePeerConnection) {
@@ -128,8 +135,9 @@ public final class RealtimeSessionModel: ObservableObject {
         self.iceClient = iceClient
         self.requiresVerification = requiresVerification
         self.nearbyAnswerTimeout = nearbyAnswerTimeout
-        self.sleep = sleep
+        self.sleep = sleep ?? realSleep
         self.makeNearbyConnection = makeNearbyConnection
+        self.makeInboundConnection = makeInboundConnection
         self.makeConnection = makeConnection
     }
 
@@ -168,7 +176,7 @@ public final class RealtimeSessionModel: ObservableObject {
     /// Both sides end up here: the sender once a peer arrives on its code, the
     /// receiver as soon as it has one to join.
     public func join(code: String, role: Role = .responder) async {
-        generation += 1
+        retirePreviousConnection()
         let g = generation
         // A sender minted this code and is already displaying it; the other
         // device has to read it off that screen, so replacing it with
@@ -206,7 +214,10 @@ public final class RealtimeSessionModel: ObservableObject {
     /// answers STUN-only to anyone. That is precisely why this works signed out,
     /// and why `code: ""` below is load-bearing rather than a placeholder.
     public func connectNearby(peerId: String, role: Role = .initiator) async {
-        generation += 1
+        // Same leak as `acceptNearby` guards against, minus the pending-send
+        // clear: a staged selection is exactly what this call is about to send,
+        // so only the dead connection goes.
+        retirePreviousConnection()
         let g = generation
         state = .connecting
         do {
@@ -221,6 +232,72 @@ public final class RealtimeSessionModel: ObservableObject {
         } catch {
             guard g == generation else { return }
             state = .failed(ErrorCopy.message(for: error))
+        }
+    }
+
+    /// Same-network receive: a device on this public address offered, and this
+    /// Mac is answering. Nothing here was chosen by the local user, which is
+    /// what every constraint below is about.
+    ///
+    /// `handoff` is called at the one instant it can be: after the connection
+    /// exists and its callbacks are wired, and before this returns. That is when
+    /// the router replays the offer it has been holding — plus any ICE that
+    /// arrived behind it, which on a LAN is most of it — into the connection.
+    /// Calling it earlier delivers frames to a model that cannot react; later
+    /// costs the session its first candidates.
+    ///
+    /// Returns whether a connection was installed, so the caller can release its
+    /// inbound reservation on every failure path without inferring it from
+    /// state.
+    @discardableResult
+    public func acceptNearby(peerId: String,
+                             handoff: @MainActor () -> Void = {}) async -> Bool {
+        // Retire the previous session rather than overwrite it.
+        //
+        // A terminal file session — `.completed` or `.failed` — leaves its
+        // connection retained, because nothing on those paths tears down. The
+        // listener is admitted again as soon as the models stop reporting busy,
+        // so the very next unsolicited offer used to reassign `connection` and
+        // drop the old object on the floor: never closed, still holding its
+        // RTCPeerConnection and its claim on the signalling slot, and released
+        // by ARC at some arbitrary later moment — whose `deinit` then ran
+        // against a socket the new session was using.
+        //
+        // Clearing `pendingSend` is the part that is a rule rather than
+        // hygiene. Files the local user staged for an outbound transfer are
+        // still pending after a session ends, and `proceedAfterVerification`
+        // sends whatever is pending: without this, answering an offer would
+        // upload that staged selection to a peer who dialled *us* and whom
+        // nobody chose.
+        teardown()
+        let g = generation
+        state = .connecting
+        do {
+            // Empty code, exactly as on the outbound nearby path: no code is
+            // minted or joined, no bearer token is involved, and the answer is
+            // STUN-only.
+            let servers = try await iceClient.fetch(code: "")
+            guard g == generation else { return false }
+            let c = try await makeInboundConnection(peerId, servers)
+            // Cancelled, or superseded by a newer session, while this was in
+            // flight. The connection nobody is watching has to be closed rather
+            // than left holding the socket and the peer.
+            guard g == generation else { c.close(); return false }
+            wire(c, generation: g)
+            connection = c
+            // A responder's `start` is a no-op (it has no offer to make); called
+            // anyway so both nearby paths have one shape.
+            c.start()
+            handoff()
+            // A peer that offers and then vanishes would otherwise leave this on
+            // "Connecting…" for as long as the app is resident — which, for a
+            // listener that is always on, is forever.
+            armAnswerTimeout(generation: g)
+            return true
+        } catch {
+            guard g == generation else { return false }
+            state = .failed(ErrorCopy.message(for: error))
+            return false
         }
     }
 
@@ -491,6 +568,22 @@ public final class RealtimeSessionModel: ObservableObject {
     private func apply(_ g: Int, _ body: (RealtimeSessionModel) -> Void) {
         guard g == generation else { return }
         body(self)
+    }
+
+    /// Ends the previous attempt's connection, and nothing else.
+    ///
+    /// A terminal state (`.completed`, `.failed`) does not tear down, so
+    /// `connection` outlives it. Every entry point that installs a new one has
+    /// to close the old one first or it is simply leaked — still holding an
+    /// RTCPeerConnection and a claim on the signalling slot. This is the
+    /// narrow version, for the paths that must preserve what the local user
+    /// staged; `acceptNearby` uses the full `teardown` because an unsolicited
+    /// session must not inherit any of it.
+    private func retirePreviousConnection() {
+        generation += 1
+        cancelAnswerTimeout()
+        connection?.close()
+        connection = nil
     }
 
     private func teardown() {

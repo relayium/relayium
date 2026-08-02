@@ -11,10 +11,10 @@ struct ContentView: View {
     @EnvironmentObject private var downloadModel: CloudDownloadModel
     @EnvironmentObject private var realtimeModel: RealtimeSessionModel
     @EnvironmentObject private var realtimeTextModel: RealtimeTextSessionModel
+    @EnvironmentObject private var nearbyReceive: NearbyReceiveModel
     @State private var showDownload = false
     @State private var showDirect = false
     @State private var selectedTab: Tab = .direct
-    private let notifier = TransferNotifier()
 
     var body: some View {
         Group {
@@ -128,55 +128,23 @@ struct ContentView: View {
         .frame(minWidth: 380, minHeight: 420)
         .padding()
         .onReceive(deepLinks.$pending.compactMap { $0 }) { route($0) }
-        .onChange(of: uploadModel.state) { state in
-            switch state {
-            case .uploading:
-                notifier.prepare()
-            case .done:
-                notifier.completed("Your encrypted download link is ready.")
-            default:
-                break
-            }
-        }
-        .onChange(of: downloadModel.state) { state in
-            switch state {
-            case .downloading:
-                notifier.prepare()
-            case .done(let urls):
-                notifier.completed("\(urls.count) file\(urls.count == 1 ? " is" : "s are") ready.")
-            default:
-                break
-            }
-        }
-        .onChange(of: realtimeModel.state) { state in
-            switch state {
-            case .minting, .joining, .connecting, .transferring:
-                notifier.prepare()
-            case .completed(let urls):
-                notifier.completed(urls.isEmpty
-                    ? "Your files reached the other device."
-                    : "\(urls.count) file\(urls.count == 1 ? " is" : "s are") ready.")
-            default:
-                break
-            }
-        }
-        .onChange(of: realtimeTextModel.state) { state in
-            switch state {
-            case .minting, .showingCode, .joining, .connecting, .verifying,
-                 .waitingAccept, .incomingRequest, .open:
-                notifier.prepare()
-            default:
-                break
-            }
-        }
-        .onChange(of: realtimeTextModel.history.last?.id) { messageID in
-            guard messageID != nil,
-                  realtimeTextModel.history.last?.direction == .incoming else { return }
-            notifier.completed(
-                "A new encrypted message arrived.",
-                title: "Relayium message"
-            )
-        }
+        // Notifications are app-scoped now (`TransferNotificationCenter`): a
+        // session can start while this window does not exist, and a window-scoped
+        // observer would both miss those and double-fire whenever two view trees
+        // were alive at once.
+        //
+        // What is still this view's job is bringing the incoming session into
+        // view. `task(id:)` rather than `onChange`, so a window reopened *during*
+        // a live receive lands on it too.
+        .task(id: nearbyReceive.activeKind) { revealIncoming() }
+    }
+
+    /// An unsolicited session must not be hidden behind the tab the user last
+    /// used, or behind a collapsed disclosure group on the signed-out screen.
+    private func revealIncoming() {
+        guard nearbyReceive.activeKind != nil else { return }
+        selectedTab = .direct
+        showDirect = true
     }
 
     private func route(_ link: AppDeepLink) {

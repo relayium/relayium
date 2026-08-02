@@ -2,6 +2,20 @@ import XCTest
 @testable import RelayiumAppKit
 @testable import RelayiumKit
 
+/// Every socket a model has opened, in order. Two live at once would put this
+/// Mac in the room twice, under two peer ids, and every other device would see
+/// it as two devices.
+final class SocketLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _channels: [FakeWebSocketChannel] = []
+    var channels: [FakeWebSocketChannel] { lock.lock(); defer { lock.unlock() }; return _channels }
+    func open() -> FakeWebSocketChannel {
+        let ch = FakeWebSocketChannel()
+        lock.lock(); _channels.append(ch); lock.unlock()
+        return ch
+    }
+}
+
 /// The same-network roster is the one place in the app where the user is asked
 /// to pick a peer out of a room that can hold more than two — and where the
 /// room's membership is decided by a shared public IP rather than by anyone
@@ -57,7 +71,7 @@ final class LanDiscoveryTests: XCTestCase {
         await settle()
 
         XCTAssertTrue(model.devices.isEmpty)
-        XCTAssertEqual(model.state, .scanning)
+        XCTAssertEqual(model.state, .connecting)
 
         welcome("self-1")
         await settle()
@@ -160,7 +174,11 @@ final class LanDiscoveryTests: XCTestCase {
 
     /// Losing the socket empties everything: a roster nobody is maintaining is
     /// a list of devices that may not be there, and the state has to say so.
-    func testADroppedSocketEmptiesTheRoomAndSaysSo() async {
+    ///
+    /// It says "reconnecting", not "failed": this socket is what makes the Mac
+    /// reachable, so a drop that ended in a dead end would silently stop
+    /// background receive until somebody noticed and pressed a button.
+    func testADroppedSocketEmptiesTheRoomAndSaysItIsReconnecting() async {
         let model = makeModel()
         model.start()
         welcome("self-1")
@@ -174,8 +192,9 @@ final class LanDiscoveryTests: XCTestCase {
         XCTAssertTrue(model.devices.isEmpty)
         XCTAssertNil(model.selectedId)
         XCTAssertNil(model.client)
-        XCTAssertFalse(model.isScanning)
-        guard case .failed = model.state else { return XCTFail("got \(model.state)") }
+        XCTAssertFalse(model.isScanning, "an unmaintained roster must not read as a live one")
+        guard case .reconnecting = model.state else { return XCTFail("got \(model.state)") }
+        model.stop()   // drop the pending retry before the test ends
     }
 
     /// Operation identity: a roster frame from a socket the user stopped must
@@ -267,5 +286,192 @@ final class LanDiscoveryTests: XCTestCase {
                      Peer(id: "p2", name: "Phone")],
             selfId: "self")
         XCTAssertEqual(devices.map(\.id), ["p2"])
+    }
+}
+
+// ── residency: the socket that makes this Mac reachable ─────────────────────
+//
+// Background receive is only as good as the room membership under it, so every
+// test here is a way the app silently stops being reachable.
+@MainActor
+final class LanResidencyTests: XCTestCase {
+    private func settle() async { await Task.yield(); await Task.yield(); await Task.yield() }
+
+    /// Residency is the default. Nothing is pressed and no window has to be
+    /// open for this Mac to be in the room.
+    func testStartsAutomaticallyAndIsIdempotent() async {
+        let log = SocketLog()
+        let model = LanDiscoveryModel(connect: {
+            let ch = log.open()
+            let client = SignalingClient(channel: ch, name: "Mac")
+            ch.fireOpen()
+            return client
+        }, sleep: { _ in })
+
+        model.startResident()
+        XCTAssertEqual(model.state, .connecting)
+        XCTAssertNotNil(model.client)
+
+        // Every window that appears calls this. A second socket would put this
+        // Mac in the room twice.
+        model.startResident()
+        model.startResident()
+        XCTAssertEqual(log.channels.count, 1)
+        model.stop()
+    }
+
+    /// A drop reconnects on its own, with the old socket gone before the new
+    /// one opens.
+    func testADroppedSocketReconnectsWithoutDuplicatingItself() async {
+        let log = SocketLog()
+        let model = LanDiscoveryModel(connect: {
+            let ch = log.open()
+            let client = SignalingClient(channel: ch, name: "Mac")
+            ch.fireOpen()
+            return client
+        }, sleep: { _ in })
+        model.startResident()
+        log.channels[0].fireText(#"{"type":"welcome","name":"self-1","ip":"1.2.3.4"}"#)
+        await settle()
+        XCTAssertEqual(model.state, .joined)
+
+        log.channels[0].fireRemoteClose()
+        for _ in 0..<50 where log.channels.count < 2 { await settle() }
+
+        XCTAssertEqual(log.channels.count, 2, "a dropped socket must be replaced, not mourned")
+        XCTAssertTrue(log.channels[0].closed || !log.channels[0].isOpen,
+                      "the old socket must be gone before the new one opens")
+        XCTAssertEqual(model.state, .connecting)
+
+        log.channels[1].fireText(#"{"type":"welcome","name":"self-2","ip":"1.2.3.4"}"#)
+        await settle()
+        XCTAssertEqual(model.state, .joined)
+        model.stop()
+    }
+
+    /// Backoff is bounded but never gives up: the usual cause is a network this
+    /// Mac will rejoin, and a listener that stops retrying is one that has
+    /// silently stopped receiving.
+    func testBackoffIsBoundedAndNonDecreasing() {
+        let steps = LanDiscoveryModel.reconnectBackoff
+        XCTAssertFalse(steps.isEmpty)
+        XCTAssertEqual(steps, steps.sorted(), "backoff must not shrink under repeated failure")
+        XCTAssertGreaterThan(steps[0], 0, "an immediate retry is a hot loop against the hub")
+        XCTAssertLessThanOrEqual(steps.last ?? .infinity, 60,
+                                 "a cap this long is an app that looks off for a minute")
+    }
+
+    /// A retry armed for a socket epoch that has since been replaced must not
+    /// open a second one on top of the live socket.
+    func testAStaleRetryCannotOpenASecondSocket() async {
+        let log = SocketLog()
+        let released = Gate2()
+        let model = LanDiscoveryModel(connect: {
+            let ch = log.open()
+            let client = SignalingClient(channel: ch, name: "Mac")
+            ch.fireOpen()
+            return client
+        }, sleep: { _ in await released.wait() })
+
+        model.startResident()
+        log.channels[0].fireRemoteClose()          // arms a retry, held on the gate
+        await settle()
+        guard case .reconnecting = model.state else { return XCTFail("got \(model.state)") }
+
+        model.start()                              // the user pressed "Look again" first
+        XCTAssertEqual(log.channels.count, 2)
+
+        await released.open()                      // the stale retry finally wakes
+        for _ in 0..<20 { await settle() }
+        XCTAssertEqual(log.channels.count, 2, "a superseded retry must not open a third socket")
+        model.stop()
+    }
+
+    /// An explicit pause is truthful and sticky: nothing listens, nothing
+    /// retries, and the launch path must not quietly undo it.
+    func testPauseStopsListeningAndSurvivesAResidentStart() async {
+        let log = SocketLog()
+        let model = LanDiscoveryModel(connect: {
+            let ch = log.open()
+            let client = SignalingClient(channel: ch, name: "Mac")
+            ch.fireOpen()
+            return client
+        }, sleep: { _ in })
+        model.startResident()
+        XCTAssertEqual(log.channels.count, 1)
+
+        model.pause()
+        XCTAssertEqual(model.state, .paused)
+        XCTAssertTrue(model.isPaused)
+        XCTAssertNil(model.client)
+
+        // A reopened window calls this again; it must not resume receiving on
+        // the user's behalf.
+        model.startResident()
+        XCTAssertEqual(model.state, .paused)
+        XCTAssertEqual(log.channels.count, 1)
+
+        model.resume()
+        XCTAssertEqual(log.channels.count, 2)
+        XCTAssertEqual(model.state, .connecting)
+        model.stop()
+    }
+
+    /// A socket that drops while paused stays paused rather than reconnecting
+    /// behind the user's back.
+    func testAPausedModelDoesNotReconnect() async {
+        let log = SocketLog()
+        let model = LanDiscoveryModel(connect: {
+            let ch = log.open()
+            let client = SignalingClient(channel: ch, name: "Mac")
+            ch.fireOpen()
+            return client
+        }, sleep: { _ in })
+        model.startResident()
+        model.pause()
+        // Whatever the dead socket does now, it is not our socket any more.
+        log.channels[0].fireRemoteClose()
+        for _ in 0..<20 { await settle() }
+        XCTAssertEqual(model.state, .paused)
+        XCTAssertEqual(log.channels.count, 1)
+        model.stop()
+    }
+
+    /// Stop is teardown, not pause: it leaves the room and stays out, and a
+    /// close arriving afterwards is not a drop worth reconnecting from.
+    func testStopEndsResidencyOutright() async {
+        let log = SocketLog()
+        let model = LanDiscoveryModel(connect: {
+            let ch = log.open()
+            let client = SignalingClient(channel: ch, name: "Mac")
+            ch.fireOpen()
+            return client
+        }, sleep: { _ in })
+        model.startResident()
+        model.stop()
+        XCTAssertEqual(model.state, .off)
+        log.channels[0].fireRemoteClose()
+        for _ in 0..<20 { await settle() }
+        XCTAssertEqual(model.state, .off)
+        XCTAssertEqual(log.channels.count, 1)
+    }
+}
+
+/// One-shot rendezvous, for holding an injected sleep open across a lifecycle
+/// change. (A second copy of the pattern in NearbyTransferTests, which is
+/// `private` to that file.)
+actor Gate2 {
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var opened = false
+
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func open() {
+        opened = true
+        for waiter in waiters { waiter.resume() }
+        waiters = []
     }
 }

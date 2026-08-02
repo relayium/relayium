@@ -16,6 +16,7 @@ struct NearbyPane: View {
     enum Intent { case files, text }
 
     @ObservedObject var discovery: LanDiscoveryModel
+    @ObservedObject var receive: NearbyReceiveModel
     @ObservedObject var fileModel: RealtimeSessionModel
     @ObservedObject var textModel: RealtimeTextSessionModel
     let intent: Intent
@@ -58,23 +59,21 @@ struct NearbyPane: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack {
-                if discovery.isScanning {
-                    Button("Stop looking") { discovery.stop() }
-                    ProgressView().controlSize(.small)
-                } else {
-                    Button("Find nearby devices") { discovery.start() }
-                        .disabled(busy)
-                }
-            }
+            receiving
 
-            if case let .failed(message) = discovery.state {
-                Text(message).font(.callout).foregroundStyle(.red)
+            if case let .reconnecting(message) = discovery.state {
+                Text(message).font(.callout).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if discovery.isScanning {
                 roster
+            } else if !discovery.isPaused {
+                HStack {
+                    Button("Look again") { discovery.start() }
+                        .disabled(busy)
+                    ProgressView().controlSize(.small)
+                }
             }
 
             if let device = discovery.selectedDevice {
@@ -86,6 +85,53 @@ struct NearbyPane: View {
                 Text(stagingError).font(.callout).foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    /// Receiving is on by default and runs whether or not this pane is on
+    /// screen, so this section's job is to say so plainly — including the part
+    /// that is uncomfortable. A background receive that the user has to discover
+    /// by finding a file in Downloads is worse than one they were told about.
+    @ViewBuilder
+    private var receiving: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(receiveStatus).font(.subheadline.weight(.semibold))
+                Spacer()
+                if discovery.isPaused {
+                    Button("Resume receiving") { discovery.resume() }
+                } else {
+                    Button("Pause receiving") { discovery.pause() }
+                        .disabled(busy)
+                }
+            }
+            // The default is no prompt, by the same decision that made advanced
+            // verification opt-in. Stating the consequence is not a contradiction
+            // of that decision; hiding it would be.
+            Text(discovery.isPaused
+                 ? "This Mac is not listening for nearby devices. It can still send, and pairing codes still work."
+                 : "While Relayium is running, a device on this address can send files or start a message session without asking first. Files are written to your Downloads folder. Anything sharing this public address can try — pause receiving if that is not what you want.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let failure = receive.lastFailure {
+                Text(failure).font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Nearby receiving")
+    }
+
+    private var receiveStatus: String {
+        switch receive.state {
+        case .off: return "Nearby receiving: off"
+        case .paused: return "Nearby receiving: paused"
+        case .connecting: return "Nearby receiving: joining…"
+        case .ready: return "Nearby receiving: ready"
+        case .reconnecting: return "Nearby receiving: reconnecting…"
+        case .active(.file): return "Receiving files from a nearby device…"
+        case .active(.text): return "A nearby message session is open"
         }
     }
 
@@ -162,7 +208,7 @@ struct NearbyPane: View {
             // human gate that is not there: file transfers stop at the browser's
             // own save prompt, message sessions open by themselves unless the
             // verification setting below is on.
-            Text("On relayium.com the other person still chooses where to save incoming files; a message session opens on their side without a prompt unless advanced verification is on for either device (below). This Mac can send to a nearby device but cannot yet receive from one — use a pairing code below for that.")
+            Text("On relayium.com the other person still chooses where to save incoming files; a message session opens on their side without a prompt unless advanced verification is on for either device (below). This Mac accepts incoming nearby transfers the same way while receiving is on.")
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

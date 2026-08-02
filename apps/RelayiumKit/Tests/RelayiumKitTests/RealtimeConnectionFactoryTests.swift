@@ -146,6 +146,102 @@ final class RealtimeConnectionFactoryTests: XCTestCase {
         return (conn as! RecordingConnection, record)
     }
 
+    // MARK: - cleaning up a `make` that never got a connection
+
+    /// A `make` that fails must not run `build`. Shared by the cleanup tests so
+    /// each one says only what it is about.
+    private func makeExpectingFailure(
+        signaling: SignalingClient,
+        peerTimeout: TimeInterval
+    ) async -> Error? {
+        do {
+            _ = try await RealtimeConnectionFactory.make(
+                role: .initiator,
+                config: ICEConfig(iceServers: [], relays: []),
+                signaling: signaling,
+                peerTimeout: peerTimeout,
+                choiceDeadline: 0.05,
+                measure: { _, _ in },
+                build: { signaling, _, _, _, _, _, _ in
+                    XCTFail("a failed make must not build a connection")
+                    return RecordingConnection(signaling: signaling)
+                })
+            return nil
+        } catch {
+            return error
+        }
+    }
+
+    /// `make` builds its own socket with `SignalingClient.connect`, so it owns
+    /// it — and a wait that ends in `noPeerAppeared` used to walk away leaving
+    /// that socket open. Once per failed attempt, for the life of the process.
+    func testMakeClosesTheSocketItOwnsWhenNoPeerAppears() async {
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+
+        let error = await makeExpectingFailure(signaling: sig, peerTimeout: 0.05)
+
+        XCTAssertEqual(error as? RealtimeConnectionFactory.FactoryError, .noPeerAppeared)
+        XCTAssertTrue(ch.closed, "make owns this socket and has to close it on every failure")
+        XCTAssertNil(sig.onSignal, "the temporary handler has to be given back too")
+    }
+
+    /// The reason the socket stayed open: the temporary handler retains the
+    /// negotiator, the negotiator retains the client, and the client holds the
+    /// handler. Nothing on the failure path broke that ring, so the client was
+    /// never deallocated and `SignalingClient.deinit`'s `channel.close()` never
+    /// ran. Asserting on the object, not just the flag, is what pins it.
+    func testAFailedMakeDoesNotLeakItsSignalingClient() async {
+        let ch = FakeWebSocketChannel()
+        weak var leaked: SignalingClient?
+        do {
+            let sig = SignalingClient(channel: ch, name: "Mac")
+            leaked = sig
+            ch.fireOpen()
+            _ = await makeExpectingFailure(signaling: sig, peerTimeout: 0.05)
+        }
+        XCTAssertNil(leaked, "a failed make must not leave a retain cycle holding the socket")
+    }
+
+    /// Cleanup must stay ownership-safe. If a newer connection claimed the slot
+    /// while `make` was still waiting, the failing `make` has to leave that
+    /// handler alone — clearing it would deafen a live session, which is the
+    /// same class of bug the token exists to prevent.
+    func testAFailedMakeDoesNotUnhookASupersedingHandler() async {
+        final class Count: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value = 0
+            func bump() { lock.lock(); value += 1; lock.unlock() }
+            var current: Int { lock.lock(); defer { lock.unlock() }; return value }
+        }
+        let ch = FakeWebSocketChannel()
+        let sig = SignalingClient(channel: ch, name: "Mac")
+        ch.fireOpen()
+
+        let running = Task { await self.makeExpectingFailure(signaling: sig, peerTimeout: 30) }
+        // `make` installs onSignal first and onPeers second (inside firstPeer),
+        // so onPeers being set means the temporary claim is in place.
+        var waited = 0
+        while sig.onPeers == nil && waited < 500 {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+            waited += 1
+        }
+        XCTAssertNotNil(sig.onPeers, "make never got as far as waiting for a peer")
+
+        let heard = Count()
+        _ = sig.installSignalHandler { _, _ in heard.bump() }
+
+        // Now end the wait: `firstPeer` resumes with noPeerAppeared on close.
+        ch.fireRemoteClose()
+        let error = await running.value
+        XCTAssertEqual(error as? RealtimeConnectionFactory.FactoryError, .noPeerAppeared)
+
+        ch.fireText(#"{"type":"signal","from":"b","data":{}}"#)
+        XCTAssertEqual(heard.current, 1,
+                       "a failing make must give back only its own claim on the slot")
+    }
+
     private func joinPeer(_ ch: FakeWebSocketChannel) {
         ch.fireText(#"{"type":"welcome","name":"self-1","ip":"1.2.3.4"}"#)
         ch.fireText(#"{"type":"peers","peers":[{"id":"self-1","name":"Mac"},{"id":"other-2","name":"Phone"}]}"#)

@@ -50,6 +50,8 @@ public final class RealtimeTextSessionModel: ObservableObject {
     /// a code. `@MainActor` because the socket it reaches for lives on
     /// `LanDiscoveryModel`.
     private let makeNearbyConnection: @MainActor (_ peerId: String, _ role: Role, _ ice: ICEConfig) async throws -> RealtimePeerConnection
+    /// The inbound half: a responder for a text offer that arrived on its own.
+    private let makeInboundConnection: @MainActor (_ peerId: String, _ ice: ICEConfig) async throws -> RealtimePeerConnection
     /// How long a nearby connect waits for the chosen device to answer.
     private let nearbyAnswerTimeout: TimeInterval
     /// Read when the SAS lands, not captured at init: the user may flip the
@@ -80,11 +82,14 @@ public final class RealtimeTextSessionModel: ObservableObject {
                 requiresVerification: @escaping () -> Bool = { false },
                 now: @escaping () -> TimeInterval = { Date().timeIntervalSince1970 },
                 idleSeconds: TimeInterval = TEXT_IDLE_SECONDS,
-                idleSleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
-                    try? await Task.sleep(nanoseconds: nanoseconds)
-                },
+                // Optional rather than a defaulted closure literal — see
+                // `realSleep`. `nil` means the real timer.
+                idleSleep: (@Sendable (UInt64) async -> Void)? = nil,
                 nearbyAnswerTimeout: TimeInterval = 30,
                 makeNearbyConnection: @escaping @MainActor (String, Role, ICEConfig) async throws -> RealtimePeerConnection = { _, _, _ in
+                    throw NearbyError.notScanning
+                },
+                makeInboundConnection: @escaping @MainActor (String, ICEConfig) async throws -> RealtimePeerConnection = { _, _ in
                     throw NearbyError.notScanning
                 },
                 makeConnection: @escaping (String, Role, ICEConfig) async throws -> RealtimePeerConnection) {
@@ -93,9 +98,10 @@ public final class RealtimeTextSessionModel: ObservableObject {
         self.requiresVerification = requiresVerification
         self.now = now
         self.idleSeconds = idleSeconds
-        self.idleSleep = idleSleep
+        self.idleSleep = idleSleep ?? realSleep
         self.nearbyAnswerTimeout = nearbyAnswerTimeout
         self.makeNearbyConnection = makeNearbyConnection
+        self.makeInboundConnection = makeInboundConnection
         self.makeConnection = makeConnection
         self.lastRefill = now()
     }
@@ -197,6 +203,45 @@ public final class RealtimeTextSessionModel: ObservableObject {
             } else {
                 state = .failed(ErrorCopy.message(for: error))
             }
+        }
+    }
+
+    /// Same-network receive: a device on this public address offered a text
+    /// session and this Mac is answering it.
+    ///
+    /// The responder path is the existing one, unchanged: `onSAS` + `onOpen`
+    /// reach `proceedAfterVerification`, which presents `incomingRequest` and —
+    /// with advanced verification off, the default — accepts it immediately.
+    /// Nothing is decrypted before that `accept()`, and nothing about this entry
+    /// point changes when the preference is on.
+    ///
+    /// `handoff` replays the buffered offer (and whatever followed it) into the
+    /// connection; see `RealtimeSessionModel.acceptNearby` for why it is called
+    /// exactly here.
+    @discardableResult
+    public func acceptNearby(peerId: String,
+                             handoff: @MainActor () -> Void = {}) async -> Bool {
+        beginAttempt()
+        let g = generation
+        self.role = .responder
+        // No code was involved, so none may be blacklisted by a later reject.
+        activeCode = ""
+        state = .connecting
+        do {
+            let ice = try await iceClient.fetch(code: "")
+            guard g == generation else { return false }
+            let peer = try await makeInboundConnection(peerId, ice)
+            guard g == generation else { peer.close(); return false }
+            wire(peer, generation: g)
+            connection = peer
+            peer.start()
+            handoff()
+            armAnswerTimeout()
+            return true
+        } catch {
+            guard g == generation else { return false }
+            state = .failed(ErrorCopy.message(for: error))
+            return false
         }
     }
 
