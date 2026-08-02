@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"네트워크를 넘는 파일 및 실시간 텍스트 전송 — 종단간 암호화 | Relayium","description":"6자 페어링 코드로 서로 다른 네트워크 간 파일과 일시적인 실시간 텍스트를 전송합니다. 두 기기가 온라인이어야 하며 브라우저는 설계상 암호문만 보는 TURN 릴레이를 사용합니다.","url":"https://relayium.com/ko/cross-network/","inLanguage":"ko","dateModified":"2026-07-31","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"파일이나 메시지가 서버를 거치나요?","acceptedAnswer":{"@type":"Answer","text":"네트워크를 넘는 브라우저 세션은 설계상 TURN 릴레이를 사용하지만 파일과 메시지는 종단간 암호화되어 릴레이에는 암호문만 보입니다. Relayium은 메시지 본문을 저장하지 않습니다."}},{"@type":"Question","name":"코드가 꼭 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"네. 6자 코드(또는 참여 링크/QR)는 5분간 유효하며 네트워크를 넘는 두 기기를 페어링합니다. 코드는 서버가 문자 집합 ACDEFHJKMNPRTWXY23456789에서 발급합니다 — O·I와 헷갈리지 않도록 0과 1은 없습니다 — 그래서 직접 지어낼 수 없고, 서버가 발급한 코드만 페어링됩니다."}},{"@type":"Question","name":"계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"파일 또는 텍스트 페어링 코드를 만드는 쪽은 로그인해야 하지만 코드로 참여하는 쪽은 계정이 필요 없습니다."}},{"@type":"Question","name":"종단간 암호화인가요?","acceptedAnswer":{"@type":"Answer","text":"네 — X25519 키 교환과 청크별 AES-256-GCM 암호화를 사용합니다. 별도 채널로 SAS를 대조하면 끝점 공개 키가 바뀌지 않았고 시그널링 서비스나 TURN 릴레이가 어느 끝점도 사칭하거나 애플리케이션 계층 E2EE를 종료하지 않았음을 확인합니다. TURN은 경로에 남아도 암호문만 운반합니다."}},{"@type":"Question","name":"파일뿐 아니라 텍스트도 보낼 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"네. 두 기기가 온라인인 동안 메시지 하나당 최대 65,536 UTF-8바이트의 일시적인 실시간 텍스트를 보낼 수 있습니다. Relayium은 본문이나 서버 측 기록을 저장하지 않지만 각 기기는 받은 텍스트를 복사하거나 보관할 수 있습니다."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
@@ -51,11 +51,11 @@ h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .pitch{font-size:20px;margin:0 0 24px;max-width:42em}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
 ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
-.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .why li b,.compare h3{color:var(--text-h)}
-.learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
+.learn{list-style:none;padding:0}.learn a{color:var(--accent-fg);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
@@ -76,8 +76,8 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
-      
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <main>
       <h1>네트워크를 넘는 파일과 실시간 텍스트, 종단간 암호화</h1>
       <p class="pitch">서로 다른 네트워크의 온라인 기기 두 대를 6자 코드(또는 참여 링크/QR)로 연결해 파일이나 일시적인 텍스트를 보냅니다. 브라우저는 설계상 Relayium TURN 릴레이를 사용하지만 릴레이에는 암호문만 보이며, Relayium은 메시지 본문을 저장하지 않습니다.</p>
       <a class="cta" href="/cross-network?lang=ko">전송 시작</a>
@@ -126,7 +126,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <h3>파일뿐 아니라 텍스트도 보낼 수 있나요?</h3>
       <p>네. 두 기기가 온라인인 동안 메시지 하나당 최대 65,536 UTF-8바이트의 일시적인 실시간 텍스트를 보낼 수 있습니다. Relayium은 본문이나 서버 측 기록을 저장하지 않지만 각 기기는 받은 텍스트를 복사하거나 보관할 수 있습니다.</p></section>
 
-      
+      </main>
       <footer>
         <a href="/?lang=ko">← Relayium</a>
         <a href="/ko/apps/">앱</a>

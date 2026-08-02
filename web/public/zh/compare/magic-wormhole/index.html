@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 magic-wormhole：命令行文件传输","description":"magic-wormhole 和 Relayium CLI 都能用一段简短口令在终端之间端到端加密传输文件。本文客观比较两者，也如实说明一处 Relayium 目前不如它的地方。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/compare/magic-wormhole/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"Relayium 对比 magic-wormhole：命令行文件传输"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 的 CLI 免费吗？","acceptedAnswer":{"@type":"Answer","text":"完全免费。没有付费档位，也没有什么可计量的——每种模式都是两端直接连接，CLI 开源。"}},{"@type":"Question","name":"需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"send 需要，云端 up 也需要。push/pull 用你自己的 SSH 权限，daemon 直连用你机器之间固定的 TLS 证书信任，这两者都不涉及 Relayium 账号。send/receive 是例外：配对码只能由服务器签发，而且只签发给已登录的账号，所以发送方要先运行一次 relayium login——如果 send 用的是别人给你的码，它不生成新码，也就不需要登录。接收方始终不需要账号。"}},{"@type":"Question","name":"如果我处在严格 NAT 之后又打不通直连怎么办？","acceptedAnswer":{"@type":"Answer","text":"这种情况下 Relayium 的 send/receive 是纯直连的，会失败——它不会退回到任何中继。magic-wormhole 的 Transit Relay 依然可以承载加密数据流，完成传输。如果你需要不管网络环境如何都能成功，magic-wormhole 目前能处理这种情况；改用 Relayium 的 push/pull 或对一台你能连到的服务器做 daemon 直连同样可行，因为它们不依赖那一跳点对点直连。"}},{"@type":"Question","name":"CLI 的配对码能和 Relayium 的浏览器版互通吗？","acceptedAnswer":{"@type":"Answer","text":"目前还不能实时配对传输——CLI 的 send/receive 用的是自己的直连握手协议，和浏览器基于 WebRTC 的配对流程不是一回事，两者暂不互通。如果只想用浏览器把文件交给对方，可以用 Relayium 的存储下载链接，或者浏览器版自己的配对码模式。"}},{"@type":"Question","name":"可以自托管吗？","acceptedAnswer":{"@type":"Answer","text":"可以。Relayium 的服务器以 Docker 镜像形式发布（docker compose up -d --build），你也可以用 --server https://your-domain 让 CLI 的 send/receive 指向你自己的实例。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium 对比 magic-wormhole：命令行文件传输</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Relayium 对比 magic-wormhole：命令行文件传输</h1>
       <p class="updated">最近更新: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/magic-wormhole/">English</a><a href="/zh/compare/magic-wormhole/" aria-current="true">中文</a><a href="/ja/compare/magic-wormhole/">日本語</a><a href="/ko/compare/magic-wormhole/">한국어</a><a href="/de/compare/magic-wormhole/">Deutsch</a><a href="/fr/compare/magic-wormhole/">Français</a><a href="/ar/compare/magic-wormhole/">العربية</a><a href="/es/compare/magic-wormhole/">Español</a><a href="/pt/compare/magic-wormhole/">Português</a></nav>
@@ -116,6 +121,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>继续阅读</h2>
       <ul class="related"><li><a href="/zh/compare/croc/">Relayium 对比 croc：从终端加密传输文件</a></li><li><a href="/zh/guides/send-a-file-to-someone/">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/transfer-files-from-terminal/">用 Relayium CLI 从终端传输文件与文本</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files/">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=zh">← Relayium</a>
         <a href="/zh/apps/">应用</a>

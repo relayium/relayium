@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs rsync: SSH 設定なしでフォルダーを同期","description":"Relayium sync と rsync を公平に比較。rsync は成熟した強力な標準ツールですが、Relayium sync はその一部の力を手放す代わりに設定を減らし、SSH サーバーなしでネットワークをまたいで動きます。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/compare/rsync/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs rsync: SSH 設定なしでフォルダーを同期"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"sync は rsync の完全な代替になりますか？","acceptedAnswer":{"@type":"Answer","text":"なりません。一方向のミラーしか行わず、rsync のようなブロック単位の差分アルゴリズムもありません。サイズやタイムスタンプが変わったファイルは丸ごと再送され、フラグの数も rsync よりずっと少ないです。双方向の同期やきめ細かいフィルター制御が必要な場合、あるいは rsync の成熟したエコシステムに頼りたい場合は、rsync の方が今も優れた道具です。"}},{"@type":"Question","name":"sync に SSH サーバーは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。デーモン直結（relayium://host:port）は SSH を完全に省きます。証明書ピンニング付きの TLS 接続で、受信側のフィンガープリントによって認証され、一度承認すれば以後は記憶されます。SSH 経由（user@host:path）を選ぶこともできますが、リモートに relayium がインストールされている必要があり、push と違って sync に tar フォールバックはありません。"}},{"@type":"Question","name":"sync はソース側で削除したファイルを削除しますか？","acceptedAnswer":{"@type":"Answer","text":"--delete を渡し、かつ受信側の serve が --allow-delete で起動されている場合だけです。そうでなければ削除要求は拒否され、黙って無視されるのではなく送信側に報告されます。"}},{"@type":"Question","name":"リアルタイムで継続的に同期できますか？","acceptedAnswer":{"@type":"Answer","text":"できます。--watch を付けてください。最初のミラーが終わった後も sync は動き続け、ソース配下でファイルが変化するたびに（デバウンスしつつ）再ミラーします。"}},{"@type":"Question","name":"これは無料ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。Relayium CLI は完全に無料です。sync、push/pull、デーモン直結にアカウントは不要です。send はサーバーがペアリングコードを発行するために、クラウドの up はファイルを保存するためにアカウントが必要です。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ja">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs rsync: SSH 設定なしでフォルダーを同期</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Relayium vs rsync: SSH 設定なしでフォルダーを同期</h1>
       <p class="updated">最終更新: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/rsync/">English</a><a href="/zh/compare/rsync/">中文</a><a href="/ja/compare/rsync/" aria-current="true">日本語</a><a href="/ko/compare/rsync/">한국어</a><a href="/de/compare/rsync/">Deutsch</a><a href="/fr/compare/rsync/">Français</a><a href="/ar/compare/rsync/">العربية</a><a href="/es/compare/rsync/">Español</a><a href="/pt/compare/rsync/">Português</a></nav>
@@ -115,6 +120,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>続けて読む</h2>
       <ul class="related"><li><a href="/ja/guides/sync-a-large-folder-between-servers/">2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）</a></li><li><a href="/ja/compare/scp/">Relayium と scp の比較：よりシンプルな SSH 転送</a></li><li><a href="/ja/guides/server-to-server-transfers/">Relayium CLI でサーバー間転送（デーモン直結）</a></li><li><a href="/ja/how-to/automate-server-backups/">cron で暗号化されたサーバーバックアップを自動化する</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=ja">← Relayium</a>
         <a href="/ja/apps/">アプリ</a>

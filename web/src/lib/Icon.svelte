@@ -3,7 +3,7 @@
     | "bolt" | "file" | "folder" | "message"
     | "link" | "pairing-code" | "lock" | "download" | "package"
     | "globe" | "clock" | "devices" | "network"
-    | "nearby" | "shield" | "file-download";
+    | "nearby" | "shield" | "file-download" | "close";
 </script>
 
 <script lang="ts">
@@ -71,6 +71,8 @@
   {:else if name === "file-download"}
     <path d="M7 3.5h6l4 4v12a.8.8 0 0 1-.8.8H7a.8.8 0 0 1-.8-.8V4.3A.8.8 0 0 1 7 3.5zM13 3.5v4h4" />
     <path d="M11.5 11v5.5m0 0-2-2m2 2 2-2" />
+  {:else if name === "close"}
+    <path d="M6 6l12 12M18 6 6 18" />
   {/if}
 </svg>
 

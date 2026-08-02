@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Is it safe to send files over the internet?","description":"What actually goes wrong with email, cloud links, and USB drives — what \"end-to-end encrypted\" and \"zero-knowledge\" really mean, and what to check before trusting a transfer tool.","inLanguage":"en","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/guides/is-it-safe-to-send-files-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"Is it safe to send files over the internet?"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Is it safe to email a sensitive file?","acceptedAnswer":{"@type":"Answer","text":"Email isn't designed for confidential file transfer — attachments are commonly retained, scanned, and backed up by mail servers on both ends, and a forwarded message can put the file in front of people you never intended. It's fine for low-stakes files; for anything sensitive, a tool with end-to-end encryption removes that exposure."}},{"@type":"Question","name":"What does \"zero-knowledge\" actually mean?","acceptedAnswer":{"@type":"Answer","text":"That the party storing your data was never given the key to read it. The encryption happens on your device before anything uploads, and the key lives only somewhere the server never sees — like a URL fragment — so what sits on the server is ciphertext it structurally cannot decrypt, not just data it promises not to look at."}},{"@type":"Question","name":"Is a password-protected zip file good enough?","acceptedAnswer":{"@type":"Answer","text":"It's better than nothing, but the password often travels the same way as the file — in the same email thread, for instance — which undoes the protection, and zip encryption implementations vary widely in strength. A tool built around end-to-end encryption removes that weak link by never needing a shared password at all."}},{"@type":"Question","name":"Does Relayium keep a copy of my files?","acceptedAnswer":{"@type":"Answer","text":"In realtime mode, Relayium keeps no server-side copy or transfer history: WebRTC is direct on the same LAN, while cross-network browser sessions use TURN by design to carry end-to-end encrypted ciphertext the relay cannot read or decrypt. For a stored link, the server holds only encrypted ciphertext it cannot read, until the link expires or is downloaded once if you chose burn-after-read."}},{"@type":"Question","name":"Do I need an account to send or receive a file?","acceptedAnswer":{"@type":"Answer","text":"On the same network, neither side needs an account. Sending across networks by pairing code, or creating a stored link, requires the sender to sign in — but the person receiving never needs an account, whichever mode is used."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Is it safe to send files over the internet?</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Is it safe to send files over the internet?</h1>
       <p class="updated">Last updated: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/is-it-safe-to-send-files-over-the-internet/" aria-current="true">English</a><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">中文</a><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/">日本語</a><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet/">한국어</a><a href="/de/guides/is-it-safe-to-send-files-over-the-internet/">Deutsch</a><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet/">Français</a><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet/">العربية</a><a href="/es/guides/is-it-safe-to-send-files-over-the-internet/">Español</a><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet/">Português</a></nav>
@@ -116,6 +121,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>Keep reading</h2>
       <ul class="related"><li><a href="/guides/how-relayium-encrypts-your-files/">How Relayium encrypts your files end-to-end</a></li><li><a href="/how-to/share-a-file-with-an-expiring-link/">Share a file with a secure, expiring download link</a></li><li><a href="/guides/what-is-peer-to-peer-file-transfer/">What is peer-to-peer file transfer?</a></li><li><a href="/how-to/send-large-files-without-cloud/">How to send large files without the cloud</a></li><li><a href="/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/">← Relayium</a>
         <a href="/apps">Apps</a>

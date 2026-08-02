@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Recevoir des fichiers depuis la ligne de commande","description":"Trois façons de recevoir un fichier avec la CLI Relayium : receive pour un envoi par code de jumelage entre réseaux, serve comme boîte de réception à l'écoute des envois en daemon direct, ou pull depuis un serveur où vous pouvez déjà vous connecter en SSH. Gratuit, sans compte.","inLanguage":"fr","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/guides/receive-files-from-the-command-line/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Recevoir des fichiers depuis la ligne de commande"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Ai-je besoin d'un compte pour recevoir des fichiers ?","acceptedAnswer":{"@type":"Answer","text":"Non. Les trois méthodes — receive, serve et pull — sont entièrement gratuites et ne nécessitent aucun compte Relayium de votre côté. La seule connexion où que ce soit est celle de l'expéditeur en mode receive, pour que sa CLI puisse générer le code de jumelage."}},{"@type":"Question","name":"relayium receive est-il interopérable avec le code de jumelage du navigateur ?","acceptedAnswer":{"@type":"Answer","text":"Non. Le protocole de code de jumelage de la CLI est distinct du flux de lien de participation et de QR code du navigateur sur relayium.com — ils utilisent des poignées de main différentes et ne communiquent pas entre eux aujourd'hui, donc un code CLI ne se jumelle qu'avec une autre CLI. C'est sur la feuille de route, mais ce n'est pas encore quelque chose sur quoi compter. En attendant, un destinataire sur navigateur veut un lien relayium up plutôt qu'un code."}},{"@type":"Question","name":"Que se passe-t-il si une machine inconnue envoie vers mon processus serve à l'écoute ?","acceptedAnswer":{"@type":"Answer","text":"Dans un terminal, on vous demande de l'approuver par son adresse et son empreinte lors de son premier envoi, et l'approbation est mémorisée. Sans terminal — un service systemd, une tâche cron — il n'y a personne à qui demander, donc un émetteur inconnu est rejeté ; autorisez-le d'abord avec relayium authorize \u003cfingerprint>."}},{"@type":"Question","name":"Puis-je faire un pull depuis un serveur où relayium n'est pas installé ?","acceptedAnswer":{"@type":"Answer","text":"Non. pull a toujours besoin de relayium côté distant ; il n'y a pas de repli tar comme pour push. Installez d'abord relayium là-bas."}},{"@type":"Question","name":"Où relayium conserve-t-il mon identité et les pairs de confiance ?","acceptedAnswer":{"@type":"Answer","text":"Par défaut dans ~/.config/relayium — surchargez cet emplacement avec --config-dir sur toute commande touchant à l'identité ou à la confiance."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=fr">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Recevoir des fichiers depuis la ligne de commande</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Recevoir des fichiers depuis la ligne de commande</h1>
       <p class="updated">Dernière mise à jour: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line/">English</a><a href="/zh/guides/receive-files-from-the-command-line/">中文</a><a href="/ja/guides/receive-files-from-the-command-line/">日本語</a><a href="/ko/guides/receive-files-from-the-command-line/">한국어</a><a href="/de/guides/receive-files-from-the-command-line/">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line/" aria-current="true">Français</a><a href="/ar/guides/receive-files-from-the-command-line/">العربية</a><a href="/es/guides/receive-files-from-the-command-line/">Español</a><a href="/pt/guides/receive-files-from-the-command-line/">Português</a></nav>
@@ -117,6 +122,7 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete</code></pre>
       </div>
       <h2>À lire ensuite</h2>
       <ul class="related"><li><a href="/fr/guides/send-a-file-to-someone/">Envoyer un fichier à quelqu&#39;un à travers les réseaux avec la CLI Relayium</a></li><li><a href="/fr/guides/run-relayium-as-an-always-on-service/">Faire tourner Relayium en service de réception permanent</a></li><li><a href="/fr/guides/transfer-files-from-terminal/">Transférer fichiers et texte depuis le terminal avec la CLI Relayium</a></li><li><a href="/fr/compare/croc/">Relayium vs croc : transfert de fichiers chiffré en terminal</a></li><li><a href="/fr/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=fr">← Relayium</a>
         <a href="/fr/apps/">Applis</a>

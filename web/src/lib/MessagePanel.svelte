@@ -120,28 +120,34 @@
       <div class="sas" bind:this={revealTarget}>{t.codeLabel} <code>{sasCode}</code> — {t.text.sasCompare}</div>
     {/if}
 
-    <ol class="msglist" role="log" aria-live="polite">
-      {#each history as m (m.id)}
-        <li class="msg" class:out={m.dir === "out"} class:failed={m.failed}>
-          <span class="who">
-            {m.dir === "out" ? t.text.you : t.text.peer(peerName)}
-            {#if m.failed}<span class="failed-label">{t.status.sendFail}</span>{/if}
-          </span>
-          <time>{new Date(m.at).toLocaleTimeString()}</time>
-          <!-- 转义过的文本节点。dir="auto" 让阿拉伯语正文在英文界面下也读得对，
-               而界面本身的方向由 dir(lang()) 管，两者互不干涉。 -->
-          <span class="msg-body" dir="auto">{m.body}</span>
-          <button
-            type="button"
-            class="btn btn-link copy"
-            class:copied={copied.value === String(m.id)}
-            onclick={() => copied.copy(m.body, String(m.id))}
-          >{copied.value === String(m.id) ? t.text.copied : t.text.copy}</button>
-        </li>
-      {:else}
-        <li class="empty">{t.text.emptyHistory}</li>
-      {/each}
-    </ol>
+    <!-- The live region is this wrapper, not the list itself: ARIA does not
+         allow role="log" on <ol>, and setting it there also overrode the list
+         semantics, orphaning every <li> inside. Announcements behave the same
+         from a wrapper — a live region announces changes anywhere in its subtree. -->
+    <div class="msglog" role="log" aria-live="polite">
+      <ol class="msglist">
+        {#each history as m (m.id)}
+          <li class="msg" class:out={m.dir === "out"} class:failed={m.failed}>
+            <span class="who">
+              {m.dir === "out" ? t.text.you : t.text.peer(peerName)}
+              {#if m.failed}<span class="failed-label">{t.status.sendFail}</span>{/if}
+            </span>
+            <time>{new Date(m.at).toLocaleTimeString()}</time>
+            <!-- 转义过的文本节点。dir="auto" 让阿拉伯语正文在英文界面下也读得对，
+                 而界面本身的方向由 dir(lang()) 管，两者互不干涉。 -->
+            <span class="msg-body" dir="auto">{m.body}</span>
+            <button
+              type="button"
+              class="btn btn-link copy"
+              class:copied={copied.value === String(m.id)}
+              onclick={() => copied.copy(m.body, String(m.id))}
+            >{copied.value === String(m.id) ? t.text.copied : t.text.copy}</button>
+          </li>
+        {:else}
+          <li class="empty">{t.text.emptyHistory}</li>
+        {/each}
+      </ol>
+    </div>
 
     {#if status === "open"}
       <label class="sr-only" for="msg-compose">{t.text.panelTitle}</label>
@@ -233,7 +239,7 @@
   .msg.failed { border-color: var(--danger); }
   .who { grid-area: who; display: inline-flex; flex-wrap: wrap; gap: var(--space-1); font-size: var(--fs-xs); font-weight: 600; color: var(--text-h); }
   .failed-label { color: var(--danger); }
-  time { grid-area: time; font-size: var(--fs-xs); color: var(--text); opacity: 0.7; }
+  time { grid-area: time; font-size: var(--fs-xs); color: var(--text); }
   .copy { grid-area: copy; font-size: var(--fs-xs); }
 
   /*
@@ -249,7 +255,11 @@
     font-size: var(--fs-sm);
     color: var(--text-h);
   }
-  .empty { font-size: var(--fs-sm); color: var(--text); opacity: 0.8; }
+  /* No opacity on any of these: --text IS the secondary tier (5.73:1 on white),
+     and multiplying it by 0.7–0.8 dropped the timestamp, the empty state, the
+     composer hint and both privacy notes to 3.3–3.7:1. Size already carries the
+     hierarchy. */
+  .empty { font-size: var(--fs-sm); color: var(--text); }
 
   textarea {
     inline-size: 100%;
@@ -269,11 +279,11 @@
   .compose-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
   .byte-count { font-size: var(--fs-xs); font-variant-numeric: tabular-nums; color: var(--text); }
   .byte-count.over { color: var(--danger); font-weight: 600; }
-  .hint { font-size: var(--fs-xs); color: var(--text); opacity: 0.75; flex: 1; }
+  .hint { font-size: var(--fs-xs); color: var(--text); flex: 1; }
   .compose-foot .send { margin-inline-start: auto; }
   .over-note { margin: 0; font-size: var(--fs-sm); color: var(--danger); }
   .bad { margin: 0; font-size: var(--fs-sm); color: var(--danger); }
-  .note { margin: 0; font-size: var(--fs-xs); color: var(--text); opacity: 0.75; }
+  .note { margin: 0; font-size: var(--fs-xs); color: var(--text); }
   .act { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
   .sr-only {

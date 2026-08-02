@@ -1,0 +1,14 @@
+{
+  "policy": [
+    "This file is an accounting ledger for accessibility violations that are knowingly unfixed.",
+    "It is NOT a mute switch: every entry names one exact target, one exact axe rule id and one exact node selector.",
+    "The runner fails the build in all three of these cases, so entries cannot rot silently:",
+    "  1. a violation that no entry claims;",
+    "  2. an entry that matched nothing in this run (stale — the violation is gone, delete the entry);",
+    "  3. an entry past its `expires` date.",
+    "Wildcards, empty strings and multi-rule entries are rejected at load time.",
+    "`incomplete` results are never claimed here — axe could not decide, so a human must, via the manual matrix.",
+    "Fields (all required, all strings): target, rule, selector, reason, owner, expires (YYYY-MM-DD)."
+  ],
+  "entries": []
+}

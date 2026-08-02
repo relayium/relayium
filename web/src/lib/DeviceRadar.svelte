@@ -120,7 +120,7 @@
   .cdot {
     display: grid; place-items: center;
     width: 34px; height: 34px; border-radius: 50%;
-    background: var(--accent); color: #fff;
+    background: var(--accent-action); color: #fff;
     font-size: var(--fs-sm); font-weight: 700;
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
   }

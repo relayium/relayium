@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Enviar un archivo a alguien entre redes con la CLI de Relayium","description":"Usa relayium send y receive para mover un archivo directamente entre dos personas en redes distintas, con un breve código de emparejamiento. Cifrado de extremo a extremo, verificado con un código SAS y gratis: el archivo va directo entre los dos extremos, nunca a través de nuestros servidores.","inLanguage":"es","datePublished":"2026-07-08","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/es/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/es/"},{"@type":"ListItem","position":2,"name":"Guías","item":"https://relayium.com/es/guides/"},{"@type":"ListItem","position":3,"name":"Enviar un archivo a alguien entre redes con la CLI de Relayium"}]},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿De dónde sale el código de emparejamiento?","acceptedAnswer":{"@type":"Answer","text":"Lo genera Relayium. Ejecuta `relayium send ./release.zip` (después de `relayium login`) y la CLI imprime un código de 6 caracteres válido durante cinco minutos, junto con el comando exacto que ejecuta el otro extremo. No puedes elegirlo tú: el servidor solo acepta los códigos que él mismo emitió."}},{"@type":"Question","name":"¿Se sube el archivo a algún sitio?","acceptedAnswer":{"@type":"Answer","text":"No. El archivo fluye directamente entre las dos partes, cifrado de extremo a extremo. Solo un pequeño handshake con el punto de encuentro pasa por Relayium para presentar los extremos; el archivo nunca."}},{"@type":"Question","name":"¿Y si no podemos conectarnos?","acceptedAnswer":{"@type":"Answer","text":"Si ambos extremos están detrás de un NAT estricto sin dirección alcanzable, no se puede establecer la conexión directa y la transferencia falla: la CLI no tiene respaldo por retransmisor, por diseño. Usa daemon directo entre dos servidores alcanzables, o push por SSH, cuando no haya una ruta directa disponible."}},{"@type":"Question","name":"¿Cómo sé que de verdad es la persona correcta al otro lado?","acceptedAnswer":{"@type":"Answer","text":"Ambas terminales muestran un código SAS idéntico de 6 dígitos derivado de las huellas de sus certificados TLS fijados. Compáralo fuera de banda; la coincidencia confirma que las huellas no fueron sustituidas y que el servicio de encuentro no suplantó a ninguno de los extremos. Autentica los extremos, no cada salto de la ruta de red. Añade --verify para exigir esa confirmación antes de que se muevan bytes."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=es">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=es">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">Enviar un archivo a alguien entre redes con la CLI de Relayium</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Enviar un archivo a alguien entre redes con la CLI de Relayium</h1>
       <p class="updated">Última actualización: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/send-a-file-to-someone/">English</a><a href="/zh/guides/send-a-file-to-someone/">中文</a><a href="/ja/guides/send-a-file-to-someone/">日本語</a><a href="/ko/guides/send-a-file-to-someone/">한국어</a><a href="/de/guides/send-a-file-to-someone/">Deutsch</a><a href="/fr/guides/send-a-file-to-someone/">Français</a><a href="/ar/guides/send-a-file-to-someone/">العربية</a><a href="/es/guides/send-a-file-to-someone/" aria-current="true">Español</a><a href="/pt/guides/send-a-file-to-someone/">Português</a></nav>
@@ -112,6 +117,7 @@ relayium receive K7M4XR</code></pre>
       </div>
       <h2>Seguir leyendo</h2>
       <ul class="related"><li><a href="/es/guides/receive-files-from-the-command-line/">Recibir archivos desde la línea de comandos</a></li><li><a href="/es/guides/transfer-files-from-terminal/">Transfiere archivos y texto desde la terminal con la CLI de Relayium</a></li><li><a href="/es/compare/croc/">Relayium vs croc: transferencia de archivos cifrada desde la terminal</a></li><li><a href="/es/how-to/send-files-between-two-computers-over-the-internet/">Enviar archivos entre dos ordenadores por Internet</a></li><li><a href="/es/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=es">← Relayium</a>
         <a href="/es/apps/">Apps</a>

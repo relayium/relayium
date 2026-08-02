@@ -81,6 +81,9 @@ const en: Messages = {
     peerBusy: "The other device is busy with another transfer — try again shortly ✗",
   },
   account: {
+    verifyPanel: "Verify your email",
+    forgotPanel: "Reset password",
+    panel: "Account",
     signIn: "Sign in",
     signOut: "Sign out",
     email: "Email address",
@@ -331,7 +334,7 @@ const en: Messages = {
     noToken: "This page is only reachable from a sign-in link.",
     home: "Back to home",
   },
-  nav: { lanTab: "LAN", crossTab: "Realtime", offlineTab: "Async", cliTab: "CLI", appsTab: "Apps" },
+  nav: { footerLegalLabel: "Legal", footerGuidesLabel: "Resources", primaryLabel: "Main", footerLabel: "Footer", lanTab: "LAN", crossTab: "Realtime", offlineTab: "Async", cliTab: "CLI", appsTab: "Apps" },
   crossTitle: "Realtime transfer",
   offlineTitle: "Async transfer",
   cli: { subtitle: "Transfer files and ephemeral text from your terminal — end-to-end encrypted, self-hostable." },

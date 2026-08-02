@@ -81,6 +81,9 @@ const de: Messages = {
     peerBusy: "Das andere Gerät ist mit einer anderen Übertragung beschäftigt — bitte gleich erneut versuchen ✗",
   },
   account: {
+    verifyPanel: "E-Mail bestätigen",
+    forgotPanel: "Passwort zurücksetzen",
+    panel: "Konto",
     signIn: "Anmelden",
     signOut: "Abmelden",
     email: "E-Mail-Adresse",
@@ -331,7 +334,7 @@ const de: Messages = {
     noToken: "Diese Seite ist nur über einen Anmeldelink erreichbar.",
     home: "Zurück zur Startseite",
   },
-  nav: { lanTab: "LAN", crossTab: "Echtzeit", offlineTab: "Asynchron", cliTab: "CLI", appsTab: "Apps" },
+  nav: { footerLegalLabel: "Rechtliches", footerGuidesLabel: "Ressourcen", primaryLabel: "Hauptnavigation", footerLabel: "Fußzeilennavigation", lanTab: "LAN", crossTab: "Echtzeit", offlineTab: "Asynchron", cliTab: "CLI", appsTab: "Apps" },
   crossTitle: "Echtzeitübertragung",
   offlineTitle: "Asynchron senden",
   cli: { subtitle: "Dateien und flüchtigen Text vom Terminal übertragen — Ende-zu-Ende-verschlüsselt, selbst hostbar." },

@@ -1020,8 +1020,14 @@
       <div class="activity-reveal-marker" bind:this={incomingReveal} aria-hidden="true"></div>
     {/if}
     <section class="ui-card request">
-      <div class="req-head">{t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total))}</div>
-      <ul class="filelist">
+      <div class="req-head" id="request-head">{t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total))}</div>
+      <!-- A long manifest scrolls inside its own box. Without a tab stop, someone
+           deciding whether to accept 40 files can only read the first few of them
+           unless they have a mouse — on the one screen where knowing exactly what
+           you are consenting to is the entire point. Named by the card's heading,
+           which already says who is sending and how much. -->
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <ul class="filelist" tabindex="0" aria-labelledby="request-head">
         {#each incoming.files as f}
           <li><span class="fname">{f.name}</span><span class="fsize">{formatSize(f.size)}</span></li>
         {/each}
@@ -1047,10 +1053,10 @@
     {/if}
     <section class="ui-card xfer" class:ok={xf.done && xf.ok} class:bad={xf.done && !xf.ok} out:fade={{ duration: 300 }}>
       <div class="xfer-head">
-        <span class="label">{xf.dir === "send" ? t.sendTo(nameOf(xf.peer)) : t.recvFrom(nameOf(xf.peer))}</span>
+        <span class="label" id={`xfer-label-${xf.dir}`}>{xf.dir === "send" ? t.sendTo(nameOf(xf.peer)) : t.recvFrom(nameOf(xf.peer))}</span>
         {#if xf.files.length}<span class="count">{xf.files.length > 1 ? t.fileCounter(xf.index + 1, xf.files.length) : xf.files[0].name}</span>{/if}
         {#if xf.done}
-          <button class="btn btn-sm x" onclick={() => (xf.dir === "send" ? workspace.dismissSend(xf) : workspace.dismissRecv(xf))} aria-label={t.close}>✕</button>
+          <button class="btn btn-sm x" onclick={() => (xf.dir === "send" ? workspace.dismissSend(xf) : workspace.dismissRecv(xf))} aria-label={t.close}><Icon name="close" size={14} /></button>
         {:else}
           <button class="btn btn-sm x cancel" onclick={() => workspace.abortFile(xf.dir)}>{t.cancel}</button>
         {/if}
@@ -1068,7 +1074,11 @@
            header. Legacy keeps its per-direction badge. -->
       {#if !xf.done}
         {@const path = mixed ? undefined : xf.dir === "send" ? workspace.sendPath : workspace.recvPath}
-        <div class="progress-bar" role="progressbar" aria-valuenow={pct(xf)} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{pct(xf)}%"></div></div>
+        <!-- Named by the card's own heading ("Sending to Alice"): a bare
+             progressbar announces a percentage of nothing. One card per
+             direction, so the id is unique. -->
+        <div class="progress-bar" role="progressbar" aria-labelledby={`xfer-label-${xf.dir}`}
+             aria-valuenow={pct(xf)} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{pct(xf)}%"></div></div>
         <div class="meta">
           <span>{pct(xf)}% · {formatSize(xf.sent)} / {formatSize(xf.total)}</span>
           <span class="meta-right">
@@ -1241,9 +1251,11 @@
 
           <section class="ui-card history">
             <details>
-              <summary>{t.historyTitle}</summary>
+              <summary id="history-title">{t.historyTitle}</summary>
               {#if history.length}
-                <ul class="filelist">
+                <!-- Same scrollable box as the consent manifest, same reason. -->
+                <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+                <ul class="filelist" tabindex="0" aria-labelledby="history-title">
                   {#each history as e (e.id)}
                     <li>
                       <span class="fname">{e.direction === "send" ? "↑" : "↓"} {e.name} · {e.peer}</span>
@@ -1274,13 +1286,13 @@
     {/await}
 
     <footer>
-      <nav class="legal" aria-label="Legal">
+      <nav class="legal" aria-label={t.nav.footerLegalLabel}>
         <a href={legalUrl("security", lang())}>{t.legal.security}</a>
         <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>
         <a href={legalUrl("terms", lang())}>{t.legal.terms}</a>
         <a href="https://github.com/relayium/relayium" target="_blank" rel="noopener noreferrer">GitHub</a>
       </nav>
-      <nav class="legal" aria-label="Guides">
+      <nav class="legal" aria-label={t.nav.footerGuidesLabel}>
         <a href={PRICING_PATH} onclick={(e) => { e.preventDefault(); navigate("pricing"); }}>{t.pricingPage.navLink}</a>
         <a href={pageUrl("guides", lang())}>{t.learn.hub}</a>
       </nav>
@@ -1388,12 +1400,12 @@
   .sas { margin-block-end: 14px; }
 
   .xfer-head { display: flex; align-items: center; gap: 10px; }
-  .xfer-head .label { color: var(--accent); font-size: 14px; font-weight: 500; white-space: nowrap; }
+  .xfer-head .label { color: var(--accent-fg); font-size: 14px; font-weight: 500; white-space: nowrap; }
   .xfer-head .count { color: var(--text); font-size: 13px; margin-inline-start: auto; word-break: break-all; text-align: end; }
-  /* Close (✕) / Cancel share the .btn primitive; only their position and the
+  /* Close / Cancel share the .btn primitive; only their position and the
      cancel-specific hover colour are local. */
   .x { margin-inline-start: var(--space-2); flex: none; }
-  .x.cancel:hover { color: var(--accent); }
+  .x.cancel:hover { color: var(--accent-fg); }
   .status { font-size: 13.5px; color: var(--text); margin-block: 8px 10px; }
   .xfer .quota-note { margin-block: var(--space-2) 0; }
   /* A translucent sheen sweeps across the filled portion so an in-flight transfer
@@ -1482,7 +1494,7 @@
   .pavatar {
     flex: none; width: 40px; height: 40px; line-height: 40px; text-align: center;
     border-radius: 50%; color: #fff; font-weight: 600;
-    background: var(--grad-accent);
+    background: var(--grad-action);
   }
   .pavatar.big { width: 48px; height: 48px; line-height: 48px; font-size: 20px; }
   .ptext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -1533,7 +1545,7 @@
   }
   footer .legal { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
   footer .legal a { color: var(--text-h); text-decoration: none; }
-  footer .legal a:hover { color: var(--accent); }
+  footer .legal a:hover { color: var(--accent-fg); }
   footer .fineprint { max-width: 60ch; }
 
   .dropzone {

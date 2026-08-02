@@ -556,15 +556,15 @@
   .dl { color: var(--text-h); }
   .exp { color: var(--text); margin-inline-start: auto; }
   .exp.soon { color: var(--danger); }
-  .tag.burn { color: var(--accent); }
+  .tag.burn { color: var(--accent-fg); }
   .link-hint { margin: 0 0 var(--space-3); font-size: var(--fs-xs); color: var(--text); }
   .linkbtn {
     font: inherit; font-size: var(--fs-xs); background: none; cursor: pointer;
-    border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--accent);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--accent-fg);
     padding: 2px 10px; transition: border-color .13s;
   }
   .linkbtn:hover { border-color: var(--accent-border); }
-  .linkbtn.copied { color: #2ecc71; border-color: #2ecc71; animation: pop-in .3s ease; }
+  .linkbtn.copied { color: var(--ok); border-color: var(--ok-border); animation: pop-in .3s ease; }
   @media (prefers-reduced-motion: reduce) { .linkbtn.copied { animation: none; } }
   .del {
     font: inherit; font-size: var(--fs-xs); background: none; cursor: pointer;
@@ -596,7 +596,7 @@
     font: inherit; font-size: var(--fs-xs); font-weight: 600; color: var(--text-h);
     background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px;
   }
-  .nname:hover { color: var(--accent); }
+  .nname:hover { color: var(--accent-fg); }
   .rename {
     font: inherit; font-size: var(--fs-xs); padding: 2px 8px; width: 14ch; max-width: 45vw;
     border: 1px solid var(--accent); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-h);
@@ -623,7 +623,7 @@
   .nid { font-family: ui-monospace, monospace; color: var(--text-h); }
   .nstat { color: var(--text); }
   .probe { font-size: var(--fs-xs); }
-  .probe.ok { color: var(--accent); }
+  .probe.ok { color: var(--ok); }
   .probe.bad { color: var(--danger); }
   .chk {
     font: inherit; font-size: var(--fs-xs); background: none; cursor: pointer; margin-inline-start: auto;

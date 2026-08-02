@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium을 상시 실행되는 수신 서비스로 운영하기","description":"relayium serve를 계속 실행해 두어 어떤 피어든 언제든 푸시할 수 있게 하세요——인증서 고정 TLS 위에서 동작하는 데몬 다이렉트입니다. 최초 푸시 승인, 핑거프린트 사전 인증, systemd(Linux) 또는 launchd(macOS)로 부팅 시 실행하기, 그리고 --allow-delete를 다룹니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/run-relayium-as-an-always-on-service/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Relayium을 상시 실행되는 수신 서비스로 운영하기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"serve는 기본적으로 어떤 포트를 대기하나요?","acceptedAnswer":{"@type":"Answer","text":"9031입니다. 리스너 쪽(serve --port N)과 보내는 쪽의 대상 주소(relayium://host:N) 모두에서 --port로 바꿀 수 있습니다."}},{"@type":"Question","name":"모든 푸시를 일일이 손으로 승인해야 하나요?","acceptedAnswer":{"@type":"Answer","text":"특정 핑거프린트의 첫 푸시만 승인하면 됩니다. 그것도 serve가 터미널이 연결된 상태로 실행 중일 때만 표시됩니다. 이후에는 기억됩니다. serve를 비대화형(systemd, 파이프)으로 실행하면 프롬프트가 전혀 뜨지 않고 알 수 없는 피어는 거부됩니다——이 경우 relayium authorize로 미리 승인해 두세요."}},{"@type":"Question","name":"보내는 쪽이 내 상시 수신기에 있는 파일을 삭제할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"serve를 --allow-delete와 함께 시작했고 보내는 쪽이 sync --delete를 실행하는 경우에만 가능합니다. --allow-delete가 없으면 삭제는 조용히 건너뛰고 나머지는 그대로 전송됩니다."}},{"@type":"Question","name":"상시 수신 서비스를 운영하는 것이 무료인가요?","acceptedAnswer":{"@type":"Answer","text":"네. relayium serve는 무료이며 자체 호스팅 가능한 CLI의 일부입니다——연결 어느 쪽도 계정이 필요 없고 유료 등급도 없습니다."}},{"@type":"Question","name":"serve는 신원과 피어 목록을 어디에 보관하나요?","acceptedAnswer":{"@type":"Answer","text":"기본적으로 ~/.config/relayium에 있습니다(id.key/id.crt는 이 호스트의 신원, authorized_fingerprints는 허용 목록). systemd 서비스의 경우 --config-dir을 /etc/relayium 같은 고정된 위치로 지정하세요."}},{"@type":"Question","name":"macOS에서 부팅 시 serve를 실행하려면?","acceptedAnswer":{"@type":"Answer","text":"macOS에는 systemd가 없습니다——launchd를 사용하세요. serve를 /Library/LaunchDaemons에 LaunchDaemon으로 설치하거나(부팅 시 시작, UserName을 설정해 본인 계정으로 실행), ~/Library/LaunchAgents에 LaunchAgent로 설치하세요(로그인 시 시작). 이 가이드에는 바로 고쳐 쓸 수 있는 plist가 있습니다. Homebrew 서비스는 없습니다. launchd는 serve에 프롬프트를 띄울 터미널을 주지 않으므로, 먼저 relayium authorize로 푸시하는 쪽을 미리 승인해 두세요."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ko">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium을 상시 실행되는 수신 서비스로 운영하기</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Relayium을 상시 실행되는 수신 서비스로 운영하기</h1>
       <p class="updated">마지막 업데이트: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service/">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service/">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service/">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service/" aria-current="true">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service/">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service/">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service/">العربية</a><a href="/es/guides/run-relayium-as-an-always-on-service/">Español</a><a href="/pt/guides/run-relayium-as-an-always-on-service/">Português</a></nav>
@@ -173,6 +178,7 @@ sudo launchctl bootout system/com.relayium.serve</code></pre>
       </div>
       <h2>계속 읽기</h2>
       <ul class="related"><li><a href="/ko/guides/receive-files-from-the-command-line/">명령줄에서 파일 받기</a></li><li><a href="/ko/guides/server-to-server-transfers/">Relayium CLI로 서버 간 전송(데몬 다이렉트)</a></li><li><a href="/ko/how-to/automate-server-backups/">cron 작업으로 암호화된 서버 백업 자동화하기</a></li><li><a href="/ko/guides/bring-your-own-node/">Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기</a></li><li><a href="/ko/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=ko">← Relayium</a>
         <a href="/ko/apps/">앱</a>

@@ -143,7 +143,7 @@
     padding: 2px var(--space-2);
     border-radius: 999px;
     background: var(--accent-bg);
-    color: var(--accent);
+    color: var(--accent-fg);
     font-size: var(--fs-xs);
   }
   .price { margin: var(--space-2) 0 0; color: var(--text-h); font-weight: 600; }

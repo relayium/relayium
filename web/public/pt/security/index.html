@@ -22,8 +22,8 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Segurança e modelo de ameaças · Relayium","description":"Como a Relayium protege seus arquivos e textos temporários: chaves por sessão, criptografia autenticada, verificação SAS, caminhos diretos e retransmitidos, links de download de conhecimento zero e uma exposição honesta dos limites da proteção.","url":"https://relayium.com/pt/security/","inLanguage":"pt","dateModified":"2026-07-31","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -35,14 +35,18 @@ h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <!-- The legal text is the main landmark. The site header and footer are
+           outside it; the language bar is inside, after the h1, matching its
+           visual position — it is a labelled <nav> landmark either way. -->
+      <main>
       <h1>Segurança e modelo de ameaças</h1>
       <p class="updated">Última atualização: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/security/">English</a><a href="/zh/security/">中文</a><a href="/ja/security/">日本語</a><a href="/ko/security/">한국어</a><a href="/de/security/">Deutsch</a><a href="/fr/security/">Français</a><a href="/ar/security/">العربية</a><a href="/es/security/">Español</a><a href="/pt/security/" aria-current="true">Português</a></nav>
@@ -58,6 +62,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Contra o que a Relayium não protege</h2><p>A criptografia de ponta a ponta protege os dados em trânsito entre dois pontos de extremidade honestos. Por design, ela não pode proteger contra:</p><ul><li>Um dispositivo ou navegador comprometido em qualquer uma das pontas — malware, uma extensão de navegador hostil ou alguém lendo a tela.</li><li>Os metadados necessários: horário da sessão, bytes retransmitidos e, para um link armazenado ou sessão com código, a conta que criou o link ou o código.</li><li>Um destinatário que guarda, copia ou encaminha arquivos ou mensagens depois de recebê-los.</li><li>Compartilhar um link de download por um canal não confiável, já que a chave de descriptografia viaja dentro do link.</li></ul>
       <h2>Suporte a navegadores e seus limites</h2><p>A Relayium funciona em qualquer navegador moderno com WebRTC sobre HTTPS. Alguns recursos diferem conforme o navegador:</p><ul><li>Chrome e Edge no desktop têm a API File System Access e transmitem arquivos grandes diretamente para o disco, sem um teto de memória prático.</li><li>Firefox, Safari e todos os navegadores móveis (no iOS, todo navegador é WebKit) não têm essa API e montam o arquivo na memória no caminho em tempo real, por isso o aplicativo avisa acima de cerca de 256 MB — uma estimativa deliberadamente conservadora, não um limite medido. Para arquivos desse tamanho, prefira Chrome/Edge no desktop, ou use o modo de link de download, cuja página de download ainda pode gravar em disco por meio de um service worker.</li><li>O WebRTC exige um contexto seguro (HTTPS); o aplicativo não se conecta por HTTP simples.</li></ul>
       <h2>Código aberto e relato de problemas</h2><p>O design do protocolo e todo o código de cliente e servidor são públicos no GitHub, de modo que qualquer pessoa pode auditar a criptografia, executar o próprio servidor ou contribuir. Se você encontrar um problema de segurança, relate-o de forma privada por meio do relato de vulnerabilidades do GitHub no repositório, em vez de abrir uma issue pública.</p>
+      </main>
       <footer>
         <a href="/">← Relayium</a>
         <a href="/pt/apps/">Apps</a>

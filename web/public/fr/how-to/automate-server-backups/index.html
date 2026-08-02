@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Automatiser les sauvegardes serveur chiffrées avec une tâche cron","description":"Planifiez relayium push ou sync via cron pour copier automatiquement un répertoire vers un autre serveur — chiffré, reprenable, vérifié par SHA-256, et gratuit.","inLanguage":"fr","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/how-to/automate-server-backups/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Automatiser les sauvegardes serveur chiffrées avec une tâche cron"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Le serveur de sauvegarde a-t-il besoin de relayium installé ?","acceptedAnswer":{"@type":"Answer","text":"Cela dépend de la commande. push fonctionne dans les deux cas : avec relayium installé, il utilise le protocole natif (reprise + vérification SHA-256 par fichier) ; sans, push bascule sur un simple flux tar via SSH, si bien qu'un serveur nu fonctionne quand même. sync a toujours besoin du protocole natif de relayium côté distant — il n'y a pas de repli tar pour sync, installez-le donc là-bas au préalable."}},{"@type":"Question","name":"La sauvegarde est-elle chiffrée et vérifiée ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Chaque fichier est vérifié de bout en bout par un hachage SHA-256, et en poussant via SSH ou daemon-direct, les octets sont déjà protégés par le chiffrement propre à cette connexion — rien à configurer en plus."}},{"@type":"Question","name":"Que se passe-t-il si la tâche cron est interrompue en cours de route ?","acceptedAnswer":{"@type":"Answer","text":"Avec relayium des deux côtés, la prochaine exécution planifiée reprend les fichiers partiels au lieu de tout renvoyer. Passez --no-resume si vous voulez plutôt un renvoi complet et propre."}},{"@type":"Question","name":"--delete peut-il vider ma destination par accident ?","acceptedAnswer":{"@type":"Answer","text":"sync refuse de s'exécuter avec --delete si le répertoire source ne contient aucun fichier, et le récepteur doit être démarré avec serve --allow-delete pour que les suppressions prennent effet — sinon elles sont ignorées et vous sont signalées."}},{"@type":"Question","name":"Ai-je besoin d'un compte, est-ce payant ?","acceptedAnswer":{"@type":"Answer","text":"Non. La CLI est gratuite et ne nécessite aucun compte pour push, pull ou sync — le transfert passe par votre propre connexion SSH ou une connexion daemon directe, pas par les serveurs de Relayium."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=fr">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Automatiser les sauvegardes serveur chiffrées avec une tâche cron</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Automatiser les sauvegardes serveur chiffrées avec une tâche cron</h1>
       <p class="updated">Dernière mise à jour: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups/">English</a><a href="/zh/how-to/automate-server-backups/">中文</a><a href="/ja/how-to/automate-server-backups/">日本語</a><a href="/ko/how-to/automate-server-backups/">한국어</a><a href="/de/how-to/automate-server-backups/">Deutsch</a><a href="/fr/how-to/automate-server-backups/" aria-current="true">Français</a><a href="/ar/how-to/automate-server-backups/">العربية</a><a href="/es/how-to/automate-server-backups/">Español</a><a href="/pt/how-to/automate-server-backups/">Português</a></nav>
@@ -120,6 +125,7 @@ relayium push ./data relayium://backup-server:9031</code></pre>
       </div>
       <h2>À lire ensuite</h2>
       <ul class="related"><li><a href="/fr/guides/back-up-a-server-over-ssh/">Sauvegarder des fichiers sur son propre serveur via SSH avec la CLI Relayium</a></li><li><a href="/fr/guides/run-relayium-as-an-always-on-service/">Faire tourner Relayium en service de réception permanent</a></li><li><a href="/fr/guides/sync-a-large-folder-between-servers/">Synchroniser un gros dossier entre deux serveurs (avec reprise, en arrière-plan)</a></li><li><a href="/fr/compare/rsync/">Relayium vs rsync : synchroniser des dossiers sans configurer SSH</a></li><li><a href="/fr/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=fr">← Relayium</a>
         <a href="/fr/apps/">Applis</a>

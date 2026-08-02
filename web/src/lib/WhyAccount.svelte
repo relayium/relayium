@@ -52,6 +52,6 @@
   .point { margin: 0; }
   dt { font-size: var(--fs-xs); font-weight: 600; color: var(--text-h); margin: 0 0 3px; }
   dd { margin: 0; font-size: var(--fs-xs); color: var(--text); line-height: 1.55; }
-  dd a { color: var(--accent); white-space: nowrap; }
+  dd a { color: var(--accent-fg); white-space: nowrap; }
   dd a:hover { text-decoration: underline; }
 </style>

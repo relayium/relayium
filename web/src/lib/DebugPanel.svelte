@@ -6,6 +6,7 @@
   //
   // 从 App.svelte 里搬出来的：它自带轮询、自带一整套样式、和传输逻辑一点关系都没有。
   import { summarizeStats, type Conn, type ConnDiagnostics } from "./webrtc";
+  import Icon from "./Icon.svelte";
 
   interface Props {
     /** 当前活动连接的取数器。传函数而不是传值：面板每秒轮询一次，连接会在传输之间
@@ -53,7 +54,7 @@
     <label><input type="checkbox" bind:checked={includeIps} /> 含 IP</label>
     <button type="button" onclick={() => (frozen = !frozen)}>{frozen ? "继续" : "冻结"}</button>
     <button type="button" onclick={copyDiagnostics} disabled={!dbg}>复制</button>
-    <button type="button" class="dbg-x" onclick={onclose} title="关闭调试" aria-label="关闭调试">✕</button>
+    <button type="button" class="dbg-x" onclick={onclose} title="关闭调试" aria-label="关闭调试"><Icon name="close" size={12} /></button>
   </div>
   {#if relayPool.length}
     <div class="dbg-relay">
@@ -91,7 +92,7 @@
   .dbg-head label { display: flex; align-items: center; gap: 3px; white-space: nowrap; opacity: 0.85; }
   .dbg-head button { padding: 3px 10px; border: 1px solid #55555c; border-radius: 5px; background: #2a2a2e; color: inherit; cursor: pointer; }
   .dbg-head button:disabled { opacity: 0.4; cursor: default; }
-  .dbg-head .dbg-x { margin-inline-start: auto; padding: 3px 8px; }
+  .dbg-head .dbg-x { display: inline-grid; place-items: center; margin-inline-start: auto; padding: 3px 8px; }
   .dbg dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 0; }
   .dbg dt { opacity: 0.6; }
   .dbg dd { margin: 0; word-break: break-all; }

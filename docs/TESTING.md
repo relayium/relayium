@@ -2,6 +2,9 @@
 
 This document is the repeatable acceptance script for spec §7 criteria 1–6.
 
+Accessibility has its own procedure — automated coverage plus a screen-reader
+matrix that no headless check can stand in for: **[TESTING-accessibility.md](TESTING-accessibility.md)**.
+
 **Execution status key:**
 - `[AUTOMATED]` — actually executed in CI / this session; output captured.
 - `[MANUAL]` — requires two real browsers/devices and a real network; cannot run headless.

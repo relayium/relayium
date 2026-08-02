@@ -30,6 +30,9 @@ import {
   OBSERVE_CAPS, SAVE_STUB, argFlag, argPresent, fail, launchBrowser, newTab, ok,
   requireServer, setWideViewport, withWatchdog,
 } from "./harness.mjs";
+// 统一链路的同意态同样是静态扫描器到不了的地方，而且这里的规矩更紧：一条链路只有
+// 一个 SAS，两条通道各自同意。哪一格长出了新的违规，都要在这里当场红。
+import { scanLiveState } from "./a11y-core.mjs";
 
 const BASE = argFlag("--url", "http://localhost:8098");
 // 和 lan-transfer 的 9444 分开：两套用例各自 pkill 自己那一个端口的残留浏览器，
@@ -267,6 +270,8 @@ async function mixedScenario(browser) {
   await b.waitFor(`document.querySelectorAll('${HEAD} .path').length === 1`, "the header's single path badge", 20_000);
   ok("the header named the peer, the link state, one path and one explicit disconnect");
 
+  await scanLiveState(a, "mixed workspace header (one authenticated link)");
+
   const fileEdge = await mobileDecisionVisible(b, "tab B", ".request", "a 40-file consent card");
   // 这条链路的第一个同意边，读屏器必须听到那六位码。
   if (!fileEdge.announcement.includes(sasB)) {
@@ -274,6 +279,9 @@ async function mixedScenario(browser) {
   }
   await screenshot(b, "mobile-file-consent");
   ok("a 40-file consent card stayed decidable inside a 390px viewport and announced the code");
+
+  // 文件通道的同意卡：40 个文件 + SAS + 同意按钮，全在 390px 里。
+  await scanLiveState(b, "mixed file consent card (390px)");
 
   // ── 二、粘性：长列表滚下去，唯一的 SAS 不能滚出验证语境 ───────────────────
   // 只滚固定的一段，不滚到页面最底下：滚出粘性头部的包含块之后它本来就该松开，那时
@@ -488,6 +496,9 @@ async function mixedScenario(browser) {
   }
   await screenshot(b, "mobile-text-consent");
   ok("the second lane consented under the same SAS without re-reading it aloud");
+
+  // 文本通道同意之后：同一条链路上两条通道都活着，消息记录也在。
+  await scanLiveState(b, "mixed text lane consented (both lanes live)");
 
   await b.evaluate("(() => { document.querySelector('.msgpanel .act button.btn-primary').click(); return true; })()");
   await a.waitFor("!!document.querySelector('.msgpanel textarea')", "tab A's composer (session open)", 40_000);

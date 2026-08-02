@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 rsync：无需配置 SSH 也能同步文件夹","description":"客观对比 Relayium sync 与 rsync：rsync 是成熟强大的黄金标准，Relayium sync 用一部分能力换取更简单的配置，并且跨网络无需搭建 SSH 服务。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/compare/rsync/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"Relayium 对比 rsync：无需配置 SSH 也能同步文件夹"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"sync 能完全替代 rsync 吗？","acceptedAnswer":{"@type":"Answer","text":"不能。它只做单向镜像，也没有 rsync 那种基于数据块的增量算法——大小或时间戳变化的文件会被整个重传，参数也远少于 rsync。如果你需要双向同步、精细的过滤控制，或者依赖 rsync 成熟的生态，rsync 仍然是更好的工具。"}},{"@type":"Question","name":"sync 需要 SSH 服务吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。daemon 直连（relayium://host:port）完全跳过 SSH：用证书固定的 TLS 连接，通过接收方的指纹认证，批准一次之后就会被记住。你也可以选择走 SSH（user@host:path），前提是远端已经装了 relayium——但和 push 不同，sync 没有 tar 兜底。"}},{"@type":"Question","name":"sync 会删除源端已经移除的文件吗？","acceptedAnswer":{"@type":"Answer","text":"只有在你传了 --delete、并且接收方的 serve 是以 --allow-delete 启动时才会。否则接收方会拒绝删除请求，并把结果回传给发送方，而不会静默忽略。"}},{"@type":"Question","name":"能做到实时持续同步吗？","acceptedAnswer":{"@type":"Answer","text":"可以，加上 --watch。完成首次镜像之后 sync 会继续运行，只要源目录下有文件变化（有防抖），就会重新镜像。"}},{"@type":"Question","name":"这是免费的吗？","acceptedAnswer":{"@type":"Answer","text":"是的。Relayium CLI 完全免费。sync、push/pull 和 daemon 直连都不需要账号。send 需要账号，好让服务器签发配对码；云端 up 需要账号来存文件。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</h1>
       <p class="updated">最近更新: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/rsync/">English</a><a href="/zh/compare/rsync/" aria-current="true">中文</a><a href="/ja/compare/rsync/">日本語</a><a href="/ko/compare/rsync/">한국어</a><a href="/de/compare/rsync/">Deutsch</a><a href="/fr/compare/rsync/">Français</a><a href="/ar/compare/rsync/">العربية</a><a href="/es/compare/rsync/">Español</a><a href="/pt/compare/rsync/">Português</a></nav>
@@ -115,6 +120,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>继续阅读</h2>
       <ul class="related"><li><a href="/zh/guides/sync-a-large-folder-between-servers/">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/compare/scp/">Relayium 对比 scp：更简单的 SSH 文件传输</a></li><li><a href="/zh/guides/server-to-server-transfers/">用 Relayium CLI 实现服务器到服务器直传（daemon 直连）</a></li><li><a href="/zh/how-to/automate-server-backups/">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=zh">← Relayium</a>
         <a href="/zh/apps/">应用</a>

@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Send text, links and commands between devices","description":"Move text, links, commands and multiline code between devices with Relayium — end-to-end encrypted and online-only, with no message bodies or server-side history kept by Relayium; either endpoint can retain received text.","inLanguage":"en","datePublished":"2026-07-30","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"Send text, links and commands between devices"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Can Relayium read or recover my messages?","acceptedAnswer":{"@type":"Answer","text":"No. Message content is end-to-end encrypted between the two devices, and Relayium servers keep no message bodies or server-side history. Either endpoint can copy or retain received text; after the live session ends, Relayium has no server copy to recover."}},{"@type":"Question","name":"Can I use a browser on one end and the CLI on the other?","acceptedAnswer":{"@type":"Answer","text":"No. Browser and CLI text sessions use different transports and pairing handshakes. Use two browsers or two CLI clients."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Send text, links and commands between devices</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Send text, links and commands between devices</h1>
       <p class="updated">Last updated: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-text-between-devices/" aria-current="true">English</a><a href="/zh/how-to/send-text-between-devices/">中文</a><a href="/ja/how-to/send-text-between-devices/">日本語</a><a href="/ko/how-to/send-text-between-devices/">한국어</a><a href="/de/how-to/send-text-between-devices/">Deutsch</a><a href="/fr/how-to/send-text-between-devices/">Français</a><a href="/ar/how-to/send-text-between-devices/">العربية</a><a href="/es/how-to/send-text-between-devices/">Español</a><a href="/pt/how-to/send-text-between-devices/">Português</a></nav>
@@ -109,6 +114,7 @@ cat snippet.txt | relayium text K7M4XR --yes</code></pre>
       </div>
       <h2>Keep reading</h2>
       <ul class="related"><li><a href="/guides/transfer-files-from-terminal/">Transfer files and text from the terminal with the Relayium CLI</a></li><li><a href="/guides/send-a-file-to-someone/">Send a file to someone across networks with the Relayium CLI</a></li><li><a href="/how-to/send-files-on-the-same-wifi/">Send files between devices on the same Wi-Fi</a></li><li><a href="/guides/how-relayium-encrypts-your-files/">How Relayium encrypts your files end-to-end</a></li><li><a href="/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/">← Relayium</a>
         <a href="/apps">Apps</a>

@@ -63,7 +63,7 @@
      `grid-column: 1 / -1` is already the default, so this is a no-op there. */
   .case:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .case:hover { border-color: var(--accent-border); box-shadow: var(--shadow); }
-  .case:hover h3 { color: var(--accent); }
+  .case:hover h3 { color: var(--accent-fg); }
   .case:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .icon {
     flex: none; width: 44px; height: 44px; line-height: 44px; text-align: center;

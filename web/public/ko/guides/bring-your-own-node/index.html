@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기","description":"직접 준비한 릴레이/스토리지 노드를 명령어 하나로 Relayium 계정에 연결하세요. 그러면 전송이 종량제 서버가 아닌 내 노드를 통해 이루어지므로 무료이며, 데이터도 직접 관리하는 하드웨어에 남습니다.","inLanguage":"ko","datePublished":"2026-07-10","dateModified":"2026-07-22","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"“relayium-node: command not found”가 떴습니다 — 무엇이 잘못되었나요?","acceptedAnswer":{"@type":"Answer","text":"relayium-node 바이너리를 설치하기 전에 실행한 것입니다. 계정 페이지의 한 줄 설치 명령어(curl … | sudo … sh 형태)를 사용하세요. 이것이 바이너리를 다운로드하여 PATH에 놓고 서비스로 시작합니다. relayium-node를 별도로 설치하는 일은 결코 없습니다."}},{"@type":"Question","name":"재부팅 후에도 노드가 온라인을 유지하나요?","acceptedAnswer":{"@type":"Answer","text":"네. 설치 프로그램은 부팅 시 활성화되고 Restart=always로 설정된 systemd 서비스를 등록하므로, 재부팅 후 복귀하고 충돌하면 스스로 재시작합니다. 추가로 실행할 것은 없습니다."}},{"@type":"Question","name":"이것은 Relayium 셀프 호스팅과 어떻게 다른가요?","acceptedAnswer":{"@type":"Answer","text":"Bring-your-own-node는 평소의 relayium.com 계정과 앱을 그대로 유지하면서 트래픽을 운반할 본인 소유의 노드를 추가하는 것뿐입니다. 셀프 호스팅은 서버 스택 전체(계정, 웹 앱, 시그널링)를 본인 도메인에서 운영합니다. 이에 대해서는 “Relayium 셀프 호스팅” 가이드를 참조하세요."}},{"@type":"Question","name":"다른 사람이 제 노드를 사용하거나 제 데이터를 볼 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 노드는 토큰으로 내 계정에 연결되어 그 계정의 트래픽만 운반합니다. 실시간 전송은 종단 간 암호화되고, 저장된 블롭은 내 노드가 읽을 수 없는 암호문입니다. 내 데이터와 노드 구성은 오직 본인만 사용할 수 있습니다."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -75,8 +75,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ko">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기</h1>
       <p class="updated">마지막 업데이트: 2026-07-22</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node/">English</a><a href="/zh/guides/bring-your-own-node/">中文</a><a href="/ja/guides/bring-your-own-node/">日本語</a><a href="/ko/guides/bring-your-own-node/" aria-current="true">한국어</a><a href="/de/guides/bring-your-own-node/">Deutsch</a><a href="/fr/guides/bring-your-own-node/">Français</a><a href="/ar/guides/bring-your-own-node/">العربية</a><a href="/es/guides/bring-your-own-node/">Español</a><a href="/pt/guides/bring-your-own-node/">Português</a></nav>
@@ -138,6 +143,7 @@ sudo ufw allow 49152:65535/udp # relay</code></pre>
       </div>
       <h2>계속 읽기</h2>
       <ul class="related"><li><a href="/ko/guides/self-host-relayium/">Relayium 셀프 호스팅: 나만의 파일·텍스트 전송 서버 운영하기</a></li><li><a href="/ko/guides/run-relayium-as-an-always-on-service/">Relayium을 상시 실행되는 수신 서비스로 운영하기</a></li><li><a href="/ko/guides/how-relayium-encrypts-your-files/">Relayium이 파일을 종단간 암호화하는 방식</a></li><li><a href="/ko/compare/nextcloud/">Relayium vs Nextcloud: 파일 전송에는 무엇을 써야 할까</a></li><li><a href="/ko/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=ko">← Relayium</a>
         <a href="/ko/apps/">앱</a>

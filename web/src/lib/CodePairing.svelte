@@ -212,7 +212,7 @@
   }
   .row { display: flex; align-items: center; gap: var(--space-3); }
   /* Copy success: brief green + pop on the button that just fired. */
-  .btn.copied { color: #2ecc71; border-color: #2ecc71; animation: pop-in .3s ease; }
+  .btn.copied { color: var(--ok); border-color: var(--ok-border); animation: pop-in .3s ease; }
   @media (prefers-reduced-motion: reduce) { .btn.copied { animation: none; } }
   /* The minter's action row can hold copy + copy-link + share + ttl; let it wrap
      on narrow screens instead of overflowing the card. */

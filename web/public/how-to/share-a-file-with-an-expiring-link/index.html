@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Share a file with a secure, expiring download link","description":"Encrypt a file in your browser and get a link the server can't decrypt. Choose 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan, or burn after the first download, then send it whenever you're ready.","inLanguage":"en","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/how-to/share-a-file-with-an-expiring-link/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"Share a file with a secure, expiring download link"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Does the person I send the link to need an account?","acceptedAnswer":{"@type":"Answer","text":"No. Anyone with the full link — including the part after the `#` — can open it and download the files. Only the sender needs to sign in to create the link in the first place."}},{"@type":"Question","name":"Can Relayium read my file?","acceptedAnswer":{"@type":"Answer","text":"No. Your browser encrypts the files with a random AES-256-GCM key before anything is uploaded, and that key lives only in the URL fragment, which never reaches the server. The server stores ciphertext it has no way to decrypt — a zero-knowledge design."}},{"@type":"Question","name":"How long do links last?","acceptedAnswer":{"@type":"Answer","text":"You choose when you create the link: 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan, or you can set it to burn after the first complete download instead of a fixed expiry. After that point the link stops working."}},{"@type":"Question","name":"Is the file really gone after burn-after-read?","acceptedAnswer":{"@type":"Answer","text":"Burn-after-read is designed for exactly one download: once the recipient finishes downloading the file, the link stops working for anyone who opens it afterward, so it can't quietly be viewed a second time."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Share a file with a secure, expiring download link</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Share a file with a secure, expiring download link</h1>
       <p class="updated">Last updated: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/share-a-file-with-an-expiring-link/" aria-current="true">English</a><a href="/zh/how-to/share-a-file-with-an-expiring-link/">中文</a><a href="/ja/how-to/share-a-file-with-an-expiring-link/">日本語</a><a href="/ko/how-to/share-a-file-with-an-expiring-link/">한국어</a><a href="/de/how-to/share-a-file-with-an-expiring-link/">Deutsch</a><a href="/fr/how-to/share-a-file-with-an-expiring-link/">Français</a><a href="/ar/how-to/share-a-file-with-an-expiring-link/">العربية</a><a href="/es/how-to/share-a-file-with-an-expiring-link/">Español</a><a href="/pt/how-to/share-a-file-with-an-expiring-link/">Português</a></nav>
@@ -103,6 +108,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>Keep reading</h2>
       <ul class="related"><li><a href="/compare/wetransfer/">Relayium vs WeTransfer: large realtime transfers without server-side file storage</a></li><li><a href="/guides/how-relayium-encrypts-your-files/">How Relayium encrypts your files end-to-end</a></li><li><a href="/how-to/send-large-files-without-cloud/">How to send large files without the cloud</a></li><li><a href="/guides/is-it-safe-to-send-files-over-the-internet/">Is it safe to send files over the internet?</a></li><li><a href="/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/">← Relayium</a>
         <a href="/apps">Apps</a>

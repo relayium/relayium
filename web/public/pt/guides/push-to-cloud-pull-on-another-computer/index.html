@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Suba arquivos para a nuvem e os pegue em outro computador","description":"Transferência de arquivos assíncrona pela sua conta do Relayium: envie de uma máquina com relayium up e baixe em outra com relayium down quando for conveniente — com criptografia de ponta a ponta, e só o envio precisa de conta.","inLanguage":"pt","datePublished":"2026-07-12","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/guides/push-to-cloud-pull-on-another-computer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Suba arquivos para a nuvem e os pegue em outro computador"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Preciso de uma conta?","acceptedAnswer":{"@type":"Answer","text":"Para enviar para a nuvem, e para o send quando um código precisa ser gerado. O relayium up sempre exige relayium login, para que o arquivo fique guardado sob a sua conta. O relayium send só exige quando o servidor precisa gerar um novo código de emparelhamento para você — se você executar send com um código que alguém lhe passou, nada é gerado, então nenhum login é necessário. O relayium down e o relayium receive não precisam de conta, e push/pull, daemon direto e sync funcionam sem uma."}},{"@type":"Question","name":"Meu arquivo é criptografado?","acceptedAnswer":{"@type":"Answer","text":"Sim, de ponta a ponta. Ele é criptografado na sua máquina antes do envio; a chave vive apenas no fragmento #k= do link e nunca é enviada ao servidor. O Relayium armazena texto cifrado que não consegue ler, incluindo os nomes dos arquivos."}},{"@type":"Question","name":"E se eu perder o link?","acceptedAnswer":{"@type":"Answer","text":"O link carrega a única cópia da chave de descriptografia, então um link perdido significa um arquivo irrecuperável — não há nada no servidor que possa recuperá-lo."}},{"@type":"Question","name":"Posso limitar quem baixa?","acceptedAnswer":{"@type":"Answer","text":"Qualquer pessoa com o link pode baixar, então compartilhe-o de forma privada. Use --burn para permitir um único download, ou --max-downloads \u003cn> para limitar o número, e --ttl \u003cduração> para expirá-lo após um tempo definido."}},{"@type":"Question","name":"Funciona com o site?","acceptedAnswer":{"@type":"Answer","text":"Sim. Um link do relayium up abre em um navegador, e um link de compartilhamento criado no relayium.com pode ser buscado com relayium down em outra máquina."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -78,8 +78,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=pt">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Suba arquivos para a nuvem e os pegue em outro computador</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Suba arquivos para a nuvem e os pegue em outro computador</h1>
       <p class="updated">Última atualização: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer/">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer/">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer/">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer/">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer/">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer/">Français</a><a href="/ar/guides/push-to-cloud-pull-on-another-computer/">العربية</a><a href="/es/guides/push-to-cloud-pull-on-another-computer/">Español</a><a href="/pt/guides/push-to-cloud-pull-on-another-computer/" aria-current="true">Português</a></nav>
@@ -133,6 +138,7 @@ relayium up ./report.pdf --max-downloads 5   # 5 downloads permitidos, depois so
       </div>
       <h2>Continue lendo</h2>
       <ul class="related"><li><a href="/pt/guides/transfer-files-from-terminal/">Transfira arquivos e texto pelo terminal com a CLI do Relayium</a></li><li><a href="/pt/guides/send-a-file-to-someone/">Enviar um arquivo para alguém entre redes com a CLI do Relayium</a></li><li><a href="/pt/how-to/share-a-file-with-an-expiring-link/">Compartilhar um arquivo com um link de download seguro e com validade</a></li><li><a href="/pt/guides/receive-files-from-the-command-line/">Receber arquivos pela linha de comando</a></li><li><a href="/pt/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=pt">← Relayium</a>
         <a href="/pt/apps/">Apps</a>

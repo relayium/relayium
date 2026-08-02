@@ -15,8 +15,11 @@
 
 {#if confirmState.open}
   <button type="button" class="backdrop" aria-label={t.dialogCancel} onclick={() => resolveConfirm(false)}></button>
-  <div class="modal" role="dialog" aria-modal="true" use:trapFocus>
-    <p class="msg">{confirmState.message}</p>
+  <!-- Named by the question it is asking. The message is the only content that
+       identifies this dialog, and it is already localized by whoever opened it,
+       so aria-labelledby beats inventing a generic "Confirm" string. -->
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-msg" use:trapFocus>
+    <p class="msg" id="confirm-modal-msg">{confirmState.message}</p>
     <div class="actions">
       <button type="button" class="btn btn-ghost" onclick={() => resolveConfirm(false)}>{t.dialogCancel}</button>
       <button type="button" class="btn btn-primary" bind:this={confirmBtn} onclick={() => resolveConfirm(true)}>

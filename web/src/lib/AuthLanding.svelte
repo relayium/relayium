@@ -50,7 +50,7 @@
     border: 1px solid var(--accent-border);
     border-radius: 50%;
     background: var(--accent-bg);
-    color: var(--accent);
+    color: var(--accent-fg);
   }
   h1 {
     margin: 0;

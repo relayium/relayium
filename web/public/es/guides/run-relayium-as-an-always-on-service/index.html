@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Ejecuta Relayium como un servicio de recepción siempre activo","description":"Mantén relayium serve en ejecución para que cualquier par pueda enviarte archivos en cualquier momento — daemon directo sobre TLS con anclaje. Cubre la aprobación del primer envío, la autorización previa de huellas, ejecutarlo al arranque con systemd (Linux) o launchd (macOS), y --allow-delete.","inLanguage":"es","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/es/guides/run-relayium-as-an-always-on-service/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/es/"},{"@type":"ListItem","position":2,"name":"Guías","item":"https://relayium.com/es/guides/"},{"@type":"ListItem","position":3,"name":"Ejecuta Relayium como un servicio de recepción siempre activo"}]},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿En qué puerto escucha serve por defecto?","acceptedAnswer":{"@type":"Answer","text":"9031. Cámbialo con --port tanto en el proceso a la escucha (serve --port N) como en el destino del emisor (relayium://host:N)."}},{"@type":"Question","name":"¿Tengo que aprobar cada envío a mano?","acceptedAnswer":{"@type":"Answer","text":"Solo el primer envío de una huella dada, y únicamente cuando serve se ejecuta con una terminal conectada. Después se recuerda. Ejecutar serve de forma no interactiva (systemd, una tubería) omite por completo la solicitud y rechaza los pares desconocidos — autorízalos de antemano con relayium authorize en su lugar."}},{"@type":"Question","name":"¿Puede un remitente eliminar archivos en mi receptor siempre activo?","acceptedAnswer":{"@type":"Answer","text":"Solo si iniciaste serve con --allow-delete y el remitente está ejecutando sync --delete. Sin --allow-delete, las eliminaciones se omiten en silencio y todo lo demás se transfiere igualmente."}},{"@type":"Question","name":"¿Es gratis ejecutar un receptor siempre activo?","acceptedAnswer":{"@type":"Answer","text":"Sí. relayium serve forma parte de la CLI gratuita y autoalojable — sin cuenta, sin nivel de pago, en ninguno de los dos lados de la conexión."}},{"@type":"Question","name":"¿Dónde guarda serve su identidad y su lista de pares?","acceptedAnswer":{"@type":"Answer","text":"En ~/.config/relayium por defecto (id.key/id.crt para la identidad de este host, authorized_fingerprints para la lista de permitidos). Apunta --config-dir a un lugar fijo, como /etc/relayium, para un servicio systemd."}},{"@type":"Question","name":"¿Cómo ejecuto serve al arranque en macOS?","acceptedAnswer":{"@type":"Answer","text":"macOS no tiene systemd — usa launchd. Instala serve como LaunchDaemon en /Library/LaunchDaemons (se inicia en el arranque; define UserName para ejecutarlo como tú), o como LaunchAgent en ~/Library/LaunchAgents (se inicia al iniciar sesión). Esta guía incluye un plist listo para editar; no hay servicio de Homebrew. Autoriza de antemano a los emisores con relayium authorize, ya que launchd no da a serve ninguna terminal en la que preguntar."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=es">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=es">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">Ejecuta Relayium como un servicio de recepción siempre activo</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Ejecuta Relayium como un servicio de recepción siempre activo</h1>
       <p class="updated">Última actualización: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service/">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service/">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service/">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service/">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service/">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service/">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service/">العربية</a><a href="/es/guides/run-relayium-as-an-always-on-service/" aria-current="true">Español</a><a href="/pt/guides/run-relayium-as-an-always-on-service/">Português</a></nav>
@@ -173,6 +178,7 @@ sudo launchctl bootout system/com.relayium.serve</code></pre>
       </div>
       <h2>Sigue leyendo</h2>
       <ul class="related"><li><a href="/es/guides/receive-files-from-the-command-line/">Recibir archivos desde la línea de comandos</a></li><li><a href="/es/guides/server-to-server-transfers/">Transferencias de servidor a servidor con la CLI de Relayium (daemon directo)</a></li><li><a href="/es/how-to/automate-server-backups/">Automatiza copias de seguridad cifradas del servidor con una tarea cron</a></li><li><a href="/es/guides/bring-your-own-node/">Usa tu propio nodo: aprovecha el retransmisor y el almacenamiento de Relayium gratis</a></li><li><a href="/es/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=es">← Relayium</a>
         <a href="/es/apps/">Apps</a>

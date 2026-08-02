@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Envoyer des fichiers entre appareils sur le même Wi-Fi","description":"Comment envoyer des fichiers entre n'importe quels appareils sur le même Wi-Fi ou réseau local — sans compte, sans code d'appairage, ouvrez simplement relayium.com sur les deux et transférez directement, chiffré de bout en bout.","inLanguage":"fr","datePublished":"2026-07-09","dateModified":"2026-07-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/how-to/send-files-on-the-same-wifi/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Envoyer des fichiers entre appareils sur le même Wi-Fi"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Ai-je besoin d'un compte pour envoyer des fichiers sur le même Wi-Fi ?","acceptedAnswer":{"@type":"Answer","text":"Non. Les transferts sur le même réseau ne nécessitent ni compte ni code d'appairage d'aucun côté — ouvrez simplement relayium.com sur chaque appareil."}},{"@type":"Question","name":"Comment Relayium sait-il quels appareils sont sur mon réseau ?","acceptedAnswer":{"@type":"Answer","text":"Les appareils connectés au même réseau partagent généralement la même adresse IP publique, et Relayium regroupe automatiquement les appareils dont l'IP publique correspond dans la même salle, sans code requis."}},{"@type":"Question","name":"Plus de deux appareils peuvent-ils se voir en même temps ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Les salles du même réseau ne sont pas limitées à une paire : tout appareil qui ouvre relayium.com depuis ce réseau peut apparaître et recevoir des fichiers, pratique pour partager avec plusieurs personnes dans la même pièce ou le même bureau."}},{"@type":"Question","name":"Le transfert est-il quand même chiffré s'il ne quitte jamais mon réseau ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Chaque transfert sur le même réseau utilise le même échange de clés X25519 et le même chiffrement AES-256-GCM qu'un transfert entre réseaux différents, avec un code de vérification que vous pouvez contrôler vous-même et une vérification d'intégrité SHA-256 par fichier."}},{"@type":"Question","name":"Et si un appareil est en Wi-Fi et l'autre en données mobiles ?","acceptedAnswer":{"@type":"Answer","text":"Ils ne sont alors pas sur le même réseau, et la découverte automatique ne les connectera pas. Utilisez plutôt un code d'appairage — l'expéditeur se connecte pour le créer, et le destinataire n'a pas besoin de compte. Entre réseaux différents, le transfert passe par un relais TURN chiffré plutôt que par une connexion directe, tout en restant chiffré de bout en bout : le relais ne transmet que du texte chiffré et ne peut pas lire le fichier."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=fr">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Envoyer des fichiers entre appareils sur le même Wi-Fi</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Envoyer des fichiers entre appareils sur le même Wi-Fi</h1>
       <p class="updated">Dernière mise à jour: 2026-07-09</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-on-the-same-wifi/">English</a><a href="/zh/how-to/send-files-on-the-same-wifi/">中文</a><a href="/ja/how-to/send-files-on-the-same-wifi/">日本語</a><a href="/ko/how-to/send-files-on-the-same-wifi/">한국어</a><a href="/de/how-to/send-files-on-the-same-wifi/">Deutsch</a><a href="/fr/how-to/send-files-on-the-same-wifi/" aria-current="true">Français</a><a href="/ar/how-to/send-files-on-the-same-wifi/">العربية</a><a href="/es/how-to/send-files-on-the-same-wifi/">Español</a><a href="/pt/how-to/send-files-on-the-same-wifi/">Português</a></nav>
@@ -105,6 +110,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>À lire ensuite</h2>
       <ul class="related"><li><a href="/fr/how-to/airdrop-for-windows-and-android/">AirDrop pour Windows, Linux et Android</a></li><li><a href="/fr/how-to/transfer-files-between-mac-and-windows/">Transférer des fichiers entre un Mac et un PC Windows</a></li><li><a href="/fr/how-to/send-text-between-devices/">Envoyer du texte, des liens et des commandes entre appareils</a></li><li><a href="/fr/guides/what-is-peer-to-peer-file-transfer/">Qu&#39;est-ce que le transfert de fichiers pair à pair ?</a></li><li><a href="/fr/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=fr">← Relayium</a>
         <a href="/fr/apps/">Applis</a>

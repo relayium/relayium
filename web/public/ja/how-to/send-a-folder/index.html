@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"ファイルではなくフォルダごと送る方法","description":"ブラウザでフォルダをまるごと選んで一括送信。相対パスを保持したまま、1バッチ最大1,000ファイル、それぞれ SHA-256 で検証。事前の圧縮は不要です。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-a-folder/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"ファイルではなくフォルダごと送る方法"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"iPhone や iPad からフォルダを送れますか？","acceptedAnswer":{"@type":"Answer","text":"送信側としては送れません。iOS の Safari にはフォルダ選択の手段がなく、個々のファイルしか選べないため、現在フォルダ送信はデスクトップの Chrome、Edge、Firefox からのみ行えます。iPhone や iPad は受信側としてはフォルダを問題なく受け取れます（.zip として届きます）。"}},{"@type":"Question","name":"サブフォルダやファイル構造は保持されますか？","acceptedAnswer":{"@type":"Answer","text":"はい。Relayium は入れ子になったサブフォルダを含む各ファイルの相対パスを保持するため、届くフォルダは選んだものと同じレイアウトになります。"}},{"@type":"Question","name":"フォルダ送信に入れられるファイル数の上限は？","acceptedAnswer":{"@type":"Answer","text":"1バッチ最大1,000ファイルで、それぞれ到着時に固有の SHA-256 ハッシュで検証されます。"}},{"@type":"Question","name":"相手が受け取るのは実際のフォルダですか、それとも .zip ですか？","acceptedAnswer":{"@type":"Answer","text":"相手のブラウザによります。Chrome と Edge は相手が選んだディレクトリへファイルを直接書き込みます。Firefox と Safari は無圧縮の .zip（4 GiB 未満）を1つ受け取り、解凍すると同じフォルダ構造になります。"}},{"@type":"Question","name":"フォルダを送るのにアカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"同じネットワークなら不要です。ネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要ですが、受信側はどちらの場合もアカウント不要です。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ja">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">ファイルではなくフォルダごと送る方法</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>ファイルではなくフォルダごと送る方法</h1>
       <p class="updated">最終更新: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder/">English</a><a href="/zh/how-to/send-a-folder/">中文</a><a href="/ja/how-to/send-a-folder/" aria-current="true">日本語</a><a href="/ko/how-to/send-a-folder/">한국어</a><a href="/de/how-to/send-a-folder/">Deutsch</a><a href="/fr/how-to/send-a-folder/">Français</a><a href="/ar/how-to/send-a-folder/">العربية</a><a href="/es/how-to/send-a-folder/">Español</a><a href="/pt/how-to/send-a-folder/">Português</a></nav>
@@ -102,6 +107,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>続けて読む</h2>
       <ul class="related"><li><a href="/ja/how-to/send-large-files-without-cloud/">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers/">2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">P2P（ピアツーピア）ファイル転送とは？</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=ja">← Relayium</a>
         <a href="/ja/apps/">アプリ</a>

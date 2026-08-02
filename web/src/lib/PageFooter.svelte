@@ -10,7 +10,9 @@
 </script>
 
 <footer>
-  <nav class="legal">
+  <!-- Named so it is distinguishable from the top nav in a landmark list; both
+       were unnamed navigation landmarks, which is the same as having neither. -->
+  <nav class="legal" aria-label={t.nav.footerLabel}>
     <a href={APPS_PATH} onclick={(e) => { e.preventDefault(); navigate("apps"); }}>{t.nav.appsTab}</a>
     <a href={PRICING_PATH} onclick={(e) => { e.preventDefault(); navigate("pricing"); }}>{t.pricingPage.navLink}</a>
     <!-- The 36 generated guides had no entry point from any SPA route: read the
@@ -34,6 +36,6 @@
   }
   footer .legal { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
   footer .legal a { color: var(--text-h); text-decoration: none; }
-  footer .legal a:hover { color: var(--accent); }
+  footer .legal a:hover { color: var(--accent-fg); }
   footer .fineprint { max-width: 60ch; }
 </style>

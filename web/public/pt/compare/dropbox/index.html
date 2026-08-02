@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs Dropbox para enviar um arquivo","description":"Uma comparação justa: o Dropbox se destaca na sincronização duradoura e em links compartilhados; o Relayium oferece um caminho em tempo real sem cópia nem histórico de conteúdo no servidor, ou um link armazenado de conhecimento zero que expira.","inLanguage":"pt","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/compare/dropbox/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs Dropbox para enviar um arquivo"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"O arquivo fica em uma conta como ficaria com o Dropbox?","acceptedAnswer":{"@type":"Answer","text":"Não fica cópia nem histórico em tempo real no servidor. O WebRTC é direto na mesma LAN; entre redes, o TURN transporta texto cifrado que não consegue ler nem descriptografar. O link guarda apenas texto cifrado de conhecimento zero e expira ou se autodestrói após o primeiro download."}},{"@type":"Question","name":"Meu destinatário precisa se cadastrar em algo?","acceptedAnswer":{"@type":"Answer","text":"Não. Na mesma LAN ninguém precisa de conta. Entra quem cria o código ou link; quem participa da sessão ou baixa o link não precisa de uma."}},{"@type":"Question","name":"Existe um limite de tamanho de arquivo?","acceptedAnswer":{"@type":"Answer","text":"As transferências em tempo real lidam com até 1.000 arquivos por lote sem limite de tamanho do lado do servidor — Chrome e Edge gravam direto no disco para dezenas de gigabytes. Quando nenhum caminho de gravação em fluxo se aplica e o navegador precisa armazenar na memória, o Relayium avisa acima de cerca de 256 MB; esse número é uma estimativa deliberadamente conservadora, não um limite rígido. Os links armazenados contam contra uma cota vinculada à conta do remetente."}},{"@type":"Question","name":"É gratuito usar o Relayium no lugar de um plano do Dropbox?","acceptedAnswer":{"@type":"Answer","text":"Sim. O Relayium é gratuito e de código aberto sob a licença AGPL-3.0, com o protocolo e o código completos em github.com/relayium/relayium — não há nível pago que restrinja transferências maiores ou mais rápidas."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=pt">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs Dropbox para enviar um arquivo</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Relayium vs Dropbox para enviar um arquivo</h1>
       <p class="updated">Última atualização: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/dropbox/">English</a><a href="/zh/compare/dropbox/">中文</a><a href="/ja/compare/dropbox/">日本語</a><a href="/ko/compare/dropbox/">한국어</a><a href="/de/compare/dropbox/">Deutsch</a><a href="/fr/compare/dropbox/">Français</a><a href="/ar/compare/dropbox/">العربية</a><a href="/es/compare/dropbox/">Español</a><a href="/pt/compare/dropbox/" aria-current="true">Português</a></nav>
@@ -105,6 +110,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>Continue lendo</h2>
       <ul class="related"><li><a href="/pt/compare/google-drive/">Relayium vs Google Drive para enviar arquivos</a></li><li><a href="/pt/how-to/share-a-file-with-an-expiring-link/">Compartilhar um arquivo com um link de download seguro e com validade</a></li><li><a href="/pt/how-to/send-large-files-without-cloud/">Como enviar arquivos grandes sem a nuvem</a></li><li><a href="/pt/guides/how-relayium-encrypts-your-files/">Como o Relayium criptografa seus arquivos de ponta a ponta</a></li><li><a href="/pt/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=pt">← Relayium</a>
         <a href="/pt/apps/">Apps</a>

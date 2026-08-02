@@ -146,7 +146,7 @@
 </script>
 
 <header class="dlnav">
-  <a class="brand" href="/"><span class="mark">⇌</span><span class="word">Relayium</span></a>
+  <a class="brand" href="/"><span class="mark" aria-hidden="true">⇌</span><span class="word">Relayium</span></a>
   <select
     class="lang"
     aria-label={t.langLabel}
@@ -203,7 +203,7 @@
     {/if}
 
     {#if pageState === "downloading"}
-      <div class="progress-bar" role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{progress}%"></div></div>
+      <div class="progress-bar" role="progressbar" aria-label={t.download.downloading} aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{progress}%"></div></div>
       <!-- 不加 aria-live：百分比每块都在变，读屏会被刷屏（进度本身已由上面的
            role="progressbar" + aria-valuenow 如实传达）。aria-live 只留给状态切换。 -->
       <p>{t.download.downloading} {progress}%</p>
@@ -262,7 +262,7 @@
   .fsize { color: var(--text); white-space: nowrap; }
 
   .expiry { font-size: var(--fs-xs); color: var(--text); margin: 0 0 var(--space-3); }
-  .expiry.soon { color: var(--accent); font-weight: 500; }
+  .expiry.soon { color: var(--accent-fg); font-weight: 500; }
   .trust {
     font-size: var(--fs-xs); line-height: 1.55; color: var(--text-h);
     margin: 0 0 var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm);
@@ -281,7 +281,7 @@
   }
   .memwarn p { margin: 0 0 var(--space-2); }
   .memwarn .how { color: var(--text); }
-  .error { color: var(--danger); } .ok { color: #2ecc71; }
+  .error { color: var(--danger); } .ok { color: var(--ok); }
 
   .sendcta {
     margin-top: var(--space-7); padding: var(--space-4); border-radius: var(--radius-sm);
@@ -289,7 +289,7 @@
     display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
     font-size: var(--fs-xs); color: var(--text);
   }
-  .sendcta a { color: var(--accent); text-decoration: none; font-weight: 500; white-space: nowrap; }
+  .sendcta a { color: var(--accent-fg); text-decoration: none; font-weight: 500; white-space: nowrap; }
   .sendcta a:hover { text-decoration: underline; }
 
   footer { margin-top: var(--space-5); display: flex; gap: var(--space-4); font-size: 12.5px; }

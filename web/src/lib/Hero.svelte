@@ -118,7 +118,7 @@
     font: inherit; color: inherit; background: none; border: none; padding: 0;
     cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px;
   }
-  .name-btn:hover { color: var(--accent); }
+  .name-btn:hover { color: var(--accent-fg); }
   /* Touch pointers get a ~44px target without changing the label's metrics or
      the sentence's line height. Mouse/trackpad hit areas are untouched. */
   @media (pointer: coarse) {

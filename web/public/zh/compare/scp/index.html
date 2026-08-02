@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 scp：更简单的 SSH 文件传输","description":"scp 通用且预装在几乎所有系统上。Relayium 的 push/pull 走同一条 SSH，但增加了断点续传、SHA-256 校验、进度显示，以及针对裸机服务器的兜底方案。一次客观的对比。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/compare/scp/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"Relayium 对比 scp：更简单的 SSH 文件传输"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 的 CLI 需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"push/pull 不需要——它使用你自己的 SSH 访问权限，方式和 scp 完全一样，不需要 Relayium 账号，也不需要登录；daemon 直连和 sync 同样如此。send 和云端 up 是例外：send 需要账号，好让服务器签发配对码（如果用的是别人给你的码则不需要），up 需要账号来存文件。接收则从不需要。"}},{"@type":"Question","name":"如果远程服务器没装 Relayium，push 还能用吗？","acceptedAnswer":{"@type":"Answer","text":"可以。push 会先检测，如果 relayium 不在，就会退化为通过同一条 SSH 连接传输一段普通的 tar 流，因此在裸机服务器上依然可用。这个兜底只属于 push——pull 始终需要远程已经装好 relayium，因为在 pull 里远程要充当发送方。"}},{"@type":"Question","name":"用起来真的和 scp 一样简单吗？","acceptedAnswer":{"@type":"Answer","text":"命令形式很相近：relayium push src user@host:dest，对应 scp -r src user@host:dest。区别只会在出问题时体现出来——连接掉线时会续传而不是重来，且每个文件到达后都会做校验和验证。"}},{"@type":"Question","name":"什么时候该直接用 scp？","acceptedAnswer":{"@type":"Answer","text":"对于真正的一次性拷贝——不需要续传，不需要校验，也不想引入额外的二进制——scp 本来就在那里，是更简单的选择。它也是快速脚本里更稳妥的默认项，不想引入新依赖时尤其如此。"}},{"@type":"Question","name":"Relayium 的 CLI 免费吗？","acceptedAnswer":{"@type":"Answer","text":"完全免费——没有付费档位，AGPL-3.0 许可并开源，每种模式都是两端直接连接。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium 对比 scp：更简单的 SSH 文件传输</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Relayium 对比 scp：更简单的 SSH 文件传输</h1>
       <p class="updated">最近更新: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/scp/">English</a><a href="/zh/compare/scp/" aria-current="true">中文</a><a href="/ja/compare/scp/">日本語</a><a href="/ko/compare/scp/">한국어</a><a href="/de/compare/scp/">Deutsch</a><a href="/fr/compare/scp/">Français</a><a href="/ar/compare/scp/">العربية</a><a href="/es/compare/scp/">Español</a><a href="/pt/compare/scp/">Português</a></nav>
@@ -117,6 +122,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>继续阅读</h2>
       <ul class="related"><li><a href="/zh/guides/back-up-a-server-over-ssh/">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/compare/rsync/">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/guides/server-to-server-transfers/">用 Relayium CLI 实现服务器到服务器直传（daemon 直连）</a></li><li><a href="/zh/guides/transfer-files-from-terminal/">用 Relayium CLI 从终端传输文件与文本</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=zh">← Relayium</a>
         <a href="/zh/apps/">应用</a>

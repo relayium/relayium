@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر","description":"نقل ملفات غير متزامن عبر حساب Relayium لديك: ارفع من جهاز باستخدام relayium up، ونزّل على جهاز آخر باستخدام relayium down متى ناسبك ذلك — مشفّر من الطرف إلى الطرف، والرفع وحده هو ما يحتاج إلى حساب.","inLanguage":"ar","datePublished":"2026-07-12","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/guides/push-to-cloud-pull-on-another-computer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل أحتاج إلى حساب؟","acceptedAnswer":{"@type":"Answer","text":"للرفع، وللإرسال حين يلزم إصدار رمز. يتطلب relayium up دائمًا تسجيل relayium login كي يُخزَّن الملف تحت حسابك. أما relayium send فلا يتطلبه إلا حين يلزم الخادم أن يُصدر لك رمز اقتران جديدًا — فإن شغّلت send برمزٍ سلّمه إليك أحدهم، فهو لا يُصدر شيئًا ولا يلزمه تسجيل الدخول. أما relayium down وrelayium receive فلا يحتاجان إلى حساب، وكذلك تعمل push/pull، وdaemon direct، وsync بلا واحد."}},{"@type":"Question","name":"هل ملفي مشفّر؟","acceptedAnswer":{"@type":"Answer","text":"نعم، من الطرف إلى الطرف. يُشفَّر على جهازك قبل الرفع؛ ويعيش المفتاح فقط في الجزء #k= من الرابط ولا يُرسَل إلى الخادم أبدًا. يخزّن Relayium نصًا مُشفَّرًا لا يستطيع قراءته، بما في ذلك أسماء الملفات."}},{"@type":"Question","name":"ماذا لو فقدت الرابط؟","acceptedAnswer":{"@type":"Answer","text":"يحمل الرابط النسخة الوحيدة من مفتاح فك التشفير، فالرابط المفقود يعني ملفًا غير قابل للاسترجاع — لا يوجد على الخادم شيء يمكنه استعادته."}},{"@type":"Question","name":"هل يمكنني تقييد من ينزّله؟","acceptedAnswer":{"@type":"Answer","text":"أي شخص يملك الرابط يستطيع التنزيل، فشاركه بشكل خاص. استخدم --burn للسماح بتنزيل واحد، أو ‎--max-downloads \u003cn>‎ لتحديد العدد، و ‎--ttl \u003cduration>‎ لإنهاء صلاحيته بعد وقت محدد."}},{"@type":"Question","name":"هل يعمل مع الموقع؟","acceptedAnswer":{"@type":"Answer","text":"نعم. رابط من relayium up يُفتح في متصفح، ورابط مشاركة أُنشئ على relayium.com يمكن جلبه بـ relayium down على جهاز آخر."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -78,8 +78,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ar">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ar">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>ادفع الملفات إلى السحابة، واسحبها على حاسوب آخر</h1>
       <p class="updated">آخر تحديث: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer/">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer/">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer/">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer/">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer/">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer/">Français</a><a href="/ar/guides/push-to-cloud-pull-on-another-computer/" aria-current="true">العربية</a><a href="/es/guides/push-to-cloud-pull-on-another-computer/">Español</a><a href="/pt/guides/push-to-cloud-pull-on-another-computer/">Português</a></nav>
@@ -133,6 +138,7 @@ relayium up ./report.pdf --max-downloads 5   # يسمح بـ 5 تنزيلات ث
       </div>
       <h2>تابع القراءة</h2>
       <ul class="related"><li><a href="/ar/guides/transfer-files-from-terminal/">انقل الملفات والنصوص من الطرفية باستخدام Relayium CLI</a></li><li><a href="/ar/guides/send-a-file-to-someone/">إرسال ملف إلى شخص ما عبر الشبكات باستخدام واجهة Relayium الطرفية (CLI)</a></li><li><a href="/ar/how-to/share-a-file-with-an-expiring-link/">مشاركة ملف برابط تنزيل آمن ينتهي صلاحيته</a></li><li><a href="/ar/guides/receive-files-from-the-command-line/">استقبال الملفات من سطر الأوامر</a></li><li><a href="/ar/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=ar">← Relayium</a>
         <a href="/ar/apps/">التطبيقات</a>

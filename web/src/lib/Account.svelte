@@ -9,6 +9,7 @@
   } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate } from "./router.svelte";
+  import Icon from "./Icon.svelte";
   import Pricing from "./Pricing.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
@@ -34,6 +35,20 @@
   // Forgot-password panel state.
   let forgotBusy = $state(false);
   let forgotSent = $state(false);
+
+  /**
+   * The dialog's accessible name, following the SAME branch order the template
+   * uses below. Kept next to the state it reads rather than inlined in the
+   * markup so the two orders cannot silently diverge — if a new submode is added
+   * to the template and not here, the dialog starts lying about what it is.
+   */
+  const dialogName = $derived(
+    session().user ? t.account.panel
+    : registeredEmail ? t.account.verifyPanel
+    : mode === "forgot" ? t.account.forgotPanel
+    : mode === "register" ? t.account.createAccount
+    : t.account.signIn,
+  );
 
   // magic-link 备用入口（仅当后端开启）
   let magicSent = $state(false);
@@ -319,7 +334,7 @@
   {#if billingBanner}
     <div class="billing-toast" class:cancel={billingBanner === "cancel"}>
       <span>{billingBanner === "success" ? t.billing.checkoutSuccess : t.billing.checkoutCanceled}</span>
-      <button type="button" class="toast-close" aria-label={t.close} onclick={() => (billingBanner = "")}>✕</button>
+      <button type="button" class="toast-close" aria-label={t.close} onclick={() => (billingBanner = "")}><Icon name="close" size={12} /></button>
     </div>
   {/if}
   {#if reactivateToken}
@@ -328,7 +343,7 @@
       <button type="button" class="reactivate-btn" onclick={onReactivate} disabled={reactivateBusy}>
         {t.account.reactivate}
       </button>
-      <button type="button" class="toast-close" aria-label={t.close} onclick={() => { reactivateToken = ""; reactivateError = ""; }}>✕</button>
+      <button type="button" class="toast-close" aria-label={t.close} onclick={() => { reactivateToken = ""; reactivateError = ""; }}><Icon name="close" size={12} /></button>
     </div>
   {/if}
   {#if session().user}
@@ -341,8 +356,12 @@
 
   {#if open}
     <button type="button" class="backdrop" aria-label={t.close} onclick={() => (open = false)}></button>
-    <div class="modal" role="dialog" aria-modal="true" use:trapFocus>
-      <button class="close-x" onclick={() => (open = false)} aria-label={t.close}>✕</button>
+    <!-- One dialog element, five real submodes. The name follows whichever is on
+         screen, in the same branch order the template renders them — a fixed
+         label would announce "Account" to somebody being asked to verify an
+         email or reset a password. -->
+    <div class="modal" role="dialog" aria-modal="true" aria-label={dialogName} use:trapFocus>
+      <button class="close-x" onclick={() => (open = false)} aria-label={t.close}><Icon name="close" size={16} /></button>
       {#if session().user}
         <div class="menu">
           <div class="who">{t.account.signedInAs(session().user!.email)}</div>
@@ -511,6 +530,7 @@
   }
   .close-x {
     position: absolute; top: 10px; inset-inline-end: 10px;
+    display: grid; place-items: center;
     width: 28px; height: 28px; padding: 0; border-radius: var(--radius-sm); cursor: pointer;
     border: 1px solid transparent; background: none; color: var(--text); font-size: var(--fs-sm);
     transition: background .13s, color .13s;
@@ -563,10 +583,11 @@
   .billing-toast.cancel { color: var(--text); }
   .reactivate-btn {
     padding: 2px var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--accent); color: var(--accent-contrast, #fff); cursor: pointer; font-size: var(--fs-xs);
+    background: var(--accent-action); color: var(--accent-contrast, #fff); cursor: pointer; font-size: var(--fs-xs);
   }
   .reactivate-btn:disabled { opacity: 0.6; cursor: default; }
   .toast-close {
+    display: inline-grid; place-items: center;
     padding: 0; border: 0; background: none; color: var(--text); cursor: pointer; font-size: var(--fs-xs);
   }
 </style>

@@ -144,8 +144,8 @@ export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) 
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="${ctaHref(lang)}">Relayium</a></header>
-      ${body(slug, lang, doc, articleLinks)}
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="${ctaHref(lang)}">Relayium</a></header>
+      <main>${body(slug, lang, doc, articleLinks)}</main>
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
         <a href="${urlPath("apps", lang)}">${esc(APPS_LABELS[lang])}</a>

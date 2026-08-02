@@ -16,7 +16,10 @@
   ]);
 </script>
 
-<main class="pricing-page page-enter">
+<!-- A <section>, not a <main>: every SPA route renders inside App.svelte's single
+     <main>, so a second one here nested two "main" landmarks inside each other —
+     which leaves a screen reader with no unambiguous "skip to the content". -->
+<section class="pricing-page page-enter">
   <button class="back" onclick={() => navigate("lan")}>{p.back}</button>
 
   <header class="head ui-page-head">
@@ -72,7 +75,7 @@
       </div>
     {/each}
   </section>
-</main>
+</section>
 
 <style>
   /* Layout only. The header, the card surfaces and their headings come from the
@@ -99,13 +102,13 @@
     cursor: pointer;
     padding: 0;
   }
-  .back:hover { color: var(--accent); }
+  .back:hover { color: var(--accent-fg); }
   /* .ui-page-head owns the centering, padding and h1 size; the subtitle is
      longer than the 44ch .tagline primitive is meant for, so it keeps its own
      measure. */
   .head { display: flex; flex-direction: column; gap: var(--space-2); }
   .head .sub { margin: 0; color: var(--text); max-inline-size: 68ch; margin-inline: auto; }
-  .head .signed-out { margin: 0; font-size: var(--fs-xs); color: var(--accent); }
+  .head .signed-out { margin: 0; font-size: var(--fs-xs); color: var(--accent-fg); }
 
   .explainer { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-4); }
   .card.free { border-inline-start: 3px solid var(--accent); }

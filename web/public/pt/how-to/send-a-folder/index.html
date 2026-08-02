@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Como enviar uma pasta inteira, não só arquivos","description":"Escolha uma pasta inteira no navegador e envie de uma vez — caminhos relativos preservados, até 1.000 arquivos, cada um verificado com SHA-256. Sem precisar compactar antes.","inLanguage":"pt","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/how-to/send-a-folder/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Como enviar uma pasta inteira, não só arquivos"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Posso enviar uma pasta de um iPhone ou iPad?","acceptedAnswer":{"@type":"Answer","text":"Não como remetente — o Safari do iOS não tem seletor de pastas, apenas arquivos individuais, então o envio de pastas funciona atualmente a partir do Chrome, Edge ou Firefox de desktop. Um iPhone ou iPad ainda pode receber uma pasta numa boa, como um .zip."}},{"@type":"Question","name":"As subpastas e a estrutura de arquivos são preservadas?","acceptedAnswer":{"@type":"Answer","text":"Sim. O Relayium mantém o caminho relativo de cada arquivo, incluindo subpastas aninhadas, então a pasta que chega tem o mesmo layout da que você escolheu."}},{"@type":"Question","name":"Quantos arquivos um envio de pasta pode conter?","acceptedAnswer":{"@type":"Answer","text":"Até 1.000 arquivos em um único lote, cada um verificado individualmente com um hash SHA-256 na chegada."}},{"@type":"Question","name":"O destinatário recebe uma pasta de verdade ou um .zip?","acceptedAnswer":{"@type":"Answer","text":"Depende do navegador dele. Chrome e Edge gravam os arquivos direto em um diretório que ele escolhe. Firefox e Safari recebem um único .zip sem compressão (abaixo de 4 GiB) que, ao ser descompactado, resulta na mesma estrutura de pasta."}},{"@type":"Question","name":"Preciso de uma conta para enviar uma pasta?","acceptedAnswer":{"@type":"Answer","text":"Não na mesma rede. Enviar entre redes com um código de emparelhamento exige que o remetente faça login, mas quem recebe nunca precisa de conta em nenhum dos casos."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=pt">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Como enviar uma pasta inteira, não só arquivos</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Como enviar uma pasta inteira, não só arquivos</h1>
       <p class="updated">Última atualização: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder/">English</a><a href="/zh/how-to/send-a-folder/">中文</a><a href="/ja/how-to/send-a-folder/">日本語</a><a href="/ko/how-to/send-a-folder/">한국어</a><a href="/de/how-to/send-a-folder/">Deutsch</a><a href="/fr/how-to/send-a-folder/">Français</a><a href="/ar/how-to/send-a-folder/">العربية</a><a href="/es/how-to/send-a-folder/">Español</a><a href="/pt/how-to/send-a-folder/" aria-current="true">Português</a></nav>
@@ -102,6 +107,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>Continue lendo</h2>
       <ul class="related"><li><a href="/pt/how-to/send-large-files-without-cloud/">Como enviar arquivos grandes sem a nuvem</a></li><li><a href="/pt/guides/sync-a-large-folder-between-servers/">Sincronizar uma pasta grande entre dois servidores (retomável, em segundo plano)</a></li><li><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Enviar arquivos entre dois computadores pela Internet</a></li><li><a href="/pt/guides/what-is-peer-to-peer-file-transfer/">O que é transferência de arquivos ponto a ponto?</a></li><li><a href="/pt/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=pt">← Relayium</a>
         <a href="/pt/apps/">Apps</a>

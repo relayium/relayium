@@ -110,6 +110,14 @@ export interface Messages {
     peerBusy: string; // the peer refused the offer because it's already in a transfer
   };
   account: {
+    /** Accessible names for the account dialog's five submodes. One <div
+     *  role="dialog"> hosts all of them, so the name has to follow the mode —
+     *  announcing "Account" to somebody being asked to verify an email is worse
+     *  than the no-name state this replaced. `createAccount` and `signIn` below
+     *  already say the right thing for the register/login forms and are reused. */
+    verifyPanel: string;
+    forgotPanel: string;
+    panel: string;
     signIn: string;
     signOut: string;
     email: string;
@@ -375,7 +383,18 @@ export interface Messages {
     noToken: string;
     home: string;
   };
-  nav: { lanTab: string; crossTab: string; offlineTab: string; cliTab: string; appsTab: string };
+  // primaryLabel / footerLabel name the two <nav> landmarks. Two landmarks of the
+  // same role with the same (or no) accessible name are indistinguishable in a
+  // screen reader's landmark list, so both must be named — and named in the
+  // user's language, like every other string a screen reader reads aloud.
+  nav: {
+    primaryLabel: string; footerLabel: string;
+    /** App.svelte's footer holds TWO nav landmarks side by side. They need
+     *  distinct names — reusing footerLabel for both would make them collide
+     *  exactly the way the top nav and the page footer used to. */
+    footerLegalLabel: string; footerGuidesLabel: string;
+    lanTab: string; crossTab: string; offlineTab: string; cliTab: string; appsTab: string;
+  };
   // Full page headings for the cross/offline pages. The nav.*Tab strings are the
   // short pill labels; these are the descriptive <h1> titles.
   crossTitle: string;

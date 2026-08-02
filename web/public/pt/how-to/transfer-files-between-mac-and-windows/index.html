@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Transferir arquivos entre um Mac e um PC com Windows","description":"Como enviar arquivos entre macOS e Windows sem pen drive, sem pasta de rede compartilhada e sem upload para a nuvem. Na mesma rede e pela internet — nada para instalar em nenhuma das máquinas.","inLanguage":"pt","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/how-to/transfer-files-between-mac-and-windows/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Transferir arquivos entre um Mac e um PC com Windows"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Preciso instalar alguma coisa no Mac ou no PC com Windows?","acceptedAnswer":{"@type":"Answer","text":"Não. O Relayium roda inteiramente no navegador tanto no macOS quanto no Windows. Abra o relayium.com em cada máquina e está pronto — nada para baixar de qualquer forma. Na mesma rede uma transferência não precisa de conta alguma; emparelhar pela internet só pede que o remetente faça login."}},{"@type":"Question","name":"Os dois computadores precisam estar na mesma rede?","acceptedAnswer":{"@type":"Answer","text":"Não. Estar na mesma rede é o caminho mais rápido porque as duas máquinas se encontram automaticamente, mas um código de emparelhamento conecta um Mac e um PC com Windows pela internet igualmente bem — mesmo de cidades diferentes. De qualquer forma, a transferência permanece criptografada de ponta a ponta; a rota entre redes só pede que o remetente faça login primeiro, e quem recebe nunca precisa de conta."}},{"@type":"Question","name":"Posso enviar uma pasta inteira, não só arquivos individuais?","acceptedAnswer":{"@type":"Answer","text":"Sim. Arraste uma pasta e o Relayium envia até 1.000 arquivos no lote, preservando a estrutura da pasta. Chrome e Edge no Windows gravam direto em um diretório escolhido; se o navegador que recebe não conseguir gravar pastas diretamente, ela chega como um único .zip com a mesma organização."}},{"@type":"Question","name":"As permissões de arquivo, os fins de linha ou os nomes de arquivo vão se embaralhar ao passar do Mac para o Windows?","acceptedAnswer":{"@type":"Answer","text":"Não. O Relayium move os bytes exatos de cada arquivo e os verifica com um hash SHA-256 de ponta a ponta — ele não toca nos fins de linha, na codificação ou nos nomes de arquivo. Tudo o que uma conversão em nível de aplicação precisaria tratar (como CRLF versus LF em um arquivo de texto) fica inalterado, porque o próprio arquivo fica inalterado."}},{"@type":"Question","name":"Existe algum limite de tamanho?","acceptedAnswer":{"@type":"Answer","text":"Até 1.000 arquivos por lote. Não há limite de tamanho algum do lado do servidor — Chrome e Edge no computador transmitem direto para o disco. Firefox e Safari não têm a API File System Access, então um lote recebido em um deles fica na memória, e o Relayium avisa acima de cerca de 256 MB — uma estimativa conservadora, não um limite rígido, já que o teto real depende da memória da máquina e do que mais ela estiver rodando."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=pt">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Transferir arquivos entre um Mac e um PC com Windows</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Transferir arquivos entre um Mac e um PC com Windows</h1>
       <p class="updated">Última atualização: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-between-mac-and-windows/">English</a><a href="/zh/how-to/transfer-files-between-mac-and-windows/">中文</a><a href="/ja/how-to/transfer-files-between-mac-and-windows/">日本語</a><a href="/ko/how-to/transfer-files-between-mac-and-windows/">한국어</a><a href="/de/how-to/transfer-files-between-mac-and-windows/">Deutsch</a><a href="/fr/how-to/transfer-files-between-mac-and-windows/">Français</a><a href="/ar/how-to/transfer-files-between-mac-and-windows/">العربية</a><a href="/es/how-to/transfer-files-between-mac-and-windows/">Español</a><a href="/pt/how-to/transfer-files-between-mac-and-windows/" aria-current="true">Português</a></nav>
@@ -110,6 +115,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>Continue lendo</h2>
       <ul class="related"><li><a href="/pt/how-to/send-files-on-the-same-wifi/">Enviar arquivos entre dispositivos na mesma rede Wi-Fi</a></li><li><a href="/pt/how-to/airdrop-for-windows-and-android/">AirDrop para Windows, Linux e Android</a></li><li><a href="/pt/compare/airdrop/">Relayium vs AirDrop: uma alternativa ao AirDrop multiplataforma</a></li><li><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Enviar arquivos entre dois computadores pela Internet</a></li><li><a href="/pt/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=pt">← Relayium</a>
         <a href="/pt/apps/">Apps</a>

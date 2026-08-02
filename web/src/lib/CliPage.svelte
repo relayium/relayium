@@ -98,9 +98,17 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
           <span class="g" aria-hidden="true">
             {#if p.g === "network"}<Icon name="network" size={22} />{:else}{p.g}{/if}
           </span>
-          <h3>{p.title}</h3>
+          <h3 id={`pick-title-${i}`}>{p.title}</h3>
           <p>{t.cliPage.pickWhen[i]}</p>
-          <code>{p.cmd}</code>
+          <!-- Scrolls sideways, so it has to be a keyboard stop — otherwise the
+               tail of a long command is readable with a mouse and unreachable
+               without one. Named by the card's own visible heading.
+               svelte-ignore fires because <code> is non-interactive; that rule
+               guards against fake buttons, and this is the opposite case — WCAG
+               2.1.1 requires a scrollable region to be reachable, which is exactly
+               what axe's scrollable-region-focusable check asks for here. -->
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+          <code tabindex="0" role="group" aria-labelledby={`pick-title-${i}`}>{p.cmd}</code>
         </div>
       {/each}
     </div>
@@ -405,10 +413,14 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     border-radius: 999px;
     background: var(--surface-2);
   }
+  /* The status tokens, not a second private green. The literal #1a7f37 that used
+     to live here was 4.43:1 on its own 10% tint — under AA by a hair, and invisible
+     to the token work that already tuned --ok for both themes (it had no dark-mode
+     value at all, so dark got the light green too). */
   .tag.free {
-    color: #1a7f37;
-    border-color: color-mix(in srgb, #1a7f37 40%, transparent);
-    background: color-mix(in srgb, #1a7f37 10%, transparent);
+    color: var(--ok);
+    border-color: var(--ok-border);
+    background: var(--ok-bg);
   }
 
   .steps {
@@ -491,7 +503,7 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     font-size: var(--fs-sm);
   }
   .guide-card .arr {
-    color: var(--accent);
+    color: var(--accent-fg);
   }
   @media (max-width: 620px) {
     .guide-cards {
@@ -510,7 +522,7 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     padding: 1px 5px;
   }
   a {
-    color: var(--accent);
+    color: var(--accent-fg);
   }
 
   footer {

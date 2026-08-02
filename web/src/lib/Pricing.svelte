@@ -348,7 +348,7 @@
   @media (pointer: coarse) {
     .toggle-btn { min-block-size: 44px; padding-inline: var(--space-4); }
   }
-  .save-badge { font-size: var(--fs-xs); color: var(--accent); font-weight: 600; }
+  .save-badge { font-size: var(--fs-xs); color: var(--accent-fg); font-weight: 600; }
   .load-status { font-size: var(--fs-xs); color: var(--text); margin: 0; }
   .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); }
   /* min-inline-size:0 so a long localized tier name can't blow the grid track
@@ -360,7 +360,7 @@
      "hangs off the card's top edge" placement are local. */
   .ribbon {
     position: absolute; inset-block-start: -10px; inset-inline-end: var(--space-3);
-    background: var(--accent); border-color: transparent; color: #fff; font-weight: 600;
+    background: var(--accent-action); border-color: transparent; color: #fff; font-weight: 600;
   }
   .tier-name { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
   /* The paid price is the decision, so it is the largest type on the page after

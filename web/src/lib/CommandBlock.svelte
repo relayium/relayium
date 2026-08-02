@@ -2,6 +2,10 @@
   // A terminal-window styled code block with a copy-to-clipboard button.
   let { code, title = "" }: { code: string; title?: string } = $props();
   let copied = $state(false);
+  // Ties the scrollable <pre> to the visible title as its accessible name. $props.id()
+  // keeps it unique when a page renders several command blocks.
+  const uid = $props.id();
+  const titleId = `cmdblock-title-${uid}`;
   async function copy() {
     try {
       await navigator.clipboard.writeText(code);
@@ -16,12 +20,23 @@
 <div class="term">
   <div class="bar">
     <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
-    {#if title}<span class="title">{title}</span>{/if}
+    {#if title}<span class="title" id={titleId}>{title}</span>{/if}
     <button class="copy" class:copied onclick={copy} aria-label="Copy to clipboard">
       {copied ? "Copied ✓" : "Copy"}
     </button>
   </div>
-  <pre><code>{code}</code></pre>
+  <!-- The block scrolls sideways (overflow-x on <pre>), and a region that can
+       scroll but cannot be focused is unreachable to anyone driving the page from
+       the keyboard: there is nothing to put the caret on, so the hidden end of a
+       long command simply cannot be read. tabindex="0" makes it a stop; the
+       global :focus-visible outline makes that stop visible. The name is the
+       terminal title that is already on screen — no invented, untranslated copy,
+       and no second string that could drift from the visible one.
+       svelte-ignore fires because <pre> is non-interactive; that rule exists to
+       stop fake buttons, and this is the opposite case — WCAG 2.1.1 requires a
+       scrollable region to be reachable by keyboard. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <pre tabindex="0" role={title ? "group" : undefined} aria-labelledby={title ? titleId : undefined}><code>{code}</code></pre>
 </div>
 
 <style>
@@ -83,9 +98,11 @@
     border-color: var(--accent-border);
   }
   /* Success flash: the label pops and greens for its brief "Copied ✓" window. */
+  /* --ok, not another private green: #2ecc71 was ~2:1 on this bar in light mode,
+     i.e. the success message was the least readable text in the component. */
   .copy.copied {
-    color: #2ecc71;
-    border-color: #2ecc71;
+    color: var(--ok);
+    border-color: var(--ok-border);
     animation: pop-in .3s ease;
   }
   @media (prefers-reduced-motion: reduce) { .copy.copied { animation: none; } }

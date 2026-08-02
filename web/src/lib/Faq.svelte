@@ -48,11 +48,11 @@
     font-size: var(--fs-sm); color: var(--text-h); font-weight: 500;
   }
   summary::-webkit-details-marker { display: none; }
-  summary:hover { color: var(--accent); }
+  summary:hover { color: var(--accent-fg); }
   .q { min-width: 0; }
   .chev {
     flex: none; width: 22px; height: 22px; line-height: 20px; text-align: center;
-    border-radius: 50%; font-size: 18px; color: var(--accent);
+    border-radius: 50%; font-size: 18px; color: var(--accent-fg);
     background: var(--accent-bg); transition: transform .2s ease;
   }
   .qa[open] .chev { transform: rotate(45deg); }

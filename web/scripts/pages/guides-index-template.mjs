@@ -10,8 +10,8 @@ const PRIVACY_LABELS = {
 };
 
 const STYLE = `
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -23,8 +23,8 @@ h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
 .lead{font-size:19px}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:0}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
-.guidelist{list-style:none;padding:0}.guidelist li{margin:8px 0}.guidelist a{color:var(--accent);text-decoration:none;font-size:18px}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.guidelist{list-style:none;padding:0}.guidelist li{margin:8px 0}.guidelist a{color:var(--accent-fg);text-decoration:none;font-size:18px}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 `;
@@ -115,11 +115,15 @@ export function renderGuidesIndexPage({ lang, doc, groups }) {
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="${ctaHref(lang)}">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="${ctaHref(lang)}">Relayium</a></header>
+      <!-- Everything between the site header and the footer is this page's own
+           content, so it belongs to one main landmark. -->
+      <main>
       <h1>${esc(doc.heading)}</h1>
       <p class="lead">${esc(doc.intro)}</p>
       ${langBar(lang)}
       ${sections}
+      </main>
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
         <a href="${urlPath("apps", lang)}">${esc(APPS_LABELS[lang])}</a>

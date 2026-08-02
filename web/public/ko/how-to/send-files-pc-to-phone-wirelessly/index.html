@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"PC에서 폰으로 무선 파일 전송: 케이블도 앱도 필요 없이","description":"컴퓨터와 휴대폰 사이에서 Wi-Fi로 파일을 옮기는 단계별 가이드 — 드래그 앤 드롭, USB 케이블 없이, 클라우드 계정 없이, 게다가 전 과정 종단간 암호화.","inLanguage":"ko","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/how-to/send-files-pc-to-phone-wirelessly/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"PC에서 폰으로 무선 파일 전송: 케이블도 앱도 필요 없이"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Windows와 iPhone뿐 아니라 Mac과 Android에서도 되나요?","acceptedAnswer":{"@type":"Answer","text":"네. Relayium은 Windows, macOS, Linux, Android, iOS의 브라우저에서 동작하므로 어떤 조합이든 됩니다 — Windows에서 Android로, Mac에서 iPhone으로, Linux에서 휴대폰으로, 그리고 그 반대도 마찬가지입니다. 양쪽 기기 어디에도 설치할 것이 없습니다."}},{"@type":"Question","name":"전송은 얼마나 빠른가요?","acceptedAnswer":{"@type":"Answer","text":"같은 Wi-Fi에서는 두 기기가 직접 연결되어 속도가 서버가 아닌 로컬 네트워크로 결정되며, 보통 Wi-Fi가 허락하는 만큼 빠릅니다. 서로 다른 네트워크에서는 설계상 전송이 암호화된 TURN 릴레이를 거치므로, 양쪽 인터넷 회선과 그 한 홉에 달려 있습니다. 대신 네트워크를 넘는 NAT에서 좀처럼 통하지 않는 직접 연결 시도를 기다리지 않고 1~2초 만에 연결이 성립합니다."}},{"@type":"Question","name":"이렇게 파일을 보내도 안전한가요?","acceptedAnswer":{"@type":"Answer","text":"네. 브라우저의 전송 암호화 위에 Relayium은 자체 계층을 더합니다. X25519 키 교환으로 도출한 키를 블록별 AES-256-GCM에 쓰며, 이 키는 서버에 닿지 않습니다. 두 기기의 6자리 코드(SAS)가 일치하면 키가 바뀌지 않았으며 서버나 릴레이가 어느 한쪽 끝점으로 위장하거나 애플리케이션 계층 종단간 암호화를 종료하지 않았음을 확인할 수 있습니다. 네트워크를 넘을 때 TURN 릴레이는 여전히 전송 경로에 있지만, 복호화할 수 없는 암호문만 전달합니다. 각 파일은 SHA-256 해시로도 종단간 검증됩니다."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ko">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">PC에서 폰으로 무선 파일 전송: 케이블도 앱도 필요 없이</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>PC에서 폰으로 무선 파일 전송: 케이블도 앱도 필요 없이</h1>
       <p class="updated">마지막 업데이트: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-pc-to-phone-wirelessly/">English</a><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/">中文</a><a href="/ja/how-to/send-files-pc-to-phone-wirelessly/">日本語</a><a href="/ko/how-to/send-files-pc-to-phone-wirelessly/" aria-current="true">한국어</a><a href="/de/how-to/send-files-pc-to-phone-wirelessly/">Deutsch</a><a href="/fr/how-to/send-files-pc-to-phone-wirelessly/">Français</a><a href="/ar/how-to/send-files-pc-to-phone-wirelessly/">العربية</a><a href="/es/how-to/send-files-pc-to-phone-wirelessly/">Español</a><a href="/pt/how-to/send-files-pc-to-phone-wirelessly/">Português</a></nav>
@@ -103,6 +108,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>계속 읽기</h2>
       <ul class="related"><li><a href="/ko/how-to/transfer-files-android-to-iphone/">안드로이드에서 아이폰으로 파일 전송하는 방법 (케이블 없이)</a></li><li><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code/">QR 코드를 스캔해서 파일 전송하기</a></li><li><a href="/ko/how-to/send-files-on-the-same-wifi/">같은 Wi-Fi에 있는 기기끼리 파일 보내기</a></li><li><a href="/ko/compare/airdrop/">Relayium vs AirDrop: 크로스플랫폼 에어드롭 대안</a></li><li><a href="/ko/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=ko">← Relayium</a>
         <a href="/ko/apps/">앱</a>

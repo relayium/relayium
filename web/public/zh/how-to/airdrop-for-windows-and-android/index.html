@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Windows、Linux、Android 的隔空投送替代方案","description":"Windows、Linux、Android 都没有官方版 AirDrop——这是最接近的做法：在浏览器里同一 Wi-Fi 即时互传，无需账号、无需安装，还能做到 AirDrop 做不到的跨网络传输。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/airdrop-for-windows-and-android/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"Windows、Linux、Android 的隔空投送替代方案"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Windows 或 Android 有官方版 AirDrop 吗？","acceptedAnswer":{"@type":"Answer","text":"没有——AirDrop 是 Apple 设备专属，Apple 从未推出过 Windows 或 Android 客户端。Relayium 是基于浏览器的替代方案：在两台设备上打开 relayium.com，无论平台组合如何都能一样使用，包括 Apple 与非 Apple 混搭的情况。"}},{"@type":"Question","name":"需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"同一 Wi-Fi 下的流程不需要——两端打开网页就能互相发现，完全无需登录。跨不同网络用配对码发送时需要发送方登录；无论哪种网络模式，接收方都始终无需账号。"}},{"@type":"Question","name":"需要安装什么吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。它在每个平台上都是一个网页——Windows、Linux、macOS、Android 和 iOS——所以不用从应用商店下载，也不用操心更新。"}},{"@type":"Question","name":"这和「Relayium 对比 AirDrop」那篇有什么不同？","acceptedAnswer":{"@type":"Answer","text":"那篇文章是客观的正面对比，讲清 AirDrop 真正更好的地方（纯 Apple 家庭）以及它的短板。本文则是操作指南，教你在至少一台设备不是 Apple 产品时，如何真正获得类似 AirDrop 的体验。"}},{"@type":"Question","name":"能像 AirDrop 一样发给一群人吗？","acceptedAnswer":{"@type":"Answer","text":"在同一网络下可以——本地房间不限于两台设备，因此附近不止一台设备可以同时接收。而跨网络的配对码模式只连接两台设备，且经由加密中继完成。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">Windows、Linux、Android 的隔空投送替代方案</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Windows、Linux、Android 的隔空投送替代方案</h1>
       <p class="updated">最近更新: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/airdrop-for-windows-and-android/">English</a><a href="/zh/how-to/airdrop-for-windows-and-android/" aria-current="true">中文</a><a href="/ja/how-to/airdrop-for-windows-and-android/">日本語</a><a href="/ko/how-to/airdrop-for-windows-and-android/">한국어</a><a href="/de/how-to/airdrop-for-windows-and-android/">Deutsch</a><a href="/fr/how-to/airdrop-for-windows-and-android/">Français</a><a href="/ar/how-to/airdrop-for-windows-and-android/">العربية</a><a href="/es/how-to/airdrop-for-windows-and-android/">Español</a><a href="/pt/how-to/airdrop-for-windows-and-android/">Português</a></nav>
@@ -104,6 +109,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>继续阅读</h2>
       <ul class="related"><li><a href="/zh/compare/airdrop/">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/how-to/send-files-on-the-same-wifi/">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/how-to/transfer-files-between-mac-and-windows/">如何在 Mac 和 Windows 电脑之间传输文件</a></li><li><a href="/zh/compare/localsend/">Relayium 对比 LocalSend：局域网传输该选哪个</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=zh">← Relayium</a>
         <a href="/zh/apps/">应用</a>

@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Transferir arquivos escaneando um código QR","description":"Envie arquivos escaneando um código QR de uma sessão de emparelhamento — a transferência é criptografada de ponta a ponta o caminho todo. Sem app nem conta para quem escaneia.","inLanguage":"pt","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/how-to/transfer-files-by-scanning-a-qr-code/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Transferir arquivos escaneando um código QR"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Quem escaneia o QR precisa de uma conta Relayium?","acceptedAnswer":{"@type":"Answer","text":"Não. Só o remetente faz login para criar o código de emparelhamento e o seu QR. Quem escaneia apenas entra na sala que já foi criada — sem conta, sem cadastro, nada para instalar."}},{"@type":"Question","name":"O que o código QR contém de fato?","acceptedAnswer":{"@type":"Answer","text":"O mesmo link de entrada que o botão “copiar link” copia — uma URL relayium.com com o código de emparelhamento embutido. Escaneá-lo apenas abre esse link no navegador, que entra na sala automaticamente."}},{"@type":"Question","name":"Escanear o QR é tão seguro quanto digitar o código?","acceptedAnswer":{"@type":"Answer","text":"Sim, é a conexão idêntica de qualquer jeito. Os dois dispositivos ainda negociam uma troca de chaves X25519, criptografam com AES-256-GCM e mostram um código de verificação SAS coincidente que você deve conferir antes de confiar na transferência. O QR só muda como você entra na sala, não como a transferência é protegida."}},{"@type":"Question","name":"E se o QR não escanear?","acceptedAnswer":{"@type":"Answer","text":"Nada se perde — o mesmo cartão de emparelhamento mostra o código bruto e um link copiável, e um botão de compartilhamento nos dispositivos compatíveis. Qualquer um deles abre a mesma sala que o QR."}},{"@type":"Question","name":"Isso funciona entre redes diferentes, como dados do celular e o Wi-Fi de casa?","acceptedAnswer":{"@type":"Answer","text":"Sim. Este é o fluxo de emparelhamento entre redes, então funciona tanto se os dois dispositivos compartilharem uma rede como se não. Um código de emparelhamento sempre liga os dois por um retransmissor TURN criptografado — o caminho confiável entre redes cujos NATs costumam inviabilizar qualquer conexão direta — e esse retransmissor só carrega texto cifrado. Quem conecta diretamente são os dispositivos de uma mesma rede que se encontram sem código."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=pt">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Transferir arquivos escaneando um código QR</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Transferir arquivos escaneando um código QR</h1>
       <p class="updated">Última atualização: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-by-scanning-a-qr-code/">English</a><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/">中文</a><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code/">日本語</a><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code/">한국어</a><a href="/de/how-to/transfer-files-by-scanning-a-qr-code/">Deutsch</a><a href="/fr/how-to/transfer-files-by-scanning-a-qr-code/">Français</a><a href="/ar/how-to/transfer-files-by-scanning-a-qr-code/">العربية</a><a href="/es/how-to/transfer-files-by-scanning-a-qr-code/">Español</a><a href="/pt/how-to/transfer-files-by-scanning-a-qr-code/" aria-current="true">Português</a></nav>
@@ -104,6 +109,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>Continue lendo</h2>
       <ul class="related"><li><a href="/pt/how-to/send-files-pc-to-phone-wirelessly/">Enviar arquivos do PC para o celular sem fio, sem cabo nem app</a></li><li><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Enviar arquivos entre dois computadores pela Internet</a></li><li><a href="/pt/how-to/transfer-files-android-to-iphone/">Como transferir arquivos do Android para o iPhone (sem cabo)</a></li><li><a href="/pt/guides/what-is-peer-to-peer-file-transfer/">O que é transferência de arquivos ponto a ponto?</a></li><li><a href="/pt/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=pt">← Relayium</a>
         <a href="/pt/apps/">Apps</a>

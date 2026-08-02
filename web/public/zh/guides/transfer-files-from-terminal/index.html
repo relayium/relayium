@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 从终端传输文件与文本","description":"安装免费、端到端加密的 Relayium CLI，通过 SSH、配对码或 daemon 直连传输文件，并在两台机器同时在线时发送临时文本。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 Relayium CLI 从终端传输文件与文本"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"CLI 要收费吗？","acceptedAnswer":{"@type":"Answer","text":"不收费。CLI 完全免费。直连的文件与文本字节都不经过 Relayium 中继，因此没有什么可计量，也没有什么可付费。"}},{"@type":"Question","name":"需要 Relayium 账号吗？","acceptedAnswer":{"@type":"Answer","text":"send 或 text 生成配对码时需要账号，云端 up 也需要。push / pull 使用你自己的 SSH，daemon 直连使用公钥信任，都无需账号。服务器只为已登录账号签发配对码，因此创建端先运行一次 relayium login；持别人给你的码加入无需登录，receive 接收方也始终无需登录。"}},{"@type":"Question","name":"支持哪些操作系统？","acceptedAnswer":{"@type":"Answer","text":"macOS、Linux 和 Windows 上均提供预编译二进制，覆盖 x86-64 和 arm64。安装脚本适用于 macOS 和 Linux；在 Windows 上，请从发布页下载 .zip。"}},{"@type":"Question","name":"我的文件会经过 Relayium 的服务器吗？","acceptedAnswer":{"@type":"Answer","text":"不会。在每种模式下，文件字节都在两端之间直接传输。只有 send / receive 会联系到我们的服务器，而且只是为了一次很小的会合握手——从不涉及文件内容。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">用 Relayium CLI 从终端传输文件与文本</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>用 Relayium CLI 从终端传输文件与文本</h1>
       <p class="updated">最近更新: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/transfer-files-from-terminal/">English</a><a href="/zh/guides/transfer-files-from-terminal/" aria-current="true">中文</a><a href="/ja/guides/transfer-files-from-terminal/">日本語</a><a href="/ko/guides/transfer-files-from-terminal/">한국어</a><a href="/de/guides/transfer-files-from-terminal/">Deutsch</a><a href="/fr/guides/transfer-files-from-terminal/">Français</a><a href="/ar/guides/transfer-files-from-terminal/">العربية</a><a href="/es/guides/transfer-files-from-terminal/">Español</a><a href="/pt/guides/transfer-files-from-terminal/">Português</a></nav>
@@ -109,6 +114,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>继续阅读</h2>
       <ul class="related"><li><a href="/zh/guides/send-a-file-to-someone/">用 Relayium CLI 跨网络把文件发给对方</a></li><li><a href="/zh/guides/receive-files-from-the-command-line/">在命令行接收文件</a></li><li><a href="/zh/guides/push-to-cloud-pull-on-another-computer/">在一台电脑上传到云端，在另一台电脑取回</a></li><li><a href="/zh/how-to/send-text-between-devices/">在设备之间发送文本、链接和命令</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=zh">← Relayium</a>
         <a href="/zh/apps/">应用</a>

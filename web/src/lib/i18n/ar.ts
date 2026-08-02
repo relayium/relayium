@@ -136,6 +136,9 @@ const ar: Messages = {
     peerBusy: "الجهاز الآخر مشغول بنقل آخر — أعد المحاولة بعد قليل ✗",
   },
   account: {
+    verifyPanel: "تأكيد بريدك الإلكتروني",
+    forgotPanel: "إعادة تعيين كلمة المرور",
+    panel: "الحساب",
     signIn: "تسجيل الدخول",
     signOut: "تسجيل الخروج",
     email: "البريد الإلكتروني",
@@ -386,7 +389,7 @@ const ar: Messages = {
     noToken: "لا يمكن الوصول إلى هذه الصفحة إلا من رابط تسجيل الدخول.",
     home: "العودة إلى الصفحة الرئيسية",
   },
-  nav: { lanTab: "LAN", crossTab: "فوري", offlineTab: "غير متزامن", cliTab: "CLI", appsTab: "التطبيقات" },
+  nav: { footerLegalLabel: "الشؤون القانونية", footerGuidesLabel: "الموارد", primaryLabel: "التنقل الرئيسي", footerLabel: "تنقل التذييل", lanTab: "LAN", crossTab: "فوري", offlineTab: "غير متزامن", cliTab: "CLI", appsTab: "التطبيقات" },
   crossTitle: "نقل فوري",
   offlineTitle: "نقل غير متزامن",
   cli: { subtitle: "انقل الملفات والنصوص العابرة من سطر الأوامر — مشفَّر من الطرف إلى الطرف، وقابل للاستضافة الذاتية." },

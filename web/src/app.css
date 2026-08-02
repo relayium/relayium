@@ -6,9 +6,36 @@
   --code-bg: #f4f3ec;
   --accent: #aa3bff;
   --accent-deep: #6d28d9;
-  /* The one brand gradient — buttons, marks, progress fills all draw from it so
-     every page reads as the same product. */
+  /* ── The three accent roles ───────────────────────────────────────────────
+     --accent is the DECORATIVE brand colour: fills, rims, gradient stops,
+     selection tints, glyphs. It is 4.39:1 on white, which is fine for all of
+     those and NOT fine for text — so it must never be the colour of a word.
+     Splitting the roles is what lets the brand stay recognisably purple while
+     the readable surfaces clear AA:
+       --accent-fg     text/links that should read as accent.
+                       light #7e22ce → 6.98:1 on --bg, 5.80:1 on an accent tint;
+                       dark  #c084fc → 6.77:1 on --bg, 4.95:1 on --surface.
+       --accent-action a SOLID fill that carries white text.
+                       light #6d28d9 → 7.10:1 against #fff;
+                       dark  #7c3aed → 5.70:1 against #fff.
+                       (--accent itself was 4.39:1 light and 2.64:1 dark here —
+                        white on the dark accent was the worst ratio on the site.)
+     Picking between them is a semantic question, not a search-and-replace:
+     "is this a word or an edge?" and "does something white sit on top of it?" */
+  --accent-fg: #7e22ce;
+  --accent-action: #6d28d9;
+  --accent-action-deep: #4338ca;
+  /* The decorative brand gradient. Logo marks and progress fills draw from it so
+     every page reads as the same product — but NOTHING readable may sit on top of
+     it: white text is 4.39:1 on the light first stop and 2.64:1 on the dark one.
+     A gradient hides that better than a flat fill does, which is precisely why it
+     went unnoticed. */
   --grad-accent: linear-gradient(135deg, var(--accent), var(--accent-deep));
+  /* The gradient that CAN carry white text: both endpoints clear AA in both
+     themes (light 7.10:1 → 7.90:1, dark 5.70:1 → 6.29:1). Endpoints are enough to
+     check — luminance is convex along a two-stop sRGB ramp, so its maximum (the
+     worst contrast against white) is always at one end, never in the middle. */
+  --grad-action: linear-gradient(135deg, var(--accent-action), var(--accent-action-deep));
   --accent-bg: rgba(170, 59, 255, 0.1);
   --accent-border: rgba(170, 59, 255, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
@@ -107,6 +134,11 @@
     --code-bg: #1f2028;
     --accent: #c084fc;
     --accent-deep: #818cf8;
+    /* Dark inverts which role needs help: the accent is light enough to read as
+       text (6.77:1) but far too light to carry white (2.64:1). */
+    --accent-fg: #c084fc;
+    --accent-action: #7c3aed;
+    --accent-action-deep: #4f46e5;
     --accent-bg: rgba(192, 132, 252, 0.15);
     --accent-border: rgba(192, 132, 252, 0.5);
     --social-bg: rgba(47, 48, 58, 0.5);
@@ -137,6 +169,10 @@
   --code-bg: #1f2028;
   --accent: #c084fc;
   --accent-deep: #818cf8;
+  /* Same split as the prefers-color-scheme block above. */
+  --accent-fg: #c084fc;
+  --accent-action: #7c3aed;
+  --accent-action-deep: #4f46e5;
   --accent-bg: rgba(192, 132, 252, 0.15);
   --accent-border: rgba(192, 132, 252, 0.5);
   --social-bg: rgba(47, 48, 58, 0.5);
@@ -270,7 +306,7 @@ code {
 .btn.disabled { opacity: .55; cursor: not-allowed; box-shadow: none; transform: none; }
 /* Explicit name for the neutral tier, so intent is writable in markup. */
 .btn-secondary { background: var(--control-bg); border-color: var(--control-border); color: var(--text-h); }
-.btn-primary { background: var(--grad-accent); border-color: transparent; color: #fff; }
+.btn-primary { background: var(--grad-action); border-color: transparent; color: #fff; }
 .btn-primary:not(:disabled):not(.is-disabled):not(.disabled):hover {
   filter: brightness(1.07);
   box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--accent) 60%, transparent);

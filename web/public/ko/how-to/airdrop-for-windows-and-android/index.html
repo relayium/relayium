@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Windows·Linux·Android용 AirDrop 대안","description":"Windows·Linux·Android에는 공식 AirDrop이 없습니다 — 가장 가까운 방법은 이것입니다: 브라우저에서 같은 Wi-Fi로 즉시 공유, 계정도 설치도 불필요, 게다가 AirDrop이 못 하는 인터넷 너머 전송까지.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/how-to/airdrop-for-windows-and-android/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Windows·Linux·Android용 AirDrop 대안"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Windows나 Android용 공식 AirDrop이 있나요?","acceptedAnswer":{"@type":"Answer","text":"없습니다 — AirDrop은 Apple 기기 전용이며 Apple은 Windows나 Android용 클라이언트를 낸 적이 없습니다. Relayium은 브라우저 기반 대안입니다. 두 기기에서 relayium.com을 열면, Apple과 비Apple이 섞인 조합을 포함해 플랫폼과 상관없이 똑같이 동작합니다."}},{"@type":"Question","name":"계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"같은 Wi-Fi 흐름에서는 필요 없습니다 — 양쪽에서 페이지를 열면 서로를 찾고, 로그인이 전혀 필요 없습니다. 다른 네트워크를 넘어 페어링 코드로 보낼 때는 보내는 쪽의 로그인이 필요하지만, 어느 네트워크 모드든 받는 쪽은 계정이 필요 없습니다."}},{"@type":"Question","name":"뭔가 설치해야 하나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. Windows·Linux·macOS·Android·iOS 어디서나 웹 페이지이므로 스토어에서 내려받을 것도, 계속 업데이트할 것도 없습니다."}},{"@type":"Question","name":"'Relayium vs AirDrop' 비교 글과는 무엇이 다른가요?","acceptedAnswer":{"@type":"Answer","text":"그 글은 AirDrop이 실제로 더 나은 부분(순수 Apple 가정)과 부족한 부분을 정면으로 비교한 글입니다. 이 가이드는 적어도 한 기기가 Apple 제품이 아닐 때 실제로 AirDrop 같은 경험을 얻는 방법을 알려주는 실전 가이드입니다."}},{"@type":"Question","name":"AirDrop처럼 여러 명에게 보낼 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"같은 네트워크에서는 가능합니다 — 로컬 방은 두 기기로 제한되지 않으므로 근처의 여러 기기가 동시에 받을 수 있습니다. 인터넷 너머의 페어링 코드 모드는 암호화된 릴레이를 거쳐 두 기기만 잇습니다."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ko">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">Windows·Linux·Android용 AirDrop 대안</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Windows·Linux·Android용 AirDrop 대안</h1>
       <p class="updated">마지막 업데이트: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/airdrop-for-windows-and-android/">English</a><a href="/zh/how-to/airdrop-for-windows-and-android/">中文</a><a href="/ja/how-to/airdrop-for-windows-and-android/">日本語</a><a href="/ko/how-to/airdrop-for-windows-and-android/" aria-current="true">한국어</a><a href="/de/how-to/airdrop-for-windows-and-android/">Deutsch</a><a href="/fr/how-to/airdrop-for-windows-and-android/">Français</a><a href="/ar/how-to/airdrop-for-windows-and-android/">العربية</a><a href="/es/how-to/airdrop-for-windows-and-android/">Español</a><a href="/pt/how-to/airdrop-for-windows-and-android/">Português</a></nav>
@@ -104,6 +109,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>계속 읽기</h2>
       <ul class="related"><li><a href="/ko/compare/airdrop/">Relayium vs AirDrop: 크로스플랫폼 에어드롭 대안</a></li><li><a href="/ko/how-to/send-files-on-the-same-wifi/">같은 Wi-Fi에 있는 기기끼리 파일 보내기</a></li><li><a href="/ko/how-to/transfer-files-between-mac-and-windows/">Mac과 Windows PC 사이에서 파일 전송하는 방법</a></li><li><a href="/ko/compare/localsend/">Relayium vs LocalSend: 로컬 파일 전송, 무엇을 쓸까</a></li><li><a href="/ko/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=ko">← Relayium</a>
         <a href="/ko/apps/">앱</a>

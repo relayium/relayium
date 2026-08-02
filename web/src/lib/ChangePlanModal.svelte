@@ -63,9 +63,12 @@
   }
 </script>
 
-<div class="backdrop" role="dialog" aria-modal="true" use:trapFocus>
+<!-- The heading already names this dialog ("Change plan · Pro monthly"), so it is
+     the accessible name; a separate aria-label would be a second copy of the same
+     sentence that nothing keeps in sync. -->
+<div class="backdrop" role="dialog" aria-modal="true" aria-labelledby="change-plan-title" use:trapFocus>
   <div class="modal">
-    <h3>{t.billing.changePlan} · {planName} {cycleWord(cycle)}</h3>
+    <h3 id="change-plan-title">{t.billing.changePlan} · {planName} {cycleWord(cycle)}</h3>
     {#if loadFailed}
       <p class="err">{t.billing.previewError}</p>
     {:else if !preview}

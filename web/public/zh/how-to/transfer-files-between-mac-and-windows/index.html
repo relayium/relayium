@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何在 Mac 和 Windows 电脑之间传输文件","description":"在 macOS 和 Windows 之间传文件，不用 U 盘、不用共享文件夹、不用上传网盘。同一网络和跨互联网都能用——两台电脑都无需安装任何东西。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/transfer-files-between-mac-and-windows/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"如何在 Mac 和 Windows 电脑之间传输文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Mac 或 Windows PC 上需要安装什么吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。Relayium 在 macOS 和 Windows 上都完全运行于浏览器中。在每台机器上打开 relayium.com 就绪了——无论哪种方式都不用下载。同一网络下传输完全无需账号；跨互联网配对只需发送方登录一下。"}},{"@type":"Question","name":"两台电脑必须在同一网络吗？","acceptedAnswer":{"@type":"Answer","text":"不必。同一网络是最快的方式，因为两台机器会自动互相发现；但配对码同样能让 Mac 和 Windows PC 跨越互联网连接——即使身处不同城市。无论哪种方式传输都保持端到端加密；跨网络路径只是需要发送方先登录，接收方始终无需账号。"}},{"@type":"Question","name":"能发送整个文件夹，而不只是单个文件吗？","acceptedAnswer":{"@type":"Answer","text":"可以。把文件夹拖进去，Relayium 会以一批最多 1,000 个文件发送，并保持文件夹结构。Windows 上的 Chrome 和 Edge 会直接写入你选择的目录；如果接收方浏览器不支持直接写入文件夹，会以单个 .zip 到达，结构相同。"}},{"@type":"Question","name":"从 Mac 传到 Windows，文件权限、换行符或文件名会被弄乱吗？","acceptedAnswer":{"@type":"Answer","text":"不会。Relayium 传输的是每个文件的精确字节，并用 SHA-256 哈希做端到端校验——不会触碰换行符、编码或文件名。任何需要应用层转换处理的东西（比如文本文件里 CRLF 和 LF 的区别）都不受影响，因为文件本身没有被改动。"}},{"@type":"Question","name":"有大小限制吗？","acceptedAnswer":{"@type":"Answer","text":"每批最多 1,000 个文件。服务器端完全没有大小上限——桌面版 Chrome 和 Edge 会直接流式写入磁盘。Firefox 和 Safari 没有 File System Access API，在它们那边接收的整批文件只能先放在内存里，因此超过约 256 MB 时 Relayium 会先提示你——这是个保守估计而非硬上限，真正的天花板取决于这台机器的内存以及还跑着什么。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">如何在 Mac 和 Windows 电脑之间传输文件</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>如何在 Mac 和 Windows 电脑之间传输文件</h1>
       <p class="updated">最近更新: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-between-mac-and-windows/">English</a><a href="/zh/how-to/transfer-files-between-mac-and-windows/" aria-current="true">中文</a><a href="/ja/how-to/transfer-files-between-mac-and-windows/">日本語</a><a href="/ko/how-to/transfer-files-between-mac-and-windows/">한국어</a><a href="/de/how-to/transfer-files-between-mac-and-windows/">Deutsch</a><a href="/fr/how-to/transfer-files-between-mac-and-windows/">Français</a><a href="/ar/how-to/transfer-files-between-mac-and-windows/">العربية</a><a href="/es/how-to/transfer-files-between-mac-and-windows/">Español</a><a href="/pt/how-to/transfer-files-between-mac-and-windows/">Português</a></nav>
@@ -110,6 +115,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>继续阅读</h2>
       <ul class="related"><li><a href="/zh/how-to/send-files-on-the-same-wifi/">同一 Wi-Fi 下的设备之间互传文件</a></li><li><a href="/zh/how-to/airdrop-for-windows-and-android/">Windows、Linux、Android 的隔空投送替代方案</a></li><li><a href="/zh/compare/airdrop/">Relayium 对比 AirDrop：跨平台的隔空投送替代方案</a></li><li><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/">如何通过互联网在两台电脑之间传文件</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=zh">← Relayium</a>
         <a href="/zh/apps/">应用</a>

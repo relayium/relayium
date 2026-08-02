@@ -81,6 +81,9 @@ const fr: Messages = {
     peerBusy: "L'autre appareil est occupé par un autre transfert — réessayez dans un instant ✗",
   },
   account: {
+    verifyPanel: "Vérifier votre e-mail",
+    forgotPanel: "Réinitialiser le mot de passe",
+    panel: "Compte",
     signIn: "Se connecter",
     signOut: "Se déconnecter",
     email: "Adresse e-mail",
@@ -331,7 +334,7 @@ const fr: Messages = {
     noToken: "Cette page n'est accessible que depuis un lien de connexion.",
     home: "Retour à l'accueil",
   },
-  nav: { lanTab: "LAN", crossTab: "Temps réel", offlineTab: "Asynchrone", cliTab: "CLI", appsTab: "Applis" },
+  nav: { footerLegalLabel: "Mentions légales", footerGuidesLabel: "Ressources", primaryLabel: "Navigation principale", footerLabel: "Navigation de pied de page", lanTab: "LAN", crossTab: "Temps réel", offlineTab: "Asynchrone", cliTab: "CLI", appsTab: "Applis" },
   crossTitle: "Transfert en temps réel",
   offlineTitle: "Transfert asynchrone",
   cli: { subtitle: "Transférez des fichiers et du texte éphémère depuis votre terminal — chiffré de bout en bout, auto-hébergeable." },

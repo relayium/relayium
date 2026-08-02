@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Aloja Relayium por tu cuenta: ejecuta tu servidor de transferencia de archivos y texto","description":"Ejecuta toda la pila de Relayium por tu cuenta con un solo comando de Docker — tu propio dominio, tus propios datos, sin cuenta de terceros. Cubre el emparejamiento de archivos y texto efímero, las claves de entorno, el retransmisor TURN opcional del navegador y cómo apuntar la CLI hacia él.","inLanguage":"es","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/es/guides/self-host-relayium/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/es/"},{"@type":"ListItem","position":2,"name":"Guías","item":"https://relayium.com/es/guides/"},{"@type":"ListItem","position":3,"name":"Aloja Relayium por tu cuenta: ejecuta tu servidor de transferencia de archivos y texto"}]},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Necesito configurar TURN?","acceptedAnswer":{"@type":"Answer","text":"Solo si quieres que las transferencias en tiempo real entre redes funcionen a través de NAT estrictos. Las transferencias en la misma red, el push/pull basado en SSH y el daemon directo funcionan todos sin él — TURN sirve puramente para el recorrido de NAT en la ruta del código de emparejamiento entre redes."}},{"@type":"Question","name":"¿La CLI sigue siendo gratis si me autoalojo?","acceptedAnswer":{"@type":"Answer","text":"Sí. La CLI sigue siendo gratis con relayium.com o con tu servidor. send o text sin código necesitan una cuenta en el servidor de destino para generar uno, y up la necesita para guardar un archivo. receive, down y text con el código impreso no requieren iniciar sesión."}},{"@type":"Question","name":"¿Puedo usar mi propio dominio y certificado TLS?","acceptedAnswer":{"@type":"Answer","text":"Sí. La imagen de Docker escucha en HTTP simple en :8080; pon nginx o Caddy delante con tu propio dominio y certificado (por ejemplo, vía certbot/Let's Encrypt). docs/self-hosting.md cubre qué hay que redirigir; la configuración nginx de producción propia de Relayium no está publicada, así que tendrás que escribir la tuya."}},{"@type":"Question","name":"¿Qué datos almacena mi servidor autoalojado?","acceptedAnswer":{"@type":"Answer","text":"Una base de datos SQLite (cuentas, sesiones) en RELAYIUM_DB y, para las transferencias almacenadas/basadas en enlace, blobs cifrados en RELAYIUM_BLOB_DIR que el propio servidor no puede descifrar. El servidor no guarda archivos en tiempo real ni cuerpos de mensajes y solo retransmite el handshake de señalización; los dispositivos receptores sí pueden conservar archivos o texto."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=es">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=es">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">Aloja Relayium por tu cuenta: ejecuta tu servidor de transferencia de archivos y texto</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Aloja Relayium por tu cuenta: ejecuta tu servidor de transferencia de archivos y texto</h1>
       <p class="updated">Última actualización: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium/">English</a><a href="/zh/guides/self-host-relayium/">中文</a><a href="/ja/guides/self-host-relayium/">日本語</a><a href="/ko/guides/self-host-relayium/">한국어</a><a href="/de/guides/self-host-relayium/">Deutsch</a><a href="/fr/guides/self-host-relayium/">Français</a><a href="/ar/guides/self-host-relayium/">العربية</a><a href="/es/guides/self-host-relayium/" aria-current="true">Español</a><a href="/pt/guides/self-host-relayium/">Português</a></nav>
@@ -113,6 +118,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>Sigue leyendo</h2>
       <ul class="related"><li><a href="/es/guides/bring-your-own-node/">Usa tu propio nodo: aprovecha el retransmisor y el almacenamiento de Relayium gratis</a></li><li><a href="/es/compare/nextcloud/">Relayium vs Nextcloud para enviar archivos</a></li><li><a href="/es/guides/how-relayium-encrypts-your-files/">Cómo Relayium cifra tus archivos de extremo a extremo</a></li><li><a href="/es/guides/run-relayium-as-an-always-on-service/">Ejecuta Relayium como un servicio de recepción siempre activo</a></li><li><a href="/es/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=es">← Relayium</a>
         <a href="/es/apps/">Apps</a>

@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI","description":"استخدم relayium push وpull لنسخ المجلدات أو مزامنتها إلى خادم تدخل إليه بالفعل عبر ssh — قابل للاستئناف، ومُتحقَّق من سلامته، ومجاني. تنتقل البايتات عبر اتصال SSH لديك ولا تلمس خوادم Relayium أبدًا.","inLanguage":"ar","datePublished":"2026-07-08","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل تمر الملفات عبر خوادم Relayium؟","acceptedAnswer":{"@type":"Answer","text":"لا. يجري push وpull بالكامل عبر اتصال SSH لديك. خوادم Relayium لا تشارك أبدًا ولا تحتاج إلى حساب."}},{"@type":"Question","name":"هل يحتاج الخادم إلى تثبيت relayium؟","acceptedAnswer":{"@type":"Answer","text":"يعتمد ذلك على الاتجاه. بالنسبة لـ push فهو اختياري: مع relayium على الطرف البعيد تحصل على البروتوكول الأصلي — عمليات نقل قابلة للاستئناف وتحقق SHA-256 لكل ملف — وبدونه يتراجع push إلى بث tar بسيط عبر SSH، وهو يعمل مع ذلك لكنه يرسل دائمًا كل ملف بالكامل. أما بالنسبة لـ pull فهو مطلوب: يحتاج pull دائمًا إلى relayium على الطرف البعيد (لا يملك تراجع tar)، فثبّته هناك أولًا."}},{"@type":"Question","name":"كيف يختار أي مفتاح SSH وأي منفذ يستخدم؟","acceptedAnswer":{"@type":"Answer","text":"يقرأ ملف ~/.ssh/config لديك كما يفعل ssh، فتُلتقط أسماء المضيفين المستعارة والمفاتيح والمنافذ تلقائيًا. يمكنك أيضًا تجاوزها لكل أمر بـ -i لملف الهوية و -p للمنفذ."}},{"@type":"Question","name":"هل هذا أسرع من rsync؟","acceptedAnswer":{"@type":"Answer","text":"للدفع إلى خادمك الخاص فهو في المستوى نفسه تقريبًا لـ rsync عبر SSH؛ الهدف ليس التفوّق على rsync بل أن نمنحك أداة واحدة تنفّذ أيضًا عمليات النقل عبر الشبكات ومن خادم إلى خادم بنفس ضمانات الاستئناف والسلامة."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ar">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ar">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI</h1>
       <p class="updated">آخر تحديث: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/">English</a><a href="/zh/guides/back-up-a-server-over-ssh/">中文</a><a href="/ja/guides/back-up-a-server-over-ssh/">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh/">한국어</a><a href="/de/guides/back-up-a-server-over-ssh/">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh/">Français</a><a href="/ar/guides/back-up-a-server-over-ssh/" aria-current="true">العربية</a><a href="/es/guides/back-up-a-server-over-ssh/">Español</a><a href="/pt/guides/back-up-a-server-over-ssh/">Português</a></nav>
@@ -115,6 +120,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</c
       </div>
       <h2>تابع القراءة</h2>
       <ul class="related"><li><a href="/ar/how-to/automate-server-backups/">أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron</a></li><li><a href="/ar/guides/server-to-server-transfers/">النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)</a></li><li><a href="/ar/compare/scp/">Relayium مقابل scp: نقل ملفات أبسط عبر SSH</a></li><li><a href="/ar/guides/sync-a-large-folder-between-servers/">مزامنة مجلد كبير بين خادمين (قابلة للاستئناف، في الخلفية)</a></li><li><a href="/ar/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=ar">← Relayium</a>
         <a href="/ar/apps/">التطبيقات</a>

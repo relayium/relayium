@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs. scp: einfachere Dateiübertragung über SSH","description":"scp ist universell und praktisch überall vorinstalliert. Relayium push/pull nutzen dasselbe SSH, ergänzen aber Wiederaufnahme, SHA-256-Prüfung, Fortschritt und einen Fallback für nackte Server. Ein fairer Vergleich.","inLanguage":"de","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/de/compare/scp/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/de/"},{"@type":"ListItem","position":2,"name":"Anleitungen","item":"https://relayium.com/de/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs. scp: einfachere Dateiübertragung über SSH"}]},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Braucht Relayiums CLI ein Konto?","acceptedAnswer":{"@type":"Answer","text":"Für push/pull nicht — es nutzt deinen eigenen SSH-Zugang genau wie scp, ohne Relayium-Konto und ohne Anmeldung, und für daemon-direct und sync gilt dasselbe. send und Cloud-up sind die Ausnahmen: send braucht ein Konto, damit der Server seinen Pairing-Code erzeugen kann (mit einem übergebenen Code nicht), und up eines, um die Datei zu speichern. Zum Empfangen nie."}},{"@type":"Question","name":"Funktioniert push, wenn auf dem entfernten Server kein Relayium installiert ist?","acceptedAnswer":{"@type":"Answer","text":"Ja. push prüft zuerst und fällt, falls relayium nicht vorhanden ist, auf einen einfachen tar-Stream über dieselbe SSH-Verbindung zurück, sodass es auch gegen einen nackten Server funktioniert. Dieser Fallback existiert nur bei push — pull braucht immer relayium bereits auf der Gegenseite installiert, da die Gegenseite bei einem pull als Absender agiert."}},{"@type":"Question","name":"Ist es wirklich so einfach zu benutzen wie scp?","acceptedAnswer":{"@type":"Answer","text":"Die Befehle sehen ähnlich aus: relayium push src user@host:dest statt scp -r src user@host:dest. Der Unterschied zeigt sich nur, wenn etwas schiefgeht — eine abgebrochene Verbindung wird fortgesetzt statt neu gestartet, und jede Datei wird bei Ankunft per Prüfsumme verifiziert."}},{"@type":"Question","name":"Wann sollte ich einfach scp verwenden?","acceptedAnswer":{"@type":"Answer","text":"Für eine echte einmalige Kopie, bei der nichts fortgesetzt oder verifiziert werden muss und du kein zusätzliches Binary willst — scp ist schon da und die einfachere Wahl. Es ist auch die sicherere Standardwahl in schnellen Skripten, wenn du keine neue Abhängigkeit willst."}},{"@type":"Question","name":"Ist Relayiums CLI kostenlos?","acceptedAnswer":{"@type":"Answer","text":"Ja, vollständig — keine bezahlte Stufe, AGPL-3.0-lizenziert und quelloffen, und jeder Modus verbindet die beiden Enden direkt."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=de">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs. scp: einfachere Dateiübertragung über SSH</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Relayium vs. scp: einfachere Dateiübertragung über SSH</h1>
       <p class="updated">Zuletzt aktualisiert: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/scp/">English</a><a href="/zh/compare/scp/">中文</a><a href="/ja/compare/scp/">日本語</a><a href="/ko/compare/scp/">한국어</a><a href="/de/compare/scp/" aria-current="true">Deutsch</a><a href="/fr/compare/scp/">Français</a><a href="/ar/compare/scp/">العربية</a><a href="/es/compare/scp/">Español</a><a href="/pt/compare/scp/">Português</a></nav>
@@ -117,6 +122,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>Weiterlesen</h2>
       <ul class="related"><li><a href="/de/guides/back-up-a-server-over-ssh/">Dateien über SSH auf dem eigenen Server sichern mit der Relayium CLI</a></li><li><a href="/de/compare/rsync/">Relayium vs. rsync: Ordner synchronisieren ohne SSH-Setup</a></li><li><a href="/de/guides/server-to-server-transfers/">Server-zu-Server-Übertragungen mit der Relayium CLI (daemon-direct)</a></li><li><a href="/de/guides/transfer-files-from-terminal/">Dateien und Text mit der Relayium CLI vom Terminal übertragen</a></li><li><a href="/de/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=de">← Relayium</a>
         <a href="/de/apps/">Apps</a>

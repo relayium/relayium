@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기","description":"relayium push와 pull로 이미 ssh로 접속하는 서버에 디렉터리를 복사하거나 동기화하세요 — 재개 가능하고 무결성 검사가 되며 무료입니다. 바이트는 내 SSH 연결을 통해 이동하며 Relayium의 서버를 전혀 거치지 않습니다.","inLanguage":"ko","datePublished":"2026-07-08","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"파일이 Relayium의 서버를 거치나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. push와 pull은 전적으로 내 SSH 연결을 통해 실행됩니다. Relayium의 서버는 전혀 관여하지 않으며 계정도 필요 없습니다."}},{"@type":"Question","name":"서버에 relayium이 설치되어 있어야 하나요?","acceptedAnswer":{"@type":"Answer","text":"방향에 따라 다릅니다. push의 경우 선택 사항입니다. 원격에 relayium이 있으면 네이티브 프로토콜을 사용할 수 있습니다 — 재개 가능한 전송과 파일별 SHA-256 검사입니다. 없으면 push는 SSH를 통한 tar 스트림으로 대체되며, 여전히 동작하지만 각 파일을 항상 전체 전송합니다. pull의 경우 필수입니다. pull은 항상 원격지에 relayium이 있어야 하며(tar 대체 방식 없음), 먼저 원격지에 설치해 두세요."}},{"@type":"Question","name":"어떤 SSH 키와 포트를 사용할지 어떻게 정하나요?","acceptedAnswer":{"@type":"Answer","text":"ssh와 마찬가지로 기존 ~/.ssh/config를 읽으므로, 호스트 별칭, 키, 포트가 자동으로 반영됩니다. 명령마다 -i로 신원 파일을, -p로 포트를 지정해 재정의할 수도 있습니다."}},{"@type":"Question","name":"이게 rsync보다 빠른가요?","acceptedAnswer":{"@type":"Answer","text":"자신의 서버로 push하는 경우라면 SSH를 통한 rsync와 비슷한 수준입니다. 목표는 rsync를 이기는 것이 아니라, 같은 재개와 무결성 보장을 갖춘 채로 크로스 네트워크 전송과 서버 간 전송까지 함께 해내는 하나의 도구를 제공하는 것입니다."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ko">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기</h1>
       <p class="updated">마지막 업데이트: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/">English</a><a href="/zh/guides/back-up-a-server-over-ssh/">中文</a><a href="/ja/guides/back-up-a-server-over-ssh/">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh/" aria-current="true">한국어</a><a href="/de/guides/back-up-a-server-over-ssh/">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh/">Français</a><a href="/ar/guides/back-up-a-server-over-ssh/">العربية</a><a href="/es/guides/back-up-a-server-over-ssh/">Español</a><a href="/pt/guides/back-up-a-server-over-ssh/">Português</a></nav>
@@ -115,6 +120,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</c
       </div>
       <h2>계속 읽기</h2>
       <ul class="related"><li><a href="/ko/how-to/automate-server-backups/">cron 작업으로 암호화된 서버 백업 자동화하기</a></li><li><a href="/ko/guides/server-to-server-transfers/">Relayium CLI로 서버 간 전송(데몬 다이렉트)</a></li><li><a href="/ko/compare/scp/">Relayium vs scp: 더 간단한 SSH 파일 전송</a></li><li><a href="/ko/guides/sync-a-large-folder-between-servers/">두 서버 사이에서 큰 폴더 동기화하기(재개 가능, 백그라운드)</a></li><li><a href="/ko/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=ko">← Relayium</a>
         <a href="/ko/apps/">앱</a>

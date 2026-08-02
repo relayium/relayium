@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Transferências de servidor para servidor com a CLI do Relayium (daemon direto)","description":"Mova arquivos diretamente entre dois servidores que você controla com relayium serve e push relayium:// — sobre TLS com fixação, sem retransmissor, sem SSH, sem código de emparelhamento. Aprove um novo emissor uma vez no seu primeiro push e depois automatize-o ou execute-o sob systemd.","inLanguage":"pt","datePublished":"2026-07-08","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/pt/guides/server-to-server-transfers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/pt/"},{"@type":"ListItem","position":2,"name":"Guias","item":"https://relayium.com/pt/guides/"},{"@type":"ListItem","position":3,"name":"Transferências de servidor para servidor com a CLI do Relayium (daemon direto)"}]},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Em que o daemon direto difere de push por SSH?","acceptedAnswer":{"@type":"Answer","text":"push por SSH tunela a transferência pela sua conexão SSH e precisa de uma conta SSH no remoto. O daemon direto não precisa de SSH nem de conta — os dois servidores se autenticam mutuamente pela impressão digital do certificado sobre TLS com fixação, o que é mais leve quando as duas máquinas são suas."}},{"@type":"Question","name":"Preciso copiar impressões digitais à mão de um lado para o outro?","acceptedAnswer":{"@type":"Answer","text":"Não. Em um terminal, serve pede que você aprove cada novo emissor no seu primeiro push — mostrando seu endereço e sua impressão digital — e o lembra, então os pushes posteriores são silenciosos. Você só recorre a relayium id ou relayium authorize em configurações não interativas como um serviço do systemd, onde não há ninguém para responder ao prompt."}},{"@type":"Question","name":"Onde estão os arquivos de identidade e confiança?","acceptedAnswer":{"@type":"Answer","text":"Em ~/.config/relayium/ por padrão (substitua com --config-dir). id.key / id.crt são a identidade persistente deste host, known_hosts guarda as impressões digitais dos processos à escuta para os quais você fez push, e authorized_fingerprints é a lista de permissão de emissores do processo à escuta."}},{"@type":"Question","name":"O que acontece se uma impressão digital mudar?","acceptedAnswer":{"@type":"Answer","text":"O push é recusado e avisa. A chave do processo à escuta é fixada em known_hosts no primeiro uso, então uma mudança posterior — um host com chave regenerada ou um ataque de intermediário — é rejeitada em vez de aceita silenciosamente. Remova a linha do known_hosts apenas se você rotacionou a chave intencionalmente."}},{"@type":"Question","name":"Existe algum retorno por retransmissor?","acceptedAnswer":{"@type":"Answer","text":"Não. O daemon direto pressupõe um endereço de processo à escuta alcançável; se a conexão não puder ser feita, ela falha. Nada é jamais roteado via proxy pelo Relayium — esse é o propósito deste modo."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=pt">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">Transferências de servidor para servidor com a CLI do Relayium (daemon direto)</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Transferências de servidor para servidor com a CLI do Relayium (daemon direto)</h1>
       <p class="updated">Última atualização: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers/">English</a><a href="/zh/guides/server-to-server-transfers/">中文</a><a href="/ja/guides/server-to-server-transfers/">日本語</a><a href="/ko/guides/server-to-server-transfers/">한국어</a><a href="/de/guides/server-to-server-transfers/">Deutsch</a><a href="/fr/guides/server-to-server-transfers/">Français</a><a href="/ar/guides/server-to-server-transfers/">العربية</a><a href="/es/guides/server-to-server-transfers/">Español</a><a href="/pt/guides/server-to-server-transfers/" aria-current="true">Português</a></nav>
@@ -136,6 +141,7 @@ WantedBy=multi-user.target</code></pre>
       </div>
       <h2>Continue lendo</h2>
       <ul class="related"><li><a href="/pt/guides/sync-a-large-folder-between-servers/">Sincronizar uma pasta grande entre dois servidores (retomável, em segundo plano)</a></li><li><a href="/pt/guides/back-up-a-server-over-ssh/">Faça backup de arquivos no seu próprio servidor via SSH com a CLI do Relayium</a></li><li><a href="/pt/compare/rsync/">Relayium vs rsync: sincronize pastas sem a configuração de SSH</a></li><li><a href="/pt/guides/run-relayium-as-an-always-on-service/">Execute o Relayium como um serviço de recepção sempre ativo</a></li><li><a href="/pt/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=pt">← Relayium</a>
         <a href="/pt/apps/">Apps</a>

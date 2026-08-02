@@ -81,6 +81,9 @@ const ja: Messages = {
     peerBusy: "相手は別の転送中です。しばらくして再試行してください ✗",
   },
   account: {
+    verifyPanel: "メールアドレスの確認",
+    forgotPanel: "パスワードの再設定",
+    panel: "アカウント",
     signIn: "サインイン",
     signOut: "サインアウト",
     email: "メールアドレス",
@@ -331,7 +334,7 @@ const ja: Messages = {
     noToken: "このページはサインインリンクからのみ開けます。",
     home: "ホームへ戻る",
   },
-  nav: { lanTab: "LAN", crossTab: "リアルタイム", offlineTab: "非同期", cliTab: "CLI", appsTab: "アプリ" },
+  nav: { footerLegalLabel: "法務情報", footerGuidesLabel: "リソース", primaryLabel: "メインナビゲーション", footerLabel: "フッターナビゲーション", lanTab: "LAN", crossTab: "リアルタイム", offlineTab: "非同期", cliTab: "CLI", appsTab: "アプリ" },
   crossTitle: "リアルタイム転送",
   offlineTitle: "非同期転送",
   cli: { subtitle: "ターミナルからファイルと一時的なテキストを転送 — エンドツーエンド暗号化、セルフホスト可能。" },

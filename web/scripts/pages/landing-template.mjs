@@ -6,8 +6,8 @@ import { LANGS, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, PRICING_LABELS, PRICING
 // Exported so mode-template.mjs (and any other landing-style page) can reuse the
 // exact same inline stylesheet + page-shell classes instead of forking them.
 export const STYLE = `
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
@@ -20,11 +20,11 @@ h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .pitch{font-size:20px;margin:0 0 24px;max-width:42em}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
 ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
-.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .why li b,.compare h3{color:var(--text-h)}
-.learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
+.learn{list-style:none;padding:0}.learn a{color:var(--accent-fg);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
@@ -134,8 +134,12 @@ export function renderLandingPage({ lang, doc, articleLinks = [] }) {
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="${ctaHref(lang)}">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="${ctaHref(lang)}">Relayium</a></header>
       ${langBar(lang)}
+      <!-- The language bar and the footer are navigation, so the main landmark
+           starts after them: a screen-reader user jumping to the main content
+           should land on this page's own words, not on a row of language links. -->
+      <main>
       <h1>${esc(doc.hero.h1)}</h1>
       <p class="pitch">${esc(doc.hero.pitch)}</p>
       <a class="cta" href="${ctaHref(lang)}">${esc(doc.hero.cta)}</a>
@@ -167,6 +171,7 @@ export function renderLandingPage({ lang, doc, articleLinks = [] }) {
       </section>
 
       ${learn ? `<section class="reveal">${learn}</section>` : ""}
+      </main>
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
         <a href="${urlPath("apps", lang)}">${esc(APPS_LABELS[lang])}</a>

@@ -22,8 +22,8 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"이용약관 · Relayium","description":"Relayium 이용약관 — 기기 간 파일 및 실시간 텍스트를 종단간 암호화하여 전송하는 오픈소스 서비스입니다. 핵심 서비스는 무료이며, 선택적인 유료 플랜을 이용할 수 있습니다.","url":"https://relayium.com/ko/terms/","inLanguage":"ko","dateModified":"2026-07-31","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -35,14 +35,18 @@ h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <!-- The legal text is the main landmark. The site header and footer are
+           outside it; the language bar is inside, after the h1, matching its
+           visual position — it is a labelled <nav> landmark either way. -->
+      <main>
       <h1>이용약관</h1>
       <p class="updated">최종 업데이트: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/terms/">English</a><a href="/zh/terms/">中文</a><a href="/ja/terms/">日本語</a><a href="/ko/terms/" aria-current="true">한국어</a><a href="/de/terms/">Deutsch</a><a href="/fr/terms/">Français</a><a href="/ar/terms/">العربية</a><a href="/es/terms/">Español</a><a href="/pt/terms/">Português</a></nav>
@@ -61,6 +65,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>준거법</h2><p>이 약관은 서비스 운영자가 설립된 지역에 적용되는 법률의 적용을 받으며, 귀하가 거주하는 지역에서 법적으로 보장되는 강행 소비자 보호 권리를 제거하지 않습니다. 일부 조항이 집행 불가능한 것으로 판단되더라도 나머지 조항은 계속 유효합니다.</p>
       <h2>약관 변경</h2><p>서비스가 발전함에 따라 이 약관을 업데이트할 수 있습니다. 업데이트 시 위의 ‘최종 업데이트’ 날짜를 변경합니다. 변경 후 계속 사용하는 것은 업데이트된 약관에 동의하는 것을 의미합니다.</p>
       <h2>문의</h2><p>이 약관에 관한 질문이 있으시면 support@relayium.com으로 이메일을 보내주세요.</p>
+      </main>
       <footer>
         <a href="/">← Relayium</a>
         <a href="/ko/apps/">앱</a>

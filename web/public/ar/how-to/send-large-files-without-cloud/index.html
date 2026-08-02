@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"كيفية إرسال الملفات الكبيرة دون سحابة","description":"أرسِل مقاطع فيديو وأرشيفات بحجم عدة غيغابايت حيًا بين المتصفحات: يتصل WebRTC مباشرةً داخل شبكة LAN نفسها، ويحمل TURN النص المشفّر من الطرف إلى الطرف عبر الشبكات، بلا نسخة محتوى أو سجل فوري على الخادم.","inLanguage":"ar","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/how-to/send-large-files-without-cloud/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"كيفية إرسال الملفات الكبيرة دون سحابة"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"ما أكبر ملف يمكنني إرساله؟","acceptedAnswer":{"@type":"Answer","text":"في الوضع الفوري لا يوجد حد من جهة الخادم — يأتي السقف من المتصفح المستقبِل. على Chrome أو Edge في الحاسوب يُبَثّ الملف إلى القرص، فيمكنك إرسال عشرات الغيغابايت دون نفاد الذاكرة. أما Firefox وSafari فتنقصهما واجهة File System Access، فيُجمَّع ما يستقبلانه في الذاكرة، وينبّهك Relayium فوق نحو 256 ميغابايت — وهو تقدير متحفّظ لا سقف مقيس، إذ يتوقف السقف الحقيقي على ذاكرة الجهاز ونظامه وما هو مفتوح غير ذلك."}},{"@type":"Question","name":"ماذا يحدث إذا قُوطِع النقل؟","acceptedAnswer":{"@type":"Answer","text":"يستأنف تلقائيًا. إذا انقطع الاتصال في منتصف النقل — إشارة Wi-Fi متقطعة، حاسوب محمول نائم، تبديل شبكة — يلتقط Relayium من حيث توقف بدلًا من إعادة الملف كاملًا، فلا يضيع نقل طويل بسبب عثرة عابرة."}},{"@type":"Question","name":"كيف تُحمى خصوصيتي للملفات الكبيرة؟","acceptedAnswer":{"@type":"Answer","text":"النقل الفوري مشفّر من الطرف إلى الطرف عبر X25519 وAES-256-GCM لكل كتلة، ولا يصل المفتاح إلى أي خادم. يعرض الجهازان رمزًا من 6 أرقام ويُفحص كل ملف بـ SHA-256. يتصل WebRTC مباشرةً داخل شبكة LAN نفسها؛ وعبر الشبكات تستخدم المتصفحات TURN حسب التصميم، ولا يحمل المُرحِّل إلا نصًا مشفّرًا لا يستطيع قراءته أو فك تشفيره."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ar">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ar">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">كيفية إرسال الملفات الكبيرة دون سحابة</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>كيفية إرسال الملفات الكبيرة دون سحابة</h1>
       <p class="updated">آخر تحديث: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud/">English</a><a href="/zh/how-to/send-large-files-without-cloud/">中文</a><a href="/ja/how-to/send-large-files-without-cloud/">日本語</a><a href="/ko/how-to/send-large-files-without-cloud/">한국어</a><a href="/de/how-to/send-large-files-without-cloud/">Deutsch</a><a href="/fr/how-to/send-large-files-without-cloud/">Français</a><a href="/ar/how-to/send-large-files-without-cloud/" aria-current="true">العربية</a><a href="/es/how-to/send-large-files-without-cloud/">Español</a><a href="/pt/how-to/send-large-files-without-cloud/">Português</a></nav>
@@ -101,6 +106,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>تابع القراءة</h2>
       <ul class="related"><li><a href="/ar/how-to/send-a-folder/">كيفية إرسال مجلد كامل، لا ملفات فقط</a></li><li><a href="/ar/how-to/share-a-file-with-an-expiring-link/">مشاركة ملف برابط تنزيل آمن ينتهي صلاحيته</a></li><li><a href="/ar/compare/wetransfer/">Relayium مقابل WeTransfer: نقل ملفات كبيرة فوريًا دون تخزينها على الخادم</a></li><li><a href="/ar/guides/what-is-peer-to-peer-file-transfer/">ما هو نقل الملفات من الند للند؟</a></li><li><a href="/ar/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=ar">← Relayium</a>
         <a href="/ar/apps/">التطبيقات</a>

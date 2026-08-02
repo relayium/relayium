@@ -15,10 +15,20 @@
   <div class="table" role="table">
     <div class="row header" role="row">
       <span class="cell feat" role="columnheader">{t.compare.colFeature}</span>
-      <a class="cell rt head-link" role="columnheader" href={CROSS_PATH}
-         onclick={(e) => { e.preventDefault(); navigate("cross"); }}><Icon name="bolt" /> <span>{t.compare.colRealtime}</span></a>
-      <a class="cell st head-link" role="columnheader" href={OFFLINE_PATH}
-         onclick={(e) => { e.preventDefault(); navigate("offline"); }}><Icon name="package" /> <span>{t.compare.colStored}</span></a>
+      <!-- The columnheader role lives on the cell, and the link lives inside it.
+           It used to sit on the <a> itself, which ARIA does not allow: a link
+           cannot also be a column header, and browsers resolve that conflict
+           differently — some drop the header, some drop the link. Nesting keeps
+           both truths intact: the grid still has three real column headers, and
+           the last two still contain working links. -->
+      <span class="cell rt is-link" role="columnheader">
+        <a class="head-link" href={CROSS_PATH}
+           onclick={(e) => { e.preventDefault(); navigate("cross"); }}><Icon name="bolt" /> <span>{t.compare.colRealtime}</span></a>
+      </span>
+      <span class="cell st is-link" role="columnheader">
+        <a class="head-link" href={OFFLINE_PATH}
+           onclick={(e) => { e.preventDefault(); navigate("offline"); }}><Icon name="package" /> <span>{t.compare.colStored}</span></a>
+      </span>
     </div>
     {#each t.compare.rows as r (r.label)}
       <div class="row" role="row">
@@ -55,8 +65,18 @@
   .row.header .cell { font-weight: 600; color: var(--text-h); background: var(--code-bg); font-size: var(--fs-sm); }
   .row:not(.header):hover { background: var(--accent-bg); }
 
-  .head-link { display: flex; align-items: center; gap: var(--space-2); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-  .head-link:hover { color: var(--accent); }
+  /* Moving columnheader off the <a> and onto the cell must NOT shrink the target
+     to the width of the words: the whole header cell was clickable before, and a
+     smaller hit area is a WCAG 2.5.8 (target size) regression that no rule in the
+     scan would have caught. The cell hands its padding to the link, and the link
+     fills the cell — same pixels, correct semantics. */
+  .cell.is-link { padding: 0; }
+  .head-link {
+    display: flex; align-items: center; gap: var(--space-2);
+    block-size: 100%; padding: var(--space-3) var(--space-4);
+    text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+  }
+  .head-link:hover { color: var(--accent-fg); }
 
   @media (max-width: 640px) {
     .table { border: none; background: none; }

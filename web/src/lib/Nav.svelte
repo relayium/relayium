@@ -66,7 +66,7 @@
   });
 </script>
 
-<nav class="topnav" class:has-account={showAccount}>
+<nav class="topnav" class:has-account={showAccount} aria-label={t.nav.primaryLabel}>
   <a class="brand" href="/" onclick={(e) => { e.preventDefault(); navigate("lan"); }}>
     <Logo size={26} /><span class="word">Relayium</span>
   </a>
@@ -131,7 +131,7 @@
     transition: border-color .13s, color .13s, background .13s;
   }
   .tab:hover { border-color: var(--accent-border); }
-  .tab.active { color: #fff; background: var(--grad-accent); border-color: transparent; }
+  .tab.active { color: #fff; background: var(--grad-action); border-color: transparent; }
 
   .lang {
     font: inherit; font-size: var(--fs-xs); padding-block: 5px; padding-inline: 10px 28px;
@@ -146,7 +146,17 @@
        Five destinations, two selects and nine languages do not honestly fit one
        320px row — the defect was equal-width compression, not the second row. */
     .topnav { flex-wrap: wrap; gap: 8px; row-gap: 10px; }
-    .brand .word { display: none; }
+    /* Hidden from sight, NOT from the accessibility tree. `display: none` took
+       the word out of both, and the brand link's only remaining content was an
+       aria-hidden logo — so at ≤ this width the link had no accessible name at
+       all and a screen reader announced a bare "link". Clipping it keeps the
+       existing "Relayium" text as the name without adding a second copy of it
+       in an aria-label that could drift from what's on screen. */
+    .brand .word {
+      position: absolute; width: 1px; height: 1px; margin: -1px;
+      padding: 0; border: 0; overflow: hidden; white-space: nowrap;
+      clip-path: inset(50%);
+    }
     /* A zero flex basis lets this group share the first row's remaining space
        with the brand. Without it flex-wrap uses the selects' max-content width
        when deciding the line, so several locales wrapped at 320px even though

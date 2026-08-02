@@ -81,6 +81,9 @@ const zh: Messages = {
     peerBusy: "对方正忙（另一个传输进行中），请稍后再试 ✗",
   },
   account: {
+    verifyPanel: "验证邮箱",
+    forgotPanel: "重置密码",
+    panel: "账户",
     signIn: "登录",
     signOut: "退出登录",
     email: "邮箱地址",
@@ -331,7 +334,7 @@ const zh: Messages = {
     noToken: "本页面只能从登录链接进入。",
     home: "返回首页",
   },
-  nav: { lanTab: "局域网传输", crossTab: "实时传输", offlineTab: "异步传输", cliTab: "CLI", appsTab: "应用" },
+  nav: { footerLegalLabel: "法律", footerGuidesLabel: "资源", primaryLabel: "主导航", footerLabel: "页脚导航", lanTab: "局域网传输", crossTab: "实时传输", offlineTab: "异步传输", cliTab: "CLI", appsTab: "应用" },
   crossTitle: "实时传输",
   offlineTitle: "异步传输",
   cli: { subtitle: "在终端里传文件和临时文本 —— 端到端加密，可自托管。" },

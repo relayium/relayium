@@ -56,8 +56,8 @@
     font-size: var(--fs-sm);
     font-weight: 600;
     color: #fff;
-    background: var(--accent);
-    border: 1px solid var(--accent);
+    background: var(--accent-action);
+    border: 1px solid var(--accent-action);
     padding: var(--space-2) var(--space-4);
     border-radius: 999px;
     text-decoration: none;

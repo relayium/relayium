@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Haz copias de seguridad de archivos en tu propio servidor por SSH con la CLI de Relayium","description":"Usa relayium push y pull para copiar o sincronizar directorios a un servidor al que ya accedes por ssh — reanudable, con comprobación de integridad y gratis. Los bytes viajan por tu propia conexión SSH y nunca tocan los servidores de Relayium.","inLanguage":"es","datePublished":"2026-07-08","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/es/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/es/"},{"@type":"ListItem","position":2,"name":"Guías","item":"https://relayium.com/es/guides/"},{"@type":"ListItem","position":3,"name":"Haz copias de seguridad de archivos en tu propio servidor por SSH con la CLI de Relayium"}]},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Los archivos pasan por los servidores de Relayium?","acceptedAnswer":{"@type":"Answer","text":"No. push y pull se ejecutan enteramente sobre tu propia conexión SSH. Los servidores de Relayium nunca intervienen y no necesitas ninguna cuenta."}},{"@type":"Question","name":"¿El servidor necesita tener relayium instalado?","acceptedAnswer":{"@type":"Answer","text":"Depende de la dirección. Para push es opcional: con relayium en el remoto obtienes el protocolo nativo — transferencias reanudables y comprobaciones SHA-256 por archivo — y sin él, push recurre a un simple flujo tar sobre SSH, que sigue funcionando pero envía siempre cada archivo por completo. Para pull es obligatorio: pull siempre necesita relayium en el remoto (no tiene alternativa con tar), así que instálalo allí primero."}},{"@type":"Question","name":"¿Cómo elige qué clave SSH y qué puerto usar?","acceptedAnswer":{"@type":"Answer","text":"Lee tu ~/.ssh/config igual que hace ssh, así que los alias de host, las claves y los puertos se recogen automáticamente. También puedes sobrescribirlos por comando con -i para el archivo de identidad y -p para el puerto."}},{"@type":"Question","name":"¿Es más rápido que rsync?","acceptedAnswer":{"@type":"Answer","text":"Para enviar a tu propio servidor está en el mismo orden de magnitud que rsync sobre SSH; el objetivo no es superar a rsync, sino darte una sola herramienta que además hace transferencias entre redes y de servidor a servidor con las mismas garantías de reanudación e integridad."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=es">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=es">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">Haz copias de seguridad de archivos en tu propio servidor por SSH con la CLI de Relayium</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Haz copias de seguridad de archivos en tu propio servidor por SSH con la CLI de Relayium</h1>
       <p class="updated">Última actualización: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/">English</a><a href="/zh/guides/back-up-a-server-over-ssh/">中文</a><a href="/ja/guides/back-up-a-server-over-ssh/">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh/">한국어</a><a href="/de/guides/back-up-a-server-over-ssh/">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh/">Français</a><a href="/ar/guides/back-up-a-server-over-ssh/">العربية</a><a href="/es/guides/back-up-a-server-over-ssh/" aria-current="true">Español</a><a href="/pt/guides/back-up-a-server-over-ssh/">Português</a></nav>
@@ -115,6 +120,7 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</c
       </div>
       <h2>Sigue leyendo</h2>
       <ul class="related"><li><a href="/es/how-to/automate-server-backups/">Automatiza copias de seguridad cifradas del servidor con una tarea cron</a></li><li><a href="/es/guides/server-to-server-transfers/">Transferencias de servidor a servidor con la CLI de Relayium (daemon directo)</a></li><li><a href="/es/compare/scp/">Relayium vs scp: transferencia de archivos más sencilla por SSH</a></li><li><a href="/es/guides/sync-a-large-folder-between-servers/">Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)</a></li><li><a href="/es/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=es">← Relayium</a>
         <a href="/es/apps/">Apps</a>

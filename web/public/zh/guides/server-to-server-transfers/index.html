@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 实现服务器到服务器直传（daemon 直连）","description":"用 relayium serve 和 push relayium:// 在你自己掌控的两台服务器之间直接搬运文件——基于证书固定的 TLS，无需中继、无需 SSH、无需配对码。在新的推送方首次推送时批准一次，之后即可自动化，或在 systemd 下运行。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/server-to-server-transfers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 Relayium CLI 实现服务器到服务器直传（daemon 直连）"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"daemon 直连和通过 SSH 推送有什么不同？","acceptedAnswer":{"@type":"Answer","text":"通过 SSH 推送会把传输隧道进你的 SSH 连接，并且需要在远端有一个 SSH 账号。daemon 直连不需要 SSH，也不需要账号——两台服务器通过证书固定的 TLS，用证书指纹互相验证身份，当两台机器都是你自己的时候，这样更轻量。"}},{"@type":"Question","name":"我需要手动到处复制指纹吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。在终端中，serve 会在每个新推送方首次推送时提示你批准它——显示其地址和指纹——并记住它，因此后续推送是静默的。只有在没有终端的非交互式场景（比如作为 systemd 服务运行，没有人来回应提示）时，你才需要用到 relayium id 或 relayium authorize。"}},{"@type":"Question","name":"身份和信任文件在哪里？","acceptedAnswer":{"@type":"Answer","text":"默认在 ~/.config/relayium/ 中（可用 --config-dir 覆盖）。id.key / id.crt 是这台主机的持久身份，known_hosts 保存着你推送过的监听端的指纹，authorized_fingerprints 则是监听端的推送方允许列表。"}},{"@type":"Question","name":"指纹变化了会怎样？","acceptedAnswer":{"@type":"Answer","text":"监听端会拒绝这次推送并发出警告。监听端的密钥在首次使用时就固定在 known_hosts 中，因此之后的变化——无论是主机重新生成了密钥，还是中间人攻击——都会遭到拒绝，而不会默默放行。只有在你确实主动轮换了密钥时，才应删除 known_hosts 中对应的那一行。"}},{"@type":"Question","name":"有没有中继回退？","acceptedAnswer":{"@type":"Answer","text":"没有。daemon 直连假定监听端地址是可达的；如果无法建立连接，就会失败。任何数据都绝不会经由 Relayium 代理——这正是这个模式的意义所在。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">用 Relayium CLI 实现服务器到服务器直传（daemon 直连）</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>用 Relayium CLI 实现服务器到服务器直传（daemon 直连）</h1>
       <p class="updated">最近更新: 2026-07-12</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers/">English</a><a href="/zh/guides/server-to-server-transfers/" aria-current="true">中文</a><a href="/ja/guides/server-to-server-transfers/">日本語</a><a href="/ko/guides/server-to-server-transfers/">한국어</a><a href="/de/guides/server-to-server-transfers/">Deutsch</a><a href="/fr/guides/server-to-server-transfers/">Français</a><a href="/ar/guides/server-to-server-transfers/">العربية</a><a href="/es/guides/server-to-server-transfers/">Español</a><a href="/pt/guides/server-to-server-transfers/">Português</a></nav>
@@ -136,6 +141,7 @@ WantedBy=multi-user.target</code></pre>
       </div>
       <h2>继续阅读</h2>
       <ul class="related"><li><a href="/zh/guides/sync-a-large-folder-between-servers/">在两台服务器之间同步一个大文件夹（可续传、后台运行）</a></li><li><a href="/zh/guides/back-up-a-server-over-ssh/">用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</a></li><li><a href="/zh/compare/rsync/">Relayium 对比 rsync：无需配置 SSH 也能同步文件夹</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service/">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=zh">← Relayium</a>
         <a href="/zh/apps/">应用</a>

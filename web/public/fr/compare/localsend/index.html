@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs LocalSend : quel transfert local choisir","description":"Un comparatif honnête de Relayium et LocalSend. LocalSend est une excellente application open source installée sur chaque appareil ; Relayium fait le même transfert local dans le navigateur — sans installation — plus entre réseaux et en CLI.","inLanguage":"fr","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/compare/localsend/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs LocalSend : quel transfert local choisir"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Dois-je installer quelque chose pour utiliser Relayium sur le même réseau ?","acceptedAnswer":{"@type":"Answer","text":"Non. Ouvrez relayium.com dans un navigateur sur les deux appareils pendant qu'ils sont sur le même réseau : ils se voient automatiquement — sans application, sans compte, sans code d'appairage."}},{"@type":"Question","name":"LocalSend a-t-il besoin d'une connexion internet ?","acceptedAnswer":{"@type":"Answer","text":"Non — c'est l'une de ses forces. LocalSend fonctionne entièrement sur le réseau local sans aucun serveur impliqué, donc il continue de fonctionner même sans internet du tout."}},{"@type":"Question","name":"Relayium peut-il envoyer des fichiers à quelqu'un sur un réseau différent ?","acceptedAnswer":{"@type":"Answer","text":"Oui. Créez un code d'appairage (ou partagez le lien de participation qu'il génère) et l'autre appareil se connecte depuis n'importe où. Dans le navigateur, cette connexion entre réseaux passe par conception par un relais TURN chiffré : elle s'établit donc en une ou deux secondes, sans attendre des tentatives de connexion directe qui réussissent rarement entre deux réseaux domestiques. Le relais ne transporte que du texte chiffré et ne peut pas lire vos fichiers. Créer le code demande d'être connecté ; la personne à qui vous le remettez, jamais."}},{"@type":"Question","name":"Relayium est-il open source ?","acceptedAnswer":{"@type":"Answer","text":"Oui, sous licence AGPL-3.0, avec l'intégralité du protocole et du code, publics sur github.com/relayium/relayium — le même genre d'ouverture qui rend LocalSend digne de confiance."}},{"@type":"Question","name":"Lequel est le plus privé ?","acceptedAnswer":{"@type":"Answer","text":"Les deux gardent les transferts sur le même réseau hors d'un serveur public : sur le réseau local, les deux appareils Relayium se parlent en direct. LocalSend sécurise son transport local. Relayium ajoute, sur le réseau local comme entre réseaux, un canal de chiffrement indépendant au niveau applicatif avec un code SAS vérifiable des deux côtés — c'est pourquoi, sur le trajet entre réseaux, le relais ne voit que du texte chiffré."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=fr">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs LocalSend : quel transfert local choisir</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Relayium vs LocalSend : quel transfert local choisir</h1>
       <p class="updated">Dernière mise à jour: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/localsend/">English</a><a href="/zh/compare/localsend/">中文</a><a href="/ja/compare/localsend/">日本語</a><a href="/ko/compare/localsend/">한국어</a><a href="/de/compare/localsend/">Deutsch</a><a href="/fr/compare/localsend/" aria-current="true">Français</a><a href="/ar/compare/localsend/">العربية</a><a href="/es/compare/localsend/">Español</a><a href="/pt/compare/localsend/">Português</a></nav>
@@ -108,6 +113,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>À lire ensuite</h2>
       <ul class="related"><li><a href="/fr/how-to/send-files-on-the-same-wifi/">Envoyer des fichiers entre appareils sur le même Wi-Fi</a></li><li><a href="/fr/compare/snapdrop/">Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?</a></li><li><a href="/fr/compare/airdrop/">Relayium vs AirDrop : une alternative multiplateforme</a></li><li><a href="/fr/guides/what-is-peer-to-peer-file-transfer/">Qu&#39;est-ce que le transfert de fichiers pair à pair ?</a></li><li><a href="/fr/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=fr">← Relayium</a>
         <a href="/fr/apps/">Applis</a>

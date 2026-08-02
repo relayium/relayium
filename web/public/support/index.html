@@ -22,8 +22,8 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Support · Relayium","description":"How to get help with Relayium: contact for billing and subscriptions, transfer problems, self-hosted nodes, and security reports.","url":"https://relayium.com/support/","inLanguage":"en","dateModified":"2026-07-20","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -35,14 +35,18 @@ h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <!-- The legal text is the main landmark. The site header and footer are
+           outside it; the language bar is inside, after the h1, matching its
+           visual position — it is a labelled <nav> landmark either way. -->
+      <main>
       <h1>Support</h1>
       <p class="updated">Last updated: 2026-07-20</p>
       <nav class="langbar" aria-label="Language"><a href="/support/" aria-current="true">English</a><a href="/zh/support/">中文</a><a href="/ja/support/">日本語</a><a href="/ko/support/">한국어</a><a href="/de/support/">Deutsch</a><a href="/fr/support/">Français</a><a href="/ar/support/">العربية</a><a href="/es/support/">Español</a><a href="/pt/support/">Português</a></nav>
@@ -52,6 +56,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Transfers and technical problems</h2><p>If a transfer will not connect or a download fails, tell us which mode you were using (realtime pairing code, or a stored download link), the browsers and operating systems on both ends, and roughly when it happened. That is almost always enough to identify the cause.</p><p>Bug reports and feature requests are welcome in public on GitHub, where you can also read the code that handles your files.</p><ul><li>Do not paste a download link or its key into a public issue — the key in the link is what decrypts your file.</li></ul>
       <h2>Self-hosted nodes</h2><p>If you run your own relay or storage node, questions and problems belong on GitHub rather than in email, so the answers stay searchable for everyone else running one.</p>
       <h2>Security reports</h2><p>Please report vulnerabilities privately through GitHub&#39;s vulnerability reporting on the repository rather than opening a public issue, so a fix can ship before the details are public. Our threat model and what we do and do not defend against are documented on the Security page.</p>
+      </main>
       <footer>
         <a href="/">← Relayium</a>
         <a href="/apps">Apps</a>

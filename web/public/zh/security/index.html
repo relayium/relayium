@@ -22,8 +22,8 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"安全与威胁模型 · Relayium","description":"Relayium 如何保护你的文件与临时文本：每次会话独立的密钥、认证加密、SAS 校验、直连与中继路径、零知识下载链接，以及对我们能防和不能防什么的坦诚说明。","url":"https://relayium.com/zh/security/","inLanguage":"zh-Hans","dateModified":"2026-07-31","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -35,14 +35,18 @@ h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <!-- The legal text is the main landmark. The site header and footer are
+           outside it; the language bar is inside, after the h1, matching its
+           visual position — it is a labelled <nav> landmark either way. -->
+      <main>
       <h1>安全与威胁模型</h1>
       <p class="updated">最后更新: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/security/">English</a><a href="/zh/security/" aria-current="true">中文</a><a href="/ja/security/">日本語</a><a href="/ko/security/">한국어</a><a href="/de/security/">Deutsch</a><a href="/fr/security/">Français</a><a href="/ar/security/">العربية</a><a href="/es/security/">Español</a><a href="/pt/security/">Português</a></nav>
@@ -58,6 +62,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Relayium 不能防范什么</h2><p>端到端加密保护的是数据在两个诚实端点之间的传输过程。就设计而言，它无法防范：</p><ul><li>任一端设备或浏览器被攻陷——恶意软件、恶意浏览器扩展，或有人偷看屏幕。</li><li>服务器必然会接触到的元数据：会话时间、中继字节数，以及（若为暂存下载链接或配对码会话）创建链接或配对码的账号。</li><li>接收方在收到文件或消息后选择留存、复制或转发。</li><li>通过不可信渠道分享下载链接，因为解密密钥就在链接里。</li></ul>
       <h2>浏览器支持及其限制</h2><p>Relayium 可在任何支持 WebRTC 且经 HTTPS 访问的现代浏览器中运行。少数能力因浏览器而异：</p><ul><li>桌面版 Chrome 与 Edge 具备 File System Access API，会把大文件直接流式写入磁盘，几乎没有内存上限。</li><li>Firefox、Safari 以及所有手机浏览器（iOS 上的浏览器全都是 WebKit）没有这个 API，在实时接收路径上只能把文件攒在内存里，因此超过约 256 MB 时应用会先给出提示——这是一个刻意保守的估计值，而不是实测出来的硬上限。这个量级的文件建议改用桌面版 Chrome/Edge，或改走下载链接模式，其下载页还可以通过 service worker 流式落盘。</li><li>WebRTC 需要安全上下文（HTTPS）；应用不会在纯 HTTP 下建立连接。</li></ul>
       <h2>开源与问题上报</h2><p>协议设计与全部前后端代码都在 GitHub 公开，任何人都能审查其密码学实现、自行运行服务器或参与贡献。如果你发现安全问题，请通过仓库上 GitHub 的私密漏洞上报渠道私下报告，而不要公开提交 issue。</p>
+      </main>
       <footer>
         <a href="/">← Relayium</a>
         <a href="/zh/apps/">应用</a>

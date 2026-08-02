@@ -82,7 +82,7 @@
   .textsec .points li::before {
     content: "✓";
     position: absolute; inset-inline-start: var(--space-5); top: var(--space-4);
-    color: var(--accent); font-weight: 700;
+    color: var(--accent-fg); font-weight: 700;
   }
   .textsec .limit {
     margin: 0; padding: 9px 12px;

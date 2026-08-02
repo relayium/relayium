@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI でネットワークを越えて誰かにファイルを送る","description":"relayium send と receive を使い、短いペアリングコードだけで異なるネットワーク上の2人の間でファイルを直接移動します。エンドツーエンドで暗号化され、SAS コードで検証され、しかも無料。ファイルは二人の間を直接行き来し、当社のサーバーを経由することはありません。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium CLI でネットワークを越えて誰かにファイルを送る"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ペアリングコードはどこから来るのですか？","acceptedAnswer":{"@type":"Answer","text":"Relayium が発行します。`relayium login` のうえで `relayium send ./release.zip` を実行すると、CLI が5分間有効な6文字のコードと、相手が実行するコマンドをそのまま表示します。自分で選ぶことはできません。サーバーは自身が発行したコードしか受け付けないからです。"}},{"@type":"Question","name":"ファイルはどこかにアップロードされますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。ファイルは二人の間で直接ストリーミングされ、エンドツーエンドで暗号化されます。二つの端を引き合わせるためのごく小さなランデブーハンドシェイクだけが Relayium を経由し、ファイルは決して経由しません。"}},{"@type":"Question","name":"接続できない場合はどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"両端が厳格な NAT の内側にあり到達可能なアドレスがない場合、直接接続は確立できず転送は失敗します。CLI は設計上リレーへのフォールバックを持ちません。直接の経路が使えない場合は、到達可能な2台のサーバー間でのデーモン直結、または SSH 経由の push を使ってください。"}},{"@type":"Question","name":"相手が本当に正しい人物だとどうやって分かりますか？","acceptedAnswer":{"@type":"Answer","text":"両方のターミナルが固定された TLS 証明書フィンガープリントから導かれた同一の6桁の SAS コードを表示します。帯域外で照合すると、フィンガープリントが差し替えられておらず、ランデブーサービスがどちらのエンドポイントにもなりすましていないことを確認できます。これはエンドポイントを認証するもので、ネットワーク経路上のすべてのホップを証明するものではありません。バイトが動く前にその確認を必須にするには --verify を追加します。"}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ja">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium CLI でネットワークを越えて誰かにファイルを送る</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Relayium CLI でネットワークを越えて誰かにファイルを送る</h1>
       <p class="updated">最終更新: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/send-a-file-to-someone/">English</a><a href="/zh/guides/send-a-file-to-someone/">中文</a><a href="/ja/guides/send-a-file-to-someone/" aria-current="true">日本語</a><a href="/ko/guides/send-a-file-to-someone/">한국어</a><a href="/de/guides/send-a-file-to-someone/">Deutsch</a><a href="/fr/guides/send-a-file-to-someone/">Français</a><a href="/ar/guides/send-a-file-to-someone/">العربية</a><a href="/es/guides/send-a-file-to-someone/">Español</a><a href="/pt/guides/send-a-file-to-someone/">Português</a></nav>
@@ -112,6 +117,7 @@ relayium receive K7M4XR</code></pre>
       </div>
       <h2>続けて読む</h2>
       <ul class="related"><li><a href="/ja/guides/receive-files-from-the-command-line/">コマンドラインでファイルを受信する</a></li><li><a href="/ja/guides/transfer-files-from-terminal/">Relayium CLI でターミナルからファイルとテキストを転送する</a></li><li><a href="/ja/compare/croc/">Relayium と croc の比較：ターミナルから暗号化転送</a></li><li><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">インターネット経由で2台のPC間にファイルを送る方法</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=ja">← Relayium</a>
         <a href="/ja/apps/">アプリ</a>

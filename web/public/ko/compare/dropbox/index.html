@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs Dropbox: 파일 하나 보내기","description":"공정한 비교입니다. Dropbox는 영구 동기화와 공유 링크에 강하고, Relayium은 서버 측 내용 복사본이나 기록을 남기지 않는 실시간 경로 또는 만료되는 영지식 저장 링크를 제공합니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/compare/dropbox/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs Dropbox: 파일 하나 보내기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Dropbox처럼 파일이 계정 안에 남나요?","acceptedAnswer":{"@type":"Answer","text":"서버 측 실시간 복사본이나 기록은 남지 않습니다. 같은 LAN은 WebRTC 직접 연결, 네트워크 간 TURN은 읽거나 복호화할 수 없는 종단간 암호문을 운반합니다. 저장 링크는 복호화할 수 없는 영지식 암호문을 저장하고 만료되거나 첫 다운로드 후 삭제됩니다."}},{"@type":"Question","name":"받는 사람이 뭔가에 가입해야 하나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 같은 LAN은 양쪽 모두 계정이 필요 없습니다. 코드나 저장 링크 생성자는 로그인하지만 실시간 참가자나 링크 다운로드자는 계정이 필요 없습니다."}},{"@type":"Question","name":"파일 크기 제한이 있나요?","acceptedAnswer":{"@type":"Answer","text":"실시간 전송은 한 번에 최대 1,000개 파일을 처리할 수 있고 서버 측 크기 제한이 없습니다. Chrome과 Edge는 수십 기가바이트까지 곧바로 디스크로 스트리밍합니다. 디스크로 흘려보낼 경로가 하나도 적용되지 않아 브라우저가 메모리에 담아야 할 때는 Relayium이 약 256 MB를 넘으면 경고합니다. 이 수치는 일부러 보수적으로 잡은 추정치이지 하드 한계가 아닙니다. 저장 링크는 보내는 쪽 계정에 연결된 용량 한도에 포함됩니다."}},{"@type":"Question","name":"Dropbox 요금제 대신 Relayium을 쓰는 건 무료인가요?","acceptedAnswer":{"@type":"Answer","text":"네. Relayium은 AGPL-3.0 라이선스의 무료 오픈소스이며, 프로토콜과 코드 전체가 github.com/relayium/relayium에 있습니다. 더 크거나 빠른 전송을 여는 유료 등급은 없습니다."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ko">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs Dropbox: 파일 하나 보내기</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Relayium vs Dropbox: 파일 하나 보내기</h1>
       <p class="updated">마지막 업데이트: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/dropbox/">English</a><a href="/zh/compare/dropbox/">中文</a><a href="/ja/compare/dropbox/">日本語</a><a href="/ko/compare/dropbox/" aria-current="true">한국어</a><a href="/de/compare/dropbox/">Deutsch</a><a href="/fr/compare/dropbox/">Français</a><a href="/ar/compare/dropbox/">العربية</a><a href="/es/compare/dropbox/">Español</a><a href="/pt/compare/dropbox/">Português</a></nav>
@@ -105,6 +110,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>계속 읽기</h2>
       <ul class="related"><li><a href="/ko/compare/google-drive/">Relayium vs Google Drive: 파일을 더 직접적으로 보내기</a></li><li><a href="/ko/how-to/share-a-file-with-an-expiring-link/">만료되는 안전한 다운로드 링크로 파일 공유하기</a></li><li><a href="/ko/how-to/send-large-files-without-cloud/">클라우드 없이 대용량 파일 보내는 방법</a></li><li><a href="/ko/guides/how-relayium-encrypts-your-files/">Relayium이 파일을 종단간 암호화하는 방식</a></li><li><a href="/ko/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=ko">← Relayium</a>
         <a href="/ko/apps/">앱</a>

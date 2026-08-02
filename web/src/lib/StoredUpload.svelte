@@ -203,7 +203,7 @@
   {#if bigBatch}<p class="bignote">{t.stored.bigNote}</p>{/if}
 
   {#if busy}
-    <div class="progress-bar" role="progressbar" aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{progress}%"></div></div>
+    <div class="progress-bar" role="progressbar" aria-label={phase === "uploading" ? t.stored.uploadingNow : t.stored.encrypting} aria-valuenow={progress} aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style:width="{progress}%"></div></div>
     <!-- 同 DownloadPage：百分比不进 live region，理由见那里的注释。 -->
     <p class="phase">{phase === "uploading" ? `${t.stored.uploadingNow} ${progress}%` : `${t.stored.encrypting} ${progress}%`}</p>
     <button type="button" class="btn btn-ghost cancel" onclick={cancel}>{t.cancel}</button>

@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Cómo transferir archivos de Android a iPhone (sin cable)","description":"Una guía paso a paso para enviar fotos, vídeos y documentos de Android a iPhone en un navegador — sin AirDrop, sin cable, sin subir a la nube. Solo abre Relayium en ambos dispositivos.","inLanguage":"es","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/es/how-to/transfer-files-android-to-iphone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/es/"},{"@type":"ListItem","position":2,"name":"Guías","item":"https://relayium.com/es/guides/"},{"@type":"ListItem","position":3,"name":"Cómo transferir archivos de Android a iPhone (sin cable)"}]},{"@type":"FAQPage","inLanguage":"es","mainEntity":[{"@type":"Question","name":"¿Necesito instalar una app en alguno de los teléfonos?","acceptedAnswer":{"@type":"Answer","text":"No. Relayium se ejecuta por completo en el navegador tanto en Android como en iPhone. Abre relayium.com en cada dispositivo y ya está — sin descarga de ningún tipo. En la misma red una transferencia en tiempo real no necesita cuenta; emparejar entre redes solo le pide al remitente que inicie sesión. Puedes, opcionalmente, añadirlo a tu pantalla de inicio como PWA, pero eso es solo un acceso directo."}},{"@type":"Question","name":"¿Los dos teléfonos tienen que estar en la misma Wi-Fi?","acceptedAnswer":{"@type":"Answer","text":"No. La misma red es la vía más rápida porque los dispositivos se descubren automáticamente, pero un código de emparejamiento conecta dos teléfonos entre redes distintas — incluso uno con datos móviles y otro con Wi-Fi. La transferencia sigue cifrada de extremo a extremo en ambos casos, aunque emparejar entre redes requiere que el remitente inicie sesión — el destinatario nunca necesita una cuenta."}},{"@type":"Question","name":"¿Se comprimen o alteran las fotos de alguna forma?","acceptedAnswer":{"@type":"Answer","text":"No. El archivo original se transfiere byte a byte sin compresión, y cada archivo se comprueba de extremo a extremo con un hash SHA-256, así que lo que llega al iPhone es idéntico bit a bit a lo que enviaste desde Android."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=es">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=es">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">Cómo transferir archivos de Android a iPhone (sin cable)</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Cómo transferir archivos de Android a iPhone (sin cable)</h1>
       <p class="updated">Última actualización: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone/">English</a><a href="/zh/how-to/transfer-files-android-to-iphone/">中文</a><a href="/ja/how-to/transfer-files-android-to-iphone/">日本語</a><a href="/ko/how-to/transfer-files-android-to-iphone/">한국어</a><a href="/de/how-to/transfer-files-android-to-iphone/">Deutsch</a><a href="/fr/how-to/transfer-files-android-to-iphone/">Français</a><a href="/ar/how-to/transfer-files-android-to-iphone/">العربية</a><a href="/es/how-to/transfer-files-android-to-iphone/" aria-current="true">Español</a><a href="/pt/how-to/transfer-files-android-to-iphone/">Português</a></nav>
@@ -103,6 +108,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>Seguir leyendo</h2>
       <ul class="related"><li><a href="/es/how-to/send-files-pc-to-phone-wirelessly/">Enviar archivos del PC al teléfono sin cables, sin cable ni app</a></li><li><a href="/es/compare/airdrop/">Relayium vs AirDrop: una alternativa a AirDrop multiplataforma</a></li><li><a href="/es/how-to/transfer-files-by-scanning-a-qr-code/">Transferir archivos escaneando un código QR</a></li><li><a href="/es/how-to/send-files-on-the-same-wifi/">Enviar archivos entre dispositivos en la misma Wi-Fi</a></li><li><a href="/es/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=es">← Relayium</a>
         <a href="/es/apps/">Apps</a>

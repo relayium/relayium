@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"How Relayium encrypts your files end-to-end","description":"How Relayium protects your files: X25519 and AES-256-GCM for live transfers, a six-digit code that catches a dishonest server, and zero-knowledge stored links.","inLanguage":"en","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/guides/how-relayium-encrypts-your-files/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"How Relayium encrypts your files end-to-end"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Can Relayium read my files?","acceptedAnswer":{"@type":"Answer","text":"No. In realtime mode, the encryption key is derived independently on both devices and never leaves them — Relayium's servers never see it or the file contents. For stored links, the key lives only in the URL fragment, which browsers never send to any server, so the server only ever holds ciphertext it cannot decrypt."}},{"@type":"Question","name":"What does the server actually see?","acceptedAnswer":{"@type":"Answer","text":"In realtime mode on the same network, only the connection-setup information needed to introduce two devices to each other — never file bytes. Across networks the TURN relay does carry the bytes, but only as ciphertext it holds no key for. For stored links, it sees ciphertext plus bookkeeping like size and expiry time — never the plaintext, filenames, or the decryption key."}},{"@type":"Question","name":"Is the TURN relay a weak point?","acceptedAnswer":{"@type":"Answer","text":"In the browser it carries every cross-network transfer by design, not only the ones where a direct path failed — but it only ever handles ciphertext, and it has no key, so it can't read what it's relaying. Relayium counts the bytes it relays against your account's monthly allowance, but never inspects their contents."}},{"@type":"Question","name":"Is Relayium open source?","acceptedAnswer":{"@type":"Answer","text":"Yes. The protocol design and all client and server code are public on GitHub under the AGPL-3.0 license, so the cryptography described here can be independently audited rather than taken on trust."}},{"@type":"Question","name":"What if the two verification codes on screen don't match?","acceptedAnswer":{"@type":"Answer","text":"Stop the transfer. A mismatch means the commit-then-reveal check failed, which points to a possible man-in-the-middle rather than a benign glitch — don't proceed until you understand why."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">How Relayium encrypts your files end-to-end</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>How Relayium encrypts your files end-to-end</h1>
       <p class="updated">Last updated: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/how-relayium-encrypts-your-files/" aria-current="true">English</a><a href="/zh/guides/how-relayium-encrypts-your-files/">中文</a><a href="/ja/guides/how-relayium-encrypts-your-files/">日本語</a><a href="/ko/guides/how-relayium-encrypts-your-files/">한국어</a><a href="/de/guides/how-relayium-encrypts-your-files/">Deutsch</a><a href="/fr/guides/how-relayium-encrypts-your-files/">Français</a><a href="/ar/guides/how-relayium-encrypts-your-files/">العربية</a><a href="/es/guides/how-relayium-encrypts-your-files/">Español</a><a href="/pt/guides/how-relayium-encrypts-your-files/">Português</a></nav>
@@ -109,6 +114,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>Keep reading</h2>
       <ul class="related"><li><a href="/guides/is-it-safe-to-send-files-over-the-internet/">Is it safe to send files over the internet?</a></li><li><a href="/guides/what-is-peer-to-peer-file-transfer/">What is peer-to-peer file transfer?</a></li><li><a href="/how-to/share-a-file-with-an-expiring-link/">Share a file with a secure, expiring download link</a></li><li><a href="/guides/self-host-relayium/">Self-host Relayium: run your own file-and-text transfer server</a></li><li><a href="/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/">← Relayium</a>
         <a href="/apps">Apps</a>

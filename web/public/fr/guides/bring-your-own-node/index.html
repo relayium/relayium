@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Apportez votre propre nœud : utilisez gratuitement le relais et le stockage de Relayium","description":"Rattachez votre propre nœud de relais/stockage à votre compte Relayium en une seule commande. Vos transferts passent alors par votre nœud — et non par nos serveurs facturés à l'usage —, ils sont donc gratuits, et les données restent sur du matériel que vous contrôlez.","inLanguage":"fr","datePublished":"2026-07-10","dateModified":"2026-07-22","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Apportez votre propre nœud : utilisez gratuitement le relais et le stockage de Relayium"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"J'ai obtenu « relayium-node: command not found » — qu'est-ce qui a mal tourné ?","acceptedAnswer":{"@type":"Answer","text":"Vous avez exécuté le binaire relayium-node avant de l'installer. Utilisez la commande d'installation en une ligne de la page du compte (de la forme curl … | sudo … sh) : elle télécharge le binaire, le place dans votre PATH et le démarre en tant que service. Vous n'installez jamais relayium-node séparément."}},{"@type":"Question","name":"Le nœud reste-t-il en ligne après un redémarrage ?","acceptedAnswer":{"@type":"Answer","text":"Oui. L'installateur enregistre un service systemd qui est activé au démarrage et réglé sur Restart=always, si bien qu'il revient après un redémarrage et se relance de lui-même en cas de plantage. Rien de plus à exécuter."}},{"@type":"Question","name":"En quoi est-ce différent d'auto-héberger Relayium ?","acceptedAnswer":{"@type":"Answer","text":"Bring-your-own-node conserve votre compte relayium.com et vos applications habituels et ajoute simplement un nœud qui vous appartient pour acheminer votre trafic. L'auto-hébergement fait tourner toute la pile serveur (comptes, application web, signalisation) sur votre propre domaine — voyez le guide « Auto-héberger Relayium » pour cela."}},{"@type":"Question","name":"Quelqu'un d'autre peut-il utiliser mon nœud ou voir mes données ?","acceptedAnswer":{"@type":"Answer","text":"Non. Un nœud est rattaché à votre compte par son jeton et n'achemine que le trafic de votre compte. Les transferts en temps réel sont chiffrés de bout en bout et les blobs stockés sont du texte chiffré que votre nœud ne peut pas lire. Vos données et la configuration de votre nœud ne sont utilisables que par vous."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -75,8 +75,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=fr">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Apportez votre propre nœud : utilisez gratuitement le relais et le stockage de Relayium</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Apportez votre propre nœud : utilisez gratuitement le relais et le stockage de Relayium</h1>
       <p class="updated">Dernière mise à jour: 2026-07-22</p>
       <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node/">English</a><a href="/zh/guides/bring-your-own-node/">中文</a><a href="/ja/guides/bring-your-own-node/">日本語</a><a href="/ko/guides/bring-your-own-node/">한국어</a><a href="/de/guides/bring-your-own-node/">Deutsch</a><a href="/fr/guides/bring-your-own-node/" aria-current="true">Français</a><a href="/ar/guides/bring-your-own-node/">العربية</a><a href="/es/guides/bring-your-own-node/">Español</a><a href="/pt/guides/bring-your-own-node/">Português</a></nav>
@@ -138,6 +143,7 @@ sudo ufw allow 49152:65535/udp # relay</code></pre>
       </div>
       <h2>Continuer la lecture</h2>
       <ul class="related"><li><a href="/fr/guides/self-host-relayium/">Auto-héberger Relayium : gérez votre serveur de transfert de fichiers et de texte</a></li><li><a href="/fr/guides/run-relayium-as-an-always-on-service/">Faire tourner Relayium en service de réception permanent</a></li><li><a href="/fr/guides/how-relayium-encrypts-your-files/">Comment Relayium chiffre vos fichiers de bout en bout</a></li><li><a href="/fr/compare/nextcloud/">Relayium vs Nextcloud pour l&#39;envoi de fichiers</a></li><li><a href="/fr/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=fr">← Relayium</a>
         <a href="/fr/apps/">Applis</a>

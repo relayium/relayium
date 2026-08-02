@@ -40,7 +40,8 @@ export function renderNotFoundPage() {
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/">${SITE.name}</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">${SITE.name}</a></header>
+      <main>
       <h1>Page not found</h1>
       <p class="pitch">
         The page you asked for doesn't exist — it may have been moved, or the link
@@ -53,6 +54,7 @@ export function renderNotFoundPage() {
         <h2>Where to go instead</h2>
         <ul class="learn">${links}</ul>
       </section>
+      </main>
       <footer>
         <a href="/">← ${SITE.name}</a>
         <a href="/privacy/">Privacy</a>

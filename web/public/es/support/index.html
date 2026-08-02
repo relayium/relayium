@@ -22,8 +22,8 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Soporte · Relayium","description":"Cómo obtener ayuda con Relayium: contacto para facturación y suscripciones, problemas de transferencia, nodos autoalojados e informes de seguridad.","url":"https://relayium.com/es/support/","inLanguage":"es","dateModified":"2026-07-20","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -35,14 +35,18 @@ h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <!-- The legal text is the main landmark. The site header and footer are
+           outside it; the language bar is inside, after the h1, matching its
+           visual position — it is a labelled <nav> landmark either way. -->
+      <main>
       <h1>Soporte</h1>
       <p class="updated">Última actualización: 2026-07-20</p>
       <nav class="langbar" aria-label="Language"><a href="/support/">English</a><a href="/zh/support/">中文</a><a href="/ja/support/">日本語</a><a href="/ko/support/">한국어</a><a href="/de/support/">Deutsch</a><a href="/fr/support/">Français</a><a href="/ar/support/">العربية</a><a href="/es/support/" aria-current="true">Español</a><a href="/pt/support/">Português</a></nav>
@@ -52,6 +56,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Transferencias y problemas técnicos</h2><p>Si una transferencia no conecta o una descarga falla, dinos qué modo estabas usando (código de emparejamiento en tiempo real o un enlace de descarga almacenado), los navegadores y sistemas operativos de ambos extremos y aproximadamente cuándo ocurrió. Casi siempre basta con eso para identificar la causa.</p><p>Los informes de errores y las peticiones de funciones son bienvenidos en público en GitHub, donde además puedes leer el código que maneja tus archivos.</p><ul><li>No pegues un enlace de descarga ni su clave en una incidencia pública: la clave que va en el enlace es lo que descifra tu archivo.</li></ul>
       <h2>Nodos autoalojados</h2><p>Si ejecutas tu propio nodo de retransmisión o de almacenamiento, las dudas y los problemas van mejor en GitHub que por correo, para que las respuestas queden buscables para todos los demás que también ejecutan uno.</p>
       <h2>Informes de seguridad</h2><p>Informa de las vulnerabilidades en privado a través del informe de vulnerabilidades de GitHub en el repositorio en lugar de abrir una incidencia pública, para que la corrección pueda publicarse antes que los detalles. Nuestro modelo de amenazas y aquello contra lo que protegemos o no está documentado en la página de Seguridad.</p>
+      </main>
       <footer>
         <a href="/">← Relayium</a>
         <a href="/es/apps/">Apps</a>

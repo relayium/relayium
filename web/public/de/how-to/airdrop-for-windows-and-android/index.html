@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"AirDrop-Alternative für Windows, Linux, Android","description":"Es gibt kein offizielles AirDrop für Windows, Linux oder Android — hier die nächste Alternative: sofortiges Teilen im selben WLAN im Browser, ohne Konto, ohne Installation, plus eine Möglichkeit übers Internet, die AirDrop nicht kann.","inLanguage":"de","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/de/how-to/airdrop-for-windows-and-android/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/de/"},{"@type":"ListItem","position":2,"name":"Anleitungen","item":"https://relayium.com/de/guides/"},{"@type":"ListItem","position":3,"name":"AirDrop-Alternative für Windows, Linux, Android"}]},{"@type":"FAQPage","inLanguage":"de","mainEntity":[{"@type":"Question","name":"Gibt es eine offizielle AirDrop-App für Windows oder Android?","acceptedAnswer":{"@type":"Answer","text":"Nein — AirDrop ist Apple-Geräten vorbehalten, und Apple hat nie einen Windows- oder Android-Client herausgebracht. Relayium ist eine browserbasierte Alternative: Öffne relayium.com auf beiden Geräten, und es funktioniert unabhängig von der Plattform gleich, auch bei gemischten Apple-/Nicht-Apple-Paaren."}},{"@type":"Question","name":"Brauche ich ein Konto?","acceptedAnswer":{"@type":"Answer","text":"Für den Ablauf im selben WLAN nicht — öffne die Seite auf beiden Geräten, und sie erkennen sich, ganz ohne Anmeldung. Das Senden über verschiedene Netzwerke mit einem Pairing-Code erfordert die Anmeldung des Absenders; der Empfänger braucht in keinem der beiden Netzwerkmodi je ein Konto."}},{"@type":"Question","name":"Muss ich etwas installieren?","acceptedAnswer":{"@type":"Answer","text":"Nein. Es ist auf jeder Plattform eine Webseite — Windows, Linux, macOS, Android und iOS —, es gibt also nichts aus einem Store herunterzuladen und nichts aktuell zu halten."}},{"@type":"Question","name":"Wie unterscheidet sich das vom Vergleich Relayium vs. AirDrop?","acceptedAnswer":{"@type":"Answer","text":"Jener Artikel ist ein direkter Vergleich, wo AirDrop wirklich besser ist (reine Apple-Haushalte) und wo es an Grenzen stößt. Diese Anleitung ist die Schritt-für-Schritt-Version, um tatsächlich das AirDrop-ähnliche Erlebnis zu bekommen, wenn mindestens ein Gerät kein Apple-Gerät ist."}},{"@type":"Question","name":"Kann ich, wie bei AirDrop, an mehrere gleichzeitig senden?","acceptedAnswer":{"@type":"Answer","text":"Im selben Netzwerk ja — der lokale Raum ist nicht auf zwei Geräte begrenzt, sodass mehr als ein nahes Gerät gleichzeitig empfangen kann. Der Pairing-Code-Modus fürs Senden übers Internet verbindet genau zwei Geräte, und zwar über ein verschlüsseltes Relay."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=de">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=de">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">AirDrop-Alternative für Windows, Linux, Android</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>AirDrop-Alternative für Windows, Linux, Android</h1>
       <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/airdrop-for-windows-and-android/">English</a><a href="/zh/how-to/airdrop-for-windows-and-android/">中文</a><a href="/ja/how-to/airdrop-for-windows-and-android/">日本語</a><a href="/ko/how-to/airdrop-for-windows-and-android/">한국어</a><a href="/de/how-to/airdrop-for-windows-and-android/" aria-current="true">Deutsch</a><a href="/fr/how-to/airdrop-for-windows-and-android/">Français</a><a href="/ar/how-to/airdrop-for-windows-and-android/">العربية</a><a href="/es/how-to/airdrop-for-windows-and-android/">Español</a><a href="/pt/how-to/airdrop-for-windows-and-android/">Português</a></nav>
@@ -104,6 +109,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>Weiterlesen</h2>
       <ul class="related"><li><a href="/de/compare/airdrop/">Relayium vs. AirDrop: eine plattformübergreifende Alternative</a></li><li><a href="/de/how-to/send-files-on-the-same-wifi/">Dateien zwischen Geräten im selben WLAN senden</a></li><li><a href="/de/how-to/transfer-files-between-mac-and-windows/">Dateien zwischen Mac und Windows-PC übertragen</a></li><li><a href="/de/compare/localsend/">Relayium vs. LocalSend: welche lokale Dateiübertragung?</a></li><li><a href="/de/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=de">← Relayium</a>
         <a href="/de/apps/">Apps</a>

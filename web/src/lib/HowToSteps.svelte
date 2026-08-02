@@ -60,7 +60,7 @@
     width: 46px; height: 46px; flex: none;
     display: grid; place-items: center;
     border-radius: 14px;
-    color: var(--accent); background: var(--accent-bg);
+    color: var(--accent-fg); background: var(--accent-bg);
     border: 1px solid var(--accent-border);
     transition: transform .2s cubic-bezier(.22, 1, .36, 1);
   }
@@ -72,7 +72,7 @@
     position: absolute; top: -7px; inset-inline-start: -7px;
     width: 20px; height: 20px; line-height: 19px; text-align: center;
     border-radius: 50%; font-size: 12px; font-weight: 700;
-    color: #fff; background: var(--accent);
+    color: #fff; background: var(--accent-action);
     border: 2px solid var(--surface-2);
   }
   .step p { margin: 0; font-size: var(--fs-xs); line-height: 1.55; color: var(--text); }

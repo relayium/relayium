@@ -60,7 +60,7 @@
   .secure-link {
     display: inline-block; margin-top: var(--space-4);
     font-size: var(--fs-sm); font-weight: 600;
-    color: var(--accent); text-decoration: none;
+    color: var(--accent-fg); text-decoration: none;
   }
   .secure-link:hover { text-decoration: underline; }
 </style>

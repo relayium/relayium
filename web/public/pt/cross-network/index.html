@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"Transferência entre redes de arquivos e texto ao vivo — criptografia de ponta a ponta | Relayium","description":"Envie arquivos e texto efêmero ao vivo entre redes com um código de 6 caracteres. Os dois dispositivos ficam online; o navegador usa por projeto um retransmissor TURN que só vê dados cifrados.","url":"https://relayium.com/pt/cross-network/","inLanguage":"pt","dateModified":"2026-07-31","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"pt","mainEntity":[{"@type":"Question","name":"Meus arquivos ou mensagens passam pelo servidor?","acceptedAnswer":{"@type":"Answer","text":"Sessões do navegador entre redes usam por projeto o TURN do Relayium, mas arquivos e mensagens são criptografados de ponta a ponta e ele só vê dados cifrados. O Relayium não armazena o corpo das mensagens."}},{"@type":"Question","name":"Um código é obrigatório?","acceptedAnswer":{"@type":"Answer","text":"Sim: um código de 6 caracteres (ou seu link de acesso/QR), válido por 5 minutos, empareja os dois dispositivos entre redes diferentes. O servidor o gera a partir do alfabeto ACDEFHJKMNPRTWXY23456789 — sem 0 e sem 1, para que nada se confunda com O ou I — então você não pode inventar um: só emparelha um código que o servidor tenha emitido."}},{"@type":"Question","name":"Preciso de uma conta?","acceptedAnswer":{"@type":"Answer","text":"Quem cria um código para arquivos ou texto faz login; entrar com esse código não exige conta."}},{"@type":"Question","name":"É criptografia de ponta a ponta?","acceptedAnswer":{"@type":"Answer","text":"Sim — X25519 e AES-256-GCM por bloco. Comparar o SAS por um canal independente confirma que as chaves públicas das pontas não foram substituídas e que nem o serviço de sinalização nem o TURN se passaram por uma ponta ou terminaram a E2EE da aplicação. O TURN pode continuar no caminho de rede, levando apenas dados cifrados."}},{"@type":"Question","name":"Posso enviar texto além de arquivos?","acceptedAnswer":{"@type":"Answer","text":"Sim. Com os dois dispositivos online, envie texto efêmero ao vivo de até 65.536 bytes UTF-8 por mensagem. O Relayium não armazena o corpo nem histórico no servidor, embora cada dispositivo possa copiar ou guardar o texto recebido."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:820px;margin:0 auto;padding:0 20px 64px}
@@ -51,11 +51,11 @@ h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .pitch{font-size:20px;margin:0 0 24px;max-width:42em}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
 ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
-.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+.cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .why li b,.compare h3{color:var(--text-h)}
-.learn{list-style:none;padding:0}.learn a{color:var(--accent);text-decoration:none}
+.learn{list-style:none;padding:0}.learn a{color:var(--accent-fg);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 header .logo{transition:transform .25s cubic-bezier(.22,1,.36,1)}header a:hover .logo{transform:rotate(-8deg) scale(1.08)}
@@ -76,8 +76,8 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=pt">Relayium</a></header>
-      
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <main>
       <h1>Arquivos e texto ao vivo entre redes, criptografados de ponta a ponta</h1>
       <p class="pitch">Dois dispositivos online em redes diferentes se emparelham com um código de 6 caracteres (ou link/QR) para enviar arquivos ou texto efêmero. O navegador usa por projeto o TURN do Relayium, que só vê dados cifrados; o Relayium não armazena o corpo das mensagens.</p>
       <a class="cta" href="/cross-network?lang=pt">Iniciar transferência</a>
@@ -126,7 +126,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <h3>Posso enviar texto além de arquivos?</h3>
       <p>Sim. Com os dois dispositivos online, envie texto efêmero ao vivo de até 65.536 bytes UTF-8 por mensagem. O Relayium não armazena o corpo nem histórico no servidor, embora cada dispositivo possa copiar ou guardar o texto recebido.</p></section>
 
-      
+      </main>
       <footer>
         <a href="/?lang=pt">← Relayium</a>
         <a href="/pt/apps/">Apps</a>

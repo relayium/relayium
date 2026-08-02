@@ -88,6 +88,6 @@
     max-inline-size: 720px; margin-block: var(--space-4) 0; margin-inline: auto; text-align: center;
     font-size: var(--fs-xs); color: var(--text); line-height: 1.55;
   }
-  .cli-note a { color: var(--accent); text-decoration: none; white-space: nowrap; }
+  .cli-note a { color: var(--accent-fg); text-decoration: none; white-space: nowrap; }
   .cli-note a:hover { text-decoration: underline; }
 </style>

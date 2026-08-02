@@ -20,6 +20,9 @@ import {
   OBSERVE_CAPS, SAVE_STUB, argFlag, argPresent, fail, launchBrowser, newTab, ok,
   requireServer, setWideViewport, sleep, withWatchdog,
 } from "./harness.mjs";
+// 真场景里的无障碍断言。静态扫描器扫不到这些状态：它没有对端，也没有信令服务器，
+// 而"同意卡 / 进行中的进度条 / 消息记录"恰好是这个产品里最需要读屏的三个地方。
+import { scanLiveState } from "./a11y-core.mjs";
 
 const BASE = argFlag("--url", "http://localhost:8099");
 const DEBUG_PORT = 9444;
@@ -151,6 +154,10 @@ async function resumeScenario(browser) {
   await receiver.waitFor("window.__e2e.bytes > 1024 * 1024", "the receiver to durably write the first MB");
   const midway = await receiver.evaluate("window.__e2e.bytes");
 
+  // 传输进行中：这是 role="progressbar" 唯一活着的时候。静态页上根本没有这个节点，
+  // 所以"进度条有没有可访问名"这条只能在这里问。
+  await scanLiveState(receiver, "receiver mid-transfer (live progressbar)");
+
   // 两边同时判死：模拟"这条链路两头都没了"（掉 Wi-Fi）。只打一边的话，另一边要等
   // ICE consent 超时（约 30s）才察觉，测试会慢且更飘。
   await sender.evaluate("window.__dropLive()");
@@ -175,6 +182,10 @@ async function resumeScenario(browser) {
     throw new Error(`resumed file does not match what was sent: ${got.sha256} != ${sentHash}`);
   }
   ok(`resumed and delivered ${got.bytes} bytes byte-identical (receiver used ${got.pcs} connections)`);
+
+  // 掉线→续传→完成之后的终态：断线重连会重建卡片和 live region，重建出来的那一份
+  // 同样要是干净的。
+  await scanLiveState(receiver, "receiver after drop + resume completed");
 
   const errs = [...sender.errors, ...receiver.errors].filter((e) => !/401|Failed to load resource/.test(e));
   // 掉线本身会在控制台留下预期内的噪音（"connection lost"/"resume ..."），只筛真正
@@ -402,6 +413,9 @@ async function messageScenario(browser) {
     throw new Error(`wide message panel overflowed: ${JSON.stringify(messageLayout)}`);
   }
   ok("both tabs opened the message session");
+
+  // 消息面板带着 role="log" live-region wrapper 和内部消息列表——静态扫描器同样到不了。
+  await scanLiveState(a, "message session (log + composer)");
 
   // SAS：消息会话在 phase 1 里跑自己的握手，所以它有自己的一串码 —— 但两边必须一致。
   const msgSas = `(() => { const c = document.querySelector('.msgpanel .sas code'); return c ? c.textContent.trim() : ''; })()`;
@@ -1348,6 +1362,9 @@ async function main() {
       throw new Error(`wide incoming request overflowed: ${JSON.stringify(requestLayout)}`);
     }
     ok("receiver got the confirmation card with the filename");
+
+    // 同意卡是整个产品里最要紧的一屏：用户在这里凭 SAS 决定要不要收下这些字节。
+    await scanLiveState(receiver, "file consent card (pre-accept)");
 
     await receiver.evaluate(`(() => { (${acceptBtn}).click(); return true; })()`);
 

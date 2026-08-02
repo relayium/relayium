@@ -22,8 +22,8 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"개인정보 처리방침 · Relayium","description":"Relayium이 파일과 임시 텍스트를 처리하는 방식: 콘텐츠는 종단간 암호화되고, Relayium은 실시간 메시지 본문을 저장하지 않으며, 임시 다운로드 링크의 파일은 영지식 암호화됩니다.","url":"https://relayium.com/ko/privacy/","inLanguage":"ko","dateModified":"2026-07-31","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -35,14 +35,18 @@ h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <!-- The legal text is the main landmark. The site header and footer are
+           outside it; the language bar is inside, after the h1, matching its
+           visual position — it is a labelled <nav> landmark either way. -->
+      <main>
       <h1>개인정보 처리방침</h1>
       <p class="updated">최종 업데이트: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/privacy/">English</a><a href="/zh/privacy/">中文</a><a href="/ja/privacy/">日本語</a><a href="/ko/privacy/" aria-current="true">한국어</a><a href="/de/privacy/">Deutsch</a><a href="/fr/privacy/">Français</a><a href="/ar/privacy/">العربية</a><a href="/es/privacy/">Español</a><a href="/pt/privacy/">Português</a></nav>
@@ -62,6 +66,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>아동</h2><p>Relayium은 아동을 대상으로 하지 않습니다. 저희는 13세 미만이거나 거주 지역의 디지털 동의 최소 연령 미만인 사람의 개인정보를 고의로 수집하지 않습니다. 아동이 저희에게 정보를 제공했다고 생각되시면 support@relayium.com으로 연락해 주시면 삭제해 드리겠습니다.</p>
       <h2>이 방침의 변경</h2><p>서비스가 발전함에 따라 이 방침을 업데이트할 수 있습니다. 업데이트 시 위의 ‘최종 업데이트’ 날짜를 변경합니다.</p>
       <h2>문의</h2><p>개인정보에 관한 질문이 있으시면 support@relayium.com으로 이메일을 보내주세요.</p>
+      </main>
       <footer>
         <a href="/">← Relayium</a>
         <a href="/ko/apps/">앱</a>

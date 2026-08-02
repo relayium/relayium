@@ -81,6 +81,9 @@ const pt: Messages = {
     peerBusy: "O outro dispositivo está ocupado com outra transferência — tente novamente em instantes ✗",
   },
   account: {
+    verifyPanel: "Verifique o seu e-mail",
+    forgotPanel: "Redefinir palavra-passe",
+    panel: "Conta",
     signIn: "Entrar",
     signOut: "Sair",
     email: "Endereço de e-mail",
@@ -331,7 +334,7 @@ const pt: Messages = {
     noToken: "Esta página só é acessível a partir de um link de acesso.",
     home: "Voltar ao início",
   },
-  nav: { lanTab: "LAN", crossTab: "Tempo real", offlineTab: "Assíncrono", cliTab: "CLI", appsTab: "Apps" },
+  nav: { footerLegalLabel: "Jurídico", footerGuidesLabel: "Recursos", primaryLabel: "Navegação principal", footerLabel: "Navegação do rodapé", lanTab: "LAN", crossTab: "Tempo real", offlineTab: "Assíncrono", cliTab: "CLI", appsTab: "Apps" },
   crossTitle: "Transferência em tempo real",
   offlineTitle: "Transferência assíncrona",
   cli: { subtitle: "Transfira arquivos e texto efêmero do seu terminal — com criptografia de ponta a ponta, auto-hospedável." },

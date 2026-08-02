@@ -43,7 +43,7 @@
     color: var(--text-h); font-weight: 700; font-size: var(--fs-sm);
   }
   .avatar.target {
-    background: var(--grad-accent); border-color: transparent; color: #fff;
+    background: var(--grad-action); border-color: transparent; color: #fff;
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
   }
   .label {

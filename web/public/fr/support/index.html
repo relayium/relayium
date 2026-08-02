@@ -22,8 +22,8 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Assistance · Relayium","description":"Comment obtenir de l'aide sur Relayium : contact pour la facturation et les abonnements, les problèmes de transfert, les nœuds auto-hébergés et les signalements de sécurité.","url":"https://relayium.com/fr/support/","inLanguage":"fr","dateModified":"2026-07-20","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -35,14 +35,18 @@ h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <!-- The legal text is the main landmark. The site header and footer are
+           outside it; the language bar is inside, after the h1, matching its
+           visual position — it is a labelled <nav> landmark either way. -->
+      <main>
       <h1>Assistance</h1>
       <p class="updated">Dernière mise à jour: 2026-07-20</p>
       <nav class="langbar" aria-label="Language"><a href="/support/">English</a><a href="/zh/support/">中文</a><a href="/ja/support/">日本語</a><a href="/ko/support/">한국어</a><a href="/de/support/">Deutsch</a><a href="/fr/support/" aria-current="true">Français</a><a href="/ar/support/">العربية</a><a href="/es/support/">Español</a><a href="/pt/support/">Português</a></nav>
@@ -52,6 +56,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Transferts et problèmes techniques</h2><p>Si un transfert ne parvient pas à se connecter ou si un téléchargement échoue, indiquez-nous le mode utilisé (code d&#39;appairage en temps réel, ou lien de téléchargement stocké), les navigateurs et systèmes d&#39;exploitation des deux côtés, et à peu près le moment où cela s&#39;est produit. Cela suffit presque toujours à identifier la cause.</p><p>Les rapports de bogues et les demandes de fonctionnalités sont les bienvenus publiquement sur GitHub, où vous pouvez aussi lire le code qui manipule vos fichiers.</p><ul><li>Ne collez pas un lien de téléchargement ni sa clé dans un ticket public — la clé contenue dans le lien est ce qui déchiffre votre fichier.</li></ul>
       <h2>Nœuds auto-hébergés</h2><p>Si vous exploitez votre propre nœud de relais ou de stockage, les questions et les problèmes ont leur place sur GitHub plutôt que par e-mail, afin que les réponses restent consultables par tous ceux qui en font autant.</p>
       <h2>Signalements de sécurité</h2><p>Veuillez signaler les vulnérabilités en privé via le signalement de vulnérabilité GitHub du dépôt plutôt qu&#39;en ouvrant un ticket public, afin qu&#39;un correctif puisse être publié avant les détails. Notre modèle de menace et ce contre quoi nous protégeons ou non sont documentés sur la page Sécurité.</p>
+      </main>
       <footer>
         <a href="/">← Relayium</a>
         <a href="/fr/apps/">Applis</a>

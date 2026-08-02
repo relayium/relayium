@@ -17,6 +17,10 @@ dist-ssr
 dist-link-e2e
 # Browser evidence from `e2e/mixed-link.mjs --screenshots`.
 e2e-screenshots
+# Machine-readable inventory from `e2e/a11y-scan.mjs --json`. The pass/fail
+# verdict is the allowlist, not a checked-in snapshot of findings. Glob so the
+# per-run names (a11y-report-fixed.json, …) are covered too.
+a11y-report*.json
 
 # Editor directories and files
 .vscode/*

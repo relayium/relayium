@@ -50,7 +50,7 @@
     position: absolute; top: 16px; inset-inline-end: 16px;
     width: 24px; height: 24px; line-height: 24px; text-align: center;
     border-radius: 50%; font-size: 13px; font-weight: 600;
-    color: var(--accent); background: var(--accent-bg);
+    color: var(--accent-fg); background: var(--accent-bg);
   }
   .icon { color: var(--accent); }
   .way h3 { margin: 2px 0 0; font-size: var(--fs-body); color: var(--text-h); font-weight: 600; }
@@ -58,7 +58,7 @@
   .tag {
     align-self: flex-start; margin-top: auto;
     font-size: 12px; padding: 4px 10px; border-radius: 999px;
-    color: var(--accent); background: var(--accent-bg); border: 1px solid var(--accent-border);
+    color: var(--accent-fg); background: var(--accent-bg); border: 1px solid var(--accent-border);
   }
   @media (max-width: 720px) { .ways { grid-template-columns: 1fr; } }
 </style>

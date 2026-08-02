@@ -22,8 +22,8 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"보안 및 위협 모델 · Relayium","description":"Relayium이 파일과 임시 텍스트를 보호하는 방식: 세션별 키, 인증된 암호화, SAS 검증, 직접 및 중계 경로, 영지식 다운로드 링크, 그리고 무엇을 방어하고 무엇을 방어하지 않는지에 대한 솔직한 설명.","url":"https://relayium.com/ko/security/","inLanguage":"ko","dateModified":"2026-07-31","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -35,14 +35,18 @@ h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
 .updated{color:var(--text);font-size:14px;margin:0 0 8px}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <!-- The legal text is the main landmark. The site header and footer are
+           outside it; the language bar is inside, after the h1, matching its
+           visual position — it is a labelled <nav> landmark either way. -->
+      <main>
       <h1>보안 및 위협 모델</h1>
       <p class="updated">최종 업데이트: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/security/">English</a><a href="/zh/security/">中文</a><a href="/ja/security/">日本語</a><a href="/ko/security/" aria-current="true">한국어</a><a href="/de/security/">Deutsch</a><a href="/fr/security/">Français</a><a href="/ar/security/">العربية</a><a href="/es/security/">Español</a><a href="/pt/security/">Português</a></nav>
@@ -58,6 +62,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Relayium이 방어하지 못하는 것</h2><p>종단간 암호화는 정직한 두 엔드포인트 사이의 전송 중 데이터를 보호합니다. 설계상 다음은 방어할 수 없습니다:</p><ul><li>어느 한쪽 기기나 브라우저의 침해 — 멀웨어, 악성 브라우저 확장 프로그램, 또는 화면을 훔쳐보는 사람.</li><li>서버가 필연적으로 다루는 메타데이터: 세션 시각, 중계 바이트 수, 그리고 저장형 다운로드 링크나 페어링 코드 세션의 경우 링크 또는 코드를 만든 계정.</li><li>수신자가 파일이나 메시지를 받은 후 보관, 복사 또는 전달하기로 선택하는 것.</li><li>복호화 키가 링크 안에 담겨 이동하므로, 신뢰할 수 없는 경로로 다운로드 링크를 공유하는 것.</li></ul>
       <h2>브라우저 지원과 그 한계</h2><p>Relayium은 HTTPS를 통해 WebRTC를 사용할 수 있는 모든 최신 브라우저에서 작동합니다. 일부 기능은 브라우저에 따라 다릅니다:</p><ul><li>데스크톱 Chrome과 Edge는 File System Access API가 있어 큰 파일을 디스크로 직접 스트리밍하며, 실질적인 메모리 상한이 없습니다.</li><li>Firefox와 Safari, 그리고 모든 모바일 브라우저(iOS에서는 어떤 브라우저든 WebKit입니다)에는 그 API가 없어 실시간 수신 경로에서는 파일을 메모리에서 조립합니다. 그래서 약 256MB를 넘으면 앱이 미리 경고합니다 — 실측한 한계가 아니라 일부러 보수적으로 잡은 추정값입니다. 그 정도 크기의 파일에는 데스크톱 Chrome/Edge를 사용하거나 다운로드 링크 모드를 이용하십시오. 다운로드 링크의 내려받기 페이지는 service worker를 통해 디스크로 흘려보낼 수도 있습니다.</li><li>WebRTC는 보안 컨텍스트(HTTPS)를 요구합니다. 앱은 일반 HTTP에서는 연결되지 않습니다.</li></ul>
       <h2>오픈 소스 및 문제 신고</h2><p>프로토콜 설계와 클라이언트·서버의 모든 코드는 GitHub에 공개되어 있어 누구나 암호화를 감사하고, 자신의 서버를 운영하고, 기여할 수 있습니다. 보안 문제를 발견하면 공개 이슈를 여는 대신 저장소의 GitHub 비공개 취약점 신고를 통해 비공개로 신고해 주십시오.</p>
+      </main>
       <footer>
         <a href="/">← Relayium</a>
         <a href="/ko/apps/">앱</a>

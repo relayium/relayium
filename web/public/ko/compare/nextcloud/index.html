@@ -37,8 +37,8 @@
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium vs Nextcloud: 파일 전송에는 무엇을 써야 할까","description":"Relayium과 Nextcloud 비교. Nextcloud는 장기 저장용 자체 호스팅 클라우드이고, Relayium은 서버 측 실시간 내용 사본을 저장하지 않는 전송 도구입니다. LAN은 직접, 네트워크 간 브라우저는 읽을 수 없는 E2E 암호문을 TURN으로 운반하며 만료 영지식 링크도 제공합니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/compare/nextcloud/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Relayium vs Nextcloud: 파일 전송에는 무엇을 써야 할까"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Relayium 대신 Nextcloud를 써야 하나요?","acceptedAnswer":{"@type":"Answer","text":"사진, 문서, 팀 공유 드라이브처럼 파일의 영구적이고 동기화된 보금자리를 원한다면, 네, 그것이 바로 Nextcloud가 만들어진 목적입니다. Relayium은 그것의 대체품이 아니라, 한 사람에게서 다른 사람에게 빠르고 사적으로 파일을 전달하는 더 좁은 일을 위한 것입니다."}},{"@type":"Question","name":"Relayium도 Nextcloud처럼 파일을 저장하나요?","acceptedAnswer":{"@type":"Answer","text":"실시간은 서버 측 내용 사본이나 기록을 저장하지 않습니다. LAN은 직접, 네트워크 간 TURN은 읽거나 복호화할 수 없는 암호문입니다. 저장 링크는 만료 또는 즉시 삭제까지 영지식 암호문만 보관합니다."}},{"@type":"Question","name":"계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"같은 네트워크에서는 필요 없습니다. 페어링 코드로 네트워크를 넘어 보내거나 저장 링크를 만들 때는 보내는 쪽의 로그인이 필요합니다. 받는 쪽은 어느 경우든 계정이 필요 없습니다. 반면 Nextcloud는 접근하는 모든 사용자에게 계정(또는 계정 보유자가 만든 공유 링크)이 필요합니다."}},{"@type":"Question","name":"Relayium도 자체 호스팅할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"네. Nextcloud의 여러 서비스로 이루어진 구성과 달리, Relayium의 서버는 단일 컨테이너입니다. docker compose 명령 하나로 전체 시스템이 구동되며, 네트워크 간 NAT 통과용 선택적 TURN 릴레이 프로필도 있습니다."}},{"@type":"Question","name":"Relayium은 무료인가요?","acceptedAnswer":{"@type":"Answer","text":"네 — AGPL-3.0 라이선스의 무료 오픈소스이며 유료 등급이 없습니다. Nextcloud의 코어 서버 소프트웨어도 무료 오픈소스이지만, Nextcloud GmbH가 제공하는 일부 호스팅과 지원은 유료입니다."}}]}]}</script>
     <style>
-:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;color-scheme:light dark}
-@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc}}
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
@@ -54,13 +54,13 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
 pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
-.langbar a{color:var(--accent);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
 .ctacard p{margin:0 0 14px}
-.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent),#6d28d9)}
-.related{list-style:none;padding:0}.related a{color:var(--accent);text-decoration:none}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
 .crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
-.crumbs a{color:var(--accent);text-decoration:none}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -68,8 +68,13 @@ footer a{color:var(--text-h);text-decoration:none}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ko">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs Nextcloud: 파일 전송에는 무엇을 써야 할까</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
       <h1>Relayium vs Nextcloud: 파일 전송에는 무엇을 써야 할까</h1>
       <p class="updated">마지막 업데이트: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/nextcloud/">English</a><a href="/zh/compare/nextcloud/">中文</a><a href="/ja/compare/nextcloud/">日本語</a><a href="/ko/compare/nextcloud/" aria-current="true">한국어</a><a href="/de/compare/nextcloud/">Deutsch</a><a href="/fr/compare/nextcloud/">Français</a><a href="/ar/compare/nextcloud/">العربية</a><a href="/es/compare/nextcloud/">Español</a><a href="/pt/compare/nextcloud/">Português</a></nav>
@@ -108,6 +113,7 @@ footer a{color:var(--text-h);text-decoration:none}
       </div>
       <h2>계속 읽기</h2>
       <ul class="related"><li><a href="/ko/guides/self-host-relayium/">Relayium 셀프 호스팅: 나만의 파일·텍스트 전송 서버 운영하기</a></li><li><a href="/ko/guides/bring-your-own-node/">Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기</a></li><li><a href="/ko/compare/dropbox/">Relayium vs Dropbox: 파일 하나 보내기</a></li><li><a href="/ko/how-to/share-a-file-with-an-expiring-link/">만료되는 안전한 다운로드 링크로 파일 공유하기</a></li><li><a href="/ko/">Relayium</a></li></ul>
+      </main>
       <footer>
         <a href="/?lang=ko">← Relayium</a>
         <a href="/ko/apps/">앱</a>

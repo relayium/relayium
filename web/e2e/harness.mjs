@@ -9,7 +9,7 @@
  * 这里不放任何场景断言：场景归各自的脚本，共用的只有"怎么开一个真浏览器"。
  */
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { accessSync, constants, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -25,8 +25,81 @@ export const argFlag = (name, dflt) => {
 /** `--keep` 这类布尔开关。 */
 export const argPresent = (name) => argv.includes(name);
 
-export const CHROME =
-  process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+/**
+ * 按平台列出的 Chrome 候选路径。
+ *
+ * 以前这里是一个写死的 macOS 路径，于是这套 harness 只能在这一台机器上跑：Linux 上
+ * spawn 一个不存在的可执行文件**不会**立刻报错，脚本会转而去连 CDP 端口，连 40 次
+ * 之后抛一条 fetch 失败——真正的原因（没装 Chrome）在报错里一个字都没有。
+ *
+ * 顺序是有意的：先 Google Chrome，再 Chromium。两者的 WebRTC 行为并不完全一致，
+ * 能拿到 Chrome 就不要退到 Chromium。
+ */
+const CHROME_CANDIDATES = {
+  darwin: [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+  ],
+  linux: [
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/snap/bin/chromium",
+  ],
+};
+
+/** 能不能真的把它 spawn 起来：必须是**普通文件**，而且当前用户有执行位。 */
+function isExecutableFile(path) {
+  try {
+    if (!statSync(path).isFile()) return false;
+    accessSync(path, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 给显式指定的路径一句人话，说清它到底哪儿不能用。 */
+function describeUnusable(path) {
+  let stat;
+  try {
+    stat = statSync(path);
+  } catch (err) {
+    return err.code === "ENOENT" ? "there is no such file" : `it cannot be read (${err.code})`;
+  }
+  if (stat.isDirectory()) return "that is a directory, not an executable (point at the binary inside it)";
+  if (!stat.isFile()) return "that is not a regular file";
+  return "it is not executable by this user (check the execute bit)";
+}
+
+/**
+ * 找一个能用的浏览器，找不到就**抛错**——绝不静默跳过。
+ *
+ * 一套"没有浏览器就当通过"的用例，在 CI 里和"全都过了"长得一模一样，那正是这个仓库
+ * 最不想要的东西。所以这里宁可红，也不给任何跳过的口子。
+ *
+ * `CHROME_PATH` 一旦给了就只认它：显式指定之后再偷偷回退到别的浏览器，会变成
+ * "我以为在测 A，其实在测 B"。
+ */
+export function resolveChrome() {
+  const pinned = process.env.CHROME_PATH;
+  if (pinned) {
+    if (isExecutableFile(pinned)) return pinned;
+    // 显式指定的路径要逐条说清楚**哪里**不对。"存在"是不够的：一个目录（比如顺手填了
+    // 那个 .app 包本身）或一个没有执行位的文件都能通过存在性检查，然后 spawn 抛
+    // EACCES/EISDIR——那条报错里一个字都不会提到 CHROME_PATH 填错了。
+    throw new Error(`CHROME_PATH is set to ${pinned} but ${describeUnusable(pinned)} — fix it or unset it`);
+  }
+  const tried = CHROME_CANDIDATES[process.platform] ?? [];
+  // 候选路径只跳过、不报错：一个装坏了的 Chromium 不该挡住排在它后面的好 Chrome。
+  for (const candidate of tried) if (isExecutableFile(candidate)) return candidate;
+  throw new Error(
+    `no Chrome found on platform "${process.platform}".\n` +
+      (tried.length ? `    tried: ${tried.join("\n           ")}\n` : "    no candidate paths are known for this platform\n") +
+      `    install Google Chrome, or point CHROME_PATH at an existing binary.`,
+  );
+}
 
 export const ok = (label) => console.log(`  \x1b[32m✓\x1b[0m ${label}`);
 export const fail = (label, err) => {
@@ -202,6 +275,8 @@ export async function requireServer(base, hint) {
  * 只杀同一个 debugPort 的实例，所以两个脚本各用各的端口就不会互相误伤。
  */
 export async function launchBrowser({ debugPort, keep = false }) {
+  // 先解析浏览器：没有浏览器就没必要 pkill、建临时 profile 或等 800ms，直接报清楚。
+  const chromeBin = resolveChrome();
   try {
     spawn("pkill", ["-f", `remote-debugging-port=${debugPort}`], { stdio: "ignore" });
     await sleep(800);
@@ -209,7 +284,7 @@ export async function launchBrowser({ debugPort, keep = false }) {
 
   const profile = mkdtempSync(join(tmpdir(), "relayium-e2e-"));
   const chrome = spawn(
-    CHROME,
+    chromeBin,
     [
       "--headless=new",
       `--remote-debugging-port=${debugPort}`,
