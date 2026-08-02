@@ -3,7 +3,7 @@ import XCTest
 @testable import RelayiumKit
 
 private final class TextStubPair: PairCodeClient, @unchecked Sendable {
-    var result = MintedCode(code: "K7M3X9", expiresAt: 1_800_000_000)
+    var result = MintedCode(code: "483920", expiresAt: 1_800_000_000)
     func mint(token: String) async throws -> MintedCode { result }
 }
 
@@ -109,7 +109,11 @@ final class RealtimeTextSessionModelTests: XCTestCase {
     private var clock: TimeInterval = 100
     private var connection = TextStubConnection()
 
+    /// `verify` defaults to TRUE, unlike the product, because most cases below
+    /// exercise the blocking gate and a helper that quietly took the ungated
+    /// path would leave it untested. Default-OFF has its own section.
     private func makeModel(
+        verify: Bool = true,
         idleSeconds: TimeInterval = 600,
         idleSleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
             try? await Task.sleep(nanoseconds: nanoseconds)
@@ -121,6 +125,7 @@ final class RealtimeTextSessionModelTests: XCTestCase {
         return RealtimeTextSessionModel(
             pairClient: TextStubPair(),
             iceClient: TextStubICE(),
+            requiresVerification: { verify },
             now: { [weak self] in self?.clock ?? 0 },
             idleSeconds: idleSeconds,
             idleSleep: idleSleep,
@@ -143,7 +148,7 @@ final class RealtimeTextSessionModelTests: XCTestCase {
     }
 
     private func openInitiator(_ model: RealtimeTextSessionModel) async {
-        await model.join(code: "K7M3X9", role: .initiator)
+        await model.join(code: "483920", role: .initiator)
         connection.onSAS?("brave-otter-lamp")
         connection.onOpen?()
         await settle()
@@ -153,7 +158,7 @@ final class RealtimeTextSessionModelTests: XCTestCase {
     }
 
     private func openResponder(_ model: RealtimeTextSessionModel) async {
-        await model.join(code: "K7M3X9")
+        await model.join(code: "483920")
         connection.onSAS?("brave-otter-lamp")
         connection.onOpen?()
         await settle()
@@ -167,16 +172,85 @@ final class RealtimeTextSessionModelTests: XCTestCase {
         guard case let .showingCode(code, _) = model.state else {
             return XCTFail("got \(model.state)")
         }
-        XCTAssertEqual(code, "K7M3X9")
+        XCTAssertEqual(code, "483920")
 
         await model.join(code: code, role: .initiator)
         XCTAssertTrue(connection.started)
         guard case .connecting = model.state else { return XCTFail("got \(model.state)") }
     }
 
+    // MARK: - advanced verification OFF (the product default)
+
+    /// Constructed WITHOUT the parameter, so this fails if the shipped default
+    /// is ever flipped by an edit elsewhere.
+    func testVerificationIsOffByDefault() async {
+        clock = 100
+        connection = TextStubConnection()
+        let peer = connection
+        let model = RealtimeTextSessionModel(
+            pairClient: TextStubPair(),
+            iceClient: TextStubICE(),
+            now: { [weak self] in self?.clock ?? 0 },
+            makeConnection: { _, _, _ in peer })
+        await model.join(code: "483920", role: .initiator)
+        connection.onSAS?("six-words")
+        connection.onOpen?()
+        await settle()
+        if case .verifying = model.state { XCTFail("blocked on the SAS with verification off") }
+    }
+
+    /// The initiator still confirms on the TRANSPORT — that call is what enables
+    /// decryption, and it is not a display concern — it simply does not wait for
+    /// a human to look at a code first.
+    func testUnverifiedInitiatorConfirmsTheTransportWithoutAskingTheUser() async {
+        let model = makeModel(verify: false)
+        await model.join(code: "483920", role: .initiator)
+        connection.onSAS?("six-words")
+        connection.onOpen?()
+        await settle()
+        guard case .waitingAccept = model.state else { return XCTFail("got \(model.state)") }
+        XCTAssertEqual(connection.confirmTextSASCount, 1)
+
+        connection.onControl?(.accept)
+        await settle()
+        guard case .open = model.state else { return XCTFail("got \(model.state)") }
+    }
+
+    /// An incoming text request opens straight into the composer. `acceptText`
+    /// is exactly the step the ON path performs on a tap, so nothing is
+    /// decrypted any earlier than the session already allowed.
+    func testUnverifiedResponderAutoAcceptsIntoTheComposer() async {
+        let model = makeModel(verify: false)
+        await model.join(code: "483920", role: .responder)
+        connection.onSAS?("six-words")
+        connection.onOpen?()
+        await settle()
+        guard case .open = model.state else { return XCTFail("got \(model.state)") }
+        XCTAssertEqual(connection.acceptTextCount, 1)
+    }
+
+    /// Opting in restores the explicit accept/reject pair in full.
+    func testOptingInRestoresTheIncomingRequestGate() async {
+        let model = makeModel(verify: true)
+        await model.join(code: "483920", role: .responder)
+        connection.onSAS?("six-words")
+        connection.onOpen?()
+        await settle()
+        guard case .verifying = model.state else { return XCTFail("got \(model.state)") }
+        XCTAssertEqual(connection.acceptTextCount, 0)
+
+        model.confirmSAS()
+        guard case .incomingRequest = model.state else { return XCTFail("got \(model.state)") }
+        XCTAssertEqual(connection.acceptTextCount, 0, "accepted before the user chose")
+
+        model.accept()
+        guard case .open = model.state else { return XCTFail("got \(model.state)") }
+        XCTAssertEqual(connection.acceptTextCount, 1)
+    }
+
     func testInitiatorCannotOpenUntilSASAndPeerAccept() async {
         let model = makeModel()
-        await model.join(code: "K7M3X9", role: .initiator)
+        await model.join(code: "483920", role: .initiator)
         connection.onSAS?("six-words")
         await settle()
         guard case .connecting = model.state else {
@@ -196,7 +270,7 @@ final class RealtimeTextSessionModelTests: XCTestCase {
 
     func testAcceptArrivingBeforeSASConfirmationStillOpensSession() async {
         let model = makeModel()
-        await model.join(code: "K7M3X9", role: .initiator)
+        await model.join(code: "483920", role: .initiator)
         connection.onSAS?("six-words")
         connection.onOpen?()
         await settle()
@@ -219,7 +293,7 @@ final class RealtimeTextSessionModelTests: XCTestCase {
 
     func testAcceptedTextCallbackCanPromoteWaitingStateWithoutTaskOrdering() async {
         let model = makeModel()
-        await model.join(code: "K7M3X9", role: .initiator)
+        await model.join(code: "483920", role: .initiator)
         connection.onSAS?("six-words")
         connection.onOpen?()
         await settle()
@@ -238,7 +312,7 @@ final class RealtimeTextSessionModelTests: XCTestCase {
 
     func testRejectArrivingBeforeSASConfirmationRefusesSession() async {
         let model = makeModel()
-        await model.join(code: "K7M3X9", role: .initiator)
+        await model.join(code: "483920", role: .initiator)
         connection.onSAS?("six-words")
         connection.onOpen?()
         await settle()
@@ -253,7 +327,7 @@ final class RealtimeTextSessionModelTests: XCTestCase {
 
     func testInitiatorSASRejectionNotifiesPeer() async {
         let model = makeModel()
-        await model.join(code: "K7M3X9", role: .initiator)
+        await model.join(code: "483920", role: .initiator)
         connection.onSAS?("six-words")
         connection.onOpen?()
         await settle()
@@ -269,7 +343,7 @@ final class RealtimeTextSessionModelTests: XCTestCase {
             idleSeconds: 42,
             idleSleep: { nanoseconds in await idleGate.wait(nanoseconds: nanoseconds) }
         )
-        await model.join(code: "K7M3X9", role: .initiator)
+        await model.join(code: "483920", role: .initiator)
         connection.onSAS?("six-words")
         connection.onOpen?()
         await settle()
@@ -284,7 +358,7 @@ final class RealtimeTextSessionModelTests: XCTestCase {
 
     func testChannelOpeningBeforeSASStillWaitsForVerificationPhrase() async {
         let model = makeModel()
-        await model.join(code: "K7M3X9", role: .initiator)
+        await model.join(code: "483920", role: .initiator)
         connection.onOpen?()
         await settle()
         guard case .connecting = model.state else {
@@ -301,7 +375,7 @@ final class RealtimeTextSessionModelTests: XCTestCase {
 
     func testResponderAcceptsOnlyAfterSASConfirmationAndExplicitConsent() async {
         let model = makeModel()
-        await model.join(code: "K7M3X9")
+        await model.join(code: "483920")
         connection.onSAS?("six-words")
         connection.onOpen?()
         await settle()
@@ -318,7 +392,7 @@ final class RealtimeTextSessionModelTests: XCTestCase {
 
     func testInboundBeforeConsentFailsClosedAndNeverRendersBody() async {
         let model = makeModel()
-        await model.join(code: "K7M3X9")
+        await model.join(code: "483920")
         connection.onSAS?("six-words")
         connection.onOpen?()
         await settle()
@@ -451,7 +525,7 @@ final class RealtimeTextSessionModelTests: XCTestCase {
 
     func testRejectedAndStaleCallbacksCannotReopenOrAppend() async {
         let model = makeModel()
-        model.updateJoinCode("K7M3X9")
+        model.updateJoinCode("483920")
         await model.join(code: model.joinCode)
         connection.onSAS?("six-words")
         connection.onOpen?()

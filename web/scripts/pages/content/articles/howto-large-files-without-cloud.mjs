@@ -60,7 +60,7 @@ const en = {
       },
       {
         q: "How is my privacy protected for large files?",
-        a: "Realtime transfers are end-to-end encrypted with an X25519 key exchange and per-chunk AES-256-GCM, and that key never reaches any server. Both devices show a 6-digit verification code, and each file is checked with a SHA-256 hash. LAN WebRTC is direct; cross-network browser sessions use TURN by design, and the relay carries only ciphertext it cannot read or decrypt.",
+        a: "Realtime transfers are end-to-end encrypted with an X25519 key exchange and per-chunk AES-256-GCM, and that key never reaches any server. With advanced verification on (off by default), both devices show a 6-digit verification code; each file is checked with a SHA-256 hash. LAN WebRTC is direct; cross-network browser sessions use TURN by design, and the relay carries only ciphertext it cannot read or decrypt.",
       },
     ],
   },
@@ -128,7 +128,7 @@ const zh = {
       },
       {
         q: "传大文件时隐私如何保证？",
-        a: "实时传输用 X25519 密钥交换加逐块 AES-256-GCM 做端到端加密，密钥从不抵达任何服务器。两台设备显示 6 位校验码，每个文件用 SHA-256 校验。局域网 WebRTC 直连；跨网络浏览器按设计使用 TURN，中继只承载它无法读取或解密的密文。",
+        a: "实时传输用 X25519 密钥交换加逐块 AES-256-GCM 做端到端加密，密钥从不抵达任何服务器。打开高级验证（默认关闭）后两台设备会显示 6 位校验码；每个文件都用 SHA-256 校验。局域网 WebRTC 直连；跨网络浏览器按设计使用 TURN，中继只承载它无法读取或解密的密文。",
       },
     ],
   },
@@ -196,7 +196,7 @@ const ja = {
       },
       {
         q: "大きなファイルでプライバシーはどう守られますか？",
-        a: "リアルタイム転送は X25519 の鍵交換とチャンクごとの AES-256-GCM でエンドツーエンドに暗号化され、鍵はどのサーバーにも届きません。両端末が6桁の検証コードを表示し、各ファイルを SHA-256 で検証します。同じ LAN の WebRTC は直接接続し、ネットワークをまたぐブラウザは設計上 TURN を使用します。リレーは暗号文を運ぶだけで読み取りも復号もできません。",
+        a: "リアルタイム転送は X25519 の鍵交換とチャンクごとの AES-256-GCM でエンドツーエンドに暗号化され、鍵はどのサーバーにも届きません。高度な検証（既定はオフ）をオンにすると両端末が6桁の検証コードを表示します。各ファイルは SHA-256 で検証します。同じ LAN の WebRTC は直接接続し、ネットワークをまたぐブラウザは設計上 TURN を使用します。リレーは暗号文を運ぶだけで読み取りも復号もできません。",
       },
     ],
   },
@@ -264,7 +264,7 @@ const ko = {
       },
       {
         q: "대용량 파일에서 개인정보는 어떻게 보호되나요?",
-        a: "실시간 전송은 X25519 키 교환과 블록별 AES-256-GCM으로 종단간 암호화되며 키는 어떤 서버에도 도달하지 않습니다. 두 기기가 6자리 검증 코드를 표시하고 각 파일을 SHA-256으로 검사합니다. 같은 LAN의 WebRTC는 직접 연결하며, 네트워크를 넘는 브라우저는 설계상 TURN을 사용합니다. 릴레이는 읽거나 복호화할 수 없는 암호문만 운반합니다.",
+        a: "실시간 전송은 X25519 키 교환과 블록별 AES-256-GCM으로 종단간 암호화되며 키는 어떤 서버에도 도달하지 않습니다. 고급 검증(기본값 꺼짐)을 켜면 두 기기가 6자리 검증 코드를 표시하며, 각 파일은 SHA-256으로 검사합니다. 같은 LAN의 WebRTC는 직접 연결하며, 네트워크를 넘는 브라우저는 설계상 TURN을 사용합니다. 릴레이는 읽거나 복호화할 수 없는 암호문만 운반합니다.",
       },
     ],
   },
@@ -332,7 +332,7 @@ const de = {
       },
       {
         q: "Wie ist meine Privatsphäre bei großen Dateien geschützt?",
-        a: "Echtzeitübertragungen sind mit X25519 und AES-256-GCM pro Block Ende-zu-Ende verschlüsselt; der Schlüssel erreicht keinen Server. Beide Geräte zeigen einen sechsstelligen Verifizierungscode, jede Datei wird per SHA-256 geprüft. WebRTC ist im selben LAN direkt; netzübergreifende Browser nutzen TURN planmäßig, und das Relay transportiert nur Chiffretext, den es weder lesen noch entschlüsseln kann.",
+        a: "Echtzeitübertragungen sind mit X25519 und AES-256-GCM pro Block Ende-zu-Ende verschlüsselt; der Schlüssel erreicht keinen Server. Mit eingeschalteter erweiterter Verifizierung (standardmäßig aus) zeigen beide Geräte einen sechsstelligen Verifizierungscode; jede Datei wird per SHA-256 geprüft. WebRTC ist im selben LAN direkt; netzübergreifende Browser nutzen TURN planmäßig, und das Relay transportiert nur Chiffretext, den es weder lesen noch entschlüsseln kann.",
       },
     ],
   },
@@ -400,7 +400,7 @@ const fr = {
       },
       {
         q: "Comment ma vie privée est-elle protégée pour les gros fichiers ?",
-        a: "Les transferts en temps réel utilisent X25519 et AES-256-GCM par bloc de bout en bout ; la clé n'atteint aucun serveur. Les deux appareils affichent un code à 6 chiffres et chaque fichier est vérifié par SHA-256. WebRTC est direct sur le même LAN ; entre réseaux, les navigateurs utilisent TURN par conception, et le relais ne transporte que du texte chiffré qu'il ne peut ni lire ni déchiffrer.",
+        a: "Les transferts en temps réel utilisent X25519 et AES-256-GCM par bloc de bout en bout ; la clé n'atteint aucun serveur. Avec la vérification avancée activée (désactivée par défaut), les deux appareils affichent un code à 6 chiffres, et chaque fichier est vérifié par SHA-256. WebRTC est direct sur le même LAN ; entre réseaux, les navigateurs utilisent TURN par conception, et le relais ne transporte que du texte chiffré qu'il ne peut ni lire ni déchiffrer.",
       },
     ],
   },
@@ -468,7 +468,7 @@ const ar = {
       },
       {
         q: "كيف تُحمى خصوصيتي للملفات الكبيرة؟",
-        a: "النقل الفوري مشفّر من الطرف إلى الطرف عبر X25519 وAES-256-GCM لكل كتلة، ولا يصل المفتاح إلى أي خادم. يعرض الجهازان رمزًا من 6 أرقام ويُفحص كل ملف بـ SHA-256. يتصل WebRTC مباشرةً داخل شبكة LAN نفسها؛ وعبر الشبكات تستخدم المتصفحات TURN حسب التصميم، ولا يحمل المُرحِّل إلا نصًا مشفّرًا لا يستطيع قراءته أو فك تشفيره.",
+        a: "النقل الفوري مشفّر من الطرف إلى الطرف عبر X25519 وAES-256-GCM لكل كتلة، ولا يصل المفتاح إلى أي خادم. وعند تفعيل التحقّق المتقدّم (المعطَّل افتراضيًا) يعرض الجهازان رمزًا من 6 أرقام، ويُفحص كل ملف بـ SHA-256. يتصل WebRTC مباشرةً داخل شبكة LAN نفسها؛ وعبر الشبكات تستخدم المتصفحات TURN حسب التصميم، ولا يحمل المُرحِّل إلا نصًا مشفّرًا لا يستطيع قراءته أو فك تشفيره.",
       },
     ],
   },
@@ -536,7 +536,7 @@ const es = {
       },
       {
         q: "¿Cómo se protege mi privacidad con archivos grandes?",
-        a: "Las transferencias en tiempo real usan X25519 y AES-256-GCM por bloque de extremo a extremo; la clave no llega a ningún servidor. Ambos dispositivos muestran un código de 6 dígitos y cada archivo se verifica con SHA-256. WebRTC es directo en la misma LAN; entre redes, los navegadores usan TURN por diseño y el retransmisor solo transporta texto cifrado que no puede leer ni descifrar.",
+        a: "Las transferencias en tiempo real usan X25519 y AES-256-GCM por bloque de extremo a extremo; la clave no llega a ningún servidor. Con la verificación avanzada activada (desactivada por omisión), ambos dispositivos muestran un código de 6 dígitos, y cada archivo se verifica con SHA-256. WebRTC es directo en la misma LAN; entre redes, los navegadores usan TURN por diseño y el retransmisor solo transporta texto cifrado que no puede leer ni descifrar.",
       },
     ],
   },
@@ -604,7 +604,7 @@ const pt = {
       },
       {
         q: "Como minha privacidade é protegida em arquivos grandes?",
-        a: "As transferências em tempo real usam X25519 e AES-256-GCM por bloco de ponta a ponta; a chave não chega a nenhum servidor. Os dois dispositivos mostram um código de 6 dígitos e cada arquivo é verificado com SHA-256. O WebRTC é direto na mesma LAN; entre redes, os navegadores usam TURN por design e o retransmissor só transporta texto cifrado que não consegue ler nem descriptografar.",
+        a: "As transferências em tempo real usam X25519 e AES-256-GCM por bloco de ponta a ponta; a chave não chega a nenhum servidor. Com a verificação avançada ativada (desligada por padrão), os dois dispositivos mostram um código de 6 dígitos, e cada arquivo é verificado com SHA-256. O WebRTC é direto na mesma LAN; entre redes, os navegadores usam TURN por design e o retransmissor só transporta texto cifrado que não consegue ler nem descriptografar.",
       },
     ],
   },

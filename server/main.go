@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coder/websocket"
 	"github.com/mdp/qrterminal/v3"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
@@ -275,13 +274,14 @@ func main() {
 	// bearer token, so the code has an owner to attribute relay usage to (see
 	// pairUser and the route registration below). JOINING the code's room is
 	// anonymous — the receiver signs in nowhere, it just presents the code to
-	// /ws?code= and /api/ice?code=. Codes are not numeric: they are drawn from
-	// signal.CodeAlphabet (upper-case letters and digits, with the
-	// visually-ambiguous glyphs removed), which is why the CLI copy interpolates
-	// that constant instead of describing digits.
+	// /ws?code= and /api/ice?code=. A code is exactly signal.CodeLen decimal
+	// digits (signal.CodeAlphabet), so every client can offer a numeric keypad
+	// and the copy can say "six digits" without listing an alphabet. Note this is
+	// NOT the same six digits as the SAS: the code admits you to the room, the
+	// SAS authenticates the peer keys.
 	// Pure in-memory — works even if the DB is unavailable.
-	// TTL 是 signal.CodeTTLSeconds（30 分钟），理由写在那个常量上；导出成常量是因为
-	// CLI 的报错文案要照着说「有效 30 分钟」，行为和文案必须取自同一个来源。
+	// TTL 是 signal.CodeTTLSeconds（5 分钟），理由写在那个常量上；导出成常量是因为
+	// CLI 的报错文案要照着说「有效 5 分钟」，行为和文案必须取自同一个来源。
 	pairReg := signal.NewPairRegistry(signal.CodeTTLSeconds, func() int64 { return time.Now().Unix() })
 	go pairReg.Run(context.Background(), time.Minute)
 	// div lowers the per-instance thresholds below for a round-robin multi-instance
@@ -290,19 +290,32 @@ func main() {
 	div := *rateLimitDivisor
 	pairLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(10, div), time.Minute, func() int64 { return time.Now().Unix() })
 	go pairLimiter.Run(context.Background(), time.Minute)
-	// Separate limiter for /ws code-join attempts: 30/min/IP caps brute-force of
-	// the code space (24^6, see signal.CodeAlphabet — it was 10^6 back when codes
-	// were digits) while allowing a real recipient to reload a few times.
-	wsCodeLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(30, div), time.Minute, func() int64 { return time.Now().Unix() })
+	// Separate limiter for /ws code-join attempts. The budget and the reasoning
+	// live on wsJoinPerIPPerMinute (wsroute.go), next to the handler that spends
+	// it; it is deliberately the same figure as iceLimiter below.
+	wsCodeLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(wsJoinPerIPPerMinute, div), time.Minute, func() int64 { return time.Now().Unix() })
 	go wsCodeLimiter.Run(context.Background(), time.Minute)
 	// Global (non-per-IP) breaker on INVALID pairing-code join attempts: sheds
-	// brute-force load and signals attacks. It never affects valid-code joins.
+	// brute-force load and signals attacks. It never affects valid-code joins —
+	// which is also why it is not a ceiling on guessing (see GuessBreaker).
 	// The breaker is global (not per-IP), so IP-hash routing can't consolidate it
 	// across instances — dividing its trip threshold is the main use of the divisor.
 	guessBreaker := signal.NewGuessBreaker(account.PerInstanceThreshold(200, div), time.Minute, 30*time.Second, func() int64 { return time.Now().Unix() })
-	// H1: /api/ice pairing-code → TURN-credential endpoint. 5/min/IP.
+	// H1: /api/ice pairing-code → TURN-credential endpoint. Per-endpoint REQUEST
+	// cap, 5/min/IP — same figure as the /ws request cap so neither endpoint is
+	// the looser path for repeated-request load.
 	iceLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(5, div), time.Minute, func() int64 { return time.Now().Unix() })
 	go iceLimiter.Run(context.Background(), time.Minute)
+	// The cross-endpoint cap on how many DIFFERENT codes one address may try.
+	// ONE object, wired into both /ws (below) and /api/ice (SetCodeGuessLimiter):
+	// they are two halves of a single validity oracle, and while each held its own
+	// budget an attacker who split guesses between them got the sum — about 10
+	// candidates a minute from one address against a 1e6 code space, twice the
+	// number the design claimed. Sharing the object is the fix; do not give either
+	// endpoint its own. Per-process, like every limiter here (see
+	// PerInstanceThreshold for the multi-instance caveat).
+	codeGuessBudget := signal.NewCodeGuessLimiter(account.PerInstanceThreshold(pairingGuessesPerIPPerMinute, div), time.Minute, func() int64 { return time.Now().Unix() })
+	go codeGuessBudget.Run(context.Background(), time.Minute)
 	// H2a: register endpoint (email-bomb + Sybil surface). 5/min/IP.
 	registerLimiter := signal.NewRateLimiter(account.PerInstanceThreshold(5, div), time.Minute, func() int64 { return time.Now().Unix() })
 	go registerLimiter.Run(context.Background(), time.Minute)
@@ -351,62 +364,17 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ready"))
 	})
-	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		code := r.URL.Query().Get("code")
-		if code != "" && !wsCodeLimiter.Allow(ipx.IP(r)) {
-			http.Error(w, "too many pairing attempts", http.StatusTooManyRequests)
-			return
-		}
-		// 形状不对的直接拒，不进注册表：爆破流量里绝大多数是随便拼的串，没必要
-		// 让它们变成 map 查询和日志里的攻击者自选内容。注意仍然走上面的限流，
-		// 否则这条快速路径反而成了免费的试探通道。
-		if code != "" && !signal.ValidCodeFormat(code) {
-			http.Error(w, "invalid or expired pairing code", http.StatusForbidden)
-			return
-		}
-		room, maxPeers, lan, ok := signal.RoomFor(code, pairReg.Validate)
-		if !ok {
-			// Invalid/expired code = a guess. Feed the global breaker; when it is
-			// open, shed with 429 and a throttled WARN. Valid codes are unaffected.
-			if code != "" {
-				if open, logNow := guessBreaker.RecordInvalid(); open {
-					if logNow {
-						log.Printf("WARNING: pairing-code guess breaker OPEN — shedding invalid /ws?code= joins")
-					}
-					http.Error(w, "too many pairing attempts", http.StatusTooManyRequests)
-					return
-				}
-			}
-			http.Error(w, "invalid or expired pairing code", http.StatusForbidden)
-			return
-		}
-		if lan {
-			room = ipx.RoomKey(r)
-			maxPeers = lanMaxPeers // LAN: capped (was unlimited)
-		}
-		ip := ipx.IP(r)
-		// Global check first: it's a plain int compare under the limiter's own
-		// mutex, cheaper than the per-IP map lookup below, and if the server is
-		// already at its global cap there is no reason to pay for that lookup
-		// (or grow the per-IP map with an entry we're about to refuse anyway).
-		if !globalConns.Acquire() {
-			http.Error(w, "too many connections", http.StatusTooManyRequests)
-			return
-		}
-		defer globalConns.Release()
-		if !ipConns.Acquire(ip) {
-			http.Error(w, "too many connections", http.StatusTooManyRequests)
-			return
-		}
-		defer ipConns.Release(ip)
-		c, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			return
-		}
-		ctx := r.Context()
-		handle(ctx, c, room, maxPeers, ip)
-		_ = c.Close(websocket.StatusNormalClosure, "")
-	})
+	mux.HandleFunc("/ws", wsRoute{
+		reqLimiter:   wsCodeLimiter,
+		guessBudget:  codeGuessBudget,
+		guessBreaker: guessBreaker,
+		ipx:          ipx,
+		validate:     pairReg.Validate,
+		globalConns:  globalConns,
+		ipConns:      ipConns,
+		handle:       handle,
+		lanMaxPeers:  lanMaxPeers,
+	}.handler())
 	if dbErr != nil {
 		// /api/pair mints cross-network pairing codes owned by a logged-in user, so
 		// without accounts it is simply not registered — LAN transfer is unaffected.
@@ -467,7 +435,10 @@ func main() {
 		acct.SetPairCodeOwner(pairReg.OwnerOf)
 		acct.SetClientIP(ipx.IP) // H3: trusted-proxy-aware rate-limit keys
 		acct.SetICELimiter(iceLimiter)
-		acct.SetGuessBreaker(guessBreaker) // shared /ws breaker: shed /api/ice during a flood
+		// The same object the /ws route holds: one distinct-code budget per IP
+		// across both validity oracles, not one per endpoint.
+		acct.SetCodeGuessLimiter(codeGuessBudget)
+		acct.SetGuessBreaker(guessBreaker) // shared /ws breaker: /api/ice feeds it, /ws sheds on it
 		acct.SetRegisterLimiter(registerLimiter)
 		acct.SetPasskeyBeginLimiter(passkeyBeginLimiter)
 		acct.SetDownloadLimiter(downloadLimiter)

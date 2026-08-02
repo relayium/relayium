@@ -3,9 +3,9 @@ import UniformTypeIdentifiers
 import RelayiumAppKit
 import RelayiumKit
 
-/// Peer-to-peer transfer: mint a code or join one, compare the phrase, send.
-/// Holds no decisions — every state it renders is covered by
-/// RealtimeSessionModelTests.
+/// Peer-to-peer transfer: mint a code or join one, optionally compare the
+/// phrase, send. Holds no decisions — every state it renders is covered by
+/// RealtimeSessionModelTests, including whether `.verifying` is reached at all.
 struct DirectPane: View {
     @ObservedObject var model: RealtimeSessionModel
     let token: String
@@ -106,6 +106,9 @@ struct DirectPane: View {
 
     // MARK: - the SAS gate
 
+    /// Reached only with advanced verification ON. With it off the model goes
+    /// straight from `connecting` to `transferring`, so this view is simply
+    /// never built — the gate is a model state, not a hidden button here.
     private func verifying(_ sas: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Check this matches").font(.subheadline.weight(.semibold))

@@ -3,9 +3,17 @@
   //
   // Pure presentation + callbacks, like MessagePanel and DeviceRadar: it holds no
   // link, lane or protocol state. Its whole job is the product rule "one connected
-  // peer workspace has one authenticated link and one SAS" — so this is the ONLY
-  // place a mixed link's verification code, path badge and disconnect action are
-  // rendered. The file and text lane cards below it must not repeat any of them.
+  // peer workspace has one encrypted link and at most one SAS" — so this is the
+  // ONLY place a mixed link's verification code, path badge and disconnect action
+  // are rendered. The file and text lane cards below it must not repeat any of them.
+  //
+  // "At most one" because advanced verification is off by default: on a default
+  // session `sasCode` stays empty and no code is shown at all. The link is still
+  // encrypted and commit-reveal-complete (commit-reveal + AEAD, neither optional),
+  // which is protocol integrity — each side revealed the key it committed to and
+  // every frame is authenticated. What the absent code means is that nobody
+  // compared endpoint keys out of band, so nothing here establishes that the peer
+  // is the intended person; only a compared SAS does.
   import { lang, messages, type Messages } from "./i18n.svelte";
   // Taken off the workspace getter that feeds this prop rather than from
   // peer-link.svelte directly: that module specifier differs from the PeerLink
@@ -50,9 +58,10 @@
   }
 </script>
 
-<!-- Sticky so a long activity column can never scroll the sole SAS out of the
-     verification context. Everything inside stays on one wrapping row set so a
-     320px viewport keeps it short enough to be worth pinning.
+<!-- Sticky so a long activity column can never scroll the SAS — when advanced
+     verification put one there — out of the verification context. Everything
+     inside stays on one wrapping row set so a 320px viewport keeps it short
+     enough to be worth pinning.
 
      What is pinned is deliberately only the trust state: who, what link, which
      code. Measured at 390px, adding the explanatory sentence below made this box

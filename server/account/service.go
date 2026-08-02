@@ -180,13 +180,25 @@ type Service struct {
 	// existing tests are unchanged); main.go injects signal.IPExtractor.IP,
 	// which only trusts XFF from configured/loopback proxies (H3).
 	clientIP func(*http.Request) string
-	// iceLimiter caps /api/ice attempts per IP (H1: brute-forcing the 6-digit
-	// pairing code would steal a victim's TURN credentials). nil = unlimited.
+	// iceLimiter is /api/ice's own REQUEST cap per IP (H1: brute-forcing the
+	// 6-digit pairing code would steal a victim's TURN credentials). It bounds
+	// requests, not distinct codes, so repeating one code is not free load.
+	// nil = unlimited.
 	iceLimiter rateLimiter
+	// codeGuesses is the DISTINCT-pairing-code budget shared with /ws (one object
+	// wired by main.go for both). /ws and /api/ice are two halves of one validity
+	// oracle; with only the per-endpoint request caps above, an attacker split
+	// guesses across them and got the sum. This is the cap on how many different
+	// codes an address may try. nil = no distinct-guess cap (per-endpoint request
+	// caps still apply).
+	codeGuesses codeGuessLimiter
 	// iceBreaker is the process-wide pairing-code brute-force breaker shared with
-	// /ws. While it is open, /api/ice sheds credential issuance (STUN-only) so it
-	// cannot be used as a validity oracle or a victim-billed credential tap during
-	// a flood; invalid /api/ice codes also feed it. nil disables this layer.
+	// /ws. /api/ice only FEEDS it (every invalid non-empty code is recorded) and
+	// no longer sheds anything on it: a valid code is served its credentials
+	// whether the breaker is open or not, because shedding valid codes turned a
+	// cheap guess-flood into a fleet-wide relay outage (see handleICE in turn.go).
+	// /ws is where an open breaker actually sheds — invalid joins only.
+	// nil disables this layer.
 	iceBreaker guessBreaker
 	// registerLimiter caps POST /api/auth/register attempts per IP (H2a). nil = unlimited.
 	registerLimiter rateLimiter
@@ -233,9 +245,23 @@ type Service struct {
 // satisfies it. Declared locally so the account package need not import signal.
 type rateLimiter interface{ Allow(key string) bool }
 
+// codeGuessLimiter is the shared cross-endpoint distinct-pairing-code budget;
+// *signal.CodeGuessLimiter satisfies it. Declared locally for the same reason as
+// rateLimiter above. main.go wires the SAME object here and into the /ws route,
+// which is the point: the budget is one per IP, not one per endpoint.
+type codeGuessLimiter interface {
+	// AllowCode records `code` as presented by `ip` and reports whether the
+	// address stays within its distinct-candidate budget for the trailing window.
+	// An empty code is not a guess and is always allowed.
+	AllowCode(ip, code string) bool
+}
+
 // guessBreaker is the subset of *signal.GuessBreaker handleICE needs, declared
-// locally for the same reason: IsOpen to shed while a flood is active, and
-// RecordInvalid to feed an invalid /api/ice code into the shared breaker.
+// locally for the same reason. In practice only RecordInvalid is called — to
+// feed an invalid /api/ice code into the shared breaker; handleICE deliberately
+// no longer sheds valid codes while the breaker is open (see turn.go). IsOpen
+// stays in the interface because it is the breaker's read-only half and the next
+// caller that wants to read the flood state should not have to widen this again.
 type guessBreaker interface {
 	IsOpen() bool
 	RecordInvalid() (open, logNow bool)
@@ -304,12 +330,20 @@ func (s *Service) SetClientIP(fn func(*http.Request) string) {
 	}
 }
 
-// SetICELimiter caps /api/ice at N/window/IP (H1: 5/min). nil = unlimited.
+// SetICELimiter caps /api/ice REQUESTS at N/window/IP (H1: 5/min). This is the
+// per-endpoint cap; the cap on distinct codes tried lives in
+// SetCodeGuessLimiter. nil = unlimited.
 func (s *Service) SetICELimiter(rl rateLimiter) { s.iceLimiter = rl }
 
-// SetGuessBreaker wires the shared pairing-code brute-force breaker (the same
-// instance /ws feeds) so /api/ice sheds credential issuance while it is open and
-// feeds it invalid codes. nil disables this layer.
+// SetCodeGuessLimiter wires the pairing-code guess budget that /api/ice shares
+// with /ws. main.go passes the same object to both, so five distinct codes is
+// five across the pair of endpoints rather than five on each. nil = no
+// distinct-guess cap.
+func (s *Service) SetCodeGuessLimiter(l codeGuessLimiter) { s.codeGuesses = l }
+
+// SetGuessBreaker wires the shared pairing-code brute-force detector (the same
+// instance /ws feeds) so an invalid /api/ice code counts towards it too. Valid
+// codes are served normally whether or not it is open. nil disables this layer.
 func (s *Service) SetGuessBreaker(b guessBreaker) { s.iceBreaker = b }
 
 // SetRegisterLimiter caps POST /api/auth/register per IP (H2a: 5/min). nil = unlimited.

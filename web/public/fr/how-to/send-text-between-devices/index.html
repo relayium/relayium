@@ -82,24 +82,27 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="lead">Le navigateur et la CLI prennent en charge le texte, mais utilisent des transports séparés et ne peuvent pas rejoindre leurs codes respectifs. Utilisez la même méthode aux deux extrémités.</p>
       <h2>Navigateur : envoyer un message à un appareil en ligne</h2>
       <p>Ouvrez relayium.com sur les deux appareils. Sur le même réseau ils apparaissent automatiquement ; sinon créez un code navigateur sur la page interréseau et rejoignez-le dans l&#39;autre navigateur.</p>
-      <ul><li>Choisissez « Envoyer un message » sur la carte du pair. Avant acceptation, le destinataire ne voit ni contenu ni zone de saisie.</li><li>Comparez le code de vérification à six chiffres (SAS), saisissez ou collez le texte, puis envoyez avec ⌘/Ctrl+Entrée.</li><li>Tant que la session reste ouverte, chaque côté peut envoyer plusieurs messages et copier ceux qu&#39;il reçoit.</li></ul>
+      <ul><li>Choisissez « Envoyer un message » sur la carte du pair. Par défaut, la session s&#39;ouvre directement sur la zone de saisie des deux côtés — la connexion est chiffrée dans tous les cas.</li><li>Saisissez ou collez le texte, puis envoyez avec ⌘/Ctrl+Entrée. Activez d&#39;abord la vérification avancée si vous voulez que les deux écrans affichent le même code de vérification à six chiffres (SAS) à comparer, avec une acceptation explicite avant l&#39;ouverture de la session.</li><li>Tant que la session reste ouverte, chaque côté peut envoyer plusieurs messages et copier ceux qu&#39;il reçoit.</li></ul>
       <h2>CLI : créer un code sur une machine, le rejoindre sur l&#39;autre</h2>
-      <p>Lancez relayium text sans code sur une machine. La commande crée un code à six caractères avec votre compte, affiche exactement la commande que l&#39;autre machine doit exécuter, et reste dans la session à l&#39;attendre. Aucun fichier temporaire, aucun processus supplémentaire à arrêter.</p>
-      <p>Lancez ensuite relayium text avec ce code sur l&#39;autre machine. En mode interactif, chaque ligne est un message et le SAS doit être confirmé. Pour du texte multiligne ou exact, utilisez un pipe en un seul message avec --yes, car aucun terminal ne peut afficher la confirmation.</p>
+      <p>Lancez relayium text sans code sur une machine. La commande crée un code à six chiffres avec votre compte, affiche exactement la commande que l&#39;autre machine doit exécuter, et reste dans la session à l&#39;attendre. Aucun fichier temporaire, aucun processus supplémentaire à arrêter.</p>
+      <p>Lancez ensuite relayium text avec ce code sur l&#39;autre machine. En mode interactif, chaque ligne est un message et rien ne s&#39;arrête pour comparer un code tant que vous ne le demandez pas. Pour du texte multiligne ou exact, utilisez un pipe en un seul message : aucun indicateur supplémentaire n&#39;est requis.</p>
       <pre><code># One machine mints the code and waits (relayium login is required once)
 relayium text
-# Code: K7M4XR   (valid 30 minutes)
-# On the other machine:  relayium text K7M4XR
+# Code: 483920   (valid 5 minutes)
+# On the other machine:  relayium text 483920
 
 # The other machine joins that code
-relayium text K7M4XR
+relayium text 483920
 
 # Send one multiline message exactly as copied (macOS)
-pbpaste | relayium text K7M4XR --yes
+pbpaste | relayium text 483920
 
 # Or pipe a file on any shell
-cat snippet.txt | relayium text K7M4XR --yes</code></pre>
-      <ul><li>Les codes CLI durent cinq minutes et relient uniquement deux CLI ; navigateur et CLI ne sont pas interopérables.</li><li>Seule la machine qui crée le code exige un compte connecté. Celle qui rejoint le code affiché n&#39;a pas besoin de se connecter.</li><li>--yes ignore la confirmation interactive du SAS ; vérifiez la session par un autre moyen fiable.</li></ul>
+cat snippet.txt | relayium text 483920
+
+# Optional: stop to compare the verification code (SAS) first
+relayium text 483920 --verify</code></pre>
+      <ul><li>Les codes CLI durent cinq minutes et relient uniquement deux CLI ; navigateur et CLI ne sont pas interopérables.</li><li>Seule la machine qui crée le code exige un compte connecté. Celle qui rejoint le code affiché n&#39;a pas besoin de se connecter.</li><li>--verify active la comparaison du SAS et nécessite un terminal pour y répondre : un lancement avec un pipe et --verify est refusé plutôt que poursuivi comme s&#39;il avait été confirmé. --yes reste accepté, signifie toujours « ne jamais demander » et l&#39;emporte sur --verify.</li></ul>
       <h2>Ce que le transfert de texte est — et n&#39;est pas</h2>
       <p>Le contenu reste du texte brut UTF-8, avec espaces, tabulations, lignes vides et retours à la ligne. Relayium ne l&#39;exécute pas, ne rend pas le Markdown, ne crée ni lien ni aperçu.</p>
       <ul><li>Les deux appareils doivent être en ligne ensemble. Pas de livraison hors ligne, boîte de réception, contacts ou historique synchronisé.</li><li>L&#39;historique est local à la session ouverte et disparaît à sa fermeture ou au rechargement. Le serveur ne stocke aucun corps de message.</li><li>Un message est limité à 65 536 octets UTF-8. Envoyez les contenus plus grands sous forme de fichier.</li></ul>

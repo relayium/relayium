@@ -30,10 +30,10 @@ const en = {
       heading: "The 6-digit code that catches a dishonest server",
       body: [
         "There's a subtlety worth being honest about. WebRTC's own built-in encryption (DTLS) exchanges key fingerprints through the signaling server that introduces the two devices to each other. If that server were dishonest, it could in theory sit in the middle and swap in its own keys — a classic man-in-the-middle attack — without either browser immediately noticing.",
-        "Relayium closes that gap with a short verification code. Both devices derive the same 6-digit Short Authentication String (SAS) from their two public keys and display it on screen. If the codes match, the public keys weren't swapped: the signaling or relay server did not impersonate either endpoint or terminate the application-layer end-to-end encryption. This does not mean there was no server on the network path — cross-network ciphertext may still travel through TURN by design. But a plain 6-digit code is only about 20 bits, which in principle a well-positioned attacker could try to brute-force into matching after seeing both real keys. To prevent that, Relayium uses a commit-then-reveal handshake: each side first sends a hash committing to its key, and only reveals the real key after receiving the other side's commitment. That ordering means a malicious server has to commit to a fake key blind, before it has seen the real one — it cannot pick a colliding key after the fact, so the short code stays trustworthy.",
+        "Relayium closes that gap with a short verification code. Both devices derive the same 6-digit Short Authentication String (SAS) from their two public keys, and can display it on screen. Showing it and stopping to compare it is advanced verification, which is off by default — so a default transfer shows no code. Everything else described here still runs on every transfer: the fresh keys, the encryption, the commit-then-reveal handshake and the per-chunk authentication. What a default transfer does not get is this check itself — catching a swapped key, or a stranger on the other end, needs advanced verification turned on and the two people actually comparing the code out of band. If the codes match, the public keys weren't swapped: the signaling or relay server did not impersonate either endpoint or terminate the application-layer end-to-end encryption. This does not mean there was no server on the network path — cross-network ciphertext may still travel through TURN by design. But a plain 6-digit code is only about 20 bits, which in principle a well-positioned attacker could try to brute-force into matching after seeing both real keys. To prevent that, Relayium uses a commit-then-reveal handshake: each side first sends a hash committing to its key, and only reveals the real key after receiving the other side's commitment. That ordering means a malicious server has to commit to a fake key blind, before it has seen the real one — it cannot pick a colliding key after the fact, so the short code stays trustworthy.",
       ],
       bullets: [
-        "For the strongest guarantee, read the code aloud over a call or compare it in person, not just by eye on two screens next to each other.",
+        "For the strongest guarantee, turn on advanced verification, then read the code aloud over a call or compare it in person, not just by eye on two screens next to each other.",
         "If the two codes don't match, stop — treat it as a sign someone may be intercepting the connection.",
       ],
     },
@@ -84,12 +84,12 @@ const en = {
       },
       {
         q: "What if the two verification codes on screen don't match?",
-        a: "Stop the transfer. A mismatch means the commit-then-reveal check failed, which points to a possible man-in-the-middle rather than a benign glitch — don't proceed until you understand why.",
+        a: "Stop the transfer. Two different codes mean the two devices are not looking at the same connection — exactly what a substituted key or a man-in-the-middle would produce, rather than a benign glitch. (A failed commit-then-reveal handshake is a separate, earlier failure: it aborts the connection itself, before any code is shown.) Don't proceed until you understand why.",
       },
     ],
   },
   cta: {
-    text: "Curious what it looks like in practice? Start a transfer and watch the verification code appear for yourself.",
+    text: "Curious what it looks like in practice? Turn on advanced verification before you start a new connection, so the code comparison and the confirmation steps are in place from the very beginning.",
     button: "Try Relayium now",
   },
   relatedHeading: "Keep reading",
@@ -121,10 +121,10 @@ const zh = {
       heading: "识破不诚实服务器的六位校验码",
       body: [
         "这里有个值得坦白说明的细微之处。WebRTC 自带的加密（DTLS）会通过负责撮合两台设备的信令服务器交换密钥指纹。如果这个服务器不诚实，理论上它可以居中调包成自己的密钥——一次经典的中间人攻击——而两端浏览器不会立刻察觉。",
-        "Relayium 用一段简短的校验码堵上这个缺口。两台设备都从各自的公钥推导出同一段 6 位短校验码（SAS），并显示在屏幕上。如果两边的码一致，说明公钥没有被调包：信令服务器或中继服务器没有冒充任一端点，也没有终止应用层端到端加密。这并不意味着传输路径上没有服务器——跨网络传输的密文仍可能按设计经过 TURN。一段普通的 6 位数字码只有约 20 比特，一个位置合适的攻击者理论上可以在看到双方真实密钥后暴力凑出一个匹配的码。为防止这一点，Relayium 采用「先承诺后揭示」的握手方式：双方先各自发送一段对自己密钥的哈希承诺，收到对方的承诺之后才揭示真正的密钥。这个顺序意味着恶意服务器必须在还没见到真实密钥的情况下盲目地承诺一个伪造密钥——它无法事后再挑一个能撞上的密钥，短校验码因此依然可信。",
+        "Relayium 用一段简短的校验码堵上这个缺口。两台设备都从各自的公钥推导出同一段 6 位短校验码（SAS），并可以把它显示在屏幕上。是否显示、是否停下来核对属于「高级验证」，默认关闭——所以默认的传输并不会显示任何校验码。这里描述的其余部分对每一次传输都照常生效：每次新生成的密钥、加密、「先承诺后揭示」握手，以及逐块的认证。默认传输缺少的正是这道核对本身——要发现密钥被调包，或者对面根本是陌生人，需要打开高级验证，并且两个人真的通过其他渠道核对这段码。如果两边的码一致，说明公钥没有被调包：信令服务器或中继服务器没有冒充任一端点，也没有终止应用层端到端加密。这并不意味着传输路径上没有服务器——跨网络传输的密文仍可能按设计经过 TURN。一段普通的 6 位数字码只有约 20 比特，一个位置合适的攻击者理论上可以在看到双方真实密钥后暴力凑出一个匹配的码。为防止这一点，Relayium 采用「先承诺后揭示」的握手方式：双方先各自发送一段对自己密钥的哈希承诺，收到对方的承诺之后才揭示真正的密钥。这个顺序意味着恶意服务器必须在还没见到真实密钥的情况下盲目地承诺一个伪造密钥——它无法事后再挑一个能撞上的密钥，短校验码因此依然可信。",
       ],
       bullets: [
-        "为获得最强的保证，请通过通话读出校验码或当面核对，而不只是各自看屏幕上的数字。",
+        "为获得最强的保证，请先打开高级验证，再通过通话读出校验码或当面核对，而不只是各自看屏幕上的数字。",
         "如果两边的码不一致，请立即停止：这可能意味着有人正在拦截连接。",
       ],
     },
@@ -175,12 +175,12 @@ const zh = {
       },
       {
         q: "如果屏幕上两边的校验码不一致怎么办？",
-        a: "立即停止传输。码不一致意味着「先承诺后揭示」的校验没有通过，这指向的是可能存在中间人，而不是一次无害的小故障——在弄清楚原因之前不要继续。",
+        a: "立即停止传输。两边的码不一致，说明两台设备看到的不是同一条连接——这正是密钥被调包或存在中间人时会出现的结果，而不是一次无害的小故障。（「先承诺后揭示」握手失败是另一回事，也发生得更早：它会让连接直接中止，根本不会显示任何校验码。）在弄清楚原因之前不要继续。",
       },
     ],
   },
   cta: {
-    text: "想亲眼看看实际效果？发起一次传输，亲自见证校验码的出现。",
+    text: "想亲眼看看实际效果？在开始新连接之前打开高级验证，这样校验码比对和各处确认步骤从一开始就生效。",
     button: "立即试用 Relayium",
   },
   relatedHeading: "继续阅读",
@@ -212,10 +212,10 @@ const ja = {
       heading: "不正なサーバーを見破る6桁のコード",
       body: [
         "ここには正直に触れておくべき細部があります。WebRTC 標準の暗号化（DTLS）は、2台のデバイスを引き合わせるシグナリングサーバー経由で鍵のフィンガープリントを交換します。もしそのサーバーが不正であれば、理論上は中間に入って自分の鍵にすり替えることができます——典型的な中間者攻撃で、しかもどちらのブラウザもすぐには気づきません。",
-        "Relayium はこの隙を短い検証コードで塞ぎます。両方のデバイスは双方の公開鍵から同じ6桁の Short Authentication String（SAS）を導出し、画面に表示します。2つのコードが一致すれば公開鍵はすり替えられておらず、シグナリングサーバーやリレーサーバーがどちらかのエンドポイントになりすましたり、アプリケーション層のエンドツーエンド暗号化を終端したりしていないことを確認できます。これはネットワーク経路上にサーバーが存在しないという意味ではありません——ネットワークをまたぐ暗号文は設計どおり TURN を通ることがあります。しかし単純な6桁のコードは約20ビットしかなく、原理的には双方の本物の鍵を見た攻撃者が一致するコードを総当たりで作り出そうとする余地があります。それを防ぐため、Relayium はコミット後開示ハンドシェイクを使います。各側はまず自分の鍵に対するハッシュを送ってコミットし、相手のコミットメントを受け取ってから初めて本物の鍵を開示します。この順序によって、悪意あるサーバーは本物の鍵を見る前に盲目的に偽の鍵をコミットせざるを得ず、後から衝突する鍵を選ぶことはできません。だから短いコードは信頼できるままなのです。",
+        "Relayium はこの隙を短い検証コードで塞ぎます。両方のデバイスは双方の公開鍵から同じ6桁の Short Authentication String（SAS）を導出し、画面に表示できます。表示して照合のために止まるかどうかは「高度な検証」で、既定はオフです——つまり既定の転送ではコードは表示されません。ここで説明しているそれ以外の仕組み（毎回新しい鍵、暗号化、コミット後開示ハンドシェイク、チャンクごとの認証）は、どの転送でもそのまま働きます。既定の転送に欠けているのはこの照合そのものです——鍵のすり替えや、相手が意図した人物でないことを検知するには、高度な検証をオンにしたうえで、二人が実際に別の手段でコードを読み合わせる必要があります。2つのコードが一致すれば公開鍵はすり替えられておらず、シグナリングサーバーやリレーサーバーがどちらかのエンドポイントになりすましたり、アプリケーション層のエンドツーエンド暗号化を終端したりしていないことを確認できます。これはネットワーク経路上にサーバーが存在しないという意味ではありません——ネットワークをまたぐ暗号文は設計どおり TURN を通ることがあります。しかし単純な6桁のコードは約20ビットしかなく、原理的には双方の本物の鍵を見た攻撃者が一致するコードを総当たりで作り出そうとする余地があります。それを防ぐため、Relayium はコミット後開示ハンドシェイクを使います。各側はまず自分の鍵に対するハッシュを送ってコミットし、相手のコミットメントを受け取ってから初めて本物の鍵を開示します。この順序によって、悪意あるサーバーは本物の鍵を見る前に盲目的に偽の鍵をコミットせざるを得ず、後から衝突する鍵を選ぶことはできません。だから短いコードは信頼できるままなのです。",
       ],
       bullets: [
-        "最も強い保証を得るには、隣り合った2つの画面を目で見比べるだけでなく、通話でコードを読み上げるか、対面で照合してください。",
+        "最も強い保証を得るには、まず高度な検証をオンにしたうえで、隣り合った2つの画面を目で見比べるだけでなく、通話でコードを読み上げるか、対面で照合してください。",
         "2つのコードが一致しない場合は中止してください。誰かが接続を傍受している可能性を示すサインです。",
       ],
     },
@@ -266,12 +266,12 @@ const ja = {
       },
       {
         q: "画面上の2つの検証コードが一致しない場合はどうすればいいですか？",
-        a: "転送を中止してください。コードが一致しないということは、コミット後開示の検証が失敗したことを意味し、単なる不具合ではなく中間者の存在を示している可能性があります——理由が分かるまで先に進まないでください。",
+        a: "転送を中止してください。コードが一致しないということは、2台が同じ接続を見ていないということです——鍵のすり替えや中間者がいる場合にまさに現れる結果であり、単なる不具合ではありません。（コミット後開示ハンドシェイクの失敗はこれとは別の、もっと早い段階の失敗です。接続自体が中止され、コードは表示されません。）理由が分かるまで先に進まないでください。",
       },
     ],
   },
   cta: {
-    text: "実際にどう見えるか気になりますか？転送を開始して、検証コードが表示される様子を自分の目で確かめてください。",
+    text: "実際にどう見えるか気になりますか？新しい接続を始める前に高度な検証をオンにしておくと、コードの照合と確認のステップが最初から有効になります。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -303,10 +303,10 @@ const ko = {
       heading: "부정직한 서버를 잡아내는 6자리 코드",
       body: [
         "여기서 솔직히 짚고 넘어갈 부분이 있습니다. WebRTC 자체 내장 암호화(DTLS)는 두 기기를 소개해주는 시그널링 서버를 통해 키 지문을 교환합니다. 만약 그 서버가 부정직하다면, 이론적으로는 중간에 끼어들어 자신의 키로 바꿔치기할 수 있습니다——고전적인 중간자 공격이며, 양쪽 브라우저 모두 즉시 알아차리지 못할 수 있습니다.",
-        "Relayium은 짧은 검증 코드로 이 틈을 막습니다. 두 기기는 각자의 공개 키에서 동일한 6자리 Short Authentication String(SAS)을 도출해 화면에 표시합니다. 두 코드가 일치하면 공개 키가 바뀌지 않았으며, 시그널링 서버나 릴레이 서버가 어느 엔드포인트도 사칭하지 않았고 애플리케이션 계층의 종단 간 암호화를 종료하지 않았다는 뜻입니다. 이는 네트워크 경로에 서버가 없다는 뜻이 아닙니다——네트워크 간 암호문은 설계상 여전히 TURN을 통과할 수 있습니다. 하지만 단순한 6자리 코드는 약 20비트에 불과해서, 원칙적으로는 유리한 위치에 있는 공격자가 양쪽의 진짜 키를 본 뒤 일치하는 코드를 무차별 대입으로 만들어낼 여지가 있습니다. 이를 막기 위해 Relayium은 커밋 후 공개 핸드셰이크를 사용합니다. 각 측은 먼저 자신의 키에 대한 해시를 보내 커밋하고, 상대방의 커밋을 받은 후에야 진짜 키를 공개합니다. 이 순서 덕분에 악의적인 서버는 진짜 키를 보기도 전에 눈을 감은 채 가짜 키를 커밋해야 하며, 나중에 충돌하는 키를 고를 수 없습니다. 그래서 짧은 코드가 계속 신뢰할 수 있는 상태로 남는 것입니다.",
+        "Relayium은 짧은 검증 코드로 이 틈을 막습니다. 두 기기는 각자의 공개 키에서 동일한 6자리 Short Authentication String(SAS)을 도출해 화면에 표시할 수 있습니다. 이를 표시하고 대조를 위해 멈출지는 «고급 검증»이며 기본값은 꺼짐입니다 — 즉 기본 전송에서는 코드가 표시되지 않습니다. 여기에서 설명하는 나머지, 곧 매번 새로 만드는 키와 암호화, 커밋 후 공개 핸드셰이크, 청크마다의 인증은 모든 전송에 그대로 적용됩니다. 기본 전송에 없는 것은 이 대조 자체입니다 — 키가 바뀌었는지, 상대가 의도한 사람이 아닌지 알아내려면 고급 검증을 켜고 두 사람이 실제로 다른 경로로 코드를 맞춰 봐야 합니다. 두 코드가 일치하면 공개 키가 바뀌지 않았으며, 시그널링 서버나 릴레이 서버가 어느 엔드포인트도 사칭하지 않았고 애플리케이션 계층의 종단 간 암호화를 종료하지 않았다는 뜻입니다. 이는 네트워크 경로에 서버가 없다는 뜻이 아닙니다——네트워크 간 암호문은 설계상 여전히 TURN을 통과할 수 있습니다. 하지만 단순한 6자리 코드는 약 20비트에 불과해서, 원칙적으로는 유리한 위치에 있는 공격자가 양쪽의 진짜 키를 본 뒤 일치하는 코드를 무차별 대입으로 만들어낼 여지가 있습니다. 이를 막기 위해 Relayium은 커밋 후 공개 핸드셰이크를 사용합니다. 각 측은 먼저 자신의 키에 대한 해시를 보내 커밋하고, 상대방의 커밋을 받은 후에야 진짜 키를 공개합니다. 이 순서 덕분에 악의적인 서버는 진짜 키를 보기도 전에 눈을 감은 채 가짜 키를 커밋해야 하며, 나중에 충돌하는 키를 고를 수 없습니다. 그래서 짧은 코드가 계속 신뢰할 수 있는 상태로 남는 것입니다.",
       ],
       bullets: [
-        "가장 강력한 보장을 위해서는 나란히 놓인 두 화면을 눈으로 보기만 하지 말고, 통화로 코드를 소리 내어 읽거나 직접 만나 대조하세요.",
+        "가장 강력한 보장을 위해서는 먼저 고급 검증을 켠 다음, 나란히 놓인 두 화면을 눈으로 보기만 하지 말고 통화로 코드를 소리 내어 읽거나 직접 만나 대조하세요.",
         "두 코드가 일치하지 않으면 중단하세요. 누군가 연결을 가로채고 있다는 신호로 받아들이세요.",
       ],
     },
@@ -357,12 +357,12 @@ const ko = {
       },
       {
         q: "화면에 표시된 두 검증 코드가 일치하지 않으면 어떻게 하나요?",
-        a: "전송을 중단하세요. 코드가 일치하지 않는다는 것은 커밋 후 공개 검증이 실패했다는 뜻이며, 단순한 오류가 아니라 중간자 공격 가능성을 가리킵니다——이유를 파악하기 전까지는 계속 진행하지 마세요.",
+        a: "전송을 중단하세요. 두 코드가 다르다는 것은 두 기기가 같은 연결을 보고 있지 않다는 뜻입니다 — 키가 교체되었거나 중간자가 있을 때 정확히 이렇게 나타나며, 단순한 오류가 아닙니다. (커밋 후 공개 핸드셰이크 실패는 이보다 앞서 일어나는 별개의 실패로, 코드가 표시되기도 전에 연결 자체가 중단됩니다.) 이유를 파악하기 전까지는 계속 진행하지 마세요.",
       },
     ],
   },
   cta: {
-    text: "실제로 어떻게 보이는지 궁금하신가요? 전송을 시작해서 검증 코드가 나타나는 것을 직접 확인해 보세요.",
+    text: "실제로 어떻게 보이는지 궁금하신가요? 새 연결을 시작하기 전에 고급 검증을 켜 두면 코드 대조와 확인 단계가 처음부터 적용됩니다.",
     button: "지금 Relayium 사용해보기",
   },
   relatedHeading: "계속 읽기",
@@ -394,10 +394,10 @@ const de = {
       heading: "Der sechsstellige Code, der einen unehrlichen Server entlarvt",
       body: [
         "Hier gibt es eine Feinheit, die man offen ansprechen sollte. Die in WebRTC eingebaute Verschlüsselung (DTLS) tauscht Schlüssel-Fingerabdrücke über den Signalisierungsserver aus, der die beiden Geräte einander vorstellt. Wäre dieser Server unehrlich, könnte er sich theoretisch dazwischenschalten und eigene Schlüssel unterschieben — ein klassischer Man-in-the-Middle-Angriff, den keiner der beiden Browser sofort bemerken würde.",
-        "Relayium schließt diese Lücke mit einem kurzen Verifizierungscode. Beide Geräte leiten aus ihren beiden öffentlichen Schlüsseln denselben sechsstelligen Short Authentication String (SAS) ab und zeigen ihn auf dem Bildschirm an. Stimmen die Codes überein, wurden die öffentlichen Schlüssel nicht ausgetauscht: Der Signalisierungs- oder Relay-Server hat sich weder als einer der Endpunkte ausgegeben noch die Ende-zu-Ende-Verschlüsselung auf Anwendungsebene beendet. Das bedeutet nicht, dass sich kein Server im Netzwerkpfad befand — netzwerkübergreifender Geheimtext kann weiterhin planmäßig über TURN laufen. Ein einfacher sechsstelliger Code hat jedoch nur etwa 20 Bit, was ein gut positionierter Angreifer im Prinzip per Brute Force zu einem passenden Code verarbeiten könnte, nachdem er beide echten Schlüssel gesehen hat. Um das zu verhindern, nutzt Relayium einen Commit-dann-Offenlegen-Handshake: Jede Seite sendet zunächst einen Hash, der sich auf ihren Schlüssel festlegt, und gibt den echten Schlüssel erst preis, nachdem sie die Festlegung der Gegenseite erhalten hat. Diese Reihenfolge zwingt einen bösartigen Server dazu, sich blind — bevor er den echten Schlüssel gesehen hat — auf einen gefälschten Schlüssel festzulegen; er kann also nicht nachträglich einen kollidierenden Schlüssel wählen, weshalb der kurze Code vertrauenswürdig bleibt.",
+        "Relayium schließt diese Lücke mit einem kurzen Verifizierungscode. Beide Geräte leiten aus ihren beiden öffentlichen Schlüsseln denselben sechsstelligen Short Authentication String (SAS) ab und können ihn auf dem Bildschirm anzeigen. Ob er angezeigt und für den Vergleich angehalten wird, ist die „erweiterte Verifizierung“ und standardmäßig aus — eine Standardübertragung zeigt also keinen Code. Alles andere hier Beschriebene läuft bei jeder Übertragung unverändert weiter: die frischen Schlüssel, die Verschlüsselung, der Commit-dann-Offenlegen-Handshake und die Authentifizierung jedes Chunks. Was einer Standardübertragung fehlt, ist genau diese Prüfung — einen ausgetauschten Schlüssel oder eine fremde Gegenstelle erkennt man nur mit eingeschalteter erweiterter Verifizierung und wenn beide Personen den Code tatsächlich über einen anderen Kanal vergleichen. Stimmen die Codes überein, wurden die öffentlichen Schlüssel nicht ausgetauscht: Der Signalisierungs- oder Relay-Server hat sich weder als einer der Endpunkte ausgegeben noch die Ende-zu-Ende-Verschlüsselung auf Anwendungsebene beendet. Das bedeutet nicht, dass sich kein Server im Netzwerkpfad befand — netzwerkübergreifender Geheimtext kann weiterhin planmäßig über TURN laufen. Ein einfacher sechsstelliger Code hat jedoch nur etwa 20 Bit, was ein gut positionierter Angreifer im Prinzip per Brute Force zu einem passenden Code verarbeiten könnte, nachdem er beide echten Schlüssel gesehen hat. Um das zu verhindern, nutzt Relayium einen Commit-dann-Offenlegen-Handshake: Jede Seite sendet zunächst einen Hash, der sich auf ihren Schlüssel festlegt, und gibt den echten Schlüssel erst preis, nachdem sie die Festlegung der Gegenseite erhalten hat. Diese Reihenfolge zwingt einen bösartigen Server dazu, sich blind — bevor er den echten Schlüssel gesehen hat — auf einen gefälschten Schlüssel festzulegen; er kann also nicht nachträglich einen kollidierenden Schlüssel wählen, weshalb der kurze Code vertrauenswürdig bleibt.",
       ],
       bullets: [
-        "Für die stärkste Garantie lies den Code laut in einem Anruf vor oder vergleiche ihn persönlich — nicht nur mit den Augen auf zwei nebeneinanderliegenden Bildschirmen.",
+        "Für die stärkste Garantie schalte die erweiterte Verifizierung ein und lies den Code laut in einem Anruf vor oder vergleiche ihn persönlich — nicht nur mit den Augen auf zwei nebeneinanderliegenden Bildschirmen.",
         "Stimmen die beiden Codes nicht überein, brich ab — das ist ein Hinweis darauf, dass jemand die Verbindung abfangen könnte.",
       ],
     },
@@ -448,12 +448,12 @@ const de = {
       },
       {
         q: "Was, wenn die beiden Verifizierungscodes auf dem Bildschirm nicht übereinstimmen?",
-        a: "Brich die Übertragung ab. Eine Abweichung bedeutet, dass die Commit-dann-Offenlegen-Prüfung fehlgeschlagen ist — das deutet eher auf einen möglichen Man-in-the-Middle als auf eine harmlose Störung hin. Fahre erst fort, wenn du den Grund verstanden hast.",
+        a: "Brich die Übertragung ab. Zwei verschiedene Codes bedeuten, dass die beiden Geräte nicht dieselbe Verbindung sehen — genau das, was ein ausgetauschter Schlüssel oder ein Man-in-the-Middle erzeugt, und keine harmlose Störung. (Ein fehlgeschlagener Commit-dann-Offenlegen-Handshake ist ein anderer, früherer Fehler: Er bricht die Verbindung selbst ab, bevor überhaupt ein Code angezeigt wird.) Fahre erst fort, wenn du den Grund verstanden hast.",
       },
     ],
   },
   cta: {
-    text: "Neugierig, wie das in der Praxis aussieht? Starte eine Übertragung und sieh den Verifizierungscode mit eigenen Augen erscheinen.",
+    text: "Neugierig, wie das in der Praxis aussieht? Schalte die erweiterte Verifizierung ein, bevor du eine neue Verbindung startest — dann gelten der Codevergleich und die Bestätigungsschritte von Anfang an.",
     button: "Relayium jetzt ausprobieren",
   },
   relatedHeading: "Weiterlesen",
@@ -485,10 +485,10 @@ const fr = {
       heading: "Le code à 6 chiffres qui démasque un serveur malhonnête",
       body: [
         "Il y a une subtilité qu'il vaut la peine d'exposer honnêtement. Le chiffrement intégré de WebRTC (DTLS) échange les empreintes de clés via le serveur de signalisation qui présente les deux appareils l'un à l'autre. Si ce serveur était malhonnête, il pourrait en théorie s'interposer et substituer ses propres clés — une attaque classique de l'homme du milieu — sans qu'aucun des deux navigateurs ne le remarque immédiatement.",
-        "Relayium comble cette faille avec un court code de vérification. Les deux appareils dérivent le même Short Authentication String (SAS) à 6 chiffres à partir de leurs deux clés publiques et l'affichent à l'écran. Si les codes correspondent, les clés publiques n'ont pas été substituées : le serveur de signalisation ou de relais n'a usurpé aucun des deux terminaux ni interrompu le chiffrement de bout en bout au niveau applicatif. Cela ne signifie pas qu'aucun serveur ne se trouvait sur le chemin réseau — le texte chiffré entre réseaux peut toujours transiter par TURN comme prévu. Mais un simple code à 6 chiffres ne représente qu'environ 20 bits, ce qu'un attaquant bien placé pourrait en principe tenter de forcer par force brute pour obtenir une correspondance après avoir vu les deux vraies clés. Pour l'empêcher, Relayium utilise une poignée de main « engagement puis révélation » : chaque partie envoie d'abord un hachage qui l'engage sur sa clé, et ne révèle la vraie clé qu'après avoir reçu l'engagement de l'autre. Cet ordre oblige un serveur malveillant à s'engager sur une fausse clé à l'aveugle, avant d'avoir vu la vraie — il ne peut donc pas choisir après coup une clé provoquant une collision, et le code court reste digne de confiance.",
+        "Relayium comble cette faille avec un court code de vérification. Les deux appareils dérivent le même Short Authentication String (SAS) à 6 chiffres à partir de leurs deux clés publiques et peuvent l'afficher à l'écran. L'afficher et s'arrêter pour le comparer relève de la « vérification avancée », désactivée par défaut — un transfert par défaut n'affiche donc aucun code. Tout le reste de ce qui est décrit ici s'applique à chaque transfert : les clés régénérées, le chiffrement, la poignée de main « engagement puis révélation » et l'authentification de chaque fragment. Ce qui manque à un transfert par défaut, c'est cette comparaison elle-même — détecter une clé substituée, ou un inconnu à l'autre bout, suppose la vérification avancée activée et deux personnes qui comparent réellement le code par un autre canal. Si les codes correspondent, les clés publiques n'ont pas été substituées : le serveur de signalisation ou de relais n'a usurpé aucun des deux terminaux ni interrompu le chiffrement de bout en bout au niveau applicatif. Cela ne signifie pas qu'aucun serveur ne se trouvait sur le chemin réseau — le texte chiffré entre réseaux peut toujours transiter par TURN comme prévu. Mais un simple code à 6 chiffres ne représente qu'environ 20 bits, ce qu'un attaquant bien placé pourrait en principe tenter de forcer par force brute pour obtenir une correspondance après avoir vu les deux vraies clés. Pour l'empêcher, Relayium utilise une poignée de main « engagement puis révélation » : chaque partie envoie d'abord un hachage qui l'engage sur sa clé, et ne révèle la vraie clé qu'après avoir reçu l'engagement de l'autre. Cet ordre oblige un serveur malveillant à s'engager sur une fausse clé à l'aveugle, avant d'avoir vu la vraie — il ne peut donc pas choisir après coup une clé provoquant une collision, et le code court reste digne de confiance.",
       ],
       bullets: [
-        "Pour la garantie la plus forte, lisez le code à voix haute lors d'un appel ou comparez-le en personne, pas seulement des yeux sur deux écrans côte à côte.",
+        "Pour la garantie la plus forte, activez la vérification avancée, puis lisez le code à voix haute lors d'un appel ou comparez-le en personne, pas seulement des yeux sur deux écrans côte à côte.",
         "Si les deux codes ne correspondent pas, arrêtez-vous — considérez cela comme un signe que quelqu'un intercepte peut-être la connexion.",
       ],
     },
@@ -539,12 +539,12 @@ const fr = {
       },
       {
         q: "Que faire si les deux codes de vérification à l'écran ne correspondent pas ?",
-        a: "Arrêtez le transfert. Une différence signifie que la vérification « engagement puis révélation » a échoué, ce qui indique un homme du milieu potentiel plutôt qu'un simple incident bénin — ne poursuivez pas avant d'avoir compris pourquoi.",
+        a: "Arrêtez le transfert. Deux codes différents signifient que les deux appareils ne voient pas la même connexion — c'est exactement ce que produirait une clé substituée ou un homme du milieu, et non un incident bénin. (L'échec de la poignée de main « engagement puis révélation » est une autre défaillance, plus précoce : elle interrompt la connexion elle-même, avant qu'un code soit affiché.) Ne poursuivez pas avant d'avoir compris pourquoi.",
       },
     ],
   },
   cta: {
-    text: "Curieux de voir à quoi cela ressemble en pratique ? Lancez un transfert et observez le code de vérification apparaître sous vos yeux.",
+    text: "Curieux de voir à quoi cela ressemble en pratique ? Activez la vérification avancée avant de lancer une nouvelle connexion : la comparaison du code et les étapes de confirmation s'appliquent alors dès le début.",
     button: "Essayer Relayium maintenant",
   },
   relatedHeading: "À lire ensuite",
@@ -576,10 +576,10 @@ const ar = {
       heading: "رمز الخانات الست الذي يكشف الخادم غير النزيه",
       body: [
         "هناك دقيقة تستحق الصراحة بشأنها. يتبادل التشفير المدمج في WebRTC (DTLS) بصمات المفاتيح عبر خادم الإشارة الذي يُعرّف الجهازين أحدهما بالآخر. لو كان ذلك الخادم غير نزيه، لأمكنه نظريًا أن يتوسّط ويستبدل مفاتيحه الخاصة — هجوم وسيط كلاسيكي — دون أن يلاحظ أيٌّ من المتصفحَين ذلك فورًا.",
-        "يسدّ Relayium هذه الثغرة برمز تحقق قصير. يشتقّ كلا الجهازين نفس سلسلة المصادقة القصيرة (SAS) المكوَّنة من ست خانات من مفتاحيهما العامّين ويعرضانها على الشاشة. إذا تطابق الرمزان، فهذا يؤكد أن المفاتيح العامة لم تُستبدَل، وأن خادم الإشارة أو الترحيل لم ينتحل شخصية أيٍّ من الطرفين ولم يُنهِ التشفير من طرف إلى طرف في طبقة التطبيق. ولا يعني ذلك غياب الخوادم عن مسار الشبكة — فقد تظل البيانات المشفرة بين الشبكات تمر عبر TURN وفق التصميم. لكن الرمز البسيط المكوَّن من ست خانات لا يتجاوز نحو 20 بت، وهو ما قد يحاول مهاجم في موقع مناسب مبدئيًا أن يخمّنه بالقوة الغاشمة ليطابقه بعد رؤية المفتاحين الحقيقيين. لمنع ذلك، يستخدم Relayium مصافحة «الالتزام ثم الكشف»: يرسل كل طرف أولًا تجزئة (hash) تلتزم بمفتاحه، ولا يكشف عن المفتاح الحقيقي إلا بعد تلقّي التزام الطرف الآخر. يعني هذا الترتيب أن الخادم الخبيث عليه أن يلتزم بمفتاح مزيّف على العمياء، قبل أن يكون قد رأى المفتاح الحقيقي — فلا يستطيع اختيار مفتاح متصادم بعد وقوع الأمر، وهكذا يبقى الرمز القصير جديرًا بالثقة.",
+        "يسدّ Relayium هذه الثغرة برمز تحقق قصير. يشتقّ كلا الجهازين نفس سلسلة المصادقة القصيرة (SAS) المكوَّنة من ست خانات من مفتاحيهما العامّين، ويمكنهما عرضها على الشاشة. أما عرضها والتوقّف لمقارنتها فهو «التحقّق المتقدّم» المعطَّل افتراضيًا — أي أن عملية النقل الافتراضية لا تعرض أي رمز. وأما بقية ما هو موضَّح هنا فيسري على كل عملية نقل كما هو: المفاتيح الجديدة في كل مرة، والتشفير، ومصافحة «الالتزام ثم الكشف»، والتحقق من كل جزء. ما ينقص عملية النقل الافتراضية هو هذه المقارنة نفسها — فاكتشاف استبدال المفاتيح، أو أن الطرف الآخر شخص غير الذي تقصده، يتطلّب تفعيل التحقّق المتقدّم ومقارنة الرمز فعليًا عبر قناة أخرى. إذا تطابق الرمزان، فهذا يؤكد أن المفاتيح العامة لم تُستبدَل، وأن خادم الإشارة أو الترحيل لم ينتحل شخصية أيٍّ من الطرفين ولم يُنهِ التشفير من طرف إلى طرف في طبقة التطبيق. ولا يعني ذلك غياب الخوادم عن مسار الشبكة — فقد تظل البيانات المشفرة بين الشبكات تمر عبر TURN وفق التصميم. لكن الرمز البسيط المكوَّن من ست خانات لا يتجاوز نحو 20 بت، وهو ما قد يحاول مهاجم في موقع مناسب مبدئيًا أن يخمّنه بالقوة الغاشمة ليطابقه بعد رؤية المفتاحين الحقيقيين. لمنع ذلك، يستخدم Relayium مصافحة «الالتزام ثم الكشف»: يرسل كل طرف أولًا تجزئة (hash) تلتزم بمفتاحه، ولا يكشف عن المفتاح الحقيقي إلا بعد تلقّي التزام الطرف الآخر. يعني هذا الترتيب أن الخادم الخبيث عليه أن يلتزم بمفتاح مزيّف على العمياء، قبل أن يكون قد رأى المفتاح الحقيقي — فلا يستطيع اختيار مفتاح متصادم بعد وقوع الأمر، وهكذا يبقى الرمز القصير جديرًا بالثقة.",
       ],
       bullets: [
-        "لأقوى ضمان، اقرأ الرمز بصوت عالٍ عبر مكالمة أو قارِنه وجهًا لوجه، لا بمجرد النظر إلى شاشتين متجاورتين.",
+        "لأقوى ضمان، فعِّل التحقّق المتقدّم أولًا، ثم اقرأ الرمز بصوت عالٍ عبر مكالمة أو قارِنه وجهًا لوجه، لا بمجرد النظر إلى شاشتين متجاورتين.",
         "إذا لم يتطابق الرمزان، توقّف — واعتبر ذلك علامة على أن أحدهم قد يعترض الاتصال.",
       ],
     },
@@ -630,12 +630,12 @@ const ar = {
       },
       {
         q: "ماذا لو لم يتطابق رمزا التحقق على الشاشة؟",
-        a: "أوقِف النقل. عدم التطابق يعني أن فحص «الالتزام ثم الكشف» قد فشل، وهو ما يشير إلى احتمال وجود وسيط لا إلى خلل بسيط غير مؤذٍ — لا تُكمِل حتى تفهم السبب.",
+        a: "أوقِف النقل. اختلاف الرمزين يعني أن الجهازين لا يريان الاتصال نفسه — وهذا بالضبط ما يحدث عند استبدال المفاتيح أو وجود وسيط، لا خللًا بسيطًا غير مؤذٍ. (أما فشل مصافحة «الالتزام ثم الكشف» فهو عطل مختلف وأسبق: يُنهي الاتصال نفسه قبل عرض أي رمز.) لا تُكمِل حتى تفهم السبب.",
       },
     ],
   },
   cta: {
-    text: "أتتساءل كيف يبدو الأمر عمليًا؟ ابدأ عملية نقل وشاهد رمز التحقق يظهر بنفسك.",
+    text: "أتتساءل كيف يبدو الأمر عمليًا؟ فعِّل التحقّق المتقدّم قبل بدء اتصال جديد، لتسري مقارنة الرمز وخطوات التأكيد منذ البداية.",
     button: "جرّب Relayium الآن",
   },
   relatedHeading: "تابع القراءة",
@@ -667,10 +667,10 @@ const es = {
       heading: "El código de 6 dígitos que detecta a un servidor deshonesto",
       body: [
         "Hay una sutileza que conviene reconocer con honestidad. El cifrado propio de WebRTC (DTLS) intercambia las huellas de las claves a través del servidor de señalización que presenta los dos dispositivos entre sí. Si ese servidor fuera deshonesto, podría en teoría situarse en medio y sustituir sus propias claves — un clásico ataque de intermediario — sin que ninguno de los dos navegadores lo notara de inmediato.",
-        "Relayium cierra esa brecha con un breve código de verificación. Ambos dispositivos derivan el mismo Short Authentication String (SAS) de 6 dígitos a partir de sus dos claves públicas y lo muestran en pantalla. Si los códigos coinciden, las claves públicas no se sustituyeron: el servidor de señalización o de retransmisión no suplantó a ninguno de los extremos ni terminó el cifrado de extremo a extremo de la capa de aplicación. Esto no significa que no hubiera ningún servidor en la ruta de red — el texto cifrado entre redes aún puede pasar por TURN por diseño. Pero un código simple de 6 dígitos son solo unos 20 bits, que en principio un atacante bien situado podría intentar forzar por fuerza bruta hasta hacerlo coincidir tras ver ambas claves reales. Para evitarlo, Relayium usa un handshake de comprometer-y-luego-revelar: cada lado envía primero un hash que lo compromete con su clave, y solo revela la clave real después de recibir el compromiso del otro lado. Ese orden significa que un servidor malicioso tiene que comprometerse a ciegas con una clave falsa, antes de haber visto la real — no puede elegir después una clave que colisione, así que el código corto sigue siendo fiable.",
+        "Relayium cierra esa brecha con un breve código de verificación. Ambos dispositivos derivan el mismo Short Authentication String (SAS) de 6 dígitos a partir de sus dos claves públicas y pueden mostrarlo en pantalla. Mostrarlo y detenerse a compararlo es la «verificación avanzada», desactivada por omisión: una transferencia predeterminada no muestra ningún código. Todo lo demás que se describe aquí sigue aplicándose a cada transferencia: las claves nuevas, el cifrado, el handshake de comprometer-y-luego-revelar y la autenticación de cada fragmento. Lo que no tiene una transferencia predeterminada es esta comprobación en sí — detectar una clave sustituida, o a un desconocido al otro lado, exige activar la verificación avanzada y que las dos personas comparen realmente el código por otro canal. Si los códigos coinciden, las claves públicas no se sustituyeron: el servidor de señalización o de retransmisión no suplantó a ninguno de los extremos ni terminó el cifrado de extremo a extremo de la capa de aplicación. Esto no significa que no hubiera ningún servidor en la ruta de red — el texto cifrado entre redes aún puede pasar por TURN por diseño. Pero un código simple de 6 dígitos son solo unos 20 bits, que en principio un atacante bien situado podría intentar forzar por fuerza bruta hasta hacerlo coincidir tras ver ambas claves reales. Para evitarlo, Relayium usa un handshake de comprometer-y-luego-revelar: cada lado envía primero un hash que lo compromete con su clave, y solo revela la clave real después de recibir el compromiso del otro lado. Ese orden significa que un servidor malicioso tiene que comprometerse a ciegas con una clave falsa, antes de haber visto la real — no puede elegir después una clave que colisione, así que el código corto sigue siendo fiable.",
       ],
       bullets: [
-        "Para la garantía más fuerte, lee el código en voz alta en una llamada o compáralo en persona, no solo a ojo en dos pantallas una al lado de la otra.",
+        "Para la garantía más fuerte, activa la verificación avanzada y luego lee el código en voz alta en una llamada o compáralo en persona, no solo a ojo en dos pantallas una al lado de la otra.",
         "Si los dos códigos no coinciden, detente — trátalo como una señal de que alguien podría estar interceptando la conexión.",
       ],
     },
@@ -721,12 +721,12 @@ const es = {
       },
       {
         q: "¿Qué pasa si los dos códigos de verificación en pantalla no coinciden?",
-        a: "Detén la transferencia. Una discrepancia significa que la comprobación de comprometer-y-luego-revelar falló, lo que apunta a un posible intermediario más que a un fallo inofensivo — no continúes hasta entender por qué.",
+        a: "Detén la transferencia. Dos códigos distintos significan que los dos dispositivos no están viendo la misma conexión: es exactamente lo que produciría una clave sustituida o un intermediario, no un fallo inofensivo. (Que falle el handshake de comprometer-y-luego-revelar es otra cosa, y ocurre antes: aborta la propia conexión, sin llegar a mostrar ningún código.) No continúes hasta entender por qué.",
       },
     ],
   },
   cta: {
-    text: "¿Quieres ver cómo funciona en la práctica? Inicia una transferencia y comprueba tú mismo cómo aparece el código de verificación.",
+    text: "¿Quieres ver cómo funciona en la práctica? Activa la verificación avanzada antes de iniciar una nueva conexión: así la comparación del código y los pasos de confirmación se aplican desde el principio.",
     button: "Prueba Relayium ahora",
   },
   relatedHeading: "Sigue leyendo",
@@ -758,10 +758,10 @@ const pt = {
       heading: "O código de 6 dígitos que flagra um servidor desonesto",
       body: [
         "Há uma sutileza que vale a pena reconhecer com honestidade. A criptografia embutida do WebRTC (DTLS) troca as impressões digitais das chaves através do servidor de sinalização que apresenta os dois dispositivos um ao outro. Se esse servidor fosse desonesto, ele poderia em teoria se colocar no meio e substituir suas próprias chaves — um clássico ataque de intermediário — sem que nenhum dos dois navegadores percebesse de imediato.",
-        "O Relayium fecha essa brecha com um curto código de verificação. Ambos os dispositivos derivam o mesmo Short Authentication String (SAS) de 6 dígitos a partir de suas duas chaves públicas e o exibem na tela. Se os códigos coincidem, as chaves públicas não foram substituídas: o servidor de sinalização ou de retransmissão não se passou por nenhum dos endpoints nem encerrou a criptografia de ponta a ponta da camada de aplicação. Isso não significa que não havia servidor no caminho de rede — o texto cifrado entre redes ainda pode passar pelo TURN por design. Mas um código simples de 6 dígitos tem apenas cerca de 20 bits, o que em princípio um atacante bem posicionado poderia tentar quebrar por força bruta até fazer coincidir depois de ver as duas chaves reais. Para evitar isso, o Relayium usa um handshake de comprometer-e-depois-revelar: cada lado primeiro envia um hash que o compromete com sua chave, e só revela a chave real depois de receber o compromisso do outro lado. Essa ordem significa que um servidor malicioso tem de se comprometer com uma chave falsa às cegas, antes de ter visto a real — ele não pode escolher depois uma chave que colida, então o código curto continua confiável.",
+        "O Relayium fecha essa brecha com um curto código de verificação. Ambos os dispositivos derivam o mesmo Short Authentication String (SAS) de 6 dígitos a partir de suas duas chaves públicas e podem exibi-lo na tela. Exibi-lo e parar para compará-lo é a “verificação avançada”, desligada por padrão: uma transferência padrão não mostra código algum. Todo o restante descrito aqui continua valendo para cada transferência: as chaves novas, a criptografia, o handshake de comprometer-e-depois-revelar e a autenticação de cada bloco. O que falta a uma transferência padrão é justamente essa conferência — detectar uma chave substituída, ou um desconhecido do outro lado, exige a verificação avançada ligada e as duas pessoas comparando o código de fato por outro canal. Se os códigos coincidem, as chaves públicas não foram substituídas: o servidor de sinalização ou de retransmissão não se passou por nenhum dos endpoints nem encerrou a criptografia de ponta a ponta da camada de aplicação. Isso não significa que não havia servidor no caminho de rede — o texto cifrado entre redes ainda pode passar pelo TURN por design. Mas um código simples de 6 dígitos tem apenas cerca de 20 bits, o que em princípio um atacante bem posicionado poderia tentar quebrar por força bruta até fazer coincidir depois de ver as duas chaves reais. Para evitar isso, o Relayium usa um handshake de comprometer-e-depois-revelar: cada lado primeiro envia um hash que o compromete com sua chave, e só revela a chave real depois de receber o compromisso do outro lado. Essa ordem significa que um servidor malicioso tem de se comprometer com uma chave falsa às cegas, antes de ter visto a real — ele não pode escolher depois uma chave que colida, então o código curto continua confiável.",
       ],
       bullets: [
-        "Para a garantia mais forte, leia o código em voz alta em uma chamada ou compare-o pessoalmente, não apenas a olho em duas telas lado a lado.",
+        "Para a garantia mais forte, ative a verificação avançada e então leia o código em voz alta em uma chamada ou compare-o pessoalmente, não apenas a olho em duas telas lado a lado.",
         "Se os dois códigos não coincidirem, pare — trate isso como um sinal de que alguém pode estar interceptando a conexão.",
       ],
     },
@@ -812,12 +812,12 @@ const pt = {
       },
       {
         q: "E se os dois códigos de verificação na tela não coincidirem?",
-        a: "Pare a transferência. Uma divergência significa que a verificação de comprometer-e-depois-revelar falhou, o que aponta para um possível intermediário e não para uma falha inofensiva — não prossiga até entender o motivo.",
+        a: "Pare a transferência. Dois códigos diferentes significam que os dois dispositivos não estão vendo a mesma conexão — é exatamente o que uma chave substituída ou um intermediário produziria, e não uma falha inofensiva. (Uma falha no handshake de comprometer-e-depois-revelar é outra coisa, e ocorre antes: ela aborta a própria conexão, sem exibir código algum.) Não prossiga até entender o motivo.",
       },
     ],
   },
   cta: {
-    text: "Curioso para ver como isso fica na prática? Inicie uma transferência e veja o código de verificação aparecer você mesmo.",
+    text: "Curioso para ver como isso fica na prática? Ative a verificação avançada antes de iniciar uma nova conexão: assim a comparação do código e as etapas de confirmação valem desde o início.",
     button: "Experimente o Relayium agora",
   },
   relatedHeading: "Continue lendo",

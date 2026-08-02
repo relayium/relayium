@@ -82,24 +82,27 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="lead">ブラウザと CLI の両方がテキストに対応しますが、別々の転送方式であり、互いのペアリングコードには参加できません。両端で同じ方式を選んでください。</p>
       <h2>ブラウザ：オンライン端末へメッセージを送る</h2>
       <p>両方の端末で relayium.com を開きます。同じネットワークなら自動表示され、別ネットワークならクロスネットワーク画面でブラウザ用コードを作り、もう一方のブラウザで参加します。</p>
-      <ul><li>相手のカードで「メッセージを送信」を選びます。受信側が承認するまで本文も入力欄も表示されません。</li><li>両画面の 6 桁の確認コード（SAS）を比べ、入力または貼り付け後に ⌘/Ctrl+Enter で送信します。</li><li>セッション中は双方が複数のメッセージを送り、受信メッセージをコピーできます。</li></ul>
+      <ul><li>相手のカードで「メッセージを送信」を選びます。既定では両端でそのまま入力欄が開きます。いずれの場合も接続は暗号化されています。</li><li>テキストを入力または貼り付け、⌘/Ctrl+Enter で送信します。両画面に同じ 6 桁の確認コード（SAS）を表示して照合し、セッションを開く前に明示的な承認を挟みたい場合は、先に「高度な検証」をオンにしてください。</li><li>セッション中は双方が複数のメッセージを送り、受信メッセージをコピーできます。</li></ul>
       <h2>CLI：片方でコードを発行し、もう片方が参加する</h2>
-      <p>片方のマシンでコードを付けずに relayium text を実行します。アカウントで 6 文字のコードを発行し、もう一方が実行すべきコマンドをそのまま表示し、相手の参加を待ちます。一時ファイルも、止めるべき別プロセスもありません。</p>
-      <p>もう一方のマシンではそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、既定で SAS 確認を求めます。複数行や正確な stdin はパイプで 1 メッセージとして送り、端末プロンプトがないため --yes を付けます。</p>
+      <p>片方のマシンでコードを付けずに relayium text を実行します。アカウントで 6 桁の数字コードを発行し、もう一方が実行すべきコマンドをそのまま表示し、相手の参加を待ちます。一時ファイルも、止めるべき別プロセスもありません。</p>
+      <p>もう一方のマシンではそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、こちらから求めない限りコード照合で止まることはありません。複数行や正確な stdin はパイプで 1 メッセージとして送れます。パイプ実行に追加のフラグは不要です。</p>
       <pre><code># One machine mints the code and waits (relayium login is required once)
 relayium text
-# Code: K7M4XR   (valid 30 minutes)
-# On the other machine:  relayium text K7M4XR
+# Code: 483920   (valid 5 minutes)
+# On the other machine:  relayium text 483920
 
 # The other machine joins that code
-relayium text K7M4XR
+relayium text 483920
 
 # Send one multiline message exactly as copied (macOS)
-pbpaste | relayium text K7M4XR --yes
+pbpaste | relayium text 483920
 
 # Or pipe a file on any shell
-cat snippet.txt | relayium text K7M4XR --yes</code></pre>
-      <ul><li>CLI コードは 30 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。</li><li>ログイン済みアカウントが必要なのはコードを発行する側だけです。表示されたコードで参加する側はログイン不要です。</li><li>--yes は対話的な SAS 確認を省くため、別の信頼できる手段で確認してください。</li></ul>
+cat snippet.txt | relayium text 483920
+
+# Optional: stop to compare the verification code (SAS) first
+relayium text 483920 --verify</code></pre>
+      <ul><li>CLI コードは 5 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。</li><li>ログイン済みアカウントが必要なのはコードを発行する側だけです。表示されたコードで参加する側はログイン不要です。</li><li>--verify は SAS 照合を有効にするオプションで、応答するには端末が必要です。そのためパイプ実行に --verify を付けると、確認済みとして続行せずに拒否します。--yes も引き続き使え、意味は「決してプロンプトを出さない」で、--verify より優先されます。</li></ul>
       <h2>テキスト転送の範囲</h2>
       <p>本文は UTF-8 のプレーンテキストです。空白、タブ、空行、改行を保持し、実行、Markdown 描画、リンク化、プレビューはしません。</p>
       <ul><li>両端が同時にオンラインである必要があります。オフライン配信、受信箱、連絡先、同期チャット履歴はありません。</li><li>履歴は開いているローカルセッションだけにあり、終了や再読み込みで消えます。サーバーは本文を保存しません。</li><li>1 メッセージは UTF-8 で 65,536 バイトまで。それ以上はファイルとして送ってください。</li></ul>

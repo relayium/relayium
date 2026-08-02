@@ -14,15 +14,17 @@ describe("wsURL", () => {
 
 describe("parseCodeParam", () => {
   it("extracts a well-formed pairing code", () => {
-    expect(parseCodeParam("#c=K7M3X9")).toBe("K7M3X9");
-    expect(parseCodeParam("#c=424242")).toBe("424242"); // all-digit codes are still legal
+    expect(parseCodeParam("#c=483920")).toBe("483920");
+    expect(parseCodeParam("#c=004291")).toBe("004291"); // 前导零不能被吃掉
+    expect(parseCodeParam("#c=000000")).toBe("000000"); // 全零是一个普通的码
   });
   it("rejects anything that is not a valid code — the link is untrusted input", () => {
-    expect(parseCodeParam("#c=K7M3X")).toBe("");     // 短一位
-    expect(parseCodeParam("#c=K7M3X92")).toBe("");   // 长一位
-    expect(parseCodeParam("#c=042424")).toBe("");    // 0/1 不在字母表里
-    expect(parseCodeParam("#c=k7m3x9")).toBe("");    // 小写
-    expect(parseCodeParam("#c=K7M3XB")).toBe("");    // B 被剔（和 8 混）
+    expect(parseCodeParam("#c=48392")).toBe("");     // 短一位
+    expect(parseCodeParam("#c=4839201")).toBe("");   // 长一位
+    expect(parseCodeParam("#c=K7M3X9")).toBe("");    // 旧字母表：格式变更之后整个失效
+    expect(parseCodeParam("#c=48392a")).toBe("");    // 任何字母
+    expect(parseCodeParam("#c=48 392")).toBe("");    // 空格
+    expect(parseCodeParam("#c=+48392")).toBe("");    // 数字形状但不是数字字符
     expect(parseCodeParam("#t=abc")).toBe("");
     expect(parseCodeParam("")).toBe("");
   });

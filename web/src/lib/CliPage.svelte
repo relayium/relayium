@@ -21,11 +21,11 @@ relayium pull user@host:backups/ ./restore
 relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@host:backups/`;
   const codeCmd = `# sender (once per machine: relayium login)
 relayium send ./file.zip
-# prints:  Code: K7M4XR   (valid 30 minutes)
-#          On the other machine:  relayium receive K7M4XR
+# prints:  Code: 483920   (valid 5 minutes)
+#          On the other machine:  relayium receive 483920
 
 # receiver — no account needed
-relayium receive K7M4XR ./downloads`;
+relayium receive 483920 ./downloads`;
   const daemonListenCmd = `# on the RECEIVER
 relayium serve --dir ~/inbox      # --once to accept one transfer; --port to change 9031`;
   const daemonPushCmd = `# on the SENDER
@@ -45,13 +45,16 @@ relayium authorize 74318e3b…`;
   const syncCmd = "relayium sync ./site relayium://receiver.example.com --delete --watch";
   const textCmd = `# one machine mints and waits (needs relayium login); the other joins
 relayium text
-#   → Code: K7M4XR   |   On the other machine:  relayium text K7M4XR
+#   → Code: 483920   |   On the other machine:  relayium text 483920
 
 # the other machine joins the printed code — one line per message, Ctrl-D to end
-relayium text K7M4XR`;
-  const textPipeCmd = `# exact bytes, including multiline: pipe it
-pbpaste | relayium text K7M4XR --yes
-cat snippet.py | relayium text K7M4XR --yes`;
+relayium text 483920`;
+  const textPipeCmd = `# exact bytes, including multiline: pipe it — no flag needed
+pbpaste | relayium text 483920
+cat snippet.py | relayium text 483920
+
+# optional: stop to compare the verification code first (needs a terminal)
+relayium text 483920 --verify`;
   const loginCmd = "relayium login   # opens relayium.com/device — enter the code to bind this machine";
   const upCmd = `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…

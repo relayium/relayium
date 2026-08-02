@@ -74,10 +74,15 @@ public enum AppEnvironment {
     }
 
     @MainActor
-    public static func makeRealtimeModel(baseURL: URL = productionBaseURL) -> RealtimeSessionModel {
+    public static func makeRealtimeModel(baseURL: URL = productionBaseURL,
+                                        verification: VerificationPreference) -> RealtimeSessionModel {
         RealtimeSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
             iceClient: HTTPICEClient(baseURL: baseURL),
+            // Read per session rather than captured as a value: flipping the
+            // preference must take effect on the next connection, not the next
+            // app launch.
+            requiresVerification: { verification.requiresSASConfirmation },
             makeConnection: { code, role, servers in
                 try await RealtimeConnectionFactory.make(
                     code: code, role: role, config: servers,
@@ -86,10 +91,12 @@ public enum AppEnvironment {
     }
 
     @MainActor
-    public static func makeRealtimeTextModel(baseURL: URL = productionBaseURL) -> RealtimeTextSessionModel {
+    public static func makeRealtimeTextModel(baseURL: URL = productionBaseURL,
+                                            verification: VerificationPreference) -> RealtimeTextSessionModel {
         RealtimeTextSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
             iceClient: HTTPICEClient(baseURL: baseURL),
+            requiresVerification: { verification.requiresSASConfirmation },
             makeConnection: { code, role, servers in
                 try await RealtimeConnectionFactory.make(
                     code: code,

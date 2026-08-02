@@ -3,13 +3,13 @@ import XCTest
 
 final class PairClientTests: XCTestCase {
     func testParsesTheMintedCode() throws {
-        let m = try parseMintedCode(#"{"code":"K7M3X9","expiresAt":1800000000}"#.data(using: .utf8)!)
-        XCTAssertEqual(m.code, "K7M3X9")
+        let m = try parseMintedCode(#"{"code":"483920","expiresAt":1800000000}"#.data(using: .utf8)!)
+        XCTAssertEqual(m.code, "483920")
         XCTAssertEqual(m.expiresAt, 1800000000)
     }
 
     func testMalformedMintIsRejected() {
-        XCTAssertThrowsError(try parseMintedCode(#"{"code":"K7M3X9"}"#.data(using: .utf8)!))
+        XCTAssertThrowsError(try parseMintedCode(#"{"code":"483920"}"#.data(using: .utf8)!))
         XCTAssertThrowsError(try parseMintedCode(Data()))
     }
 
@@ -19,7 +19,7 @@ final class PairClientTests: XCTestCase {
     /// that is not a connection problem.
     func testMintingWithoutATokenNeverReachesTheNetwork() async {
         StubURLProtocol.stub = .init(status: 200,
-                                     body: #"{"code":"K7M3X9","expiresAt":1}"#.data(using: .utf8)!)
+                                     body: #"{"code":"483920","expiresAt":1}"#.data(using: .utf8)!)
         StubURLProtocol.lastRequest = nil
         let c = HTTPPairClient(baseURL: URL(string: "https://relayium.com")!,
                                session: StubURLProtocol.session())

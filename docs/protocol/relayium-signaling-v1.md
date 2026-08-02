@@ -10,6 +10,40 @@ handshake ride inside `data` and are defined by the realtime layer, not here.
   holds exactly two peers; the LAN room holds up to a server cap (currently 50),
   so the `peers` roster there may list more than one other peer.
 
+## Pairing code (authoritative: `signal.CodeAlphabet` / `CodeLen` / `CodeTTLSeconds`)
+- Exactly **6 decimal digits**, `0`-`9`. Leading zeros are ordinary: `004291` and
+  `000000` are valid codes and are NOT the integers 4291 and 0. A client that
+  parses a code as a number destroys a tenth of the code space.
+- Case has no meaning; there is nothing to normalize but "discard non-digits".
+- **Not** the same six digits as the SAS (relayium-handshake-v1.md), which is
+  derived from the two endpoint public keys. Two different values, same width.
+- **TTL 300 s**, checked once, at this join. Nothing re-checks it afterwards, so
+  a code expiring mid-session never interrupts an established transfer.
+- The server refuses a wrong-shaped code with 403 before any registry lookup.
+- Admission limits, per `main.go`, in two distinct kinds:
+  - **Distinct codes tried: 5 per minute per IP, shared with `/api/ice`**
+    (`signal.CodeGuessLimiter`, one object injected into both). The two
+    endpoints are two halves of one validity oracle — a live code gets you into
+    the room here and a `turn:` entry there — so the budget counts candidate
+    CODES, not requests, and splitting guesses across the two endpoints buys
+    nothing. Presenting the same code to both, which is what a real receiver
+    does, spends one of the five.
+  - **Requests: 5 per minute per IP on this endpoint** (`wsJoinPerIPPerMinute`,
+    deliberately equal to `/api/ice`'s own request cap). Repeating one code
+    costs no guess budget, so this is what keeps that from being free load.
+  - Plus a process-wide breaker on INVALID attempts (200/min, 30 s cooldown).
+    The breaker is fed only by refused codes, so it can never deny a valid join
+    — and for the same reason it sheds load and flags floods rather than
+    bounding how many codes a distributed attacker may try.
+  All three are per-process counters. Behind a round-robin load balancer each
+  instance enforces its own (`account.PerInstanceThreshold` divides them for
+  that case); none of them is a global or cross-instance ceiling. The
+  distinct-code budget and the TTL are the bound on guessing one live code from
+  one address.
+- **This format is not backward compatible.** Codes over the previous
+  24-character alphabet (`ACDEFHJKMNPRTWXY23456789`) are rejected as malformed by
+  every current client and by the server.
+
 ## Envelope (every frame, both directions), JSON:
 { "type": string, "from"?: string, "to"?: string, "name"?: string,
   "ip"?: string, "peers"?: [{"id":string,"name":string}], "data"?: <any JSON> }

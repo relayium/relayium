@@ -82,13 +82,13 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="lead">对方用配对码推给你时用 receive；想要一个常驻收件箱、让受信任的机器随时可以推送过来时用 serve；而你主动去连接一台已能 SSH 登录的服务器取文件时用 pull。</p>
       <h2>三种接收方式，各自适用于什么场景</h2>
       <p>用哪个命令，取决于谁在发起传输，以及两台机器是怎么互相认识的：</p>
-      <ul><li>relayium receive &lt;code&gt; [destdir] ——对方跨网络发给你：他的 CLI 先生成一个配对码，再线下转告你。直接点对点，用 SAS 码验证。</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——这台机器监听 daemon 直连的 relayium:// 推送，默认端口 9031。</li><li>relayium pull [user@]host:src &lt;dest&gt; ——你主动通过 SSH 连接到一台你已能登录的服务器，把文件取回来。</li></ul>
+      <ul><li>relayium receive &lt;code&gt; [destdir] ——对方跨网络发给你：他的 CLI 先生成一个配对码，再线下转告你。直接点对点，并给出一段可供核对的 SAS 码。</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——这台机器监听 daemon 直连的 relayium:// 推送，默认端口 9031。</li><li>relayium pull [user@]host:src &lt;dest&gt; ——你主动通过 SSH 连接到一台你已能登录的服务器，把文件取回来。</li></ul>
       <h2>receive：对方跨网络把文件发给你</h2>
-      <p>这是 relayium send 的接收端。对方在自己那边运行 relayium send &lt;path&gt;（事先 relayium login 过），CLI 会生成一个 6 位、30 分钟内有效的码并打印出来。然后对方通过你们都信任的渠道告诉你——打个电话、发条消息。你则用这个码运行 receive：</p>
-      <pre><code>relayium receive K7M4XR
+      <p>这是 relayium send 的接收端。对方在自己那边运行 relayium send &lt;path&gt;（事先 relayium login 过），CLI 会生成一个 6 位数字、5 分钟内有效的码并打印出来。然后对方通过你们都信任的渠道告诉你——打个电话、发条消息。你则用这个码运行 receive：</p>
+      <pre><code>relayium receive 483920
 
 # 或者放进指定的目录
-relayium receive K7M4XR ./downloads</code></pre>
+relayium receive 483920 ./downloads</code></pre>
       <ul><li>连接是直接点对点、端到端加密的；一旦连上，两边的终端会打印出同一个 SAS（简短认证串）。通过带外方式与发送方核对，可以确认固定的 TLS 证书指纹没有被替换、会合服务没有冒充任一端。SAS 认证的是端点，并不证明网络路径上的每一跳。</li><li>不指定目标目录时，文件会落到当前目录。</li><li>和 send 一样只走直连：如果两个网络之间找不到直连路径，传输会失败，而不会经中继转发。</li><li>这是 CLI 自己的配对码协议——CLI 的码只能和 CLI 配对。目前和 relayium.com 浏览器端的配对码或二维码流程互不通用；未来也许会支持，但现在还不能指望。如果你手上只有浏览器，请让发送方改用 relayium up 给你一个下载链接。</li><li>接收方无论在哪个网络上，都不需要账号。只有发送方需要登录，好让发送端的 CLI 生成配对码。</li></ul>
       <h2>serve：把这台机器变成一个监听收件箱</h2>
       <p>serve 的方向正相反：不是你去连别人，而是其他机器通过 relayium:// 直接推送给你——专为你已经信任的机器设计，比如你自己的笔记本推给一台 NAS，或者构建服务器把产物投递到你的机器上——走的是证书固定的 TLS 1.3 连接，无需 SSH，无需会合。</p>

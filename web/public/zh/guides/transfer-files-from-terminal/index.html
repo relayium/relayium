@@ -90,7 +90,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>发送临时文本</h2>
       <p>在一台机器运行 relayium text 生成配对码并等待，然后在另一台机器用打印出的配对码加入：</p>
       <pre><code>relayium text</code></pre>
-      <pre><code>relayium text K7M4XR</code></pre>
+      <pre><code>relayium text 483920</code></pre>
       <ul><li>生成配对码需要先执行 relayium login；持码加入无需登录。</li><li>两台机器必须同时在线。消息通过 P2P 点对点直连进行端到端加密传输，Relayium 服务器不存储消息正文；CLI text 不使用浏览器的 TURN 中继。任一端仍可复制或保留收到的文本。</li><li>单条消息最多 65,536 UTF-8 字节。更大的内容请使用 relayium send。</li></ul>
       <h2>第一次传输</h2>
       <p>最快上手的方式是把一个文件夹复制到你能 SSH 进去的服务器。Relayium 使用你现有的 SSH 访问权限，远程无需任何配置，也不用创建账号：</p>

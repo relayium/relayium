@@ -40,10 +40,10 @@ func startHub(t *testing.T) string {
 }
 
 // A code that can't be a pairing code must fail before the dial, and say why.
-// The user-visible bug this pins: `relayium send f.zip 726122` (a made-up
-// numeric code — '1' is not in the alphabet) spent a round trip to come back
-// with "expected handshake response status code 101 but got 403", which names
-// neither the code nor anything the user can act on.
+// The user-visible bug this pins: `relayium send f.zip K7M4XR` (a made-up code,
+// and since the format change an impossible one — codes are digits) spent a
+// round trip to come back with "expected handshake response status code 101 but
+// got 403", which names neither the code nor anything the user can act on.
 func TestJoinRejectsMalformedCodeWithoutDialing(t *testing.T) {
 	var hits int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +54,7 @@ func TestJoinRejectsMalformedCodeWithoutDialing(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, err := Join(ctx, base, "726122", "sender")
+	_, err := Join(ctx, base, "K7M4XR", "sender")
 	if err == nil {
 		t.Fatal("Join with a malformed code succeeded")
 	}
@@ -65,7 +65,7 @@ func TestJoinRejectsMalformedCodeWithoutDialing(t *testing.T) {
 	// the CLI copy honest, and a hard-coded number makes it go stale the first
 	// time the TTL moves — which is exactly what happened at 5 -> 30 minutes.
 	lifetime := fmt.Sprintf("%d minutes", signal.CodeTTLSeconds/60)
-	for _, want := range []string{"726122", "6 characters", lifetime, "issued by the server"} {
+	for _, want := range []string{"K7M4XR", "6 digits (0-9)", lifetime, "issued by the server"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}
@@ -90,7 +90,7 @@ func TestJoinSurfacesServerRefusalBody(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, err := Join(ctx, base, "ACDEFH", "sender")
+	_, err := Join(ctx, base, "726122", "sender")
 	if err == nil {
 		t.Fatal("Join against a 403 server succeeded")
 	}

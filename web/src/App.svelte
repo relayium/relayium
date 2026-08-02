@@ -29,7 +29,8 @@
   import { applyHeadMeta, pageMeta } from "./lib/page-meta";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
-  import { shouldConfirmBeforeSend } from "./lib/confirm-send";
+  import { needsSendConfirmation, shownSasCode, autoAcceptsIncomingText } from "./lib/verify-gates";
+  import { verifyPeers, setVerifyPeers } from "./lib/verify-pref.svelte";
   import { folderUploadSupported } from "./lib/platform";
   import { reveal } from "./lib/reveal";
   import Nav from "./lib/Nav.svelte";
@@ -126,6 +127,13 @@
   const recv = $derived(workspace.recv);
   const incoming = $derived(workspace.incoming);
   const activeText = $derived(workspace.text);
+  // 「高级验证」偏好，默认关。关的时候 SAS 不上屏，围绕比对它建立的额外确认步骤
+  // 也一并省掉；开的时候完全恢复原来的行为。理由与边界写在 verify-pref 里——
+  // 尤其是：这个开关**不**影响 commit-reveal / AEAD，也不影响接收文件的保存同意。
+  const verifyOn = $derived(verifyPeers());
+  /** 这条链路的 SAS，只有在偏好打开时才是可显示的。模板一律读这个而不是
+   *  workspace.sasCode，避免某一处漏掉判断又把码渲染出来。 */
+  const shownSas = $derived(shownSasCode(verifyOn, workspace.sasCode));
 
   // Client-local "recent transfers" log (localStorage-backed, this device only).
   // Refreshed after each recorded completion and on clear — never read live from
@@ -412,12 +420,24 @@
     if (outbox().length && surfaceShown && visiblePeers.length === 1
       && !workspace.blocksNewIntent(visiblePeers[0].id)) {
       const peer = visiblePeers[0];
-      if (!shouldConfirmBeforeSend(roomCode)) {
-        workspace.sendFiles(peer.id, takeOutbox()); // LAN: unchanged frictionless auto-send
+      // The extra sender confirmation belongs to advanced verification: its only
+      // stated reason was "the joiner might be a code-guesser, so look at the SAS
+      // before you send". With the preference off there is no SAS on screen to
+      // look at, so the bar would be a prompt with nothing behind it. LAN was
+      // always frictionless; a code room now matches it unless the user opted in.
+      //
+      // The exposure this accepts, stated plainly: someone who guesses a live
+      // code and joins first can be the peer this offer goes to. What stops it
+      // becoming a received file is the recipient's own accept step, which no
+      // mode skips (autoAcceptsIncomingFile). Turning verification on restores
+      // the sender-side confirmation as well.
+      if (!needsSendConfirmation(verifyOn, roomCode)) {
+        workspace.sendFiles(peer.id, takeOutbox());
         return;
       }
-      // Code room: surface a confirmation bar instead of auto-sending, so a
-      // code-guesser who joined never receives the files automatically.
+      // Code room, verification on: surface a confirmation bar instead of
+      // auto-sending, so a code-guesser who joined never receives the files
+      // automatically.
       if (!pendingPeer && peer.id !== dismissedPeerId) pendingPeer = peer;
     } else {
       pendingPeer = null; // peer left / conditions changed
@@ -437,6 +457,21 @@
       pendingPeer = null;
     }
   }
+
+  // With advanced verification off, an incoming TEXT request opens straight into
+  // the composer. The accept/reject pair existed to hold the session shut until
+  // the SAS had been compared; with no SAS shown, it degrades into "a stranger
+  // wants to talk to you — [Accept]", which nobody can answer more safely than
+  // the composer itself can. Nothing is decrypted early by this: accept() is
+  // exactly the step the session already required, and it is what installs the
+  // message listener.
+  //
+  // Deliberately NOT extended to an incoming FILE request. That prompt is about
+  // what lands on disk (and carries the user gesture the save-target picker
+  // needs), so it stays in every mode — see ReceiveActions.
+  $effect(() => {
+    if (autoAcceptsIncomingText(verifyOn, activeText.status)) workspace.acceptText();
+  });
 
   // A newly actionable verification/consent step must not appear silently below
   // the phone viewport. Keep this separate from visual ordering: every activity
@@ -484,7 +519,9 @@
         key: `file:recv:${incoming.from}`,
         target: "incoming",
         lead: t.requestHead(nameOf(incoming.from), incoming.files.length, formatSize(incoming.total)),
-        sas: workspace.sasCode,
+        // Undefined rather than "" so the announcer takes its no-code path and
+        // reads the edge alone, instead of "…. Code . compare it with…".
+        sas: shownSas || undefined,
         sasCompare: t.codeCompare,
       };
     }
@@ -494,7 +531,7 @@
         key: `file:${file.dir}:${file.peer}`,
         target: "file",
         lead: statusText(t, file),
-        sas: workspace.sasCode,
+        sas: shownSas || undefined,
         sasCompare: t.codeCompare,
       };
     }
@@ -509,7 +546,7 @@
         key: `text:${activeText.status}:${activeText.peerId}`,
         target: "text",
         lead,
-        sas: activeText.sasCode,
+        sas: verifyOn ? activeText.sasCode : undefined,
         sasCompare: t.text.sasCompare,
       };
     }
@@ -881,6 +918,9 @@
     setHistoryEnabled(historyKeep);
     history = loadHistory();
   }
+  function toggleVerify(e: Event) {
+    setVerifyPeers((e.currentTarget as HTMLInputElement).checked);
+  }
   function historyWhen(at: number): string {
     return new Date(at).toLocaleString();
   }
@@ -1025,7 +1065,7 @@
     <WorkspaceHeader
       peerName={nameOf(workspace.linkPeerId)}
       status={workspace.linkStatus}
-      sasCode={workspace.sasCode}
+      sasCode={shownSas}
       path={workspace.linkPath}
       onDisconnect={() => workspace.disconnect()}
       bind:element={headEl}
@@ -1063,8 +1103,16 @@
           <li><span class="fname">{f.name}</span><span class="fsize">{formatSize(f.size)}</span></li>
         {/each}
       </ul>
-      {#if !mixed && workspace.sasCode}
-        <div class="sas activity-reveal-target" bind:this={incomingReveal}>{t.codeLabel} <code>{workspace.sasCode}</code> — {t.codeCompare}</div>
+      <!-- Legacy surface. The verification box is shown only when the preference
+           is on, but the reveal anchor is NOT optional: without it a consent
+           card arriving below the fold would never be scrolled into view. The
+           anchor keeps the box's position either way. -->
+      {#if !mixed}
+        {#if shownSas}
+          <div class="sas activity-reveal-target" bind:this={incomingReveal}>{t.codeLabel} <code>{shownSas}</code> — {t.codeCompare}</div>
+        {:else}
+          <div class="activity-reveal-marker" bind:this={incomingReveal} aria-hidden="true"></div>
+        {/if}
       {/if}
       <!-- 收/拒按钮住在 ReceiveActions 里，因为大批次的内存提示必须拦在这一下
            点击之前：接受即用户手势，pickSaveTarget 在同一个手势里开选择器。 -->
@@ -1097,7 +1145,7 @@
         {statusText(t, xf)}
         <!-- A mixed link's code belongs to the link, not to this batch: the header
              above owns it. Repeating it per card is what the one-SAS rule forbids. -->
-        {#if workspace.sasCode && !xf.done && !mixed} · {t.codeLabel} <code>{workspace.sasCode}</code>{/if}
+        {#if shownSas && !xf.done && !mixed} · {t.codeLabel} <code>{shownSas}</code>{/if}
       </div>
       <!-- A cross-network connection that never came up is almost never "the
            transfer failed" — it is "there was no relay to carry it". Say which,
@@ -1143,7 +1191,7 @@
       status={activeText.status}
       peerName={nameOf(activeText.peerId)}
       sasCode={activeText.sasCode}
-      showSas={!mixed}
+      showSas={!mixed && verifyOn}
       path={mixed ? undefined : workspace.textPath}
       history={activeText.history}
       errorKey={activeText.errorKey}
@@ -1214,6 +1262,20 @@
       </p>
     {/if}
   </section>
+
+  <!-- Deliberately inside transferSurface: LAN renders this snippet and so does
+       CrossPage, so one placement makes the setting reachable from both kinds of
+       session. Collapsed by default — it is an advanced option, and unfolding it
+       is the moment to read what the comparison does and does not detect. -->
+  <details class="ui-card verify-pref">
+    <summary>{t.verify.title}</summary>
+    <label class="verify-toggle">
+      <input type="checkbox" checked={verifyOn} onchange={toggleVerify} />
+      {t.verify.toggle}
+    </label>
+    <p class="verify-note">{t.verify.note}</p>
+    <p class="verify-note">{t.verify.unaffected}</p>
+  </details>
 {/snippet}
 
   {#if surfaceShown && dragActive && dropTarget(visiblePeers.length, dropBusy) !== "off"}
@@ -1432,6 +1494,17 @@
     margin-block-start: 12px; font-size: 13px; color: var(--text); cursor: pointer;
   }
   .history-keep input { cursor: pointer; }
+
+  /* Same visual weight as the history preference: both are per-device settings
+     that live under the task column rather than competing with it. */
+  .verify-pref { margin-block-start: var(--space-3); }
+  .verify-pref summary { cursor: pointer; font-weight: 600; color: var(--text-h); }
+  .verify-toggle {
+    display: flex; align-items: center; gap: 8px;
+    margin-block-start: 12px; font-size: 13px; color: var(--text); cursor: pointer;
+  }
+  .verify-toggle input { cursor: pointer; }
+  .verify-note { margin: 8px 0 0; font-size: var(--fs-xs); line-height: 1.5; color: var(--text); }
   /* .sas itself is a shared primitive (app.css) — the verification box looks the
      same here and in the message panel. Only the stacking gap is local. */
   .sas { margin-block-end: 14px; }

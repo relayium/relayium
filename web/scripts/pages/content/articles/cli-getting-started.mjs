@@ -41,7 +41,7 @@ const en = {
       body: [
         "Run relayium text on one machine to mint a pairing code and wait, then join from the other machine with the printed code:",
       ],
-      code: ["relayium text", "relayium text K7M4XR"],
+      code: ["relayium text", "relayium text 483920"],
       bullets: [
         "Minting the code needs relayium login; joining with a code needs no login.",
         "Both machines must stay online. Messages are end-to-end encrypted over a direct P2P (peer-to-peer) connection, and Relayium servers never store their bodies; CLI text does not use the browser TURN relay. Either endpoint can still copy or retain received text.",
@@ -135,7 +135,7 @@ const zh = {
       body: [
         "在一台机器运行 relayium text 生成配对码并等待，然后在另一台机器用打印出的配对码加入：",
       ],
-      code: ["relayium text", "relayium text K7M4XR"],
+      code: ["relayium text", "relayium text 483920"],
       bullets: [
         "生成配对码需要先执行 relayium login；持码加入无需登录。",
         "两台机器必须同时在线。消息通过 P2P 点对点直连进行端到端加密传输，Relayium 服务器不存储消息正文；CLI text 不使用浏览器的 TURN 中继。任一端仍可复制或保留收到的文本。",
@@ -229,7 +229,7 @@ const ja = {
       body: [
         "一方で relayium text を実行してペアリングコードを発行し、もう一方は表示されたコードで参加します：",
       ],
-      code: ["relayium text", "relayium text K7M4XR"],
+      code: ["relayium text", "relayium text 483920"],
       bullets: [
         "コードの発行には relayium login が必要ですが、コードでの参加にはログイン不要です。",
         "両方の端末がオンラインである必要があります。メッセージはエンドツーエンド暗号化された P2P 直結で流れ、Relayium サーバーは本文を保存しません。CLI text はブラウザの TURN リレーを使いません。各端末は受信したテキストをコピーまたは保持できます。",
@@ -323,7 +323,7 @@ const ko = {
       body: [
         "한 기기에서 relayium text로 페어링 코드를 발급하고, 다른 기기에서 출력된 코드로 참여하세요:",
       ],
-      code: ["relayium text", "relayium text K7M4XR"],
+      code: ["relayium text", "relayium text 483920"],
       bullets: [
         "코드 발급에는 relayium login이 필요하지만 코드로 참여할 때는 로그인하지 않습니다.",
         "두 기기가 함께 온라인이어야 합니다. 메시지는 종단간 암호화된 P2P 직결로 전송되며 Relayium 서버는 본문을 저장하지 않습니다. CLI text는 브라우저 TURN 릴레이를 사용하지 않습니다. 각 엔드포인트는 받은 텍스트를 복사하거나 보관할 수 있습니다.",
@@ -417,7 +417,7 @@ const de = {
       body: [
         "Führe auf einem Rechner relayium text aus, um einen Pairing-Code zu erzeugen; der andere tritt mit dem ausgegebenen Code bei:",
       ],
-      code: ["relayium text", "relayium text K7M4XR"],
+      code: ["relayium text", "relayium text 483920"],
       bullets: [
         "Das Erzeugen des Codes braucht relayium login; der Beitritt mit einem Code braucht keine Anmeldung.",
         "Beide Rechner müssen online bleiben. Nachrichten laufen Ende-zu-Ende-verschlüsselt über eine direkte P2P-Verbindung; Relayium-Server speichern ihre Inhalte nicht. CLI text nutzt das Browser-TURN-Relay nicht. Beide Endpunkte können empfangenen Text dennoch kopieren oder behalten.",
@@ -511,7 +511,7 @@ const fr = {
       body: [
         "Lancez relayium text sur une machine pour créer un code d'appairage, puis rejoignez depuis l'autre avec le code affiché :",
       ],
-      code: ["relayium text", "relayium text K7M4XR"],
+      code: ["relayium text", "relayium text 483920"],
       bullets: [
         "Créer le code nécessite relayium login ; le rejoindre ne nécessite aucune connexion.",
         "Les deux machines doivent rester en ligne. Les messages sont chiffrés de bout en bout sur une connexion P2P directe et les serveurs Relayium ne stockent pas leur corps. CLI text n'utilise pas le relais TURN du navigateur. Chaque extrémité peut néanmoins copier ou conserver le texte reçu.",
@@ -605,7 +605,7 @@ const ar = {
       body: [
         "شغّل relayium text على جهاز لإصدار رمز اقتران، ثم انضم من الجهاز الآخر بالرمز المطبوع:",
       ],
-      code: ["relayium text", "relayium text K7M4XR"],
+      code: ["relayium text", "relayium text 483920"],
       bullets: [
         "يتطلب إصدار الرمز relayium login؛ أما الانضمام بالرمز فلا يحتاج إلى تسجيل دخول.",
         "يجب أن يبقى الجهازان متصلين. تمر الرسائل مشفّرة من الطرف إلى الطرف عبر اتصال P2P مباشر، ولا تخزّن خوادم Relayium متنها. لا يستخدم CLI text مُرحِّل TURN الخاص بالمتصفح. ومع ذلك يمكن لأي طرف نسخ النص المستلم أو الاحتفاظ به.",
@@ -699,7 +699,7 @@ const es = {
       body: [
         "Ejecuta relayium text en una máquina para generar un código de emparejamiento y únete desde la otra con el código impreso:",
       ],
-      code: ["relayium text", "relayium text K7M4XR"],
+      code: ["relayium text", "relayium text 483920"],
       bullets: [
         "Generar el código requiere relayium login; unirse con un código no requiere iniciar sesión.",
         "Ambas máquinas deben seguir conectadas. Los mensajes están cifrados de extremo a extremo por una conexión P2P directa y los servidores de Relayium no almacenan su contenido. CLI text no usa el retransmisor TURN del navegador. Cualquiera de los extremos puede copiar o conservar el texto recibido.",
@@ -793,7 +793,7 @@ const pt = {
       body: [
         "Execute relayium text em uma máquina para gerar um código de emparelhamento e entre na outra com o código exibido:",
       ],
-      code: ["relayium text", "relayium text K7M4XR"],
+      code: ["relayium text", "relayium text 483920"],
       bullets: [
         "Gerar o código requer relayium login; entrar com um código não requer login.",
         "As duas máquinas precisam ficar online. As mensagens têm criptografia de ponta a ponta em uma conexão P2P direta, e os servidores da Relayium não armazenam seu conteúdo. CLI text não usa o retransmissor TURN do navegador. Qualquer ponta ainda pode copiar ou guardar o texto recebido.",

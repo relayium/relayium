@@ -44,8 +44,8 @@ func Join(ctx context.Context, serverURL, code, name string) (*Session, error) {
 			// self-hoster their own instance's codes come from a service they
 			// deliberately are not using.
 			return nil, fmt.Errorf(
-				"pairing code %q is not a valid code: codes are %d characters from %s, last %d minutes, and are issued by the server — one cannot be made up",
-				code, signal.CodeLen, signal.CodeAlphabet, signal.CodeTTLSeconds/60)
+				"pairing code %q is not a valid code: codes are %s, and are issued by the server — one cannot be made up",
+				code, signal.CodeFormatNote())
 		}
 		u.RawQuery = "code=" + url.QueryEscape(code)
 	}

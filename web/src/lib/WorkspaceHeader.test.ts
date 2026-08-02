@@ -99,10 +99,22 @@ describe("WorkspaceHeader", () => {
     // from every subsequent scroll position, for a sentence read once.
     expect(section.contains(note)).toBe(false);
     expect(section.nextElementSibling).toBe(note);
-    // What stays pinned is exactly the trust state: peer, link state, path, code
-    // and the escape hatch.
+    // What stays pinned is exactly the trust state: peer, link state, path, the
+    // code when advanced verification produced one, and the escape hatch.
     expect(section.querySelectorAll(".sas")).toHaveLength(1);
     expect(section.querySelectorAll(".wh-disconnect")).toHaveLength(1);
+  });
+
+  it("explains the shared connection on a session that shows no code at all", () => {
+    // The default session has advanced verification OFF, so there is no SAS row
+    // here — and this note is rendered in exactly that case too. It is therefore
+    // the one sentence that must stay true without any comparison having
+    // happened: it may not call the link verified or refer to comparing a code
+    // as something the user did.
+    open({ sasCode: "" });
+    expect(target.querySelectorAll(".sas")).toHaveLength(0);
+    const note = target.querySelector(".wh-note") as HTMLElement;
+    expect(note.textContent).toContain(messages.en.workspace.lanesNote);
   });
 
   it("hands back the pinned box so a reveal can measure it at scroll time", () => {

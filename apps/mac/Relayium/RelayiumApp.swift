@@ -71,8 +71,23 @@ struct RelayiumApp: App {
     // one is running.
     @StateObject private var uploadModel = AppEnvironment.makeUploadModel()
     @StateObject private var downloadModel = AppEnvironment.makeDownloadModel()
-    @StateObject private var realtimeModel = AppEnvironment.makeRealtimeModel()
-    @StateObject private var realtimeTextModel = AppEnvironment.makeRealtimeTextModel()
+    // One preference object shared by both realtime models and the UI that
+    // toggles it, so a change applies to the next session of either kind
+    // without a relaunch.
+    @StateObject private var verification: VerificationPreference
+    @StateObject private var realtimeModel: RealtimeSessionModel
+    @StateObject private var realtimeTextModel: RealtimeTextSessionModel
+
+    @MainActor
+    init() {
+        // The models need the preference at construction (they read it through
+        // a closure), and a @StateObject default value cannot reference another
+        // property — so both are built here against one shared instance.
+        let prefs = VerificationPreference()
+        _verification = StateObject(wrappedValue: prefs)
+        _realtimeModel = StateObject(wrappedValue: AppEnvironment.makeRealtimeModel(verification: prefs))
+        _realtimeTextModel = StateObject(wrappedValue: AppEnvironment.makeRealtimeTextModel(verification: prefs))
+    }
 
     var body: some Scene {
         // Identified so the menu bar can reopen it: closing the last window does
@@ -86,6 +101,7 @@ struct RelayiumApp: App {
                 .environmentObject(downloadModel)
                 .environmentObject(realtimeModel)
                 .environmentObject(realtimeTextModel)
+                .environmentObject(verification)
                 .task { await session.restore() }
                 .task {
                     // Wired here rather than at init: the delegate is created by

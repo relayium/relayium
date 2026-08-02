@@ -241,6 +241,33 @@ export const SAVE_STUB = `
  * 断言之前确认自己确实指着 `build:link-e2e` 的产物——否则"链路没建起来"会被误读成
  * 回归，而真正的原因只是拿错了 dist。
  */
+
+/** Turn ON the advanced-verification preference before the app boots.
+ *
+ * The SAS presentation rules ("one link, one SAS", stickiness, the announced
+ * code) are rules about the OPT-IN path — the shipped default shows no code at
+ * all. A scenario that asserts them has to say so, rather than silently
+ * depending on a default that has since changed. Written as an init script so
+ * it lands before the module reads localStorage at import time.
+ *
+ * Key must match verify-pref.svelte.ts's ON_KEY. */
+export const VERIFY_ON = `
+  try { localStorage.setItem("relayium.verify.on", "1"); } catch { /* private mode */ }
+`;
+
+/** The opposite, and NOT the same as injecting nothing.
+ *
+ * Every tab in a run shares one browser profile, so the first scenario that
+ * injects VERIFY_ON leaves the key in localStorage for the whole origin. A
+ * later tab that injects nothing therefore inherits verification ON — a
+ * "default path" scenario written that way silently tests the opt-in path
+ * instead, and hangs waiting for a consent gate it claimed would not appear.
+ * Removing the key is what actually reproduces a device that has never touched
+ * the preference. */
+export const VERIFY_DEFAULT = `
+  try { localStorage.removeItem("relayium.verify.on"); } catch { /* private mode */ }
+`;
+
 export const OBSERVE_CAPS = `
   window.__advertisedCaps = null;
   (() => {

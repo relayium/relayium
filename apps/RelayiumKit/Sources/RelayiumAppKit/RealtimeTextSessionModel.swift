@@ -46,6 +46,9 @@ public final class RealtimeTextSessionModel: ObservableObject {
     private let pairClient: PairCodeClient
     private let iceClient: ICEConfigClient
     private let makeConnection: (_ code: String, _ role: Role, _ ice: ICEConfig) async throws -> RealtimePeerConnection
+    /// Read when the SAS lands, not captured at init: the user may flip the
+    /// preference between sessions. Default OFF — see `VerificationPreference`.
+    private let requiresVerification: () -> Bool
     private let now: () -> TimeInterval
     private let idleSeconds: TimeInterval
     private let idleSleep: @Sendable (_ nanoseconds: UInt64) async -> Void
@@ -68,6 +71,7 @@ public final class RealtimeTextSessionModel: ObservableObject {
 
     public init(pairClient: PairCodeClient,
                 iceClient: ICEConfigClient,
+                requiresVerification: @escaping () -> Bool = { false },
                 now: @escaping () -> TimeInterval = { Date().timeIntervalSince1970 },
                 idleSeconds: TimeInterval = TEXT_IDLE_SECONDS,
                 idleSleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
@@ -76,6 +80,7 @@ public final class RealtimeTextSessionModel: ObservableObject {
                 makeConnection: @escaping (String, Role, ICEConfig) async throws -> RealtimePeerConnection) {
         self.pairClient = pairClient
         self.iceClient = iceClient
+        self.requiresVerification = requiresVerification
         self.now = now
         self.idleSeconds = idleSeconds
         self.idleSleep = idleSleep
@@ -153,6 +158,17 @@ public final class RealtimeTextSessionModel: ObservableObject {
 
     public func confirmSAS() {
         guard case .verifying = state else { return }
+        proceedAfterVerification()
+    }
+
+    /// The one "this connection is cleared" transition, shared by the ON path
+    /// (the user pressed "They match") and the OFF path (the
+    /// commit-reveal-complete encrypted connection is open and there is nobody
+    /// being asked — nothing has established WHO the peer is).
+    ///
+    /// `confirmTextSAS()` is called on the initiator in BOTH paths: it is what
+    /// enables decryption on the transport, and it is not a display concern.
+    private func proceedAfterVerification() {
         switch role {
         case .initiator:
             if peerRejected {
@@ -161,10 +177,26 @@ public final class RealtimeTextSessionModel: ObservableObject {
                 state = peerAccepted ? .open(sas: sas) : .waitingAccept(sas: sas)
                 connection?.confirmTextSAS()
             }
+            touch()
         case .responder:
             state = .incomingRequest(sas: sas)
+            touch()
+            // With verification off, an incoming text request opens straight
+            // into the composer. `accept()` is exactly the step the ON path
+            // performs on a tap — nothing is decrypted any earlier, it simply
+            // is not waiting on a decision that no displayed code informs.
+            //
+            // Deliberately narrow: this is a message session, whose whole
+            // content is what the composer is about to show. It says nothing
+            // about the FILE path, which is a separate decision per platform —
+            // the browser keeps a per-batch Accept gesture, while this app
+            // accepts an incoming manifest itself and writes into the
+            // configured destination (Downloads by default; see
+            // RealtimeSessionModel.startPendingReceive). Note that neither is a
+            // confidentiality control: an unintended peer that wants the files
+            // just accepts them.
+            if !requiresVerification() { accept() }
         }
-        touch()
     }
 
     public func rejectSAS() {
@@ -349,6 +381,10 @@ public final class RealtimeTextSessionModel: ObservableObject {
     private func presentVerificationIfReady() {
         guard connectionOpened, !sas.isEmpty else { return }
         guard case .connecting = state else { return }
+        guard requiresVerification() else {
+            proceedAfterVerification()
+            return
+        }
         state = .verifying(sas: sas)
         touch()
     }

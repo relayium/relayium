@@ -36,10 +36,10 @@ const en = {
       ],
       bullets: [
         "On the sending computer, open relayium.com and sign in.",
-        "Pick the files or the folder to send — up to 1,000 files per batch. Relayium mints a 6-character pairing code (and a matching join link/QR).",
+        "Pick the files or the folder to send — up to 1,000 files per batch. Relayium mints a 6-digit pairing code (and a matching join link/QR).",
         "Share that code or link with the other person however is convenient — read it out, text it, paste it in chat.",
-        "On the receiving computer, open the link, or open relayium.com and type in the 6-character code. No sign-in required on this side.",
-        "Both screens now show the same short verification code (SAS). Check that they match — this confirms the keys were not replaced and both computers joined the same end-to-end encrypted session; it does not prove which network path carries the ciphertext — then the transfer starts automatically.",
+        "On the receiving computer, open the link, or open relayium.com and type in the 6-digit code. No sign-in required on this side.",
+        "The transfer then starts automatically. If you turn on advanced verification first (it is off by default), both screens also show the same short verification code (SAS) to check before that happens — a match confirms the keys were not replaced and both computers joined the same end-to-end encrypted session; it does not prove which network path carries the ciphertext — then the transfer starts automatically.",
       ],
     },
     {
@@ -116,10 +116,10 @@ const zh = {
       ],
       bullets: [
         "在发送方的电脑上，打开 relayium.com 并登录。",
-        "选择要发送的文件或文件夹——每批最多 1,000 个文件。Relayium 会生成一个 6 位配对码（以及对应的加入链接/二维码）。",
+        "选择要发送的文件或文件夹——每批最多 1,000 个文件。Relayium 会生成一个 6 位数字配对码（以及对应的加入链接/二维码）。",
         "用任意方便的方式把这个码或链接告诉对方——念出来、发短信、贴到聊天窗口都行。",
-        "在接收方的电脑上，打开链接，或者打开 relayium.com 输入这个 6 位码。这一侧不需要登录。",
-        "此时两边屏幕会显示同一段短校验码（SAS）。核对一致——这能确认密钥未被替换、两台电脑加入的是同一个端到端加密会话；它并不能证明密文走的是哪条网络路径——之后传输会自动开始。",
+        "在接收方的电脑上，打开链接，或者打开 relayium.com 输入这个 6 位数字码。这一侧不需要登录。",
+        "之后传输会自动开始。如果你事先打开了「高级验证」（默认关闭），两边屏幕还会先显示同一段短校验码（SAS）供你核对——一致能确认密钥未被替换、两台电脑加入的是同一个端到端加密会话；它并不能证明密文走的是哪条网络路径——之后传输会自动开始。",
       ],
     },
     {
@@ -196,10 +196,10 @@ const ja = {
       ],
       bullets: [
         "送信側のパソコンで relayium.com を開き、サインインします。",
-        "送るファイルまたはフォルダを選びます。1バッチ最大1,000ファイル。Relayium が6文字のペアリングコード（対応する参加リンク／QRコード付き）を発行します。",
+        "送るファイルまたはフォルダを選びます。1バッチ最大1,000ファイル。Relayium が 6 桁の数字ペアリングコード（対応する参加リンク／QRコード付き）を発行します。",
         "そのコードやリンクを都合の良い方法で相手に伝えます。読み上げる、テキストメッセージで送る、チャットに貼り付けるなど。",
-        "受信側のパソコンで、リンクを開くか、relayium.com を開いて6文字のコードを入力します。こちら側にサインインは不要です。",
-        "両方の画面に同じ短い検証コード（SAS）が表示されます。一致を確認してください。これは鍵がすり替えられず、2台が同じエンドツーエンド暗号化セッションに参加したことを確認しますが、暗号文がどのネットワーク経路を通るかを証明するものではありません。その後、転送が自動的に始まります。",
+        "受信側のパソコンで、リンクを開くか、relayium.com を開いて 6 桁の数字コードを入力します。こちら側にサインインは不要です。",
+        "その後、転送が自動的に始まります。先に「高度な検証」（既定はオフ）をオンにしておくと、両方の画面に同じ短い検証コード（SAS）も表示され、始まる前に照合できます。一致すれば、鍵がすり替えられず、2台が同じエンドツーエンド暗号化セッションに参加したことを確認しますが、暗号文がどのネットワーク経路を通るかを証明するものではありません。その後、転送が自動的に始まります。",
       ],
     },
     {
@@ -276,10 +276,10 @@ const ko = {
       ],
       bullets: [
         "보내는 쪽 컴퓨터에서 relayium.com을 열고 로그인합니다.",
-        "보낼 파일이나 폴더를 고릅니다 — 배치당 최대 1,000개. Relayium이 6자리 페어링 코드(그리고 짝을 이루는 참여 링크/QR)를 발급합니다.",
+        "보낼 파일이나 폴더를 고릅니다 — 배치당 최대 1,000개. Relayium이 6자리 숫자 페어링 코드(그리고 짝을 이루는 참여 링크/QR)를 발급합니다.",
         "그 코드나 링크를 편한 방법으로 상대에게 전달합니다 — 불러주거나, 문자로 보내거나, 채팅에 붙여넣거나.",
-        "받는 쪽 컴퓨터에서 링크를 열거나, relayium.com을 열고 6자리 코드를 입력합니다. 이쪽은 로그인이 필요 없습니다.",
-        "이제 양쪽 화면에 동일한 짧은 검증 코드(SAS)가 표시됩니다. 일치하는지 확인하세요. 이는 키가 바뀌지 않았고 두 컴퓨터가 같은 종단간 암호화 세션에 참여했음을 확인하지만, 암호문이 어떤 네트워크 경로를 지나는지 증명하지는 않습니다. 그러면 전송이 자동으로 시작됩니다.",
+        "받는 쪽 컴퓨터에서 링크를 열거나, relayium.com을 열고 6자리 숫자 코드를 입력합니다. 이쪽은 로그인이 필요 없습니다.",
+        "그러면 전송이 자동으로 시작됩니다. 먼저 고급 검증(기본값 꺼짐)을 켜 두면 양쪽 화면에 동일한 짧은 검증 코드(SAS)도 표시되어 시작 전에 확인할 수 있습니다. 일치하면 키가 바뀌지 않았고 두 컴퓨터가 같은 종단간 암호화 세션에 참여했음을 확인하지만, 암호문이 어떤 네트워크 경로를 지나는지 증명하지는 않습니다. 그러면 전송이 자동으로 시작됩니다.",
       ],
     },
     {
@@ -359,7 +359,7 @@ const de = {
         "Wähle die zu sendenden Dateien oder den Ordner aus — bis zu 1.000 Dateien pro Stapel. Relayium erzeugt einen sechsstelligen Pairing-Code (und den passenden Beitrittslink/QR-Code).",
         "Teile diesen Code oder Link auf beliebige, bequeme Weise mit der anderen Person — vorlesen, per SMS schicken, in den Chat einfügen.",
         "Öffne auf dem empfangenden Computer den Link, oder öffne relayium.com und gib den sechsstelligen Code ein. Auf dieser Seite ist keine Anmeldung nötig.",
-        "Beide Bildschirme zeigen nun denselben kurzen Verifizierungscode (SAS). Prüfe, ob sie übereinstimmen — das bestätigt, dass die Schlüssel nicht ausgetauscht wurden und beide Computer derselben Ende-zu-Ende-verschlüsselten Sitzung beigetreten sind; welchen Netzwerkpfad der Chiffretext nimmt, beweist es nicht — dann startet die Übertragung automatisch.",
+        "Danach startet die Übertragung automatisch. Schaltest du vorher die erweiterte Verifizierung ein (standardmäßig aus), zeigen beide Bildschirme zusätzlich denselben kurzen Verifizierungscode (SAS), den du davor prüfen kannst — Übereinstimmung bestätigt, dass die Schlüssel nicht ausgetauscht wurden und beide Computer derselben Ende-zu-Ende-verschlüsselten Sitzung beigetreten sind; welchen Netzwerkpfad der Chiffretext nimmt, beweist es nicht — dann startet die Übertragung automatisch.",
       ],
     },
     {
@@ -436,10 +436,10 @@ const fr = {
       ],
       bullets: [
         "Sur l'ordinateur qui envoie, ouvrez relayium.com et connectez-vous.",
-        "Choisissez les fichiers ou le dossier à envoyer — jusqu'à 1 000 fichiers par lot. Relayium génère un code d'appairage à 6 caractères (avec le lien de participation/code QR correspondant).",
+        "Choisissez les fichiers ou le dossier à envoyer — jusqu'à 1 000 fichiers par lot. Relayium génère un code d'appairage à 6 chiffres (avec le lien de participation/code QR correspondant).",
         "Partagez ce code ou ce lien avec l'autre personne comme cela vous arrange — le lire à voix haute, l'envoyer par SMS, le coller dans un chat.",
-        "Sur l'ordinateur qui reçoit, ouvrez le lien, ou ouvrez relayium.com et saisissez le code à 6 caractères. Aucune connexion n'est requise de ce côté.",
-        "Les deux écrans affichent maintenant le même court code de vérification (SAS). Vérifiez qu'il concorde : cela confirme que les clés n'ont pas été substituées et que les deux ordinateurs ont rejoint la même session chiffrée de bout en bout, mais ne prouve pas le chemin réseau suivi par le texte chiffré. Le transfert démarre alors automatiquement.",
+        "Sur l'ordinateur qui reçoit, ouvrez le lien, ou ouvrez relayium.com et saisissez le code à 6 chiffres. Aucune connexion n'est requise de ce côté.",
+        "Le transfert démarre ensuite automatiquement. Si vous activez d'abord la vérification avancée (désactivée par défaut), les deux écrans affichent en plus le même court code de vérification (SAS) à vérifier avant : une concordance confirme que les clés n'ont pas été substituées et que les deux ordinateurs ont rejoint la même session chiffrée de bout en bout, mais ne prouve pas le chemin réseau suivi par le texte chiffré. Le transfert démarre alors automatiquement.",
       ],
     },
     {
@@ -516,10 +516,10 @@ const ar = {
       ],
       bullets: [
         "على جهاز الإرسال، افتح relayium.com وسجّل الدخول.",
-        "اختر الملفات أو المجلد المراد إرساله — حتى 1,000 ملف في الدفعة الواحدة. يُنشئ Relayium رمز اقتران من 6 محارف (ورابط انضمام/رمز QR مطابقًا له).",
+        "اختر الملفات أو المجلد المراد إرساله — حتى 1,000 ملف في الدفعة الواحدة. يُنشئ Relayium رمز اقتران من 6 أرقام (ورابط انضمام/رمز QR مطابقًا له).",
         "شارك ذلك الرمز أو الرابط مع الطرف الآخر بأي طريقة مناسبة — اقرأه بصوت عالٍ، أرسله برسالة نصية، الصقه في المحادثة.",
-        "على جهاز الاستقبال، افتح الرابط، أو افتح relayium.com وأدخل الرمز المؤلف من 6 محارف. لا حاجة لتسجيل الدخول على هذا الطرف.",
-        "تعرض الشاشتان الآن نفس رمز التحقق القصير (SAS). تحقق من تطابقهما — فهذا يؤكد أن المفاتيح لم تُستبدل وأن الحاسوبين انضما إلى جلسة التشفير من الطرف إلى الطرف نفسها، لكنه لا يثبت أي مسار شبكي يسلكه النص المشفّر — ثم يبدأ النقل تلقائيًا.",
+        "على جهاز الاستقبال، افتح الرابط، أو افتح relayium.com وأدخل الرمز المؤلف من 6 أرقام. لا حاجة لتسجيل الدخول على هذا الطرف.",
+        "ثم يبدأ النقل تلقائيًا. وإن فعّلت «التحقّق المتقدّم» أولًا (وهو معطَّل افتراضيًا)، تعرض الشاشتان أيضًا رمز التحقق القصير نفسه (SAS) لتتحقق منه قبل ذلك — والتطابق يؤكد أن المفاتيح لم تُستبدل وأن الحاسوبين انضما إلى جلسة التشفير من الطرف إلى الطرف نفسها، لكنه لا يثبت أي مسار شبكي يسلكه النص المشفّر — ثم يبدأ النقل تلقائيًا.",
       ],
     },
     {
@@ -596,10 +596,10 @@ const es = {
       ],
       bullets: [
         "En el ordenador que envía, abre relayium.com e inicia sesión.",
-        "Elige los archivos o la carpeta a enviar — hasta 1.000 archivos por lote. Relayium genera un código de emparejamiento de 6 caracteres (y un enlace/QR de unión que le corresponde).",
+        "Elige los archivos o la carpeta a enviar — hasta 1.000 archivos por lote. Relayium genera un código de emparejamiento de 6 dígitos (y un enlace/QR de unión que le corresponde).",
         "Comparte ese código o enlace con la otra persona como te resulte más cómodo — léelo en voz alta, mándalo por mensaje, pégalo en el chat.",
-        "En el ordenador que recibe, abre el enlace, o abre relayium.com y escribe el código de 6 caracteres. En este lado no hace falta iniciar sesión.",
-        "Ahora ambas pantallas muestran el mismo código de verificación corto (SAS). Comprueba que coincidan: esto confirma que las claves no fueron sustituidas y que ambos ordenadores se unieron a la misma sesión cifrada de extremo a extremo, pero no demuestra qué ruta de red lleva el texto cifrado. Entonces la transferencia comienza automáticamente.",
+        "En el ordenador que recibe, abre el enlace, o abre relayium.com y escribe el código de 6 dígitos. En este lado no hace falta iniciar sesión.",
+        "Después la transferencia comienza automáticamente. Si activas antes la verificación avanzada (desactivada por omisión), ambas pantallas muestran además el mismo código de verificación corto (SAS) para comprobarlo primero: la coincidencia confirma que las claves no fueron sustituidas y que ambos ordenadores se unieron a la misma sesión cifrada de extremo a extremo, pero no demuestra qué ruta de red lleva el texto cifrado. Entonces la transferencia comienza automáticamente.",
       ],
     },
     {
@@ -676,10 +676,10 @@ const pt = {
       ],
       bullets: [
         "No computador que envia, abra relayium.com e faça login.",
-        "Escolha os arquivos ou a pasta a enviar — até 1.000 arquivos por lote. O Relayium gera um código de emparelhamento de 6 caracteres (e um link/QR de entrada correspondente).",
+        "Escolha os arquivos ou a pasta a enviar — até 1.000 arquivos por lote. O Relayium gera um código de emparelhamento de 6 dígitos (e um link/QR de entrada correspondente).",
         "Compartilhe esse código ou link com a outra pessoa da forma que for mais conveniente — leia em voz alta, mande por mensagem, cole no chat.",
-        "No computador que recebe, abra o link, ou abra relayium.com e digite o código de 6 caracteres. Deste lado não é preciso fazer login.",
-        "Agora as duas telas mostram o mesmo código de verificação curto (SAS). Confira se eles coincidem: isso confirma que as chaves não foram substituídas e que os dois computadores entraram na mesma sessão criptografada de ponta a ponta, mas não prova qual caminho de rede leva o texto cifrado. Então a transferência começa automaticamente.",
+        "No computador que recebe, abra o link, ou abra relayium.com e digite o código de 6 dígitos. Deste lado não é preciso fazer login.",
+        "Depois a transferência começa automaticamente. Se você ativar antes a verificação avançada (desligada por padrão), as duas telas também mostram o mesmo código de verificação curto (SAS) para conferir primeiro: a coincidência confirma que as chaves não foram substituídas e que os dois computadores entraram na mesma sessão criptografada de ponta a ponta, mas não prova qual caminho de rede leva o texto cifrado. Então a transferência começa automaticamente.",
       ],
     },
     {

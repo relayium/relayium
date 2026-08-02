@@ -55,9 +55,9 @@ const en = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive K7M4XR --server https://your-domain",
+        "relayium receive 483920 --server https://your-domain",
         "relayium text --server https://your-domain",
-        "relayium text K7M4XR --server https://your-domain",
+        "relayium text 483920 --server https://your-domain",
       ],
       bullets: [
         "The CLI is free either way — --server changes which rendezvous server it talks to for the pairing-code handshake. send or text without a code mints one against that server, and cloud up stores under an account on it, so sign in there first with relayium login --server https://your-domain. receive, down, and text with the printed code need no login.",
@@ -145,9 +145,9 @@ const zh = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive K7M4XR --server https://your-domain",
+        "relayium receive 483920 --server https://your-domain",
         "relayium text --server https://your-domain",
-        "relayium text K7M4XR --server https://your-domain",
+        "relayium text 483920 --server https://your-domain",
       ],
       bullets: [
         "无论用哪个服务器，CLI 都是免费的——--server 只是改变了配对码握手所连接的会合服务器。send 或 text 不带码运行时会在该服务器生成配对码，云端 up 也存到那台服务器上的账号下，所以要先用 relayium login --server https://your-domain 在那边登录；receive、down，以及使用打印配对码加入的 text 都无需登录。",
@@ -235,9 +235,9 @@ const ja = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive K7M4XR --server https://your-domain",
+        "relayium receive 483920 --server https://your-domain",
         "relayium text --server https://your-domain",
-        "relayium text K7M4XR --server https://your-domain",
+        "relayium text 483920 --server https://your-domain",
       ],
       bullets: [
         "どちらのサーバーを使っても CLI は無料です——--server はペアリングコードのハンドシェイク先を変更するだけです。send または text をコードなしで実行するとそのサーバーでコードを発行し、クラウドの up もそのサーバー上のアカウントに保存するため、先に relayium login --server https://your-domain でサインインしてください。receive、down、表示されたコードで参加する text はログイン不要です。",
@@ -325,9 +325,9 @@ const ko = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive K7M4XR --server https://your-domain",
+        "relayium receive 483920 --server https://your-domain",
         "relayium text --server https://your-domain",
-        "relayium text K7M4XR --server https://your-domain",
+        "relayium text 483920 --server https://your-domain",
       ],
       bullets: [
         "어느 서버를 쓰든 CLI는 무료입니다 — --server는 페어링 코드 핸드셰이크 서버만 바꿉니다. send나 text를 코드 없이 실행하면 그 서버에서 코드를 발급하고, 클라우드 up도 그 서버 계정에 저장하므로 먼저 relayium login --server https://your-domain으로 로그인하세요. receive, down, 출력된 코드로 참여하는 text는 로그인이 필요 없습니다.",
@@ -415,9 +415,9 @@ const de = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive K7M4XR --server https://your-domain",
+        "relayium receive 483920 --server https://your-domain",
         "relayium text --server https://your-domain",
-        "relayium text K7M4XR --server https://your-domain",
+        "relayium text 483920 --server https://your-domain",
       ],
       bullets: [
         "Egal welchen Server sie nutzt, die CLI ist kostenlos — --server ändert nur den Rendezvous-Server. send oder text ohne Code erzeugen dort einen Code, und Cloud-up speichert unter einem Konto auf ihm; melde dich daher zuerst mit relayium login --server https://your-domain an. receive, down und text mit dem ausgegebenen Code brauchen keine Anmeldung.",
@@ -505,9 +505,9 @@ const fr = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive K7M4XR --server https://your-domain",
+        "relayium receive 483920 --server https://your-domain",
         "relayium text --server https://your-domain",
-        "relayium text K7M4XR --server https://your-domain",
+        "relayium text 483920 --server https://your-domain",
       ],
       bullets: [
         "Quel que soit le serveur utilisé, la CLI est gratuite — --server ne change que le serveur de rendez-vous. send ou text sans code y génèrent un code, et up y stocke sous un compte ; connectez-vous donc d'abord avec relayium login --server https://your-domain. receive, down et text avec le code affiché ne nécessitent aucune connexion.",
@@ -595,9 +595,9 @@ const ar = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive K7M4XR --server https://your-domain",
+        "relayium receive 483920 --server https://your-domain",
         "relayium text --server https://your-domain",
-        "relayium text K7M4XR --server https://your-domain",
+        "relayium text 483920 --server https://your-domain",
       ],
       bullets: [
         "الـ CLI مجاني في كلتا الحالتين — ‎--server‎ يغيّر خادم التعارف فقط. يصدر send أو text بلا رمز رمزًا من ذلك الخادم، ويخزّن up السحابي تحت حساب عليه، لذا سجّل الدخول أولًا بـ ‎relayium login --server https://your-domain‎. أما receive وdown وtext مع الرمز المطبوع فلا تحتاج إلى تسجيل دخول.",
@@ -685,9 +685,9 @@ const es = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive K7M4XR --server https://your-domain",
+        "relayium receive 483920 --server https://your-domain",
         "relayium text --server https://your-domain",
-        "relayium text K7M4XR --server https://your-domain",
+        "relayium text 483920 --server https://your-domain",
       ],
       bullets: [
         "La CLI es gratis en cualquier caso — --server solo cambia el servidor de punto de encuentro. send o text sin código generan uno allí, y up guarda bajo una cuenta en ese servidor, así que inicia sesión primero con relayium login --server https://your-domain. receive, down y text con el código impreso no necesitan iniciar sesión.",
@@ -775,9 +775,9 @@ const pt = {
       ],
       code: [
         "relayium send ./report.pdf --server https://your-domain",
-        "relayium receive K7M4XR --server https://your-domain",
+        "relayium receive 483920 --server https://your-domain",
         "relayium text --server https://your-domain",
-        "relayium text K7M4XR --server https://your-domain",
+        "relayium text 483920 --server https://your-domain",
       ],
       bullets: [
         "A CLI é gratuita em qualquer dos casos — --server apenas muda o servidor de encontro. send ou text sem código geram um código nele, e up guarda sob uma conta nesse servidor, então entre primeiro com relayium login --server https://your-domain. receive, down e text com o código impresso não precisam de login.",

@@ -5,6 +5,10 @@ import RelayiumKit
 
 struct RealtimeTextPane: View {
     @ObservedObject var model: RealtimeTextSessionModel
+    /// Only used to decide whether the derived phrase is worth screen space.
+    /// The model reaches the same preference for the behaviour; this view must
+    /// not be the thing that decides whether a gate exists.
+    @EnvironmentObject private var verification: VerificationPreference
     let token: String
 
     var body: some View {
@@ -124,9 +128,11 @@ struct RealtimeTextPane: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Waiting for the other device to accept…")
                 .font(.subheadline.weight(.semibold))
-            Text("Verified phrase: \(sas)")
-                .font(.caption.monospaced())
-                .textSelection(.enabled)
+            if verification.requiresSASConfirmation {
+                Text("Verified phrase: \(sas)")
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+            }
             ProgressView().controlSize(.small)
             Button("End session") { model.end() }
         }
@@ -136,9 +142,11 @@ struct RealtimeTextPane: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("The other device wants to exchange text")
                 .font(.subheadline.weight(.semibold))
-            Text("Verified phrase: \(sas)")
-                .font(.caption.monospaced())
-                .textSelection(.enabled)
+            if verification.requiresSASConfirmation {
+                Text("Verified phrase: \(sas)")
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+            }
             Text("No message has been decrypted or shown yet.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -155,7 +163,9 @@ struct RealtimeTextPane: View {
             HStack {
                 Text("Private text session").font(.headline)
                 Spacer()
-                Text(sas).font(.caption.monospaced()).foregroundStyle(.secondary)
+                if verification.requiresSASConfirmation {
+                    Text(sas).font(.caption.monospaced()).foregroundStyle(.secondary)
+                }
             }
             Text("Relayium stores no message body or server-side history. Either device can still copy or retain text.")
                 .font(.caption)

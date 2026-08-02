@@ -17,8 +17,8 @@ import { createHash, randomBytes } from "node:crypto";
 // CDP 客户端、标签页把手、浏览器生命周期和另存为桩都在 harness.mjs 里，和
 // mixed-link.mjs 共用同一份——两个脚本的超时语义和挂死检测必须是同一套。
 import {
-  OBSERVE_CAPS, SAVE_STUB, argFlag, argPresent, fail, launchBrowser, newTab, ok,
-  requireServer, setWideViewport, sleep, withWatchdog,
+  OBSERVE_CAPS, SAVE_STUB, VERIFY_DEFAULT, VERIFY_ON, argFlag, argPresent, fail, launchBrowser,
+  newTab, ok, requireServer, setWideViewport, sleep, withWatchdog,
 } from "./harness.mjs";
 // 真场景里的无障碍断言。静态扫描器扫不到这些状态：它没有对端，也没有信令服务器，
 // 而"同意卡 / 进行中的进度条 / 消息记录"恰好是这个产品里最需要读屏的三个地方。
@@ -563,11 +563,15 @@ const utf8Hex = (s) => [...Buffer.from(s, "utf8")].map((b) => b.toString(16).pad
  *  3. 同意之前**一个正文节点都没有**；
  *  4. 一段长得像脚本的内容渲染成文本，`.msg-body` 里**没有**任何元素。
  */
+// Drives the ON path of advanced verification: the explicit accept/reject on an
+// incoming text request, and the SAS box that decision is built around. Both are
+// opt-in now (the default opens straight into the composer with no code shown),
+// so this scenario says so instead of leaning on a default that has moved.
 async function messageScenario(browser) {
   // 顺带钉住"默认构建通告什么"。这一幕本来就要等 caps 到达，探针不额外花任何时间，
   // 而它守的是一条比消息本身更硬的规矩：link/1 还没做完，默认产物里就不能出现它。
-  const a = await newTab(browser, BASE + "/", OBSERVE_CAPS);
-  const b = await newTab(browser, BASE + "/", OBSERVE_CAPS);
+  const a = await newTab(browser, BASE + "/", VERIFY_ON + OBSERVE_CAPS);
+  const b = await newTab(browser, BASE + "/", VERIFY_ON + OBSERVE_CAPS);
   await setWideViewport(a, 390, 844);
   await setWideViewport(b, 390, 844);
 
@@ -766,6 +770,89 @@ async function messageScenario(browser) {
   const errs = [...a.errors, ...b.errors].filter((e) => !/401|Failed to load resource/.test(e));
   if (errs.length) throw new Error(`console errors during the message session:\n    ${errs.join("\n    ")}`);
   ok("no console errors during the message session");
+
+  await browser.send("Target.closeTarget", { targetId: a.targetId });
+  await browser.send("Target.closeTarget", { targetId: b.targetId });
+}
+
+/**
+ * The SHIPPED DEFAULT of a text session: advanced verification off.
+ *
+ * Deliberately a separate, small scenario rather than a branch inside
+ * messageScenario: that one measures the ON path's consent layout (the SAS box
+ * and the accept/reject buttons inside a 390px fold), and there is nothing to
+ * measure here — the point is that neither exists. Keeping them apart also
+ * keeps each one's failure legible.
+ *
+ * VERIFY_DEFAULT (not "no init script") makes these two tabs exactly what a
+ * visitor gets — see its comment: the profile is shared with the ON scenarios
+ * above, so injecting nothing would inherit their preference. The assertions
+ * are the owner-visible promise:
+ *
+ *  1. the recipient lands in the composer — no accept/reject card ever renders;
+ *  2. no SAS is rendered on either side;
+ *  3. the INITIATOR also reaches the composer, which it can only do after the
+ *     recipient's automatic ACCEPT byte arrives. Without this the recipient
+ *     could be rendering a composer locally while the session never activated.
+ *
+ * Unit tests (verify-gates.test.ts) cover the same gates, but they cannot show
+ * that the default build, in a real browser, over a real link, opens without a
+ * gate — which is the thing the owner actually sees.
+ */
+async function messageDefaultScenario(browser) {
+  const a = await newTab(browser, BASE + "/", VERIFY_DEFAULT);
+  const b = await newTab(browser, BASE + "/", VERIFY_DEFAULT);
+  await setWideViewport(a);
+  await setWideViewport(b);
+
+  const peersSeen = "document.querySelectorAll('.pname').length > 0";
+  await a.waitFor(peersSeen, "tab A to see tab B on the radar (default verification)", 30_000);
+  await b.waitFor(peersSeen, "tab B to see tab A on the radar (default verification)", 30_000);
+  await a.waitFor(`!!document.querySelector('${MSG_OPEN_BTN}')`, "the message control (default verification)", 30_000);
+
+  // Watch for the accept/reject card from the instant the request can arrive.
+  // Polling after the composer appears would miss a card that flashed and was
+  // replaced, so the probe runs in the page and latches.
+  // The accept button is the one primary action inside `.act`; the open session
+  // has its own `.act` row (Clear / Start over), all ghost buttons, so matching
+  // `.act button` alone would count the normal composer chrome as a gate.
+  const watchForGate = `(() => {
+    window.__gateSeen = 0;
+    window.__sasSeen = 0;
+    const look = () => {
+      if (document.querySelector('.msgpanel .act button.btn-primary')) window.__gateSeen++;
+      if (document.querySelector('.msgpanel .sas')) window.__sasSeen++;
+    };
+    new MutationObserver(look).observe(document.body, { childList: true, subtree: true });
+    look();
+    return true;
+  })()`;
+  await b.evaluate(watchForGate);
+  await a.evaluate(watchForGate);
+
+  await a.evaluate(`(() => { document.querySelector('${MSG_OPEN_BTN}').click(); return true; })()`);
+
+  // The recipient opens straight into the composer.
+  await b.waitFor("!!document.querySelector('.msgpanel textarea')", "tab B's composer (no consent gate)", 40_000);
+  // And the initiator only gets there once tab B's automatic ACCEPT lands.
+  await a.waitFor("!!document.querySelector('.msgpanel textarea')", "tab A's composer (peer auto-accepted)", 40_000);
+
+  const observed = {
+    a: await a.evaluate("({ gate: window.__gateSeen, sas: window.__sasSeen })"),
+    b: await b.evaluate("({ gate: window.__gateSeen, sas: window.__sasSeen })"),
+  };
+  for (const [who, seen] of Object.entries(observed)) {
+    if (seen.gate !== 0) {
+      throw new Error(`tab ${who} rendered an accept/reject gate ${seen.gate} time(s) with verification off`);
+    }
+    if (seen.sas !== 0) {
+      throw new Error(`tab ${who} rendered a SAS ${seen.sas} time(s) with verification off`);
+    }
+  }
+  ok("the default text session opened into the composer on both tabs, with no consent gate and no SAS");
+
+  const errs = [...a.errors, ...b.errors].filter((e) => !/401|Failed to load resource/.test(e));
+  if (errs.length) throw new Error(`console errors during the default message session:\n    ${errs.join("\n    ")}`);
 
   await browser.send("Target.closeTarget", { targetId: a.targetId });
   await browser.send("Target.closeTarget", { targetId: b.targetId });
@@ -1517,7 +1604,12 @@ async function main() {
     await smallMessageCapScenario(browser);
 
     // ── 两个标签页进同一个房间（都是 127.0.0.1，服务器按来源 IP 归组）────────
-    const sender = await newTab(browser, BASE + "/");
+    // Advanced verification ON for the main pair. This run asserts the ON-path
+    // consent layout (the verification box and the buttons staying inside a
+    // 390px fold with a 40-file manifest); with the shipped default there is no
+    // box to measure. The default path's own gating is covered by
+    // verify-gates.test.ts.
+    const sender = await newTab(browser, BASE + "/", VERIFY_ON);
     // Batch-3 desktop-workspace contract. Keep the sender wide for the whole
     // transfer so requests/progress/completion exercise the real two-column path,
     // not merely a static screenshot. The later scenarios still cover Chrome's
@@ -1602,7 +1694,7 @@ async function main() {
     }
     ok("the zero-peer state used one compact scanner and no selectable radar");
 
-    const receiver = await newTab(browser, BASE + "/", SAVE_STUB);
+    const receiver = await newTab(browser, BASE + "/", VERIFY_ON + SAVE_STUB);
     await setWideViewport(receiver);
 
     const peersSeen = `(() => {
@@ -2127,6 +2219,10 @@ async function main() {
     await resumeScenario(browser);
     await sleep(1000);
     await messageScenario(browser);
+    await sleep(1000);
+    // The default (verification off) path, right after the ON path above, so a
+    // change that collapses the two is visible as one of them failing.
+    await messageDefaultScenario(browser);
     await sleep(1000);
     await capsSuppressedScenario(browser);
 

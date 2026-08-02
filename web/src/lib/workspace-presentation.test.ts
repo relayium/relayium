@@ -43,7 +43,7 @@ describe("unified mixed peer workspace presentation", () => {
     for (const prop of [
       "peerName={nameOf(workspace.linkPeerId)}",
       "status={workspace.linkStatus}",
-      "sasCode={workspace.sasCode}",
+      "sasCode={shownSas}",
       "path={workspace.linkPath}",
       "onDisconnect={() => workspace.disconnect()}",
     ]) expect(surface).toContain(prop);
@@ -51,15 +51,17 @@ describe("unified mixed peer workspace presentation", () => {
 
   it("shows one SAS: no lane card repeats the link code", () => {
     // File progress card.
-    expect(surface).toContain("{#if workspace.sasCode && !xf.done && !mixed}");
+    expect(surface).toContain("{#if shownSas && !xf.done && !mixed}");
     // Incoming file consent card: an anchor, never a second code box — and the
     // anchor precedes the card, so aligning it under the pinned header reveals
     // the filenames and the buttons rather than scrolling them behind it.
     expect(surface).toMatch(
       /\{#if mixed\}\s*<div class="activity-reveal-marker" bind:this=\{incomingReveal\}[^]*?\{\/if\}\s*<section class="ui-card request">/,
     );
-    // Message panel.
-    expect(surface).toContain("showSas={!mixed}");
+    // Message panel. `verifyOn` is the advanced-verification preference: with it
+    // off there is no SAS anywhere, and with it on the mixed header still owns
+    // the one code, so the panel renders it only in the legacy branch.
+    expect(surface).toContain("showSas={!mixed && verifyOn}");
 
     // And the panel really has no unguarded verification box.
     for (const at of indicesOf(panel, 'class="sas"')) {
@@ -77,7 +79,7 @@ describe("unified mixed peer workspace presentation", () => {
   it("announces through the tested announcer, keyed on link identity", () => {
     // The once-per-link rule itself is covered by activity-announcement.test.ts.
     // What has to hold *here* is that App still routes through it and hands it
-    // the link identity rather than the six digits — passing workspace.sasCode
+    // the link identity rather than the six digits — passing shownSas
     // as the key would silently restore the "same code, new link, never
     // announced" bug that the announcer exists to prevent.
     expect(app).toContain("const announcer = createActivityAnnouncer();");
@@ -111,7 +113,10 @@ describe("unified mixed peer workspace presentation", () => {
     // on a SAS that comes from the link itself: once the link is gone there is no
     // candidate, so the effect runs with null during every teardown gap.
     const reveal = app.slice(app.indexOf("function activityReveal()"), app.indexOf("function revealElement("));
+    // The EDGE triggers the reveal; only the announced code is preference-gated,
+    // so a consent card still scrolls into view with verification off.
     expect(reveal).toContain("incoming && workspace.sasCode");
+    expect(reveal).toContain("sas: shownSas || undefined");
     expect(reveal).toContain("!x.done && workspace.sasCode");
     expect(reveal).toContain("activeText.sasCode &&");
   });
@@ -142,7 +147,9 @@ describe("unified mixed peer workspace presentation", () => {
 
   it("leaves the legacy file, text and peer surfaces untouched", () => {
     // The legacy in-card SAS render site and its reveal target still exist.
-    expect(surface).toContain('{#if !mixed && workspace.sasCode}');
+    // The legacy verification box is preference-gated; its reveal anchor is not.
+    expect(surface).toContain('{#if shownSas}');
+    expect(surface).toMatch(/\{:else\}\s*<div class="activity-reveal-marker" bind:this=\{incomingReveal\}/);
     expect(surface).toContain('class="sas activity-reveal-target" bind:this={incomingReveal}');
     // One message render site for both branches; no duplicated protocol wiring.
     expect(surface.match(/<MessagePanel\b/g)).toHaveLength(1);

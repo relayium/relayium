@@ -3,19 +3,18 @@ package signal
 import "testing"
 
 // The pairing-code TTL is a security parameter, not a comfort setting: it is the
-// width of the online brute-force window against the 24^6 code space. Pin it so
+// width of the online brute-force window against the 10^6 code space. Pin it so
 // widening it again is a deliberate edit to a test that says why, rather than a
 // one-character change nobody reviews. See CodeTTLSeconds for the arithmetic.
-func TestCodeTTLIsThirtyMinutes(t *testing.T) {
-	const want int64 = 30 * 60
+func TestCodeTTLIsFiveMinutes(t *testing.T) {
+	const want int64 = 5 * 60
 	if CodeTTLSeconds != want {
 		t.Fatalf("CodeTTLSeconds = %d, want %d — 改宽它就是改宽爆破窗口，先读那个常量上的取舍", CodeTTLSeconds, want)
 	}
-	// An hour is where the per-IP join limiter (30/min) starts handing a
-	// 1000-IP botnet ~1% at a given live code. Past that, lengthen CodeLen
-	// instead of the window.
-	if CodeTTLSeconds > 3600 {
-		t.Errorf("CodeTTLSeconds = %d: 超过一小时应当先加长 CodeLen，而不是继续放宽窗口", CodeTTLSeconds)
+	// 六位纯数字只有 1e6 的空间，所以窗口是主要的闸之一。加长窗口必须同时重算
+	// join 限流（现在 5 次/分钟/IP）和 GuessBreaker，不能只改这一个数。
+	if CodeTTLSeconds > 900 {
+		t.Errorf("CodeTTLSeconds = %d: 十位数字空间下超过 15 分钟必须先重算限流预算", CodeTTLSeconds)
 	}
 }
 
@@ -33,6 +32,12 @@ func TestCodeExpiresExactlyAtTheTTLBoundary(t *testing.T) {
 	}
 	if exp != clock+CodeTTLSeconds {
 		t.Fatalf("exp = %d, want %d", exp, clock+CodeTTLSeconds)
+	}
+	// The boundary is the literal 300-second one the copy promises, not merely
+	// "whatever CodeTTLSeconds happens to be": a TTL regression that also edited
+	// the constant would otherwise still pass this test.
+	if exp != clock+300 {
+		t.Fatalf("exp = %d, want %d (mint + 300s)", exp, clock+300)
 	}
 
 	// One second before the boundary: still live, and still attributable.
@@ -62,9 +67,9 @@ func TestCodeExpiresExactlyAtTheTTLBoundary(t *testing.T) {
 // The TTL governs ADMISSION only. A code that expires while two peers are
 // already paired must not retroactively invalidate the room they are in: the
 // room key is derived once, at join time, and nothing re-checks the code
-// afterwards. This is the invariant the new 30-minute countdown copy promises
-// ("an established transfer is never cut off by it"), so it is pinned here
-// rather than left as an emergent property of RoomFor's call sites.
+// afterwards. This is the invariant the countdown copy promises ("an established
+// transfer is never cut off by it"), so it is pinned here rather than left as an
+// emergent property of RoomFor's call sites.
 func TestExpiryDoesNotChangeAnEstablishedRoom(t *testing.T) {
 	clock := int64(500)
 	r := NewPairRegistry(CodeTTLSeconds, func() int64 { return clock })

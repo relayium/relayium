@@ -18,19 +18,19 @@ const en = {
   // is looking. shells.test.mjs asserts it.
   title: "Cross-network file and live text transfer — end-to-end encrypted | Relayium",
   description:
-    "Send files and live ephemeral text across networks with a 6-character code. The creator signs in; joining needs no account. TURN carries only end-to-end encrypted ciphertext.",
+    "Send files and live ephemeral text across networks with a 6-digit code. The creator signs in; joining needs no account. TURN carries only end-to-end encrypted ciphertext.",
   hero: {
     h1: "Cross-network files and live text, end-to-end encrypted",
     pitch:
-      "Two online devices on different networks pair with a 6-character code (or its link/QR) to send files or ephemeral text. Browser sessions use Relayium's TURN relay by design, but it only ever sees ciphertext; text message bodies are never stored by Relayium.",
+      "Two online devices on different networks pair with a 6-digit code (or its link/QR) to send files or ephemeral text. Browser sessions use Relayium's TURN relay by design, but it only ever sees ciphertext; text message bodies are never stored by Relayium.",
     cta: "Start a transfer",
   },
   how: {
     heading: "A transfer in four steps",
     steps: [
-      "One person signs in and mints a 6-character pairing code for a file or text session (or shares its join link / QR).",
+      "One person signs in and mints a 6-digit pairing code for a file or text session (or shares its join link / QR).",
       "The other person opens the link or enters the code — joining with a code needs no account.",
-      "Both sides compare the same 6-digit SAS out of band. A match confirms the X25519 endpoint public keys were not substituted, so the signaling service or TURN relay did not impersonate either endpoint or terminate the app-layer E2EE. TURN can still remain in the network path, carrying only ciphertext.",
+      "Optional (turn on advanced verification): both sides compare the same 6-digit verification code (SAS) out of band — a different value from the pairing code. A match confirms the X25519 endpoint public keys were not substituted, so the signaling service or TURN relay did not impersonate either endpoint or terminate the app-layer E2EE. TURN can still remain in the network path, carrying only ciphertext.",
       "With both devices online, files stream and live text messages move end-to-end encrypted through TURN. Relayium never stores message bodies; one message can contain up to 65,536 UTF-8 bytes.",
     ],
   },
@@ -42,7 +42,7 @@ const en = {
         desc: "X25519 key exchange + per-chunk AES-256-GCM; keys are negotiated only between the two devices, so neither the relay nor the server can decrypt.",
       },
       {
-        title: "SAS anti-MITM",
+        title: "Optional SAS anti-MITM check",
         desc: "Compare the 6-digit SAS out of band to confirm the X25519 endpoint public keys were not substituted. A match detects a signaling service or TURN relay impersonating an endpoint; it does not prove TURN is absent from the network path, where it carries only ciphertext.",
       },
       {
@@ -85,7 +85,7 @@ const en = {
       },
       {
         q: "Is a code required?",
-        a: "Yes: a 6-character code (or its join link/QR), valid 30 minutes, pairs the two devices across networks. The server mints it from the alphabet ACDEFHJKMNPRTWXY23456789 — no 0 and no 1, so nothing is mistaken for O or I — which also means you cannot invent one: only a code the server handed out will pair.",
+        a: "Yes: a 6-digit code (or its join link/QR), valid 5 minutes, pairs the two devices across networks. The server mints it uniformly at random from 0-9, so every digit is possible and a leading zero is ordinary — which also means you cannot invent one: only a code the server handed out will pair. It is not the same six digits as the verification code (SAS), which is derived from the two endpoint keys.",
       },
       {
         q: "Do I need an account?",
@@ -108,19 +108,19 @@ const en = {
 const zh = {
   title: "跨网络文件与实时文本传输——端到端加密 | Relayium",
   description:
-    "用 6 字符配对码跨网络传输文件和实时临时文本。双方须同时在线；浏览器会按设计使用仅能看到密文的 TURN 中继。",
+    "用 6 位数字配对码跨网络传输文件和实时临时文本。双方须同时在线；浏览器会按设计使用仅能看到密文的 TURN 中继。",
   hero: {
     h1: "跨网络传输文件与实时文本，端到端加密",
     pitch:
-      "两台在线设备身处不同网络时，可用 6 字符配对码（或其加入链接/二维码）传输文件或临时文本。浏览器会按设计使用 Relayium 的 TURN 中继，但中继只能看到密文；Relayium 从不存储文本正文。",
+      "两台在线设备身处不同网络时，可用 6 位数字配对码（或其加入链接/二维码）传输文件或临时文本。浏览器会按设计使用 Relayium 的 TURN 中继，但中继只能看到密文；Relayium 从不存储文本正文。",
     cta: "开始传输",
   },
   how: {
     heading: "四步完成一次传输",
     steps: [
-      "一方登录后为文件或文本会话生成一个 6 字符配对码（也可分享其加入链接/二维码）。",
+      "一方登录后为文件或文本会话生成一个 6 位数字配对码（也可分享其加入链接/二维码）。",
       "另一方打开链接或输入配对码即可——持码加入无需账号。",
-      "双方通过带外渠道核对同一段 6 位数字 SAS 校验码（与配对码是两个不同的值）。一致表示 X25519 端点公钥未被替换，信令服务或 TURN 中继没有冒充任一端点或终止应用层端到端加密；TURN 仍可处于网络路径中，但只承载密文。",
+      "可选（打开「高级验证」）：双方通过带外渠道核对同一段 6 位数字校验码（SAS，与配对码是两个不同的值）。一致表示 X25519 端点公钥未被替换，信令服务或 TURN 中继没有冒充任一端点或终止应用层端到端加密；TURN 仍可处于网络路径中，但只承载密文。",
       "双方同时在线时，文件流和实时文本均通过 TURN 端到端加密传输。Relayium 不存储消息正文；每条消息最多 65,536 个 UTF-8 字节。",
     ],
   },
@@ -132,7 +132,7 @@ const zh = {
         desc: "X25519 密钥交换 + 每块 AES-256-GCM 加密，密钥只在两台设备间协商，中继与服务器均无法解密。",
       },
       {
-        title: "SAS 防中间人",
+        title: "可选的 SAS 防中间人核对",
         desc: "通过带外渠道核对 6 位 SAS，可确认 X25519 端点公钥未被替换，并检测信令服务或 TURN 中继冒充端点。它并不证明网络路径中没有 TURN；TURN 仍可能在路径中，但只承载密文。",
       },
       {
@@ -175,7 +175,7 @@ const zh = {
       },
       {
         q: "一定要用配对码吗？",
-        a: "是的：6 字符配对码（或其加入链接/二维码）有效期 30 分钟，用于让两台设备跨网络配对。配对码由服务器从字母表 ACDEFHJKMNPRTWXY23456789 中签发——不含 0 和 1，以免与 O、I 混淆——因此你无法自己编一个：只有服务器发出的码才能完成配对。",
+        a: "是的：6 位数字配对码（或其加入链接/二维码）有效期 5 分钟，用于让两台设备跨网络配对。配对码由服务器在 0-9 之间均匀随机签发，每一位数字都可能出现，前导零也是正常的——因此你无法自己编一个：只有服务器发出的码才能完成配对。它与校验码（SAS）不是同一组六位数字：后者由两端的密钥推导而来。",
       },
       {
         q: "需要注册账号吗？",
@@ -198,19 +198,19 @@ const zh = {
 const ja = {
   title: "ネットワークをまたぐファイルとライブテキスト転送——エンドツーエンド暗号化 | Relayium",
   description:
-    "6文字のペアリングコードで、異なるネットワーク間のファイルと一時的なライブテキストを転送。両端末がオンラインで、ブラウザは暗号文しか見えないTURNリレーを設計どおり使用します。",
+    "6 桁の数字ペアリングコードで、異なるネットワーク間のファイルと一時的なライブテキストを転送。両端末がオンラインで、ブラウザは暗号文しか見えないTURNリレーを設計どおり使用します。",
   hero: {
     h1: "ネットワークをまたぐファイルとライブテキスト、エンドツーエンド暗号化",
     pitch:
-      "異なるネットワーク上のオンライン端末2台を6文字のコード（または参加リンク/QR）でペアリングし、ファイルや一時的なテキストを送ります。ブラウザは設計どおりRelayiumのTURNリレーを使いますが、リレーが見るのは暗号文だけで、Relayiumはメッセージ本文を保存しません。",
+      "異なるネットワーク上のオンライン端末2台を 6 桁の数字コード（または参加リンク/QR）でペアリングし、ファイルや一時的なテキストを送ります。ブラウザは設計どおりRelayiumのTURNリレーを使いますが、リレーが見るのは暗号文だけで、Relayiumはメッセージ本文を保存しません。",
     cta: "転送を始める",
   },
   how: {
     heading: "4ステップで転送",
     steps: [
-      "一方がサインインし、ファイルまたはテキスト用の6文字ペアリングコードを発行します（参加リンク/QRの共有も可能）。",
+      "一方がサインインし、ファイルまたはテキスト用の 6 桁の数字ペアリングコードを発行します（参加リンク/QRの共有も可能）。",
       "もう一方はリンクを開くかコードを入力するだけ——コードでの参加にアカウントは不要です。",
-      "両端で6桁の検証コード（SAS）を別経路で照合します。一致すればX25519エンドポイント公開鍵が置き換えられておらず、シグナリングサービスやTURNリレーが端末になりすましてアプリ層E2EEを終端していないことを確認できます。TURNはネットワーク経路上に残り、暗号文だけを運ぶ場合があります。",
+      "任意（「高度な検証」をオンにした場合）：両端で6桁の検証コード（SAS。ペアリングコードとは別の値）を別経路で照合します。一致すればX25519エンドポイント公開鍵が置き換えられておらず、シグナリングサービスやTURNリレーが端末になりすましてアプリ層E2EEを終端していないことを確認できます。TURNはネットワーク経路上に残り、暗号文だけを運ぶ場合があります。",
       "両端末がオンラインの間、ファイルとライブテキストはTURN経由でエンドツーエンド暗号化されます。Relayiumは本文を保存せず、1件は最大65,536 UTF-8バイトです。",
     ],
   },
@@ -222,7 +222,7 @@ const ja = {
         desc: "X25519鍵交換とチャンクごとのAES-256-GCM。鍵は2台の端末間だけでネゴシエートされ、リレーもサーバーも復号できません。",
       },
       {
-        title: "SASで中間者攻撃を防止",
+        title: "SASによる任意の中間者攻撃チェック",
         desc: "6桁のSASを別経路で照合し、X25519エンドポイント公開鍵が置き換えられていないことを確認します。シグナリングサービスやTURNリレーによる端末のなりすましを検出しますが、ネットワーク経路にTURNがないことを証明するものではありません。TURNは暗号文だけを運びます。",
       },
       {
@@ -265,7 +265,7 @@ const ja = {
       },
       {
         q: "コードは必須ですか？",
-        a: "はい。6文字のコード（またはその参加リンク/QR）は30分間有効で、ネットワークをまたぐ2台の端末をペアリングします。コードはサーバーが文字集合 ACDEFHJKMNPRTWXY23456789 から発行します——0 と 1 は O・I と紛らわしいため含みません——ので、自分で考えて作ることはできません。サーバーが発行したコードだけがペアリングできます。",
+        a: "はい。6 桁の数字コード（またはその参加リンク/QR）は 5 分間有効で、ネットワークをまたぐ2台の端末をペアリングします。コードはサーバーが 0-9 から一様ランダムに発行するため、どの数字も現れますし先頭が 0 になることもあります。自分で考えて作ることはできず、サーバーが発行したコードだけがペアリングできます。これは検証コード（SAS）の6桁とは別物で、SAS は両端の鍵から導出されます。",
       },
       {
         q: "アカウントは必要ですか？",
@@ -288,19 +288,19 @@ const ja = {
 const ko = {
   title: "네트워크를 넘는 파일 및 실시간 텍스트 전송 — 종단간 암호화 | Relayium",
   description:
-    "6자 페어링 코드로 서로 다른 네트워크 간 파일과 일시적인 실시간 텍스트를 전송합니다. 두 기기가 온라인이어야 하며 브라우저는 설계상 암호문만 보는 TURN 릴레이를 사용합니다.",
+    "6자리 숫자 페어링 코드로 서로 다른 네트워크 간 파일과 일시적인 실시간 텍스트를 전송합니다. 두 기기가 온라인이어야 하며 브라우저는 설계상 암호문만 보는 TURN 릴레이를 사용합니다.",
   hero: {
     h1: "네트워크를 넘는 파일과 실시간 텍스트, 종단간 암호화",
     pitch:
-      "서로 다른 네트워크의 온라인 기기 두 대를 6자 코드(또는 참여 링크/QR)로 연결해 파일이나 일시적인 텍스트를 보냅니다. 브라우저는 설계상 Relayium TURN 릴레이를 사용하지만 릴레이에는 암호문만 보이며, Relayium은 메시지 본문을 저장하지 않습니다.",
+      "서로 다른 네트워크의 온라인 기기 두 대를 6자리 숫자 코드(또는 참여 링크/QR)로 연결해 파일이나 일시적인 텍스트를 보냅니다. 브라우저는 설계상 Relayium TURN 릴레이를 사용하지만 릴레이에는 암호문만 보이며, Relayium은 메시지 본문을 저장하지 않습니다.",
     cta: "전송 시작",
   },
   how: {
     heading: "4단계로 전송",
     steps: [
-      "한쪽이 로그인해 파일 또는 텍스트 세션용 6자 페어링 코드를 생성합니다(참여 링크/QR 공유도 가능).",
+      "한쪽이 로그인해 파일 또는 텍스트 세션용 6자리 숫자 페어링 코드를 생성합니다(참여 링크/QR 공유도 가능).",
       "다른 쪽은 링크를 열거나 코드를 입력합니다 — 코드로 참여할 때는 계정이 필요 없습니다.",
-      "양쪽이 별도 채널로 동일한 6자리 검증 코드(SAS, 페어링 코드와는 다른 값)를 대조합니다. 일치하면 X25519 끝점 공개 키가 바뀌지 않았고 시그널링 서비스나 TURN 릴레이가 어느 끝점도 사칭하거나 애플리케이션 계층 E2EE를 종료하지 않았음을 확인합니다. TURN은 네트워크 경로에 남아 암호문만 운반할 수 있습니다.",
+      "선택 사항(«고급 검증»을 켠 경우): 양쪽이 별도 채널로 동일한 6자리 검증 코드(SAS, 페어링 코드와는 다른 값)를 대조합니다. 일치하면 X25519 끝점 공개 키가 바뀌지 않았고 시그널링 서비스나 TURN 릴레이가 어느 끝점도 사칭하거나 애플리케이션 계층 E2EE를 종료하지 않았음을 확인합니다. TURN은 네트워크 경로에 남아 암호문만 운반할 수 있습니다.",
       "두 기기가 온라인인 동안 파일과 실시간 텍스트는 TURN을 통해 종단간 암호화됩니다. Relayium은 메시지 본문을 저장하지 않으며 메시지 하나는 최대 65,536 UTF-8바이트입니다.",
     ],
   },
@@ -312,7 +312,7 @@ const ko = {
         desc: "X25519 키 교환과 청크별 AES-256-GCM. 키는 두 기기 사이에서만 협상되어 릴레이도 서버도 복호화할 수 없습니다.",
       },
       {
-        title: "SAS로 중간자 공격 차단",
+        title: "선택적 SAS 중간자 공격 확인",
         desc: "별도 채널로 6자리 SAS를 대조해 X25519 끝점 공개 키가 바뀌지 않았는지 확인합니다. 시그널링 서비스나 TURN 릴레이의 끝점 사칭을 탐지하지만, 네트워크 경로에 TURN이 없다는 뜻은 아닙니다. TURN은 암호문만 운반합니다.",
       },
       {
@@ -355,7 +355,7 @@ const ko = {
       },
       {
         q: "코드가 꼭 필요한가요?",
-        a: "네. 6자 코드(또는 참여 링크/QR)는 30분간 유효하며 네트워크를 넘는 두 기기를 페어링합니다. 코드는 서버가 문자 집합 ACDEFHJKMNPRTWXY23456789에서 발급합니다 — O·I와 헷갈리지 않도록 0과 1은 없습니다 — 그래서 직접 지어낼 수 없고, 서버가 발급한 코드만 페어링됩니다.",
+        a: "네. 6자리 숫자 코드(또는 참여 링크/QR)는 5분간 유효하며 네트워크를 넘는 두 기기를 페어링합니다. 코드는 서버가 0-9에서 균일 무작위로 발급하므로 모든 숫자가 나올 수 있고 앞자리 0도 정상입니다. 그래서 직접 지어낼 수 없고, 서버가 발급한 코드만 페어링됩니다. 이는 검증 코드(SAS)의 여섯 자리와 다른 값이며, SAS는 양쪽 끝점 키에서 도출됩니다.",
       },
       {
         q: "계정이 필요한가요?",
@@ -390,7 +390,7 @@ const de = {
     steps: [
       "Eine Person meldet sich an und erzeugt einen 6-Zeichen-Pairing-Code für Dateien oder Text (oder teilt Beitrittslink/QR).",
       "Die andere öffnet den Link oder gibt den Code ein — zum Beitreten mit Code ist kein Konto nötig.",
-      "Beide Seiten vergleichen denselben 6-stelligen Verifizierungscode (SAS — nicht den Pairing-Code) über einen unabhängigen Kanal. Eine Übereinstimmung bestätigt, dass die öffentlichen X25519-Endpunktschlüssel nicht ersetzt wurden und weder Signalisierungsdienst noch TURN-Relay einen Endpunkt imitiert oder die E2E-Verschlüsselung der Anwendung terminiert haben. TURN kann weiter im Netzwerkpfad liegen und transportiert dort nur Chiffretext.",
+      "Optional (erweiterte Verifizierung einschalten): Beide Seiten vergleichen denselben 6-stelligen Verifizierungscode (SAS — nicht den Pairing-Code) über einen unabhängigen Kanal. Eine Übereinstimmung bestätigt, dass die öffentlichen X25519-Endpunktschlüssel nicht ersetzt wurden und weder Signalisierungsdienst noch TURN-Relay einen Endpunkt imitiert oder die E2E-Verschlüsselung der Anwendung terminiert haben. TURN kann weiter im Netzwerkpfad liegen und transportiert dort nur Chiffretext.",
       "Solange beide Geräte online sind, laufen Dateien und Live-Text Ende-zu-Ende-verschlüsselt über TURN. Relayium speichert keine Nachrichtentexte; eine Nachricht umfasst höchstens 65.536 UTF-8-Bytes.",
     ],
   },
@@ -402,7 +402,7 @@ const de = {
         desc: "X25519-Schlüsselaustausch und AES-256-GCM pro Block; die Schlüssel werden ausschließlich zwischen den beiden Geräten ausgehandelt, weder das Relay noch der Server können entschlüsseln.",
       },
       {
-        title: "SAS gegen Man-in-the-Middle",
+        title: "Optionale SAS-Prüfung gegen Man-in-the-Middle",
         desc: "Der Abgleich des 6-stelligen SAS über einen unabhängigen Kanal bestätigt, dass die öffentlichen X25519-Endpunktschlüssel nicht ersetzt wurden. Er erkennt, wenn Signalisierungsdienst oder TURN-Relay einen Endpunkt imitieren, beweist aber nicht, dass TURN im Netzwerkpfad fehlt; dort transportiert es nur Chiffretext.",
       },
       {
@@ -445,7 +445,7 @@ const de = {
       },
       {
         q: "Ist ein Code erforderlich?",
-        a: "Ja: Ein 6-Zeichen-Code (oder dessen Beitrittslink/QR), 30 Minuten gültig, koppelt die beiden Geräte über Netzwerke hinweg. Der Server erzeugt ihn aus dem Alphabet ACDEFHJKMNPRTWXY23456789 — ohne 0 und 1, damit nichts mit O oder I verwechselt wird — du kannst dir also keinen ausdenken: nur ein vom Server ausgegebener Code koppelt.",
+        a: "Ja: Ein 6-stelliger Zifferncode (oder dessen Beitrittslink/QR), 5 Minuten gültig, koppelt die beiden Geräte über Netzwerke hinweg. Der Server erzeugt ihn gleichverteilt zufällig aus 0-9, jede Ziffer kommt vor und eine führende Null ist ganz normal — du kannst dir also keinen ausdenken: nur ein vom Server ausgegebener Code koppelt. Es sind nicht dieselben sechs Ziffern wie beim Verifizierungscode (SAS), der aus den beiden Endpunktschlüsseln abgeleitet wird.",
       },
       {
         q: "Brauche ich ein Konto?",
@@ -468,19 +468,19 @@ const de = {
 const fr = {
   title: "Transfert inter-réseaux de fichiers et de texte en direct — chiffré de bout en bout | Relayium",
   description:
-    "Transférez fichiers et texte éphémère en direct entre réseaux avec un code à 6 caractères. Les deux appareils restent en ligne ; le navigateur utilise volontairement un relais TURN qui ne voit que du chiffré.",
+    "Transférez fichiers et texte éphémère en direct entre réseaux avec un code à 6 chiffres. Les deux appareils restent en ligne ; le navigateur utilise volontairement un relais TURN qui ne voit que du chiffré.",
   hero: {
     h1: "Fichiers et texte en direct entre réseaux, chiffrés de bout en bout",
     pitch:
-      "Deux appareils en ligne sur des réseaux différents s'appairent avec un code à 6 caractères (ou son lien/QR) pour envoyer fichiers ou texte éphémère. Le navigateur utilise volontairement le relais TURN de Relayium, qui ne voit que du chiffré ; Relayium ne stocke aucun corps de message.",
+      "Deux appareils en ligne sur des réseaux différents s'appairent avec un code à 6 chiffres (ou son lien/QR) pour envoyer fichiers ou texte éphémère. Le navigateur utilise volontairement le relais TURN de Relayium, qui ne voit que du chiffré ; Relayium ne stocke aucun corps de message.",
     cta: "Démarrer le transfert",
   },
   how: {
     heading: "Transférer en quatre étapes",
     steps: [
-      "Une personne se connecte et génère un code à 6 caractères pour une session de fichiers ou de texte (ou partage son lien/QR).",
+      "Une personne se connecte et génère un code à 6 chiffres pour une session de fichiers ou de texte (ou partage son lien/QR).",
       "L'autre ouvre le lien ou saisit le code — rejoindre avec un code ne nécessite aucun compte.",
-      "Les deux parties comparent le même code de vérification (SAS) à 6 chiffres par un canal indépendant. S'il correspond, les clés publiques X25519 des terminaux n'ont pas été remplacées : ni le service de signalisation ni le relais TURN n'a usurpé un terminal ou terminé le chiffrement E2E applicatif. TURN peut rester sur le chemin réseau, où il ne transporte que du texte chiffré.",
+      "Facultatif (activez la vérification avancée) : les deux parties comparent le même code de vérification (SAS) à 6 chiffres — différent du code d'appairage — par un canal indépendant. S'il correspond, les clés publiques X25519 des terminaux n'ont pas été remplacées : ni le service de signalisation ni le relais TURN n'a usurpé un terminal ou terminé le chiffrement E2E applicatif. TURN peut rester sur le chemin réseau, où il ne transporte que du texte chiffré.",
       "Avec les deux appareils en ligne, fichiers et texte en direct passent par TURN, chiffrés de bout en bout. Relayium ne stocke aucun corps de message ; chacun peut contenir jusqu'à 65 536 octets UTF-8.",
     ],
   },
@@ -492,7 +492,7 @@ const fr = {
         desc: "Échange de clés X25519 et AES-256-GCM par bloc ; les clés sont négociées uniquement entre les deux appareils, ni le relais ni le serveur ne peuvent donc déchiffrer.",
       },
       {
-        title: "SAS contre l'homme du milieu",
+        title: "Vérification SAS facultative contre l'homme du milieu",
         desc: "Comparez le SAS à 6 chiffres par un canal indépendant pour confirmer que les clés publiques X25519 des terminaux n'ont pas été remplacées. Cela détecte l'usurpation d'un terminal par le service de signalisation ou le relais TURN, sans prouver l'absence de TURN sur le chemin réseau, où il ne transporte que du texte chiffré.",
       },
       {
@@ -535,7 +535,7 @@ const fr = {
       },
       {
         q: "Un code est-il obligatoire ?",
-        a: "Oui : un code à 6 caractères (ou son lien d'accès/QR), valable 30 minutes, appaire les deux appareils entre réseaux différents. Le serveur le génère à partir de l'alphabet ACDEFHJKMNPRTWXY23456789 — ni 0 ni 1, pour éviter toute confusion avec O et I — vous ne pouvez donc pas en inventer un : seul un code délivré par le serveur appaire.",
+        a: "Oui : un code à 6 chiffres (ou son lien d'accès/QR), valable 5 minutes, appaire les deux appareils entre réseaux différents. Le serveur le tire uniformément au hasard entre 0 et 9, tous les chiffres sont possibles et un zéro initial est ordinaire — vous ne pouvez donc pas en inventer un : seul un code délivré par le serveur appaire. Ce ne sont pas les six chiffres du code de vérification (SAS), lequel est dérivé des clés des deux extrémités.",
       },
       {
         q: "Faut-il un compte ?",
@@ -570,7 +570,7 @@ const ar = {
     steps: [
       "يسجّل أحد الطرفين الدخول ويولّد رمزًا من 6 خانات لجلسة ملفات أو نص (أو يشارك رابط الانضمام/QR).",
       "يفتح الطرف الآخر الرابط أو يُدخل الرمز — لا يحتاج الانضمام بالرمز إلى حساب.",
-      "يقارن الطرفان رمز التحقق نفسه المكوّن من 6 أرقام (SAS) عبر قناة مستقلة. يؤكد التطابق أن مفاتيح X25519 العامة للطرفين لم تُستبدل، وأن خدمة الإشارة أو مُرحِّل TURN لم تنتحل شخصية أي طرف أو تُنهِ تشفير طبقة التطبيق من الطرف إلى الطرف. وقد يظل TURN ضمن مسار الشبكة، لكنه لا يحمل سوى النص المشفر.",
+      "اختياري (بتفعيل «التحقّق المتقدّم»): يقارن الطرفان رمز التحقق نفسه المكوّن من 6 أرقام (SAS، وهو غير رمز الاقتران) عبر قناة مستقلة. يؤكد التطابق أن مفاتيح X25519 العامة للطرفين لم تُستبدل، وأن خدمة الإشارة أو مُرحِّل TURN لم تنتحل شخصية أي طرف أو تُنهِ تشفير طبقة التطبيق من الطرف إلى الطرف. وقد يظل TURN ضمن مسار الشبكة، لكنه لا يحمل سوى النص المشفر.",
       "مع اتصال الجهازين، تنتقل الملفات والنصوص المباشرة مشفّرة من الطرف إلى الطرف عبر TURN. لا يخزن Relayium نص الرسالة؛ وحدّ الرسالة 65,536 بايت UTF-8.",
     ],
   },
@@ -582,7 +582,7 @@ const ar = {
         desc: "تبادل مفاتيح X25519 وتشفير AES-256-GCM لكل كتلة؛ تُتفاوض المفاتيح بين الجهازين فقط، لذا لا يستطيع المُرحِّل ولا الخادم فك التشفير.",
       },
       {
-        title: "SAS ضد هجوم الوسيط",
+        title: "فحص SAS اختياري ضد هجوم الوسيط",
         desc: "قارن رمز SAS المكوّن من 6 أرقام عبر قناة مستقلة للتأكد من عدم استبدال مفاتيح X25519 العامة للطرفين. يكشف ذلك انتحال خدمة الإشارة أو مُرحِّل TURN لأي طرف، لكنه لا يثبت غياب TURN عن مسار الشبكة؛ فهو لا يحمل هناك سوى النص المشفر.",
       },
       {
@@ -625,7 +625,7 @@ const ar = {
       },
       {
         q: "هل الرمز إلزامي؟",
-        a: "نعم: رمز مكوّن من 6 خانات (أو رابط الانضمام/رمز QR الخاص به)، صالح لمدة 30 دقيقة، يقرن الجهازين عبر شبكات مختلفة. يُصدره الخادم من مجموعة الحروف ACDEFHJKMNPRTWXY23456789 — بلا 0 وبلا 1 حتى لا يختلطا بحرفَي O وI — لذلك لا يمكنك اختلاق رمز من عندك: لا يقرن إلا رمز أصدره الخادم.",
+        a: "نعم: رمز مكوّن من 6 أرقام (أو رابط الانضمام/رمز QR الخاص به)، صالح لمدة 5 دقائق، يقرن الجهازين عبر شبكات مختلفة. يُصدره الخادم عشوائيًا بتوزيع منتظم من 0 إلى 9، فكل رقم وارد والصفر في المقدمة أمر عادي — لذلك لا يمكنك اختلاق رمز من عندك: لا يقرن إلا رمز أصدره الخادم. وهو ليس الأرقام الستة نفسها لرمز التحقق (SAS) المشتقّ من مفتاحَي الطرفين.",
       },
       {
         q: "هل يلزم حساب؟",
@@ -648,19 +648,19 @@ const ar = {
 const es = {
   title: "Transferencia entre redes de archivos y texto en vivo — cifrada de extremo a extremo | Relayium",
   description:
-    "Envía archivos y texto efímero en vivo entre redes con un código de 6 caracteres. Ambos dispositivos permanecen en línea; el navegador usa por diseño un retransmisor TURN que solo ve datos cifrados.",
+    "Envía archivos y texto efímero en vivo entre redes con un código de 6 dígitos. Ambos dispositivos permanecen en línea; el navegador usa por diseño un retransmisor TURN que solo ve datos cifrados.",
   hero: {
     h1: "Archivos y texto en vivo entre redes, cifrados de extremo a extremo",
     pitch:
-      "Dos dispositivos en línea en redes distintas se emparejan con un código de 6 caracteres (o su enlace/QR) para enviar archivos o texto efímero. El navegador usa por diseño el TURN de Relayium, que solo ve datos cifrados; Relayium no almacena el cuerpo de los mensajes.",
+      "Dos dispositivos en línea en redes distintas se emparejan con un código de 6 dígitos (o su enlace/QR) para enviar archivos o texto efímero. El navegador usa por diseño el TURN de Relayium, que solo ve datos cifrados; Relayium no almacena el cuerpo de los mensajes.",
     cta: "Iniciar transferencia",
   },
   how: {
     heading: "Transferir en cuatro pasos",
     steps: [
-      "Una persona inicia sesión y genera un código de 6 caracteres para archivos o texto (o comparte su enlace/QR).",
+      "Una persona inicia sesión y genera un código de 6 dígitos para archivos o texto (o comparte su enlace/QR).",
       "La otra abre el enlace o introduce el código — unirse con el código no requiere cuenta.",
-      "Ambas partes comparan el mismo código de verificación (SAS) de 6 dígitos por un canal independiente. Si coincide, confirma que las claves públicas X25519 de los extremos no fueron sustituidas y que ni el servicio de señalización ni el retransmisor TURN suplantaron un extremo o terminaron el E2EE de la aplicación. TURN puede seguir en la ruta de red, llevando solo datos cifrados.",
+      "Opcional (activa la verificación avanzada): ambas partes comparan el mismo código de verificación (SAS) de 6 dígitos —distinto del código de emparejamiento— por un canal independiente. Si coincide, confirma que las claves públicas X25519 de los extremos no fueron sustituidas y que ni el servicio de señalización ni el retransmisor TURN suplantaron un extremo o terminaron el E2EE de la aplicación. TURN puede seguir en la ruta de red, llevando solo datos cifrados.",
       "Con ambos dispositivos en línea, archivos y texto en vivo viajan cifrados de extremo a extremo por TURN. Relayium no almacena el cuerpo; cada mensaje admite hasta 65.536 bytes UTF-8.",
     ],
   },
@@ -672,7 +672,7 @@ const es = {
         desc: "Intercambio de claves X25519 y AES-256-GCM por bloque; las claves se negocian únicamente entre los dos dispositivos, de modo que ni el retransmisor ni el servidor pueden descifrar.",
       },
       {
-        title: "SAS contra el ataque de intermediario",
+        title: "Comprobación SAS opcional contra el intermediario",
         desc: "Compara el SAS de 6 dígitos por un canal independiente para confirmar que las claves públicas X25519 de los extremos no fueron sustituidas. Detecta la suplantación de un extremo por el servicio de señalización o TURN, pero no demuestra que TURN esté ausente de la ruta de red, donde solo lleva datos cifrados.",
       },
       {
@@ -715,7 +715,7 @@ const es = {
       },
       {
         q: "¿Es obligatorio un código?",
-        a: "Sí: un código de 6 caracteres (o su enlace de acceso/QR), válido 30 minutos, empareja los dos dispositivos entre redes distintas. El servidor lo genera a partir del alfabeto ACDEFHJKMNPRTWXY23456789 — sin 0 ni 1, para que nada se confunda con O ni I — así que no puedes inventarte uno: solo empareja un código que haya emitido el servidor.",
+        a: "Sí: un código de 6 dígitos (o su enlace de acceso/QR), válido 5 minutos, empareja los dos dispositivos entre redes distintas. El servidor lo genera uniformemente al azar entre 0 y 9, cualquier dígito puede salir y un cero inicial es normal — así que no puedes inventarte uno: solo empareja un código que haya emitido el servidor. No son los mismos seis dígitos que el código de verificación (SAS), derivado de las claves de ambos extremos.",
       },
       {
         q: "¿Necesito una cuenta?",
@@ -738,19 +738,19 @@ const es = {
 const pt = {
   title: "Transferência entre redes de arquivos e texto ao vivo — criptografia de ponta a ponta | Relayium",
   description:
-    "Envie arquivos e texto efêmero ao vivo entre redes com um código de 6 caracteres. Os dois dispositivos ficam online; o navegador usa por projeto um retransmissor TURN que só vê dados cifrados.",
+    "Envie arquivos e texto efêmero ao vivo entre redes com um código de 6 dígitos. Os dois dispositivos ficam online; o navegador usa por projeto um retransmissor TURN que só vê dados cifrados.",
   hero: {
     h1: "Arquivos e texto ao vivo entre redes, criptografados de ponta a ponta",
     pitch:
-      "Dois dispositivos online em redes diferentes se emparelham com um código de 6 caracteres (ou link/QR) para enviar arquivos ou texto efêmero. O navegador usa por projeto o TURN do Relayium, que só vê dados cifrados; o Relayium não armazena o corpo das mensagens.",
+      "Dois dispositivos online em redes diferentes se emparelham com um código de 6 dígitos (ou link/QR) para enviar arquivos ou texto efêmero. O navegador usa por projeto o TURN do Relayium, que só vê dados cifrados; o Relayium não armazena o corpo das mensagens.",
     cta: "Iniciar transferência",
   },
   how: {
     heading: "Transferir em quatro passos",
     steps: [
-      "Uma pessoa faz login e gera um código de 6 caracteres para arquivos ou texto (ou compartilha seu link/QR).",
+      "Uma pessoa faz login e gera um código de 6 dígitos para arquivos ou texto (ou compartilha seu link/QR).",
       "A outra abre o link ou digita o código — entrar com o código não exige conta.",
-      "As duas partes comparam o mesmo código de verificação (SAS) de 6 dígitos por um canal independente. Se coincidir, confirma que as chaves públicas X25519 das pontas não foram substituídas e que nem o serviço de sinalização nem o retransmissor TURN se passaram por uma ponta ou terminaram a E2EE da aplicação. O TURN pode continuar no caminho de rede, levando apenas dados cifrados.",
+      "Opcional (ligue a verificação avançada): as duas partes comparam o mesmo código de verificação (SAS) de 6 dígitos — diferente do código de emparelhamento — por um canal independente. Se coincidir, confirma que as chaves públicas X25519 das pontas não foram substituídas e que nem o serviço de sinalização nem o retransmissor TURN se passaram por uma ponta ou terminaram a E2EE da aplicação. O TURN pode continuar no caminho de rede, levando apenas dados cifrados.",
       "Com os dois dispositivos online, arquivos e texto ao vivo passam criptografados de ponta a ponta pelo TURN. O Relayium não armazena o corpo; cada mensagem aceita até 65.536 bytes UTF-8.",
     ],
   },
@@ -762,7 +762,7 @@ const pt = {
         desc: "Troca de chaves X25519 e AES-256-GCM por bloco; as chaves são negociadas apenas entre os dois dispositivos, de modo que nem o retransmissor nem o servidor conseguem descriptografar.",
       },
       {
-        title: "SAS contra o ataque de intermediário",
+        title: "Verificação SAS opcional contra o intermediário",
         desc: "Compare o SAS de 6 dígitos por um canal independente para confirmar que as chaves públicas X25519 das pontas não foram substituídas. Isso detecta quando o serviço de sinalização ou o TURN se passa por uma ponta, mas não prova que o TURN esteja ausente do caminho de rede, onde só leva dados cifrados.",
       },
       {
@@ -805,7 +805,7 @@ const pt = {
       },
       {
         q: "Um código é obrigatório?",
-        a: "Sim: um código de 6 caracteres (ou seu link de acesso/QR), válido por 30 minutos, empareja os dois dispositivos entre redes diferentes. O servidor o gera a partir do alfabeto ACDEFHJKMNPRTWXY23456789 — sem 0 e sem 1, para que nada se confunda com O ou I — então você não pode inventar um: só emparelha um código que o servidor tenha emitido.",
+        a: "Sim: um código de 6 dígitos (ou seu link de acesso/QR), válido por 5 minutos, empareja os dois dispositivos entre redes diferentes. O servidor o gera uniformemente ao acaso entre 0 e 9, qualquer dígito pode sair e um zero à esquerda é normal — então você não pode inventar um: só emparelha um código que o servidor tenha emitido. Não são os mesmos seis dígitos do código de verificação (SAS), derivado das chaves das duas pontas.",
       },
       {
         q: "Preciso de uma conta?",

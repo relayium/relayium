@@ -20,7 +20,8 @@ import (
 type textFlags struct {
 	server    string
 	advertise string
-	yes       bool // skip the SAS prompt -- for scripts, which cannot answer one
+	verify    bool // opt IN to the SAS prompt, exactly as `send --verify` does
+	yes       bool // legacy explicit "do not prompt me"; also overrides --verify
 }
 
 func parseTextFlags(args []string) (textFlags, []string, error) {
@@ -28,7 +29,8 @@ func parseTextFlags(args []string) (textFlags, []string, error) {
 	fs := flag.NewFlagSet("text", flag.ContinueOnError)
 	fs.StringVar(&f.server, "server", defaultServer, "Relayium server base URL (self-host)")
 	fs.StringVar(&f.advertise, "advertise", "", "host:port to advertise as a direct endpoint")
-	fs.BoolVar(&f.yes, "yes", false, "skip the SAS confirmation prompt (for scripts)")
+	fs.BoolVar(&f.verify, "verify", false, "require SAS confirmation before the session opens")
+	fs.BoolVar(&f.yes, "yes", false, "never prompt for SAS confirmation (the default; overrides --verify)")
 	// parseArgs is permuteFlags + Parse, the one entry point every subcommand
 	// uses, so trailing flags work here too.
 	if err := parseArgs(fs, args); err != nil {
@@ -37,15 +39,32 @@ func parseTextFlags(args []string) (textFlags, []string, error) {
 	return f, fs.Args(), nil
 }
 
-// A message session has no manifest for the user to inspect before content
-// arrives, so unlike `send` -- where --verify opts IN to a prompt -- this prompts
-// by default and --yes opts out.
-func (f textFlags) confirmSAS(tty bool) bool { return tty && !f.yes }
+// wantsVerify reports whether the user asked for the SAS comparison.
+//
+// It used to be the other way round: `text` prompted by default and --yes opted
+// out, on the reasoning that a message session has no manifest to inspect first.
+// That reasoning conflated two different things. The SAS detects substitution of
+// the SIGNALING endpoints; it is not consent to receive content, and it is not
+// what protects the body of a message (commit-reveal + AEAD do that, and they
+// are never optional). Presenting it as a mandatory step made an optional check
+// look load-bearing, and it refused scripted sessions outright for failing to
+// compare a code no pipe could ever show a human.
+//
+// So --verify opts in here just as it does for `send`, and --yes keeps working
+// for every script that already passes it. --yes wins over --verify because it
+// is the more explicit statement of the same intent ("do not stop to ask me"):
+// a wrapper script that hard-codes --yes must not start blocking because someone
+// added --verify to a shared flag list.
+func (f textFlags) wantsVerify() bool { return f.verify && !f.yes }
 
-// And a session that cannot prompt must refuse rather than proceed unverified.
-// Failing fast is the rule the pairing-code work already set for scripted
-// environments: never block a job on a human who is not there.
-func (f textFlags) allowUnverified(tty bool) bool { return tty || f.yes }
+// confirmSAS reports whether to actually prompt: only when asked, and only when
+// there is a terminal to ask.
+func (f textFlags) confirmSAS(tty bool) bool { return f.wantsVerify() && tty }
+
+// refusesForVerify reports whether the run must stop before doing anything
+// because it was asked to verify and has nobody to ask. Failing fast beats
+// silently downgrading to unverified: --verify was an explicit request.
+func (f textFlags) refusesForVerify(tty bool) bool { return f.wantsVerify() && !tty }
 
 // isTerminalFile reports whether f is a real terminal.
 //
@@ -93,16 +112,16 @@ func runText(args []string, stdout, stderr io.Writer) int {
 		// what guarantees a made-up code never reaches the network at all.
 		if !signal.ValidCodeFormat(code) {
 			fmt.Fprintf(stderr,
-				"pairing code %q is not a valid code: codes are %d characters from %s, last %d minutes, and are issued by the server — one cannot be made up\n",
-				code, signal.CodeLen, signal.CodeAlphabet, signal.CodeTTLSeconds/60)
+				"pairing code %q is not a valid code: codes are %s, and are issued by the server — one cannot be made up\n",
+				code, signal.CodeFormatNote())
 			return 2
 		}
 	}
 
 	tty := textStdinIsTTY()
-	if !f.allowUnverified(tty) {
-		fmt.Fprintln(stderr, "refusing to start a message session without confirming the SAS: stdin is not a terminal, so there is nobody to prompt.")
-		fmt.Fprintln(stderr, "Pass --yes if you have compared the code another way, or run it from a terminal.")
+	if f.refusesForVerify(tty) {
+		fmt.Fprintln(stderr, "--verify was requested but stdin is not a terminal, so there is nobody to prompt.")
+		fmt.Fprintln(stderr, "Drop --verify (or pass --yes) to run without the SAS comparison, or run it from a terminal.")
 		return 2
 	}
 
@@ -121,9 +140,8 @@ func runText(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	// crossFlags.verify means "prompt to confirm the SAS", and confirmSAS has
-	// already inverted the default for text: interactive confirms, --yes or a
-	// non-terminal does not prompt.
+	// crossFlags.verify means "prompt to confirm the SAS"; confirmSAS has already
+	// resolved the opt-in against whether there is a terminal to ask.
 	cf := crossFlags{server: f.server, advertise: f.advertise, verify: f.confirmSAS(tty)}
 	conn, err := crossnetConn(ctx, code, "text", cf, stderr, rzvous.ModeText)
 	if err != nil {

@@ -15,7 +15,7 @@ const zh = {
     steps: [
       "两台设备用现代浏览器打开 relayium.com。",
       "一方选择或拖入要发送的文件（每批最多 1,000 个）；也可以改为发送一条文本消息。",
-      "双方通过带外渠道核对屏幕上同一段 6 位校验码（SAS）。一致的校验码可检测 X25519 端点公钥是否被替换，或信令服务器是否冒充端点并终止应用层端到端加密；它不证明网络路径中没有服务器或 TURN 中继。",
+      "可选：打开「高级验证」后，双方屏幕会显示同一段 6 位校验码（SAS），再通过带外渠道核对。它默认关闭，而加密、承诺-揭示握手和完整性校验无论开关都照常运行。一致的校验码可检测 X25519 端点公钥是否被替换，或信令服务器是否冒充端点并终止应用层端到端加密；它不证明网络路径中没有服务器或 TURN 中继。",
       "文件逐块经 AES-256-GCM 加密传输，并以 SHA-256 校验完整性；临时文本使用独立的端到端加密会话。双方须同时在线，Relayium 服务器不保存消息正文或服务端历史，但端点可以留存文本。",
     ],
   },
@@ -31,8 +31,8 @@ const zh = {
         desc: "同一网络下文件通过加密的 WebRTC 通道在设备之间直接流动、根本不经过我们的服务器；跨网络时经加密中继转发，中继也只能看到密文。",
       },
       {
-        title: "SAS 防中间人",
-        desc: "通过带外渠道核对两边屏幕上的 6 位校验码，可检测 X25519 端点公钥替换，或信令服务器冒充端点并终止应用层端到端加密。SAS 验证端点，不证明网络路径中没有服务器或 TURN 中继。",
+        title: "可选的 SAS 防中间人核对",
+        desc: "打开「高级验证」（默认关闭）后，两边屏幕会显示同一段 6 位校验码；通过带外渠道核对它，可检测 X25519 端点公钥替换，或信令服务器冒充端点并终止应用层端到端加密。SAS 验证端点，不证明网络路径中没有服务器或 TURN 中继。",
       },
       {
         title: "临时加密文本",
@@ -115,7 +115,7 @@ const ja = {
     steps: [
       "2台の端末でモダンブラウザから relayium.com を開きます。",
       "片方が送るファイルを選ぶかドラッグします（1回につき最大1,000個）。テキストメッセージを送ることもできます。",
-      "両方の画面に表示される同じ6桁の検証コード（SAS）を別の通信手段で照合します。一致すれば、X25519エンドポイント公開鍵の差し替えや、シグナリングサーバーがエンドポイントになりすましてアプリケーション層のエンドツーエンド暗号化を終端する試みを検出できます。ネットワーク経路にサーバーやTURNリレーがないことを証明するものではありません。",
+      "任意：「高度な検証」をオンにすると両方の画面に同じ6桁の検証コード（SAS）が表示され、別の通信手段で照合できます。既定はオフで、暗号化・コミット後開示ハンドシェイク・完全性検証はオンオフに関わらず常に動作します。一致すれば、X25519エンドポイント公開鍵の差し替えや、シグナリングサーバーがエンドポイントになりすましてアプリケーション層のエンドツーエンド暗号化を終端する試みを検出できます。ネットワーク経路にサーバーやTURNリレーがないことを証明するものではありません。",
       "ファイルはAES-256-GCMでチャンクごとに暗号化し、SHA-256で完全性を検証します。一時テキストは独立したエンドツーエンド暗号化セッションを使います。両端末がオンラインで、サーバーは本文や履歴を保存しませんが、端末は保持できます。",
     ],
   },
@@ -131,8 +131,8 @@ const ja = {
         desc: "同じネットワークではファイルは暗号化されたWebRTCチャネルを通じて端末間を直接流れ、当社のサーバーを一切経由しません。ネットワークをまたぐ場合は暗号化されたリレーを経由しますが、リレーも暗号文しか見えません。",
       },
       {
-        title: "SASで中間者攻撃を防止",
-        desc: "別の通信手段で6桁のコードを照合すると、X25519エンドポイント公開鍵の差し替えや、シグナリングサーバーによるエンドポイントのなりすましとアプリケーション層E2EEの終端を検出できます。SASはエンドポイントを認証するもので、経路上にサーバーやTURNリレーがないことの証明ではありません。",
+        title: "任意のSAS中間者攻撃チェック",
+        desc: "「高度な検証」（既定はオフ）をオンにすると両画面に6桁のコードが表示され、別の通信手段で照合すると、X25519エンドポイント公開鍵の差し替えや、シグナリングサーバーによるエンドポイントのなりすましとアプリケーション層E2EEの終端を検出できます。SASはエンドポイントを認証するもので、経路上にサーバーやTURNリレーがないことの証明ではありません。",
       },
       {
         title: "一時的な暗号化テキスト",
@@ -215,7 +215,7 @@ const ko = {
     steps: [
       "두 기기에서 최신 브라우저로 relayium.com에 접속합니다.",
       "한쪽이 보낼 파일을 선택하거나 끌어다 놓습니다(한 번에 최대 1,000개). 대신 텍스트 메시지를 보낼 수도 있습니다.",
-      "양쪽 화면의 동일한 6자리 검증 코드(SAS)를 별도 채널로 대조합니다. 코드가 일치하면 X25519 끝점 공개 키 교체나 시그널링 서버가 끝점을 사칭해 애플리케이션 계층 종단간 암호화를 종료하려는 시도를 탐지할 수 있습니다. 네트워크 경로에 서버나 TURN 릴레이가 없음을 증명하지는 않습니다.",
+      "선택 사항: 고급 검증을 켜면 양쪽 화면에 동일한 6자리 검증 코드(SAS)가 표시되며 별도 채널로 대조할 수 있습니다. 기본값은 꺼짐이고, 암호화와 커밋 후 공개 핸드셰이크, 무결성 검증은 켜든 끄든 항상 동작합니다. 코드가 일치하면 X25519 끝점 공개 키 교체나 시그널링 서버가 끝점을 사칭해 애플리케이션 계층 종단간 암호화를 종료하려는 시도를 탐지할 수 있습니다. 네트워크 경로에 서버나 TURN 릴레이가 없음을 증명하지는 않습니다.",
       "파일은 AES-256-GCM으로 암호화하고 SHA-256으로 확인합니다. 텍스트는 별도 암호화 세션을 사용하며 두 기기가 온라인이어야 합니다. 서버는 본문이나 기록을 저장하지 않지만 기기는 보관할 수 있습니다.",
     ],
   },
@@ -231,8 +231,8 @@ const ko = {
         desc: "같은 네트워크에서 파일은 암호화된 WebRTC 채널을 통해 기기 간에 직접 전달되며 당사 서버를 전혀 거치지 않습니다. 네트워크를 넘을 때는 암호화된 릴레이를 거치지만 릴레이도 암호문만 볼 수 있습니다.",
       },
       {
-        title: "SAS로 중간자 공격 차단",
-        desc: "별도 채널로 6자리 코드를 대조하면 X25519 끝점 공개 키 교체나 시그널링 서버의 끝점 사칭 및 애플리케이션 계층 종단간 암호화 종료를 탐지할 수 있습니다. SAS는 끝점을 인증하며 네트워크 경로에 서버나 TURN 릴레이가 없음을 증명하지 않습니다.",
+        title: "선택적 SAS 중간자 공격 확인",
+        desc: "고급 검증(기본값 꺼짐)을 켜면 양쪽 화면에 6자리 코드가 표시되고, 이를 별도 채널로 대조하면 X25519 끝점 공개 키 교체나 시그널링 서버의 끝점 사칭 및 애플리케이션 계층 종단간 암호화 종료를 탐지할 수 있습니다. SAS는 끝점을 인증하며 네트워크 경로에 서버나 TURN 릴레이가 없음을 증명하지 않습니다.",
       },
       {
         title: "일회성 암호화 텍스트",
@@ -315,7 +315,7 @@ const de = {
     steps: [
       "Öffne relayium.com auf beiden Geräten in einem modernen Browser.",
       "Eine Seite wählt die zu sendenden Dateien aus oder zieht sie hinein (bis zu 1.000 pro Vorgang) — oder schickt stattdessen eine Textnachricht.",
-      "Vergleiche den 6-stelligen Verifizierungscode (SAS) beider Bildschirme über einen unabhängigen Kanal. Eine Übereinstimmung erkennt ausgetauschte öffentliche X25519-Endpunktschlüssel oder einen Signalisierungsserver, der einen Endpunkt imitiert und die Ende-zu-Ende-Verschlüsselung der Anwendung beendet; sie beweist nicht, dass der Netzwerkpfad frei von Servern oder TURN-Relays ist.",
+      "Optional: Schalte die erweiterte Verifizierung ein, dann zeigen beide Bildschirme denselben 6-stelligen Verifizierungscode (SAS), den du über einen unabhängigen Kanal vergleichen kannst. Standardmäßig ist sie aus; Verschlüsselung, Commit-dann-Offenlegen-Handshake und Integritätsprüfung laufen so oder so. Eine Übereinstimmung erkennt ausgetauschte öffentliche X25519-Endpunktschlüssel oder einen Signalisierungsserver, der einen Endpunkt imitiert und die Ende-zu-Ende-Verschlüsselung der Anwendung beendet; sie beweist nicht, dass der Netzwerkpfad frei von Servern oder TURN-Relays ist.",
       "Dateien werden mit AES-256-GCM verschlüsselt und per SHA-256 geprüft. Text nutzt eine eigene verschlüsselte Sitzung; beide Geräte bleiben online. Server speichern weder Nachrichtentexte noch Verlauf, Endgeräte können Text behalten.",
     ],
   },
@@ -331,8 +331,8 @@ const de = {
         desc: "Im selben Netz fließen Dateien über einen verschlüsselten WebRTC-Kanal direkt von Gerät zu Gerät und erreichen unsere Server nie; netzübergreifend läuft es über ein verschlüsseltes Relay, das ebenfalls nur Chiffretext sieht.",
       },
       {
-        title: "SAS gegen Man-in-the-Middle",
-        desc: "Der Vergleich des 6-stelligen Codes über einen unabhängigen Kanal erkennt ausgetauschte öffentliche X25519-Endpunktschlüssel oder einen Signalisierungsserver, der einen Endpunkt imitiert und die Ende-zu-Ende-Verschlüsselung der Anwendung beendet. SAS authentifiziert die Endpunkte; es beweist nicht, dass im Netzwerkpfad keine Server oder TURN-Relays liegen.",
+        title: "Optionale SAS-Prüfung gegen Man-in-the-Middle",
+        desc: "Mit eingeschalteter erweiterter Verifizierung (standardmäßig aus) zeigen beide Bildschirme einen 6-stelligen Code; sein Vergleich über einen unabhängigen Kanal erkennt ausgetauschte öffentliche X25519-Endpunktschlüssel oder einen Signalisierungsserver, der einen Endpunkt imitiert und die Ende-zu-Ende-Verschlüsselung der Anwendung beendet. SAS authentifiziert die Endpunkte; es beweist nicht, dass im Netzwerkpfad keine Server oder TURN-Relays liegen.",
       },
       {
         title: "Flüchtiger verschlüsselter Text",
@@ -417,7 +417,7 @@ const fr = {
     steps: [
       "Ouvrez relayium.com sur les deux appareils dans un navigateur moderne.",
       "Un côté sélectionne ou glisse les fichiers à envoyer (jusqu'à 1 000 par lot) — ou envoie plutôt un message texte.",
-      "Comparez le code de vérification à 6 chiffres (SAS) des deux écrans par un canal indépendant. Une correspondance détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation qui usurpe une extrémité et termine le chiffrement applicatif de bout en bout ; elle ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau.",
+      "Facultatif : activez la vérification avancée et les deux écrans affichent le même code de vérification à 6 chiffres (SAS), que vous pouvez comparer par un canal indépendant. Elle est désactivée par défaut ; le chiffrement, la poignée de main « engagement puis révélation » et le contrôle d'intégrité s'exécutent dans tous les cas. Une correspondance détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation qui usurpe une extrémité et termine le chiffrement applicatif de bout en bout ; elle ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau.",
       "Les fichiers sont chiffrés en AES-256-GCM et vérifiés par SHA-256. Le texte utilise une session chiffrée distincte ; les deux appareils restent en ligne. Relayium ne conserve ni corps ni historique, mais les appareils peuvent garder le texte.",
     ],
   },
@@ -433,8 +433,8 @@ const fr = {
         desc: "Sur le même réseau, les fichiers circulent directement d'appareil à appareil via un canal WebRTC chiffré et ne passent jamais par nos serveurs ; entre réseaux différents, ils transitent par un relais chiffré qui, lui aussi, ne voit que du chiffré.",
       },
       {
-        title: "SAS contre l'homme du milieu",
-        desc: "Comparer le code à 6 chiffres par un canal indépendant détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation qui usurpe une extrémité et termine le chiffrement applicatif de bout en bout. Le SAS authentifie les extrémités ; il ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau.",
+        title: "Vérification SAS facultative contre l'homme du milieu",
+        desc: "Avec la vérification avancée activée (désactivée par défaut), les deux écrans affichent un code à 6 chiffres ; le comparer par un canal indépendant détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation qui usurpe une extrémité et termine le chiffrement applicatif de bout en bout. Le SAS authentifie les extrémités ; il ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau.",
       },
       {
         title: "Texte chiffré éphémère",
@@ -519,7 +519,7 @@ const ar = {
     steps: [
       "افتح relayium.com على كلا الجهازين في متصفح حديث.",
       "يختار أحد الطرفين الملفات المراد إرسالها أو يسحبها (حتى 1,000 لكل دفعة)، أو يرسل رسالة نصية بدلاً من ذلك.",
-      "قارِن رمز التحقق المكوّن من 6 أرقام (SAS) على الشاشتين عبر قناة مستقلة. يكشف التطابق استبدال مفاتيح X25519 العامة للطرفين، أو انتحال خادم الإشارة لأحد الطرفين وإنهاء التشفير من الطرف إلى الطرف على مستوى التطبيق؛ لكنه لا يثبت خلو مسار الشبكة من الخوادم أو مُرحِّلات TURN.",
+      "اختياري: فعِّل التحقّق المتقدّم لتعرض الشاشتان الرمز نفسه المكوّن من 6 أرقام (SAS)، ثم قارِنه عبر قناة مستقلة. وهو معطَّل افتراضيًا، بينما يعمل التشفير ومصافحة «الالتزام ثم الكشف» وفحص السلامة في الحالتين. يكشف التطابق استبدال مفاتيح X25519 العامة للطرفين، أو انتحال خادم الإشارة لأحد الطرفين وإنهاء التشفير من الطرف إلى الطرف على مستوى التطبيق؛ لكنه لا يثبت خلو مسار الشبكة من الخوادم أو مُرحِّلات TURN.",
       "تُشفَّر الملفات بـ AES-256-GCM وتُفحص بـ SHA-256. يستخدم النص جلسة مشفَّرة مستقلة ويبقى الجهازان متصلين. لا يحفظ Relayium أجسام الرسائل أو سجلها، لكن يمكن للطرفين الاحتفاظ بالنص.",
     ],
   },
@@ -535,8 +535,8 @@ const ar = {
         desc: "على نفس الشبكة تنتقل الملفات مباشرةً من جهاز إلى جهاز عبر قناة WebRTC مُشفَّرة ولا تمر أبدًا عبر خوادمنا؛ وعبر الشبكات المختلفة تمر عبر مُرحِّل مُشفَّر لا يرى هو الآخر سوى نص مُشفَّر.",
       },
       {
-        title: "SAS ضد هجوم الوسيط",
-        desc: "تكشف مقارنة الرمز المكوّن من 6 أرقام عبر قناة مستقلة استبدال مفاتيح X25519 العامة للطرفين، أو انتحال خادم الإشارة لأحد الطرفين وإنهاء التشفير من الطرف إلى الطرف على مستوى التطبيق. يصادق SAS على الطرفين، ولا يثبت خلو مسار الشبكة من الخوادم أو مُرحِّلات TURN.",
+        title: "فحص SAS اختياري ضد هجوم الوسيط",
+        desc: "عند تفعيل التحقّق المتقدّم (المعطَّل افتراضيًا) تعرض الشاشتان رمزًا من 6 أرقام، وتكشف مقارنته عبر قناة مستقلة استبدال مفاتيح X25519 العامة للطرفين، أو انتحال خادم الإشارة لأحد الطرفين وإنهاء التشفير من الطرف إلى الطرف على مستوى التطبيق. يصادق SAS على الطرفين، ولا يثبت خلو مسار الشبكة من الخوادم أو مُرحِّلات TURN.",
       },
       {
         title: "نص مُشفَّر عابر",
@@ -621,7 +621,7 @@ const es = {
     steps: [
       "Abre relayium.com en ambos dispositivos con un navegador moderno.",
       "Un lado selecciona o arrastra los archivos a enviar (hasta 1.000 por lote), o envía un mensaje de texto en su lugar.",
-      "Compara por un canal independiente el código de verificación de 6 dígitos (SAS) de ambas pantallas. Una coincidencia detecta la sustitución de claves públicas X25519 de los extremos, o que el servidor de señalización suplante un extremo y termine el cifrado de extremo a extremo de la aplicación; no demuestra que no haya servidores o relés TURN en la ruta de red.",
+      "Opcional: activa la verificación avanzada y ambas pantallas mostrarán el mismo código de verificación de 6 dígitos (SAS), que puedes comparar por un canal independiente. Está desactivada por omisión; el cifrado, el handshake de compromiso y revelación y la comprobación de integridad se ejecutan igualmente. Una coincidencia detecta la sustitución de claves públicas X25519 de los extremos, o que el servidor de señalización suplante un extremo y termine el cifrado de extremo a extremo de la aplicación; no demuestra que no haya servidores o relés TURN en la ruta de red.",
       "Los archivos se cifran con AES-256-GCM y se verifican con SHA-256. El texto usa una sesión cifrada independiente y ambos dispositivos siguen conectados. Relayium no guarda cuerpos ni historial, pero los extremos pueden conservarlo.",
     ],
   },
@@ -637,8 +637,8 @@ const es = {
         desc: "En la misma red, los archivos circulan directamente de dispositivo a dispositivo por un canal WebRTC cifrado y nunca llegan a nuestros servidores; entre redes distintas van por un retransmisor cifrado que, también él, solo ve texto cifrado.",
       },
       {
-        title: "SAS contra el ataque de intermediario",
-        desc: "Comparar el código de 6 dígitos por un canal independiente detecta la sustitución de claves públicas X25519 de los extremos, o que el servidor de señalización suplante un extremo y termine el cifrado de extremo a extremo de la aplicación. El SAS autentica los extremos; no demuestra que no haya servidores o relés TURN en la ruta de red.",
+        title: "Comprobación SAS opcional contra el intermediario",
+        desc: "Con la verificación avanzada activada (desactivada por omisión), ambas pantallas muestran un código de 6 dígitos; compararlo por un canal independiente detecta la sustitución de claves públicas X25519 de los extremos, o que el servidor de señalización suplante un extremo y termine el cifrado de extremo a extremo de la aplicación. El SAS autentica los extremos; no demuestra que no haya servidores o relés TURN en la ruta de red.",
       },
       {
         title: "Texto cifrado efímero",
@@ -723,7 +723,7 @@ const pt = {
     steps: [
       "Abra relayium.com nos dois dispositivos em um navegador moderno.",
       "Um lado seleciona ou arrasta os arquivos a enviar (até 1.000 por lote), ou envia uma mensagem de texto no lugar.",
-      "Compare por um canal independente o código de verificação de 6 dígitos (SAS) das duas telas. A correspondência detecta a substituição das chaves públicas X25519 das pontas, ou o servidor de sinalização se passando por uma ponta e encerrando a criptografia de ponta a ponta da aplicação; ela não prova que não há servidores ou retransmissores TURN na rota de rede.",
+      "Opcional: ative a verificação avançada e as duas telas mostrarão o mesmo código de verificação de 6 dígitos (SAS), que você pode comparar por um canal independente. Ela vem desligada; a criptografia, o handshake de compromisso e revelação e a verificação de integridade rodam de qualquer forma. A correspondência detecta a substituição das chaves públicas X25519 das pontas, ou o servidor de sinalização se passando por uma ponta e encerrando a criptografia de ponta a ponta da aplicação; ela não prova que não há servidores ou retransmissores TURN na rota de rede.",
       "Os arquivos são criptografados em blocos com AES-256-GCM e verificados com SHA-256; o texto usa uma sessão criptografada separada. Os dois dispositivos ficam online. O Relayium não guarda corpo nem histórico no servidor, mas as pontas podem reter texto.",
     ],
   },
@@ -739,8 +739,8 @@ const pt = {
         desc: "Na mesma rede, os arquivos circulam diretamente de dispositivo a dispositivo por um canal WebRTC criptografado e nunca chegam aos nossos servidores; entre redes diferentes passam por um retransmissor criptografado que, também ele, só vê texto cifrado.",
       },
       {
-        title: "SAS contra o ataque de intermediário",
-        desc: "Comparar o código de 6 dígitos por um canal independente detecta a substituição das chaves públicas X25519 das pontas, ou o servidor de sinalização se passando por uma ponta e encerrando a criptografia de ponta a ponta da aplicação. O SAS autentica as pontas; não prova que não há servidores ou retransmissores TURN na rota de rede.",
+        title: "Verificação SAS opcional contra o intermediário",
+        desc: "Com a verificação avançada ativada (desligada por padrão), as duas telas mostram um código de 6 dígitos; compará-lo por um canal independente detecta a substituição das chaves públicas X25519 das pontas, ou o servidor de sinalização se passando por uma ponta e encerrando a criptografia de ponta a ponta da aplicação. O SAS autentica as pontas; não prova que não há servidores ou retransmissores TURN na rota de rede.",
       },
       {
         title: "Texto criptografado efêmero",

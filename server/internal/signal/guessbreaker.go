@@ -10,10 +10,18 @@ import (
 const guessBreakerKey = "global"
 
 // GuessBreaker is a process-wide detector for pairing-code brute-forcing. It
-// counts INVALID /ws?code= attempts in a fixed window; once the window budget is
-// exceeded it latches OPEN for a cooldown. It never inspects or blocks valid
+// counts INVALID /ws?code= attempts in a trailing window; once the window budget
+// is exceeded it latches OPEN for a cooldown. It never inspects or blocks valid
 // codes — callers only feed it invalid attempts — so it cannot deny a legitimate
 // join. When open, callers shed the invalid attempt (429) and log (throttled).
+//
+// It is NOT a cap on how many codes an attacker may try. Callers reach
+// RecordInvalid only on the branch where the code was already refused, so a
+// guesser who lands on a live code is admitted no matter what state this is in,
+// and a distributed attacker's successful attempts are never counted here at
+// all. Detection and load shedding on the invalid majority is the whole job; the
+// bound on guessing lives in the per-IP limiter (wsJoinPerIPPerMinute) and the
+// code TTL. Do not describe this as a global guess ceiling in docs or copy.
 type GuessBreaker struct {
 	rl       *RateLimiter // windowed count of invalid attempts under guessBreakerKey
 	cooldown int64        // seconds the breaker stays open after a trip

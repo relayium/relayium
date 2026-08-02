@@ -99,9 +99,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>让 CLI 指向你的服务器</h2>
       <p>Relayium CLI 默认使用 relayium.com 的会合服务器来完成跨网络的 send/receive 与 text。传入 --server 即可改用你自己的服务器：</p>
       <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
-      <pre><code>relayium receive K7M4XR --server https://your-domain</code></pre>
+      <pre><code>relayium receive 483920 --server https://your-domain</code></pre>
       <pre><code>relayium text --server https://your-domain</code></pre>
-      <pre><code>relayium text K7M4XR --server https://your-domain</code></pre>
+      <pre><code>relayium text 483920 --server https://your-domain</code></pre>
       <ul><li>无论用哪个服务器，CLI 都是免费的——--server 只是改变了配对码握手所连接的会合服务器。send 或 text 不带码运行时会在该服务器生成配对码，云端 up 也存到那台服务器上的账号下，所以要先用 relayium login --server https://your-domain 在那边登录；receive、down，以及使用打印配对码加入的 text 都无需登录。</li><li>text 两端必须同时在线。消息使用独立的端到端加密 P2P 直连会话；CLI text 只支持直连，不使用网页版的 TURN 中继。Relayium 和你的自托管服务器都不保存消息正文或服务端历史，但任一终端或接收方都可以在收到文本后复制或留存。</li><li>push/pull（走你自己的 SSH）以及 serve + daemon 直连的 push relayium://host，无论是否自托管都完全不会接触 relayium.com——它们直接连到你指定的远程地址。</li></ul>
       <h2>常见问题</h2>
       <h3>我需要搭建 TURN 吗？</h3>

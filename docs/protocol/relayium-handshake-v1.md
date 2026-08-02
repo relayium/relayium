@@ -35,7 +35,23 @@ cannot MITM the 6-digit SAS. Hashes raw bytes only (never JSON).
    - keys = deriveSession(role, selfKeypair, peerPub)  — role initiator→client,
      responder→server (crypto_kx); the two roles mirror so one's send == other's recv.
    - sas = sas(selfPub, peerPub)  — order-independent 6-digit code; identical on
-     both sides; the user compares it out of band.
+     both sides.
+
+## What is mandatory, and what is not
+- Steps 1-4 (commit, reveal, verifyCommit) are **mandatory on every connection**
+  in every client. A mismatched or missing commit is a hard error and the channel
+  never opens. No preference, flag or build reaches this.
+- **Displaying the SAS and asking a human to compare it is optional**, and is off
+  by default in the web and macOS clients (opt-in via "advanced verification";
+  `--verify` in the CLI). The derived value is kept either way, so enabling the
+  comparison never needs a renegotiation.
+- The distinction matters when reasoning about what an attack buys: commit-reveal
+  removes an adaptive key choice by the relay, which is what makes a ~20-bit SAS
+  worth comparing at all. Skipping the comparison forgoes the detection of an
+  endpoint substitution that a human would have caught; it does not weaken the
+  key exchange, the AEAD, or the commitment check.
+- The SAS is six digits and so is the pairing code (relayium-signaling-v1.md).
+  They are unrelated values; user-facing copy must not conflate them.
 
 ## Roles
 - initiator = the side that started the connection (sends the SDP offer).

@@ -99,8 +99,10 @@ const sentences = (s) => [...s.matchAll(SENTENCE)].map((m) => m[0]);
 // ── (a) demonstrated pairing codes ────────────────────────────────────────
 // signal.CodeAlphabet / signal.CodeLen. A code outside them is one the server
 // could never have issued, so the example fails before it reaches the network.
-// 428571, 123456 and ABCD-1234 all reached readers on this branch.
-const CODE_ALPHABET = "ACDEFHJKMNPRTWXY23456789";
+// 428571, 123456 and ABCD-1234 all reached readers on this branch. Since the
+// format change the alphabet is the ten decimal digits, so every old-alphabet
+// example (K7M4XR and friends) is caught here too.
+const CODE_ALPHABET = "0123456789";
 const CODE_LEN = 6;
 const INVOCATION = /relayium (send|receive)((?: +\S+)*)/g;
 // The `(?: +\S+)*` above runs to the end of the string, so in prose it swallows
@@ -129,7 +131,7 @@ function badCodeExample(s) {
     // just the slot the grammar puts it in: the code is receive's first argument
     // and send's last, but a prose example can put it anywhere and the point is
     // that the number is unissuable wherever it sits. Across the whole content
-    // tree exactly three distinct code-shaped arguments exist, all K7M4XR, so
+    // tree the code-shaped arguments are all the same demonstration code, so
     // this costs nothing in false positives and closes the positional hole.
     for (const tok of commandArgs(argstr))
       if (CODEISH.test(tok) && (tok.length !== CODE_LEN || [...tok].some((c) => !CODE_ALPHABET.includes(c))))

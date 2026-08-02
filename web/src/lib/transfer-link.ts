@@ -16,7 +16,7 @@ export class HttpError extends Error {
   }
 }
 
-/** Extract a pairing code from a hash like "#c=K7M3X9". "" if none.
+/** Extract a pairing code from a hash like "#c=483920". "" if none.
  *  形状不合法的一律当没有——链接里的码是不可信输入，宽松解析只会把垃圾一路带到
  *  信令层。字母表见 pair-code.ts。 */
 export function parseCodeParam(hash: string): string {

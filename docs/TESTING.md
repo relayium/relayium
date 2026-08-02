@@ -260,20 +260,25 @@ These are explicitly out of scope for the first milestone and are **not** defect
 | No cross-origin CORS | The Go server does not set CORS headers. API calls from a different origin will fail. |
 | No HTTPS / WSS | M0 uses plain HTTP and WS. For production use, place behind a TLS-terminating reverse proxy (nginx, Caddy). WebRTC will still use DTLS-SRTP internally regardless. |
 
-## Cross-network transfer (②a: pairing-code room + STUN P2P)
+## Cross-network transfer (②a: pairing-code room + TURN relay)
 
-Prerequisites: server running (no sign-in needed; pairing codes are account-free).
-For a real cross-network test, the two machines must be on different networks (e.g.
-laptop on Wi-Fi, phone on cellular). STUN-only means symmetric-NAT pairs may
-fail to connect — that fallback is ②b (TURN), out of scope here.
+Prerequisites: server running with TURN configured (`-turn-secret` / `-turn-urls`),
+and a signed-in account on the machine that creates the pairing code. The joining
+side needs no account. For a real cross-network test, the two machines must be on
+different networks (e.g. laptop on Wi-Fi, phone on cellular). Cross-network browser
+rooms use relay-only ICE through the configured TURN server, so the relay carries
+only ciphertext — it never sees plaintext or file contents.
 
-1. **Generate a pairing code (sender):** open the app, click
+1. **Generate a pairing code (sender):** sign in, open the app, click
    "Send to someone on another network", pick files, and generate a 6-digit
-   pairing code — a join link and QR appear alongside it (no sign-in needed;
-   codes live 30 minutes). The page reloads into pairing-room mode.
+   pairing code — a join link and QR appear alongside it (the receiver does not
+   need to sign in; codes live 5 minutes). The page reloads into pairing-room mode.
 2. **Open the link (receiver, different network):** open the link (or scan the
    QR). The receiver connects to the same room.
-3. **Verify SAS:** both sides see the 6-digit code; confirm they match.
+3. **Verify SAS (optional):** advanced verification is OFF by default, so no SAS
+   is shown. Turn it on in the workspace's "Advanced verification" panel to see
+   the 6-digit verification code on both sides and confirm they match — note it
+   is a different value from the 6-digit pairing code.
 4. **Transfer:** sender picks files and sends; receiver accepts and downloads.
    Confirm the per-file SHA-256 integrity check passes.
 5. **Legacy-link check:** open `https://<host>/cross-network#t=deadbeef` (a retired
@@ -336,7 +341,12 @@ Phase 1 of the messaging feature (spec:
 
 Gates 1–3 and 5–9 are browser-side; gate 4 needs two builds; gate 10 needs two
 machines with the CLI. The browser scenarios that *can* be automated already are —
-`web/e2e/lan-transfer.mjs` covers matching SAS, byte-exact multibyte content,
+`web/e2e/lan-transfer.mjs` covers **both** verification paths: the default
+(`messageDefaultScenario`, advanced verification OFF) asserts the recipient lands
+straight in the composer with no accept/reject card ever rendering, no SAS on
+either side, and the initiator reaching its composer too; the opt-in path
+(`messageScenario`, advanced verification ON) asserts the explicit accept/reject
+gate and matching SAS on both tabs. It also covers byte-exact multibyte content,
 literal rendering of script-like content, and the suppressed-caps case. What
 remains here is what a headless harness cannot reach: two real devices, an older
 build, OS notifications, a screen reader, and two live CLI processes.
@@ -357,8 +367,16 @@ The payload used throughout, chosen so any trimming or normalisation shows:
 
 ### 1. Two devices, LAN — byte fidelity
 
+Run this on the **default** setup: advanced verification OFF on both devices (that
+is the shipped default — do not turn it on here).
+
 1. Open `/` on both devices; wait until each shows the other on the radar.
-2. On device A press **💬 Send a message** on B's card. On B, **Accept**.
+2. On device A press **💬 Send a message** on B's card.
+
+   **Expect:** the composer opens directly on **both** devices. B is shown **no
+   Accept/Decline card** — there is nothing to approve — and **neither** side
+   shows a SAS / verification code. Seeing either one here is a failure of the
+   default path (that gated flow is section 3's opt-in scenario).
 3. Paste the payload above into A's composer and press ⌘/Ctrl+Enter.
 
 **Expect:** B renders it with indentation, the blank lines and the emoji visually
@@ -370,16 +388,29 @@ containing the original payload must report no differences.
 ### 2. Cross-network room — relay path, one SAS, ten minutes
 
 1. On A open `/cross-network`, sign in, mint a code. Join it from B via the link.
-2. Open a message session and exchange several messages over ten minutes.
+2. **Turn on "Advanced verification" on both devices** (the workspace's *Advanced
+   verification* panel) **before** opening the message session. It is OFF by
+   default and no SAS would be shown otherwise; this scenario checks the SAS, so
+   it is deliberately opted in on both ends.
+3. Open a message session and exchange several messages over ten minutes.
 
 **Expect:** the path badge in the message panel reads **relay** (cross-network
-forces `iceTransportPolicy: "relay"`); the 6-digit code shown on A and B is
-**identical**; messages still send after ten minutes of light use, and the session
+forces `iceTransportPolicy: "relay"`); the 6-digit verification code shown on A
+and B is **identical** — and it is a different value from the 6-digit pairing
+code; messages still send after ten minutes of light use, and the session
 has not silently ended. Note the idle timeout is 10 minutes of **no** traffic, so
 keep exchanging a message every few minutes — a session that dies while in use is
 a failure.
 
-### 3. Consent
+### 3. Advanced verification opt-in — the consent gates
+
+This section tests the **opt-in** path, so **turn on "Advanced verification" on
+both devices before starting**. With the preference on, an incoming message
+request stops at an explicit Accept/Decline card and both sides show a SAS; with
+it off (the shipped default, exercised in section 1) **none of these gates are
+expected** — the session opens straight into the composer with no card and no
+code, and that is not a bug. If you see the gates below without having opted in,
+or fail to see them after opting in on both devices, that is the failure.
 
 Everything here is observable in the UI. Note that the composer only exists once a
 session is **open** — there is deliberately no way to type before the peer accepts,
@@ -488,8 +519,8 @@ joins that code's room itself as the first of its two peers:
 
 ```bash
 relayium text
-# Code: K7M4XR   (valid 30 minutes)
-# On the other machine:  relayium text K7M4XR
+# Code: 483920   (valid 5 minutes)
+# On the other machine:  relayium text 483920
 # waiting for the other side to join…
 ```
 
@@ -501,45 +532,61 @@ transfers and still hands off `relayium receive`.)
 
 A code room holds exactly **two** peers, so make sure the previous pair of
 processes has **exited** before starting the next sub-test, and mint a fresh code
-if more than thirty minutes have passed.
+if more than five minutes have passed.
 
 Also check the refusals, which must not spend a code:
 
 ```bash
-printf 'hi' | relayium text; echo "exit=$?"          # exit 2, names --yes, no code minted
+printf 'hi' | relayium text --verify; echo "exit=$?"  # exit 2: --verify asked for a
+                                                      # prompt and stdin is not a
+                                                      # terminal. Names --yes as the
+                                                      # way out. No code minted.
 empty_config="$(mktemp -d)"
-XDG_CONFIG_HOME="$empty_config" relayium text --yes; echo "exit=$?"  # exit 1,
-                                                     # tells you to log in and
-                                                     # says `relayium text <code>`
+XDG_CONFIG_HOME="$empty_config" relayium text; echo "exit=$?"  # exit 1, tells you to
+                                                     # log in and says
+                                                     # `relayium text <code>`
 rmdir "$empty_config"
 ```
 
-#### 10a. Interactive: SAS prompted by default
+And the case that must **not** be a refusal — verification is opt-in, so a plain
+piped run is an ordinary run and needs no flag at all:
+
+```bash
+printf 'hi' | relayium text 483920   # proceeds; --yes is not required
+```
+
+#### 10a. Interactive default: no prompt
 
 Machine A mints and waits; machine B joins the code it prints:
 
 ```bash
 # machine A                        # machine B
-relayium text                      relayium text K7M4XR
+relayium text                      relayium text 483920
+```
+
+**Expect:** the session opens straight into the message loop with **no SAS prompt
+on either side** and nothing extra passed to get there — `text` opts in to
+verification exactly the way `send` does. A line typed on either side appears on
+the other. Ctrl-D on either side ends the session cleanly on both, with no hang and
+no stack trace.
+
+#### 10b. `--verify`: opting in to the SAS comparison
+
+```bash
+# machine A                        # machine B
+relayium text --verify             relayium text 483920 --verify
 ```
 
 **Expect:** both print `SAS: NNNNNN  (compare on both ends)` and **prompt for
-confirmation** — unlike `send`, where `--verify` opts in. The two codes match.
-Answer `y` on both. A line typed on either side appears on the other. Ctrl-D on
-either side ends the session cleanly on both, with no hang and no stack trace.
+confirmation**; the two codes match. Answer `y` on both and the session opens as in
+10a. Answer `n` on either side and it ends there, with nothing sent.
 
-#### 10b. Piped without `--yes`: refused before the network
+Two more checks on the flag itself, neither of which changes anything on the wire:
+`--verify` on **one** side only is valid (that side prompts, the other does not),
+and `--yes --verify` together never prompt — `--yes` wins, so a wrapper script that
+already hard-codes it cannot start blocking on a human.
 
-```bash
-# machine A mints and waits; on machine B:
-printf 'hello' | relayium text K7M4XR; echo "exit=$?"
-```
-
-**Expect:** non-zero exit; a message saying stdin is not a terminal so there is
-nobody to prompt, and naming `--yes` as the opt-out. No connection is attempted, so
-this fails immediately rather than after a pairing timeout.
-
-#### 10c. Piped with `--yes`: exact bytes, including multiline
+#### 10c. Piped: exact bytes, including multiline
 
 Both sides must be **non-interactive**, or the receiver frames each message as a
 line and the comparison fails. Any redirected stdin qualifies — a file, a pipe or
@@ -551,10 +598,10 @@ terminal rather than whether it is a character device:
 printf '  \tif x:\n\n\t\tprint("你好 🌍")\n  trailing   ' > /tmp/msg.txt
 
 # machine A mints, sends the file as one message, and waits
-relayium text --yes < /tmp/msg.txt
+relayium text < /tmp/msg.txt
 
 # machine B joins the printed code (redirected stdin means piped mode)
-relayium text K7M4XR --yes < /dev/null > /tmp/got.txt
+relayium text 483920 < /dev/null > /tmp/got.txt
 
 # then on B
 diff /tmp/msg.txt /tmp/got.txt && echo "byte-identical"
@@ -567,13 +614,17 @@ Two things that are correct but look odd: B's empty stdin means B sends one **em
 message** to A, which A prints as nothing; and each side half-closes when its stdin
 ends, which is what lets both terminate.
 
+Adding `--yes` to either command must change nothing here. It is kept working for
+scripts written when it was required; re-run one of the two with it to confirm the
+byte comparison still passes.
+
 #### 10d. Mode mismatch: refused, and never a silent empty success
 
 ```bash
 # machine A
-relayium text --yes < /dev/null
+relayium text < /dev/null
 # machine B
-relayium receive K7M4XR
+relayium receive 483920
 ```
 
 **Expect:** a **mode mismatch** error naming both commands — "the other side is
@@ -588,7 +639,7 @@ and `ls` its working directory.
 #### 10e. Over the limit: refused, with the alternative named
 
 ```bash
-head -c 70000 /dev/zero | tr '\0' a | relayium text K7M4XR --yes; echo "exit=$?"
+head -c 70000 /dev/zero | tr '\0' a | relayium text 483920; echo "exit=$?"
 ```
 
 **Expect:** non-zero exit; an error naming the byte count (70 000) and the

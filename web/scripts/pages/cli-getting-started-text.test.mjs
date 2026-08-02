@@ -25,7 +25,7 @@ describe("CLI getting-started guide includes ephemeral text", () => {
         item.code?.includes("relayium text")
       );
       expect(section, `${lang} text section`).toBeTruthy();
-      expect(section.code).toEqual(["relayium text", "relayium text K7M4XR"]);
+      expect(section.code).toEqual(["relayium text", "relayium text 483920"]);
 
       const copy = [...(section.body ?? []), ...(section.bullets ?? [])].join(" ");
       expect(copy, `${lang} mint login`).toContain("relayium login");

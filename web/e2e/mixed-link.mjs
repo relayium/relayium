@@ -27,7 +27,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  OBSERVE_CAPS, SAVE_STUB, argFlag, argPresent, fail, launchBrowser, newTab, ok,
+  OBSERVE_CAPS, SAVE_STUB, VERIFY_ON, argFlag, argPresent, fail, launchBrowser, newTab, ok,
   requireServer, setWideViewport, withWatchdog,
 } from "./harness.mjs";
 // 统一链路的同意态同样是静态扫描器到不了的地方，而且这里的规矩更紧：一条链路只有
@@ -198,8 +198,11 @@ const setTheme = async (tab, value) => {
 async function mixedScenario(browser) {
   // A 发起，B 收（另存为被桩掉）。两边都装上只读的 caps 探针：跑任何断言之前先确认
   // 这个产物真的通告了 link/1。
-  const a = await newTab(browser, BASE + "/", OBSERVE_CAPS + TRACK_PEER_CONNECTIONS);
-  const b = await newTab(browser, BASE + "/", OBSERVE_CAPS + SAVE_STUB + TRACK_PEER_CONNECTIONS);
+  // This scenario is about the unified workspace's verification presentation,
+  // which only exists with advanced verification ON. It is off by default, so
+  // both tabs opt in before boot.
+  const a = await newTab(browser, BASE + "/", VERIFY_ON + OBSERVE_CAPS + TRACK_PEER_CONNECTIONS);
+  const b = await newTab(browser, BASE + "/", VERIFY_ON + OBSERVE_CAPS + SAVE_STUB + TRACK_PEER_CONNECTIONS);
   await setWideViewport(a, 390, 844);
   await setWideViewport(b, 390, 844);
 

@@ -21,14 +21,31 @@ describe("llms.txt file and ephemeral text product facts", () => {
     expect(llms).toContain("joining with a code does not");
   });
 
-  it("pins pairing-code shape and expiry without confusing it with the SAS", () => {
-    expect(llms).toContain("6-character code");
-    expect(llms).toContain("Codes expire 30 minutes");
+  it("pins pairing-code shape and expiry, and separates it from the SAS", () => {
+    // Both are six digits now, so the file cannot rely on "characters vs digits"
+    // to tell them apart — it has to say so.
+    expect(llms).toContain("6-digit pairing code");
+    expect(llms).toContain("Codes expire 5 minutes");
+    expect(llms).toContain("six decimal digits (0-9, leading zeros included)");
+    expect(llms).toContain("not the same value as the 6-digit SAS");
     expect(llms).toContain("6-digit Short Authentication String (SAS)");
-    expect(llms).not.toMatch(/6-digit pairing code/i);
-    // Both values this line has carried before; either one reappearing means
-    // the TTL moved and this file was left behind.
-    expect(llms).not.toMatch(/codes? (?:live|last|expire(?:s)?) (?:5|15) minutes/i);
+    // The alphabet and the two TTLs this file has carried before. Any of them
+    // reappearing means the format or the window moved and this file was left
+    // behind — which is exactly what happened at 5 -> 30 minutes.
+    expect(llms).not.toMatch(/6-character/i);
+    expect(llms).not.toMatch(/ACDEFHJKMNPRTWXY/);
+    expect(llms).not.toMatch(/codes? (?:live|last|expire(?:s)?) (?:15|30) minutes/i);
+  });
+
+  // The SAS is opt-in. A file that describes it as something the product always
+  // does would be teaching an LLM to tell users they are protected by a check
+  // their browser never showed them.
+  it("says the SAS comparison is optional and bounds what turning it off changes", () => {
+    expect(llms).toMatch(/Anti man-in-the-middle \(optional\)/);
+    expect(llms).toContain("it is off by default");
+    expect(llms).toContain("only when a person actually compares the two values");
+    expect(llms).toContain("it never disables commit-then-reveal");
+    expect(llms).toContain("receiving files still asks before anything is saved");
   });
 
   it("distinguishes browser TURN ciphertext from direct-only CLI text", () => {

@@ -20,9 +20,15 @@ transport and handshake are defined elsewhere.
   relayium-text-v1.md's business.
 - 2 DONE_LEGACY / 3 BATCH_LEGACY — REJECTED (peer on an older version); never parsed.
 - Single-byte control (recv→sender): 0xfe ACCEPT, 0xff REJECT, 0xfd COMPLETE.
-  ACCEPT/REJECT are reused unchanged as the message session's consent handshake
+  ACCEPT/REJECT are reused unchanged as the message session's activation handshake
   (relayium-text-v1.md); COMPLETE has no meaning there. A 1-byte control frame is
   structurally disjoint from any 5-byte-header frame, so the two never collide.
+  ACCEPT means "the recipient's handler is attached and content may flow" — a
+  default client emits it automatically once the link is up, and only advanced
+  verification holds it for a human. It is not a signal that anyone approved
+  anything, and must not be read as one. The FILE accept prompt is a separate
+  step and is unaffected. The ordering invariant is unchanged in both cases:
+  attach the receive handler BEFORE sending ACCEPT, and send no content before it.
 
 ## Seal
 - AES-256-GCM with the 32-byte session key; nonce = nonceFromSeq(seq) (4 zero

@@ -81,7 +81,9 @@ describe("legal pages describe temporary text accurately", () => {
       const text = JSON.stringify(textSection);
       const limits = sectionBlob(security, lang, 7);
 
-      expect(security.langs[lang].updated).toBe("2026-07-31");
+      // Bumped when the SAS section stopped describing the code as something
+      // both screens always show: advanced verification is off by default.
+      expect(security.langs[lang].updated).toBe("2026-08-02");
       for (const token of ["X25519", "AES-256-GCM", "CLI"]) {
         expect(browserCrypto, `security.${lang}.browserCrypto.${token}`).toContain(token);
       }

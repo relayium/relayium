@@ -99,9 +99,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Paramétrer la CLI pour votre serveur</h2>
       <p>Par défaut, la CLI Relayium utilise le serveur de rendez-vous de relayium.com pour send/receive et text entre réseaux différents. Passez --server pour utiliser le vôtre à la place :</p>
       <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
-      <pre><code>relayium receive K7M4XR --server https://your-domain</code></pre>
+      <pre><code>relayium receive 483920 --server https://your-domain</code></pre>
       <pre><code>relayium text --server https://your-domain</code></pre>
-      <pre><code>relayium text K7M4XR --server https://your-domain</code></pre>
+      <pre><code>relayium text 483920 --server https://your-domain</code></pre>
       <ul><li>Quel que soit le serveur utilisé, la CLI est gratuite — --server ne change que le serveur de rendez-vous. send ou text sans code y génèrent un code, et up y stocke sous un compte ; connectez-vous donc d&#39;abord avec relayium login --server https://your-domain. receive, down et text avec le code affiché ne nécessitent aucune connexion.</li><li>Les deux extrémités de text doivent rester en ligne. Les messages utilisent leur propre session P2P directe chiffrée de bout en bout. Le text de la CLI est exclusivement direct et n&#39;utilise pas le relais TURN de l&#39;appli web. Ni Relayium ni votre serveur auto-hébergé ne stockent le corps des messages ou un historique côté serveur, mais chaque terminal ou destinataire peut copier ou conserver le texte après réception.</li><li>push/pull (via votre propre SSH) ainsi que serve + le push daemon-direct relayium://host ne touchent jamais relayium.com, auto-hébergé ou non — ils se connectent directement à la machine distante que vous indiquez.</li></ul>
       <h2>Questions fréquentes</h2>
       <h3>Dois-je configurer TURN ?</h3>

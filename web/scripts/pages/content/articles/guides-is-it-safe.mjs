@@ -60,7 +60,7 @@ const en = {
     {
       heading: "How Relayium answers each of these",
       body: [
-        "For a live transfer, with both people online at once, Relayium generates a fresh X25519 key pair on each device and derives a shared AES-256-GCM key that exists only inside the two browsers — it's never sent to Relayium's own servers. A short on-screen verification code (a SAS) lets both sides confirm the keys weren't swapped by a dishonest server in the middle, and each file's SHA-256 hash is checked end to end so a corrupted transfer doesn't arrive looking fine. The mechanics of exactly how that works are covered in more depth in \"How Relayium encrypts your files end-to-end\", if you want to go further than this page.",
+        "For a live transfer, with both people online at once, Relayium generates a fresh X25519 key pair on each device and derives a shared AES-256-GCM key that exists only inside the two browsers — it's never sent to Relayium's own servers. An optional short verification code (a SAS) — shown when you turn on advanced verification, which is off by default — lets both sides confirm the keys weren't swapped by a dishonest server in the middle, and each file's SHA-256 hash is checked end to end so a corrupted transfer doesn't arrive looking fine. The mechanics of exactly how that works are covered in more depth in \"How Relayium encrypts your files end-to-end\", if you want to go further than this page.",
         "When the recipient isn't online yet, a stored download link uses a genuinely different, zero-knowledge design: your browser generates a random AES-256-GCM key and encrypts the files with it before anything uploads. That key is never sent to the server — it lives only in the link's URL fragment, the part after #, which browsers never transmit. The server ends up holding ciphertext it has no way to decrypt, plus an expiry you choose: 1 hour, 1 day, 3 days, 7 days, or up to 14 days depending on your plan, or burn after the first completed download.",
         "Across networks, Relayium's browser app uses TURN by design: the relay carries end-to-end encrypted ciphertext, but it never receives the key and cannot read or decrypt the file.",
         "None of this asks you to trust a claim on faith: Relayium's client and server code is open source under the AGPL-3.0 license, so it can be read and audited rather than taken on faith.",
@@ -74,7 +74,7 @@ const en = {
       heading: "Encryption isn't the whole story — a few habits still matter",
       body: [
         "Strong encryption protects a file in transit and at rest, but it can't stop you from sending a link to the wrong address — treat a share link like the file itself, and don't post it somewhere public.",
-        "For anything genuinely sensitive, take the extra few seconds to compare a verification code out loud on a call, or in person, rather than trusting that two matching screens next to each other haven't both been fooled.",
+        "For anything genuinely sensitive, turn on advanced verification and take the extra few seconds to compare the verification code out loud on a call, or in person, rather than trusting that two matching screens next to each other haven't both been fooled.",
         "And no transfer tool, however well encrypted, protects a file that's already exposed on a device that's compromised — good encryption assumes the two ends themselves are trustworthy. None of this is a reason to be paranoid about sending files; it's just worth knowing what encryption does and doesn't cover.",
       ],
     },
@@ -105,7 +105,7 @@ const en = {
     ],
   },
   cta: {
-    text: "Curious whether a tool actually protects what it claims to? Start a transfer and see the verification code and the zero-knowledge link for yourself.",
+    text: "Curious whether a tool actually protects what it claims to? Start a transfer, turn on advanced verification, and see the verification code and the zero-knowledge link for yourself.",
     button: "Try Relayium now",
   },
   relatedHeading: "Keep reading",
@@ -166,7 +166,7 @@ const zh = {
     {
       heading: "Relayium 如何回应这些问题",
       body: [
-        "在一次双方同时在线的实时传输中，Relayium 会让每台设备各生成一对全新的 X25519 密钥，再各自推导出同一把只存在于两个浏览器内部的 AES-256-GCM 共享密钥——它从不会发送给 Relayium 自己的服务器。屏幕上显示的那段简短校验码（SAS）能让双方确认密钥没有被中间不诚实的服务器调包；每个文件的 SHA-256 哈希也会做端到端核对，这样一次损坏的传输不会看起来「一切正常」。想知道这背后具体是怎么运作的，可以接着读《Relayium 如何对文件端到端加密》，那篇讲得更深入。",
+        "在一次双方同时在线的实时传输中，Relayium 会让每台设备各生成一对全新的 X25519 密钥，再各自推导出同一把只存在于两个浏览器内部的 AES-256-GCM 共享密钥——它从不会发送给 Relayium 自己的服务器。可选的那段简短校验码（SAS）——打开默认关闭的「高级验证」后才会显示——能让双方确认密钥没有被中间不诚实的服务器调包；每个文件的 SHA-256 哈希也会做端到端核对，这样一次损坏的传输不会看起来「一切正常」。想知道这背后具体是怎么运作的，可以接着读《Relayium 如何对文件端到端加密》，那篇讲得更深入。",
         "当接收方还不在线时，存储下载链接采用的是另一套零知识方案：你的浏览器会生成一把随机的 AES-256-GCM 密钥，在任何内容上传之前就用它把文件加密好。这把密钥从不会发给服务器——它只存在于链接的 URL 片段里，也就是 # 号之后、浏览器从不发送的那部分。服务器最终持有的是它无法解密的密文，外加一个由你选择的有效期：1 小时、1 天、3 天、7 天，最长 14 天（上限取决于你的套餐），或者阅后即焚（首次完整下载后即删除）。",
         "跨网络时，Relayium 浏览器端按设计使用 TURN：中继承载端到端加密的密文，但从未拿到密钥，无法读取或解密文件。",
         "这些都不需要你单凭信任去接受：Relayium 的客户端和服务器代码都以 AGPL-3.0 许可证开源，谁都可以阅读和审查，而不必只是相信宣传。",
@@ -180,7 +180,7 @@ const zh = {
       heading: "加密不是全部——有几个习惯依然值得保持",
       body: [
         "强加密能保护文件在传输中和存放时的安全，但它挡不住你把链接发给了错的人——把分享链接当作文件本身来对待，不要把它公开发到什么地方。",
-        "对于真正敏感的内容，多花几秒钟，在通话里读出校验码或者当面核对，而不要只是相信两块并排的屏幕不可能同时被骗过。",
+        "对于真正敏感的内容，请打开高级验证，多花几秒钟，在通话里读出校验码或者当面核对，而不要只是相信两块并排的屏幕不可能同时被骗过。",
         "而且不管加密做得多好，任何传输工具都保护不了一台已被攻破的设备上早已暴露的文件——好的加密假设的前提是两端本身可信。这些都不是让你对发文件这件事草木皆兵的理由，只是值得清楚加密到底覆盖了什么、没覆盖什么。",
       ],
     },
@@ -211,7 +211,7 @@ const zh = {
     ],
   },
   cta: {
-    text: "想知道一个工具是不是真的做到了它宣称的保护？发起一次传输，亲眼看看那段校验码和这个零知识链接。",
+    text: "想知道一个工具是不是真的做到了它宣称的保护？发起一次传输，打开高级验证，亲眼看看那段校验码和这个零知识链接。",
     button: "立即试用 Relayium",
   },
   relatedHeading: "继续阅读",
@@ -272,7 +272,7 @@ const ja = {
     {
       heading: "Relayium はこれらにどう答えるか",
       body: [
-        "双方が同時にオンラインであるリアルタイム転送では、Relayium は各デバイスに新しい X25519 鍵ペアを生成させ、両ブラウザの内部にのみ存在する共有 AES-256-GCM 鍵を導出します。この鍵が Relayium 自身のサーバーに送られることはありません。画面に表示される短い検証コード（SAS）によって、双方は鍵が中間の不正なサーバーによってすり替えられていないことを確認でき、各ファイルの SHA-256 ハッシュがエンドツーエンドで照合されるため、破損した転送が何ごともなかったように見えることはありません。この仕組みの詳細をさらに知りたい場合は、より深く解説した「Relayium がファイルをエンドツーエンドで暗号化する仕組み」をご覧ください。",
+        "双方が同時にオンラインであるリアルタイム転送では、Relayium は各デバイスに新しい X25519 鍵ペアを生成させ、両ブラウザの内部にのみ存在する共有 AES-256-GCM 鍵を導出します。この鍵が Relayium 自身のサーバーに送られることはありません。任意の短い検証コード（SAS）——既定でオフの「高度な検証」をオンにすると表示されます——によって、双方は鍵が中間の不正なサーバーによってすり替えられていないことを確認でき、各ファイルの SHA-256 ハッシュがエンドツーエンドで照合されるため、破損した転送が何ごともなかったように見えることはありません。この仕組みの詳細をさらに知りたい場合は、より深く解説した「Relayium がファイルをエンドツーエンドで暗号化する仕組み」をご覧ください。",
         "受信者がまだオンラインでないとき、保存型のダウンロードリンクは本当に異なるゼロ知識方式を使います。ブラウザがランダムな AES-256-GCM 鍵を生成し、何かがアップロードされる前にそれでファイルを暗号化します。この鍵はサーバーには一切送られません。リンクの URL フラグメント、つまり # の後ろの部分にのみ存在し、ブラウザはこの部分を決して送信しません。結果としてサーバーが持つのは、復号する術のない暗号文と、選んだ有効期限（1時間、1日、3日、7日、プランに応じて最長14日、または最初のダウンロード完了後に消去）だけです。",
         "ネットワークをまたぐ場合、Relayium のブラウザアプリは設計上 TURN を使用します。リレーはエンドツーエンド暗号文を運びますが、鍵を受け取らないため、ファイルを読み取ることも復号することもできません。",
         "これらのどれについても、主張を鵜呑みにする必要はありません。Relayium のクライアントとサーバーのコードは AGPL-3.0 ライセンスのもとオープンソースで公開されており、宣伝を信じるのではなく、誰でも読んで監査できます。",
@@ -286,7 +286,7 @@ const ja = {
       heading: "暗号化がすべてではない:それでも大切ないくつかの習慣",
       body: [
         "強力な暗号化は転送中と保存中のファイルを守りますが、リンクを間違った宛先に送ってしまうことまでは防げません。共有リンクはファイルそのものだと思って扱い、どこか公開の場に貼らないようにしましょう。",
-        "本当に機密性の高い内容については、あと数秒手間をかけて、通話で検証コードを声に出して読み合わせるか、対面で照合しましょう。隣り合った2つの画面が両方とも欺かれていないと信じるだけでは十分ではありません。",
+        "本当に機密性の高い内容については、高度な検証をオンにし、あと数秒手間をかけて、通話で検証コードを声に出して読み合わせるか、対面で照合しましょう。隣り合った2つの画面が両方とも欺かれていないと信じるだけでは十分ではありません。",
         "そして、どれほど暗号化がしっかりしていても、すでに侵害された端末上で露出しているファイルを転送ツールが守ることはできません。優れた暗号化は、両端そのものが信頼できることを前提としています。だからといって、ファイルを送ること自体に神経質になる必要はありません。ただ、暗号化がどこまでをカバーし、どこからはカバーしないのかを知っておく価値がある、というだけです。",
       ],
     },
@@ -317,7 +317,7 @@ const ja = {
     ],
   },
   cta: {
-    text: "あるツールが本当に謳い文句どおりに守ってくれているのか気になりますか？転送を始めて、検証コードとゼロ知識のリンクを自分の目で確かめてください。",
+    text: "あるツールが本当に謳い文句どおりに守ってくれているのか気になりますか？転送を始め、高度な検証をオンにして、検証コードとゼロ知識のリンクを自分の目で確かめてください。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
@@ -378,7 +378,7 @@ const ko = {
     {
       heading: "Relayium이 이 각각에 답하는 방식",
       body: [
-        "양쪽이 동시에 온라인 상태인 실시간 전송에서, Relayium은 각 기기에서 새로운 X25519 키 쌍을 만들고, 두 브라우저 내부에만 존재하는 공유 AES-256-GCM 키를 도출합니다——이 키는 Relayium 자체 서버로 전송되는 일이 없습니다. 화면에 표시되는 짧은 검증 코드(SAS)를 통해 양쪽 모두 중간의 부정직한 서버가 키를 바꿔치기하지 않았음을 확인할 수 있고, 각 파일의 SHA-256 해시가 종단간으로 대조되므로 손상된 전송이 문제없어 보이게 도착하는 일이 없습니다. 이 원리가 정확히 어떻게 작동하는지 더 깊이 알고 싶다면 \"Relayium이 파일을 종단간 암호화하는 방식\"에서 더 자세히 다룹니다.",
+        "양쪽이 동시에 온라인 상태인 실시간 전송에서, Relayium은 각 기기에서 새로운 X25519 키 쌍을 만들고, 두 브라우저 내부에만 존재하는 공유 AES-256-GCM 키를 도출합니다——이 키는 Relayium 자체 서버로 전송되는 일이 없습니다. 선택적인 짧은 검증 코드(SAS)——기본값이 꺼짐인 고급 검증을 켜면 표시됩니다——를 통해 양쪽 모두 중간의 부정직한 서버가 키를 바꿔치기하지 않았음을 확인할 수 있고, 각 파일의 SHA-256 해시가 종단간으로 대조되므로 손상된 전송이 문제없어 보이게 도착하는 일이 없습니다. 이 원리가 정확히 어떻게 작동하는지 더 깊이 알고 싶다면 \"Relayium이 파일을 종단간 암호화하는 방식\"에서 더 자세히 다룹니다.",
         "수신자가 아직 온라인이 아닐 때, 저장형 다운로드 링크는 진짜로 다른 영지식 방식을 사용합니다. 브라우저는 무작위 AES-256-GCM 키를 생성하고, 무언가 업로드되기 전에 그것으로 파일을 암호화합니다. 이 키는 서버로 전혀 전송되지 않습니다——링크의 URL 프래그먼트, 즉 # 뒤의 부분에만 존재하며, 브라우저는 이 부분을 절대 전송하지 않습니다. 결국 서버가 갖게 되는 것은 복호화할 방법이 없는 암호문과, 직접 선택한 만료 기한(1시간, 1일, 3일, 7일, 요금제에 따라 최대 14일, 또는 첫 다운로드 완료 후 삭제)뿐입니다.",
         "네트워크를 넘을 때 Relayium 브라우저 앱은 설계상 TURN을 사용합니다. 릴레이는 종단간 암호문을 운반하지만 키를 받지 않으므로 파일을 읽거나 복호화할 수 없습니다.",
         "이 중 어느 것도 주장을 그냥 믿으라고 요구하지 않습니다. Relayium의 클라이언트와 서버 코드는 AGPL-3.0 라이선스로 공개되어 있어, 홍보 문구를 믿는 대신 누구나 읽고 감사할 수 있습니다.",
@@ -392,7 +392,7 @@ const ko = {
       heading: "암호화가 전부는 아닙니다 — 여전히 중요한 몇 가지 습관",
       body: [
         "강력한 암호화는 전송 중과 저장 중인 파일을 보호하지만, 링크를 잘못된 주소로 보내는 것까지 막아주지는 못합니다. 공유 링크를 파일 그 자체처럼 다루고, 어딘가 공개된 곳에 게시하지 마세요.",
-        "정말로 민감한 내용에 대해서는, 몇 초를 더 들여 통화로 검증 코드를 소리 내어 읽어 대조하거나 직접 만나서 확인하세요. 나란히 놓인 두 화면이 둘 다 속지 않았을 것이라고 그냥 믿는 것만으로는 부족합니다.",
+        "정말로 민감한 내용에 대해서는 고급 검증을 켠 다음, 몇 초를 더 들여 통화로 검증 코드를 소리 내어 읽어 대조하거나 직접 만나서 확인하세요. 나란히 놓인 두 화면이 둘 다 속지 않았을 것이라고 그냥 믿는 것만으로는 부족합니다.",
         "그리고 아무리 암호화가 잘 되어 있어도, 이미 손상된 기기에서 노출된 파일을 어떤 전송 도구도 보호해줄 수는 없습니다. 좋은 암호화는 양쪽 끝 자체가 신뢰할 수 있다는 것을 전제로 합니다. 이것이 파일을 보내는 일 자체에 대해 지나치게 예민해질 이유는 아닙니다. 다만 암호화가 어디까지 커버하고 어디부터는 커버하지 않는지 알아둘 가치가 있다는 것입니다.",
       ],
     },
@@ -423,7 +423,7 @@ const ko = {
     ],
   },
   cta: {
-    text: "어떤 도구가 실제로 약속한 만큼 보호해주는지 궁금하신가요? 전송을 시작해서 검증 코드와 영지식 링크를 직접 확인해 보세요.",
+    text: "어떤 도구가 실제로 약속한 만큼 보호해주는지 궁금하신가요? 전송을 시작하고 고급 검증을 켜서 검증 코드와 영지식 링크를 직접 확인해 보세요.",
     button: "지금 Relayium 사용해보기",
   },
   relatedHeading: "계속 읽기",
@@ -484,7 +484,7 @@ const de = {
     {
       heading: "Wie Relayium jede dieser Fragen beantwortet",
       body: [
-        "Bei einer Live-Übertragung, bei der beide Seiten gleichzeitig online sind, erzeugt Relayium auf jedem Gerät ein frisches X25519-Schlüsselpaar und leitet einen gemeinsamen AES-256-GCM-Schlüssel ab, der nur innerhalb der beiden Browser existiert — er wird nie an Relayiums eigene Server gesendet. Ein kurzer, auf dem Bildschirm angezeigter Verifizierungscode (ein SAS) lässt beide Seiten bestätigen, dass die Schlüssel nicht von einem unehrlichen Server in der Mitte ausgetauscht wurden, und der SHA-256-Hash jeder Datei wird Ende-zu-Ende geprüft, sodass eine beschädigte Übertragung nicht unauffällig ankommt. Wie das genau funktioniert, wird ausführlicher in „Wie Relayium deine Dateien Ende-zu-Ende verschlüsselt“ beschrieben, falls du tiefer einsteigen möchtest.",
+        "Bei einer Live-Übertragung, bei der beide Seiten gleichzeitig online sind, erzeugt Relayium auf jedem Gerät ein frisches X25519-Schlüsselpaar und leitet einen gemeinsamen AES-256-GCM-Schlüssel ab, der nur innerhalb der beiden Browser existiert — er wird nie an Relayiums eigene Server gesendet. Ein optionaler kurzer Verifizierungscode (ein SAS) — er erscheint, wenn du die standardmäßig ausgeschaltete erweiterte Verifizierung einschaltest — lässt beide Seiten bestätigen, dass die Schlüssel nicht von einem unehrlichen Server in der Mitte ausgetauscht wurden, und der SHA-256-Hash jeder Datei wird Ende-zu-Ende geprüft, sodass eine beschädigte Übertragung nicht unauffällig ankommt. Wie das genau funktioniert, wird ausführlicher in „Wie Relayium deine Dateien Ende-zu-Ende verschlüsselt“ beschrieben, falls du tiefer einsteigen möchtest.",
         "Ist der Empfänger noch nicht online, nutzt ein gespeicherter Download-Link ein wirklich anderes, Zero-Knowledge-Design: Dein Browser erzeugt einen zufälligen AES-256-GCM-Schlüssel und verschlüsselt die Dateien damit, bevor überhaupt etwas hochgeladen wird. Dieser Schlüssel wird nie an den Server gesendet — er lebt nur im URL-Fragment des Links, dem Teil nach dem #, den Browser nie übertragen. Der Server besitzt am Ende nur Chiffretext, den er nicht entschlüsseln kann, plus ein von dir gewähltes Ablaufdatum: 1 Stunde, 1 Tag, 3 Tage, 7 Tage, bis zu 14 Tage je nach Tarif, oder Löschung nach dem ersten vollständigen Download.",
         "Netzübergreifend nutzt Relayiums Browser-App TURN planmäßig: Das Relay transportiert Ende-zu-Ende-verschlüsselten Chiffretext, erhält aber nie den Schlüssel und kann die Datei weder lesen noch entschlüsseln.",
         "Nichts davon verlangt, dass du einer Behauptung einfach glaubst: Relayiums Client- und Servercode ist unter der AGPL-3.0-Lizenz quelloffen und kann gelesen und geprüft werden, statt bloß geglaubt zu werden.",
@@ -498,7 +498,7 @@ const de = {
       heading: "Verschlüsselung ist nicht alles — ein paar Gewohnheiten zählen weiterhin",
       body: [
         "Starke Verschlüsselung schützt eine Datei während der Übertragung und im Ruhezustand, kann dich aber nicht davon abhalten, einen Link an die falsche Adresse zu senden — behandle einen Freigabelink wie die Datei selbst und poste ihn nicht irgendwo öffentlich.",
-        "Bei wirklich sensiblen Inhalten nimm dir die paar zusätzlichen Sekunden, einen Verifizierungscode am Telefon laut vorzulesen oder persönlich zu vergleichen, statt einfach darauf zu vertrauen, dass zwei nebeneinanderliegende, übereinstimmende Bildschirme nicht beide getäuscht wurden.",
+        "Bei wirklich sensiblen Inhalten schalte die erweiterte Verifizierung ein und nimm dir die paar zusätzlichen Sekunden, den Verifizierungscode am Telefon laut vorzulesen oder persönlich zu vergleichen, statt einfach darauf zu vertrauen, dass zwei nebeneinanderliegende, übereinstimmende Bildschirme nicht beide getäuscht wurden.",
         "Und kein noch so gut verschlüsseltes Übertragungs-Tool schützt eine Datei, die bereits auf einem kompromittierten Gerät offenliegt — gute Verschlüsselung setzt voraus, dass die beiden Endpunkte selbst vertrauenswürdig sind. Das ist kein Grund, beim Versenden von Dateien paranoid zu werden — es lohnt sich nur zu wissen, was Verschlüsselung abdeckt und was nicht.",
       ],
     },
@@ -529,7 +529,7 @@ const de = {
     ],
   },
   cta: {
-    text: "Neugierig, ob ein Tool wirklich das schützt, was es verspricht? Starte eine Übertragung und sieh dir den Verifizierungscode und den Zero-Knowledge-Link selbst an.",
+    text: "Neugierig, ob ein Tool wirklich das schützt, was es verspricht? Starte eine Übertragung, schalte die erweiterte Verifizierung ein und sieh dir den Verifizierungscode und den Zero-Knowledge-Link selbst an.",
     button: "Relayium jetzt ausprobieren",
   },
   relatedHeading: "Weiterlesen",
@@ -590,7 +590,7 @@ const fr = {
     {
       heading: "Comment Relayium répond à chacun de ces points",
       body: [
-        "Pour un transfert en direct, avec les deux personnes en ligne en même temps, Relayium génère une nouvelle paire de clés X25519 sur chaque appareil et dérive une clé AES-256-GCM partagée qui n'existe qu'à l'intérieur des deux navigateurs — elle n'est jamais envoyée aux serveurs de Relayium eux-mêmes. Un court code de vérification affiché à l'écran (un SAS) permet aux deux parties de confirmer que les clés n'ont pas été substituées par un serveur malhonnête au milieu, et le hachage SHA-256 de chaque fichier est vérifié de bout en bout, si bien qu'un transfert corrompu n'arrive pas en paraissant intact. Le détail exact de ce mécanisme est expliqué plus en profondeur dans « Comment Relayium chiffre vos fichiers de bout en bout », si vous voulez aller plus loin que cette page.",
+        "Pour un transfert en direct, avec les deux personnes en ligne en même temps, Relayium génère une nouvelle paire de clés X25519 sur chaque appareil et dérive une clé AES-256-GCM partagée qui n'existe qu'à l'intérieur des deux navigateurs — elle n'est jamais envoyée aux serveurs de Relayium eux-mêmes. Un court code de vérification facultatif (un SAS), affiché lorsque vous activez la vérification avancée — désactivée par défaut —, permet aux deux parties de confirmer que les clés n'ont pas été substituées par un serveur malhonnête au milieu, et le hachage SHA-256 de chaque fichier est vérifié de bout en bout, si bien qu'un transfert corrompu n'arrive pas en paraissant intact. Le détail exact de ce mécanisme est expliqué plus en profondeur dans « Comment Relayium chiffre vos fichiers de bout en bout », si vous voulez aller plus loin que cette page.",
         "Quand le destinataire n'est pas encore en ligne, un lien de téléchargement stocké utilise un mécanisme réellement différent, à divulgation nulle : votre navigateur génère une clé AES-256-GCM aléatoire et l'utilise pour chiffrer les fichiers avant tout envoi. Cette clé n'est jamais envoyée au serveur — elle ne vit que dans le fragment d'URL du lien, la partie après le #, que les navigateurs ne transmettent jamais. Le serveur finit par détenir uniquement du texte chiffré qu'il n'a aucun moyen de déchiffrer, plus une expiration que vous choisissez : 1 heure, 1 jour, 3 jours, 7 jours, jusqu'à 14 jours selon votre offre, ou autodestruction après le premier téléchargement complet.",
         "Entre réseaux, l'application navigateur Relayium utilise TURN par conception : le relais transporte du texte chiffré de bout en bout, mais ne reçoit jamais la clé et ne peut ni lire ni déchiffrer le fichier.",
         "Rien de tout cela ne vous demande de croire une affirmation sur parole : le code client et serveur de Relayium est open source sous licence AGPL-3.0, et peut donc être lu et audité plutôt que simplement cru.",
@@ -604,7 +604,7 @@ const fr = {
       heading: "Le chiffrement n'est pas tout — quelques habitudes comptent encore",
       body: [
         "Un chiffrement solide protège un fichier en transit et au repos, mais il ne peut pas vous empêcher d'envoyer un lien à la mauvaise adresse — traitez un lien de partage comme le fichier lui-même, et ne le publiez pas quelque part de public.",
-        "Pour tout ce qui est vraiment sensible, prenez les quelques secondes supplémentaires pour comparer un code de vérification à voix haute lors d'un appel, ou en personne, plutôt que de faire confiance au fait que deux écrans côte à côte qui correspondent n'aient pas tous deux été trompés.",
+        "Pour tout ce qui est vraiment sensible, activez la vérification avancée et prenez les quelques secondes supplémentaires pour comparer le code de vérification à voix haute lors d'un appel, ou en personne, plutôt que de faire confiance au fait que deux écrans côte à côte qui correspondent n'aient pas tous deux été trompés.",
         "Et aucun outil de transfert, aussi bien chiffré soit-il, ne protège un fichier déjà exposé sur un appareil compromis — un bon chiffrement suppose que les deux extrémités elles-mêmes sont dignes de confiance. Rien de tout cela n'est une raison de devenir paranoïaque à l'idée d'envoyer des fichiers ; il vaut simplement la peine de savoir ce que le chiffrement couvre, et ce qu'il ne couvre pas.",
       ],
     },
@@ -635,7 +635,7 @@ const fr = {
     ],
   },
   cta: {
-    text: "Curieux de savoir si un outil protège vraiment ce qu'il prétend ? Lancez un transfert et observez par vous-même le code de vérification et le lien à divulgation nulle.",
+    text: "Curieux de savoir si un outil protège vraiment ce qu'il prétend ? Lancez un transfert, activez la vérification avancée et observez par vous-même le code de vérification et le lien à divulgation nulle.",
     button: "Essayer Relayium maintenant",
   },
   relatedHeading: "À lire ensuite",
@@ -696,7 +696,7 @@ const ar = {
     {
       heading: "كيف يجيب Relayium عن كلٍّ من هذه",
       body: [
-        "في النقل الفوري، مع وجود الطرفين متصلَين في آن واحد، يولّد Relayium زوج مفاتيح X25519 جديدًا على كل جهاز ويشتقّ مفتاح AES-256-GCM مشتركًا موجودًا فقط داخل المتصفحَين — ولا يُرسَل أبدًا إلى خوادم Relayium نفسها. ويتيح رمز تحقق قصير على الشاشة (SAS) للطرفين تأكيد أن المفاتيح لم تُستبدَل من قِبَل خادم غير نزيه في المنتصف، وتُفحَص تجزئة SHA-256 لكل ملف من الطرف إلى الطرف حتى لا يصل نقل تالف وهو يبدو سليمًا. أما تفاصيل كيفية عمل ذلك بالضبط فتُشرَح بعمق أكبر في «كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف»، إن أردت التعمّق أكثر من هذه الصفحة.",
+        "في النقل الفوري، مع وجود الطرفين متصلَين في آن واحد، يولّد Relayium زوج مفاتيح X25519 جديدًا على كل جهاز ويشتقّ مفتاح AES-256-GCM مشتركًا موجودًا فقط داخل المتصفحَين — ولا يُرسَل أبدًا إلى خوادم Relayium نفسها. ويتيح رمز تحقق قصير اختياري (SAS) — يظهر عند تفعيل «التحقّق المتقدّم» المعطَّل افتراضيًا — للطرفين تأكيد أن المفاتيح لم تُستبدَل من قِبَل خادم غير نزيه في المنتصف، وتُفحَص تجزئة SHA-256 لكل ملف من الطرف إلى الطرف حتى لا يصل نقل تالف وهو يبدو سليمًا. أما تفاصيل كيفية عمل ذلك بالضبط فتُشرَح بعمق أكبر في «كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف»، إن أردت التعمّق أكثر من هذه الصفحة.",
         "حين لا يكون المُستقبِل متصلًا بعد، يستخدم رابط التنزيل المُخزَّن تصميمًا مختلفًا فعلًا بمعرفة صفرية: يولّد متصفحك مفتاح AES-256-GCM عشوائيًا ويشفّر به الملفات قبل رفع أي شيء. لا يُرسَل هذا المفتاح إلى الخادم أبدًا — بل يوجد فقط في جزء عنوان الرابط (URL fragment)، وهو الجزء الذي يلي #، والذي لا ترسله المتصفحات أبدًا. ينتهي الأمر بالخادم حاملًا نصًا مُشفَّرًا لا سبيل له إلى فك تشفيره، إضافة إلى مدة انتهاء صلاحية تختارها أنت: ساعة واحدة، أو يوم واحد، أو 3 أيام، أو 7 أيام، أو حتى 14 يومًا حسب باقتك، أو الحذف بعد أول تنزيل مكتمل.",
         "عبر الشبكات يستخدم تطبيق Relayium في المتصفح TURN حسب التصميم: ينقل المُرحِّل نصًا مشفّرًا من الطرف إلى الطرف، لكنه لا يتلقى المفتاح أبدًا ولا يستطيع قراءة الملف أو فك تشفيره.",
         "لا يطلب أيٌّ من هذا أن تصدّق ادّعاءً على عِلّاته: شيفرة عميل Relayium وخادمه مفتوحة المصدر بموجب رخصة AGPL-3.0، فيمكن قراءتها وتدقيقها بدلًا من تصديقها على عِلّاته.",
@@ -710,7 +710,7 @@ const ar = {
       heading: "التشفير ليس القصة كلها — لا تزال بعض العادات مهمة",
       body: [
         "يحمي التشفير القوي الملف أثناء نقله وأثناء تخزينه، لكنه لا يمنعك من إرسال رابط إلى العنوان الخطأ — تعامل مع رابط المشاركة كأنه الملف نفسه، ولا تنشره في مكان عام.",
-        "بالنسبة لأي شيء حسّاس فعلًا، خصّص بضع ثوانٍ إضافية لمقارنة رمز التحقق بصوت عالٍ عبر مكالمة، أو وجهًا لوجه، بدلًا من الثقة بأن شاشتين متطابقتين متجاورتين لم تُخدَعا كلتاهما.",
+        "بالنسبة لأي شيء حسّاس فعلًا، فعِّل التحقّق المتقدّم وخصّص بضع ثوانٍ إضافية لمقارنة رمز التحقق بصوت عالٍ عبر مكالمة، أو وجهًا لوجه، بدلًا من الثقة بأن شاشتين متطابقتين متجاورتين لم تُخدَعا كلتاهما.",
         "ولا توجد أداة نقل، مهما بلغت جودة تشفيرها، تحمي ملفًا منكشفًا أصلًا على جهاز مُخترَق — فالتشفير الجيد يفترض أن الطرفين نفسيهما جديران بالثقة. لا شيء من هذا سبب للإصابة بجنون الارتياب من إرسال الملفات؛ إنما من المفيد فقط أن تعرف ما الذي يغطّيه التشفير وما لا يغطّيه.",
       ],
     },
@@ -741,7 +741,7 @@ const ar = {
     ],
   },
   cta: {
-    text: "أتتساءل إن كانت أداة ما تحمي فعلًا ما تدّعي حمايته؟ ابدأ عملية نقل وشاهد رمز التحقق ورابط المعرفة الصفرية بنفسك.",
+    text: "أتتساءل إن كانت أداة ما تحمي فعلًا ما تدّعي حمايته؟ ابدأ عملية نقل، وفعِّل التحقّق المتقدّم، وشاهد رمز التحقق ورابط المعرفة الصفرية بنفسك.",
     button: "جرّب Relayium الآن",
   },
   relatedHeading: "تابع القراءة",
@@ -802,7 +802,7 @@ const es = {
     {
       heading: "Cómo responde Relayium a cada una de estas",
       body: [
-        "Para una transferencia en vivo, con ambas personas en línea a la vez, Relayium genera un nuevo par de claves X25519 en cada dispositivo y deriva una clave AES-256-GCM compartida que existe solo dentro de los dos navegadores — nunca se envía a los propios servidores de Relayium. Un breve código de verificación en pantalla (un SAS) permite a ambos lados confirmar que las claves no fueron sustituidas por un servidor deshonesto en medio, y el hash SHA-256 de cada archivo se comprueba de extremo a extremo para que una transferencia corrupta no llegue con buen aspecto. Los detalles exactos de cómo funciona eso se tratan con más profundidad en «Cómo Relayium cifra tus archivos de extremo a extremo», si quieres ir más allá de esta página.",
+        "Para una transferencia en vivo, con ambas personas en línea a la vez, Relayium genera un nuevo par de claves X25519 en cada dispositivo y deriva una clave AES-256-GCM compartida que existe solo dentro de los dos navegadores — nunca se envía a los propios servidores de Relayium. Un breve código de verificación opcional (un SAS), que aparece al activar la verificación avanzada —desactivada por omisión—, permite a ambos lados confirmar que las claves no fueron sustituidas por un servidor deshonesto en medio, y el hash SHA-256 de cada archivo se comprueba de extremo a extremo para que una transferencia corrupta no llegue con buen aspecto. Los detalles exactos de cómo funciona eso se tratan con más profundidad en «Cómo Relayium cifra tus archivos de extremo a extremo», si quieres ir más allá de esta página.",
         "Cuando el destinatario aún no está en línea, un enlace de descarga almacenado usa un diseño genuinamente distinto, de conocimiento cero: tu navegador genera una clave AES-256-GCM aleatoria y cifra los archivos con ella antes de que se suba nada. Esa clave nunca se envía al servidor — vive solo en el fragmento de la URL del enlace, la parte tras el #, que los navegadores nunca transmiten. El servidor acaba guardando texto cifrado que no tiene forma de descifrar, más una caducidad que tú eliges: 1 hora, 1 día, 3 días, 7 días, hasta 14 días según tu plan, o destrucción tras la primera descarga completada.",
         "Entre redes, la aplicación web de Relayium usa TURN por diseño: el retransmisor transporta texto cifrado de extremo a extremo, pero nunca recibe la clave y no puede leer ni descifrar el archivo.",
         "Nada de esto te pide confiar en una afirmación por fe: el código de cliente y servidor de Relayium es de código abierto bajo la licencia AGPL-3.0, así que puede leerse y auditarse en lugar de aceptarse por fe.",
@@ -816,7 +816,7 @@ const es = {
       heading: "El cifrado no es toda la historia — unos pocos hábitos siguen importando",
       body: [
         "Un cifrado fuerte protege un archivo en tránsito y en reposo, pero no puede impedir que envíes un enlace a la dirección equivocada — trata un enlace para compartir como el propio archivo, y no lo publiques en ningún lugar público.",
-        "Para cualquier cosa genuinamente sensible, tómate los pocos segundos de más para comparar un código de verificación en voz alta en una llamada, o en persona, en lugar de fiarte de que dos pantallas coincidentes una al lado de la otra no hayan sido engañadas ambas.",
+        "Para cualquier cosa genuinamente sensible, activa la verificación avanzada y tómate los pocos segundos de más para comparar el código de verificación en voz alta en una llamada, o en persona, en lugar de fiarte de que dos pantallas coincidentes una al lado de la otra no hayan sido engañadas ambas.",
         "Y ninguna herramienta de transferencia, por bien cifrada que esté, protege un archivo que ya está expuesto en un dispositivo comprometido — un buen cifrado da por supuesto que los dos extremos son de fiar. Nada de esto es motivo para volverse paranoico con el envío de archivos; solo vale la pena saber qué cubre el cifrado y qué no.",
       ],
     },
@@ -847,7 +847,7 @@ const es = {
     ],
   },
   cta: {
-    text: "¿Con curiosidad por saber si una herramienta protege de verdad lo que afirma? Inicia una transferencia y comprueba por ti mismo el código de verificación y el enlace de conocimiento cero.",
+    text: "¿Con curiosidad por saber si una herramienta protege de verdad lo que afirma? Inicia una transferencia, activa la verificación avanzada y comprueba por ti mismo el código de verificación y el enlace de conocimiento cero.",
     button: "Prueba Relayium ahora",
   },
   relatedHeading: "Sigue leyendo",
@@ -908,7 +908,7 @@ const pt = {
     {
       heading: "Como o Relayium responde a cada um desses pontos",
       body: [
-        "Para uma transferência ao vivo, com as duas pessoas online ao mesmo tempo, o Relayium gera um novo par de chaves X25519 em cada dispositivo e deriva uma chave AES-256-GCM compartilhada que existe apenas dentro dos dois navegadores — ela nunca é enviada aos próprios servidores do Relayium. Um curto código de verificação na tela (um SAS) permite que ambos os lados confirmem que as chaves não foram substituídas por um servidor desonesto no meio, e o hash SHA-256 de cada arquivo é verificado de ponta a ponta para que uma transferência corrompida não chegue parecendo intacta. Os detalhes exatos de como isso funciona são abordados com mais profundidade em “Como o Relayium criptografa seus arquivos de ponta a ponta”, se você quiser ir além desta página.",
+        "Para uma transferência ao vivo, com as duas pessoas online ao mesmo tempo, o Relayium gera um novo par de chaves X25519 em cada dispositivo e deriva uma chave AES-256-GCM compartilhada que existe apenas dentro dos dois navegadores — ela nunca é enviada aos próprios servidores do Relayium. Um curto código de verificação opcional (um SAS), que aparece quando você ativa a verificação avançada — desligada por padrão —, permite que ambos os lados confirmem que as chaves não foram substituídas por um servidor desonesto no meio, e o hash SHA-256 de cada arquivo é verificado de ponta a ponta para que uma transferência corrompida não chegue parecendo intacta. Os detalhes exatos de como isso funciona são abordados com mais profundidade em “Como o Relayium criptografa seus arquivos de ponta a ponta”, se você quiser ir além desta página.",
         "Quando o destinatário ainda não está online, um link de download armazenado usa um design genuinamente diferente, de conhecimento zero: seu navegador gera uma chave AES-256-GCM aleatória e criptografa os arquivos com ela antes que qualquer coisa seja enviada. Essa chave nunca é enviada ao servidor — ela vive apenas no fragmento da URL do link, a parte depois do #, que os navegadores nunca transmitem. O servidor acaba guardando texto cifrado que não tem como descriptografar, mais uma expiração que você escolhe: 1 hora, 1 dia, 3 dias, 7 dias, até 14 dias conforme o seu plano, ou autodestruição após o primeiro download concluído.",
         "Entre redes, o aplicativo web do Relayium usa TURN por design: o retransmissor transporta texto cifrado de ponta a ponta, mas nunca recebe a chave e não consegue ler nem descriptografar o arquivo.",
         "Nada disso pede que você acredite em uma afirmação às cegas: o código de cliente e servidor do Relayium é de código aberto sob a licença AGPL-3.0, então pode ser lido e auditado em vez de aceito às cegas.",
@@ -922,7 +922,7 @@ const pt = {
       heading: "A criptografia não é toda a história — alguns hábitos ainda importam",
       body: [
         "Uma criptografia forte protege um arquivo em trânsito e em repouso, mas não pode impedir que você envie um link para o endereço errado — trate um link de compartilhamento como o próprio arquivo, e não o publique em nenhum lugar público.",
-        "Para qualquer coisa genuinamente sensível, dedique os poucos segundos a mais para comparar um código de verificação em voz alta em uma chamada, ou pessoalmente, em vez de confiar que duas telas coincidentes lado a lado não tenham sido ambas enganadas.",
+        "Para qualquer coisa genuinamente sensível, ative a verificação avançada e dedique os poucos segundos a mais para comparar o código de verificação em voz alta em uma chamada, ou pessoalmente, em vez de confiar que duas telas coincidentes lado a lado não tenham sido ambas enganadas.",
         "E nenhuma ferramenta de transferência, por melhor criptografada que seja, protege um arquivo que já está exposto em um dispositivo comprometido — uma boa criptografia pressupõe que as duas pontas em si são confiáveis. Nada disso é motivo para ficar paranoico em relação a enviar arquivos; só vale a pena saber o que a criptografia cobre e o que não cobre.",
       ],
     },
@@ -953,7 +953,7 @@ const pt = {
     ],
   },
   cta: {
-    text: "Curioso para saber se uma ferramenta realmente protege o que afirma? Inicie uma transferência e veja você mesmo o código de verificação e o link de conhecimento zero.",
+    text: "Curioso para saber se uma ferramenta realmente protege o que afirma? Inicie uma transferência, ative a verificação avançada e veja você mesmo o código de verificação e o link de conhecimento zero.",
     button: "Experimente o Relayium agora",
   },
   relatedHeading: "Continue lendo",

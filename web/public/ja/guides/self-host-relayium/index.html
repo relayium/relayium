@@ -99,9 +99,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>CLI を自分のサーバーに向ける</h2>
       <p>Relayium CLI は、ネットワークをまたぐ send/receive と text で既定では relayium.com のランデブーサーバーを使います。--server を渡せば、代わりに自分のサーバーを使えます:</p>
       <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
-      <pre><code>relayium receive K7M4XR --server https://your-domain</code></pre>
+      <pre><code>relayium receive 483920 --server https://your-domain</code></pre>
       <pre><code>relayium text --server https://your-domain</code></pre>
-      <pre><code>relayium text K7M4XR --server https://your-domain</code></pre>
+      <pre><code>relayium text 483920 --server https://your-domain</code></pre>
       <ul><li>どちらのサーバーを使っても CLI は無料です——--server はペアリングコードのハンドシェイク先を変更するだけです。send または text をコードなしで実行するとそのサーバーでコードを発行し、クラウドの up もそのサーバー上のアカウントに保存するため、先に relayium login --server https://your-domain でサインインしてください。receive、down、表示されたコードで参加する text はログイン不要です。</li><li>text の両端は同時にオンラインである必要があります。メッセージは独立したエンドツーエンド暗号化 P2P 直結セッションを使います。CLI text は直結専用で、ブラウザ版の TURN リレーは使いません。Relayium もセルフホストしたサーバーもメッセージ本文やサーバー側の履歴を保存しませんが、どちらの端末または受信者も受信後のテキストをコピーまたは保持できます。</li><li>push/pull（自分の SSH 経由）や、serve とデーモン直結の push relayium://host は、セルフホストかどうかにかかわらず relayium.com に一切触れません——指定したリモートに直接接続します。</li></ul>
       <h2>よくある質問</h2>
       <h3>TURN を設定する必要はありますか？</h3>

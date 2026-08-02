@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>跨网络文件与实时文本传输——端到端加密 | Relayium</title>
-    <meta name="description" content="用 6 字符配对码跨网络传输文件和实时临时文本。双方须同时在线；浏览器会按设计使用仅能看到密文的 TURN 中继。" />
+    <meta name="description" content="用 6 位数字配对码跨网络传输文件和实时临时文本。双方须同时在线；浏览器会按设计使用仅能看到密文的 TURN 中继。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/cross-network/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/cross-network" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="跨网络文件与实时文本传输——端到端加密 | Relayium" />
-    <meta property="og:description" content="用 6 字符配对码跨网络传输文件和实时临时文本。双方须同时在线；浏览器会按设计使用仅能看到密文的 TURN 中继。" />
+    <meta property="og:description" content="用 6 位数字配对码跨网络传输文件和实时临时文本。双方须同时在线；浏览器会按设计使用仅能看到密文的 TURN 中继。" />
     <meta property="og:url" content="https://relayium.com/zh/cross-network/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="跨网络文件与实时文本传输——端到端加密 | Relayium" />
-    <meta name="twitter:description" content="用 6 字符配对码跨网络传输文件和实时临时文本。双方须同时在线；浏览器会按设计使用仅能看到密文的 TURN 中继。" />
+    <meta name="twitter:description" content="用 6 位数字配对码跨网络传输文件和实时临时文本。双方须同时在线；浏览器会按设计使用仅能看到密文的 TURN 中继。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"跨网络文件与实时文本传输——端到端加密 | Relayium","description":"用 6 字符配对码跨网络传输文件和实时临时文本。双方须同时在线；浏览器会按设计使用仅能看到密文的 TURN 中继。","url":"https://relayium.com/zh/cross-network/","inLanguage":"zh-Hans","dateModified":"2026-07-31","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"文件或消息会经过你们的服务器吗？","acceptedAnswer":{"@type":"Answer","text":"跨网络浏览器会话会按设计使用 Relayium 的 TURN 中继，但文件和消息均为端到端加密，因此中继只能看到密文。Relayium 不存储文本正文。"}},{"@type":"Question","name":"一定要用配对码吗？","acceptedAnswer":{"@type":"Answer","text":"是的：6 字符配对码（或其加入链接/二维码）有效期 30 分钟，用于让两台设备跨网络配对。配对码由服务器从字母表 ACDEFHJKMNPRTWXY23456789 中签发——不含 0 和 1，以免与 O、I 混淆——因此你无法自己编一个：只有服务器发出的码才能完成配对。"}},{"@type":"Question","name":"需要注册账号吗？","acceptedAnswer":{"@type":"Answer","text":"创建文件或文本配对码的一方需登录；任何持码加入的人都无需账号。"}},{"@type":"Question","name":"是端到端加密的吗？","acceptedAnswer":{"@type":"Answer","text":"是——采用 X25519 密钥交换 + 每块 AES-256-GCM 加密。通过带外渠道核对 SAS 可确认端点公钥未被替换，信令服务或 TURN 中继没有冒充任一端点或终止应用层端到端加密；TURN 仍可处于网络路径中，但只承载密文。"}},{"@type":"Question","name":"除了文件，还能发送文本吗？","acceptedAnswer":{"@type":"Answer","text":"可以。双方在线时，可发送实时临时文本，每条最多 65,536 个 UTF-8 字节。Relayium 不存储消息正文或服务端历史，但任一端点都可复制或保留收到的文本。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","name":"跨网络文件与实时文本传输——端到端加密 | Relayium","description":"用 6 位数字配对码跨网络传输文件和实时临时文本。双方须同时在线；浏览器会按设计使用仅能看到密文的 TURN 中继。","url":"https://relayium.com/zh/cross-network/","inLanguage":"zh-Hans","dateModified":"2026-07-31","publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/"}},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"文件或消息会经过你们的服务器吗？","acceptedAnswer":{"@type":"Answer","text":"跨网络浏览器会话会按设计使用 Relayium 的 TURN 中继，但文件和消息均为端到端加密，因此中继只能看到密文。Relayium 不存储文本正文。"}},{"@type":"Question","name":"一定要用配对码吗？","acceptedAnswer":{"@type":"Answer","text":"是的：6 位数字配对码（或其加入链接/二维码）有效期 5 分钟，用于让两台设备跨网络配对。配对码由服务器在 0-9 之间均匀随机签发，每一位数字都可能出现，前导零也是正常的——因此你无法自己编一个：只有服务器发出的码才能完成配对。它与校验码（SAS）不是同一组六位数字：后者由两端的密钥推导而来。"}},{"@type":"Question","name":"需要注册账号吗？","acceptedAnswer":{"@type":"Answer","text":"创建文件或文本配对码的一方需登录；任何持码加入的人都无需账号。"}},{"@type":"Question","name":"是端到端加密的吗？","acceptedAnswer":{"@type":"Answer","text":"是——采用 X25519 密钥交换 + 每块 AES-256-GCM 加密。通过带外渠道核对 SAS 可确认端点公钥未被替换，信令服务或 TURN 中继没有冒充任一端点或终止应用层端到端加密；TURN 仍可处于网络路径中，但只承载密文。"}},{"@type":"Question","name":"除了文件，还能发送文本吗？","acceptedAnswer":{"@type":"Answer","text":"可以。双方在线时，可发送实时临时文本，每条最多 65,536 个 UTF-8 字节。Relayium 不存储消息正文或服务端历史，但任一端点都可复制或保留收到的文本。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -79,15 +79,15 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
       <main>
       <h1>跨网络传输文件与实时文本，端到端加密</h1>
-      <p class="pitch">两台在线设备身处不同网络时，可用 6 字符配对码（或其加入链接/二维码）传输文件或临时文本。浏览器会按设计使用 Relayium 的 TURN 中继，但中继只能看到密文；Relayium 从不存储文本正文。</p>
+      <p class="pitch">两台在线设备身处不同网络时，可用 6 位数字配对码（或其加入链接/二维码）传输文件或临时文本。浏览器会按设计使用 Relayium 的 TURN 中继，但中继只能看到密文；Relayium 从不存储文本正文。</p>
       <a class="cta" href="/cross-network?lang=zh">开始传输</a>
 
       <section class="reveal">
       <h2>四步完成一次传输</h2>
       <ol class="steps">
-        <li>一方登录后为文件或文本会话生成一个 6 字符配对码（也可分享其加入链接/二维码）。</li>
+        <li>一方登录后为文件或文本会话生成一个 6 位数字配对码（也可分享其加入链接/二维码）。</li>
         <li>另一方打开链接或输入配对码即可——持码加入无需账号。</li>
-        <li>双方通过带外渠道核对同一段 6 位数字 SAS 校验码（与配对码是两个不同的值）。一致表示 X25519 端点公钥未被替换，信令服务或 TURN 中继没有冒充任一端点或终止应用层端到端加密；TURN 仍可处于网络路径中，但只承载密文。</li>
+        <li>可选（打开「高级验证」）：双方通过带外渠道核对同一段 6 位数字校验码（SAS，与配对码是两个不同的值）。一致表示 X25519 端点公钥未被替换，信令服务或 TURN 中继没有冒充任一端点或终止应用层端到端加密；TURN 仍可处于网络路径中，但只承载密文。</li>
         <li>双方同时在线时，文件流和实时文本均通过 TURN 端到端加密传输。Relayium 不存储消息正文；每条消息最多 65,536 个 UTF-8 字节。</li>
       </ol>
       </section>
@@ -96,7 +96,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <h2>为什么选择 Relayium</h2>
       <ul class="why">
         <li><b>端到端加密</b> — X25519 密钥交换 + 每块 AES-256-GCM 加密，密钥只在两台设备间协商，中继与服务器均无法解密。</li>
-        <li><b>SAS 防中间人</b> — 通过带外渠道核对 6 位 SAS，可确认 X25519 端点公钥未被替换，并检测信令服务或 TURN 中继冒充端点。它并不证明网络路径中没有 TURN；TURN 仍可能在路径中，但只承载密文。</li>
+        <li><b>可选的 SAS 防中间人核对</b> — 通过带外渠道核对 6 位 SAS，可确认 X25519 端点公钥未被替换，并检测信令服务或 TURN 中继冒充端点。它并不证明网络路径中没有 TURN；TURN 仍可能在路径中，但只承载密文。</li>
         <li><b>中继只经手密文</b> — 跨网络浏览器传输会按设计使用快速 TURN 中继，以在 NAT 环境下可靠连接——中继只经手密文，从不接触你的密钥或明文。</li>
         <li><b>实时临时文本</b> — 双方必须同时在线。Relayium 不存储消息正文或服务端历史；接收端仍可复制或保留文本。每条消息最多 65,536 个 UTF-8 字节。</li>
         <li><b>跨平台</b> — Windows、macOS、Linux、Android、iOS——只要有现代浏览器，无需安装任何 App。</li>
@@ -118,7 +118,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <h3>文件或消息会经过你们的服务器吗？</h3>
       <p>跨网络浏览器会话会按设计使用 Relayium 的 TURN 中继，但文件和消息均为端到端加密，因此中继只能看到密文。Relayium 不存储文本正文。</p>
       <h3>一定要用配对码吗？</h3>
-      <p>是的：6 字符配对码（或其加入链接/二维码）有效期 30 分钟，用于让两台设备跨网络配对。配对码由服务器从字母表 ACDEFHJKMNPRTWXY23456789 中签发——不含 0 和 1，以免与 O、I 混淆——因此你无法自己编一个：只有服务器发出的码才能完成配对。</p>
+      <p>是的：6 位数字配对码（或其加入链接/二维码）有效期 5 分钟，用于让两台设备跨网络配对。配对码由服务器在 0-9 之间均匀随机签发，每一位数字都可能出现，前导零也是正常的——因此你无法自己编一个：只有服务器发出的码才能完成配对。它与校验码（SAS）不是同一组六位数字：后者由两端的密钥推导而来。</p>
       <h3>需要注册账号吗？</h3>
       <p>创建文件或文本配对码的一方需登录；任何持码加入的人都无需账号。</p>
       <h3>是端到端加密的吗？</h3>

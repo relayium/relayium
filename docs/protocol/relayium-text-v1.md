@@ -70,28 +70,53 @@ There are no acknowledgements and no resume. A message is at most 64 KiB: sent o
 not sent. Acks would also be one step from delivery receipts, which this protocol
 deliberately does not have.
 
-### Consent handshake
+### Activation handshake
 
-A message session is accepted once, explicitly, before any content is rendered. It
-reuses the file protocol's existing single-byte control frames unchanged
-(relayium-realtime-wire-v1.md) — no new vocabulary:
+A message session is activated once, explicitly on the wire, before any content
+crosses it. It reuses the file protocol's existing single-byte control frames
+unchanged (relayium-realtime-wire-v1.md) — no new vocabulary:
 
-- `0xfe` ACCEPT — recipient → initiator, sent once when the user accepts. The
-  initiator may not send a message frame before receiving it.
-- `0xff` REJECT — recipient → initiator, sent once when the user declines; the
-  connection is then closed.
+- `0xfe` ACCEPT — recipient → initiator, sent once when the recipient's side is
+  ready to receive. The initiator may not send a message frame before receiving it.
+- `0xff` REJECT — recipient → initiator, sent once when the session is declined;
+  the connection is then closed.
 - `0xfd` COMPLETE — belongs to the file protocol and has no meaning here. Ignore it.
+
+**ACCEPT is an activation signal, not evidence that a human approved anything.**
+A default client sends it automatically once the commit-reveal-complete,
+encrypted link is established (handshake per relayium-handshake-v1.md); the
+recipient sees the composer, not a prompt. A client with **advanced
+verification** enabled holds ACCEPT until the person approves the session — that
+is the same place the SAS comparison lives. Both behaviours are conforming and
+indistinguishable on the wire, so an implementation
+MUST NOT read a received ACCEPT as "someone looked at this". What consent means
+on a given surface is decided above this protocol, not by this byte.
+
+"Commit-reveal-complete" is the precise claim and is deliberately not written as
+"authenticated": the handshake proves that the key each side revealed matches the
+commitment it made first, and AEAD authenticates every frame after that. Neither
+establishes that the peer is the *intended* person — only an out-of-band SAS
+comparison does, and a default client never asks for one. See
+relayium-handshake-v1.md.
+
+This says nothing about the FILE protocol's own accept step, which is a separate
+decision about bytes landing on disk. That step is platform-specific: a browser
+recipient approves an incoming batch before anything is written, while the native
+macOS client accepts the manifest automatically and writes into its configured
+destination — Downloads by default. Neither is a confidentiality control — an
+unintended recipient who wants the files simply accepts them.
 
 Single-byte control frames are structurally disjoint from a kind-9 frame, which is
 at least 21 bytes, so the two can never be confused.
 
-The recipient MUST NOT attach a frame handler before accepting, and MUST attach it
-**before** sending ACCEPT.
+The recipient MUST NOT attach a frame handler before it is ready to accept, and
+MUST attach it **before** sending ACCEPT. This ordering is a wire invariant and
+holds identically whether ACCEPT was automatic or human-approved.
 
 Both halves are load-bearing, in opposite directions. A message event dispatched on
 a DataChannel with no listener attached is **dropped — there is no replay**, so
-sending ACCEPT first loses whatever the peer sends the instant it sees it. Not
-attaching before consent is what makes "no content before consent" structural: a
+sending ACCEPT first loses whatever the peer sends the instant it sees it.
+Attaching first is also what makes "no content before activation" structural: a
 peer that sends before ACCEPT has its frames dropped undecrypted, which is the safe
 direction and is also the peer breaking its own session — its seq is consumed, so
 the next frame is rejected as out of order. Ordering the two correctly costs
@@ -172,6 +197,13 @@ certificate fingerprint instead of a crypto_kx public key, and the two SAS
 constructions are not interoperable). There is therefore **no application-layer
 AEAD on this path** — adding one would duplicate a guarantee the stream already
 has.
+
+The pinning and the commit-reveal are unconditional. **Stopping to compare the
+SAS is not**: `relayium text` runs without a prompt unless `--verify` is passed,
+matching `send`. `--verify` needs a terminal to answer and refuses rather than
+proceeding as if it had been confirmed; `--yes` is still accepted, means "never
+prompt", and overrides `--verify`. None of that changes a byte on the wire — it
+is which value the local user is asked to look at.
 
 ### Mode negotiation
 

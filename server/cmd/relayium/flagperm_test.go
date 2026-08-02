@@ -162,7 +162,7 @@ func TestSubcommandParsersAcceptTrailingFlags(t *testing.T) {
 		}
 	})
 	t.Run("text flags", func(t *testing.T) {
-		f, rest, err := parseTextFlags([]string{"K7M4XR", "--yes", "--server", "wss://example.invalid"})
+		f, rest, err := parseTextFlags([]string{"483920", "--yes", "--server", "wss://example.invalid"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -172,7 +172,7 @@ func TestSubcommandParsersAcceptTrailingFlags(t *testing.T) {
 		if f.server != "wss://example.invalid" {
 			t.Fatalf("server = %q", f.server)
 		}
-		if !reflect.DeepEqual(rest, []string{"K7M4XR"}) {
+		if !reflect.DeepEqual(rest, []string{"483920"}) {
 			t.Fatalf("operands = %q", rest)
 		}
 	})

@@ -82,24 +82,27 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="lead">The browser and command-line client each support text, but they are separate transports and cannot join each other&#39;s pairing codes. Choose one flow below and use it on both ends.</p>
       <h2>Browser: send a message to an online device</h2>
       <p>Open relayium.com on both devices. Devices on the same network appear automatically; for different networks, create a browser pairing code from the cross-network page and join it in the other browser.</p>
-      <ul><li>On the peer card, choose “Send a message”; the recipient must accept before any message content or composer appears.</li><li>Compare the six-digit verification code (SAS) on both screens, then type or paste text. Use ⌘/Ctrl+Enter to send.</li><li>Each side can send several messages and use Copy on any received message while the session remains open.</li></ul>
+      <ul><li>On the peer card, choose “Send a message”. By default the session opens straight into the composer on both ends — the connection is encrypted either way.</li><li>Type or paste text and send with ⌘/Ctrl+Enter. Turn on advanced verification first if you want both screens to show a six-digit verification code (SAS) to compare, plus an explicit accept step before the session opens.</li><li>Each side can send several messages and use Copy on any received message while the session remains open.</li></ul>
       <h2>CLI: mint a code on one machine, join it on the other</h2>
-      <p>Run relayium text with no code on one machine. It mints a six-character code with your account, prints the exact command the other machine should run, and stays in the session waiting for it. There is no temporary file to send and no extra process to stop.</p>
-      <p>Run relayium text with that code on the other machine. Interactive mode sends one line per message and asks both people to confirm the SAS. For multiline or byte-exact stdin, pipe it as one message and pass --yes because no terminal is available for the SAS prompt.</p>
+      <p>Run relayium text with no code on one machine. It mints a six-digit code with your account, prints the exact command the other machine should run, and stays in the session waiting for it. There is no temporary file to send and no extra process to stop.</p>
+      <p>Run relayium text with that code on the other machine. Interactive mode sends one line per message and does not stop to compare a code unless you ask it to. For multiline or byte-exact stdin, pipe it as one message; a piped run needs no extra flag.</p>
       <pre><code># One machine mints the code and waits (relayium login is required once)
 relayium text
-# Code: K7M4XR   (valid 30 minutes)
-# On the other machine:  relayium text K7M4XR
+# Code: 483920   (valid 5 minutes)
+# On the other machine:  relayium text 483920
 
 # The other machine joins that code
-relayium text K7M4XR
+relayium text 483920
 
 # Send one multiline message exactly as copied (macOS)
-pbpaste | relayium text K7M4XR --yes
+pbpaste | relayium text 483920
 
 # Or pipe a file on any shell
-cat snippet.txt | relayium text K7M4XR --yes</code></pre>
-      <ul><li>CLI codes last thirty minutes and are CLI-to-CLI only; browser codes cannot connect a browser to the CLI.</li><li>Only the machine that mints needs a signed-in account. The machine joining the printed code does not sign in.</li><li>--yes skips the interactive SAS confirmation, so compare the session another trusted way before using it.</li></ul>
+cat snippet.txt | relayium text 483920
+
+# Optional: stop to compare the verification code (SAS) first
+relayium text 483920 --verify</code></pre>
+      <ul><li>CLI codes last five minutes and are CLI-to-CLI only; browser codes cannot connect a browser to the CLI.</li><li>Only the machine that mints needs a signed-in account. The machine joining the printed code does not sign in.</li><li>--verify opts in to comparing the SAS and needs a terminal to answer it, so a piped run with --verify refuses instead of continuing as if it had been confirmed. --yes is still accepted, still means “never prompt”, and overrides --verify.</li></ul>
       <h2>What text transfer is — and is not</h2>
       <p>Relayium treats the body as UTF-8 plain text. It preserves spaces, tabs, blank lines and line breaks, and does not execute, render Markdown, linkify or preview the content.</p>
       <ul><li>Both devices must be online together. There is no offline delivery, inbox, contact list or synchronized chat history.</li><li>History is local to the open session and disappears when it ends or the page reloads; the server never stores message bodies.</li><li>One message is at most 65,536 UTF-8 bytes. For anything larger, send it as a file instead.</li></ul>

@@ -35,7 +35,7 @@ const en = {
       heading: "Where Relayium differs: application-layer end-to-end encryption",
       body: [
         "Plain WebRTC is encrypted in transit by DTLS, and that is real protection against a passive network eavesdropper. But the DTLS fingerprints that authenticate each side are exchanged through the signaling server. A malicious or compromised signaling server can substitute its own fingerprints and sit invisibly in the middle — a classic man-in-the-middle attack that DTLS alone does not stop.",
-        "Relayium adds a second, independent encryption layer on top of the WebRTC channel: an X25519 key exchange derives a key used for per-chunk AES-256-GCM, and that key is never sent to any server. To detect a man-in-the-middle, both devices display the same 6-digit Short Authentication String (SAS); if the codes match, no server has impersonated either endpoint or terminated the application-layer encryption. Each file is also verified end-to-end with a SHA-256 hash.",
+        "Relayium adds a second, independent encryption layer on top of the WebRTC channel: an X25519 key exchange derives a key used for per-chunk AES-256-GCM, and that key is never sent to any server. To detect a man-in-the-middle, turn on advanced verification (off by default) and both devices display the same 6-digit Short Authentication String (SAS); if the codes match, no server has impersonated either endpoint or terminated the application-layer encryption. Each file is also verified end-to-end with a SHA-256 hash.",
       ],
     },
     {
@@ -52,7 +52,7 @@ const en = {
       ],
       bullets: [
         "Encryption layer: plain WebRTC relies on DTLS alone; Relayium adds application-layer X25519 + AES-256-GCM on top.",
-        "MITM defense: Relayium shows a 6-digit SAS code both sides verify; plain WebRTC has no equivalent check against a malicious signaling server.",
+        "MITM defense: Relayium offers an optional 6-digit SAS code (advanced verification, off by default) that both sides can verify; plain WebRTC has no equivalent check against a malicious signaling server.",
         "Across networks: Relayium connects by pairing code (or the join link it generates) over an encrypted TURN relay; LAN discovery is the primary path for Snapdrop.",
         "Storage mode: Relayium offers optional zero-knowledge stored download links; the others are realtime-only.",
         "Resume: Relayium can resume an interrupted transfer instead of starting over.",
@@ -116,7 +116,7 @@ const zh = {
       heading: "Relayium 的不同：应用层端到端加密",
       body: [
         "裸用 WebRTC 时，传输加密只靠 DTLS，这对被动的网络窃听者确实是有效保护。但用于验证双方身份的 DTLS 指纹是经由信令服务器交换的。恶意或被入侵的信令服务器可以替换成自己的指纹，隐形地插在中间——这正是 DTLS 本身无法阻止的中间人攻击。",
-        "Relayium 在 WebRTC 通道之上再加了一层独立加密：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，而这把密钥从不发送给任何服务器。为发现中间人，两台设备会显示同一段 6 位校验码（SAS）；只要两边一致，就说明没有服务器冒充任一端或终止应用层加密。每个文件还会用 SHA-256 做端到端完整性校验。",
+        "Relayium 在 WebRTC 通道之上再加了一层独立加密：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，而这把密钥从不发送给任何服务器。为发现中间人，可以打开默认关闭的「高级验证」，两台设备就会显示同一段 6 位校验码（SAS）；只要两边一致，就说明没有服务器冒充任一端或终止应用层加密。每个文件还会用 SHA-256 做端到端完整性校验。",
       ],
     },
     {
@@ -133,7 +133,7 @@ const zh = {
       ],
       bullets: [
         "加密层级：裸用 WebRTC 只依赖 DTLS；Relayium 在其之上再加应用层 X25519 + AES-256-GCM。",
-        "防中间人：Relayium 显示两边核对的 6 位 SAS 校验码；裸用 WebRTC 对恶意信令服务器没有对应的核验手段。",
+        "防中间人：Relayium 提供可选的 6 位 SAS 校验码（「高级验证」，默认关闭）供两边核对；裸用 WebRTC 对恶意信令服务器没有对应的核验手段。",
         "跨网络：Relayium 可用配对码（或它生成的加入链接）连接，数据经加密 TURN 中继转发；Snapdrop 主要依赖局域网发现。",
         "存储模式：Relayium 提供可选的零知识存储下载链接；另两者只有实时模式。",
         "断点续传：Relayium 可在传输中断后续传，而非重来。",
@@ -197,7 +197,7 @@ const ja = {
       heading: "Relayium の違い：アプリケーション層のエンドツーエンド暗号化",
       body: [
         "素の WebRTC は DTLS によって転送中は暗号化され、受動的な盗聴者に対しては確かな保護になります。しかし双方を認証する DTLS フィンガープリントはシグナリングサーバー経由で交換されます。悪意ある、あるいは侵害されたシグナリングサーバーは自分のフィンガープリントに差し替え、見えない形で間に入り込めます。これは DTLS だけでは防げない典型的な中間者攻撃です。",
-        "Relayium は WebRTC チャネルの上に、独立した2つ目の暗号化層を加えます。X25519 の鍵交換で導出した鍵をチャンクごとの AES-256-GCM に使い、その鍵はどのサーバーにも送られません。中間者を検出するため、両方の端末が同じ6桁のショート認証文字列（SAS）を表示します。コードが一致すれば、サーバーがどちらかの端末になりすましたり、アプリケーション層の暗号化を終端したりしていないことを確認できます。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
+        "Relayium は WebRTC チャネルの上に、独立した2つ目の暗号化層を加えます。X25519 の鍵交換で導出した鍵をチャンクごとの AES-256-GCM に使い、その鍵はどのサーバーにも送られません。中間者を検出するには、既定でオフの「高度な検証」をオンにします。すると両方の端末が同じ6桁のショート認証文字列（SAS）を表示します。コードが一致すれば、サーバーがどちらかの端末になりすましたり、アプリケーション層の暗号化を終端したりしていないことを確認できます。各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されます。",
       ],
     },
     {
@@ -214,7 +214,7 @@ const ja = {
       ],
       bullets: [
         "暗号化層：素の WebRTC は DTLS だけに依存。Relayium はその上にアプリケーション層の X25519 + AES-256-GCM を加える。",
-        "中間者対策：Relayium は双方で照合する6桁の SAS コードを表示。素の WebRTC には悪意あるシグナリングサーバーへの相当する確認手段がない。",
+        "中間者対策：Relayium は双方で照合できる6桁の SAS コードを任意で表示（「高度な検証」、既定はオフ）。素の WebRTC には悪意あるシグナリングサーバーへの相当する確認手段がない。",
         "ネットワーク越え：Relayium はペアリングコード（またはその参加リンク）で接続し、暗号化された TURN リレーを経由する。Snapdrop は主に LAN 発見に依存。",
         "保存モード：Relayium は任意のゼロ知識保存ダウンロードリンクを提供。他はリアルタイムのみ。",
         "再開：Relayium は中断した転送を最初からやり直さずに再開できる。",
@@ -278,7 +278,7 @@ const ko = {
       heading: "Relayium의 차이: 애플리케이션 계층 종단간 암호화",
       body: [
         "순수 WebRTC는 DTLS로 전송 중 암호화되며, 수동적 도청자에 대해서는 실질적인 보호가 됩니다. 하지만 양쪽을 인증하는 DTLS 지문은 시그널링 서버를 거쳐 교환됩니다. 악의적이거나 침해된 시그널링 서버는 자신의 지문으로 바꿔치기해 보이지 않게 중간에 끼어들 수 있습니다. 이것이 DTLS만으로는 막을 수 없는 전형적인 중간자 공격입니다.",
-        "Relayium은 WebRTC 채널 위에 독립적인 두 번째 암호화 계층을 더합니다. X25519 키 교환으로 도출한 키를 청크별 AES-256-GCM에 사용하며, 이 키는 어떤 서버에도 전송되지 않습니다. 중간자를 탐지하기 위해 두 기기가 동일한 6자리 짧은 인증 문자열(SAS)을 표시합니다. 코드가 일치하면 서버가 어느 한쪽을 사칭하거나 애플리케이션 계층 암호화를 종료하지 않았음을 확인할 수 있습니다. 각 파일은 SHA-256 해시로 종단간 검증됩니다.",
+        "Relayium은 WebRTC 채널 위에 독립적인 두 번째 암호화 계층을 더합니다. X25519 키 교환으로 도출한 키를 청크별 AES-256-GCM에 사용하며, 이 키는 어떤 서버에도 전송되지 않습니다. 중간자를 탐지하려면 기본값이 꺼짐인 고급 검증을 켜면 되고, 그러면 두 기기가 동일한 6자리 짧은 인증 문자열(SAS)을 표시합니다. 코드가 일치하면 서버가 어느 한쪽을 사칭하거나 애플리케이션 계층 암호화를 종료하지 않았음을 확인할 수 있습니다. 각 파일은 SHA-256 해시로 종단간 검증됩니다.",
       ],
     },
     {
@@ -295,7 +295,7 @@ const ko = {
       ],
       bullets: [
         "암호화 계층: 순수 WebRTC는 DTLS에만 의존합니다. Relayium은 그 위에 애플리케이션 계층 X25519 + AES-256-GCM을 더합니다.",
-        "중간자 방어: Relayium은 양쪽이 대조하는 6자리 SAS 코드를 표시합니다. 순수 WebRTC는 악의적 시그널링 서버에 대한 상응하는 확인 수단이 없습니다.",
+        "중간자 방어: Relayium은 양쪽이 대조할 수 있는 6자리 SAS 코드를 선택적으로 표시합니다(고급 검증, 기본값 꺼짐). 순수 WebRTC는 악의적 시그널링 서버에 대한 상응하는 확인 수단이 없습니다.",
         "네트워크 넘기: Relayium은 페어링 코드(또는 그 참여 링크)로 연결하며 암호화된 TURN 릴레이를 거칩니다. Snapdrop은 주로 LAN 탐색에 의존합니다.",
         "저장 모드: Relayium은 선택적 영지식 저장 다운로드 링크를 제공합니다. 나머지는 실시간 전용입니다.",
         "재개: Relayium은 중단된 전송을 처음부터 다시 하지 않고 이어받을 수 있음.",
@@ -359,7 +359,7 @@ const de = {
       heading: "Worin sich Relayium unterscheidet: Ende-zu-Ende-Verschlüsselung auf Anwendungsebene",
       body: [
         "Reines WebRTC ist beim Transport durch DTLS verschlüsselt, und das ist echter Schutz gegen einen passiven Netzwerk-Lauscher. Aber die DTLS-Fingerabdrücke, die jede Seite authentifizieren, werden über den Signalisierungsserver ausgetauscht. Ein bösartiger oder kompromittierter Signalisierungsserver kann eigene Fingerabdrücke einschleusen und sich unsichtbar dazwischensetzen — ein klassischer Man-in-the-Middle-Angriff, den DTLS allein nicht verhindert.",
-        "Relayium fügt über dem WebRTC-Kanal eine zweite, unabhängige Verschlüsselungsschicht hinzu: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, und dieser Schlüssel wird nie an einen Server gesendet. Um einen Man-in-the-Middle zu erkennen, zeigen beide Geräte denselben sechsstelligen Short Authentication String (SAS) an; stimmen die Codes überein, hat sich kein Server als einer der Endpunkte ausgegeben oder die Verschlüsselung der Anwendungsschicht terminiert. Jede Datei wird zudem per SHA-256-Hash Ende-zu-Ende geprüft.",
+        "Relayium fügt über dem WebRTC-Kanal eine zweite, unabhängige Verschlüsselungsschicht hinzu: Ein X25519-Schlüsselaustausch leitet einen Schlüssel für AES-256-GCM pro Block ab, und dieser Schlüssel wird nie an einen Server gesendet. Um einen Man-in-the-Middle zu erkennen, schaltest du die standardmäßig ausgeschaltete erweiterte Verifizierung ein; dann zeigen beide Geräte denselben sechsstelligen Short Authentication String (SAS) an; stimmen die Codes überein, hat sich kein Server als einer der Endpunkte ausgegeben oder die Verschlüsselung der Anwendungsschicht terminiert. Jede Datei wird zudem per SHA-256-Hash Ende-zu-Ende geprüft.",
       ],
     },
     {
@@ -376,7 +376,7 @@ const de = {
       ],
       bullets: [
         "Verschlüsselungsschicht: Reines WebRTC verlässt sich allein auf DTLS; Relayium legt X25519 + AES-256-GCM auf Anwendungsebene darüber.",
-        "MITM-Schutz: Relayium zeigt einen sechsstelligen SAS-Code, den beide Seiten prüfen; reines WebRTC hat keine entsprechende Kontrolle gegen einen bösartigen Signalisierungsserver.",
+        "MITM-Schutz: Relayium bietet optional einen sechsstelligen SAS-Code (erweiterte Verifizierung, standardmäßig aus), den beide Seiten prüfen können; reines WebRTC hat keine entsprechende Kontrolle gegen einen bösartigen Signalisierungsserver.",
         "Netzwerkübergreifend: Relayium verbindet per Pairing-Code (oder dessen Beitrittslink) über ein verschlüsseltes TURN-Relay; bei Snapdrop ist die LAN-Erkennung der Hauptweg.",
         "Speichermodus: Relayium bietet optionale Zero-Knowledge-Download-Links; die anderen sind nur Echtzeit.",
         "Fortsetzen: Relayium kann eine unterbrochene Übertragung fortsetzen, statt neu zu beginnen.",
@@ -440,7 +440,7 @@ const fr = {
       heading: "Là où Relayium diffère : chiffrement de bout en bout au niveau applicatif",
       body: [
         "Le WebRTC brut est chiffré en transit par DTLS, ce qui protège réellement contre une écoute réseau passive. Mais les empreintes DTLS qui authentifient chaque partie sont échangées via le serveur de signalisation. Un serveur de signalisation malveillant ou compromis peut y substituer ses propres empreintes et s'intercaler de façon invisible — une attaque de l'homme du milieu classique que DTLS seul n'empêche pas.",
-        "Relayium ajoute une seconde couche de chiffrement indépendante par-dessus le canal WebRTC : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n'est jamais envoyée à aucun serveur. Pour détecter un homme du milieu, les deux appareils affichent la même chaîne d'authentification courte (SAS) à 6 chiffres ; si les codes concordent, aucun serveur n'a usurpé l'identité d'un appareil ni terminé le chiffrement de la couche applicative. Chaque fichier est aussi vérifié de bout en bout par une empreinte SHA-256.",
+        "Relayium ajoute une seconde couche de chiffrement indépendante par-dessus le canal WebRTC : un échange de clés X25519 dérive une clé utilisée pour un AES-256-GCM par bloc, et cette clé n'est jamais envoyée à aucun serveur. Pour détecter un homme du milieu, activez la vérification avancée (désactivée par défaut) et les deux appareils affichent la même chaîne d'authentification courte (SAS) à 6 chiffres ; si les codes concordent, aucun serveur n'a usurpé l'identité d'un appareil ni terminé le chiffrement de la couche applicative. Chaque fichier est aussi vérifié de bout en bout par une empreinte SHA-256.",
       ],
     },
     {
@@ -457,7 +457,7 @@ const fr = {
       ],
       bullets: [
         "Couche de chiffrement : le WebRTC brut ne repose que sur DTLS ; Relayium ajoute par-dessus X25519 + AES-256-GCM au niveau applicatif.",
-        "Défense MITM : Relayium affiche un code SAS à 6 chiffres que les deux parties vérifient ; le WebRTC brut n'a aucun contrôle équivalent contre un serveur de signalisation malveillant.",
+        "Défense MITM : Relayium propose en option un code SAS à 6 chiffres (vérification avancée, désactivée par défaut) que les deux parties peuvent vérifier ; le WebRTC brut n'a aucun contrôle équivalent contre un serveur de signalisation malveillant.",
         "Entre réseaux : Relayium se connecte par code d'appairage (ou son lien de participation) via un relais TURN chiffré ; pour Snapdrop, la découverte sur le réseau local est la voie principale.",
         "Mode de stockage : Relayium propose des liens de téléchargement stockés à divulgation nulle en option ; les autres sont uniquement en temps réel.",
         "Reprise : Relayium peut reprendre un transfert interrompu au lieu de recommencer.",
@@ -521,7 +521,7 @@ const ar = {
       heading: "أين يختلف Relayium: التشفير من الطرف إلى الطرف على طبقة التطبيق",
       body: [
         "WebRTC العادي مُشفَّر أثناء النقل بواسطة DTLS، وهذه حماية حقيقية ضد متنصّت سلبي على الشبكة. لكن بصمات DTLS التي تصادق على كل طرف تُتبادَل عبر خادم الإشارة. يمكن لخادم إشارة خبيث أو مخترَق أن يستبدل بصماته الخاصة ويجلس بلا مرئية في المنتصف — هجوم وسيط كلاسيكي لا يوقفه DTLS وحده.",
-        "يضيف Relayium طبقة تشفير ثانية مستقلة فوق قناة WebRTC: يشتق تبادل مفاتيح X25519 مفتاحًا يُستخدم لـ AES-256-GCM لكل كتلة، ولا يُرسَل هذا المفتاح أبدًا إلى أي خادم. ولاكتشاف الوسيط، يعرض كلا الجهازين نفس رمز التحقق القصير المكوّن من 6 أرقام (SAS)؛ فإن تطابق الرمزان، لم ينتحل أي خادم هوية أحد الطرفين ولم يُنهِ تشفير طبقة التطبيق. كما يُتحقق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
+        "يضيف Relayium طبقة تشفير ثانية مستقلة فوق قناة WebRTC: يشتق تبادل مفاتيح X25519 مفتاحًا يُستخدم لـ AES-256-GCM لكل كتلة، ولا يُرسَل هذا المفتاح أبدًا إلى أي خادم. ولاكتشاف الوسيط، فعّل «التحقّق المتقدّم» المعطَّل افتراضيًا، فيعرض كلا الجهازين نفس رمز التحقق القصير المكوّن من 6 أرقام (SAS)؛ فإن تطابق الرمزان، لم ينتحل أي خادم هوية أحد الطرفين ولم يُنهِ تشفير طبقة التطبيق. كما يُتحقق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256.",
       ],
     },
     {
@@ -538,7 +538,7 @@ const ar = {
       ],
       bullets: [
         "طبقة التشفير: WebRTC العادي يعتمد على DTLS وحده؛ بينما يضيف Relayium فوقه X25519 + AES-256-GCM على طبقة التطبيق.",
-        "الدفاع ضد الوسيط: يعرض Relayium رمز SAS من 6 أرقام يتحقق منه الطرفان؛ بينما لا يملك WebRTC العادي فحصًا مكافئًا ضد خادم إشارة خبيث.",
+        "الدفاع ضد الوسيط: يوفّر Relayium اختياريًا رمز SAS من 6 أرقام («التحقّق المتقدّم»، معطَّل افتراضيًا) يمكن للطرفين التحقق منه؛ بينما لا يملك WebRTC العادي فحصًا مكافئًا ضد خادم إشارة خبيث.",
         "عبر الشبكات: يتصل Relayium برمز اقتران (أو برابط الانضمام الذي يولّده) عبر مُرحِّل TURN مُشفَّر؛ بينما اكتشاف الشبكة المحلية هو المسار الأساسي لـ Snapdrop.",
         "وضع التخزين: يقدّم Relayium روابط تنزيل مُخزَّنة بمعرفة صفرية اختيارية؛ بينما الأخريان فوريتان فقط.",
         "الاستئناف: يستطيع Relayium استئناف نقل منقطع بدلًا من البدء من جديد.",
@@ -602,7 +602,7 @@ const es = {
       heading: "En qué se diferencia Relayium: cifrado de extremo a extremo en la capa de aplicación",
       body: [
         "El WebRTC simple está cifrado en tránsito por DTLS, y eso es protección real frente a un fisgón pasivo de la red. Pero las huellas DTLS que autentican a cada lado se intercambian a través del servidor de señalización. Un servidor de señalización malicioso o comprometido puede sustituir sus propias huellas y colocarse invisiblemente en medio: un ataque de intermediario clásico que DTLS por sí solo no detiene.",
-        "Relayium añade una segunda capa de cifrado independiente sobre el canal WebRTC: un intercambio de claves X25519 deriva una clave usada para AES-256-GCM por bloque, y esa clave nunca se envía a ningún servidor. Para detectar a un intermediario, ambos dispositivos muestran el mismo código de verificación de 6 dígitos (SAS); si los códigos coinciden, ningún servidor ha suplantado a uno de los extremos ni ha terminado el cifrado de la capa de aplicación. Cada archivo también se verifica de extremo a extremo con un hash SHA-256.",
+        "Relayium añade una segunda capa de cifrado independiente sobre el canal WebRTC: un intercambio de claves X25519 deriva una clave usada para AES-256-GCM por bloque, y esa clave nunca se envía a ningún servidor. Para detectar a un intermediario, activa la verificación avanzada (desactivada por omisión) y ambos dispositivos muestran el mismo código de verificación de 6 dígitos (SAS); si los códigos coinciden, ningún servidor ha suplantado a uno de los extremos ni ha terminado el cifrado de la capa de aplicación. Cada archivo también se verifica de extremo a extremo con un hash SHA-256.",
       ],
     },
     {
@@ -619,7 +619,7 @@ const es = {
       ],
       bullets: [
         "Capa de cifrado: el WebRTC simple depende solo de DTLS; Relayium añade encima X25519 + AES-256-GCM en la capa de aplicación.",
-        "Defensa contra intermediarios: Relayium muestra un código SAS de 6 dígitos que ambos lados verifican; el WebRTC simple no tiene comprobación equivalente frente a un servidor de señalización malicioso.",
+        "Defensa contra intermediarios: Relayium ofrece de forma opcional un código SAS de 6 dígitos (verificación avanzada, desactivada por omisión) que ambos lados pueden verificar; el WebRTC simple no tiene comprobación equivalente frente a un servidor de señalización malicioso.",
         "Entre redes: Relayium conecta por código de emparejamiento (o el enlace de unión que genera) a través de un retransmisor TURN cifrado; el descubrimiento en la red local es la vía principal de Snapdrop.",
         "Modo de almacenamiento: Relayium ofrece enlaces de descarga almacenados de conocimiento cero opcionales; los otros son solo en tiempo real.",
         "Reanudación: Relayium puede reanudar una transferencia interrumpida en lugar de empezar de nuevo.",
@@ -683,7 +683,7 @@ const pt = {
       heading: "Onde o Relayium difere: criptografia de ponta a ponta na camada de aplicação",
       body: [
         "O WebRTC puro é criptografado em trânsito pelo DTLS, e isso é proteção real contra um bisbilhoteiro passivo da rede. Mas as impressões digitais DTLS que autenticam cada lado são trocadas através do servidor de sinalização. Um servidor de sinalização malicioso ou comprometido pode substituir suas próprias impressões e se colocar invisivelmente no meio — um ataque de intermediário clássico que o DTLS sozinho não impede.",
-        "O Relayium adiciona uma segunda camada de criptografia independente sobre o canal WebRTC: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM por bloco, e essa chave nunca é enviada a nenhum servidor. Para detectar um intermediário, ambos os dispositivos exibem o mesmo código de verificação de 6 dígitos (SAS); se os códigos coincidem, nenhum servidor se passou por uma das pontas nem terminou a criptografia da camada de aplicação. Cada arquivo também é verificado de ponta a ponta com um hash SHA-256.",
+        "O Relayium adiciona uma segunda camada de criptografia independente sobre o canal WebRTC: uma troca de chaves X25519 deriva uma chave usada para AES-256-GCM por bloco, e essa chave nunca é enviada a nenhum servidor. Para detectar um intermediário, ative a verificação avançada (desligada por padrão) e ambos os dispositivos exibem o mesmo código de verificação de 6 dígitos (SAS); se os códigos coincidem, nenhum servidor se passou por uma das pontas nem terminou a criptografia da camada de aplicação. Cada arquivo também é verificado de ponta a ponta com um hash SHA-256.",
       ],
     },
     {
@@ -700,7 +700,7 @@ const pt = {
       ],
       bullets: [
         "Camada de criptografia: o WebRTC puro depende só do DTLS; o Relayium adiciona por cima X25519 + AES-256-GCM na camada de aplicação.",
-        "Defesa contra intermediário: o Relayium mostra um código SAS de 6 dígitos que os dois lados verificam; o WebRTC puro não tem verificação equivalente contra um servidor de sinalização malicioso.",
+        "Defesa contra intermediário: o Relayium oferece opcionalmente um código SAS de 6 dígitos (verificação avançada, desligada por padrão) que os dois lados podem verificar; o WebRTC puro não tem verificação equivalente contra um servidor de sinalização malicioso.",
         "Entre redes: o Relayium conecta por código de emparelhamento (ou o link de entrada que gera) através de um retransmissor TURN criptografado; a descoberta na rede local é o caminho principal do Snapdrop.",
         "Modo de armazenamento: o Relayium oferece links de download armazenados de conhecimento zero opcionais; os outros são apenas em tempo real.",
         "Retomada: o Relayium pode retomar uma transferência interrompida em vez de começar de novo.",

@@ -54,19 +54,32 @@ func (s *Service) stunServers() []ICEServer {
 // 而一句写错的安全声明比没有声明更糟，后来的改动会依赖它。
 //
 // 不打算把响应做成一致的：那意味着对无效码也签发中继凭据，等于把付费带宽白送给
-// 任何人，代价远大于这个预言机本身。真正的边界是码的熵（24^6，见 signal.CodeAlphabet）
-// 加上这里的 5 次/分钟/IP；而且 /ws 本来就是一个更好用的预言机（30 次/分钟/IP），
-// 攻击者没有理由挑这一个。
+// 任何人，代价远大于这个预言机本身。真正的边界是码的熵（10^6，见 signal.CodeLen）
+// 加上**跨端点共享的**每 IP 猜测预算：/ws 和这里是同一个预言机的两半，各自记账就
+// 等于把预算加起来（攻击者分摊到两个端点，一分钟能试的不同码翻倍）。所以两端现在
+// 共用一个 CodeGuessLimiter（main.go 注入同一个对象），每 IP 每分钟 5 个**不同**的
+// 候选码，无论怎么在两个端点之间拆分；各端点自己的请求限流仍在，用来挡重复请求的
+// 纯负载。注意这是单进程口径，多实例见 PerInstanceThreshold。
 func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
-	// H1: 猜中一个活着的配对码就能偷走受害者的 TURN 凭据（并让对方为流量买单），
-	// 所以这里按 IP 限速 5 次/分钟。码空间自 2026-07-23 起是 24^6 ≈ 1.91e8
-	// （原为 6 位数字 1e6），TTL 30 分钟（见 signal.CodeTTLSeconds 里放宽窗口的取舍）——见 signal.CodeAlphabet。
+	// H1: 猜中一个活着的配对码就能偷走受害者的 TURN 凭据（并让对方为流量买单）。
+	// 两道闸：① 本端点的请求限流（5 次/分钟/IP，挡重复请求的负载）；② 与 /ws 共享的
+	// 不同候选码预算（见 signal.CodeGuessLimiter），后者才是"一个 IP 一分钟能试几个
+	// 码"的真实上限。码空间是 10^6（6 位十进制数字，见 signal.CodeLen），TTL 5 分钟
+	// （见 signal.CodeTTLSeconds）。
+	// s.clientIP is resolved inside each guard rather than once up front: tests
+	// build a bare &Service{} with no clientIP and no limiters, and an
+	// unconditional call would nil-panic on them.
 	if s.iceLimiter != nil && !s.iceLimiter.Allow(s.clientIP(r)) {
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		return
 	}
 	servers := s.stunServers()
 	code := r.URL.Query().Get("code")
+	// 空码是 LAN 请求（只要 STUN），不是对配对码的猜测，不记账也不拦。
+	if code != "" && s.codeGuesses != nil && !s.codeGuesses.AllowCode(s.clientIP(r), code) {
+		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
+		return
+	}
 	owner := ""
 	validCode := false
 	if code != "" && s.pairCodeOwner != nil {

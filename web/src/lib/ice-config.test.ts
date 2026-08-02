@@ -98,12 +98,12 @@ describe("fetchIceConfig relay status", () => {
 
   it("reports ok when a code room was issued a relay", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(okBody({ iceServers: [STUN_ONLY[0], LEGACY_TURN] })));
-    expect((await fetchIceConfig("K7M4XR")).relayStatus).toBe("ok");
+    expect((await fetchIceConfig("483920")).relayStatus).toBe("ok");
   });
 
   it("reports ok when the relay arrives only through the pool", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(okBody({ iceServers: STUN_ONLY, relays: [relay("tok")] })));
-    expect((await fetchIceConfig("K7M4XR")).relayStatus).toBe("ok");
+    expect((await fetchIceConfig("483920")).relayStatus).toBe("ok");
   });
 
   // LAN legitimately has no relay; calling that a fault would put a scary banner
@@ -116,14 +116,14 @@ describe("fetchIceConfig relay status", () => {
   it("passes through the server's own reason for withholding a relay", async () => {
     for (const denied of ["quota", "unverified"] as const) {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(okBody({ iceServers: STUN_ONLY, relayDenied: denied })));
-      expect((await fetchIceConfig("K7M4XR")).relayStatus).toBe(denied);
+      expect((await fetchIceConfig("483920")).relayStatus).toBe(denied);
       vi.unstubAllGlobals();
     }
   });
 
   it("reports none when a code room came back with no relay and no reason", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(okBody({ iceServers: STUN_ONLY })));
-    expect((await fetchIceConfig("K7M4XR")).relayStatus).toBe("none");
+    expect((await fetchIceConfig("483920")).relayStatus).toBe("none");
   });
 
   // /api/ice is 5/min/IP and a phone on a carrier CGNAT shares its public IP
@@ -134,7 +134,7 @@ describe("fetchIceConfig relay status", () => {
   it("does not retry a rate limit, and says so", async () => {
     const fetchMock = vi.fn().mockResolvedValue(errBody(429));
     vi.stubGlobal("fetch", fetchMock);
-    const cfg = await fetchIceConfig("K7M4XR");
+    const cfg = await fetchIceConfig("483920");
     expect(cfg.relayStatus).toBe("ratelimited");
     expect(cfg.iceServers).toEqual([]); // never a third-party STUN — see FALLBACK
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -146,7 +146,7 @@ describe("fetchIceConfig relay status", () => {
       .mockRejectedValueOnce(new TypeError("network error"))
       .mockResolvedValueOnce(okBody({ iceServers: [STUN_ONLY[0], LEGACY_TURN] }));
     vi.stubGlobal("fetch", fetchMock);
-    const cfg = await fetchIceConfig("K7M4XR");
+    const cfg = await fetchIceConfig("483920");
     expect(cfg.relayStatus).toBe("ok");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -157,7 +157,7 @@ describe("fetchIceConfig relay status", () => {
       .mockResolvedValueOnce(errBody(503))
       .mockResolvedValueOnce(okBody({ iceServers: [STUN_ONLY[0], LEGACY_TURN] }));
     vi.stubGlobal("fetch", fetchMock);
-    expect((await fetchIceConfig("K7M4XR")).relayStatus).toBe("ok");
+    expect((await fetchIceConfig("483920")).relayStatus).toBe("ok");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -167,7 +167,7 @@ describe("fetchIceConfig relay status", () => {
     for (const denied of ["quota", "unverified"] as const) {
       const fetchMock = vi.fn().mockResolvedValue(errBody(403, { relayDenied: denied }));
       vi.stubGlobal("fetch", fetchMock);
-      expect((await fetchIceConfig("K7M4XR")).relayStatus).toBe(denied);
+      expect((await fetchIceConfig("483920")).relayStatus).toBe(denied);
       expect(fetchMock).toHaveBeenCalledTimes(1);
       vi.unstubAllGlobals();
     }
@@ -176,7 +176,7 @@ describe("fetchIceConfig relay status", () => {
   it("does not retry a 4xx it cannot explain", async () => {
     const fetchMock = vi.fn().mockResolvedValue(errBody(400));
     vi.stubGlobal("fetch", fetchMock);
-    expect((await fetchIceConfig("K7M4XR")).relayStatus).toBe("unavailable");
+    expect((await fetchIceConfig("483920")).relayStatus).toBe("unavailable");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -187,7 +187,7 @@ describe("fetchIceConfig relay status", () => {
       json: async () => { throw new SyntaxError("Unexpected token <"); },
     });
     vi.stubGlobal("fetch", fetchMock);
-    expect((await fetchIceConfig("K7M4XR")).relayStatus).toBe("unavailable");
+    expect((await fetchIceConfig("483920")).relayStatus).toBe("unavailable");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -199,7 +199,7 @@ describe("fetchIceConfig relay status", () => {
         .mockResolvedValueOnce(errBody(503, undefined, { "Retry-After": "3" }))
         .mockResolvedValueOnce(okBody({ iceServers: [STUN_ONLY[0], LEGACY_TURN] }));
       vi.stubGlobal("fetch", fetchMock);
-      const pending = fetchIceConfig("K7M4XR");
+      const pending = fetchIceConfig("483920");
       await vi.advanceTimersByTimeAsync(2_500);
       expect(fetchMock).toHaveBeenCalledTimes(1); // the default 1.2s backoff would already have fired
       await vi.advanceTimersByTimeAsync(600);
@@ -215,7 +215,7 @@ describe("fetchIceConfig relay status", () => {
   it("does not retry at all when Retry-After is long", async () => {
     const fetchMock = vi.fn().mockResolvedValue(errBody(503, undefined, { "Retry-After": "3600" }));
     vi.stubGlobal("fetch", fetchMock);
-    expect((await fetchIceConfig("K7M4XR")).relayStatus).toBe("unavailable");
+    expect((await fetchIceConfig("483920")).relayStatus).toBe("unavailable");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

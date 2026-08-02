@@ -21,7 +21,7 @@ usage:
   relayium send <src...> [code]              send to a peer over a pairing code (cross-network)
                                              (omit the code to mint one; requires login)
   relayium receive <code> [destdir]          receive such a transfer
-  relayium text [code] [--yes]               ephemeral encrypted messages with a peer
+  relayium text [code] [--verify]            ephemeral encrypted messages with a peer
                                              (both ends run this; omit the code to mint one,
                                               which requires login; pipe stdin for exact multiline)
   relayium serve [--dir D] [--port N] [--once]   listen for daemon-direct pushes
@@ -41,7 +41,8 @@ flags (after the subcommand):
   -i <file>       ssh identity file
   -p <port>       ssh port
   --no-resume     disable resuming partial files
-  --yes           skip the SAS confirmation prompt (text; for scripts)
+  --verify        stop to compare the SAS before sending/opening (send, text)
+  --yes           never prompt for SAS confirmation (text; the default, kept for scripts)
   --config-dir D  identity/trust directory (daemon direct; default ~/.config/relayium)
 `
 

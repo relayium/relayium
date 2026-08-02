@@ -8,7 +8,7 @@ import { withInstall } from "../install-section.mjs";
 const en = {
   title: "Send a file to someone across networks with the Relayium CLI",
   description:
-    "Use relayium send and receive to move a file directly between two people on different networks, using a short pairing code. End-to-end encrypted, verified with a SAS code, and free — the file goes straight between you, never through our servers.",
+    "Use relayium send and receive to move a file directly between two people on different networks, using a short pairing code. End-to-end encrypted, with an optional SAS code to compare, and free — the file goes straight between you, never through our servers.",
   updatedLabel: "Last updated",
   lead: [
     "Sometimes the other machine isn't yours and you can't SSH into it — a file for a colleague in another office, a build for a client, an archive for a friend across the country. relayium send and receive move it directly between the two of you across networks, using nothing but a short pairing code that your CLI mints when you send.",
@@ -23,17 +23,17 @@ const en = {
       code: [
         `# sender (once per machine: relayium login)
 relayium send ./release.zip
-# prints:  Code: K7M4XR   (valid 30 minutes)
-#          On the other machine:  relayium receive K7M4XR
+# prints:  Code: 483920   (valid 5 minutes)
+#          On the other machine:  relayium receive 483920
 
 # receiver (in the folder where files should land) — no account needed
-relayium receive K7M4XR`,
+relayium receive 483920`,
       ],
       bullets: [
-        "The code is 6 characters from a restricted alphabet — no 0 or 1, nothing that can be misread aloud — and it expires 30 minutes after it is minted.",
+        "The code is 6 decimal digits — any of 0-9, leading zeros included — and it expires 5 minutes after it is minted.",
         "Only the sender signs in. The receiver needs the CLI and the code, and no account at all.",
         "The code is just a shared secret to meet on; it isn't sent to anyone but the rendezvous, and it introduces the two ends only.",
-        "The receiver can pass a destination directory: relayium receive K7M4XR ./downloads",
+        "The receiver can pass a destination directory: relayium receive 483920 ./downloads",
         "Both ends must be the CLI — a browser can't join a CLI pairing code. Sending to someone who only has a browser? Use relayium up instead, which gives you a download link.",
       ],
     },
@@ -63,7 +63,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "Where does the pairing code come from?",
-        a: "Relayium mints it. Run `relayium send ./release.zip` (after `relayium login`) and the CLI prints a 6-character code good for thirty minutes, plus the exact command the other end runs. You can't choose it yourself — the server only accepts codes it issued.",
+        a: "Relayium mints it. Run `relayium send ./release.zip` (after `relayium login`) and the CLI prints a 6-digit code good for five minutes, plus the exact command the other end runs. You can't choose it yourself — the server only accepts codes it issued.",
       },
       {
         q: "Is the file uploaded anywhere?",
@@ -105,17 +105,17 @@ const zh = {
       code: [
         `# 发送方（每台机器执行一次：relayium login）
 relayium send ./release.zip
-# 输出：  Code: K7M4XR   (valid 30 minutes)
-#          On the other machine:  relayium receive K7M4XR
+# 输出：  Code: 483920   (valid 5 minutes)
+#          On the other machine:  relayium receive 483920
 
 # 接收方（在文件应落地的目录下）——无需账号
-relayium receive K7M4XR`,
+relayium receive 483920`,
       ],
       bullets: [
-        "这个码是 6 位，取自一个受限字母表——没有 0 和 1，也没有念出来会听混的字符——并且在生成 30 分钟后失效。",
+        "这个码是 6 位十进制数字——0-9 都可能出现，也可能以 0 开头——并且在生成 5 分钟后失效。",
         "只有发送方需要登录。接收方只需要装好 CLI 和拿到这个码，完全不需要账号。",
         "这个码只是一个用来会合的共享密钥；除了会合服务器，它不会发给任何人，而且只用来介绍双方。",
-        "接收方可以指定目标目录：relayium receive K7M4XR ./downloads",
+        "接收方可以指定目标目录：relayium receive 483920 ./downloads",
         "两端都必须是 CLI——浏览器无法加入 CLI 的配对码。如果对方只有浏览器，请改用 relayium up，它会给你一个下载链接。",
       ],
     },
@@ -145,7 +145,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "配对码是从哪来的？",
-        a: "由 Relayium 生成。登录后运行 `relayium send ./release.zip`，CLI 会打印一个 6 位、30 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。",
+        a: "由 Relayium 生成。登录后运行 `relayium send ./release.zip`，CLI 会打印一个 6 位数字、5 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。",
       },
       {
         q: "文件会上传到什么地方吗？",
@@ -187,17 +187,17 @@ const ja = {
       code: [
         `# 送信側（マシンごとに一度：relayium login）
 relayium send ./release.zip
-# 表示：  Code: K7M4XR   (valid 30 minutes)
-#          On the other machine:  relayium receive K7M4XR
+# 表示：  Code: 483920   (valid 5 minutes)
+#          On the other machine:  relayium receive 483920
 
 # 受信側（ファイルを置きたいフォルダーで）。アカウントは不要
-relayium receive K7M4XR`,
+relayium receive 483920`,
       ],
       bullets: [
-        "コードは制限された文字集合から選ばれた6文字です。0 と 1 は含まれず、読み上げて取り違えやすい文字も除いてあります。そして発行から30分で失効します。",
+        "コードは 6 桁の十進数字です。0-9 のいずれも現れ、先頭が 0 になることもあります。そして発行から 5 分で失効します。",
         "サインインが必要なのは送信側だけです。受信側は CLI とコードさえあればよく、アカウントは一切要りません。",
         "コードは合流するための共有シークレットにすぎません。ランデブー先以外の誰にも送られず、二つの端を引き合わせるためだけに使われます。",
-        "受信側は送り先のディレクトリを指定できます：relayium receive K7M4XR ./downloads",
+        "受信側は送り先のディレクトリを指定できます：relayium receive 483920 ./downloads",
         "両端とも CLI である必要があります。ブラウザは CLI のペアリングコードに参加できません。相手がブラウザしか持っていない場合は、代わりに relayium up を使ってください。ダウンロードリンクが得られます。",
       ],
     },
@@ -227,7 +227,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "ペアリングコードはどこから来るのですか？",
-        a: "Relayium が発行します。`relayium login` のうえで `relayium send ./release.zip` を実行すると、CLI が30分間有効な6文字のコードと、相手が実行するコマンドをそのまま表示します。自分で選ぶことはできません。サーバーは自身が発行したコードしか受け付けないからです。",
+        a: "Relayium が発行します。`relayium login` のうえで `relayium send ./release.zip` を実行すると、CLI が 5 分間有効な 6 桁の数字コードと、相手が実行するコマンドをそのまま表示します。自分で選ぶことはできません。サーバーは自身が発行したコードしか受け付けないからです。",
       },
       {
         q: "ファイルはどこかにアップロードされますか？",
@@ -269,17 +269,17 @@ const ko = {
       code: [
         `# 보내는 쪽(기기마다 한 번: relayium login)
 relayium send ./release.zip
-# 출력:   Code: K7M4XR   (valid 30 minutes)
-#          On the other machine:  relayium receive K7M4XR
+# 출력:   Code: 483920   (valid 5 minutes)
+#          On the other machine:  relayium receive 483920
 
 # 받는 쪽(파일이 저장될 폴더에서) — 계정 필요 없음
-relayium receive K7M4XR`,
+relayium receive 483920`,
       ],
       bullets: [
-        "코드는 제한된 문자 집합에서 뽑은 6자입니다. 0과 1이 없고, 소리 내어 읽을 때 헷갈리는 문자도 빠져 있습니다. 그리고 발급된 지 30분이 지나면 만료됩니다.",
+        "코드는 6자리 십진 숫자입니다. 0-9 어느 것이든 나올 수 있고 앞자리가 0일 수도 있습니다. 그리고 발급된 지 5분이 지나면 만료됩니다.",
         "로그인이 필요한 쪽은 보내는 사람뿐입니다. 받는 쪽은 CLI와 코드만 있으면 되고, 계정은 전혀 필요 없습니다.",
         "이 코드는 만남을 위한 공유 비밀일 뿐입니다. 랑데부 서버 외에는 누구에게도 전송되지 않으며, 오직 두 끝을 서로 소개하는 데만 쓰입니다.",
-        "받는 쪽은 대상 디렉터리를 지정할 수 있습니다: relayium receive K7M4XR ./downloads",
+        "받는 쪽은 대상 디렉터리를 지정할 수 있습니다: relayium receive 483920 ./downloads",
         "양쪽 모두 CLI여야 합니다. 브라우저는 CLI 페어링 코드에 참여할 수 없습니다. 상대에게 브라우저밖에 없다면 대신 relayium up을 쓰세요. 다운로드 링크가 나옵니다.",
       ],
     },
@@ -309,7 +309,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "페어링 코드는 어디서 나오나요?",
-        a: "Relayium이 발급합니다. `relayium login` 후 `relayium send ./release.zip`을 실행하면 CLI가 30분간 유효한 6자 코드와 상대가 실행할 명령을 그대로 출력합니다. 직접 고를 수는 없습니다. 서버는 자신이 발급한 코드만 받아들이기 때문입니다.",
+        a: "Relayium이 발급합니다. `relayium login` 후 `relayium send ./release.zip`을 실행하면 CLI가 5분간 유효한 6자리 숫자 코드와 상대가 실행할 명령을 그대로 출력합니다. 직접 고를 수는 없습니다. 서버는 자신이 발급한 코드만 받아들이기 때문입니다.",
       },
       {
         q: "파일이 어딘가에 업로드되나요?",
@@ -336,7 +336,7 @@ relayium receive K7M4XR`,
 const de = {
   title: "Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden",
   description:
-    "Nutze relayium send und receive, um eine Datei mithilfe eines kurzen Pairing-Codes direkt zwischen zwei Personen in unterschiedlichen Netzwerken zu bewegen. Ende-zu-Ende verschlüsselt, mit einem SAS-Code verifiziert und kostenlos — die Datei geht direkt zwischen euch hin und her, nie über unsere Server.",
+    "Nutze relayium send und receive, um eine Datei mithilfe eines kurzen Pairing-Codes direkt zwischen zwei Personen in unterschiedlichen Netzwerken zu bewegen. Ende-zu-Ende verschlüsselt, mit einem optionalen SAS-Code zum Vergleichen und kostenlos — die Datei geht direkt zwischen euch hin und her, nie über unsere Server.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "Manchmal ist die andere Maschine nicht deine eigene und du kannst dich nicht per SSH einloggen — eine Datei für eine Kollegin in einem anderen Büro, ein Build für einen Kunden, ein Archiv für einen Freund am anderen Ende des Landes. relayium send und receive bewegen sie über Netzwerke hinweg direkt zwischen euch beiden, nur mit einem kurzen Pairing-Code, den deine CLI beim Senden erzeugt.",
@@ -351,17 +351,17 @@ const de = {
       code: [
         `# Absender (einmal pro Rechner: relayium login)
 relayium send ./release.zip
-# gibt aus:  Code: K7M4XR   (valid 30 minutes)
-#          On the other machine:  relayium receive K7M4XR
+# gibt aus:  Code: 483920   (valid 5 minutes)
+#          On the other machine:  relayium receive 483920
 
 # Empfänger (in dem Ordner, in dem die Dateien landen sollen) — kein Konto nötig
-relayium receive K7M4XR`,
+relayium receive 483920`,
       ],
       bullets: [
-        "Der Code besteht aus 6 Zeichen eines eingeschränkten Alphabets — ohne 0 und 1 und ohne alles, was man vorgelesen verwechseln kann — und läuft 30 Minuten nach dem Erzeugen ab.",
+        "Der Code besteht aus 6 Dezimalziffern — jede von 0-9, führende Nullen eingeschlossen — und läuft 5 Minuten nach dem Erzeugen ab.",
         "Nur der Absender meldet sich an. Der Empfänger braucht die CLI und den Code, aber überhaupt kein Konto.",
         "Der Code ist nur ein gemeinsames Geheimnis zum Treffen; er wird an niemanden außer der Rendezvous-Stelle gesendet und stellt nur die beiden Enden einander vor.",
-        "Der Empfänger kann ein Zielverzeichnis angeben: relayium receive K7M4XR ./downloads",
+        "Der Empfänger kann ein Zielverzeichnis angeben: relayium receive 483920 ./downloads",
         "Beide Enden müssen die CLI sein — ein Browser kann einem CLI-Pairing-Code nicht beitreten. Du sendest an jemanden, der nur einen Browser hat? Nimm stattdessen relayium up, das gibt dir einen Download-Link.",
       ],
     },
@@ -391,7 +391,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "Woher kommt der Pairing-Code?",
-        a: "Relayium erzeugt ihn. Führe `relayium send ./release.zip` aus (nach `relayium login`), und die CLI gibt einen Code aus 6 Zeichen aus, der fünf Minuten gilt, dazu den genauen Befehl für die andere Seite. Selbst wählen kannst du ihn nicht — der Server akzeptiert nur Codes, die er selbst ausgegeben hat.",
+        a: "Relayium erzeugt ihn. Führe `relayium send ./release.zip` aus (nach `relayium login`), und die CLI gibt einen Code aus 6 Ziffern aus, der fünf Minuten gilt, dazu den genauen Befehl für die andere Seite. Selbst wählen kannst du ihn nicht — der Server akzeptiert nur Codes, die er selbst ausgegeben hat.",
       },
       {
         q: "Wird die Datei irgendwohin hochgeladen?",
@@ -418,7 +418,7 @@ relayium receive K7M4XR`,
 const fr = {
   title: "Envoyer un fichier à quelqu'un à travers les réseaux avec la CLI Relayium",
   description:
-    "Utilisez relayium send et receive pour déplacer un fichier directement entre deux personnes sur des réseaux différents, à l'aide d'un court code d'appairage. Chiffré de bout en bout, vérifié par un code SAS, et gratuit — le fichier va tout droit entre vous, jamais via nos serveurs.",
+    "Utilisez relayium send et receive pour déplacer un fichier directement entre deux personnes sur des réseaux différents, à l'aide d'un court code d'appairage. Chiffré de bout en bout, avec un code SAS facultatif à comparer, et gratuit — le fichier va tout droit entre vous, jamais via nos serveurs.",
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Parfois l'autre machine n'est pas la vôtre et vous ne pouvez pas vous y connecter en SSH — un fichier pour un collègue dans un autre bureau, un build pour un client, une archive pour un ami à l'autre bout du pays. relayium send et receive le déplacent directement entre vous deux à travers les réseaux, en utilisant seulement un court code d'appairage que votre CLI génère au moment de l'envoi.",
@@ -433,17 +433,17 @@ const fr = {
       code: [
         `# expéditeur (une fois par machine : relayium login)
 relayium send ./release.zip
-# affiche :  Code: K7M4XR   (valid 30 minutes)
-#          On the other machine:  relayium receive K7M4XR
+# affiche :  Code: 483920   (valid 5 minutes)
+#          On the other machine:  relayium receive 483920
 
 # destinataire (dans le dossier où les fichiers doivent arriver) — aucun compte nécessaire
-relayium receive K7M4XR`,
+relayium receive 483920`,
       ],
       bullets: [
-        "Le code fait 6 caractères tirés d'un alphabet restreint — ni 0 ni 1, et rien qui puisse être confondu à l'oral — et il expire 30 minutes après sa génération.",
+        "Le code fait 6 chiffres décimaux — n'importe lequel de 0 à 9, zéros initiaux compris — et il expire 5 minutes après sa génération.",
         "Seul l'expéditeur se connecte. Le destinataire a besoin de la CLI et du code, et d'aucun compte.",
         "Le code n'est qu'un secret partagé pour se retrouver ; il n'est envoyé à personne d'autre qu'au point de rendez-vous, et il ne sert qu'à présenter les deux extrémités.",
-        "Le destinataire peut indiquer un répertoire de destination : relayium receive K7M4XR ./downloads",
+        "Le destinataire peut indiquer un répertoire de destination : relayium receive 483920 ./downloads",
         "Les deux extrémités doivent être la CLI — un navigateur ne peut pas rejoindre un code d'appairage CLI. Vous envoyez à quelqu'un qui n'a qu'un navigateur ? Utilisez plutôt relayium up, qui vous donne un lien de téléchargement.",
       ],
     },
@@ -473,7 +473,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "D'où vient le code d'appairage ?",
-        a: "C'est Relayium qui le génère. Lancez `relayium send ./release.zip` (après `relayium login`) et la CLI affiche un code de 6 caractères valable cinq minutes, ainsi que la commande exacte que l'autre extrémité doit exécuter. Vous ne pouvez pas le choisir vous-même — le serveur n'accepte que les codes qu'il a émis.",
+        a: "C'est Relayium qui le génère. Lancez `relayium send ./release.zip` (après `relayium login`) et la CLI affiche un code de 6 chiffres valable cinq minutes, ainsi que la commande exacte que l'autre extrémité doit exécuter. Vous ne pouvez pas le choisir vous-même — le serveur n'accepte que les codes qu'il a émis.",
       },
       {
         q: "Le fichier est-il envoyé quelque part ?",
@@ -515,17 +515,17 @@ const ar = {
       code: [
         `# المُرسِل (مرة واحدة لكل جهاز: relayium login)
 relayium send ./release.zip
-# يطبع:   Code: K7M4XR   (valid 30 minutes)
-#          On the other machine:  relayium receive K7M4XR
+# يطبع:   Code: 483920   (valid 5 minutes)
+#          On the other machine:  relayium receive 483920
 
 # المُستقبِل (في المجلد الذي يجب أن تصل إليه الملفات) — بلا حساب
-relayium receive K7M4XR`,
+relayium receive 483920`,
       ],
       bullets: [
-        "الرمز مكوَّن من 6 محارف من أبجدية مقيَّدة — بلا 0 أو 1، وبلا أي محرف يسهل الخلط بينه وبين غيره عند النطق — وينتهي مفعوله بعد 30 دقيقة من إصداره.",
+        "الرمز مكوَّن من 6 أرقام عشرية — أي رقم من 0 إلى 9، بما في ذلك الأصفار في المقدمة — وينتهي مفعوله بعد 5 دقائق من إصداره.",
         "المُرسِل وحده هو من يسجّل الدخول. أما المُستقبِل فيحتاج إلى واجهة CLI والرمز فقط، ولا يحتاج إلى حساب إطلاقًا.",
         "الرمز مجرد سر مشترك للقاء؛ لا يُرسَل إلى أحد سوى نقطة التعارف، وهو يُعرِّف الطرفين ببعضهما فقط.",
-        "يمكن للمُستقبِل تمرير مجلد وجهة: relayium receive K7M4XR ./downloads",
+        "يمكن للمُستقبِل تمرير مجلد وجهة: relayium receive 483920 ./downloads",
         "يجب أن يكون الطرفان كلاهما على واجهة CLI — فالمتصفح لا يستطيع الانضمام إلى رمز اقتران خاص بـ CLI. هل تُرسِل إلى شخص لا يملك سوى متصفح؟ استخدم relayium up بدلًا من ذلك، فهو يعطيك رابط تنزيل.",
       ],
     },
@@ -555,7 +555,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "من أين يأتي رمز الاقتران؟",
-        a: "‏Relayium هو من يُصدره. شغِّل `relayium send ./release.zip` (بعد `relayium login`) فتطبع واجهة CLI رمزًا من 6 محارف صالحًا لثلاثين دقيقة، مع الأمر الذي سينفّذه الطرف الآخر بالضبط. لا يمكنك اختياره بنفسك — فالخادم لا يقبل إلا الرموز التي أصدرها هو.",
+        a: "‏Relayium هو من يُصدره. شغِّل `relayium send ./release.zip` (بعد `relayium login`) فتطبع واجهة CLI رمزًا من 6 أرقام صالحًا لخمس دقائق، مع الأمر الذي سينفّذه الطرف الآخر بالضبط. لا يمكنك اختياره بنفسك — فالخادم لا يقبل إلا الرموز التي أصدرها هو.",
       },
       {
         q: "هل يُرفَع الملف إلى أي مكان؟",
@@ -582,7 +582,7 @@ relayium receive K7M4XR`,
 const es = {
   title: "Enviar un archivo a alguien entre redes con la CLI de Relayium",
   description:
-    "Usa relayium send y receive para mover un archivo directamente entre dos personas en redes distintas, con un breve código de emparejamiento. Cifrado de extremo a extremo, verificado con un código SAS y gratis: el archivo va directo entre los dos extremos, nunca a través de nuestros servidores.",
+    "Usa relayium send y receive para mover un archivo directamente entre dos personas en redes distintas, con un breve código de emparejamiento. Cifrado de extremo a extremo, con un código SAS opcional para comparar y gratis: el archivo va directo entre los dos extremos, nunca a través de nuestros servidores.",
   updatedLabel: "Última actualización",
   lead: [
     "A veces la otra máquina no es tuya y no puedes entrar por SSH: un archivo para un colega en otra oficina, una compilación para un cliente, un archivo comprimido para un amigo al otro lado del país. relayium send y receive lo mueven directamente entre las dos partes, entre redes, usando solo un código de emparejamiento corto que tu CLI genera al enviar.",
@@ -597,17 +597,17 @@ const es = {
       code: [
         `# quien envía (una vez por máquina: relayium login)
 relayium send ./release.zip
-# imprime:  Code: K7M4XR   (valid 30 minutes)
-#          On the other machine:  relayium receive K7M4XR
+# imprime:  Code: 483920   (valid 5 minutes)
+#          On the other machine:  relayium receive 483920
 
 # quien recibe (en la carpeta donde deben llegar los archivos) — sin cuenta
-relayium receive K7M4XR`,
+relayium receive 483920`,
       ],
       bullets: [
-        "El código tiene 6 caracteres de un alfabeto restringido —sin 0 ni 1, y sin nada que se confunda al leerlo en voz alta— y caduca 30 minutos después de generarse.",
+        "El código tiene 6 dígitos decimales —cualquiera de 0 a 9, ceros iniciales incluidos— y caduca 5 minutos después de generarse.",
         "Solo el remitente inicia sesión. El receptor necesita la CLI y el código, y ninguna cuenta.",
         "El código es solo un secreto compartido para encontrarse; no se envía a nadie más que al punto de encuentro, y solo sirve para presentar los dos extremos.",
-        "El receptor puede indicar un directorio de destino: relayium receive K7M4XR ./downloads",
+        "El receptor puede indicar un directorio de destino: relayium receive 483920 ./downloads",
         "Ambos extremos tienen que ser la CLI: un navegador no puede unirse a un código de emparejamiento de la CLI. ¿Envías a alguien que solo tiene navegador? Usa relayium up, que te da un enlace de descarga.",
       ],
     },
@@ -637,7 +637,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "¿De dónde sale el código de emparejamiento?",
-        a: "Lo genera Relayium. Ejecuta `relayium send ./release.zip` (después de `relayium login`) y la CLI imprime un código de 6 caracteres válido durante cinco minutos, junto con el comando exacto que ejecuta el otro extremo. No puedes elegirlo tú: el servidor solo acepta los códigos que él mismo emitió.",
+        a: "Lo genera Relayium. Ejecuta `relayium send ./release.zip` (después de `relayium login`) y la CLI imprime un código de 6 dígitos válido durante cinco minutos, junto con el comando exacto que ejecuta el otro extremo. No puedes elegirlo tú: el servidor solo acepta los códigos que él mismo emitió.",
       },
       {
         q: "¿Se sube el archivo a algún sitio?",
@@ -664,7 +664,7 @@ relayium receive K7M4XR`,
 const pt = {
   title: "Enviar um arquivo para alguém entre redes com a CLI do Relayium",
   description:
-    "Use relayium send e receive para mover um arquivo diretamente entre duas pessoas em redes diferentes, com um código de emparelhamento curto. Com criptografia de ponta a ponta, verificado com um código SAS e gratuito: o arquivo vai direto entre as duas pontas, nunca através dos nossos servidores.",
+    "Use relayium send e receive para mover um arquivo diretamente entre duas pessoas em redes diferentes, com um código de emparelhamento curto. Com criptografia de ponta a ponta, com um código SAS opcional para comparar e gratuito: o arquivo vai direto entre as duas pontas, nunca através dos nossos servidores.",
   updatedLabel: "Última atualização",
   lead: [
     "Às vezes a outra máquina não é sua e você não consegue entrar por SSH: um arquivo para um colega em outro escritório, um build para um cliente, um arquivo compactado para um amigo do outro lado do país. relayium send e receive o movem diretamente entre as duas partes, entre redes, usando apenas um código de emparelhamento curto que a sua CLI gera na hora de enviar.",
@@ -679,17 +679,17 @@ const pt = {
       code: [
         `# quem envia (uma vez por máquina: relayium login)
 relayium send ./release.zip
-# imprime:  Code: K7M4XR   (valid 30 minutes)
-#          On the other machine:  relayium receive K7M4XR
+# imprime:  Code: 483920   (valid 5 minutes)
+#          On the other machine:  relayium receive 483920
 
 # quem recebe (na pasta onde os arquivos devem chegar) — sem conta
-relayium receive K7M4XR`,
+relayium receive 483920`,
       ],
       bullets: [
-        "O código tem 6 caracteres de um alfabeto restrito — sem 0 nem 1, e sem nada que se confunda ao ser lido em voz alta — e expira 30 minutos depois de gerado.",
+        "O código tem 6 dígitos decimais — qualquer um de 0 a 9, zeros à esquerda incluídos — e expira 5 minutos depois de gerado.",
         "Só quem envia faz login. Quem recebe precisa da CLI e do código, e de conta nenhuma.",
         "O código é apenas um segredo compartilhado para se encontrar; não é enviado a ninguém além do ponto de encontro, e serve apenas para apresentar as duas pontas.",
-        "O receptor pode indicar um diretório de destino: relayium receive K7M4XR ./downloads",
+        "O receptor pode indicar um diretório de destino: relayium receive 483920 ./downloads",
         "As duas pontas precisam ser a CLI — um navegador não consegue entrar em um código de emparelhamento da CLI. Vai enviar para alguém que só tem navegador? Use relayium up, que devolve um link de download.",
       ],
     },
@@ -719,7 +719,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "De onde vem o código de emparelhamento?",
-        a: "Quem gera é o Relayium. Rode `relayium send ./release.zip` (depois de `relayium login`) e a CLI exibe um código de 6 caracteres válido por cinco minutos, junto com o comando exato que a outra ponta executa. Você não pode escolhê-lo — o servidor só aceita os códigos que ele mesmo emitiu.",
+        a: "Quem gera é o Relayium. Rode `relayium send ./release.zip` (depois de `relayium login`) e a CLI exibe um código de 6 dígitos válido por cinco minutos, junto com o comando exato que a outra ponta executa. Você não pode escolhê-lo — o servidor só aceita os códigos que ele mesmo emitiu.",
       },
       {
         q: "O arquivo é enviado para algum lugar?",

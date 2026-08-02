@@ -99,9 +99,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Point the CLI at your server</h2>
       <p>The Relayium CLI defaults to relayium.com&#39;s rendezvous server for cross-network send/receive and text. Pass --server to use your own instead:</p>
       <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
-      <pre><code>relayium receive K7M4XR --server https://your-domain</code></pre>
+      <pre><code>relayium receive 483920 --server https://your-domain</code></pre>
       <pre><code>relayium text --server https://your-domain</code></pre>
-      <pre><code>relayium text K7M4XR --server https://your-domain</code></pre>
+      <pre><code>relayium text 483920 --server https://your-domain</code></pre>
       <ul><li>The CLI is free either way — --server changes which rendezvous server it talks to for the pairing-code handshake. send or text without a code mints one against that server, and cloud up stores under an account on it, so sign in there first with relayium login --server https://your-domain. receive, down, and text with the printed code need no login.</li><li>Both text peers must stay online. Messages use their own end-to-end encrypted, direct peer-to-peer session; CLI text is direct-only and does not use the browser&#39;s TURN relay. Neither Relayium nor your self-hosted server stores message bodies or server-side history, but either terminal or recipient can copy or retain text after receiving it.</li><li>push/pull (over your own SSH) and serve + daemon-direct push relayium://host don&#39;t touch relayium.com at all, self-hosted or not — they connect straight to the remote you specify.</li></ul>
       <h2>Frequently asked questions</h2>
       <h3>Do I need to set up TURN?</h3>

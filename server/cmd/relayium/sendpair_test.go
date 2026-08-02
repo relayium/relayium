@@ -90,7 +90,7 @@ func TestAPIBaseRejectsUnusableServerURLs(t *testing.T) {
 // still mint when send is pointed at the same host with the /ws signaling path.
 func TestMintCodeAcceptsASignalingURLWithAPath(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"code":"K7M4XR","expiresAt":4102444800}`))
+		_, _ = w.Write([]byte(`{"code":"483920","expiresAt":4102444800}`))
 	}))
 	defer srv.Close()
 
@@ -107,7 +107,7 @@ func TestMintCodeAcceptsASignalingURLWithAPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mintCode against the signaling path: %v", err)
 	}
-	if code != "K7M4XR" {
+	if code != "483920" {
 		t.Fatalf("code = %q", code)
 	}
 }
@@ -124,7 +124,7 @@ func TestMintCodeAcceptsASubPathDeployment(t *testing.T) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		_, _ = w.Write([]byte(`{"code":"K7M4XR","expiresAt":4102444800}`))
+		_, _ = w.Write([]byte(`{"code":"483920","expiresAt":4102444800}`))
 	}))
 	defer srv.Close()
 
@@ -142,7 +142,7 @@ func TestMintCodeAcceptsASubPathDeployment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mintCode against a sub-path deployment: %v (request hit %q)", err, gotPath)
 	}
-	if code != "K7M4XR" {
+	if code != "483920" {
 		t.Fatalf("code = %q", code)
 	}
 }
@@ -187,7 +187,7 @@ func TestMintCodePrintsHandoffBlock(t *testing.T) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		_, _ = w.Write([]byte(`{"code":"K7M4XR","expiresAt":4102444800}`))
+		_, _ = w.Write([]byte(`{"code":"483920","expiresAt":4102444800}`))
 	}))
 	defer srv.Close()
 
@@ -205,11 +205,11 @@ func TestMintCodePrintsHandoffBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mintCode: %v", err)
 	}
-	if code != "K7M4XR" {
+	if code != "483920" {
 		t.Fatalf("code = %q", code)
 	}
 	out := errb.String()
-	for _, want := range []string{"K7M4XR", "relayium receive K7M4XR", "waiting for the receiver"} {
+	for _, want := range []string{"483920", "relayium receive 483920", "waiting for the receiver"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("block %q does not contain %q", out, want)
 		}
@@ -237,7 +237,7 @@ func TestMintCodeForTextHandsOffTheTextCommand(t *testing.T) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		_, _ = w.Write([]byte(`{"code":"K7M4XR","expiresAt":4102444800}`))
+		_, _ = w.Write([]byte(`{"code":"483920","expiresAt":4102444800}`))
 	}))
 	defer srv.Close()
 
@@ -245,10 +245,10 @@ func TestMintCodeForTextHandsOffTheTextCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mintCode for text: %v", err)
 	}
-	if code != "K7M4XR" {
+	if code != "483920" {
 		t.Fatalf("code = %q", code)
 	}
-	for _, want := range []string{"Code: K7M4XR", "On the other machine:  relayium text K7M4XR", "waiting for the other side to join"} {
+	for _, want := range []string{"Code: 483920", "On the other machine:  relayium text 483920", "waiting for the other side to join"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("text block %q does not contain %q", out, want)
 		}
@@ -407,7 +407,7 @@ func TestMintCodeRateLimited(t *testing.T) {
 func TestMintCodeTTLLineForNormalExpiry(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		exp := time.Now().Add(300 * time.Second).Unix()
-		fmt.Fprintf(w, `{"code":"K7M4XR","expiresAt":%d}`, exp)
+		fmt.Fprintf(w, `{"code":"483920","expiresAt":%d}`, exp)
 	}))
 	defer srv.Close()
 
@@ -415,7 +415,7 @@ func TestMintCodeTTLLineForNormalExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mintCode: %v", err)
 	}
-	if !strings.Contains(out, "Code: K7M4XR   (valid 5 minutes)") {
+	if !strings.Contains(out, "Code: 483920   (valid 5 minutes)") {
 		t.Errorf("want the server's 300 s rounded to a 5-minute TTL line, got %q", out)
 	}
 }
@@ -427,7 +427,7 @@ func TestMintCodeTTLLineForNormalExpiry(t *testing.T) {
 // be worse than saying nothing.
 func TestMintCodeOmitsTTLClauseWhenServerDoesNotReportExpiry(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"code":"K7M4XR"}`))
+		_, _ = w.Write([]byte(`{"code":"483920"}`))
 	}))
 	defer srv.Close()
 
@@ -438,7 +438,7 @@ func TestMintCodeOmitsTTLClauseWhenServerDoesNotReportExpiry(t *testing.T) {
 	if strings.Contains(out, "valid") {
 		t.Errorf("want no TTL clause when expiresAt is unreported, got %q", out)
 	}
-	if !strings.Contains(out, "Code: K7M4XR\n") {
+	if !strings.Contains(out, "Code: 483920\n") {
 		t.Errorf("want the bare code line, got %q", out)
 	}
 }
@@ -457,11 +457,11 @@ func TestTTLClause(t *testing.T) {
 		want      string
 	}{
 		{"zero means unreported, omit entirely", 0, ""},
-		{"synthetic 300s rounds to 5 minutes, not truncated to 4", now.Add(300 * time.Second).Unix(), "   (valid 5 minutes)"},
+		{"synthetic 600s rounds to 10 minutes, not truncated to 9", now.Add(600 * time.Second).Unix(), "   (valid 10 minutes)"},
 		{
-			"a code minted at the real pairing TTL prints 30 minutes",
+			"a code minted at the real pairing TTL prints 5 minutes",
 			now.Add(time.Duration(signal.CodeTTLSeconds) * time.Second).Unix(),
-			"   (valid 30 minutes)",
+			"   (valid 5 minutes)",
 		},
 		{"under a minute clamps to a singular minute", now.Add(10 * time.Second).Unix(), "   (valid 1 minute)"},
 		{"already expired still clamps to a singular minute", now.Add(-10 * time.Second).Unix(), "   (valid 1 minute)"},

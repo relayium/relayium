@@ -32,7 +32,7 @@ const en = {
         "On each device, open relayium.com in a modern browser (Chrome, Edge, Firefox or Safari).",
         "The devices on that network appear to each other automatically — no code, no login, no account on either side.",
         "Pick a file or a whole folder (up to 1,000 files per batch) and choose which device on the list should receive it.",
-        "Both devices show the same short verification code (SAS). Glance at it on each screen, confirm it matches, and the transfer starts.",
+        "The transfer starts once the recipient accepts. If you turn on advanced verification (off by default), both devices also show the same short verification code (SAS) to glance at and confirm first.",
         "Files move straight from one device to the other; save them when they land.",
       ],
     },
@@ -46,7 +46,7 @@ const en = {
     {
       heading: "Still end-to-end encrypted",
       body: [
-        "Being on the same network does not mean the transfer is sent in the clear. Relayium negotiates an X25519 key exchange between the two devices and encrypts every chunk with AES-256-GCM; that key is never seen by any server, including Relayium's own signaling server, which only helps the devices find each other. The short verification code (SAS) both screens display lets you visually confirm the connection is genuinely between your two devices, and each file is checked end to end with a SHA-256 hash so you know it arrived byte-for-byte intact.",
+        "Being on the same network does not mean the transfer is sent in the clear. Relayium negotiates an X25519 key exchange between the two devices and encrypts every chunk with AES-256-GCM; that key is never seen by any server, including Relayium's own signaling server, which only helps the devices find each other. With advanced verification on, both screens also display a short verification code (SAS) that lets you visually confirm the connection is genuinely between your two devices, and each file is checked end to end with a SHA-256 hash so you know it arrived byte-for-byte intact.",
       ],
     },
     {
@@ -115,7 +115,7 @@ const zh = {
         "在每台设备上用现代浏览器（Chrome、Edge、Firefox 或 Safari）打开 relayium.com。",
         "同网络下的设备会自动互相出现——两端都无需配对码，无需登录，无需账号。",
         "选好文件或整个文件夹（每批最多 1,000 个文件），再从列表里选出要接收的那台设备。",
-        "两台设备会显示同一段简短的校验码（SAS）。分别瞄一眼，确认一致，传输就开始了。",
+        "接收方接受后传输就开始了。如果你打开「高级验证」（默认关闭），两台设备还会显示同一段简短的校验码（SAS），可以先分别瞄一眼确认一致。",
         "文件直接从一台设备传到另一台；到达后保存即可。",
       ],
     },
@@ -129,7 +129,7 @@ const zh = {
     {
       heading: "依然是端到端加密",
       body: [
-        "在同一网络下不代表传输就是明文的。Relayium 会在两台设备之间协商 X25519 密钥交换，并用 AES-256-GCM 对每个数据块加密；这把密钥不会被任何服务器看到，包括 Relayium 自己的信令服务器——它只负责帮设备找到彼此。两块屏幕显示的同一段简短校验码（SAS）能让你亲眼确认这条连接确实建立在你的两台设备之间，而每个文件还会用 SHA-256 哈希做端到端完整性校验，让你确信它是逐字节完整到达的。",
+        "在同一网络下不代表传输就是明文的。Relayium 会在两台设备之间协商 X25519 密钥交换，并用 AES-256-GCM 对每个数据块加密；这把密钥不会被任何服务器看到，包括 Relayium 自己的信令服务器——它只负责帮设备找到彼此。打开高级验证后，两块屏幕还会显示同一段简短校验码（SAS），能让你亲眼确认这条连接确实建立在你的两台设备之间，而每个文件还会用 SHA-256 哈希做端到端完整性校验，让你确信它是逐字节完整到达的。",
       ],
     },
     {
@@ -198,7 +198,7 @@ const ja = {
         "各端末で最新のブラウザ（Chrome、Edge、Firefox、Safari）で relayium.com を開きます。",
         "そのネットワーク上の端末は自動的に互いに表示されます。両側ともコードもログインもアカウントも不要です。",
         "ファイルまたはフォルダ全体（1バッチ最大1,000ファイル）を選び、一覧から受信させたい端末を選びます。",
-        "両方の端末が同じ短い検証コード（SAS）を表示します。それぞれの画面でちらっと見て一致を確認すれば、転送が始まります。",
+        "受信側が承諾すると転送が始まります。「高度な検証」（既定はオフ）をオンにすると、両方の端末が同じ短い検証コード（SAS）も表示するので、先にそれぞれの画面でちらっと見て一致を確認できます。",
         "ファイルは1台からもう1台へ直接移動します。届いたら保存してください。",
       ],
     },
@@ -212,7 +212,7 @@ const ja = {
     {
       heading: "それでもエンドツーエンド暗号化",
       body: [
-        "同じネットワーク上にあるからといって、転送が平文で送られるわけではありません。Relayium は2台の端末間で X25519 鍵交換を行い、すべてのチャンクを AES-256-GCM で暗号化します。その鍵は、端末同士が互いを見つける手助けをするだけの Relayium 自身のシグナリングサーバーを含め、いかなるサーバーにも見えません。両方の画面が表示する短い検証コード（SAS）で、接続が本当に手元の2台の端末間であることを目視で確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるので、バイト単位で無事に届いたことがわかります。",
+        "同じネットワーク上にあるからといって、転送が平文で送られるわけではありません。Relayium は2台の端末間で X25519 鍵交換を行い、すべてのチャンクを AES-256-GCM で暗号化します。その鍵は、端末同士が互いを見つける手助けをするだけの Relayium 自身のシグナリングサーバーを含め、いかなるサーバーにも見えません。高度な検証をオンにすると両方の画面に短い検証コード（SAS）も表示され、接続が本当に手元の2台の端末間であることを目視で確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるので、バイト単位で無事に届いたことがわかります。",
       ],
     },
     {
@@ -281,7 +281,7 @@ const ko = {
         "각 기기에서 최신 브라우저(Chrome, Edge, Firefox 또는 Safari)로 relayium.com을 엽니다.",
         "그 네트워크에 있는 기기가 자동으로 서로에게 나타납니다 — 양쪽 다 코드도, 로그인도, 계정도 필요 없습니다.",
         "파일이나 폴더 전체(배치당 최대 1,000개)를 고르고, 목록에서 받을 기기를 선택합니다.",
-        "두 기기가 동일한 짧은 검증 코드(SAS)를 표시합니다. 각 화면에서 힐끗 보고 일치하는지 확인하면 전송이 시작됩니다.",
+        "받는 쪽이 수락하면 전송이 시작됩니다. 고급 검증(기본값 꺼짐)을 켜면 두 기기가 동일한 짧은 검증 코드(SAS)도 표시하므로, 각 화면에서 힐끗 보고 먼저 일치를 확인할 수 있습니다.",
         "파일이 한 기기에서 다른 기기로 곧장 이동합니다. 도착하면 저장합니다.",
       ],
     },
@@ -295,7 +295,7 @@ const ko = {
     {
       heading: "그래도 종단간 암호화",
       body: [
-        "같은 네트워크에 있다고 해서 전송이 평문으로 이루어지는 것은 아닙니다. Relayium은 두 기기 사이에서 X25519 키 교환을 협상하고 모든 청크를 AES-256-GCM으로 암호화합니다. 그 키는 기기가 서로를 찾도록 돕기만 하는 Relayium 자체 시그널링 서버를 포함해 어떤 서버에도 보이지 않습니다. 두 화면이 표시하는 동일한 짧은 검증 코드(SAS)로 연결이 정말로 내 두 기기 사이에서 이루어졌는지 눈으로 확인할 수 있고, 각 파일은 SHA-256 해시로 종단간 검증되어 바이트 단위로 온전히 도착했음을 알 수 있습니다.",
+        "같은 네트워크에 있다고 해서 전송이 평문으로 이루어지는 것은 아닙니다. Relayium은 두 기기 사이에서 X25519 키 교환을 협상하고 모든 청크를 AES-256-GCM으로 암호화합니다. 그 키는 기기가 서로를 찾도록 돕기만 하는 Relayium 자체 시그널링 서버를 포함해 어떤 서버에도 보이지 않습니다. 고급 검증을 켜면 두 화면에 동일한 짧은 검증 코드(SAS)도 표시되어 연결이 정말로 내 두 기기 사이에서 이루어졌는지 눈으로 확인할 수 있고, 각 파일은 SHA-256 해시로 종단간 검증되어 바이트 단위로 온전히 도착했음을 알 수 있습니다.",
       ],
     },
     {
@@ -364,7 +364,7 @@ const de = {
         "Öffne auf jedem Gerät relayium.com in einem modernen Browser (Chrome, Edge, Firefox oder Safari).",
         "Die Geräte in diesem Netz erscheinen einander automatisch — kein Code, kein Login, auf keiner der beiden Seiten ein Konto.",
         "Wähle eine Datei oder einen ganzen Ordner (bis zu 1.000 Dateien pro Stapel) und bestimme, welches Gerät aus der Liste sie empfangen soll.",
-        "Beide Geräte zeigen denselben kurzen Verifizierungscode (SAS). Wirf auf beiden Bildschirmen einen Blick darauf, bestätige, dass er übereinstimmt, und die Übertragung beginnt.",
+        "Die Übertragung beginnt, sobald die Gegenseite annimmt. Schaltest du die erweiterte Verifizierung ein (standardmäßig aus), zeigen beide Geräte zusätzlich denselben kurzen Verifizierungscode (SAS), auf den du vorher einen Blick werfen und dessen Übereinstimmung du bestätigen kannst.",
         "Dateien wandern direkt von einem Gerät zum anderen; speichere sie, sobald sie ankommen.",
       ],
     },
@@ -378,7 +378,7 @@ const de = {
     {
       heading: "Trotzdem Ende-zu-Ende-verschlüsselt",
       body: [
-        "Im selben Netz zu sein bedeutet nicht, dass die Übertragung im Klartext erfolgt. Relayium handelt zwischen den beiden Geräten einen X25519-Schlüsselaustausch aus und verschlüsselt jeden Block mit AES-256-GCM; diesen Schlüssel bekommt kein Server zu sehen, auch nicht Relayiums eigener Signaling-Server, der den Geräten nur hilft, einander zu finden. Der kurze Verifizierungscode (SAS), den beide Bildschirme anzeigen, lässt dich visuell bestätigen, dass die Verbindung wirklich zwischen deinen beiden Geräten besteht, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft, damit du weißt, dass sie byte-genau angekommen ist.",
+        "Im selben Netz zu sein bedeutet nicht, dass die Übertragung im Klartext erfolgt. Relayium handelt zwischen den beiden Geräten einen X25519-Schlüsselaustausch aus und verschlüsselt jeden Block mit AES-256-GCM; diesen Schlüssel bekommt kein Server zu sehen, auch nicht Relayiums eigener Signaling-Server, der den Geräten nur hilft, einander zu finden. Mit eingeschalteter erweiterter Verifizierung zeigen beide Bildschirme zusätzlich einen kurzen Verifizierungscode (SAS), der dich visuell bestätigen lässt, dass die Verbindung wirklich zwischen deinen beiden Geräten besteht, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft, damit du weißt, dass sie byte-genau angekommen ist.",
       ],
     },
     {
@@ -447,7 +447,7 @@ const fr = {
         "Sur chaque appareil, ouvrez relayium.com dans un navigateur moderne (Chrome, Edge, Firefox ou Safari).",
         "Les appareils de ce réseau apparaissent automatiquement les uns aux autres — aucun code, aucune connexion, aucun compte d'aucun côté.",
         "Choisissez un fichier ou un dossier entier (jusqu'à 1 000 fichiers par lot) et sélectionnez, dans la liste, l'appareil qui doit le recevoir.",
-        "Les deux appareils affichent le même code de vérification court (SAS). Un coup d'œil sur chaque écran, confirmez qu'il concorde, et le transfert démarre.",
+        "Le transfert démarre dès que le destinataire accepte. Si vous activez la vérification avancée (désactivée par défaut), les deux appareils affichent en plus le même code de vérification court (SAS) : un coup d'œil sur chaque écran, et vous confirmez qu'il concorde avant.",
         "Les fichiers passent directement d'un appareil à l'autre ; enregistrez-les une fois arrivés.",
       ],
     },
@@ -461,7 +461,7 @@ const fr = {
     {
       heading: "Toujours chiffré de bout en bout",
       body: [
-        "Être sur le même réseau ne veut pas dire que le transfert circule en clair. Relayium négocie un échange de clés X25519 entre les deux appareils et chiffre chaque bloc avec AES-256-GCM ; cette clé n'est jamais vue par aucun serveur, y compris le propre serveur de signalisation de Relayium, qui aide seulement les appareils à se trouver. Le code de vérification court (SAS) affiché sur les deux écrans vous permet de confirmer visuellement que la connexion est bien entre vos deux appareils, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256, pour savoir qu'il est arrivé intact, octet pour octet.",
+        "Être sur le même réseau ne veut pas dire que le transfert circule en clair. Relayium négocie un échange de clés X25519 entre les deux appareils et chiffre chaque bloc avec AES-256-GCM ; cette clé n'est jamais vue par aucun serveur, y compris le propre serveur de signalisation de Relayium, qui aide seulement les appareils à se trouver. Avec la vérification avancée activée, les deux écrans affichent en plus un code de vérification court (SAS) qui vous permet de confirmer visuellement que la connexion est bien entre vos deux appareils, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256, pour savoir qu'il est arrivé intact, octet pour octet.",
       ],
     },
     {
@@ -530,7 +530,7 @@ const ar = {
         "على كل جهاز، افتح relayium.com في متصفح حديث (Chrome أو Edge أو Firefox أو Safari).",
         "تظهر الأجهزة الموجودة على تلك الشبكة لبعضها تلقائيًا — لا رمز، لا تسجيل دخول، لا حساب على أي من الجانبين.",
         "اختر ملفًا أو مجلدًا كاملًا (حتى 1,000 ملف لكل دفعة) وحدّد أي جهاز في القائمة ينبغي أن يستقبله.",
-        "يعرض كلا الجهازين رمز التحقق القصير نفسه (SAS). ألقِ نظرة عليه على كل شاشة، وتأكّد من تطابقه، فيبدأ النقل.",
+        "يبدأ النقل بمجرد قبول الطرف المستلم. وإذا فعّلت التحقّق المتقدّم (المعطَّل افتراضيًا)، يعرض الجهازان أيضًا رمز التحقق القصير نفسه (SAS)، فألقِ نظرة عليه على كل شاشة وتأكّد من تطابقه أولًا.",
         "تنتقل الملفات مباشرةً من جهاز إلى آخر؛ احفظها عند وصولها.",
       ],
     },
@@ -544,7 +544,7 @@ const ar = {
     {
       heading: "ما يزال مشفَّرًا من الطرف إلى الطرف",
       body: [
-        "الوجود على نفس الشبكة لا يعني أن النقل يُرسَل بنص صريح. يتفاوض Relayium على تبادل مفاتيح X25519 بين الجهازين ويشفّر كل جزء بـ AES-256-GCM؛ ولا يرى هذا المفتاح أي خادم، بما في ذلك خادم الإشارة الخاص بـ Relayium نفسه، الذي لا يفعل سوى مساعدة الجهازين على العثور على بعضهما. ويتيح لك رمز التحقق القصير (SAS) الذي تعرضه الشاشتان أن تؤكّد بصريًا أن الاتصال قائم حقًا بين جهازيك، ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256 لتعلم أنه وصل سليمًا بايتًا ببايت.",
+        "الوجود على نفس الشبكة لا يعني أن النقل يُرسَل بنص صريح. يتفاوض Relayium على تبادل مفاتيح X25519 بين الجهازين ويشفّر كل جزء بـ AES-256-GCM؛ ولا يرى هذا المفتاح أي خادم، بما في ذلك خادم الإشارة الخاص بـ Relayium نفسه، الذي لا يفعل سوى مساعدة الجهازين على العثور على بعضهما. وعند تفعيل التحقّق المتقدّم تعرض الشاشتان أيضًا رمز تحقق قصيرًا (SAS) يتيح لك أن تؤكّد بصريًا أن الاتصال قائم حقًا بين جهازيك، ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256 لتعلم أنه وصل سليمًا بايتًا ببايت.",
       ],
     },
     {
@@ -613,7 +613,7 @@ const es = {
         "En cada dispositivo, abre relayium.com en un navegador moderno (Chrome, Edge, Firefox o Safari).",
         "Los dispositivos de esa red aparecen entre sí automáticamente — sin código, sin inicio de sesión, sin cuenta en ninguno de los lados.",
         "Elige un archivo o una carpeta entera (hasta 1.000 archivos por lote) y selecciona qué dispositivo de la lista debe recibirlo.",
-        "Ambos dispositivos muestran el mismo código de verificación corto (SAS). Échale un vistazo en cada pantalla, confirma que coincide, y la transferencia empieza.",
+        "La transferencia empieza en cuanto quien recibe acepta. Si activas la verificación avanzada (desactivada por omisión), ambos dispositivos muestran además el mismo código de verificación corto (SAS): échale un vistazo en cada pantalla y confirma que coincide antes.",
         "Los archivos pasan directamente de un dispositivo al otro; guárdalos cuando lleguen.",
       ],
     },
@@ -627,7 +627,7 @@ const es = {
     {
       heading: "Sigue siendo cifrado de extremo a extremo",
       body: [
-        "Estar en la misma red no significa que la transferencia se envíe en claro. Relayium negocia un intercambio de claves X25519 entre los dos dispositivos y cifra cada bloque con AES-256-GCM; esa clave nunca la ve ningún servidor, incluido el propio servidor de señalización de Relayium, que solo ayuda a los dispositivos a encontrarse. El código de verificación corto (SAS) que ambas pantallas muestran te permite confirmar visualmente que la conexión es realmente entre tus dos dispositivos, y cada archivo se comprueba de extremo a extremo con un hash SHA-256 para que sepas que llegó intacto byte a byte.",
+        "Estar en la misma red no significa que la transferencia se envíe en claro. Relayium negocia un intercambio de claves X25519 entre los dos dispositivos y cifra cada bloque con AES-256-GCM; esa clave nunca la ve ningún servidor, incluido el propio servidor de señalización de Relayium, que solo ayuda a los dispositivos a encontrarse. Con la verificación avanzada activada, ambas pantallas muestran además un código de verificación corto (SAS) que te permite confirmar visualmente que la conexión es realmente entre tus dos dispositivos, y cada archivo se comprueba de extremo a extremo con un hash SHA-256 para que sepas que llegó intacto byte a byte.",
       ],
     },
     {
@@ -696,7 +696,7 @@ const pt = {
         "Em cada dispositivo, abra relayium.com em um navegador moderno (Chrome, Edge, Firefox ou Safari).",
         "Os dispositivos daquela rede aparecem uns para os outros automaticamente — sem código, sem login, sem conta em nenhum dos lados.",
         "Escolha um arquivo ou uma pasta inteira (até 1.000 arquivos por lote) e escolha qual dispositivo da lista deve recebê-lo.",
-        "Ambos os dispositivos mostram o mesmo código de verificação curto (SAS). Dê uma olhada em cada tela, confirme que coincide, e a transferência começa.",
+        "A transferência começa assim que quem recebe aceita. Se você ativar a verificação avançada (desligada por padrão), os dois dispositivos também mostram o mesmo código de verificação curto (SAS): dê uma olhada em cada tela e confirme que coincide antes.",
         "Os arquivos passam direto de um dispositivo para o outro; salve-os quando chegarem.",
       ],
     },
@@ -710,7 +710,7 @@ const pt = {
     {
       heading: "Ainda criptografado de ponta a ponta",
       body: [
-        "Estar na mesma rede não significa que a transferência é enviada às claras. O Relayium negocia uma troca de chaves X25519 entre os dois dispositivos e criptografa cada bloco com AES-256-GCM; essa chave nunca é vista por nenhum servidor, incluindo o próprio servidor de sinalização do Relayium, que apenas ajuda os dispositivos a se encontrarem. O código de verificação curto (SAS) que ambas as telas exibem permite confirmar visualmente que a conexão é realmente entre os seus dois dispositivos, e cada arquivo é verificado de ponta a ponta com um hash SHA-256 para você saber que chegou intacto, byte a byte.",
+        "Estar na mesma rede não significa que a transferência é enviada às claras. O Relayium negocia uma troca de chaves X25519 entre os dois dispositivos e criptografa cada bloco com AES-256-GCM; essa chave nunca é vista por nenhum servidor, incluindo o próprio servidor de sinalização do Relayium, que apenas ajuda os dispositivos a se encontrarem. Com a verificação avançada ativada, as duas telas também exibem um código de verificação curto (SAS) que permite confirmar visualmente que a conexão é realmente entre os seus dois dispositivos, e cada arquivo é verificado de ponta a ponta com um hash SHA-256 para você saber que chegou intacto, byte a byte.",
       ],
     },
     {

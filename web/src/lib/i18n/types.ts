@@ -672,7 +672,17 @@ export interface Messages {
   historyEmpty: string;
   historyClear: string;
   historyKeep: string;
-  // Unified peer workspace (`link/1`). One authenticated link carries both the
+  // Per-device "advanced verification" preference (verify-pref.svelte.ts).
+  // Default OFF: the SAS comparison is an optional endpoint check, not the thing
+  // that protects the content, so `unaffected` has to say plainly what the switch
+  // does NOT touch — otherwise "verification: off" reads as "encryption: off".
+  verify: {
+    title: string;
+    toggle: string;
+    note: string; // what the comparison is and what it detects
+    unaffected: string; // what is never gated on it (keys, ciphertext relay, save consent)
+  };
+  // Unified peer workspace (`link/1`). One encrypted link carries both the
   // file and the text lane, so exactly one header owns the peer name, link state,
   // path badge, verification code and disconnect action. Legacy peers never reach
   // these strings — they keep the separate file and message surfaces.
@@ -687,7 +697,13 @@ export interface Messages {
     stateConnecting: string;
     stateOpen: string;
     stateFailed: string;
-    // Explains why one code covers files and messages at once.
+    // Explains that one encrypted connection carries both files and messages,
+    // and which consent steps that does and does not include. It must NOT call
+    // the link "verified" or imply a code comparison happened: commit-reveal and
+    // AEAD are what always hold — protocol integrity, not identity — and
+    // advanced verification is off by default, so on a default session nobody
+    // compared anything and the peer is not established as the intended person.
+    // What always holds on top of that is the file-receive prompt.
     lanesNote: string;
     // ── queued outbound file batches ──
     queuedTitle: (count: number) => string;

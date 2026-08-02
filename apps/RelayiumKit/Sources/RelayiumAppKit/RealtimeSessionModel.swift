@@ -44,6 +44,11 @@ public enum RealtimeState: Equatable {
     case connecting
     /// Blocking on purpose: nothing is sent and nothing is written until the
     /// local user confirms the phrase matches the other device's.
+    ///
+    /// Only reached when the advanced-verification preference is ON. With it
+    /// off (the default) the session goes straight from `connecting` to
+    /// `transferring` — see `VerificationPreference` for why, and for what that
+    /// does NOT change.
     case verifying(sas: String)
     case transferring(done: Int, total: Int)
     case completed([URL])
@@ -58,6 +63,10 @@ public final class RealtimeSessionModel: ObservableObject {
     /// Shared with the view so an OS handoff can prefill the same field without
     /// auto-joining or replacing an active connection.
     @Published public var joinCode: String = ""
+    /// The SAS derived for the live connection, kept whether or not it is being
+    /// shown. Turning the preference on must not require a renegotiation, and a
+    /// UI that wants to display the code outside the blocking gate can read it.
+    @Published public private(set) var sasCode: String = ""
     /// Where a received transfer is written. The pane sets it from a save panel.
     public var saveDirectory: URL = FileManager.default
         .urls(for: .downloadsDirectory, in: .userDomainMask).first
@@ -69,12 +78,26 @@ public final class RealtimeSessionModel: ObservableObject {
     /// and waiting for the other device to appear on the code — there is no peer
     /// id to construct one with until then.
     private let makeConnection: (_ code: String, _ role: Role, _ iceServers: ICEConfig) async throws -> RealtimePeerConnection
+    /// Read at the moment the SAS arrives, not captured at init: the user may
+    /// flip the preference between sessions without restarting the app.
+    private let requiresVerification: () -> Bool
 
     private var connection: RealtimePeerConnection?
     private var writer: ManifestWriter?
     private var pendingSend: (sources: [PlaintextSource], metas: [FileMeta])?
     private var pendingReceive = false
     private var sasConfirmed = false
+    /// The DataChannel is open. Tracked because `onSAS` fires on the SIGNALLING
+    /// channel, as soon as the peer's reveal verifies — which can be before the
+    /// DataChannel finishes opening. Nothing may be written until both are true:
+    /// `transmit` does not check `readyState`, so a manifest sent early is
+    /// dropped by WebRTC and the transfer stalls with no error.
+    ///
+    /// This used to be masked by the blocking SAS gate — a human takes seconds,
+    /// and the channel was always open by the time they clicked. With
+    /// verification off there is no such pause, so the ordering has to be
+    /// explicit. Mirrors `RealtimeTextSessionModel.connectionOpened`.
+    private var connectionOpened = false
     private var totalBytes = 0
     private var completedIncomingFiles = 0
     /// Operation identity: a callback from a session the user has left must not
@@ -83,9 +106,11 @@ public final class RealtimeSessionModel: ObservableObject {
 
     public init(pairClient: PairCodeClient,
                 iceClient: ICEConfigClient,
+                requiresVerification: @escaping () -> Bool = { false },
                 makeConnection: @escaping (String, Role, ICEConfig) async throws -> RealtimePeerConnection) {
         self.pairClient = pairClient
         self.iceClient = iceClient
+        self.requiresVerification = requiresVerification
         self.makeConnection = makeConnection
     }
 
@@ -159,7 +184,9 @@ public final class RealtimeSessionModel: ObservableObject {
         return false
     }
 
-    /// Queued until the SAS is confirmed — see `confirmSAS`.
+    /// Queued until the handshake completes (commit-reveal + AEAD keys); with
+    /// verification ON, also until the user confirms the SAS — see `confirmSAS`,
+    /// which is the only step that says anything about the peer's identity.
     public func stageSend(sources: [PlaintextSource], metas: [FileMeta]) {
         guard sources.count == metas.count, let total = try? validateRealtimeFiles(metas) else {
             pendingSend = nil
@@ -175,6 +202,29 @@ public final class RealtimeSessionModel: ObservableObject {
 
     public func confirmSAS() {
         guard case .verifying = state else { return }
+        proceedAfterVerification()
+    }
+
+    /// Present the gate, or step past it, once BOTH the SAS is derived and the
+    /// DataChannel is open. Called from `onSAS` and `onOpen`, which can arrive
+    /// in either order.
+    private func advanceWhenReady() {
+        guard connectionOpened, !sasCode.isEmpty else { return }
+        guard case .connecting = state else { return }
+        if requiresVerification() {
+            sasConfirmed = false
+            state = .verifying(sas: sasCode)
+        } else {
+            proceedAfterVerification()
+        }
+    }
+
+    /// The single "this connection is cleared to move bytes" transition, shared
+    /// by the ON path (the user pressed "They match") and the OFF path (the
+    /// commit-reveal-complete encrypted connection is ready, and nothing is
+    /// waiting on a human). "Cleared" is about readiness, not about anyone
+    /// having established WHO the peer is — only a compared SAS does that.
+    private func proceedAfterVerification() {
         sasConfirmed = true
         if let p = pendingSend {
             state = .transferring(done: 0, total: totalBytes)
@@ -230,11 +280,27 @@ public final class RealtimeSessionModel: ObservableObject {
     // MARK: - wiring
 
     private func wire(_ c: RealtimePeerConnection, generation g: Int) {
+        // The handshake has completed and the SAS is derived. Whether that
+        // becomes a screen depends on the preference; whether the handshake
+        // itself held does not — commit-then-reveal already failed the
+        // connection if the reveal did not match, before this ever fires. What
+        // the preference does decide is whether anyone ever checks that the peer
+        // on the other end is the intended one, which is what comparing the SAS
+        // out of band — and only that — establishes.
         c.onSAS = { [weak self] sas in
             Task { @MainActor in
-                self?.apply(g) {
-                    $0.sasConfirmed = false
-                    $0.state = .verifying(sas: sas)
+                self?.apply(g) { m in
+                    m.sasCode = sas
+                    m.sasConfirmed = false
+                    m.advanceWhenReady()
+                }
+            }
+        }
+        c.onOpen = { [weak self] in
+            Task { @MainActor in
+                self?.apply(g) { m in
+                    m.connectionOpened = true
+                    m.advanceWhenReady()
                 }
             }
         }
@@ -354,6 +420,8 @@ public final class RealtimeSessionModel: ObservableObject {
         pendingReceive = false
         completedIncomingFiles = 0
         sasConfirmed = false
+        sasCode = ""
+        connectionOpened = false
         incoming = []
     }
 }

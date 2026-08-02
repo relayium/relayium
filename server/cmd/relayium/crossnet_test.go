@@ -39,7 +39,7 @@ func TestSplitSendArgs(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A file whose name is also a well-formed pairing code. The file wins.
-	coded := filepath.Join(dir, "K7M4XR")
+	coded := filepath.Join(dir, "726122")
 	if err := os.WriteFile(coded, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -52,10 +52,11 @@ func TestSplitSendArgs(t *testing.T) {
 		wantErr  bool
 	}{
 		{"single source mints", []string{real}, []string{real}, "", false},
-		{"trailing code is a code", []string{real, "K7M4XR"}, []string{real}, "K7M4XR", false},
+		{"trailing code is a code", []string{real, "483920"}, []string{real}, "483920", false},
 		{"two sources mint", []string{real, real}, []string{real, real}, "", false},
 		{"code-named file stays a source", []string{real, coded}, []string{real, coded}, "", false},
-		{"neither file nor code errors", []string{real, "726122"}, nil, "", true},
+		{"leading-zero code is a code", []string{real, "004291"}, []string{real}, "004291", false},
+		{"neither file nor code errors", []string{real, "K7M4XR"}, nil, "", true},
 		{"no arguments errors", nil, nil, "", true},
 	}
 	for _, tc := range cases {
@@ -121,7 +122,7 @@ func TestSplitSendArgsKeepsAnUnstatableArgumentAsASource(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A real file that happens to be named like a well-formed code.
-	if err := os.WriteFile(filepath.Join(work, "K7M4XR"), []byte("x"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(work, "726122"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	prev, err := os.Getwd()
@@ -141,30 +142,30 @@ func TestSplitSendArgsKeepsAnUnstatableArgumentAsASource(t *testing.T) {
 
 	// Precondition. If this platform (or this filesystem) still lets the stat
 	// through, or reports plain ENOENT, there is nothing here to exercise.
-	if _, statErr := os.Stat("K7M4XR"); statErr == nil || errors.Is(statErr, fs.ErrNotExist) {
-		t.Skipf("os.Stat(K7M4XR) = %v; no non-ENOENT stat failure available here", statErr)
+	if _, statErr := os.Stat("726122"); statErr == nil || errors.Is(statErr, fs.ErrNotExist) {
+		t.Skipf("os.Stat(726122) = %v; no non-ENOENT stat failure available here", statErr)
 	}
 
-	srcs, code, err := splitSendArgs([]string{real, "K7M4XR"})
+	srcs, code, err := splitSendArgs([]string{real, "726122"})
 	if err != nil {
 		t.Fatalf("an unstatable argument must stay a source, got error: %v", err)
 	}
 	if code != "" {
 		t.Errorf("code = %q, want none — a file we merely cannot stat is not a pairing code", code)
 	}
-	if strings.Join(srcs, "|") != strings.Join([]string{real, "K7M4XR"}, "|") {
+	if strings.Join(srcs, "|") != strings.Join([]string{real, "726122"}, "|") {
 		t.Errorf("srcs = %v, want both arguments kept as sources", srcs)
 	}
 }
 
-// The user-visible bug that started this: a made-up numeric code must not
-// degrade into "no such file", it must explain what a code is.
+// The user-visible bug that started this: a made-up code must not degrade into
+// "no such file", it must explain what a code is.
 func TestSplitSendArgsExplainsAMadeUpCode(t *testing.T) {
-	_, _, err := splitSendArgs([]string{"pando_uu.zip", "726122"})
+	_, _, err := splitSendArgs([]string{"pando_uu.zip", "K7M4XR"})
 	if err == nil {
 		t.Fatal("want an error")
 	}
-	for _, want := range []string{"726122", "pairing code", "relayium send"} {
+	for _, want := range []string{"K7M4XR", "pairing code", "6 digits (0-9)", "relayium send"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}

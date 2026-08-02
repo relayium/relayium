@@ -161,19 +161,30 @@
   {:else if mode === "receive"}
     <p class="lead">{t.pair.enterHint}</p>
     <div class="row">
+      <!-- 数字键盘不是装饰：接收端最常见的设备是手机，而 Android 只有在
+           inputmode="numeric" **加上** pattern="[0-9]*" 都在的时候才可靠地弹出纯
+           数字键盘（Chrome 在只有 inputmode 时对 type="text" 仍会给出全键盘的变体）。
+           type 保持 text 而不是 number：number 会带上加减箭头、允许 e/+/- 和小数点、
+           并且在部分浏览器里把 "004291" 规范化成 4291——码是字符串，前导零有意义。
+           autocomplete="one-time-code" 让 iOS/Android 能从短信/剪贴板直接建议这六位。
+
+           **不要把 maxlength 加回来。** 浏览器把 maxlength 作用在粘贴进来的原始串
+           上，发生在 oninput 归一化之前：粘 "483-920" 会先被截成 "483-92"，归一化后
+           只剩五位的 "48392"——用户看到一个自己并没有输错的无效码，而且只有在真实
+           浏览器里粘贴带格式的码时才复现。长度上限由下面的 normalizeCode() 负责
+           （每次 input 都截到 CODE_LEN），绑定值仍然是六位，前导零也不受影响。 -->
       <input
-        inputmode="text"
-        autocapitalize="characters"
-        autocomplete="off"
+        type="text"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        autocomplete="one-time-code"
         autocorrect="off"
         spellcheck="false"
-        maxlength={CODE_LEN}
-        placeholder="K7M3X9"
+        placeholder="483920"
         aria-label={t.pair.enterHint}
         bind:value={entry}
         oninput={() => {
-          // 归一化收在一处（大写 + 丢掉字母表外的字符），粘贴一段带空格或连字符的
-          // 码也能直接用。
+          // 归一化收在一处（只留数字），粘贴一段带空格或连字符的码也能直接用。
           entry = normalizeCode(entry);
           if (entry.length === CODE_LEN) join(); // 输满即加入，不用再点一次
         }}

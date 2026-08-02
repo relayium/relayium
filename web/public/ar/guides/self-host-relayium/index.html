@@ -99,9 +99,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>وجّه الـ CLI إلى خادمك</h2>
       <p>يستخدم Relayium CLI افتراضيًا خادم التعارف الخاص بـ relayium.com لعمليات send/receive وtext عبر الشبكات. مرّر ‎--server‎ لاستخدام خادمك بدلًا منه:</p>
       <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
-      <pre><code>relayium receive K7M4XR --server https://your-domain</code></pre>
+      <pre><code>relayium receive 483920 --server https://your-domain</code></pre>
       <pre><code>relayium text --server https://your-domain</code></pre>
-      <pre><code>relayium text K7M4XR --server https://your-domain</code></pre>
+      <pre><code>relayium text 483920 --server https://your-domain</code></pre>
       <ul><li>الـ CLI مجاني في كلتا الحالتين — ‎--server‎ يغيّر خادم التعارف فقط. يصدر send أو text بلا رمز رمزًا من ذلك الخادم، ويخزّن up السحابي تحت حساب عليه، لذا سجّل الدخول أولًا بـ ‎relayium login --server https://your-domain‎. أما receive وdown وtext مع الرمز المطبوع فلا تحتاج إلى تسجيل دخول.</li><li>يجب أن يبقى طرفا text متصلين معًا. تستخدم الرسائل جلسة P2P مباشرة مستقلة ومشفّرة من الطرف إلى الطرف. text في CLI مباشر فقط ولا يستخدم مُرحِّل TURN الخاص بتطبيق الويب. لا تخزّن Relayium ولا خادمك المستضاف ذاتيًا متون الرسائل أو سجلًا على الخادم، لكن يمكن لأي طرفية أو مستلم نسخ النص أو الاحتفاظ به بعد استلامه.</li><li>‏push/pull (عبر SSH الخاص بك) وserve + دفع daemon direct عبر push relayium://host لا يلمسان relayium.com إطلاقًا، سواء بالاستضافة الذاتية أم لا — يتصلان مباشرةً بالجهاز البعيد الذي تحدده.</li></ul>
       <h2>الأسئلة الشائعة</h2>
       <h3>هل أحتاج إلى إعداد TURN؟</h3>

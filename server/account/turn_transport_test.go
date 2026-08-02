@@ -146,9 +146,9 @@ func TestICEDoesNotAdvertiseTCPForUDPOnlyNodes(t *testing.T) {
 func TestICEAdvertisesTCPTransportForPairingCode(t *testing.T) {
 	ts, svc, store := newICEServer(t, "secret")
 	owner := verifiedOwner(t, store, "tcp-owner@example.com")
-	svc.SetPairCodeOwner(ownerResolver(owner, "K7M4XR"))
+	svc.SetPairCodeOwner(ownerResolver(owner, "483920"))
 
-	resp, err := ts.Client().Get(ts.URL + "/api/ice?code=K7M4XR")
+	resp, err := ts.Client().Get(ts.URL + "/api/ice?code=483920")
 	if err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("get: err=%v status=%v", err, resp.StatusCode)
 	}

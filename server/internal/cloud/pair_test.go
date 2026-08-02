@@ -15,7 +15,7 @@ func TestMintPairSendsBearerAndReturnsCode(t *testing.T) {
 		gotAuth = r.Header.Get("Authorization")
 		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"code":"K7M4XR","expiresAt":1900000000}`))
+		_, _ = w.Write([]byte(`{"code":"483920","expiresAt":1900000000}`))
 	}))
 	defer srv.Close()
 
@@ -25,7 +25,7 @@ func TestMintPairSendsBearerAndReturnsCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MintPair: %v", err)
 	}
-	if p.Code != "K7M4XR" || p.ExpiresAt != 1900000000 {
+	if p.Code != "483920" || p.ExpiresAt != 1900000000 {
 		t.Fatalf("pair = %+v", p)
 	}
 	if gotPath != "/api/pair" {

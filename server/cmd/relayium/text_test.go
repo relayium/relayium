@@ -26,8 +26,10 @@ func TestTextWithoutACodeMintsRatherThanPrintingUsage(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	withStdin(t, "", false)
 	var out, errb bytes.Buffer
-	// --yes clears the SAS gate so the run gets as far as minting.
-	if code := runText([]string{"--yes"}, &out, &errb); code == 0 {
+	// No flags: verification is opt-in, so a plain run reaches minting on its own.
+	// (Passing --yes here would still work and would still prove nothing extra --
+	// it is a no-op unless --verify is also present.)
+	if code := runText(nil, &out, &errb); code == 0 {
 		t.Fatal("expected a non-zero exit when minting is impossible")
 	}
 	msg := errb.String()
@@ -46,8 +48,8 @@ func TestTextWithoutACodeMintsRatherThanPrintingUsage(t *testing.T) {
 
 func TestTextRejectsAMalformedCodeBeforeDialing(t *testing.T) {
 	var out, errb bytes.Buffer
-	// 0 and 1 are not in CodeAlphabet, so this cannot be a real code.
-	if code := runText([]string{"726122"}, &out, &errb); code == 0 {
+	// Letters are not in CodeAlphabet, so this cannot be a real code.
+	if code := runText([]string{"K7M4XR"}, &out, &errb); code == 0 {
 		t.Fatal("expected a non-zero exit on a malformed code")
 	}
 	if strings.Contains(errb.String(), "dial") {
@@ -56,48 +58,76 @@ func TestTextRejectsAMalformedCodeBeforeDialing(t *testing.T) {
 }
 
 func TestParseTextFlags(t *testing.T) {
-	f, rest, err := parseTextFlags([]string{"--server", "wss://example.invalid", "K7M4XR"})
+	f, rest, err := parseTextFlags([]string{"--server", "wss://example.invalid", "483920"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if f.server != "wss://example.invalid" {
 		t.Fatalf("server = %q", f.server)
 	}
-	if len(rest) != 1 || rest[0] != "K7M4XR" {
+	if len(rest) != 1 || rest[0] != "483920" {
 		t.Fatalf("rest = %v", rest)
 	}
 }
 
-// A message session has no manifest to inspect, so the SAS gate is on by
-// default -- unlike `send`, where --verify opts in.
-func TestTextConfirmsTheSasByDefaultOnATty(t *testing.T) {
-	f, _, err := parseTextFlags([]string{"K7M4XR"})
+// SAS comparison is now OPT-IN here, exactly as it is for `send`: the default
+// run never prompts, on a terminal or off it. The old default (prompt on a TTY,
+// refuse a pipe without --yes) made an optional endpoint check look like a
+// mandatory step and stopped scripted sessions that had no way to answer.
+func TestTextDoesNotConfirmTheSasByDefault(t *testing.T) {
+	f, _, err := parseTextFlags([]string{"483920"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.confirmSAS(true) {
+		t.Fatal("the default run must not prompt, even on a TTY")
+	}
+	if f.confirmSAS(false) {
+		t.Fatal("the default run must not prompt off a TTY either")
+	}
+	if f.refusesForVerify(false) {
+		t.Fatal("a default piped run must not be refused")
+	}
+}
+
+// --verify opts in, and only a terminal can answer it.
+func TestTextVerifyOptsIn(t *testing.T) {
+	f, _, err := parseTextFlags([]string{"--verify", "483920"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !f.confirmSAS(true) {
-		t.Fatal("a TTY session must confirm the SAS by default")
+		t.Fatal("--verify on a TTY must prompt")
 	}
 	if f.confirmSAS(false) {
 		t.Fatal("a piped session cannot prompt")
 	}
+	// And it must say so rather than proceeding as if it had been confirmed.
+	if !f.refusesForVerify(false) {
+		t.Fatal("--verify with nobody to prompt must refuse")
+	}
 }
 
-// And a piped session without --yes must refuse rather than proceed unverified.
-func TestTextRefusesAPipedSessionWithoutYes(t *testing.T) {
-	f, _, err := parseTextFlags([]string{"K7M4XR"})
+// --yes stays accepted for the scripts that already pass it. It means the same
+// thing it always meant -- "do not prompt me" -- which is now also the default,
+// so it is a no-op alone and an explicit override next to --verify.
+func TestTextYesRemainsCompatible(t *testing.T) {
+	fy, _, err := parseTextFlags([]string{"--yes", "483920"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.allowUnverified(false) {
-		t.Fatal("piped without --yes must not proceed unverified")
+	if fy.confirmSAS(true) || fy.refusesForVerify(false) {
+		t.Fatal("--yes alone must behave exactly like the default")
 	}
-	fy, _, err := parseTextFlags([]string{"--yes", "K7M4XR"})
+	both, _, err := parseTextFlags([]string{"--verify", "--yes", "483920"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !fy.allowUnverified(false) {
-		t.Fatal("--yes is the documented opt-out for scripts")
+	if both.confirmSAS(true) {
+		t.Fatal("--yes must win over --verify: it is the explicit do-not-ask")
+	}
+	if both.refusesForVerify(false) {
+		t.Fatal("--yes must not leave a piped run refused")
 	}
 }
 
@@ -121,12 +151,13 @@ func withStdin(t *testing.T, in string, tty bool) {
 	t.Cleanup(func() { textStdin, textStdinIsTTY = oldIn, oldTTY })
 }
 
-// A piped run with no --yes must refuse before it reaches the network, and say
-// which flag unblocks it.
-func TestRunTextRefusesAPipedRunWithoutYesBeforeDialing(t *testing.T) {
+// A piped run that ASKED to verify must refuse before it reaches the network,
+// and say which flag unblocks it. (A piped run that did not ask now proceeds --
+// see TestRunTextPipedDefaultIsNotRefused.)
+func TestRunTextRefusesAPipedVerifyBeforeDialing(t *testing.T) {
 	withStdin(t, "hello\n", false)
 	var out, errb bytes.Buffer
-	code := runText([]string{"K7M4XR"}, &out, &errb)
+	code := runText([]string{"--verify", "483920"}, &out, &errb)
 	if code == 0 {
 		t.Fatal("expected a non-zero exit")
 	}
@@ -138,22 +169,40 @@ func TestRunTextRefusesAPipedRunWithoutYesBeforeDialing(t *testing.T) {
 	}
 }
 
-// The code's shape is checked before the SAS/TTY gate, so a typo is reported as a
-// typo rather than masked by a complaint about --yes.
-func TestRunTextReportsABadCodeAheadOfTheYesGate(t *testing.T) {
+// The regression this pins: a plain scripted `echo hi | relayium text CODE` used
+// to be refused outright for not having compared a SAS nobody could show it.
+// It must now get past the flag gate and fail (if at all) on the network.
+func TestRunTextPipedDefaultIsNotRefused(t *testing.T) {
 	withStdin(t, "hello\n", false)
 	var out, errb bytes.Buffer
-	if code := runText([]string{"726122"}, &out, &errb); code == 0 {
+	runText([]string{"--server", "wss://127.0.0.1:1", "483920"}, &out, &errb)
+	if strings.Contains(errb.String(), "--yes") {
+		t.Fatalf("a default piped run must not be refused over verification: %q", errb.String())
+	}
+	if strings.Contains(errb.String(), "confirming the SAS") {
+		t.Fatalf("a default piped run must not be refused over verification: %q", errb.String())
+	}
+}
+
+// The code's shape is checked before the verification gate, so a typo is
+// reported as a typo rather than masked by a complaint about --yes.
+func TestRunTextReportsABadCodeAheadOfTheVerifyGate(t *testing.T) {
+	withStdin(t, "hello\n", false)
+	var out, errb bytes.Buffer
+	if code := runText([]string{"--verify", "K7M4XR"}, &out, &errb); code == 0 {
 		t.Fatal("expected a non-zero exit")
 	}
 	if strings.Contains(errb.String(), "--yes") {
 		t.Fatalf("a malformed code must not be reported as a --yes problem: %q", errb.String())
 	}
+	if !strings.Contains(errb.String(), "6 digits (0-9)") {
+		t.Fatalf("the refusal must say what a code is, got %q", errb.String())
+	}
 }
 
 func TestRunTextRejectsExtraOperands(t *testing.T) {
 	var out, errb bytes.Buffer
-	if code := runText([]string{"K7M4XR", "extra"}, &out, &errb); code == 0 {
+	if code := runText([]string{"483920", "extra"}, &out, &errb); code == 0 {
 		t.Fatal("expected a non-zero exit on a second operand")
 	}
 }
@@ -182,7 +231,7 @@ func pairServer(t *testing.T) (*httptest.Server, func() int) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		_, _ = w.Write([]byte(`{"code":"K7M4XR","expiresAt":4102444800}`))
+		_, _ = w.Write([]byte(`{"code":"483920","expiresAt":4102444800}`))
 	}))
 	t.Cleanup(srv.Close)
 	return srv, func() int {
@@ -226,7 +275,7 @@ func TestRunTextWithoutACodeMintsAndHandsOffTheTextCommand(t *testing.T) {
 		t.Fatalf("want exactly one mint request, got %d", got)
 	}
 	msg := errb.String()
-	for _, want := range []string{"Code: K7M4XR", "On the other machine:  relayium text K7M4XR"} {
+	for _, want := range []string{"Code: 483920", "On the other machine:  relayium text 483920"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("hand-off %q does not contain %q", msg, want)
 		}
@@ -237,7 +286,7 @@ func TestRunTextWithoutACodeMintsAndHandsOffTheTextCommand(t *testing.T) {
 	// The minted code is the one this side joins — the room's other place stays
 	// free for the peer, which is what the old "start a send, then Ctrl-C it"
 	// workaround existed to arrange by hand.
-	if !strings.Contains(msg, "K7M4XR") {
+	if !strings.Contains(msg, "483920") {
 		t.Errorf("the session should use the minted code: %q", msg)
 	}
 	// stdout carries the peer's message bytes verbatim; the hand-off is not part
@@ -255,7 +304,7 @@ func TestRunTextWithACodeNeverMints(t *testing.T) {
 	withStdin(t, "", false)
 
 	var out, errb bytes.Buffer
-	if code := runText([]string{"--yes", "--server", srv.URL, "K7M4XR"}, &out, &errb); code == 0 {
+	if code := runText([]string{"--yes", "--server", srv.URL, "483920"}, &out, &errb); code == 0 {
 		t.Fatal("the rendezvous cannot succeed against an HTTP-only test server")
 	}
 	if got := hits(); got != 0 {
@@ -266,18 +315,18 @@ func TestRunTextWithACodeNeverMints(t *testing.T) {
 	}
 }
 
-// The SAS gate comes first, so a piped run without --yes is refused before any
-// request is made. Minting is an authenticated call that starts the code's
+// The verification gate comes first, so a piped --verify run is refused before
+// any request is made. Minting is an authenticated call that starts the code's
 // expiry clock (signal.CodeTTLSeconds); spending one on a session that was
 // never going to open is the kind of waste the ordering exists to prevent.
-func TestRunTextWithoutACodeRefusesAPipedRunBeforeMinting(t *testing.T) {
+func TestRunTextWithoutACodeRefusesAPipedVerifyBeforeMinting(t *testing.T) {
 	srv, hits := pairServer(t)
 	loginAgainst(t, srv)
 	withStdin(t, "hello\n", false)
 
 	var out, errb bytes.Buffer
-	if code := runText([]string{"--server", srv.URL}, &out, &errb); code != 2 {
-		t.Fatalf("want exit 2 for a piped run without --yes, got %d", code)
+	if code := runText([]string{"--verify", "--server", srv.URL}, &out, &errb); code != 2 {
+		t.Fatalf("want exit 2 for a piped --verify run, got %d", code)
 	}
 	if got := hits(); got != 0 {
 		t.Fatalf("a refused run must not mint; got %d request(s)", got)
@@ -325,7 +374,7 @@ func TestRunTextWithoutACodeMintsAgainstASelfHostedServer(t *testing.T) {
 		t.Fatalf("want exactly one mint request against the self-hosted server, got %d", got)
 	}
 	msg := errb.String()
-	if !strings.Contains(msg, "On the other machine:  relayium text K7M4XR") {
+	if !strings.Contains(msg, "On the other machine:  relayium text 483920") {
 		t.Errorf("hand-off %q does not name the text command", msg)
 	}
 	if strings.Contains(msg, "install.sh") {
@@ -872,8 +921,8 @@ func TestInstallDeadlineWrapsAFailure(t *testing.T) {
 // ── TTY detection ────────────────────────────────────────────────────────────
 // The old check was `fi.Mode()&os.ModeCharDevice != 0`, which is true for EVERY
 // character device. It therefore called `relayium text CODE < /dev/null`
-// interactive: the SAS prompt would go to nobody, and the received bytes would be
-// newline-framed instead of exact. These pin the real semantics.
+// interactive: a `--verify` prompt would go to nobody, and the received bytes
+// would be newline-framed instead of exact. These pin the real semantics.
 
 func TestIsTerminalFileRejectsCharacterDevices(t *testing.T) {
 	for _, name := range []string{os.DevNull, "/dev/zero"} {

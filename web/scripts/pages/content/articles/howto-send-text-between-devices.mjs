@@ -4,17 +4,20 @@
 
 const commands = `# One machine mints the code and waits (relayium login is required once)
 relayium text
-# Code: K7M4XR   (valid 30 minutes)
-# On the other machine:  relayium text K7M4XR
+# Code: 483920   (valid 5 minutes)
+# On the other machine:  relayium text 483920
 
 # The other machine joins that code
-relayium text K7M4XR
+relayium text 483920
 
 # Send one multiline message exactly as copied (macOS)
-pbpaste | relayium text K7M4XR --yes
+pbpaste | relayium text 483920
 
 # Or pipe a file on any shell
-cat snippet.txt | relayium text K7M4XR --yes`;
+cat snippet.txt | relayium text 483920
+
+# Optional: stop to compare the verification code (SAS) first
+relayium text 483920 --verify`;
 
 function article(c) {
   return {
@@ -62,19 +65,19 @@ const en = article({
   browserBody:
     "Open relayium.com on both devices. Devices on the same network appear automatically; for different networks, create a browser pairing code from the cross-network page and join it in the other browser.",
   browserSteps: [
-    "On the peer card, choose “Send a message”; the recipient must accept before any message content or composer appears.",
-    "Compare the six-digit verification code (SAS) on both screens, then type or paste text. Use ⌘/Ctrl+Enter to send.",
+    "On the peer card, choose “Send a message”. By default the session opens straight into the composer on both ends — the connection is encrypted either way.",
+    "Type or paste text and send with ⌘/Ctrl+Enter. Turn on advanced verification first if you want both screens to show a six-digit verification code (SAS) to compare, plus an explicit accept step before the session opens.",
     "Each side can send several messages and use Copy on any received message while the session remains open.",
   ],
   cliHeading: "CLI: mint a code on one machine, join it on the other",
   cliBody: [
-    "Run relayium text with no code on one machine. It mints a six-character code with your account, prints the exact command the other machine should run, and stays in the session waiting for it. There is no temporary file to send and no extra process to stop.",
-    "Run relayium text with that code on the other machine. Interactive mode sends one line per message and asks both people to confirm the SAS. For multiline or byte-exact stdin, pipe it as one message and pass --yes because no terminal is available for the SAS prompt.",
+    "Run relayium text with no code on one machine. It mints a six-digit code with your account, prints the exact command the other machine should run, and stays in the session waiting for it. There is no temporary file to send and no extra process to stop.",
+    "Run relayium text with that code on the other machine. Interactive mode sends one line per message and does not stop to compare a code unless you ask it to. For multiline or byte-exact stdin, pipe it as one message; a piped run needs no extra flag.",
   ],
   cliNotes: [
-    "CLI codes last thirty minutes and are CLI-to-CLI only; browser codes cannot connect a browser to the CLI.",
+    "CLI codes last five minutes and are CLI-to-CLI only; browser codes cannot connect a browser to the CLI.",
     "Only the machine that mints needs a signed-in account. The machine joining the printed code does not sign in.",
-    "--yes skips the interactive SAS confirmation, so compare the session another trusted way before using it.",
+    "--verify opts in to comparing the SAS and needs a terminal to answer it, so a piped run with --verify refuses instead of continuing as if it had been confirmed. --yes is still accepted, still means “never prompt”, and overrides --verify.",
   ],
   boundariesHeading: "What text transfer is — and is not",
   boundariesBody:
@@ -113,19 +116,19 @@ const zh = article({
   browserBody:
     "在两台设备上打开 relayium.com。同一网络的设备会自动出现；不同网络时，在跨网络页面创建浏览器配对码，再让另一台浏览器加入。",
   browserSteps: [
-    "在对端卡片上选择“发送消息”；接收方接受之前，消息正文和输入框都不会出现。",
-    "核对两块屏幕上的 6 位校验码（SAS），然后输入或粘贴文本，用 ⌘/Ctrl+Enter 发送。",
+    "在对端卡片上选择“发送消息”。默认情况下会话会直接在两端打开输入框——无论是否核对校验码，连接都是加密的。",
+    "输入或粘贴文本，用 ⌘/Ctrl+Enter 发送。如果希望两块屏幕先显示同一个 6 位校验码（SAS）供核对，并在会话打开前多一步明确接受，请先打开“高级验证”。",
     "会话保持打开时，双方都能连续发送多条消息，也能对收到的任意消息点“复制”。",
   ],
   cliHeading: "CLI：一台机器生成配对码，另一台加入",
   cliBody: [
-    "在其中一台机器上直接运行 relayium text，不带配对码。它会用你的账号生成一个 6 位配对码，打印出另一台机器该运行的完整命令，并留在会话里等待对方加入。不需要临时文件，也不需要另外停掉任何进程。",
-    "另一台机器用该码运行 relayium text。交互模式每行是一条消息，并默认要求双方确认 SAS；多行或要求逐字节保真的内容请通过管道作为一条消息发送，因为此时没有终端可确认 SAS，所以必须显式加 --yes。",
+    "在其中一台机器上直接运行 relayium text，不带配对码。它会用你的账号生成一个 6 位数字配对码，打印出另一台机器该运行的完整命令，并留在会话里等待对方加入。不需要临时文件，也不需要另外停掉任何进程。",
+    "另一台机器用该码运行 relayium text。交互模式每行是一条消息，除非你主动要求，否则不会停下来核对校验码；多行或要求逐字节保真的内容请通过管道作为一条消息发送，管道方式不需要额外加任何参数。",
   ],
   cliNotes: [
-    "CLI 配对码有效期 30 分钟，只能 CLI 对 CLI；浏览器码不能让浏览器与 CLI 互连。",
+    "CLI 配对码有效期 5 分钟，只能 CLI 对 CLI；浏览器码不能让浏览器与 CLI 互连。",
     "只有生成配对码的那台机器需要已登录账号；使用打印出来的配对码加入时不需要登录。",
-    "--yes 会跳过交互式 SAS 确认，使用前应通过其他可信方式核对会话。",
+    "--verify 用来主动开启 SAS 核对，它需要终端来回答，因此管道运行时加 --verify 会直接拒绝，而不是当作已确认继续。--yes 仍然可用，含义仍是“永不提示”，并且优先于 --verify。",
   ],
   boundariesHeading: "文本传输是什么，也不是什么",
   boundariesBody:
@@ -164,19 +167,19 @@ const ja = article({
   browserBody:
     "両方の端末で relayium.com を開きます。同じネットワークなら自動表示され、別ネットワークならクロスネットワーク画面でブラウザ用コードを作り、もう一方のブラウザで参加します。",
   browserSteps: [
-    "相手のカードで「メッセージを送信」を選びます。受信側が承認するまで本文も入力欄も表示されません。",
-    "両画面の 6 桁の確認コード（SAS）を比べ、入力または貼り付け後に ⌘/Ctrl+Enter で送信します。",
+    "相手のカードで「メッセージを送信」を選びます。既定では両端でそのまま入力欄が開きます。いずれの場合も接続は暗号化されています。",
+    "テキストを入力または貼り付け、⌘/Ctrl+Enter で送信します。両画面に同じ 6 桁の確認コード（SAS）を表示して照合し、セッションを開く前に明示的な承認を挟みたい場合は、先に「高度な検証」をオンにしてください。",
     "セッション中は双方が複数のメッセージを送り、受信メッセージをコピーできます。",
   ],
   cliHeading: "CLI：片方でコードを発行し、もう片方が参加する",
   cliBody: [
-    "片方のマシンでコードを付けずに relayium text を実行します。アカウントで 6 文字のコードを発行し、もう一方が実行すべきコマンドをそのまま表示し、相手の参加を待ちます。一時ファイルも、止めるべき別プロセスもありません。",
-    "もう一方のマシンではそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、既定で SAS 確認を求めます。複数行や正確な stdin はパイプで 1 メッセージとして送り、端末プロンプトがないため --yes を付けます。",
+    "片方のマシンでコードを付けずに relayium text を実行します。アカウントで 6 桁の数字コードを発行し、もう一方が実行すべきコマンドをそのまま表示し、相手の参加を待ちます。一時ファイルも、止めるべき別プロセスもありません。",
+    "もう一方のマシンではそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、こちらから求めない限りコード照合で止まることはありません。複数行や正確な stdin はパイプで 1 メッセージとして送れます。パイプ実行に追加のフラグは不要です。",
   ],
   cliNotes: [
-    "CLI コードは 30 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。",
+    "CLI コードは 5 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。",
     "ログイン済みアカウントが必要なのはコードを発行する側だけです。表示されたコードで参加する側はログイン不要です。",
-    "--yes は対話的な SAS 確認を省くため、別の信頼できる手段で確認してください。",
+    "--verify は SAS 照合を有効にするオプションで、応答するには端末が必要です。そのためパイプ実行に --verify を付けると、確認済みとして続行せずに拒否します。--yes も引き続き使え、意味は「決してプロンプトを出さない」で、--verify より優先されます。",
   ],
   boundariesHeading: "テキスト転送の範囲",
   boundariesBody:
@@ -209,19 +212,19 @@ const ko = article({
   browserBody:
     "두 기기에서 relayium.com을 엽니다. 같은 네트워크에서는 자동으로 나타나고, 다른 네트워크에서는 교차 네트워크 페이지에서 브라우저 코드를 만든 뒤 다른 브라우저가 참여합니다.",
   browserSteps: [
-    "상대 카드에서 “메시지 보내기”를 선택합니다. 수신자가 수락하기 전에는 본문이나 작성기가 나타나지 않습니다.",
-    "두 화면의 6자리 확인 코드(SAS)를 비교한 뒤 입력하거나 붙여 넣고 ⌘/Ctrl+Enter로 보냅니다.",
+    "상대 카드에서 “메시지 보내기”를 선택합니다. 기본값에서는 양쪽 모두 곧바로 작성기가 열립니다. 어느 쪽이든 연결은 암호화됩니다.",
+    "텍스트를 입력하거나 붙여 넣고 ⌘/Ctrl+Enter로 보냅니다. 두 화면에 같은 6자리 확인 코드(SAS)를 띄워 대조하고 세션을 열기 전에 명시적인 수락 단계를 두려면 먼저 고급 검증을 켜세요.",
     "세션이 열린 동안 양쪽에서 여러 메시지를 보내고 받은 메시지를 복사할 수 있습니다.",
   ],
   cliHeading: "CLI: 한쪽에서 코드를 발급하고 다른 쪽이 참여",
   cliBody: [
     "한쪽 컴퓨터에서 코드 없이 relayium text를 실행합니다. 계정으로 6자리 코드를 발급하고, 다른 쪽이 실행할 명령을 그대로 출력한 뒤 상대가 참여할 때까지 세션에서 기다립니다. 임시 파일도, 따로 중지할 프로세스도 없습니다.",
-    "다른 쪽 컴퓨터에서 그 코드로 relayium text를 실행합니다. 대화형 모드는 한 줄을 한 메시지로 보내고 기본적으로 SAS 확인을 요구합니다. 여러 줄 또는 정확한 stdin은 파이프로 한 메시지로 보내며 터미널 확인이 없으므로 --yes를 붙입니다.",
+    "다른 쪽 컴퓨터에서 그 코드로 relayium text를 실행합니다. 대화형 모드는 한 줄을 한 메시지로 보내며, 직접 요청하지 않는 한 코드를 대조하려고 멈추지 않습니다. 여러 줄이거나 바이트 그대로 보내야 하는 stdin은 파이프로 한 메시지로 보내면 되고, 파이프 실행에는 추가 플래그가 필요 없습니다.",
   ],
   cliNotes: [
-    "CLI 코드는 30분 동안 유효하고 CLI끼리만 연결합니다. 브라우저와 CLI는 서로 연결되지 않습니다.",
+    "CLI 코드는 5분 동안 유효하고 CLI끼리만 연결합니다. 브라우저와 CLI는 서로 연결되지 않습니다.",
     "로그인 계정은 코드를 발급하는 쪽에만 필요합니다. 출력된 코드로 참여하는 쪽은 로그인할 필요가 없습니다.",
-    "--yes는 대화형 SAS 확인을 건너뛰므로 다른 신뢰할 수 있는 방법으로 세션을 확인하세요.",
+    "--verify는 SAS 대조를 켜는 옵션이며 답하려면 터미널이 필요합니다. 그래서 파이프 실행에 --verify를 붙이면 확인된 것처럼 진행하지 않고 거부합니다. --yes도 그대로 쓸 수 있고 “절대 묻지 않음”을 뜻하며 --verify보다 우선합니다.",
   ],
   boundariesHeading: "텍스트 전송의 범위",
   boundariesBody:
@@ -254,19 +257,19 @@ const de = article({
   browserBody:
     "Öffne relayium.com auf beiden Geräten. Im selben Netz erscheinen sie automatisch; über verschiedene Netze erzeugst du auf der Cross-Network-Seite einen Browser-Code und trittst im zweiten Browser bei.",
   browserSteps: [
-    "Wähle auf der Gerätekarte „Nachricht senden“. Vor der Annahme sieht der Empfänger weder Inhalt noch Eingabefeld.",
-    "Vergleiche den sechsstelligen Prüfcode (SAS) auf beiden Bildschirmen, füge Text ein und sende mit ⌘/Strg+Enter.",
+    "Wähle auf der Gerätekarte „Nachricht senden“. Standardmäßig öffnet sich die Sitzung auf beiden Seiten direkt im Eingabefeld — verschlüsselt ist die Verbindung so oder so.",
+    "Text eingeben oder einfügen und mit ⌘/Strg+Enter senden. Schalte vorher die erweiterte Verifizierung ein, wenn beide Bildschirme denselben sechsstelligen Prüfcode (SAS) zum Vergleichen zeigen und die Sitzung erst nach ausdrücklicher Annahme öffnen soll.",
     "Solange die Sitzung offen ist, können beide Seiten mehrere Nachrichten senden und empfangene Inhalte kopieren.",
   ],
   cliHeading: "CLI: auf einem Rechner einen Code erzeugen, auf dem anderen beitreten",
   cliBody: [
     "Starte auf einem Rechner relayium text ohne Code. Der Befehl erzeugt mit deinem Konto einen sechsstelligen Code, gibt genau den Befehl aus, den der andere Rechner ausführen soll, und wartet in der Sitzung auf ihn. Keine temporäre Datei, kein zusätzlicher Prozess, der beendet werden müsste.",
-    "Starte auf dem anderen Rechner relayium text mit diesem Code. Interaktiv ist jede Zeile eine Nachricht und beide Seiten bestätigen standardmäßig den SAS. Mehrzeilige oder bytegenaue Eingabe wird als eine Nachricht gepiped und braucht --yes, weil kein Terminal für die Bestätigung vorhanden ist.",
+    "Starte auf dem anderen Rechner relayium text mit diesem Code. Interaktiv ist jede Zeile eine Nachricht, und es wird nicht für einen Codevergleich angehalten, solange du das nicht verlangst. Mehrzeilige oder bytegenaue Eingabe wird als eine Nachricht gepiped — dafür ist kein zusätzliches Flag nötig.",
   ],
   cliNotes: [
     "CLI-Codes gelten fünf Minuten und verbinden nur CLI mit CLI; Browser und CLI sind nicht interoperabel.",
     "Nur der Rechner, der den Code erzeugt, braucht ein angemeldetes Konto. Der Rechner, der dem ausgegebenen Code beitritt, muss sich nicht anmelden.",
-    "--yes überspringt die interaktive SAS-Bestätigung; prüfe die Sitzung vorher auf einem anderen vertrauenswürdigen Weg.",
+    "--verify schaltet den SAS-Vergleich ein und braucht ein Terminal für die Antwort; ein gepipeter Lauf mit --verify wird deshalb abgelehnt, statt so weiterzulaufen, als wäre bestätigt worden. --yes wird weiterhin akzeptiert, bedeutet „niemals fragen“ und hat Vorrang vor --verify.",
   ],
   boundariesHeading: "Was Textübertragung ist — und was nicht",
   boundariesBody:
@@ -299,19 +302,19 @@ const fr = article({
   browserBody:
     "Ouvrez relayium.com sur les deux appareils. Sur le même réseau ils apparaissent automatiquement ; sinon créez un code navigateur sur la page interréseau et rejoignez-le dans l'autre navigateur.",
   browserSteps: [
-    "Choisissez « Envoyer un message » sur la carte du pair. Avant acceptation, le destinataire ne voit ni contenu ni zone de saisie.",
-    "Comparez le code de vérification à six chiffres (SAS), saisissez ou collez le texte, puis envoyez avec ⌘/Ctrl+Entrée.",
+    "Choisissez « Envoyer un message » sur la carte du pair. Par défaut, la session s'ouvre directement sur la zone de saisie des deux côtés — la connexion est chiffrée dans tous les cas.",
+    "Saisissez ou collez le texte, puis envoyez avec ⌘/Ctrl+Entrée. Activez d'abord la vérification avancée si vous voulez que les deux écrans affichent le même code de vérification à six chiffres (SAS) à comparer, avec une acceptation explicite avant l'ouverture de la session.",
     "Tant que la session reste ouverte, chaque côté peut envoyer plusieurs messages et copier ceux qu'il reçoit.",
   ],
   cliHeading: "CLI : créer un code sur une machine, le rejoindre sur l'autre",
   cliBody: [
-    "Lancez relayium text sans code sur une machine. La commande crée un code à six caractères avec votre compte, affiche exactement la commande que l'autre machine doit exécuter, et reste dans la session à l'attendre. Aucun fichier temporaire, aucun processus supplémentaire à arrêter.",
-    "Lancez ensuite relayium text avec ce code sur l'autre machine. En mode interactif, chaque ligne est un message et le SAS doit être confirmé. Pour du texte multiligne ou exact, utilisez un pipe en un seul message avec --yes, car aucun terminal ne peut afficher la confirmation.",
+    "Lancez relayium text sans code sur une machine. La commande crée un code à six chiffres avec votre compte, affiche exactement la commande que l'autre machine doit exécuter, et reste dans la session à l'attendre. Aucun fichier temporaire, aucun processus supplémentaire à arrêter.",
+    "Lancez ensuite relayium text avec ce code sur l'autre machine. En mode interactif, chaque ligne est un message et rien ne s'arrête pour comparer un code tant que vous ne le demandez pas. Pour du texte multiligne ou exact, utilisez un pipe en un seul message : aucun indicateur supplémentaire n'est requis.",
   ],
   cliNotes: [
     "Les codes CLI durent cinq minutes et relient uniquement deux CLI ; navigateur et CLI ne sont pas interopérables.",
     "Seule la machine qui crée le code exige un compte connecté. Celle qui rejoint le code affiché n'a pas besoin de se connecter.",
-    "--yes ignore la confirmation interactive du SAS ; vérifiez la session par un autre moyen fiable.",
+    "--verify active la comparaison du SAS et nécessite un terminal pour y répondre : un lancement avec un pipe et --verify est refusé plutôt que poursuivi comme s'il avait été confirmé. --yes reste accepté, signifie toujours « ne jamais demander » et l'emporte sur --verify.",
   ],
   boundariesHeading: "Ce que le transfert de texte est — et n'est pas",
   boundariesBody:
@@ -344,19 +347,19 @@ const ar = article({
   browserBody:
     "افتح relayium.com على الجهازين. تظهر الأجهزة على الشبكة نفسها تلقائيًا؛ وعبر شبكتين أنشئ رمز متصفح من صفحة النقل بين الشبكات وانضم إليه من المتصفح الآخر.",
   browserSteps: [
-    "اختر «إرسال رسالة» من بطاقة الطرف الآخر. لا يظهر النص أو مربع الكتابة للمستلم قبل أن يقبل.",
-    "قارن رمز التحقق ذي الأرقام الستة (SAS) على الشاشتين، ثم اكتب أو الصق وأرسل باستخدام ⌘/Ctrl+Enter.",
+    "اختر «إرسال رسالة» من بطاقة الطرف الآخر. افتراضيًا تُفتح الجلسة مباشرةً على مربع الكتابة في الطرفين، والاتصال مُشفَّر في الحالتين.",
+    "اكتب النص أو الصقه ثم أرسله باستخدام ⌘/Ctrl+Enter. فعِّل التحقّق المتقدّم أولًا إذا أردت أن تعرض الشاشتان رمز تحقّق واحدًا من ست خانات (SAS) لمقارنته، مع خطوة قبول صريحة قبل فتح الجلسة.",
     "ما دامت الجلسة مفتوحة يستطيع الطرفان إرسال عدة رسائل ونسخ أي رسالة مستلمة.",
   ],
   cliHeading: "سطر الأوامر: أصدر الرمز على جهاز وانضم إليه من الآخر",
   cliBody: [
-    "شغّل relayium text بلا رمز على أحد الجهازين. سيصدر رمزًا من ستة محارف باستخدام حسابك، ويطبع الأمر الذي يشغّله الجهاز الآخر تمامًا، ثم يبقى في الجلسة بانتظاره. لا ملف مؤقت ولا عملية إضافية يجب إيقافها.",
-    "شغّل relayium text بذلك الرمز على الجهاز الآخر. في الوضع التفاعلي كل سطر رسالة ويُطلب تأكيد SAS افتراضيًا. أرسل النص متعدد الأسطر أو الدقيق عبر pipe كرسالة واحدة مع --yes لأن الطرفية غير متاحة للتأكيد.",
+    "شغّل relayium text بلا رمز على أحد الجهازين. سيصدر رمزًا من ستة أرقام باستخدام حسابك، ويطبع الأمر الذي يشغّله الجهاز الآخر تمامًا، ثم يبقى في الجلسة بانتظاره. لا ملف مؤقت ولا عملية إضافية يجب إيقافها.",
+    "شغّل relayium text بذلك الرمز على الجهاز الآخر. في الوضع التفاعلي كل سطر رسالة، ولا يتوقّف التشغيل لمقارنة أي رمز ما لم تطلب ذلك. أرسل النص متعدد الأسطر أو الدقيق عبر pipe كرسالة واحدة؛ ولا يحتاج ذلك إلى أي خيار إضافي.",
   ],
   cliNotes: [
-    "رمز CLI صالح لثلاثين دقيقة ويربط CLI بـ CLI فقط؛ لا يتوافق المتصفح مع CLI.",
+    "رمز CLI صالح لخمس دقائق ويربط CLI بـ CLI فقط؛ لا يتوافق المتصفح مع CLI.",
     "الجهاز الذي يصدر الرمز وحده يحتاج حسابًا مسجل الدخول؛ أما الجهاز الذي ينضم بالرمز المطبوع فلا يحتاج إلى تسجيل الدخول.",
-    "--yes يتجاوز تأكيد SAS التفاعلي؛ تحقق من الجلسة بوسيلة موثوقة أخرى.",
+    "‏--verify يفعّل مقارنة SAS ويحتاج طرفية للإجابة، لذلك يُرفض التشغيل عبر pipe مع --verify بدل المتابعة وكأن التأكيد قد تم. ولا يزال --yes مقبولًا ويعني «لا تسأل أبدًا»، وله الأولوية على --verify.",
   ],
   boundariesHeading: "حدود نقل النصوص",
   boundariesBody:
@@ -389,19 +392,19 @@ const es = article({
   browserBody:
     "Abre relayium.com en ambos dispositivos. En la misma red aparecen automáticamente; en redes distintas crea un código de navegador en la página entre redes y únete desde el otro navegador.",
   browserSteps: [
-    "Elige «Enviar un mensaje» en la tarjeta del par. Antes de aceptar, el destinatario no ve contenido ni editor.",
-    "Compara el código de verificación de seis dígitos (SAS), escribe o pega y envía con ⌘/Ctrl+Enter.",
+    "Elige «Enviar un mensaje» en la tarjeta del par. De forma predeterminada la sesión se abre directamente en el editor en ambos lados; la conexión está cifrada en cualquier caso.",
+    "Escribe o pega el texto y envíalo con ⌘/Ctrl+Enter. Activa antes la verificación avanzada si quieres que ambas pantallas muestren el mismo código de verificación de seis dígitos (SAS) para comparar, con una aceptación explícita antes de abrir la sesión.",
     "Mientras la sesión siga abierta, ambos lados pueden enviar varios mensajes y copiar cualquiera que reciban.",
   ],
   cliHeading: "CLI: emite el código en un equipo y únete desde el otro",
   cliBody: [
-    "Ejecuta relayium text sin código en un equipo. Emite un código de seis caracteres con tu cuenta, imprime exactamente el comando que debe ejecutar el otro equipo y se queda en la sesión esperándolo. Sin archivo temporal y sin ningún proceso extra que detener.",
-    "Después ejecuta relayium text con ese código en el otro equipo. El modo interactivo envía una línea por mensaje y pide confirmar el SAS. Para texto multilínea o exacto, usa una tubería como un solo mensaje con --yes, porque no hay terminal para confirmar.",
+    "Ejecuta relayium text sin código en un equipo. Emite un código de seis dígitos con tu cuenta, imprime exactamente el comando que debe ejecutar el otro equipo y se queda en la sesión esperándolo. Sin archivo temporal y sin ningún proceso extra que detener.",
+    "Después ejecuta relayium text con ese código en el otro equipo. El modo interactivo envía una línea por mensaje y no se detiene a comparar ningún código salvo que lo pidas. Para texto multilínea o exacto, usa una tubería como un solo mensaje: no hace falta ninguna opción adicional.",
   ],
   cliNotes: [
     "Los códigos CLI duran cinco minutos y solo conectan CLI con CLI; navegador y CLI no son interoperables.",
     "Solo el equipo que emite el código exige una cuenta conectada. El equipo que se une con el código impreso no necesita iniciar sesión.",
-    "--yes omite la confirmación interactiva del SAS; verifica la sesión por otro medio fiable.",
+    "--verify activa la comparación del SAS y necesita un terminal para responder, así que una ejecución con tubería y --verify se rechaza en lugar de continuar como si se hubiera confirmado. --yes se sigue aceptando, sigue significando «nunca preguntar» y tiene prioridad sobre --verify.",
   ],
   boundariesHeading: "Qué es —y qué no es— la transferencia de texto",
   boundariesBody:
@@ -434,19 +437,19 @@ const pt = article({
   browserBody:
     "Abra relayium.com nos dois dispositivos. Na mesma rede eles aparecem automaticamente; em redes diferentes crie um código de navegador na página entre redes e entre pelo outro navegador.",
   browserSteps: [
-    "Escolha “Enviar uma mensagem” no cartão do par. Antes de aceitar, o destinatário não vê conteúdo nem editor.",
-    "Compare o código de verificação de seis dígitos (SAS), digite ou cole e envie com ⌘/Ctrl+Enter.",
+    "Escolha “Enviar uma mensagem” no cartão do par. Por padrão a sessão abre direto no editor dos dois lados; a conexão é criptografada de qualquer forma.",
+    "Digite ou cole o texto e envie com ⌘/Ctrl+Enter. Ative antes a verificação avançada se quiser que as duas telas mostrem o mesmo código de verificação de seis dígitos (SAS) para comparar, com uma aceitação explícita antes de a sessão abrir.",
     "Enquanto a sessão estiver aberta, os dois lados podem enviar várias mensagens e copiar qualquer mensagem recebida.",
   ],
   cliHeading: "CLI: emita o código em uma máquina e entre pela outra",
   cliBody: [
-    "Execute relayium text sem código em uma das máquinas. Ele emite um código de seis caracteres com a sua conta, imprime exatamente o comando que a outra máquina deve executar e permanece na sessão esperando por ela. Sem arquivo temporário e sem nenhum processo extra para parar.",
-    "Depois execute relayium text com esse código na outra máquina. O modo interativo envia uma linha por mensagem e pede confirmação do SAS. Para texto multilinha ou exato, use um pipe como uma mensagem com --yes, pois não há terminal para confirmar.",
+    "Execute relayium text sem código em uma das máquinas. Ele emite um código de seis dígitos com a sua conta, imprime exatamente o comando que a outra máquina deve executar e permanece na sessão esperando por ela. Sem arquivo temporário e sem nenhum processo extra para parar.",
+    "Depois execute relayium text com esse código na outra máquina. O modo interativo envia uma linha por mensagem e não para para comparar nenhum código, a menos que você peça. Para texto multilinha ou exato, use um pipe como uma única mensagem: nenhuma opção extra é necessária.",
   ],
   cliNotes: [
     "Códigos CLI duram cinco minutos e conectam apenas CLI com CLI; navegador e CLI não são interoperáveis.",
     "Somente a máquina que emite o código exige uma conta conectada. A máquina que entra com o código impresso não precisa fazer login.",
-    "--yes pula a confirmação interativa do SAS; verifique a sessão por outro meio confiável.",
+    "--verify ativa a comparação do SAS e precisa de um terminal para responder, então uma execução com pipe e --verify é recusada em vez de continuar como se tivesse sido confirmada. --yes continua aceito, ainda significa “nunca perguntar” e tem prioridade sobre --verify.",
   ],
   boundariesHeading: "O que a transferência de texto é — e não é",
   boundariesBody:

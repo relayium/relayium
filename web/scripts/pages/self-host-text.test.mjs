@@ -108,7 +108,7 @@ describe("self-hosting guide documents CLI text against a custom server", () => 
         candidate.code?.includes("relayium text --server https://your-domain"),
       );
       expect(section, `${lang} has no self-hosted text section`).toBeTruthy();
-      expect(section.code).toContain("relayium text K7M4XR --server https://your-domain");
+      expect(section.code).toContain("relayium text 483920 --server https://your-domain");
 
       const prose = [...section.body, ...section.bullets].join(" ");
       expect(prose).toContain("relayium login --server https://your-domain");

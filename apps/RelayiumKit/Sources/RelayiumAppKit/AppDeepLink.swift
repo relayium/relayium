@@ -5,18 +5,25 @@ public enum AppDeepLink: Equatable {
     case realtime(code: String?)
 }
 
-private let pairingAlphabet = Set("ACDEFHJKMNPRTWXY23456789")
+/// Must stay byte-identical to `signal.CodeAlphabet` (Go) and `CODE_ALPHABET`
+/// (web). A pairing code is six decimal digits — nothing else — which is what
+/// lets every client offer a numeric keypad and lets the copy say "six digits"
+/// without listing an alphabet. It is NOT the same six digits as the SAS.
+private let pairingAlphabet = Set("0123456789")
 private let pairingCodeLength = 6
 
-/// The same filtering the web and macOS pairing fields use: normalize case,
-/// discard ambiguous/invalid characters, and cap the result at six.
+/// The same filtering the web and macOS pairing fields use: keep the digits,
+/// discard everything else, and cap the result at six.
+///
+/// Deliberately string-only: "004291" and "000000" are ordinary codes, so any
+/// Int round-trip here would silently destroy a tenth of the code space.
 public func normalizedPairingCode(_ raw: String) -> String {
-    let cleaned = raw.uppercased().filter { pairingAlphabet.contains($0) }
+    let cleaned = raw.filter { pairingAlphabet.contains($0) }
     return String(cleaned.prefix(pairingCodeLength))
 }
 
 public func isCompletePairingCode(_ raw: String) -> Bool {
-    normalizedPairingCode(raw) == raw.uppercased() && raw.count == pairingCodeLength
+    normalizedPairingCode(raw) == raw && raw.count == pairingCodeLength
 }
 
 /// Parse only links that the production Associated Domains entitlement can
@@ -48,7 +55,7 @@ public func parseAppDeepLink(_ url: URL) -> AppDeepLink? {
           isCompletePairingCode(raw) else {
         return nil
     }
-    return .realtime(code: raw.uppercased())
+    return .realtime(code: raw)
 }
 
 @MainActor

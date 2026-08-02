@@ -25,7 +25,7 @@ press one button to send, and the software picks the right path while keeping co
 **end-to-end encrypted by default** — the keys only ever exist on the sender and the receiver.
 
 The same protocol also carries **ephemeral text**. When both devices are online, a message session
-opens an independent end-to-end encrypted connection with its own SAS to compare, and carries a link,
+opens an independent end-to-end encrypted connection — with its own optional verification code to compare — and carries a link,
 a command, or a block of multiline code instead of a file. On a LAN, browser messages move directly;
 cross-network browser sessions use TURN that carries only ciphertext; CLI text is direct-only.
 Messages are session-scoped:
@@ -50,8 +50,10 @@ is **how seriously we take end-to-end encryption**:
 
 - **App-layer E2E + SAS, not just WebRTC's DTLS.** WebRTC's DTLS fingerprints are exchanged *through the
   signaling server*, so a malicious server could MITM them. Relayium adds an **X25519 + AEAD layer on top
-  of the DataChannel** — keys never reach the server — and a **short verification code (SAS)** so two humans
-  can detect a key-swapping server out of band.
+  of the DataChannel** — keys never reach the server — plus a commit-then-reveal handshake that always
+  runs and always fails closed on tampering. On top of that sits an **optional short verification code
+  (SAS)**: turn on *advanced verification* (off by default) and two humans can compare it out of band to
+  detect a key-swapping server.
 - **A protocol, not just a page.** The crypto layer is deliberately decoupled
   from transport. It already backs the shipped CLI and the macOS release
   candidate; iOS is next (see [Delivery status](#delivery-status)).
@@ -59,11 +61,11 @@ is **how seriously we take end-to-end encryption**:
 ## Features
 
 - 🔒 **End-to-end encrypted** — per-transfer ephemeral X25519 keys → AES-256-GCM per chunk. Keys never leave the two devices.
-- 🛡️ **SAS verification code** — browsers compare a code derived from the X25519 endpoint public keys; the CLI compares one derived from the pinned TLS certificate fingerprints. Matching it out of band detects endpoint impersonation or key substitution.
+- 🛡️ **Optional SAS verification code** — turn on *advanced verification* (off by default) and both browsers show a six-digit code derived from the X25519 endpoint public keys; the CLI shows one derived from the pinned TLS certificate fingerprints (`--verify` stops for it). Matching it out of band detects endpoint impersonation or key substitution — when someone actually compares it. It is a different value from the six-digit pairing code, and the encryption never depends on it: commit-then-reveal and AEAD integrity fail closed either way.
 - 📡 **Private paths, stated precisely** — on a LAN, realtime file bytes flow directly over WebRTC. Cross-network browser sessions use a TURN relay by design, but it carries only end-to-end encrypted ciphertext; the CLI is direct-only. Stored download links are encrypted in your browser first, and the server holds only ciphertext it has no key for (see [docs/billing-transparency.md](docs/billing-transparency.md)).
 - 📦 **Multi-file batches** (up to 1,000) — streamed straight to disk where supported; other browsers may buffer in memory.
 - ✅ **Per-file SHA-256 integrity check** on the receiving end.
-- 💬 **Ephemeral encrypted text** — send a link, a command, or a block of multiline code to a device that's online right now, over a connection of its own that is end-to-end encrypted and SAS-verified just like a transfer. Relayium never stores message bodies or server-side history; either endpoint can retain received text. At most 65,536 UTF-8 bytes per message, delivered exactly as typed; anything larger is a file.
+- 💬 **Ephemeral encrypted text** — send a link, a command, or a block of multiline code to a device that's online right now, over a connection of its own that is end-to-end encrypted, with the same optional SAS comparison as a transfer. Relayium never stores message bodies or server-side history; either endpoint can retain received text. At most 65,536 UTF-8 bytes per message, delivered exactly as typed; anything larger is a file.
 - 🌐 **9 languages** — English, 中文, 日本語, 한국어, Deutsch, Français, العربية, Español, Português — auto-detected, switchable.
 - ⚡ **Browser-first** — just open a URL; installing the CLI is optional. Realtime files and text on the same LAN need **no account**; creating a cross-network file or text pairing code requires sign-in, while anyone joining with that code needs no account. Creating stored download links also requires sign-in.
 - 🪶 **Self-hostable footprint** — one static SPA + a single Go server binary, with optional CLI and node binaries.
@@ -81,8 +83,8 @@ curl -fsSL https://relayium.com/install.sh | sh
 Four direct modes — three that move files, one that moves text:
 
 - **`push` / `pull` over your own SSH** — `relayium push ./photos user@host:backups/` (bytes travel over SSH; no Relayium account).
-- **`text` — ephemeral encrypted messages** — run `relayium text` with no code on one machine to mint a code (with your account, as `send` does); it prints the exact `relayium text K7M4XR` command the other machine runs, then waits in the live session for it. Both machines must be online at the same time: this is not a mailbox. One line per message interactively; pipe stdin (`pbpaste | relayium text K7M4XR --yes`) to send multiline content or exact bytes. End-to-end encrypted over a pinned-TLS direct connection of its own, exactly like a file transfer; Relayium stores no message body or server-side history, though either endpoint can retain text. The SAS is confirmed by default; a piped run refuses unless you pass `--yes`. One message is at most 65,536 bytes of UTF-8 — anything larger is a file. CLI to CLI: exactly as with file transfers, the terminal and the browser are separate transports and don't pair with each other.
-- **`send` / `receive` by pairing code** — `relayium send ./file.zip` mints a code with your account (after `relayium login`) and prints what the other end runs: `relayium receive K7M4XR`. Codes are 6 characters and last 30 minutes; the receiver needs no account. Cross-network and direct peer-to-peer — a small rendezvous handshake introduces the two ends, the file goes straight between them, no relay. Sending to someone with a browser instead? Use `relayium up` for a download link.
+- **`text` — ephemeral encrypted messages** — run `relayium text` with no code on one machine to mint a code (with your account, as `send` does); it prints the exact `relayium text 483920` command the other machine runs, then waits in the live session for it. Both machines must be online at the same time: this is not a mailbox. One line per message interactively; pipe stdin (`pbpaste | relayium text 483920`) to send multiline content or exact bytes. End-to-end encrypted over a pinned-TLS direct connection of its own, exactly like a file transfer; Relayium stores no message body or server-side history, though either endpoint can retain text. Verification is opt-in: add `--verify` to stop and compare the SAS (that needs a terminal to answer, so a piped `--verify` run refuses rather than pretending it was confirmed); `--yes` is still accepted and means the same as the default. One message is at most 65,536 bytes of UTF-8 — anything larger is a file. CLI to CLI: exactly as with file transfers, the terminal and the browser are separate transports and don't pair with each other.
+- **`send` / `receive` by pairing code** — `relayium send ./file.zip` mints a code with your account (after `relayium login`) and prints what the other end runs: `relayium receive 483920`. Codes are 6 digits and last 5 minutes; the receiver needs no account. Cross-network and direct peer-to-peer — a small rendezvous handshake introduces the two ends, the file goes straight between them, no relay. Sending to someone with a browser instead? Use `relayium up` for a download link.
 - **`serve` + `push relayium://` daemon direct** — `relayium serve --dir ~/inbox` then `relayium push ./file relayium://host` (server-to-server over pinned TLS; no relay, no SSH, no code — the listener approves each new pusher on its first push and remembers it).
 
 Keep a folder mirrored with **`sync`** — incremental (only changed files transfer), optionally `--delete` to mirror and `--watch` to re-sync in real time:
@@ -100,7 +102,7 @@ Full docs at [relayium.com/cli](https://relayium.com/cli); prebuilt binaries on 
 | Cross-platform           | ✅ any browser          | ❌ Apple only    | ✅                 | ✅                  |
 | Content path             | LAN direct; cross-network ciphertext relay | direct | uploaded | LAN direct |
 | End-to-end encrypted     | ✅ X25519 + AES-256-GCM | ✅               | ❌ / at rest only  | ⚠️ DTLS only        |
-| MITM verification (SAS)  | ✅ 6-digit code         | n/a              | n/a                | ❌                  |
+| MITM verification (SAS)  | ✅ 6-digit code, opt-in | n/a              | n/a                | ❌                  |
 | No install               | ✅                      | ✅               | ⚠️ size limits      | ✅                  |
 | No account               | ⚠️ LAN\*                | ✅               | ⚠️ size limits      | ✅                  |
 | Server-imposed size cap  | ❌ none                 | ❌ none          | ✅ (e.g. 2 GB free) | ❌ none             |
@@ -112,8 +114,8 @@ for files or text requires sign-in; anyone joining with that code needs no accou
 
 The gap from Snapdrop/PairDrop is the **application-layer E2E + SAS**: WebRTC's DTLS fingerprints are
 exchanged *through the signaling server*, so a malicious server could MITM them. Relayium adds an
-X25519 + AES-256-GCM layer **on top of** the DataChannel (keys never reach the server) plus a short code
-two humans can compare out of band.
+X25519 + AES-256-GCM layer **on top of** the DataChannel (keys never reach the server) plus a commit-then-reveal
+handshake and an optional short code two humans can compare out of band.
 
 ## How it works
 
@@ -132,8 +134,10 @@ two humans can compare out of band.
 1. Both browsers connect to the signaling server over WebSocket and are grouped into a **room by public IP**.
 2. The sender creates a WebRTC offer (carrying its X25519 public key); the server relays it to the receiver.
 3. ICE candidates are exchanged, the DataChannel opens, and both sides derive shared session keys via ECDH.
-4. Both screens show a **SAS code** derived from the X25519 endpoint public keys — comparing it out of
-   band detects endpoint impersonation or key substitution.
+4. With *advanced verification* on (off by default), both screens show a **SAS code** derived from the
+   X25519 endpoint public keys — comparing it out of band detects endpoint impersonation or key
+   substitution. The commit-then-reveal handshake that makes the SAS meaningful runs either way, and a
+   mismatched reveal fails the connection whether or not anyone is looking at a code.
 5. The receiver explicitly **accepts** (this click is the user gesture that lets the browser stream to disk).
 6. The sender chunks each file, encrypts every chunk with AES-256-GCM, and streams it over the DataChannel;
    the receiver decrypts, writes to disk, and verifies SHA-256 per file.
@@ -141,16 +145,22 @@ two humans can compare out of band.
 ## Security model
 
 - **Threat model:** the signaling server may passively observe or try to impersonate either endpoint; the
-  network may be eavesdropped. The server can read **no file or message content**, and a browser SAS
-  compared out of band detects X25519 endpoint-key substitution. The CLI uses a separate SAS derived from
-  the two pinned TLS certificate fingerprints to detect endpoint impersonation during rendezvous.
+  network may be eavesdropped. The server can read **no file or message content**, and — when advanced
+  verification is on and a person actually compares them — a browser SAS compared out of band detects
+  X25519 endpoint-key substitution. The CLI uses a separate SAS derived from the two pinned TLS
+  certificate fingerprints (`--verify`) to detect endpoint impersonation during rendezvous. With the
+  comparison off, the residual exposure is precisely that: an active substitution of the signalling
+  endpoints goes unnoticed by the humans. It buys the attacker nothing against a passive server, and the
+  commit-then-reveal check that bounds it still runs unconditionally.
 - **Keys:** a fresh ephemeral X25519 keypair per transfer (persistent device identity is a later milestone);
   ECDH yields the session keys.
 - **Encryption:** each chunk is AES-256-GCM with a unique nonce. The nonce counter is **global across a batch**
   (it never resets per file), so no nonce is ever reused under a session key.
 - **Integrity:** per-chunk GCM tag **and** a per-file SHA-256 verified end-to-end.
 - **Anti-MITM:** the browser SAS is derived from the two X25519 endpoint public keys; comparing it out of
-  band detects endpoint impersonation or key substitution.
+  band detects endpoint impersonation or key substitution. Displaying it and stopping for that comparison
+  is opt-in (*advanced verification*, off by default; `--verify` in the CLI) — the commitment check that
+  makes a ~20-bit code worth comparing is not, and rejects a mismatched reveal on every connection.
 - **Metadata minimization:** the server sees room membership (public IP), a device nickname, presence,
   and signaling envelopes. On a LAN, content travels directly over the DataChannel; cross-network browser
   TURN carries only end-to-end encrypted ciphertext; CLI transfers are direct-only. Relayium never stores
@@ -268,7 +278,7 @@ The CLI is direct-only. Stored download links are encrypted before upload, so th
 
 **Is it really end-to-end encrypted?**
 Yes. A per-transfer X25519 key exchange derives an AES-256-GCM key; keys exist only on the sender and
-receiver. A 6-digit SAS code shown on both screens lets you detect a man-in-the-middle.
+receiver. With advanced verification on, a 6-digit SAS code shown on both screens lets you detect a man-in-the-middle on the signalling endpoints; it is separate from the 6-digit pairing code, and the encryption itself does not depend on anyone comparing it.
 
 **Can I send files between different operating systems — say a Windows PC and an iPhone?**
 Yes. Relayium runs in the browser, so it's fully cross-platform: Windows ↔ iPhone, Android ↔ Mac,
@@ -280,7 +290,7 @@ In Firefox/Safari they're buffered in memory, so Relayium warns above roughly 25
 
 **Can I send text, not just files?**
 Yes. When both devices are online you can open a message session — its own end-to-end encrypted
-peer-to-peer connection, with its own SAS to compare: links, commands, and multiline code arrive
+peer-to-peer connection, with its own optional SAS to compare: links, commands, and multiline code arrive
 exactly as typed, up to 65,536 UTF-8 bytes per message. Relayium never stores message bodies or server-side
 history; there's no offline messaging, though either endpoint can retain received text. Anything
 larger goes as a file. The terminal has its own equivalent, `relayium text <code>` — CLI to CLI,
@@ -293,7 +303,7 @@ ever sees ciphertext. Creating a file or text code requires sign-in; joining wit
 
 **How is this different from Snapdrop or PairDrop?**
 Same browser + WebRTC + LAN idea, but Relayium adds an application-layer E2E encryption layer
-(X25519 + AES-256-GCM) and a SAS verification code on top of WebRTC's DTLS — so a malicious signaling
+(X25519 + AES-256-GCM) and an optional SAS verification code on top of WebRTC's DTLS — so a malicious signaling
 server can't read or MITM the transfer undetected. See the [comparison table](#how-does-relayium-compare).
 
 ## Contributing

@@ -82,24 +82,27 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="lead">浏览器和命令行都支持文本，但它们是两套独立传输，不能加入彼此的配对码。下面任选一种方式，两端保持一致。</p>
       <h2>浏览器：给在线设备发送消息</h2>
       <p>在两台设备上打开 relayium.com。同一网络的设备会自动出现；不同网络时，在跨网络页面创建浏览器配对码，再让另一台浏览器加入。</p>
-      <ul><li>在对端卡片上选择“发送消息”；接收方接受之前，消息正文和输入框都不会出现。</li><li>核对两块屏幕上的 6 位校验码（SAS），然后输入或粘贴文本，用 ⌘/Ctrl+Enter 发送。</li><li>会话保持打开时，双方都能连续发送多条消息，也能对收到的任意消息点“复制”。</li></ul>
+      <ul><li>在对端卡片上选择“发送消息”。默认情况下会话会直接在两端打开输入框——无论是否核对校验码，连接都是加密的。</li><li>输入或粘贴文本，用 ⌘/Ctrl+Enter 发送。如果希望两块屏幕先显示同一个 6 位校验码（SAS）供核对，并在会话打开前多一步明确接受，请先打开“高级验证”。</li><li>会话保持打开时，双方都能连续发送多条消息，也能对收到的任意消息点“复制”。</li></ul>
       <h2>CLI：一台机器生成配对码，另一台加入</h2>
-      <p>在其中一台机器上直接运行 relayium text，不带配对码。它会用你的账号生成一个 6 位配对码，打印出另一台机器该运行的完整命令，并留在会话里等待对方加入。不需要临时文件，也不需要另外停掉任何进程。</p>
-      <p>另一台机器用该码运行 relayium text。交互模式每行是一条消息，并默认要求双方确认 SAS；多行或要求逐字节保真的内容请通过管道作为一条消息发送，因为此时没有终端可确认 SAS，所以必须显式加 --yes。</p>
+      <p>在其中一台机器上直接运行 relayium text，不带配对码。它会用你的账号生成一个 6 位数字配对码，打印出另一台机器该运行的完整命令，并留在会话里等待对方加入。不需要临时文件，也不需要另外停掉任何进程。</p>
+      <p>另一台机器用该码运行 relayium text。交互模式每行是一条消息，除非你主动要求，否则不会停下来核对校验码；多行或要求逐字节保真的内容请通过管道作为一条消息发送，管道方式不需要额外加任何参数。</p>
       <pre><code># One machine mints the code and waits (relayium login is required once)
 relayium text
-# Code: K7M4XR   (valid 30 minutes)
-# On the other machine:  relayium text K7M4XR
+# Code: 483920   (valid 5 minutes)
+# On the other machine:  relayium text 483920
 
 # The other machine joins that code
-relayium text K7M4XR
+relayium text 483920
 
 # Send one multiline message exactly as copied (macOS)
-pbpaste | relayium text K7M4XR --yes
+pbpaste | relayium text 483920
 
 # Or pipe a file on any shell
-cat snippet.txt | relayium text K7M4XR --yes</code></pre>
-      <ul><li>CLI 配对码有效期 30 分钟，只能 CLI 对 CLI；浏览器码不能让浏览器与 CLI 互连。</li><li>只有生成配对码的那台机器需要已登录账号；使用打印出来的配对码加入时不需要登录。</li><li>--yes 会跳过交互式 SAS 确认，使用前应通过其他可信方式核对会话。</li></ul>
+cat snippet.txt | relayium text 483920
+
+# Optional: stop to compare the verification code (SAS) first
+relayium text 483920 --verify</code></pre>
+      <ul><li>CLI 配对码有效期 5 分钟，只能 CLI 对 CLI；浏览器码不能让浏览器与 CLI 互连。</li><li>只有生成配对码的那台机器需要已登录账号；使用打印出来的配对码加入时不需要登录。</li><li>--verify 用来主动开启 SAS 核对，它需要终端来回答，因此管道运行时加 --verify 会直接拒绝，而不是当作已确认继续。--yes 仍然可用，含义仍是“永不提示”，并且优先于 --verify。</li></ul>
       <h2>文本传输是什么，也不是什么</h2>
       <p>Relayium 把正文当作 UTF-8 纯文本，保留空格、制表符、空行和换行；不会执行内容、渲染 Markdown、自动识别链接或生成预览。</p>
       <ul><li>两台设备必须同时在线；没有离线投递、收件箱、联系人或同步聊天记录。</li><li>历史只存在于当前本地会话，结束会话或刷新页面后消失；服务器从不保存消息正文。</li><li>每条消息最多 65,536 个 UTF-8 字节；更大的内容请作为文件发送。</li></ul>

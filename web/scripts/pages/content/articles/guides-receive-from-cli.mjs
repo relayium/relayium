@@ -19,7 +19,7 @@ const en = {
         "Which command you run depends on who's starting the transfer and how the two machines know each other:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — someone sends to you across networks using a pairing code their CLI minted and passed to you out of band. Direct peer-to-peer, verified with a SAS code.",
+        "relayium receive <code> [destdir] — someone sends to you across networks using a pairing code their CLI minted and passed to you out of band. Direct peer-to-peer, with a SAS code you can compare.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — this machine listens for daemon-direct relayium:// pushes, on port 9031 by default.",
         "relayium pull [user@]host:src <dest> — you reach out over SSH to a server you can already log into and fetch files back.",
       ],
@@ -27,13 +27,13 @@ const en = {
     {
       heading: "receive: someone sends you a file across networks",
       body: [
-        "This is the receiving half of relayium send. The other person runs relayium send <path> on their end (after relayium login); their CLI mints a 6-character code, good for 30 minutes, and prints it. They tell you what it is over any channel you both trust — a call, a chat message. You run receive with that code:",
+        "This is the receiving half of relayium send. The other person runs relayium send <path> on their end (after relayium login); their CLI mints a 6-digit code, good for 5 minutes, and prints it. They tell you what it is over any channel you both trust — a call, a chat message. You run receive with that code:",
       ],
       code: [
-        `relayium receive K7M4XR
+        `relayium receive 483920
 
 # or into a specific directory
-relayium receive K7M4XR ./downloads`,
+relayium receive 483920 ./downloads`,
       ],
       bullets: [
         "The connection is direct, peer-to-peer, and end-to-end encrypted; both terminals print the same SAS (short authentication string) once connected. Compare it out of band to confirm that the pinned TLS certificate fingerprints were not substituted and the rendezvous service did not impersonate either endpoint. The SAS authenticates the endpoints; it does not prove every network hop.",
@@ -130,7 +130,7 @@ const zh = {
       heading: "三种接收方式，各自适用于什么场景",
       body: ["用哪个命令，取决于谁在发起传输，以及两台机器是怎么互相认识的："],
       bullets: [
-        "relayium receive <code> [destdir] ——对方跨网络发给你：他的 CLI 先生成一个配对码，再线下转告你。直接点对点，用 SAS 码验证。",
+        "relayium receive <code> [destdir] ——对方跨网络发给你：他的 CLI 先生成一个配对码，再线下转告你。直接点对点，并给出一段可供核对的 SAS 码。",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——这台机器监听 daemon 直连的 relayium:// 推送，默认端口 9031。",
         "relayium pull [user@]host:src <dest> ——你主动通过 SSH 连接到一台你已能登录的服务器，把文件取回来。",
       ],
@@ -138,13 +138,13 @@ const zh = {
     {
       heading: "receive：对方跨网络把文件发给你",
       body: [
-        "这是 relayium send 的接收端。对方在自己那边运行 relayium send <path>（事先 relayium login 过），CLI 会生成一个 6 位、30 分钟内有效的码并打印出来。然后对方通过你们都信任的渠道告诉你——打个电话、发条消息。你则用这个码运行 receive：",
+        "这是 relayium send 的接收端。对方在自己那边运行 relayium send <path>（事先 relayium login 过），CLI 会生成一个 6 位数字、5 分钟内有效的码并打印出来。然后对方通过你们都信任的渠道告诉你——打个电话、发条消息。你则用这个码运行 receive：",
       ],
       code: [
-        `relayium receive K7M4XR
+        `relayium receive 483920
 
 # 或者放进指定的目录
-relayium receive K7M4XR ./downloads`,
+relayium receive 483920 ./downloads`,
       ],
       bullets: [
         "连接是直接点对点、端到端加密的；一旦连上，两边的终端会打印出同一个 SAS（简短认证串）。通过带外方式与发送方核对，可以确认固定的 TLS 证书指纹没有被替换、会合服务没有冒充任一端。SAS 认证的是端点，并不证明网络路径上的每一跳。",
@@ -243,7 +243,7 @@ const ja = {
         "どのコマンドを使うかは、誰が転送を始めるのか、そして2台のマシンがどう互いを知っているかによって決まります:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] ——相手の CLI が発行し、帯域外で伝えられたペアリングコードを使って、相手がネットワークを越えて送ってきます。直接ピアツーピアで、SAS コードで検証します。",
+        "relayium receive <code> [destdir] ——相手の CLI が発行し、帯域外で伝えられたペアリングコードを使って、相手がネットワークを越えて送ってきます。直接ピアツーピアで、照合用の SAS コードが表示されます。",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——このマシンがデーモン直結の relayium:// プッシュを待ち受けます。デフォルトのポートは 9031 です。",
         "relayium pull [user@]host:src <dest> ——自分からすでにログインできるサーバーへ SSH で出向き、ファイルを取り込みます。",
       ],
@@ -251,13 +251,13 @@ const ja = {
     {
       heading: "receive: 相手がネットワークを越えてファイルを送ってくる",
       body: [
-        "これは relayium send の受信側です。相手は自分の側で relayium send <path> を実行します（事前に relayium login 済み）。相手の CLI が30分間有効な6文字のコードを発行して表示するので、通話やチャットなど二人が信頼できる手段でそれを伝えてもらいます。受け取ったコードで receive を実行します:",
+        "これは relayium send の受信側です。相手は自分の側で relayium send <path> を実行します（事前に relayium login 済み）。相手の CLI が 5 分間有効な 6 桁の数字コードを発行して表示するので、通話やチャットなど二人が信頼できる手段でそれを伝えてもらいます。受け取ったコードで receive を実行します:",
       ],
       code: [
-        `relayium receive K7M4XR
+        `relayium receive 483920
 
 # 特定のディレクトリに受け取る場合
-relayium receive K7M4XR ./downloads`,
+relayium receive 483920 ./downloads`,
       ],
       bullets: [
         "接続は直接のピアツーピアでエンドツーエンドに暗号化されています。接続後、両方のターミナルに同じ SAS（short authentication string）が表示されます。送信側と帯域外で照合すると、固定された TLS 証明書フィンガープリントが差し替えられておらず、ランデブーサービスがどちらのエンドポイントにもなりすましていないことを確認できます。SAS はエンドポイントを認証するもので、ネットワーク経路上のすべてのホップを証明するものではありません。",
@@ -354,7 +354,7 @@ const ko = {
       heading: "받는 세 가지 방법과 각각이 적용되는 상황",
       body: ["어떤 명령을 실행할지는 누가 전송을 시작하는지, 그리고 두 기기가 서로 어떻게 아는 사이인지에 따라 달라집니다:"],
       bullets: [
-        "relayium receive <code> [destdir] — 상대의 CLI가 발급해 대역 외로 알려준 페어링 코드를 사용해 상대가 네트워크를 넘어 보내옵니다. 직접적인 피어투피어이며 SAS 코드로 검증됩니다.",
+        "relayium receive <code> [destdir] — 상대의 CLI가 발급해 대역 외로 알려준 페어링 코드를 사용해 상대가 네트워크를 넘어 보내옵니다. 직접적인 피어투피어이며, 대조할 수 있는 SAS 코드가 표시됩니다.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — 이 기기가 데몬 다이렉트 relayium:// 푸시를 대기합니다. 기본 포트는 9031입니다.",
         "relayium pull [user@]host:src <dest> — 이미 로그인할 수 있는 서버로 SSH를 통해 직접 다가가 파일을 가져옵니다.",
       ],
@@ -362,13 +362,13 @@ const ko = {
     {
       heading: "receive: 상대가 네트워크를 넘어 파일을 보낼 때",
       body: [
-        "이것은 relayium send의 받는 쪽입니다. 상대는 자기 쪽에서 relayium send <path>를 실행합니다(미리 relayium login을 해 둔 상태로). 그러면 상대의 CLI가 30분간 유효한 6자 코드를 발급해 출력하고, 상대는 통화나 채팅 등 서로 신뢰하는 채널로 그것을 알려줍니다. 받는 쪽에서는 그 코드로 receive를 실행합니다:",
+        "이것은 relayium send의 받는 쪽입니다. 상대는 자기 쪽에서 relayium send <path>를 실행합니다(미리 relayium login을 해 둔 상태로). 그러면 상대의 CLI가 5분간 유효한 6자리 숫자 코드를 발급해 출력하고, 상대는 통화나 채팅 등 서로 신뢰하는 채널로 그것을 알려줍니다. 받는 쪽에서는 그 코드로 receive를 실행합니다:",
       ],
       code: [
-        `relayium receive K7M4XR
+        `relayium receive 483920
 
 # 특정 디렉터리로 받으려면
-relayium receive K7M4XR ./downloads`,
+relayium receive 483920 ./downloads`,
       ],
       bullets: [
         "연결은 직접적인 피어투피어이며 종단간 암호화됩니다. 연결되면 양쪽 터미널에 동일한 SAS(짧은 인증 문자열)가 출력됩니다. 발신자와 대역 외로 비교하면 고정된 TLS 인증서 지문이 바뀌지 않았고 랑데부 서비스가 어느 끝점도 사칭하지 않았음을 확인할 수 있습니다. SAS는 끝점을 인증하는 것이지 네트워크 경로의 모든 홉을 증명하는 것은 아닙니다.",
@@ -467,7 +467,7 @@ const de = {
         "Welchen Befehl du nutzt, hängt davon ab, wer die Übertragung startet und wie sich die beiden Maschinen kennen:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — jemand sendet dir netzwerkübergreifend mit einem Pairing-Code, den dessen CLI erzeugt und dir außerhalb des Kanals mitgeteilt hat. Direkt peer-to-peer, verifiziert mit einem SAS-Code.",
+        "relayium receive <code> [destdir] — jemand sendet dir netzwerkübergreifend mit einem Pairing-Code, den dessen CLI erzeugt und dir außerhalb des Kanals mitgeteilt hat. Direkt peer-to-peer, mit einem SAS-Code zum Vergleichen.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — diese Maschine lauscht auf Daemon-Direct-Pushes über relayium://, standardmäßig auf Port 9031.",
         "relayium pull [user@]host:src <dest> — du greifst per SSH auf einen Server zu, in den du dich schon einloggen kannst, und holst Dateien zurück.",
       ],
@@ -475,13 +475,13 @@ const de = {
     {
       heading: "receive: jemand sendet dir eine Datei über Netzwerke hinweg",
       body: [
-        "Das ist die Empfangsseite von relayium send. Die andere Person führt auf ihrer Seite relayium send <path> aus (nach relayium login); ihre CLI erzeugt einen Code aus 6 Zeichen, gültig für 30 Minuten, und gibt ihn aus. Sie teilt ihn dir über einen Kanal mit, dem ihr beide vertraut — ein Anruf, eine Chatnachricht. Du führst receive mit diesem Code aus:",
+        "Das ist die Empfangsseite von relayium send. Die andere Person führt auf ihrer Seite relayium send <path> aus (nach relayium login); ihre CLI erzeugt einen Code aus 6 Ziffern, gültig für 5 Minuten, und gibt ihn aus. Sie teilt ihn dir über einen Kanal mit, dem ihr beide vertraut — ein Anruf, eine Chatnachricht. Du führst receive mit diesem Code aus:",
       ],
       code: [
-        `relayium receive K7M4XR
+        `relayium receive 483920
 
 # oder in ein bestimmtes Verzeichnis
-relayium receive K7M4XR ./downloads`,
+relayium receive 483920 ./downloads`,
       ],
       bullets: [
         "Die Verbindung ist direkt, peer-to-peer und Ende-zu-Ende verschlüsselt; sobald sie steht, geben beide Terminals denselben SAS (Short Authentication String) aus. Vergleiche ihn außerhalb des Kanals mit dem Sender, um zu bestätigen, dass die angehefteten TLS-Zertifikatsfingerabdrücke nicht ausgetauscht wurden und der Rendezvous-Dienst keinen Endpunkt imitiert hat. Der SAS authentifiziert die Endpunkte; er beweist nicht jeden Netzwerk-Hop.",
@@ -580,7 +580,7 @@ const fr = {
         "La commande à exécuter dépend de qui déclenche le transfert et de la façon dont les deux machines se connaissent :",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — quelqu'un vous envoie à travers les réseaux avec un code de jumelage que sa CLI a généré et vous a communiqué hors bande. Pair-à-pair direct, vérifié par un code SAS.",
+        "relayium receive <code> [destdir] — quelqu'un vous envoie à travers les réseaux avec un code de jumelage que sa CLI a généré et vous a communiqué hors bande. Pair-à-pair direct, avec un code SAS à comparer.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — cette machine écoute les envois en daemon direct via relayium://, sur le port 9031 par défaut.",
         "relayium pull [user@]host:src <dest> — vous allez chercher, via SSH, sur un serveur où vous pouvez déjà vous connecter, et vous récupérez des fichiers.",
       ],
@@ -588,13 +588,13 @@ const fr = {
     {
       heading: "receive : quelqu'un vous envoie un fichier à travers les réseaux",
       body: [
-        "C'est le pendant côté réception de relayium send. L'autre personne exécute relayium send <path> de son côté (après relayium login) ; sa CLI génère un code de 6 caractères, valable 30 minutes, et l'affiche. Elle vous le communique par un canal auquel vous faites tous deux confiance — un appel, un message. Vous exécutez receive avec ce code :",
+        "C'est le pendant côté réception de relayium send. L'autre personne exécute relayium send <path> de son côté (après relayium login) ; sa CLI génère un code de 6 chiffres, valable 5 minutes, et l'affiche. Elle vous le communique par un canal auquel vous faites tous deux confiance — un appel, un message. Vous exécutez receive avec ce code :",
       ],
       code: [
-        `relayium receive K7M4XR
+        `relayium receive 483920
 
 # ou vers un répertoire précis
-relayium receive K7M4XR ./downloads`,
+relayium receive 483920 ./downloads`,
       ],
       bullets: [
         "La connexion est directe, pair-à-pair et chiffrée de bout en bout ; une fois connectés, les deux terminaux affichent le même SAS (short authentication string). Comparez-le hors bande avec l'expéditeur pour confirmer que les empreintes des certificats TLS épinglés n'ont pas été substituées et que le service de rendez-vous n'a usurpé aucune extrémité. Le SAS authentifie les extrémités ; il ne prouve pas chaque saut réseau.",
@@ -693,7 +693,7 @@ const ar = {
         "الأمر الذي تشغّله يعتمد على من يبدأ النقل وكيف يعرف الجهازان أحدهما الآخر:",
       ],
       bullets: [
-        "‏‎relayium receive <code> [destdir]‎ — يرسل إليك شخص عبر الشبكات باستخدام رمز اقتران أصدرته واجهة CLI لديه ثم أبلغك به خارج القناة. من الند للند مباشرةً، مُتحقَّق منه برمز SAS.",
+        "‏‎relayium receive <code> [destdir]‎ — يرسل إليك شخص عبر الشبكات باستخدام رمز اقتران أصدرته واجهة CLI لديه ثم أبلغك به خارج القناة. من الند للند مباشرةً، مع رمز SAS يمكنك مقارنته.",
         "‏‎relayium serve [--dir D] [--port N] [--once] [--allow-delete]‎ — يستمع هذا الجهاز لعمليات الدفع daemon direct عبر relayium://، على المنفذ 9031 افتراضيًا.",
         "‏‎relayium pull [user@]host:src <dest>‎ — تمدّ يدك عبر SSH إلى خادم يمكنك أصلًا تسجيل الدخول إليه وتجلب الملفات.",
       ],
@@ -701,13 +701,13 @@ const ar = {
     {
       heading: "receive: شخص يرسل إليك ملفًا عبر الشبكات",
       body: [
-        "هذا هو نصف الاستقبال من relayium send. يشغّل الطرف الآخر ‎relayium send <path>‎ من جهته (بعد relayium login)، فتُصدر واجهة CLI لديه رمزًا من 6 محارف صالحًا لـ 30 دقيقة وتطبعه. ثم يخبرك به عبر أي قناة تثقان بها كلاكما — مكالمة، رسالة محادثة. تشغّل أنت receive بذلك الرمز:",
+        "هذا هو نصف الاستقبال من relayium send. يشغّل الطرف الآخر ‎relayium send <path>‎ من جهته (بعد relayium login)، فتُصدر واجهة CLI لديه رمزًا من 6 أرقام صالحًا لـ 5 دقائق وتطبعه. ثم يخبرك به عبر أي قناة تثقان بها كلاكما — مكالمة، رسالة محادثة. تشغّل أنت receive بذلك الرمز:",
       ],
       code: [
-        `relayium receive K7M4XR
+        `relayium receive 483920
 
 # أو إلى مجلد محدد
-relayium receive K7M4XR ./downloads`,
+relayium receive 483920 ./downloads`,
       ],
       bullets: [
         "الاتصال مباشر ومن الند للند ومشفَّر من الطرف إلى الطرف؛ يطبع الطرفان الرمز SAS نفسه (سلسلة المصادقة القصيرة) بمجرد الاتصال. قارنه مع المُرسِل خارج القناة لتأكيد أن بصمات شهادات TLS المثبّتة لم تُستبدل وأن خدمة الالتقاء لم تنتحل شخصية أي طرف. يصادق SAS على الطرفين؛ ولا يثبت كل قفزة في مسار الشبكة.",
@@ -806,7 +806,7 @@ const es = {
         "Qué comando ejecutas depende de quién inicia la transferencia y de cómo se conocen las dos máquinas:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — alguien te envía entre redes usando un código de emparejamiento que generó su CLI y te comunicó fuera de banda. Directo de igual a igual, verificado con un código SAS.",
+        "relayium receive <code> [destdir] — alguien te envía entre redes usando un código de emparejamiento que generó su CLI y te comunicó fuera de banda. Directo de igual a igual, con un código SAS que puedes comparar.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — esta máquina escucha envíos en daemon directo por relayium://, en el puerto 9031 por defecto.",
         "relayium pull [user@]host:src <dest> — vas a buscar por SSH a un servidor al que ya puedes conectarte y recuperas archivos.",
       ],
@@ -814,13 +814,13 @@ const es = {
     {
       heading: "receive: alguien te envía un archivo entre redes",
       body: [
-        "Esta es la mitad receptora de relayium send. La otra persona ejecuta relayium send <path> en su extremo (tras relayium login); su CLI genera un código de 6 caracteres, válido 30 minutos, y lo imprime. Te dice cuál es por cualquier canal en el que ambos confíen — una llamada, un mensaje de chat. Tú ejecutas receive con ese código:",
+        "Esta es la mitad receptora de relayium send. La otra persona ejecuta relayium send <path> en su extremo (tras relayium login); su CLI genera un código de 6 dígitos, válido 5 minutos, y lo imprime. Te dice cuál es por cualquier canal en el que ambos confíen — una llamada, un mensaje de chat. Tú ejecutas receive con ese código:",
       ],
       code: [
-        `relayium receive K7M4XR
+        `relayium receive 483920
 
 # o dentro de un directorio concreto
-relayium receive K7M4XR ./downloads`,
+relayium receive 483920 ./downloads`,
       ],
       bullets: [
         "La conexión es directa, de igual a igual y cifrada de extremo a extremo; ambos terminales imprimen el mismo SAS (cadena de autenticación corta) una vez conectados. Compáralo fuera de banda con el remitente para confirmar que las huellas de los certificados TLS fijados no fueron sustituidas y que el servicio de encuentro no suplantó a ninguno de los extremos. El SAS autentica los extremos; no demuestra cada salto de la ruta de red.",
@@ -919,7 +919,7 @@ const pt = {
         "Qual comando você executa depende de quem inicia a transferência e de como as duas máquinas se conhecem:",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — alguém envia para você entre redes usando um código de emparelhamento que a CLI dessa pessoa gerou e repassou a você fora de banda. Direto ponto a ponto, verificado com um código SAS.",
+        "relayium receive <code> [destdir] — alguém envia para você entre redes usando um código de emparelhamento que a CLI dessa pessoa gerou e repassou a você fora de banda. Direto ponto a ponto, com um código SAS que você pode comparar.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — esta máquina fica à escuta de envios em daemon direto por relayium://, na porta 9031 por padrão.",
         "relayium pull [user@]host:src <dest> — você vai buscar por SSH em um servidor ao qual já consegue se conectar e recupera arquivos.",
       ],
@@ -927,13 +927,13 @@ const pt = {
     {
       heading: "receive: alguém envia um arquivo para você entre redes",
       body: [
-        "Esta é a metade receptora do relayium send. A outra pessoa executa relayium send <path> do lado dela (depois de relayium login); a CLI dela gera um código de 6 caracteres, válido por 30 minutos, e o exibe. Ela te diz qual é por qualquer canal em que ambos confiem — uma ligação, uma mensagem de chat. Você executa receive com esse código:",
+        "Esta é a metade receptora do relayium send. A outra pessoa executa relayium send <path> do lado dela (depois de relayium login); a CLI dela gera um código de 6 dígitos, válido por 5 minutos, e o exibe. Ela te diz qual é por qualquer canal em que ambos confiem — uma ligação, uma mensagem de chat. Você executa receive com esse código:",
       ],
       code: [
-        `relayium receive K7M4XR
+        `relayium receive 483920
 
 # ou para um diretório específico
-relayium receive K7M4XR ./downloads`,
+relayium receive 483920 ./downloads`,
       ],
       bullets: [
         "A conexão é direta, ponto a ponto e criptografada de ponta a ponta; ambos os terminais imprimem o mesmo SAS (cadeia de autenticação curta) assim que conectados. Compare-o fora de banda com quem envia para confirmar que as impressões digitais dos certificados TLS fixados não foram substituídas e que o serviço de encontro não se passou por nenhuma das pontas. O SAS autentica as pontas; não prova cada salto da rota de rede.",

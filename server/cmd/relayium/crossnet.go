@@ -79,7 +79,13 @@ func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr i
 			modeCommand(hs.PeerMode), modeCommand(mode))
 	}
 
-	fmt.Fprintf(stderr, "SAS: %s  (compare on both ends)\n", hs.SAS)
+	// Named "verification code", not just "SAS", and explicitly separated from the
+	// pairing code: both are six digits now, and a line reading "SAS: 483920" next
+	// to a pairing code the user just typed invites reading one as the other. What
+	// it is for is stated in the same breath, because comparing it is optional
+	// (--verify makes it blocking) and an unexplained code nobody compares is
+	// worse than no line at all.
+	fmt.Fprintf(stderr, "verification code (SAS): %s — not the pairing code; compare it on both ends to rule out a substituted endpoint\n", hs.SAS)
 	if f.verify {
 		if !confirmSAS(stderr) {
 			return nil, fmt.Errorf("SAS not confirmed; aborting")
@@ -119,8 +125,8 @@ func crossnetConn(ctx context.Context, code, name string, f crossFlags, stderr i
 // The last argument is a code iff it does NOT exist on disk and IS shaped like
 // a code. Both halves matter: shape alone would eat the second file of
 // `send a.zip b.zip`, and the disk check alone would misread a file genuinely
-// named "K7M4XR". When it is neither, guessing either way produces a wrong and
-// confusing error ("no such file: 726122" for a mistyped code, "not a valid
+// named "483920". When it is neither, guessing either way produces a wrong and
+// confusing error ("no such file: 483920" for a mistyped code, "not a valid
 // code" for a mistyped filename), so name both readings instead.
 func splitSendArgs(args []string) (srcs []string, code string, err error) {
 	if len(args) == 0 {
@@ -145,9 +151,9 @@ func splitSendArgs(args []string) (srcs []string, code string, err error) {
 	}
 	return nil, "", fmt.Errorf(
 		"last argument %q is neither an existing file nor a pairing code\n"+
-			"  codes are %d characters from %s, and last %d minutes\n"+
+			"  codes are %s\n"+
 			"  to mint one automatically, leave it out:  relayium send %s",
-		last, signal.CodeLen, signal.CodeAlphabet, signal.CodeTTLSeconds/60,
+		last, signal.CodeFormatNote(),
 		strings.Join(args[:len(args)-1], " "))
 }
 
@@ -226,7 +232,7 @@ func runReceiveCross(args []string, stdout, stderr io.Writer) int {
 
 func confirmSAS(w io.Writer) bool {
 	// Minimal: in --verify mode read a line from stdin; "y"/"yes" confirms.
-	fmt.Fprint(w, "Do the SAS codes match on both ends? [y/N] ")
+	fmt.Fprint(w, "Do the verification codes match on both ends? [y/N] ")
 	var ans string
 	fmt.Fscanln(osStdin(), &ans)
 	return ans == "y" || ans == "yes" || ans == "Y"

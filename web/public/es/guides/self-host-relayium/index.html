@@ -99,9 +99,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Apunta la CLI hacia tu servidor</h2>
       <p>La CLI de Relayium usa por defecto el servidor de punto de encuentro de relayium.com para send/receive y text entre redes. Pasa --server para usar el tuyo en su lugar:</p>
       <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
-      <pre><code>relayium receive K7M4XR --server https://your-domain</code></pre>
+      <pre><code>relayium receive 483920 --server https://your-domain</code></pre>
       <pre><code>relayium text --server https://your-domain</code></pre>
-      <pre><code>relayium text K7M4XR --server https://your-domain</code></pre>
+      <pre><code>relayium text 483920 --server https://your-domain</code></pre>
       <ul><li>La CLI es gratis en cualquier caso — --server solo cambia el servidor de punto de encuentro. send o text sin código generan uno allí, y up guarda bajo una cuenta en ese servidor, así que inicia sesión primero con relayium login --server https://your-domain. receive, down y text con el código impreso no necesitan iniciar sesión.</li><li>Ambos extremos de text deben permanecer en línea. Los mensajes usan su propia sesión P2P directa cifrada de extremo a extremo. text en la CLI es solo directo y no usa el relé TURN de la app web. Ni Relayium ni tu servidor autoalojado guardan el cuerpo de los mensajes ni un historial del servidor, pero cualquiera de los terminales o el destinatario puede copiar o conservar el texto después de recibirlo.</li><li>push/pull (por tu propio SSH) y serve + el push daemon directo relayium://host no tocan relayium.com en absoluto, te autoalojes o no — se conectan directamente al remoto que indiques.</li></ul>
       <h2>Preguntas frecuentes</h2>
       <h3>¿Necesito configurar TURN?</h3>

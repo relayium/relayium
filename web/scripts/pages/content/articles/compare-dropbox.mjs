@@ -32,7 +32,7 @@ const en = {
     {
       heading: "Realtime send: no server-side content copy or history",
       body: [
-        "When both people are online, realtime transfer streams up to 1,000 files over the selected path: direct WebRTC on the same LAN, or TURN by design across networks. There is no upload-for-storage step or server-side realtime content history. Both sides get a matching 6-digit verification code (SAS), every file is checked with SHA-256 end to end, and a dropped connection resumes.",
+        "When both people are online, realtime transfer streams up to 1,000 files over the selected path: direct WebRTC on the same LAN, or TURN by design across networks. There is no upload-for-storage step or server-side realtime content history. Advanced verification (off by default) adds a matching 6-digit verification code (SAS) for both sides, every file is checked with SHA-256 end to end, and a dropped connection resumes.",
         "There's no server-side storage-size cap; the receiving browser sets the practical ceiling. Chrome and Edge stream to disk; Firefox and Safari may buffer in memory, so Relayium warns above roughly 256 MB. On the same LAN no account is needed and WebRTC connects directly. Across networks, whoever creates the pairing code signs in and the browser uses TURN by design; the relay carries only end-to-end ciphertext it cannot read or decrypt. The person joining never needs an account.",
       ],
     },
@@ -506,7 +506,7 @@ const ar = {
     {
       heading: "الإرسال الفوري: بلا نسخة محتوى أو سجل على الخادم",
       body: [
-        "حين يكون الطرفان متصلين يبث النقل الفوري حتى 1,000 ملف عبر المسار المختار: WebRTC مباشر داخل شبكة LAN نفسها أو TURN حسب التصميم بين الشبكات. لا رفع للتخزين ولا سجل فوري على الخادم، مع رمز من 6 أرقام وSHA-256 والاستئناف.",
+        "حين يكون الطرفان متصلين يبث النقل الفوري حتى 1,000 ملف عبر المسار المختار: WebRTC مباشر داخل شبكة LAN نفسها أو TURN حسب التصميم بين الشبكات. لا رفع للتخزين ولا سجل فوري على الخادم، مع رمز اختياري من 6 أرقام (التحقّق المتقدّم، معطَّل افتراضيًا) وSHA-256 والاستئناف.",
         "لا يوجد حد لتخزين الحجم على الخادم؛ ويحدد المتصفح المستقبِل السقف العملي. يبث Chrome/Edge إلى القرص وقد يخزن Firefox/Safari في الذاكرة مع تحذير قرب 256 ميغابايت. داخل شبكة LAN نفسها لا حساب وWebRTC مباشر. عبر الشبكات يسجل منشئ الرمز الدخول، ويحمل TURN نصًا مشفّرًا من الطرف إلى الطرف لا يستطيع قراءته أو فك تشفيره، ولا يحتاج المنضم إلى حساب.",
       ],
     },
