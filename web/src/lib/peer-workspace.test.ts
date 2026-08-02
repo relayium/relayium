@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { CHROME_MAX_MESSAGE_BYTES } from "./wire-limit";
 import { generateKeyPair, ready } from "./crypto";
 import { createPeerWorkspace } from "./peer-workspace.svelte";
 import type { TextSession } from "./text-session.svelte";
@@ -34,7 +35,7 @@ function setup() {
     return {
       channel: file,
       getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
-      close: vi.fn(), path: async () => "lan",
+      close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => "lan",
       stats: async () => new Map() as unknown as RTCStatsReport,
     };
   });

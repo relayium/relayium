@@ -84,7 +84,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>Qual comando você executa depende de quem inicia a transferência e de como as duas máquinas se conhecem:</p>
       <ul><li>relayium receive &lt;code&gt; [destdir] — alguém envia para você entre redes usando um código de emparelhamento que a CLI dessa pessoa gerou e repassou a você fora de banda. Direto ponto a ponto, verificado com um código SAS.</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] — esta máquina fica à escuta de envios em daemon direto por relayium://, na porta 9031 por padrão.</li><li>relayium pull [user@]host:src &lt;dest&gt; — você vai buscar por SSH em um servidor ao qual já consegue se conectar e recupera arquivos.</li></ul>
       <h2>receive: alguém envia um arquivo para você entre redes</h2>
-      <p>Esta é a metade receptora do relayium send. A outra pessoa executa relayium send &lt;path&gt; do lado dela (depois de relayium login); a CLI dela gera um código de 6 caracteres, válido por 5 minutos, e o exibe. Ela te diz qual é por qualquer canal em que ambos confiem — uma ligação, uma mensagem de chat. Você executa receive com esse código:</p>
+      <p>Esta é a metade receptora do relayium send. A outra pessoa executa relayium send &lt;path&gt; do lado dela (depois de relayium login); a CLI dela gera um código de 6 caracteres, válido por 30 minutos, e o exibe. Ela te diz qual é por qualquer canal em que ambos confiem — uma ligação, uma mensagem de chat. Você executa receive com esse código:</p>
       <pre><code>relayium receive K7M4XR
 
 # ou para um diretório específico

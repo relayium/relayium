@@ -914,6 +914,326 @@ async function pricingHierarchyScenario(browser) {
   await browser.send("Target.closeTarget", { targetId: tab.targetId });
 }
 
+/**
+ * 手机 + 跨网中继形态：一台安卓手机在只有中继池、而中继测速探测又打不通的情况下，
+ * 到底拿到了什么 RTCConfiguration。
+ *
+ * 这条用例对的是一个真实故障：跨网传输在手机上一直显示"正在建立加密连接"、进度 0%，
+ * 30 秒后报"建立连接失败"，而服务端日志干干净净。原因不在超时，在于**中继被丢掉了**。
+ * App 只有在 measureRelay 成功选出一台中继时才用中继池；测速超时（手机上因为射频唤醒 +
+ * TURN 长期凭据的两轮 Allocate 而常态发生）就退回去看顶层 iceServers 里那条遗留 TURN。
+ * 而"只用我自己的节点"的用户、以及任何靠节点池发中继的部署，顶层根本没有 TURN——于是
+ * 策略退回 "all"、只剩 STUN，跨网必然连不上。
+ *
+ * 这里每一样都是真的：真安卓 UA + 触摸视口、真 /api/ice 形状（STUN 顶层 + 中继池）、
+ * 真 RTCPeerConnection 去 allocate 一台不存在的 TURN（所以探测是真的超时，不是打桩）。
+ * 断言落在应用交给 RTCPeerConnection 的那份配置上——修复前那份配置里一条 turn: 都没有。
+ */
+async function mobileRelayFallbackScenario(browser) {
+  // /api/ice 的形状：顶层只有 STUN，中继全在 relays 池里。这正是严格模式用户和
+  // 节点池部署看到的响应。TURN 主机指向一个黑洞地址，所以 measureRelay 必然测空。
+  const POOL_ONLY_ICE = `
+    window.__configs = [];
+    (() => {
+      const Real = window.RTCPeerConnection;
+      window.RTCPeerConnection = function (cfg, ...rest) {
+        window.__configs.push(JSON.parse(JSON.stringify(cfg ?? {})));
+        return new Real(cfg, ...rest);
+      };
+      window.RTCPeerConnection.prototype = Real.prototype;
+      const realFetch = window.fetch;
+      window.fetch = (input, init) => {
+        const url = typeof input === "string" ? input : input?.url ?? "";
+        if (url.startsWith("/api/ice")) {
+          return Promise.resolve(new Response(JSON.stringify({
+            iceServers: [{ urls: "stun:127.0.0.1:3478" }],
+            relays: [{
+              id: "pool-a",
+              region: "test",
+              iceServers: [{ urls: ["turn:192.0.2.1:3478"], username: "u", credential: "c" }],
+            }],
+          }), { status: 200, headers: { "Content-Type": "application/json" } }));
+        }
+        return realFetch(input, init);
+      };
+    })();
+  `;
+  // A real Pixel-class Android: touch viewport plus the UA the app would see.
+  const ANDROID_UA =
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36";
+
+  const phone = await newTab(browser, BASE + "/", POOL_ONLY_ICE + SAVE_STUB);
+  await phone.send("Network.enable");
+  await phone.send("Network.setUserAgentOverride", { userAgent: ANDROID_UA, platform: "Linux armv8l" });
+  await phone.send("Emulation.setDeviceMetricsOverride", {
+    width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true,
+  });
+  await phone.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+
+  const peer = await newTab(browser, BASE + "/", POOL_ONLY_ICE + SAVE_STUB);
+  const peersSeen = "document.querySelectorAll('.pname').length > 0";
+  await phone.waitFor(peersSeen, "peers (mobile relay scenario)", 30_000);
+  await peer.waitFor(peersSeen, "peers (mobile relay scenario)");
+
+  // The probe is genuinely running against an unreachable TURN host; wait past
+  // its budget so the app is in the "no relay selected" state the bug needed.
+  await sleep(10_000);
+  const selected = await phone.evaluate(`(() => {
+    // No relay may have been selected — that is the precondition, not a failure.
+    return window.__configs.length;
+  })()`);
+  if (!selected) throw new Error("the phone never built a peer connection — the relay probe did not run");
+
+  // From here on, only configs built for the transfer itself count.
+  await phone.evaluate("window.__configs.length = 0; true");
+
+  await phone.evaluate(`(() => {
+    const input = document.querySelector('.file-pick-input');
+    const dt = new DataTransfer();
+    dt.items.add(new File([new Uint8Array(1024)], 'mobile-relay.bin', { type: 'application/octet-stream' }));
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  await phone.waitFor("window.__configs.length > 0", "the phone to build a transfer peer connection", 30_000);
+
+  const cfg = await phone.evaluate("window.__configs[0]");
+  const urls = (cfg.iceServers ?? []).flatMap((s) => (Array.isArray(s.urls) ? s.urls : [s.urls]));
+  const turn = urls.filter((u) => u.startsWith("turn:") || u.startsWith("turns:"));
+  if (turn.length === 0) {
+    throw new Error(
+      `the phone built a transfer connection with NO relay: ${JSON.stringify(cfg)} — ` +
+      `this is the reported failure: relay-pool credentials were issued and then discarded, ` +
+      `so a cross-network transfer sits at 0% until the connect timeout`,
+    );
+  }
+  if (cfg.iceTransportPolicy !== "relay") {
+    throw new Error(`relay was present but policy was ${cfg.iceTransportPolicy ?? "all"}, want "relay": ${JSON.stringify(cfg)}`);
+  }
+  ok(`an Android phone with an unmeasurable relay pool still relays (${turn.join(", ")}, policy ${cfg.iceTransportPolicy})`);
+
+  // And the failure that follows must be a bounded, named one rather than an
+  // endless 0%: the relay is a black hole, so this connection cannot succeed.
+  // What it must NOT do is stay at "connecting" forever.
+  const failed = `[...document.querySelectorAll('.status')].some(n => /✗/.test(n.textContent))`;
+  await phone.waitFor(failed, "the unreachable-relay transfer to fail rather than hang at 0%", 70_000);
+  ok("an unreachable relay produced a terminal failure instead of an endless 0%");
+
+  await browser.send("Target.closeTarget", { targetId: phone.targetId });
+  await browser.send("Target.closeTarget", { targetId: peer.targetId });
+}
+
+/**
+ * A peer that only accepts 64 KiB SCTP messages — the reported Android failure.
+ *
+ * A DataChannel's maximum message size is negotiated, not a property of the
+ * local browser: it is the smaller of what this end can send and what the peer
+ * advertised as `a=max-message-size` (64 KiB by default, per RFC 8841, when the
+ * peer advertises nothing). Old Chromium-based Android WebViews land there.
+ * Text frames are small and sail through; a 192 KiB file chunk does not — which
+ * is exactly why text worked and every file transfer failed.
+ *
+ * Nothing here is emulated away. Both tabs run real Chromium and a real
+ * PeerConnection; the only intervention is rewriting the advertised limit in
+ * the SDP each side receives, which is precisely what such a peer would send.
+ * Part one measures what a real Chromium does at that limit; part two runs an
+ * actual multi-chunk transfer through it and compares SHA-256.
+ */
+async function smallMessageCapScenario(browser) {
+  const CAP = 65536;
+  // Rewrite the limit the peer advertises. Applied to what goes into the WebRTC
+  // engine only — the signalling bytes (and any signature over them) are
+  // untouched.
+  const CAP_SDP = `
+    window.__capBytes = ${CAP};
+    (() => {
+      const capSdp = (sdp) => /a=max-message-size:/.test(sdp)
+        ? sdp.replace(/a=max-message-size:\\d+/g, 'a=max-message-size:' + window.__capBytes)
+        : sdp.replace(/(a=sctp-port:\\d+\\r?\\n)/, '$1a=max-message-size:' + window.__capBytes + '\\r\\n');
+      const real = RTCPeerConnection.prototype.setRemoteDescription;
+      RTCPeerConnection.prototype.setRemoteDescription = function (desc) {
+        if (desc && desc.sdp) desc = { type: desc.type, sdp: capSdp(desc.sdp) };
+        return real.call(this, desc);
+      };
+      window.__negotiated = () => window.__pcs.map((pc) => pc.sctp && pc.sctp.maxMessageSize);
+    })();
+  `;
+
+  // ── 1. what a real Chromium does at a 64 KiB negotiated limit ──────────────
+  const probeTab = await newTab(browser, BASE + "/", PC_TRACKER + CAP_SDP);
+  const probe = await probeTab.evaluate(`(async () => {
+    const a = new RTCPeerConnection(), b = new RTCPeerConnection();
+    a.onicecandidate = (e) => e.candidate && b.addIceCandidate(e.candidate);
+    b.onicecandidate = (e) => e.candidate && a.addIceCandidate(e.candidate);
+    const ch = a.createDataChannel('probe');
+    const open = new Promise((r) => { ch.onopen = r; });
+    await a.setLocalDescription(await a.createOffer());
+    await b.setRemoteDescription(a.localDescription);
+    await b.setLocalDescription(await b.createAnswer());
+    await a.setRemoteDescription(b.localDescription);
+    await open;
+    const attempt = (n) => {
+      try { ch.send(new Uint8Array(n)); return 'sent'; } catch (err) { return err.name || 'threw'; }
+    };
+    const chunkFrame = attempt(192 * 1024 + 21);  // what the file protocol used to send, always
+    const afterChunk = ch.readyState;
+    const fitted = attempt(${CAP} - 21);          // what it sends now
+    const out = { negotiated: a.sctp.maxMessageSize, chunkFrame, afterChunk, fitted, afterFitted: ch.readyState };
+    a.close(); b.close();
+    return out;
+  })()`);
+
+  if (probe.negotiated !== CAP) {
+    throw new Error(`the cap did not take: sctp.maxMessageSize is ${probe.negotiated}, want ${CAP}`);
+  }
+  if (probe.chunkFrame === "sent" && probe.afterChunk === "open") {
+    throw new Error(
+      `this Chromium accepted a ${192 * 1024 + 21}-byte message at a ${CAP}-byte limit, so this ` +
+      `run cannot demonstrate the defect — the scenario needs revisiting`,
+    );
+  }
+  if (probe.fitted !== "sent" || probe.afterFitted !== "open") {
+    throw new Error(`a message inside the limit should go through, got ${probe.fitted}/${probe.afterFitted}`);
+  }
+  ok(`a real 64 KiB-capped channel refuses the old 192 KiB chunk frame (${probe.chunkFrame}, channel ${probe.afterChunk}) and takes a fitted one`);
+  await browser.send("Target.closeTarget", { targetId: probeTab.targetId });
+
+  // ── 2. an actual multi-chunk file through that same limit ─────────────────
+  const NAME = "e2e-small-cap.bin";
+  const BYTES = 3 * 192 * 1024 + 7777; // several logical chunks, and a partial tail
+  const GEN = `
+    window.__makePayload = (n) => {
+      const out = new Uint8Array(n);
+      let x = 0x2545f491;
+      for (let i = 0; i < n; i++) { x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0; out[i] = x & 0xff; }
+      return out;
+    };
+    window.__sha256 = async (u8) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', u8))]
+      .map((b) => b.toString(16).padStart(2, '0')).join('');
+  `;
+
+  const sender = await newTab(browser, BASE + "/", PC_TRACKER + CAP_SDP + GEN);
+  const receiver = await newTab(browser, BASE + "/", PC_TRACKER + CAP_SDP + GEN + SAVE_STUB);
+  await setWideViewport(sender);
+  await setWideViewport(receiver);
+  const peersSeen = "document.querySelectorAll('.pname').length > 0";
+  await sender.waitFor(peersSeen, "peers (small message cap)");
+  await receiver.waitFor(peersSeen, "peers (small message cap)");
+
+  const sentHash = await sender.evaluate(`(async () => {
+    const bytes = window.__makePayload(${BYTES});
+    const input = document.querySelector('.file-pick-input');
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], ${JSON.stringify(NAME)}, { type: 'application/octet-stream' }));
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return window.__sha256(bytes);
+  })()`);
+
+  const acceptBtn = `[...document.querySelectorAll('button')].find(b => /接受|Accept|受け取|수락|Annehmen|Accepter|قبول|Aceptar/i.test(b.textContent))`;
+  await receiver.waitFor(`!!(${acceptBtn})`, "the confirmation card (small message cap)");
+  await receiver.evaluate(`(() => { (${acceptBtn}).click(); return true; })()`);
+
+  // The failure this replaces was an indefinite 0%, so the window is deliberately
+  // finite: not finishing inside it IS the regression.
+  await receiver.waitFor("window.__e2e.closed === true", "the capped transfer to finish", 120_000);
+
+  const got = await receiver.evaluate(`(async () => {
+    const buf = new Uint8Array(await new Blob(window.__e2e.chunks).arrayBuffer());
+    return { bytes: buf.length, sha256: await window.__sha256(buf), negotiated: window.__negotiated() };
+  })()`);
+  const senderNegotiated = await sender.evaluate("window.__negotiated()");
+
+  const live = [...got.negotiated, ...senderNegotiated].filter((n) => typeof n === "number");
+  if (!live.length || live.some((n) => n !== CAP)) {
+    throw new Error(`both peers must have negotiated ${CAP}, got ${JSON.stringify(live)}`);
+  }
+  if (got.bytes !== BYTES) throw new Error(`received ${got.bytes} bytes, want ${BYTES}`);
+  if (got.sha256 !== sentHash) throw new Error(`received file differs: ${got.sha256} != ${sentHash}`);
+  ok(`${BYTES} bytes delivered byte-identical over a ${CAP}-byte message limit`);
+
+  // Truthfulness: the receiver's card must say "done", not sit on a stale
+  // progress state, and no lane may have reported a failure.
+  const finalState = await receiver.evaluate(`(() => ({
+    bad: document.querySelectorAll('.xfer.bad').length,
+    text: [...document.querySelectorAll('.xfer .status')].map((n) => n.textContent.trim()).join(' | '),
+  }))()`);
+  if (finalState.bad > 0) {
+    throw new Error(`the transfer succeeded but the card reports failure: ${finalState.text}`);
+  }
+  ok(`the capped transfer's final state is truthful (${finalState.text || "no status row"})`);
+
+  const bad = [...sender.errors, ...receiver.errors]
+    .filter((e) => /ReferenceError|TypeError|is not a function|too large|Message too big/i.test(e));
+  if (bad.length) throw new Error(`the capped path raised real errors:\n    ${bad.join("\n    ")}`);
+  ok("the capped path raised no oversize-send or reference errors");
+
+  await browser.send("Target.closeTarget", { targetId: sender.targetId });
+  await browser.send("Target.closeTarget", { targetId: receiver.targetId });
+
+  // ── 3. a resume whose replacement connection allows LESS than the first ────
+  // The adversarial case: the receiver's checkpoint and hash chain were built on
+  // a connection that carried whole 192 KiB chunks, and the replacement carries
+  // 64 KiB messages. Both must still agree on every byte and on the file hash.
+  const RESUME_BYTES = 8 * 1024 * 1024 + 321;
+  const NO_CAP = 262144; // Chromium's own ceiling: capping to it changes nothing
+  const bigSender = await newTab(browser, BASE + "/", PC_TRACKER + CAP_SDP + GEN);
+  const bigReceiver = await newTab(browser, BASE + "/", PC_TRACKER + CAP_SDP + GEN + SAVE_STUB);
+  await setWideViewport(bigSender);
+  await setWideViewport(bigReceiver);
+  for (const tab of [bigSender, bigReceiver]) {
+    await tab.evaluate(`(() => { window.__capBytes = ${NO_CAP}; return true; })()`);
+    await tab.waitFor(peersSeen, "peers (resume under a smaller cap)");
+  }
+  // Slow the receiver's writes so the drop lands mid-file instead of after it.
+  await bigReceiver.evaluate("window.__e2e.writeDelayMs = 25; true");
+
+  const resumeHash = await bigSender.evaluate(`(async () => {
+    const bytes = window.__makePayload(${RESUME_BYTES});
+    const input = document.querySelector('.file-pick-input');
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], 'e2e-cap-resume.bin', { type: 'application/octet-stream' }));
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return window.__sha256(bytes);
+  })()`);
+  await bigReceiver.waitFor(`!!(${acceptBtn})`, "the confirmation card (resume under a smaller cap)");
+  await bigReceiver.evaluate(`(() => { (${acceptBtn}).click(); return true; })()`);
+  await bigReceiver.waitFor("window.__e2e.bytes > 1024 * 1024", "the receiver to durably write the first MB");
+
+  // From here every new connection negotiates 64 KiB — including the resume.
+  for (const tab of [bigSender, bigReceiver]) {
+    await tab.evaluate(`(() => { window.__capBytes = ${CAP}; return true; })()`);
+  }
+  await bigReceiver.evaluate("window.__e2e.writeDelayMs = 0; true");
+  await bigSender.evaluate("window.__dropLive()");
+  await bigReceiver.evaluate("window.__dropLive()");
+  ok("dropped mid-transfer, then narrowed the message limit for the replacement connection");
+
+  await bigReceiver.waitFor("window.__e2e.closed === true", "the resumed capped transfer to finish", 180_000);
+  const resumed = await bigReceiver.evaluate(`(async () => {
+    const buf = new Uint8Array(await new Blob(window.__e2e.chunks).arrayBuffer());
+    return { bytes: buf.length, sha256: await window.__sha256(buf), pcs: window.__pcs.length, negotiated: window.__negotiated() };
+  })()`);
+
+  if (resumed.pcs < 2) {
+    throw new Error(`no resume happened (receiver built ${resumed.pcs} connection(s)) — this run proved nothing`);
+  }
+  if (!resumed.negotiated.includes(CAP)) {
+    throw new Error(`the replacement connection should have negotiated ${CAP}, got ${JSON.stringify(resumed.negotiated)}`);
+  }
+  if (resumed.bytes !== RESUME_BYTES) {
+    throw new Error(`resumed file is ${resumed.bytes} bytes, want ${RESUME_BYTES} — bytes were skipped or duplicated`);
+  }
+  if (resumed.sha256 !== resumeHash) {
+    throw new Error(`resumed file does not match what was sent: ${resumed.sha256} != ${resumeHash}`);
+  }
+  ok(`resumed across a narrowed message limit and delivered ${resumed.bytes} bytes byte-identical`);
+
+  await browser.send("Target.closeTarget", { targetId: bigSender.targetId });
+  await browser.send("Target.closeTarget", { targetId: bigReceiver.targetId });
+}
+
 async function main() {
   // 前置检查：服务器在不在，dist 是不是新的（旧 dist 会测出一个假绿）。
   await requireServer(BASE, "start it with: cd server && RELAYIUM_ADDR=:8099 go run .");
@@ -927,6 +1247,8 @@ async function main() {
     await authLandingScenario(browser);
     await appsHierarchyScenario(browser);
     await pricingHierarchyScenario(browser);
+    await mobileRelayFallbackScenario(browser);
+    await smallMessageCapScenario(browser);
 
     // ── 两个标签页进同一个房间（都是 127.0.0.1，服务器按来源 IP 归组）────────
     const sender = await newTab(browser, BASE + "/");

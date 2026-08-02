@@ -88,7 +88,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>另一台机器用该码运行 relayium text。交互模式每行是一条消息，并默认要求双方确认 SAS；多行或要求逐字节保真的内容请通过管道作为一条消息发送，因为此时没有终端可确认 SAS，所以必须显式加 --yes。</p>
       <pre><code># One machine mints the code and waits (relayium login is required once)
 relayium text
-# Code: K7M4XR   (valid 5 minutes)
+# Code: K7M4XR   (valid 30 minutes)
 # On the other machine:  relayium text K7M4XR
 
 # The other machine joins that code
@@ -99,7 +99,7 @@ pbpaste | relayium text K7M4XR --yes
 
 # Or pipe a file on any shell
 cat snippet.txt | relayium text K7M4XR --yes</code></pre>
-      <ul><li>CLI 配对码有效期 5 分钟，只能 CLI 对 CLI；浏览器码不能让浏览器与 CLI 互连。</li><li>只有生成配对码的那台机器需要已登录账号；使用打印出来的配对码加入时不需要登录。</li><li>--yes 会跳过交互式 SAS 确认，使用前应通过其他可信方式核对会话。</li></ul>
+      <ul><li>CLI 配对码有效期 30 分钟，只能 CLI 对 CLI；浏览器码不能让浏览器与 CLI 互连。</li><li>只有生成配对码的那台机器需要已登录账号；使用打印出来的配对码加入时不需要登录。</li><li>--yes 会跳过交互式 SAS 确认，使用前应通过其他可信方式核对会话。</li></ul>
       <h2>文本传输是什么，也不是什么</h2>
       <p>Relayium 把正文当作 UTF-8 纯文本，保留空格、制表符、空行和换行；不会执行内容、渲染 Markdown、自动识别链接或生成预览。</p>
       <ul><li>两台设备必须同时在线；没有离线投递、收件箱、联系人或同步聊天记录。</li><li>历史只存在于当前本地会话，结束会话或刷新页面后消失；服务器从不保存消息正文。</li><li>每条消息最多 65,536 个 UTF-8 字节；更大的内容请作为文件发送。</li></ul>

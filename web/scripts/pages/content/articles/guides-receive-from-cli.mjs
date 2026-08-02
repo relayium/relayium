@@ -27,7 +27,7 @@ const en = {
     {
       heading: "receive: someone sends you a file across networks",
       body: [
-        "This is the receiving half of relayium send. The other person runs relayium send <path> on their end (after relayium login); their CLI mints a 6-character code, good for 5 minutes, and prints it. They tell you what it is over any channel you both trust — a call, a chat message. You run receive with that code:",
+        "This is the receiving half of relayium send. The other person runs relayium send <path> on their end (after relayium login); their CLI mints a 6-character code, good for 30 minutes, and prints it. They tell you what it is over any channel you both trust — a call, a chat message. You run receive with that code:",
       ],
       code: [
         `relayium receive K7M4XR
@@ -138,7 +138,7 @@ const zh = {
     {
       heading: "receive：对方跨网络把文件发给你",
       body: [
-        "这是 relayium send 的接收端。对方在自己那边运行 relayium send <path>（事先 relayium login 过），CLI 会生成一个 6 位、5 分钟内有效的码并打印出来。然后对方通过你们都信任的渠道告诉你——打个电话、发条消息。你则用这个码运行 receive：",
+        "这是 relayium send 的接收端。对方在自己那边运行 relayium send <path>（事先 relayium login 过），CLI 会生成一个 6 位、30 分钟内有效的码并打印出来。然后对方通过你们都信任的渠道告诉你——打个电话、发条消息。你则用这个码运行 receive：",
       ],
       code: [
         `relayium receive K7M4XR
@@ -251,7 +251,7 @@ const ja = {
     {
       heading: "receive: 相手がネットワークを越えてファイルを送ってくる",
       body: [
-        "これは relayium send の受信側です。相手は自分の側で relayium send <path> を実行します（事前に relayium login 済み）。相手の CLI が5分間有効な6文字のコードを発行して表示するので、通話やチャットなど二人が信頼できる手段でそれを伝えてもらいます。受け取ったコードで receive を実行します:",
+        "これは relayium send の受信側です。相手は自分の側で relayium send <path> を実行します（事前に relayium login 済み）。相手の CLI が30分間有効な6文字のコードを発行して表示するので、通話やチャットなど二人が信頼できる手段でそれを伝えてもらいます。受け取ったコードで receive を実行します:",
       ],
       code: [
         `relayium receive K7M4XR
@@ -362,7 +362,7 @@ const ko = {
     {
       heading: "receive: 상대가 네트워크를 넘어 파일을 보낼 때",
       body: [
-        "이것은 relayium send의 받는 쪽입니다. 상대는 자기 쪽에서 relayium send <path>를 실행합니다(미리 relayium login을 해 둔 상태로). 그러면 상대의 CLI가 5분간 유효한 6자 코드를 발급해 출력하고, 상대는 통화나 채팅 등 서로 신뢰하는 채널로 그것을 알려줍니다. 받는 쪽에서는 그 코드로 receive를 실행합니다:",
+        "이것은 relayium send의 받는 쪽입니다. 상대는 자기 쪽에서 relayium send <path>를 실행합니다(미리 relayium login을 해 둔 상태로). 그러면 상대의 CLI가 30분간 유효한 6자 코드를 발급해 출력하고, 상대는 통화나 채팅 등 서로 신뢰하는 채널로 그것을 알려줍니다. 받는 쪽에서는 그 코드로 receive를 실행합니다:",
       ],
       code: [
         `relayium receive K7M4XR
@@ -475,7 +475,7 @@ const de = {
     {
       heading: "receive: jemand sendet dir eine Datei über Netzwerke hinweg",
       body: [
-        "Das ist die Empfangsseite von relayium send. Die andere Person führt auf ihrer Seite relayium send <path> aus (nach relayium login); ihre CLI erzeugt einen Code aus 6 Zeichen, gültig für 5 Minuten, und gibt ihn aus. Sie teilt ihn dir über einen Kanal mit, dem ihr beide vertraut — ein Anruf, eine Chatnachricht. Du führst receive mit diesem Code aus:",
+        "Das ist die Empfangsseite von relayium send. Die andere Person führt auf ihrer Seite relayium send <path> aus (nach relayium login); ihre CLI erzeugt einen Code aus 6 Zeichen, gültig für 30 Minuten, und gibt ihn aus. Sie teilt ihn dir über einen Kanal mit, dem ihr beide vertraut — ein Anruf, eine Chatnachricht. Du führst receive mit diesem Code aus:",
       ],
       code: [
         `relayium receive K7M4XR
@@ -588,7 +588,7 @@ const fr = {
     {
       heading: "receive : quelqu'un vous envoie un fichier à travers les réseaux",
       body: [
-        "C'est le pendant côté réception de relayium send. L'autre personne exécute relayium send <path> de son côté (après relayium login) ; sa CLI génère un code de 6 caractères, valable 5 minutes, et l'affiche. Elle vous le communique par un canal auquel vous faites tous deux confiance — un appel, un message. Vous exécutez receive avec ce code :",
+        "C'est le pendant côté réception de relayium send. L'autre personne exécute relayium send <path> de son côté (après relayium login) ; sa CLI génère un code de 6 caractères, valable 30 minutes, et l'affiche. Elle vous le communique par un canal auquel vous faites tous deux confiance — un appel, un message. Vous exécutez receive avec ce code :",
       ],
       code: [
         `relayium receive K7M4XR
@@ -701,7 +701,7 @@ const ar = {
     {
       heading: "receive: شخص يرسل إليك ملفًا عبر الشبكات",
       body: [
-        "هذا هو نصف الاستقبال من relayium send. يشغّل الطرف الآخر ‎relayium send <path>‎ من جهته (بعد relayium login)، فتُصدر واجهة CLI لديه رمزًا من 6 محارف صالحًا لـ 5 دقائق وتطبعه. ثم يخبرك به عبر أي قناة تثقان بها كلاكما — مكالمة، رسالة محادثة. تشغّل أنت receive بذلك الرمز:",
+        "هذا هو نصف الاستقبال من relayium send. يشغّل الطرف الآخر ‎relayium send <path>‎ من جهته (بعد relayium login)، فتُصدر واجهة CLI لديه رمزًا من 6 محارف صالحًا لـ 30 دقيقة وتطبعه. ثم يخبرك به عبر أي قناة تثقان بها كلاكما — مكالمة، رسالة محادثة. تشغّل أنت receive بذلك الرمز:",
       ],
       code: [
         `relayium receive K7M4XR
@@ -814,7 +814,7 @@ const es = {
     {
       heading: "receive: alguien te envía un archivo entre redes",
       body: [
-        "Esta es la mitad receptora de relayium send. La otra persona ejecuta relayium send <path> en su extremo (tras relayium login); su CLI genera un código de 6 caracteres, válido 5 minutos, y lo imprime. Te dice cuál es por cualquier canal en el que ambos confíen — una llamada, un mensaje de chat. Tú ejecutas receive con ese código:",
+        "Esta es la mitad receptora de relayium send. La otra persona ejecuta relayium send <path> en su extremo (tras relayium login); su CLI genera un código de 6 caracteres, válido 30 minutos, y lo imprime. Te dice cuál es por cualquier canal en el que ambos confíen — una llamada, un mensaje de chat. Tú ejecutas receive con ese código:",
       ],
       code: [
         `relayium receive K7M4XR
@@ -927,7 +927,7 @@ const pt = {
     {
       heading: "receive: alguém envia um arquivo para você entre redes",
       body: [
-        "Esta é a metade receptora do relayium send. A outra pessoa executa relayium send <path> do lado dela (depois de relayium login); a CLI dela gera um código de 6 caracteres, válido por 5 minutos, e o exibe. Ela te diz qual é por qualquer canal em que ambos confiem — uma ligação, uma mensagem de chat. Você executa receive com esse código:",
+        "Esta é a metade receptora do relayium send. A outra pessoa executa relayium send <path> do lado dela (depois de relayium login); a CLI dela gera um código de 6 caracteres, válido por 30 minutos, e o exibe. Ela te diz qual é por qualquer canal em que ambos confiem — uma ligação, uma mensagem de chat. Você executa receive com esse código:",
       ],
       code: [
         `relayium receive K7M4XR

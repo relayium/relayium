@@ -395,7 +395,7 @@ const fr: Messages = {
     mode2Title: "send / receive — par code d'appairage",
     mode2Tag: "gratuit · P2P direct",
     mode2Body:
-      "Envoyez à une autre personne au-delà des réseaux. Connectez-vous une fois avec relayium login, puis lancez send sans code : la CLI génère un code d'appairage de 6 caractères (tiré d'un alphabet sans 0 ni 1), valable 5 minutes, et affiche la commande exacte que l'autre extrémité doit exécuter. Transmettez ce code par un autre canal — dites-le au téléphone. Vous ne pouvez pas le choisir, le serveur n'accepte que les codes qu'il a émis, et le destinataire n'a besoin d'aucun compte. Les deux extrémités doivent être la CLI ; pour quelqu'un qui n'a qu'un navigateur, utilisez plutôt relayium up. La connexion est directe en pair-à-pair : seule une petite poignée de main de rendez-vous transite par Relayium pour présenter les deux extrémités — les octets du fichier, eux, jamais. Si les deux extrémités sont derrière un NAT strict et ne peuvent pas se connecter directement, le transfert échoue simplement (la CLI ne dispose d'aucun relais). Les deux terminaux affichent un SAS à 6 chiffres dérivé des empreintes de leurs certificats TLS épinglés. Une comparaison hors bande confirme que les empreintes n'ont pas été substituées et que le service de rendez-vous n'a usurpé aucune extrémité ; elle authentifie les extrémités, pas chaque saut réseau (ajoutez --verify pour exiger une confirmation avant tout transfert d'octets).",
+      "Envoyez à une autre personne au-delà des réseaux. Connectez-vous une fois avec relayium login, puis lancez send sans code : la CLI génère un code d'appairage de 6 caractères (tiré d'un alphabet sans 0 ni 1), valable 30 minutes, et affiche la commande exacte que l'autre extrémité doit exécuter. Transmettez ce code par un autre canal — dites-le au téléphone. Vous ne pouvez pas le choisir, le serveur n'accepte que les codes qu'il a émis, et le destinataire n'a besoin d'aucun compte. Les deux extrémités doivent être la CLI ; pour quelqu'un qui n'a qu'un navigateur, utilisez plutôt relayium up. La connexion est directe en pair-à-pair : seule une petite poignée de main de rendez-vous transite par Relayium pour présenter les deux extrémités — les octets du fichier, eux, jamais. Si les deux extrémités sont derrière un NAT strict et ne peuvent pas se connecter directement, le transfert échoue simplement (la CLI ne dispose d'aucun relais). Les deux terminaux affichent un SAS à 6 chiffres dérivé des empreintes de leurs certificats TLS épinglés. Une comparaison hors bande confirme que les empreintes n'ont pas été substituées et que le service de rendez-vous n'a usurpé aucune extrémité ; elle authentifie les extrémités, pas chaque saut réseau (ajoutez --verify pour exiger une confirmation avant tout transfert d'octets).",
     mode3Title: "daemon-direct — serveur à serveur",
     mode3Tag: "gratuit",
     mode3Body:
@@ -483,6 +483,12 @@ const fr: Messages = {
     signInToSend: "Connectez-vous pour envoyer d'un réseau à l'autre. La personne qui reçoit n'a jamais besoin de compte.",
     relayQuotaWarn: "Votre quota de relais mensuel est épuisé : une session navigateur inter-réseaux ne peut pas démarrer ou continuer. Les sessions sur le même réseau et les transferts directs CLI restent disponibles. Utilisez un lien de téléchargement, augmentez votre offre ou exécutez votre propre nœud.",
     relayQuotaFail: "Votre quota de relais mensuel est épuisé : cette session navigateur inter-réseaux ne peut pas se connecter. Les sessions sur le même réseau et les transferts directs CLI ne sont pas affectés. Utilisez un lien de téléchargement, augmentez votre offre ou exécutez votre propre nœud.",
+    relayUnverifiedWarn: "Confirmez votre adresse e-mail pour utiliser le relais inter-réseaux. En attendant, une session navigateur ne se connecte que si les deux appareils s'atteignent directement. Les transferts sur le même réseau et la CLI ne sont pas affectés.",
+    relayUnverifiedFail: "Cette session navigateur inter-réseaux n'a pas pu se connecter : le relais n'est délivré qu'aux comptes vérifiés. Confirmez votre adresse e-mail, puis générez un nouveau code d'appairage.",
+    relayUnavailableWarn: "Impossible de charger les paramètres de relais de cette session ; une connexion inter-réseaux pourrait être impossible. Rechargez la page pour réessayer.",
+    relayUnavailableFail: "Cette session n'a jamais reçu ses paramètres de relais, il n'y avait donc aucun chemin inter-réseaux. Rechargez la page et générez un nouveau code d'appairage — c'est généralement temporaire.",
+    relayNoneWarn: "Aucun relais n'est disponible pour cette session ; elle ne se connectera que si les deux appareils s'atteignent directement.",
+    relayNoneFail: "Cette session navigateur inter-réseaux n'a pas pu se connecter faute de relais disponible. Les transferts sur le même réseau et les transferts directs CLI ne sont pas affectés.",
   },
   offline: {
     tagline: "Chiffré dans votre navigateur, puis stocké · le serveur ne détient que du texte chiffré",
@@ -511,7 +517,8 @@ const fr: Messages = {
     waiting: "En attente de l'autre appareil…",
     queued: (n, s) => `${n} fichier(s) · ${s} — envoi automatique dès que l'autre appareil rejoint`,
     bareConnect: "Créer une connexion sans choisir de fichiers",
-    expiresIn: (s) => `expire dans ${s}`,
+    expiresIn: (s) => `le code d'appairage expire dans ${s}`,
+    ttlNote: "Ce compte à rebours ne concerne que le code d'appairage : passé ce délai, aucun nouvel appareil ne peut le rejoindre. Une fois l'autre appareil connecté, le transfert va jusqu'au bout et n'est jamais interrompu par ce délai.",
     expired: "Code d'appairage expiré — générez-en un nouveau",
     copy: "Copier",
     copied: "Copié",
@@ -593,7 +600,7 @@ const fr: Messages = {
       sub: "Quand les deux côtés sont en ligne, transfert en temps réel d'un réseau à l'autre — le destinataire n'a pas besoin de compte.",
       ways: [
         { name: "Créer un code d'appairage", how: "Connectez-vous et créez un code à 6 caractères, avec lien de participation et QR. Vous choisirez le contenu après l'arrivée de l'autre appareil.", tag: "Le créateur se connecte" },
-        { name: "Transmettre le code", how: "Dictez-le, envoyez le lien ou montrez le QR — au choix ; l'autre personne le saisit ou l'ouvre dans n'importe quel navigateur moderne.", tag: "Codes valables 5 minutes" },
+        { name: "Transmettre le code", how: "Dictez-le, envoyez le lien ou montrez le QR — au choix ; l'autre personne le saisit ou l'ouvre dans n'importe quel navigateur moderne.", tag: "Codes valables 30 minutes" },
         { name: "Choisir fichiers ou texte", how: "Après son arrivée, choisissez jusqu'à 1 000 fichiers sur sa carte, ou « Envoyer un message » pour du texte en ligne. Comparez le SAS, puis le contenu traverse TURN chiffré de bout en bout.", tag: "Le relais ne peut ni lire ni déchiffrer les deux" },
       ],
     },

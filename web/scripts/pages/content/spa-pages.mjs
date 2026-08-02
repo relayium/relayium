@@ -122,7 +122,7 @@ export const cli = {
       },
       {
         title: "send / receive — by pairing code",
-        desc: "Send to another person across networks. After relayium login, run send with no code: the CLI mints a 6-character pairing code (no 0 or 1), good for 5 minutes, and prints the command the other end runs — you pass that on out of band. The receiver needs no account. The connection is direct peer-to-peer: only a small rendezvous handshake passes through Relayium — the file bytes never do. Both terminals print a 6-digit SAS derived from their pinned TLS certificate fingerprints. Matching it out of band confirms the fingerprints were not substituted and the rendezvous service did not impersonate either endpoint; it authenticates the endpoints, not every network hop.",
+        desc: "Send to another person across networks. After relayium login, run send with no code: the CLI mints a 6-character pairing code (no 0 or 1), good for 30 minutes, and prints the command the other end runs — you pass that on out of band. The receiver needs no account. The connection is direct peer-to-peer: only a small rendezvous handshake passes through Relayium — the file bytes never do. Both terminals print a 6-digit SAS derived from their pinned TLS certificate fingerprints. Matching it out of band confirms the fingerprints were not substituted and the rendezvous service did not impersonate either endpoint; it authenticates the endpoints, not every network hop.",
       },
       {
         title: "text — ephemeral messages",

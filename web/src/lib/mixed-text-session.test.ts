@@ -6,7 +6,8 @@ import {
   MIXED_TEXT_END_ACK_TIMEOUT_MS,
 } from "./mixed-text-session.svelte";
 import { LinkBusyError, UnsupportedLinkError, type MixedPeerLink } from "./peer-link.svelte";
-import { TextReceiver, TextSender, TEXT_END, TEXT_REQUEST } from "./text-wire";
+import { TextReceiver, TextSender, TEXT_END, TEXT_MAX_BYTES, TEXT_REQUEST } from "./text-wire";
+import { CHROME_MAX_MESSAGE_BYTES, CONSERVATIVE_MAX_MESSAGE_BYTES } from "./wire-limit";
 import { ACCEPT, REJECT } from "./transfer";
 
 function fakeChannel() {
@@ -38,7 +39,10 @@ function fakeChannel() {
 
 type FakeChannel = ReturnType<typeof fakeChannel>;
 
-async function harness(role: "initiator" | "responder" = "initiator") {
+async function harness(
+  role: "initiator" | "responder" = "initiator",
+  maxFrameBytes = CHROME_MAX_MESSAGE_BYTES,
+) {
   const a = generateKeyPair();
   const b = generateKeyPair();
   const keys = await deriveSession(role, a, b.publicKey);
@@ -49,7 +53,7 @@ async function harness(role: "initiator" | "responder" = "initiator") {
   const link: MixedPeerLink = {
     peerId: "peer",
     role,
-    conn: { close: connClose } as unknown as MixedPeerLink["conn"],
+    conn: { close: connClose, maxFrameBytes: () => maxFrameBytes } as unknown as MixedPeerLink["conn"],
     fileChannel: file as unknown as RTCDataChannel,
     textChannel: text as unknown as RTCDataChannel,
     keys,
@@ -818,6 +822,38 @@ describe("mixed text session", () => {
     expect(session.history).toHaveLength(1);
     session.clearHistory();
     expect(session.history).toEqual([]);
+  });
+
+  // 64 KiB of plaintext seals into a 65 557 B frame, which a peer that
+  // negotiated the RFC 8841 default of 65 536 cannot accept: send() would throw,
+  // the channel would die, and the conversation with it. Refuse the message
+  // instead — and refuse it before TextSender takes a nonce, so the link's
+  // reusable codecs stay usable and the next message still goes through.
+  it("refuses a message the connection cannot carry, without killing the lane", async () => {
+    const { session, text } = await harness("initiator", CONSERVATIVE_MAX_MESSAGE_BYTES);
+    await session.openWith("peer");
+    text.dispatch(ACCEPT);
+    const before = text.sent.length;
+
+    await session.send("x".repeat(TEXT_MAX_BYTES)); // within the product cap, over the wire's
+    expect(session.errorKey).toBe("tooLong");
+    expect(session.status).toBe("open"); // the lane survives
+    expect(text.sent.length, "nothing may reach the channel").toBe(before);
+    expect(session.history, "and nothing may look delivered").toHaveLength(0);
+
+    // The nonce was never spent, so the conversation carries on normally.
+    await session.send("short enough");
+    expect(session.errorKey).toBe("");
+    expect(session.history).toHaveLength(1);
+  });
+
+  it("still allows the full product cap on a connection that can carry it", async () => {
+    const { session, text } = await harness("initiator", CHROME_MAX_MESSAGE_BYTES);
+    await session.openWith("peer");
+    text.dispatch(ACCEPT);
+    await session.send("x".repeat(TEXT_MAX_BYTES));
+    expect(session.errorKey).toBe("");
+    expect(session.history).toHaveLength(1);
   });
 
   it("clears transcript identity when attaching a different peer", async () => {

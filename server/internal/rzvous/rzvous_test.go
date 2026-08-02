@@ -3,6 +3,7 @@ package rzvous
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -60,7 +61,11 @@ func TestJoinRejectsMalformedCodeWithoutDialing(t *testing.T) {
 	if n := atomic.LoadInt32(&hits); n != 0 {
 		t.Errorf("malformed code still dialed the server %d time(s)", n)
 	}
-	for _, want := range []string{"726122", "6 characters", "5 minutes", "issued by the server"} {
+	// Derived from the constant, not typed out: this assertion existed to keep
+	// the CLI copy honest, and a hard-coded number makes it go stale the first
+	// time the TTL moves — which is exactly what happened at 5 -> 30 minutes.
+	lifetime := fmt.Sprintf("%d minutes", signal.CodeTTLSeconds/60)
+	for _, want := range []string{"726122", "6 characters", lifetime, "issued by the server"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}
@@ -92,7 +97,7 @@ func TestJoinSurfacesServerRefusalBody(t *testing.T) {
 	if !strings.Contains(err.Error(), "invalid or expired pairing code") {
 		t.Errorf("error %q drops the server's explanation", err)
 	}
-	if !strings.Contains(err.Error(), "5 minutes") {
+	if !strings.Contains(err.Error(), fmt.Sprintf("%d minutes", signal.CodeTTLSeconds/60)) {
 		t.Errorf("error %q does not mention the code lifetime", err)
 	}
 }

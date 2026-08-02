@@ -170,6 +170,31 @@ export function connectLink(opts: ConnectOpts): Promise<Conn> {
   return handshakeConnect(opts, "link");
 }
 
+/**
+ * 揭示密钥的时限，**从数据通道打开那一刻开始算**。
+ *
+ * establish() 的超时只管到"数据通道开了"为止，一旦开了它就把定时器清掉。但通道开了
+ * 不等于握手完成：reveal 走的是信令（WebSocket），不是数据通道。信令在 answer 之后
+ * 断掉、对端的 reveal 在路上丢了、或者对端进程被系统冻结（手机切到后台/锁屏最常见），
+ * 通道会好端端地开着，而 reveal 永远不来。
+ *
+ * 调用方那边等的是 `while (!keys)`——一个**没有任何上界**的自旋。于是界面就永远停在
+ * "正在建立加密连接…" 的 0%，既不失败也不前进，取消按钮之外没有任何出口。
+ *
+ * 从"通道已开"起算而不是从头起算，是为了不出现"通道早就开好了、却还要空等到总时限"
+ * 这种沉默：通道一开，剩下要等的只有一条信令消息，30 秒足够，也足够短。
+ */
+const KEY_REVEAL_TIMEOUT_MS = 30_000;
+
+/**
+ * 从建连开始到"密钥可用"的**总上限**，任何进展都不重置它。
+ *
+ * 传输层自己有一条同样长度的硬上限（webrtc-core 的 SETUP_HARD_CAP_MS），这一条盖在
+ * 它外面：传输层那条在通道打开时就清掉了，而握手还能再等一个 KEY_REVEAL 窗口。两条
+ * 定时器一起，最坏情况是"总共 90 秒后一定有结论"，而不是 90 + 30。
+ */
+const SETUP_DEADLINE_MS = 90_000;
+
 async function handshakeConnect(opts: ConnectOpts, generation: Generation): Promise<Conn> {
   const { signaling, peerId, selfKey, role, onPeerKey } = opts;
 
@@ -178,6 +203,28 @@ async function handshakeConnect(opts: ConnectOpts, generation: Generation): Prom
   let peerCommit: Uint8Array | undefined;
   let revealSent = false;
   let peerKeyDelivered = false;
+
+  // Settles when the peer's key has been revealed AND verified against its
+  // commitment — the moment this connection is actually trustworthy. Armed here,
+  // before any signalling, so the deadline covers the whole handshake.
+  let keyDelivered!: () => void;
+  let keyFailed!: (err: Error) => void;
+  const peerKeyReady = new Promise<void>((resolve, reject) => {
+    keyDelivered = resolve;
+    keyFailed = reject;
+  });
+  void peerKeyReady.catch(() => {}); // observed below; this only silences the early-rejection warning
+  const timedOut = () => keyFailed(new Error(`relayium: ${generation} key handshake timed out`));
+  // Armed now and never re-armed: this is the ceiling on the whole setup.
+  const setupTimer = setTimeout(timedOut, SETUP_DEADLINE_MS);
+  let keyTimer: ReturnType<typeof setTimeout> | undefined;
+  const clearTimers = () => { clearTimeout(setupTimer); clearTimeout(keyTimer); };
+  // Cancel must still work in the window this gate adds. establish() drops its
+  // own abort listener once the channel opens, so without this a user pressing
+  // cancel between "channel open" and "key verified" would get no response until
+  // the deadline — and the pc would sit there alive for the rest of it.
+  const abortHandshake = () => keyFailed(Object.assign(new Error("relayium: connection aborted"), { name: "AbortError" }));
+  opts.signal?.addEventListener("abort", abortHandshake, { once: true });
 
   // Disclose our real key + nonce. Guarded to once: an ICE-restart answer would
   // otherwise re-trigger this after the SAS is already fixed.
@@ -195,62 +242,98 @@ async function handshakeConnect(opts: ConnectOpts, generation: Generation): Prom
     signaling.sendSignal(peerId, msg);
   }
 
-  return establish({
-    signaling,
-    peerId,
-    role,
-    generation,
-    // Keeps "connection failed" and "text connection failed" apart in logs and
-    // tests; the file generation keeps its existing unlabelled wording.
-    label: generation === "text" ? "text" : generation === "link" ? "link" : undefined,
-    channelLabels: generation === "link" ? LINK_CHANNEL_LABELS : undefined,
-    captureBeforeReadyBytes: generation === "link" ? LINK_CAPTURE_MAX_BYTES : undefined,
-    config: opts.config,
-    initialSignal: opts.initialSignal,
-    onStateChange: opts.onStateChange,
-    signal: opts.signal,
+  let conn: Conn;
+  try {
+    conn = await establish({
+      signaling,
+      peerId,
+      role,
+      generation,
+      // Keeps "connection failed" and "text connection failed" apart in logs and
+      // tests; the file generation keeps its existing unlabelled wording.
+      label: generation === "text" ? "text" : generation === "link" ? "link" : undefined,
+      channelLabels: generation === "link" ? LINK_CHANNEL_LABELS : undefined,
+      captureBeforeReadyBytes: generation === "link" ? LINK_CAPTURE_MAX_BYTES : undefined,
+      config: opts.config,
+      initialSignal: opts.initialSignal,
+      onStateChange: opts.onStateChange,
+      signal: opts.signal,
 
-    // The commit rides along with every offer/answer we send; caps ride with it
-    // as the per-connection confirmation of the roster-level hello.
-    sdpExtra: () => ({ commit: selfCommit, caps: [...LOCAL_CAPS] }),
+      // The commit rides along with every offer/answer we send; caps ride with it
+      // as the per-connection confirmation of the roster-level hello.
+      sdpExtra: () => ({ commit: selfCommit, caps: [...LOCAL_CAPS] }),
 
-    // Must run *before* the SDP is handled: answering an offer sends our commit,
-    // and the peer's commit has to be recorded by then or a reveal that arrives
-    // in the same burst has nothing to verify against.
-    beforeSdp: (msg) => {
-      if (msg.commit) peerCommit = unb64(msg.commit);
-      // Peer-authored: only report a well-formed list, and never let a bad one
-      // throw in here — this runs inside the inbound signalling chain.
-      if (Array.isArray(msg.caps)) {
-        opts.onPeerCaps?.(msg.caps.filter((c): c is string => typeof c === "string"));
-      }
-    },
+      // Must run *before* the SDP is handled: answering an offer sends our commit,
+      // and the peer's commit has to be recorded by then or a reveal that arrives
+      // in the same burst has nothing to verify against.
+      beforeSdp: (msg) => {
+        if (msg.commit) peerCommit = unb64(msg.commit);
+        // Peer-authored: only report a well-formed list, and never let a bad one
+        // throw in here — this runs inside the inbound signalling chain.
+        if (Array.isArray(msg.caps)) {
+          opts.onPeerCaps?.(msg.caps.filter((c): c is string => typeof c === "string"));
+        }
+      },
 
-    // Initiator now holds the responder's commit → safe to reveal our key.
-    onAnswer: sendReveal,
+      // Initiator now holds the responder's commit → safe to reveal our key.
+      onAnswer: sendReveal,
 
-    // Verify a peer reveal against its earlier commit. A mismatch means the value
-    // was chosen after seeing our key (or tampered in flight): abort hard, never
-    // open the channel — silently continuing would defeat the SAS entirely.
-    afterSdp: (msg, ctx) => {
-      if (!msg.reveal || peerKeyDelivered) return; // ignore duplicates (e.g. ICE restart)
-      const peerPub = unb64(msg.reveal.key);
-      const peerNonce = unb64(msg.reveal.nonce);
-      if (!peerCommit || !verifyCommit(peerCommit, peerPub, peerNonce)) {
-        // fail() unblocks a caller still awaiting connect(); close() tears down
-        // even if the channel already opened (then fail() is a settled no-op),
-        // surfacing to the app as a dropped connection rather than a silent MITM.
-        ctx.fail(new Error("relayium: key commitment mismatch — possible MITM"));
-        ctx.close();
-        return;
-      }
-      peerKeyDelivered = true;
-      // Responder learns the peer key from the reveal and only now discloses its
-      // own; the initiator has already revealed (on receiving the answer's commit).
-      if (role === "responder") sendReveal();
-      onPeerKey(peerPub);
-    },
-  });
+      // Verify a peer reveal against its earlier commit. A mismatch means the value
+      // was chosen after seeing our key (or tampered in flight): abort hard, never
+      // open the channel — silently continuing would defeat the SAS entirely.
+      afterSdp: (msg, ctx) => {
+        if (!msg.reveal || peerKeyDelivered) return; // ignore duplicates (e.g. ICE restart)
+        const peerPub = unb64(msg.reveal.key);
+        const peerNonce = unb64(msg.reveal.nonce);
+        if (!peerCommit || !verifyCommit(peerCommit, peerPub, peerNonce)) {
+          // fail() unblocks a caller still awaiting connect(); close() tears down
+          // even if the channel already opened (then fail() is a settled no-op),
+          // surfacing to the app as a dropped connection rather than a silent MITM.
+          const mitm = new Error("relayium: key commitment mismatch — possible MITM");
+          ctx.fail(mitm);
+          // Also reject the handshake gate: once the channel has opened, ctx.fail
+          // is a settled no-op and pc.close() fires no state change (per spec), so
+          // without this a detected MITM would leave the caller waiting on a
+          // promise nothing else ever settles.
+          keyFailed(mitm);
+          ctx.close();
+          return;
+        }
+        peerKeyDelivered = true;
+        // Responder learns the peer key from the reveal and only now discloses its
+        // own; the initiator has already revealed (on receiving the answer's commit).
+        if (role === "responder") sendReveal();
+        onPeerKey(peerPub);
+        keyDelivered();
+      },
+    });
+  } catch (err) {
+    // Transport never came up; nothing left to wait for.
+    clearTimers();
+    opts.signal?.removeEventListener("abort", abortHandshake);
+    throw err;
+  }
+  // The channel is open, so only one signalling message is still owed. Start the
+  // short window here rather than at the top — a setup that spent 80 s legitimately
+  // progressing must not then get a fresh 30 s, and one that opened instantly must
+  // not be left waiting out the overall deadline in silence.
+  keyTimer = setTimeout(timedOut, KEY_REVEAL_TIMEOUT_MS);
+
+  // The transport is up; the handshake may not be. Waiting here — rather than in
+  // each caller's unbounded `while (!keys)` spin — is what makes "connecting" a
+  // state with an end. Resolving no earlier than peerKeyDelivered is safe in both
+  // roles: neither side can send an application frame before it holds the peer's
+  // key, and the responder reveals its own key in the same turn it sets this.
+  try {
+    await peerKeyReady;
+  } catch (err) {
+    conn.close();
+    throw err;
+  } finally {
+    clearTimers();
+    opts.signal?.removeEventListener("abort", abortHandshake);
+  }
+  return conn;
 }
 
 interface ResumeOpts {

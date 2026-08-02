@@ -23,10 +23,12 @@ describe("llms.txt file and ephemeral text product facts", () => {
 
   it("pins pairing-code shape and expiry without confusing it with the SAS", () => {
     expect(llms).toContain("6-character code");
-    expect(llms).toContain("Codes expire 5 minutes");
+    expect(llms).toContain("Codes expire 30 minutes");
     expect(llms).toContain("6-digit Short Authentication String (SAS)");
     expect(llms).not.toMatch(/6-digit pairing code/i);
-    expect(llms).not.toMatch(/codes? (?:live|last|expire(?:s)?) 15 minutes/i);
+    // Both values this line has carried before; either one reappearing means
+    // the TTL moved and this file was left behind.
+    expect(llms).not.toMatch(/codes? (?:live|last|expire(?:s)?) (?:5|15) minutes/i);
   });
 
   it("distinguishes browser TURN ciphertext from direct-only CLI text", () => {

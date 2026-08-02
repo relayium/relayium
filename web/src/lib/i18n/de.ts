@@ -395,7 +395,7 @@ const de: Messages = {
     mode2Title: "send / receive — per Pairing-Code",
     mode2Tag: "kostenlos · direktes P2P",
     mode2Body:
-      "Sende netzwerkübergreifend an eine andere Person. Melde dich einmal mit relayium login an und führe send dann ohne Code aus: Die CLI erzeugt einen Pairing-Code aus 6 Zeichen (aus einem Alphabet ohne 0 und 1), gültig für 5 Minuten, und gibt den genauen Befehl für die Gegenseite aus. Gib diesen Code außerhalb des Kanals weiter — etwa am Telefon. Selbst wählen kannst du ihn nicht, der Server akzeptiert nur selbst ausgegebene Codes, und der Empfänger braucht kein Konto. Beide Enden müssen die CLI sein; für jemanden mit nur einem Browser nimm stattdessen relayium up. Die Verbindung ist direktes Peer-to-Peer: Nur ein kleiner Rendezvous-Handshake läuft über Relayium, um die beiden Enden einander vorzustellen — die Dateibytes nie. Sind beide Enden hinter strengem NAT und können sich nicht direkt verbinden, schlägt die Übertragung schlicht fehl (die CLI hat kein Relay). Beide Terminals zeigen einen sechsstelligen SAS an, der aus ihren gepinnten TLS-Zertifikatsfingerabdrücken abgeleitet wird. Der Abgleich über einen anderen Kanal bestätigt, dass die Fingerabdrücke nicht ersetzt wurden und der Rendezvous-Dienst keinen Endpunkt imitiert hat; er authentifiziert die Endpunkte, nicht jeden Netzwerk-Hop (mit --verify wird eine Bestätigung verlangt, bevor überhaupt Bytes fließen).",
+      "Sende netzwerkübergreifend an eine andere Person. Melde dich einmal mit relayium login an und führe send dann ohne Code aus: Die CLI erzeugt einen Pairing-Code aus 6 Zeichen (aus einem Alphabet ohne 0 und 1), gültig für 30 Minuten, und gibt den genauen Befehl für die Gegenseite aus. Gib diesen Code außerhalb des Kanals weiter — etwa am Telefon. Selbst wählen kannst du ihn nicht, der Server akzeptiert nur selbst ausgegebene Codes, und der Empfänger braucht kein Konto. Beide Enden müssen die CLI sein; für jemanden mit nur einem Browser nimm stattdessen relayium up. Die Verbindung ist direktes Peer-to-Peer: Nur ein kleiner Rendezvous-Handshake läuft über Relayium, um die beiden Enden einander vorzustellen — die Dateibytes nie. Sind beide Enden hinter strengem NAT und können sich nicht direkt verbinden, schlägt die Übertragung schlicht fehl (die CLI hat kein Relay). Beide Terminals zeigen einen sechsstelligen SAS an, der aus ihren gepinnten TLS-Zertifikatsfingerabdrücken abgeleitet wird. Der Abgleich über einen anderen Kanal bestätigt, dass die Fingerabdrücke nicht ersetzt wurden und der Rendezvous-Dienst keinen Endpunkt imitiert hat; er authentifiziert die Endpunkte, nicht jeden Netzwerk-Hop (mit --verify wird eine Bestätigung verlangt, bevor überhaupt Bytes fließen).",
     mode3Title: "daemon-direct — Server zu Server",
     mode3Tag: "kostenlos",
     mode3Body:
@@ -483,6 +483,12 @@ const de: Messages = {
     signInToSend: "Zum netzwerkübergreifenden Senden anmelden. Die empfangende Person braucht nie ein Konto.",
     relayQuotaWarn: "Das Relay-Kontingent dieses Monats ist aufgebraucht; netzwerkübergreifende Browser-Sitzungen können bis zum Reset nächsten Monat nicht starten oder fortfahren. Sitzungen im selben Netz und direkte CLI-Wege bleiben unberührt. Nutze einen Download-Link, ein Upgrade oder deinen eigenen Node.",
     relayQuotaFail: "Diese netzwerkübergreifende Browser-Sitzung kann wegen des aufgebrauchten Relay-Kontingents nicht verbinden. Sitzungen im selben Netz und direkte CLI-Wege bleiben unberührt. Nutze einen Download-Link, ein Upgrade oder deinen eigenen Node.",
+    relayUnverifiedWarn: "Bestätige deine E-Mail-Adresse, um das netzwerkübergreifende Relay zu nutzen. Bis dahin verbindet sich eine Browser-Sitzung nur, wenn beide Geräte einander direkt erreichen. Übertragungen im selben Netz und die CLI bleiben unberührt.",
+    relayUnverifiedFail: "Diese netzwerkübergreifende Browser-Sitzung konnte nicht verbinden, weil ein Relay nur an bestätigte Konten ausgegeben wird. Bestätige deine E-Mail-Adresse und erzeuge dann einen neuen Pairing-Code.",
+    relayUnavailableWarn: "Die Relay-Einstellungen für diese Sitzung konnten nicht geladen werden, eine netzwerkübergreifende Verbindung ist daher womöglich nicht möglich. Lade die Seite neu, um es erneut zu versuchen.",
+    relayUnavailableFail: "Diese Sitzung hat ihre Relay-Einstellungen nie erhalten, es gab also keinen netzwerkübergreifenden Weg. Lade die Seite neu und erzeuge einen neuen Pairing-Code — das ist meist vorübergehend.",
+    relayNoneWarn: "Für diese Sitzung ist kein Relay verfügbar; sie verbindet sich nur, wenn beide Geräte einander direkt erreichen.",
+    relayNoneFail: "Diese netzwerkübergreifende Browser-Sitzung konnte nicht verbinden, weil kein Relay verfügbar war. Übertragungen im selben Netz und direkte CLI-Wege bleiben unberührt.",
   },
   offline: {
     tagline: "Im Browser verschlüsselt, dann zwischengespeichert · der Server hält nur Chiffretext",
@@ -511,7 +517,8 @@ const de: Messages = {
     waiting: "Warte darauf, dass das andere Gerät beitritt…",
     queued: (n, s) => `${n} Datei(en) · ${s} — wird automatisch gesendet, sobald die Gegenseite beitritt`,
     bareConnect: "Nur verbinden, ohne Dateien auszuwählen",
-    expiresIn: (s) => `läuft in ${s} ab`,
+    expiresIn: (s) => `Pairing-Code läuft in ${s} ab`,
+    ttlNote: "Dieser Countdown gilt nur dem Pairing-Code: Danach kann kein neues Gerät mehr damit beitreten. Ist die Gegenstelle einmal beigetreten, läuft die Übertragung bis zum Ende weiter und wird davon nie abgebrochen.",
     expired: "Pairing-Code abgelaufen — bitte neu erzeugen",
     copy: "Kopieren",
     copied: "Kopiert",
@@ -593,7 +600,7 @@ const de: Messages = {
       sub: "Wenn beide Seiten online sind, netzwerkübergreifend in Echtzeit übertragen — der Empfänger braucht kein Konto.",
       ways: [
         { name: "Pairing-Code erstellen", how: "Melde dich an und erstelle einen 6-stelligen Pairing-Code samt Beitrittslink und QR. Was du sendest, wählst du erst, wenn das andere Gerät beigetreten ist.", tag: "Der Ersteller meldet sich an" },
-        { name: "Code an die Gegenseite geben", how: "Vorlesen, den Link schicken oder den QR zeigen — die andere Person tippt ihn ein oder öffnet ihn in einem beliebigen modernen Browser.", tag: "Codes gelten 5 Minuten" },
+        { name: "Code an die Gegenseite geben", how: "Vorlesen, den Link schicken oder den QR zeigen — die andere Person tippt ihn ein oder öffnet ihn in einem beliebigen modernen Browser.", tag: "Codes gelten 30 Minuten" },
         { name: "Dateien oder Text wählen", how: "Nach dem Beitritt wählst du auf der Gerätekarte bis zu 1.000 Dateien oder „Nachricht senden“ für Onlinetext. Vergleicht den SAS; danach läuft der Inhalt Ende-zu-Ende-verschlüsselt über TURN.", tag: "Das Relay kann beides weder lesen noch entschlüsseln" },
       ],
     },

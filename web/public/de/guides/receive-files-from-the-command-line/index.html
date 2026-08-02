@@ -84,7 +84,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>Welchen Befehl du nutzt, hängt davon ab, wer die Übertragung startet und wie sich die beiden Maschinen kennen:</p>
       <ul><li>relayium receive &lt;code&gt; [destdir] — jemand sendet dir netzwerkübergreifend mit einem Pairing-Code, den dessen CLI erzeugt und dir außerhalb des Kanals mitgeteilt hat. Direkt peer-to-peer, verifiziert mit einem SAS-Code.</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] — diese Maschine lauscht auf Daemon-Direct-Pushes über relayium://, standardmäßig auf Port 9031.</li><li>relayium pull [user@]host:src &lt;dest&gt; — du greifst per SSH auf einen Server zu, in den du dich schon einloggen kannst, und holst Dateien zurück.</li></ul>
       <h2>receive: jemand sendet dir eine Datei über Netzwerke hinweg</h2>
-      <p>Das ist die Empfangsseite von relayium send. Die andere Person führt auf ihrer Seite relayium send &lt;path&gt; aus (nach relayium login); ihre CLI erzeugt einen Code aus 6 Zeichen, gültig für 5 Minuten, und gibt ihn aus. Sie teilt ihn dir über einen Kanal mit, dem ihr beide vertraut — ein Anruf, eine Chatnachricht. Du führst receive mit diesem Code aus:</p>
+      <p>Das ist die Empfangsseite von relayium send. Die andere Person führt auf ihrer Seite relayium send &lt;path&gt; aus (nach relayium login); ihre CLI erzeugt einen Code aus 6 Zeichen, gültig für 30 Minuten, und gibt ihn aus. Sie teilt ihn dir über einen Kanal mit, dem ihr beide vertraut — ein Anruf, eine Chatnachricht. Du führst receive mit diesem Code aus:</p>
       <pre><code>relayium receive K7M4XR
 
 # oder in ein bestimmtes Verzeichnis

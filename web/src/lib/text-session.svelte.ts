@@ -11,7 +11,7 @@
 import { PeerBusyError } from "./webrtc";
 import type { ConnPath } from "./webrtc";
 import type { SessionKeys } from "./crypto";
-import { TextSender, TextReceiver, TEXT_MAX_BYTES, textByteLength, isTextFrame } from "./text-wire";
+import { TextSender, TextReceiver, textByteLength, textPlainLimit, isTextFrame } from "./text-wire";
 import { ACCEPT, REJECT, controlKind } from "./transfer";
 import { peerSupportsText } from "./peer-caps.svelte";
 import { createRateBucket } from "./rate-bucket";
@@ -73,6 +73,10 @@ export interface TextConn {
     onmessage: ((e: { data: ArrayBuffer }) => void) | null;
     onclose: (() => void) | null;
   };
+  /** The largest single DataChannel message this connection may carry. Optional
+   *  so a test double need not model SCTP negotiation; absent means "no known
+   *  ceiling", and the product cap alone applies. */
+  maxFrameBytes?(): number;
   keys: SessionKeys;
   sas: string;
   path?: ConnPath;
@@ -327,7 +331,13 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
 
     async send(body: string): Promise<void> {
       if (status !== "open" || !conn || !keys) return;
-      if (textByteLength(body) > TEXT_MAX_BYTES) { errorKey = "tooLong"; return; }
+      // Against the CONNECTION's limit, not just the product cap: a sealed 64 KiB
+      // message is 65 557 B and does not fit a peer that negotiated 65 536, and
+      // handing that to send() closes the channel and ends the conversation.
+      if (textByteLength(body) > textPlainLimit(conn.maxFrameBytes?.() ?? Infinity)) {
+        errorKey = "tooLong";
+        return;
+      }
       if ((conn.channel.bufferedAmount ?? 0) > TEXT_SEND_BUFFER_MAX) {
         record({ dir: "out", body, at: deps.now(), failed: true });
         return;

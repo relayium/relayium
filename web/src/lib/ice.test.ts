@@ -38,7 +38,7 @@ describe("fetchIceServers", () => {
   });
 
   it("falls back to an empty list (never a third-party STUN) on a non-ok response", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500, headers: new Headers(), json: async () => { throw new SyntaxError("not JSON"); } }));
     const out = await fetchIceServers("424242");
     expect(out).toEqual(FALLBACK_STUN);
   });
@@ -91,7 +91,7 @@ describe("fetchIceConfig relayDenied", () => {
   });
 
   it("leaves relayDenied undefined on a fallback (non-ok / network error)", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 502, headers: new Headers(), json: async () => { throw new SyntaxError("not JSON"); } });
     vi.stubGlobal("fetch", fetchMock);
 
     const cfg = await fetchIceConfig("424242");

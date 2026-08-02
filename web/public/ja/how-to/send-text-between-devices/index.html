@@ -88,7 +88,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>もう一方のマシンではそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、既定で SAS 確認を求めます。複数行や正確な stdin はパイプで 1 メッセージとして送り、端末プロンプトがないため --yes を付けます。</p>
       <pre><code># One machine mints the code and waits (relayium login is required once)
 relayium text
-# Code: K7M4XR   (valid 5 minutes)
+# Code: K7M4XR   (valid 30 minutes)
 # On the other machine:  relayium text K7M4XR
 
 # The other machine joins that code
@@ -99,7 +99,7 @@ pbpaste | relayium text K7M4XR --yes
 
 # Or pipe a file on any shell
 cat snippet.txt | relayium text K7M4XR --yes</code></pre>
-      <ul><li>CLI コードは 5 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。</li><li>ログイン済みアカウントが必要なのはコードを発行する側だけです。表示されたコードで参加する側はログイン不要です。</li><li>--yes は対話的な SAS 確認を省くため、別の信頼できる手段で確認してください。</li></ul>
+      <ul><li>CLI コードは 30 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。</li><li>ログイン済みアカウントが必要なのはコードを発行する側だけです。表示されたコードで参加する側はログイン不要です。</li><li>--yes は対話的な SAS 確認を省くため、別の信頼できる手段で確認してください。</li></ul>
       <h2>テキスト転送の範囲</h2>
       <p>本文は UTF-8 のプレーンテキストです。空白、タブ、空行、改行を保持し、実行、Markdown 描画、リンク化、プレビューはしません。</p>
       <ul><li>両端が同時にオンラインである必要があります。オフライン配信、受信箱、連絡先、同期チャット履歴はありません。</li><li>履歴は開いているローカルセッションだけにあり、終了や再読み込みで消えます。サーバーは本文を保存しません。</li><li>1 メッセージは UTF-8 で 65,536 バイトまで。それ以上はファイルとして送ってください。</li></ul>

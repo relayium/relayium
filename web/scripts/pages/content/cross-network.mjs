@@ -85,7 +85,7 @@ const en = {
       },
       {
         q: "Is a code required?",
-        a: "Yes: a 6-character code (or its join link/QR), valid 5 minutes, pairs the two devices across networks. The server mints it from the alphabet ACDEFHJKMNPRTWXY23456789 — no 0 and no 1, so nothing is mistaken for O or I — which also means you cannot invent one: only a code the server handed out will pair.",
+        a: "Yes: a 6-character code (or its join link/QR), valid 30 minutes, pairs the two devices across networks. The server mints it from the alphabet ACDEFHJKMNPRTWXY23456789 — no 0 and no 1, so nothing is mistaken for O or I — which also means you cannot invent one: only a code the server handed out will pair.",
       },
       {
         q: "Do I need an account?",
@@ -175,7 +175,7 @@ const zh = {
       },
       {
         q: "一定要用配对码吗？",
-        a: "是的：6 字符配对码（或其加入链接/二维码）有效期 5 分钟，用于让两台设备跨网络配对。配对码由服务器从字母表 ACDEFHJKMNPRTWXY23456789 中签发——不含 0 和 1，以免与 O、I 混淆——因此你无法自己编一个：只有服务器发出的码才能完成配对。",
+        a: "是的：6 字符配对码（或其加入链接/二维码）有效期 30 分钟，用于让两台设备跨网络配对。配对码由服务器从字母表 ACDEFHJKMNPRTWXY23456789 中签发——不含 0 和 1，以免与 O、I 混淆——因此你无法自己编一个：只有服务器发出的码才能完成配对。",
       },
       {
         q: "需要注册账号吗？",
@@ -265,7 +265,7 @@ const ja = {
       },
       {
         q: "コードは必須ですか？",
-        a: "はい。6文字のコード（またはその参加リンク/QR）は5分間有効で、ネットワークをまたぐ2台の端末をペアリングします。コードはサーバーが文字集合 ACDEFHJKMNPRTWXY23456789 から発行します——0 と 1 は O・I と紛らわしいため含みません——ので、自分で考えて作ることはできません。サーバーが発行したコードだけがペアリングできます。",
+        a: "はい。6文字のコード（またはその参加リンク/QR）は30分間有効で、ネットワークをまたぐ2台の端末をペアリングします。コードはサーバーが文字集合 ACDEFHJKMNPRTWXY23456789 から発行します——0 と 1 は O・I と紛らわしいため含みません——ので、自分で考えて作ることはできません。サーバーが発行したコードだけがペアリングできます。",
       },
       {
         q: "アカウントは必要ですか？",
@@ -355,7 +355,7 @@ const ko = {
       },
       {
         q: "코드가 꼭 필요한가요?",
-        a: "네. 6자 코드(또는 참여 링크/QR)는 5분간 유효하며 네트워크를 넘는 두 기기를 페어링합니다. 코드는 서버가 문자 집합 ACDEFHJKMNPRTWXY23456789에서 발급합니다 — O·I와 헷갈리지 않도록 0과 1은 없습니다 — 그래서 직접 지어낼 수 없고, 서버가 발급한 코드만 페어링됩니다.",
+        a: "네. 6자 코드(또는 참여 링크/QR)는 30분간 유효하며 네트워크를 넘는 두 기기를 페어링합니다. 코드는 서버가 문자 집합 ACDEFHJKMNPRTWXY23456789에서 발급합니다 — O·I와 헷갈리지 않도록 0과 1은 없습니다 — 그래서 직접 지어낼 수 없고, 서버가 발급한 코드만 페어링됩니다.",
       },
       {
         q: "계정이 필요한가요?",
@@ -445,7 +445,7 @@ const de = {
       },
       {
         q: "Ist ein Code erforderlich?",
-        a: "Ja: Ein 6-Zeichen-Code (oder dessen Beitrittslink/QR), 5 Minuten gültig, koppelt die beiden Geräte über Netzwerke hinweg. Der Server erzeugt ihn aus dem Alphabet ACDEFHJKMNPRTWXY23456789 — ohne 0 und 1, damit nichts mit O oder I verwechselt wird — du kannst dir also keinen ausdenken: nur ein vom Server ausgegebener Code koppelt.",
+        a: "Ja: Ein 6-Zeichen-Code (oder dessen Beitrittslink/QR), 30 Minuten gültig, koppelt die beiden Geräte über Netzwerke hinweg. Der Server erzeugt ihn aus dem Alphabet ACDEFHJKMNPRTWXY23456789 — ohne 0 und 1, damit nichts mit O oder I verwechselt wird — du kannst dir also keinen ausdenken: nur ein vom Server ausgegebener Code koppelt.",
       },
       {
         q: "Brauche ich ein Konto?",
@@ -535,7 +535,7 @@ const fr = {
       },
       {
         q: "Un code est-il obligatoire ?",
-        a: "Oui : un code à 6 caractères (ou son lien d'accès/QR), valable 5 minutes, appaire les deux appareils entre réseaux différents. Le serveur le génère à partir de l'alphabet ACDEFHJKMNPRTWXY23456789 — ni 0 ni 1, pour éviter toute confusion avec O et I — vous ne pouvez donc pas en inventer un : seul un code délivré par le serveur appaire.",
+        a: "Oui : un code à 6 caractères (ou son lien d'accès/QR), valable 30 minutes, appaire les deux appareils entre réseaux différents. Le serveur le génère à partir de l'alphabet ACDEFHJKMNPRTWXY23456789 — ni 0 ni 1, pour éviter toute confusion avec O et I — vous ne pouvez donc pas en inventer un : seul un code délivré par le serveur appaire.",
       },
       {
         q: "Faut-il un compte ?",
@@ -625,7 +625,7 @@ const ar = {
       },
       {
         q: "هل الرمز إلزامي؟",
-        a: "نعم: رمز مكوّن من 6 خانات (أو رابط الانضمام/رمز QR الخاص به)، صالح لمدة 5 دقائق، يقرن الجهازين عبر شبكات مختلفة. يُصدره الخادم من مجموعة الحروف ACDEFHJKMNPRTWXY23456789 — بلا 0 وبلا 1 حتى لا يختلطا بحرفَي O وI — لذلك لا يمكنك اختلاق رمز من عندك: لا يقرن إلا رمز أصدره الخادم.",
+        a: "نعم: رمز مكوّن من 6 خانات (أو رابط الانضمام/رمز QR الخاص به)، صالح لمدة 30 دقيقة، يقرن الجهازين عبر شبكات مختلفة. يُصدره الخادم من مجموعة الحروف ACDEFHJKMNPRTWXY23456789 — بلا 0 وبلا 1 حتى لا يختلطا بحرفَي O وI — لذلك لا يمكنك اختلاق رمز من عندك: لا يقرن إلا رمز أصدره الخادم.",
       },
       {
         q: "هل يلزم حساب؟",
@@ -715,7 +715,7 @@ const es = {
       },
       {
         q: "¿Es obligatorio un código?",
-        a: "Sí: un código de 6 caracteres (o su enlace de acceso/QR), válido 5 minutos, empareja los dos dispositivos entre redes distintas. El servidor lo genera a partir del alfabeto ACDEFHJKMNPRTWXY23456789 — sin 0 ni 1, para que nada se confunda con O ni I — así que no puedes inventarte uno: solo empareja un código que haya emitido el servidor.",
+        a: "Sí: un código de 6 caracteres (o su enlace de acceso/QR), válido 30 minutos, empareja los dos dispositivos entre redes distintas. El servidor lo genera a partir del alfabeto ACDEFHJKMNPRTWXY23456789 — sin 0 ni 1, para que nada se confunda con O ni I — así que no puedes inventarte uno: solo empareja un código que haya emitido el servidor.",
       },
       {
         q: "¿Necesito una cuenta?",
@@ -805,7 +805,7 @@ const pt = {
       },
       {
         q: "Um código é obrigatório?",
-        a: "Sim: um código de 6 caracteres (ou seu link de acesso/QR), válido por 5 minutos, empareja os dois dispositivos entre redes diferentes. O servidor o gera a partir do alfabeto ACDEFHJKMNPRTWXY23456789 — sem 0 e sem 1, para que nada se confunda com O ou I — então você não pode inventar um: só emparelha um código que o servidor tenha emitido.",
+        a: "Sim: um código de 6 caracteres (ou seu link de acesso/QR), válido por 30 minutos, empareja os dois dispositivos entre redes diferentes. O servidor o gera a partir do alfabeto ACDEFHJKMNPRTWXY23456789 — sem 0 e sem 1, para que nada se confunda com O ou I — então você não pode inventar um: só emparelha um código que o servidor tenha emitido.",
       },
       {
         q: "Preciso de uma conta?",

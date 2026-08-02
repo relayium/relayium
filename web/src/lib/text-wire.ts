@@ -13,17 +13,36 @@ type Bytes = Uint8Array<ArrayBuffer>;
 export const KIND_TEXT_ENC = 9;
 
 /**
- * One message, one frame, no chunking.
+ * One message, one frame, no chunking — the **product** cap.
  *
- * 64 KiB of UTF-8 covers any realistic paste of code or logs. The on-wire frame
- * is 65 557 B, far under the 256 KiB DataChannel max-message-size that CHUNK_SIZE
- * is also sized against (transfer.ts:9-13). Anything larger is a file, and the UI
- * says so rather than silently splitting content the user thinks of as one thing.
+ * 64 KiB of UTF-8 covers any realistic paste of code or logs. Anything larger is
+ * a file, and the UI says so rather than silently splitting content the user
+ * thinks of as one thing.
+ *
+ * It is not, by itself, a cap the wire can always honour: 64 KiB of plaintext
+ * seals into a 65 557 B frame, which does NOT fit a connection that negotiated
+ * the RFC 8841 default of 65 536 (an Android peer that advertises nothing drags
+ * every sender down to it). See textPlainLimit for the number to check against.
  */
 export const TEXT_MAX_BYTES = 64 * 1024;
 
 /** Per-frame wire overhead: 5-byte header + 16-byte AES-GCM tag. */
 export const TEXT_FRAME_OVERHEAD = 5 + 16;
+
+/**
+ * The plaintext one message may carry on **this** connection: the product cap,
+ * lowered to whatever the sealed frame must fit in.
+ *
+ * The file stream fragments when a chunk does not fit; text deliberately does
+ * not (see TEXT_MAX_BYTES), so the only correct answer for an outsized message
+ * is to refuse it — before sealing, so no nonce is burned and the conversation
+ * survives. Handing an oversize message to `send()` instead kills the channel
+ * and takes the whole session with it.
+ */
+export function textPlainLimit(maxFrameBytes: number): number {
+  const usable = Math.floor(maxFrameBytes) - TEXT_FRAME_OVERHEAD;
+  return Math.max(0, Math.min(usable, TEXT_MAX_BYTES));
+}
 
 // Mixed-link text-lane lifecycle. ACCEPT/REJECT remain the shared 0xfe/0xff
 // bytes from transfer.ts; the DataChannel label scopes their meaning.

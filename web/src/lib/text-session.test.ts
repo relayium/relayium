@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ready, generateKeyPair, deriveSession, type SessionKeys } from "./crypto";
-import { TextSender, TEXT_MAX_BYTES } from "./text-wire";
+import { TextSender, TEXT_FRAME_OVERHEAD, TEXT_MAX_BYTES } from "./text-wire";
+import { CONSERVATIVE_MAX_MESSAGE_BYTES } from "./wire-limit";
 import { ACCEPT, REJECT, COMPLETE } from "./transfer";
 import { PeerBusyError } from "./webrtc";
 import { recordPeerCaps, resetPeerCaps, CAP_TEXT } from "./peer-caps.svelte";
@@ -36,7 +37,7 @@ async function drainUntil(pred: () => boolean, maxTicks = 4000) {
   for (let i = 0; i < maxTicks && !pred(); i++) await new Promise((r) => setTimeout(r, 0));
 }
 
-async function harness(opts: { failWith?: Error; autoTick?: number; deferred?: boolean; transferActive?: () => boolean } = {}) {
+async function harness(opts: { failWith?: Error; autoTick?: number; deferred?: boolean; transferActive?: () => boolean; maxFrameBytes?: number } = {}) {
   const a = generateKeyPair();
   const b = generateKeyPair();
   const ka = await deriveSession("initiator", a, b.publicKey);
@@ -51,6 +52,7 @@ async function harness(opts: { failWith?: Error; autoTick?: number; deferred?: b
   const now = () => { clock += autoTick; return clock; };
   const conn = (keys: SessionKeys, channel: FakeChannel): TextConn => ({
     channel, keys, sas: "123456", path: "lan", close: () => channel.close(),
+    ...(opts.maxFrameBytes === undefined ? {} : { maxFrameBytes: () => opts.maxFrameBytes! }),
   });
   // deferred 模式：每次 connect 都挂起，测试自己决定什么时候、以什么顺序落地。
   const attempts: { ch: FakeChannel; resolve: () => void; reject: (e: Error) => void }[] = [];
@@ -208,6 +210,24 @@ describe("text session", () => {
     expect(ch.sent.length).toBe(0);
     expect(s.history.length).toBe(0);
     expect(s.errorKey).toBe("tooLong");
+  });
+
+  // A 64 KiB message is inside the product cap but seals into a 65 557 B frame,
+  // which a peer that negotiated the RFC 8841 default of 65 536 cannot take.
+  // send() would throw and the channel would be gone; refuse it instead.
+  it("refuses a message this connection cannot carry, and stays open", async () => {
+    const { s, ch, peerAccepts } = await harness({ maxFrameBytes: CONSERVATIVE_MAX_MESSAGE_BYTES });
+    recordPeerCaps("p1", { caps: [CAP_TEXT] });
+    await s.openWith("p1");
+    await peerAccepts();
+    await s.send("a".repeat(TEXT_MAX_BYTES));
+    expect(s.errorKey).toBe("tooLong");
+    expect(ch.sent.length).toBe(0);
+    expect(s.history.length).toBe(0);
+    expect(s.status).toBe("open");
+    await s.send("a".repeat(TEXT_MAX_BYTES - TEXT_FRAME_OVERHEAD)); // the largest that fits
+    expect(s.errorKey).toBe("");
+    expect(s.history.length).toBe(1);
   });
 
   it("clears a previous error once a send succeeds", async () => {

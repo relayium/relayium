@@ -18,11 +18,11 @@ import {
 } from "./text-session.svelte";
 import {
   TEXT_END,
-  TEXT_MAX_BYTES,
   TEXT_REQUEST,
   isTextFrame,
   textByteLength,
   textLifecycleKind,
+  textPlainLimit,
 } from "./text-wire";
 import { ACCEPT, REJECT } from "./transfer";
 import {
@@ -692,7 +692,11 @@ export function createMixedTextSession(deps: MixedTextSessionDeps): MixedTextSes
       if (status !== "open" || !expectedLink || poisoned(expectedLink)) return;
       const expectedGeneration = generation;
       const expectedOutboundEpoch = outboundEpoch;
-      if (textByteLength(body) > TEXT_MAX_BYTES) {
+      // Against the CONNECTION's limit, not just the product cap: a sealed
+      // 64 KiB message is 65 557 B and does not fit a peer that negotiated
+      // 65 536. Checked here, before TextSender consumes a nonce, so refusing
+      // one message never costs the link its reusable text codecs.
+      if (textByteLength(body) > textPlainLimit(expectedLink.conn.maxFrameBytes())) {
         errorKey = "tooLong";
         return;
       }

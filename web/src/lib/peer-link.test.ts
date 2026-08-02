@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { CHROME_MAX_MESSAGE_BYTES } from "./wire-limit";
 import { deriveSession, generateKeyPair, ready, signResume, verifyResume } from "./crypto";
 import {
   LINK_AUTH_TIMEOUT_MS, LINK_LEAVE_AUTH_LENGTH, LINK_LEAVE_MAX_ATTEMPTS, LINK_RECOVERY_RETRY_MS,
@@ -47,7 +48,7 @@ function transportHarness() {
       channel: file,
       getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
       close: vi.fn(),
-      path: async () => "lan",
+      maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => "lan",
       stats: async () => new Map() as unknown as RTCStatsReport,
     };
     conns.push(conn);
@@ -77,7 +78,7 @@ function rebuiltConn(opts: {
     takeCaptured: opts.captured
       ? (label: string) => ({ frames: pending[label]?.splice(0) ?? [], overflow: opts.captured?.overflow === true })
       : undefined,
-    close: vi.fn(), path: async () => "lan",
+    close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => "lan",
     stats: async () => new Map() as unknown as RTCStatsReport,
   };
   return { conn, file, text };
@@ -178,7 +179,7 @@ describe("mixed peer link ownership", () => {
       const conn: Conn = {
         channel: file,
         getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
-        close: vi.fn(), path: async () => "lan",
+        close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => "lan",
         stats: async () => new Map() as unknown as RTCStatsReport,
       };
       setTimeout(() => {
@@ -212,7 +213,7 @@ describe("mixed peer link ownership", () => {
       conn = {
         channel: file,
         getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
-        close: vi.fn(), path: async () => "lan",
+        close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => "lan",
         stats: async () => new Map() as unknown as RTCStatsReport,
       };
       setTimeout(() => {
@@ -514,7 +515,7 @@ describe("mixed peer link ownership", () => {
     const conn: Conn = {
       channel: file,
       getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
-      close: vi.fn(), path: async () => "lan",
+      close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => "lan",
       stats: async () => new Map() as unknown as RTCStatsReport,
     };
     const connect = vi.fn(async () => conn);
@@ -541,7 +542,7 @@ describe("mixed peer link ownership", () => {
     const conn: Conn = {
       channel: file,
       getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
-      close: vi.fn(), path: async () => "lan",
+      close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => "lan",
       stats: async () => new Map() as unknown as RTCStatsReport,
     };
     const connect = vi.fn(async (opts: Parameters<typeof connectLink>[0]) => {
@@ -569,7 +570,7 @@ describe("mixed peer link ownership", () => {
     const conn: Conn = {
       channel: file,
       getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
-      close: vi.fn(), path: async () => "lan",
+      close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => "lan",
       stats: async () => new Map() as unknown as RTCStatsReport,
     };
     const connect = vi.fn(async (opts: Parameters<typeof connectLink>[0]) => {
@@ -635,7 +636,7 @@ describe("mixed peer link ownership", () => {
       const file = { label: "relayium" } as RTCDataChannel;
       const conn: Conn = {
         channel: file, getChannel: (label) => label === "relayium" ? file : undefined,
-        close: vi.fn(), path: async () => "lan",
+        close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => "lan",
         stats: async () => new Map() as unknown as RTCStatsReport,
       };
       transport.conns.push(conn);
@@ -665,7 +666,7 @@ describe("mixed peer link ownership", () => {
       const conn: Conn = {
         channel: file,
         getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
-        close: vi.fn(), path: async () => "lan",
+        close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => "lan",
         stats: async () => new Map() as unknown as RTCStatsReport,
       };
       transport.conns.push(conn);

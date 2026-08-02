@@ -406,7 +406,7 @@ const en: Messages = {
     mode2Title: "send / receive — by pairing code",
     mode2Tag: "free · direct P2P",
     mode2Body:
-      "Send to another person across networks. Sign in once with relayium login, then run send with no code: the CLI mints a 6-character pairing code (drawn from an alphabet with no 0 or 1), good for 5 minutes, and prints the exact command the other end runs. Pass that code on out of band — say it over a call. You can't pick it yourself, the server only accepts codes it issued, and the receiver needs no account. Both ends must be the CLI; for someone with only a browser, use relayium up instead. The connection is direct peer-to-peer: only a small rendezvous handshake passes through Relayium to introduce the two ends — the file bytes never do. If both ends are behind strict NAT and can't connect directly, the transfer simply fails (the CLI has no relay). Both terminals print a 6-digit SAS derived from their pinned TLS certificate fingerprints. Matching it out of band confirms the fingerprints were not substituted and the rendezvous service did not impersonate either endpoint; it authenticates the endpoints, not every network hop (add --verify to require confirmation before any bytes move).",
+      "Send to another person across networks. Sign in once with relayium login, then run send with no code: the CLI mints a 6-character pairing code (drawn from an alphabet with no 0 or 1), good for 30 minutes, and prints the exact command the other end runs. Pass that code on out of band — say it over a call. You can't pick it yourself, the server only accepts codes it issued, and the receiver needs no account. Both ends must be the CLI; for someone with only a browser, use relayium up instead. The connection is direct peer-to-peer: only a small rendezvous handshake passes through Relayium to introduce the two ends — the file bytes never do. If both ends are behind strict NAT and can't connect directly, the transfer simply fails (the CLI has no relay). Both terminals print a 6-digit SAS derived from their pinned TLS certificate fingerprints. Matching it out of band confirms the fingerprints were not substituted and the rendezvous service did not impersonate either endpoint; it authenticates the endpoints, not every network hop (add --verify to require confirmation before any bytes move).",
     mode3Title: "daemon direct — server to server",
     mode3Tag: "free",
     mode3Body:
@@ -493,6 +493,12 @@ const en: Messages = {
     signInToSend: "Sign in to send across networks. The person receiving never needs an account.",
     relayQuotaWarn: "You've used up this month's relay traffic, so cross-network browser sessions cannot start or continue until it resets next month. Same-network sessions and direct CLI transfers are unaffected. To send now, use a stored download link, upgrade for more relay traffic, or run your own node.",
     relayQuotaFail: "This cross-network browser session cannot connect because this month's relay traffic is used up. Same-network sessions and direct CLI transfers are unaffected. Use a stored download link, upgrade for more relay traffic, or run your own node.",
+    relayUnverifiedWarn: "Verify your email address to use cross-network relay. Until then a browser session can only connect when both devices can reach each other directly; same-network transfers and the CLI are unaffected.",
+    relayUnverifiedFail: "This cross-network browser session could not connect because relay is only issued to verified accounts. Verify your email address, then create a new pairing code.",
+    relayUnavailableWarn: "Couldn't load the relay settings for this session, so a cross-network connection may not be possible. Reload the page to try again.",
+    relayUnavailableFail: "This session never received its relay settings, so there was no cross-network path to connect over. Reload the page and create a new pairing code — this is usually temporary.",
+    relayNoneWarn: "No relay is available for this session, so it can only connect if both devices can reach each other directly.",
+    relayNoneFail: "This cross-network browser session could not connect because no relay was available for it. Same-network transfers and direct CLI transfers are unaffected.",
   },
   offline: {
     tagline: "Encrypted in your browser, then stored · the server only ever holds ciphertext",
@@ -521,7 +527,8 @@ const en: Messages = {
     waiting: "Waiting for the other device to join…",
     queued: (n, s) => `${n} file(s) · ${s} — sends automatically once the other side joins`,
     bareConnect: "Create a connection without picking files",
-    expiresIn: (s) => `expires in ${s}`,
+    expiresIn: (s) => `pairing code expires in ${s}`,
+    ttlNote: "That countdown is the pairing code only — it stops new devices from joining with it. Once the other device has joined, the transfer keeps running to completion and is never cut off by it.",
     expired: "Pairing code expired — generate a new one",
     copy: "Copy",
     copied: "Copied",
@@ -603,7 +610,7 @@ const en: Messages = {
       sub: "When both sides are online, transfer across networks in real time — the recipient needs no account.",
       ways: [
         { name: "Create a pairing code", how: "Sign in and create a 6-character pairing code, together with a join link and QR. You choose what to send after the other device joins.", tag: "The creator signs in" },
-        { name: "Give the code to the other side", how: "Read it out, send the link, or show the QR — any of the three; they type it in or open it in any modern browser.", tag: "Codes live 5 minutes" },
+        { name: "Give the code to the other side", how: "Read it out, send the link, or show the QR — any of the three; they type it in or open it in any modern browser.", tag: "Codes live 30 minutes" },
         { name: "Choose files or text", how: "After they join, choose up to 1,000 files on their device card, or choose “Send a message” for online text. Compare the SAS, then send end-to-end encrypted ciphertext through TURN.", tag: "The relay cannot read or decrypt either" },
       ],
     },

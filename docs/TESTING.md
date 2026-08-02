@@ -270,7 +270,7 @@ fail to connect — that fallback is ②b (TURN), out of scope here.
 1. **Generate a pairing code (sender):** open the app, click
    "Send to someone on another network", pick files, and generate a 6-digit
    pairing code — a join link and QR appear alongside it (no sign-in needed;
-   codes live 15 minutes). The page reloads into pairing-room mode.
+   codes live 30 minutes). The page reloads into pairing-room mode.
 2. **Open the link (receiver, different network):** open the link (or scan the
    QR). The receiver connects to the same room.
 3. **Verify SAS:** both sides see the 6-digit code; confirm they match.
@@ -488,7 +488,7 @@ joins that code's room itself as the first of its two peers:
 
 ```bash
 relayium text
-# Code: K7M4XR   (valid 5 minutes)
+# Code: K7M4XR   (valid 30 minutes)
 # On the other machine:  relayium text K7M4XR
 # waiting for the other side to join…
 ```
@@ -501,7 +501,7 @@ transfers and still hands off `relayium receive`.)
 
 A code room holds exactly **two** peers, so make sure the previous pair of
 processes has **exited** before starting the next sub-test, and mint a fresh code
-if more than five minutes have passed.
+if more than thirty minutes have passed.
 
 Also check the refusals, which must not spend a code:
 

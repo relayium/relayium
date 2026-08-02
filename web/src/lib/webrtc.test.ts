@@ -119,6 +119,7 @@ beforeAll(async () => { await ready(); });
 afterEach(() => {
   instances.length = 0;
   FakePC.inboundLabels = ["relayium"];
+  vi.useRealTimers(); // a test that installed the jumpable clock must not leak it
   vi.unstubAllGlobals();
 });
 
@@ -132,6 +133,35 @@ describe("webrtc commit-then-reveal handshake", () => {
       role: "initiator", onPeerKey: () => {}, signal: controller.signal,
     });
     const rejected = expect(p).rejects.toMatchObject({ name: "AbortError" });
+    await flush();
+    controller.abort();
+    await rejected;
+    expect(instances[0].connectionState).toBe("closed");
+  });
+
+  // The handshake gate adds a window that establish() no longer guards: the
+  // channel is open (so establish has dropped its abort listener) but the peer
+  // key has not arrived. Cancel has to keep working there, or a user pressing it
+  // during "正在建立加密连接" would get nothing for the next 30 seconds while the
+  // peer connection stayed alive behind a UI that already looked idle.
+  it("still cancels after the channel opens but before the key is verified", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const controller = new AbortController();
+
+    // Answers the offer (transport comes up) but never reveals.
+    hub.R.onSignal((from, data) => {
+      const msg = data as InboundSignal;
+      if (msg.sdp?.type === "offer") hub.R.sendSignal(from, { sdp: { type: "answer", sdp: "answer" }, commit: "AAAA" });
+    });
+
+    const p = connect({
+      signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
+      role: "initiator", onPeerKey: () => {}, signal: controller.signal,
+    });
+    const rejected = expect(p).rejects.toMatchObject({ name: "AbortError" });
+    await flush();
+    openAll();
     await flush();
     controller.abort();
     await rejected;
@@ -218,6 +248,7 @@ describe("webrtc commit-then-reveal handshake", () => {
   });
 
   it("aborts when a reveal does not open its commitment (MITM)", async () => {
+    useJumpableClock();
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const iKey = generateKeyPair();
@@ -241,9 +272,152 @@ describe("webrtc commit-then-reveal handshake", () => {
     await rejected;
     expect(rPeer).toBeUndefined();
 
-    // Tidy the still-pending initiator side (channel-open clears its timer).
+    // The initiator must NOT be left holding a resolved connection. Its channel
+    // can open perfectly well — the transport is fine, it is the handshake that
+    // is dead — and before the handshake gate existed connect() resolved right
+    // there, handing the caller a connection whose keys never arrive. The caller
+    // then spun on `while (!keys)` with no deadline: the transfer sat at 0% for
+    // as long as the tab stayed open. Now the handshake deadline ends it.
     openAll();
-    try { (await iP).close(); } catch { /* also rejected — fine */ }
+    await expectHandshakeTimeout(iP);
+  });
+});
+
+/** Install a clock that still advances on its own (so the hub's setTimeout
+ *  delivery and flush() keep working) but can also be jumped forward past the
+ *  30s commit-reveal deadline. Must be called BEFORE connect(), or the deadline
+ *  is armed on the real clock and no amount of advancing will fire it.
+ *  afterEach restores real timers. */
+const useJumpableClock = () => vi.useFakeTimers({ shouldAdvanceTime: true });
+
+/** Track whether a promise has settled, without consuming its rejection. */
+function watch(p: Promise<unknown>): () => boolean {
+  let settled = false;
+  void p.then(() => (settled = true), () => (settled = true));
+  return () => settled;
+}
+
+/** Assert that a connect() promise whose channel is already open is still
+ *  unresolved, and then fails once the key-reveal window — 30 s from the moment
+ *  the channel opened, NOT the rest of the overall setup deadline — elapses.
+ *  Requires useJumpableClock(). */
+async function expectHandshakeTimeout(p: Promise<unknown>): Promise<void> {
+  const settled = watch(p);
+  const rejects = expect(p).rejects.toThrow(/handshake timed out/);
+  await flush();
+  expect(settled(), "connect() must not resolve before the peer key is verified").toBe(false);
+  await vi.advanceTimersByTimeAsync(29_000);
+  expect(settled(), "the key window must be a window, not an instant").toBe(false);
+  await vi.advanceTimersByTimeAsync(2_000);
+  await rejects;
+}
+
+// ── how long a setup is allowed to take ─────────────────────────────────────
+//
+// A flat 30-second cut-off was rejected: it kills exactly the connections that
+// are working, just slowly (a phone waking its radio, then two TURN Allocate
+// round trips because long-term credentials always draw a 401 challenge first,
+// then hole punching). The policy is two deadlines instead — 30 s with no
+// progress, and a 90 s ceiling nothing can push back.
+describe("the setup deadline", () => {
+  /** A syntactically plausible remote candidate. Distinct per index, because the
+   *  progress ledger counts each piece of evidence exactly once. */
+  const candidate = (i: number): InboundSignal =>
+    ({ ice: { candidate: `candidate:${i} 1 udp 2122260223 10.0.0.${i} 5000 typ host`, sdpMid: "0", sdpMLineIndex: 0 } });
+
+  function startInitiator(hub: ReturnType<typeof makeHub>) {
+    return connect({
+      signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
+      role: "initiator", onPeerKey: () => {},
+    });
+  }
+
+  it("fails at ~30 s when the far side never responds at all", async () => {
+    useJumpableClock();
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const p = startInitiator(makeHub()); // nobody is listening on the other side
+    const settled = watch(p);
+    const rejects = expect(p).rejects.toThrow(/connection timed out/);
+    await flush();
+
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(settled(), "must not give up before the no-progress window is spent").toBe(false);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await rejects;
+    expect(instances[0].connectionState).toBe("closed");
+  });
+
+  it("keeps going past 30 s for a late answer, then times out from there", async () => {
+    useJumpableClock();
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const p = startInitiator(hub);
+    const settled = watch(p);
+    const rejects = expect(p).rejects.toThrow(/connection timed out/);
+    await flush();
+
+    // A phone that took 25 s to wake up and answer. The old flat cut-off had
+    // five seconds left for the whole of ICE; this restarts the window.
+    await vi.advanceTimersByTimeAsync(25_000);
+    hub.inject("I", "R", { sdp: { type: "answer", sdp: "answer" }, commit: "AAAA" });
+    await flush();
+
+    await vi.advanceTimersByTimeAsync(20_000); // t≈45s — past the old deadline
+    expect(settled(), "a peer that really answered must buy more time").toBe(false);
+    await vi.advanceTimersByTimeAsync(11_000); // t≈56s — 30s after the answer
+    await rejects;
+  });
+
+  it("counts a remote candidate as progress, but not without limit", async () => {
+    useJumpableClock();
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const p = startInitiator(hub);
+    const settled = watch(p);
+    const rejects = expect(p).rejects.toThrow(/connection timed out/);
+    await flush();
+
+    // Candidates every 20 s. Each one would push the no-progress window to +30 s,
+    // so on that timer alone this would still be alive at 110 s.
+    for (let i = 0; i < 5; i++) {
+      hub.inject("I", "R", candidate(i));
+      await flush();
+      if (i < 4) await vi.advanceTimersByTimeAsync(20_000);
+    }
+    await vi.advanceTimersByTimeAsync(5_000); // t≈85s
+    expect(settled(), "real ICE traffic must extend the window").toBe(false);
+
+    // The ceiling is not extendable, so 90 s is 90 s however the peer paces it.
+    await vi.advanceTimersByTimeAsync(6_000); // t≈91s
+    await rejects;
+    expect(instances[0].connectionState).toBe("closed");
+  });
+
+  it("does not hand a late-opening channel a fresh key window past the ceiling", async () => {
+    useJumpableClock();
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const p = startInitiator(hub);
+    const settled = watch(p);
+    const rejects = expect(p).rejects.toThrow(/handshake timed out/);
+    await flush();
+
+    // Genuine progress for 60 s, then the channel finally opens at ~80 s.
+    for (let i = 0; i < 4; i++) {
+      hub.inject("I", "R", candidate(i));
+      await flush();
+      await vi.advanceTimersByTimeAsync(20_000);
+    }
+    openAll();
+    await flush();
+    expect(settled(), "the transport is up; only the key is missing").toBe(false);
+
+    // A full 30 s key window from here would run to 110 s. The overall ceiling
+    // wins instead — the whole setup still ends at 90 s.
+    await vi.advanceTimersByTimeAsync(5_000); // t≈85s
+    expect(settled()).toBe(false);
+    await vi.advanceTimersByTimeAsync(6_000); // t≈91s
+    await rejects;
   });
 });
 
@@ -971,20 +1145,30 @@ describe("signalling generations", () => {
 
   it("bounds pre-ready mixed capture independently of the file flow window", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
+    FakePC.inboundLabels = [...LINK_CHANNEL_LABELS];
     const hub = makeHub();
+    // A real responder, so the commit-reveal actually completes: connect() now
+    // resolves on the handshake, not merely on the channels opening.
+    const rP = connectLink({
+      signaling: hub.R, peerId: "I", selfKey: generateKeyPair().publicKey,
+      role: "responder", onPeerKey: () => {},
+    });
     const iP = connectLink({
       signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
       role: "initiator", onPeerKey: () => {},
     });
     await flush();
-    const pc = instances[0];
+    const pc = instances[1]; // [0] is the responder, which is constructed first
     const file = pc.channels.find((ch) => ch.label === "relayium")!;
     file._open();
     file._message(new ArrayBuffer(LINK_CAPTURE_MAX_BYTES + 1));
     pc.channels.find((ch) => ch.label === "relayium-text")!._open();
+    openAll();
+    await flush();
     const conn = await iP;
     expect(conn.takeCaptured?.("relayium")).toEqual({ frames: [], overflow: true });
     conn.close();
+    (await rP).close();
   });
 
   it("still tags a resume connection's outbound signals", async () => {
@@ -1049,6 +1233,7 @@ describe("signalling generations", () => {
   // above -- the responder rejects mid-flush, so the expectation is attached
   // before the flush rather than after it.
   it("aborts a text connection on a commitment mismatch, like the file one", async () => {
+    useJumpableClock();
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();
     const iKey = generateKeyPair();
@@ -1066,13 +1251,48 @@ describe("signalling generations", () => {
     await rejected;
     expect(rPeer).toBeUndefined();
 
+    // Same as the file path: the text initiator is bounded by the handshake
+    // deadline rather than left holding a keyless connection forever.
     openAll();
-    try { (await iP).close(); } catch { /* also rejected -- fine */ }
+    await expectHandshakeTimeout(iP);
   });
 
   // The same property webrtc.test.ts already pins for resume, now across the
   // pair that matters: without it, a text offer lands in listenForIncoming and
   // starts a file receive on the peer.
+  // The reported symptom was "正在建立加密连接 at 0% for a long time". The
+  // transport timeout in webrtc-core only covers "did a channel open"; it is
+  // cleared the moment one does. But the reveal that completes commit-reveal
+  // travels over the SIGNALLING socket, not the channel — so a peer whose
+  // WebSocket dies after answering (a phone that got backgrounded or lost its
+  // cell connection between the answer and the reveal) leaves a perfectly open
+  // channel whose keys never arrive. Before this deadline the caller's
+  // `while (!keys)` spin had no upper bound at all, so "a long time" could be
+  // forever: no failure, no progress, and only the cancel button as an exit.
+  it("fails a handshake whose reveal never arrives instead of waiting forever", async () => {
+    useJumpableClock();
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+
+    // A responder that answers the offer (so the transport comes up and the
+    // connect timer is cleared) but never sends its reveal — signalling died
+    // right after the answer.
+    hub.R.onSignal((from, data) => {
+      const msg = data as InboundSignal;
+      if (msg.sdp?.type === "offer") hub.R.sendSignal(from, { sdp: { type: "answer", sdp: "answer" }, commit: "AAAA" });
+    });
+
+    const iP = connect({
+      signaling: hub.I, peerId: "R", selfKey: generateKeyPair().publicKey,
+      role: "initiator", onPeerKey: () => {},
+    });
+    await flush();
+    openAll(); // the channel is genuinely open; only the handshake is stuck
+    await expectHandshakeTimeout(iP);
+    // And the peer connection is torn down rather than left alive and keyless.
+    expect(instances[0].connectionState).toBe("closed");
+  });
+
   it("does not cross-route between a live file connection and a live text one", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC);
     const hub = makeHub();

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { ready, generateKeyPair, deriveSession } from "./crypto";
+import { ready, generateKeyPair, deriveSession, type SessionKeys } from "./crypto";
 import {
   Sender, Receiver, FRAME, CHUNK_SIZE, CHUNK_OVERHEAD, FLOW_WINDOW, FLOW_ACK_INTERVAL,
   ACCEPT, REJECT, COMPLETE, FILE_BUSY, BATCH_ABORT, ackFrame, advanceAck, controlKind, isBatchAbort, parseAck, parseResumeReq,
@@ -7,6 +7,15 @@ import {
 } from "./transfer";
 
 beforeAll(async () => { await ready(); });
+
+/** The manifest as the single frame it is on any connection that can carry a
+ *  whole chunk. Fragmented manifests have their own suite (wire-limit tests);
+ *  asserting the count here keeps those two cases from quietly merging. */
+async function batchFrame(s: Sender, files: Parameters<Sender["batchFrames"]>[0], keys: SessionKeys) {
+  const frames = await s.batchFrames(files, keys);
+  expect(frames).toHaveLength(1);
+  return frames[0];
+}
 
 const concat = (chunks: Uint8Array[]) => {
   const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
@@ -37,7 +46,7 @@ async function driveWithDrop(
   let offset = 0;
   let checkpoint: { index: number; offset: number; chain: Uint8Array } = { index: 0, offset: 0, chain: new Uint8Array(32) };
 
-  await receiver.feed(await sender.batchFrame(files.map((f) => ({ name: f.name, size: f.size })), ka), kb);
+  await receiver.feed(await batchFrame(sender, files.map((f) => ({ name: f.name, size: f.size })), ka), kb);
 
   const handle = async (f: Uint8Array<ArrayBuffer>) => {
     if (f[0] === FRAME.CHUNK) seqsUsed.push(seqOf(f));
@@ -103,7 +112,7 @@ async function roundTrip(
   const receiver = new Receiver();
 
   const manifestOut = await receiver.feed(
-    await sender.batchFrame(files.map((f) => ({ name: f.name, size: f.size })), ka),
+    await batchFrame(sender, files.map((f) => ({ name: f.name, size: f.size })), ka),
     kb,
   );
 
@@ -155,7 +164,7 @@ describe("transfer", () => {
     const { ka, kb } = await session();
     const sender = new Sender();
     const out = await new Receiver().feed(
-      await sender.batchFrame([{ name: "a.jpg", size: 3, path: "trip/day1/a.jpg" }], ka),
+      await batchFrame(sender, [{ name: "a.jpg", size: 3, path: "trip/day1/a.jpg" }], ka),
       kb,
     );
     expect(out.batch!.files[0].path).toBe("trip/day1/a.jpg");
@@ -168,7 +177,7 @@ describe("transfer", () => {
       size: i,
       path: `deeply/nested/folder/path/segment/file-${i}.bin`,
     }));
-    await expect(new Sender().batchFrame(many, ka)).rejects.toThrow(/manifest too large/);
+    await expect(batchFrame(new Sender(), many, ka)).rejects.toThrow(/manifest too large/);
   });
 
   it("reports integrity failure when a chunk is corrupted", async () => {
@@ -176,7 +185,7 @@ describe("transfer", () => {
     const file = new File([new Uint8Array(100_000)], "x.bin");
     const sender = new Sender();
     const receiver = new Receiver();
-    await receiver.feed(await sender.batchFrame([{ name: file.name, size: file.size }], ka), kb);
+    await receiver.feed(await batchFrame(sender, [{ name: file.name, size: file.size }], ka), kb);
 
     let ok: boolean | undefined;
     let first = true;
@@ -299,7 +308,7 @@ describe("flow-control ack frame", () => {
 
     const sender = new Sender();
     const receiver = new Receiver();
-    await receiver.feed(await sender.batchFrame([{ name: "big.bin", size: bytes.length }], ka), kb);
+    await receiver.feed(await batchFrame(sender, [{ name: "big.bin", size: bytes.length }], ka), kb);
 
     // Pre-encrypt every data frame (the wire the App would send).
     const frames: Uint8Array[] = [];
@@ -363,7 +372,7 @@ describe("mixed-link file lifecycle controls", () => {
     const { ka, kb } = await session();
     const sender = new Sender();
     const receiver = new Receiver();
-    await receiver.feed(await sender.batchFrame([{ name: "a", size: 1 }], ka), kb);
+    await receiver.feed(await batchFrame(sender, [{ name: "a", size: 1 }], ka), kb);
     expect(() => receiver.resumeAt(new Uint8Array(32), 0)).toThrow(/moved backwards/);
     expect(() => receiver.resumeAt(new Uint8Array(32), 2)).not.toThrow();
   });
@@ -382,7 +391,7 @@ describe("通道上的元数据不可读", () => {
   it("manifest 帧里看不到文件名", async () => {
     const { ka } = await session();
     const entry = { name: "salary-2026.pdf", size: 1234, path: "hr/salary-2026.pdf" };
-    const f = await new Sender().batchFrame([entry], ka);
+    const f = await batchFrame(new Sender(), [entry], ka);
     expect(wire(f)).not.toContain("salary");
     expect(wire(f)).not.toContain("hr/");
     expect(wire(f)).not.toContain("1234");
@@ -401,7 +410,7 @@ describe("通道上的元数据不可读", () => {
       .map((b) => b.toString(16).padStart(2, "0")).join("");
 
     const sender = new Sender();
-    await sender.batchFrame([{ name: "x.bin", size: bytes.length }], ka);
+    await batchFrame(sender, [{ name: "x.bin", size: bytes.length }], ka);
     let doneFrame: Uint8Array | undefined;
     for await (const fr of sender.dataFrames([new File([bytes], "x.bin")], ka)) {
       if (fr[0] === FRAME.DONE) doneFrame = fr;
@@ -419,7 +428,7 @@ describe("通道上的元数据不可读", () => {
     // 加密之后，完整性校验照常成立（这是同一批数据的正向回归）。
     const receiver = new Receiver();
     const s2 = new Sender();
-    await receiver.feed(await s2.batchFrame([{ name: "x.bin", size: bytes.length }], ka), kb);
+    await receiver.feed(await batchFrame(s2, [{ name: "x.bin", size: bytes.length }], ka), kb);
     let ok: boolean | undefined;
     for await (const fr of s2.dataFrames([new File([bytes], "x.bin")], ka)) {
       const out = await receiver.feed(fr, kb);
@@ -430,7 +439,7 @@ describe("通道上的元数据不可读", () => {
 
   it("manifest 被篡改会被 AEAD 抓住，而不是悄悄改掉确认卡片上的文件名", async () => {
     const { ka, kb } = await session();
-    const f = await new Sender().batchFrame([{ name: "a.bin", size: 1 }], ka);
+    const f = await batchFrame(new Sender(), [{ name: "a.bin", size: 1 }], ka);
     f[9] ^= 0x01; // 翻密文里的一个 bit
     await expect(new Receiver().feed(f, kb)).rejects.toThrow();
   });
@@ -450,7 +459,7 @@ describe("通道上的元数据不可读", () => {
     const sender = new Sender();
     const seqs: number[] = [];
     const seqOfFrame = (f: Uint8Array) => new DataView(f.buffer, f.byteOffset).getUint32(1);
-    seqs.push(seqOfFrame(await sender.batchFrame([{ name: "a", size: 10 }], ka)));
+    seqs.push(seqOfFrame(await batchFrame(sender, [{ name: "a", size: 10 }], ka)));
     for await (const fr of sender.dataFrames([new File([new Uint8Array(10)], "a")], ka)) {
       seqs.push(seqOfFrame(fr));
     }

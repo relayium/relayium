@@ -395,7 +395,7 @@ const es: Messages = {
     mode2Title: "send / receive — mediante código de emparejamiento",
     mode2Tag: "gratis · P2P directo",
     mode2Body:
-      "Envía a otra persona entre redes. Inicia sesión una vez con relayium login y luego ejecuta send sin código: la CLI genera un código de emparejamiento de 6 caracteres (de un alfabeto sin 0 ni 1), válido 5 minutos, e imprime el comando exacto que ejecuta el otro extremo. Pasa ese código por otro canal — dilo en una llamada. No puedes elegirlo tú, el servidor solo acepta los códigos que él emitió, y el receptor no necesita cuenta. Ambos extremos tienen que ser la CLI; para alguien que solo tiene navegador, usa relayium up. La conexión es directa de igual a igual: solo un pequeño handshake con el punto de encuentro pasa por Relayium para presentar los dos extremos — los bytes del archivo nunca lo hacen. Si ambos extremos están detrás de un NAT estricto y no pueden conectarse directamente, la transferencia simplemente falla (la CLI no tiene retransmisor). Ambas terminales muestran un SAS de 6 dígitos derivado de las huellas de sus certificados TLS fijados. Compararlo por un canal externo confirma que las huellas no fueron sustituidas y que el servicio de encuentro no suplantó a ninguno de los extremos; autentica los extremos, no cada salto de la ruta de red (añade --verify para exigir confirmación antes de mover cualquier byte).",
+      "Envía a otra persona entre redes. Inicia sesión una vez con relayium login y luego ejecuta send sin código: la CLI genera un código de emparejamiento de 6 caracteres (de un alfabeto sin 0 ni 1), válido 30 minutos, e imprime el comando exacto que ejecuta el otro extremo. Pasa ese código por otro canal — dilo en una llamada. No puedes elegirlo tú, el servidor solo acepta los códigos que él emitió, y el receptor no necesita cuenta. Ambos extremos tienen que ser la CLI; para alguien que solo tiene navegador, usa relayium up. La conexión es directa de igual a igual: solo un pequeño handshake con el punto de encuentro pasa por Relayium para presentar los dos extremos — los bytes del archivo nunca lo hacen. Si ambos extremos están detrás de un NAT estricto y no pueden conectarse directamente, la transferencia simplemente falla (la CLI no tiene retransmisor). Ambas terminales muestran un SAS de 6 dígitos derivado de las huellas de sus certificados TLS fijados. Compararlo por un canal externo confirma que las huellas no fueron sustituidas y que el servicio de encuentro no suplantó a ninguno de los extremos; autentica los extremos, no cada salto de la ruta de red (añade --verify para exigir confirmación antes de mover cualquier byte).",
     mode3Title: "daemon directo — de servidor a servidor",
     mode3Tag: "gratis",
     mode3Body:
@@ -482,6 +482,12 @@ const es: Messages = {
     signInToSend: "Inicia sesión para enviar entre redes. La persona que recibe nunca necesita una cuenta.",
     relayQuotaWarn: "Agotaste la cuota mensual de retransmisión: una sesión del navegador entre redes no puede empezar ni continuar. Las sesiones en la misma red y las transferencias directas por CLI siguen disponibles. Usa un enlace de descarga, mejora tu plan o ejecuta tu propio nodo.",
     relayQuotaFail: "Agotaste la cuota mensual de retransmisión: esta sesión del navegador entre redes no puede conectarse. Las sesiones en la misma red y las transferencias directas por CLI no se ven afectadas. Usa un enlace de descarga, mejora tu plan o ejecuta tu propio nodo.",
+    relayUnverifiedWarn: "Verifica tu correo para usar la retransmisión entre redes. Hasta entonces, una sesión del navegador solo conecta si ambos dispositivos se alcanzan directamente. Las transferencias en la misma red y la CLI no se ven afectadas.",
+    relayUnverifiedFail: "Esta sesión del navegador entre redes no pudo conectarse porque la retransmisión solo se entrega a cuentas verificadas. Verifica tu correo y genera un código de emparejamiento nuevo.",
+    relayUnavailableWarn: "No se pudo cargar la configuración de retransmisión de esta sesión, así que quizá no sea posible conectar entre redes. Recarga la página para reintentarlo.",
+    relayUnavailableFail: "Esta sesión nunca recibió su configuración de retransmisión, así que no había ninguna ruta entre redes. Recarga la página y genera un código de emparejamiento nuevo; suele ser algo temporal.",
+    relayNoneWarn: "No hay retransmisión disponible para esta sesión: solo conectará si ambos dispositivos se alcanzan directamente.",
+    relayNoneFail: "Esta sesión del navegador entre redes no pudo conectarse porque no había ninguna retransmisión disponible. Las sesiones en la misma red y las transferencias directas por CLI no se ven afectadas.",
   },
   offline: {
     tagline: "Cifrado en tu navegador y luego almacenado · el servidor solo conserva texto cifrado",
@@ -510,7 +516,8 @@ const es: Messages = {
     waiting: "Esperando a que el otro dispositivo se una…",
     queued: (n, s) => `${n} archivo(s) · ${s} — se envían automáticamente en cuanto el otro lado se une`,
     bareConnect: "Crear una conexión sin elegir archivos",
-    expiresIn: (s) => `caduca en ${s}`,
+    expiresIn: (s) => `el código de emparejamiento caduca en ${s}`,
+    ttlNote: "Esa cuenta atrás es solo del código de emparejamiento: cuando llega a cero, ningún dispositivo nuevo puede unirse con él. Una vez que el otro dispositivo se ha unido, la transferencia sigue hasta terminar y nunca se corta por esto.",
     expired: "El código de emparejamiento caducó — genera uno nuevo",
     copy: "Copiar",
     copied: "Copiado",
@@ -592,7 +599,7 @@ const es: Messages = {
       sub: "Cuando ambos lados están en línea, transfiere en tiempo real entre redes — el destinatario no necesita cuenta.",
       ways: [
         { name: "Crea un código de emparejamiento", how: "Inicia sesión y crea un código de 6 caracteres, con enlace para unirse y QR. Elige qué enviar después de que se una el otro dispositivo.", tag: "El creador inicia sesión" },
-        { name: "Dale el código al otro lado", how: "Léelo en voz alta, envía el enlace o muestra el QR — cualquiera de los tres; lo escriben o lo abren en cualquier navegador moderno.", tag: "Los códigos viven 5 minutos" },
+        { name: "Dale el código al otro lado", how: "Léelo en voz alta, envía el enlace o muestra el QR — cualquiera de los tres; lo escriben o lo abren en cualquier navegador moderno.", tag: "Los códigos viven 30 minutos" },
         { name: "Elige archivos o texto", how: "Cuando se una, elige hasta 1.000 archivos en su tarjeta o «Enviar un mensaje» para texto en línea. Compara el SAS y envía el contenido cifrado de extremo a extremo por TURN.", tag: "El retransmisor no puede leer ni descifrar ninguno" },
       ],
     },

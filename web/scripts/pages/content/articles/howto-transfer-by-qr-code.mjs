@@ -18,7 +18,7 @@ const en = {
       heading: "Create a code, get a QR",
       body: [
         "On the sending device, open relayium.com and sign in — creating a pairing code is the one place Relayium asks for an account, because the code has to belong to someone. Pick a file, a folder, or just connect without files queued yet.",
-        "Relayium mints a short pairing code — six characters drawn from an alphabet with every lookalike glyph removed, so there is no 0 or O and no 1 or I — and, right next to it, renders a QR code. The code is good for five minutes; after that you generate a fresh one. The QR doesn't encode anything new — it's the same join link the \"copy link\" button gives you, just rendered as a scannable square instead of text. Whoever opens that link lands straight in your pairing room.",
+        "Relayium mints a short pairing code — six characters drawn from an alphabet with every lookalike glyph removed, so there is no 0 or O and no 1 or I — and, right next to it, renders a QR code. The code is good for thirty minutes; after that you generate a fresh one. The QR doesn't encode anything new — it's the same join link the \"copy link\" button gives you, just rendered as a scannable square instead of text. Whoever opens that link lands straight in your pairing room.",
       ],
     },
     {
@@ -160,7 +160,7 @@ const ja = {
       heading: "コードを作ると QR も表示される",
       body: [
         "送信側の端末で relayium.com を開いてサインインします。ペアリングコードの作成は、Relayium が唯一アカウントを求める場面です。コードは誰かに帰属している必要があるからです。ファイル、フォルダを選ぶか、ファイルなしでまず接続だけ済ませることもできます。",
-        "Relayium は短いペアリングコードを発行し、その隣に QR コードを描画します。コードは、紛らわしい字形をすべて除いた文字セットから選ばれた6文字で、0 と O も 1 と I も含まれません。有効期間は5分で、切れたら新しいものを発行し直します。QR コードは何か新しい情報を含んでいるわけではなく、「リンクをコピー」ボタンで得られるのと同じ参加リンクを、テキストではなくスキャン可能な四角形として表示しているだけです。そのリンクを開いた人は、そのままペアリングルームに入ります。",
+        "Relayium は短いペアリングコードを発行し、その隣に QR コードを描画します。コードは、紛らわしい字形をすべて除いた文字セットから選ばれた6文字で、0 と O も 1 と I も含まれません。有効期間は30分で、切れたら新しいものを発行し直します。QR コードは何か新しい情報を含んでいるわけではなく、「リンクをコピー」ボタンで得られるのと同じ参加リンクを、テキストではなくスキャン可能な四角形として表示しているだけです。そのリンクを開いた人は、そのままペアリングルームに入ります。",
       ],
     },
     {
@@ -231,7 +231,7 @@ const ko = {
       heading: "코드를 만들면 QR도 함께 생깁니다",
       body: [
         "보내는 쪽 기기에서 relayium.com을 열고 로그인합니다 — 페어링 코드를 만드는 것이 Relayium이 계정을 요구하는 유일한 순간인데, 코드는 누군가에게 귀속되어야 하기 때문입니다. 파일이나 폴더를 고르거나, 파일 없이 우선 연결만 시작할 수도 있습니다.",
-        "Relayium은 짧은 페어링 코드를 발급하고 바로 옆에 QR 코드를 그립니다. 코드는 헷갈리는 글자를 모두 걷어낸 문자 집합에서 고른 여섯 글자라, 0도 O도, 1도 I도 들어가지 않습니다. 유효 시간은 5분이며, 지나면 새로 만들면 됩니다. QR 코드는 새로운 정보를 담고 있는 게 아니라, '링크 복사' 버튼으로 얻는 것과 같은 참여 링크를 텍스트 대신 스캔 가능한 사각형으로 표시할 뿐입니다. 그 링크를 여는 사람은 곧바로 페어링 방으로 들어갑니다.",
+        "Relayium은 짧은 페어링 코드를 발급하고 바로 옆에 QR 코드를 그립니다. 코드는 헷갈리는 글자를 모두 걷어낸 문자 집합에서 고른 여섯 글자라, 0도 O도, 1도 I도 들어가지 않습니다. 유효 시간은 30분이며, 지나면 새로 만들면 됩니다. QR 코드는 새로운 정보를 담고 있는 게 아니라, '링크 복사' 버튼으로 얻는 것과 같은 참여 링크를 텍스트 대신 스캔 가능한 사각형으로 표시할 뿐입니다. 그 링크를 여는 사람은 곧바로 페어링 방으로 들어갑니다.",
       ],
     },
     {
@@ -444,7 +444,7 @@ const ar = {
       heading: "أنشئ رمزًا، واحصل على QR",
       body: [
         "على جهاز الإرسال، افتح relayium.com وسجّل الدخول — إنشاء رمز اقتران هو الموضع الوحيد الذي يطلب فيه Relayium حسابًا، لأن الرمز يجب أن يعود لشخص ما. اختر ملفًا أو مجلدًا، أو اتصل فقط دون ملفات في الانتظار بعد.",
-        "يُنشئ Relayium رمز اقتران قصيرًا — ستة محارف من مجموعة حُذفت منها كل الأشكال المتشابهة، فلا 0 ولا O ولا 1 ولا I — وإلى جانبه مباشرةً، يعرض رمز QR. ويبقى الرمز صالحًا خمس دقائق، وبعدها تُنشئ رمزًا جديدًا. لا يحمل رمز QR أي شيء جديد — إنه رابط الانضمام نفسه الذي يمنحك إياه زر «نسخ الرابط»، معروضًا على هيئة مربع قابل للمسح بدلًا من نص. من يفتح ذلك الرابط يصل مباشرةً إلى غرفة الاقتران لديك.",
+        "يُنشئ Relayium رمز اقتران قصيرًا — ستة محارف من مجموعة حُذفت منها كل الأشكال المتشابهة، فلا 0 ولا O ولا 1 ولا I — وإلى جانبه مباشرةً، يعرض رمز QR. ويبقى الرمز صالحًا ثلاثين دقيقة، وبعدها تُنشئ رمزًا جديدًا. لا يحمل رمز QR أي شيء جديد — إنه رابط الانضمام نفسه الذي يمنحك إياه زر «نسخ الرابط»، معروضًا على هيئة مربع قابل للمسح بدلًا من نص. من يفتح ذلك الرابط يصل مباشرةً إلى غرفة الاقتران لديك.",
       ],
     },
     {

@@ -497,6 +497,15 @@ export interface Messages {
     signInToSend: string; // gate hint on the mint card when signed out
     relayQuotaWarn: string; // proactive banner on the minter's code card when over the monthly relay cap
     relayQuotaFail: string; // shown when a cross-network transfer fails and no relay was available (over cap)
+    // The other three ways a session ends up with no relay. Each used to be
+    // silent — the transfer simply sat at 0% and then said "connection failed",
+    // which told the user nothing about what to do next. See RelayAvailability.
+    relayUnverifiedWarn: string; // owner's email is unverified, so TURN was withheld
+    relayUnverifiedFail: string;
+    relayUnavailableWarn: string; // /api/ice could not be read (rate limit, network blip)
+    relayUnavailableFail: string;
+    relayNoneWarn: string; // the server issued no relay for this code at all
+    relayNoneFail: string;
   };
   offline: {
     tagline: string; // page subtitle — encrypt-then-store, ciphertext-only server
@@ -525,7 +534,12 @@ export interface Messages {
     waiting: string;
     queued: (n: number, size: string) => string; // files picked before pairing, auto-send on join
     bareConnect: string; // secondary: open a room without picking files (receiver-initiated flows)
-    expiresIn: (s: string) => string;
+    expiresIn: (s: string) => string; // countdown on the minter's card — names the CODE, not the transfer
+    // Says out loud what the countdown does and does not govern. The owner read
+    // a shrinking timer next to a live session as "the transfer expires in N",
+    // so the two facts (code stops admitting / transfer runs to completion) are
+    // stated together rather than left to be inferred.
+    ttlNote: string;
     expired: string;
     copy: string;
     copied: string;

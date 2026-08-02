@@ -23,14 +23,14 @@ const en = {
       code: [
         `# sender (once per machine: relayium login)
 relayium send ./release.zip
-# prints:  Code: K7M4XR   (valid 5 minutes)
+# prints:  Code: K7M4XR   (valid 30 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
 # receiver (in the folder where files should land) — no account needed
 relayium receive K7M4XR`,
       ],
       bullets: [
-        "The code is 6 characters from a restricted alphabet — no 0 or 1, nothing that can be misread aloud — and it expires 5 minutes after it is minted.",
+        "The code is 6 characters from a restricted alphabet — no 0 or 1, nothing that can be misread aloud — and it expires 30 minutes after it is minted.",
         "Only the sender signs in. The receiver needs the CLI and the code, and no account at all.",
         "The code is just a shared secret to meet on; it isn't sent to anyone but the rendezvous, and it introduces the two ends only.",
         "The receiver can pass a destination directory: relayium receive K7M4XR ./downloads",
@@ -63,7 +63,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "Where does the pairing code come from?",
-        a: "Relayium mints it. Run `relayium send ./release.zip` (after `relayium login`) and the CLI prints a 6-character code good for five minutes, plus the exact command the other end runs. You can't choose it yourself — the server only accepts codes it issued.",
+        a: "Relayium mints it. Run `relayium send ./release.zip` (after `relayium login`) and the CLI prints a 6-character code good for thirty minutes, plus the exact command the other end runs. You can't choose it yourself — the server only accepts codes it issued.",
       },
       {
         q: "Is the file uploaded anywhere?",
@@ -105,14 +105,14 @@ const zh = {
       code: [
         `# 发送方（每台机器执行一次：relayium login）
 relayium send ./release.zip
-# 输出：  Code: K7M4XR   (valid 5 minutes)
+# 输出：  Code: K7M4XR   (valid 30 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
 # 接收方（在文件应落地的目录下）——无需账号
 relayium receive K7M4XR`,
       ],
       bullets: [
-        "这个码是 6 位，取自一个受限字母表——没有 0 和 1，也没有念出来会听混的字符——并且在生成 5 分钟后失效。",
+        "这个码是 6 位，取自一个受限字母表——没有 0 和 1，也没有念出来会听混的字符——并且在生成 30 分钟后失效。",
         "只有发送方需要登录。接收方只需要装好 CLI 和拿到这个码，完全不需要账号。",
         "这个码只是一个用来会合的共享密钥；除了会合服务器，它不会发给任何人，而且只用来介绍双方。",
         "接收方可以指定目标目录：relayium receive K7M4XR ./downloads",
@@ -145,7 +145,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "配对码是从哪来的？",
-        a: "由 Relayium 生成。登录后运行 `relayium send ./release.zip`，CLI 会打印一个 6 位、5 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。",
+        a: "由 Relayium 生成。登录后运行 `relayium send ./release.zip`，CLI 会打印一个 6 位、30 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。",
       },
       {
         q: "文件会上传到什么地方吗？",
@@ -187,14 +187,14 @@ const ja = {
       code: [
         `# 送信側（マシンごとに一度：relayium login）
 relayium send ./release.zip
-# 表示：  Code: K7M4XR   (valid 5 minutes)
+# 表示：  Code: K7M4XR   (valid 30 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
 # 受信側（ファイルを置きたいフォルダーで）。アカウントは不要
 relayium receive K7M4XR`,
       ],
       bullets: [
-        "コードは制限された文字集合から選ばれた6文字です。0 と 1 は含まれず、読み上げて取り違えやすい文字も除いてあります。そして発行から5分で失効します。",
+        "コードは制限された文字集合から選ばれた6文字です。0 と 1 は含まれず、読み上げて取り違えやすい文字も除いてあります。そして発行から30分で失効します。",
         "サインインが必要なのは送信側だけです。受信側は CLI とコードさえあればよく、アカウントは一切要りません。",
         "コードは合流するための共有シークレットにすぎません。ランデブー先以外の誰にも送られず、二つの端を引き合わせるためだけに使われます。",
         "受信側は送り先のディレクトリを指定できます：relayium receive K7M4XR ./downloads",
@@ -227,7 +227,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "ペアリングコードはどこから来るのですか？",
-        a: "Relayium が発行します。`relayium login` のうえで `relayium send ./release.zip` を実行すると、CLI が5分間有効な6文字のコードと、相手が実行するコマンドをそのまま表示します。自分で選ぶことはできません。サーバーは自身が発行したコードしか受け付けないからです。",
+        a: "Relayium が発行します。`relayium login` のうえで `relayium send ./release.zip` を実行すると、CLI が30分間有効な6文字のコードと、相手が実行するコマンドをそのまま表示します。自分で選ぶことはできません。サーバーは自身が発行したコードしか受け付けないからです。",
       },
       {
         q: "ファイルはどこかにアップロードされますか？",
@@ -269,14 +269,14 @@ const ko = {
       code: [
         `# 보내는 쪽(기기마다 한 번: relayium login)
 relayium send ./release.zip
-# 출력:   Code: K7M4XR   (valid 5 minutes)
+# 출력:   Code: K7M4XR   (valid 30 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
 # 받는 쪽(파일이 저장될 폴더에서) — 계정 필요 없음
 relayium receive K7M4XR`,
       ],
       bullets: [
-        "코드는 제한된 문자 집합에서 뽑은 6자입니다. 0과 1이 없고, 소리 내어 읽을 때 헷갈리는 문자도 빠져 있습니다. 그리고 발급된 지 5분이 지나면 만료됩니다.",
+        "코드는 제한된 문자 집합에서 뽑은 6자입니다. 0과 1이 없고, 소리 내어 읽을 때 헷갈리는 문자도 빠져 있습니다. 그리고 발급된 지 30분이 지나면 만료됩니다.",
         "로그인이 필요한 쪽은 보내는 사람뿐입니다. 받는 쪽은 CLI와 코드만 있으면 되고, 계정은 전혀 필요 없습니다.",
         "이 코드는 만남을 위한 공유 비밀일 뿐입니다. 랑데부 서버 외에는 누구에게도 전송되지 않으며, 오직 두 끝을 서로 소개하는 데만 쓰입니다.",
         "받는 쪽은 대상 디렉터리를 지정할 수 있습니다: relayium receive K7M4XR ./downloads",
@@ -309,7 +309,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "페어링 코드는 어디서 나오나요?",
-        a: "Relayium이 발급합니다. `relayium login` 후 `relayium send ./release.zip`을 실행하면 CLI가 5분간 유효한 6자 코드와 상대가 실행할 명령을 그대로 출력합니다. 직접 고를 수는 없습니다. 서버는 자신이 발급한 코드만 받아들이기 때문입니다.",
+        a: "Relayium이 발급합니다. `relayium login` 후 `relayium send ./release.zip`을 실행하면 CLI가 30분간 유효한 6자 코드와 상대가 실행할 명령을 그대로 출력합니다. 직접 고를 수는 없습니다. 서버는 자신이 발급한 코드만 받아들이기 때문입니다.",
       },
       {
         q: "파일이 어딘가에 업로드되나요?",
@@ -351,14 +351,14 @@ const de = {
       code: [
         `# Absender (einmal pro Rechner: relayium login)
 relayium send ./release.zip
-# gibt aus:  Code: K7M4XR   (valid 5 minutes)
+# gibt aus:  Code: K7M4XR   (valid 30 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
 # Empfänger (in dem Ordner, in dem die Dateien landen sollen) — kein Konto nötig
 relayium receive K7M4XR`,
       ],
       bullets: [
-        "Der Code besteht aus 6 Zeichen eines eingeschränkten Alphabets — ohne 0 und 1 und ohne alles, was man vorgelesen verwechseln kann — und läuft 5 Minuten nach dem Erzeugen ab.",
+        "Der Code besteht aus 6 Zeichen eines eingeschränkten Alphabets — ohne 0 und 1 und ohne alles, was man vorgelesen verwechseln kann — und läuft 30 Minuten nach dem Erzeugen ab.",
         "Nur der Absender meldet sich an. Der Empfänger braucht die CLI und den Code, aber überhaupt kein Konto.",
         "Der Code ist nur ein gemeinsames Geheimnis zum Treffen; er wird an niemanden außer der Rendezvous-Stelle gesendet und stellt nur die beiden Enden einander vor.",
         "Der Empfänger kann ein Zielverzeichnis angeben: relayium receive K7M4XR ./downloads",
@@ -433,14 +433,14 @@ const fr = {
       code: [
         `# expéditeur (une fois par machine : relayium login)
 relayium send ./release.zip
-# affiche :  Code: K7M4XR   (valid 5 minutes)
+# affiche :  Code: K7M4XR   (valid 30 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
 # destinataire (dans le dossier où les fichiers doivent arriver) — aucun compte nécessaire
 relayium receive K7M4XR`,
       ],
       bullets: [
-        "Le code fait 6 caractères tirés d'un alphabet restreint — ni 0 ni 1, et rien qui puisse être confondu à l'oral — et il expire 5 minutes après sa génération.",
+        "Le code fait 6 caractères tirés d'un alphabet restreint — ni 0 ni 1, et rien qui puisse être confondu à l'oral — et il expire 30 minutes après sa génération.",
         "Seul l'expéditeur se connecte. Le destinataire a besoin de la CLI et du code, et d'aucun compte.",
         "Le code n'est qu'un secret partagé pour se retrouver ; il n'est envoyé à personne d'autre qu'au point de rendez-vous, et il ne sert qu'à présenter les deux extrémités.",
         "Le destinataire peut indiquer un répertoire de destination : relayium receive K7M4XR ./downloads",
@@ -515,14 +515,14 @@ const ar = {
       code: [
         `# المُرسِل (مرة واحدة لكل جهاز: relayium login)
 relayium send ./release.zip
-# يطبع:   Code: K7M4XR   (valid 5 minutes)
+# يطبع:   Code: K7M4XR   (valid 30 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
 # المُستقبِل (في المجلد الذي يجب أن تصل إليه الملفات) — بلا حساب
 relayium receive K7M4XR`,
       ],
       bullets: [
-        "الرمز مكوَّن من 6 محارف من أبجدية مقيَّدة — بلا 0 أو 1، وبلا أي محرف يسهل الخلط بينه وبين غيره عند النطق — وينتهي مفعوله بعد 5 دقائق من إصداره.",
+        "الرمز مكوَّن من 6 محارف من أبجدية مقيَّدة — بلا 0 أو 1، وبلا أي محرف يسهل الخلط بينه وبين غيره عند النطق — وينتهي مفعوله بعد 30 دقيقة من إصداره.",
         "المُرسِل وحده هو من يسجّل الدخول. أما المُستقبِل فيحتاج إلى واجهة CLI والرمز فقط، ولا يحتاج إلى حساب إطلاقًا.",
         "الرمز مجرد سر مشترك للقاء؛ لا يُرسَل إلى أحد سوى نقطة التعارف، وهو يُعرِّف الطرفين ببعضهما فقط.",
         "يمكن للمُستقبِل تمرير مجلد وجهة: relayium receive K7M4XR ./downloads",
@@ -555,7 +555,7 @@ relayium receive K7M4XR`,
     items: [
       {
         q: "من أين يأتي رمز الاقتران؟",
-        a: "‏Relayium هو من يُصدره. شغِّل `relayium send ./release.zip` (بعد `relayium login`) فتطبع واجهة CLI رمزًا من 6 محارف صالحًا لخمس دقائق، مع الأمر الذي سينفّذه الطرف الآخر بالضبط. لا يمكنك اختياره بنفسك — فالخادم لا يقبل إلا الرموز التي أصدرها هو.",
+        a: "‏Relayium هو من يُصدره. شغِّل `relayium send ./release.zip` (بعد `relayium login`) فتطبع واجهة CLI رمزًا من 6 محارف صالحًا لثلاثين دقيقة، مع الأمر الذي سينفّذه الطرف الآخر بالضبط. لا يمكنك اختياره بنفسك — فالخادم لا يقبل إلا الرموز التي أصدرها هو.",
       },
       {
         q: "هل يُرفَع الملف إلى أي مكان؟",
@@ -597,14 +597,14 @@ const es = {
       code: [
         `# quien envía (una vez por máquina: relayium login)
 relayium send ./release.zip
-# imprime:  Code: K7M4XR   (valid 5 minutes)
+# imprime:  Code: K7M4XR   (valid 30 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
 # quien recibe (en la carpeta donde deben llegar los archivos) — sin cuenta
 relayium receive K7M4XR`,
       ],
       bullets: [
-        "El código tiene 6 caracteres de un alfabeto restringido —sin 0 ni 1, y sin nada que se confunda al leerlo en voz alta— y caduca 5 minutos después de generarse.",
+        "El código tiene 6 caracteres de un alfabeto restringido —sin 0 ni 1, y sin nada que se confunda al leerlo en voz alta— y caduca 30 minutos después de generarse.",
         "Solo el remitente inicia sesión. El receptor necesita la CLI y el código, y ninguna cuenta.",
         "El código es solo un secreto compartido para encontrarse; no se envía a nadie más que al punto de encuentro, y solo sirve para presentar los dos extremos.",
         "El receptor puede indicar un directorio de destino: relayium receive K7M4XR ./downloads",
@@ -679,14 +679,14 @@ const pt = {
       code: [
         `# quem envia (uma vez por máquina: relayium login)
 relayium send ./release.zip
-# imprime:  Code: K7M4XR   (valid 5 minutes)
+# imprime:  Code: K7M4XR   (valid 30 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
 # quem recebe (na pasta onde os arquivos devem chegar) — sem conta
 relayium receive K7M4XR`,
       ],
       bullets: [
-        "O código tem 6 caracteres de um alfabeto restrito — sem 0 nem 1, e sem nada que se confunda ao ser lido em voz alta — e expira 5 minutos depois de gerado.",
+        "O código tem 6 caracteres de um alfabeto restrito — sem 0 nem 1, e sem nada que se confunda ao ser lido em voz alta — e expira 30 minutos depois de gerado.",
         "Só quem envia faz login. Quem recebe precisa da CLI e do código, e de conta nenhuma.",
         "O código é apenas um segredo compartilhado para se encontrar; não é enviado a ninguém além do ponto de encontro, e serve apenas para apresentar as duas pontas.",
         "O receptor pode indicar um diretório de destino: relayium receive K7M4XR ./downloads",

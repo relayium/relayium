@@ -21,7 +21,7 @@ relayium pull user@host:backups/ ./restore
 relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@host:backups/`;
   const codeCmd = `# sender (once per machine: relayium login)
 relayium send ./file.zip
-# prints:  Code: K7M4XR   (valid 5 minutes)
+# prints:  Code: K7M4XR   (valid 30 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
 # receiver — no account needed

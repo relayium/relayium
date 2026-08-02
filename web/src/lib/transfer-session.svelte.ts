@@ -22,9 +22,11 @@ import {
   resumeReqFrame,
   parseResumeReq,
   resumePointInRange,
+  resumePointAligned,
   ackFrame,
   advanceAck,
   parseAck,
+  isChunkFrame,
   FLOW_WINDOW,
   FLOW_ACK_INTERVAL,
   FRAME,
@@ -33,6 +35,7 @@ import {
   type FileMeta,
   type ResumePoint,
 } from "./transfer";
+import { lastForegroundAt, stalled } from "./foreground";
 import { pickSaveTarget, type SaveTarget, type FileSink } from "./filesink";
 import { requestNotifyPermission } from "./notify";
 import type { PickedFile } from "./drag";
@@ -70,6 +73,11 @@ export interface SessionDeps {
 
 // 掉线之后每一侧还愿意等多久重连并续传，超时就判这次传输失败。
 const RESUME_WINDOW_MS = 90_000;
+/** How long a consented receive may go quiet before it is declared dead. Counted
+ *  from the later of the last byte and the last time this page was in the
+ *  foreground — see foreground.ts for why the second term is load-bearing on a
+ *  phone. */
+const RECEIVE_STALL_MS = 45_000;
 
 // 传输循环最快多久往 $state 里写一次进度。
 // 千兆局域网上循环每秒转 500+ 次，而每次写 send/recv 都会让它的所有读者失效：
@@ -267,16 +275,24 @@ export function createTransferSession(deps: SessionDeps) {
       recvAbort = null;
     };
 
-    conn = await connect({
-      signaling: signaling(), peerId: from, selfKey: selfKey.publicKey, role: "responder",
-      initialSignal: offer,
-      onPeerKey: async (pk) => { keys = await deriveSession("responder", selfKey, pk); sasCode = sas(selfKey.publicKey, pk); },
-      config: rtcConfig(),
-      // A drop ICE can't recover: if bytes were already flowing, pause and wait
-      // for the sender to re-offer so we can resume; otherwise fail. The normal
-      // end-of-batch close also fires "closed", but this is a no-op once done.
-      onStateChange: (state) => { if (state === "failed" || state === "closed") onRecvDrop(); },
-    });
+    try {
+      conn = await connect({
+        signaling: signaling(), peerId: from, selfKey: selfKey.publicKey, role: "responder",
+        initialSignal: offer,
+        onPeerKey: async (pk) => { keys = await deriveSession("responder", selfKey, pk); sasCode = sas(selfKey.publicKey, pk); },
+        config: rtcConfig(),
+        // A drop ICE can't recover: if bytes were already flowing, pause and wait
+        // for the sender to re-offer so we can resume; otherwise fail. The normal
+        // end-of-batch close also fires "closed", but this is a no-op once done.
+        onStateChange: (state) => { if (state === "failed" || state === "closed") onRecvDrop(); },
+      });
+    } catch (err) {
+      // The user cancelled while this was still connecting. recvAbort already
+      // returned the UI to idle, so letting the rejection propagate would put a
+      // "connection failed" card back on screen seconds after they dismissed it.
+      if (cancelled) return;
+      throw err;
+    }
 
     // Cancelled while ICE was negotiating: the connection resolved after the abort,
     // so close it now (recvAbort already reset the UI to idle) and stop here.
@@ -329,7 +345,7 @@ export function createTransferSession(deps: SessionDeps) {
       // Arm the stall watchdog only once data is actually expected.
       lastActivity = Date.now();
       watchdog = setInterval(() => {
-        if (!r.done && Date.now() - lastActivity > 45_000) failRecv("recvFail");
+        if (!r.done && stalled(Date.now(), lastActivity, lastForegroundAt(), RECEIVE_STALL_MS)) failRecv("recvFail");
       }, 5_000);
     };
 
@@ -362,7 +378,11 @@ export function createTransferSession(deps: SessionDeps) {
     // exactly that early failure to keep this honest.
     function onRecvDrop() {
       if (r.done || cancelled || completing) return;
-      if (!resumable) { failRecv("recvFail"); return; }
+      // No session keys means the commit-reveal handshake never completed, so
+      // nothing was ever received — that is a failure to CONNECT, not a failed
+      // receive. Reporting "receive failed" there sent the user looking at their
+      // disk or the file when the problem was the connection (or the relay).
+      if (!resumable) { failRecv(keys ? "recvFail" : "connectFail"); return; }
       if (pausedRecv || resuming) return; // already waiting or mid-resume
       clearWatchdog();
       conn?.close(); // drop the dead pc + its signalling listener so it can't cross-route the resume
@@ -407,7 +427,7 @@ export function createTransferSession(deps: SessionDeps) {
       recv = r = { ...r, status: "receiving" };
       lastActivity = Date.now();
       watchdog = setInterval(() => {
-        if (!r.done && Date.now() - lastActivity > 45_000) failRecv("recvFail");
+        if (!r.done && stalled(Date.now(), lastActivity, lastForegroundAt(), RECEIVE_STALL_MS)) failRecv("recvFail");
       }, 5_000);
       resuming = false; // setup done; a further drop is handled by onRecvDrop again
       // Ask the sender to pick up from our last durable point.
@@ -421,6 +441,10 @@ export function createTransferSession(deps: SessionDeps) {
         await sleep(5); // queue frames until keys are derived
       }
       const out = await receiver.feed(new Uint8Array(buf), keys);
+      // Any authenticated frame is progress, including a piece of a chunk that
+      // has not been assembled yet. Counting only completed chunks would let a
+      // slow link look stalled while it is visibly working.
+      lastActivity = Date.now();
       if (out.batch) {
         manifest = out.batch.files;
         total = manifest.reduce((n, f) => n + f.size, 0);
@@ -612,8 +636,10 @@ export function createTransferSession(deps: SessionDeps) {
             const rp = parseResumeReq(buf);
             // 范围校验：越界的续传点会让下面的 files.slice / file.slice 切出错误的
             // 字节区间。形状（非负整数）已由 parseResumeReq 保证，这里只能由我们
-            // 判断上界——只有发送端知道这批文件各多大。
-            if (rp && resumePointInRange(rp, files.map((f) => f.size))) { resolveReq(rp); return; }
+            // 判断上界——只有发送端知道这批文件各多大。对齐校验挡的是另一件事：
+            // 不落在分块边界上的续传点会让发送端跳过它和下一个边界之间的字节。
+            const sizes = files.map((f) => f.size);
+            if (rp && resumePointInRange(rp, sizes) && resumePointAligned(rp, sizes)) { resolveReq(rp); return; }
             if (controlKind(buf) === "complete") doneAck = true;
           };
           // The receiver sends its resume request as soon as the channel opens.
@@ -634,12 +660,16 @@ export function createTransferSession(deps: SessionDeps) {
           // newly emitted bytes.
           sentHighWater = sent;
           let lastUiAt = 0; // UI progress throttle — see UI_TICK_MS
-          for await (const frame of sender.dataFrames(files, keys, rp)) {
+          // A resumed connection negotiates its own maximum message size, which
+          // may be smaller (or larger) than the one that dropped. Only the
+          // fragmentation changes: the chain hash and the checkpoint grid are
+          // defined in CHUNK_SIZE, so the two attempts still agree on the bytes.
+          for await (const frame of sender.dataFrames(files, keys, rp, rconn.maxFrameBytes())) {
             if (lost) throw new Error("connection lost during resume");
             await backpressure(rconn.channel);
             await creditGate(sent); // don't outrun the receiver's durable writes
             rconn.channel.send(frame);
-            if (frame[0] === FRAME.CHUNK) {
+            if (isChunkFrame(frame)) {
               sent += frame.byteLength - CHUNK_OVERHEAD;
               sentHighWater = Math.max(sentHighWater, sent);
             }
@@ -705,7 +735,10 @@ export function createTransferSession(deps: SessionDeps) {
       sender = new Sender();
       // manifest 现在是加密的（见 transfer.ts 的 KIND_BATCH_ENC），所以要 await，
       // 也必须在拿到 keys 之后发——上面那个 while 循环保证了这一点。
-      conn.channel.send(await sender.batchFrame(metas, keys)); // announce the batch; wait for the decision
+      // 每一帧都按这条连接协商出来的单帧上限切；上限太小的连接在这里就明确失败，
+      // 而不是等第一个数据块把通道打死。
+      const limit = conn.maxFrameBytes();
+      for (const f of await sender.batchFrames(metas, keys, limit)) conn.channel.send(f);
       send = s = { ...s, status: "waitingAccept" };
 
       const ok = await accepted;
@@ -721,11 +754,11 @@ export function createTransferSession(deps: SessionDeps) {
       const start = Date.now();
       let sent = 0, idx = 0;
       let lastUiAt = 0; // UI progress throttle — see UI_TICK_MS
-      for await (const frame of sender.dataFrames(files, keys)) {
+      for await (const frame of sender.dataFrames(files, keys, undefined, limit)) {
         await backpressure(conn.channel);
         await creditGate(sent); // don't outrun the receiver's durable writes
         conn.channel.send(frame);
-        if (frame[0] === FRAME.CHUNK) {
+        if (isChunkFrame(frame)) {
           sent += frame.byteLength - CHUNK_OVERHEAD;
           sentHighWater = Math.max(sentHighWater, sent);
         }

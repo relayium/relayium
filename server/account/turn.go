@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/relayium/relayium/httpx"
@@ -59,7 +60,7 @@ func (s *Service) stunServers() []ICEServer {
 func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 	// H1: 猜中一个活着的配对码就能偷走受害者的 TURN 凭据（并让对方为流量买单），
 	// 所以这里按 IP 限速 5 次/分钟。码空间自 2026-07-23 起是 24^6 ≈ 1.91e8
-	// （原为 6 位数字 1e6），TTL 5 分钟（原 15 分钟）——见 signal.CodeAlphabet。
+	// （原为 6 位数字 1e6），TTL 30 分钟（见 signal.CodeTTLSeconds 里放宽窗口的取舍）——见 signal.CodeAlphabet。
 	if s.iceLimiter != nil && !s.iceLimiter.Allow(s.clientIP(r)) {
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		return
@@ -136,7 +137,7 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 	// Legacy single TURN stays in the top-level iceServers so older clients (that
 	// don't read `relays`) keep working unchanged. Withheld in strict mode.
 	if validCode && !strict && s.cfg.TURNSecret != "" && len(s.cfg.TURNURLs) > 0 {
-		servers = append(servers, turnCredentials(s.cfg.TURNSecret, token, expiry, s.cfg.TURNURLs))
+		servers = append(servers, turnCredentials(s.cfg.TURNSecret, token, expiry, withTCPTransport(s.cfg.TURNURLs)))
 	}
 
 	resp := map[string]any{"iceServers": servers}
@@ -171,6 +172,10 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 		seenAddr := map[string]bool{}
 		since := now.Add(-nodeOnlineWindow).Unix()
 
+		// Node URLs go out exactly as the node registered them: relayium-node
+		// is UDP-only, so widening them would advertise a candidate that can
+		// never allocate. See withTCPTransport.
+		//
 		// The owner's own nodes (free relay), always included.
 		if own, err := s.store.UserNodes(r.Context(), owner, since); err == nil {
 			for _, n := range own {
@@ -229,7 +234,7 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 					continue // a dynamic node already covers this machine
 				}
 				relays = append(relays, relayEntry{ID: rc.ID, Region: rc.Region, STUN: rc.STUN,
-					ICEServers: []ICEServer{turnCredentials(rc.Secret, token, expiry, rc.URLs)}})
+					ICEServers: []ICEServer{turnCredentials(rc.Secret, token, expiry, withTCPTransport(rc.URLs))}})
 			}
 		}
 		if len(relays) > 0 {
@@ -248,10 +253,54 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 // static-auth-secret lets coturn validate the credential (and read the expiry
 // embedded in the username) with no per-credential server state. HMAC-SHA1 is
 // the construction mandated by the TURN REST mechanism, not a security choice.
+//
+// `urls` is passed through verbatim. Whether a relay also answers on TCP is a
+// property of that relay, so the decision belongs at the call site — see
+// withTCPTransport.
 func turnCredentials(secret, token string, expiry int64, urls []string) ICEServer {
 	username := fmt.Sprintf("%d:%s", expiry, token)
 	mac := hmac.New(sha1.New, []byte(secret))
 	mac.Write([]byte(username))
 	cred := base64.StdEncoding.EncodeToString(mac.Sum(nil))
 	return ICEServer{URLs: urls, Username: username, Credential: cred}
+}
+
+// withTCPTransport pairs every bare `turn:` URL with its explicit
+// `?transport=tcp` sibling, UDP first.
+//
+// A `turn:host:3478` URL means UDP only to a browser. coturn listens on TCP at
+// the same port, but nothing says so, and a network that drops UDP (some
+// cellular, corporate and campus networks) then gathers no relay candidate at
+// all — on a path that forces iceTransportPolicy "relay", leaving nothing to
+// fall back to. UDP stays first so ICE still prefers it and a working network
+// selects exactly the pair it selected before; an unanswered TCP candidate
+// costs one allocation attempt and is then ignored.
+//
+// **Only for relays we know answer on TCP.** relayium-node runs a UDP-only pion
+// server (one PacketConnConfig, no ListenerConfigs), so advertising TCP for a
+// fleet or BYO node would hand every client a candidate that can never allocate.
+// That is why the two static, deployer-configured sources call this and the two
+// node-sourced ones do not.
+//
+// A URL that already carries a query is left alone: RFC 7065 defines exactly one
+// TURN URI parameter, so a `?` means the deployer chose a transport explicitly.
+// `turns:` is left alone too — it is TLS over TCP by definition.
+func withTCPTransport(urls []string) []string {
+	out := make([]string, 0, len(urls)*2)
+	seen := make(map[string]bool, len(urls)*2)
+	add := func(u string) {
+		if u == "" || seen[u] {
+			return
+		}
+		seen[u] = true
+		out = append(out, u)
+	}
+	for _, u := range urls {
+		add(u)
+		if !strings.HasPrefix(u, "turn:") || strings.Contains(u, "?") {
+			continue
+		}
+		add(u + "?transport=tcp")
+	}
+	return out
 }

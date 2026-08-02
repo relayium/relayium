@@ -88,12 +88,12 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>Inicia sesión una vez con relayium login y después solo envía. La CLI genera un código de emparejamiento, lo imprime junto con el comando exacto que ejecuta el otro extremo, y espera. Pasa ese código fuera de banda: dilo en una llamada, escríbelo en un chat:</p>
       <pre><code># quien envía (una vez por máquina: relayium login)
 relayium send ./release.zip
-# imprime:  Code: K7M4XR   (valid 5 minutes)
+# imprime:  Code: K7M4XR   (valid 30 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
 # quien recibe (en la carpeta donde deben llegar los archivos) — sin cuenta
 relayium receive K7M4XR</code></pre>
-      <ul><li>El código tiene 6 caracteres de un alfabeto restringido —sin 0 ni 1, y sin nada que se confunda al leerlo en voz alta— y caduca 5 minutos después de generarse.</li><li>Solo el remitente inicia sesión. El receptor necesita la CLI y el código, y ninguna cuenta.</li><li>El código es solo un secreto compartido para encontrarse; no se envía a nadie más que al punto de encuentro, y solo sirve para presentar los dos extremos.</li><li>El receptor puede indicar un directorio de destino: relayium receive K7M4XR ./downloads</li><li>Ambos extremos tienen que ser la CLI: un navegador no puede unirse a un código de emparejamiento de la CLI. ¿Envías a alguien que solo tiene navegador? Usa relayium up, que te da un enlace de descarga.</li></ul>
+      <ul><li>El código tiene 6 caracteres de un alfabeto restringido —sin 0 ni 1, y sin nada que se confunda al leerlo en voz alta— y caduca 30 minutos después de generarse.</li><li>Solo el remitente inicia sesión. El receptor necesita la CLI y el código, y ninguna cuenta.</li><li>El código es solo un secreto compartido para encontrarse; no se envía a nadie más que al punto de encuentro, y solo sirve para presentar los dos extremos.</li><li>El receptor puede indicar un directorio de destino: relayium receive K7M4XR ./downloads</li><li>Ambos extremos tienen que ser la CLI: un navegador no puede unirse a un código de emparejamiento de la CLI. ¿Envías a alguien que solo tiene navegador? Usa relayium up, que te da un enlace de descarga.</li></ul>
       <h2>Verificar con el código SAS</h2>
       <p>Cuando los dos extremos se conectan, ambas terminales muestran el mismo SAS (short authentication string) de 6 dígitos derivado de las huellas de sus certificados TLS fijados. Compáralo fuera de banda —léelo en voz alta durante la llamada— para confirmar que las huellas no fueron sustituidas y que el servicio de encuentro no suplantó a ninguno de los extremos. El SAS autentica los extremos; no demuestra cada salto de la ruta de red.</p>
       <p>Para obtener la protección más fuerte, añade --verify: la transferencia esperará a que confirmes que los códigos coinciden antes de que se mueva un solo byte.</p>

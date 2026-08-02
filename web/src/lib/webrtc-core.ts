@@ -6,6 +6,7 @@
 // 通过下面的钩子挂进来。分界线是有意的：安全状态机不进这个文件，读 connectResume
 // 的人也就不需要先说服自己"这条路径没有偷偷共享任何鉴权状态"。
 import type { SignalingClient } from "./signaling";
+import { negotiatedMaxMessageBytes } from "./wire-limit";
 
 export interface RtcConfig {
   iceServers: RTCIceServer[];
@@ -111,6 +112,10 @@ export interface Conn {
   takeCaptured?(label: string): { frames: readonly ArrayBuffer[]; overflow: boolean };
   /** Tear down the peer connection and stop listening for this peer's signals. */
   close(): void;
+  /** The largest single DataChannel message this connection may carry. Not a
+   *  constant of the local browser — SCTP negotiates it with the peer, so a
+   *  sender must ask the connection, never assume. See wire-limit.ts. */
+  maxFrameBytes(): number;
   /** The live ICE path, read from getStats() on demand. */
   path(): Promise<ConnPath>;
   /** Raw getStats() report — for the ?debug=1 diagnostics panel. */
@@ -141,9 +146,27 @@ export function classifyPath(stats: RTCStatsReport): ConnPath {
   return "p2p";
 }
 
-/** 建连总时限。ICE 可能一直停在 "checking" 而永远不翻 "failed"（没有可达路径、
- *  TURN 被墙），没有这个兜底，await 建连的调用方会永远卡在 0%。 */
-const CONNECT_TIMEOUT_MS = 30_000;
+/**
+ * 建连的时限是**两条**，不是一条。ICE 可能一直停在 "checking" 而永远不翻 "failed"
+ * （没有可达路径、TURN 被墙），所以必须有兜底；但一刀 30 秒砍下去砍掉的恰恰是**正在
+ * 推进**的那种连接：手机射频从空闲唤醒、TURN 长期凭据的两次 Allocate（第一次必然吃
+ * 一个 401 challenge）、再加上双方各自打洞，一次正常的跨网建连可以超过 30 秒。
+ *
+ *   · NO_PROGRESS：连续这么久**没有任何对端进展**就失败——真的卡住了就快点给结论；
+ *   · HARD_CAP：从建连开始算的总上限，**不因进展而重置**，所以"一直有点动静"也拖不
+ *     过它。
+ */
+const NO_PROGRESS_TIMEOUT_MS = 30_000;
+const SETUP_HARD_CAP_MS = 90_000;
+
+/**
+ * 最多有多少条远端候选算作"进展"。
+ *
+ * 候选是对端（或改写信令的中间人）可以无限刷的东西，所以它不能是一张无限续期的票。
+ * 真实的一次 ICE 交换只有个位数条候选，这个数够用；超出的候选照常加进 pc，只是不再
+ * 顺延时限。硬上限本身已经封死了总时间，这一条是让"刷候选"连接近硬上限都做不到。
+ */
+const MAX_CANDIDATE_PROGRESS = 6;
 
 /** 8MB 在途窗口，让管道始终有货可发。 */
 const BUFFERED_LOW = 8 << 20;
@@ -372,9 +395,21 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
   // observed now; the later await still receives and propagates the same error.
   void ready.catch(() => {});
 
-  const connectTimer = setTimeout(() => {
-    if (!opened) failReady(new Error(`relayium: ${what} timed out`));
-  }, CONNECT_TIMEOUT_MS);
+  const expire = () => { if (!opened) failReady(new Error(`relayium: ${what} timed out`)); };
+  const hardTimer = setTimeout(expire, SETUP_HARD_CAP_MS); // never re-armed
+  let idleTimer = setTimeout(expire, NO_PROGRESS_TIMEOUT_MS);
+  const clearTimers = () => { clearTimeout(hardTimer); clearTimeout(idleTimer); };
+  // Each kind of progress counts ONCE (the key is its identity), so nothing a
+  // peer can repeat — the same candidate twice, a re-offer, a state that
+  // flip-flops — buys a second extension.
+  const progressSeen = new Set<string>();
+  let remoteCandidates = 0;
+  function progress(key: string) {
+    if (opened || progressSeen.has(key)) return;
+    progressSeen.add(key);
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(expire, NO_PROGRESS_TIMEOUT_MS);
+  }
 
   let abortListener: (() => void) | undefined;
   let closed = false;
@@ -395,6 +430,9 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     opts.beforeSdp?.(msg);
     if (msg.sdp) {
       await pc.setRemoteDescription(msg.sdp);
+      // The peer answered (or re-offered): the strongest evidence there is that
+      // somebody is on the other end and this setup is worth more time.
+      progress(`sdp:${msg.sdp.type}`);
       if (msg.sdp.type === "offer") {
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
@@ -407,6 +445,8 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     if (msg.ice) {
       try {
         await pc.addIceCandidate(msg.ice);
+        // Only a candidate the pc actually accepted, and only the first few.
+        if (remoteCandidates < MAX_CANDIDATE_PROGRESS) progress(`ice:${remoteCandidates++}`);
       } catch {
         // A candidate arriving before remoteDescription is set, or after close,
         // is non-fatal on a LAN where host candidates in the SDP usually suffice.
@@ -467,6 +507,9 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
 
   pc.onconnectionstatechange = () => {
     const state = pc.connectionState;
+    // A transport state we have not seen before means the ICE agent moved, which
+    // only real checks with a real peer can cause.
+    progress(`state:${state}`);
     opts.onStateChange?.(state);
     if (state === "disconnected") tryIceRestart();
     // A failure before the channel ever opened must unblock the caller; after it
@@ -492,7 +535,7 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
       }
     }
     const openChannels = await ready;
-    clearTimeout(connectTimer);
+    clearTimers();
     if (opts.signal?.aborted) {
       const err = new Error("relayium: connection aborted");
       err.name = "AbortError";
@@ -515,6 +558,11 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
           }
         : undefined,
       close,
+      // Read live rather than captured at open: `pc.sctp` is null until the SCTP
+      // transport exists, and the value is fixed for the connection's life once
+      // it does. A resumed connection is a different pc and may negotiate a
+      // different number.
+      maxFrameBytes: () => negotiatedMaxMessageBytes(pc.sctp),
       path: (): Promise<ConnPath> => pc.getStats().then(classifyPath),
       stats: () => pc.getStats(),
     };
@@ -522,7 +570,7 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
     // Establishment failed or timed out: clean up the listener and peer
     // connection, then propagate so the caller shows a retryable failure
     // instead of a progress bar frozen at 0%.
-    clearTimeout(connectTimer);
+    clearTimers();
     close();
     throw err;
   }

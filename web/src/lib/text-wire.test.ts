@@ -2,9 +2,10 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { ready, generateKeyPair, deriveSession, seal } from "./crypto";
 import {
   TextSender, TextReceiver, KIND_TEXT_ENC, TEXT_MAX_BYTES, TEXT_FRAME_OVERHEAD,
-  TEXT_REQUEST, TEXT_END, textByteLength, isTextFrame, textLifecycleKind,
+  TEXT_REQUEST, TEXT_END, textByteLength, textPlainLimit, isTextFrame, textLifecycleKind,
 } from "./text-wire";
 import { ACCEPT, REJECT, COMPLETE, FILE_BUSY } from "./transfer";
+import { CHROME_MAX_MESSAGE_BYTES, CONSERVATIVE_MAX_MESSAGE_BYTES } from "./wire-limit";
 
 beforeAll(async () => { await ready(); });
 
@@ -267,5 +268,38 @@ describe("text wire", () => {
       .feed(await s.frame("CANARY-arrives", ka.textSend), kb.textRecv)
       .catch((e: Error) => e);
     expect((outOfOrder as Error).message).not.toContain("CANARY");
+  });
+});
+
+// The advertised 64 KiB plaintext does not fit every connection: it seals into a
+// 65 557 B frame, and RFC 8841 says a peer that advertises no max-message-size
+// gets 65 536. Text is deliberately not fragmented (see TEXT_MAX_BYTES), so the
+// only correct move is to know the real ceiling before sealing.
+describe("textPlainLimit", () => {
+  it("is the product cap on a connection that can carry it", () => {
+    expect(textPlainLimit(CHROME_MAX_MESSAGE_BYTES)).toBe(TEXT_MAX_BYTES);
+    expect(textPlainLimit(Infinity)).toBe(TEXT_MAX_BYTES);
+    expect(textPlainLimit(TEXT_MAX_BYTES + TEXT_FRAME_OVERHEAD)).toBe(TEXT_MAX_BYTES);
+  });
+
+  it("drops below it on a 64 KiB connection — the case that killed sessions", () => {
+    const limit = textPlainLimit(CONSERVATIVE_MAX_MESSAGE_BYTES);
+    expect(limit).toBe(CONSERVATIVE_MAX_MESSAGE_BYTES - TEXT_FRAME_OVERHEAD);
+    expect(limit).toBeLessThan(TEXT_MAX_BYTES);
+  });
+
+  it("describes exactly what fits, at the boundary", async () => {
+    const { ka } = await pair();
+    const limit = textPlainLimit(CONSERVATIVE_MAX_MESSAGE_BYTES);
+    const sender = new TextSender();
+    const fits = await sender.frame("a".repeat(limit), ka.textSend);
+    expect(fits.byteLength).toBe(CONSERVATIVE_MAX_MESSAGE_BYTES);
+    const over = await sender.frame("a".repeat(limit + 1), ka.textSend);
+    expect(over.byteLength).toBeGreaterThan(CONSERVATIVE_MAX_MESSAGE_BYTES);
+  });
+
+  it("never returns a negative allowance for an absurdly small connection", () => {
+    expect(textPlainLimit(0)).toBe(0);
+    expect(textPlainLimit(TEXT_FRAME_OVERHEAD - 1)).toBe(0);
   });
 });

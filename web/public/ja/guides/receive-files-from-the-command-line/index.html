@@ -84,7 +84,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>どのコマンドを使うかは、誰が転送を始めるのか、そして2台のマシンがどう互いを知っているかによって決まります:</p>
       <ul><li>relayium receive &lt;code&gt; [destdir] ——相手の CLI が発行し、帯域外で伝えられたペアリングコードを使って、相手がネットワークを越えて送ってきます。直接ピアツーピアで、SAS コードで検証します。</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——このマシンがデーモン直結の relayium:// プッシュを待ち受けます。デフォルトのポートは 9031 です。</li><li>relayium pull [user@]host:src &lt;dest&gt; ——自分からすでにログインできるサーバーへ SSH で出向き、ファイルを取り込みます。</li></ul>
       <h2>receive: 相手がネットワークを越えてファイルを送ってくる</h2>
-      <p>これは relayium send の受信側です。相手は自分の側で relayium send &lt;path&gt; を実行します（事前に relayium login 済み）。相手の CLI が5分間有効な6文字のコードを発行して表示するので、通話やチャットなど二人が信頼できる手段でそれを伝えてもらいます。受け取ったコードで receive を実行します:</p>
+      <p>これは relayium send の受信側です。相手は自分の側で relayium send &lt;path&gt; を実行します（事前に relayium login 済み）。相手の CLI が30分間有効な6文字のコードを発行して表示するので、通話やチャットなど二人が信頼できる手段でそれを伝えてもらいます。受け取ったコードで receive を実行します:</p>
       <pre><code>relayium receive K7M4XR
 
 # 特定のディレクトリに受け取る場合

@@ -88,7 +88,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>Run relayium text with that code on the other machine. Interactive mode sends one line per message and asks both people to confirm the SAS. For multiline or byte-exact stdin, pipe it as one message and pass --yes because no terminal is available for the SAS prompt.</p>
       <pre><code># One machine mints the code and waits (relayium login is required once)
 relayium text
-# Code: K7M4XR   (valid 5 minutes)
+# Code: K7M4XR   (valid 30 minutes)
 # On the other machine:  relayium text K7M4XR
 
 # The other machine joins that code
@@ -99,7 +99,7 @@ pbpaste | relayium text K7M4XR --yes
 
 # Or pipe a file on any shell
 cat snippet.txt | relayium text K7M4XR --yes</code></pre>
-      <ul><li>CLI codes last five minutes and are CLI-to-CLI only; browser codes cannot connect a browser to the CLI.</li><li>Only the machine that mints needs a signed-in account. The machine joining the printed code does not sign in.</li><li>--yes skips the interactive SAS confirmation, so compare the session another trusted way before using it.</li></ul>
+      <ul><li>CLI codes last thirty minutes and are CLI-to-CLI only; browser codes cannot connect a browser to the CLI.</li><li>Only the machine that mints needs a signed-in account. The machine joining the printed code does not sign in.</li><li>--yes skips the interactive SAS confirmation, so compare the session another trusted way before using it.</li></ul>
       <h2>What text transfer is — and is not</h2>
       <p>Relayium treats the body as UTF-8 plain text. It preserves spaces, tabs, blank lines and line breaks, and does not execute, render Markdown, linkify or preview the content.</p>
       <ul><li>Both devices must be online together. There is no offline delivery, inbox, contact list or synchronized chat history.</li><li>History is local to the open session and disappears when it ends or the page reloads; the server never stores message bodies.</li><li>One message is at most 65,536 UTF-8 bytes. For anything larger, send it as a file instead.</li></ul>

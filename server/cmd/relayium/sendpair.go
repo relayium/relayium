@@ -192,8 +192,11 @@ func printHandoff(w io.Writer, pair cloud.Pair, base string, p mintPurpose) {
 // ttlClause renders " (valid N minutes)" for the hand-off block, derived from
 // the server's expiry rather than hard-coded so the copy follows a TTL change
 // instead of lying about it. Rounds rather than truncates: Unix() floors the
-// server's deadline and network latency eats a little more, so a plain
-// integer divide by time.Minute prints "4 minutes" for every 5-minute code.
+// server's deadline and network latency eats a little more, so a plain integer
+// divide by time.Minute prints "29 minutes" for every code minted at the real
+// TTL (signal.CodeTTLSeconds, currently 1800). The rounding rule is what the
+// tests exercise, with whatever expiry is convenient to synthesise — the
+// numbers in those cases are examples of the arithmetic, not the product TTL.
 // expiresAt == 0 means an older server that doesn't report an expiry (see
 // cloud.go's truncatedTTLNotice) — there is nothing to derive, so the clause
 // is omitted rather than guessed.

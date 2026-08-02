@@ -435,7 +435,11 @@ func TestTurnCredentials(t *testing.T) {
 	if got.Credential != wantCred {
 		t.Fatalf("credential = %q, want %q", got.Credential, wantCred)
 	}
+	// URLs are passed through verbatim. Whether a relay also answers on TCP is a
+	// property of that relay, not of the credential, so the call site decides —
+	// see withTCPTransport, which the two static config sources apply and the
+	// UDP-only node sources deliberately do not.
 	if fmt.Sprint(got.URLs) != fmt.Sprint(urls) {
-		t.Fatalf("urls = %v, want %v", got.URLs, urls)
+		t.Fatalf("urls = %v, want %v unchanged", got.URLs, urls)
 	}
 }

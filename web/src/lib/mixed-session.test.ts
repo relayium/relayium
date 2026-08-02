@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { CHROME_MAX_MESSAGE_BYTES } from "./wire-limit";
 import { generateKeyPair, ready } from "./crypto";
 import { createMixedSession, type MixedSessionDeps } from "./mixed-session.svelte";
 import type { MixedPeerLink } from "./peer-link.svelte";
@@ -44,7 +45,7 @@ function harness(
       channel: file,
       getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
       close: vi.fn(),
-      path: async () => typeof path === "function" ? path() : path,
+      maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => typeof path === "function" ? path() : path,
       stats: async () => new Map() as unknown as RTCStatsReport,
     };
     conns.push(conn);
@@ -214,7 +215,7 @@ describe("mixed session coordinator", () => {
       getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
       takeCaptured: (label) => ({ frames: captured[label].splice(0), overflow: false }),
       close: vi.fn(),
-      path: async () => "p2p",
+      maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => "p2p",
       stats: async () => new Map() as unknown as RTCStatsReport,
     };
     const resume = vi.fn(async () => rebuilt);
@@ -362,7 +363,7 @@ describe("mixed session transport recovery", () => {
       channel: file,
       getChannel: (label) => label === "relayium" ? file : label === "relayium-text" ? text : undefined,
       close: vi.fn(),
-      path: async () => "p2p",
+      maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES, path: async () => "p2p",
       stats: async () => new Map() as unknown as RTCStatsReport,
     };
     return { conn, file, text };

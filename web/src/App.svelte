@@ -22,7 +22,8 @@
   import { createPeerWorkspace, type PeerWorkspace } from "./lib/peer-workspace.svelte";
   import { createActivityAnnouncer, type ActivityEdge } from "./lib/activity-announcement";
   import { recordTransfer, loadHistory, clearHistory, historyEnabled, setHistoryEnabled, type HistEntry } from "./lib/history";
-  import { fetchIceConfig, hasTurnServer, measureRelays, pickRelay, type RelayEntry } from "./lib/ice";
+  import { chooseRtcConfig, fetchIceConfig, measureRelays, pickRelay, type RelayAvailability, type RelayEntry } from "./lib/ice";
+  import { relayFailNote } from "./lib/relay-status";
   import type { Peer } from "./lib/protocol";
   import { lang, dir, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { applyHeadMeta, pageMeta } from "./lib/page-meta";
@@ -139,7 +140,10 @@
   const roomCode = $derived(roomCodeStore());
   let joinedRoom = $state(false);
   let linkDead = $state(false);
-  let relayDenied = $state<string>(""); // "quota" when the code owner is over the monthly relay cap (no TURN issued)
+  // Why a relay is (not) available for this room — see RelayAvailability. Every
+  // non-"ok" value used to be invisible: the UI only ever recognised "quota",
+  // so a withheld or unreachable relay surfaced as a bare "connection failed".
+  let relayStatus = $state<RelayAvailability>("ok");
 
   // Non-reactive locals
   let signaling: SignalingClient;
@@ -156,17 +160,16 @@
   let myRelayRtt = $state<Record<string, number>>({});
   let peerRelayRtt = $state<Record<string, number>>({});
   let selectedRelayId = $state<string | null>(null);
-  // Build the RTCConfiguration for a new connection. On the cross-network path a
-  // TURN relay is handed out (via the pairing code); force relay-only ICE there so
-  // connection setup is ~1-2 s instead of ~20 s spent waiting for cross-NAT direct
-  // candidate checks to time out before ICE would fall back to that relay anyway.
-  // Prefer the relay the two peers agreed is fastest; fall back to the whole
-  // advertised set. STUN-only rooms (LAN, no code) keep "all" so host candidates work.
-  const rtcConfig = (): RtcConfig => {
-    const picked = selectedRelayId ? relayPool.find((r) => r.id === selectedRelayId) : undefined;
-    if (picked) return { iceServers: picked.iceServers, iceTransportPolicy: "relay" };
-    return hasTurnServer(iceServers) ? { iceServers, iceTransportPolicy: "relay" } : { iceServers };
-  };
+  // Build the RTCConfiguration for a new connection: prefer the relay the two
+  // peers agreed is fastest, otherwise use every relay we were handed, and keep
+  // "all" only when there is genuinely no relay (LAN). The reasoning — why
+  // cross-network forces relay-only, and why a missing measurement must not
+  // throw the pool away — is on chooseRtcConfig.
+  //
+  // It lives in ice.ts so it is unit-testable. In here it had no coverage at
+  // all, and the case it got wrong (no relay selected yet on a pool-only
+  // deployment) is exactly the one that stranded cross-network peers.
+  const rtcConfig = (): RtcConfig => chooseRtcConfig({ iceServers, relays: relayPool }, selectedRelayId);
 
   // ── nearest-relay selection ──────────────────────────────────────────────────────
   // Each peer measures its RTT to every pool relay; the maps are swapped over signaling
@@ -638,7 +641,7 @@
     const ice = await fetchIceConfig(roomCode);
     iceServers = ice.iceServers;
     relayPool = ice.relays;
-    relayDenied = ice.relayDenied ?? "";
+    relayStatus = ice.relayStatus;
     signaling = new SignalingClient(wsURL(location, roomCode), selfName);
     signaling.onSelfId((id, ip) => {
       selfId = id; selfIP = ip; joinedRoom = true;
@@ -724,7 +727,7 @@
     selfIP = "";
     joinedRoom = false;
     linkDead = false;
-    relayDenied = "";
+    relayStatus = "ok";
     session.reset();
     connState = "connecting";
     resetRelaySelection(); // the new room has its own relay pool + measurements
@@ -737,7 +740,7 @@
     if (epoch !== roomEpoch) return;
     iceServers = ice.iceServers;
     relayPool = ice.relays;
-    relayDenied = ice.relayDenied ?? "";
+    relayStatus = ice.relayStatus;
     signaling.reconnect(wsURL(location, roomCode));
     startRelayMeasurement(); // measure the new room's pool in the background
   }
@@ -1095,8 +1098,13 @@
              above owns it. Repeating it per card is what the one-SAS rule forbids. -->
         {#if workspace.sasCode && !xf.done && !mixed} · {t.codeLabel} <code>{workspace.sasCode}</code>{/if}
       </div>
-      {#if xf.done && !xf.ok && xf.status === "connectFail" && relayDenied === "quota"}
-        <p class="ui-callout quota-note">{t.crossnet.relayQuotaFail}</p>
+      <!-- A cross-network connection that never came up is almost never "the
+           transfer failed" — it is "there was no relay to carry it". Say which,
+           so the user knows whether to retry, verify their email, wait for the
+           quota to reset, or reload. relayFailNote returns "" for a plain
+           relay-was-available failure, which keeps the generic status line. -->
+      {#if xf.done && !xf.ok && xf.status === "connectFail" && relayFailNote(t, relayStatus)}
+        <p class="ui-callout quota-note">{relayFailNote(t, relayStatus)}</p>
       {/if}
       <!-- Same rule for the path badge: one link, one path label, and it is in the
            header. Legacy keeps its per-direction badge. -->
@@ -1226,7 +1234,7 @@
 
   {#if currentRoute() === "cross"}
     {#await routePage("cross") then { default: CrossPage }}
-      <CrossPage {roomCode} {linkDead} {showTransfer} {relayDenied} {transferSurface} dismissLan={() => (lanDismissed = true)} />
+      <CrossPage {roomCode} {linkDead} {showTransfer} {relayStatus} {transferSurface} dismissLan={() => (lanDismissed = true)} />
     {/await}
   {:else if currentRoute() === "offline"}
     {#await routePage("offline") then { default: OfflinePage }}

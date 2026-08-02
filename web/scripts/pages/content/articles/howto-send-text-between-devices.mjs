@@ -4,7 +4,7 @@
 
 const commands = `# One machine mints the code and waits (relayium login is required once)
 relayium text
-# Code: K7M4XR   (valid 5 minutes)
+# Code: K7M4XR   (valid 30 minutes)
 # On the other machine:  relayium text K7M4XR
 
 # The other machine joins that code
@@ -72,7 +72,7 @@ const en = article({
     "Run relayium text with that code on the other machine. Interactive mode sends one line per message and asks both people to confirm the SAS. For multiline or byte-exact stdin, pipe it as one message and pass --yes because no terminal is available for the SAS prompt.",
   ],
   cliNotes: [
-    "CLI codes last five minutes and are CLI-to-CLI only; browser codes cannot connect a browser to the CLI.",
+    "CLI codes last thirty minutes and are CLI-to-CLI only; browser codes cannot connect a browser to the CLI.",
     "Only the machine that mints needs a signed-in account. The machine joining the printed code does not sign in.",
     "--yes skips the interactive SAS confirmation, so compare the session another trusted way before using it.",
   ],
@@ -123,7 +123,7 @@ const zh = article({
     "另一台机器用该码运行 relayium text。交互模式每行是一条消息，并默认要求双方确认 SAS；多行或要求逐字节保真的内容请通过管道作为一条消息发送，因为此时没有终端可确认 SAS，所以必须显式加 --yes。",
   ],
   cliNotes: [
-    "CLI 配对码有效期 5 分钟，只能 CLI 对 CLI；浏览器码不能让浏览器与 CLI 互连。",
+    "CLI 配对码有效期 30 分钟，只能 CLI 对 CLI；浏览器码不能让浏览器与 CLI 互连。",
     "只有生成配对码的那台机器需要已登录账号；使用打印出来的配对码加入时不需要登录。",
     "--yes 会跳过交互式 SAS 确认，使用前应通过其他可信方式核对会话。",
   ],
@@ -174,7 +174,7 @@ const ja = article({
     "もう一方のマシンではそのコードを指定して relayium text を実行します。対話モードは 1 行を 1 メッセージとして送り、既定で SAS 確認を求めます。複数行や正確な stdin はパイプで 1 メッセージとして送り、端末プロンプトがないため --yes を付けます。",
   ],
   cliNotes: [
-    "CLI コードは 5 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。",
+    "CLI コードは 30 分有効で CLI 同士専用です。ブラウザと CLI は接続できません。",
     "ログイン済みアカウントが必要なのはコードを発行する側だけです。表示されたコードで参加する側はログイン不要です。",
     "--yes は対話的な SAS 確認を省くため、別の信頼できる手段で確認してください。",
   ],
@@ -219,7 +219,7 @@ const ko = article({
     "다른 쪽 컴퓨터에서 그 코드로 relayium text를 실행합니다. 대화형 모드는 한 줄을 한 메시지로 보내고 기본적으로 SAS 확인을 요구합니다. 여러 줄 또는 정확한 stdin은 파이프로 한 메시지로 보내며 터미널 확인이 없으므로 --yes를 붙입니다.",
   ],
   cliNotes: [
-    "CLI 코드는 5분 동안 유효하고 CLI끼리만 연결합니다. 브라우저와 CLI는 서로 연결되지 않습니다.",
+    "CLI 코드는 30분 동안 유효하고 CLI끼리만 연결합니다. 브라우저와 CLI는 서로 연결되지 않습니다.",
     "로그인 계정은 코드를 발급하는 쪽에만 필요합니다. 출력된 코드로 참여하는 쪽은 로그인할 필요가 없습니다.",
     "--yes는 대화형 SAS 확인을 건너뛰므로 다른 신뢰할 수 있는 방법으로 세션을 확인하세요.",
   ],
@@ -354,7 +354,7 @@ const ar = article({
     "شغّل relayium text بذلك الرمز على الجهاز الآخر. في الوضع التفاعلي كل سطر رسالة ويُطلب تأكيد SAS افتراضيًا. أرسل النص متعدد الأسطر أو الدقيق عبر pipe كرسالة واحدة مع --yes لأن الطرفية غير متاحة للتأكيد.",
   ],
   cliNotes: [
-    "رمز CLI صالح لخمس دقائق ويربط CLI بـ CLI فقط؛ لا يتوافق المتصفح مع CLI.",
+    "رمز CLI صالح لثلاثين دقيقة ويربط CLI بـ CLI فقط؛ لا يتوافق المتصفح مع CLI.",
     "الجهاز الذي يصدر الرمز وحده يحتاج حسابًا مسجل الدخول؛ أما الجهاز الذي ينضم بالرمز المطبوع فلا يحتاج إلى تسجيل الدخول.",
     "--yes يتجاوز تأكيد SAS التفاعلي؛ تحقق من الجلسة بوسيلة موثوقة أخرى.",
   ],

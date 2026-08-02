@@ -84,7 +84,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>用哪个命令，取决于谁在发起传输，以及两台机器是怎么互相认识的：</p>
       <ul><li>relayium receive &lt;code&gt; [destdir] ——对方跨网络发给你：他的 CLI 先生成一个配对码，再线下转告你。直接点对点，用 SAS 码验证。</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] ——这台机器监听 daemon 直连的 relayium:// 推送，默认端口 9031。</li><li>relayium pull [user@]host:src &lt;dest&gt; ——你主动通过 SSH 连接到一台你已能登录的服务器，把文件取回来。</li></ul>
       <h2>receive：对方跨网络把文件发给你</h2>
-      <p>这是 relayium send 的接收端。对方在自己那边运行 relayium send &lt;path&gt;（事先 relayium login 过），CLI 会生成一个 6 位、5 分钟内有效的码并打印出来。然后对方通过你们都信任的渠道告诉你——打个电话、发条消息。你则用这个码运行 receive：</p>
+      <p>这是 relayium send 的接收端。对方在自己那边运行 relayium send &lt;path&gt;（事先 relayium login 过），CLI 会生成一个 6 位、30 分钟内有效的码并打印出来。然后对方通过你们都信任的渠道告诉你——打个电话、发条消息。你则用这个码运行 receive：</p>
       <pre><code>relayium receive K7M4XR
 
 # 或者放进指定的目录

@@ -267,9 +267,9 @@ func TestRunTextWithACodeNeverMints(t *testing.T) {
 }
 
 // The SAS gate comes first, so a piped run without --yes is refused before any
-// request is made. Minting is an authenticated call that starts a five-minute
-// expiry clock; spending one on a session that was never going to open is the
-// kind of waste the ordering exists to prevent.
+// request is made. Minting is an authenticated call that starts the code's
+// expiry clock (signal.CodeTTLSeconds); spending one on a session that was
+// never going to open is the kind of waste the ordering exists to prevent.
 func TestRunTextWithoutACodeRefusesAPipedRunBeforeMinting(t *testing.T) {
 	srv, hits := pairServer(t)
 	loginAgainst(t, srv)

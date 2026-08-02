@@ -12,7 +12,6 @@ import type { MixedPeerLink } from "./peer-link.svelte";
 import {
   ACCEPT,
   BATCH_ABORT,
-  CHUNK_SIZE,
   CHUNK_OVERHEAD,
   COMPLETE,
   FILE_BUSY,
@@ -25,9 +24,11 @@ import {
   advanceAck,
   controlKind,
   isBatchAbort,
+  isChunkFrame,
   isResumeReq,
   parseAck,
   parseResumeReq,
+  resumePointAligned,
   resumePointInRange,
   resumeReqFrame,
   type FileMeta,
@@ -325,10 +326,10 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   function validResumeRequest(current: Outbound, point: ResumePoint): boolean {
     const sizes = current.batch.files.map((file) => file.size);
     if (!resumePointInRange(point, sizes) || !pointAtOrBefore(point, current.produced)) return false;
-    // Sender.dataFrames hashes fixed source chunks. Every honest durable
-    // checkpoint is therefore either a chunk boundary or the exact file end.
-    const size = sizes[point.index];
-    return point.offset === size || point.offset % CHUNK_SIZE === 0;
+    // Sender.dataFrames hashes fixed CHUNK_SIZE source pieces, so every honest
+    // durable checkpoint is a chunk boundary or the exact file end — including
+    // on a connection that fragmented those pieces across several messages.
+    return resumePointAligned(point, sizes);
   }
 
   /**
@@ -1292,10 +1293,13 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         )) return;
         resyncOut = false;
       }
-      const frame = await candidate.fileSender.batchFrame(batch.files, candidate.keys);
+      // Frames are cut to this link's negotiated single-message maximum; see
+      // wire-limit.ts for why that is a property of the peer, not of us.
+      const limit = candidate.conn.maxFrameBytes();
+      const frames = await candidate.fileSender.batchFrames(batch.files, candidate.keys, limit);
       // Even if glare/cancel crossed encryption, put the nonce-consuming manifest
       // on the ordered channel before its ABORT barrier.
-      sendProtected(frame, candidate, expectedGeneration);
+      for (const frame of frames) sendProtected(frame, candidate, expectedGeneration);
       current.phase = "waitingAccept";
       if (send) send = { ...send, status: "waitingAccept" };
 
@@ -1334,13 +1338,15 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       const startedAt = now();
       let index = 0;
       let lastUiAt = 0;
-      for await (const data of candidate.fileSender.dataFrames(batch.picked.map((picked) => picked.file), candidate.keys)) {
+      for await (const data of candidate.fileSender.dataFrames(
+        batch.picked.map((picked) => picked.file), candidate.keys, undefined, limit,
+      )) {
         // dataFrames consumed a nonce before yielding. If a stop crossed that
         // await, this one frame must still enter the channel before BATCH_ABORT.
         if (!current.cancelRequested && !current.remoteStop) await waitForCredit(current);
         await waitForBuffer(candidate.fileChannel, current);
         sendProtected(data, candidate, expectedGeneration);
-        if (data[0] === FRAME.CHUNK) {
+        if (isChunkFrame(data)) {
           current.sentBytes += data.byteLength - CHUNK_OVERHEAD;
           advanceProduced(current, {
             index,
@@ -1436,15 +1442,19 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       let index = point.index;
       let fileOffset = point.offset;
       let lastUiAt = 0;
+      // A replacement transport negotiates its own maximum message size. Only
+      // the fragmentation follows it; `point` is on the CHUNK_SIZE grid either
+      // way, so the resumed hash chain lines up with the receiver's checkpoint.
       for await (const data of candidate.fileSender.dataFrames(
         batch.picked.map((picked) => picked.file),
         candidate.keys,
         point,
+        candidate.conn.maxFrameBytes(),
       )) {
         if (!current.cancelRequested && !current.remoteStop) await waitForCredit(current);
         await waitForBuffer(candidate.fileChannel, current);
         sendProtected(data, candidate, expectedGeneration);
-        if (data[0] === FRAME.CHUNK) {
+        if (isChunkFrame(data)) {
           const bytes = data.byteLength - CHUNK_OVERHEAD;
           current.sentBytes += bytes;
           fileOffset += bytes;

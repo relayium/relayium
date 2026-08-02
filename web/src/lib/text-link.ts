@@ -74,6 +74,9 @@ async function link(
     // 就是 ArrayBuffer——transfer-session 的接收侧也是同一个断言。整条链上只在这一处
     // 收窄，状态机那边就不必认识 DOM 类型。
     channel: conn.channel as unknown as TextConn["channel"],
+    // Asked per send, never captured: SCTP settles the number with the peer, and
+    // it is the only thing standing between a 64 KiB paste and a dead channel.
+    maxFrameBytes: () => conn.maxFrameBytes(),
     keys,
     sas: code,
     path: await conn.path(),

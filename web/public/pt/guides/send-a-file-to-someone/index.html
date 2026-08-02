@@ -88,12 +88,12 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>Faça login uma vez com relayium login e depois é só enviar. A CLI gera um código de emparelhamento, exibe-o junto com o comando exato que a outra ponta executa, e fica aguardando. Repasse esse código fora de banda: diga em uma chamada, coloque em um chat:</p>
       <pre><code># quem envia (uma vez por máquina: relayium login)
 relayium send ./release.zip
-# imprime:  Code: K7M4XR   (valid 5 minutes)
+# imprime:  Code: K7M4XR   (valid 30 minutes)
 #          On the other machine:  relayium receive K7M4XR
 
 # quem recebe (na pasta onde os arquivos devem chegar) — sem conta
 relayium receive K7M4XR</code></pre>
-      <ul><li>O código tem 6 caracteres de um alfabeto restrito — sem 0 nem 1, e sem nada que se confunda ao ser lido em voz alta — e expira 5 minutos depois de gerado.</li><li>Só quem envia faz login. Quem recebe precisa da CLI e do código, e de conta nenhuma.</li><li>O código é apenas um segredo compartilhado para se encontrar; não é enviado a ninguém além do ponto de encontro, e serve apenas para apresentar as duas pontas.</li><li>O receptor pode indicar um diretório de destino: relayium receive K7M4XR ./downloads</li><li>As duas pontas precisam ser a CLI — um navegador não consegue entrar em um código de emparelhamento da CLI. Vai enviar para alguém que só tem navegador? Use relayium up, que devolve um link de download.</li></ul>
+      <ul><li>O código tem 6 caracteres de um alfabeto restrito — sem 0 nem 1, e sem nada que se confunda ao ser lido em voz alta — e expira 30 minutos depois de gerado.</li><li>Só quem envia faz login. Quem recebe precisa da CLI e do código, e de conta nenhuma.</li><li>O código é apenas um segredo compartilhado para se encontrar; não é enviado a ninguém além do ponto de encontro, e serve apenas para apresentar as duas pontas.</li><li>O receptor pode indicar um diretório de destino: relayium receive K7M4XR ./downloads</li><li>As duas pontas precisam ser a CLI — um navegador não consegue entrar em um código de emparelhamento da CLI. Vai enviar para alguém que só tem navegador? Use relayium up, que devolve um link de download.</li></ul>
       <h2>Verificar com o código SAS</h2>
       <p>Quando as duas pontas se conectam, os dois terminais exibem o mesmo SAS (short authentication string) de 6 dígitos derivado das impressões digitais dos certificados TLS fixados. Compare-o fora de banda — leia em voz alta durante a chamada — para confirmar que as impressões digitais não foram substituídas e que o serviço de encontro não se passou por nenhuma das pontas. O SAS autentica as pontas; não prova cada salto da rota de rede.</p>
       <p>Para a proteção mais forte, adicione --verify: a transferência então espera que você confirme que os códigos coincidem antes que um único byte se mova.</p>

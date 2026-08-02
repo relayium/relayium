@@ -280,8 +280,8 @@ func main() {
 	// visually-ambiguous glyphs removed), which is why the CLI copy interpolates
 	// that constant instead of describing digits.
 	// Pure in-memory — works even if the DB is unavailable.
-	// TTL 是 signal.CodeTTLSeconds（5 分钟），理由写在那个常量上；导出成常量是因为
-	// CLI 的报错文案要照着说「有效 5 分钟」，行为和文案必须取自同一个来源。
+	// TTL 是 signal.CodeTTLSeconds（30 分钟），理由写在那个常量上；导出成常量是因为
+	// CLI 的报错文案要照着说「有效 30 分钟」，行为和文案必须取自同一个来源。
 	pairReg := signal.NewPairRegistry(signal.CodeTTLSeconds, func() int64 { return time.Now().Unix() })
 	go pairReg.Run(context.Background(), time.Minute)
 	// div lowers the per-instance thresholds below for a round-robin multi-instance

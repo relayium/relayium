@@ -9,16 +9,19 @@ export { MAX_FILES } from "./manifest";
 // `Uint8Array<ArrayBufferLike>`. Every buffer here is ArrayBuffer-backed.
 type Bytes = Uint8Array<ArrayBuffer>;
 
-// Larger chunks mean fewer encrypt/send/event-loop iterations per MB → higher
-// throughput. The on-wire message is CHUNK_SIZE + CHUNK_OVERHEAD (21 B); keep it
-// well under the DataChannel max-message-size (256 KiB on Chrome) so sends never
-// fail with "Message too large".
+/**
+ * The protocol's **logical** chunk: the unit the integrity chain hashes, the
+ * unit the receiver writes and checkpoints, and therefore the unit a resume
+ * point must land on. It is a constant of the wire format and must not vary
+ * with the connection — see piecePlainBytes for the number that does.
+ *
+ * Larger is faster: fewer encrypt/write/event-loop iterations per MB.
+ */
 export const CHUNK_SIZE = 192 * 1024;
-// Raised from 10 to accommodate folder sends. The real ceiling is the manifest
-// frame size (guarded below), not this count.
-// The manifest travels as a single plaintext DataChannel message; keep it well
-// under the 256 KiB max-message-size. Long relative paths make this the true
-// limit on how many files a batch can carry.
+// The protocol ceiling on one batch's manifest, independent of how many
+// DataChannel messages carry it. It bounds what a peer can make a receiver
+// buffer and parse before consent, and — with long relative paths — it, not
+// MAX_FILES, is the real limit on how many files a folder send can carry.
 export const MANIFEST_MAX_BYTES = 200 * 1024;
 
 export interface FileMeta {
@@ -32,9 +35,20 @@ export interface Manifest {
 }
 
 // Frame wire format: [1 byte kind][4 byte big-endian seq][payload].
-const KIND_CHUNK = 1; // one encrypted file slice
-const KIND_BATCH_ENC = 7; // manifest, sealed with the session key
+const KIND_CHUNK = 1; // last (or only) piece of one logical chunk
+const KIND_BATCH_ENC = 7; // last (or only) piece of the manifest, sealed with the session key
 const KIND_DONE_ENC = 8; // end-of-file integrity hash, sealed with the session key
+// Transport fragmentation. A logical CHUNK_SIZE chunk (or the manifest) that
+// does not fit one DataChannel message goes out as PART…PART, terminated by the
+// ordinary CHUNK/BATCH kind above. Each piece is sealed separately and burns its
+// own nonce; the receiver reassembles the plaintext before hashing or parsing,
+// so the hash chain, the checkpoint grid and the resume contract are all still
+// expressed in CHUNK_SIZE regardless of how the bytes were carried.
+//
+// When the connection can carry a whole chunk — every current desktop browser —
+// no PART is ever emitted and the bytes on the wire are identical to before.
+const KIND_CHUNK_PART = 10;
+const KIND_BATCH_PART = 11;
 
 // 旧的明文 manifest / DONE。**只用来识别老版本对端**，不再解析。
 //
@@ -54,16 +68,63 @@ const KIND_ACK = 6; // receiver->sender (plaintext): cumulative bytes durably wr
  *  recognise the one frame it must accept while its sequence is unaligned. */
 export const FRAME = {
   CHUNK: KIND_CHUNK,
+  CHUNK_PART: KIND_CHUNK_PART,
   DONE: KIND_DONE_ENC,
   BATCH: KIND_BATCH_ENC,
   RESUME: KIND_RESUME_START,
 } as const;
+
+/** Does this frame carry file bytes? Senders count progress and flow-control
+ *  credit with it, so a fragmented chunk is accounted exactly like an
+ *  unfragmented one instead of counting only its final piece. */
+export function isChunkFrame(f: Uint8Array): boolean {
+  return f[0] === KIND_CHUNK || f[0] === KIND_CHUNK_PART;
+}
 
 /** A resume checkpoint: the receiver has durably written `offset` bytes of file
  *  `index`; the sender continues from there. */
 export interface ResumePoint { index: number; offset: number; }
 /** Per-chunk wire overhead: 5-byte header + 16-byte AES-GCM tag. plaintext = byteLength - this. */
 export const CHUNK_OVERHEAD = 5 + 16;
+
+/** Below this the connection is not worth trying: the per-message overhead and
+ *  the number of encrypt/send round trips would dominate, and no real SCTP
+ *  implementation negotiates anything this small. Failing here is a named,
+ *  visible error rather than a transfer that crawls. */
+export const MIN_PIECE_BYTES = 4096;
+
+/**
+ * The plaintext one DataChannel message may carry, given this connection's
+ * negotiated `maxMessageSize`.
+ *
+ * Capped at CHUNK_SIZE: a bigger allowance buys nothing, because CHUNK_SIZE is
+ * the fixed unit the hash chain and the checkpoint grid are defined in. `Infinity`
+ * (both ends declared no limit) therefore lands on exactly today's behaviour.
+ */
+export function piecePlainBytes(maxFrameBytes: number): number {
+  const usable = Math.min(Math.floor(maxFrameBytes) - CHUNK_OVERHEAD, CHUNK_SIZE);
+  if (!(usable >= MIN_PIECE_BYTES)) {
+    throw new Error(`relayium: this connection's maximum message size (${maxFrameBytes}) is too small to send files`);
+  }
+  return usable;
+}
+
+/**
+ * Is this a resume point the sender can actually restart from?
+ *
+ * The chain hash is `h = SHA-256(h || chunk)` over CHUNK_SIZE pieces, so it is
+ * defined only at chunk boundaries (and at the exact end of a file). A receiver
+ * that follows the protocol only ever checkpoints there, because it only writes
+ * a chunk once the whole chunk has arrived. An unaligned point can come only
+ * from a peer that is not following the protocol or from a frame injected by
+ * the signalling relay — and honouring one would make the sender skip the bytes
+ * between the request and the next boundary. Refuse instead.
+ */
+export function resumePointAligned(p: ResumePoint, sizes: number[]): boolean {
+  const size = sizes[p.index];
+  if (size === undefined) return false;
+  return p.offset === size || p.offset % CHUNK_SIZE === 0;
+}
 
 // Application-level receive flow control. A DataChannel exposes no receive-side
 // backpressure to JS: onmessage drains the SCTP buffer into memory as fast as the
@@ -223,16 +284,52 @@ export class Sender {
    * 保证那个值永远不会被数据块用到，而续传会让计数器从一个任意点继续——多一个不变量
    * 就多一处能悄悄反复使用同一个 nonce 的地方。
    *
-   * manifest 过大（文件太多、路径太长）会超过 DataChannel 的单帧上限，直接抛错。
+   * 一条连接装不下整个 manifest 时按 maxFrameBytes 切成多帧（每帧各消费一个 seq）；
+   * 超过协议上限 MANIFEST_MAX_BYTES 的仍然直接抛错。
    */
-  async batchFrame(files: FileMeta[], keys: SessionKeys): Promise<Bytes> {
+  async batchFrames(
+    files: FileMeta[],
+    keys: SessionKeys,
+    maxFrameBytes: number = CHUNK_SIZE + CHUNK_OVERHEAD,
+  ): Promise<Bytes[]> {
     const manifest: Manifest = { files };
     const payload = enc.encode(JSON.stringify(manifest)) as Bytes;
     // 上限比的是密文长度：GCM 会多出 16 字节 tag，按明文比会让临界的 manifest
     // 通过检查、然后在 send() 上炸掉。
     if (payload.length + 16 > MANIFEST_MAX_BYTES) throw new Error("relayium: manifest too large");
-    const s = this.seq++;
-    return frame(KIND_BATCH_ENC, s, await seal(keys.send, s, payload));
+    const out: Bytes[] = [];
+    for await (const f of this.pieces(payload, keys, piecePlainBytes(maxFrameBytes), KIND_BATCH_PART, KIND_BATCH_ENC)) {
+      out.push(f);
+    }
+    return out;
+  }
+
+  /**
+   * Cut one plaintext into sealed frames of at most `pieceBytes` payload, the
+   * last one carrying `finalKind`. An empty plaintext still yields exactly one
+   * (final) frame, and a plaintext that divides evenly yields no trailing empty
+   * frame.
+   *
+   * Each piece reserves its nonce **before** yielding, for the same reason
+   * dataFrames does: an abandoned generator must leave `seq` past everything it
+   * emitted, or a resume would reuse a nonce.
+   */
+  private async *pieces(
+    plain: Bytes,
+    keys: SessionKeys,
+    pieceBytes: number,
+    partKind: number,
+    finalKind: number,
+  ): AsyncGenerator<Bytes> {
+    let off = 0;
+    for (;;) {
+      const end = Math.min(off + pieceBytes, plain.length);
+      const last = end >= plain.length;
+      const s = this.seq++;
+      yield frame(last ? finalKind : partKind, s, await seal(keys.send, s, plain.slice(off, end) as Bytes));
+      if (last) return;
+      off = end;
+    }
   }
 
   /** Announce where a resumed stream picks up. `this.seq` is the nonce the first
@@ -248,7 +345,16 @@ export class Sender {
    * chain hash is still computed from byte 0, so the per-file DONE remains a hash
    * of the whole file and the receiver's resumed chain lines up.
    */
-  async *dataFrames(files: File[], keys: SessionKeys, resume?: ResumePoint): AsyncGenerator<Bytes> {
+  async *dataFrames(
+    files: File[],
+    keys: SessionKeys,
+    resume?: ResumePoint,
+    maxFrameBytes: number = CHUNK_SIZE + CHUNK_OVERHEAD,
+  ): AsyncGenerator<Bytes> {
+    const pieceBytes = piecePlainBytes(maxFrameBytes);
+    if (resume && !resumePointAligned(resume, files.map((f) => f.size))) {
+      throw new Error("relayium: resume point is not on a chunk boundary");
+    }
     for (let fi = 0; fi < files.length; fi++) {
       if (resume && fi < resume.index) continue; // delivered before the drop
       const file = files[fi];
@@ -257,16 +363,13 @@ export class Sender {
       for (let offset = 0; offset < file.size; offset += CHUNK_SIZE) {
         const piece = new Uint8Array(
           await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer(),
-        );
+        ) as Bytes;
+        // Hashed whole and from byte 0 even when it is not sent: the chain is
+        // defined over CHUNK_SIZE pieces, so it stays identical no matter how the
+        // connection fragments them — which is what lets a resumed connection
+        // negotiate a different message size and still agree on the file hash.
         hash = await chainHash(hash, piece);
-        if (offset >= from) {
-          // Reserve the nonce and advance BEFORE yielding: a generator suspends at
-          // the yield, so if the transfer is abandoned here (a drop), this.seq must
-          // already point past this chunk — otherwise a resume would reuse its
-          // nonce. A burned (sent-but-lost) chunk simply consumes its seq forever.
-          const s = this.seq++;
-          yield frame(KIND_CHUNK, s, await seal(keys.send, s, piece));
-        }
+        if (offset >= from) yield* this.pieces(piece, keys, pieceBytes, KIND_CHUNK_PART, KIND_CHUNK);
       }
       // DONE 也走加密，因此**同样消费一个 seq**。它带的是整份文件的 SHA-256——
       // 明文发等于把"这是不是文件 X"的判定能力白送给通道里的中间人。
@@ -283,6 +386,13 @@ export class Sender {
 export class Receiver {
   private expectedSeq = 0; // global nonce counter, mirrors the sender
   private hash = new Uint8Array(32); // chained hash of the file currently arriving
+  // Plaintext pieces of the logical chunk (or manifest) currently arriving, held
+  // until its terminating frame. Nothing is written, hashed, parsed or
+  // checkpointed from a partial one, so the durable state the receiver can
+  // resume from stays exactly on the CHUNK_SIZE grid.
+  private parts: Uint8Array[] = [];
+  private partBytes = 0;
+  private partKind = 0;
 
   /** A copy of the current file's running chain hash. The App checkpoints this
    *  next to the bytes it has durably written, so a resume can restore a point
@@ -296,6 +406,7 @@ export class Receiver {
    * sequence deliberately continues across the reusable link. */
   abortBatch(): void {
     this.hash = new Uint8Array(32);
+    this.dropParts();
   }
 
   /** Restore the chain hash to a checkpoint and align the nonce counter to the
@@ -309,6 +420,52 @@ export class Receiver {
     }
     this.hash = chain.slice();
     this.expectedSeq = seq;
+    // Pieces of a chunk the old transport cut in half are worthless: the sender
+    // restarts from the checkpoint, which is a whole-chunk boundary.
+    this.dropParts();
+  }
+
+  private dropParts(): void {
+    this.parts = [];
+    this.partBytes = 0;
+    this.partKind = 0;
+  }
+
+  /** Buffer one non-final piece. `limit` bounds how much a peer can make this
+   *  receiver hold before the terminating frame arrives. */
+  private addPart(kind: number, plain: Uint8Array, limit: number): void {
+    if (this.partKind && this.partKind !== kind) {
+      throw new Error("relayium: interleaved partial frames");
+    }
+    if (this.partBytes + plain.length > limit) {
+      throw new Error("relayium: oversized fragmented frame");
+    }
+    this.partKind = kind;
+    this.parts.push(plain);
+    this.partBytes += plain.length;
+  }
+
+  /** Join the buffered pieces with the terminating frame's plaintext.
+   *
+   *  The limit is checked BEFORE the "nothing buffered" shortcut, because it
+   *  bounds the logical unit, not the fragmentation. A peer that skips the PART
+   *  kinds and sends one authenticated terminal frame is the cheapest way to
+   *  hand this receiver an arbitrarily large plaintext to hash or JSON-parse
+   *  before any consent — the very thing addPart exists to prevent. */
+  private joinParts(kind: number, plain: Uint8Array, limit: number): Uint8Array {
+    if (this.partKind && this.partKind !== kind) {
+      throw new Error("relayium: interleaved partial frames");
+    }
+    if (this.partBytes + plain.length > limit) {
+      throw new Error("relayium: oversized frame");
+    }
+    if (this.partBytes === 0) return plain;
+    const out = new Uint8Array(this.partBytes + plain.length);
+    let off = 0;
+    for (const p of this.parts) { out.set(p, off); off += p.length; }
+    out.set(plain, off);
+    this.dropParts();
+    return out;
   }
 
   async feed(
@@ -318,10 +475,19 @@ export class Receiver {
     const kind = encoded[0];
     const seq = new DataView(encoded.buffer, encoded.byteOffset).getUint32(1);
     const payload = encoded.slice(5);
+    // A non-final piece: authenticate it in sequence, buffer it, emit nothing.
+    if (kind === KIND_CHUNK_PART || kind === KIND_BATCH_PART) {
+      if (seq !== this.expectedSeq) throw new Error("out-of-order partial frame");
+      const piece = await open(keys.recv, seq, payload); // throws on tamper
+      this.expectedSeq++;
+      this.addPart(kind, piece, kind === KIND_CHUNK_PART ? CHUNK_SIZE : MANIFEST_MAX_BYTES);
+      return {};
+    }
     if (kind === KIND_BATCH_ENC) {
       if (seq !== this.expectedSeq) throw new Error("out-of-order manifest");
-      const plain = await open(keys.recv, seq, payload); // throws on tamper
+      const tail = await open(keys.recv, seq, payload); // throws on tamper
       this.expectedSeq++;
+      const plain = this.joinParts(KIND_BATCH_PART, tail, MANIFEST_MAX_BYTES);
       const batch = JSON.parse(dec.decode(plain)) as Manifest;
       const files = validateManifestFiles<FileMeta>(batch?.files);
       // 文件名由发送端任意构造，而接收方的确认卡片正是用户做信任决策的地方：
@@ -342,8 +508,11 @@ export class Receiver {
     }
     if (kind === KIND_CHUNK) {
       if (seq !== this.expectedSeq) throw new Error("out-of-order chunk");
-      const plain = await open(keys.recv, seq, payload); // throws on tamper
+      const tail = await open(keys.recv, seq, payload); // throws on tamper
       this.expectedSeq++;
+      // The whole logical chunk, however many messages carried it — so the chain
+      // hash and the caller's write/checkpoint both see the CHUNK_SIZE unit.
+      const plain = this.joinParts(KIND_CHUNK_PART, tail, CHUNK_SIZE);
       this.hash = await chainHash(this.hash, plain);
       return { chunk: plain };
     }
@@ -351,6 +520,9 @@ export class Receiver {
       if (seq !== this.expectedSeq) throw new Error("out-of-order done");
       const plain = await open(keys.recv, seq, payload); // throws on tamper
       this.expectedSeq++;
+      // A file cannot end in the middle of a chunk. Leftover pieces mean the
+      // sender's framing and ours disagree — fail rather than hash a short chunk.
+      if (this.partBytes > 0) throw new Error("relayium: file ended mid-chunk");
       const { sha256 } = JSON.parse(dec.decode(plain)) as { sha256: string };
       const ok = sha256 === toHex(this.hash);
       this.hash = new Uint8Array(32); // reset chain for the next file in the batch

@@ -395,7 +395,7 @@ const pt: Messages = {
     mode2Title: "send / receive — por código de emparelhamento",
     mode2Tag: "grátis · P2P direto",
     mode2Body:
-      "Envie para outra pessoa entre redes. Faça login uma vez com relayium login e depois rode send sem código: a CLI gera um código de emparelhamento de 6 caracteres (de um alfabeto sem 0 nem 1), válido por 5 minutos, e exibe o comando exato que a outra ponta executa. Repasse esse código por um canal externo — diga-o numa ligação. Você não pode escolhê-lo, o servidor só aceita os códigos que ele mesmo emitiu, e quem recebe não precisa de conta. As duas pontas precisam ser a CLI; para alguém que só tem navegador, use relayium up. A conexão é ponto a ponto direta: apenas um pequeno handshake de encontro passa pelo Relayium para apresentar as duas pontas — os bytes do arquivo nunca passam. Se ambas as pontas estiverem atrás de um NAT restrito e não conseguirem conectar diretamente, a transferência simplesmente falha (a CLI não tem retransmissor). Os dois terminais exibem um SAS de 6 dígitos derivado das impressões digitais de seus certificados TLS fixados. Compará-lo por outro canal confirma que as impressões não foram substituídas e que o serviço de encontro não se passou por nenhuma das pontas; ele autentica as pontas, não cada salto da rota de rede (adicione --verify para exigir confirmação antes que qualquer byte se mova).",
+      "Envie para outra pessoa entre redes. Faça login uma vez com relayium login e depois rode send sem código: a CLI gera um código de emparelhamento de 6 caracteres (de um alfabeto sem 0 nem 1), válido por 30 minutos, e exibe o comando exato que a outra ponta executa. Repasse esse código por um canal externo — diga-o numa ligação. Você não pode escolhê-lo, o servidor só aceita os códigos que ele mesmo emitiu, e quem recebe não precisa de conta. As duas pontas precisam ser a CLI; para alguém que só tem navegador, use relayium up. A conexão é ponto a ponto direta: apenas um pequeno handshake de encontro passa pelo Relayium para apresentar as duas pontas — os bytes do arquivo nunca passam. Se ambas as pontas estiverem atrás de um NAT restrito e não conseguirem conectar diretamente, a transferência simplesmente falha (a CLI não tem retransmissor). Os dois terminais exibem um SAS de 6 dígitos derivado das impressões digitais de seus certificados TLS fixados. Compará-lo por outro canal confirma que as impressões não foram substituídas e que o serviço de encontro não se passou por nenhuma das pontas; ele autentica as pontas, não cada salto da rota de rede (adicione --verify para exigir confirmação antes que qualquer byte se mova).",
     mode3Title: "daemon direto — de servidor para servidor",
     mode3Tag: "grátis",
     mode3Body:
@@ -482,6 +482,12 @@ const pt: Messages = {
     signInToSend: "Entre para enviar entre redes. Quem recebe nunca precisa de conta.",
     relayQuotaWarn: "Sua cota mensal de retransmissão acabou: uma sessão do navegador entre redes não pode começar nem continuar. Sessões na mesma rede e transferências diretas pela CLI continuam disponíveis. Use um link de download, faça upgrade ou rode seu próprio nó.",
     relayQuotaFail: "Sua cota mensal de retransmissão acabou: esta sessão do navegador entre redes não consegue conectar. Sessões na mesma rede e transferências diretas pela CLI não são afetadas. Use um link de download, faça upgrade ou rode seu próprio nó.",
+    relayUnverifiedWarn: "Verifique seu e-mail para usar a retransmissão entre redes. Até lá, uma sessão do navegador só conecta se os dois dispositivos se alcançarem diretamente. Transferências na mesma rede e a CLI não são afetadas.",
+    relayUnverifiedFail: "Esta sessão do navegador entre redes não conseguiu conectar porque a retransmissão só é emitida para contas verificadas. Verifique seu e-mail e gere um novo código de emparelhamento.",
+    relayUnavailableWarn: "Não foi possível carregar as configurações de retransmissão desta sessão, então talvez não dê para conectar entre redes. Recarregue a página para tentar de novo.",
+    relayUnavailableFail: "Esta sessão nunca recebeu suas configurações de retransmissão, então não havia caminho entre redes. Recarregue a página e gere um novo código de emparelhamento — costuma ser temporário.",
+    relayNoneWarn: "Não há retransmissão disponível para esta sessão: ela só conecta se os dois dispositivos se alcançarem diretamente.",
+    relayNoneFail: "Esta sessão do navegador entre redes não conseguiu conectar porque não havia retransmissão disponível. Sessões na mesma rede e transferências diretas pela CLI não são afetadas.",
   },
   offline: {
     tagline: "Criptografado no seu navegador e então armazenado · o servidor só guarda texto cifrado",
@@ -510,7 +516,8 @@ const pt: Messages = {
     waiting: "Aguardando o outro dispositivo entrar…",
     queued: (n, s) => `${n} arquivo(s) · ${s} — enviados automaticamente quando o outro lado entrar`,
     bareConnect: "Criar uma conexão sem escolher arquivos",
-    expiresIn: (s) => `expira em ${s}`,
+    expiresIn: (s) => `o código de emparelhamento expira em ${s}`,
+    ttlNote: "Essa contagem regressiva vale só para o código de emparelhamento: depois dela, nenhum dispositivo novo entra com ele. Depois que o outro dispositivo entrou, a transferência segue até o fim e nunca é cortada por isso.",
     expired: "Código de emparelhamento expirado — gere um novo",
     copy: "Copiar",
     copied: "Copiado",
@@ -592,7 +599,7 @@ const pt: Messages = {
       sub: "Quando os dois lados estão online, transfiram em tempo real entre redes — o destinatário não precisa de conta.",
       ways: [
         { name: "Crie um código de emparelhamento", how: "Entre e crie um código de 6 caracteres com link de entrada e QR. Escolha o que enviar depois que o outro aparelho participar.", tag: "O criador faz login" },
-        { name: "Dê o código para o outro lado", how: "Diga-o em voz alta, envie o link ou mostre o QR — qualquer um dos três; a pessoa o digita ou o abre em qualquer navegador moderno.", tag: "Os códigos duram 5 minutos" },
+        { name: "Dê o código para o outro lado", how: "Diga-o em voz alta, envie o link ou mostre o QR — qualquer um dos três; a pessoa o digita ou o abre em qualquer navegador moderno.", tag: "Os códigos duram 30 minutos" },
         { name: "Escolha arquivos ou texto", how: "Quando a pessoa entrar, escolha até 1.000 arquivos no cartão dela ou “Enviar mensagem” para texto online. Compare o SAS e envie o conteúdo criptografado de ponta a ponta pelo TURN.", tag: "O retransmissor não consegue ler nem descriptografar nenhum" },
       ],
     },

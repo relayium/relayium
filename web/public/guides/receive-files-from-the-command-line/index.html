@@ -84,7 +84,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>Which command you run depends on who&#39;s starting the transfer and how the two machines know each other:</p>
       <ul><li>relayium receive &lt;code&gt; [destdir] — someone sends to you across networks using a pairing code their CLI minted and passed to you out of band. Direct peer-to-peer, verified with a SAS code.</li><li>relayium serve [--dir D] [--port N] [--once] [--allow-delete] — this machine listens for daemon-direct relayium:// pushes, on port 9031 by default.</li><li>relayium pull [user@]host:src &lt;dest&gt; — you reach out over SSH to a server you can already log into and fetch files back.</li></ul>
       <h2>receive: someone sends you a file across networks</h2>
-      <p>This is the receiving half of relayium send. The other person runs relayium send &lt;path&gt; on their end (after relayium login); their CLI mints a 6-character code, good for 5 minutes, and prints it. They tell you what it is over any channel you both trust — a call, a chat message. You run receive with that code:</p>
+      <p>This is the receiving half of relayium send. The other person runs relayium send &lt;path&gt; on their end (after relayium login); their CLI mints a 6-character code, good for 30 minutes, and prints it. They tell you what it is over any channel you both trust — a call, a chat message. You run receive with that code:</p>
       <pre><code>relayium receive K7M4XR
 
 # or into a specific directory

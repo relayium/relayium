@@ -128,26 +128,38 @@ const CodeAlphabet = "ACDEFHJKMNPRTWXY23456789"
 // 6 characters over a 24-character alphabet is 24^6 ≈ 1.91e8 — about 191x the
 // old 6-digit space (1e6). That ratio is what makes online guessing impractical:
 // the join limiter allows 30 attempts per minute per IP, so a 1000-IP botnet
-// gets ~150k guesses inside the 5-minute TTL, i.e. a ~0.08% chance at any given
-// code (it was ~45% before). Shortening to 5 characters divides the space by 24
-// and was measured as not enough; lengthening the code was rejected on UX
-// grounds. Both numbers are therefore load-bearing.
+// gets ~900k guesses inside the 30-minute TTL, i.e. a ~0.47% chance at any given
+// code (it was ~45% with 6 digits, and ~0.08% back when the TTL was 5 minutes —
+// see CodeTTLSeconds for why that window was widened and what still bounds it).
+// Shortening to 5 characters divides the space by 24 and was measured as not
+// enough; lengthening the code was rejected on UX grounds. Both numbers are
+// therefore load-bearing, and CodeLen is the cheap dial if this probability
+// ever needs to come back down.
 const CodeLen = 6
 
 // CodeTTLSeconds is how long a minted pairing code stays valid — the value
 // main.go hands NewPairRegistry, and the one the CLI's error copy quotes.
 //
 // It is exported for the same reason CodeLen and CodeAlphabet are: the CLI
-// tells the user what a code is ("6 characters from …, and last 5 minutes")
+// tells the user what a code is ("6 characters from …, and last 30 minutes")
 // and every one of those numbers has to come from the same place as the
 // behaviour, or the copy goes stale the first time the value moves. It was a
 // bare 300 at the NewPairRegistry call site with the "5 minutes" typed out by
 // hand in three separate strings.
 //
-// 5 分钟：配对码是跨网传输的唯一准入凭证，有效期直接决定爆破窗口有多大。真正扛住
-// 爆破的是码的熵（24^6，见 CodeAlphabet），TTL 只是再乘 1/3；但两者都便宜，就都
-// 拿上。用户来不及的话界面本来就有重新生成的流程。
-const CodeTTLSeconds int64 = 300
+// **这个 TTL 管的是"码还能不能用来会合"，不是一次传输能活多久。** 码只在 RoomFor
+// 里被查一次（建立 WebSocket 的时候）；之后房间、信令、WebRTC 连接和正在传的文件
+// 都不再看它，过期不会打断任何已经连上的会话。TURN 凭据另有自己的有效期。
+//
+// 30 分钟（原为 5 分钟）：5 分钟不够读码、挑文件、授权、两边来回沟通，而过期之后的
+// 表现（连不上）和真正的连接故障长得一样。
+//
+// 代价是真实的：码空间 24^6 ≈ 1.91e8，/ws 加入限流 30 次/分钟/IP，窗口拉长 6 倍后
+// 1000 IP 僵尸网络命中某个特定活码的概率从 ~0.08% 升到 ~0.47%。可接受是因为限流不是
+// 唯一的闸：GuessBreaker 会整体甩掉持续爆破；猜中只换来会合权和一份记在码主人账上的
+// TURN 凭据，拿不到明文（commit-reveal + SAS）；跨网自动发送还要码主人按一次确认。
+// 要再压这个概率，加长 CodeLen 比缩短 TTL 便宜得多——多一个字符就是除以 24。
+const CodeTTLSeconds int64 = 1800
 
 // randCode returns a uniformly random CodeLen-character code over CodeAlphabet.
 //

@@ -81,8 +81,8 @@ func TestSplitSendArgs(t *testing.T) {
 }
 
 // runSendCross must check the sources (xfer.BuildManifest) before minting a
-// code: a code starts its 5-minute clock the instant it's minted, and a
-// mistyped path shouldn't burn one. With no credentials on disk, minting
+// code: a code starts its expiry clock (signal.CodeTTLSeconds) the instant it's
+// minted, and a mistyped path shouldn't burn one. With no credentials on disk, minting
 // would fail with the not-logged-in error — so if the mint moved ahead of
 // the manifest check, a missing-file send would report "needs an account"
 // instead of the missing file, and this test would catch it.

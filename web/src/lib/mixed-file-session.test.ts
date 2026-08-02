@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { deriveSession, generateKeyPair, ready } from "./crypto";
+import { CHROME_MAX_MESSAGE_BYTES } from "./wire-limit";
+import { deriveSession, generateKeyPair, ready, type SessionKeys } from "./crypto";
 import { createMixedFileSession, MIXED_FILE_GAP_TIMEOUT_MS } from "./mixed-file-session.svelte";
 import type { SaveTarget } from "./filesink";
 import type { MixedPeerLink } from "./peer-link.svelte";
@@ -112,7 +113,7 @@ async function harness(opts: {
   const aLink: MixedPeerLink = {
     peerId: "b",
     role: "initiator",
-    conn: { close: vi.fn() } as unknown as MixedPeerLink["conn"],
+    conn: { close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES } as unknown as MixedPeerLink["conn"],
     fileChannel: file.a as unknown as RTCDataChannel,
     textChannel: text.a as unknown as RTCDataChannel,
     keys: aKeys,
@@ -125,7 +126,7 @@ async function harness(opts: {
   const bLink: MixedPeerLink = {
     peerId: "a",
     role: "responder",
-    conn: { close: vi.fn() } as unknown as MixedPeerLink["conn"],
+    conn: { close: vi.fn(), maxFrameBytes: () => CHROME_MAX_MESSAGE_BYTES } as unknown as MixedPeerLink["conn"],
     fileChannel: file.b as unknown as RTCDataChannel,
     textChannel: text.b as unknown as RTCDataChannel,
     keys: bKeys,
@@ -165,6 +166,14 @@ async function until(check: () => boolean, timeout = 4_000) {
     if (Date.now() > deadline) throw new Error("condition timed out");
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
+}
+
+/** The manifest as the single frame it is whenever the link can carry a whole
+ *  chunk — which every link in this file can. */
+async function batchFrame(s: Sender, files: Parameters<Sender["batchFrames"]>[0], keys: SessionKeys) {
+  const frames = await s.batchFrames(files, keys);
+  expect(frames).toHaveLength(1);
+  return frames[0];
 }
 
 const picked = (name: string, body: string) => [{ file: new File([body], name) }];
@@ -216,7 +225,7 @@ describe("mixed file session", () => {
     const { b, bLink, aLink, file, bTarget, text } = await harness();
     const feed = vi.spyOn(bLink.fileReceiver, "feed");
     const source = new File(["secret"], "early.txt");
-    file.a.send(await aLink.fileSender.batchFrame([{ name: source.name, size: source.size }], aLink.keys));
+    file.a.send(await batchFrame(aLink.fileSender, [{ name: source.name, size: source.size }], aLink.keys));
     await until(() => !!b.incoming);
     expect(feed).toHaveBeenCalledOnce(); // manifest only
 
@@ -233,7 +242,7 @@ describe("mixed file session", () => {
   it("fails the file lane when authenticated content exceeds the declared drain bound", async () => {
     const { b, aLink, file, text } = await harness();
     const source = new File([new Uint8Array(192 * 1024)], "oversized.bin");
-    file.a.send(await aLink.fileSender.batchFrame([{ name: source.name, size: 1 }], aLink.keys));
+    file.a.send(await batchFrame(aLink.fileSender, [{ name: source.name, size: 1 }], aLink.keys));
     await until(() => !!b.incoming);
     b.accept();
     await until(() => b.recv?.status === "receiving");
@@ -253,8 +262,8 @@ describe("mixed file session", () => {
     const evil = new File(["evil"], "same.txt");
     const sender = aLink.fileSender;
     const other = new Sender();
-    const manifest = await sender.batchFrame([{ name: good.name, size: good.size }], aLink.keys);
-    await other.batchFrame([{ name: evil.name, size: evil.size }], aLink.keys);
+    const manifest = await batchFrame(sender, [{ name: good.name, size: good.size }], aLink.keys);
+    await batchFrame(other, [{ name: evil.name, size: evil.size }], aLink.keys);
     const goodFrames: Uint8Array<ArrayBuffer>[] = [];
     for await (const frame of sender.dataFrames([good], aLink.keys)) goodFrames.push(frame);
     const evilFrames: Uint8Array<ArrayBuffer>[] = [];
@@ -382,15 +391,15 @@ describe("mixed file session", () => {
     const { a, b, bLink, bTarget } = await harness();
     let releaseManifest!: () => void;
     const gate = new Promise<void>((resolve) => { releaseManifest = resolve; });
-    const original = bLink.fileSender.batchFrame.bind(bLink.fileSender);
-    const batchFrame = vi.spyOn(bLink.fileSender, "batchFrame").mockImplementation(async (...args) => {
-      const frame = await original(...args);
+    const original = bLink.fileSender.batchFrames.bind(bLink.fileSender);
+    const batchFrames = vi.spyOn(bLink.fileSender, "batchFrames").mockImplementation(async (...args) => {
+      const frames = await original(...args);
       await gate;
-      return frame;
+      return frames;
     });
 
     b.enqueue("a", picked("cancelled.txt", "B"));
-    await until(() => batchFrame.mock.calls.length === 1);
+    await until(() => batchFrames.mock.calls.length === 1);
     b.cancel("send");
     a.enqueue("b", picked("winning.txt", "A"));
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -407,7 +416,7 @@ describe("mixed file session", () => {
 
   it("cancels a local batch while link establishment is still pending", async () => {
     const { aLink } = await harness();
-    const batchFrame = vi.spyOn(aLink.fileSender, "batchFrame");
+    const batchFrames = vi.spyOn(aLink.fileSender, "batchFrames");
     let resolveLink!: (link: MixedPeerLink) => void;
     const gate = new Promise<MixedPeerLink>((resolve) => { resolveLink = resolve; });
     const session = createMixedFileSession({ ensureLink: () => gate });
@@ -420,7 +429,7 @@ describe("mixed file session", () => {
     resolveLink(aLink);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(session.active()).toBe(false);
-    expect(batchFrame).not.toHaveBeenCalled();
+    expect(batchFrames).not.toHaveBeenCalled();
   });
 
   it("bounds automatic BUSY replay to one attempt", async () => {
@@ -511,7 +520,7 @@ describe("mixed file session", () => {
   it("bounds the serialized receive queue against an uncooperative peer", async () => {
     const { b, bLink, aLink, file, text } = await harness();
     const source = new File([new Uint8Array(64 * 1024)], "flood.bin");
-    file.a.send(await aLink.fileSender.batchFrame([{ name: source.name, size: source.size }], aLink.keys));
+    file.a.send(await batchFrame(aLink.fileSender, [{ name: source.name, size: source.size }], aLink.keys));
     await until(() => !!b.incoming);
     b.accept();
     await until(() => b.recv?.status === "receiving");
@@ -596,14 +605,14 @@ describe("mixed file session", () => {
     const { a, aLink, bLink, text } = await harness();
     let releaseManifest!: () => void;
     const manifestGate = new Promise<void>((resolve) => { releaseManifest = resolve; });
-    const originalBatchFrame = aLink.fileSender.batchFrame.bind(aLink.fileSender);
-    const batchFrame = vi.spyOn(aLink.fileSender, "batchFrame").mockImplementation(async (...args) => {
-      const frame = await originalBatchFrame(...args);
+    const originalBatchFrame = aLink.fileSender.batchFrames.bind(aLink.fileSender);
+    const batchFrames = vi.spyOn(aLink.fileSender, "batchFrames").mockImplementation(async (...args) => {
+      const frames = await originalBatchFrame(...args);
       await manifestGate;
-      return frame;
+      return frames;
     });
     a.enqueue("b", picked("old.txt", "old"));
-    await until(() => batchFrame.mock.calls.length === 1);
+    await until(() => batchFrames.mock.calls.length === 1);
 
     const replacement = channelPair();
     const newLink: MixedPeerLink = {
@@ -615,7 +624,7 @@ describe("mixed file session", () => {
     a.detach();
     a.attach(newLink);
     const remoteSender = new Sender();
-    replacement.b.send(await remoteSender.batchFrame([{ name: "new.txt", size: 1 }], bLink.keys));
+    replacement.b.send(await batchFrame(remoteSender, [{ name: "new.txt", size: 1 }], bLink.keys));
     await until(() => a.incoming?.files[0].name === "new.txt");
 
     releaseManifest();
@@ -1189,7 +1198,7 @@ describe("mixed file session transport recovery", () => {
 
     // A peer that just carries on where it left off. Its sequence may well line
     // up, but this side cannot prove what it dropped in the gap.
-    swap.a.send(await aLink.fileSender.batchFrame([{ name: "sneaky.txt", size: 1 }], aLink.keys));
+    swap.a.send(await batchFrame(aLink.fileSender, [{ name: "sneaky.txt", size: 1 }], aLink.keys));
 
     await until(() => b.errorKey === "failed");
     expect(b.incoming).toBeNull();
@@ -1394,14 +1403,14 @@ describe("mixed file session transport recovery", () => {
     const { a, b, aLink, bLink, links, file, text, bTarget } = await harness();
     let releaseManifest!: () => void;
     const manifestGate = new Promise<void>((resolve) => { releaseManifest = resolve; });
-    const original = aLink.fileSender.batchFrame.bind(aLink.fileSender);
-    const batchFrame = vi.spyOn(aLink.fileSender, "batchFrame").mockImplementation(async (...args) => {
-      const frame = await original(...args);
+    const original = aLink.fileSender.batchFrames.bind(aLink.fileSender);
+    const batchFrames = vi.spyOn(aLink.fileSender, "batchFrames").mockImplementation(async (...args) => {
+      const frames = await original(...args);
       await manifestGate;
-      return frame;
+      return frames;
     });
     a.enqueue("b", picked("crossing.txt", "never sent"));
-    await until(() => batchFrame.mock.calls.length === 1);
+    await until(() => batchFrames.mock.calls.length === 1);
 
     // The gap crosses manifest encryption: a nonce is burned for a frame that
     // never leaves this side.
@@ -1417,7 +1426,7 @@ describe("mixed file session transport recovery", () => {
     // rebuilt lane.
     expect(a.errorKey).toBe("");
     expect(a.send?.status).toBe("sendFail");
-    batchFrame.mockRestore();
+    batchFrames.mockRestore();
 
     a.enqueue("b", picked("after-crossing.txt", "burned nonce repaired"));
     await until(() => b.incoming?.files[0].name === "after-crossing.txt");

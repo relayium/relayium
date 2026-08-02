@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import type { RelayAvailability } from "./ice";
   import CodePairing from "./CodePairing.svelte";
   import HowItWorks from "./HowItWorks.svelte";
   import ModeCompare from "./ModeCompare.svelte";
@@ -16,8 +17,8 @@
   import PageFooter from "./PageFooter.svelte";
   import Icon from "./Icon.svelte";
 
-  let { roomCode = "", linkDead = false, showTransfer = false, relayDenied = "", transferSurface, dismissLan }:
-    { roomCode?: string; linkDead?: boolean; showTransfer?: boolean; relayDenied?: string; transferSurface?: Snippet; dismissLan?: () => void } = $props();
+  let { roomCode = "", linkDead = false, showTransfer = false, relayStatus = "ok", transferSurface, dismissLan }:
+    { roomCode?: string; linkDead?: boolean; showTransfer?: boolean; relayStatus?: RelayAvailability; transferSurface?: Snippet; dismissLan?: () => void } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
   const inRoom = $derived(!!roomCode);
@@ -65,7 +66,7 @@
       <section class="ui-card ui-card-raised ui-stack active">
         <div class="ui-card-head"><h2 class="realtime-heading"><span class="realtime-icon" aria-hidden="true"><Icon name="bolt" size={18} /></span><span>{t.methods.realtime.name}</span></h2></div>
         <p class="ui-card-sub">{t.methods.realtime.sub}</p>
-        <CodePairing {roomCode} expired={linkDead} {relayDenied} />
+        <CodePairing {roomCode} expired={linkDead} {relayStatus} />
         <button class="btn btn-ghost btn-sm startover" onclick={startOver}>{t.startOver}</button>
       </section>
     {:else}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/relayium/relayium/internal/cloud"
+	"github.com/relayium/relayium/internal/signal"
 )
 
 func TestAPIBase(t *testing.T) {
@@ -398,9 +399,11 @@ func TestMintCodeRateLimited(t *testing.T) {
 }
 
 // The TTL line is derived from the server's expiresAt, and Unix() flooring
-// plus network latency means a naive "seconds / 60" truncates every
-// 5-minute code down to "4 minutes". This pins the rounded, correct output
-// for a normal mint so that regression can't silently return.
+// plus network latency means a naive "seconds / 60" truncates every code down
+// by one minute. 300 s here is a SYNTHETIC expiry chosen because 5 is the
+// smallest number that makes the off-by-one obvious — it is not the pairing
+// TTL (that is signal.CodeTTLSeconds, and TestTTLClause covers it below). What
+// this pins is that the printed minutes follow whatever the server reported.
 func TestMintCodeTTLLineForNormalExpiry(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		exp := time.Now().Add(300 * time.Second).Unix()
@@ -413,7 +416,7 @@ func TestMintCodeTTLLineForNormalExpiry(t *testing.T) {
 		t.Fatalf("mintCode: %v", err)
 	}
 	if !strings.Contains(out, "Code: K7M4XR   (valid 5 minutes)") {
-		t.Errorf("want a rounded 5-minute TTL line, got %q", out)
+		t.Errorf("want the server's 300 s rounded to a 5-minute TTL line, got %q", out)
 	}
 }
 
@@ -441,8 +444,11 @@ func TestMintCodeOmitsTTLClauseWhenServerDoesNotReportExpiry(t *testing.T) {
 }
 
 // Direct unit coverage of the rounding/singular/omission rules, without the
-// network round trip — fast and exhaustive over edge cases the
-// higher-level tests above don't each need to restate.
+// network round trip — fast and exhaustive over edge cases the higher-level
+// tests above don't each need to restate. The synthetic expiries below exist
+// to exercise the arithmetic; the one case that is about the PRODUCT is the
+// signal.CodeTTLSeconds one, which is what the CLI actually prints in the
+// hand-off block and what the docs and web copy have to agree with.
 func TestTTLClause(t *testing.T) {
 	now := time.Now()
 	cases := []struct {
@@ -451,7 +457,12 @@ func TestTTLClause(t *testing.T) {
 		want      string
 	}{
 		{"zero means unreported, omit entirely", 0, ""},
-		{"300s rounds to 5 minutes, not truncated to 4", now.Add(300 * time.Second).Unix(), "   (valid 5 minutes)"},
+		{"synthetic 300s rounds to 5 minutes, not truncated to 4", now.Add(300 * time.Second).Unix(), "   (valid 5 minutes)"},
+		{
+			"a code minted at the real pairing TTL prints 30 minutes",
+			now.Add(time.Duration(signal.CodeTTLSeconds) * time.Second).Unix(),
+			"   (valid 30 minutes)",
+		},
 		{"under a minute clamps to a singular minute", now.Add(10 * time.Second).Unix(), "   (valid 1 minute)"},
 		{"already expired still clamps to a singular minute", now.Add(-10 * time.Second).Unix(), "   (valid 1 minute)"},
 	}

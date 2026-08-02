@@ -11,10 +11,12 @@
   import { formatSize } from "./format";
   import { folderUploadSupported } from "./platform";
   import { session } from "./auth.svelte";
+  import { relayWarnNote } from "./relay-status";
+  import type { RelayAvailability } from "./ice";
   import Icon from "./Icon.svelte";
 
-  let { roomCode = "", expired = false, relayDenied = "", requireLogin }:
-    { roomCode?: string; expired?: boolean; relayDenied?: string; requireLogin?: () => void } = $props();
+  let { roomCode = "", expired = false, relayStatus = "ok", requireLogin }:
+    { roomCode?: string; expired?: boolean; relayStatus?: RelayAvailability; requireLogin?: () => void } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
   const EXP_KEY = "relayium_pair_exp";
@@ -71,6 +73,7 @@
   });
 
   const queuedBytes = $derived(outbox().reduce((n, p) => n + p.file.size, 0));
+  const relayWarn = $derived(relayWarnNote(t, relayStatus));
 
   // Files-first entry: pick files, then mint — the batch waits in the outbox
   // and App auto-offers it the moment the recipient joins the code room.
@@ -134,6 +137,10 @@
         {#if canShare()}<button class="btn btn-ghost" onclick={() => share({ title: "Relayium", text: `Relayium: ${roomCode}`, url: joinLink })}>{t.share}</button>{/if}
         {#if remaining}<span class="ttl">{t.pair.expiresIn(remaining)}</span>{/if}
       </div>
+      <!-- The countdown is about the CODE, not about the transfer. Without this
+           line a shrinking timer next to a live session reads as "your transfer
+           has N minutes left", which is what the owner reported believing. -->
+      {#if remaining}<p class="ttl-note">{t.pair.ttlNote}</p>{/if}
       {#if qrDataUrl}
         <img class="qr" src={qrDataUrl} alt="QR" width="160" height="160" />
         <p class="scan">{t.pair.scanHint}</p>
@@ -141,9 +148,14 @@
       {#if outbox().length}
         <p class="queued">{t.pair.queued(outbox().length, formatSize(queuedBytes))}</p>
       {/if}
-      {#if relayDenied === "quota"}
-        <p class="quota-warn">{t.crossnet.relayQuotaWarn}</p>
-      {/if}
+    {/if}
+    <!-- Deliberately OUTSIDE the isMinter branch: both ends of a code room fetch
+         their own /api/ice, and the side that typed or scanned the code is the
+         one with nothing else on screen — without this it sees only "waiting"
+         and then a connection failure it was never warned about. Rendered once
+         for either role. Empty for "ok" and for LAN, which is the normal case. -->
+    {#if relayWarn}
+      <p class="quota-warn">{relayWarn}</p>
     {/if}
     <p class="waiting"><span class="pulse" aria-hidden="true"></span>{t.pair.waiting}</p>
   {:else if mode === "receive"}
@@ -218,6 +230,7 @@
      on narrow screens instead of overflowing the card. */
   .row.wrap { flex-wrap: wrap; justify-content: center; }
   .ttl { font-size: var(--fs-xs); color: var(--text); font-variant-numeric: tabular-nums; }
+  .ttl-note { margin: 0; font-size: var(--fs-xs); line-height: 1.5; color: var(--text); text-align: center; max-width: 40ch; }
   .waiting { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--fs-xs); color: var(--text); }
   /* A slow breathing dot so a wait for the other side reads as "live", not stuck. */
   .pulse {
