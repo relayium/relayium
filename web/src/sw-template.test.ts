@@ -21,11 +21,20 @@ interface FetchEvent {
   respondWith: (r: Response | Promise<Response>) => void;
 }
 
-/** 把 sw-template.js 当成真 SW 跑起来，返回驱动它的把手。 */
-function loadSW() {
+/** 当前这一代 shell 缓存的名字（VERSION 被替换成 "test"）。 */
+const CACHE = "relayium-shell-test";
+
+/**
+ * 把 sw-template.js 当成真 SW 跑起来，返回驱动它的把手。
+ *
+ * `precache` 喂给 __PRECACHE__，`seed` 按给定顺序预先建好若干命名缓存 —— 顺序就是
+ * 创建顺序，而 CacheStorage.keys() 的规范保证正是「按插入顺序返回」，旧壳保留策略
+ * 整个建立在这一点上。
+ */
+function loadSW(o: { precache?: string[]; seed?: [string, string[]][] } = {}) {
   const src = readFileSync(resolve(process.cwd(), "src/sw-template.js"), "utf8")
     .replace("__VERSION__", "test")
-    .replace("__PRECACHE__", "[]")
+    .replace("__PRECACHE__", JSON.stringify(o.precache ?? []))
     .replace("__SHARE_ROUTE__", SHARE_ROUTE)
     .replace("__STREAM_ROUTE__", STREAM_ROUTE);
 
@@ -57,20 +66,108 @@ function loadSW() {
   const put: { url: string; body: string }[] = [];
   // 分享缓存是真的会被枚举和删除的（sweepStaleShares），所以这个桩不能只有 put。
   const shareEntries = new Map<string, string>();
+
+  /**
+   * shell 及其它命名缓存。Map 保插入顺序 = 创建顺序，keys() 就照这个顺序返回。
+   * 每条内容写成 `<缓存名>:<路径>`，命中之后一读正文就知道是哪一代给的。
+   */
+  const shells = new Map<string, Map<string, string>>();
+  /** 每一个存在的缓存名，按创建顺序。分享缓存也在其中。 */
+  const names: string[] = [];
+  const pathOf = (r: unknown): string => {
+    const u = typeof r === "string" ? r : (r as { url: string }).url;
+    try { return new URL(u, ORIGIN).pathname; } catch { return u; }
+  };
   const shareCache = {
     addAll: async () => {},
     put: async (req: { url: string }, res: Response) => void put.push({ url: req.url, body: await res.text() }),
     keys: async () => [...shareEntries.keys()].map((url) => ({ url })),
     delete: async (req: { url: string }) => shareEntries.delete(req.url),
+    // 分享缓存**能**答得上来（真 Cache 也一样）。桩必须忠实，否则「shell 回退绝不
+    // 碰分享缓存」那条断言就只是在测一个空实现。
+    match: async (req: unknown) => {
+      const body = shareEntries.get(pathOf(req));
+      return body === undefined ? undefined : new Response(body);
+    },
   };
+  const deleted: string[] = [];
+  function shellCache(name: string) {
+    let entries = shells.get(name);
+    if (!entries) { entries = new Map(); shells.set(name, entries); }
+    const own = entries;
+    return {
+      addAll: async (urls: string[]) => { for (const u of urls) own.set(pathOf(u), `${name}:${pathOf(u)}`); },
+      put: async (req: unknown, res: Response) => {
+        const url = typeof req === "string" ? req : (req as { url: string }).url;
+        const body = await res.text();
+        put.push({ url, body });
+        own.set(pathOf(req), body);
+      },
+      match: async (req: unknown) => {
+        const body = own.get(pathOf(req));
+        return body === undefined ? undefined : new Response(body);
+      },
+      keys: async () => [...own.keys()].map((url) => ({ url })),
+      delete: async (req: unknown) => own.delete(pathOf(req)),
+    };
+  }
+  // seed 的顺序就是创建顺序。没显式 seed 分享缓存时把它排在最前，好让「按前缀过滤」
+  // 那一步真的被考到（它排在所有 shell 之前，最容易被当成"最旧的一代"误删）。
+  const seeded = o.seed ?? [];
+  if (!seeded.some(([n]) => n === "relayium-share")) names.push("relayium-share");
+  for (const [name, urls] of seeded) {
+    names.push(name);
+    if (name === "relayium-share") continue;
+    const m = new Map<string, string>();
+    for (const u of urls) m.set(pathOf(u), `${name}:${pathOf(u)}`);
+    shells.set(name, m);
+  }
+
+  /**
+   * keys() 会报出来、但实际上并不存在的缓存名。模拟的是真实的竞态：activate 的清理
+   * 和 fetch 是交错跑的，一个名字可能刚被枚举到就被删掉。open() 会把它凭空建回来，
+   * 带 cacheName 的 match 不会。
+   */
+  const phantom: string[] = [];
+
   const cachesStub = {
-    open: async () => shareCache,
-    keys: async () => [] as string[],
-    delete: async () => true,
-    match: async () => undefined,
+    open: async (name: string) => {
+      if (!names.includes(name)) names.push(name); // open 会创建，创建即入队
+      return name === "relayium-share" ? shareCache : shellCache(name);
+    },
+    /** 规范：按创建（插入）顺序返回，最早创建的在最前。 */
+    keys: async () => [...names, ...phantom],
+    delete: async (name: string) => {
+      deleted.push(name);
+      const i = names.indexOf(name);
+      if (i >= 0) names.splice(i, 1);
+      return shells.delete(name) || i >= 0;
+    },
+    /**
+     * 不带 cacheName 时是**全局** match：按创建顺序逐个找，第一个命中就返回 —— 也就是
+     * 「最旧的优先」。这正是 shellMatch 要绕开的行为，桩必须忠实实现，否则「当前优先」
+     * 那条断言会退化成空话。
+     *
+     * 带 cacheName 时只看那一个缓存；名字不存在就给 undefined，**不创建**它（规范如此，
+     * 也正是 shellMatch 用它而不用 open() 的理由）。
+     */
+    match: async (req: unknown, opts?: { cacheName?: string }) => {
+      const only = opts?.cacheName;
+      const scan = only === undefined ? names : names.includes(only) ? [only] : [];
+      for (const name of scan) {
+        const body =
+          name === "relayium-share" ? shareEntries.get(pathOf(req)) : shells.get(name)?.get(pathOf(req));
+        if (body !== undefined) return new Response(body);
+      }
+      return undefined;
+    },
   };
   const waitUntils: Promise<unknown>[] = [];
-  const fetchStub = async () => new Response("from network");
+  let offline = false;
+  const fetchStub = async () => {
+    if (offline) throw new TypeError("Failed to fetch"); // 断网时浏览器就是这么抛的
+    return new Response("from network");
+  };
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   new Function("self", "caches", "fetch", src)(swSelf, cachesStub, fetchStub);
 
@@ -78,6 +175,16 @@ function loadSW() {
     put,
     shareEntries,
     skipWaitingCalls,
+    /** 现存缓存名，按创建顺序。 */
+    cacheNames: () => [...names],
+    /** 某一代 shell 缓存里的条目路径。 */
+    cacheEntries: (name: string) => [...(shells.get(name)?.keys() ?? [])],
+    /** 被 caches.delete() 点过名的缓存，按顺序。 */
+    deleted,
+    /** 断网/恢复。断网时 fetch 抛，导航就落到离线兜底那条路上。 */
+    setOffline: (v: boolean) => { offline = v; },
+    /** 让 keys() 多报一个并不存在的缓存名（枚举之后随即被删掉的那一刻）。 */
+    ghostKey: (name: string) => void phantom.push(name),
     /** 这个 SW 递给等待中版本的消息，连同它一起转移过去的回执端口。 */
     waitingPosts,
     /** 让 self.skipWaiting() 返回的那个 promise 兑现（真 SW 里就是激活落地）。 */
@@ -775,5 +882,245 @@ describe("sw-template 分享缓存的过期清理", () => {
     sw.shareEntries.set(other, "x");
     await sw.activate();
     expect([...sw.shareEntries.keys()]).toEqual([other]);
+  });
+});
+
+// ── 旧 shell 缓存的保留 ────────────────────────────────────────────────────────
+//
+// 真机复现过的缺陷：A 页开着，B 装好并激活；activate 把 A 那一代 shell 删光。清掉
+// 非保证的 HTTP 缓存之后，在 A 里点「价格」会去取 A 那代的懒加载 hash，服务器上早
+// 已 404，标题变了、内容一片空白。而更新提示条的全部承诺就是「先把手上的事做完，再
+// 刷新」——旧壳被删，这句承诺是假的。所以保留当前 + 最近创建的两代旧壳。
+describe("sw-template 旧 shell 保留", () => {
+  const SHELL = (v: string) => `relayium-shell-${v}`;
+
+  it("保留当前 + 最近创建的两代旧壳，更早的才删", async () => {
+    const sw = loadSW({
+      seed: [
+        [SHELL("a"), ["/"]],
+        [SHELL("b"), ["/"]],
+        [SHELL("c"), ["/"]],
+        [SHELL("d"), ["/"]],
+        [CACHE, ["/"]],
+      ],
+    });
+
+    await sw.activate();
+
+    // 删除顺序是实现细节（新→旧遍历），钉住的是"删了哪些"。
+    expect([...sw.deleted].sort()).toEqual([SHELL("a"), SHELL("b")]);
+    expect(sw.cacheNames()).toEqual(["relayium-share", SHELL("c"), SHELL("d"), CACHE]);
+  });
+
+  it("绝不删当前这一代", async () => {
+    const sw = loadSW({ seed: [[CACHE, ["/"]], [SHELL("x"), ["/"]], [SHELL("y"), ["/"]], [SHELL("z"), ["/"]]] });
+
+    await sw.activate();
+
+    expect(sw.deleted).not.toContain(CACHE);
+    expect(sw.cacheNames()).toContain(CACHE);
+  });
+
+  // 回滚到一个**缓存名已经存在**的版本时，CACHE 在 keys() 里的位置是它当初第一次创建
+  // 的位置——不在最后，甚至可能在最前。保留的必须仍然是「除当前之外最近创建的两代」。
+  it("回滚：当前排在更晚创建的旧壳之前，保留的仍是最近两代", async () => {
+    const sw = loadSW({
+      seed: [
+        [CACHE, ["/"]], // 回滚回来的这一代当初最先创建
+        [SHELL("n1"), ["/"]],
+        [SHELL("n2"), ["/"]],
+        [SHELL("n3"), ["/"]],
+        [SHELL("n4"), ["/"]],
+      ],
+    });
+
+    await sw.activate();
+
+    expect([...sw.deleted].sort()).toEqual([SHELL("n1"), SHELL("n2")]);
+    expect(sw.cacheNames()).toEqual(["relayium-share", CACHE, SHELL("n3"), SHELL("n4")]);
+  });
+
+  it("当前夹在中间时也按创建顺序留最近两代", async () => {
+    const sw = loadSW({
+      seed: [
+        [SHELL("o1"), ["/"]],
+        [CACHE, ["/"]],
+        [SHELL("o2"), ["/"]],
+        [SHELL("o3"), ["/"]],
+      ],
+    });
+
+    await sw.activate();
+
+    expect(sw.deleted).toEqual([SHELL("o1")]);
+    expect(sw.cacheNames()).toEqual(["relayium-share", CACHE, SHELL("o2"), SHELL("o3")]);
+  });
+
+  it("旧壳不足两代时一个都不删", async () => {
+    const sw = loadSW({ seed: [[SHELL("only"), ["/"]], [CACHE, ["/"]]] });
+    await sw.activate();
+    expect(sw.deleted).toEqual([]);
+  });
+
+  // 分享缓存装的是用户分享进来的**明文文件**，删错就是丢文件；而它在 keys() 里排在
+  // 所有 shell 之前，正是按顺序取"最旧"时最容易误伤的那个。
+  it("绝不碰分享缓存和其它不带 shell 前缀的缓存", async () => {
+    const sw = loadSW({
+      seed: [
+        ["relayium-share", []],
+        ["some-other-cache", ["/x"]],
+        [SHELL("p1"), ["/"]],
+        [SHELL("p2"), ["/"]],
+        [SHELL("p3"), ["/"]],
+        [CACHE, ["/"]],
+      ],
+    });
+
+    await sw.activate();
+
+    expect(sw.deleted).toEqual([SHELL("p1")]);
+    expect(sw.cacheNames()).toContain("relayium-share");
+    expect(sw.cacheNames()).toContain("some-other-cache");
+  });
+
+  it("清理不影响既有的分享条目 TTL 扫除", async () => {
+    const sw = loadSW({ seed: [[SHELL("q1"), ["/"]], [SHELL("q2"), ["/"]], [SHELL("q3"), ["/"]], [CACHE, ["/"]]] });
+    const stale = `${ORIGIN}/__shared__/${(Date.now() - 25 * 3600_000).toString(36)}-abc/0`;
+    sw.shareEntries.set(stale, "x");
+
+    await sw.activate();
+
+    expect(sw.deleted).toEqual([SHELL("q1")]);
+    expect(sw.shareEntries.size, "TTL 扫除照旧跑").toBe(0);
+  });
+});
+
+// ── 查找顺序：当前优先，再按新→旧回退 ─────────────────────────────────────────
+describe("sw-template shell 查找顺序", () => {
+  const OLDEST = "relayium-shell-oldest";
+  const NEWER_OLD = "relayium-shell-newer-old";
+
+  it("离线导航拿当前这一代的根文档，不是最旧那一代的", async () => {
+    // 全局 caches.match("/") 按创建顺序找，会把 OLDEST 的 / 交出去——这正是要避开的。
+    const sw = loadSW({ seed: [[OLDEST, ["/"]], [NEWER_OLD, ["/"]], [CACHE, ["/"]]] });
+    sw.setOffline(true);
+
+    const res = await sw.fetch({ url: ORIGIN + "/d/abc", mode: "navigate" })!;
+
+    expect(await res.text()).toBe(`${CACHE}:/`);
+  });
+
+  it("当前这一代没有根文档时，才回退到最近那一代旧壳", async () => {
+    const sw = loadSW({ seed: [[OLDEST, ["/"]], [NEWER_OLD, ["/"]], [CACHE, ["/other"]]] });
+    sw.setOffline(true);
+
+    const res = await sw.fetch({ url: ORIGIN + "/", mode: "navigate" })!;
+
+    expect(await res.text()).toBe(`${NEWER_OLD}:/`);
+  });
+
+  it("哪一代都没有根文档时如实交白卷（和改动前一样，不伪造响应）", async () => {
+    const sw = loadSW({ seed: [[CACHE, []]] });
+    sw.setOffline(true);
+
+    expect(await sw.fetch({ url: ORIGIN + "/", mode: "navigate" })!).toBeUndefined();
+  });
+
+  // site.webmanifest 每一代同名、不带哈希。按创建顺序找会把旧副本交出去。
+  it("同名条目（site.webmanifest）以当前这一代为准", async () => {
+    const sw = loadSW({
+      seed: [[OLDEST, ["/site.webmanifest"]], [CACHE, ["/site.webmanifest"]]],
+    });
+
+    const res = await sw.fetch({ url: ORIGIN + "/site.webmanifest" })!;
+
+    expect(await res.text()).toBe(`${CACHE}:/site.webmanifest`);
+  });
+
+  // 这就是缺陷本身：还开着的旧页面点懒加载路由，要的是它那一代的哈希文件名，服务器
+  // 上早没有了，只有保留的旧壳里还留着。
+  it("只在旧壳里的懒加载 chunk 由旧壳供，且新的一代优先", async () => {
+    const chunk = "/assets/PricingPage-OLDHASH1.js";
+    const sw = loadSW({ seed: [[OLDEST, [chunk]], [NEWER_OLD, [chunk]], [CACHE, ["/"]]] });
+
+    const res = await sw.fetch({ url: ORIGIN + chunk })!;
+
+    expect(await res.text()).toBe(`${NEWER_OLD}:${chunk}`);
+  });
+
+  it("超出保留窗口的更旧一代不再参与回退，直接走网络", async () => {
+    const chunk = "/assets/PricingPage-ANCIENT1.js";
+    const sw = loadSW({
+      seed: [
+        ["relayium-shell-ancient", [chunk]],
+        [OLDEST, ["/"]],
+        [NEWER_OLD, ["/"]],
+        [CACHE, ["/"]],
+      ],
+    });
+
+    const res = await sw.fetch({ url: ORIGIN + chunk })!;
+
+    expect(await res.text()).toBe("from network");
+  });
+
+  it("分享缓存绝不被当成 shell 回退", async () => {
+    const path = "/assets/PricingPage-OLDHASH2.js";
+    const sw = loadSW({ seed: [[CACHE, ["/"]]] });
+    sw.shareEntries.set(path, "share:leaked");
+
+    const res = await sw.fetch({ url: ORIGIN + path })!;
+
+    expect(await res.text()).toBe("from network");
+  });
+
+  it("网络回填只写当前这一代，旧壳保持只读", async () => {
+    const url = ORIGIN + "/assets/ja-NEWHASH01.js";
+    const sw = loadSW({ seed: [[OLDEST, ["/"]], [NEWER_OLD, ["/"]], [CACHE, ["/"]]] });
+
+    await sw.fetch({ url })!;
+    await until(() => sw.put.length > 0);
+
+    expect(sw.put).toEqual([{ url, body: "from network" }]);
+    expect(sw.cacheEntries(CACHE)).toContain("/assets/ja-NEWHASH01.js");
+    expect(sw.cacheEntries(OLDEST)).toEqual(["/"]);
+    expect(sw.cacheEntries(NEWER_OLD)).toEqual(["/"]);
+  });
+});
+
+// caches.open() 会**创建**不存在的缓存。fetch 和 activate 的清理是交错跑的，中间那个
+// 窗口里 open 一个刚被删掉的名字，就凭空复活一个空缓存——它还会占掉一个保留位，把真
+// 正有用的那一代顶出去。带 cacheName 的 match 不创建任何东西。
+describe("sw-template shell 查找不创建缓存", () => {
+  it("查一个还不存在的当前缓存，不会把它建出来", async () => {
+    const sw = loadSW(); // 只有 relayium-share，当前这一代还没装
+    const before = sw.cacheNames();
+
+    // 不带哈希，所以 fill 不会顺手创建当前缓存 —— 只考查找这一步。
+    const res = await sw.fetch({ url: ORIGIN + "/site.webmanifest" })!;
+
+    expect(await res.text()).toBe("from network");
+    expect(sw.cacheNames()).toEqual(before);
+  });
+
+  it("回退时查不存在的旧壳，也不会把它建出来", async () => {
+    const sw = loadSW({ seed: [[CACHE, ["/"]]] });
+    const before = sw.cacheNames();
+
+    await sw.fetch({ url: ORIGIN + "/site.webmanifest" })!;
+
+    expect(sw.cacheNames()).toEqual(before);
+  });
+  it("回退时遇到一个枚举到、随即被删掉的旧壳，也不会把它建回来", async () => {
+    // activate 的清理和 fetch 是交错跑的：keys() 报出来的名字，等真去查的时候可能
+    // 已经没了。open() 会把它凭空建回来，那个空缓存还会占掉一个保留位。
+    const sw = loadSW({ seed: [[CACHE, ["/"]]] });
+    sw.ghostKey("relayium-shell-just-deleted");
+    const before = sw.cacheNames();
+
+    const res = await sw.fetch({ url: ORIGIN + "/site.webmanifest" })!;
+
+    expect(await res.text()).toBe("from network");
+    expect(sw.cacheNames()).toEqual(before);
   });
 });

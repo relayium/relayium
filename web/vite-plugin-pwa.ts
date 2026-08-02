@@ -10,7 +10,15 @@ const SHARE_ROUTE = "/share-target";
  * Emits a hand-written service worker (`/sw.js`) that precaches the app shell.
  * The precache list is the built JS/CSS plus the root document + manifest; the
  * cache version is a hash of that list, so it changes exactly when a hashed
- * asset name changes — old shells then evict themselves on activate. No Workbox.
+ * asset name changes. No Workbox.
+ *
+ * Old shells are NOT all evicted on activate: the two most recently created ones
+ * are kept (see KEEP_OLD_SHELLS in sw-template.js). A deploy does not touch a tab
+ * that is already open — it keeps running the JavaScript it loaded with, and that
+ * JavaScript lazy-loads routes by their old hashed filenames, which the server no
+ * longer has. Deleting the old shell made those routes render blank, which is
+ * exactly the "finish what you are doing, then refresh" promise the update notice
+ * makes. Retention is bounded, not indefinite.
  */
 export function pwaPlugin(): Plugin {
   return {

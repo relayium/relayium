@@ -4,11 +4,27 @@
 // emits the result as /sw.js. This file is never bundled or imported directly.
 /* eslint-disable */
 const VERSION = "__VERSION__";
-const CACHE = "relayium-shell-" + VERSION;
+const SHELL_PREFIX = "relayium-shell-";
+const CACHE = SHELL_PREFIX + VERSION;
 const PRECACHE = __PRECACHE__; // JSON array of shell URLs
 const SHARE_ROUTE = "__SHARE_ROUTE__"; // e.g. "/share-target"
 const SHARE_CACHE = "relayium-share";
 const STREAM_ROUTE = "__STREAM_ROUTE__"; // e.g. "/__stream__/" — see lib/sw-stream.ts
+
+/**
+ * 除当前这一代之外，还保留几代旧 shell 缓存。
+ *
+ * 为什么不是 0（activate 时全删，也就是这一版之前的行为）：发版**不会**动一张已经
+ * 开着的页面，它跑的还是加载时那份 JS。那份 JS 里的路由是懒加载的——点「价格」才去
+ * 取 PricingPage-<旧 hash>.js。新版本一 activate 就把旧 shell 删光，这些旧 hash 在
+ * 服务器上也早已不存在：真机复现过，标题变了、路由内容一片空白。而更新提示条的全部
+ * 承诺就是「你可以先把手上的事做完再刷新」——旧壳被删掉，这句承诺就是假的。
+ *
+ * 为什么是 2 而不是无限：当前 precache 41 条约 0.89 MiB，三代合计约 2.7 MiB（外加
+ * 运行时回填的语言包）。两代旧壳刚好覆盖 A→B→C 这种连着发版/紧急修复的节奏，再多
+ * 就是在为无限期的陈旧页面付存储，那不是这条闸门要解决的问题。
+ */
+const KEEP_OLD_SHELLS = 2;
 
 /**
  * 流式下载注册表：pathname → entry。页面在用户手势里先 postMessage 登记一条流
@@ -101,21 +117,77 @@ async function sweepStaleShares(cache) {
   }
 }
 
+/**
+ * 旧 shell 缓存名，**新创建的在前**。
+ *
+ * 依赖的是 CacheStorage.keys() 的规范保证：它按 name→cache 的**插入顺序**返回，也就是
+ * 创建顺序，最早创建的在最前。所以 reverse() 之后就是「最近创建的在前」。这里不能拿
+ * 版本号排序——版本是内容哈希，没有顺序可言。
+ *
+ * 回滚要留意：回滚到一个**缓存名已经存在**的版本时，CACHE 在 keys() 里的位置是它当初
+ * 第一次创建的位置，不在最后。所以下面一律先把 CACHE 剔掉再按顺序取，位置在哪都不影响
+ * 结果——保留的永远是「除当前之外最近创建的两代」。
+ */
+function oldShellsNewestFirst(keys) {
+  return keys.filter((k) => k !== CACHE && k.startsWith(SHELL_PREFIX)).reverse();
+}
+
+/**
+ * 只删掉超出保留代数的旧 shell。
+ *
+ * 三条硬约束，测试逐条钉着：绝不删 CACHE；绝不碰不带 SHELL_PREFIX 的缓存（
+ * relayium-share 首当其冲，它装的是用户分享进来的明文文件，删错就是丢文件）；
+ * 保留的是**最近创建**的 KEEP_OLD_SHELLS 代，不是随便两代。
+ */
+function pruneOldShells(keys) {
+  const doomed = oldShellsNewestFirst(keys).slice(KEEP_OLD_SHELLS);
+  return Promise.all(doomed.map((k) => caches.delete(k)));
+}
+
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter((k) => k.startsWith("relayium-shell-") && k !== CACHE)
-            .map((k) => caches.delete(k)),
-        ),
-      )
+      .then(pruneOldShells)
       .then(() => caches.open(SHARE_CACHE).then(sweepStaleShares).catch(() => {}))
       .then(() => self.clients.claim()),
   );
 });
+
+/**
+ * 在 shell 缓存里找一条响应：**先当前，再保留的旧壳（新→旧）**。
+ *
+ * 顺序是这个函数存在的全部理由。全局的 caches.match() 按缓存创建顺序找，第一个命中
+ * 就返回——那等于「最旧的优先」：离线导航会拿到最老那一代的 index.html，
+ * site.webmanifest 这种**不带哈希、每代同名**的条目也会被旧副本盖住。当前这一代必须
+ * 先问。
+ *
+ * 反过来，旧壳的回退也不能少：一张还开着的旧页面点进懒加载路由时，要的是它自己那代的
+ * PricingPage-<旧 hash>.js，服务器上早没有了，只有旧壳里还留着一份。
+ *
+ * 只找 shell 缓存。relayium-share 装的是分享进来的文件，它们由页面直接开缓存来取
+ * （share-target.ts 的 drainSharedFiles），不该出现在任何一次资源查找里。
+ *
+ * 用 caches.match(req, { cacheName }) 而不是 caches.open(name).then(c => c.match())：
+ * open() 会**创建**不存在的缓存，而 fetch 和 activate 的清理是交错跑的——中间那个窗口
+ * 里 open 一个刚被删掉的名字，就凭空复活一个空缓存，它还会顶掉一个真正有用的保留位。
+ * 带 cacheName 的 match 对不存在的名字直接给 undefined，不创建任何东西。
+ */
+async function shellMatch(request) {
+  try {
+    const hit = await caches.match(request, { cacheName: CACHE });
+    if (hit) return hit;
+    // 取前 KEEP_OLD_SHELLS 个：activate 之后本来也只剩这么多，明确切一刀之后，
+    // 「清理还没跑完」的窗口里行为也和稳态一致。
+    for (const name of oldShellsNewestFirst(await caches.keys()).slice(0, KEEP_OLD_SHELLS)) {
+      const found = await caches.match(request, { cacheName: name });
+      if (found) return found;
+    }
+  } catch {
+    /* 缓存不可用：当作没命中，交给网络。 */
+  }
+  return undefined;
+}
 
 self.addEventListener("fetch", (e) => {
   const req = e.request;
@@ -155,7 +227,9 @@ self.addEventListener("fetch", (e) => {
   if (req.mode === "navigate") {
     // Network-first: fresh HTML when online, the cached shell when offline so
     // the app still opens instantly (signalling/transfer then need the network).
-    e.respondWith(fetch(req).catch(() => caches.match("/")));
+    // 离线兜底走 shellMatch 而不是全局 caches.match("/")：后者按缓存创建顺序找，
+    // 会把**最老那一代**的 index.html 交出去。见 shellMatch。
+    e.respondWith(fetch(req).catch(() => shellMatch("/")));
     return;
   }
 
@@ -165,8 +239,12 @@ self.addEventListener("fetch", (e) => {
     // chunks, most notably) would go to the network forever and the app would
     // break the moment it went offline — the precache list is deliberately
     // narrow, so the runtime fill is what makes that narrowing safe.
+    //
+    // 当前这一代优先，找不到才回退到保留的旧壳（新→旧）：还开着的旧页面靠这条
+    // 回退才拿得到它自己那代的懒加载 chunk，而 site.webmanifest 这种每代同名的
+    // 条目必须拿当前的。回填只写当前缓存（见 fill）。
     e.respondWith(
-      caches.match(req).then((hit) => hit || fetch(req).then((res) => fill(req, res))),
+      shellMatch(req).then((hit) => hit || fetch(req).then((res) => fill(req, res))),
     );
   }
 });
@@ -178,6 +256,9 @@ self.addEventListener("fetch", (e) => {
  * 反过来，把 /api/… 之类的动态响应或 opaque/错误响应存进这个按版本清理的 cache，
  * 就会得到一份没人负责失效的影子副本。res.clone() 必须在返回前做——响应体只能读
  * 一次，先给了浏览器就没得存了。
+ *
+ * 只写**当前**这一代。保留的旧壳是只读的历史，往里回填等于让它们随着时间长胖，而
+ * 保留代数那个存储上限就是这么被绕过去的。
  */
 function fill(req, res) {
   const cacheable =
