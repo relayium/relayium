@@ -244,7 +244,7 @@ describe("MePage 的注销账户入口", () => {
     expect(calls.some((c) => c.url.includes("/api/auth/logout")), "发了登出请求").toBe(false);
     expect(target.querySelector(".danger-zone"), "注销区块自己消失了").toBeTruthy();
     expect(target.querySelector(".files"), "页面数据被清掉了").toBeTruthy();
-    expect(target.querySelector(".clidevices")).toBeTruthy();
+    expect(target.querySelector(".accountdevices")).toBeTruthy();
   });
 
   it("失败是明确的，而且可以再试一次", async () => {

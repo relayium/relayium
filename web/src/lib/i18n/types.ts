@@ -352,16 +352,23 @@ export interface Messages {
     confirmDelNode: string; // confirm() before removing a node
     copyLink: string; // copy the rebuilt share link for a stored file (key held locally)
     linkHint: string; // note: links are recoverable only on the browser that uploaded
-    // 已登录的 CLI 设备。后端一直有列出/吊销的能力（GET /api/devices +
-    // DELETE /api/devices/{id}，删设备会级联删掉它的 CLI 令牌），但界面上一直没有
-    // 入口——用户既看不到哪几台机器持有全权令牌，也无法吊销其中任何一台。
-    cliTitle: string;
-    cliIntro: string;
-    cliEmpty: string;
-    cliLastUsed: (when: string) => string;
-    cliNeverUsed: string;
-    cliRevoke: string;
-    cliConfirmRevoke: string;
+    // 账号级、可吊销的持令牌设备。GET /api/devices 返回两类：CLI（relayium login）
+    // 和 App（macOS/iOS 原生登录，Kind = "app"）——两类持有的是同一种能代表账号
+    // 传输/上传的 bearer 令牌，DELETE /api/devices/{id} 会连带删掉它。浏览器那一类
+    // 不在这里（会话 cookie，不是能拷走的令牌），所以导语必须自己说清楚这件事。
+    //
+    // 文案不能只说 CLI：那样原生 App 的登录在用户眼里就成了「不在这个列表里」，
+    // 而确认框里的「CLI 令牌」也会对着一台 App 设备说出错误的后果。
+    deviceTitle: string;
+    deviceIntro: string;
+    deviceEmpty: string;
+    deviceLastUsed: (when: string) => string;
+    deviceNeverUsed: string;
+    deviceRevoke: string; // 每行都一样的可见按钮文字
+    deviceRevokeLabel: (name: string, kind: string) => string; // 可访问名称——指名设备与登录类型
+    deviceConfirmRevoke: (name: string) => string; // 指名道姓，且对两类凭据都说得对
+    deviceKindApp: string; // 行内类型标签：原生 App 登录
+    deviceKindCli: string; // 行内类型标签：CLI 登录
     actionFailed: string; // generic "the request failed" notice for the write actions on this page
     // 账户注销入口。服务端的双重确认流程（POST /api/account/delete/request 只发一封
     // 确认邮件，真正的删除发生在邮件里的链接被打开之后）早就有了，法律文本也已经写明

@@ -63,43 +63,75 @@
   let nowSec = $state(Math.floor(Date.now() / 1000));
   let loadedFor = ""; // user id we last loaded data for; guards against refetch loops
 
-  // 已登录的 CLI 设备。后端一直有这两个接口（列出 + 删除，删设备会级联删掉它的
-  // CLI 令牌），但界面上一直没有入口——于是用户既看不到哪几台机器持有能代表自己
-  // 传输/上传的令牌，也没法吊销其中任何一台。丢了笔记本时这是唯一能自救的地方。
+  // 账号级、可吊销的持令牌设备。后端一直有这两个接口（列出 + 删除，删设备会级联
+  // 删掉它的令牌），丢了笔记本或手机时这是唯一能自救的地方。
   interface DeviceRow { ID: string; Name: string; CreatedAt: number; LastSeenAt: number; Kind: string }
-  let cliDevices = $state<DeviceRow[]>([]);
 
-  async function loadCliDevices() {
+  // 列进来的 Kind，以及它们各自的行内标签。只有这两类：它们持有的是同一种能代表
+  // 账号传输/上传的 bearer 令牌（CLI 走 relayium login，App 走原生登录），吊销的
+  // 后果对两者是同一句话。
+  //
+  // 浏览器那一类不列：本机自动登记，持有的是会话 cookie 而不是能拷走的令牌。空
+  // Kind 和将来才出现的新 Kind 同样不列——这一版说不清楚吊销它们意味着什么，与其
+  // 给一个含义不明的破坏性按钮，不如不给。
+  //
+  // Map 而不是普通对象：Kind 是从服务端拿来的字符串，拿对象查表就得用 `in` 或
+  // `?.` 判断，两者都会走到 Object.prototype 上——Kind = "toString"/"constructor"
+  // 会被当成已知类型放行，还会把行内标签渲染成一个内置函数。Map 只有自有键。
+  const DEVICE_KINDS = new Map<string, () => string>([
+    ["app", () => t.me.deviceKindApp],
+    ["cli", () => t.me.deviceKindCli],
+  ]);
+
+  let devices = $state<DeviceRow[]>([]);
+  // 设备请求属于哪一段登录会话。账号切换、登出后再登录同一账号，甚至组件销毁，
+  // 都会换一个代号；旧列表/旧吊销请求的迟到响应因此不能改写当前页面。
+  let deviceSessionGen = 0;
+
+  async function loadDevices(gen: number) {
+    if (gen !== deviceSessionGen) return;
     try {
       const res = await fetch("/api/devices", { credentials: "include" });
       const all: DeviceRow[] = res.ok ? ((await res.json()).devices ?? []) : [];
-      // 只列 CLI 设备：浏览器那一类是本机自动登记的，列出来只会是噪音（而且它们
-      // 持有的是会话 cookie，不是可以拷走的令牌）。
-      cliDevices = all
-        .filter((d) => d.Kind === "cli")
+      if (gen !== deviceSessionGen) return;
+      // 跨类型统一排序：这个列表唯一的排序承诺是「最近用过的在最上面」，按类型
+      // 分组会让它不成立。从未使用过的（LastSeenAt = 0）之间按创建时间倒序。
+      devices = all
+        .filter((d) => DEVICE_KINDS.has(d.Kind))
         .sort((a, b) => b.LastSeenAt - a.LastSeenAt || b.CreatedAt - a.CreatedAt);
     } catch {
-      cliDevices = [];
+      if (gen === deviceSessionGen) devices = [];
     }
   }
 
-  async function revokeCliDevice(d: DeviceRow) {
-    if (!(await confirmDialog(t.me.cliConfirmRevoke))) return;
+  async function revokeDevice(d: DeviceRow) {
+    const gen = deviceSessionGen;
+    // 确认框指名要吊销的是哪一台：一屏里可能有好几行，可见文字又都是同一个"吊销"。
+    if (!(await confirmDialog(t.me.deviceConfirmRevoke(d.Name)))) return;
+    if (gen !== deviceSessionGen) return;
     try {
       const res = await fetch(`/api/devices/${encodeURIComponent(d.ID)}`, {
         method: "DELETE", credentials: "include",
       });
+      if (gen !== deviceSessionGen) return;
       if (!res.ok) { failed(); return; }
-      cliDevices = cliDevices.filter((x) => x.ID !== d.ID);
+      // 按 ID 摘掉那一行。等确认框期间列表可能已经被重新拉过，所以过滤的是当时
+      // 的 `devices`，不是发起吊销时的那份快照。
+      devices = devices.filter((x) => x.ID !== d.ID);
     } catch {
-      failed();
+      if (gen === deviceSessionGen) failed();
     }
+  }
+
+  /** 行内类型标签：App 还是 CLI。两类持有同等权限的令牌，用户得能一眼分开。 */
+  function kindText(d: DeviceRow): string {
+    return DEVICE_KINDS.get(d.Kind)?.() ?? "";
   }
 
   /** 最后使用时间。0 = 登录后一次都没用过——那种设备最值得吊销，所以单独说清楚。 */
   function lastUsedText(d: DeviceRow): string {
-    if (!d.LastSeenAt) return t.me.cliNeverUsed;
-    return t.me.cliLastUsed(new Date(d.LastSeenAt * 1000).toLocaleString());
+    if (!d.LastSeenAt) return t.me.deviceNeverUsed;
+    return t.me.deviceLastUsed(new Date(d.LastSeenAt * 1000).toLocaleString(lang()));
   }
 
   // "My Nodes" — BYO relay node section.
@@ -157,7 +189,7 @@
     }
   }
 
-  async function load() {
+  async function load(deviceGen: number) {
     loading = true;
     try {
       const [sr, fr, mr] = await Promise.all([
@@ -187,7 +219,7 @@
       loading = false;
     }
     await loadNodes();
-    await loadCliDevices();
+    await loadDevices(deviceGen);
   }
 
   async function copyLink(id: string) {
@@ -350,11 +382,15 @@
     const uid = session().user?.id ?? "";
     if (uid && uid !== loadedFor) {
       loadedFor = uid;
+      const deviceGen = ++deviceSessionGen;
+      devices = [];
       resetDeleteRequest();
-      load();
+      load(deviceGen);
     }
     if (!uid) {
       loadedFor = "";
+      deviceSessionGen++;
+      devices = [];
       stats = null; files = []; loading = false;
       nodes = []; strict = false; newToken = null; addingNode = false; renamingId = null;
       resetDeleteRequest();
@@ -368,6 +404,7 @@
   });
   onDestroy(() => {
     clearInterval(tick);
+    deviceSessionGen++;
     resetDeleteRequest();
   });
 </script>
@@ -535,18 +572,23 @@
       {/if}
     </section>
 
-    <section class="clidevices">
-      <h2>{t.me.cliTitle}</h2>
-      <p class="muted">{t.me.cliIntro}</p>
-      {#if cliDevices.length === 0}
-        <p class="muted">{t.me.cliEmpty}</p>
+    <section class="accountdevices">
+      <h2>{t.me.deviceTitle}</h2>
+      <p class="muted">{t.me.deviceIntro}</p>
+      {#if devices.length === 0}
+        <p class="muted">{t.me.deviceEmpty}</p>
       {:else}
-        <ul class="clilist">
-          {#each cliDevices as d (d.ID)}
+        <ul class="devicelist">
+          {#each devices as d (d.ID)}
             <li>
-              <span class="cliname">{d.Name}</span>
-              <span class="cliseen" class:never={!d.LastSeenAt}>{lastUsedText(d)}</span>
-              <button class="del" onclick={() => revokeCliDevice(d)}>{t.me.cliRevoke}</button>
+              <span class="devicename">{d.Name}</span>
+              <span class="devicekind">{kindText(d)}</span>
+              <span class="deviceseen" class:never={!d.LastSeenAt}>{lastUsedText(d)}</span>
+              <!-- 可见文字每一行都一样，所以可访问名称必须带上设备名——否则读屏
+                   用户拿到的是一串分不开的"吊销"。 -->
+              <button class="del" aria-label={t.me.deviceRevokeLabel(d.Name, kindText(d))} onclick={() => revokeDevice(d)}>
+                {t.me.deviceRevoke}
+              </button>
             </li>
           {/each}
         </ul>
@@ -574,16 +616,22 @@
 </section>
 
 <style>
-  .clidevices { margin-top: var(--section-gap); }
-  .clilist { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
-  .clilist li {
+  .accountdevices { margin-top: var(--section-gap); }
+  .devicelist { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .devicelist li {
     display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
     padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius);
   }
-  .cliname { flex: 1 1 auto; min-width: 0; color: var(--text-h); font-weight: 500; word-break: break-word; }
-  .cliseen { font-size: var(--fs-xs); color: var(--text); }
+  .devicename { flex: 1 1 auto; min-width: 0; color: var(--text-h); font-weight: 500; word-break: break-word; }
+  /* 类型标签跟在设备名后面，做成一枚安静的徽章：它是分类，不是状态，颜色上抢不过
+     "从未使用"那一条。不收缩，免得窄屏上被挤成竖排的单字。 */
+  .devicekind {
+    flex: 0 0 auto; font-size: var(--fs-xs); color: var(--text);
+    padding: 2px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  }
+  .deviceseen { font-size: var(--fs-xs); color: var(--text); }
   /* 从未使用过的设备最值得吊销——给它一点视觉重量，别和其他行糊在一起。 */
-  .cliseen.never { color: var(--danger); }
+  .deviceseen.never { color: var(--danger); }
 
   /* 注销区块：一条分隔线 + 更大的上边距，把它和上面的日常操作断开。 */
   .danger-zone {
@@ -752,6 +800,12 @@
   .chk:disabled { opacity: .6; cursor: default; }
 
   @media (max-width: 520px) {
+    .devicelist li {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+    }
+    .devicelist .del { justify-self: end; }
     .exp { margin-inline-start: 0; }
   }
 </style>
