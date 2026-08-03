@@ -104,6 +104,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case contentBackToSignIn = "content.backToSignIn"
     case tabDirect = "tab.direct"
     case tabLink = "tab.link"
+    /// The iOS receive tab. `tab.link` labels a macOS tab that both sends and
+    /// receives; this one only receives, and `download.heading`
+    /// ("Receive files") is a screen title, too long for a tab item.
+    case tabReceive = "tab.receive"
     case tabAccount = "tab.account"
 
     // MARK: - Sign in
@@ -111,6 +115,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case loginEmail = "login.email"
     case loginPassword = "login.password"
     case loginSignIn = "login.signIn"
+    /// A sign-in in flight, for the same reason as `account.restoring`.
+    case loginSigningIn = "login.signingIn"
     case loginSignInWithApple = "login.signInWithApple"
     case loginCreateAccount = "login.createAccount"
 
@@ -312,6 +318,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// %1$@ used, %2$@ cap.
     case accountMeterOf = "account.meterOf"
     case accountStaleFigures = "account.staleFigures"
+    /// Launch restore. macOS shows a bare `ProgressView`; a full-screen touch
+    /// state needs a label, and VoiceOver reads nothing from a bare spinner.
+    /// Same sentence as `menubar.loadingAccount` under a key that names the
+    /// right surface.
+    case accountRestoring = "account.restoring"
     case accountDevicesHeading = "account.devicesHeading"
     case accountDevicesBody = "account.devicesBody"
     case accountNoDevices = "account.noDevices"

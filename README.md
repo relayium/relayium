@@ -232,15 +232,17 @@ pairing code requires sign-in; joining with that code does not.
   Apple notarization, stapled, and Gatekeeper-validated; public release and the
   website download switch are still pending.
 - **iOS — in development, not public:** a native SwiftUI app now exists at
-  [`apps/ios`](apps/ios) and builds against the same shared Swift package. Its
-  first slice receives an encrypted stored link without an account: paste the
-  link, inspect the decrypted manifest and its delete-after-download warning,
-  save the files into the app's own folder in the Files app, and hand the
-  finished result to the system share sheet. It ships the same nine languages.
-  Everything else in the iOS plan — sending, realtime and nearby transfer,
-  accounts, universal links, the Share Extension, background transfer,
-  notifications, and App Store release — is still to be built, and there is no
-  download to install.
+  [`apps/ios`](apps/ios) and builds against the same shared Swift package. It
+  receives an encrypted stored link without an account — paste the link,
+  inspect the decrypted manifest and its delete-after-download warning, save the
+  files into the app's own folder in the Files app, and hand the finished result
+  to the system share sheet — and it can now sign in to a Relayium account with
+  an email and password to see the plan and usage that account has, refresh it,
+  and sign out. Receiving still needs no account. It ships the same nine
+  languages. Everything else in the iOS plan — sending, realtime and nearby
+  transfer, device and stored-file management, universal links, the Share
+  Extension, background transfer, notifications, and App Store release — is
+  still to be built, and there is no download to install.
 - **Next:** publish and validate the first macOS release and continue iOS;
   persistent device identity, resumable transfer, broader protocol
   documentation, and additional distribution formats remain future work.

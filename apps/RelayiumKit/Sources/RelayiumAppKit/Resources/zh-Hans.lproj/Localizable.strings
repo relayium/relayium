@@ -72,12 +72,14 @@
 "content.backToSignIn" = "返回登录";
 "tab.direct" = "直连";
 "tab.link" = "链接";
+"tab.receive" = "接收";
 "tab.account" = "账户";
 
 /* MARK: 登录 */
 "login.email" = "邮箱";
 "login.password" = "密码";
 "login.signIn" = "登录";
+"login.signingIn" = "正在登录…";
 "login.signInWithApple" = "通过 Apple 登录";
 "login.createAccount" = "在 relayium.com 注册账户";
 
@@ -242,6 +244,7 @@
 "account.storage" = "存储";
 "account.meterOf" = "%1$@ / %2$@";
 "account.staleFigures" = "显示的是最后一次已知数据 — 无法连接服务器。";
+"account.restoring" = "正在载入账户…";
 "account.devicesHeading" = "已登录的设备";
 "account.devicesBody" = "持有本账户令牌的应用与命令行登录。浏览器不在此列：它们使用会话登录，而不是令牌。";
 "account.noDevices" = "当前没有应用或命令行设备处于登录状态。";
@@ -350,7 +353,7 @@
 "error.destination.notPermitted.filesApp" = "Relayium 没有写入「文件」App 中接收文件夹（%@）的权限，因此什么都没有保存。请重新下载；如果仍然失败，请重新启动 Relayium 并反馈这个问题。";
 "error.destination.systemError.filesApp" = "Relayium 未能写入「文件」App 中的接收文件夹（%1$@）（错误 %2$@），因此什么都没有保存。请重新下载；如果仍然失败，请重新启动 Relayium 并反馈这个错误编号。";
 "error.manifest.unsafePath" = "对方设备描述了一个位于“%@”的文件，它会被写到你所选文件夹之外。什么都没有保存。";
-"error.manifest.duplicatePath" = "这次传输在“%@”上包含了不止一个文件 — 在这台 Mac 上它们是同一个文件 — 因此什么都没有保存。请让发送方为其中一个改名。";
+"error.manifest.duplicatePath" = "这次传输在“%@”上包含了不止一个文件 — 在这台设备上它们是同一个文件 — 因此什么都没有保存。请让发送方为其中一个改名。";
 "error.manifest.pathCollision" = "这次传输要求“%@”同时是文件和文件夹，而这两者不可能并存，因此什么都没有保存。请让发送方重试。";
 "error.plaintext.unreadable" = "未能打开“%@”，因此什么都没有发送。请检查该文件是否仍然存在、以及你是否有读取权限。";
 "error.plaintext.readFailed" = "读取“%@”在中途失败，因此传输已停止。对方设备已丢弃这个不完整的文件。";

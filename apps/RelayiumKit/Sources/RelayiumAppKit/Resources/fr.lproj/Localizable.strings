@@ -72,12 +72,14 @@
 "content.backToSignIn" = "Retour à la connexion";
 "tab.direct" = "Direct";
 "tab.link" = "Lien";
+"tab.receive" = "Recevoir";
 "tab.account" = "Compte";
 
 /* MARK: connexion */
 "login.email" = "E-mail";
 "login.password" = "Mot de passe";
 "login.signIn" = "Se connecter";
+"login.signingIn" = "Connexion en cours…";
 "login.signInWithApple" = "Se connecter avec Apple";
 "login.createAccount" = "Créer un compte sur relayium.com";
 
@@ -245,6 +247,7 @@
 "account.storage" = "Stockage";
 "account.meterOf" = "%1$@ sur %2$@";
 "account.staleFigures" = "Affichage des derniers chiffres connus — le serveur était injoignable.";
+"account.restoring" = "Chargement de votre compte…";
 "account.devicesHeading" = "Appareils connectés";
 "account.devicesBody" = "Apps et connexions en ligne de commande qui détiennent un jeton pour ce compte. Les navigateurs n’y figurent pas : ils se connectent avec une session, pas avec un jeton.";
 "account.noDevices" = "Aucune app ni ligne de commande n’est connectée.";
@@ -358,7 +361,7 @@
 "error.destination.notPermitted.filesApp" = "Relayium n’a pas le droit d’écrire dans son dossier de réception dans l’app Fichiers (%@) : rien n’a été enregistré. Téléchargez de nouveau ; si l’échec persiste, relancez Relayium et signalez-le.";
 "error.destination.systemError.filesApp" = "Relayium n’a pas pu écrire dans son dossier de réception dans l’app Fichiers (%1$@, erreur %2$@) : rien n’a été enregistré. Téléchargez de nouveau ; si l’échec persiste, relancez Relayium et signalez ce numéro d’erreur.";
 "error.manifest.unsafePath" = "L’autre appareil a décrit un fichier situé à « %@ », qui serait écrit hors du dossier choisi. Rien n’a été enregistré.";
-"error.manifest.duplicatePath" = "Le transfert contient plusieurs fichiers à « %@ » — sur ce Mac, c’est le même fichier — donc rien n’a été enregistré. Demandez à l’expéditeur d’en renommer un.";
+"error.manifest.duplicatePath" = "Le transfert contient plusieurs fichiers à « %@ » — sur cet appareil, c’est le même fichier — donc rien n’a été enregistré. Demandez à l’expéditeur d’en renommer un.";
 "error.manifest.pathCollision" = "Le transfert veut que « %@ » soit à la fois un fichier et un dossier, ce qui est impossible : rien n’a été enregistré. Demandez à l’expéditeur de réessayer.";
 "error.plaintext.unreadable" = "Impossible d’ouvrir « %@ » : rien n’a été envoyé. Vérifiez que le fichier existe encore et que vous avez le droit de le lire.";
 "error.plaintext.readFailed" = "La lecture de « %@ » a échoué en cours de route : le transfert a été arrêté. L’autre appareil a écarté le fichier incomplet.";

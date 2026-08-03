@@ -24,9 +24,11 @@ public final class KeychainTokenStore: TokenStore {
     private let account: String
     private let accessGroup: String?
 
-    /// `accessGroup` is nil-able because this type also runs in hosts that have
-    /// no entitlement to name one — the SPM test host, chiefly. The app always
-    /// passes `AppEnvironment.keychainAccessGroup`.
+    /// `accessGroup` is nil-able because plenty of hosts have no entitlement to
+    /// name one: the SPM test host, and the iOS app, which ships no
+    /// `keychain-access-groups` entitlement and deliberately keeps its bearer in
+    /// its own default group. The macOS app passes the shared team group. Both
+    /// values come from `AppEnvironment.keychainConfiguration`.
     public init(service: String, account: String, accessGroup: String? = nil) {
         self.service = service
         self.account = account

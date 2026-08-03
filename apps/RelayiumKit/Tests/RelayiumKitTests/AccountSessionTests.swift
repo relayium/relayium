@@ -214,6 +214,7 @@ final class AccountSessionTests: XCTestCase {
 
         await s.refresh()
         guard case .ready = s.state else { return XCTFail("must stay ready, got \(s.state)") }
+        XCTAssertNotNil(s.bearerToken, "the live session must still hold a usable bearer")
     }
 
     // Same defect as above, but for restore() specifically: closing and reopening
@@ -232,6 +233,7 @@ final class AccountSessionTests: XCTestCase {
 
         await s.restore()
         guard case .ready = s.state else { return XCTFail("must stay ready, got \(s.state)") }
+        XCTAssertNotNil(s.bearerToken, "the live session must still hold a usable bearer")
     }
 
     // MARK: - Operation identity
@@ -393,6 +395,105 @@ final class AccountSessionTests: XCTestCase {
         guard case .ready = s.state else { return XCTFail("want ready, got \(s.state)") }
         XCTAssertFalse(seen.contains(.restoring), "a reopened window is a refresh, not a cold start")
     }
+
+    // A refused revocation must NOT delete local state: that would leave a
+    // still-valid server credential nothing on this device can revoke. The user
+    // is offered a retry instead, and the retry has to actually work.
+    func testSignOutFailureKeepsTheCredentialAndOffersRetry() async throws {
+        let store = InMemoryTokenStore()
+        try store.save("rlm_cli_TESTTOKEN")
+        try routeLoggedIn(loginBody: Data())
+        let s = session(store: store)
+        await s.restore()
+        guard case .ready = s.state else { return XCTFail("setup failed, got \(s.state)") }
+
+        StubURLProtocol.router = { req in
+            switch req.url?.path {
+            case "/api/auth/logout": return .init(status: 503, body: Data())
+            default:                 return .init(status: 500, body: Data())
+            }
+        }
+        await s.logOut()
+
+        XCTAssertEqual(s.state, .unavailable(message: L10n.t(.accountSignOutFailed)))
+        XCTAssertEqual(s.bearerToken, "rlm_cli_TESTTOKEN",
+                       "the credential must survive so the revocation can be retried")
+        XCTAssertEqual(try store.load(), "rlm_cli_TESTTOKEN")
+
+        StubURLProtocol.router = { _ in .init(status: 200, body: Data()) }
+        await s.logOut()
+
+        XCTAssertEqual(s.state, .loggedOut)
+        XCTAssertNil(s.bearerToken)
+        XCTAssertNil(try store.load())
+    }
+
+    // restore()'s COLD path — read the store, then fetch — is the one entry
+    // point the generation guard was never proved on. A sign-out that lands
+    // while the launch fetch is in flight must win: otherwise the late success
+    // writes `.ready` over it and puts the user back on an account screen whose
+    // token was just cleared.
+    func testSignOutDuringLaunchRestoreStaysSignedOut() async throws {
+        let store = InMemoryTokenStore()
+        try store.save("rlm_cli_TESTTOKEN")
+        let gate = RequestGate()
+        let me = try fixture("me"), usage = try fixture("me-usage")
+        StubURLProtocol.router = { req in
+            switch req.url?.path {
+            case "/api/me":          gate.hold(); return .init(status: 200, body: me)
+            case "/api/me/usage":    return .init(status: 200, body: usage)
+            case "/api/auth/logout": return .init(status: 200, body: Data())
+            default:                 return .init(status: 500, body: Data())
+            }
+        }
+        let s = session(store: store)
+        let restoring = Task { await s.restore() }
+        await gate.reached()
+        // In a Task and released before it is awaited, exactly like the refresh
+        // case above: `StubURLProtocol.startLoading` blocks URLSession's own
+        // loading thread, so a sign-out awaited while /api/me is still held
+        // would wait out the 60s transport timeout instead of racing it. The
+        // yield is what matters — `logOut()` bumps the operation generation
+        // synchronously, before its first await, so by the time the gate opens
+        // the launch restore is already superseded.
+        let loggingOut = Task { await s.logOut() }   // the user signs out during the launch fetch
+        await Task.yield()
+        gate.release()
+        await loggingOut.value
+        await restoring.value
+
+        XCTAssertEqual(s.state, .loggedOut, "a launch restore must not undo a sign-out that beat it")
+        XCTAssertNil(s.bearerToken)
+        XCTAssertNil(try store.load())
+    }
+
+    // The password rides in the POST body and the bearer in a header. Either one
+    // in a URL would reach every proxy log, the server's access log, and any
+    // Referer that followed.
+    func testCredentialsNeverAppearInARequestURL() async throws {
+        let recorder = URLRecorder()
+        let loginBody = try fixture("login-success")
+        let me = try fixture("me"), usage = try fixture("me-usage")
+        StubURLProtocol.router = { req in
+            recorder.record(req.url)
+            switch req.url?.path {
+            case "/api/me":       return .init(status: 200, body: me)
+            case "/api/me/usage": return .init(status: 200, body: usage)
+            default:              return .init(status: 200, body: loginBody)
+            }
+        }
+        let s = session(store: InMemoryTokenStore())
+        await s.logIn(email: "person@example.com", password: "hunter2-correct-horse")
+        guard case .ready = s.state else { return XCTFail("setup failed, got \(s.state)") }
+
+        XCTAssertFalse(recorder.urls.isEmpty, "nothing was sent — the test proves nothing")
+        for url in recorder.urls {
+            XCTAssertFalse(url.contains("hunter2"), url)
+            XCTAssertFalse(url.contains("person@example.com"), url)
+            XCTAssertFalse(url.contains("rlm_cli_TESTTOKEN"), url)
+            XCTAssertNil(URLComponents(string: url)?.query, url)
+        }
+    }
 }
 
 /// A latch a stubbed response can block on, so a test can run a main-actor call
@@ -433,4 +534,21 @@ final class FailingSaveTokenStore: TokenStore {
     func save(_ token: String) throws { throw KeychainError.status(-25308) }
     func load() throws -> String? { token }
     func clear() throws { token = nil }
+}
+
+/// Collects every URL that reached the transport. The stub's router runs on
+/// URLSession's own thread, so a captured local array would be a data race.
+final class URLRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var seen: [String] = []
+
+    func record(_ url: URL?) {
+        lock.lock(); defer { lock.unlock() }
+        seen.append(url?.absoluteString ?? "")
+    }
+
+    var urls: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return seen
+    }
 }

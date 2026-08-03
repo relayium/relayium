@@ -1,5 +1,10 @@
 import XCTest
+import Security
 @testable import RelayiumAppKit
+// `baseQuery` and `query(for:)` are internal seams in RelayiumKit, kept internal
+// precisely so a host with no keychain entitlement can still assert the
+// dictionary the Security framework would receive.
+@testable import RelayiumKit
 
 final class AppEnvironmentTests: XCTestCase {
     func testProductionBaseURLIsTheServiceOrigin() {
@@ -39,9 +44,122 @@ final class AppEnvironmentTests: XCTestCase {
     }
 
     func testKeychainAccessGroupIsTheSharedTeamGroup() {
-        // Shared, not the default per-app group: R3's iOS app reads the same
-        // credential, and changing this later would cost a data migration.
+        // Shared, not the default per-app group — a macOS-only decision. The
+        // iOS app does NOT read this credential: it carries no
+        // keychain-access-groups entitlement and keeps its own bearer under
+        // `com.relayium.app` with no group. Changing this value would cost every
+        // existing macOS installation a data migration.
         XCTAssertEqual(AppEnvironment.keychainAccessGroup,
                        "7PVYUG4YQS.com.relayium.shared")
+    }
+
+    // The macOS row cannot move: every existing installation's bearer token and
+    // every stored-link key it saved lives under exactly these values.
+    func testMacKeychainConfigurationIsTheHistoricalIdentity() {
+        let c = AppEnvironment.keychainConfiguration(for: .macOS)
+        XCTAssertEqual(c.service, "com.relayium.mac")
+        XCTAssertEqual(c.account, "bearer-token")
+        XCTAssertEqual(c.accessGroup, "7PVYUG4YQS.com.relayium.shared")
+    }
+
+    // iOS carries no keychain-access-groups entitlement, so naming a group
+    // would be refused on a signed device build — and would claim a cross-app
+    // credential share that does not exist.
+    func testIOSKeychainConfigurationNamesTheAppAndNoAccessGroup() {
+        let c = AppEnvironment.keychainConfiguration(for: .iOS)
+        XCTAssertEqual(c.service, "com.relayium.app")
+        XCTAssertEqual(c.account, "bearer-token")
+        XCTAssertNil(c.accessGroup)
+    }
+
+    func testThePlatformsShareTheAccountAndDifferInService() {
+        let mac = AppEnvironment.keychainConfiguration(for: .macOS)
+        let ios = AppEnvironment.keychainConfiguration(for: .iOS)
+        XCTAssertEqual(mac.account, ios.account)
+        XCTAssertNotEqual(mac.service, ios.service)
+    }
+
+    // Every platform has a decision, and only the entitled one names a group.
+    // Iterating allCases is what stops a future platform from being added
+    // without one.
+    func testEveryPlatformHasACompleteConfiguration() {
+        for platform in KeychainPlatform.allCases {
+            let c = AppEnvironment.keychainConfiguration(for: platform)
+            XCTAssertFalse(c.service.isEmpty, "\(platform)")
+            XCTAssertFalse(c.account.isEmpty, "\(platform)")
+            if platform != .macOS {
+                XCTAssertNil(c.accessGroup, "\(platform) must not name an access group")
+            }
+        }
+    }
+
+    // The dictionary the Security framework actually receives, for a platform
+    // this host is not running.
+    func testTokenStoreQueryOmitsTheAccessGroupOnIOS() {
+        let store = AppEnvironment.makeTokenStore(AppEnvironment.keychainConfiguration(for: .iOS))
+        XCTAssertEqual(store.baseQuery[kSecAttrService as String] as? String, "com.relayium.app")
+        XCTAssertEqual(store.baseQuery[kSecAttrAccount as String] as? String, "bearer-token")
+        XCTAssertNil(store.baseQuery[kSecAttrAccessGroup as String])
+    }
+
+    func testTokenStoreQueryCarriesTheTeamGroupOnMac() {
+        let store = AppEnvironment.makeTokenStore(AppEnvironment.keychainConfiguration(for: .macOS))
+        XCTAssertEqual(store.baseQuery[kSecAttrService as String] as? String, "com.relayium.mac")
+        XCTAssertEqual(store.baseQuery[kSecAttrAccessGroup as String] as? String,
+                       "7PVYUG4YQS.com.relayium.shared")
+    }
+
+    // The one host-dependent fact in the whole policy, kept to one assertion.
+    func testCurrentPlatformMatchesTheCompiledPlatform() {
+        #if os(iOS)
+        XCTAssertEqual(AppEnvironment.currentKeychainPlatform, .iOS)
+        #else
+        XCTAssertEqual(AppEnvironment.currentKeychainPlatform, .macOS)
+        #endif
+    }
+
+    // The stored-link keys share the bearer's service — the id charset refuses
+    // separators specifically so no id can compose the bearer's account name.
+    // One configuration is what keeps that relationship true on both platforms
+    // instead of a future iOS upload slice inventing a second service.
+    //
+    // Both rows are asserted from THIS host, like the bearer's: a stored-link
+    // query reachable only from the platform that runs it is exactly the half of
+    // the policy that would go unchecked until someone shipped it.
+    func testStoredLinkKeyQueryOnMacIsTheHistoricalIdentity() throws {
+        let q = try AppEnvironment
+            .makeStoredLinkKeyStore(AppEnvironment.keychainConfiguration(for: .macOS))
+            .query(for: "0123456789abcdef0123456789abcdef")
+        XCTAssertEqual(q[kSecAttrService as String] as? String, "com.relayium.mac")
+        XCTAssertEqual(q[kSecAttrAccessGroup as String] as? String,
+                       "7PVYUG4YQS.com.relayium.shared")
+    }
+
+    func testStoredLinkKeyQueryOnIOSOmitsTheAccessGroup() throws {
+        let q = try AppEnvironment
+            .makeStoredLinkKeyStore(AppEnvironment.keychainConfiguration(for: .iOS))
+            .query(for: "0123456789abcdef0123456789abcdef")
+        XCTAssertEqual(q[kSecAttrService as String] as? String, "com.relayium.app")
+        XCTAssertNil(q[kSecAttrAccessGroup as String])
+    }
+
+    // And the no-argument call the app actually makes resolves to this host's
+    // row, so the wiring is covered and not just the table.
+    func testStoredLinkKeyStoreDefaultsToTheCurrentPlatform() throws {
+        let q = try AppEnvironment.makeStoredLinkKeyStore()
+            .query(for: "0123456789abcdef0123456789abcdef")
+        XCTAssertEqual(q[kSecAttrService as String] as? String,
+                       AppEnvironment.keychainConfiguration.service)
+        XCTAssertEqual(q[kSecAttrAccessGroup as String] as? String,
+                       AppEnvironment.keychainConfiguration.accessGroup)
+    }
+
+    // "In the fragment" and "not in the query" are different claims, and only
+    // the second one keeps the token out of the server's access log.
+    func testReactivateURLPutsNothingInTheQuery() {
+        let url = AppEnvironment.reactivateWebURL(token: "react_abc")
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        XCTAssertNil(components?.query)
+        XCTAssertEqual(components?.fragment?.contains("react_abc"), true)
     }
 }

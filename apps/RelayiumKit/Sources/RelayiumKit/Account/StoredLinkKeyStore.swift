@@ -131,8 +131,11 @@ public final class KeychainStoredLinkKeyStore: StoredLinkKeyStore {
     private let queue = DispatchQueue(label: "com.relayium.stored-link-keys")
 
     /// `accessGroup` is nil-able for the same reason as `KeychainTokenStore`'s:
-    /// the SPM test host has no entitlement to name one. The app always passes
-    /// `AppEnvironment.keychainAccessGroup`.
+    /// the SPM test host has no entitlement to name one, and neither does the
+    /// iOS app, which keeps these keys in its own default group under its own
+    /// service. macOS passes the shared team group. Both values come from
+    /// `AppEnvironment.keychainConfiguration`, so these keys share the bearer
+    /// token's service on whichever platform is running.
     public init(service: String, accessGroup: String? = nil) {
         self.service = service
         self.accessGroup = accessGroup

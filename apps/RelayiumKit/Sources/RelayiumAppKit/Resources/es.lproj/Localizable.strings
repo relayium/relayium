@@ -72,12 +72,14 @@
 "content.backToSignIn" = "Volver al inicio de sesión";
 "tab.direct" = "Directo";
 "tab.link" = "Enlace";
+"tab.receive" = "Recibir";
 "tab.account" = "Cuenta";
 
 /* MARK: inicio de sesión */
 "login.email" = "Correo electrónico";
 "login.password" = "Contraseña";
 "login.signIn" = "Iniciar sesión";
+"login.signingIn" = "Iniciando sesión…";
 "login.signInWithApple" = "Iniciar sesión con Apple";
 "login.createAccount" = "Crear una cuenta en relayium.com";
 
@@ -245,6 +247,7 @@
 "account.storage" = "Almacenamiento";
 "account.meterOf" = "%1$@ de %2$@";
 "account.staleFigures" = "Se muestran las últimas cifras conocidas: no se pudo contactar con el servidor.";
+"account.restoring" = "Cargando tu cuenta…";
 "account.devicesHeading" = "Dispositivos con sesión iniciada";
 "account.devicesBody" = "Apps e inicios de sesión por línea de comandos que tienen un token de esta cuenta. Los navegadores no aparecen: inician sesión con una sesión, no con un token.";
 "account.noDevices" = "No hay ninguna app ni dispositivo de línea de comandos con sesión iniciada.";
@@ -358,7 +361,7 @@
 "error.destination.notPermitted.filesApp" = "Relayium no tiene permiso para escribir en su carpeta de recepción de la app Archivos (%@), así que no se guardó nada. Vuelve a descargar; si sigue fallando, reinicia Relayium y comunícalo, por favor.";
 "error.destination.systemError.filesApp" = "Relayium no pudo escribir en su carpeta de recepción de la app Archivos (%1$@, error %2$@), así que no se guardó nada. Vuelve a descargar; si sigue fallando, reinicia Relayium y comunica ese número de error.";
 "error.manifest.unsafePath" = "El otro dispositivo describió un archivo en «%@», que se escribiría fuera de la carpeta que elegiste. No se guardó nada.";
-"error.manifest.duplicatePath" = "La transferencia contiene más de un archivo en «%@» —en este Mac son el mismo archivo—, así que no se guardó nada. Pídele a quien envía que renombre uno de ellos.";
+"error.manifest.duplicatePath" = "La transferencia contiene más de un archivo en «%@» —en este dispositivo son el mismo archivo—, así que no se guardó nada. Pídele a quien envía que renombre uno de ellos.";
 "error.manifest.pathCollision" = "La transferencia quiere que «%@» sea a la vez archivo y carpeta, y eso no puede existir, así que no se guardó nada. Pídele a quien envía que lo intente de nuevo.";
 "error.plaintext.unreadable" = "No se pudo abrir «%@», así que no se envió nada. Comprueba que el archivo sigue existiendo y que tienes permiso para leerlo.";
 "error.plaintext.readFailed" = "La lectura de «%@» falló a mitad de camino, así que la transferencia se detuvo. El otro dispositivo descartó el archivo incompleto.";

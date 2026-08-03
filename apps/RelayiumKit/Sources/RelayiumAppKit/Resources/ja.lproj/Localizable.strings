@@ -72,12 +72,14 @@
 "content.backToSignIn" = "サインインに戻る";
 "tab.direct" = "ダイレクト";
 "tab.link" = "リンク";
+"tab.receive" = "受信";
 "tab.account" = "アカウント";
 
 /* MARK: サインイン */
 "login.email" = "メールアドレス";
 "login.password" = "パスワード";
 "login.signIn" = "サインイン";
+"login.signingIn" = "サインインしています…";
 "login.signInWithApple" = "Apple でサインイン";
 "login.createAccount" = "relayium.com でアカウントを作成";
 
@@ -242,6 +244,7 @@
 "account.storage" = "ストレージ";
 "account.meterOf" = "%1$@ / %2$@";
 "account.staleFigures" = "最後に取得できた数値を表示しています — サーバーに接続できませんでした。";
+"account.restoring" = "アカウントを読み込んでいます…";
 "account.devicesHeading" = "サインイン中のデバイス";
 "account.devicesBody" = "このアカウントのトークンを保持しているアプリとコマンドラインのログインです。ブラウザは一覧に含まれません。ブラウザはトークンではなくセッションでサインインするためです。";
 "account.noDevices" = "サインイン中のアプリ・コマンドラインデバイスはありません。";
@@ -350,7 +353,7 @@
 "error.destination.notPermitted.filesApp" = "Relayium には「ファイル」App 内の受信フォルダ（%@）への書き込み権限がないため、何も保存されませんでした。もう一度ダウンロードしてください。それでも失敗する場合は Relayium を再起動し、ご報告ください。";
 "error.destination.systemError.filesApp" = "Relayium は「ファイル」App 内の受信フォルダ（%1$@）に書き込めませんでした（エラー %2$@）。何も保存されていません。もう一度ダウンロードしてください。それでも失敗する場合は Relayium を再起動し、このエラー番号をご報告ください。";
 "error.manifest.unsafePath" = "相手のデバイスは「%@」にあるファイルを指定しましたが、それは選んだフォルダの外に書き込まれてしまいます。何も保存されませんでした。";
-"error.manifest.duplicatePath" = "この転送には「%@」のファイルが複数含まれています — この Mac ではそれらは同一のファイルです — そのため何も保存されませんでした。送信者にどちらかの名前を変えてもらってください。";
+"error.manifest.duplicatePath" = "この転送には「%@」のファイルが複数含まれています — このデバイスではそれらは同一のファイルです — そのため何も保存されませんでした。送信者にどちらかの名前を変えてもらってください。";
 "error.manifest.pathCollision" = "この転送は「%@」をファイルとフォルダの両方にしようとしていますが、両立できないため、何も保存されませんでした。送信者にもう一度試してもらってください。";
 "error.plaintext.unreadable" = "「%@」を開けなかったため、何も送信されませんでした。そのファイルがまだ存在し、読み取り権限があるか確認してください。";
 "error.plaintext.readFailed" = "「%@」の読み取りが途中で失敗したため、転送を停止しました。相手のデバイスは不完全なファイルを破棄しました。";

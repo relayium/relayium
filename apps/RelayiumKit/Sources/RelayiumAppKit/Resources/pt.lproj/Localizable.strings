@@ -72,12 +72,14 @@
 "content.backToSignIn" = "Voltar ao início de sessão";
 "tab.direct" = "Direto";
 "tab.link" = "Ligação";
+"tab.receive" = "Receber";
 "tab.account" = "Conta";
 
 /* MARK: início de sessão */
 "login.email" = "E-mail";
 "login.password" = "Palavra-passe";
 "login.signIn" = "Iniciar sessão";
+"login.signingIn" = "A iniciar sessão…";
 "login.signInWithApple" = "Iniciar sessão com a Apple";
 "login.createAccount" = "Criar uma conta em relayium.com";
 
@@ -245,6 +247,7 @@
 "account.storage" = "Armazenamento";
 "account.meterOf" = "%1$@ de %2$@";
 "account.staleFigures" = "A mostrar os últimos valores conhecidos — não foi possível contactar o servidor.";
+"account.restoring" = "A carregar a sua conta…";
 "account.devicesHeading" = "Dispositivos com sessão iniciada";
 "account.devicesBody" = "Apps e inícios de sessão por linha de comandos que detêm um token desta conta. Os navegadores não aparecem: iniciam sessão com uma sessão, não com um token.";
 "account.noDevices" = "Não há nenhuma app nem dispositivo de linha de comandos com sessão iniciada.";
@@ -358,7 +361,7 @@
 "error.destination.notPermitted.filesApp" = "O Relayium não tem permissão para escrever na sua pasta de receção na app Ficheiros (%@), por isso nada foi guardado. Transfira de novo; se continuar a falhar, reinicie o Relayium e, por favor, comunique isto.";
 "error.destination.systemError.filesApp" = "O Relayium não conseguiu escrever na sua pasta de receção na app Ficheiros (%1$@, erro %2$@), por isso nada foi guardado. Transfira de novo; se continuar a falhar, reinicie o Relayium e comunique esse número de erro.";
 "error.manifest.unsafePath" = "O outro dispositivo descreveu um ficheiro em «%@», que seria escrito fora da pasta que escolheu. Nada foi guardado.";
-"error.manifest.duplicatePath" = "A transferência contém mais do que um ficheiro em «%@» — neste Mac são o mesmo ficheiro — por isso nada foi guardado. Peça a quem envia que renomeie um deles.";
+"error.manifest.duplicatePath" = "A transferência contém mais do que um ficheiro em «%@» — neste dispositivo são o mesmo ficheiro — por isso nada foi guardado. Peça a quem envia que renomeie um deles.";
 "error.manifest.pathCollision" = "A transferência quer que «%@» seja ao mesmo tempo ficheiro e pasta, o que não pode existir, por isso nada foi guardado. Peça a quem envia que tente de novo.";
 "error.plaintext.unreadable" = "Não foi possível abrir «%@», por isso nada foi enviado. Verifique se o ficheiro ainda existe e se tem permissão para o ler.";
 "error.plaintext.readFailed" = "A leitura de «%@» falhou a meio, por isso a transferência foi interrompida. O outro dispositivo descartou o ficheiro incompleto.";

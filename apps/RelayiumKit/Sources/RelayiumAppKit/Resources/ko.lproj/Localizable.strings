@@ -72,12 +72,14 @@
 "content.backToSignIn" = "로그인으로 돌아가기";
 "tab.direct" = "직접 전송";
 "tab.link" = "링크";
+"tab.receive" = "받기";
 "tab.account" = "계정";
 
 /* MARK: 로그인 */
 "login.email" = "이메일";
 "login.password" = "비밀번호";
 "login.signIn" = "로그인";
+"login.signingIn" = "로그인하는 중…";
 "login.signInWithApple" = "Apple로 로그인";
 "login.createAccount" = "relayium.com에서 계정 만들기";
 
@@ -242,6 +244,7 @@
 "account.storage" = "저장 공간";
 "account.meterOf" = "%1$@ / %2$@";
 "account.staleFigures" = "마지막으로 확인된 수치를 표시하고 있습니다 — 서버에 연결하지 못했습니다.";
+"account.restoring" = "계정을 불러오는 중…";
 "account.devicesHeading" = "로그인된 기기";
 "account.devicesBody" = "이 계정의 토큰을 가진 앱과 명령줄 로그인입니다. 브라우저는 목록에 없습니다. 브라우저는 토큰이 아니라 세션으로 로그인하기 때문입니다.";
 "account.noDevices" = "로그인된 앱이나 명령줄 기기가 없습니다.";
@@ -350,7 +353,7 @@
 "error.destination.notPermitted.filesApp" = "Relayium에 파일 앱의 받기 폴더(%@)에 쓸 권한이 없어 아무것도 저장하지 않았습니다. 다시 다운로드해 보세요. 계속 실패하면 Relayium을 다시 실행하고 신고해 주세요.";
 "error.destination.systemError.filesApp" = "Relayium이 파일 앱의 받기 폴더(%1$@)에 쓰지 못했습니다(오류 %2$@). 아무것도 저장하지 않았습니다. 다시 다운로드해 보세요. 계속 실패하면 Relayium을 다시 실행하고 이 오류 번호를 신고해 주세요.";
 "error.manifest.unsafePath" = "상대 기기가 “%@”에 있는 파일을 지정했는데, 이는 선택한 폴더 바깥에 기록됩니다. 아무것도 저장하지 않았습니다.";
-"error.manifest.duplicatePath" = "이 전송에는 “%@”에 해당하는 파일이 둘 이상 있습니다 — 이 Mac에서는 같은 파일입니다 — 그래서 아무것도 저장하지 않았습니다. 보낸 사람에게 하나의 이름을 바꿔 달라고 하세요.";
+"error.manifest.duplicatePath" = "이 전송에는 “%@”에 해당하는 파일이 둘 이상 있습니다 — 이 기기에서는 같은 파일입니다 — 그래서 아무것도 저장하지 않았습니다. 보낸 사람에게 하나의 이름을 바꿔 달라고 하세요.";
 "error.manifest.pathCollision" = "이 전송은 “%@”이(가) 파일이면서 동시에 폴더이기를 요구하는데, 그럴 수는 없으므로 아무것도 저장하지 않았습니다. 보낸 사람에게 다시 시도해 달라고 하세요.";
 "error.plaintext.unreadable" = "“%@”을(를) 열지 못해 아무것도 보내지 않았습니다. 파일이 아직 있는지, 읽을 권한이 있는지 확인하세요.";
 "error.plaintext.readFailed" = "“%@”을(를) 읽는 도중 실패해 전송을 중단했습니다. 상대 기기는 불완전한 파일을 폐기했습니다.";

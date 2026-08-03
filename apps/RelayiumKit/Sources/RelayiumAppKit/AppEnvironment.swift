@@ -9,6 +9,46 @@ public enum AppEnvironment {
     public static let keychainAccount = "bearer-token"
     public static let keychainAccessGroup = "7PVYUG4YQS.com.relayium.shared"
 
+    /// The iOS credential identity: this app's own bundle id, and NO access
+    /// group. See `KeychainConfiguration.accessGroup`.
+    public static let iosKeychainService = "com.relayium.app"
+
+    public static func keychainConfiguration(for platform: KeychainPlatform) -> KeychainConfiguration {
+        switch platform {
+        case .macOS:
+            return KeychainConfiguration(service: keychainService,
+                                         account: keychainAccount,
+                                         accessGroup: keychainAccessGroup)
+        case .iOS:
+            return KeychainConfiguration(service: iosKeychainService,
+                                         account: keychainAccount,
+                                         accessGroup: nil)
+        }
+    }
+
+    /// The one compile-time conditional in the keychain policy.
+    public static var currentKeychainPlatform: KeychainPlatform {
+        #if os(iOS)
+        return .iOS
+        #else
+        return .macOS
+        #endif
+    }
+
+    public static var keychainConfiguration: KeychainConfiguration {
+        keychainConfiguration(for: currentKeychainPlatform)
+    }
+
+    /// Built through the configuration so a test can assert the keychain query
+    /// for a platform it is not running on.
+    public static func makeTokenStore(
+        _ configuration: KeychainConfiguration = keychainConfiguration
+    ) -> KeychainTokenStore {
+        KeychainTokenStore(service: configuration.service,
+                           account: configuration.account,
+                           accessGroup: configuration.accessGroup)
+    }
+
     // MARK: - Web hand-off
     //
     // The native app renders account state read-only and sends the user to the web
@@ -66,9 +106,7 @@ public enum AppEnvironment {
     public static func makeSession(baseURL: URL = productionBaseURL) -> AccountSession {
         AccountSession(
             client: AccountClient(baseURL: baseURL),
-            tokenStore: KeychainTokenStore(service: keychainService,
-                                           account: keychainAccount,
-                                           accessGroup: keychainAccessGroup),
+            tokenStore: makeTokenStore(),
             deviceName: deviceName()
         )
     }
@@ -184,8 +222,15 @@ public enum AppEnvironment {
     /// with the object they belong to). Two stores would mean an upload whose
     /// link the Account tab cannot rebuild, which is exactly the failure this
     /// capability exists to remove.
-    public static func makeStoredLinkKeyStore() -> StoredLinkKeyStore {
-        KeychainStoredLinkKeyStore(service: keychainService, accessGroup: keychainAccessGroup)
+    ///
+    /// Takes a configuration for the same reason `makeTokenStore` does: both
+    /// platforms' Security dictionaries have to be assertable from one host.
+    /// The default is this platform's, so the app's call site does not change.
+    public static func makeStoredLinkKeyStore(
+        _ configuration: KeychainConfiguration = keychainConfiguration
+    ) -> KeychainStoredLinkKeyStore {
+        KeychainStoredLinkKeyStore(service: configuration.service,
+                                   accessGroup: configuration.accessGroup)
     }
 
     @MainActor

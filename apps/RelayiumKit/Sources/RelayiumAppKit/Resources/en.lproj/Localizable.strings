@@ -73,12 +73,14 @@
 "content.backToSignIn" = "Back to sign in";
 "tab.direct" = "Direct";
 "tab.link" = "Link";
+"tab.receive" = "Receive";
 "tab.account" = "Account";
 
 /* MARK: sign in */
 "login.email" = "Email";
 "login.password" = "Password";
 "login.signIn" = "Sign in";
+"login.signingIn" = "Signing in…";
 "login.signInWithApple" = "Sign in with Apple";
 "login.createAccount" = "Create an account on relayium.com";
 
@@ -246,6 +248,7 @@
 "account.storage" = "Storage";
 "account.meterOf" = "%1$@ of %2$@";
 "account.staleFigures" = "Showing the last known figures — couldn't reach the server.";
+"account.restoring" = "Loading your account…";
 "account.devicesHeading" = "Signed-in devices";
 "account.devicesBody" = "Apps and command-line logins that hold a token for this account. Browsers aren't listed: they sign in with a session, not a token.";
 "account.noDevices" = "No app or command-line device is signed in.";
@@ -359,7 +362,7 @@
 "error.destination.notPermitted.filesApp" = "Relayium isn't allowed to write to its receive folder in the Files app (%@), so nothing was saved. Try downloading again; if it keeps failing, restart Relayium and please report it.";
 "error.destination.systemError.filesApp" = "Relayium couldn't write to its receive folder in the Files app (%1$@) — error %2$@ — so nothing was saved. Try downloading again; if it keeps failing, restart Relayium and please report that error number.";
 "error.manifest.unsafePath" = "The other device described a file at “%@”, which would be written outside the folder you chose. Nothing was saved.";
-"error.manifest.duplicatePath" = "The transfer contains more than one file at “%@” — on this Mac those are the same file — so nothing was saved. Ask the sender to rename one of them.";
+"error.manifest.duplicatePath" = "The transfer contains more than one file at “%@” — on this device those are the same file — so nothing was saved. Ask the sender to rename one of them.";
 "error.manifest.pathCollision" = "The transfer wants “%@” to be both a file and a folder, which cannot exist at once, so nothing was saved. Ask the sender to try again.";
 "error.plaintext.unreadable" = "Couldn't open “%@”, so nothing was sent. Check the file still exists and you have permission to read it.";
 "error.plaintext.readFailed" = "Reading “%@” failed part-way through, so the transfer was stopped. The other device discarded the incomplete file.";

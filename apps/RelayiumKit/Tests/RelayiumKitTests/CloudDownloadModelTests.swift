@@ -494,4 +494,61 @@ final class CloudDownloadModelContainerTests: XCTestCase {
         model.download(into: try ReceiveDestination.directory(inDocuments: documents))
         _ = await waitFor("the download to settle", { done(model.state) })
     }
+
+    /// Anonymous receive: nothing in this flow may authenticate.
+    ///
+    /// R3-B puts an account tab beside the receive tab, and the change that
+    /// would be easiest to make and hardest to notice is a download that quietly
+    /// starts requiring a session — it would keep working for whoever wrote it,
+    /// and fail only for the users this app exists to serve. So assert the wire
+    /// rather than the wiring: nothing that leaves carries a credential.
+    func testAnAnonymousReceiveSendsNoCredential() async throws {
+        let key = [UInt8](repeating: 7, count: 32)
+        let files = [ManifestFile(name: "notes.txt", size: 4)]
+        let m = try makeModel(files: files, key: key, contents: ["notes.txt": [1, 2, 3, 4]])
+
+        // Wrap the router `makeModel` installed, so both the meta and the blob
+        // request are observed without changing how the model is built.
+        let recorder = RequestRecorder()
+        let inner = try XCTUnwrap(StubURLProtocol.router)
+        StubURLProtocol.router = { req in
+            recorder.record(req)
+            return inner(req)
+        }
+
+        m.linkText = "https://relayium.com/d/abc123#k=\(encodeStoreKey(key))"
+        m.resolve()
+        _ = await waitFor("the manifest to resolve",
+                          { if case .ready = m.state { return true }; return false })
+        m.download(into: try tempDir())
+        _ = await waitFor("the download to finish",
+                          { if case .done = m.state { return true }; return false })
+        guard case .done = m.state else { return XCTFail("download failed: \(m.state)") }
+
+        XCTAssertGreaterThanOrEqual(recorder.requests.count, 2,
+                                    "meta and blob must both have been fetched")
+        for request in recorder.requests {
+            XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"),
+                         request.url?.absoluteString ?? "")
+            XCTAssertNil(URLComponents(string: request.url?.absoluteString ?? "")?.query,
+                         request.url?.absoluteString ?? "")
+        }
+    }
+}
+
+/// Collects the requests that reached the transport. The stub's router runs on
+/// URLSession's own thread, so a captured local array would be a data race.
+final class RequestRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var seen: [URLRequest] = []
+
+    func record(_ request: URLRequest) {
+        lock.lock(); defer { lock.unlock() }
+        seen.append(request)
+    }
+
+    var requests: [URLRequest] {
+        lock.lock(); defer { lock.unlock() }
+        return seen
+    }
 }

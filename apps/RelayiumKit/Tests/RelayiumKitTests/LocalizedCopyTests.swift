@@ -342,4 +342,66 @@ final class LocalizedCopyTests: XCTestCase {
             XCTAssertNotEqual(signIn, fileKey, language.rawValue)
         }
     }
+
+    // MARK: - the iOS account surface says nothing about a Mac
+
+    /// Every non-plural key the iOS account tab and its tab item render.
+    /// Listed rather than derived: the point is that somebody decided this set
+    /// is what iOS shows, and that a later addition to it is a decision too.
+    private let iosAccountSurface: [L10nKey] = [
+        .tabReceive, .tabAccount, .accountRestoring,
+        .loginEmail, .loginPassword, .loginSignIn, .loginSigningIn, .loginCreateAccount,
+        .contentAccountLoadFailed, .contentCheckEmailTitle, .contentCheckEmailBody,
+        .contentOpenRelayium, .contentBackToSignIn,
+        .contentPendingDeletionTitle, .contentPendingDeletionBody, .contentReactivate,
+        .accountManagePlan, .accountTraffic, .accountStorage, .accountMeterOf,
+        .accountStaleFigures, .accountSignOutFailed,
+        .usageUnlimited, .usageResetsToday,
+        .badgeTrial, .badgePaymentFailed, .badgeCanceled, .badgeUnpaid,
+        .badgePaymentIncomplete, .badgePaused, .badgeInactive,
+        .commonRefresh, .commonSignOut, .commonTryAgain,
+    ]
+
+    func testNothingTheIOSAccountSurfaceRendersNamesAMac() {
+        for key in iosAccountSurface {
+            for language in AppLanguage.allCases {
+                let text = L10n.t(key, language: language)
+                XCTAssertFalse(text.contains("Mac"),
+                               "\(key.rawValue) [\(language.rawValue)]: \(text)")
+                XCTAssertFalse(text.contains("macOS"),
+                               "\(key.rawValue) [\(language.rawValue)]: \(text)")
+            }
+        }
+        // The one plural the summary renders, driven through its own entry point.
+        for language in AppLanguage.allCases {
+            let text = L10n.plural(.usageResetsInDays, 3, language: language)
+            XCTAssertFalse(text.contains("Mac"), "usage.resetsInDays [\(language.rawValue)]: \(text)")
+        }
+    }
+
+    /// The three new keys are real copy in every language, not a key echoed
+    /// back and not a template with an unsubstituted placeholder.
+    func testTheNewIOSKeysAreTranslatedEverywhere() {
+        for key in [L10nKey.tabReceive, .accountRestoring, .loginSigningIn] {
+            for language in AppLanguage.allCases {
+                let text = L10n.t(key, language: language)
+                XCTAssertFalse(text.isEmpty, "\(key.rawValue) [\(language.rawValue)]")
+                XCTAssertNotEqual(text, key.rawValue,
+                                  "\(key.rawValue) [\(language.rawValue)] fell back to the key")
+                XCTAssertFalse(text.contains("%@"), "\(key.rawValue) [\(language.rawValue)]: \(text)")
+            }
+        }
+    }
+
+    /// A receive refusal iOS can already hit. The sentence is true on both
+    /// platforms; the noun was not, and the offending path still has to be in
+    /// it or the user cannot act on it.
+    func testTheDuplicatePathRefusalNamesNoPlatform() {
+        for language in AppLanguage.allCases {
+            let text = ErrorCopy.message(for: ManifestPathError.duplicatePath("t/a.txt"),
+                                         language: language)
+            XCTAssertFalse(text.contains("Mac"), "[\(language.rawValue)] \(text)")
+            XCTAssertTrue(text.contains("t/a.txt"), "[\(language.rawValue)] \(text)")
+        }
+    }
 }
