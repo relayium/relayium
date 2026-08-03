@@ -74,7 +74,13 @@ extension CloudClient {
         // or future metadata limiter can still return 429 here. Keep the whole
         // stored-download path on one user-facing outcome.
         case 429: throw CloudError.downloadLimited
-        default:  throw CloudError.server(status: http.statusCode)
+        // Everything else is the service, not the link. `server(status:)` stays
+        // the upload path's answer — there the user is the account holder and
+        // "the server returned an error (500)" is a complete story. Here it is
+        // not: the reader holds a link and a key and has to be told which of
+        // the three to act on, and metadata failing says nothing about either
+        // of theirs. The status rides along for the bug report.
+        default:  throw CloudError.downloadUnavailable(status: http.statusCode)
         }
     }
 
@@ -103,7 +109,12 @@ extension CloudClient {
             // Only an initial 403 gets the bounded redirect-target retry above.
             // A 429 is surfaced after exactly one blob request.
             if code == 429 { throw CloudError.downloadLimited }
-            guard code == 200 else { throw CloudError.server(status: code) }
+            // Every remaining non-200 is the storage or the server in front of
+            // it, answered after exactly the requests already made: the replay
+            // above is the ONLY one, so a 5xx is surfaced on its first response
+            // rather than doubled against a service that is already failing,
+            // and a second 403 lands here with its own status.
+            guard code == 200 else { throw CloudError.downloadUnavailable(status: code) }
             chunkStream = stream; break
         }
 

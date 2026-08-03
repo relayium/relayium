@@ -415,6 +415,13 @@ public enum ErrorCopy {
                 // the reader of this sentence cannot buy their way past it, and
                 // the other cause genuinely does clear on its own.
                 return L10n.t(.errorCloudDownloadLimited, language: language)
+            case .downloadUnavailable:
+                // The status is intentionally not rendered. It is retained on
+                // the case for logs and bug reports, but a recipient shown
+                // "(503)" has been handed a number to act on and no action; the
+                // sentence they need is that neither their link nor their key
+                // is the problem and the service is worth trying again.
+                return L10n.t(.errorCloudDownloadUnavailable, language: language)
             case .notFound:
                 return L10n.t(.errorCloudNotFound, language: language)
             case .server(let status):

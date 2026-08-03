@@ -34,6 +34,21 @@ public enum CloudError: Error, Equatable {
     /// since it is not this user's quota; `server(status: 429)` reads as a
     /// generic server failure and does not explain either actionable cause.
     case downloadLimited
+    /// A stored download the SERVICE could not answer — the storage backend or
+    /// the server in front of it — carrying the exact status it answered with.
+    ///
+    /// Separate from `server(status:)` even though both are "a non-2xx nobody
+    /// classified", because on this path the generic wording is actively
+    /// misleading. A recipient holds a link and a key, and *the server returned
+    /// an error (503)* leaves them to guess which of the three they should act
+    /// on: retype the link, ask the sender to re-send, or wait. This case says
+    /// the guess is unnecessary — nothing about the file or the key was even
+    /// evaluated — and that coming back later is the whole remedy.
+    ///
+    /// The status is retained rather than collapsed: it is the only diagnostic
+    /// the client has, so it stays available to bug reports and logs even
+    /// though the copy deliberately does not print it.
+    case downloadUnavailable(status: Int)
     case notFound              // 404
     case server(status: Int)   // other non-2xx
     case network               // transport failure

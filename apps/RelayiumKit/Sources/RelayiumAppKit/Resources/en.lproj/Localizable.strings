@@ -448,6 +448,7 @@
 "error.cloud.dailyQuota" = "This file needs more than your remaining daily upload allowance — a single large file can use it all on its own. Try again tomorrow, or upgrade for a bigger daily allowance.";
 "error.cloud.monthlyTraffic" = "Your account has reached its monthly traffic limit. Uploads resume next month, or upgrade to continue now.";
 "error.cloud.downloadLimited" = "Too many download requests right now, or the sender's monthly transfer allowance is used up. Wait a few minutes, then try opening the link again.";
+"error.cloud.downloadUnavailable" = "The server or storage is temporarily unavailable. This response does not indicate a problem with the file or its key. Try again shortly.";
 "error.cloud.notFound" = "This link has expired, was already downloaded, or was mistyped.";
 "error.cloud.server" = "The server returned an error (%@). Try again shortly.";
 "error.cloud.network" = "Couldn't reach the server. Check your internet connection.";

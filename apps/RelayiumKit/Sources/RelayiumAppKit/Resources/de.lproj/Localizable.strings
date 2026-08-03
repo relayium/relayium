@@ -447,6 +447,7 @@
 "error.cloud.dailyQuota" = "Diese Datei überschreitet dein verbleibendes Tageskontingent für Uploads — eine einzige große Datei kann es allein aufbrauchen. Versuch es morgen erneut oder wechsle für ein größeres Tageskontingent den Tarif.";
 "error.cloud.monthlyTraffic" = "Dein Konto hat sein monatliches Datenvolumen erreicht. Uploads laufen nächsten Monat weiter, oder wechsle den Tarif, um sofort fortzufahren.";
 "error.cloud.downloadLimited" = "Gerade laufen zu viele Download-Anfragen, oder das monatliche Übertragungsvolumen des Absenders ist aufgebraucht. Warte ein paar Minuten und öffne den Link dann erneut.";
+"error.cloud.downloadUnavailable" = "Server oder Speicher sind vorübergehend nicht erreichbar. Diese Antwort deutet nicht auf ein Problem mit der Datei oder ihrem Schlüssel hin. Versuche es gleich noch einmal.";
 "error.cloud.notFound" = "Dieser Link ist abgelaufen, wurde bereits heruntergeladen oder falsch eingegeben.";
 "error.cloud.server" = "Der Server hat einen Fehler gemeldet (%@). Versuch es gleich noch einmal.";
 "error.cloud.network" = "Der Server war nicht erreichbar. Prüfe deine Internetverbindung.";

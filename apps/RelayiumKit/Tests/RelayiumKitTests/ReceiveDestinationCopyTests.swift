@@ -453,6 +453,7 @@ final class ReceiveDestinationCopyTests: XCTestCase {
             DownloadDestinationError.incomplete,
             DownloadDestinationError.exceedsManifest,
             CloudError.downloadLimited,
+            CloudError.downloadUnavailable(status: 503),
             CloudError.notFound,
             HandshakeError.mitm,
             ManifestPathError.unsafePath("../../etc/passwd"),

@@ -254,10 +254,70 @@ final class ErrorCopyTests: XCTestCase {
         XCTAssertEqual(Set([download, rate, monthly]).count, 3)
     }
 
+    /// The availability answer's whole job is to keep a recipient from drawing
+    /// the two wrong conclusions a bare status invites: that their link or key
+    /// is bad (it is not — nothing about them was even evaluated), and that
+    /// there is nothing to come back to. So it names the transient thing that
+    /// IS wrong, denies the two it is not, and invites a later retry.
+    func testDownloadUnavailableBlamesTheServiceAndNeitherFileNorKey() {
+        let m = ErrorCopy.message(for: CloudError.downloadUnavailable(status: 503), language: .en)
+        let lower = m.lowercased()
+        XCTAssertTrue(lower.contains("temporarily unavailable"), m)
+        XCTAssertTrue(lower.contains("server") && lower.contains("storage"),
+                      "names what is actually unavailable: \(m)")
+        XCTAssertTrue(lower.contains("does not indicate") || lower.contains("doesn't indicate"),
+                      "the denial has to be explicit: \(m)")
+        XCTAssertTrue(lower.contains("file") && lower.contains("key"),
+                      "both wrong conclusions are named and denied: \(m)")
+        XCTAssertTrue(lower.contains("try again"), "it is worth coming back to: \(m)")
+        // Not the missing-link story: nothing here says the object is gone.
+        XCTAssertFalse(lower.contains("expired"), m)
+        XCTAssertFalse(lower.contains("mistyped"), m)
+    }
+
+    /// And it is not the generic server sentence with extra words: that one
+    /// reads as "the request failed" and leaves the recipient to guess whether
+    /// their link is the problem, which is the guess this case exists to remove.
+    func testDownloadUnavailableIsDistinctFromTheGenericServerCopy() {
+        for language in AppLanguage.allCases {
+            let unavailable = ErrorCopy.message(for: CloudError.downloadUnavailable(status: 503),
+                                                language: language)
+            let generic = ErrorCopy.message(for: CloudError.server(status: 503), language: language)
+            let limited = ErrorCopy.message(for: CloudError.downloadLimited, language: language)
+            let missing = ErrorCopy.message(for: CloudError.notFound, language: language)
+            XCTAssertEqual(Set([unavailable, generic, limited, missing]).count, 4,
+                           "\(language.rawValue) collapsed a download outcome")
+        }
+    }
+
+    /// It resolves in all nine languages — a recipient who hits a 503 is not
+    /// shown the raw key, and not shown English inside an Arabic screen.
+    func testDownloadUnavailableResolvesInEveryLanguage() {
+        for language in AppLanguage.allCases {
+            let m = ErrorCopy.message(for: CloudError.downloadUnavailable(status: 503),
+                                      language: language)
+            XCTAssertFalse(m.isEmpty, language.rawValue)
+            XCTAssertNotEqual(m, L10nKey.errorCloudDownloadUnavailable.rawValue,
+                              "\(language.rawValue) fell through to the raw key")
+            XCTAssertEqual(m, L10n.t(.errorCloudDownloadUnavailable, language: language),
+                           "\(language.rawValue) did not come from the new key")
+        }
+    }
+
+    /// The status is carried by the case, not by the sentence: the copy says the
+    /// same thing whichever status produced it, so a translation can read
+    /// naturally instead of wrapping a number.
+    func testDownloadUnavailableCopyDoesNotDependOnTheStatus() {
+        let a = ErrorCopy.message(for: CloudError.downloadUnavailable(status: 403), language: .en)
+        let b = ErrorCopy.message(for: CloudError.downloadUnavailable(status: 503), language: .en)
+        XCTAssertEqual(a, b)
+    }
+
     func testEveryCloudErrorHasCopy() {
         let cases: [CloudError] = [
             .unauthorized, .quota, .rateLimited, .dailyQuota, .monthlyTraffic,
-            .downloadLimited, .notFound, .server(status: 500), .network, .decoding,
+            .downloadLimited, .downloadUnavailable(status: 503), .notFound,
+            .server(status: 500), .network, .decoding,
         ]
         for e in cases {
             let m = ErrorCopy.message(for: e, language: .en)

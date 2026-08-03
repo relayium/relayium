@@ -111,15 +111,31 @@ final class CloudClientTests: XCTestCase {
         }
     }
 
-    /// Other statuses on metadata are untouched by that mapping.
-    func testMetaKeepsNotFoundAndOtherStatuses() async {
+    /// The two statuses metadata classifies by name keep their meaning: 404 is
+    /// the link, not the service.
+    func testMetaKeepsNotFound() async {
         StubURLProtocol.stub = .init(status: 404, body: Data(), check: nil)
         await XCTAssertThrowsErrorAsync(try await self.client().fetchMeta(id: "abc")) {
             XCTAssertEqual($0 as? CloudError, .notFound)
         }
-        StubURLProtocol.stub = .init(status: 503, body: Data(), check: nil)
-        await XCTAssertThrowsErrorAsync(try await self.client().fetchMeta(id: "abc")) {
-            XCTAssertEqual($0 as? CloudError, .server(status: 503))
+    }
+
+    /// Everything else metadata can answer with is the SERVICE being unavailable
+    /// — a recipient who is told "the server returned an error (503)" cannot
+    /// tell that from "your link is broken", and the two lead to opposite
+    /// actions (retry vs. ask the sender for a new link).
+    ///
+    /// The exact status survives into the case: it is what makes a bug report
+    /// actionable, and collapsing 500/502/503 into one value would throw away
+    /// the only diagnostic the client has.
+    func testMetaClassifiesEveryOtherStatusAsUnavailableWithItsExactStatus() async {
+        for status in [500, 502, 503] {
+            // Deliberately opaque: classification is by status, never body prose.
+            StubURLProtocol.stub = .init(status: status, body: Data("edge-copy-may-change".utf8),
+                                         check: nil)
+            await XCTAssertThrowsErrorAsync(try await self.client().fetchMeta(id: "abc")) {
+                XCTAssertEqual($0 as? CloudError, .downloadUnavailable(status: status))
+            }
         }
     }
 
@@ -160,18 +176,58 @@ final class CloudClientTests: XCTestCase {
         XCTAssertEqual(blobRequestCount(), 2, "exactly one replay")
     }
 
-    /// And it is bounded: a second 403 is the answer, not a third request.
+    /// And it is bounded: a second 403 is the answer, not a third request. The
+    /// answer is the availability case rather than the generic one, because a
+    /// refused redirect target is a storage-side condition — the recipient's
+    /// link and key are exactly as valid as they were a second earlier — and it
+    /// carries the 403 that produced it.
     func testBlobStopsAfterASecondForbidden() async throws {
         let v = try Vectors.load("store-wire-vectors")
         StubURLProtocol.reset()
         StubURLProtocol.router = { [self] req in
             if req.url?.path.hasSuffix("/meta") == true { return metaStub(v) }
-            return .init(status: 403, body: Data(), check: nil)
+            // Deliberately opaque: classification is by status, never body prose.
+            return .init(status: 403, body: Data("edge-copy-may-change".utf8), check: nil)
         }
         await XCTAssertThrowsErrorAsync(try await self.client().download(id: "abc", key: v.hex("keyHex")) { _ in }) {
-            XCTAssertEqual($0 as? CloudError, .server(status: 403))
+            XCTAssertEqual($0 as? CloudError, .downloadUnavailable(status: 403))
         }
         XCTAssertEqual(blobRequestCount(), 2, "one replay, then the refusal stands")
+    }
+
+    /// A 5xx on the blob is NOT replayed. The bounded replay exists for one
+    /// thing — a redirect target that has not yet accepted the signed request —
+    /// and a server that is failing or overloaded is the case where a hidden
+    /// second request makes it worse. So: one request, one answer, exact status.
+    func testBlobUnavailableIsSurfacedAfterExactlyOneRequest() async throws {
+        let v = try Vectors.load("store-wire-vectors")
+        StubURLProtocol.reset()
+        StubURLProtocol.router = { [self] req in
+            if req.url?.path.hasSuffix("/meta") == true { return metaStub(v) }
+            // Deliberately opaque: classification is by status, never body prose.
+            return .init(status: 503, body: Data("edge-copy-may-change".utf8), check: nil)
+        }
+        await XCTAssertThrowsErrorAsync(try await self.client().download(id: "abc", key: v.hex("keyHex")) { _ in }) {
+            XCTAssertEqual($0 as? CloudError, .downloadUnavailable(status: 503))
+        }
+        XCTAssertEqual(blobRequestCount(), 1, "a 5xx must not be replayed")
+    }
+
+    /// Every other blob status reaches the same case with its own number, so a
+    /// bug report can say which one the storage answered with.
+    func testBlobKeepsTheExactStatusItWasGiven() async throws {
+        let v = try Vectors.load("store-wire-vectors")
+        for status in [500, 502] {
+            StubURLProtocol.reset()
+            StubURLProtocol.router = { [self] req in
+                if req.url?.path.hasSuffix("/meta") == true { return metaStub(v) }
+                return .init(status: status, body: Data("edge-copy-may-change".utf8), check: nil)
+            }
+            await XCTAssertThrowsErrorAsync(try await self.client().download(id: "abc", key: v.hex("keyHex")) { _ in }) {
+                XCTAssertEqual($0 as? CloudError, .downloadUnavailable(status: status))
+            }
+            XCTAssertEqual(blobRequestCount(), 1, "\(status) must not be replayed")
+        }
     }
 
     /// 404 on the blob still means the link is gone, not a limit.

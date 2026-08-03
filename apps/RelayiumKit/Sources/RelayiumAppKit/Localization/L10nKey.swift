@@ -780,6 +780,13 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// the exhausted allowance is the SENDER's — the reader of this sentence
     /// cannot upgrade their way out of it.
     case errorCloudDownloadLimited = "error.cloud.downloadLimited"
+    /// A stored download the service could not answer. Separate from
+    /// `error.cloud.server` because that one only says the request failed, and
+    /// the recipient's next question — is my link bad? — is exactly what this
+    /// sentence has to answer. Deliberately carries no status: the number is on
+    /// the error case for bug reports, and a sentence built around it reads as
+    /// something the reader is supposed to act on.
+    case errorCloudDownloadUnavailable = "error.cloud.downloadUnavailable"
     case errorCloudNotFound = "error.cloud.notFound"
     /// %@ — an HTTP status, verbatim.
     case errorCloudServer = "error.cloud.server"
