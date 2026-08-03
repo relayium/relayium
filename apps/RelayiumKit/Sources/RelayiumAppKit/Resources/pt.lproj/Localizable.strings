@@ -20,6 +20,7 @@
 "common.code" = "Código";
 "common.chooseFilesOrFolders" = "Escolher ficheiros ou pastas…";
 "common.endSession" = "Terminar a sessão";
+"common.share" = "Partilhar";
 "common.expires" = "Expira a %@";
 
 /* MARK: formatos de apresentação */
@@ -137,6 +138,10 @@
 "download.save" = "Guardar…";
 "download.savePanelPrompt" = "Guardar aqui";
 "download.badLink" = "Isto não parece uma ligação do Relayium. Deveria ter a forma https://relayium.com/d/…#k=…";
+"download.receive" = "Transferir";
+"download.resolving" = "A verificar a ligação…";
+"download.inProgress" = "A transferir…";
+"download.savedLocation" = "Estes ficheiros estão na pasta %@ da app Ficheiros. Também os pode partilhar a partir daqui.";
 "download.fileCount.one" = "%@ ficheiro";
 "download.fileCount.other" = "%@ ficheiros";
 "download.savedFiles.one" = "Guardado %@ ficheiro";
@@ -343,10 +348,15 @@
 "error.destination.directoryExists" = "«%@» já existe aqui — esta ligação já foi transferida para esta pasta antes. Escolha outra pasta: a app não junta a uma pasta existente, porque não consegue distinguir uma transferência a meio dos seus próprios ficheiros.";
 "error.destination.unsafeName" = "A ligação descreve um ficheiro chamado «%@» que seria escrito fora da pasta que escolheu, por isso nada foi guardado. Peça a quem envia uma ligação nova.";
 "error.destination.fileExists" = "«%@» já existe no destino. Escolha outra pasta; o Relayium não a substituirá.";
+"error.destination.fileExists.filesApp" = "«%1$@» já está em %2$@, por isso nada foi guardado — o Relayium não o substituirá. Abra a app Ficheiros, mude o nome desse item ou remova-o, e transfira de novo.";
+"error.destination.directoryExists.filesApp" = "«%1$@» já está em %2$@ — esta ligação já foi transferida antes. O Relayium não junta nada a esse item, porque não consegue distinguir uma transferência a meio dos seus próprios ficheiros. Abra a app Ficheiros, mude o nome desse item ou remova-o, e transfira de novo.";
 "error.destination.incomplete" = "O número de bytes recebidos não correspondia à lista de ficheiros, por isso os ficheiros incompletos foram descartados. Peça a quem envia que tente de novo.";
 "error.destination.noSpace" = "Não há espaço livre suficiente para guardar esta transferência, por isso nada foi guardado. Liberte espaço e tente novamente.";
 "error.destination.notPermitted" = "O Relayium não tem permissão para escrever nessa pasta, por isso nada foi guardado. Escolha outra pasta.";
 "error.destination.systemError" = "Não foi possível escrever na pasta de destino (erro %@), por isso nada foi guardado. Tente outra pasta.";
+"error.destination.unsafeName.filesApp" = "A ligação descreve um caminho de ficheiro não seguro («%@»), por isso nada foi guardado. Peça a quem envia uma ligação nova.";
+"error.destination.notPermitted.filesApp" = "O Relayium não tem permissão para escrever na sua pasta de receção na app Ficheiros (%@), por isso nada foi guardado. Transfira de novo; se continuar a falhar, reinicie o Relayium e, por favor, comunique isto.";
+"error.destination.systemError.filesApp" = "O Relayium não conseguiu escrever na sua pasta de receção na app Ficheiros (%1$@, erro %2$@), por isso nada foi guardado. Transfira de novo; se continuar a falhar, reinicie o Relayium e comunique esse número de erro.";
 "error.manifest.unsafePath" = "O outro dispositivo descreveu um ficheiro em «%@», que seria escrito fora da pasta que escolheu. Nada foi guardado.";
 "error.manifest.duplicatePath" = "A transferência contém mais do que um ficheiro em «%@» — neste Mac são o mesmo ficheiro — por isso nada foi guardado. Peça a quem envia que renomeie um deles.";
 "error.manifest.pathCollision" = "A transferência quer que «%@» seja ao mesmo tempo ficheiro e pasta, o que não pode existir, por isso nada foi guardado. Peça a quem envia que tente de novo.";

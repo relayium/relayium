@@ -20,6 +20,7 @@
 "common.code" = "Código";
 "common.chooseFilesOrFolders" = "Elegir archivos o carpetas…";
 "common.endSession" = "Finalizar sesión";
+"common.share" = "Compartir";
 "common.expires" = "Caduca el %@";
 
 /* MARK: formatos de presentación */
@@ -137,6 +138,10 @@
 "download.save" = "Guardar…";
 "download.savePanelPrompt" = "Guardar aquí";
 "download.badLink" = "Esto no parece un enlace de Relayium. Debería tener la forma https://relayium.com/d/…#k=…";
+"download.receive" = "Descargar";
+"download.resolving" = "Comprobando el enlace…";
+"download.inProgress" = "Descargando…";
+"download.savedLocation" = "Estos archivos están en la carpeta %@ de la app Archivos. También puedes compartirlos desde aquí.";
 "download.fileCount.one" = "%@ archivo";
 "download.fileCount.other" = "%@ archivos";
 "download.savedFiles.one" = "Se guardó %@ archivo";
@@ -343,10 +348,15 @@
 "error.destination.directoryExists" = "«%@» ya existe aquí: este enlace ya se descargó antes en esta carpeta. Elige otra carpeta; la app no fusiona con una carpeta existente porque no puede distinguir una descarga a medias de tus propios archivos.";
 "error.destination.unsafeName" = "El enlace describe un archivo llamado «%@» que se escribiría fuera de la carpeta que elegiste, así que no se guardó nada. Pídele a quien envía un enlace nuevo.";
 "error.destination.fileExists" = "«%@» ya existe en el destino. Elige otra carpeta; Relayium no lo sobrescribirá.";
+"error.destination.fileExists.filesApp" = "«%1$@» ya está en %2$@, así que no se guardó nada: Relayium no lo sobrescribirá. Abre la app Archivos, cambia el nombre de ese elemento o elimínalo, y vuelve a descargar.";
+"error.destination.directoryExists.filesApp" = "«%1$@» ya está en %2$@: este enlace ya se descargó antes. Relayium no fusiona con ese elemento, porque no puede distinguir una descarga a medias de tus propios archivos. Abre la app Archivos, cambia el nombre de ese elemento o elimínalo, y vuelve a descargar.";
 "error.destination.incomplete" = "El número de bytes recibidos no coincidía con la lista de archivos, así que los archivos incompletos se descartaron. Pídele a quien envía que lo intente de nuevo.";
 "error.destination.noSpace" = "No hay espacio libre suficiente para guardar esta transferencia, así que no se guardó nada. Libera espacio e inténtalo de nuevo.";
 "error.destination.notPermitted" = "Relayium no tiene permiso para escribir en esa carpeta, así que no se guardó nada. Elige otra carpeta.";
 "error.destination.systemError" = "No se pudo escribir en la carpeta de destino (error %@), así que no se guardó nada. Prueba con otra carpeta.";
+"error.destination.unsafeName.filesApp" = "El enlace describe una ruta de archivo no segura («%@»), así que no se guardó nada. Pídele a quien envía un enlace nuevo.";
+"error.destination.notPermitted.filesApp" = "Relayium no tiene permiso para escribir en su carpeta de recepción de la app Archivos (%@), así que no se guardó nada. Vuelve a descargar; si sigue fallando, reinicia Relayium y comunícalo, por favor.";
+"error.destination.systemError.filesApp" = "Relayium no pudo escribir en su carpeta de recepción de la app Archivos (%1$@, error %2$@), así que no se guardó nada. Vuelve a descargar; si sigue fallando, reinicia Relayium y comunica ese número de error.";
 "error.manifest.unsafePath" = "El otro dispositivo describió un archivo en «%@», que se escribiría fuera de la carpeta que elegiste. No se guardó nada.";
 "error.manifest.duplicatePath" = "La transferencia contiene más de un archivo en «%@» —en este Mac son el mismo archivo—, así que no se guardó nada. Pídele a quien envía que renombre uno de ellos.";
 "error.manifest.pathCollision" = "La transferencia quiere que «%@» sea a la vez archivo y carpeta, y eso no puede existir, así que no se guardó nada. Pídele a quien envía que lo intente de nuevo.";

@@ -20,6 +20,7 @@
 "common.code" = "配对码";
 "common.chooseFilesOrFolders" = "选择文件或文件夹…";
 "common.endSession" = "结束会话";
+"common.share" = "分享";
 "common.expires" = "%@ 过期";
 
 /* MARK: 展示格式 */
@@ -137,6 +138,10 @@
 "download.save" = "保存…";
 "download.savePanelPrompt" = "保存到这里";
 "download.badLink" = "这看起来不像 Relayium 链接。它应当形如 https://relayium.com/d/…#k=…";
+"download.receive" = "下载";
+"download.resolving" = "正在检查链接…";
+"download.inProgress" = "正在下载…";
+"download.savedLocation" = "这些文件位于「文件」App 中的 %@ 文件夹里。你也可以直接从这里分享。";
 "download.fileCount.other" = "%@ 个文件";
 "download.savedFiles.other" = "已保存 %@ 个文件";
 
@@ -335,10 +340,15 @@
 "error.destination.directoryExists" = "这里已经存在“%@” — 这条链接之前下载到过这个文件夹。请另选一个文件夹：本应用不会并入已有文件夹，因为它无法分辨半途而废的下载和你自己的文件。";
 "error.destination.unsafeName" = "这条链接描述了一个名为“%@”的文件，它会被写到你所选文件夹之外，因此什么都没有保存。请向发送方索取新的链接。";
 "error.destination.fileExists" = "目标位置已经存在“%@”。请另选一个文件夹；Relayium 不会覆盖它。";
+"error.destination.fileExists.filesApp" = "%2$@ 中已经存在“%1$@”，因此没有保存任何内容；Relayium 不会覆盖它。请打开「文件」App，重命名或删除该项目，然后重新下载。";
+"error.destination.directoryExists.filesApp" = "%2$@ 中已经存在“%1$@” — 这条链接之前下载过。Relayium 不会并入该项目，因为它无法分辨半途而废的下载和你自己的文件。请打开「文件」App，重命名或删除该项目，然后重新下载。";
 "error.destination.incomplete" = "收到的字节数与文件列表不符，因此不完整的文件已被丢弃。请让发送方重试。";
 "error.destination.noSpace" = "可用空间不足以保存这次传输，因此什么都没有保存。请清理空间后重试。";
 "error.destination.notPermitted" = "Relayium 没有写入那个文件夹的权限，因此什么都没有保存。请另选一个文件夹。";
 "error.destination.systemError" = "目标文件夹无法写入（错误 %@），因此什么都没有保存。请换一个文件夹。";
+"error.destination.unsafeName.filesApp" = "这条链接描述了不安全的文件路径“%@”，因此什么都没有保存。请向发送方索取新的链接。";
+"error.destination.notPermitted.filesApp" = "Relayium 没有写入「文件」App 中接收文件夹（%@）的权限，因此什么都没有保存。请重新下载；如果仍然失败，请重新启动 Relayium 并反馈这个问题。";
+"error.destination.systemError.filesApp" = "Relayium 未能写入「文件」App 中的接收文件夹（%1$@）（错误 %2$@），因此什么都没有保存。请重新下载；如果仍然失败，请重新启动 Relayium 并反馈这个错误编号。";
 "error.manifest.unsafePath" = "对方设备描述了一个位于“%@”的文件，它会被写到你所选文件夹之外。什么都没有保存。";
 "error.manifest.duplicatePath" = "这次传输在“%@”上包含了不止一个文件 — 在这台 Mac 上它们是同一个文件 — 因此什么都没有保存。请让发送方为其中一个改名。";
 "error.manifest.pathCollision" = "这次传输要求“%@”同时是文件和文件夹，而这两者不可能并存，因此什么都没有保存。请让发送方重试。";

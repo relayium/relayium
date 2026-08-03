@@ -20,6 +20,7 @@
 "common.code" = "페어링 코드";
 "common.chooseFilesOrFolders" = "파일 또는 폴더 선택…";
 "common.endSession" = "세션 종료";
+"common.share" = "공유";
 "common.expires" = "만료 %@";
 
 /* MARK: 표시 형식 */
@@ -137,6 +138,10 @@
 "download.save" = "저장…";
 "download.savePanelPrompt" = "여기에 저장";
 "download.badLink" = "Relayium 링크로 보이지 않습니다. https://relayium.com/d/…#k=… 형태여야 합니다.";
+"download.receive" = "다운로드";
+"download.resolving" = "링크를 확인하는 중…";
+"download.inProgress" = "다운로드하는 중…";
+"download.savedLocation" = "이 파일은 파일 앱의 %@ 폴더에 있습니다. 여기에서 바로 공유할 수도 있습니다.";
 "download.fileCount.other" = "파일 %@개";
 "download.savedFiles.other" = "파일 %@개를 저장했습니다";
 
@@ -335,10 +340,15 @@
 "error.destination.directoryExists" = "여기에 이미 “%@”이(가) 있습니다 — 이 링크는 전에 이 폴더로 받은 적이 있습니다. 다른 폴더를 선택하세요. 중단된 다운로드와 사용자의 파일을 구분할 수 없기 때문에 앱은 기존 폴더에 합치지 않습니다.";
 "error.destination.unsafeName" = "이 링크는 “%@”이라는 이름의 파일을 지정하는데, 선택한 폴더 바깥에 기록될 수 있어 아무것도 저장하지 않았습니다. 보낸 사람에게 새 링크를 요청하세요.";
 "error.destination.fileExists" = "대상 위치에 이미 “%@”이(가) 있습니다. 다른 폴더를 선택하세요. Relayium은 덮어쓰지 않습니다.";
+"error.destination.fileExists.filesApp" = "%2$@에 이미 “%1$@”이(가) 있어 아무것도 저장하지 않았습니다. Relayium은 덮어쓰지 않습니다. 파일 앱을 열어 해당 항목의 이름을 바꾸거나 삭제한 다음 다시 다운로드하세요.";
+"error.destination.directoryExists.filesApp" = "%2$@에 이미 “%1$@”이(가) 있습니다 — 이 링크는 전에 받은 적이 있습니다. 중단된 다운로드와 사용자의 파일을 구분할 수 없기 때문에 Relayium은 기존 항목에 합치지 않습니다. 파일 앱을 열어 해당 항목의 이름을 바꾸거나 삭제한 다음 다시 다운로드하세요.";
 "error.destination.incomplete" = "받은 바이트 수가 파일 목록과 일치하지 않아 불완전한 파일을 폐기했습니다. 보낸 사람에게 다시 시도해 달라고 하세요.";
 "error.destination.noSpace" = "이 전송을 저장할 여유 공간이 부족해 아무것도 저장하지 않았습니다. 공간을 확보한 뒤 다시 시도하세요.";
 "error.destination.notPermitted" = "Relayium에 그 폴더에 쓸 권한이 없어 아무것도 저장하지 않았습니다. 다른 폴더를 선택하세요.";
 "error.destination.systemError" = "대상 폴더에 쓸 수 없었습니다(오류 %@). 아무것도 저장하지 않았습니다. 다른 폴더로 시도하세요.";
+"error.destination.unsafeName.filesApp" = "이 링크는 안전하지 않은 파일 경로 “%@”을(를) 지정하고 있어 아무것도 저장하지 않았습니다. 보낸 사람에게 새 링크를 요청하세요.";
+"error.destination.notPermitted.filesApp" = "Relayium에 파일 앱의 받기 폴더(%@)에 쓸 권한이 없어 아무것도 저장하지 않았습니다. 다시 다운로드해 보세요. 계속 실패하면 Relayium을 다시 실행하고 신고해 주세요.";
+"error.destination.systemError.filesApp" = "Relayium이 파일 앱의 받기 폴더(%1$@)에 쓰지 못했습니다(오류 %2$@). 아무것도 저장하지 않았습니다. 다시 다운로드해 보세요. 계속 실패하면 Relayium을 다시 실행하고 이 오류 번호를 신고해 주세요.";
 "error.manifest.unsafePath" = "상대 기기가 “%@”에 있는 파일을 지정했는데, 이는 선택한 폴더 바깥에 기록됩니다. 아무것도 저장하지 않았습니다.";
 "error.manifest.duplicatePath" = "이 전송에는 “%@”에 해당하는 파일이 둘 이상 있습니다 — 이 Mac에서는 같은 파일입니다 — 그래서 아무것도 저장하지 않았습니다. 보낸 사람에게 하나의 이름을 바꿔 달라고 하세요.";
 "error.manifest.pathCollision" = "이 전송은 “%@”이(가) 파일이면서 동시에 폴더이기를 요구하는데, 그럴 수는 없으므로 아무것도 저장하지 않았습니다. 보낸 사람에게 다시 시도해 달라고 하세요.";

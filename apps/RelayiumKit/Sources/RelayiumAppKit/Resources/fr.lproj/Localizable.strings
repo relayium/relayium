@@ -20,6 +20,7 @@
 "common.code" = "Code";
 "common.chooseFilesOrFolders" = "Choisir des fichiers ou des dossiers…";
 "common.endSession" = "Terminer la session";
+"common.share" = "Partager";
 "common.expires" = "Expire %@";
 
 /* MARK: formats d’affichage */
@@ -137,6 +138,10 @@
 "download.save" = "Enregistrer…";
 "download.savePanelPrompt" = "Enregistrer ici";
 "download.badLink" = "Cela ne ressemble pas à un lien Relayium. Il devrait avoir la forme https://relayium.com/d/…#k=…";
+"download.receive" = "Télécharger";
+"download.resolving" = "Vérification du lien…";
+"download.inProgress" = "Téléchargement…";
+"download.savedLocation" = "Ces fichiers se trouvent dans le dossier « %@ » de l’app Fichiers. Vous pouvez aussi les partager depuis ici.";
 "download.fileCount.one" = "%@ fichier";
 "download.fileCount.other" = "%@ fichiers";
 "download.savedFiles.one" = "%@ fichier enregistré";
@@ -343,10 +348,15 @@
 "error.destination.directoryExists" = "« %@ » existe déjà ici — ce lien a déjà été téléchargé dans ce dossier. Choisissez un autre dossier : l’app ne fusionne pas avec un dossier existant, car elle ne peut pas distinguer un téléchargement inachevé de vos propres fichiers.";
 "error.destination.unsafeName" = "Le lien décrit un fichier nommé « %@ » qui serait écrit hors du dossier choisi : rien n’a été enregistré. Demandez un nouveau lien à l’expéditeur.";
 "error.destination.fileExists" = "« %@ » existe déjà dans la destination. Choisissez un autre dossier ; Relayium ne l’écrasera pas.";
+"error.destination.fileExists.filesApp" = "« %1$@ » se trouve déjà dans %2$@, donc rien n’a été enregistré — Relayium ne l’écrasera pas. Ouvrez l’app Fichiers, renommez ou supprimez cet élément, puis téléchargez de nouveau.";
+"error.destination.directoryExists.filesApp" = "« %1$@ » se trouve déjà dans %2$@ — ce lien a déjà été téléchargé. Relayium ne fusionne pas avec cet élément, car il ne peut pas distinguer un téléchargement inachevé de vos propres fichiers. Ouvrez l’app Fichiers, renommez ou supprimez cet élément, puis téléchargez de nouveau.";
 "error.destination.incomplete" = "Le nombre d’octets reçus ne correspondait pas à la liste de fichiers : les fichiers incomplets ont été écartés. Demandez à l’expéditeur de réessayer.";
 "error.destination.noSpace" = "Il n’y a pas assez d’espace libre pour enregistrer ce transfert : rien n’a été enregistré. Libérez de l’espace et réessayez.";
 "error.destination.notPermitted" = "Relayium n’a pas le droit d’écrire dans ce dossier : rien n’a été enregistré. Choisissez un autre dossier.";
 "error.destination.systemError" = "Impossible d’écrire dans le dossier de destination (erreur %@) : rien n’a été enregistré. Essayez un autre dossier.";
+"error.destination.unsafeName.filesApp" = "Le lien décrit un chemin de fichier non sûr (« %@ ») : rien n’a été enregistré. Demandez un nouveau lien à l’expéditeur.";
+"error.destination.notPermitted.filesApp" = "Relayium n’a pas le droit d’écrire dans son dossier de réception dans l’app Fichiers (%@) : rien n’a été enregistré. Téléchargez de nouveau ; si l’échec persiste, relancez Relayium et signalez-le.";
+"error.destination.systemError.filesApp" = "Relayium n’a pas pu écrire dans son dossier de réception dans l’app Fichiers (%1$@, erreur %2$@) : rien n’a été enregistré. Téléchargez de nouveau ; si l’échec persiste, relancez Relayium et signalez ce numéro d’erreur.";
 "error.manifest.unsafePath" = "L’autre appareil a décrit un fichier situé à « %@ », qui serait écrit hors du dossier choisi. Rien n’a été enregistré.";
 "error.manifest.duplicatePath" = "Le transfert contient plusieurs fichiers à « %@ » — sur ce Mac, c’est le même fichier — donc rien n’a été enregistré. Demandez à l’expéditeur d’en renommer un.";
 "error.manifest.pathCollision" = "Le transfert veut que « %@ » soit à la fois un fichier et un dossier, ce qui est impossible : rien n’a été enregistré. Demandez à l’expéditeur de réessayer.";

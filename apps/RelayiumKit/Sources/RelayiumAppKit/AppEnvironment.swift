@@ -214,6 +214,19 @@ public enum AppEnvironment {
 
     @MainActor
     public static func makeDownloadModel(baseURL: URL = productionBaseURL) -> CloudDownloadModel {
+        #if os(iOS)
+        // Here rather than at the iOS call site so no future iOS surface can
+        // construct a download model that tells the user to choose a folder it
+        // never offers. `ReceiveDestinationCopy` re-words the five destination
+        // errors whose shared wording assumes a folder picker — the two
+        // collisions, an unsafe name, and the two write failures that are not
+        // ENOSPC — and defers to `ErrorCopy` for everything else, including the
+        // destination errors whose advice really is platform-neutral. See its
+        // comment for the case-by-case list.
+        CloudDownloadModel(client: CloudClient(baseURL: baseURL),
+                           errorCopy: { ReceiveDestinationCopy.message(for: $0) })
+        #else
         CloudDownloadModel(client: CloudClient(baseURL: baseURL))
+        #endif
     }
 }

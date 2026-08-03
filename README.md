@@ -37,7 +37,7 @@ and anything larger is a file.
 Relayium is in **active, pre-1.0 development**. The production web app and CLI
 are live. A universal macOS app has passed Developer ID signing, Apple
 notarization, and Gatekeeper validation and is being prepared for its first
-public release. iOS development is next and has not started.
+public release. iOS development has started and is not public yet.
 
 > 👉 **Try it now: [relayium.com](https://relayium.com/)** — use two devices on
 > the same LAN without an account, or sign in to create a cross-network pairing
@@ -55,8 +55,9 @@ is **how seriously we take end-to-end encryption**:
   (SAS)**: turn on *advanced verification* (off by default) and two humans can compare it out of band to
   detect a key-swapping server.
 - **A protocol, not just a page.** The crypto layer is deliberately decoupled
-  from transport. It already backs the shipped CLI and the macOS release
-  candidate; iOS is next (see [Delivery status](#delivery-status)).
+  from transport. It already backs the shipped CLI, the macOS release
+  candidate, and the iOS app now under development (see
+  [Delivery status](#delivery-status)).
 
 ## Features
 
@@ -230,9 +231,17 @@ pairing code requires sign-in; joining with that code does not.
   signed Sparkle update foundation. Its DMG is Developer ID-signed, accepted by
   Apple notarization, stapled, and Gatekeeper-validated; public release and the
   website download switch are still pending.
-- **iOS — not started:** the shared Swift package and native product design are
-  in place, but the iOS app itself has not begun implementation.
-- **Next:** publish and validate the first macOS release, then build iOS;
+- **iOS — in development, not public:** a native SwiftUI app now exists at
+  [`apps/ios`](apps/ios) and builds against the same shared Swift package. Its
+  first slice receives an encrypted stored link without an account: paste the
+  link, inspect the decrypted manifest and its delete-after-download warning,
+  save the files into the app's own folder in the Files app, and hand the
+  finished result to the system share sheet. It ships the same nine languages.
+  Everything else in the iOS plan — sending, realtime and nearby transfer,
+  accounts, universal links, the Share Extension, background transfer,
+  notifications, and App Store release — is still to be built, and there is no
+  download to install.
+- **Next:** publish and validate the first macOS release and continue iOS;
   persistent device identity, resumable transfer, broader protocol
   documentation, and additional distribution formats remain future work.
 
@@ -332,7 +341,7 @@ the full index; in short:
 | Part | License | What that means for you |
 | --- | --- | --- |
 | [`server/`](server) (signaling server, relay node, CLI) and [`web/`](web) (the app you use at relayium.com) | [AGPL-3.0](server/LICENSE) | You can run, study, modify, and redistribute it freely — including self-hosting it for yourself or your org. The one extra condition versus a permissive license: if you modify it and run your modified version as a network service for *other* people, you must publish your changes' source under the same license. This is what stops someone taking the whole stack (SEO content included) and standing up a competing hosted service without giving back. |
-| [`apps/`](apps) (RelayiumKit, the macOS app, future iOS) | [Apache-2.0](apps/LICENSE) | A fully permissive license — use it, embed it, ship modified versions closed-source if you like, no obligation to publish changes. It's Apache-2.0 rather than AGPL specifically so these clients can be distributed through the Apple App Store, whose terms conflict with GPL-family "no further restrictions" clauses. |
+| [`apps/`](apps) (RelayiumKit, the macOS app, the iOS app) | [Apache-2.0](apps/LICENSE) | A fully permissive license — use it, embed it, ship modified versions closed-source if you like, no obligation to publish changes. It's Apache-2.0 rather than AGPL specifically so these clients can be distributed through the Apple App Store, whose terms conflict with GPL-family "no further restrictions" clauses. |
 | [`docs/`](docs) (including the wire protocol spec in `docs/protocol/`) | [CC BY 4.0](docs/LICENSE) | Implement the protocol however you like, in any codebase, under any license — just credit Relayium as the source of the spec. Same terms for the rest of the docs (design notes, testing procedures). |
 
 **If you already have a copy of Relayium from before this relicensing** (any commit prior to the one that

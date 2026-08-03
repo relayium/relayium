@@ -283,22 +283,42 @@ final class LocalizationIntegrityTests: XCTestCase {
     /// because `NSApplication.userInterfaceLayoutDirection` — which is what
     /// SwiftUI's `\.layoutDirection` follows — is decided from the app's own
     /// localization list and not from a package's.
-    ///
-    /// Read from the repository rather than from a built bundle so it fails in
-    /// `swift test`, before anyone gets as far as running the app.
     func testTheMacAppDeclaresTheSameNineLocalizations() throws {
+        try assertAppDeclaresTheNine(at: "mac/Relayium/Info.plist")
+    }
+
+    /// And the iOS app, for the identical reason.
+    ///
+    /// Not a copy for symmetry's sake: `UIApplication.userInterfaceLayoutDirection`
+    /// is decided from the app bundle's own localization list exactly as
+    /// `NSApplication`'s is, so an iOS build that omitted this would render the
+    /// package's correct Arabic strings in a left-to-right layout — the failure
+    /// that is hardest to notice, because nothing about it is empty or blank.
+    func testTheIOSAppDeclaresTheSameNineLocalizations() throws {
+        try assertAppDeclaresTheNine(at: "ios/Relayium/Info.plist")
+    }
+
+    /// Read from the repository rather than from a built bundle so both fail in
+    /// `swift test`, before anyone gets as far as running either app.
+    private func assertAppDeclaresTheNine(at relativePath: String,
+                                          file: StaticString = #filePath,
+                                          line: UInt = #line) throws {
         let infoPlist = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // RelayiumKitTests
             .deletingLastPathComponent()   // Tests
             .deletingLastPathComponent()   // RelayiumKit
             .deletingLastPathComponent()   // apps
-            .appendingPathComponent("mac/Relayium/Info.plist")
+            .appendingPathComponent(relativePath)
         let plist = try XCTUnwrap(NSDictionary(contentsOf: infoPlist) as? [String: Any],
-                                  "cannot read \(infoPlist.path)")
+                                  "cannot read \(infoPlist.path)", file: file, line: line)
         let declared = try XCTUnwrap(plist["CFBundleLocalizations"] as? [String],
-                                     "Info.plist declares no CFBundleLocalizations")
-        XCTAssertEqual(Set(declared), Set(AppLanguage.allCases.map(\.lproj)))
-        XCTAssertTrue(declared.contains("ar"), "Arabic must be an app localization for RTL")
+                                     "\(relativePath) declares no CFBundleLocalizations",
+                                     file: file, line: line)
+        XCTAssertEqual(Set(declared), Set(AppLanguage.allCases.map(\.lproj)),
+                       relativePath, file: file, line: line)
+        XCTAssertTrue(declared.contains("ar"),
+                      "Arabic must be an app localization for RTL: \(relativePath)",
+                      file: file, line: line)
     }
 
     /// Technical values are isolated under RTL and untouched otherwise.

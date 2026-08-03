@@ -2,6 +2,7 @@
 
 - `RelayiumKit/` — pure-logic Swift package (transport, signaling, crypto, wire). Test: `cd RelayiumKit && swift test`.
 - `mac/` — macOS SwiftUI app (`com.relayium.mac`), depends on the local RelayiumKit package.
+- `ios/` — iOS SwiftUI app (`com.relayium.app`), same local package. In development, not public.
 
 Licensed under Apache-2.0 (unlike `server/`/`web/`, which are AGPL-3.0) — see
 [`apps/LICENSE`](LICENSE). Apache-2.0 was chosen specifically so these clients can
@@ -242,12 +243,14 @@ rendered language, so an Arabic date uses Arabic conventions — a deliberate
 split from the digits used for counts.
 
 **RTL.** Arabic participates as a real localization of both bundles. The package
-ships `ar.lproj`, and `apps/mac/Relayium/Info.plist` lists all nine in
-`CFBundleLocalizations` — that list is what makes macOS set the app's
-user-interface layout direction, which is what SwiftUI's `\.layoutDirection`
-follows. No layout is mirrored by hand. Technical values interpolated into
-localized prose (file names, manifest paths, pairing codes, the SAS, HTTP
-statuses, an `OSStatus`, an `errno`, a device name) go through `L10n.token`,
+ships `ar.lproj`, and both `apps/mac/Relayium/Info.plist` and
+`apps/ios/Relayium/Info.plist` list all nine in `CFBundleLocalizations` — that
+list is what makes the OS set the app's user-interface layout direction, which
+is what SwiftUI's `\.layoutDirection` follows. No layout is mirrored by hand.
+Technical values interpolated into localized prose (file names, manifest paths,
+pairing codes, the SAS, HTTP statuses, an `OSStatus`, an `errno`, a device name,
+the Files-app path in a collision message and in the iOS done state) go through
+`L10n.token`,
 which wraps them in U+2068/U+2069 isolates **for RTL only**, so the bytes are
 unchanged and English output is byte-identical to what it was before.
 
@@ -261,15 +264,29 @@ Run with the rest of `swift test`:
   language per plural key; placeholder signatures matching English key by key;
   every lookup returning *that* language's own catalog entry; English fallback
   then the raw key; the platform agreeing Arabic and only Arabic is RTL; and the
-  app's `Info.plist` declaring the same nine.
+  macOS and iOS `Info.plist`s each declaring the same nine.
 - `LocalizedCopyTests` — what the copy actually renders, in explicit languages:
   translated errors that keep their instruction, file names surviving verbatim
   inside translated sentences, Arabic isolating a hostile path without altering
   it, Arabic picking four different plural forms, and the claims that must
   survive translation (the key stays on this Mac and never reaches Relayium's
   servers; deletion is irreversible; the SAS acronym and the brand are kept).
-- `LocalizationSourceGuardTests` — scans `apps/mac/Relayium` and
-  `Sources/RelayiumAppKit` for user-facing English literals and fails on them.
+- `ReceiveDestinationCopyTests` — the five destination errors iOS may not reuse
+  macOS's wording for, asserted in all nine: the shared copy really does give
+  the picker advice (and really does claim a folder the user chose, for
+  `unsafeName`), the iOS copy really does replace it — Files-app recovery for
+  the two collisions, keeping the shared reason it will not merge; the link
+  blamed rather than a folder for an unsafe path; the fixed receive folder plus
+  a retry-and-report for the two write failures, with the errno kept for the
+  generic one. Also: no re-worded message leaves a `%@` on screen, Arabic
+  isolates every interpolation (name, folder path, errno) without altering it,
+  and `ENOSPC`, `incomplete` and `exceedsManifest` — plus every non-destination
+  error — come out of `ErrorCopy` byte for byte, with ENOSPC pinned to the
+  shared key itself rather than merely to matching text.
+- `LocalizationSourceGuardTests` — scans `apps/mac/Relayium`, `apps/ios/Relayium`
+  and `Sources/RelayiumAppKit` for user-facing English literals and fails on
+  them. Each root's file count is asserted separately, so a rename that empties
+  one cannot hide behind the other two.
   A literal that must stay verbatim carries an explicit
   `// nonlocalized: <reason>` comment, on its own line or the line above. The
   guard is tested in both directions so it can neither rot into a no-op nor
@@ -362,3 +379,114 @@ The previous warning here — that rebuilding between two launches could break
 auto-login, because an ad-hoc signature ties a keychain item's ACL to that exact
 binary — no longer applies now that every build is signed by the same stable
 Developer ID identity.
+
+## iOS app
+
+`apps/ios/Relayium.xcodeproj` (bundle id `com.relayium.app`,
+`IPHONEOS_DEPLOYMENT_TARGET = 16.0`, iPhone + iPad) is a SwiftUI app over the
+same local `RelayiumKit` package. **In development and not public** — there is
+no signing identity, no provisioning profile, no App Store presence, and the
+website lists no iOS download.
+
+R3-A, the first slice, does exactly one thing: receive an anonymous encrypted
+stored link. Paste the link, inspect the decrypted manifest, its safe file
+names, its expiry and its delete-after-download warning, then save and share.
+Everything is the shared stack — `parseTransferLink` → `CloudClient.fetchMeta` →
+`decryptManifest` → `ManifestWriter` → `ReceivedPayload` — with the app target
+holding views only. Design and plan:
+`docs/superpowers/specs/2026-08-03-native-ios-r3a-anonymous-stored-receive-design.md`.
+
+Headless build (the same command CI runs):
+
+```
+xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+```
+
+### Where received files go
+
+`<app container>/Documents/Received`, resolved through `FileManager` by
+`ReceiveDestination` in `RelayiumAppKit` — never a constructed path, because the
+container is assigned by the OS. `Info.plist` sets `UIFileSharingEnabled` and
+`LSSupportsOpeningDocumentsInPlace`, which publishes that folder as
+*On My iPhone ▸ Relayium* in Files.
+
+`Received` is deliberately **not** localized. It is a path component the user
+sees, but it is also the identity of everything already saved: a translated name
+would move the first time the user changed language and strand every earlier
+download.
+
+The destination being fixed is the interesting consequence. On macOS the user
+picks a folder per transfer, so a name collision is a corner case; on iOS,
+receiving the same link twice hits it every time. Nothing about the rules
+changes, and the rule is not "everything refuses" — it is that nothing already
+on disk is overwritten, merged into or deleted:
+
+| Shape | Second receive |
+|---|---|
+| one flat file | refuses (`fileExists`) |
+| several flat files, in `relayium-<id>` | refuses (`directoryExists`) |
+| a nested folder | steps aside to `photos (2)`, atomically |
+
+What changed is only that the ordinary path now runs through these, so
+`CloudDownloadModelContainerTests` covers a second receive explicitly for **the
+two flat shapes above, the ones that refuse**: each must fail, leave the first
+download's bytes untouched, and leave `model.received` nil so nothing
+half-written is offered as a result. The folder shape does not fail and is not
+asserted there — its step-aside is `FolderReceiveTests`' subject.
+
+Refusing is only half of it, because on iOS there is nowhere else to put the
+files. `ErrorCopy` was written behind an `NSOpenPanel`, and that shows in five
+of its `DownloadDestinationError` arms — four end by sending the user to the
+picker, and two of those also speak of *the folder you chose*.
+`ReceiveDestinationCopy` re-words exactly those five:
+
+| case | iOS wording |
+|---|---|
+| `fileExists`, `directoryExists` | rename or remove the item in the Files app, then download again — keeping the shared refusal and the shared reason a container will not be merged into |
+| `unsafeName` | the link asked for an unsafe path, nothing was saved, ask the sender for a new link — no folder named, because the destination is not what failed and the user chose none |
+| `systemError(EACCES/EPERM)` | Relayium cannot write to its own receive folder in Files; retry, and report it if it persists |
+| `systemError(other)` | the same, with the errno kept, because it is the only diagnosable part and the thing worth reporting |
+
+It says which folder to look in (`Relayium/Received`, or `Relayium` for the one
+collision that can occupy the receive folder's own name) and interpolates every
+value — name, path, errno — through `L10n.token`. Everything whose advice does
+not depend on a picker is handed to `ErrorCopy` unchanged: `systemError(ENOSPC)`
+(*free up space*), `incomplete` and `exceedsManifest` (*ask the sender to try
+again*), and every non-destination error. macOS's wording does not move; the
+shared `error.destination.*` strings are untouched and the five `.filesApp` keys
+are additions. `CloudDownloadModel` takes the formatter as an init parameter
+defaulting to `ErrorCopy`; `AppEnvironment` supplies the iOS one under
+`#if os(iOS)`.
+
+Success is the same folder, said the same way. `.done` renders
+`ReceiveDestinationCopy.savedLocation()`, which interpolates `Relayium/Received`
+into `download.savedLocation` (`%@`) from the constants above rather than letting
+nine translations spell the route out — spelled out, each was free to stop at
+`Relayium`, the folder that holds the receive folder rather than the files, on
+the one sentence the user acts on when the transfer is over.
+
+### Sharing
+
+`.done` renders a `ShareLink` over `ReceivedPayload.dragURLs`, so a folder or
+multi-file receive shares its **container** as one item and *Save to Files*
+copies the tree in one piece. The affordance exists only in `.done`, which the
+model reaches only after `ManifestWriter.finish()` returned.
+
+### Capabilities
+
+`Relayium.entitlements` is empty on purpose. No Associated Domains (so no
+`onOpenURL`: nothing could deliver a URL, and wiring it would read like
+universal-link support that does not exist), no keychain access group, no local
+network, no background modes, no push, no Sign in with Apple. Each entitlement
+lands with the functional slice that needs it.
+
+### Not verified yet
+
+The app builds, launches on the simulator, renders Arabic right-to-left, and is
+covered by `swift test` below the view layer. Not yet done by hand: an
+end-to-end receive against a real link; the `Received` folder actually appearing
+under *On My iPhone ▸ Relayium* in Files (the two `Info.plist` keys are the
+documented way to get it, but this build has not been looked at in Files);
+*Save to Files* accepting a **directory** item from the share sheet; VoiceOver;
+and the largest Dynamic Type sizes.

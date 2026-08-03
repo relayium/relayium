@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- Deliberately empty.
+
+     R3-A receives an anonymous stored link and writes into the app's own
+     container. Nothing in that flow needs a capability: no Associated Domains
+     (no link handoff yet), no keychain access group (no account yet), no local
+     network (no nearby yet), no background modes (transfers do not survive
+     suspension yet), no push, no Sign in with Apple.
+
+     The file exists rather than being omitted so the wiring is in place and a
+     later slice adds one entitlement in one reviewed diff. An entitlement is a
+     claim the app makes to the OS and to the user; each one lands with the
+     functional slice that needs it, never in advance. -->
+<dict/>
+</plist>

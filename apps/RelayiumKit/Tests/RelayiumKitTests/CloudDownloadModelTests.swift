@@ -242,7 +242,8 @@ final class CloudDownloadModelContainerTests: XCTestCase {
     /// `contents` is given, `/api/files/<id>/blob` (the framed ciphertext the
     /// real uploader produces, via the same `ChunkEncryptor`).
     private func makeModel(files: [ManifestFile], key: [UInt8],
-                           contents: [String: [UInt8]]? = nil) throws -> CloudDownloadModel {
+                           contents: [String: [UInt8]]? = nil,
+                           errorCopy: ((Error) -> String)? = nil) throws -> CloudDownloadModel {
         let enc = try encryptManifest(key: key, StoredManifest(files: files))
         let meta = StoredFileMeta(encManifest: Data(enc).base64EncodedString(),
                                   size: 0, burnAfterRead: false, expiresAt: 0)
@@ -262,7 +263,8 @@ final class CloudDownloadModelContainerTests: XCTestCase {
         }
         let client = CloudClient(baseURL: URL(string: "https://example.invalid")!,
                                  session: StubURLProtocol.session())
-        return CloudDownloadModel(client: client)
+        guard let errorCopy else { return CloudDownloadModel(client: client) }
+        return CloudDownloadModel(client: client, errorCopy: errorCopy)
     }
 
     /// Yields are not enough here: `resolve`/`download` run a real (stubbed)
@@ -342,5 +344,154 @@ final class CloudDownloadModelContainerTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: urls[1]), Data([4, 5]))
         // The finished result is what Reveal/drag-out is offered on.
         XCTAssertEqual(m.received?.dragURLs, [container])
+    }
+
+    // MARK: - the same link received twice into a FIXED destination
+    //
+    // macOS asks for a folder every time, so receiving the same link twice
+    // usually lands somewhere else and the collision is a corner case. iOS
+    // (R3-A) has one app-owned folder and no picker, so "the destination name is
+    // already taken" is simply what the second tap does — the ordinary path, not
+    // the adversarial one.
+    //
+    // Both shapes are driven through `ReceiveDestination`, so what is asserted
+    // is the destination the iOS app actually uses rather than a temporary
+    // directory that merely resembles it.
+
+    /// Several flat files: the second receive finds its `relayium-<id>` box
+    /// already there. It must refuse, leave the first download's bytes exactly
+    /// as they were, and not present the earlier result as this transfer's.
+    func testASecondMultiFileReceiveRefusesTheExistingContainerAndKeepsItsBytes() async throws {
+        let key = [UInt8](repeating: 6, count: 32)
+        let files = [ManifestFile(name: "a.txt", size: 3), ManifestFile(name: "b.txt", size: 2)]
+        let contents = ["a.txt": [UInt8]([1, 2, 3]), "b.txt": [UInt8]([4, 5])]
+        let documents = try tempDir()
+        let link = "https://relayium.com/d/twice-multi#k=\(encodeStoreKey(key))"
+
+        let first = try makeModel(files: files, key: key, contents: contents)
+        try await receive(first, link: link, into: documents)
+        guard case .done = first.state else { return XCTFail("first receive: \(first.state)") }
+        let container = try XCTUnwrap(first.receivedContainer)
+
+        let second = try makeModel(files: files, key: key, contents: contents)
+        try await receive(second, link: link, into: documents,
+                          until: { if case .failed = $0 { return true }; return false })
+
+        guard case .failed = second.state else {
+            return XCTFail("a taken container must refuse, got \(second.state)")
+        }
+        // Nothing half-finished may be offered as a result.
+        XCTAssertNil(second.received)
+        XCTAssertNil(second.receivedContainer)
+        // And the first download is untouched — same directory, same bytes.
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: container.path).sorted(),
+                       ["a.txt", "b.txt"])
+        XCTAssertEqual(try Data(contentsOf: container.appendingPathComponent("a.txt")),
+                       Data([1, 2, 3]))
+        XCTAssertEqual(try Data(contentsOf: container.appendingPathComponent("b.txt")),
+                       Data([4, 5]))
+        XCTAssertEqual(try FileManager.default
+                        .contentsOfDirectory(atPath: container.deletingLastPathComponent().path),
+                       ["relayium-twice-multi"],
+                       "a refused second receive must not leave anything beside the first")
+    }
+
+    /// One flat file: it is written straight into the receive folder, so the
+    /// second receive collides on the FILE name rather than on a container. The
+    /// existing file's bytes are the thing that must not move.
+    func testASecondSingleFileReceiveRefusesAndKeepsTheExistingBytes() async throws {
+        let key = [UInt8](repeating: 7, count: 32)
+        let files = [ManifestFile(name: "notes.txt", size: 4)]
+        let documents = try tempDir()
+        let link = "https://relayium.com/d/twice-one#k=\(encodeStoreKey(key))"
+
+        let first = try makeModel(files: files, key: key, contents: ["notes.txt": [1, 2, 3, 4]])
+        try await receive(first, link: link, into: documents)
+        guard case .done(let urls) = first.state else {
+            return XCTFail("first receive: \(first.state)")
+        }
+        let saved = try XCTUnwrap(urls.first)
+        XCTAssertEqual(try Data(contentsOf: saved), Data([1, 2, 3, 4]))
+
+        // Different bytes behind the same manifest: if the refusal ever became a
+        // truncate-and-rewrite, the assertion below would catch it as a content
+        // change rather than only as a missing error.
+        let second = try makeModel(files: files, key: key, contents: ["notes.txt": [9, 9, 9, 9]])
+        try await receive(second, link: link, into: documents,
+                          until: { if case .failed = $0 { return true }; return false })
+
+        guard case .failed = second.state else {
+            return XCTFail("a taken file name must refuse, got \(second.state)")
+        }
+        XCTAssertNil(second.received)
+        XCTAssertEqual(try Data(contentsOf: saved), Data([1, 2, 3, 4]),
+                       "the refusal overwrote the file it was supposed to protect")
+        XCTAssertEqual(try FileManager.default
+                        .contentsOfDirectory(atPath: saved.deletingLastPathComponent().path),
+                       ["notes.txt"])
+    }
+
+    /// The refusal above is only half of what the user gets — the other half is
+    /// the sentence explaining it, and on iOS the shared one ends in advice that
+    /// cannot be followed. Driven through the model rather than through
+    /// `ReceiveDestinationCopy` directly, because the message the user reads is
+    /// the one the model put in `.failed`, and the seam between the two is
+    /// exactly what a future refactor would drop.
+    ///
+    /// Both copies are asserted against the SAME failure so the negative claim
+    /// means something: the shared wording really does say "choose another
+    /// folder" here, and the iOS wording really does replace it.
+    func testTheIOSCopyReplacesPickerAdviceForARefusedSecondReceive() async throws {
+        let failed: (DownloadState) -> Bool = { if case .failed = $0 { return true }; return false }
+        let key = [UInt8](repeating: 8, count: 32)
+        let files = [ManifestFile(name: "notes.txt", size: 4)]
+        let bytes: [String: [UInt8]] = ["notes.txt": [1, 2, 3, 4]]
+        let documents = try tempDir()
+        let link = "https://relayium.com/d/twice-copy#k=\(encodeStoreKey(key))"
+
+        let first = try makeModel(files: files, key: key, contents: bytes)
+        try await receive(first, link: link, into: documents)
+        guard case .done = first.state else { return XCTFail("first receive: \(first.state)") }
+
+        // macOS's model, built the way `AppEnvironment` builds it there.
+        let mac = try makeModel(files: files, key: key, contents: bytes,
+                                errorCopy: { ErrorCopy.message(for: $0, language: .en) })
+        try await receive(mac, link: link, into: documents, until: failed)
+        guard case .failed(let macMessage) = mac.state else {
+            return XCTFail("a taken file name must refuse, got \(mac.state)")
+        }
+        XCTAssertTrue(macMessage.contains("Choose another folder"), macMessage)
+
+        // The iOS model. Same refusal, same preserved bytes, different recovery.
+        let ios = try makeModel(files: files, key: key, contents: bytes,
+                                errorCopy: { ReceiveDestinationCopy.message(for: $0,
+                                                                            language: .en) })
+        try await receive(ios, link: link, into: documents, until: failed)
+        guard case .failed(let message) = ios.state else {
+            return XCTFail("a taken file name must refuse, got \(ios.state)")
+        }
+        XCTAssertFalse(message.contains("Choose another folder"),
+                       "iOS has no folder picker to send the user to: \(message)")
+        XCTAssertTrue(message.contains("notes.txt"), message)
+        XCTAssertTrue(message.contains("Relayium/Received"), message)
+        XCTAssertTrue(message.contains("Files app"), message)
+        XCTAssertNil(ios.received)
+    }
+
+    /// Resolve, then download into the app-owned receive folder under
+    /// `documents`, and wait for the state the caller expects.
+    private func receive(_ model: CloudDownloadModel, link: String, into documents: URL,
+                         until done: @escaping (DownloadState) -> Bool = {
+                             if case .done = $0 { return true }; return false
+                         }) async throws {
+        model.linkText = link
+        model.resolve()
+        _ = await waitFor("the manifest to resolve",
+                          { if case .ready = model.state { return true }; return false })
+        guard case .ready = model.state else {
+            return XCTFail("resolve failed: \(model.state)")
+        }
+        model.download(into: try ReceiveDestination.directory(inDocuments: documents))
+        _ = await waitFor("the download to settle", { done(model.state) })
     }
 }

@@ -20,6 +20,7 @@
 "common.code" = "ペアリングコード";
 "common.chooseFilesOrFolders" = "ファイルまたはフォルダを選択…";
 "common.endSession" = "セッションを終了";
+"common.share" = "共有";
 "common.expires" = "有効期限 %@";
 
 /* MARK: 表示フォーマット */
@@ -137,6 +138,10 @@
 "download.save" = "保存…";
 "download.savePanelPrompt" = "ここに保存";
 "download.badLink" = "Relayium のリンクではないようです。https://relayium.com/d/…#k=… のような形式である必要があります。";
+"download.receive" = "ダウンロード";
+"download.resolving" = "リンクを確認しています…";
+"download.inProgress" = "ダウンロードしています…";
+"download.savedLocation" = "これらのファイルは「ファイル」App の %@ フォルダにあります。ここから共有することもできます。";
 "download.fileCount.other" = "%@ 個のファイル";
 "download.savedFiles.other" = "%@ 個のファイルを保存しました";
 
@@ -335,10 +340,15 @@
 "error.destination.directoryExists" = "ここにはすでに「%@」があります — このリンクは以前このフォルダにダウンロードされています。別のフォルダを選んでください。中断したダウンロードとあなた自身のファイルを区別できないため、アプリは既存のフォルダに統合しません。";
 "error.destination.unsafeName" = "このリンクは「%@」という名前のファイルを指定しており、選んだフォルダの外に書き込まれてしまうため、何も保存されませんでした。送信者に新しいリンクをもらってください。";
 "error.destination.fileExists" = "保存先にはすでに「%@」があります。別のフォルダを選んでください。Relayium が上書きすることはありません。";
+"error.destination.fileExists.filesApp" = "%2$@ にはすでに「%1$@」があるため、何も保存されませんでした。Relayium が上書きすることはありません。「ファイル」App を開いてその項目の名前を変更するか削除してから、もう一度ダウンロードしてください。";
+"error.destination.directoryExists.filesApp" = "%2$@ にはすでに「%1$@」があります — このリンクは以前ダウンロードされています。中断したダウンロードとあなた自身のファイルを区別できないため、Relayium は既存の項目に統合しません。「ファイル」App を開いてその項目の名前を変更するか削除してから、もう一度ダウンロードしてください。";
 "error.destination.incomplete" = "受信したバイト数がファイルリストと一致しなかったため、不完全なファイルは破棄されました。送信者にもう一度試してもらってください。";
 "error.destination.noSpace" = "この転送を保存するのに十分な空き容量がないため、何も保存されませんでした。空き容量を確保してからお試しください。";
 "error.destination.notPermitted" = "Relayium にはそのフォルダへの書き込み権限がないため、何も保存されませんでした。別のフォルダを選んでください。";
 "error.destination.systemError" = "保存先フォルダに書き込めませんでした（エラー %@）。何も保存されていません。別のフォルダをお試しください。";
+"error.destination.unsafeName.filesApp" = "このリンクは安全でないファイルパス「%@」を指定しているため、何も保存されませんでした。送信者に新しいリンクをもらってください。";
+"error.destination.notPermitted.filesApp" = "Relayium には「ファイル」App 内の受信フォルダ（%@）への書き込み権限がないため、何も保存されませんでした。もう一度ダウンロードしてください。それでも失敗する場合は Relayium を再起動し、ご報告ください。";
+"error.destination.systemError.filesApp" = "Relayium は「ファイル」App 内の受信フォルダ（%1$@）に書き込めませんでした（エラー %2$@）。何も保存されていません。もう一度ダウンロードしてください。それでも失敗する場合は Relayium を再起動し、このエラー番号をご報告ください。";
 "error.manifest.unsafePath" = "相手のデバイスは「%@」にあるファイルを指定しましたが、それは選んだフォルダの外に書き込まれてしまいます。何も保存されませんでした。";
 "error.manifest.duplicatePath" = "この転送には「%@」のファイルが複数含まれています — この Mac ではそれらは同一のファイルです — そのため何も保存されませんでした。送信者にどちらかの名前を変えてもらってください。";
 "error.manifest.pathCollision" = "この転送は「%@」をファイルとフォルダの両方にしようとしていますが、両立できないため、何も保存されませんでした。送信者にもう一度試してもらってください。";

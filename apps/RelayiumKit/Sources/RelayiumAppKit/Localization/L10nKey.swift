@@ -32,6 +32,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case commonCode = "common.code"
     case commonChooseFilesOrFolders = "common.chooseFilesOrFolders"
     case commonEndSession = "common.endSession"
+    /// The system share sheet. iOS reveals nothing and drags nothing out; this
+    /// is how a finished transfer reaches the rest of the device.
+    case commonShare = "common.share"
     /// %@ — a formatted date/time. Technical only in the sense that it is data:
     /// it is rendered through `L10n.date`, so it is already in this language.
     case commonExpires = "common.expires"
@@ -179,6 +182,29 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case downloadSave = "download.save"
     case downloadSavePanelPrompt = "download.savePanelPrompt"
     case downloadBadLink = "download.badLink"
+    /// The download action where there is no folder picker to open.
+    ///
+    /// Separate from `download.save` rather than shared with it: macOS's `Save…`
+    /// promises a panel, and on iOS the destination is already decided, so the
+    /// ellipsis would be a lie about what the next tap does.
+    case downloadReceive = "download.receive"
+    /// Labelled status for the two waits. macOS shows a bare spinner beside a
+    /// pane the user is already reading; a touch screen showing only a spinner
+    /// says nothing, and VoiceOver reads nothing at all.
+    case downloadResolving = "download.resolving"
+    case downloadInProgress = "download.inProgress"
+    /// Where the files actually are, said once, after they are there. The
+    /// counterpart of macOS's "Reveal in Finder" for a platform whose file
+    /// browser is a separate app.
+    ///
+    /// %@ — the route through the Files app, `Relayium/Received`, supplied by
+    /// `ReceiveDestinationCopy.savedLocation()` from the same constants the
+    /// destination failures name and isolated as a technical token. Interpolated
+    /// rather than written into each translation because the receive folder sits
+    /// one level below the app's own folder, and a sentence that spelled the
+    /// route out was free to stop at `Relayium` — which is where the files are
+    /// not.
+    case downloadSavedLocation = "download.savedLocation"
 
     // MARK: - Ephemeral text
 
@@ -395,11 +421,58 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case errorDestinationUnsafeName = "error.destination.unsafeName"
     /// %@ — a file name, never translated.
     case errorDestinationFileExists = "error.destination.fileExists"
+    /// %1$@ — a file name, never translated. %2$@ — the folder's path in the
+    /// Files app, never translated.
+    ///
+    /// The first of the five `.filesApp` keys. Each answers a shared
+    /// `error.destination.*` string that only makes sense behind a folder
+    /// picker: four of them end in *choose another folder*, and two of those
+    /// also speak of *the folder you chose*. iOS receives into one app-owned
+    /// folder and offers no picker, so on that platform those sentences name an
+    /// action the user cannot take, or describe a choice nobody made.
+    ///
+    /// All five preserve the underlying outcome and the rule behind it; what
+    /// they change is only what the shared copy gets wrong on iOS. For the two
+    /// collisions that is the RECOVERY: go to the named folder in Files, rename
+    /// or remove the item that is in the way, and download again — while the
+    /// refusal itself, and the reason a container will not be merged into, are
+    /// carried over from the shared copy on purpose, so the two platforms do not
+    /// drift into explaining one rule two ways. For `unsafeName` it is the
+    /// PREMISE: the shared copy assumes a folder the user chose, which does not
+    /// exist on this platform, so the replacement drops that premise rather than
+    /// the verdict. For the two write failures it is again the RECOVERY, since
+    /// the folder they name cannot be swapped for another. Used by
+    /// `ReceiveDestinationCopy`; nothing on macOS reaches any of the five.
+    case errorDestinationFileExistsFilesApp = "error.destination.fileExists.filesApp"
+    /// %1$@ — a directory name, never translated. %2$@ — the folder's path in
+    /// the Files app, never translated.
+    case errorDestinationDirectoryExistsFilesApp = "error.destination.directoryExists.filesApp"
     case errorDestinationIncomplete = "error.destination.incomplete"
     case errorDestinationNoSpace = "error.destination.noSpace"
     case errorDestinationNotPermitted = "error.destination.notPermitted"
     /// %@ — an errno value, verbatim.
     case errorDestinationSystemError = "error.destination.systemError"
+    /// %@ — the unsafe name or path the link asked for, never translated.
+    ///
+    /// The shared key says the file would land *outside the folder you chose*,
+    /// which on iOS is false in its subject as well as its advice — no folder
+    /// was chosen. This says what is actually wrong: the link asks for a path
+    /// the app will not write. There is no folder in it at all, because the
+    /// destination is not what failed and the sender is the only fix.
+    case errorDestinationUnsafeNameFilesApp = "error.destination.unsafeName.filesApp"
+    /// %@ — the receive folder's path in the Files app, never translated.
+    ///
+    /// The shared key ends in *choose another folder*. The folder here is the
+    /// app's own and fixed, so the only honest recovery is to retry and, if it
+    /// persists, report it.
+    case errorDestinationNotPermittedFilesApp = "error.destination.notPermitted.filesApp"
+    /// %1$@ — the receive folder's path in the Files app, never translated.
+    /// %2$@ — an errno value, verbatim.
+    ///
+    /// As above, and it keeps the errno for the same reason the shared key does:
+    /// it is the only diagnosable part, and here it is the thing worth putting
+    /// in the report.
+    case errorDestinationSystemErrorFilesApp = "error.destination.systemError.filesApp"
     /// %@ — a manifest path, never translated.
     case errorManifestUnsafePath = "error.manifest.unsafePath"
     /// %@ — a manifest path, never translated.

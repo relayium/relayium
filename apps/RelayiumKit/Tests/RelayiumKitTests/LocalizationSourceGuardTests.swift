@@ -30,12 +30,17 @@ final class LocalizationSourceGuardTests: XCTestCase {
         return [
             packageRoot.appendingPathComponent("Sources/RelayiumAppKit"),
             apps.appendingPathComponent("mac/Relayium"),
+            // R3-A's iOS app. It renders the same catalogs through the same
+            // `L10n` and has the same failure mode, and being the newest
+            // surface it is where a `Text("Try again")` is most likely to be
+            // typed next.
+            apps.appendingPathComponent("ios/Relayium"),
         ]
     }
 
     func testNoUserFacingEnglishLiteralsInTheAppOrViewModelLayer() throws {
         var offenders: [String] = []
-        var scannedFiles = 0
+        var scannedFiles: [String: Int] = [:]
 
         for root in scannedRoots {
             // A missing root means a rename moved the code out from under this
@@ -46,8 +51,9 @@ final class LocalizationSourceGuardTests: XCTestCase {
                 XCTFail("scanned root is missing: \(root.path)")
                 continue
             }
+            scannedFiles[root.path] = 0
             for file in try swiftFiles(under: root) {
-                scannedFiles += 1
+                scannedFiles[root.path, default: 0] += 1
                 let source = try String(contentsOf: file, encoding: .utf8)
                 let lines = source.components(separatedBy: "\n")
                 for (number, line) in lines.enumerated() {
@@ -64,7 +70,14 @@ final class LocalizationSourceGuardTests: XCTestCase {
             }
         }
 
-        XCTAssertGreaterThan(scannedFiles, 30,
+        // Per root as well as in total. A global threshold alone is satisfied
+        // by the two large roots on its own, so a third root that a rename
+        // emptied would go on passing while covering nothing — which is the
+        // exact failure this count exists to notice.
+        for (root, count) in scannedFiles {
+            XCTAssertGreaterThan(count, 0, "no Swift files under \(root)")
+        }
+        XCTAssertGreaterThan(scannedFiles.values.reduce(0, +), 45,
                              "the scan found almost nothing — the roots are probably wrong")
         XCTAssertTrue(offenders.isEmpty,
                       "user-facing English literals must go through L10n, or carry an "

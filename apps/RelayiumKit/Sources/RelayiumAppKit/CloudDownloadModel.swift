@@ -50,12 +50,23 @@ public final class CloudDownloadModel: ObservableObject {
     }
 
     private let client: CloudClient
+    private let errorCopy: (Error) -> String
     private var task: Task<Void, Never>?
     private var generation = 0
     private var link: ParsedLink?
     private var key: [UInt8] = []
 
-    public init(client: CloudClient) { self.client = client }
+    /// `errorCopy` exists for one difference and defaults to no difference at
+    /// all: macOS picks a destination per transfer, so `ErrorCopy`'s "choose
+    /// another folder" is actionable there, while iOS receives into one
+    /// app-owned folder where that sentence names an action the user cannot
+    /// take. The recovery step is the platform's; the rules that produced the
+    /// failure are not, and none of them live behind this seam.
+    public init(client: CloudClient,
+                errorCopy: @escaping (Error) -> String = { ErrorCopy.message(for: $0) }) {
+        self.client = client
+        self.errorCopy = errorCopy
+    }
 
     public var isBusy: Bool {
         switch state {
@@ -94,7 +105,7 @@ public final class CloudDownloadModel: ObservableObject {
             } catch {
                 await MainActor.run {
                     guard g == self.generation else { return }
-                    self.state = .failed(ErrorCopy.message(for: error))
+                    self.state = .failed(self.errorCopy(error))
                 }
             }
         }
@@ -175,7 +186,7 @@ public final class CloudDownloadModel: ObservableObject {
                 writer?.discard()
                 await MainActor.run {
                     guard g == self.generation else { return }
-                    self.state = .failed(ErrorCopy.message(for: error))
+                    self.state = .failed(self.errorCopy(error))
                 }
             }
         }

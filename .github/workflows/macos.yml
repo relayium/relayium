@@ -63,6 +63,26 @@ jobs:
           apps/mac/scripts/test-notarize-dmg.sh
           apps/mac/scripts/test-release-readiness.sh
 
+  # The iOS app (R3-A) compiles against the same package, so an `apps/**` change
+  # that breaks it has to fail here rather than the next time somebody opens
+  # Xcode. Unsigned and simulator-only: this is compile evidence, not a release
+  # path, and there is nothing to distribute. No secrets, so it runs on fork
+  # pull requests like `test` does.
+  ios-build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Toolchain versions
+        run: xcodebuild -version
+      # `generic/platform=iOS Simulator` builds for the simulator SDK without
+      # booting a device or needing a runtime download.
+      - name: Build (unsigned, iOS Simulator)
+        run: |
+          xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/dd-ios" \
+            CODE_SIGNING_ALLOWED=NO build
+
   # Needs the signing certificate, so it cannot run where secrets are
   # unavailable. This repository is public: a fork's pull request cannot read
   # repository secrets, and a job that tried would fail confusingly rather than

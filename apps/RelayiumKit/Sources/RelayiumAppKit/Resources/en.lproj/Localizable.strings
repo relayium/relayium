@@ -21,6 +21,7 @@
 "common.code" = "Code";
 "common.chooseFilesOrFolders" = "Choose Files or Folders…";
 "common.endSession" = "End session";
+"common.share" = "Share";
 "common.expires" = "Expires %@";
 
 /* MARK: presentation formats */
@@ -138,6 +139,10 @@
 "download.save" = "Save…";
 "download.savePanelPrompt" = "Save Here";
 "download.badLink" = "That doesn't look like a Relayium link. It should look like https://relayium.com/d/…#k=…";
+"download.receive" = "Download";
+"download.resolving" = "Checking the link…";
+"download.inProgress" = "Downloading…";
+"download.savedLocation" = "These files are in the %@ folder in the Files app. You can also share them from here.";
 "download.fileCount.one" = "%@ file";
 "download.fileCount.other" = "%@ files";
 "download.savedFiles.one" = "Saved %@ file";
@@ -344,10 +349,15 @@
 "error.destination.directoryExists" = "“%@” already exists here — this link was downloaded to this folder before. Choose another folder: the app won't merge into an existing one, because it can't tell a half-finished download from your own files.";
 "error.destination.unsafeName" = "The link describes a file named “%@” that would be written outside the folder you chose, so nothing was saved. Ask the sender for a new link.";
 "error.destination.fileExists" = "“%@” already exists in the destination. Choose another folder; Relayium will not overwrite it.";
+"error.destination.fileExists.filesApp" = "“%1$@” is already in %2$@, so nothing was saved — Relayium will not overwrite it. Open the Files app, rename or remove that item, then download again.";
+"error.destination.directoryExists.filesApp" = "“%1$@” is already in %2$@ — this link was downloaded before. Relayium won't merge into it, because it can't tell a half-finished download from your own files. Open the Files app, rename or remove that item, then download again.";
 "error.destination.incomplete" = "The received byte count did not match the file list, so the incomplete files were discarded. Ask the sender to try again.";
 "error.destination.noSpace" = "There isn't enough free space to save this transfer, so nothing was saved. Free up space and try again.";
 "error.destination.notPermitted" = "Relayium isn't allowed to write to that folder, so nothing was saved. Choose another folder.";
 "error.destination.systemError" = "The destination folder couldn't be written to (error %@), so nothing was saved. Try another folder.";
+"error.destination.unsafeName.filesApp" = "The link describes an unsafe file path (“%@”), so nothing was saved. Ask the sender for a new link.";
+"error.destination.notPermitted.filesApp" = "Relayium isn't allowed to write to its receive folder in the Files app (%@), so nothing was saved. Try downloading again; if it keeps failing, restart Relayium and please report it.";
+"error.destination.systemError.filesApp" = "Relayium couldn't write to its receive folder in the Files app (%1$@) — error %2$@ — so nothing was saved. Try downloading again; if it keeps failing, restart Relayium and please report that error number.";
 "error.manifest.unsafePath" = "The other device described a file at “%@”, which would be written outside the folder you chose. Nothing was saved.";
 "error.manifest.duplicatePath" = "The transfer contains more than one file at “%@” — on this Mac those are the same file — so nothing was saved. Ask the sender to rename one of them.";
 "error.manifest.pathCollision" = "The transfer wants “%@” to be both a file and a folder, which cannot exist at once, so nothing was saved. Ask the sender to try again.";

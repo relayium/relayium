@@ -20,6 +20,7 @@
 "common.code" = "Code";
 "common.chooseFilesOrFolders" = "Dateien oder Ordner auswählen…";
 "common.endSession" = "Sitzung beenden";
+"common.share" = "Teilen";
 "common.expires" = "Läuft ab: %@";
 
 /* MARK: Darstellungsformate */
@@ -137,6 +138,10 @@
 "download.save" = "Sichern…";
 "download.savePanelPrompt" = "Hier sichern";
 "download.badLink" = "Das sieht nicht nach einem Relayium-Link aus. Er sollte aussehen wie https://relayium.com/d/…#k=…";
+"download.receive" = "Herunterladen";
+"download.resolving" = "Link wird geprüft…";
+"download.inProgress" = "Wird heruntergeladen…";
+"download.savedLocation" = "Diese Dateien liegen im Ordner „%@“ in der App „Dateien“. Du kannst sie auch direkt von hier aus teilen.";
 "download.fileCount.one" = "%@ Datei";
 "download.fileCount.other" = "%@ Dateien";
 "download.savedFiles.one" = "%@ Datei gesichert";
@@ -343,10 +348,15 @@
 "error.destination.directoryExists" = "„%@“ ist hier bereits vorhanden — dieser Link wurde schon einmal in diesen Ordner geladen. Wähle einen anderen Ordner: Die App führt nichts mit einem vorhandenen Ordner zusammen, weil sie einen halb fertigen Download nicht von deinen eigenen Dateien unterscheiden kann.";
 "error.destination.unsafeName" = "Der Link beschreibt eine Datei namens „%@“, die außerhalb des gewählten Ordners geschrieben würde, deshalb wurde nichts gesichert. Bitte die sendende Seite um einen neuen Link.";
 "error.destination.fileExists" = "„%@“ ist am Zielort bereits vorhanden. Wähle einen anderen Ordner; Relayium überschreibt nichts.";
+"error.destination.fileExists.filesApp" = "„%1$@“ ist bereits in %2$@ vorhanden, deshalb wurde nichts gespeichert — Relayium überschreibt nichts. Öffne die App „Dateien“, benenne diesen Eintrag um oder entferne ihn, und lade dann erneut.";
+"error.destination.directoryExists.filesApp" = "„%1$@“ ist bereits in %2$@ vorhanden — dieser Link wurde schon einmal geladen. Relayium führt nichts damit zusammen, weil es einen halb fertigen Download nicht von deinen eigenen Dateien unterscheiden kann. Öffne die App „Dateien“, benenne diesen Eintrag um oder entferne ihn, und lade dann erneut.";
 "error.destination.incomplete" = "Die empfangene Byte-Anzahl passte nicht zur Dateiliste, deshalb wurden die unvollständigen Dateien verworfen. Bitte die sendende Seite, es erneut zu versuchen.";
 "error.destination.noSpace" = "Es ist nicht genug freier Speicher vorhanden, um diese Übertragung zu sichern, deshalb wurde nichts gesichert. Schaffe Platz und versuch es erneut.";
 "error.destination.notPermitted" = "Relayium darf nicht in diesen Ordner schreiben, deshalb wurde nichts gesichert. Wähle einen anderen Ordner.";
 "error.destination.systemError" = "In den Zielordner konnte nicht geschrieben werden (Fehler %@), deshalb wurde nichts gesichert. Versuch einen anderen Ordner.";
+"error.destination.unsafeName.filesApp" = "Der Link beschreibt einen unsicheren Dateipfad („%@“), deshalb wurde nichts gesichert. Bitte die sendende Seite um einen neuen Link.";
+"error.destination.notPermitted.filesApp" = "Relayium darf nicht in seinen Empfangsordner in der App „Dateien“ (%@) schreiben, deshalb wurde nichts gesichert. Lade es erneut; wenn es weiterhin fehlschlägt, starte Relayium neu und melde es bitte.";
+"error.destination.systemError.filesApp" = "In den Empfangsordner von Relayium in der App „Dateien“ (%1$@) konnte nicht geschrieben werden (Fehler %2$@), deshalb wurde nichts gesichert. Lade es erneut; wenn es weiterhin fehlschlägt, starte Relayium neu und melde bitte diese Fehlernummer.";
 "error.manifest.unsafePath" = "Das andere Gerät hat eine Datei unter „%@“ beschrieben, die außerhalb des gewählten Ordners geschrieben würde. Es wurde nichts gesichert.";
 "error.manifest.duplicatePath" = "Die Übertragung enthält mehr als eine Datei unter „%@“ — auf diesem Mac sind das dieselbe Datei — deshalb wurde nichts gesichert. Bitte die sendende Seite, eine davon umzubenennen.";
 "error.manifest.pathCollision" = "Die Übertragung möchte, dass „%@“ zugleich Datei und Ordner ist, was nicht gleichzeitig möglich ist, deshalb wurde nichts gesichert. Bitte die sendende Seite, es erneut zu versuchen.";
