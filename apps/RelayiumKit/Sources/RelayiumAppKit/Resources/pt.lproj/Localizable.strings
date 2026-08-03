@@ -78,13 +78,13 @@
 "nav.sectionDirect" = "Direto";
 "nav.sectionLinks" = "Ligações";
 "nav.nearby" = "Por perto";
-"nav.nearbySubtitle" = "Dispositivos nesta rede, sem conta";
+"nav.nearbySubtitle" = "Sem conta, de aparelho para aparelho — só na mesma rede";
 "nav.pairingCode" = "Código de emparelhamento";
-"nav.pairingCodeSubtitle" = "Ligue entre redes com seis dígitos";
+"nav.pairingCodeSubtitle" = "Texto e ficheiros pequenos entre redes — ambos online";
 "nav.storedSend" = "Enviar uma ligação";
-"nav.storedSendSubtitle" = "Guarde um ficheiro cifrado e partilhe a ligação";
+"nav.storedSendSubtitle" = "Ficheiros grandes, levantados depois — inicie sessão; limites do plano";
 "nav.storedReceive" = "Abrir uma ligação";
-"nav.storedReceiveSubtitle" = "Receba um ficheiro que alguém lhe enviou";
+"nav.storedReceiveSubtitle" = "Abra uma ligação que lhe enviaram — sem conta, até expirar";
 "nav.account" = "Conta";
 "nav.accountSubtitle" = "Plano, dispositivos e ficheiros guardados";
 "nav.a11ySections" = "Destinos do Relayium";

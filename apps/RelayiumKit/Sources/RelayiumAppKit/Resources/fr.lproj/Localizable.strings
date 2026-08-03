@@ -78,13 +78,13 @@
 "nav.sectionDirect" = "Direct";
 "nav.sectionLinks" = "Liens";
 "nav.nearby" = "À proximité";
-"nav.nearbySubtitle" = "Appareils sur ce réseau, sans compte";
+"nav.nearbySubtitle" = "Sans compte, d’appareil à appareil — même réseau uniquement";
 "nav.pairingCode" = "Code d’association";
-"nav.pairingCodeSubtitle" = "Se connecter entre réseaux avec six chiffres";
+"nav.pairingCodeSubtitle" = "Texte et petits fichiers entre réseaux — les deux en ligne";
 "nav.storedSend" = "Envoyer un lien";
-"nav.storedSendSubtitle" = "Stocker un fichier chiffré et partager le lien";
+"nav.storedSendSubtitle" = "Gros fichiers, récupérés plus tard — connexion, limites de l’offre";
 "nav.storedReceive" = "Ouvrir un lien";
-"nav.storedReceiveSubtitle" = "Recevoir un fichier que quelqu’un vous a envoyé";
+"nav.storedReceiveSubtitle" = "Ouvrir un lien reçu — sans compte, jusqu’à son expiration";
 "nav.account" = "Compte";
 "nav.accountSubtitle" = "Forfait, appareils et fichiers stockés";
 "nav.a11ySections" = "Destinations Relayium";

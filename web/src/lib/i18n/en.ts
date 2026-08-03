@@ -523,7 +523,7 @@ const en: Messages = {
     offline: { lead: "Recipient not online? Use async transfer — encrypt, upload, and leave a download link they can fetch for days.", cta: "Go to async transfer →" },
   },
   methods: {
-    realtime: { name: "Realtime transfer", sub: "Pick your files and get a 6-digit code — read it out, send the link, or show the QR; the moment the other side joins, the transfer starts automatically.", badge: "Recipient: no account" },
+    realtime: { name: "Realtime transfer", sub: "Create a 6-digit code — read it out, send the link, or show the QR. Once the other device joins, choose the files to send, or “Send a message” for text.", badge: "Recipient: no account" },
     stored: { name: "Download link", sub: "Your browser encrypts then stores; the recipient downloads anytime, no live session and no account needed.", badge: "Offline OK" },
   },
   pair: {
@@ -635,23 +635,24 @@ const en: Messages = {
   },
   compare: {
     title: "Which mode to choose",
-    sub: "“Realtime transfer” is for when both are online now; “Download link” is for picking up later.",
+    sub: "LAN needs no account but only works on one shared network; realtime hands small files and text over while both sides are online; a download link is the one to use for large files, or when they'll fetch it later.",
     colFeature: "Aspect",
+    colLan: "LAN",
     colRealtime: "Realtime",
     colStored: "Download link",
     rows: [
-      { label: "Sign-in needed", realtime: "Cross-network file/text code creator signs in; joiner needs no account", stored: "Download-link creator signs in" },
-      { label: "Recipient online?", realtime: "Yes — both online at once", stored: "No — download asynchronously" },
-      { label: "Files via server?", realtime: "Same network: device-to-device. Across networks: relay carries ciphertext it cannot read or decrypt", stored: "Yes, but zero-knowledge ciphertext only" },
-      { label: "Lifetime", realtime: "Both online; no server-side text history", stored: "Up to 14 days (by plan), or burn after reading" },
-      { label: "Best for", realtime: "Live big-file or text transfer", stored: "Recipient offline, or one link for many" },
+      { label: "Sign-in needed", lan: "Neither side signs in", realtime: "Cross-network file/text code creator signs in; joiner needs no account", stored: "Download-link creator signs in; the recipient needs no account" },
+      { label: "Network needed", lan: "Same local network only — it cannot reach a device on another network", realtime: "Any network, but both devices online at the same moment", stored: "Any network; the recipient fetches whenever they like" },
+      { label: "Files via server?", lan: "No — device to device inside your own network", realtime: "Same network: device-to-device. Across networks: relay carries ciphertext it cannot read or decrypt", stored: "Yes, but zero-knowledge ciphertext only" },
+      { label: "If it's interrupted", lan: "Temporary file-connection drops can resume; closing or reloading either page means start again", realtime: "Temporary file-connection drops can resume; closing or reloading either page means start again", stored: "Keep the sender page open until upload finishes; after that the link works until expiry" },
+      { label: "Best for", lan: "Phone ↔ laptop on the same Wi-Fi, with no account at all", realtime: "Quick small files and text across networks — a command, a link, a note", stored: "Large files, and send now / fetch later" },
     ],
   },
   useCases: {
     title: "Built for these moments",
     sub: "From remote collaboration to privacy-sensitive one-shot delivery.",
     items: [
-      { title: "Send big files across the world", desc: "Fire a multi-gigabyte video, design file, or dataset straight to a colleague or family member abroad — streamed to disk, no memory bloat, no quality loss." },
+      { title: "Send big files across the world", desc: "A multi-gigabyte video, design file, or dataset: encrypt it into a download link and send the link on. The recipient need not be online while you upload; keep your page open until the upload finishes, then either side can close the laptop and the link remains available until expiry. It still streams to disk on the way down: no memory bloat, no quality loss." },
       { title: "When they're not online", desc: "Generate an encrypted download link with an expiry and send it over; they grab it whenever they're free — and one link can serve several recipients." },
       { title: "Phone ↔ computer", desc: "Move files between your own devices across systems and networks — scan or type a code to connect, no cloud drive or cable required." },
       { title: "Privacy-sensitive one-shot delivery", desc: "End-to-end encryption plus an optional verification code (SAS) against MITM, with burn-after-reading — ideal for contracts, IDs, or keys." },
@@ -664,7 +665,7 @@ const en: Messages = {
     items: [
       { q: "Do I need to install an app?", a: "No. Any modern browser can transfer straight from the web page — Chrome is recommended (streams large files to disk with an optional target folder, without using memory)." },
       { q: "What if it won't connect?", a: "On the same network, realtime transfers connect device-to-device. Across networks they run over an encrypted TURN relay, which gets through strict firewalls and NATs reliably (the relay only ever forwards ciphertext and cannot decrypt). Still stuck? A download link is the most reliable option — it's asynchronous, so both sides don't need to be online at once." },
-      { q: "How big can files be?", a: "Realtime file transfer streams data, so there's no hard size cap in practice; download links are bounded by a per-file size limit and a daily quota, which the page will tell you about." },
+      { q: "How big can files be?", a: "Realtime file transfer streams data and has no server-side size cap. Temporary connection drops can resume, but both pages must remain open; closing or reloading either one ends the live session. For large files, use a download link: it has a per-file size limit and daily quota shown on the page. Keep the sender page open until upload finishes; after that the link remains available until expiry even when either side closes the tab. Realtime is at its best for quick small files and text." },
       { q: "Can the server read or decrypt my files?", a: "No. On the same network, realtime transfers never touch the server; across networks TURN carries ciphertext that it cannot decrypt. Download links are encrypted in your browser and the server keeps only ciphertext it cannot decrypt — the key lives solely with the link's sharer and recipient." },
       { q: "Do I have to create an account?", a: "Same-network file and text transfers need no sign-in. Creating a cross-network file or text pairing code requires the creator to sign in; joining by code, link, or QR needs no account. Creating an async download link also requires sign-in, while downloading does not." },
       { q: "Is it open source?", a: "Yes. The protocol design and all front-end and back-end code are public on GitHub — free to review, self-host, or contribute to." },

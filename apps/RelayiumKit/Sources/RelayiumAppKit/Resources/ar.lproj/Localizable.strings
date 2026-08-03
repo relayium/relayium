@@ -81,13 +81,13 @@
 "nav.sectionDirect" = "مباشر";
 "nav.sectionLinks" = "الروابط";
 "nav.nearby" = "الأجهزة القريبة";
-"nav.nearbySubtitle" = "أجهزة على هذه الشبكة، بدون حساب";
+"nav.nearbySubtitle" = "بدون حساب، من جهاز إلى جهاز — على الشبكة نفسها فقط";
 "nav.pairingCode" = "رمز الاقتران";
-"nav.pairingCodeSubtitle" = "اتصل عبر الشبكات برمز من ست خانات";
+"nav.pairingCodeSubtitle" = "نصوص وملفات صغيرة عبر الشبكات — مع اتصال الطرفين";
 "nav.storedSend" = "إرسال رابط";
-"nav.storedSendSubtitle" = "خزّن ملفًا مشفّرًا وشارك الرابط";
+"nav.storedSendSubtitle" = "ملفات كبيرة تُستلَم لاحقًا — يلزم تسجيل الدخول وتنطبق حدود الباقة";
 "nav.storedReceive" = "فتح رابط";
-"nav.storedReceiveSubtitle" = "استلم ملفًا أرسله إليك شخص ما";
+"nav.storedReceiveSubtitle" = "افتح رابطًا أرسله إليك أحدهم — بدون حساب، قبل انتهاء صلاحيته";
 "nav.account" = "الحساب";
 "nav.accountSubtitle" = "الخطة والأجهزة والملفات المخزّنة";
 "nav.a11ySections" = "وجهات Relayium";

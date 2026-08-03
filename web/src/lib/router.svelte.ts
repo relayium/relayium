@@ -9,6 +9,12 @@ import { clearRoom } from "./room.svelte";
 
 export type Route = "lan" | "cross" | "offline" | "download" | "me" | "cli" | "apps" | "pricing" | "verify-email" | "reset-password" | "magic-link";
 
+/** Path of the LAN / same-network transfer page. It is the site root, so this
+ *  constant exists to name it rather than to compute it: copy that links the
+ *  three transfer modes side by side should not spell one of them as a bare
+ *  string while the other two are constants. */
+export const LAN_PATH = "/";
+
 /** Personal center path. Login-gated page; not part of the transfer flows. */
 export const ME_PATH = "/me";
 
@@ -99,7 +105,7 @@ export function navigate(r: Route): void {
     : r === "verify-email" ? VERIFY_EMAIL_PATH
     : r === "reset-password" ? RESET_PASSWORD_PATH
     : r === "magic-link" ? MAGIC_PATH
-    : "/";
+    : LAN_PATH;
   clearRoom(); // leaving a 2-peer code room rebinds the socket via App's effect
   history.pushState({}, "", pathname);
   route = r;

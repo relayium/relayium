@@ -662,6 +662,76 @@ final class LocalizedCopyTests: XCTestCase {
         }
     }
 
+    // MARK: - the sidebar is where the transport is chosen
+
+    /// Each sidebar caption is the last thing someone reads before committing to
+    /// a transport, so it has to carry the limitation that rules the transport
+    /// out and not only the benefit that sells it. "Devices on this network" did
+    /// not say *only* this network; "Connect across networks with six digits"
+    /// did not say both sides have to stay online. Someone picks the wrong row,
+    /// gets a screen that cannot do what they came for, and reads that as the
+    /// app being broken.
+    ///
+    /// Tokens are per language and written down by hand: the point of the table
+    /// is that somebody read each translation and confirmed the limitation is
+    /// still in it, in a form that language actually uses.
+    func testSidebarSubtitlesKeepTheDecisiveLimitation() throws {
+        let sameNetworkOnly: [AppLanguage: String] = [
+            .en: "same network only", .zh: "仅限同一网络", .ja: "同じネットワーク内のみ",
+            .ko: "같은 네트워크에서만", .de: "nur im selben Netzwerk", .fr: "même réseau uniquement",
+            .ar: "على الشبكة نفسها فقط", .es: "solo la misma red", .pt: "só na mesma rede",
+        ]
+        let bothOnline: [AppLanguage: String] = [
+            .en: "both sides online", .zh: "双方须同时在线", .ja: "双方がオンライン",
+            .ko: "양쪽 모두 온라인", .de: "beide Seiten online", .fr: "les deux en ligne",
+            .ar: "اتصال الطرفين", .es: "ambos en línea", .pt: "ambos online",
+        ]
+        let largeFiles: [AppLanguage: String] = [
+            .en: "Large files", .zh: "大文件", .ja: "大きなファイル",
+            .ko: "큰 파일", .de: "Große Dateien", .fr: "Gros fichiers",
+            .ar: "ملفات كبيرة", .es: "Archivos grandes", .pt: "Ficheiros grandes",
+        ]
+        let noAccount: [AppLanguage: String] = [
+            .en: "no account", .zh: "无需账户", .ja: "アカウント不要",
+            .ko: "계정 불필요", .de: "ohne Konto", .fr: "sans compte",
+            .ar: "بدون حساب", .es: "sin cuenta", .pt: "sem conta",
+        ]
+        for language in AppLanguage.allCases {
+            let nearby = L10n.t(.navNearbySubtitle, language: language)
+            let pairing = L10n.t(.navPairingCodeSubtitle, language: language)
+            let send = L10n.t(.navStoredSendSubtitle, language: language)
+            let receive = L10n.t(.navStoredReceiveSubtitle, language: language)
+
+            XCTAssertTrue(nearby.contains(try XCTUnwrap(sameNetworkOnly[language])),
+                          "\(language.rawValue) nearby hides that it cannot leave the network: \(nearby)")
+            XCTAssertTrue(pairing.contains(try XCTUnwrap(bothOnline[language])),
+                          "\(language.rawValue) pairing hides that both sides must stay online: \(pairing)")
+            XCTAssertTrue(send.contains(try XCTUnwrap(largeFiles[language])),
+                          "\(language.rawValue) stored send no longer claims the large-file path: \(send)")
+            XCTAssertTrue(receive.contains(try XCTUnwrap(noAccount[language])),
+                          "\(language.rawValue) stored receive drops the anonymous half: \(receive)")
+
+            // The large-file path is the stored one. A pairing-code caption that
+            // also advertises large files puts the reader on a live transport
+            // that requires both app/page sessions to remain active. Temporary
+            // transport drops may resume; closing the session is the boundary.
+            XCTAssertFalse(pairing.localizedCaseInsensitiveContains(try XCTUnwrap(largeFiles[language])),
+                           "\(language.rawValue) pairing recommends itself for large files: \(pairing)")
+
+            for (key, rendered) in [(L10nKey.navNearbySubtitle, nearby),
+                                    (.navPairingCodeSubtitle, pairing),
+                                    (.navStoredSendSubtitle, send),
+                                    (.navStoredReceiveSubtitle, receive)] {
+                XCTAssertNotEqual(rendered, key.rawValue,
+                                  "\(key.rawValue) [\(language.rawValue)] fell back to the key")
+                if language != .en {
+                    XCTAssertNotEqual(rendered, L10n.t(key, language: .en),
+                                      "\(key.rawValue) [\(language.rawValue)] is untranslated")
+                }
+            }
+        }
+    }
+
     /// A receive refusal iOS can already hit. The sentence is true on both
     /// platforms; the noun was not, and the offending path still has to be in
     /// it or the user cannot act on it.

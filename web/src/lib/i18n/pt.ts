@@ -512,7 +512,7 @@ const pt: Messages = {
     offline: { lead: "O destinatário não está online? Use a transferência assíncrona — criptografe, envie e deixe um link de download que ele pode buscar por dias.", cta: "Ir para a transferência assíncrona →" },
   },
   methods: {
-    realtime: { name: "Transferência em tempo real", sub: "Escolha seus arquivos e receba um código de 6 dígitos — diga-o em voz alta, envie o link ou mostre o QR; assim que o outro lado entra, a transferência começa automaticamente.", badge: "Destinatário: sem conta" },
+    realtime: { name: "Transferência em tempo real", sub: "Crie primeiro um código de 6 dígitos: diga-o em voz alta, envie o link ou mostre o QR. Assim que o outro aparelho entra, escolha os arquivos a enviar, ou “Enviar uma mensagem” para texto.", badge: "Destinatário: sem conta" },
     stored: { name: "Link de download", sub: "Seu navegador criptografa e então armazena; o destinatário baixa a qualquer momento, sem sessão ao vivo e sem conta.", badge: "Funciona offline" },
   },
   pair: {
@@ -624,23 +624,24 @@ const pt: Messages = {
   },
   compare: {
     title: "Qual modo escolher",
-    sub: "“Transferência em tempo real” é para quando os dois estão online agora; “Link de download” é para pegar depois.",
+    sub: "A rede local não pede conta, mas só funciona dentro de uma mesma rede; o tempo real passa arquivos pequenos e texto enquanto os dois estão online; para arquivos grandes, ou para pegar depois, use o link de download.",
     colFeature: "Aspecto",
+    colLan: "Rede local (LAN)",
     colRealtime: "Transferência em tempo real",
     colStored: "Link de download",
     rows: [
-      { label: "Precisa entrar", realtime: "Quem cria um código para arquivos ou texto entra; quem participa não precisa", stored: "Quem cria o link entra" },
-      { label: "Destinatário online?", realtime: "Sim — ambos online ao mesmo tempo", stored: "Não — baixe de forma assíncrona" },
-      { label: "Arquivos pelo servidor?", realtime: "Na mesma rede: não, de dispositivo para dispositivo. Entre redes: o retransmissor TURN transporta o texto cifrado de ponta a ponta sem conseguir ler nem descriptografar o conteúdo em claro", stored: "Sim, mas apenas texto cifrado de conhecimento zero" },
-      { label: "Duração", realtime: "Ambos online; sem histórico de texto no servidor", stored: "Até 14 dias (conforme o plano), ou autodestruição após a leitura" },
-      { label: "Melhor para", realtime: "Arquivos grandes ou texto ao vivo", stored: "Destinatário offline, ou um link para muitos" },
+      { label: "Precisa entrar", lan: "Nenhum dos dois lados entra", realtime: "Quem cria um código para arquivos ou texto entra; quem participa não precisa", stored: "Quem cria o link entra; quem recebe não precisa de conta" },
+      { label: "Rede necessária", lan: "Somente a mesma rede local — não alcança um aparelho em outra rede", realtime: "Qualquer rede, mas os dois aparelhos online ao mesmo tempo", stored: "Qualquer rede; quem recebe pega quando quiser" },
+      { label: "Arquivos pelo servidor?", lan: "Não — de dispositivo para dispositivo dentro da sua própria rede", realtime: "Na mesma rede: não, de dispositivo para dispositivo. Entre redes: o retransmissor TURN transporta o texto cifrado de ponta a ponta sem conseguir ler nem descriptografar o conteúdo em claro", stored: "Sim, mas apenas texto cifrado de conhecimento zero" },
+      { label: "Se for interrompido", lan: "Uma queda breve do arquivo pode retomar; fechar ou recarregar uma página exige recomeçar", realtime: "Uma queda breve do arquivo pode retomar; fechar ou recarregar uma página exige recomeçar", stored: "Mantenha a página de envio aberta até o upload terminar; depois o link vale até expirar" },
+      { label: "Melhor para", lan: "Celular ↔ computador no mesmo Wi-Fi, sem conta nenhuma", realtime: "Arquivos pequenos e texto passados rápido entre redes — um comando, um link, uma anotação", stored: "Arquivos grandes, e enviar agora / pegar depois" },
     ],
   },
   useCases: {
     title: "Feito para estes momentos",
     sub: "Da colaboração remota à entrega única sensível à privacidade.",
     items: [
-      { title: "Envie arquivos grandes pelo mundo", desc: "Dispare um vídeo, arquivo de design ou conjunto de dados de vários gigabytes direto para um colega ou familiar no exterior — transmitido para o disco, sem inchaço de memória, sem perda de qualidade." },
+      { title: "Envie arquivos grandes pelo mundo", desc: "Um vídeo, arquivo de design ou conjunto de dados de vários gigabytes: criptografe-o em um link de download e envie o link. Quem recebe não precisa estar online durante o upload; mantenha a página de envio aberta até terminar. Depois qualquer lado pode fechar o notebook e o link continua disponível até expirar. Na hora de pegar, continua sendo transmitido para o disco: sem inchaço de memória, sem perda de qualidade." },
       { title: "Quando a pessoa não está online", desc: "Gere um link de download criptografado com prazo de validade e envie-o; ela o pega quando estiver livre — e um link pode servir a vários destinatários." },
       { title: "Celular ↔ computador", desc: "Mova arquivos entre seus próprios dispositivos, entre sistemas e redes — escaneie ou digite um código para conectar, sem precisar de nuvem ou cabo." },
       { title: "Entrega única sensível à privacidade", desc: "Criptografia de ponta a ponta mais um código de verificação (SAS) opcional contra intermediário, com autodestruição após a leitura — ideal para contratos, documentos ou chaves." },
@@ -653,7 +654,7 @@ const pt: Messages = {
     items: [
       { q: "Preciso instalar um aplicativo?", a: "Não. Qualquer navegador moderno pode transferir direto da página web — recomendamos o Chrome (transmite arquivos grandes para o disco com uma pasta de destino opcional, sem usar memória)." },
       { q: "E se não conectar?", a: "Na mesma rede, as transferências em tempo real conectam de dispositivo para dispositivo. Entre redes, elas passam por um retransmissor TURN criptografado, que atravessa com confiabilidade firewalls e NATs rígidos (o retransmissor só encaminha texto cifrado e não consegue descriptografar). Ainda travado? Um link de download é a opção mais confiável — é assíncrono, então os dois lados não precisam estar online ao mesmo tempo." },
-      { q: "Qual o tamanho máximo dos arquivos?", a: "A transferência em tempo real transmite os dados, então na prática não há limite rígido de tamanho; os links de download são limitados por um tamanho máximo por arquivo e por uma cota diária, sobre os quais a página avisa você." },
+      { q: "Qual o tamanho máximo dos arquivos?", a: "A transferência em tempo real transmite os dados e não tem limite de tamanho no servidor. Uma queda breve pode retomar, mas as duas páginas precisam ficar abertas; fechar ou recarregar uma encerra a sessão ao vivo. Para arquivos grandes use um link de download: a página mostra o máximo por arquivo e a cota diária. Mantenha a página de envio aberta até o upload terminar; depois o link continua disponível até expirar mesmo com uma aba fechada. O tempo real é melhor para arquivos pequenos e texto que precisam passar rápido." },
       { q: "O servidor consegue ler ou descriptografar meus arquivos ou mensagens?", a: "Não. Na rede local o tempo real é direto; entre redes o navegador usa TURN por projeto: o retransmissor transporta o texto cifrado de ponta a ponta, mas não consegue ler nem descriptografar o conteúdo em claro. O Relayium não guarda corpo nem histórico de mensagens, embora as pontas possam reter texto. Links guardam apenas arquivos cifrados." },
       { q: "Preciso criar uma conta?", a: "Transferências em LAN na mesma rede não exigem login. Entre redes, quem cria um código de emparelhamento para arquivos ou texto precisa entrar; quem participa com o código ou link não precisa de conta. Criar um link de download assíncrono também exige login." },
       { q: "É de código aberto?", a: "Sim. O design do protocolo e todo o código de front-end e back-end são públicos no GitHub — livre para revisar, auto-hospedar ou contribuir." },

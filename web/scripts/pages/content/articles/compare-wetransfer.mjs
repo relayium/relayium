@@ -4,13 +4,13 @@
 // Terminology mirrors src/lib/i18n.svelte.ts and content/landing.mjs.
 
 const en = {
-  title: "Relayium vs WeTransfer: large realtime transfers without server-side file storage",
+  title: "Relayium vs WeTransfer: encrypted links and live handoffs",
   description:
     "An honest comparison of Relayium and WeTransfer. WeTransfer is great for asynchronous link sharing; Relayium adds realtime transfers with no server-side file copy or history, plus zero-knowledge stored links.",
   updatedLabel: "Last updated",
   lead: [
     "WeTransfer made sending big files feel effortless: drop a file, get a link, and the recipient downloads whenever they are ready — even if they were offline when you sent it. That asynchronous, no-account-to-receive experience is genuinely good, and it is why so many people reach for it.",
-    "This article compares the two fairly. WeTransfer's strength is polished, link-based sharing where the file waits on a server. Relayium's focus is different: realtime transfers with no server-side file copy or history, plus an optional stored link that stays zero-knowledge encrypted. On the same LAN the browsers connect directly; across networks they use TURN by design. Neither is simply better — they solve slightly different problems.",
+    "This article compares the two fairly. For large files or later pickup, Relayium also recommends a stored link: unlike WeTransfer, its server keeps only zero-knowledge ciphertext. Relayium's realtime mode is a separate strength for quick small files and text while both sides stay online — direct on the same LAN and carried as end-to-end ciphertext over TURN across networks.",
   ],
   sections: [
     {
@@ -61,7 +61,7 @@ const en = {
     items: [
       {
         q: "Is there really no file-size limit?",
-        a: "In realtime mode there is no server-side cap because Relayium keeps no server-side file copy or history. Same-LAN browsers connect directly; cross-network browser sessions use TURN by design, carrying end-to-end encrypted ciphertext the relay cannot read or decrypt. In Chrome or Edge the download streams straight to disk, so multi-gigabyte files are fine. In Firefox or Safari, when no streaming path applies the browser buffers in memory instead, and Relayium warns above roughly 256 MB — a deliberately conservative estimate, not a hard limit. Stored download links have a quota tied to your account.",
+        a: "In realtime mode there is no server-side cap because Relayium keeps no server-side file copy or history. Same-LAN browsers connect directly; cross-network sessions carry end-to-end ciphertext over TURN. Chrome or Edge can stream realtime files to disk, but both live pages must remain active, so large files are better sent with a stored download link. Stored links have a per-file limit and account quota shown before upload; Firefox or Safari warns above roughly 256 MB for a realtime receive buffered in memory.",
       },
       {
         q: "What if the recipient isn't online?",
@@ -74,20 +74,20 @@ const en = {
     ],
   },
   cta: {
-    text: "Send a large file right now — no size cap, no install, and no account needed on the same network.",
+    text: "For a large file, leave an encrypted download link; for a quick small file or text, connect both sides and send it live.",
     button: "Try Relayium now",
   },
   relatedHeading: "Keep reading",
 };
 
 const zh = {
-  title: "Relayium 对比 WeTransfer：实时大文件不做服务端存储",
+  title: "Relayium 对比 WeTransfer：加密下载链接与实时递送",
   description:
     "客观对比 Relayium 与 WeTransfer。WeTransfer 擅长异步链接分享；Relayium 的实时模式不在服务端保留文件副本或传输历史，另有零知识加密的存储下载链接。",
   updatedLabel: "最近更新",
   lead: [
     "WeTransfer 让发送大文件变得轻松：拖入文件、拿到链接，对方随时下载——哪怕你发送时对方并不在线。这种异步、收件方无需账号的体验确实很好，也正是许多人选择它的原因。",
-    "本文客观对比这两者。WeTransfer 的长处是成熟的、基于链接的分享，文件在服务器上等待被下载。Relayium 的重点不同：实时传输不在服务端保留文件副本或传输历史；同一局域网内浏览器直连，跨网络浏览器则按设计使用 TURN。此外还有一个可选的、始终零知识加密的存储链接。两者并非谁更好，而是各自解决略有不同的问题。",
+    "本文客观对比这两者。大文件或稍后再取时，Relayium 同样推荐存储链接；不同之处是服务器只保存零知识密文。实时模式是另一项能力，适合双方保持在线时快速递送小文件和文本：同一局域网内直连，跨网络经 TURN 承载端到端密文。",
   ],
   sections: [
     {
@@ -138,7 +138,7 @@ const zh = {
     items: [
       {
         q: "真的没有文件大小限制吗？",
-        a: "实时模式下没有服务端上限，因为 Relayium 不在服务端保留文件副本或传输历史。同一局域网内浏览器直连；跨网络浏览器按设计使用 TURN，承载中继无法读取或解密的端到端密文。在 Chrome 或 Edge 中，下载会直接流式写入磁盘，所以几 GB 的文件都没问题。在 Firefox 或 Safari 中，当所有流式写盘路径都不适用时，浏览器只能攒在内存里，Relayium 会在超过约 256 MB 时给出提示——这是刻意取的保守估计，不是硬上限。存储下载链接则有与账号绑定的配额。",
+        a: "实时模式没有服务端上限，因为 Relayium 不保留服务端文件副本或历史；同一局域网内直连，跨网络经 TURN 承载端到端密文。Chrome 或 Edge 能把实时文件流式写盘，但双方页面必须保持在线，因此大文件更适合使用存储下载链接。链接的单文件上限与账号额度会在上传前显示；Firefox 或 Safari 实时接收放在内存中，超过约 256 MB 时会给出保守提示。",
       },
       {
         q: "对方不在线怎么办？",
@@ -151,20 +151,20 @@ const zh = {
     ],
   },
   cta: {
-    text: "现在就发一个大文件——无大小上限、无需安装，同一网络下也无需账号。",
+    text: "大文件请留一条加密下载链接；快速递送小文件或文本时，让双方连上后实时发送。",
     button: "立即试用 Relayium",
   },
   relatedHeading: "继续阅读",
 };
 
 const ja = {
-  title: "Relayium と WeTransfer の比較：サーバー側に保存せず大容量をリアルタイム転送",
+  title: "Relayium と WeTransfer の比較：暗号化リンクとリアルタイム受け渡し",
   description:
     "Relayium と WeTransfer を公平に比較。WeTransfer は非同期のリンク共有が得意です。Relayium はサーバー側にファイルのコピーや転送履歴を残さないリアルタイム転送と、ゼロ知識の保存リンクを備えます。",
   updatedLabel: "最終更新",
   lead: [
     "WeTransfer は大きなファイルの送信を簡単にしました。ファイルをドロップしてリンクを受け取れば、相手は好きなときにダウンロードできます。送った時点で相手がオフラインでも大丈夫です。この非同期で、受け取りにアカウントが要らない体験は本当に優れており、多くの人が選ぶ理由です。",
-    "本記事はこの2つを公平に比較します。WeTransfer の強みは、ファイルがサーバー上で待つ洗練されたリンクベースの共有です。Relayium のリアルタイム転送はサーバー側にファイルのコピーや転送履歴を残しません。同一 LAN ではブラウザ同士が直接接続し、ネットワークをまたぐ場合は設計上 TURN を使います。加えて、常にゼロ知識で暗号化される任意の保存リンクもあります。どちらが単純に優れているわけではなく、少し異なる問題を解いています。",
+    "本記事は公平に比較します。大きなファイルや後で受け取る場合、Relayium も保存リンクを推奨しますが、サーバーが保持するのはゼロ知識の暗号文だけです。リアルタイムは、双方がオンラインのまま小さなファイルやテキストをすばやく渡す別の強みです。同一 LAN では直結し、ネットワーク間では TURN がエンドツーエンド暗号文を運びます。",
   ],
   sections: [
     {
@@ -215,7 +215,7 @@ const ja = {
     items: [
       {
         q: "本当にファイルサイズの上限はないのですか？",
-        a: "リアルタイムモードはサーバー側にファイルのコピーや転送履歴を残さないため、サーバー側の上限はありません。同一 LAN ではブラウザ同士が直接接続し、ネットワークをまたぐ場合は設計上 TURN が読取・復号不能なエンドツーエンド暗号文を運びます。Chrome や Edge ではダウンロードがそのままディスクにストリーミングされるので、数ギガバイトのファイルも問題ありません。Firefox や Safari では、ストリーミングで書き出せる経路がどれも使えないときにメモリへ溜めることになり、Relayium は約 256 MB を超えると警告します。これは意図的に保守的な見積もりであり、ハードな上限ではありません。保存型ダウンロードリンクにはアカウントに紐づく容量枠があります。",
+        a: "リアルタイムにはサーバー側上限がなく、同一 LAN では直結し、ネットワーク間では TURN がエンドツーエンド暗号文を運びます。Chrome／Edge はディスクへ流せますが、双方のページを開いたままにする必要があるため、大きなファイルには保存型ダウンロードリンクが適します。リンクの上限と容量枠はアップロード前に表示され、Firefox／Safari のリアルタイム受信は約256 MBを超えると保守的な警告を表示します。",
       },
       {
         q: "受信側がオンラインでないときは？",
@@ -228,20 +228,20 @@ const ja = {
     ],
   },
   cta: {
-    text: "今すぐ大容量ファイルを送ってみてください。サイズ上限なし、インストール不要で、同じネットワークならアカウントも不要です。",
+    text: "大きなファイルは暗号化ダウンロードリンクで。小さなファイルやテキストは双方をつないでリアルタイムに渡せます。",
     button: "Relayium を今すぐ試す",
   },
   relatedHeading: "続けて読む",
 };
 
 const ko = {
-  title: "Relayium vs WeTransfer: 서버 측 저장 없이 대용량 실시간 전송",
+  title: "Relayium vs WeTransfer: 암호화 링크와 실시간 전달",
   description:
     "Relayium과 WeTransfer를 공정하게 비교합니다. WeTransfer는 비동기 링크 공유에 강하고, Relayium은 서버 측에 파일 사본이나 전송 기록을 남기지 않는 실시간 전송과 영지식 저장 링크를 제공합니다.",
   updatedLabel: "마지막 업데이트",
   lead: [
     "WeTransfer는 큰 파일 보내기를 손쉽게 만들었습니다. 파일을 끌어다 놓고 링크를 받으면 상대는 원할 때 다운로드합니다. 보낼 때 상대가 오프라인이어도 괜찮습니다. 이런 비동기적이고 받는 데 계정이 필요 없는 경험은 정말 훌륭하며, 많은 사람이 선택하는 이유입니다.",
-    "이 글은 두 가지를 공정하게 비교합니다. WeTransfer의 강점은 파일이 서버에서 기다리는 세련된 링크 기반 공유입니다. Relayium의 실시간 전송은 서버 측에 파일 사본이나 전송 기록을 남기지 않습니다. 같은 LAN에서는 브라우저끼리 직접 연결하고, 네트워크를 넘을 때는 설계상 TURN을 사용합니다. 여기에 항상 영지식으로 암호화되는 선택적 저장 링크도 있습니다. 어느 하나가 단순히 낫다기보다, 조금 다른 문제를 풉니다.",
+    "이 글은 공정하게 비교합니다. 대용량 파일이나 나중에 받을 때 Relayium도 저장 링크를 권장하지만 서버에는 영지식 암호문만 남습니다. 실시간은 양쪽이 온라인인 동안 작은 파일과 텍스트를 빠르게 건네는 별도 강점입니다. 같은 LAN에서는 직접 연결하고 네트워크 간에는 TURN이 종단간 암호문을 운반합니다.",
   ],
   sections: [
     {
@@ -292,7 +292,7 @@ const ko = {
     items: [
       {
         q: "정말 파일 크기 제한이 없나요?",
-        a: "실시간 모드는 서버 측에 파일 사본이나 전송 기록을 남기지 않으므로 서버 측 제한이 없습니다. 같은 LAN에서는 브라우저끼리 직접 연결하고, 네트워크를 넘을 때는 설계상 TURN이 읽거나 복호화할 수 없는 종단간 암호문을 운반합니다. Chrome이나 Edge에서는 다운로드가 곧바로 디스크로 스트리밍되어 수 기가바이트 파일도 괜찮습니다. Firefox나 Safari에서는 디스크로 흘려보낼 경로가 하나도 적용되지 않을 때 메모리에 담게 되며, Relayium이 약 256 MB를 넘으면 경고합니다 — 일부러 보수적으로 잡은 추정치이지 하드 한계가 아닙니다. 저장형 다운로드 링크에는 계정에 연결된 용량 한도가 있습니다.",
+        a: "실시간에는 서버 측 한도가 없고 같은 LAN에서는 직접, 네트워크 간에는 TURN으로 종단간 암호문을 운반합니다. Chrome/Edge는 디스크로 스트리밍하지만 두 페이지가 계속 활성 상태여야 하므로 대용량 파일에는 저장형 다운로드 링크가 적합합니다. 링크 한도와 할당량은 업로드 전에 표시되며 Firefox/Safari 실시간 수신은 약256 MB를 넘으면 보수적인 경고를 표시합니다.",
       },
       {
         q: "받는 쪽이 접속해 있지 않으면요?",
@@ -305,20 +305,20 @@ const ko = {
     ],
   },
   cta: {
-    text: "지금 대용량 파일을 보내보세요. 크기 제한 없이, 설치 없이, 같은 네트워크에서는 계정도 필요 없습니다.",
+    text: "대용량 파일은 암호화 다운로드 링크로, 작은 파일과 텍스트는 양쪽을 연결해 실시간으로 보내세요.",
     button: "지금 Relayium 사용해보기",
   },
   relatedHeading: "계속 읽기",
 };
 
 const de = {
-  title: "Relayium vs. WeTransfer: große Echtzeitdateien ohne serverseitige Speicherung",
+  title: "Relayium vs. WeTransfer: verschlüsselte Links und Live-Übergaben",
   description:
     "Ein ehrlicher Vergleich von Relayium und WeTransfer. WeTransfer glänzt beim asynchronen Teilen per Link; Relayium bietet Echtzeitübertragungen ohne serverseitige Dateikopie oder Übertragungsverlauf, plus Zero-Knowledge-Speicherlinks.",
   updatedLabel: "Zuletzt aktualisiert",
   lead: [
     "WeTransfer hat das Versenden großer Dateien mühelos gemacht: Datei ablegen, Link erhalten, und der Empfänger lädt herunter, wann er bereit ist — selbst wenn er beim Senden offline war. Dieses asynchrone Erlebnis, bei dem man zum Empfangen kein Konto braucht, ist wirklich gut und der Grund, warum so viele darauf zurückgreifen.",
-    "Dieser Artikel vergleicht die beiden fair. WeTransfers Stärke ist ausgereiftes, linkbasiertes Teilen, bei dem die Datei auf einem Server wartet. Relayiums Echtzeitübertragung behält keine serverseitige Dateikopie und keinen Übertragungsverlauf: Im selben LAN verbinden sich die Browser direkt, über Netzwerkgrenzen hinweg nutzen sie planmäßig TURN. Dazu kommt ein optionaler Zero-Knowledge-verschlüsselter Speicherlink. Keines ist einfach besser — sie lösen leicht unterschiedliche Probleme.",
+    "Dieser Artikel vergleicht fair. Für große Dateien oder spätere Abholung empfiehlt Relayium ebenfalls einen Speicherlink, dessen Server jedoch nur Zero-Knowledge-Chiffretext hält. Echtzeit ist eine eigene Stärke für kleine Dateien und Text, solange beide Seiten online bleiben: im selben LAN direkt, netzübergreifend als Ende-zu-Ende-Chiffretext über TURN.",
   ],
   sections: [
     {
@@ -369,7 +369,7 @@ const de = {
     items: [
       {
         q: "Gibt es wirklich kein Dateigrößenlimit?",
-        a: "Im Echtzeitmodus gibt es kein serverseitiges Limit, weil Relayium keine serverseitige Dateikopie und keinen Übertragungsverlauf behält. Im selben LAN verbinden sich die Browser direkt; über Netzwerkgrenzen hinweg transportiert TURN planmäßig Ende-zu-Ende-Chiffretext, den es weder lesen noch entschlüsseln kann. In Chrome oder Edge streamt der Download direkt auf die Festplatte. Firefox oder Safari puffern im Arbeitsspeicher, wenn kein Streaming-Weg greift, und Relayium warnt oberhalb von rund 256 MB — eine bewusst konservative Schätzung, keine harte Grenze. Gespeicherte Download-Links haben ein an dein Konto gebundenes Kontingent.",
+        a: "Echtzeit hat kein serverseitiges Limit; im LAN verbindet sie direkt und netzübergreifend trägt TURN Ende-zu-Ende-Chiffretext. Chrome/Edge kann auf die Festplatte streamen, aber beide Live-Seiten müssen aktiv bleiben, daher eignen sich Speicherlinks besser für große Dateien. Link-Limit und Kontingent werden vor dem Upload angezeigt; Firefox/Safari warnt bei einem gepufferten Echtzeitempfang ab rund 256 MB.",
       },
       {
         q: "Was, wenn der Empfänger nicht online ist?",
@@ -382,20 +382,20 @@ const de = {
     ],
   },
   cta: {
-    text: "Sende jetzt eine große Datei — kein Größenlimit, keine Installation und im selben Netz kein Konto.",
+    text: "Große Dateien per verschlüsseltem Download-Link; kleine Dateien und Text bei verbundenen Seiten in Echtzeit.",
     button: "Relayium jetzt ausprobieren",
   },
   relatedHeading: "Weiterlesen",
 };
 
 const fr = {
-  title: "Relayium vs WeTransfer : gros fichiers en temps réel sans stockage côté serveur",
+  title: "Relayium vs WeTransfer : liens chiffrés et remises en direct",
   description:
     "Un comparatif honnête de Relayium et WeTransfer. WeTransfer excelle au partage asynchrone par lien ; Relayium ajoute des transferts en temps réel sans copie de fichier ni historique côté serveur, et des liens stockés à divulgation nulle.",
   updatedLabel: "Dernière mise à jour",
   lead: [
     "WeTransfer a rendu l'envoi de gros fichiers sans effort : déposez un fichier, obtenez un lien, et le destinataire télécharge quand il est prêt — même s'il était hors ligne au moment de l'envoi. Cette expérience asynchrone, sans compte pour recevoir, est vraiment bonne, et c'est pourquoi tant de gens s'y fient.",
-    "Cet article compare les deux équitablement. La force de WeTransfer est un partage soigné, basé sur des liens, où le fichier attend sur un serveur. Le temps réel de Relayium ne conserve ni copie du fichier ni historique côté serveur : sur le même LAN, les navigateurs se connectent directement ; entre réseaux, ils utilisent TURN par conception. S'y ajoute un lien stocké optionnel à divulgation nulle. Aucun n'est simplement meilleur — ils résolvent des problèmes légèrement différents.",
+    "Cet article compare équitablement. Pour les gros fichiers ou une récupération ultérieure, Relayium recommande aussi un lien stocké, mais le serveur ne conserve que du texte chiffré à divulgation nulle. Le temps réel est une force distincte pour les petits fichiers et le texte tant que les deux côtés restent en ligne : direct sur le LAN, ou chiffré de bout en bout via TURN entre réseaux.",
   ],
   sections: [
     {
@@ -446,7 +446,7 @@ const fr = {
     items: [
       {
         q: "N'y a-t-il vraiment aucune limite de taille de fichier ?",
-        a: "En mode temps réel, il n'y a aucune limite côté serveur, car Relayium ne conserve ni copie du fichier ni historique côté serveur. Sur le même LAN, les navigateurs se connectent directement ; entre réseaux, TURN transporte par conception du chiffré de bout en bout qu'il ne peut ni lire ni déchiffrer. Dans Chrome ou Edge, le téléchargement s'écrit directement sur le disque. Dans Firefox ou Safari, le navigateur met en mémoire tampon quand aucun flux disque ne s'applique, et Relayium prévient au-delà d'environ 256 Mo — une estimation prudente, pas une limite dure. Les liens de téléchargement stockés ont un quota lié à votre compte.",
+        a: "Le temps réel n'a pas de limite côté serveur ; il est direct sur le LAN et TURN transporte le chiffré de bout en bout entre réseaux. Chrome/Edge peut écrire sur le disque, mais les deux pages vivantes doivent rester actives : un lien stocké convient donc mieux aux gros fichiers. Sa limite et son quota sont affichés avant l'envoi ; Firefox/Safari avertit vers 256 Mo pour une réception temps réel mise en mémoire.",
       },
       {
         q: "Que faire si le destinataire n'est pas en ligne ?",
@@ -459,20 +459,20 @@ const fr = {
     ],
   },
   cta: {
-    text: "Envoyez un gros fichier maintenant — sans limite de taille, sans installation, et sans compte sur le même réseau.",
+    text: "Gros fichier : laissez un lien chiffré. Petit fichier ou texte : connectez les deux côtés et envoyez en direct.",
     button: "Essayer Relayium maintenant",
   },
   relatedHeading: "À lire ensuite",
 };
 
 const ar = {
-  title: "Relayium مقابل WeTransfer: نقل ملفات كبيرة فوريًا دون تخزينها على الخادم",
+  title: "Relayium مقابل WeTransfer: روابط مشفّرة وتسليم فوري",
   description:
     "مقارنة صادقة بين Relayium وWeTransfer. WeTransfer رائع للمشاركة اللامتزامنة بالروابط؛ ويضيف Relayium نقلًا فوريًا بلا نسخة ملف أو سجل نقل على الخادم، وروابط مُخزَّنة بمعرفة صفرية.",
   updatedLabel: "آخر تحديث",
   lead: [
     "جعل WeTransfer إرسال الملفات الكبيرة يبدو بلا عناء: أفلِت ملفًا، واحصل على رابط، ويُنزّله المُستقبِل متى كان جاهزًا — حتى لو كان غير متصل حين أرسلته. هذه التجربة اللامتزامنة التي لا تتطلب حسابًا للاستقبال جيدة حقًا، وهي سبب لجوء كثير من الناس إليها.",
-    "تقارن هذه المقالة الاثنين بإنصاف. قوة WeTransfer هي المشاركة المصقولة القائمة على الروابط، حيث ينتظر الملف على خادم. أما نقل Relayium الفوري فلا يحتفظ بنسخة من الملف أو سجل نقل على الخادم: تتصل المتصفحات مباشرةً على شبكة LAN نفسها، وتستخدم TURN بحكم التصميم عبر الشبكات. ويضيف أيضًا رابطًا مُخزَّنًا اختياريًا بمعرفة صفرية. لا أحدهما أفضل ببساطة — بل يحلّان مشكلتين مختلفتين قليلًا.",
+    "تقارن المقالة بإنصاف. للملفات الكبيرة أو الاستلام لاحقًا يوصي Relayium أيضًا برابط مخزّن، لكن الخادم لا يحتفظ إلا بنص مشفّر بمعرفة صفرية. والنقل الفوري قوة منفصلة للملفات الصغيرة والنص ما دام الطرفان متصلين: مباشر داخل LAN، أو نص مشفّر من الطرف إلى الطرف عبر TURN بين الشبكات.",
   ],
   sections: [
     {
@@ -523,7 +523,7 @@ const ar = {
     items: [
       {
         q: "هل لا يوجد حقًا حد لحجم الملف؟",
-        a: "في الوضع الفوري لا يوجد سقف من جانب الخادم، لأن Relayium لا يحتفظ بنسخة من الملف أو سجل نقل على الخادم. تتصل المتصفحات مباشرةً على شبكة LAN نفسها؛ وعبر الشبكات يحمل TURN بحكم التصميم نصًا مشفّرًا من الطرف إلى الطرف لا يستطيع قراءته أو فك تشفيره. في Chrome أو Edge يُبثّ التنزيل مباشرةً إلى القرص. وفي Firefox أو Safari يخزّن المتصفح في الذاكرة حين لا يتاح البث إلى القرص، ويحذّر Relayium فوق نحو 256 MB — وهو تقدير متحفّظ، لا حدّ صلب. أما روابط التنزيل المُخزَّنة فلها حصة مرتبطة بحسابك.",
+        a: "لا سقف من الخادم للنقل الفوري؛ يتصل مباشرةً داخل LAN ويحمل TURN النص المشفّر بين الشبكات. يستطيع Chrome وEdge البث إلى القرص، لكن يجب إبقاء الصفحتين الحيتين نشطتين، لذا يناسب الرابط المخزّن الملفات الكبيرة أكثر. تُعرض حدود الرابط وحصته قبل الرفع؛ ويحذّر Firefox وSafari قرب 256 MB للاستقبال الفوري في الذاكرة.",
       },
       {
         q: "ماذا لو لم يكن المُستقبِل متصلًا؟",
@@ -536,20 +536,20 @@ const ar = {
     ],
   },
   cta: {
-    text: "أرسل ملفًا كبيرًا الآن — بلا سقف حجم، وبلا تثبيت، وبلا حاجة إلى حساب على نفس الشبكة.",
+    text: "للملف الكبير اترك رابط تنزيل مشفّرًا؛ ولملف صغير أو نص اربط الطرفين وأرسله فوريًا.",
     button: "جرّب Relayium الآن",
   },
   relatedHeading: "تابع القراءة",
 };
 
 const es = {
-  title: "Relayium vs WeTransfer: archivos grandes en tiempo real sin almacenamiento en el servidor",
+  title: "Relayium vs WeTransfer: enlaces cifrados y entregas en vivo",
   description:
     "Una comparación honesta de Relayium y WeTransfer. WeTransfer es excelente para compartir enlaces de forma asíncrona; Relayium añade transferencias en tiempo real sin copia del archivo ni historial en el servidor, y enlaces almacenados de conocimiento cero.",
   updatedLabel: "Última actualización",
   lead: [
     "WeTransfer hizo que enviar archivos grandes pareciera sencillo: sueltas un archivo, obtienes un enlace y el destinatario descarga cuando esté listo, aunque estuviera desconectado cuando lo enviaste. Esa experiencia asíncrona, sin cuenta para recibir, es genuinamente buena, y es por lo que tanta gente recurre a ella.",
-    "Este artículo compara ambos con justicia. La fuerza de WeTransfer es el uso compartido pulido, basado en enlaces, donde el archivo espera en un servidor. El tiempo real de Relayium no conserva copia del archivo ni historial en el servidor: en la misma LAN los navegadores se conectan directamente; entre redes usan TURN por diseño. También ofrece un enlace almacenado opcional de conocimiento cero. Ninguno es simplemente mejor: resuelven problemas ligeramente distintos.",
+    "Este artículo compara con justicia. Para archivos grandes o recoger más tarde, Relayium también recomienda un enlace almacenado, pero el servidor solo guarda texto cifrado de conocimiento cero. El tiempo real es una fortaleza distinta para archivos pequeños y texto mientras ambos lados siguen en línea: directo en LAN o cifrado de extremo a extremo por TURN entre redes.",
   ],
   sections: [
     {
@@ -600,7 +600,7 @@ const es = {
     items: [
       {
         q: "¿De verdad no hay límite de tamaño de archivo?",
-        a: "En modo en tiempo real no hay límite del lado del servidor porque Relayium no conserva copia del archivo ni historial en el servidor. En la misma LAN los navegadores se conectan directamente; entre redes TURN transporta por diseño texto cifrado de extremo a extremo que no puede leer ni descifrar. En Chrome o Edge la descarga se escribe directamente al disco. En Firefox o Safari el navegador almacena en memoria cuando no hay flujo a disco, y Relayium avisa por encima de unos 256 MB: una estimación conservadora, no un límite duro. Los enlaces almacenados tienen una cuota ligada a tu cuenta.",
+        a: "El tiempo real no tiene límite del servidor; conecta directo en LAN y TURN transporta el cifrado entre redes. Chrome/Edge puede escribir al disco, pero ambas páginas vivas deben seguir activas, así que un enlace almacenado conviene más para archivos grandes. Su máximo y cuota se muestran antes de subir; Firefox/Safari avisa cerca de 256 MB en una recepción en memoria.",
       },
       {
         q: "¿Qué pasa si el destinatario no está en línea?",
@@ -613,20 +613,20 @@ const es = {
     ],
   },
   cta: {
-    text: "Envía un archivo grande ahora mismo: sin límite de tamaño, sin instalación y sin necesidad de cuenta en la misma red.",
+    text: "Archivo grande: deja un enlace cifrado. Archivo pequeño o texto: conecta ambos lados y envíalo en vivo.",
     button: "Prueba Relayium ahora",
   },
   relatedHeading: "Sigue leyendo",
 };
 
 const pt = {
-  title: "Relayium vs WeTransfer: arquivos grandes em tempo real sem armazenamento no servidor",
+  title: "Relayium vs WeTransfer: links criptografados e entregas ao vivo",
   description:
     "Uma comparação honesta de Relayium e WeTransfer. O WeTransfer é ótimo para compartilhar links de forma assíncrona; o Relayium adiciona transferências em tempo real sem cópia do arquivo nem histórico no servidor, e links armazenados de conhecimento zero.",
   updatedLabel: "Última atualização",
   lead: [
     "O WeTransfer fez o envio de arquivos grandes parecer sem esforço: solte um arquivo, receba um link e o destinatário baixa quando estiver pronto — mesmo que estivesse offline quando você enviou. Essa experiência assíncrona, sem conta para receber, é genuinamente boa, e é por isso que tanta gente recorre a ela.",
-    "Este artigo compara os dois com justiça. A força do WeTransfer é o compartilhamento polido, baseado em links, em que o arquivo espera num servidor. O tempo real do Relayium não mantém cópia do arquivo nem histórico no servidor: na mesma LAN os navegadores se conectam diretamente; entre redes usam TURN por projeto. Há também um link armazenado opcional de conhecimento zero. Nenhum é simplesmente melhor — eles resolvem problemas ligeiramente diferentes.",
+    "Este artigo compara com justiça. Para arquivos grandes ou pegar depois, o Relayium também recomenda um link armazenado, mas o servidor guarda apenas texto cifrado de conhecimento zero. O tempo real é uma força separada para arquivos pequenos e texto enquanto os dois lados ficam online: direto na LAN ou criptografado de ponta a ponta pelo TURN entre redes.",
   ],
   sections: [
     {
@@ -677,7 +677,7 @@ const pt = {
     items: [
       {
         q: "Realmente não há limite de tamanho de arquivo?",
-        a: "No modo em tempo real não há limite do lado do servidor porque o Relayium não mantém cópia do arquivo nem histórico no servidor. Na mesma LAN os navegadores se conectam diretamente; entre redes o TURN transporta por projeto texto cifrado de ponta a ponta que não consegue ler nem descriptografar. No Chrome ou no Edge o download é gravado direto no disco. No Firefox ou no Safari o navegador guarda na memória quando não há fluxo para o disco, e o Relayium avisa acima de cerca de 256 MB — uma estimativa conservadora, não um limite rígido. Os links armazenados têm uma cota ligada à sua conta.",
+        a: "O tempo real não tem limite no servidor; conecta direto na LAN e o TURN transporta a criptografia entre redes. Chrome/Edge pode gravar no disco, mas as duas páginas ao vivo precisam continuar ativas, então o link armazenado serve melhor para arquivos grandes. O máximo e a cota aparecem antes do upload; Firefox/Safari avisa perto de 256 MB em uma recepção na memória.",
       },
       {
         q: "E se o destinatário não estiver online?",
@@ -690,7 +690,7 @@ const pt = {
     ],
   },
   cta: {
-    text: "Envie um arquivo grande agora mesmo — sem limite de tamanho, sem instalação e sem precisar de conta na mesma rede.",
+    text: "Arquivo grande: deixe um link criptografado. Arquivo pequeno ou texto: conecte os dois lados e envie ao vivo.",
     button: "Experimente o Relayium agora",
   },
   relatedHeading: "Continue lendo",

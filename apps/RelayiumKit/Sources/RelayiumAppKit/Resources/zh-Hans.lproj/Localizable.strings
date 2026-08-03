@@ -78,13 +78,13 @@
 "nav.sectionDirect" = "直连";
 "nav.sectionLinks" = "链接";
 "nav.nearby" = "附近设备";
-"nav.nearbySubtitle" = "同一网络中的设备，无需账户";
+"nav.nearbySubtitle" = "免账户，设备之间直传——仅限同一网络";
 "nav.pairingCode" = "配对码";
-"nav.pairingCodeSubtitle" = "用六位数字跨网络连接";
+"nav.pairingCodeSubtitle" = "跨网络发送文本和小文件——双方须同时在线";
 "nav.storedSend" = "发送链接";
-"nav.storedSendSubtitle" = "加密存储文件并分享链接";
+"nav.storedSendSubtitle" = "大文件，稍后再取——需登录，受套餐限制";
 "nav.storedReceive" = "打开链接";
-"nav.storedReceiveSubtitle" = "接收别人发给你的文件";
+"nav.storedReceiveSubtitle" = "打开别人发来的链接——无需账户，过期前有效";
 "nav.account" = "账户";
 "nav.accountSubtitle" = "套餐、设备与已存文件";
 "nav.a11ySections" = "Relayium 功能页";

@@ -78,13 +78,13 @@
 "nav.sectionDirect" = "ダイレクト";
 "nav.sectionLinks" = "リンク";
 "nav.nearby" = "近くのデバイス";
-"nav.nearbySubtitle" = "同じネットワーク上のデバイス。アカウント不要";
+"nav.nearbySubtitle" = "アカウント不要、端末から端末へ。同じネットワーク内のみ";
 "nav.pairingCode" = "ペアリングコード";
-"nav.pairingCodeSubtitle" = "6桁の数字でネットワークを越えて接続";
+"nav.pairingCodeSubtitle" = "ネットワークを越えてテキストと小さめのファイル。双方がオンラインで";
 "nav.storedSend" = "リンクを送る";
-"nav.storedSendSubtitle" = "暗号化したファイルを保存してリンクを共有";
+"nav.storedSendSubtitle" = "大きなファイルを後から受け取り。サインインが必要でプラン上限あり";
 "nav.storedReceive" = "リンクを開く";
-"nav.storedReceiveSubtitle" = "誰かが送ってくれたファイルを受け取る";
+"nav.storedReceiveSubtitle" = "誰かが送ったリンクを開く。アカウント不要、有効期限まで";
 "nav.account" = "アカウント";
 "nav.accountSubtitle" = "プラン、デバイス、保存済みファイル";
 "nav.a11ySections" = "Relayium の画面一覧";

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { navigate, CROSS_PATH, OFFLINE_PATH } from "./router.svelte";
+  import { navigate, LAN_PATH, CROSS_PATH, OFFLINE_PATH } from "./router.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import Icon from "./Icon.svelte";
   const t = $derived<Messages>(messages[lang()]);
@@ -19,8 +19,12 @@
            It used to sit on the <a> itself, which ARIA does not allow: a link
            cannot also be a column header, and browsers resolve that conflict
            differently — some drop the header, some drop the link. Nesting keeps
-           both truths intact: the grid still has three real column headers, and
-           the last two still contain working links. -->
+           both truths intact: the grid still has real column headers, and each
+           mode column still contains a working link to that mode's page. -->
+      <span class="cell lan is-link" role="columnheader">
+        <a class="head-link" href={LAN_PATH}
+           onclick={(e) => { e.preventDefault(); navigate("lan"); }}><Icon name="network" /> <span>{t.compare.colLan}</span></a>
+      </span>
       <span class="cell rt is-link" role="columnheader">
         <a class="head-link" href={CROSS_PATH}
            onclick={(e) => { e.preventDefault(); navigate("cross"); }}><Icon name="bolt" /> <span>{t.compare.colRealtime}</span></a>
@@ -33,8 +37,15 @@
     {#each t.compare.rows as r (r.label)}
       <div class="row" role="row">
         <span class="cell feat" role="rowheader">{r.label}</span>
-        <span class="cell rt" role="cell" data-label={t.compare.colRealtime}>{r.realtime}</span>
-        <span class="cell st" role="cell" data-label={t.compare.colStored}>{r.stored}</span>
+        <!-- The mode name is real text rather than a CSS-generated label,
+             because the narrow layout hides the header row: generated content is
+             not reliably in the accessibility tree, so a phone reader heard three
+             unattributed answers per row. Being an element, it is hidden by
+             `display: none` at the widths where the real column headers exist,
+             and hidden from assistive tech there too. -->
+        <span class="cell lan" role="cell"><span class="tag">{t.compare.colLan}</span>{r.lan}</span>
+        <span class="cell rt" role="cell"><span class="tag">{t.compare.colRealtime}</span>{r.realtime}</span>
+        <span class="cell st" role="cell"><span class="tag">{t.compare.colStored}</span>{r.stored}</span>
       </div>
     {/each}
   </div>
@@ -50,8 +61,10 @@
     border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
     background: var(--surface-2);
   }
+  /* Three mode columns share the width evenly so no mode reads as the default,
+     and the aspect column stays narrow because its labels are short. */
   .row {
-    display: grid; grid-template-columns: 1.1fr 1.5fr 1.5fr;
+    display: grid; grid-template-columns: 0.9fr 1fr 1fr 1fr;
     border-top: 1px solid var(--border);
   }
   .row:first-child { border-top: none; }
@@ -60,7 +73,9 @@
     border-inline-start: 1px solid var(--border);
   }
   .cell.feat { border-inline-start: none; color: var(--text-h); font-weight: 500; }
-  .cell.rt, .cell.st { color: var(--text); }
+  .cell.lan, .cell.rt, .cell.st { color: var(--text); }
+  /* Wide layout: the column headers already say which mode this is. */
+  .tag { display: none; }
 
   .row.header .cell { font-weight: 600; color: var(--text-h); background: var(--code-bg); font-size: var(--fs-sm); }
   .row:not(.header):hover { background: var(--accent-bg); }
@@ -78,7 +93,11 @@
   }
   .head-link:hover { color: var(--accent-fg); }
 
-  @media (max-width: 640px) {
+  /* A third mode column costs horizontal room the medium widths do not have:
+     four columns of prose wrap to a shred each on a small laptop or a tablet.
+     Below 900px the table becomes the same stacked cards the phone gets, which
+     is why the breakpoint moved up rather than the type size coming down. */
+  @media (max-width: 900px) {
     .table { border: none; background: none; }
     .row.header { display: none; }
     .row {
@@ -88,8 +107,9 @@
     }
     .cell { border-inline-start: none; border-top: 1px solid var(--border); }
     .cell.feat { border-top: none; background: var(--code-bg); font-size: 14px; }
-    .cell.rt::before, .cell.st::before {
-      content: attr(data-label) " · "; color: var(--text-h); font-weight: 500;
-    }
+    /* The mode name is the card's own column header, so it sits on its own line
+       above the value rather than as an inline prefix: with three modes the
+       "Realtime · …" run-on made each card read as one paragraph. */
+    .tag { display: block; color: var(--text-h); font-weight: 500; margin-block-end: 2px; }
   }
 </style>

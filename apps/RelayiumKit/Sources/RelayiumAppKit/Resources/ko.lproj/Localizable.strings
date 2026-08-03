@@ -78,13 +78,13 @@
 "nav.sectionDirect" = "직접 전송";
 "nav.sectionLinks" = "링크";
 "nav.nearby" = "근처 기기";
-"nav.nearbySubtitle" = "같은 네트워크의 기기, 계정 불필요";
+"nav.nearbySubtitle" = "계정 없이 기기에서 기기로 — 같은 네트워크에서만";
 "nav.pairingCode" = "페어링 코드";
-"nav.pairingCodeSubtitle" = "여섯 자리 숫자로 다른 네트워크와 연결";
+"nav.pairingCodeSubtitle" = "네트워크를 넘어 텍스트와 작은 파일 — 양쪽 모두 온라인";
 "nav.storedSend" = "링크 보내기";
-"nav.storedSendSubtitle" = "파일을 암호화해 저장하고 링크 공유";
+"nav.storedSendSubtitle" = "큰 파일을 나중에 받기 — 로그인 필요, 요금제 한도 적용";
 "nav.storedReceive" = "링크 열기";
-"nav.storedReceiveSubtitle" = "누군가 보낸 파일 받기";
+"nav.storedReceiveSubtitle" = "누군가 보낸 링크 열기 — 계정 불필요, 만료 전까지";
 "nav.account" = "계정";
 "nav.accountSubtitle" = "요금제, 기기, 저장된 파일";
 "nav.a11ySections" = "Relayium 화면";

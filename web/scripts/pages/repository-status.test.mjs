@@ -11,8 +11,10 @@ describe("public repository status", () => {
     expect(readme).toContain("status-active%20development");
     expect(readme).toContain("The production web app and CLI");
     expect(readme).toContain("## Delivery status");
-    expect(readme).toContain("**macOS — release candidate:**");
-    expect(readme).toContain("**iOS — not started:**");
+    expect(readme).toContain("**macOS — engineering build, not public:**");
+    expect(readme).toContain("**iOS — in development, not public:**");
+    expect(readme).toContain("Public release and the website download");
+    expect(readme).toContain("there is no download to install");
     expect(readme).not.toContain("status-M0%20MVP");
     expect(readme).not.toContain("This repository is **M0**");
     expect(readme).not.toContain("This is an early MVP");

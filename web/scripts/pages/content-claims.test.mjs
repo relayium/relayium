@@ -349,6 +349,50 @@ function claimsRelayIsAFallback(s, lang) {
     return `says a transfer falls back to a relay when a direct path fails: "${raw.trim()}"`;
   }
 }
+// ── (d) "realtime is the mode for large files" ────────────────────────────
+// Realtime genuinely has no server-side size cap, and this rule does not touch
+// that fact — the corpus states it in ten places and every one of them stays.
+// What it forbids is the step from the fact to the recommendation: a realtime
+// transfer rides one live session, so both page/app sessions must stay active;
+// a temporary transport drop can resume, but closing or reloading ends the live
+// session. The large-file path is the stored download link, which remains
+// available after the upload completes. So the rule needs all three of a realtime word, a
+// large-file word, and a word of RECOMMENDATION in the same sentence. Requiring
+// the third is the whole design: without it the rule swallows "Realtime
+// transfers handle up to 1,000 files per batch with no server-side size cap"
+// (compare-dropbox, compare-google-drive, compare-wetransfer — nine locales
+// each), which is true and is the differentiator those articles exist to state.
+//
+// Every RECOMMENDS entry below is harvested from the copy that shipped, so the
+// rule recognises the defect rather than the fix.
+// Portuguese is "tempo real" and Spanish "tiempo real"; German inflects the
+// adjective AND umlauts the stem in the superlative (große → größten), which is
+// why both halves are spelled out rather than guessed from the positive form.
+const REALTIME_WORD = /\breal-?time\b|实时|リアルタイム|실시간|Echtzeit|temps réel|الفوري|t(?:ie|e)mpo real/i;
+const LARGE_FILE_WORD =
+  /\b(?:biggest|largest|large|big|huge|multi-gigabyte)\b[^.]{0,12}\bfiles?\b|大(?:的)?文件|最大的文件|大容量|大きなファイル|最大のファイル|큰 파일|대용량|gr(?:o|ö)(?:ß|ss)(?:e|en|er|ere|eren|ten)\s+Dateien|gros fichiers|ملفات كبيرة|أكبر الملفات|archivos (?:grandes|más grandes)|arquivos (?:grandes|maiores)|maiores arquivos/i;
+const RECOMMENDS = {
+  en: ["cleanest option", "best option", "best for", "best way", "ideal for", "the way to go", "recommended for", "reach for"],
+  zh: ["最干净的选择", "最好的选择", "最佳选择", "最适合", "推荐用", "首选"],
+  ja: ["最もすっきりした選択肢", "最良の選択肢", "最適です", "おすすめ"],
+  ko: ["가장 깔끔한 선택", "가장 좋은 선택", "최선의 선택", "가장 적합"],
+  de: ["sauberste Option", "beste Option", "am besten für", "ideal für", "empfiehlt sich"],
+  fr: ["l'option la plus nette", "la meilleure option", "idéal pour", "le mieux pour", "recommandé pour"],
+  ar: ["الخيار الأنظف", "الخيار الأفضل", "الأنسب", "الأمثل"],
+  es: ["la opción más limpia", "la mejor opción", "ideal para", "lo mejor para", "recomendado para"],
+  pt: ["a opção mais limpa", "a melhor opção", "ideal para", "o melhor para", "recomendado para"],
+};
+
+function recommendsRealtimeForLargeFiles(s, lang) {
+  for (const raw of sentences(s)) {
+    const t = stripArabicMarks(raw);
+    const lt = t.toLowerCase();
+    if (!REALTIME_WORD.test(t) || !LARGE_FILE_WORD.test(t)) continue;
+    if (!RECOMMENDS[lang].some((p) => lt.includes(stripArabicMarks(p).toLowerCase()))) continue;
+    return `recommends realtime as the mode for large files: "${raw.trim()}"`;
+  }
+}
+
 // Deliberately tolerated: guides-what-is-p2p-file-transfer.mjs defines the TURN
 // protocol generically — "a fallback relay server that both devices connect to
 // when a direct path fails" — in a networking-explainer section that is scoped
@@ -416,6 +460,49 @@ describe("content claims about pairing codes, accounts and the relay", () => {
     };
     const trigger = LANGS.filter((l) => claimsRelayIsAFallback(DENIALS[l], l));
     if (trigger.length) throw new Error(`relay-fallback rule false-positives on a denial in: ${trigger.join(", ")}`);
+  });
+
+  it("never recommends realtime as the mode for large files", () => {
+    const bad = scan(recommendsRealtimeForLargeFiles);
+    if (bad.length) throw new Error(`realtime recommended for large files:\n  ${bad.join("\n  ")}`);
+  });
+
+  // The nine sentences below are the ones that shipped, verbatim from the diff
+  // that removed them. A table written from the corrected copy would recognise
+  // none of them.
+  it("recognises the big-file recommendation in every language", () => {
+    const BAIT = {
+      en: "For the biggest files, when you can both be online, the realtime path stays the cleanest option.",
+      zh: "对于最大的文件，只要双方都能在线，实时路径始终是最干净的选择。",
+      ja: "最大のファイルでは、双方がオンラインになれるなら、リアルタイムの経路が常に最もすっきりした選択肢です。",
+      ko: "가장 큰 파일이라면, 양쪽이 온라인일 수 있을 때 실시간 경로가 언제나 가장 깔끔한 선택입니다.",
+      de: "Für die größten Dateien bleibt der Echtzeitweg die sauberste Option, wenn ihr beide online sein könnt.",
+      fr: "Pour les plus gros fichiers, quand vous pouvez tous deux être en ligne, la voie en temps réel reste l'option la plus nette.",
+      ar: "أما لأكبر الملفات، حين يمكنكما أن تكونا متصلين معًا، فيبقى المسار الفوري الخيار الأنظف.",
+      es: "Para los archivos más grandes, cuando ambos lados pueden estar en línea, la vía en tiempo real sigue siendo la opción más limpia.",
+      pt: "Para os maiores arquivos, quando os dois conseguem ficar online, o caminho em tempo real continua sendo a opção mais limpa.",
+    };
+    const deaf = LANGS.filter((l) => !recommendsRealtimeForLargeFiles(BAIT[l], l));
+    if (deaf.length) throw new Error(`big-file recommendation rule never fires for: ${deaf.join(", ")}`);
+  });
+
+  // The mirror: the no-server-cap fact is not the defect, and a rule that
+  // cannot tell them apart would force the corpus to stop stating a true
+  // differentiator.
+  it("does not fire on the true no-server-cap statement", () => {
+    const FACTS = {
+      en: "Realtime transfers handle up to 1,000 files per batch with no server-side size cap — Chrome and Edge stream large files straight to disk.",
+      zh: "实时传输一次最多可处理 1,000 个文件，没有服务器端大小上限——Chrome 和 Edge 会把大文件直接流式写入磁盘。",
+      ja: "リアルタイム転送は1バッチ最大1,000ファイルで、サーバー側のサイズ上限はありません。大きなファイルはChromeとEdgeがディスクへ直接書き出します。",
+      ko: "실시간 전송은 배치당 최대 1,000개 파일을 다루며 서버 측 크기 상한이 없습니다. 큰 파일은 Chrome과 Edge가 디스크로 곧장 씁니다.",
+      de: "Echtzeitübertragungen haben kein serverseitiges Limit; große Dateien streamen Chrome und Edge direkt auf die Festplatte.",
+      fr: "Les transferts en temps réel n'ont aucune limite de taille côté serveur : Chrome et Edge écrivent les gros fichiers directement sur le disque.",
+      ar: "لا حدّ من جهة الخادم لعمليات النقل الفوري؛ ويبثّ Chrome وEdge الملفات الكبيرة إلى القرص.",
+      es: "Las transferencias en tiempo real no tienen tope de tamaño en el servidor: Chrome y Edge escriben los archivos grandes directamente en el disco.",
+      pt: "As transferências em tempo real não têm limite de tamanho no servidor: Chrome e Edge gravam os arquivos grandes direto no disco.",
+    };
+    const trigger = LANGS.filter((l) => recommendsRealtimeForLargeFiles(FACTS[l], l));
+    if (trigger.length) throw new Error(`big-file rule false-positives on the size fact in: ${trigger.join(", ")}`);
   });
 });
 

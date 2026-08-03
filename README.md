@@ -311,8 +311,13 @@ Yes. Relayium runs in the browser, so it's fully cross-platform: Windows ↔ iPh
 Linux ↔ anything. Unlike AirDrop it isn't limited to Apple devices.
 
 **What's the file-size limit?**
-No server-imposed limit. In Chrome/Edge files stream straight to disk (size bound only by free space).
+Realtime transfer has no server-imposed limit. In Chrome/Edge files stream straight to disk (size bound only by free space).
 In Firefox/Safari they're buffered in memory, so Relayium warns above roughly 256 MB — a deliberately conservative estimate, not a hard limit.
+That missing cap is not a recommendation: a realtime transfer rides one live session, so either side closing or
+reloading the page ends it (brief transport drops can resume while both pages remain active). For large files use a
+stored download link. Keep the sender page open until its upload finishes; after that the link remains available
+until expiry even when either side closes the tab. Stored links are bounded by a per-file size cap and a daily quota;
+realtime is at its best for quick small files and text.
 
 **Can I send text, not just files?**
 Yes. When both devices are online you can open a message session — its own end-to-end encrypted

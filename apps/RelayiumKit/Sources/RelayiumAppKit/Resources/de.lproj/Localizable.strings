@@ -78,13 +78,13 @@
 "nav.sectionDirect" = "Direkt";
 "nav.sectionLinks" = "Links";
 "nav.nearby" = "In der Nähe";
-"nav.nearbySubtitle" = "Geräte in diesem Netzwerk, ohne Konto";
+"nav.nearbySubtitle" = "Ohne Konto, von Gerät zu Gerät — nur im selben Netzwerk";
 "nav.pairingCode" = "Kopplungscode";
-"nav.pairingCodeSubtitle" = "Netzwerkübergreifend verbinden mit sechs Ziffern";
+"nav.pairingCodeSubtitle" = "Text und kleine Dateien netzübergreifend — beide Seiten online";
 "nav.storedSend" = "Link senden";
-"nav.storedSendSubtitle" = "Datei verschlüsselt ablegen und den Link teilen";
+"nav.storedSendSubtitle" = "Große Dateien, später abgeholt — Anmeldung, Tarifgrenzen gelten";
 "nav.storedReceive" = "Link öffnen";
-"nav.storedReceiveSubtitle" = "Eine Datei empfangen, die dir jemand geschickt hat";
+"nav.storedReceiveSubtitle" = "Einen zugeschickten Link öffnen — ohne Konto, bis er abläuft";
 "nav.account" = "Konto";
 "nav.accountSubtitle" = "Tarif, Geräte und abgelegte Dateien";
 "nav.a11ySections" = "Relayium-Bereiche";

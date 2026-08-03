@@ -86,17 +86,20 @@ describe("ModeCompare keeps table semantics without illegal roles", () => {
     // ARIA does not allow a link to also be a column header; browsers disagree
     // about which of the two to drop.
     expect(root.querySelectorAll("a[role='columnheader']").length).toBe(0);
-    expect(root.querySelectorAll("[role='columnheader']").length).toBe(3);
+    // One aspect column plus the three transfer modes.
+    expect(root.querySelectorAll("[role='columnheader']").length).toBe(4);
     for (const cell of root.querySelectorAll("[role='columnheader']")) {
       expect(cell.tagName).toBe("SPAN");
     }
   });
 
-  it("still offers both header links inside the header row", () => {
+  it("offers a header link for every mode in the header row", () => {
     const root = render(ModeCompare);
     const links = root.querySelectorAll("[role='row'] [role='columnheader'] a.head-link");
-    expect(links.length).toBe(2);
-    expect([...links].map((a) => a.getAttribute("href"))).toEqual(["/cross-network", "/offline-transfer"]);
+    // A named mode the reader cannot open is a dead end: all three columns are
+    // pages, so all three headings are links to them.
+    expect(links.length).toBe(3);
+    expect([...links].map((a) => a.getAttribute("href"))).toEqual(["/", "/cross-network", "/offline-transfer"]);
   });
 
   it("lets the link fill its header cell instead of shrinking to the words", () => {
@@ -109,8 +112,32 @@ describe("ModeCompare keeps table semantics without illegal roles", () => {
     expect(css).toMatch(/\.cell\.is-link \{ padding: 0; \}/);
     expect(css).toMatch(/\.head-link \{[\s\S]*?block-size: 100%;[\s\S]*?padding: var\(--space-3\) var\(--space-4\);/);
     const root = render(ModeCompare);
-    // The marker class the padding rule keys off must actually be on both cells.
-    expect(root.querySelectorAll("[role='columnheader'].is-link").length).toBe(2);
+    // The marker class the padding rule keys off must actually be on every
+    // linked cell.
+    expect(root.querySelectorAll("[role='columnheader'].is-link").length).toBe(3);
+  });
+
+  it("names the mode inside each card cell, as text rather than CSS content", () => {
+    // Narrow layout hides the header row, so the only thing left saying which
+    // mode an answer belongs to is the per-cell tag. As `content: attr(...)`
+    // that label was not reliably in the accessibility tree — a phone reader got
+    // three unattributed answers per row. As an element it is announced when the
+    // cards are showing, and `display: none` keeps it out of both the layout and
+    // the tree at the widths where the real column headers do the job.
+    const compare = readFileSync(resolve(import.meta.dirname, "ModeCompare.svelte"), "utf8");
+    expect(compare).not.toContain("content: attr(data-label)");
+    expect(compare).toMatch(/\.tag \{ display: none; \}/);
+    expect(compare).toMatch(/@media \(max-width: 900px\)[\s\S]*?\.tag \{ display: block;/);
+
+    const root = render(ModeCompare);
+    const rows = [...root.querySelectorAll("[role='row']")].filter((r) => !r.classList.contains("header"));
+    expect(rows.length).toBeGreaterThanOrEqual(5);
+    for (const row of rows) {
+      const tags = [...row.querySelectorAll("[role='cell'] > .tag")].map((t) => t.textContent?.trim());
+      expect(tags.filter(Boolean)).toHaveLength(3);
+      // Each answer carries its own mode name, and no two in a row are the same.
+      expect(new Set(tags).size).toBe(3);
+    }
   });
 });
 

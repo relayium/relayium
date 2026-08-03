@@ -513,7 +513,7 @@ const fr: Messages = {
     offline: { lead: "Destinataire hors ligne ? Utilisez le transfert asynchrone — chiffrez, téléversez et laissez un lien de téléchargement, récupérable pendant plusieurs jours.", cta: "Vers le transfert asynchrone →" },
   },
   methods: {
-    realtime: { name: "Transfert en temps réel", sub: "Choisissez vos fichiers et obtenez un code à 6 chiffres — dictez-le, envoyez le lien ou montrez le QR ; dès que l'autre appareil rejoint, le transfert démarre automatiquement.", badge: "Destinataire sans compte" },
+    realtime: { name: "Transfert en temps réel", sub: "Créez d'abord un code à 6 chiffres — dictez-le, envoyez le lien ou montrez le QR. Dès que l'autre appareil rejoint, choisissez les fichiers à envoyer, ou « Envoyer un message » pour du texte.", badge: "Destinataire sans compte" },
     stored: { name: "Lien de téléchargement", sub: "Votre navigateur chiffre puis stocke temporairement ; le destinataire télécharge quand il veut, sans session ni compte.", badge: "Même hors ligne" },
   },
   pair: {
@@ -625,23 +625,24 @@ const fr: Messages = {
   },
   compare: {
     title: "Quel mode choisir",
-    sub: "« Transfert en temps réel » quand les deux sont en ligne maintenant ; « Lien de téléchargement » pour récupérer plus tard.",
+    sub: "Le LAN ne demande aucun compte mais ne fonctionne que sur un même réseau ; le temps réel fait passer petits fichiers et textes tant que les deux sont en ligne ; pour les gros fichiers, ou pour une récupération plus tard, prenez le lien de téléchargement.",
     colFeature: "Critère",
+    colLan: "LAN",
     colRealtime: "Transfert en temps réel",
     colStored: "Lien de téléchargement",
     rows: [
-      { label: "Connexion requise", realtime: "Le créateur d'un code fichier ou texte se connecte ; la personne qui le rejoint n'en a pas besoin", stored: "Le créateur du lien se connecte" },
-      { label: "Destinataire en ligne ?", realtime: "Oui — les deux en ligne en même temps", stored: "Non — téléchargement asynchrone" },
-      { label: "Fichiers via le serveur ?", realtime: "Même réseau : non, d'appareil à appareil. Entre réseaux : le relais TURN transmet le chiffré de bout en bout sans pouvoir lire ni déchiffrer le contenu en clair", stored: "Oui, mais uniquement du texte chiffré à divulgation nulle" },
-      { label: "Durée de vie", realtime: "Les deux en ligne ; aucun historique texte côté serveur", stored: "Jusqu'à 14 jours (selon l'offre), ou autodestruction après lecture" },
-      { label: "Idéal pour", realtime: "Gros fichiers ou texte en direct", stored: "Destinataire hors ligne, ou un lien pour plusieurs" },
+      { label: "Connexion requise", lan: "Aucune des deux parties ne se connecte", realtime: "Le créateur d'un code fichier ou texte se connecte ; la personne qui le rejoint n'en a pas besoin", stored: "Le créateur du lien se connecte ; le destinataire n'a pas besoin de compte" },
+      { label: "Réseau nécessaire", lan: "Uniquement le même réseau local : impossible d'atteindre un appareil sur un autre réseau", realtime: "N'importe quel réseau, mais les deux appareils en ligne au même moment", stored: "N'importe quel réseau ; le destinataire récupère quand il veut" },
+      { label: "Fichiers via le serveur ?", lan: "Non — d'appareil à appareil au sein de votre propre réseau", realtime: "Même réseau : non, d'appareil à appareil. Entre réseaux : le relais TURN transmet le chiffré de bout en bout sans pouvoir lire ni déchiffrer le contenu en clair", stored: "Oui, mais uniquement du texte chiffré à divulgation nulle" },
+      { label: "En cas d'interruption", lan: "Une brève coupure de fichier peut reprendre ; fermer ou recharger une page oblige à recommencer", realtime: "Une brève coupure de fichier peut reprendre ; fermer ou recharger une page oblige à recommencer", stored: "Gardez la page d'envoi ouverte jusqu'à la fin du téléversement ; ensuite le lien reste valable jusqu'à expiration" },
+      { label: "Idéal pour", lan: "Téléphone ↔ ordinateur sur le même Wi-Fi, sans aucun compte", realtime: "Petits fichiers et textes à faire passer vite entre réseaux : une commande, un lien, une note", stored: "Gros fichiers, et envoyer maintenant / récupérer plus tard" },
     ],
   },
   useCases: {
     title: "Pensé pour ces moments",
     sub: "De la collaboration à distance à l'envoi unique de documents confidentiels.",
     items: [
-      { title: "Envoyer de gros fichiers à l'autre bout du monde", desc: "Expédiez une vidéo de plusieurs gigaoctets, un fichier de conception ou un jeu de données directement à un collègue ou un proche à l'étranger — diffusé directement sur le disque, sans saturer la mémoire ni perdre en qualité." },
+      { title: "Envoyer de gros fichiers à l'autre bout du monde", desc: "Une vidéo de plusieurs gigaoctets, un fichier de conception ou un jeu de données : chiffrez-le en lien de téléchargement et envoyez le lien. Le destinataire n'a pas besoin d'être en ligne pendant le téléversement ; gardez la page d'envoi ouverte jusqu'à la fin. Ensuite, chacun peut fermer son ordinateur et le lien reste disponible jusqu'à expiration. À la récupération, tout est toujours diffusé sur le disque : sans saturer la mémoire ni perdre en qualité." },
       { title: "Quand il n'est pas en ligne", desc: "Générez un lien de téléchargement chiffré avec une expiration et envoyez-le ; il le récupère quand il est libre — et un seul lien peut servir à plusieurs destinataires." },
       { title: "Téléphone ↔ ordinateur", desc: "Déplacez des fichiers entre vos propres appareils, d'un système et d'un réseau à l'autre — scannez ou saisissez un code pour vous connecter, sans cloud ni câble." },
       { title: "Envoi unique de documents confidentiels", desc: "Chiffrement de bout en bout et code de vérification (SAS) facultatif contre l'interception, avec autodestruction après lecture — idéal pour les contrats, pièces d'identité ou clés." },
@@ -654,7 +655,7 @@ const fr: Messages = {
     items: [
       { q: "Dois-je installer une application ?", a: "Non. N'importe quel navigateur moderne transfère directement depuis la page web — Chrome est recommandé (diffuse les gros fichiers directement sur le disque, avec un dossier cible optionnel, sans utiliser la mémoire)." },
       { q: "Et si la connexion ne s'établit pas ?", a: "Sur le même réseau, les transferts en temps réel se connectent d'appareil à appareil. Entre réseaux, ils passent par un relais TURN chiffré, qui traverse de façon fiable les pare-feu et NAT stricts (le relais ne transmet que du texte chiffré et ne peut pas déchiffrer). Toujours bloqué ? Un lien de téléchargement est le plus fiable — il est asynchrone, les deux parties n'ont donc pas besoin d'être en ligne en même temps." },
-      { q: "Quelle taille les fichiers peuvent-ils atteindre ?", a: "Le transfert en temps réel diffuse les données en flux, donc il n'y a en pratique aucune limite stricte de taille ; les liens de téléchargement sont soumis à une taille maximale par fichier et à un quota quotidien, que la page vous indiquera." },
+      { q: "Quelle taille les fichiers peuvent-ils atteindre ?", a: "Le transfert en temps réel diffuse les données et n'a pas de limite de taille côté serveur. Une brève coupure peut reprendre, mais les deux pages doivent rester ouvertes ; fermer ou recharger l'une d'elles termine la session vivante. Pour les gros fichiers, prenez un lien de téléchargement : la page indique sa taille maximale et son quota quotidien. Gardez la page d'envoi ouverte jusqu'à la fin du téléversement ; ensuite le lien reste disponible jusqu'à expiration, même si un onglet est fermé. Le temps réel excelle pour les petits fichiers et les textes à faire passer vite." },
       { q: "Le serveur peut-il lire ou déchiffrer mes fichiers ou messages ?", a: "Non. Sur le même réseau, le temps réel est direct ; entre réseaux, le navigateur utilise TURN par conception : le relais transmet le chiffré de bout en bout, mais ne peut ni lire ni déchiffrer le contenu en clair. Relayium ne conserve ni corps de message ni historique serveur, bien que les appareils puissent garder le texte. Les liens stockent uniquement le fichier chiffré à divulgation nulle." },
       { q: "Faut-il obligatoirement créer un compte ?", a: "Les transferts LAN sur le même réseau ne nécessitent aucune connexion. Entre réseaux, la personne qui crée un code d'appairage pour un fichier ou du texte doit se connecter ; celle qui rejoint avec le code ou le lien n'a pas besoin de compte. La création d'un lien de téléchargement asynchrone exige aussi une connexion." },
       { q: "Est-ce open source ?", a: "Oui. La conception du protocole ainsi que tout le code front-end et back-end sont publics sur GitHub — chacun peut les examiner, les auto-héberger ou y contribuer." },

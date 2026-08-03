@@ -512,7 +512,7 @@ const es: Messages = {
     offline: { lead: "¿El destinatario no está en línea? Usa la transferencia asíncrona — cifra, sube y deja un enlace de descarga que podrá recoger durante días.", cta: "Ir a la transferencia asíncrona →" },
   },
   methods: {
-    realtime: { name: "Transferencia en tiempo real", sub: "Elige tus archivos y obtén un código de 6 dígitos — léelo en voz alta, envía el enlace o muestra el QR; en cuanto el otro lado se une, la transferencia comienza automáticamente.", badge: "Destinatario: sin cuenta" },
+    realtime: { name: "Transferencia en tiempo real", sub: "Crea primero un código de 6 dígitos: léelo en voz alta, envía el enlace o muestra el QR. En cuanto el otro dispositivo se une, elige los archivos que enviar, o «Enviar un mensaje» para texto.", badge: "Destinatario: sin cuenta" },
     stored: { name: "Enlace de descarga", sub: "Tu navegador cifra y luego almacena; el destinatario descarga en cualquier momento, sin sesión en vivo ni cuenta.", badge: "Sin conexión, sin problema" },
   },
   pair: {
@@ -624,23 +624,24 @@ const es: Messages = {
   },
   compare: {
     title: "Qué modo elegir",
-    sub: "La «Transferencia en tiempo real» es para cuando ambos están en línea ahora; el «Enlace de descarga» es para recoger después.",
+    sub: "La red local no pide cuenta, pero solo funciona dentro de una misma red; el tiempo real pasa archivos pequeños y texto mientras ambos están en línea; para archivos grandes, o para recoger más tarde, usa el enlace de descarga.",
     colFeature: "Aspecto",
+    colLan: "Red local (LAN)",
     colRealtime: "Transferencia en tiempo real",
     colStored: "Enlace de descarga",
     rows: [
-      { label: "¿Necesita inicio de sesión?", realtime: "Quien crea un código para archivos o texto inicia sesión; quien se une no la necesita", stored: "Quien crea el enlace inicia sesión" },
-      { label: "¿Destinatario en línea?", realtime: "Sí — ambos en línea a la vez", stored: "No — descarga de forma asíncrona" },
-      { label: "¿Archivos vía servidor?", realtime: "En la misma red: no, de dispositivo a dispositivo. Entre redes: el retransmisor TURN transporta el texto cifrado de extremo a extremo sin poder leer ni descifrar el contenido en claro", stored: "Sí, pero solo texto cifrado de conocimiento cero" },
-      { label: "Duración", realtime: "Ambos en línea; sin historial de texto en el servidor", stored: "Hasta 14 días (según el plan), o destrucción tras la lectura" },
-      { label: "Ideal para", realtime: "Archivos grandes o texto en vivo", stored: "Destinatario sin conexión, o un enlace para muchos" },
+      { label: "¿Necesita inicio de sesión?", lan: "Ninguna de las dos partes inicia sesión", realtime: "Quien crea un código para archivos o texto inicia sesión; quien se une no la necesita", stored: "Quien crea el enlace inicia sesión; quien lo recibe no necesita cuenta" },
+      { label: "Red necesaria", lan: "Solo la misma red local: no alcanza a un dispositivo de otra red", realtime: "Cualquier red, pero ambos dispositivos en línea a la vez", stored: "Cualquier red; quien recibe lo recoge cuando quiera" },
+      { label: "¿Archivos vía servidor?", lan: "No — de dispositivo a dispositivo dentro de tu propia red", realtime: "En la misma red: no, de dispositivo a dispositivo. Entre redes: el retransmisor TURN transporta el texto cifrado de extremo a extremo sin poder leer ni descifrar el contenido en claro", stored: "Sí, pero solo texto cifrado de conocimiento cero" },
+      { label: "Si se interrumpe", lan: "Una caída breve del archivo puede reanudarse; cerrar o recargar una página obliga a empezar de nuevo", realtime: "Una caída breve del archivo puede reanudarse; cerrar o recargar una página obliga a empezar de nuevo", stored: "Mantén abierta la página de envío hasta acabar la subida; después el enlace sirve hasta caducar" },
+      { label: "Ideal para", lan: "Móvil ↔ portátil en el mismo wifi, sin cuenta alguna", realtime: "Archivos pequeños y texto de una red a otra en un momento: un comando, un enlace, una nota", stored: "Archivos grandes, y enviar ahora / recoger después" },
     ],
   },
   useCases: {
     title: "Pensado para estos momentos",
     sub: "Desde la colaboración remota hasta la entrega única sensible a la privacidad.",
     items: [
-      { title: "Envía archivos grandes por todo el mundo", desc: "Dispara un vídeo, un archivo de diseño o un conjunto de datos de varios gigabytes directamente a un colega o familiar en el extranjero — transmitido al disco, sin saturar la memoria, sin pérdida de calidad." },
+      { title: "Envía archivos grandes por todo el mundo", desc: "Un vídeo, un archivo de diseño o un conjunto de datos de varios gigabytes: cífralo en un enlace de descarga y envía el enlace. Quien recibe no tiene que estar en línea durante la subida; mantén abierta la página de envío hasta que termine. Después cualquiera puede cerrar el portátil y el enlace queda disponible hasta caducar. Al recogerlo se sigue transmitiendo al disco: sin saturar la memoria, sin pérdida de calidad." },
       { title: "Cuando no están en línea", desc: "Genera un enlace de descarga cifrado con caducidad y envíalo; lo recogen cuando estén libres — y un solo enlace puede servir a varios destinatarios." },
       { title: "Teléfono ↔ ordenador", desc: "Mueve archivos entre tus propios dispositivos a través de sistemas y redes — escanea o escribe un código para conectar, sin necesidad de una unidad en la nube ni de un cable." },
       { title: "Entrega única sensible a la privacidad", desc: "Cifrado de extremo a extremo más un código de verificación (SAS) opcional contra intermediarios, con destrucción tras la lectura — ideal para contratos, documentos de identidad o claves." },
@@ -653,7 +654,7 @@ const es: Messages = {
     items: [
       { q: "¿Necesito instalar una aplicación?", a: "No. Cualquier navegador moderno puede transferir directamente desde la página web — se recomienda Chrome (transmite archivos grandes al disco con una carpeta de destino opcional, sin usar memoria)." },
       { q: "¿Y si no se conecta?", a: "En la misma red, las transferencias en tiempo real se conectan de dispositivo a dispositivo. Entre redes van por un retransmisor TURN cifrado, que atraviesa de forma fiable cortafuegos y NAT estrictos (el retransmisor solo reenvía texto cifrado y no puede descifrar). ¿Sigue atascado? Un enlace de descarga es la opción más fiable — es asíncrono, así que ambos lados no necesitan estar en línea a la vez." },
-      { q: "¿De qué tamaño pueden ser los archivos?", a: "La transferencia en tiempo real transmite los datos, así que en la práctica no hay un tope de tamaño rígido; los enlaces de descarga están limitados por un tamaño máximo por archivo y una cuota diaria, de lo que la página te informará." },
+      { q: "¿De qué tamaño pueden ser los archivos?", a: "La transferencia en tiempo real transmite los datos y no tiene tope de tamaño en el servidor. Una caída breve puede reanudarse, pero ambas páginas deben seguir abiertas; cerrar o recargar una termina la sesión viva. Para archivos grandes usa un enlace de descarga: la página muestra el máximo por archivo y la cuota diaria. Mantén abierta la página de envío hasta acabar la subida; después el enlace queda disponible hasta caducar aunque se cierre una pestaña. El tiempo real brilla con archivos pequeños y texto que hay que pasar rápido." },
       { q: "¿Puede el servidor leer o descifrar mis archivos o mensajes?", a: "No. En la red local el tiempo real es directo; entre redes el navegador usa TURN por diseño: el retransmisor transporta el texto cifrado de extremo a extremo, pero no puede leer ni descifrar el contenido en claro. Relayium no guarda cuerpos ni historial de mensajes, aunque los extremos pueden conservar texto. Los enlaces guardan únicamente archivos cifrados." },
       { q: "¿Tengo que crear una cuenta?", a: "Las transferencias por LAN en la misma red no necesitan inicio de sesión. Entre redes, quien crea un código de emparejamiento para archivos o texto debe iniciar sesión; quien se une con el código o enlace no necesita una cuenta. Crear un enlace de descarga asíncrono también requiere iniciar sesión." },
       { q: "¿Es de código abierto?", a: "Sí. El diseño del protocolo y todo el código de front-end y back-end son públicos en GitHub — libres de revisar, autoalojar o contribuir." },

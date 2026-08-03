@@ -641,13 +641,18 @@ export interface Messages {
     realtime: HowSection;
     offline: HowSection;
   };
+  // The three transfer modes, side by side. Two of them used to be here; LAN was
+  // missing, which quietly made "which mode do I want?" a choice between the two
+  // that need an account. Every column heading is a link to that mode's page, so
+  // each of these three names has to work as link text on its own.
   compare: {
     title: string;
     sub: string;
     colFeature: string;
-    colRealtime: string;
-    colStored: string;
-    rows: { label: string; realtime: string; stored: string }[];
+    colLan: string; // same-network, account-free
+    colRealtime: string; // live pairing code, small files and text
+    colStored: string; // encrypted upload + download link, the large-file path
+    rows: { label: string; lan: string; realtime: string; stored: string }[];
   };
   useCases: {
     title: string;

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Relayium と WeTransfer の比較：サーバー側に保存せず大容量をリアルタイム転送 · Relayium</title>
+    <title>Relayium と WeTransfer の比較：暗号化リンクとリアルタイム受け渡し · Relayium</title>
     <meta name="description" content="Relayium と WeTransfer を公平に比較。WeTransfer は非同期のリンク共有が得意です。Relayium はサーバー側にファイルのコピーや転送履歴を残さないリアルタイム転送と、ゼロ知識の保存リンクを備えます。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/compare/wetransfer/" />
@@ -22,7 +22,7 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
-    <meta property="og:title" content="Relayium と WeTransfer の比較：サーバー側に保存せず大容量をリアルタイム転送" />
+    <meta property="og:title" content="Relayium と WeTransfer の比較：暗号化リンクとリアルタイム受け渡し" />
     <meta property="og:description" content="Relayium と WeTransfer を公平に比較。WeTransfer は非同期のリンク共有が得意です。Relayium はサーバー側にファイルのコピーや転送履歴を残さないリアルタイム転送と、ゼロ知識の保存リンクを備えます。" />
     <meta property="og:url" content="https://relayium.com/ja/compare/wetransfer/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
@@ -32,10 +32,10 @@
     <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
     <meta property="og:locale" content="ja_JP" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Relayium と WeTransfer の比較：サーバー側に保存せず大容量をリアルタイム転送" />
+    <meta name="twitter:title" content="Relayium と WeTransfer の比較：暗号化リンクとリアルタイム受け渡し" />
     <meta name="twitter:description" content="Relayium と WeTransfer を公平に比較。WeTransfer は非同期のリンク共有が得意です。Relayium はサーバー側にファイルのコピーや転送履歴を残さないリアルタイム転送と、ゼロ知識の保存リンクを備えます。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium と WeTransfer の比較：サーバー側に保存せず大容量をリアルタイム転送","description":"Relayium と WeTransfer を公平に比較。WeTransfer は非同期のリンク共有が得意です。Relayium はサーバー側にファイルのコピーや転送履歴を残さないリアルタイム転送と、ゼロ知識の保存リンクを備えます。","inLanguage":"ja","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/compare/wetransfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium と WeTransfer の比較：サーバー側に保存せず大容量をリアルタイム転送"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"本当にファイルサイズの上限はないのですか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイムモードはサーバー側にファイルのコピーや転送履歴を残さないため、サーバー側の上限はありません。同一 LAN ではブラウザ同士が直接接続し、ネットワークをまたぐ場合は設計上 TURN が読取・復号不能なエンドツーエンド暗号文を運びます。Chrome や Edge ではダウンロードがそのままディスクにストリーミングされるので、数ギガバイトのファイルも問題ありません。Firefox や Safari では、ストリーミングで書き出せる経路がどれも使えないときにメモリへ溜めることになり、Relayium は約 256 MB を超えると警告します。これは意図的に保守的な見積もりであり、ハードな上限ではありません。保存型ダウンロードリンクにはアカウントに紐づく容量枠があります。"}},{"@type":"Question","name":"受信側がオンラインでないときは？","acceptedAnswer":{"@type":"Answer","text":"保存型ダウンロードリンクを使います。ブラウザがファイルを AES-256-GCM で暗号化し、鍵は URL フラグメントだけに残り、サーバーは受信側が後で取得できるゼロ知識の暗号文を保持します。リンクの作成には送信側のサインインが必要で、有効期限切れや最初のダウンロード後の消去を設定できます。"}},{"@type":"Question","name":"Relayium は無料ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。Relayium は AGPL-3.0 ライセンスの無料オープンソースで、プロトコルとコードのすべてが github.com/relayium/relayium にあります。より大きなリアルタイム転送を解放する有料プランはありません。大容量の余裕はブラウザのディスクへのストリーミングから来るものであり、サブスクリプションからではありません。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium と WeTransfer の比較：暗号化リンクとリアルタイム受け渡し","description":"Relayium と WeTransfer を公平に比較。WeTransfer は非同期のリンク共有が得意です。Relayium はサーバー側にファイルのコピーや転送履歴を残さないリアルタイム転送と、ゼロ知識の保存リンクを備えます。","inLanguage":"ja","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/compare/wetransfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium と WeTransfer の比較：暗号化リンクとリアルタイム受け渡し"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"本当にファイルサイズの上限はないのですか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイムにはサーバー側上限がなく、同一 LAN では直結し、ネットワーク間では TURN がエンドツーエンド暗号文を運びます。Chrome／Edge はディスクへ流せますが、双方のページを開いたままにする必要があるため、大きなファイルには保存型ダウンロードリンクが適します。リンクの上限と容量枠はアップロード前に表示され、Firefox／Safari のリアルタイム受信は約256 MBを超えると保守的な警告を表示します。"}},{"@type":"Question","name":"受信側がオンラインでないときは？","acceptedAnswer":{"@type":"Answer","text":"保存型ダウンロードリンクを使います。ブラウザがファイルを AES-256-GCM で暗号化し、鍵は URL フラグメントだけに残り、サーバーは受信側が後で取得できるゼロ知識の暗号文を保持します。リンクの作成には送信側のサインインが必要で、有効期限切れや最初のダウンロード後の消去を設定できます。"}},{"@type":"Question","name":"Relayium は無料ですか？","acceptedAnswer":{"@type":"Answer","text":"はい。Relayium は AGPL-3.0 ライセンスの無料オープンソースで、プロトコルとコードのすべてが github.com/relayium/relayium にあります。より大きなリアルタイム転送を解放する有料プランはありません。大容量の余裕はブラウザのディスクへのストリーミングから来るものであり、サブスクリプションからではありません。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -69,17 +69,17 @@ footer a{color:var(--text-h);text-decoration:none}
   <body>
     <div class="wrap">
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ja">Relayium</a></header>
-      <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium と WeTransfer の比較：サーバー側に保存せず大容量をリアルタイム転送</span></nav>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium と WeTransfer の比較：暗号化リンクとリアルタイム受け渡し</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
-      <h1>Relayium と WeTransfer の比較：サーバー側に保存せず大容量をリアルタイム転送</h1>
+      <h1>Relayium と WeTransfer の比較：暗号化リンクとリアルタイム受け渡し</h1>
       <p class="updated">最終更新: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/wetransfer/">English</a><a href="/zh/compare/wetransfer/">中文</a><a href="/ja/compare/wetransfer/" aria-current="true">日本語</a><a href="/ko/compare/wetransfer/">한국어</a><a href="/de/compare/wetransfer/">Deutsch</a><a href="/fr/compare/wetransfer/">Français</a><a href="/ar/compare/wetransfer/">العربية</a><a href="/es/compare/wetransfer/">Español</a><a href="/pt/compare/wetransfer/">Português</a></nav>
       <p class="lead">WeTransfer は大きなファイルの送信を簡単にしました。ファイルをドロップしてリンクを受け取れば、相手は好きなときにダウンロードできます。送った時点で相手がオフラインでも大丈夫です。この非同期で、受け取りにアカウントが要らない体験は本当に優れており、多くの人が選ぶ理由です。</p>
-      <p class="lead">本記事はこの2つを公平に比較します。WeTransfer の強みは、ファイルがサーバー上で待つ洗練されたリンクベースの共有です。Relayium のリアルタイム転送はサーバー側にファイルのコピーや転送履歴を残しません。同一 LAN ではブラウザ同士が直接接続し、ネットワークをまたぐ場合は設計上 TURN を使います。加えて、常にゼロ知識で暗号化される任意の保存リンクもあります。どちらが単純に優れているわけではなく、少し異なる問題を解いています。</p>
+      <p class="lead">本記事は公平に比較します。大きなファイルや後で受け取る場合、Relayium も保存リンクを推奨しますが、サーバーが保持するのはゼロ知識の暗号文だけです。リアルタイムは、双方がオンラインのまま小さなファイルやテキストをすばやく渡す別の強みです。同一 LAN では直結し、ネットワーク間では TURN がエンドツーエンド暗号文を運びます。</p>
       <h2>WeTransfer が優れている点</h2>
       <p>WeTransfer の中心的な発想は非同期です。送信側が一度アップロードしてリンクを受け取り、受信側は後でダウンロードします。2人が同時にオンラインである必要はなく、明日開く予定のクライアントに動画をメールで送るときにまさに欲しい形です。</p>
       <p>成熟していて摩擦もありません。インストールは不要、無料枠ではアカウントなしで送信でき、インターフェースは簡潔さで有名です。サイズ上限の範囲で時々リンク共有するだけなら、しっかり動きます。</p>
@@ -97,13 +97,13 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>サイズ上限：WeTransfer の無料枠は転送を 2 GB に制限します。Relayium のリアルタイムはサーバー側の上限がありません（Chrome/Edge はディスクへストリーミング。ブラウザがメモリに溜めるしかない場合は約 256 MB を超えると警告します）。</li><li>ファイルの置き場所：WeTransfer はファイルをサーバーに保存します。Relayium のリアルタイムはサーバー側にファイルのコピーや転送履歴を残しません。同一 LAN では直接接続し、ネットワークをまたぐ場合は設計上 TURN が読取・復号不能なエンドツーエンド暗号文を運びます。</li><li>暗号化：WeTransfer は通信中も保存時も暗号化しますが、鍵はサービス側が保持します。Relayium は6桁の SAS コード付きのエンドツーエンド暗号化で、保存リンクは鍵が URL フラグメントだけにあるゼロ知識です。</li><li>受信側がオフライン：どちらも対応します。WeTransfer は保存リンクで、Relayium は有効期限や閲覧後削除を設定できるゼロ知識の保存ダウンロードリンクで対応します。</li><li>整合性と再開：Relayium は各ファイルを SHA-256 で検証し、中断した転送を最初からやり直さず再開できる。</li><li>費用と開放性：Relayium は無料で AGPL-3.0 ライセンス、github.com/relayium/relayium にあり、ブラウザで Windows・macOS・Linux・Android・iOS で動作し、インストール不要。</li></ul>
       <h2>よくある質問</h2>
       <h3>本当にファイルサイズの上限はないのですか？</h3>
-      <p>リアルタイムモードはサーバー側にファイルのコピーや転送履歴を残さないため、サーバー側の上限はありません。同一 LAN ではブラウザ同士が直接接続し、ネットワークをまたぐ場合は設計上 TURN が読取・復号不能なエンドツーエンド暗号文を運びます。Chrome や Edge ではダウンロードがそのままディスクにストリーミングされるので、数ギガバイトのファイルも問題ありません。Firefox や Safari では、ストリーミングで書き出せる経路がどれも使えないときにメモリへ溜めることになり、Relayium は約 256 MB を超えると警告します。これは意図的に保守的な見積もりであり、ハードな上限ではありません。保存型ダウンロードリンクにはアカウントに紐づく容量枠があります。</p>
+      <p>リアルタイムにはサーバー側上限がなく、同一 LAN では直結し、ネットワーク間では TURN がエンドツーエンド暗号文を運びます。Chrome／Edge はディスクへ流せますが、双方のページを開いたままにする必要があるため、大きなファイルには保存型ダウンロードリンクが適します。リンクの上限と容量枠はアップロード前に表示され、Firefox／Safari のリアルタイム受信は約256 MBを超えると保守的な警告を表示します。</p>
       <h3>受信側がオンラインでないときは？</h3>
       <p>保存型ダウンロードリンクを使います。ブラウザがファイルを AES-256-GCM で暗号化し、鍵は URL フラグメントだけに残り、サーバーは受信側が後で取得できるゼロ知識の暗号文を保持します。リンクの作成には送信側のサインインが必要で、有効期限切れや最初のダウンロード後の消去を設定できます。</p>
       <h3>Relayium は無料ですか？</h3>
       <p>はい。Relayium は AGPL-3.0 ライセンスの無料オープンソースで、プロトコルとコードのすべてが github.com/relayium/relayium にあります。より大きなリアルタイム転送を解放する有料プランはありません。大容量の余裕はブラウザのディスクへのストリーミングから来るものであり、サブスクリプションからではありません。</p>
       <div class="ctacard">
-        <p>今すぐ大容量ファイルを送ってみてください。サイズ上限なし、インストール不要で、同じネットワークならアカウントも不要です。</p>
+        <p>大きなファイルは暗号化ダウンロードリンクで。小さなファイルやテキストは双方をつないでリアルタイムに渡せます。</p>
         <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
       </div>
       <h2>続けて読む</h2>

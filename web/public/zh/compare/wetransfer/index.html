@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Relayium 对比 WeTransfer：实时大文件不做服务端存储 · Relayium</title>
+    <title>Relayium 对比 WeTransfer：加密下载链接与实时递送 · Relayium</title>
     <meta name="description" content="客观对比 Relayium 与 WeTransfer。WeTransfer 擅长异步链接分享；Relayium 的实时模式不在服务端保留文件副本或传输历史，另有零知识加密的存储下载链接。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/zh/compare/wetransfer/" />
@@ -22,7 +22,7 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
-    <meta property="og:title" content="Relayium 对比 WeTransfer：实时大文件不做服务端存储" />
+    <meta property="og:title" content="Relayium 对比 WeTransfer：加密下载链接与实时递送" />
     <meta property="og:description" content="客观对比 Relayium 与 WeTransfer。WeTransfer 擅长异步链接分享；Relayium 的实时模式不在服务端保留文件副本或传输历史，另有零知识加密的存储下载链接。" />
     <meta property="og:url" content="https://relayium.com/zh/compare/wetransfer/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
@@ -32,10 +32,10 @@
     <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Relayium 对比 WeTransfer：实时大文件不做服务端存储" />
+    <meta name="twitter:title" content="Relayium 对比 WeTransfer：加密下载链接与实时递送" />
     <meta name="twitter:description" content="客观对比 Relayium 与 WeTransfer。WeTransfer 擅长异步链接分享；Relayium 的实时模式不在服务端保留文件副本或传输历史，另有零知识加密的存储下载链接。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 WeTransfer：实时大文件不做服务端存储","description":"客观对比 Relayium 与 WeTransfer。WeTransfer 擅长异步链接分享；Relayium 的实时模式不在服务端保留文件副本或传输历史，另有零知识加密的存储下载链接。","inLanguage":"zh-Hans","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/compare/wetransfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"Relayium 对比 WeTransfer：实时大文件不做服务端存储"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"真的没有文件大小限制吗？","acceptedAnswer":{"@type":"Answer","text":"实时模式下没有服务端上限，因为 Relayium 不在服务端保留文件副本或传输历史。同一局域网内浏览器直连；跨网络浏览器按设计使用 TURN，承载中继无法读取或解密的端到端密文。在 Chrome 或 Edge 中，下载会直接流式写入磁盘，所以几 GB 的文件都没问题。在 Firefox 或 Safari 中，当所有流式写盘路径都不适用时，浏览器只能攒在内存里，Relayium 会在超过约 256 MB 时给出提示——这是刻意取的保守估计，不是硬上限。存储下载链接则有与账号绑定的配额。"}},{"@type":"Question","name":"对方不在线怎么办？","acceptedAnswer":{"@type":"Answer","text":"用存储下载链接。你的浏览器会用 AES-256-GCM 加密文件，密钥只留在 URL 片段里，服务器保存的是零知识密文，收件方稍后即可取回。生成链接需要发送方登录，并可设为到期失效或首次下载后即焚。"}},{"@type":"Question","name":"Relayium 免费吗？","acceptedAnswer":{"@type":"Answer","text":"免费。Relayium 采用 AGPL-3.0 许可，是免费开源软件，完整的协议与代码都在 github.com/relayium/relayium。没有付费档去解锁更大的实时传输——大文件的空间来自浏览器的流式写盘，而不是订阅。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 对比 WeTransfer：加密下载链接与实时递送","description":"客观对比 Relayium 与 WeTransfer。WeTransfer 擅长异步链接分享；Relayium 的实时模式不在服务端保留文件副本或传输历史，另有零知识加密的存储下载链接。","inLanguage":"zh-Hans","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/compare/wetransfer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"Relayium 对比 WeTransfer：加密下载链接与实时递送"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"真的没有文件大小限制吗？","acceptedAnswer":{"@type":"Answer","text":"实时模式没有服务端上限，因为 Relayium 不保留服务端文件副本或历史；同一局域网内直连，跨网络经 TURN 承载端到端密文。Chrome 或 Edge 能把实时文件流式写盘，但双方页面必须保持在线，因此大文件更适合使用存储下载链接。链接的单文件上限与账号额度会在上传前显示；Firefox 或 Safari 实时接收放在内存中，超过约 256 MB 时会给出保守提示。"}},{"@type":"Question","name":"对方不在线怎么办？","acceptedAnswer":{"@type":"Answer","text":"用存储下载链接。你的浏览器会用 AES-256-GCM 加密文件，密钥只留在 URL 片段里，服务器保存的是零知识密文，收件方稍后即可取回。生成链接需要发送方登录，并可设为到期失效或首次下载后即焚。"}},{"@type":"Question","name":"Relayium 免费吗？","acceptedAnswer":{"@type":"Answer","text":"免费。Relayium 采用 AGPL-3.0 许可，是免费开源软件，完整的协议与代码都在 github.com/relayium/relayium。没有付费档去解锁更大的实时传输——大文件的空间来自浏览器的流式写盘，而不是订阅。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -69,17 +69,17 @@ footer a{color:var(--text-h);text-decoration:none}
   <body>
     <div class="wrap">
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
-      <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium 对比 WeTransfer：实时大文件不做服务端存储</span></nav>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium 对比 WeTransfer：加密下载链接与实时递送</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
-      <h1>Relayium 对比 WeTransfer：实时大文件不做服务端存储</h1>
+      <h1>Relayium 对比 WeTransfer：加密下载链接与实时递送</h1>
       <p class="updated">最近更新: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/compare/wetransfer/">English</a><a href="/zh/compare/wetransfer/" aria-current="true">中文</a><a href="/ja/compare/wetransfer/">日本語</a><a href="/ko/compare/wetransfer/">한국어</a><a href="/de/compare/wetransfer/">Deutsch</a><a href="/fr/compare/wetransfer/">Français</a><a href="/ar/compare/wetransfer/">العربية</a><a href="/es/compare/wetransfer/">Español</a><a href="/pt/compare/wetransfer/">Português</a></nav>
       <p class="lead">WeTransfer 让发送大文件变得轻松：拖入文件、拿到链接，对方随时下载——哪怕你发送时对方并不在线。这种异步、收件方无需账号的体验确实很好，也正是许多人选择它的原因。</p>
-      <p class="lead">本文客观对比这两者。WeTransfer 的长处是成熟的、基于链接的分享，文件在服务器上等待被下载。Relayium 的重点不同：实时传输不在服务端保留文件副本或传输历史；同一局域网内浏览器直连，跨网络浏览器则按设计使用 TURN。此外还有一个可选的、始终零知识加密的存储链接。两者并非谁更好，而是各自解决略有不同的问题。</p>
+      <p class="lead">本文客观对比这两者。大文件或稍后再取时，Relayium 同样推荐存储链接；不同之处是服务器只保存零知识密文。实时模式是另一项能力，适合双方保持在线时快速递送小文件和文本：同一局域网内直连，跨网络经 TURN 承载端到端密文。</p>
       <h2>WeTransfer 做得好的地方</h2>
       <p>WeTransfer 的核心思路是异步：发送方上传一次、拿到链接，收件方稍后再下载。两个人不必同时在线——当你把一段视频发给明天才会打开它的客户时，这正是你想要的。</p>
       <p>它也成熟、顺滑。无需安装任何软件，免费档不用账号即可发送，界面以简洁著称。在大小上限之内做偶尔的链接分享，它确实好用。</p>
@@ -97,13 +97,13 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>大小上限：WeTransfer 免费档每次传输上限 2 GB；Relayium 实时模式无服务器端上限（Chrome/Edge 流式写盘；浏览器只能攒内存时，Relayium 会在超过约 256 MB 时给出提示）。</li><li>文件存放：WeTransfer 把文件存在它的服务器上；Relayium 实时模式不在服务端保留文件副本或传输历史。同一局域网内浏览器直连，跨网络浏览器按设计使用 TURN 承载其无法读取或解密的端到端密文。</li><li>加密：WeTransfer 在传输与静态存储时加密，但密钥由它持有；Relayium 端到端加密并带 6 位 SAS 校验码，存储链接为零知识，密钥只在 URL 片段里。</li><li>收件方离线：两者都能应对——WeTransfer 靠它的存储链接，Relayium 靠零知识存储下载链接，可设到期或下载后即焚。</li><li>完整性与续传：Relayium 用 SHA-256 校验每个文件，并可在传输中断后续传而非重来。</li><li>费用与开放：Relayium 免费且采用 AGPL-3.0 许可，代码在 github.com/relayium/relayium；在浏览器中运行，覆盖 Windows、macOS、Linux、Android 和 iOS，无需安装。</li></ul>
       <h2>常见问题</h2>
       <h3>真的没有文件大小限制吗？</h3>
-      <p>实时模式下没有服务端上限，因为 Relayium 不在服务端保留文件副本或传输历史。同一局域网内浏览器直连；跨网络浏览器按设计使用 TURN，承载中继无法读取或解密的端到端密文。在 Chrome 或 Edge 中，下载会直接流式写入磁盘，所以几 GB 的文件都没问题。在 Firefox 或 Safari 中，当所有流式写盘路径都不适用时，浏览器只能攒在内存里，Relayium 会在超过约 256 MB 时给出提示——这是刻意取的保守估计，不是硬上限。存储下载链接则有与账号绑定的配额。</p>
+      <p>实时模式没有服务端上限，因为 Relayium 不保留服务端文件副本或历史；同一局域网内直连，跨网络经 TURN 承载端到端密文。Chrome 或 Edge 能把实时文件流式写盘，但双方页面必须保持在线，因此大文件更适合使用存储下载链接。链接的单文件上限与账号额度会在上传前显示；Firefox 或 Safari 实时接收放在内存中，超过约 256 MB 时会给出保守提示。</p>
       <h3>对方不在线怎么办？</h3>
       <p>用存储下载链接。你的浏览器会用 AES-256-GCM 加密文件，密钥只留在 URL 片段里，服务器保存的是零知识密文，收件方稍后即可取回。生成链接需要发送方登录，并可设为到期失效或首次下载后即焚。</p>
       <h3>Relayium 免费吗？</h3>
       <p>免费。Relayium 采用 AGPL-3.0 许可，是免费开源软件，完整的协议与代码都在 github.com/relayium/relayium。没有付费档去解锁更大的实时传输——大文件的空间来自浏览器的流式写盘，而不是订阅。</p>
       <div class="ctacard">
-        <p>现在就发一个大文件——无大小上限、无需安装，同一网络下也无需账号。</p>
+        <p>大文件请留一条加密下载链接；快速递送小文件或文本时，让双方连上后实时发送。</p>
         <a class="cta" href="/?lang=zh">立即试用 Relayium</a>
       </div>
       <h2>继续阅读</h2>

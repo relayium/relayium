@@ -38,6 +38,7 @@ describe("content icon ownership", () => {
     expect(cases).toContain('<Icon name={CASE_ICONS[i]} size={22} />');
 
     const compare = source("ModeCompare.svelte");
+    expect(compare).toContain('<Icon name="network" />');
     expect(compare).toContain('<Icon name="bolt" />');
     expect(compare).toContain('<Icon name="package" />');
   });

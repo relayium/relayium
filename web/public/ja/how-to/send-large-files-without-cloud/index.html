@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>クラウドを使わずに大きなファイルを送る方法 · Relayium</title>
-    <meta name="description" content="数ギガバイトの動画やプロジェクトアーカイブをブラウザ間でライブ転送。同じ LAN の WebRTC は直接接続し、ネットワークをまたぐブラウザは TURN でエンドツーエンド暗号文を運び、リアルタイム内容のサーバー側コピーや履歴は残しません。" />
+    <meta name="description" content="大きな動画やプロジェクトアーカイブにはエンドツーエンド暗号化ダウンロードリンクを作り、相手が後で取得できるようにします。双方がオンラインを保てる場合はリアルタイムも選べます。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/how-to/send-large-files-without-cloud/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-large-files-without-cloud/" />
@@ -23,7 +23,7 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
     <meta property="og:title" content="クラウドを使わずに大きなファイルを送る方法" />
-    <meta property="og:description" content="数ギガバイトの動画やプロジェクトアーカイブをブラウザ間でライブ転送。同じ LAN の WebRTC は直接接続し、ネットワークをまたぐブラウザは TURN でエンドツーエンド暗号文を運び、リアルタイム内容のサーバー側コピーや履歴は残しません。" />
+    <meta property="og:description" content="大きな動画やプロジェクトアーカイブにはエンドツーエンド暗号化ダウンロードリンクを作り、相手が後で取得できるようにします。双方がオンラインを保てる場合はリアルタイムも選べます。" />
     <meta property="og:url" content="https://relayium.com/ja/how-to/send-large-files-without-cloud/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -33,9 +33,9 @@
     <meta property="og:locale" content="ja_JP" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="クラウドを使わずに大きなファイルを送る方法" />
-    <meta name="twitter:description" content="数ギガバイトの動画やプロジェクトアーカイブをブラウザ間でライブ転送。同じ LAN の WebRTC は直接接続し、ネットワークをまたぐブラウザは TURN でエンドツーエンド暗号文を運び、リアルタイム内容のサーバー側コピーや履歴は残しません。" />
+    <meta name="twitter:description" content="大きな動画やプロジェクトアーカイブにはエンドツーエンド暗号化ダウンロードリンクを作り、相手が後で取得できるようにします。双方がオンラインを保てる場合はリアルタイムも選べます。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"クラウドを使わずに大きなファイルを送る方法","description":"数ギガバイトの動画やプロジェクトアーカイブをブラウザ間でライブ転送。同じ LAN の WebRTC は直接接続し、ネットワークをまたぐブラウザは TURN でエンドツーエンド暗号文を運び、リアルタイム内容のサーバー側コピーや履歴は残しません。","inLanguage":"ja","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-large-files-without-cloud/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"クラウドを使わずに大きなファイルを送る方法"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"送れるファイルの最大サイズは？","acceptedAnswer":{"@type":"Answer","text":"リアルタイムモードにサーバー側の制限はありません。上限は受信側のブラウザ次第です。パソコン版の Chrome や Edge ではファイルがディスクへストリーミングされるため、メモリを使い切らずに数十 GB を送れます。Firefox と Safari には File System Access API がないため、受け取った分はメモリに溜められることになり、およそ 256 MB を超えると Relayium が警告します。これは実測した天井ではなく控えめな見積もりで、本当の限界は端末のメモリ・OS・ほかに何を開いているかで決まります。"}},{"@type":"Question","name":"転送が中断されたらどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"自動的に再開します。転送の途中で接続が切れても（Wi-Fi の切断、ノートPCのスリープ、ネットワークの切り替えなど）、Relayium はファイル全体をやり直すのではなく止まった所から続けるので、長い転送が一瞬の不調で無駄になりません。"}},{"@type":"Question","name":"大きなファイルでプライバシーはどう守られますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイム転送は X25519 の鍵交換とチャンクごとの AES-256-GCM でエンドツーエンドに暗号化され、鍵はどのサーバーにも届きません。高度な検証（既定はオフ）をオンにすると両端末が6桁の検証コードを表示します。各ファイルは SHA-256 で検証します。同じ LAN の WebRTC は直接接続し、ネットワークをまたぐブラウザは設計上 TURN を使用します。リレーは暗号文を運ぶだけで読み取りも復号もできません。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"クラウドを使わずに大きなファイルを送る方法","description":"大きな動画やプロジェクトアーカイブにはエンドツーエンド暗号化ダウンロードリンクを作り、相手が後で取得できるようにします。双方がオンラインを保てる場合はリアルタイムも選べます。","inLanguage":"ja","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-large-files-without-cloud/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"クラウドを使わずに大きなファイルを送る方法"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"送れるファイルの最大サイズは？","acceptedAnswer":{"@type":"Answer","text":"大きなファイルには保存型ダウンロードリンクを使ってください。1ファイル上限と容量枠はアップロード前に表示されます。リアルタイムにはサーバー側上限がなく、パソコン版 Chrome／Edge はディスクへ流せますが、双方のページを開いたままにする必要があります。Firefox／Safari のリアルタイム受信はメモリに保持され、約256 MBを超えると保守的な警告を表示します。"}},{"@type":"Question","name":"転送が中断されたらどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"双方のページが動作中なら、一時的な接続切れは保存済みチェックポイントから再開できます。ページを閉じる／再読み込みする、または App セッションを終了するとライブ転送は終了します。保存リンクでは受信者のオンラインは不要ですが、送信側はアップロード完了までページを開く必要があります。"}},{"@type":"Question","name":"大きなファイルでプライバシーはどう守られますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイム転送は X25519 の鍵交換とチャンクごとの AES-256-GCM でエンドツーエンドに暗号化され、鍵はどのサーバーにも届きません。高度な検証（既定はオフ）をオンにすると両端末が6桁の検証コードを表示します。各ファイルは SHA-256 で検証します。同じ LAN の WebRTC は直接接続し、ネットワークをまたぐブラウザは設計上 TURN を使用します。リレーは暗号文を運ぶだけで読み取りも復号もできません。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -79,33 +79,33 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="updated">最終更新: 2026-07-31</p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud/">English</a><a href="/zh/how-to/send-large-files-without-cloud/">中文</a><a href="/ja/how-to/send-large-files-without-cloud/" aria-current="true">日本語</a><a href="/ko/how-to/send-large-files-without-cloud/">한국어</a><a href="/de/how-to/send-large-files-without-cloud/">Deutsch</a><a href="/fr/how-to/send-large-files-without-cloud/">Français</a><a href="/ar/how-to/send-large-files-without-cloud/">العربية</a><a href="/es/how-to/send-large-files-without-cloud/">Español</a><a href="/pt/how-to/send-large-files-without-cloud/">Português</a></nav>
       <p class="lead">20 GB の動画書き出しや重いプロジェクトのアーカイブは、まさにクラウドストレージが最も遅く感じる場面です。ファイル全体を一度アップロードして待ち、相手がもう一度ダウンロードします。2回の完全な転送に加え、ストレージ容量の制限も受けます。一度きりの受け渡しなのに、A から B へ送るだけのバイトのために、これだけの複製と待ち時間がかかります。</p>
-      <p class="lead">Relayium は後でダウンロードするためにアップロードするのではなく、ファイルをライブでストリーミングします。同じ LAN では WebRTC が直接接続し、ネットワークをまたぐブラウザセッションは設計上 TURN を使って、リレーが読み取りも復号もできないエンドツーエンド暗号文を運びます。Relayium はリアルタイム内容や転送履歴を保存しません。本ガイドでは、ブラウザごとのサイズ上限と双方が通常同時にオンラインである必要も説明します。</p>
-      <h2>大きなファイルで直接転送が有利な理由</h2>
-      <p>クラウドストレージでは大きなファイルを保存用にアップロードし、後でダウンロードするため、その間ストレージ容量も消費します。Relayium のリアルタイム経路は継続的にストリーミングします。同じ LAN では WebRTC が直接接続し、ネットワークをまたぐブラウザは TURN でエンドツーエンド暗号文を転送します。どちらでもサーバー側の内容コピーやリアルタイム履歴は残りません。</p>
-      <p>Relayium は完全にブラウザ内で動作するため、どちらの端末にもインストールは不要です。Windows、macOS、Linux、Android、iOS で動きます。同じネットワークならリアルタイム転送にアカウントは要りません。ネットワークをまたいでペアリングコードで送る場合も送信側がサインインするだけです。両方の端末で relayium.com を開いて接続するだけです。</p>
+      <p class="lead">大きなファイルでは、Relayium はエンドツーエンド暗号化された保存型ダウンロードリンクを推奨します。アップロード中に受信者がオンラインである必要はなく、後で取得できます。送信側はアップロード完了までページを開き、その後リンクは期限まで残ります。双方がオンラインを保てる場合、リアルタイムはライブの選択肢です。同じ LAN では WebRTC が直接接続し、ネットワーク間では TURN が暗号文を運びます。リアルタイム内容やサーバー側のコピーは残しません。</p>
+      <h2>大きなファイルで保存リンクを既定にする理由</h2>
+      <p>Relayium のダウンロードリンクが保存するのはブラウザで暗号化された暗号文だけです。アップロード中に受信者はオフラインでもよく、後で取得できます。完了後に送信側がページを閉じても、リンクは期限まで残ります。制約は画面に表示される1ファイル上限、容量枠、有効期限です。</p>
+      <p>リアルタイムは双方が今すぐ準備できる場合の選択肢です。同じ LAN ではアカウントなしで WebRTC が直接接続し、ネットワーク間では TURN がエンドツーエンド暗号文を運び、コード作成側がサインインします。双方のページを開いたままにする必要があるため、時間のかかる大容量転送より、小さなファイルやテキストの素早い受け渡しに向きます。</p>
       <h2>リアルタイムモードにはサイズ上限がない</h2>
       <p>Relayium は内容のコピーを保持しないため、リアルタイム転送にサーバー側ストレージのサイズ制限はありません。ネットワークをまたぐ際は TURN が両者のオンライン中に暗号文を運びますが、読み取りも復号もできず、転送履歴として保持しません。実際の上限は受信側ブラウザが決めます。</p>
-      <p>Chrome と Edge では、届いたファイルは到着に合わせてそのままディスクへストリーミングされるため、メモリに収める必要がありません。これが非常に大きなファイルに使うべき組み合わせで、数十 GB まで余裕です。1バッチには最大1,000ファイルを入れられ、それぞれが SHA-256 ハッシュでエンドツーエンドに検証されるので、ディスクに残るものは送ったものとバイト単位で同一です。</p>
+      <p>Chrome と Edge ではリアルタイム受信をディスクへ直接流せるため、技術的には数十 GB も扱えます。ただし大きなファイルの既定として推奨する意味ではありません。ライブセッションでは双方のページを開いたままにする必要があります。1バッチ最大1,000ファイルで、それぞれ SHA-256 で検証されます。</p>
       <ul><li>受信側がパソコン版の Chrome または Edge：ファイルはそのままディスクへストリーミングされるため、実質的にサイズ上限はありません。</li><li>Firefox と Safari には File System Access API がないため、リアルタイム受信の1バッチはメモリに保持されます。およそ 256 MB を超えると Relayium が警告します。これは硬い上限ではなく、意図的に控えめに置いた目安です。</li><li>1バッチ最大1,000ファイル、それぞれ到着時に固有の SHA-256 ハッシュで検証されます。</li></ul>
       <h2>最初からではなく再開する</h2>
-      <p>大きな転送には時間がかかり、その時間こそ Wi-Fi が切れ、ノートPCがスリープし、スマホがネットワークを切り替える瞬間です。Relayium はそれに備えて作られています。途中で接続が切れても、転送はファイル全体をやり直すのではなく、止まった所から再開します。</p>
+      <p>双方のライブページが動作中なら、一時的な通信切断は保存済みのチェックポイントから再開できます。一方、どちらかのページを閉じる／再読み込みする、または App セッションを終了するとライブ転送は終了し、新たな受け渡しが必要です。これも大きなファイルで保存リンクを優先する理由です。</p>
       <p>接続性も同じように扱われます。同一ネットワーク内では転送はデバイス間で直接行われ、ネットワークをまたぐ場合は暗号化ストリームが TURN リレーを経由します。リレーが見るのは暗号文だけなので、この経路でもエンドツーエンド暗号化のままです。</p>
       <h2>今すぐ送る、または後で取れるリンクを残す</h2>
       <p>リアルタイム転送は双方が同時にオンラインであることが必要で、都合を合わせられるときに最適です。相手が今いない場合は、代わりに保存型のダウンロードリンクを作成できます。</p>
-      <p>保存リンクはゼロ知識です。ブラウザがアップロード前に AES-256-GCM でファイルを暗号化し、復号鍵は URL フラグメントにだけ存在するため、サーバーは読めない暗号文を保持します。トレードオフも把握してください。リンクの作成には送信側のサインインが必要で、リンクはストレージ容量を消費し、有効期限があります（初回ダウンロード後に消去する設定も可能）。リンク経由には利点もあります。そのダウンロードページは Firefox や Safari でも Service Worker を使って単一ファイルをディスクへストリーミングできるため、受信側ブラウザのメモリが制約になりません。最大のファイルでは、双方がオンラインになれるなら、リアルタイムの経路が常に最もすっきりした選択肢です。</p>
+      <p>保存リンクはゼロ知識です。ブラウザがアップロード前に AES-256-GCM で暗号化し、復号鍵は URL フラグメントにだけ存在します。作成には送信側のサインインが必要で、容量枠を使い、有効期限があります。ダウンロードページは Firefox や Safari でも Service Worker で単一ファイルをディスクへ流せます。大きなファイルほど保存リンクを先に選びます。アップロード中に受信者はオンライン不要ですが、送信側は完了までページを開きます。その後はどちらがノートPCを閉じても期限までリンクが残ります。ライブ経路は双方が机の前にいて、今すぐ届けたいときの手段です。</p>
       <h2>よくある質問</h2>
       <h3>送れるファイルの最大サイズは？</h3>
-      <p>リアルタイムモードにサーバー側の制限はありません。上限は受信側のブラウザ次第です。パソコン版の Chrome や Edge ではファイルがディスクへストリーミングされるため、メモリを使い切らずに数十 GB を送れます。Firefox と Safari には File System Access API がないため、受け取った分はメモリに溜められることになり、およそ 256 MB を超えると Relayium が警告します。これは実測した天井ではなく控えめな見積もりで、本当の限界は端末のメモリ・OS・ほかに何を開いているかで決まります。</p>
+      <p>大きなファイルには保存型ダウンロードリンクを使ってください。1ファイル上限と容量枠はアップロード前に表示されます。リアルタイムにはサーバー側上限がなく、パソコン版 Chrome／Edge はディスクへ流せますが、双方のページを開いたままにする必要があります。Firefox／Safari のリアルタイム受信はメモリに保持され、約256 MBを超えると保守的な警告を表示します。</p>
       <h3>転送が中断されたらどうなりますか？</h3>
-      <p>自動的に再開します。転送の途中で接続が切れても（Wi-Fi の切断、ノートPCのスリープ、ネットワークの切り替えなど）、Relayium はファイル全体をやり直すのではなく止まった所から続けるので、長い転送が一瞬の不調で無駄になりません。</p>
+      <p>双方のページが動作中なら、一時的な接続切れは保存済みチェックポイントから再開できます。ページを閉じる／再読み込みする、または App セッションを終了するとライブ転送は終了します。保存リンクでは受信者のオンラインは不要ですが、送信側はアップロード完了までページを開く必要があります。</p>
       <h3>大きなファイルでプライバシーはどう守られますか？</h3>
       <p>リアルタイム転送は X25519 の鍵交換とチャンクごとの AES-256-GCM でエンドツーエンドに暗号化され、鍵はどのサーバーにも届きません。高度な検証（既定はオフ）をオンにすると両端末が6桁の検証コードを表示します。各ファイルは SHA-256 で検証します。同じ LAN の WebRTC は直接接続し、ネットワークをまたぐブラウザは設計上 TURN を使用します。リレーは暗号文を運ぶだけで読み取りも復号もできません。</p>
       <div class="ctacard">
-        <p>次の数ギガバイトのファイルをリアルタイムで送りましょう。インストール不要で、同じネットワークならアカウントも不要です。</p>
+        <p>次の数ギガバイトのファイルをクラウドなしで。暗号化したダウンロードリンクを残すか、両方の端末をつないでいま送るか。インストール不要で、同じネットワークならアカウントも不要です。</p>
         <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
       </div>
       <h2>続けて読む</h2>
-      <ul class="related"><li><a href="/ja/how-to/send-a-folder/">ファイルではなくフォルダごと送る方法</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link/">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/compare/wetransfer/">Relayium と WeTransfer の比較：サーバー側に保存せず大容量をリアルタイム転送</a></li><li><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">P2P（ピアツーピア）ファイル転送とは？</a></li><li><a href="/ja/">Relayium</a></li></ul>
+      <ul class="related"><li><a href="/ja/how-to/send-a-folder/">ファイルではなくフォルダごと送る方法</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link/">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/compare/wetransfer/">Relayium と WeTransfer の比較：暗号化リンクとリアルタイム受け渡し</a></li><li><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">P2P（ピアツーピア）ファイル転送とは？</a></li><li><a href="/ja/">Relayium</a></li></ul>
       </main>
       <footer>
         <a href="/?lang=ja">← Relayium</a>
