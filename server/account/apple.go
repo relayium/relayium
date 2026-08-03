@@ -15,8 +15,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/relayium/relayium/httpx"
 )
 
 // appleIssuer is the fixed `iss` claim in every Sign in with Apple identity token.
@@ -27,7 +25,14 @@ const appleKeysURL = "https://appleid.apple.com/auth/keys"
 
 // appleClaims is the subset of a verified Apple identity token we consume.
 type appleClaims struct {
-	Sub            string // stable per-user Apple id — the primary account key
+	Sub string // stable per-user Apple id — the primary account key
+	// Aud is the client id the token was minted FOR: the app's Bundle ID for a
+	// native authorization, the web Services ID for the browser flow. Both are
+	// in the cryptographic allowlist (cfg.AppleClientIDs), so verification alone
+	// cannot tell them apart — the native route needs the value itself, both to
+	// refuse the Web audience and to name the client the one-time code is
+	// exchanged as.
+	Aud            string
 	Email          string // present on first authorization (and while unchanged)
 	EmailVerified  bool
 	IsPrivateEmail bool // true = Apple private-relay address (…@privaterelay.appleid.com)
@@ -117,7 +122,7 @@ func (s *Service) verifyAppleIDToken(ctx context.Context, idToken, expectedNonce
 		return appleClaims{}, errors.New("apple: nonce mismatch")
 	}
 	return appleClaims{
-		Sub: c.Sub, Email: normEmail(c.Email),
+		Sub: c.Sub, Aud: c.Aud, Email: normEmail(c.Email),
 		EmailVerified: bool(c.EmailVerified), IsPrivateEmail: bool(c.IsPrivateEmail),
 	}, nil
 }
@@ -129,88 +134,6 @@ func containsStr(ss []string, want string) bool {
 		}
 	}
 	return false
-}
-
-// handleAppleNative logs a native (iOS/macOS) app in with a Sign in with Apple
-// identity token and returns a bearer token. Dormant until EnableApple is set.
-// Resolution order: by the stable Apple `sub` first (Apple only returns the
-// email on the FIRST authorization), falling back to email-based account
-// creation/linking on that first sign-in.
-func (s *Service) handleAppleNative(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		IDToken string `json:"idToken"`
-		Nonce   string `json:"nonce"`
-		Name    string `json:"name"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&in); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	claims, err := s.verifyAppleIDToken(r.Context(), in.IDToken, in.Nonce)
-	if err != nil {
-		httpx.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_token"})
-		return
-	}
-	u, found, err := s.store.GetUserByIdentity(r.Context(), "apple", claims.Sub)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	if !found {
-		// First sign-in for this Apple id. Apple only gives us the email now, so
-		// this is our one chance to create/link the account by it.
-		if claims.Email == "" {
-			httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "no_email_first_signin"})
-			return
-		}
-		u, err = s.store.UpsertUserByEmail(r.Context(), claims.Email, in.Name)
-		if err != nil {
-			http.Error(w, "server error", http.StatusInternalServerError)
-			return
-		}
-		if s.frozenBlocked(w, u) {
-			return
-		}
-		if err := s.store.LinkIdentity(r.Context(), "apple", claims.Sub, u.ID); err != nil {
-			http.Error(w, "server error", http.StatusInternalServerError)
-			return
-		}
-		if claims.EmailVerified {
-			// Pre-hijack defense: drop any password planted on this email while
-			// unverified, before Apple verifies it (see dropUnverifiedPassword).
-			// Gate verification on the drop succeeding — verifying while a planted
-			// password survives is exactly the takeover we're closing, so on error
-			// we must NOT flip the account to verified (mirrors oauth.go).
-			if err := s.dropUnverifiedPassword(r.Context(), u.ID); err != nil {
-				http.Error(w, "server error", http.StatusInternalServerError)
-				return
-			}
-			if err := s.store.SetEmailVerified(r.Context(), u.ID); err != nil {
-				http.Error(w, "server error", http.StatusInternalServerError)
-				return
-			}
-		}
-	} else if s.frozenBlocked(w, u) {
-		return
-	}
-	s.finishNativeLogin(w, r, u.ID, "App (Apple)")
-}
-
-// frozenBlocked writes the pending-deletion response and reports true when the
-// account is scheduled for deletion, so a frozen account never gets a token.
-func (s *Service) frozenBlocked(w http.ResponseWriter, u User) bool {
-	if u.DeletedAt == 0 {
-		return false
-	}
-	raw, err := s.issueReactivateToken(context.Background(), u.ID, u.Email)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return true
-	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"status": "pending_deletion", "purgeAfter": u.PurgeAfter, "reactivateToken": raw,
-	})
-	return true
 }
 
 // ── Apple public-key (JWKS) store ────────────────────────────────────────────

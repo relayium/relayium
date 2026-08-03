@@ -215,10 +215,14 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// The macOS browser device flow.
     ///
     /// It used to be labelled "Sign in with Apple", which was a claim about a
-    /// mechanism this app does not implement: it opens relayium.com in a sheet
-    /// and polls `/api/cli/device/*` for an approval. The wording now names what
-    /// actually happens, so the button no longer impersonates a native
-    /// `ASAuthorizationAppleIDButton` that no entitlement backs.
+    /// mechanism the macOS app does not implement: it opens relayium.com in a
+    /// sheet and polls `/api/cli/device/*` for an approval. The wording now
+    /// names what actually happens.
+    ///
+    /// iOS ships the real system button instead (`SignInView`), and this key is
+    /// not rendered there. The macOS app still cannot: a Developer ID build
+    /// cannot carry `com.apple.developer.applesignin`, so the honest control on
+    /// that platform stays a browser sign-in until a Mac App Store track exists.
     case loginBrowserSignIn = "login.browserSignIn"
     /// The submit button in create-account mode.
     case loginCreateAccount = "login.createAccount"
@@ -231,6 +235,16 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// through `error.account.passwordTooShort`.
     case loginErrorEmailMissing = "login.errorEmailMissing"
     case loginErrorPasswordsDiffer = "login.errorPasswordsDiffer"
+    /// Separates the email/password form from Sign in with Apple.
+    ///
+    /// One word, and it is in the catalog rather than a literal because it is
+    /// the shortest kind of copy that goes wrong silently: an English "or" in
+    /// the middle of an Arabic screen. There is deliberately no key for the
+    /// Apple button's own label — the system button carries Apple's wording,
+    /// already localized and already correct for sign-in versus sign-up, and
+    /// re-titling it would be both a guideline violation and a translation we
+    /// would then own.
+    case loginAppleDivider = "login.appleDivider"
 
     // MARK: - Direct hub and verification setting
 
@@ -572,6 +586,30 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case errorAccountPasswordTooShort = "error.account.passwordTooShort"
     case errorAccountEmailTaken = "error.account.emailTaken"
     case errorAccountPendingDeletion = "error.account.pendingDeletion"
+    /// Native Sign in with Apple. Four sentences for two very different kinds
+    /// of failure, and none of them may reuse `error.account.invalidCredentials`
+    /// — that one tells the user to check an email and a password, and an Apple
+    /// authorization involves neither.
+    ///
+    /// The server refused the credential: the identity token, its audience, or
+    /// the one-time authorization code. All of those are one fact to the user.
+    case errorAppleRejected = "error.apple.rejected"
+    /// The exchange could not be completed with Apple at all — an outage, or a
+    /// server that holds no Apple key. The only one of the four worth retrying
+    /// unchanged, so it is the only one that says so.
+    case errorAppleUnavailable = "error.apple.unavailable"
+    /// Apple returned no address for an identity that has not been linked here.
+    /// The copy points to the system authorization record that can be reset;
+    /// displaying server status 400 would give the user nothing to act on.
+    case errorAppleEmailUnavailable = "error.apple.emailUnavailable"
+    /// The authorization came back without the identity token or the one-time
+    /// code, so nothing was sent. It may not describe a refusal: no server ever
+    /// saw this attempt.
+    case errorAppleIncompleteCredential = "error.apple.incompleteCredential"
+    /// `AuthenticationServices` itself failed. Deliberately NOT rendered for a
+    /// user who cancelled — cancelling asks for nothing to happen, and an error
+    /// sentence is something happening.
+    case errorAppleAuthorizationFailed = "error.apple.authorizationFailed"
     /// %@ — an OSStatus, verbatim.
     case errorKeychainSignIn = "error.keychain.signIn"
     /// %@ — an OSStatus, verbatim.

@@ -116,12 +116,79 @@ that by name. Other explicit web hand-offs remain: billing, the reactivation
 link for an account inside its deletion grace period, and the macOS browser
 sign-in fallback described below.
 
-macOS additionally offers a **browser sign-in fallback** — an
+### Sign in with Apple
+
+**iOS has it natively; macOS does not, and says so.**
+
+On iOS the account form renders the real `SignInWithAppleButton` in both modes
+(`.signIn` / `.signUp`, so the system supplies Apple's own localized label). Each
+tap mints a fresh 32-byte base64url nonce and an opaque OAuth `state`, puts both on the
+`ASAuthorizationAppleIDRequest` — raw, because Apple echoes it verbatim into the
+identity token's `nonce` claim — and asks for `.fullName` and `.email`, the two
+things Apple sends on a first authorization only. The nonce is held as the form's
+own state for exactly that attempt: a completion arriving with no pending attempt,
+or with an OAuth `state` belonging to a superseded attempt, is refused rather than
+sent with a nonce its token cannot match. A user cancelling is silent; anything
+else gets localized, non-sensitive copy.
+
+The server side is the point of the slice. `POST /api/auth/apple/native` used to
+accept `{idToken, nonce, name}` and mint a bearer on the identity token alone. It
+now requires the one-time **authorization code** too and, in order:
+
+1. verifies the presented identity token (signature, `iss`, `aud` ∈
+   `RELAYIUM_APPLE_CLIENT_IDS`, `exp`, and this attempt's nonce);
+2. **refuses the web Services ID audience** — that allowlist is shared with the
+   browser flow, so a web identity token would otherwise verify here and buy a
+   native bearer. Refused *before* any code is spent;
+3. redeems the code at Apple's token endpoint as the verified audience, with a
+   client_secret JWT signed for that same client (the signer and its cache are
+   now keyed by client id; the web flow keeps the Services ID and its redirect
+   URI, unchanged);
+4. verifies the id_token Apple returns and requires the **same** `aud`, `sub` and
+   `nonce` as the presented one.
+
+Anything missing, used, mismatched or unreachable fails closed and mints no
+bearer and no device row: 400 `invalid_request`, 401 `invalid_token` /
+`invalid_audience` / `invalid_code` / `token_mismatch`, 502 `apple_unavailable`,
+503 `apple_not_configured`. Apple's code is single-use and lives five minutes, so
+redeeming it is what makes a captured identity token useless. Nothing on this
+path logs a token, a code or a nonce.
+
+The exceptional 400 `no_email_first_signin` has dedicated native copy directing
+the user to reset Relayium under the device's Sign in with Apple settings; it is
+not rendered as an unexplained HTTP status.
+
+`com.apple.developer.applesignin = [Default]` is now the iOS app's **only**
+entitlement, and `DEVELOPMENT_TEAM` is set on the iOS target so a signed build
+can resolve a profile for it.
+
+**Manual preconditions this repository cannot satisfy**, and which no simulator
+or unsigned build proves:
+
+- the `com.relayium.app` App ID and its provisioning profile must carry the Sign
+  in with Apple capability;
+- production `RELAYIUM_APPLE_CLIENT_IDS` must include `com.relayium.app`, and the
+  deployment must hold the Apple Team ID, Key ID and `.p8` key (without them the
+  route answers 503 rather than pretending);
+- the live flow — a real Apple ID on a signed device build, through to an account
+  — has not been run. Simulator evidence is compile-and-render evidence only.
+
+**Deferred, and launch-blocking:** the exchange consumes the authorization code
+but stores no Apple refresh or access token. Apple's account-lifecycle guidance
+expects that storage for periodic re-validation and programmatic revocation, plus
+server-to-server revocation notifications and an in-app deletion path built on
+them. Until those exist, this slice is a hardened sign-in, not a handled Apple
+account lifecycle.
+
+macOS keeps its **browser sign-in fallback** instead — an
 `ASWebAuthenticationSession` sheet on relayium.com plus a poll of
-`/api/cli/device/*`. It was labelled "Sign in with Apple", which was a claim
-about a mechanism this app does not implement: there is no Apple-ID API and no
-`applesignin` entitlement anywhere in the tree. The action is unchanged; the
-label now names what it does. Native Sign in with Apple remains a later slice.
+`/api/cli/device/*`. It was once labelled "Sign in with Apple", which was a claim
+about a mechanism that app does not implement; the label now names what it does.
+It stays that way here on distribution grounds, not oversight: the shipped
+evidence is that a Developer ID (non-Mac-App-Store) build cannot carry
+`applesignin`, so native Apple sign-in on macOS waits for a Mac App Store track.
+`MacSurfaceGuardTests.testMacDidNotInheritTheIOSNativeAppleSignIn` asserts the
+Mac target gained no Apple-ID API and no entitlement in this slice.
 
 **Not verified by hand.** The whole registration path — a real address, the
 email arriving, the link, and the sign-in afterwards — has not been run against
@@ -762,11 +829,14 @@ model reaches only after `ManifestWriter.finish()` returned.
 
 ### Capabilities
 
-`Relayium.entitlements` is empty on purpose. No Associated Domains (so no
-`onOpenURL`: nothing could deliver a URL, and wiring it would read like
-universal-link support that does not exist), no keychain access group, no local
-network, no background modes, no push, no Sign in with Apple. Each entitlement
-lands with the functional slice that needs it.
+`Relayium.entitlements` claims exactly one capability:
+`com.apple.developer.applesignin = [Default]`, which arrived with the native
+Sign in with Apple button described above. Still absent: Associated Domains (so
+no `onOpenURL`: nothing could deliver a URL, and wiring it would read like
+universal-link support that does not exist), keychain access group, local
+network, background modes, push, IAP. Each entitlement lands with the functional
+slice that needs it, and `IOSSurfaceGuardTests` fails on any other key appearing
+in the file.
 
 ### Not verified yet
 
@@ -776,6 +846,8 @@ end-to-end receive against a real link; the `Received` folder actually appearing
 under *On My iPhone ▸ Relayium* in Files (the two `Info.plist` keys are the
 documented way to get it, but this build has not been looked at in Files);
 *Save to Files* accepting a **directory** item from the share sheet; VoiceOver;
-the largest Dynamic Type sizes; and in-app registration end to end (see
-"Accounts, in the app" above — the layer below the views is covered by
-`swift test`, the live path is not).
+the largest Dynamic Type sizes; in-app registration end to end (see "Accounts,
+in the app" above — the layer below the views is covered by `swift test`, the
+live path is not); and **native Sign in with Apple on a signed device against a
+real Apple ID**, which additionally needs the App ID capability and the server
+audience listed under "Sign in with Apple" above.

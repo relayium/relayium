@@ -87,7 +87,7 @@ type Config struct {
 	AppleTeamID          string            // client_secret `iss`
 	AppleKeyID           string            // .p8 Key ID; client_secret JWT header `kid`
 	AppleRedirect        string            // derived: BaseURL + /api/auth/apple/web/callback
-	ApplePrivateKey      *ecdsa.PrivateKey // parsed .p8; nil when web SiwA is off
+	ApplePrivateKey      *ecdsa.PrivateKey // parsed .p8; nil when code exchange is off
 	AppleDomainAssocFile string            // path to apple-developer-domain-association.txt
 	AdminUser            string
 	AdminPassword        string
@@ -146,15 +146,26 @@ type Service struct {
 	// to Apple's token endpoint using a client_secret JWT signed with
 	// cfg.ApplePrivateKey (implemented in Task 3).
 	exchangeAppleCode func(ctx context.Context, code string) (idToken string, err error)
+	// exchangeAppleNativeCode redeems a NATIVE app's one-time authorization code
+	// as `clientID` — the Bundle ID audience already verified in the presented
+	// identity token. Separate from the web hook rather than a widened version of
+	// it: the two exchanges differ in client_id AND in redirect_uri (a native
+	// authorization has none), and one hook would let a test that stubs the web
+	// flow silently answer for the native one. Injectable for the same reason as
+	// its sibling — the native path is verified end to end in tests without
+	// touching Apple.
+	exchangeAppleNativeCode func(ctx context.Context, clientID, code string) (idToken string, err error)
 	// appleKey resolves Apple's signing public key for a given JWKS `kid`.
 	// Injectable so tests verify tokens against a local key without touching the
 	// network; the default fetches + caches Apple's public JWKS.
 	appleKey func(ctx context.Context, kid string) (*rsa.PublicKey, error)
-	// appleSecMu guards appleSecTok/appleSecExp, the cached appleClientSecret()
-	// JWT; regenerated once it's within 2 minutes of appleSecExp.
-	appleSecMu  sync.Mutex
-	appleSecTok string
-	appleSecExp time.Time
+	// appleSecMu guards appleSecrets, the client_secret JWT cache. One entry per
+	// Apple client id (Services ID for the web flow, Bundle ID for the app),
+	// because Apple binds the secret's `sub` to the client redeeming the code —
+	// a single shared entry would hand one client the other's secret. Each entry
+	// is regenerated once it is within 2 minutes of its exp.
+	appleSecMu   sync.Mutex
+	appleSecrets map[string]appleSecret
 	// Admin sessions and the TOTP replay guard now live in the store (persistent,
 	// multi-instance safe) — no process-local session map or counter here anymore.
 	// See the multi-instance-state-migration doc in relayium-ops.
@@ -281,6 +292,7 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 	svc.clientIP = httpx.ClientIP
 	svc.fetchGoogleUser = svc.realFetchGoogleUser
 	svc.exchangeAppleCode = svc.realExchangeAppleCode
+	svc.exchangeAppleNativeCode = svc.realExchangeAppleNativeCode
 	svc.appleKey = newAppleKeyStore().key
 	svc.allowPrivateNodeURLs = os.Getenv("RELAYIUM_ALLOW_PRIVATE_NODE_URLS") == "true"
 	svc.nodeHTTP = &http.Client{Transport: &http.Transport{

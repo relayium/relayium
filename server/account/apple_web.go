@@ -11,7 +11,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -197,20 +196,45 @@ func appleNameFromForm(raw string) string {
 	return strings.TrimSpace(u.Name.FirstName + " " + u.Name.LastName)
 }
 
-// realExchangeAppleCode swaps the authorization code for tokens at Apple's
-// token endpoint, authenticating with a freshly minted client_secret, and
-// returns the id_token for verification.
+// realExchangeAppleCode swaps a WEB authorization code for tokens: the Services
+// ID as client_id and the registered redirect_uri, exactly as Apple's browser
+// flow requires. Unchanged behaviour, expressed through the shared exchange.
 func (s *Service) realExchangeAppleCode(ctx context.Context, code string) (string, error) {
-	secret, err := s.appleClientSecret()
+	return s.exchangeAppleCodeAs(ctx, s.cfg.AppleServicesID, code, s.cfg.AppleRedirect)
+}
+
+// realExchangeAppleNativeCode swaps a NATIVE authorization code for tokens.
+//
+// Two differences from the web call, both required by Apple: the client_id is
+// the app's Bundle ID (here, the audience already verified in the presented
+// identity token), and there is no redirect_uri — a native authorization has no
+// redirect, and sending the web one would be describing a different client.
+func (s *Service) realExchangeAppleNativeCode(ctx context.Context, clientID, code string) (string, error) {
+	return s.exchangeAppleCodeAs(ctx, clientID, code, "")
+}
+
+// exchangeAppleCodeAs redeems an authorization code at Apple's token endpoint
+// as `clientID`, authenticating with a client_secret JWT signed for that same
+// client, and returns the id_token for verification.
+//
+// A 4xx is Apple ANSWERING and refusing (used code, expired code, wrong client)
+// and is reported as errAppleCodeRejected; everything else — transport failure,
+// 5xx, an unparseable body, a response with no id_token — is an exchange that
+// did not happen. Callers that must fail closed treat both as failure; the
+// distinction exists only so the caller can say which one truthfully.
+func (s *Service) exchangeAppleCodeAs(ctx context.Context, clientID, code, redirectURI string) (string, error) {
+	secret, err := s.appleClientSecretFor(clientID)
 	if err != nil {
 		return "", err
 	}
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
-		"redirect_uri":  {s.cfg.AppleRedirect},
-		"client_id":     {s.cfg.AppleServicesID},
+		"client_id":     {clientID},
 		"client_secret": {secret},
+	}
+	if redirectURI != "" {
+		form.Set("redirect_uri", redirectURI)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, appleTokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
@@ -223,11 +247,16 @@ func (s *Service) realExchangeAppleCode(ctx context.Context, code string) (strin
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		// Apple returns a JSON error body (e.g. {"error":"invalid_client"}) that
-		// names the exact reason the exchange failed. It carries no secret, so log
-		// it — without this, every token-stage failure is an opaque status code.
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		log.Printf("apple: token exchange failed: status %d, body %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		// Do not log Apple's response body. It is normally a tiny JSON error,
+		// but it is still data returned by an external identity provider in a
+		// credential exchange; treating it as guaranteed secret-free would turn
+		// an upstream behaviour change into a credential log. Status plus our own
+		// client id identifies which configuration failed without that risk.
+		log.Printf("apple: token exchange failed for %s: status %d",
+			clientID, resp.StatusCode)
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			return "", fmt.Errorf("%w: status %d", errAppleCodeRejected, resp.StatusCode)
+		}
 		return "", fmt.Errorf("apple token status %d", resp.StatusCode)
 	}
 	var out struct {
@@ -242,20 +271,49 @@ func (s *Service) realExchangeAppleCode(ctx context.Context, code string) (strin
 	return out.IDToken, nil
 }
 
+// appleSecret is one cached client_secret JWT and the moment it stops being
+// usable. Held per client id (see Service.appleSecrets).
+type appleSecret struct {
+	token string
+	exp   time.Time
+}
+
 // appleSecretTTL is how long a minted client_secret is trusted before we resign.
 // Apple caps client_secret exp at 6 months; a short window keeps blast radius
 // small and resigning is nanoseconds.
 const appleSecretTTL = 30 * time.Minute
 
-// appleClientSecret returns an ES256 JWT proving control of the Services ID,
-// used as the OAuth client_secret in the code exchange. Cached until shortly
-// before expiry.
+// appleClientSecret returns the WEB client_secret: an ES256 JWT proving control
+// of the Services ID. The browser flow's one client, named once.
 func (s *Service) appleClientSecret() (string, error) {
+	return s.appleClientSecretFor(s.cfg.AppleServicesID)
+}
+
+// appleClientSecretFor returns an ES256 JWT proving control of `clientID`, used
+// as the OAuth client_secret in that client's code exchange. Cached per client
+// until shortly before expiry.
+//
+// Parameterized because Apple binds the secret to the client redeeming the
+// code: `sub` is the client_id, so the Services ID secret cannot redeem an app
+// (Bundle ID) authorization or the reverse. The cache is keyed the same way for
+// the same reason — one shared entry would hand whichever client asked second
+// a secret minted for the first.
+//
+// The key space is bounded by configuration: every caller passes either the
+// configured Services ID or an `aud` already checked against
+// cfg.AppleClientIDs, so a request cannot grow this map.
+func (s *Service) appleClientSecretFor(clientID string) (string, error) {
+	if clientID == "" {
+		return "", errors.New("apple: no client id for client_secret")
+	}
+	if s.cfg.ApplePrivateKey == nil {
+		return "", errors.New("apple: no .p8 private key configured")
+	}
 	now := s.now()
 	s.appleSecMu.Lock()
 	defer s.appleSecMu.Unlock()
-	if s.appleSecTok != "" && now.Before(s.appleSecExp.Add(-2*time.Minute)) {
-		return s.appleSecTok, nil
+	if cached, ok := s.appleSecrets[clientID]; ok && now.Before(cached.exp.Add(-2*time.Minute)) {
+		return cached.token, nil
 	}
 	exp := now.Add(appleSecretTTL)
 	header := map[string]string{"alg": "ES256", "kid": s.cfg.AppleKeyID}
@@ -264,7 +322,7 @@ func (s *Service) appleClientSecret() (string, error) {
 		"iat": now.Unix(),
 		"exp": exp.Unix(),
 		"aud": appleIssuer, // "https://appleid.apple.com"
-		"sub": s.cfg.AppleServicesID,
+		"sub": clientID,
 	}
 	hb, _ := json.Marshal(header)
 	cb, _ := json.Marshal(claims)
@@ -279,7 +337,10 @@ func (s *Service) appleClientSecret() (string, error) {
 	r.FillBytes(sig[:32])
 	ss.FillBytes(sig[32:])
 	tok := signingInput + "." + base64.RawURLEncoding.EncodeToString(sig)
-	s.appleSecTok, s.appleSecExp = tok, exp
+	if s.appleSecrets == nil {
+		s.appleSecrets = map[string]appleSecret{}
+	}
+	s.appleSecrets[clientID] = appleSecret{token: tok, exp: exp}
 	return tok, nil
 }
 

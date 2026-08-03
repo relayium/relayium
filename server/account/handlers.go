@@ -111,6 +111,10 @@ func (s *Service) routeMux() *http.ServeMux {
 	}
 	// Sign in with Apple (native app token exchange). Dormant until configured.
 	if s.cfg.EnableApple {
+		// Registered on EnableApple alone, unlike the browser routes below: it
+		// is the app's only way in, so it answers honestly when the .p8 signing
+		// material it needs to redeem an authorization code is absent
+		// (503 apple_not_configured) rather than disappearing into a 404.
 		mux.HandleFunc("POST /api/auth/apple/native", s.handleAppleNative)
 		// Browser Sign in with Apple: additionally gated on appleWebConfigured
 		// so a half-configured deploy (EnableApple set but no Services ID/team/

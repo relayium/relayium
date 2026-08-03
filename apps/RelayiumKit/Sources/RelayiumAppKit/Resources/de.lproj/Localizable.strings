@@ -117,6 +117,7 @@
 "login.needAccount" = "Neu bei Relayium? Konto erstellen";
 "login.errorEmailMissing" = "Gib deine E-Mail-Adresse ein.";
 "login.errorPasswordsDiffer" = "Die beiden Passwörter stimmen nicht überein.";
+"login.appleDivider" = "oder";
 
 /* MARK: Direkt-Hub und Verifizierung */
 "hub.transferType" = "Übertragungsart";
@@ -365,6 +366,11 @@
 "error.account.passwordTooShort" = "Verwende mindestens 8 Zeichen für dein Passwort.";
 "error.account.emailTaken" = "Für diese Adresse gibt es bereits ein Konto. Melde dich stattdessen an oder nimm eine andere Adresse.";
 "error.account.pendingDeletion" = "Ein Konto für diese Adresse wird gelöscht. Nutze den Reaktivierungslink aus der E-Mail von der Löschung oder versuche es nach Ablauf der Frist erneut.";
+"error.apple.rejected" = "Die Anmeldung mit Apple wurde nicht akzeptiert. Versuche es erneut oder melde dich mit E-Mail und Passwort an.";
+"error.apple.unavailable" = "Die Anmeldung mit Apple ließ sich gerade nicht abschließen. Versuche es gleich noch einmal.";
+"error.apple.emailUnavailable" = "Apple hat keine E-Mail-Adresse bereitgestellt. Entferne Relayium in den Einstellungen unter „Mit Apple anmelden“ und versuche es erneut.";
+"error.apple.incompleteCredential" = "Apple hat nicht alles zurückgegeben, was für die Anmeldung nötig ist – es wurde nichts gesendet. Versuche es erneut oder melde dich mit E-Mail und Passwort an.";
+"error.apple.authorizationFailed" = "Die Anmeldung mit Apple wurde nicht abgeschlossen. Versuche es erneut oder melde dich mit E-Mail und Passwort an.";
 "error.keychain.signIn" = "macOS konnte deine Anmeldung nicht sichern (Schlüsselbund-Fehler %@). Du bleibst angemeldet, bis du die App beendest.";
 "error.storedKey.keychain.save" = "Der Schlüsselbund konnte den Schlüssel dieser Datei nicht sichern (Schlüsselbund-Fehler %@).";
 "error.storedKey.keychain.read" = "macOS konnte den Schlüssel dieser Datei nicht aus dem Schlüsselbund lesen (Schlüsselbund-Fehler %@).";

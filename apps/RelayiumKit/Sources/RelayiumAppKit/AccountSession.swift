@@ -224,6 +224,79 @@ public final class AccountSession: ObservableObject {
         }
     }
 
+    /// Sign in with an Apple authorization the platform just completed.
+    ///
+    /// Deliberately the same shape as `logIn` — same generation claim, same
+    /// keychain write, same `/api/me` + usage load, same pending-deletion and
+    /// cancellation handling — because it is the same thing: a credential
+    /// exchange that ends in a bearer. A second, parallel path to `.ready`
+    /// would be a second set of races to get right.
+    ///
+    /// It reports `.authenticating` rather than a state of its own: what is in
+    /// flight is a sign-in, and it can end on an account. The one place it
+    /// differs from a password sign-in is the failure copy, which comes from
+    /// the Apple-specific `AccountError` cases and never says "check your email
+    /// and password" about credentials the user never typed.
+    ///
+    /// There is no `.emailUnverified` branch: Apple asserting the address IS
+    /// the verification, so the server never answers that here.
+    public func logInWithApple(idToken: String,
+                               authorizationCode: String,
+                               nonce: String,
+                               name: String) async {
+        let g = beginSessionOperation()
+        state = .authenticating
+        do {
+            let outcome = try await client.loginWithApple(idToken: idToken,
+                                                          authorizationCode: authorizationCode,
+                                                          nonce: nonce,
+                                                          name: name)
+            // A sign-out (or a newer sign-in) that landed while this was in
+            // flight wins — and, as in `logIn`, this is what stops a stale
+            // success from writing a token into the keychain afterwards.
+            guard !superseded(g) else { return }
+            switch outcome {
+            case let .success(token, _):
+                sessionToken = token
+                try? tokenStore.save(token)
+                await loadAccount(token: token, generation: g)
+            case let .pendingDeletion(purgeAfter, reactivateToken):
+                state = .pendingDeletion(purgeAfter: purgeAfter, reactivateToken: reactivateToken)
+            case let .emailUnverified(email):
+                // Not reachable through this route today. Rendered rather than
+                // ignored so a server that ever did answer it produces the
+                // screen that can act on it, not a silently dropped response.
+                state = .emailUnverified(email: email)
+            }
+        } catch {
+            guard !superseded(g) else { return }
+            guard !Task.isCancelled else {
+                state = .loggedOut
+                return
+            }
+            state = .failed(message: ErrorCopy.message(for: error))
+        }
+    }
+
+    /// Report a native Apple authorization that never reached the server.
+    ///
+    /// The system sheet failed, or completed with a credential missing the
+    /// fields the exchange needs. Nothing was sent, so this is the form again
+    /// with a reason — the same resting place a rejected sign-in reaches, and
+    /// deliberately not `.unavailable`, which offers a retry of a request that
+    /// was never made.
+    ///
+    /// A user CANCELLING is not this: the caller drops that on the floor, since
+    /// the whole meaning of cancelling is that nothing happens.
+    ///
+    /// It claims the operation generation like every other entry point here, so
+    /// an older in-flight attempt cannot land afterwards and paint over the
+    /// reason the user is looking at.
+    public func reportAppleSignInFailure(_ error: Error) {
+        _ = beginSessionOperation()
+        state = .failed(message: ErrorCopy.message(for: error))
+    }
+
     /// Create an account from the app.
     ///
     /// Three things it deliberately does NOT do, each of which would be a lie

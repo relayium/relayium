@@ -120,6 +120,7 @@
 "login.needAccount" = "جديد على Relayium؟ أنشئ حسابًا";
 "login.errorEmailMissing" = "أدخل بريدك الإلكتروني.";
 "login.errorPasswordsDiffer" = "كلمتا السر غير متطابقتين.";
+"login.appleDivider" = "أو";
 
 /* MARK: مركز الاتصال المباشر والتحقق */
 "hub.transferType" = "نوع النقل";
@@ -400,6 +401,11 @@
 "error.account.passwordTooShort" = "استخدم 8 أحرف على الأقل لكلمة السر.";
 "error.account.emailTaken" = "يوجد حساب بهذا البريد بالفعل. سجّل الدخول أو استخدم بريدًا آخر.";
 "error.account.pendingDeletion" = "هناك حساب بهذا البريد مجدول للحذف. استخدم رابط إعادة التفعيل المرسل عند الحذف، أو أعد المحاولة بعد انتهاء مهلة السماح.";
+"error.apple.rejected" = "لم يُقبل تسجيل الدخول باستخدام Apple. أعد المحاولة أو سجّل الدخول ببريدك وكلمة السر.";
+"error.apple.unavailable" = "تعذّر إكمال تسجيل الدخول باستخدام Apple الآن. أعد المحاولة بعد قليل.";
+"error.apple.emailUnavailable" = "لم تقدّم Apple عنوان بريد إلكتروني. أزل Relayium من «تسجيل الدخول باستخدام Apple» في الإعدادات، ثم أعد المحاولة.";
+"error.apple.incompleteCredential" = "لم يُرجِع Apple كل ما يلزم لتسجيل الدخول، لذا لم يُرسَل أي شيء. أعد المحاولة أو سجّل الدخول ببريدك وكلمة السر.";
+"error.apple.authorizationFailed" = "لم يكتمل تسجيل الدخول باستخدام Apple. أعد المحاولة أو سجّل الدخول ببريدك وكلمة السر.";
 "error.keychain.signIn" = "تعذّر على macOS تخزين تسجيل دخولك (خطأ سلسلة المفاتيح %@). ستبقى مسجَّل الدخول حتى تُنهي التطبيق.";
 "error.storedKey.keychain.save" = "تعذّر على سلسلة المفاتيح حفظ مفتاح هذا الملف (خطأ سلسلة المفاتيح %@).";
 "error.storedKey.keychain.read" = "تعذّر على macOS قراءة مفتاح هذا الملف من سلسلة المفاتيح (خطأ سلسلة المفاتيح %@).";

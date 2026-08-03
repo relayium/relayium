@@ -1,17 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<!-- Deliberately empty, and still empty after three slices.
+<!-- Exactly one entitlement, and it arrives with the feature that needs it.
 
-     The app receives an anonymous stored link (R3-A), signs in to a Relayium
-     account (R3-B) and now sends files (R3-C), and none of that needs a
-     capability.
+     `com.apple.developer.applesignin` is what lets the app present an
+     `ASAuthorizationAppleIDRequest`. It is claimed now because this slice ships
+     the real system Sign in with Apple button and the hardened server exchange
+     behind it; it was absent through the previous three slices for the same
+     reason it is present now — an entitlement is a claim to the OS and to the
+     user, and each one lands with the functional slice that earns it.
 
-     The bearer token and the stored-link keys live in this app's OWN default
-     per-app keychain access group — the one every app gets — which is why no
-     `keychain-access-groups` entitlement appears here. Naming a group would
-     claim a credential share with another app that does not exist, and on a
-     signed device build it would fail with `errSecMissingEntitlement` (-34018).
+     `Default` (rather than `Sign In With Apple`) is the plain capability: this
+     app is not the primary of an app group that shares an Apple ID relationship
+     with another app.
+
+     A SIGNED build additionally needs the com.relayium.app App ID to carry the
+     Sign in with Apple capability in its provisioning profile, and the server's
+     RELAYIUM_APPLE_CLIENT_IDS to include com.relayium.app. Neither is something
+     this file can establish, and neither is proved by a simulator build.
+
+     The bearer token and the stored-link keys still live in this app's OWN
+     default per-app keychain access group — the one every app gets — which is
+     why no `keychain-access-groups` entitlement appears here. Naming a group
+     would claim a credential share with another app that does not exist, and on
+     a signed device build it would fail with `errSecMissingEntitlement`
+     (-34018).
 
      `PhotosPicker` likewise needs neither an entitlement nor an
      `NSPhotoLibraryUsageDescription`: it runs out of process and hands back only
@@ -20,11 +33,11 @@
      Still absent, each with the slice that would earn it: Associated Domains
      (link handoff), an App Group and a shared keychain group (a Share
      Extension), local network (nearby), background modes (transfers surviving
-     suspension), push, IAP.
-
-     The file exists rather than being omitted so the wiring is in place and a
-     later slice adds one entitlement in one reviewed diff. An entitlement is a
-     claim the app makes to the OS and to the user; each one lands with the
-     functional slice that needs it, never in advance. -->
-<dict/>
+     suspension), push, IAP. -->
+<dict>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+</dict>
 </plist>

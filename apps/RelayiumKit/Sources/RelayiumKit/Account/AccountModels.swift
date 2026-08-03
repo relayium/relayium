@@ -226,4 +226,27 @@ public enum AccountError: Error, Equatable {
     /// is refused so a second account cannot occupy an address the original
     /// owner may still reactivate into.
     case accountPendingDeletion
+
+    // MARK: - Sign in with Apple
+    //
+    // Two cases, not one, and neither is `invalidCredentials`: no email and no
+    // password was involved in an Apple authorization, so that error's copy
+    // ("check your email and password") would name two fields the user never
+    // touched and send them looking for a mistake they did not make.
+
+    /// 401 — the server refused the Apple credential. The identity token failed
+    /// verification, its audience was not this app's, the one-time
+    /// authorization code was used/expired/invalid, or the token Apple returned
+    /// for the code described a different authorization. All four are the same
+    /// thing to the user: this attempt did not establish a sign-in.
+    case appleRejected
+    /// 502/503 — the exchange could not be completed at all: Apple was
+    /// unreachable, or the server holds no Apple signing key. Nothing about the
+    /// user's Apple ID is wrong, so a retry can work.
+    case appleUnavailable
+    /// 400 `no_email_first_signin` — this Apple identity has never been linked
+    /// here, but Apple returned no address with which to create or find its
+    /// account. The remedy lives in the device's Sign in with Apple settings,
+    /// not in an HTTP status shown to the user.
+    case appleEmailUnavailable
 }

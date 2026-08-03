@@ -117,6 +117,7 @@
 "login.needAccount" = "Novo no Relayium? Crie uma conta";
 "login.errorEmailMissing" = "Introduza o seu e-mail.";
 "login.errorPasswordsDiffer" = "As duas palavras-passe não coincidem.";
+"login.appleDivider" = "ou";
 
 /* MARK: centro direto e verificação */
 "hub.transferType" = "Tipo de transferência";
@@ -365,6 +366,11 @@
 "error.account.passwordTooShort" = "Use pelo menos 8 caracteres na palavra-passe.";
 "error.account.emailTaken" = "Já existe uma conta com este e-mail. Inicie sessão ou use outro endereço.";
 "error.account.pendingDeletion" = "Existe uma conta com este e-mail agendada para eliminação. Use a ligação de reativação do e-mail enviado nessa altura, ou tente de novo após o período de tolerância.";
+"error.apple.rejected" = "O início de sessão com a Apple não foi aceite. Tente de novo ou entre com o seu e-mail e palavra-passe.";
+"error.apple.unavailable" = "Não foi possível concluir agora o início de sessão com a Apple. Tente daqui a pouco.";
+"error.apple.emailUnavailable" = "A Apple não forneceu um endereço de e-mail. Remova o Relayium de «Iniciar sessão com a Apple» nas Definições e tente novamente.";
+"error.apple.incompleteCredential" = "A Apple não devolveu tudo o que é preciso para entrar, por isso nada foi enviado. Tente de novo ou entre com o seu e-mail e palavra-passe.";
+"error.apple.authorizationFailed" = "O início de sessão com a Apple não foi concluído. Tente de novo ou entre com o seu e-mail e palavra-passe.";
 "error.keychain.signIn" = "O macOS não conseguiu guardar o seu início de sessão (erro do porta-chaves %@). Continuará com sessão iniciada até sair da app.";
 "error.storedKey.keychain.save" = "O porta-chaves não conseguiu guardar a chave deste ficheiro (erro do porta-chaves %@).";
 "error.storedKey.keychain.read" = "O macOS não conseguiu ler a chave deste ficheiro do porta-chaves (erro do porta-chaves %@).";

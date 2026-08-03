@@ -117,6 +117,7 @@
 "login.needAccount" = "Relayium이 처음이신가요? 계정 만들기";
 "login.errorEmailMissing" = "이메일 주소를 입력하세요.";
 "login.errorPasswordsDiffer" = "두 비밀번호가 일치하지 않습니다.";
+"login.appleDivider" = "또는";
 
 /* MARK: 직접 전송 허브와 검증 설정 */
 "hub.transferType" = "전송 종류";
@@ -357,6 +358,11 @@
 "error.account.passwordTooShort" = "비밀번호는 8자 이상이어야 합니다.";
 "error.account.emailTaken" = "이 주소로 만든 계정이 이미 있습니다. 로그인하거나 다른 주소를 사용하세요.";
 "error.account.pendingDeletion" = "이 주소의 계정이 삭제 예정입니다. 삭제할 때 보낸 메일의 복구 링크를 사용하거나, 유예 기간이 끝난 뒤 다시 시도하세요.";
+"error.apple.rejected" = "Apple 로그인이 수락되지 않았습니다. 다시 시도하거나 이메일과 비밀번호로 로그인하세요.";
+"error.apple.unavailable" = "지금은 Apple 로그인을 마칠 수 없었습니다. 잠시 후 다시 시도하세요.";
+"error.apple.emailUnavailable" = "Apple에서 이메일 주소를 제공하지 않았습니다. 설정의 ‘Apple로 로그인’에서 Relayium을 제거한 후 다시 시도하세요.";
+"error.apple.incompleteCredential" = "로그인에 필요한 정보가 Apple에서 오지 않아 아무것도 전송하지 않았습니다. 다시 시도하거나 이메일과 비밀번호로 로그인하세요.";
+"error.apple.authorizationFailed" = "Apple 로그인이 완료되지 않았습니다. 다시 시도하거나 이메일과 비밀번호로 로그인하세요.";
 "error.keychain.signIn" = "macOS가 로그인 정보를 저장하지 못했습니다(키체인 오류 %@). 앱을 종료하기 전까지는 로그인 상태가 유지됩니다.";
 "error.storedKey.keychain.save" = "키체인에 이 파일의 키를 저장하지 못했습니다(키체인 오류 %@).";
 "error.storedKey.keychain.read" = "macOS가 이 파일의 키를 키체인에서 읽지 못했습니다(키체인 오류 %@).";

@@ -403,6 +403,34 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "this slice adds no Apple entitlement")
     }
 
+    /// iOS gaining native Sign in with Apple does not give macOS one.
+    ///
+    /// The iOS slice ships a real `SignInWithAppleButton`, an Apple entitlement
+    /// and a hardened server exchange. None of it crosses: the shipped evidence
+    /// is that a Developer ID (outside the Mac App Store) distribution cannot
+    /// carry `com.apple.developer.applesignin`, so a Mac build with that button
+    /// would either fail to sign or fail at the first authorization. Until a
+    /// Mac App Store track exists, the honest macOS control is the browser
+    /// sign-in it already has, labelled as one.
+    ///
+    /// The shared layer is exempt on purpose: `AccountSession.logInWithApple`
+    /// and `AppleSignIn.swift` are platform-free value logic, and the thing
+    /// that would make macOS claim the feature is the AppKit-level control and
+    /// the entitlement — which is what this asserts the absence of.
+    func testMacDidNotInheritTheIOSNativeAppleSignIn() throws {
+        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+            for symbol in ["SignInWithAppleButton", "ASAuthorizationAppleID",
+                           "logInWithApple", "AppleSignInAttempt"] {
+                XCTAssertFalse(text.contains(symbol),
+                               "\(name) adopts native Apple sign-in on macOS: \(symbol)")
+            }
+        }
+        let entitlements = try String(
+            contentsOf: macRoot.appendingPathComponent("Relayium.entitlements"), encoding: .utf8)
+        XCTAssertFalse(entitlements.contains("applesignin"),
+                       "the Developer ID macOS build cannot carry this entitlement")
+    }
+
     // MARK: - the sidebar's live-session marker
 
     /// The marker has to answer "is the running session presented *here*", and

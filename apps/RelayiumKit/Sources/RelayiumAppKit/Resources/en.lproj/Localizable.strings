@@ -118,6 +118,7 @@
 "login.needAccount" = "New to Relayium? Create an account";
 "login.errorEmailMissing" = "Enter your email address.";
 "login.errorPasswordsDiffer" = "The two passwords don't match.";
+"login.appleDivider" = "or";
 
 /* MARK: direct hub, verification setting */
 "hub.transferType" = "Transfer type";
@@ -366,6 +367,11 @@
 "error.account.passwordTooShort" = "Use at least 8 characters for your password.";
 "error.account.emailTaken" = "There is already an account for this address. Sign in instead, or use another address.";
 "error.account.pendingDeletion" = "An account for this address is scheduled for deletion. Use the reactivation link from the email sent when it was deleted, or try again after the grace period ends.";
+"error.apple.rejected" = "Apple sign-in wasn't accepted. Try again, or sign in with your email and password.";
+"error.apple.unavailable" = "Couldn't finish signing in with Apple just now. Try again in a moment.";
+"error.apple.emailUnavailable" = "Apple didn't provide an email address. Remove Relayium from Sign in with Apple in Settings, then try again.";
+"error.apple.incompleteCredential" = "Apple didn't return everything needed to sign in, so nothing was sent. Try again, or sign in with your email and password.";
+"error.apple.authorizationFailed" = "Signing in with Apple didn't complete. Try again, or sign in with your email and password.";
 "error.keychain.signIn" = "macOS wouldn't store your sign-in (keychain error %@). You'll stay signed in until you quit.";
 "error.storedKey.keychain.save" = "The keychain wouldn't save this file's key (keychain error %@).";
 "error.storedKey.keychain.read" = "macOS wouldn't read this file's key from the keychain (keychain error %@).";

@@ -117,6 +117,7 @@
 "login.needAccount" = "¿Nuevo en Relayium? Crea una cuenta";
 "login.errorEmailMissing" = "Escribe tu correo electrónico.";
 "login.errorPasswordsDiffer" = "Las dos contraseñas no coinciden.";
+"login.appleDivider" = "o";
 
 /* MARK: centro directo y verificación */
 "hub.transferType" = "Tipo de transferencia";
@@ -365,6 +366,11 @@
 "error.account.passwordTooShort" = "Usa al menos 8 caracteres para la contraseña.";
 "error.account.emailTaken" = "Ya existe una cuenta con este correo. Inicia sesión o usa otra dirección.";
 "error.account.pendingDeletion" = "Hay una cuenta con este correo programada para eliminarse. Usa el enlace de reactivación del correo enviado al eliminarla, o inténtalo cuando termine el periodo de gracia.";
+"error.apple.rejected" = "No se aceptó el inicio de sesión con Apple. Inténtalo de nuevo o entra con tu correo y contraseña.";
+"error.apple.unavailable" = "Ahora mismo no se pudo completar el inicio de sesión con Apple. Inténtalo en un momento.";
+"error.apple.emailUnavailable" = "Apple no proporcionó una dirección de correo. Elimina Relayium de «Iniciar sesión con Apple» en Ajustes e inténtalo de nuevo.";
+"error.apple.incompleteCredential" = "Apple no devolvió todo lo necesario para iniciar sesión, así que no se envió nada. Inténtalo de nuevo o entra con tu correo y contraseña.";
+"error.apple.authorizationFailed" = "El inicio de sesión con Apple no se completó. Inténtalo de nuevo o entra con tu correo y contraseña.";
 "error.keychain.signIn" = "macOS no pudo guardar tu inicio de sesión (error de llavero %@). Seguirás con la sesión iniciada hasta que salgas de la app.";
 "error.storedKey.keychain.save" = "El llavero no pudo guardar la clave de este archivo (error de llavero %@).";
 "error.storedKey.keychain.read" = "macOS no pudo leer la clave de este archivo del llavero (error de llavero %@).";

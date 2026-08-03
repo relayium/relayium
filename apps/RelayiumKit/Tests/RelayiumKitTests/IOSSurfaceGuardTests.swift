@@ -7,9 +7,12 @@ import XCTest
 ///
 ///  1. **A credential in a log.** One `print` in a view that renders a token is
 ///     a line nobody re-reads and no behavioral test can see.
-///  2. **A dead control for a deferred feature.** A disabled "Sign in with
-///     Apple", an empty device list, a greyed Send tab: each is a promise the
-///     app cannot keep, and each reads as progress in review.
+///  2. **A dead control for a deferred feature.** An empty device list, a
+///     greyed Send tab, a button for something unwired: each is a promise the
+///     app cannot keep, and each reads as progress in review. "Sign in with
+///     Apple" was the example here through three slices; it left the list by
+///     being BUILT, which is why the Apple assertions below are positive ones
+///     about the system control rather than a ban on naming it.
 ///  3. **Copy that names the wrong platform.** R3-B recorded nineteen such
 ///     catalog strings. Re-deriving the set for R3-C found **twenty-two**: the
 ///     R3-B count enumerated the keys saying *Mac* plus the one saying *macOS*,
@@ -109,9 +112,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // capability claimed before it works.
         //
         // `CloudUploadModel` LEFT this list in R3-C, deliberately: this is the
-        // slice that ships it. Everything else stays.
+        // slice that ships it. `SignInWithAppleButton` and
+        // `AuthenticationServices` left it in THIS slice, for the same reason —
+        // the app now presents the real system control. What replaces the ban
+        // is not nothing: `testTheAppleButtonIsTheSystemControlWiredToTheSession`
+        // and `testOnlyTheFormImportsAuthenticationServices` below say what the
+        // Apple surface must be, which is the harder claim. Everything else stays.
         let deferred = [
-            "SignInWithAppleButton", "AuthenticationServices", "BrowserLoginModel",
+            "BrowserLoginModel",
             "AccountManagementModel", "RealtimeSessionModel",
             "RealtimeTextSessionModel", "LanDiscoveryModel", "NearbyReceiveModel",
             "UIPasteboard", "onOpenURL", "UNUserNotificationCenter", "StoreKit",
@@ -292,15 +300,77 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       + "so a second press cannot start a second request")
     }
 
-    /// Empty is the claim: this app needs no capability, and an entitlement is
-    /// a claim to the OS that lands with the feature requiring it. The nil
-    /// keychain access group is the same decision, from the other side.
-    func testTheEntitlementsFileIsStillEmpty() throws {
+    // MARK: - native Sign in with Apple
+
+    /// The Apple control is the SYSTEM one, and its result goes to the session.
+    ///
+    /// Each clause is a way the feature could look finished and not be: a
+    /// custom-drawn button (a guideline violation and an impersonation), a
+    /// request without the nonce (nothing binds the token to this attempt), a
+    /// request without the scopes (a first authorization that cannot create an
+    /// account), and a completion that never reaches `logInWithApple` (a button
+    /// that dismisses a sheet and does nothing).
+    func testTheAppleButtonIsTheSystemControlWiredToTheSession() throws {
+        let form = try XCTUnwrap(try sources().first { $0.name == "SignInView.swift" })
+        XCTAssertTrue(form.text.contains("SignInWithAppleButton("),
+                      "the Apple control must be the system button, not a lookalike")
+        XCTAssertTrue(form.text.contains("mode == .register ? .signUp : .signIn"),
+                      "the system button's label must follow the form's mode")
+        XCTAssertTrue(form.text.contains("request.nonce = attempt.nonce"),
+                      "the request must carry this attempt's nonce")
+        XCTAssertTrue(form.text.contains("request.state = attempt.state"),
+                      "the request must carry an opaque attempt identity")
+        XCTAssertTrue(form.text.contains("request.requestedScopes = [.fullName, .email]"),
+                      "a first authorization needs the name and email Apple only sends once")
+        XCTAssertTrue(form.text.contains("session.logInWithApple(idToken:"),
+                      "the credential must be exchanged through the session")
+        // The nonce belongs to ONE attempt: consumed on completion, and a
+        // completion with nothing pending is refused rather than sent with a
+        // freshly minted nonce the token could never match.
+        XCTAssertTrue(form.text.contains("guard let attempt = appleAttempt else { return }"),
+                      "a stale or superseded completion must be refused")
+        XCTAssertTrue(form.text.contains("attempt.matches(returnedState: credential.state)"),
+                      "a completion must belong to the attempt whose nonce is still held")
+        XCTAssertTrue(form.text.contains("appleAttempt = nil"),
+                      "the attempt must be consumed, so one authorization cannot land twice")
+        // Cancelling asks for nothing to happen — including no error sentence.
+        XCTAssertTrue(form.text.contains("== .canceled { return }"),
+                      "a user cancellation must be silent")
+    }
+
+    /// `AuthenticationServices` belongs to the form and nowhere else.
+    ///
+    /// A second importer would be a second place an Apple authorization can
+    /// start, and the nonce that binds one attempt is `SignInView`'s own state:
+    /// an authorization begun anywhere else could not be checked against it.
+    func testOnlyTheFormImportsAuthenticationServices() throws {
+        for (name, text) in try sources() where name != "SignInView.swift" {
+            for symbol in ["AuthenticationServices", "SignInWithAppleButton",
+                           "ASAuthorizationAppleID", "ASAuthorizationController"] {
+                XCTAssertFalse(text.contains(symbol), "\(name) starts its own Apple authorization: \(symbol)")
+            }
+        }
+        let form = try XCTUnwrap(try sources().first { $0.name == "SignInView.swift" })
+        XCTAssertTrue(form.text.contains("import AuthenticationServices"))
+    }
+
+    /// One entitlement, and it is the one this slice earned.
+    ///
+    /// Empty used to be the claim. It is now exactly `applesignin`, because the
+    /// app presents an `ASAuthorizationAppleIDRequest` — and still nothing else,
+    /// because every other capability belongs to a feature that does not exist
+    /// yet. The nil keychain access group is the same decision, from the other
+    /// side: the bearer lives in this app's own default group.
+    func testTheEntitlementsFileClaimsOnlyAppleSignIn() throws {
         let data = try Data(contentsOf: iosRoot.appendingPathComponent("Relayium.entitlements"))
         let plist = try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
-        XCTAssertTrue(plist.isEmpty, "iOS R3-C claims no capability: \(plist.keys.sorted())")
+        XCTAssertEqual(plist.keys.sorted(), ["com.apple.developer.applesignin"],
+                       "iOS claims a capability it does not use: \(plist.keys.sorted())")
+        XCTAssertEqual(plist["com.apple.developer.applesignin"] as? [String], ["Default"])
+        XCTAssertNil(plist["keychain-access-groups"],
+                     "the bearer lives in this app's own default keychain group")
     }
 
     /// The bearer is read at the moment of use and nowhere else.

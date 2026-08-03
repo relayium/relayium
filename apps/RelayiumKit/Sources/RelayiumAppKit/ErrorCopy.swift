@@ -155,6 +155,31 @@ public enum ErrorCopy {
                 // screen: the reactivation link was emailed when the account was
                 // deleted, and nothing the user types here can substitute for it.
                 return L10n.t(.errorAccountPendingDeletion, language: language)
+            case .appleRejected:
+                // Never `.errorAccountInvalidCredentials`: that sentence tells
+                // the user to check an email and a password, and an Apple
+                // authorization involved neither. It names the remedy that
+                // exists on the same screen — try again, or use the form.
+                return L10n.t(.errorAppleRejected, language: language)
+            case .appleUnavailable:
+                // The attempt could not be completed with Apple at all. A retry
+                // is genuinely worth making, which is the whole difference from
+                // the case above.
+                return L10n.t(.errorAppleUnavailable, language: language)
+            case .appleEmailUnavailable:
+                return L10n.t(.errorAppleEmailUnavailable, language: language)
+            }
+        }
+        if let e = error as? AppleSignInError {
+            switch e {
+            case .missingIdentityToken, .missingAuthorizationCode, .unexpectedCredential:
+                // The authorization came back without what the exchange needs,
+                // so nothing was sent. Says that rather than "your sign-in was
+                // refused", which would be a claim about a server that never
+                // saw it.
+                return L10n.t(.errorAppleIncompleteCredential, language: language)
+            case .authorizationFailed:
+                return L10n.t(.errorAppleAuthorizationFailed, language: language)
             }
         }
         if let e = error as? KeychainError {

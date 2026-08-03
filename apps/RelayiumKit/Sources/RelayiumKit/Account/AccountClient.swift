@@ -90,6 +90,74 @@ public struct AccountClient {
         }
     }
 
+    /// Sign in with Apple, natively.
+    ///
+    /// The four values are what the server needs to establish that ONE live
+    /// Apple authorization happened and that it happened here:
+    ///
+    ///  * `idToken` — the identity token the system handed the app;
+    ///  * `authorizationCode` — Apple's one-time code, single-use and valid for
+    ///    five minutes. The server redeems it at Apple's token endpoint, which
+    ///    is what makes a captured identity token useless on its own;
+    ///  * `nonce` — the value this attempt put on the authorization request, so
+    ///    the server can bind the token to it;
+    ///  * `name` — the display name Apple sends on the FIRST authorization
+    ///    only, empty otherwise. Passed through as given, never invented.
+    ///
+    /// It deliberately sends no `deviceName`, unlike `login`: the server names
+    /// this device "App (Apple)" itself, and the endpoint has no field for one.
+    /// Sending a key the handler does not read would look like a feature and be
+    /// a no-op.
+    ///
+    /// Nothing here logs, and none of the four values touches a URL or a header
+    /// — they exist only inside the POST body, for exactly one exchange.
+    public func loginWithApple(idToken: String,
+                               authorizationCode: String,
+                               nonce: String,
+                               name: String) async throws -> LoginOutcome {
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/auth/apple/native"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "idToken": idToken, "authorizationCode": authorizationCode,
+            "nonce": nonce, "name": name,
+        ])
+        let (data, resp) = try await send(req)
+        switch resp.statusCode {
+        case 200:
+            // Same two shapes as a password login: a session, or a frozen
+            // account's reactivation notice. There is no unverified case —
+            // Apple asserting the address IS the verification.
+            if let pd = try? JSONDecoder().decode(PendingDeletionBody.self, from: data),
+               pd.status == "pending_deletion" {
+                return .pendingDeletion(purgeAfter: pd.purgeAfter, reactivateToken: pd.reactivateToken)
+            }
+            guard let ok = try? JSONDecoder().decode(LoginSuccessBody.self, from: data) else {
+                throw AccountError.decoding
+            }
+            return .success(token: ok.token, user: ok.user)
+        case 401:
+            // Deliberately NOT `.invalidCredentials`: no email and no password
+            // were involved, and that error's copy talks about both. The server
+            // refused the Apple credential — the identity token, the audience,
+            // the one-time code, or the pair not describing one authorization.
+            throw AccountError.appleRejected
+        case 400 where errorCode(in: data) == "no_email_first_signin":
+            // Apple normally supplies the address needed to create/link an
+            // account. If it does not, expose the one actionable remedy rather
+            // than a raw server status.
+            throw AccountError.appleEmailUnavailable
+        case 429: throw AccountError.rateLimited
+        case 502, 503:
+            // The server could not COMPLETE the exchange (Apple unreachable, or
+            // this deployment holds no Apple signing key). Nothing about the
+            // user's Apple ID is wrong and a retry may work, so it must not be
+            // reported as a rejection.
+            throw AccountError.appleUnavailable
+        default:  throw AccountError.server(status: resp.statusCode)
+        }
+    }
+
     /// Ask for another verification email.
     ///
     /// The endpoint answers **200 unconditionally** — it will not say whether an
