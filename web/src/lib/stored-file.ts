@@ -37,6 +37,51 @@ export class UploadError extends Error {
   }
 }
 
+/** A stored-object / upload identifier the server handed back that this client
+ *  refuses to act on.
+ *
+ *  Every id an upload response carries is interpolated into something where a
+ *  stray character changes the *meaning* of the string rather than its value:
+ *  the resumable `uploadId` becomes a path segment of every PATCH, offset GET
+ *  and finalize; the finalize/`/api/files` id becomes the key-map entry the
+ *  decryption key is filed under and the `/d/<id>#k=<key>` link the user is
+ *  handed. So `../me` aims a request at an endpoint this upload never
+ *  authorised, `a#b` orphans the key fragment, and a blank or duplicate-after-
+ *  escaping id silently overwrites another upload's key.
+ *
+ *  Refused, never sanitised and never percent-encoded: escaping would let two
+ *  distinct ids collapse onto one key-map entry (losing a key for good), and no
+ *  encoding helps against a `.` or `..` that a server or proxy resolves for its
+ *  own reasons. Refusing is the only defence that does not depend on who
+ *  normalises the path.
+ *
+ *  Deliberately carries no field for the offending value and never puts it in
+ *  the message: this reaches UI copy and logs, and a hostile id is exactly the
+ *  string that must not be echoed back into either.
+ *
+ *  Matches native `StoredObjectID` (apps/RelayiumKit) character for character —
+ *  the two clients speak to the same server and must refuse the same ids. */
+export class InvalidUploadIdError extends Error {
+  constructor() {
+    super("invalid upload identifier");
+    this.name = "InvalidUploadIdError";
+  }
+}
+
+/** Wide enough for any plausible future id format, narrow enough that every
+ *  member is inert in a URL path, a query string and a link fragment. Every id
+ *  the server actually issues is `authx.NewID()` — 32 hex characters — so
+ *  nothing legitimate is anywhere near the edge of this. */
+const UPLOAD_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+/** Return `id` unchanged if it is one inert token, else throw. Non-strings
+ *  (a JSON `null`, number, object or array) fail the same way a bad string
+ *  does — `JSON.parse` types nothing for us. */
+function checkedUploadId(id: unknown): string {
+  if (typeof id !== "string" || !UPLOAD_ID_RE.test(id)) throw new InvalidUploadIdError();
+  return id;
+}
+
 /** The download's network layer failed (offline, connection dropped mid-stream) —
  *  distinct from a decrypt/integrity failure, so the UI can offer a plain retry
  *  instead of the misleading "wrong key or corrupt file" message. */
@@ -92,7 +137,11 @@ export async function uploadFile(
     signal,
     (loaded, tot) => onProgress?.({ phase: "uploading", sent: loaded, total: tot }),
   );
-  return { id, expiresAt, key: encodeKey(sk.raw) };
+  // The single-shot endpoint is a trust boundary of its own: on an older server
+  // it is the *only* answer, and uploadFileResumable falls back to it. Checked
+  // before an UploadResult exists, so no caller — direct or fallback — can be
+  // handed one carrying an id this client would refuse to act on.
+  return { id: checkedUploadId(id), expiresAt, key: encodeKey(sk.raw) };
 }
 
 /** 允许回落到单发路径的最大密文体积。
@@ -126,6 +175,13 @@ export async function uploadFileResumable(
     return await chunkedUpload(files, opts, onProgress, signal);
   } catch (e) {
     if (signal?.aborted) throw e;
+    // An identifier this client refused is a trust-boundary failure, not a
+    // server too old to offer /api/uploads. Stated as its own clause rather
+    // than left to the fact that it is not an UploadError, because what must
+    // not happen is specific: falling through would re-send every byte down
+    // the single-shot path in answer to a response that was already malformed,
+    // and there is nothing to retry — the same id would be refused again.
+    if (e instanceof InvalidUploadIdError) throw e;
     if (e instanceof UploadError && (e.status === 413 || e.status === 429 || e.status === 401)) throw e;
     if (cipherSizeFor(files) > FALLBACK_MAX_CIPHER_BYTES) throw e;
     return uploadFile(files, opts, onProgress, signal);
@@ -169,7 +225,15 @@ async function chunkedUpload(
   new DataView(header.buffer).setUint32(0, encManifest.length);
   const q = `?burnAfterRead=${opts.burnAfterRead ? 1 : 0}&ttl=${opts.ttl}&size=${cipherSize}`;
   const init = await uploadJSON("POST", "/api/uploads" + q, new Blob([header, encManifest]), signal);
-  const uploadId: string = init.uploadId;
+  // The first thing done with the server's answer, and deliberately before a
+  // single file byte is encrypted or sent — the encryptFiles generator below is
+  // not even constructed yet. uploadId is interpolated into the URL of every
+  // PATCH, offset GET and finalize, so an id of `../me` composes a request aimed
+  // at an endpoint this upload never authorised. Checking here means those three
+  // are only ever reached with an id that is one inert token.
+  //
+  // Refused, not escaped: see InvalidUploadIdError.
+  const uploadId = checkedUploadId(init.uploadId);
   const chunkSize: number = init.chunkSize > 0 ? init.chunkSize : 8 << 20;
 
   // 打包缓冲：贪婪填到 >= chunkSize 就发。容量留出一整帧的余量，因为最后一帧可能
@@ -229,7 +293,10 @@ async function chunkedUpload(
 
   // finalize (small; retried so a flaky moment doesn't waste the whole upload).
   const fin = await uploadJSON("POST", `/api/uploads/${uploadId}/finalize`, undefined, signal, true);
-  return { id: fin.id, expiresAt: fin.expiresAt, key: encodeKey(sk.raw) };
+  // A second server-chosen id, and not necessarily the one init issued: this is
+  // the one the key gets filed under and the /d/<id> the user is handed.
+  // Checked before an UploadResult exists.
+  return { id: checkedUploadId(fin.id), expiresAt: fin.expiresAt, key: encodeKey(sk.raw) };
 }
 
 /** PATCH `chunk`, which covers ciphertext bytes [start, start+chunk.length), and

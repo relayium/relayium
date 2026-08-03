@@ -11,6 +11,7 @@ import {
   keyFromFragment,
   uploadBufferPeak,
   UploadError,
+  InvalidUploadIdError,
 } from "./stored-file";
 import {
   generateStoreKey,
@@ -577,6 +578,224 @@ describe("uploadFileResumable", () => {
     const after = slices;
     for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
     expect(slices).toBe(after);
+  });
+});
+
+// Ids a server must never be able to talk this client into acting on. Not an
+// abstract charset sweep: each one changes the MEANING of the string it is
+// composed into rather than its value. `../other`, `..`, `a/b` and `/api/me`
+// add or rewrite path segments of a PATCH/offset/finalize URL; `a?b` and `a#b`
+// truncate a URL at a delimiter and, in a `/d/<id>#k=<key>` link, would move or
+// orphan the key fragment; `a%2fb` is the escaped form that a server or proxy
+// may resolve back into a separator; `a.b` is the dot a path normaliser may
+// act on; whitespace, newline and NUL break the token wherever it is stored;
+// `ключ` is outside the ASCII all these composed forms are defined over. Empty
+// and 129 characters are the two length bounds. The trailing non-strings are
+// what JSON.parse can hand back for a field nothing types for us.
+const hostileUploadIds: unknown[] = [
+  "",
+  "a".repeat(129),
+  "../other",
+  "..",
+  "a/b",
+  "/api/me",
+  "a?b",
+  "a#b",
+  "a%2fb",
+  "a.b",
+  " ",
+  "a b",
+  "a\nb",
+  "\n",
+  "a\0b",
+  "ключ",
+  null,
+  42,
+  { id: "ok" },
+  ["ok"],
+];
+
+// The shapes a real server issues, plus both length bounds. `authx.NewID()` is
+// 32 hex characters — the first entry — so the rest is headroom, not fiction.
+const validUploadIds = [
+  "0123456789abcdef0123456789abcdef",
+  "AZaz09_-",
+  "a",
+  "a".repeat(128),
+];
+
+const label = (id: unknown) => JSON.stringify(id);
+
+// A fetch double for the resumable endpoints whose two server-chosen ids are
+// injectable — init's `uploadId` and finalize's `id` are two separate answers
+// and two separate trust boundaries. It counts every call by kind so a test can
+// prove one did NOT happen, and never throws on an unexpected URL: a PATCH aimed
+// at `/api/uploads/../me` must be *recorded*, not masked by a thrown mock.
+function installIdentifierFetch(opts: { initId?: unknown; finalizeId?: unknown; initStatus?: number }) {
+  const state = { inits: 0, patches: 0, offsets: 0, finalizes: 0, received: 0, urls: [] as string[] };
+  const json = (body: unknown, status = 200) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      state.urls.push(`${method} ${url}`);
+      if (method === "POST" && url.startsWith("/api/uploads?")) {
+        state.inits++;
+        if (opts.initStatus && opts.initStatus >= 300) return json({}, opts.initStatus);
+        return json({ uploadId: opts.initId, chunkSize: 100 * 1024 });
+      }
+      if (method === "POST" && url.endsWith("/finalize")) {
+        state.finalizes++;
+        return json({ id: opts.finalizeId, expiresAt: 123 });
+      }
+      if (method === "PATCH") {
+        state.patches++;
+        state.received += (await toBytes(init!.body)).length;
+        return json({ received: state.received });
+      }
+      state.offsets++;
+      return json({ received: state.received });
+    }),
+  );
+  return state;
+}
+
+// Small enough that the size gate cannot be what blocks a fallback: if the
+// terminal clause were missing, this file WOULD be re-uploaded single-shot.
+function smallFixture(): File {
+  return new File([new Uint8Array(4096)], "small.bin");
+}
+
+describe("server-supplied identifier trust", () => {
+  describe("resumable init uploadId", () => {
+    for (const id of hostileUploadIds) {
+      it(`refuses ${label(id)} before touching the upload`, async () => {
+        const state = installIdentifierFetch({ initId: id, finalizeId: "fid" });
+        // A single-shot path that would succeed, so "no fallback happened" is a
+        // real observation and not just an endpoint that was broken anyway.
+        const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
+        const file = smallFixture();
+        let slices = 0;
+        const realSlice = file.slice.bind(file);
+        file.slice = ((...a: Parameters<Blob["slice"]>) => {
+          slices++;
+          return realSlice(...a);
+        }) as Blob["slice"];
+
+        await expect(uploadFileResumable([file], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(
+          InvalidUploadIdError,
+        );
+        // Exactly the init request, nothing else: the id was refused before it
+        // could be interpolated into any URL.
+        expect(state.urls).toHaveLength(1);
+        expect(state.urls[0]).toMatch(/^POST \/api\/uploads\?/);
+        expect([state.patches, state.offsets, state.finalizes]).toEqual([0, 0, 0]);
+        // Terminal, not a fallback signal: the single POST was never sent.
+        expect(captured.url).toBe("");
+        expect(captured.body).toBeNull();
+        // And no file byte was ever encrypted for an upload already refused.
+        expect(slices).toBe(0);
+      });
+    }
+
+    for (const id of validUploadIds) {
+      it(`accepts ${label(id)} and completes the chunked upload`, async () => {
+        const state = installIdentifierFetch({ initId: id, finalizeId: "fid" });
+        const out = await uploadFileResumable([smallFixture()], { burnAfterRead: false, ttl: 0 });
+        expect(out.id).toBe("fid");
+        expect(state.patches).toBeGreaterThan(0);
+        expect(state.finalizes).toBe(1);
+        // The accepted id is used verbatim — never escaped or rewritten.
+        expect(state.urls).toContain(`PATCH /api/uploads/${id}`);
+        expect(state.urls).toContain(`POST /api/uploads/${id}/finalize`);
+      });
+    }
+  });
+
+  describe("finalize response id", () => {
+    for (const id of hostileUploadIds) {
+      it(`refuses ${label(id)} with no UploadResult escaping`, async () => {
+        const state = installIdentifierFetch({ initId: "u1", finalizeId: id });
+        const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
+
+        await expect(uploadFileResumable([smallFixture()], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(
+          InvalidUploadIdError,
+        );
+        // Chunks may well have been uploaded and the upload finalized — that is
+        // unavoidable, the id only arrives with finalize's answer. What must not
+        // happen is a result carrying it, or a second full upload chasing it.
+        expect(state.finalizes).toBe(1);
+        expect(captured.url).toBe("");
+        expect(captured.body).toBeNull();
+      });
+    }
+
+    for (const id of validUploadIds) {
+      it(`accepts ${label(id)} as the returned id`, async () => {
+        installIdentifierFetch({ initId: "u1", finalizeId: id });
+        const out = await uploadFileResumable([smallFixture()], { burnAfterRead: false, ttl: 0 });
+        expect(out.id).toBe(id);
+        expect(out.expiresAt).toBe(123);
+        expect(out.key.length).toBeGreaterThan(0);
+      });
+    }
+  });
+
+  describe("single-shot /api/files id", () => {
+    for (const id of hostileUploadIds) {
+      it(`refuses ${label(id)} on a direct upload`, async () => {
+        installFakeXHR({ status: 200, response: JSON.stringify({ id, expiresAt: 9 }), network: false });
+        await expect(uploadFile([smallFixture()], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(
+          InvalidUploadIdError,
+        );
+      });
+
+      it(`refuses ${label(id)} reached as the compatibility fallback`, async () => {
+        // An old server 404s init — the one thing that legitimately reaches the
+        // single-shot path — and then answers with a hostile id.
+        const state = installIdentifierFetch({ initStatus: 404 });
+        const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id, expiresAt: 9 }), network: false });
+
+        await expect(uploadFileResumable([smallFixture()], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(
+          InvalidUploadIdError,
+        );
+        expect(captured.url).toContain("/api/files"); // the fallback really ran
+        expect([state.patches, state.offsets, state.finalizes]).toEqual([0, 0, 0]);
+      });
+    }
+
+    for (const id of validUploadIds) {
+      it(`accepts ${label(id)} on a direct upload`, async () => {
+        installFakeXHR({ status: 200, response: JSON.stringify({ id, expiresAt: 9 }), network: false });
+        const out = await uploadFile([smallFixture()], { burnAfterRead: false, ttl: 0 });
+        expect(out.id).toBe(id);
+        expect(out.expiresAt).toBe(9);
+        expect(out.key.length).toBeGreaterThan(0);
+      });
+    }
+
+    it("refuses a 2xx body with no id field at all", async () => {
+      installFakeXHR({ status: 200, response: JSON.stringify({ expiresAt: 9 }), network: false });
+      await expect(uploadFile([smallFixture()], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(
+        InvalidUploadIdError,
+      );
+    });
+  });
+
+  it("never echoes the refused value", async () => {
+    installIdentifierFetch({ initId: "../other?x=1#k=stolen" });
+    installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
+    const err = await uploadFileResumable([smallFixture()], { burnAfterRead: false, ttl: 0 }).catch((e) => e);
+    expect(err).toBeInstanceOf(InvalidUploadIdError);
+    // The refused string is the one thing that must not reach a log or UI copy.
+    for (const s of [err.message, String(err), err.stack ?? ""]) {
+      expect(s).not.toContain("../other");
+      expect(s).not.toContain("stolen");
+    }
   });
 });
 
