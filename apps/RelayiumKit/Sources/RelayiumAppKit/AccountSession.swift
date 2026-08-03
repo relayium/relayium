@@ -45,6 +45,29 @@ public enum ResendState: Equatable {
     case failed(message: String)
 }
 
+/// What the account screen's "delete this account" action is doing.
+///
+/// Its own published value rather than a `SessionState` case, for the same
+/// reason `ResendState` is: asking the server to email a confirmation link does
+/// not change who is signed in, and modelling it as a session state would tear
+/// down the account screen — the plan, the meters, the device list — around a
+/// button press.
+///
+/// The names are the load-bearing part. There is no `.deleted` and no `.pending`
+/// here, because this type can never observe either: the only thing it can know
+/// is that the server took the request. Everything destructive happens after the
+/// link in the email is opened, which happens somewhere this app cannot see.
+public enum AccountDeletionRequestState: Equatable {
+    case idle
+    case requesting
+    /// The server accepted the request. Deliberately not `.emailSent` and not
+    /// `.deletionScheduled`: the endpoint answers 200 whether it mailed anything
+    /// or swallowed the request under its per-account throttle, and nothing has
+    /// been deleted either way.
+    case requested
+    case failed(message: String)
+}
+
 /// The whole account state machine. Routing *is* session state, so there is one
 /// source of truth rather than a separate router.
 ///
@@ -59,6 +82,11 @@ public final class AccountSession: ObservableObject {
     /// The check-email screen's own action. Reset by every operation that moves
     /// the session, so a "sent" notice cannot outlive the screen it was about.
     @Published public private(set) var resendState: ResendState = .idle
+    /// The account screen's delete-this-account action. Reset by every operation
+    /// that moves the session, for the same reason `resendState` is: a notice
+    /// about one account's deletion request has no meaning on a signed-out
+    /// screen or on somebody else's account.
+    @Published public private(set) var deletionRequestState: AccountDeletionRequestState = .idle
 
     private let client: AccountClient
     private let tokenStore: TokenStore
@@ -101,17 +129,25 @@ public final class AccountSession: ObservableObject {
     }
 
     /// `beginOperation`, plus the one thing every session-moving operation owes
-    /// the check-email screen: its resend notice belongs to ONE address in ONE
-    /// state, so signing in, signing out, restoring or registering clears it.
-    /// A "Sent" line surviving into the next screen would be a claim about an
-    /// email nobody there asked for.
+    /// the two screen-local notices: each belongs to ONE address or ONE account
+    /// in ONE state, so signing in, signing out, restoring or registering clears
+    /// them. A "Sent" line surviving into the next screen would be a claim about
+    /// an email nobody there asked for, and a "we've emailed you a confirmation
+    /// link" line surviving a sign-in as somebody else would be a claim about a
+    /// deletion request that account never made.
     ///
-    /// `resendVerification()` deliberately uses the bare `beginOperation()`
-    /// instead: it claims the same generation counter — so a sign-out mid-resend
-    /// still supersedes it — while leaving `resendState` alone, since that is
-    /// the value it exists to write.
+    /// `resendVerification()` and `requestAccountDeletion()` deliberately use
+    /// the bare `beginOperation()` instead: each claims the same generation
+    /// counter — so a sign-out mid-request still supersedes it — while leaving
+    /// the notice alone, since that is the value each exists to write.
+    ///
+    /// `refresh()` clearing the deletion notice is a deliberate consequence, not
+    /// an oversight: it is a session-moving operation, one rule covers all of
+    /// them, and losing a notice is the safe direction to be wrong in — the
+    /// alternative is a second lifecycle whose failure mode is a stale claim.
     private func beginSessionOperation() -> Int {
         resendState = .idle
+        deletionRequestState = .idle
         return beginOperation()
     }
 
@@ -382,6 +418,84 @@ public final class AccountSession: ObservableObject {
             }
             resendState = .failed(message: ErrorCopy.message(for: error))
         }
+    }
+
+    /// Ask the server to email this account a deletion-confirm link.
+    ///
+    /// What this method is allowed to establish is exactly one thing: the server
+    /// took the request. So it writes only `deletionRequestState`, and it must
+    /// not — on any path — clear the bearer, sign the user out, or move
+    /// `state`. Nothing has been deleted when this returns; the account is still
+    /// signed in, still usable, and stays that way until the link in the email
+    /// is opened and the server revokes the credential itself. An app that
+    /// signed out here would be asserting a deletion that has not happened, and
+    /// would take away the session the user needs to change their mind.
+    ///
+    /// Reachable only from a `.ready` account, and it pins THREE things about
+    /// that account rather than one, because they can diverge:
+    ///
+    ///  * the **generation**, so a sign-out or a second sign-in that lands
+    ///    mid-flight supersedes this and the late completion writes nothing;
+    ///  * the **account id**, so a response cannot paint a notice about one
+    ///    account onto another that is now on screen;
+    ///  * the **token**, so the request goes out under the credential this
+    ///    account holds now, not one captured earlier and since replaced.
+    ///
+    /// A second press while one is in flight is refused rather than queued: the
+    /// endpoint throttles per account anyway, so a queued second request would
+    /// buy nothing and could turn a "requested" into a silently swallowed one.
+    public func requestAccountDeletion() async {
+        // A stale view or a late tap is not authority to ask for anything — and
+        // in particular has no authority to claim the shared generation and
+        // supersede whatever replaced the screen it came from.
+        guard case let .ready(user, _) = state,
+              let token = sessionToken, !token.isEmpty else { return }
+        if case .requesting = deletionRequestState { return }
+        let accountId = user.id
+        let g = beginOperation()
+        deletionRequestState = .requesting
+        do {
+            try await client.requestAccountDeletion(token: token)
+            guard isStill(accountId, token, g) else { return }
+            deletionRequestState = .requested
+        } catch {
+            guard isStill(accountId, token, g) else { return }
+            // A cancelled request (the window closed mid-request) is not a
+            // refused one. Nothing was claimed for this attempt, so the honest
+            // resting state is the button again, without an error the user did
+            // not cause.
+            guard !Task.isCancelled else {
+                deletionRequestState = .idle
+                return
+            }
+            deletionRequestState = .failed(message: Self.deletionRequestMessage(for: error))
+        }
+    }
+
+    /// The sentence a failed deletion request gets.
+    ///
+    /// `ErrorCopy`'s wording for a rejected credential is about an email and a
+    /// password, and neither was involved: the bearer this screen holds was
+    /// revoked or expired between the account loading and this request. Same
+    /// substitution `AccountManagementModel` makes for the same reason.
+    ///
+    /// It reports rather than acts. A 401 here does NOT clear the token or sign
+    /// the user out: this path may not end a session, and the user is told what
+    /// to do instead.
+    private static func deletionRequestMessage(for error: Error) -> String {
+        if let e = error as? AccountError, e == .invalidCredentials {
+            return L10n.t(.accountBearerInvalid)
+        }
+        return ErrorCopy.message(for: error)
+    }
+
+    /// Is the account this operation was started for still the one on screen,
+    /// holding the same credential, with no newer operation having claimed the
+    /// counter? All three, because each catches a case the others do not.
+    private func isStill(_ accountId: String, _ token: String, _ g: Int) -> Bool {
+        guard !superseded(g) else { return false }
+        guard case let .ready(user, _) = state, user.id == accountId else { return false }
+        return sessionToken == token
     }
 
     public func refresh() async {

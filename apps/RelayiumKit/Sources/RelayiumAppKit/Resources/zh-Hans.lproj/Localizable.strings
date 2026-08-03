@@ -326,9 +326,17 @@
 "account.fileNotDownloaded" = "尚未下载";
 "account.fileDownloadedOnce" = "已下载 1 次";
 "account.fileDownloadedTimes.other" = "已下载 %@ 次";
-"account.bearerInvalid" = "这台 Mac 的登录凭据已失效。请退出登录后重新登录。";
+"account.bearerInvalid" = "这台设备的登录凭据已失效。请退出登录后重新登录。";
 "account.keyCleanupWarning" = "已存储的文件“%1$@”已从服务器删除，但它的密钥仍留在这台 Mac 上。%2$@ 这个密钥已经打不开任何东西了 — 它所对应的加密数据已经不存在。";
 "account.signOutFailed" = "无法安全退出登录。凭据已保留，你可以重试。";
+"account.deleteAccountHeading" = "删除账户";
+"account.deleteAccountBody" = "删除账户从一封邮件开始：Relayium 会向 %@ 发送确认链接。在打开该链接之前不会删除任何内容。";
+"account.deleteAccount" = "删除账户…";
+"account.deleteAccountConfirmTitle" = "要删除这个 Relayium 账户吗？";
+"account.deleteAccountConfirmBody" = "Relayium 会通过邮件向 %@ 发送确认链接。在打开该链接之前不会删除任何内容。打开后会撤销该账户的 Relayium 登录会话和设备访问权限、清除已存储的文件，并安排在宽限期结束后永久删除账户；在宽限期内重新登录即可重新激活账户。";
+"account.deleteAccountConfirmAction" = "发送确认邮件";
+"account.deleteAccountRequesting" = "正在请求确认邮件…";
+"account.deleteAccountRequested" = "已提交请求。在打开该链接之前不会删除任何内容。如果 %@ 没有收到邮件，请查看垃圾邮件文件夹后重试。";
 
 /* MARK: 套餐用量与徽标 */
 "usage.unlimited" = "无限制";

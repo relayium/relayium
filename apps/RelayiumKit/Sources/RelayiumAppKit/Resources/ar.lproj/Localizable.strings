@@ -349,9 +349,17 @@
 "account.fileDownloadedTimes.few" = "نُزِّل %@ مرات";
 "account.fileDownloadedTimes.many" = "نُزِّل %@ مرة";
 "account.fileDownloadedTimes.other" = "نُزِّل %@ مرة";
-"account.bearerInvalid" = "لم يعد تسجيل الدخول على هذا الـ Mac صالحًا. سجّل الخروج ثم سجّل الدخول من جديد.";
+"account.bearerInvalid" = "لم يعد تسجيل الدخول على هذا الجهاز صالحًا. سجّل الخروج ثم سجّل الدخول من جديد.";
 "account.keyCleanupWarning" = "حُذف الملف المخزَّن «%1$@» من الخادم، لكن مفتاحه لا يزال على هذا الـ Mac. %2$@ ولم يعد هذا المفتاح يفتح شيئًا — فالبيانات المُعمّاة التي كان يخصّها لم تعد موجودة.";
 "account.signOutFailed" = "تعذّر تسجيل الخروج بأمان. احتُفظ ببيانات الاعتماد كي تتمكن من إعادة المحاولة.";
+"account.deleteAccountHeading" = "حذف الحساب";
+"account.deleteAccountBody" = "يبدأ حذف هذا الحساب برسالة بريد: يرسل Relayium رابط تأكيد إلى %@. لا يتم حذف أي شيء قبل فتح هذا الرابط.";
+"account.deleteAccount" = "حذف الحساب…";
+"account.deleteAccountConfirmTitle" = "هل تريد حذف حساب Relayium هذا؟";
+"account.deleteAccountConfirmBody" = "يرسل Relayium رابط تأكيد عبر البريد إلى %@. لا يتم حذف أي شيء قبل فتح هذا الرابط. عند فتحه، تُلغى جلسات Relayium وصلاحية وصول الأجهزة لهذا الحساب، وتُحذف ملفاته المخزنة، ويُجدول حذف الحساب نهائيًا بعد انتهاء مهلة السماح. خلال هذه المهلة، سجّل الدخول مرة أخرى لإعادة تنشيط الحساب.";
+"account.deleteAccountConfirmAction" = "أرسل رسالة التأكيد بالبريد";
+"account.deleteAccountRequesting" = "جارٍ طلب رسالة التأكيد…";
+"account.deleteAccountRequested" = "تم إرسال الطلب. لا يتم حذف أي شيء قبل فتح هذا الرابط. إن لم تصل رسالة إلى %@ فتحقق من مجلد البريد المزعج ثم أعد المحاولة.";
 
 /* MARK: الاستهلاك والشارات */
 "usage.unlimited" = "بلا حدود";

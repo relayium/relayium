@@ -171,12 +171,22 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// indirectly — which is why `error.manifest.duplicatePath`, the one an iOS
     /// receive can already hit, was corrected in the catalogs instead of listed
     /// here, and why the five above had to be corrected the same way.
+    ///
+    /// A sixth left this list in the account-deletion slice, by the same route:
+    /// `account.bearerInvalid` is what `AccountSession` renders when a deletion
+    /// request comes back 401, and `AccountSession` runs on both platforms — so
+    /// listing it here would have banned a sentence the shared layer now
+    /// produces anyway. It was corrected in place in all nine catalogs instead
+    /// ("this Mac" → the language's own device noun), and
+    /// `LocalizedCopyTests.testTheRevokedCredentialSentenceNamesNoPlatform`
+    /// carries the claim from here on — which is the stronger guard, since it
+    /// reads the copy rather than the call sites.
     func testNoPlatformNamingCopyKeyIsRenderedOnIOS() throws {
         let platformNaming: [L10nKey] = [
             // R3-D: device and stored-file management, and rebuilding a link
             // from a stored key.
             .accountThisMac, .accountRevokeThisMac, .accountKeyNotOnThisMac,
-            .accountKeyLookupFailed, .accountKeyCleanupWarning, .accountBearerInvalid,
+            .accountKeyLookupFailed, .accountKeyCleanupWarning,
             .errorStoredLinkKeyInvalidKey,
             .errorStoredKeyKeychainRead, .errorStoredKeyKeychainRemove,
             // R3-E / R3-F: realtime, nearby, notifications.
@@ -186,7 +196,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
             // Rendered by nothing on either platform yet.
             .errorKeychainSignIn,
         ]
-        XCTAssertEqual(platformNaming.count, 17)
+        XCTAssertEqual(platformNaming.count, 16)
         for (name, text) in try sources() {
             for key in platformNaming {
                 XCTAssertFalse(text.contains(".\(key)"),
@@ -298,6 +308,51 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(tab.text.contains("if isResending {"),
                       "the resend button must be replaced while a request is in flight, "
                       + "so a second press cannot start a second request")
+    }
+
+    /// The signed-in account can end itself, in the app, in two steps.
+    ///
+    /// Same claim as `MacSurfaceGuardTests`'s, on the surface `AccountTab`
+    /// renders for `.ready` — and each clause is a way it could look finished
+    /// and not be: a button wired straight to the session would be a one-tap
+    /// account deletion, an `openURL` would be the browser hand-off this slice
+    /// exists to replace, and a sign-out on success would assert a deletion the
+    /// server has not performed and take away the credential the user needs if
+    /// they change their mind before opening the link.
+    func testTheAccountSurfaceCanEndTheAccountNativelyAndOnlyAfterConfirming() throws {
+        let all = try sources()
+        let summary = try XCTUnwrap(all.first { $0.name == "AccountSummaryView.swift" })
+        XCTAssertTrue(summary.text.contains(
+            "Button(L10n.t(.accountDeleteAccount), role: .destructive)"),
+            "the delete control must carry the destructive role")
+        XCTAssertTrue(summary.text.contains("confirmingAccountDeletion = true"),
+                      "and must open a confirmation rather than act")
+        XCTAssertTrue(summary.text.contains("confirmationDialog("),
+                      "the confirmation must be the system's, not a hand-drawn sheet")
+        XCTAssertTrue(summary.text.contains(
+            "Button(L10n.t(.accountDeleteAccountConfirmAction), role: .destructive)"),
+            "the confirmation's action is the destructive one")
+        XCTAssertTrue(summary.text.contains("session.requestAccountDeletion()"),
+                      "the request must go through the session")
+
+        // Exactly one call site across the whole app: a second would be one
+        // that skipped the confirmation.
+        XCTAssertEqual(all.map { $0.text.components(separatedBy: "session.requestAccountDeletion()").count - 1 }
+                          .reduce(0, +), 1)
+
+        guard let confirmAction = summary.text.range(of: ".accountDeleteAccountConfirmAction"),
+              let requests = summary.text.range(of: "session.requestAccountDeletion()") else {
+            return XCTFail("AccountSummaryView no longer has the two-step delete")
+        }
+        XCTAssertTrue(confirmAction.upperBound < requests.lowerBound,
+                      "the request must sit inside the confirmation's destructive button")
+
+        // No hand-off to the website, and no sign-out on the way. The one
+        // sign-out here is the Sign out button that was already on the screen.
+        XCTAssertFalse(summary.text.contains("openURL(AppEnvironment.accountWebURL"),
+                       "account deletion must not leave the app")
+        XCTAssertEqual(summary.text.components(separatedBy: "session.logOut()").count - 1, 1,
+                       "requesting a deletion must not sign the user out")
     }
 
     // MARK: - native Sign in with Apple

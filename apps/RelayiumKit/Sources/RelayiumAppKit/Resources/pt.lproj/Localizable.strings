@@ -330,9 +330,17 @@
 "account.fileDownloadedOnce" = "transferido uma vez";
 "account.fileDownloadedTimes.one" = "transferido %@ vez";
 "account.fileDownloadedTimes.other" = "transferido %@ vezes";
-"account.bearerInvalid" = "O início de sessão deste Mac já não é válido. Termine a sessão e volte a iniciá-la.";
+"account.bearerInvalid" = "O início de sessão deste dispositivo já não é válido. Termine a sessão e volte a iniciá-la.";
 "account.keyCleanupWarning" = "O ficheiro armazenado «%1$@» foi eliminado do servidor, mas a sua chave continua neste Mac. %2$@ Essa chave já não abre nada — os dados cifrados a que pertencia desapareceram.";
 "account.signOutFailed" = "Não foi possível terminar a sessão em segurança. As credenciais foram mantidas para que possa tentar de novo.";
+"account.deleteAccountHeading" = "Eliminar a conta";
+"account.deleteAccountBody" = "Eliminar esta conta começa por um e-mail: o Relayium envia uma ligação de confirmação para %@. Nada é apagado até que essa ligação seja aberta.";
+"account.deleteAccount" = "Eliminar a conta…";
+"account.deleteAccountConfirmTitle" = "Eliminar esta conta Relayium?";
+"account.deleteAccountConfirmBody" = "O Relayium envia uma ligação de confirmação por e-mail para %@. Nada é apagado até que essa ligação seja aberta. Ao abri-la, as sessões do Relayium e o acesso dos dispositivos desta conta são revogados, os ficheiros guardados são apagados e a eliminação definitiva da conta é agendada para o fim do período de tolerância. Durante esse período, inicie sessão novamente para reativar a conta.";
+"account.deleteAccountConfirmAction" = "Enviar o e-mail de confirmação";
+"account.deleteAccountRequesting" = "A pedir o e-mail de confirmação…";
+"account.deleteAccountRequested" = "Pedido enviado. Nada é apagado até que essa ligação seja aberta. Se não chegar nenhum e-mail a %@, verifique a pasta de spam e tente novamente.";
 
 /* MARK: utilização e distintivos */
 "usage.unlimited" = "Ilimitado";

@@ -87,11 +87,21 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/auth/email/resend", s.handleResendVerification)
 	mux.HandleFunc("POST /api/auth/password/forgot", s.handleForgotPassword)
 	mux.HandleFunc("POST /api/auth/password/reset", s.handleResetPassword)
-	// Self-serve account deletion (double opt-in): request is session-authed and
+	// Self-serve account deletion (double opt-in): request is authenticated and
 	// only ever emails a confirm link (no destructive action); confirm carries
 	// no session (a prior confirm may already have revoked it) — the token
 	// itself is the authorization, mirroring the password-reset token pattern.
-	mux.HandleFunc("POST /api/account/delete/request", s.RequireSession(s.handleDeleteRequest))
+	//
+	// RequireAuth (session cookie OR bearer), for the same reason /api/me and
+	// the device list carry it: the native apps hold a rlm_cli_ bearer and no
+	// session cookie, so a session-only route puts the one control that can
+	// start a deletion out of reach of the app the user is signed into. The
+	// widening is bounded to the REQUEST — the only thing it can produce is an
+	// email to the account's own address, and only the link in that email can
+	// destroy anything. Nothing about the cookie path moves: RequireAuth tries
+	// the session cookie first and CSRFGuard still rejects a cookie POST
+	// carrying a foreign Origin. `confirm` below stays exactly as it was.
+	mux.HandleFunc("POST /api/account/delete/request", s.RequireAuth(s.handleDeleteRequest))
 	mux.HandleFunc("POST /api/account/delete/confirm", s.handleDeleteConfirm)
 	// Reactivation (Task 4): also unauthed — a frozen account has no live
 	// session, so the reactivate token itself is the authorization, exactly

@@ -552,10 +552,43 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case accountFileDownloaded = "account.fileDownloaded"
     case accountFileNotDownloaded = "account.fileNotDownloaded"
     case accountFileDownloadedOnce = "account.fileDownloadedOnce"
+    /// Device-neutral since the account-deletion slice: `AccountSession` renders
+    /// it when a deletion request comes back 401, and that runs on iOS too, so
+    /// the sentence may not say "Mac" any more.
     case accountBearerInvalid = "account.bearerInvalid"
     /// %1$@ stored-file id (technical), %2$@ the key-removal failure sentence.
     case accountKeyCleanupWarning = "account.keyCleanupWarning"
     case accountSignOutFailed = "account.signOutFailed"
+
+    // MARK: - Deleting the account itself
+    //
+    // Every one of these is held to the same three claims, in all nine
+    // languages, by `LocalizedCopyTests`: the confirmation still happens by
+    // EMAIL, asking is NOT yet deleting, and what confirming destroys is stated
+    // rather than implied. The wording is device-neutral — iOS renders these
+    // too, so nothing here may name a platform.
+
+    case accountDeleteAccountHeading = "account.deleteAccountHeading"
+    /// %@ — the account's own email address, never translated.
+    case accountDeleteAccountBody = "account.deleteAccountBody"
+    /// The control that opens the confirmation, not the one that acts.
+    case accountDeleteAccount = "account.deleteAccount"
+    case accountDeleteAccountConfirmTitle = "account.deleteAccountConfirmTitle"
+    /// %@ — the account's own email address. The one string that has to carry
+    /// the whole consequence: which server-side access confirming revokes,
+    /// what it erases, and that the account itself goes permanently once the
+    /// grace period ends.
+    case accountDeleteAccountConfirmBody = "account.deleteAccountConfirmBody"
+    /// The destructive button INSIDE the confirmation. It is labelled with what
+    /// pressing it actually does — send an email — because it does not delete
+    /// anything, and a button reading "Delete" would be the app's own copy
+    /// contradicting the sentence directly above it.
+    case accountDeleteAccountConfirmAction = "account.deleteAccountConfirmAction"
+    case accountDeleteAccountRequesting = "account.deleteAccountRequesting"
+    /// %@ — the account's own email address. Says what was established (the
+    /// server took the request) and not what was not: the endpoint answers the
+    /// same way whether it mailed anything or throttled it.
+    case accountDeleteAccountRequested = "account.deleteAccountRequested"
 
     // MARK: - Plan meters and badges
 

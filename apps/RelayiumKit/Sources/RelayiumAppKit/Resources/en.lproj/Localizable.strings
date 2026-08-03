@@ -331,9 +331,17 @@
 "account.fileDownloadedOnce" = "downloaded once";
 "account.fileDownloadedTimes.one" = "downloaded %@ time";
 "account.fileDownloadedTimes.other" = "downloaded %@ times";
-"account.bearerInvalid" = "This Mac's sign-in is no longer valid. Sign out and sign in again.";
+"account.bearerInvalid" = "This device's sign-in is no longer valid. Sign out and sign in again.";
 "account.keyCleanupWarning" = "The stored file “%1$@” was deleted from the server, but its key is still on this Mac. %2$@ The key can't open anything any more — the encrypted data it belonged to is gone.";
 "account.signOutFailed" = "Could not securely sign out. The credential was kept so you can retry.";
+"account.deleteAccountHeading" = "Delete account";
+"account.deleteAccountBody" = "Deleting this account starts with an email: Relayium sends a confirmation link to %@. Nothing is removed until that link is opened.";
+"account.deleteAccount" = "Delete account…";
+"account.deleteAccountConfirmTitle" = "Delete this Relayium account?";
+"account.deleteAccountConfirmBody" = "Relayium sends a confirmation link by email to %@. Nothing is removed until that link is opened. Opening it revokes this account's Relayium sessions and device access, erases its stored files, and schedules permanent account deletion after the grace period. During that period, sign in again to reactivate the account.";
+"account.deleteAccountConfirmAction" = "Send the confirmation email";
+"account.deleteAccountRequesting" = "Asking for the confirmation email…";
+"account.deleteAccountRequested" = "Requested. Nothing is removed until that link is opened. If no email reaches %@, check your spam folder and try again.";
 
 /* MARK: plan meters and badges */
 "usage.unlimited" = "Unlimited";

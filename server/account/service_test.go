@@ -19,6 +19,8 @@ type capturingMailer struct {
 	// test can assert on the delete-confirm link, the post-confirm reactivate
 	// link, and the scheduled purge time without racing other mailer calls.
 	lastDeleteLink      string // confirm-deletion link from SendAccountDeletionConfirm
+	lastDeleteEmail     string // address that link was sent to
+	deleteRequests      int    // SendAccountDeletionConfirm calls
 	lastReactivateLink  string // reactivate link from SendAccountDeletionScheduled/Reminder
 	lastPurgeAt         int64
 	deletionScheduled   int
@@ -56,11 +58,31 @@ func (m *capturingMailer) sends() int {
 	return m.count
 }
 
-func (m *capturingMailer) SendAccountDeletionConfirm(_ context.Context, _, link string) error {
+func (m *capturingMailer) SendAccountDeletionConfirm(_ context.Context, email, link string) error {
 	m.mu.Lock()
+	m.lastDeleteEmail = email
 	m.lastDeleteLink = link
+	m.deleteRequests++
 	m.mu.Unlock()
 	return nil
+}
+
+// deleteConfirmSends reports how many delete-confirm emails were sent, under
+// the same lock every field is written behind.
+func (m *capturingMailer) deleteConfirmSends() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.deleteRequests
+}
+
+// deleteConfirmRecipient is the address the last delete-confirm link was
+// addressed to. The endpoint answers the same generic 200 whatever happens, so
+// this is the only place a test can see WHICH account a request actually acted
+// for — which is the whole question a bearer-authenticated route raises.
+func (m *capturingMailer) deleteConfirmRecipient() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.lastDeleteEmail
 }
 
 func (m *capturingMailer) SendAccountDeletionScheduled(_ context.Context, _ string, purgeAt int64, reactivateLink string) error {

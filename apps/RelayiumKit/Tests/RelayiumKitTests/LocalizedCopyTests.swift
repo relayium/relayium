@@ -338,6 +338,200 @@ final class LocalizedCopyTests: XCTestCase {
         XCTAssertTrue(L10n.t(.accountDeleteFileBody, language: .ar).contains("لا يمكن التراجع"))
     }
 
+    // MARK: - deleting the account itself
+
+    /// The address the app shows a user in each language, alongside the phrases
+    /// that carry the safety claims the account-deletion copy may never lose.
+    ///
+    /// Written out by hand, one row per language, for the reason `deviceNoun`
+    /// above is: an assertion that a translation still says "confirm by email"
+    /// is only worth something if somebody read the sentence and named the words
+    /// it says it in.
+    private struct DeletionCopyClaims {
+        /// The language's word for email — the confirmation is by mail, and no
+        /// translation may quietly turn it into an in-app confirmation.
+        let email: String
+        /// "Nothing is removed until that link is opened", in this language.
+        /// The claim that makes the request safe: asking is not deleting.
+        let notYet: String
+        /// The word that says the end state is permanent, so the destructive
+        /// consequence is stated rather than left to be inferred.
+        let permanent: String
+        /// Server-side access that confirmation actually revokes.
+        let revokedAccess: String
+        /// The supported recovery path during the grace period.
+        let reactivate: String
+        /// Claims the product cannot make: an established peer transfer may
+        /// continue, and the first confirmation email is not a reactivation
+        /// email.
+        let overclaims: [String]
+    }
+
+    private let deletionClaims: [AppLanguage: DeletionCopyClaims] = [
+        .en: .init(email: "email",
+                   notYet: "Nothing is removed until",
+                   permanent: "permanent",
+                   revokedAccess: "sessions and device access",
+                   reactivate: "sign in again",
+                   overclaims: ["transfers in progress", "same email"]),
+        .zh: .init(email: "邮件",
+                   notYet: "之前不会删除任何内容",
+                   permanent: "永久",
+                   revokedAccess: "登录会话和设备访问权限",
+                   reactivate: "重新登录",
+                   overclaims: ["进行中的传输", "同一封邮件"]),
+        .ja: .init(email: "メール",
+                   notYet: "まで、何も削除されません",
+                   permanent: "完全に",
+                   revokedAccess: "セッションとデバイスのアクセス権",
+                   reactivate: "もう一度サインイン",
+                   overclaims: ["進行中の転送", "同じメール"]),
+        .ko: .init(email: "메일",
+                   notYet: "전에는 아무것도 삭제되지 않습니다",
+                   permanent: "영구",
+                   revokedAccess: "세션과 기기 접근 권한",
+                   reactivate: "다시 로그인",
+                   overclaims: ["진행 중인 전송", "같은 메일"]),
+        .de: .init(email: "E-Mail",
+                   notYet: "wird nichts entfernt",
+                   permanent: "endgültig",
+                   revokedAccess: "Sitzungen und Gerätezugriffe",
+                   reactivate: "erneut anmelden",
+                   overclaims: ["laufende Übertragungen", "dieselbe E-Mail"]),
+        .fr: .init(email: "e-mail",
+                   notYet: "Rien n'est supprimé tant que",
+                   permanent: "définitive",
+                   revokedAccess: "sessions Relayium et l'accès des appareils",
+                   reactivate: "reconnectez-vous",
+                   overclaims: ["transferts en cours", "même e-mail"]),
+        .ar: .init(email: "البريد",
+                   notYet: "لا يتم حذف أي شيء قبل فتح",
+                   permanent: "نهائيًا",
+                   revokedAccess: "جلسات Relayium وصلاحية وصول الأجهزة",
+                   reactivate: "سجّل الدخول مرة أخرى",
+                   overclaims: ["عمليات النقل الجارية", "الرسالة نفسها"]),
+        .es: .init(email: "correo",
+                   notYet: "No se elimina nada hasta",
+                   permanent: "definitiva",
+                   revokedAccess: "sesiones de Relayium y el acceso de los dispositivos",
+                   reactivate: "vuelve a iniciar sesión",
+                   overclaims: ["transferencias en curso", "mismo correo"]),
+        .pt: .init(email: "e-mail",
+                   notYet: "Nada é apagado até",
+                   permanent: "definitiva",
+                   revokedAccess: "sessões do Relayium e o acesso dos dispositivos",
+                   reactivate: "inicie sessão novamente",
+                   overclaims: ["transferências em curso", "mesmo e-mail"]),
+    ]
+
+    /// The safety claims, in all nine languages.
+    ///
+    /// This is the only destructive action in the app whose copy is the safety
+    /// mechanism: the button sends an email and nothing else, and a translation
+    /// that lost any one of these would leave a user pressing a destructive
+    /// control with a wrong idea of what happens next. So each is asserted on
+    /// the strings the two screens actually render, not on the English original.
+    ///
+    ///  1. **It is still confirmed by email.** Both the confirmation the user
+    ///     reads before pressing and the notice they read afterwards say so.
+    ///  2. **Asking is not yet deleting.** Same two strings, because the second
+    ///     one is what stays on screen and would otherwise be read as "done".
+    ///  3. **The consequence is stated accurately.** The confirmation names
+    ///     server-side access revocation, stored-file removal, permanent account
+    ///     deletion and the supported reactivation path without promising to
+    ///     stop established peer transfers or reuse the first email.
+    func testTheAccountDeletionCopyKeepsItsSafetyClaimsInEveryLanguage() throws {
+        let address = "ada@example.com"
+        for language in AppLanguage.allCases {
+            let claims = try XCTUnwrap(deletionClaims[language],
+                                       "\(language.rawValue) has no row in the table")
+            let confirm = L10n.t(.accountDeleteAccountConfirmBody, [address], language: language)
+            let requested = L10n.t(.accountDeleteAccountRequested, [address], language: language)
+
+            for (name, text) in [("confirm body", confirm), ("requested notice", requested)] {
+                XCTAssertTrue(text.contains(claims.email),
+                              "\(language.rawValue) \(name) stopped saying the confirmation is "
+                              + "by email: \(text)")
+                XCTAssertTrue(text.contains(claims.notYet),
+                              "\(language.rawValue) \(name) stopped saying that nothing is "
+                              + "removed until the link is opened: \(text)")
+                XCTAssertTrue(text.contains(address),
+                              "\(language.rawValue) \(name) lost the address: \(text)")
+            }
+            XCTAssertTrue(confirm.contains(claims.permanent),
+                          "\(language.rawValue) confirm body stopped stating that the account "
+                          + "goes permanently: \(confirm)")
+            XCTAssertTrue(confirm.contains(claims.revokedAccess),
+                          "\(language.rawValue) confirm body stopped naming the server-side "
+                          + "access that is revoked: \(confirm)")
+            XCTAssertTrue(confirm.contains(claims.reactivate),
+                          "\(language.rawValue) confirm body stopped explaining reactivation: "
+                          + confirm)
+            for overclaim in claims.overclaims {
+                XCTAssertFalse(confirm.contains(overclaim),
+                               "\(language.rawValue) confirm body makes an unsupported claim "
+                               + "(\(overclaim)): \(confirm)")
+            }
+        }
+    }
+
+    /// Every string the deletion section adds is real copy in all nine, not a
+    /// key echoed back and not a template with an unsubstituted placeholder.
+    func testTheAccountDeletionCopyIsTranslatedEverywhere() {
+        let plain: [L10nKey] = [
+            .accountDeleteAccountHeading, .accountDeleteAccount,
+            .accountDeleteAccountConfirmTitle, .accountDeleteAccountConfirmAction,
+            .accountDeleteAccountRequesting,
+        ]
+        let withAddress: [L10nKey] = [
+            .accountDeleteAccountBody, .accountDeleteAccountConfirmBody,
+            .accountDeleteAccountRequested,
+        ]
+        for language in AppLanguage.allCases {
+            for key in plain + withAddress {
+                let text = withAddress.contains(key)
+                    ? L10n.t(key, ["x@example.com"], language: language)
+                    : L10n.t(key, language: language)
+                XCTAssertFalse(text.isEmpty, "\(key.rawValue) [\(language.rawValue)]")
+                XCTAssertNotEqual(text, key.rawValue,
+                                  "\(key.rawValue) [\(language.rawValue)] fell back to the key")
+                XCTAssertFalse(text.contains("%@"),
+                               "\(key.rawValue) [\(language.rawValue)]: \(text)")
+            }
+        }
+    }
+
+    /// The button inside the confirmation is labelled for what it does, and what
+    /// it does is send an email. Every language names the mail rather than the
+    /// deletion, because the sentence directly above it says nothing is deleted
+    /// yet — a button contradicting its own dialog is the copy defect this
+    /// action can least afford.
+    func testTheConfirmationButtonNamesTheEmailInEveryLanguage() throws {
+        for language in AppLanguage.allCases {
+            let claims = try XCTUnwrap(deletionClaims[language])
+            let action = L10n.t(.accountDeleteAccountConfirmAction, language: language)
+            XCTAssertTrue(action.contains(claims.email)
+                          || action.contains(claims.email.lowercased()),
+                          "\(language.rawValue) confirmation button stopped naming the email: "
+                          + action)
+        }
+    }
+
+    /// `account.bearerInvalid` is rendered by `AccountSession` when a deletion
+    /// request comes back 401, and that runs on iOS as well as macOS — so the
+    /// sentence that used to say "this Mac" may not name a platform in any
+    /// language any more. This replaces the ban that kept it off iOS.
+    func testTheRevokedCredentialSentenceNamesNoPlatform() {
+        for language in AppLanguage.allCases {
+            let text = L10n.t(.accountBearerInvalid, language: language)
+            XCTAssertFalse(text.isEmpty, language.rawValue)
+            for platform in ["Mac", "iPhone", "iPad", "iOS", "macOS"] {
+                XCTAssertFalse(text.contains(platform),
+                               "\(language.rawValue) names a platform: \(text)")
+            }
+        }
+    }
+
     /// Verification is off by default and that is stated, not implied — in every
     /// language, because it is the one setting whose default a user may want to
     /// change before they trust a transfer.

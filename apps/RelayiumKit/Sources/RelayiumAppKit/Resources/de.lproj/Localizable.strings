@@ -330,9 +330,17 @@
 "account.fileDownloadedOnce" = "einmal heruntergeladen";
 "account.fileDownloadedTimes.one" = "%@-mal heruntergeladen";
 "account.fileDownloadedTimes.other" = "%@-mal heruntergeladen";
-"account.bearerInvalid" = "Die Anmeldung dieses Macs ist nicht mehr gültig. Melde dich ab und wieder an.";
+"account.bearerInvalid" = "Die Anmeldung dieses Geräts ist nicht mehr gültig. Melde dich ab und wieder an.";
 "account.keyCleanupWarning" = "Die gespeicherte Datei „%1$@“ wurde vom Server gelöscht, ihr Schlüssel liegt aber weiterhin auf diesem Mac. %2$@ Der Schlüssel kann nichts mehr öffnen — die verschlüsselten Daten, zu denen er gehörte, sind fort.";
 "account.signOutFailed" = "Sicheres Abmelden war nicht möglich. Die Zugangsdaten wurden behalten, damit du es erneut versuchen kannst.";
+"account.deleteAccountHeading" = "Konto löschen";
+"account.deleteAccountBody" = "Das Löschen dieses Kontos beginnt mit einer E-Mail: Relayium sendet einen Bestätigungslink an %@. Bis dieser Link geöffnet wird, wird nichts entfernt.";
+"account.deleteAccount" = "Konto löschen…";
+"account.deleteAccountConfirmTitle" = "Dieses Relayium-Konto löschen?";
+"account.deleteAccountConfirmBody" = "Relayium sendet einen Bestätigungslink per E-Mail an %@. Bis dieser Link geöffnet wird, wird nichts entfernt. Beim Öffnen werden die Relayium-Sitzungen und Gerätezugriffe dieses Kontos widerrufen, seine gespeicherten Dateien gelöscht und die endgültige Kontolöschung nach Ablauf der Karenzzeit geplant. Während dieser Zeit kannst du dich erneut anmelden, um das Konto zu reaktivieren.";
+"account.deleteAccountConfirmAction" = "Bestätigungs-E-Mail senden";
+"account.deleteAccountRequesting" = "Bestätigungs-E-Mail wird angefordert…";
+"account.deleteAccountRequested" = "Angefordert. Bis dieser Link geöffnet wird, wird nichts entfernt. Falls bei %@ keine E-Mail ankommt, sieh im Spam-Ordner nach und versuche es erneut.";
 
 /* MARK: Verbrauch und Abzeichen */
 "usage.unlimited" = "Unbegrenzt";

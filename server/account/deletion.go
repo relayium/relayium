@@ -228,6 +228,11 @@ func (s *Service) handleReactivate(w http.ResponseWriter, r *http.Request) {
 // handleForgotPassword/handleResendVerification): the mailer send outcome is
 // not observable to the caller, so a probe can't distinguish "sent" from
 // "throttled".
+//
+// The caller is whoever RequireAuth resolved — a browser session or a native
+// app's bearer — and `u` is the ONE user that resolution produced. The address
+// the link goes to is read off that user, never off the request, so no caller
+// can aim the email anywhere but at their own account's address.
 func (s *Service) handleDeleteRequest(w http.ResponseWriter, r *http.Request, u User) {
 	key := u.ID + "|" + s.clientIP(r)
 	if !s.deleteRequests.locked(key, s.now()) {

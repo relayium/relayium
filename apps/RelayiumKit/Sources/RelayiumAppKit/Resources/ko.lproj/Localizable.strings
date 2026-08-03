@@ -326,9 +326,17 @@
 "account.fileNotDownloaded" = "아직 다운로드되지 않음";
 "account.fileDownloadedOnce" = "1회 다운로드됨";
 "account.fileDownloadedTimes.other" = "%@회 다운로드됨";
-"account.bearerInvalid" = "이 Mac의 로그인이 더 이상 유효하지 않습니다. 로그아웃한 뒤 다시 로그인하세요.";
+"account.bearerInvalid" = "이 기기의 로그인이 더 이상 유효하지 않습니다. 로그아웃한 뒤 다시 로그인하세요.";
 "account.keyCleanupWarning" = "저장된 파일 “%1$@”은(는) 서버에서 삭제되었지만, 그 키는 아직 이 Mac에 남아 있습니다. %2$@ 이 키로는 더 이상 아무것도 열 수 없습니다 — 키가 속했던 암호화 데이터가 사라졌기 때문입니다.";
 "account.signOutFailed" = "안전하게 로그아웃하지 못했습니다. 다시 시도할 수 있도록 자격 증명은 유지했습니다.";
+"account.deleteAccountHeading" = "계정 삭제";
+"account.deleteAccountBody" = "계정 삭제는 메일에서 시작합니다. Relayium이 %@ 주소로 확인 링크를 보냅니다. 그 링크를 열기 전에는 아무것도 삭제되지 않습니다.";
+"account.deleteAccount" = "계정 삭제…";
+"account.deleteAccountConfirmTitle" = "이 Relayium 계정을 삭제할까요?";
+"account.deleteAccountConfirmBody" = "Relayium이 %@ 주소로 확인 링크를 메일로 보냅니다. 그 링크를 열기 전에는 아무것도 삭제되지 않습니다. 링크를 열면 이 계정의 Relayium 세션과 기기 접근 권한이 해지되고 저장된 파일이 삭제되며, 유예 기간이 끝난 뒤 계정이 영구 삭제되도록 예약됩니다. 유예 기간에는 다시 로그인하여 계정을 재활성화할 수 있습니다.";
+"account.deleteAccountConfirmAction" = "확인 메일 보내기";
+"account.deleteAccountRequesting" = "확인 메일을 요청하는 중…";
+"account.deleteAccountRequested" = "요청했습니다. 그 링크를 열기 전에는 아무것도 삭제되지 않습니다. %@ 주소로 메일이 오지 않으면 스팸함을 확인한 뒤 다시 시도하세요.";
 
 /* MARK: 사용량과 배지 */
 "usage.unlimited" = "무제한";

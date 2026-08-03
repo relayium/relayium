@@ -326,9 +326,17 @@
 "account.fileNotDownloaded" = "未ダウンロード";
 "account.fileDownloadedOnce" = "1 回ダウンロード";
 "account.fileDownloadedTimes.other" = "%@ 回ダウンロード";
-"account.bearerInvalid" = "この Mac のサインインは無効になりました。サインアウトしてから、もう一度サインインしてください。";
+"account.bearerInvalid" = "このデバイスのサインインは無効になりました。サインアウトしてから、もう一度サインインしてください。";
 "account.keyCleanupWarning" = "保存済みファイル「%1$@」はサーバーから削除されましたが、その鍵はまだこの Mac に残っています。%2$@ この鍵はもう何も開けません — 対応する暗号化データは存在しません。";
 "account.signOutFailed" = "安全にサインアウトできませんでした。再試行できるよう認証情報は保持されています。";
+"account.deleteAccountHeading" = "アカウントを削除";
+"account.deleteAccountBody" = "アカウントの削除はメールから始まります。Relayium が %@ に確認リンクを送ります。そのリンクを開くまで、何も削除されません。";
+"account.deleteAccount" = "アカウントを削除…";
+"account.deleteAccountConfirmTitle" = "この Relayium アカウントを削除しますか？";
+"account.deleteAccountConfirmBody" = "Relayium は %@ にメールで確認リンクを送ります。そのリンクを開くまで、何も削除されません。開くと、このアカウントの Relayium セッションとデバイスのアクセス権が取り消され、保存済みファイルが消去され、猶予期間の終了後にアカウントが完全に削除される予定になります。猶予期間中は、もう一度サインインするとアカウントを再有効化できます。";
+"account.deleteAccountConfirmAction" = "確認メールを送信";
+"account.deleteAccountRequesting" = "確認メールをリクエストしています…";
+"account.deleteAccountRequested" = "リクエストしました。そのリンクを開くまで、何も削除されません。%@ に届かない場合は迷惑メールフォルダを確認して、もう一度お試しください。";
 
 /* MARK: 使用量とバッジ */
 "usage.unlimited" = "無制限";

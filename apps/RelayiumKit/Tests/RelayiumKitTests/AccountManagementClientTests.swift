@@ -226,6 +226,65 @@ final class AccountManagementClientTests: XCTestCase {
         }
     }
 
+    // MARK: - asking for the account-deletion email
+
+    /// One POST, one bearer, no body, and no address parameter — WHICH account
+    /// is the server's decision, read off the user the token resolves to. An
+    /// address in the request would be a way to aim the email.
+    func testRequestAccountDeletionPostsTheBearerAndNamesNoAddress() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.stub = .init(status: 200, body: Data(#"{"status":"sent"}"#.utf8), check: { req in
+            XCTAssertEqual(req.url?.path, "/api/account/delete/request")
+            XCTAssertEqual(req.httpMethod, "POST")
+            XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer rlm_cli_T")
+            XCTAssertNil(req.url?.query, "nothing about this request belongs in a URL")
+        })
+        try await client().requestAccountDeletion(token: "rlm_cli_T")
+        XCTAssertEqual(StubURLProtocol.requestCount, 1)
+        XCTAssertTrue(StubURLProtocol.lastBodyBytes.isEmpty,
+                      "the request carries no body — the token decides the account")
+        StubURLProtocol.reset()
+    }
+
+    /// The bearer travels in the header and nowhere else. In a URL it would
+    /// reach every proxy log, the server's own access log, and any Referer.
+    func testRequestAccountDeletionKeepsTheTokenOutOfTheURL() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.stub = .init(status: 200, body: Data(), check: nil)
+        try await client().requestAccountDeletion(token: "rlm_cli_SECRET")
+        for request in StubURLProtocol.observed {
+            XCTAssertFalse(request.url?.absoluteString.contains("rlm_cli_SECRET") ?? false,
+                           "the bearer reached a URL: \(String(describing: request.url))")
+        }
+        StubURLProtocol.reset()
+    }
+
+    func testRequestAccountDeletionMapsARejectedBearer() async {
+        StubURLProtocol.stub = .init(status: 401, body: Data("unauthorized".utf8), check: nil)
+        await XCTAssertThrowsErrorAsync(try await self.client().requestAccountDeletion(token: "bad")) {
+            XCTAssertEqual($0 as? AccountError, .invalidCredentials)
+        }
+    }
+
+    func testRequestAccountDeletionMapsRateLimited() async {
+        StubURLProtocol.stub = .init(status: 429, body: Data(), check: nil)
+        await XCTAssertThrowsErrorAsync(try await self.client().requestAccountDeletion(token: "t")) {
+            XCTAssertEqual($0 as? AccountError, .rateLimited)
+        }
+    }
+
+    /// A cross-origin refusal, an outage, a proxy — none of them mean the
+    /// request was accepted, so none of them may be reported as success.
+    func testRequestAccountDeletionMapsEveryOtherStatusAsAFailure() async {
+        for status in [400, 403, 404, 500, 503] {
+            StubURLProtocol.stub = .init(status: status, body: Data(), check: nil)
+            await XCTAssertThrowsErrorAsync(
+                try await self.client().requestAccountDeletion(token: "t")) {
+                XCTAssertEqual($0 as? AccountError, .server(status: status))
+            }
+        }
+    }
+
     // MARK: - device classification
 
     /// Browser rows are the noise this list has to drop: they are registered

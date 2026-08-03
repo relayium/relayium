@@ -3,7 +3,8 @@ import RelayiumKit
 import RelayiumAppKit
 
 /// The signed-in account surface: who this is, what the plan allows and how much
-/// of it is used, which devices hold a token, and what is stored on the server.
+/// of it is used, which devices hold a token, what is stored on the server, and
+/// how to end the account.
 ///
 /// Built on `SectionCard` and `InlineMessage` like the other four destinations.
 /// It used to be a flat column grouped by `Divider()`, with three headings that
@@ -24,6 +25,10 @@ struct AccountView: View {
     /// property of this screen, not of the account.
     @State private var deviceToRevoke: AccountDevice?
     @State private var fileToDelete: StoredFileSummary?
+    /// Whether the account-deletion confirmation is up. Here for the same
+    /// reason as the two above: until the user confirms, nothing has been asked
+    /// of the server, so it is a property of this screen.
+    @State private var confirmingAccountDeletion = false
 
     /// Which account and credential the rows on screen belong to. Rebuilt each
     /// render and passed into every call, so a result that arrives after a sign
@@ -42,6 +47,7 @@ struct AccountView: View {
                 .frame(maxWidth: 720, alignment: .leading)
             devicesCard
             filesCard
+            deleteAccountCard
 
             // The rows could not be loaded at all — distinct from a per-row
             // failure, which is drawn on the row it belongs to.
@@ -126,6 +132,29 @@ struct AccountView: View {
             Button(L10n.t(.commonCancel), role: .cancel) { fileToDelete = nil }
         } message: {
             Text(L10n.t(.accountDeleteFileBody))
+        }
+        // The third confirmation, and the only one whose subject is the account
+        // rather than a row. The system dialog is what makes it accessible and
+        // dismissible the way the platform's users expect; the destructive role
+        // is on the button that sends the request, and Cancel is the default.
+        .confirmationDialog(
+            L10n.t(.accountDeleteAccountConfirmTitle),
+            isPresented: $confirmingAccountDeletion,
+            titleVisibility: .visible
+        ) {
+            // Labelled for what pressing it does. It sends an email; it deletes
+            // nothing, and the message above says so — a button reading
+            // "Delete" here would contradict the sentence it sits under.
+            Button(L10n.t(.accountDeleteAccountConfirmAction), role: .destructive) {
+                confirmingAccountDeletion = false
+                // Unstructured on purpose: the session owns the scoping, and
+                // this view stays on screen either way, so nothing about the
+                // request should be tied to this dialog's lifetime.
+                Task { await session.requestAccountDeletion() }
+            }
+            Button(L10n.t(.commonCancel), role: .cancel) { confirmingAccountDeletion = false }
+        } message: {
+            Text(L10n.t(.accountDeleteAccountConfirmBody, [L10n.token(user.email)]))
         }
     }
 
@@ -346,6 +375,66 @@ struct AccountView: View {
 
     private func fileDetail(_ file: StoredFileSummary) -> String {
         AccountPresentation.fileDetail(file)
+    }
+
+    // MARK: - deleting the account itself
+
+    /// The one control on this screen that can end the account, and the only
+    /// one that is deliberately two steps away from happening: the button opens
+    /// a confirmation, the confirmation sends an email, and only the link in
+    /// that email destroys anything.
+    ///
+    /// It is a card at the bottom rather than a menu item or a hidden setting
+    /// because it has to be findable — a deletion the user cannot locate is a
+    /// deletion that happens by writing to support. What keeps it from being a
+    /// hazard is the double opt-in, not obscurity.
+    ///
+    /// Nothing here signs the user out. The credential stays valid until the
+    /// server revokes it on confirmation, which is what leaves a way back for
+    /// somebody who changes their mind between the two steps.
+    @ViewBuilder
+    private var deleteAccountCard: some View {
+        SectionCard(title: L10n.t(.accountDeleteAccountHeading)) {
+            // The address is the user's own: isolated, never translated.
+            Text(L10n.t(.accountDeleteAccountBody, [L10n.token(user.email)]))
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            switch session.deletionRequestState {
+            case .requested:
+                // `.info`, not a success mark: the endpoint answers the same
+                // way whether it mailed anything or throttled the request, and
+                // nothing has been deleted in either case.
+                InlineMessage(.info, L10n.t(.accountDeleteAccountRequested,
+                                            [L10n.token(user.email)]))
+            case let .failed(message):
+                InlineMessage(.failure, message)
+            case .idle, .requesting:
+                EmptyView()
+            }
+
+            HStack {
+                // One slot, so the row does not jump and a second press cannot
+                // start a second request — the button is simply not the control
+                // on screen while one is in flight.
+                if isRequestingAccountDeletion {
+                    ProgressView { Text(L10n.t(.accountDeleteAccountRequesting)) }
+                        .controlSize(.small)
+                } else {
+                    // Retrying is the same button: a failure left the account
+                    // exactly as it was, so there is one action, not two.
+                    Button(L10n.t(.accountDeleteAccount), role: .destructive) {
+                        confirmingAccountDeletion = true
+                    }
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private var isRequestingAccountDeletion: Bool {
+        if case .requesting = session.deletionRequestState { return true }
+        return false
     }
 
     // MARK: - shared bits

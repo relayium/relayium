@@ -330,9 +330,17 @@
 "account.fileDownloadedOnce" = "téléchargé une fois";
 "account.fileDownloadedTimes.one" = "téléchargé %@ fois";
 "account.fileDownloadedTimes.other" = "téléchargé %@ fois";
-"account.bearerInvalid" = "La connexion de ce Mac n’est plus valide. Déconnectez-vous puis reconnectez-vous.";
+"account.bearerInvalid" = "La connexion de cet appareil n’est plus valide. Déconnectez-vous puis reconnectez-vous.";
 "account.keyCleanupWarning" = "Le fichier stocké « %1$@ » a été supprimé du serveur, mais sa clé est encore sur ce Mac. %2$@ Cette clé n’ouvre plus rien — les données chiffrées auxquelles elle appartenait n’existent plus.";
 "account.signOutFailed" = "Déconnexion sécurisée impossible. Les identifiants ont été conservés pour que vous puissiez réessayer.";
+"account.deleteAccountHeading" = "Supprimer le compte";
+"account.deleteAccountBody" = "La suppression de ce compte commence par un e-mail : Relayium envoie un lien de confirmation à %@. Rien n'est supprimé tant que ce lien n'est pas ouvert.";
+"account.deleteAccount" = "Supprimer le compte…";
+"account.deleteAccountConfirmTitle" = "Supprimer ce compte Relayium ?";
+"account.deleteAccountConfirmBody" = "Relayium envoie un lien de confirmation par e-mail à %@. Rien n'est supprimé tant que ce lien n'est pas ouvert. L'ouvrir révoque les sessions Relayium et l'accès des appareils associés à ce compte, efface ses fichiers stockés et programme la suppression définitive du compte après le délai de grâce. Pendant ce délai, reconnectez-vous pour réactiver le compte.";
+"account.deleteAccountConfirmAction" = "Envoyer l'e-mail de confirmation";
+"account.deleteAccountRequesting" = "Demande de l'e-mail de confirmation…";
+"account.deleteAccountRequested" = "Demande envoyée. Rien n'est supprimé tant que ce lien n'est pas ouvert. Si aucun e-mail n'arrive à %@, vérifiez vos courriers indésirables puis réessayez.";
 
 /* MARK: usage et badges */
 "usage.unlimited" = "Illimité";

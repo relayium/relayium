@@ -87,8 +87,10 @@ func TestDeleteRequestThenConfirm(t *testing.T) {
 	}
 }
 
-// TestDeleteRequestRequiresSession: no cookie → 401, and no mail sent.
-func TestDeleteRequestRequiresSession(t *testing.T) {
+// TestDeleteRequestRequiresAuthentication: no credential → 401, and no mail
+// sent. The route accepts a bearer as well as a cookie since the native apps
+// need it (see deletion_bearer_test.go); what it never accepts is nothing.
+func TestDeleteRequestRequiresAuthentication(t *testing.T) {
 	ts, _, _, mail := newFileServer(t)
 	resp := httptestPost(t, ts.URL+"/api/account/delete/request", "", nil)
 	if resp.StatusCode != http.StatusUnauthorized {

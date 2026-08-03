@@ -180,6 +180,40 @@ public struct AccountClient {
         }
     }
 
+    /// Ask the server to email this account a deletion-confirm link.
+    ///
+    /// This endpoint DELETES NOTHING. It mints a short-lived, single-use token,
+    /// mails a link carrying it to the address on the account, and returns. The
+    /// destructive work — revoking server-side sessions and device credentials,
+    /// purging server-stored account data, and scheduling the hard purge after
+    /// the grace period — happens only when that link is opened, at a separate
+    /// endpoint this client deliberately does not call. The second step happens
+    /// in the mailbox, not in whatever holds the bearer.
+    ///
+    /// Which account is decided by the TOKEN, server-side. There is no address
+    /// parameter and there must never be one: the server reads the address off
+    /// the user the bearer resolved to, so a caller cannot aim the email
+    /// anywhere. Nothing here logs, and the token exists only in the header of
+    /// one request.
+    ///
+    /// Like `resendVerification`, the endpoint answers **200 unconditionally**:
+    /// it will not say whether mail was actually sent, because its per-user
+    /// throttle would otherwise be observable. So a success here means *the
+    /// server accepted the request*, and nothing stronger — not that an email
+    /// was delivered, and certainly not that an account was deleted.
+    public func requestAccountDeletion(token: String) async throws {
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/account/delete/request"))
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (_, resp) = try await send(req)
+        switch resp.statusCode {
+        case 200: return
+        case 401: throw AccountError.invalidCredentials   // stale/revoked bearer
+        case 429: throw AccountError.rateLimited
+        default:  throw AccountError.server(status: resp.statusCode)
+        }
+    }
+
     /// The `error` field of a JSON error body, or nil when the body is not one.
     private func errorCode(in data: Data) -> String? {
         (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error

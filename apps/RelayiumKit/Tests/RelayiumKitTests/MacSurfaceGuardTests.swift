@@ -587,8 +587,9 @@ final class MacSurfaceGuardTests: XCTestCase {
         let account = try source(named: "AccountView.swift")
         XCTAssertFalse(account.contains("Divider()"),
                        "divider-based grouping is what SectionCard replaces")
-        XCTAssertEqual(occurrences(of: "SectionCard(", in: account), 3,
-                       "profile/plan/usage, devices and stored files are three deliberate cards")
+        XCTAssertEqual(occurrences(of: "SectionCard(", in: account), 4,
+                       "profile/plan/usage, devices, stored files and deleting the account "
+                       + "are four deliberate cards")
         XCTAssertGreaterThanOrEqual(occurrences(of: "InlineMessage(", in: account), 5,
                                     "row errors, the load error, the cleanup warning and the "
                                     + "stale-figures notice all carry a symbol")
@@ -601,6 +602,50 @@ final class MacSurfaceGuardTests: XCTestCase {
                      "session.logOut()", "session.refresh()", "AccountScope(accountId: user.id"] {
             XCTAssertTrue(account.contains(kept), "AccountView lost \(kept)")
         }
+    }
+
+    /// Ending the account is reachable from the account screen, and it is two
+    /// steps: a destructive control that opens a confirmation, and a
+    /// confirmation whose action asks the SERVER for an email.
+    ///
+    /// Every clause is a way this could look finished and not be. A button that
+    /// called `requestAccountDeletion()` directly would be a one-tap account
+    /// deletion with no confirmation. A confirmation whose action opened a URL
+    /// would be the browser hand-off this slice exists to replace. And a
+    /// success path that signed the user out would assert a deletion that has
+    /// not happened — the credential stays valid until the emailed link is
+    /// confirmed and the server revokes it, which is what leaves a way back.
+    func testTheAccountSurfaceCanEndTheAccountNativelyAndOnlyAfterConfirming() throws {
+        let account = try source(named: "AccountView.swift")
+        XCTAssertTrue(account.contains("Button(L10n.t(.accountDeleteAccount), role: .destructive)"),
+                      "the delete control must carry the destructive role")
+        XCTAssertTrue(account.contains("confirmingAccountDeletion = true"),
+                      "and must open a confirmation rather than act")
+        XCTAssertTrue(account.contains("L10n.t(.accountDeleteAccountConfirmTitle)"),
+                      "the confirmation must be the system dialog, titled")
+        XCTAssertTrue(account.contains("Button(L10n.t(.accountDeleteAccountConfirmAction), role: .destructive)"),
+                      "the confirmation's action is the destructive one")
+        XCTAssertTrue(account.contains("session.requestAccountDeletion()"),
+                      "the request must go through the session")
+        XCTAssertEqual(occurrences(of: "session.requestAccountDeletion()", in: account), 1,
+                       "a second call site would be one that skipped the confirmation")
+
+        // The one call to the session must sit inside the confirmation's
+        // action. Source order, not render order — the dialog is a modifier on
+        // `body` and the card is a computed property further down the file, so
+        // only the local ordering inside the dialog is a real claim.
+        guard let requests = account.range(of: "session.requestAccountDeletion()"),
+              let confirmAction = account.range(of: ".accountDeleteAccountConfirmAction") else {
+            return XCTFail("AccountView no longer has the two-step delete")
+        }
+        XCTAssertTrue(confirmAction.upperBound < requests.lowerBound,
+                      "the request must sit inside the confirmation's destructive button")
+
+        // And it adds no sign-out. The two that were already here are the
+        // self-revoke hand-off and the explicit Sign out button; a third would
+        // be the deletion path ending a session the server has not revoked.
+        XCTAssertEqual(occurrences(of: "session.logOut()", in: account), 2,
+                       "requesting a deletion must not sign the user out")
     }
 
     /// One file may name the failure colour, and it is the one that always draws
