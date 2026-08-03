@@ -37,17 +37,29 @@ export class UploadError extends Error {
   }
 }
 
-/** A stored-object / upload identifier the server handed back that this client
- *  refuses to act on.
+/** A stored-object identifier this client refuses to act on, whoever produced it.
  *
- *  Every id an upload response carries is interpolated into something where a
- *  stray character changes the *meaning* of the string rather than its value:
- *  the resumable `uploadId` becomes a path segment of every PATCH, offset GET
- *  and finalize; the finalize/`/api/files` id becomes the key-map entry the
- *  decryption key is filed under and the `/d/<id>#k=<key>` link the user is
- *  handed. So `../me` aims a request at an endpoint this upload never
- *  authorised, `a#b` orphans the key fragment, and a blank or duplicate-after-
- *  escaping id silently overwrites another upload's key.
+ *  Every such id is interpolated into something where a stray character changes
+ *  the *meaning* of the string rather than its value: the resumable `uploadId`
+ *  becomes a path segment of every PATCH, offset GET and finalize; the
+ *  finalize/`/api/files` id becomes the key-map entry the decryption key is filed
+ *  under and the `/d/<id>#k=<key>` link the user is handed; a download id becomes
+ *  the path segment of `/api/files/<id>/meta` and `/blob`. So `../me` aims a
+ *  request at an endpoint this client never meant to call, `a#b` orphans the key
+ *  fragment, and a blank or duplicate-after-escaping id silently overwrites
+ *  another upload's key.
+ *
+ *  Two populations reach the rule, and only one of them is a tripwire:
+ *
+ *  - **Outbound, server-issued.** An id the server minted for this account's own
+ *    upload is `authx.NewID()` — 32 hex characters — so the check is a guard on a
+ *    broken or substituted response, not a defence against the caller.
+ *  - **Inbound, recipient-supplied.** An id that arrived in a `/d/<id>#k=<key>`
+ *    link — from a sender, a page, a chat message — or in a direct call to
+ *    `fetchMeta`/`downloadBlob`, both public and both taking a plain `string`.
+ *    Whoever wrote the link chose it; nothing guarantees it is 32 hex or that it
+ *    came through the router at all. Here the check IS the defence, which is why
+ *    it sits at the boundary that builds the request.
  *
  *  Refused, never sanitised and never percent-encoded: escaping would let two
  *  distinct ids collapse onto one key-map entry (losing a key for good), and no
@@ -61,24 +73,36 @@ export class UploadError extends Error {
  *
  *  Matches native `StoredObjectID` (apps/RelayiumKit) character for character —
  *  the two clients speak to the same server and must refuse the same ids. */
-export class InvalidUploadIdError extends Error {
+export class InvalidStoredObjectIdError extends Error {
   constructor() {
-    super("invalid upload identifier");
-    this.name = "InvalidUploadIdError";
+    super("invalid stored object identifier");
+    this.name = "InvalidStoredObjectIdError";
   }
 }
+
+/** The name this refusal had while it only covered upload responses. Kept as the
+ *  same class, not a subclass or a second error: an existing
+ *  `catch (e instanceof InvalidUploadIdError)` must go on catching every refusal,
+ *  and must not start missing the ones that now come from a download id. */
+export const InvalidUploadIdError = InvalidStoredObjectIdError;
+export type InvalidUploadIdError = InvalidStoredObjectIdError;
 
 /** Wide enough for any plausible future id format, narrow enough that every
  *  member is inert in a URL path, a query string and a link fragment. Every id
  *  the server actually issues is `authx.NewID()` — 32 hex characters — so
- *  nothing legitimate is anywhere near the edge of this. */
-const UPLOAD_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+ *  nothing legitimate is anywhere near the edge of this.
+ *
+ *  `$` and not `\n$`-tolerant by accident: JavaScript's `$` without `m` matches
+ *  only at the very end of the input, so `"a\n"` is refused. Perl and Python
+ *  would accept it — this rule must not be ported by shape into either. */
+const STORED_OBJECT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** Return `id` unchanged if it is one inert token, else throw. Non-strings
- *  (a JSON `null`, number, object or array) fail the same way a bad string
- *  does — `JSON.parse` types nothing for us. */
-function checkedUploadId(id: unknown): string {
-  if (typeof id !== "string" || !UPLOAD_ID_RE.test(id)) throw new InvalidUploadIdError();
+ *  (a JSON `null`, number, object or array, or anything a JavaScript caller
+ *  passes despite the `string` annotation) fail the same way a bad string does —
+ *  neither `JSON.parse` nor an erased TypeScript type checks anything for us. */
+function checkedStoredObjectId(id: unknown): string {
+  if (typeof id !== "string" || !STORED_OBJECT_ID_RE.test(id)) throw new InvalidStoredObjectIdError();
   return id;
 }
 
@@ -141,7 +165,7 @@ export async function uploadFile(
   // it is the *only* answer, and uploadFileResumable falls back to it. Checked
   // before an UploadResult exists, so no caller — direct or fallback — can be
   // handed one carrying an id this client would refuse to act on.
-  return { id: checkedUploadId(id), expiresAt, key: encodeKey(sk.raw) };
+  return { id: checkedStoredObjectId(id), expiresAt, key: encodeKey(sk.raw) };
 }
 
 /** 允许回落到单发路径的最大密文体积。
@@ -181,7 +205,7 @@ export async function uploadFileResumable(
     // not happen is specific: falling through would re-send every byte down
     // the single-shot path in answer to a response that was already malformed,
     // and there is nothing to retry — the same id would be refused again.
-    if (e instanceof InvalidUploadIdError) throw e;
+    if (e instanceof InvalidStoredObjectIdError) throw e;
     if (e instanceof UploadError && (e.status === 413 || e.status === 429 || e.status === 401)) throw e;
     if (cipherSizeFor(files) > FALLBACK_MAX_CIPHER_BYTES) throw e;
     return uploadFile(files, opts, onProgress, signal);
@@ -232,8 +256,8 @@ async function chunkedUpload(
   // at an endpoint this upload never authorised. Checking here means those three
   // are only ever reached with an id that is one inert token.
   //
-  // Refused, not escaped: see InvalidUploadIdError.
-  const uploadId = checkedUploadId(init.uploadId);
+  // Refused, not escaped: see InvalidStoredObjectIdError.
+  const uploadId = checkedStoredObjectId(init.uploadId);
   const chunkSize: number = init.chunkSize > 0 ? init.chunkSize : 8 << 20;
 
   // 打包缓冲：贪婪填到 >= chunkSize 就发。容量留出一整帧的余量，因为最后一帧可能
@@ -296,7 +320,7 @@ async function chunkedUpload(
   // A second server-chosen id, and not necessarily the one init issued: this is
   // the one the key gets filed under and the /d/<id> the user is handed.
   // Checked before an UploadResult exists.
-  return { id: checkedUploadId(fin.id), expiresAt: fin.expiresAt, key: encodeKey(sk.raw) };
+  return { id: checkedStoredObjectId(fin.id), expiresAt: fin.expiresAt, key: encodeKey(sk.raw) };
 }
 
 /** PATCH `chunk`, which covers ciphertext bytes [start, start+chunk.length), and
@@ -438,7 +462,22 @@ function postWithProgress(
   });
 }
 
+/** Fetch a stored object's (encrypted) metadata.
+ *
+ *  Public, and its `id` is whatever the recipient's link said — so the check runs
+ *  here, on the way in, with nothing awaited before it: a value Relayium could
+ *  never have issued costs the network nothing and tells the server nothing about
+ *  what was tried. */
 export async function fetchMeta(id: string): Promise<StoredFileMeta> {
+  return fetchMetaChecked(checkedStoredObjectId(id));
+}
+
+/** `fetchMeta` for an id that has ALREADY passed `checkedStoredObjectId`. Private
+ *  precisely so that stays true — it exists only so `downloadBlob` can reuse the
+ *  one value it checked at its own boundary, instead of re-running a check whose
+ *  result is already known (which would read as the real defence while the real
+ *  defence sat elsewhere). */
+async function fetchMetaChecked(id: string): Promise<StoredFileMeta> {
   const res = await fetch(`/api/files/${encodeURIComponent(id)}/meta`);
   if (!res.ok) throw new Error(`meta failed: ${res.status}`);
   return res.json();
@@ -455,7 +494,7 @@ function base64ToBytes(b64: string): Uint8Array {
  *  Used to detect a stream truncated on a frame boundary, which a bare frame
  *  reassembler cannot distinguish from a clean end. */
 async function expectedPlaintextBytes(id: string, key: CryptoKey): Promise<number> {
-  const meta = await fetchMeta(id);
+  const meta = await fetchMetaChecked(id); // only ever called with downloadBlob's checked id
   const manifest = await decryptManifest(key, base64ToBytes(meta.encManifest));
   return manifest.files.reduce((n, f) => n + f.size, 0);
 }
@@ -463,7 +502,11 @@ async function expectedPlaintextBytes(id: string, key: CryptoKey): Promise<numbe
 /** Stream the ciphertext, decrypt chunk-by-chunk, and hand plaintext to onChunk.
  *  The decrypted total is checked against `expectedBytes` (defaulting to the
  *  manifest's summed file sizes) so a truncated download fails instead of being
- *  reported as a complete file. */
+ *  reported as a complete file.
+ *
+ *  Public, and its own trust boundary rather than a caller's: `expectedBytes`
+ *  lets a caller skip the metadata lookup entirely, so nothing upstream can be
+ *  relied on to have looked at `id` first. */
 export async function downloadBlob(
   id: string,
   key: CryptoKey,
@@ -471,7 +514,12 @@ export async function downloadBlob(
   onProgress?: (received: number) => void,
   expectedBytes?: number,
 ): Promise<void> {
-  const expected = expectedBytes ?? (await expectedPlaintextBytes(id, key));
+  // First statement, before the metadata lookup, the blob request and any
+  // onChunk/onProgress callback: a refused id must cost zero requests and must
+  // never hand a caller a byte or a progress tick it would have to un-report.
+  // `checked` is then the only value composed into either URL below.
+  const checked = checkedStoredObjectId(id);
+  const expected = expectedBytes ?? (await expectedPlaintextBytes(checked, key));
   let res: Response;
   // A direct-download 302 hands us a one-shot token, so a request the browser
   // itself replayed (a retried idle connection, say) comes back 403 from the
@@ -480,7 +528,7 @@ export async function downloadBlob(
   // 403 is a real failure, not something to spin on.
   for (let attempt = 0; ; attempt++) {
     try {
-      res = await fetch(`/api/files/${encodeURIComponent(id)}/blob`);
+      res = await fetch(`/api/files/${encodeURIComponent(checked)}/blob`);
     } catch (e) {
       throw new DownloadNetworkError(e); // fetch rejected — offline / DNS / connection refused
     }

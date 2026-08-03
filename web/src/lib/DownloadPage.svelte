@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { fetchMeta, downloadBlob, parseDownloadKey, keyFromFragment, DownloadNetworkError } from "./stored-file";
+  import { fetchMeta, downloadBlob, parseDownloadKey, keyFromFragment, DownloadNetworkError, InvalidStoredObjectIdError } from "./stored-file";
   import { decryptManifest, type StoredManifest } from "./store-crypto";
   import { pickSaveTarget, warnsAboutMemory, LARGE_DOWNLOAD_WARN_BYTES, SaveCancelledError, SinkCancelledError, SinkTransportError, type SaveOptions, type SaveTarget, type FileSink } from "./filesink";
   import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages } from "./i18n.svelte";
@@ -54,13 +54,25 @@
       pageState = "ready";
     } catch (e) {
       pageState = "error";
-      errKey = isNotFound(e) ? "notFound" : "decryptFail";
+      errKey = isRefusedLink(e) ? "notFound" : "decryptFail";
     }
   });
   onDestroy(() => clearInterval(ticker));
 
   function isNotFound(e: unknown): boolean {
     return e instanceof Error && /\b404\b/.test(e.message);
+  }
+  /**
+   * 「这条链接指不向任何东西」的两种说法，归成同一句文案。
+   *
+   * 404 是服务端说的；InvalidStoredObjectIdError 是 stored-file 在发请求**之前**
+   * 说的——链接里的那个 id 是 Relayium 根本不可能签发的形状。后者以前落进 else
+   * 分支，被说成「密钥错误或文件损坏」：那句话在指控用户的密钥或这份文件，而真相
+   * 是一个字节都没取、密钥一次都没用上。两者用户能做的事完全一样（换一条链接，
+   * 找发件人重发），所以同一句话；也都不给重试——同一个 id 只会被同样地拒掉。
+   */
+  function isRefusedLink(e: unknown): boolean {
+    return isNotFound(e) || e instanceof InvalidStoredObjectIdError;
   }
   function base64ToBytes(b64: string): Uint8Array {
     const bin = atob(b64);
@@ -240,6 +252,10 @@
       // 只有真正的解密/完整性失败才配得上那句"密钥错误或文件损坏"。
       if (e instanceof SinkCancelledError) errKey = "cancelled";
       else if (e instanceof SinkTransportError) errKey = "swFail";
+      // downloadBlob 是自己的信任边界（调用方给了 expectedBytes 时它连 meta 都不查），
+      // 所以拒绝也可能在这里才发生 —— 同样不是「密钥错误或文件损坏」。只认这一种，
+      // 不顺手把 404 也并进来：取字节阶段的 404 归因是另一件事，本次不动。
+      else if (e instanceof InvalidStoredObjectIdError) errKey = "notFound";
       else errKey = e instanceof DownloadNetworkError ? "netFail" : "decryptFail";
     }
   }

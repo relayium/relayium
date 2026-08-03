@@ -12,6 +12,7 @@ import {
   uploadBufferPeak,
   UploadError,
   InvalidUploadIdError,
+  InvalidStoredObjectIdError,
 } from "./stored-file";
 import {
   generateStoreKey,
@@ -581,22 +582,28 @@ describe("uploadFileResumable", () => {
   });
 });
 
-// Ids a server must never be able to talk this client into acting on. Not an
-// abstract charset sweep: each one changes the MEANING of the string it is
-// composed into rather than its value. `../other`, `..`, `a/b` and `/api/me`
-// add or rewrite path segments of a PATCH/offset/finalize URL; `a?b` and `a#b`
-// truncate a URL at a delimiter and, in a `/d/<id>#k=<key>` link, would move or
-// orphan the key fragment; `a%2fb` is the escaped form that a server or proxy
-// may resolve back into a separator; `a.b` is the dot a path normaliser may
-// act on; whitespace, newline and NUL break the token wherever it is stored;
-// `ключ` is outside the ASCII all these composed forms are defined over. Empty
-// and 129 characters are the two length bounds. The trailing non-strings are
-// what JSON.parse can hand back for a field nothing types for us.
-const hostileUploadIds: unknown[] = [
+// Ids this client must never be talked into acting on, whoever produced them —
+// a server answering an upload, or the sender of a `/d/<id>#k=<key>` link. Not
+// an abstract charset sweep: each one changes the MEANING of the string it is
+// composed into rather than its value. `../other`, `..`, `.`, `a/b` and
+// `/api/me` add or rewrite path segments of a PATCH/offset/finalize or
+// `/api/files/<id>/…` URL; `a?b` and `a#b` truncate a URL at a delimiter and, in
+// a `/d/<id>#k=<key>` link, would move or orphan the key fragment; `a%2fb` is the
+// escaped form that a server or proxy may resolve back into a separator; `a.b`
+// is the dot a path normaliser may act on; whitespace, newline and NUL break the
+// token wherever it is stored; `ключ` is outside the ASCII all these composed
+// forms are defined over. `a\n` is the trailing newline specifically: in Perl and
+// Python `$` matches *before* it, and this rule is the one place that assumption
+// would let a two-line id through. Empty and 129 characters are the two length
+// bounds. The trailing non-strings are what JSON.parse can hand back for a field
+// nothing types for us — and what a JavaScript caller of the public download API
+// can pass despite the `string` annotation.
+const hostileStoredObjectIds: unknown[] = [
   "",
   "a".repeat(129),
   "../other",
   "..",
+  ".",
   "a/b",
   "/api/me",
   "a?b",
@@ -606,6 +613,7 @@ const hostileUploadIds: unknown[] = [
   " ",
   "a b",
   "a\nb",
+  "a\n",
   "\n",
   "a\0b",
   "ключ",
@@ -617,7 +625,7 @@ const hostileUploadIds: unknown[] = [
 
 // The shapes a real server issues, plus both length bounds. `authx.NewID()` is
 // 32 hex characters — the first entry — so the rest is headroom, not fiction.
-const validUploadIds = [
+const validStoredObjectIds = [
   "0123456789abcdef0123456789abcdef",
   "AZaz09_-",
   "a",
@@ -672,7 +680,7 @@ function smallFixture(): File {
 
 describe("server-supplied identifier trust", () => {
   describe("resumable init uploadId", () => {
-    for (const id of hostileUploadIds) {
+    for (const id of hostileStoredObjectIds) {
       it(`refuses ${label(id)} before touching the upload`, async () => {
         const state = installIdentifierFetch({ initId: id, finalizeId: "fid" });
         // A single-shot path that would succeed, so "no fallback happened" is a
@@ -702,7 +710,7 @@ describe("server-supplied identifier trust", () => {
       });
     }
 
-    for (const id of validUploadIds) {
+    for (const id of validStoredObjectIds) {
       it(`accepts ${label(id)} and completes the chunked upload`, async () => {
         const state = installIdentifierFetch({ initId: id, finalizeId: "fid" });
         const out = await uploadFileResumable([smallFixture()], { burnAfterRead: false, ttl: 0 });
@@ -717,7 +725,7 @@ describe("server-supplied identifier trust", () => {
   });
 
   describe("finalize response id", () => {
-    for (const id of hostileUploadIds) {
+    for (const id of hostileStoredObjectIds) {
       it(`refuses ${label(id)} with no UploadResult escaping`, async () => {
         const state = installIdentifierFetch({ initId: "u1", finalizeId: id });
         const captured = installFakeXHR({ status: 200, response: JSON.stringify({ id: "fid", expiresAt: 9 }), network: false });
@@ -734,7 +742,7 @@ describe("server-supplied identifier trust", () => {
       });
     }
 
-    for (const id of validUploadIds) {
+    for (const id of validStoredObjectIds) {
       it(`accepts ${label(id)} as the returned id`, async () => {
         installIdentifierFetch({ initId: "u1", finalizeId: id });
         const out = await uploadFileResumable([smallFixture()], { burnAfterRead: false, ttl: 0 });
@@ -746,7 +754,7 @@ describe("server-supplied identifier trust", () => {
   });
 
   describe("single-shot /api/files id", () => {
-    for (const id of hostileUploadIds) {
+    for (const id of hostileStoredObjectIds) {
       it(`refuses ${label(id)} on a direct upload`, async () => {
         installFakeXHR({ status: 200, response: JSON.stringify({ id, expiresAt: 9 }), network: false });
         await expect(uploadFile([smallFixture()], { burnAfterRead: false, ttl: 0 })).rejects.toBeInstanceOf(
@@ -768,7 +776,7 @@ describe("server-supplied identifier trust", () => {
       });
     }
 
-    for (const id of validUploadIds) {
+    for (const id of validStoredObjectIds) {
       it(`accepts ${label(id)} on a direct upload`, async () => {
         installFakeXHR({ status: 200, response: JSON.stringify({ id, expiresAt: 9 }), network: false });
         const out = await uploadFile([smallFixture()], { burnAfterRead: false, ttl: 0 });
@@ -796,6 +804,172 @@ describe("server-supplied identifier trust", () => {
       expect(s).not.toContain("../other");
       expect(s).not.toContain("stolen");
     }
+  });
+});
+
+// A fetch double for the two download endpoints, answering with REAL ciphertext:
+// `/meta` returns the encrypted manifest, `/blob` the frame stream for it. It
+// records every URL, so a test can assert both which path was asked for and —
+// for a refused id — that nothing was asked for at all.
+async function installDownloadFetch() {
+  const sk = await generateStoreKey();
+  const plaintext = new Uint8Array(200);
+  for (let i = 0; i < plaintext.length; i++) plaintext[i] = i & 0xff;
+  const frames: Uint8Array[] = [];
+  for await (const fr of encryptFiles([new File([plaintext], "d.bin")], sk.key)) frames.push(fr);
+  const body = concat(frames);
+  const encManifest = await encryptManifest(sk.key, { files: [{ name: "d.bin", size: plaintext.length }] });
+
+  const urls: string[] = [];
+  const fetchMock = vi.fn(async (url: string) => {
+    urls.push(url);
+    if (url.endsWith("/meta")) {
+      return {
+        ok: true,
+        json: async () => ({
+          encManifest: bytesToBase64(encManifest),
+          size: body.length,
+          burnAfterRead: false,
+          expiresAt: 0,
+        }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      body: new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(body);
+          c.close();
+        },
+      }),
+    };
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return { urls, fetchMock, key: sk.key, plaintext };
+}
+
+// The other population reaching the same rule, and the only one that is a real
+// defence rather than a tripwire: an id that arrived in a `/d/<id>#k=<key>` link
+// — from a sender, a chat message, an OS handoff — or in a direct call to these
+// two public functions, which take a plain `string` and are reachable from any
+// caller. Nothing guarantees it is the 32 hex the server issues, and nothing
+// guarantees it came through the router at all. So the refusal has to sit at the
+// boundary that builds the request, before a single byte moves.
+describe("recipient-supplied identifier trust", () => {
+  describe("fetchMeta", () => {
+    for (const id of hostileStoredObjectIds) {
+      it(`refuses ${label(id)} without issuing a request`, async () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal("fetch", fetchMock);
+        await expect(fetchMeta(id as string)).rejects.toBeInstanceOf(InvalidStoredObjectIdError);
+        // The whole point: an id Relayium can never have issued costs the network
+        // nothing, and tells the server nothing about what was tried.
+        expect(fetchMock).not.toHaveBeenCalled();
+      });
+    }
+
+    for (const id of validStoredObjectIds) {
+      it(`accepts ${label(id)} and asks for the documented path verbatim`, async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ encManifest: "AAAA", size: 10, burnAfterRead: false, expiresAt: 5 }),
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        expect((await fetchMeta(id)).size).toBe(10);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(fetchMock).toHaveBeenCalledWith(`/api/files/${id}/meta`);
+      });
+    }
+  });
+
+  describe("downloadBlob", () => {
+    for (const id of hostileStoredObjectIds) {
+      it(`refuses ${label(id)} before meta, blob, chunk or progress`, async () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal("fetch", fetchMock);
+        const sk = await generateStoreKey();
+        const chunks: Uint8Array[] = [];
+        const progress: number[] = [];
+        await expect(
+          downloadBlob(
+            id as string,
+            sk.key,
+            async (pt) => {
+              chunks.push(pt);
+            },
+            (n) => progress.push(n),
+          ),
+        ).rejects.toBeInstanceOf(InvalidStoredObjectIdError);
+        // No expectedBytes, so the unchecked path would have gone looking for the
+        // manifest first — this asserts the refusal precedes even that.
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(chunks).toEqual([]);
+        expect(progress).toEqual([]);
+      });
+
+      it(`refuses ${label(id)} with expectedBytes supplied, which skips the manifest`, async () => {
+        // downloadBlob's own boundary, isolated: with expectedBytes there is no
+        // metadata lookup at all, so nothing but this check can refuse the id.
+        const fetchMock = vi.fn();
+        vi.stubGlobal("fetch", fetchMock);
+        const sk = await generateStoreKey();
+        const chunks: Uint8Array[] = [];
+        const progress: number[] = [];
+        await expect(
+          downloadBlob(
+            id as string,
+            sk.key,
+            async (pt) => {
+              chunks.push(pt);
+            },
+            (n) => progress.push(n),
+            0,
+          ),
+        ).rejects.toBeInstanceOf(InvalidStoredObjectIdError);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(chunks).toEqual([]);
+        expect(progress).toEqual([]);
+      });
+    }
+
+    for (const id of validStoredObjectIds) {
+      it(`accepts ${label(id)} and decrypts through both documented paths`, async () => {
+        const d = await installDownloadFetch();
+        const chunks: Uint8Array[] = [];
+        await downloadBlob(id, d.key, async (pt) => {
+          chunks.push(pt);
+        });
+        expect(concat(chunks)).toEqual(d.plaintext);
+        // One checked value drives BOTH requests — a check that only guarded the
+        // blob URL would leave the metadata lookup speaking for an unchecked id.
+        expect(d.urls).toEqual([`/api/files/${id}/meta`, `/api/files/${id}/blob`]);
+      });
+    }
+
+    it("never echoes a refused recipient-supplied value", async () => {
+      // Worse here than on the upload side: this string came from whoever wrote
+      // the link, so echoing it into page copy or a log is the injection.
+      vi.stubGlobal("fetch", vi.fn());
+      const sk = await generateStoreKey();
+      const err = await downloadBlob("../other?x=1#k=stolen", sk.key, async () => {}, undefined, 0).catch(
+        (e) => e,
+      );
+      expect(err).toBeInstanceOf(InvalidStoredObjectIdError);
+      for (const s of [err.message, String(err), err.stack ?? ""]) {
+        expect(s).not.toContain("../other");
+        expect(s).not.toContain("stolen");
+      }
+    });
+
+    it("keeps InvalidUploadIdError catching the same refusal", async () => {
+      // The rule is one rule now, so the two names must be one class: an existing
+      // `catch (e instanceof InvalidUploadIdError)` cannot start missing refusals
+      // because the id came from a download instead of an upload.
+      expect(InvalidUploadIdError).toBe(InvalidStoredObjectIdError);
+      vi.stubGlobal("fetch", vi.fn());
+      await expect(fetchMeta("a/b")).rejects.toBeInstanceOf(InvalidUploadIdError);
+    });
   });
 });
 

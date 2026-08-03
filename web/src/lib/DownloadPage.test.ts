@@ -20,6 +20,7 @@ vi.mock("./stored-file", () => ({
   parseDownloadKey: () => "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   keyFromFragment: async () => ({ fake: "key" }),
   DownloadNetworkError: class DownloadNetworkError extends Error {},
+  InvalidStoredObjectIdError: class InvalidStoredObjectIdError extends Error {},
 }));
 
 const manifestFiles = vi.fn();
@@ -46,6 +47,10 @@ vi.mock("./filesink", async (orig) => {
 });
 
 import DownloadPage from "./DownloadPage.svelte";
+// From the mock above, i.e. the same class the page will see — an `instanceof`
+// against the real module here would never match and the test would pass on the
+// fallback branch it is meant to rule out.
+import { InvalidStoredObjectIdError } from "./stored-file";
 import { loadLang, messages } from "./i18n.svelte";
 import { LARGE_DOWNLOAD_WARN_BYTES, SinkTransportError, probeStreamSupport, swStreamReady, pickSaveTarget } from "./filesink";
 import { refreshHolds, resetAppUpdate } from "./app-update.svelte";
@@ -73,10 +78,16 @@ function stubPickers(canStream: boolean): () => void {
   };
 }
 
-async function mountPage(o: { canStream: boolean; files: { name: string; size: number }[] }) {
+async function mountPage(o: {
+  canStream: boolean;
+  files: { name: string; size: number }[];
+  /** 让 onMount 的 fetchMeta 以这个理由失败，用来盯住加载阶段的错误归因。 */
+  metaError?: unknown;
+}) {
   restorePickers = stubPickers(o.canStream);
   manifestFiles.mockReturnValue(o.files);
-  fetchMeta.mockResolvedValue({ expiresAt: 0, burnAfterRead: false, encManifest: "" });
+  if (o.metaError) fetchMeta.mockRejectedValue(o.metaError);
+  else fetchMeta.mockResolvedValue({ expiresAt: 0, burnAfterRead: false, encManifest: "" });
   await loadLang("en");
   target = document.createElement("div");
   document.body.appendChild(target);
@@ -712,5 +723,43 @@ describe("DownloadPage 拿写入端失败", () => {
     expect(target.querySelector(".bar"), "不该停在 downloading").toBeNull();
     expect(refreshHolds(), "漏放会让刷新按钮永远是灰的").toBe(0);
     expect(downloadBlob, "根本没走到取字节").not.toHaveBeenCalled();
+  });
+});
+
+// 链接里的标识符是**收件方拿到什么就是什么**：发件人、聊天软件、系统分享，谁写的
+// 都可能。stored-file 在发请求之前就会拒掉 Relayium 根本不可能签发的形状——但那条
+// 拒绝到了页面上必须说人话。它以前会落进 else 分支，被说成「密钥错误或文件损坏」：
+// 那句话是在指控用户的密钥或这份文件，而真相是这条链接根本不指向任何东西，而且一个
+// 字节都没取、密钥一次都没用上。重试更是白搭——同一个 id 会被同样地拒掉。
+describe("DownloadPage 被拒的标识符", () => {
+  it("加载阶段被拒：说「链接无效或已过期」，不是「密钥错误或文件损坏」，且不给重试", async () => {
+    await mountPage({
+      canStream: false,
+      files: [{ name: "a.bin", size: SMALL }],
+      metaError: new InvalidStoredObjectIdError(),
+    });
+
+    const err = target.querySelector(".error");
+    expect(err, "被拒了就得说出来").not.toBeNull();
+    expect(err!.textContent!.trim()).toBe(messages.en.download.notFound);
+    expect(err!.textContent!.trim()).not.toBe(messages.en.download.decryptFail);
+    expect(target.querySelector("button"), "同一个 id 重试还是被拒").toBeNull();
+    expect(downloadBlob, "一个字节都不该取").not.toHaveBeenCalled();
+  });
+
+  it("取字节阶段被拒同样归成链接无效，不给重试", async () => {
+    // downloadBlob 是自己的公开边界：即使 meta 那一步不知怎么过去了,这里的拒绝也
+    // 不能变成「密钥错误或文件损坏」。这一条走的是清单已加载的那条路,所以重试按钮
+    // 的闸门（netFail/swFail/cancelled + manifest）是真的被考到的。
+    downloadBlob.mockRejectedValue(new InvalidStoredObjectIdError());
+    await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+    await clickDownload();
+
+    const err = target.querySelector(".error");
+    expect(err).not.toBeNull();
+    expect(err!.textContent!.trim()).toBe(messages.en.download.notFound);
+    expect(err!.textContent!.trim()).not.toBe(messages.en.download.decryptFail);
+    expect(target.querySelector(".btn-primary"), "重试没有意义").toBeNull();
+    expect(refreshHolds(), "错误路径漏放会让刷新按钮永远是灰的").toBe(0);
   });
 });
