@@ -110,6 +110,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// rendered by `apps/ios/Relayium` alone. `download.heading` ("Receive
     /// files") is a screen title, too long for a tab item.
     case tabReceive = "tab.receive"
+    /// The iOS send tab. A third register again: `upload.heading` ("Send files")
+    /// is a screen title and `common.send` is the button that starts a transfer,
+    /// while this names a place in the tab bar.
+    case tabSend = "tab.send"
     case tabAccount = "tab.account"
 
     // MARK: - Navigation
@@ -236,11 +240,41 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case uploadSendAnother = "upload.sendAnother"
     case uploadExpiresAfter = "upload.expiresAfter"
     case uploadBurnAfterRead = "upload.burnAfterRead"
+    /// The foreground-only truth, rendered while an upload is in flight. There
+    /// is no background `URLSession` and no resume, and a limitation the app
+    /// stays silent about is one the user only discovers by losing a transfer.
+    case uploadKeepOpen = "upload.keepOpen"
     case uploadKeyKept = "upload.keyKept"
     /// %@ — the stored-link-key failure sentence this warning leads with.
     case uploadKeyWarning = "upload.keyWarning"
     /// %@ — a user's own file name, never translated.
     case uploadFileTooLarge = "upload.fileTooLarge"
+
+    // MARK: - The iOS Send tab
+    //
+    // The gate above the send flow, and the two picker sources beneath it. The
+    // gate exists because sending genuinely needs an account and receiving
+    // genuinely does not, so each body says that asymmetry out loud rather than
+    // leaving a greyed-out button to imply the whole product is gated.
+
+    /// There is no existing "this needs an account" string: the account tab's
+    /// copy is about *signing in*, which is the remedy, not the reason.
+    case sendAccountTitle = "send.accountTitle"
+    /// Names the honest asymmetry — uploads go to your account, receiving a link
+    /// never needs one.
+    case sendAccountBody = "send.accountBody"
+    /// Selects the Account tab. Distinct from `content.openRelayium`, which
+    /// opens a browser — which this must not do.
+    case sendOpenAccount = "send.openAccount"
+    /// "Signed in, but the account did not load" is a different sentence from
+    /// "you need an account", and telling this user to sign in would be false.
+    case sendAccountUnavailableBody = "send.accountUnavailableBody"
+    /// The Photos button. `common.chooseFilesOrFolders` is reused verbatim for
+    /// the Files button beside it.
+    case sendChoosePhotos = "send.choosePhotos"
+    /// Staging copies bytes out of the photo library and takes time; a bare
+    /// spinner says nothing to VoiceOver.
+    case sendPreparingPhotos = "send.preparingPhotos"
 
     case ttlOneHour = "ttl.oneHour"
     case ttlOneDay = "ttl.oneDay"
@@ -593,6 +627,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case errorSelectionSymbolicLink = "error.selection.symbolicLink"
     /// %@ — a path, never translated.
     case errorSelectionPathTooLong = "error.selection.pathTooLong"
+    /// A refused photo batch: one item could not be staged, so none of them
+    /// were. `error.selection.unreadable` names a path the user never saw — the
+    /// staged name is this app's own invention, not the one they chose in the
+    /// Photos picker.
+    case errorPhotoImportFailed = "error.photoImport.failed"
     case errorCloudUnauthorized = "error.cloud.unauthorized"
     case errorCloudQuota = "error.cloud.quota"
     case errorCloudRateLimited = "error.cloud.rateLimited"

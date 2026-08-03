@@ -245,6 +245,23 @@ public enum AppEnvironment {
         )
     }
 
+    /// The send flow's app-scoped owner: selection, security scopes, photo
+    /// staging, account isolation and the advisory size hint.
+    ///
+    /// The per-file size hint comes from the PUBLIC `GET /api/config` that
+    /// `CloudClient.fetchConfig()` has always spoken and nothing had called yet.
+    /// It is injected as a closure rather than taken as a client so the staleness
+    /// tests can gate the response and land it at a chosen moment — the case that
+    /// matters is a response arriving after the account that asked for it is
+    /// gone, and that cannot be staged against a real `URLSession`.
+    @MainActor
+    public static func makeSendSelectionModel(baseURL: URL = productionBaseURL,
+                                              upload: CloudUploadModel) -> SendSelectionModel {
+        let client = CloudClient(baseURL: baseURL)
+        return SendSelectionModel(upload: upload,
+                                  fetchConfig: { try await client.fetchConfig() })
+    }
+
     @MainActor
     public static func makeAccountManagementModel(baseURL: URL = productionBaseURL,
                                                   keyStore: StoredLinkKeyStore) -> AccountManagementModel {

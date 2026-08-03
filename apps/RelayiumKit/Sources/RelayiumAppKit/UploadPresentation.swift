@@ -3,11 +3,11 @@ import Foundation
 /// What the "Link ready" screen says about the key that opens an upload.
 ///
 /// One statement, chosen from what actually happened — never two. The two
-/// possible facts contradict each other outright: either this Mac kept the key,
-/// in which case the link on screen is reproducible from the Account tab, or it
-/// did not, in which case that link is the only copy there will ever be. Saying
-/// both, which is what a fixed line plus a conditional warning does, teaches the
-/// user to believe neither.
+/// possible facts contradict each other outright: either this device kept the
+/// key, in which case the link on screen is reproducible from the Account tab,
+/// or it did not, in which case that link is the only copy there will ever be.
+/// Saying both, which is what a fixed line plus a conditional warning does,
+/// teaches the user to believe neither.
 public struct UploadKeyNotice: Equatable {
     public let text: String
     /// Whether this is the case the user has to act on now. The pane renders a
@@ -22,20 +22,24 @@ public struct UploadKeyNotice: Equatable {
 }
 
 public enum UploadPresentation {
-    /// Said when the key is safely on this Mac. It is the reassuring case and it
-    /// is also the privacy claim: the key never reached Relayium, which is what
-    /// makes the stored ciphertext unreadable to it.
+    /// Said when the key is safely on this device. It is the reassuring case and
+    /// it is also the privacy claim: the key never reached Relayium, which is
+    /// what makes the stored ciphertext unreadable to it.
     ///
     /// A function rather than the constant it used to be, because it is one of
     /// the two statements the localization has to keep TRUE in every language:
-    /// "stored on this Mac" and "never sent to Relayium's servers" are the E2E
-    /// guarantee, not marketing.
+    /// "stored on this device" and "never sent to Relayium's servers" are the
+    /// E2E guarantee, not marketing.
+    ///
+    /// The noun is *device*, not *Mac*: the same sentence is rendered on iOS
+    /// from R3-C onwards, and what it has to keep true is where the key lives —
+    /// not which platform is reading it.
     public static func keyKeptText(language: AppLanguage? = nil) -> String {
         L10n.t(.uploadKeyKept, language: language)
     }
 
     /// `warning` is `UploadState.done`'s — non-nil exactly when the upload
-    /// succeeded but this Mac could not keep the key. It arrives already
+    /// succeeded but this device could not keep the key. It arrives already
     /// localized (`CloudUploadModel` builds it through `ErrorCopy`), so it is
     /// passed through rather than looked up again.
     public static func keyNotice(warning: String?, language: AppLanguage? = nil) -> UploadKeyNotice {

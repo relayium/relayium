@@ -69,6 +69,7 @@
 "content.reactivate" = "Réactiver sur relayium.com";
 "content.backToSignIn" = "Retour à la connexion";
 "tab.receive" = "Recevoir";
+"tab.send" = "Envoyer";
 "tab.account" = "Compte";
 
 /* MARK: barre latérale de navigation */
@@ -149,9 +150,16 @@
 "upload.sendAnother" = "Envoyer autre chose";
 "upload.expiresAfter" = "Expire après";
 "upload.burnAfterRead" = "Supprimer après le premier téléchargement";
-"upload.keyKept" = "La clé est conservée en sécurité sur ce Mac et n’est jamais envoyée aux serveurs de Relayium. Vous pouvez copier ce lien de nouveau depuis l’onglet « Compte ».";
+"upload.keepOpen" = "Gardez Relayium ouvert jusqu’à la fin. Quitter l’app peut interrompre l’envoi, qui ne peut pas encore reprendre en arrière-plan.";
+"upload.keyKept" = "La clé est conservée en sécurité sur cet appareil et n’est jamais envoyée aux serveurs de Relayium. Vous pouvez copier ce lien de nouveau depuis l’onglet « Compte ».";
 "upload.keyWarning" = "%@ Le lien ci-dessous est la seule copie disponible de la clé — copiez-le maintenant. Les serveurs de Relayium n’ont jamais eu la clé, ce lien ne peut donc pas être réaffiché.";
 "upload.fileTooLarge" = "%@ dépasse la taille acceptée par ce serveur.";
+"send.accountTitle" = "L’envoi nécessite un compte";
+"send.accountBody" = "Les fichiers que vous envoyez sont chiffrés sur cet appareil puis téléversés vers votre compte Relayium : l’envoi demande donc une connexion. La réception d’un lien n’en demande jamais.";
+"send.openAccount" = "Aller au compte";
+"send.accountUnavailableBody" = "L’envoi a besoin des limites de votre offre, qui n’ont pas pu être chargées. Ouvrez « Compte » pour réessayer.";
+"send.choosePhotos" = "Choisir des photos ou des vidéos…";
+"send.preparingPhotos" = "Préparation de votre sélection…";
 "ttl.oneHour" = "1 heure";
 "ttl.oneDay" = "1 jour";
 "ttl.threeDays" = "3 jours";
@@ -341,13 +349,13 @@
 "error.account.decoding" = "Le serveur a renvoyé une réponse que cette version de l’app ne comprend pas. Une mise à jour peut y remédier.";
 "error.account.network" = "Serveur injoignable. Vérifiez votre connexion Internet.";
 "error.keychain.signIn" = "macOS n’a pas pu enregistrer votre connexion (erreur de trousseau %@). Vous resterez connecté jusqu’à ce que vous quittiez l’app.";
-"error.storedKey.keychain.save" = "macOS n’a pas pu enregistrer la clé de ce fichier dans le trousseau (erreur de trousseau %@).";
+"error.storedKey.keychain.save" = "Le trousseau n’a pas pu enregistrer la clé de ce fichier (erreur de trousseau %@).";
 "error.storedKey.keychain.read" = "macOS n’a pas pu lire la clé de ce fichier dans le trousseau (erreur de trousseau %@).";
 "error.storedKey.keychain.remove" = "macOS n’a pas pu retirer la clé de ce fichier du trousseau (erreur de trousseau %@).";
-"error.storedKey.badId.save" = "L’identifiant de ce fichier n’est pas de ceux sous lesquels cette app enregistre une clé : sa clé n’a donc pas été conservée sur ce Mac. Merci de le signaler.";
+"error.storedKey.badId.save" = "L’identifiant de ce fichier n’est pas de ceux sous lesquels cette app enregistre une clé : sa clé n’a donc pas été conservée sur cet appareil. Merci de le signaler.";
 "error.storedKey.badId.read" = "L’identifiant de cet élément n’est pas de ceux que cette app traite : sa clé n’a donc pas été lue et le lien ne peut pas être reconstruit ici. Gérez-le sur relayium.com, et merci de le signaler.";
 "error.storedKey.badId.remove" = "L’identifiant de cet élément n’est pas de ceux que cette app traite : la clé n’a donc pas été retirée. Merci de le signaler.";
-"error.storedKey.badKey.save" = "La clé de ce fichier n’a pas une forme que cette app peut enregistrer : elle n’a donc pas été conservée sur ce Mac. Merci de le signaler.";
+"error.storedKey.badKey.save" = "La clé de ce fichier n’a pas une forme que cette app peut enregistrer : elle n’a donc pas été conservée sur cet appareil. Merci de le signaler.";
 "error.storedKey.badKey.remove" = "La clé de ce fichier n’a pas une forme que cette app peut traiter : elle n’a donc pas été retirée. Merci de le signaler.";
 "error.handshake.mitm" = "Les deux appareils n’ont pas pu s’accorder sur un secret partagé. Quelqu’un interfère peut-être avec cette connexion — arrêtez, et réappairez avec un nouveau code.";
 "error.peer.protocol" = "L’autre appareil a envoyé quelque chose que cette version de l’app ne comprend pas. Les deux côtés ont peut-être besoin d’une mise à jour.";
@@ -395,12 +403,13 @@
 "error.manifest.pathCollision" = "Le transfert veut que « %@ » soit à la fois un fichier et un dossier, ce qui est impossible : rien n’a été enregistré. Demandez à l’expéditeur de réessayer.";
 "error.plaintext.unreadable" = "Impossible d’ouvrir « %@ » : rien n’a été envoyé. Vérifiez que le fichier existe encore et que vous avez le droit de le lire.";
 "error.plaintext.readFailed" = "La lecture de « %@ » a échoué en cours de route : le transfert a été arrêté. L’autre appareil a écarté le fichier incomplet.";
-"error.plaintext.tooManyOpenFiles" = "Ce Mac a épuisé ses descripteurs de fichiers au milieu de votre sélection (sa limite est %@). Relayium garde chaque fichier sélectionné ouvert afin que ce soient exactement vos fichiers qui partent : envoyez-les par lots plus petits.";
+"error.plaintext.tooManyOpenFiles" = "Cet appareil a épuisé ses descripteurs de fichiers au milieu de votre sélection (sa limite est %@). Relayium garde chaque fichier sélectionné ouvert afin que ce soient exactement vos fichiers qui partent : envoyez-les par lots plus petits.";
 "error.selection.noFiles" = "Il n’y a aucun fichier à envoyer. Un dossier vide ne peut pas être transféré seul — la liste de fichiers n’a aucun moyen de décrire un dossier sans contenu.";
 "error.selection.tooManyFiles" = "Cette sélection contient plus de %@ fichiers. Envoyez-en moins, ou compressez d’abord le dossier.";
 "error.selection.unreadable" = "Impossible de lire « %@ » : rien n’a été envoyé. Vérifiez que l’élément existe encore et que vous avez le droit de l’ouvrir.";
 "error.selection.symbolicLink" = "« %@ » est un lien symbolique. Relayium ne le suit pas — cela pourrait envoyer des fichiers hors de votre sélection — et ne l’ignore pas non plus en silence. Retirez-le de la sélection, ou envoyez le vrai dossier qu’il désigne.";
 "error.selection.pathTooLong" = "Le chemin « %@ » est trop long pour être décrit dans un transfert. Envoyez depuis un dossier moins profond, ou raccourcissez les noms.";
+"error.photoImport.failed" = "Une partie de votre sélection n’a pas pu être préparée pour l’envoi : rien n’a donc été sélectionné. Choisissez à nouveau, ou moins d’éléments à la fois.";
 "error.cloud.unauthorized" = "Votre connexion a expiré. Reconnectez-vous pour envoyer des fichiers.";
 "error.cloud.quota" = "Il ne reste pas assez d’espace ou de quota quotidien pour ce fichier. Libérez de l’espace ou changez d’offre.";
 "error.cloud.rateLimited" = "Trop d’envois en cours. Attendez une minute, puis réessayez.";

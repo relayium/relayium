@@ -69,6 +69,7 @@
 "content.reactivate" = "Auf relayium.com reaktivieren";
 "content.backToSignIn" = "Zurück zur Anmeldung";
 "tab.receive" = "Empfangen";
+"tab.send" = "Senden";
 "tab.account" = "Konto";
 
 /* MARK: Navigationsleiste */
@@ -149,9 +150,16 @@
 "upload.sendAnother" = "Etwas anderes senden";
 "upload.expiresAfter" = "Läuft ab nach";
 "upload.burnAfterRead" = "Nach dem ersten Download löschen";
-"upload.keyKept" = "Der Schlüssel liegt sicher auf diesem Mac und wird nie an die Server von Relayium gesendet. Du kannst diesen Link jederzeit im Tab „Konto“ erneut kopieren.";
+"upload.keepOpen" = "Lass Relayium geöffnet, bis das hier fertig ist. Die App zu verlassen kann den Upload abbrechen, und im Hintergrund lässt er sich noch nicht fortsetzen.";
+"upload.keyKept" = "Der Schlüssel liegt sicher auf diesem Gerät und wird nie an die Server von Relayium gesendet. Du kannst diesen Link jederzeit im Tab „Konto“ erneut kopieren.";
 "upload.keyWarning" = "%@ Der Link unten ist die einzige verfügbare Kopie des Schlüssels — kopiere ihn jetzt. Die Server von Relayium hatten den Schlüssel nie, deshalb kann dieser Link nicht erneut angezeigt werden.";
 "upload.fileTooLarge" = "%@ ist größer, als dieser Server akzeptiert.";
+"send.accountTitle" = "Zum Senden ist ein Konto nötig";
+"send.accountBody" = "Dateien, die du sendest, werden auf diesem Gerät verschlüsselt und in dein Relayium-Konto hochgeladen — deshalb ist zum Senden eine Anmeldung nötig. Zum Empfangen eines Links nie.";
+"send.openAccount" = "Zum Konto";
+"send.accountUnavailableBody" = "Zum Senden werden die Grenzen deines Tarifs gebraucht, und die ließen sich nicht laden. Öffne „Konto“ und versuche es erneut.";
+"send.choosePhotos" = "Fotos oder Videos wählen…";
+"send.preparingPhotos" = "Auswahl wird vorbereitet…";
 "ttl.oneHour" = "1 Stunde";
 "ttl.oneDay" = "1 Tag";
 "ttl.threeDays" = "3 Tage";
@@ -341,13 +349,13 @@
 "error.account.decoding" = "Der Server hat eine Antwort geschickt, die diese App-Version nicht versteht. Ein Update kann helfen.";
 "error.account.network" = "Der Server war nicht erreichbar. Prüfe deine Internetverbindung.";
 "error.keychain.signIn" = "macOS konnte deine Anmeldung nicht sichern (Schlüsselbund-Fehler %@). Du bleibst angemeldet, bis du die App beendest.";
-"error.storedKey.keychain.save" = "macOS konnte den Schlüssel dieser Datei nicht im Schlüsselbund sichern (Schlüsselbund-Fehler %@).";
+"error.storedKey.keychain.save" = "Der Schlüsselbund konnte den Schlüssel dieser Datei nicht sichern (Schlüsselbund-Fehler %@).";
 "error.storedKey.keychain.read" = "macOS konnte den Schlüssel dieser Datei nicht aus dem Schlüsselbund lesen (Schlüsselbund-Fehler %@).";
 "error.storedKey.keychain.remove" = "macOS konnte den Schlüssel dieser Datei nicht aus dem Schlüsselbund entfernen (Schlüsselbund-Fehler %@).";
-"error.storedKey.badId.save" = "Die Kennung dieser Datei ist keine, unter der diese App einen Schlüssel sichert, deshalb wurde ihr Schlüssel nicht auf diesem Mac gesichert. Bitte melde das.";
+"error.storedKey.badId.save" = "Die Kennung dieser Datei ist keine, unter der diese App einen Schlüssel sichert, deshalb wurde ihr Schlüssel nicht auf diesem Gerät gesichert. Bitte melde das.";
 "error.storedKey.badId.read" = "Die Kennung dieses Objekts ist keine, mit der diese App arbeitet, deshalb wurde sein Schlüssel nicht gelesen und der Link lässt sich hier nicht wiederherstellen. Verwalte es auf relayium.com und melde das bitte.";
 "error.storedKey.badId.remove" = "Die Kennung dieses Objekts ist keine, mit der diese App arbeitet, deshalb wurde der Schlüssel nicht entfernt. Bitte melde das.";
-"error.storedKey.badKey.save" = "Der Schlüssel dieser Datei hat keine Form, die diese App sichern kann, deshalb wurde er nicht auf diesem Mac gesichert. Bitte melde das.";
+"error.storedKey.badKey.save" = "Der Schlüssel dieser Datei hat keine Form, die diese App sichern kann, deshalb wurde er nicht auf diesem Gerät gesichert. Bitte melde das.";
 "error.storedKey.badKey.remove" = "Der Schlüssel dieser Datei hat keine Form, mit der diese App arbeiten kann, deshalb wurde er nicht entfernt. Bitte melde das.";
 "error.handshake.mitm" = "Die beiden Geräte konnten sich nicht auf ein gemeinsames Geheimnis einigen. Möglicherweise greift jemand in diese Verbindung ein — brich ab und koppelt euch mit einem neuen Code erneut.";
 "error.peer.protocol" = "Das andere Gerät hat etwas gesendet, das diese App-Version nicht versteht. Vielleicht müssen beide Seiten aktualisiert werden.";
@@ -395,12 +403,13 @@
 "error.manifest.pathCollision" = "Die Übertragung möchte, dass „%@“ zugleich Datei und Ordner ist, was nicht gleichzeitig möglich ist, deshalb wurde nichts gesichert. Bitte die sendende Seite, es erneut zu versuchen.";
 "error.plaintext.unreadable" = "„%@“ ließ sich nicht öffnen, deshalb wurde nichts gesendet. Prüfe, ob die Datei noch existiert und du sie lesen darfst.";
 "error.plaintext.readFailed" = "Das Lesen von „%@“ ist mittendrin fehlgeschlagen, deshalb wurde die Übertragung gestoppt. Das andere Gerät hat die unvollständige Datei verworfen.";
-"error.plaintext.tooManyOpenFiles" = "Diesem Mac sind mitten in deiner Auswahl die Datei-Handles ausgegangen (sein Limit liegt bei %@). Relayium hält jede ausgewählte Datei geöffnet, damit genau die Dateien gesendet werden, die du gewählt hast — sende sie deshalb in kleineren Paketen.";
+"error.plaintext.tooManyOpenFiles" = "Diesem Gerät sind mitten in deiner Auswahl die Datei-Handles ausgegangen (sein Limit liegt bei %@). Relayium hält jede ausgewählte Datei geöffnet, damit genau die Dateien gesendet werden, die du gewählt hast — sende sie deshalb in kleineren Paketen.";
 "error.selection.noFiles" = "Es gibt nichts zu senden. Ein leerer Ordner lässt sich nicht für sich allein übertragen — die Dateiliste kann einen Ordner ohne Inhalt nicht beschreiben.";
 "error.selection.tooManyFiles" = "Diese Auswahl enthält mehr als %@ Dateien. Wähle weniger Dateien oder komprimiere den Ordner zuerst.";
 "error.selection.unreadable" = "„%@“ ließ sich nicht lesen, deshalb wurde nichts gesendet. Prüfe, ob das Objekt noch existiert und du es öffnen darfst.";
 "error.selection.symbolicLink" = "„%@“ ist ein symbolischer Link. Relayium folgt ihm nicht — das könnte Dateien außerhalb deiner Auswahl senden — und überspringt ihn auch nicht stillschweigend. Nimm ihn aus der Auswahl oder sende den echten Ordner, auf den er zeigt.";
 "error.selection.pathTooLong" = "Der Pfad „%@“ ist zu lang, um in einer Übertragung beschrieben zu werden. Sende aus einem flacheren Ordner oder kürze die Namen.";
+"error.photoImport.failed" = "Ein Teil deiner Auswahl ließ sich nicht zum Senden vorbereiten, deshalb wurde nichts ausgewählt. Wähle erneut oder nimm weniger auf einmal.";
 "error.cloud.unauthorized" = "Deine Anmeldung ist abgelaufen. Melde dich erneut an, um Dateien zu senden.";
 "error.cloud.quota" = "Für diese Datei ist nicht genug Speicher oder Tageskontingent übrig. Schaffe Platz oder wechsle den Tarif.";
 "error.cloud.rateLimited" = "Gerade laufen zu viele Uploads. Warte eine Minute und versuch es dann erneut.";

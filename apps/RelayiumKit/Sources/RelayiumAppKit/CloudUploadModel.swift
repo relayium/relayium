@@ -20,10 +20,11 @@ public enum UploadState: Equatable {
     /// know what is in it, and `.picked([])` must be unreachable.
     case picked([SelectedFile])
     case uploading(sent: Int, total: Int)
-    /// `keyWarning` is non-nil when the upload succeeded but this Mac could not
-    /// keep the key. The link is still here — it is the only copy of that key —
-    /// and the warning is what turns a silent future "this file's key is not on
-    /// this Mac" into something the user could act on now, by copying it.
+    /// `keyWarning` is non-nil when the upload succeeded but this device could
+    /// not keep the key. The link is still here — it is the only copy of that
+    /// key — and the warning is what turns a silent future "this file's key is
+    /// not on this device" into something the user could act on now, by copying
+    /// it.
     case done(link: String, expiresAt: Int64, keyWarning: String?)
     case failed(String)
 }
@@ -65,6 +66,17 @@ public final class CloudUploadModel: ObservableObject {
     public func applyRetentionCap(_ secs: Int64) {
         ttlChoices = allowedTTLs(retentionSecs: secs)
         if !ttlChoices.contains(ttl) { ttl = ttlChoices.last ?? 3600 }
+    }
+
+    /// Advisory limits, applied as a pair so they can only be set and cleared
+    /// together. `UploadCaps.unknown` on every transition out of a ready
+    /// account is what stops one account's plan from bounding another's picker.
+    ///
+    /// The *selected* TTL is left where the user put it unless the new cap no
+    /// longer allows it: a cap is a limit, a selection is a preference.
+    public func apply(_ caps: UploadCaps) {
+        applyRetentionCap(caps.retentionSecs)
+        maxFileSize = caps.maxFileSize
     }
 
     /// Roots the user chose or dropped — files, folders, or a mix. Folders are

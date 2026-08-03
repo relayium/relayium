@@ -5,14 +5,23 @@ import RelayiumAppKit
 ///
 /// It never reads `session.state`. The receive flow R3-A shipped works with no
 /// account, and the only way to keep that true in a slice that ADDS an account
-/// is to make it structural: the tab bar and both tabs exist in every session
-/// state, so signing out, failing to sign in, or never signing in cannot
-/// remove, gate or rebuild the receive tab.
+/// is to make it structural: the tab bar and all three tabs exist in every
+/// session state, so signing out, failing to sign in, or never signing in
+/// cannot remove, gate or rebuild the receive tab.
+///
+/// R3-C adds the Send tab, which is the first tab that genuinely needs an
+/// account — and the temptation it creates is a "is the user signed in" gate up
+/// here, above the tab bar. There is none. The send tab's gate lives INSIDE the
+/// send tab, and the only thing this file learns about the account is where to
+/// route a user who needs one: `onOpenAccount` is a tab-selection change handed
+/// down as a closure, not a session read.
 struct RootView: View {
-    private enum Tab: Hashable { case receive, account }
+    private enum Tab: Hashable { case receive, send, account }
 
     @EnvironmentObject private var session: AccountSession
     @ObservedObject var download: CloudDownloadModel
+    @ObservedObject var upload: CloudUploadModel
+    @ObservedObject var send: SendSelectionModel
     @State private var selection: Tab = .receive
 
     var body: some View {
@@ -20,6 +29,11 @@ struct RootView: View {
             ReceiveView(model: download)
                 .tabItem { Label(L10n.t(.tabReceive), systemImage: "tray.and.arrow.down") }
                 .tag(Tab.receive)
+
+            SendView(upload: upload, selection: send,
+                     onOpenAccount: { self.selection = .account })
+                .tabItem { Label(L10n.t(.tabSend), systemImage: "arrow.up.doc") }
+                .tag(Tab.send)
 
             AccountTab()
                 .tabItem { Label(L10n.t(.tabAccount), systemImage: "person.crop.circle") }

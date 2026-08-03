@@ -8,7 +8,7 @@ import XCTest
 /// of them: that `ErrorCopy` in Arabic is Arabic, that a file name inside it is
 /// still the file name, that a count of three files picks Arabic's `few` and not
 /// its `other`, and that the claims the product cannot afford to lose in
-/// translation — end-to-end encryption, the key never leaving this Mac,
+/// translation — end-to-end encryption, the key never leaving this device,
 /// irreversible deletion — are present in every language.
 ///
 /// Every assertion names its language. None of them can pass or fail because of
@@ -281,16 +281,37 @@ final class LocalizedCopyTests: XCTestCase {
 
     // MARK: - claims that must survive translation
 
+    /// The device noun each catalog uses, written down by hand.
+    ///
+    /// This table is what replaced a `contains("Mac")` assertion. That one held
+    /// in nine languages only because "Mac" is a brand name kept verbatim in
+    /// translation — the *device* noun is genuinely translated, so asserting it
+    /// means naming each language's word for it and having read the sentence it
+    /// sits in. Same nouns R3-B established for `error.manifest.duplicatePath`.
+    private let deviceNoun: [AppLanguage: String] = [
+        .en: "this device", .zh: "这台设备", .ja: "このデバイス", .ko: "이 기기",
+        .de: "diesem Gerät", .fr: "cet appareil", .ar: "هذا الجهاز",
+        .es: "este dispositivo", .pt: "este dispositivo",
+    ]
+
     /// The upload success notice is the app's E2E claim, not decoration: the key
-    /// is on this Mac and never reaches Relayium's servers. Every language has
+    /// is on this device and never reaches Relayium's servers. Every language has
     /// to say both halves, and every language has to keep the brand name.
-    func testTheKeyIsKeptNoticeMakesItsClaimInEveryLanguage() {
+    ///
+    /// The noun changed from *Mac* to *device* in R3-C, because iOS renders this
+    /// exact sentence from that slice onwards. The substance being pinned did
+    /// not change: where the key lives, and that it never left.
+    func testTheKeyIsKeptNoticeMakesItsClaimInEveryLanguage() throws {
         for language in AppLanguage.allCases {
             let notice = UploadPresentation.keyKeptText(language: language)
+            let noun = try XCTUnwrap(deviceNoun[language],
+                                     "\(language.rawValue) has no noun in the table")
             XCTAssertTrue(notice.contains("Relayium"),
                           "\(language.rawValue) lost the brand: \(notice)")
-            XCTAssertTrue(notice.contains("Mac"),
+            XCTAssertTrue(notice.contains(noun),
                           "\(language.rawValue) stopped saying where the key lives: \(notice)")
+            XCTAssertFalse(notice.contains("Mac"),
+                           "\(language.rawValue) still names a platform: \(notice)")
         }
     }
 
@@ -390,6 +411,103 @@ final class LocalizedCopyTests: XCTestCase {
                                   "\(key.rawValue) [\(language.rawValue)] fell back to the key")
                 XCTAssertFalse(text.contains("%@"), "\(key.rawValue) [\(language.rawValue)]: \(text)")
             }
+        }
+    }
+
+    // MARK: - the iOS send surface says nothing about a Mac either
+
+    /// Every non-plural key the iOS Send tab reaches, listed rather than
+    /// derived — adding to this set is a decision, the same way the account
+    /// surface's list is.
+    ///
+    /// The `error.selection.*` keys are in it because `SendSelectionModel`
+    /// renders them through `selectionError`: a preparation failure never
+    /// reaches `CloudUploadModel`, so those strings are on this screen without
+    /// any upload state naming them.
+    private let iosSendSurface: [L10nKey] = [
+        .tabSend, .uploadHeading, .uploadReady, .uploadLinkReady, .uploadSendAnother,
+        .uploadExpiresAfter, .uploadBurnAfterRead, .uploadKeepOpen, .uploadKeyKept,
+        .sendAccountTitle, .sendAccountBody, .sendOpenAccount,
+        .sendAccountUnavailableBody, .sendChoosePhotos, .sendPreparingPhotos,
+        .commonSend, .commonClear, .commonCancel, .commonShare, .commonExpires,
+        .commonTryAgain, .commonChooseFilesOrFolders, .commonStarting,
+        .errorPhotoImportFailed, .errorCloudUnauthorized,
+        .errorSelectionNoFiles, .errorSelectionTooManyFiles, .errorSelectionUnreadable,
+        .errorSelectionSymbolicLink, .errorSelectionPathTooLong,
+        .ttlOneHour, .ttlOneDay, .ttlThreeDays, .ttlSevenDays, .ttlFourteenDays,
+    ]
+
+    func testEveryCopyTheSendSurfaceReachesNamesNoPlatform() {
+        for key in iosSendSurface {
+            for language in AppLanguage.allCases {
+                let text = L10n.t(key, language: language)
+                XCTAssertFalse(text.contains("Mac"),
+                               "\(key.rawValue) [\(language.rawValue)]: \(text)")
+                XCTAssertFalse(text.contains("macOS"),
+                               "\(key.rawValue) [\(language.rawValue)]: \(text)")
+            }
+        }
+    }
+
+    /// The save-path failures are reached through `ErrorCopy` rather than by
+    /// name, which is why they were found by reachability review rather than by
+    /// reading the send screen's own key list. `CloudUploadModel.finish` routes
+    /// every one of them, and every one of them used to say *macOS* or *Mac*.
+    func testTheKeySavePathNamesNoPlatformInAnyLanguage() {
+        for language in AppLanguage.allCases {
+            for error in [KeychainError.status(-25308) as Error,
+                          StoredLinkKeyError.invalidIdentifier,
+                          StoredLinkKeyError.invalidKey] {
+                let text = ErrorCopy.storedLinkKeyMessage(for: error, operation: .save,
+                                                          language: language)
+                XCTAssertFalse(text.contains("Mac"), "[\(language.rawValue)] \(text)")
+                XCTAssertFalse(text.contains("macOS"), "[\(language.rawValue)] \(text)")
+            }
+            let staging = ErrorCopy.message(for: PlaintextSourceError.tooManyOpenFiles(limit: 256),
+                                            language: language)
+            XCTAssertFalse(staging.contains("Mac"), "[\(language.rawValue)] \(staging)")
+        }
+    }
+
+    /// The nine new keys are real copy in every language, not a key echoed back
+    /// and not a template with an unsubstituted placeholder.
+    func testTheNewSendKeysAreTranslatedEverywhere() {
+        for key in [L10nKey.tabSend, .sendAccountTitle, .sendAccountBody, .sendOpenAccount,
+                    .sendAccountUnavailableBody, .sendChoosePhotos, .sendPreparingPhotos,
+                    .uploadKeepOpen, .errorPhotoImportFailed] {
+            for language in AppLanguage.allCases {
+                let text = L10n.t(key, language: language)
+                XCTAssertFalse(text.isEmpty, "\(key.rawValue) [\(language.rawValue)]")
+                XCTAssertNotEqual(text, key.rawValue,
+                                  "\(key.rawValue) [\(language.rawValue)] fell back to the key")
+                XCTAssertFalse(text.contains("%@"), "\(key.rawValue) [\(language.rawValue)]: \(text)")
+                if language != .en {
+                    XCTAssertNotEqual(text, L10n.t(key, language: .en),
+                                      "\(key.rawValue) [\(language.rawValue)] is untranslated")
+                }
+            }
+        }
+    }
+
+    /// The send tab's body carries the same load-bearing clause the account
+    /// gates do: sending needs an account, receiving never does. A translation
+    /// that drops the second half turns an explanation into a refusal.
+    func testTheSendGateBodyKeepsTheAnonymousHalfInEveryLanguage() {
+        let receiving: [AppLanguage: String] = [
+            .en: "Receiving a link never does",
+            .zh: "接收链接则始终不需要账户",
+            .ja: "リンクの受信にアカウントは一切要りません",
+            .ko: "링크를 받을 때는 계정이 전혀 필요하지 않습니다",
+            .de: "Zum Empfangen eines Links nie",
+            .fr: "La réception d’un lien n’en demande jamais",
+            .ar: "أمّا استلام رابط فلا يتطلّب حسابًا أبدًا",
+            .es: "Recibir un enlace nunca lo requiere",
+            .pt: "Receber uma ligação nunca exige",
+        ]
+        for language in AppLanguage.allCases {
+            let body = L10n.t(.sendAccountBody, language: language)
+            XCTAssertTrue(body.contains(receiving[language] ?? "\u{0}"),
+                          "\(language.rawValue) drops the anonymous half: \(body)")
         }
     }
 

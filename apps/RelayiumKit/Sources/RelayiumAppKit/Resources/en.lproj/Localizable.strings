@@ -70,6 +70,7 @@
 "content.reactivate" = "Reactivate on relayium.com";
 "content.backToSignIn" = "Back to sign in";
 "tab.receive" = "Receive";
+"tab.send" = "Send";
 "tab.account" = "Account";
 
 /* MARK: navigation sidebar */
@@ -150,9 +151,16 @@
 "upload.sendAnother" = "Send another";
 "upload.expiresAfter" = "Expires after";
 "upload.burnAfterRead" = "Delete after first download";
-"upload.keyKept" = "The key is stored securely on this Mac and is never sent to Relayium's servers. You can copy this link again from the Account tab.";
+"upload.keepOpen" = "Keep Relayium open until this finishes. Leaving the app can stop the upload, and it can't be resumed in the background yet.";
+"upload.keyKept" = "The key is stored securely on this device and is never sent to Relayium's servers. You can copy this link again from the Account tab.";
 "upload.keyWarning" = "%@ The link below is the only available copy of the key — copy it now. Relayium's servers never had the key, so this link can't be shown again.";
 "upload.fileTooLarge" = "%@ is larger than this server accepts.";
+"send.accountTitle" = "Sending needs an account";
+"send.accountBody" = "Files you send are encrypted on this device and uploaded to your Relayium account, so sending needs you to sign in. Receiving a link never does.";
+"send.openAccount" = "Go to Account";
+"send.accountUnavailableBody" = "Sending needs your plan's limits, and they couldn't be loaded. Open Account to try again.";
+"send.choosePhotos" = "Choose Photos or Videos…";
+"send.preparingPhotos" = "Preparing what you chose…";
 "ttl.oneHour" = "1 hour";
 "ttl.oneDay" = "1 day";
 "ttl.threeDays" = "3 days";
@@ -342,13 +350,13 @@
 "error.account.decoding" = "The server sent a response this version of the app doesn't understand. Updating may fix it.";
 "error.account.network" = "Couldn't reach the server. Check your internet connection.";
 "error.keychain.signIn" = "macOS wouldn't store your sign-in (keychain error %@). You'll stay signed in until you quit.";
-"error.storedKey.keychain.save" = "macOS wouldn't save this file's key to the keychain (keychain error %@).";
+"error.storedKey.keychain.save" = "The keychain wouldn't save this file's key (keychain error %@).";
 "error.storedKey.keychain.read" = "macOS wouldn't read this file's key from the keychain (keychain error %@).";
 "error.storedKey.keychain.remove" = "macOS wouldn't remove this file's key from the keychain (keychain error %@).";
-"error.storedKey.badId.save" = "This file's identifier isn't one this app will save a key under, so its key was not saved on this Mac. Please report it.";
+"error.storedKey.badId.save" = "This file's identifier isn't one this app will save a key under, so its key was not saved on this device. Please report it.";
 "error.storedKey.badId.read" = "This item's identifier isn't one this app will act on, so its key was not read and the link can't be rebuilt here. Manage it on relayium.com, and please report it.";
 "error.storedKey.badId.remove" = "This item's identifier isn't one this app will act on, so the key was not removed. Please report it.";
-"error.storedKey.badKey.save" = "This file's key isn't in a form this app can save, so it was not saved on this Mac. Please report it.";
+"error.storedKey.badKey.save" = "This file's key isn't in a form this app can save, so it was not saved on this device. Please report it.";
 "error.storedKey.badKey.remove" = "This file's key isn't in a form this app can act on, so it was not removed. Please report it.";
 "error.handshake.mitm" = "The two devices could not agree on a shared secret. Someone may be interfering with this connection — stop, and pair again with a new code.";
 "error.peer.protocol" = "The other device sent something this version of the app doesn't understand. Both sides may need updating.";
@@ -396,12 +404,13 @@
 "error.manifest.pathCollision" = "The transfer wants “%@” to be both a file and a folder, which cannot exist at once, so nothing was saved. Ask the sender to try again.";
 "error.plaintext.unreadable" = "Couldn't open “%@”, so nothing was sent. Check the file still exists and you have permission to read it.";
 "error.plaintext.readFailed" = "Reading “%@” failed part-way through, so the transfer was stopped. The other device discarded the incomplete file.";
-"error.plaintext.tooManyOpenFiles" = "This Mac ran out of open-file handles part-way through your selection (its limit is %@). Relayium holds every selected file open so the exact files you chose are the ones that get sent, so send them in smaller batches.";
+"error.plaintext.tooManyOpenFiles" = "This device ran out of open-file handles part-way through your selection (its limit is %@). Relayium holds every selected file open so the exact files you chose are the ones that get sent, so send them in smaller batches.";
 "error.selection.noFiles" = "There are no files to send. An empty folder can't be transferred on its own — the file list has no way to describe a folder with nothing in it.";
 "error.selection.tooManyFiles" = "That selection holds more than %@ files. Send fewer files, or zip the folder first.";
 "error.selection.unreadable" = "Couldn't read “%@”, so nothing was sent. Check the item still exists and you have permission to open it.";
 "error.selection.symbolicLink" = "“%@” is a symbolic link. Relayium won't follow it — that could send files from outside what you chose — and won't skip it silently either. Remove it from the selection, or send the real folder it points at.";
 "error.selection.pathTooLong" = "The path “%@” is too long to describe in a transfer. Send from a shallower folder, or shorten the names.";
+"error.photoImport.failed" = "Some of what you chose couldn't be prepared for sending, so nothing was selected. Choose again, or send fewer items at once.";
 "error.cloud.unauthorized" = "Your sign-in expired. Sign in again to send files.";
 "error.cloud.quota" = "Not enough space or daily quota left for this file. Free up space or upgrade.";
 "error.cloud.rateLimited" = "Too many uploads right now. Wait a minute, then try again.";

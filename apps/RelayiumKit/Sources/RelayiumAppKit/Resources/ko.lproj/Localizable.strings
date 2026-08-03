@@ -69,6 +69,7 @@
 "content.reactivate" = "relayium.com에서 다시 활성화";
 "content.backToSignIn" = "로그인으로 돌아가기";
 "tab.receive" = "받기";
+"tab.send" = "보내기";
 "tab.account" = "계정";
 
 /* MARK: 내비게이션 사이드바 */
@@ -149,9 +150,16 @@
 "upload.sendAnother" = "다른 파일 보내기";
 "upload.expiresAfter" = "유효 기간";
 "upload.burnAfterRead" = "첫 다운로드 후 삭제";
-"upload.keyKept" = "키는 이 Mac에 안전하게 저장되며 Relayium의 서버로 전송되지 않습니다. 이 링크는 「계정」 탭에서 언제든 다시 복사할 수 있습니다.";
+"upload.keepOpen" = "끝날 때까지 Relayium을 열어 두세요. 앱을 벗어나면 업로드가 중단될 수 있고, 아직 백그라운드에서 이어서 보낼 수 없습니다.";
+"upload.keyKept" = "키는 이 기기에 안전하게 저장되며 Relayium의 서버로 전송되지 않습니다. 이 링크는 「계정」 탭에서 언제든 다시 복사할 수 있습니다.";
 "upload.keyWarning" = "%@ 아래 링크가 키의 유일한 사본입니다 — 지금 복사하세요. Relayium의 서버는 키를 가진 적이 없으므로 이 링크를 다시 표시할 수 없습니다.";
 "upload.fileTooLarge" = "%@ 은(는) 이 서버가 허용하는 크기를 넘습니다.";
+"send.accountTitle" = "보내려면 계정이 필요합니다";
+"send.accountBody" = "보내는 파일은 이 기기에서 암호화되어 Relayium 계정으로 업로드됩니다. 그래서 보내려면 로그인이 필요합니다. 링크를 받을 때는 계정이 전혀 필요하지 않습니다.";
+"send.openAccount" = "계정으로 이동";
+"send.accountUnavailableBody" = "보내려면 요금제의 한도가 필요한데 불러오지 못했습니다. 「계정」에서 다시 시도하세요.";
+"send.choosePhotos" = "사진 또는 비디오 선택…";
+"send.preparingPhotos" = "선택한 항목을 준비하는 중…";
 "ttl.oneHour" = "1시간";
 "ttl.oneDay" = "1일";
 "ttl.threeDays" = "3일";
@@ -333,13 +341,13 @@
 "error.account.decoding" = "이 버전의 앱이 이해할 수 없는 응답을 서버가 보냈습니다. 업데이트하면 해결될 수 있습니다.";
 "error.account.network" = "서버에 연결하지 못했습니다. 인터넷 연결을 확인하세요.";
 "error.keychain.signIn" = "macOS가 로그인 정보를 저장하지 못했습니다(키체인 오류 %@). 앱을 종료하기 전까지는 로그인 상태가 유지됩니다.";
-"error.storedKey.keychain.save" = "macOS가 이 파일의 키를 키체인에 저장하지 못했습니다(키체인 오류 %@).";
+"error.storedKey.keychain.save" = "키체인에 이 파일의 키를 저장하지 못했습니다(키체인 오류 %@).";
 "error.storedKey.keychain.read" = "macOS가 이 파일의 키를 키체인에서 읽지 못했습니다(키체인 오류 %@).";
 "error.storedKey.keychain.remove" = "macOS가 이 파일의 키를 키체인에서 제거하지 못했습니다(키체인 오류 %@).";
-"error.storedKey.badId.save" = "이 파일의 식별자는 이 앱이 키를 저장할 때 쓰는 형식이 아닙니다. 그래서 키가 이 Mac에 저장되지 않았습니다. 신고해 주세요.";
+"error.storedKey.badId.save" = "이 파일의 식별자는 이 앱이 키를 저장할 때 쓰는 형식이 아닙니다. 그래서 키가 이 기기에 저장되지 않았습니다. 신고해 주세요.";
 "error.storedKey.badId.read" = "이 항목의 식별자는 이 앱이 다루는 형식이 아닙니다. 그래서 키를 읽지 않았고 여기서는 링크를 다시 만들 수 없습니다. relayium.com에서 관리하시고, 신고해 주세요.";
 "error.storedKey.badId.remove" = "이 항목의 식별자는 이 앱이 다루는 형식이 아닙니다. 그래서 키가 제거되지 않았습니다. 신고해 주세요.";
-"error.storedKey.badKey.save" = "이 파일의 키는 이 앱이 저장할 수 있는 형식이 아닙니다. 그래서 이 Mac에 저장되지 않았습니다. 신고해 주세요.";
+"error.storedKey.badKey.save" = "이 파일의 키는 이 앱이 저장할 수 있는 형식이 아닙니다. 그래서 이 기기에 저장되지 않았습니다. 신고해 주세요.";
 "error.storedKey.badKey.remove" = "이 파일의 키는 이 앱이 다룰 수 있는 형식이 아닙니다. 그래서 제거되지 않았습니다. 신고해 주세요.";
 "error.handshake.mitm" = "두 기기가 공유 비밀에 합의하지 못했습니다. 누군가 이 연결에 개입하고 있을 수 있습니다 — 지금 중단하고 새 코드로 다시 페어링하세요.";
 "error.peer.protocol" = "상대 기기가 이 버전의 앱이 이해할 수 없는 것을 보냈습니다. 양쪽 모두 업데이트가 필요할 수 있습니다.";
@@ -387,12 +395,13 @@
 "error.manifest.pathCollision" = "이 전송은 “%@”이(가) 파일이면서 동시에 폴더이기를 요구하는데, 그럴 수는 없으므로 아무것도 저장하지 않았습니다. 보낸 사람에게 다시 시도해 달라고 하세요.";
 "error.plaintext.unreadable" = "“%@”을(를) 열지 못해 아무것도 보내지 않았습니다. 파일이 아직 있는지, 읽을 권한이 있는지 확인하세요.";
 "error.plaintext.readFailed" = "“%@”을(를) 읽는 도중 실패해 전송을 중단했습니다. 상대 기기는 불완전한 파일을 폐기했습니다.";
-"error.plaintext.tooManyOpenFiles" = "선택을 처리하는 도중 이 Mac의 열린 파일 핸들이 바닥났습니다(한도 %@). Relayium은 선택한 파일이 그대로 전송되도록 모든 파일을 계속 열어 두므로, 더 작게 나누어 보내세요.";
+"error.plaintext.tooManyOpenFiles" = "선택을 처리하는 도중 이 기기의 열린 파일 핸들이 바닥났습니다(한도 %@). Relayium은 선택한 파일이 그대로 전송되도록 모든 파일을 계속 열어 두므로, 더 작게 나누어 보내세요.";
 "error.selection.noFiles" = "보낼 파일이 없습니다. 빈 폴더는 그 자체로 전송할 수 없습니다 — 파일 목록에는 내용이 없는 폴더를 표현할 방법이 없기 때문입니다.";
 "error.selection.tooManyFiles" = "그 선택에는 %@개가 넘는 파일이 있습니다. 파일 수를 줄이거나 폴더를 먼저 압축하세요.";
 "error.selection.unreadable" = "“%@”을(를) 읽지 못해 아무것도 보내지 않았습니다. 항목이 아직 있는지, 열 권한이 있는지 확인하세요.";
 "error.selection.symbolicLink" = "“%@”은(는) 심볼릭 링크입니다. Relayium은 이를 따라가지 않습니다 — 선택한 범위 밖의 파일을 보낼 수 있기 때문입니다 — 그리고 조용히 건너뛰지도 않습니다. 선택에서 제외하거나, 링크가 가리키는 실제 폴더를 보내세요.";
 "error.selection.pathTooLong" = "경로 “%@”이(가) 너무 길어 전송에서 기술할 수 없습니다. 더 얕은 폴더에서 보내거나 이름을 줄이세요.";
+"error.photoImport.failed" = "선택한 항목 중 일부를 보낼 준비를 하지 못해 아무것도 선택되지 않았습니다. 다시 선택하거나 한 번에 더 적게 선택하세요.";
 "error.cloud.unauthorized" = "로그인이 만료되었습니다. 파일을 보내려면 다시 로그인하세요.";
 "error.cloud.quota" = "이 파일에 쓸 공간이나 오늘 할당량이 부족합니다. 공간을 확보하거나 업그레이드하세요.";
 "error.cloud.rateLimited" = "지금 업로드가 너무 많습니다. 1분 정도 기다린 뒤 다시 시도하세요.";

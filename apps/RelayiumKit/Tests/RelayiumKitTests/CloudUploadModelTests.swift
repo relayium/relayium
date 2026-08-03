@@ -119,7 +119,7 @@ final class CloudUploadModelTests: XCTestCase {
 
     /// The key exists only in that link. Keeping it is what makes the Account
     /// tab able to hand the link back later instead of listing an object nobody
-    /// on this Mac can open.
+    /// on this device can open.
     func testASuccessfulUploadPersistsItsKeyForLaterReconstruction() async throws {
         let m = makeModel()
         await m.applyOutcome(UploadOutcome(id: "abc", expiresAt: 99, keyB64url: "KEY"))
@@ -165,7 +165,7 @@ final class CloudUploadModelTests: XCTestCase {
     /// The same requirement for the failures the app raises itself. Their shared
     /// copy is `AccountClient`'s — an id refused BEFORE a DELETE was sent — and
     /// rendered here it was wrong twice: `invalidKey` said the key stored on
-    /// this Mac is unreadable when this save stored nothing, and
+    /// this device is unreadable when this save stored nothing, and
     /// `invalidIdentifier` read as a refusal that stopped everything, on the
     /// screen that exists BECAUSE the upload succeeded.
     func testAKeySaveTheAppRefusesSaysSoWithoutDenyingTheUpload() async {
@@ -243,17 +243,24 @@ final class CloudUploadModelTests: XCTestCase {
 
     // MARK: - what the "Link ready" screen says about the key
 
-    /// After a successful save the key IS on this Mac and the Account tab can
+    /// After a successful save the key IS on this device and the Account tab can
     /// hand the link back, so the screen must not say the link is the only copy
     /// of it. That statement was true before this store existed and is false
     /// now, which is worse than vague: it tells the user to treat a recoverable
     /// link as irreplaceable, and it contradicts the warning shown when the save
     /// really did fail.
-    func testTheSuccessNoticeSaysTheKeyIsKeptOnThisMacAndNeverSent() {
+    ///
+    /// What this pins is WHERE the key lives and that it never left — not the
+    /// word "Mac", which was only ever assertable in nine languages because a
+    /// brand name survives translation verbatim. The same notice is rendered on
+    /// iOS from R3-C onwards, so the noun that was platform-true is now
+    /// platform-false, and the substance is unchanged.
+    func testTheSuccessNoticeSaysTheKeyIsKeptOnThisDeviceAndNeverSent() {
         let notice = UploadPresentation.keyNotice(warning: nil)
         XCTAssertFalse(notice.isWarning)
-        XCTAssertTrue(notice.text.contains("this Mac"), notice.text)
+        XCTAssertTrue(notice.text.contains("this device"), notice.text)
         XCTAssertTrue(notice.text.contains("never sent to Relayium"), notice.text)
+        XCTAssertFalse(notice.text.contains("Mac"), notice.text)
         XCTAssertFalse(notice.text.lowercased().contains("only"),
                        "the success copy still claims the link is the only copy: \(notice.text)")
     }
@@ -279,5 +286,37 @@ final class CloudUploadModelTests: XCTestCase {
         XCTAssertTrue(notice.isWarning)
         XCTAssertTrue(notice.text.contains("only available copy"), notice.text)
         XCTAssertTrue(notice.text.lowercased().contains("copy it now"), notice.text)
+    }
+
+    // MARK: - advisory caps, applied as one pair
+
+    func testApplyingCapsNarrowsTheTTLChoices() {
+        let m = makeModel()
+        m.apply(UploadCaps(retentionSecs: 86_400, maxFileSize: 0))
+        XCTAssertEqual(m.ttlChoices, [3600, 86400])
+    }
+
+    /// The pair is applied and cleared together, so a size gate cannot outlive
+    /// the retention it arrived with.
+    func testApplyingAnUnknownCapTurnsBothOff() {
+        let m = makeModel()
+        m.apply(UploadCaps(retentionSecs: 3600, maxFileSize: 1000))
+        XCTAssertEqual(m.ttlChoices, [3600])
+        XCTAssertEqual(m.maxFileSize, 1000)
+        m.apply(.unknown)
+        XCTAssertEqual(m.ttlChoices, [3600, 86400, 259200, 604800, 1209600])
+        XCTAssertEqual(m.maxFileSize, 0)
+    }
+
+    /// A cap is a limit; the chosen TTL is a preference. Narrowing pulls the
+    /// selection down only when it no longer fits, and widening again never
+    /// moves it back — the user's choice is theirs.
+    func testApplyingCapsMovesTheSelectedTTLOnlyWhenItNoLongerFits() {
+        let m = makeModel()
+        m.ttl = 604_800
+        m.apply(UploadCaps(retentionSecs: 86_400, maxFileSize: 0))
+        XCTAssertEqual(m.ttl, 86_400)
+        m.apply(.unknown)
+        XCTAssertEqual(m.ttl, 86_400, "widening the cap must not re-pick for the user")
     }
 }

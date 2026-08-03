@@ -69,6 +69,7 @@
 "content.reactivate" = "在 relayium.com 重新激活";
 "content.backToSignIn" = "返回登录";
 "tab.receive" = "接收";
+"tab.send" = "发送";
 "tab.account" = "账户";
 
 /* MARK: 导航侧栏 */
@@ -149,9 +150,16 @@
 "upload.sendAnother" = "再发一份";
 "upload.expiresAfter" = "有效期";
 "upload.burnAfterRead" = "首次下载后即删除";
-"upload.keyKept" = "密钥已安全保存在这台 Mac 上，绝不会发送给 Relayium 的服务器。你随时可以在「账户」标签页再次复制这条链接。";
+"upload.keepOpen" = "请保持 Relayium 打开，直到这次传输完成。离开应用可能会中断上传，而且目前还不能在后台续传。";
+"upload.keyKept" = "密钥已安全保存在这台设备上，绝不会发送给 Relayium 的服务器。你随时可以在「账户」标签页再次复制这条链接。";
 "upload.keyWarning" = "%@ 下面这条链接是密钥仅存的一份副本 — 请立即复制。Relayium 的服务器从未持有该密钥，因此这条链接无法再次显示。";
 "upload.fileTooLarge" = "%@ 超过了该服务器接受的大小。";
+"send.accountTitle" = "发送需要账户";
+"send.accountBody" = "你发送的文件会在这台设备上加密，然后上传到你的 Relayium 账户，所以发送需要先登录。接收链接则始终不需要账户。";
+"send.openAccount" = "前往账户";
+"send.accountUnavailableBody" = "发送需要读取你套餐的限额，但这次没能载入。请前往「账户」重试。";
+"send.choosePhotos" = "选择照片或视频…";
+"send.preparingPhotos" = "正在准备所选内容…";
 "ttl.oneHour" = "1 小时";
 "ttl.oneDay" = "1 天";
 "ttl.threeDays" = "3 天";
@@ -333,13 +341,13 @@
 "error.account.decoding" = "服务器返回的响应是这个版本的应用无法理解的。更新可能会解决问题。";
 "error.account.network" = "无法连接服务器。请检查你的网络连接。";
 "error.keychain.signIn" = "macOS 未能保存你的登录凭据（钥匙串错误 %@）。在退出应用之前你会保持登录状态。";
-"error.storedKey.keychain.save" = "macOS 未能把这个文件的密钥保存到钥匙串（钥匙串错误 %@）。";
+"error.storedKey.keychain.save" = "钥匙串未能保存这个文件的密钥（钥匙串错误 %@）。";
 "error.storedKey.keychain.read" = "macOS 未能从钥匙串读取这个文件的密钥（钥匙串错误 %@）。";
 "error.storedKey.keychain.remove" = "macOS 未能从钥匙串移除这个文件的密钥（钥匙串错误 %@）。";
-"error.storedKey.badId.save" = "这个文件的标识符不是本应用会用来保存密钥的形式，因此它的密钥没有保存在这台 Mac 上。请反馈这个问题。";
+"error.storedKey.badId.save" = "这个文件的标识符不是本应用会用来保存密钥的形式，因此它的密钥没有保存在这台设备上。请反馈这个问题。";
 "error.storedKey.badId.read" = "这一项的标识符不是本应用会处理的形式，因此没有读取它的密钥，链接也无法在此重建。请到 relayium.com 管理它，并反馈这个问题。";
 "error.storedKey.badId.remove" = "这一项的标识符不是本应用会处理的形式，因此密钥没有被移除。请反馈这个问题。";
-"error.storedKey.badKey.save" = "这个文件的密钥不是本应用能够保存的形式，因此它没有保存在这台 Mac 上。请反馈这个问题。";
+"error.storedKey.badKey.save" = "这个文件的密钥不是本应用能够保存的形式，因此它没有保存在这台设备上。请反馈这个问题。";
 "error.storedKey.badKey.remove" = "这个文件的密钥不是本应用能够处理的形式，因此它没有被移除。请反馈这个问题。";
 "error.handshake.mitm" = "两台设备未能就共享密钥达成一致。可能有人正在干扰这条连接 — 请立即停止，并用新的配对码重新配对。";
 "error.peer.protocol" = "对方设备发送的内容是这个版本的应用无法理解的。双方可能都需要更新。";
@@ -387,12 +395,13 @@
 "error.manifest.pathCollision" = "这次传输要求“%@”同时是文件和文件夹，而这两者不可能并存，因此什么都没有保存。请让发送方重试。";
 "error.plaintext.unreadable" = "未能打开“%@”，因此什么都没有发送。请检查该文件是否仍然存在、以及你是否有读取权限。";
 "error.plaintext.readFailed" = "读取“%@”在中途失败，因此传输已停止。对方设备已丢弃这个不完整的文件。";
-"error.plaintext.tooManyOpenFiles" = "在处理你的选择时，这台 Mac 用尽了可打开的文件句柄（上限为 %@）。Relayium 会持有每一个所选文件不放，以确保发出的正是你选中的那些文件，因此请分成更小的批次发送。";
+"error.plaintext.tooManyOpenFiles" = "在处理你的选择时，这台设备用尽了可打开的文件句柄（上限为 %@）。Relayium 会持有每一个所选文件不放，以确保发出的正是你选中的那些文件，因此请分成更小的批次发送。";
 "error.selection.noFiles" = "没有可发送的文件。空文件夹无法单独传输 — 文件列表没有办法描述一个什么都没有的文件夹。";
 "error.selection.tooManyFiles" = "该选择包含的文件超过 %@ 个。请减少文件数量，或先把文件夹压缩。";
 "error.selection.unreadable" = "未能读取“%@”，因此什么都没有发送。请检查该项是否仍然存在、以及你是否有打开权限。";
 "error.selection.symbolicLink" = "“%@”是一个符号链接。Relayium 不会跟随它 — 那可能会发送你所选范围之外的文件 — 也不会悄悄跳过它。请把它从选择中移除，或直接发送它指向的真实文件夹。";
 "error.selection.pathTooLong" = "路径“%@”太长，无法在一次传输中描述。请从更浅的文件夹发送，或缩短名称。";
+"error.photoImport.failed" = "所选内容中有一部分无法准备好发送，因此这次什么都没有选中。请重新选择，或一次少选一些。";
 "error.cloud.unauthorized" = "你的登录已过期。请重新登录以发送文件。";
 "error.cloud.quota" = "剩余空间或当日配额不足以容纳这个文件。请清理空间或升级套餐。";
 "error.cloud.rateLimited" = "当前上传次数过多。请等一分钟再试。";

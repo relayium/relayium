@@ -246,11 +246,16 @@ pairing code requires sign-in; joining with that code does not.
   files into the app's own folder in the Files app, and hand the finished result
   to the system share sheet — and it can now sign in to a Relayium account with
   an email and password to see the plan and usage that account has, refresh it,
-  and sign out. Receiving still needs no account. It ships the same nine
-  languages. Everything else in the iOS plan — sending, realtime and nearby
-  transfer, device and stored-file management, universal links, the Share
-  Extension, background transfer, notifications, and App Store release — is
-  still to be built, and there is no download to install.
+  and sign out. It can now also send: choose files, folders, photos or videos in
+  the app, pick how long the link lives and whether it is deleted after the
+  first download, and hand the finished link to the share sheet. Files are
+  encrypted on the device and the key never reaches Relayium. Sending needs an
+  account; receiving still does not. Uploads run only while the app is open —
+  there is no background transfer or resume yet. It ships the same nine
+  languages. Everything else in the iOS plan — realtime and nearby transfer,
+  device and stored-file management, universal links, the Share Extension,
+  background transfer, notifications, and App Store release — is still to be
+  built, and there is no download to install.
 - **Next:** publish and validate the first macOS release and continue iOS;
   persistent device identity, resumable transfer, broader protocol
   documentation, and additional distribution formats remain future work.

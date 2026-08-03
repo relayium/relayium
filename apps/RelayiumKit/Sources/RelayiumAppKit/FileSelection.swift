@@ -12,7 +12,7 @@ import RelayiumKit
 
 /// One file to send, with the relative path it will be reconstructed under.
 public struct SelectedFile: Equatable {
-    /// Absolute location on this Mac.
+    /// Absolute location on this device.
     public let url: URL
     /// Forward-slash path relative to the PARENT of the selected root, so a
     /// selected folder's own name survives the trip: selecting `~/Pictures/trip`
