@@ -28,8 +28,8 @@ The practical meaning of "synchronized" is:
 | Folder transfer | Folder picker/drop, relative paths, multi-file preservation | Both macOS pickers reject directories; comments call recursion out of scope | **Blocking gap** |
 | LAN nearby transfer | Nearby-device room and direct browser flow | Kit can join the empty-code LAN room, but the app exposes pairing codes only and has no nearby-device UI | **Blocking gap** |
 | Account plan and usage | Personal center meters and plan | `AccountView` | Implemented |
-| Device management | List/revoke signed-in CLI/app devices | No native API/model/UI; web-only | **Blocking gap** |
-| Stored-file management | List links, rebuild link, delete stored ciphertext | No native API/model/UI; web-only | **Blocking gap** |
+| Device management | List/revoke signed-in CLI/app devices | `AccountView` devices section + `AccountManagementModel`, over bearer-authed `GET`/`DELETE /api/devices`; this Mac is marked and revoking it signs the app out | Implemented |
+| Stored-file management | List links, rebuild link, delete stored ciphertext | `AccountView` stored-files section + `AccountManagementModel`; links rebuilt only where `StoredLinkKeyStore` holds the key, and the absence is explained rather than hidden | Implemented |
 | Sign-in methods | Password, Apple, browser/device approval | Password is native; the button labelled Apple opens the browser device-approval page rather than native Sign in with Apple | Functional, native UX gap |
 | Localization | Nine web locales | macOS UI strings are English literals | Follow-up parity gap |
 

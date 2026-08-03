@@ -20,7 +20,11 @@ public enum UploadState: Equatable {
     /// know what is in it, and `.picked([])` must be unreachable.
     case picked([SelectedFile])
     case uploading(sent: Int, total: Int)
-    case done(link: String, expiresAt: Int64)
+    /// `keyWarning` is non-nil when the upload succeeded but this Mac could not
+    /// keep the key. The link is still here — it is the only copy of that key —
+    /// and the warning is what turns a silent future "this file's key is not on
+    /// this Mac" into something the user could act on now, by copying it.
+    case done(link: String, expiresAt: Int64, keyWarning: String?)
     case failed(String)
 }
 
@@ -34,6 +38,10 @@ public final class CloudUploadModel: ObservableObject {
     @Published public private(set) var ttlChoices: [Int] = allowedTTLs(retentionSecs: 0)
 
     private let uploader: CloudUploader
+    /// Where the key of every successful upload is kept, so the Account tab can
+    /// rebuild this link later. The same store the account management model
+    /// reads — one installation, one answer to "do I have this key".
+    private let keyStore: StoredLinkKeyStore
     private let origin: String
     private var task: Task<Void, Never>?
     /// The files the user chose, kept so cancel() and reset() can return to a
@@ -43,8 +51,9 @@ public final class CloudUploadModel: ObservableObject {
     /// superseded upload must not repaint a screen the user has moved past.
     private var generation = 0
 
-    public init(uploader: CloudUploader, origin: String) {
+    public init(uploader: CloudUploader, keyStore: StoredLinkKeyStore, origin: String) {
         self.uploader = uploader
+        self.keyStore = keyStore
         self.origin = origin
     }
 
@@ -117,7 +126,7 @@ public final class CloudUploadModel: ObservableObject {
                     onProgress: { sent, total in
                         Task { @MainActor in self.report(sent: sent, total: total, g: g) }
                     })
-                await MainActor.run { self.finish(outcome, g: g) }
+                await self.finish(outcome, g: g)
             } catch is CancellationError {
                 await MainActor.run { self.restore(g: g) }
             } catch {
@@ -159,9 +168,38 @@ public final class CloudUploadModel: ObservableObject {
         state = .uploading(sent: sent, total: total)
     }
 
-    func finish(_ o: UploadOutcome, g: Int) {
+    /// Persist the key, then present the link.
+    ///
+    /// The key is stored BEFORE the generation is checked, and deliberately so:
+    /// by the time this runs the server has the bytes, whatever the screen is
+    /// showing. If the user cancelled or started another upload in the meantime,
+    /// nothing here should repaint — but the key is still the only thing that
+    /// could ever open what was uploaded, so throwing it away because a view
+    /// moved on would be losing data to a UI event.
+    func finish(_ o: UploadOutcome, g: Int) async {
+        var warning: String?
+        do {
+            try await keyStore.save(id: o.id, keyB64url: o.keyB64url)
+        } catch {
+            // Never a failed upload: the transfer succeeded, and reporting it as
+            // a failure would invite a retry that sends every byte a second
+            // time. The link itself is intact — and it is now the ONLY place
+            // that key exists, which is the whole reason this is said loudly and
+            // said here, on the last screen the link appears on.
+            //
+            // It leads with what failed rather than wrapping it, because the
+            // stored-key copy already names the operation: the shared table's
+            // `KeychainError` wording is the SIGN-IN store's, and a save that
+            // never touched the session must not borrow it.
+            warning = """
+                \(ErrorCopy.storedLinkKeyMessage(for: error, operation: .save)) \
+                The link below is the only available copy of the key — copy it now. \
+                Relayium's servers never had the key, so this link can't be shown again.
+                """
+        }
         guard g == generation else { return }
-        applyOutcome(o)
+        state = .done(link: buildDownloadLink(origin: origin, id: o.id, keyB64url: o.keyB64url),
+                      expiresAt: o.expiresAt, keyWarning: warning)
     }
 
     func restore(g: Int) {
@@ -182,9 +220,9 @@ public final class CloudUploadModel: ObservableObject {
         state = .failed(message)
     }
 
-    /// Split out so the link construction is testable without a transfer.
-    public func applyOutcome(_ o: UploadOutcome) {
-        state = .done(link: buildDownloadLink(origin: origin, id: o.id, keyB64url: o.keyB64url),
-                      expiresAt: o.expiresAt)
+    /// Split out so the link construction and key persistence are testable
+    /// without a transfer.
+    public func applyOutcome(_ o: UploadOutcome) async {
+        await finish(o, g: generation)
     }
 }

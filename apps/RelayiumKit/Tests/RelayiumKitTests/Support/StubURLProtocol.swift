@@ -18,6 +18,11 @@ final class StubURLProtocol: URLProtocol {
     nonisolated(unsafe) static var router: ((URLRequest) -> Stub)?
     nonisolated(unsafe) static var lastRequest: URLRequest?
     nonisolated(unsafe) static var lastBodyBytes: [UInt8] = []
+    /// Requests that actually reached the transport. `lastRequest` cannot answer
+    /// "was anything sent at all", which is the whole assertion for a client that
+    /// is supposed to refuse an input BEFORE building a request. Reset it in the
+    /// test that reads it; nothing else touches it.
+    nonisolated(unsafe) static var requestCount = 0
     static func bodyBytes(_ req: URLRequest) -> [UInt8] { lastBodyBytes }
 
     static func session() -> URLSession {
@@ -28,6 +33,7 @@ final class StubURLProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
+        Self.requestCount += 1
         if let b = request.httpBody { Self.lastBodyBytes = [UInt8](b) }
         else if let s = request.httpBodyStream {
             s.open(); defer { s.close() }

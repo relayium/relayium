@@ -31,6 +31,34 @@ for source_path in "${text_sources[@]}"; do
   fi
 done
 
+# Same guard for account device/stored-file management, and for the same reason:
+# the manifest now claims it, so the artifacts that claim rests on must exist.
+account_sources=(
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/AccountManagementModel.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumKit/Account/StoredLinkKeyStore.swift"
+  "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/AccountManagementModelTests.swift"
+  "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/AccountManagementClientTests.swift"
+  "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/StoredLinkKeyStoreTests.swift"
+  "$repo_root/server/account/devices_bearer_test.go"
+  "$repo_root/apps/mac/Relayium/AccountView.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumKit/Account/AccountClient.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumKit/Account/AccountModels.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/CloudUploadModel.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/UploadPresentation.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/ErrorCopy.swift"
+  "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/CloudUploadModelTests.swift"
+  "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/ErrorCopyTests.swift"
+  "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/Support/LoginWordingAssertion.swift"
+  "$repo_root/server/account/auth.go"
+  "$repo_root/server/account/handlers.go"
+)
+for source_path in "${account_sources[@]}"; do
+  if [ ! -f "$source_path" ]; then
+    echo "error: account-management evidence source is missing: $source_path" >&2
+    exit 1
+  fi
+done
+
 read_capability() {
   # JavaScript template literals must remain single-quoted from the shell.
   # shellcheck disable=SC2016

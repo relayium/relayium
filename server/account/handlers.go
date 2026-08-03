@@ -133,10 +133,21 @@ func (s *Service) routeMux() *http.ServeMux {
 	// the session cookie first.
 	mux.HandleFunc("GET /api/me", s.RequireAuth(s.handleMe))
 	mux.HandleFunc("GET /api/me/usage", s.RequireAuth(s.handleMeUsage))
-	mux.HandleFunc("GET /api/devices", s.RequireSession(s.handleListDevices))
+	// RequireAuth (session cookie OR bearer), for the same reason /api/me above
+	// carries it: the native app's own credential IS one of the rows in this
+	// list, so a session-only device list puts the one screen that can revoke it
+	// out of reach of the app holding it. Reads and writes both — every one of
+	// them is scoped to the caller's user id in the store, so a bearer can only
+	// ever see or mutate its own account's devices.
+	//
+	// POST stays RequireSession on purpose: native login already registers a
+	// device when it mints the bearer (see issueBearer), so nothing needs this
+	// route, and leaving it session-only keeps a leaked token from minting
+	// device rows.
+	mux.HandleFunc("GET /api/devices", s.RequireAuth(s.handleListDevices))
 	mux.HandleFunc("POST /api/devices", s.RequireSession(s.handleUpsertDevice))
-	mux.HandleFunc("PATCH /api/devices/{id}", s.RequireSession(s.handleRenameDevice))
-	mux.HandleFunc("DELETE /api/devices/{id}", s.RequireSession(s.handleDeleteDevice))
+	mux.HandleFunc("PATCH /api/devices/{id}", s.RequireAuth(s.handleRenameDevice))
+	mux.HandleFunc("DELETE /api/devices/{id}", s.RequireAuth(s.handleDeleteDevice))
 	mux.HandleFunc("GET /api/ice", s.handleICE)
 	mux.HandleFunc("GET /api/config", s.handleConfig)
 	mux.HandleFunc("GET /api/usage", s.RequireSession(s.handleUsage))
@@ -194,13 +205,47 @@ func (s *Service) handleConfig(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// deviceView is one row of the device list as clients see it.
+//
+// The JSON tags spell out Go's own default capitalization rather than adopting
+// lowerCamel: this response has shipped in that shape since the web devices
+// section was built, and `MePage.svelte` reads `d.ID`/`d.Name`/`d.Kind`/
+// `d.LastSeenAt` off it today. Renaming them to add a field would break a live
+// client for no benefit; a NEW field is additive and simply ignored by clients
+// that don't know it.
+type deviceView struct {
+	ID         string `json:"ID"`
+	UserID     string `json:"UserID"`
+	Name       string `json:"Name"`
+	CreatedAt  int64  `json:"CreatedAt"`
+	LastSeenAt int64  `json:"LastSeenAt"`
+	Kind       string `json:"Kind"`
+	// Current marks the device whose bearer token authenticated THIS request,
+	// so a native client can label it and warn before revoking itself. False
+	// for every row of a cookie-authenticated request: a browser holds a
+	// session, not a device-bound token, so none of these rows is "the device
+	// you are using" in a way that revoking would end.
+	Current bool `json:"Current"`
+}
+
 func (s *Service) handleListDevices(w http.ResponseWriter, r *http.Request, u User) {
 	ds, err := s.store.ListDevices(r.Context(), u.ID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"devices": ds})
+	currentID := s.bearerDeviceID(r, u.ID)
+	out := make([]deviceView, 0, len(ds))
+	for _, d := range ds {
+		out = append(out, deviceView{
+			ID: d.ID, UserID: d.UserID, Name: d.Name,
+			CreatedAt: d.CreatedAt, LastSeenAt: d.LastSeenAt, Kind: d.Kind,
+			// currentID is "" for a cookie caller, and device ids are never
+			// empty, so this cannot accidentally mark a row.
+			Current: currentID != "" && d.ID == currentID,
+		})
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"devices": out})
 }
 
 func (s *Service) handleUpsertDevice(w http.ResponseWriter, r *http.Request, u User) {

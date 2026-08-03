@@ -216,6 +216,25 @@ carry the entitlement: a signed app or a future app-hosted test target.
 above** — sign in, quit, relaunch the same build, confirm auto-login. That is the
 only check that exercises the real keychain under the real entitlement.
 
+`KeychainStoredLinkKeyStore` — the per-upload E2E keys behind the Account tab's
+"Copy link" — has exactly the same limitation and the same unverifiable-under-SPM
+status, so its automated coverage is the query shape, the identifier validation,
+the off-main-actor hop and `decodeLookup` (everything `key(for:)` decides once
+the Security call has answered, including rejecting stored bytes that are not a
+usable base64url key); the items themselves are only ever written by a signed
+build, and the two lines that actually call `SecItemCopyMatching` are the one
+part no `swift test` can reach. Its manual check is: sign in, send a file from
+the Link tab, and confirm the "Link ready" screen says the key is stored on this
+Mac and never sent to Relayium — **not** that the link is the only copy of it,
+which is what the failed-to-save warning says and the two must never both
+appear. Then open the Account tab and confirm the new object offers **Copy
+link** with the same URL the upload showed; quit, relaunch, and confirm it still
+does. An object uploaded from another device — or by any build before this one —
+must instead say the key is not on this Mac. Deleting it from the Account tab
+must remove both the row and the key, so a later list does not offer a link to
+something that is gone. Finally, sign out and back in and confirm the lists are
+rebuilt rather than inherited.
+
 ### Provisioning profile
 
 `Relayium Mac`, installed at

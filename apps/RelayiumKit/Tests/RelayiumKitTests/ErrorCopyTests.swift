@@ -23,6 +23,104 @@ final class ErrorCopyTests: XCTestCase {
     func testKeychainErrorNamesTheStatusCode() {
         XCTAssertTrue(ErrorCopy.message(for: KeychainError.status(-25300)).contains("-25300"))
     }
+    /// The shared table's `KeychainError` copy is about the SIGN-IN it could not
+    /// keep, and stays that way: `AccountSession` is its only caller, and for
+    /// that caller every word of it is true.
+    func testTheSharedKeychainCopyStaysAboutTheSignIn() {
+        let m = ErrorCopy.message(for: KeychainError.status(-25300)).lowercased()
+        XCTAssertTrue(m.contains("sign-in"), m)
+        XCTAssertTrue(m.contains("quit"), m)
+    }
+    /// The same error type also reaches three stored-link-key paths, where that
+    /// copy is false in every part: no sign-in was involved, nothing about the
+    /// session changed, and quitting has nothing to do with it. Those paths get
+    /// copy about the file's key — and keep the status, which is the only thing
+    /// that makes a keychain refusal diagnosable.
+    func testStoredLinkKeyCopyNeverBorrowsTheSignInWording() {
+        for op in [StoredLinkKeyOperation.save, .read, .remove] {
+            let m = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308), operation: op)
+            assertSaysNothingAboutSigningIn(m, "the \(op) copy")
+            XCTAssertTrue(m.contains("-25308"), "the keychain status was dropped for \(op): \(m)")
+            XCTAssertTrue(m.lowercased().contains("keychain"), m)
+            XCTAssertTrue(m.lowercased().contains("key"), m)
+        }
+    }
+    /// Three separate statements, not one reworded once: "not written", "not
+    /// readable" and "not removed" have different consequences for the user.
+    func testEachStoredLinkKeyOperationSaysWhichOneFailed() {
+        let save = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308), operation: .save)
+        let read = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308), operation: .read)
+        let remove = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308), operation: .remove)
+        XCTAssertTrue(save.lowercased().contains("save"), save)
+        XCTAssertTrue(read.lowercased().contains("read"), read)
+        XCTAssertTrue(remove.lowercased().contains("remove"), remove)
+        XCTAssertEqual(Set([save, read, remove]).count, 3, "two key operations share one message")
+    }
+    /// Only the two types these paths actually raise are contextualised.
+    /// Anything else still falls through to the shared table, so this seam stays
+    /// one branch per borrowed meaning rather than a second copy table to keep
+    /// in step.
+    func testStoredLinkKeyCopyDefersToTheSharedTableForEverythingElse() {
+        for op in [StoredLinkKeyOperation.save, .read, .remove] {
+            XCTAssertEqual(ErrorCopy.storedLinkKeyMessage(for: UnknownFailure(), operation: op),
+                           ErrorCopy.message(for: UnknownFailure()))
+        }
+    }
+
+    /// `StoredLinkKeyError` needs the operation too. Its shared wording answers
+    /// for `AccountClient`, which raises `invalidIdentifier` from its own id
+    /// check BEFORE a DELETE is sent — "it was refused" is the whole truth
+    /// there — and `invalidKey` describes bytes read back from the keychain.
+    /// Both are false on a save: nothing was stored, and the save runs after the
+    /// upload has already landed.
+    func testStoredLinkKeyErrorsSayWhichKeyOperationFailed() {
+        for e in [StoredLinkKeyError.invalidKey, .invalidIdentifier] {
+            let save = ErrorCopy.storedLinkKeyMessage(for: e, operation: .save)
+            let read = ErrorCopy.storedLinkKeyMessage(for: e, operation: .read)
+            let remove = ErrorCopy.storedLinkKeyMessage(for: e, operation: .remove)
+            XCTAssertTrue(save.lowercased().contains("save"), "\(e) save: \(save)")
+            XCTAssertTrue(read.lowercased().contains("read"), "\(e) read: \(read)")
+            XCTAssertTrue(remove.lowercased().contains("remove"), "\(e) remove: \(remove)")
+            XCTAssertEqual(Set([save, read, remove]).count, 3, "two \(e) operations share one message")
+            for (m, op) in [(save, "save"), (read, "read"), (remove, "remove")] {
+                assertSaysNothingAboutSigningIn(m, "the \(e) \(op) copy")
+                assertDoesNotDenyACompletedRequest(m, "the \(e) \(op) copy")
+            }
+        }
+    }
+
+    /// The sharpest of the six. A failed SAVE must not describe a key sitting on
+    /// this Mac: `invalidKey` on the way IN means no keychain item was written
+    /// at all, so the shared sentence would send the user looking for something
+    /// that does not exist — and the link on screen is the only copy there is.
+    func testAKeySaveRefusalDoesNotDescribeAKeyThatWasNeverStored() {
+        let m = ErrorCopy.storedLinkKeyMessage(for: StoredLinkKeyError.invalidKey, operation: .save)
+        XCTAssertFalse(m.lowercased().contains("stored on this mac"), m)
+        XCTAssertNotEqual(m, ErrorCopy.message(for: StoredLinkKeyError.invalidKey))
+    }
+
+    /// The read arm keeps the shared sentence, because that is the path it was
+    /// written for: `checkedKey(fromStored:)` rejecting bytes the keychain
+    /// returned. Asserted rather than assumed so the two copies of one sentence
+    /// cannot drift apart unnoticed.
+    func testTheReadArmKeepsTheWordingTheSharedTableWasWrittenFor() {
+        XCTAssertEqual(ErrorCopy.storedLinkKeyMessage(for: StoredLinkKeyError.invalidKey, operation: .read),
+                       ErrorCopy.message(for: StoredLinkKeyError.invalidKey))
+    }
+
+    /// And the shared table itself is untouched: `AccountClient`'s row-action
+    /// check is not a key operation, and its copy — refused, manage it on the
+    /// web, report it — is still what that path renders.
+    func testTheSharedTableKeepsItsRowActionWordingForARefusedIdentifier() {
+        let m = ErrorCopy.message(for: StoredLinkKeyError.invalidIdentifier)
+        XCTAssertTrue(m.lowercased().contains("refused"), m)
+        XCTAssertTrue(m.contains("relayium.com"), m)
+        for op in [StoredLinkKeyOperation.save, .read, .remove] {
+            XCTAssertNotEqual(ErrorCopy.storedLinkKeyMessage(for: StoredLinkKeyError.invalidIdentifier,
+                                                             operation: op), m,
+                              "the \(op) copy is still the row action's")
+        }
+    }
     /// Quota and rate-limit are the only two an upload user can act on, so they
     /// must not collapse into a generic message.
     func testCloudQuotaAndRateLimitAreDistinctAndActionable() {

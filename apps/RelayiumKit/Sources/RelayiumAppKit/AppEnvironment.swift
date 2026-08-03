@@ -177,12 +177,37 @@ public enum AppEnvironment {
         BrowserLoginModel(client: HTTPDeviceAuthClient(baseURL: baseURL))
     }
 
+    /// The keys of stored uploads made from this installation.
+    ///
+    /// Built once by the app and handed to BOTH the upload model (which writes
+    /// them) and the account management model (which reads them and removes them
+    /// with the object they belong to). Two stores would mean an upload whose
+    /// link the Account tab cannot rebuild, which is exactly the failure this
+    /// capability exists to remove.
+    public static func makeStoredLinkKeyStore() -> StoredLinkKeyStore {
+        KeychainStoredLinkKeyStore(service: keychainService, accessGroup: keychainAccessGroup)
+    }
+
     @MainActor
-    public static func makeUploadModel(baseURL: URL = productionBaseURL) -> CloudUploadModel {
+    public static func makeUploadModel(baseURL: URL = productionBaseURL,
+                                       keyStore: StoredLinkKeyStore) -> CloudUploadModel {
         CloudUploadModel(
             uploader: CloudUploader(transport: HTTPResumableTransport(baseURL: baseURL)),
+            keyStore: keyStore,
             // The origin the link is built from, so a self-hosted build produces
             // links pointing at its own deployment rather than relayium.com.
+            origin: baseURL.absoluteString
+        )
+    }
+
+    @MainActor
+    public static func makeAccountManagementModel(baseURL: URL = productionBaseURL,
+                                                  keyStore: StoredLinkKeyStore) -> AccountManagementModel {
+        AccountManagementModel(
+            service: AccountClient(baseURL: baseURL),
+            keyStore: keyStore,
+            // Same origin rule as the upload model's: a rebuilt link has to point
+            // at the deployment the object actually lives on.
             origin: baseURL.absoluteString
         )
     }

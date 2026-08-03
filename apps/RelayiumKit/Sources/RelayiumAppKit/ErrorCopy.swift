@@ -1,6 +1,17 @@
 import Foundation
 import RelayiumKit
 
+/// Which stored-link-key operation a failure belongs to.
+///
+/// Three cases rather than one because the consequence differs: a failed save
+/// means the key exists only in the link on screen, a failed read means a key
+/// that may well be here cannot be reached, and a failed remove means an
+/// obsolete key outlived the ciphertext it belonged to. Only the first is
+/// something the user has to act on now.
+public enum StoredLinkKeyOperation {
+    case save, read, remove
+}
+
 /// Every user-facing error string in the native apps.
 ///
 /// No error type in RelayiumKit implements `LocalizedError`, so
@@ -12,6 +23,91 @@ import RelayiumKit
 /// `NSError`s through a single `((Error) -> Void)` callback. Extending a layered
 /// chain that already has a total fallback beats inventing one under pressure.
 public enum ErrorCopy {
+    /// Copy for a failure of the store holding each upload's E2E key.
+    ///
+    /// It exists because both types these paths raise carry somebody else's
+    /// meaning by default.
+    ///
+    /// `KeychainError` is raised by two stores that mean entirely different
+    /// things by it. `KeychainTokenStore` holds this Mac's bearer, so
+    /// `message(for:)`'s wording — the sign-in was not stored, you will stay
+    /// signed in until you quit — is exactly right there and is left alone.
+    /// `KeychainStoredLinkKeyStore` holds one file's key, and for it that same
+    /// sentence is false three times over: no sign-in was involved, the session
+    /// is untouched, and quitting changes nothing.
+    ///
+    /// `StoredLinkKeyError` needs the operation for a different reason. Its
+    /// shared wording answers for the one caller that raises it WITHOUT touching
+    /// the key store — `AccountClient`'s id check before a DELETE goes out — so
+    /// it describes a refusal that stopped everything, and `invalidKey`'s
+    /// describes bytes read back from the keychain. Reused verbatim on a save
+    /// both are false: nothing was stored, so there is no unreadable stored key
+    /// to describe, and the save runs AFTER the upload landed, so copy that
+    /// reads as "the request never went" sends the user to repeat work the
+    /// server has already done. Every arm below therefore says which LOCAL key
+    /// operation did not happen, and says nothing about a request that
+    /// succeeded.
+    public static func storedLinkKeyMessage(for error: Error,
+                                            operation: StoredLinkKeyOperation) -> String {
+        if let e = error as? KeychainError {
+            switch e {
+            case .status(let s):
+                // The status is the only diagnosable part of a keychain refusal
+                // — -25308 (interaction not allowed, a locked keychain) and
+                // -34018 (missing entitlement) are different problems with the
+                // same symptom. It names an OSStatus and nothing about the key
+                // or the file, so there is nothing here to leak.
+                switch operation {
+                case .save:
+                    return "macOS wouldn't save this file's key to the keychain (keychain error \(s))."
+                case .read:
+                    return "macOS wouldn't read this file's key from the keychain (keychain error \(s))."
+                case .remove:
+                    return "macOS wouldn't remove this file's key from the keychain (keychain error \(s))."
+                }
+            }
+        }
+        if let e = error as? StoredLinkKeyError {
+            switch e {
+            case .invalidIdentifier:
+                // The app refused an id the server sent: a bug on one side or
+                // the other, never something the user did, and never worth a
+                // retry, because the same id would be refused again. What
+                // changes per operation is what was left undone and whether
+                // there is anywhere else to go — after a remove the object is
+                // already deleted from the server, so pointing at the web would
+                // be pointing at nothing.
+                switch operation {
+                case .save:
+                    return "This file's identifier isn't one this app will save a key under, so its key was not saved on this Mac. Please report it."
+                case .read:
+                    return "This item's identifier isn't one this app will act on, so its key was not read and the link can't be rebuilt here. Manage it on relayium.com, and please report it."
+                case .remove:
+                    return "This item's identifier isn't one this app will act on, so the key was not removed. Please report it."
+                }
+            case .invalidKey:
+                // Only the read arm may say a stored key is unreadable, because
+                // it is the only one where something IS stored: `invalidKey`
+                // reaches it from `checkedKey(fromStored:)`, i.e. bytes the
+                // keychain returned. On a save the key was refused on its way
+                // in and no item was written, so the same sentence would send
+                // the user looking for a keychain entry that does not exist.
+                switch operation {
+                case .save:
+                    return "This file's key isn't in a form this app can save, so it was not saved on this Mac. Please report it."
+                case .read:
+                    // Deliberately the shared table's sentence: that path is the
+                    // one it was written for. Pinned by a test so the two cannot
+                    // drift apart silently.
+                    return "The key stored on this Mac for this file is unreadable, so the link can't be rebuilt from it."
+                case .remove:
+                    return "This file's key isn't in a form this app can act on, so it was not removed. Please report it."
+                }
+            }
+        }
+        return message(for: error)
+    }
+
     public static func message(for error: Error) -> String {
         if let e = error as? AccountError {
             switch e {
@@ -36,6 +132,10 @@ public enum ErrorCopy {
         if let e = error as? KeychainError {
             switch e {
             case .status(let s):
+                // Specifically the SIGN-IN token store's failure, and only
+                // `AccountSession` may reach it. The same type is raised for
+                // each upload's E2E key, where every clause of this is false —
+                // that caller goes through `storedLinkKeyMessage(for:operation:)`.
                 return "macOS wouldn't store your sign-in (keychain error \(s)). You'll stay signed in until you quit."
             }
         }
@@ -243,6 +343,28 @@ public enum ErrorCopy {
                 return "Couldn't reach the server. Check your internet connection."
             case .decoding:
                 return "The server sent a response this version of the app doesn't understand. Updating may fix it."
+            }
+        }
+        if let e = error as? StoredLinkKeyError {
+            switch e {
+            case .invalidIdentifier:
+                // The app refused to act on an id the server sent, which is a
+                // bug on one side or the other — never something the user did.
+                // Naming the row is what makes it reportable; inviting a retry
+                // would not be, because the same id would be refused again.
+                //
+                // This wording is the ROW ACTION's: `AccountClient` checks the
+                // id before a DELETE is sent, so "it was refused" is the whole
+                // truth there. The three key-store paths raise the same case
+                // around an operation that follows a request which already
+                // succeeded, and go through
+                // `storedLinkKeyMessage(for:operation:)` instead.
+                return "This item's identifier isn't one this app will act on, so it was refused. Manage it on relayium.com, and please report it."
+            case .invalidKey:
+                // Distinct from "the key isn't on this Mac": something IS stored
+                // and it is not usable. Saying the key is absent would close the
+                // question; this leaves it open, because it is.
+                return "The key stored on this Mac for this file is unreadable, so the link can't be rebuilt from it."
             }
         }
         if let e = error as? StoredWireError {

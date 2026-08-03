@@ -34,12 +34,15 @@ struct UploadPane: View {
                 Text(total > 0 ? "\(sent * 100 / total)%" : "Starting…")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Cancel") { model.cancel() }
-            case .done(let link, let expiresAt):
+            case .done(let link, let expiresAt, let keyWarning):
                 Text("Link ready").font(.subheadline.weight(.semibold))
-                // The key lives only in this link. Say so here, on the screen
-                // where the link appears — not in a tooltip found later.
-                Text("This link is the only copy of the key. If it is lost, the files cannot be recovered.")
-                    .font(.caption).foregroundStyle(.secondary)
+                // Exactly one statement about the key, decided in
+                // UploadPresentation where it is tested. Which one is not
+                // cosmetic: after a successful save the key really is on this
+                // Mac and the Account tab can hand this link back, so the old
+                // fixed "this link is the only copy" line was false on the
+                // common path — and it contradicted the warning on the rare one.
+                keyNotice(UploadPresentation.keyNotice(warning: keyWarning))
                 HStack {
                     Text(link).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
                     Button("Copy") {
@@ -68,6 +71,19 @@ struct UploadPane: View {
             } else {
                 model.clearSelection()
             }
+        }
+    }
+
+    @ViewBuilder
+    private func keyNotice(_ notice: UploadKeyNotice) -> some View {
+        if notice.isWarning {
+            Label(notice.text, systemImage: "exclamationmark.triangle")
+                .font(.caption).foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text(notice.text)
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

@@ -71,6 +71,11 @@ struct RelayiumApp: App {
     // one is running.
     @StateObject private var uploadModel: CloudUploadModel
     @StateObject private var downloadModel: CloudDownloadModel
+    // Devices and stored files. App-scoped like the transfer models: a revoke or
+    // a delete must survive the window's view tree being rebuilt, and it shares
+    // the upload model's key store, so a link saved by an upload is the same one
+    // this can rebuild.
+    @StateObject private var accountManagement: AccountManagementModel
     // One preference object shared by both realtime models and the UI that
     // toggles it, so a change applies to the next session of either kind
     // without a relaunch.
@@ -103,8 +108,15 @@ struct RelayiumApp: App {
             verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
         let receive = AppEnvironment.makeNearbyReceiveModel(
             fileModel: files, textModel: text, discovery: nearby, inboundRoom: inboundRoom)
-        let uploads = AppEnvironment.makeUploadModel()
+        // One key store for the whole app: the upload model writes a key here,
+        // the account model reads it back and removes it with the object. Two
+        // instances would still work — they address the same keychain items —
+        // but building it once keeps the shared dependency visible rather than
+        // implied by two constructors happening to agree.
+        let storedKeys = AppEnvironment.makeStoredLinkKeyStore()
+        let uploads = AppEnvironment.makeUploadModel(keyStore: storedKeys)
         let downloads = AppEnvironment.makeDownloadModel()
+        let management = AppEnvironment.makeAccountManagementModel(keyStore: storedKeys)
         _verification = StateObject(wrappedValue: prefs)
         _lanDiscovery = StateObject(wrappedValue: nearby)
         _realtimeModel = StateObject(wrappedValue: files)
@@ -112,6 +124,7 @@ struct RelayiumApp: App {
         _nearbyReceive = StateObject(wrappedValue: receive)
         _uploadModel = StateObject(wrappedValue: uploads)
         _downloadModel = StateObject(wrappedValue: downloads)
+        _accountManagement = StateObject(wrappedValue: management)
         _notifications = StateObject(wrappedValue: TransferNotificationCenter(
             uploadModel: uploads,
             downloadModel: downloads,
@@ -130,6 +143,7 @@ struct RelayiumApp: App {
                 .environmentObject(deepLinks)
                 .environmentObject(uploadModel)
                 .environmentObject(downloadModel)
+                .environmentObject(accountManagement)
                 .environmentObject(realtimeModel)
                 .environmentObject(realtimeTextModel)
                 .environmentObject(verification)
