@@ -363,6 +363,21 @@ export interface Messages {
     cliRevoke: string;
     cliConfirmRevoke: string;
     actionFailed: string; // generic "the request failed" notice for the write actions on this page
+    // 账户注销入口。服务端的双重确认流程（POST /api/account/delete/request 只发一封
+    // 确认邮件，真正的删除发生在邮件里的链接被打开之后）早就有了，法律文本也已经写明
+    // 「可以在网页端的账户设置里删除账户」——但网页上一直没有这个按钮。
+    //
+    // 这几条文案本身就是安全机制：按钮按下去只发一封邮件，所以每一句都不能读成
+    // 「已经删了」。`deleteRequested` 尤其如此——端点无论真发了邮件、被节流吞掉还是
+    // 发信失败都回同一个 200，所以那句话只能声称「请求已提交」，不能声称「已发送」。
+    deleteTitle: string; // danger 区块标题
+    deleteBody: (email: string) => string; // 按下之前先说清楚会发生什么
+    deleteAction: string; // 可见的破坏性控件
+    deleteConfirm: (email: string) => string; // 应用内确认弹窗的全文（唯一说明后果的地方）
+    deleteConfirmAction: string; // 弹窗里的肯定按钮：按它做的事是「发邮件」，标签就得这么写
+    deleteRequesting: string; // 请求在途时的按钮文案
+    deleteRequested: (email: string) => string; // 只能声称「已请求」，见上
+    deleteFailed: string; // 明确的失败，且可重试
   };
   // Shared "why an account?" explainer shown on the two login-gated feature pages
   // (/cross-network, /offline-transfer) and, compact, on the /me login gate.

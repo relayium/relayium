@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import ConfirmModal from "./ConfirmModal.svelte";
-  import { confirmDialog } from "./confirm-dialog.svelte";
+  import { confirmDialog, resolveConfirm } from "./confirm-dialog.svelte";
   import { session, refreshSession } from "./auth.svelte";
   import { setLoginOpen } from "./login.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
@@ -275,17 +275,89 @@
     stats ? stats.uploadBytes + stats.downloadBytes + stats.relayBytes : 0,
   );
 
+  // 账户注销。服务端的双重确认流程一直都在（POST /api/account/delete/request 只发一封
+  // 确认邮件，删除动作全部发生在邮件里的链接被打开之后），法律文本也已经写明可以在网页
+  // 端的账户设置里注销——但网页上从来没有这个入口，只有原生 App 有。
+  //
+  // 状态名是承重的：没有 "deleted"，也没有 "scheduled"，因为这个按钮观察不到那两件事。
+  // 它唯一能知道的是「服务端收下了这次请求」——端点无论真发了邮件、被按账号节流吞掉还是
+  // 发信失败都回同一个 200。
+  type DeleteState = "idle" | "requesting" | "requested" | "failed";
+  let deleteState = $state<DeleteState>("idle");
+  // 发起这次请求的账号 + 一个单调递增的代号。两个都要，因为它们会分头失效：
+  //  - 账号 id 挡住「A 的结果画到 B 的页面上」；
+  //  - 代号挡住「登出后又用同一个账号登回来」——那时 id 又对上了，只有代号还能证明
+  //    这条响应属于上一段会话。
+  let deleteGen = 0;
+  let deleteForUser = "";
+
+  // 注销请求的提示语。空串 = 无话可说——但承载它的活动区域必须一直在（见模板里的
+  // 注释），所以这里给的是内容，不是「渲不渲染」。
+  const deleteNotice = $derived(
+    deleteState === "requested" ? t.me.deleteRequested(session().user?.email ?? "")
+    : deleteState === "failed" ? t.me.deleteFailed
+    : "",
+  );
+
+  /** 这条在途响应还属于当前这段会话吗？ */
+  function deleteStillCurrent(gen: number): boolean {
+    return gen === deleteGen && (session().user?.id ?? "") === deleteForUser;
+  }
+
+  // 账号变了（登出、或换成另一个账号）就作废在途请求并清空反馈：一句关于某个账号的
+  // 「已提交请求」出现在登出后的页面上、或者别人的账号上，都是在说一件没发生的事。
+  function resetDeleteRequest() {
+    // ConfirmModal is shared and lives outside the signed-in branch. Without
+    // this, signing out, changing account, or leaving /me while the dialog is
+    // open leaves the old account address visible (and retained in its state)
+    // even though the request itself would later be rejected by the uid guard.
+    resolveConfirm(false);
+    deleteGen++;
+    deleteForUser = "";
+    deleteState = "idle";
+  }
+
+  async function requestAccountDeletion() {
+    const uid = session().user?.id ?? "";
+    if (!uid) return; // 未登录时这个区块根本不渲染；这里守的是过期视图/迟到的点击
+    // 同一时刻只允许一条在途请求。这一处判断就够，不需要在弹窗之后再补一次：共享的
+    // confirmDialog 同时只存在一个弹窗，第二次调用会先把上一个 resolve 成"取消"，
+    // 于是先进来的那次在下一行就退出了，两条路径不可能同时走到发请求那步。
+    if (deleteState === "requesting") return;
+    // 先问，问完了才认领代号：取消那条路径因此一个字节都不改——既不发请求，也不会
+    // 顺手抹掉上一次请求留在屏幕上的结果（那句话说的是上一次请求的事实，没被推翻）。
+    if (!(await confirmDialog(t.me.deleteConfirm(session().user?.email ?? ""), t.me.deleteConfirmAction))) return;
+    if ((session().user?.id ?? "") !== uid) return; // 弹窗开着的时候账号被换掉了
+    const gen = ++deleteGen;
+    deleteForUser = uid;
+    deleteState = "requesting";
+    let res: Response;
+    try {
+      res = await fetch("/api/account/delete/request", { method: "POST", credentials: "include" });
+    } catch {
+      if (!deleteStillCurrent(gen)) return;
+      deleteState = "failed";
+      return;
+    }
+    if (!deleteStillCurrent(gen)) return;
+    // 这里**不**登出、**不**清会话、**不**动页面上的任何数据：什么都还没被删，账号
+    // 依然可用，而且用户可能正需要这个会话来改主意。
+    deleteState = res.ok ? "requested" : "failed";
+  }
+
   // Load once per logged-in user; reload if a login happens while on this page.
   $effect(() => {
     const uid = session().user?.id ?? "";
     if (uid && uid !== loadedFor) {
       loadedFor = uid;
+      resetDeleteRequest();
       load();
     }
     if (!uid) {
       loadedFor = "";
       stats = null; files = []; loading = false;
       nodes = []; strict = false; newToken = null; addingNode = false; renamingId = null;
+      resetDeleteRequest();
     }
   });
 
@@ -294,7 +366,10 @@
     await refreshSession();
     tick = setInterval(() => (nowSec = Math.floor(Date.now() / 1000)), 30_000);
   });
-  onDestroy(() => clearInterval(tick));
+  onDestroy(() => {
+    clearInterval(tick);
+    resetDeleteRequest();
+  });
 </script>
 
 <section class="me page-enter">
@@ -477,6 +552,24 @@
         </ul>
       {/if}
     </section>
+
+    <!-- 注销账户。放在最底下并用一条分隔线切开：它和上面那些日常操作不是一类东西，
+         不该出现在用户扫一眼就会点到的地方，但也必须真的找得到——法律文本承诺了它。 -->
+    <section class="danger-zone">
+      <h2>{t.me.deleteTitle}</h2>
+      <p class="muted">{t.me.deleteBody(session().user?.email ?? "")}</p>
+      <button
+        class="danger-btn"
+        disabled={deleteState === "requesting"}
+        onclick={requestAccountDeletion}
+      >
+        {deleteState === "requesting" ? t.me.deleteRequesting : t.me.deleteAction}
+      </button>
+      <!-- 活动区域一直在，不是等到有话要说的那一刻才建出来：读屏只播报**已存在**的
+           活动区域内部的变化。含义全部写在句子里，颜色只是加强——失败那句自己就说了
+           「没能请求成功、什么都没删、可以重试」。 -->
+      <p class="del-status" class:ok={deleteState === "requested"} class:bad={deleteState === "failed"} role="status" aria-live="polite" aria-atomic="true">{deleteNotice}</p>
+    </section>
   {/if}
 </section>
 
@@ -491,6 +584,31 @@
   .cliseen { font-size: var(--fs-xs); color: var(--text); }
   /* 从未使用过的设备最值得吊销——给它一点视觉重量，别和其他行糊在一起。 */
   .cliseen.never { color: var(--danger); }
+
+  /* 注销区块：一条分隔线 + 更大的上边距，把它和上面的日常操作断开。 */
+  .danger-zone {
+    margin-top: var(--section-gap);
+    padding-top: var(--space-5);
+    border-top: 1px solid var(--border);
+  }
+  .danger-zone h2 { font-size: var(--fs-h3); margin: 0 0 var(--space-2); }
+  /* 这两段都嵌着用户的邮箱地址——窄屏上一个长地址不换行就会把区块撑出容器。 */
+  .danger-zone .muted { margin: 0 0 var(--space-3); line-height: 1.6; max-width: 68ch; word-break: break-word; }
+  .danger-btn {
+    font: inherit; font-size: var(--fs-xs); background: none; cursor: pointer;
+    border: 1px solid var(--danger-border); border-radius: var(--radius-sm); color: var(--danger);
+    padding: var(--space-2) var(--space-4); transition: background-color .13s;
+  }
+  .danger-btn:hover:not(:disabled) { background: var(--danger-bg); }
+  .danger-btn:disabled { opacity: .6; cursor: default; }
+  /* 空的时候是零高度的：活动区域必须常驻，但没话说的时候不该占位或画出边框。 */
+  .del-status { margin: 0; font-size: var(--fs-xs); line-height: 1.6; max-width: 68ch; word-break: break-word; }
+  .del-status.ok, .del-status.bad {
+    margin-top: var(--space-3); padding: 0.6rem 0.9rem;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+  }
+  .del-status.ok { color: var(--text-h); background: var(--social-bg); border-color: var(--accent-border); }
+  .del-status.bad { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
 
   .action-err {
     margin: 0 0 1rem;

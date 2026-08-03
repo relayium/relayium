@@ -23,7 +23,7 @@
     <div class="actions">
       <button type="button" class="btn btn-ghost" onclick={() => resolveConfirm(false)}>{t.dialogCancel}</button>
       <button type="button" class="btn btn-primary" bind:this={confirmBtn} onclick={() => resolveConfirm(true)}>
-        {t.dialogConfirm}
+        {confirmState.confirmLabel || t.dialogConfirm}
       </button>
     </div>
   </div>
