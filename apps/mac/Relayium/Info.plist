@@ -4,15 +4,12 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<!-- The nine languages this app ships, declared here because the catalogs
-	     themselves live in the RelayiumAppKit package bundle rather than in this
-	     one. Without this list macOS treats the app as English-only: it would
-	     pick English as the app localization for an Arabic user, and — the part
-	     that actually breaks the UI — leave the app's user-interface layout
-	     direction left-to-right, so SwiftUI's \.layoutDirection would never
-	     become .rightToLeft and every Arabic screen would be laid out backwards
-	     while reading correctly. Keep in step with AppLanguage; the release
-	     readiness script checks the two agree. -->
+	<!-- The nine languages this app ships. The catalogs live in the
+	     RelayiumAppKit package bundle rather than this bundle, so the list keeps
+	     the app's declared localizations in step with AppLanguage. The macOS
+	     scene also applies that resolved language's layout direction explicitly:
+	     CFBundleLocalizations alone did not mirror a package-backed Arabic UI on
+	     a real build. The release-readiness script checks this list. -->
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
@@ -29,6 +26,14 @@
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<!-- Written by hand rather than left to actool's partial-plist merge. With
+	     GENERATE_INFOPLIST_FILE = NO and a hand-maintained INFOPLIST_FILE, the
+	     key would otherwise arrive only by that merge — and a silent failure of
+	     it is indistinguishable from a missing icon. One line makes the
+	     acceptance check unambiguous. The name matches
+	     ASSETCATALOG_COMPILER_APPICON_NAME in both build configurations. -->
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>

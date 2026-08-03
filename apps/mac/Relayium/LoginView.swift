@@ -45,11 +45,11 @@ struct LoginView: View {
             .disabled(isBusy)
 
             if let errorMessage {
-                Text(errorMessage)
-                    .font(.callout)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                // The reason a sign-in did not work is the one message on this
+                // form that must survive a colour filter, so it carries a symbol
+                // like every other failure in the app.
+                InlineMessage(.failure, errorMessage)
+                    .frame(maxWidth: 280)
             }
 
             // Same slot either way, so the form doesn't jump while it submits.
@@ -70,11 +70,8 @@ struct LoginView: View {
                 .disabled(isBusy || browserBusy)
 
             if case let .failed(message) = browserLogin.state {
-                Text(message)
-                    .font(.callout)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                InlineMessage(.failure, message)
+                    .frame(maxWidth: 280)
             }
 
             Button(L10n.t(.loginCreateAccount)) {

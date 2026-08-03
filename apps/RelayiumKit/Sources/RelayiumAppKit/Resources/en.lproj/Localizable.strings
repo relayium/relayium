@@ -60,9 +60,7 @@
 "nearby.status.receivingFiles" = "Receiving files from a nearby device…";
 "nearby.status.messageSession" = "A nearby message session is open";
 
-/* MARK: window shell */
-"content.haveLink" = "I have a link";
-"content.nearbyOrCode" = "Nearby device or pairing code";
+/* MARK: account states (macOS destination + iOS tab) */
 "content.accountLoadFailed" = "Couldn't load your account";
 "content.checkEmailTitle" = "Check your email";
 "content.checkEmailBody" = "We sent a verification link to %@. Verify it, then sign in again.";
@@ -71,10 +69,33 @@
 "content.pendingDeletionBody" = "It will be erased after %@. Reactivate it on the web to keep it.";
 "content.reactivate" = "Reactivate on relayium.com";
 "content.backToSignIn" = "Back to sign in";
-"tab.direct" = "Direct";
-"tab.link" = "Link";
 "tab.receive" = "Receive";
 "tab.account" = "Account";
+
+/* MARK: navigation sidebar */
+"nav.sectionDirect" = "Direct";
+"nav.sectionLinks" = "Links";
+"nav.nearby" = "Nearby";
+"nav.nearbySubtitle" = "Devices on this network, no account needed";
+"nav.pairingCode" = "Pairing code";
+"nav.pairingCodeSubtitle" = "Connect across networks with six digits";
+"nav.storedSend" = "Send a link";
+"nav.storedSendSubtitle" = "Store an encrypted file and share the link";
+"nav.storedReceive" = "Open a link";
+"nav.storedReceiveSubtitle" = "Receive a file somebody sent you";
+"nav.account" = "Account";
+"nav.accountSubtitle" = "Plan, devices and stored files";
+"nav.a11ySections" = "Relayium destinations";
+"nav.a11yLiveSession" = "A transfer is running here";
+"nav.residency" = "Receiving";
+
+/* MARK: capability gates */
+"gate.sendLinkTitle" = "Sending a link needs an account";
+"gate.sendLinkBody" = "A link stores the encrypted file on Relayium's servers until it expires, so it is billed to an account. Relayium never receives the key. Opening a link somebody sent you needs no account.";
+"gate.createCodeTitle" = "Creating a code needs an account";
+"gate.createCodeBody" = "Creating a code reserves relay capacity that is billed to the account that created it. Joining a code somebody else created needs no account.";
+"gate.signIn" = "Sign in";
+"gate.createAccount" = "Create an account";
 
 /* MARK: sign in */
 "login.email" = "Email";
@@ -93,6 +114,11 @@
 "verify.explainWhat" = "Off by default. When on, both devices show the same six-digit verification code (SAS) before anything moves; comparing it out loud detects a substituted signalling endpoint. It is not the pairing code you typed in, and it only detects anything if someone actually compares the two.";
 "verify.explainEncryption" = "This changes what is shown and what stops for confirmation — never the encryption. Keys are generated on this Mac and never sent to Relayium, the relay carries only ciphertext, and a tampered handshake always fails.";
 
+/* MARK: single-session presence */
+"presence.busyTitle" = "This session is shown elsewhere";
+"presence.busyBody" = "Nearby and Pairing code share one session; choose Show it to return to it.";
+"presence.showIt" = "Show it";
+
 /* MARK: pairing-code file transfer */
 "direct.sendHeading" = "Send";
 "direct.dropHint" = "Drop files or folders here, or click to choose. Then create a code for the other device.";
@@ -103,6 +129,7 @@
 "direct.scanOnPhone" = "Or scan this on a phone.";
 "direct.waitingForDevice" = "Waiting for the other device…";
 "direct.chooseFilesFirst" = "Choose files or folders to send first.";
+"direct.joinNoAccountNeeded" = "Joining a code somebody else created needs no account.";
 
 /* MARK: live file session */
 "session.connecting" = "Connecting…";
@@ -117,6 +144,7 @@
 /* MARK: stored upload */
 "upload.heading" = "Send files";
 "upload.dropHint" = "Drop files or folders here, or click to choose";
+"storedSend.idleTitle" = "Nothing chosen yet";
 "upload.ready" = "Ready";
 "upload.linkReady" = "Link ready";
 "upload.sendAnother" = "Send another";
@@ -145,6 +173,8 @@
 "download.resolving" = "Checking the link…";
 "download.inProgress" = "Downloading…";
 "download.savedLocation" = "These files are in the %@ folder in the Files app. You can also share them from here.";
+"download.idleHint" = "Paste a Relayium link. The key stays in the link and never reaches Relayium's servers.";
+"download.noAccountNeeded" = "Opening a link somebody sent you needs no account.";
 "download.fileCount.one" = "%@ file";
 "download.fileCount.other" = "%@ files";
 "download.savedFiles.one" = "Saved %@ file";
@@ -155,7 +185,6 @@
 "text.startHeading" = "Start a text session";
 "text.startBody" = "Both devices stay online. Messages are end-to-end encrypted and kept only in this session's memory.";
 "text.createCode" = "Create a text code";
-"text.signInToCreate" = "Sign in to create a code. Joining someone else's code does not require an account.";
 "text.joinHeading" = "Join a text session";
 "text.joinHint" = "A pairing code does not reveal its type. Choose Text here only when the sender started a text session.";
 "text.giveCode" = "Give this text code to the other device";
@@ -217,6 +246,7 @@
 "nearby.reconnecting" = "Lost the connection to Relayium's device rendezvous. Reconnecting…";
 "nearby.unnamedDevice" = "Unnamed device";
 "nearby.setupFailed" = "An incoming nearby transfer could not be set up.";
+"nearby.noAccountNeeded" = "Sending and receiving on this network needs no account.";
 
 /* MARK: drop zone, picker, received result, QR */
 "drop.a11yLabel" = "Files to send";

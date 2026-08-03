@@ -48,9 +48,7 @@ struct RealtimeFileSessionView: View {
     private func verifying(_ sas: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.t(.sessionCheckMatches)).font(.subheadline.weight(.semibold))
-            Text(sas)
-                .font(.system(size: 26, weight: .semibold, design: .monospaced))
-                .textSelection(.enabled)
+            SecurityCodeText(code: sas, style: .verification)
             Text(L10n.t(.sessionCheckMatchesBody))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

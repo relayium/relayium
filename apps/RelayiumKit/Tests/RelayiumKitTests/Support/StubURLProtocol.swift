@@ -23,7 +23,23 @@ final class StubURLProtocol: URLProtocol {
     /// is supposed to refuse an input BEFORE building a request. Reset it in the
     /// test that reads it; nothing else touches it.
     nonisolated(unsafe) static var requestCount = 0
+    /// Every request, in order. `lastRequest` answers "what did the last call
+    /// send"; this answers "what did ALL of them send", which is the only shape
+    /// an absence assertion can take — a credential hides in the request the
+    /// test forgot to look at, never in the one it inspected. Reset it in the
+    /// test that reads it; nothing else touches it.
+    nonisolated(unsafe) static var observed: [URLRequest] = []
     static func bodyBytes(_ req: URLRequest) -> [UInt8] { lastBodyBytes }
+
+    /// Forget every recorded request. Deliberately not a `tearDown` hook: this
+    /// type is shared static state, and a test that reads `observed` has to say
+    /// where its own window of observation begins.
+    static func reset() {
+        observed = []
+        requestCount = 0
+        lastRequest = nil
+        lastBodyBytes = []
+    }
 
     static func session() -> URLSession {
         let cfg = URLSessionConfiguration.ephemeral
@@ -42,6 +58,7 @@ final class StubURLProtocol: URLProtocol {
             Self.lastBodyBytes = out
         } else { Self.lastBodyBytes = [] }
         Self.lastRequest = request
+        Self.observed.append(request)
         Self.stub?.check?(request)
         let s = Self.router?(request) ?? Self.stub ?? Stub(status: 500, body: Data(), check: nil)
         let resp = HTTPURLResponse(url: request.url!, statusCode: s.status,

@@ -255,10 +255,10 @@ final class LocalizationIntegrityTests: XCTestCase {
 
     // MARK: - right-to-left
 
-    /// Arabic is the only RTL language shipped, and the PLATFORM agrees — this
-    /// is the data macOS uses to set the app's layout direction, which is what
-    /// drives SwiftUI's `\.layoutDirection` rather than anything this app does
-    /// by hand.
+    /// Arabic is the only RTL language shipped, and the platform's character
+    /// direction agrees. The macOS scene root consumes this same app-language
+    /// fact explicitly; package-backed catalogs did not make macOS propagate it
+    /// into SwiftUI's environment on their own.
     func testArabicIsRightToLeftAndNothingElseIs() {
         for language in AppLanguage.allCases {
             let platform = NSLocale.characterDirection(forLanguage: language.lproj)
@@ -277,12 +277,10 @@ final class LocalizationIntegrityTests: XCTestCase {
 
     /// The macOS app declares the same nine in `CFBundleLocalizations`.
     ///
-    /// This is the load-bearing half of RTL. The catalogs live in the package
-    /// bundle, so without this list the APP bundle looks English-only to macOS:
-    /// an Arabic user would get correct Arabic strings laid out left to right,
-    /// because `NSApplication.userInterfaceLayoutDirection` — which is what
-    /// SwiftUI's `\.layoutDirection` follows — is decided from the app's own
-    /// localization list and not from a package's.
+    /// This list advertises every supported localization from the app bundle.
+    /// On macOS the package catalogs still did not propagate Arabic direction
+    /// into the scene, so `RelayiumApp` additionally derives the scene-root
+    /// direction from the same `AppLanguage` resolver.
     func testTheMacAppDeclaresTheSameNineLocalizations() throws {
         try assertAppDeclaresTheNine(at: "mac/Relayium/Info.plist")
     }

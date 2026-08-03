@@ -578,6 +578,7 @@ public final class RealtimeSessionModel: ObservableObject {
         c.onError = { [weak self] err in
             Task { @MainActor in
                 self?.apply(g) { m in
+                    guard m.isBusy else { return m.retireWriterAfterTerminalState() }
                     m.writer?.discard()
                     m.state = .failed(ErrorCopy.message(for: err))
                 }
@@ -586,13 +587,32 @@ public final class RealtimeSessionModel: ObservableObject {
         c.onClose = { [weak self] in
             Task { @MainActor in
                 self?.apply(g) { m in
-                    if m.isBusy {
-                        m.writer?.discard()
-                        m.state = .failed(L10n.t(.sessionPeerDisconnected))
-                    }
+                    guard m.isBusy else { return m.retireWriterAfterTerminalState() }
+                    m.writer?.discard()
+                    m.state = .failed(L10n.t(.sessionPeerDisconnected))
                 }
             }
         }
+    }
+
+    /// What a transport callback may do once the session is already terminal:
+    /// let go of the writer, and never discard through it.
+    ///
+    /// Every connection eventually errors or closes, and both callbacks used to
+    /// treat that as the transfer's outcome. For a `.completed` receive it is
+    /// not: `writer.finish()` has already run, the user has been shown the
+    /// files and offered Reveal in Finder, and the bytes are theirs. A late
+    /// `discard()` there deleted them off disk about fifteen seconds after they
+    /// appeared — the connection's death being reported as the transfer's.
+    ///
+    /// Dropping the reference is what makes that unrepeatable rather than
+    /// merely unlikely: no later path can reach a writer that is gone, so the
+    /// completed files cannot be discarded by a callback added after this one.
+    /// `.failed` is left alone; its partial debris is retired by
+    /// `releaseConnectionState`, which is also where the connection goes.
+    private func retireWriterAfterTerminalState() {
+        guard case .completed = state else { return }
+        writer = nil
     }
 
     /// Every callback goes through here, so the generation check exists once.

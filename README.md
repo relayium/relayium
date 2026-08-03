@@ -36,8 +36,9 @@ and anything larger is a file.
 
 Relayium is in **active, pre-1.0 development**. The production web app and CLI
 are live. A universal macOS app has passed Developer ID signing, Apple
-notarization, and Gatekeeper validation and is being prepared for its first
-public release. iOS development has started and is not public yet.
+notarization, and Gatekeeper validation; it remains an **engineering build**
+being prepared for a first public release. iOS development has started and is
+not public yet.
 
 > 👉 **Try it now: [relayium.com](https://relayium.com/)** — use two devices on
 > the same LAN without an account, or sign in to create a cross-network pairing
@@ -55,8 +56,8 @@ is **how seriously we take end-to-end encryption**:
   (SAS)**: turn on *advanced verification* (off by default) and two humans can compare it out of band to
   detect a key-swapping server.
 - **A protocol, not just a page.** The crypto layer is deliberately decoupled
-  from transport. It already backs the shipped CLI, the macOS release
-  candidate, and the iOS app now under development (see
+  from transport. It already backs the shipped CLI, the macOS engineering
+  build, and the iOS app now under development (see
   [Delivery status](#delivery-status)).
 
 ## Features
@@ -224,13 +225,20 @@ pairing code requires sign-in; joining with that code does not.
 - **CLI and nodes — live:** published binaries provide pairing-code file/text
   transfer, encrypted upload/download links, SSH and daemon-direct transfer,
   folder sync, self-hosting, and managed relay/storage nodes.
-- **macOS — release candidate:** the universal app supports account access,
-  realtime sending and receiving, folder transfer, same-network nearby transfer
-  in both directions, trusted link handoff, notifications, the same nine
-  languages as the web client (Arabic included, laid out right to left), and a
-  signed Sparkle update foundation. Its DMG is Developer ID-signed, accepted by
-  Apple notarization, stapled, and Gatekeeper-validated; public release and the
-  website download switch are still pending.
+- **macOS — engineering build, not public:** the universal app supports account
+  access, realtime sending and receiving, folder transfer, same-network nearby
+  transfer in both directions, trusted link handoff, notifications, the same
+  nine languages as the web client (Arabic included, laid out right to left),
+  and a signed Sparkle update foundation. Its single window is a desktop shell
+  whose sidebar names all five destinations at once — Nearby, Pairing code,
+  Send a link, Open a link, Account — so the capabilities that need no account
+  (nearby in both directions, joining someone else's pairing code, and opening
+  a link somebody sent) are reachable without signing in; an account is asked
+  for only where it is actually required, with the reason stated. A DMG of an
+  earlier build is Developer ID-signed, accepted by Apple notarization,
+  stapled, and Gatekeeper-validated. Public release and the website download
+  switch are still pending, and the release-readiness manifest is still
+  unapproved.
 - **iOS — in development, not public:** a native SwiftUI app now exists at
   [`apps/ios`](apps/ios) and builds against the same shared Swift package. It
   receives an encrypted stored link without an account — paste the link,

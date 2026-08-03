@@ -2,6 +2,16 @@ import SwiftUI
 import RelayiumKit
 import RelayiumAppKit
 
+/// The signed-in account surface: who this is, what the plan allows and how much
+/// of it is used, which devices hold a token, and what is stored on the server.
+///
+/// Built on `SectionCard` and `InlineMessage` like the other four destinations.
+/// It used to be a flat column grouped by `Divider()`, with three headings that
+/// were `Text(...).font(.headline)` — the pattern the component vocabulary
+/// exists to replace — and it stated every failure in red text with no symbol
+/// beside it, which is no statement at all to a reader who cannot distinguish
+/// the colour. Nothing about the model moved: the same scope, the same
+/// confirmations, the same row-local busy flags, the same one-shot sign-out.
 struct AccountView: View {
     let user: NativeUser
     let usage: UsageResponse
@@ -23,49 +33,20 @@ struct AccountView: View {
     }
 
     var body: some View {
+        // ONE structural identity, with every modifier below still attached to
+        // it: `deviceToRevoke`/`fileToDelete`, both confirmations and both
+        // `.task(id:)`s live on this view, and splitting it would restart the
+        // load and drop a dialog mid-question.
         VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(user.displayName.isEmpty ? user.email : user.displayName).font(.title2.weight(.semibold))
-                Text(user.email).foregroundStyle(.secondary)
-            }
+            profileCard
+                .frame(maxWidth: 720, alignment: .leading)
+            devicesCard
+            filesCard
 
-            HStack {
-                Text(usage.plan.name).font(.headline)
-                // Both the "should this show at all" predicate and the wording live
-                // in UsagePresentation, where they are tested. A raw Stripe status
-                // must never reach this capsule.
-                if let badge = UsagePresentation.subscriptionBadge(for: usage.plan.subscriptionStatus) {
-                    Text(badge)
-                        .font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(.quaternary, in: Capsule())
-                }
-                Spacer()
-                // macOS ships as a direct download, so billing is compliant on the web.
-                // The app shows the tier read-only and hands off — to the plans page,
-                // which is where a change of plan is actually made.
-                Button(L10n.t(.accountManagePlan)) { NSWorkspace.shared.open(AppEnvironment.plansWebURL) }
-            }
-
-            meter(L10n.t(.accountTraffic), UsagePresentation.display(usage.traffic))
-            meter(L10n.t(.accountStorage), UsagePresentation.display(usage.storage))
-
-            Text(UsagePresentation.resetText(resetsAt: usage.resetsAt, now: Date()))
-                .font(.caption).foregroundStyle(.secondary)
-
-            if session.isStale {
-                Label(L10n.t(.accountStaleFigures), systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
-            Divider()
-            devicesSection
-            Divider()
-            filesSection
-
+            // The rows could not be loaded at all — distinct from a per-row
+            // failure, which is drawn on the row it belongs to.
             if let loadError = management.loadError {
-                Label(loadError, systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                InlineMessage(.failure, loadError)
             }
 
             // A delete that succeeded on the server but could not clean up
@@ -73,23 +54,25 @@ struct AccountView: View {
             // but the app must not imply it removed something it did not.
             if let cleanupWarning = management.keyCleanupWarning {
                 HStack(alignment: .firstTextBaseline) {
-                    Label(cleanupWarning, systemImage: "exclamationmark.triangle")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    InlineMessage(.warning, cleanupWarning)
                     Spacer(minLength: 8)
                     Button(L10n.t(.commonDismiss)) { management.dismissKeyCleanupWarning() }
                         .buttonStyle(.link)
                 }
             }
 
-            Spacer()
-
             HStack {
+                // The destination's primary action, so it answers Return — the
+                // design's rule for all five. Refresh is the safe one to put
+                // there: it is idempotent, and the alternative on this screen
+                // signs the user out.
                 Button(L10n.t(.commonRefresh)) { refresh() }
+                    .keyboardShortcut(.defaultAction)
                 Spacer()
                 Button(L10n.t(.commonSignOut)) { signOut() }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         // Keyed on the scope so signing in as someone else reloads rather than
         // leaving the previous account's devices on screen.
         .task(id: scope) { await management.load(scope) }
@@ -180,12 +163,60 @@ struct AccountView: View {
         Task { await session.logOut() }
     }
 
+    // MARK: - profile, plan and usage
+
+    /// The card is titled with whoever this account belongs to, because that is
+    /// the one thing on the screen that answers "whose account am I looking at" —
+    /// the question a shared Mac makes worth answering before any figure below it.
+    private var profileTitle: String {
+        user.displayName.isEmpty ? user.email : user.displayName
+    }
+
+    @ViewBuilder
+    private var profileCard: some View {
+        SectionCard(title: profileTitle) {
+            // Only when it adds something: with no display name the card is
+            // already titled with the address.
+            if !user.displayName.isEmpty {
+                Text(user.email).foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Text(usage.plan.name).font(.subheadline.weight(.semibold))
+                // Both the "should this show at all" predicate and the wording live
+                // in UsagePresentation, where they are tested. A raw Stripe status
+                // must never reach this capsule.
+                if let badge = UsagePresentation.subscriptionBadge(for: usage.plan.subscriptionStatus) {
+                    Text(badge)
+                        .font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(.quaternary, in: Capsule())
+                }
+                Spacer()
+                // The Mac build is a direct download, so billing is compliant on
+                // the web. The app shows the tier read-only and hands off — to the
+                // plans page, which is where a change of plan is actually made.
+                Button(L10n.t(.accountManagePlan)) { NSWorkspace.shared.open(AppEnvironment.plansWebURL) }
+            }
+
+            meter(L10n.t(.accountTraffic), UsagePresentation.display(usage.traffic))
+            meter(L10n.t(.accountStorage), UsagePresentation.display(usage.storage))
+
+            Text(UsagePresentation.resetText(resetsAt: usage.resetsAt, now: Date()))
+                .font(.caption).foregroundStyle(.secondary)
+
+            // The figures above are the last ones that arrived, not the current
+            // ones. That is a caveat on the meters, so it sits inside their card.
+            if session.isStale {
+                InlineMessage(.warning, L10n.t(.accountStaleFigures))
+            }
+        }
+    }
+
     // MARK: - devices
 
     @ViewBuilder
-    private var devicesSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionHeader(L10n.t(.accountDevicesHeading))
+    private var devicesCard: some View {
+        SectionCard(title: L10n.t(.accountDevicesHeading)) {
             // Browsers are left out on purpose — see AccountDevice.holdsRevocableToken.
             Text(L10n.t(.accountDevicesBody))
                 .font(.caption).foregroundStyle(.secondary)
@@ -229,8 +260,7 @@ struct AccountView: View {
                     .disabled(management.isBusy(row: device.id))
             }
             if let error = management.error(forRow: device.id) {
-                Text(error).font(.caption).foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
+                InlineMessage(.failure, error)
             }
         }
     }
@@ -244,9 +274,8 @@ struct AccountView: View {
     // MARK: - stored files
 
     @ViewBuilder
-    private var filesSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionHeader(L10n.t(.accountFilesHeading))
+    private var filesCard: some View {
+        SectionCard(title: L10n.t(.accountFilesHeading)) {
             Text(L10n.t(.accountFilesBody))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -289,9 +318,9 @@ struct AccountView: View {
                 // The honest version of a disabled button: the key was only ever
                 // in the link, and this Mac does not have it. Saying "unavailable"
                 // without saying why reads as a bug the user could work around.
-                Text(L10n.t(.accountKeyNotOnThisMac))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // `.info` rather than `.warning`: nothing went wrong, and nothing
+                // here can be retried into working.
+                InlineMessage(.info, L10n.t(.accountKeyNotOnThisMac))
                 HStack {
                     Spacer()
                     Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
@@ -299,10 +328,9 @@ struct AccountView: View {
                 }
             case .keyLookupFailed(let message):
                 // Not the same statement as "you don't have the key": this one
-                // may be one keychain unlock away.
-                Text(L10n.t(.accountKeyLookupFailed, [message]))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // may be one keychain unlock away, which is why it warns rather
+                // than merely informs.
+                InlineMessage(.warning, L10n.t(.accountKeyLookupFailed, [message]))
                 HStack {
                     Spacer()
                     Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
@@ -311,8 +339,7 @@ struct AccountView: View {
             }
 
             if let error = management.error(forRow: row.id) {
-                Text(error).font(.caption).foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
+                InlineMessage(.failure, error)
             }
         }
     }
@@ -322,11 +349,6 @@ struct AccountView: View {
     }
 
     // MARK: - shared bits
-
-    @ViewBuilder
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title).font(.headline)
-    }
 
     @ViewBuilder
     private func meter(_ title: String, _ d: MeterDisplay) -> some View {

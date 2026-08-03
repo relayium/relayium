@@ -40,18 +40,20 @@ struct RealtimeTextSessionView: View {
             }
 
             if let message = model.errorMessage {
-                Text(message).font(.callout).foregroundStyle(.red)
+                InlineMessage(.failure, message)
             }
         }
     }
+
+    /// The model owns whether the draft can be sent; this is only what the
+    /// counter renders, so the two cannot disagree about the threshold.
+    private var overByteLimit: Bool { model.draftByteCount > TEXT_MAX_BYTES }
 
     private func verify(_ sas: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.t(.textCheckMatches))
                 .font(.subheadline.weight(.semibold))
-            Text(sas)
-                .font(.system(size: 26, weight: .semibold, design: .monospaced))
-                .textSelection(.enabled)
+            SecurityCodeText(code: sas, style: .verification)
             Text(L10n.t(.textCheckMatchesBody))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -133,10 +135,21 @@ struct RealtimeTextSessionView: View {
                 .accessibilityLabel(L10n.t(.textComposerLabel))
 
             HStack {
+                // Over the limit the counter turns a colour AND grows a symbol.
+                // Colour alone left the one control that explains why Send is
+                // dead — the draft is too long — invisible to anyone who cannot
+                // see it, and the two numbers beside it are what VoiceOver reads.
+                if overByteLimit {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
+                }
                 Text(L10n.t(.textByteCounter, [L10n.number(model.draftByteCount),
                                                L10n.number(TEXT_MAX_BYTES)]))
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(model.draftByteCount > TEXT_MAX_BYTES ? .red : .secondary)
+                    .foregroundStyle(overByteLimit ? AnyShapeStyle(Color.orange)
+                                                   : AnyShapeStyle(.secondary))
                 Spacer()
                 Button(L10n.t(.commonSend)) { model.sendDraft() }
                     .buttonStyle(.borderedProminent)
@@ -193,7 +206,11 @@ struct RealtimeTextSessionView: View {
                 Text(L10n.t(message.direction == .outgoing ? .textSent : .textReceived))
                     .font(.caption.weight(.semibold))
                 if message.failed {
-                    Text(L10n.t(.textNotSent)).font(.caption).foregroundStyle(.red)
+                    // A symbol, not a colour: this label is the only thing that
+                    // distinguishes a message that went from one that did not.
+                    Label(L10n.t(.textNotSent), systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
                 Spacer()
                 Button(L10n.t(.commonCopy)) {
@@ -217,7 +234,7 @@ struct RealtimeTextSessionView: View {
     private var terminalMessage: some View {
         switch model.state {
         case let .failed(message):
-            Text(message).font(.callout).foregroundStyle(.red)
+            InlineMessage(.failure, message)
         case .refused:
             Text(L10n.t(.textRefused))
                 .font(.callout).foregroundStyle(.secondary)

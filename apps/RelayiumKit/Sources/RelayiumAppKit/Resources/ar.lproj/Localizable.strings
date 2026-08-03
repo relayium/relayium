@@ -63,8 +63,6 @@
 "nearby.status.messageSession" = "هناك جلسة رسائل مفتوحة مع جهاز قريب";
 
 /* MARK: النافذة */
-"content.haveLink" = "لديّ رابط";
-"content.nearbyOrCode" = "جهاز قريب أو رمز اقتران";
 "content.accountLoadFailed" = "تعذّر تحميل حسابك";
 "content.checkEmailTitle" = "تحقق من بريدك";
 "content.checkEmailBody" = "أرسلنا رابط توثيق إلى %@. وثّقه ثم سجّل الدخول مجددًا.";
@@ -73,10 +71,33 @@
 "content.pendingDeletionBody" = "سيُمحى بعد %@. أعِد تفعيله من الويب للاحتفاظ به.";
 "content.reactivate" = "إعادة التفعيل على relayium.com";
 "content.backToSignIn" = "العودة إلى تسجيل الدخول";
-"tab.direct" = "مباشر";
-"tab.link" = "رابط";
 "tab.receive" = "استلام";
 "tab.account" = "الحساب";
+
+/* MARK: شريط التنقل الجانبي */
+"nav.sectionDirect" = "مباشر";
+"nav.sectionLinks" = "الروابط";
+"nav.nearby" = "الأجهزة القريبة";
+"nav.nearbySubtitle" = "أجهزة على هذه الشبكة، بدون حساب";
+"nav.pairingCode" = "رمز الاقتران";
+"nav.pairingCodeSubtitle" = "اتصل عبر الشبكات برمز من ست خانات";
+"nav.storedSend" = "إرسال رابط";
+"nav.storedSendSubtitle" = "خزّن ملفًا مشفّرًا وشارك الرابط";
+"nav.storedReceive" = "فتح رابط";
+"nav.storedReceiveSubtitle" = "استلم ملفًا أرسله إليك شخص ما";
+"nav.account" = "الحساب";
+"nav.accountSubtitle" = "الخطة والأجهزة والملفات المخزّنة";
+"nav.a11ySections" = "وجهات Relayium";
+"nav.a11yLiveSession" = "هناك عملية نقل جارية هنا";
+"nav.residency" = "الاستلام";
+
+/* MARK: شروط استخدام الميزات */
+"gate.sendLinkTitle" = "إرسال رابط يتطلب حسابًا";
+"gate.sendLinkBody" = "يحفظ الرابط الملف المشفّر على خوادم Relayium حتى انتهاء صلاحيته، لذلك تُحتسب تكلفته على حساب. لا يتلقى Relayium المفتاح أبدًا. فتح رابط أرسله إليك شخص ما لا يتطلب حسابًا.";
+"gate.createCodeTitle" = "إنشاء رمز يتطلب حسابًا";
+"gate.createCodeBody" = "إنشاء رمز يحجز سعة ترحيل تُحتسب على الحساب الذي أنشأه. الانضمام إلى رمز أنشأه شخص آخر لا يتطلب حسابًا.";
+"gate.signIn" = "تسجيل الدخول";
+"gate.createAccount" = "إنشاء حساب";
 
 /* MARK: تسجيل الدخول */
 "login.email" = "البريد الإلكتروني";
@@ -95,6 +116,11 @@
 "verify.explainWhat" = "مُعطَّل افتراضيًا. عند تفعيله يعرض الجهازان رمز تحقق واحدًا من ست خانات (SAS) قبل أن ينتقل أي شيء؛ ومقارنته بصوت مسموع تكشف استبدال طرف الإشارات. وهو ليس رمز الاقتران الذي أدخلته، ولا يكشف شيئًا إلا إذا قارنه شخص فعلًا.";
 "verify.explainEncryption" = "هذا يغيّر ما يُعرض وأين يتوقف الأمر طلبًا للتأكيد — ولا يغيّر التعمية أبدًا. تُولَّد المفاتيح على هذا الـ Mac ولا تُرسل إلى Relayium إطلاقًا، ولا ينقل المُرحِّل سوى نص مُعمّى، وأي مصافحة مُلاعَب بها تفشل دائمًا.";
 
+/* MARK: single-session presence */
+"presence.busyTitle" = "هذه الجلسة معروضة في مكان آخر";
+"presence.busyBody" = "تتشارك الأجهزة القريبة ورمز الاقتران جلسة واحدة؛ اختر «إظهارها» للعودة إليها.";
+"presence.showIt" = "إظهارها";
+
 /* MARK: نقل الملفات برمز اقتران */
 "direct.sendHeading" = "إرسال";
 "direct.dropHint" = "أفلِت الملفات أو المجلدات هنا، أو انقر للاختيار. ثم أنشئ رمزًا للجهاز الآخر.";
@@ -105,6 +131,7 @@
 "direct.scanOnPhone" = "أو امسحه ضوئيًا بهاتف.";
 "direct.waitingForDevice" = "في انتظار الجهاز الآخر…";
 "direct.chooseFilesFirst" = "اختر أولًا الملفات أو المجلدات المراد إرسالها.";
+"direct.joinNoAccountNeeded" = "الانضمام إلى رمز أنشأه شخص آخر لا يتطلب حسابًا.";
 
 /* MARK: جلسة ملفات حيّة */
 "session.connecting" = "جارٍ الاتصال…";
@@ -119,6 +146,7 @@
 /* MARK: الرفع السحابي */
 "upload.heading" = "إرسال ملفات";
 "upload.dropHint" = "أفلِت الملفات أو المجلدات هنا، أو انقر للاختيار";
+"storedSend.idleTitle" = "لم يتم اختيار أي شيء بعد";
 "upload.ready" = "جاهز";
 "upload.linkReady" = "الرابط جاهز";
 "upload.sendAnother" = "إرسال شيء آخر";
@@ -147,6 +175,8 @@
 "download.resolving" = "جارٍ التحقق من الرابط…";
 "download.inProgress" = "جارٍ التنزيل…";
 "download.savedLocation" = "هذه الملفات موجودة في مجلد %@ داخل تطبيق «الملفات». يمكنك أيضًا مشاركتها من هنا.";
+"download.idleHint" = "ألصِق رابط Relayium. يبقى المفتاح داخل الرابط ولا يصل إلى خوادم Relayium أبدًا.";
+"download.noAccountNeeded" = "فتح رابط أرسله إليك شخص ما لا يتطلب حسابًا.";
 "download.fileCount.zero" = "%@ ملفات";
 "download.fileCount.one" = "%@ ملف";
 "download.fileCount.two" = "%@ ملفان";
@@ -165,7 +195,6 @@
 "text.startHeading" = "بدء جلسة نصية";
 "text.startBody" = "يبقى الجهازان متصلين. الرسائل مُعمّاة من الطرف إلى الطرف ولا تُحفظ إلا في ذاكرة هذه الجلسة.";
 "text.createCode" = "إنشاء رمز نصي";
-"text.signInToCreate" = "إنشاء رمز يتطلب تسجيل الدخول. أما الانضمام إلى رمز شخص آخر فلا يحتاج حسابًا.";
 "text.joinHeading" = "الانضمام إلى جلسة نصية";
 "text.joinHint" = "رمز الاقتران لا يكشف نوعه. اختر «نص» هنا فقط إذا كان المُرسِل قد بدأ جلسة نصية.";
 "text.giveCode" = "أعطِ هذا الرمز النصي للجهاز الآخر";
@@ -227,6 +256,7 @@
 "nearby.reconnecting" = "انقطع الاتصال بخدمة التقاء الأجهزة في Relayium. جارٍ إعادة الاتصال…";
 "nearby.unnamedDevice" = "جهاز بلا اسم";
 "nearby.setupFailed" = "تعذّر تهيئة عملية نقل قريبة واردة.";
+"nearby.noAccountNeeded" = "الإرسال والاستقبال على هذه الشبكة لا يتطلبان حسابًا.";
 
 /* MARK: منطقة الإفلات والمُنتقي والنتيجة ورمز QR */
 "drop.a11yLabel" = "ملفات للإرسال";

@@ -393,6 +393,74 @@ final class LocalizedCopyTests: XCTestCase {
         }
     }
 
+    // MARK: - the anonymous half of the shell
+
+    /// The phrase each language uses to say "no account is needed", chosen as the
+    /// longest fragment that is common to all five sentences below in that
+    /// language — German says *ist kein Konto nötig* in the gates and *brauchen
+    /// kein Konto* on the nearby line, and Arabic switches the verb to the dual
+    /// (*لا يتطلبان*) when the subject is sending AND receiving, so the shared
+    /// fragment is shorter than any single sentence's wording.
+    ///
+    /// Written down by hand rather than derived: the point of the table is that
+    /// somebody read each translation and confirmed it still says the thing.
+    private let noAccountPhrase: [AppLanguage: String] = [
+        .en: "needs no account",
+        .zh: "不需要账户",
+        .ja: "アカウントは不要です",
+        .ko: "계정이 필요하지 않습니다",
+        .de: "kein Konto",
+        .fr: "aucun compte",
+        .ar: "لا يتطلب",
+        .es: "no requiere ninguna cuenta",
+        .pt: "não exige qualquer conta",
+    ]
+
+    /// The claim this whole round turns on: three capabilities work signed out,
+    /// and both account gates say so in their own body rather than reading as a
+    /// flat wall. A translation that drops the final clause turns a gate that
+    /// explains itself into one that only refuses, in that language only — which
+    /// is exactly the kind of regression no build or screenshot would surface.
+    func testGateBodiesKeepTheirLoadBearingClauseInEveryLanguage() throws {
+        let keys: [L10nKey] = [.gateSendLinkBody, .gateCreateCodeBody,
+                               .nearbyNoAccountNeeded, .directJoinNoAccountNeeded,
+                               .downloadNoAccountNeeded]
+        for language in AppLanguage.allCases {
+            let phrase = try XCTUnwrap(noAccountPhrase[language],
+                                       "\(language.rawValue) has no phrase in the table")
+            for key in keys {
+                let rendered = L10n.t(key, language: language)
+                XCTAssertFalse(rendered.isEmpty, "\(key.rawValue) [\(language.rawValue)]")
+                XCTAssertNotEqual(rendered, key.rawValue,
+                                  "\(key.rawValue) [\(language.rawValue)] fell back to the key")
+                if language != .en {
+                    XCTAssertNotEqual(rendered, L10n.t(key, language: .en),
+                                      "\(key.rawValue) [\(language.rawValue)] is untranslated")
+                }
+                XCTAssertTrue(rendered.contains(phrase),
+                              "\(key.rawValue) [\(language.rawValue)] drops the anonymous half: \(rendered)")
+            }
+        }
+    }
+
+    /// The sidebar names all five destinations at once, so two of them reading
+    /// the same is not a cosmetic problem — it is a destination the user cannot
+    /// tell apart from another one, in that language only. English is where the
+    /// copy is written, so English is the one place a collision would be noticed
+    /// by hand; the other eight are why this is a test.
+    func testDestinationNamesAreDistinctInEveryLanguage() {
+        let keys: [L10nKey] = [.navNearby, .navPairingCode, .navStoredSend,
+                               .navStoredReceive, .navAccount]
+        for language in AppLanguage.allCases {
+            let names = keys.map { L10n.t($0, language: language) }
+            XCTAssertFalse(names.contains(where: \.isEmpty), language.rawValue)
+            XCTAssertFalse(names.contains(where: { name in keys.contains { $0.rawValue == name } }),
+                           "\(language.rawValue) fell back to a raw key: \(names)")
+            XCTAssertEqual(Set(names).count, keys.count,
+                           "\(language.rawValue) reuses a destination name: \(names)")
+        }
+    }
+
     /// A receive refusal iOS can already hit. The sentence is true on both
     /// platforms; the noun was not, and the offending path still has to be in
     /// it or the user cannot act on it.

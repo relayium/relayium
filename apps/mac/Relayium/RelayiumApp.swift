@@ -54,6 +54,12 @@ final class TransferQuitGuard: NSObject, NSApplicationDelegate {
         cancelTransfers?()
         return .terminateNow
     }
+
+    /// The menu bar — not the window — is what makes this Mac reachable. The room
+    /// socket, an in-flight transfer and `MenuBarExtra` all outlive the window, so
+    /// closing it must not end the process. Quit is still ⌘Q, still guarded by
+    /// `applicationShouldTerminate` above.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }
 
 @main
@@ -89,6 +95,28 @@ struct RelayiumApp: App {
     // same reason the transfer models are: both have to outlive the window.
     @StateObject private var nearbyReceive: NearbyReceiveModel
     @StateObject private var notifications: TransferNotificationCenter
+    // Which destination is on screen. App-scoped rather than `@State` so the
+    // selection survives the window's view tree being torn down and rebuilt: the
+    // window is closable while the process keeps running, and reopening it from
+    // the menu bar has to land where the user — or a deep link, or an incoming
+    // session — last was.
+    @StateObject private var navigation = AppNavigationModel()
+    // Which destination presents the live session. App-scoped for the same
+    // reason the models are: Nearby and Pairing code drive the SAME realtime
+    // models, and the answer to "which of them is showing it" has to survive the
+    // window's view tree being torn down and rebuilt. It is not — and cannot be
+    // — a defence against a second window; the scene being a unique `Window` is
+    // what makes that impossible.
+    @StateObject private var presence = TransferPresence()
+
+    /// The strings live in a Swift-package resource bundle, while SwiftUI asks
+    /// the app bundle which way to lay out the scene. macOS therefore kept an
+    /// Arabic package catalog in a left-to-right app even though
+    /// `CFBundleLocalizations` named Arabic. Resolve the same language the copy
+    /// layer uses and make that answer explicit at both scene roots.
+    private var appLayoutDirection: LayoutDirection {
+        L10n.current.isRightToLeft ? .rightToLeft : .leftToRight
+    }
 
     @MainActor
     init() {
@@ -134,11 +162,23 @@ struct RelayiumApp: App {
     }
 
     var body: some Scene {
-        // Identified so the menu bar can reopen it: closing the last window does
-        // not quit the app (the MenuBarExtra keeps it running), so without an id
-        // there is no way back to the UI short of quitting and relaunching.
-        WindowGroup(id: "main") {
-            ContentView()
+        // A UNIQUE `Window`, never a `WindowGroup`. Identified so the menu bar
+        // can reopen it: closing the last window does not quit the app (the
+        // MenuBarExtra and `applicationShouldTerminateAfterLastWindowClosed`
+        // keep it running), so without an id there is no way back to the UI
+        // short of quitting and relaunching.
+        //
+        // Uniqueness is what makes "one live session, one Cancel button" true.
+        // `openWindow(id:)` against a `Window` orders the existing window
+        // forward; against a `WindowGroup` it creates another one, and two
+        // windows render the same app-scoped models twice — two Cancel buttons
+        // for one transfer, however app-scoped the state is. A `Window` scene
+        // also contributes no File ▸ New Window item and no ⌘N.
+        Window("Relayium", id: "main") {
+            AppShellView()
+                .environment(\.layoutDirection, appLayoutDirection)
+                .environmentObject(navigation)
+                .environmentObject(presence)
                 .environmentObject(session)
                 .environmentObject(deepLinks)
                 .environmentObject(uploadModel)
@@ -171,11 +211,16 @@ struct RelayiumApp: App {
                         downloadModel.cancel()
                         realtimeModel.cancel()
                         realtimeTextModel.end()
+                        // Every session at once, from a path with no
+                        // destination to ask — the one case `releaseAll` exists
+                        // for. Nothing is left owning a transfer that no longer
+                        // runs.
+                        presence.releaseAll()
                     }
                 }
                 .onOpenURL { deepLinks.open($0) }
         }
-        .defaultSize(width: 420, height: 460)
+        .defaultSize(width: 1040, height: 700)
         .commands {
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: updaterController.updater)
@@ -188,6 +233,7 @@ struct RelayiumApp: App {
         // the app.
         MenuBarExtra("Relayium", systemImage: "paperplane") {
             MenuBarView()
+                .environment(\.layoutDirection, appLayoutDirection)
                 .environmentObject(session)
                 .environmentObject(nearbyReceive)
                 .environmentObject(lanDiscovery)

@@ -88,10 +88,13 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case nearbyStatusReceivingFiles = "nearby.status.receivingFiles"
     case nearbyStatusMessageSession = "nearby.status.messageSession"
 
-    // MARK: - Window shell
+    // MARK: - Account states
+    //
+    // Shared: the macOS Account destination and the iOS Account tab both render
+    // these. The two keys that used to head this group — `content.haveLink` and
+    // `content.nearbyOrCode` — were the old macOS root's two choices, and left
+    // with the root picker they labelled.
 
-    case contentHaveLink = "content.haveLink"
-    case contentNearbyOrCode = "content.nearbyOrCode"
     case contentAccountLoadFailed = "content.accountLoadFailed"
     case contentCheckEmailTitle = "content.checkEmailTitle"
     /// %@ — the account's email address.
@@ -102,13 +105,61 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case contentPendingDeletionBody = "content.pendingDeletionBody"
     case contentReactivate = "content.reactivate"
     case contentBackToSignIn = "content.backToSignIn"
-    case tabDirect = "tab.direct"
-    case tabLink = "tab.link"
-    /// The iOS receive tab. `tab.link` labels a macOS tab that both sends and
-    /// receives; this one only receives, and `download.heading`
-    /// ("Receive files") is a screen title, too long for a tab item.
+    /// The iOS receive tab, and the iOS account tab. macOS has no tab bar —
+    /// `nav.*` names its five sidebar destinations — so these two keys are
+    /// rendered by `apps/ios/Relayium` alone. `download.heading` ("Receive
+    /// files") is a screen title, too long for a tab item.
     case tabReceive = "tab.receive"
     case tabAccount = "tab.account"
+
+    // MARK: - Navigation
+    //
+    // The macOS sidebar. Five rows, all visible at once, each with a one-line
+    // subtitle — so what a destination does is readable before it is opened
+    // rather than after. The subtitles are also the rows' accessibility hints,
+    // which is why each one is a sentence and not a fragment.
+
+    /// Sidebar section: the two destinations where the other person is present.
+    case navSectionDirect = "nav.sectionDirect"
+    /// Sidebar section: the two destinations that go through a stored link.
+    case navSectionLinks = "nav.sectionLinks"
+    case navNearby = "nav.nearby"
+    /// Says "no account needed" because that is the fact the old shell hid.
+    case navNearbySubtitle = "nav.nearbySubtitle"
+    case navPairingCode = "nav.pairingCode"
+    case navPairingCodeSubtitle = "nav.pairingCodeSubtitle"
+    case navStoredSend = "nav.storedSend"
+    case navStoredSendSubtitle = "nav.storedSendSubtitle"
+    case navStoredReceive = "nav.storedReceive"
+    case navStoredReceiveSubtitle = "nav.storedReceiveSubtitle"
+    case navAccount = "nav.account"
+    case navAccountSubtitle = "nav.accountSubtitle"
+    /// The sidebar list's accessibility label.
+    case navA11ySections = "nav.a11ySections"
+    /// Announced on the row whose destination is presenting a live session, so
+    /// a VoiceOver user is not told to look for it on the wrong screen.
+    case navA11yLiveSession = "nav.a11yLiveSession"
+    /// The sidebar footer's heading. Background receive — what makes this Mac
+    /// reachable — reports its own state beneath it.
+    case navResidency = "nav.residency"
+
+    // MARK: - Capability gates
+    //
+    // What `CapabilityGateView` renders when a feature genuinely needs an
+    // account. Each body names the REAL server-side reason — an account pays for
+    // stored bytes, an account pays for the relayed traffic a minted code
+    // reserves — and each ends by naming the half that needs no account, because
+    // the most damaging thing the old shell did was imply the whole product did.
+    // That final clause is load-bearing and is asserted in all nine languages.
+
+    case gateSendLinkTitle = "gate.sendLinkTitle"
+    case gateSendLinkBody = "gate.sendLinkBody"
+    case gateCreateCodeTitle = "gate.createCodeTitle"
+    case gateCreateCodeBody = "gate.createCodeBody"
+    /// Selects the Account destination. Distinct from `login.signIn`, which
+    /// submits the form once the user is already looking at it.
+    case gateSignIn = "gate.signIn"
+    case gateCreateAccount = "gate.createAccount"
 
     // MARK: - Sign in
 
@@ -130,6 +181,20 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case verifyExplainWhat = "verify.explainWhat"
     case verifyExplainEncryption = "verify.explainEncryption"
 
+    // MARK: - Single-session presence
+    //
+    // Nearby and Pairing code drive the SAME realtime models, so exactly one of
+    // them presents a running session. These three are what the OTHER one says
+    // instead of drawing a second copy of it with a second Cancel button. The
+    // body names the reason rather than only the fact, because "already running"
+    // on its own reads as a bug on the screen that is refusing to show it.
+
+    case presenceBusyTitle = "presence.busyTitle"
+    case presenceBusyBody = "presence.busyBody"
+    /// Selects the destination that owns the session. Not a cancel and not a
+    /// second Cancel — the whole point is that there is one of each.
+    case presenceShowIt = "presence.showIt"
+
     // MARK: - Pairing-code file transfer
 
     case directSendHeading = "direct.sendHeading"
@@ -141,6 +206,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case directScanOnPhone = "direct.scanOnPhone"
     case directWaitingForDevice = "direct.waitingForDevice"
     case directChooseFilesFirst = "direct.chooseFilesFirst"
+    /// Sits with the join field, which is rendered and enabled identically
+    /// signed out. Only minting a code is gated, and only because the code's
+    /// owner is billed for the relay capacity it reserves.
+    case directJoinNoAccountNeeded = "direct.joinNoAccountNeeded"
 
     // MARK: - Live file session
 
@@ -157,6 +226,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     case uploadHeading = "upload.heading"
     case uploadDropHint = "upload.dropHint"
+    /// The empty state of the stored-send selection, whose explanation is
+    /// `upload.dropHint` — the drop zone below it is the way out, so this names
+    /// the state and the hint names the action rather than one string trying to
+    /// do both.
+    case storedSendIdleTitle = "storedSend.idleTitle"
     case uploadReady = "upload.ready"
     case uploadLinkReady = "upload.linkReady"
     case uploadSendAnother = "upload.sendAnother"
@@ -211,6 +285,17 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// route out was free to stop at `Relayium` — which is where the files are
     /// not.
     case downloadSavedLocation = "download.savedLocation"
+    /// What the receive surface says before a link is pasted. The second
+    /// sentence is the reason this destination needs nothing from the user but
+    /// the link: the key travels in the fragment, which never leaves the client.
+    /// It replaces an `EmptyView()` — literally what this state used to render.
+    case downloadIdleHint = "download.idleHint"
+    /// The third of the three "needs no account" lines, and the one that carries
+    /// the most weight: receiving a stored link is the capability the old
+    /// sign-in-first shell hid most completely. Its clause must survive
+    /// translation in all nine — it is the same sentence `gate.sendLinkBody`
+    /// ends with, said where the capability actually is.
+    case downloadNoAccountNeeded = "download.noAccountNeeded"
 
     // MARK: - Ephemeral text
 
@@ -218,7 +303,6 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case textStartHeading = "text.startHeading"
     case textStartBody = "text.startBody"
     case textCreateCode = "text.createCode"
-    case textSignInToCreate = "text.signInToCreate"
     case textJoinHeading = "text.joinHeading"
     case textJoinHint = "text.joinHint"
     case textGiveCode = "text.giveCode"
@@ -285,6 +369,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case nearbyReconnecting = "nearby.reconnecting"
     case nearbyUnnamedDevice = "nearby.unnamedDevice"
     case nearbySetupFailed = "nearby.setupFailed"
+    /// Both directions, stated once where the roster is. The code-less room
+    /// mints nothing and `/api/ice` answers it STUN-only, so neither sending nor
+    /// receiving here ever reaches the transport with a credential.
+    case nearbyNoAccountNeeded = "nearby.noAccountNeeded"
 
     // MARK: - Drop zone, picker, received result, QR
 

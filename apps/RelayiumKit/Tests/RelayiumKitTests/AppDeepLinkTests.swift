@@ -70,6 +70,48 @@ final class AppDeepLinkTests: XCTestCase {
         XCTAssertNil(router.pending)
     }
 
+    /// Why the shell defers its `consume()` by one turn instead of calling it
+    /// inline, which is the obvious shape and the wrong one.
+    ///
+    /// `@Published` emits in `willSet`: a subscriber runs BEFORE the new value
+    /// is stored, so a `consume()` made from inside the subscriber is
+    /// immediately overwritten by the assignment that delivered the link. The
+    /// router is then left holding a link the UI has already acted on — and
+    /// `Published` replays its current value to every new subscriber, so the
+    /// next time the unique window is closed and reopened the link is applied a
+    /// second time: a stored download that was already saved would re-resolve,
+    /// discarding the result on screen.
+    ///
+    /// This is a property of the mechanism, not of `AppDeepLinkRouter`, which is
+    /// exactly why it is worth pinning: if `pending` ever stops being
+    /// `@Published`, this fails and the deferral in `AppShellView` can go.
+    @MainActor
+    func testConsumingFromInsideTheSubscriberDoesNotClearPending() {
+        let router = AppDeepLinkRouter()
+        var seen: [AppDeepLink] = []
+        let subscription = router.$pending.compactMap { $0 }.sink { link in
+            seen.append(link)
+            router.consume()          // inline — the shape this warns against
+        }
+        defer { subscription.cancel() }
+
+        XCTAssertTrue(router.open(URL(string: "https://relayium.com/cross-network#c=483920")!))
+        XCTAssertEqual(seen, [.realtime(code: "483920")], "the UI still saw it exactly once")
+        XCTAssertEqual(router.pending, .realtime(code: "483920"),
+                       "an inline consume is overwritten by the assignment that delivered the link")
+
+        // A late subscriber — the window reopening — is handed it again.
+        var replayed: [AppDeepLink] = []
+        let second = router.$pending.compactMap { $0 }.sink { replayed.append($0) }
+        defer { second.cancel() }
+        XCTAssertEqual(replayed, [.realtime(code: "483920")],
+                       "Published replays its current value, so an unconsumed link fires again")
+
+        // Deferred out of the emission, it clears — what the shell does.
+        router.consume()
+        XCTAssertNil(router.pending)
+    }
+
     func testRouterDoesNotReplacePendingWorkWithAnInvalidURL() {
         let router = AppDeepLinkRouter()
         XCTAssertTrue(router.open(URL(string: "https://relayium.com/cross-network")!))

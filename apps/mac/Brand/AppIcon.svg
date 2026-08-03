@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <!-- Derived from web/public/favicon.svg and web/src/lib/Logo.svelte, which
+       carry byte-identical artwork. Two deliberate deviations, both recorded in
+       the design: the corner radius follows Apple's macOS grid (185.4/1024 =
+       22.5% of the 824 body) rather than the web mark's rx=15 on 64, and no
+       drop shadow is baked into the alpha channel. -->
+  <defs>
+    <linearGradient id="body" x1="100" y1="100" x2="924" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#a94bff"/>
+      <stop offset="1" stop-color="#635bff"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="100" y1="100" x2="100" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity=".22"/>
+      <stop offset=".55" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185.4" fill="url(#body)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185.4" fill="url(#sheen)"/>
+  <g transform="translate(100 100) scale(12.875)">
+    <path d="M16 25h25.5M35 17.5 42.5 25 35 32.5M48 39H22.5M29 31.5 21.5 39l7.5 7.5"
+          stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

@@ -5,7 +5,7 @@ import RelayiumKit
 /// What an inbound nearby session is carrying. Drives which UI the app puts on
 /// screen, so a session that arrives while the picker was on the other mode
 /// still shows itself.
-public enum NearbyReceiveKind: Equatable {
+public enum NearbyReceiveKind: Equatable, CaseIterable, Sendable {
     case file
     case text
 }

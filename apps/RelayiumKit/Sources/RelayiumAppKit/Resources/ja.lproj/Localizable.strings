@@ -60,8 +60,6 @@
 "nearby.status.messageSession" = "近くのデバイスとのメッセージセッションが開いています";
 
 /* MARK: ウインドウ */
-"content.haveLink" = "リンクを持っています";
-"content.nearbyOrCode" = "近くのデバイス、またはペアリングコード";
 "content.accountLoadFailed" = "アカウントを読み込めませんでした";
 "content.checkEmailTitle" = "メールをご確認ください";
 "content.checkEmailBody" = "%@ に確認リンクを送信しました。確認してから、もう一度サインインしてください。";
@@ -70,10 +68,33 @@
 "content.pendingDeletionBody" = "%@ 以降に消去されます。残したい場合はウェブで再有効化してください。";
 "content.reactivate" = "relayium.com で再有効化";
 "content.backToSignIn" = "サインインに戻る";
-"tab.direct" = "ダイレクト";
-"tab.link" = "リンク";
 "tab.receive" = "受信";
 "tab.account" = "アカウント";
+
+/* MARK: ナビゲーションサイドバー */
+"nav.sectionDirect" = "ダイレクト";
+"nav.sectionLinks" = "リンク";
+"nav.nearby" = "近くのデバイス";
+"nav.nearbySubtitle" = "同じネットワーク上のデバイス。アカウント不要";
+"nav.pairingCode" = "ペアリングコード";
+"nav.pairingCodeSubtitle" = "6桁の数字でネットワークを越えて接続";
+"nav.storedSend" = "リンクを送る";
+"nav.storedSendSubtitle" = "暗号化したファイルを保存してリンクを共有";
+"nav.storedReceive" = "リンクを開く";
+"nav.storedReceiveSubtitle" = "誰かが送ってくれたファイルを受け取る";
+"nav.account" = "アカウント";
+"nav.accountSubtitle" = "プラン、デバイス、保存済みファイル";
+"nav.a11ySections" = "Relayium の画面一覧";
+"nav.a11yLiveSession" = "ここで転送が進行中です";
+"nav.residency" = "受信";
+
+/* MARK: 機能の利用条件 */
+"gate.sendLinkTitle" = "リンクの送信にはアカウントが必要です";
+"gate.sendLinkBody" = "リンクは暗号化したファイルを期限まで Relayium のサーバーに保存するため、費用はアカウントに課金されます。Relayium が鍵を受け取ることはありません。誰かが送ってくれたリンクを開くのにアカウントは不要です。";
+"gate.createCodeTitle" = "コードの作成にはアカウントが必要です";
+"gate.createCodeBody" = "コードを作成するとリレー容量が確保され、作成したアカウントに課金されます。他の人が作成したコードに参加するのにアカウントは不要です。";
+"gate.signIn" = "サインイン";
+"gate.createAccount" = "アカウントを作成";
 
 /* MARK: サインイン */
 "login.email" = "メールアドレス";
@@ -92,6 +113,11 @@
 "verify.explainWhat" = "デフォルトはオフです。オンにすると、データが動き出す前に両方のデバイスが同じ 6 桁の確認コード（SAS）を表示します。声に出して照合すれば、シグナリング経路のすり替えを検知できます。これは入力したペアリングコードとは別物であり、実際に誰かが照合して初めて意味を持ちます。";
 "verify.explainEncryption" = "これが変えるのは、何を表示するか、どこで確認のために止まるかだけで、暗号化そのものは決して変わりません。鍵はこの Mac で生成され Relayium に送信されることはなく、リレーは暗号文しか運ばず、改ざんされたハンドシェイクは必ず失敗します。";
 
+/* MARK: single-session presence */
+"presence.busyTitle" = "このセッションは別の場所に表示されています";
+"presence.busyBody" = "近くのデバイスとペアリングコードは 1 つのセッションを共有します。「表示する」を選ぶと、そのセッションに戻れます。";
+"presence.showIt" = "表示する";
+
 /* MARK: ペアリングコードによるファイル転送 */
 "direct.sendHeading" = "送信";
 "direct.dropHint" = "ここにファイルやフォルダをドロップするか、クリックして選択してください。そのあと相手のデバイス用のコードを作成します。";
@@ -102,6 +128,7 @@
 "direct.scanOnPhone" = "スマートフォンで読み取ることもできます。";
 "direct.waitingForDevice" = "相手のデバイスを待っています…";
 "direct.chooseFilesFirst" = "先に送信するファイルまたはフォルダを選んでください。";
+"direct.joinNoAccountNeeded" = "他の人が作成したコードに参加するのにアカウントは不要です。";
 
 /* MARK: ライブのファイルセッション */
 "session.connecting" = "接続しています…";
@@ -116,6 +143,7 @@
 /* MARK: クラウドアップロード */
 "upload.heading" = "ファイルを送る";
 "upload.dropHint" = "ここにファイルやフォルダをドロップするか、クリックして選択";
+"storedSend.idleTitle" = "まだ何も選ばれていません";
 "upload.ready" = "準備完了";
 "upload.linkReady" = "リンクの準備ができました";
 "upload.sendAnother" = "別のものを送る";
@@ -144,6 +172,8 @@
 "download.resolving" = "リンクを確認しています…";
 "download.inProgress" = "ダウンロードしています…";
 "download.savedLocation" = "これらのファイルは「ファイル」App の %@ フォルダにあります。ここから共有することもできます。";
+"download.idleHint" = "Relayium のリンクを貼り付けてください。鍵はリンクの中に留まり、Relayium のサーバーに届くことはありません。";
+"download.noAccountNeeded" = "誰かが送ってくれたリンクを開くのにアカウントは不要です。";
 "download.fileCount.other" = "%@ 個のファイル";
 "download.savedFiles.other" = "%@ 個のファイルを保存しました";
 
@@ -152,7 +182,6 @@
 "text.startHeading" = "テキストセッションを開始";
 "text.startBody" = "両方のデバイスがオンラインのままである必要があります。メッセージはエンドツーエンドで暗号化され、このセッションのメモリ上にのみ保持されます。";
 "text.createCode" = "テキスト用コードを作成";
-"text.signInToCreate" = "コードの作成にはサインインが必要です。他人のコードに参加するだけならアカウントは不要です。";
 "text.joinHeading" = "テキストセッションに参加";
 "text.joinHint" = "ペアリングコードからは種類がわかりません。送信側がテキストセッションを開始した場合にのみ、ここで「テキスト」を選んでください。";
 "text.giveCode" = "このテキスト用コードを相手のデバイスに伝えてください";
@@ -214,6 +243,7 @@
 "nearby.reconnecting" = "Relayium のデバイス・ランデブーへの接続が切れました。再接続しています…";
 "nearby.unnamedDevice" = "名称未設定のデバイス";
 "nearby.setupFailed" = "受信側の近距離転送を確立できませんでした。";
+"nearby.noAccountNeeded" = "このネットワーク上での送信も受信もアカウントは不要です。";
 
 /* MARK: ドロップ領域、ピッカー、受信結果、QR */
 "drop.a11yLabel" = "送信するファイル";

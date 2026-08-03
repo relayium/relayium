@@ -408,6 +408,113 @@ final class RealtimeSessionModelTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: urls[1]), Data([4, 5]))
     }
 
+    /// A transport error that arrives AFTER the receive completed must not
+    /// delete the files.
+    ///
+    /// This is the shape of a real data-loss bug observed on a running build:
+    /// the sender sees `complete`, the app shows the received file, and roughly
+    /// fifteen seconds later — when the peer connection finally tears itself
+    /// down and reports an error — `onError` discarded the writer and replaced
+    /// the terminal `.completed` with a failure. The file the user had already
+    /// been shown, and had been told to reveal in Finder, vanished from disk.
+    ///
+    /// `.completed` is terminal and its bytes belong to the user. A late error
+    /// on a connection that has already finished its job describes the
+    /// connection, not the transfer, and `onClose` already knows that (it guards
+    /// on `isBusy`). `onError` did not.
+    func testALateTransportErrorCannotDeleteACompletedReceive() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([FileMeta(name: "a.txt", size: 3)])
+        conn.onFileChunk?([1, 2, 3])
+        conn.onDone?(true)
+        await settle()
+        guard case let .completed(urls) = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertEqual(try Data(contentsOf: urls[0]), Data([1, 2, 3]))
+
+        // The connection dies afterwards, as every connection eventually does.
+        conn.onError?(HandshakeError.mitm)
+        await settle()
+
+        guard case let .completed(after) = m.state else {
+            return XCTFail("a late transport error replaced the terminal result: \(m.state)")
+        }
+        XCTAssertEqual(after, urls, "the completed result must keep naming the same files")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: urls[0].path),
+                      "the received file was deleted after it had been handed to the user")
+        XCTAssertEqual(try Data(contentsOf: urls[0]), Data([1, 2, 3]),
+                       "the received file's bytes must survive a late transport error")
+    }
+
+    /// The same rule for a late close, which reaches the same writer by another
+    /// path. Already guarded by `isBusy`; asserted so the guard cannot be
+    /// dropped without a red test.
+    func testALateCloseCannotDeleteACompletedReceive() async throws {
+        let dir = try tempDir()
+        let m = makeModel()
+        m.saveDirectory = dir
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([FileMeta(name: "a.txt", size: 3)])
+        conn.onFileChunk?([1, 2, 3])
+        conn.onDone?(true)
+        await settle()
+        guard case let .completed(urls) = m.state else { return XCTFail("got \(m.state)") }
+
+        conn.onClose?()
+        await settle()
+
+        guard case .completed = m.state else {
+            return XCTFail("a late close replaced the terminal result: \(m.state)")
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: urls[0].path),
+                      "the received file was deleted by a late close")
+    }
+
+    /// A late error must not overwrite the FIRST failure's reason either. The
+    /// user acts on the message they were given; replacing "the peer declined"
+    /// with whatever the socket said on its way out turns a specific diagnosis
+    /// into a generic one.
+    ///
+    /// The first failure is a peer REJECT rather than a tampered DONE because
+    /// only REJECT leaves the generation alone. `failReceive` tears the session
+    /// down, which bumps the generation, so every later callback is dropped by
+    /// `apply`'s generation check before the terminal-state guard is ever
+    /// consulted — a test written that way stays green with the guard deleted.
+    /// This one reaches `onError` on the live generation, so the guard is the
+    /// only thing keeping the message the user was shown.
+    func testALateTransportErrorDoesNotRewriteAnEarlierFailure() async throws {
+        let m = makeModel()
+        m.saveDirectory = try tempDir()
+        await m.join(code: "483920")
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        m.confirmSAS()
+        conn.onManifest?([FileMeta(name: "a.txt", size: 3)])
+        conn.onFileChunk?([1, 2, 3])
+        conn.onControl?(.reject)     // the peer declines: the first, specific failure
+        await settle()
+        guard case let .failed(first) = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertTrue(first.lowercased().contains("declined"),
+                      "the captured failure has to be the reject, not something else: \(first)")
+
+        conn.onError?(HandshakeError.mitm)
+        await settle()
+
+        guard case let .failed(after) = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertEqual(after, first, "a late error rewrote the failure the user was already shown")
+    }
+
     /// A folder receive, end to end through the model: the tree is rebuilt under
     /// a container named after the folder that was sent, and that container —
     /// not the loose files — is what Finder gets handed.
@@ -760,6 +867,21 @@ final class RealtimeSessionModelTests: XCTestCase {
         XCTAssertEqual(conn.closeCount, 1)
         guard case .idle = m.state else { return XCTFail("got \(m.state)") }
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("a.txt").path))
+    }
+
+    /// `.failed` is a state the session STAYS in, so the error keeps its place
+    /// on screen instead of blinking past. The cost of that is that the macOS
+    /// destinations treat "not `.idle`" as "somebody is presenting a session"
+    /// and keep the other one on its "shown elsewhere" card — so the pane's
+    /// **Done** has to land the model back on `.idle`, and `cancel` is the call
+    /// that does it from a failure as much as from a live transfer.
+    func testCancelClearsAFailureBackToIdle() async {
+        let m = makeModel()
+        pair.error = AccountError.notSignedIn
+        await m.mintCode(token: "")
+        guard case .failed = m.state else { return XCTFail("got \(m.state)") }
+        m.cancel()
+        guard case .idle = m.state else { return XCTFail("Done left the session owned: \(m.state)") }
     }
 
     /// A callback from a session the user has left must not repaint the screen.

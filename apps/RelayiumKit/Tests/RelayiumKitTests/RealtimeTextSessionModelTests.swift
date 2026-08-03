@@ -543,6 +543,46 @@ final class RealtimeTextSessionModelTests: XCTestCase {
         guard case .refused = model.state else { return XCTFail("stale callback landed") }
     }
 
+    /// The other half of the decision above. Keeping the transcript on screen
+    /// means the session sits in a terminal state rather than returning to
+    /// `.idle`, and the macOS destinations read "not `.idle`" as "somebody is
+    /// presenting a session" — which keeps the other destination on its "shown
+    /// elsewhere" card. So the pane's **Done** has to reach `.idle`, and it is
+    /// also the only thing that discards the retained history.
+    ///
+    /// `.ended` and `.refused` are the two terminal states a test can reach
+    /// without a factory failure; `reset` does not branch on which one it is
+    /// leaving, so `.failed` and `.unsupported` take the same path.
+    func testResetClearsATerminalSessionBackToIdle() async {
+        let ended = makeModel()
+        await openResponder(ended)
+        connection.onText?("keep locally", 33)
+        await settle()
+        ended.end()
+        guard case .ended = ended.state else { return XCTFail("got \(ended.state)") }
+        XCTAssertEqual(ended.history.map(\.body), ["keep locally"],
+                       "the transcript must outlive the session that produced it")
+        ended.reset()
+        guard case .idle = ended.state else {
+            return XCTFail("Done left the session owned: \(ended.state)")
+        }
+        XCTAssertTrue(ended.history.isEmpty, "Done is the deliberate discard")
+
+        let refused = makeModel()
+        await refused.join(code: "483920", role: .initiator)
+        connection.onSAS?("six-words")
+        connection.onOpen?()
+        await settle()
+        connection.onControl?(.reject)
+        connection.onClose?()
+        await settle()
+        guard case .refused = refused.state else { return XCTFail("got \(refused.state)") }
+        refused.reset()
+        guard case .idle = refused.state else {
+            return XCTFail("Done left the session owned: \(refused.state)")
+        }
+    }
+
     func testDelayedSendCompletionAfterEndIsIgnored() async {
         let model = makeModel()
         await openInitiator(model)

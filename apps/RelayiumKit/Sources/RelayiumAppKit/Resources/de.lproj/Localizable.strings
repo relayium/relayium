@@ -60,8 +60,6 @@
 "nearby.status.messageSession" = "Eine Nachrichtensitzung mit einem Gerät in der Nähe ist offen";
 
 /* MARK: Fenster */
-"content.haveLink" = "Ich habe einen Link";
-"content.nearbyOrCode" = "Gerät in der Nähe oder Kopplungscode";
 "content.accountLoadFailed" = "Dein Konto konnte nicht geladen werden";
 "content.checkEmailTitle" = "Sieh in deinem Postfach nach";
 "content.checkEmailBody" = "Wir haben einen Bestätigungslink an %@ geschickt. Bestätige ihn und melde dich dann erneut an.";
@@ -70,10 +68,33 @@
 "content.pendingDeletionBody" = "Es wird nach %@ endgültig gelöscht. Reaktiviere es im Web, um es zu behalten.";
 "content.reactivate" = "Auf relayium.com reaktivieren";
 "content.backToSignIn" = "Zurück zur Anmeldung";
-"tab.direct" = "Direkt";
-"tab.link" = "Link";
 "tab.receive" = "Empfangen";
 "tab.account" = "Konto";
+
+/* MARK: Navigationsleiste */
+"nav.sectionDirect" = "Direkt";
+"nav.sectionLinks" = "Links";
+"nav.nearby" = "In der Nähe";
+"nav.nearbySubtitle" = "Geräte in diesem Netzwerk, ohne Konto";
+"nav.pairingCode" = "Kopplungscode";
+"nav.pairingCodeSubtitle" = "Netzwerkübergreifend verbinden mit sechs Ziffern";
+"nav.storedSend" = "Link senden";
+"nav.storedSendSubtitle" = "Datei verschlüsselt ablegen und den Link teilen";
+"nav.storedReceive" = "Link öffnen";
+"nav.storedReceiveSubtitle" = "Eine Datei empfangen, die dir jemand geschickt hat";
+"nav.account" = "Konto";
+"nav.accountSubtitle" = "Tarif, Geräte und abgelegte Dateien";
+"nav.a11ySections" = "Relayium-Bereiche";
+"nav.a11yLiveSession" = "Hier läuft eine Übertragung";
+"nav.residency" = "Empfang";
+
+/* MARK: Zugangsvoraussetzungen */
+"gate.sendLinkTitle" = "Zum Senden eines Links ist ein Konto nötig";
+"gate.sendLinkBody" = "Ein Link speichert die verschlüsselte Datei bis zum Ablauf auf Relayiums Servern und wird deshalb einem Konto berechnet. Relayium erhält den Schlüssel nie. Zum Öffnen eines Links, den dir jemand geschickt hat, ist kein Konto nötig.";
+"gate.createCodeTitle" = "Zum Erstellen eines Codes ist ein Konto nötig";
+"gate.createCodeBody" = "Ein Code reserviert Relay-Kapazität, die dem Konto berechnet wird, das ihn erstellt hat. Zum Beitreten zu einem Code, den jemand anderes erstellt hat, ist kein Konto nötig.";
+"gate.signIn" = "Anmelden";
+"gate.createAccount" = "Konto erstellen";
 
 /* MARK: Anmeldung */
 "login.email" = "E-Mail";
@@ -92,6 +113,11 @@
 "verify.explainWhat" = "Standardmäßig aus. Wenn aktiviert, zeigen beide Geräte denselben sechsstelligen Verifizierungscode (SAS), bevor irgendetwas übertragen wird; laut vorgelesen deckt der Vergleich einen ausgetauschten Signalisierungsendpunkt auf. Es ist nicht der Kopplungscode, den du eingegeben hast, und er erkennt nur dann etwas, wenn wirklich jemand die beiden vergleicht.";
 "verify.explainEncryption" = "Das ändert, was angezeigt wird und wo für eine Bestätigung angehalten wird — niemals die Verschlüsselung. Schlüssel entstehen auf diesem Mac und werden nie an Relayium gesendet, das Relay transportiert ausschließlich Chiffrat, und ein manipulierter Handshake scheitert immer.";
 
+/* MARK: single-session presence */
+"presence.busyTitle" = "Diese Sitzung wird woanders angezeigt";
+"presence.busyBody" = "In der Nähe und Kopplungscode teilen sich eine Sitzung; wähle „Anzeigen“, um zu ihr zurückzukehren.";
+"presence.showIt" = "Anzeigen";
+
 /* MARK: Dateiübertragung per Kopplungscode */
 "direct.sendHeading" = "Senden";
 "direct.dropHint" = "Dateien oder Ordner hierher ziehen oder klicken, um sie auszuwählen. Erstelle danach einen Code für das andere Gerät.";
@@ -102,6 +128,7 @@
 "direct.scanOnPhone" = "Oder scanne dies mit einem Telefon.";
 "direct.waitingForDevice" = "Warten auf das andere Gerät…";
 "direct.chooseFilesFirst" = "Wähle zuerst Dateien oder Ordner zum Senden aus.";
+"direct.joinNoAccountNeeded" = "Zum Beitreten zu einem Code, den jemand anderes erstellt hat, ist kein Konto nötig.";
 
 /* MARK: Live-Dateisitzung */
 "session.connecting" = "Verbindung wird hergestellt…";
@@ -116,6 +143,7 @@
 /* MARK: Cloud-Upload */
 "upload.heading" = "Dateien senden";
 "upload.dropHint" = "Dateien oder Ordner hierher ziehen oder klicken, um sie auszuwählen";
+"storedSend.idleTitle" = "Noch nichts ausgewählt";
 "upload.ready" = "Bereit";
 "upload.linkReady" = "Link ist bereit";
 "upload.sendAnother" = "Etwas anderes senden";
@@ -144,6 +172,8 @@
 "download.resolving" = "Link wird geprüft…";
 "download.inProgress" = "Wird heruntergeladen…";
 "download.savedLocation" = "Diese Dateien liegen im Ordner „%@“ in der App „Dateien“. Du kannst sie auch direkt von hier aus teilen.";
+"download.idleHint" = "Füge einen Relayium-Link ein. Der Schlüssel bleibt im Link und erreicht Relayiums Server nie.";
+"download.noAccountNeeded" = "Zum Öffnen eines Links, den dir jemand geschickt hat, ist kein Konto nötig.";
 "download.fileCount.one" = "%@ Datei";
 "download.fileCount.other" = "%@ Dateien";
 "download.savedFiles.one" = "%@ Datei gesichert";
@@ -154,7 +184,6 @@
 "text.startHeading" = "Textsitzung starten";
 "text.startBody" = "Beide Geräte bleiben online. Nachrichten sind Ende-zu-Ende-verschlüsselt und bleiben nur im Arbeitsspeicher dieser Sitzung.";
 "text.createCode" = "Textcode erstellen";
-"text.signInToCreate" = "Zum Erstellen eines Codes ist eine Anmeldung nötig. Dem Code einer anderen Person beizutreten erfordert kein Konto.";
 "text.joinHeading" = "Textsitzung beitreten";
 "text.joinHint" = "Ein Kopplungscode verrät seine Art nicht. Wähle hier nur dann „Text“, wenn die sendende Seite eine Textsitzung gestartet hat.";
 "text.giveCode" = "Gib diesen Textcode an das andere Gerät weiter";
@@ -216,6 +245,7 @@
 "nearby.reconnecting" = "Die Verbindung zum Geräte-Rendezvous von Relayium ist abgerissen. Verbindung wird wiederhergestellt…";
 "nearby.unnamedDevice" = "Unbenanntes Gerät";
 "nearby.setupFailed" = "Eine eingehende Übertragung aus der Nähe konnte nicht eingerichtet werden.";
+"nearby.noAccountNeeded" = "Senden und Empfangen in diesem Netzwerk brauchen kein Konto.";
 
 /* MARK: Ablagebereich, Auswahl, Ergebnis, QR */
 "drop.a11yLabel" = "Zu sendende Dateien";

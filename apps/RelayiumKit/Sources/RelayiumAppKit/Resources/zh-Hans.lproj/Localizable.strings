@@ -60,8 +60,6 @@
 "nearby.status.messageSession" = "已开启一个附近设备的消息会话";
 
 /* MARK: 窗口外壳 */
-"content.haveLink" = "我有链接";
-"content.nearbyOrCode" = "附近设备或配对码";
 "content.accountLoadFailed" = "无法载入你的账户";
 "content.checkEmailTitle" = "请查收邮件";
 "content.checkEmailBody" = "我们已向 %@ 发送验证链接。验证后请重新登录。";
@@ -70,10 +68,33 @@
 "content.pendingDeletionBody" = "它将在 %@ 之后被彻底清除。若要保留，请在网页端重新激活。";
 "content.reactivate" = "在 relayium.com 重新激活";
 "content.backToSignIn" = "返回登录";
-"tab.direct" = "直连";
-"tab.link" = "链接";
 "tab.receive" = "接收";
 "tab.account" = "账户";
+
+/* MARK: 导航侧栏 */
+"nav.sectionDirect" = "直连";
+"nav.sectionLinks" = "链接";
+"nav.nearby" = "附近设备";
+"nav.nearbySubtitle" = "同一网络中的设备，无需账户";
+"nav.pairingCode" = "配对码";
+"nav.pairingCodeSubtitle" = "用六位数字跨网络连接";
+"nav.storedSend" = "发送链接";
+"nav.storedSendSubtitle" = "加密存储文件并分享链接";
+"nav.storedReceive" = "打开链接";
+"nav.storedReceiveSubtitle" = "接收别人发给你的文件";
+"nav.account" = "账户";
+"nav.accountSubtitle" = "套餐、设备与已存文件";
+"nav.a11ySections" = "Relayium 功能页";
+"nav.a11yLiveSession" = "此处有正在进行的传输";
+"nav.residency" = "接收";
+
+/* MARK: 能力门槛 */
+"gate.sendLinkTitle" = "发送链接需要账户";
+"gate.sendLinkBody" = "链接会把加密后的文件存放在 Relayium 的服务器上直到过期，因此需要由账户付费。Relayium 永远拿不到密钥。打开别人发给你的链接不需要账户。";
+"gate.createCodeTitle" = "创建配对码需要账户";
+"gate.createCodeBody" = "创建配对码会预留中继容量，由创建它的账户付费。加入别人创建的配对码不需要账户。";
+"gate.signIn" = "登录";
+"gate.createAccount" = "创建账户";
 
 /* MARK: 登录 */
 "login.email" = "邮箱";
@@ -92,6 +113,11 @@
 "verify.explainWhat" = "默认关闭。开启后，双方设备会在任何数据传输之前显示同一个六位验证码（SAS）；口头核对它可以发现被替换的信令端点。它不是你输入的配对码，而且只有真的有人去核对，它才起作用。";
 "verify.explainEncryption" = "这只改变显示什么、以及在哪里停下来等你确认 — 从不改变加密本身。密钥在这台 Mac 上生成、绝不发送给 Relayium，中继只承载密文，被篡改的握手一定会失败。";
 
+/* MARK: single-session presence */
+"presence.busyTitle" = "该会话显示在别处";
+"presence.busyBody" = "附近设备和配对码共用同一个会话；选择「显示它」即可回到它所在的位置。";
+"presence.showIt" = "显示它";
+
 /* MARK: 配对码文件传输 */
 "direct.sendHeading" = "发送";
 "direct.dropHint" = "把文件或文件夹拖到这里，或点击选择。然后为对方设备创建配对码。";
@@ -102,6 +128,7 @@
 "direct.scanOnPhone" = "也可以用手机扫描。";
 "direct.waitingForDevice" = "正在等待对方设备…";
 "direct.chooseFilesFirst" = "请先选择要发送的文件或文件夹。";
+"direct.joinNoAccountNeeded" = "加入别人创建的配对码不需要账户。";
 
 /* MARK: 实时文件会话 */
 "session.connecting" = "正在连接…";
@@ -116,6 +143,7 @@
 /* MARK: 云端上传 */
 "upload.heading" = "发送文件";
 "upload.dropHint" = "把文件或文件夹拖到这里，或点击选择";
+"storedSend.idleTitle" = "还没有选择任何内容";
 "upload.ready" = "就绪";
 "upload.linkReady" = "链接已就绪";
 "upload.sendAnother" = "再发一份";
@@ -144,6 +172,8 @@
 "download.resolving" = "正在检查链接…";
 "download.inProgress" = "正在下载…";
 "download.savedLocation" = "这些文件位于「文件」App 中的 %@ 文件夹里。你也可以直接从这里分享。";
+"download.idleHint" = "粘贴一个 Relayium 链接。密钥始终留在链接里，永远不会到达 Relayium 的服务器。";
+"download.noAccountNeeded" = "打开别人发给你的链接不需要账户。";
 "download.fileCount.other" = "%@ 个文件";
 "download.savedFiles.other" = "已保存 %@ 个文件";
 
@@ -152,7 +182,6 @@
 "text.startHeading" = "发起文本会话";
 "text.startBody" = "双方设备都需保持在线。消息端到端加密，且仅保存在本次会话的内存中。";
 "text.createCode" = "创建文本配对码";
-"text.signInToCreate" = "创建配对码需要登录。加入别人的配对码则不需要账户。";
 "text.joinHeading" = "加入文本会话";
 "text.joinHint" = "配对码本身不会透露类型。只有当发送方发起的是文本会话时，才在这里选择「文本」。";
 "text.giveCode" = "把这个文本配对码告诉对方设备";
@@ -214,6 +243,7 @@
 "nearby.reconnecting" = "与 Relayium 设备会合服务的连接已断开。正在重连…";
 "nearby.unnamedDevice" = "未命名设备";
 "nearby.setupFailed" = "一次传入的附近传输未能建立。";
+"nearby.noAccountNeeded" = "在这个网络上发送和接收都不需要账户。";
 
 /* MARK: 拖放区、选择器、接收结果、二维码 */
 "drop.a11yLabel" = "待发送的文件";

@@ -60,8 +60,6 @@
 "nearby.status.messageSession" = "주변 기기와의 메시지 세션이 열려 있음";
 
 /* MARK: 윈도우 */
-"content.haveLink" = "링크가 있습니다";
-"content.nearbyOrCode" = "주변 기기 또는 페어링 코드";
 "content.accountLoadFailed" = "계정을 불러오지 못했습니다";
 "content.checkEmailTitle" = "이메일을 확인해 주세요";
 "content.checkEmailBody" = "%@ 으로 확인 링크를 보냈습니다. 확인한 뒤 다시 로그인해 주세요.";
@@ -70,10 +68,33 @@
 "content.pendingDeletionBody" = "%@ 이후에 완전히 지워집니다. 계정을 유지하려면 웹에서 다시 활성화하세요.";
 "content.reactivate" = "relayium.com에서 다시 활성화";
 "content.backToSignIn" = "로그인으로 돌아가기";
-"tab.direct" = "직접 전송";
-"tab.link" = "링크";
 "tab.receive" = "받기";
 "tab.account" = "계정";
+
+/* MARK: 내비게이션 사이드바 */
+"nav.sectionDirect" = "직접 전송";
+"nav.sectionLinks" = "링크";
+"nav.nearby" = "근처 기기";
+"nav.nearbySubtitle" = "같은 네트워크의 기기, 계정 불필요";
+"nav.pairingCode" = "페어링 코드";
+"nav.pairingCodeSubtitle" = "여섯 자리 숫자로 다른 네트워크와 연결";
+"nav.storedSend" = "링크 보내기";
+"nav.storedSendSubtitle" = "파일을 암호화해 저장하고 링크 공유";
+"nav.storedReceive" = "링크 열기";
+"nav.storedReceiveSubtitle" = "누군가 보낸 파일 받기";
+"nav.account" = "계정";
+"nav.accountSubtitle" = "요금제, 기기, 저장된 파일";
+"nav.a11ySections" = "Relayium 화면";
+"nav.a11yLiveSession" = "여기서 전송이 진행 중입니다";
+"nav.residency" = "수신";
+
+/* MARK: 기능 이용 조건 */
+"gate.sendLinkTitle" = "링크를 보내려면 계정이 필요합니다";
+"gate.sendLinkBody" = "링크는 암호화된 파일을 만료될 때까지 Relayium 서버에 보관하므로 계정에 요금이 청구됩니다. Relayium은 키를 받지 않습니다. 누군가 보낸 링크를 여는 데는 계정이 필요하지 않습니다.";
+"gate.createCodeTitle" = "코드를 만들려면 계정이 필요합니다";
+"gate.createCodeBody" = "코드를 만들면 릴레이 용량이 예약되며 만든 계정에 요금이 청구됩니다. 다른 사람이 만든 코드에 참여하는 데는 계정이 필요하지 않습니다.";
+"gate.signIn" = "로그인";
+"gate.createAccount" = "계정 만들기";
 
 /* MARK: 로그인 */
 "login.email" = "이메일";
@@ -92,6 +113,11 @@
 "verify.explainWhat" = "기본값은 꺼짐입니다. 켜면 어떤 데이터도 오가기 전에 두 기기가 동일한 여섯 자리 확인 코드(SAS)를 표시합니다. 소리 내어 대조하면 시그널링 종단이 바꿔치기된 경우를 잡아낼 수 있습니다. 이는 입력한 페어링 코드와는 다른 것이며, 실제로 누군가 대조해야만 의미가 있습니다.";
 "verify.explainEncryption" = "이 설정은 무엇을 보여주고 어디서 확인을 위해 멈추는지만 바꿉니다 — 암호화 자체는 결코 바뀌지 않습니다. 키는 이 Mac에서 생성되어 Relayium으로 전송되지 않고, 중계 서버는 암호문만 나르며, 변조된 핸드셰이크는 언제나 실패합니다.";
 
+/* MARK: single-session presence */
+"presence.busyTitle" = "이 세션은 다른 곳에 표시되어 있습니다";
+"presence.busyBody" = "근처 기기와 페어링 코드는 하나의 세션을 공유합니다. 「보기」를 선택하면 그 세션으로 돌아갑니다.";
+"presence.showIt" = "보기";
+
 /* MARK: 페어링 코드 파일 전송 */
 "direct.sendHeading" = "보내기";
 "direct.dropHint" = "여기에 파일이나 폴더를 끌어다 놓거나 클릭해서 선택하세요. 그런 다음 상대 기기를 위한 코드를 만듭니다.";
@@ -102,6 +128,7 @@
 "direct.scanOnPhone" = "휴대폰으로 스캔해도 됩니다.";
 "direct.waitingForDevice" = "상대 기기를 기다리는 중…";
 "direct.chooseFilesFirst" = "먼저 보낼 파일이나 폴더를 선택하세요.";
+"direct.joinNoAccountNeeded" = "다른 사람이 만든 코드에 참여하는 데는 계정이 필요하지 않습니다.";
 
 /* MARK: 실시간 파일 세션 */
 "session.connecting" = "연결하는 중…";
@@ -116,6 +143,7 @@
 /* MARK: 클라우드 업로드 */
 "upload.heading" = "파일 보내기";
 "upload.dropHint" = "여기에 파일이나 폴더를 끌어다 놓거나 클릭해서 선택하세요";
+"storedSend.idleTitle" = "아직 선택한 항목이 없습니다";
 "upload.ready" = "준비됨";
 "upload.linkReady" = "링크 준비 완료";
 "upload.sendAnother" = "다른 파일 보내기";
@@ -144,6 +172,8 @@
 "download.resolving" = "링크를 확인하는 중…";
 "download.inProgress" = "다운로드하는 중…";
 "download.savedLocation" = "이 파일은 파일 앱의 %@ 폴더에 있습니다. 여기에서 바로 공유할 수도 있습니다.";
+"download.idleHint" = "Relayium 링크를 붙여넣으세요. 키는 링크 안에 남아 있으며 Relayium 서버에는 절대 전달되지 않습니다.";
+"download.noAccountNeeded" = "누군가 보낸 링크를 여는 데는 계정이 필요하지 않습니다.";
 "download.fileCount.other" = "파일 %@개";
 "download.savedFiles.other" = "파일 %@개를 저장했습니다";
 
@@ -152,7 +182,6 @@
 "text.startHeading" = "텍스트 세션 시작";
 "text.startBody" = "두 기기 모두 온라인 상태를 유지해야 합니다. 메시지는 종단 간 암호화되며 이 세션의 메모리에만 보관됩니다.";
 "text.createCode" = "텍스트 코드 만들기";
-"text.signInToCreate" = "코드를 만들려면 로그인이 필요합니다. 다른 사람의 코드에 참여하는 데는 계정이 필요 없습니다.";
 "text.joinHeading" = "텍스트 세션 참여";
 "text.joinHint" = "페어링 코드만으로는 종류를 알 수 없습니다. 보내는 쪽이 텍스트 세션을 시작한 경우에만 여기서 「텍스트」를 선택하세요.";
 "text.giveCode" = "이 텍스트 코드를 상대 기기에 알려주세요";
@@ -214,6 +243,7 @@
 "nearby.reconnecting" = "Relayium 기기 랑데부 서비스와의 연결이 끊어졌습니다. 다시 연결하는 중…";
 "nearby.unnamedDevice" = "이름 없는 기기";
 "nearby.setupFailed" = "들어온 주변 전송을 준비하지 못했습니다.";
+"nearby.noAccountNeeded" = "이 네트워크에서 보내고 받는 데는 계정이 필요하지 않습니다.";
 
 /* MARK: 드롭 영역, 선택기, 수신 결과, QR */
 "drop.a11yLabel" = "보낼 파일";

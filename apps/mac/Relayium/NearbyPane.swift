@@ -13,17 +13,19 @@ import RelayiumKit
 /// would recognise. That is exactly why this pane never picks a device: the
 /// roster is "who else is on this address", not "who else is in this room".
 struct NearbyPane: View {
-    enum Intent { case files, text }
-
     @ObservedObject var discovery: LanDiscoveryModel
     @ObservedObject var receive: NearbyReceiveModel
     @ObservedObject var fileModel: RealtimeSessionModel
     @ObservedObject var textModel: RealtimeTextSessionModel
-    let intent: Intent
-    /// Owned by `DirectHubPane`, which hides the pairing-code section while a
-    /// nearby session is on screen — the two would otherwise render the same
-    /// model twice.
-    @Binding var sessionActive: Bool
+    /// Files or text. The same choice the pairing-code destination asks, so it
+    /// is held once, in `TransferPresence`, rather than answered twice.
+    let mode: TransferMode
+
+    /// Which destination is presenting the live session. Nearby and Pairing
+    /// code drive the SAME two models, so exactly one of them may render one —
+    /// this is what `DirectHubPane`'s local `nearbySession` flag used to say,
+    /// moved to app scope so it survives the window's view tree.
+    @EnvironmentObject private var presence: TransferPresence
 
     @StateObject private var selection = SelectionStore()
     @State private var stagingError: String?
@@ -32,7 +34,7 @@ struct NearbyPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if sessionActive {
+            if presence.rendersSession(.nearby) {
                 session
             } else {
                 discoverySection
@@ -42,10 +44,10 @@ struct NearbyPane: View {
         // dismissed — returns this pane to the roster rather than stranding it
         // on an empty session view.
         .onChange(of: fileModel.state) { state in
-            if intent == .files, state == .idle { sessionActive = false }
+            if mode == .files, state == .idle { presence.release(.nearby) }
         }
         .onChange(of: textModel.state) { state in
-            if intent == .text, state == .idle { sessionActive = false }
+            if mode == .text, state == .idle { presence.release(.nearby) }
         }
     }
 
@@ -53,11 +55,14 @@ struct NearbyPane: View {
 
     private var discoverySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.t(.nearbyHeading)).font(.headline)
+            // No heading of its own: the `SectionCard` this sits in carries it,
+            // and a card whose first line repeats its own title is the drift the
+            // component vocabulary exists to stop.
             Text(L10n.t(.nearbyExplain))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 720, alignment: .leading)
 
             receiving
 
@@ -65,11 +70,11 @@ struct NearbyPane: View {
             // drop must never be the thing that picks a device. Choosing what to
             // send and choosing who to send it to are two separate acts, and
             // only pressing Send combines them.
-            if intent == .files { filesToSend }
+            if mode == .files { filesToSend }
 
             if case let .reconnecting(message) = discovery.state {
-                Text(message).font(.callout).foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+                InlineMessage(.warning, message)
+                    .frame(maxWidth: 720, alignment: .leading)
             }
 
             if discovery.isScanning {
@@ -88,10 +93,11 @@ struct NearbyPane: View {
             }
 
             if let stagingError {
-                Text(stagingError).font(.callout).foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
+                InlineMessage(.failure, stagingError)
+                    .frame(maxWidth: 720, alignment: .leading)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// What will be sent, staged before — and independently of — the device it
@@ -106,8 +112,7 @@ struct NearbyPane: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let message = selection.error {
-                Text(message).font(.callout).foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
+                InlineMessage(.failure, message)
             }
             if !selection.isEmpty {
                 Button(L10n.t(.commonClear)) { selection.clear() }
@@ -115,6 +120,7 @@ struct NearbyPane: View {
                     .disabled(busy)
             }
         }
+        .frame(maxWidth: 720, alignment: .leading)
     }
 
     /// Receiving is on by default and runs whether or not this pane is on
@@ -143,21 +149,22 @@ struct NearbyPane: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if let failure = receive.lastFailure {
-                Text(failure).font(.caption).foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+                InlineMessage(.warning, failure)
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.t(.nearbyA11yReceiving))
+        .frame(maxWidth: 720, alignment: .leading)
     }
 
     @ViewBuilder
     private var roster: some View {
         if discovery.devices.isEmpty {
-            Text(L10n.t(.nearbyEmptyRoster))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            // A designed empty state rather than a grey caption: "no devices
+            // yet" is the state a first-time user is most likely to be in, and
+            // the copy is the one thing that tells them what to do about it.
+            EmptyStateView(symbol: "dot.radiowaves.left.and.right",
+                           title: L10n.t(.nearbyEmptyRoster))
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 // Keyed by peer id, never by position: the hub's roster order
@@ -205,20 +212,28 @@ struct NearbyPane: View {
             // characters by `safeDisplayName`, and isolated rather than translated.
             Text(L10n.t(.nearbySendTo, [L10n.token(device.label)]))
                 .font(.subheadline.weight(.semibold))
-            switch intent {
+            switch mode {
             case .files:
                 Text(selection.summary.map { L10n.t(.nearbySelectionSendHint, [$0]) }
                      ?? L10n.t(.nearbyAddFilesHint))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                // Return sends. The precondition is on the button rather than
+                // in the handler's head: with nothing staged, or with a session
+                // already running, the default action is inert instead of firing
+                // a send that `sendFiles()` would have to refuse.
                 Button(L10n.t(.commonSend)) { sendFiles() }
                     .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
                     .disabled(selection.isEmpty || busy)
             case .text:
                 Text(L10n.t(.nearbyTextIntent))
                     .font(.caption).foregroundStyle(.secondary)
+                // The other half of the same `switch`, so the two defaults are
+                // never on screen together: a mode is either files or text.
                 Button(L10n.t(.nearbyStartMessageSession)) { startText() }
                     .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
                     .disabled(busy)
             }
             // Says what actually happens on the other end rather than implying a
@@ -229,6 +244,7 @@ struct NearbyPane: View {
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: 720, alignment: .leading)
     }
 
     // MARK: - the live session
@@ -236,12 +252,11 @@ struct NearbyPane: View {
     @ViewBuilder
     private var session: some View {
         VStack(alignment: .leading, spacing: 10) {
-            switch intent {
+            switch mode {
             case .files:
                 RealtimeFileSessionView(model: fileModel)
                 if case let .failed(message) = fileModel.state {
-                    Text(message).font(.callout).foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
+                    InlineMessage(.failure, message)
                 }
             case .text:
                 RealtimeTextSessionView(model: textModel)
@@ -249,7 +264,7 @@ struct NearbyPane: View {
             if !busy {
                 Button(L10n.t(.nearbyBackToDevices)) { leaveSession() }
                     .buttonStyle(.link)
-                if intent == .text {
+                if mode == .text {
                     // Says so rather than surprising: leaving is the one action
                     // here that discards the local history the terminal view is
                     // still showing.
@@ -287,7 +302,10 @@ struct NearbyPane: View {
         }
         stagingError = nil
         fileModel.stageSend(sources: staged.sources, metas: staged.metas)
-        sessionActive = true
+        // Claimed before dialling, so the session this is about to start is
+        // presented here. The claim can only be refused while another
+        // destination owns a session, and this pane is not on screen then.
+        presence.claim(.nearby, mode: mode)
         Task { await fileModel.connectNearby(peerId: device.id, role: .initiator) }
     }
 
@@ -297,16 +315,16 @@ struct NearbyPane: View {
             return
         }
         stagingError = nil
-        sessionActive = true
+        presence.claim(.nearby, mode: mode)
         Task { await textModel.connectNearby(peerId: device.id, role: .initiator) }
     }
 
     private func leaveSession() {
-        switch intent {
+        switch mode {
         case .files: fileModel.cancel()
         case .text: textModel.reset()
         }
         selection.clear()
-        sessionActive = false
+        presence.release(.nearby)
     }
 }
