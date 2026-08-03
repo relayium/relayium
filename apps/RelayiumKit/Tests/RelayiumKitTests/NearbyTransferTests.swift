@@ -128,6 +128,16 @@ final class NearbyConnectionFactoryTests: XCTestCase {
         return (ch, client)
     }
 
+    private func eventually(timeout: TimeInterval = 2.0,
+                            _ predicate: () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if predicate() { return true }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        return predicate()
+    }
+
     /// The nearby room holds everyone behind one public address. The connection
     /// must go to the id the user picked and to nothing else — in particular it
     /// must not consult the roster at all, because "the first peer that is not
@@ -258,6 +268,9 @@ final class NearbyConnectionFactoryTests: XCTestCase {
     func testTextAnnouncesItsCapabilityToTheChosenPeerOnly() async throws {
         let (ch, sig) = openSocket()
         let record = NearbyBuildRecord()
+        // fireOpen() already emitted the room JOIN. Discard it so the wait below
+        // cannot mistake that unrelated frame for the addressed capability hello.
+        ch.sent.removeAll()
 
         let task = Task {
             try await RealtimeConnectionFactory.connectNearby(
@@ -270,7 +283,17 @@ final class NearbyConnectionFactoryTests: XCTestCase {
                     return ReplayRecorder(signaling: signaling)
                 })
         }
-        while ch.sent.isEmpty { await Task.yield() }
+        let announced = await eventually {
+            ch.sent.contains { text in
+                guard let envelope = try? JSONDecoder().decode(
+                    Envelope.self,
+                    from: Data(text.utf8)
+                ) else { return false }
+                return envelope.to == "chosen-7"
+                    && envelope.data.map(peerCaps(from:)) == ["text/1"]
+            }
+        }
+        XCTAssertTrue(announced, "the capability hello must be sent before the peer answers")
         ch.fireText(#"{"type":"signal","from":"chosen-7","data":{"caps":["text/1"]}}"#)
         _ = try await task.value
 

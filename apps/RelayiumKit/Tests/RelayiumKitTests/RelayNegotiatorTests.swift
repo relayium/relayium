@@ -79,10 +79,9 @@ final class RelayNegotiatorTests: XCTestCase {
     }
 
     /// Polls `predicate` with a bounded wait instead of a fixed sleep.
-    /// `FakeWebSocketChannel.sent` is mutated from `start()`'s background
-    /// Task without synchronisation, so a flat `Task.sleep` before reading it
-    /// would either flake under load or mask a genuine failure to send —
-    /// polling for the condition itself does neither.
+    /// `FakeWebSocketChannel.sent` is mutated from `start()`'s background Task.
+    /// The capture is synchronized, and polling the actual condition avoids a
+    /// fixed sleep that would either flake under load or mask a send failure.
     private func eventually(timeout: TimeInterval = 2.0, _ predicate: () -> Bool) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
@@ -171,11 +170,10 @@ final class RelayNegotiatorTests: XCTestCase {
     /// peerJoined's own broadcast path: the peer arrives once measuring has
     /// already finished, so `peerJoined` itself must be the one to send.
     ///
-    /// `ch.sent` is an unsynchronised array mutated from `start()`'s
-    /// background Task, so this does not read it until `waitForChoice` has
-    /// returned non-nil — which can only happen once `mine` was actually
-    /// recorded, and `mine` is never cleared afterwards. That handshake is
-    /// the synchronisation, so there is nothing left to poll or race.
+    /// This does not inspect `ch.sent` until `waitForChoice` has returned
+    /// non-nil — which can only happen once `mine` was actually recorded, and
+    /// `mine` is never cleared afterwards. The fake capture is synchronized;
+    /// this handshake also means there is nothing left to poll.
     func testBroadcastsToAPeerThatJoinsAfterMeasuringCompletes() async {
         let ch = FakeWebSocketChannel()
         let sig = SignalingClient(channel: ch, name: "Mac")
