@@ -13,6 +13,7 @@ import {
   UploadError,
   InvalidUploadIdError,
   InvalidStoredObjectIdError,
+  StoredDownloadHttpError,
 } from "./stored-file";
 import {
   generateStoreKey,
@@ -1151,6 +1152,83 @@ describe("downloadBlob", () => {
     const chunks: Uint8Array[] = [];
     await downloadBlob("test-id", sk.key, async (pt) => { chunks.push(pt); });
     expect(concat(chunks)).toEqual(original);
+  });
+});
+
+// 服务端说「没有了」必须和「密钥不对 / 文件坏了」分得开。存储对象会过期、会被别的
+// 接收方 burn 掉、也会在读完 meta 到取字节之间被 GC —— 三种都以 404 出现，三种都与
+// 用户的密钥和这份文件的完整性无关。状态码以前只以文本形式活在 Error.message 里，
+// 调用方只能拿正则去猜；这里钉住它是结构化字段，并且带上「哪一次请求」。
+describe("stored-download response failures", () => {
+  it("fetchMeta 的非 ok 响应抛出带确切状态码与 metadata 阶段的类型化错误", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    const err = await fetchMeta("gone").catch((e) => e);
+    // 结构化字段先断言：正则匹配 message 的老做法在这两条上就会红。
+    expect(err.status).toBe(404);
+    expect(err.phase).toBe("metadata");
+    expect(err).toBeInstanceOf(StoredDownloadHttpError);
+  });
+
+  it("非 404 的响应失败一样类型化，状态码原样保留 —— 它们不是「链接指不向任何东西」", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 429 }));
+    const err = await fetchMeta("busy").catch((e) => e);
+    expect(err.status).toBe(429);
+    expect(err.phase).toBe("metadata");
+    expect(err).toBeInstanceOf(StoredDownloadHttpError);
+  });
+
+  it("blob 的 404 带 blob 阶段，且一个字节、一次进度都不交付", async () => {
+    const sk = await generateStoreKey();
+    const f = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      // 真给一条可读的流：404 的响应体绝不该被当成密文读进来。
+      body: new ReadableStream<Uint8Array>({
+        start(c) { c.enqueue(new Uint8Array(64)); c.close(); },
+      }),
+    });
+    vi.stubGlobal("fetch", f);
+    const chunks: Uint8Array[] = [];
+    const progress: number[] = [];
+    const err = await downloadBlob(
+      "gone",
+      sk.key,
+      async (pt) => { chunks.push(pt); },
+      (n) => progress.push(n),
+      0,
+    ).catch((e) => e);
+    expect(err.status).toBe(404);
+    expect(err.phase).toBe("blob");
+    expect(err).toBeInstanceOf(StoredDownloadHttpError);
+    expect(chunks).toEqual([]);
+    expect(progress).toEqual([]);
+    // 404 不是 403：一次性重放重试是给已花掉的直连令牌准备的，对「没有了」毫无意义。
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("downloadBlob 自己查清单时的 404 归到 metadata 阶段", async () => {
+    // 不给 expectedBytes，于是 downloadBlob 先查 /meta —— 那一次请求的失败属于
+    // metadata，哪怕调用方进的是 downloadBlob。
+    const sk = await generateStoreKey();
+    const f = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    vi.stubGlobal("fetch", f);
+    const err = await downloadBlob("gone", sk.key, async () => {}).catch((e) => e);
+    expect(err.status).toBe(404);
+    expect(err.phase).toBe("metadata");
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(f).toHaveBeenCalledWith("/api/files/gone/meta");
+  });
+
+  it("第二次 403 仍在正好两次请求后停下，并暴露 blob 阶段的 403", async () => {
+    // 既有的一次性重试边界不能因为类型化而变松或变紧。
+    const sk = await generateStoreKey();
+    const f = vi.fn().mockResolvedValue({ ok: false, status: 403 });
+    vi.stubGlobal("fetch", f);
+    const err = await downloadBlob("gone", sk.key, async () => {}, undefined, 0).catch((e) => e);
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(err.status).toBe(403);
+    expect(err.phase).toBe("blob");
+    expect(err).toBeInstanceOf(StoredDownloadHttpError);
   });
 });
 

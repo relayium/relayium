@@ -106,6 +106,39 @@ function checkedStoredObjectId(id: unknown): string {
   return id;
 }
 
+/** Which request of a stored download failed. `metadata` is `/api/files/<id>/meta`
+ *  — including the lookup `downloadBlob` runs itself when given no `expectedBytes`
+ *  — and `blob` is `/api/files/<id>/blob`. */
+export type StoredDownloadPhase = "metadata" | "blob";
+
+/** A stored-download request the server answered with a non-ok status, carrying
+ *  that status and the request it belongs to.
+ *
+ *  Typed because one status means something entirely different from the rest:
+ *  404 is "this link points at nothing any more" — the TTL lapsed, another
+ *  receiver burned it, or the GC ran between the metadata read and the blob read.
+ *  None of that has anything to do with the recipient's key or this file's
+ *  integrity, which is what the download page says for an unclassified failure.
+ *
+ *  The status used to be legible only as text inside a plain Error message, so
+ *  the page matched `/\b404\b/` on it. That both under- and over-fires: any
+ *  rewording of the message silently turns a real 404 back into "wrong key or
+ *  corrupt file", and a genuine decrypt error that happens to mention 404 (an
+ *  offset, a byte count) gets excused as a dead link — the one case where the
+ *  user should go check their key.
+ *
+ *  Only 404 carries that meaning. 403/429/503 keep whatever handling they had;
+ *  they get a typed error purely so callers stop having to read messages. */
+export class StoredDownloadHttpError extends Error {
+  constructor(
+    public status: number,
+    public phase: StoredDownloadPhase,
+  ) {
+    super(`stored download ${phase} failed: ${status}`);
+    this.name = "StoredDownloadHttpError";
+  }
+}
+
 /** The download's network layer failed (offline, connection dropped mid-stream) —
  *  distinct from a decrypt/integrity failure, so the UI can offer a plain retry
  *  instead of the misleading "wrong key or corrupt file" message. */
@@ -479,7 +512,7 @@ export async function fetchMeta(id: string): Promise<StoredFileMeta> {
  *  defence sat elsewhere). */
 async function fetchMetaChecked(id: string): Promise<StoredFileMeta> {
   const res = await fetch(`/api/files/${encodeURIComponent(id)}/meta`);
-  if (!res.ok) throw new Error(`meta failed: ${res.status}`);
+  if (!res.ok) throw new StoredDownloadHttpError(res.status, "metadata");
   return res.json();
 }
 
@@ -534,7 +567,9 @@ export async function downloadBlob(
     }
     if (res.status !== 403 || attempt > 0) break;
   }
-  if (!res.ok) throw new Error(`blob failed: ${res.status}`);
+  // After the bounded 403 replay above, so a spent-token retry still happens
+  // before any status is reported as final.
+  if (!res.ok) throw new StoredDownloadHttpError(res.status, "blob");
   if (!res.body) throw new Error("streaming not supported");
   const decryptor = new StoreDecryptor(key);
   const reader = res.body.getReader();

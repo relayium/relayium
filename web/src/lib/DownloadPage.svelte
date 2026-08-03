@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { fetchMeta, downloadBlob, parseDownloadKey, keyFromFragment, DownloadNetworkError, InvalidStoredObjectIdError } from "./stored-file";
+  import { fetchMeta, downloadBlob, parseDownloadKey, keyFromFragment, DownloadNetworkError, InvalidStoredObjectIdError, StoredDownloadHttpError } from "./stored-file";
   import { decryptManifest, type StoredManifest } from "./store-crypto";
   import { pickSaveTarget, warnsAboutMemory, LARGE_DOWNLOAD_WARN_BYTES, SaveCancelledError, SinkCancelledError, SinkTransportError, type SaveOptions, type SaveTarget, type FileSink } from "./filesink";
   import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages } from "./i18n.svelte";
@@ -59,20 +59,24 @@
   });
   onDestroy(() => clearInterval(ticker));
 
-  function isNotFound(e: unknown): boolean {
-    return e instanceof Error && /\b404\b/.test(e.message);
-  }
   /**
    * 「这条链接指不向任何东西」的两种说法，归成同一句文案。
    *
-   * 404 是服务端说的；InvalidStoredObjectIdError 是 stored-file 在发请求**之前**
-   * 说的——链接里的那个 id 是 Relayium 根本不可能签发的形状。后者以前落进 else
-   * 分支，被说成「密钥错误或文件损坏」：那句话在指控用户的密钥或这份文件，而真相
-   * 是一个字节都没取、密钥一次都没用上。两者用户能做的事完全一样（换一条链接，
-   * 找发件人重发），所以同一句话；也都不给重试——同一个 id 只会被同样地拒掉。
+   * 404 是服务端说的——链接曾经指向的那份东西现在不在了：TTL 到了、别的接收方
+   * burn 掉了、或者 GC 正好跑在读完 meta 和取字节之间。InvalidStoredObjectIdError
+   * 是 stored-file 在发请求**之前**说的——链接里的那个 id 是 Relayium 根本不可能
+   * 签发的形状。两者用户能做的事完全一样（换一条链接，找发件人重发），所以同一句
+   * 话；也都不给重试——文件不会自己回来，同一个 id 也只会被同样地拒掉。
+   *
+   * 只认结构化的 404，不再拿正则搜 message。正则那版只在加载阶段说得对：取字节
+   * 阶段压根不问它，一次「文件已经不在了」被说成「密钥错误或文件损坏」——在指控
+   * 用户的密钥和这份文件。而且它两头都不牢：改一句措辞就漏掉真 404，「offset 404」
+   * 这类解密诊断又会被当成链接失效，可那正是唯一该让用户去查密钥的场合。
+   * 403/429/503 同样是类型化的响应失败，但它们不是「不在了」，归因一如既往。
    */
   function isRefusedLink(e: unknown): boolean {
-    return isNotFound(e) || e instanceof InvalidStoredObjectIdError;
+    return (e instanceof StoredDownloadHttpError && e.status === 404)
+      || e instanceof InvalidStoredObjectIdError;
   }
   function base64ToBytes(b64: string): Uint8Array {
     const bin = atob(b64);
@@ -252,10 +256,12 @@
       // 只有真正的解密/完整性失败才配得上那句"密钥错误或文件损坏"。
       if (e instanceof SinkCancelledError) errKey = "cancelled";
       else if (e instanceof SinkTransportError) errKey = "swFail";
-      // downloadBlob 是自己的信任边界（调用方给了 expectedBytes 时它连 meta 都不查），
-      // 所以拒绝也可能在这里才发生 —— 同样不是「密钥错误或文件损坏」。只认这一种，
-      // 不顺手把 404 也并进来：取字节阶段的 404 归因是另一件事，本次不动。
-      else if (e instanceof InvalidStoredObjectIdError) errKey = "notFound";
+      // 和加载阶段同一个判据：链接指不向任何东西。这一段是它的第二个入口 ——
+      // 清单读出来了、文件列表都显示了，对象却在用户按下下载的那一刻没了（TTL 到期、
+      // 被别的接收方 burn、GC 撞上），或者 downloadBlob 作为自己的信任边界拒了这个
+      // id（调用方给了 expectedBytes 时它连 meta 都不查）。两种都不是「密钥错误或
+      // 文件损坏」，也都没什么可重试的。
+      else if (isRefusedLink(e)) errKey = "notFound";
       else errKey = e instanceof DownloadNetworkError ? "netFail" : "decryptFail";
     }
   }

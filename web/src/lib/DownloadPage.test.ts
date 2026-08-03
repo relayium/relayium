@@ -21,6 +21,16 @@ vi.mock("./stored-file", () => ({
   keyFromFragment: async () => ({ fake: "key" }),
   DownloadNetworkError: class DownloadNetworkError extends Error {},
   InvalidStoredObjectIdError: class InvalidStoredObjectIdError extends Error {},
+  // 和真模块同形（status + phase），但必须是页面真正 import 到的那一个类 ——
+  // 理由同下面 InvalidStoredObjectIdError 的注释。
+  StoredDownloadHttpError: class StoredDownloadHttpError extends Error {
+    constructor(
+      public status: number,
+      public phase: "metadata" | "blob",
+    ) {
+      super(`stored download ${phase} failed: ${status}`);
+    }
+  },
 }));
 
 const manifestFiles = vi.fn();
@@ -50,7 +60,7 @@ import DownloadPage from "./DownloadPage.svelte";
 // From the mock above, i.e. the same class the page will see — an `instanceof`
 // against the real module here would never match and the test would pass on the
 // fallback branch it is meant to rule out.
-import { InvalidStoredObjectIdError } from "./stored-file";
+import { InvalidStoredObjectIdError, StoredDownloadHttpError } from "./stored-file";
 import { loadLang, messages } from "./i18n.svelte";
 import { LARGE_DOWNLOAD_WARN_BYTES, SinkTransportError, probeStreamSupport, swStreamReady, pickSaveTarget } from "./filesink";
 import { refreshHolds, resetAppUpdate } from "./app-update.svelte";
@@ -761,5 +771,79 @@ describe("DownloadPage 被拒的标识符", () => {
     expect(err!.textContent!.trim()).not.toBe(messages.en.download.decryptFail);
     expect(target.querySelector(".btn-primary"), "重试没有意义").toBeNull();
     expect(refreshHolds(), "错误路径漏放会让刷新按钮永远是灰的").toBe(0);
+  });
+});
+
+// 存储对象会在页面还开着的时候消失：TTL 到了、别的接收方 burn 掉了、或者 GC 正好
+// 跑在读完 meta 和取字节之间。服务端对这三种都答 404，而下载页以前把取字节阶段的
+// 404 归成「密钥错误或文件损坏」—— 那句话在指控用户的密钥和这份文件，可真相是这份
+// 文件已经不在了，跟密钥和完整性都没关系，重试也永远不会变好。
+describe("DownloadPage 服务端说没有了（404）", () => {
+  it("加载阶段的 404：说「链接无效或已过期」，不给重试", async () => {
+    await mountPage({
+      canStream: false,
+      files: [{ name: "a.bin", size: SMALL }],
+      metaError: new StoredDownloadHttpError(404, "metadata"),
+    });
+
+    const err = target.querySelector(".error");
+    expect(err, "404 了就得说出来").not.toBeNull();
+    expect(err!.textContent!.trim()).toBe(messages.en.download.notFound);
+    expect(err!.textContent!.trim()).not.toBe(messages.en.download.decryptFail);
+    expect(target.querySelector("button"), "文件不在了，重试还是不在").toBeNull();
+    expect(downloadBlob, "一个字节都不该取").not.toHaveBeenCalled();
+  });
+
+  // 竞态那条：清单已经加载好、文件列表都显示出来了，用户点下载的那一刻对象刚好没了。
+  it("清单加载成功后取字节时 404：仍是链接无效，不给重试，并释放刷新闸门", async () => {
+    downloadBlob.mockRejectedValue(new StoredDownloadHttpError(404, "blob"));
+    await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+    await clickDownload();
+
+    const err = target.querySelector(".error");
+    expect(err).not.toBeNull();
+    expect(err!.textContent!.trim()).toBe(messages.en.download.notFound);
+    expect(err!.textContent!.trim()).not.toBe(messages.en.download.decryptFail);
+    // manifest 已加载，所以重试按钮的闸门（netFail/swFail/cancelled + manifest）
+    // 是真的被考到的：归因错一次就会多出一个点了也没用的按钮。
+    expect(target.querySelector(".btn-primary"), "文件已经不在了，重试没有意义").toBeNull();
+    expect(refreshHolds(), "错误路径漏放会让刷新按钮永远是灰的").toBe(0);
+  });
+
+  it("非 404 的响应失败不算「链接无效」—— 503 仍走原来的归因", async () => {
+    // 服务端暂时不可用跟「这份文件不在了」是两回事，别为了修 404 把整个 5xx/4xx
+    // 都说成链接失效。
+    downloadBlob.mockRejectedValue(new StoredDownloadHttpError(503, "blob"));
+    await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+    await clickDownload();
+
+    const err = target.querySelector(".error");
+    expect(err!.textContent!.trim()).not.toBe(messages.en.download.notFound);
+    expect(err!.textContent!.trim()).toBe(messages.en.download.decryptFail);
+  });
+
+  it("消息里恰好含 404 的普通 Error 不是「链接无效」（加载阶段）", async () => {
+    // 归因必须看结构化状态码，不是拿正则去搜 message：解密失败的诊断信息里出现
+    // 「404」三个字（偏移、长度、字节数）足以把一次真正的密钥/完整性失败伪装成
+    // 「链接无效或已过期」，用户就再也不会去检查自己的密钥了。
+    await mountPage({
+      canStream: false,
+      files: [{ name: "a.bin", size: SMALL }],
+      metaError: new Error("bad tag at offset 404"),
+    });
+    expect(target.querySelector(".error")!.textContent!.trim()).toBe(
+      messages.en.download.decryptFail,
+    );
+  });
+
+  it("消息里恰好含 404 的普通 Error 不是「链接无效」（取字节阶段）", async () => {
+    downloadBlob.mockRejectedValue(new Error("integrity check failed after 404 bytes"));
+    await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+    await clickDownload();
+
+    expect(target.querySelector(".error")!.textContent!.trim()).toBe(
+      messages.en.download.decryptFail,
+    );
+    expect(target.querySelector(".btn-primary"), "解密失败重试没有意义").toBeNull();
   });
 });
