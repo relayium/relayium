@@ -10,7 +10,9 @@ import XCTest
 /// a `/d/<id>#k=<key>` link, would move or orphan the key fragment; whitespace
 /// and `a\u{0}b` break the token in a keychain attribute; `ключ` is outside the
 /// ASCII any of these composed forms is defined over; empty and 129 characters
-/// are the two length bounds.
+/// are the two length bounds. `a\n` is the trailing-newline form specifically:
+/// a link's surrounding whitespace is trimmed, so a newline INSIDE the
+/// identifier is the one that survives to be composed into a request.
 let hostileStoredObjectIDs = [
     "../other",
     "..",
@@ -23,10 +25,19 @@ let hostileStoredObjectIDs = [
     " ",
     "a b",
     "a\nb",
+    "a\n",
     "a\u{0}b",
     "ключ",
     "",
     String(repeating: "a", count: 129),
+]
+
+/// Ids the server really issues, plus both edges of what the rule allows.
+let legitimateStoredObjectIDs = [
+    "0f9a1b2c3d4e5f60718293a4b5c6d7e8",     // authx.NewID(): 32 hex
+    "A-Za-z0-9_-",                          // every allowed character class
+    "a",                                    // the short edge
+    String(repeating: "a", count: 128),     // the inclusive long edge
 ]
 
 /// Records every call so a test can prove one did NOT happen. Its ids are
@@ -338,5 +349,294 @@ final class CloudUploadModelIdentifierTrustTests: XCTestCase {
         XCTAssertNil(warning)
         let stored = try await keys.key(for: id)
         XCTAssertEqual(stored, "KEY")
+    }
+}
+
+// MARK: - the INBOUND half: an id that arrives from a shared link
+//
+// Everything above is an id this app was handed by the server it just uploaded
+// to. The rest is the other direction, which is the wider boundary: the id in a
+// `…/d/<id>#k=<key>` link is supplied by whoever produced the link — a sender,
+// a page, a chat message, a Universal Link handoff — and it is composed into
+// `/api/files/<id>/meta` and `/api/files/<id>/blob` by the same
+// `appendingPathComponent` that percent-encodes neither `/` nor `.`.
+
+/// A pasted `…/d/<id>#k=<key>` for every hostile id, in both spellings a link
+/// can carry one.
+///
+/// The percent-encoded twin is not decoration — it is the only spelling that
+/// works for most of these. `URL.path` DECODES before `parseTransferLink`
+/// splits it, so `a%3Fb`, `a%23b`, `a%0Ab` and `a%00b` arrive as `a?b`, `a#b`,
+/// `a\nb` and `a\0b`: identifiers whose raw spelling the URL grammar would
+/// otherwise have eaten at a delimiter. `%2e%2e` is likewise how `..` reaches
+/// the identifier past anything that resolves dot segments in the raw form.
+private func hostileDownloadLinks() -> [String] {
+    hostileStoredObjectIDs.flatMap { id -> [String] in
+        let encoded = Data(id.utf8).map { String(format: "%%%02X", $0) }.joined()
+        return [id, encoded].map { "https://relayium.com/d/\($0)#k=KEY" }
+    }.filter { $0 != queryDelimitedLink }
+}
+
+/// The one link above that is NOT a refusal, and must not be asserted as one.
+/// In the URL grammar `…/d/a?b#k=KEY` genuinely denotes the id `a` with a query
+/// `b` — the `?b` is never part of the identifier, so there is nothing to
+/// refuse. Its encoded twin `a%3Fb` IS an identifier containing `?`, and stays
+/// in the corpus. Pinned by its own test below so this exclusion cannot quietly
+/// grow into "the parser accepts query strings in ids".
+private let queryDelimitedLink = "https://relayium.com/d/a?b#k=KEY"
+
+final class SharedLinkIdentifierTrustTests: XCTestCase {
+
+    /// The link parser is the first boundary a recipient-supplied id crosses,
+    /// and it must refuse synchronously — before `resolve()` has a `ParsedLink`
+    /// to build a request from.
+    func testTheLinkParserRefusesEveryHostileIdentifier() {
+        for link in hostileDownloadLinks() {
+            XCTAssertNil(parseTransferLink(link), link.debugDescription)
+        }
+    }
+
+    /// The documented exception, pinned rather than excluded silently: the id
+    /// really is `a`, which is inert.
+    func testAQueryDelimiterIsNotPartOfTheIdentifier() {
+        XCTAssertEqual(parseTransferLink(queryDelimitedLink),
+                       ParsedLink(id: "a", keyB64url: "KEY"))
+    }
+
+    /// Every legitimate link still parses, including both length edges — the
+    /// refusal above must not have narrowed what a real share link may carry.
+    func testTheLinkParserStillAcceptsEveryLegitimateIdentifier() {
+        for id in legitimateStoredObjectIDs {
+            XCTAssertEqual(parseTransferLink("https://relayium.com/d/\(id)#k=KEY"),
+                           ParsedLink(id: id, keyB64url: "KEY"), id.debugDescription)
+        }
+        // The properties the parser already had, re-asserted beside the new
+        // rule because they are what a too-eager refusal would break first.
+        XCTAssertEqual(parseTransferLink("  https://relayium.com/d/x#k=Y \n"),
+                       ParsedLink(id: "x", keyB64url: "Y"))
+        XCTAssertEqual(parseTransferLink("https://files.example.org/d/zz#k=QQ"),
+                       ParsedLink(id: "zz", keyB64url: "QQ"))
+    }
+
+    /// The production handoff. `parseAppDeepLink` reaches the same ids through
+    /// an OS-delivered Universal Link, which is the one path where the app acts
+    /// on a URL nobody in this process typed.
+    func testTheProductionDeepLinkRefusesEveryHostileIdentifier() {
+        var constructed = 0
+        for link in hostileDownloadLinks() {
+            guard let url = URL(string: link) else { continue }
+            constructed += 1
+            XCTAssertNil(parseAppDeepLink(url), link.debugDescription)
+        }
+        XCTAssertGreaterThan(constructed, 0, "no hostile link was even constructible")
+    }
+
+    func testTheProductionDeepLinkStillAcceptsALegitimateIdentifier() {
+        for id in legitimateStoredObjectIDs {
+            let url = URL(string: "https://relayium.com/d/\(id)#k=KEY")!
+            XCTAssertEqual(parseAppDeepLink(url), .download(url), id.debugDescription)
+        }
+    }
+}
+
+/// The network boundary itself. `CloudClient` is public and its id parameter is
+/// a plain `String`, so the parser's refusal is not the only thing between a
+/// hostile id and a request: `resolve()` is one caller, and any other caller —
+/// present or future, in this package or outside it — can reach `fetchMeta` and
+/// `download` without going through `parseTransferLink` at all.
+final class CloudClientIdentifierTrustTests: XCTestCase {
+    private func client() -> CloudClient {
+        CloudClient(baseURL: URL(string: "https://relayium.test")!,
+                    session: StubURLProtocol.session())
+    }
+
+    /// A server that answers ANY path with a complete, valid transfer: the
+    /// encrypted manifest on `/meta`, the real framed ciphertext everywhere
+    /// else.
+    ///
+    /// Deliberately not a 404 or an empty body. "No chunk was delivered" is
+    /// only evidence if chunks WOULD have been delivered had the request gone
+    /// out — against a stub that fails anyway, the assertion passes whether or
+    /// not the check exists.
+    private func serveAWorkingTransfer(_ v: Vectors) {
+        let encManifestB64 = Data(v.hex("manifest.ctHex")).base64EncodedString()
+        let meta = #"{"encManifest":"\#(encManifestB64)","size":54,"burnAfterRead":false,"expiresAt":1790000000}"#
+        StubURLProtocol.router = { req in
+            req.url?.path.hasSuffix("/meta") == true
+                ? .init(status: 200, body: Data(meta.utf8), check: nil)
+                : .init(status: 200, body: Data(v.hex("streamHex")), check: nil)
+        }
+    }
+
+    override func setUp() { StubURLProtocol.reset() }
+
+    override func tearDown() {
+        StubURLProtocol.router = nil
+        StubURLProtocol.stub = nil
+        StubURLProtocol.reset()
+    }
+
+    /// Nothing leaves. Not a HEAD, not a probe — the id never becomes a URL.
+    func testFetchMetaWithAHostileIdentifierSendsNothingAtAll() async throws {
+        let v = try Vectors.load("store-wire-vectors")
+        serveAWorkingTransfer(v)
+        for id in hostileStoredObjectIDs {
+            StubURLProtocol.reset()
+            do {
+                _ = try await client().fetchMeta(id: id)
+                XCTFail("meta id \(id.debugDescription) was accepted")
+            } catch {
+                XCTAssertEqual(error as? StoredLinkKeyError, .invalidIdentifier,
+                               "meta id \(id.debugDescription)")
+            }
+            XCTAssertEqual(StubURLProtocol.requestCount, 0,
+                           """
+                           meta id \(id.debugDescription) reached the transport as \
+                           \(StubURLProtocol.observed.map { $0.url?.absoluteString ?? "?" })
+                           """)
+        }
+    }
+
+    /// The same for the download, which composes the id into a SECOND URL — the
+    /// blob — after the meta round trip. Both must be unreachable, and no
+    /// plaintext may be handed to the caller on the way.
+    func testDownloadWithAHostileIdentifierSendsNothingAndYieldsNoPlaintext() async throws {
+        let v = try Vectors.load("store-wire-vectors")
+        serveAWorkingTransfer(v)
+        for id in hostileStoredObjectIDs {
+            StubURLProtocol.reset()
+            var chunks = 0
+            do {
+                _ = try await client().download(id: id, key: v.hex("keyHex")) { _ in chunks += 1 }
+                XCTFail("download id \(id.debugDescription) was accepted")
+            } catch {
+                XCTAssertEqual(error as? StoredLinkKeyError, .invalidIdentifier,
+                               "download id \(id.debugDescription)")
+            }
+            XCTAssertEqual(StubURLProtocol.requestCount, 0,
+                           """
+                           download id \(id.debugDescription) reached the transport as \
+                           \(StubURLProtocol.observed.map { $0.url?.absoluteString ?? "?" })
+                           """)
+            XCTAssertEqual(chunks, 0,
+                           "download id \(id.debugDescription) delivered \(chunks) chunk(s)")
+        }
+    }
+
+    /// The valid path is byte-for-byte what it was: the same two endpoints, in
+    /// the same order, with the id interpolated verbatim — and the plaintext
+    /// still comes back out. Without this, refusing everything would pass.
+    func testALegitimateIdentifierStillReachesTheSameEndpointsVerbatim() async throws {
+        let v = try Vectors.load("store-wire-vectors")
+        serveAWorkingTransfer(v)
+        for id in legitimateStoredObjectIDs {
+            StubURLProtocol.reset()
+            var got = [UInt8]()
+            let manifest = try await client().download(id: id, key: v.hex("keyHex")) { got += $0 }
+            XCTAssertEqual(got, v.fileDatas().flatMap { $0 }, id.debugDescription)
+            XCTAssertEqual(manifest.files.map(\.name), ["hello.txt", "ab.txt"], id.debugDescription)
+            XCTAssertEqual(StubURLProtocol.observed.map { $0.url?.path ?? "" },
+                           ["/api/files/\(id)/meta", "/api/files/\(id)/blob"],
+                           id.debugDescription)
+        }
+    }
+
+    func testALegitimateIdentifierStillFetchesItsMeta() async throws {
+        let v = try Vectors.load("store-wire-vectors")
+        serveAWorkingTransfer(v)
+        let id = "0f9a1b2c3d4e5f60718293a4b5c6d7e8"
+        let meta = try await client().fetchMeta(id: id)
+        XCTAssertEqual(meta.expiresAt, 1_790_000_000)
+        XCTAssertEqual(StubURLProtocol.observed.map { $0.url?.path ?? "" },
+                       ["/api/files/\(id)/meta"])
+    }
+}
+
+/// And the model that a pasted link actually goes through.
+@MainActor
+final class CloudDownloadModelIdentifierTrustTests: XCTestCase {
+    private func makeModel() -> CloudDownloadModel {
+        CloudDownloadModel(client: CloudClient(baseURL: URL(string: "https://relayium.test")!,
+                                               session: StubURLProtocol.session()))
+    }
+
+    private func tempDir() throws -> URL {
+        let d = FileManager.default.temporaryDirectory
+            .appendingPathComponent("g2-idtrust-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    override func setUp() {
+        StubURLProtocol.reset()
+        // A 200 for anything that escapes. Note that reaching it would still
+        // end in `.failed` — the body does not decode — so the state alone
+        // cannot tell a refusal from a round trip that failed later. That is
+        // what the message and `requestCount` assertions below are for.
+        StubURLProtocol.stub = .init(status: 200, body: Data("{}".utf8), check: nil)
+    }
+
+    override func tearDown() {
+        StubURLProtocol.stub = nil
+        StubURLProtocol.router = nil
+        StubURLProtocol.reset()
+    }
+
+    /// A hostile link is bad INPUT, not a failed transfer: it is refused
+    /// synchronously, with the copy that describes the expected link shape, and
+    /// no task is ever started.
+    func testResolvingAHostileLinkFailsAsBadInputWithoutAnyNetworkActivity() async {
+        for link in hostileDownloadLinks() {
+            StubURLProtocol.reset()
+            let m = makeModel()
+            m.linkText = link
+            m.resolve()
+
+            guard case .failed(let message) = m.state else {
+                XCTFail("link \(link.debugDescription) resolved to \(m.state)")
+                continue
+            }
+            XCTAssertEqual(message, L10n.t(.downloadBadLink), link.debugDescription)
+            XCTAssertNil(m.receivedContainer, link.debugDescription)
+            XCTAssertEqual(StubURLProtocol.requestCount, 0, link.debugDescription)
+
+            // Nothing may arrive late either: a task started before the refusal
+            // would settle into `.ready` after this yield.
+            try? await Task.sleep(nanoseconds: 20_000_000)
+            if case .ready = m.state { XCTFail("link \(link.debugDescription) became ready") }
+            XCTAssertEqual(StubURLProtocol.requestCount, 0, link.debugDescription)
+        }
+    }
+
+    /// The consequence that matters on disk: a refused link cannot reach
+    /// `download(into:)`, so it cannot create a `relayium-<id>` directory named
+    /// after an id this app refused to act on.
+    func testAHostileLinkCannotCreateAReceiveDestination() throws {
+        let parent = try tempDir()
+        for link in hostileDownloadLinks() {
+            let m = makeModel()
+            m.linkText = link
+            m.resolve()
+            m.download(into: parent)
+            guard case .failed = m.state else {
+                XCTFail("link \(link.debugDescription) reached \(m.state)")
+                continue
+            }
+            XCTAssertNil(m.received, link.debugDescription)
+        }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: parent.path), [],
+                       "a refused link created a destination in the folder the user chose")
+    }
+
+    /// Generation semantics are unchanged: a refusal still supersedes whatever
+    /// was on screen, and `cancel()` still returns the model to idle.
+    func testARefusalStillCancelsBackToIdle() {
+        let m = makeModel()
+        m.linkText = "https://relayium.com/d/..#k=KEY"
+        m.resolve()
+        guard case .failed = m.state else { return XCTFail("got \(m.state)") }
+        m.cancel()
+        XCTAssertEqual(m.state, .idle)
+        XCTAssertNil(m.receivedContainer)
     }
 }

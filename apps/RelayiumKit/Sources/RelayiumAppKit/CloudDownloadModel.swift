@@ -12,16 +12,29 @@ public struct ParsedLink: Equatable {
 }
 
 /// Parse `…/d/<id>#k=<key>`. Everything that cannot possibly work fails here,
-/// before a network call: a missing fragment, a non-`/d/` path, an empty id.
-/// The origin is not checked — a self-hosted deployment is a different host, and
-/// the id and key are what matter.
+/// before a network call: a missing fragment, a non-`/d/` path, an id this app
+/// will not act on. The origin is not checked — a self-hosted deployment is a
+/// different host, and the id and key are what matter.
+///
+/// The id comes from whoever produced the link — a sender, a page, a chat
+/// message, an OS handoff — and is composed into `/api/files/<id>/meta` and
+/// `/api/files/<id>/blob`, so it gets the same `StoredObjectID` rule an id
+/// issued by the server does. The path split alone is not that rule: it removes
+/// separators, but `URL.path` DECODES first, so `%2E%2E`, `%3F`, `%23`, `%0A`
+/// and `%00` deliver `..`, `?`, `#`, a newline and a NUL into a single path
+/// component, where nothing downstream is looking for them any more.
+///
+/// Refused, not repaired: an id that is not one inert token names an object
+/// this app cannot vouch for, and rewriting it would only produce a link to
+/// something the sender did not share.
 public func parseTransferLink(_ s: String) -> ParsedLink? {
     let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
     guard let url = URL(string: trimmed), let fragment = url.fragment else { return nil }
     guard let key = parseDownloadFragment(fragment) else { return nil }
     let parts = url.path.split(separator: "/", omittingEmptySubsequences: true)
-    guard parts.count == 2, parts[0] == "d", !parts[1].isEmpty else { return nil }
-    return ParsedLink(id: String(parts[1]), keyB64url: key)
+    guard parts.count == 2, parts[0] == "d",
+          let id = try? StoredObjectID.checked(String(parts[1])) else { return nil }
+    return ParsedLink(id: id, keyB64url: key)
 }
 
 public enum DownloadState: Equatable {

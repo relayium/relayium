@@ -1,8 +1,8 @@
 import Foundation
 
-/// The one rule for a server-supplied stored-object or upload identifier.
+/// The one rule for a stored-object or upload identifier, whoever produced it.
 ///
-/// Four subsystems compose one of these into something where a stray character
+/// Five subsystems compose one of these into something where a stray character
 /// changes the meaning rather than the value:
 ///
 /// - `KeychainStoredLinkKeyStore` concatenates it into `kSecAttrAccount`,
@@ -10,9 +10,11 @@ import Foundation
 /// - `HTTPResumableTransport` appends the resumable `uploadId` as a path
 ///   component of every PATCH, GET-offset and finalize,
 /// - `buildDownloadLink` interpolates it into `origin/d/<id>#k=<key>`, which is
-///   then shown to the user as the link that opens the upload.
+///   then shown to the user as the link that opens the upload,
+/// - `CloudClient.fetchMeta` and `CloudClient.download` append it to
+///   `api/files/<id>/meta` and `api/files/<id>/blob`.
 ///
-/// All four need it to stay ONE inert token. Refusing separators, dot segments,
+/// All five need it to stay ONE inert token. Refusing separators, dot segments,
 /// query/fragment delimiters, whitespace and non-ASCII means a hostile or merely
 /// surprising id can neither name a *different* keychain item — including the
 /// bearer token, which shares the service — nor steer a request at a different
@@ -25,8 +27,19 @@ import Foundation
 /// `URLSession` resolves for its own reasons. Refusing is the only defence that
 /// does not depend on who normalises the path.
 ///
-/// Every id any caller can be handed is `authx.NewID()`: 32 hex characters, so
-/// nothing legitimate is anywhere near the edge of this.
+/// Two populations reach this rule, and only one of them is trusted:
+///
+/// - **Outbound, server-issued.** An id the server minted for this account's
+///   own upload is `authx.NewID()`: 32 hex characters, so nothing legitimate is
+///   anywhere near the edge of this. Here the check is a tripwire on a broken or
+///   substituted response, not a defence against the caller.
+/// - **Inbound, recipient-supplied.** An id that arrives in a
+///   `…/d/<id>#k=<key>` link — from a sender, a page, a chat message, an OS
+///   handoff — or in a direct call to `CloudClient`, which is public and takes a
+///   plain `String`, was produced by whoever wrote the link. Nothing guarantees
+///   it is 32 hex, and nothing guarantees it came through `parseTransferLink`.
+///   Here the check is the defence, which is why it also lives at the boundary
+///   that builds the request rather than only at the parser.
 ///
 /// It raises `StoredLinkKeyError.invalidIdentifier` rather than a case of its
 /// own. That error is already the shared one — `AccountClient` has always raised

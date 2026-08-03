@@ -46,7 +46,23 @@ public struct CloudClient {
 }
 
 extension CloudClient {
+    /// Both public entry points below take the id a RECIPIENT supplied — it
+    /// arrives in a `…/d/<id>#k=<key>` link, from a sender, a page, a chat
+    /// message or an OS handoff — and append it as a URL path component, which
+    /// percent-encodes neither `/` nor `.`. `parseTransferLink` applies the same
+    /// rule, but it is one caller of a public type, so the check lives here too:
+    /// the boundary that builds the request is the one that has to hold.
+    ///
+    /// Refused, not escaped: see `StoredObjectID`.
     public func fetchMeta(id: String) async throws -> StoredFileMeta {
+        try await fetchMeta(checked: StoredObjectID.checked(id))
+    }
+
+    /// The id here has already been through `StoredObjectID.checked`, and it is
+    /// the same value the URL below is built from — so `download` can do the one
+    /// check that covers both of its requests instead of a second one that
+    /// would look like belt-and-braces and be neither.
+    private func fetchMeta(checked id: String) async throws -> StoredFileMeta {
         let req = URLRequest(url: baseURL.appendingPathComponent("api/files/\(id)/meta"))
         let (data, http) = try await send(req)
         switch http.statusCode {
@@ -59,8 +75,12 @@ extension CloudClient {
     }
 
     public func download(id: String, key: [UInt8], onChunk: ([UInt8]) throws -> Void) async throws -> StoredManifest {
+        // 0) the id, once, before either request is built and before the caller
+        //    is handed a single byte of plaintext.
+        let id = try StoredObjectID.checked(id)
+
         // 1) manifest → expected plaintext total (truncation defense).
-        let meta = try await fetchMeta(id: id)
+        let meta = try await fetchMeta(checked: id)
         guard let encManifest = Data(base64Encoded: meta.encManifest) else { throw CloudError.decoding }
         let manifest = try decryptManifest(key: key, [UInt8](encManifest))
         let expected = manifest.files.reduce(0) { $0 + Int($1.size) }
