@@ -50,10 +50,11 @@ public enum ErrorCopy {
     /// is untouched, and quitting changes nothing.
     ///
     /// `StoredLinkKeyError` needs the operation for a different reason. Its
-    /// shared wording answers for the one caller that raises it WITHOUT touching
-    /// the key store — `AccountClient`'s id check before a DELETE goes out — so
-    /// it describes a refusal that stopped everything, and `invalidKey`'s
-    /// describes bytes read back from the keychain. Reused verbatim on a save
+    /// shared wording answers for the callers that raise it WITHOUT touching the
+    /// key store — `AccountClient`'s id check before a DELETE goes out, and the
+    /// upload path's checks on the ids a server returns — so it describes a
+    /// refusal that stopped everything, and `invalidKey`'s describes bytes read
+    /// back from the keychain. Reused verbatim on a save
     /// both are false: nothing was stored, so there is no unreadable stored key
     /// to describe, and the save runs AFTER the upload landed, so copy that
     /// reads as "the request never went" sends the user to repeat work the
@@ -423,12 +424,18 @@ public enum ErrorCopy {
                 // Naming the row is what makes it reportable; inviting a retry
                 // would not be, because the same id would be refused again.
                 //
-                // This wording is the ROW ACTION's: `AccountClient` checks the
-                // id before a DELETE is sent, so "it was refused" is the whole
-                // truth there. The three key-store paths raise the same case
-                // around an operation that follows a request which already
-                // succeeded, and go through
-                // `storedLinkKeyMessage(for:operation:)` instead.
+                // This wording belongs to the paths where the refusal IS the
+                // whole outcome: `AccountClient` checks the id before a DELETE
+                // is sent, and `CloudUploadModel.finish` checks the id an
+                // upload returned before anything is filed or shown — so
+                // nothing was saved, no link exists, and "it was refused,
+                // manage it on relayium.com" is exactly true. (The object is
+                // on the server in the upload case, which is what makes that
+                // last clause the useful half rather than a deflection.) The
+                // three key-store paths raise the same case around an
+                // operation that follows a request which already succeeded,
+                // and go through `storedLinkKeyMessage(for:operation:)`
+                // instead.
                 return L10n.t(.errorStoredLinkKeyInvalidIdentifier, language: language)
             case .invalidKey:
                 // Distinct from "the key isn't on this Mac": something IS stored

@@ -30,6 +30,13 @@ public enum CloudError: Error, Equatable {
 
 /// The shareable link; the key lives ONLY in the fragment. `/d/<id>` is the
 /// recipient route the server AASA also hands off to the native app (Universal Links).
+///
+/// `id` is interpolated verbatim — this function neither checks nor escapes it,
+/// because both would be the wrong place: the id has to be refused before a key
+/// is filed under it, not repaired on the way into a string. Every caller
+/// therefore passes one that `StoredObjectID.checked` has already accepted:
+/// `CloudUploadModel.finish` checks it directly, and `AccountManagementModel`
+/// reaches this only through a key lookup that applied the same rule.
 public func buildDownloadLink(origin: String, id: String, keyB64url: String) -> String {
     "\(origin)/d/\(id)#k=\(keyB64url)"
 }

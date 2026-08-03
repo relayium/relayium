@@ -64,8 +64,20 @@ public final class CloudUploader {
         header += [UInt8(n >> 24 & 0xff), UInt8(n >> 16 & 0xff), UInt8(n >> 8 & 0xff), UInt8(n & 0xff)]
         header += encManifest
 
-        let (uploadId, chunkSize) = try await transport.initUpload(
+        let (issuedId, chunkSize) = try await transport.initUpload(
             header: header, burnAfterRead: burnAfterRead, ttl: ttl, size: total, token: token)
+        // The first thing this function does with the server's answer, and
+        // deliberately before any file bytes are encrypted or sent — the
+        // encryptor below is not even constructed yet. `uploadId` is appended as
+        // a URL path component by every PATCH, offset read and finalize below,
+        // and `URL.appendingPathComponent` percent-encodes neither `/` nor `.`
+        // — so an id of `../me` composes a request aimed at an endpoint this
+        // upload never authorised. Checking here means `patchChunk`,
+        // `uploadOffset` and `finalizeUpload` are only ever reached with an id
+        // that is one inert token.
+        //
+        // Refused, not escaped: see `StoredObjectID`.
+        let uploadId = try StoredObjectID.checked(issuedId)
 
         let enc = ChunkEncryptor(key: raw, sources: sources)
         // Held bytes double as the replay buffer: the server can commit part of a
@@ -139,7 +151,13 @@ public final class CloudUploader {
         if try enc.next() != nil { throw CloudError.server(status: 0) }
 
         let r = try await transport.finalizeUpload(uploadId: uploadId, token: token)
-        return UploadOutcome(id: r.id, expiresAt: r.expiresAt, keyB64url: encodeStoreKey(raw))
+        // A second server-chosen id, and not necessarily the one init issued:
+        // this is the one that becomes the keychain account name the key is
+        // filed under and the `/d/<id>` the user is handed. Checked before an
+        // `UploadOutcome` exists, so no caller can be given an outcome carrying
+        // an id this app would refuse to act on.
+        return UploadOutcome(id: try StoredObjectID.checked(r.id),
+                             expiresAt: r.expiresAt, keyB64url: encodeStoreKey(raw))
     }
 
     /// PATCH with resync-and-replay. A reset commits whatever landed, so the
@@ -217,12 +235,25 @@ extension CloudUploader {
                                     ttl: ttl, token: token, onProgress: onProgress)
         } catch is CancellationError {
             throw CancellationError()
+        } catch let e as StoredLinkKeyError {
+            // An identifier this app refused is a trust-boundary failure, not a
+            // server too old to offer `/api/uploads`. Stated as its own clause
+            // rather than left to the fact that it is not a `CloudError`,
+            // because what must not happen is specific: falling through would
+            // send every byte a SECOND time down the single-shot path, in
+            // response to an answer that was already malformed. There is also
+            // nothing to retry — the same id would be refused again.
+            throw e
         } catch let e as CloudError {
             // Never mask a failure the user can act on, and never retry it.
             if e == .unauthorized || e == .quota || e == .rateLimited { throw e }
             if cipherSizeFor(sources.map(\.size)) > FALLBACK_MAX_CIPHER_BYTES { throw e }
             let s = try await singleShot(burnAfterRead, ttl, token)
-            return UploadOutcome(id: s.result.id, expiresAt: s.result.expiresAt,
+            // The fallback reaches a different endpoint on an older server, so
+            // it is a trust boundary of its own and gets the same check. An
+            // `UploadOutcome` may not escape either path unchecked.
+            return UploadOutcome(id: try StoredObjectID.checked(s.result.id),
+                                 expiresAt: s.result.expiresAt,
                                  keyB64url: s.keyB64url)
         }
     }

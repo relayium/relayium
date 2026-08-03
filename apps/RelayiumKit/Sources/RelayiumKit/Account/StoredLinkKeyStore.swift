@@ -29,37 +29,20 @@ public enum StoredLinkKeyError: Error, Equatable {
     case invalidKey
 }
 
-/// Validation shared by every implementation, so a test written against the
+/// Key validation shared by every implementation, so a test written against the
 /// in-memory store proves the contract the keychain one also enforces.
 ///
-/// The identifier is the load-bearing one: it arrives from the server and gets
-/// concatenated into `kSecAttrAccount` here and into a URL path in
-/// `AccountClient.authedDelete`. Both need it to stay ONE inert token. Refusing
-/// separators, traversal, whitespace and non-ASCII means a hostile or merely
-/// surprising id can neither name a *different* keychain item — including the
-/// bearer token, which shares the service — nor steer a DELETE at a different
-/// endpoint. Sanitising instead of refusing would map two distinct ids onto one
-/// account, which silently loses a key.
-///
-/// Every id either caller can be handed is `authx.NewID()`: 32 hex characters.
+/// The identifier half of the contract is not here: it is `StoredObjectID`,
+/// because the same rule now guards a keychain account name, a DELETE path, the
+/// resumable upload's own id and the link the user is shown. One rule, one
+/// home. This type calls it rather than restating it.
 enum StoredLinkKeyValidation {
-    /// Wide enough for any plausible future id format, narrow enough that every
-    /// member is inert in a keychain attribute. `authx.NewID()` is 32 hex chars.
-    static let idCharacters = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")
-    static let maxIDLength = 128
     /// Unpadded base64url — the exact alphabet `parseDownloadFragment` accepts,
     /// so a key that would not survive a round trip through a link is refused at
     /// the point it is stored rather than at the point someone tries to use it.
-    static let keyCharacters = idCharacters
+    /// The same alphabet the id uses, which is why it is spelled once.
+    static let keyCharacters = StoredObjectID.characters
     static let maxKeyLength = 512
-
-    static func checkedID(_ id: String) throws -> String {
-        guard !id.isEmpty, id.count <= maxIDLength,
-              id.allSatisfy({ idCharacters.contains($0) }) else {
-            throw StoredLinkKeyError.invalidIdentifier
-        }
-        return id
-    }
 
     static func checkedKey(_ key: String) throws -> String {
         guard !key.isEmpty, key.count <= maxKeyLength,
@@ -101,16 +84,16 @@ public final class InMemoryStoredLinkKeyStore: StoredLinkKeyStore {
     public init() {}
 
     public func save(id: String, keyB64url: String) async throws {
-        let id = try StoredLinkKeyValidation.checkedID(id)
+        let id = try StoredObjectID.checked(id)
         keys[id] = try StoredLinkKeyValidation.checkedKey(keyB64url)
     }
 
     public func key(for id: String) async throws -> String? {
-        keys[try StoredLinkKeyValidation.checkedID(id)]
+        keys[try StoredObjectID.checked(id)]
     }
 
     public func remove(id: String) async throws {
-        keys.removeValue(forKey: try StoredLinkKeyValidation.checkedID(id))
+        keys.removeValue(forKey: try StoredObjectID.checked(id))
     }
 }
 
@@ -144,7 +127,7 @@ public final class KeychainStoredLinkKeyStore: StoredLinkKeyStore {
     /// Internal rather than private so the composed name can be asserted by
     /// tests that cannot exercise the real keychain.
     func account(for id: String) throws -> String {
-        Self.accountPrefix + (try StoredLinkKeyValidation.checkedID(id))
+        Self.accountPrefix + (try StoredObjectID.checked(id))
     }
 
     /// `kSecUseDataProtectionKeychain` is load-bearing, as in `KeychainTokenStore`:

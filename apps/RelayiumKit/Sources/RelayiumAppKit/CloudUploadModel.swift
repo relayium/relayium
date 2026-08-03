@@ -180,7 +180,16 @@ public final class CloudUploadModel: ObservableObject {
         state = .uploading(sent: sent, total: total)
     }
 
-    /// Persist the key, then present the link.
+    /// Check the id, persist the key, then present the link.
+    ///
+    /// The id is checked FIRST, before the key store is touched and before any
+    /// link is built. `CloudUploader` already refuses an id the server should
+    /// never have sent, so nothing legitimate reaches this — but an
+    /// `UploadOutcome` is a plain public struct that anything can construct, and
+    /// this is the last point before its id becomes a keychain account name and
+    /// a URL shown to the user as the way to open the upload. A hostile id must
+    /// not be presented as a working link, which is what interpolating it
+    /// unchecked would do even when the save that precedes it was refused.
     ///
     /// The key is stored BEFORE the generation is checked, and deliberately so:
     /// by the time this runs the server has the bytes, whatever the screen is
@@ -188,10 +197,23 @@ public final class CloudUploadModel: ObservableObject {
     /// nothing here should repaint — but the key is still the only thing that
     /// could ever open what was uploaded, so throwing it away because a view
     /// moved on would be losing data to a UI event.
+    ///
+    /// A refused id is the one case with nothing to preserve: no key can be
+    /// filed under it and no link can be built from it, so the generation rule
+    /// applies plainly — a superseded result stays silent, a current one fails
+    /// with the sentence the app already has for an id it will not act on.
     func finish(_ o: UploadOutcome, g: Int) async {
+        let id: String
+        do {
+            id = try StoredObjectID.checked(o.id)
+        } catch {
+            guard g == generation else { return }
+            state = .failed(ErrorCopy.message(for: error))
+            return
+        }
         var warning: String?
         do {
-            try await keyStore.save(id: o.id, keyB64url: o.keyB64url)
+            try await keyStore.save(id: id, keyB64url: o.keyB64url)
         } catch {
             // Never a failed upload: the transfer succeeded, and reporting it as
             // a failure would invite a retry that sends every byte a second
@@ -207,7 +229,7 @@ public final class CloudUploadModel: ObservableObject {
                              [ErrorCopy.storedLinkKeyMessage(for: error, operation: .save)])
         }
         guard g == generation else { return }
-        state = .done(link: buildDownloadLink(origin: origin, id: o.id, keyB64url: o.keyB64url),
+        state = .done(link: buildDownloadLink(origin: origin, id: id, keyB64url: o.keyB64url),
                       expiresAt: o.expiresAt, keyWarning: warning)
     }
 

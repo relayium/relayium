@@ -239,10 +239,10 @@ public final class AccountManagementModel: ObservableObject {
     ///
     /// `buildDownloadLink` interpolates the id straight into a URL, and it is
     /// only ever reached through a key lookup that validated that id first
-    /// (`StoredLinkKeyValidation.checkedID`, the same contract `AccountClient`
-    /// applies before a DELETE). A hostile id therefore lands in the
-    /// `keyLookupFailed` branch rather than in a link — deliberately, not
-    /// incidentally.
+    /// (`StoredObjectID.checked`, the same contract `AccountClient` applies
+    /// before a DELETE and `CloudUploader` applies to every id an upload
+    /// returns). A hostile id therefore lands in the `keyLookupFailed` branch
+    /// rather than in a link — deliberately, not incidentally.
     private func availability(for file: StoredFileSummary) async -> StoredLinkAvailability {
         do {
             guard let key = try await keyStore.key(for: file.id) else { return .keyNotOnThisMac }

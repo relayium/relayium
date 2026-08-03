@@ -338,12 +338,12 @@ extension AccountClient {
     /// row at an unrelated endpoint. Refusing is the only defence that does not
     /// depend on who normalises the path.
     ///
-    /// `StoredLinkKeyValidation.checkedID` is deliberately the same contract the
-    /// keychain account name uses: both compose a server-supplied id into
-    /// something that must stay one inert token, and one rule is one thing to
-    /// get right. Every id this app can present here — device and stored-file
-    /// alike — is `authx.NewID()`, 32 hex characters, so nothing legitimate is
-    /// near the edge of it.
+    /// `StoredObjectID.checked` is deliberately the same contract the keychain
+    /// account name, the resumable upload id and the download link all use: each
+    /// composes a server-supplied id into something that must stay one inert
+    /// token, and one rule is one thing to get right. Every id this app can
+    /// present here — device and stored-file alike — is `authx.NewID()`, 32 hex
+    /// characters, so nothing legitimate is near the edge of it.
     ///
     /// It throws BEFORE the request is built, so a rejected id costs no round
     /// trip and `URLSession` never sees it.
@@ -356,7 +356,7 @@ extension AccountClient {
     /// also what a failed read on the server looks like.
     @discardableResult
     private func authedDelete(_ collection: String, id: String, token: String) async throws -> StoredFileDeletion {
-        let id = try StoredLinkKeyValidation.checkedID(id)
+        let id = try StoredObjectID.checked(id)
         var req = URLRequest(url: baseURL.appendingPathComponent(collection).appendingPathComponent(id))
         req.httpMethod = "DELETE"
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
