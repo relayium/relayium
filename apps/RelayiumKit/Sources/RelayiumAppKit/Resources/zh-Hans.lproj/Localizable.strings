@@ -438,6 +438,7 @@
 "error.cloud.rateLimited" = "当前上传次数过多。请等一分钟再试。";
 "error.cloud.dailyQuota" = "这个文件需要的额度超过了你当日剩余的上传配额 — 单个大文件本身就可能用光配额。请明天再试，或升级以获得更大的每日配额。";
 "error.cloud.monthlyTraffic" = "你的账户已达到当月流量上限。下个月会恢复上传，也可以升级立即继续。";
+"error.cloud.downloadLimited" = "当前下载请求过多，或者发送方的当月流量额度已用完。请等几分钟，然后重新打开这条链接。";
 "error.cloud.notFound" = "这条链接已过期、已被下载，或者输入有误。";
 "error.cloud.server" = "服务器返回了一个错误（%@）。请稍后再试。";
 "error.cloud.network" = "无法连接服务器。请检查你的网络连接。";

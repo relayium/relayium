@@ -775,6 +775,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case errorCloudRateLimited = "error.cloud.rateLimited"
     case errorCloudDailyQuota = "error.cloud.dailyQuota"
     case errorCloudMonthlyTraffic = "error.cloud.monthlyTraffic"
+    /// The download-side 429. Separate from `error.cloud.rateLimited` because
+    /// that one is an uploader's, and from `error.cloud.monthlyTraffic` because
+    /// the exhausted allowance is the SENDER's — the reader of this sentence
+    /// cannot upgrade their way out of it.
+    case errorCloudDownloadLimited = "error.cloud.downloadLimited"
     case errorCloudNotFound = "error.cloud.notFound"
     /// %@ — an HTTP status, verbatim.
     case errorCloudServer = "error.cloud.server"

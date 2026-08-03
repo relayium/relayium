@@ -406,6 +406,15 @@ public enum ErrorCopy {
                 return L10n.t(.errorCloudDailyQuota, language: language)
             case .monthlyTraffic:
                 return L10n.t(.errorCloudMonthlyTraffic, language: language)
+            case .downloadLimited:
+                // Names both causes and asserts neither, because the client
+                // cannot tell a per-IP download limit from the sender's
+                // exhausted monthly allowance — same status, same request, and
+                // the only discriminator is server prose. Says wait rather than
+                // upgrade: the allowance that may be gone is the SENDER's, so
+                // the reader of this sentence cannot buy their way past it, and
+                // the other cause genuinely does clear on its own.
+                return L10n.t(.errorCloudDownloadLimited, language: language)
             case .notFound:
                 return L10n.t(.errorCloudNotFound, language: language)
             case .server(let status):

@@ -70,6 +70,10 @@ extension CloudClient {
             guard let m = try? JSONDecoder().decode(StoredFileMeta.self, from: data) else { throw CloudError.decoding }
             return m
         case 404: throw CloudError.notFound
+        // Both server-side download gates currently sit on `/blob`, but an edge
+        // or future metadata limiter can still return 429 here. Keep the whole
+        // stored-download path on one user-facing outcome.
+        case 429: throw CloudError.downloadLimited
         default:  throw CloudError.server(status: http.statusCode)
         }
     }
@@ -96,6 +100,9 @@ extension CloudClient {
             let code = http.statusCode
             if code == 403 && attempt == 0 { attempt += 1; continue }
             if code == 404 { throw CloudError.notFound }
+            // Only an initial 403 gets the bounded redirect-target retry above.
+            // A 429 is surfaced after exactly one blob request.
+            if code == 429 { throw CloudError.downloadLimited }
             guard code == 200 else { throw CloudError.server(status: code) }
             chunkStream = stream; break
         }

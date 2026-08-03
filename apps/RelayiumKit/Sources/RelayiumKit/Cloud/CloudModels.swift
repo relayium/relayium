@@ -22,6 +22,18 @@ public enum CloudError: Error, Equatable {
     /// 429, the account is out of monthly traffic. Resets next month; only an
     /// upgrade clears it sooner.
     case monthlyTraffic
+    /// 429 on a stored download. The cases above describe an uploader's own
+    /// request rate and allowances, while a recipient can encounter either the
+    /// download-start limit for their IP or the sender account's monthly
+    /// traffic limit.
+    ///
+    /// One case for both because the client cannot tell them apart: they are the
+    /// same status on the same request, and the only discriminator is server
+    /// prose, which is a wire contract that drifts. `monthlyTraffic`'s wording
+    /// would assert the second cause and offer an upgrade that would not help,
+    /// since it is not this user's quota; `server(status: 429)` reads as a
+    /// generic server failure and does not explain either actionable cause.
+    case downloadLimited
     case notFound              // 404
     case server(status: Int)   // other non-2xx
     case network               // transport failure

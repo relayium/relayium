@@ -446,6 +446,7 @@
 "error.cloud.rateLimited" = "Há demasiados envios neste momento. Espere um minuto e tente novamente.";
 "error.cloud.dailyQuota" = "Este ficheiro precisa de mais do que a quota de envio que lhe resta hoje — um único ficheiro grande pode gastá-la sozinho. Tente amanhã, ou mude de plano para uma quota diária maior.";
 "error.cloud.monthlyTraffic" = "A sua conta atingiu o limite de tráfego mensal. Os envios recomeçam no próximo mês, ou mude de plano para continuar já.";
+"error.cloud.downloadLimited" = "Há demasiados pedidos de transferência neste momento, ou o tráfego mensal de quem enviou esgotou-se. Espere alguns minutos e volte a abrir a ligação.";
 "error.cloud.notFound" = "Esta ligação expirou, já foi transferida, ou foi escrita incorretamente.";
 "error.cloud.server" = "O servidor devolveu um erro (%@). Tente novamente daqui a pouco.";
 "error.cloud.network" = "Não foi possível contactar o servidor. Verifique a sua ligação à internet.";

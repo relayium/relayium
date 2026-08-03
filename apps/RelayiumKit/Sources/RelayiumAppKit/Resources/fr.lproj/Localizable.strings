@@ -446,6 +446,7 @@
 "error.cloud.rateLimited" = "Trop d’envois en cours. Attendez une minute, puis réessayez.";
 "error.cloud.dailyQuota" = "Ce fichier dépasse votre quota d’envoi quotidien restant — un seul gros fichier peut l’épuiser à lui seul. Réessayez demain, ou changez d’offre pour un quota quotidien plus élevé.";
 "error.cloud.monthlyTraffic" = "Votre compte a atteint sa limite mensuelle de trafic. Les envois reprennent le mois prochain, ou changez d’offre pour continuer maintenant.";
+"error.cloud.downloadLimited" = "Trop de demandes de téléchargement en ce moment, ou le volume de transfert mensuel de l’expéditeur est épuisé. Attendez quelques minutes, puis rouvrez le lien.";
 "error.cloud.notFound" = "Ce lien a expiré, a déjà été téléchargé, ou a été mal saisi.";
 "error.cloud.server" = "Le serveur a renvoyé une erreur (%@). Réessayez sous peu.";
 "error.cloud.network" = "Serveur injoignable. Vérifiez votre connexion Internet.";

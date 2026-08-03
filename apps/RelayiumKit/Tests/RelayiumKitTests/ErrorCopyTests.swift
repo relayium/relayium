@@ -231,10 +231,33 @@ final class ErrorCopyTests: XCTestCase {
         }
     }
 
+    /// The download-side 429 has two possible causes — the per-IP download-start
+    /// limiter and the sender account's monthly traffic gate — and the client
+    /// cannot tell which fired without parsing server prose. So the copy names
+    /// both and asserts neither, and it belongs to a RECIPIENT: a sentence about
+    /// uploads describes work this user never did.
+    func testDownloadLimitedNamesBothCausesWithoutClaimingEither() {
+        let m = ErrorCopy.message(for: CloudError.downloadLimited, language: .en)
+        let lower = m.lowercased()
+        XCTAssertTrue(lower.contains("download"), m)
+        XCTAssertTrue(lower.contains("monthly"), "the sender's allowance is the other cause")
+        XCTAssertTrue(lower.contains("or "), "both causes, neither asserted")
+        XCTAssertTrue(lower.contains("wait"), "the one 429 here that is worth waiting out")
+        XCTAssertFalse(lower.contains("upload"), "the recipient did not upload anything")
+    }
+
+    /// And it must not collapse into either upload 429 it sits next to.
+    func testDownloadLimitedIsDistinctFromTheUploadLimits() {
+        let download = ErrorCopy.message(for: CloudError.downloadLimited, language: .en)
+        let rate = ErrorCopy.message(for: CloudError.rateLimited, language: .en)
+        let monthly = ErrorCopy.message(for: CloudError.monthlyTraffic, language: .en)
+        XCTAssertEqual(Set([download, rate, monthly]).count, 3)
+    }
+
     func testEveryCloudErrorHasCopy() {
         let cases: [CloudError] = [
             .unauthorized, .quota, .rateLimited, .dailyQuota, .monthlyTraffic,
-            .notFound, .server(status: 500), .network, .decoding,
+            .downloadLimited, .notFound, .server(status: 500), .network, .decoding,
         ]
         for e in cases {
             let m = ErrorCopy.message(for: e, language: .en)

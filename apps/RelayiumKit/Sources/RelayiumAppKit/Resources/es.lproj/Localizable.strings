@@ -446,6 +446,7 @@
 "error.cloud.rateLimited" = "Ahora mismo hay demasiadas subidas. Espera un minuto y vuelve a intentarlo.";
 "error.cloud.dailyQuota" = "Este archivo necesita más de la cuota de subida que te queda hoy: un solo archivo grande puede agotarla por sí mismo. Inténtalo mañana, o mejora tu plan para una cuota diaria mayor.";
 "error.cloud.monthlyTraffic" = "Tu cuenta alcanzó su límite de tráfico mensual. Las subidas se reanudan el mes que viene, o mejora tu plan para continuar ahora.";
+"error.cloud.downloadLimited" = "Ahora mismo hay demasiadas solicitudes de descarga, o el tráfico mensual de quien lo envió se agotó. Espera unos minutos y vuelve a abrir el enlace.";
 "error.cloud.notFound" = "Este enlace caducó, ya se descargó, o se escribió mal.";
 "error.cloud.server" = "El servidor devolvió un error (%@). Inténtalo de nuevo en un momento.";
 "error.cloud.network" = "No se pudo contactar con el servidor. Comprueba tu conexión a internet.";
