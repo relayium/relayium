@@ -237,6 +237,25 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "the shell must not switch on session state — that would gate the receive tab")
     }
 
+    /// A failure a second tap would fix must offer that tap.
+    ///
+    /// This view rendered a sentence and nothing else for every failure,
+    /// including a dropped connection — leaving the user to re-derive that
+    /// re-opening the link is what repeats the work, and no affordance at all
+    /// once the transfer itself had started. The decision is the shared model's
+    /// (`CloudDownloadRecoveryTests`), so what belongs here is the same
+    /// conditional the macOS pane renders, from the same API, and nothing that
+    /// reads a message or a status to second-guess it.
+    func testTheReceiveViewOffersRetryOnlyWhereTheModelSaysItHelps() throws {
+        let receive = try XCTUnwrap(try sources().first { $0.name == "ReceiveView.swift" })
+        XCTAssertTrue(receive.text.contains("model.canRetry"),
+                      "the retry affordance must be conditional on the model's recovery")
+        XCTAssertTrue(receive.text.contains("model.retry()"),
+                      "the retry must go through the model's guarded entry point")
+        XCTAssertTrue(receive.text.contains(".commonTryAgain"),
+                      "both platforms render the same shared label")
+    }
+
     /// One call site is what keeps the typed email and password alive across
     /// .loggedOut → .authenticating → .failed.
     func testTheSignInFormHasExactlyOneCallSite() throws {

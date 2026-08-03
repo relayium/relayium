@@ -10,8 +10,15 @@ final class StubURLProtocol: URLProtocol {
         /// instead of as a single chunk — exercises chunk-boundary-independent reassembly.
         let bodyChunks: [Data]?
         let check: ((URLRequest) -> Void)?
-        init(status: Int, body: Data = Data(), bodyChunks: [Data]? = nil, check: ((URLRequest) -> Void)? = nil) {
-            self.status = status; self.body = body; self.bodyChunks = bodyChunks; self.check = check
+        /// A transport failure delivered INSTEAD of a clean end of body, after
+        /// whatever `body`/`bodyChunks` was already handed over. A status code
+        /// cannot express "the connection dropped nine chunks in", and that is
+        /// precisely the failure a partially written download comes from.
+        let failure: Error?
+        init(status: Int, body: Data = Data(), bodyChunks: [Data]? = nil,
+             check: ((URLRequest) -> Void)? = nil, failure: Error? = nil) {
+            self.status = status; self.body = body; self.bodyChunks = bodyChunks
+            self.check = check; self.failure = failure
         }
     }
     nonisolated(unsafe) static var stub: Stub?
@@ -81,7 +88,11 @@ final class StubURLProtocol: URLProtocol {
         } else {
             client?.urlProtocol(self, didLoad: s.body)
         }
-        client?.urlProtocolDidFinishLoading(self)
+        if let failure = s.failure {
+            client?.urlProtocol(self, didFailWithError: failure)
+        } else {
+            client?.urlProtocolDidFinishLoading(self)
+        }
     }
     override func stopLoading() {}
 }

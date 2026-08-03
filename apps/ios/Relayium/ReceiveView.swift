@@ -109,7 +109,24 @@ struct ReceiveView: View {
             done(fileCount: urls.count)
 
         case .failed(let message):
-            failure(message)
+            VStack(alignment: .leading, spacing: 12) {
+                failure(message)
+                // The same conditional the macOS pane renders, from the same
+                // model API. This screen used to show the sentence and nothing
+                // else, including for a dropped connection — leaving the user to
+                // work out that re-opening the link is what repeats resolution,
+                // and offering nothing at all once the transfer itself had
+                // started. Which failures are worth repeating is the model's
+                // decision, on the typed error, not something inferred here from
+                // the text above.
+                if model.canRetry {
+                    Button { model.retry() } label: {
+                        Text(L10n.t(.commonTryAgain)).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                }
+            }
         }
     }
 

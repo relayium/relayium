@@ -77,11 +77,21 @@ struct DownloadPane: View {
                 }
             case .failed(let message):
                 InlineMessage(.failure, message)
-                // Resolving again is the whole retry: it re-parses whatever is
-                // in the field, so a corrected link works without any other
-                // step, and an unchanged bad one says the same thing again
-                // rather than appearing to have done something.
-                Button(L10n.t(.commonTryAgain)) { model.resolve() }
+                // Offered only where the model says a second attempt can end
+                // differently, and it repeats the work that actually failed —
+                // resolution, or the transfer into the folder already chosen.
+                //
+                // This used to be unconditional and hard-wired to `resolve()`:
+                // the same button for a burnt link, a 404 and a dropped
+                // connection, and after a failure mid-transfer it walked the
+                // user back to a confirmation card they had already accepted.
+                // The rule lives in `CloudDownloadModel`, on the typed error, so
+                // it is testable and does not depend on which of nine languages
+                // the message above is in. A corrected link still needs no
+                // button at all: the field and its Open action are always there.
+                if model.canRetry {
+                    Button(L10n.t(.commonTryAgain)) { model.retry() }
+                }
             }
         }
     }

@@ -297,6 +297,27 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "only picked preflight should require the upload token")
     }
 
+    /// The receive pane's Try Again is the model's decision, not the view's.
+    ///
+    /// It used to be unconditional and hard-wired to `resolve()`: the same
+    /// button for a 404, a burnt link and a dropped connection, and after a
+    /// failure halfway through the transfer it walked the user back to a
+    /// confirmation card they had already accepted instead of repeating the
+    /// download. Which failures are worth repeating — and what repeating them
+    /// means — is decided from the typed error in `CloudDownloadModel`, where
+    /// `CloudDownloadRecoveryTests` can hold it. A view that reads a message or
+    /// a status to make that call would put the policy somewhere no test
+    /// reaches and make it wrong in eight languages.
+    func testTheDownloadPaneOffersRetryOnlyWhereTheModelSaysItHelps() throws {
+        let pane = try source(named: "DownloadPane.swift")
+        XCTAssertTrue(pane.contains("if model.canRetry"),
+                      "the retry affordance must be conditional on the model's recovery")
+        XCTAssertTrue(pane.contains("model.retry()"),
+                      "the retry must go through the model's guarded entry point")
+        XCTAssertFalse(pane.contains("Button(L10n.t(.commonTryAgain)) { model.resolve() }"),
+                       "a failed transfer must not be retried by re-resolving the link")
+    }
+
     // MARK: - registration happens in the app
 
     /// No macOS surface opens the website to do account work.

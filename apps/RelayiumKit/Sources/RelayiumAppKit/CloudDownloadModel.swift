@@ -46,6 +46,63 @@ public enum DownloadState: Equatable {
     case failed(String)
 }
 
+/// What an explicit "Try Again" would actually do — decided from the typed
+/// failure, never from the sentence the user is reading.
+///
+/// Two things follow from that. The nine catalogs stay free to reword: a policy
+/// that matched English would be wrong in eight languages the moment a
+/// translator improved one. And the view stays free of the rule: `DownloadPane`
+/// used to offer the same unconditional button for a burnt link and a dropped
+/// connection, and to answer both by re-parsing the text field — which, after a
+/// failure mid-transfer, walks the user back to a card they already accepted.
+enum DownloadRecovery: Equatable {
+    /// The answer will not change. A limit that has not reset, an object that is
+    /// gone, a manifest that failed its integrity check or names a path outside
+    /// the destination, a destination that is already taken: repeating the
+    /// identical request produces the identical result, so no button is offered
+    /// rather than one that spends taps to say the same thing again.
+    ///
+    /// Not the same as "nothing to do" — the link field and its Open action are
+    /// always on screen, which is the recovery for a link that was wrong, and
+    /// the failure copy still names the local remedy where one exists.
+    case none
+    /// Re-run resolution: parse the link again, fetch metadata, decrypt the
+    /// manifest. Nothing has been chosen or written yet.
+    case resolveLink
+    /// Repeat the transfer into the destination the user already chose. The
+    /// manifest and key are the ones already resolved; the partial output of the
+    /// attempt that failed has been discarded, so this writes from the start.
+    case downloadAgain(into: URL)
+
+    /// The whole policy, in one place a test can hold.
+    ///
+    /// `network` means the request could not finish, including a connection that
+    /// dropped after some bytes arrived; `downloadUnavailable` means the service
+    /// could not serve the request right now. Neither says the link or payload
+    /// is invalid, so a fresh attempt can produce a different answer. Everything
+    /// else — including `unauthorized`, which this anonymous path should never
+    /// see, and a stream that ended short, which is evidence about the payload —
+    /// is final.
+    static func after(_ error: Error, phase: DownloadPhase) -> DownloadRecovery {
+        switch error as? CloudError {
+        case .network, .downloadUnavailable:
+            switch phase {
+            case .resolving: return .resolveLink
+            case .downloading(let parent): return .downloadAgain(into: parent)
+            }
+        default:
+            return .none
+        }
+    }
+}
+
+/// Which piece of work a failure interrupted. The error decides WHETHER a retry
+/// is offered; this decides WHAT it repeats.
+enum DownloadPhase: Equatable {
+    case resolving
+    case downloading(into: URL)
+}
+
 @MainActor
 public final class CloudDownloadModel: ObservableObject {
     @Published public private(set) var state: DownloadState = .idle
@@ -54,6 +111,10 @@ public final class CloudDownloadModel: ObservableObject {
     /// `RealtimeSessionModel.receivedContainer` for why it is not folded into
     /// the state case.
     @Published public private(set) var receivedContainer: URL?
+    /// What a retry would repeat, or `.none`. Non-`.none` only in `.failed`:
+    /// every new resolve, download and cancel clears it, so it cannot outlive
+    /// the failure that armed it.
+    @Published private(set) var recovery: DownloadRecovery = .none
 
     /// Reveal/drag-out targets for a finished download, or nil. Non-nil only in
     /// `.done`, which is reached only after the writer's `finish()` returned.
@@ -68,6 +129,10 @@ public final class CloudDownloadModel: ObservableObject {
     private var generation = 0
     private var link: ParsedLink?
     private var key: [UInt8] = []
+    /// The manifest a retry writes. Kept beside `link`/`key` rather than read
+    /// back out of `.ready`, because a retry starts from `.failed` — the state
+    /// the transfer left, not the one it started from.
+    private var manifest: StoredManifest?
 
     /// `errorCopy` exists for one difference and defaults to no difference at
     /// all: macOS picks a destination per transfer, so `ErrorCopy`'s "choose
@@ -88,9 +153,40 @@ public final class CloudDownloadModel: ObservableObject {
         }
     }
 
+    /// Whether to render a retry action at all. Both platforms ask this one
+    /// question rather than each deciding from a message or a status.
+    public var canRetry: Bool { recovery != .none }
+
+    /// The one retry entry point, guarded twice.
+    ///
+    /// The recovery is read and cleared in the same synchronous turn, before any
+    /// work starts, so a second tap on a button that is still on screen finds
+    /// nothing armed. Without that, two transfers would race into one
+    /// destination: the loser refuses on the container the winner just created,
+    /// and whichever settles last decides what the user is told about bytes they
+    /// may or may not have. The `.failed` guard is the other half — a retry may
+    /// only ever repeat work that has already stopped.
+    public func retry() {
+        guard case .failed = state else { return }
+        let pending = recovery
+        recovery = .none
+        switch pending {
+        case .none:
+            return
+        case .resolveLink:
+            resolve()
+        case .downloadAgain(let parent):
+            guard let manifest else { return }
+            startDownload(manifest, into: parent)
+        }
+    }
+
     /// Resolve the link: parse, fetch meta, decrypt the manifest. No token —
     /// anonymous download is what a share link is.
     public func resolve() {
+        // Before the parse, so the malformed-link failure below is armed with
+        // nothing either: no retry re-parses a string into a different link.
+        recovery = .none
         guard let parsed = parseTransferLink(linkText) else {
             state = .failed(L10n.t(.downloadBadLink))
             return
@@ -112,20 +208,31 @@ public final class CloudDownloadModel: ObservableObject {
                 await MainActor.run {
                     guard g == self.generation else { return }
                     self.key = k
+                    self.manifest = manifest
                     self.state = .ready(manifest, expiresAt: meta.expiresAt,
                                         burnAfterRead: meta.burnAfterRead)
                 }
             } catch {
                 await MainActor.run {
                     guard g == self.generation else { return }
+                    self.recovery = DownloadRecovery.after(error, phase: .resolving)
                     self.state = .failed(self.errorCopy(error))
                 }
             }
         }
     }
 
+    /// Start the transfer. Only from `.ready`: the user has seen what is in the
+    /// link and chosen where it goes. A retry re-enters `startDownload` instead,
+    /// since by then the state is the `.failed` the last attempt left.
     public func download(into parent: URL) {
-        guard case .ready(let manifest, _, _) = state, let parsed = link else { return }
+        guard case .ready(let manifest, _, _) = state else { return }
+        startDownload(manifest, into: parent)
+    }
+
+    private func startDownload(_ manifest: StoredManifest, into parent: URL) {
+        guard let parsed = link else { return }
+        recovery = .none
         generation += 1
         let g = generation
         let total = manifest.files.reduce(0) { $0 + $1.size }
@@ -195,10 +302,18 @@ public final class CloudDownloadModel: ObservableObject {
                     self.state = .done(urls)
                 }
             } catch {
-                // A truncated file with a plausible name is worse than no file.
+                // A truncated file with a plausible name is worse than no file —
+                // and the retry offered below depends on this having happened
+                // first: the download refuses to merge into an existing
+                // `relayium-<id>`, so a container left behind would make every
+                // retry fail on the wreckage of the attempt before it. Discard
+                // is synchronous and runs before `.failed` is published, so the
+                // failed state the user can act on is never one with a partial
+                // file still under it.
                 writer?.discard()
                 await MainActor.run {
                     guard g == self.generation else { return }
+                    self.recovery = DownloadRecovery.after(error, phase: .downloading(into: parent))
                     self.state = .failed(self.errorCopy(error))
                 }
             }
@@ -210,6 +325,8 @@ public final class CloudDownloadModel: ObservableObject {
         task = nil
         generation += 1
         receivedContainer = nil
+        // Stopping is a decision, not a pause: nothing may stay armed behind it.
+        recovery = .none
         state = .idle
     }
 }
