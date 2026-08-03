@@ -244,7 +244,7 @@ final class StagedSourcePinningTests: XCTestCase {
         guard case .tooManyOpenFiles? = err as? PlaintextSourceError else {
             return XCTFail("expected tooManyOpenFiles, got \(err)")
         }
-        XCTAssertTrue(ErrorCopy.message(for: err).contains("smaller batches"),
+        XCTAssertTrue(ErrorCopy.message(for: err, language: .en).contains("smaller batches"),
                       "the copy has to say what to do about it")
     }
 
@@ -264,7 +264,7 @@ final class StagedSourcePinningTests: XCTestCase {
 
         XCTAssertThrowsError(try stageRealtimeFiles(selected)) { err in
             XCTAssertEqual(err as? PlaintextSourceError, .unreadable(name: "notes.txt"))
-            XCTAssertTrue(ErrorCopy.message(for: err).contains("notes.txt"))
+            XCTAssertTrue(ErrorCopy.message(for: err, language: .en).contains("notes.txt"))
         }
         XCTAssertThrowsError(try stageCloudFiles(selected)) { err in
             XCTAssertEqual(err as? PlaintextSourceError, .unreadable(name: "notes.txt"))

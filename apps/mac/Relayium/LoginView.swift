@@ -29,13 +29,14 @@ struct LoginView: View {
 
     var body: some View {
         VStack(spacing: 16) {
+            // The product name, not copy. nonlocalized: brand.
             Text("Relayium").font(.largeTitle.weight(.semibold))
 
             VStack(spacing: 8) {
-                TextField("Email", text: $email)
+                TextField(L10n.t(.loginEmail), text: $email)
                     .textContentType(.username)
                     .disableAutocorrection(true)
-                SecureField("Password", text: $password)
+                SecureField(L10n.t(.loginPassword), text: $password)
                     .textContentType(.password)
                     .onSubmit { submit() }
             }
@@ -53,7 +54,7 @@ struct LoginView: View {
 
             // Same slot either way, so the form doesn't jump while it submits.
             ZStack {
-                Button("Sign in", action: submit)
+                Button(L10n.t(.loginSignIn), action: submit)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canSubmit)
                     .opacity(isBusy ? 0 : 1)
@@ -65,7 +66,7 @@ struct LoginView: View {
             // Named for what the user wants, not for how it is delivered: the
             // password form is right above, so whoever presses this came for
             // Apple, and the page it opens leads with the Apple button.
-            Button("Sign in with Apple") { startBrowserLogin() }
+            Button(L10n.t(.loginSignInWithApple)) { startBrowserLogin() }
                 .disabled(isBusy || browserBusy)
 
             if case let .failed(message) = browserLogin.state {
@@ -76,7 +77,7 @@ struct LoginView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button("Create an account on relayium.com") {
+            Button(L10n.t(.loginCreateAccount)) {
                 NSWorkspace.shared.open(AppEnvironment.productionBaseURL)
             }
             .buttonStyle(.link)

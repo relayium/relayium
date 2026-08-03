@@ -73,14 +73,17 @@ final class SelectionStoreTests: XCTestCase {
         try file("trip/sub/b.txt")
         try dir("trip/hollow")
         store.replace(with: [try dir("trip"), try file("loose.txt")])
-        let summary = try XCTUnwrap(store.summary)
+        // English named explicitly: the summary is three pluralized fragments
+        // now, and which words they are depends on the language, not on the
+        // machine running the test.
+        let summary = try XCTUnwrap(store.summaryText(language: .en))
         XCTAssertTrue(summary.contains("3 files"), summary)
         XCTAssertTrue(summary.contains("1 folder"), summary)
         XCTAssertTrue(summary.contains("empty folder"), summary)
     }
 
     func testNoSummaryWhenNothingIsSelected() {
-        XCTAssertNil(SelectionStore().summary)
+        XCTAssertNil(SelectionStore().summaryText(language: .en))
         XCTAssertTrue(SelectionStore().isEmpty)
     }
 

@@ -87,7 +87,7 @@ public func nearbyDevices(roster: [Peer], selfId: String) -> [NearbyDevice] {
         // device cannot dress its name up as another one.
         let cleaned = safeDisplayName(peer.name)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        unique.append((peer.id, cleaned.isEmpty ? "Unnamed device" : cleaned))
+        unique.append((peer.id, cleaned.isEmpty ? L10n.t(.nearbyUnnamedDevice) : cleaned))
     }
 
     var nameCounts: [String: Int] = [:]
@@ -337,8 +337,7 @@ public final class LanDiscoveryModel: ObservableObject {
             state = isPausedByUser ? .paused : .off
             return
         }
-        state = .reconnecting(
-            "Lost the connection to Relayium's device rendezvous. Reconnecting…")
+        state = .reconnecting(L10n.t(.nearbyReconnecting))
         scheduleReconnect()
     }
 

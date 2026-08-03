@@ -55,8 +55,8 @@ struct FileDropZone<Label: View>: View {
                 }
                 return true
             }
-            .accessibilityLabel("Files to send")
-            .accessibilityHint("Drop files or folders here, or activate to choose them.")
+            .accessibilityLabel(L10n.t(.dropA11yLabel))
+            .accessibilityHint(L10n.t(.dropA11yHint))
     }
 }
 
@@ -88,7 +88,7 @@ func chooseFilesOrFolders(into store: SelectionStore) {
     panel.allowsMultipleSelection = true
     panel.canChooseFiles = true
     panel.canChooseDirectories = true
-    panel.prompt = "Choose"
+    panel.prompt = L10n.t(.pickerPrompt)
     // A picker REPLACES: what the panel showed when the user pressed Choose is
     // exactly what they meant to send. A drop appends, because there is no such
     // moment of confirmation for a drag.

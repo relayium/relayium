@@ -43,17 +43,17 @@ struct AccountView: View {
                 // macOS ships as a direct download, so billing is compliant on the web.
                 // The app shows the tier read-only and hands off — to the plans page,
                 // which is where a change of plan is actually made.
-                Button("Manage plan") { NSWorkspace.shared.open(AppEnvironment.plansWebURL) }
+                Button(L10n.t(.accountManagePlan)) { NSWorkspace.shared.open(AppEnvironment.plansWebURL) }
             }
 
-            meter("Traffic", UsagePresentation.display(usage.traffic))
-            meter("Storage", UsagePresentation.display(usage.storage))
+            meter(L10n.t(.accountTraffic), UsagePresentation.display(usage.traffic))
+            meter(L10n.t(.accountStorage), UsagePresentation.display(usage.storage))
 
             Text(UsagePresentation.resetText(resetsAt: usage.resetsAt, now: Date()))
                 .font(.caption).foregroundStyle(.secondary)
 
             if session.isStale {
-                Label("Showing the last known figures — couldn't reach the server.", systemImage: "exclamationmark.triangle")
+                Label(L10n.t(.accountStaleFigures), systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -77,7 +77,7 @@ struct AccountView: View {
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
-                    Button("Dismiss") { management.dismissKeyCleanupWarning() }
+                    Button(L10n.t(.commonDismiss)) { management.dismissKeyCleanupWarning() }
                         .buttonStyle(.link)
                 }
             }
@@ -85,9 +85,9 @@ struct AccountView: View {
             Spacer()
 
             HStack {
-                Button("Refresh") { refresh() }
+                Button(L10n.t(.commonRefresh)) { refresh() }
                 Spacer()
-                Button("Sign out") { signOut() }
+                Button(L10n.t(.commonSignOut)) { signOut() }
             }
         }
         // Keyed on the scope so signing in as someone else reloads rather than
@@ -114,36 +114,35 @@ struct AccountView: View {
             Task { await session.logOut() }
         }
         .confirmationDialog(
-            "Revoke “\(deviceToRevoke?.name ?? "")”?",
+            L10n.t(.accountRevokeTitle, [L10n.token(deviceToRevoke?.name ?? "")]),
             isPresented: Binding(get: { deviceToRevoke != nil },
                                  set: { if !$0 { deviceToRevoke = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Revoke", role: .destructive) {
+            Button(L10n.t(.commonRevoke), role: .destructive) {
                 guard let device = deviceToRevoke else { return }
                 deviceToRevoke = nil
                 Task { await management.revoke(device, scope: scope) }
             }
-            Button("Cancel", role: .cancel) { deviceToRevoke = nil }
+            Button(L10n.t(.commonCancel), role: .cancel) { deviceToRevoke = nil }
         } message: {
-            Text(deviceToRevoke?.current == true
-                 ? "This is the Mac you're using. Revoking it signs this app out immediately."
-                 : "That device will be signed out and will have to sign in again.")
+            Text(L10n.t(deviceToRevoke?.current == true
+                        ? .accountRevokeThisMac : .accountRevokeOther))
         }
         .confirmationDialog(
-            "Delete this stored file?",
+            L10n.t(.accountDeleteFileTitle),
             isPresented: Binding(get: { fileToDelete != nil },
                                  set: { if !$0 { fileToDelete = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Delete", role: .destructive) {
+            Button(L10n.t(.commonDelete), role: .destructive) {
                 guard let file = fileToDelete else { return }
                 fileToDelete = nil
                 Task { await management.delete(file, scope: scope) }
             }
-            Button("Cancel", role: .cancel) { fileToDelete = nil }
+            Button(L10n.t(.commonCancel), role: .cancel) { fileToDelete = nil }
         } message: {
-            Text("The encrypted data is erased from the server. Anyone holding the link will get nothing. This cannot be undone.")
+            Text(L10n.t(.accountDeleteFileBody))
         }
     }
 
@@ -186,16 +185,16 @@ struct AccountView: View {
     @ViewBuilder
     private var devicesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionHeader("Signed-in devices")
+            sectionHeader(L10n.t(.accountDevicesHeading))
             // Browsers are left out on purpose — see AccountDevice.holdsRevocableToken.
-            Text("Apps and command-line logins that hold a token for this account. Browsers aren't listed: they sign in with a session, not a token.")
+            Text(L10n.t(.accountDevicesBody))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             if management.isLoading && management.devices.isEmpty {
                 ProgressView().controlSize(.small)
             } else if management.devices.isEmpty {
-                Text("No app or command-line device is signed in.")
+                Text(L10n.t(.accountNoDevices))
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 ForEach(management.devices) { device in
@@ -211,10 +210,10 @@ struct AccountView: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(device.name.isEmpty ? "Unnamed device" : device.name)
+                        Text(device.name.isEmpty ? L10n.t(.accountUnnamedDevice) : device.name)
                             .lineLimit(1).truncationMode(.middle)
                         if device.current {
-                            Text("This Mac")
+                            Text(L10n.t(.accountThisMac))
                                 .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
                                 .background(.quaternary, in: Capsule())
                         }
@@ -226,7 +225,7 @@ struct AccountView: View {
                 Spacer(minLength: 8)
                 // Only the row being changed is disabled: a slow revoke on one
                 // device must not freeze the rest of the list.
-                Button("Revoke") { deviceToRevoke = device }
+                Button(L10n.t(.commonRevoke)) { deviceToRevoke = device }
                     .disabled(management.isBusy(row: device.id))
             }
             if let error = management.error(forRow: device.id) {
@@ -237,13 +236,9 @@ struct AccountView: View {
     }
 
     private func deviceDetail(_ device: AccountDevice) -> String {
-        let kind = device.kind == "cli" ? "Command line" : "App"
-        // 0 means the credential has never been used since it was issued —
-        // stated plainly rather than rendered as 1970.
-        let used = device.lastSeenAt == 0
-            ? "never used"
-            : "last used \(shortDate(device.lastSeenAt))"
-        return "\(kind) · \(used) · added \(shortDate(device.createdAt))"
+        AccountPresentation.deviceDetail(kind: device.kind,
+                                         lastSeenAt: device.lastSeenAt,
+                                         createdAt: device.createdAt)
     }
 
     // MARK: - stored files
@@ -251,15 +246,15 @@ struct AccountView: View {
     @ViewBuilder
     private var filesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionHeader("Stored files")
-            Text("Encrypted data this account is storing. Relayium's servers never see the file names or the keys, so only the details below are known to them.")
+            sectionHeader(L10n.t(.accountFilesHeading))
+            Text(L10n.t(.accountFilesBody))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             if management.isLoading && management.files.isEmpty {
                 ProgressView().controlSize(.small)
             } else if management.files.isEmpty {
-                Text("Nothing stored right now.")
+                Text(L10n.t(.accountNoFiles))
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 ForEach(management.files) { row in
@@ -282,35 +277,35 @@ struct AccountView: View {
             switch row.link {
             case .available(let link):
                 HStack {
-                    Button("Copy link") {
+                    Button(L10n.t(.accountCopyLink)) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(link, forType: .string)
                     }
                     Spacer()
-                    Button("Delete", role: .destructive) { fileToDelete = row.file }
+                    Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
                         .disabled(management.isBusy(row: row.id))
                 }
             case .keyNotOnThisMac:
                 // The honest version of a disabled button: the key was only ever
                 // in the link, and this Mac does not have it. Saying "unavailable"
                 // without saying why reads as a bug the user could work around.
-                Text("The key for this file isn't on this Mac, so the link can't be rebuilt here. It was sent from another device, or before this version of the app started keeping keys. Relayium's servers never had it.")
+                Text(L10n.t(.accountKeyNotOnThisMac))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Spacer()
-                    Button("Delete", role: .destructive) { fileToDelete = row.file }
+                    Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
                         .disabled(management.isBusy(row: row.id))
                 }
             case .keyLookupFailed(let message):
                 // Not the same statement as "you don't have the key": this one
                 // may be one keychain unlock away.
-                Text("Couldn't check this Mac's keychain for the key, so the link can't be shown. \(message)")
+                Text(L10n.t(.accountKeyLookupFailed, [message]))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Spacer()
-                    Button("Delete", role: .destructive) { fileToDelete = row.file }
+                    Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
                         .disabled(management.isBusy(row: row.id))
                 }
             }
@@ -323,15 +318,7 @@ struct AccountView: View {
     }
 
     private func fileDetail(_ file: StoredFileSummary) -> String {
-        var parts = ["\(byteText(file.size)) encrypted"]
-        parts.append(file.expiresAt == 0 ? "no expiry" : "expires \(shortDate(file.expiresAt))")
-        if file.burnAfterRead { parts.append("deletes after one download") }
-        switch file.downloadCount {
-        case 0: parts.append(file.downloaded ? "downloaded" : "not downloaded yet")
-        case 1: parts.append("downloaded once")
-        default: parts.append("downloaded \(file.downloadCount) times")
-        }
-        return parts.joined(separator: " · ")
+        AccountPresentation.fileDetail(file)
     }
 
     // MARK: - shared bits
@@ -341,22 +328,14 @@ struct AccountView: View {
         Text(title).font(.headline)
     }
 
-    private func shortDate(_ epochSeconds: Int64) -> String {
-        Date(timeIntervalSince1970: TimeInterval(epochSeconds))
-            .formatted(date: .abbreviated, time: .shortened)
-    }
-
-    private func byteText(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-    }
-
     @ViewBuilder
     private func meter(_ title: String, _ d: MeterDisplay) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(title).font(.subheadline)
                 Spacer()
-                Text("\(d.usedText) of \(d.capText)").font(.subheadline).foregroundStyle(.secondary)
+                Text(L10n.t(.accountMeterOf, [d.usedText, d.capText]))
+                    .font(.subheadline).foregroundStyle(.secondary)
             }
             // No bar when unlimited: there is no ratio to draw.
             if let fraction = d.fraction {

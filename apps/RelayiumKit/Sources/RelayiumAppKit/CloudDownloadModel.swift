@@ -68,7 +68,7 @@ public final class CloudDownloadModel: ObservableObject {
     /// anonymous download is what a share link is.
     public func resolve() {
         guard let parsed = parseTransferLink(linkText) else {
-            state = .failed("That doesn't look like a Relayium link. It should look like https://relayium.com/d/…#k=…")
+            state = .failed(L10n.t(.downloadBadLink))
             return
         }
         generation += 1

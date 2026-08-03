@@ -1,0 +1,119 @@
+import Foundation
+import RelayiumKit
+
+/// Copy that a SwiftUI view would otherwise assemble inline.
+///
+/// Everything here used to live in `apps/mac/Relayium/*.swift` as a `switch`
+/// returning English literals, a dictionary of labels, or a `"\(a) · \(b)"`
+/// interpolation. Three reasons it moved:
+///
+///  1. **Testability.** A string built inside a `View`'s computed property is
+///     unreachable from `swift test`. These are reachable, and the localized
+///     assertions in `LocalizedCopyTests` drive them directly.
+///  2. **One copy, two clients.** The menu-bar extra and the nearby pane render
+///     the same receive status; the R3 iOS app will render the same device rows.
+///     Two `switch` statements over the same enum is two places for a state to
+///     go missing.
+///  3. **The literal guard.** `LocalizationSourceGuardTests` refuses user-facing
+///     English literals in the view layer, and these were exactly that.
+public enum NearbyStatusPresentation {
+    /// Deliberately never says "ready" for a state that is not. A dropped socket
+    /// says it is reconnecting, because during that gap this Mac genuinely
+    /// cannot be reached and a user who is waiting for a file needs to know it
+    /// is the app, not the sender.
+    public static func text(for state: NearbyReceiveState,
+                            language: AppLanguage? = nil) -> String {
+        switch state {
+        case .off:            return L10n.t(.nearbyStatusOff, language: language)
+        case .paused:         return L10n.t(.nearbyStatusPaused, language: language)
+        case .connecting:     return L10n.t(.nearbyStatusJoining, language: language)
+        case .ready:          return L10n.t(.nearbyStatusReady, language: language)
+        case .reconnecting:   return L10n.t(.nearbyStatusReconnecting, language: language)
+        case .active(.file):  return L10n.t(.nearbyStatusReceivingFiles, language: language)
+        case .active(.text):  return L10n.t(.nearbyStatusMessageSession, language: language)
+        }
+    }
+}
+
+/// The Account tab's row details.
+public enum AccountPresentation {
+    /// "App · last used 3 Jan 2026 at 09:12 · added 1 Jan 2026 at 08:00".
+    ///
+    /// The device's own NAME is not in here — it is the user's or the peer's
+    /// text and is rendered verbatim beside this line.
+    public static func deviceDetail(kind: String,
+                                    lastSeenAt: Int64,
+                                    createdAt: Int64,
+                                    language: AppLanguage? = nil) -> String {
+        let kindText = kind == "cli"
+            ? L10n.t(.accountDeviceKindCli, language: language)
+            : L10n.t(.accountDeviceKindApp, language: language)
+        // 0 means the credential has never been used since it was issued —
+        // stated plainly rather than rendered as 1970.
+        let used = lastSeenAt == 0
+            ? L10n.t(.accountDeviceNeverUsed, language: language)
+            : L10n.t(.accountDeviceLastUsed, [shortDate(lastSeenAt, language: language)],
+                     language: language)
+        let added = L10n.t(.accountDeviceAdded, [shortDate(createdAt, language: language)],
+                           language: language)
+        return L10n.detail([kindText, used, added], language: language)
+    }
+
+    /// "1.2 MB encrypted · expires 4 Jan 2026 at 09:00 · downloaded twice".
+    public static func fileDetail(_ file: StoredFileSummary,
+                                  language: AppLanguage? = nil) -> String {
+        var parts = [L10n.t(.accountFileEncryptedSize,
+                            [L10n.bytes(file.size, language: language)], language: language)]
+        parts.append(file.expiresAt == 0
+                     ? L10n.t(.accountFileNoExpiry, language: language)
+                     : L10n.t(.accountFileExpires,
+                              [shortDate(file.expiresAt, language: language)], language: language))
+        if file.burnAfterRead { parts.append(L10n.t(.accountFileBurn, language: language)) }
+        switch file.downloadCount {
+        case 0:
+            parts.append(file.downloaded
+                         ? L10n.t(.accountFileDownloaded, language: language)
+                         : L10n.t(.accountFileNotDownloaded, language: language))
+        case 1:
+            parts.append(L10n.t(.accountFileDownloadedOnce, language: language))
+        default:
+            parts.append(L10n.plural(.accountFileDownloadedTimes, file.downloadCount,
+                                     language: language))
+        }
+        return L10n.detail(parts, language: language)
+    }
+
+    /// The abbreviated date/time the account rows use throughout.
+    public static func shortDate(_ epochSeconds: Int64, language: AppLanguage? = nil) -> String {
+        L10n.date(Date(timeIntervalSince1970: TimeInterval(epochSeconds)),
+                  dateStyle: .medium, timeStyle: .short, language: language)
+    }
+}
+
+/// The stored-download pane's counts.
+public enum DownloadPresentation {
+    /// "3 files · 12.4 MB".
+    public static func manifestSummary(fileCount: Int,
+                                       totalBytes: Int64,
+                                       language: AppLanguage? = nil) -> String {
+        L10n.t(.downloadManifestSummary,
+               [L10n.plural(.downloadFileCount, fileCount, language: language),
+                L10n.bytes(totalBytes, language: language)],
+               language: language)
+    }
+
+    public static func savedSummary(fileCount: Int, language: AppLanguage? = nil) -> String {
+        L10n.plural(.downloadSavedFiles, fileCount, language: language)
+    }
+}
+
+/// What a notification says.
+///
+/// Bodies deliberately contain no filenames, links, pairing codes or keys —
+/// notification previews are visible on a locked screen — so localizing them
+/// introduces no new disclosure. Counts are the only substitution.
+public enum NotificationCopy {
+    public static func filesReady(count: Int, language: AppLanguage? = nil) -> String {
+        L10n.plural(.notifyFilesReady, count, language: language)
+    }
+}

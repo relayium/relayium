@@ -189,6 +189,104 @@ profile cannot silently turn HTTPS handoff back off. Link parsing and routing
 are covered by `swift test`; real Finder/Safari handoff remains part of release
 acceptance because macOS and Apple's AASA cache participate in that path.
 
+### Localization
+
+The public macOS UI ships in the same nine languages as the web client:
+**en, zh-Hans, ja, ko, de, fr, ar, es, pt**. The copy and the catalogs belong to
+`RelayiumAppKit`, not to the app target:
+
+    apps/RelayiumKit/Sources/RelayiumAppKit/
+      Localization/AppLanguage.swift          the closed set of nine, + RTL and lproj
+      Localization/L10n.swift                 the only lookup API
+      Localization/L10nKey.swift              L10nKey / PluralKey — the canonical key list
+      Localization/LocalizationCatalog.swift  Bundle.module → <lang>.lproj
+      Localization/PluralRule.swift           CLDR integer plural rules for the nine
+      Localization/AppCopy.swift              copy a SwiftUI view would otherwise inline
+      Resources/<lang>.lproj/Localizable.strings
+
+Views and view models call `L10n.t(.someKey)`; nothing calls `NSLocalizedString`,
+and nothing relies on SwiftUI auto-localizing a string literal. That is not a
+style rule — the catalogs are in the package bundle, so a literal in the app
+target resolves against the *app* bundle, finds nothing, and renders English in
+every language with no error anywhere.
+
+**Locale selection.** `L10n.current` is resolved once from
+`Locale.preferredLanguages` by `AppLanguage.resolve(preferred:)`, which matches
+on the language subtag in the caller's order — so `zh-Hant-TW` and `zh-Hans-CN`
+both land on the Simplified catalog, and anything unmatched lands on English.
+It is settable (`L10n.current = .ko`, `L10n.resetCurrent()`) for previews and
+harnesses.
+
+**Fallback.** Asked language → English → the key itself. The last step is
+deliberate: a raw `account.filesHeading` on screen is a bug report, a blank
+label is not. `Package.swift` declares `defaultLocalization: "en"` to match.
+
+**Explicit locale.** Every entry point takes an optional `language:`
+(`L10n.t(_:language:)`, `ErrorCopy.message(for:language:)`,
+`UsagePresentation.display(_:language:)`, `SelectionStore.summaryText(language:)`,
+…). This is what makes the tests mean something: an assertion about Arabic
+wording must not depend on the language of the machine running it.
+
+**Plurals** are decided in Swift (`PluralRule`), not in `.stringsdict`.
+`.stringsdict` expansion runs through `String.localizedStringWithFormat`, which
+reads `Locale.current` — so the form chosen would depend on the host rather than
+on the language being rendered, which is exactly the property this layer exists
+to provide. Catalog keys are `key.one`, `key.other`, and for Arabic also `.zero`
+`.two` `.few` `.many`.
+
+**Numbers, bytes, dates.** Counts and byte figures use Latin digits with a
+per-language decimal separator (matching the web client, and keeping a figure
+next to a `KB` symbol readable); the percent sign's position and the
+number/unit order come from the catalog. Dates go through `DateFormatter` in the
+rendered language, so an Arabic date uses Arabic conventions — a deliberate
+split from the digits used for counts.
+
+**RTL.** Arabic participates as a real localization of both bundles. The package
+ships `ar.lproj`, and `apps/mac/Relayium/Info.plist` lists all nine in
+`CFBundleLocalizations` — that list is what makes macOS set the app's
+user-interface layout direction, which is what SwiftUI's `\.layoutDirection`
+follows. No layout is mirrored by hand. Technical values interpolated into
+localized prose (file names, manifest paths, pairing codes, the SAS, HTTP
+statuses, an `OSStatus`, an `errno`, a device name) go through `L10n.token`,
+which wraps them in U+2068/U+2069 isolates **for RTL only**, so the bytes are
+unchanged and English output is byte-identical to what it was before.
+
+#### Localization integrity tests
+
+Run with the rest of `swift test`:
+
+- `LocalizationIntegrityTests` — exactly nine languages and exactly nine shipped
+  `.lproj`; every canonical key present and non-empty in every catalog; no
+  catalog key the app does not reference; exactly the CLDR plural categories per
+  language per plural key; placeholder signatures matching English key by key;
+  every lookup returning *that* language's own catalog entry; English fallback
+  then the raw key; the platform agreeing Arabic and only Arabic is RTL; and the
+  app's `Info.plist` declaring the same nine.
+- `LocalizedCopyTests` — what the copy actually renders, in explicit languages:
+  translated errors that keep their instruction, file names surviving verbatim
+  inside translated sentences, Arabic isolating a hostile path without altering
+  it, Arabic picking four different plural forms, and the claims that must
+  survive translation (the key stays on this Mac and never reaches Relayium's
+  servers; deletion is irreversible; the SAS acronym and the brand are kept).
+- `LocalizationSourceGuardTests` — scans `apps/mac/Relayium` and
+  `Sources/RelayiumAppKit` for user-facing English literals and fails on them.
+  A literal that must stay verbatim carries an explicit
+  `// nonlocalized: <reason>` comment, on its own line or the line above. The
+  guard is tested in both directions so it can neither rot into a no-op nor
+  become so strict that the next person disables it.
+
+Adding a string means: add a case to `L10nKey` (or `PluralKey`), add it to all
+nine `.strings` files, and use it. Missing any of those fails a test rather than
+shipping. `apps/mac/scripts/test-release-readiness.sh` repeats the existence and
+`CFBundleLocalizations` checks without needing a Swift toolchain.
+
+Not covered by any automated test: how the screens actually read. The SwiftUI
+surfaces are exercised only through their models and presentation seams, so line
+wrapping, truncation at the 380pt minimum width and the mirrored Arabic layout
+have not been looked at, and the translations have had no native-speaker review.
+macOS supplies its own localization for system menu items and standard alert
+buttons; those are not in this catalog.
+
 ### Manual acceptance
 
 Sign-in, keychain persistence and sign-out are verified by hand. Launch the app, sign

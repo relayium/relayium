@@ -1,0 +1,374 @@
+/* Relayium — Deutsch. Markenname Relayium, relayium.com, SAS, WebRTC, UTF-8 und
+   die Einheiten B/KB/MB bleiben unübersetzt. */
+
+/* MARK: gemeinsame Bedienelemente */
+"common.cancel" = "Abbrechen";
+"common.clear" = "Leeren";
+"common.copy" = "Kopieren";
+"common.done" = "Fertig";
+"common.join" = "Beitreten";
+"common.send" = "Senden";
+"common.accept" = "Annehmen";
+"common.reject" = "Ablehnen";
+"common.revoke" = "Widerrufen";
+"common.delete" = "Löschen";
+"common.dismiss" = "Ausblenden";
+"common.refresh" = "Aktualisieren";
+"common.signOut" = "Abmelden";
+"common.tryAgain" = "Erneut versuchen";
+"common.starting" = "Wird gestartet…";
+"common.code" = "Code";
+"common.chooseFilesOrFolders" = "Dateien oder Ordner auswählen…";
+"common.endSession" = "Sitzung beenden";
+"common.expires" = "Läuft ab: %@";
+
+/* MARK: Darstellungsformate */
+"format.percent" = "%@ %%";
+"format.bytes" = "%1$@ %2$@";
+"format.detailPair" = "%1$@ · %2$@";
+
+/* MARK: App-Lebenszyklus */
+"app.checkForUpdates" = "Nach Updates suchen…";
+"quit.title" = "Eine Übertragung läuft noch";
+"quit.body" = "Jetzt zu beenden bricht sie ab. Nichts wird gespeichert, und ein laufender Upload muss von vorn beginnen.";
+"quit.cancelAndQuit" = "Übertragung abbrechen und beenden";
+"quit.keepTransferring" = "Weiter übertragen";
+
+/* MARK: Menüleiste */
+"menubar.planUsage" = "%1$@ — %2$@ verbraucht";
+"menubar.loadingAccount" = "Konto wird geladen…";
+"menubar.signingIn" = "Anmeldung läuft…";
+"menubar.signedInUnreachable" = "Angemeldet — Server nicht erreichbar";
+"menubar.emailUnverified" = "%@ — E-Mail nicht bestätigt";
+"menubar.pendingDeletion" = "Konto zur Löschung vorgemerkt";
+"menubar.notSignedIn" = "Nicht angemeldet";
+"menubar.resumeNearby" = "Empfang von Geräten in der Nähe fortsetzen";
+"menubar.pauseNearby" = "Empfang von Geräten in der Nähe pausieren";
+"menubar.openToSeeTransfer" = "Relayium öffnen, um diese Übertragung zu sehen";
+"menubar.open" = "Relayium öffnen";
+"menubar.coreStatus" = "Kern: %1$@ · WebRTC: %2$@";
+"menubar.quit" = "Relayium beenden";
+
+/* MARK: Hintergrundempfang */
+"nearby.status.off" = "Empfang in der Nähe: aus";
+"nearby.status.paused" = "Empfang in der Nähe: pausiert";
+"nearby.status.joining" = "Empfang in der Nähe: tritt bei…";
+"nearby.status.ready" = "Empfang in der Nähe: bereit";
+"nearby.status.reconnecting" = "Empfang in der Nähe: verbindet erneut…";
+"nearby.status.receivingFiles" = "Dateien von einem Gerät in der Nähe werden empfangen…";
+"nearby.status.messageSession" = "Eine Nachrichtensitzung mit einem Gerät in der Nähe ist offen";
+
+/* MARK: Fenster */
+"content.haveLink" = "Ich habe einen Link";
+"content.nearbyOrCode" = "Gerät in der Nähe oder Kopplungscode";
+"content.accountLoadFailed" = "Dein Konto konnte nicht geladen werden";
+"content.checkEmailTitle" = "Sieh in deinem Postfach nach";
+"content.checkEmailBody" = "Wir haben einen Bestätigungslink an %@ geschickt. Bestätige ihn und melde dich dann erneut an.";
+"content.openRelayium" = "relayium.com öffnen";
+"content.pendingDeletionTitle" = "Dieses Konto ist zur Löschung vorgemerkt";
+"content.pendingDeletionBody" = "Es wird nach %@ endgültig gelöscht. Reaktiviere es im Web, um es zu behalten.";
+"content.reactivate" = "Auf relayium.com reaktivieren";
+"content.backToSignIn" = "Zurück zur Anmeldung";
+"tab.direct" = "Direkt";
+"tab.link" = "Link";
+"tab.account" = "Konto";
+
+/* MARK: Anmeldung */
+"login.email" = "E-Mail";
+"login.password" = "Passwort";
+"login.signIn" = "Anmelden";
+"login.signInWithApple" = "Mit Apple anmelden";
+"login.createAccount" = "Konto auf relayium.com erstellen";
+
+/* MARK: Direkt-Hub und Verifizierung */
+"hub.transferType" = "Übertragungsart";
+"hub.files" = "Dateien";
+"hub.text" = "Text";
+"hub.transferTypeHint" = "Wähle, was diese Sitzung übertragen soll.";
+"verify.toggle" = "Verifizierungscodes mit dem anderen Gerät vergleichen";
+"verify.explainWhat" = "Standardmäßig aus. Wenn aktiviert, zeigen beide Geräte denselben sechsstelligen Verifizierungscode (SAS), bevor irgendetwas übertragen wird; laut vorgelesen deckt der Vergleich einen ausgetauschten Signalisierungsendpunkt auf. Es ist nicht der Kopplungscode, den du eingegeben hast, und er erkennt nur dann etwas, wenn wirklich jemand die beiden vergleicht.";
+"verify.explainEncryption" = "Das ändert, was angezeigt wird und wo für eine Bestätigung angehalten wird — niemals die Verschlüsselung. Schlüssel entstehen auf diesem Mac und werden nie an Relayium gesendet, das Relay transportiert ausschließlich Chiffrat, und ein manipulierter Handshake scheitert immer.";
+
+/* MARK: Dateiübertragung per Kopplungscode */
+"direct.sendHeading" = "Senden";
+"direct.dropHint" = "Dateien oder Ordner hierher ziehen oder klicken, um sie auszuwählen. Erstelle danach einen Code für das andere Gerät.";
+"direct.createCode" = "Code erstellen";
+"direct.receiveHeading" = "Empfangen";
+"direct.creatingCode" = "Code wird erstellt…";
+"direct.giveCode" = "Gib diesen Code an das andere Gerät weiter";
+"direct.scanOnPhone" = "Oder scanne dies mit einem Telefon.";
+"direct.waitingForDevice" = "Warten auf das andere Gerät…";
+"direct.chooseFilesFirst" = "Wähle zuerst Dateien oder Ordner zum Senden aus.";
+
+/* MARK: Live-Dateisitzung */
+"session.connecting" = "Verbindung wird hergestellt…";
+"session.checkMatches" = "Prüfe, ob dies übereinstimmt";
+"session.checkMatchesBody" = "Auf dem anderen Gerät sollte genau dasselbe stehen. Wenn nicht, greift möglicherweise jemand in diese Verbindung ein.";
+"session.theyMatch" = "Stimmen überein";
+"session.theyDontMatch" = "Stimmen nicht überein";
+"session.transferComplete" = "Übertragung abgeschlossen";
+"session.invalidFileList" = "Die ausgewählte Dateiliste ist ungültig. Wähle die Dateien erneut aus.";
+"session.peerDisconnected" = "Das andere Gerät hat die Verbindung getrennt.";
+
+/* MARK: Cloud-Upload */
+"upload.heading" = "Dateien senden";
+"upload.dropHint" = "Dateien oder Ordner hierher ziehen oder klicken, um sie auszuwählen";
+"upload.ready" = "Bereit";
+"upload.linkReady" = "Link ist bereit";
+"upload.sendAnother" = "Etwas anderes senden";
+"upload.expiresAfter" = "Läuft ab nach";
+"upload.burnAfterRead" = "Nach dem ersten Download löschen";
+"upload.keyKept" = "Der Schlüssel liegt sicher auf diesem Mac und wird nie an die Server von Relayium gesendet. Du kannst diesen Link jederzeit im Tab „Konto“ erneut kopieren.";
+"upload.keyWarning" = "%@ Der Link unten ist die einzige verfügbare Kopie des Schlüssels — kopiere ihn jetzt. Die Server von Relayium hatten den Schlüssel nie, deshalb kann dieser Link nicht erneut angezeigt werden.";
+"upload.fileTooLarge" = "%@ ist größer, als dieser Server akzeptiert.";
+"ttl.oneHour" = "1 Stunde";
+"ttl.oneDay" = "1 Tag";
+"ttl.threeDays" = "3 Tage";
+"ttl.sevenDays" = "7 Tage";
+"ttl.fourteenDays" = "14 Tage";
+"ttl.seconds" = "%@ s";
+
+/* MARK: Cloud-Download */
+"download.heading" = "Dateien empfangen";
+"download.linkPlaceholder" = "relayium.com/d/…-Link einfügen";
+"download.open" = "Öffnen";
+"download.manifestSummary" = "%1$@ · %2$@";
+"download.burnNotice" = "Dieser Link wird nach dem Download gelöscht. Diese Dateien zu speichern verbraucht ihn — danach kann sie niemand mehr herunterladen.";
+"download.save" = "Sichern…";
+"download.savePanelPrompt" = "Hier sichern";
+"download.badLink" = "Das sieht nicht nach einem Relayium-Link aus. Er sollte aussehen wie https://relayium.com/d/…#k=…";
+"download.fileCount.one" = "%@ Datei";
+"download.fileCount.other" = "%@ Dateien";
+"download.savedFiles.one" = "%@ Datei gesichert";
+"download.savedFiles.other" = "%@ Dateien gesichert";
+
+/* MARK: flüchtiger Text */
+"text.creatingCode" = "Textcode wird erstellt…";
+"text.startHeading" = "Textsitzung starten";
+"text.startBody" = "Beide Geräte bleiben online. Nachrichten sind Ende-zu-Ende-verschlüsselt und bleiben nur im Arbeitsspeicher dieser Sitzung.";
+"text.createCode" = "Textcode erstellen";
+"text.signInToCreate" = "Zum Erstellen eines Codes ist eine Anmeldung nötig. Dem Code einer anderen Person beizutreten erfordert kein Konto.";
+"text.joinHeading" = "Textsitzung beitreten";
+"text.joinHint" = "Ein Kopplungscode verrät seine Art nicht. Wähle hier nur dann „Text“, wenn die sendende Seite eine Textsitzung gestartet hat.";
+"text.giveCode" = "Gib diesen Textcode an das andere Gerät weiter";
+"text.connecting" = "Private Textsitzung wird verbunden…";
+"text.checkMatches" = "Prüfe, ob dies mit dem anderen Gerät übereinstimmt";
+"text.checkMatchesBody" = "Wenn es nicht exakt übereinstimmt, greift möglicherweise jemand in die Verbindung ein.";
+"text.waitingAccept" = "Warten, bis das andere Gerät annimmt…";
+"text.verifiedPhrase" = "Verifizierte Phrase: %@";
+"text.incomingHeading" = "Das andere Gerät möchte Text austauschen";
+"text.nothingDecrypted" = "Bisher wurde keine Nachricht entschlüsselt oder angezeigt.";
+"text.sessionHeading" = "Private Textsitzung";
+"text.noServerHistory" = "Relayium speichert weder Nachrichteninhalte noch einen serverseitigen Verlauf. Beide Geräte können den Text dennoch kopieren oder aufbewahren.";
+"text.noMessages" = "Noch keine Nachrichten.";
+"text.composerLabel" = "Nachricht";
+"text.byteCounter" = "%1$@ / %2$@ UTF-8-Bytes";
+"text.clipboardNotice" = "Beim Kopieren landet der Inhalt in der Zwischenablage des Systems, wo andere Apps oder Verlaufswerkzeuge ihn aufbewahren können.";
+"text.clipboardNoticeShort" = "Kopieren kann Inhalte in der Zwischenablage oder deren Verlauf hinterlassen.";
+"text.clearHistory" = "Verlauf löschen";
+"text.localHistoryHeading" = "Lokaler Sitzungsverlauf";
+"text.localHistoryBody" = "Dieser Verlauf bleibt nur im Arbeitsspeicher dieser App, bis du ihn löschst oder eine andere Sitzung startest.";
+"text.sent" = "Gesendet";
+"text.received" = "Empfangen";
+"text.notSent" = "Nicht gesendet";
+"text.copySentMessage" = "Gesendete Nachricht kopieren";
+"text.copyReceivedMessage" = "Empfangene Nachricht kopieren";
+"text.refused" = "Das andere Gerät hat diese Textsitzung abgelehnt.";
+"text.unsupported" = "Dieses Gerät unterstützt Relayium-Textsitzungen noch nicht. Aktualisiere Relayium auf beiden Geräten.";
+"text.ended" = "Die Textsitzung ist beendet. Der lokale Verlauf bleibt sichtbar, bis du ihn löschst oder eine andere Sitzung startest.";
+"text.messageTooLong" = "Diese Nachricht ist zu lang. Sende sie stattdessen als Datei.";
+"text.sendFailed" = "Die Nachricht konnte nicht gesendet werden.";
+"text.sessionFailed" = "Die Nachrichtensitzung ist fehlgeschlagen.";
+"text.tooManyMessages" = "Das andere Gerät hat zu viele Nachrichten gesendet.";
+"text.safetyLimits" = "Die Nachrichtensitzung hat ihre Sicherheitsgrenzen überschritten.";
+
+/* MARK: Geräte in der Nähe */
+"nearby.heading" = "Geräte in der Nähe";
+"nearby.explain" = "Geräte, auf denen Relayium läuft — die App oder relayium.com — und die das Internet über dieselbe öffentliche Adresse erreichen wie dieser Mac. Meist ist das dein WLAN, aber ein Mobilfunk- oder VPN-Gateway kann auch fremde Geräte in die Liste bringen. Relayium durchsucht dein Netzwerk nie; es fragt seinen Rendezvous-Dienst, wer sonst noch von dieser Adresse kommt.";
+"nearby.dropHint" = "Dateien oder Ordner hierher ziehen oder klicken, um sie auszuwählen. Nichts wird gesendet, bevor du unten ein Gerät auswählst und auf Senden drückst.";
+"nearby.lookAgain" = "Erneut suchen";
+"nearby.resumeReceiving" = "Empfang fortsetzen";
+"nearby.pauseReceiving" = "Empfang pausieren";
+"nearby.pausedBody" = "Dieser Mac hört nicht auf Geräte in der Nähe. Senden ist weiterhin möglich, und Kopplungscodes funktionieren wie gewohnt.";
+"nearby.listeningBody" = "Solange Relayium läuft, kann ein Gerät an dieser Adresse ohne Nachfrage Dateien senden oder eine Nachrichtensitzung starten. Dateien landen in deinem Ordner „Downloads“. Alles, was diese öffentliche Adresse teilt, kann es versuchen — pausiere den Empfang, wenn du das nicht möchtest.";
+"nearby.a11yReceiving" = "Empfang in der Nähe";
+"nearby.emptyRoster" = "Noch keine anderen Geräte. Öffne relayium.com auf dem anderen Gerät und lass die Seite geöffnet.";
+"nearby.namesDisclaimer" = "Namen stammen vom anderen Gerät und sind kein Beweis dafür, wer es ist. Vergleiche unten die Verifizierungscodes, wenn das wichtig ist.";
+"nearby.a11yDevices" = "Geräte in der Nähe";
+"nearby.a11yChooseDevice" = "Dieses Gerät als Ziel auswählen.";
+"nearby.sendTo" = "An %@ senden";
+"nearby.selectionSendHint" = "%@. Direkt an dieses Gerät senden.";
+"nearby.addFilesHint" = "Füge oben Dateien oder Ordner hinzu und sende sie dann direkt an dieses Gerät.";
+"nearby.textIntent" = "Öffnet eine Ende-zu-Ende-verschlüsselte Nachrichtensitzung. Bei Relayium wird nichts gespeichert.";
+"nearby.startMessageSession" = "Nachrichtensitzung starten";
+"nearby.acceptanceNote" = "Auf relayium.com wählt die andere Person weiterhin selbst, wo eingehende Dateien gespeichert werden; eine Nachrichtensitzung öffnet sich dort ohne Nachfrage, sofern nicht auf einem der Geräte die erweiterte Verifizierung (unten) aktiv ist. Dieser Mac nimmt eingehende Übertragungen aus der Nähe genauso an, solange der Empfang aktiv ist.";
+"nearby.backToDevices" = "Zurück zu Geräten in der Nähe";
+"nearby.leavingClearsHistory" = "Beim Verlassen wird der lokale Nachrichtenverlauf dieser Sitzung gelöscht.";
+"nearby.deviceGone" = "Dieses Gerät ist nicht mehr in der Nähe. Wähle ein anderes.";
+"nearby.addFilesFirst" = "Füge zuerst Dateien oder Ordner zum Senden hinzu.";
+"nearby.reconnecting" = "Die Verbindung zum Geräte-Rendezvous von Relayium ist abgerissen. Verbindung wird wiederhergestellt…";
+"nearby.unnamedDevice" = "Unbenanntes Gerät";
+"nearby.setupFailed" = "Eine eingehende Übertragung aus der Nähe konnte nicht eingerichtet werden.";
+
+/* MARK: Ablagebereich, Auswahl, Ergebnis, QR */
+"drop.a11yLabel" = "Zu sendende Dateien";
+"drop.a11yHint" = "Dateien oder Ordner hierher ziehen oder aktivieren, um sie auszuwählen.";
+"picker.prompt" = "Auswählen";
+"received.revealInFinder" = "Im Finder zeigen";
+"received.dragHint" = "Zieh eines der Objekte oben in den Finder oder eine andere App.";
+"received.a11yDragHint" = "In eine andere App ziehen, um es zu kopieren, oder „Im Finder zeigen“ verwenden.";
+"qr.a11yLabel" = "QR-Code für den Kopplungslink";
+
+/* MARK: Mitteilungen */
+"notify.title.complete" = "Relayium-Übertragung abgeschlossen";
+"notify.title.failed" = "Relayium-Übertragung fehlgeschlagen";
+"notify.title.message" = "Relayium-Nachricht";
+"notify.title.incoming" = "Relayium: eingehend";
+"notify.uploadReady" = "Dein verschlüsselter Download-Link ist bereit.";
+"notify.filesDelivered" = "Deine Dateien haben das andere Gerät erreicht.";
+"notify.transferStopped" = "Eine Übertragung wurde vor dem Abschluss beendet.";
+"notify.newMessage" = "Eine neue verschlüsselte Nachricht ist eingetroffen.";
+"notify.incomingFiles" = "Ein Gerät in der Nähe sendet Dateien an diesen Mac.";
+"notify.incomingText" = "Ein Gerät in der Nähe hat eine Nachrichtensitzung mit diesem Mac gestartet.";
+"notify.incomingFailed" = "Eine eingehende Übertragung aus der Nähe konnte nicht gestartet werden.";
+"notify.filesReady.one" = "%@ Datei ist bereit.";
+"notify.filesReady.other" = "%@ Dateien sind bereit.";
+
+/* MARK: Konto */
+"account.managePlan" = "Tarif verwalten";
+"account.traffic" = "Datenvolumen";
+"account.storage" = "Speicher";
+"account.meterOf" = "%1$@ von %2$@";
+"account.staleFigures" = "Es werden die zuletzt bekannten Werte angezeigt — der Server war nicht erreichbar.";
+"account.devicesHeading" = "Angemeldete Geräte";
+"account.devicesBody" = "Apps und Befehlszeilen-Anmeldungen, die ein Token für dieses Konto halten. Browser stehen nicht in der Liste: Sie melden sich mit einer Sitzung an, nicht mit einem Token.";
+"account.noDevices" = "Kein App- oder Befehlszeilengerät ist angemeldet.";
+"account.unnamedDevice" = "Unbenanntes Gerät";
+"account.thisMac" = "Dieser Mac";
+"account.deviceKindCli" = "Befehlszeile";
+"account.deviceKindApp" = "App";
+"account.deviceNeverUsed" = "nie verwendet";
+"account.deviceLastUsed" = "zuletzt verwendet %@";
+"account.deviceAdded" = "hinzugefügt %@";
+"account.revokeTitle" = "„%@“ widerrufen?";
+"account.revokeThisMac" = "Das ist der Mac, den du gerade benutzt. Ein Widerruf meldet diese App sofort ab.";
+"account.revokeOther" = "Dieses Gerät wird abgemeldet und muss sich erneut anmelden.";
+"account.filesHeading" = "Gespeicherte Dateien";
+"account.filesBody" = "Verschlüsselte Daten, die dieses Konto speichert. Die Server von Relayium sehen weder die Dateinamen noch die Schlüssel, ihnen sind also nur die Angaben unten bekannt.";
+"account.noFiles" = "Derzeit ist nichts gespeichert.";
+"account.copyLink" = "Link kopieren";
+"account.keyNotOnThisMac" = "Der Schlüssel für diese Datei liegt nicht auf diesem Mac, deshalb lässt sich der Link hier nicht wiederherstellen. Sie wurde von einem anderen Gerät gesendet oder bevor diese App-Version Schlüssel aufbewahrt hat. Die Server von Relayium hatten ihn nie.";
+"account.keyLookupFailed" = "Der Schlüsselbund dieses Macs konnte nicht nach dem Schlüssel durchsucht werden, deshalb lässt sich der Link nicht anzeigen. %@";
+"account.deleteFileTitle" = "Diese gespeicherte Datei löschen?";
+"account.deleteFileBody" = "Die verschlüsselten Daten werden vom Server gelöscht. Wer den Link hat, bekommt nichts mehr. Das lässt sich nicht rückgängig machen.";
+"account.fileEncryptedSize" = "%@ verschlüsselt";
+"account.fileNoExpiry" = "kein Ablauf";
+"account.fileExpires" = "läuft ab %@";
+"account.fileBurn" = "wird nach einem Download gelöscht";
+"account.fileDownloaded" = "heruntergeladen";
+"account.fileNotDownloaded" = "noch nicht heruntergeladen";
+"account.fileDownloadedOnce" = "einmal heruntergeladen";
+"account.fileDownloadedTimes.one" = "%@-mal heruntergeladen";
+"account.fileDownloadedTimes.other" = "%@-mal heruntergeladen";
+"account.bearerInvalid" = "Die Anmeldung dieses Macs ist nicht mehr gültig. Melde dich ab und wieder an.";
+"account.keyCleanupWarning" = "Die gespeicherte Datei „%1$@“ wurde vom Server gelöscht, ihr Schlüssel liegt aber weiterhin auf diesem Mac. %2$@ Der Schlüssel kann nichts mehr öffnen — die verschlüsselten Daten, zu denen er gehörte, sind fort.";
+"account.signOutFailed" = "Sicheres Abmelden war nicht möglich. Die Zugangsdaten wurden behalten, damit du es erneut versuchen kannst.";
+
+/* MARK: Verbrauch und Abzeichen */
+"usage.unlimited" = "Unbegrenzt";
+"usage.resetsToday" = "Setzt sich heute zurück";
+"usage.resetsInDays.one" = "Setzt sich in %@ Tag zurück";
+"usage.resetsInDays.other" = "Setzt sich in %@ Tagen zurück";
+"badge.trial" = "Testphase";
+"badge.paymentFailed" = "Zahlung fehlgeschlagen";
+"badge.canceled" = "Gekündigt";
+"badge.unpaid" = "Unbezahlt";
+"badge.paymentIncomplete" = "Zahlung unvollständig";
+"badge.paused" = "Pausiert";
+"badge.inactive" = "Inaktiv";
+
+/* MARK: Auswahlübersicht */
+"selection.files.one" = "%@ Datei bereit";
+"selection.files.other" = "%@ Dateien bereit";
+"selection.folders.one" = "in %@ Ordner";
+"selection.folders.other" = "in %@ Ordnern";
+"selection.emptyFolders.one" = "%@ leerer Ordner kann nicht gesendet werden";
+"selection.emptyFolders.other" = "%@ leere Ordner können nicht gesendet werden";
+
+/* MARK: Fehler */
+"error.account.invalidCredentials" = "Diese E-Mail-Adresse und dieses Passwort passen zu keinem Konto.";
+"error.account.notSignedIn" = "Melde dich an, um einen Kopplungscode zu erstellen. Dateien mit einem Code, den dir jemand gibt, kannst du weiterhin empfangen.";
+"error.account.rateLimited" = "Zu viele Versuche. Warte eine Minute und versuch es dann erneut.";
+"error.account.server" = "Der Server hat einen Fehler gemeldet (%@). Versuch es gleich noch einmal.";
+"error.account.decoding" = "Der Server hat eine Antwort geschickt, die diese App-Version nicht versteht. Ein Update kann helfen.";
+"error.account.network" = "Der Server war nicht erreichbar. Prüfe deine Internetverbindung.";
+"error.keychain.signIn" = "macOS konnte deine Anmeldung nicht sichern (Schlüsselbund-Fehler %@). Du bleibst angemeldet, bis du die App beendest.";
+"error.storedKey.keychain.save" = "macOS konnte den Schlüssel dieser Datei nicht im Schlüsselbund sichern (Schlüsselbund-Fehler %@).";
+"error.storedKey.keychain.read" = "macOS konnte den Schlüssel dieser Datei nicht aus dem Schlüsselbund lesen (Schlüsselbund-Fehler %@).";
+"error.storedKey.keychain.remove" = "macOS konnte den Schlüssel dieser Datei nicht aus dem Schlüsselbund entfernen (Schlüsselbund-Fehler %@).";
+"error.storedKey.badId.save" = "Die Kennung dieser Datei ist keine, unter der diese App einen Schlüssel sichert, deshalb wurde ihr Schlüssel nicht auf diesem Mac gesichert. Bitte melde das.";
+"error.storedKey.badId.read" = "Die Kennung dieses Objekts ist keine, mit der diese App arbeitet, deshalb wurde sein Schlüssel nicht gelesen und der Link lässt sich hier nicht wiederherstellen. Verwalte es auf relayium.com und melde das bitte.";
+"error.storedKey.badId.remove" = "Die Kennung dieses Objekts ist keine, mit der diese App arbeitet, deshalb wurde der Schlüssel nicht entfernt. Bitte melde das.";
+"error.storedKey.badKey.save" = "Der Schlüssel dieser Datei hat keine Form, die diese App sichern kann, deshalb wurde er nicht auf diesem Mac gesichert. Bitte melde das.";
+"error.storedKey.badKey.remove" = "Der Schlüssel dieser Datei hat keine Form, mit der diese App arbeiten kann, deshalb wurde er nicht entfernt. Bitte melde das.";
+"error.handshake.mitm" = "Die beiden Geräte konnten sich nicht auf ein gemeinsames Geheimnis einigen. Möglicherweise greift jemand in diese Verbindung ein — brich ab und koppelt euch mit einem neuen Code erneut.";
+"error.peer.protocol" = "Das andere Gerät hat etwas gesendet, das diese App-Version nicht versteht. Vielleicht müssen beide Seiten aktualisiert werden.";
+"error.realtime.tamper" = "Die eingetroffenen Daten passten nicht zu dem, was die sendende Seite beschrieben hat, deshalb wurden sie verworfen. Bitte um erneutes Senden.";
+"error.realtime.dropped" = "Die Verbindung hat einen Teil der Übertragung verloren. Nichts wurde gespeichert — versuch es erneut.";
+"error.realtime.legacyPeer" = "Auf dem anderen Gerät läuft eine ältere Version, die diese Übertragung nicht abschließen kann. Sie muss aktualisiert werden.";
+"error.sender.manifestTooLarge" = "Zu viele Dateien auf einmal für eine einzelne Übertragung. Sende sie in kleineren Paketen.";
+"error.sender.invalidManifest" = "Die ausgewählten Dateien ließen sich nicht sicher beschreiben, deshalb wurde die Übertragung nicht gestartet.";
+"error.sender.sourceShorter" = "„%@“ hat sich während des Sendens verändert, deshalb wurde die Übertragung gestoppt. Versuch es erneut.";
+"error.sender.sourceLonger" = "„%@“ ist nach der Auswahl gewachsen, deshalb wurden Bytes außerhalb der freigegebenen Dateiliste nicht gesendet. Wähle die Datei erneut aus und versuch es noch einmal.";
+"error.connection.peerBusy" = "Das andere Gerät ist bereits in einer Übertragung. Warte, bis sie fertig ist, und versuch es dann erneut.";
+"error.connection.unsupportedPeer" = "Das andere Gerät unterstützt verschlüsselte Textsitzungen noch nicht. Vielleicht muss es aktualisiert werden.";
+"error.connection.failed" = "Die private Verbindung ließ sich nicht öffnen. Prüfe, ob beide Geräte online sind, und versuch es erneut.";
+"error.connection.alreadySending" = "Diese Verbindung sendet bereits. Starte für eine weitere Übertragung eine neue Sitzung.";
+"error.connection.rejected" = "Das andere Gerät hat diese Übertragung abgelehnt.";
+"error.connection.timedOut" = "Das andere Gerät antwortet nicht mehr, deshalb wurde die Sitzung beendet.";
+"error.connection.textSendBufferFull" = "Die Verbindung holt gerade auf. Warte einen Moment und sende die Nachricht dann erneut.";
+"error.connection.textSendFailed" = "Die verschlüsselte Nachricht konnte nicht gesendet werden. Versuch es noch einmal.";
+"error.connection.textReceiveBufferFull" = "Das andere Gerät hat vor Abschluss der Verifizierung zu viel gesendet, deshalb wurde die Sitzung geschlossen.";
+"error.factory.noPeerAppeared" = "Niemand ist beigetreten, bevor der Kopplungscode ablief. Erstelle einen neuen Code und versuch es erneut.";
+"error.nearby.notScanning" = "Relayium sucht nicht mehr nach Geräten in der Nähe, deshalb ist dieses Gerät nicht mehr verfügbar. Such erneut und wähle es dann aus.";
+"error.nearby.noAnswer" = "Dieses Gerät hat nicht geantwortet. Öffne relayium.com darauf, lass die Seite geöffnet und wähle es erneut aus. Ein Kopplungscode funktioniert stattdessen auch — und ist der Weg, um auf diesem Mac zu empfangen.";
+"error.staging.fileCount" = "Wähle zwischen 1 und %@ Dateien.";
+"error.staging.unreadable" = "Es konnten nicht alle ausgewählten Dateien geöffnet werden, deshalb wurde nichts gesendet. Wähle die Dateien erneut aus.";
+"error.text.authenticationFailed" = "Die verschlüsselte Nachricht hat ihre Integritätsprüfung nicht bestanden, deshalb wurde sie verworfen und die Sitzung geschlossen.";
+"error.text.outOfOrder" = "Die Verbindung hat eine Nachricht verloren oder umsortiert, deshalb wurde die Sitzung geschlossen, ohne sie anzuzeigen.";
+"error.text.messageTooLarge" = "Das andere Gerät hat eine Nachricht gesendet, die größer ist als diese Version unterstützt, deshalb wurde die Sitzung geschlossen.";
+"error.text.invalid" = "Das andere Gerät hat eine ungültige verschlüsselte Nachricht gesendet, deshalb wurde sie verworfen und die Sitzung geschlossen.";
+"error.deviceAuth.denied" = "Diese Anmeldung wurde im Browser abgelehnt. Versuch es erneut, falls du das nicht warst.";
+"error.deviceAuth.expired" = "Die Anmeldeanfrage ist abgelaufen. Beginne von vorn, um eine neue zu erhalten.";
+"error.destination.directoryExists" = "„%@“ ist hier bereits vorhanden — dieser Link wurde schon einmal in diesen Ordner geladen. Wähle einen anderen Ordner: Die App führt nichts mit einem vorhandenen Ordner zusammen, weil sie einen halb fertigen Download nicht von deinen eigenen Dateien unterscheiden kann.";
+"error.destination.unsafeName" = "Der Link beschreibt eine Datei namens „%@“, die außerhalb des gewählten Ordners geschrieben würde, deshalb wurde nichts gesichert. Bitte die sendende Seite um einen neuen Link.";
+"error.destination.fileExists" = "„%@“ ist am Zielort bereits vorhanden. Wähle einen anderen Ordner; Relayium überschreibt nichts.";
+"error.destination.incomplete" = "Die empfangene Byte-Anzahl passte nicht zur Dateiliste, deshalb wurden die unvollständigen Dateien verworfen. Bitte die sendende Seite, es erneut zu versuchen.";
+"error.destination.noSpace" = "Es ist nicht genug freier Speicher vorhanden, um diese Übertragung zu sichern, deshalb wurde nichts gesichert. Schaffe Platz und versuch es erneut.";
+"error.destination.notPermitted" = "Relayium darf nicht in diesen Ordner schreiben, deshalb wurde nichts gesichert. Wähle einen anderen Ordner.";
+"error.destination.systemError" = "In den Zielordner konnte nicht geschrieben werden (Fehler %@), deshalb wurde nichts gesichert. Versuch einen anderen Ordner.";
+"error.manifest.unsafePath" = "Das andere Gerät hat eine Datei unter „%@“ beschrieben, die außerhalb des gewählten Ordners geschrieben würde. Es wurde nichts gesichert.";
+"error.manifest.duplicatePath" = "Die Übertragung enthält mehr als eine Datei unter „%@“ — auf diesem Mac sind das dieselbe Datei — deshalb wurde nichts gesichert. Bitte die sendende Seite, eine davon umzubenennen.";
+"error.manifest.pathCollision" = "Die Übertragung möchte, dass „%@“ zugleich Datei und Ordner ist, was nicht gleichzeitig möglich ist, deshalb wurde nichts gesichert. Bitte die sendende Seite, es erneut zu versuchen.";
+"error.plaintext.unreadable" = "„%@“ ließ sich nicht öffnen, deshalb wurde nichts gesendet. Prüfe, ob die Datei noch existiert und du sie lesen darfst.";
+"error.plaintext.readFailed" = "Das Lesen von „%@“ ist mittendrin fehlgeschlagen, deshalb wurde die Übertragung gestoppt. Das andere Gerät hat die unvollständige Datei verworfen.";
+"error.plaintext.tooManyOpenFiles" = "Diesem Mac sind mitten in deiner Auswahl die Datei-Handles ausgegangen (sein Limit liegt bei %@). Relayium hält jede ausgewählte Datei geöffnet, damit genau die Dateien gesendet werden, die du gewählt hast — sende sie deshalb in kleineren Paketen.";
+"error.selection.noFiles" = "Es gibt nichts zu senden. Ein leerer Ordner lässt sich nicht für sich allein übertragen — die Dateiliste kann einen Ordner ohne Inhalt nicht beschreiben.";
+"error.selection.tooManyFiles" = "Diese Auswahl enthält mehr als %@ Dateien. Wähle weniger Dateien oder komprimiere den Ordner zuerst.";
+"error.selection.unreadable" = "„%@“ ließ sich nicht lesen, deshalb wurde nichts gesendet. Prüfe, ob das Objekt noch existiert und du es öffnen darfst.";
+"error.selection.symbolicLink" = "„%@“ ist ein symbolischer Link. Relayium folgt ihm nicht — das könnte Dateien außerhalb deiner Auswahl senden — und überspringt ihn auch nicht stillschweigend. Nimm ihn aus der Auswahl oder sende den echten Ordner, auf den er zeigt.";
+"error.selection.pathTooLong" = "Der Pfad „%@“ ist zu lang, um in einer Übertragung beschrieben zu werden. Sende aus einem flacheren Ordner oder kürze die Namen.";
+"error.cloud.unauthorized" = "Deine Anmeldung ist abgelaufen. Melde dich erneut an, um Dateien zu senden.";
+"error.cloud.quota" = "Für diese Datei ist nicht genug Speicher oder Tageskontingent übrig. Schaffe Platz oder wechsle den Tarif.";
+"error.cloud.rateLimited" = "Gerade laufen zu viele Uploads. Warte eine Minute und versuch es dann erneut.";
+"error.cloud.dailyQuota" = "Diese Datei überschreitet dein verbleibendes Tageskontingent für Uploads — eine einzige große Datei kann es allein aufbrauchen. Versuch es morgen erneut oder wechsle für ein größeres Tageskontingent den Tarif.";
+"error.cloud.monthlyTraffic" = "Dein Konto hat sein monatliches Datenvolumen erreicht. Uploads laufen nächsten Monat weiter, oder wechsle den Tarif, um sofort fortzufahren.";
+"error.cloud.notFound" = "Dieser Link ist abgelaufen, wurde bereits heruntergeladen oder falsch eingegeben.";
+"error.cloud.server" = "Der Server hat einen Fehler gemeldet (%@). Versuch es gleich noch einmal.";
+"error.cloud.network" = "Der Server war nicht erreichbar. Prüfe deine Internetverbindung.";
+"error.cloud.decoding" = "Der Server hat eine Antwort geschickt, die diese App-Version nicht versteht. Ein Update kann helfen.";
+"error.storedLinkKey.invalidIdentifier" = "Die Kennung dieses Objekts ist keine, mit der diese App arbeitet, deshalb wurde es abgelehnt. Verwalte es auf relayium.com und melde das bitte.";
+"error.storedLinkKey.invalidKey" = "Der auf diesem Mac gespeicherte Schlüssel für diese Datei ist unlesbar, deshalb lässt sich der Link daraus nicht wiederherstellen.";
+"error.storedWire.invalidKey" = "Der Schlüssel dieses Links ist fehlerhaft — wahrscheinlich wurde er unvollständig kopiert.";
+"error.storedWire.corrupt" = "Die heruntergeladenen Daten passten nicht zu dem, was der Link beschreibt, deshalb wurden sie verworfen. Bitte die sendende Seite um einen neuen Link.";
+"error.unknown" = "Etwas ist schiefgelaufen (%@).";

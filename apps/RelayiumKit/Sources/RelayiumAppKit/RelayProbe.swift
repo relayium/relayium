@@ -116,7 +116,7 @@ private final class FirstRelayCandidate: NSObject, RTCPeerConnectionDelegate, @u
     }
 
     func peerConnection(_ pc: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
-        guard candidate.sdp.contains(" typ relay") else { return }
+        guard candidate.sdp.contains(" typ relay") else { return }  // nonlocalized: SDP candidate token
         settle(true)
     }
 

@@ -365,7 +365,7 @@ public final class RealtimeSessionModel: ObservableObject {
         guard sources.count == metas.count, let total = try? validateRealtimeFiles(metas) else {
             pendingSend = nil
             totalBytes = 0
-            state = .failed("The selected file list is invalid. Choose the files again.")
+            state = .failed(L10n.t(.sessionInvalidFileList))
             return
         }
         pendingSend = (sources, metas, total)
@@ -588,7 +588,7 @@ public final class RealtimeSessionModel: ObservableObject {
                 self?.apply(g) { m in
                     if m.isBusy {
                         m.writer?.discard()
-                        m.state = .failed("The other device disconnected.")
+                        m.state = .failed(L10n.t(.sessionPeerDisconnected))
                     }
                 }
             }

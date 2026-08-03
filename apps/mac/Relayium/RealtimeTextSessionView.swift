@@ -27,8 +27,8 @@ struct RealtimeTextSessionView: View {
                 terminalMessage
                 retainedHistory
             case .joining, .connecting:
-                ProgressView("Connecting a private text session…").controlSize(.small)
-                Button("Cancel") { model.end() }
+                ProgressView(L10n.t(.textConnecting)).controlSize(.small)
+                Button(L10n.t(.commonCancel)) { model.end() }
             case let .verifying(sas):
                 verify(sas)
             case let .waitingAccept(sas):
@@ -47,52 +47,52 @@ struct RealtimeTextSessionView: View {
 
     private func verify(_ sas: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Check this matches the other device")
+            Text(L10n.t(.textCheckMatches))
                 .font(.subheadline.weight(.semibold))
             Text(sas)
                 .font(.system(size: 26, weight: .semibold, design: .monospaced))
                 .textSelection(.enabled)
-            Text("If it does not match exactly, someone may be intercepting the connection.")
+            Text(L10n.t(.textCheckMatchesBody))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack {
-                Button("They match") { model.confirmSAS() }
+                Button(L10n.t(.sessionTheyMatch)) { model.confirmSAS() }
                     .buttonStyle(.borderedProminent)
-                Button("They don't match") { model.rejectSAS() }
+                Button(L10n.t(.sessionTheyDontMatch)) { model.rejectSAS() }
             }
         }
     }
 
     private func waiting(_ sas: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Waiting for the other device to accept…")
+            Text(L10n.t(.textWaitingAccept))
                 .font(.subheadline.weight(.semibold))
             if verification.requiresSASConfirmation {
-                Text("Verified phrase: \(sas)")
+                Text(L10n.t(.textVerifiedPhrase, [L10n.token(sas)]))
                     .font(.caption.monospaced())
                     .textSelection(.enabled)
             }
             ProgressView().controlSize(.small)
-            Button("End session") { model.end() }
+            Button(L10n.t(.commonEndSession)) { model.end() }
         }
     }
 
     private func incomingRequest(_ sas: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("The other device wants to exchange text")
+            Text(L10n.t(.textIncomingHeading))
                 .font(.subheadline.weight(.semibold))
             if verification.requiresSASConfirmation {
-                Text("Verified phrase: \(sas)")
+                Text(L10n.t(.textVerifiedPhrase, [L10n.token(sas)]))
                     .font(.caption.monospaced())
                     .textSelection(.enabled)
             }
-            Text("No message has been decrypted or shown yet.")
+            Text(L10n.t(.textNothingDecrypted))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack {
-                Button("Accept") { model.accept() }
+                Button(L10n.t(.commonAccept)) { model.accept() }
                     .buttonStyle(.borderedProminent)
-                Button("Reject") { model.reject() }
+                Button(L10n.t(.commonReject)) { model.reject() }
             }
         }
     }
@@ -100,13 +100,13 @@ struct RealtimeTextSessionView: View {
     private func session(_ sas: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Private text session").font(.headline)
+                Text(L10n.t(.textSessionHeading)).font(.headline)
                 Spacer()
                 if verification.requiresSASConfirmation {
                     Text(sas).font(.caption.monospaced()).foregroundStyle(.secondary)
                 }
             }
-            Text("Relayium stores no message body or server-side history. Either device can still copy or retain text.")
+            Text(L10n.t(.textNoServerHistory))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -114,7 +114,7 @@ struct RealtimeTextSessionView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
                     if model.history.isEmpty {
-                        Text("No messages yet.")
+                        Text(L10n.t(.textNoMessages))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -130,29 +130,30 @@ struct RealtimeTextSessionView: View {
                 .font(.body.monospaced())
                 .frame(minHeight: 72)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
-                .accessibilityLabel("Message")
+                .accessibilityLabel(L10n.t(.textComposerLabel))
 
             HStack {
-                Text("\(model.draftByteCount.formatted()) / \(TEXT_MAX_BYTES.formatted()) UTF-8 bytes")
+                Text(L10n.t(.textByteCounter, [L10n.number(model.draftByteCount),
+                                               L10n.number(TEXT_MAX_BYTES)]))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(model.draftByteCount > TEXT_MAX_BYTES ? .red : .secondary)
                 Spacer()
-                Button("Send") { model.sendDraft() }
+                Button(L10n.t(.commonSend)) { model.sendDraft() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(!model.canSend)
             }
 
-            Text("Copying places content on the system clipboard, where other apps or clipboard history tools may retain it.")
+            Text(L10n.t(.textClipboardNotice))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack {
-                Button("Clear history") { model.clearHistory() }
+                Button(L10n.t(.textClearHistory)) { model.clearHistory() }
                     .disabled(model.history.isEmpty)
                 Spacer()
-                Button("End session") { model.end() }
+                Button(L10n.t(.commonEndSession)) { model.end() }
             }
         }
     }
@@ -161,8 +162,8 @@ struct RealtimeTextSessionView: View {
     private var retainedHistory: some View {
         if !model.history.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Local session history").font(.headline)
-                Text("This history remains only in this app's memory until you clear it or start another session.")
+                Text(L10n.t(.textLocalHistoryHeading)).font(.headline)
+                Text(L10n.t(.textLocalHistoryBody))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -176,11 +177,11 @@ struct RealtimeTextSessionView: View {
                 }
                 .frame(minHeight: 100, maxHeight: 200)
                 HStack {
-                    Text("Copying may leave content in the system clipboard or clipboard history.")
+                    Text(L10n.t(.textClipboardNoticeShort))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("Clear history") { model.clearHistory() }
+                    Button(L10n.t(.textClearHistory)) { model.clearHistory() }
                 }
             }
         }
@@ -189,18 +190,19 @@ struct RealtimeTextSessionView: View {
     private func messageRow(_ message: RealtimeTextMessage) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text(message.direction == .outgoing ? "Sent" : "Received")
+                Text(L10n.t(message.direction == .outgoing ? .textSent : .textReceived))
                     .font(.caption.weight(.semibold))
                 if message.failed {
-                    Text("Not sent").font(.caption).foregroundStyle(.red)
+                    Text(L10n.t(.textNotSent)).font(.caption).foregroundStyle(.red)
                 }
                 Spacer()
-                Button("Copy") {
+                Button(L10n.t(.commonCopy)) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(message.body, forType: .string)
                 }
                 .buttonStyle(.link)
-                .accessibilityLabel("Copy \(message.direction == .outgoing ? "sent" : "received") message")
+                .accessibilityLabel(L10n.t(message.direction == .outgoing
+                                           ? .textCopySentMessage : .textCopyReceivedMessage))
             }
             Text(message.body)
                 .textSelection(.enabled)
@@ -217,13 +219,13 @@ struct RealtimeTextSessionView: View {
         case let .failed(message):
             Text(message).font(.callout).foregroundStyle(.red)
         case .refused:
-            Text("The other device refused this text session.")
+            Text(L10n.t(.textRefused))
                 .font(.callout).foregroundStyle(.secondary)
         case .unsupported:
-            Text("That device does not support Relayium text sessions yet. Update Relayium on both devices.")
+            Text(L10n.t(.textUnsupported))
                 .font(.callout).foregroundStyle(.secondary)
         case .ended:
-            Text("The text session ended. Local history remains visible until you clear or start another session.")
+            Text(L10n.t(.textEnded))
                 .font(.callout).foregroundStyle(.secondary)
         default:
             EmptyView()

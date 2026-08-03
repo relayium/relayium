@@ -40,7 +40,7 @@ struct ContentView: View {
                     // A share link that demands a signup is not a share link.
                     // fetchMeta and the blob route take no token, so receiving
                     // works here — only sending needs an account.
-                    DisclosureGroup("I have a link", isExpanded: $showDownload) {
+                    DisclosureGroup(L10n.t(.contentHaveLink), isExpanded: $showDownload) {
                         DownloadPane(model: downloadModel)
                     }
                     // Same reasoning one transport over: joining a code needs no
@@ -50,7 +50,7 @@ struct ContentView: View {
                     // `/api/ice` answers it STUN-only. Appended, never inserted
                     // above LoginView — its @State has to survive every
                     // transition through this branch.
-                    DisclosureGroup("Nearby device or pairing code", isExpanded: $showDirect) {
+                    DisclosureGroup(L10n.t(.contentNearbyOrCode), isExpanded: $showDirect) {
                         DirectHubPane(
                             fileModel: realtimeModel,
                             textModel: realtimeTextModel,
@@ -61,24 +61,28 @@ struct ContentView: View {
             case .unavailable(let message):
                 // We still hold a valid-looking token — offer a retry, not a form.
                 VStack(spacing: 12) {
-                    Text("Couldn't load your account").font(.headline)
+                    Text(L10n.t(.contentAccountLoadFailed)).font(.headline)
                     Text(message).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    Button("Try again") { Task { await session.refresh() } }
+                    Button(L10n.t(.commonTryAgain)) { Task { await session.refresh() } }
                         .keyboardShortcut(.defaultAction)
-                    Button("Sign out") { Task { await session.logOut() } }.buttonStyle(.link)
+                    Button(L10n.t(.commonSignOut)) { Task { await session.logOut() } }.buttonStyle(.link)
                 }
             case .emailUnverified(let email):
                 noticeView(
-                    title: "Check your email",
-                    body: "We sent a verification link to \(email). Verify it, then sign in again.",
-                    actionTitle: "Open relayium.com",
+                    title: L10n.t(.contentCheckEmailTitle),
+                    // The address is the user's own and is isolated, not translated.
+                    body: L10n.t(.contentCheckEmailBody, [L10n.token(email)]),
+                    actionTitle: L10n.t(.contentOpenRelayium),
                     url: AppEnvironment.accountWebURL
                 )
             case let .pendingDeletion(purgeAfter, reactivateToken):
                 noticeView(
-                    title: "This account is scheduled for deletion",
-                    body: "It will be erased after \(Date(timeIntervalSince1970: TimeInterval(purgeAfter)).formatted(date: .abbreviated, time: .omitted)). Reactivate it on the web to keep it.",
-                    actionTitle: "Reactivate on relayium.com",
+                    title: L10n.t(.contentPendingDeletionTitle),
+                    body: L10n.t(.contentPendingDeletionBody, [
+                        L10n.date(Date(timeIntervalSince1970: TimeInterval(purgeAfter)),
+                                  dateStyle: .medium, timeStyle: .none),
+                    ]),
+                    actionTitle: L10n.t(.contentReactivate),
                     // The token is the whole button: it is what makes reactivation
                     // one click on a web session the frozen account cannot create.
                     url: AppEnvironment.reactivateWebURL(token: reactivateToken)
@@ -96,7 +100,7 @@ struct ContentView: View {
                         )
                             .padding()
                     }
-                    .tabItem { Label("Direct", systemImage: "bolt.horizontal") }
+                    .tabItem { Label(L10n.t(.tabDirect), systemImage: "bolt.horizontal") }
                     .tag(Tab.direct)
 
                     ScrollView {
@@ -114,13 +118,13 @@ struct ContentView: View {
                             uploadModel.applyRetentionCap(usage.plan.retentionSecs)
                         }
                     }
-                    .tabItem { Label("Link", systemImage: "link") }
+                    .tabItem { Label(L10n.t(.tabLink), systemImage: "link") }
                     .tag(Tab.link)
 
                     ScrollView {
                         AccountView(user: user, usage: usage).padding()
                     }
-                    .tabItem { Label("Account", systemImage: "person.crop.circle") }
+                    .tabItem { Label(L10n.t(.tabAccount), systemImage: "person.crop.circle") }
                     .tag(Tab.account)
                 }
             }
@@ -185,7 +189,7 @@ struct ContentView: View {
             Text(title).font(.headline)
             Text(body).multilineTextAlignment(.center).foregroundStyle(.secondary)
             Button(actionTitle) { NSWorkspace.shared.open(url) }
-            Button("Back to sign in") { Task { await session.logOut() } }.buttonStyle(.link)
+            Button(L10n.t(.contentBackToSignIn)) { Task { await session.logOut() } }.buttonStyle(.link)
         }
     }
 }

@@ -294,7 +294,7 @@ final class FileSelectionTests: XCTestCase {
         try FileManager.default.removeItem(at: a)
         XCTAssertThrowsError(try stageRealtimeFiles(selection.files)) { err in
             XCTAssertEqual(err as? PlaintextSourceError, .unreadable(name: "a.txt"))
-            XCTAssertTrue(ErrorCopy.message(for: err).contains("a.txt"))
+            XCTAssertTrue(ErrorCopy.message(for: err, language: .en).contains("a.txt"))
         }
     }
 }

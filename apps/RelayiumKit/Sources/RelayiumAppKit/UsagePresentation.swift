@@ -10,10 +10,11 @@ public struct MeterDisplay: Equatable {
 }
 
 public enum UsagePresentation {
-    public static func display(_ m: Meter) -> MeterDisplay {
+    public static func display(_ m: Meter, language: AppLanguage? = nil) -> MeterDisplay {
         MeterDisplay(
-            usedText: bytesText(m.used),
-            capText: m.isUnlimited ? "Unlimited" : bytesText(m.cap),
+            usedText: bytesText(m.used, language: language),
+            capText: m.isUnlimited ? L10n.t(.usageUnlimited, language: language)
+                                   : bytesText(m.cap, language: language),
             // Clamped: over-quota is a real server state and the bar must not overflow.
             fraction: m.isUnlimited ? nil : min(1.0, Double(m.used) / Double(m.cap)),
             isUnlimited: m.isUnlimited
@@ -29,42 +30,39 @@ public enum UsagePresentation {
     /// (`past_due`, `incomplete_expired`, …) and rendering it verbatim shows
     /// snake_case machine vocabulary to a paying customer at the exact moment
     /// something is wrong with their billing. Wording follows the web's
-    /// (`web/src/lib/PlanCard.svelte` + `i18n/en.ts`) so the two surfaces agree.
-    public static func subscriptionBadge(for status: String) -> String? {
+    /// (`web/src/lib/PlanCard.svelte` + `i18n/*.ts`) so the two surfaces agree in
+    /// every language.
+    public static func subscriptionBadge(for status: String,
+                                         language: AppLanguage? = nil) -> String? {
         switch status {
-        case "", "active":                      return nil
-        case "trialing":                        return "Trial"
-        case "past_due":                        return "Payment failed"
-        case "canceled":                        return "Canceled"
-        case "unpaid":                          return "Unpaid"
-        case "incomplete", "incomplete_expired": return "Payment incomplete"
-        case "paused":                          return "Paused"
+        case "", "active":                       return nil
+        case "trialing":                         return L10n.t(.badgeTrial, language: language)
+        case "past_due":                         return L10n.t(.badgePaymentFailed, language: language)
+        case "canceled":                         return L10n.t(.badgeCanceled, language: language)
+        case "unpaid":                           return L10n.t(.badgeUnpaid, language: language)
+        case "incomplete", "incomplete_expired": return L10n.t(.badgePaymentIncomplete, language: language)
+        case "paused":                           return L10n.t(.badgePaused, language: language)
         // An unknown status is still not "active", so it must be visible — but as
-        // English, not as whatever string a future Stripe version invents.
-        default:                                return "Inactive"
+        // words, not as whatever string a future Stripe version invents.
+        default:                                 return L10n.t(.badgeInactive, language: language)
         }
     }
 
-    /// Binary units. `String(format:)` with no locale argument does not localize the
-    /// decimal separator, so this is stable across machines and in CI.
-    public static func bytesText(_ n: Int64) -> String {
-        let units = ["B", "KB", "MB", "GB", "TB"]
-        var value = Double(n)
-        var unit = 0
-        while value >= 1024 && unit < units.count - 1 {
-            value /= 1024
-            unit += 1
-        }
-        if unit == 0 { return "\(n) B" }
-        return String(format: "%.1f %@", value, units[unit])
+    /// Binary units, with Latin digits and this language's decimal separator.
+    ///
+    /// The unit symbols (`B`, `KB`, …) are technical and stay verbatim in every
+    /// language; what the catalog owns is the separator between number and unit,
+    /// so a right-to-left layout can put them in the order it wants.
+    public static func bytesText(_ n: Int64, language: AppLanguage? = nil) -> String {
+        L10n.bytes(n, language: language)
     }
 
-    /// Whole days remaining rather than a formatted date: no locale dependence, and
-    /// "resets in 5 days" is what a person actually wants to know.
-    public static func resetText(resetsAt: Int64, now: Date) -> String {
+    /// Whole days remaining rather than a formatted date: the figure a person
+    /// actually wants, and it pluralizes per language rather than per English.
+    public static func resetText(resetsAt: Int64, now: Date, language: AppLanguage? = nil) -> String {
         let seconds = Double(resetsAt) - now.timeIntervalSince1970
-        guard seconds >= 86_400 else { return "Resets today" }
+        guard seconds >= 86_400 else { return L10n.t(.usageResetsToday, language: language) }
         let days = Int(seconds / 86_400)
-        return days == 1 ? "Resets in 1 day" : "Resets in \(days) days"
+        return L10n.plural(.usageResetsInDays, days, language: language)
     }
 }

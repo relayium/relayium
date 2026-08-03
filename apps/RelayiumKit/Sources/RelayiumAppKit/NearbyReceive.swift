@@ -277,7 +277,7 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
             // that is genuinely theirs is still on the session model's own
             // state, and the room's own `reconnecting` explains the gap.
             gate.release()
-            lastFailure = "An incoming nearby transfer could not be set up."
+            lastFailure = L10n.t(.nearbySetupFailed)
         }
         // The attempt is over either way; the connection, if there is one, holds
         // the socket itself. Leaving this set would let a *later* attempt build

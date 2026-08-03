@@ -22,6 +22,19 @@ public enum StoredLinkKeyOperation {
 /// `HandshakeError`, `RealtimeError`, `RealtimeSenderError` and bare WebRTC
 /// `NSError`s through a single `((Error) -> Void)` callback. Extending a layered
 /// chain that already has a total fallback beats inventing one under pressure.
+///
+/// ## Localization
+///
+/// Every arm resolves an `L10nKey` rather than returning a literal. The
+/// `language` argument is optional and defaults to `L10n.current`, so no call
+/// site changed — but it exists, and it is the reason a test can assert the
+/// Arabic wording of a MITM warning without touching the machine's settings.
+///
+/// Values interpolated into these sentences are the user's or the peer's, or
+/// they are diagnostics: file names, manifest paths, HTTP statuses, an OSStatus,
+/// an errno, a file-count limit. They are never translated, and they go through
+/// `L10n.token` so Arabic lays each one out as one unit instead of letting the
+/// bidi algorithm rearrange a path around the sentence.
 public enum ErrorCopy {
     /// Copy for a failure of the store holding each upload's E2E key.
     ///
@@ -48,7 +61,8 @@ public enum ErrorCopy {
     /// operation did not happen, and says nothing about a request that
     /// succeeded.
     public static func storedLinkKeyMessage(for error: Error,
-                                            operation: StoredLinkKeyOperation) -> String {
+                                            operation: StoredLinkKeyOperation,
+                                            language: AppLanguage? = nil) -> String {
         if let e = error as? KeychainError {
             switch e {
             case .status(let s):
@@ -57,14 +71,13 @@ public enum ErrorCopy {
                 // -34018 (missing entitlement) are different problems with the
                 // same symptom. It names an OSStatus and nothing about the key
                 // or the file, so there is nothing here to leak.
+                let key: L10nKey
                 switch operation {
-                case .save:
-                    return "macOS wouldn't save this file's key to the keychain (keychain error \(s))."
-                case .read:
-                    return "macOS wouldn't read this file's key from the keychain (keychain error \(s))."
-                case .remove:
-                    return "macOS wouldn't remove this file's key from the keychain (keychain error \(s))."
+                case .save:   key = .errorStoredKeyKeychainSave
+                case .read:   key = .errorStoredKeyKeychainRead
+                case .remove: key = .errorStoredKeyKeychainRemove
                 }
+                return L10n.t(key, [token(s, language)], language: language)
             }
         }
         if let e = error as? StoredLinkKeyError {
@@ -78,12 +91,9 @@ public enum ErrorCopy {
                 // already deleted from the server, so pointing at the web would
                 // be pointing at nothing.
                 switch operation {
-                case .save:
-                    return "This file's identifier isn't one this app will save a key under, so its key was not saved on this Mac. Please report it."
-                case .read:
-                    return "This item's identifier isn't one this app will act on, so its key was not read and the link can't be rebuilt here. Manage it on relayium.com, and please report it."
-                case .remove:
-                    return "This item's identifier isn't one this app will act on, so the key was not removed. Please report it."
+                case .save:   return L10n.t(.errorStoredKeyBadIdSave, language: language)
+                case .read:   return L10n.t(.errorStoredKeyBadIdRead, language: language)
+                case .remove: return L10n.t(.errorStoredKeyBadIdRemove, language: language)
                 }
             case .invalidKey:
                 // Only the read arm may say a stored key is unreadable, because
@@ -94,39 +104,40 @@ public enum ErrorCopy {
                 // the user looking for a keychain entry that does not exist.
                 switch operation {
                 case .save:
-                    return "This file's key isn't in a form this app can save, so it was not saved on this Mac. Please report it."
+                    return L10n.t(.errorStoredKeyBadKeySave, language: language)
                 case .read:
-                    // Deliberately the shared table's sentence: that path is the
-                    // one it was written for. Pinned by a test so the two cannot
-                    // drift apart silently.
-                    return "The key stored on this Mac for this file is unreadable, so the link can't be rebuilt from it."
+                    // Deliberately the shared table's key, not a copy of its
+                    // words: that path is the one it was written for, and one
+                    // key is what stops the two from drifting apart in any of
+                    // the nine catalogs. Pinned by a test as well.
+                    return L10n.t(.errorStoredLinkKeyInvalidKey, language: language)
                 case .remove:
-                    return "This file's key isn't in a form this app can act on, so it was not removed. Please report it."
+                    return L10n.t(.errorStoredKeyBadKeyRemove, language: language)
                 }
             }
         }
-        return message(for: error)
+        return message(for: error, language: language)
     }
 
-    public static func message(for error: Error) -> String {
+    public static func message(for error: Error, language: AppLanguage? = nil) -> String {
         if let e = error as? AccountError {
             switch e {
             case .invalidCredentials:
-                return "That email and password don't match an account."
+                return L10n.t(.errorAccountInvalidCredentials, language: language)
             case .notSignedIn:
                 // Says why rather than just refusing: the asymmetry is the
                 // server's billing policy — whoever creates a code pays for any
                 // traffic relayed through it — and a user who can receive fine
                 // deserves to know why sending is different.
-                return "Sign in to create a pairing code. You can still receive files with a code someone shares with you."
+                return L10n.t(.errorAccountNotSignedIn, language: language)
             case .rateLimited:
-                return "Too many attempts. Wait a minute, then try again."
+                return L10n.t(.errorAccountRateLimited, language: language)
             case .server(let status):
-                return "The server returned an error (\(status)). Try again shortly."
+                return L10n.t(.errorAccountServer, [token(status, language)], language: language)
             case .decoding:
-                return "The server sent a response this version of the app doesn't understand. Updating may fix it."
+                return L10n.t(.errorAccountDecoding, language: language)
             case .network:
-                return "Couldn't reach the server. Check your internet connection."
+                return L10n.t(.errorAccountNetwork, language: language)
             }
         }
         if let e = error as? KeychainError {
@@ -136,7 +147,7 @@ public enum ErrorCopy {
                 // `AccountSession` may reach it. The same type is raised for
                 // each upload's E2E key, where every clause of this is false —
                 // that caller goes through `storedLinkKeyMessage(for:operation:)`.
-                return "macOS wouldn't store your sign-in (keychain error \(s)). You'll stay signed in until you quit."
+                return L10n.t(.errorKeychainSignIn, [token(s, language)], language: language)
             }
         }
         if let e = error as? HandshakeError {
@@ -146,107 +157,110 @@ public enum ErrorCopy {
                 // means someone may be attacking the user. No retry, no
                 // reconnect: the instruction is to stop and pair again, because
                 // reconnecting means reconnecting to whoever that was.
-                return "The two devices could not agree on a shared secret. Someone may be interfering with this connection — stop, and pair again with a new code."
+                return L10n.t(.errorHandshakeMitm, language: language)
             case .noCommitRecorded, .badBase64, .invalidKey:
-                return "The other device sent something this version of the app doesn't understand. Both sides may need updating."
+                return L10n.t(.errorPeerProtocol, language: language)
             }
         }
         if let e = error as? RealtimeError {
             switch e {
             case .tamper:
-                return "The data that arrived didn't match what the sender described, so it was discarded. Ask them to send it again."
+                return L10n.t(.errorRealtimeTamper, language: language)
             case .outOfOrder, .malformed, .lengthMismatch:
-                return "The connection dropped part of the transfer. Nothing was saved — try again."
+                return L10n.t(.errorRealtimeDropped, language: language)
             case .legacyPeer:
-                return "The other device is running an older version that can't complete this transfer. It needs updating."
+                return L10n.t(.errorRealtimeLegacyPeer, language: language)
             case .unknownKind:
-                return "The other device sent something this version of the app doesn't understand. Both sides may need updating."
+                return L10n.t(.errorPeerProtocol, language: language)
             }
         }
         if let e = error as? RealtimeSenderError {
             switch e {
             case .manifestTooLarge:
-                return "Too many files at once for a single transfer. Send them in smaller batches."
+                return L10n.t(.errorSenderManifestTooLarge, language: language)
             case .invalidManifest:
-                return "The selected files could not be described safely, so the transfer was not started."
+                return L10n.t(.errorSenderInvalidManifest, language: language)
             case .sourceShorterThanDeclared(let name):
                 // Almost always a file edited or deleted mid-send.
-                return "“\(name)” changed while it was being sent, so the transfer was stopped. Try again."
+                return L10n.t(.errorSenderSourceShorter,
+                              [L10n.token(name, language: language)], language: language)
             case .sourceLongerThanDeclared(let name):
-                return "“\(name)” grew after it was selected, so bytes outside the approved file list were not sent. Choose it again and retry."
+                return L10n.t(.errorSenderSourceLonger,
+                              [L10n.token(name, language: language)], language: language)
             }
         }
         if let e = error as? RealtimeConnection.ConnectionError {
             switch e {
             case .peerBusy:
-                return "The other device is already in a transfer. Wait for it to finish, then try again."
+                return L10n.t(.errorConnectionPeerBusy, language: language)
             case .unsupportedPeer:
-                return "The other device does not support encrypted text sessions yet. It may need updating."
+                return L10n.t(.errorConnectionUnsupportedPeer, language: language)
             case .peerConnectionFailed, .notReady:
-                return "The private connection could not be opened. Check both devices are online, then try again."
+                return L10n.t(.errorConnectionFailed, language: language)
             case .alreadySending:
-                return "This connection is already sending. Start a new session for another transfer."
+                return L10n.t(.errorConnectionAlreadySending, language: language)
             case .rejected:
-                return "The other device declined this transfer."
+                return L10n.t(.errorConnectionRejected, language: language)
             case .timedOut:
-                return "The other device stopped responding, so the session ended."
+                return L10n.t(.errorConnectionTimedOut, language: language)
             case .textSendBufferFull:
-                return "The connection is catching up. Wait a moment, then send the message again."
+                return L10n.t(.errorConnectionTextSendBufferFull, language: language)
             case .textSendFailed:
-                return "The encrypted message could not be sent. Try it again."
+                return L10n.t(.errorConnectionTextSendFailed, language: language)
             case .textReceiveBufferFull:
-                return "The other device sent too much before verification finished, so the session was closed."
+                return L10n.t(.errorConnectionTextReceiveBufferFull, language: language)
             }
         }
         if let e = error as? RealtimeConnectionFactory.FactoryError {
             switch e {
             case .noPeerAppeared:
-                return "Nobody joined before the pairing code expired. Create a new code and try again."
+                return L10n.t(.errorFactoryNoPeerAppeared, language: language)
             case .unsupportedPeer:
-                return "The other device does not support encrypted text sessions yet. It may need updating."
+                return L10n.t(.errorConnectionUnsupportedPeer, language: language)
             }
         }
         if let e = error as? NearbyError {
             switch e {
             case .notScanning:
-                return "Relayium stopped looking for nearby devices, so that one is no longer available. Scan again, then pick it."
+                return L10n.t(.errorNearbyNotScanning, language: language)
             case .noAnswer:
                 // Recovery steps, not a diagnosis: the roster proves the two
                 // devices reached the same rendezvous, so "you're not on the
                 // same network" would be a claim this code cannot make. What it
                 // can say is what makes a device answer — a listening peer,
                 // which today means relayium.com — and where to go instead.
-                return "That device didn't answer. Open relayium.com on it, keep that page open, and pick it again. A pairing code works instead, and is the way to receive on this Mac."
+                return L10n.t(.errorNearbyNoAnswer, language: language)
             }
         }
         if let e = error as? RealtimeStagingError {
             switch e {
             case .fileCount:
-                return "Choose between 1 and \(MAX_FILES) files."
+                return L10n.t(.errorStagingFileCount, [token(MAX_FILES, language)],
+                              language: language)
             case .unreadable:
-                return "Couldn't open every selected file, so nothing was sent. Choose the files again."
+                return L10n.t(.errorStagingUnreadable, language: language)
             }
         }
         if let e = error as? RealtimeTextError {
             switch e {
             case .authenticationFailed:
-                return "The encrypted message failed its integrity check, so it was discarded and the session was closed."
+                return L10n.t(.errorTextAuthenticationFailed, language: language)
             case .outOfOrder:
-                return "The connection dropped or reordered a message, so the session was closed without showing it."
+                return L10n.t(.errorTextOutOfOrder, language: language)
             case .messageTooLarge:
-                return "The other device sent a message larger than this version supports, so the session was closed."
+                return L10n.t(.errorTextMessageTooLarge, language: language)
             case .invalidKey, .malformedFrame, .wrongKind, .sequenceExhausted, .invalidUTF8:
-                return "The other device sent an invalid encrypted message, so it was discarded and the session was closed."
+                return L10n.t(.errorTextInvalid, language: language)
             }
         }
         if let e = error as? DeviceAuthOutcomeError {
             switch e {
             case .denied:
-                return "That sign-in was declined in the browser. Try again if that wasn't you."
+                return L10n.t(.errorDeviceAuthDenied, language: language)
             case .expired:
                 // Nobody's mistake — the request simply went unanswered. Copy
                 // that read as a rejection would send the user looking for one.
-                return "The sign-in request timed out. Start again to get a new one."
+                return L10n.t(.errorDeviceAuthExpired, language: language)
             }
         }
         if let e = error as? DownloadDestinationError {
@@ -255,24 +269,28 @@ public enum ErrorCopy {
                 // A bare "refused" reads as a bug. Say what it found and why it
                 // will not merge: it cannot tell a leftover partial download from
                 // files the user put there.
-                return "“\(name)” already exists here — this link was downloaded to this folder before. Choose another folder: the app won't merge into an existing one, because it can't tell a half-finished download from your own files."
+                return L10n.t(.errorDestinationDirectoryExists,
+                              [L10n.token(name, language: language)], language: language)
             case .unsafeName(let name):
-                return "The link describes a file named “\(name)” that would be written outside the folder you chose, so nothing was saved. Ask the sender for a new link."
+                return L10n.t(.errorDestinationUnsafeName,
+                              [L10n.token(name, language: language)], language: language)
             case .fileExists(let name):
-                return "“\(name)” already exists in the destination. Choose another folder; Relayium will not overwrite it."
+                return L10n.t(.errorDestinationFileExists,
+                              [L10n.token(name, language: language)], language: language)
             case .exceedsManifest, .incomplete:
-                return "The received byte count did not match the file list, so the incomplete files were discarded. Ask the sender to try again."
+                return L10n.t(.errorDestinationIncomplete, language: language)
             case .systemError(let code):
                 // Names the two a user can actually act on and keeps the number
                 // for everything else — "something went wrong" on a full disk
                 // sends people looking in the wrong place.
                 if code == ENOSPC {
-                    return "There isn't enough free space to save this transfer, so nothing was saved. Free up space and try again."
+                    return L10n.t(.errorDestinationNoSpace, language: language)
                 }
                 if code == EACCES || code == EPERM {
-                    return "Relayium isn't allowed to write to that folder, so nothing was saved. Choose another folder."
+                    return L10n.t(.errorDestinationNotPermitted, language: language)
                 }
-                return "The destination folder couldn't be written to (error \(code)), so nothing was saved. Try another folder."
+                return L10n.t(.errorDestinationSystemError, [token(code, language)],
+                              language: language)
             }
         }
         if let e = error as? ManifestPathError {
@@ -281,23 +299,29 @@ public enum ErrorCopy {
                 // Names the path rather than saying "invalid": on the receiving
                 // end this is the one message that lets the user tell a broken
                 // sender from an attempt to write outside the folder they chose.
-                return "The other device described a file at “\(path)”, which would be written outside the folder you chose. Nothing was saved."
+                return L10n.t(.errorManifestUnsafePath,
+                              [L10n.token(path, language: language)], language: language)
             case .duplicatePath(let path):
-                return "The transfer contains more than one file at “\(path)” — on this Mac those are the same file — so nothing was saved. Ask the sender to rename one of them."
+                return L10n.t(.errorManifestDuplicatePath,
+                              [L10n.token(path, language: language)], language: language)
             case .pathCollision(let path):
-                return "The transfer wants “\(path)” to be both a file and a folder, which cannot exist at once, so nothing was saved. Ask the sender to try again."
+                return L10n.t(.errorManifestPathCollision,
+                              [L10n.token(path, language: language)], language: language)
             }
         }
         if let e = error as? PlaintextSourceError {
             switch e {
             case .unreadable(let name):
-                return "Couldn't open “\(name)”, so nothing was sent. Check the file still exists and you have permission to read it."
+                return L10n.t(.errorPlaintextUnreadable,
+                              [L10n.token(name, language: language)], language: language)
             case .readFailed(let name, _):
-                return "Reading “\(name)” failed part-way through, so the transfer was stopped. The other device discarded the incomplete file."
+                return L10n.t(.errorPlaintextReadFailed,
+                              [L10n.token(name, language: language)], language: language)
             case .tooManyOpenFiles(let limit):
                 // Says what to do rather than naming a rlimit: the actionable
                 // half is "send fewer files at once".
-                return "This Mac ran out of open-file handles part-way through your selection (its limit is \(limit)). Relayium holds every selected file open so the exact files you chose are the ones that get sent, so send them in smaller batches."
+                return L10n.t(.errorPlaintextTooManyOpenFiles, [token(limit, language)],
+                              language: language)
             }
         }
         if let e = error as? FileSelectionError {
@@ -306,43 +330,47 @@ public enum ErrorCopy {
                 // Distinct from the count error on purpose: "choose between 1
                 // and 1000 files" is baffling advice for someone who did choose
                 // a folder — it just has nothing in it.
-                return "There are no files to send. An empty folder can't be transferred on its own — the file list has no way to describe a folder with nothing in it."
+                return L10n.t(.errorSelectionNoFiles, language: language)
             case .tooManyFiles:
-                return "That selection holds more than \(MAX_FILES) files. Send fewer files, or zip the folder first."
+                return L10n.t(.errorSelectionTooManyFiles, [token(MAX_FILES, language)],
+                              language: language)
             case .unreadable(let name):
-                return "Couldn't read “\(name)”, so nothing was sent. Check the item still exists and you have permission to open it."
+                return L10n.t(.errorSelectionUnreadable,
+                              [L10n.token(name, language: language)], language: language)
             case .symbolicLink(let name):
                 // Neither choice is silent: following the link would send a
                 // different tree (possibly from outside what was selected) and
                 // skipping it would send an incomplete one without saying so.
-                return "“\(name)” is a symbolic link. Relayium won't follow it — that could send files from outside what you chose — and won't skip it silently either. Remove it from the selection, or send the real folder it points at."
+                return L10n.t(.errorSelectionSymbolicLink,
+                              [L10n.token(name, language: language)], language: language)
             case .pathTooLong(let path):
-                return "The path “\(path)” is too long to describe in a transfer. Send from a shallower folder, or shorten the names."
+                return L10n.t(.errorSelectionPathTooLong,
+                              [L10n.token(path, language: language)], language: language)
             }
         }
         if let e = error as? CloudError {
             switch e {
             case .unauthorized:
-                return "Your sign-in expired. Sign in again to send files."
+                return L10n.t(.errorCloudUnauthorized, language: language)
             case .quota:
-                return "Not enough space or daily quota left for this file. Free up space or upgrade."
+                return L10n.t(.errorCloudQuota, language: language)
             case .rateLimited:
-                return "Too many uploads right now. Wait a minute, then try again."
+                return L10n.t(.errorCloudRateLimited, language: language)
             case .dailyQuota:
                 // Not "you've used too much": the gate is used + this file >
                 // quota, so one large file can trip it on its own with nothing
                 // else sent today. The wording has to cover both.
-                return "This file needs more than your remaining daily upload allowance — a single large file can use it all on its own. Try again tomorrow, or upgrade for a bigger daily allowance."
+                return L10n.t(.errorCloudDailyQuota, language: language)
             case .monthlyTraffic:
-                return "Your account has reached its monthly traffic limit. Uploads resume next month, or upgrade to continue now."
+                return L10n.t(.errorCloudMonthlyTraffic, language: language)
             case .notFound:
-                return "This link has expired, was already downloaded, or was mistyped."
+                return L10n.t(.errorCloudNotFound, language: language)
             case .server(let status):
-                return "The server returned an error (\(status)). Try again shortly."
+                return L10n.t(.errorCloudServer, [token(status, language)], language: language)
             case .network:
-                return "Couldn't reach the server. Check your internet connection."
+                return L10n.t(.errorCloudNetwork, language: language)
             case .decoding:
-                return "The server sent a response this version of the app doesn't understand. Updating may fix it."
+                return L10n.t(.errorCloudDecoding, language: language)
             }
         }
         if let e = error as? StoredLinkKeyError {
@@ -359,25 +387,36 @@ public enum ErrorCopy {
                 // around an operation that follows a request which already
                 // succeeded, and go through
                 // `storedLinkKeyMessage(for:operation:)` instead.
-                return "This item's identifier isn't one this app will act on, so it was refused. Manage it on relayium.com, and please report it."
+                return L10n.t(.errorStoredLinkKeyInvalidIdentifier, language: language)
             case .invalidKey:
                 // Distinct from "the key isn't on this Mac": something IS stored
                 // and it is not usable. Saying the key is absent would close the
                 // question; this leaves it open, because it is.
-                return "The key stored on this Mac for this file is unreadable, so the link can't be rebuilt from it."
+                return L10n.t(.errorStoredLinkKeyInvalidKey, language: language)
             }
         }
         if let e = error as? StoredWireError {
             switch e {
             case .invalidKey:
-                return "That link's key is malformed — it was probably copied incompletely."
+                return L10n.t(.errorStoredWireInvalidKey, language: language)
             case .invalidManifest, .frameTooLarge, .truncatedStream, .lengthMismatch:
                 // Not transient: the bytes did not match the manifest. Inviting a
                 // retry would send the user back for the same corrupt data.
-                return "The downloaded data didn't match what the link described, so it was discarded. Ask the sender for a new link."
+                return L10n.t(.errorStoredWireCorrupt, language: language)
             }
         }
         // Total by construction: name the type so a bug report is actionable.
-        return "Something went wrong (\(type(of: error)))."
+        return L10n.t(.errorUnknown,
+                      [L10n.token(String(describing: type(of: error)), language: language)],
+                      language: language)
+    }
+
+    /// A diagnostic number, rendered verbatim and isolated for RTL.
+    ///
+    /// Verbatim matters: an HTTP status, an OSStatus, an errno and a file-count
+    /// limit are values someone will type into a search box or paste into a bug
+    /// report, so they get no grouping separators and no digit substitution.
+    private static func token<T: BinaryInteger>(_ value: T, _ language: AppLanguage?) -> String {
+        L10n.token(String(value), language: language)
     }
 }

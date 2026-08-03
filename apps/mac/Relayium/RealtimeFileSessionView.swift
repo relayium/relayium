@@ -21,8 +21,8 @@ struct RealtimeFileSessionView: View {
             EmptyView()
         case .joining, .connecting:
             VStack(alignment: .leading, spacing: 8) {
-                ProgressView("Connecting…").controlSize(.small)
-                Button("Cancel") { model.cancel() }
+                ProgressView(L10n.t(.sessionConnecting)).controlSize(.small)
+                Button(L10n.t(.commonCancel)) { model.cancel() }
             }
         case let .verifying(sas):
             verifying(sas)
@@ -30,14 +30,14 @@ struct RealtimeFileSessionView: View {
             transferring(done: done, total: total)
         case .completed:
             VStack(alignment: .leading, spacing: 8) {
-                Text("Transfer complete").font(.subheadline.weight(.semibold))
+                Text(L10n.t(.sessionTransferComplete)).font(.subheadline.weight(.semibold))
                 // Only a RECEIVE has a payload. A sender reaches `.completed`
                 // with no URLs of its own, and offering it a drag source would
                 // be offering files it never wrote.
                 if let payload = model.received {
                     ReceivedResultView(payload: payload)
                 }
-                Button("Done") { model.cancel() }.buttonStyle(.link)
+                Button(L10n.t(.commonDone)) { model.cancel() }.buttonStyle(.link)
             }
         }
     }
@@ -47,20 +47,20 @@ struct RealtimeFileSessionView: View {
     /// never built — the gate is a model state, not a hidden button here.
     private func verifying(_ sas: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Check this matches").font(.subheadline.weight(.semibold))
+            Text(L10n.t(.sessionCheckMatches)).font(.subheadline.weight(.semibold))
             Text(sas)
                 .font(.system(size: 26, weight: .semibold, design: .monospaced))
                 .textSelection(.enabled)
-            Text("The other device should be showing exactly this. If it isn't, someone may be intercepting the connection.")
+            Text(L10n.t(.sessionCheckMatchesBody))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             // Equally weighted on purpose: a visually secondary reject is a
             // reject nobody presses, on the one screen where pressing it is the
             // entire point.
             HStack {
-                Button("They match") { model.confirmSAS() }
+                Button(L10n.t(.sessionTheyMatch)) { model.confirmSAS() }
                     .buttonStyle(.borderedProminent)
-                Button("They don't match") { model.rejectSAS() }
+                Button(L10n.t(.sessionTheyDontMatch)) { model.rejectSAS() }
             }
         }
     }
@@ -68,7 +68,7 @@ struct RealtimeFileSessionView: View {
     private func transferring(done: Int, total: Int) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             ProgressView(value: total > 0 ? Double(done) / Double(total) : 0)
-            Text(total > 0 ? "\(done * 100 / total)%" : "Starting…")
+            Text(L10n.percent(done: done, total: total) ?? L10n.t(.commonStarting))
                 .font(.caption).foregroundStyle(.secondary)
             // Keyed by index: a folder legitimately contains two files with the
             // same leaf name in different subdirectories, and `id: \.name` would
@@ -79,7 +79,7 @@ struct RealtimeFileSessionView: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle)
             }
-            Button("Cancel") { model.cancel() }
+            Button(L10n.t(.commonCancel)) { model.cancel() }
         }
     }
 }

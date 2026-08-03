@@ -336,7 +336,7 @@ public final class RealtimeTextSessionModel: ObservableObject {
         let body = draft
         guard case .open = state, let connection else { return }
         guard body.utf8.count <= TEXT_MAX_BYTES else {
-            errorMessage = "That message is too long. Send it as a file instead."
+            errorMessage = L10n.t(.textMessageTooLong)
             return
         }
         if connection.textBufferedAmount > RealtimeConnection.textSendBufferMaximum {
@@ -350,7 +350,7 @@ public final class RealtimeTextSessionModel: ObservableObject {
                 guard let self, g == self.generation else { return }
                 self.record(direction: .outgoing, body: body, failed: error != nil)
                 if error != nil {
-                    self.errorMessage = "The message could not be sent."
+                    self.errorMessage = L10n.t(.textSendFailed)
                 }
             }
         }
@@ -473,16 +473,16 @@ public final class RealtimeTextSessionModel: ObservableObject {
             state = .open(sas: sas)
         }
         guard case .open = state else {
-            finish(.failed("The message session failed."))
+            finish(.failed(L10n.t(.textSessionFailed)))
             return
         }
         guard takeRateToken() else {
-            finish(.failed("The other device sent too many messages."))
+            finish(.failed(L10n.t(.textTooManyMessages)))
             return
         }
         guard inboundCount + 1 <= TEXT_SESSION_MAX_MESSAGES,
               inboundBytes + framedBytes <= TEXT_SESSION_MAX_BYTES else {
-            finish(.failed("The message session exceeded its safety limits."))
+            finish(.failed(L10n.t(.textSafetyLimits)))
             return
         }
         inboundCount += 1

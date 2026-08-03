@@ -14,75 +14,61 @@ struct MenuBarView: View {
         // which is the one moment the menu bar is the only surface the user has.
         switch session.state {
         case let .ready(user, usage):
+            // The email and the plan name are the account's own data, never
+            // translated — only the sentence around them is.
             Text(user.email)
-            Text("\(usage.plan.name) — \(UsagePresentation.display(usage.traffic).usedText) used")
+            Text(L10n.t(.menubarPlanUsage,
+                        [L10n.token(usage.plan.name),
+                         UsagePresentation.display(usage.traffic).usedText]))
         case .restoring:
-            Text("Loading your account…")
+            Text(L10n.t(.menubarLoadingAccount))
         case .authenticating:
-            Text("Signing in…")
+            Text(L10n.t(.menubarSigningIn))
         case .unavailable:
-            Text("Signed in — can't reach the server")
+            Text(L10n.t(.menubarSignedInUnreachable))
         case let .emailUnverified(email):
-            Text("\(email) — email not verified")
+            Text(L10n.t(.menubarEmailUnverified, [L10n.token(email)]))
         case .pendingDeletion:
-            Text("Account scheduled for deletion")
+            Text(L10n.t(.menubarPendingDeletion))
         case .loggedOut, .failed:
-            Text("Not signed in")
+            Text(L10n.t(.menubarNotSignedIn))
         }
         Divider()
         // What background receive is actually doing. With the window closed this
         // is the only place it is visible, and "ready" has to be a claim the app
         // can back up — hence a state per case rather than one optimistic label.
-        Text(receiveStatus)
+        Text(NearbyStatusPresentation.text(for: receive.state))
         if receive.state == .paused {
-            Button("Resume receiving from nearby devices") { discovery.resume() }
+            Button(L10n.t(.menubarResumeNearby)) { discovery.resume() }
         } else {
-            Button("Pause receiving from nearby devices") { discovery.pause() }
+            Button(L10n.t(.menubarPauseNearby)) { discovery.pause() }
                 .disabled(isReceiving)
         }
         Divider()
         // The window can be closed while the app keeps running, so this is the
         // only way back to it — including back to a session that arrived while
         // it was closed. Spec'd in "Menu-bar residency".
-        Button(isReceiving ? "Open Relayium to see this transfer" : "Open Relayium") {
+        Button(L10n.t(isReceiving ? .menubarOpenToSeeTransfer : .menubarOpen)) {
             activateApp()
             openWindow(id: "main")
         }
         Divider()
         // The R1-A acceptance signal, kept reachable: proves the Kit is linked and
-        // both native cores initialized in the shipped bundle.
-        Text("Core: \(sodiumReady() ? "ok" : "FAILED") · WebRTC: \(webrtcAvailable() ? "ok" : "FAILED")")
+        // both native cores initialized in the shipped bundle. `ok`/`FAILED` are
+        // diagnostic tokens a bug report quotes verbatim, so only the sentence
+        // around them is localized. nonlocalized: build diagnostic tokens.
+        Text(L10n.t(.menubarCoreStatus, [
+            L10n.token(sodiumReady() ? "ok" : "FAILED"),
+            L10n.token(webrtcAvailable() ? "ok" : "FAILED"),
+        ]))
         Divider()
-        Button("Quit Relayium") { NSApplication.shared.terminate(nil) }
+        Button(L10n.t(.menubarQuit)) { NSApplication.shared.terminate(nil) }
             .keyboardShortcut("q")
     }
 
     private var isReceiving: Bool {
         if case .active = receive.state { return true }
         return false
-    }
-
-    /// Deliberately never says "ready" for a state that is not. A dropped socket
-    /// says it is reconnecting, because during that gap this Mac genuinely
-    /// cannot be reached and a user who is waiting for a file needs to know it
-    /// is the app, not the sender.
-    private var receiveStatus: String {
-        switch receive.state {
-        case .off:
-            return "Nearby receiving: off"
-        case .paused:
-            return "Nearby receiving: paused"
-        case .connecting:
-            return "Nearby receiving: joining…"
-        case .ready:
-            return "Nearby receiving: ready"
-        case .reconnecting:
-            return "Nearby receiving: reconnecting…"
-        case .active(.file):
-            return "Receiving files from a nearby device…"
-        case .active(.text):
-            return "A nearby message session is open"
-        }
     }
 
     /// Clicking a menu-bar item does not bring the app forward, so the reopened
@@ -100,6 +86,7 @@ struct MenuBarView: View {
         }
     }
 
+    // nonlocalized: compiler diagnostic, never rendered
     @available(macOS, deprecated: 14.0, message: "Only reachable on macOS 13.")
     private func activateAppLegacy() {
         NSApp.activate(ignoringOtherApps: true)

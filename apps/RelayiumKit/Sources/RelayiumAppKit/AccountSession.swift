@@ -193,7 +193,7 @@ public final class AccountSession: ObservableObject {
                 // Keychain state here would leave a still-valid server credential
                 // that can no longer be self-revoked from this device.
                 guard !Task.isCancelled, !superseded(g) else { return }
-                state = .unavailable(message: "Could not securely sign out. The credential was kept so you can retry.")
+                state = .unavailable(message: L10n.t(.accountSignOutFailed))
                 return
             }
         }

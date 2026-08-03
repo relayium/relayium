@@ -53,7 +53,7 @@ final class TransferNotificationCenter: ObservableObject {
             .sink { [weak self] state in
                 switch state {
                 case .uploading: self?.notifier.prepare()
-                case .done: self?.notifier.completed("Your encrypted download link is ready.")
+                case .done: self?.notifier.completed(L10n.t(.notifyUploadReady))
                 default: break
                 }
             }
@@ -65,8 +65,7 @@ final class TransferNotificationCenter: ObservableObject {
                 case .downloading:
                     self?.notifier.prepare()
                 case let .done(urls):
-                    self?.notifier.completed(
-                        "\(urls.count) file\(urls.count == 1 ? " is" : "s are") ready.")
+                    self?.notifier.completed(NotificationCopy.filesReady(count: urls.count))
                 default:
                     break
                 }
@@ -82,11 +81,11 @@ final class TransferNotificationCenter: ObservableObject {
                     // Counts only. No filename, no peer name, no code, no key:
                     // this body is readable on a locked screen.
                     self?.notifier.completed(urls.isEmpty
-                        ? "Your files reached the other device."
-                        : "\(urls.count) file\(urls.count == 1 ? " is" : "s are") ready.")
+                        ? L10n.t(.notifyFilesDelivered)
+                        : NotificationCopy.filesReady(count: urls.count))
                 case .failed:
-                    self?.notifier.completed("A transfer stopped before it finished.",
-                                             title: "Relayium transfer failed")
+                    self?.notifier.completed(L10n.t(.notifyTransferStopped),
+                                             title: L10n.t(.notifyTitleFailed))
                 default:
                     break
                 }
@@ -111,8 +110,8 @@ final class TransferNotificationCenter: ObservableObject {
                       last.id != self.lastAnnouncedMessageID else { return }
                 self.lastAnnouncedMessageID = last.id
                 // Never the body — see above.
-                self.notifier.completed("A new encrypted message arrived.",
-                                        title: "Relayium message")
+                self.notifier.completed(L10n.t(.notifyNewMessage),
+                                        title: L10n.t(.notifyTitleMessage))
             }
             .store(in: &cancellables)
 
@@ -121,17 +120,15 @@ final class TransferNotificationCenter: ObservableObject {
         receiveModel.onSessionStarted = { [weak self] kind in
             self?.notifier.prepare()
             self?.notifier.completed(
-                kind == .file
-                    ? "A nearby device is sending files to this Mac."
-                    : "A nearby device started a message session with this Mac.",
-                title: "Relayium incoming")
+                L10n.t(kind == .file ? .notifyIncomingFiles : .notifyIncomingText),
+                title: L10n.t(.notifyTitleIncoming))
         }
 
         receiveModel.$lastFailure
             .sink { [weak self] failure in
                 guard failure != nil else { return }
-                self?.notifier.completed("An incoming nearby transfer could not start.",
-                                         title: "Relayium transfer failed")
+                self?.notifier.completed(L10n.t(.notifyIncomingFailed),
+                                         title: L10n.t(.notifyTitleFailed))
             }
             .store(in: &cancellables)
     }

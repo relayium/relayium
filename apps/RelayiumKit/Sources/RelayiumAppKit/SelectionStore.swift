@@ -89,15 +89,28 @@ public final class SelectionStore: ObservableObject {
     /// half of "folders are supported now": a folder with nothing in it cannot
     /// be represented by either wire format, and a user who selected one has to
     /// be told before they send, not left to discover a missing folder later.
-    public var summary: String? {
+    public var summary: String? { summaryText(language: nil) }
+
+    /// The same line in an explicit language, so a test can assert the Chinese
+    /// and Arabic wording without depending on the machine it runs on.
+    ///
+    /// Built from three independently pluralized fragments rather than one
+    /// sentence with three counts in it. That is what lets Arabic apply its six
+    /// plural forms to each count separately — "1 folder" and "3 folders" take
+    /// different words there, and a single template could only ever agree with
+    /// one of them.
+    public func summaryText(language: AppLanguage?) -> String? {
         guard let selection, !selection.files.isEmpty else { return nil }
-        let n = selection.files.count
-        var text = "\(n) file\(n == 1 ? "" : "s") ready"
+        var text = L10n.plural(.selectionFiles, selection.files.count, language: language)
         let folders = folderCount
-        if folders > 0 { text += " in \(folders) folder\(folders == 1 ? "" : "s")" }
+        if folders > 0 {
+            text += " " + L10n.plural(.selectionFolders, folders, language: language)
+        }
         let skipped = selection.emptyDirectories.count
         if skipped > 0 {
-            text += " · \(skipped) empty folder\(skipped == 1 ? "" : "s") can't be sent"
+            text = L10n.detail([text, L10n.plural(.selectionEmptyFolders, skipped,
+                                                  language: language)],
+                               language: language)
         }
         return text
     }

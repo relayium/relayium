@@ -30,13 +30,13 @@ struct ReceivedResultView: View {
                 .contentShape(Rectangle())
                 .onDrag { NSItemProvider(contentsOf: url) ?? NSItemProvider() }
                 .accessibilityLabel(url.lastPathComponent)
-                .accessibilityHint("Drag to another app to copy it, or use Reveal in Finder.")
+                .accessibilityHint(L10n.t(.receivedA11yDragHint))
             }
             HStack {
-                Button("Reveal in Finder") {
+                Button(L10n.t(.receivedRevealInFinder)) {
                     NSWorkspace.shared.activateFileViewerSelecting(payload.revealURLs)
                 }
-                Text("Drag any item above into Finder or another app.")
+                Text(L10n.t(.receivedDragHint))
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }

@@ -1,0 +1,366 @@
+/* Relayium — 简体中文。品牌名 Relayium、relayium.com、SAS、WebRTC、UTF-8、
+   B/KB/MB 等技术记号一律保持原文。 */
+
+/* MARK: 通用控件 */
+"common.cancel" = "取消";
+"common.clear" = "清除";
+"common.copy" = "复制";
+"common.done" = "完成";
+"common.join" = "加入";
+"common.send" = "发送";
+"common.accept" = "接受";
+"common.reject" = "拒绝";
+"common.revoke" = "吊销";
+"common.delete" = "删除";
+"common.dismiss" = "知道了";
+"common.refresh" = "刷新";
+"common.signOut" = "退出登录";
+"common.tryAgain" = "重试";
+"common.starting" = "正在开始…";
+"common.code" = "配对码";
+"common.chooseFilesOrFolders" = "选择文件或文件夹…";
+"common.endSession" = "结束会话";
+"common.expires" = "%@ 过期";
+
+/* MARK: 展示格式 */
+"format.percent" = "%@%%";
+"format.bytes" = "%1$@ %2$@";
+"format.detailPair" = "%1$@ · %2$@";
+
+/* MARK: 应用生命周期 */
+"app.checkForUpdates" = "检查更新…";
+"quit.title" = "仍有传输正在进行";
+"quit.body" = "现在退出会取消传输。已传部分不会保存，正在进行的上传必须从头再来。";
+"quit.cancelAndQuit" = "取消传输并退出";
+"quit.keepTransferring" = "继续传输";
+
+/* MARK: 菜单栏 */
+"menubar.planUsage" = "%1$@ — 已用 %2$@";
+"menubar.loadingAccount" = "正在载入账户…";
+"menubar.signingIn" = "正在登录…";
+"menubar.signedInUnreachable" = "已登录 — 无法连接服务器";
+"menubar.emailUnverified" = "%@ — 邮箱未验证";
+"menubar.pendingDeletion" = "该账户已排入删除队列";
+"menubar.notSignedIn" = "未登录";
+"menubar.resumeNearby" = "恢复接收附近设备的传输";
+"menubar.pauseNearby" = "暂停接收附近设备的传输";
+"menubar.openToSeeTransfer" = "打开 Relayium 查看这次传输";
+"menubar.open" = "打开 Relayium";
+"menubar.coreStatus" = "内核：%1$@ · WebRTC：%2$@";
+"menubar.quit" = "退出 Relayium";
+
+/* MARK: 后台接收状态 */
+"nearby.status.off" = "附近接收：已关闭";
+"nearby.status.paused" = "附近接收：已暂停";
+"nearby.status.joining" = "附近接收：正在加入…";
+"nearby.status.ready" = "附近接收：就绪";
+"nearby.status.reconnecting" = "附近接收：正在重连…";
+"nearby.status.receivingFiles" = "正在接收附近设备发来的文件…";
+"nearby.status.messageSession" = "已开启一个附近设备的消息会话";
+
+/* MARK: 窗口外壳 */
+"content.haveLink" = "我有链接";
+"content.nearbyOrCode" = "附近设备或配对码";
+"content.accountLoadFailed" = "无法载入你的账户";
+"content.checkEmailTitle" = "请查收邮件";
+"content.checkEmailBody" = "我们已向 %@ 发送验证链接。验证后请重新登录。";
+"content.openRelayium" = "打开 relayium.com";
+"content.pendingDeletionTitle" = "该账户已排入删除队列";
+"content.pendingDeletionBody" = "它将在 %@ 之后被彻底清除。若要保留，请在网页端重新激活。";
+"content.reactivate" = "在 relayium.com 重新激活";
+"content.backToSignIn" = "返回登录";
+"tab.direct" = "直连";
+"tab.link" = "链接";
+"tab.account" = "账户";
+
+/* MARK: 登录 */
+"login.email" = "邮箱";
+"login.password" = "密码";
+"login.signIn" = "登录";
+"login.signInWithApple" = "通过 Apple 登录";
+"login.createAccount" = "在 relayium.com 注册账户";
+
+/* MARK: 直连中心与验证设置 */
+"hub.transferType" = "传输类型";
+"hub.files" = "文件";
+"hub.text" = "文本";
+"hub.transferTypeHint" = "选择这次会话要传输的内容。";
+"verify.toggle" = "与对方设备核对验证码";
+"verify.explainWhat" = "默认关闭。开启后，双方设备会在任何数据传输之前显示同一个六位验证码（SAS）；口头核对它可以发现被替换的信令端点。它不是你输入的配对码，而且只有真的有人去核对，它才起作用。";
+"verify.explainEncryption" = "这只改变显示什么、以及在哪里停下来等你确认 — 从不改变加密本身。密钥在这台 Mac 上生成、绝不发送给 Relayium，中继只承载密文，被篡改的握手一定会失败。";
+
+/* MARK: 配对码文件传输 */
+"direct.sendHeading" = "发送";
+"direct.dropHint" = "把文件或文件夹拖到这里，或点击选择。然后为对方设备创建配对码。";
+"direct.createCode" = "创建配对码";
+"direct.receiveHeading" = "接收";
+"direct.creatingCode" = "正在创建配对码…";
+"direct.giveCode" = "把这个配对码告诉对方设备";
+"direct.scanOnPhone" = "也可以用手机扫描。";
+"direct.waitingForDevice" = "正在等待对方设备…";
+"direct.chooseFilesFirst" = "请先选择要发送的文件或文件夹。";
+
+/* MARK: 实时文件会话 */
+"session.connecting" = "正在连接…";
+"session.checkMatches" = "请核对是否一致";
+"session.checkMatchesBody" = "对方设备上显示的应当与此完全相同。如果不同，可能有人正在拦截这条连接。";
+"session.theyMatch" = "一致";
+"session.theyDontMatch" = "不一致";
+"session.transferComplete" = "传输完成";
+"session.invalidFileList" = "所选文件列表无效。请重新选择文件。";
+"session.peerDisconnected" = "对方设备已断开连接。";
+
+/* MARK: 云端上传 */
+"upload.heading" = "发送文件";
+"upload.dropHint" = "把文件或文件夹拖到这里，或点击选择";
+"upload.ready" = "就绪";
+"upload.linkReady" = "链接已就绪";
+"upload.sendAnother" = "再发一份";
+"upload.expiresAfter" = "有效期";
+"upload.burnAfterRead" = "首次下载后即删除";
+"upload.keyKept" = "密钥已安全保存在这台 Mac 上，绝不会发送给 Relayium 的服务器。你随时可以在「账户」标签页再次复制这条链接。";
+"upload.keyWarning" = "%@ 下面这条链接是密钥仅存的一份副本 — 请立即复制。Relayium 的服务器从未持有该密钥，因此这条链接无法再次显示。";
+"upload.fileTooLarge" = "%@ 超过了该服务器接受的大小。";
+"ttl.oneHour" = "1 小时";
+"ttl.oneDay" = "1 天";
+"ttl.threeDays" = "3 天";
+"ttl.sevenDays" = "7 天";
+"ttl.fourteenDays" = "14 天";
+"ttl.seconds" = "%@ 秒";
+
+/* MARK: 云端下载 */
+"download.heading" = "接收文件";
+"download.linkPlaceholder" = "粘贴 relayium.com/d/… 链接";
+"download.open" = "打开";
+"download.manifestSummary" = "%1$@ · %2$@";
+"download.burnNotice" = "这条链接是「下载即删除」的。保存这些文件会用掉它 — 之后任何人都无法再下载。";
+"download.save" = "保存…";
+"download.savePanelPrompt" = "保存到这里";
+"download.badLink" = "这看起来不像 Relayium 链接。它应当形如 https://relayium.com/d/…#k=…";
+"download.fileCount.other" = "%@ 个文件";
+"download.savedFiles.other" = "已保存 %@ 个文件";
+
+/* MARK: 临时文本 */
+"text.creatingCode" = "正在创建文本配对码…";
+"text.startHeading" = "发起文本会话";
+"text.startBody" = "双方设备都需保持在线。消息端到端加密，且仅保存在本次会话的内存中。";
+"text.createCode" = "创建文本配对码";
+"text.signInToCreate" = "创建配对码需要登录。加入别人的配对码则不需要账户。";
+"text.joinHeading" = "加入文本会话";
+"text.joinHint" = "配对码本身不会透露类型。只有当发送方发起的是文本会话时，才在这里选择「文本」。";
+"text.giveCode" = "把这个文本配对码告诉对方设备";
+"text.connecting" = "正在建立私密文本会话…";
+"text.checkMatches" = "请核对与对方设备是否一致";
+"text.checkMatchesBody" = "如果不是完全一致，可能有人正在拦截这条连接。";
+"text.waitingAccept" = "正在等待对方设备接受…";
+"text.verifiedPhrase" = "验证短语：%@";
+"text.incomingHeading" = "对方设备想要与你交换文本";
+"text.nothingDecrypted" = "目前还没有任何消息被解密或显示。";
+"text.sessionHeading" = "私密文本会话";
+"text.noServerHistory" = "Relayium 不保存任何消息正文，也没有服务端历史。但任何一方设备仍然可以复制或自行留存文本。";
+"text.noMessages" = "还没有消息。";
+"text.composerLabel" = "消息";
+"text.byteCounter" = "%1$@ / %2$@ UTF-8 字节";
+"text.clipboardNotice" = "复制会把内容放进系统剪贴板，其他应用或剪贴板历史工具可能会留存它。";
+"text.clipboardNoticeShort" = "复制可能会在系统剪贴板或剪贴板历史中留下内容。";
+"text.clearHistory" = "清除历史";
+"text.localHistoryHeading" = "本地会话历史";
+"text.localHistoryBody" = "这份历史只存在于本应用的内存中，直到你清除它或开始另一次会话。";
+"text.sent" = "已发送";
+"text.received" = "已接收";
+"text.notSent" = "未发送";
+"text.copySentMessage" = "复制已发送的消息";
+"text.copyReceivedMessage" = "复制已接收的消息";
+"text.refused" = "对方设备拒绝了这次文本会话。";
+"text.unsupported" = "该设备还不支持 Relayium 文本会话。请在双方设备上更新 Relayium。";
+"text.ended" = "文本会话已结束。本地历史会一直显示，直到你清除它或开始另一次会话。";
+"text.messageTooLong" = "这条消息太长了。请改为以文件方式发送。";
+"text.sendFailed" = "这条消息未能发送。";
+"text.sessionFailed" = "消息会话失败。";
+"text.tooManyMessages" = "对方设备发送的消息过多。";
+"text.safetyLimits" = "消息会话超出了安全限额。";
+
+/* MARK: 附近设备 */
+"nearby.heading" = "附近设备";
+"nearby.explain" = "正在运行 Relayium（应用或 relayium.com）、并且与这台 Mac 从同一个公网地址访问互联网的设备。通常这意味着你的 Wi-Fi，但运营商或 VPN 网关也可能把陌生人的设备放进这个列表。Relayium 从不扫描你的网络；它只是向自己的会合服务询问还有谁来自那个地址。";
+"nearby.dropHint" = "把文件或文件夹拖到这里，或点击选择。在你从下方挑选设备并按下「发送」之前，什么都不会发出。";
+"nearby.lookAgain" = "重新查找";
+"nearby.resumeReceiving" = "恢复接收";
+"nearby.pauseReceiving" = "暂停接收";
+"nearby.pausedBody" = "这台 Mac 当前不监听附近设备。它仍然可以发送，配对码也照常可用。";
+"nearby.listeningBody" = "只要 Relayium 在运行，同一地址下的设备无需事先询问就能向你发送文件或发起消息会话。文件会写入你的「下载」文件夹。共用这个公网地址的任何设备都可以尝试 — 如果你不希望这样，请暂停接收。";
+"nearby.a11yReceiving" = "附近接收";
+"nearby.emptyRoster" = "还没有其他设备。请在对方设备上打开 relayium.com 并让页面保持打开。";
+"nearby.namesDisclaimer" = "名称由对方设备提供，不能证明它是谁。如果这一点重要，请在下方核对验证码。";
+"nearby.a11yDevices" = "附近设备";
+"nearby.a11yChooseDevice" = "选择这台设备作为发送目标。";
+"nearby.sendTo" = "发送给 %@";
+"nearby.selectionSendHint" = "%@。可直接发送到那台设备。";
+"nearby.addFilesHint" = "先在上方添加文件或文件夹，然后直接发送到那台设备。";
+"nearby.textIntent" = "将打开一个端到端加密的消息会话。Relayium 不存储任何内容。";
+"nearby.startMessageSession" = "发起消息会话";
+"nearby.acceptanceNote" = "在 relayium.com 上，对方仍需自行选择传入文件的保存位置；除非任一设备开启了高级验证（见下方），消息会话会在对方那里直接打开而不弹出提示。只要接收处于开启状态，这台 Mac 也以同样的方式接受附近设备的传入传输。";
+"nearby.backToDevices" = "返回附近设备";
+"nearby.leavingClearsHistory" = "离开会清除本次会话的本地消息历史。";
+"nearby.deviceGone" = "那台设备已不在附近。请另选一台。";
+"nearby.addFilesFirst" = "请先添加要发送的文件或文件夹。";
+"nearby.reconnecting" = "与 Relayium 设备会合服务的连接已断开。正在重连…";
+"nearby.unnamedDevice" = "未命名设备";
+"nearby.setupFailed" = "一次传入的附近传输未能建立。";
+
+/* MARK: 拖放区、选择器、接收结果、二维码 */
+"drop.a11yLabel" = "待发送的文件";
+"drop.a11yHint" = "把文件或文件夹拖到这里，或激活以选择它们。";
+"picker.prompt" = "选择";
+"received.revealInFinder" = "在访达中显示";
+"received.dragHint" = "可把上面任意一项拖到访达或其他应用中。";
+"received.a11yDragHint" = "拖到其他应用即可复制，或使用「在访达中显示」。";
+"qr.a11yLabel" = "配对链接的二维码";
+
+/* MARK: 通知 */
+"notify.title.complete" = "Relayium 传输完成";
+"notify.title.failed" = "Relayium 传输失败";
+"notify.title.message" = "Relayium 消息";
+"notify.title.incoming" = "Relayium 传入请求";
+"notify.uploadReady" = "你的加密下载链接已就绪。";
+"notify.filesDelivered" = "你的文件已送达对方设备。";
+"notify.transferStopped" = "一次传输在完成前中断了。";
+"notify.newMessage" = "收到一条新的加密消息。";
+"notify.incomingFiles" = "一台附近设备正在向这台 Mac 发送文件。";
+"notify.incomingText" = "一台附近设备与这台 Mac 发起了消息会话。";
+"notify.incomingFailed" = "一次传入的附近传输未能开始。";
+"notify.filesReady.other" = "%@ 个文件已就绪。";
+
+/* MARK: 账户标签页 */
+"account.managePlan" = "管理套餐";
+"account.traffic" = "流量";
+"account.storage" = "存储";
+"account.meterOf" = "%1$@ / %2$@";
+"account.staleFigures" = "显示的是最后一次已知数据 — 无法连接服务器。";
+"account.devicesHeading" = "已登录的设备";
+"account.devicesBody" = "持有本账户令牌的应用与命令行登录。浏览器不在此列：它们使用会话登录，而不是令牌。";
+"account.noDevices" = "当前没有应用或命令行设备处于登录状态。";
+"account.unnamedDevice" = "未命名设备";
+"account.thisMac" = "这台 Mac";
+"account.deviceKindCli" = "命令行";
+"account.deviceKindApp" = "应用";
+"account.deviceNeverUsed" = "从未使用";
+"account.deviceLastUsed" = "上次使用 %@";
+"account.deviceAdded" = "添加于 %@";
+"account.revokeTitle" = "吊销“%@”？";
+"account.revokeThisMac" = "这就是你正在使用的 Mac。吊销它会立即让本应用退出登录。";
+"account.revokeOther" = "该设备将被退出登录，必须重新登录才能继续使用。";
+"account.filesHeading" = "已存储的文件";
+"account.filesBody" = "本账户正在存储的加密数据。Relayium 的服务器从不知道文件名和密钥，因此它们只知道下面这些信息。";
+"account.noFiles" = "当前没有存储任何内容。";
+"account.copyLink" = "复制链接";
+"account.keyNotOnThisMac" = "这个文件的密钥不在这台 Mac 上，因此无法在此重建链接。它可能是从另一台设备发出的，或是在本应用开始保存密钥之前发出的。Relayium 的服务器从未持有它。";
+"account.keyLookupFailed" = "无法在这台 Mac 的钥匙串中查找该密钥，因此无法显示链接。%@";
+"account.deleteFileTitle" = "删除这个已存储的文件？";
+"account.deleteFileBody" = "加密数据将从服务器上被抹除。任何持有链接的人都将一无所获。此操作无法撤销。";
+"account.fileEncryptedSize" = "%@ 密文";
+"account.fileNoExpiry" = "永不过期";
+"account.fileExpires" = "%@ 过期";
+"account.fileBurn" = "下载一次后即删除";
+"account.fileDownloaded" = "已下载";
+"account.fileNotDownloaded" = "尚未下载";
+"account.fileDownloadedOnce" = "已下载 1 次";
+"account.fileDownloadedTimes.other" = "已下载 %@ 次";
+"account.bearerInvalid" = "这台 Mac 的登录凭据已失效。请退出登录后重新登录。";
+"account.keyCleanupWarning" = "已存储的文件“%1$@”已从服务器删除，但它的密钥仍留在这台 Mac 上。%2$@ 这个密钥已经打不开任何东西了 — 它所对应的加密数据已经不存在。";
+"account.signOutFailed" = "无法安全退出登录。凭据已保留，你可以重试。";
+
+/* MARK: 套餐用量与徽标 */
+"usage.unlimited" = "无限制";
+"usage.resetsToday" = "今天重置";
+"usage.resetsInDays.other" = "%@ 天后重置";
+"badge.trial" = "试用中";
+"badge.paymentFailed" = "扣款失败";
+"badge.canceled" = "已取消";
+"badge.unpaid" = "未支付";
+"badge.paymentIncomplete" = "支付未完成";
+"badge.paused" = "已暂停";
+"badge.inactive" = "未生效";
+
+/* MARK: 选择摘要 */
+"selection.files.other" = "已就绪 %@ 个文件";
+"selection.folders.other" = "分布在 %@ 个文件夹中";
+"selection.emptyFolders.other" = "%@ 个空文件夹无法发送";
+
+/* MARK: 错误 */
+"error.account.invalidCredentials" = "该邮箱与密码不匹配任何账户。";
+"error.account.notSignedIn" = "创建配对码需要登录。你仍然可以用别人分享的配对码接收文件。";
+"error.account.rateLimited" = "尝试次数过多。请等一分钟再试。";
+"error.account.server" = "服务器返回了一个错误（%@）。请稍后再试。";
+"error.account.decoding" = "服务器返回的响应是这个版本的应用无法理解的。更新可能会解决问题。";
+"error.account.network" = "无法连接服务器。请检查你的网络连接。";
+"error.keychain.signIn" = "macOS 未能保存你的登录凭据（钥匙串错误 %@）。在退出应用之前你会保持登录状态。";
+"error.storedKey.keychain.save" = "macOS 未能把这个文件的密钥保存到钥匙串（钥匙串错误 %@）。";
+"error.storedKey.keychain.read" = "macOS 未能从钥匙串读取这个文件的密钥（钥匙串错误 %@）。";
+"error.storedKey.keychain.remove" = "macOS 未能从钥匙串移除这个文件的密钥（钥匙串错误 %@）。";
+"error.storedKey.badId.save" = "这个文件的标识符不是本应用会用来保存密钥的形式，因此它的密钥没有保存在这台 Mac 上。请反馈这个问题。";
+"error.storedKey.badId.read" = "这一项的标识符不是本应用会处理的形式，因此没有读取它的密钥，链接也无法在此重建。请到 relayium.com 管理它，并反馈这个问题。";
+"error.storedKey.badId.remove" = "这一项的标识符不是本应用会处理的形式，因此密钥没有被移除。请反馈这个问题。";
+"error.storedKey.badKey.save" = "这个文件的密钥不是本应用能够保存的形式，因此它没有保存在这台 Mac 上。请反馈这个问题。";
+"error.storedKey.badKey.remove" = "这个文件的密钥不是本应用能够处理的形式，因此它没有被移除。请反馈这个问题。";
+"error.handshake.mitm" = "两台设备未能就共享密钥达成一致。可能有人正在干扰这条连接 — 请立即停止，并用新的配对码重新配对。";
+"error.peer.protocol" = "对方设备发送的内容是这个版本的应用无法理解的。双方可能都需要更新。";
+"error.realtime.tamper" = "收到的数据与发送方所描述的不一致，因此已被丢弃。请让对方重新发送。";
+"error.realtime.dropped" = "连接丢失了传输中的一部分。什么都没有保存 — 请重试。";
+"error.realtime.legacyPeer" = "对方设备运行的是较旧的版本，无法完成这次传输。它需要更新。";
+"error.sender.manifestTooLarge" = "单次传输的文件太多了。请分成更小的批次发送。";
+"error.sender.invalidManifest" = "所选文件无法被安全地描述，因此传输没有开始。";
+"error.sender.sourceShorter" = "“%@”在发送过程中发生了变化，因此传输已停止。请重试。";
+"error.sender.sourceLonger" = "“%@”在被选中之后变大了，因此已批准文件列表之外的字节没有被发送。请重新选择它并重试。";
+"error.connection.peerBusy" = "对方设备正在进行另一次传输。请等它结束后再试。";
+"error.connection.unsupportedPeer" = "对方设备还不支持加密文本会话。它可能需要更新。";
+"error.connection.failed" = "私密连接未能建立。请确认两台设备都在线，然后重试。";
+"error.connection.alreadySending" = "这条连接已经在发送了。要进行另一次传输，请开始新的会话。";
+"error.connection.rejected" = "对方设备拒绝了这次传输。";
+"error.connection.timedOut" = "对方设备停止了响应，因此会话已结束。";
+"error.connection.textSendBufferFull" = "连接正在追赶进度。请稍等片刻再发送这条消息。";
+"error.connection.textSendFailed" = "这条加密消息未能发送。请再试一次。";
+"error.connection.textReceiveBufferFull" = "对方设备在验证完成前发送了过多内容，因此会话已关闭。";
+"error.factory.noPeerAppeared" = "在配对码过期之前没有人加入。请创建新的配对码并重试。";
+"error.nearby.notScanning" = "Relayium 已停止查找附近设备，因此那台设备不再可用。请重新查找，然后再选择它。";
+"error.nearby.noAnswer" = "那台设备没有应答。请在它上面打开 relayium.com 并保持页面打开，然后重新选择它。也可以改用配对码 — 在这台 Mac 上接收正是靠配对码。";
+"error.staging.fileCount" = "请选择 1 到 %@ 个文件。";
+"error.staging.unreadable" = "未能打开全部所选文件，因此什么都没有发送。请重新选择文件。";
+"error.text.authenticationFailed" = "这条加密消息未通过完整性校验，因此已被丢弃并关闭了会话。";
+"error.text.outOfOrder" = "连接丢失或重排了一条消息，因此会话已关闭且不显示该消息。";
+"error.text.messageTooLarge" = "对方设备发送的消息超过了这个版本支持的大小，因此会话已关闭。";
+"error.text.invalid" = "对方设备发送了一条无效的加密消息，因此它已被丢弃并关闭了会话。";
+"error.deviceAuth.denied" = "浏览器中拒绝了这次登录。如果那不是你本人，请重试。";
+"error.deviceAuth.expired" = "这次登录请求已超时。请重新开始以获取新的请求。";
+"error.destination.directoryExists" = "这里已经存在“%@” — 这条链接之前下载到过这个文件夹。请另选一个文件夹：本应用不会并入已有文件夹，因为它无法分辨半途而废的下载和你自己的文件。";
+"error.destination.unsafeName" = "这条链接描述了一个名为“%@”的文件，它会被写到你所选文件夹之外，因此什么都没有保存。请向发送方索取新的链接。";
+"error.destination.fileExists" = "目标位置已经存在“%@”。请另选一个文件夹；Relayium 不会覆盖它。";
+"error.destination.incomplete" = "收到的字节数与文件列表不符，因此不完整的文件已被丢弃。请让发送方重试。";
+"error.destination.noSpace" = "可用空间不足以保存这次传输，因此什么都没有保存。请清理空间后重试。";
+"error.destination.notPermitted" = "Relayium 没有写入那个文件夹的权限，因此什么都没有保存。请另选一个文件夹。";
+"error.destination.systemError" = "目标文件夹无法写入（错误 %@），因此什么都没有保存。请换一个文件夹。";
+"error.manifest.unsafePath" = "对方设备描述了一个位于“%@”的文件，它会被写到你所选文件夹之外。什么都没有保存。";
+"error.manifest.duplicatePath" = "这次传输在“%@”上包含了不止一个文件 — 在这台 Mac 上它们是同一个文件 — 因此什么都没有保存。请让发送方为其中一个改名。";
+"error.manifest.pathCollision" = "这次传输要求“%@”同时是文件和文件夹，而这两者不可能并存，因此什么都没有保存。请让发送方重试。";
+"error.plaintext.unreadable" = "未能打开“%@”，因此什么都没有发送。请检查该文件是否仍然存在、以及你是否有读取权限。";
+"error.plaintext.readFailed" = "读取“%@”在中途失败，因此传输已停止。对方设备已丢弃这个不完整的文件。";
+"error.plaintext.tooManyOpenFiles" = "在处理你的选择时，这台 Mac 用尽了可打开的文件句柄（上限为 %@）。Relayium 会持有每一个所选文件不放，以确保发出的正是你选中的那些文件，因此请分成更小的批次发送。";
+"error.selection.noFiles" = "没有可发送的文件。空文件夹无法单独传输 — 文件列表没有办法描述一个什么都没有的文件夹。";
+"error.selection.tooManyFiles" = "该选择包含的文件超过 %@ 个。请减少文件数量，或先把文件夹压缩。";
+"error.selection.unreadable" = "未能读取“%@”，因此什么都没有发送。请检查该项是否仍然存在、以及你是否有打开权限。";
+"error.selection.symbolicLink" = "“%@”是一个符号链接。Relayium 不会跟随它 — 那可能会发送你所选范围之外的文件 — 也不会悄悄跳过它。请把它从选择中移除，或直接发送它指向的真实文件夹。";
+"error.selection.pathTooLong" = "路径“%@”太长，无法在一次传输中描述。请从更浅的文件夹发送，或缩短名称。";
+"error.cloud.unauthorized" = "你的登录已过期。请重新登录以发送文件。";
+"error.cloud.quota" = "剩余空间或当日配额不足以容纳这个文件。请清理空间或升级套餐。";
+"error.cloud.rateLimited" = "当前上传次数过多。请等一分钟再试。";
+"error.cloud.dailyQuota" = "这个文件需要的额度超过了你当日剩余的上传配额 — 单个大文件本身就可能用光配额。请明天再试，或升级以获得更大的每日配额。";
+"error.cloud.monthlyTraffic" = "你的账户已达到当月流量上限。下个月会恢复上传，也可以升级立即继续。";
+"error.cloud.notFound" = "这条链接已过期、已被下载，或者输入有误。";
+"error.cloud.server" = "服务器返回了一个错误（%@）。请稍后再试。";
+"error.cloud.network" = "无法连接服务器。请检查你的网络连接。";
+"error.cloud.decoding" = "服务器返回的响应是这个版本的应用无法理解的。更新可能会解决问题。";
+"error.storedLinkKey.invalidIdentifier" = "这一项的标识符不是本应用会处理的形式，因此操作被拒绝。请到 relayium.com 管理它，并反馈这个问题。";
+"error.storedLinkKey.invalidKey" = "这台 Mac 上为该文件保存的密钥无法读取，因此无法据此重建链接。";
+"error.storedWire.invalidKey" = "这条链接的密钥格式有误 — 很可能是复制不完整。";
+"error.storedWire.corrupt" = "下载到的数据与链接所描述的不一致，因此已被丢弃。请向发送方索取新的链接。";
+"error.unknown" = "出了点问题（%@）。";

@@ -1,4 +1,5 @@
 import AppKit
+import RelayiumAppKit
 @preconcurrency import UserNotifications
 
 /// Completion notifications deliberately contain no filenames, links, pairing
@@ -14,7 +15,8 @@ final class TransferNotifier {
         }
     }
 
-    func completed(_ body: String, title: String = "Relayium transfer complete") {
+    func completed(_ body: String, title: String? = nil) {
+        let title = title ?? L10n.t(.notifyTitleComplete)
         guard !NSApp.isActive else { return }
         center.getNotificationSettings { [center] settings in
             guard settings.authorizationStatus == .authorized ||

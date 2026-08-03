@@ -7,12 +7,12 @@ struct DownloadPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Receive files").font(.headline)
+            Text(L10n.t(.downloadHeading)).font(.headline)
             HStack {
-                TextField("Paste a relayium.com/d/… link", text: $model.linkText)
+                TextField(L10n.t(.downloadLinkPlaceholder), text: $model.linkText)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { model.resolve() }
-                Button("Open") { model.resolve() }
+                Button(L10n.t(.downloadOpen)) { model.resolve() }
                     .disabled(model.linkText.isEmpty)
             }
             switch model.state {
@@ -22,7 +22,8 @@ struct DownloadPane: View {
                 ProgressView().controlSize(.small)
             case .ready(let manifest, let expiresAt, let burn):
                 let total = manifest.files.reduce(0) { $0 + $1.size }
-                Text("\(manifest.files.count) file\(manifest.files.count == 1 ? "" : "s") · \(ByteCountFormatter.string(fromByteCount: Int64(total), countStyle: .file))")
+                Text(DownloadPresentation.manifestSummary(fileCount: manifest.files.count,
+                                                          totalBytes: Int64(total)))
                     .font(.subheadline.weight(.semibold))
                 // By index, not by name: a folder upload keeps its hierarchy in
                 // `name`, so two entries can share a leaf and duplicate ids
@@ -35,18 +36,21 @@ struct DownloadPane: View {
                 }
                 if burn {
                     // Stated before it costs something, not as a footnote after.
-                    Text("This link is delete-after-download. Saving these files uses it up — nobody else can download them afterwards.")
+                    Text(L10n.t(.downloadBurnNotice))
                         .font(.caption).foregroundStyle(.orange)
                 }
-                Text("Expires \(Date(timeIntervalSince1970: TimeInterval(expiresAt)).formatted())")
+                Text(L10n.t(.commonExpires, [
+                    L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
+                              dateStyle: .medium, timeStyle: .short),
+                ]))
                     .font(.caption).foregroundStyle(.secondary)
-                Button("Save…") { chooseDestination() }
+                Button(L10n.t(.downloadSave)) { chooseDestination() }
                     .buttonStyle(.borderedProminent)
             case .downloading(let received, let total):
                 ProgressView(value: total > 0 ? Double(received) / Double(total) : 0)
-                Button("Cancel") { model.cancel() }
+                Button(L10n.t(.commonCancel)) { model.cancel() }
             case .done(let urls):
-                Text("Saved \(urls.count) file\(urls.count == 1 ? "" : "s")")
+                Text(DownloadPresentation.savedSummary(fileCount: urls.count))
                     .font(.subheadline.weight(.semibold))
                 if let payload = model.received {
                     ReceivedResultView(payload: payload)
@@ -63,7 +67,7 @@ struct DownloadPane: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-        panel.prompt = "Save Here"
+        panel.prompt = L10n.t(.downloadSavePanelPrompt)
         if panel.runModal() == .OK, let dir = panel.url { model.download(into: dir) }
     }
 }

@@ -3,6 +3,12 @@ import PackageDescription
 
 let package = Package(
     name: "RelayiumKit",
+    // Required the moment a target ships `.lproj` resources: it is the language
+    // SwiftPM treats as the base, and it is what makes `en` the deterministic
+    // fallback for every key that a translation is missing for. It must stay
+    // `en` — `LocalizationCatalog` falls back to `AppLanguage.en` in code, and
+    // the two would disagree otherwise.
+    defaultLocalization: "en",
     platforms: [.macOS(.v13), .iOS(.v16)],
     products: [.library(name: "RelayiumKit", targets: ["RelayiumKit", "RelayiumAppKit"])],
     dependencies: [
@@ -29,7 +35,13 @@ let package = Package(
         // @MainActor view-model layer for the native apps. Imports RelayiumKit and
         // Foundation, never SwiftUI — that is what keeps it unit-testable under
         // `swift test` and reusable by the iOS app in R3.
-        .target(name: "RelayiumAppKit", dependencies: ["RelayiumKit"]),
+        // The nine `.lproj` catalogs live here rather than in the macOS app
+        // target: the copy belongs to the layer that produces it, `Bundle.module`
+        // resolves it without any main-bundle lookup, and R3's iOS app then gets
+        // the same strings by linking the same package.
+        .target(name: "RelayiumAppKit",
+                dependencies: ["RelayiumKit"],
+                resources: [.process("Resources")]),
         .testTarget(
             name: "RelayiumKitTests",
             dependencies: ["RelayiumKit", "RelayiumAppKit"],

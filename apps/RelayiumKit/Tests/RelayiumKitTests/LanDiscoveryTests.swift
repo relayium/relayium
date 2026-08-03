@@ -258,7 +258,11 @@ final class LanDiscoveryTests: XCTestCase {
         XCTAssertEqual(devices.count, 2)
         XCTAssertFalse(devices.contains { $0.name.unicodeScalars.contains { $0.value == 0x202E } })
         XCTAssertFalse(devices.contains { $0.name.unicodeScalars.contains { $0.value == 0x07 } })
-        XCTAssertTrue(devices.contains { $0.name == "Unnamed device" }, "a blank name still needs something to click")
+        // The placeholder is localized copy now, so this asserts the CONTRACT — a
+        // blank name still gets something clickable — rather than one language's
+        // spelling of it.
+        XCTAssertTrue(devices.contains { $0.name == L10n.t(.nearbyUnnamedDevice) },
+                      "a blank name still needs something to click")
     }
 
     /// The hub builds its roster by ranging a Go map, so the order differs

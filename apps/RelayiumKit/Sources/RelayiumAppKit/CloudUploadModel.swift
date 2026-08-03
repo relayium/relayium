@@ -92,7 +92,7 @@ public final class CloudUploadModel: ObservableObject {
                 let attrs = try? FileManager.default.attributesOfItem(atPath: file.url.path)
                 let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
                 if size > maxFileSize {
-                    state = .failed("\(file.name) is larger than this server accepts.")
+                    state = .failed(L10n.t(.uploadFileTooLarge, [L10n.token(file.name)]))
                     return
                 }
             }
@@ -191,11 +191,8 @@ public final class CloudUploadModel: ObservableObject {
             // stored-key copy already names the operation: the shared table's
             // `KeychainError` wording is the SIGN-IN store's, and a save that
             // never touched the session must not borrow it.
-            warning = """
-                \(ErrorCopy.storedLinkKeyMessage(for: error, operation: .save)) \
-                The link below is the only available copy of the key — copy it now. \
-                Relayium's servers never had the key, so this link can't be shown again.
-                """
+            warning = L10n.t(.uploadKeyWarning,
+                             [ErrorCopy.storedLinkKeyMessage(for: error, operation: .save)])
         }
         guard g == generation else { return }
         state = .done(link: buildDownloadLink(origin: origin, id: o.id, keyB64url: o.keyB64url),

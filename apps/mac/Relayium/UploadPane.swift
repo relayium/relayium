@@ -11,31 +11,26 @@ struct UploadPane: View {
     /// oversized file and still has something to return to after a cancel.
     @StateObject private var selection = SelectionStore()
 
-    private let ttlLabels: [Int: String] = [
-        3600: "1 hour", 86400: "1 day", 259200: "3 days",
-        604800: "7 days", 1209600: "14 days",
-    ]
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Send files").font(.headline)
+            Text(L10n.t(.uploadHeading)).font(.headline)
             switch model.state {
             case .idle:
-                dropZone(hint: "Drop files or folders here, or click to choose")
+                dropZone(hint: L10n.t(.uploadDropHint))
             case .picked:
-                dropZone(hint: selection.summary ?? "Ready")
-                Button("Clear") { selection.clear() }.buttonStyle(.link)
+                dropZone(hint: selection.summary ?? L10n.t(.uploadReady))
+                Button(L10n.t(.commonClear)) { selection.clear() }.buttonStyle(.link)
                 options
-                Button("Send") { model.start(token: token) }
+                Button(L10n.t(.commonSend)) { model.start(token: token) }
                     .buttonStyle(.borderedProminent)
                     .disabled(token.isEmpty)
             case .uploading(let sent, let total):
                 ProgressView(value: total > 0 ? Double(sent) / Double(total) : 0)
-                Text(total > 0 ? "\(sent * 100 / total)%" : "Starting…")
+                Text(L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
                     .font(.caption).foregroundStyle(.secondary)
-                Button("Cancel") { model.cancel() }
+                Button(L10n.t(.commonCancel)) { model.cancel() }
             case .done(let link, let expiresAt, let keyWarning):
-                Text("Link ready").font(.subheadline.weight(.semibold))
+                Text(L10n.t(.uploadLinkReady)).font(.subheadline.weight(.semibold))
                 // Exactly one statement about the key, decided in
                 // UploadPresentation where it is tested. Which one is not
                 // cosmetic: after a successful save the key really is on this
@@ -45,18 +40,21 @@ struct UploadPane: View {
                 keyNotice(UploadPresentation.keyNotice(warning: keyWarning))
                 HStack {
                     Text(link).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
-                    Button("Copy") {
+                    Button(L10n.t(.commonCopy)) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(link, forType: .string)
                     }
                 }
-                Text("Expires \(Date(timeIntervalSince1970: TimeInterval(expiresAt)).formatted())")
+                Text(L10n.t(.commonExpires, [
+                    L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
+                              dateStyle: .medium, timeStyle: .short),
+                ]))
                     .font(.caption).foregroundStyle(.secondary)
-                Button("Send another") { model.reset() }.buttonStyle(.link)
+                Button(L10n.t(.uploadSendAnother)) { model.reset() }.buttonStyle(.link)
             case .failed(let message):
                 Text(message).foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Try again") { model.reset() }
+                Button(L10n.t(.commonTryAgain)) { model.reset() }
             }
         }
         // The store owns "what the user chose"; the model owns "what is being
@@ -89,13 +87,13 @@ struct UploadPane: View {
 
     private var options: some View {
         HStack(spacing: 16) {
-            Picker("Expires after", selection: $model.ttl) {
+            Picker(L10n.t(.uploadExpiresAfter), selection: $model.ttl) {
                 ForEach(model.ttlChoices, id: \.self) { secs in
-                    Text(ttlLabels[secs] ?? "\(secs)s").tag(secs)
+                    Text(TtlPresentation.label(seconds: secs)).tag(secs)
                 }
             }
             .frame(maxWidth: 220)
-            Toggle("Delete after first download", isOn: $model.burnAfterRead)
+            Toggle(L10n.t(.uploadBurnAfterRead), isOn: $model.burnAfterRead)
         }
     }
 
@@ -107,7 +105,7 @@ struct UploadPane: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Button("Choose Files or Folders…") { chooseFilesOrFolders(into: selection) }
+            Button(L10n.t(.commonChooseFilesOrFolders)) { chooseFilesOrFolders(into: selection) }
         }
     }
 }

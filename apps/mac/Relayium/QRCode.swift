@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreImage.CIFilterBuiltins
+import RelayiumAppKit
 
 /// A QR code for the join link, rendered by the OS.
 ///
@@ -18,7 +19,7 @@ struct QRCodeView: View {
                 .interpolation(.none)          // keep the modules crisp
                 .resizable()
                 .frame(width: side, height: side)
-                .accessibilityLabel("QR code for the pairing link")
+                .accessibilityLabel(L10n.t(.qrA11yLabel))
         } else {
             // The code itself is the primary affordance; a failed QR is a
             // missing accelerator, not a broken screen.

@@ -360,11 +360,12 @@ public final class AccountManagementModel: ObservableObject {
     /// is inert. No retry is offered because there is no operation to retry —
     /// the object is already gone.
     private static func cleanupMessage(id: String, error: Error) -> String {
-        """
-        The stored file “\(id)” was deleted from the server, but its key is still on \
-        this Mac. \(ErrorCopy.storedLinkKeyMessage(for: error, operation: .remove)) \
-        The key can't open anything any more — the encrypted data it belonged to is gone.
-        """
+        // The id is a server-issued opaque token, so it is isolated rather than
+        // translated — under Arabic the bidi algorithm would otherwise be free
+        // to move part of it across the sentence.
+        L10n.t(.accountKeyCleanupWarning,
+               [L10n.token(id),
+                ErrorCopy.storedLinkKeyMessage(for: error, operation: .remove)])
     }
 
     /// Most recently used first — the web's ordering — with a total tie-break so
@@ -378,7 +379,7 @@ public final class AccountManagementModel: ObservableObject {
         // a password, which is not what happened here: the bearer this screen is
         // using expired or was revoked elsewhere.
         if let e = error as? AccountError, e == .invalidCredentials {
-            return "This Mac's sign-in is no longer valid. Sign out and sign in again."
+            return L10n.t(.accountBearerInvalid)
         }
         return ErrorCopy.message(for: error)
     }

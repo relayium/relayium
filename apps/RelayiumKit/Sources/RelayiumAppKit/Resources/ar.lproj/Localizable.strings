@@ -1,0 +1,409 @@
+/* Relayium — العربية (تُعرض من اليمين إلى اليسار).
+   اسم العلامة Relayium و relayium.com و SAS و WebRTC و UTF-8 ووحدات B/KB/MB
+   تبقى كما هي دون ترجمة. القيم التقنية المُدرجة في الجُمل (أسماء الملفات،
+   المسارات، رموز الحالة) تُغلَّف بعازل اتجاهي في الشيفرة حتى تُقرأ كوحدة واحدة.
+   جميع صيغ الجمع الست موجودة لكل مفتاح عددي. */
+
+/* MARK: عناصر تحكم مشتركة */
+"common.cancel" = "إلغاء";
+"common.clear" = "مسح";
+"common.copy" = "نسخ";
+"common.done" = "تم";
+"common.join" = "انضمام";
+"common.send" = "إرسال";
+"common.accept" = "قبول";
+"common.reject" = "رفض";
+"common.revoke" = "إبطال";
+"common.delete" = "حذف";
+"common.dismiss" = "إخفاء";
+"common.refresh" = "تحديث";
+"common.signOut" = "تسجيل الخروج";
+"common.tryAgain" = "إعادة المحاولة";
+"common.starting" = "جارٍ البدء…";
+"common.code" = "الرمز";
+"common.chooseFilesOrFolders" = "اختيار ملفات أو مجلدات…";
+"common.endSession" = "إنهاء الجلسة";
+"common.expires" = "تنتهي الصلاحية %@";
+
+/* MARK: صيغ العرض */
+"format.percent" = "%@%%";
+"format.bytes" = "%1$@ %2$@";
+"format.detailPair" = "%1$@ · %2$@";
+
+/* MARK: دورة حياة التطبيق */
+"app.checkForUpdates" = "التحقق من التحديثات…";
+"quit.title" = "لا يزال هناك نقل جارٍ";
+"quit.body" = "الخروج الآن يُلغيه. لن يُحفظ شيء، وأي رفع قيد التنفيذ سيبدأ من جديد.";
+"quit.cancelAndQuit" = "إلغاء النقل والخروج";
+"quit.keepTransferring" = "متابعة النقل";
+
+/* MARK: شريط القوائم */
+"menubar.planUsage" = "%1$@ — استُخدم %2$@";
+"menubar.loadingAccount" = "جارٍ تحميل حسابك…";
+"menubar.signingIn" = "جارٍ تسجيل الدخول…";
+"menubar.signedInUnreachable" = "مسجَّل الدخول — تعذّر الوصول إلى الخادم";
+"menubar.emailUnverified" = "%@ — البريد غير مُوثَّق";
+"menubar.pendingDeletion" = "الحساب مُجدوَل للحذف";
+"menubar.notSignedIn" = "غير مسجَّل الدخول";
+"menubar.resumeNearby" = "استئناف الاستقبال من الأجهزة القريبة";
+"menubar.pauseNearby" = "إيقاف الاستقبال من الأجهزة القريبة مؤقتًا";
+"menubar.openToSeeTransfer" = "افتح Relayium لرؤية هذا النقل";
+"menubar.open" = "فتح Relayium";
+"menubar.coreStatus" = "النواة: %1$@ · WebRTC: %2$@";
+"menubar.quit" = "إنهاء Relayium";
+
+/* MARK: حالة الاستقبال في الخلفية */
+"nearby.status.off" = "الاستقبال من القريبين: متوقف";
+"nearby.status.paused" = "الاستقبال من القريبين: مُوقَف مؤقتًا";
+"nearby.status.joining" = "الاستقبال من القريبين: جارٍ الانضمام…";
+"nearby.status.ready" = "الاستقبال من القريبين: جاهز";
+"nearby.status.reconnecting" = "الاستقبال من القريبين: جارٍ إعادة الاتصال…";
+"nearby.status.receivingFiles" = "جارٍ استقبال ملفات من جهاز قريب…";
+"nearby.status.messageSession" = "هناك جلسة رسائل مفتوحة مع جهاز قريب";
+
+/* MARK: النافذة */
+"content.haveLink" = "لديّ رابط";
+"content.nearbyOrCode" = "جهاز قريب أو رمز اقتران";
+"content.accountLoadFailed" = "تعذّر تحميل حسابك";
+"content.checkEmailTitle" = "تحقق من بريدك";
+"content.checkEmailBody" = "أرسلنا رابط توثيق إلى %@. وثّقه ثم سجّل الدخول مجددًا.";
+"content.openRelayium" = "فتح relayium.com";
+"content.pendingDeletionTitle" = "هذا الحساب مُجدوَل للحذف";
+"content.pendingDeletionBody" = "سيُمحى بعد %@. أعِد تفعيله من الويب للاحتفاظ به.";
+"content.reactivate" = "إعادة التفعيل على relayium.com";
+"content.backToSignIn" = "العودة إلى تسجيل الدخول";
+"tab.direct" = "مباشر";
+"tab.link" = "رابط";
+"tab.account" = "الحساب";
+
+/* MARK: تسجيل الدخول */
+"login.email" = "البريد الإلكتروني";
+"login.password" = "كلمة السر";
+"login.signIn" = "تسجيل الدخول";
+"login.signInWithApple" = "تسجيل الدخول باستخدام Apple";
+"login.createAccount" = "إنشاء حساب على relayium.com";
+
+/* MARK: مركز الاتصال المباشر والتحقق */
+"hub.transferType" = "نوع النقل";
+"hub.files" = "ملفات";
+"hub.text" = "نص";
+"hub.transferTypeHint" = "اختر ما ستنقله هذه الجلسة.";
+"verify.toggle" = "مقارنة رمز التحقق مع الجهاز الآخر";
+"verify.explainWhat" = "مُعطَّل افتراضيًا. عند تفعيله يعرض الجهازان رمز تحقق واحدًا من ست خانات (SAS) قبل أن ينتقل أي شيء؛ ومقارنته بصوت مسموع تكشف استبدال طرف الإشارات. وهو ليس رمز الاقتران الذي أدخلته، ولا يكشف شيئًا إلا إذا قارنه شخص فعلًا.";
+"verify.explainEncryption" = "هذا يغيّر ما يُعرض وأين يتوقف الأمر طلبًا للتأكيد — ولا يغيّر التعمية أبدًا. تُولَّد المفاتيح على هذا الـ Mac ولا تُرسل إلى Relayium إطلاقًا، ولا ينقل المُرحِّل سوى نص مُعمّى، وأي مصافحة مُلاعَب بها تفشل دائمًا.";
+
+/* MARK: نقل الملفات برمز اقتران */
+"direct.sendHeading" = "إرسال";
+"direct.dropHint" = "أفلِت الملفات أو المجلدات هنا، أو انقر للاختيار. ثم أنشئ رمزًا للجهاز الآخر.";
+"direct.createCode" = "إنشاء رمز";
+"direct.receiveHeading" = "استقبال";
+"direct.creatingCode" = "جارٍ إنشاء رمز…";
+"direct.giveCode" = "أعطِ هذا الرمز للجهاز الآخر";
+"direct.scanOnPhone" = "أو امسحه ضوئيًا بهاتف.";
+"direct.waitingForDevice" = "في انتظار الجهاز الآخر…";
+"direct.chooseFilesFirst" = "اختر أولًا الملفات أو المجلدات المراد إرسالها.";
+
+/* MARK: جلسة ملفات حيّة */
+"session.connecting" = "جارٍ الاتصال…";
+"session.checkMatches" = "تحقق من التطابق";
+"session.checkMatchesBody" = "ينبغي أن يعرض الجهاز الآخر هذا تمامًا. إن لم يكن كذلك، فقد يكون أحدهم يعترض هذا الاتصال.";
+"session.theyMatch" = "متطابقان";
+"session.theyDontMatch" = "غير متطابقين";
+"session.transferComplete" = "اكتمل النقل";
+"session.invalidFileList" = "قائمة الملفات المختارة غير صالحة. اختر الملفات من جديد.";
+"session.peerDisconnected" = "قطع الجهاز الآخر الاتصال.";
+
+/* MARK: الرفع السحابي */
+"upload.heading" = "إرسال ملفات";
+"upload.dropHint" = "أفلِت الملفات أو المجلدات هنا، أو انقر للاختيار";
+"upload.ready" = "جاهز";
+"upload.linkReady" = "الرابط جاهز";
+"upload.sendAnother" = "إرسال شيء آخر";
+"upload.expiresAfter" = "تنتهي الصلاحية بعد";
+"upload.burnAfterRead" = "الحذف بعد أول تنزيل";
+"upload.keyKept" = "المفتاح محفوظ بأمان على هذا الـ Mac ولا يُرسل أبدًا إلى خوادم Relayium. يمكنك نسخ هذا الرابط مرة أخرى من علامة التبويب «الحساب».";
+"upload.keyWarning" = "%@ الرابط أدناه هو النسخة الوحيدة المتاحة من المفتاح — انسخه الآن. لم تملك خوادم Relayium المفتاح قط، لذا لا يمكن عرض هذا الرابط مرة أخرى.";
+"upload.fileTooLarge" = "%@ أكبر مما يقبله هذا الخادم.";
+"ttl.oneHour" = "ساعة واحدة";
+"ttl.oneDay" = "يوم واحد";
+"ttl.threeDays" = "3 أيام";
+"ttl.sevenDays" = "7 أيام";
+"ttl.fourteenDays" = "14 يومًا";
+"ttl.seconds" = "%@ ث";
+
+/* MARK: التنزيل السحابي */
+"download.heading" = "استقبال ملفات";
+"download.linkPlaceholder" = "ألصِق رابط relayium.com/d/…";
+"download.open" = "فتح";
+"download.manifestSummary" = "%1$@ · %2$@";
+"download.burnNotice" = "هذا الرابط يُحذف بعد التنزيل. حفظ هذه الملفات يستهلكه — ولن يستطيع أحد تنزيلها بعد ذلك.";
+"download.save" = "حفظ…";
+"download.savePanelPrompt" = "الحفظ هنا";
+"download.badLink" = "لا يبدو هذا رابط Relayium. ينبغي أن يكون بالشكل https://relayium.com/d/…#k=…";
+"download.fileCount.zero" = "%@ ملفات";
+"download.fileCount.one" = "%@ ملف";
+"download.fileCount.two" = "%@ ملفان";
+"download.fileCount.few" = "%@ ملفات";
+"download.fileCount.many" = "%@ ملفًا";
+"download.fileCount.other" = "%@ ملف";
+"download.savedFiles.zero" = "حُفظت %@ ملفات";
+"download.savedFiles.one" = "حُفظ %@ ملف";
+"download.savedFiles.two" = "حُفظ %@ ملفان";
+"download.savedFiles.few" = "حُفظت %@ ملفات";
+"download.savedFiles.many" = "حُفظ %@ ملفًا";
+"download.savedFiles.other" = "حُفظ %@ ملف";
+
+/* MARK: النص المؤقت */
+"text.creatingCode" = "جارٍ إنشاء رمز نصي…";
+"text.startHeading" = "بدء جلسة نصية";
+"text.startBody" = "يبقى الجهازان متصلين. الرسائل مُعمّاة من الطرف إلى الطرف ولا تُحفظ إلا في ذاكرة هذه الجلسة.";
+"text.createCode" = "إنشاء رمز نصي";
+"text.signInToCreate" = "إنشاء رمز يتطلب تسجيل الدخول. أما الانضمام إلى رمز شخص آخر فلا يحتاج حسابًا.";
+"text.joinHeading" = "الانضمام إلى جلسة نصية";
+"text.joinHint" = "رمز الاقتران لا يكشف نوعه. اختر «نص» هنا فقط إذا كان المُرسِل قد بدأ جلسة نصية.";
+"text.giveCode" = "أعطِ هذا الرمز النصي للجهاز الآخر";
+"text.connecting" = "جارٍ وصل جلسة نصية خاصة…";
+"text.checkMatches" = "تحقق من تطابق هذا مع الجهاز الآخر";
+"text.checkMatchesBody" = "إن لم يتطابق تمامًا، فقد يكون أحدهم يعترض الاتصال.";
+"text.waitingAccept" = "في انتظار قبول الجهاز الآخر…";
+"text.verifiedPhrase" = "عبارة التحقق: %@";
+"text.incomingHeading" = "يريد الجهاز الآخر تبادل نص";
+"text.nothingDecrypted" = "لم تُفكّ تعمية أي رسالة ولم تُعرض بعد.";
+"text.sessionHeading" = "جلسة نصية خاصة";
+"text.noServerHistory" = "لا يحفظ Relayium متن أي رسالة ولا سجلًا على الخادم. ومع ذلك يستطيع أي من الجهازين نسخ النص أو الاحتفاظ به.";
+"text.noMessages" = "لا رسائل بعد.";
+"text.composerLabel" = "الرسالة";
+"text.byteCounter" = "%1$@ / %2$@ بايت UTF-8";
+"text.clipboardNotice" = "النسخ يضع المحتوى في حافظة النظام، حيث قد تحتفظ به تطبيقات أخرى أو أدوات سجل الحافظة.";
+"text.clipboardNoticeShort" = "قد يترك النسخ محتوى في حافظة النظام أو في سجلها.";
+"text.clearHistory" = "مسح السجل";
+"text.localHistoryHeading" = "سجل الجلسة المحلي";
+"text.localHistoryBody" = "يبقى هذا السجل في ذاكرة هذا التطبيق فقط إلى أن تمسحه أو تبدأ جلسة أخرى.";
+"text.sent" = "مُرسَلة";
+"text.received" = "مُستلَمة";
+"text.notSent" = "لم تُرسَل";
+"text.copySentMessage" = "نسخ الرسالة المُرسَلة";
+"text.copyReceivedMessage" = "نسخ الرسالة المُستلَمة";
+"text.refused" = "رفض الجهاز الآخر هذه الجلسة النصية.";
+"text.unsupported" = "هذا الجهاز لا يدعم جلسات Relayium النصية بعد. حدِّث Relayium على الجهازين.";
+"text.ended" = "انتهت الجلسة النصية. يبقى السجل المحلي ظاهرًا إلى أن تمسحه أو تبدأ جلسة أخرى.";
+"text.messageTooLong" = "هذه الرسالة طويلة جدًا. أرسلها كملف بدلًا من ذلك.";
+"text.sendFailed" = "تعذّر إرسال الرسالة.";
+"text.sessionFailed" = "أخفقت جلسة الرسائل.";
+"text.tooManyMessages" = "أرسل الجهاز الآخر رسائل أكثر مما ينبغي.";
+"text.safetyLimits" = "تجاوزت جلسة الرسائل حدود الأمان الخاصة بها.";
+
+/* MARK: الأجهزة القريبة */
+"nearby.heading" = "الأجهزة القريبة";
+"nearby.explain" = "أجهزة تُشغِّل Relayium — التطبيق أو relayium.com — وتصل إلى الإنترنت من العنوان العام نفسه الذي يستخدمه هذا الـ Mac. غالبًا ما يعني ذلك شبكة Wi‑Fi الخاصة بك، لكن بوابة مشغّل أو VPN قد تُدخل أجهزة غرباء إلى القائمة أيضًا. لا يفحص Relayium شبكتك إطلاقًا؛ بل يسأل خدمة الالتقاء التابعة له مَن غيرك يأتي من ذلك العنوان.";
+"nearby.dropHint" = "أفلِت الملفات أو المجلدات هنا، أو انقر للاختيار. لن يُرسل شيء حتى تختار جهازًا أدناه وتضغط إرسال.";
+"nearby.lookAgain" = "البحث مجددًا";
+"nearby.resumeReceiving" = "استئناف الاستقبال";
+"nearby.pauseReceiving" = "إيقاف الاستقبال مؤقتًا";
+"nearby.pausedBody" = "هذا الـ Mac لا ينصت للأجهزة القريبة. لا يزال بإمكانه الإرسال، ورموز الاقتران تعمل كالمعتاد.";
+"nearby.listeningBody" = "ما دام Relayium يعمل، يستطيع أي جهاز على هذا العنوان إرسال ملفات أو بدء جلسة رسائل دون أن يسأل أولًا. تُكتب الملفات في مجلد التنزيلات لديك. وأي شيء يشارك هذا العنوان العام يمكنه المحاولة — أوقف الاستقبال مؤقتًا إن لم يكن هذا ما تريده.";
+"nearby.a11yReceiving" = "الاستقبال من القريبين";
+"nearby.emptyRoster" = "لا توجد أجهزة أخرى بعد. افتح relayium.com على الجهاز الآخر واترك الصفحة مفتوحة.";
+"nearby.namesDisclaimer" = "الأسماء تأتي من الجهاز الآخر وليست دليلًا على هويته. قارِن رموز التحقق أدناه إن كان ذلك مهمًا.";
+"nearby.a11yDevices" = "الأجهزة القريبة";
+"nearby.a11yChooseDevice" = "اختيار هذا الجهاز للإرسال إليه.";
+"nearby.sendTo" = "إرسال إلى %@";
+"nearby.selectionSendHint" = "%@. أرسِلها مباشرة إلى ذلك الجهاز.";
+"nearby.addFilesHint" = "أضف ملفات أو مجلدات في الأعلى، ثم أرسِلها مباشرة إلى ذلك الجهاز.";
+"nearby.textIntent" = "يفتح جلسة رسائل مُعمّاة من الطرف إلى الطرف. لا يُخزَّن شيء على Relayium.";
+"nearby.startMessageSession" = "بدء جلسة رسائل";
+"nearby.acceptanceNote" = "على relayium.com يظل الطرف الآخر هو من يختار أين تُحفظ الملفات الواردة؛ أما جلسة الرسائل فتُفتح لديه دون مطالبة ما لم يكن التحقق المتقدم مُفعَّلًا على أحد الجهازين (أدناه). وهذا الـ Mac يقبل عمليات النقل القريبة الواردة بالطريقة نفسها ما دام الاستقبال مُفعَّلًا.";
+"nearby.backToDevices" = "العودة إلى الأجهزة القريبة";
+"nearby.leavingClearsHistory" = "المغادرة تمسح سجل رسائل هذه الجلسة المحلي.";
+"nearby.deviceGone" = "لم يعد ذلك الجهاز قريبًا. اختر جهازًا آخر.";
+"nearby.addFilesFirst" = "أضف أولًا ملفات أو مجلدات لإرسالها.";
+"nearby.reconnecting" = "انقطع الاتصال بخدمة التقاء الأجهزة في Relayium. جارٍ إعادة الاتصال…";
+"nearby.unnamedDevice" = "جهاز بلا اسم";
+"nearby.setupFailed" = "تعذّر تهيئة عملية نقل قريبة واردة.";
+
+/* MARK: منطقة الإفلات والمُنتقي والنتيجة ورمز QR */
+"drop.a11yLabel" = "ملفات للإرسال";
+"drop.a11yHint" = "أفلِت الملفات أو المجلدات هنا، أو فعِّل لاختيارها.";
+"picker.prompt" = "اختيار";
+"received.revealInFinder" = "إظهار في Finder";
+"received.dragHint" = "اسحب أي عنصر أعلاه إلى Finder أو إلى تطبيق آخر.";
+"received.a11yDragHint" = "اسحبه إلى تطبيق آخر لنسخه، أو استخدم «إظهار في Finder».";
+"qr.a11yLabel" = "رمز QR لرابط الاقتران";
+
+/* MARK: الإشعارات */
+"notify.title.complete" = "اكتمل نقل Relayium";
+"notify.title.failed" = "فشل نقل Relayium";
+"notify.title.message" = "رسالة Relayium";
+"notify.title.incoming" = "Relayium: وارد";
+"notify.uploadReady" = "رابط التنزيل المُعمّى جاهز.";
+"notify.filesDelivered" = "وصلت ملفاتك إلى الجهاز الآخر.";
+"notify.transferStopped" = "توقّف نقل قبل أن يكتمل.";
+"notify.newMessage" = "وصلت رسالة مُعمّاة جديدة.";
+"notify.incomingFiles" = "جهاز قريب يرسل ملفات إلى هذا الـ Mac.";
+"notify.incomingText" = "بدأ جهاز قريب جلسة رسائل مع هذا الـ Mac.";
+"notify.incomingFailed" = "تعذّر بدء عملية نقل قريبة واردة.";
+"notify.filesReady.zero" = "%@ ملفات جاهزة.";
+"notify.filesReady.one" = "%@ ملف جاهز.";
+"notify.filesReady.two" = "%@ ملفان جاهزان.";
+"notify.filesReady.few" = "%@ ملفات جاهزة.";
+"notify.filesReady.many" = "%@ ملفًا جاهزًا.";
+"notify.filesReady.other" = "%@ ملف جاهز.";
+
+/* MARK: الحساب */
+"account.managePlan" = "إدارة الخطة";
+"account.traffic" = "حركة البيانات";
+"account.storage" = "التخزين";
+"account.meterOf" = "%1$@ من %2$@";
+"account.staleFigures" = "تُعرض آخر أرقام معروفة — تعذّر الوصول إلى الخادم.";
+"account.devicesHeading" = "الأجهزة المسجَّلة الدخول";
+"account.devicesBody" = "التطبيقات وعمليات الدخول من سطر الأوامر التي تحمل رمزًا لهذا الحساب. المتصفحات ليست ضمن القائمة: فهي تسجّل الدخول بجلسة لا برمز.";
+"account.noDevices" = "لا يوجد تطبيق أو جهاز سطر أوامر مسجَّل الدخول.";
+"account.unnamedDevice" = "جهاز بلا اسم";
+"account.thisMac" = "هذا الـ Mac";
+"account.deviceKindCli" = "سطر الأوامر";
+"account.deviceKindApp" = "تطبيق";
+"account.deviceNeverUsed" = "لم يُستخدم قط";
+"account.deviceLastUsed" = "آخر استخدام %@";
+"account.deviceAdded" = "أُضيف %@";
+"account.revokeTitle" = "إبطال «%@»؟";
+"account.revokeThisMac" = "هذا هو الـ Mac الذي تستخدمه. إبطاله يُخرج هذا التطبيق فورًا.";
+"account.revokeOther" = "سيُسجَّل خروج ذلك الجهاز وسيلزمه تسجيل الدخول من جديد.";
+"account.filesHeading" = "الملفات المخزَّنة";
+"account.filesBody" = "بيانات مُعمّاة يخزّنها هذا الحساب. لا ترى خوادم Relayium أسماء الملفات ولا المفاتيح إطلاقًا، فلا تعرف سوى التفاصيل أدناه.";
+"account.noFiles" = "لا شيء مخزَّن حاليًا.";
+"account.copyLink" = "نسخ الرابط";
+"account.keyNotOnThisMac" = "مفتاح هذا الملف ليس على هذا الـ Mac، لذا لا يمكن إعادة بناء الرابط هنا. فقد أُرسل من جهاز آخر، أو قبل أن يبدأ هذا الإصدار من التطبيق بحفظ المفاتيح. ولم تملكه خوادم Relayium قط.";
+"account.keyLookupFailed" = "تعذّر البحث عن المفتاح في سلسلة مفاتيح هذا الـ Mac، لذا لا يمكن عرض الرابط. %@";
+"account.deleteFileTitle" = "حذف هذا الملف المخزَّن؟";
+"account.deleteFileBody" = "تُمحى البيانات المُعمّاة من الخادم. ولن يحصل حاملُ الرابط على شيء. لا يمكن التراجع عن هذا.";
+"account.fileEncryptedSize" = "%@ مُعمّاة";
+"account.fileNoExpiry" = "بلا انتهاء صلاحية";
+"account.fileExpires" = "تنتهي الصلاحية %@";
+"account.fileBurn" = "يُحذف بعد تنزيل واحد";
+"account.fileDownloaded" = "نُزِّل";
+"account.fileNotDownloaded" = "لم يُنزَّل بعد";
+"account.fileDownloadedOnce" = "نُزِّل مرة واحدة";
+"account.fileDownloadedTimes.zero" = "نُزِّل %@ مرات";
+"account.fileDownloadedTimes.one" = "نُزِّل %@ مرة";
+"account.fileDownloadedTimes.two" = "نُزِّل %@ مرتين";
+"account.fileDownloadedTimes.few" = "نُزِّل %@ مرات";
+"account.fileDownloadedTimes.many" = "نُزِّل %@ مرة";
+"account.fileDownloadedTimes.other" = "نُزِّل %@ مرة";
+"account.bearerInvalid" = "لم يعد تسجيل الدخول على هذا الـ Mac صالحًا. سجّل الخروج ثم سجّل الدخول من جديد.";
+"account.keyCleanupWarning" = "حُذف الملف المخزَّن «%1$@» من الخادم، لكن مفتاحه لا يزال على هذا الـ Mac. %2$@ ولم يعد هذا المفتاح يفتح شيئًا — فالبيانات المُعمّاة التي كان يخصّها لم تعد موجودة.";
+"account.signOutFailed" = "تعذّر تسجيل الخروج بأمان. احتُفظ ببيانات الاعتماد كي تتمكن من إعادة المحاولة.";
+
+/* MARK: الاستهلاك والشارات */
+"usage.unlimited" = "بلا حدود";
+"usage.resetsToday" = "يُعاد الضبط اليوم";
+"usage.resetsInDays.zero" = "يُعاد الضبط خلال %@ أيام";
+"usage.resetsInDays.one" = "يُعاد الضبط خلال %@ يوم";
+"usage.resetsInDays.two" = "يُعاد الضبط خلال %@ يومين";
+"usage.resetsInDays.few" = "يُعاد الضبط خلال %@ أيام";
+"usage.resetsInDays.many" = "يُعاد الضبط خلال %@ يومًا";
+"usage.resetsInDays.other" = "يُعاد الضبط خلال %@ يوم";
+"badge.trial" = "تجريبي";
+"badge.paymentFailed" = "فشل الدفع";
+"badge.canceled" = "مُلغى";
+"badge.unpaid" = "غير مدفوع";
+"badge.paymentIncomplete" = "الدفع غير مكتمل";
+"badge.paused" = "مُوقَف مؤقتًا";
+"badge.inactive" = "غير نشط";
+
+/* MARK: ملخّص الاختيار */
+"selection.files.zero" = "%@ ملفات جاهزة";
+"selection.files.one" = "%@ ملف جاهز";
+"selection.files.two" = "%@ ملفان جاهزان";
+"selection.files.few" = "%@ ملفات جاهزة";
+"selection.files.many" = "%@ ملفًا جاهزًا";
+"selection.files.other" = "%@ ملف جاهز";
+"selection.folders.zero" = "في %@ مجلدات";
+"selection.folders.one" = "في %@ مجلد";
+"selection.folders.two" = "في %@ مجلدين";
+"selection.folders.few" = "في %@ مجلدات";
+"selection.folders.many" = "في %@ مجلدًا";
+"selection.folders.other" = "في %@ مجلد";
+"selection.emptyFolders.zero" = "%@ مجلدات فارغة لا يمكن إرسالها";
+"selection.emptyFolders.one" = "%@ مجلد فارغ لا يمكن إرساله";
+"selection.emptyFolders.two" = "%@ مجلدان فارغان لا يمكن إرسالهما";
+"selection.emptyFolders.few" = "%@ مجلدات فارغة لا يمكن إرسالها";
+"selection.emptyFolders.many" = "%@ مجلدًا فارغًا لا يمكن إرسالها";
+"selection.emptyFolders.other" = "%@ مجلد فارغ لا يمكن إرساله";
+
+/* MARK: الأخطاء */
+"error.account.invalidCredentials" = "هذا البريد وكلمة السر لا يطابقان أي حساب.";
+"error.account.notSignedIn" = "سجّل الدخول لإنشاء رمز اقتران. ولا يزال بإمكانك استقبال الملفات برمز يشاركه معك أحدهم.";
+"error.account.rateLimited" = "محاولات كثيرة جدًا. انتظر دقيقة ثم أعد المحاولة.";
+"error.account.server" = "أعاد الخادم خطأ (%@). أعد المحاولة بعد قليل.";
+"error.account.decoding" = "أرسل الخادم ردًا لا يفهمه هذا الإصدار من التطبيق. قد يحل التحديث المشكلة.";
+"error.account.network" = "تعذّر الوصول إلى الخادم. تحقق من اتصالك بالإنترنت.";
+"error.keychain.signIn" = "تعذّر على macOS تخزين تسجيل دخولك (خطأ سلسلة المفاتيح %@). ستبقى مسجَّل الدخول حتى تُنهي التطبيق.";
+"error.storedKey.keychain.save" = "تعذّر على macOS حفظ مفتاح هذا الملف في سلسلة المفاتيح (خطأ سلسلة المفاتيح %@).";
+"error.storedKey.keychain.read" = "تعذّر على macOS قراءة مفتاح هذا الملف من سلسلة المفاتيح (خطأ سلسلة المفاتيح %@).";
+"error.storedKey.keychain.remove" = "تعذّر على macOS إزالة مفتاح هذا الملف من سلسلة المفاتيح (خطأ سلسلة المفاتيح %@).";
+"error.storedKey.badId.save" = "مُعرِّف هذا الملف ليس مما يحفظ هذا التطبيق مفتاحًا تحته، لذا لم يُحفظ مفتاحه على هذا الـ Mac. يرجى الإبلاغ عن ذلك.";
+"error.storedKey.badId.read" = "مُعرِّف هذا العنصر ليس مما يتعامل معه هذا التطبيق، لذا لم يُقرأ مفتاحه ولا يمكن إعادة بناء الرابط هنا. أدِر العنصر على relayium.com، ويرجى الإبلاغ عن ذلك.";
+"error.storedKey.badId.remove" = "مُعرِّف هذا العنصر ليس مما يتعامل معه هذا التطبيق، لذا لم يُزَل المفتاح. يرجى الإبلاغ عن ذلك.";
+"error.storedKey.badKey.save" = "مفتاح هذا الملف ليس بصيغة يستطيع هذا التطبيق حفظها، لذا لم يُحفظ على هذا الـ Mac. يرجى الإبلاغ عن ذلك.";
+"error.storedKey.badKey.remove" = "مفتاح هذا الملف ليس بصيغة يستطيع هذا التطبيق التعامل معها، لذا لم يُزَل. يرجى الإبلاغ عن ذلك.";
+"error.handshake.mitm" = "لم يتمكن الجهازان من الاتفاق على سر مشترك. قد يكون أحدهم يتدخّل في هذا الاتصال — توقّف، وأعد الاقتران برمز جديد.";
+"error.peer.protocol" = "أرسل الجهاز الآخر شيئًا لا يفهمه هذا الإصدار من التطبيق. قد يحتاج الطرفان إلى تحديث.";
+"error.realtime.tamper" = "لم تطابق البيانات الواصلة ما وصفه المُرسِل، لذا أُهملت. اطلب منه إرسالها مرة أخرى.";
+"error.realtime.dropped" = "أسقط الاتصال جزءًا من النقل. لم يُحفظ شيء — أعد المحاولة.";
+"error.realtime.legacyPeer" = "يعمل الجهاز الآخر بإصدار أقدم لا يستطيع إتمام هذا النقل. يحتاج إلى تحديث.";
+"error.sender.manifestTooLarge" = "ملفات كثيرة جدًا دفعة واحدة لعملية نقل واحدة. أرسِلها على دفعات أصغر.";
+"error.sender.invalidManifest" = "تعذّر وصف الملفات المختارة بأمان، لذا لم يبدأ النقل.";
+"error.sender.sourceShorter" = "تغيّر «%@» أثناء إرساله، لذا أُوقف النقل. أعد المحاولة.";
+"error.sender.sourceLonger" = "كبُر «%@» بعد اختياره، لذا لم تُرسل البايتات الخارجة عن قائمة الملفات المعتمدة. اختره من جديد ثم أعد المحاولة.";
+"error.connection.peerBusy" = "الجهاز الآخر منشغل بعملية نقل. انتظر حتى تنتهي ثم أعد المحاولة.";
+"error.connection.unsupportedPeer" = "الجهاز الآخر لا يدعم الجلسات النصية المُعمّاة بعد. قد يحتاج إلى تحديث.";
+"error.connection.failed" = "تعذّر فتح الاتصال الخاص. تأكد من أن الجهازين متصلان بالإنترنت ثم أعد المحاولة.";
+"error.connection.alreadySending" = "هذا الاتصال يرسل بالفعل. ابدأ جلسة جديدة لعملية نقل أخرى.";
+"error.connection.rejected" = "رفض الجهاز الآخر عملية النقل هذه.";
+"error.connection.timedOut" = "توقّف الجهاز الآخر عن الاستجابة، لذا انتهت الجلسة.";
+"error.connection.textSendBufferFull" = "الاتصال يعوّض تأخّره. انتظر لحظة ثم أرسل الرسالة مجددًا.";
+"error.connection.textSendFailed" = "تعذّر إرسال الرسالة المُعمّاة. أعد المحاولة.";
+"error.connection.textReceiveBufferFull" = "أرسل الجهاز الآخر أكثر مما ينبغي قبل انتهاء التحقق، لذا أُغلقت الجلسة.";
+"error.factory.noPeerAppeared" = "لم ينضم أحد قبل انتهاء صلاحية رمز الاقتران. أنشئ رمزًا جديدًا وأعد المحاولة.";
+"error.nearby.notScanning" = "توقّف Relayium عن البحث عن الأجهزة القريبة، لذا لم يعد ذلك الجهاز متاحًا. ابحث من جديد ثم اختره.";
+"error.nearby.noAnswer" = "لم يستجب ذلك الجهاز. افتح relayium.com عليه، واترك تلك الصفحة مفتوحة، ثم اختره مرة أخرى. ويصلح رمز الاقتران بديلًا، وهو الطريقة المتاحة للاستقبال على هذا الـ Mac.";
+"error.staging.fileCount" = "اختر ما بين 1 و %@ ملفًا.";
+"error.staging.unreadable" = "تعذّر فتح كل الملفات المختارة، لذا لم يُرسل شيء. اختر الملفات من جديد.";
+"error.text.authenticationFailed" = "أخفقت الرسالة المُعمّاة في فحص السلامة، لذا أُهملت وأُغلقت الجلسة.";
+"error.text.outOfOrder" = "أسقط الاتصال رسالة أو أعاد ترتيبها، لذا أُغلقت الجلسة دون عرضها.";
+"error.text.messageTooLarge" = "أرسل الجهاز الآخر رسالة أكبر مما يدعمه هذا الإصدار، لذا أُغلقت الجلسة.";
+"error.text.invalid" = "أرسل الجهاز الآخر رسالة مُعمّاة غير صالحة، لذا أُهملت وأُغلقت الجلسة.";
+"error.deviceAuth.denied" = "رُفض تسجيل الدخول هذا في المتصفح. أعد المحاولة إن لم تكن أنت.";
+"error.deviceAuth.expired" = "انتهت مهلة طلب تسجيل الدخول. ابدأ من جديد للحصول على طلب آخر.";
+"error.destination.directoryExists" = "«%@» موجود هنا بالفعل — فقد نُزِّل هذا الرابط إلى هذا المجلد من قبل. اختر مجلدًا آخر: لا يدمج التطبيق داخل مجلد قائم، لأنه لا يستطيع التمييز بين تنزيل غير مكتمل وملفاتك أنت.";
+"error.destination.unsafeName" = "يصف الرابط ملفًا اسمه «%@» سيُكتب خارج المجلد الذي اخترته، لذا لم يُحفظ شيء. اطلب من المُرسِل رابطًا جديدًا.";
+"error.destination.fileExists" = "«%@» موجود بالفعل في الوجهة. اختر مجلدًا آخر؛ فلن يستبدله Relayium.";
+"error.destination.incomplete" = "لم يطابق عدد البايتات المستلمة قائمة الملفات، لذا أُهملت الملفات غير المكتملة. اطلب من المُرسِل إعادة المحاولة.";
+"error.destination.noSpace" = "لا توجد مساحة حرة كافية لحفظ هذا النقل، لذا لم يُحفظ شيء. حرِّر مساحة ثم أعد المحاولة.";
+"error.destination.notPermitted" = "لا يُسمح لـ Relayium بالكتابة في ذلك المجلد، لذا لم يُحفظ شيء. اختر مجلدًا آخر.";
+"error.destination.systemError" = "تعذّرت الكتابة في مجلد الوجهة (خطأ %@)، لذا لم يُحفظ شيء. جرّب مجلدًا آخر.";
+"error.manifest.unsafePath" = "وصف الجهاز الآخر ملفًا في «%@»، وهو ما سيُكتب خارج المجلد الذي اخترته. لم يُحفظ شيء.";
+"error.manifest.duplicatePath" = "يحتوي النقل على أكثر من ملف في «%@» — وهي على هذا الـ Mac الملف نفسه — لذا لم يُحفظ شيء. اطلب من المُرسِل إعادة تسمية أحدها.";
+"error.manifest.pathCollision" = "يريد النقل أن يكون «%@» ملفًا ومجلدًا في آن واحد، وهذا مستحيل، لذا لم يُحفظ شيء. اطلب من المُرسِل إعادة المحاولة.";
+"error.plaintext.unreadable" = "تعذّر فتح «%@»، لذا لم يُرسل شيء. تحقق من أن الملف لا يزال موجودًا وأن لديك صلاحية قراءته.";
+"error.plaintext.readFailed" = "أخفقت قراءة «%@» في منتصفها، لذا أُوقف النقل. وأهمل الجهاز الآخر الملف غير المكتمل.";
+"error.plaintext.tooManyOpenFiles" = "نفدت من هذا الـ Mac مقابض الملفات المفتوحة في منتصف اختيارك (حدّه %@). يُبقي Relayium كل ملف مختار مفتوحًا كي تكون الملفات المُرسَلة هي نفسها التي اخترتها، لذا أرسِلها على دفعات أصغر.";
+"error.selection.noFiles" = "لا توجد ملفات لإرسالها. لا يمكن نقل مجلد فارغ بمفرده — إذ لا سبيل في قائمة الملفات لوصف مجلد لا يحوي شيئًا.";
+"error.selection.tooManyFiles" = "يضم هذا الاختيار أكثر من %@ ملف. أرسِل ملفات أقل، أو اضغط المجلد أولًا.";
+"error.selection.unreadable" = "تعذّرت قراءة «%@»، لذا لم يُرسل شيء. تحقق من أن العنصر لا يزال موجودًا وأن لديك صلاحية فتحه.";
+"error.selection.symbolicLink" = "«%@» وصلة رمزية. لا يتبعها Relayium — فقد يرسل ذلك ملفات من خارج ما اخترته — ولا يتخطاها بصمت أيضًا. أزِلها من الاختيار، أو أرسِل المجلد الحقيقي الذي تشير إليه.";
+"error.selection.pathTooLong" = "المسار «%@» أطول من أن يُوصف في عملية نقل. أرسِل من مجلد أقل عمقًا، أو اختصر الأسماء.";
+"error.cloud.unauthorized" = "انتهت صلاحية تسجيل دخولك. سجّل الدخول من جديد لإرسال الملفات.";
+"error.cloud.quota" = "لا تكفي المساحة أو الحصة اليومية المتبقية لهذا الملف. حرِّر مساحة أو ارقَ بخطتك.";
+"error.cloud.rateLimited" = "هناك عمليات رفع كثيرة جدًا الآن. انتظر دقيقة ثم أعد المحاولة.";
+"error.cloud.dailyQuota" = "يحتاج هذا الملف إلى أكثر من حصة الرفع المتبقية لك اليوم — وقد يستهلكها ملف كبير واحد بمفرده. أعد المحاولة غدًا، أو ارقَ بخطتك للحصول على حصة يومية أكبر.";
+"error.cloud.monthlyTraffic" = "بلغ حسابك حدّ حركة البيانات الشهري. يستأنف الرفع الشهر المقبل، أو ارقَ بخطتك للمتابعة الآن.";
+"error.cloud.notFound" = "هذا الرابط انتهت صلاحيته، أو نُزِّل من قبل، أو كُتب خطأً.";
+"error.cloud.server" = "أعاد الخادم خطأ (%@). أعد المحاولة بعد قليل.";
+"error.cloud.network" = "تعذّر الوصول إلى الخادم. تحقق من اتصالك بالإنترنت.";
+"error.cloud.decoding" = "أرسل الخادم ردًا لا يفهمه هذا الإصدار من التطبيق. قد يحل التحديث المشكلة.";
+"error.storedLinkKey.invalidIdentifier" = "مُعرِّف هذا العنصر ليس مما يتعامل معه هذا التطبيق، لذا رُفض. أدِر العنصر على relayium.com، ويرجى الإبلاغ عن ذلك.";
+"error.storedLinkKey.invalidKey" = "المفتاح المحفوظ على هذا الـ Mac لهذا الملف غير قابل للقراءة، لذا لا يمكن إعادة بناء الرابط منه.";
+"error.storedWire.invalidKey" = "مفتاح ذلك الرابط مُشوَّه — على الأرجح نُسخ ناقصًا.";
+"error.storedWire.corrupt" = "لم تطابق البيانات المُنزَّلة ما وصفه الرابط، لذا أُهملت. اطلب من المُرسِل رابطًا جديدًا.";
+"error.unknown" = "حدث خطأ ما (%@).";

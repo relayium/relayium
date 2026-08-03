@@ -224,7 +224,9 @@ pairing code requires sign-in; joining with that code does not.
   transfer, encrypted upload/download links, SSH and daemon-direct transfer,
   folder sync, self-hosting, and managed relay/storage nodes.
 - **macOS — release candidate:** the universal app supports account access,
-  realtime sending and receiving, trusted link handoff, notifications, and a
+  realtime sending and receiving, folder transfer, same-network nearby transfer
+  in both directions, trusted link handoff, notifications, the same nine
+  languages as the web client (Arabic included, laid out right to left), and a
   signed Sparkle update foundation. Its DMG is Developer ID-signed, accepted by
   Apple notarization, stapled, and Gatekeeper-validated; public release and the
   website download switch are still pending.

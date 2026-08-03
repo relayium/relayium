@@ -265,7 +265,7 @@ final class CloudUploadModelTests: XCTestCase {
         let notice = UploadPresentation.keyNotice(warning: "the key was not kept")
         XCTAssertTrue(notice.isWarning)
         XCTAssertEqual(notice.text, "the key was not kept")
-        XCTAssertNotEqual(notice.text, UploadPresentation.keyKeptText)
+        XCTAssertNotEqual(notice.text, UploadPresentation.keyKeptText())
     }
 
     /// And the failure path really does carry the instruction the success path

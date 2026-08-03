@@ -53,8 +53,8 @@ struct NearbyPane: View {
 
     private var discoverySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Nearby devices").font(.headline)
-            Text("Devices running Relayium — the app or relayium.com — that reach the internet from the same public address as this Mac. Usually that means your Wi-Fi, but a carrier or VPN gateway can put strangers' devices on the list too. Relayium never scans your network; it asks its rendezvous service who else arrives from that address.")
+            Text(L10n.t(.nearbyHeading)).font(.headline)
+            Text(L10n.t(.nearbyExplain))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -76,7 +76,7 @@ struct NearbyPane: View {
                 roster
             } else if !discovery.isPaused {
                 HStack {
-                    Button("Look again") { discovery.start() }
+                    Button(L10n.t(.nearbyLookAgain)) { discovery.start() }
                         .disabled(busy)
                     ProgressView().controlSize(.small)
                 }
@@ -100,8 +100,7 @@ struct NearbyPane: View {
     private var filesToSend: some View {
         VStack(alignment: .leading, spacing: 6) {
             FileDropZone(store: selection, isBusy: busy) {
-                Text(selection.summary
-                     ?? "Drop files or folders here, or click to choose. Nothing is sent until you pick a device below and press Send.")
+                Text(selection.summary ?? L10n.t(.nearbyDropHint))
                     .font(.caption).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -111,7 +110,7 @@ struct NearbyPane: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !selection.isEmpty {
-                Button("Clear") { selection.clear() }
+                Button(L10n.t(.commonClear)) { selection.clear() }
                     .buttonStyle(.link)
                     .disabled(busy)
             }
@@ -126,21 +125,20 @@ struct NearbyPane: View {
     private var receiving: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Text(receiveStatus).font(.subheadline.weight(.semibold))
+                Text(NearbyStatusPresentation.text(for: receive.state))
+                    .font(.subheadline.weight(.semibold))
                 Spacer()
                 if discovery.isPaused {
-                    Button("Resume receiving") { discovery.resume() }
+                    Button(L10n.t(.nearbyResumeReceiving)) { discovery.resume() }
                 } else {
-                    Button("Pause receiving") { discovery.pause() }
+                    Button(L10n.t(.nearbyPauseReceiving)) { discovery.pause() }
                         .disabled(busy)
                 }
             }
             // The default is no prompt, by the same decision that made advanced
             // verification opt-in. Stating the consequence is not a contradiction
             // of that decision; hiding it would be.
-            Text(discovery.isPaused
-                 ? "This Mac is not listening for nearby devices. It can still send, and pairing codes still work."
-                 : "While Relayium is running, a device on this address can send files or start a message session without asking first. Files are written to your Downloads folder. Anything sharing this public address can try — pause receiving if that is not what you want.")
+            Text(L10n.t(discovery.isPaused ? .nearbyPausedBody : .nearbyListeningBody))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -150,25 +148,13 @@ struct NearbyPane: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Nearby receiving")
-    }
-
-    private var receiveStatus: String {
-        switch receive.state {
-        case .off: return "Nearby receiving: off"
-        case .paused: return "Nearby receiving: paused"
-        case .connecting: return "Nearby receiving: joining…"
-        case .ready: return "Nearby receiving: ready"
-        case .reconnecting: return "Nearby receiving: reconnecting…"
-        case .active(.file): return "Receiving files from a nearby device…"
-        case .active(.text): return "A nearby message session is open"
-        }
+        .accessibilityLabel(L10n.t(.nearbyA11yReceiving))
     }
 
     @ViewBuilder
     private var roster: some View {
         if discovery.devices.isEmpty {
-            Text("No other devices yet. Open relayium.com on the other device and leave the page open.")
+            Text(L10n.t(.nearbyEmptyRoster))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -180,13 +166,13 @@ struct NearbyPane: View {
                 ForEach(discovery.devices) { device in
                     deviceRow(device)
                 }
-                Text("Names come from the other device and are not proof of who it is. Compare verification codes below if that matters.")
+                Text(L10n.t(.nearbyNamesDisclaimer))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .contain)
-            .accessibilityLabel("Nearby devices")
+            .accessibilityLabel(L10n.t(.nearbyA11yDevices))
         }
     }
 
@@ -209,26 +195,29 @@ struct NearbyPane: View {
         .buttonStyle(.plain)
         .disabled(busy)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
-        .accessibilityHint("Choose this device to send to.")
+        .accessibilityHint(L10n.t(.nearbyA11yChooseDevice))
     }
 
     @ViewBuilder
     private func actions(for device: NearbyDevice) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Send to \(device.label)").font(.subheadline.weight(.semibold))
+            // The peer's own name, already stripped of control and bidi
+            // characters by `safeDisplayName`, and isolated rather than translated.
+            Text(L10n.t(.nearbySendTo, [L10n.token(device.label)]))
+                .font(.subheadline.weight(.semibold))
             switch intent {
             case .files:
-                Text(selection.summary.map { "\($0). Send it straight to that device." }
-                     ?? "Add files or folders above, then send them straight to that device.")
+                Text(selection.summary.map { L10n.t(.nearbySelectionSendHint, [$0]) }
+                     ?? L10n.t(.nearbyAddFilesHint))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Send") { sendFiles() }
+                Button(L10n.t(.commonSend)) { sendFiles() }
                     .buttonStyle(.borderedProminent)
                     .disabled(selection.isEmpty || busy)
             case .text:
-                Text("Opens an end-to-end encrypted message session. Nothing is stored on Relayium.")
+                Text(L10n.t(.nearbyTextIntent))
                     .font(.caption).foregroundStyle(.secondary)
-                Button("Start a message session") { startText() }
+                Button(L10n.t(.nearbyStartMessageSession)) { startText() }
                     .buttonStyle(.borderedProminent)
                     .disabled(busy)
             }
@@ -236,7 +225,7 @@ struct NearbyPane: View {
             // human gate that is not there: file transfers stop at the browser's
             // own save prompt, message sessions open by themselves unless the
             // verification setting below is on.
-            Text("On relayium.com the other person still chooses where to save incoming files; a message session opens on their side without a prompt unless advanced verification is on for either device (below). This Mac accepts incoming nearby transfers the same way while receiving is on.")
+            Text(L10n.t(.nearbyAcceptanceNote))
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -258,13 +247,13 @@ struct NearbyPane: View {
                 RealtimeTextSessionView(model: textModel)
             }
             if !busy {
-                Button("Back to nearby devices") { leaveSession() }
+                Button(L10n.t(.nearbyBackToDevices)) { leaveSession() }
                     .buttonStyle(.link)
                 if intent == .text {
                     // Says so rather than surprising: leaving is the one action
                     // here that discards the local history the terminal view is
                     // still showing.
-                    Text("Leaving clears this session's local message history.")
+                    Text(L10n.t(.nearbyLeavingClearsHistory))
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             }
@@ -282,11 +271,11 @@ struct NearbyPane: View {
         // is live, and a device that left between the list being drawn and this
         // button being pressed must not be dialled by a stale id.
         guard let device = discovery.selectedDevice else {
-            stagingError = "That device is no longer nearby. Pick another one."
+            stagingError = L10n.t(.nearbyDeviceGone)
             return
         }
         guard let expanded = selection.selection else {
-            stagingError = selection.error ?? "Add files or folders to send first."
+            stagingError = selection.error ?? L10n.t(.nearbyAddFilesFirst)
             return
         }
         let staged: (sources: [PlaintextSource], metas: [FileMeta])
@@ -304,7 +293,7 @@ struct NearbyPane: View {
 
     private func startText() {
         guard let device = discovery.selectedDevice else {
-            stagingError = "That device is no longer nearby. Pick another one."
+            stagingError = L10n.t(.nearbyDeviceGone)
             return
         }
         stagingError = nil

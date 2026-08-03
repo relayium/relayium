@@ -20,7 +20,7 @@ struct RealtimeTextPane: View {
                 Divider()
                 start
             case .minting:
-                ProgressView("Creating a text code…").controlSize(.small)
+                ProgressView(L10n.t(.textCreatingCode)).controlSize(.small)
             case let .showingCode(code, expiresAt):
                 showing(code: code, expiresAt: expiresAt)
             case .joining, .connecting, .verifying, .waitingAccept,
@@ -33,12 +33,12 @@ struct RealtimeTextPane: View {
     private var start: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Start a text session").font(.headline)
-                Text("Both devices stay online. Messages are end-to-end encrypted and kept only in this session's memory.")
+                Text(L10n.t(.textStartHeading)).font(.headline)
+                Text(L10n.t(.textStartBody))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Create a text code") {
+                Button(L10n.t(.textCreateCode)) {
                     Task {
                         await model.mintCode(token: token)
                         guard case let .showingCode(code, _) = model.state else { return }
@@ -48,7 +48,7 @@ struct RealtimeTextPane: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(token.isEmpty)
                 if token.isEmpty {
-                    Text("Sign in to create a code. Joining someone else's code does not require an account.")
+                    Text(L10n.t(.textSignInToCreate))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -57,18 +57,18 @@ struct RealtimeTextPane: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Join a text session").font(.headline)
+                Text(L10n.t(.textJoinHeading)).font(.headline)
                 HStack {
-                    TextField("Code", text: $model.joinCode)
+                    TextField(L10n.t(.commonCode), text: $model.joinCode)
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 140)
                         .onChange(of: model.joinCode) { model.updateJoinCode($0) }
-                    Button("Join") {
+                    Button(L10n.t(.commonJoin)) {
                         Task { await model.join(code: model.joinCode) }
                     }
                     .disabled(!model.canJoin)
                 }
-                Text("A pairing code does not reveal its type. Choose Text here only when the sender started a text session.")
+                Text(L10n.t(.textJoinHint))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -78,17 +78,20 @@ struct RealtimeTextPane: View {
 
     private func showing(code: String, expiresAt: Int64) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Give this text code to the other device")
+            Text(L10n.t(.textGiveCode))
                 .font(.subheadline.weight(.semibold))
             Text(code)
                 .font(.system(size: 34, weight: .semibold, design: .monospaced))
                 .textSelection(.enabled)
-            Text("Expires \(Date(timeIntervalSince1970: TimeInterval(expiresAt)).formatted(date: .omitted, time: .shortened))")
+            Text(L10n.t(.commonExpires, [
+                L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
+                          dateStyle: .none, timeStyle: .short),
+            ]))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             QRCodeView(url: "\(AppEnvironment.productionBaseURL.absoluteString)/cross-network#c=\(code)")
-            ProgressView("Waiting for the other device…").controlSize(.small)
-            Button("Cancel") { model.end() }
+            ProgressView(L10n.t(.directWaitingForDevice)).controlSize(.small)
+            Button(L10n.t(.commonCancel)) { model.end() }
         }
     }
 }

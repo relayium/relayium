@@ -59,6 +59,61 @@ for source_path in "${account_sources[@]}"; do
   fi
 done
 
+# Localization. Same reasoning again, with one addition: the catalogs are DATA,
+# so a rename or a bad merge can delete eight of them and leave a build that
+# compiles, runs, and silently renders English to everybody.
+localization_sources=(
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Localization/AppLanguage.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Localization/L10n.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Localization/L10nKey.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Localization/LocalizationCatalog.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Localization/PluralRule.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Localization/AppCopy.swift"
+  "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/LocalizationIntegrityTests.swift"
+  "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/LocalizedCopyTests.swift"
+  "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/LocalizationSourceGuardTests.swift"
+)
+for source_path in "${localization_sources[@]}"; do
+  if [ ! -f "$source_path" ]; then
+    echo "error: localization evidence source is missing: $source_path" >&2
+    exit 1
+  fi
+done
+
+# The nine catalogs themselves, by name. `swift test` asserts far more about
+# them, but this runs in the release path and needs no toolchain.
+supported_lprojs=(en zh-Hans ja ko de fr ar es pt)
+catalog_root="$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Resources"
+for lproj in "${supported_lprojs[@]}"; do
+  if [ ! -f "$catalog_root/$lproj.lproj/Localizable.strings" ]; then
+    echo "error: localization catalog is missing: $lproj.lproj/Localizable.strings" >&2
+    exit 1
+  fi
+done
+
+# Exactly nine, so a tenth language cannot be half-added: a catalog the app
+# cannot select is a translation nobody will ever see, and it would pass every
+# existence check above.
+shipped_lproj_count="$(find "$catalog_root" -maxdepth 1 -type d -name '*.lproj' | wc -l | tr -d ' ')"
+if [ "$shipped_lproj_count" != "${#supported_lprojs[@]}" ]; then
+  echo "error: expected ${#supported_lprojs[@]} .lproj catalogs, found $shipped_lproj_count" >&2
+  exit 1
+fi
+
+# And the APP has to declare the same nine. This is the one that decides layout
+# direction: without `ar` in CFBundleLocalizations, macOS treats the app as
+# English-only and lays an otherwise correct Arabic UI out left to right.
+app_localizations="$(
+  /usr/libexec/PlistBuddy -c "Print :CFBundleLocalizations" \
+    "$repo_root/apps/mac/Relayium/Info.plist" 2>/dev/null | tr -d ' ' | sed '1d;$d'
+)"
+for lproj in "${supported_lprojs[@]}"; do
+  if ! printf '%s\n' "$app_localizations" | grep -Fqx "$lproj"; then
+    echo "error: Info.plist CFBundleLocalizations is missing $lproj" >&2
+    exit 1
+  fi
+done
+
 read_capability() {
   # JavaScript template literals must remain single-quoted from the shell.
   # shellcheck disable=SC2016
@@ -84,6 +139,11 @@ read_approval() {
 
 if [ "$(read_capability "$readiness" ephemeral-text implemented)" != true ]; then
   echo "error: ephemeral-text is implemented in the app but the manifest says otherwise" >&2
+  exit 1
+fi
+
+if [ "$(read_capability "$readiness" localization implemented)" != true ]; then
+  echo "error: localization is implemented in the app but the manifest says otherwise" >&2
   exit 1
 fi
 

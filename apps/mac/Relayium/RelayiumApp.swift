@@ -26,7 +26,7 @@ struct CheckForUpdatesView: View {
     }
 
     var body: some View {
-        Button("Check for Updates…", action: updater.checkForUpdates)
+        Button(L10n.t(.appCheckForUpdates), action: updater.checkForUpdates)
             .disabled(!model.canCheckForUpdates)
     }
 }
@@ -46,10 +46,10 @@ final class TransferQuitGuard: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard isTransferRunning?() == true else { return .terminateNow }
         let alert = NSAlert()
-        alert.messageText = "A transfer is still running"
-        alert.informativeText = "Quitting now cancels it. Nothing is saved, and an upload in progress will have to start over."
-        alert.addButton(withTitle: "Cancel Transfer and Quit")
-        alert.addButton(withTitle: "Keep Transferring")
+        alert.messageText = L10n.t(.quitTitle)
+        alert.informativeText = L10n.t(.quitBody)
+        alert.addButton(withTitle: L10n.t(.quitCancelAndQuit))
+        alert.addButton(withTitle: L10n.t(.quitKeepTransferring))
         guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
         cancelTransfers?()
         return .terminateNow

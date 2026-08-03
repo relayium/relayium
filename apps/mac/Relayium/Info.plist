@@ -4,6 +4,27 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<!-- The nine languages this app ships, declared here because the catalogs
+	     themselves live in the RelayiumAppKit package bundle rather than in this
+	     one. Without this list macOS treats the app as English-only: it would
+	     pick English as the app localization for an Arabic user, and — the part
+	     that actually breaks the UI — leave the app's user-interface layout
+	     direction left-to-right, so SwiftUI's \.layoutDirection would never
+	     become .rightToLeft and every Arabic screen would be laid out backwards
+	     while reading correctly. Keep in step with AppLanguage; the release
+	     readiness script checks the two agree. -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hans</string>
+		<string>ja</string>
+		<string>ko</string>
+		<string>de</string>
+		<string>fr</string>
+		<string>ar</string>
+		<string>es</string>
+		<string>pt</string>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

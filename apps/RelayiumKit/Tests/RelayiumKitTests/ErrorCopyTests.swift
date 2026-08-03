@@ -10,24 +10,24 @@ final class ErrorCopyTests: XCTestCase {
             .invalidCredentials, .rateLimited, .server(status: 503), .decoding, .network,
         ]
         for e in cases {
-            XCTAssertFalse(ErrorCopy.message(for: e).isEmpty, "no copy for \(e)")
+            XCTAssertFalse(ErrorCopy.message(for: e, language: .en).isEmpty, "no copy for \(e)")
         }
     }
     func testServerErrorNamesTheStatus() {
-        XCTAssertTrue(ErrorCopy.message(for: AccountError.server(status: 503)).contains("503"))
+        XCTAssertTrue(ErrorCopy.message(for: AccountError.server(status: 503), language: .en).contains("503"))
     }
     func testInvalidCredentialsTalksAboutEmailAndPassword() {
-        let m = ErrorCopy.message(for: AccountError.invalidCredentials).lowercased()
+        let m = ErrorCopy.message(for: AccountError.invalidCredentials, language: .en).lowercased()
         XCTAssertTrue(m.contains("email") && m.contains("password"))
     }
     func testKeychainErrorNamesTheStatusCode() {
-        XCTAssertTrue(ErrorCopy.message(for: KeychainError.status(-25300)).contains("-25300"))
+        XCTAssertTrue(ErrorCopy.message(for: KeychainError.status(-25300), language: .en).contains("-25300"))
     }
     /// The shared table's `KeychainError` copy is about the SIGN-IN it could not
     /// keep, and stays that way: `AccountSession` is its only caller, and for
     /// that caller every word of it is true.
     func testTheSharedKeychainCopyStaysAboutTheSignIn() {
-        let m = ErrorCopy.message(for: KeychainError.status(-25300)).lowercased()
+        let m = ErrorCopy.message(for: KeychainError.status(-25300), language: .en).lowercased()
         XCTAssertTrue(m.contains("sign-in"), m)
         XCTAssertTrue(m.contains("quit"), m)
     }
@@ -38,7 +38,7 @@ final class ErrorCopyTests: XCTestCase {
     /// that makes a keychain refusal diagnosable.
     func testStoredLinkKeyCopyNeverBorrowsTheSignInWording() {
         for op in [StoredLinkKeyOperation.save, .read, .remove] {
-            let m = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308), operation: op)
+            let m = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308), operation: op, language: .en)
             assertSaysNothingAboutSigningIn(m, "the \(op) copy")
             XCTAssertTrue(m.contains("-25308"), "the keychain status was dropped for \(op): \(m)")
             XCTAssertTrue(m.lowercased().contains("keychain"), m)
@@ -48,9 +48,9 @@ final class ErrorCopyTests: XCTestCase {
     /// Three separate statements, not one reworded once: "not written", "not
     /// readable" and "not removed" have different consequences for the user.
     func testEachStoredLinkKeyOperationSaysWhichOneFailed() {
-        let save = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308), operation: .save)
-        let read = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308), operation: .read)
-        let remove = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308), operation: .remove)
+        let save = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308), operation: .save, language: .en)
+        let read = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308), operation: .read, language: .en)
+        let remove = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308), operation: .remove, language: .en)
         XCTAssertTrue(save.lowercased().contains("save"), save)
         XCTAssertTrue(read.lowercased().contains("read"), read)
         XCTAssertTrue(remove.lowercased().contains("remove"), remove)
@@ -62,8 +62,8 @@ final class ErrorCopyTests: XCTestCase {
     /// in step.
     func testStoredLinkKeyCopyDefersToTheSharedTableForEverythingElse() {
         for op in [StoredLinkKeyOperation.save, .read, .remove] {
-            XCTAssertEqual(ErrorCopy.storedLinkKeyMessage(for: UnknownFailure(), operation: op),
-                           ErrorCopy.message(for: UnknownFailure()))
+            XCTAssertEqual(ErrorCopy.storedLinkKeyMessage(for: UnknownFailure(), operation: op, language: .en),
+                           ErrorCopy.message(for: UnknownFailure(), language: .en))
         }
     }
 
@@ -75,9 +75,9 @@ final class ErrorCopyTests: XCTestCase {
     /// upload has already landed.
     func testStoredLinkKeyErrorsSayWhichKeyOperationFailed() {
         for e in [StoredLinkKeyError.invalidKey, .invalidIdentifier] {
-            let save = ErrorCopy.storedLinkKeyMessage(for: e, operation: .save)
-            let read = ErrorCopy.storedLinkKeyMessage(for: e, operation: .read)
-            let remove = ErrorCopy.storedLinkKeyMessage(for: e, operation: .remove)
+            let save = ErrorCopy.storedLinkKeyMessage(for: e, operation: .save, language: .en)
+            let read = ErrorCopy.storedLinkKeyMessage(for: e, operation: .read, language: .en)
+            let remove = ErrorCopy.storedLinkKeyMessage(for: e, operation: .remove, language: .en)
             XCTAssertTrue(save.lowercased().contains("save"), "\(e) save: \(save)")
             XCTAssertTrue(read.lowercased().contains("read"), "\(e) read: \(read)")
             XCTAssertTrue(remove.lowercased().contains("remove"), "\(e) remove: \(remove)")
@@ -94,9 +94,9 @@ final class ErrorCopyTests: XCTestCase {
     /// at all, so the shared sentence would send the user looking for something
     /// that does not exist — and the link on screen is the only copy there is.
     func testAKeySaveRefusalDoesNotDescribeAKeyThatWasNeverStored() {
-        let m = ErrorCopy.storedLinkKeyMessage(for: StoredLinkKeyError.invalidKey, operation: .save)
+        let m = ErrorCopy.storedLinkKeyMessage(for: StoredLinkKeyError.invalidKey, operation: .save, language: .en)
         XCTAssertFalse(m.lowercased().contains("stored on this mac"), m)
-        XCTAssertNotEqual(m, ErrorCopy.message(for: StoredLinkKeyError.invalidKey))
+        XCTAssertNotEqual(m, ErrorCopy.message(for: StoredLinkKeyError.invalidKey, language: .en))
     }
 
     /// The read arm keeps the shared sentence, because that is the path it was
@@ -104,28 +104,28 @@ final class ErrorCopyTests: XCTestCase {
     /// returned. Asserted rather than assumed so the two copies of one sentence
     /// cannot drift apart unnoticed.
     func testTheReadArmKeepsTheWordingTheSharedTableWasWrittenFor() {
-        XCTAssertEqual(ErrorCopy.storedLinkKeyMessage(for: StoredLinkKeyError.invalidKey, operation: .read),
-                       ErrorCopy.message(for: StoredLinkKeyError.invalidKey))
+        XCTAssertEqual(ErrorCopy.storedLinkKeyMessage(for: StoredLinkKeyError.invalidKey, operation: .read, language: .en),
+                       ErrorCopy.message(for: StoredLinkKeyError.invalidKey, language: .en))
     }
 
     /// And the shared table itself is untouched: `AccountClient`'s row-action
     /// check is not a key operation, and its copy — refused, manage it on the
     /// web, report it — is still what that path renders.
     func testTheSharedTableKeepsItsRowActionWordingForARefusedIdentifier() {
-        let m = ErrorCopy.message(for: StoredLinkKeyError.invalidIdentifier)
+        let m = ErrorCopy.message(for: StoredLinkKeyError.invalidIdentifier, language: .en)
         XCTAssertTrue(m.lowercased().contains("refused"), m)
         XCTAssertTrue(m.contains("relayium.com"), m)
         for op in [StoredLinkKeyOperation.save, .read, .remove] {
             XCTAssertNotEqual(ErrorCopy.storedLinkKeyMessage(for: StoredLinkKeyError.invalidIdentifier,
-                                                             operation: op), m,
+                                                             operation: op, language: .en), m,
                               "the \(op) copy is still the row action's")
         }
     }
     /// Quota and rate-limit are the only two an upload user can act on, so they
     /// must not collapse into a generic message.
     func testCloudQuotaAndRateLimitAreDistinctAndActionable() {
-        let quota = ErrorCopy.message(for: CloudError.quota)
-        let rate = ErrorCopy.message(for: CloudError.rateLimited)
+        let quota = ErrorCopy.message(for: CloudError.quota, language: .en)
+        let rate = ErrorCopy.message(for: CloudError.rateLimited, language: .en)
         XCTAssertNotEqual(quota, rate)
         XCTAssertTrue(quota.lowercased().contains("space") || quota.lowercased().contains("quota"))
         XCTAssertTrue(rate.lowercased().contains("wait") || rate.lowercased().contains("too many"))
@@ -134,9 +134,9 @@ final class ErrorCopyTests: XCTestCase {
     /// The three 429s must read differently, and only one of them may suggest
     /// waiting — the other two reset tomorrow and next month.
     func testTheThree429sReadDifferently() {
-        let wait = ErrorCopy.message(for: CloudError.rateLimited)
-        let daily = ErrorCopy.message(for: CloudError.dailyQuota)
-        let monthly = ErrorCopy.message(for: CloudError.monthlyTraffic)
+        let wait = ErrorCopy.message(for: CloudError.rateLimited, language: .en)
+        let daily = ErrorCopy.message(for: CloudError.dailyQuota, language: .en)
+        let monthly = ErrorCopy.message(for: CloudError.monthlyTraffic, language: .en)
         XCTAssertEqual(Set([wait, daily, monthly]).count, 3)
         XCTAssertTrue(daily.lowercased().contains("tomorrow"))
         XCTAssertTrue(monthly.lowercased().contains("month"))
@@ -148,8 +148,8 @@ final class ErrorCopyTests: XCTestCase {
     /// Deny and expire are different events and must not share a message: one
     /// says a person refused, the other says nobody answered in time.
     func testDeviceAuthOutcomesReadDifferently() {
-        let denied = ErrorCopy.message(for: DeviceAuthOutcomeError.denied)
-        let expired = ErrorCopy.message(for: DeviceAuthOutcomeError.expired)
+        let denied = ErrorCopy.message(for: DeviceAuthOutcomeError.denied, language: .en)
+        let expired = ErrorCopy.message(for: DeviceAuthOutcomeError.expired, language: .en)
         XCTAssertNotEqual(denied, expired)
         XCTAssertFalse(denied.contains("DeviceAuthOutcomeError"), "fell through to the type-name fallback")
         XCTAssertFalse(expired.contains("DeviceAuthOutcomeError"), "fell through to the type-name fallback")
@@ -160,7 +160,7 @@ final class ErrorCopyTests: XCTestCase {
     /// The one error in this app that means someone may be attacking the user.
     /// It must not read as a network hiccup with a retry button.
     func testMitmSaysStopRatherThanRetry() {
-        let m = ErrorCopy.message(for: HandshakeError.mitm).lowercased()
+        let m = ErrorCopy.message(for: HandshakeError.mitm, language: .en).lowercased()
         XCTAssertFalse(m.contains("try again"))
         XCTAssertFalse(m.contains("reconnect"))
         XCTAssertTrue(m.contains("again") ? m.contains("pair") : true,
@@ -174,15 +174,15 @@ final class ErrorCopyTests: XCTestCase {
         let realtime: [RealtimeError] = [.outOfOrder, .tamper, .legacyPeer, .unknownKind(9), .malformed]
         let sender: [RealtimeSenderError] = [.manifestTooLarge, .sourceShorterThanDeclared(name: "f")]
         for e in handshake {
-            let m = ErrorCopy.message(for: e)
+            let m = ErrorCopy.message(for: e, language: .en)
             XCTAssertFalse(m.contains("HandshakeError"), "no copy for \(e)")
         }
         for e in realtime {
-            let m = ErrorCopy.message(for: e)
+            let m = ErrorCopy.message(for: e, language: .en)
             XCTAssertFalse(m.contains("RealtimeError"), "no copy for \(e)")
         }
         for e in sender {
-            let m = ErrorCopy.message(for: e)
+            let m = ErrorCopy.message(for: e, language: .en)
             XCTAssertFalse(m.contains("RealtimeSenderError"), "no copy for \(e)")
         }
 
@@ -192,7 +192,7 @@ final class ErrorCopyTests: XCTestCase {
             .textSendFailed, .textReceiveBufferFull,
         ]
         for e in connection {
-            let m = ErrorCopy.message(for: e)
+            let m = ErrorCopy.message(for: e, language: .en)
             XCTAssertFalse(m.contains("ConnectionError"), "no copy for \(e)")
         }
 
@@ -200,7 +200,7 @@ final class ErrorCopyTests: XCTestCase {
             .noPeerAppeared, .unsupportedPeer,
         ]
         for e in factory {
-            let m = ErrorCopy.message(for: e)
+            let m = ErrorCopy.message(for: e, language: .en)
             XCTAssertFalse(m.contains("FactoryError"), "no copy for \(e)")
         }
 
@@ -211,14 +211,14 @@ final class ErrorCopyTests: XCTestCase {
             .invalidUTF8(bytes: 1),
         ]
         for e in text {
-            let m = ErrorCopy.message(for: e)
+            let m = ErrorCopy.message(for: e, language: .en)
             XCTAssertFalse(m.contains("RealtimeTextError"), "no copy for \(e)")
         }
     }
 
     /// A missing link has three plausible causes and the copy must not assert one.
     func testNotFoundNamesAllThreeCauses() {
-        let m = ErrorCopy.message(for: CloudError.notFound).lowercased()
+        let m = ErrorCopy.message(for: CloudError.notFound, language: .en).lowercased()
         XCTAssertTrue(m.contains("expired"))
         XCTAssertTrue(m.contains("downloaded") || m.contains("burn"))
     }
@@ -226,7 +226,7 @@ final class ErrorCopyTests: XCTestCase {
     /// Integrity failures must not invite a retry — they are not transient.
     func testIntegrityFailuresDoNotInviteRetry() {
         for e in [StoredWireError.lengthMismatch, .truncatedStream] {
-            let m = ErrorCopy.message(for: e).lowercased()
+            let m = ErrorCopy.message(for: e, language: .en).lowercased()
             XCTAssertFalse(m.contains("try again"), "\(e) must not invite a retry")
         }
     }
@@ -237,7 +237,7 @@ final class ErrorCopyTests: XCTestCase {
             .notFound, .server(status: 500), .network, .decoding,
         ]
         for e in cases {
-            let m = ErrorCopy.message(for: e)
+            let m = ErrorCopy.message(for: e, language: .en)
             XCTAssertFalse(m.isEmpty, "no copy for \(e)")
             XCTAssertFalse(m.contains("CloudError"), "\(e) fell through to the type-name fallback")
         }
@@ -245,7 +245,7 @@ final class ErrorCopyTests: XCTestCase {
 
     /// The refusal has to explain itself — the spec calls a bare refusal a bug.
     func testDirectoryExistsExplainsWhyItWontMerge() {
-        let m = ErrorCopy.message(for: DownloadDestinationError.directoryExists(name: "relayium-abc"))
+        let m = ErrorCopy.message(for: DownloadDestinationError.directoryExists(name: "relayium-abc"), language: .en)
         XCTAssertTrue(m.contains("relayium-abc"))
         XCTAssertTrue(m.lowercased().contains("merge"))
     }
@@ -253,7 +253,7 @@ final class ErrorCopyTests: XCTestCase {
     /// A manifest that tries to escape the destination is refused by name, so a
     /// bug report can say which entry did it.
     func testUnsafeNameIsReportedWithTheOffendingName() {
-        let m = ErrorCopy.message(for: DownloadDestinationError.unsafeName("../escape.txt"))
+        let m = ErrorCopy.message(for: DownloadDestinationError.unsafeName("../escape.txt"), language: .en)
         XCTAssertTrue(m.contains("../escape.txt"))
     }
 
@@ -273,7 +273,7 @@ final class ErrorCopyTests: XCTestCase {
             FileSelectionError.pathTooLong("deep/…"),
         ]
         for e in cases {
-            let m = ErrorCopy.message(for: e)
+            let m = ErrorCopy.message(for: e, language: .en)
             XCTAssertFalse(m.isEmpty, "no copy for \(e)")
             XCTAssertFalse(m.contains("Error)"), "\(e) fell through to the type-name fallback: \(m)")
         }
@@ -282,26 +282,26 @@ final class ErrorCopyTests: XCTestCase {
     /// The refusal names the offending path, so the user can find and remove it
     /// rather than re-picking everything and hoping.
     func testFolderRefusalsNameTheOffendingItem() {
-        XCTAssertTrue(ErrorCopy.message(for: ManifestPathError.unsafePath("../escape.txt"))
+        XCTAssertTrue(ErrorCopy.message(for: ManifestPathError.unsafePath("../escape.txt"), language: .en)
             .contains("../escape.txt"))
-        XCTAssertTrue(ErrorCopy.message(for: FileSelectionError.symbolicLink("box/out"))
+        XCTAssertTrue(ErrorCopy.message(for: FileSelectionError.symbolicLink("box/out"), language: .en)
             .contains("box/out"))
-        XCTAssertTrue(ErrorCopy.message(for: FileSelectionError.unreadable("gone.txt"))
+        XCTAssertTrue(ErrorCopy.message(for: FileSelectionError.unreadable("gone.txt"), language: .en)
             .contains("gone.txt"))
     }
 
     /// An empty folder gets its own answer. "Choose between 1 and 1000 files"
     /// is baffling advice for someone who did choose a folder.
     func testEmptySelectionSaysWhyAnEmptyFolderCannotBeSent() {
-        let m = ErrorCopy.message(for: FileSelectionError.noFiles)
+        let m = ErrorCopy.message(for: FileSelectionError.noFiles, language: .en)
         XCTAssertTrue(m.lowercased().contains("empty folder"), m)
-        XCTAssertNotEqual(m, ErrorCopy.message(for: RealtimeStagingError.fileCount))
+        XCTAssertNotEqual(m, ErrorCopy.message(for: RealtimeStagingError.fileCount, language: .en))
     }
 
     // The realtime rounds route ConnectionError, HandshakeError, RealtimeError and bare
     // WebRTC NSErrors through one ((Error) -> Void). The fallback must already be total.
     func testUnknownErrorStillProducesActionableText() {
-        let m = ErrorCopy.message(for: UnknownFailure())
+        let m = ErrorCopy.message(for: UnknownFailure(), language: .en)
         XCTAssertFalse(m.isEmpty)
         XCTAssertTrue(m.contains("UnknownFailure"), "fallback should name the type for a bug report")
     }
