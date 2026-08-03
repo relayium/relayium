@@ -14,8 +14,11 @@
   const t = $derived<Messages>(messages[lang()]);
 
   type PageState = "loading" | "ready" | "downloading" | "done" | "error";
+  type ErrKey =
+    | "notFound" | "noKey" | "decryptFail" | "unsupported"
+    | "netFail" | "cancelled" | "swFail" | "limited" | "unavailable" | "";
   let pageState: PageState = $state("loading");
-  let errKey: "notFound" | "noKey" | "decryptFail" | "unsupported" | "netFail" | "cancelled" | "swFail" | "" = $state("");
+  let errKey: ErrKey = $state("");
 
   /**
    * 下载页是**唯一**打开 service worker 流式落盘的地方。
@@ -28,6 +31,18 @@
   const SAVE_OPTS: SaveOptions = { swStream: true };
   let manifest = $state<StoredManifest | null>(null);
   let key: CryptoKey | null = null;
+  /**
+   * onMount 读到的那把 #k=，原样留在内存里。
+   *
+   * 地址栏里的那份在读到的下一行就被 history.replaceState 抹掉了（零知识密钥不能
+   * 留在历史记录和 Referer 里），所以**页面活着的这段时间里这是唯一一份**。元数据
+   * 那一步失败时的重试全靠它：再去读一次 location.hash 只会拿到空串，把用户从
+   * 「网络故障，可以重试」踢进「链接不完整」，而且再也回不来；location.reload 同理
+   * ——重新加载的那条 URL 已经没有密钥了。
+   *
+   * 用 $state 而不是普通 let：重试按钮的显示条件要读它。
+   */
+  let fragKey = $state("");
   let progress = $state(0); // 0..100
   let expiresAt = $state(0); // unix seconds; 0 until meta loads
   let burnAfterRead = $state(false);
@@ -45,19 +60,43 @@
       history.replaceState(null, "", location.pathname + location.search);
     }
     if (!k) { pageState = "error"; errKey = "noKey"; return; }
+    fragKey = k;
+    await loadMeta();
+  });
+  onDestroy(() => clearInterval(ticker));
+
+  /** 读元数据、解出清单，走到「可以下载」那一屏。重试也走这里，所以它不读地址栏
+   *  ——密钥从 fragKey 来（见那里的注释）。先把状态打回 loading：错误屏连同重试
+   *  按钮一起消失，用户点不出第二次，也就不会有两个并发的元数据请求。 */
+  async function loadMeta() {
+    pageState = "loading";
+    errKey = "";
     try {
       const meta = await fetchMeta(id);
       expiresAt = meta.expiresAt;
       burnAfterRead = meta.burnAfterRead;
-      key = await keyFromFragment(k);
+      key = await keyFromFragment(fragKey);
       manifest = await decryptManifest(key, base64ToBytes(meta.encManifest));
       pageState = "ready";
     } catch (e) {
       pageState = "error";
-      errKey = isRefusedLink(e) ? "notFound" : "decryptFail";
+      errKey = classifyError(e);
     }
-  });
-  onDestroy(() => clearInterval(ticker));
+  }
+
+  /** 重试按下之后该重做哪一步：清单还没读出来就重读元数据，读出来了就重取字节。
+   *  两条路都在页面内完成 —— 不重新加载，因为那条 URL 上的 #k= 早就没了。
+   *
+   *  两条路都**先**同步离开错误屏，然后才 await 任何东西：错误屏连同重试按钮一起
+   *  消失，用户点不出第二次；而且下载真要在取字节之前停下来问一句（大文件 + 不能
+   *  流式落盘的浏览器要弹内存提示），那一屏是长在非 error 分支里的 —— 停在 error
+   *  上就等于「点了重试什么都没发生」，用户只会以为自己没点中。 */
+  async function retry() {
+    if (manifest === null || key === null) { await loadMeta(); return; } // loadMeta 自己会打回 loading
+    pageState = "ready";
+    errKey = "";
+    await download();
+  }
 
   /**
    * 「这条链接指不向任何东西」的两种说法，归成同一句文案。
@@ -72,12 +111,52 @@
    * 阶段压根不问它，一次「文件已经不在了」被说成「密钥错误或文件损坏」——在指控
    * 用户的密钥和这份文件。而且它两头都不牢：改一句措辞就漏掉真 404，「offset 404」
    * 这类解密诊断又会被当成链接失效，可那正是唯一该让用户去查密钥的场合。
-   * 403/429/503 同样是类型化的响应失败，但它们不是「不在了」，归因一如既往。
+   * 403/429/5xx 同样是类型化的响应失败，但它们不是「不在了」——各自的归因见
+   * classifyError。
    */
   function isRefusedLink(e: unknown): boolean {
     return (e instanceof StoredDownloadHttpError && e.status === 404)
       || e instanceof InvalidStoredObjectIdError;
   }
+
+  /**
+   * 一次失败该说哪句话 —— 加载阶段和取字节阶段共用这一个判据。
+   *
+   * 两个阶段以前各写各的 if 链，而且加载阶段那条只有两个分支（404 / 其它），于是
+   * 「服务端在读密文之前就答了个状态码」和「密钥错误或文件损坏」被混成一句话。那句
+   * 话是这一页最重的指控：它说收件人手里的密钥不对，或者这份文件坏了。可 429（限流
+   * 或发件人流量用尽）、最终 403、5xx、以及请求压根没发出去这四种，全都发生在
+   * StoreDecryptor 拿到第一个字节**之前** —— 密钥一次都没用上，指控它没有任何依据。
+   *
+   * 排序是有讲究的：先认最具体的类型，最后才落到 decryptFail。decryptFail 是**兜底**
+   * 而不是某一类错误的名字，所以它必须排在最后，且只接住真正没被认出来的东西。
+   */
+  function classifyError(e: unknown): ErrKey {
+    if (e instanceof SinkCancelledError) return "cancelled";
+    if (e instanceof SinkTransportError) return "swFail";
+    // 这条链接指不向任何东西：404 或者一个 Relayium 不可能签发的 id。
+    if (isRefusedLink(e)) return "notFound";
+    if (e instanceof StoredDownloadHttpError) {
+      // 429 只有一个状态码，背后却是两个闸门：per-IP 的下载起始限流，和发件人账号的
+      // 月流量上限。服务端**只在英文响应体里**区分它们，而按那段文本分流等于把归因
+      // 钉死在一句服务端文案上 —— 改一个词前端就错。一句话覆盖两者，不给立即重试。
+      if (e.status === 429) return "limited";
+      // 剩下的结构化失败（最终 403、5xx）：服务端/存储侧暂时不可用，可重试。
+      // downloadBlob 已经替一次性直连令牌做过它那唯一一次 403 重放，走到这里的 403
+      // 是真的被拒了。
+      return "unavailable";
+    }
+    if (e instanceof DownloadNetworkError) return "netFail";
+    return "decryptFail";
+  }
+
+  /** 能在这一页原地重来的失败。429 刻意不在里面：那个按钮除了把同一个闸门撞得更响
+   *  什么也做不到。notFound / noKey / unsupported / decryptFail 重试同样没有意义。 */
+  const RETRYABLE: readonly ErrKey[] = ["netFail", "swFail", "cancelled", "unavailable"];
+  // fragKey 是闸门的另一半：没有密钥就没有可以重做的事（noKey / unsupported 那两屏
+  // 根本没走到读密钥这一步）。不必再判 pageState —— 这个按钮只长在模板的 error
+  // 分支里面，而 errKey 只和 pageState = "error" 同时被写。
+  const canRetry = $derived(RETRYABLE.includes(errKey) && fragKey !== "");
   function base64ToBytes(b64: string): Uint8Array {
     const bin = atob(b64);
     const out = new Uint8Array(bin.length);
@@ -92,6 +171,21 @@
 
   // 内存提示已经显示，等用户决定继续还是换个浏览器。
   let memWarn = $state(false);
+
+  /**
+   * 已经有一次下载在跑了。
+   *
+   * 点下载到 pageState 变成 "downloading" 之间隔着一整个 `await pickSaveTarget`
+   * ——「保存到哪里」的对话框开着的那段时间里，按钮还长在「就绪」那一屏上原地没动。
+   * 手快点两下（或者点完没反应又补一下）就会开出**两次**下载：两个保存目标、两条
+   * 各自往同一批 sink 里写的字节流、两个 holdRefresh 闸门。第二个闸门永远放不掉的
+   * 那一半更糟——全站更新提示条的刷新按钮就此一直是灰的，而页面看上去完全正常。
+   *
+   * 装在 startDownload 这个公共边界上，所以三个入口（下载按钮、「仍要下载」、重试）
+   * 都被同一道闸门挡住。必须**同步**置位：任何 await 之后再置就还留着同一个窗口。
+   * 普通 let 而不是 $state：模板不读它，它只负责让第二次调用当场返回。
+   */
+  let downloadInFlight = false;
 
   async function download() {
     await startDownload(false);
@@ -108,14 +202,17 @@
    */
   async function startDownload(force: boolean) {
     if (!manifest || !key) return;
+    if (downloadInFlight) return; // 见 downloadInFlight：第二下当场丢掉
     // warnsAboutMemory 而不是手写的同一条件：文件夹清单现在会走 ZIP 分支，峰值约
     // 2× 批次总量，而 memoryPeakBytes 正是按 pickSaveTarget 的分支逐字算这个的。
     // 手写版对扁平批次结果完全一样，只有文件夹会（正确地）更早提示。
     if (!force && warnsAboutMemory(saveSpecs, totalBytes, SAVE_OPTS)) {
       memWarn = true;
-      return; // 一个字节都还没取
+      return; // 一个字节都还没取——闸门还没置位，紧接着的「仍要下载」才进得来
     }
     memWarn = false;
+    // 同步置位，且**在第一个 await 之前** —— 这一行往下再没有第二次能进来。
+    downloadInFlight = true;
     // 从这里到这个函数结束是「刷新会毁掉东西」的那一段：保存位置一旦选好、字节一旦
     // 开始落，刷新就等于把这次下载整个丢掉从零再来。全站更新提示条据此禁用刷新按钮
     // （见 app-update 的 holdRefresh）——这条路完全在 workspace 之外，warnsOnLeave
@@ -124,7 +221,11 @@
     try {
       await runDownload();
     } finally {
+      // 两个闸门在同一个 finally 里一起放：选择器取消、选择器失败、下载成功、下载
+      // 失败，以及 runDownload 万一漏出来的抛出，走的都是这里。漏放一次这一页的
+      // 下载能力就永久废掉了（而且看不出来：按钮还在，点了没反应）。
       releaseRefresh();
+      downloadInFlight = false;
     }
   }
 
@@ -251,18 +352,11 @@
       pageState = "done";
     } catch (e) {
       pageState = "error";
-      // 用户自己取消下载不是故障，更不是"密钥错误或文件损坏"——如实说。
-      // 掉线可重试；SW 落盘那一段出问题也可重试（字节一个都没错，只是没交到磁盘）；
-      // 只有真正的解密/完整性失败才配得上那句"密钥错误或文件损坏"。
-      if (e instanceof SinkCancelledError) errKey = "cancelled";
-      else if (e instanceof SinkTransportError) errKey = "swFail";
-      // 和加载阶段同一个判据：链接指不向任何东西。这一段是它的第二个入口 ——
-      // 清单读出来了、文件列表都显示了，对象却在用户按下下载的那一刻没了（TTL 到期、
-      // 被别的接收方 burn、GC 撞上），或者 downloadBlob 作为自己的信任边界拒了这个
-      // id（调用方给了 expectedBytes 时它连 meta 都不查）。两种都不是「密钥错误或
-      // 文件损坏」，也都没什么可重试的。
-      else if (isRefusedLink(e)) errKey = "notFound";
-      else errKey = e instanceof DownloadNetworkError ? "netFail" : "decryptFail";
+      // 和加载阶段同一个 classifyError。这一段是每一条归因的第二个入口：清单读出来
+      // 了、文件列表都显示了，故障才发生 —— 对象在按下下载的那一刻没了（TTL 到期、
+      // 被别的接收方 burn、GC 撞上）、限流闸门落下、节点正在重启、用户自己取消。
+      // 两个阶段共用一个判据，正是为了不让其中一边悄悄少认一类错误。
+      errKey = classifyError(e);
     }
   }
 
@@ -294,12 +388,15 @@
       {:else if errKey === "netFail"}{t.download.netFail}
       {:else if errKey === "swFail"}{t.download.swFail}
       {:else if errKey === "cancelled"}{t.download.cancelled}
+      {:else if errKey === "limited"}{t.download.limited}
+      {:else if errKey === "unavailable"}{t.download.unavailable}
       {:else}{t.download.decryptFail}{/if}
     </p>
-    <!-- 传输类故障（掉线 / SW 落盘中断）和用户主动取消都可以原地重来；
-         只有 decryptFail / notFound / noKey / unsupported 重试没有意义。 -->
-    {#if (errKey === "netFail" || errKey === "swFail" || errKey === "cancelled") && manifest}
-      <button class="btn btn-primary" onclick={download}>{t.download.retry}</button>
+    <!-- 传输类故障（掉线 / SW 落盘中断 / 服务端暂时不可用）和用户主动取消都可以
+         原地重来；429 / decryptFail / notFound / noKey / unsupported 重试没有意义。
+         按下之后 retry 会自己决定是重读元数据还是重取字节。 -->
+    {#if canRetry}
+      <button class="btn btn-primary" onclick={retry}>{t.download.retry}</button>
     {/if}
   {:else if pageState === "ready" && expired}
     <p class="error">{t.download.notFound}</p>

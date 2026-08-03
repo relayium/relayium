@@ -592,6 +592,8 @@ const de: Messages = {
     netFail: "Download unterbrochen — bitte Verbindung prüfen und erneut versuchen.",
     swFail: "Speichern auf die Festplatte unterbrochen — bitte erneut versuchen.",
     cancelled: "Download abgebrochen. Es wurde nichts gespeichert — du kannst ihn erneut starten.",
+    limited: "Momentan zu viele Download-Anfragen, oder das monatliche Transfervolumen des Absenders ist aufgebraucht. Warte ein paar Minuten und öffne den Link erneut — die Datei ist weiterhin da.",
+    unavailable: "Server oder Speicher sind vorübergehend nicht erreichbar. Diese Antwort deutet nicht auf ein Problem mit der Datei oder deinem Schlüssel hin. Bitte gleich noch einmal versuchen.",
     retry: "Erneut versuchen",
     memWarn: (size) => `Dieser Link umfasst insgesamt ${size}. Dein Browser kann einen Download nicht direkt auf die Festplatte streamen und muss die ganze Datei im Speicher halten — der Browser kann abstürzen.`,
     memWarnHow: "Öffne diesen Link in Chrome oder Edge auf einem Computer, oder hol ihn mit dem Kommandozeilen-Werkzeug ab — beide streamen direkt auf die Festplatte.",

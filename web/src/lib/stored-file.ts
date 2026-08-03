@@ -511,7 +511,19 @@ export async function fetchMeta(id: string): Promise<StoredFileMeta> {
  *  result is already known (which would read as the real defence while the real
  *  defence sat elsewhere). */
 async function fetchMetaChecked(id: string): Promise<StoredFileMeta> {
-  const res = await fetch(`/api/files/${encodeURIComponent(id)}/meta`);
+  let res: Response;
+  try {
+    res = await fetch(`/api/files/${encodeURIComponent(id)}/meta`);
+  } catch (e) {
+    // Offline, DNS failure, connection refused — the request never reached a
+    // server, so there is no status to classify. The blob read has wrapped this
+    // as DownloadNetworkError from the start; the metadata read let a bare
+    // TypeError escape, and the download page has no way to tell that apart from
+    // a decrypt failure. It then says "wrong key or corrupted file" — accusing
+    // the recipient's key and this file, when not a byte was fetched and the key
+    // was never used. Same wrapper here, so both reads fail the same way.
+    throw new DownloadNetworkError(e);
+  }
   if (!res.ok) throw new StoredDownloadHttpError(res.status, "metadata");
   return res.json();
 }

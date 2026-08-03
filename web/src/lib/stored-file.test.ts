@@ -14,6 +14,7 @@ import {
   InvalidUploadIdError,
   InvalidStoredObjectIdError,
   StoredDownloadHttpError,
+  DownloadNetworkError,
 } from "./stored-file";
 import {
   generateStoreKey,
@@ -1229,6 +1230,40 @@ describe("stored-download response failures", () => {
     expect(err.status).toBe(403);
     expect(err.phase).toBe("blob");
     expect(err).toBeInstanceOf(StoredDownloadHttpError);
+  });
+
+  // 取字节那一段早就把 fetch 的 reject 归成 DownloadNetworkError 了；查清单这一段
+  // 没有，于是「离线 / DNS 挂了 / 连接被拒」会以一个裸的 TypeError 逃出去，下载页
+  // 把它归进 else 分支 —— 一次断网被说成「密钥错误或文件损坏」。那句话在指控用户的
+  // 密钥和这份文件，而真相是一个字节都没取到、密钥一次都没用上，重试完全可能成功。
+  it("fetchMeta 的 fetch 本身 reject 归成 DownloadNetworkError，而不是裸错误", async () => {
+    const boom = new TypeError("Failed to fetch");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(boom));
+    const err = await fetchMeta("abc").catch((e) => e);
+    expect(err).toBeInstanceOf(DownloadNetworkError);
+    expect(err).not.toBeInstanceOf(StoredDownloadHttpError);
+    // 原因留着：诊断时要能看到到底是什么网络故障。
+    expect(err.cause).toBe(boom);
+  });
+
+  it("downloadBlob 自己查清单时的网络故障同样是 DownloadNetworkError，且不发第二个请求", async () => {
+    const sk = await generateStoreKey();
+    const f = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", f);
+    const err = await downloadBlob("abc", sk.key, async () => {}).catch((e) => e);
+    expect(err).toBeInstanceOf(DownloadNetworkError);
+    // 清单都没读到，blob 那一次请求根本不该发出去。
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(f).toHaveBeenCalledWith("/api/files/abc/meta");
+  });
+
+  it("被拒的 id 仍然先于任何网络归因 —— 不能被包成「可重试的网络故障」", async () => {
+    // 顺序守卫：把 fetch 包进 try 时最容易顺手把整段都包进去，于是发请求之前的
+    // 拒绝也变成了 DownloadNetworkError，页面就会给一个点了也没用的重试按钮。
+    const f = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", f);
+    await expect(fetchMeta("a/b")).rejects.toBeInstanceOf(InvalidStoredObjectIdError);
+    expect(f).not.toHaveBeenCalled();
   });
 });
 

@@ -602,6 +602,8 @@ const en: Messages = {
     netFail: "Download interrupted — check your connection and try again.",
     swFail: "Saving to disk was interrupted — please try again.",
     cancelled: "Download cancelled. Nothing was saved — you can start it again.",
+    limited: "Too many download requests right now, or the sender's monthly transfer allowance is used up. Wait a few minutes and open the link again — the file is still there.",
+    unavailable: "The server or storage is temporarily unavailable. This response doesn't indicate a problem with the file or your key. Please try again in a moment.",
     retry: "Retry",
     memWarn: (size) => `This link is ${size} in total. Your browser can’t stream a download straight to disk, so it has to hold the whole file in memory — the browser may crash.`,
     memWarnHow: "Open this link in Chrome or Edge on a computer, or fetch it with the command-line tool — both stream straight to disk.",

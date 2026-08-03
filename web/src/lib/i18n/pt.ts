@@ -591,6 +591,8 @@ const pt: Messages = {
     netFail: "Download interrompido — verifique sua conexão e tente novamente.",
     swFail: "Falha ao salvar no disco — tente novamente.",
     cancelled: "Download cancelado. Nada foi salvo — você pode iniciá-lo novamente.",
+    limited: "Há muitas solicitações de download no momento, ou a cota mensal de transferência do remetente acabou. Espere alguns minutos e abra o link novamente — o arquivo continua lá.",
+    unavailable: "O servidor ou o armazenamento está temporariamente indisponível. Esta resposta não indica que haja um problema com o arquivo ou com sua chave. Tente novamente em instantes.",
     retry: "Tentar novamente",
     memWarn: (size) => `Este link soma ${size}. Seu navegador não consegue transmitir o download direto para o disco, então precisa manter o arquivo inteiro na memória — o navegador pode travar.`,
     memWarnHow: "Abra este link no Chrome ou Edge em um computador, ou baixe com a ferramenta de linha de comando — os dois transmitem direto para o disco.",

@@ -591,6 +591,8 @@ const es: Messages = {
     netFail: "Descarga interrumpida — comprueba tu conexión e inténtalo de nuevo.",
     swFail: "Se interrumpió al guardar en el disco — inténtalo de nuevo.",
     cancelled: "Descarga cancelada. No se guardó nada: puedes volver a iniciarla.",
+    limited: "Ahora mismo hay demasiadas solicitudes de descarga, o el remitente ha agotado su cuota de transferencia mensual. Espera unos minutos y vuelve a abrir el enlace: el archivo sigue ahí.",
+    unavailable: "El servidor o el almacenamiento no está disponible temporalmente. Esta respuesta no indica que haya un problema con el archivo ni con tu clave. Inténtalo de nuevo en un momento.",
     retry: "Reintentar",
     memWarn: (size) => `Este enlace suma ${size}. Tu navegador no puede transmitir la descarga directamente al disco, así que debe mantener el archivo entero en memoria y el navegador podría fallar.`,
     memWarnHow: "Abre este enlace en Chrome o Edge en un ordenador, o descárgalo con la herramienta de línea de comandos: ambos transmiten directamente al disco.",

@@ -644,6 +644,15 @@ export interface Messages {
     // 没来取流）。同样可重试，且**绝不能**落进 decryptFail —— 文件一个字节都没错。
     swFail: string;
     cancelled: string; // user cancelled the browser download — not a failure, and NOT a decrypt error
+    // 服务端答了 429。两个闸门共用这个状态码：per-IP 的下载起始限流，和发件人账号的
+    // 月流量上限。**只有英文响应体**能区分它们，而解析那段文本是把 UI 归因钉死在一句
+    // 服务端文案上 —— 所以这里一句话同时覆盖两者，说清「等一会儿再开这条链接」。
+    // 刻意不给重试按钮：立刻重试只会更快撞上同一个闸门。
+    limited: string;
+    // 结构化的非 404 / 非 429 响应失败（最终 403、5xx）。全都发生在读密文**之前**，
+    // 所以既不是「链接指不向任何东西」，也绝不是「密钥错误或文件损坏」——一个字节都
+    // 没解密过。服务端/存储侧的暂时故障，可重试。
+    unavailable: string;
     retry: string; // button: retry a network-failed download
     // 没有流式落盘能力的浏览器（Firefox/Safari/所有手机）必须把整个文件读进
     // 内存，大文件足以掀掉页面 —— 下载开始前先说清楚，并给一个明确的继续入口。

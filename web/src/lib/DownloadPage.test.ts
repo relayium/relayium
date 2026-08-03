@@ -13,11 +13,16 @@ import { mount, unmount, flushSync } from "svelte";
 
 const downloadBlob = vi.fn();
 const fetchMeta = vi.fn();
+/** 真实的 #k= 只在 onMount 那一瞬间读得到：紧接着 history.replaceState 就把它从
+ *  地址栏抹掉了（零知识密钥不能留在历史记录 / Referer 里）。所以这是个可编程的
+ *  替身而不是常量 —— 「第二次读会拿到空串」正是重试路径必须活下来的那个现实。 */
+const parseDownloadKey = vi.fn();
+const FRAG_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 vi.mock("./stored-file", () => ({
   fetchMeta: (...a: unknown[]) => fetchMeta(...a),
   downloadBlob: (...a: unknown[]) => downloadBlob(...a),
-  parseDownloadKey: () => "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  parseDownloadKey: (...a: unknown[]) => parseDownloadKey(...a),
   keyFromFragment: async () => ({ fake: "key" }),
   DownloadNetworkError: class DownloadNetworkError extends Error {},
   InvalidStoredObjectIdError: class InvalidStoredObjectIdError extends Error {},
@@ -60,7 +65,7 @@ import DownloadPage from "./DownloadPage.svelte";
 // From the mock above, i.e. the same class the page will see — an `instanceof`
 // against the real module here would never match and the test would pass on the
 // fallback branch it is meant to rule out.
-import { InvalidStoredObjectIdError, StoredDownloadHttpError } from "./stored-file";
+import { InvalidStoredObjectIdError, StoredDownloadHttpError, DownloadNetworkError } from "./stored-file";
 import { loadLang, messages } from "./i18n.svelte";
 import { LARGE_DOWNLOAD_WARN_BYTES, SinkTransportError, probeStreamSupport, swStreamReady, pickSaveTarget } from "./filesink";
 import { refreshHolds, resetAppUpdate } from "./app-update.svelte";
@@ -93,11 +98,15 @@ async function mountPage(o: {
   files: { name: string; size: number }[];
   /** 让 onMount 的 fetchMeta 以这个理由失败，用来盯住加载阶段的错误归因。 */
   metaError?: unknown;
+  /** 只让**第一次** fetchMeta 失败，之后照常成功 —— 用来考重试是否真能恢复。 */
+  metaErrorOnce?: unknown;
 }) {
   restorePickers = stubPickers(o.canStream);
   manifestFiles.mockReturnValue(o.files);
+  const ok = { expiresAt: 0, burnAfterRead: false, encManifest: "" };
   if (o.metaError) fetchMeta.mockRejectedValue(o.metaError);
-  else fetchMeta.mockResolvedValue({ expiresAt: 0, burnAfterRead: false, encManifest: "" });
+  else if (o.metaErrorOnce) fetchMeta.mockRejectedValueOnce(o.metaErrorOnce).mockResolvedValue(ok);
+  else fetchMeta.mockResolvedValue(ok);
   await loadLang("en");
   target = document.createElement("div");
   document.body.appendChild(target);
@@ -141,6 +150,8 @@ beforeEach(() => {
   downloadBlob.mockReset();
   downloadBlob.mockResolvedValue(undefined);
   fetchMeta.mockReset();
+  parseDownloadKey.mockReset();
+  parseDownloadKey.mockReturnValue(FRAG_KEY);
   // blobSink 关闭时会走 URL.createObjectURL，jsdom 没实现。
   vi.stubGlobal("URL", Object.assign(URL, {
     createObjectURL: () => "blob:stub",
@@ -810,16 +821,18 @@ describe("DownloadPage 服务端说没有了（404）", () => {
     expect(refreshHolds(), "错误路径漏放会让刷新按钮永远是灰的").toBe(0);
   });
 
-  it("非 404 的响应失败不算「链接无效」—— 503 仍走原来的归因", async () => {
+  it("非 404 的响应失败不算「链接无效」，也不算「密钥错误或文件损坏」", async () => {
     // 服务端暂时不可用跟「这份文件不在了」是两回事，别为了修 404 把整个 5xx/4xx
-    // 都说成链接失效。
+    // 都说成链接失效；同样也不能落回 decryptFail —— 503 是在读密文**之前**答的，
+    // 一个字节都没解密过，指控用户的密钥毫无根据。
     downloadBlob.mockRejectedValue(new StoredDownloadHttpError(503, "blob"));
     await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
     await clickDownload();
 
     const err = target.querySelector(".error");
     expect(err!.textContent!.trim()).not.toBe(messages.en.download.notFound);
-    expect(err!.textContent!.trim()).toBe(messages.en.download.decryptFail);
+    expect(err!.textContent!.trim()).not.toBe(messages.en.download.decryptFail);
+    expect(err!.textContent!.trim()).toBe(messages.en.download.unavailable);
   });
 
   it("消息里恰好含 404 的普通 Error 不是「链接无效」（加载阶段）", async () => {
@@ -845,5 +858,357 @@ describe("DownloadPage 服务端说没有了（404）", () => {
       messages.en.download.decryptFail,
     );
     expect(target.querySelector(".btn-primary"), "解密失败重试没有意义").toBeNull();
+  });
+});
+
+// 「密钥错误或文件损坏」是这一页最重的一句话：它在指控收件人拿到的密钥，或者这份
+// 文件本身。可 404 之外还有一整类失败根本轮不到密钥出场 —— 服务端在**读密文之前**
+// 就答了 429/403/5xx，或者请求压根没出去（离线 / DNS / 连接被拒）。以前这些全落进
+// 同一个 else，于是一次限流、一次节点重启、一次断网都被说成「你的文件坏了」，而
+// 429 甚至连重试按钮都不该有（点它只会更快撞上同一个闸门）。
+describe("DownloadPage HTTP / 元数据故障归因", () => {
+  /** 页面上那句错误文案。 */
+  const errText = () => target.querySelector(".error")?.textContent?.trim();
+  const retryBtn = () => target.querySelector(".btn-primary");
+
+  // --- 429：限流或发件人流量用尽 ---------------------------------------------
+  //
+  // 服务端对这两件事都答 429（一个是 per-IP 起始限流，一个是发件人账号的月流量
+  // 闸门），而且只在英文响应体里区分 —— 前端绝不该去解析那段文本。两者用户能做的
+  // 事一样：等一会儿再开链接。所以同一句文案，且**不给立即重试**：那个按钮除了
+  // 把同一个闸门撞得更响什么也做不到。
+
+  it("取字节阶段 429：说限流/流量用尽，不给重试按钮", async () => {
+    downloadBlob.mockRejectedValue(new StoredDownloadHttpError(429, "blob"));
+    await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+    await clickDownload();
+
+    expect(errText()).toBe(messages.en.download.limited);
+    expect(errText()).not.toBe(messages.en.download.decryptFail);
+    expect(errText()).not.toBe(messages.en.download.unavailable);
+    expect(retryBtn(), "立刻重试只会更快撞上同一个闸门").toBeNull();
+    expect(refreshHolds(), "错误路径漏放会让刷新按钮永远是灰的").toBe(0);
+  });
+
+  it("加载阶段 429：同一句文案，同样不给重试", async () => {
+    await mountPage({
+      canStream: false,
+      files: [{ name: "a.bin", size: SMALL }],
+      metaError: new StoredDownloadHttpError(429, "metadata"),
+    });
+
+    expect(errText()).toBe(messages.en.download.limited);
+    expect(target.querySelector("button"), "等一会儿再开链接，不是原地猛点").toBeNull();
+    expect(downloadBlob, "一个字节都不该取").not.toHaveBeenCalled();
+  });
+
+  it("429 之后页面自己不会再发一次请求（没有隐藏的重试循环）", async () => {
+    downloadBlob.mockRejectedValue(new StoredDownloadHttpError(429, "blob"));
+    await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+    await clickDownload();
+    for (let i = 0; i < 5; i++) { await tick(); flushSync(); }
+    expect(downloadBlob).toHaveBeenCalledTimes(1);
+    expect(fetchMeta).toHaveBeenCalledTimes(1);
+  });
+
+  // --- 非 404 / 非 429 的结构化响应失败 --------------------------------------
+  //
+  // downloadBlob 已经替一次性直连令牌做过它那唯一一次 403 重放；走到这里的 403 是
+  // 真的被拒了，和 5xx 一样发生在读密文之前。暂时不可用 → 可以重试。
+
+  it("取字节阶段最终 403（一次性重放已经用掉了）：说暂时不可用并给重试", async () => {
+    downloadBlob.mockRejectedValue(new StoredDownloadHttpError(403, "blob"));
+    await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+    await clickDownload();
+
+    expect(errText()).toBe(messages.en.download.unavailable);
+    expect(errText()).not.toBe(messages.en.download.decryptFail);
+    expect(retryBtn(), "换个令牌 / 等节点回来，重试是有意义的").not.toBeNull();
+    expect(refreshHolds()).toBe(0);
+  });
+
+  it("取字节阶段 503 之后点重试，真的又取一次字节并完成", async () => {
+    const files = [{ name: "a.bin", size: SMALL }];
+    downloadBlob.mockRejectedValueOnce(new StoredDownloadHttpError(503, "blob"));
+    await mountPage({ canStream: false, files });
+    await clickDownload();
+    expect(errText()).toBe(messages.en.download.unavailable);
+
+    // 重试走的是取字节那一条 —— 清单还在，没必要重读元数据。
+    deliverDeclaredBytes(files);
+    await clickDownload(".btn-primary");
+    await until(() => !!target.querySelector(".ok"));
+    expect(downloadBlob).toHaveBeenCalledTimes(2);
+    expect(fetchMeta, "清单已经在手里，不该再读一次元数据").toHaveBeenCalledTimes(1);
+    expect(target.querySelector(".error")).toBeNull();
+  });
+
+  it("加载阶段 503：说暂时不可用并给重试，且重试真的恢复", async () => {
+    await mountPage({
+      canStream: false,
+      files: [{ name: "a.bin", size: SMALL }],
+      metaErrorOnce: new StoredDownloadHttpError(503, "metadata"),
+    });
+    expect(errText()).toBe(messages.en.download.unavailable);
+    expect(retryBtn()).not.toBeNull();
+
+    await clickDownload(".btn-primary");
+    await until(() => !!target.querySelector(".filelist"));
+    expect(target.querySelector(".error")).toBeNull();
+    expect(fetchMeta).toHaveBeenCalledTimes(2);
+  });
+
+  // --- 元数据请求根本没出去 ---------------------------------------------------
+
+  it("加载阶段网络故障：说掉线（netFail），不是「密钥错误或文件损坏」", async () => {
+    await mountPage({
+      canStream: false,
+      files: [{ name: "a.bin", size: SMALL }],
+      metaError: new DownloadNetworkError(new TypeError("Failed to fetch")),
+    });
+
+    expect(errText()).toBe(messages.en.download.netFail);
+    expect(errText()).not.toBe(messages.en.download.decryptFail);
+    expect(retryBtn(), "掉线可重试 —— 而且清单都还没有，重试是唯一出路").not.toBeNull();
+    expect(downloadBlob, "一个字节都不该取").not.toHaveBeenCalled();
+  });
+
+  // 这一条是本轮最容易做错的地方：onMount 一读到 #k= 就 history.replaceState 把它
+  // 从地址栏抹掉了（零知识密钥不能留在历史 / Referer 里）。所以「重试」不能再去读
+  // 一次 URL，也不能 location.reload —— 那两条路拿到的都是一条没有密钥的链接，用户
+  // 会从「网络故障」被踢进「链接不完整」，而且再也回不来。
+  it("元数据重试用的是内存里那份密钥：URL 里的 #k= 早就没了也照样恢复", async () => {
+    // 第一次读到密钥（onMount），之后再读只会拿到空串 —— 就是抹掉之后的真实情形。
+    parseDownloadKey.mockReset();
+    parseDownloadKey.mockReturnValueOnce(FRAG_KEY).mockReturnValue("");
+
+    await mountPage({
+      canStream: false,
+      files: [{ name: "a.bin", size: SMALL }],
+      metaErrorOnce: new DownloadNetworkError(new TypeError("Failed to fetch")),
+    });
+    expect(errText()).toBe(messages.en.download.netFail);
+
+    await clickDownload(".btn-primary");
+    await until(() => !!target.querySelector(".filelist"));
+
+    // 恢复到了真正的「可以下载」那一屏，而不是 noKey。
+    expect(target.querySelector(".error"), "重试之后不该还有错误").toBeNull();
+    expect(errText()).not.toBe(messages.en.download.noKey);
+    expect(target.querySelector(".filelist")!.textContent).toContain("a.bin");
+    expect(fetchMeta).toHaveBeenCalledTimes(2);
+    // 唯一一次读 URL 就是 onMount 那次；再读一次就说明密钥的生命周期搞错了。
+    expect(parseDownloadKey, "重试不该再去读地址栏").toHaveBeenCalledTimes(1);
+
+    // 恢复之后照常能下载，走的是同一份内存密钥。
+    deliverDeclaredBytes([{ name: "a.bin", size: SMALL }]);
+    await clickDownload();
+    expect(downloadBlob).toHaveBeenCalledTimes(1);
+  });
+
+  it("元数据重试期间不再显示错误屏，且不会并发发两次请求", async () => {
+    // 重试一按下就该回到 loading：错误屏（连同那个按钮）消失，用户点不出第二次。
+    let release!: (v: unknown) => void;
+    fetchMeta.mockReset();
+    fetchMeta
+      .mockRejectedValueOnce(new DownloadNetworkError(new TypeError("Failed to fetch")))
+      .mockImplementationOnce(() => new Promise((r) => (release = r)));
+    manifestFiles.mockReturnValue([{ name: "a.bin", size: SMALL }]);
+    restorePickers = stubPickers(false);
+    await loadLang("en");
+    target = document.createElement("div");
+    document.body.appendChild(target);
+    app = mount(DownloadPage, { target, props: { id: "abc" } });
+    await until(() => !!target.querySelector(".error"));
+
+    (target.querySelector(".btn-primary") as HTMLButtonElement).click();
+    flushSync();
+    expect(target.querySelector(".error"), "重试中就不该还留着错误屏").toBeNull();
+    expect(target.querySelector(".btn-primary"), "按钮没了就点不出第二次").toBeNull();
+    expect(fetchMeta).toHaveBeenCalledTimes(2);
+
+    release({ expiresAt: 0, burnAfterRead: false, encManifest: "" });
+    await until(() => !!target.querySelector(".filelist"));
+    expect(fetchMeta).toHaveBeenCalledTimes(2);
+  });
+
+  // 重试按下之后必须**离开错误屏**。取字节这一条在真正取字节之前还可能停下来问
+  // 一句（大文件 + 不能流式落盘的浏览器要先弹内存提示），而那一屏是长在非 error
+  // 分支里的：停在 error 上就等于「点了重试，什么都没发生」——用户只会以为自己
+  // 没点中，这条链接对他就此报废。
+  it("取字节重试会离开错误屏，内存提示这类中途询问才有地方显示", async () => {
+    downloadBlob.mockRejectedValue(new StoredDownloadHttpError(503, "blob"));
+    await mountPage({ canStream: false, files: [{ name: "big.mp4", size: BIG }] });
+
+    // 先过一遍内存提示，把这一批送进真正的下载。
+    await clickDownload();
+    expect(target.querySelector(".memwarn")).not.toBeNull();
+    await clickDownload(".memwarn button");
+    expect(errText()).toBe(messages.en.download.unavailable);
+    expect(downloadBlob).toHaveBeenCalledTimes(1);
+
+    // 重试：同一批文件仍然大到要提示，于是应当**再次**看到内存提示，而不是一个
+    // 纹丝不动的错误屏。
+    await clickDownload(".btn-primary");
+    expect(target.querySelector(".error"), "重试之后不该还停在错误屏上").toBeNull();
+    expect(target.querySelector(".memwarn"), "该问的还是要问，不能静默什么都不做").not.toBeNull();
+    expect(refreshHolds(), "只弹了提示，一个字节都没取，不该占闸门").toBe(0);
+  });
+
+  it("链接不完整（没有 #k=）仍然不给重试 —— 没有密钥可以复用", async () => {
+    parseDownloadKey.mockReset();
+    parseDownloadKey.mockReturnValue("");
+    await mountPage({ canStream: false, files: [{ name: "a.bin", size: SMALL }] });
+
+    expect(errText()).toBe(messages.en.download.noKey);
+    expect(target.querySelector("button"), "重试拿不出一把不存在的密钥").toBeNull();
+    expect(fetchMeta, "连元数据都不该去读").not.toHaveBeenCalled();
+  });
+});
+
+// 点下载到 pageState 变成 "downloading" 之间隔着一整个 await pickSaveTarget ——
+// 保存位置对话框开着的那段时间里，按钮还长在「就绪」那一屏上原地没动。手快点两下
+// （或者点完没反应又点一下）就会开出**两次**下载：两个保存目标、两条各自往同一批
+// sink 里写的字节流、两个 holdRefresh 闸门。第二个闸门永远放不掉的那一半更糟：
+// 全站更新提示条的刷新按钮就此一直是灰的。
+//
+// 闸门必须是**同步**的：任何 await 之后再置位都还留着同一个窗口。
+describe("DownloadPage 下载并发闸门", () => {
+  /** 一个开着不落定的「保存位置」对话框，外加它被开了几次。
+   *
+   *  盯 showSaveFilePicker 而不是 pickSaveTarget：前者是真实的那个边界（对话框一旦
+   *  开出来就已经打扰到用户了），而且它天然能数「开了几次」。 */
+  function deferredPicker() {
+    const w = window as unknown as Record<string, unknown>;
+    const had = "showSaveFilePicker" in w;
+    let picks = 0;
+    let release!: () => void;
+    const writable = { write: async () => {}, close: async () => {} };
+    w.showSaveFilePicker = () =>
+      new Promise((resolve) => {
+        picks++;
+        release = () => resolve({ createWritable: async () => writable });
+      });
+    return {
+      picks: () => picks,
+      release: () => release(),
+      restore: () => { if (!had) delete w.showSaveFilePicker; },
+    };
+  }
+
+  it("对话框还开着时再点一次下载：只开一次选择器、只跑一次下载、只占一个闸门", async () => {
+    probeStreamSupport(); // 没有 SW，这一批走 Save As
+    const files = [{ name: "a.bin", size: SMALL }];
+    deliverDeclaredBytes(files);
+    await mountPage({ canStream: false, files });
+    const picker = deferredPicker();
+    try {
+      const btn = target.querySelector(".btn-primary") as HTMLButtonElement;
+      // 两下之间不 await：第一下的 pickSaveTarget 还挂着，页面还停在同一屏。
+      btn.click();
+      btn.click();
+      flushSync();
+      await tick();
+      flushSync();
+
+      expect(picker.picks(), "第二下必须被同步挡掉，不能再开一个对话框").toBe(1);
+      expect(refreshHolds(), "两个闸门里的第二个永远放不掉，刷新按钮就此一直是灰的").toBe(1);
+
+      picker.release();
+      await until(() => !!target.querySelector(".ok"));
+      expect(downloadBlob, "只该有一条字节流").toHaveBeenCalledTimes(1);
+      expect(refreshHolds(), "跑完要放干净").toBe(0);
+    } finally { picker.restore(); }
+  });
+
+  // 重试是这个窗口的第二个入口：它同步把页面切回「就绪」那一屏，于是原地就长出一个
+  // 下载按钮 —— 手快的第二下正好落在它上面。闸门装在 startDownload 这个公共边界上，
+  // 两个入口才都被挡住。
+  it("重试之后紧接着再点一次：同样只开一次选择器、只占一个闸门", async () => {
+    probeStreamSupport();
+    const files = [{ name: "a.bin", size: SMALL }];
+    // 第一次失败（不用对话框：没有 FSA 就走 blobSink），进到可重试的错误屏。
+    downloadBlob.mockRejectedValueOnce(new StoredDownloadHttpError(503, "blob"));
+    await mountPage({ canStream: false, files });
+    await clickDownload();
+    expect(target.querySelector(".error")!.textContent!.trim()).toBe(messages.en.download.unavailable);
+
+    deliverDeclaredBytes(files);
+    const picker = deferredPicker();
+    try {
+      (target.querySelector(".btn-primary") as HTMLButtonElement).click(); // 重试
+      flushSync();
+      // 错误屏换成了就绪屏，同一个位置现在是「下载并解密」——第二下落在这里。
+      (target.querySelector(".btn-primary") as HTMLButtonElement).click();
+      flushSync();
+      await tick();
+      flushSync();
+
+      expect(picker.picks(), "重试这条路也必须被同一个闸门挡住").toBe(1);
+      expect(refreshHolds()).toBe(1);
+
+      picker.release();
+      await until(() => !!target.querySelector(".ok"));
+      expect(downloadBlob, "一次失败 + 一次重试，不是三次").toHaveBeenCalledTimes(2);
+      expect(refreshHolds()).toBe(0);
+    } finally { picker.restore(); }
+  });
+
+  // 闸门放不掉比多跑一次下载更难查：页面看起来完全正常，只有刷新按钮从此再也点不动，
+  // 而且下一次下载会被自己上一次的残留挡住。所以每一条出口都要单独钉。
+  it("用户取消保存位置后闸门不留残留，下一次下载照常开得出来", async () => {
+    probeStreamSupport();
+    const w = window as unknown as Record<string, unknown>;
+    const had = "showSaveFilePicker" in w;
+    const files = [{ name: "a.bin", size: SMALL }];
+    deliverDeclaredBytes(files);
+    await mountPage({ canStream: false, files });
+    w.showSaveFilePicker = async () => { throw Object.assign(new Error("abort"), { name: "AbortError" }); };
+    try {
+      await clickDownload();
+      expect(downloadBlob, "取消了就没取字节").not.toHaveBeenCalled();
+      expect(refreshHolds()).toBe(0);
+
+      // 关键：闸门若没放，这一次会被上一次的残留静默吃掉。
+      delete w.showSaveFilePicker; // 这回走 blobSink，直接跑完
+      await clickDownload();
+      await until(() => !!target.querySelector(".ok"));
+      expect(downloadBlob, "取消不该把这一页的下载能力永久废掉").toHaveBeenCalledTimes(1);
+      expect(refreshHolds()).toBe(0);
+    } finally { if (!had) delete w.showSaveFilePicker; }
+  });
+
+  it("下载失败后闸门不留残留，重试还开得出来", async () => {
+    probeStreamSupport();
+    const files = [{ name: "a.bin", size: SMALL }];
+    downloadBlob.mockRejectedValueOnce(new StoredDownloadHttpError(503, "blob"));
+    await mountPage({ canStream: false, files });
+    await clickDownload();
+    expect(refreshHolds(), "失败路径漏放会让刷新按钮永远是灰的").toBe(0);
+
+    deliverDeclaredBytes(files);
+    await clickDownload(".btn-primary");
+    await until(() => !!target.querySelector(".ok"));
+    expect(downloadBlob).toHaveBeenCalledTimes(2);
+    expect(refreshHolds()).toBe(0);
+  });
+
+  it("只弹了内存提示的那一次不占闸门，「仍要下载」才真的开始", async () => {
+    // 内存提示是在取字节**之前**早退的：一个字节都没动，既不该占刷新闸门，也不该
+    // 占并发闸门 —— 占了的话紧接着那次「仍要下载」就会被自己挡掉，按钮彻底失灵。
+    probeStreamSupport();
+    const files = [{ name: "big.mp4", size: BIG }];
+    deliverDeclaredBytes(files);
+    await mountPage({ canStream: false, files });
+
+    await clickDownload();
+    expect(target.querySelector(".memwarn")).not.toBeNull();
+    expect(downloadBlob).not.toHaveBeenCalled();
+    expect(refreshHolds()).toBe(0);
+
+    await clickDownload(".memwarn button");
+    await until(() => !!target.querySelector(".ok"));
+    expect(downloadBlob, "早退把闸门占住的话，这一次会被静默吃掉").toHaveBeenCalledTimes(1);
+    expect(refreshHolds()).toBe(0);
   });
 });
