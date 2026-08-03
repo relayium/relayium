@@ -272,7 +272,14 @@
       {#each tiers as tier (tier.id)}
         <div class="tier ui-card ui-stack" class:popular={tier.id === POPULAR_ID} class:is-current={tier.id === currentPlanId}>
           {#if tier.id === POPULAR_ID}<div class="ribbon ui-badge">{t.billing.popular}</div>{/if}
-          <h3 class="tier-name">{tier.name}</h3>
+          <!-- h2, not h3: this grid is the first content under the page's h1 on
+               /pricing, and jumping h1 → h3 is a real axe heading-order failure
+               (it only shows once /api/plans resolves, which is why the scan now
+               loads real tiers). Inside the account dialog the same level is
+               still correct — nothing there opens a section above it. Only the
+               level moves: .tier-name below pins the typography this used to
+               render with, so nothing on the card changes visually. -->
+          <h2 class="tier-name">{tier.name}</h2>
           {#if isFree(tier)}
             <div class="tier-price">{t.billing.free}</div>
           {:else}
@@ -362,7 +369,23 @@
     position: absolute; inset-block-start: -10px; inset-inline-end: var(--space-3);
     background: var(--accent-action); border-color: transparent; color: #fff; font-weight: 600;
   }
-  .tier-name { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
+  /* The declarations after the colour exist to keep this batch a pure
+     semantics change. app.css styles `h2` globally (weight 600, line-height
+     1.15, letter-spacing -0.4px and the heading font family) and styles `h3`
+     not at all, so promoting the tier name for heading-order would otherwise
+     also have re-typeset it:
+     measured in Chrome, 700 → 600, 23.2px → 20.7px leading, normal → -0.4px
+     tracking, and a 2px shorter box on every card. Adopting the app's h2
+     treatment here may well be the right call — it is a design decision, and
+     it is not this one. */
+  .tier-name {
+    margin: 0; font-size: var(--fs-h3); color: var(--text-h);
+    /* `inherit`, not literal values: leading and tracking are inherited
+       properties, so an unstyled h3 took whatever the card gave it. Spelling
+       out "normal" here would have been a different 2px-shorter box. */
+    font-family: inherit; font-weight: 700;
+    line-height: inherit; letter-spacing: inherit;
+  }
   /* The paid price is the decision, so it is the largest type on the page after
      the h1. Tabular numerals keep the column of prices aligned as the cycle
      flips between 2- and 3-digit amounts. */

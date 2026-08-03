@@ -91,6 +91,27 @@ describe("Account billing", () => {
     expect(target.textContent).toContain("Pro");
   });
 
+  // Pricing's second embedding. The a11y scan reaches exactly this state
+  // (spa/cross-network/account-modal/pricing), so the tier heading level has to
+  // be the same one /pricing pins — one component, one answer.
+  it("renders the inline tier names as h2 inside the account dialog", async () => {
+    vi.stubGlobal("fetch", baseFetchMock(FREE_USER));
+    await mountAccount();
+
+    const upgradeBtn = Array.from(target.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Upgrade");
+    upgradeBtn!.click();
+    await new Promise((r) => setTimeout(r, 0));
+    flushSync();
+
+    const inline = target.querySelector(".pricing-inline")!;
+    expect(inline).not.toBeNull();
+    const names = Array.from(inline.querySelectorAll<HTMLElement>(".tier-name"));
+    // Real cards, not the aria-hidden skeleton: the skeleton has no .tier-name.
+    expect(names.map((n) => n.textContent)).toEqual(PLAN_TIERS.map((t) => t.name));
+    expect(names.map((n) => n.tagName)).toEqual(PLAN_TIERS.map(() => "H2"));
+    expect(inline.querySelectorAll("h3").length).toBe(0);
+  });
+
   it("shows a Manage billing button for a subscribed user that POSTs the portal endpoint and redirects", async () => {
     Object.defineProperty(window, "location", {
       configurable: true,

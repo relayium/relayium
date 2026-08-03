@@ -150,14 +150,44 @@ SPA 壳的 `<body>` 里只有一个 `<noscript>`——真正的界面全靠 JS �
 
 ### 扫什么
 
-14 格。静态那 7 格覆盖全部 6 种模板（landing / article / guides-index / legal /
+15 格，表在 `a11y-targets.mjs`（单独一个模块，好让 `a11y-core.test.mjs` 能 import 它
+去断言——`a11y-scan.mjs` 顶层就跑完整轮扫描，谁 import 它谁就等于跑了一次 CI）。
+
+静态那 7 格覆盖全部 6 种模板（landing / article / guides-index / legal /
 mode / 404）：landing 的代表页本身是 RTL，article 再加一份 RTL 分支；mode 模板只有本地化
-语言有静态页（英文走 SPA 路由），所以它那一格是 `/zh/cross-network/`。SPA 那 7 格覆盖首页
-的桌面浅色与移动深色、cross-network / pricing / apps / cli，以及一个**动态决策态**（账户弹窗）。
+语言有静态页（英文走 SPA 路由），所以它那一格是 `/zh/cross-network/`。SPA 那 6 格覆盖首页
+的桌面浅色与移动深色、cross-network / pricing / apps / cli。另外 **2 格是动态决策态**，
+都挂在账户弹窗上（账户按钮只在 cross / offline / pricing / me 四条路由上渲染）：一格是
+登出态的登录表单，一格是**已登录免费用户展开的内联档位网格**。
+
+Pricing 这个组件有**两处**嵌入，两格各扫一处：独立的 `/pricing`（`h1` 之下），和账户
+弹窗里 `role="dialog"` 内的那一份。只扫前者就等于宣称这个组件是干净的，而弹窗里那一份
+从来没被看过——那是另一套语境、另一种可视宽度、另一种会话状态。
 
 每格都钉死视口、`prefers-color-scheme` 和 `prefers-reduced-motion`，等的是各自的
 readySelector 而不是固定 sleep——固定 sleep 在快机器上浪费时间，在慢机器上给出一张
-还没画完的页面，然后同一份代码今天绿明天红。
+还没画完的页面，然后同一份代码今天绿明天红。readySelector 要选**真正想扫的内容**：
+`ready` 加可选的 `readyCount` 判「至少这么多个节点在了」，两个定价格子要的是四张真卡
+全到齐，而不是骨架屏还在时的那个容器。
+
+### 定价那两格为什么带一份浏览器端 API 夹具
+
+`vite preview` 只吐 `dist`，`/api/*` 后面什么都没有。于是 `/pricing` 的 `onMount` 拿到
+一份 HTML、`res.json()` 抛错、组件停在 loadError 分支——而 `.pricing-page` 这个外壳**照样
+在**。这一格因此长期在扫一句红色的错误提示：四张真卡、它们的标题层级、价格排版和 CTA
+一个都没进过 axe。那里正好藏着一条真的 `heading-order` 违规（`h1 → h3`），它只在
+`/api/plans` 真的解析成功之后才出现，所以这道门一次都没看见过它。
+
+修法是 `a11y-fixtures.mjs`：一段用 `Page.addScriptToEvaluateOnNewDocument` 注进去的
+`window.fetch` 补丁，**只**给需要的那两格。不接真后端是有意的——那会给一条纯前端的 CI
+门加上 Go 服务器 + 数据库 + 迁移 + 种子数据的依赖，而它们任何一个抖一下，红的都是无障碍
+扫描，一个指向完全错误方向的失败。补丁本身守四条纪律（`a11y-fixtures.test.mjs` 逐条钉着）：
+认 `Request` 也认字符串/`URL`（`String(new Request(u))` 是 `[object Request]`，只看字符串
+会静默失配）、只接管同源 GET、没匹配上的**原样**放行（连参数对象都不重建，重建会悄悄丢掉
+`signal`/`credentials`/`body`）、返回真的 `Response`。注入是按标签页会话下发的，而每一格
+各开各的标签页，所以夹具不会漏到别的目标上。
+
+拿掉夹具这两格不会变绿，会**超时报错**：readySelector 要的是四张真卡，没有真数据就到不了。
 
 ### 规则口径与允许清单
 

@@ -28,6 +28,10 @@ import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { argFlag, argPresent, launchBrowser, newTab, ok, sleep, withWatchdog } from "./harness.mjs";
+import { apiFixtureScript } from "./a11y-fixtures.mjs";
+// 目标表住在自己的模块里，好让 a11y-core.test.mjs 能直接 import 它去断言——这个文件
+// 顶层就跑完整轮扫描，谁 import 它谁就等于跑了一次 CI。
+import { MOBILE, TARGETS } from "./a11y-targets.mjs";
 import {
   EXTRA_RULES, WCAG_TAGS, applyAllowlist, axeVersion, colors, loadAllowlist, printGrouped,
   printIncomplete, runAxe,
@@ -42,58 +46,6 @@ const DEBUG_PORT = 9446;
 const PREVIEW_PORT = Number(argFlag("--preview-port", "4183"));
 const GLOBAL_TIMEOUT_MS = 8 * 60_000;
 const ALLOWLIST = resolve(here, "a11y-allowlist.json");
-
-const DESKTOP = { width: 1440, height: 900 };
-const MOBILE = { width: 390, height: 844 };
-
-/**
- * 扫描目标。
- *
- * 每个目标都钉死了视口、配色方案和一个 readySelector——**不用固定 sleep**。固定 sleep
- * 在快机器上浪费时间，在慢机器上给出的是一张还没画完的页面，然后同一份代码今天绿明天红。
- */
-const TARGETS = [
-  // ── 静态产物：4 个模板 + 404，含一份 RTL ────────────────────────────────
-  { id: "static/landing/ar", url: "/ar/", ready: "footer", viewport: DESKTOP, scheme: "light",
-    note: "landing 模板 + RTL（dir=rtl 只有阿拉伯语走）" },
-  { id: "static/article/en", url: "/compare/snapdrop/", ready: "footer", viewport: DESKTOP, scheme: "light",
-    note: "article 模板（约 50 篇文章共用）" },
-  { id: "static/article/ar", url: "/ar/compare/snapdrop/", ready: "footer", viewport: DESKTOP, scheme: "light",
-    note: "article 模板的 RTL 分支" },
-  // mode 模板（cross-network / offline-transfer）**没有**英文静态页——英文走 SPA
-  // 路由——所以只能从本地化 URL 进。少了这一格，这个模板就是没人扫过的。
-  { id: "static/mode/zh", url: "/zh/cross-network/", ready: "footer", viewport: DESKTOP, scheme: "light",
-    note: "mode 模板只有 8 种本地化语言有静态页" },
-  { id: "static/guides-index/en", url: "/guides/", ready: "footer", viewport: DESKTOP, scheme: "light" },
-  { id: "static/legal/en", url: "/privacy/", ready: "footer", viewport: DESKTOP, scheme: "light" },
-  { id: "static/notfound/en", url: "/404.html", ready: "h1", viewport: DESKTOP, scheme: "light" },
-
-  // ── SPA：必须等真组件挂上来 ────────────────────────────────────────────
-  // 首页折叠线以下的内容是一个动态 import。等首屏 .lan-workspace 只在本地快磁盘上
-  // 偶然把它一起扫到；生产网络会少掉整个营销区块却照样显示全绿。等懒加载块里的
-  // 稳定 heading，才代表这一个目标的完整 DOM 已经到齐。
-  { id: "spa/landing/desktop-light", url: "/", ready: "#home-text-title", viewport: DESKTOP, scheme: "light" },
-  { id: "spa/landing/mobile-dark", url: "/", ready: "#home-text-title", viewport: MOBILE, scheme: "dark",
-    note: "同一个完整页面的另一套令牌：深色的对比度和浅色是两回事" },
-  { id: "spa/cross-network", url: "/cross-network", ready: ".crosspage", viewport: DESKTOP, scheme: "light" },
-  { id: "spa/pricing", url: "/pricing", ready: ".pricing-page", viewport: DESKTOP, scheme: "light" },
-  { id: "spa/apps", url: "/apps", ready: ".apps", viewport: DESKTOP, scheme: "light" },
-  { id: "spa/cli", url: "/cli", ready: ".cli", viewport: DESKTOP, scheme: "light" },
-
-  // ── 一个动态决策态 ─────────────────────────────────────────────────────
-  // 真正的"同意/验证"决策态需要两个 peer 和一台信令服务器，那是后续挂到
-  // lan-transfer / mixed-link 上的事。这里取的是**不需要后端就能到达**的那一个：
-  // 账户弹窗。它同时是三处 role="dialog" 之一，正好被这一轮扫到。
-  // 账户按钮只在 cross / offline / pricing / me 四条路由上渲染（Nav.svelte），
-  // 所以这一格挂在 /cross-network 上而不是首页。
-  { id: "spa/cross-network/account-modal", url: "/cross-network", ready: ".crosspage",
-    viewport: DESKTOP, scheme: "light",
-    drive: {
-      click: ".acct-btn",
-      ready: '.modal[role="dialog"]',
-      note: "动态决策态：账户/登录弹窗打开",
-    } },
-];
 
 // ── vite preview 的生命周期 ─────────────────────────────────────────────────
 //
@@ -191,7 +143,15 @@ async function startPreview(distDir) {
 // ── 单个目标 ────────────────────────────────────────────────────────────────
 
 async function scanTarget(browser, base, target) {
-  const tab = await newTab(browser, "about:blank");
+  // 夹具走 addScriptToEvaluateOnNewDocument，而 newTab 在导航之前就下发它——所以它在
+  // 页面第一行脚本之前就位，`onMount` 里那次 `/api/plans` 一定落在补丁上。它是**这个
+  // 标签页会话**的东西，下一格换新标签页就没有了。
+  const tab = await newTab(browser, "about:blank", target.fixture ? apiFixtureScript(target.fixture) : undefined);
+  const waitReady = (selector, count, what) => tab.waitFor(
+    `document.querySelectorAll(${JSON.stringify(selector)}).length >= ${count ?? 1}`,
+    `${target.id} → ${what ?? selector}${count > 1 ? ` ×${count}` : ""}`,
+    30_000,
+  );
   try {
     // 先钉死渲染环境再导航：配色方案和动效偏好必须在**首次绘制之前**就位，
     // 不然扫到的是一张"从浅色跳到深色"的中间态。runner 的默认值也不能信——
@@ -207,26 +167,25 @@ async function scanTarget(browser, base, target) {
     });
 
     await tab.send("Page.navigate", { url: base + target.url });
-    await tab.waitFor(`!!document.querySelector(${JSON.stringify(target.ready)})`, `${target.id} → ${target.ready}`, 30_000);
+    await waitReady(target.ready, target.readyCount);
 
-    if (target.drive) {
+    // 一串有序的步骤，而不是一次点击：内联档位要两步（打开弹窗 → 展开 Pricing），
+    // 而每一步都必须等到位再走下一步——上一步还没渲染完就去找下一个按钮，失败会
+    // 报成"没有这个按钮"，指向一个根本不存在的选择器问题。
+    for (const step of target.drive ?? []) {
       await tab.evaluate(`(() => {
-        const el = document.querySelector(${JSON.stringify(target.drive.click)});
-        if (!el) throw new Error("nothing to click: ${target.drive.click}");
+        const el = document.querySelector(${JSON.stringify(step.click)});
+        if (!el) throw new Error("nothing to click: " + ${JSON.stringify(step.click)});
         el.click();
         return true;
       })()`);
-      await tab.waitFor(
-        `!!document.querySelector(${JSON.stringify(target.drive.ready)})`,
-        `${target.id} → ${target.drive.ready}`,
-        15_000,
-      );
+      await waitReady(step.ready, step.readyCount);
     }
 
     const result = await runAxe(tab);
     return { ...result, consoleErrors: tab.errors.slice() };
   } finally {
-    // 一格一个标签页并且当场关掉：14 个活标签页会一直挂着 WebSocket 和定时器，
+    // 一格一个标签页并且当场关掉：15 个活标签页会一直挂着 WebSocket 和定时器，
     // 后面的目标就不是在一个干净的浏览器里跑了。
     try { await browser.send("Target.closeTarget", { targetId: tab.targetId }); } catch { /* 已经关了 */ }
   }

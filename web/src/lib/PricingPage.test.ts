@@ -33,7 +33,10 @@ function precedes(a: Element, b: Element): boolean {
 }
 
 afterEach(() => {
-  if (app) unmount(app as never);
+  if (app) {
+    unmount(app as never);
+    app = undefined;
+  }
   target?.remove();
   vi.unstubAllGlobals();
 });
@@ -62,6 +65,41 @@ describe("PricingPage hierarchy", () => {
     // The cycle control and a real price are both inside that first block.
     expect(pricing.querySelector('[role="group"]')).not.toBeNull();
     expect(pricing.textContent).toContain("$3.90");
+  });
+
+  // axe's heading-order rule, asserted directly: every heading may go one level
+  // deeper than the previous one at most. The tier names used to be h3 straight
+  // after the page h1, which is a real WCAG failure — and it only appears once
+  // /api/plans resolves, so it stayed invisible to a scanner that never got real
+  // plans. Levels, not selectors: this survives any CSS or markup churn.
+  it("never skips a heading level once the real tiers are on the page", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => TIERS })) as unknown as typeof fetch);
+    await mountPage();
+
+    const headings = Array.from(target.querySelectorAll("h1, h2, h3, h4, h5, h6"));
+    // Guard against a vacuous pass: a load-error page has an h1 and nothing else.
+    expect(target.querySelectorAll(".tier-name").length).toBe(TIERS.length);
+    expect(headings.length).toBeGreaterThan(TIERS.length);
+
+    // The first heading has nothing to be out of order with; every later one is
+    // compared to its predecessor. Going back up (h3 -> h2) is always fine.
+    let previous = Number(headings[0].tagName[1]);
+    for (const h of headings.slice(1)) {
+      const level = Number(h.tagName[1]);
+      expect(level - previous, `${h.tagName} "${h.textContent}" skips a level after h${previous}`)
+        .toBeLessThanOrEqual(1);
+      previous = level;
+    }
+  });
+
+  it("gives every tier name the same heading level, directly under the page h1", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => TIERS })) as unknown as typeof fetch);
+    await mountPage();
+
+    expect(target.querySelectorAll("h1").length).toBe(1);
+    const names = Array.from(target.querySelectorAll<HTMLElement>(".tier-name"));
+    expect(names.map((n) => n.tagName)).toEqual(TIERS.map(() => "H2"));
+    expect(names.map((n) => n.textContent)).toEqual(TIERS.map((t) => t.name));
   });
 
   it("adopts the shared page header and still shows title, subtitle and the signed-out CTA", async () => {
@@ -118,6 +156,27 @@ describe("PricingPage hierarchy", () => {
     const selfhost = target.querySelector(".selfhost")!;
     expect(selfhost.classList.contains("ui-card")).toBe(true);
     expect(selfhost.classList.contains("ui-stack")).toBe(true);
+  });
+});
+
+// app.css styles `h2` globally (heading font family, font-weight 600,
+// line-height 1.15, letter-spacing -0.4px) and styles `h3` not at all.
+// Promoting the tier name to h2 for heading-order therefore silently re-typeset
+// all four cards until
+// .tier-name pinned the old values back — measured in Chrome: 700 -> 600,
+// 23.2px -> 20.7px leading, normal -> -0.4px tracking, 2px shorter box. jsdom
+// never loads app.css, so no rendered assertion can catch this coming back;
+// the source check is the only guard there is.
+describe("tier headings carry their own typography, not the global h2 treatment", () => {
+  it("pins font family, weight, line-height and letter-spacing on .tier-name", () => {
+    const src = readFileSync(join(import.meta.dirname, "Pricing.svelte"), "utf8");
+    const rule = src.slice(src.indexOf(".tier-name {"));
+    const body = rule.slice(0, rule.indexOf("}"));
+
+    expect(body, "Pricing.svelte has no .tier-name rule block").toContain("font-size");
+    for (const prop of ["font-family: inherit", "font-weight: 700", "line-height: inherit", "letter-spacing: inherit"]) {
+      expect(body, `.tier-name no longer pins ${prop}`).toContain(prop);
+    }
   });
 });
 
