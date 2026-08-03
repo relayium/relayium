@@ -138,6 +138,23 @@ public enum ErrorCopy {
                 return L10n.t(.errorAccountDecoding, language: language)
             case .network:
                 return L10n.t(.errorAccountNetwork, language: language)
+            case .emailInvalid:
+                return L10n.t(.errorAccountEmailInvalid, language: language)
+            case .passwordTooShort:
+                // The same sentence the form shows before it sends anything, and
+                // deliberately the same key: one rule stated one way, whether it
+                // was the app or the server that noticed.
+                return L10n.t(.errorAccountPasswordTooShort, language: language)
+            case .emailTaken:
+                // Names the remedy — sign in — because "already registered" on
+                // its own reads as a refusal rather than as an invitation to the
+                // form directly above.
+                return L10n.t(.errorAccountEmailTaken, language: language)
+            case .accountPendingDeletion:
+                // The one registration failure whose remedy is not on this
+                // screen: the reactivation link was emailed when the account was
+                // deleted, and nothing the user types here can substitute for it.
+                return L10n.t(.errorAccountPendingDeletion, language: language)
             }
         }
         if let e = error as? KeychainError {

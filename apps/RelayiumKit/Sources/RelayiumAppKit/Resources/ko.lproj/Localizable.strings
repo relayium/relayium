@@ -62,8 +62,10 @@
 /* MARK: 윈도우 */
 "content.accountLoadFailed" = "계정을 불러오지 못했습니다";
 "content.checkEmailTitle" = "이메일을 확인해 주세요";
-"content.checkEmailBody" = "%@ 으로 확인 링크를 보냈습니다. 확인한 뒤 다시 로그인해 주세요.";
-"content.openRelayium" = "relayium.com 열기";
+"content.checkEmailBody" = "%@ 으로 확인 링크를 보냈습니다. 링크를 열어 확인한 뒤 앱으로 돌아와 로그인하세요.";
+"content.resendVerification" = "확인 메일 다시 보내기";
+"content.resendVerificationBusy" = "보내는 중…";
+"content.resendVerificationSent" = "다시 보내기를 요청했습니다. 오지 않으면 스팸함을 확인하세요.";
 "content.pendingDeletionTitle" = "이 계정은 삭제 예정입니다";
 "content.pendingDeletionBody" = "%@ 이후에 완전히 지워집니다. 계정을 유지하려면 웹에서 다시 활성화하세요.";
 "content.reactivate" = "relayium.com에서 다시 활성화";
@@ -96,14 +98,25 @@
 "gate.createCodeBody" = "코드를 만들면 릴레이 용량이 예약되며 만든 계정에 요금이 청구됩니다. 다른 사람이 만든 코드에 참여하는 데는 계정이 필요하지 않습니다.";
 "gate.signIn" = "로그인";
 "gate.createAccount" = "계정 만들기";
+"gate.openAccount" = "계정 열기";
 
 /* MARK: 로그인 */
 "login.email" = "이메일";
 "login.password" = "비밀번호";
+"login.signInTitle" = "다시 오신 것을 환영합니다";
+"login.signInBody" = "로그인하여 암호화 링크를 보내고 요금제, 기기, 저장된 파일을 관리하세요.";
+"login.registerTitle" = "Relayium 계정 만들기";
+"login.registerBody" = "앱에서 바로 가입하세요. 이메일 주소 확인 링크를 보내 드립니다.";
+"login.displayName" = "이름(선택)";
+"login.confirmPassword" = "비밀번호 확인";
 "login.signIn" = "로그인";
 "login.signingIn" = "로그인하는 중…";
-"login.signInWithApple" = "Apple로 로그인";
-"login.createAccount" = "relayium.com에서 계정 만들기";
+"login.creatingAccount" = "계정을 만드는 중…";
+"login.browserSignIn" = "브라우저로 로그인";
+"login.createAccount" = "계정 만들기";
+"login.needAccount" = "Relayium이 처음이신가요? 계정 만들기";
+"login.errorEmailMissing" = "이메일 주소를 입력하세요.";
+"login.errorPasswordsDiffer" = "두 비밀번호가 일치하지 않습니다.";
 
 /* MARK: 직접 전송 허브와 검증 설정 */
 "hub.transferType" = "전송 종류";
@@ -340,6 +353,10 @@
 "error.account.server" = "서버가 오류를 반환했습니다(%@). 잠시 후 다시 시도하세요.";
 "error.account.decoding" = "이 버전의 앱이 이해할 수 없는 응답을 서버가 보냈습니다. 업데이트하면 해결될 수 있습니다.";
 "error.account.network" = "서버에 연결하지 못했습니다. 인터넷 연결을 확인하세요.";
+"error.account.emailInvalid" = "올바른 이메일 주소가 아닌 것 같습니다.";
+"error.account.passwordTooShort" = "비밀번호는 8자 이상이어야 합니다.";
+"error.account.emailTaken" = "이 주소로 만든 계정이 이미 있습니다. 로그인하거나 다른 주소를 사용하세요.";
+"error.account.pendingDeletion" = "이 주소의 계정이 삭제 예정입니다. 삭제할 때 보낸 메일의 복구 링크를 사용하거나, 유예 기간이 끝난 뒤 다시 시도하세요.";
 "error.keychain.signIn" = "macOS가 로그인 정보를 저장하지 못했습니다(키체인 오류 %@). 앱을 종료하기 전까지는 로그인 상태가 유지됩니다.";
 "error.storedKey.keychain.save" = "키체인에 이 파일의 키를 저장하지 못했습니다(키체인 오류 %@).";
 "error.storedKey.keychain.read" = "macOS가 이 파일의 키를 키체인에서 읽지 못했습니다(키체인 오류 %@).";

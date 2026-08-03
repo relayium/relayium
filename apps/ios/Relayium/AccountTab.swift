@@ -41,11 +41,7 @@ struct AccountTab: View {
                 ProgressView { Text(L10n.t(.accountRestoring)) }
 
             case let .emailUnverified(email):
-                notice(title: L10n.t(.contentCheckEmailTitle),
-                       // The address is the user's own: isolated, not translated.
-                       body: L10n.t(.contentCheckEmailBody, [L10n.token(email)]),
-                       actionTitle: L10n.t(.contentOpenRelayium),
-                       url: AppEnvironment.accountWebURL)
+                checkEmail(email: email)
 
             case let .pendingDeletion(purgeAfter, reactivateToken):
                 notice(title: L10n.t(.contentPendingDeletionTitle),
@@ -76,9 +72,9 @@ struct AccountTab: View {
             case let .ready(user, usage):
                 AccountSummaryView(user: user, usage: usage)
 
-            case .loggedOut, .authenticating, .failed:
+            case .loggedOut, .authenticating, .registering, .failed:
                 // Unreachable: `SignInPresentation.form` is non-nil for exactly
-                // these three, and the `if let` above took them. Listed rather
+                // these four, and the `if let` above took them. Listed rather
                 // than defaulted so a new SessionState case is a compile error
                 // here instead of a blank screen.
                 EmptyView()
@@ -86,7 +82,63 @@ struct AccountTab: View {
         }
     }
 
-    /// The two states reached holding no usable session. "Back to sign in" is a
+    /// The account exists and cannot sign in until the link in its verification
+    /// email has been opened.
+    ///
+    /// Reached two ways — a registration that just succeeded, and a sign-in
+    /// against an unverified account — and it is the same screen for both, on
+    /// both platforms. It used to offer "Open relayium.com", which existed
+    /// because the app could not ask for another email; it now asks the server
+    /// directly, and the only web step left is the link in the message itself.
+    private func checkEmail(email: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.t(.contentCheckEmailTitle)).font(.headline)
+            // The address is the user's own: isolated, not translated.
+            Text(L10n.t(.contentCheckEmailBody, [L10n.token(email)]))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            switch session.resendState {
+            case .requested:
+                // Not "sent": the endpoint answers 200 whether it emailed
+                // anything or swallowed the request under its own throttle.
+                Text(L10n.t(.contentResendVerificationSent))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            case let .failed(message):
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            case .idle, .sending:
+                EmptyView()
+            }
+
+            // One slot, so the screen does not jump and no second request can
+            // start while one is in flight: the button is not on screen then.
+            // Labelled rather than a bare spinner — VoiceOver reads nothing
+            // from one.
+            if isResending {
+                ProgressView { Text(L10n.t(.contentResendVerificationBusy)) }
+            } else {
+                Button(L10n.t(.contentResendVerification)) {
+                    Task { await session.resendVerification(email: email) }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            Button(L10n.t(.contentBackToSignIn)) { Task { await session.logOut() } }
+                .font(.callout)
+        }
+    }
+
+    private var isResending: Bool {
+        if case .sending = session.resendState { return true }
+        return false
+    }
+
+    /// The state reached holding no usable session. "Back to sign in" is a
     /// sign-out, exactly as on macOS: the honest way back is to drop what is
     /// held rather than to pretend it works.
     private func notice(title: String, body: String,

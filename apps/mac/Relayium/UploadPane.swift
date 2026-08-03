@@ -76,7 +76,7 @@ struct UploadPane: View {
             CapabilityGateView(gate: gate,
                                title: L10n.t(.gateSendLinkTitle),
                                body: L10n.t(.gateSendLinkBody),
-                               onSignIn: { navigation.select(.account) })
+                               onAccount: { navigation.selectAccount(intent: $0) })
         }
     }
 

@@ -52,6 +52,16 @@ public enum AppRouting {
 @MainActor public final class AppNavigationModel: ObservableObject {
     @Published public var selection: AppDestination
 
+    /// Which half of the account form the Account destination should open on.
+    ///
+    /// The whole reason it exists: a capability gate's **Create an account**
+    /// used to open relayium.com, and routing it to the Account destination
+    /// without this would land the user on a sign-in form — a button that names
+    /// one thing and produces another. The form reads this on arrival and is
+    /// otherwise free to change mode on its own; nothing here reaches back into
+    /// the form's typed fields.
+    @Published public private(set) var accountIntent: AuthMode = .signIn
+
     /// How many times `select(_:)` has been called. Test-observable, so the
     /// "exactly one assignment, nothing else touched" contract above is
     /// something a test can check rather than something a comment claims.
@@ -66,5 +76,24 @@ public enum AppRouting {
     public func select(_ d: AppDestination) {
         selection = d
         selectionWrites += 1
+    }
+
+    /// Open the account surface on a named half of the form.
+    ///
+    /// Still exactly one selection write: the intent is set first so the form
+    /// cannot render once on the wrong mode and then swap under the user.
+    public func selectAccount(intent: AuthMode) {
+        accountIntent = intent
+        select(.account)
+    }
+
+    /// Keep the remembered account-form half in step with a mode change that
+    /// happened *inside* the form, without manufacturing a navigation event.
+    ///
+    /// This is load-bearing when a create-account route is followed by the
+    /// user's own “Back to sign in”: a later remount must not replay the old
+    /// `.register` intent and undo that choice.
+    public func rememberAccountIntent(_ intent: AuthMode) {
+        accountIntent = intent
     }
 }

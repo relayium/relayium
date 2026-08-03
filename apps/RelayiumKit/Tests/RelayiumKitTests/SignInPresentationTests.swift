@@ -19,9 +19,10 @@ final class SignInPresentationTests: XCTestCase {
         return .ready(user: me.user, usage: usage)
     }
 
-    func testTheFormOwnsExactlyThreeStates() throws {
+    func testTheFormOwnsExactlyFourStates() throws {
         XCTAssertNotNil(SignInPresentation.form(for: .loggedOut))
         XCTAssertNotNil(SignInPresentation.form(for: .authenticating))
+        XCTAssertNotNil(SignInPresentation.form(for: .registering))
         XCTAssertNotNil(SignInPresentation.form(for: .failed(message: "nope")))
 
         XCTAssertNil(SignInPresentation.form(for: .restoring))
@@ -34,8 +35,106 @@ final class SignInPresentationTests: XCTestCase {
 
     func testOnlyAnInFlightAttemptIsBusy() {
         XCTAssertEqual(SignInPresentation.form(for: .authenticating)?.isBusy, true)
+        XCTAssertEqual(SignInPresentation.form(for: .registering)?.isBusy, true)
         XCTAssertEqual(SignInPresentation.form(for: .loggedOut)?.isBusy, false)
         XCTAssertEqual(SignInPresentation.form(for: .failed(message: "nope"))?.isBusy, false)
+    }
+
+    /// Busy is not one fact but two, and the label has to say which. A
+    /// registration reporting "Signing in…" would name an outcome it cannot
+    /// reach — it ends on the check-email screen, never on an account.
+    func testTheBusyLabelNamesTheOperationThatIsActuallyRunning() {
+        XCTAssertEqual(SignInPresentation.form(for: .authenticating)?.activity, .signingIn)
+        XCTAssertEqual(SignInPresentation.form(for: .registering)?.activity, .creatingAccount)
+        XCTAssertEqual(AuthActivity.signingIn.busyTitleKey, .loginSigningIn)
+        XCTAssertEqual(AuthActivity.creatingAccount.busyTitleKey, .loginCreatingAccount)
+        XCTAssertNil(AuthActivity.idle.busyTitleKey)
+    }
+
+    /// The two modes name themselves differently in both directions, so the
+    /// button that switches modes never reads like the button that submits.
+    func testTheModeDecidesBothLabelsAndToggles() {
+        XCTAssertEqual(AuthMode.signIn.submitTitleKey, .loginSignIn)
+        XCTAssertEqual(AuthMode.register.submitTitleKey, .loginCreateAccount)
+        XCTAssertEqual(AuthMode.signIn.titleKey, .loginSignInTitle)
+        XCTAssertEqual(AuthMode.signIn.bodyKey, .loginSignInBody)
+        XCTAssertEqual(AuthMode.register.titleKey, .loginRegisterTitle)
+        XCTAssertEqual(AuthMode.register.bodyKey, .loginRegisterBody)
+        XCTAssertEqual(AuthMode.signIn.switchTitleKey, .loginNeedAccount)
+        XCTAssertEqual(AuthMode.register.switchTitleKey, .contentBackToSignIn)
+        XCTAssertEqual(AuthMode.signIn.toggled, .register)
+        XCTAssertEqual(AuthMode.register.toggled, .signIn)
+        XCTAssertNotEqual(AuthMode.register.submitTitleKey, AuthMode.signIn.switchTitleKey,
+                          "submitting and switching modes must not share one string")
+    }
+
+    // MARK: - what the form refuses to send
+
+    /// Emptiness only, and per mode: the confirmation field does not exist on
+    /// the sign-in half, so requiring it there would disable a working button.
+    func testTheButtonIsLiveOnceTheRequiredFieldsAreNonEmpty() {
+        let signIn = RegistrationDraft(email: "a@b.co", password: "pw12345678")
+        XCTAssertTrue(SignInPresentation.canSubmit(mode: .signIn, draft: signIn, isBusy: false))
+        XCTAssertFalse(SignInPresentation.canSubmit(mode: .register, draft: signIn, isBusy: false),
+                       "create-account also needs the confirmation typed")
+        XCTAssertFalse(SignInPresentation.canSubmit(mode: .signIn, draft: signIn, isBusy: true),
+                       "an attempt is already in flight")
+
+        let full = RegistrationDraft(email: "a@b.co", password: "pw12345678",
+                                     confirmPassword: "pw12345678")
+        XCTAssertTrue(SignInPresentation.canSubmit(mode: .register, draft: full, isBusy: false))
+        XCTAssertFalse(SignInPresentation.canSubmit(
+            mode: .register,
+            draft: RegistrationDraft(email: "", password: "pw12345678", confirmPassword: "pw12345678"),
+            isBusy: false))
+    }
+
+    /// A greyed button states no reason, so the substantive checks produce a
+    /// SENTENCE on submit instead of disabling the control. These are the three
+    /// sentences, in the order the user should fix them.
+    func testTheSubstantiveChecksRunOnSubmitAndNameOneFieldEach() {
+        XCTAssertEqual(SignInPresentation.problem(in: RegistrationDraft(
+            email: "   ", password: "pw12345678", confirmPassword: "pw12345678")),
+                       .emailMissing,
+                       "whitespace is not an address; the server would trim it and refuse")
+        XCTAssertEqual(SignInPresentation.problem(in: RegistrationDraft(
+            email: "a@b.co", password: "short12", confirmPassword: "short12")),
+                       .passwordTooShort)
+        XCTAssertEqual(SignInPresentation.problem(in: RegistrationDraft(
+            email: "a@b.co", password: "pw12345678", confirmPassword: "pw1234567")),
+                       .passwordsDiffer)
+        XCTAssertNil(SignInPresentation.problem(in: RegistrationDraft(
+            displayName: "", email: "a@b.co",
+            password: "pw12345678", confirmPassword: "pw12345678")),
+                     "a name is optional to the server and optional here")
+    }
+
+    /// The server counts BYTES (`len(password) < 8` in Go). Counting characters
+    /// would refuse a three-character Chinese password the server accepts, which
+    /// is a refusal the user cannot understand and cannot appeal.
+    func testThePasswordMinimumIsMeasuredInBytesLikeTheServers() {
+        XCTAssertEqual(SignInPresentation.minimumPasswordBytes, 8)
+        let chinese = "密码密"   // 3 characters, 9 UTF-8 bytes
+        XCTAssertEqual(chinese.count, 3)
+        XCTAssertNil(SignInPresentation.problem(in: RegistrationDraft(
+            email: "a@b.co", password: chinese, confirmPassword: chinese)))
+        let ascii = "abcdefg"    // 7 characters, 7 bytes
+        XCTAssertEqual(SignInPresentation.problem(in: RegistrationDraft(
+            email: "a@b.co", password: ascii, confirmPassword: ascii)), .passwordTooShort)
+    }
+
+    /// The form's own refusals and the server's arrive through one message slot,
+    /// so the password rule must read identically whichever side noticed it.
+    func testTheFormAndTheServerStateThePasswordRuleWithOneString() {
+        XCTAssertEqual(RegistrationProblem.passwordTooShort.messageKey,
+                       .errorAccountPasswordTooShort)
+        for language in AppLanguage.allCases {
+            XCTAssertEqual(L10n.t(RegistrationProblem.passwordTooShort.messageKey,
+                                  language: language),
+                           ErrorCopy.message(for: AccountError.passwordTooShort,
+                                             language: language),
+                           language.rawValue)
+        }
     }
 
     // The message is the rejection the session carries, verbatim — the form does
@@ -45,6 +144,15 @@ final class SignInPresentationTests: XCTestCase {
                        "wrong password")
         XCTAssertNil(SignInPresentation.form(for: .loggedOut)?.errorMessage)
         XCTAssertNil(SignInPresentation.form(for: .authenticating)?.errorMessage)
+    }
+
+    /// The form must not be torn down mid-registration. It is the same claim the
+    /// three sign-in states rest on — one non-nil answer means one branch in the
+    /// view, which is what preserves the typed fields AND the mode.
+    func testARegistrationInFlightStillRendersTheForm() {
+        let busy = SignInPresentation.form(for: .registering)
+        XCTAssertNotNil(busy)
+        XCTAssertNil(busy?.errorMessage)
     }
 
     // A busy form must never also be showing the previous attempt's rejection:

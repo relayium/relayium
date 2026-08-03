@@ -62,8 +62,10 @@
 /* MARK: Fenster */
 "content.accountLoadFailed" = "Dein Konto konnte nicht geladen werden";
 "content.checkEmailTitle" = "Sieh in deinem Postfach nach";
-"content.checkEmailBody" = "Wir haben einen Bestätigungslink an %@ geschickt. Bestätige ihn und melde dich dann erneut an.";
-"content.openRelayium" = "relayium.com öffnen";
+"content.checkEmailBody" = "Wir haben einen Bestätigungslink an %@ geschickt. Öffne ihn, komm dann hierher zurück und melde dich an.";
+"content.resendVerification" = "E-Mail erneut senden";
+"content.resendVerificationBusy" = "Wird gesendet…";
+"content.resendVerificationSent" = "Angefordert. Falls nichts ankommt, sieh im Spam-Ordner nach.";
 "content.pendingDeletionTitle" = "Dieses Konto ist zur Löschung vorgemerkt";
 "content.pendingDeletionBody" = "Es wird nach %@ endgültig gelöscht. Reaktiviere es im Web, um es zu behalten.";
 "content.reactivate" = "Auf relayium.com reaktivieren";
@@ -96,14 +98,25 @@
 "gate.createCodeBody" = "Ein Code reserviert Relay-Kapazität, die dem Konto berechnet wird, das ihn erstellt hat. Zum Beitreten zu einem Code, den jemand anderes erstellt hat, ist kein Konto nötig.";
 "gate.signIn" = "Anmelden";
 "gate.createAccount" = "Konto erstellen";
+"gate.openAccount" = "Konto öffnen";
 
 /* MARK: Anmeldung */
 "login.email" = "E-Mail";
 "login.password" = "Passwort";
+"login.signInTitle" = "Willkommen zurück";
+"login.signInBody" = "Melde dich an, um verschlüsselte Links zu senden und Tarif, Geräte und gespeicherte Dateien zu verwalten.";
+"login.registerTitle" = "Relayium-Konto erstellen";
+"login.registerBody" = "Registriere dich direkt in der App. Wir senden dir einen Bestätigungslink per E-Mail.";
+"login.displayName" = "Name (optional)";
+"login.confirmPassword" = "Passwort bestätigen";
 "login.signIn" = "Anmelden";
 "login.signingIn" = "Anmeldung läuft…";
-"login.signInWithApple" = "Mit Apple anmelden";
-"login.createAccount" = "Konto auf relayium.com erstellen";
+"login.creatingAccount" = "Konto wird erstellt…";
+"login.browserSignIn" = "Im Browser anmelden";
+"login.createAccount" = "Konto erstellen";
+"login.needAccount" = "Neu bei Relayium? Konto erstellen";
+"login.errorEmailMissing" = "Gib deine E-Mail-Adresse ein.";
+"login.errorPasswordsDiffer" = "Die beiden Passwörter stimmen nicht überein.";
 
 /* MARK: Direkt-Hub und Verifizierung */
 "hub.transferType" = "Übertragungsart";
@@ -348,6 +361,10 @@
 "error.account.server" = "Der Server hat einen Fehler gemeldet (%@). Versuch es gleich noch einmal.";
 "error.account.decoding" = "Der Server hat eine Antwort geschickt, die diese App-Version nicht versteht. Ein Update kann helfen.";
 "error.account.network" = "Der Server war nicht erreichbar. Prüfe deine Internetverbindung.";
+"error.account.emailInvalid" = "Das sieht nicht nach einer gültigen E-Mail-Adresse aus.";
+"error.account.passwordTooShort" = "Verwende mindestens 8 Zeichen für dein Passwort.";
+"error.account.emailTaken" = "Für diese Adresse gibt es bereits ein Konto. Melde dich stattdessen an oder nimm eine andere Adresse.";
+"error.account.pendingDeletion" = "Ein Konto für diese Adresse wird gelöscht. Nutze den Reaktivierungslink aus der E-Mail von der Löschung oder versuche es nach Ablauf der Frist erneut.";
 "error.keychain.signIn" = "macOS konnte deine Anmeldung nicht sichern (Schlüsselbund-Fehler %@). Du bleibst angemeldet, bis du die App beendest.";
 "error.storedKey.keychain.save" = "Der Schlüsselbund konnte den Schlüssel dieser Datei nicht sichern (Schlüsselbund-Fehler %@).";
 "error.storedKey.keychain.read" = "macOS konnte den Schlüssel dieser Datei nicht aus dem Schlüsselbund lesen (Schlüsselbund-Fehler %@).";

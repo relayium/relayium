@@ -297,6 +297,112 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "only picked preflight should require the upload token")
     }
 
+    // MARK: - registration happens in the app
+
+    /// No macOS surface opens the website to do account work.
+    ///
+    /// `AppEnvironment.accountWebURL` was the "send them to relayium.com"
+    /// hand-off, and three surfaces used it: the sign-in form's *Create an
+    /// account*, the capability gate's, and both check-email screens. All four
+    /// are native now, so a reference here is a regression to the flow this
+    /// slice replaced.
+    ///
+    /// Two hand-offs survive and are deliberately allowed: `plansWebURL`
+    /// (billing stays on the web) and `reactivateWebURL` (a frozen account
+    /// cannot sign in, so the token in that link is the only way back).
+    func testNoMacSurfaceOpensTheWebsiteForAccountWork() throws {
+        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+            XCTAssertFalse(text.contains("accountWebURL"),
+                           "\(name) sends the user to the website for account work")
+        }
+    }
+
+    /// The form creates the account itself, and owns which half is showing.
+    func testTheFormRegistersNativelyAndOwnsItsMode() throws {
+        let login = try source(named: "LoginView.swift")
+        XCTAssertTrue(login.contains("session.register(email:"),
+                      "the form must create the account through the session, in the app")
+        XCTAssertTrue(login.contains("@State private var mode: AuthMode"),
+                      "the mode is the form's own state")
+        XCTAssertTrue(login.contains("SignInPresentation.problem(in: draft)"),
+                      "the substantive checks run before a request goes out")
+        for (name, text) in try sources(under: macRoot, atLeast: 20)
+        where name != "LoginView.swift" && name != "Components/CapabilityGateView.swift" {
+            XCTAssertFalse(text.contains("AuthMode"),
+                           "\(name) must not decide the form's mode")
+        }
+    }
+
+    /// A capability gate's **Create an account** routes into the app.
+    ///
+    /// Both halves matter. Opening a website would be the old flow; selecting
+    /// the Account destination without naming the create-account half would be a
+    /// button that says one thing and produces a sign-in form — the same defect
+    /// as the greyed control `CapabilityGateView` exists to replace.
+    func testTheCapabilityGatesCreateAccountSelectsTheNativeForm() throws {
+        let gate = try source(named: "Components/CapabilityGateView.swift")
+        XCTAssertTrue(gate.contains("Button(L10n.t(.gateCreateAccount)) { onAccount(.register) }"),
+                      "Create an account must open the native form on its create half")
+        XCTAssertTrue(gate.contains("Button(L10n.t(.gateOpenAccount)) { onAccount(.signIn) }"),
+                      "an unverified address is finished on the Account destination, "
+                      + "which owns the resend action — not on a website")
+        for caller in ["UploadPane.swift", "DirectPane.swift", "RealtimeTextPane.swift"] {
+            XCTAssertTrue(try source(named: caller)
+                .contains("onAccount: { navigation.selectAccount(intent: $0) }"),
+                          "\(caller) must pass the gate's requested half through to navigation")
+        }
+    }
+
+    /// The check-email screen can act and can leave, exactly as on iOS.
+    func testTheCheckEmailScreenCanResendAndGoBack() throws {
+        let account = try source(named: "Destinations/AccountDestination.swift")
+        XCTAssertTrue(account.contains("session.resendVerification(email: email)"),
+                      "the check-email screen must be able to ask for another email")
+        XCTAssertTrue(account.contains("L10n.t(.contentBackToSignIn)"),
+                      "and must offer the way back, which is a sign-out")
+        XCTAssertTrue(account.contains("navigation.rememberAccountIntent(.signIn)"),
+                      "Back to sign in must not replay an older register route")
+        XCTAssertTrue(account.contains("if isResending {"),
+                      "the resend button must be replaced while a request is in flight, "
+                      + "so a second press cannot start a second request")
+    }
+
+    /// The browser device flow may not impersonate native Sign in with Apple.
+    ///
+    /// It opens relayium.com in an `ASWebAuthenticationSession` sheet and polls
+    /// `/api/cli/device/*`. Whatever the user picks over there — Apple, a
+    /// password, anything else — is the browser's business, and no Apple-ID API
+    /// and no `com.apple.developer.applesignin` entitlement exists in this app.
+    /// So a button labelled for Apple was a claim about a mechanism that is not
+    /// here. The action stays; only the claim goes.
+    ///
+    /// The ban is on the Apple-ID vocabulary specifically, NOT on the
+    /// `AuthenticationServices` framework: `BrowserSignIn.swift` imports it for
+    /// the web sheet, which is a different API for a different thing, and
+    /// banning the import would force the sheet to be rewritten to satisfy a
+    /// test rather than a requirement.
+    func testTheBrowserFallbackDoesNotClaimToBeNativeApple() throws {
+        let login = try rawSource(named: "LoginView.swift")
+        XCTAssertTrue(login.contains("L10n.t(.loginBrowserSignIn)"),
+                      "the browser fallback must be labelled for what it does")
+        XCTAssertTrue(login.contains("startBrowserLogin()"),
+                      "and must still work — this renames a claim, it does not remove a feature")
+        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+            for appleism in ["SignInWithAppleButton", "ASAuthorizationAppleID",
+                             "ASAuthorizationController", "signInWithApple"] {
+                XCTAssertFalse(text.contains(appleism),
+                               "\(name) claims native Apple sign-in: \(appleism)")
+            }
+        }
+        XCTAssertTrue(try source(named: "BrowserSignIn.swift")
+            .contains("ASWebAuthenticationSession"),
+                      "the sheet is a web session, which is what the label now says")
+        let entitlements = try String(
+            contentsOf: macRoot.appendingPathComponent("Relayium.entitlements"), encoding: .utf8)
+        XCTAssertFalse(entitlements.contains("applesignin"),
+                       "this slice adds no Apple entitlement")
+    }
+
     // MARK: - the sidebar's live-session marker
 
     /// The marker has to answer "is the running session presented *here*", and

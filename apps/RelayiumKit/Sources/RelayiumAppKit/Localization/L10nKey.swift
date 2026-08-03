@@ -98,8 +98,23 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case contentAccountLoadFailed = "content.accountLoadFailed"
     case contentCheckEmailTitle = "content.checkEmailTitle"
     /// %@ — the account's email address.
+    ///
+    /// Says *come back here* rather than "open relayium.com": the link in the
+    /// email is the only web step in the flow, and the app is where the session
+    /// is created afterwards.
     case contentCheckEmailBody = "content.checkEmailBody"
-    case contentOpenRelayium = "content.openRelayium"
+    /// The action on the check-email screen. It replaces `content.openRelayium`,
+    /// which sent the user to a website to compensate for the app having no way
+    /// to ask for another email — which it now has.
+    case contentResendVerification = "content.resendVerification"
+    /// The request is in flight. Labelled, for the same reason every other busy
+    /// state in the app is: a bare spinner reads as nothing to VoiceOver.
+    case contentResendVerificationBusy = "content.resendVerificationBusy"
+    /// What a 200 from the resend endpoint actually establishes: the server
+    /// accepted the request. It answers 200 whether or not it sent anything (see
+    /// `AccountClient.resendVerification`), so the copy claims acceptance and
+    /// names the spam folder rather than promising a delivery it cannot observe.
+    case contentResendVerificationSent = "content.resendVerificationSent"
     case contentPendingDeletionTitle = "content.pendingDeletionTitle"
     /// %@ — the purge date.
     case contentPendingDeletionBody = "content.pendingDeletionBody"
@@ -164,16 +179,58 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// submits the form once the user is already looking at it.
     case gateSignIn = "gate.signIn"
     case gateCreateAccount = "gate.createAccount"
+    /// Selects the Account destination for a user who already has an account and
+    /// something to finish there — verifying an address, chiefly. Distinct from
+    /// `gate.signIn`, which promises a form, and from `content.openRelayium`,
+    /// which promised a website and no longer exists.
+    case gateOpenAccount = "gate.openAccount"
 
-    // MARK: - Sign in
+    // MARK: - Sign in and create account
+    //
+    // One form, two modes. Registration happens IN THE APP against
+    // `POST /api/auth/register`; the only web step in the flow is the link in
+    // the verification email, which is the server's own confirmation endpoint.
 
     case loginEmail = "login.email"
     case loginPassword = "login.password"
+    /// Mode-specific heading and explanation above the one account-access form.
+    /// These make the screen explain the value of an account rather than
+    /// presenting four unexplained fields as the whole product experience.
+    case loginSignInTitle = "login.signInTitle"
+    case loginSignInBody = "login.signInBody"
+    case loginRegisterTitle = "login.registerTitle"
+    case loginRegisterBody = "login.registerBody"
+    /// The optional name field, offered only in create-account mode. Marked
+    /// optional in the label itself, because a form that refuses a submission
+    /// over a field nobody said was required is the more expensive mistake.
+    case loginDisplayName = "login.displayName"
+    case loginConfirmPassword = "login.confirmPassword"
     case loginSignIn = "login.signIn"
     /// A sign-in in flight, for the same reason as `account.restoring`.
     case loginSigningIn = "login.signingIn"
-    case loginSignInWithApple = "login.signInWithApple"
+    /// A registration in flight. Separate from `login.signingIn` because they
+    /// are different operations with different outcomes — this one ends on the
+    /// check-email screen, never on an account.
+    case loginCreatingAccount = "login.creatingAccount"
+    /// The macOS browser device flow.
+    ///
+    /// It used to be labelled "Sign in with Apple", which was a claim about a
+    /// mechanism this app does not implement: it opens relayium.com in a sheet
+    /// and polls `/api/cli/device/*` for an approval. The wording now names what
+    /// actually happens, so the button no longer impersonates a native
+    /// `ASAuthorizationAppleIDButton` that no entitlement backs.
+    case loginBrowserSignIn = "login.browserSignIn"
+    /// The submit button in create-account mode.
     case loginCreateAccount = "login.createAccount"
+    /// The control that switches the form from sign-in into create-account mode.
+    /// A different register from the button it reveals, so the two do not read as
+    /// two ways to do the same thing.
+    case loginNeedAccount = "login.needAccount"
+    /// The form's own refusals, checked before any request goes out. There is no
+    /// key for the password rule: it is the server's rule, so both sides say it
+    /// through `error.account.passwordTooShort`.
+    case loginErrorEmailMissing = "login.errorEmailMissing"
+    case loginErrorPasswordsDiffer = "login.errorPasswordsDiffer"
 
     // MARK: - Direct hub and verification setting
 
@@ -263,8 +320,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// Names the honest asymmetry — uploads go to your account, receiving a link
     /// never needs one.
     case sendAccountBody = "send.accountBody"
-    /// Selects the Account tab. Distinct from `content.openRelayium`, which
-    /// opens a browser — which this must not do.
+    /// Selects the Account tab. It has never opened a browser, and now nothing
+    /// on the account path does: `content.openRelayium` — the key that did — is
+    /// gone, replaced by in-app registration and `content.resendVerification`.
+    /// `gate.openAccount` is its macOS counterpart.
     case sendOpenAccount = "send.openAccount"
     /// "Signed in, but the account did not load" is a different sentence from
     /// "you need an account", and telling this user to sign in would be false.
@@ -505,6 +564,14 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case errorAccountServer = "error.account.server"
     case errorAccountDecoding = "error.account.decoding"
     case errorAccountNetwork = "error.account.network"
+    /// The four registration refusals. Each names the remedy rather than the
+    /// status code, because each has a different one.
+    case errorAccountEmailInvalid = "error.account.emailInvalid"
+    /// Rendered by the form's own check as well as by the server's 400 — one
+    /// rule, one sentence.
+    case errorAccountPasswordTooShort = "error.account.passwordTooShort"
+    case errorAccountEmailTaken = "error.account.emailTaken"
+    case errorAccountPendingDeletion = "error.account.pendingDeletion"
     /// %@ — an OSStatus, verbatim.
     case errorKeychainSignIn = "error.keychain.signIn"
     /// %@ — an OSStatus, verbatim.

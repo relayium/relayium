@@ -65,8 +65,10 @@
 /* MARK: النافذة */
 "content.accountLoadFailed" = "تعذّر تحميل حسابك";
 "content.checkEmailTitle" = "تحقق من بريدك";
-"content.checkEmailBody" = "أرسلنا رابط توثيق إلى %@. وثّقه ثم سجّل الدخول مجددًا.";
-"content.openRelayium" = "فتح relayium.com";
+"content.checkEmailBody" = "أرسلنا رابط توثيق إلى %@. افتح الرابط ثم عد إلى التطبيق وسجّل الدخول.";
+"content.resendVerification" = "إعادة إرسال رسالة التوثيق";
+"content.resendVerificationBusy" = "جارٍ الإرسال…";
+"content.resendVerificationSent" = "تم إرسال الطلب. إن لم تصلك الرسالة فتحقّق من مجلد البريد المزعج.";
 "content.pendingDeletionTitle" = "هذا الحساب مُجدوَل للحذف";
 "content.pendingDeletionBody" = "سيُمحى بعد %@. أعِد تفعيله من الويب للاحتفاظ به.";
 "content.reactivate" = "إعادة التفعيل على relayium.com";
@@ -99,14 +101,25 @@
 "gate.createCodeBody" = "إنشاء رمز يحجز سعة ترحيل تُحتسب على الحساب الذي أنشأه. الانضمام إلى رمز أنشأه شخص آخر لا يتطلب حسابًا.";
 "gate.signIn" = "تسجيل الدخول";
 "gate.createAccount" = "إنشاء حساب";
+"gate.openAccount" = "فتح الحساب";
 
 /* MARK: تسجيل الدخول */
 "login.email" = "البريد الإلكتروني";
 "login.password" = "كلمة السر";
+"login.signInTitle" = "مرحبًا بعودتك";
+"login.signInBody" = "سجّل الدخول لإرسال روابط مشفّرة وإدارة خطتك وأجهزتك وملفاتك المخزّنة.";
+"login.registerTitle" = "إنشاء حساب Relayium";
+"login.registerBody" = "سجّل من داخل التطبيق. سنرسل إلى بريدك رابطًا لتوثيق العنوان.";
+"login.displayName" = "الاسم (اختياري)";
+"login.confirmPassword" = "تأكيد كلمة السر";
 "login.signIn" = "تسجيل الدخول";
 "login.signingIn" = "جارٍ تسجيل الدخول…";
-"login.signInWithApple" = "تسجيل الدخول باستخدام Apple";
-"login.createAccount" = "إنشاء حساب على relayium.com";
+"login.creatingAccount" = "جارٍ إنشاء الحساب…";
+"login.browserSignIn" = "تسجيل الدخول عبر المتصفح";
+"login.createAccount" = "إنشاء حساب";
+"login.needAccount" = "جديد على Relayium؟ أنشئ حسابًا";
+"login.errorEmailMissing" = "أدخل بريدك الإلكتروني.";
+"login.errorPasswordsDiffer" = "كلمتا السر غير متطابقتين.";
 
 /* MARK: مركز الاتصال المباشر والتحقق */
 "hub.transferType" = "نوع النقل";
@@ -383,6 +396,10 @@
 "error.account.server" = "أعاد الخادم خطأ (%@). أعد المحاولة بعد قليل.";
 "error.account.decoding" = "أرسل الخادم ردًا لا يفهمه هذا الإصدار من التطبيق. قد يحل التحديث المشكلة.";
 "error.account.network" = "تعذّر الوصول إلى الخادم. تحقق من اتصالك بالإنترنت.";
+"error.account.emailInvalid" = "لا يبدو هذا بريدًا إلكترونيًا صالحًا.";
+"error.account.passwordTooShort" = "استخدم 8 أحرف على الأقل لكلمة السر.";
+"error.account.emailTaken" = "يوجد حساب بهذا البريد بالفعل. سجّل الدخول أو استخدم بريدًا آخر.";
+"error.account.pendingDeletion" = "هناك حساب بهذا البريد مجدول للحذف. استخدم رابط إعادة التفعيل المرسل عند الحذف، أو أعد المحاولة بعد انتهاء مهلة السماح.";
 "error.keychain.signIn" = "تعذّر على macOS تخزين تسجيل دخولك (خطأ سلسلة المفاتيح %@). ستبقى مسجَّل الدخول حتى تُنهي التطبيق.";
 "error.storedKey.keychain.save" = "تعذّر على سلسلة المفاتيح حفظ مفتاح هذا الملف (خطأ سلسلة المفاتيح %@).";
 "error.storedKey.keychain.read" = "تعذّر على macOS قراءة مفتاح هذا الملف من سلسلة المفاتيح (خطأ سلسلة المفاتيح %@).";

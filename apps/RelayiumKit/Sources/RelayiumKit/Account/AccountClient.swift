@@ -36,6 +36,87 @@ public struct AccountClient {
         }
     }
 
+    /// Create a password account.
+    ///
+    /// It returns an ADDRESS, not a token, and that is the endpoint's whole
+    /// shape: registration issues no session, because the account cannot sign in
+    /// until the link in the verification email has been opened. A caller that
+    /// expected a bearer here would be modelling a product that does not exist.
+    ///
+    /// `displayName` is optional to the server (it accepts an empty string) and
+    /// is passed through as given — it is the user's own text, never translated.
+    ///
+    /// Nothing in this method logs, and the password reaches the transport only
+    /// inside the POST body: never a URL, never a header, never an error value.
+    public func register(email: String,
+                         password: String,
+                         displayName: String) async throws -> RegistrationOutcome {
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/auth/register"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject:
+            ["email": email, "password": password, "displayName": displayName])
+        let (data, resp) = try await send(req)
+        switch resp.statusCode {
+        case 200:
+            guard let body = try? JSONDecoder().decode(RegistrationSuccessBody.self, from: data),
+                  body.status == "verification_sent" else {
+                throw AccountError.decoding
+            }
+            // The server's normalization when it sent one, the typed address
+            // otherwise — never an empty string, which would leave the
+            // check-email screen naming no mailbox at all.
+            let normalized = body.email.flatMap { $0.isEmpty ? nil : $0 } ?? email
+            return RegistrationOutcome(email: normalized)
+        case 400:
+            // Two documented refusals share this status, and a body that is
+            // neither (the plain-text "bad request" a malformed JSON body earns)
+            // is not one of them.
+            switch errorCode(in: data) {
+            case "invalid_email":       throw AccountError.emailInvalid
+            case "password too short":  throw AccountError.passwordTooShort
+            default:                    throw AccountError.server(status: 400)
+            }
+        case 409:
+            // Pending deletion first: it is the narrower fact, and the server
+            // checks it ahead of the taken-email case for the same reason.
+            switch errorCode(in: data) {
+            case "account_pending_deletion": throw AccountError.accountPendingDeletion
+            case "email already registered": throw AccountError.emailTaken
+            default:                         throw AccountError.server(status: 409)
+            }
+        case 429: throw AccountError.rateLimited
+        default:  throw AccountError.server(status: resp.statusCode)
+        }
+    }
+
+    /// Ask for another verification email.
+    ///
+    /// The endpoint answers **200 unconditionally** — it will not say whether an
+    /// account exists, whether it is already verified, or whether its own
+    /// per-address throttle swallowed this request, because any of those answers
+    /// is an account-enumeration oracle. So a 200 here means *the server
+    /// accepted the request*, and nothing stronger; only a transport failure or
+    /// a non-200 from something in front of the server is reportable, and this
+    /// throws for exactly those.
+    public func resendVerification(email: String) async throws {
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/auth/email/resend"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["email": email])
+        let (_, resp) = try await send(req)
+        switch resp.statusCode {
+        case 200: return
+        case 429: throw AccountError.rateLimited
+        default:  throw AccountError.server(status: resp.statusCode)
+        }
+    }
+
+    /// The `error` field of a JSON error body, or nil when the body is not one.
+    private func errorCode(in data: Data) -> String? {
+        (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error
+    }
+
     /// Revoke exactly the bearer presented by this native client. A 401 is
     /// idempotent success: the token is already absent or invalid.
     public func logout(token: String) async throws {

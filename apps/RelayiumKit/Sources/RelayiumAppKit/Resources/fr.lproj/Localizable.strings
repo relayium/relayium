@@ -62,8 +62,10 @@
 /* MARK: fenêtre */
 "content.accountLoadFailed" = "Impossible de charger votre compte";
 "content.checkEmailTitle" = "Vérifiez votre boîte mail";
-"content.checkEmailBody" = "Nous avons envoyé un lien de vérification à %@. Validez-le, puis reconnectez-vous.";
-"content.openRelayium" = "Ouvrir relayium.com";
+"content.checkEmailBody" = "Nous avons envoyé un lien de vérification à %@. Ouvrez-le, puis revenez ici pour vous connecter.";
+"content.resendVerification" = "Renvoyer l'e-mail";
+"content.resendVerificationBusy" = "Envoi en cours…";
+"content.resendVerificationSent" = "Demande envoyée. Si rien n'arrive, vérifiez vos courriers indésirables.";
 "content.pendingDeletionTitle" = "Ce compte est programmé pour suppression";
 "content.pendingDeletionBody" = "Il sera effacé après le %@. Réactivez-le sur le web pour le conserver.";
 "content.reactivate" = "Réactiver sur relayium.com";
@@ -96,14 +98,25 @@
 "gate.createCodeBody" = "Créer un code réserve de la capacité de relais, facturée au compte qui l’a créé. Rejoindre un code créé par quelqu’un d’autre ne nécessite aucun compte.";
 "gate.signIn" = "Se connecter";
 "gate.createAccount" = "Créer un compte";
+"gate.openAccount" = "Ouvrir le compte";
 
 /* MARK: connexion */
 "login.email" = "E-mail";
 "login.password" = "Mot de passe";
+"login.signInTitle" = "Bon retour";
+"login.signInBody" = "Connectez-vous pour envoyer des liens chiffrés et gérer votre offre, vos appareils et vos fichiers stockés.";
+"login.registerTitle" = "Créer votre compte Relayium";
+"login.registerBody" = "Inscrivez-vous directement dans l’app. Nous vous enverrons un lien de vérification par e-mail.";
+"login.displayName" = "Nom (facultatif)";
+"login.confirmPassword" = "Confirmer le mot de passe";
 "login.signIn" = "Se connecter";
 "login.signingIn" = "Connexion en cours…";
-"login.signInWithApple" = "Se connecter avec Apple";
-"login.createAccount" = "Créer un compte sur relayium.com";
+"login.creatingAccount" = "Création du compte…";
+"login.browserSignIn" = "Se connecter dans le navigateur";
+"login.createAccount" = "Créer un compte";
+"login.needAccount" = "Nouveau sur Relayium ? Créer un compte";
+"login.errorEmailMissing" = "Saisissez votre adresse e-mail.";
+"login.errorPasswordsDiffer" = "Les deux mots de passe ne correspondent pas.";
 
 /* MARK: hub direct et vérification */
 "hub.transferType" = "Type de transfert";
@@ -348,6 +361,10 @@
 "error.account.server" = "Le serveur a renvoyé une erreur (%@). Réessayez sous peu.";
 "error.account.decoding" = "Le serveur a renvoyé une réponse que cette version de l’app ne comprend pas. Une mise à jour peut y remédier.";
 "error.account.network" = "Serveur injoignable. Vérifiez votre connexion Internet.";
+"error.account.emailInvalid" = "Cette adresse e-mail ne semble pas valide.";
+"error.account.passwordTooShort" = "Utilisez au moins 8 caractères pour votre mot de passe.";
+"error.account.emailTaken" = "Un compte existe déjà pour cette adresse. Connectez-vous ou utilisez une autre adresse.";
+"error.account.pendingDeletion" = "Un compte lié à cette adresse est en cours de suppression. Utilisez le lien de réactivation envoyé par e-mail lors de la suppression, ou réessayez après la période de grâce.";
 "error.keychain.signIn" = "macOS n’a pas pu enregistrer votre connexion (erreur de trousseau %@). Vous resterez connecté jusqu’à ce que vous quittiez l’app.";
 "error.storedKey.keychain.save" = "Le trousseau n’a pas pu enregistrer la clé de ce fichier (erreur de trousseau %@).";
 "error.storedKey.keychain.read" = "macOS n’a pas pu lire la clé de ce fichier dans le trousseau (erreur de trousseau %@).";

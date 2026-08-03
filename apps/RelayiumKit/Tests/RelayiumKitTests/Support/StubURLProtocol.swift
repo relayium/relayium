@@ -31,6 +31,18 @@ final class StubURLProtocol: URLProtocol {
     nonisolated(unsafe) static var observed: [URLRequest] = []
     static func bodyBytes(_ req: URLRequest) -> [UInt8] { lastBodyBytes }
 
+    /// The last request body as a JSON object.
+    ///
+    /// Reads the captured bytes rather than `req.httpBody`, for the same reason
+    /// `bodyBytes` ignores its argument: a request that reaches a `URLProtocol`
+    /// may carry its body as a stream instead, so the request alone cannot be
+    /// trusted to answer "what was sent". `startLoading` captures the bytes
+    /// before the stub's `check` runs, which is where this is read from.
+    static func bodyJSON(_ req: URLRequest) -> [String: Any]? {
+        let object = try? JSONSerialization.jsonObject(with: Data(lastBodyBytes))
+        return object as? [String: Any]
+    }
+
     /// Forget every recorded request. Deliberately not a `tearDown` hook: this
     /// type is shared static state, and a test that reads `observed` has to say
     /// where its own window of observation begins.

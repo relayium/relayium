@@ -230,6 +230,68 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "a second call site would give the form a second structural identity")
     }
 
+    // MARK: - registration happens in the app
+
+    /// The form creates the account itself.
+    ///
+    /// It used to open relayium.com, and the whole point of this slice is that
+    /// it no longer does: `AppEnvironment.accountWebURL` is the "just send them
+    /// to the website" hand-off, and no iOS surface may reach for it now that
+    /// signing in, creating an account and asking for another verification email
+    /// all happen here.
+    ///
+    /// Two hand-offs survive and are deliberately NOT banned: `plansWebURL`
+    /// (billing, which stays on the web) and `reactivateWebURL` (a frozen
+    /// account cannot sign in, so the token in that link is the only way back).
+    func testNoIOSSurfaceOpensTheWebsiteForAccountWork() throws {
+        for (name, text) in try sources() {
+            XCTAssertFalse(text.contains("accountWebURL"),
+                           "\(name) sends the user to the website for account work")
+            XCTAssertFalse(text.contains("productionBaseURL"),
+                           "\(name) opens relayium.com directly")
+        }
+        let form = try XCTUnwrap(try sources().first { $0.name == "SignInView.swift" })
+        XCTAssertTrue(form.text.contains("session.register(email:"),
+                      "the form must create the account through the session, in the app")
+        XCTAssertTrue(form.text.contains("mode == .register ? .emailAddress : .username"),
+                      "registration should expose an email field while sign-in stays a credential username")
+        for webbish in ["openURL", "UIApplication.shared.open", "SFSafariViewController"] {
+            XCTAssertFalse(form.text.contains(webbish),
+                           "the sign-in/create form must not open anything: \(webbish)")
+        }
+    }
+
+    /// The mode lives in the form and nowhere else.
+    ///
+    /// A second holder — a tab, the shell, a router — would be a second source
+    /// of truth for which half is showing, and the one SwiftUI would win with is
+    /// whichever rebuilt last. That is the same failure the single call site
+    /// above exists to prevent, one level up.
+    func testOnlyTheFormOwnsWhichHalfIsShowing() throws {
+        for (name, text) in try sources() where name != "SignInView.swift" {
+            XCTAssertFalse(text.contains("AuthMode"), "\(name) must not decide the form's mode")
+        }
+        let form = try XCTUnwrap(try sources().first { $0.name == "SignInView.swift" })
+        XCTAssertTrue(form.text.contains("@State private var mode: AuthMode"),
+                      "the mode is the form's own state")
+    }
+
+    /// The check-email screen can act and can leave.
+    ///
+    /// It is the state a fresh registration lands in, and before this slice its
+    /// only action was a link to relayium.com. Both controls are one `Button`
+    /// each — exactly the kind of wiring a later re-layout drops silently.
+    func testTheCheckEmailScreenCanResendAndGoBack() throws {
+        let tab = try XCTUnwrap(try sources().first { $0.name == "AccountTab.swift" })
+        XCTAssertTrue(tab.text.contains("session.resendVerification(email: email)"),
+                      "the check-email screen must be able to ask for another email")
+        XCTAssertTrue(tab.text.contains("L10n.t(.contentBackToSignIn)"),
+                      "and must offer the way back, which is a sign-out")
+        XCTAssertTrue(tab.text.contains("if isResending {"),
+                      "the resend button must be replaced while a request is in flight, "
+                      + "so a second press cannot start a second request")
+    }
+
     /// Empty is the claim: this app needs no capability, and an entitlement is
     /// a claim to the OS that lands with the feature requiring it. The nil
     /// keychain access group is the same decision, from the other side.

@@ -36,7 +36,11 @@ public enum SendAvailability: Equatable {
             return .ready
         case .unavailable:
             return .accountUnavailable
-        case .loggedOut, .failed, .emailUnverified, .pendingDeletion:
+        case .loggedOut, .failed, .emailUnverified, .pendingDeletion, .registering:
+            // `.registering` sits here rather than with `.checking` for the same
+            // reason `AccountGate` puts it under "sign in required": creating an
+            // account never ends in one that can send, so a spinner would be
+            // waiting for something that is not coming.
             return .needsAccount
         }
     }
@@ -65,8 +69,8 @@ public struct SendAccountContext: Equatable, Sendable {
         switch state {
         case let .ready(user, usage):
             return SendAccountContext(userId: user.id, retentionSecs: usage.plan.retentionSecs)
-        case .restoring, .loggedOut, .authenticating, .emailUnverified,
-             .pendingDeletion, .failed, .unavailable:
+        case .restoring, .loggedOut, .authenticating, .registering,
+             .emailUnverified, .pendingDeletion, .failed, .unavailable:
             return .none
         }
     }

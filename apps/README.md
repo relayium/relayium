@@ -74,7 +74,7 @@ accessibility hint:
 | Direct | Pairing code | needed to *create* a code; joining one needs none |
 | Links | Send a link — store an encrypted file | needed |
 | Links | Open a link — receive one somebody sent | not needed |
-| — | Account — plan, devices, stored files | is the sign-in |
+| — | Account — plan, devices, stored files | is the sign-in *and* the sign-up |
 
 A sidebar footer reports whether this Mac can be reached right now; pause and
 resume stay in Nearby and in the menu bar rather than gaining a third site.
@@ -88,6 +88,47 @@ account is needed and offering sign-in, beside the half that needs none. A
 capability that is unavailable for want of an account says so and offers the
 action that resolves it, rather than appearing as a greyed control with no
 stated reason.
+
+### Accounts, in the app
+
+Signing in and **creating an account** are both native, on macOS and on iOS. One
+form with two modes — `SignInPresentation` in `RelayiumAppKit` decides which
+states it owns, which half is showing and what a draft is missing, so both apps
+render the same rules and a test can read them. Registration posts to
+`POST /api/auth/register`; the form checks a non-empty address, the server's
+8-byte password minimum and a matching confirmation first, so those three
+mistakes cost no round trip.
+
+Registration issues **no session** — the server sends a verification email and
+the account cannot sign in until its link has been opened. So a successful
+registration lands on the same check-email screen a sign-in against an
+unverified account reaches, carrying the server's normalized address, and that
+screen can ask for another email (`POST /api/auth/email/resend`) or go back,
+which signs out. The resend endpoint answers 200 whether it sent anything or
+swallowed the request under its own per-address throttle, so the copy reports
+what was *accepted*, never a delivery.
+
+**The one web step inside registration is the link in the email**, which is the
+server's own confirmation endpoint. Nothing intercepts it and no native token
+is minted from it. No registration or check-email control sends the user to
+relayium.com any more — `MacSurfaceGuardTests` and `IOSSurfaceGuardTests` assert
+that by name. Other explicit web hand-offs remain: billing, the reactivation
+link for an account inside its deletion grace period, and the macOS browser
+sign-in fallback described below.
+
+macOS additionally offers a **browser sign-in fallback** — an
+`ASWebAuthenticationSession` sheet on relayium.com plus a poll of
+`/api/cli/device/*`. It was labelled "Sign in with Apple", which was a claim
+about a mechanism this app does not implement: there is no Apple-ID API and no
+`applesignin` entitlement anywhere in the tree. The action is unchanged; the
+label now names what it does. Native Sign in with Apple remains a later slice.
+
+**Not verified by hand.** The whole registration path — a real address, the
+email arriving, the link, and the sign-in afterwards — has not been run against
+a live server on either platform. What is covered is the layer below the views:
+the request bodies and every documented server answer, the state machine
+including sign-out and restore racing an in-flight registration or resend, and
+the copy in all nine languages.
 
 ### App icon
 
@@ -389,6 +430,11 @@ buttons; those are not in this catalog.
 Sign-in, keychain persistence and sign-out are verified by hand. Launch the app, sign
 in, check the plan and usage, quit and relaunch to confirm auto-login, then sign out
 and confirm the return to the login form.
+
+**Creating an account has not been run by hand on either platform.** The row to
+add when it is: create an account from the app with a real address, confirm the
+check-email screen names the address the server normalized it to, use *Send the
+email again*, open the link from the mailbox, come back and sign in.
 
 `KeychainTokenStore`'s round-trip test skips by default, and the reason changed
 with the data-protection switch. It used to catch any failing `SecItemAdd` and
@@ -730,4 +776,6 @@ end-to-end receive against a real link; the `Received` folder actually appearing
 under *On My iPhone ▸ Relayium* in Files (the two `Info.plist` keys are the
 documented way to get it, but this build has not been looked at in Files);
 *Save to Files* accepting a **directory** item from the share sheet; VoiceOver;
-and the largest Dynamic Type sizes.
+the largest Dynamic Type sizes; and in-app registration end to end (see
+"Accounts, in the app" above — the layer below the views is covered by
+`swift test`, the live path is not).

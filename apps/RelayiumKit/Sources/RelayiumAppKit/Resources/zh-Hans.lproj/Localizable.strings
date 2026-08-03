@@ -62,8 +62,10 @@
 /* MARK: 窗口外壳 */
 "content.accountLoadFailed" = "无法载入你的账户";
 "content.checkEmailTitle" = "请查收邮件";
-"content.checkEmailBody" = "我们已向 %@ 发送验证链接。验证后请重新登录。";
-"content.openRelayium" = "打开 relayium.com";
+"content.checkEmailBody" = "我们已向 %@ 发送验证链接。打开链接完成验证后，回到应用登录。";
+"content.resendVerification" = "重新发送验证邮件";
+"content.resendVerificationBusy" = "正在发送…";
+"content.resendVerificationSent" = "已提交请求。如果没有收到，请查看垃圾邮件文件夹。";
 "content.pendingDeletionTitle" = "该账户已排入删除队列";
 "content.pendingDeletionBody" = "它将在 %@ 之后被彻底清除。若要保留，请在网页端重新激活。";
 "content.reactivate" = "在 relayium.com 重新激活";
@@ -96,14 +98,25 @@
 "gate.createCodeBody" = "创建配对码会预留中继容量，由创建它的账户付费。加入别人创建的配对码不需要账户。";
 "gate.signIn" = "登录";
 "gate.createAccount" = "创建账户";
+"gate.openAccount" = "打开账户";
 
 /* MARK: 登录 */
 "login.email" = "邮箱";
 "login.password" = "密码";
+"login.signInTitle" = "欢迎回来";
+"login.signInBody" = "登录后即可发送加密链接，并管理套餐、设备和已存文件。";
+"login.registerTitle" = "创建 Relayium 账户";
+"login.registerBody" = "直接在应用内注册。我们会向你的邮箱发送验证链接。";
+"login.displayName" = "昵称（选填）";
+"login.confirmPassword" = "确认密码";
 "login.signIn" = "登录";
 "login.signingIn" = "正在登录…";
-"login.signInWithApple" = "通过 Apple 登录";
-"login.createAccount" = "在 relayium.com 注册账户";
+"login.creatingAccount" = "正在创建账户…";
+"login.browserSignIn" = "使用浏览器登录";
+"login.createAccount" = "创建账户";
+"login.needAccount" = "还没有 Relayium 账户？立即创建";
+"login.errorEmailMissing" = "请输入邮箱地址。";
+"login.errorPasswordsDiffer" = "两次输入的密码不一致。";
 
 /* MARK: 直连中心与验证设置 */
 "hub.transferType" = "传输类型";
@@ -340,6 +353,10 @@
 "error.account.server" = "服务器返回了一个错误（%@）。请稍后再试。";
 "error.account.decoding" = "服务器返回的响应是这个版本的应用无法理解的。更新可能会解决问题。";
 "error.account.network" = "无法连接服务器。请检查你的网络连接。";
+"error.account.emailInvalid" = "邮箱地址格式不正确。";
+"error.account.passwordTooShort" = "密码至少需要 8 个字符。";
+"error.account.emailTaken" = "该邮箱已注册。请直接登录，或换一个邮箱。";
+"error.account.pendingDeletion" = "该邮箱的账户正在等待删除。请使用删除时邮件中的恢复链接，或在宽限期结束后重试。";
 "error.keychain.signIn" = "macOS 未能保存你的登录凭据（钥匙串错误 %@）。在退出应用之前你会保持登录状态。";
 "error.storedKey.keychain.save" = "钥匙串未能保存这个文件的密钥（钥匙串错误 %@）。";
 "error.storedKey.keychain.read" = "macOS 未能从钥匙串读取这个文件的密钥（钥匙串错误 %@）。";

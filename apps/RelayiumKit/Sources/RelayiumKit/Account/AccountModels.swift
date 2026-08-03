@@ -74,6 +74,37 @@ public enum LoginOutcome: Equatable {
     case pendingDeletion(purgeAfter: Int64, reactivateToken: String)
 }
 
+/// The 200 body of `POST /api/auth/register`: `{status,email}`.
+///
+/// `status` is decoded rather than ignored because it is the only thing that
+/// distinguishes this response from some other 200 a proxy or a future endpoint
+/// might return, and "the account was created" is not a claim to make on the
+/// strength of a status code alone.
+public struct RegistrationSuccessBody: Codable, Equatable {
+    public var status: String
+    /// Absent only from a server that stops sending it; the caller falls back to
+    /// the address that was typed.
+    public var email: String?
+
+    public init(status: String, email: String?) {
+        self.status = status
+        self.email = email
+    }
+}
+
+/// What a successful registration established: an account exists, no session
+/// was issued, and one verification email is on its way.
+///
+/// It carries the address rather than nothing because the address it carries is
+/// the **server's** normalization of what was typed — lower-cased and trimmed.
+/// Showing the typed text instead is how a stray capital or a trailing space
+/// becomes a user searching the wrong mailbox for an email that did arrive.
+public struct RegistrationOutcome: Equatable {
+    public let email: String
+
+    public init(email: String) { self.email = email }
+}
+
 /// One row of `GET /api/devices`: a machine that has signed in to this account.
 ///
 /// The wire keys are Go's default capitalization (`ID`, `Name`, …) because that
@@ -174,4 +205,25 @@ public enum AccountError: Error, Equatable {
     case server(status: Int)     // other non-2xx
     case decoding                // body didn't match the expected shape
     case network                 // URLSession transport error
+
+    // MARK: - Registration
+    //
+    // Four refusals of `POST /api/auth/register`, each one a different thing for
+    // the user to do next. Collapsing them into `.server(status:)` would put
+    // "400" on screen where "that address is already registered — sign in
+    // instead" belongs, which is the one failure a new user is most likely to
+    // hit and the only one with a one-tap remedy.
+
+    /// 400 `invalid_email` — the server could not parse the address.
+    case emailInvalid
+    /// 400 `password too short` — under the server's 8-byte minimum. The form
+    /// checks the same rule first, so reaching this means the two disagreed.
+    case passwordTooShort
+    /// 409 `email already registered`.
+    case emailTaken
+    /// 409 `account_pending_deletion` — an account on this address (or its
+    /// canonical sibling) is inside its deletion grace period. Registering again
+    /// is refused so a second account cannot occupy an address the original
+    /// owner may still reactivate into.
+    case accountPendingDeletion
 }

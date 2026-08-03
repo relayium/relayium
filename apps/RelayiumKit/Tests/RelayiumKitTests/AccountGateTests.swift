@@ -44,6 +44,17 @@ final class AccountGateTests: XCTestCase {
                        .signInRequired)
     }
 
+    /// A registration in flight is NOT `.loading`.
+    ///
+    /// `.loading` means "the app is working out who you are, hold on", and a
+    /// capability that says that here would be waiting for an account that
+    /// cannot arrive: registering ends on the check-email screen at best, never
+    /// on a session this feature could use.
+    func testARegistrationInFlightStillNeedsAnAccount() {
+        XCTAssertEqual(AccountGate.from(.registering, bearer: nil), .signInRequired)
+        XCTAssertNotEqual(AccountGate.from(.registering, bearer: nil), .loading)
+    }
+
     func testUnavailableEmailAndDeletionPassThrough() {
         XCTAssertEqual(AccountGate.from(.unavailable(message: "offline"), bearer: "t"),
                        .unavailable(message: "offline"))

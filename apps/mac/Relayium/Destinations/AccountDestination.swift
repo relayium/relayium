@@ -13,6 +13,7 @@ import RelayiumAppKit
 /// to all of them.
 struct AccountDestination: View {
     @EnvironmentObject private var session: AccountSession
+    @EnvironmentObject private var navigation: AppNavigationModel
 
     var body: some View {
         DestinationScaffold(title: L10n.t(.navAccount),
@@ -28,19 +29,23 @@ struct AccountDestination: View {
                 }
                 .frame(maxWidth: 720, alignment: .leading)
 
-            case .loggedOut, .authenticating, .failed:
-                // ONE branch for all three. Each branch of a ViewBuilder `switch`
+            case .loggedOut, .authenticating, .registering, .failed:
+                // ONE branch for all four. Each branch of a ViewBuilder `switch`
                 // is a distinct structural identity, so splitting these would make
                 // SwiftUI tear the subtree down and rebuild it on every transition
-                // — resetting `LoginView`'s `@State` email and password. That is
+                // — resetting `LoginView`'s `@State` fields and its MODE. That is
                 // the round's primary flow: every wrong password would blank both
-                // fields and make the user retype their email too. "Busy" is a
-                // disabled control inside the form, never a sibling view.
-                // Still ONE branch: the VStack is a single structural identity,
-                // so LoginView's @State survives every transition among the
-                // three states, exactly as before.
+                // fields and make the user retype their email too, and a rejected
+                // registration would drop the user back onto the sign-in half
+                // with an error about a registration. "Busy" is a disabled
+                // control inside the form, never a sibling view.
                 VStack(spacing: 16) {
-                    LoginView(errorMessage: loginError, isBusy: isAuthenticating)
+                    // Which states the form owns, and what each shows, is decided
+                    // in `SignInPresentation`, where a test can read it — the
+                    // same seam the iOS tab renders through.
+                    if let form = SignInPresentation.form(for: session.state) {
+                        LoginView(form: form)
+                    }
                 }
                 .frame(maxWidth: 720)
 
@@ -58,12 +63,7 @@ struct AccountDestination: View {
                 .frame(maxWidth: 720, alignment: .leading)
 
             case let .emailUnverified(email):
-                notice(title: L10n.t(.contentCheckEmailTitle),
-                       // The address is the user's own and is isolated, not
-                       // translated.
-                       body: L10n.t(.contentCheckEmailBody, [L10n.token(email)]),
-                       actionTitle: L10n.t(.contentOpenRelayium),
-                       url: AppEnvironment.accountWebURL)
+                checkEmail(email: email)
 
             case let .pendingDeletion(purgeAfter, reactivateToken):
                 notice(title: L10n.t(.contentPendingDeletionTitle),
@@ -83,15 +83,62 @@ struct AccountDestination: View {
         }
     }
 
-    /// The error to show on the form, or `nil` while there is nothing to report.
-    /// Derived rather than switched on, so the form stays one view — see above.
-    private var loginError: String? {
-        if case let .failed(message) = session.state { return message }
-        return nil
+    /// The account exists and cannot sign in until the link in its verification
+    /// email has been opened.
+    ///
+    /// Reached two ways — a registration that just succeeded, and a sign-in
+    /// against an unverified account — and it is the same screen for both. It
+    /// used to offer "Open relayium.com", which was there because the app had no
+    /// way to ask for another email; it now asks the server directly, and the
+    /// only web step left is the link in the message itself.
+    private func checkEmail(email: String) -> some View {
+        SectionCard(title: L10n.t(.contentCheckEmailTitle)) {
+            // The address is the user's own and is isolated, not translated.
+            Text(L10n.t(.contentCheckEmailBody, [L10n.token(email)]))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            switch session.resendState {
+            case .requested:
+                // `.info`, not a success mark: the endpoint answers 200 whether
+                // it sent anything or throttled the request, so this reports
+                // what was asked for rather than what arrived.
+                InlineMessage(.info, L10n.t(.contentResendVerificationSent))
+            case let .failed(message):
+                InlineMessage(.failure, message)
+            case .idle, .sending:
+                EmptyView()
+            }
+
+            HStack {
+                // One slot, so the row does not jump, and no second request
+                // while one is in flight — the button is simply not the control
+                // on screen while it is.
+                if isResending {
+                    ProgressView { Text(L10n.t(.contentResendVerificationBusy)) }
+                        .controlSize(.small)
+                } else {
+                    Button(L10n.t(.contentResendVerification)) {
+                        Task { await session.resendVerification(email: email) }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+                Button(L10n.t(.contentBackToSignIn)) {
+                    // The route that opened registration is remembered so a
+                    // remounted form can honour it. Replace that one-shot intent
+                    // before returning, or the new form would immediately flip
+                    // back to registration.
+                    navigation.rememberAccountIntent(.signIn)
+                    Task { await session.logOut() }
+                }
+                    .buttonStyle(.link)
+            }
+        }
+        .frame(maxWidth: 720, alignment: .leading)
     }
 
-    private var isAuthenticating: Bool {
-        if case .authenticating = session.state { return true }
+    private var isResending: Bool {
+        if case .sending = session.resendState { return true }
         return false
     }
 

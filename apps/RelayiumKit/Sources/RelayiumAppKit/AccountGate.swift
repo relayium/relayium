@@ -56,6 +56,12 @@ public enum AccountGate: Equatable {
             return .loading
         case .loggedOut:
             return .signInRequired
+        case .registering:
+            // NOT `.loading`. A registration in flight cannot produce an account
+            // for this capability — it ends on the check-email screen at best —
+            // so "hold on, we're finding out who you are" would be false, and a
+            // spinner that resolved into a gate anyway is worse than the gate.
+            return .signInRequired
         case .failed:
             // The reason a sign-in attempt was rejected belongs on the form,
             // beside the fields that produced it — not on a feature card

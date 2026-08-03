@@ -63,8 +63,10 @@
 /* MARK: account states (macOS destination + iOS tab) */
 "content.accountLoadFailed" = "Couldn't load your account";
 "content.checkEmailTitle" = "Check your email";
-"content.checkEmailBody" = "We sent a verification link to %@. Verify it, then sign in again.";
-"content.openRelayium" = "Open relayium.com";
+"content.checkEmailBody" = "We sent a verification link to %@. Open it, then come back here and sign in.";
+"content.resendVerification" = "Send the email again";
+"content.resendVerificationBusy" = "Sending…";
+"content.resendVerificationSent" = "Requested. If it doesn't arrive, check your spam folder.";
 "content.pendingDeletionTitle" = "This account is scheduled for deletion";
 "content.pendingDeletionBody" = "It will be erased after %@. Reactivate it on the web to keep it.";
 "content.reactivate" = "Reactivate on relayium.com";
@@ -97,14 +99,25 @@
 "gate.createCodeBody" = "Creating a code reserves relay capacity that is billed to the account that created it. Joining a code somebody else created needs no account.";
 "gate.signIn" = "Sign in";
 "gate.createAccount" = "Create an account";
+"gate.openAccount" = "Open Account";
 
-/* MARK: sign in */
+/* MARK: sign in and create account (one in-app form, two modes) */
 "login.email" = "Email";
 "login.password" = "Password";
+"login.signInTitle" = "Welcome back";
+"login.signInBody" = "Sign in to send encrypted links and manage your plan, devices, and stored files.";
+"login.registerTitle" = "Create your Relayium account";
+"login.registerBody" = "Register here in the app. We’ll email you a link to verify the address.";
+"login.displayName" = "Name (optional)";
+"login.confirmPassword" = "Confirm password";
 "login.signIn" = "Sign in";
 "login.signingIn" = "Signing in…";
-"login.signInWithApple" = "Sign in with Apple";
-"login.createAccount" = "Create an account on relayium.com";
+"login.creatingAccount" = "Creating your account…";
+"login.browserSignIn" = "Sign in using your browser";
+"login.createAccount" = "Create account";
+"login.needAccount" = "New to Relayium? Create an account";
+"login.errorEmailMissing" = "Enter your email address.";
+"login.errorPasswordsDiffer" = "The two passwords don't match.";
 
 /* MARK: direct hub, verification setting */
 "hub.transferType" = "Transfer type";
@@ -349,6 +362,10 @@
 "error.account.server" = "The server returned an error (%@). Try again shortly.";
 "error.account.decoding" = "The server sent a response this version of the app doesn't understand. Updating may fix it.";
 "error.account.network" = "Couldn't reach the server. Check your internet connection.";
+"error.account.emailInvalid" = "That doesn't look like a valid email address.";
+"error.account.passwordTooShort" = "Use at least 8 characters for your password.";
+"error.account.emailTaken" = "There is already an account for this address. Sign in instead, or use another address.";
+"error.account.pendingDeletion" = "An account for this address is scheduled for deletion. Use the reactivation link from the email sent when it was deleted, or try again after the grace period ends.";
 "error.keychain.signIn" = "macOS wouldn't store your sign-in (keychain error %@). You'll stay signed in until you quit.";
 "error.storedKey.keychain.save" = "The keychain wouldn't save this file's key (keychain error %@).";
 "error.storedKey.keychain.read" = "macOS wouldn't read this file's key from the keychain (keychain error %@).";

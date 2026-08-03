@@ -35,6 +35,30 @@ final class AppRoutingTests: XCTestCase {
         XCTAssertEqual(nav.selectionWrites, 2)
         XCTAssertEqual(nav.selection, .storedReceive)
     }
+    /// A capability gate's **Create an account** has to land on the
+    /// create-account half of the form. Routing it to the Account destination
+    /// alone would show a sign-in form — a button that names one thing and
+    /// produces another, which is the same defect as the greyed control the
+    /// gates exist to replace.
+    @MainActor func testSelectingTheAccountCarriesTheHalfOfTheFormToShow() {
+        let nav = AppNavigationModel()
+        XCTAssertEqual(nav.accountIntent, .signIn, "the default is the common case")
+
+        nav.selectAccount(intent: .register)
+        XCTAssertEqual(nav.selection, .account)
+        XCTAssertEqual(nav.accountIntent, .register)
+        XCTAssertEqual(nav.selectionWrites, 1, "still exactly one selection write")
+
+        nav.selectAccount(intent: .signIn)
+        XCTAssertEqual(nav.accountIntent, .signIn)
+        XCTAssertEqual(nav.selectionWrites, 2)
+
+        nav.rememberAccountIntent(.register)
+        XCTAssertEqual(nav.accountIntent, .register)
+        XCTAssertEqual(nav.selectionWrites, 2,
+                       "remembering the form's own switch is not navigation")
+    }
+
     @MainActor func testLaterEventWinsAndNeitherClearsTheOther() {
         let nav = AppNavigationModel()
         nav.select(AppRouting.destination(forIncoming: .file))

@@ -62,8 +62,10 @@
 /* MARK: ウインドウ */
 "content.accountLoadFailed" = "アカウントを読み込めませんでした";
 "content.checkEmailTitle" = "メールをご確認ください";
-"content.checkEmailBody" = "%@ に確認リンクを送信しました。確認してから、もう一度サインインしてください。";
-"content.openRelayium" = "relayium.com を開く";
+"content.checkEmailBody" = "%@ に確認リンクを送信しました。リンクを開いて確認したら、アプリに戻ってサインインしてください。";
+"content.resendVerification" = "確認メールを再送する";
+"content.resendVerificationBusy" = "送信しています…";
+"content.resendVerificationSent" = "再送をリクエストしました。届かない場合は迷惑メールフォルダをご確認ください。";
 "content.pendingDeletionTitle" = "このアカウントは削除予定です";
 "content.pendingDeletionBody" = "%@ 以降に消去されます。残したい場合はウェブで再有効化してください。";
 "content.reactivate" = "relayium.com で再有効化";
@@ -96,14 +98,25 @@
 "gate.createCodeBody" = "コードを作成するとリレー容量が確保され、作成したアカウントに課金されます。他の人が作成したコードに参加するのにアカウントは不要です。";
 "gate.signIn" = "サインイン";
 "gate.createAccount" = "アカウントを作成";
+"gate.openAccount" = "アカウントを開く";
 
 /* MARK: サインイン */
 "login.email" = "メールアドレス";
 "login.password" = "パスワード";
+"login.signInTitle" = "おかえりなさい";
+"login.signInBody" = "サインインすると、暗号化リンクの送信やプラン、デバイス、保存済みファイルの管理ができます。";
+"login.registerTitle" = "Relayiumアカウントを作成";
+"login.registerBody" = "このアプリで登録できます。確認用リンクをメールでお送りします。";
+"login.displayName" = "名前（任意）";
+"login.confirmPassword" = "パスワード（確認）";
 "login.signIn" = "サインイン";
 "login.signingIn" = "サインインしています…";
-"login.signInWithApple" = "Apple でサインイン";
-"login.createAccount" = "relayium.com でアカウントを作成";
+"login.creatingAccount" = "アカウントを作成しています…";
+"login.browserSignIn" = "ブラウザでサインイン";
+"login.createAccount" = "アカウントを作成";
+"login.needAccount" = "Relayium は初めてですか？アカウントを作成";
+"login.errorEmailMissing" = "メールアドレスを入力してください。";
+"login.errorPasswordsDiffer" = "2 つのパスワードが一致しません。";
 
 /* MARK: ダイレクトハブと検証設定 */
 "hub.transferType" = "転送の種類";
@@ -340,6 +353,10 @@
 "error.account.server" = "サーバーがエラーを返しました（%@）。しばらくしてからお試しください。";
 "error.account.decoding" = "このバージョンのアプリが理解できない応答をサーバーが返しました。更新すると解決する場合があります。";
 "error.account.network" = "サーバーに接続できませんでした。インターネット接続をご確認ください。";
+"error.account.emailInvalid" = "メールアドレスの形式が正しくないようです。";
+"error.account.passwordTooShort" = "パスワードは 8 文字以上にしてください。";
+"error.account.emailTaken" = "このメールアドレスのアカウントはすでにあります。サインインするか、別のアドレスをお使いください。";
+"error.account.pendingDeletion" = "このメールアドレスのアカウントは削除待ちです。削除時に送信されたメールの復元リンクを使うか、猶予期間の終了後にもう一度お試しください。";
 "error.keychain.signIn" = "macOS がサインイン情報を保存できませんでした（キーチェーンエラー %@）。アプリを終了するまではサインインしたままです。";
 "error.storedKey.keychain.save" = "キーチェーンにこのファイルの鍵を保存できませんでした（キーチェーンエラー %@）。";
 "error.storedKey.keychain.read" = "macOS がこのファイルの鍵をキーチェーンから読み取れませんでした（キーチェーンエラー %@）。";

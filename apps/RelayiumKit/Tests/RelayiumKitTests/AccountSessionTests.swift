@@ -236,6 +236,335 @@ final class AccountSessionTests: XCTestCase {
         XCTAssertNotNil(s.bearerToken, "the live session must still hold a usable bearer")
     }
 
+    // MARK: - Registration
+    //
+    // Creating an account issues NO credential: the only success is the
+    // check-email state, and every assertion below is about not pretending
+    // otherwise.
+
+    func testRegisterLandsOnCheckEmailWithTheServersAddress() async throws {
+        let store = InMemoryTokenStore()
+        StubURLProtocol.stub = .init(status: 200, body: registeredBody)
+        let s = session(store: store)
+        await s.register(email: " Ada@Example.COM ", password: "correct horse battery",
+                         displayName: "Ada")
+        XCTAssertEqual(s.state, .emailUnverified(email: "ada@example.com"),
+                       "the check-email screen must name the address the account was created under")
+        XCTAssertNil(try store.load(), "registration issues no token — there is nothing to store")
+        XCTAssertNil(s.bearerToken)
+        XCTAssertEqual(s.resendState, .idle)
+    }
+
+    /// It must never reach `.ready`, and must never try: the account cannot
+    /// authenticate anything until the email is verified.
+    func testRegisterNeverFetchesTheAccount() async throws {
+        StubURLProtocol.router = { req in
+            if req.url?.path != "/api/auth/register" {
+                XCTFail("registration must not call \(req.url?.path ?? "?")")
+            }
+            return .init(status: 200, body: registeredBody)
+        }
+        let s = session(store: InMemoryTokenStore())
+        await s.register(email: "a@b.co", password: "pw12345678", displayName: "")
+        guard case .emailUnverified = s.state else { return XCTFail("got \(s.state)") }
+    }
+
+    /// A refused registration belongs back on the form with the server's reason
+    /// — never `.unavailable`, which offers a retry for something a retry cannot
+    /// fix, and never `.loggedOut`, which would silently discard the reason.
+    func testRegisterRejectionSurfacesTheReasonOnTheForm() async {
+        StubURLProtocol.stub = .init(status: 409,
+                                     body: Data(#"{"error":"email already registered"}"#.utf8))
+        let s = session(store: InMemoryTokenStore())
+        await s.register(email: "a@b.co", password: "pw12345678", displayName: "")
+        XCTAssertEqual(s.state, .failed(message: ErrorCopy.message(for: AccountError.emailTaken)))
+    }
+
+    /// Switching between the two halves of the one form must not carry a
+    /// rejection from the old half with it. The state change stays inside the
+    /// form-owning set, so SwiftUI keeps the draft and mode alive.
+    func testDismissingAnAccessErrorReturnsToTheSameFormWithoutANetworkCall() async {
+        StubURLProtocol.stub = .init(status: 409,
+                                     body: Data(#"{"error":"email already registered"}"#.utf8))
+        let s = session(store: InMemoryTokenStore())
+        await s.register(email: "a@b.co", password: "pw12345678", displayName: "")
+        guard case .failed = s.state else { return XCTFail("setup failed, got \(s.state)") }
+
+        StubURLProtocol.reset()
+        StubURLProtocol.router = { _ in
+            XCTFail("dismissing copy must not call the network")
+            return .init(status: 500)
+        }
+        s.dismissAccountAccessError()
+
+        XCTAssertEqual(s.state, .loggedOut)
+        XCTAssertEqual(StubURLProtocol.requestCount, 0)
+    }
+
+    /// A sign-out that lands while a registration is in flight wins, exactly as
+    /// it does for a sign-in: the late completion must not put a check-email
+    /// screen on top of a form the user went back to.
+    func testSignOutDuringAnInFlightRegistrationWins() async throws {
+        let gate = RequestGate()
+        StubURLProtocol.router = { req in
+            switch req.url?.path {
+            case "/api/auth/register": gate.hold(); return .init(status: 200, body: registeredBody)
+            default:                   return .init(status: 200, body: Data())
+            }
+        }
+        let s = session(store: InMemoryTokenStore())
+        let registering = Task {
+            await s.register(email: "a@b.co", password: "pw12345678", displayName: "")
+        }
+        await gate.reached()
+        let loggingOut = Task { await s.logOut() }
+        await Task.yield()
+        gate.release()
+        await loggingOut.value
+        await registering.value
+
+        XCTAssertEqual(s.state, .loggedOut,
+                       "a registration that finished after sign-out must not take the screen")
+    }
+
+    /// The other interleaving: a second registration (or a sign-in) started
+    /// while the first is in flight. The last one to start is the only one
+    /// allowed to finish.
+    func testAStaleRegistrationCannotOverwriteANewerOne() async throws {
+        StubURLProtocol.reset()
+        let gate = RequestGate()
+        // Keyed on the transport's own counter rather than on a captured `var`:
+        // the router runs on URLSession's thread, and a mutable capture there
+        // would be the data race this suite exists to avoid staging.
+        StubURLProtocol.router = { _ in
+            guard StubURLProtocol.requestCount == 1 else {
+                return .init(status: 200, body: registeredBody)
+            }
+            gate.hold()
+            return .init(status: 409, body: Data(#"{"error":"email already registered"}"#.utf8))
+        }
+        let s = session(store: InMemoryTokenStore())
+        let first = Task { await s.register(email: "a@b.co", password: "pw12345678", displayName: "") }
+        await gate.reached()
+        let second = Task { await s.register(email: "c@d.co", password: "pw12345678", displayName: "") }
+        await Task.yield()
+        gate.release()
+        await second.value
+        await first.value
+
+        XCTAssertEqual(s.state, .emailUnverified(email: "ada@example.com"),
+                       "the superseded attempt's rejection must not land on top")
+        StubURLProtocol.reset()
+    }
+
+    /// A new window opening mid-registration must not restart from the (still
+    /// empty) keychain: that would abort the registration and drop the user on
+    /// the form, which is the same defect `restore()` already guards for a
+    /// sign-in.
+    func testRestoreDuringAnInFlightRegistrationDoesNotAbortIt() async throws {
+        let gate = RequestGate()
+        StubURLProtocol.router = { req in
+            gate.hold(); return .init(status: 200, body: registeredBody)
+        }
+        let s = session(store: InMemoryTokenStore())
+        let registering = Task {
+            await s.register(email: "a@b.co", password: "pw12345678", displayName: "")
+        }
+        await gate.reached()
+        await s.restore()
+        gate.release()
+        await registering.value
+
+        XCTAssertEqual(s.state, .emailUnverified(email: "ada@example.com"))
+    }
+
+    /// The check-email screen holds an address and a resend action that nothing
+    /// else can reproduce — the keychain certainly cannot. Reopening a window
+    /// over it must leave it alone; the way out is the explicit "Back to sign
+    /// in", which signs out.
+    func testRestoreDoesNotDiscardTheCheckEmailScreen() async throws {
+        StubURLProtocol.stub = .init(status: 200, body: registeredBody)
+        let s = session(store: InMemoryTokenStore())
+        await s.register(email: "a@b.co", password: "pw12345678", displayName: "")
+        guard case .emailUnverified = s.state else { return XCTFail("setup failed, got \(s.state)") }
+
+        StubURLProtocol.router = { _ in XCTFail("must not call the network"); return .init(status: 500) }
+        await s.restore()
+        XCTAssertEqual(s.state, .emailUnverified(email: "ada@example.com"))
+    }
+
+    /// Same rule for the reactivation notice, and for a sharper reason: it
+    /// carries the one token that can undo a deletion, and a cold restore would
+    /// throw it away.
+    func testRestoreDoesNotDiscardThePendingDeletionNotice() async throws {
+        StubURLProtocol.stub = .init(status: 200, body: try fixture("login-pending-deletion"))
+        let s = session(store: InMemoryTokenStore())
+        await s.logIn(email: "a@b.co", password: "pw")
+        guard case .pendingDeletion = s.state else { return XCTFail("setup failed, got \(s.state)") }
+
+        await s.restore()
+        XCTAssertEqual(s.state, .pendingDeletion(purgeAfter: 1_780_000_000,
+                                                 reactivateToken: "react_abc"))
+    }
+
+    // MARK: - Resending the verification email
+
+    func testResendReportsWhatTheServerAccepted() async throws {
+        StubURLProtocol.router = { req in
+            switch req.url?.path {
+            case "/api/auth/email/resend": return .init(status: 200, body: Data(#"{"status":"sent"}"#.utf8))
+            default:                       return .init(status: 200, body: registeredBody)
+            }
+        }
+        let s = session(store: InMemoryTokenStore())
+        await s.register(email: "a@b.co", password: "pw12345678", displayName: "")
+        await s.resendVerification(email: "ada@example.com")
+
+        XCTAssertEqual(s.resendState, .requested)
+        XCTAssertEqual(s.state, .emailUnverified(email: "ada@example.com"),
+                       "asking about the screen must not replace the screen")
+    }
+
+    func testResendFailureIsReportedAndLeavesTheScreenIntact() async throws {
+        StubURLProtocol.router = { req in
+            switch req.url?.path {
+            case "/api/auth/email/resend": return .init(status: 503, body: Data())
+            default:                       return .init(status: 200, body: registeredBody)
+            }
+        }
+        let s = session(store: InMemoryTokenStore())
+        await s.register(email: "a@b.co", password: "pw12345678", displayName: "")
+        await s.resendVerification(email: "ada@example.com")
+
+        XCTAssertEqual(s.resendState,
+                       .failed(message: ErrorCopy.message(for: AccountError.server(status: 503))))
+        XCTAssertEqual(s.state, .emailUnverified(email: "ada@example.com"))
+    }
+
+    /// No second request while one is in flight. The endpoint throttles per
+    /// address anyway, so a queued second press would buy nothing and turn a
+    /// "requested" into a silently swallowed one.
+    func testASecondResendWhileOneIsInFlightIsRefused() async throws {
+        StubURLProtocol.stub = .init(status: 200, body: registeredBody)
+        let s = session(store: InMemoryTokenStore())
+        await s.register(email: "a@b.co", password: "pw12345678", displayName: "")
+        guard case .emailUnverified = s.state else { return XCTFail("setup failed, got \(s.state)") }
+
+        StubURLProtocol.reset()
+        let gate = RequestGate()
+        StubURLProtocol.router = { _ in gate.hold(); return .init(status: 200, body: Data(#"{"status":"sent"}"#.utf8)) }
+
+        let first = Task { await s.resendVerification(email: "ada@example.com") }
+        await gate.reached()
+        await s.resendVerification(email: "ada@example.com")   // the impatient second press
+        gate.release()
+        await first.value
+
+        XCTAssertEqual(StubURLProtocol.requestCount, 1, "exactly one request reached the transport")
+        XCTAssertEqual(s.resendState, .requested)
+        StubURLProtocol.reset()
+    }
+
+    /// A resend that completes after the user has left the screen must write
+    /// nothing: "Sent" on a sign-in form is a claim about an email nobody there
+    /// asked for.
+    func testALateResendCannotWriteOntoAScreenThatMovedOn() async throws {
+        StubURLProtocol.stub = .init(status: 200, body: registeredBody)
+        let s = session(store: InMemoryTokenStore())
+        await s.register(email: "a@b.co", password: "pw12345678", displayName: "")
+        guard case .emailUnverified = s.state else { return XCTFail("setup failed, got \(s.state)") }
+
+        let gate = RequestGate()
+        StubURLProtocol.stub = nil
+        StubURLProtocol.router = { req in
+            switch req.url?.path {
+            case "/api/auth/logout": return .init(status: 200, body: Data())
+            default:                 gate.hold(); return .init(status: 200, body: Data(#"{"status":"sent"}"#.utf8))
+            }
+        }
+        let resending = Task { await s.resendVerification(email: "ada@example.com") }
+        await gate.reached()
+        let loggingOut = Task { await s.logOut() }
+        await Task.yield()
+        gate.release()
+        await loggingOut.value
+        await resending.value
+
+        XCTAssertEqual(s.state, .loggedOut)
+        XCTAssertEqual(s.resendState, .idle, "the notice must not survive the screen it was about")
+    }
+
+    /// A callback from a check-email screen that is no longer current has no
+    /// authority to send mail — and, just as importantly, no authority to claim
+    /// the shared generation and supersede the operation that replaced it.
+    func testAStaleResendForTheWrongStateOrAddressDoesNothing() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.router = { _ in
+            XCTFail("a stale resend must not reach the transport")
+            return .init(status: 500)
+        }
+        let s = session(store: InMemoryTokenStore())
+
+        await s.resendVerification(email: "old@example.com")
+        XCTAssertEqual(s.state, .restoring)
+        XCTAssertEqual(s.resendState, .idle)
+        XCTAssertEqual(StubURLProtocol.requestCount, 0)
+
+        StubURLProtocol.router = { _ in .init(status: 200, body: registeredBody) }
+        await s.register(email: "a@b.co", password: "pw12345678", displayName: "")
+        StubURLProtocol.reset()
+        StubURLProtocol.router = { _ in
+            XCTFail("an address from an older screen must not be used")
+            return .init(status: 500)
+        }
+        await s.resendVerification(email: "old@example.com")
+        XCTAssertEqual(s.state, .emailUnverified(email: "ada@example.com"))
+        XCTAssertEqual(s.resendState, .idle)
+        XCTAssertEqual(StubURLProtocol.requestCount, 0)
+    }
+
+    /// And the simple half: any session-moving operation clears a stale notice.
+    func testEverySessionOperationClearsTheResendNotice() async throws {
+        StubURLProtocol.router = { req in
+            switch req.url?.path {
+            case "/api/auth/email/resend": return .init(status: 200, body: Data(#"{"status":"sent"}"#.utf8))
+            default:                       return .init(status: 200, body: registeredBody)
+            }
+        }
+        let s = session(store: InMemoryTokenStore())
+        await s.register(email: "a@b.co", password: "pw12345678", displayName: "")
+        await s.resendVerification(email: "ada@example.com")
+        XCTAssertEqual(s.resendState, .requested)
+
+        StubURLProtocol.stub = nil
+        StubURLProtocol.router = { _ in .init(status: 401, body: Data(#"{"error":"nope"}"#.utf8)) }
+        await s.logIn(email: "a@b.co", password: "wrong")
+        XCTAssertEqual(s.resendState, .idle)
+    }
+
+    /// The registration password and address ride in the POST body, exactly as
+    /// the login credentials do. Either one in a URL would reach every proxy
+    /// log, the server's access log, and any `Referer` that followed.
+    func testRegistrationCredentialsNeverAppearInARequestURL() async throws {
+        let recorder = URLRecorder()
+        StubURLProtocol.router = { req in
+            recorder.record(req.url)
+            return .init(status: 200, body: registeredBody)
+        }
+        let s = session(store: InMemoryTokenStore())
+        await s.register(email: "person@example.com", password: "hunter2-correct-horse",
+                         displayName: "Ada Lovelace")
+        guard case .emailUnverified = s.state else { return XCTFail("setup failed, got \(s.state)") }
+
+        XCTAssertFalse(recorder.urls.isEmpty, "nothing was sent — the test proves nothing")
+        for url in recorder.urls {
+            XCTAssertFalse(url.contains("hunter2"), url)
+            XCTAssertFalse(url.contains("person@example.com"), url)
+            XCTAssertFalse(url.contains("Ada"), url)
+            XCTAssertNil(URLComponents(string: url)?.query, url)
+        }
+    }
+
     // MARK: - Operation identity
     //
     // Being @MainActor serializes each step, not each operation: `logOut()` and
@@ -323,6 +652,52 @@ final class AccountSessionTests: XCTestCase {
     //
     // A WindowGroup gives ⌘N and window-reopen for free, and every ContentView
     // runs `.task { await session.restore() }`.
+
+    /// Reopening a window while the user is typing must not turn the shared
+    /// session into `.restoring`: that tears the form out of every window and
+    /// loses its draft. Once the session says logged out, the empty keychain has
+    /// already been established.
+    func testRestoreDoesNotRebuildALoggedOutForm() async {
+        let s = session(store: InMemoryTokenStore())
+        await s.restore()
+        XCTAssertEqual(s.state, .loggedOut)
+
+        StubURLProtocol.reset()
+        StubURLProtocol.router = { _ in
+            XCTFail("a re-entrant restore must not reload an established empty store")
+            return .init(status: 500)
+        }
+        var seen: [SessionState] = []
+        let sub = s.$state.sink { seen.append($0) }
+        defer { sub.cancel() }
+
+        await s.restore()
+
+        XCTAssertEqual(s.state, .loggedOut)
+        XCTAssertFalse(seen.contains(.restoring))
+        XCTAssertEqual(StubURLProtocol.requestCount, 0)
+    }
+
+    /// A rejected attempt is the same form plus a useful sentence. A second
+    /// window must not erase both by running a cold restore against an empty
+    /// keychain.
+    func testRestoreDoesNotDiscardARejectedForm() async {
+        StubURLProtocol.stub = .init(status: 401, body: Data(#"{"error":"nope"}"#.utf8))
+        let s = session(store: InMemoryTokenStore())
+        await s.logIn(email: "a@b.co", password: "wrong")
+        let failed = s.state
+        guard case .failed = failed else { return XCTFail("setup failed, got \(failed)") }
+
+        StubURLProtocol.reset()
+        StubURLProtocol.router = { _ in
+            XCTFail("the rejection is already a settled session state")
+            return .init(status: 500)
+        }
+        await s.restore()
+
+        XCTAssertEqual(s.state, failed)
+        XCTAssertEqual(StubURLProtocol.requestCount, 0)
+    }
 
     func testRestoreOnALiveSessionKeepsTheAccountOnScreen() async throws {
         let store = InMemoryTokenStore()
@@ -495,6 +870,12 @@ final class AccountSessionTests: XCTestCase {
         }
     }
 }
+
+/// The 200 body of a successful registration, in the server's documented shape.
+///
+/// File scope rather than a member of the `@MainActor` test case: the stub's
+/// router runs on URLSession's own thread and cannot reach main-actor state.
+private let registeredBody = Data(#"{"status":"verification_sent","email":"ada@example.com"}"#.utf8)
 
 /// A latch a stubbed response can block on, so a test can run a main-actor call
 /// (sign out, cancel) *while* a request is in flight. `hold()` runs on

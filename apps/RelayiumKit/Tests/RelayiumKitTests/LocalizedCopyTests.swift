@@ -364,6 +364,80 @@ final class LocalizedCopyTests: XCTestCase {
         }
     }
 
+    // MARK: - in-app registration
+
+    /// Every string the create-account flow adds is real copy in all nine, not a
+    /// key echoed back and not a template with an unsubstituted placeholder.
+    func testTheRegistrationCopyIsTranslatedEverywhere() {
+        let added: [L10nKey] = [
+            .loginSignInTitle, .loginSignInBody,
+            .loginRegisterTitle, .loginRegisterBody,
+            .loginDisplayName, .loginConfirmPassword, .loginCreateAccount,
+            .loginCreatingAccount, .loginNeedAccount, .loginBrowserSignIn,
+            .loginErrorEmailMissing, .loginErrorPasswordsDiffer,
+            .contentResendVerification, .contentResendVerificationBusy,
+            .contentResendVerificationSent, .gateOpenAccount,
+            .errorAccountEmailInvalid, .errorAccountPasswordTooShort,
+            .errorAccountEmailTaken, .errorAccountPendingDeletion,
+        ]
+        for key in added {
+            for language in AppLanguage.allCases {
+                let text = L10n.t(key, language: language)
+                XCTAssertFalse(text.isEmpty, "\(key.rawValue) [\(language.rawValue)]")
+                XCTAssertNotEqual(text, key.rawValue,
+                                  "\(key.rawValue) [\(language.rawValue)] fell back to the key")
+                XCTAssertFalse(text.contains("%@"),
+                               "\(key.rawValue) [\(language.rawValue)]: \(text)")
+            }
+        }
+    }
+
+    /// The four registration refusals are four different things to do next, so
+    /// no two of them may render the same sentence in any language — that is the
+    /// whole reason they are distinct `AccountError` cases rather than one
+    /// `.server(status:)`.
+    func testEachRegistrationRefusalSaysSomethingDifferentInEveryLanguage() {
+        let errors: [AccountError] = [.emailInvalid, .passwordTooShort,
+                                      .emailTaken, .accountPendingDeletion]
+        for language in AppLanguage.allCases {
+            let rendered = errors.map { ErrorCopy.message(for: $0, language: language) }
+            XCTAssertEqual(Set(rendered).count, errors.count,
+                           "\(language.rawValue) renders two refusals identically: \(rendered)")
+            for message in rendered {
+                XCTAssertFalse(message.contains("error.account"),
+                               "\(language.rawValue) fell through to a raw key: \(message)")
+            }
+        }
+    }
+
+    /// The check-email screen sends the user back to the APP, not to a website.
+    ///
+    /// The old copy ended in "sign in again", which was written for the only way
+    /// this state was reachable then — a sign-in against an unverified account.
+    /// A registration reaches it too, and "again" would be describing something
+    /// that never happened. The address itself must survive verbatim in all
+    /// nine, isolated under Arabic.
+    func testTheCheckEmailBodyNamesTheAddressAndPointsBackToTheApp() {
+        for language in AppLanguage.allCases {
+            let email = "ada@example.com"
+            let body = L10n.t(.contentCheckEmailBody,
+                              [L10n.token(email, language: language)], language: language)
+            XCTAssertTrue(body.contains(email), "\(language.rawValue): \(body)")
+            XCTAssertFalse(body.contains("relayium.com"),
+                           "\(language.rawValue) still sends the user to a website: \(body)")
+        }
+    }
+
+    /// The macOS browser fallback must not claim to be Sign in with Apple in any
+    /// language: no entitlement backs it, and what it opens is a browser.
+    func testTheBrowserFallbackNeverClaimsToBeApple() {
+        for language in AppLanguage.allCases {
+            let text = L10n.t(.loginBrowserSignIn, language: language)
+            XCTAssertFalse(text.contains("Apple"), "\(language.rawValue): \(text)")
+            XCTAssertFalse(text.contains("آبل"), "\(language.rawValue): \(text)")
+        }
+    }
+
     // MARK: - the iOS account surface says nothing about a Mac
 
     /// Every non-plural key the iOS account tab and its tab item render.
@@ -371,9 +445,18 @@ final class LocalizedCopyTests: XCTestCase {
     /// is what iOS shows, and that a later addition to it is a decision too.
     private let iosAccountSurface: [L10nKey] = [
         .tabReceive, .tabAccount, .accountRestoring,
-        .loginEmail, .loginPassword, .loginSignIn, .loginSigningIn, .loginCreateAccount,
+        .loginEmail, .loginPassword,
+        .loginSignInTitle, .loginSignInBody,
+        .loginRegisterTitle, .loginRegisterBody,
+        .loginDisplayName, .loginConfirmPassword,
+        .loginSignIn, .loginSigningIn, .loginCreatingAccount,
+        .loginCreateAccount, .loginNeedAccount,
+        .loginErrorEmailMissing, .loginErrorPasswordsDiffer,
+        .errorAccountEmailInvalid, .errorAccountPasswordTooShort,
+        .errorAccountEmailTaken, .errorAccountPendingDeletion,
         .contentAccountLoadFailed, .contentCheckEmailTitle, .contentCheckEmailBody,
-        .contentOpenRelayium, .contentBackToSignIn,
+        .contentResendVerification, .contentResendVerificationBusy,
+        .contentResendVerificationSent, .contentBackToSignIn,
         .contentPendingDeletionTitle, .contentPendingDeletionBody, .contentReactivate,
         .accountManagePlan, .accountTraffic, .accountStorage, .accountMeterOf,
         .accountStaleFigures, .accountSignOutFailed,

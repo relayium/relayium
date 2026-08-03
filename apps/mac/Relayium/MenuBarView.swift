@@ -30,7 +30,11 @@ struct MenuBarView: View {
             Text(L10n.t(.menubarEmailUnverified, [L10n.token(email)]))
         case .pendingDeletion:
             Text(L10n.t(.menubarPendingDeletion))
-        case .loggedOut, .failed:
+        case .loggedOut, .failed, .registering:
+            // `.registering` belongs here, and the sentence stays true through
+            // it: creating an account issues no session, so nobody is signed in
+            // during it and nobody is signed in when it succeeds — the next
+            // state is the check-email one, which has its own line above.
             Text(L10n.t(.menubarNotSignedIn))
         }
         Divider()

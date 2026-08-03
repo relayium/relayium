@@ -62,8 +62,10 @@
 /* MARK: ventana */
 "content.accountLoadFailed" = "No se pudo cargar tu cuenta";
 "content.checkEmailTitle" = "Revisa tu correo";
-"content.checkEmailBody" = "Enviamos un enlace de verificación a %@. Verifícalo y vuelve a iniciar sesión.";
-"content.openRelayium" = "Abrir relayium.com";
+"content.checkEmailBody" = "Enviamos un enlace de verificación a %@. Ábrelo y luego vuelve aquí para iniciar sesión.";
+"content.resendVerification" = "Volver a enviar el correo";
+"content.resendVerificationBusy" = "Enviando…";
+"content.resendVerificationSent" = "Solicitado. Si no llega, revisa la carpeta de spam.";
 "content.pendingDeletionTitle" = "Esta cuenta está programada para eliminarse";
 "content.pendingDeletionBody" = "Se borrará después del %@. Reactívala en la web para conservarla.";
 "content.reactivate" = "Reactivar en relayium.com";
@@ -96,14 +98,25 @@
 "gate.createCodeBody" = "Crear un código reserva capacidad de retransmisión que se cobra a la cuenta que lo creó. Unirse a un código creado por otra persona no requiere ninguna cuenta.";
 "gate.signIn" = "Iniciar sesión";
 "gate.createAccount" = "Crear una cuenta";
+"gate.openAccount" = "Abrir Cuenta";
 
 /* MARK: inicio de sesión */
 "login.email" = "Correo electrónico";
 "login.password" = "Contraseña";
+"login.signInTitle" = "Te damos la bienvenida de nuevo";
+"login.signInBody" = "Inicia sesión para enviar enlaces cifrados y gestionar tu plan, dispositivos y archivos almacenados.";
+"login.registerTitle" = "Crea tu cuenta de Relayium";
+"login.registerBody" = "Regístrate directamente en la app. Te enviaremos un enlace para verificar tu correo.";
+"login.displayName" = "Nombre (opcional)";
+"login.confirmPassword" = "Confirmar contraseña";
 "login.signIn" = "Iniciar sesión";
 "login.signingIn" = "Iniciando sesión…";
-"login.signInWithApple" = "Iniciar sesión con Apple";
-"login.createAccount" = "Crear una cuenta en relayium.com";
+"login.creatingAccount" = "Creando tu cuenta…";
+"login.browserSignIn" = "Iniciar sesión en el navegador";
+"login.createAccount" = "Crear cuenta";
+"login.needAccount" = "¿Nuevo en Relayium? Crea una cuenta";
+"login.errorEmailMissing" = "Escribe tu correo electrónico.";
+"login.errorPasswordsDiffer" = "Las dos contraseñas no coinciden.";
 
 /* MARK: centro directo y verificación */
 "hub.transferType" = "Tipo de transferencia";
@@ -348,6 +361,10 @@
 "error.account.server" = "El servidor devolvió un error (%@). Inténtalo de nuevo en un momento.";
 "error.account.decoding" = "El servidor envió una respuesta que esta versión de la app no entiende. Actualizarla puede solucionarlo.";
 "error.account.network" = "No se pudo contactar con el servidor. Comprueba tu conexión a internet.";
+"error.account.emailInvalid" = "Ese correo electrónico no parece válido.";
+"error.account.passwordTooShort" = "Usa al menos 8 caracteres para la contraseña.";
+"error.account.emailTaken" = "Ya existe una cuenta con este correo. Inicia sesión o usa otra dirección.";
+"error.account.pendingDeletion" = "Hay una cuenta con este correo programada para eliminarse. Usa el enlace de reactivación del correo enviado al eliminarla, o inténtalo cuando termine el periodo de gracia.";
 "error.keychain.signIn" = "macOS no pudo guardar tu inicio de sesión (error de llavero %@). Seguirás con la sesión iniciada hasta que salgas de la app.";
 "error.storedKey.keychain.save" = "El llavero no pudo guardar la clave de este archivo (error de llavero %@).";
 "error.storedKey.keychain.read" = "macOS no pudo leer la clave de este archivo del llavero (error de llavero %@).";

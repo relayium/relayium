@@ -19,17 +19,25 @@ struct CapabilityGateView: View {
     /// `body:` is the outward name; stored as `message` because `body` is
     /// already taken by `View`.
     private let message: String
-    private let onSignIn: () -> Void
+    private let onAccount: (AuthMode) -> Void
 
     @EnvironmentObject private var session: AccountSession
 
-    /// `onSignIn` selects the Account destination. Passed in rather than reached
-    /// for, so this component knows nothing about the navigation model.
-    init(gate: AccountGate, title: String, body: String, onSignIn: @escaping () -> Void) {
+    /// `onAccount` selects the Account destination, on the half of its form the
+    /// caller names. Passed in rather than reached for, so this component knows
+    /// nothing about the navigation model.
+    ///
+    /// It takes the mode because **Create an account** used to open
+    /// relayium.com. Routing it to the Account destination without saying which
+    /// half to show would land the user on a sign-in form — a button that names
+    /// one thing and produces another, which is the same defect as the greyed
+    /// control this whole view exists to replace.
+    init(gate: AccountGate, title: String, body: String,
+         onAccount: @escaping (AuthMode) -> Void) {
         self.gate = gate
         self.title = title
         self.message = body
-        self.onSignIn = onSignIn
+        self.onAccount = onAccount
     }
 
     var body: some View {
@@ -54,10 +62,12 @@ struct CapabilityGateView: View {
                                title: title,
                                body: message,
                                actionTitle: L10n.t(.gateSignIn),
-                               action: onSignIn)
-                Button(L10n.t(.gateCreateAccount)) {
-                    NSWorkspace.shared.open(AppEnvironment.accountWebURL)
-                }
+                               action: { onAccount(.signIn) })
+                // Registration is in the app. This used to open relayium.com,
+                // which was the only place an account could be created; it now
+                // opens the same Account destination the button above does, on
+                // its create-account half.
+                Button(L10n.t(.gateCreateAccount)) { onAccount(.register) }
                 .buttonStyle(.link)
 
             case let .unavailable(text):
@@ -70,9 +80,11 @@ struct CapabilityGateView: View {
                 Text(L10n.t(.contentCheckEmailBody, [L10n.token(email)]))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button(L10n.t(.contentOpenRelayium)) {
-                    NSWorkspace.shared.open(AppEnvironment.accountWebURL)
-                }
+                // To the Account destination, which owns the resend action and
+                // the way back — not to a website, and not to a second copy of
+                // the resend button that would have to keep its own busy state
+                // in step with the first.
+                Button(L10n.t(.gateOpenAccount)) { onAccount(.signIn) }
 
             case let .pendingDeletion(purgeAfter, reactivateToken):
                 Text(L10n.t(.contentPendingDeletionTitle)).font(.headline)

@@ -78,7 +78,7 @@ struct DirectPane: View {
                 CapabilityGateView(gate: gate,
                                    title: L10n.t(.gateCreateCodeTitle),
                                    body: L10n.t(.gateCreateCodeBody),
-                                   onSignIn: { navigation.select(.account) })
+                                   onAccount: { navigation.selectAccount(intent: $0) })
             }
         }
     }
