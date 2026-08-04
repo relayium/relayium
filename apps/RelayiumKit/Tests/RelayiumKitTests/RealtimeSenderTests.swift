@@ -14,7 +14,7 @@ final class RealtimeSenderTests: XCTestCase {
         let datas = v.realtimeFileDatas()        // [[UInt8]]
         let s = RealtimeSender(sessionKey: v.hex("sessionKeyHex"))
         var out = try s.batchFrame(files)
-        for f in s.dataFrames(zip(files, datas).map { ($0, $1) }) { out += f }
+        for f in try s.dataFrames(zip(files, datas).map { ($0, $1) }) { out += f }
         XCTAssertEqual(out, v.hex("frameStreamHex"))
     }
     func testChainHashMatchesVector() throws {

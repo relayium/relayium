@@ -70,5 +70,469 @@
         "frameHex": "09000000029ac427891d9785b07af268c1b3c955a09afaf173659d89867455c1996be0dc5aaebb71480906a543e5c72aa571092f02f53d140eafaa64a92845faa10cde"
       }
     ]
+  },
+  "kinds": {
+    "chunk": 1,
+    "chunkPart": 10,
+    "batchEnc": 7,
+    "batchPart": 11,
+    "resumeStart": 4,
+    "resumeReq": 5,
+    "doneEnc": 8
+  },
+  "limits": {
+    "chunkSize": 196608,
+    "chunkOverhead": 21,
+    "minPieceBytes": 4096
+  },
+  "resume": {
+    "reqPoint": {
+      "index": 3,
+      "offset": 987654
+    },
+    "reqFrameHex": "05000000007b22696e646578223a332c226f6666736574223a3938373635347d",
+    "startPoint": {
+      "index": 1,
+      "offset": 393216,
+      "seq": 9
+    },
+    "startFrameHex": "04000000007b22696e646578223a312c226f6666736574223a3339333231362c22736571223a397d"
+  },
+  "fragmentation": {
+    "keyHex": "7777777777777777777777777777777777777777777777777777777777777777",
+    "maxFrameBytes": 65536,
+    "pieceBytes": 65515,
+    "manifest": {
+      "files": [
+        {
+          "name": "frag-0.bin",
+          "size": 393221
+        },
+        {
+          "name": "frag-1.bin",
+          "size": 0
+        },
+        {
+          "name": "frag-2.bin",
+          "size": 9
+        }
+      ]
+    },
+    "bodies": [
+      {
+        "size": 393221,
+        "seed": 33,
+        "sha256": "106f9cf68ab87ce110379fe48c7379db0a605696021c465612f5965d8427e812"
+      },
+      {
+        "size": 0,
+        "seed": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "size": 9,
+        "seed": 42,
+        "sha256": "5a0e43759e3cb8f7254fa2d6059a1455d4d5dd343e37a2c268e895bd65543b09"
+      }
+    ],
+    "batchFramesHex": [
+      "0700000000672fd1a046f8dde12d0e6e8742e91293767607eebbed39149b2d57e66df205cedaf4e4092f68936302a8e2016bb9edce73e63e03d198c2e4842f5439a21d988805fb8117c39ca8f0a9a1f3a880f056e4010cfa63553c36a77bd602b50ec5d0cc96b0dbf1f4611cbd0f23411dce8c33253e56b40595ed8d6138d5c56b7b"
+    ],
+    "dataFrames": {
+      "count": 13,
+      "frames": [
+        {
+          "kind": 10,
+          "seq": 1,
+          "length": 65536
+        },
+        {
+          "kind": 10,
+          "seq": 2,
+          "length": 65536
+        },
+        {
+          "kind": 10,
+          "seq": 3,
+          "length": 65536
+        },
+        {
+          "kind": 1,
+          "seq": 4,
+          "length": 84
+        },
+        {
+          "kind": 10,
+          "seq": 5,
+          "length": 65536
+        },
+        {
+          "kind": 10,
+          "seq": 6,
+          "length": 65536
+        },
+        {
+          "kind": 10,
+          "seq": 7,
+          "length": 65536
+        },
+        {
+          "kind": 1,
+          "seq": 8,
+          "length": 84
+        },
+        {
+          "kind": 1,
+          "seq": 9,
+          "length": 26
+        },
+        {
+          "kind": 8,
+          "seq": 10,
+          "length": 98
+        },
+        {
+          "kind": 8,
+          "seq": 11,
+          "length": 98
+        },
+        {
+          "kind": 1,
+          "seq": 12,
+          "length": 30
+        },
+        {
+          "kind": 8,
+          "seq": 13,
+          "length": 98
+        }
+      ],
+      "streamSha256": "33cfea229d561e2afa113c2a4987abe1232163e8e90be79b605983e367ba59c5"
+    },
+    "logicalChunkLengths": [
+      196608,
+      196608,
+      5,
+      9
+    ],
+    "doneHashes": [
+      "1f6d7e406d3de41a5a3eb79d7666c8fc08a8e43dc0442805ec90e3bf14382a96",
+      "0000000000000000000000000000000000000000000000000000000000000000",
+      "68b5bdd0dfeb1bb4892d9386c4313c2fb4a745ebd2594f4043c8faf71c23c467"
+    ]
+  },
+  "durableResume": {
+    "keyHex": "8888888888888888888888888888888888888888888888888888888888888888",
+    "manifest": {
+      "files": [
+        {
+          "name": "big.bin",
+          "size": 591058
+        }
+      ]
+    },
+    "body": {
+      "size": 591058,
+      "seed": 61,
+      "sha256": "6bb08f2757501bb55ccdf0178e162f2c3538087c0f7ef9dbc4fc2e71ab1b39ab"
+    },
+    "firstMaxFrameBytes": 262144,
+    "resumedMaxFrameBytes": 65536,
+    "batchFramesHex": [
+      "070000000085d7ee798072e72ec5379175f8e5f34d3c9cafe7617bc71567e189510011fe062620863e7459c3ea155f0e33fb6480691bc9a5de1b269af190e6a37a"
+    ],
+    "deliveredFrames": {
+      "count": 2,
+      "frames": [
+        {
+          "kind": 1,
+          "seq": 1,
+          "length": 196629
+        },
+        {
+          "kind": 1,
+          "seq": 2,
+          "length": 196629
+        }
+      ],
+      "streamSha256": "5bd4a34598274a00a79c348371aa32661bb5c1a81868bee0041a9d2183e8bc17"
+    },
+    "lostFrames": {
+      "count": 3,
+      "frames": [
+        {
+          "kind": 1,
+          "seq": 3,
+          "length": 196629
+        },
+        {
+          "kind": 1,
+          "seq": 4,
+          "length": 1255
+        },
+        {
+          "kind": 8,
+          "seq": 5,
+          "length": 98
+        }
+      ],
+      "streamSha256": "a65953dbf8aa0ca3646c46d916a2679fda20e91e17b9df20ed662db49294c12e"
+    },
+    "checkpoint": {
+      "index": 0,
+      "offset": 393216
+    },
+    "chainAtCheckpointHex": "cb50605e8950c5a0c7593fc37b90bb786a951b44a9d0c173a83d7fb217fc4a4b",
+    "resumeReqHex": "05000000007b22696e646578223a302c226f6666736574223a3339333231367d",
+    "resumeStartHex": "04000000007b22696e646578223a302c226f6666736574223a3339333231362c22736571223a367d",
+    "resumeSeq": 6,
+    "resumedFrames": {
+      "count": 6,
+      "frames": [
+        {
+          "kind": 10,
+          "seq": 6,
+          "length": 65536
+        },
+        {
+          "kind": 10,
+          "seq": 7,
+          "length": 65536
+        },
+        {
+          "kind": 10,
+          "seq": 8,
+          "length": 65536
+        },
+        {
+          "kind": 1,
+          "seq": 9,
+          "length": 84
+        },
+        {
+          "kind": 1,
+          "seq": 10,
+          "length": 1255
+        },
+        {
+          "kind": 8,
+          "seq": 11,
+          "length": 98
+        }
+      ],
+      "streamSha256": "8ca317025bc5158d9c08d2536245fe8eb407e0ae5b53286e6a0a074739b12bcf"
+    },
+    "doneHashHex": "fdc1e62f5e85bdbea551b784c20773ccba6109765a3478dd04e2fa9dd308a514"
+  },
+  "multiFileResume": {
+    "keyHex": "9999999999999999999999999999999999999999999999999999999999999999",
+    "manifest": {
+      "files": [
+        {
+          "name": "mf-0.bin",
+          "size": 196611
+        },
+        {
+          "name": "mf-1.bin",
+          "size": 9
+        },
+        {
+          "name": "mf-2.bin",
+          "size": 393216
+        }
+      ]
+    },
+    "bodies": [
+      {
+        "size": 196611,
+        "seed": 41
+      },
+      {
+        "size": 9,
+        "seed": 42
+      },
+      {
+        "size": 393216,
+        "seed": 43
+      }
+    ],
+    "maxFrameBytes": 65536,
+    "cases": [
+      {
+        "point": {
+          "index": 0,
+          "offset": 196611
+        },
+        "seqAtResume": 17,
+        "resumeStartHex": "04000000007b22696e646578223a302c226f6666736574223a3139363631312c22736571223a31377d",
+        "frames": {
+          "count": 12,
+          "frames": [
+            {
+              "kind": 8,
+              "seq": 17,
+              "length": 98
+            },
+            {
+              "kind": 1,
+              "seq": 18,
+              "length": 30
+            },
+            {
+              "kind": 8,
+              "seq": 19,
+              "length": 98
+            },
+            {
+              "kind": 10,
+              "seq": 20,
+              "length": 65536
+            },
+            {
+              "kind": 10,
+              "seq": 21,
+              "length": 65536
+            },
+            {
+              "kind": 10,
+              "seq": 22,
+              "length": 65536
+            },
+            {
+              "kind": 1,
+              "seq": 23,
+              "length": 84
+            },
+            {
+              "kind": 10,
+              "seq": 24,
+              "length": 65536
+            },
+            {
+              "kind": 10,
+              "seq": 25,
+              "length": 65536
+            },
+            {
+              "kind": 10,
+              "seq": 26,
+              "length": 65536
+            },
+            {
+              "kind": 1,
+              "seq": 27,
+              "length": 84
+            },
+            {
+              "kind": 8,
+              "seq": 28,
+              "length": 98
+            }
+          ],
+          "streamSha256": "53c30f935005ddb20c4a3acbdadcaa768e7ffff421c1a5eff7d1b70d250a946d"
+        },
+        "resumeReqHex": "05000000007b22696e646578223a302c226f6666736574223a3139363631317d"
+      },
+      {
+        "point": {
+          "index": 2,
+          "offset": 0
+        },
+        "seqAtResume": 17,
+        "resumeStartHex": "04000000007b22696e646578223a322c226f6666736574223a302c22736571223a31377d",
+        "frames": {
+          "count": 9,
+          "frames": [
+            {
+              "kind": 10,
+              "seq": 17,
+              "length": 65536
+            },
+            {
+              "kind": 10,
+              "seq": 18,
+              "length": 65536
+            },
+            {
+              "kind": 10,
+              "seq": 19,
+              "length": 65536
+            },
+            {
+              "kind": 1,
+              "seq": 20,
+              "length": 84
+            },
+            {
+              "kind": 10,
+              "seq": 21,
+              "length": 65536
+            },
+            {
+              "kind": 10,
+              "seq": 22,
+              "length": 65536
+            },
+            {
+              "kind": 10,
+              "seq": 23,
+              "length": 65536
+            },
+            {
+              "kind": 1,
+              "seq": 24,
+              "length": 84
+            },
+            {
+              "kind": 8,
+              "seq": 25,
+              "length": 98
+            }
+          ],
+          "streamSha256": "f2b298c90b42cbcdf9e7403cf84bd6bf7cb0d1ed871085865dc2f3337974f654"
+        },
+        "resumeReqHex": "05000000007b22696e646578223a322c226f6666736574223a307d"
+      },
+      {
+        "point": {
+          "index": 2,
+          "offset": 196608
+        },
+        "seqAtResume": 17,
+        "resumeStartHex": "04000000007b22696e646578223a322c226f6666736574223a3139363630382c22736571223a31377d",
+        "frames": {
+          "count": 5,
+          "frames": [
+            {
+              "kind": 10,
+              "seq": 17,
+              "length": 65536
+            },
+            {
+              "kind": 10,
+              "seq": 18,
+              "length": 65536
+            },
+            {
+              "kind": 10,
+              "seq": 19,
+              "length": 65536
+            },
+            {
+              "kind": 1,
+              "seq": 20,
+              "length": 84
+            },
+            {
+              "kind": 8,
+              "seq": 21,
+              "length": 98
+            }
+          ],
+          "streamSha256": "effa1583e2ea448072c09daab17ca64275e2b2f8e3b18dd1119069327e3a8c9f"
+        },
+        "resumeReqHex": "05000000007b22696e646578223a322c226f6666736574223a3139363630387d"
+      }
+    ]
   }
 }

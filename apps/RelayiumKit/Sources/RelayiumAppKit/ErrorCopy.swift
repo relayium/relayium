@@ -214,7 +214,13 @@ public enum ErrorCopy {
                 return L10n.t(.errorRealtimeDropped, language: language)
             case .legacyPeer:
                 return L10n.t(.errorRealtimeLegacyPeer, language: language)
-            case .unknownKind:
+            // The fragmentation and resume failures are all "the peer's framing
+            // and ours disagree", which is what the peer-protocol string already
+            // says. They are reachable only through the durable file-lane wire,
+            // which no app surface is wired to yet; when the lane ships and the
+            // user can actually see one of these, they get their own copy rather
+            // than a shared generic line.
+            case .unknownKind, .oversizedFrame, .interleavedParts, .resumeRejected:
                 return L10n.t(.errorPeerProtocol, language: language)
             }
         }
@@ -231,6 +237,11 @@ public enum ErrorCopy {
             case .sourceLongerThanDeclared(let name):
                 return L10n.t(.errorSenderSourceLonger,
                               [L10n.token(name, language: language)], language: language)
+            // Same reasoning as the RealtimeError fragmentation cases above:
+            // these three are connection/peer-framing failures on the durable
+            // file-lane wire, which is not yet reachable from any app surface.
+            case .frameSizeTooSmall, .resumePointRejected, .sequenceExhausted:
+                return L10n.t(.errorPeerProtocol, language: language)
             }
         }
         if let e = error as? RealtimeConnection.ConnectionError {

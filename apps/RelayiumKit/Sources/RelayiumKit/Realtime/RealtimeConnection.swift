@@ -458,6 +458,11 @@ public final class RealtimeConnection: NSObject {
                 }
             case .done(let ok):
                 onDone?(ok)
+            case .pending:
+                // A non-final piece of a fragmented logical chunk: authenticated
+                // and buffered by the receiver, but nothing is written, hashed or
+                // acked until the whole chunk has arrived.
+                break
             case .resume:
                 // RESUME_START is part of the resume-reconnect path, out of scope
                 // for this fresh-connect shell.

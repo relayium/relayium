@@ -21,7 +21,7 @@ final class RealtimeFrameProducerTests: XCTestCase {
         let batch = RealtimeSender(sessionKey: key)
         _ = try batch.batchFrame([metaA, metaB])           // consumes seq 0
         var expected: [UInt8] = []
-        for f in batch.dataFrames([(metaA, a), (metaB, b)]) { expected += f }
+        for f in try batch.dataFrames([(metaA, a), (metaB, b)]) { expected += f }
 
         let streamed = RealtimeSender(sessionKey: key)
         _ = try streamed.batchFrame([metaA, metaB])        // same seq 0
@@ -40,7 +40,7 @@ final class RealtimeFrameProducerTests: XCTestCase {
         let batch = RealtimeSender(sessionKey: key)
         _ = try batch.batchFrame([meta])
         var expected: [UInt8] = []
-        for f in batch.dataFrames([(meta, [])]) { expected += f }
+        for f in try batch.dataFrames([(meta, [])]) { expected += f }
 
         let streamed = RealtimeSender(sessionKey: key)
         _ = try streamed.batchFrame([meta])
@@ -142,7 +142,7 @@ final class RealtimeFrameProducerTests: XCTestCase {
         let batch = RealtimeSender(sessionKey: key)
         _ = try batch.batchFrame(metas)
         var expected: [UInt8] = []
-        for f in batch.dataFrames(zip(metas, datas).map { ($0, $1) }) { expected += f }
+        for f in try batch.dataFrames(zip(metas, datas).map { ($0, $1) }) { expected += f }
 
         let streamed = RealtimeSender(sessionKey: key)
         _ = try streamed.batchFrame(metas)

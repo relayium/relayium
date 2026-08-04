@@ -8,6 +8,14 @@ public enum RealtimeEvent: Equatable {
     case chunk([UInt8])
     case done(ok: Bool)
     case resume(index: Int, offset: Int, seq: UInt32)
+    /// A non-final piece of a fragmented logical chunk or manifest: authenticated
+    /// and buffered, but carrying no event of its own.
+    ///
+    /// Explicitly "nothing happened", not a chunk of zero bytes: nothing is
+    /// written, hashed, parsed or checkpointed from a partial unit, so the
+    /// durable state a lane can resume from stays exactly on the `CHUNK_SIZE`
+    /// grid however the transport fragmented the bytes.
+    case pending
 }
 
 public enum RealtimeError: Error, Equatable {
@@ -17,6 +25,14 @@ public enum RealtimeError: Error, Equatable {
     case unknownKind(UInt8)
     case malformed
     case lengthMismatch
+    /// A logical unit (chunk or manifest) exceeded its protocol maximum — either
+    /// across buffered fragments or in one terminal frame.
+    case oversizedFrame
+    /// Fragments of two different logical units arrived interleaved.
+    case interleavedParts
+    /// A resume was requested into no active batch, to a point outside it or off
+    /// the chunk grid, or with a chain snapshot that is not a SHA-256 state.
+    case resumeRejected
 }
 
 /// Receive side of the RealtimeWire protocol: dispatches on frame kind,
@@ -31,7 +47,17 @@ public final class RealtimeReceiver {
     /// Same monotonic seq discipline as `RealtimeSender`: every encrypted
     /// frame (BATCH/CHUNK/DONE) consumes the next seq in order, so a
     /// mismatch means either a dropped/reordered frame or an injected one.
-    private var expectedSeq: UInt32 = 0
+    ///
+    /// Held one width wider than the 32-bit wire value, exactly like
+    /// `RealtimeTextReceiver`'s counter. `UInt32.max` is a nonce a conforming
+    /// sender genuinely emits — `RealtimeSender.reserveSequence` hands out that
+    /// last value and only then fails closed — so a `UInt32` counter would trap
+    /// the process on the increment after it, at a moment the PEER chooses. One
+    /// past the ceiling is not a legal seq for any frame, which is precisely the
+    /// state wanted: it compares unequal to every parsed `UInt32`, so everything
+    /// after the last nonce is refused as out of order rather than wrapping onto
+    /// a nonce that is already spent.
+    private var expectedSeq: UInt64 = 0
 
     /// Running per-file chain hash, reset after each DONE (a batch can carry
     /// more than one file, each with its own chain).
@@ -40,8 +66,115 @@ public final class RealtimeReceiver {
     private var fileIndex = 0
     private var receivedInFile = 0
 
+    /// Plaintext pieces of the logical chunk (or manifest) currently arriving,
+    /// held until its terminating frame.
+    private var parts: [[UInt8]] = []
+    private var partBytes = 0
+    private var partKind: UInt8 = 0
+
+    /// Whether a piece of a logical unit is buffered right now.
+    ///
+    /// `partBytes` cannot answer this. A zero-length PART is authenticated and
+    /// accepted — the count cap, not the byte cap, is what bounds those — so it
+    /// is real buffered state that leaves the byte total at zero. Using the byte
+    /// count as the proxy makes `joinParts` take its "nothing buffered" shortcut
+    /// without clearing `parts`/`partKind`, stranding a kind that then refuses
+    /// the next logical unit as interleaved, and makes DONE close a file out
+    /// over a chunk the sender has not finished framing.
+    private var hasParts: Bool { !parts.isEmpty }
+
     public init(sessionKey: [UInt8]) {
         self.sessionKey = sessionKey
+    }
+
+    /// A copy of the current file's running chain hash. The owner checkpoints it
+    /// next to the bytes it has durably written, so a resume can restore a point
+    /// where hash state and written bytes agree.
+    public func snapshotChain() -> [UInt8] { hash }
+
+    /// An ordered BATCH_ABORT has authenticated every emitted frame of the old
+    /// batch. Reset only its per-file integrity state and its consent: the
+    /// global nonce sequence deliberately continues, because the link's keys
+    /// have not changed and a reusable lane goes on to carry the next batch.
+    public func abortBatch() {
+        hash = [UInt8](repeating: 0, count: 32)
+        files = nil
+        fileIndex = 0
+        receivedInFile = 0
+        dropParts()
+    }
+
+    /// Restore this receiver to a durable checkpoint before feeding resumed
+    /// frames.
+    ///
+    /// Everything is validated against state the receiver already holds, because
+    /// the announcement that motivates this call arrives in plaintext on a
+    /// channel with a signalling relay in the middle. The owner is expected to
+    /// have compared the announced point against its OWN durable checkpoint
+    /// first; this is the second gate, not the first.
+    public func resumeAt(_ point: ResumePoint, chain: [UInt8], seq: UInt32) throws {
+        // A resume may skip forward over frames that were sent and lost, but must
+        // never move the receive nonce backwards: that would make an old
+        // ciphertext valid again under the same key and sequence number.
+        // Widened, not truncated: once the counter is past the 32-bit ceiling no
+        // announced `seq` can reach it, so an exhausted sequence can never be
+        // rewound into a range whose nonces have all been used.
+        guard UInt64(seq) >= expectedSeq else { throw RealtimeError.outOfOrder }
+        guard let files else { throw RealtimeError.resumeRejected }
+        guard chain.count == 32 else { throw RealtimeError.resumeRejected }
+        let sizes = files.map(\.size)
+        guard resumePointInRange(point, sizes), resumePointAligned(point, sizes) else {
+            throw RealtimeError.resumeRejected
+        }
+        hash = chain
+        expectedSeq = UInt64(seq)
+        fileIndex = point.index
+        receivedInFile = point.offset
+        // Pieces of a chunk the old transport cut in half are worthless: the
+        // sender restarts from the checkpoint, which is a whole-chunk boundary.
+        dropParts()
+    }
+
+    private func dropParts() {
+        parts = []
+        partBytes = 0
+        partKind = 0
+    }
+
+    /// Buffer one non-final piece. `limit` bounds how much a peer can make this
+    /// receiver hold before the terminating frame arrives.
+    private func addPart(kind: UInt8, plain: [UInt8], limit: Int) throws {
+        if partKind != 0, partKind != kind { throw RealtimeError.interleavedParts }
+        if partBytes + plain.count > limit { throw RealtimeError.oversizedFrame }
+        // A byte bound alone is not a bound: a peer can send unlimited
+        // ZERO-length pieces, which never advance `partBytes` while each one
+        // costs an array slot. The count bound is what actually closes that,
+        // and it costs no legitimate sender anything — the smallest piece any
+        // conforming sender may use is MIN_PIECE_BYTES, so the largest logical
+        // unit (a MANIFEST_MAX_BYTES manifest) is at most 50 pieces.
+        if parts.count >= MAX_PIECES_PER_LOGICAL_UNIT { throw RealtimeError.oversizedFrame }
+        partKind = kind
+        parts.append(plain)
+        partBytes += plain.count
+    }
+
+    /// Join the buffered pieces with the terminating frame's plaintext.
+    ///
+    /// The limit is checked BEFORE the "nothing buffered" shortcut, because it
+    /// bounds the logical unit, not the fragmentation. A peer that skips the PART
+    /// kinds and sends one authenticated terminal frame is the cheapest way to
+    /// hand this receiver an arbitrarily large plaintext to hash or JSON-parse
+    /// before any consent — the very thing `addPart` exists to prevent.
+    private func joinParts(kind: UInt8, plain: [UInt8], limit: Int) throws -> [UInt8] {
+        if partKind != 0, partKind != kind { throw RealtimeError.interleavedParts }
+        if partBytes + plain.count > limit { throw RealtimeError.oversizedFrame }
+        if !hasParts { return plain }
+        var out = [UInt8]()
+        out.reserveCapacity(partBytes + plain.count)
+        for p in parts { out += p }
+        out += plain
+        dropParts()
+        return out
     }
 
     public func feed(_ encoded: [UInt8]) throws -> RealtimeEvent {
@@ -51,14 +184,30 @@ public final class RealtimeReceiver {
         let payload = Array(encoded[5...])
 
         switch kind {
+        case RealtimeKind.chunkPart, RealtimeKind.batchPart:
+            // A non-final piece: authenticate it in sequence, buffer it, emit
+            // nothing.
+            guard UInt64(seq) == expectedSeq else { throw RealtimeError.outOfOrder }
+            guard let piece = open(key: sessionKey, seq: UInt64(seq), ciphertext: payload) else {
+                throw RealtimeError.tamper
+            }
+            expectedSeq += 1
+            try addPart(kind: kind, plain: piece,
+                        limit: kind == RealtimeKind.chunkPart ? CHUNK_SIZE : MANIFEST_MAX_BYTES)
+            return .pending
+
         case RealtimeKind.batchEnc, RealtimeKind.chunk, RealtimeKind.doneEnc:
-            guard seq == expectedSeq else { throw RealtimeError.outOfOrder }
+            guard UInt64(seq) == expectedSeq else { throw RealtimeError.outOfOrder }
             guard let plain = open(key: sessionKey, seq: UInt64(seq), ciphertext: payload) else {
                 throw RealtimeError.tamper
             }
             expectedSeq += 1
             switch kind {
             case RealtimeKind.batchEnc:
+                // The whole logical manifest, however many messages carried it —
+                // and bounded before it is decoded, not after.
+                let plain = try joinParts(kind: RealtimeKind.batchPart, plain: plain,
+                                          limit: MANIFEST_MAX_BYTES)
                 guard files == nil else { throw RealtimeError.malformed }
                 guard let decoded = try? JSONDecoder().decode(BatchPayload.self, from: Data(plain)) else {
                     throw RealtimeError.malformed
@@ -73,6 +222,11 @@ public final class RealtimeReceiver {
                 // 在这个唯一入口把双向控制符洗掉。
                 return .batch(decoded.files.map(sanitizeFileMeta))
             case RealtimeKind.chunk:
+                // The whole logical chunk, however many messages carried it — so
+                // the chain hash and the owner's write/checkpoint both see the
+                // CHUNK_SIZE unit. The bound comes first: it is what stops an
+                // unfragmented oversize frame from being hashed before consent.
+                let plain = try joinParts(kind: RealtimeKind.chunkPart, plain: plain, limit: CHUNK_SIZE)
                 guard let files, fileIndex < files.count,
                       plain.count <= files[fileIndex].size - receivedInFile else {
                     throw RealtimeError.lengthMismatch
@@ -81,6 +235,12 @@ public final class RealtimeReceiver {
                 hash = chainHash(hash, plain)
                 return .chunk(plain)
             default: // doneEnc
+                // A file cannot end in the middle of a logical chunk. Leftover
+                // pieces mean the sender's framing and ours disagree — fail
+                // rather than close out a file over a short chunk. A buffered
+                // piece carrying no bytes says that just as loudly as a short
+                // one, so this asks whether a piece exists, not how big it was.
+                guard !hasParts else { throw RealtimeError.malformed }
                 guard let files, fileIndex < files.count,
                       receivedInFile == files[fileIndex].size else {
                     throw RealtimeError.lengthMismatch
@@ -137,24 +297,11 @@ private func hexEncoded(_ bytes: [UInt8]) -> String {
     return String(decoding: out, as: UTF8.self)
 }
 
-/// Non-negative safe integer, mirroring transfer.ts's `isIndex` exactly:
-/// `typeof n === "number" && Number.isSafeInteger(n) && n >= 0`. That caps at
-/// 2^53-1 (9007199254740991, `Number.MAX_SAFE_INTEGER`) — NOT `Int.max`
-/// (2^63-1): a JS sender can never legitimately produce a value above 2^53-1
-/// (it stops being an exact integer past that), so accepting up to `Int.max`
-/// here would let a malformed/attacker-supplied value through that the real
-/// protocol can never emit. Also rejects missing/non-numeric/negative/
-/// non-integer values (JSONSerialization never hands back NaN/Infinity for a
-/// well-formed JSON number, but a string like `"nope"` in the `seq` field
-/// must still be rejected, not coerced).
-private func safeIndex(_ v: Any?) -> Int? {
-    guard let n = v as? NSNumber else { return nil }
-    // Exclude booleans, which bridge to NSNumber too.
-    if CFGetTypeID(n) == CFBooleanGetTypeID() { return nil }
-    let d = n.doubleValue
-    guard d.rounded(.towardZero) == d, d >= 0, d <= 9_007_199_254_740_991 else { return nil }
-    return n.intValue
-}
+// `safeIndex` — the non-negative JSON-safe-integer gate this file applies to
+// RESUME_START's index/offset/seq — now lives in RealtimeResume.swift, next to
+// the resume-request parser that applies exactly the same rule to exactly the
+// same two numbers. One copy, so the two directions of the resume handshake
+// cannot drift apart.
 
 private struct BatchPayload: Decodable {
     let files: [FileMeta]
