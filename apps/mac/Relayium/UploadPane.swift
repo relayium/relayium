@@ -62,8 +62,19 @@ struct UploadPane: View {
             } else {
                 gateCard
             }
+        case .checkingRecovery, .preparing, .restarting:
+            // R3-G's durable recovery is the iOS app's: this pane is built with
+            // no `PendingUploadSupport`, so neither state is reachable here.
+            // Handled rather than defaulted, so adding a state to the shared
+            // model stays a compile error on this platform instead of a silent
+            // blank card.
+            uploadingCard(sent: 0, total: 0)
         case let .uploading(sent, total):
             uploadingCard(sent: sent, total: total)
+        case .interrupted:
+            // Same: unreachable without a pending store. Falling back to the
+            // selection keeps the user's files in front of them.
+            if case .allowed = gate { selectionCard } else { gateCard }
         case let .done(link, expiresAt, keyWarning):
             linkReadyCard(link: link, expiresAt: expiresAt, keyWarning: keyWarning)
         case let .failed(message):

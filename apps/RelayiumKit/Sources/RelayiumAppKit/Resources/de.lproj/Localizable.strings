@@ -170,7 +170,16 @@
 "upload.sendAnother" = "Etwas anderes senden";
 "upload.expiresAfter" = "Läuft ab nach";
 "upload.burnAfterRead" = "Nach dem ersten Download löschen";
-"upload.keepOpen" = "Lass Relayium geöffnet, bis das hier fertig ist. Die App zu verlassen kann den Upload abbrechen, und im Hintergrund lässt er sich noch nicht fortsetzen.";
+"upload.keepOpen" = "Lass Relayium geöffnet, bis das hier fertig ist. Die App zu verlassen oder zu schließen pausiert den Upload — im Hintergrund läuft er nie weiter —, aber deine Dateien liegen auf diesem Gerät: Beim erneuten Öffnen kannst du den Upload fortsetzen.";
+"upload.preparing" = "Deine Dateien werden vorbereitet …";
+"upload.checkingRecovery" = "Pausierter Upload wird gesucht …";
+"upload.interruptedTitle" = "Upload pausiert";
+"upload.interruptedBody" = "%1$@ (%2$@) liegen auf diesem Gerät und können dort fortgesetzt werden, wo der Upload aufgehört hat.";
+"upload.interruptedReason" = "Abgebrochen, weil: %@";
+"upload.resume" = "Upload fortsetzen";
+"upload.discard" = "Gespeicherte Kopie löschen";
+"upload.restarting" = "Der Server hat den pausierten Upload verworfen, deshalb beginnt er von vorn.";
+"upload.cleanupFailed" = "Die Dateikopie auf diesem Gerät ließ sich nicht löschen. Relayium versucht es beim nächsten Start erneut.";
 "upload.keyKept" = "Der Schlüssel liegt sicher auf diesem Gerät und wird nie an die Server von Relayium gesendet. Du kannst diesen Link jederzeit im Tab „Konto“ erneut kopieren.";
 "upload.keyWarning" = "%@ Der Link unten ist die einzige verfügbare Kopie des Schlüssels — kopiere ihn jetzt. Die Server von Relayium hatten den Schlüssel nie, deshalb kann dieser Link nicht erneut angezeigt werden.";
 "upload.fileTooLarge" = "%@ ist größer, als dieser Server akzeptiert.";

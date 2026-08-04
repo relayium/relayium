@@ -170,7 +170,16 @@
 "upload.sendAnother" = "Enviar outra coisa";
 "upload.expiresAfter" = "Expira após";
 "upload.burnAfterRead" = "Eliminar após a primeira transferência";
-"upload.keepOpen" = "Mantenha o Relayium aberto até isto terminar. Sair da app pode parar o envio, que ainda não pode ser retomado em segundo plano.";
+"upload.keepOpen" = "Mantenha o Relayium aberto até isto terminar. Sair da app ou fechá-la pausa o envio — ele nunca continua em segundo plano —, mas os seus ficheiros ficam guardados neste dispositivo: ao reabrir o Relayium pode continuar o envio.";
+"upload.preparing" = "A preparar os seus ficheiros…";
+"upload.checkingRecovery" = "A procurar um envio em pausa…";
+"upload.interruptedTitle" = "Envio em pausa";
+"upload.interruptedBody" = "%1$@ (%2$@) estão guardados neste dispositivo, prontos para continuar de onde o envio parou.";
+"upload.interruptedReason" = "Parou porque: %@";
+"upload.resume" = "Retomar o envio";
+"upload.discard" = "Eliminar a cópia guardada";
+"upload.restarting" = "O servidor descartou o envio em pausa, por isso começa do início.";
+"upload.cleanupFailed" = "Não foi possível remover a cópia dos ficheiros deste dispositivo. O Relayium tentará novamente da próxima vez que abrir.";
 "upload.keyKept" = "A chave está guardada em segurança neste dispositivo e nunca é enviada para os servidores do Relayium. Pode voltar a copiar esta ligação no separador «Conta».";
 "upload.keyWarning" = "%@ A ligação abaixo é a única cópia disponível da chave — copie-a agora. Os servidores do Relayium nunca tiveram a chave, por isso esta ligação não pode ser mostrada outra vez.";
 "upload.fileTooLarge" = "%@ é maior do que este servidor aceita.";

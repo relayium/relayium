@@ -170,7 +170,16 @@
 "upload.sendAnother" = "Envoyer autre chose";
 "upload.expiresAfter" = "Expire après";
 "upload.burnAfterRead" = "Supprimer après le premier téléchargement";
-"upload.keepOpen" = "Gardez Relayium ouvert jusqu’à la fin. Quitter l’app peut interrompre l’envoi, qui ne peut pas encore reprendre en arrière-plan.";
+"upload.keepOpen" = "Gardez Relayium ouvert jusqu’à la fin. Quitter ou fermer l’app met l’envoi en pause — il ne continue jamais en arrière-plan —, mais vos fichiers sont enregistrés sur cet appareil : rouvrez Relayium pour poursuivre l’envoi.";
+"upload.preparing" = "Préparation de vos fichiers…";
+"upload.checkingRecovery" = "Recherche d’un envoi en pause…";
+"upload.interruptedTitle" = "Envoi en pause";
+"upload.interruptedBody" = "%1$@ (%2$@) sont enregistrés sur cet appareil, prêts à reprendre là où l’envoi s’est arrêté.";
+"upload.interruptedReason" = "Interrompu parce que : %@";
+"upload.resume" = "Reprendre l’envoi";
+"upload.discard" = "Supprimer la copie enregistrée";
+"upload.restarting" = "Le serveur a abandonné l’envoi en pause : il repart du début.";
+"upload.cleanupFailed" = "La copie des fichiers sur cet appareil n’a pas pu être supprimée. Relayium réessaiera à sa prochaine ouverture.";
 "upload.keyKept" = "La clé est conservée en sécurité sur cet appareil et n’est jamais envoyée aux serveurs de Relayium. Vous pouvez copier ce lien de nouveau depuis l’onglet « Compte ».";
 "upload.keyWarning" = "%@ Le lien ci-dessous est la seule copie disponible de la clé — copiez-le maintenant. Les serveurs de Relayium n’ont jamais eu la clé, ce lien ne peut donc pas être réaffiché.";
 "upload.fileTooLarge" = "%@ dépasse la taille acceptée par ce serveur.";

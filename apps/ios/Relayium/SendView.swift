@@ -100,13 +100,89 @@ struct SendView: View {
         case .picked:
             choosing
             options
+        case .checkingRecovery:
+            ProgressView { Text(L10n.t(.uploadCheckingRecovery)) }
+        case .preparing:
+            // Copying the selection into this app's own storage. Labelled, not
+            // a bare spinner: on a large video this is the longest part of the
+            // send, and a spinner says nothing at all to VoiceOver.
+            VStack(alignment: .leading, spacing: 12) {
+                ProgressView { Text(L10n.t(.uploadPreparing)) }
+                Button(L10n.t(.commonCancel)) { upload.cancel() }
+            }
         case let .uploading(sent, total):
             uploading(sent: sent, total: total)
+        case .restarting:
+            restarting
+        case let .interrupted(files, bytes, message):
+            interrupted(files: files, bytes: bytes, message: message)
         case let .done(link, expiresAt, keyWarning):
             linkReady(link: link, expiresAt: expiresAt, keyWarning: keyWarning)
         case let .failed(message):
             failure(message)
         }
+    }
+
+    /// The offer made for a job whose bytes are on this device.
+    ///
+    /// Two actions, and the destructive one is marked as such: Discard deletes
+    /// this device's only copy of what the user chose. Nothing here happens on
+    /// its own — the app never resumes an upload the user did not ask it to.
+    private func interrupted(files: Int, bytes: Int, message: String?) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(L10n.t(.uploadInterruptedTitle)).font(.headline)
+            Text(L10n.t(.uploadInterruptedBody, [
+                L10n.plural(.selectionFiles, files),
+                ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file),
+            ]))
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            // Wrapping rather than truncating: at the largest Dynamic Type
+            // sizes this sentence is several lines on an iPhone, and the part
+            // that would be cut is the part that says where the files are.
+            .fixedSize(horizontal: false, vertical: true)
+
+            if let message {
+                Text(L10n.t(.uploadInterruptedReason, [L10n.token(message)]))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Button(action: resume) {
+                Text(L10n.t(.uploadResume)).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+
+            Button(role: .destructive) { upload.discardPendingJob() } label: {
+                Text(L10n.t(.uploadDiscard)).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+        }
+        // One element for the explanation, so VoiceOver reads the situation as
+        // a sentence and then lands on the two actions.
+        .accessibilityElement(children: .contain)
+    }
+
+    /// The server dropped an idle session, so the bar is about to go back to
+    /// zero. Said out loud, because a progress bar that restarts silently reads
+    /// as a bug rather than as the honest thing that just happened.
+    private var restarting: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ProgressView { Text(L10n.t(.uploadHeading)) }
+            Text(L10n.t(.uploadRestarting))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(L10n.t(.commonCancel)) { upload.cancel() }
+        }
+    }
+
+    private func resume() {
+        guard let token = session.bearerToken else { return onOpenAccount() }
+        upload.resume(token: token)
     }
 
     /// The two sources, the line describing what they produced, and the two
@@ -140,6 +216,7 @@ struct SendView: View {
             // Above the actions they qualify, in reading order.
             if let importError = selection.importError { failureLine(importError) }
             if let preparationError = selection.selectionError { failureLine(preparationError) }
+            if let cleanupWarning = upload.cleanupWarning { failureLine(cleanupWarning) }
 
             Button { isChoosingFiles = true } label: {
                 Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
@@ -223,8 +300,10 @@ struct SendView: View {
             } currentValueLabel: {
                 Text(L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
             }
-            // Above Cancel, in reading order: this is the foreground-only truth,
-            // and there is no background transfer and no resume to soften it.
+            // Above Cancel, in reading order. Still the foreground-only truth —
+            // nothing uploads while the app is suspended — but R3-G gave it a
+            // second half: the bytes are staged on this device, so reopening
+            // Relayium offers to carry on. Both halves are in the sentence.
             Text(L10n.t(.uploadKeepOpen))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -244,6 +323,16 @@ struct SendView: View {
             // only copy" would be false on the common path and would contradict
             // the warning on the rare one.
             keyNotice(UploadPresentation.keyNotice(warning: keyWarning))
+            // A separate fact from the key notice, and only ever shown when it
+            // is true: the upload succeeded and this device's copy of the files
+            // could not be removed. The user's files staying on their own
+            // device is theirs to know about.
+            if let cleanupWarning = upload.cleanupWarning {
+                Text(cleanupWarning)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             // Selectable text and `ShareLink`, never a pasteboard write: an app
             // that puts things on the clipboard behind the user's back is doing
             // the thing this product promises not to do, and iOS would raise its

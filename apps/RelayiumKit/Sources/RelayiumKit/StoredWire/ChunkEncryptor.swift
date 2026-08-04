@@ -231,9 +231,49 @@ public final class ChunkEncryptor {
     private var index = 0
     private var seq: UInt64 = 1
 
+    /// Bytes of the FIRST frame this encryptor yields that the server already
+    /// holds. Zero for a fresh encryptor; set when resuming into a frame's
+    /// interior, where the frame must be sealed whole and then sliced.
+    public private(set) var dropFromFirstFrame = 0
+
     public init(key: [UInt8], sources: [PlaintextSource]) {
         self.key = key
         self.sources = sources
+    }
+
+    /// Position a fresh encryptor at the frame containing `offset` in the
+    /// framed stream, so `next()` yields exactly the frames from there on.
+    ///
+    /// **Fresh sources, never a seek.** The sources handed in must be at their
+    /// start; this advances the one that carries the offset by reading and
+    /// discarding in bounded steps. A `seek` on the protocol would be faster
+    /// and worse: every conformer would then owe a correct rewind, and a source
+    /// whose position was wrong by one byte produces a stream that is valid
+    /// AES-GCM and decrypts to rubbish. Reading forward from a known start
+    /// cannot be wrong by construction, and the cost is disk, not network.
+    ///
+    /// Sources before the offset's file are never read at all; sources after it
+    /// are untouched and start where they always would.
+    public convenience init(key: [UInt8], sources: [PlaintextSource], resumingAt offset: Int) throws {
+        self.init(key: key, sources: sources)
+        guard offset > 0 else { return }
+        guard let position = framePosition(sizes: sources.map(\.size), offset: offset) else {
+            throw StoredWireError.lengthMismatch
+        }
+        index = position.fileIndex
+        seq = position.seq
+        dropFromFirstFrame = position.dropFromFrame
+        var consumed = 0
+        while consumed < position.byteInFile {
+            let want = min(STORE_CHUNK_SIZE, position.byteInFile - consumed)
+            let got = try self.sources[index].read(want)
+            // A source that ran dry before the offset it is supposed to hold is
+            // not the source this plan was staged from.
+            guard !got.isEmpty, got.count <= want else {
+                throw StoredWireError.lengthMismatch
+            }
+            consumed += got.count
+        }
     }
 
     /// The next frame, or nil once every source is exhausted.
@@ -245,6 +285,9 @@ public final class ChunkEncryptor {
         while index < sources.count {
             let pt = try sources[index].read(STORE_CHUNK_SIZE)
             if pt.isEmpty { index += 1; continue }
+            guard pt.count <= STORE_CHUNK_SIZE else {
+                throw StoredWireError.lengthMismatch
+            }
             let f = Data(frame(seal(key: key, seq: seq, plaintext: pt)))
             seq += 1
             return f

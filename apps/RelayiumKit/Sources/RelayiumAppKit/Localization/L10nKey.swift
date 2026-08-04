@@ -329,10 +329,34 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case uploadSendAnother = "upload.sendAnother"
     case uploadExpiresAfter = "upload.expiresAfter"
     case uploadBurnAfterRead = "upload.burnAfterRead"
-    /// The foreground-only truth, rendered while an upload is in flight. There
-    /// is no background `URLSession` and no resume, and a limitation the app
-    /// stays silent about is one the user only discovers by losing a transfer.
+    /// The foreground-only truth, rendered while an upload is in flight.
+    ///
+    /// R3-G changed what this has to say. There is still no background
+    /// `URLSession` and iOS still stops the process when the user leaves — but
+    /// the bytes are now staged on this device, so reopening the app offers to
+    /// carry on. Both halves have to be in the sentence: a limitation the app
+    /// stays silent about is one the user discovers by losing a transfer, and a
+    /// recovery it stays silent about is one they never use.
     case uploadKeepOpen = "upload.keepOpen"
+    /// Copying the selection into this app's own storage, before any upload.
+    case uploadPreparing = "upload.preparing"
+    /// Checking local disk and Keychain for an interrupted stored upload.
+    case uploadCheckingRecovery = "upload.checkingRecovery"
+    /// The heading of the offer made for a job that stopped.
+    case uploadInterruptedTitle = "upload.interruptedTitle"
+    /// %1$@ files, %2$@ size — what is waiting, and where it lives.
+    case uploadInterruptedBody = "upload.interruptedBody"
+    /// The reason it stopped, when there is one. %@ — the failure sentence.
+    case uploadInterruptedReason = "upload.interruptedReason"
+    case uploadResume = "upload.resume"
+    /// Destructive: it deletes this device's copy of the user's files.
+    case uploadDiscard = "upload.discard"
+    /// The server dropped an idle session, so the upload starts over. Named
+    /// because the progress bar is about to return to zero.
+    case uploadRestarting = "upload.restarting"
+    /// The upload finished but its staged copy could not be removed. Never a
+    /// failed upload — the link works — and never silent either.
+    case uploadCleanupFailed = "upload.cleanupFailed"
     case uploadKeyKept = "upload.keyKept"
     /// %@ — the stored-link-key failure sentence this warning leads with.
     case uploadKeyWarning = "upload.keyWarning"

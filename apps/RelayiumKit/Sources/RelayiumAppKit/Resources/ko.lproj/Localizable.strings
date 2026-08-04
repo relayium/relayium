@@ -170,7 +170,16 @@
 "upload.sendAnother" = "다른 파일 보내기";
 "upload.expiresAfter" = "유효 기간";
 "upload.burnAfterRead" = "첫 다운로드 후 삭제";
-"upload.keepOpen" = "끝날 때까지 Relayium을 열어 두세요. 앱을 벗어나면 업로드가 중단될 수 있고, 아직 백그라운드에서 이어서 보낼 수 없습니다.";
+"upload.keepOpen" = "끝날 때까지 Relayium을 열어 두세요. 앱을 벗어나거나 종료하면 업로드가 일시정지되며 백그라운드에서는 계속되지 않습니다. 다만 파일이 이 기기에 저장되므로 Relayium을 다시 열면 업로드를 계속할 수 있습니다.";
+"upload.preparing" = "파일을 준비하는 중…";
+"upload.checkingRecovery" = "일시정지된 업로드를 확인하는 중…";
+"upload.interruptedTitle" = "업로드 일시정지됨";
+"upload.interruptedBody" = "%1$@(%2$@)이(가) 이 기기에 저장되어 있어 멈춘 지점부터 이어서 보낼 수 있습니다.";
+"upload.interruptedReason" = "중단된 이유: %@";
+"upload.resume" = "업로드 이어서 하기";
+"upload.discard" = "저장된 사본 삭제";
+"upload.restarting" = "서버가 일시정지된 업로드를 정리해서 처음부터 다시 시작합니다.";
+"upload.cleanupFailed" = "이 기기에 저장된 파일 사본을 삭제하지 못했습니다. 다음에 Relayium을 열 때 다시 삭제를 시도합니다.";
 "upload.keyKept" = "키는 이 기기에 안전하게 저장되며 Relayium의 서버로 전송되지 않습니다. 이 링크는 「계정」 탭에서 언제든 다시 복사할 수 있습니다.";
 "upload.keyWarning" = "%@ 아래 링크가 키의 유일한 사본입니다 — 지금 복사하세요. Relayium의 서버는 키를 가진 적이 없으므로 이 링크를 다시 표시할 수 없습니다.";
 "upload.fileTooLarge" = "%@ 은(는) 이 서버가 허용하는 크기를 넘습니다.";

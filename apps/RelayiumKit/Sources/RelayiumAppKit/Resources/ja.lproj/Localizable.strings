@@ -170,7 +170,16 @@
 "upload.sendAnother" = "別のものを送る";
 "upload.expiresAfter" = "有効期間";
 "upload.burnAfterRead" = "最初のダウンロード後に削除";
-"upload.keepOpen" = "完了するまで Relayium を開いたままにしてください。アプリを離れるとアップロードが止まることがあり、バックグラウンドでの再開はまだできません。";
+"upload.keepOpen" = "完了するまで Relayium を開いたままにしてください。アプリを離れたり終了したりするとアップロードは一時停止します（バックグラウンドでは続きません）。ただしファイルはこの端末に保存されるので、Relayium を開き直せばアップロードを続けられます。";
+"upload.preparing" = "ファイルを準備しています…";
+"upload.checkingRecovery" = "一時停止したアップロードを確認しています…";
+"upload.interruptedTitle" = "アップロードを一時停止しました";
+"upload.interruptedBody" = "%1$@（%2$@）をこの端末に保存しました。止まったところから続けられます。";
+"upload.interruptedReason" = "停止した理由：%@";
+"upload.resume" = "アップロードを再開";
+"upload.discard" = "保存したコピーを削除";
+"upload.restarting" = "サーバーが一時停止中のアップロードを破棄したため、最初からやり直します。";
+"upload.cleanupFailed" = "この端末に保存したファイルのコピーを削除できませんでした。次に Relayium を開いたときにもう一度削除を試みます。";
 "upload.keyKept" = "鍵はこのデバイスに安全に保存され、Relayium のサーバーに送信されることはありません。このリンクは「アカウント」タブからいつでもコピーできます。";
 "upload.keyWarning" = "%@ 下のリンクが鍵の唯一の控えです — いますぐコピーしてください。Relayium のサーバーは鍵を一度も持っていないため、このリンクを再表示することはできません。";
 "upload.fileTooLarge" = "%@ はこのサーバーが受け付けるサイズを超えています。";

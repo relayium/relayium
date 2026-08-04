@@ -1,5 +1,6 @@
 import XCTest
 @testable import RelayiumAppKit
+@testable import RelayiumKit
 
 /// What the iOS app is NOT allowed to contain.
 ///
@@ -603,10 +604,45 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" })
         XCTAssertEqual(app.text.components(separatedBy: "makeStoredLinkKeyStore()").count - 1, 1,
                        "a second key store would be a second source of truth for the keys")
-        XCTAssertTrue(app.text.contains("AppEnvironment.makeUploadModel(keyStore: keys)"),
+        XCTAssertTrue(app.text.contains("AppEnvironment.makeUploadModel(\n            keyStore: keys"),
                       "the upload model must take the shared store")
         XCTAssertTrue(app.text.contains("AppEnvironment.makeAccountManagementModel(keyStore: keys)"),
                       "and the management model must take the SAME one")
+    }
+
+    /// R3-G's pending key is a DIFFERENT store, and that is the point.
+    ///
+    /// The content key of an unfinished upload is named by a locally minted job
+    /// id; a stored-link key is named by a server-minted object id. Sharing one
+    /// namespace would let a pending key be read as the key to an object that
+    /// does not exist yet, or a finished upload be "resumed" from a key that
+    /// belongs to a delivered file. The app builds it through the factory that
+    /// carries the separate prefix, never by reusing `keys`.
+    func testThePendingUploadKeyIsAStoreOfItsOwn() throws {
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" })
+        XCTAssertTrue(app.text.contains("AppEnvironment.makePendingUploadSupport()"),
+                      "durable recovery must be wired through the factory, not assembled inline")
+        XCTAssertFalse(app.text.contains("PendingUploadSupport(store:"),
+                       "the app must not hand-build the pair and pick its own keychain namespace")
+        XCTAssertEqual(KeychainStoredLinkKeyStore.pendingUploadPrefix, "pending-upload-key:")
+        XCTAssertNotEqual(KeychainStoredLinkKeyStore.pendingUploadPrefix,
+                          KeychainStoredLinkKeyStore.accountPrefix)
+    }
+
+    /// The foreground-only claim survives R3-G, and gains its second half.
+    ///
+    /// What changed is not that iOS keeps uploading — it does not — but that the
+    /// bytes are staged on the device, so reopening the app can carry on. The
+    /// copy has to say both, and the symbols that would make the first half a
+    /// lie stay banned by `testTheSendTabAddsNoBackgroundCapability`.
+    func testTheKeepOpenCopyStatesBothTheLimitAndTheRecovery() throws {
+        let keepOpen = L10n.t(.uploadKeepOpen, language: .en)
+        XCTAssertTrue(keepOpen.lowercased().contains("background"),
+                      "the foreground-only limit must still be stated")
+        XCTAssertTrue(keepOpen.lowercased().contains("reopen"),
+                      "and so must the recovery that now exists")
+        XCTAssertFalse(keepOpen.contains("can't be resumed"),
+                       "the stale 'no resume' claim is now false")
     }
 
     /// The management model is app-scoped and injected once.

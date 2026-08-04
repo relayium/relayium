@@ -106,8 +106,20 @@ public final class KeychainStoredLinkKeyStore: StoredLinkKeyStore {
     /// charset (no `:`), no id can compose an account name outside this space.
     public static let accountPrefix = "stored-link-key:"
 
+    /// The namespace for the content key of an upload that has NOT finished.
+    ///
+    /// A separate space from `accountPrefix`, and not merely tidiness: a
+    /// pending job is named by a locally minted id while a stored object is
+    /// named by a server-minted one, and the two populations must not be able
+    /// to name each other's items. A pending key that could be read as a
+    /// stored-link key would hand out the key to an object that does not exist
+    /// yet; a stored-link key readable as a pending one would let a finished
+    /// upload be "resumed".
+    public static let pendingUploadPrefix = "pending-upload-key:"
+
     private let service: String
     private let accessGroup: String?
+    private let accountPrefix: String
     /// Serial: the Security calls are thread-safe, but a save is a delete
     /// followed by an add, and two overlapping saves for the same id could
     /// otherwise interleave into a lost item.
@@ -119,15 +131,17 @@ public final class KeychainStoredLinkKeyStore: StoredLinkKeyStore {
     /// service. macOS passes the shared team group. Both values come from
     /// `AppEnvironment.keychainConfiguration`, so these keys share the bearer
     /// token's service on whichever platform is running.
-    public init(service: String, accessGroup: String? = nil) {
+    public init(service: String, accessGroup: String? = nil,
+                accountPrefix: String = KeychainStoredLinkKeyStore.accountPrefix) {
         self.service = service
         self.accessGroup = accessGroup
+        self.accountPrefix = accountPrefix
     }
 
     /// Internal rather than private so the composed name can be asserted by
     /// tests that cannot exercise the real keychain.
     func account(for id: String) throws -> String {
-        Self.accountPrefix + (try StoredObjectID.checked(id))
+        accountPrefix + (try StoredObjectID.checked(id))
     }
 
     /// `kSecUseDataProtectionKeychain` is load-bearing, as in `KeychainTokenStore`:

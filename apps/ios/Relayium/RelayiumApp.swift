@@ -28,7 +28,16 @@ import RelayiumAppKit
 /// the Nearby tab forward in app instead — which is also why residency is
 /// foreground-only and honestly says so.
 ///
-/// Still absent, and deliberately not stubbed: background transfer and resume,
+/// R3-G adds durable recovery to the STORED half only, and adds no capability
+/// to do it: the selected bytes are copied into this app's own Application
+/// Support directory before a server session exists, so an upload the system
+/// interrupts can be finished after a relaunch. It is user-driven — an explicit
+/// Resume or Discard — because nothing here runs while the app is suspended.
+/// Direct and Nearby remain live sessions and are unaffected.
+///
+/// Still absent, and deliberately not stubbed: background transfer (no
+/// `URLSessionConfiguration.background`, no background mode — an upload never
+/// progresses while suspended, force-quit or rebooted),
 /// notifications, IAP, and the **Share Extension** — which is deferred to the
 /// separately designed capability/release slice, because it is a second target
 /// in a second process needing an App Group and a shared keychain access group,
@@ -130,7 +139,12 @@ struct RelayiumApp: App {
         // and in this store. R3-B made `makeStoredLinkKeyStore` per-platform, so
         // this resolves to com.relayium.app with NO access group and no `#if`.
         let keys = AppEnvironment.makeStoredLinkKeyStore()
-        let uploads = AppEnvironment.makeUploadModel(keyStore: keys)
+        // R3-G: the stored-send half gets durable recovery. The bytes are
+        // staged into this app's own Application Support directory before a
+        // server session exists, so an upload the system interrupts can be
+        // finished later — by the user asking, never on its own.
+        let uploads = AppEnvironment.makeUploadModel(
+            keyStore: keys, pending: AppEnvironment.makePendingUploadSupport())
         let managing = AppEnvironment.makeAccountManagementModel(keyStore: keys)
         _management = StateObject(wrappedValue: managing)
         // Subscribed HERE, in init, and not from a `.task` on any view. That is

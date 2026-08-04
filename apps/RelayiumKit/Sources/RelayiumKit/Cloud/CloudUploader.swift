@@ -51,18 +51,26 @@ public final class CloudUploader {
 
     public init(transport: ResumableTransport) { self.transport = transport }
 
+    /// The framed-stream header every session leads with: the length-prefixed
+    /// encrypted manifest. A pure function of (key, names, sizes) — which is
+    /// what lets a re-initialized session be byte-identical to the one the
+    /// server reaped.
+    static func manifestHeader(key: [UInt8], sources: [PlaintextSource]) throws -> [UInt8] {
+        let manifest = StoredManifest(files: sources.map { ManifestFile(name: $0.name, size: $0.size) })
+        let encManifest = try encryptManifest(key: key, manifest)
+        let n = encManifest.count
+        var header: [UInt8] = [UInt8(n >> 24 & 0xff), UInt8(n >> 16 & 0xff),
+                               UInt8(n >> 8 & 0xff), UInt8(n & 0xff)]
+        header += encManifest
+        return header
+    }
+
     public func upload(sources: [PlaintextSource], burnAfterRead: Bool, ttl: Int,
                        token: String,
                        onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
         let raw = generateStoreKey()
-        let manifest = StoredManifest(files: sources.map { ManifestFile(name: $0.name, size: $0.size) })
-        let encManifest = try encryptManifest(key: raw, manifest)
-        let total = cipherSizeFor(sources.map(\.size))
-
-        var header = [UInt8]()
-        let n = encManifest.count
-        header += [UInt8(n >> 24 & 0xff), UInt8(n >> 16 & 0xff), UInt8(n >> 8 & 0xff), UInt8(n & 0xff)]
-        header += encManifest
+        let header = try Self.manifestHeader(key: raw, sources: sources)
+        let total = try Self.checkedCipherSize(sources.map(\.size))
 
         let (issuedId, chunkSize) = try await transport.initUpload(
             header: header, burnAfterRead: burnAfterRead, ttl: ttl, size: total, token: token)
@@ -78,8 +86,106 @@ public final class CloudUploader {
         //
         // Refused, not escaped: see `StoredObjectID`.
         let uploadId = try StoredObjectID.checked(issuedId)
-
+        guard validUploadChunkSize(chunkSize) else { throw CloudError.decoding }
         let enc = ChunkEncryptor(key: raw, sources: sources)
+        try await pump(enc: enc, uploadId: uploadId, chunkSize: chunkSize,
+                       from: 0, total: total, token: token, onProgress: onProgress)
+
+        try Task.checkCancellation()
+        let r = try await transport.finalizeUpload(uploadId: uploadId, token: token)
+        // A second server-chosen id, and not necessarily the one init issued:
+        // this is the one that becomes the keychain account name the key is
+        // filed under and the `/d/<id>` the user is handed. Checked before an
+        // `UploadOutcome` exists, so no caller can be given an outcome carrying
+        // an id this app would refuse to act on.
+        return UploadOutcome(id: try StoredObjectID.checked(r.id),
+                             expiresAt: r.expiresAt, keyB64url: encodeStoreKey(raw))
+    }
+
+    /// Continue — or restart — the upload of an already-staged job.
+    ///
+    /// The difference from `upload` is where the key and the session come from.
+    /// Both are the caller's: the key was generated when the job was staged and
+    /// has lived in the keychain since, and `uploadId` is whatever session the
+    /// plan recorded. That is what lets this run in a process that has never
+    /// seen the user's original files.
+    ///
+    /// Three shapes come out of the server, and all three are recoverable:
+    ///
+    ///  - a live session with a committed offset — continue from that exact byte;
+    ///  - a session already holding everything — finalize, send nothing;
+    ///  - **404, the idle reaper got there first** — open a fresh session with
+    ///    the SAME key and the SAME manifest and restart at zero. The bytes are
+    ///    still ours; only the server's half expired.
+    ///
+    /// An offset outside `0...total` is refused rather than guessed at: it
+    /// means the session is not the one this plan describes, and continuing
+    /// would splice a misplaced stream into somebody's blob.
+    public func resume(sources: [PlaintextSource], key: [UInt8], uploadId: String?,
+                       uploadChunkSize: Int?,
+                       burnAfterRead: Bool, ttl: Int, token: String,
+                       onUploadSession: (String, Int) throws -> Void,
+                       onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
+        let header = try Self.manifestHeader(key: key, sources: sources)
+        let total = try Self.checkedCipherSize(sources.map(\.size))
+
+        var session: (id: String, chunkSize: Int)?
+        var committed = 0
+        if let existing = uploadId {
+            let checked = try StoredObjectID.checked(existing)
+            guard let uploadChunkSize, validUploadChunkSize(uploadChunkSize) else {
+                throw CloudError.decoding
+            }
+            do {
+                let offset = try await transport.uploadOffset(uploadId: checked, token: token)
+                guard offset >= 0, offset <= total else { throw CloudError.server(status: 0) }
+                committed = offset
+                // The server advertises this value only at init. It belongs to
+                // the persisted session; a later process must not guess it.
+                session = (checked, uploadChunkSize)
+            } catch CloudError.notFound {
+                session = nil                       // reaped: fall through to a fresh init
+            }
+        }
+
+        if session == nil {
+            let (issuedId, chunkSize) = try await transport.initUpload(
+                header: header, burnAfterRead: burnAfterRead, ttl: ttl, size: total, token: token)
+            guard validUploadChunkSize(chunkSize) else { throw CloudError.decoding }
+            session = (try StoredObjectID.checked(issuedId), chunkSize)
+            committed = 0
+        }
+        guard let live = session else { throw CloudError.network }
+        // Before any byte moves, so the plan records the session it is about to
+        // feed — including a brand-new one that replaced a reaped session.
+        try onUploadSession(live.id, live.chunkSize)
+
+        if committed < total {
+            let enc = try ChunkEncryptor(key: key, sources: sources, resumingAt: committed)
+            try await pump(enc: enc, uploadId: live.id, chunkSize: live.chunkSize,
+                           from: committed, total: total, token: token, onProgress: onProgress)
+        } else {
+            // Everything already landed. A zero-length PATCH at the end of the
+            // stream is not a thing to send; finalizing is the only work left.
+            onProgress(total, total)
+        }
+
+        try Task.checkCancellation()
+        let r = try await transport.finalizeUpload(uploadId: live.id, token: token)
+        return UploadOutcome(id: try StoredObjectID.checked(r.id),
+                             expiresAt: r.expiresAt, keyB64url: encodeStoreKey(key))
+    }
+
+    /// The send loop, shared by a first attempt and a resume.
+    ///
+    /// `from` is the server's committed offset; the encryptor is already
+    /// positioned there and carries `dropFromFirstFrame` for an offset that
+    /// landed inside a frame. Everything else — the packing buffer, the
+    /// no-copy slice handed to the transport, the replay on a partial commit —
+    /// is unchanged, and the memory guards still measure it.
+    private func pump(enc: ChunkEncryptor, uploadId: String, chunkSize: Int,
+                      from: Int, total: Int, token: String,
+                      onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws {
         // Held bytes double as the replay buffer: the server can commit part of a
         // chunk, so the unacknowledged tail must survive until it is acked.
         //
@@ -88,8 +194,12 @@ public final class CloudUploader {
         // into a new allocation to cross the call.
         var pending = Data()
         pending.reserveCapacity(chunkSize + STORE_CHUNK_SIZE + FRAME_OVERHEAD)
-        var chunkStart = 0
-        var offset = 0
+        var chunkStart = from
+        var offset = from
+        /// Bytes of the first frame the server already holds. Sliced off after
+        /// the frame is sealed whole — the seal is what makes the tail
+        /// byte-identical to the run this one continues.
+        var drop = enc.dropFromFirstFrame
         bufferPeak = 0
         bytesCopiedToTransport = 0
         packingBufferReallocations = 0
@@ -103,12 +213,19 @@ public final class CloudUploader {
         }
 
         let gate = ProgressGate(onProgress)
-        onProgress(0, total)
+        gate.floor(from)
+        onProgress(from, total)
         while offset < total {
             try Task.checkCancellation()
             while pending.count < chunkSize {
-                guard let f = try enc.next() else { break }
+                guard var f = try enc.next() else { break }
                 try Task.checkCancellation()
+                if drop > 0 {
+                    // Only ever the first frame, and only ever a prefix of it.
+                    guard drop < f.count else { throw CloudError.server(status: 0) }
+                    f = Data(f[(f.startIndex + drop)...])
+                    drop = 0
+                }
                 pending += f
             }
             // Encryptor dry before the declared size was met: the formula and the
@@ -149,15 +266,26 @@ public final class CloudUploader {
         // The other half of the asymmetric guard: the loop ends on offset >= total,
         // so an under-reporting formula would leave frames unsent. Confirm dry.
         if try enc.next() != nil { throw CloudError.server(status: 0) }
+    }
 
-        let r = try await transport.finalizeUpload(uploadId: uploadId, token: token)
-        // A second server-chosen id, and not necessarily the one init issued:
-        // this is the one that becomes the keychain account name the key is
-        // filed under and the `/d/<id>` the user is handed. Checked before an
-        // `UploadOutcome` exists, so no caller can be given an outcome carrying
-        // an id this app would refuse to act on.
-        return UploadOutcome(id: try StoredObjectID.checked(r.id),
-                             expiresAt: r.expiresAt, keyB64url: encodeStoreKey(raw))
+    /// `cipherSizeFor` is the wire-format reference used by interop tests, but
+    /// its historical signature cannot report malformed negative sizes or
+    /// arithmetic overflow. Network-facing code needs a checked form before a
+    /// total is placed into a URL or `Content-Range`.
+    private static func checkedCipherSize(_ sizes: [Int]) throws -> Int {
+        var total = 0
+        for size in sizes {
+            guard size >= 0 else { throw StoredWireError.lengthMismatch }
+            let frameCount = size == 0 ? 0 : ((size - 1) / STORE_CHUNK_SIZE) + 1
+            let (overhead, overheadOverflow) = frameCount.multipliedReportingOverflow(by: FRAME_OVERHEAD)
+            guard !overheadOverflow else { throw StoredWireError.lengthMismatch }
+            let (withPayload, payloadOverflow) = size.addingReportingOverflow(overhead)
+            guard !payloadOverflow else { throw StoredWireError.lengthMismatch }
+            let (next, totalOverflow) = total.addingReportingOverflow(withPayload)
+            guard !totalOverflow else { throw StoredWireError.lengthMismatch }
+            total = next
+        }
+        return total
     }
 
     /// PATCH with resync-and-replay. A reset commits whatever landed, so the

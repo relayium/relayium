@@ -291,15 +291,43 @@ public enum AppEnvironment {
                                    accessGroup: configuration.accessGroup)
     }
 
+    /// The keychain store for the content key of an upload that has not
+    /// finished yet, in its own namespace beside the stored-link keys.
+    ///
+    /// Same service and access group as every other credential this app keeps —
+    /// what differs is the account prefix, so a pending job and a finished
+    /// object can never name each other's item.
+    public static func makePendingUploadKeyStore(
+        _ configuration: KeychainConfiguration = keychainConfiguration
+    ) -> KeychainStoredLinkKeyStore {
+        KeychainStoredLinkKeyStore(service: configuration.service,
+                                   accessGroup: configuration.accessGroup,
+                                   accountPrefix: KeychainStoredLinkKeyStore.pendingUploadPrefix)
+    }
+
+    /// Durable recovery for stored uploads.
+    ///
+    /// iOS only, and deliberately: the process there is suspended and killed by
+    /// the system while a send is in flight, which is the whole reason a staged
+    /// copy exists. macOS keeps the original single-process path rather than
+    /// gaining a recovery surface nobody there has asked for and nothing there
+    /// has tested.
+    public static func makePendingUploadSupport() -> PendingUploadSupport {
+        PendingUploadSupport(store: PendingUploadStore(root: PendingUploadStore.defaultRoot()),
+                             keys: makePendingUploadKeyStore())
+    }
+
     @MainActor
     public static func makeUploadModel(baseURL: URL = productionBaseURL,
-                                       keyStore: StoredLinkKeyStore) -> CloudUploadModel {
+                                       keyStore: StoredLinkKeyStore,
+                                       pending: PendingUploadSupport? = nil) -> CloudUploadModel {
         CloudUploadModel(
             uploader: CloudUploader(transport: HTTPResumableTransport(baseURL: baseURL)),
             keyStore: keyStore,
             // The origin the link is built from, so a self-hosted build produces
             // links pointing at its own deployment rather than relayium.com.
-            origin: baseURL.absoluteString
+            origin: baseURL.absoluteString,
+            pending: pending
         )
     }
 

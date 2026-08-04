@@ -19,7 +19,24 @@ public enum UploadState: Equatable {
     /// The expanded file list, not the roots: a folder is only "picked" once we
     /// know what is in it, and `.picked([])` must be unreachable.
     case picked([SelectedFile])
+    /// Looking only at local disk and Keychain for an interrupted upload. It is
+    /// brief, but it blocks a new selection so an older valid job cannot become
+    /// a hidden second job while its key is being checked.
+    case checkingRecovery
+    /// Copying the selection into this app's own storage, before any server
+    /// session exists. Its own state because it takes real time on a large
+    /// selection and a spinner with no sentence says nothing to anybody.
+    case preparing
     case uploading(sent: Int, total: Int)
+    /// A staged job that stopped — the network died, the app was terminated, or
+    /// the user left. The bytes and the key are still here; what happens next
+    /// is the user's choice, never this model's.
+    case interrupted(files: Int, bytes: Int, message: String?)
+    /// The server's idle reaper got to the session first, so a fresh one is
+    /// being opened with the same key and manifest. Shown because the progress
+    /// bar is about to go back to zero, and a bar that restarts with no
+    /// explanation reads as a bug.
+    case restarting
     /// `keyWarning` is non-nil when the upload succeeded but this device could
     /// not keep the key. The link is still here — it is the only copy of that
     /// key — and the warning is what turns a silent future "this file's key is
@@ -38,13 +55,35 @@ public final class CloudUploadModel: ObservableObject {
     @Published public var maxFileSize: Int64 = 0
     @Published public private(set) var ttlChoices: [Int] = allowedTTLs(retentionSecs: 0)
 
+    /// Stated whenever a finished upload could not have its staged bytes, its
+    /// plan or its pending key removed. Never a failure of the upload — the
+    /// object exists and the link works — but the user's files are still on
+    /// this device and that is theirs to know.
+    @Published public private(set) var cleanupWarning: String?
+
     private let uploader: CloudUploader
     /// Where the key of every successful upload is kept, so the Account tab can
     /// rebuild this link later. The same store the account management model
     /// reads — one installation, one answer to "do I have this key".
     private let keyStore: StoredLinkKeyStore
     private let origin: String
-    private var task: Task<Void, Never>?
+    /// Durable recovery, or nil on a platform that does not offer it. macOS
+    /// passes nothing: its uploads are not interrupted by the OS suspending the
+    /// app, and claiming a resume it has not shipped would be a lie in a menu.
+    private let pending: PendingUploadSupport?
+    /// The ready account these staged bytes belong to. Written by the send
+    /// model when the session changes; a job is only ever prepared, recovered
+    /// or resumed for the account that is signed in NOW.
+    public var accountId: String?
+    /// The staged job this model is currently offering or running, if any.
+    private var job: PendingUploadPlan?
+    var task: Task<Void, Never>?
+    /// Keychain verification for a job found on disk. Separate from the upload
+    /// task because recovery is an offer and must never contact the network.
+    var recoveryTask: Task<Void, Never>?
+    /// Removal runs after the state has already changed, so a test (and a
+    /// caller that needs to know the disk is clean) can await it.
+    var cleanupTask: Task<Void, Never>?
     /// The files the user chose, kept so cancel() and reset() can return to a
     /// state they can act from instead of making them choose again.
     private var lastPicked: [SelectedFile] = []
@@ -52,13 +91,20 @@ public final class CloudUploadModel: ObservableObject {
     /// superseded upload must not repaint a screen the user has moved past.
     private var generation = 0
 
-    public init(uploader: CloudUploader, keyStore: StoredLinkKeyStore, origin: String) {
+    public init(uploader: CloudUploader, keyStore: StoredLinkKeyStore, origin: String,
+                pending: PendingUploadSupport? = nil) {
         self.uploader = uploader
         self.keyStore = keyStore
         self.origin = origin
+        self.pending = pending
     }
 
-    public var isBusy: Bool { if case .uploading = state { return true }; return false }
+    public var isBusy: Bool {
+        switch state {
+        case .checkingRecovery, .preparing, .uploading, .restarting: return true
+        default: return false
+        }
+    }
 
     /// Exposed for the superseded-callback test; nothing else should read it.
     var currentGeneration: Int { generation }
@@ -121,29 +167,350 @@ public final class CloudUploadModel: ObservableObject {
         guard case .picked(let files) = state else { return }
         generation += 1
         let g = generation
-        state = .uploading(sent: 0, total: 0)
+        cleanupWarning = nil
+
+        // Without durable recovery (macOS today) this is the original path,
+        // unchanged: one live uploader, one in-memory key, no staged copy.
+        guard let pending, let accountId, !accountId.isEmpty else {
+            state = .uploading(sent: 0, total: 0)
+            task = Task { [weak self] in
+                guard let self else { return }
+                do {
+                    // Through `stageCloudFiles`, not a second copy of it: the rule
+                    // that folder hierarchy rides in `ManifestFile.name` has to have
+                    // exactly one implementation, or the native upload and the thing
+                    // its interop test pins drift apart.
+                    let sources = try stageCloudFiles(files)
+                    let outcome = try await self.uploader.upload(
+                        sources: sources,
+                        burnAfterRead: self.burnAfterRead,
+                        ttl: self.ttl,
+                        token: token,
+                        onProgress: { sent, total in
+                            Task { @MainActor in self.report(sent: sent, total: total, g: g) }
+                        })
+                    await self.finish(outcome, g: g)
+                } catch is CancellationError {
+                    await MainActor.run { self.restore(g: g) }
+                } catch {
+                    await MainActor.run { self.fail(error, g: g) }
+                }
+            }
+            return
+        }
+
+        // The durable path. The order is the correctness: the bytes become this
+        // app's own, the key is filed under the job, and only then does a
+        // server session exist. Reversed, a crash in between would leave a
+        // session nothing on this device could feed.
+        state = .preparing
+        let burn = burnAfterRead
+        let ttl = self.ttl
+        task = Task { [weak self] in
+            guard let self else { return }
+            let store = pending.store
+            var stagedPlan: PendingUploadPlan?
+            var keyWasSaved = false
+            var wasAdopted = false
+            do {
+                let preparation = Task.detached(priority: .userInitiated) {
+                    try store.prepare(files: files, accountId: accountId,
+                                      burnAfterRead: burn, ttl: ttl)
+                }
+                let plan = try await withTaskCancellationHandler {
+                    try await preparation.value
+                } onCancel: {
+                    preparation.cancel()
+                }
+                stagedPlan = plan
+                try Task.checkCancellation()
+                let key = generateStoreKey()
+                do {
+                    try await pending.keys.save(id: plan.jobId, keyB64url: encodeStoreKey(key))
+                    keyWasSaved = true
+                } catch {
+                    // A job whose key cannot be kept is not recoverable, so it
+                    // must not be left on disk pretending to be.
+                    store.purge(plan)
+                    throw error
+                }
+                try Task.checkCancellation()
+                wasAdopted = self.adopt(plan, g: g)
+                guard wasAdopted else { throw CancellationError() }
+                await self.run(plan: plan, key: key, token: token, g: g)
+            } catch is CancellationError {
+                if let plan = stagedPlan, !wasAdopted {
+                    if keyWasSaved { try? await pending.keys.remove(id: plan.jobId) }
+                    store.purge(plan)
+                }
+                self.pauseOrRestore(g: g)
+            } catch {
+                if let plan = stagedPlan, !wasAdopted {
+                    if keyWasSaved { try? await pending.keys.remove(id: plan.jobId) }
+                    store.purge(plan)
+                }
+                self.fail(error, g: g)
+            }
+        }
+    }
+
+    /// Continue the staged job the user is being offered. Only ever from an
+    /// explicit choice — there is no path from launch, from `.ready`, or from
+    /// the network coming back that reaches this.
+    public func resume(token: String) {
+        guard case .interrupted = state, let pending, let job else { return }
+        generation += 1
+        let g = generation
+        cleanupWarning = nil
+        state = .uploading(sent: 0, total: job.totalBytes)
         task = Task { [weak self] in
             guard let self else { return }
             do {
-                // Through `stageCloudFiles`, not a second copy of it: the rule
-                // that folder hierarchy rides in `ManifestFile.name` has to have
-                // exactly one implementation, or the native upload and the thing
-                // its interop test pins drift apart.
-                let sources = try stageCloudFiles(files)
-                let outcome = try await self.uploader.upload(
-                    sources: sources,
-                    burnAfterRead: self.burnAfterRead,
-                    ttl: self.ttl,
-                    token: token,
-                    onProgress: { sent, total in
-                        Task { @MainActor in self.report(sent: sent, total: total, g: g) }
-                    })
-                await self.finish(outcome, g: g)
+                let storedKey = try await pending.keys.key(for: job.jobId)
+                guard let storedKey, let key = try? decodeStoreKey(storedKey) else {
+                    // The bytes are here and the key is not: nothing can ever
+                    // open this upload, so offering it again would be a lie.
+                    try? await pending.keys.remove(id: job.jobId)
+                    let retired = (try? pending.store.markRetired(job)) ?? job
+                    pending.store.purge(retired)
+                    self.job = nil
+                    throw PendingUploadError.stagingMissing
+                }
+                await self.run(plan: job, key: key, token: token, g: g)
             } catch is CancellationError {
-                await MainActor.run { self.restore(g: g) }
+                await MainActor.run { self.pauseOrRestore(g: g) }
             } catch {
                 await MainActor.run { self.fail(error, g: g) }
             }
+        }
+    }
+
+    /// Run one attempt at a staged job, from wherever the server got to.
+    private func run(plan: PendingUploadPlan, key: [UInt8], token: String, g: Int) async {
+        guard let pending else { return }
+        do {
+            let sources = try pending.store.sources(for: plan)
+            let known = plan.uploadId
+            let outcome = try await uploader.resume(
+                sources: sources, key: key, uploadId: plan.uploadId,
+                uploadChunkSize: plan.uploadChunkSize,
+                burnAfterRead: plan.burnAfterRead, ttl: plan.ttl, token: token,
+                onUploadSession: { [weak self] id, chunkSize in
+                    // Persisted from the uploader's own context, before bytes
+                    // move. A session recorded after the first PATCH is a
+                    // session a crash can orphan.
+                    let updated = try pending.store.setUploadSession(
+                        id: id, chunkSize: chunkSize, for: plan)
+                    Task { @MainActor in
+                        self?.sessionEstablished(updated, replaced: known != nil && known != id, g: g)
+                    }
+                },
+                onProgress: { [weak self] sent, total in
+                    Task { @MainActor in self?.report(sent: sent, total: total, g: g) }
+                })
+            // The session callback has already committed the newest plan to
+            // disk. Use that version for finalization even if its MainActor UI
+            // callback has not run yet.
+            let active = pending.store.plan(for: plan.accountId)
+                .flatMap { $0.jobId == plan.jobId ? $0 : nil } ?? plan
+            await completed(outcome, plan: active, g: g)
+        } catch is CancellationError {
+            await MainActor.run { self.pauseOrRestore(g: g) }
+        } catch {
+            if let active = pending.store.plan(for: plan.accountId),
+               active.jobId == plan.jobId {
+                await MainActor.run {
+                    guard g == self.generation else { return }
+                    self.job = active
+                }
+            }
+            await MainActor.run { self.interrupt(error, g: g) }
+        }
+    }
+
+    /// Success. The order here is what stops one upload from becoming two.
+    ///
+    /// The object exists on the server the moment `finalize` returns, so the
+    /// plan is marked finalized FIRST — before the final key is saved and
+    /// before anything is deleted. A crash, a keychain failure or an
+    /// undeletable file after that point leaves a job that recovery will not
+    /// offer, rather than one that would upload the same bytes a second time.
+    private func completed(_ outcome: UploadOutcome, plan: PendingUploadPlan, g: Int) async {
+        guard let pending else { return }
+        var cleanupFailed = (try? pending.store.markFinalized(plan, storedId: outcome.id)) == nil
+        // Cancellation normally lands at the explicit check before finalize.
+        // If it races an already in-flight finalize, the server still owns a
+        // completed object. Present that result only while this exact job still
+        // owns the screen; never overwrite a discard or a newer upload.
+        let presentationGeneration: Int? = await MainActor.run {
+            if g == self.generation || self.job?.jobId == plan.jobId {
+                return self.generation
+            }
+            return nil
+        }
+        await finish(outcome, g: presentationGeneration ?? g)
+        do {
+            try await pending.keys.remove(id: plan.jobId)
+        } catch {
+            cleanupFailed = true
+        }
+        if !pending.store.purge(plan) { cleanupFailed = true }
+        await MainActor.run {
+            if self.job?.jobId == plan.jobId { self.job = nil }
+            guard let presentationGeneration,
+                  presentationGeneration == self.generation else { return }
+            if cleanupFailed { self.cleanupWarning = L10n.t(.uploadCleanupFailed) }
+        }
+    }
+
+    // MARK: - recovery, offered and never taken on its own
+
+    /// Look for a job this account can finish. Called when the session becomes
+    /// ready and when the app launches — and it contacts nothing: recovery is
+    /// an offer made from disk, not a transfer started on the user's behalf.
+    public func recoverPendingJob(for accountId: String?) {
+        self.accountId = accountId
+        guard let pending else { return }
+        // Recovery is an account-entry action, never a refresh action. Do not
+        // replace a selection, a failure the user is reading, or a completed
+        // link even if a caller asks twice for the same account.
+        guard case .idle = state else { return }
+        generation += 1
+        let g = generation
+        recoveryTask?.cancel()
+        cleanupWarning = nil
+        guard let accountId else { return }
+        state = .checkingRecovery
+        recoveryTask = Task { [weak self] in
+            guard let self else { return }
+            await Task.detached(priority: .utility) {
+                pending.store.sweepIncomplete()
+            }.value
+            guard !Task.isCancelled, g == self.generation,
+                  self.accountId == accountId else { return }
+            guard let plan = pending.store.plan(for: accountId) else {
+                self.state = .idle
+                self.recoveryTask = nil
+                return
+            }
+
+            let message: String?
+            do {
+                guard let storedKey = try await pending.keys.key(for: plan.jobId),
+                      (try? decodeStoreKey(storedKey)) != nil else {
+                    // A crash can land after the atomic plan write but before
+                    // Keychain save, and an item can itself be corrupted. Such
+                    // a job is not resumable and must never be presented as
+                    // though its key still exists.
+                    try? await pending.keys.remove(id: plan.jobId)
+                    let retired = (try? pending.store.markRetired(plan)) ?? plan
+                    pending.store.purge(retired)
+                    guard g == self.generation else { return }
+                    self.state = .idle
+                    self.recoveryTask = nil
+                    return
+                }
+                message = nil
+            } catch {
+                // Keychain may merely be locked. Keep the job and let an
+                // explicit Resume retry the read; state what blocked recovery.
+                message = ErrorCopy.storedLinkKeyMessage(for: error, operation: .read)
+            }
+            guard !Task.isCancelled, g == self.generation,
+                  self.accountId == accountId else { return }
+            self.job = plan
+            self.state = .interrupted(files: plan.files.count, bytes: plan.totalBytes,
+                                      message: message)
+            self.recoveryTask = nil
+        }
+    }
+
+    /// Forget the job on this screen and remove it from disk. What "Discard"
+    /// means, and also what an account leaving means.
+    public func discardPendingJob() {
+        guard let pending, let plan = job else { return }
+        discard(plan, using: pending)
+    }
+
+    private func discard(_ plan: PendingUploadPlan, using pending: PendingUploadSupport) {
+        generation += 1
+        job = nil
+        state = lastPicked.isEmpty ? .idle : .picked(lastPicked)
+        cleanupWarning = nil
+        let cleanupGeneration = generation
+        // Record Discard before the asynchronous keychain cleanup begins. A
+        // force-quit on the next line must still leave a job the launch sweep
+        // deletes rather than a job recovery offers.
+        let cleanupPlan = (try? pending.store.markRetired(plan)) ?? plan
+        cleanupTask = Task { [weak self] in
+            var failed = false
+            do { try await pending.keys.remove(id: cleanupPlan.jobId) }
+            catch { failed = true }
+            if !pending.store.purge(cleanupPlan) { failed = true }
+            guard failed, let self, cleanupGeneration == self.generation else { return }
+            self.cleanupWarning = L10n.t(.uploadCleanupFailed)
+        }
+    }
+
+    /// The account left. Hide the job SYNCHRONOUSLY — before any await, so no
+    /// runloop turn exists in which the next account could see it — and then
+    /// remove it.
+    public func purgePendingJob() {
+        // Recovery may still be checking Keychain and therefore may not have
+        // assigned `job` yet. Resolve the outgoing account's plan before its
+        // identity is cleared, so a sign-out in that brief window still obeys
+        // the same purge rule as a job already visible on screen.
+        let undisplayed = job == nil ? pending?.store.plan(for: accountId) : nil
+        task?.cancel()
+        task = nil
+        recoveryTask?.cancel()
+        recoveryTask = nil
+        if let pending, let plan = job ?? undisplayed {
+            discard(plan, using: pending)
+        } else {
+            generation += 1
+            state = lastPicked.isEmpty ? .idle : .picked(lastPicked)
+        }
+        job = nil
+        accountId = nil
+    }
+
+    // MARK: - staged-job state transitions, each guarded by generation
+
+    @discardableResult
+    private func adopt(_ plan: PendingUploadPlan, g: Int) -> Bool {
+        guard g == generation else { return false }
+        job = plan
+        state = .uploading(sent: 0, total: plan.totalBytes)
+        return true
+    }
+
+    private func sessionEstablished(_ plan: PendingUploadPlan, replaced: Bool, g: Int) {
+        guard g == generation else { return }
+        job = plan
+        // A session that was replaced means the server's idle reaper took the
+        // old one: the bar is about to go back to zero, and saying so beats
+        // looking like a bug.
+        if replaced { state = .restarting }
+    }
+
+    /// A failure that leaves the job recoverable. Distinct from `fail`: there
+    /// are staged bytes and a key on this device, so the honest offer is
+    /// "resume or discard", not "try again" against a selection that is gone.
+    private func interrupt(_ error: Error, g: Int) {
+        guard g == generation else { return }
+        guard let plan = job else { return fail(error, g: g) }
+        state = .interrupted(files: plan.files.count, bytes: plan.totalBytes,
+                             message: ErrorCopy.message(for: error))
+    }
+
+    /// Cancellation with a staged job behind it is a pause, not a loss.
+    private func pauseOrRestore(g: Int) {
+        guard g == generation else { return }
+        if let plan = job {
+            state = .interrupted(files: plan.files.count, bytes: plan.totalBytes, message: nil)
+        } else {
+            restore(g: g)
         }
     }
 
@@ -152,7 +519,16 @@ public final class CloudUploadModel: ObservableObject {
     public func cancel() {
         task?.cancel()
         task = nil
+        recoveryTask?.cancel()
+        recoveryTask = nil
         generation += 1
+        // A staged job survives being cancelled: the bytes are this app's own
+        // and the user may want them later. Discard is the destructive choice,
+        // and it is a separate one.
+        if let plan = job {
+            state = .interrupted(files: plan.files.count, bytes: plan.totalBytes, message: nil)
+            return
+        }
         state = lastPicked.isEmpty ? .idle : .picked(lastPicked)
     }
 

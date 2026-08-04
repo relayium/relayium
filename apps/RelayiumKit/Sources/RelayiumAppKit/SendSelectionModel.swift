@@ -371,12 +371,25 @@ public final class SendSelectionModel: ObservableObject {
     private func accountContextChanged(_ context: SendAccountContext) {
         // Any change of the ready user's id is an account switch, and so is
         // leaving `.ready` at all.
-        if context.userId != accountUserId { isolateFromPreviousAccount() }
+        let accountChanged = context.userId != accountUserId
+        if accountChanged { isolateFromPreviousAccount() }
         accountGeneration += 1
         let g = accountGeneration
         accountUserId = context.userId
         configTask.cancel()                     // an older fetch applies to nobody
-        guard context.userId != nil else { upload.apply(.unknown); return }
+        guard let userId = context.userId else { upload.apply(.unknown); return }
+        // A staged job belongs to an account, so the account is what unlocks
+        // it. This both tells the upload model who is signed in and offers any
+        // job that account left behind — an OFFER: nothing is resumed until the
+        // user asks, and `recoverPendingJob` touches no network.
+        if accountChanged {
+            upload.recoverPendingJob(for: userId)
+        } else {
+            // Retention/usage refresh for the same account: update limits below,
+            // but do not replace a live selection or a finished link with a
+            // second recovery scan.
+            upload.accountId = userId
+        }
         // Retention is known NOW; the size hint is not. The pair is applied
         // twice on purpose: the screen is usable immediately and gets sharper
         // if the advisory fetch lands.
@@ -425,6 +438,11 @@ public final class SendSelectionModel: ObservableObject {
     /// client `DELETE`, and this does not invent one.
     private func isolateFromPreviousAccount() {
         upload.cancel()
+        // Synchronously, before any await: the staged bytes, the plan and the
+        // pending key belong to the account that is leaving. A job still on
+        // screen for one runloop turn is a job the next account can see, and
+        // one still on disk is one they could resume.
+        upload.purgePendingJob()
         supersedeImports()
         configTask.cancel()
         access.clear()

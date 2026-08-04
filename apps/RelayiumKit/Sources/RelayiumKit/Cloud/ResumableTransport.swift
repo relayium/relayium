@@ -8,6 +8,22 @@ public enum PatchOutcome: Equatable {
     case serverAhead(received: Int)
 }
 
+/// The protocol default used when the server reports 0 at initialization. A
+/// pending plan persists the resolved value beside its upload id, so a later
+/// process never guesses this value for an existing session.
+public let DEFAULT_UPLOAD_CHUNK_SIZE = 8 << 20
+
+/// Refuse a server or a corrupted pending plan that would make the uploader
+/// reserve an unbounded buffer. Production currently issues 8 MiB; 64 MiB
+/// leaves room for a future tuning change without allowing an init response to
+/// turn directly into a multi-gigabyte allocation.
+public let MAX_UPLOAD_CHUNK_SIZE = 64 << 20
+
+@inline(__always)
+public func validUploadChunkSize(_ size: Int) -> Bool {
+    size > 0 && size <= MAX_UPLOAD_CHUNK_SIZE
+}
+
 /// `Content-Range: bytes <from>-<to-1>/<total>` — end is inclusive on the wire,
 /// exclusive in our call sites.
 func contentRangeHeader(from: Int, to: Int, total: Int) -> String {
@@ -79,7 +95,7 @@ public struct HTTPResumableTransport: ResumableTransport {
         struct Body: Decodable { let uploadId: String; let chunkSize: Int }
         guard let b = try? JSONDecoder().decode(Body.self, from: data) else { throw CloudError.decoding }
         // The server may report 0 to mean "use your default" — same rule as web.
-        return (b.uploadId, b.chunkSize > 0 ? b.chunkSize : 8 << 20)
+        return (b.uploadId, b.chunkSize > 0 ? b.chunkSize : DEFAULT_UPLOAD_CHUNK_SIZE)
     }
 
     public func patchChunk(uploadId: String, bytes: Data, from: Int, to: Int,

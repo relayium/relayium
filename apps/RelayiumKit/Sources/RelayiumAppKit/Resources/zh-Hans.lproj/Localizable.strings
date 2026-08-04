@@ -170,7 +170,16 @@
 "upload.sendAnother" = "再发一份";
 "upload.expiresAfter" = "有效期";
 "upload.burnAfterRead" = "首次下载后即删除";
-"upload.keepOpen" = "请保持 Relayium 打开，直到这次传输完成。离开应用可能会中断上传，而且目前还不能在后台续传。";
+"upload.keepOpen" = "请保持 Relayium 打开，直到这次传输完成。离开或关闭应用会暂停上传——它不会在后台继续——但文件已保存在本机，重新打开 Relayium 后可以继续上传。";
+"upload.preparing" = "正在准备你的文件……";
+"upload.checkingRecovery" = "正在检查是否有暂停的上传……";
+"upload.interruptedTitle" = "上传已暂停";
+"upload.interruptedBody" = "%1$@（%2$@）已保存在本机，可以从上传中断的位置继续。";
+"upload.interruptedReason" = "中断原因：%@";
+"upload.resume" = "继续上传";
+"upload.discard" = "删除本机副本";
+"upload.restarting" = "服务器已丢弃暂停的上传，因此将从头重新开始。";
+"upload.cleanupFailed" = "Relayium 没能删除保存在本机的文件副本，下次打开时会再次尝试清理。";
 "upload.keyKept" = "密钥已安全保存在这台设备上，绝不会发送给 Relayium 的服务器。你随时可以在「账户」标签页再次复制这条链接。";
 "upload.keyWarning" = "%@ 下面这条链接是密钥仅存的一份副本 — 请立即复制。Relayium 的服务器从未持有该密钥，因此这条链接无法再次显示。";
 "upload.fileTooLarge" = "%@ 超过了该服务器接受的大小。";
