@@ -146,9 +146,39 @@ public final class AccountManagementModel: ObservableObject {
     public func isBusy(row id: String) -> Bool { busyRows.contains(id) }
     public func error(forRow id: String) -> String? { rowErrors[id] }
 
-    /// Acknowledge `needsSignOut` once the app has acted on it, so reopening a
-    /// window does not sign the next session out again.
-    public func acknowledgeSignOut() { needsSignOut = false }
+    /// Claim a successful self-revoke, exactly once, and let go of the account
+    /// in the same step.
+    ///
+    /// The signal is raised by a network response, and the screen that started
+    /// the revoke may be gone by the time it arrives — on iOS a `TabView` tears
+    /// down the tab the user just left, which is precisely what a "revoke this
+    /// device, then go look at something else" gesture does. So the claim takes
+    /// no scope: its caller is an app shell that has none, and the account being
+    /// left is whichever one this model is currently holding.
+    ///
+    /// Three properties, and each is a defect if it is missing:
+    ///
+    ///  * **Exactly one caller wins.** It is `@MainActor` and has no suspension
+    ///    point, so the test-and-clear cannot interleave. A second winner would
+    ///    sign a second session out.
+    ///  * **The rows go with it.** Separating "notice" from "clear" is what
+    ///    leaves an interval in which the credential is dead server-side and the
+    ///    previous account's reconstructed `#k=` links — each one the plaintext
+    ///    of a stored file to anybody holding it — are still in memory in an
+    ///    app-scoped object.
+    ///  * **Nothing inherits it.** `deactivate()` bumps the generation and drops
+    ///    the scope, so a load already in flight cannot repaint afterwards and
+    ///    the next sign-in starts from nothing.
+    ///
+    /// Returns whether this call is the one that claimed it.
+    public func consumeSelfRevoke() -> Bool {
+        guard needsSignOut else { return false }
+        // `deactivate` → `clearRows` lowers `needsSignOut` as well, so the flag
+        // is cleared by the same statement that drops the rows rather than by a
+        // separate one a later edit could reorder away from it.
+        deactivate()
+        return true
+    }
 
     public func dismissKeyCleanupWarning() { keyCleanupWarning = nil }
 

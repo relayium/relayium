@@ -937,4 +937,164 @@ final class LocalizedCopyTests: XCTestCase {
             XCTAssertTrue(text.contains("t/a.txt"), "[\(language.rawValue)] \(text)")
         }
     }
+
+    // MARK: - R3-D: device and stored-file management, on both platforms
+
+    /// Every non-plural key the account-management sections render — the device
+    /// list, the stored-file list, both confirmations, and the three key states.
+    ///
+    /// Listed rather than derived, like the two surface lists above: the point is
+    /// that somebody decided this set is what the management surface shows, and
+    /// that adding to it is a decision too. Until R3-D these strings were macOS's
+    /// alone and said so; iOS renders every one of them now.
+    private let accountManagementSurface: [L10nKey] = [
+        .accountDevicesHeading, .accountDevicesBody, .accountNoDevices,
+        .accountUnnamedDevice, .accountThisMac, .accountLoadingDevices,
+        .accountDeviceKindCli, .accountDeviceKindApp, .accountDeviceNeverUsed,
+        .accountDeviceLastUsed, .accountDeviceAdded,
+        .accountRevokeTitle, .accountRevokeThisMac, .accountRevokeOther,
+        .accountRevokeDeviceLabel,
+        .accountFilesHeading, .accountFilesBody, .accountNoFiles, .accountLoadingFiles,
+        .accountKeyNotOnThisMac, .accountKeyLookupFailed, .accountKeyCleanupWarning,
+        .accountDeleteFileTitle, .accountDeleteFileBody,
+        .accountShareFileLabel, .accountDeleteFileLabel,
+        .accountFileEncryptedSize, .accountFileNoExpiry, .accountFileExpires,
+        .accountFileBurn, .accountFileDownloaded, .accountFileNotDownloaded,
+        .accountFileDownloadedOnce,
+        .errorStoredLinkKeyInvalidKey,
+        .errorStoredKeyKeychainRead, .errorStoredKeyKeychainRemove,
+        .errorStoredKeyBadIdRead, .errorStoredKeyBadIdRemove,
+        .accountSigningOut,
+        .commonRevoke, .commonDelete, .commonShare, .commonDismiss, .commonCancel,
+    ]
+
+    func testNothingTheAccountManagementSurfaceRendersNamesAPlatform() {
+        for key in accountManagementSurface {
+            for language in AppLanguage.allCases {
+                let text = L10n.t(key, language: language)
+                for platform in ["Mac", "macOS", "iPhone", "iPad", "iOS"] {
+                    XCTAssertFalse(text.contains(platform),
+                                   "\(key.rawValue) [\(language.rawValue)] names \(platform): "
+                                   + text)
+                }
+            }
+        }
+        // The one plural a stored row can render, driven through its own entry
+        // point because a key list cannot reach it.
+        for language in AppLanguage.allCases {
+            let text = L10n.plural(.accountFileDownloadedTimes, 3, language: language)
+            XCTAssertFalse(text.contains("Mac"),
+                           "account.fileDownloadedTimes [\(language.rawValue)]: \(text)")
+        }
+    }
+
+    /// The word each catalog uses for the thing the key is on.
+    ///
+    /// A root rather than a full phrase, because these sentences inflect it —
+    /// German's *Gerät* takes a dative article, French's *appareil* a
+    /// demonstrative — and pinning the inflection would assert the grammar
+    /// instead of the claim. Same nouns as `deviceNoun` above, reduced to the
+    /// part that survives every case the R3-D sentences put them in.
+    private let deviceWord: [AppLanguage: String] = [
+        .en: "device", .zh: "设备", .ja: "デバイス", .ko: "기기",
+        .de: "Gerät", .fr: "appareil", .ar: "الجهاز",
+        .es: "dispositivo", .pt: "dispositivo",
+    ]
+
+    /// The badge on the row for the credential this app is holding.
+    ///
+    /// Exact equality, not containment: it is two or three words long, it is the
+    /// only thing distinguishing that row from the others, and a translation that
+    /// drifted into a sentence would be a capsule that no longer fits at large
+    /// Dynamic Type sizes.
+    private let thisDeviceBadge: [AppLanguage: String] = [
+        .en: "This device", .zh: "这台设备", .ja: "このデバイス", .ko: "이 기기",
+        .de: "Dieses Gerät", .fr: "Cet appareil", .ar: "هذا الجهاز",
+        .es: "Este dispositivo", .pt: "Este dispositivo",
+    ]
+
+    func testTheCurrentDeviceBadgeIsTheSameShortPhraseInEveryLanguage() throws {
+        for language in AppLanguage.allCases {
+            XCTAssertEqual(L10n.t(.accountThisMac, language: language),
+                           try XCTUnwrap(thisDeviceBadge[language]),
+                           "\(language.rawValue) moved the current-device badge")
+        }
+    }
+
+    /// The five R3-D sentences that are ABOUT the device the key or the
+    /// credential is on. Dropping the platform is only half the correction: each
+    /// still has to say which thing it is talking about, or "the key isn't here"
+    /// stops naming a *here*.
+    func testEverySentenceAboutThisDeviceStillNamesADevice() throws {
+        let aboutTheDevice: [L10nKey] = [
+            .accountRevokeThisMac, .accountKeyNotOnThisMac, .accountKeyLookupFailed,
+            .accountKeyCleanupWarning, .errorStoredLinkKeyInvalidKey,
+        ]
+        for language in AppLanguage.allCases {
+            let word = try XCTUnwrap(deviceWord[language],
+                                     "\(language.rawValue) has no noun in the table")
+            for key in aboutTheDevice {
+                let text = L10n.t(key, language: language)
+                XCTAssertTrue(text.contains(word),
+                              "\(key.rawValue) [\(language.rawValue)] stopped naming the "
+                              + "device: \(text)")
+            }
+        }
+    }
+
+    /// The key read and removal failures are reached through `ErrorCopy` rather
+    /// than by name — `AccountManagementModel.availability` formats one and
+    /// `cleanupMessage` the other — which is why they were found by reachability
+    /// rather than by reading the screen's key list, exactly as the save path
+    /// was in R3-C. Both used to open with the word *macOS*.
+    func testTheStoredKeyReadAndRemovePathsNameNoPlatformInAnyLanguage() {
+        for language in AppLanguage.allCases {
+            for operation in [StoredLinkKeyOperation.read, .remove] {
+                for error in [KeychainError.status(-25308) as Error,
+                              StoredLinkKeyError.invalidIdentifier,
+                              StoredLinkKeyError.invalidKey] {
+                    let text = ErrorCopy.storedLinkKeyMessage(for: error, operation: operation,
+                                                              language: language)
+                    XCTAssertFalse(text.isEmpty, "\(language.rawValue) \(operation)")
+                    for platform in ["Mac", "macOS"] {
+                        XCTAssertFalse(text.contains(platform),
+                                       "[\(language.rawValue)] \(operation): \(text)")
+                    }
+                }
+            }
+        }
+    }
+
+    /// A read failure and a removal failure are different operations and are
+    /// reported at different moments — one instead of a link, one after the
+    /// server has already destroyed the ciphertext. Rendering them identically
+    /// would make the cleanup warning read as a failed delete.
+    func testTheKeyReadAndRemoveFailuresStayDistinctInEveryLanguage() {
+        for language in AppLanguage.allCases {
+            let read = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308),
+                                                      operation: .read, language: language)
+            let remove = ErrorCopy.storedLinkKeyMessage(for: KeychainError.status(-25308),
+                                                        operation: .remove, language: language)
+            XCTAssertNotEqual(read, remove, language.rawValue)
+        }
+    }
+
+    /// The keys R3-D adds are real copy in every language, not a key echoed back
+    /// and not a template with an unsubstituted placeholder.
+    func testTheNewManagementKeysAreTranslatedEverywhere() {
+        for key in [L10nKey.accountLoadingDevices, .accountLoadingFiles, .accountSigningOut,
+                    .accountRevokeDeviceLabel, .accountShareFileLabel,
+                    .accountDeleteFileLabel] {
+            for language in AppLanguage.allCases {
+                let text = L10n.t(key, language: language)
+                XCTAssertFalse(text.isEmpty, "\(key.rawValue) [\(language.rawValue)]")
+                XCTAssertNotEqual(text, key.rawValue,
+                                  "\(key.rawValue) [\(language.rawValue)] fell back to the key")
+                if language != .en {
+                    XCTAssertNotEqual(text, L10n.t(key, language: .en),
+                                      "\(key.rawValue) [\(language.rawValue)] is untranslated")
+                }
+            }
+        }
+    }
 }

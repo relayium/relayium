@@ -100,9 +100,134 @@ final class MacSurfaceGuardTests: XCTestCase {
 
     func testShellNeverReadsTheSession() throws {
         let shell = try source(named: "Shell/AppShellView.swift")
-        for s in ["session.state", "AccountSession", "SessionState", "bearerToken"] {
+        for s in ["session.state", "AccountSession", "SessionState", "bearerToken",
+                  "AccountManagementModel", "AccountScope"] {
             XCTAssertFalse(shell.contains(s), "the shell must not know about the account: \(s)")
         }
+    }
+
+    // MARK: - leaving the account outlives the screen that asked to
+
+    /// **No view owns the self-revoke hand-off.**
+    ///
+    /// Revoking the current device cascades this app's own bearer server-side,
+    /// and the app used to notice by way of a `.task(id: management.needsSignOut)`
+    /// on this view. That is a view's lifetime, and on macOS a view's lifetime is
+    /// shorter than the operation in two ordinary ways: selecting another
+    /// sidebar destination replaces `AccountView`, and closing the unique window
+    /// takes the whole split view down while the process keeps running behind
+    /// the `MenuBarExtra`. Either one lands the response with nobody to consume
+    /// it, and the app goes on treating a revoked bearer as live until somebody
+    /// navigates back to Account.
+    ///
+    /// This view may still START a revoke. It may not be what notices one
+    /// succeeded, so it names none of the machinery.
+    func testNoViewOwnsTheSelfRevokeHandOff() throws {
+        let account = try source(named: "AccountView.swift")
+        for viewScoped in ["needsSignOut", "acknowledgeSignOut", "consumeSelfRevoke",
+                           "session.logOut()"] {
+            XCTAssertFalse(account.contains(viewScoped),
+                           "AccountView owns \(viewScoped) again — leaving this destination "
+                           + "would strand a revoked credential")
+        }
+        // One `.task(id:)` survives on this view, and it is the scope-keyed load.
+        XCTAssertEqual(occurrences(of: ".task(id:", in: account), 1,
+                       "the only task on this view is the scope-keyed load")
+        XCTAssertTrue(account.contains(".task(id: scope)"))
+    }
+
+    /// The observer is app-scoped and subscribes before any view exists — which
+    /// on macOS also means before any WINDOW exists, and that is the point:
+    /// `applicationShouldTerminateAfterLastWindowClosed` is false here, so the
+    /// process outlives its window and a window-scoped observer would be absent
+    /// for exactly the interval this defect occupies.
+    func testTheSelfRevokeObserverIsAppScopedAndStartedBeforeAnyView() throws {
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertTrue(app.contains("@StateObject private var signOut: AccountSignOutCoordinator"),
+                      "the observer belongs to the App, not to a window or a view")
+        XCTAssertTrue(app.contains(".observe(management.$needsSignOut)"),
+                      "it has to be subscribed to the signal")
+        XCTAssertTrue(app.contains(".environmentObject(signOut)"))
+        guard let initRange = app.range(of: "init() {"),
+              let body = app.range(of: "var body: some Scene"),
+              let observe = app.range(of: ".observe(management.$needsSignOut)") else {
+            return XCTFail("RelayiumApp no longer has the shape this checks")
+        }
+        XCTAssertTrue(initRange.upperBound < observe.lowerBound
+                      && observe.upperBound < body.lowerBound,
+                      "the subscription must be made in init, before any scene is built")
+        XCTAssertEqual(occurrences(of: "AccountSignOutCoordinator(", in: app), 1,
+                       "a second coordinator would be a second logout path")
+        for (name, text) in try sources(under: macRoot, atLeast: 20)
+        where name != "RelayiumApp.swift" {
+            XCTAssertFalse(text.contains("$needsSignOut"), "\(name) starts a second observer")
+        }
+    }
+
+    /// While the revocation is running the window is blocked and says so.
+    ///
+    /// By then the bearer is either already dead (a self-revoke) or being killed
+    /// (an explicit sign-out), so an upload started from another destination
+    /// would be spent against a credential that is going away. Blocked AND
+    /// labelled: a split view that stops responding with no explanation reads as
+    /// the app having hung, and a bare `ProgressView()` reads as nothing at all
+    /// to VoiceOver.
+    ///
+    /// It is a transient operation, not an account gate — it goes up when a
+    /// revocation starts and comes down when it ends, so the shell still renders
+    /// unconditionally and every signed-out capability keeps its structure.
+    func testTheShellBlocksAndLabelsWindowActionsWhileTheLogoutFinishes() throws {
+        let shell = try source(named: "Shell/AppShellView.swift")
+        XCTAssertTrue(shell.contains("@EnvironmentObject private var signOut: AccountSignOutCoordinator"))
+        XCTAssertTrue(shell.contains(".disabled(signOut.isSigningOut)"),
+                      "a destination must not act with a credential the server is revoking")
+        XCTAssertTrue(shell.contains("ProgressView { Text(L10n.t(.accountSigningOut)) }"),
+                      "the block has to say what it is waiting for")
+        // The split view still renders unconditionally: the block is a modifier
+        // on it, never a branch around it.
+        XCTAssertFalse(shell.contains("if signOut.isSigningOut {\n            NavigationSplitView"),
+                       "the shell must not swap its structure for a sign-out")
+    }
+
+    /// The explicit Sign out button goes through the same coordinator, so "one
+    /// revocation at a time" is enforceable rather than hoped for.
+    func testTheExplicitSignOutGoesThroughTheOneCoordinator() throws {
+        let account = try source(named: "AccountView.swift")
+        XCTAssertTrue(account.contains(
+            "@EnvironmentObject private var signOut: AccountSignOutCoordinator"))
+        XCTAssertTrue(account.contains("signOut.signOut(scope: scope)"),
+                      "the button must hand the SCOPED sign-out to the coordinator")
+        XCTAssertEqual(occurrences(of: "signOut.signOut(", in: account), 1,
+                       "a second call site would be one that skipped the serialization")
+        let direct = try sources(under: macRoot, atLeast: 20)
+            .filter { $0.text.contains("session.logOut()") }.map(\.name).sorted()
+        XCTAssertEqual(direct, ["Destinations/AccountDestination.swift"],
+                       "a signed-in surface signs out around the coordinator")
+    }
+
+    /// A Refresh already in flight must not put the rows and reconstructed links
+    /// back after a sign-out cleared them.
+    ///
+    /// `AccountSession.logOut()` deliberately keeps `.ready` on screen until its
+    /// revocation finishes, so a superseded Refresh returns to a still-ready
+    /// account and `AccountRefreshDecision` would legitimately choose `.reload` —
+    /// recreating every `#k=` link for the length of the sign-out timeout. The
+    /// gate reads the coordinator rather than view state, so it survives this
+    /// destination being replaced and reselected mid-sign-out.
+    func testLeavingTheAccountPreventsAnOlderRefreshFromRehydratingItsRows() throws {
+        let account = try source(named: "AccountView.swift")
+        guard let refreshStart = account.range(of: "private func refresh() {") else {
+            return XCTFail("AccountView no longer has one refresh seam")
+        }
+        let refresh = account[refreshStart.lowerBound...]
+        guard let sessionRefresh = refresh.range(of: "await session.refresh()"),
+              let leaveGuard = refresh.range(of: "guard !signOut.isSigningOut else {") else {
+            return XCTFail("refresh no longer refuses to reload an account being left")
+        }
+        XCTAssertTrue(sessionRefresh.upperBound < leaveGuard.lowerBound,
+                      "the leave signal must be checked when the suspended refresh returns")
+        XCTAssertTrue(refresh[leaveGuard.lowerBound...].contains("management.clear(scope: previous)"),
+                      "a late refresh must leave the old scope deactivated")
     }
 
     func testNoDisclosureGroupAndNoMacOS14API() throws {
@@ -614,15 +739,35 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(occurrences(of: "InlineMessage(", in: account), 5,
                                     "row errors, the load error, the cleanup warning and the "
                                     + "stale-figures notice all carry a symbol")
-        for kept in [".task(id: scope)", ".task(id: management.needsSignOut)",
+        // `.task(id: management.needsSignOut)`, `acknowledgeSignOut()` and
+        // `session.logOut()` deliberately LEFT this list: noticing a successful
+        // self-revoke is no longer this view's job, because a view's lifetime is
+        // shorter than the operation. What replaces them is not nothing —
+        // `testNoViewOwnsTheSelfRevokeHandOff` and
+        // `testTheExplicitSignOutGoesThroughTheOneCoordinator` say where the
+        // hand-off went, which is the harder claim.
+        for kept in [".task(id: scope)", "signOut.signOut(scope: scope)",
                      "confirmationDialog", "management.isBusy(row: device.id)",
                      "management.isBusy(row: row.id)", "management.revoke(device, scope: scope)",
                      "management.delete(file, scope: scope)", "management.clear(scope:",
-                     "management.acknowledgeSignOut()", "management.dismissKeyCleanupWarning()",
+                     "management.dismissKeyCleanupWarning()",
                      "AccountRefreshDecision.next", "NSPasteboard.general.setString",
-                     "session.logOut()", "session.refresh()", "AccountScope(accountId: user.id"] {
+                     "session.refresh()", "AccountScope(accountId: user.id"] {
             XCTAssertTrue(account.contains(kept), "AccountView lost \(kept)")
         }
+    }
+
+    /// The list and its destructive confirmation must name the same device.
+    /// `AccountPresentation.deviceName` trims whitespace and supplies the
+    /// localized fallback; using raw `device.name` in either place produces a
+    /// blank row or a dialog titled `Revoke “”?` for a value the server accepts.
+    func testTheDeviceRowAndRevokeDialogShareTheDeviceNameFallback() throws {
+        let account = try source(named: "AccountView.swift")
+        XCTAssertTrue(account.contains("Text(AccountPresentation.deviceName(device))"),
+                      "the row bypasses the shared whitespace-aware fallback")
+        XCTAssertTrue(account.contains(
+            "deviceToRevoke.map { AccountPresentation.deviceName($0) } ?? \"\""),
+                      "the destructive dialog does not name the device the row displayed")
     }
 
     /// Ending the account is reachable from the account screen, and it is two
@@ -662,10 +807,12 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(confirmAction.upperBound < requests.lowerBound,
                       "the request must sit inside the confirmation's destructive button")
 
-        // And it adds no sign-out. The two that were already here are the
-        // self-revoke hand-off and the explicit Sign out button; a third would
-        // be the deletion path ending a session the server has not revoked.
-        XCTAssertEqual(occurrences(of: "session.logOut()", in: account), 2,
+        // And it adds no sign-out. Zero, now that both sign-out paths belong to
+        // the coordinator: a deletion request that ended the session would
+        // assert a deletion the server has not performed and take away the
+        // credential the user needs if they change their mind before opening
+        // the emailed link.
+        XCTAssertEqual(occurrences(of: "session.logOut()", in: account), 0,
                        "requesting a deletion must not sign the user out")
     }
 

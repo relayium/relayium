@@ -522,7 +522,19 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case accountDevicesBody = "account.devicesBody"
     case accountNoDevices = "account.noDevices"
     case accountUnnamedDevice = "account.unnamedDevice"
+    /// The badge on the row for the credential this app is holding.
+    ///
+    /// The key still spells *thisMac* because renaming it would rewrite nine
+    /// catalogs for no user-visible gain; the WORDING is device-neutral from
+    /// R3-D onwards, because iOS renders the same badge. `LocalizedCopyTests`
+    /// pins the phrase itself in every language.
     case accountThisMac = "account.thisMac"
+    /// Both lists load from one call, but each says which list is loading: a
+    /// bare spinner reads as nothing to VoiceOver and says nothing to anybody on
+    /// a screen with two lists on it.
+    case accountLoadingDevices = "account.loadingDevices"
+    case accountLoadingFiles = "account.loadingFiles"
+    case accountSigningOut = "account.signingOut"
     case accountDeviceKindCli = "account.deviceKindCli"
     case accountDeviceKindApp = "account.deviceKindApp"
     case accountDeviceNeverUsed = "account.deviceNeverUsed"
@@ -534,6 +546,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case accountRevokeTitle = "account.revokeTitle"
     case accountRevokeThisMac = "account.revokeThisMac"
     case accountRevokeOther = "account.revokeOther"
+    /// The revoke button's accessible label. %1$@ — the device's own name, never
+    /// translated; %2$@ — its detail line, which is what tells two devices with
+    /// the SAME name apart to somebody who cannot see the list.
+    case accountRevokeDeviceLabel = "account.revokeDeviceLabel"
     case accountFilesHeading = "account.filesHeading"
     case accountFilesBody = "account.filesBody"
     case accountNoFiles = "account.noFiles"
@@ -543,6 +559,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case accountKeyLookupFailed = "account.keyLookupFailed"
     case accountDeleteFileTitle = "account.deleteFileTitle"
     case accountDeleteFileBody = "account.deleteFileBody"
+    /// The two stored-row actions' accessible labels. %@ — the object's
+    /// server-issued id, isolated rather than translated. A list of rows whose
+    /// only controls read "Share" and "Delete" is unusable without sight.
+    case accountShareFileLabel = "account.shareFileLabel"
+    case accountDeleteFileLabel = "account.deleteFileLabel"
     /// %@ — a formatted byte size.
     case accountFileEncryptedSize = "account.fileEncryptedSize"
     case accountFileNoExpiry = "account.fileNoExpiry"

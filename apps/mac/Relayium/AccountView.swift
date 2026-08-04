@@ -19,6 +19,12 @@ struct AccountView: View {
 
     @EnvironmentObject private var session: AccountSession
     @EnvironmentObject private var management: AccountManagementModel
+    /// Leaving the account, from either direction. App-scoped rather than this
+    /// view's `@State`, because the moment that matters is the one where this
+    /// view does not exist: a revoke of the current device can land after the
+    /// user has selected another destination or closed the window. See
+    /// `AccountSignOutCoordinator`.
+    @EnvironmentObject private var signOut: AccountSignOutCoordinator
 
     /// The row a confirmation dialog is currently asking about. Held here rather
     /// than in the model: nothing has been asked of the server yet, so it is a
@@ -75,35 +81,27 @@ struct AccountView: View {
                 Button(L10n.t(.commonRefresh)) { refresh() }
                     .keyboardShortcut(.defaultAction)
                 Spacer()
-                Button(L10n.t(.commonSignOut)) { signOut() }
+                // Handed to the coordinator rather than performed here. Doing it
+                // here would be a second logout path racing the self-revoke one,
+                // and it would die with this destination.
+                Button(L10n.t(.commonSignOut)) { signOut.signOut(scope: scope) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         // Keyed on the scope so signing in as someone else reloads rather than
         // leaving the previous account's devices on screen.
-        .task(id: scope) { await management.load(scope) }
-        // Revoking this Mac's own credential cascades the bearer server-side.
-        // Leaving the account screen up would be a UI asserting an authentication
-        // that no longer exists, so the app signs itself out locally.
         //
-        // Two deliberate details. The signal is consumed BEFORE acting, so it is
-        // one-shot: a sign-out that fails leaves the user on the retryable
-        // `.unavailable` screen rather than re-firing forever, and signing back
-        // in as the same account does not inherit it. And the sign-out itself is
-        // an unstructured `Task` — it succeeds by removing this very view, which
-        // would cancel a `.task` part-way through `client.logout` and leave the
-        // local credential exactly where it was.
-        .task(id: management.needsSignOut) {
-            guard management.needsSignOut else { return }
-            management.acknowledgeSignOut()
-            // The account this model is holding rows for is the one being signed
-            // out of, so let go of them here rather than leaving a signed-out
-            // account's devices and #k= links in an app-scoped object.
-            management.clear(scope: scope)
-            Task { await session.logOut() }
-        }
+        // This is the ONLY task on this view. Noticing a successful self-revoke
+        // used to be a second one, and that was the defect the R3-D review
+        // found: a `.task` dies with the view, and this view dies whenever the
+        // user selects another sidebar destination or closes the window — which
+        // does not end the process here. `AccountSignOutCoordinator` observes
+        // the signal at app scope instead, before any scene is built.
+        .task(id: scope) { await management.load(scope) }
         .confirmationDialog(
-            L10n.t(.accountRevokeTitle, [L10n.token(deviceToRevoke?.name ?? "")]),
+            L10n.t(.accountRevokeTitle, [
+                L10n.token(deviceToRevoke.map { AccountPresentation.deviceName($0) } ?? ""),
+            ]),
             isPresented: Binding(get: { deviceToRevoke != nil },
                                  set: { if !$0 { deviceToRevoke = nil } }),
             titleVisibility: .visible
@@ -173,6 +171,21 @@ struct AccountView: View {
         let previous = scope
         Task {
             await session.refresh()
+            // `logOut()` supersedes the session refresh but deliberately keeps
+            // `.ready` on screen until its own network call finishes. Without
+            // this gate the returning refresh would see that still-ready state,
+            // choose `.reload`, and recreate every row and every reconstructed
+            // `#k=` link after the sign-out had already dropped them — for the
+            // whole length of the revocation.
+            //
+            // Read from the coordinator rather than from view state: this
+            // destination can be replaced and reselected while the logout is
+            // still running, and fresh `@State` would come back `false` and
+            // reopen the gate mid-sign-out.
+            guard !signOut.isSigningOut else {
+                management.clear(scope: previous)
+                return
+            }
             switch AccountRefreshDecision.next(previous: previous,
                                                state: session.state,
                                                bearer: session.bearerToken) {
@@ -180,16 +193,6 @@ struct AccountView: View {
             case .clear(let stale):    management.clear(scope: stale)
             }
         }
-    }
-
-    /// Explicit sign-out. The rows go first, deliberately: `logOut()` makes a
-    /// network call that can take a minute to time out, and there is no reason
-    /// for a leaving user's device list and reconstructed `#k=` links to sit in
-    /// an app-scoped object for it. Nothing is lost if the sign-out fails —
-    /// returning to the account screen re-runs the load.
-    private func signOut() {
-        management.clear(scope: scope)
-        Task { await session.logOut() }
     }
 
     // MARK: - profile, plan and usage
@@ -270,7 +273,7 @@ struct AccountView: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(device.name.isEmpty ? L10n.t(.accountUnnamedDevice) : device.name)
+                        Text(AccountPresentation.deviceName(device))
                             .lineLimit(1).truncationMode(.middle)
                         if device.current {
                             Text(L10n.t(.accountThisMac))

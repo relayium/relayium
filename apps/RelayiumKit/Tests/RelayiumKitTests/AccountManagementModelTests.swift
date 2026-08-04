@@ -255,6 +255,62 @@ final class AccountManagementModelTests: XCTestCase {
                        "a load from the previous account repainted the current one")
     }
 
+    /// The same account id under a DIFFERENT credential — the case an account
+    /// check alone cannot see.
+    ///
+    /// Signing out and straight back in as yourself is the ordinary way to reach
+    /// it, and a self-revoke is the sharper one: the old bearer is dead
+    /// server-side while the user is still looking at their own account. A guard
+    /// that compared only `accountId` would call the in-flight load current,
+    /// because it IS the right account — and would repaint the new session with
+    /// a list fetched under a credential the server has already revoked,
+    /// including devices the revoke removed. The scope is the pair for exactly
+    /// this reason.
+    func testALoadUnderARotatedCredentialForTheSameAccountDoesNotRepaint() async {
+        service.gatedListToken = "old-token"
+        service.devices = [device("revoked-device"), device("kept")]
+        let m = makeModel()
+
+        let slow = Task { await m.load(self.scope("u1", token: "old-token")) }
+        _ = await waitFor("the first load to reach the service") { self.service.listCalls == 1 }
+
+        // Same person, same account, new credential.
+        service.devices = [device("kept")]
+        await m.load(scope("u1", token: "rotated-token"))
+        XCTAssertEqual(m.devices.map(\.id), ["kept"])
+
+        await service.listGate.release()
+        _ = await slow.value
+        XCTAssertEqual(m.devices.map(\.id), ["kept"],
+                       "a load under the previous credential repainted the current session")
+        XCTAssertFalse(m.isLoading, "the stale load's return left the model loading")
+    }
+
+    /// And the same for an action. A revoke issued under the old credential must
+    /// not remove a row from the session that replaced it: the request went out
+    /// against a bearer this app no longer holds, so whatever the server did with
+    /// it is not a statement about what is on screen now.
+    func testAnActionUnderARotatedCredentialDoesNotMutateTheCurrentSession() async {
+        service.devices = [device("d1"), device("d2")]
+        let m = makeModel()
+        await m.load(scope("u1", token: "old-token"))
+        service.gatedActionToken = "old-token"
+
+        let stale = Task {
+            await m.revoke(device("d1"), scope: self.scope("u1", token: "old-token"))
+        }
+        _ = await waitFor("the revoke to be in flight") { m.isBusy(row: "d1") }
+        await m.load(scope("u1", token: "rotated-token"))
+
+        await service.actionGate.release()
+        _ = await stale.value
+        XCTAssertEqual(m.devices.map(\.id).sorted(), ["d1", "d2"],
+                       "a revoke under a dead credential removed a row from the new session")
+        XCTAssertNil(m.error(forRow: "d1"),
+                     "and must not report on a row it no longer speaks for")
+        XCTAssertFalse(m.isBusy(row: "d1"), "the stale action stranded the row as busy")
+    }
+
     /// Switching accounts must not leave the previous account's rows on screen
     /// while the new ones load.
     func testSwitchingAccountsClearsTheRowsImmediately() async {
@@ -766,14 +822,90 @@ final class AccountManagementModelTests: XCTestCase {
         XCTAssertNil(m.keyCleanupWarning)
     }
 
-    func testSignOutSignalIsAcknowledgeable() async {
+    // MARK: - claiming a self-revoke without a scope
+
+    /// The signal has to be claimable by something that is not the account
+    /// screen, because the account screen is exactly what may not be on screen
+    /// when it arrives: a user who taps Revoke and immediately switches tabs
+    /// takes the view down before the response lands. So this takes no scope —
+    /// the caller is an app shell that has none — and does in ONE synchronous
+    /// step what the view used to do in three.
+    func testConsumingASelfRevokeClaimsItExactlyOnce() async {
         service.devices = [device("d1", current: true)]
         let m = makeModel()
         await m.load(scope())
         await m.revoke(m.devices[0], scope: scope())
         XCTAssertTrue(m.needsSignOut)
-        m.acknowledgeSignOut()
+
+        XCTAssertTrue(m.consumeSelfRevoke(), "the first claim must win")
         XCTAssertFalse(m.needsSignOut)
+        XCTAssertFalse(m.consumeSelfRevoke(),
+                       "a second claim would sign a second session out")
+    }
+
+    /// Claiming it is also what drops the rows. Separating the two — as the
+    /// view did — is what left a window where the credential was dead
+    /// server-side and the previous account's reconstructed `#k=` links were
+    /// still held in an app-scoped object.
+    func testConsumingASelfRevokeDropsTheRowsAndTheReconstructedLinks() async throws {
+        try await keys.save(id: "f1", keyB64url: "AAAA")
+        service.devices = [device("d1", current: true), device("d2")]
+        service.files = [file("f1")]
+        let m = makeModel()
+        await m.load(scope())
+        guard case .available = m.files[0].link else { return XCTFail("no link to drop") }
+
+        await m.revoke(device("d1", current: true), scope: scope())
+        XCTAssertTrue(m.consumeSelfRevoke())
+        XCTAssertTrue(m.devices.isEmpty, "the revoked account's devices survived the claim")
+        XCTAssertTrue(m.files.isEmpty, "a reconstructed #k= link survived the claim")
+        XCTAssertNil(m.loadError)
+        XCTAssertFalse(m.isLoading)
+    }
+
+    func testConsumingNothingIsRefusedAndChangesNothing() async {
+        service.devices = [device("d1")]
+        let m = makeModel()
+        await m.load(scope())
+        XCTAssertFalse(m.consumeSelfRevoke(), "there was no signal to claim")
+        XCTAssertEqual(m.devices.map(\.id), ["d1"], "a refused claim cleared the rows anyway")
+    }
+
+    /// A claim also stops belonging to the account, so the NEXT sign-in loads
+    /// from nothing and cannot inherit either the signal or the rows — the
+    /// failure an app-scoped model makes possible and a view-scoped one hid.
+    func testALaterSessionInheritsNeitherTheSignalNorTheRows() async {
+        service.devices = [device("d1", current: true)]
+        let m = makeModel()
+        await m.load(scope("u1"))
+        await m.revoke(m.devices[0], scope: scope("u1"))
+        XCTAssertTrue(m.consumeSelfRevoke())
+
+        service.devices = [device("d9")]
+        await m.load(scope("u2", token: "t2"))
+        XCTAssertFalse(m.needsSignOut, "the next session inherited a sign-out")
+        XCTAssertEqual(m.devices.map(\.id), ["d9"])
+        XCTAssertFalse(m.consumeSelfRevoke(), "the claimed signal came back")
+    }
+
+    /// A load already in flight for the revoked account must not put its rows
+    /// back after the claim — the same guarantee `clear(scope:)` gives, from an
+    /// entry point that has no scope to compare.
+    func testALoadInFlightWhenTheSelfRevokeIsClaimedDoesNotRepaint() async {
+        service.devices = [device("d1", current: true), device("d2")]
+        let m = makeModel()
+        await m.load(scope())
+        await m.revoke(device("d1", current: true), scope: scope())
+
+        service.gatedListToken = "tok"
+        let pending = Task { await m.load(self.scope()) }
+        _ = await waitFor("the refresh to reach the service") { self.service.listCalls == 2 }
+        XCTAssertTrue(m.consumeSelfRevoke())
+
+        await service.listGate.release()
+        _ = await pending.value
+        XCTAssertTrue(m.devices.isEmpty, "a load from the revoked account repainted after the claim")
+        XCTAssertFalse(m.isLoading)
     }
 
     // MARK: - where Refresh goes afterwards

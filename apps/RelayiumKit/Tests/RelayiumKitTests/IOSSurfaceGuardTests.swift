@@ -20,13 +20,28 @@ import XCTest
 ///     `.read` and `.remove`. Recording the miscount is part of fixing it.
 ///     R3-C reaches five of the twenty-two and corrects those five in place, in
 ///     all nine catalogs, to device-neutral wording that stays true on macOS.
-///     **Seventeen** remain, each blocked behind a feature this app does not
-///     have — so rendering one has to be a decision rather than an oversight.
+///     R3-D reaches eight more — the device list, the stored-file list and the
+///     link rebuild — and corrects those the same way. **Eight** remain, seven
+///     blocked behind a feature this app does not have and one rendered by
+///     nothing on either platform, so rendering any of them has to be a decision
+///     rather than an oversight.
 ///  4. **A feature quietly unwired.** Launch restore is not decoration: without
 ///     it a signed-in user meets the sign-in form every launch.
 ///
-/// It scans source text rather than behavior on purpose: these are absences,
-/// and an absence has no runtime to observe.
+/// Much of it scans source text rather than behavior on purpose: these are
+/// absences, and an absence has no runtime to observe.
+///
+/// R3-D adds the other direction, and it is the larger half of this file now.
+/// The account-management surface is the first iOS screen whose defects are all
+/// *presence* defects — a management model built twice, a stale credential
+/// carried into a revoke, a sign-out that clears rows after the network call
+/// instead of before, a `#k=` link offered for a key this device does not hold.
+/// None of those is visible in a screenshot and none is reachable from a package
+/// test, because SwiftUI owns the view. So the decisions live in
+/// `AccountManagementModel` and `AccountPresentation`, where
+/// `AccountManagementModelTests` and `AccountManagementPresentationTests` drive
+/// them for real, and what is asserted HERE is only the wiring that connects the
+/// two — which is exactly the part a re-layout drops silently.
 final class IOSSurfaceGuardTests: XCTestCase {
 
     /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
@@ -118,9 +133,20 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // is not nothing: `testTheAppleButtonIsTheSystemControlWiredToTheSession`
         // and `testOnlyTheFormImportsAuthenticationServices` below say what the
         // Apple surface must be, which is the harder claim. Everything else stays.
+        //
+        // `AccountManagementModel` LEFT this list in R3-D, for the same reason
+        // `CloudUploadModel` left it in R3-C: this is the slice that renders it.
+        // What replaces the ban is not nothing — the positive wiring invariants
+        // further down say the model is app-scoped, built from the ONE key
+        // store, injected once, and reachable only from the ready account
+        // surface, which is the harder claim.
+        //
+        // `UIPasteboard` deliberately stays. R3-D is the first slice with a
+        // rebuilt `#k=` link to hand somewhere, and the honest hand-off is the
+        // share sheet the user opened, not a clipboard write behind their back.
         let deferred = [
             "BrowserLoginModel",
-            "AccountManagementModel", "RealtimeSessionModel",
+            "RealtimeSessionModel",
             "RealtimeTextSessionModel", "LanDiscoveryModel", "NearbyReceiveModel",
             "UIPasteboard", "onOpenURL", "UNUserNotificationCenter", "StoreKit",
             "NSWorkspace",
@@ -151,8 +177,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// The seventeen keys whose wording still names a platform, each grouped
-    /// with the slice that will first render it.
+    /// The eight keys whose wording still names a platform, each grouped with
+    /// the slice that will first render it.
     ///
     /// Five left this list in R3-C because this slice renders them, so they were
     /// corrected in place in all nine catalogs instead: `upload.keyKept`,
@@ -181,14 +207,25 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// `LocalizedCopyTests.testTheRevokedCredentialSentenceNamesNoPlatform`
     /// carries the claim from here on — which is the stronger guard, since it
     /// reads the copy rather than the call sites.
+    ///
+    /// **R3-D takes eight more off this list by the same route.** The device
+    /// list, the stored-file list and the link rebuild are what this slice
+    /// renders, so `account.thisMac`, `account.revokeThisMac`,
+    /// `account.keyNotOnThisMac`, `account.keyLookupFailed`,
+    /// `account.keyCleanupWarning`, `error.storedLinkKey.invalidKey`,
+    /// `error.storedKey.keychain.read` and `error.storedKey.keychain.remove`
+    /// were corrected in place in all nine catalogs to wording that is true on
+    /// both platforms. `LocalizedCopyTests`'
+    /// `testNothingTheAccountManagementSurfaceRendersNamesAPlatform` and
+    /// `testEverySentenceAboutThisDeviceStillNamesADevice` carry that claim from
+    /// here on, and they carry the half a ban cannot: that each sentence still
+    /// names the device it is about instead of merely dropping the noun.
+    ///
+    /// Seven of the remaining eight are still blocked behind a feature this app
+    /// does not have, so rendering one has to be a decision rather than an
+    /// oversight. The eighth is rendered by nothing on either platform.
     func testNoPlatformNamingCopyKeyIsRenderedOnIOS() throws {
         let platformNaming: [L10nKey] = [
-            // R3-D: device and stored-file management, and rebuilding a link
-            // from a stored key.
-            .accountThisMac, .accountRevokeThisMac, .accountKeyNotOnThisMac,
-            .accountKeyLookupFailed, .accountKeyCleanupWarning,
-            .errorStoredLinkKeyInvalidKey,
-            .errorStoredKeyKeychainRead, .errorStoredKeyKeychainRemove,
             // R3-E / R3-F: realtime, nearby, notifications.
             .nearbyExplain, .nearbyPausedBody, .nearbyAcceptanceNote,
             .notifyIncomingFiles, .notifyIncomingText, .verifyExplainEncryption,
@@ -196,7 +233,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
             // Rendered by nothing on either platform yet.
             .errorKeychainSignIn,
         ]
-        XCTAssertEqual(platformNaming.count, 16)
+        XCTAssertEqual(platformNaming.count, 8)
         for (name, text) in try sources() {
             for key in platformNaming {
                 XCTAssertFalse(text.contains(".\(key)"),
@@ -225,10 +262,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
     /// The receive flow must not acquire an account dependency: it is the one
     /// thing this app could already do, and it works signed out.
+    ///
+    /// `AccountManagementModel` joins the ban in R3-D. It is injected into the
+    /// environment at the app scope, which puts it structurally within reach of
+    /// every tab — and an `@EnvironmentObject` the receive tab merely DECLARED
+    /// would crash it outright in any build where the object was not installed.
+    /// Anonymous receive stays independent of the account by not naming it.
     func testTheReceiveFlowIsIndependentOfTheSession() throws {
         let all = try sources()
         let receive = try XCTUnwrap(all.first { $0.name == "ReceiveView.swift" })
-        for symbol in ["AccountSession", "bearerToken"] {
+        for symbol in ["AccountSession", "bearerToken", "AccountManagementModel",
+                       "AccountScope"] {
             XCTAssertFalse(receive.text.contains(symbol),
                            "ReceiveView must not depend on \(symbol)")
         }
@@ -366,11 +410,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(confirmAction.upperBound < requests.lowerBound,
                       "the request must sit inside the confirmation's destructive button")
 
-        // No hand-off to the website, and no sign-out on the way. The one
-        // sign-out here is the Sign out button that was already on the screen.
+        // No hand-off to the website, and no sign-out on the way.
         XCTAssertFalse(summary.text.contains("openURL(AppEnvironment.accountWebURL"),
                        "account deletion must not leave the app")
-        XCTAssertEqual(summary.text.components(separatedBy: "session.logOut()").count - 1, 1,
+        // Zero, now that both sign-out paths belong to the coordinator. A
+        // deletion request that ended the session would assert a deletion the
+        // server has not performed and take away the credential the user needs
+        // if they change their mind before opening the emailed link.
+        XCTAssertEqual(summary.text.components(separatedBy: "session.logOut()").count - 1, 0,
                        "requesting a deletion must not sign the user out")
     }
 
@@ -447,20 +494,433 @@ final class IOSSurfaceGuardTests: XCTestCase {
                      "the bearer lives in this app's own default keychain group")
     }
 
-    /// The bearer is read at the moment of use and nowhere else.
+    /// The bearer is read at the moment of use, and only by the two surfaces
+    /// that spend it.
     ///
     /// It is not `@Published` on purpose — a credential has no business in the
     /// view-update surface — so the send button's ENABLEMENT comes from
     /// `session.state` and its ACTION re-reads the token. The upload model does
     /// capture it for the life of one authenticated upload task; that is what an
     /// authenticated upload IS, and it is not this guard's business. What this
-    /// guard forbids is a SECOND holder in the view layer.
-    func testTheBearerIsReadInExactlyOnePlaceOnce() throws {
+    /// guard forbids is a holder anywhere ELSE in the view layer.
+    ///
+    /// R3-D adds the second reader, and it is a different shape from the first:
+    /// `AccountSummaryView` recomputes an `AccountScope` on every render rather
+    /// than storing one, so a result can be checked against the account and
+    /// credential on screen when it ARRIVES. Storing it is the defect that shape
+    /// exists to prevent, so the read is asserted to be a computed property.
+    func testTheBearerIsReadOnlyWhereItIsSpent() throws {
         let all = try sources()
-        XCTAssertEqual(all.map { $0.text.components(separatedBy: "bearerToken").count - 1 }
+        let readers = all.filter { $0.text.contains("bearerToken") }.map(\.name).sorted()
+        XCTAssertEqual(readers, ["AccountSummaryView.swift", "SendView.swift"],
+                       "a third view-layer holder of the credential")
+        let summary = try XCTUnwrap(all.first { $0.name == "AccountSummaryView.swift" })
+        XCTAssertTrue(summary.text.contains("private var scope: AccountScope {"),
+                      "the scope must be recomputed per render, not stored")
+        XCTAssertTrue(summary.text.contains(
+            "AccountScope(accountId: user.id, token: session.bearerToken ?? \"\")"),
+            "the scope must pair THIS render's account with the live credential")
+        // Two reads, and the second is the reason this is not "exactly one":
+        // `refresh()` has to ask the session what it holds AFTER the refresh
+        // moved it, because a refresh can rotate the credential or end the
+        // session entirely. Re-reading the computed `scope` there would hand
+        // `AccountRefreshDecision` the value it is supposed to check.
+        XCTAssertEqual(summary.text.components(separatedBy: "session.bearerToken").count - 1, 2,
+                       "the credential is read to build the scope and to re-check it after a refresh")
+        XCTAssertTrue(summary.text.contains("bearer: session.bearerToken"),
+                      "the refresh decision must see the LIVE credential, not the rendered scope")
+        XCTAssertFalse(summary.text.contains("@State private var scope"),
+                       "a stored scope would outlive the credential it names")
+    }
+
+    // MARK: - R3-D: device and stored-file management
+
+    /// One key store, shared by the upload that WRITES a `#k=` key and the
+    /// management model that READS it back.
+    ///
+    /// Two stores would still address the same keychain items, so this would not
+    /// fail at runtime — it would drift the moment either construction gained an
+    /// argument the other did not, and the symptom would be an upload whose link
+    /// the Account tab cannot rebuild. The key exists nowhere else: not on the
+    /// server, not in the manifest, only in the link and in this store.
+    func testOneStoredLinkKeyStoreIsSharedByUploadAndManagement() throws {
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" })
+        XCTAssertEqual(app.text.components(separatedBy: "makeStoredLinkKeyStore()").count - 1, 1,
+                       "a second key store would be a second source of truth for the keys")
+        XCTAssertTrue(app.text.contains("AppEnvironment.makeUploadModel(keyStore: keys)"),
+                      "the upload model must take the shared store")
+        XCTAssertTrue(app.text.contains("AppEnvironment.makeAccountManagementModel(keyStore: keys)"),
+                      "and the management model must take the SAME one")
+    }
+
+    /// The management model is app-scoped and injected once.
+    ///
+    /// View-scoped would be the natural-looking mistake and the wrong one: a
+    /// SwiftUI `TabView` mounts its tabs lazily and can tear an off-screen one
+    /// down, so a revoke in flight — the operation that can end this app's own
+    /// session — would be cancelled by the user switching tabs, and
+    /// `needsSignOut` would be raised on an object that no longer exists.
+    func testTheManagementModelIsAppScopedAndInjectedOnce() throws {
+        let all = try sources()
+        let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" })
+        XCTAssertTrue(app.text.contains("@StateObject private var management: AccountManagementModel"),
+                      "the model belongs to the App, not to a view")
+        XCTAssertTrue(app.text.contains(".environmentObject(management)"),
+                      "and has to reach the view tree")
+        XCTAssertEqual(all.map { $0.text.components(separatedBy: "makeAccountManagementModel").count - 1 }
+                          .reduce(0, +), 1,
+                       "a second construction would be a second model, with its own rows")
+        XCTAssertEqual(all.map { $0.text.components(separatedBy: ".environmentObject(management)").count - 1 }
                           .reduce(0, +), 1)
-        let owner = try XCTUnwrap(all.first { $0.text.contains("bearerToken") })
-        XCTAssertEqual(owner.name, "SendView.swift")
+    }
+
+    /// Management is rendered by the ready account surface and by nothing else.
+    ///
+    /// The tab is a router over session states; the summary is the one state
+    /// that HAS an account whose devices and files exist. A second holder would
+    /// be a screen able to render a revoke button outside `.ready` — with a
+    /// scope built from a user that is no longer signed in.
+    func testOnlyTheReadyAccountSurfaceRendersManagement() throws {
+        let all = try sources()
+        let holders = all.filter { $0.text.contains("AccountManagementModel") }
+            .map(\.name).sorted()
+        XCTAssertEqual(holders, ["AccountSummaryView.swift", "RelayiumApp.swift"])
+        let summary = try XCTUnwrap(all.first { $0.name == "AccountSummaryView.swift" })
+        XCTAssertTrue(summary.text.contains(
+            "@EnvironmentObject private var management: AccountManagementModel"))
+        let tab = try XCTUnwrap(all.first { $0.name == "AccountTab.swift" })
+        XCTAssertFalse(tab.text.contains("management"),
+                       "the router must not reach into the account's rows")
+        XCTAssertTrue(tab.text.contains("AccountSummaryView(user: user, usage: usage)"),
+                      "and the summary must stay the `.ready` arm")
+    }
+
+    /// Every call into the model carries the scope, and the load is KEYED on it.
+    ///
+    /// `.task(id:)` is what makes signing in as somebody else reload instead of
+    /// leaving the previous account's devices — each with a revoke button — under
+    /// the new account's name. A bare `.task` would run once per view identity
+    /// and never again.
+    func testEveryManagementCallCarriesTheScopeAndTheLoadIsKeyedOnIt() throws {
+        let summary = try XCTUnwrap(try sources().first { $0.name == "AccountSummaryView.swift" })
+        for wired in [".task(id: scope) { await management.load(scope) }",
+                      "management.revoke(device, scope: scope)",
+                      "management.delete(file, scope: scope)",
+                      "management.clear(scope:"] {
+            XCTAssertTrue(summary.text.contains(wired), "AccountSummaryView lost \(wired)")
+        }
+        // No call may reach the model without one. A scope-less overload does
+        // not exist, so this catches the shape rather than the symbol: a bare
+        // `management.load()` would not compile, but `management.load(stale)`
+        // built from something other than the render-time scope would.
+        XCTAssertFalse(summary.text.contains("management.load(AccountScope("),
+                       "a call must not mint its own scope beside the render-time one")
+    }
+
+    /// Refresh goes through the shared decision, and acts on BOTH of its answers.
+    ///
+    /// The naive version — refresh the session, then reload with the scope the
+    /// view recomputes — is wrong in two ways that only appear once refreshing
+    /// can change the session: an expired bearer pairs the old account id with an
+    /// empty token, and a second sign-in pairs it with a stranger's credential.
+    /// Which outcome it is belongs in `AccountRefreshDecision`, where
+    /// `AccountManagementModelTests` drives it; this asserts the view carries it
+    /// out rather than re-deriving it.
+    func testRefreshDefersToTheSharedDecisionAndHandlesBothOutcomes() throws {
+        let summary = try XCTUnwrap(try sources().first { $0.name == "AccountSummaryView.swift" })
+        XCTAssertTrue(summary.text.contains("AccountRefreshDecision.next(previous: previous,"),
+                      "the decision must not be re-derived in the view")
+        XCTAssertTrue(summary.text.contains("case .reload(let current): await management.load(current)"),
+                      "a still-ready same account reloads under its CURRENT bearer")
+        XCTAssertTrue(summary.text.contains("case .clear(let stale):    management.clear(scope: stale)"),
+                      "anything else lets the rows go rather than fetching more of them")
+        guard let refresh = summary.text.range(of: "await session.refresh()"),
+              let decide = summary.text.range(of: "AccountRefreshDecision.next(previous:") else {
+            return XCTFail("AccountSummaryView no longer refreshes through the decision")
+        }
+        XCTAssertTrue(refresh.upperBound < decide.lowerBound,
+                      "the decision must read the session AFTER the refresh moved it")
+    }
+
+    /// The explicit Sign out button goes through the same coordinator the
+    /// self-revoke does.
+    ///
+    /// Not tidiness: it is what makes "one revocation at a time" enforceable.
+    /// With the view calling `session.logOut()` itself, a Sign out tapped while a
+    /// self-revoke's sign-out was already running would be a second revocation of
+    /// a credential that is already gone, and its failure would be reported over
+    /// the first one's success. It still carries the scope, because a press
+    /// naming an account the model has moved on from must not wipe the current
+    /// one's rows.
+    ///
+    /// The claim that the rows go BEFORE the network call moved with the code:
+    /// `AccountSignOutCoordinatorTests` drives it against a held-open logout,
+    /// which is a stronger check than the source ordering this used to read.
+    func testTheExplicitSignOutGoesThroughTheOneCoordinator() throws {
+        let all = try sources()
+        let summary = try XCTUnwrap(all.first { $0.name == "AccountSummaryView.swift" })
+        XCTAssertTrue(summary.text.contains(
+            "@EnvironmentObject private var signOut: AccountSignOutCoordinator"))
+        XCTAssertTrue(summary.text.contains("signOut.signOut(scope: scope)"),
+                      "the button must hand the SCOPED sign-out to the coordinator")
+        XCTAssertEqual(summary.text.components(separatedBy: "signOut.signOut(").count - 1, 1,
+                       "a second call site would be one that skipped the serialization")
+        // Nowhere in the app may reach the session's sign-out directly except
+        // the two account-router screens that hold no rows and have no scope to
+        // give: `.unavailable` and check-email, both of which are signed-OUT
+        // states by the time they are on screen.
+        let direct = all.filter { $0.text.contains("session.logOut()") }.map(\.name).sorted()
+        XCTAssertEqual(direct, ["AccountTab.swift"],
+                       "a signed-in surface signs out around the coordinator")
+    }
+
+    /// A Refresh already in flight must not put the rows and reconstructed links
+    /// back after a sign-out cleared them.
+    ///
+    /// `AccountSession.logOut()` deliberately keeps `.ready` on screen until its
+    /// network revocation finishes. A superseded Refresh therefore returns to a
+    /// still-ready old account and `AccountRefreshDecision` would legitimately
+    /// choose `.reload` — recreating every `#k=` link for the length of the
+    /// sign-out timeout, which is exactly the interval the pre-call clear exists
+    /// to avoid.
+    ///
+    /// The gate reads the COORDINATOR, not this view's `@State`. That is the
+    /// review's finding applied to the gate as well as to the observer: the
+    /// account view can be torn down and rebuilt mid-sign-out — a tab switch away
+    /// and back — and a fresh `@State` would come back `false` and reopen the
+    /// gate while the revocation was still running.
+    func testLeavingTheAccountPreventsAnOlderRefreshFromRehydratingItsRows() throws {
+        let summary = try XCTUnwrap(try sources().first { $0.name == "AccountSummaryView.swift" })
+        XCTAssertFalse(summary.text.contains("@State private var isLeavingAccount"),
+                       "a view-scoped leave flag does not survive the view it lives on")
+        guard let refreshStart = summary.text.range(of: "private func refresh() {") else {
+            return XCTFail("AccountSummaryView no longer has one refresh seam")
+        }
+        let refresh = summary.text[refreshStart.lowerBound...]
+        guard let sessionRefresh = refresh.range(of: "await session.refresh()"),
+              let leaveGuard = refresh.range(of: "guard !signOut.isSigningOut else {") else {
+            return XCTFail("refresh no longer refuses to reload an account being left")
+        }
+        XCTAssertTrue(sessionRefresh.upperBound < leaveGuard.lowerBound,
+                      "the leave signal must be checked when the suspended refresh returns")
+        XCTAssertTrue(refresh[leaveGuard.lowerBound...].contains("management.clear(scope: previous)"),
+                      "a late refresh must leave the old scope deactivated")
+    }
+
+    /// **No view owns the self-revoke hand-off.**
+    ///
+    /// This is the defect the R3-D review found, and it is a lifecycle one, so
+    /// nothing about it is visible in the account screen's own behaviour. The
+    /// hand-off used to be a `.task(id: management.needsSignOut)` on this view.
+    /// A user who taps Revoke on the current device and immediately switches
+    /// tabs takes that view down before the response lands: the app-scoped model
+    /// still records the signal truthfully, but nothing consumes it, so the
+    /// other tabs go on offering to spend a bearer the server has already
+    /// revoked until the user happens to return to the Account tab.
+    ///
+    /// The account screen may still START a revoke. It may not be what NOTICES
+    /// one succeeded — so it names none of the machinery, and a re-layout cannot
+    /// reintroduce a view-scoped observer without failing here.
+    func testNoViewOwnsTheSelfRevokeHandOff() throws {
+        let summary = try XCTUnwrap(try sources().first { $0.name == "AccountSummaryView.swift" })
+        for viewScoped in ["needsSignOut", "acknowledgeSignOut", "consumeSelfRevoke",
+                           "session.logOut()"] {
+            XCTAssertFalse(summary.text.contains(viewScoped),
+                           "the account view owns \(viewScoped) again — a tab switch would "
+                           + "strand a revoked credential")
+        }
+        // Two `.task`s used to live here. Only the scope-keyed load may now.
+        XCTAssertEqual(summary.text.components(separatedBy: ".task(").count - 1, 1,
+                       "the only task on this view is the scope-keyed load")
+    }
+
+    /// The observer is app-scoped and subscribes BEFORE any view exists.
+    ///
+    /// Stronger than "an always-mounted root": it does not depend on a view
+    /// hierarchy at all, which is the same reason `SendSelectionModel.observe`
+    /// is called from `init` rather than from a `.task`. `AccountSession` is
+    /// never handed to the coordinator directly — it takes a closure, so
+    /// `AccountSignOutCoordinatorTests` can hold a logout open and look at the
+    /// app while the call is in flight.
+    func testTheSelfRevokeObserverIsAppScopedAndStartedBeforeAnyView() throws {
+        let all = try sources()
+        let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" })
+        XCTAssertTrue(app.text.contains("@StateObject private var signOut: AccountSignOutCoordinator"),
+                      "the observer belongs to the App, not to a view")
+        // The locals are named apart from the properties, the way this file
+        // already names `account`, `uploads` and `sending`: a `@StateObject`'s
+        // property cannot be read inside `init`, so the wiring necessarily runs
+        // against locals.
+        XCTAssertTrue(app.text.contains(".observe(managing.$needsSignOut)"),
+                      "it has to be subscribed to the signal")
+        XCTAssertTrue(app.text.contains(".environmentObject(signOut)"))
+        // Subscribed inside `init`, so no view's lifetime gates it.
+        guard let initRange = app.text.range(of: "init() {"),
+              let body = app.text.range(of: "var body: some Scene"),
+              let observe = app.text.range(of: ".observe(managing.$needsSignOut)") else {
+            return XCTFail("RelayiumApp no longer has the shape this checks")
+        }
+        XCTAssertTrue(initRange.upperBound < observe.lowerBound
+                      && observe.upperBound < body.lowerBound,
+                      "the subscription must be made in init, before any view is built")
+        // Constructed exactly once, and known to exactly the three files that
+        // need it: the app that owns it, the shell that blocks on it, and the
+        // account screen that hands it an explicit sign-out.
+        XCTAssertEqual(app.text.components(separatedBy: "AccountSignOutCoordinator(").count - 1, 1,
+                       "a second coordinator would be a second logout path")
+        XCTAssertEqual(all.filter { $0.text.contains("AccountSignOutCoordinator") }
+                          .map(\.name).sorted(),
+                       ["AccountSummaryView.swift", "RelayiumApp.swift", "RootView.swift"])
+        for (name, text) in all where name != "RelayiumApp.swift" {
+            XCTAssertFalse(text.contains("$needsSignOut"),
+                           "\(name) starts a second observer")
+        }
+    }
+
+    /// While the network logout is finishing, every tab is blocked and says so.
+    ///
+    /// The bearer is already dead server-side by then, so an action started in
+    /// another tab would fail against the server and report it as the user's
+    /// problem. Blocked AND labelled: a frozen tab bar with no explanation reads
+    /// as the app having hung, and a bare spinner reads as nothing at all to
+    /// VoiceOver.
+    ///
+    /// It is a transient operation, not an account gate. The shell still never
+    /// reads `session.state` and never sees the account's rows, so anonymous
+    /// receive stays structurally independent of whether anyone is signed in.
+    func testEveryTabIsBlockedAndLabelledWhileTheLogoutFinishes() throws {
+        let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
+        XCTAssertTrue(root.text.contains("@EnvironmentObject private var signOut: AccountSignOutCoordinator"))
+        XCTAssertTrue(root.text.contains(".disabled(signOut.isSigningOut)"),
+                      "a tab must not act with a credential the server has revoked")
+        XCTAssertTrue(root.text.contains("ProgressView { Text(L10n.t(.accountSigningOut)) }"),
+                      "the block has to say what it is waiting for")
+        // The shell learns exactly one thing, and it is not who is signed in.
+        for accountish in ["session.state", "AccountManagementModel", "management",
+                           "bearerToken", "AccountScope"] {
+            XCTAssertFalse(root.text.contains(accountish),
+                           "the shell reads \(accountish) — that would gate the receive tab")
+        }
+    }
+
+    /// Both row actions are destructive and both ask first, through the system's
+    /// own dialog — which is what makes them dismissible, readable at every
+    /// Dynamic Type size and announced the way the platform's users expect.
+    ///
+    /// The revoke message is not fixed text: revoking the credential in your hand
+    /// signs this app out, and revoking another one does not. The decision lives
+    /// in `AccountPresentation.revokeConsequence`, where a test drives it.
+    func testBothRowActionsConfirmBeforeActingAndSayWhatTheyCost() throws {
+        let summary = try XCTUnwrap(try sources().first { $0.name == "AccountSummaryView.swift" })
+        XCTAssertEqual(summary.text.components(separatedBy: "confirmationDialog(").count - 1, 3,
+                       "revoke, delete-file and delete-account are three confirmations")
+        guard let revokeDialog = summary.text.range(of: ".confirmationDialog(\n            L10n.t(.accountRevokeTitle"),
+              let fileDialog = summary.text.range(of: ".confirmationDialog(\n            L10n.t(.accountDeleteFileTitle)"),
+              let accountDialog = summary.text.range(of: ".confirmationDialog(\n            L10n.t(.accountDeleteAccountConfirmTitle)") else {
+            return XCTFail("one of the three destructive confirmations is no longer attached")
+        }
+        XCTAssertTrue(summary.text[revokeDialog.lowerBound..<fileDialog.lowerBound]
+            .contains("Button(L10n.t(.commonRevoke), role: .destructive)"),
+                      "the confirmed revoke action must carry the destructive role")
+        XCTAssertTrue(summary.text[fileDialog.lowerBound..<accountDialog.lowerBound]
+            .contains("Button(L10n.t(.commonDelete), role: .destructive)"),
+                      "the confirmed stored-file delete must carry the destructive role")
+        XCTAssertTrue(summary.text.contains(
+            "AccountPresentation.revokeConsequence(current: deviceToRevoke?.current == true)"),
+            "the consequence must come from the tested seam, not from an inline ternary")
+        // The list buttons must OPEN a dialog rather than act. A direct call
+        // would be a one-tap revoke of the credential the user is holding.
+        XCTAssertEqual(summary.text.components(separatedBy: "management.revoke(").count - 1, 1)
+        XCTAssertEqual(summary.text.components(separatedBy: "management.delete(").count - 1, 1)
+        for opener in ["deviceToRevoke = device", "fileToDelete = row.file"] {
+            XCTAssertTrue(summary.text.contains(opener), "the row button must open \(opener)")
+        }
+    }
+
+    /// The rebuilt link leaves through the share sheet the user opened, and the
+    /// three key states are decided in the tested seam.
+    ///
+    /// A `#k=` fragment IS the plaintext. Writing one to `UIPasteboard` on the
+    /// app's own initiative would hand it to every app on the device and raise
+    /// iOS's own paste notification besides — which is why the pasteboard stays
+    /// on the deferred-symbol list rather than becoming this slice's affordance.
+    func testTheRebuiltLinkGoesOutThroughTheSystemShareSheetOnly() throws {
+        let summary = try XCTUnwrap(try sources().first { $0.name == "AccountSummaryView.swift" })
+        XCTAssertTrue(summary.text.contains("AccountPresentation.link(for: row.link)"),
+                      "which of the three states a row is in belongs in the tested seam")
+        XCTAssertTrue(summary.text.contains("ShareLink(item: link)"),
+                      "the link must leave through the platform's hand-off")
+        XCTAssertEqual(summary.text.components(separatedBy: "ShareLink(").count - 1, 1,
+                       "one share affordance, in the one arm that has a link")
+        // Both unavailable states are rendered, and rendered differently: one is
+        // permanent from this device, the other may be one unlock away.
+        for arm in ["case .unavailable(let explanation):", "case .lookupFailed(let explanation):"] {
+            XCTAssertTrue(summary.text.contains(arm), "the row no longer distinguishes \(arm)")
+        }
+    }
+
+    /// Failure and warning states carry a symbol and readable text, never colour
+    /// alone, and every progress indicator is labelled.
+    ///
+    /// A bare `ProgressView()` says nothing to VoiceOver and nothing to anybody
+    /// on a screen with two lists loading at once. Red on its own says nothing
+    /// under a colour filter, in Increase Contrast, or to a reader who cannot
+    /// distinguish it.
+    func testEveryManagementStateIsReadableWithoutColourOrSight() throws {
+        let summary = try XCTUnwrap(try sources().first { $0.name == "AccountSummaryView.swift" })
+        XCTAssertFalse(summary.text.contains("ProgressView()\n"),
+                       "an unlabelled spinner reads as nothing")
+        for labelled in ["ProgressView { Text(L10n.t(.accountLoadingDevices)) }",
+                         "ProgressView { Text(L10n.t(.accountLoadingFiles)) }"] {
+            XCTAssertTrue(summary.text.contains(labelled), "missing \(labelled)")
+        }
+        for state in [".accountNoDevices", ".accountNoFiles"] {
+            XCTAssertTrue(summary.text.contains(state), "the empty state \(state) is not rendered")
+        }
+        // Red is named ONCE in the file, and the one place that names it draws a
+        // symbol in the same expression. Counting symbols against reds would
+        // pass on a file with four symbols somewhere and a bare red line
+        // somewhere else; this cannot, because there is nowhere else to put one.
+        let reds = summary.text.components(separatedBy: "foregroundStyle(.red)").count - 1
+        XCTAssertEqual(reds, 1, "every failure on this screen goes through one helper")
+        let helper = try XCTUnwrap(
+            summary.text.range(of: "private func failureLine(_ text: String) -> some View {"))
+        let redUse = try XCTUnwrap(summary.text.range(of: "foregroundStyle(.red)"))
+        XCTAssertTrue(helper.upperBound < redUse.lowerBound,
+                      "the one red is not the helper's")
+        XCTAssertTrue(summary.text[helper.upperBound..<redUse.lowerBound]
+            .contains("systemImage: \"exclamationmark.triangle\""),
+                      "the helper states a failure in colour with no symbol beside it")
+        // The row actions are named for the row they belong to, which is the
+        // only thing telling two same-named devices apart without sight.
+        for label in ["AccountPresentation.revokeActionLabel(for: device)",
+                      "AccountPresentation.shareActionLabel(fileId: row.file.id)",
+                      "AccountPresentation.deleteActionLabel(fileId: row.file.id)"] {
+            XCTAssertTrue(summary.text.contains(label), "missing accessibility label: \(label)")
+        }
+    }
+
+    /// The cleanup warning is dismissible, and it is not a row error.
+    ///
+    /// It is raised after a delete the server CONFIRMED, so calling it a failure
+    /// would send the user to retry an operation that already succeeded — and the
+    /// row it would attach to is gone. What is left is a statement about what is
+    /// still on this device, with nothing to retry and a way to put it away.
+    func testTheCleanupWarningIsANonBlockingDismissibleNotice() throws {
+        let summary = try XCTUnwrap(try sources().first { $0.name == "AccountSummaryView.swift" })
+        XCTAssertTrue(summary.text.contains("management.keyCleanupWarning"))
+        XCTAssertTrue(summary.text.contains("management.dismissKeyCleanupWarning()"),
+                      "a warning with no way to dismiss it is a permanent one")
+        XCTAssertTrue(summary.text.contains("management.loadError"),
+                      "a whole-list failure is distinct from a per-row one")
+        XCTAssertTrue(summary.text.contains("management.error(forRow: device.id)"))
+        XCTAssertTrue(summary.text.contains("management.error(forRow: row.id)"))
+        // Only the row in flight is disabled: a slow revoke on one device must
+        // not freeze the rest of the list.
+        XCTAssertTrue(summary.text.contains("management.isBusy(row: device.id)"))
+        XCTAssertTrue(summary.text.contains("management.isBusy(row: row.id)"))
+        XCTAssertFalse(summary.text.contains(".disabled(management.isLoading)"),
+                       "loading must not disable rows that are not being changed")
     }
 
     /// Account-owned work is app-scoped. SwiftUI mounts a `TabView`'s tabs

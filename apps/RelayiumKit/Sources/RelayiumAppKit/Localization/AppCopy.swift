@@ -88,6 +88,107 @@ public enum AccountPresentation {
         L10n.date(Date(timeIntervalSince1970: TimeInterval(epochSeconds)),
                   dateStyle: .medium, timeStyle: .short, language: language)
     }
+
+    // MARK: - decisions the two account surfaces would otherwise each make
+
+    /// The device's name as it should appear, or the localized stand-in.
+    ///
+    /// Trimmed, not merely checked for empty: a name that is only whitespace is
+    /// a blank row with extra steps, and the server does not promise otherwise —
+    /// `AccountDevice`'s decoder already defaults a missing `Name` to `""`.
+    public static func deviceName(_ device: AccountDevice,
+                                  language: AppLanguage? = nil) -> String {
+        let name = device.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? L10n.t(.accountUnnamedDevice, language: language) : name
+    }
+
+    /// What revoking this row actually costs.
+    ///
+    /// Revoking the credential in your hand cascades this app's own bearer
+    /// server-side and signs it out immediately; revoking another device's does
+    /// not. A confirmation that stated the wrong one would be a destructive
+    /// dialog lying about its own button, which is why the choice is here rather
+    /// than as a ternary inside a `View`.
+    public static func revokeConsequence(current: Bool,
+                                         language: AppLanguage? = nil) -> String {
+        L10n.t(current ? .accountRevokeThisMac : .accountRevokeOther, language: language)
+    }
+
+    /// The revoke button's accessible label.
+    ///
+    /// The visible label is one word for every row, which is the right thing to
+    /// look at and the wrong thing to hear: two devices of the same model sign in
+    /// under the same name routinely, and then the list is two identical
+    /// buttons. The detail line is what separates them — it carries the kind and
+    /// both dates — and the current device says so outright, because that is the
+    /// one whose consequence is different.
+    public static func revokeActionLabel(for device: AccountDevice,
+                                         language: AppLanguage? = nil) -> String {
+        var detail = deviceDetail(kind: device.kind,
+                                  lastSeenAt: device.lastSeenAt,
+                                  createdAt: device.createdAt,
+                                  language: language)
+        if device.current {
+            detail = L10n.detail([L10n.t(.accountThisMac, language: language), detail],
+                                 language: language)
+        }
+        // The name is the user's or the peer's own text: isolated under Arabic,
+        // never translated.
+        return L10n.t(.accountRevokeDeviceLabel,
+                      [L10n.token(deviceName(device, language: language), language: language),
+                       detail],
+                      language: language)
+    }
+
+    /// The stored-row actions' accessible labels. The id is server-issued and
+    /// opaque, so it is isolated rather than translated.
+    public static func shareActionLabel(fileId: String,
+                                        language: AppLanguage? = nil) -> String {
+        L10n.t(.accountShareFileLabel, [L10n.token(fileId, language: language)],
+               language: language)
+    }
+
+    public static func deleteActionLabel(fileId: String,
+                                         language: AppLanguage? = nil) -> String {
+        L10n.t(.accountDeleteFileLabel, [L10n.token(fileId, language: language)],
+               language: language)
+    }
+
+    /// What a stored row's link area can offer, and what it has to say when it
+    /// can offer nothing.
+    ///
+    /// The mapping is one line per case and is still worth its own function: it
+    /// is the point where a `#k=` link — which IS the plaintext to anybody
+    /// holding it — either reaches a share sheet or does not, and it is the point
+    /// where the two ways of not holding a key stop being interchangeable.
+    public static func link(for availability: StoredLinkAvailability,
+                            language: AppLanguage? = nil) -> StoredLinkPresentation {
+        switch availability {
+        case .available(let link):
+            return .shareable(link)
+        case .keyNotOnThisMac:
+            return .unavailable(L10n.t(.accountKeyNotOnThisMac, language: language))
+        case .keyLookupFailed(let reason):
+            return .lookupFailed(L10n.t(.accountKeyLookupFailed, [reason], language: language))
+        }
+    }
+}
+
+/// What one stored row can do about its link.
+///
+/// Three cases rather than "a link or nothing", because the two empty-handed
+/// states are opposite statements about what the user can do next: `.unavailable`
+/// is permanent from this installation — the key was only ever in the link, and
+/// the server never had it — while `.lookupFailed` may be one keychain unlock
+/// away. Collapsing them would tell somebody their file is unrecoverable on the
+/// strength of a locked keychain.
+public enum StoredLinkPresentation: Equatable {
+    /// The link was rebuilt here. Hand it to the platform's own share sheet.
+    case shareable(String)
+    /// This installation does not hold the key, and nothing can retry into it.
+    case unavailable(String)
+    /// The keychain would not answer. Carries the underlying reason.
+    case lookupFailed(String)
 }
 
 /// The stored-download pane's counts.

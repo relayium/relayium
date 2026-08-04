@@ -22,6 +22,19 @@ struct AppShellView: View {
     @EnvironmentObject private var realtimeModel: RealtimeSessionModel
     @EnvironmentObject private var realtimeTextModel: RealtimeTextSessionModel
     @EnvironmentObject private var nearbyReceive: NearbyReceiveModel
+    /// The ONE account-adjacent fact this file learns, and it is deliberately
+    /// not who is signed in: whether a sign-out's network revocation is running
+    /// right now.
+    ///
+    /// That distinction is why this does not break the rule above. A
+    /// `session.state` read would decide the shell's STRUCTURE from whether
+    /// somebody has an account, which is the sign-in wall this design removed.
+    /// This is a transient operation — it goes up when a revocation starts and
+    /// comes down when it ends, signed in or not — and while it is up the bearer
+    /// is either already dead server-side or being killed, so an upload started
+    /// from any destination would be spent against a credential that is going
+    /// away.
+    @EnvironmentObject private var signOut: AccountSignOutCoordinator
 
     var body: some View {
         NavigationSplitView {
@@ -39,6 +52,23 @@ struct AppShellView: View {
             }
         }
         .frame(minWidth: 860, minHeight: 560)
+        // A modifier ON the split view, never a branch around it: the structure
+        // still renders unconditionally, which is what keeps every signed-out
+        // capability reachable. Applied here rather than inside a destination so
+        // it reaches the sidebar too — a destination the user could still select
+        // is a destination they could still act in.
+        .disabled(signOut.isSigningOut)
+        // Said out loud, not merely enforced. A window that stops responding
+        // with no explanation reads as the app having hung, and a bare
+        // `ProgressView()` reads as nothing at all to VoiceOver.
+        .overlay {
+            if signOut.isSigningOut {
+                ProgressView { Text(L10n.t(.accountSigningOut)) }
+                    .controlSize(.small)
+                    .padding(20)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
         // A link the OS handed this app. `AppDeepLinkRouter` has already
         // refused anything that is not a relayium.com link this app can serve,
         // so what arrives here is one of exactly two shapes.

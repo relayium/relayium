@@ -750,6 +750,11 @@ Everything is the shared stack — `parseTransferLink` → `CloudClient.fetchMet
 holding views only. Design and plan:
 `docs/superpowers/specs/2026-08-03-native-ios-r3a-anonymous-stored-receive-design.md`.
 
+Three tabs now. **Receive** is R3-A unchanged and still needs no account.
+**Send** is R3-C: files, folders, photos and videos chosen in the app, encrypted
+here and uploaded. **Account** is R3-B's sign-in and usage summary plus R3-D's
+device and stored-file management, described below.
+
 Headless build (the same command CI runs):
 
 ```
@@ -827,6 +832,103 @@ multi-file receive shares its **container** as one item and *Save to Files*
 copies the tree in one piece. The affordance exists only in `.done`, which the
 model reaches only after `ManifestWriter.finish()` returned.
 
+### Account management (R3-D)
+
+The signed-in account tab lists the devices holding a token for the account and
+the ciphertext the account is storing, and owns the two writes that go with
+them: revoking a credential and deleting a stored object. It renders the same
+`AccountManagementModel` the macOS pane does — same scope rules, same
+generation guards, same one-shot self-revoke claim, and the same app-scoped
+`AccountSignOutCoordinator` consuming it — so nothing about the state machine is
+duplicated for iOS.
+
+**One key store.** `RelayiumApp` builds `AppEnvironment.makeStoredLinkKeyStore()`
+once and hands the same instance to the upload model, which WRITES a `#k=` key
+after an upload, and to the management model, which READS it back to rebuild a
+link and removes it with the object. The key exists nowhere else: not on the
+server, only in the link and in that store.
+
+**What the server can and cannot see.** Stored-object metadata — id, encrypted
+size, expiry, burn flag, download count — is the server's own, and that is what
+the row shows. The key is not, so a rebuilt link is something this device can
+produce or cannot, and the row says which of three states it is in:
+
+| state | row |
+|---|---|
+| the key is here | `ShareLink` over the rebuilt link — the system share sheet, never a `UIPasteboard` write |
+| the key is not on this device | an informational line: it was only ever in the link, and Relayium's servers never had it. Nothing to retry |
+| the keychain would not answer | a warning carrying the keychain's own reason — this one may be one unlock away, which is why it is not the same statement |
+
+`AccountPresentation.link(for:)` makes that a decision a test drives rather than
+a `switch` inside a `View`; `AccountManagementPresentationTests` asserts that
+neither empty-handed state can produce a shareable link and that the two never
+render the same sentence in any language.
+
+**Both writes confirm first**, through the system's own `confirmationDialog`,
+with the destructive role on the button that acts. The revoke confirmation states
+the right consequence for the row: revoking the credential this app is holding
+signs it out immediately, and revoking another device's does not.
+
+**Leaving the account is not owned by a view — on either platform.**
+`AccountSignOutCoordinator` in `RelayiumAppKit` is created and subscribed in each
+app's `init`, before any view or scene exists, and both apps route their explicit
+Sign out through it too.
+
+That is a correction, and the reason is worth recording. Both apps used to notice
+a successful self-revoke through a `.task(id: management.needsSignOut)` on the
+account screen. That reads correctly and is wrong: revoking the current device
+kills the app's own bearer server-side, and the response can arrive after the
+screen is gone. On iOS a `TabView` tears down the tab the user just left — which
+is exactly what "revoke this device, then go look at something else" does. On
+macOS selecting another sidebar destination replaces `AccountView`, and closing
+the unique window takes the whole split view down while the process keeps running
+behind the `MenuBarExtra`. In every one of those cases the app-scoped model still
+recorded the signal truthfully and nothing consumed it, so the rest of the app
+went on treating a revoked bearer as live until the account surface was remounted.
+
+What the coordinator does, in order: `AccountManagementModel.consumeSelfRevoke()`
+claims the signal in one synchronous `@MainActor` step that also drops the rows,
+the reconstructed `#k=` links and the active scope — so exactly one caller wins,
+nothing survives into the next session, and no load already in flight can repaint.
+Then it raises `isSigningOut`, which blocks and labels the whole app (`Signing
+out…`, `account.signingOut`) for the length of the revocation: every tab on iOS,
+the split view and sidebar on macOS. It refuses to start a second `logout` while
+one is running, so an explicit Sign out cannot race the self-revoke path. The
+call itself runs in an unstructured `Task` holding a snapshot of the closure, so
+neither the account screen nor the shell being torn down can truncate it. The
+same flag is what stops a Refresh already in flight from rehydrating the rows:
+`AccountSession.logOut()` keeps `.ready` on screen until its revocation finishes,
+so a superseded refresh would otherwise legitimately choose `.reload`.
+
+`AccountSignOutCoordinatorTests` drives all of it with **no view mounted at all**,
+which is the whole claim; `MacSurfaceGuardTests` and `IOSSurfaceGuardTests` pin
+that no view has taken the observer back.
+
+**Deleting a stored object** discards the local key only on a delete the server
+confirmed. If the server confirmed but the key could not be removed, the row
+still goes, no row error is raised — the ciphertext really is gone, and there is
+no operation left to retry — and a dismissible warning says what is still on this
+device. The account-deletion flow above it is unchanged.
+
+**Layout and accessibility.** One vertical, scrollable column on iPhone and
+iPad: name, current-device badge and detail each get their own line, so the
+largest Dynamic Type sizes wrap rather than truncating the one thing identifying
+the row. Progress is labelled (`Loading devices…`, `Loading stored files…`),
+every failure and warning carries a symbol as well as its colour, and each row's
+buttons carry an accessible label naming the row — two devices signed in under
+the same name are otherwise two identical "Revoke" buttons.
+
+**Copy.** R3-D renders eight strings that named macOS
+(`account.thisMac`, `account.revokeThisMac`, `account.keyNotOnThisMac`,
+`account.keyLookupFailed`, `account.keyCleanupWarning`,
+`error.storedLinkKey.invalidKey`, `error.storedKey.keychain.read`,
+`error.storedKey.keychain.remove`). All eight were corrected in place in all nine
+catalogs to wording that stays true on macOS, and `LocalizedCopyTests` asserts
+both halves: no platform is named, and each sentence still names the *device* it
+is about. Eight platform-naming keys remain guarded — seven behind R3-E/R3-F
+features this app does not have, and `error.keychain.signIn`, which nothing
+renders on either platform.
+
 ### Capabilities
 
 `Relayium.entitlements` claims exactly one capability:
@@ -851,3 +953,20 @@ in the app" above — the layer below the views is covered by `swift test`, the
 live path is not); and **native Sign in with Apple on a signed device against a
 real Apple ID**, which additionally needs the App ID capability and the server
 audience listed under "Sign in with Apple" above.
+
+R3-D adds its own outstanding items, and they are the ones a package test
+structurally cannot reach, because SwiftUI owns the view: a device list loaded
+from a real account and a revoke observed taking effect server-side; a stored
+row's `ShareLink` actually opening the share sheet with the rebuilt link; a
+self-revoke started and then navigated away from — switching tabs on iOS,
+selecting another destination or closing the window on macOS — observed to sign
+the app out and block the UI anyway, which is the lifecycle correction above and
+is exercised only headlessly so far; the
+`keyNotOnThisMac` and `keyLookupFailed` rows against a real keychain (a locked
+keychain in particular, which is the state the second one exists for); a
+self-revoke on a device signing that device out; VoiceOver on the two row
+buttons and on two devices sharing a name; the largest Dynamic Type sizes on a
+row with a long device name; and the Arabic right-to-left layout of the two new
+sections specifically. What `swift test` does cover is the model's scope, race
+and cleanup behaviour, the presentation decisions, and the wiring that connects
+them.

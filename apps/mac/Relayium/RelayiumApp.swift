@@ -70,7 +70,11 @@ struct RelayiumApp: App {
         userDriverDelegate: nil
     )
     @NSApplicationDelegateAdaptor(TransferQuitGuard.self) private var quitGuard
-    @StateObject private var session = AppEnvironment.makeSession()
+    // Assigned in `init` rather than defaulted inline, because the sign-out
+    // coordinator built there needs a reference to it: a property's wrapped
+    // value cannot be read from `init`, so the object has to exist as a local
+    // first. Same shape the iOS app uses for the same reason.
+    @StateObject private var session: AccountSession
     @StateObject private var deepLinks = AppDeepLinkRouter()
     // App-scoped rather than view-scoped: a transfer must survive the window's
     // view tree being rebuilt, and the quit guard has to be able to ask whether
@@ -82,6 +86,13 @@ struct RelayiumApp: App {
     // the upload model's key store, so a link saved by an upload is the same one
     // this can rebuild.
     @StateObject private var accountManagement: AccountManagementModel
+    // Leaving the account, from either direction, and the one object on this
+    // list whose absence is a security defect rather than a lost transfer.
+    // Revoking the current device kills this app's own bearer server-side, and
+    // the response can arrive after the account destination has been replaced —
+    // or after the window has been closed, which on this app does not end the
+    // process. So the observer is app-scoped and subscribes in `init`, below.
+    @StateObject private var signOut: AccountSignOutCoordinator
     // One preference object shared by both realtime models and the UI that
     // toggles it, so a change applies to the next session of either kind
     // without a relaunch.
@@ -153,6 +164,25 @@ struct RelayiumApp: App {
         _uploadModel = StateObject(wrappedValue: uploads)
         _downloadModel = StateObject(wrappedValue: downloads)
         _accountManagement = StateObject(wrappedValue: management)
+        let account = AppEnvironment.makeSession()
+        _session = StateObject(wrappedValue: account)
+        // Subscribed HERE, in init, and not from a `.task` on any view or scene.
+        // That is the whole point: the signal is raised by a network response
+        // that can land after the account destination has been replaced by
+        // another one, or after the unique window has been closed —
+        // `applicationShouldTerminateAfterLastWindowClosed` is false and the
+        // MenuBarExtra keeps the process up, so "no window" is an ordinary
+        // running state here, not a shutdown. An observer with a view's or a
+        // window's lifetime is an observer that is absent for exactly the
+        // interval this defect occupies.
+        //
+        // The session goes in as a closure rather than as an object so the
+        // coordinator's tests can hold a logout open and inspect the app while
+        // the revocation is in flight.
+        let leaving = AccountSignOutCoordinator(management: management,
+                                                logOut: { await account.logOut() })
+        leaving.observe(management.$needsSignOut)
+        _signOut = StateObject(wrappedValue: leaving)
         _notifications = StateObject(wrappedValue: TransferNotificationCenter(
             uploadModel: uploads,
             downloadModel: downloads,
@@ -184,6 +214,7 @@ struct RelayiumApp: App {
                 .environmentObject(uploadModel)
                 .environmentObject(downloadModel)
                 .environmentObject(accountManagement)
+                .environmentObject(signOut)
                 .environmentObject(realtimeModel)
                 .environmentObject(realtimeTextModel)
                 .environmentObject(verification)
