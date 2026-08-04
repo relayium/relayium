@@ -1189,4 +1189,231 @@ final class LocalizedCopyTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - R3-F: the nearby copy is now rendered on two platforms
+
+    /// Every non-plural key the iOS Nearby tab reaches, listed rather than
+    /// derived, so adding one is a decision.
+    private let nearbySurface: [L10nKey] = [
+        .navNearby, .nearbyExplain, .nearbySafetySummary, .nearbyHowItWorks,
+        .nearbyListeningBody, .nearbyPausedBody,
+        .nearbySavedToAppFolder, .nearbyPauseReceiving, .nearbyResumeReceiving,
+        .nearbyLookAgain, .nearbyEmptyRoster, .nearbyNamesDisclaimer,
+        .nearbyA11yReceiving, .nearbyA11yDevices, .nearbyA11yChooseDevice,
+        .nearbySendTo, .nearbySelectionSendHint, .nearbyAddFilesHint,
+        .nearbyTextIntent, .nearbyStartMessageSession, .nearbyAcceptanceNote,
+        .nearbyBackToDevices, .nearbyLeavingClearsHistory, .nearbyDeviceGone,
+        .nearbyAddFilesFirst, .nearbyReconnecting, .nearbyUnnamedDevice,
+        .nearbySetupFailed, .nearbyNoAccountNeeded,
+        .nearbyStatusOff, .nearbyStatusPaused, .nearbyStatusJoining, .nearbyStatusReady,
+        .nearbyStatusReconnecting, .nearbyStatusReceivingFiles, .nearbyStatusMessageSession,
+        .presenceBusyTitle, .presenceBusyBody, .presenceShowIt,
+        .errorNearbyNotScanning, .errorNearbyNoAnswer,
+    ]
+
+    /// Nothing the nearby surface renders may name a platform any more.
+    ///
+    /// Four of these said *Mac* — the explanation of what the roster is, the
+    /// paused body, the acceptance note and the no-answer error — because until
+    /// R3-F only a Mac rendered them. iOS renders all four now, so each was
+    /// corrected in place in all nine catalogs rather than hidden behind a
+    /// per-platform key: two catalogs of the same paragraph drift, and the
+    /// drift is invisible until somebody reads both.
+    func testNothingTheNearbySurfaceRendersNamesAPlatform() {
+        for key in nearbySurface {
+            for language in AppLanguage.allCases {
+                let text = L10n.t(key, language: language)
+                for platform in ["Mac", "macOS", "iPhone", "iPad", "iOS"] {
+                    XCTAssertFalse(text.contains(platform),
+                                   "\(key.rawValue) [\(language.rawValue)] names \(platform): \(text)")
+                }
+            }
+        }
+    }
+
+    /// Dropping the platform noun is only half the correction: the four
+    /// sentences that are ABOUT this device still have to name a device, or
+    /// "is not listening" stops saying what is not listening.
+    func testTheCorrectedNearbySentencesStillNameADevice() throws {
+        for language in AppLanguage.allCases {
+            let word = try XCTUnwrap(deviceWord[language])
+            for key in [L10nKey.nearbyExplain, .nearbyPausedBody, .nearbyAcceptanceNote,
+                        .errorNearbyNoAnswer] {
+                let text = L10n.t(key, language: language)
+                XCTAssertTrue(text.contains(word),
+                              "\(key.rawValue) [\(language.rawValue)] stopped naming the device: "
+                              + text)
+            }
+        }
+    }
+
+    /// **The listening body no longer says where files land, and that is the
+    /// point.** macOS writes them to Downloads; iOS writes them into its own
+    /// container and publishes it through the Files app. One shared sentence
+    /// claiming Downloads would have been simply false on the platform this
+    /// slice adds — a user told to look somewhere that does not exist.
+    ///
+    /// So the location sentence is its own key per platform, and the shared
+    /// paragraph keeps the part that is true on both: anything on this public
+    /// address can try, and pausing is how you stop it.
+    func testTheSharedListeningBodyNamesNoSaveLocationAndKeepsItsWarning() throws {
+        let pauseWord: [AppLanguage: String] = [
+            .en: "pause", .zh: "暂停", .ja: "一時停止", .ko: "일시 중지",
+            .de: "pausier", .fr: "suspend", .ar: "أوقف",
+            .es: "ausa", .pt: "ause",
+        ]
+        let downloadsWord: [AppLanguage: String] = [
+            .en: "Downloads", .zh: "下载", .ja: "ダウンロード", .ko: "다운로드",
+            .de: "Downloads", .fr: "Téléchargements", .ar: "التنزيلات",
+            .es: "Descargas", .pt: "Transferências",
+        ]
+        for language in AppLanguage.allCases {
+            let shared = L10n.t(.nearbyListeningBody, language: language)
+            XCTAssertFalse(shared.contains(try XCTUnwrap(downloadsWord[language])),
+                           "nearby.listeningBody [\(language.rawValue)] still promises one "
+                           + "platform's folder: \(shared)")
+            XCTAssertTrue(shared.contains(try XCTUnwrap(pauseWord[language])),
+                          "nearby.listeningBody [\(language.rawValue)] dropped the way out: \(shared)")
+
+            // The Mac keeps its own sentence, and it is the one that may name
+            // the folder — because on that platform it is where the files are.
+            let mac = L10n.t(.nearbySavedToDownloads, language: language)
+            XCTAssertTrue(mac.contains(try XCTUnwrap(downloadsWord[language])),
+                          "nearby.savedToDownloads [\(language.rawValue)] no longer names the "
+                          + "folder it exists to name: \(mac)")
+
+            // And iOS gets the place it can actually be reached: the app's own
+            // folder in Files. Naming Downloads here would send the user to a
+            // folder no iOS app has.
+            let ios = L10n.t(.nearbySavedToAppFolder, language: language)
+            XCTAssertFalse(ios.isEmpty)
+            XCTAssertFalse(ios.contains(try XCTUnwrap(downloadsWord[language])),
+                           "nearby.savedToAppFolder [\(language.rawValue)] claims Downloads: \(ios)")
+        }
+    }
+
+    /// The nearby explanation is the one sentence standing between the roster
+    /// and "these are the devices on my Wi-Fi". It has to keep all three of its
+    /// claims in every language: the grouping is a shared public address, that
+    /// usually but NOT always means your own network, and Relayium scans
+    /// nothing.
+    func testTheNearbyExplanationKeepsItsThreeClaimsInEveryLanguage() throws {
+        let publicAddress: [AppLanguage: String] = [
+            .en: "public address", .zh: "公网地址", .ja: "グローバルアドレス", .ko: "공인 주소",
+            .de: "öffentliche Adresse", .fr: "adresse publique", .ar: "العنوان العام",
+            .es: "dirección pública", .pt: "endereço público",
+        ]
+        let gateway: [AppLanguage: String] = [
+            .en: "VPN", .zh: "VPN", .ja: "VPN", .ko: "VPN",
+            .de: "VPN", .fr: "VPN", .ar: "VPN", .es: "VPN", .pt: "VPN",
+        ]
+        let scans: [AppLanguage: String] = [
+            .en: "never scans", .zh: "从不扫描", .ja: "スキャンしません", .ko: "스캔하지 않습니다",
+            .de: "nie", .fr: "ne scanne jamais", .ar: "لا يفحص",
+            .es: "nunca escanea", .pt: "nunca examina",
+        ]
+        for language in AppLanguage.allCases {
+            let text = L10n.t(.nearbyExplain, language: language)
+            for (label, table) in [("the public-address grouping", publicAddress),
+                                   ("the stranger-gateway caveat", gateway),
+                                   ("the no-scanning claim", scans)] {
+                XCTAssertTrue(text.contains(try XCTUnwrap(table[language])),
+                              "nearby.explain [\(language.rawValue)] dropped \(label): \(text)")
+            }
+        }
+    }
+
+    /// **The summary is what the user actually reads, so it carries the claim
+    /// the full paragraph carried — in every language.**
+    ///
+    /// On the narrow platform the mechanism paragraph is now behind a closed
+    /// disclosure, which is only defensible if the sentence left in its place
+    /// still says the thing that changes a decision: the roster is grouped by a
+    /// public address, and a carrier, VPN or shared gateway puts strangers on
+    /// that address. A summary that kept only "devices near you" would be a
+    /// worse screen than the one it replaced, not a shorter one.
+    func testTheAlwaysVisibleNearbySummaryKeepsTheStrangerClaim() throws {
+        let publicAddress: [AppLanguage: String] = [
+            .en: "public address", .zh: "公网地址", .ja: "グローバルアドレス", .ko: "공인 주소",
+            .de: "öffentliche Adresse", .fr: "adresse publique", .ar: "العنوان العام",
+            .es: "dirección pública", .pt: "endereço público",
+        ]
+        // The gateways that make the address someone else's too. VPN is the one
+        // word all nine catalogs keep verbatim, so it is the one asserted.
+        let gateway: [AppLanguage: String] = [
+            .en: "VPN", .zh: "VPN", .ja: "VPN", .ko: "VPN",
+            .de: "VPN", .fr: "VPN", .ar: "VPN", .es: "VPN", .pt: "VPN",
+        ]
+        // A root rather than the inflected form: the sentence declines it, and
+        // pinning the inflection would assert grammar instead of the claim.
+        let strangers: [AppLanguage: String] = [
+            .en: "stranger", .zh: "陌生人", .ja: "見知らぬ", .ko: "모르는 사람",
+            .de: "Fremde", .fr: "inconnu", .ar: "غرباء",
+            .es: "desconocido", .pt: "desconhecido",
+        ]
+        for language in AppLanguage.allCases {
+            let text = L10n.t(.nearbySafetySummary, language: language)
+            for (label, table) in [("the public-address grouping", publicAddress),
+                                   ("the gateway caveat", gateway),
+                                   ("the strangers it can include", strangers)] {
+                XCTAssertTrue(text.contains(try XCTUnwrap(table[language])),
+                              "nearby.safetySummary [\(language.rawValue)] dropped \(label): \(text)")
+            }
+        }
+    }
+
+    /// And it has to stay short, because "always visible" is the whole point.
+    ///
+    /// The paragraph it replaces is roughly twice its length in every catalog;
+    /// at the largest accessibility content sizes that difference is several
+    /// screens of scrolling before the first control. A translation that grew
+    /// the summary back toward the paragraph would quietly restore the layout
+    /// this refinement exists to remove, and nothing else in the suite would
+    /// notice.
+    func testTheAlwaysVisibleNearbySummaryStaysMuchShorterThanTheParagraph() {
+        for language in AppLanguage.allCases {
+            let summary = L10n.t(.nearbySafetySummary, language: language)
+            let paragraph = L10n.t(.nearbyExplain, language: language)
+            XCTAssertTrue(summary.count * 3 <= paragraph.count * 2,
+                          "nearby.safetySummary [\(language.rawValue)] is \(summary.count) "
+                          + "characters against a \(paragraph.count)-character paragraph — "
+                          + "no longer a summary")
+        }
+    }
+
+    /// The disclosure's title says what is behind it. A chevron labelled with a
+    /// bare word — or with English in eight catalogs — is a control nobody opens,
+    /// which would make the collapse equivalent to deleting the explanation.
+    func testTheNearbyDisclosureTitleIsRealCopyEverywhere() {
+        for language in AppLanguage.allCases {
+            let title = L10n.t(.nearbyHowItWorks, language: language)
+            XCTAssertFalse(title.trimmingCharacters(in: .whitespaces).isEmpty,
+                           "nearby.howItWorks [\(language.rawValue)] is blank")
+            XCTAssertNotEqual(title, L10nKey.nearbyHowItWorks.rawValue,
+                              "nearby.howItWorks [\(language.rawValue)] fell back to the key")
+            if language != .en {
+                XCTAssertNotEqual(title, L10n.t(.nearbyHowItWorks, language: .en),
+                                  "nearby.howItWorks [\(language.rawValue)] is untranslated")
+            }
+        }
+    }
+
+    /// The two keys R3-F adds are real copy in every language, not a key echoed
+    /// back and not a template with an unsubstituted placeholder.
+    func testTheNewNearbyKeysAreTranslatedEverywhere() {
+        for key in [L10nKey.nearbySavedToDownloads, .nearbySavedToAppFolder,
+                    .nearbySafetySummary, .nearbyHowItWorks] {
+            for language in AppLanguage.allCases {
+                let text = L10n.t(key, language: language)
+                XCTAssertFalse(text.isEmpty, "\(key.rawValue) [\(language.rawValue)]")
+                XCTAssertNotEqual(text, key.rawValue,
+                                  "\(key.rawValue) [\(language.rawValue)] fell back to the key")
+                XCTAssertFalse(text.contains("%@"), "\(key.rawValue) [\(language.rawValue)]: \(text)")
+                if language != .en {
+                    XCTAssertNotEqual(text, L10n.t(key, language: .en),
+                                      "\(key.rawValue) [\(language.rawValue)] is untranslated")
+                }
+            }
+        }
+    }
 }

@@ -32,8 +32,17 @@
 
      Still absent, each with the slice that would earn it: Associated Domains
      (link handoff), an App Group and a shared keychain group (a Share
-     Extension), local network (nearby), background modes (transfers surviving
-     suspension), push, IAP. -->
+     Extension), background modes (transfers surviving suspension), push, IAP.
+
+     Local network is NOT on that list, and R3-E's version of this comment was
+     wrong to put it there. Relayium's nearby feature is not Bonjour and does
+     not scan: it joins the service's code-less rendezvous room over the same
+     origin as everything else, and the server groups that room by the public IP
+     it observes. R3-F therefore shipped the whole Nearby tab — roster, explicit
+     send and unsolicited receive — without adding any entitlement, any
+     NSLocalNetworkUsageDescription, any NSBonjourServices or the multicast
+     entitlement. Asking for local-network access would be a permission prompt
+     for something this app does not do. -->
 <dict>
 	<key>com.apple.developer.applesignin</key>
 	<array>

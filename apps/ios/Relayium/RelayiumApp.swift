@@ -1,31 +1,38 @@
 import SwiftUI
 import RelayiumAppKit
 
-/// R3-E: the fifth native iOS slice.
+/// R3-F: the sixth native iOS slice.
 ///
-/// Four tabs. **Receive** is R3-A unchanged — an anonymous encrypted stored
+/// Five tabs. **Receive** is R3-A unchanged — an anonymous encrypted stored
 /// link, no account involved. **Send** is R3-C: files, folders, photos and
 /// videos chosen inside the app, encrypted here and uploaded to the signed-in
-/// account. **Direct** is this slice: a six-digit pairing code carrying text or
-/// small files straight to another device, across networks, while both stay
-/// open. **Account** is R3-B's sign-in and usage summary plus R3-D's device and
-/// stored-file management.
+/// account. **Direct** is R3-E: a six-digit pairing code carrying text or small
+/// files straight to another device, across networks, while both stay open.
+/// **Nearby** is this slice: the same transfer without a code, to a device the
+/// user picks off a live roster, plus the passive half — one unsolicited file or
+/// text session at a time. **Account** is R3-B's sign-in and usage summary plus
+/// R3-D's device and stored-file management.
 ///
-/// **What R3-E is careful NOT to acquire.** Direct is realtime transfer, and
-/// realtime transfer on macOS comes with a nearby half — a resident room socket,
-/// a device roster, an inbound listener — so the shape of the shared code
-/// invites it. iOS takes none of it: `AppEnvironment`'s code-only factories
-/// build both models with the pairing-code path alone, and this file names no
-/// `LanDiscoveryModel`, no `InboundRoom` and no `NearbyReceiveModel`. That is a
-/// capability claim as much as a wiring choice — the local-network entitlement
-/// is one this app does not have and this slice does not add.
+/// **What R3-E got wrong about Nearby, and this slice corrects.** R3-E deferred
+/// the nearby half on the grounds that it needed "the local-network
+/// entitlement". It does not. `LanDiscoveryModel` is not Bonjour and scans
+/// nothing: it joins Relayium's code-less rendezvous room over the same origin
+/// as everything else in the app, and the server groups that room by the public
+/// IP it observes. So it needs ordinary internet access — and, in exchange, it
+/// can list a stranger sitting behind the same carrier or VPN gateway, which is
+/// why the tab explains what the roster is and never picks a device.
 ///
-/// Still absent, and deliberately not stubbed: nearby transfer, background
-/// transfer and resume, notifications, IAP, and the **Share Extension** — which
-/// is deferred to the separately designed capability/release slice, because it
-/// is a second target in a second process needing an App Group and a shared
-/// keychain access group, which are three entitlements this development build
-/// cannot claim.
+/// This slice therefore adds **no** capability: no `NSLocalNetworkUsageDescription`,
+/// no Bonjour service, no multicast entitlement, no background mode, no push and
+/// no notification. A session that arrives while the user is elsewhere brings
+/// the Nearby tab forward in app instead — which is also why residency is
+/// foreground-only and honestly says so.
+///
+/// Still absent, and deliberately not stubbed: background transfer and resume,
+/// notifications, IAP, and the **Share Extension** — which is deferred to the
+/// separately designed capability/release slice, because it is a second target
+/// in a second process needing an App Group and a shared keychain access group,
+/// which are three entitlements this development build cannot claim.
 ///
 /// Still no `onOpenURL`. Without Associated Domains — which this slice does not
 /// claim, because the routing it would justify still does not exist — nothing
@@ -77,6 +84,28 @@ struct RelayiumApp: App {
     /// direct session cannot survive being backgrounded; this ends it and says
     /// so, instead of leaving a progress bar that will never move again.
     @StateObject private var foreground: ForegroundSessionCoordinator
+    /// The one code-less room socket, and the one inbound listener on it.
+    ///
+    /// App-scoped for a reason the tabs do not share: residency is what makes
+    /// this device reachable, so it must not be created or destroyed by a tab
+    /// appearing. Two would put this device in the room twice, under two peer
+    /// ids, and every other device would list it as two devices.
+    @StateObject private var discovery: LanDiscoveryModel
+    @StateObject private var nearbyReceive: NearbyReceiveModel
+    /// The order in which becoming reachable happens — the receive folder
+    /// resolved and installed first, the room left before the session cleanup —
+    /// which is a decision no SwiftUI modifier can hold and no test could reach
+    /// if it were spread across the scene body.
+    @StateObject private var residency: NearbyResidencyCoordinator
+    /// Which of the two direct tabs draws the session. They drive the SAME two
+    /// models, so rendered side by side they would show one transfer twice,
+    /// each copy with its own Cancel.
+    @StateObject private var presence: TransferPresence
+    /// Which tab is on screen. App-scoped rather than `@State` in the shell for
+    /// exactly one case, and it is this slice's: an unsolicited session has to
+    /// be able to select the Nearby tab from outside the view tree, and a
+    /// `@State` is reset the moment SwiftUI rebuilds that tree.
+    @StateObject private var navigation: AppNavigationModel
 
     /// The one scene-phase reader in the app.
     ///
@@ -132,26 +161,60 @@ struct RelayiumApp: App {
         // models read it through a closure when the SAS lands — a second object
         // would be a setting the sessions never see.
         //
-        // The factories are the CODE-ONLY ones. Their nearby siblings take a
-        // `LanDiscoveryModel` and an `InboundRoom`, and constructing either here
-        // would open a room socket nothing reads and claim a local-network
-        // capability this app carries no entitlement for. What these produce
-        // instead is a model whose nearby entry points refuse —
-        // `AppEnvironmentTests` asserts exactly that, rather than the absence of
-        // a closure, which nothing could observe.
+        // R3-F switches these to the NEARBY factories, and the whole graph is
+        // built here because each object needs the previous one at construction
+        // and a `@StateObject` default value cannot reference another property.
+        // One discovery model, one inbound room, two session models, one
+        // listener: both same-network directions reach through the single room
+        // socket the discovery model owns, and reconnecting mints a new socket,
+        // which is why the listener re-subscribes through the observer slot
+        // rather than holding one.
         let verifying = VerificationPreference()
         _verification = StateObject(wrappedValue: verifying)
-        let files = AppEnvironment.makeRealtimeModel(verification: verifying)
-        let texts = AppEnvironment.makeRealtimeTextModel(verification: verifying)
+        let nearby = AppEnvironment.makeLanDiscoveryModel()
+        // Holds the exact socket an inbound attempt is being built on. A peer id
+        // only means something inside the room that issued it, so a builder that
+        // read "the current room" would, in the one case that matters — a drop
+        // mid-setup — reach a room where that id belongs to somebody else.
+        let room = InboundRoom()
+        let files = AppEnvironment.makeRealtimeModel(verification: verifying, nearby: nearby, inboundRoom: room)
+        let texts = AppEnvironment.makeRealtimeTextModel(verification: verifying, nearby: nearby, inboundRoom: room)
         _direct = StateObject(wrappedValue: files)
         _directText = StateObject(wrappedValue: texts)
-        _directSelection = StateObject(wrappedValue: DirectSendSelection())
-        _directModes = StateObject(wrappedValue: DirectModeSelection())
+        _discovery = StateObject(wrappedValue: nearby)
+        let selecting = DirectSendSelection()
+        let modes = DirectModeSelection()
+        _directSelection = StateObject(wrappedValue: selecting)
+        _directModes = StateObject(wrappedValue: modes)
+        let presenting = TransferPresence()
+        let routing = AppNavigationModel(selection: .storedReceive)
+        _presence = StateObject(wrappedValue: presenting)
+        _navigation = StateObject(wrappedValue: routing)
+
+        let receive = AppEnvironment.makeNearbyReceiveModel(
+            fileModel: files, textModel: texts, discovery: nearby, inboundRoom: room)
+        // Called synchronously as the offer is admitted and BEFORE the responder
+        // is built across an await — which is the only moment this can be done,
+        // because by the time the session is live the mode picker that would fix
+        // a wrong surface is locked. One shared call rather than three writes
+        // here, so a later edit to this file cannot reorder them; `AppRouting`
+        // owns what it does and `AppRoutingTests` drives it.
+        receive.shouldAcceptSession = { kind in
+            AppRouting.claimIncoming(kind, presence: presenting,
+                                     modes: modes, navigation: routing)
+        }
+        _nearbyReceive = StateObject(wrappedValue: receive)
         // Built here, before any view exists, for the same reason the sign-out
         // coordinator is: it acts on a signal that arrives when the surface that
         // would have observed it may already be gone.
-        _foreground = StateObject(wrappedValue: ForegroundSessionCoordinator(file: files,
-                                                                             text: texts))
+        let ending = ForegroundSessionCoordinator(file: files, text: texts)
+        _foreground = StateObject(wrappedValue: ending)
+        // The lifecycle now goes through residency, which owns the ORDER: on
+        // `.background` the room is left BEFORE R3-E's session cleanup runs, or
+        // there is a window in which this device is listed, dialable, and has
+        // already torn its transfer down.
+        _residency = StateObject(wrappedValue: NearbyResidencyCoordinator(
+            discovery: nearby, fileModel: files, foreground: ending))
     }
 
     /// SwiftUI's three phases, narrowed to the one decision this app makes.
@@ -175,7 +238,10 @@ struct RelayiumApp: App {
             RootView(download: download, upload: upload, send: send,
                      direct: direct, directText: directText,
                      directSelection: directSelection, directModes: directModes,
-                     foreground: foreground)
+                     foreground: foreground,
+                     discovery: discovery, nearbyReceive: nearbyReceive,
+                     residency: residency,
+                     navigation: navigation, presence: presence)
                 .environmentObject(session)
                 // The preference the two direct models read. Injected rather
                 // than passed, because the two session views render the derived
@@ -190,12 +256,22 @@ struct RelayiumApp: App {
                 .environmentObject(signOut)
                 // The one lifecycle observer, on the scene root rather than on a
                 // tab. What it does with each phase is
-                // `ForegroundSessionCoordinator`'s decision, where
-                // `ForegroundSessionCoordinatorTests` drives every one of them
-                // against real models; this only reports the phase.
+                // `NearbyResidencyCoordinator`'s decision — which includes when
+                // to hand `.background` on to `ForegroundSessionCoordinator`,
+                // and in what order relative to leaving the room.
+                // `NearbyResidencyCoordinatorTests` and
+                // `ForegroundSessionCoordinatorTests` drive every phase against
+                // real models; this only reports the phase.
                 .onChange(of: scenePhase) { phase in
-                    foreground.phaseChanged(to: lifecycle(phase))
+                    residency.phaseChanged(to: lifecycle(phase))
                 }
+                // Launch. `onChange` fires on a CHANGE, and the app is already
+                // `.active` when the scene first appears — so without this the
+                // device would only ever become reachable after its first trip
+                // to the background and back. Re-entrant by construction:
+                // resolving the folder is idempotent and `startResident` refuses
+                // both a second socket and an override of the user's pause.
+                .task { residency.phaseChanged(to: .active) }
         }
     }
 }

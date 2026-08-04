@@ -96,4 +96,33 @@ final class DirectModeSelectionTests: XCTestCase {
         modes.select(.files, file: .idle, text: .idle)
         XCTAssertEqual(modes.mode, .files, "the choice never came back")
     }
+
+    // MARK: - R3-F: a session nobody chose a mode for
+
+    /// An unsolicited nearby session decides its own kind, and the lock does
+    /// not apply to it.
+    ///
+    /// That is not a hole in the lock — it is what the lock is for. `select`
+    /// protects the *user's* choice from moving under a session they started;
+    /// an inbound offer is the opposite case, where there is no user choice to
+    /// protect and the alternative is a file transfer arriving while the picker
+    /// sits on Text and rendering nothing at all.
+    func testAnIncomingSessionSetsTheModeToItsOwnKind() {
+        for (kind, mode) in [(NearbyReceiveKind.file, TransferMode.files), (.text, .text)] {
+            let modes = DirectModeSelection(mode: mode == .files ? .text : .files)
+            modes.adopt(forIncoming: kind)
+            XCTAssertEqual(modes.mode, mode, "an incoming \(kind) session was left invisible")
+        }
+    }
+
+    /// Deliberately unconditional, and this is the case that says so: the
+    /// models are still idle when the claim is made — the responder has not
+    /// been built yet — so a lock-respecting version would work by accident
+    /// here and fail the moment the offer arrived a hop later.
+    func testAnIncomingSessionSetsTheModeEvenWhileAModelIsStillBusy() {
+        let modes = DirectModeSelection(mode: .files)
+        modes.select(.files, file: .idle, text: .idle)
+        modes.adopt(forIncoming: .text)
+        XCTAssertEqual(modes.mode, .text)
+    }
 }

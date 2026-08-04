@@ -37,10 +37,17 @@ struct DirectView: View {
     @ObservedObject var selection: DirectSendSelection
     @ObservedObject var modes: DirectModeSelection
     @ObservedObject var foreground: ForegroundSessionCoordinator
+    /// Which of the two direct tabs draws the session. R3-F's addition, and the
+    /// reason it is needed here at all: Nearby drives the SAME two models, so
+    /// rendered side by side the two tabs would show one transfer twice, each
+    /// copy with its own Cancel and its own Done.
+    @ObservedObject var presence: TransferPresence
     /// Tab selections handed down as closures, the same shape `SendView` uses
     /// for the account — which is what lets `RootView` stay ignorant of both.
     let onOpenSend: () -> Void
     let onOpenAccount: () -> Void
+    /// Where the session actually is, when it is not here.
+    let onShowSession: (AppDestination) -> Void
 
     @EnvironmentObject private var session: AccountSession
     @EnvironmentObject private var verification: VerificationPreference
@@ -65,22 +72,30 @@ struct DirectView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Text(L10n.t(.navPairingCodeSubtitle))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // The other direct tab is presenting the session. Say so and
+                    // offer the way there rather than drawing a second copy of
+                    // it — both tabs drive the same two models, so a second copy
+                    // would be a second Cancel for one transfer.
+                    if let owner = presence.owner, owner != .pairingCode {
+                        busyElsewhere(owner)
+                    } else {
+                        Text(L10n.t(.navPairingCodeSubtitle))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
 
-                    if let notice = foreground.interruption { interruption(notice) }
+                        if let notice = foreground.interruption { interruption(notice) }
 
-                    modePicker
+                        modePicker
 
-                    switch modes.mode {
-                    case .files: filesMode
-                    case .text:  textMode
+                        switch modes.mode {
+                        case .files: filesMode
+                        case .text:  textMode
+                        }
+
+                        if !isLocked { largeFileRoute }
+                        verificationSetting
                     }
-
-                    if !isLocked { largeFileRoute }
-                    verificationSetting
                 }
                 .padding()
                 // Leading, not centred: at the largest Dynamic Type sizes a
@@ -306,6 +321,23 @@ struct DirectView: View {
         }
     }
 
+    /// Never a second copy of the session with its own Cancel — see the call
+    /// site. `NearbyView` renders the same card from the other side.
+    private func busyElsewhere(_ owner: AppDestination) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.t(.presenceBusyTitle)).font(.headline)
+            Text(L10n.t(.presenceBusyBody))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button { onShowSession(owner) } label: {
+                Text(L10n.t(.presenceShowIt)).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        }
+    }
+
     private var openAccountButton: some View {
         Button(action: onOpenAccount) {
             Text(L10n.t(.gateOpenAccount)).frame(maxWidth: .infinity)
@@ -486,6 +518,10 @@ struct DirectView: View {
             return
         }
         file.saveDirectory = destination
+        // Claimed before connecting, so the session this is about to start is
+        // presented here. A refusal means Nearby already owns one and the card
+        // above is already showing that instead.
+        guard presence.claim(.pairingCode) else { return }
         foreground.sessionStarting()
         Task { await file.join(code: file.joinCode) }
     }
@@ -504,6 +540,10 @@ struct DirectView: View {
         // payload rendered into the button may predate a sign-out or account
         // transition; a credential is never a value a view action may cache.
         guard case let .allowed(access) = gate else { return }
+        // Before anything is written to the shared model: a refused claim means
+        // Nearby owns a session, and staging over its pending batch would be
+        // this tab reaching into a transfer it is not even drawing.
+        guard presence.claim(.pairingCode) else { return }
         foreground.sessionStarting()
         file.stageSend(sources: staged.sources, metas: staged.metas)
         await file.mintCode(token: access.token)
@@ -512,6 +552,7 @@ struct DirectView: View {
     }
 
     private func joinTextSession() {
+        guard presence.claim(.pairingCode) else { return }
         foreground.sessionStarting()
         Task { await text.join(code: text.joinCode) }
     }
@@ -520,6 +561,7 @@ struct DirectView: View {
         // Same live credential boundary as file create; joining remains outside
         // it and anonymous.
         guard case let .allowed(access) = gate else { return }
+        guard presence.claim(.pairingCode) else { return }
         foreground.sessionStarting()
         await text.mintCode(token: access.token)
         guard case let .showingCode(code, _) = text.state else { return }

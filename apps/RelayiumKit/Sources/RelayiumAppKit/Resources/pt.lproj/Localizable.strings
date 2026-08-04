@@ -248,13 +248,17 @@
 
 /* MARK: dispositivos por perto */
 "nearby.heading" = "Dispositivos por perto";
-"nearby.explain" = "Dispositivos com o Relayium a correr — a app ou relayium.com — que chegam à internet a partir do mesmo endereço público que este Mac. Normalmente isso significa a sua rede Wi-Fi, mas um gateway de operadora ou de VPN pode colocar na lista dispositivos de desconhecidos. O Relayium nunca examina a sua rede; pergunta ao seu serviço de encontro quem mais chega desse endereço.";
+"nearby.explain" = "Dispositivos com o Relayium a correr — a app ou relayium.com — que chegam à internet a partir do mesmo endereço público que este dispositivo. Normalmente isso significa a sua rede Wi-Fi, mas um gateway de operadora ou de VPN pode colocar na lista dispositivos de desconhecidos. O Relayium nunca examina a sua rede; pergunta ao seu serviço de encontro quem mais chega desse endereço.";
+"nearby.safetySummary" = "Dispositivos com o Relayium no mesmo endereço público que este dispositivo. Atrás de um gateway de operadora, de VPN ou partilhado podem estar desconhecidos, por isso escolha a quem envia.";
+"nearby.howItWorks" = "Como funciona esta lista";
 "nearby.dropHint" = "Largue ficheiros ou pastas aqui, ou clique para escolher. Nada é enviado até escolher um dispositivo abaixo e carregar em Enviar.";
 "nearby.lookAgain" = "Procurar de novo";
 "nearby.resumeReceiving" = "Retomar a receção";
 "nearby.pauseReceiving" = "Pausar a receção";
-"nearby.pausedBody" = "Este Mac não está à escuta de dispositivos por perto. Continua a poder enviar, e os códigos de emparelhamento continuam a funcionar.";
-"nearby.listeningBody" = "Enquanto o Relayium estiver a correr, um dispositivo neste endereço pode enviar ficheiros ou abrir uma sessão de mensagens sem perguntar primeiro. Os ficheiros são escritos na sua pasta Transferências. Qualquer coisa que partilhe este endereço público pode tentar — pause a receção se não for isso que quer.";
+"nearby.pausedBody" = "Este dispositivo não está à escuta de dispositivos por perto. Continua a poder enviar, e os códigos de emparelhamento continuam a funcionar.";
+"nearby.listeningBody" = "Enquanto o Relayium estiver a correr, um dispositivo neste endereço pode enviar ficheiros ou abrir uma sessão de mensagens sem perguntar primeiro. Qualquer coisa que partilhe este endereço público pode tentar — pause a receção se não for isso que quer.";
+"nearby.savedToDownloads" = "Os ficheiros recebidos são escritos na sua pasta Transferências.";
+"nearby.savedToAppFolder" = "Os ficheiros recebidos ficam na pasta própria do Relayium, que pode abrir na app Ficheiros.";
 "nearby.a11yReceiving" = "Receção por perto";
 "nearby.emptyRoster" = "Ainda não há outros dispositivos. Abra relayium.com no outro dispositivo e deixe a página aberta.";
 "nearby.namesDisclaimer" = "Os nomes vêm do outro dispositivo e não provam quem ele é. Compare os códigos de verificação abaixo se isso for importante.";
@@ -265,7 +269,7 @@
 "nearby.addFilesHint" = "Adicione ficheiros ou pastas acima e envie-os diretamente para esse dispositivo.";
 "nearby.textIntent" = "Abre uma sessão de mensagens cifrada ponta a ponta. Nada é armazenado no Relayium.";
 "nearby.startMessageSession" = "Iniciar uma sessão de mensagens";
-"nearby.acceptanceNote" = "Em relayium.com, a outra pessoa continua a escolher onde guardar os ficheiros recebidos; uma sessão de mensagens abre-se do lado dela sem aviso, a não ser que a verificação avançada esteja ligada num dos dispositivos (abaixo). Este Mac aceita transferências recebidas por perto da mesma forma enquanto a receção estiver ligada.";
+"nearby.acceptanceNote" = "Em relayium.com, a outra pessoa continua a escolher onde guardar os ficheiros recebidos; uma sessão de mensagens abre-se do lado dela sem aviso, a não ser que a verificação avançada esteja ligada num dos dispositivos (abaixo). Este dispositivo aceita transferências recebidas por perto da mesma forma enquanto a receção estiver ligada.";
 "nearby.backToDevices" = "Voltar aos dispositivos por perto";
 "nearby.leavingClearsHistory" = "Ao sair, o histórico local de mensagens desta sessão é apagado.";
 "nearby.deviceGone" = "Esse dispositivo já não está por perto. Escolha outro.";
@@ -420,7 +424,7 @@
 "error.connection.textReceiveBufferFull" = "O outro dispositivo enviou demasiado antes de a verificação terminar, por isso a sessão foi fechada.";
 "error.factory.noPeerAppeared" = "Ninguém entrou antes de o código de emparelhamento expirar. Crie um código novo e tente novamente.";
 "error.nearby.notScanning" = "O Relayium deixou de procurar dispositivos por perto, por isso esse já não está disponível. Procure de novo e escolha-o.";
-"error.nearby.noAnswer" = "Esse dispositivo não respondeu. Abra relayium.com nele, deixe essa página aberta e escolha-o outra vez. Um código de emparelhamento também serve — e é a forma de receber neste Mac.";
+"error.nearby.noAnswer" = "Esse dispositivo não respondeu. Abra relayium.com nele, deixe essa página aberta e escolha-o outra vez. Um código de emparelhamento também serve — e é a forma de receber neste dispositivo.";
 "error.staging.fileCount" = "Escolha entre 1 e %@ ficheiros.";
 "error.staging.unreadable" = "Não foi possível abrir todos os ficheiros selecionados, por isso nada foi enviado. Escolha os ficheiros novamente.";
 "error.text.authenticationFailed" = "A mensagem cifrada não passou na verificação de integridade, por isso foi descartada e a sessão foi fechada.";

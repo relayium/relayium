@@ -467,13 +467,33 @@ public enum L10nKey: String, CaseIterable, Sendable {
     // MARK: - Nearby pane
 
     case nearbyHeading = "nearby.heading"
+    /// The full mechanism paragraph: what the room is, why it usually but not
+    /// always means the user's own network, and that nothing is scanned. On the
+    /// narrow platform it is the body of a collapsed disclosure rather than the
+    /// first thing on the screen — at the largest accessibility content sizes it
+    /// alone filled several screens before any control could be reached.
     case nearbyExplain = "nearby.explain"
+    /// The one claim that may never be a tap away: the roster is grouped by
+    /// public address, and a carrier, VPN or shared gateway puts strangers on
+    /// that address. Always visible, and short enough to stay that way.
+    case nearbySafetySummary = "nearby.safetySummary"
+    /// The disclosure's own title, which has to say what is behind it — a
+    /// chevron labelled nothing is a control nobody opens.
+    case nearbyHowItWorks = "nearby.howItWorks"
     case nearbyDropHint = "nearby.dropHint"
     case nearbyLookAgain = "nearby.lookAgain"
     case nearbyResumeReceiving = "nearby.resumeReceiving"
     case nearbyPauseReceiving = "nearby.pauseReceiving"
     case nearbyPausedBody = "nearby.pausedBody"
     case nearbyListeningBody = "nearby.listeningBody"
+    // Where an unsolicited transfer lands, which is the one part of the
+    // listening explanation that is genuinely different per platform: macOS
+    // writes to the user's Downloads folder, iOS into the app's own folder,
+    // published through the Files app. One shared sentence would have to be
+    // false somewhere, so the location is its own key and the paragraph above
+    // keeps only what is true on both.
+    case nearbySavedToDownloads = "nearby.savedToDownloads"
+    case nearbySavedToAppFolder = "nearby.savedToAppFolder"
     case nearbyA11yReceiving = "nearby.a11yReceiving"
     case nearbyEmptyRoster = "nearby.emptyRoster"
     case nearbyNamesDisclaimer = "nearby.namesDisclaimer"

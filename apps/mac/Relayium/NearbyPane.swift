@@ -148,6 +148,18 @@ struct NearbyPane: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            // Where the files land, split out of the paragraph above in R3-F.
+            // iOS renders the same paragraph and writes into its own container
+            // instead, so one shared sentence naming Downloads would have been
+            // false on the platform that gained this surface — and a user told
+            // to look in a folder that does not exist is worse off than one who
+            // was told nothing.
+            if !discovery.isPaused {
+                Text(L10n.t(.nearbySavedToDownloads))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let failure = receive.lastFailure {
                 InlineMessage(.warning, failure)
             }

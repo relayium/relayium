@@ -246,13 +246,17 @@
 
 /* MARK: 附近设备 */
 "nearby.heading" = "附近设备";
-"nearby.explain" = "正在运行 Relayium（应用或 relayium.com）、并且与这台 Mac 从同一个公网地址访问互联网的设备。通常这意味着你的 Wi-Fi，但运营商或 VPN 网关也可能把陌生人的设备放进这个列表。Relayium 从不扫描你的网络；它只是向自己的会合服务询问还有谁来自那个地址。";
+"nearby.explain" = "正在运行 Relayium（应用或 relayium.com）、并且与这台设备从同一个公网地址访问互联网的设备。通常这意味着你的 Wi-Fi，但运营商或 VPN 网关也可能把陌生人的设备放进这个列表。Relayium 从不扫描你的网络；它只是向自己的会合服务询问还有谁来自那个地址。";
+"nearby.safetySummary" = "与这台设备处于同一公网地址、并且正在运行 Relayium 的设备。在运营商、VPN 或共用网关下，这个地址里也可能有陌生人，所以请自己决定发给谁。";
+"nearby.howItWorks" = "这个列表是怎么来的";
 "nearby.dropHint" = "把文件或文件夹拖到这里，或点击选择。在你从下方挑选设备并按下「发送」之前，什么都不会发出。";
 "nearby.lookAgain" = "重新查找";
 "nearby.resumeReceiving" = "恢复接收";
 "nearby.pauseReceiving" = "暂停接收";
-"nearby.pausedBody" = "这台 Mac 当前不监听附近设备。它仍然可以发送，配对码也照常可用。";
-"nearby.listeningBody" = "只要 Relayium 在运行，同一地址下的设备无需事先询问就能向你发送文件或发起消息会话。文件会写入你的「下载」文件夹。共用这个公网地址的任何设备都可以尝试 — 如果你不希望这样，请暂停接收。";
+"nearby.pausedBody" = "这台设备当前不监听附近设备。它仍然可以发送，配对码也照常可用。";
+"nearby.listeningBody" = "只要 Relayium 在运行，同一地址下的设备无需事先询问就能向你发送文件或发起消息会话。共用这个公网地址的任何设备都可以尝试 — 如果你不希望这样，请暂停接收。";
+"nearby.savedToDownloads" = "传入的文件会写入你的「下载」文件夹。";
+"nearby.savedToAppFolder" = "传入的文件保存在 Relayium 自己的文件夹里，可以在「文件」App 中打开。";
 "nearby.a11yReceiving" = "附近接收";
 "nearby.emptyRoster" = "还没有其他设备。请在对方设备上打开 relayium.com 并让页面保持打开。";
 "nearby.namesDisclaimer" = "名称由对方设备提供，不能证明它是谁。如果这一点重要，请在下方核对验证码。";
@@ -263,7 +267,7 @@
 "nearby.addFilesHint" = "先在上方添加文件或文件夹，然后直接发送到那台设备。";
 "nearby.textIntent" = "将打开一个端到端加密的消息会话。Relayium 不存储任何内容。";
 "nearby.startMessageSession" = "发起消息会话";
-"nearby.acceptanceNote" = "在 relayium.com 上，对方仍需自行选择传入文件的保存位置；除非任一设备开启了高级验证（见下方），消息会话会在对方那里直接打开而不弹出提示。只要接收处于开启状态，这台 Mac 也以同样的方式接受附近设备的传入传输。";
+"nearby.acceptanceNote" = "在 relayium.com 上，对方仍需自行选择传入文件的保存位置；除非任一设备开启了高级验证（见下方），消息会话会在对方那里直接打开而不弹出提示。只要接收处于开启状态，这台设备也以同样的方式接受附近设备的传入传输。";
 "nearby.backToDevices" = "返回附近设备";
 "nearby.leavingClearsHistory" = "离开会清除本次会话的本地消息历史。";
 "nearby.deviceGone" = "那台设备已不在附近。请另选一台。";
@@ -412,7 +416,7 @@
 "error.connection.textReceiveBufferFull" = "对方设备在验证完成前发送了过多内容，因此会话已关闭。";
 "error.factory.noPeerAppeared" = "在配对码过期之前没有人加入。请创建新的配对码并重试。";
 "error.nearby.notScanning" = "Relayium 已停止查找附近设备，因此那台设备不再可用。请重新查找，然后再选择它。";
-"error.nearby.noAnswer" = "那台设备没有应答。请在它上面打开 relayium.com 并保持页面打开，然后重新选择它。也可以改用配对码 — 在这台 Mac 上接收正是靠配对码。";
+"error.nearby.noAnswer" = "那台设备没有应答。请在它上面打开 relayium.com 并保持页面打开，然后重新选择它。也可以改用配对码 — 在这台设备上接收正是靠配对码。";
 "error.staging.fileCount" = "请选择 1 到 %@ 个文件。";
 "error.staging.unreadable" = "未能打开全部所选文件，因此什么都没有发送。请重新选择文件。";
 "error.text.authenticationFailed" = "这条加密消息未通过完整性校验，因此已被丢弃并关闭了会话。";

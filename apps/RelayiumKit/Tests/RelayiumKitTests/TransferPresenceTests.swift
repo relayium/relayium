@@ -114,4 +114,29 @@ final class TransferPresenceTests: XCTestCase {
             XCTAssertEqual(p.mode, mode)
         }
     }
+
+    // MARK: - R3-F: claiming without answering the mode question
+
+    /// iOS keeps the files-or-text answer in `DirectModeSelection`, which is
+    /// where R3-E's lock lives. A claim there must therefore take ownership
+    /// **without** writing a second copy of that answer — two copies of one
+    /// answer are free to disagree, and the disagreement would show up as a tab
+    /// rendering the wrong half of a session it does own.
+    func testClaimingWithoutAModeLeavesTheModeExactlyWhereItWas() {
+        let p = TransferPresence(mode: .text)
+        XCTAssertTrue(p.claim(.nearby))
+        XCTAssertEqual(p.owner, .nearby)
+        XCTAssertEqual(p.mode, .text, "an ownership claim answered a question it was not asked")
+    }
+
+    /// Same arbitration as the mode-carrying claim: idempotent for the owner,
+    /// refused for anybody else, and a refusal changes nothing at all.
+    func testClaimingWithoutAModeIsIdempotentForTheOwnerAndRefusedForAnyoneElse() {
+        let p = TransferPresence(mode: .files)
+        XCTAssertTrue(p.claim(.nearby))
+        XCTAssertTrue(p.claim(.nearby), "the owner must be able to re-claim its own session")
+        XCTAssertFalse(p.claim(.pairingCode))
+        XCTAssertEqual(p.owner, .nearby)
+        XCTAssertEqual(p.mode, .files)
+    }
 }

@@ -107,6 +107,17 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
     /// notifications — it does not import AppKit.
     public var onSessionStarted: ((NearbyReceiveKind) -> Void)?
 
+    /// The app-level presentation gate for a new inbound session.
+    ///
+    /// The transport models are the authority once either is busy, but a UI
+    /// action can claim its presentation synchronously and launch its async
+    /// connect on the next actor turn. During that narrow gap both models are
+    /// still idle. This callback lets the app reject an unsolicited offer that
+    /// would otherwise overwrite the already-claimed attempt. `nil` preserves
+    /// the headless/macOS behavior, where no iOS presentation arbitration is
+    /// installed.
+    public var shouldAcceptSession: ((NearbyReceiveKind) -> Bool)?
+
     private var cancellables: Set<AnyCancellable> = []
 
     public init(fileModel: RealtimeSessionModel,
@@ -233,6 +244,17 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
             return
         }
         let kind: NearbyReceiveKind = (generation == .text) ? .text : .file
+        // App-level ownership is checked before anything is published or a
+        // responder is built. A refusal must be visible to the initiator as a
+        // tagged busy reply, not as a connection timeout, and must release the
+        // synchronous reservation so later offers are still serviceable.
+        guard shouldAcceptSession?(kind) ?? true else {
+            gate.release()
+            signaling.sendSignal(to: peerId,
+                                 data: taggedSignal(busySignal(), generation: generation))
+            refreshActivity()
+            return
+        }
         // A new attempt is under way, so the previous one's failure notice stops
         // being true right here. Left standing it reads as a report on the
         // session the user is now watching — and it never expires on its own,

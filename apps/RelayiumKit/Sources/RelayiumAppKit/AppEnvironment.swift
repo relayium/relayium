@@ -123,25 +123,32 @@ public enum AppEnvironment {
         })
     }
 
-    // MARK: - realtime, for a client with no LAN half
+    // MARK: - realtime, for a client with no nearby half
     //
     // Separate factories rather than nil defaults on the two below, and the
     // difference is a claim about capability.
     //
     // The nearby factories need a `LanDiscoveryModel` and an `InboundRoom`
     // because both same-network paths reach through the one room socket that
-    // model owns. iOS has no nearby feature: no roster, no local-network
-    // entitlement, and no listener. An iOS app that constructed those two
-    // objects to satisfy a signature would open a socket nothing reads and would
-    // name a capability it does not have, in `RelayiumApp` where every reviewer
-    // looks first.
+    // model owns. A client that constructed those two objects to satisfy a
+    // signature, without a surface that reads the roster or a listener that
+    // answers, would open a socket nothing reads.
     //
     // What these produce is a model whose nearby entry points refuse — the
     // initializers' own `NearbyError.notScanning` defaults, reached because
     // nothing overrides them. Making that a defaulted argument on the existing
-    // signature would have been the same code with a worse failure mode: a macOS
-    // call site that dropped its discovery model would silently lose the whole
+    // signature would have been the same code with a worse failure mode: a call
+    // site that dropped its discovery model would silently lose the whole
     // nearby feature and still compile.
+    //
+    // **These are not a permission boundary, and R3-E's comment here wrongly
+    // implied they were.** `LanDiscoveryModel` is not Bonjour and does not scan:
+    // it joins the hub's code-less room over the same origin as everything else,
+    // and the server groups that room by the public IP it observes. Nearby
+    // therefore needs ordinary internet access on every platform — no
+    // local-network prompt and no multicast entitlement — which is why iOS could
+    // take it in R3-F without acquiring a capability. What these code-only
+    // factories express is the absence of a FEATURE, not of a permission.
 
     @MainActor
     public static func makeRealtimeModel(baseURL: URL = productionBaseURL,

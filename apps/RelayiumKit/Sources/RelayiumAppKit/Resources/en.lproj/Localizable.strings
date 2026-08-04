@@ -249,13 +249,17 @@
 
 /* MARK: nearby pane */
 "nearby.heading" = "Nearby devices";
-"nearby.explain" = "Devices running Relayium — the app or relayium.com — that reach the internet from the same public address as this Mac. Usually that means your Wi-Fi, but a carrier or VPN gateway can put strangers' devices on the list too. Relayium never scans your network; it asks its rendezvous service who else arrives from that address.";
+"nearby.explain" = "Devices running Relayium — the app or relayium.com — that reach the internet from the same public address as this device. Usually that means your Wi-Fi, but a carrier or VPN gateway can put strangers' devices on the list too. Relayium never scans your network; it asks its rendezvous service who else arrives from that address.";
+"nearby.safetySummary" = "Devices running Relayium at the same public address as this device. On a carrier, VPN or shared gateway that address can include strangers, so choose who you send to.";
+"nearby.howItWorks" = "How this list works";
 "nearby.dropHint" = "Drop files or folders here, or click to choose. Nothing is sent until you pick a device below and press Send.";
 "nearby.lookAgain" = "Look again";
 "nearby.resumeReceiving" = "Resume receiving";
 "nearby.pauseReceiving" = "Pause receiving";
-"nearby.pausedBody" = "This Mac is not listening for nearby devices. It can still send, and pairing codes still work.";
-"nearby.listeningBody" = "While Relayium is running, a device on this address can send files or start a message session without asking first. Files are written to your Downloads folder. Anything sharing this public address can try — pause receiving if that is not what you want.";
+"nearby.pausedBody" = "This device is not listening for nearby devices. It can still send, and pairing codes still work.";
+"nearby.listeningBody" = "While Relayium is running, a device on this address can send files or start a message session without asking first. Anything sharing this public address can try — pause receiving if that is not what you want.";
+"nearby.savedToDownloads" = "Incoming files are written to your Downloads folder.";
+"nearby.savedToAppFolder" = "Incoming files are saved in Relayium's own folder, which you can open in the Files app.";
 "nearby.a11yReceiving" = "Nearby receiving";
 "nearby.emptyRoster" = "No other devices yet. Open relayium.com on the other device and leave the page open.";
 "nearby.namesDisclaimer" = "Names come from the other device and are not proof of who it is. Compare verification codes below if that matters.";
@@ -266,7 +270,7 @@
 "nearby.addFilesHint" = "Add files or folders above, then send them straight to that device.";
 "nearby.textIntent" = "Opens an end-to-end encrypted message session. Nothing is stored on Relayium.";
 "nearby.startMessageSession" = "Start a message session";
-"nearby.acceptanceNote" = "On relayium.com the other person still chooses where to save incoming files; a message session opens on their side without a prompt unless advanced verification is on for either device (below). This Mac accepts incoming nearby transfers the same way while receiving is on.";
+"nearby.acceptanceNote" = "On relayium.com the other person still chooses where to save incoming files; a message session opens on their side without a prompt unless advanced verification is on for either device (below). This device accepts incoming nearby transfers the same way while receiving is on.";
 "nearby.backToDevices" = "Back to nearby devices";
 "nearby.leavingClearsHistory" = "Leaving clears this session's local message history.";
 "nearby.deviceGone" = "That device is no longer nearby. Pick another one.";
@@ -421,7 +425,7 @@
 "error.connection.textReceiveBufferFull" = "The other device sent too much before verification finished, so the session was closed.";
 "error.factory.noPeerAppeared" = "Nobody joined before the pairing code expired. Create a new code and try again.";
 "error.nearby.notScanning" = "Relayium stopped looking for nearby devices, so that one is no longer available. Scan again, then pick it.";
-"error.nearby.noAnswer" = "That device didn't answer. Open relayium.com on it, keep that page open, and pick it again. A pairing code works instead, and is the way to receive on this Mac.";
+"error.nearby.noAnswer" = "That device didn't answer. Open relayium.com on it, keep that page open, and pick it again. A pairing code works instead, and is the way to receive on this device.";
 "error.staging.fileCount" = "Choose between 1 and %@ files.";
 "error.staging.unreadable" = "Couldn't open every selected file, so nothing was sent. Choose the files again.";
 "error.text.authenticationFailed" = "The encrypted message failed its integrity check, so it was discarded and the session was closed.";

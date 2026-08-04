@@ -29,6 +29,12 @@ public enum TransferMode: Equatable, CaseIterable, Sendable {
 /// App-scoped, like the models it speaks for: the unique window is closable
 /// while the process keeps running, so ownership has to survive the view tree
 /// being torn down and rebuilt.
+///
+/// R3-F gave iOS the same two-surface shape — a Nearby tab beside the Direct
+/// one — so this arbitrates there too. What differs is only the mode: iOS holds
+/// files-or-text in `DirectModeSelection`, where its own lock lives, and claims
+/// through the `claim(_:)` overload below so no second copy of that answer
+/// exists. `mode` is macOS's.
 @MainActor
 public final class TransferPresence: ObservableObject {
     /// `nil` when no destination is presenting a session. Private setter: the
@@ -53,9 +59,28 @@ public final class TransferPresence: ObservableObject {
     /// is drawing it.
     @discardableResult
     public func claim(_ destination: AppDestination, mode: TransferMode) -> Bool {
+        guard claim(destination) else { return false }
+        self.mode = mode
+        return true
+    }
+
+    /// Take, or keep, the right to present the session — and answer nothing
+    /// else.
+    ///
+    /// The same arbitration as above, minus the mode. iOS keeps the
+    /// files-or-text answer in `DirectModeSelection`, which is where its R3-E
+    /// lock lives; writing a second copy of that answer here would be two
+    /// values free to disagree, and the disagreement shows up as the owning tab
+    /// rendering the wrong half of a session it does own. macOS has no such
+    /// second holder, so it keeps using the overload above.
+    ///
+    /// Refusal still changes nothing at all, which is the part that has to hold
+    /// on both: a losing claim that had already moved something would be a
+    /// half-applied claim.
+    @discardableResult
+    public func claim(_ destination: AppDestination) -> Bool {
         guard owner == nil || owner == destination else { return false }
         owner = destination
-        self.mode = mode
         return true
     }
 

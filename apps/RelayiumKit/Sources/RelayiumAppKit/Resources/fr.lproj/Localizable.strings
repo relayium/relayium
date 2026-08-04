@@ -248,13 +248,17 @@
 
 /* MARK: appareils à proximité */
 "nearby.heading" = "Appareils à proximité";
-"nearby.explain" = "Appareils exécutant Relayium — l’app ou relayium.com — qui atteignent Internet depuis la même adresse publique que ce Mac. C’est généralement votre Wi-Fi, mais une passerelle d’opérateur ou de VPN peut aussi y faire apparaître les appareils d’inconnus. Relayium ne scanne jamais votre réseau ; il demande à son service de rendez-vous qui d’autre arrive depuis cette adresse.";
+"nearby.explain" = "Appareils exécutant Relayium — l’app ou relayium.com — qui atteignent Internet depuis la même adresse publique que cet appareil. C’est généralement votre Wi-Fi, mais une passerelle d’opérateur ou de VPN peut aussi y faire apparaître les appareils d’inconnus. Relayium ne scanne jamais votre réseau ; il demande à son service de rendez-vous qui d’autre arrive depuis cette adresse.";
+"nearby.safetySummary" = "Appareils exécutant Relayium à la même adresse publique que cet appareil. Derrière une passerelle d’opérateur, de VPN ou partagée, des inconnus peuvent en faire partie : choisissez vous-même le destinataire.";
+"nearby.howItWorks" = "Comment cette liste fonctionne";
 "nearby.dropHint" = "Déposez des fichiers ou des dossiers ici, ou cliquez pour les choisir. Rien n’est envoyé tant que vous n’avez pas choisi un appareil ci-dessous et appuyé sur Envoyer.";
 "nearby.lookAgain" = "Chercher à nouveau";
 "nearby.resumeReceiving" = "Reprendre la réception";
 "nearby.pauseReceiving" = "Suspendre la réception";
-"nearby.pausedBody" = "Ce Mac n’écoute pas les appareils à proximité. Il peut toujours envoyer, et les codes d’appairage fonctionnent toujours.";
-"nearby.listeningBody" = "Tant que Relayium tourne, un appareil situé à cette adresse peut envoyer des fichiers ou ouvrir une session de messages sans demander d’abord. Les fichiers sont écrits dans votre dossier Téléchargements. Tout ce qui partage cette adresse publique peut essayer — suspendez la réception si ce n’est pas ce que vous voulez.";
+"nearby.pausedBody" = "Cet appareil n’écoute pas les appareils à proximité. Il peut toujours envoyer, et les codes d’appairage fonctionnent toujours.";
+"nearby.listeningBody" = "Tant que Relayium tourne, un appareil situé à cette adresse peut envoyer des fichiers ou ouvrir une session de messages sans demander d’abord. Tout ce qui partage cette adresse publique peut essayer — suspendez la réception si ce n’est pas ce que vous voulez.";
+"nearby.savedToDownloads" = "Les fichiers entrants sont écrits dans votre dossier Téléchargements.";
+"nearby.savedToAppFolder" = "Les fichiers entrants sont enregistrés dans le dossier propre à Relayium, que vous pouvez ouvrir dans l’app Fichiers.";
 "nearby.a11yReceiving" = "Réception à proximité";
 "nearby.emptyRoster" = "Aucun autre appareil pour l’instant. Ouvrez relayium.com sur l’autre appareil et laissez la page ouverte.";
 "nearby.namesDisclaimer" = "Les noms proviennent de l’autre appareil et ne prouvent pas son identité. Comparez les codes de vérification ci-dessous si cela compte.";
@@ -265,7 +269,7 @@
 "nearby.addFilesHint" = "Ajoutez des fichiers ou des dossiers ci-dessus, puis envoyez-les directement à cet appareil.";
 "nearby.textIntent" = "Ouvre une session de messages chiffrée de bout en bout. Rien n’est stocké sur Relayium.";
 "nearby.startMessageSession" = "Démarrer une session de messages";
-"nearby.acceptanceNote" = "Sur relayium.com, l’autre personne choisit toujours où enregistrer les fichiers reçus ; une session de messages s’ouvre de son côté sans invite, sauf si la vérification avancée est active sur l’un des appareils (ci-dessous). Ce Mac accepte les transferts entrants de proximité de la même manière tant que la réception est active.";
+"nearby.acceptanceNote" = "Sur relayium.com, l’autre personne choisit toujours où enregistrer les fichiers reçus ; une session de messages s’ouvre de son côté sans invite, sauf si la vérification avancée est active sur l’un des appareils (ci-dessous). Cet appareil accepte les transferts entrants de proximité de la même manière tant que la réception est active.";
 "nearby.backToDevices" = "Retour aux appareils à proximité";
 "nearby.leavingClearsHistory" = "Quitter efface l’historique local des messages de cette session.";
 "nearby.deviceGone" = "Cet appareil n’est plus à proximité. Choisissez-en un autre.";
@@ -420,7 +424,7 @@
 "error.connection.textReceiveBufferFull" = "L’autre appareil a envoyé trop de données avant la fin de la vérification : la session a été fermée.";
 "error.factory.noPeerAppeared" = "Personne n’a rejoint avant l’expiration du code d’appairage. Créez un nouveau code et réessayez.";
 "error.nearby.notScanning" = "Relayium a cessé de chercher les appareils à proximité : celui-ci n’est plus disponible. Relancez la recherche, puis choisissez-le.";
-"error.nearby.noAnswer" = "Cet appareil n’a pas répondu. Ouvrez relayium.com dessus, laissez la page ouverte, puis choisissez-le à nouveau. Un code d’appairage fonctionne à la place, et c’est la façon de recevoir sur ce Mac.";
+"error.nearby.noAnswer" = "Cet appareil n’a pas répondu. Ouvrez relayium.com dessus, laissez la page ouverte, puis choisissez-le à nouveau. Un code d’appairage fonctionne à la place, et c’est la façon de recevoir sur cet appareil.";
 "error.staging.fileCount" = "Choisissez entre 1 et %@ fichiers.";
 "error.staging.unreadable" = "Impossible d’ouvrir tous les fichiers sélectionnés : rien n’a été envoyé. Choisissez à nouveau les fichiers.";
 "error.text.authenticationFailed" = "Le message chiffré a échoué à son contrôle d’intégrité : il a été écarté et la session fermée.";

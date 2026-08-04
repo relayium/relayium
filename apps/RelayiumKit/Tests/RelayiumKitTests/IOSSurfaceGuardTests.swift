@@ -157,15 +157,27 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // `testThePasteboardIsWrittenOnlyInsideAnExplicitCopyActionAndNeverRead`,
         // which allows exactly that one write and still forbids every read.
         //
-        // The nearby half stays banned, and gained `InboundRoom` and the two
-        // factory names: iOS has no local-network entitlement, no roster and no
-        // listener, so any of these appearing would be a capability claimed in
-        // the file every reviewer opens first.
+        // **The nearby half LEFT this list in R3-F, and the reason it was on it
+        // was wrong.** It was banned as needing "a local-network entitlement",
+        // which `LanDiscoveryModel` does not: it is not Bonjour, does not scan,
+        // and joins the hub's code-less room, which the server keys by the
+        // public IP it observes. What it needs is ordinary internet access. So
+        // `LanDiscoveryModel`, `NearbyReceiveModel`, `InboundRoom`, the two
+        // factories and `connectNearby` are now what this slice ships, and what
+        // replaces the ban is the whole R3-F section below — one room socket,
+        // a destination installed before residency, an explicit peer choice and
+        // a single presenting surface. `NSLocalNetworkUsageDescription`,
+        // Bonjour and the multicast entitlement stay banned by
+        // `testTheNearbyTabAddsNoNetworkCapability`, which is the accurate
+        // claim rather than the inherited one.
+        //
+        // `acceptNearby` and `NearbyError` stay: answering an offer is
+        // `NearbyReceiveModel`'s, on the socket the offer arrived on, and an
+        // iOS view reaching for either would be a second admission path beside
+        // the arbitrated one.
         let deferred = [
             "BrowserLoginModel",
-            "LanDiscoveryModel", "NearbyReceiveModel", "InboundRoom",
-            "makeLanDiscoveryModel", "makeNearbyReceiveModel",
-            "connectNearby", "acceptNearby", "NearbyError",
+            "acceptNearby", "NearbyError",
             "onOpenURL", "UNUserNotificationCenter", "StoreKit",
             "NSWorkspace",
         ]
@@ -252,15 +264,25 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // moved. `LocalizedCopyTests.testTheVerificationExplanationNamesNoPlatformAndKeepsItsEncryptionClaims`
         // carries the claim from here on, and it carries the half a ban cannot:
         // that the four encryption facts are all still in the sentence.
+        // **R3-F takes four more off by the same route.** This slice renders the
+        // nearby surface, so `nearby.explain`, `nearby.pausedBody`,
+        // `nearby.acceptanceNote` and `error.nearby.noAnswer` — all of which
+        // said *this Mac* — were corrected in place in all nine catalogs to the
+        // device noun each language uses.
+        // `LocalizedCopyTests.testNothingTheNearbySurfaceRendersNamesAPlatform`
+        // and `testTheCorrectedNearbySentencesStillNameADevice` carry the claim
+        // from here on, together with the half a ban cannot make: that each
+        // sentence still names the device it is about.
+        //
+        // What remains is notifications, which this slice deliberately does not
+        // add — a foreground inbound session navigates in app instead — and one
+        // key rendered by nothing on either platform.
         let platformNaming: [L10nKey] = [
-            // R3-F: nearby and notifications. iOS has neither.
-            .nearbyExplain, .nearbyPausedBody, .nearbyAcceptanceNote,
             .notifyIncomingFiles, .notifyIncomingText,
-            .errorNearbyNoAnswer,
             // Rendered by nothing on either platform yet.
             .errorKeychainSignIn,
         ]
-        XCTAssertEqual(platformNaming.count, 7)
+        XCTAssertEqual(platformNaming.count, 3)
         for (name, text) in try sources() {
             for key in platformNaming {
                 XCTAssertFalse(text.contains(".\(key)"),
@@ -1051,27 +1073,25 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// take the anonymous receive tab with it.
     func testTheShellGainedTheDirectTabAndStillReadsNoSessionState() throws {
         let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
-        XCTAssertTrue(root.text.contains("case receive, send, direct, account"),
-                      "the tab set is not the four this slice ships")
         XCTAssertTrue(root.text.contains("L10n.t(.tabDirect)"))
-        XCTAssertTrue(root.text.contains(".tag(Tab.direct)"))
+        XCTAssertTrue(root.text.contains(".tag(AppDestination.pairingCode)"))
         for accountish in ["session.state", "AccountGate", "bearerToken"] {
             XCTAssertFalse(root.text.contains(accountish),
                            "the shell reads \(accountish) — that would gate the receive tab")
         }
     }
 
-    /// Both realtime models are app-scoped, built once, from the CODE-ONLY
-    /// factories.
+    /// Both realtime models are app-scoped, built once, and — since R3-F — from
+    /// the NEARBY factories, against one discovery model and one inbound room.
     ///
     /// Two claims, and the second is the one a diff hides. App-scoped, because a
     /// `TabView` tears an off-screen tab down and a live DataChannel must not go
     /// with it — the user checking their plan mid-transfer is exactly that.
-    /// Code-only, because the nearby factories take a `LanDiscoveryModel` and an
-    /// `InboundRoom`, and constructing those here would open a room socket
-    /// nothing reads and claim a local-network capability this app has no
-    /// entitlement for.
-    func testTheRealtimeModelsAreAppScopedAndBuiltFromTheCodeOnlyFactories() throws {
+    /// Nearby-wired, because the two direct surfaces drive the SAME two models
+    /// and both same-network paths reach through the one room socket the
+    /// discovery model owns; a second graph would be a second room membership
+    /// and a device listed twice.
+    func testTheRealtimeModelsAreAppScopedAndBuiltFromTheNearbyFactories() throws {
         let all = try sources()
         let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" })
         for scoped in ["@StateObject private var direct: RealtimeSessionModel",
@@ -1079,16 +1099,25 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "@StateObject private var verification: VerificationPreference",
                        "@StateObject private var directSelection: DirectSendSelection",
                        "@StateObject private var directModes: DirectModeSelection",
-                       "@StateObject private var foreground: ForegroundSessionCoordinator"] {
+                       "@StateObject private var foreground: ForegroundSessionCoordinator",
+                       "@StateObject private var discovery: LanDiscoveryModel",
+                       "@StateObject private var nearbyReceive: NearbyReceiveModel",
+                       "@StateObject private var residency: NearbyResidencyCoordinator",
+                       "@StateObject private var presence: TransferPresence",
+                       "@StateObject private var navigation: AppNavigationModel"] {
             XCTAssertTrue(app.text.contains(scoped), "missing app-scoped owner: \(scoped)")
         }
-        XCTAssertTrue(app.text.contains("AppEnvironment.makeRealtimeModel(verification: verifying)"),
-                      "the file model must come from the code-only factory")
-        XCTAssertTrue(app.text.contains("AppEnvironment.makeRealtimeTextModel(verification: verifying)"),
-                      "the text model must come from the code-only factory")
+        XCTAssertTrue(app.text.contains(
+            "AppEnvironment.makeRealtimeModel(verification: verifying, nearby: nearby, inboundRoom: room)"),
+                      "the file model must be wired to the one room socket")
+        XCTAssertTrue(app.text.contains(
+            "AppEnvironment.makeRealtimeTextModel(verification: verifying, nearby: nearby, inboundRoom: room)"),
+                      "the text model must be wired to the one room socket")
         for once in ["makeRealtimeModel(", "makeRealtimeTextModel(", "VerificationPreference(",
                      "DirectSendSelection(", "DirectModeSelection(",
-                     "ForegroundSessionCoordinator("] {
+                     "ForegroundSessionCoordinator(",
+                     "makeLanDiscoveryModel(", "InboundRoom(", "makeNearbyReceiveModel(",
+                     "NearbyResidencyCoordinator(", "TransferPresence(", "AppNavigationModel("] {
             XCTAssertEqual(all.map { $0.text.components(separatedBy: once).count - 1 }.reduce(0, +), 1,
                            "\(once) is constructed more than once — a second owner")
         }
@@ -1410,7 +1439,13 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(app.text.contains("case .background: return .background"))
         XCTAssertTrue(app.text.contains("case .inactive: return .inactive"),
                       "a picker or a share sheet must not end the session")
-        XCTAssertTrue(app.text.contains("foreground.phaseChanged(to: lifecycle(phase))"))
+        // Through the residency coordinator, which owns the ORDER: leaving the
+        // room has to happen before R3-E's session cleanup, and an order split
+        // across two `onChange` calls in a scene body is an order no test can
+        // reach. `NearbyResidencyCoordinatorTests` drives it.
+        XCTAssertTrue(app.text.contains("residency.phaseChanged(to: lifecycle(phase))"))
+        XCTAssertFalse(app.text.contains("foreground.phaseChanged("),
+                       "a second lifecycle path would let the room outlive the session cleanup")
         // Exactly one observer, at the app scope: a second in a view would fire
         // only while that view was mounted, which is precisely when it is not.
         // Three occurrences, all in `RelayiumApp`: twice on the `@Environment`
@@ -1462,7 +1497,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(view.text.contains("onOpenSend"),
                       "the large-file route must be a tab selection handed down")
         let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
-        XCTAssertTrue(root.text.contains("onOpenSend: { self.selection = .send }"),
+        XCTAssertTrue(root.text.contains("onOpenSend: { navigation.select(.storedSend) }"),
                       "and the shell must be the thing that performs it")
     }
 
@@ -1494,5 +1529,364 @@ final class IOSSurfaceGuardTests: XCTestCase {
                 XCTAssertFalse(text.contains(appKitism), "\(name) reaches for \(appKitism)")
             }
         }
+    }
+
+    // MARK: - R3-F: the Nearby tab
+
+    private func nearby() throws -> (name: String, text: String) {
+        try XCTUnwrap(try sources().first { $0.name == "NearbyView.swift" })
+    }
+
+    /// Five tabs, and the shell still learns nothing about the account.
+    ///
+    /// Nearby is the second anonymous tab and the first that an *incoming*
+    /// session can select on its own, so the selection had to move from a
+    /// `@State` in this view to an app-scoped model: a `@State` is reset when
+    /// SwiftUI rebuilds the tree, and the moment that matters is a session
+    /// arriving while the user is somewhere else.
+    func testTheShellGainedTheNearbyTabAndRoutesFromAnAppScopedSelection() throws {
+        let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
+        for tag in [".tag(AppDestination.storedReceive)", ".tag(AppDestination.storedSend)",
+                    ".tag(AppDestination.pairingCode)", ".tag(AppDestination.nearby)",
+                    ".tag(AppDestination.account)"] {
+            XCTAssertTrue(root.text.contains(tag), "the tab set is missing \(tag)")
+        }
+        XCTAssertTrue(root.text.contains("TabView(selection: $navigation.selection)"),
+                      "the selection must survive an incoming session rebuilding the tree")
+        XCTAssertFalse(root.text.contains("@State private var selection"),
+                       "a view-local selection cannot be routed to from outside the view")
+        for accountish in ["session.state", "AccountGate", "bearerToken"] {
+            XCTAssertFalse(root.text.contains(accountish),
+                           "the shell reads \(accountish) — that would gate the anonymous tabs")
+        }
+    }
+
+    /// **Nearby is anonymous in both directions, and it is enforced by not
+    /// naming the account rather than by remembering not to gate it.**
+    ///
+    /// The code-less room mints nothing and `/api/ice` answers it STUN-only, so
+    /// both directions genuinely reach the transport with no credential. An
+    /// `@EnvironmentObject` this view merely DECLARED would also crash it in
+    /// any build where the object was absent, which is the sharper reason the
+    /// ban is on the name.
+    func testTheNearbyTabNamesNoAccountAtAll() throws {
+        let view = try nearby()
+        for accountish in ["AccountSession", "AccountGate", "bearerToken", "session.state",
+                           "mintCode", "onOpenAccount"] {
+            XCTAssertFalse(view.text.contains(accountish),
+                           "NearbyView reaches for \(accountish) — this tab needs no account")
+        }
+        XCTAssertTrue(view.text.contains("L10n.t(.nearbyNoAccountNeeded)"),
+                      "and it must say so, rather than leaving it to be discovered")
+    }
+
+    /// The three sentences the roster cannot be shown without.
+    ///
+    /// A list of device names is read as "the devices on my Wi-Fi" unless it is
+    /// told otherwise, and here it is not true: the room is grouped by the
+    /// public address the server observes, which a carrier or VPN gateway can
+    /// share with strangers, and the names are peer-supplied labels.
+    func testTheRosterStatesWhatItIsAndWhatTheNamesAreNot() throws {
+        let view = try nearby()
+        for copy in [".nearbySafetySummary", ".nearbyExplain", ".nearbyNamesDisclaimer",
+                     ".nearbyEmptyRoster"] {
+            XCTAssertTrue(view.text.contains(copy), "the roster does not render \(copy)")
+        }
+    }
+
+    /// **The mechanism paragraph is one tap away; the warning is not.**
+    ///
+    /// Rendered open at the top, that paragraph was the whole first screen —
+    /// and at the largest accessibility content sizes, several of them, with no
+    /// control reachable until the user had scrolled past it. So the sentence
+    /// that changes a decision stays in the layout and the explanation moves
+    /// into a disclosure that starts closed.
+    ///
+    /// The order is asserted, not just the presence: a summary placed *below*
+    /// the disclosure would pass a containment check while leaving the screen
+    /// exactly as it was.
+    func testTheMechanismParagraphIsBehindALabelledDisclosureAndTheWarningIsNot() throws {
+        let view = try nearby()
+        XCTAssertTrue(view.text.contains("@State private var showsMechanism = false"),
+                      "the disclosure must start closed, every time the tab is built")
+        XCTAssertTrue(view.text.contains("DisclosureGroup(isExpanded: $showsMechanism)"),
+                      "the explanation is not behind a disclosure this view controls")
+        XCTAssertTrue(view.text.contains("L10n.t(.nearbyHowItWorks)"),
+                      "an unlabelled chevron is an explanation nobody opens")
+
+        let summary = try XCTUnwrap(view.text.range(of: "L10n.t(.nearbySafetySummary)"))
+        let group = try XCTUnwrap(view.text.range(of: "DisclosureGroup(isExpanded:"))
+        let paragraph = try XCTUnwrap(view.text.range(of: "L10n.t(.nearbyExplain)"))
+        XCTAssertTrue(summary.lowerBound < group.lowerBound,
+                      "the always-visible warning is drawn after the disclosure")
+        XCTAssertTrue(group.lowerBound < paragraph.lowerBound,
+                      "the paragraph is still drawn outside the disclosure")
+        XCTAssertEqual(view.text.components(separatedBy: "L10n.t(.nearbyExplain)").count - 1, 1,
+                       "a second copy of the paragraph would put it back on the first screen")
+
+        // Not a preference: a remembered "open" restores exactly the layout
+        // this refinement removes, on the content size where it hurts most.
+        for persisted in ["@AppStorage", "UserDefaults"] {
+            XCTAssertFalse(view.text.contains(persisted),
+                           "NearbyView persists disclosure state through \(persisted)")
+        }
+    }
+
+    /// **Nothing preselects a device, ever.**
+    ///
+    /// Not even when the room holds exactly one other entry — that is precisely
+    /// the case where a stranger behind the same carrier gateway is the only
+    /// candidate. Selection is the user's single explicit act, and the model's
+    /// `select`/`clearSelection` are the only ways it moves.
+    func testNoDeviceIsEverSelectedOnTheUsersBehalf() throws {
+        let view = try nearby()
+        XCTAssertTrue(view.text.contains("discovery.select(device.id)"))
+        XCTAssertTrue(view.text.contains("discovery.clearSelection()"))
+        // Exactly one call site, and it is the row's own tap handler. A second
+        // — in an `onAppear`, a `task(id:)`, or beside a roster update — is how
+        // "the only device in the room" becomes the selected one.
+        XCTAssertEqual(view.text.components(separatedBy: "discovery.select(").count - 1, 1,
+                       "NearbyView selects a device from somewhere other than the row")
+        for autoSelect in ["devices.first", "devices.count == 1", "onAppear"] {
+            XCTAssertFalse(view.text.contains(autoSelect),
+                           "NearbyView picks a device for the user: \(autoSelect)")
+        }
+    }
+
+    /// The chosen device is re-read at the instant Send is pressed.
+    ///
+    /// The roster is live. A device that left between the row being drawn and
+    /// the button being pressed must not be dialled by an id captured at render
+    /// time — the id may by then belong to a different device entirely, and the
+    /// room is not an identity.
+    func testSendingReReadsTheSelectedDeviceInsteadOfCapturingIt() throws {
+        let view = try nearby()
+        for action in ["private func sendFiles()", "private func startText()"] {
+            guard let start = view.text.range(of: action) else {
+                return XCTFail("NearbyView no longer has \(action)")
+            }
+            let body = view.text[start.lowerBound...].prefix(1200)
+            XCTAssertTrue(body.contains("guard let device = discovery.selectedDevice"),
+                          "\(action) does not re-read the selection at the moment of use")
+            XCTAssertTrue(body.contains("L10n.t(.nearbyDeviceGone)"),
+                          "\(action) must say why nothing was sent")
+        }
+    }
+
+    /// Both direct surfaces drive the SAME app-scoped objects.
+    ///
+    /// Rendered side by side they would show one session twice, each copy with
+    /// its own Cancel; staged twice they would take two sets of security scopes
+    /// for one selection; asked the mode twice they would be two answers to one
+    /// question. So the shell hands the same five objects to both tabs and
+    /// neither one owns any of them.
+    func testBothDirectTabsShareTheOneSetOfOwners() throws {
+        let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
+        for shared in ["file: direct", "text: directText", "selection: directSelection",
+                       "modes: directModes"] {
+            XCTAssertEqual(root.text.components(separatedBy: shared).count - 1, 2,
+                           "\(shared) is not handed to both direct tabs")
+        }
+        for view in ["NearbyView.swift", "DirectView.swift"] {
+            let source = try XCTUnwrap(try sources().first { $0.name == view })
+            for owning in ["@StateObject private var file", "@StateObject private var text",
+                           "@StateObject private var selection", "@StateObject private var modes",
+                           "DirectSendSelection()", "DirectModeSelection()"] {
+                XCTAssertFalse(source.text.contains(owning),
+                               "\(view) owns \(owning) instead of being handed it")
+            }
+        }
+    }
+
+    /// Exactly one tab draws the session, and the other one says where it is.
+    ///
+    /// Not a nicety: a second copy of a live session comes with a second Cancel
+    /// for one transfer, and a second Done over one retained transcript. The
+    /// arbitration is `TransferPresence`; what this pins is that BOTH tabs
+    /// consult it and that the loser offers navigation rather than a dead end.
+    func testExactlyOneDirectTabRendersTheSessionAndTheOtherPointsAtIt() throws {
+        // The exact condition, not merely a mention of `presence`. A branch that
+        // names the object and then decides from `isBusy` anyway reads as
+        // arbitrated and is not: `isBusy` is true for BOTH tabs at once, because
+        // it is a property of the shared models rather than of who owns them.
+        for (name, mine) in [("NearbyView.swift", "nearby"),
+                             ("DirectView.swift", "pairingCode")] {
+            let view = try XCTUnwrap(try sources().first { $0.name == name })
+            XCTAssertTrue(view.text.contains("if let owner = presence.owner, owner != .\(mine) {"),
+                          "\(name) does not stand aside for the other tab's session")
+            XCTAssertTrue(view.text.contains("busyElsewhere(owner)"),
+                          "\(name) stands aside without saying so")
+            for copy in [".presenceBusyTitle", ".presenceBusyBody", ".presenceShowIt"] {
+                XCTAssertTrue(view.text.contains(copy),
+                              "\(name) leaves the user on a dead end: \(copy)")
+            }
+        }
+        // Nearby is the one that also has a roster to fall back to, so its own
+        // session must be drawn on OWNERSHIP rather than on activity — the
+        // difference is a claimed-but-not-yet-connected session, which is
+        // exactly the window an inbound offer lives in.
+        let nearbyView = try nearby()
+        XCTAssertTrue(nearbyView.text.contains("} else if presence.rendersSession(.nearby) {"),
+                      "the nearby session is drawn from something other than ownership")
+    }
+
+    /// **Ownership is released only at idle**, from one place.
+    ///
+    /// `.completed` still owns the received files and the share sheet built on
+    /// them; `.ended`, `.failed`, `.refused` and `.unsupported` still own a
+    /// transcript that exists in no other copy. Releasing when the bytes stop
+    /// would blank the surface the user is still reading. `.idle` is the only
+    /// state that means there is nothing left to present — and the reconciliation
+    /// lives in the shell, which is mounted whichever tab is on screen, rather
+    /// than in the tab that happens to have claimed it.
+    func testOwnershipIsReleasedOnlyWhenBothModelsAreIdle() throws {
+        let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
+        XCTAssertTrue(root.text.contains("direct.state == .idle && directText.state == .idle"),
+                      "the shell releases ownership on something other than idle")
+        XCTAssertTrue(root.text.contains("presence.releaseAll()"))
+        for name in ["NearbyView.swift", "DirectView.swift"] {
+            let view = try XCTUnwrap(try sources().first { $0.name == name })
+            XCTAssertFalse(view.text.contains("presence.releaseAll()"),
+                           "\(name) releases a session it may not own")
+        }
+    }
+
+    /// Residency is started from the coordinator that owns the ordering, and
+    /// from exactly one place.
+    ///
+    /// The order — resolve the receive folder, install it on the model, THEN
+    /// join the room — is what stops this device advertising itself as
+    /// reachable with nowhere to write. A view that called `startResident()`
+    /// itself would be a second entry point with none of that.
+    func testResidencyIsOnlyEverStartedThroughTheCoordinator() throws {
+        let all = try sources()
+        for (name, text) in all {
+            for bypass in ["startResident()", "discovery.start()", "discovery.stop()"] {
+                XCTAssertFalse(text.contains(bypass),
+                               "\(name) bypasses the residency coordinator: \(bypass)")
+            }
+        }
+        // The two remaining direct resolves are both answers to a link or a
+        // code the user acted on, not residency: R3-A's stored receive and
+        // R3-E's pairing-code responder join. Neither advertises this device,
+        // so neither has an order to get wrong. Anything else resolving it is
+        // a second residency path with none of the ordering above.
+        XCTAssertEqual(all.filter { $0.text.contains("ReceiveDestination.directory()") }
+                          .map(\.name).sorted(),
+                       ["DirectView.swift", "ReceiveView.swift"],
+                       "the receive folder is resolved somewhere that does not own the order")
+        let view = try nearby()
+        for through in ["residency.pause()", "residency.resume()", "residency.refresh()",
+                        "residency.retry()", "residency.destinationError"] {
+            XCTAssertTrue(view.text.contains(through), "the nearby tab cannot reach \(through)")
+        }
+    }
+
+    /// An inbound session settles its surface, its mode and its tab in ONE
+    /// synchronous call, before the responder is built.
+    ///
+    /// Three separate writes in a SwiftUI closure could be reordered by a later
+    /// edit, and any interleaving that puts a write after the `await` inside
+    /// `NearbyReceiveModel.accept` loses the race it exists to win.
+    /// `AppRoutingTests` drives the function itself.
+    func testAnIncomingSessionClaimsItsSurfaceThroughTheOneRoutingCall() throws {
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" })
+        XCTAssertTrue(app.text.contains("receive.shouldAcceptSession = "),
+                      "nothing arbitrates and brings an unsolicited session forward")
+        XCTAssertTrue(app.text.contains("AppRouting.claimIncoming(kind,"),
+                      "the claim must be the one shared call, not three writes in a closure")
+        for (name, text) in try sources() where name != "RelayiumApp.swift" {
+            XCTAssertFalse(text.contains("shouldAcceptSession"),
+                           "\(name) is a second inbound admission handler")
+        }
+    }
+
+    /// **This slice adds no network capability, and the reason matters.**
+    ///
+    /// `LanDiscoveryModel` is not Bonjour and does not scan: it joins the hub's
+    /// code-less room over the same HTTPS/WebSocket origin the rest of the app
+    /// uses, and the server groups that room by the public IP it observes. So
+    /// none of Apple's local-network machinery is involved, and declaring any
+    /// of it would be a permission prompt for something the app does not do —
+    /// which is worse than a missing capability, because the user is asked to
+    /// grant access that then explains nothing.
+    func testTheNearbyTabAddsNoNetworkCapability() throws {
+        let plist = try infoPlist()
+        XCTAssertNil(plist["NSLocalNetworkUsageDescription"],
+                     "the app asks for local-network access it does not use")
+        XCTAssertNil(plist["NSBonjourServices"])
+        XCTAssertNil(plist["UIBackgroundModes"])
+        XCTAssertNil(plist["NSUserActivityTypes"])
+        // Read as a plist, not as text: the file's comment enumerates the
+        // capabilities it deliberately does NOT claim, so a text scan would
+        // fail on the very documentation of the absence it is checking for.
+        let data = try Data(contentsOf: iosRoot.appendingPathComponent("Relayium.entitlements"))
+        let entitlements = try XCTUnwrap(
+            try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+                as? [String: Any])
+        for banned in ["com.apple.developer.networking.multicast",
+                       "com.apple.developer.networking.wifi-info",
+                       "com.apple.developer.associated-domains",
+                       "com.apple.security.application-groups",
+                       "keychain-access-groups",
+                       "aps-environment"] {
+            XCTAssertNil(entitlements[banned], "the entitlements file claims \(banned)")
+        }
+        for (name, text) in try sources() {
+            for symbol in ["NWBrowser", "NWListener", "NetService", "Bonjour",
+                           "_relayium._tcp", "MultipeerConnectivity"] {
+                XCTAssertFalse(text.contains(symbol), "\(name) reaches for \(symbol)")
+            }
+        }
+    }
+
+    /// The receive location is stated, and it is the one iOS actually has.
+    ///
+    /// The shared listening paragraph no longer names a folder, because macOS
+    /// writes to Downloads and iOS writes into its own container. Rendering the
+    /// Mac's sentence here would send the user to a folder no iOS app has.
+    func testTheNearbyTabNamesTheiOSReceiveLocationAndNotDownloads() throws {
+        let view = try nearby()
+        XCTAssertTrue(view.text.contains("L10n.t(.nearbySavedToAppFolder)"),
+                      "the tab never says where an unsolicited file lands")
+        XCTAssertFalse(view.text.contains(".nearbySavedToDownloads"),
+                       "the iOS tab promises a Downloads folder it does not have")
+        XCTAssertTrue(view.text.contains(".nearbyListeningBody"),
+                      "the tab never says what receiving actually allows")
+        XCTAssertTrue(view.text.contains(".nearbyPausedBody"),
+                      "and it must say what pausing changes")
+    }
+
+    /// The optional SAS control is the shared preference here too, and there is
+    /// no second Accept step beside it: with verification off the existing
+    /// handshake still runs and the session proceeds, which is
+    /// `VerificationPreference`'s decision and not this view's to re-ask.
+    func testTheNearbyTabOffersTheSharedVerificationSettingAndNoSecondAccept() throws {
+        let view = try nearby()
+        XCTAssertTrue(view.text.contains(
+            "Toggle(L10n.t(.verifyToggle), isOn: $verification.requiresSASConfirmation)"),
+                      "the toggle must write the shared preference")
+        XCTAssertFalse(view.text.contains("@State private var requiresSAS"),
+                       "a view-local copy would be a setting no session reads")
+        XCTAssertTrue(view.text.contains("L10n.t(.nearbyAcceptanceNote)"),
+                      "the screen must say what happens on the other end")
+    }
+
+    /// The Nearby tab scrolls, like every other screen in this app.
+    ///
+    /// It is the longest one: an explanation, a status card, a roster of
+    /// unknown length, a staging section and a session. At the largest
+    /// accessibility content sizes anything not in a `ScrollView` puts its own
+    /// action off the bottom of the screen with no way to reach it.
+    func testTheNearbyTabScrollsAndStatesEveryResidencyState() throws {
+        let view = try nearby()
+        XCTAssertTrue(view.text.contains("ScrollView"),
+                      "the longest screen in the app cannot be scrolled")
+        XCTAssertTrue(view.text.contains("NearbyStatusPresentation.text(for: receive.state)"),
+                      "the residency state must come from the shared, translated mapping")
+        XCTAssertFalse(view.text.contains("ProgressView()\n"),
+                       "an unlabelled spinner reads as nothing")
+        XCTAssertFalse(view.text.contains("foregroundStyle(.red)"),
+                       "a failure stated in colour alone")
     }
 }

@@ -453,6 +453,29 @@ final class NearbyReceiveTests: XCTestCase {
         XCTAssertTrue(inbound.peerIds.isEmpty, "an inbound offer must not displace the user's own session")
     }
 
+    /// iOS claims a presentation surface synchronously, then starts its async
+    /// outbound connection on the next actor turn. The transport models are
+    /// still idle in that window, so model-level busy checks alone cannot stop
+    /// an unsolicited offer from replacing what the user just started.
+    func testAppAdmissionRefusalRejectsBeforeBuildingAResponder() async {
+        var admittedKinds: [NearbyReceiveKind] = []
+        receive.shouldAcceptSession = { kind in
+            admittedKinds.append(kind)
+            return false
+        }
+        channel.sent.removeAll()
+
+        channel.fireText(textOffer(from: "racing-peer"))
+        await settle()
+
+        XCTAssertEqual(admittedKinds, [.text])
+        XCTAssertEqual(busyReplies().map(\.to), ["racing-peer"])
+        XCTAssertTrue(inbound.peerIds.isEmpty, "a refused offer still built a responder")
+        XCTAssertEqual(fileModel.state, .idle)
+        XCTAssertEqual(textModel.state, .idle)
+        XCTAssertEqual(receive.state, .ready, "the listener did not release its reservation")
+    }
+
     // MARK: - what never opens a session
 
     /// Answers, candidates and reveals belong to a connection that already

@@ -2,13 +2,17 @@ import Foundation
 
 /// Files or text, for the one Direct surface iOS has.
 ///
-/// A pairing code does not encode what the sender meant to move, so somebody has
-/// to say — and saying it twice would be two answers to one question. On macOS
-/// that answer lives in `TransferPresence`, which also arbitrates which of two
-/// destinations *renders* the running session. iOS has one Direct tab and no
-/// nearby roster, so there is nothing to arbitrate and what is left is the
-/// narrower question this type answers: which mode is showing, and when may it
-/// change.
+/// Neither a pairing code nor a roster entry encodes what the sender meant to
+/// move, so somebody has to say — and saying it twice would be two answers to
+/// one question. On macOS that answer lives in `TransferPresence`, alongside the
+/// arbitration of which destination *renders* the running session.
+///
+/// iOS keeps the two apart, and R3-F is where that stopped being incidental: it
+/// gained a second direct surface, so it needs the arbitration too, and it takes
+/// it from the same `TransferPresence` — through the `claim(_:)` overload that
+/// answers ownership only. The mode stays here, because this is where the R3-E
+/// lock lives, and a second copy of the answer over there would be free to
+/// disagree with it.
 ///
 /// **The lock is derived, never cached.** `isLocked` takes the two model states
 /// and is asked again on every read, because a stored flag would be a second
@@ -50,5 +54,22 @@ public final class DirectModeSelection: ObservableObject {
     public func select(_ mode: TransferMode, file: RealtimeState, text: RealtimeTextState) {
         guard !Self.isLocked(file: file, text: text) else { return }
         self.mode = mode
+    }
+
+    /// A session nobody chose a mode for.
+    ///
+    /// Unconditional, and that is not a hole in the lock — it is what the lock
+    /// is for. `select` protects the *user's* choice from moving under a session
+    /// they started. An unsolicited nearby offer is the opposite case: there is
+    /// no user choice to protect, the session's kind is a fact on the wire, and
+    /// the alternative is a file transfer arriving while the picker sits on Text
+    /// and rendering nothing at all — with the picker by then locked, because a
+    /// model is busy.
+    ///
+    /// Called synchronously as the offer is admitted, before the responder is
+    /// built. See `AppRouting.claimIncoming`, which is the only caller and keeps
+    /// this write beside the two that must happen with it.
+    public func adopt(forIncoming kind: NearbyReceiveKind) {
+        mode = (kind == .text) ? .text : .files
     }
 }

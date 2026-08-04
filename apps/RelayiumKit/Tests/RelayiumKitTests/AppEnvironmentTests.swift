@@ -212,6 +212,95 @@ final class AppEnvironmentTests: XCTestCase {
         guard case .failed = model.state else { return XCTFail("got \(model.state)") }
     }
 
+    // MARK: - R3-F: the nearby graph, wired the way both platforms use it
+
+    /// One room socket, and the receive model is subscribed to it.
+    ///
+    /// `makeNearbyReceiveModel` is the only place that relationship is
+    /// established, and it is three separate wirings that have to all be there:
+    /// the observer slot (re-subscribed on every socket, because a reconnect
+    /// mints a new one), the state mirror (so what the user is told cannot drift
+    /// from the room), and the immediate seed (so a model built after residency
+    /// started does not report `off` over a joined room). Any one of them
+    /// missing looks like working code.
+    @MainActor
+    func testTheNearbyReceiveModelIsSubscribedToTheOneRoomAndFollowsItsState() async {
+        let opened = SocketLog()
+        let discovery = LanDiscoveryModel(connect: {
+            let channel = opened.open()
+            let client = SignalingClient(channel: channel, name: "iPhone")
+            channel.fireOpen()
+            return client
+        })
+        let defaults = VerificationPreference(
+            defaults: UserDefaults(suiteName: "r3f-\(UUID().uuidString)")!)
+        let room = InboundRoom()
+        let file = AppEnvironment.makeRealtimeModel(verification: defaults,
+                                                    nearby: discovery, inboundRoom: room)
+        let text = AppEnvironment.makeRealtimeTextModel(verification: defaults,
+                                                        nearby: discovery, inboundRoom: room)
+        let receive = AppEnvironment.makeNearbyReceiveModel(
+            fileModel: file, textModel: text, discovery: discovery, inboundRoom: room)
+
+        XCTAssertTrue(discovery.observer === receive,
+                      "nothing re-subscribes the listener when the socket is replaced")
+        XCTAssertEqual(receive.state, .off)
+
+        discovery.startResident()
+        for _ in 0..<8 { await Task.yield() }
+        XCTAssertEqual(receive.state, .connecting,
+                       "a room with no welcome yet is not reachable and must not say ready")
+
+        opened.channels[0].fireText(#"{"type":"welcome","name":"self-1","ip":"1.2.3.4"}"#)
+        for _ in 0..<8 { await Task.yield() }
+        XCTAssertEqual(receive.state, .ready)
+
+        discovery.startResident()
+        for _ in 0..<8 { await Task.yield() }
+        XCTAssertEqual(opened.channels.count, 1,
+                       "a second residency call put this device in the room twice")
+
+        discovery.pause()
+        for _ in 0..<8 { await Task.yield() }
+        XCTAssertEqual(receive.state, .paused)
+    }
+
+    /// The socket an inbound attempt builds on is the one the offer arrived on,
+    /// and it is nil at every other moment.
+    ///
+    /// A peer id only means something inside the room that issued it, so a
+    /// builder that read "the current room" would, in the one case that matters
+    /// — a drop mid-setup — reach a room where that id belongs to nobody, or to
+    /// somebody else.
+    @MainActor
+    func testTheInboundRoomIsEmptyOutsideAnAttemptAndIsClearedWhenTheSocketGoes() async {
+        let opened = SocketLog()
+        let discovery = LanDiscoveryModel(connect: {
+            let channel = opened.open()
+            let client = SignalingClient(channel: channel, name: "iPhone")
+            channel.fireOpen()
+            return client
+        })
+        let defaults = VerificationPreference(
+            defaults: UserDefaults(suiteName: "r3f-\(UUID().uuidString)")!)
+        let room = InboundRoom()
+        let file = AppEnvironment.makeRealtimeModel(verification: defaults,
+                                                    nearby: discovery, inboundRoom: room)
+        let text = AppEnvironment.makeRealtimeTextModel(verification: defaults,
+                                                        nearby: discovery, inboundRoom: room)
+        let receive = AppEnvironment.makeNearbyReceiveModel(
+            fileModel: file, textModel: text, discovery: discovery, inboundRoom: room)
+
+        discovery.startResident()
+        for _ in 0..<8 { await Task.yield() }
+        XCTAssertNil(room.signaling, "a builder could reach a room with no offer in flight")
+
+        discovery.stop()
+        for _ in 0..<8 { await Task.yield() }
+        XCTAssertNil(room.signaling)
+        XCTAssertEqual(receive.state, .off)
+    }
+
     // "In the fragment" and "not in the query" are different claims, and only
     // the second one keeps the token out of the server's access log.
     func testReactivateURLPutsNothingInTheQuery() {

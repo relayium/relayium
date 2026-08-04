@@ -40,6 +40,50 @@ public enum AppRouting {
         case .text: return .nearby
         }
     }
+
+    /// Everything an unsolicited session must settle **synchronously**, in one
+    /// call, before its responder is built.
+    ///
+    /// `NearbyReceiveModel` admits an offer on the socket's own delivery queue
+    /// and then builds the responder across an `await`. Three separate writes in
+    /// a closure at the call site would be three chances for a later edit to
+    /// reorder one of them past that await — and any of them landing late is a
+    /// live session on a surface nobody is looking at, with the picker that
+    /// would fix it already locked because a model is busy.
+    ///
+    /// The three answers are one decision, so they are one function:
+    ///
+    ///  - **who draws it** — refused if any surface already owns a session,
+    ///    including Nearby itself. The latter closes the small window after an
+    ///    outbound tap has claimed Nearby but before its async model has become
+    ///    busy. Nothing at all moves on refusal, because a half-applied claim
+    ///    would navigate away from a transfer to a tab that will not draw one;
+    ///  - **which half of the picker** — the session's own kind, not the user's
+    ///    choice, which is why `DirectModeSelection.adopt` is unconditional;
+    ///  - **which tab** — last, so the shell arrives at a surface that is
+    ///    already configured.
+    ///
+    /// iOS's shell is the caller. macOS reconciles the same facts from its
+    /// nearby destination's `task(id:)`, because its window can be closed and
+    /// rebuilt while a session runs — a case a one-shot call cannot cover.
+    @MainActor
+    @discardableResult
+    public static func claimIncoming(_ kind: NearbyReceiveKind,
+                                     presence: TransferPresence,
+                                     modes: DirectModeSelection,
+                                     navigation: AppNavigationModel) -> Bool {
+        let destination = destination(forIncoming: kind)
+        // This is deliberately stricter than `TransferPresence.claim`, whose
+        // idempotence is useful to a surface reconciling a session it already
+        // owns. An inbound offer is always a *new* session. If Nearby has only
+        // just claimed an outbound tap, the two realtime models may still be
+        // idle until that tap's Task begins; admitting the offer in that gap
+        // would let two attempts overwrite the same model.
+        guard presence.owner == nil, presence.claim(destination) else { return false }
+        modes.adopt(forIncoming: kind)
+        navigation.select(destination)
+        return true
+    }
 }
 
 /// Which destination is on screen, held at app scope rather than in the

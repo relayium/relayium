@@ -750,11 +750,13 @@ Everything is the shared stack — `parseTransferLink` → `CloudClient.fetchMet
 holding views only. Design and plan:
 `docs/superpowers/specs/2026-08-03-native-ios-r3a-anonymous-stored-receive-design.md`.
 
-Four tabs now. **Receive** is R3-A unchanged and still needs no account.
+Five tabs now. **Receive** is R3-A unchanged and still needs no account.
 **Send** is R3-C: files, folders, photos and videos chosen in the app, encrypted
 here and uploaded. **Direct** is R3-E: a six-digit pairing code carrying text or
 small files straight to another device across networks, described below.
-**Account** is R3-B's sign-in and usage summary plus R3-D's device and
+**Nearby** is R3-F: the same transfer with no code, to a device picked off a
+live roster, plus the passive half — one unsolicited file or text session at a
+time. **Account** is R3-B's sign-in and usage summary plus R3-D's device and
 stored-file management, described below.
 
 Headless build (the same command CI runs):
@@ -948,6 +950,97 @@ with the preference on, backgrounding mid-transfer on a real device, *Save to
 Files* for a received folder from this tab, and VoiceOver. The layer below the
 views and the wiring that connects them are covered independently by tests.
 
+### Nearby transfer (R3-F)
+
+The same realtime stack as Direct, without a code: a live roster of the other
+devices Relayium's rendezvous service sees arriving from the same public
+address, an explicit send to the one the user picks, and a passive half that
+accepts one unsolicited file or text session at a time. No account in either
+direction — the code-less room mints nothing and `/api/ice` answers it
+STUN-only.
+
+**It is not Bonjour, not mDNS and not a LAN scan, and R3-E's note in this file
+said otherwise.** That note deferred Nearby on the grounds that it needed the
+local-network entitlement. Source audit corrected it: `LanDiscoveryModel` joins
+the hub's code-less room over the same HTTPS/WebSocket origin as everything
+else, and the server groups that room by the public IP it observes. So it needs
+ordinary internet access on every platform — and in exchange it can list a
+stranger sitting behind the same carrier or VPN gateway. Every product decision
+on the screen follows from that one fact: `nearby.explain` states the grouping
+and the caveat, `nearby.namesDisclaimer` says the names are peer-supplied
+labels, and **nothing is ever preselected**, not even when the room holds
+exactly one other entry — which is precisely the case where the only candidate
+might be a stranger. `IOSSurfaceGuardTests` pins the single `discovery.select(`
+call site to the row's own tap handler.
+
+**Residency has an order, and it lives in `NearbyResidencyCoordinator` rather
+than in the scene body.** Joining the room is what advertises this device as
+reachable, so before the socket opens the receive folder is resolved
+(`ReceiveDestination.directory()`) and installed on the shared file model. A
+failure joins nothing, renders the Files-app recovery (`ReceiveDestinationCopy`
+`.appFolder`) and offers a retry — unreachable is a state the user can be told
+about, reachable-with-nowhere-to-write is one they find out about afterwards.
+The same object owns the lifecycle: `.active` joins (idempotent, and it never
+overrides a pause), `.inactive` does **nothing at all** — not even a filesystem
+touch, because that is the phase a document picker produces — and `.background`
+leaves the room *first* and only then runs R3-E's session cleanup, so there is
+no window in which this device is listed, dialable and already torn down.
+Returning to the foreground rejoins without clearing a retained result or
+transcript. A pause is the user's, is sticky across a background cycle, and is
+lifted by *Resume receiving* or by the explicit *Look again*.
+`NearbyResidencyCoordinatorTests` drives all of it; the scene body's one
+`onChange` plus a launch `task` both route through the coordinator, and the
+guard forbids any iOS source calling `startResident()`, `discovery.start()` or
+`discovery.stop()` directly.
+
+**Both direct tabs share one set of owners and exactly one draws the session.**
+Nearby and Direct are handed the same `RealtimeSessionModel`,
+`RealtimeTextSessionModel`, `DirectSendSelection` (and therefore one set of
+security scopes) and `DirectModeSelection` (one answer to files-or-text, with
+R3-E's lock unchanged). Rendered side by side they would show one transfer
+twice, each copy with its own Cancel — so `TransferPresence` arbitrates, the
+loser renders `presence.busy*` with a button to the tab that has it, and
+ownership is released only when **both** models are `.idle`, from the shell.
+Not when the bytes stop: a `.completed` receive still owns its result and its
+share sheet, and `.ended` / `.failed` / `.refused` / `.unsupported` still own a
+transcript that exists in no other copy.
+
+**An inbound offer claims its surface synchronously.**
+`NearbyReceiveModel.onSessionStarted` fires on the socket's own admission path,
+before the responder is built across an `await`, and the app's one handler calls
+`AppRouting.claimIncoming` — which takes ownership, adopts the session's *own*
+kind into the mode picker (the picker is locked once a model is busy, so this
+cannot wait), and selects the Nearby tab. Refused claims move nothing at all.
+That is also why the tab selection moved from a `@State` in `RootView` to the
+app-scoped `AppNavigationModel`: a session arriving while the user is elsewhere
+has no view to route from.
+
+**Copy.** The nearby strings are now rendered on two platforms, so
+`nearby.explain`, `nearby.pausedBody`, `nearby.acceptanceNote` and
+`error.nearby.noAnswer` were corrected in place in all nine catalogs from *this
+Mac* to each language's device noun — and `LocalizedCopyTests` asserts both
+halves, that no platform is named and that each sentence still names a device.
+The save location was split out of `nearby.listeningBody` into two keys, because
+macOS writes to Downloads and iOS writes into its own container: the shared
+paragraph now names no folder, macOS renders `nearby.savedToDownloads`, and iOS
+renders `nearby.savedToAppFolder`, which points at the Files app. One shared
+sentence would have had to be false on one of the two platforms.
+
+**No new capability, and that is now the accurate claim rather than an
+inherited one.** No `NSLocalNetworkUsageDescription`, no `NSBonjourServices`, no
+multicast or wifi-info entitlement, no background mode, no push, no
+notification, no Associated Domains, no App Group, no shared keychain group, no
+StoreKit. `Relayium.entitlements` still claims only
+`com.apple.developer.applesignin`. A foreground inbound session navigates in app
+instead of notifying, which is the honest shape for an app that is either in the
+foreground or has no session at all.
+
+**Not verified by any of this:** a real second device, actual inbound or
+outbound bytes, a roster with more than zero entries on a real network, real-
+device backgrounding mid-transfer, and *Save to Files* for a folder received
+through this tab. Those are hand tests and are listed under "Not verified yet"
+below.
+
 ### Account management (R3-D)
 
 The signed-in account tab lists the devices holding a token for the account and
@@ -1056,15 +1149,22 @@ network, background modes, push, IAP. Each entitlement lands with the functional
 slice that needs it, and `IOSSurfaceGuardTests` fails on any other key appearing
 in the file.
 
-R3-E is the slice where that rule cost something, which is worth recording.
-Direct is realtime transfer, and realtime transfer on macOS arrives with a nearby
-half — a resident room socket, a device roster, an inbound listener — so the
-shared code's shape invites it. It would need the local-network entitlement, and
-the pairing-code feature does not. So iOS took the pairing-code path alone
-through new code-only factories, and the app names no `LanDiscoveryModel`, no
-`InboundRoom` and no `NearbyReceiveModel`. Likewise `/cross-network#c=<code>`
-deep links: the Direct tab could consume one now, and Associated Domains is still
-not this slice's entitlement to add.
+R3-E recorded that its deferral of the nearby half "cost something", on the
+grounds that Nearby would need the local-network entitlement. **That reason was
+wrong, and R3-F is the correction.** `LanDiscoveryModel` is not Bonjour, does
+not scan, and reaches the same origin as the rest of the app; the room is
+grouped by the public IP the server observes. Nearby therefore needed no
+capability at all, and R3-F added none — it added a roster the user reads, and
+copy explaining what that roster is and is not. What R3-E's deferral actually
+cost was a slice's delay, not an entitlement. `IOSSurfaceGuardTests`'
+`testTheNearbyTabAddsNoNetworkCapability` now states the accurate claim by
+name: no `NSLocalNetworkUsageDescription`, no `NSBonjourServices`, no multicast
+or wifi-info entitlement, and no `NWBrowser`/`NWListener`/`NetService`/
+`MultipeerConnectivity` anywhere in the target.
+
+`/cross-network#c=<code>` deep links remain deferred for the reason that is
+still true: the Direct tab could consume one now, and Associated Domains is not
+this slice's entitlement to add.
 
 ### Not verified yet
 
@@ -1082,6 +1182,29 @@ in the app" above — the layer below the views is covered by `swift test`, the
 live path is not); and **native Sign in with Apple on a signed device against a
 real Apple ID**, which additionally needs the App ID capability and the server
 audience listed under "Sign in with Apple" above.
+
+**R3-F's outstanding items are the whole point of the feature, and none of them
+is inferable from a simulator.** Nothing below has been observed on real
+hardware or between two devices:
+
+- a roster with any entry in it at all — every check so far ran against an empty
+  room, so device rows, duplicate-name disambiguation and the selection state
+  have not been seen rendered from real peer data;
+- a real outbound send or message session to a second device, and the same in
+  reverse: an unsolicited offer actually arriving, claiming the Nearby tab and
+  delivering bytes;
+- the received file appearing under *On My iPhone ▸ Relayium* in Files after a
+  nearby receive, and *Save to Files* accepting a received **directory**;
+- backgrounding mid-transfer on a real device, and the room being rejoined on
+  return — the coordinator's decisions are covered by `swift test`, the actual
+  socket teardown under iOS suspension is not;
+- the destination-failure path, which needs a non-directory occupying
+  `Documents/Received` inside a real container;
+- pausing and resuming against a live room, and the reconnect banner appearing
+  from a genuinely dropped socket rather than a simulated one;
+- VoiceOver on the device rows and on two devices sharing a name;
+- the largest Dynamic Type sizes and Arabic right-to-left on the Nearby tab
+  specifically, including a long peer-supplied device name.
 
 R3-D adds its own outstanding items, and they are the ones a package test
 structurally cannot reach, because SwiftUI owns the view: a device list loaded
