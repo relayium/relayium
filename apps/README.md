@@ -1178,10 +1178,11 @@ without `#c=<six digits>`). R3-F deferred this on the grounds that Associated
 Domains was not its entitlement to add; it is this slice's, because the routing
 that justifies it now exists.
 
-`onOpenURL` is wired once, at the scene root, because a cold launch straight
-from a link runs before any tab is built. `RootView` holds the one subscription
-and hands the parsed link to `AppDeepLinkCoordinator`, which lives in the shared
-package and owns the whole policy:
+`onOpenURL` is wired once per app, at the scene root, because a cold launch
+straight from a link runs before any tab or window content is built. Each
+platform's shell holds the one subscription — `RootView` on iOS, `AppShellView`
+on macOS — and hands the parsed link to `AppDeepLinkCoordinator`, which lives in
+the shared package and owns the whole policy:
 
 - **A download link** selects *Receive*, fills the link field and resolves —
   metadata and the encrypted manifest only. It never saves a file. The user sees
@@ -1224,10 +1225,18 @@ stubbed mint — rather than against a fake that reports busy on command, becaus
 the interesting failures are all "a link arrived at the wrong moment" and only
 the real states prove the question is being asked correctly.
 
-**macOS still applies links inline** in `AppShellView`: the same
-navigate-then-write, without the mid-transfer refusal. Moving it onto this
-coordinator is a bounded follow-up; nothing in the object is iOS-specific, so it
-is a wiring change rather than a rewrite.
+**macOS now goes through the same coordinator.** It used to apply links inline
+in `AppShellView` — the same navigate-then-write, but with no mid-transfer
+refusal at all, so a `/d/` link tapped during a download re-`resolve()`d it and a
+pairing link tapped during a live session swapped the code out from under it.
+`RelayiumApp` builds one `AppDeepLinkCoordinator` from the app-scoped
+navigation, download and two realtime models and injects it into the unique
+window; the shell hands the link over and consumes it one turn later, and holds
+none of the transfer models any more. That deferred consume is also now
+`consume(link)` rather than a bare `consume()`, which on this platform matters
+for its own reason: the subscription is rebuilt every time the window is closed
+and reopened from the menu bar. The policy above is the whole policy on both
+platforms.
 
 ### Not verified yet
 

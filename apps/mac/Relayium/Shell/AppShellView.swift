@@ -14,13 +14,17 @@ import RelayiumAppKit
 struct AppShellView: View {
     @EnvironmentObject private var navigation: AppNavigationModel
     // Routing only. The shell holds these because it is the one place that sees
-    // an event arriving for a destination that is not on screen; it populates a
-    // field and selects, and never renders any of them.
+    // an event arriving for a destination that is not on screen; it selects, and
+    // never renders any of them.
+    //
+    // The link path deliberately does NOT hold the transfer models any more.
+    // Deciding what a link may write — and what it must not overwrite while a
+    // transfer is running — belongs to `AppDeepLinkCoordinator`, and a view that
+    // still had the models to hand is a view that could re-derive that decision
+    // where no test reaches it.
     @EnvironmentObject private var deepLinks: AppDeepLinkRouter
+    @EnvironmentObject private var deepLinkRouting: AppDeepLinkCoordinator
     @EnvironmentObject private var presence: TransferPresence
-    @EnvironmentObject private var downloadModel: CloudDownloadModel
-    @EnvironmentObject private var realtimeModel: RealtimeSessionModel
-    @EnvironmentObject private var realtimeTextModel: RealtimeTextSessionModel
     @EnvironmentObject private var nearbyReceive: NearbyReceiveModel
     /// The ONE account-adjacent fact this file learns, and it is deliberately
     /// not who is signed in: whether a sign-out's network revocation is running
@@ -71,42 +75,30 @@ struct AppShellView: View {
         }
         // A link the OS handed this app. `AppDeepLinkRouter` has already
         // refused anything that is not a relayium.com link this app can serve,
-        // so what arrives here is one of exactly two shapes.
+        // so what arrives here is one of exactly two shapes — and everything
+        // that happens to it is the shared coordinator's. In particular this
+        // file does not decide where the link goes, what it writes, or whether
+        // it may overwrite a transfer that is running; that last one is the
+        // whole reason the coordinator exists, and the inline version this
+        // replaced never asked it at all.
         .onReceive(deepLinks.$pending.compactMap { $0 }) { link in
-            // The ONE selection write, derived from the link rather than
-            // decided here — the mapping is a `switch` with no `default` in
-            // `AppRouting`, so a third link shape is a compile error there
-            // instead of a link that opens whatever was already on screen.
-            navigation.select(AppRouting.destination(for: link))
-            switch link {
-            case let .download(url):
-                downloadModel.linkText = url.absoluteString
-                downloadModel.resolve()
-            case let .realtime(code):
-                // A pairing code does not reveal whether the sender chose files
-                // or text, so both models are populated and the mode picker in
-                // the destination is what decides. Populating one would make a
-                // deep link work for half of the codes it can carry.
-                if let code {
-                    realtimeModel.updateJoinCode(code)
-                    realtimeTextModel.updateJoinCode(code)
-                }
-            }
-            // Consumed, so the same link cannot be applied twice — a second
-            // application would re-`resolve()` a download the user may already
-            // have saved, throwing away the result surface it is looking at.
+            deepLinkRouting.deliver(link)
+            // Consumed one turn later, and BOTH halves of that are load-bearing.
             //
-            // Deferred by one turn, and that is load-bearing rather than
-            // stylistic: `@Published` emits in `willSet`, so this handler runs
-            // BEFORE the router has stored the link. A `consume()` called
-            // straight from here is overwritten by the very assignment that
-            // delivered it, leaving the router holding the link — and
-            // `Published` replays its current value to every NEW subscriber.
-            // This subscription is rebuilt each time the unique window is
-            // closed and reopened from the menu bar, so an unconsumed link
-            // would resolve itself again on reopen. `AppDeepLinkTests` pins
-            // that ordering on the router.
-            Task { @MainActor in deepLinks.consume() }
+            // Deferred, because `@Published` emits in `willSet`: this handler
+            // runs BEFORE the router has stored the link, so a `consume()` from
+            // here is overwritten by the very assignment that delivered it —
+            // leaving the router holding a link that `Published` then replays to
+            // every NEW subscriber. On this platform that replay is not
+            // hypothetical: this subscription is rebuilt each time the unique
+            // window is closed and reopened from the menu bar, so an unconsumed
+            // download link would resolve itself again on reopen.
+            // `AppDeepLinkTests` pins that ordering on the router.
+            //
+            // And EXPECTED, because that deferral is real time: a second link
+            // can land inside it, and a bare `consume()` would throw away a link
+            // this subscription has never seen and `Published` will not re-emit.
+            Task { @MainActor in deepLinks.consume(link) }
         }
         // A session nobody asked for. `task(id:)` rather than `onChange`
         // because the window may have been closed when it started and rebuilt

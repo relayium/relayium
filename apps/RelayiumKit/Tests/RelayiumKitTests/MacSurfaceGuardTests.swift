@@ -577,6 +577,128 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the Developer ID macOS build cannot carry this entitlement")
     }
 
+    // MARK: - Universal Link hand-off
+
+    /// The hand-off is wired once, at the scene root, and consumed once, in the
+    /// shell — and the view layer decides nothing about the link.
+    ///
+    /// Modelled on `IOSSurfaceGuardTests`' equivalent, because this platform now
+    /// runs the same policy object. Each clause is a way this could look finished
+    /// and not be. A second `onOpenURL` would be a second entry point with its own
+    /// idea of what a link may overwrite. A second coordinator would be a second
+    /// answer to the same question, built from models nothing else observes. And
+    /// a handler that read `isBusy` here would be the shared policy re-derived in
+    /// SwiftUI, where no test can reach it — `AppDeepLinkCoordinatorTests` owns
+    /// that decision against real models.
+    func testTheUniversalLinkHandOffIsWiredOnceAndDecidesNothingInTheViewLayer() throws {
+        let all = try sources(under: macRoot, atLeast: 20)
+        let app = try source(named: "RelayiumApp.swift")
+        let shell = try source(named: "Shell/AppShellView.swift")
+
+        XCTAssertEqual(all.map { occurrences(of: ".onOpenURL", in: $0.text) }.reduce(0, +), 1,
+                       "a second onOpenURL would be a second entry point for a link")
+        XCTAssertTrue(app.contains(".onOpenURL { deepLinks.open($0) }"),
+                      "the OS hand-off belongs at the scene root, and hands over unparsed")
+
+        // Both objects are the App's, so a retained link outlives not just the
+        // window's view tree but the window itself — which on this platform is an
+        // ordinary running state, because the MenuBarExtra keeps the process up.
+        for scoped in ["@StateObject private var deepLinks = AppDeepLinkRouter()",
+                       "@StateObject private var deepLinkRouting: AppDeepLinkCoordinator"] {
+            XCTAssertTrue(app.contains(scoped), "RelayiumApp lost \(scoped)")
+        }
+        XCTAssertEqual(occurrences(of: "AppDeepLinkCoordinator(", in: app), 1,
+                       "a second coordinator would be a second answer to what a link may touch")
+        // Built from the app-scoped models, not from its own: the four locals
+        // named here are the same ones the four `@StateObject`s below wrap, so a
+        // coordinator watching a private copy of `CloudDownloadModel` — which
+        // would never see the download the user is actually running — is a
+        // failure rather than something a reviewer has to notice.
+        for wiring in ["navigation: routing, download: downloads,",
+                       "realtime: files, realtimeText: text)",
+                       "_navigation = StateObject(wrappedValue: routing)",
+                       "_downloadModel = StateObject(wrappedValue: downloads)",
+                       "_realtimeModel = StateObject(wrappedValue: files)",
+                       "_realtimeTextModel = StateObject(wrappedValue: text)"] {
+            XCTAssertTrue(app.contains(wiring),
+                          "the coordinator must share the app's models: \(wiring)")
+        }
+        // One injection, and it is the unique window's. The MenuBarExtra root
+        // deliberately does not get it: nothing there subscribes, and a second
+        // injection point is how a second subscriber starts.
+        XCTAssertEqual(occurrences(of: ".environmentObject(deepLinkRouting)", in: app), 1,
+                       "the coordinator is injected into the one window that renders links")
+
+        // One subscription, in the shell, and it does exactly two things.
+        XCTAssertEqual(all.map { occurrences(of: "deepLinks.$pending", in: $0.text) }.reduce(0, +), 1,
+                       "a second subscription would apply every link twice")
+        XCTAssertTrue(shell.contains(".onReceive(deepLinks.$pending.compactMap { $0 }) { link in"))
+        XCTAssertEqual(all.map { occurrences(of: "deepLinkRouting.deliver(", in: $0.text) }
+                          .reduce(0, +), 1,
+                       "a second deliver would navigate twice for one link")
+        XCTAssertTrue(shell.contains("deepLinkRouting.deliver(link)"),
+                      "the shell must hand the link to the shared coordinator")
+        // Deferred by one turn (the `@Published` willSet ordering) AND by
+        // expected link, so a second link landing inside that gap is not thrown
+        // away by the first one's consume. The window being closable makes the
+        // deferral's other half concrete here: `Published` replays its current
+        // value to the subscription this shell rebuilds on every reopen.
+        XCTAssertEqual(all.map { occurrences(of: "deepLinks.consume", in: $0.text) }.reduce(0, +), 1,
+                       "the link is consumed in exactly one place")
+        XCTAssertTrue(shell.contains("Task { @MainActor in deepLinks.consume(link) }"),
+                      "the consume must be deferred and must name the link it acted on")
+        XCTAssertFalse(shell.contains("deepLinks.consume()"),
+                       "an unqualified consume can discard a newer link")
+    }
+
+    /// A link fills a field and selects a destination. It never joins, never
+    /// downloads, and — the defect this replaced — never overwrites live work.
+    ///
+    /// The shell is where that went wrong, because it used to hold every model a
+    /// link touches and applied each one unconditionally: a `/d/` link tapped
+    /// during a download re-`resolve()`d it, and a pairing link tapped during a
+    /// live session swapped the code out from under it. Neither is visible in a
+    /// screenshot. Banning the models themselves, not just the calls, is what
+    /// keeps the policy from growing back — a view with `CloudDownloadModel` to
+    /// hand has a way to re-derive the decision `AppDeepLinkCoordinator` owns.
+    func testTheMacLinkPathAppliesNothingItself() throws {
+        let shell = try source(named: "Shell/AppShellView.swift")
+        for reaching in ["AppRouting.destination(for: link)", "linkText", "resolve()",
+                         "updateJoinCode", "isBusy", ".download(into:",
+                         "CloudDownloadModel", "RealtimeSessionModel",
+                         "RealtimeTextSessionModel"] {
+            XCTAssertFalse(shell.contains(reaching),
+                           "the shell applies a link itself: \(reaching)")
+        }
+        // The scene root hands the URL over unparsed and applies nothing either.
+        let app = try source(named: "RelayiumApp.swift")
+        for reaching in ["AppRouting.destination(for: link)", "linkText", "updateJoinCode",
+                         ".download(into:"] {
+            XCTAssertFalse(app.contains(reaching),
+                           "RelayiumApp applies a link itself: \(reaching)")
+        }
+    }
+
+    /// The comments that said macOS still applies links inline. Each described
+    /// this tree accurately until the coordinator was adopted and then became a
+    /// claim that the thing it points at does not exist — the kind of stale
+    /// comment a reader trusts, and here one that would send them looking for a
+    /// follow-up that is done.
+    func testNothingStillCallsTheMacLinkPathInline() throws {
+        XCTAssertFalse(try rawSource(named: "Shell/AppShellView.swift")
+            .contains("The ONE selection write"),
+                       "the shell no longer makes the selection write; the comment must go")
+        let coordinator = try String(
+            contentsOf: appsRoot.appendingPathComponent(
+                "RelayiumKit/Sources/RelayiumAppKit/AppDeepLinkCoordinator.swift"),
+            encoding: .utf8)
+        XCTAssertFalse(coordinator.contains("macOS still applies a link inline"),
+                       "macOS drives this object now; the deferral note must go")
+        XCTAssertFalse(try claimSurfaceText("apps/README.md")
+            .contains("**macOS still applies links inline**"),
+                       "apps/README.md still records the adoption as a follow-up")
+    }
+
     // MARK: - the sidebar's live-session marker
 
     /// The marker has to answer "is the running session presented *here*", and

@@ -4,13 +4,13 @@ import Foundation
 /// Everything that happens after the OS hands this app a Universal Link, in one
 /// object outside the view layer.
 ///
-/// It lives here, in the shared layer, rather than in the iOS target, for the
+/// It lives here, in the shared layer, rather than in one app target, for the
 /// reason `AppRouting` does: the decision is not SwiftUI's and is not one
-/// platform's. iOS drives it today. macOS still applies a link inline in
-/// `AppShellView` — the same navigate-then-write, without the refusal below —
-/// and moving it onto this object is the bounded follow-up recorded in
-/// `apps/README.md`. Nothing here is iOS-specific, so that adoption is a wiring
-/// change rather than a rewrite.
+/// platform's. Both shells drive it — iOS through `RootView`, macOS through
+/// `AppShellView` — and each of them does exactly two things with a link:
+/// `deliver` it, then consume it one turn later. macOS used to apply links
+/// inline instead, with no refusal at all; adopting this object is what closed
+/// that.
 ///
 /// `AppDeepLinkRouter` answers "is this a link we may act on at all" and holds
 /// the parsed result. This answers the two questions that come next, and they
@@ -199,9 +199,9 @@ public final class AppDeepLinkCoordinator: ObservableObject {
                 // new value, but `canApply` consults all three models and two of
                 // them were not the ones that changed. The check therefore
                 // happens on the next main-actor turn, when the new state is
-                // actually stored. Same ordering `AppShellView`'s deferred
-                // `consume()` exists for, and `AppDeepLinkTests` pins it on the
-                // router.
+                // actually stored. Same ordering both shells' deferred
+                // `consume(_:)` exists for, and `AppDeepLinkTests` pins it on
+                // the router.
                 //
                 // `applyIfSafe` re-reads `waiting`, so a hop that lands after a
                 // newer link arrived, or after the link was applied, is a no-op

@@ -75,7 +75,18 @@ struct RelayiumApp: App {
     // value cannot be read from `init`, so the object has to exist as a local
     // first. Same shape the iOS app uses for the same reason.
     @StateObject private var session: AccountSession
+    /// The link the OS handed this app, parsed and held until the shell has acted
+    /// on it. App-scoped because `onOpenURL` can fire before the shell's
+    /// subscription exists — a cold launch straight from a link, and on this
+    /// platform also a link arriving while the unique window is closed — and
+    /// `@Published` replays its current value to a late subscriber.
     @StateObject private var deepLinks = AppDeepLinkRouter()
+    /// What that link then does. App-scoped for the sharper reason: a link that
+    /// arrives mid-transfer is RETAINED and applied when the transfer stops, so
+    /// the object holding it has to outlive both the window's view tree and, on
+    /// this platform, the window itself — and it watches the models directly
+    /// rather than through a view.
+    @StateObject private var deepLinkRouting: AppDeepLinkCoordinator
     // App-scoped rather than view-scoped: a transfer must survive the window's
     // view tree being rebuilt, and the quit guard has to be able to ask whether
     // one is running.
@@ -110,8 +121,9 @@ struct RelayiumApp: App {
     // selection survives the window's view tree being torn down and rebuilt: the
     // window is closable while the process keeps running, and reopening it from
     // the menu bar has to land where the user — or a deep link, or an incoming
-    // session — last was.
-    @StateObject private var navigation = AppNavigationModel()
+    // session — last was. Built in `init` rather than defaulted inline because
+    // the deep-link coordinator is constructed from this exact instance.
+    @StateObject private var navigation: AppNavigationModel
     // Which destination presents the live session. App-scoped for the same
     // reason the models are: Nearby and Pairing code drive the SAME realtime
     // models, and the answer to "which of them is showing it" has to survive the
@@ -189,6 +201,15 @@ struct RelayiumApp: App {
             fileModel: files,
             textModel: text,
             receiveModel: receive))
+        let routing = AppNavigationModel()
+        _navigation = StateObject(wrappedValue: routing)
+        // Last, because it is built from four objects above and owns none of
+        // them. It navigates exactly once per link, and it is the ONE place that
+        // decides whether a link may write into a model that is mid-transfer —
+        // which is why no view on this platform repeats that decision.
+        _deepLinkRouting = StateObject(wrappedValue: AppDeepLinkCoordinator(
+            navigation: routing, download: downloads,
+            realtime: files, realtimeText: text))
     }
 
     var body: some Scene {
@@ -211,6 +232,7 @@ struct RelayiumApp: App {
                 .environmentObject(presence)
                 .environmentObject(session)
                 .environmentObject(deepLinks)
+                .environmentObject(deepLinkRouting)
                 .environmentObject(uploadModel)
                 .environmentObject(downloadModel)
                 .environmentObject(accountManagement)
