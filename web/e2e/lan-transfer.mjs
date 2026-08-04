@@ -553,6 +553,27 @@ const MSG_INJECTION = '<script>alert(1)</script><img src=x onerror=alert(2)>';
  *  change cannot break it. */
 const MSG_OPEN_BTN = ".peer-actions button";
 
+/**
+ * Latch any accept/reject gate or SAS that ever renders, from the instant a
+ * request could arrive. Polling after the composer appears would miss a card
+ * that flashed and was replaced, so the probe lives in the page.
+ *
+ * The accept button is the one primary action inside `.act`; an open session has
+ * its own `.act` row (Clear / Start over), all ghost buttons, so matching
+ * `.act button` alone would count normal composer chrome as a gate.
+ */
+const WATCH_FOR_GATE = `(() => {
+  window.__gateSeen = 0;
+  window.__sasSeen = 0;
+  const look = () => {
+    if (document.querySelector('.msgpanel .act button.btn-primary')) window.__gateSeen++;
+    if (document.querySelector('.msgpanel .sas')) window.__sasSeen++;
+  };
+  new MutationObserver(look).observe(document.body, { childList: true, subtree: true });
+  look();
+  return true;
+})()`;
+
 const utf8Hex = (s) => [...Buffer.from(s, "utf8")].map((b) => b.toString(16).padStart(2, "0")).join("");
 
 /**
@@ -812,25 +833,8 @@ async function messageDefaultScenario(browser) {
   await b.waitFor(peersSeen, "tab B to see tab A on the radar (default verification)", 30_000);
   await a.waitFor(`!!document.querySelector('${MSG_OPEN_BTN}')`, "the message control (default verification)", 30_000);
 
-  // Watch for the accept/reject card from the instant the request can arrive.
-  // Polling after the composer appears would miss a card that flashed and was
-  // replaced, so the probe runs in the page and latches.
-  // The accept button is the one primary action inside `.act`; the open session
-  // has its own `.act` row (Clear / Start over), all ghost buttons, so matching
-  // `.act button` alone would count the normal composer chrome as a gate.
-  const watchForGate = `(() => {
-    window.__gateSeen = 0;
-    window.__sasSeen = 0;
-    const look = () => {
-      if (document.querySelector('.msgpanel .act button.btn-primary')) window.__gateSeen++;
-      if (document.querySelector('.msgpanel .sas')) window.__sasSeen++;
-    };
-    new MutationObserver(look).observe(document.body, { childList: true, subtree: true });
-    look();
-    return true;
-  })()`;
-  await b.evaluate(watchForGate);
-  await a.evaluate(watchForGate);
+  await b.evaluate(WATCH_FOR_GATE);
+  await a.evaluate(WATCH_FOR_GATE);
 
   await a.evaluate(`(() => { document.querySelector('${MSG_OPEN_BTN}').click(); return true; })()`);
 
@@ -855,6 +859,143 @@ async function messageDefaultScenario(browser) {
 
   const errs = [...a.errors, ...b.errors].filter((e) => !/401|Failed to load resource/.test(e));
   if (errs.length) throw new Error(`console errors during the default message session:\n    ${errs.join("\n    ")}`);
+
+  await browser.send("Target.closeTarget", { targetId: a.targetId });
+  await browser.send("Target.closeTarget", { targetId: b.targetId });
+}
+
+/** Sent by the auto-accepting side while the initiator is still mid-handoff.
+ *  Non-ASCII on purpose: this frame is compared byte for byte after a replay,
+ *  which is the step most likely to mangle it. */
+const RACE_BODY = "发于 A 还在采样路径的那一刻 🛰";
+
+/**
+ * The reported LAN failure, forced to happen every run.
+ *
+ * On two phones, A opens a message session to B and sits on "waiting"; B — with
+ * verification off, the shipped default — is already in its composer. B types,
+ * and A reports the session as FAILED.
+ *
+ * The window is real and unavoidable: the DataChannel is open long before the
+ * initiator's session owns it, because `connectText` still has a key handshake
+ * to finish and text-link still has `await conn.path()` to run. B's automatic
+ * ACCEPT lands in that window, and a DataChannel does not replay what arrived
+ * with no handler attached. A therefore never left "waiting", and the protected
+ * frame that followed hit a session that was not open yet — a hard failure.
+ *
+ * Rather than race a timer, this holds A's `getStats()` (the path sample is its
+ * only caller here) until the test releases it, so the whole of B's auto-accept
+ * AND its first message land inside the gap on every run. It then proves three
+ * things in order: A was genuinely held (never a vacuous pass), both composers
+ * open, and the message A was sent during the hold is rendered byte for byte.
+ *
+ * Mobile width because that is where it was reported, and because a phone is
+ * where the gap is widest: slower key derivation, slower stats.
+ */
+async function messageDefaultRaceScenario(browser) {
+  const HOLD_PATH = `
+    window.__pathHeld = false;
+    window.__releasePath = false;
+    (() => {
+      const real = RTCPeerConnection.prototype.getStats;
+      RTCPeerConnection.prototype.getStats = function (...args) {
+        window.__pathHeld = true;
+        return new Promise((resolve) => {
+          const tick = () => (window.__releasePath ? resolve(real.apply(this, args)) : setTimeout(tick, 25));
+          tick();
+        });
+      };
+    })();
+  `;
+
+  const a = await newTab(browser, BASE + "/", VERIFY_DEFAULT + HOLD_PATH);
+  const b = await newTab(browser, BASE + "/", VERIFY_DEFAULT);
+  await setWideViewport(a, 390, 844);
+  await setWideViewport(b, 390, 844);
+
+  const peersSeen = "document.querySelectorAll('.pname').length > 0";
+  await a.waitFor(peersSeen, "tab A to see tab B on the radar (handoff race)", 30_000);
+  await b.waitFor(peersSeen, "tab B to see tab A on the radar (handoff race)", 30_000);
+  await a.waitFor(`!!document.querySelector('${MSG_OPEN_BTN}')`, "the message control (handoff race)", 30_000);
+  await a.evaluate(WATCH_FOR_GATE);
+  await b.evaluate(WATCH_FOR_GATE);
+
+  await a.evaluate(`(() => { document.querySelector('${MSG_OPEN_BTN}').click(); return true; })()`);
+
+  // A is inside the window. Without this the rest could pass by simply being
+  // slower than the app, proving nothing.
+  await a.waitFor("window.__pathHeld === true", "tab A's path sample to be held open", 40_000);
+
+  // B needs no human: it accepts automatically and its ACCEPT byte goes out
+  // while A still has nothing attached to hear it.
+  await b.waitFor("!!document.querySelector('.msgpanel textarea')", "tab B's composer (auto-accepted)", 40_000);
+  if (await a.evaluate("!!document.querySelector('.msgpanel textarea')")) {
+    throw new Error("tab A owned its channel before the path sample returned — the window was never exercised");
+  }
+
+  // ...and B types straight away, so a protected frame follows the ACCEPT into
+  // the same window. It is the ORDER of this pair that decides the session.
+  // Typing and sending are two page roundtrips, not one, and that is required:
+  // Svelte applies the composer's state (which is what un-disables `send`) on a
+  // later tick, so a `disabled` read inside the same callback as the `input`
+  // dispatch still sees the empty-composer value and fails on a live browser.
+  // Same shape as messageScenario's send() — set, then wait for the enabled
+  // control, then click.
+  await b.evaluate(`(() => {
+    const ta = document.querySelector('.msgpanel textarea');
+    if (!ta) throw new Error('no composer in the auto-accepted session');
+    ta.value = ${JSON.stringify(RACE_BODY)};
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`);
+  await b.waitFor(
+    "(() => { const btn = document.querySelector('.msgpanel button.send'); return !!btn && !btn.disabled; })()",
+    "a usable send button in the auto-accepted composer",
+    20_000,
+  );
+  await b.evaluate(`(() => {
+    const btn = document.querySelector('.msgpanel button.send');
+    if (!btn || btn.disabled) throw new Error('no usable send button in the auto-accepted composer');
+    btn.click();
+    return true;
+  })()`);
+  await b.waitFor("document.querySelectorAll('.msg-body').length >= 1", "tab B to record the message it sent", 20_000);
+
+  // Only now may A finish. Everything it has to act on already happened.
+  await a.evaluate("(() => { window.__releasePath = true; return true; })()");
+
+  // A's composer can only appear if the ACCEPT that arrived during the hold
+  // survived it -- and the body can only render if the frame behind that ACCEPT
+  // was replayed after it, not before.
+  await a.waitFor("!!document.querySelector('.msgpanel textarea')", "tab A's composer (the held ACCEPT survived)", 40_000);
+  await a.waitFor("document.querySelectorAll('.msg-body').length >= 1", "tab A to render the message sent during the hold", 40_000);
+
+  const got = await a.evaluate(`(() => {
+    const bytes = new TextEncoder().encode(document.querySelector('.msg-body').textContent);
+    return {
+      hex: [...bytes].map((x) => x.toString(16).padStart(2, '0')).join(''),
+      composer: !!document.querySelector('.msgpanel textarea'),
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  })()`);
+  const wantHex = utf8Hex(RACE_BODY);
+  if (got.hex !== wantHex) {
+    throw new Error(`the replayed message is not byte-identical\n      got  ${got.hex}\n      want ${wantHex}`);
+  }
+  if (!got.composer) throw new Error("tab A rendered the message but lost its composer");
+  if (got.overflow !== 0) throw new Error(`the 390px message view overflowed by ${got.overflow}px`);
+  ok("an auto-accept and the message behind it, both sent into the handoff window, arrived in order");
+
+  // Still the default path: nothing here may have quietly turned verification on.
+  for (const [who, tab] of [["A", a], ["B", b]]) {
+    const seen = await tab.evaluate("({ gate: window.__gateSeen, sas: window.__sasSeen })");
+    if (seen.gate !== 0 || seen.sas !== 0) {
+      throw new Error(`tab ${who} rendered a gate/SAS with verification off: ${JSON.stringify(seen)}`);
+    }
+  }
+
+  const errs = [...a.errors, ...b.errors].filter((e) => !/401|Failed to load resource/.test(e));
+  if (errs.length) throw new Error(`console errors during the handoff race:\n    ${errs.join("\n    ")}`);
 
   await browser.send("Target.closeTarget", { targetId: a.targetId });
   await browser.send("Target.closeTarget", { targetId: b.targetId });
@@ -2403,6 +2544,11 @@ async function main() {
     // The default (verification off) path, right after the ON path above, so a
     // change that collapses the two is visible as one of them failing.
     await messageDefaultScenario(browser);
+    await sleep(1000);
+    // The same default path under the timing that actually broke it on two
+    // phones: the responder auto-accepts and speaks while the initiator is
+    // still taking ownership of its channel.
+    await messageDefaultRaceScenario(browser);
     await sleep(1000);
     // Same default (verification off) path, but the identity question: two pages
     // of ONE browser plus an independent device.

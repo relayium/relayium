@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { connect, connectLink, connectResume, connectResumeLink, connectText, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, LINK_CAPTURE_MAX_BYTES, LINK_CHANNEL_LABELS, authPayload as reExportedAuthPayload, type InboundSignal } from "./webrtc";
+import { connect, connectLink, connectResume, connectResumeLink, connectText, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, LINK_CAPTURE_MAX_BYTES, LINK_CHANNEL_LABELS, TEXT_CAPTURE_MAX_BYTES, authPayload as reExportedAuthPayload, type InboundSignal } from "./webrtc";
+import { TEXT_MAX_BYTES, TEXT_FRAME_OVERHEAD } from "./text-wire";
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, deriveSession, signResume, verifyResume, type SessionKeys } from "./crypto";
 import { sas } from "./crypto";
-import { authPayload, linkLeavePayload, signalGeneration, type SignalAuth } from "./webrtc-core";
+import { authPayload, linkLeavePayload, signalGeneration, type RtcConfig, type SignalAuth } from "./webrtc-core";
 
 // ── Minimal RTCPeerConnection / RTCDataChannel doubles ───────────────────────
 // Enough surface for connect()'s offer/answer + commit-then-reveal state machine.
@@ -33,7 +34,9 @@ class FakePC {
   connectionState = "new";
   channel: FakeDataChannel | null = null;
   channels: FakeDataChannel[] = [];
-  constructor() { instances.push(this); }
+  /** The RTCConfiguration this peer connection was constructed with, so a test
+   *  can prove which ICE path it is actually exercising (relay-only vs. LAN). */
+  constructor(readonly config?: RtcConfig) { instances.push(this); }
   createDataChannel(label: string) {
     const ch = new FakeDataChannel(label);
     this.channels.push(ch);
@@ -1224,6 +1227,93 @@ describe("signalling generations", () => {
 
     openAll();
     const [ic, rc] = await Promise.all([iP, rP]);
+    ic.close();
+    rc.close();
+  });
+
+  // The channel opens well before connectText resolves -- the key handshake and
+  // the caller's path sample both run after it -- and an auto-accepting peer
+  // speaks in exactly that window. Retention is bounded and the drain is
+  // one-shot; the caller replays it under its own ordering rules.
+  it("retains a text lane's frames from open, bounded, until the caller drains them", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const iKey = generateKeyPair();
+    const rKey = generateKeyPair();
+    const rP = connectText({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
+    const iP = connectText({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    await flush();
+    openAll();
+    // The peer's ACCEPT byte, before the caller awaiting connectText can attach
+    // anything. Delivered on both sides' lanes: each captures its own.
+    for (const pc of instances) for (const ch of pc.channels) ch._message(new Uint8Array([0xfe]).buffer);
+    const [ic, rc] = await Promise.all([iP, rP]);
+
+    expect(ic.takeCaptured?.("relayium").frames.map((f) => [...new Uint8Array(f)])).toEqual([[0xfe]]);
+    expect(ic.takeCaptured?.("relayium").frames).toEqual([]); // one-shot; never replayed
+    expect(rc.takeCaptured?.("relayium").frames).toHaveLength(1);
+    // The bound must admit a full-size message frame (64 KiB + 21 B) -- a first
+    // message that legitimately lands here must not fail the session it starts.
+    expect(TEXT_CAPTURE_MAX_BYTES).toBeGreaterThan(TEXT_MAX_BYTES + TEXT_FRAME_OVERHEAD);
+    // And must stay well under a link's: this window holds control bytes and a
+    // message or two, not a manifest.
+    expect(TEXT_CAPTURE_MAX_BYTES).toBeLessThan(LINK_CAPTURE_MAX_BYTES);
+    ic.close();
+    rc.close();
+  });
+
+  // The owner reported the lost-first-frame symptom on the cross-network
+  // pairing-code path, not only on LAN. That path differs from the one above in
+  // exactly one respect -- it forces ICE through a TURN relay -- so the capture
+  // has to be proven under that configuration too, rather than assumed to carry
+  // over. The config assertions are the point: without them this test would
+  // silently degrade into a duplicate of the LAN case.
+  it("retains an early text frame on the relay-only cross-network config too", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const iKey = generateKeyPair();
+    const rKey = generateKeyPair();
+    // Shaped like what rtcConfig() hands the pairing-code path: server-issued
+    // TURN plus the relay-only policy that skips the doomed direct checks.
+    const relayOnly: RtcConfig = {
+      iceServers: [{ urls: "turn:turn.relayium.test:3478?transport=udp", username: "u", credential: "c" }],
+      iceTransportPolicy: "relay",
+    };
+    const rP = connectText({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {}, config: relayOnly });
+    const iP = connectText({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {}, config: relayOnly });
+    await flush();
+
+    // Both ends really are on the relay-only path -- not silently on DEFAULT_ICE.
+    expect(instances).toHaveLength(2);
+    for (const pc of instances) {
+      expect(pc.config?.iceTransportPolicy).toBe("relay");
+      expect(pc.config?.iceServers).toEqual(relayOnly.iceServers);
+    }
+
+    openAll();
+    // The auto-accepting peer's ACCEPT byte, spoken before the caller awaiting
+    // connectText can attach a handler.
+    for (const pc of instances) for (const ch of pc.channels) ch._message(new Uint8Array([0xfe]).buffer);
+    const [ic, rc] = await Promise.all([iP, rP]);
+
+    expect(ic.takeCaptured?.("relayium").frames.map((f) => [...new Uint8Array(f)])).toEqual([[0xfe]]);
+    expect(rc.takeCaptured?.("relayium").frames).toHaveLength(1);
+    ic.close();
+    rc.close();
+  });
+
+  it("reports text-lane capture overflow instead of truncating it silently", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    const hub = makeHub();
+    const iKey = generateKeyPair();
+    const rKey = generateKeyPair();
+    const rP = connectText({ signaling: hub.R, peerId: "I", selfKey: rKey.publicKey, role: "responder", onPeerKey: () => {} });
+    const iP = connectText({ signaling: hub.I, peerId: "R", selfKey: iKey.publicKey, role: "initiator", onPeerKey: () => {} });
+    await flush();
+    openAll();
+    for (const pc of instances) for (const ch of pc.channels) ch._message(new ArrayBuffer(TEXT_CAPTURE_MAX_BYTES + 1));
+    const [ic, rc] = await Promise.all([iP, rP]);
+    expect(ic.takeCaptured?.("relayium")).toEqual({ frames: [], overflow: true });
     ic.close();
     rc.close();
   });

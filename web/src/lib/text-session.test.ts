@@ -37,7 +37,31 @@ async function drainUntil(pred: () => boolean, maxTicks = 4000) {
   for (let i = 0; i < maxTicks && !pred(); i++) await new Promise((r) => setTimeout(r, 0));
 }
 
-async function harness(opts: { failWith?: Error; autoTick?: number; deferred?: boolean; transferActive?: () => boolean; maxFrameBytes?: number } = {}) {
+/**
+ * Stands in for the transport's bounded pre-ownership capture, as text-link
+ * hands it to the session: ONE atomic drain that never replays.
+ *
+ * `frames` is filled by the test before the connection lands, because that is
+ * when the real frames arrive — while deps.connect() is still resolving. The
+ * probe also records the handler the channel had at the instant of the drain,
+ * which is the ordering the whole handoff rests on.
+ */
+function makeCapture(overflow = false) {
+  const frames: ArrayBuffer[] = [];
+  const seen = { calls: 0, handlerAtDrain: undefined as unknown };
+  return {
+    frames,
+    seen,
+    take(channel: FakeChannel) {
+      seen.calls++;
+      seen.handlerAtDrain = channel.onmessage;
+      return { frames: seen.calls === 1 ? frames.splice(0) : [], overflow };
+    },
+  };
+}
+type Capture = ReturnType<typeof makeCapture>;
+
+async function harness(opts: { failWith?: Error; autoTick?: number; deferred?: boolean; transferActive?: () => boolean; maxFrameBytes?: number; capture?: Capture } = {}) {
   const a = generateKeyPair();
   const b = generateKeyPair();
   const ka = await deriveSession("initiator", a, b.publicKey);
@@ -50,8 +74,9 @@ async function harness(opts: { failWith?: Error; autoTick?: number; deferred?: b
   let clock = 0;
   const autoTick = opts.autoTick ?? 0;
   const now = () => { clock += autoTick; return clock; };
-  const conn = (keys: SessionKeys, channel: FakeChannel): TextConn => ({
+  const conn = (keys: SessionKeys, channel: FakeChannel, capture?: Capture): TextConn => ({
     channel, keys, sas: "123456", path: "lan", close: () => channel.close(),
+    ...(capture ? { takeCaptured: () => capture.take(channel) } : {}),
     ...(opts.maxFrameBytes === undefined ? {} : { maxFrameBytes: () => opts.maxFrameBytes! }),
   });
   // deferred 模式：每次 connect 都挂起，测试自己决定什么时候、以什么顺序落地。
@@ -68,7 +93,7 @@ async function harness(opts: { failWith?: Error; autoTick?: number; deferred?: b
       });
     }
     if (opts.failWith) throw opts.failWith;
-    return conn(ka, ch);
+    return conn(ka, ch, opts.capture);
   });
   const s = createTextSession({
     connect: connectFn,
@@ -79,9 +104,9 @@ async function harness(opts: { failWith?: Error; autoTick?: number; deferred?: b
   return {
     s, ch, ka, kb, connectFn, attempts,
     /** Deliver an inbound text connection the way App.svelte's listener will. */
-    inbound(peerId: string, channel: FakeChannel = ch) {
+    inbound(peerId: string, channel: FakeChannel = ch, capture?: Capture) {
       if (!listening) { s.listenForRequests(); listening = true; }
-      listener!(peerId, conn(kb, channel));
+      listener!(peerId, conn(kb, channel, capture));
     },
     /** Drive the initiator to "open" the way a real peer does: an ACCEPT byte. */
     async peerAccepts() {
@@ -519,6 +544,110 @@ describe("text session", () => {
     expect(s.status).toBe("failed");
     expect(s.history.map((m) => m.body)).not.toContain("sent before consent");
     void early;
+  });
+
+  // ── the window before the initiator owns its channel ───────────────────────
+  // The reported LAN failure. The initiator's channel is open long before
+  // deps.connect() resolves: the key handshake and the path sample both run
+  // after it. A responder that auto-accepts -- the shipped default -- puts its
+  // ACCEPT byte on the wire inside that window, and a DataChannel does not
+  // replay events delivered with no handler attached. The transport therefore
+  // retains those frames under a bound, and the session drains them at the
+  // instant it takes ownership.
+
+  it("opens on an ACCEPT that landed before the session took ownership", async () => {
+    const capture = makeCapture();
+    const { s } = await harness({ capture });
+    recordPeerCaps("p1", { caps: [CAP_TEXT] });
+    // Arrives while deps.connect() is still resolving -- the only place it can.
+    capture.frames.push(ACCEPT.buffer.slice(0) as ArrayBuffer);
+
+    await s.openWith("p1");
+    await drainUntil(() => s.status === "open");
+    expect(s.status).toBe("open");
+    // Drained exactly once, and only after a live handler was in place: a drain
+    // that ran first would leave a gap of its own for the next frame.
+    expect(capture.seen.calls).toBe(1);
+    expect(typeof capture.seen.handlerAtDrain).toBe("function");
+  });
+
+  it("replays a captured ACCEPT and the message behind it in arrival order", async () => {
+    const capture = makeCapture();
+    const { s, kb } = await harness({ capture });
+    recordPeerCaps("p1", { caps: [CAP_TEXT] });
+    const peer = new TextSender();
+    // Exactly what a phone does: auto-accept, then the user types immediately.
+    capture.frames.push(ACCEPT.buffer.slice(0) as ArrayBuffer);
+    capture.frames.push((await peer.frame("first thing they typed", kb.textSend)).buffer as ArrayBuffer);
+
+    await s.openWith("p1");
+    await drainUntil(() => s.history.length > 0 || s.status === "failed");
+    // Out-of-order replay would deliver the message frame while the session is
+    // still waitingAccept, which is a hard failure -- so this also pins FIFO.
+    expect(s.status).toBe("open");
+    expect(s.history.map((m) => m.body)).toEqual(["first thing they typed"]);
+  });
+
+  it("discards frames captured before consent instead of replaying them", async () => {
+    const capture = makeCapture();
+    const { s, ka, ch, inbound } = await harness();
+    const peer = new TextSender();
+    capture.frames.push((await peer.frame("sent before consent", ka.textSend)).buffer as ArrayBuffer);
+
+    inbound("p2", ch, capture);
+    expect(s.status).toBe("incomingRequest");
+    // Retention must not become a way in: the responder throws the frames away
+    // as it publishes the request, while nothing is attached to receive them.
+    expect(capture.seen.calls).toBe(1);
+    expect(capture.seen.handlerAtDrain).toBe(null);
+    expect(ch.onmessage).toBe(null);
+
+    s.accept();
+    await settle();
+    expect(s.status).toBe("open");
+    expect(s.history).toEqual([]);
+  });
+
+  it("fails closed when the capture overflowed rather than replay a hole", async () => {
+    const capture = makeCapture(true);
+    const { s, ch } = await harness({ capture });
+    recordPeerCaps("p1", { caps: [CAP_TEXT] });
+
+    await s.openWith("p1");
+    // A gap in an ordered stream is exactly what the receiver cannot tolerate,
+    // and it cannot be told apart from tampering. Say so instead of guessing.
+    expect(s.status).toBe("failed");
+    expect(s.errorKey).toBe("failed");
+    expect(ch.readyState).toBe("closed");
+  });
+
+  it("refuses an incoming request whose pre-consent capture overflowed", async () => {
+    const capture = makeCapture(true);
+    const { s, ka, ch, inbound } = await harness();
+    const peer = new TextSender();
+    capture.frames.push((await peer.frame("sent before consent", ka.textSend)).buffer as ArrayBuffer);
+
+    inbound("p2", ch, capture);
+    await settle();
+
+    // Overflow says the transport dropped an unknown amount of what this peer
+    // pushed before anyone was asked. Throwing away what survived is not enough:
+    // the request is never published at all, so there is no card to accept, no
+    // SAS on screen, and nothing attached that could decrypt a later frame.
+    expect(s.status).toBe("idle");
+    expect(s.peerId).toBe("");
+    expect(s.sasCode).toBe("");
+    expect(s.path).toBe(undefined);
+    expect(s.history).toEqual([]);
+    expect(s.active()).toBe(false);
+    expect(ch.onmessage).toBe(null);
+    expect(ch.readyState).toBe("closed");
+
+    // And accepting a request that was never published must not resurrect it.
+    s.accept();
+    await settle();
+    expect(s.status).toBe("idle");
+    expect(s.history).toEqual([]);
   });
 
   // ── stale attempts ─────────────────────────────────────────────────────────

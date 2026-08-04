@@ -77,6 +77,12 @@ async function link(
     // Asked per send, never captured: SCTP settles the number with the peer, and
     // it is the only thing standing between a 64 KiB paste and a dead channel.
     maxFrameBytes: () => conn.maxFrameBytes(),
+    // The channel has been open since well before this object exists: the key
+    // exchange, the poll above and the path sample below all run on top of an
+    // open channel, and the session that owns it attaches later still. The
+    // transport retained whatever the peer sent meanwhile; hand that drain to
+    // the session, which is the only thing that knows what the frames mean.
+    takeCaptured: () => conn.takeCaptured?.("relayium") ?? { frames: [], overflow: false },
     keys,
     sas: code,
     path: await conn.path(),

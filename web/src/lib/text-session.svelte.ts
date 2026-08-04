@@ -77,6 +77,25 @@ export interface TextConn {
    *  so a test double need not model SCTP negotiation; absent means "no known
    *  ceiling", and the product cap alone applies. */
   maxFrameBytes?(): number;
+  /**
+   * Atomically detach and drain the frames the transport retained from the
+   * moment this channel opened, bounded by TEXT_CAPTURE_MAX_BYTES.
+   *
+   * The connection is open long before this session owns it: connectText still
+   * has a key handshake to finish and its caller still has a path to sample.
+   * A peer that accepts automatically speaks in that window, and DataChannel
+   * events are not replayed — so a transport that dropped them left the
+   * initiator waiting for an ACCEPT that had already come and gone.
+   *
+   * Atomic matters: the drain and the handler installation must be one
+   * uninterrupted step, or a frame arriving between them falls into a new gap.
+   * `overflow` means the bound was hit and frames were dropped; the caller must
+   * fail closed rather than feed the receiver a stream with a hole in it.
+   *
+   * Optional: a peer connection that never captured (and every test double)
+   * simply has nothing to hand over.
+   */
+  takeCaptured?(): { frames: readonly ArrayBuffer[]; overflow: boolean };
   keys: SessionKeys;
   sas: string;
   path?: ConnPath;
@@ -273,6 +292,19 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
         // 这里再查一遍而不是信 text-link 的预检：那次预检和这次落地之间隔着一整个
         // 握手，一次文件传输完全可能在这期间开始。
         if (!canAcceptFrom(from)) { try { c.close(); } catch { /* gone */ } return; }
+        // 同意之前什么都不解密、不渲染——这条规则不因为传输层开始留存早到的帧而松动。
+        // The drain here is a discard: it throws those frames away AND detaches
+        // the capture, so from this moment until accept() installs a handler the
+        // channel has none at all, and a peer that jumps the gun loses its
+        // content exactly as before. The retention exists for the initiator's
+        // ACCEPT; it is not a way into this side.
+        const dropped = c.takeCaptured?.();
+        // Overflow means the transport gave up counting what this peer pushed
+        // before anyone consented: the stream now has a hole of unknown size in
+        // it. Discarding is not enough — refuse the whole request. Nothing is
+        // published, so there is no card, no SAS and no content, and the peer
+        // that flooded the pre-consent window simply gets a closed channel.
+        if (dropped?.overflow) { try { c.close(); } catch { /* gone */ } return; }
         resetSession();
         conn = c;
         keys = c.keys;
@@ -312,9 +344,21 @@ export function createTextSession(deps: TextSessionDeps): TextSession {
         keys = c.keys;
         sasCode = c.sas;
         path = c.path;
+        // The ownership handoff, in one uninterrupted step. The live handler
+        // goes on FIRST: draining before it were attached would only move the
+        // gap, and the next frame would fall into the new one. Everything the
+        // transport held then replays in arrival order onto the same serialised
+        // queue later frames use, so the peer's ACCEPT is still processed before
+        // the message it sent immediately after — which is what the ordered
+        // channel promised and what onFrame relies on.
         attachControl(c);
         status = "waitingAccept";
         touch();
+        const early = c.takeCaptured?.();
+        // A hole in an ordered stream is indistinguishable from tampering and is
+        // exactly what TextReceiver cannot tolerate. Fail, do not guess.
+        if (early?.overflow) return finish("failed", "failed");
+        for (const frame of early?.frames ?? []) queue(frame);
       } catch (err) {
         // 失败也一样会迟到，而 "failed"/"peerBusy" 同样会盖掉用户看到的 "ended"。
         if (mine !== attempt) return;

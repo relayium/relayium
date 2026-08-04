@@ -26,6 +26,22 @@ export const LOCAL_CAPS: readonly string[] = advertisedCaps();
  *  much smaller than the file flow-control window: pre-attachment traffic has
  *  not reached a content-consent state yet. */
 export const LINK_CAPTURE_MAX_BYTES = 256 * 1024;
+/**
+ * The same retention for the legacy text generation's single lane.
+ *
+ * Its window is the one between "the channel opened" and "the message session
+ * owns it" — connectText still has a key handshake to finish, and its caller
+ * still has a path to sample. A peer that accepts automatically speaks inside
+ * that window, and a DataChannel drops what has no handler.
+ *
+ * Deliberately smaller than a link's, and deliberately explicit: what may
+ * legitimately land here is a one-byte ACCEPT/REJECT and the first message or
+ * two typed straight after it. 192 KiB holds that control byte plus a pair of
+ * maximum-size text frames (64 KiB of plaintext seals into 65 557 B) with room
+ * to spare. Past it the caller fails the session closed rather than replay a
+ * stream with a hole in it.
+ */
+export const TEXT_CAPTURE_MAX_BYTES = 192 * 1024;
 /** The exact lane labels a mixed link carries, in primary-first order. One
  *  constant so the first connection and an authenticated transport resume can
  *  never disagree about which SCTP streams make up a link. */
@@ -253,7 +269,10 @@ async function handshakeConnect(opts: ConnectOpts, generation: Generation): Prom
       // tests; the file generation keeps its existing unlabelled wording.
       label: generation === "text" ? "text" : generation === "link" ? "link" : undefined,
       channelLabels: generation === "link" ? LINK_CHANNEL_LABELS : undefined,
-      captureBeforeReadyBytes: generation === "link" ? LINK_CAPTURE_MAX_BYTES : undefined,
+      captureBeforeReadyBytes:
+        generation === "link" ? LINK_CAPTURE_MAX_BYTES
+        : generation === "text" ? TEXT_CAPTURE_MAX_BYTES
+        : undefined,
       config: opts.config,
       initialSignal: opts.initialSignal,
       onStateChange: opts.onStateChange,
