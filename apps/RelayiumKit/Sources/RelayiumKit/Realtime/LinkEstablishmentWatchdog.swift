@@ -192,10 +192,28 @@ public struct LinkEstablishmentWatchdog {
     private var identityPresent = false
     private var disarmed = false
 
-    public init(start: TimeInterval, deadlines: LinkDeadlines = LinkDeadlines()) {
+    /// - Parameter identityPresent: whether this establishment ALREADY has its
+    ///   identity, which is true for exactly one thing: an authenticated
+    ///   transport replacement, whose keys, SAS and codecs existed before its
+    ///   `RTCPeerConnection` did.
+    ///
+    ///   It suppresses the key-reveal window outright rather than merely making
+    ///   it unlikely. That window describes one specific wait — "the lanes are
+    ///   up and healthy but the peer has not disclosed its key" — and a rebuild
+    ///   is never in it: there is no reveal owed in either direction. Arming it
+    ///   would put a rebuild on a deadline for a message nobody is going to
+    ///   send, and would report `.keyReveal` as the reason a link ended when
+    ///   nothing was ever waiting on a reveal. `.authenticated` is seeded into
+    ///   `seen` for the same reason, so a milestone that somehow arrived anyway
+    ///   is the repeat it actually is and buys no extension.
+    public init(start: TimeInterval,
+                deadlines: LinkDeadlines = LinkDeadlines(),
+                identityPresent: Bool = false) {
         self.deadlines = deadlines
         self.hardCapAt = start + deadlines.setupHardCap
         self.noProgressAt = start + deadlines.noProgress
+        self.identityPresent = identityPresent
+        if identityPresent { seen.insert(.authenticated) }
     }
 
     public var isArmed: Bool { !disarmed }

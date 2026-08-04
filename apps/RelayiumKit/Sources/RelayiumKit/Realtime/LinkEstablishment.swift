@@ -8,14 +8,28 @@ import Foundation
 /// runtime flag, and a reader deciding whether recovery exists must not have to
 /// infer it from what a driver happens to implement today.
 ///
-/// It is false because `WebRTCLinkTransport` derives its own session keys from
-/// its own commit/reveal and constructs the link's one `LinkCodecs` itself.
-/// Pointing it at a link that already holds codecs would either restart an
-/// AEAD sequence under a key that has already used it — catastrophic for
-/// AES-GCM — or run two senders on one key. `LinkEstablishment.authenticated`
-/// refusing a second identity and `LinkSignalPolicy` refusing the `resume`
-/// generation are the two places that keep this constant honest rather than
-/// merely documentary.
+/// It is false, and what it is false ABOUT has moved. A replacement CONNECTION
+/// now exists — `WebRTCLinkReplacementTransport` rebuilds both lanes under one
+/// already-authenticated `LinkIdentity`, authenticating its own signalling with
+/// that link's `resumeAuth` key. What does not exist is everything that would
+/// turn one such connection into a recovery path a link can rely on:
+///
+///  - no atomic swap of the old transport for the new one, so nothing decides
+///    which of two live transports owns the lanes;
+///  - no retry orchestration inside a recovery window, and nothing that keeps a
+///    dropped link current long enough to rebuild it;
+///  - no durable file checkpoints and no RESUME_REQ/RESUME_START, so a rebuilt
+///    lane resumes a connection, not a transfer;
+///  - no policy for a text lane whose codecs proved unsafe to reuse;
+///  - no admission, factory, lifecycle or UI integration, and `LINK_BUILD_SUPPORT`
+///    is still false, so no peer is ever told this build speaks `link/1`.
+///
+/// A caller deciding whether recovery exists must read this constant, not infer
+/// it from the existence of a driver. The invariant the replacement driver rests
+/// on is separate and is enforced structurally: it never derives session keys
+/// and never constructs a `LinkCodecs`, it is handed the one its link already
+/// owns (`LinkEstablishment.init(resuming:)`), and `authenticated` refusing a
+/// second identity is the backstop underneath that.
 public let LINK_TRANSPORT_REPLACEMENT_SUPPORTED = false
 
 /// One of the exact two lanes of a `link/1` transport.
@@ -148,11 +162,20 @@ public protocol LinkLaneChannel: AnyObject {
 /// its own lock because WebRTC delivers on its own threads; this class sees
 /// only what the owner has already serialized.
 ///
-/// ## What this deliberately is NOT
+/// ## Establishment and replacement share this object
 ///
-/// It is establishment, not recovery. There is no way to hand it an existing
-/// `LinkIdentity`, and `authenticated` refuses a second one — see
-/// `LINK_TRANSPORT_REPLACEMENT_SUPPORTED`.
+/// An initial establishment derives its identity and hands it over through
+/// `authenticated`; a transport replacement is handed one at construction
+/// (`init(resuming:)`) and never calls `authenticated` at all. Everything else —
+/// the exact lane set, the barrier, capture and replay, send readiness — is
+/// identical, and deliberately so: those questions have one answer per link, not
+/// one per way of reaching it.
+///
+/// What stays constant either way is that a link has exactly ONE identity.
+/// `authenticated` refuses a second, which for a replacement means it cannot
+/// acquire a second `LinkCodecs` even if something above it produced one. What
+/// this object still does not decide is whether a replacement may be used at
+/// all — see `LINK_TRANSPORT_REPLACEMENT_SUPPORTED`.
 public final class LinkEstablishment {
 
     /// What one event means for the transport as a whole.
@@ -184,7 +207,21 @@ public final class LinkEstablishment {
     private var _isPublished = false
     private var _isClosed = false
 
-    public init(capture: LinkFrameCapture = LinkFrameCapture()) {
+    /// - Parameter resuming: the authenticated identity this transport is being
+    ///   rebuilt UNDER, for an authenticated replacement; nil for an initial
+    ///   establishment, which derives its own.
+    ///
+    ///   Handing it in at construction rather than through `authenticated` is
+    ///   what makes the replacement invariant structural. A replacement must not
+    ///   be able to produce an identity — that would mean a second `LinkCodecs`,
+    ///   and two AEAD sequences counting from zero under one pair of session
+    ///   keys — and with the identity already present, `authenticated`'s
+    ///   existing "first one wins" rule refuses any later one without needing a
+    ///   second guard. The barrier is then waiting on the lanes alone, which is
+    ///   exactly what a rebuild is still waiting for.
+    public init(resuming identity: LinkIdentity? = nil,
+                capture: LinkFrameCapture = LinkFrameCapture()) {
+        self._identity = identity
         self.capture = capture
     }
 

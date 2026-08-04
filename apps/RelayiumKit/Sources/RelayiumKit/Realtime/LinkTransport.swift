@@ -129,6 +129,24 @@ public final class LinkCodecs {
     /// — never sorted — so the two directions never collapse onto one counter.
     public let textSendKey: [UInt8]
     public let textRecvKey: [UInt8]
+    /// The symmetric HMAC key that authenticates this link's signalling when it
+    /// rebuilds its transport under an authentication that already exists.
+    ///
+    /// It lives here, and only here, for two reasons. It is derived from the
+    /// session keys, and this initializer is the one place those keys are
+    /// consumed — deriving it anywhere else would mean handing the raw file
+    /// session keys to a second call site. And it is the ONE thing standing
+    /// between a rebuilt transport and a signalling relay offering its own, so
+    /// it must be impossible to point a replacement at a key that does not
+    /// belong to the codecs it is reusing: hanging it off the object whose
+    /// identity a replacement is already required to preserve makes that
+    /// structural rather than a convention.
+    ///
+    /// Unlike the two text keys this is deliberately SORTED (see
+    /// `deriveResumeAuth`): it is shared between the peers, so both ends must
+    /// derive the same value from their mirrored secrets. It is a signalling
+    /// key, never an AEAD key, and it is domain-separated from both.
+    public let resumeAuthKey: [UInt8]
 
     public init(sendKey: [UInt8], recvKey: [UInt8]) {
         self.fileSender = RealtimeSender(sessionKey: sendKey)
@@ -137,6 +155,7 @@ public final class LinkCodecs {
         self.textReceiver = RealtimeTextReceiver()
         self.textSendKey = deriveTextKey(sessionKey: sendKey)
         self.textRecvKey = deriveTextKey(sessionKey: recvKey)
+        self.resumeAuthKey = deriveResumeAuth(sendKey: sendKey, recvKey: recvKey)
     }
 }
 

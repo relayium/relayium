@@ -83,8 +83,9 @@ final class RTCLinkLane: LinkLaneChannel {
 /// 30 s no-progress deadline re-armed only by the closed `LinkMilestone` set,
 /// and a 30 s key-reveal deadline that takes over — replacing the no-progress
 /// one, never racing it — once both lanes are open while no identity exists.
-/// All three are decided by `LinkEstablishmentWatchdog`; this class only owns
-/// the single `DispatchWorkItem` that wakes it. Every guard below that can
+/// All three are decided by `LinkEstablishmentWatchdog` and woken by
+/// `LinkDeadlineClock`; this class only owns what a crossed deadline MEANS,
+/// because only it can fail a transport. Every guard below that can
 /// refuse to make progress is therefore bounded by the hard cap rather than
 /// silent — a candidate transport can no longer sit inert forever waiting for
 /// an owner that never calls `close()`.
@@ -131,10 +132,18 @@ final class RTCLinkLane: LinkLaneChannel {
 ///    (`didBeginEstablishing`/`didOpen`/`didFail`) are still unwired, and
 ///    `LINK_BUILD_SUPPORT` remains false so no peer is ever told this build
 ///    speaks `link/1`.
-///  - **Authenticated replacement and durable active-file recovery.** Not
-///    implemented, and refused rather than half-done: the `resume` generation is
-///    ignored and `LINK_TRANSPORT_REPLACEMENT_SUPPORTED` is false. A dropped
-///    lane here ends the transport; it does not hold an authentication open.
+///  - **Recovery.** This driver ignores the `resume` generation outright, and
+///    must: it derives its own session keys and constructs the link's one
+///    `LinkCodecs`, so answering a rebuild here would mean a second identity.
+///    The rebuild CONNECTION lives in `WebRTCLinkReplacementTransport`, which is
+///    handed an existing identity and derives nothing. Neither of them is
+///    recovery: nothing swaps an old transport for a new one, nothing retries
+///    inside a window, and `LINK_TRANSPORT_REPLACEMENT_SUPPORTED` is still
+///    false. A dropped lane here ends the transport; it does not hold an
+///    authentication open.
+///  - **Durable active-file recovery.** No file checkpoints and no
+///    RESUME_REQ/RESUME_START, so even a rebuilt transport resumes a connection
+///    rather than a transfer.
 ///  - **Poisoned-lane replacement closure.** `LinkTextLane` can prove its
 ///    codecs unsafe to reuse; deciding what a link does about that — and how a
 ///    replacement transport inherits it — is not answered here.
@@ -182,7 +191,6 @@ public final class WebRTCLinkTransport: NSObject {
     private let handshake: HandshakeState
     private let policy: LinkSignalPolicy
     private let establishment: LinkEstablishment
-    private let deadlines: LinkDeadlines
     /// Monotonic, and injectable so the deadline wiring can be exercised at
     /// millisecond scale. `systemUptime` rather than a wall clock: a user
     /// changing the date must not be able to expire a live establishment, and it
@@ -190,6 +198,11 @@ public final class WebRTCLinkTransport: NSObject {
     private let now: () -> TimeInterval
 
     private let queue: LinkTransportQueue
+    /// The three deadlines and the single wake-up that enforces them. Shared
+    /// with `WebRTCLinkReplacementTransport`, which needs the same arming,
+    /// staleness and cancellation rules under a watchdog that is told its
+    /// identity already exists.
+    private let clock: LinkDeadlineClock
 
     private let factory: RTCPeerConnectionFactory
     private var pc: RTCPeerConnection?
@@ -211,13 +224,6 @@ public final class WebRTCLinkTransport: NSObject {
 
     private var localCandidates = LinkCandidateGate<RTCIceCandidate>()
     private var remoteCandidates = LinkCandidateGate<RTCIceCandidate>()
-
-    private var watchdog: LinkEstablishmentWatchdog?
-    private var watchdogTimer: DispatchWorkItem?
-    /// Which scheduling of the wake-up is current. A work item that was already
-    /// dispatched when a milestone rescheduled it cannot be cancelled any more,
-    /// so it has to be able to recognise that it is stale.
-    private var watchdogGeneration = 0
 
     /// - Parameters:
     ///   - role: the deterministic role `LinkAdmission` decided (`linkRole`'s
@@ -244,9 +250,10 @@ public final class WebRTCLinkTransport: NSObject {
         self.handshake = HandshakeState(role: role)
         self.policy = LinkSignalPolicy(peerId: peerId, role: role)
         self.establishment = LinkEstablishment(capture: capture)
-        self.deadlines = deadlines
         self.now = now
-        self.queue = LinkTransportQueue(label: "im.relayium.WebRTCLinkTransport")
+        let queue = LinkTransportQueue(label: "im.relayium.WebRTCLinkTransport")
+        self.queue = queue
+        self.clock = LinkDeadlineClock(queue: queue, deadlines: deadlines)
         ensureRTCSSL()
         self.factory = RTCPeerConnectionFactory()
         super.init()
@@ -656,9 +663,8 @@ public final class WebRTCLinkTransport: NSObject {
     /// establishment will actually act on happens first starts the clock, and
     /// the second one does not restart it.
     private func armWatchdogLocked(at now: TimeInterval) {
-        guard !closed, watchdog == nil else { return }
-        watchdog = LinkEstablishmentWatchdog(start: now, deadlines: deadlines)
-        rescheduleWatchdogLocked(at: now)
+        guard !closed else { return }
+        clock.arm(at: now) { [weak self] in self?.watchdogFiredLocked() }
     }
 
     /// Whether a deadline had ALREADY passed when this event reached the queue,
@@ -672,24 +678,19 @@ public final class WebRTCLinkTransport: NSObject {
     /// a bound — and it is why the callers below must re-check `closed` rather
     /// than carrying on.
     private func expiredLocked(at now: TimeInterval) -> Bool {
-        guard !closed, let timeout = watchdog?.expiry(at: now) else { return false }
+        guard !closed, let timeout = clock.expiry(at: now) else { return false }
         failLocked(LinkTransportError.establishmentTimeout(timeout))
         return true
     }
 
     private func noteLocked(_ milestone: LinkMilestone, at now: TimeInterval) {
-        guard !closed, watchdog != nil else { return }
-        // Only a milestone that actually moved a deadline is worth a new
-        // wake-up; a repeated one, or one past the candidate budget, is not.
-        // And a milestone the watchdog reports as late is not progress at all —
-        // `expired` is a verdict, not a shade of "nothing to do", so it ends the
-        // transport rather than being dropped.
-        switch watchdog!.note(milestone, at: now) {
-        case .rearmed:
-            rescheduleWatchdogLocked(at: now)
-        case .unchanged:
-            break
-        case let .expired(timeout):
+        guard !closed else { return }
+        // The clock re-arms its own wake-up for a milestone that moved a
+        // deadline, and reports the one case only this object can act on: a
+        // milestone the watchdog judged LATE is not progress at all — it is the
+        // proof this establishment has already lost, so it ends the transport
+        // rather than being dropped.
+        if let timeout = clock.note(milestone, at: now) {
             failLocked(LinkTransportError.establishmentTimeout(timeout))
         }
     }
@@ -704,32 +705,20 @@ public final class WebRTCLinkTransport: NSObject {
         }
     }
 
-    private func rescheduleWatchdogLocked(at now: TimeInterval) {
-        watchdogTimer?.cancel()
-        watchdogTimer = nil
-        guard !closed, let deadline = watchdog?.deadline else { return }
-        watchdogGeneration += 1
-        let generation = watchdogGeneration
-        watchdogTimer = queue.after(deadline - now) { [weak self] in
-            self?.watchdogFiredLocked(generation: generation)
-        }
-    }
-
-    private func watchdogFiredLocked(generation: Int) {
-        // Three ways this wake-up can be stale, and `cancel()` only covers the
-        // ones that had not started yet: the transport closed, a milestone
-        // rescheduled after this item was already dispatched, or the deadline
-        // simply moved out from under it.
-        guard !closed, generation == watchdogGeneration, watchdog != nil else { return }
+    private func watchdogFiredLocked() {
+        // The clock has already refused the wake-ups it can recognise as stale
+        // — a superseded scheduling, a disarmed clock. The one it cannot see is
+        // this transport having closed in the meantime, and a deadline that
+        // simply moved out from under an item that was already dispatched, which
+        // is why this re-reads the clock rather than assuming the bound arrived.
+        guard !closed else { return }
         let now = self.now()
         guard !expiredLocked(at: now) else { return }
-        rescheduleWatchdogLocked(at: now)
+        clock.reschedule(at: now)
     }
 
     private func disarmWatchdogLocked() {
-        watchdog?.disarm()
-        watchdogTimer?.cancel()
-        watchdogTimer = nil
+        clock.disarm()
     }
 
     // MARK: - channels (always on `queue`)

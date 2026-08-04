@@ -43,8 +43,18 @@ public let LINK_CAPTURE_MAX_BYTES = 256 * 1024
 
 /// SHA-256 HMAC is 32 bytes, which `signResume` encodes as padded base64.
 /// Checking the length before any base64 decode or HMAC also bounds the cost of
-/// each verification a hostile peer can ask for.
-public let LINK_LEAVE_AUTH_LENGTH = 44
+/// each verification a hostile signal can ask for.
+///
+/// One constant for both authenticated link tags — the leave and the resume
+/// signalling tag — because they are the same primitive over different payloads.
+/// Two literals would be two places to change, and a verifier that bounded one
+/// but not the other is a verifier a flood can spend HMACs on.
+public let LINK_AUTH_TAG_LENGTH = 44
+
+/// The leave tag's length, which is `LINK_AUTH_TAG_LENGTH`. Kept as its own name
+/// because `parsedLinkLeaveAuth` checks it as part of an EXACT message shape,
+/// and that shape is a separate decision from the tag primitive.
+public let LINK_LEAVE_AUTH_LENGTH = LINK_AUTH_TAG_LENGTH
 
 /// How many leave signals one authenticated link will ever spend an HMAC on.
 ///
