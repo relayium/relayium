@@ -66,7 +66,7 @@ final class SharedDraftPreparationTests: XCTestCase {
 
         var itemCount: Int { names.count }
 
-        func load(_ index: Int, stage: (URL, String) throws -> Void) throws {
+        func load(_ index: Int, stage: @escaping (URL, String) throws -> Void) throws {
             if failAt == index { throw SharedDraftError.nothingUsable }
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("provider-\(UUID().uuidString)")
@@ -449,7 +449,7 @@ final class SharedDraftPreparationTests: XCTestCase {
         let url: URL
         let name: String
         var itemCount: Int { 1 }
-        func load(_ index: Int, stage: (URL, String) throws -> Void) throws {
+        func load(_ index: Int, stage: @escaping (URL, String) throws -> Void) throws {
             try stage(url, name)
         }
     }

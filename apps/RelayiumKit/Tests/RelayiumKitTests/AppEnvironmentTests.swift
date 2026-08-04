@@ -14,6 +14,66 @@ final class AppEnvironmentTests: XCTestCase {
     func testDeviceNameIsNeverEmpty() {
         XCTAssertFalse(AppEnvironment.deviceName().isEmpty)
     }
+
+    // MARK: - the iOS device name, which used to kill the app at launch
+
+    /// `iPad7,11` → `iPad`, and every unknown identifier → something a person
+    /// can read.
+    ///
+    /// This runs on macOS, which is exactly why the mapping is a separate
+    /// function rather than the body of a `#if os(iOS)` branch: a branch this
+    /// suite cannot compile is a branch it cannot check, and the branch it could
+    /// not check is the one that shipped `ProcessInfo.hostName` to a device.
+    func testTheDeviceFamilyComesFromTheHardwareIdentifier() {
+        XCTAssertEqual(AppEnvironment.deviceFamilyName(forModelIdentifier: "iPad7,11"), "iPad")
+        XCTAssertEqual(AppEnvironment.deviceFamilyName(forModelIdentifier: "iPhone14,2"), "iPhone")
+        XCTAssertEqual(AppEnvironment.deviceFamilyName(forModelIdentifier: "iPod9,1"), "iPod touch")
+    }
+
+    /// Never empty, whatever the hardware says — including the Simulator's own
+    /// `arm64` and a model identifier this build has never heard of. A blank
+    /// device name is a row in the user's device list that names no device.
+    func testTheDeviceFamilyIsNeverEmptyForAnyIdentifier() {
+        for model in ["", "arm64", "x86_64", "RealityDevice14,1", "iPa", "MacBookPro18,3"] {
+            XCTAssertFalse(AppEnvironment.deviceFamilyName(forModelIdentifier: model).isEmpty,
+                           "\(model) produced an unnamed device")
+        }
+    }
+
+    /// **The launch watchdog crash, as a guard.**
+    ///
+    /// `ProcessInfo.processInfo.hostName` on iOS goes through `NSHost`'s
+    /// blocking resolver. `deviceName()` is called by `makeSession()`, which
+    /// `RelayiumApp.init()` calls — so on a real iPad that call sat on the main
+    /// thread in `blockingResolveUntil:` until FrontBoard killed the launch
+    /// (`0x8BADF00D`, 20 seconds). Nothing in this file may resolve a name
+    /// again, and an absence has no runtime to observe.
+    ///
+    /// `UIDevice` is refused for a second reason: it is `@MainActor` in the iOS
+    /// SDK, and the realtime factories here call `deviceName()` from connection
+    /// closures that are not.
+    func testNothingInTheEnvironmentResolvesAHostName() throws {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // RelayiumKitTests
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // RelayiumKit
+            .appendingPathComponent("Sources/RelayiumAppKit/AppEnvironment.swift")
+        // Whole-line comments dropped: the file explains the absence and names
+        // the call in doing so.
+        let code = try String(contentsOf: source, encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+
+        for resolving in ["hostName", "NSHost", "Host.current().name",
+                          "gethostname", "getaddrinfo", "UIDevice"] {
+            XCTAssertFalse(code.contains(resolving),
+                           "AppEnvironment reaches for \(resolving) on a launch path")
+        }
+        // And the macOS answer stays what it was: the local computer name from
+        // the dynamic store, which resolves nothing.
+        XCTAssertTrue(code.contains("Host.current().localizedName"))
+    }
     // The site root is the LAN transfer page, not an account page. Paths mirror
     // web/src/lib/router.svelte.ts (ME_PATH, PRICING_PATH).
     func testWebHandOffPathsAreTheAccountPagesNotTheHomepage() {

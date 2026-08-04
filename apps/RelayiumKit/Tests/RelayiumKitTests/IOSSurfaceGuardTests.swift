@@ -768,6 +768,39 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        AppLanguage.allCases.map(\.lproj).sorted())
     }
 
+    /// The extension declares a non-empty `CFBundleDisplayName`, and it is the
+    /// BRAND rather than the build target's name.
+    ///
+    /// This key is enforced by `installd`, not by any build step. An appex
+    /// without it is refused at INSTALL time with `MIInstallerErrorDomain` 53,
+    /// which fails the containing app's install too — so the whole product is
+    /// uninstallable while archiving, exporting, building and running in the
+    /// simulator all stay green. That is why the guard is here: removing the key
+    /// again would be a one-line diff that no other check in this repository
+    /// notices, and the next thing to notice would be a real device.
+    ///
+    /// `CFBundleName` does not substitute for it — that is `$(PRODUCT_NAME)`,
+    /// i.e. "RelayiumShare", and the install-time check is for this key
+    /// specifically. The exact value is asserted because this string IS the
+    /// share-sheet row the user taps: what belongs there is the app the files
+    /// are going to, not the target that builds the extension.
+    func testTheExtensionDeclaresTheBrandAsItsShareSheetDisplayName() throws {
+        let data = try Data(contentsOf: shareRoot.appendingPathComponent("Info.plist"))
+        let plist = try XCTUnwrap(
+            try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+                as? [String: Any])
+
+        let displayName = try XCTUnwrap(
+            plist["CFBundleDisplayName"] as? String,
+            "the appex declares no CFBundleDisplayName string — installd refuses it "
+                + "with MIInstallerErrorDomain 53 and the containing app cannot install")
+        XCTAssertFalse(displayName.isEmpty,
+                       "an empty CFBundleDisplayName fails the same install-time check as a missing one")
+        XCTAssertEqual(displayName, "Relayium",
+                       "the share sheet must name the app the files are going to, "
+                           + "not the build target: \(displayName)")
+    }
+
     /// The project embeds exactly one `.appex`, at the right bundle id, on the
     /// same deployment target as the app.
     ///

@@ -92,15 +92,71 @@ public enum AppEnvironment {
     /// person expects rather than showing a hostname they never chose.
     ///
     /// `Host` is a macOS API; this target also builds for iOS 16 (R3), where the
-    /// device's own name is the right answer.
+    /// answer comes from the local hardware identifier instead.
+    ///
+    /// **iOS must never ask for a host name here, and this function used to.**
+    /// `ProcessInfo.processInfo.hostName` on iOS goes through `NSHost`'s
+    /// *blocking* resolver, and this is called from `makeSession()`, which
+    /// `RelayiumApp.init()` calls — so on a device whose network could not
+    /// answer, app launch sat in `blockingResolveUntil:` on the main thread
+    /// until the launch watchdog killed the process (`0x8BADF00D`, 20s). It is
+    /// also the wrong *answer*: a resolver name is not something the user chose.
+    ///
+    /// Nothing below can block, resolve, or touch the network — and nothing
+    /// below needs the main actor, which matters because the realtime factories
+    /// call this from their own connection closures.
     public static func deviceName() -> String {
         #if os(macOS)
+        // Local, from the dynamic store: the name in Sharing preferences, which
+        // IS the one the person chose. Unlike `Host.current().name`, it does not
+        // resolve anything.
         let name = Host.current().localizedName ?? ""
         return name.isEmpty ? "Mac" : name
         #else
-        let name = ProcessInfo.processInfo.hostName
-        return name.isEmpty ? "iPhone" : name
+        return deviceFamilyName(forModelIdentifier: hardwareModelIdentifier())
         #endif
+    }
+
+    /// `iPad7,11` → `iPad`. The device family, from the hardware identifier.
+    ///
+    /// Not `UIDevice.current.name`: that is `@MainActor` in the iOS SDK, and the
+    /// callers above are not — and since iOS 16 it returns the device *model*
+    /// to an unentitled app anyway, which is what this computes without needing
+    /// the main thread or UIKit at all.
+    ///
+    /// Compiled on every platform, and deliberately: it is the whole of the iOS
+    /// decision, and a `#if os(iOS)` body is a body the package's own test suite
+    /// (which runs on macOS) can never drive.
+    static func deviceFamilyName(forModelIdentifier model: String) -> String {
+        // The three families an iOS identifier can name. No one of them is a
+        // prefix of another, so this reads the same in any order.
+        for family in ["iPhone", "iPad", "iPod"] where model.hasPrefix(family) {
+            // `iPod` is the identifier; `iPod touch` is what the device is
+            // called, and this string is read by a person in their device list.
+            return family == "iPod" ? "iPod touch" : family // nonlocalized: an Apple product name
+        }
+        // A model this build has never heard of — including the Simulator's own
+        // `arm64`, when it reports no simulated model. Never empty: the web
+        // device list renders this, and a blank row names no device at all.
+        return "iPhone"
+    }
+
+    /// `hw.machine`, or the model the Simulator says it is simulating.
+    ///
+    /// A `sysctl` read of this process's own hardware: no network, no resolver,
+    /// no daemon round-trip.
+    private static func hardwareModelIdentifier() -> String {
+        // Under the Simulator `hw.machine` is the Mac's architecture, so the
+        // device being simulated comes from the environment it sets instead.
+        if let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"],
+           !simulated.isEmpty {
+            return simulated
+        }
+        var size = 0
+        guard sysctlbyname("hw.machine", nil, &size, nil, 0) == 0, size > 0 else { return "" }
+        var value = [UInt8](repeating: 0, count: size)
+        guard sysctlbyname("hw.machine", &value, &size, nil, 0) == 0 else { return "" }
+        return String(decoding: value.prefix { $0 != 0 }, as: UTF8.self)
     }
 
     @MainActor

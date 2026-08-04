@@ -26,6 +26,25 @@
 		<string>es</string>
 		<string>pt</string>
 	</array>
+	<!-- Required, and required by `installd` rather than by any build step. An
+	     appex without a non-empty `CFBundleDisplayName` is refused at INSTALL
+	     time with MIInstallerErrorDomain 53, which fails the containing app's
+	     install too — so the whole product is uninstallable and no archive,
+	     export or simulator run says a word about it. `CFBundleName` does not
+	     substitute: it is `$(PRODUCT_NAME)` = "RelayiumShare", and the check is
+	     for this key specifically.
+
+	     "Relayium" and not "RelayiumShare", because this string IS the share
+	     sheet entry the user taps. The target name is a build artifact; what
+	     belongs in the sheet is the app the files are going to.
+
+	     Not localized, and not a `$(...)` substitution. A brand name is the same
+	     in all nine languages this bundle declares, so an `InfoPlist.strings`
+	     per language would be nine copies of one word — and the catalogs this
+	     extension uses live in the RelayiumShareKit package bundle, not here,
+	     so a key looked up in THIS bundle would find nothing to vary anyway. -->
+	<key>CFBundleDisplayName</key>
+	<string>Relayium</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
