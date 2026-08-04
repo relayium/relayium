@@ -27,7 +27,7 @@ func newTestRoute(live string, now func() int64) wsRoute {
 		validate:     func(c string) bool { return c == live },
 		globalConns:  signal.NewGlobalConnLimiter(),
 		ipConns:      signal.NewIPConnLimiter(),
-		handle: func(context.Context, *websocket.Conn, string, int, string) {
+		handle: func(context.Context, *websocket.Conn, string, int, string, bool) {
 			panic("the upgrade must not be reached in these tests")
 		},
 		lanMaxPeers: lanMaxPeers,

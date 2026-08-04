@@ -67,6 +67,41 @@ describe("SignalingClient", () => {
     expect(selfId).toBe("ok1");
   });
 
+  it("treats a roster frame with no peers as an empty roster", () => {
+    // Current servers send an explicit empty array, but an older server can
+    // omit it. Since grouping, a client CAN legitimately be told "you can see
+    // nobody"; dropping that frame leaves the departed peer on screen forever.
+    const sock = new FakeSocket();
+    const c = new SignalingClient("ws://x", "Alice", () => sock);
+    let peers: unknown[] | null = null;
+    c.onPeers((p) => (peers = p));
+    sock.onopen?.();
+    sock.emit({ type: "peers", peers: [{ id: "b", name: "B" }] });
+    expect(peers).toHaveLength(1);
+    sock.emit({ type: "peers" });
+    expect(peers).toEqual([]);
+  });
+
+  it("reports an explicit physical peer departure separately from a roster handoff", () => {
+    const sock = new FakeSocket();
+    const c = new SignalingClient("ws://x", "Alice", () => sock);
+    const left: string[] = [];
+    c.onPeerLeft((peerId) => left.push(peerId));
+    sock.onopen?.();
+
+    // A representative changing in a roster is not a departure event.
+    sock.emit({ type: "peers", peers: [{ id: "new-page", name: "Phone" }] });
+    expect(left).toEqual([]);
+    sock.emit({ type: "left", peer: "old-page" });
+    expect(left).toEqual(["old-page"]);
+
+    // Missing/empty/wrong-typed peer ids are malformed and ignored.
+    sock.emit({ type: "left" });
+    sock.emit({ type: "left", peer: "" });
+    sock.emit({ type: "left", peer: 42 });
+    expect(left).toEqual(["old-page"]);
+  });
+
   it("surfaces the server-observed public IP from the welcome", () => {
     const sock = new FakeSocket();
     const c = new SignalingClient("ws://x", "Alice", () => sock);
@@ -154,6 +189,86 @@ describe("SignalingClient", () => {
     // A genuine close on the live socket still surfaces.
     made[1].onclose?.();
     expect(closes).toBe(1);
+  });
+});
+
+describe("SignalingClient LAN presence", () => {
+  // The presence hook is what makes a join say "these tabs are one device".
+  // It is deliberately a pair of getters: the room can change under a live
+  // client (reconnect), and a page's focus changes constantly.
+  const presenceOf = (deviceId: string, active = false) => ({
+    deviceId: () => deviceId,
+    active: () => active,
+  });
+
+  it("carries the installation id and the current-page state on join", () => {
+    const sock = new FakeSocket();
+    new SignalingClient("ws://x", "Alice", () => sock, presenceOf("f".repeat(32), true));
+    sock.onopen?.();
+    expect(JSON.parse(sock.sent[0])).toEqual({
+      type: "join", name: "Alice", deviceId: "f".repeat(32), active: true,
+    });
+  });
+
+  it("omits active on a join from a page that is not the current one", () => {
+    const sock = new FakeSocket();
+    new SignalingClient("ws://x", "Alice", () => sock, presenceOf("f".repeat(32), false));
+    sock.onopen?.();
+    const join = JSON.parse(sock.sent[0]);
+    expect(join.deviceId).toBe("f".repeat(32));
+    expect(join.active).toBeUndefined();
+  });
+
+  it("omits presence entirely when there is no installation id", () => {
+    // A pairing-code room: two tabs of one browser pairing with each other are
+    // two participants, and sending the id there would merge them into one.
+    const sock = new FakeSocket();
+    new SignalingClient("ws://x", "Alice", () => sock, presenceOf("", true));
+    sock.onopen?.();
+    const join = JSON.parse(sock.sent[0]);
+    expect(join).toEqual({ type: "join", name: "Alice" });
+    expect(join).not.toHaveProperty("deviceId");
+    expect(join).not.toHaveProperty("active");
+  });
+
+  it("re-evaluates presence on reconnect, so a room switch drops it", () => {
+    const made: FakeSocket[] = [];
+    let deviceId = "f".repeat(32);
+    const c = new SignalingClient("ws://lan", "Alice", (u) => {
+      const s = new FakeSocket(u);
+      made.push(s);
+      return s;
+    }, { deviceId: () => deviceId, active: () => true });
+    made[0].onopen?.();
+    expect(JSON.parse(made[0].sent[0]).deviceId).toBe("f".repeat(32));
+
+    deviceId = ""; // switched into a pairing-code room
+    c.reconnect("ws://code");
+    made[1].onopen?.();
+    expect(JSON.parse(made[1].sent[0])).toEqual({ type: "join", name: "Alice" });
+  });
+
+  it("sends an activation frame only when this connection has an identity", () => {
+    const withId = new FakeSocket();
+    const c1 = new SignalingClient("ws://x", "Alice", () => withId, presenceOf("f".repeat(32)));
+    withId.onopen?.();
+    c1.sendActivate();
+    expect(JSON.parse(withId.sent[1])).toEqual({ type: "activate" });
+
+    const without = new FakeSocket();
+    const c2 = new SignalingClient("ws://x", "Alice", () => without, presenceOf(""));
+    without.onopen?.();
+    c2.sendActivate();
+    expect(without.sent).toHaveLength(1); // the join, and nothing else
+  });
+
+  it("joins exactly as before when no presence hook is supplied", () => {
+    const sock = new FakeSocket();
+    const c = new SignalingClient("ws://x", "Alice", () => sock);
+    sock.onopen?.();
+    expect(JSON.parse(sock.sent[0])).toEqual({ type: "join", name: "Alice" });
+    c.sendActivate();
+    expect(sock.sent).toHaveLength(1);
   });
 });
 

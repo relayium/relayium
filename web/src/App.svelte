@@ -4,6 +4,9 @@
   import { fade } from "svelte/transition";
   import { ready } from "./lib/crypto";
   import { SignalingClient } from "./lib/signaling";
+  import { lanDeviceId } from "./lib/lan-device-id";
+  import { isCurrentPage, watchCurrentPage } from "./lib/current-page";
+  import { labelPeers } from "./lib/peer-labels";
   import { wsURL } from "./lib/transfer-link";
   import { roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
   import type { Conn, ConnPath, RtcConfig } from "./lib/webrtc";
@@ -156,6 +159,10 @@
 
   // Non-reactive locals
   let signaling: SignalingClient;
+  // This installation's opaque LAN presence id (see lan-device-id.ts). Read once
+  // at mount; "" when storage is unavailable, which simply means this browser
+  // joins the way a client without the field does.
+  let lanDevice = "";
   let socketRoomKey = ""; // which room the current socket is bound to; guards the reconnect effect
   let roomEpoch = 0; // bumped per room switch; discards a stale fetchIceServers response
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined; // pending auto-reconnect after a WS drop
@@ -233,7 +240,11 @@
     }
   }
   const t = $derived<Messages>(messages[lang()]);
-  const visiblePeers = $derived(peers.filter((p) => p.id !== selfId));
+  // Same-installation pages are already collapsed into one entry by the hub, so
+  // anything still sharing a name here is a genuinely different device and gets
+  // a short id suffix — the same disambiguation the native chooser does. Only
+  // the shown name changes; every action below still binds to the full peer id.
+  const visiblePeers = $derived(labelPeers(peers.filter((p) => p.id !== selfId)));
   // Which peer's send card is expanded below the radar. Solo auto-selects; a
   // stale selection (peer left) falls back to none.
   let selectedPeerId = $state("");
@@ -680,7 +691,15 @@
     iceServers = ice.iceServers;
     relayPool = ice.relays;
     relayStatus = ice.relayStatus;
-    signaling = new SignalingClient(wsURL(location, roomCode), selfName);
+    lanDevice = await lanDeviceId();
+    signaling = new SignalingClient(wsURL(location, roomCode), selfName, undefined, {
+      // LAN room only. A pairing-code room is a two-participant capability room
+      // — announcing the installation there would merge a user's own two tabs
+      // into one participant and break pairing a browser with itself. Read as a
+      // getter because switchRoom() rebinds this same client to another room.
+      deviceId: () => (roomCode ? "" : lanDevice),
+      active: () => isCurrentPage(),
+    });
     signaling.onSelfId((id, ip) => {
       selfId = id; selfIP = ip; joinedRoom = true;
       // A welcome means the socket is (re)connected — clear any reconnect state.
@@ -696,6 +715,7 @@
       broadcastRelayRtt();
       broadcastCaps();
     });
+    signaling.onPeerLeft((peerId) => workspace.peerLeft(peerId));
     signaling.onSignal(onPeerRelayRtt); // capture peers' relay-RTT maps (ignored by the WebRTC handlers)
     startRelayMeasurement(); // background; the choice is usually ready before a transfer
     signaling.onClose(() => {
@@ -795,6 +815,13 @@
     socketRoomKey = key;
     void switchRoom();
   });
+
+  // Tell the hub when this page becomes the one the user is looking at, so a
+  // nearby device that picks this browser reaches THIS tab. Only fires on a real
+  // transition (see watchCurrentPage) — every announcement spends a frame from
+  // this connection's server-side budget. The join frame carries the initial
+  // state, so nothing is sent at startup.
+  onMount(() => watchCurrentPage(() => { if (signaling) signaling.sendActivate(); }));
 
   onMount(() => {
     // Guard tab/logo navigation and tab-close while a transfer is live: navigating

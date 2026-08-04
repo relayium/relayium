@@ -161,6 +161,9 @@ func TestLeaveRebroadcastsRoster(t *testing.T) {
 	h.Join("ip1", "a", "A", a)
 	h.Join("ip1", "b", "B", b)
 	h.Leave("ip1", "b")
+	if got := countType(a, TypeLeft); got != 1 {
+		t.Fatalf("a should receive one physical-leave event for b, got %d", got)
+	}
 	if got := a.last(); got.Type != TypePeers || len(got.Peers) != 1 {
 		t.Fatalf("a should see roster of 1 after b leaves: %+v", got)
 	}

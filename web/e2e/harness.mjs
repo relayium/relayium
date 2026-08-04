@@ -138,8 +138,63 @@ export function cdp(wsUrl) {
   };
 }
 
-/** 一个标签页的把手：evaluate / 等条件 / 收集 console 错误。 */
-export async function newTab(browser, url, initScript) {
+/** localStorage key holding this browser profile's LAN seed (lan-device-id.ts).
+ *  The app derives its advertised installation id from it, so the per-page test
+ *  override decides which virtual tabs count as one device. */
+const LAN_SEED_KEY = "relayium.lan.seed";
+
+let lanSeedSerial = 0;
+/**
+ * A fresh, distinct LAN seed.
+ *
+ * Every tab in a run shares ONE browser profile, so without this they would all
+ * derive the same installation id and the hub would correctly collapse them into
+ * a single device — every existing two-tab scenario would then see zero peers.
+ * The scenarios mean "two devices", so each tab gets its own seed and keeps
+ * simulating an independent device. A scenario that genuinely means "two pages
+ * of ONE device" passes the same seed to both tabs explicitly.
+ *
+ * Deterministic (a counter, not randomness) so a failing run is reproducible.
+ */
+export const distinctLanSeed = () => (++lanSeedSerial).toString(16).padStart(64, "0");
+
+/**
+ * Init script giving THIS page its own LAN seed, before any application code
+ * runs.
+ *
+ * It overrides the one storage key rather than writing it, because localStorage
+ * is shared by every tab of the profile: a tab that wrote its seed would
+ * immediately have it overwritten by the next tab, and all of them would end up
+ * one device. The override is per page, which is exactly the "different browser
+ * profile" the scenarios are simulating. Everything else in storage — device
+ * name, preferences — still behaves normally and is still shared.
+ */
+export const lanSeedScript = (seed) => `
+  (() => {
+    const KEY = ${JSON.stringify(LAN_SEED_KEY)};
+    const SEED = ${JSON.stringify(seed)};
+    const proto = Storage.prototype;
+    const get = proto.getItem, set = proto.setItem, del = proto.removeItem;
+    const isSeed = (store, key) => store === localStorage && key === KEY;
+    proto.getItem = function (k) { return isSeed(this, k) ? SEED : get.call(this, k); };
+    proto.setItem = function (k, v) { if (!isSeed(this, k)) set.call(this, k, v); };
+    proto.removeItem = function (k) { if (!isSeed(this, k)) del.call(this, k); };
+  })();
+`;
+
+/** Make `tab` the tab the user is looking at, and wait until the page agrees.
+ *  A real activation, not a stubbed visibility flag: Chrome's --headless=new
+ *  drives document.visibilityState and hasFocus() from it, so the app's own
+ *  current-page logic is what runs. */
+export async function activateTab(browser, tab) {
+  await browser.send("Target.activateTarget", { targetId: tab.targetId });
+  await tab.waitFor("document.visibilityState === 'visible'", "this tab to become the visible one");
+}
+
+/** 一个标签页的把手：evaluate / 等条件 / 收集 console 错误。
+ *  `lanSeed` decides which installation this page belongs to; by default a fresh
+ *  one, i.e. its own device. */
+export async function newTab(browser, url, initScript, { lanSeed = distinctLanSeed() } = {}) {
   const { targetId } = await browser.send("Target.createTarget", { url: "about:blank" });
   const { sessionId } = await browser.send("Target.attachToTarget", { targetId, flatten: true });
   const errors = [];
@@ -160,7 +215,11 @@ export async function newTab(browser, url, initScript) {
   await send("Runtime.enable");
   await send("Page.enable");
   await send("DOM.enable");
-  if (initScript) await send("Page.addScriptToEvaluateOnNewDocument", { source: initScript });
+  // The seed goes first and unconditionally: a tab with no init script of its
+  // own still has to be an independent device.
+  await send("Page.addScriptToEvaluateOnNewDocument", {
+    source: [lanSeedScript(lanSeed), initScript].filter(Boolean).join("\n"),
+  });
   await send("Page.navigate", { url });
 
   // 每一次 evaluate 都带独立超时。**这是必须的**：页面主线程一旦被卡死（正是这套

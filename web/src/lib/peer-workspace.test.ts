@@ -48,8 +48,11 @@ function setup() {
   } as unknown as TransferSession;
   let legacyTextStatus = "idle";
   let legacyTextActive = false;
+  let legacyTextPeer = "";
   const legacyText = {
-    get status() { return legacyTextStatus; }, peerId: "", sasCode: "legacy-text", path: undefined,
+    get status() { return legacyTextStatus; },
+    get peerId() { return legacyTextPeer; },
+    sasCode: "legacy-text", path: undefined,
     history: [], errorKey: "", openWith: vi.fn(), accept: vi.fn(), reject: vi.fn(),
     send: vi.fn(), end: vi.fn(), clearHistory: vi.fn(), active: vi.fn(() => legacyTextActive),
   } as unknown as TextSession;
@@ -81,9 +84,10 @@ function setup() {
     setJoined(value: boolean) { joined = value; },
     setUnsupported(value: boolean) { unsupported = value; },
     setPeers(value: string[]) { peers = value; },
-    setLegacyText(status: string, active: boolean) {
+    setLegacyText(status: string, active: boolean, peerId = "") {
       legacyTextStatus = status;
       legacyTextActive = active;
+      legacyTextPeer = peerId;
     },
   };
 }
@@ -166,7 +170,7 @@ describe("peer workspace capability routing", () => {
     h.workspace.stop();
   });
 
-  it("closes a departed peer and suppresses immediate inbound reopen after explicit disconnect", async () => {
+  it("preserves an established link across a roster handoff and suppresses immediate inbound reopen after explicit disconnect", async () => {
     const h = setup();
     h.workspace.start();
     await h.workspace.mixed.ensure("z");
@@ -180,7 +184,123 @@ describe("peer workspace capability routing", () => {
     expect(h.connect).toHaveBeenCalledTimes(2);
     h.setPeers(["a"]);
     h.workspace.syncPeers();
+    expect(h.workspace.mixed.link?.peerId).toBe("z");
+    h.workspace.stop();
+  });
+
+  // A device's representative page can be replaced while we are still waiting
+  // for it to accept — the user switched tabs, or that page was closed. The new
+  // roster is the notification, and it must land as "this target is gone", not
+  // as an indefinite "Waiting for the other device to accept…".
+  it("cancels a pending request when its target leaves the roster", async () => {
+    const h = setup();
+    h.setSelfId("zz"); // greater id → this side asks and waits for the accept
+    h.workspace.start();
+    const pending = h.workspace.mixed.ensure("z");
+    pending.catch(() => {}); // the assertion below is that it settles at all
+    expect(h.workspace.linkStatus).toBe("requesting");
+
+    h.setPeers(["zz"]); // the roster now names a different page for that device
+    h.workspace.syncPeers();
+
+    expect(h.workspace.linkStatus).toBe("idle");
+    await expect(pending).rejects.toBeInstanceOf(Error);
+    h.workspace.stop();
+  });
+
+  // The SHIPPED default build negotiates text over the legacy session (it does
+  // not advertise link/1), so this is the path the reported "Waiting for the
+  // other device to accept…" actually came from. Without it, that panel stays on
+  // screen for a page that is no longer in anybody's roster — and the sender
+  // cannot even start a new session, because the dead one still counts as busy.
+  it.each([
+    ["waitingAccept"], ["connecting"],
+  ])("ends an outgoing legacy text session in %s once its target leaves the roster", (status) => {
+    const h = setup();
+    h.setLegacyText(status, true, "gone");
+    h.setPeers(["a", "z", "old"]);
+    h.workspace.syncPeers();
+    expect(h.legacyText.end).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["incomingRequest"], ["open"],
+  ])("keeps an established/incoming legacy text session in %s across a representative handoff", (status) => {
+    const h = setup();
+    h.setLegacyText(status, true, "old-representative");
+    h.setPeers(["new-representative"]);
+    h.workspace.syncPeers();
+    expect(h.legacyText.end).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["connecting"], ["waitingAccept"], ["incomingRequest"], ["open"],
+  ])("ends a legacy text session in %s when its physical peer actually leaves", (status) => {
+    const h = setup();
+    h.setLegacyText(status, true, "old-page");
+    h.workspace.peerLeft("old-page");
+    expect(h.legacyText.end).toHaveBeenCalledOnce();
+  });
+
+  it("does not end a session for an unrelated physical departure", () => {
+    const h = setup();
+    h.setLegacyText("open", true, "still-here");
+    h.workspace.peerLeft("different-page");
+    expect(h.legacyText.end).not.toHaveBeenCalled();
+  });
+
+  it("ends an established mixed link only when that physical peer leaves", async () => {
+    const h = setup();
+    await h.workspace.mixed.ensure("z");
+    const conn = h.workspace.mixed.link!.conn;
+    h.workspace.peerLeft("unrelated");
+    expect(h.workspace.mixed.link?.peerId).toBe("z");
+
+    h.workspace.peerLeft("z");
     expect(h.workspace.mixed.link).toBeNull();
+    expect(conn.close).toHaveBeenCalledOnce();
+    h.workspace.stop();
+  });
+
+  it("cancels an in-flight mixed request when that physical peer leaves", async () => {
+    const h = setup();
+    h.setSelfId("zz");
+    h.workspace.start();
+    const pending = h.workspace.mixed.ensure("z");
+    pending.catch(() => {});
+    expect(h.workspace.mixed.manager.boundPeerId).toBe("z");
+
+    h.workspace.peerLeft("z");
+    expect(h.workspace.linkStatus).toBe("idle");
+    await expect(pending).rejects.toBeInstanceOf(Error);
+    h.workspace.stop();
+  });
+
+  it("leaves a legacy text session alone while its peer is still listed", () => {
+    const h = setup();
+    h.setLegacyText("open", true, "old");
+    h.setPeers(["a", "old"]);
+    h.workspace.syncPeers();
+    expect(h.legacyText.end).not.toHaveBeenCalled();
+  });
+
+  it("does not re-end a legacy session that already finished", () => {
+    const h = setup();
+    h.setLegacyText("ended", false, "gone");
+    h.setPeers(["a"]);
+    h.workspace.syncPeers();
+    expect(h.legacyText.end).not.toHaveBeenCalled();
+  });
+
+  it("keeps waiting while the request target is still in the roster", async () => {
+    const h = setup();
+    h.setSelfId("zz");
+    h.workspace.start();
+    const pending = h.workspace.mixed.ensure("z");
+    pending.catch(() => {});
+    h.setPeers(["zz", "z", "old"]);
+    h.workspace.syncPeers();
+    expect(h.workspace.linkStatus).toBe("requesting");
     h.workspace.stop();
   });
 
@@ -361,16 +481,16 @@ describe("peer workspace during a mixed transport gap", () => {
     h.workspace.stop();
   });
 
-  it("disconnects and cancels recovery when the peer leaves during the gap", async () => {
+  it("keeps recovery alive when the roster hands the device to another page", async () => {
     const h = await interrupted();
 
     h.setPeers(["a", "old"]);
     h.workspace.syncPeers();
 
-    expect(h.workspace.mixed.link).toBeNull();
-    expect(h.workspace.linkStatus).toBe("idle");
-    expect(h.workspace.blocksLegacyInbound).toBe(false);
-    expect(h.resume.mock.calls[0][0].signal?.aborted).toBe(true);
+    expect(h.workspace.mixed.link?.peerId).toBe("z");
+    expect(h.workspace.linkStatus).toBe("interrupted");
+    expect(h.workspace.blocksLegacyInbound).toBe(true);
+    expect(h.resume.mock.calls[0][0].signal?.aborted).toBe(false);
     h.workspace.stop();
   });
 });

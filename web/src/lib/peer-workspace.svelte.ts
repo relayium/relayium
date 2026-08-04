@@ -81,6 +81,8 @@ export interface PeerWorkspace {
   conn(): Conn | null;
   start(): void;
   syncPeers(): void;
+  /** End sessions bound to a signaling peer the server confirmed closed. */
+  peerLeft(peerId: string): void;
   disconnect(): void;
   resetRoom(): void;
   stop(): void;
@@ -266,11 +268,45 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     conn() { return mixed.link?.conn ?? deps.legacyFiles.conn() ?? null; },
     start() { mixed.start(); },
     syncPeers() {
-      const peerId = mixed.link?.peerId;
-      if (peerId && !deps.peerIds().includes(peerId)) mixed.disconnect();
+      // A target we are still WAITING on gets the same rule. A device's current
+      // page can be replaced between our request and its accept (the user
+      // switched tabs, or closed that one), and the roster is how we hear about
+      // it — without this the sender sits on "Waiting for the other device to
+      // accept…" for a page that is no longer anybody's target.
+      const awaiting = mixed.manager.requestedPeerId;
+      if (awaiting && !deps.peerIds().includes(awaiting)) mixed.disconnect();
+      // The same rule for the legacy text session, which is the path the shipped
+      // build actually uses (it does not advertise link/1). A live session whose
+      // peer is no longer in the roster is not merely stale on screen: it still
+      // counts as busy, so the user cannot start a new one with the page that
+      // replaced it either.
+      // Do not tear down an established or incoming session merely because its
+      // peer stopped representing the device: a focus handoff removes that peer
+      // id from the chooser even though its socket/data channel is still alive.
+      // Those sessions own their transport close lifecycle. Only an outgoing
+      // attempt that has not opened yet can be the stale-target wait reported by
+      // the user.
+      const chatting = deps.legacyText.peerId;
+      const awaitingLegacy = deps.legacyText.status === "connecting"
+        || deps.legacyText.status === "waitingAccept";
+      if (chatting && awaitingLegacy && !deps.peerIds().includes(chatting)) {
+        deps.legacyText.end();
+      }
       for (const suppressed of suppressedUntil.keys()) {
         if (!deps.peerIds().includes(suppressed)) suppressedUntil.delete(suppressed);
       }
+    },
+    peerLeft(peerId) {
+      // Unlike a roster representative handoff, this event means the physical
+      // signaling connection is gone. End every phase tied to exactly that id;
+      // a surviving sibling page will be offered separately by the next roster.
+      if (mixed.manager.boundPeerId === peerId) {
+        mixed.disconnect();
+      }
+      if (deps.legacyText.peerId === peerId && deps.legacyText.active()) {
+        deps.legacyText.end();
+      }
+      suppressedUntil.delete(peerId);
     },
     disconnect() {
       const peerId = mixed.link?.peerId || mixed.peerId;

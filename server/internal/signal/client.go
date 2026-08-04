@@ -88,8 +88,15 @@ func (w *wsConn) Send(e Envelope) {
 }
 
 // ServeWS handles one websocket client for its whole lifetime.
-func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string) {
-	return func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string) {
+//
+// lan says whether this is the code-less same-network room. Installation
+// presence (Envelope.DeviceID/Active and TypeActivate) is honoured there and
+// ONLY there: a pairing-code room is a two-participant capability room, where
+// grouping two connections into one device would silently break a user pairing
+// two tabs of one browser. Gating it here rather than trusting the client to
+// omit the field makes that a property of the server.
+func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string, lan bool) {
+	return func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string, lan bool) {
 		// Explicit single-frame cap: a real signaling frame is a few KB. Anything
 		// larger is rejected by coder/websocket at read time (ends the loop).
 		c.SetReadLimit(maxFrameBytes)
@@ -166,12 +173,29 @@ func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket
 			switch e.Type {
 			case TypeJoin:
 				if !joined {
-					if h.JoinLimited(room, id, e.Name, conn, maxPeers, clientIP) {
+					device, active := "", false
+					if lan {
+						device, active = e.DeviceID, e.Active
+					}
+					if h.JoinDeviceLimited(room, id, e.Name, conn, maxPeers, clientIP, device, active) {
 						joined = true
 						cancelJoin() // joined in time — stop the join deadline
 					} else {
 						return // room full — close the connection
 					}
+				}
+			case TypeActivate:
+				// Charged to the same per-connection budget as a signal frame,
+				// and charged BEFORE the joined check: otherwise this frame type
+				// would be a free flood channel for anyone holding a socket.
+				if ok, reason := lim.admit(len(data)); !ok {
+					_ = c.Close(websocket.StatusPolicyViolation, reason)
+					return
+				}
+				// Only ever this connection's own (room, id) — never a target
+				// named by the frame, which carries nothing the server reads.
+				if joined && lan {
+					h.Activate(room, id)
 				}
 			case TypeSignal:
 				// Count the raw frame bytes; join frames are never counted.

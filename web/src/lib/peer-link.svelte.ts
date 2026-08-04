@@ -977,6 +977,22 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         : request(peerId);
     },
 
+    /** The peer this side has asked to connect and is now waiting on, or "".
+     *  Deliberately NOT the peer of an in-flight `establish`: a responder starts
+     *  establishing the instant the request signal arrives, which can be ahead
+     *  of the debounced roster that first names its sender. This one is only
+     *  ever set from our own `ensure` for a peer we already had in a roster, so
+     *  a later roster without it is genuinely "that page is gone". */
+    get requestedPeerId() { return requested?.peerId ?? ""; },
+
+    /** The peer id this manager is currently bound to in any lifecycle phase.
+     *  A server-confirmed physical departure uses this broader view to cancel
+     *  an in-flight establishment as well as a requested or established link. */
+    get boundPeerId() {
+      return current?.peerId ?? opening?.peerId ?? requested?.peerId
+        ?? recovering?.peerId ?? replacing?.peerId ?? "";
+    },
+
     /** True while a transport rebuild for the current link is in flight. */
     get replacingTransport() { return replacing !== null; },
 

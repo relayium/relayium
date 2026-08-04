@@ -11,14 +11,16 @@
  * 都是真的：真服务器、真 WebSocket 信令、真 RTCPeerConnection、真 AES-GCM。
  *
  * 用法：node e2e/lan-transfer.mjs [--url http://localhost:8099] [--keep]
+ *       node e2e/lan-transfer.mjs --multi-page-only  # targeted identity regression
  *   前置：web 已 build，且 Go 服务器在 --url 上跑着（它同时兜 SPA 和 /ws）。
  */
 import { createHash, randomBytes } from "node:crypto";
 // CDP 客户端、标签页把手、浏览器生命周期和另存为桩都在 harness.mjs 里，和
 // mixed-link.mjs 共用同一份——两个脚本的超时语义和挂死检测必须是同一套。
 import {
-  OBSERVE_CAPS, SAVE_STUB, VERIFY_DEFAULT, VERIFY_ON, argFlag, argPresent, fail, launchBrowser,
-  newTab, ok, requireServer, setWideViewport, sleep, withWatchdog,
+  OBSERVE_CAPS, SAVE_STUB, VERIFY_DEFAULT, VERIFY_ON, activateTab, argFlag, argPresent,
+  distinctLanSeed, fail, launchBrowser, newTab, ok, requireServer, setWideViewport, sleep,
+  withWatchdog,
 } from "./harness.mjs";
 // 真场景里的无障碍断言。静态扫描器扫不到这些状态：它没有对端，也没有信令服务器，
 // 而"同意卡 / 进行中的进度条 / 消息记录"恰好是这个产品里最需要读屏的三个地方。
@@ -859,6 +861,178 @@ async function messageDefaultScenario(browser) {
 }
 
 /**
+ * Read-only probe of what the SERVER told this page: its own peer id from the
+ * welcome, and the ids in the latest roster.
+ *
+ * Deliberately observing real frames rather than application state. The whole
+ * defect this scenario covers is about identity — which page a peer is offered
+ * and which one a request reaches — and two pages of one browser are labelled
+ * with the same device name, so the DOM alone cannot tell them apart. It also
+ * lets the scenario wait on an observable condition (the roster the server
+ * actually sent) instead of sleeping and hoping a handover has landed.
+ */
+const OBSERVE_ROSTER = `
+  window.__selfId = "";
+  window.__roster = null;
+  window.__leftPeers = [];
+  window.__signalFrames = { sent: [], received: [] };
+  (() => {
+    const Real = window.WebSocket;
+    const realSend = Real.prototype.send;
+    Real.prototype.send = function (data) {
+      try {
+        const e = JSON.parse(data);
+        if (e && e.type === "signal") window.__signalFrames.sent.push(e);
+      } catch { /* not a frame we read */ }
+      return realSend.call(this, data);
+    };
+    window.WebSocket = function (...a) {
+      const ws = new Real(...a);
+      ws.addEventListener("message", (ev) => {
+        try {
+          const e = JSON.parse(ev.data);
+          if (e && e.type === "welcome") window.__selfId = e.name;
+          if (e && e.type === "peers") window.__roster = e.peers.map((p) => p.id);
+          if (e && e.type === "left") window.__leftPeers.push(e.peer);
+          if (e && e.type === "signal") window.__signalFrames.received.push(e);
+        } catch { /* not a frame we read */ }
+      });
+      return ws;
+    };
+    window.WebSocket.prototype = Real.prototype;
+  })();
+`;
+
+/**
+ * 一个浏览器的两个标签页必须只算**一台设备**，而且请求要落在用户正看着的那一页。
+ *
+ * This is the reported defect: several identically named pages of one phone were
+ * offered as separate devices, so the other device could pick one, and the
+ * message request would land on a page nobody was looking at — one side sat on
+ * "Waiting for the other device to accept…" forever while another page of the
+ * same browser was perfectly able to start its own session.
+ *
+ * Asserts, in order:
+ *  1. an independently seeded device sees the two-page browser exactly ONCE;
+ *  2. neither page of that browser lists its sibling as a target;
+ *  3. focus decides the target: after a handover the request reaches the page
+ *     the user switched to, and the other page never renders a request at all;
+ *  4. closing the represented page falls back to the live sibling — one entry,
+ *     never a duplicate and never a dead id — and the device stays reachable.
+ */
+async function multiPageDeviceScenario(browser) {
+  // One installation, two pages. `newTab` hands every other tab in the suite its
+  // own seed, so this shared one is the only thing making these two "one device".
+  const installation = distinctLanSeed();
+  const boot = VERIFY_DEFAULT + OBSERVE_ROSTER;
+  const a1 = await newTab(browser, BASE + "/", boot, { lanSeed: installation });
+  const a2 = await newTab(browser, BASE + "/", boot, { lanSeed: installation });
+  const b = await newTab(browser, BASE + "/", boot); // an independent device
+  for (const tab of [a1, a2, b]) await setWideViewport(tab);
+
+  const joined = "!!window.__selfId && Array.isArray(window.__roster)";
+  for (const [who, tab] of [["A1", a1], ["A2", a2], ["B", b]]) {
+    await tab.waitFor(joined, `page ${who} to join the LAN room`, 30_000);
+  }
+  const selfIdOf = async (tab) => tab.evaluate("window.__selfId");
+  const rosterOf = async (tab) => tab.evaluate("window.__roster");
+  const ids = { a1: await selfIdOf(a1), a2: await selfIdOf(a2), b: await selfIdOf(b) };
+
+  // 1 + 2. Grouping, from both sides.
+  await b.waitFor("window.__roster.length === 1", "device B to see the two pages as ONE device", 30_000);
+  for (const [who, tab] of [["A1", a1], ["A2", a2]]) {
+    await tab.waitFor(
+      `JSON.stringify(window.__roster) === ${JSON.stringify(JSON.stringify([ids.b]))}`,
+      `page ${who} to see only the other device (never its own sibling)`,
+      30_000,
+    );
+  }
+  const bSees = await rosterOf(b);
+  if (bSees.length !== 1 || (bSees[0] !== ids.a1 && bSees[0] !== ids.a2)) {
+    throw new Error(`B was offered ${JSON.stringify(bSees)}, want exactly one of A's pages`);
+  }
+  ok("two pages of one browser were advertised as a single device, and never to each other");
+
+  // 3. Focus decides which page represents the device. Both directions, so a
+  // one-way "whichever joined last wins" cannot pass this.
+  const rosterIs = (id) => `JSON.stringify(window.__roster) === ${JSON.stringify(JSON.stringify([id]))}`;
+  await activateTab(browser, a2);
+  await b.waitFor(rosterIs(ids.a2), "the device to be represented by the page the user switched to (A2)", 30_000);
+  await activateTab(browser, a1);
+  await b.waitFor(rosterIs(ids.a1), "the representative to hand back to A1 on focus", 30_000);
+  ok("focus moved the device's representative in both directions, always as one entry");
+
+  // The pages that are NOT current must never render a request. Latched from
+  // before the request is sent, so a card that appeared and vanished still fails.
+  const watchForPanel = `(() => {
+    window.__panelSeen = 0;
+    const look = () => { if (document.querySelector('.msgpanel')) window.__panelSeen++; };
+    new MutationObserver(look).observe(document.body, { childList: true, subtree: true });
+    look();
+    return true;
+  })()`;
+  await a2.evaluate(watchForPanel);
+
+  await b.waitFor(`!!document.querySelector('${MSG_OPEN_BTN}')`, "B's message control", 30_000);
+  await b.evaluate(`(() => { document.querySelector('${MSG_OPEN_BTN}').click(); return true; })()`);
+
+  // Verification is off (VERIFY_DEFAULT), so the current page auto-accepts and
+  // both sides land in the composer. A request routed to the background page
+  // would leave B waiting here instead — which is exactly the reported failure.
+  await a1.waitFor("!!document.querySelector('.msgpanel textarea')", "the FOCUSED page to receive the request", 40_000);
+  await b.waitFor("!!document.querySelector('.msgpanel textarea')", "B's composer (the request was accepted, not left waiting)", 40_000);
+  const strayPanels = await a2.evaluate("window.__panelSeen");
+  if (strayPanels !== 0) {
+    throw new Error(`the background page rendered a message request ${strayPanels} time(s)`);
+  }
+  ok("the request reached the page the user was looking at, and no other page of that browser");
+
+  // 4. The represented page goes away mid-session: the device must fall back to
+  // its live sibling as ONE entry, and stay usable.
+  await browser.send("Target.closeTarget", { targetId: a1.targetId });
+  await b.waitFor(
+    `window.__leftPeers.includes(${JSON.stringify(ids.a1)})`,
+    "the server's physical-leave event for the closed page",
+    30_000,
+  );
+  await b.waitFor(rosterIs(ids.a2), "the device to fall back to its surviving page, still as one entry", 30_000);
+  await activateTab(browser, a2);
+  await b.waitFor(
+    `!!document.querySelector('${MSG_OPEN_BTN}') && !document.querySelector('${MSG_OPEN_BTN}').disabled`,
+    "B to be able to reach the device again",
+    30_000,
+  );
+  await b.evaluate(`(() => { document.querySelector('${MSG_OPEN_BTN}').click(); return true; })()`);
+  try {
+    await a2.waitFor("!!document.querySelector('.msgpanel textarea')", "the surviving page to receive the next request", 40_000);
+  } catch (err) {
+    const diagnostics = {
+      b: await b.evaluate(`({
+        roster: window.__roster,
+        left: window.__leftPeers,
+        panel: document.querySelector('.msgpanel')?.textContent ?? '',
+        sent: window.__signalFrames.sent,
+        received: window.__signalFrames.received,
+      })`),
+      a2: await a2.evaluate(`({
+        roster: window.__roster,
+        panel: document.querySelector('.msgpanel')?.textContent ?? '',
+        sent: window.__signalFrames.sent,
+        received: window.__signalFrames.received,
+      })`),
+    };
+    throw new Error(`${err.message}; diagnostics=${JSON.stringify(diagnostics)}`);
+  }
+  ok("closing the represented page handed the device to its sibling with no stale entry or wedged session");
+
+  const errs = [...a2.errors, ...b.errors].filter((e) => !/401|Failed to load resource/.test(e));
+  if (errs.length) throw new Error(`console errors during the multi-page scenario:\n    ${errs.join("\n    ")}`);
+
+  await browser.send("Target.closeTarget", { targetId: a2.targetId });
+  await browser.send("Target.closeTarget", { targetId: b.targetId });
+}
+
+/**
  * 把一个标签页的 caps 名册通告掐掉，模拟一个**跑旧版本的对端**：它从不声明 text/1。
  *
  * 对面那一页因此不该出现消息按钮 —— 这正是"新端永远不去骚扰旧端"的那条保证
@@ -1597,6 +1771,12 @@ async function main() {
   try {
     console.log(`\nLAN transfer E2E against ${BASE}`);
 
+    if (argPresent("--multi-page-only")) {
+      await multiPageDeviceScenario(browser);
+      console.log("\n\x1b[32mLAN multi-page device E2E passed\x1b[0m\n");
+      return;
+    }
+
     await authLandingScenario(browser);
     await appsHierarchyScenario(browser);
     await pricingHierarchyScenario(browser);
@@ -2223,6 +2403,10 @@ async function main() {
     // The default (verification off) path, right after the ON path above, so a
     // change that collapses the two is visible as one of them failing.
     await messageDefaultScenario(browser);
+    await sleep(1000);
+    // Same default (verification off) path, but the identity question: two pages
+    // of ONE browser plus an independent device.
+    await multiPageDeviceScenario(browser);
     await sleep(1000);
     await capsSuppressedScenario(browser);
 

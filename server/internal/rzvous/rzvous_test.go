@@ -31,7 +31,9 @@ func startHub(t *testing.T) string {
 		if err != nil {
 			return
 		}
-		handle(r.Context(), c, "testroom", 0, "127.0.0.1")
+		// lan=false: this fixture stands in for a pairing-code room, which is
+		// where the CLI rendezvous actually runs.
+		handle(r.Context(), c, "testroom", 0, "127.0.0.1", false)
 		c.Close(websocket.StatusNormalClosure, "")
 	})
 	srv := httptest.NewServer(mux)

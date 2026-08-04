@@ -46,19 +46,78 @@ handshake ride inside `data` and are defined by the realtime layer, not here.
 
 ## Envelope (every frame, both directions), JSON:
 { "type": string, "from"?: string, "to"?: string, "name"?: string,
-  "ip"?: string, "peers"?: [{"id":string,"name":string}], "data"?: <any JSON> }
-- `type` ∈ { "join", "welcome", "peers", "signal" }.
-- All fields except `type` are optional (Go omitempty).
+  "ip"?: string, "peers"?: [{"id":string,"name":string}], "data"?: <any JSON>,
+  "peer"?: string, "deviceId"?: string, "active"?: boolean }
+- `type` ∈ { "join", "welcome", "peers", "left", "signal", "activate" }.
+- Fields other than `type` are message-specific. The current server always
+  includes `peers` on a `peers` frame, including `[]`.
+- `deviceId` / `active` are **client→server only**, and only on `join`. The
+  server never echoes either to anyone: the roster stays `{id,name}`, so no
+  client can read or confirm another client's `deviceId`.
+- `peer` is **server→client only** and appears only on `left`.
+
+## LAN installation presence (optional, LAN room only)
+One browser's tabs are one device, not several. Without this, every tab of a
+phone appeared as its own identically named entry, so the other device could
+pick one and have its request land on a page nobody was looking at.
+
+- `deviceId` is an **opaque, rotating, client-derived** value: a digest of a
+  random seed held only in that browser's local storage and a 24-hour epoch. The
+  seed never leaves the device. It is NOT derived from an account, an IP address,
+  a device name or any hardware/browser fingerprint, and two clients that merely
+  share a name or an address are never merged.
+- Shape: exactly **32 lower-case hex characters** (`signal.ValidDeviceID`).
+  Anything else is rejected outright and treated as absent — an attacker-chosen
+  string can never become a grouping key.
+- **LAN room only.** In a pairing-code room the server ignores both fields, so
+  two tabs of one browser pairing with each other remain two participants. This
+  is enforced server-side, not merely by client convention.
+- Omitting `deviceId` is legal and is what an older client, the CLI and the
+  native clients do; such a peer stays a distinct device and keeps the roster
+  shape below.
+- `{"type":"activate"}` says "this connection is now the current/focused page".
+  It carries no target and can only ever affect the connection it arrives on. It
+  is charged to the same per-connection frame budget as a `signal` frame.
+- `active:true` on `join` is the same statement for a page that is already
+  current when it joins.
 
 ## Sequence
-1. On open, the client sends `{"type":"join","name":<device nickname>}`.
+1. On open, the client sends `{"type":"join","name":<device nickname>}`, plus
+   `"deviceId"` (and `"active"` when this page is the current one) in the LAN room.
 2. Server replies `{"type":"welcome","name":<this client's peer id>,"ip":<server-observed public IP or "">}`.
    (The self peer id is carried in `name` on welcome.)
-3. Server sends `{"type":"peers","peers":[{id,name},…]}` — the current room roster,
-   and again whenever it changes.
+3. Server sends `{"type":"peers","peers":[{id,name},…]}` — this recipient's view
+   of the room, and again whenever it changes.
 4. To signal a peer: `{"type":"signal","to":<peer id>,"data":<opaque JSON>}`.
    The server relays it to that peer and stamps `from` = the sender's peer id.
    The client never sets `from`.
+5. When a physical signaling connection closes, the server immediately sends
+   `{"type":"left","peer":<departed peer id>}` to other devices in the room,
+   followed by the updated roster. This event is distinct from a roster
+   representative changing because the user focused another page: clients end
+   sessions bound to `peer`, but preserve them across a roster-only handoff.
+
+## Roster semantics
+- The roster is **per recipient**: two peers in one room legitimately receive
+  different lists.
+- Connections sharing a `deviceId` are advertised as **one** entry, represented
+  by the most recently activated page; with none activated, by the most recently
+  joined one. When the representative leaves, the roster names a surviving
+  sibling instead. Peers without a `deviceId` are each their own entry.
+- Sibling tabs do not receive each other's `left` events. Other devices can
+  receive a `left` for a peer id that is no longer (or is not currently) the
+  advertised representative, because an established session may still be bound
+  to that physical page after a focus handoff.
+- A recipient that sent a `deviceId` is **not** shown its own installation's
+  connections. A recipient without one receives the pre-existing shape, which
+  includes itself; it filters its own id using the welcome.
+- Entries are sorted by (name, id), so a roster never reshuffles between two
+  broadcasts of the same membership.
+- A current server always sends the `peers` array, including `[]` for an empty
+  roster. For compatibility with older servers, clients MUST also treat an
+  absent array on a `peers` frame as empty, never as "no change"; otherwise a
+  departed peer can remain on screen.
+- Broadcasts are debounced per room (200 ms, leading + trailing).
 
 ## Robustness
 - Inbound frames are untrusted: a malformed / non-object / non-JSON frame is

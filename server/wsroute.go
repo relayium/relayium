@@ -72,7 +72,10 @@ type wsRoute struct {
 	validate     func(string) bool
 	globalConns  *signal.GlobalConnLimiter
 	ipConns      *signal.IPConnLimiter
-	handle       func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, ip string)
+	// handle takes the resolved room plus whether it is the code-less LAN room:
+	// installation presence (device grouping / activation) is honoured there
+	// only, so the two-participant pairing-code room keeps its exact semantics.
+	handle       func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, ip string, lan bool)
 	lanMaxPeers  int
 }
 
@@ -141,7 +144,7 @@ func (rt wsRoute) handler() http.HandlerFunc {
 			return
 		}
 		ctx := r.Context()
-		rt.handle(ctx, c, room, maxPeers, ip)
+		rt.handle(ctx, c, room, maxPeers, ip, lan)
 		_ = c.Close(websocket.StatusNormalClosure, "")
 	}
 }

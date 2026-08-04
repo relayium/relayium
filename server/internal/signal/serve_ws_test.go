@@ -29,7 +29,7 @@ func TestServeWSClosesOnByteBudgetExceeded(t *testing.T) {
 		if err != nil {
 			return
 		}
-		handle(r.Context(), c, "testroom", 0, "127.0.0.1")
+		handle(r.Context(), c, "testroom", 0, "127.0.0.1", true)
 		_ = c.Close(websocket.StatusNormalClosure, "")
 	})
 	srv := httptest.NewServer(mux)

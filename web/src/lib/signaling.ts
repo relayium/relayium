@@ -25,10 +25,22 @@ export interface WebSocketLike {
 
 type WsFactory = (url: string) => WebSocketLike;
 
+/** How this connection announces its LAN installation presence, read fresh at
+ *  every join because both answers change under a live client: `deviceId` is ""
+ *  in a pairing-code room (and the client can switch rooms without reloading),
+ *  and `active` follows the page's focus/visibility. */
+export interface LanPresence {
+  /** Opaque installation id, or "" for "join like a client that has none". */
+  deviceId(): string;
+  /** Whether this page is the one the user is currently looking at. */
+  active(): boolean;
+}
+
 export class SignalingClient {
   private sock: WebSocketLike;
   private selfCb: ((id: string, ip: string) => void) | null = null;
   private peersCb: ((p: Peer[]) => void) | null = null;
+  private peerLeftCb: ((peerId: string) => void) | null = null;
   private signalCbs: ((from: string, data: unknown) => void)[] = [];
   private closeCb: (() => void) | null = null;
 
@@ -36,13 +48,34 @@ export class SignalingClient {
     url: string,
     private name: string,
     private wsFactory: WsFactory = (u) => new WebSocket(u) as unknown as WebSocketLike,
+    private presence?: LanPresence,
   ) {
     this.sock = this.open(url);
   }
 
+  /** The join frame for the room this socket is opening into. Presence fields
+   *  are omitted entirely (not sent empty) when there is no installation id, so
+   *  an older server and a pairing-code room both see the original frame. */
+  private joinFrame(): Envelope {
+    const deviceId = this.presence?.deviceId() ?? "";
+    if (!deviceId) return { type: "join", name: this.name };
+    const e: Envelope = { type: "join", name: this.name, deviceId };
+    // Only ever true: `active: false` is the default the server already assumes.
+    if (this.presence?.active()) e.active = true;
+    return e;
+  }
+
+  /** Tell the hub this page is now the current one, so a peer that picks this
+   *  device reaches this tab rather than a background sibling. Meaningless (and
+   *  therefore not sent) without an installation id. */
+  sendActivate() {
+    if (!this.presence?.deviceId()) return;
+    this.send({ type: "activate" });
+  }
+
   private open(url: string): WebSocketLike {
     const sock = this.wsFactory(url);
-    sock.onopen = () => this.send({ type: "join", name: this.name });
+    sock.onopen = () => this.send(this.joinFrame());
     sock.onmessage = (ev) => this.handle(safeParseEnvelope(ev.data));
     sock.onclose = () => this.closeCb?.();
     return sock;
@@ -61,6 +94,10 @@ export class SignalingClient {
   /** Fires on welcome with the self peer id and the server-observed public IP ("" if none). */
   onSelfId(cb: (id: string, ip: string) => void) { this.selfCb = cb; }
   onPeers(cb: (p: Peer[]) => void) { this.peersCb = cb; }
+  /** Fires only when the server confirms that one physical peer connection
+   *  closed. A roster id changing by itself can instead be a harmless focus
+   *  handoff between pages of the same device. */
+  onPeerLeft(cb: (peerId: string) => void) { this.peerLeftCb = cb; }
   onClose(cb: () => void) { this.closeCb = cb; }
   /** Register a signal listener; returns an unsubscribe function. */
   onSignal(cb: (from: string, data: unknown) => void): () => void {
@@ -100,7 +137,14 @@ export class SignalingClient {
     // SAS crypto, the authoritative checks for peer-authored content.
     if (!e || typeof e.type !== "string") return;
     if (e.type === "welcome" && typeof e.name === "string") this.selfCb?.(e.name, typeof e.ip === "string" ? e.ip : "");
+    // An absent `peers` is an EMPTY roster, not a frame to drop. Current servers
+    // send an explicit [], but older servers can omit the empty array; since
+    // device grouping a client can legitimately be told it can see nobody.
+    // Ignoring that leaves a departed peer on screen. A present-but-wrong-typed
+    // `peers` is still rejected as malformed.
+    else if (e.type === "peers" && e.peers === undefined) this.peersCb?.([]);
     else if (e.type === "peers" && Array.isArray(e.peers)) this.peersCb?.(e.peers);
+    else if (e.type === "left" && typeof e.peer === "string" && e.peer !== "") this.peerLeftCb?.(e.peer);
     else if (e.type === "signal" && typeof e.from === "string") { const from = e.from; this.signalCbs.forEach((cb) => cb(from, e.data)); }
   }
 }
