@@ -27,11 +27,11 @@ const MAC_DOWNLOAD_URL = MAC_AVAILABLE ? RELEASES.macos.downloadUrl : null;
 const en = {
   title: "Get Relayium — apps for web, CLI, macOS & iOS",
   description:
-    "Download Relayium: use it in any browser, install the command-line tool, or choose a native app. End-to-end encrypted file transfer on every device, plus ephemeral text in the web app and the CLI.",
+    "Download Relayium: use it in any browser, install the command-line tool, or see what the native apps do. End-to-end encrypted file and ephemeral text transfer everywhere you work — web, command line, macOS and iOS.",
   hero: {
     h1: "Get Relayium",
     pitch:
-      "One end-to-end encrypted file transfer, everywhere you work — plus ephemeral text in the web app and the CLI. Pick your platform.",
+      "One end-to-end encrypted transfer for files and ephemeral text, everywhere you work. Pick your platform.",
     cta: "Open the web app",
   },
   how: {
@@ -41,8 +41,8 @@ const en = {
       "Command line — scriptable file transfers, folder sync, server backups and ephemeral text on macOS, Linux and Windows.",
       MAC_AVAILABLE
         ? "macOS app — download the signed and notarized native menu-bar app."
-        : "macOS app — the signed and notarized release candidate is not publicly downloadable yet.",
-      "iOS app — a native iPhone & iPad app, coming to the App Store.",
+        : "macOS app — the native menu-bar app is an engineering build and is not publicly available yet.",
+      "iOS app — a native iPhone & iPad app that moves files and text while it is open; not publicly available yet.",
     ],
   },
   why: {
@@ -59,12 +59,12 @@ const en = {
       {
         title: "macOS app",
         desc: MAC_AVAILABLE
-          ? "A true native menu-bar app (com.relayium.mac), available as a signed and notarized download."
-          : "A true native menu-bar app (com.relayium.mac). Its signed and notarized release candidate is still being prepared for public download.",
+          ? "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account management — available as a signed and notarized download."
+          : "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account management. It is an engineering build and is not publicly available yet.",
       },
       {
         title: "iOS app",
-        desc: "A native iPhone & iPad app (com.relayium.app) with share-sheet sending. Coming to the App Store.",
+        desc: "A native iPhone & iPad app (com.relayium.app): open an encrypted link with no account, send files and text to nearby devices or by six-digit code, and manage your account — while the app is open.",
       },
     ],
   },
@@ -77,7 +77,7 @@ const en = {
       },
       {
         title: "Get a native app",
-        body: "Deeper OS integration through the macOS client, with iOS planned.",
+        body: "Deeper OS integration through the macOS client, with the iOS app in development.",
       },
     ],
   },
@@ -88,10 +88,10 @@ const en = {
 const zh = {
   title: "获取 Relayium——网页版、命令行、macOS 与 iOS 应用",
   description:
-    "下载 Relayium：在任意浏览器中直接使用、安装命令行工具，或选择原生应用。端到端加密的文件传输覆盖你的每一台设备；临时文本可在网页版与命令行中收发。",
+    "下载 Relayium：在任意浏览器中直接使用、安装命令行工具，或了解原生应用能做什么。端到端加密的文件与临时文本传输，覆盖网页版、命令行以及 macOS 与 iOS 应用。",
   hero: {
     h1: "获取 Relayium",
-    pitch: "同一套端到端加密的文件传输，随处可用；临时文本可在网页版与命令行中收发。选择你的平台。",
+    pitch: "同一套端到端加密的传输，既传文件也发临时文本，随处可用。选择你的平台。",
     cta: "打开网页版",
   },
   how: {
@@ -101,8 +101,8 @@ const zh = {
       "命令行——可脚本化的文件传输、文件夹同步、服务器备份与临时文本，支持 macOS、Linux 与 Windows。",
       MAC_AVAILABLE
         ? "macOS 应用——下载已经签名并通过公证的原生菜单栏应用。"
-        : "macOS 应用——已签名并通过公证的候选版本尚未开放公开下载。",
-      "iOS 应用——原生 iPhone 与 iPad 应用，即将登陆 App Store。",
+        : "macOS 应用——原生菜单栏应用目前是工程版本，尚未开放公开下载。",
+      "iOS 应用——原生 iPhone 与 iPad 应用，在打开时互传文件与文本；尚未开放公开下载。",
     ],
   },
   why: {
@@ -119,12 +119,12 @@ const zh = {
       {
         title: "macOS 应用",
         desc: MAC_AVAILABLE
-          ? "真正的原生菜单栏应用（com.relayium.mac），现已提供经过签名和公证的下载版本。"
-          : "真正的原生菜单栏应用（com.relayium.mac）；已签名并通过公证的候选版本仍在准备公开下载。",
+          ? "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。现已提供经过签名和公证的下载版本。"
+          : "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。目前是工程版本，尚未开放公开下载。",
       },
       {
         title: "iOS 应用",
-        desc: "原生 iPhone 与 iPad 应用（com.relayium.app），支持分享菜单发送。即将登陆 App Store。",
+        desc: "原生 iPhone 与 iPad 应用（com.relayium.app）：无需账号即可打开加密链接，还能与附近设备或用六位配对码互传文件和文本，并管理账号——都在应用打开时进行。",
       },
     ],
   },
@@ -137,7 +137,7 @@ const zh = {
       },
       {
         title: "获取原生应用",
-        body: "macOS 客户端提供更深度的系统集成，iOS 版已列入后续计划。",
+        body: "macOS 客户端提供更深度的系统集成，iOS 应用也在开发中。",
       },
     ],
   },
@@ -148,11 +148,11 @@ const zh = {
 const ja = {
   title: "Relayium を入手 — ウェブ、CLI、macOS、iOS 向けアプリ",
   description:
-    "Relayium をダウンロード：任意のブラウザで使う、コマンドラインツールをインストールする、またはネイティブアプリを選べます。エンドツーエンド暗号化のファイル転送はすべてのデバイスで、一時的なテキスト送信はウェブアプリと CLI で使えます。",
+    "Relayium をダウンロード：任意のブラウザで使う、コマンドラインツールをインストールする、ネイティブアプリでできることを見る。エンドツーエンド暗号化のファイルと一時的なテキストの転送を、ウェブ・コマンドライン・macOS・iOS で。",
   hero: {
     h1: "Relayium を入手",
     pitch:
-      "同じエンドツーエンド暗号化のファイル転送を、あらゆる場所で。一時的なテキスト送信はウェブアプリと CLI で使えます。プラットフォームを選んでください。",
+      "同じエンドツーエンド暗号化の転送を、ファイルにも一時的なテキストにも、あらゆる場所で。プラットフォームを選んでください。",
     cta: "ウェブアプリを開く",
   },
   how: {
@@ -162,8 +162,8 @@ const ja = {
       "コマンドライン — スクリプト化できるファイル転送、フォルダー同期、サーバーバックアップ、一時的なテキスト送信。macOS、Linux、Windows で利用可能。",
       MAC_AVAILABLE
         ? "macOS アプリ — 署名・公証済みのネイティブなメニューバーアプリをダウンロード。"
-        : "macOS アプリ — 署名・公証済みのリリース候補は、まだ一般公開されていません。",
-      "iOS アプリ — ネイティブな iPhone・iPad アプリ、App Store に近日登場。",
+        : "macOS アプリ — ネイティブなメニューバーアプリはエンジニアリングビルドで、まだ一般公開されていません。",
+      "iOS アプリ — ネイティブな iPhone・iPad アプリ。開いている間はファイルとテキストを転送でき、まだ一般公開されていません。",
     ],
   },
   why: {
@@ -180,12 +180,12 @@ const ja = {
       {
         title: "macOS アプリ",
         desc: MAC_AVAILABLE
-          ? "本物のネイティブなメニューバーアプリ（com.relayium.mac）。署名・公証済みのダウンロード版を利用できます。"
-          : "本物のネイティブなメニューバーアプリ（com.relayium.mac）。署名・公証済みのリリース候補を一般公開に向けて準備中です。",
+          ? "本物のネイティブなメニューバーアプリ（com.relayium.mac）。近くのデバイスやペアリングコードでファイルとテキストをやり取りし、暗号化リンクの送受信やアカウント・デバイス管理にも対応。署名・公証済みのダウンロード版を利用できます。"
+          : "本物のネイティブなメニューバーアプリ（com.relayium.mac）。近くのデバイスやペアリングコードでファイルとテキストをやり取りし、暗号化リンクの送受信やアカウント・デバイス管理にも対応。現在はエンジニアリングビルドで、まだ一般公開されていません。",
       },
       {
         title: "iOS アプリ",
-        desc: "共有シートからの送信に対応したネイティブな iPhone・iPad アプリ（com.relayium.app）。App Store に近日登場。",
+        desc: "ネイティブな iPhone・iPad アプリ（com.relayium.app）。アカウントなしで暗号化リンクを開けるほか、近くのデバイスや 6 桁コードでファイルとテキストを送り、アカウントも管理できます — いずれもアプリを開いている間だけ動作します。",
       },
     ],
   },
@@ -198,7 +198,7 @@ const ja = {
       },
       {
         title: "ネイティブアプリを入手",
-        body: "macOS クライアントで OS と深く連携し、iOS 版も計画されています。",
+        body: "macOS クライアントで OS と深く連携し、iOS アプリも開発中です。",
       },
     ],
   },
@@ -209,10 +209,10 @@ const ja = {
 const ko = {
   title: "Relayium 받기 — 웹, CLI, macOS 및 iOS 앱",
   description:
-    "Relayium 다운로드: 어떤 브라우저에서든 바로 사용하거나, 명령줄 도구를 설치하거나, 네이티브 앱을 선택하세요. 종단간 암호화 파일 전송은 모든 기기에서, 임시 텍스트 전송은 웹 앱과 CLI에서.",
+    "Relayium 다운로드: 어떤 브라우저에서든 바로 사용하거나, 명령줄 도구를 설치하거나, 네이티브 앱이 무엇을 하는지 확인하세요. 종단간 암호화 파일·임시 텍스트 전송을 웹, 명령줄, macOS와 iOS에서.",
   hero: {
     h1: "Relayium 받기",
-    pitch: "하나의 종단간 암호화 파일 전송을 어디서나. 임시 텍스트 전송은 웹 앱과 CLI에서 쓸 수 있습니다. 플랫폼을 선택하세요.",
+    pitch: "하나의 종단간 암호화 전송으로 파일도 임시 텍스트도, 어디서나. 플랫폼을 선택하세요.",
     cta: "웹 앱 열기",
   },
   how: {
@@ -222,8 +222,8 @@ const ko = {
       "명령줄 — 스크립트로 자동화하는 파일 전송, 폴더 동기화, 서버 백업, 임시 텍스트 전송. macOS, Linux, Windows 지원.",
       MAC_AVAILABLE
         ? "macOS 앱 — 서명과 공증을 마친 네이티브 메뉴 막대 앱을 다운로드하세요."
-        : "macOS 앱 — 서명과 공증을 마친 출시 후보는 아직 공개 다운로드할 수 없습니다.",
-      "iOS 앱 — 네이티브 iPhone·iPad 앱, App Store에 곧 출시.",
+        : "macOS 앱 — 네이티브 메뉴 막대 앱은 엔지니어링 빌드이며, 아직 공개 배포되지 않았습니다.",
+      "iOS 앱 — 네이티브 iPhone·iPad 앱. 앱이 열려 있는 동안 파일과 텍스트를 주고받으며, 아직 공개 배포되지 않았습니다.",
     ],
   },
   why: {
@@ -240,12 +240,12 @@ const ko = {
       {
         title: "macOS 앱",
         desc: MAC_AVAILABLE
-          ? "진짜 네이티브 메뉴 막대 앱(com.relayium.mac)으로, 서명과 공증을 마친 다운로드 버전을 제공합니다."
-          : "진짜 네이티브 메뉴 막대 앱(com.relayium.mac)입니다. 서명과 공증을 마친 출시 후보를 공개 다운로드용으로 준비하고 있습니다.",
+          ? "진짜 네이티브 메뉴 막대 앱(com.relayium.mac). 근처 기기나 페어링 코드로 파일과 텍스트를 주고받고, 암호화된 링크를 보내거나 열고, 계정과 기기를 관리합니다. 서명과 공증을 마친 다운로드 버전을 제공합니다."
+          : "진짜 네이티브 메뉴 막대 앱(com.relayium.mac). 근처 기기나 페어링 코드로 파일과 텍스트를 주고받고, 암호화된 링크를 보내거나 열고, 계정과 기기를 관리합니다. 현재는 엔지니어링 빌드이며, 아직 공개 배포되지 않았습니다.",
       },
       {
         title: "iOS 앱",
-        desc: "공유 시트 전송을 지원하는 네이티브 iPhone·iPad 앱(com.relayium.app). App Store에 곧 출시됩니다.",
+        desc: "네이티브 iPhone·iPad 앱(com.relayium.app). 계정 없이 암호화된 링크를 열고, 근처 기기나 여섯 자리 코드로 파일과 텍스트를 보내고, 계정을 관리합니다 — 모두 앱이 열려 있는 동안에만.",
       },
     ],
   },
@@ -258,7 +258,7 @@ const ko = {
       },
       {
         title: "네이티브 앱 받기",
-        body: "macOS 클라이언트로 운영체제와 더 깊이 통합하며, iOS 버전도 계획되어 있습니다.",
+        body: "macOS 클라이언트로 운영체제와 더 깊이 통합하며, iOS 앱도 개발 중입니다.",
       },
     ],
   },
@@ -269,11 +269,11 @@ const ko = {
 const de = {
   title: "Relayium holen — Apps für Web, CLI, macOS & iOS",
   description:
-    "Relayium herunterladen: in jedem Browser nutzen, das Kommandozeilen-Tool installieren oder eine native App wählen. Ende-zu-Ende-verschlüsselte Dateiübertragung auf jedem Gerät, dazu flüchtiger Text in der Web-App und in der Kommandozeile.",
+    "Relayium herunterladen: in jedem Browser nutzen, das Kommandozeilen-Tool installieren oder sehen, was die nativen Apps können. Ende-zu-Ende-verschlüsselte Übertragung von Dateien und flüchtigem Text — Web, Kommandozeile, macOS und iOS.",
   hero: {
     h1: "Relayium holen",
     pitch:
-      "Eine Ende-zu-Ende-verschlüsselte Dateiübertragung, überall wo du arbeitest — dazu flüchtiger Text in der Web-App und in der Kommandozeile. Wähle deine Plattform.",
+      "Eine Ende-zu-Ende-verschlüsselte Übertragung für Dateien und flüchtigen Text, überall wo du arbeitest. Wähle deine Plattform.",
     cta: "Web-App öffnen",
   },
   how: {
@@ -283,8 +283,8 @@ const de = {
       "Kommandozeile — skriptbare Dateiübertragungen, Ordner-Sync, Server-Backups und flüchtiger Text für macOS, Linux und Windows.",
       MAC_AVAILABLE
         ? "macOS-App — die signierte und notarisierte native Menüleisten-App herunterladen."
-        : "macOS-App — der signierte und notarisierte Release Candidate ist noch nicht öffentlich verfügbar.",
-      "iOS-App — eine native iPhone- & iPad-App, kommt in den App Store.",
+        : "macOS-App — die native Menüleisten-App ist ein Entwicklungs-Build und noch nicht öffentlich verfügbar.",
+      "iOS-App — eine native iPhone- & iPad-App: Dateien und Text, solange sie geöffnet ist; noch nicht öffentlich verfügbar.",
     ],
   },
   why: {
@@ -301,12 +301,12 @@ const de = {
       {
         title: "macOS-App",
         desc: MAC_AVAILABLE
-          ? "Eine echte native Menüleisten-App (com.relayium.mac), als signierter und notarisierter Download verfügbar."
-          : "Eine echte native Menüleisten-App (com.relayium.mac). Der signierte und notarisierte Release Candidate wird noch für den öffentlichen Download vorbereitet.",
+          ? "Eine echte native Menüleisten-App (com.relayium.mac): Dateien und Text mit Geräten in der Nähe oder per Pairing-Code, verschlüsselte Links senden und öffnen, Konto und Geräte verwalten. Als signierter und notarisierter Download verfügbar."
+          : "Eine echte native Menüleisten-App (com.relayium.mac): Dateien und Text mit Geräten in der Nähe oder per Pairing-Code, verschlüsselte Links senden und öffnen, Konto und Geräte verwalten. Sie ist ein Entwicklungs-Build und noch nicht öffentlich verfügbar.",
       },
       {
         title: "iOS-App",
-        desc: "Eine native iPhone- & iPad-App (com.relayium.app) mit Versand über das Teilen-Menü. Kommt in den App Store.",
+        desc: "Eine native iPhone- & iPad-App (com.relayium.app): verschlüsselte Links ohne Konto öffnen, Dateien und Text an Geräte in der Nähe oder per sechsstelligem Code senden, das Konto verwalten — solange die App geöffnet ist.",
       },
     ],
   },
@@ -319,7 +319,7 @@ const de = {
       },
       {
         title: "Eine native App holen",
-        body: "Tiefere Integration mit dem macOS-Client; eine iOS-Version ist geplant.",
+        body: "Tiefere Integration mit dem macOS-Client; die iOS-App ist in Entwicklung.",
       },
     ],
   },
@@ -330,11 +330,11 @@ const de = {
 const fr = {
   title: "Obtenir Relayium — applis pour le web, le CLI, macOS et iOS",
   description:
-    "Téléchargez Relayium : utilisez-le dans n'importe quel navigateur, installez l'outil en ligne de commande ou choisissez une appli native. Transfert de fichiers chiffré de bout en bout sur chaque appareil, et texte éphémère dans l'appli web et en ligne de commande.",
+    "Téléchargez Relayium : utilisez-le dans n'importe quel navigateur, installez l'outil en ligne de commande ou découvrez ce que font les applis natives. Transfert chiffré de bout en bout de fichiers et de texte éphémère — web, ligne de commande, macOS et iOS.",
   hero: {
     h1: "Obtenir Relayium",
     pitch:
-      "Un même transfert de fichiers chiffré de bout en bout, partout où vous travaillez — et du texte éphémère dans l'appli web et en ligne de commande. Choisissez votre plateforme.",
+      "Un même transfert chiffré de bout en bout pour les fichiers et le texte éphémère, partout où vous travaillez. Choisissez votre plateforme.",
     cta: "Ouvrir l'appli web",
   },
   how: {
@@ -344,8 +344,8 @@ const fr = {
       "Ligne de commande — transferts de fichiers scriptables, synchronisation de dossiers, sauvegardes de serveur et texte éphémère pour macOS, Linux et Windows.",
       MAC_AVAILABLE
         ? "Appli macOS — téléchargez l'appli native de barre des menus, signée et notarisée."
-        : "Appli macOS — la version candidate signée et notarisée n'est pas encore téléchargeable publiquement.",
-      "Appli iOS — une appli native iPhone et iPad, bientôt sur l'App Store.",
+        : "Appli macOS — l'appli native de barre des menus est une version d'ingénierie et n'est pas encore disponible publiquement.",
+      "Appli iOS — une appli native iPhone et iPad : fichiers et texte tant qu'elle est ouverte ; pas encore disponible publiquement.",
     ],
   },
   why: {
@@ -362,12 +362,12 @@ const fr = {
       {
         title: "Appli macOS",
         desc: MAC_AVAILABLE
-          ? "Une vraie appli native dans la barre de menus (com.relayium.mac), disponible en téléchargement signé et notarisé."
-          : "Une vraie appli native dans la barre de menus (com.relayium.mac). Sa version candidate signée et notarisée est encore en préparation pour le téléchargement public.",
+          ? "Une vraie appli native dans la barre de menus (com.relayium.mac) : fichiers et texte avec les appareils à proximité ou par code d'appairage, envoi et ouverture de liens chiffrés, gestion du compte et des appareils. Disponible en téléchargement signé et notarisé."
+          : "Une vraie appli native dans la barre de menus (com.relayium.mac) : fichiers et texte avec les appareils à proximité ou par code d'appairage, envoi et ouverture de liens chiffrés, gestion du compte et des appareils. C'est une version d'ingénierie, pas encore disponible publiquement.",
       },
       {
         title: "Appli iOS",
-        desc: "Une appli native iPhone et iPad (com.relayium.app) avec envoi via la feuille de partage. Bientôt sur l'App Store.",
+        desc: "Une appli native iPhone et iPad (com.relayium.app) : ouvrez un lien chiffré sans compte, envoyez fichiers et texte aux appareils à proximité ou par code à six chiffres, gérez votre compte — tant que l'appli est ouverte.",
       },
     ],
   },
@@ -380,7 +380,7 @@ const fr = {
       },
       {
         title: "Obtenir une appli native",
-        body: "Une intégration plus poussée avec le client macOS ; une version iOS est prévue.",
+        body: "Une intégration plus poussée avec le client macOS ; l'appli iOS est en cours de développement.",
       },
     ],
   },
@@ -391,10 +391,10 @@ const fr = {
 const ar = {
   title: "احصل على Relayium — تطبيقات للويب وسطر الأوامر وmacOS وiOS",
   description:
-    "نزّل Relayium: استخدمه في أي متصفح، أو ثبّت أداة سطر الأوامر، أو اختر تطبيقًا أصليًا. نقل ملفات مُشفَّر من الطرف إلى الطرف على كل جهاز، ونصوص عابرة في تطبيق الويب وسطر الأوامر.",
+    "نزّل Relayium: استخدمه في أي متصفح، أو ثبّت أداة سطر الأوامر، أو تعرّف على ما تفعله التطبيقات الأصلية. نقل مُشفَّر من الطرف إلى الطرف للملفات والنصوص العابرة — في الويب وسطر الأوامر وتطبيقَي macOS وiOS.",
   hero: {
     h1: "احصل على Relayium",
-    pitch: "نقل ملفات واحد مُشفَّر من الطرف إلى الطرف، في كل مكان تعمل فيه — ونصوص عابرة في تطبيق الويب وسطر الأوامر. اختر منصّتك.",
+    pitch: "نقل واحد مُشفَّر من الطرف إلى الطرف للملفات والنصوص العابرة، في كل مكان تعمل فيه. اختر منصّتك.",
     cta: "افتح تطبيق الويب",
   },
   how: {
@@ -404,8 +404,8 @@ const ar = {
       "سطر الأوامر — عمليات نقل ملفات قابلة للبرمجة، ومزامنة المجلدات، ونسخ احتياطي للخوادم، ونصوص عابرة على macOS وLinux وWindows.",
       MAC_AVAILABLE
         ? "تطبيق macOS — نزّل تطبيق شريط القوائم الأصلي الموقّع والموثّق."
-        : "تطبيق macOS — النسخة المرشحة الموقّعة والموثّقة ليست متاحة للتنزيل العام بعد.",
-      "تطبيق iOS — تطبيق أصلي لـ iPhone وiPad، قريبًا على App Store.",
+        : "تطبيق macOS — تطبيق شريط القوائم الأصلي نسخة هندسية وليست متاحة للعامة بعد.",
+      "تطبيق iOS — تطبيق أصلي لـ iPhone وiPad: ملفات ونصوص ما دام مفتوحًا؛ وليس متاحًا للعامة بعد.",
     ],
   },
   why: {
@@ -422,12 +422,12 @@ const ar = {
       {
         title: "تطبيق macOS",
         desc: MAC_AVAILABLE
-          ? "تطبيق أصلي حقيقي في شريط القوائم (com.relayium.mac)، متاح كتنزيل موقّع وموثّق."
-          : "تطبيق أصلي حقيقي في شريط القوائم (com.relayium.mac). ما زالت نسخته المرشحة الموقّعة والموثّقة قيد الإعداد للتنزيل العام.",
+          ? "تطبيق أصلي حقيقي في شريط القوائم (com.relayium.mac): تبادل الملفات والنصوص مع الأجهزة القريبة أو برمز اقتران، وإرسال الروابط المشفّرة وفتحها، وإدارة الحساب والأجهزة. متاح كتنزيل موقّع وموثّق."
+          : "تطبيق أصلي حقيقي في شريط القوائم (com.relayium.mac): تبادل الملفات والنصوص مع الأجهزة القريبة أو برمز اقتران، وإرسال الروابط المشفّرة وفتحها، وإدارة الحساب والأجهزة. وهو نسخة هندسية ليست متاحة للعامة بعد.",
       },
       {
         title: "تطبيق iOS",
-        desc: "تطبيق أصلي لـ iPhone وiPad (com.relayium.app) مع الإرسال عبر ورقة المشاركة. قريبًا على App Store.",
+        desc: "تطبيق أصلي لـ iPhone وiPad (com.relayium.app): افتح رابطًا مشفّرًا دون حساب، وأرسِل الملفات والنصوص إلى الأجهزة القريبة أو برمز من ستة أرقام، وأدِر حسابك — ما دام التطبيق مفتوحًا.",
       },
     ],
   },
@@ -440,7 +440,7 @@ const ar = {
       },
       {
         title: "احصل على تطبيق أصلي",
-        body: "تكامل أعمق مع نظام التشغيل عبر تطبيق macOS، مع التخطيط لإصدار iOS.",
+        body: "تكامل أعمق مع نظام التشغيل عبر تطبيق macOS، وتطبيق iOS قيد التطوير.",
       },
     ],
   },
@@ -451,11 +451,11 @@ const ar = {
 const es = {
   title: "Consigue Relayium — apps para web, CLI, macOS e iOS",
   description:
-    "Descarga Relayium: úsalo en cualquier navegador, instala la herramienta de línea de comandos o elige una app nativa. Transferencia de archivos cifrada de extremo a extremo en todos tus dispositivos, y texto efímero en la app web y en la línea de comandos.",
+    "Descarga Relayium: úsalo en cualquier navegador, instala la herramienta de línea de comandos o descubre qué hacen las apps nativas. Transferencia cifrada de extremo a extremo de archivos y texto efímero — web, línea de comandos, macOS e iOS.",
   hero: {
     h1: "Consigue Relayium",
     pitch:
-      "Una misma transferencia de archivos cifrada de extremo a extremo, dondequiera que trabajes — y texto efímero en la app web y en la línea de comandos. Elige tu plataforma.",
+      "Una misma transferencia cifrada de extremo a extremo para archivos y texto efímero, dondequiera que trabajes. Elige tu plataforma.",
     cta: "Abrir la app web",
   },
   how: {
@@ -465,8 +465,8 @@ const es = {
       "Línea de comandos — transferencias de archivos programables, sincronización de carpetas, copias de servidores y texto efímero para macOS, Linux y Windows.",
       MAC_AVAILABLE
         ? "App de macOS — descarga la app nativa de barra de menús, firmada y notarizada."
-        : "App de macOS — la versión candidata firmada y notarizada aún no está disponible para descarga pública.",
-      "App de iOS — una app nativa para iPhone y iPad, pronto en la App Store.",
+        : "App de macOS — la app nativa de barra de menús es una versión de ingeniería y aún no está disponible públicamente.",
+      "App de iOS — una app nativa para iPhone y iPad: archivos y texto mientras está abierta; aún no disponible públicamente.",
     ],
   },
   why: {
@@ -483,12 +483,12 @@ const es = {
       {
         title: "App de macOS",
         desc: MAC_AVAILABLE
-          ? "Una auténtica app nativa en la barra de menús (com.relayium.mac), disponible como descarga firmada y notarizada."
-          : "Una auténtica app nativa en la barra de menús (com.relayium.mac). Su versión candidata firmada y notarizada aún se está preparando para la descarga pública.",
+          ? "Una auténtica app nativa en la barra de menús (com.relayium.mac): archivos y texto con dispositivos cercanos o por código de emparejamiento, enlaces cifrados para enviar y abrir, y gestión de cuenta y dispositivos. Disponible como descarga firmada y notarizada."
+          : "Una auténtica app nativa en la barra de menús (com.relayium.mac): archivos y texto con dispositivos cercanos o por código de emparejamiento, enlaces cifrados para enviar y abrir, y gestión de cuenta y dispositivos. Es una versión de ingeniería y aún no está disponible públicamente.",
       },
       {
         title: "App de iOS",
-        desc: "Una app nativa para iPhone y iPad (com.relayium.app) con envío desde la hoja de compartir. Pronto en la App Store.",
+        desc: "Una app nativa para iPhone y iPad (com.relayium.app): abre un enlace cifrado sin cuenta, envía archivos y texto a dispositivos cercanos o con un código de seis dígitos, y gestiona tu cuenta — mientras la app está abierta.",
       },
     ],
   },
@@ -501,7 +501,7 @@ const es = {
       },
       {
         title: "Consigue una app nativa",
-        body: "Una integración más profunda con el cliente de macOS; la versión para iOS está planificada.",
+        body: "Una integración más profunda con el cliente de macOS; la app para iOS está en desarrollo.",
       },
     ],
   },
@@ -512,11 +512,11 @@ const es = {
 const pt = {
   title: "Obtenha o Relayium — apps para web, CLI, macOS e iOS",
   description:
-    "Baixe o Relayium: use em qualquer navegador, instale a ferramenta de linha de comando ou escolha um app nativo. Transferência de arquivos criptografada de ponta a ponta em todos os dispositivos, e texto efêmero no app web e na linha de comando.",
+    "Baixe o Relayium: use em qualquer navegador, instale a ferramenta de linha de comando ou veja o que os apps nativos já fazem. Transferência criptografada de ponta a ponta de arquivos e texto efêmero — web, linha de comando, macOS e iOS.",
   hero: {
     h1: "Obtenha o Relayium",
     pitch:
-      "Uma mesma transferência de arquivos criptografada de ponta a ponta, onde quer que você trabalhe — e texto efêmero no app web e na linha de comando. Escolha sua plataforma.",
+      "Uma mesma transferência criptografada de ponta a ponta para arquivos e texto efêmero, onde quer que você trabalhe. Escolha sua plataforma.",
     cta: "Abrir o app web",
   },
   how: {
@@ -526,8 +526,8 @@ const pt = {
       "Linha de comando — transferências de arquivos programáveis, sincronização de pastas, backups de servidores e texto efêmero para macOS, Linux e Windows.",
       MAC_AVAILABLE
         ? "App para macOS — baixe o app nativo de barra de menus, assinado e notarizado."
-        : "App para macOS — a versão candidata assinada e notarizada ainda não está disponível para download público.",
-      "App para iOS — um app nativo para iPhone e iPad, em breve na App Store.",
+        : "App para macOS — o app nativo de barra de menus é uma versão de engenharia e ainda não está disponível publicamente.",
+      "App para iOS — um app nativo para iPhone e iPad: arquivos e texto enquanto está aberto; ainda não disponível publicamente.",
     ],
   },
   why: {
@@ -544,12 +544,12 @@ const pt = {
       {
         title: "App para macOS",
         desc: MAC_AVAILABLE
-          ? "Um verdadeiro app nativo na barra de menus (com.relayium.mac), disponível como download assinado e notarizado."
-          : "Um verdadeiro app nativo na barra de menus (com.relayium.mac). Sua versão candidata assinada e notarizada ainda está sendo preparada para download público.",
+          ? "Um verdadeiro app nativo na barra de menus (com.relayium.mac): arquivos e texto com dispositivos por perto ou por código de emparelhamento, links criptografados para enviar e abrir, e gestão de conta e dispositivos. Disponível como download assinado e notarizado."
+          : "Um verdadeiro app nativo na barra de menus (com.relayium.mac): arquivos e texto com dispositivos por perto ou por código de emparelhamento, links criptografados para enviar e abrir, e gestão de conta e dispositivos. É uma versão de engenharia e ainda não está disponível publicamente.",
       },
       {
         title: "App para iOS",
-        desc: "Um app nativo para iPhone e iPad (com.relayium.app) com envio pela folha de compartilhamento. Em breve na App Store.",
+        desc: "Um app nativo para iPhone e iPad (com.relayium.app): abra um link criptografado sem conta, envie arquivos e texto para dispositivos por perto ou com um código de seis dígitos, e gerencie sua conta — enquanto o app estiver aberto.",
       },
     ],
   },
@@ -562,7 +562,7 @@ const pt = {
       },
       {
         title: "Obtenha um app nativo",
-        body: "Uma integração mais profunda com o cliente para macOS; a versão para iOS está planejada.",
+        body: "Uma integração mais profunda com o cliente para macOS; o app para iOS está em desenvolvimento.",
       },
     ],
   },
@@ -590,6 +590,6 @@ if (MAC_DOWNLOAD_URL) {
 }
 
 export default {
-  updated: "2026-07-31",
+  updated: "2026-08-04",
   langs,
 };

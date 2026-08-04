@@ -10,7 +10,9 @@
 // test that would notice them drifting back: shells.test.mjs only pins the shell
 // to the SPA's meta, and the i18n guard cannot see .mjs content modules at all.
 //
-// The macOS and iOS cards stay file-only on purpose — see the negative case.
+// The macOS and iOS cards carry files AND text too, since R3-D/E/F: the second
+// describe below asserts that positively, and guards the claims that are still
+// untrue there (store distribution, an iOS Share Extension).
 //
 // The word tables are per-locale on purpose. Matching the Latin command name
 // "text" would pass on a sentence that only ever talks about send/receive,
@@ -65,15 +67,87 @@ describe("/apps web and CLI copy covers files and ephemeral text", () => {
     }
   });
 
-  it("does not extend the claim to the unshipped native apps", () => {
-    // Neither apps/ client implements the text session; saying they do would be
-    // a promise the code cannot keep.
+});
+
+// The native half of this file used to assert the opposite: that the macOS and
+// iOS cards must NOT mention text, because neither client had a text session.
+// Both do now — macOS by pairing code and nearby, iOS since R3-D/E/F — so the
+// old guard was keeping a stale sentence green. What is still untrue is the
+// distribution: neither app is on any store, and iOS has no Share Extension.
+const FILE_WORD = {
+  en: /\bfiles?\b/i,
+  zh: /文件/,
+  ja: /ファイル/,
+  ko: /파일/,
+  de: /Datei/i,
+  fr: /fichier/i,
+  es: /archivo/i,
+  pt: /arquivo/i,
+  ar: /ملف/,
+};
+
+// Apple leaves the store name untranslated in all nine locales, so one pattern
+// covers every doc. "Coming to the App Store" is a distribution promise with
+// nothing behind it; the page's own "coming soon" grouping states the status.
+const STORE_CLAIM = /app\s*store/i;
+
+const SHARE_SHEET = {
+  en: /share[\s-]?sheet|share extension/i,
+  zh: /分享菜单|共享菜单|分享扩展/,
+  ja: /共有シート|共有機能拡張/,
+  ko: /공유 시트|공유 확장/,
+  de: /Teilen-Menü|Share Extension/i,
+  fr: /feuille de partage|extension de partage/i,
+  es: /hoja de compartir|extensión de compartir/i,
+  pt: /folha de compartilhamento|extensão de compartilhamento/i,
+  ar: /ورقة المشاركة|امتداد المشاركة/,
+};
+
+const MAC_CARD = 2;
+const IOS_CARD = 3;
+
+describe("/apps native copy matches what the native apps actually do", () => {
+  it("gives both native cards their shipped file and text capability, in every locale", () => {
     for (const lang of LANGS) {
       const { items } = apps.langs[lang].why;
-      for (const i of [2, 3]) {
-        expect(items[i].desc, `${lang} native card claims text support`).not.toMatch(TEXT_WORD[lang]);
+      for (const i of [MAC_CARD, IOS_CARD]) {
+        expect(items[i].desc, `${lang} native card ${i} dropped its text capability`).toMatch(TEXT_WORD[lang]);
+        expect(items[i].desc, `${lang} native card ${i} dropped its file capability`).toMatch(FILE_WORD[lang]);
       }
     }
+  });
+
+  it("promises no store distribution in the bullets or the cards", () => {
+    for (const lang of LANGS) {
+      const doc = apps.langs[lang];
+      for (const i of [MAC_CARD, IOS_CARD]) {
+        expect(doc.how.steps[i], `${lang} bullet ${i} promises store distribution`).not.toMatch(STORE_CLAIM);
+        expect(doc.why.items[i].desc, `${lang} card ${i} promises store distribution`).not.toMatch(STORE_CLAIM);
+      }
+    }
+  });
+
+  it("claims no iOS Share Extension in the bullet or the card", () => {
+    for (const lang of LANGS) {
+      const doc = apps.langs[lang];
+      expect(doc.how.steps[IOS_CARD], `${lang} iOS bullet claims a Share Extension`).not.toMatch(SHARE_SHEET[lang]);
+      expect(doc.why.items[IOS_CARD].desc, `${lang} iOS card claims a Share Extension`).not.toMatch(SHARE_SHEET[lang]);
+    }
+  });
+
+  // English is the master the other eight are translated from; pinning the
+  // exact boundaries here beats copying eight sentences into the test.
+  it("keeps the English boundaries between shipped and unshipped work", () => {
+    const doc = apps.langs.en;
+    expect(doc.why.items[IOS_CARD].desc).toMatch(/while the app is open/i);
+    expect(doc.why.items[IOS_CARD].desc).not.toMatch(/background|notification|push\b/i);
+    // The page-level positioning scoped ephemeral text to web + CLI; both
+    // native clients now send text too.
+    expect(doc.description).not.toMatch(/text in the web app and the CLI/i);
+    expect(doc.hero.pitch).not.toMatch(/text in the web app and the CLI/i);
+    // iOS is a real, running app now — "planned" understates it as badly as a
+    // store date overstates it.
+    expect(doc.compare.items[1].body).not.toMatch(/iOS planned|with iOS planned/i);
   });
 });
 

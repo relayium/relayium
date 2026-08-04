@@ -366,10 +366,10 @@ const en: Messages = {
   appsPage: {
     metaTitle: "Get Relayium — apps for web, CLI, macOS & iOS",
     metaDesc:
-      "Download Relayium: use it in any browser, install the command-line tool, or choose a native app. End-to-end encrypted file transfer on every device, plus ephemeral text in the web app and the CLI.",
+      "Download Relayium: use it in any browser, install the command-line tool, or see what the native apps do. End-to-end encrypted file and ephemeral text transfer everywhere you work — web, command line, macOS and iOS.",
     heading: "Get Relayium",
     subhead:
-      "One end-to-end encrypted file transfer, everywhere you work — plus ephemeral text in the web app and the CLI. Pick your platform.",
+      "One end-to-end encrypted transfer for files and ephemeral text, everywhere you work. Pick your platform.",
     availableBadge: "Available",
     comingSoonBadge: "Coming soon",
     yourPlatformNote: (os) => `Looks like you're on ${os} — highlighted below.`,
@@ -388,12 +388,12 @@ const en: Messages = {
       },
       mac: {
         name: "macOS app",
-        desc: "A true native menu-bar app (com.relayium.mac), signed and notarized for a one-click install.",
+        desc: "A true native menu-bar app (com.relayium.mac): files and text with nearby devices or by pairing code, encrypted links to send and open, and account and device management.",
         cta: "Download for macOS",
       },
       ios: {
         name: "iOS app",
-        desc: "A native iPhone & iPad app (com.relayium.app) with share-sheet sending. Coming to the App Store.",
+        desc: "A native iPhone & iPad app (com.relayium.app): open an encrypted link with no account, send files and text to nearby devices or by six-digit code, and manage your account — while the app is open.",
       },
     },
   },

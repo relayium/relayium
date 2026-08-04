@@ -456,12 +456,114 @@ describe("平台定位文案覆盖文件与临时文本", () => {
     }
   });
 
-  it("原生 macOS / iOS 卡片不跟着宣称支持文本（代码里还没有）", () => {
+});
+
+// 这里原来是一条**负向**断言："原生卡片不许提文本，因为代码里还没有"。它当时是对的，
+// 现在是反的：macOS 早就有配对码与附近传输的文件/文本，iOS 的 R3-D/E/F 也把直连
+// 六位码、附近传输和账号管理全都做进去了。一条绿着的测试因此在守着过时的宣传语。
+//
+// 换成正向不变量：两张原生卡片都必须如实说出**已经实现**的文件与文本能力，同时守住
+// 两条尚未实现的边界——公开分发（App Store / Mac App Store）和 iOS 的分享扩展。
+// 用各语言自己的词，理由和 TEXT_WORD 一样：只匹配拉丁字母的话，八种译文永远为真。
+const FILE_WORD: Record<Lang, RegExp> = {
+  en: /\bfiles?\b/i,
+  zh: /文件/,
+  ja: /ファイル/,
+  ko: /파일/,
+  de: /Datei/i,
+  fr: /fichier/i,
+  es: /archivo/i,
+  pt: /arquivo/i,
+  ar: /ملف/,
+};
+
+// 苹果在这九种语言里都不翻译商店名，所以一条正则就够守住全部译文。两个原生 App 都
+// 既不在 App Store 也不在 Mac App Store，"即将登陆"同样是没有依据的分发承诺：这里
+// 干脆连提都不许提，页面上"即将推出"的分组标题已经把状态说清楚了。
+const STORE_CLAIM = /app\s*store/i;
+
+// iOS 至今没有 Share Extension：apps/ios 的 Xcode 工程里只有一个
+// com.apple.product-type.application 目标，没有任何 app-extension 目标——判据是
+// 目标不存在，而不是某个 entitlement 缺失。但九种译文里都写着"通过分享菜单发送"。
+// 这条按各语言当时实际用的说法来匹配。
+const SHARE_SHEET: Record<Lang, RegExp> = {
+  en: /share[\s-]?sheet|share extension/i,
+  zh: /分享菜单|共享菜单|分享扩展/,
+  ja: /共有シート|共有機能拡張/,
+  ko: /공유 시트|공유 확장/,
+  de: /Teilen-Menü|Share Extension/i,
+  fr: /feuille de partage|extension de partage/i,
+  es: /hoja de compartir|extensión de compartir/i,
+  pt: /folha de compartilhamento|extensão de compartilhamento/i,
+  ar: /ورقة المشاركة|امتداد المشاركة/,
+};
+
+// macOS 卡片过去写着"已签名并通过公证，可一键安装"。被公证的是**更早一个构建**的
+// DMG，而 native-releases.json 至今是 available:false——页面上既没有下载，也没有当前
+// 构建的公证结论。在没有下载的卡片上写"公证过、一键装"，读起来就是"现在就能装"。
+// 分发状态由"即将推出"分组和清单驱动的 CTA 表达，卡片只讲能力。
+//
+// 静态孪生页（scripts/pages/content/apps.mjs）由 macos-release-surface.test.mjs
+// 管：那里同样禁止 MAC_AVAILABLE=false 分支使用签名/公证措辞，同时要求
+// MAC_AVAILABLE=true 分支保留它——即真发布时该说的话不会被这条守卫删掉。这里之所以
+// 单列一份，是因为 SPA 卡片只有一份文案、没有按清单分支，两边的判据不能共用。
+const NOTARY_CLAIM: Record<Lang, RegExp> = {
+  en: /notariz|one-click install/i,
+  zh: /公证/,
+  ja: /公証/,
+  ko: /공증/,
+  de: /notarisiert/i,
+  fr: /notaris/i,
+  es: /notarizad/i,
+  pt: /notarizad/i,
+  ar: /موثّق|موثق/,
+};
+
+describe("原生 macOS / iOS 卡片如实描述已实现的能力", () => {
+  it("macOS 卡片不把公证/一键安装写成当前可得的分发状态", () => {
+    for (const { code } of LANGS) {
+      expect(messages[code].appsPage.cards.mac.desc, `${code} 的 macOS 卡片宣称了当前并不存在的公证下载`)
+        .not.toMatch(NOTARY_CLAIM[code]);
+    }
+  });
+
+  it("两张卡片在每种语言里都同时讲文件与临时文本", () => {
     for (const { code } of LANGS) {
       const { mac, ios } = messages[code].appsPage.cards;
-      expect(mac.desc, `${code} 的 macOS 卡片宣称了未实现的文本能力`).not.toMatch(TEXT_WORD[code]);
-      expect(ios.desc, `${code} 的 iOS 卡片宣称了未实现的文本能力`).not.toMatch(TEXT_WORD[code]);
+      expect(mac.desc, `${code} 的 macOS 卡片漏掉了已实现的文本能力`).toMatch(TEXT_WORD[code]);
+      expect(mac.desc, `${code} 的 macOS 卡片漏掉了文件能力`).toMatch(FILE_WORD[code]);
+      expect(ios.desc, `${code} 的 iOS 卡片漏掉了已实现的文本能力`).toMatch(TEXT_WORD[code]);
+      expect(ios.desc, `${code} 的 iOS 卡片漏掉了文件能力`).toMatch(FILE_WORD[code]);
     }
+  });
+
+  it("两张卡片都不宣称任何 App Store 分发", () => {
+    for (const { code } of LANGS) {
+      const { mac, ios } = messages[code].appsPage.cards;
+      expect(mac.desc, `${code} 的 macOS 卡片宣称了不存在的商店分发`).not.toMatch(STORE_CLAIM);
+      expect(ios.desc, `${code} 的 iOS 卡片宣称了不存在的商店分发`).not.toMatch(STORE_CLAIM);
+    }
+  });
+
+  it("iOS 卡片不宣称分享扩展", () => {
+    for (const { code } of LANGS) {
+      expect(messages[code].appsPage.cards.ios.desc, `${code} 的 iOS 卡片宣称了未实现的分享扩展`)
+        .not.toMatch(SHARE_SHEET[code]);
+    }
+  });
+
+  // 英文是母本，其余八种是从它翻的：把"哪些话不能说"钉在这里，跨语言的正则只需要守
+  // 住上面那三条真正跨语言成立的判据，不必逐句复制八份译文（那等于把文案抄进测试）。
+  it("英文原生文案保持已实现能力与未实现能力的边界", () => {
+    const a = messages.en.appsPage;
+    // iOS 的实时与云端传输都只在前台跑，没有后台传输、断点续传或推送。
+    expect(a.cards.ios.desc).toMatch(/while the app is open/i);
+    expect(a.cards.ios.desc).not.toMatch(/background|notification|push\b/i);
+    // macOS 的浏览器设备批准不是原生 Sign in with Apple，别把它写成后者。
+    expect(a.cards.mac.desc).not.toMatch(/sign in with apple/i);
+    // 整页定位曾把临时文本限定在网页版与命令行，而原生端现在两样都有。
+    expect(a.metaDesc).not.toMatch(/text in the web app and the CLI/i);
+    expect(a.subhead).not.toMatch(/text in the web app and the CLI/i);
   });
 });
 

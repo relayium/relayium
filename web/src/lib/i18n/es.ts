@@ -366,10 +366,10 @@ const es: Messages = {
   appsPage: {
     metaTitle: "Consigue Relayium — apps para web, CLI, macOS e iOS",
     metaDesc:
-      "Descarga Relayium: úsalo en cualquier navegador, instala la herramienta de línea de comandos o elige una app nativa. Transferencia de archivos cifrada de extremo a extremo en todos tus dispositivos, y texto efímero en la app web y en la línea de comandos.",
+      "Descarga Relayium: úsalo en cualquier navegador, instala la herramienta de línea de comandos o descubre qué hacen las apps nativas. Transferencia cifrada de extremo a extremo de archivos y texto efímero — web, línea de comandos, macOS e iOS.",
     heading: "Consigue Relayium",
     subhead:
-      "Una misma transferencia de archivos cifrada de extremo a extremo, dondequiera que trabajes — y texto efímero en la app web y en la línea de comandos. Elige tu plataforma.",
+      "Una misma transferencia cifrada de extremo a extremo para archivos y texto efímero, dondequiera que trabajes. Elige tu plataforma.",
     availableBadge: "Disponible",
     comingSoonBadge: "Próximamente",
     yourPlatformNote: (os) => `Parece que usas ${os} — destacado abajo.`,
@@ -382,8 +382,8 @@ const es: Messages = {
         cta: "Abrir la app web",
       },
       cli: { name: "Línea de comandos", desc: "Transferencias de archivos programables, sincronización de carpetas, copias de servidor a servidor y texto efímero para macOS, Linux y Windows.", cta: "Documentación e instalación de la CLI" },
-      mac: { name: "App de macOS", desc: "Una auténtica app nativa en la barra de menús (com.relayium.mac), firmada y notarizada para instalarla con un clic.", cta: "Descargar para macOS" },
-      ios: { name: "App de iOS", desc: "Una app nativa para iPhone y iPad (com.relayium.app) con envío desde la hoja de compartir. Pronto en la App Store." },
+      mac: { name: "App de macOS", desc: "Una auténtica app nativa en la barra de menús (com.relayium.mac): archivos y texto con dispositivos cercanos o por código de emparejamiento, enlaces cifrados para enviar y abrir, y gestión de cuenta y dispositivos.", cta: "Descargar para macOS" },
+      ios: { name: "App de iOS", desc: "Una app nativa para iPhone y iPad (com.relayium.app): abre un enlace cifrado sin cuenta, envía archivos y texto a dispositivos cercanos o con un código de seis dígitos, y gestiona tu cuenta — mientras la app está abierta." },
     },
   },
   cliPage: {

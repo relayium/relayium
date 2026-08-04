@@ -87,6 +87,27 @@ describe("AppsPage executable hierarchy", () => {
     expect(target.querySelector("#app-mac a, #app-mac button")).toBeNull();
   });
 
+  it("keeps an unavailable native card free of actions and distribution promises", async () => {
+    // The iOS UA is the worst case for this: the card the visitor's own device
+    // points at is the one there is nothing to hand them.
+    await mountPage({ platformOverride: "ios" });
+
+    for (const id of ["#app-mac", "#app-ios"]) {
+      const card = target.querySelector(id)!;
+      expect(card.querySelector("a, button"), `${id} offers an action it cannot honour`).toBeNull();
+      expect(card.querySelector(".future-status")?.textContent).toBe(messages.en.appsPage.comingSoonBadge);
+      // Rendered text, not the message table: what a visitor actually reads
+      // must not promise a store listing or a file to download. Neither app is
+      // distributed anywhere yet, and this page is where people come to install.
+      expect(card.textContent ?? "", `${id} promises store distribution`).not.toMatch(/app\s*store/i);
+      expect(card.textContent ?? "", `${id} promises a download`).not.toMatch(/\bdownloads?\b/i);
+    }
+
+    const ios = target.querySelector("#app-ios")!;
+    expect(ios.classList.contains("is-platform")).toBe(true);
+    expect(ios.getAttribute("aria-describedby")).toBe("platform-note");
+  });
+
   it("makes the long install command a named, keyboard-scrollable LTR region", async () => {
     await mountPage({ platformOverride: "linux" });
 

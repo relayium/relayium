@@ -13,8 +13,18 @@ describe("public repository status", () => {
     expect(readme).toContain("## Delivery status");
     expect(readme).toContain("**macOS — engineering build, not public:**");
     expect(readme).toContain("**iOS — in development, not public:**");
-    expect(readme).toContain("Public release and the website download");
-    expect(readme).toContain("there is no download to install");
+    // Distribution truth, matched by shape rather than by one exact sentence:
+    // neither native app is offered anywhere, and saying so must survive an
+    // ordinary rewrite of the surrounding prose.
+    // Markdown wraps these sentences, so match across the line breaks.
+    expect(readme).toMatch(/Public release[^.]*still pending/);
+    expect(readme).toMatch(/no download\s+to\s+install/);
+    expect(readme).toMatch(/no App\s+Store\s+release/);
+    // R3-D/E/F shipped the iOS realtime, nearby and account-management work the
+    // status section used to list as unbuilt. What is still missing is the
+    // lifecycle around it, and the section has to keep saying which is which.
+    expect(readme).not.toMatch(/realtime and nearby transfer[^.]*still to be built/);
+    expect(readme).toMatch(/only\s+while\s+the\s+app\s+is\s+in\s+the\s+foreground/);
     expect(readme).not.toContain("status-M0%20MVP");
     expect(readme).not.toContain("This repository is **M0**");
     expect(readme).not.toContain("This is an early MVP");

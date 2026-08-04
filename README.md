@@ -36,9 +36,11 @@ and anything larger is a file.
 
 Relayium is in **active, pre-1.0 development**. The production web app and CLI
 are live. A universal macOS app has passed Developer ID signing, Apple
-notarization, and Gatekeeper validation; it remains an **engineering build**
-being prepared for a first public release. iOS development has started and is
-not public yet.
+notarization, and Gatekeeper validation on an earlier build; it remains an
+**engineering build** being prepared for a first public release, with nothing
+to download from the site yet. The iOS app runs its transfer,
+nearby and account workflows in the foreground, and is likewise **not public**:
+there is no App Store listing and nothing to download.
 
 > 👉 **Try it now: [relayium.com](https://relayium.com/)** — use two devices on
 > the same LAN without an account, or sign in to create a cross-network pairing
@@ -226,39 +228,54 @@ pairing code requires sign-in; joining with that code does not.
   transfer, encrypted upload/download links, SSH and daemon-direct transfer,
   folder sync, self-hosting, and managed relay/storage nodes.
 - **macOS — engineering build, not public:** the universal app supports account
-  access, realtime sending and receiving, folder transfer, same-network nearby
-  transfer in both directions, trusted link handoff, notifications, the same
-  nine languages as the web client (Arabic included, laid out right to left),
-  and a signed Sparkle update foundation. Its single window is a desktop shell
+  registration and sign-in with device and stored-file management, six-digit
+  pairing-code transfer of files and text, folder transfer, nearby sending and
+  passive receiving, encrypted stored links to send and open, notifications and
+  deep links, the same nine languages as the web client (Arabic included, laid
+  out right to left), and a signed Sparkle update foundation. Signing in still
+  goes out to the browser for device approval — that is not a native Sign in
+  with Apple, which only the iOS app has. Its single window is a desktop shell
   whose sidebar names all five destinations at once — Nearby, Pairing code,
   Send a link, Open a link, Account — so the capabilities that need no account
-  (nearby in both directions, joining someone else's pairing code, and opening
+  (nearby sending and receiving, joining someone else's pairing code, and opening
   a link somebody sent) are reachable without signing in; an account is asked
   for only where it is actually required, with the reason stated. A DMG of an
   earlier build is Developer ID-signed, accepted by Apple notarization,
-  stapled, and Gatekeeper-validated. Public release and the website download
-  switch are still pending, and the release-readiness manifest is still
-  unapproved.
+  stapled, and Gatekeeper-validated. Public release, the Mac App Store and the
+  website download switch are all still pending, and the release-readiness
+  manifest is still unapproved — nothing on the site offers this app yet.
 - **iOS — in development, not public:** a native SwiftUI app now exists at
-  [`apps/ios`](apps/ios) and builds against the same shared Swift package. It
-  receives an encrypted stored link without an account — paste the link,
-  inspect the decrypted manifest and its delete-after-download warning, save the
-  files into the app's own folder in the Files app, and hand the finished result
-  to the system share sheet — and it can now sign in to a Relayium account with
-  an email and password to see the plan and usage that account has, refresh it,
-  and sign out. It can now also send: choose files, folders, photos or videos in
-  the app, pick how long the link lives and whether it is deleted after the
-  first download, and hand the finished link to the share sheet. Files are
-  encrypted on the device and the key never reaches Relayium. Sending needs an
-  account; receiving still does not. Uploads run only while the app is open —
-  there is no background transfer or resume yet. It ships the same nine
-  languages. Everything else in the iOS plan — realtime and nearby transfer,
-  device and stored-file management, universal links, the Share Extension,
-  background transfer, notifications, and App Store release — is still to be
-  built, and there is no download to install.
-- **Next:** publish and validate the first macOS release and continue iOS;
-  persistent device identity, resumable transfer, broader protocol
-  documentation, and additional distribution formats remain future work.
+  [`apps/ios`](apps/ios) and builds against the same shared Swift package. Five
+  tabs divide it, and which ones need an account is structural rather than a
+  gate over the whole app. *Receive* opens an encrypted stored link without an
+  account — paste the link, inspect the decrypted manifest and its
+  delete-after-download warning, and save the files into the app's own folder in
+  the Files app. *Send* encrypts files, folders, photos or videos on the device
+  and creates a stored link with a chosen lifetime and optional
+  delete-after-first-download; the key never reaches Relayium, and this half
+  needs an account. *Direct* is the six-digit pairing code for a small live
+  handoff of files or text — creating a code needs an account, joining one does
+  not. *Nearby* lists the devices Relayium's code-less rendezvous groups with
+  yours, sends files or text to a peer you pick explicitly, and accepts one
+  unsolicited session at a time; seeing a device there proves neither the same
+  Wi-Fi nor its identity, and the app says so. *Account* registers, signs in
+  with an email and password or natively with Apple, and shows plan and usage
+  alongside device and stored-file management. It ships the same nine languages.
+  Everything runs only while the app is in the foreground: there is no
+  background transfer, resume, notification, push, universal-link routing or
+  Share Extension, no in-app purchase, no App Store release, and no download to
+  install.
+- **Next:** complete the native core product on both platforms first, and verify
+  that completeness independently — distribution comes after it, not alongside
+  it. On iOS the core is still bounded by what this build cannot do: background
+  and resumable transfer, notifications and push, universal-link routing, and a
+  Share Extension. macOS is further along and is held to the same bar rather
+  than to its own. Both then need hands-on real-device QA and an explicit
+  native-versus-web workflow audit, and neither has had either yet. Only once
+  that verification passes do the distribution steps follow — TestFlight,
+  in-app purchase, App Store and Mac App Store submission, and the website's
+  download switch. Persistent device identity, broader protocol documentation,
+  and additional distribution formats remain future work.
 
 **Self-hosting:** a root [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) build a
 single self-contained image (`docker compose up -d --build`). See [`docs/self-hosting.md`](docs/self-hosting.md).

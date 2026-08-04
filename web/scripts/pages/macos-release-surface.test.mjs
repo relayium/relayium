@@ -37,6 +37,53 @@ describe("macOS release surface", () => {
     }
   });
 
+  // What Apple accepted and stapled was a DMG of an EARLIER build, and the
+  // manifest still says available:false — so on a page that offers no download,
+  // "signed and notarized release candidate" reads as a distributable artifact
+  // that does not exist. The unavailable branch may say engineering build and
+  // not-public; it may not borrow the trust language of a release. The
+  // available branch is untouched: when a real signed release is staged, that
+  // is exactly what it should say.
+  const NOTARY_TERM = {
+    en: /notariz|signed/i,
+    zh: /公证|签名/,
+    ja: /公証|署名/,
+    ko: /공증|서명/,
+    de: /notarisiert|signiert/i,
+    fr: /notaris|signée/i,
+    es: /notarizad|firmada/i,
+    pt: /notarizad|assinado/i,
+    ar: /موثّق|موقّع/,
+  };
+
+  it("never dresses the unavailable macOS build in release trust language", async () => {
+    const manifestText = await readFile(resolve(process.cwd(), "native-releases.json"), "utf8");
+    // The precondition this test is about. If a release is ever staged, the
+    // rendered docs switch to the available branch and this assertion says so
+    // rather than silently testing nothing.
+    expect(JSON.parse(manifestText).macos.available).toBe(false);
+
+    for (const code of LANGS) {
+      const doc = apps.langs[code];
+      expect(doc.how.steps[2], `${code} macOS bullet claims release trust it cannot show`)
+        .not.toMatch(NOTARY_TERM[code]);
+      expect(doc.why.items[2].desc, `${code} macOS card claims release trust it cannot show`)
+        .not.toMatch(NOTARY_TERM[code]);
+    }
+
+    // …and the available branch keeps its signing/notarization wording, so this
+    // guard cannot be satisfied by deleting the release copy outright.
+    const source = await readFile(resolve(process.cwd(), "scripts/pages/content/apps.mjs"), "utf8");
+    const branches = [...source.matchAll(/MAC_AVAILABLE\s*\n?\s*\?\s*"([^"]*)"/g)].map((m) => m[1]);
+    expect(branches.length, "expected one available branch per locale, in the bullet and the card").toBe(
+      LANGS.length * 2,
+    );
+    const anyNotary = /notariz|公证|签名|公証|署名|공증|서명|notarisiert|signiert|notaris|signée|notarizad|firmada|assinado|موثّق|موقّع/i;
+    for (const [i, text] of branches.entries()) {
+      expect(text, `available branch ${i} lost its signing/notarization wording`).toMatch(anyNotary);
+    }
+  });
+
   it("keeps localized crawler copy honest before the public release", async () => {
     const source = await readFile(resolve(process.cwd(), "scripts/pages/content/apps.mjs"), "utf8");
     expect(source).not.toMatch(

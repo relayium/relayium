@@ -366,10 +366,10 @@ const de: Messages = {
   appsPage: {
     metaTitle: "Relayium holen — Apps für Web, CLI, macOS & iOS",
     metaDesc:
-      "Relayium herunterladen: in jedem Browser nutzen, das Kommandozeilen-Tool installieren oder eine native App wählen. Ende-zu-Ende-verschlüsselte Dateiübertragung auf jedem Gerät, dazu flüchtiger Text in der Web-App und in der Kommandozeile.",
+      "Relayium herunterladen: in jedem Browser nutzen, das Kommandozeilen-Tool installieren oder sehen, was die nativen Apps können. Ende-zu-Ende-verschlüsselte Übertragung von Dateien und flüchtigem Text — Web, Kommandozeile, macOS und iOS.",
     heading: "Relayium holen",
     subhead:
-      "Eine Ende-zu-Ende-verschlüsselte Dateiübertragung, überall wo du arbeitest — dazu flüchtiger Text in der Web-App und in der Kommandozeile. Wähle deine Plattform.",
+      "Eine Ende-zu-Ende-verschlüsselte Übertragung für Dateien und flüchtigen Text, überall wo du arbeitest. Wähle deine Plattform.",
     availableBadge: "Verfügbar",
     comingSoonBadge: "Demnächst",
     yourPlatformNote: (os) => `Sieht aus, als wärst du auf ${os} — unten hervorgehoben.`,
@@ -382,8 +382,8 @@ const de: Messages = {
         cta: "Web-App öffnen",
       },
       cli: { name: "Kommandozeile", desc: "Skriptbare Dateiübertragungen, Ordner-Sync, Server-zu-Server-Backups und flüchtiger Text für macOS, Linux und Windows.", cta: "CLI-Doku & Installation" },
-      mac: { name: "macOS-App", desc: "Eine echte native Menüleisten-App (com.relayium.mac), signiert und notarisiert für die Ein-Klick-Installation.", cta: "Für macOS herunterladen" },
-      ios: { name: "iOS-App", desc: "Eine native iPhone- & iPad-App (com.relayium.app) mit Versand über das Teilen-Menü. Kommt in den App Store." },
+      mac: { name: "macOS-App", desc: "Eine echte native Menüleisten-App (com.relayium.mac): Dateien und Text mit Geräten in der Nähe oder per Pairing-Code, verschlüsselte Links senden und öffnen, Konto und Geräte verwalten.", cta: "Für macOS herunterladen" },
+      ios: { name: "iOS-App", desc: "Eine native iPhone- & iPad-App (com.relayium.app): verschlüsselte Links ohne Konto öffnen, Dateien und Text an Geräte in der Nähe oder per sechsstelligem Code senden, das Konto verwalten — solange die App geöffnet ist." },
     },
   },
   cliPage: {
