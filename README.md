@@ -261,17 +261,26 @@ pairing code requires sign-in; joining with that code does not.
   Wi-Fi nor its identity, and the app says so. *Account* registers, signs in
   with an email and password or natively with Apple, and shows plan and usage
   alongside device and stored-file management. It ships the same nine languages.
-  Everything runs only while the app is in the foreground: there is no
-  background transfer, resume, notification, push, universal-link routing or
-  Share Extension, no in-app purchase, no App Store release, and no download to
-  install.
+  Nothing runs while the app is in the background: it has no background
+  execution, so suspending or closing it stops whatever was in flight. A stored
+  upload survives that much, because *Send* copies the selected bytes into
+  app-private storage on the device before uploading them — reopening the app
+  offers the interrupted job back with the choice to resume it or discard the
+  staged copy, and only that explicit tap continues the upload. The app never
+  resumes anything on its own, nothing continues while it is closed, and the
+  realtime *Direct* and *Nearby* sessions stage nothing, so they end with the
+  foreground. There is still no notification or push, no universal-link routing
+  or Share Extension, no in-app purchase, no App Store release, and no download
+  to install.
 - **Next:** complete the native core product on both platforms first, and verify
   that completeness independently — distribution comes after it, not alongside
   it. On iOS the core is still bounded by what this build cannot do: background
-  and resumable transfer, notifications and push, universal-link routing, and a
-  Share Extension. macOS is further along and is held to the same bar rather
-  than to its own. Both then need hands-on real-device QA and an explicit
-  native-versus-web workflow audit, and neither has had either yet. Only once
+  execution — which keeps realtime sessions foreground-only and leaves a stored
+  upload waiting for the user to reopen the app and resume it by hand — plus
+  notifications and push, universal-link routing, and a Share Extension. macOS
+  is further along and is held to the same bar rather than to its own. Both
+  then need hands-on real-device QA and an explicit native-versus-web workflow
+  audit, and neither has had either yet. Only once
   that verification passes do the distribution steps follow — TestFlight,
   in-app purchase, App Store and Mac App Store submission, and the website's
   download switch. Persistent device identity, broader protocol documentation,

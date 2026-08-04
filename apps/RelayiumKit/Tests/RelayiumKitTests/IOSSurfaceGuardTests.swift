@@ -645,6 +645,77 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "the stale 'no resume' claim is now false")
     }
 
+    // MARK: - what the root README may claim about this app
+
+    /// The repository root, one level above `apps` — derived from `#filePath`
+    /// like `appsRoot`, so this reads the checkout the test was compiled from
+    /// rather than whatever directory the runner happens to start in.
+    private var repoRoot: URL { appsRoot.deletingLastPathComponent() }
+
+    /// One bullet of the root README's delivery-status list, whitespace-
+    /// flattened and lowercased so re-wrapping a paragraph is never a failure.
+    ///
+    /// Sliced rather than read whole, because "resume" is a true word about the
+    /// CLI, which the same file also describes.
+    private func deliveryStatusEntry(_ opener: String) throws -> String {
+        let readme = try String(contentsOf: repoRoot.appendingPathComponent("README.md"),
+                                encoding: .utf8)
+        let start = try XCTUnwrap(readme.range(of: "\n- **\(opener)"),
+                                  "the README no longer has a `\(opener)` delivery-status entry")
+        let rest = readme[start.upperBound...]
+        // Whichever ends the bullet first: the next one, or the end of the list.
+        let end = [rest.range(of: "\n- **")?.lowerBound,
+                   rest.range(of: "\n\n")?.lowerBound].compactMap { $0 }.min() ?? rest.endIndex
+        let entry = rest[..<end].split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ").lowercased()
+        XCTAssertGreaterThan(entry.count, 200, "the `\(opener)` entry sliced down to nothing")
+        return entry
+    }
+
+    /// The iOS bullet once listed *resume* among the things this build has no
+    /// version of, when what it has no version of is background execution. A
+    /// reader who believes "no resume" discards a staged upload the app would
+    /// have finished for them, so both halves must be stated and neither may
+    /// stand in for the other.
+    func testTheReadmeIOSEntrySeparatesNoBackgroundFromReopenAndResume() throws {
+        let ios = try deliveryStatusEntry("iOS")
+
+        XCTAssertTrue(ios.contains("no background execution"),
+                      "the README must name the actual limit: background execution")
+        for half in ["app-private", "stag", "reopen", "resume", "discard"] {
+            XCTAssertTrue(ios.contains(half),
+                          "the README dropped part of the staged reopen-and-resume path: \(half)")
+        }
+        XCTAssertTrue(ios.contains("explicit") || ios.contains("on its own"),
+                      "the README must say the resume is the user's, not the app's")
+        for realtime in ["direct", "nearby", "foreground"] {
+            XCTAssertTrue(ios.contains(realtime),
+                          "the README must still bound the realtime tabs: \(realtime)")
+        }
+        for stale in ["no background transfer", "resume and background", "resumable transfer"] {
+            XCTAssertFalse(ios.contains(stale),
+                           "the README's iOS entry is back to the generic claim: \(stale)")
+        }
+    }
+
+    /// The Next bullet is the roadmap, so what it lists as remaining has to be
+    /// what actually remains: background execution — not resume — plus the
+    /// surfaces this build has none of and the verifications neither platform
+    /// has had.
+    func testTheReadmeNextEntryScopesTheRemainingIOSWork() throws {
+        let next = try deliveryStatusEntry("Next:")
+
+        for remaining in ["background execution", "notification", "push", "universal-link",
+                          "share extension", "real-device", "native-versus-web"] {
+            XCTAssertTrue(next.contains(remaining),
+                          "the roadmap stopped naming remaining work: \(remaining)")
+        }
+        for stale in ["no background transfer", "resume and background", "resumable transfer"] {
+            XCTAssertFalse(next.contains(stale),
+                           "the roadmap is back to the generic claim: \(stale)")
+        }
+    }
+
     /// The management model is app-scoped and injected once.
     ///
     /// View-scoped would be the natural-looking mistake and the wrong one: a
