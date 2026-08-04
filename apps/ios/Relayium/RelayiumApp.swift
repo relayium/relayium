@@ -43,12 +43,21 @@ import RelayiumAppKit
 /// in a second process needing an App Group and a shared keychain access group,
 /// which are three entitlements this development build cannot claim.
 ///
-/// Still no `onOpenURL`. Without Associated Domains — which this slice does not
-/// claim, because the routing it would justify still does not exist — nothing
-/// can deliver a URL to this app, so wiring the handler would be dead code that
-/// reads like universal-link support. That includes `/cross-network#c=<code>`,
-/// which macOS does route: the Direct tab could consume one now, and the
-/// entitlement it would need is still not this slice's to add.
+/// **Universal Links are now wired, and that is the one capability this adds.**
+/// `Relayium.entitlements` gains `associated-domains` for `applinks:relayium.com`
+/// — that one domain, that one service — and the association file names exactly
+/// `/d/*` and `/cross-network`. There is no custom URL scheme, so nothing but a
+/// real relayium.com HTTPS link the OS has verified against the site can reach
+/// `onOpenURL`. What arrives is refused a second time by `parseAppDeepLink`,
+/// which is stricter still: this scheme, this host, no userinfo, no port other
+/// than 443, and one of exactly two paths.
+///
+/// The handler here is deliberately one line. Where the link goes, what it
+/// writes into the models, and — the part that is easy to get wrong — what it
+/// must NOT overwrite while a transfer is running all live in the shared
+/// `AppDeepLinkCoordinator`, which `AppDeepLinkCoordinatorTests` drives against
+/// real models. A link never joins a session and never starts a download: it
+/// selects a tab and fills a field.
 @main
 struct RelayiumApp: App {
     /// App-scoped rather than view-scoped, for the reason the macOS app scopes
@@ -115,6 +124,16 @@ struct RelayiumApp: App {
     /// be able to select the Nearby tab from outside the view tree, and a
     /// `@State` is reset the moment SwiftUI rebuilds that tree.
     @StateObject private var navigation: AppNavigationModel
+    /// The link the OS handed this app, parsed and held until the shell has
+    /// acted on it. App-scoped because `onOpenURL` can fire before the shell's
+    /// subscription exists — a cold launch straight from a link is exactly that
+    /// — and `@Published` replays its current value to a late subscriber.
+    @StateObject private var deepLinks = AppDeepLinkRouter()
+    /// What that link then does. App-scoped for the sharper reason: a link that
+    /// arrives mid-transfer is RETAINED and applied when the transfer stops, so
+    /// the object holding it has to outlive whichever tab happened to be on
+    /// screen — and it watches the models directly rather than through a view.
+    @StateObject private var deepLinkRouting: AppDeepLinkCoordinator
 
     /// The one scene-phase reader in the app.
     ///
@@ -126,7 +145,12 @@ struct RelayiumApp: App {
 
     @MainActor
     init() {
-        _download = StateObject(wrappedValue: AppEnvironment.makeDownloadModel())
+        // Held as a local as well, because the deep-link coordinator built at
+        // the end of this initializer needs it: a `@StateObject`'s wrapped value
+        // cannot be read from `init`, so anything two objects share has to exist
+        // as a local first. Same shape as `keys`, `account` and `managing`.
+        let downloads = AppEnvironment.makeDownloadModel()
+        _download = StateObject(wrappedValue: downloads)
         let account = AppEnvironment.makeSession()
         _session = StateObject(wrappedValue: account)
         // ONE stored-link key store: the upload model WRITES a key here and the
@@ -229,6 +253,13 @@ struct RelayiumApp: App {
         // already torn its transfer down.
         _residency = StateObject(wrappedValue: NearbyResidencyCoordinator(
             discovery: nearby, fileModel: files, foreground: ending))
+        // Last, because it is built from four objects above and owns none of
+        // them. It navigates exactly once per link, and it is the ONE place that
+        // decides whether a link may write into a model that is mid-transfer —
+        // which is why no view on this platform repeats that decision.
+        _deepLinkRouting = StateObject(wrappedValue: AppDeepLinkCoordinator(
+            navigation: routing, download: downloads,
+            realtime: files, realtimeText: texts))
     }
 
     /// SwiftUI's three phases, narrowed to the one decision this app makes.
@@ -255,7 +286,8 @@ struct RelayiumApp: App {
                      foreground: foreground,
                      discovery: discovery, nearbyReceive: nearbyReceive,
                      residency: residency,
-                     navigation: navigation, presence: presence)
+                     navigation: navigation, presence: presence,
+                     deepLinks: deepLinks, deepLinkRouting: deepLinkRouting)
                 .environmentObject(session)
                 // The preference the two direct models read. Injected rather
                 // than passed, because the two session views render the derived
@@ -286,6 +318,16 @@ struct RelayiumApp: App {
                 // resolving the folder is idempotent and `startResident` refuses
                 // both a second socket and an override of the user's pause.
                 .task { residency.phaseChanged(to: .active) }
+                // A Universal Link the OS verified against relayium.com, at the
+                // SCENE root rather than on a tab: this fires on a cold launch
+                // before any tab has been built, and on a warm one while an
+                // arbitrary tab is on screen. `open` refuses anything
+                // `parseAppDeepLink` does not recognise and returns without
+                // touching the pending link, so a hostile URL cannot discard a
+                // valid one that is still waiting to be acted on. What a
+                // recognised link then DOES is `RootView`'s one subscription and
+                // `AppDeepLinkCoordinator`'s decision; nothing is applied here.
+                .onOpenURL { deepLinks.open($0) }
         }
     }
 }

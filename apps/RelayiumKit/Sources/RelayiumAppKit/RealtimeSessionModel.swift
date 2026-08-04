@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import RelayiumKit
 
@@ -152,11 +153,34 @@ public final class RealtimeSessionModel: ObservableObject {
     }
 
     /// A live session the quit guard must not let die silently.
-    public var isBusy: Bool {
+    public var isBusy: Bool { Self.isBusy(state) }
+
+    /// The same answer as a function of the state alone, for a subscriber to
+    /// `$state` — which publishes in `willSet`, while the model still reads its
+    /// old value. One definition, delegated to, so the two cannot drift.
+    nonisolated static func isBusy(_ state: RealtimeState) -> Bool {
         switch state {
         case .idle, .failed, .completed: return false
         default: return true
         }
+    }
+
+    /// `isBusy`, published only when the answer CHANGES.
+    ///
+    /// A session walks `.minting` → `.showingCode` → `.joining` →
+    /// `.connecting` → `.verifying` → `.transferring`, and republishes
+    /// `.transferring(done:total:)` for every chunk it moves, without ever
+    /// ceasing to be busy. An observer that only cares whether work is in flight
+    /// wants the two boundaries, not that walk and not one wake-up per chunk, so
+    /// `$state` is mapped and de-duplicated rather than `objectWillChange` being
+    /// watched.
+    ///
+    /// Emits the current value on subscribe, like every `@Published`.
+    ///
+    /// Internal: `AppDeepLinkCoordinator` is the only subscriber and lives in
+    /// this package. The app targets ask `isBusy` directly.
+    var busyChanges: AnyPublisher<Bool, Never> {
+        $state.map(Self.isBusy).removeDuplicates().eraseToAnyPublisher()
     }
 
     public var canJoin: Bool { isCompletePairingCode(joinCode) }

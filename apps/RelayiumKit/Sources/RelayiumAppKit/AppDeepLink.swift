@@ -74,4 +74,18 @@ public final class AppDeepLinkRouter: ObservableObject {
     public func consume() {
         pending = nil
     }
+
+    /// Clear `pending` only if it is still the link the caller acted on.
+    ///
+    /// The shells consume one main-actor turn after the link is delivered, for
+    /// the `willSet` ordering reason `AppDeepLinkTests` pins. That gap is real
+    /// time, and a second link can land inside it — an `open` from the browser
+    /// while the first one's turn is still queued. A bare `consume()` would then
+    /// throw the NEWER link away: the UI has never seen it, `Published` will not
+    /// re-emit a value it has already emitted, and the link the user just tapped
+    /// simply does nothing.
+    public func consume(_ expected: AppDeepLink) {
+        guard pending == expected else { return }
+        pending = nil
+    }
 }

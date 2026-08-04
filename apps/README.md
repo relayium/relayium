@@ -924,9 +924,12 @@ that is the phase a document picker, a share sheet or the app switcher produces,
 which is to say the moment the user is choosing the files they are about to send.
 A finished receive and an already-ended text session are left alone.
 
-**No new capability.** No local network, no background mode, no notifications, no
-Associated Domains, no App Group, no StoreKit. `Relayium.entitlements` still
-claims only `com.apple.developer.applesignin`. iOS gets the realtime models from
+**No new capability.** R3-E added no local network, no background mode, no
+notifications, no Associated Domains, no App Group and no StoreKit; the
+entitlement file it left behind claimed only
+`com.apple.developer.applesignin`. It has since gained exactly one more key —
+`com.apple.developer.associated-domains`, added by the Universal Link slice
+described under "Capabilities" below — and nothing else. iOS gets the realtime models from
 `AppEnvironment`'s **code-only** factories, which take no `LanDiscoveryModel` and
 no `InboundRoom`; `AppEnvironmentTests` asserts the resulting models refuse every
 nearby entry point rather than half-working, and the macOS nearby factories are
@@ -1027,11 +1030,15 @@ renders `nearby.savedToAppFolder`, which points at the Files app. One shared
 sentence would have had to be false on one of the two platforms.
 
 **No new capability, and that is now the accurate claim rather than an
-inherited one.** No `NSLocalNetworkUsageDescription`, no `NSBonjourServices`, no
-multicast or wifi-info entitlement, no background mode, no push, no
-notification, no Associated Domains, no App Group, no shared keychain group, no
-StoreKit. `Relayium.entitlements` still claims only
-`com.apple.developer.applesignin`. A foreground inbound session navigates in app
+inherited one.** R3-F added no `NSLocalNetworkUsageDescription`, no
+`NSBonjourServices`, no multicast or wifi-info entitlement, no background mode,
+no push, no notification, no Associated Domains, no App Group, no shared
+keychain group and no StoreKit; the entitlement file it left behind claimed only
+`com.apple.developer.applesignin`. Associated Domains is the one thing on that
+list that has since changed: the Universal Link slice claimed it, for
+`applinks:relayium.com` alone, which is where R3-F's own deep-link deferral was
+discharged — see "Universal Links" below. Nothing else on the list has moved. A
+foreground inbound session navigates in app
 instead of notifying, which is the honest shape for an app that is either in the
 foreground or has no session at all.
 
@@ -1140,14 +1147,15 @@ renders on either platform.
 
 ### Capabilities
 
-`Relayium.entitlements` claims exactly one capability:
+`Relayium.entitlements` claims exactly two capabilities:
 `com.apple.developer.applesignin = [Default]`, which arrived with the native
-Sign in with Apple button described above. Still absent: Associated Domains (so
-no `onOpenURL`: nothing could deliver a URL, and wiring it would read like
-universal-link support that does not exist), keychain access group, local
-network, background modes, push, IAP. Each entitlement lands with the functional
-slice that needs it, and `IOSSurfaceGuardTests` fails on any other key appearing
-in the file.
+Sign in with Apple button described above, and
+`com.apple.developer.associated-domains = [applinks:relayium.com]`, which
+arrived with Universal Link routing below. Still absent: keychain access group,
+local network, background modes, push, IAP, App Group and shared keychain group.
+Each entitlement lands with the functional slice that needs it, and
+`IOSSurfaceGuardTests` fails on any other key appearing in the file — and on the
+associated-domains value being anything other than that one `applinks:` entry.
 
 R3-E recorded that its deferral of the nearby half "cost something", on the
 grounds that Nearby would need the local-network entitlement. **That reason was
@@ -1162,9 +1170,64 @@ name: no `NSLocalNetworkUsageDescription`, no `NSBonjourServices`, no multicast
 or wifi-info entitlement, and no `NWBrowser`/`NWListener`/`NetService`/
 `MultipeerConnectivity` anywhere in the target.
 
-`/cross-network#c=<code>` deep links remain deferred for the reason that is
-still true: the Direct tab could consume one now, and Associated Domains is not
-this slice's entitlement to add.
+### Universal Links
+
+Both link shapes relayium.com serves now open the iOS app: a shared download
+link (`/d/<id>#k=<key>`) and a realtime pairing link (`/cross-network`, with or
+without `#c=<six digits>`). R3-F deferred this on the grounds that Associated
+Domains was not its entitlement to add; it is this slice's, because the routing
+that justifies it now exists.
+
+`onOpenURL` is wired once, at the scene root, because a cold launch straight
+from a link runs before any tab is built. `RootView` holds the one subscription
+and hands the parsed link to `AppDeepLinkCoordinator`, which lives in the shared
+package and owns the whole policy:
+
+- **A download link** selects *Receive*, fills the link field and resolves —
+  metadata and the encrypted manifest only. It never saves a file. The user sees
+  the decrypted manifest and its delete-after-download warning first, and saving
+  stays an explicit tap, because a link is an invitation and the device it landed
+  on may not be the one the user meant.
+- **A realtime link with a code** selects *Direct* and prefills **both** the file
+  and the text session models, because the URL does not say which the sender
+  chose; prefilling one would make the feature work for half the codes it can
+  carry. It never joins.
+- **A realtime link without a code** selects *Direct* and writes nothing — in
+  particular it does not clear a code the user is part-way through typing.
+- **A link that arrives mid-transfer is retained, not applied.** Its field write
+  would abandon a resolve in flight or swap the code a live session is running
+  on, so it waits until the work stops and lands then. The newest waiting link
+  wins; an older one it displaces never comes back.
+- **Deferred application never navigates.** The selection is written once, when
+  the link arrives. If an unsolicited nearby session or the user moves elsewhere
+  during the wait, the field is filled where it belongs and the screen stays put
+  — the alternative is the app yanking a running session off screen minutes
+  after anybody asked it to.
+
+Trust is layered and neither layer is decorative. There is **no**
+`CFBundleURLTypes`: a custom scheme is unauthenticated, so any app could hand
+this one a URL the OS never checked against relayium.com. What does arrive is
+refused a second time by `parseAppDeepLink` on its own terms — https, exactly
+`relayium.com`, no userinfo, no non-443 port, and one of exactly two paths — so
+a mis-provisioned association cannot widen what the app acts on.
+`web/public/.well-known/apple-app-site-association` names
+`7PVYUG4YQS.com.relayium.mac` and `7PVYUG4YQS.com.relayium.app` for `/d/*` and
+`/cross-network` and nothing else; `aasa.test.mjs` asserts the marketing,
+pricing, legal and account pages are not claimed. The iOS app was added under
+`applinks` only — the same file's `webcredentials` list is a separate permission
+(password AutoFill), it stays as it was, and no iOS entitlement or form asks for
+it.
+
+`AppDeepLinkCoordinatorTests` drives all of it against real models — a real
+`CloudDownloadModel` over a stubbed URL session and real realtime models over a
+stubbed mint — rather than against a fake that reports busy on command, because
+the interesting failures are all "a link arrived at the wrong moment" and only
+the real states prove the question is being asked correctly.
+
+**macOS still applies links inline** in `AppShellView`: the same
+navigate-then-write, without the mid-transfer refusal. Moving it onto this
+coordinator is a bounded follow-up; nothing in the object is iOS-specific, so it
+is a wiring change rather than a rewrite.
 
 ### Not verified yet
 
@@ -1182,6 +1245,21 @@ in the app" above — the layer below the views is covered by `swift test`, the
 live path is not); and **native Sign in with Apple on a signed device against a
 real Apple ID**, which additionally needs the App ID capability and the server
 audience listed under "Sign in with Apple" above.
+
+**Universal Links are unverified on a device, and no package test can change
+that.** The association is fetched from relayium.com and verified by the OS at
+install time, so a simulator proves nothing about whether a tapped link opens
+the app at all. Outstanding: the com.relayium.app App ID carrying the Associated
+Domains capability in its provisioning profile; a signed install actually
+claiming `relayium.com`; a `/d/<id>#k=` link tapped in Mail, Messages and Safari
+opening the app on *Receive* with the manifest resolved; the same for
+`/cross-network#c=<code>` landing on *Direct* with both codes prefilled; a link
+tapped while an upload or a live session is running, confirming the transfer
+survives and the link lands afterwards; and a long-press on a link still
+offering **Open in Relayium**. macOS's own manual pass recorded the equivalent
+check as *failed* for a locally built Debug app, for exactly this reason — the
+association does not resolve for an unsigned local build — so a green simulator
+here would be evidence of nothing.
 
 **R3-F's outstanding items are the whole point of the feature, and none of them
 is inferable from a simulator.** Nothing below has been observed on real

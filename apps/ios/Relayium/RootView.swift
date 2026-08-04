@@ -40,6 +40,14 @@ import RelayiumAppKit
 ///     the point: the tab that claimed ownership may be the one SwiftUI has
 ///     torn down, and a stale owner leaves the other tab showing "shown
 ///     elsewhere" for a transfer that is not running anywhere.
+///
+/// **Universal Links add a third, and it is the same kind of thing:** a link the
+/// OS delivers arrives for a tab that is not on screen. This file is where the
+/// one subscription lives, for the reason the selection moved up here — a
+/// handler inside a tab is absent for exactly the case that matters. It decides
+/// nothing about the link: `AppDeepLinkCoordinator` owns where it goes and what
+/// it is allowed to overwrite, and that object lives in the shared layer where a
+/// test can drive it against real models.
 struct RootView: View {
     @EnvironmentObject private var session: AccountSession
     /// The ONE account-adjacent fact this file learns, and it is not who is
@@ -70,6 +78,11 @@ struct RootView: View {
     @ObservedObject var residency: NearbyResidencyCoordinator
     @ObservedObject var navigation: AppNavigationModel
     @ObservedObject var presence: TransferPresence
+    // Routing only. This file renders neither: it observes the one place a
+    // verified link arrives and hands it straight to the coordinator that
+    // decides what it may touch.
+    @ObservedObject var deepLinks: AppDeepLinkRouter
+    @ObservedObject var deepLinkRouting: AppDeepLinkCoordinator
 
     var body: some View {
         TabView(selection: $navigation.selection) {
@@ -142,6 +155,28 @@ struct RootView: View {
         // stale while somebody is watching.
         .task(id: nothingLeftToPresent) {
             if nothingLeftToPresent { presence.releaseAll() }
+        }
+        // A link the OS handed this app. `AppDeepLinkRouter` has already refused
+        // anything that is not a relayium.com link this app can serve, so what
+        // arrives is one of exactly two shapes — and everything that happens to
+        // it is the shared coordinator's. In particular this file does not
+        // decide whether the link may overwrite a transfer that is running; that
+        // is the whole reason the coordinator exists.
+        .onReceive(deepLinks.$pending.compactMap { $0 }) { link in
+            deepLinkRouting.deliver(link)
+            // Consumed one turn later, and BOTH halves of that are load-bearing.
+            //
+            // Deferred, because `@Published` emits in `willSet`: this handler
+            // runs before the router has stored the link, so a `consume()` from
+            // here is overwritten by the very assignment that delivered it —
+            // leaving the router holding a link that `Published` then replays to
+            // the next subscriber, which is a re-resolve of a download the user
+            // may already have saved. `AppDeepLinkTests` pins that ordering.
+            //
+            // And EXPECTED, because that deferral is real time: a second link
+            // can land inside it, and a bare `consume()` would throw away a link
+            // this subscription has never seen and `Published` will not re-emit.
+            Task { @MainActor in deepLinks.consume(link) }
         }
     }
 

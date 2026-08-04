@@ -269,15 +269,23 @@ pairing code requires sign-in; joining with that code does not.
   staged copy, and only that explicit tap continues the upload. The app never
   resumes anything on its own, nothing continues while it is closed, and the
   realtime *Direct* and *Nearby* sessions stage nothing, so they end with the
-  foreground. There is still no notification or push, no universal-link routing
-  or Share Extension, no in-app purchase, no App Store release, and no download
-  to install.
+  foreground. Tapping a relayium.com share or pairing link opens the app on the
+  right tab with the link already filled in — it resolves the encrypted manifest
+  or prefills the six-digit code, and never joins a session or saves a file on
+  its own; a link that arrives mid-transfer waits rather than replacing it.
+  There is still no notification or push, no Share Extension, no in-app
+  purchase, no App Store release, and no download to install. The link
+  association itself is verified by the OS at install time, so it is one of the
+  things that still needs a real device rather than a simulator.
 - **Next:** complete the native core product on both platforms first, and verify
   that completeness independently — distribution comes after it, not alongside
   it. On iOS the core is still bounded by what this build cannot do: background
   execution — which keeps realtime sessions foreground-only and leaves a stored
   upload waiting for the user to reopen the app and resume it by hand — plus
-  notifications and push, universal-link routing, and a Share Extension. macOS
+  notifications and push, and a Share Extension. Universal-link routing is
+  wired and covered by tests, but its association is only verified on a real
+  install, so it stays on the real-device list below rather than the built list
+  above. macOS
   is further along and is held to the same bar rather than to its own. Both
   then need hands-on real-device QA and an explicit native-versus-web workflow
   audit, and neither has had either yet. Only once

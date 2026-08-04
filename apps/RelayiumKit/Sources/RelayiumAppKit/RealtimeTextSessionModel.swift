@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import RelayiumKit
 
@@ -106,7 +107,12 @@ public final class RealtimeTextSessionModel: ObservableObject {
         self.lastRefill = now()
     }
 
-    public var isBusy: Bool {
+    public var isBusy: Bool { Self.isBusy(state) }
+
+    /// The same answer as a function of the state alone, for a subscriber to
+    /// `$state` — which publishes in `willSet`, while the model still reads its
+    /// old value. One definition, delegated to, so the two cannot drift.
+    nonisolated static func isBusy(_ state: RealtimeTextState) -> Bool {
         switch state {
         case .minting, .showingCode, .joining, .connecting, .verifying,
              .waitingAccept, .incomingRequest, .open:
@@ -114,6 +120,23 @@ public final class RealtimeTextSessionModel: ObservableObject {
         default:
             return false
         }
+    }
+
+    /// `isBusy`, published only when the answer CHANGES.
+    ///
+    /// An open session publishes on every message sent or received and on every
+    /// keystroke in the draft — none of which is a state change at all — and
+    /// walks `.minting`/`.joining`/`.connecting`/`.verifying`/`.open` without
+    /// ceasing to be busy. Mapping `$state` drops the first kind outright and
+    /// `removeDuplicates` collapses the second, which `objectWillChange` cannot
+    /// do either of.
+    ///
+    /// Emits the current value on subscribe, like every `@Published`.
+    ///
+    /// Internal: `AppDeepLinkCoordinator` is the only subscriber and lives in
+    /// this package. The app targets ask `isBusy` directly.
+    var busyChanges: AnyPublisher<Bool, Never> {
+        $state.map(Self.isBusy).removeDuplicates().eraseToAnyPublisher()
     }
 
     public var canJoin: Bool {

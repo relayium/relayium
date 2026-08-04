@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import RelayiumKit
 
@@ -146,11 +147,36 @@ public final class CloudDownloadModel: ObservableObject {
         self.errorCopy = errorCopy
     }
 
-    public var isBusy: Bool {
+    public var isBusy: Bool { Self.isBusy(state) }
+
+    /// The same answer as a function of the state alone.
+    ///
+    /// Needed because `$state` publishes in `willSet`: a subscriber holds the
+    /// NEW state while the model still reads the old one, so it cannot ask the
+    /// instance. Keeping one definition and delegating to it is what stops the
+    /// two from drifting.
+    nonisolated static func isBusy(_ state: DownloadState) -> Bool {
         switch state {
         case .downloading, .resolving: return true
         default: return false
         }
+    }
+
+    /// `isBusy`, published only when the answer CHANGES.
+    ///
+    /// Deliberately not `objectWillChange` for observers that only want "did
+    /// work start or stop": this model republishes `.downloading(received:
+    /// total:)` for every chunk, so one download is thousands of publishes, and
+    /// waking on each of them to ask a question whose answer stayed `true` is a
+    /// cost paid per chunk. Mapping `$state` collapses them and
+    /// `removeDuplicates` leaves exactly the boundaries.
+    ///
+    /// Emits the current value on subscribe, like every `@Published`.
+    ///
+    /// Internal: `AppDeepLinkCoordinator` is the only subscriber and lives in
+    /// this package. The app targets ask `isBusy` directly.
+    var busyChanges: AnyPublisher<Bool, Never> {
+        $state.map(Self.isBusy).removeDuplicates().eraseToAnyPublisher()
     }
 
     /// Whether to render a retry action at all. Both platforms ask this one

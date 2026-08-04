@@ -68,9 +68,10 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// Each source's CODE, with whole-line comments dropped.
     ///
     /// Load-bearing, not tidiness: these files explain what they deliberately do
-    /// NOT do, so `RelayiumApp` says "no `onOpenURL`" and `ReceiveView` says the
-    /// app never reads `UIPasteboard`. Scanning raw text would fail this guard on
-    /// the very comments that document the absence it is checking for.
+    /// NOT do, so `ReceiveView` says the app never reads `UIPasteboard` and
+    /// `RelayiumApp` names the entitlements it has not claimed. Scanning raw text
+    /// would fail this guard on the very comments that document the absence it
+    /// is checking for.
     ///
     /// Whole-line only — a trailing `//` is not stripped, so a deferred symbol
     /// named in a trailing comment still fails. That is the wanted direction:
@@ -176,10 +177,26 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // `NearbyReceiveModel`'s, on the socket the offer arrived on, and an
         // iOS view reaching for either would be a second admission path beside
         // the arbitrated one.
+        //
+        // **`onOpenURL` LEFT this list with the Universal Link slice**, for the
+        // same reason `CloudUploadModel` left it in R3-C: this is the slice that
+        // ships it. It was banned because nothing could deliver a URL — no
+        // Associated Domains, no registered scheme — so the handler would have
+        // read like universal-link support that did not exist. Both halves now
+        // do: `Relayium.entitlements` claims `applinks:relayium.com` and the
+        // site's association file names this app's ID for `/d/*` and
+        // `/cross-network`. What replaces the ban is not nothing — it is
+        // `testTheUniversalLinkHandOffIsWiredOnceAndDecidesNothingInTheViewLayer`
+        // and `testTheLinkPathNeitherJoinsNorDownloads` below, plus
+        // `AppDeepLinkCoordinatorTests` driving the policy against real models,
+        // which are harder claims than an absence. A custom URL scheme stays
+        // banned by `testTheLinkHandOffAcceptsOnlyVerifiedUniversalLinks`,
+        // because a scheme is unauthenticated and a link handoff is a trust
+        // boundary.
         let deferred = [
             "BrowserLoginModel",
             "acceptNearby", "NearbyError",
-            "onOpenURL", "UNUserNotificationCenter", "StoreKit",
+            "UNUserNotificationCenter", "StoreKit",
             "NSWorkspace",
         ]
         // This is the wrong way to do THIS slice's work. Each of these compiles,
@@ -525,23 +542,171 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(form.text.contains("import AuthenticationServices"))
     }
 
-    /// One entitlement, and it is the one this slice earned.
+    /// Two entitlements, and each is one this app earned.
     ///
-    /// Empty used to be the claim. It is now exactly `applesignin`, because the
-    /// app presents an `ASAuthorizationAppleIDRequest` — and still nothing else,
-    /// because every other capability belongs to a feature that does not exist
-    /// yet. The nil keychain access group is the same decision, from the other
-    /// side: the bearer lives in this app's own default group.
-    func testTheEntitlementsFileClaimsOnlyAppleSignIn() throws {
+    /// Empty used to be the claim, then exactly `applesignin` — because the app
+    /// presents an `ASAuthorizationAppleIDRequest`. `associated-domains` is the
+    /// second and lands by the same rule: the app now ROUTES the two link shapes
+    /// relayium.com serves, rather than claiming a capability with nothing
+    /// behind it. Everything else is still absent, because every other
+    /// capability belongs to a feature that does not exist yet. The nil keychain
+    /// access group is the same decision from the other side: the bearer lives
+    /// in this app's own default group.
+    ///
+    /// The domain list is asserted exactly. `applinks:` is what `onOpenURL`
+    /// needs; `webcredentials:` would be a password-AutoFill association this
+    /// app has no field for, and `activitycontinuation:` would be Handoff, which
+    /// it does not do. A wildcard (`*.relayium.com`) would widen the trust
+    /// boundary to every subdomain, including ones the service may later point
+    /// somewhere else.
+    func testTheEntitlementsFileClaimsOnlyAppleSignInAndAppLinks() throws {
         let data = try Data(contentsOf: iosRoot.appendingPathComponent("Relayium.entitlements"))
         let plist = try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
-        XCTAssertEqual(plist.keys.sorted(), ["com.apple.developer.applesignin"],
+        XCTAssertEqual(plist.keys.sorted(),
+                       ["com.apple.developer.applesignin",
+                        "com.apple.developer.associated-domains"],
                        "iOS claims a capability it does not use: \(plist.keys.sorted())")
         XCTAssertEqual(plist["com.apple.developer.applesignin"] as? [String], ["Default"])
+        XCTAssertEqual(plist["com.apple.developer.associated-domains"] as? [String],
+                       ["applinks:relayium.com"],
+                       "the app claims a domain or a service beyond link routing")
         XCTAssertNil(plist["keychain-access-groups"],
                      "the bearer lives in this app's own default keychain group")
+    }
+
+    // MARK: - Universal Link hand-off
+
+    /// The hand-off is wired once, at the scene root, and consumed once, in the
+    /// shell — and the view layer decides nothing about the link.
+    ///
+    /// Each clause is a way this could look finished and not be. `onOpenURL` on
+    /// a tab is absent for the case that matters, because a cold launch from a
+    /// link runs before any tab exists and a warm one lands on whichever tab
+    /// happens to be mounted. A second `onOpenURL` would be a second entry point
+    /// with its own idea of what a link may overwrite. And a handler that read
+    /// `isBusy` here would be the shared policy re-derived in SwiftUI, where no
+    /// test can reach it — `AppDeepLinkCoordinatorTests` owns that decision
+    /// against real models.
+    func testTheUniversalLinkHandOffIsWiredOnceAndDecidesNothingInTheViewLayer() throws {
+        let all = try sources()
+        let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" })
+        let root = try XCTUnwrap(all.first { $0.name == "RootView.swift" })
+
+        XCTAssertEqual(all.map { $0.text.components(separatedBy: ".onOpenURL").count - 1 }
+                          .reduce(0, +), 1,
+                       "a second onOpenURL would be a second entry point for a link")
+        XCTAssertTrue(app.text.contains(".onOpenURL { deepLinks.open($0) }"),
+                      "the OS hand-off belongs at the scene root, and hands over unparsed")
+        XCTAssertFalse(root.text.contains("onOpenURL"),
+                       "a tab-scoped handler is absent for a cold launch from a link")
+
+        // Both objects are the App's, so a retained link outlives the tab that
+        // was on screen when it arrived.
+        for scoped in ["@StateObject private var deepLinks = AppDeepLinkRouter()",
+                       "@StateObject private var deepLinkRouting: AppDeepLinkCoordinator"] {
+            XCTAssertTrue(app.text.contains(scoped), "RelayiumApp lost \(scoped)")
+        }
+        XCTAssertEqual(app.text.components(separatedBy: "AppDeepLinkCoordinator(").count - 1, 1,
+                       "a second coordinator would be a second answer to what a link may touch")
+        XCTAssertTrue(app.text.contains("navigation: routing, download: downloads,"),
+                      "the coordinator must be built from the app-scoped models, not its own")
+
+        // One subscription, in the shell, and it does exactly two things.
+        XCTAssertEqual(all.map { $0.text.components(separatedBy: "deepLinks.$pending").count - 1 }
+                          .reduce(0, +), 1,
+                       "a second subscription would apply every link twice")
+        XCTAssertTrue(root.text.contains(".onReceive(deepLinks.$pending.compactMap { $0 }) { link in"))
+        XCTAssertTrue(root.text.contains("deepLinkRouting.deliver(link)"),
+                      "the shell must hand the link to the shared coordinator")
+        // Deferred by one turn (the `@Published` willSet ordering) AND by
+        // expected link, so a second link landing inside that gap is not thrown
+        // away by the first one's consume.
+        XCTAssertTrue(root.text.contains("Task { @MainActor in deepLinks.consume(link) }"),
+                      "the consume must be deferred and must name the link it acted on")
+        XCTAssertFalse(root.text.contains("deepLinks.consume()"),
+                       "an unqualified consume can discard a newer link")
+    }
+
+    /// A link fills a field and selects a tab. It never joins and never saves.
+    ///
+    /// The shell is where that would go wrong, because it holds every model the
+    /// link touches: one `direct.join()` beside the `deliver` call would turn a
+    /// tapped link into an automatic connection to a stranger's code, and one
+    /// `download.download(into:)` would write a stranger's files to disk without
+    /// the user ever seeing the manifest. Neither is visible in a screenshot.
+    func testTheLinkPathNeitherJoinsNorDownloads() throws {
+        let all = try sources()
+        for name in ["RelayiumApp.swift", "RootView.swift"] {
+            let file = try XCTUnwrap(all.first { $0.name == name })
+            for reaching in ["updateJoinCode", "linkText", "resolve()",
+                             ".join(", ".download(into:", "isBusy"] {
+                XCTAssertFalse(file.text.contains(reaching),
+                               "\(name) applies a link itself: \(reaching)")
+            }
+        }
+    }
+
+    /// A verified Universal Link is the only way in.
+    ///
+    /// `CFBundleURLTypes` would register a custom scheme, and a custom scheme is
+    /// unauthenticated — any app on the device can claim `relayium://` and hand
+    /// this one a URL the OS never checked against relayium.com. `parseAppDeepLink`
+    /// would refuse it on the scheme alone, so this is defence in depth rather
+    /// than the only guard; it is asserted here because declaring the key is a
+    /// one-line change that reads like a convenience.
+    ///
+    /// `NSUserActivityTypes` is the Handoff/Spotlight declaration and belongs to
+    /// a feature this app does not have. A Universal Link needs neither.
+    func testTheLinkHandOffAcceptsOnlyVerifiedUniversalLinks() throws {
+        let plist = try infoPlist()
+        XCTAssertNil(plist["CFBundleURLTypes"],
+                     "a custom URL scheme is an unauthenticated way into the app")
+        XCTAssertNil(plist["NSUserActivityTypes"])
+        XCTAssertNil(plist["UIBackgroundModes"],
+                     "link routing must not have brought a background mode with it")
+        for (name, text) in try sources() {
+            XCTAssertFalse(text.contains("NSUserActivity"), "\(name) reaches for Handoff")
+            XCTAssertFalse(text.contains("relayium://"), "\(name) names a custom scheme")
+        }
+    }
+
+    /// The site's side of the association names this app, for exactly the two
+    /// paths it can act on — and still names the Mac app.
+    ///
+    /// Read here rather than only in the web test because the two halves fail
+    /// separately and silently: an entitlement with no matching `appIDs` entry
+    /// is an app that never receives a link, and an `appIDs` entry with no
+    /// entitlement is a site claiming an app that will not open. Neither shows
+    /// up on the simulator, where the association is not fetched at all.
+    func testTheSiteAssociationNamesThisAppForTheTwoRoutablePaths() throws {
+        let aasa = repoRoot
+            .appendingPathComponent("web/public/.well-known/apple-app-site-association")
+        let json = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: try Data(contentsOf: aasa))
+                as? [String: Any])
+        let applinks = try XCTUnwrap(json["applinks"] as? [String: Any])
+        let details = try XCTUnwrap(applinks["details"] as? [[String: Any]])
+        let appIDs = details.flatMap { ($0["appIDs"] as? [String]) ?? [] }
+        XCTAssertEqual(appIDs, ["7PVYUG4YQS.com.relayium.mac", "7PVYUG4YQS.com.relayium.app"],
+                       "the association no longer names both native app IDs")
+        let paths = details.flatMap { detail in
+            ((detail["components"] as? [[String: Any]]) ?? []).compactMap { $0["/"] as? String }
+        }
+        XCTAssertEqual(paths, ["/d/*", "/cross-network"],
+                       "the site claims a path parseAppDeepLink cannot route")
+
+        // `webcredentials` shares the file and is a different permission: the
+        // site allowing password AutoFill for an app. This app claims no
+        // `webcredentials:` entitlement and its sign-in form does not use
+        // AutoFill, so being added there would be a credential-adjacent
+        // association ahead of anything asking for it — and the natural mistake
+        // is to add the ID to both lists because they sit four lines apart.
+        let credentials = try XCTUnwrap(
+            (json["webcredentials"] as? [String: Any])?["apps"] as? [String])
+        XCTAssertEqual(credentials, ["7PVYUG4YQS.com.relayium.mac"],
+                       "the site associates this app for AutoFill, which it does not use")
     }
 
     /// The bearer is read at the moment of use, and only by the two surfaces
@@ -702,18 +867,53 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// what actually remains: background execution — not resume — plus the
     /// surfaces this build has none of and the verifications neither platform
     /// has had.
+    ///
+    /// **Universal-link routing left the "does not exist" half and did not leave
+    /// the roadmap.** The app now routes links and the tests below cover the
+    /// policy, but the association is fetched and verified by the OS at install
+    /// time, so nothing a simulator or a package test does is evidence that a
+    /// tapped link opens the app. Moving it out of the roadmap entirely would
+    /// claim a verification that has not happened; leaving it beside "no
+    /// notifications" would claim the routing does not exist. It has to be named
+    /// as unverified rather than as absent, so both halves are asserted.
     func testTheReadmeNextEntryScopesTheRemainingIOSWork() throws {
         let next = try deliveryStatusEntry("Next:")
 
-        for remaining in ["background execution", "notification", "push", "universal-link",
+        for remaining in ["background execution", "notification", "push",
                           "share extension", "real-device", "native-versus-web"] {
             XCTAssertTrue(next.contains(remaining),
                           "the roadmap stopped naming remaining work: \(remaining)")
         }
-        for stale in ["no background transfer", "resume and background", "resumable transfer"] {
+        XCTAssertTrue(next.contains("universal-link"),
+                      "the roadmap stopped tracking link routing altogether")
+        XCTAssertTrue(next.contains("wired"),
+                      "the roadmap still lists universal-link routing as work not done")
+        XCTAssertTrue(next.contains("real install") || next.contains("real-device"),
+                      "the roadmap must say what about link routing is still unverified")
+        for stale in ["no background transfer", "resume and background", "resumable transfer",
+                      "no universal-link"] {
             XCTAssertFalse(next.contains(stale),
                            "the roadmap is back to the generic claim: \(stale)")
         }
+    }
+
+    /// The iOS bullet describes what a link DOES, and bounds it.
+    ///
+    /// "Universal links supported" would be true and useless: the two ways this
+    /// feature could be dangerous are joining a stranger's session and writing a
+    /// stranger's files, and a reader has no way to know it does neither unless
+    /// the entry says so. The third clause is the one a reviewer would drop —
+    /// that a link arriving mid-transfer waits instead of replacing it.
+    func testTheReadmeIOSEntryStatesWhatALinkDoesAndDoesNot() throws {
+        let ios = try deliveryStatusEntry("iOS")
+
+        XCTAssertTrue(ios.contains("link"), "the README does not mention link routing at all")
+        for bounded in ["never joins", "waits"] {
+            XCTAssertTrue(ios.contains(bounded),
+                          "the README dropped what a link is NOT allowed to do: \(bounded)")
+        }
+        XCTAssertFalse(ios.contains("no universal-link"),
+                       "the README's iOS entry still calls link routing absent")
     }
 
     /// The management model is app-scoped and injected once.
@@ -1931,9 +2131,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let entitlements = try XCTUnwrap(
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
+        // `com.apple.developer.associated-domains` left this list with the
+        // Universal Link slice, and only that one: it is now claimed, for
+        // `applinks:relayium.com` alone, and
+        // `testTheEntitlementsFileClaimsOnlyAppleSignInAndAppLinks` asserts the
+        // exact value rather than merely allowing the key. Nothing else moved —
+        // link routing needs no network capability, no App Group and no push.
         for banned in ["com.apple.developer.networking.multicast",
                        "com.apple.developer.networking.wifi-info",
-                       "com.apple.developer.associated-domains",
                        "com.apple.security.application-groups",
                        "keychain-access-groups",
                        "aps-environment"] {

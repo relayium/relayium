@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appIDs": ["7PVYUG4YQS.com.relayium.mac"],
+        "appIDs": ["7PVYUG4YQS.com.relayium.mac", "7PVYUG4YQS.com.relayium.app"],
         "components": [
           { "/": "/d/*", "comment": "shared download links open in the app" },
           { "/": "/cross-network", "comment": "realtime pairing links open in the app" }

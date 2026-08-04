@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<!-- Exactly one entitlement, and it arrives with the feature that needs it.
+<!-- Exactly two entitlements, and each arrives with the feature that needs it.
 
      `com.apple.developer.applesignin` is what lets the app present an
      `ASAuthorizationAppleIDRequest`. It is claimed now because this slice ships
@@ -13,6 +13,39 @@
      `Default` (rather than `Sign In With Apple`) is the plain capability: this
      app is not the primary of an app group that shares an Apple ID relationship
      with another app.
+
+     `com.apple.developer.associated-domains = [applinks:relayium.com]` is the
+     second, and it lands by the same rule: the app now ROUTES the two link
+     shapes relayium.com actually serves. `onOpenURL` is wired at the scene root,
+     `AppDeepLinkCoordinator` selects the tab and prefills the field, and
+     `AppDeepLinkCoordinatorTests` drives that against real models. Before this
+     slice the entitlement would have been a claim with nothing behind it.
+
+     One domain, one service, and both narrower than they look. `applinks:` and
+     not `*.relayium.com`, because a wildcard would extend the trust boundary to
+     every subdomain the service may later point somewhere else. No
+     `activitycontinuation:`, which is Handoff between devices and something this
+     app does not do. And no `webcredentials:` — password AutoFill is an
+     association this app's sign-in form does not use. The SITE's association
+     file matches on that point: it names this app under `applinks` only, and
+     keeps its `webcredentials` list to the Mac app it was already permitting.
+     AutoFill is a separate permission and would arrive with the feature that
+     wants it, on both sides.
+
+     A verified Universal Link is the only way in. There is deliberately no
+     `CFBundleURLTypes` in `Info.plist`: a custom scheme is unauthenticated —
+     any app can register `relayium://` — and a link handoff is a trust boundary.
+     `parseAppDeepLink` then refuses again on its own terms (https, exactly this
+     host, no userinfo, no non-443 port, one of two paths), so a mis-provisioned
+     association cannot widen what the app will act on.
+
+     Associated Domains needs two more things a SIGNED build supplies: the
+     com.relayium.app App ID carrying that capability, and relayium.com serving
+     an `apple-app-site-association` that names `7PVYUG4YQS.com.relayium.app`
+     under `applinks` — which `web/public/.well-known/apple-app-site-association`
+     now does, alongside the Mac app. Neither is proved by a simulator build: the
+     association is fetched and verified by the OS at install time, so link
+     routing is on the list of things that still need a real device.
 
      A SIGNED build additionally needs the com.relayium.app App ID to carry the
      Sign in with Apple capability in its provisioning profile, and the server's
@@ -30,9 +63,9 @@
      `NSPhotoLibraryUsageDescription`: it runs out of process and hands back only
      the items the user picked, so this app never has library access to ask for.
 
-     Still absent, each with the slice that would earn it: Associated Domains
-     (link handoff), an App Group and a shared keychain group (a Share
-     Extension), background modes (transfers surviving suspension), push, IAP.
+     Still absent, each with the slice that would earn it: an App Group and a
+     shared keychain group (a Share Extension), background modes (transfers
+     surviving suspension), push, IAP.
 
      Local network is NOT on that list, and R3-E's version of this comment was
      wrong to put it there. Relayium's nearby feature is not Bonjour and does
@@ -47,6 +80,10 @@
 	<key>com.apple.developer.applesignin</key>
 	<array>
 		<string>Default</string>
+	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:relayium.com</string>
 	</array>
 </dict>
 </plist>
