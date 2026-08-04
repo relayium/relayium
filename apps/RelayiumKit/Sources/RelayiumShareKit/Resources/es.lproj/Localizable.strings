@@ -189,6 +189,22 @@
 "send.accountUnavailableBody" = "Enviar necesita los límites de tu plan y no se pudieron cargar. Abre «Cuenta» para intentarlo de nuevo.";
 "send.choosePhotos" = "Elegir fotos o vídeos…";
 "send.preparingPhotos" = "Preparando lo que elegiste…";
+
+/* MARK: iOS share extension */
+"share.heading" = "Enviar con Relayium";
+"share.disclosure" = "Tus archivos se copian a Relayium en este dispositivo. No se sube nada hasta que pulses «Enviar» en Relayium.";
+"share.continue" = "Copiar a Relayium";
+"share.copying" = "Copiando a Relayium: %@ hasta ahora";
+"share.itemCount.one" = "%@ elemento";
+"share.itemCount.other" = "%@ elementos";
+"share.savedTitle" = "Guardado en Relayium en este dispositivo";
+"share.savedBody" = "No se ha subido nada. Abre Relayium y pulsa Enviar en la pestaña «Enviar» cuando quieras.";
+"share.waitingTitle" = "Compartido desde otra app";
+"share.waitingBody" = "%@ esperando para enviarse.";
+"share.staysHere" = "Se quedan en este dispositivo hasta que los envíes o los descartes. Relayium nunca los envía por su cuenta.";
+"share.use" = "Usar estos archivos";
+"share.signedOutBody" = "Enviar requiere una cuenta. Inicia sesión y seguirán aquí.";
+"share.busyBody" = "Termina, descarta o borra primero lo que hay en esta pantalla.";
 "ttl.oneHour" = "1 hora";
 "ttl.oneDay" = "1 día";
 "ttl.threeDays" = "3 días";
@@ -466,6 +482,10 @@
 "error.selection.symbolicLink" = "«%@» es un enlace simbólico. Relayium no lo sigue —podría enviar archivos de fuera de lo que elegiste— y tampoco lo omite en silencio. Quítalo de la selección, o envía la carpeta real a la que apunta.";
 "error.selection.pathTooLong" = "La ruta «%@» es demasiado larga para describirla en una transferencia. Envía desde una carpeta menos profunda, o acorta los nombres.";
 "error.photoImport.failed" = "No se pudo preparar parte de lo que elegiste para enviarlo, así que no se seleccionó nada. Elige de nuevo o envía menos elementos a la vez.";
+"error.share.unavailable" = "Relayium no pudo acceder a su almacenamiento compartido, así que no se copió nada. Abre Relayium y elige los archivos ahí.";
+"error.share.nothingUsable" = "Aquí no había nada que Relayium pueda enviar. Acepta archivos, carpetas, fotos y vídeos.";
+"error.share.duplicatePath" = "Dos de los elementos compartidos se enviarían como «%@». Compártelos por separado o cambia el nombre de uno.";
+"error.share.storageFailed" = "No se pudieron copiar los archivos, así que no se preparó nada. Comprueba el espacio libre de este dispositivo e inténtalo de nuevo.";
 "error.cloud.unauthorized" = "Tu sesión caducó. Vuelve a iniciar sesión para enviar archivos.";
 "error.cloud.quota" = "No queda espacio ni cuota diaria suficiente para este archivo. Libera espacio o mejora tu plan.";
 "error.cloud.rateLimited" = "Ahora mismo hay demasiadas subidas. Espera un minuto y vuelve a intentarlo.";

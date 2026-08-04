@@ -189,6 +189,21 @@
 "send.accountUnavailableBody" = "发送需要读取你套餐的限额，但这次没能载入。请前往「账户」重试。";
 "send.choosePhotos" = "选择照片或视频…";
 "send.preparingPhotos" = "正在准备所选内容…";
+
+/* MARK: iOS share extension */
+"share.heading" = "用 Relayium 发送";
+"share.disclosure" = "文件会复制到本机的 Relayium。在 Relayium 里按下“发送”之前，不会上传任何内容。";
+"share.continue" = "复制到 Relayium";
+"share.copying" = "正在复制到 Relayium — 已复制 %@";
+"share.itemCount.other" = "%@ 个项目";
+"share.savedTitle" = "已保存到本机的 Relayium";
+"share.savedBody" = "尚未上传任何内容。准备好后，请打开 Relayium，在“发送”标签页按下发送。";
+"share.waitingTitle" = "来自其他 App 的分享";
+"share.waitingBody" = "%@ 正在等待发送。";
+"share.staysHere" = "在你发送或丢弃之前，它们一直留在本机。Relayium 不会自行发送。";
+"share.use" = "使用这些文件";
+"share.signedOutBody" = "发送需要账户。登录后它们仍在这里。";
+"share.busyBody" = "请先完成、丢弃或清除当前屏幕上的内容。";
 "ttl.oneHour" = "1 小时";
 "ttl.oneDay" = "1 天";
 "ttl.threeDays" = "3 天";
@@ -458,6 +473,10 @@
 "error.selection.symbolicLink" = "“%@”是一个符号链接。Relayium 不会跟随它 — 那可能会发送你所选范围之外的文件 — 也不会悄悄跳过它。请把它从选择中移除，或直接发送它指向的真实文件夹。";
 "error.selection.pathTooLong" = "路径“%@”太长，无法在一次传输中描述。请从更浅的文件夹发送，或缩短名称。";
 "error.photoImport.failed" = "所选内容中有一部分无法准备好发送，因此这次什么都没有选中。请重新选择，或一次少选一些。";
+"error.share.unavailable" = "Relayium 无法访问共享存储，因此没有复制任何内容。请直接打开 Relayium 选择文件。";
+"error.share.nothingUsable" = "这里没有 Relayium 能发送的内容。它支持文件、文件夹、照片和视频。";
+"error.share.duplicatePath" = "有两个分享项都会以“%@”发送。请分开分享，或先重命名其中一个。";
+"error.share.storageFailed" = "文件复制失败，因此没有暂存任何内容。请检查本机剩余空间后重试。";
 "error.cloud.unauthorized" = "你的登录已过期。请重新登录以发送文件。";
 "error.cloud.quota" = "剩余空间或当日配额不足以容纳这个文件。请清理空间或升级套餐。";
 "error.cloud.rateLimited" = "当前上传次数过多。请等一分钟再试。";

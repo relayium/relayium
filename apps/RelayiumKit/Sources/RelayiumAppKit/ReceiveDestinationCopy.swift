@@ -1,4 +1,5 @@
 import Foundation
+import RelayiumShareKit
 
 /// The copy for a destination the user did not choose and cannot change.
 ///

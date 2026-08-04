@@ -29,12 +29,22 @@ final class LocalizationSourceGuardTests: XCTestCase {
         let apps = packageRoot.deletingLastPathComponent()
         return [
             packageRoot.appendingPathComponent("Sources/RelayiumAppKit"),
+            // The catalogs and the shared draft store both live here now, and
+            // the store produces user-facing sentences (`SharedDraftCopy`) that
+            // the extension renders. A literal here would reach a share sheet in
+            // English inside an otherwise Arabic system.
+            packageRoot.appendingPathComponent("Sources/RelayiumShareKit"),
             apps.appendingPathComponent("mac/Relayium"),
             // R3-A's iOS app. It renders the same catalogs through the same
             // `L10n` and has the same failure mode, and being the newest
             // surface it is where a `Text("Try again")` is most likely to be
             // typed next.
             apps.appendingPathComponent("ios/Relayium"),
+            // The share extension. Every string it draws goes through the same
+            // catalogs, and it is the surface most likely to be typed in a
+            // hurry — it is small, it is new, and it is only ever seen from
+            // inside another app.
+            apps.appendingPathComponent("ios/RelayiumShare"),
         ]
     }
 

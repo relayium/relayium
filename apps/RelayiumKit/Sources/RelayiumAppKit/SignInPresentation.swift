@@ -1,4 +1,5 @@
 import Foundation
+import RelayiumShareKit
 
 /// Which half of the account form is on screen.
 ///

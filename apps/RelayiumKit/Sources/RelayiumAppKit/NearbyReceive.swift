@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 /// What an inbound nearby session is carrying. Drives which UI the app puts on
 /// screen, so a session that arrives while the picker was on the other mode

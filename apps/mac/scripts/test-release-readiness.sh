@@ -62,13 +62,20 @@ done
 # Localization. Same reasoning again, with one addition: the catalogs are DATA,
 # so a rename or a bad merge can delete eight of them and leave a build that
 # compiles, runs, and silently renders English to everybody.
+#
+# The catalogs and the lookup moved from `RelayiumAppKit` to `RelayiumShareKit`
+# so the iOS share extension could render the same nine languages without
+# linking the transport stack. `RelayiumAppKit` re-exports the module, so every
+# call site is unchanged — but these paths are not, and a stale list here would
+# pass by checking for files that no longer exist anywhere.
 localization_sources=(
-  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Localization/AppLanguage.swift"
-  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Localization/L10n.swift"
-  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Localization/L10nKey.swift"
-  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Localization/LocalizationCatalog.swift"
-  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Localization/PluralRule.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumShareKit/Localization/AppLanguage.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumShareKit/Localization/L10n.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumShareKit/Localization/L10nKey.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumShareKit/Localization/LocalizationCatalog.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumShareKit/Localization/PluralRule.swift"
   "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Localization/AppCopy.swift"
+  "$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/SharedLocalizationExport.swift"
   "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/LocalizationIntegrityTests.swift"
   "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/LocalizedCopyTests.swift"
   "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/LocalizationSourceGuardTests.swift"
@@ -83,7 +90,7 @@ done
 # The nine catalogs themselves, by name. `swift test` asserts far more about
 # them, but this runs in the release path and needs no toolchain.
 supported_lprojs=(en zh-Hans ja ko de fr ar es pt)
-catalog_root="$repo_root/apps/RelayiumKit/Sources/RelayiumAppKit/Resources"
+catalog_root="$repo_root/apps/RelayiumKit/Sources/RelayiumShareKit/Resources"
 for lproj in "${supported_lprojs[@]}"; do
   if [ ! -f "$catalog_root/$lproj.lproj/Localizable.strings" ]; then
     echo "error: localization catalog is missing: $lproj.lproj/Localizable.strings" >&2

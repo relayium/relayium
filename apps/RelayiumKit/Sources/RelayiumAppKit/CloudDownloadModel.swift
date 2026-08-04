@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 public struct ParsedLink: Equatable {
     public let id: String

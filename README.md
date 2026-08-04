@@ -273,19 +273,37 @@ pairing code requires sign-in; joining with that code does not.
   right tab with the link already filled in — it resolves the encrypted manifest
   or prefills the six-digit code, and never joins a session or saves a file on
   its own; a link that arrives mid-transfer waits rather than replacing it.
-  There is still no notification or push, no Share Extension, no in-app
-  purchase, no App Store release, and no download to install. The link
-  association itself is verified by the OS at install time, so it is one of the
-  things that still needs a real device rather than a simulator.
+  A **Share Extension** is now built into the engineering build: sharing files,
+  folders, photos or videos to Relayium from any app copies them into shared
+  app-private storage on the device and tells you they are saved there and that
+  nothing has been uploaded. You then open Relayium yourself and they are waiting
+  on *Send*, until you choose them and press Send — iOS does not let a share
+  extension open its containing app, so that last step is yours rather than
+  something the sheet can do for you. The extension makes no network request,
+  reads no account and holds no key — it stages local copies and stops, and the
+  app is still the only thing that encrypts, uploads or produces a link. A
+  waiting share is shown even when nobody is signed in, stays on the device until
+  it is sent or discarded, and is never expired or sent on its own. None of that
+  is verified against a real share sheet yet: the App Group has not been
+  registered on the developer portal, the extension has never run on a device,
+  and what real providers hand over for a shared folder is untested. There is
+  still no notification or push, no in-app purchase, no App Store release, and
+  no download to install. The link association itself is verified by the OS at
+  install time, so it is one of the things that still needs a real device rather
+  than a simulator.
 - **Next:** complete the native core product on both platforms first, and verify
   that completeness independently — distribution comes after it, not alongside
   it. On iOS the core is still bounded by what this build cannot do: background
   execution — which keeps realtime sessions foreground-only and leaves a stored
   upload waiting for the user to reopen the app and resume it by hand — plus
-  notifications and push, and a Share Extension. Universal-link routing is
+  notifications and push. Universal-link routing is
   wired and covered by tests, but its association is only verified on a real
   install, so it stays on the real-device list below rather than the built list
-  above. macOS
+  above. The share extension is in the same position and needs more: its App
+  Group has to be registered on the developer portal and carried by both
+  provisioning profiles, and only a signed install can show what the real share
+  sheet offers, what providers vend for a shared folder, and whether returning to
+  the app puts the waiting share in front of the user as intended. macOS
   is further along and is held to the same bar rather than to its own. Both
   then need hands-on real-device QA and an explicit native-versus-web workflow
   audit, and neither has had either yet. Only once

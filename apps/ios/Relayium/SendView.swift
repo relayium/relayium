@@ -37,6 +37,20 @@ struct SendView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    // ABOVE the account gate, and outside it.
+                    //
+                    // The share extension can be used from any app at any time,
+                    // including on a device nobody has signed in on, and it
+                    // tells the user their files are waiting in Relayium. A
+                    // draft rendered inside the `.ready` arm would make that
+                    // sentence false for exactly the person most likely to be
+                    // confused by it: they would open Relayium, see a sign-in
+                    // form, and have no way to know their files arrived at all.
+                    //
+                    // What signing in changes is whether the draft can be USED,
+                    // not whether it exists — and `SharedDraftGate` says which,
+                    // in words, right next to it.
+                    sharedDrafts
                     availability
                 }
                 .padding()
@@ -46,6 +60,85 @@ struct SendView: View {
             }
             .navigationTitle(L10n.t(.uploadHeading))
         }
+        // Re-read on arrival. A draft can be staged while this tab is off screen
+        // — that is the normal case, since the user was in another app — and
+        // SwiftUI may have torn this view down in the meantime. The scene root
+        // refreshes too, on every activation, which is what covers the user who
+        // shares a file and then switches back to a Relayium that was already
+        // running with this tab on screen.
+        .task { selection.refreshSharedDrafts() }
+    }
+
+    // MARK: - drafts the share extension left behind
+
+    /// What is waiting from another app, and what may be done with it.
+    ///
+    /// One card per draft, oldest first, because several shares are several
+    /// separate things the user asked for and merging them would send files they
+    /// never chose to send together.
+    @ViewBuilder
+    private var sharedDrafts: some View {
+        if !selection.sharedDrafts.isEmpty {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(L10n.t(.shareWaitingTitle)).font(.headline)
+                ForEach(selection.sharedDrafts) { draft in
+                    sharedDraftCard(draft)
+                }
+                Text(L10n.t(.shareStaysHere))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
+            // Contained rather than combined: each card has its own actions, and
+            // combining would leave VoiceOver reading five drafts as one label
+            // with ten buttons after it.
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    private func sharedDraftCard(_ draft: SharedDraftSummary) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(SharedDraftGate.waitingBody(fileCount: draft.fileCount))
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(ByteCountFormatter.string(fromByteCount: Int64(draft.totalBytes),
+                                           countStyle: .file))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            // The refusal, in words, above the control it explains. A disabled
+            // button with no sentence beside it is indistinguishable from a bug,
+            // and the two reasons — no account, or something on this screen
+            // would be overwritten — need completely different responses.
+            //
+            // Scoped to THIS draft. The notice names the draft whose button was
+            // pressed, so pressing Use on the third of five puts the sentence
+            // under the third and nowhere else; an unscoped reason would have
+            // read as all five being refused.
+            if let refusal = selection.sharedDraftRefusal, refusal.applies(to: draft.id) {
+                Text(SharedDraftGate.message(for: refusal.reason))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Button { selection.useSharedDraft(draft.id) } label: {
+                Text(L10n.t(.shareUse)).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+
+            // Destructive and marked as such: this deletes the only copy of what
+            // the user shared that is not still in the app they shared it from.
+            Button(role: .destructive) { selection.discardSharedDraft(draft.id) } label: {
+                Text(L10n.t(.uploadDiscard)).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+        }
+        .accessibilityElement(children: .contain)
     }
 
     // MARK: - the gate
@@ -155,7 +248,12 @@ struct SendView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
 
-            Button(role: .destructive) { upload.discardPendingJob() } label: {
+            // Through the send model, not `upload.discardPendingJob()`: for a
+            // job copied out of a shared draft this is the SECOND destruction —
+            // the draft went when the job became durable — so what the screen
+            // returns to is a policy, and it belongs where `swift test` can
+            // drive it rather than in whatever this button happens to call.
+            Button(role: .destructive) { selection.discardPendingUpload() } label: {
                 Text(L10n.t(.uploadDiscard)).frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -352,16 +450,22 @@ struct SendView: View {
             ]))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            Button(L10n.t(.uploadSendAnother)) { upload.reset() }
+            // Same reason as Discard above: after a sent shared draft there is
+            // no selection to go back to, and after an ordinary send there is.
+            // The send model owns which.
+            Button(L10n.t(.uploadSendAnother)) { selection.resetUpload() }
         }
     }
 
     private func failure(_ text: String) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             failureLine(text)
-            // `reset`, not `clearSelection`: a failure must not make the user
-            // choose every file again.
-            Button(L10n.t(.commonTryAgain)) { upload.reset() }
+            // A reset, not a clear: a failure must not make the user choose
+            // every file again. A shared draft that failed before its job became
+            // durable is still selected here, which is what makes Try again
+            // retry the same staged bytes rather than sending them back to the
+            // app they came from.
+            Button(L10n.t(.commonTryAgain)) { selection.resetUpload() }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
         }

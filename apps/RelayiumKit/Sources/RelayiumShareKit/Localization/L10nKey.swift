@@ -391,6 +391,43 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// spinner says nothing to VoiceOver.
     case sendPreparingPhotos = "send.preparingPhotos"
 
+    // MARK: - The iOS share extension, and the draft it hands over
+
+    /// The extension's own title. It names the product because the sheet it
+    /// appears in belongs to another app entirely.
+    case shareHeading = "share.heading"
+    /// The disclosure the whole surface exists for: the files are COPIED, on
+    /// this device, and nothing leaves it until Send is pressed in Relayium.
+    /// Both halves are load-bearing — a user who thinks the share sheet
+    /// uploaded something has been misled about where their file is.
+    case shareDisclosure = "share.disclosure"
+    /// The one action, and it names what actually happens: a copy onto this
+    /// device. It must not promise to open Relayium — a Share Extension is not
+    /// an extension point Apple lets open its containing app.
+    case shareContinue = "share.continue"
+    /// %@ — how many files have been copied so far. A count rather than a
+    /// percentage: a shared folder's size is not known until it has been walked.
+    case shareCopying = "share.copying"
+    /// The terminal success state. Both halves are load-bearing: the files are
+    /// SAVED, on this device, and nothing has been uploaded — and the next step
+    /// is the user opening Relayium themselves, because the extension cannot.
+    case shareSavedTitle = "share.savedTitle"
+    case shareSavedBody = "share.savedBody"
+    /// The Send tab's heading for work that arrived from another app.
+    case shareWaitingTitle = "share.waitingTitle"
+    /// %@ — a pluralized file count, already formatted.
+    case shareWaitingBody = "share.waitingBody"
+    /// Stated on both surfaces, and true on both: a complete draft is never
+    /// expired, deleted on a timer, or uploaded on its own.
+    case shareStaysHere = "share.staysHere"
+    case shareUse = "share.use"
+    /// Signed out. The draft is still visible and still safe; what it cannot do
+    /// is become an upload, because an upload belongs to an account.
+    case shareSignedOutBody = "share.signedOutBody"
+    /// Something else on the Send tab would be overwritten. Naming the reason,
+    /// rather than a disabled button with no explanation.
+    case shareBusyBody = "share.busyBody"
+
     case ttlOneHour = "ttl.oneHour"
     case ttlOneDay = "ttl.oneDay"
     case ttlThreeDays = "ttl.threeDays"
@@ -853,6 +890,19 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// staged name is this app's own invention, not the one they chose in the
     /// Photos picker.
     case errorPhotoImportFailed = "error.photoImport.failed"
+    /// The App Group container could not be resolved, so there is nowhere the
+    /// app would ever find what was shared. Deliberately not "try again": a
+    /// missing entitlement does not fix itself, and the honest remedy is to open
+    /// Relayium and choose the files there.
+    case errorShareUnavailable = "error.share.unavailable"
+    /// The share carried nothing this product can send.
+    case errorShareNothingUsable = "error.share.nothingUsable"
+    /// %@ — a user's own file name, never translated.
+    case errorShareDuplicatePath = "error.share.duplicatePath"
+    /// Anything the filesystem or a provider refused. One sentence rather than
+    /// an `NSError` domain: a code is not something a user can act on, and a
+    /// path inside one would put their directory names on screen.
+    case errorShareStorageFailed = "error.share.storageFailed"
     case errorCloudUnauthorized = "error.cloud.unauthorized"
     case errorCloudQuota = "error.cloud.quota"
     case errorCloudRateLimited = "error.cloud.rateLimited"
@@ -906,6 +956,14 @@ public enum PluralKey: String, CaseIterable, Sendable {
     case accountFileDownloadedTimes = "account.fileDownloadedTimes"
     /// %@ — the count.
     case usageResetsInDays = "usage.resetsInDays"
+    /// %@ — how many ITEMS the share sheet handed over.
+    ///
+    /// Deliberately not `downloadFileCount`. A provider is one thing the user
+    /// shared, and a shared folder is one provider and a thousand files — so
+    /// "3 files" for three providers is a number this extension has not measured
+    /// and, before the walk, cannot know. The copying label counts staged files
+    /// and is measured; this one counts what the sheet handed over and says so.
+    case shareItemCount = "share.itemCount"
 
     /// The catalog key for one category of this plural.
     public func key(_ category: PluralCategory) -> String {

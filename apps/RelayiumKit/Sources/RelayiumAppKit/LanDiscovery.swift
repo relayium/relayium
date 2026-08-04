@@ -1,5 +1,6 @@
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 /// Why a nearby transfer could not be started, before any connection exists.
 public enum NearbyError: Error, Equatable {

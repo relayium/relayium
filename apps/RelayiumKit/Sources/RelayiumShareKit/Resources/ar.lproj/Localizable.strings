@@ -192,6 +192,26 @@
 "send.accountUnavailableBody" = "يحتاج الإرسال إلى حدود خطتك، ولم يمكن تحميلها. افتح «الحساب» وأعد المحاولة.";
 "send.choosePhotos" = "اختيار صور أو مقاطع فيديو…";
 "send.preparingPhotos" = "جارٍ تجهيز ما اخترته…";
+
+/* MARK: iOS share extension */
+"share.heading" = "الإرسال عبر Relayium";
+"share.disclosure" = "تُنسخ ملفاتك إلى Relayium على هذا الجهاز. لا يُرفع أي شيء حتى تضغط «إرسال» داخل Relayium.";
+"share.continue" = "النسخ إلى Relayium";
+"share.copying" = "جارٍ النسخ إلى Relayium — %@ حتى الآن";
+"share.itemCount.zero" = "%@ عناصر";
+"share.itemCount.one" = "%@ عنصر";
+"share.itemCount.two" = "%@ عنصران";
+"share.itemCount.few" = "%@ عناصر";
+"share.itemCount.many" = "%@ عنصرًا";
+"share.itemCount.other" = "%@ عنصر";
+"share.savedTitle" = "تم الحفظ في Relayium على هذا الجهاز";
+"share.savedBody" = "لم يُرفع أي شيء بعد. افتح Relayium واضغط «إرسال» في تبويب الإرسال عندما تكون جاهزًا.";
+"share.waitingTitle" = "مُشارَك من تطبيق آخر";
+"share.waitingBody" = "%@ في انتظار الإرسال.";
+"share.staysHere" = "تبقى على هذا الجهاز حتى ترسلها أو تتخلص منها. لا يرسلها Relayium من تلقاء نفسه.";
+"share.use" = "استخدام هذه الملفات";
+"share.signedOutBody" = "الإرسال يحتاج إلى حساب. سجّل الدخول وستجدها كما هي.";
+"share.busyBody" = "أنهِ ما على هذه الشاشة أو تخلّص منه أو امسحه أولًا.";
 "ttl.oneHour" = "ساعة واحدة";
 "ttl.oneDay" = "يوم واحد";
 "ttl.threeDays" = "3 أيام";
@@ -501,6 +521,10 @@
 "error.selection.symbolicLink" = "«%@» وصلة رمزية. لا يتبعها Relayium — فقد يرسل ذلك ملفات من خارج ما اخترته — ولا يتخطاها بصمت أيضًا. أزِلها من الاختيار، أو أرسِل المجلد الحقيقي الذي تشير إليه.";
 "error.selection.pathTooLong" = "المسار «%@» أطول من أن يُوصف في عملية نقل. أرسِل من مجلد أقل عمقًا، أو اختصر الأسماء.";
 "error.photoImport.failed" = "تعذّر تجهيز جزء مما اخترته للإرسال، لذا لم يُحدَّد شيء. اختر مرة أخرى، أو أرسل عناصر أقل في المرة الواحدة.";
+"error.share.unavailable" = "تعذّر على Relayium الوصول إلى مساحته المشتركة، فلم يُنسخ أي شيء. افتح Relayium واختر الملفات من هناك.";
+"error.share.nothingUsable" = "لم يكن هنا ما يستطيع Relayium إرساله. يقبل الملفات والمجلدات والصور والفيديو.";
+"error.share.duplicatePath" = "عنصران من المُشارَك سيُرسلان بالاسم نفسه «%@». شاركهما على حدة أو غيّر اسم أحدهما.";
+"error.share.storageFailed" = "تعذّر نسخ الملفات، فلم يُجهَّز أي شيء. تأكد من وجود مساحة خالية على هذا الجهاز وأعد المحاولة.";
 "error.cloud.unauthorized" = "انتهت صلاحية تسجيل دخولك. سجّل الدخول من جديد لإرسال الملفات.";
 "error.cloud.quota" = "لا تكفي المساحة أو الحصة اليومية المتبقية لهذا الملف. حرِّر مساحة أو ارقَ بخطتك.";
 "error.cloud.rateLimited" = "هناك عمليات رفع كثيرة جدًا الآن. انتظر دقيقة ثم أعد المحاولة.";

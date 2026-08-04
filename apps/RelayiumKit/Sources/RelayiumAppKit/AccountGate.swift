@@ -1,5 +1,6 @@
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 /// What a feature that genuinely needs an account gets when it has one.
 ///

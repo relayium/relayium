@@ -1,4 +1,5 @@
 import Foundation
+import RelayiumShareKit
 // @preconcurrency for the same reason AccountSession needs it: RelayiumKit
 // predates strict concurrency and marks nothing Sendable, and this type hands
 // its service and key store to child tasks that run the two list calls

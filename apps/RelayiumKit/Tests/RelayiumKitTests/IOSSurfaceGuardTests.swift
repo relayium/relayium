@@ -566,14 +566,295 @@ final class IOSSurfaceGuardTests: XCTestCase {
                 as? [String: Any])
         XCTAssertEqual(plist.keys.sorted(),
                        ["com.apple.developer.applesignin",
-                        "com.apple.developer.associated-domains"],
+                        "com.apple.developer.associated-domains",
+                        "com.apple.security.application-groups"],
                        "iOS claims a capability it does not use: \(plist.keys.sorted())")
         XCTAssertEqual(plist["com.apple.developer.applesignin"] as? [String], ["Default"])
         XCTAssertEqual(plist["com.apple.developer.associated-domains"] as? [String],
                        ["applinks:relayium.com"],
                        "the app claims a domain or a service beyond link routing")
+        // The share extension's group, and the exact identifier the shared
+        // package resolves. A mismatch here is the failure that looks like
+        // everything working: the sheet stages a draft into one container and
+        // the app lists an empty one.
+        XCTAssertEqual(plist["com.apple.security.application-groups"] as? [String],
+                       [AppGroup.identifier])
+        XCTAssertEqual(AppGroup.identifier, "group.com.relayium.app")
         XCTAssertNil(plist["keychain-access-groups"],
                      "the bearer lives in this app's own default keychain group")
+    }
+
+    // MARK: - the share extension is a second TARGET, and a second process
+
+    private var shareRoot: URL { appsRoot.appendingPathComponent("ios/RelayiumShare") }
+
+    private func shareSources() throws -> [(name: String, text: String)] {
+        try sources(under: shareRoot, atLeast: 2)
+    }
+
+    /// The extension's entitlements are exactly one, and it is the App Group.
+    ///
+    /// Each absence below is one this extension's whole safety argument rests
+    /// on. A keychain group would put the user's bearer one API call away from a
+    /// process whose entire claim is that it cannot reach it. Associated domains
+    /// would let this target be launched for a link it has no screen for. Apple
+    /// Sign-In would be a sign-in flow inside somebody else's share sheet.
+    func testTheExtensionClaimsOnlyTheAppGroup() throws {
+        let data = try Data(contentsOf: shareRoot.appendingPathComponent("RelayiumShare.entitlements"))
+        let plist = try XCTUnwrap(
+            try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+                as? [String: Any])
+        XCTAssertEqual(plist.keys.sorted(), ["com.apple.security.application-groups"],
+                       "the extension claims a capability it does not use: \(plist.keys.sorted())")
+        XCTAssertEqual(plist["com.apple.security.application-groups"] as? [String],
+                       [AppGroup.identifier],
+                       "the extension must share exactly the app's one group")
+        for absent in ["keychain-access-groups",
+                       "com.apple.developer.applesignin",
+                       "com.apple.developer.associated-domains",
+                       "com.apple.developer.networking.wifi-info"] {
+            XCTAssertNil(plist[absent], "the extension claims \(absent)")
+        }
+    }
+
+    /// The extension cannot upload, cannot authenticate and cannot encrypt.
+    ///
+    /// A source scan, because these are ABSENCES and an absence has no runtime
+    /// to observe. Each symbol is one line away from being true: the extension
+    /// links `RelayiumShareKit`, so none of these types is even in scope — which
+    /// is the structural half — and this is the half that notices somebody
+    /// widening the link.
+    func testTheExtensionContainsNoNetworkAccountOrKeyCode() throws {
+        let forbidden = [
+            // Network, in every spelling that reaches one.
+            "URLSession", "URLRequest", "NWConnection", "Network", "WebSocket",
+            "CloudClient", "AccountClient", "CloudUploader", "SignalingClient",
+            // Credentials.
+            "AccountSession", "bearerToken", "TokenStore", "Keychain", "SecItem",
+            // Keys and ciphertext. The extension stages PLAINTEXT and stops;
+            // generating a key here would mean a second place the content key
+            // can exist, in a process the app cannot reason about.
+            "generateStoreKey", "encodeStoreKey", "ChunkEncryptor", "Sodium", "sodium",
+            // The app's own upload machinery.
+            "PendingUpload", "CloudUploadModel", "SendSelectionModel",
+            // A share extension has no business in the transport stack at all.
+            "RelayiumKit", "RelayiumAppKit", "WebRTC",
+        ]
+        for (name, text) in try shareSources() {
+            for symbol in forbidden {
+                XCTAssertFalse(text.contains(symbol),
+                               "\(name) reaches for \(symbol) — the extension stages files and nothing else")
+            }
+            for logging in ["print(", "NSLog(", "os_log(", "debugPrint(", "dump("] {
+                XCTAssertFalse(text.contains(logging),
+                               "\(name) contains \(logging) — a file name must never reach a log")
+            }
+            // The share sheet is the most public surface this product has.
+            XCTAssertFalse(text.contains("UIPasteboard"),
+                           "\(name) touches the pasteboard")
+        }
+    }
+
+    /// The extension decides nothing. Everything that could go wrong — what is
+    /// copied, what is refused, when the draft is published and what the user is
+    /// told afterwards — belongs to `SharedDraftPreparation`, where a test can
+    /// drive it.
+    func testTheExtensionDelegatesEveryDecisionToTheSharedModel() throws {
+        let all = try shareSources()
+        let controller = try XCTUnwrap(all.first { $0.name == "ShareViewController.swift" })
+
+        XCTAssertTrue(controller.text.contains("SharedDraftPreparation("),
+                      "the extension must build the shared model rather than its own flow")
+        XCTAssertTrue(controller.text.contains("ItemProviderLoader(providers: providers)"),
+                      "and hand it the providers rather than reading them itself")
+        XCTAssertTrue(controller.text.contains("try? SharedDraftStore.shared()"),
+                      "the store must come from the fail-closed App Group resolver")
+
+        guard let finish = controller.text.range(of: "func finish()"),
+              let cancelled = controller.text.range(of: "func cancelled()") else {
+            return XCTFail("ShareViewController no longer adapts NSExtensionContext")
+        }
+        XCTAssertTrue(finish.upperBound < cancelled.lowerBound)
+        XCTAssertEqual(controller.text.components(separatedBy: "completeRequest").count - 1, 1,
+                       "exactly one place completes the host request")
+    }
+
+    /// **A Share Extension may not open its containing app, and this target must
+    /// not find a way around that.**
+    ///
+    /// Apple documents `NSExtensionContext.open(_:completionHandler:)` as
+    /// supported by the Today and iMessage extension points on iOS; the App
+    /// Extension Programming Guide says a widget is the one extension type that
+    /// may open its containing app. The call compiles from a Share Extension and
+    /// is not a supported hand-off — so it is an absence here, and so is every
+    /// way of half-doing the same thing: a custom URL scheme, a walk up the
+    /// responder chain to reach `UIApplication`, a pasteboard signal, a
+    /// notification, or a network call to something that would.
+    ///
+    /// An absence has no runtime to observe, which is why this is a source scan
+    /// across the whole target rather than one assertion about one file.
+    func testNothingInTheExtensionTriesToOpenTheContainingApp() throws {
+        for (name, text) in try shareSources() {
+            for unsupported in [".open(", "openURL", "UIApplication", "canOpenURL",
+                                "openHostApp", "handoffURL", "responder",
+                                "URL(string:", "URLComponents", "https://",
+                                "CFBundleURLTypes", "relayium://",
+                                "UNUserNotification", "UNNotificationRequest"] {
+                XCTAssertFalse(text.contains(unsupported),
+                               "\(name) reaches for \(unsupported) to open the app")
+            }
+        }
+        // And the model behind it offers no such call at all: `SharedDraftHost`
+        // is `finish()` and `cancelled()`, which are the two an extension of this
+        // point actually has.
+        let source = appsRoot.appendingPathComponent(
+            "RelayiumKit/Sources/RelayiumShareKit/SharedDraftPreparation.swift")
+        let model = try String(contentsOf: source, encoding: .utf8)
+        XCTAssertTrue(model.contains("func finish()"))
+        XCTAssertTrue(model.contains("func cancelled()"))
+        XCTAssertFalse(model.contains("func openHostApp"))
+        XCTAssertFalse(model.contains("case opening"))
+        XCTAssertFalse(model.contains("case openFailed"))
+    }
+
+    /// The activation rule is bounded and names only what this extension stages.
+    ///
+    /// `TRUEPREDICATE` is the Xcode template's default and would offer Relayium
+    /// in every share sheet on the device — for a selected sentence, a URL, a
+    /// web page, a contact — none of which it can stage. An entry that appears
+    /// everywhere and fails on most of them is worse than one that appears where
+    /// it works.
+    func testTheExtensionActivatesOnlyForFilesImagesAndMovies() throws {
+        let data = try Data(contentsOf: shareRoot.appendingPathComponent("Info.plist"))
+        let plist = try XCTUnwrap(
+            try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+                as? [String: Any])
+        let extensionInfo = try XCTUnwrap(plist["NSExtension"] as? [String: Any])
+        XCTAssertEqual(extensionInfo["NSExtensionPointIdentifier"] as? String,
+                       "com.apple.share-services")
+        XCTAssertEqual(extensionInfo["NSExtensionPrincipalClass"] as? String,
+                       "$(PRODUCT_MODULE_NAME).ShareViewController")
+        XCTAssertNil(extensionInfo["NSExtensionMainStoryboard"],
+                     "a storyboard would put this surface where no test or localization guard reaches")
+
+        let attributes = try XCTUnwrap(extensionInfo["NSExtensionAttributes"] as? [String: Any])
+        let rule = attributes["NSExtensionActivationRule"]
+        XCTAssertFalse(rule is String, "the rule is a predicate string: \(String(describing: rule))")
+        let counts = try XCTUnwrap(rule as? [String: Any])
+        XCTAssertEqual(counts.keys.sorted(), [
+            "NSExtensionActivationSupportsAttachmentsWithMaxCount",
+            "NSExtensionActivationSupportsFileWithMaxCount",
+            "NSExtensionActivationSupportsImageWithMaxCount",
+            "NSExtensionActivationSupportsMovieWithMaxCount",
+        ], "the rule accepts something this extension cannot stage: \(counts.keys.sorted())")
+        for (key, value) in counts {
+            XCTAssertEqual(value as? Int, SHARED_DRAFT_MAX_FILES,
+                           "\(key) must be the manifest bound the product enforces")
+        }
+        // The AGGREGATE, and it is not redundant with the three above. Apple
+        // documents `SupportsAttachmentsWithMaxCount` as the maximum TOTAL
+        // number of attachments; the per-type maxima are each satisfiable on
+        // their own, so without it a mixed share of 1000 files, 1000 images and
+        // 1000 movies satisfies all three and hands this extension 3000 items —
+        // three times the bound `SharedDraftWriter` then refuses, after the user
+        // has already chosen them.
+        XCTAssertEqual(counts["NSExtensionActivationSupportsAttachmentsWithMaxCount"] as? Int,
+                       SHARED_DRAFT_MAX_FILES,
+                       "no aggregate bound: three per-type maxima can be satisfied at once")
+        // Nine languages, or an Arabic sheet renders correct words laid out
+        // left to right — the extension has its own bundle, so it needs its own
+        // list.
+        XCTAssertEqual((plist["CFBundleLocalizations"] as? [String])?.sorted(),
+                       AppLanguage.allCases.map(\.lproj).sorted())
+    }
+
+    /// The project embeds exactly one `.appex`, at the right bundle id, on the
+    /// same deployment target as the app.
+    ///
+    /// Read out of `project.pbxproj` because none of it is observable from a
+    /// package test and all of it is a way the feature ships broken: an
+    /// extension that is built but not embedded never appears in a share sheet,
+    /// and a bundle id that is not a suffix of the app's is rejected at install.
+    func testTheProjectEmbedsExactlyOneShareExtension() throws {
+        let project = try String(
+            contentsOf: appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
+            encoding: .utf8)
+
+        XCTAssertEqual(project.components(separatedBy: "com.apple.product-type.app-extension").count - 1, 1,
+                       "a second app extension would be a second process nobody has reasoned about")
+        XCTAssertEqual(project.components(separatedBy: "PRODUCT_BUNDLE_IDENTIFIER = com.relayium.app.share;").count - 1, 2,
+                       "the extension's bundle id must be set in both configurations")
+        XCTAssertTrue(project.contains("dstSubfolderSpec = 13;"),
+                      "the appex must be embedded into PlugIns, or it never loads")
+        XCTAssertTrue(project.contains("RelayiumShare.appex in Embed Foundation Extensions"))
+        // The extension links the dependency-free product, not the one carrying
+        // the transport stack. This is the structural half of
+        // `testTheExtensionContainsNoNetworkAccountOrKeyCode`.
+        XCTAssertTrue(project.contains("productName = RelayiumShareKit;"))
+        XCTAssertEqual(project.components(separatedBy: "productName = RelayiumKit;").count - 1, 1,
+                       "only the app target may link the transport stack")
+        // Six: the project's own Debug/Release pair, the app target's, and the
+        // extension's. An `.appex` built against a newer minimum than its host
+        // fails to load on exactly the devices the host still supports.
+        XCTAssertEqual(project.components(separatedBy: "IPHONEOS_DEPLOYMENT_TARGET = 16.0;").count - 1, 6,
+                       "project, app and extension, Debug and Release, all on iOS 16")
+        XCTAssertFalse(project.contains("IPHONEOS_DEPLOYMENT_TARGET = 17"),
+                       "the extension must not raise the minimum above the app's")
+        XCTAssertTrue(project.contains("CODE_SIGN_ENTITLEMENTS = RelayiumShare/RelayiumShare.entitlements;"))
+        XCTAssertTrue(project.contains("SKIP_INSTALL = YES;"),
+                      "an appex must not be installed as a product of its own")
+    }
+
+    /// The app and its extension carry the SAME marketing and build version.
+    ///
+    /// An App Store requirement rather than a preference: App Store Connect
+    /// rejects a submission whose embedded extension declares a
+    /// `CFBundleShortVersionString` or `CFBundleVersion` different from its
+    /// containing app's, and the failure arrives at upload time — after
+    /// archiving, signing and notarizing — with a message about a bundle nobody
+    /// was thinking about.
+    ///
+    /// They happen to agree today because both were set to the same literals by
+    /// hand, which is exactly the arrangement that drifts the first time one
+    /// target's version is bumped. Both plists take their values from build
+    /// settings, so the settings are what this reads.
+    func testTheExtensionShipsTheSameVersionAsTheAppItIsEmbeddedIn() throws {
+        let project = try String(
+            contentsOf: appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
+            encoding: .utf8)
+
+        /// Every distinct value a build setting is given anywhere in the project.
+        func values(of setting: String) -> Set<String> {
+            var found = Set<String>()
+            for line in project.split(separator: "\n") {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix("\(setting) = "), trimmed.hasSuffix(";") else { continue }
+                found.insert(String(trimmed.dropFirst(setting.count + 3).dropLast()))
+            }
+            return found
+        }
+
+        // Both targets, both configurations — four assignments of each, and
+        // exactly one value between them.
+        XCTAssertEqual(values(of: "MARKETING_VERSION").count, 1,
+                       "app and extension disagree about the marketing version: "
+                           + "\(values(of: "MARKETING_VERSION").sorted())")
+        XCTAssertEqual(values(of: "CURRENT_PROJECT_VERSION").count, 1,
+                       "app and extension disagree about the build number: "
+                           + "\(values(of: "CURRENT_PROJECT_VERSION").sorted())")
+        XCTAssertEqual(project.components(separatedBy: "MARKETING_VERSION = ").count - 1, 4,
+                       "app and extension, Debug and Release, all four set")
+        XCTAssertEqual(project.components(separatedBy: "CURRENT_PROJECT_VERSION = ").count - 1, 4)
+
+        // And neither plist hard-codes one, which would make the settings above
+        // decorative.
+        for plistPath in ["ios/Relayium/Info.plist", "ios/RelayiumShare/Info.plist"] {
+            let text = try String(contentsOf: appsRoot.appendingPathComponent(plistPath),
+                                  encoding: .utf8)
+            XCTAssertTrue(text.contains("$(MARKETING_VERSION)"), "\(plistPath) pins its own version")
+            XCTAssertTrue(text.contains("$(CURRENT_PROJECT_VERSION)"),
+                          "\(plistPath) pins its own build number")
+        }
     }
 
     // MARK: - Universal Link hand-off
@@ -691,11 +972,19 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let appIDs = details.flatMap { ($0["appIDs"] as? [String]) ?? [] }
         XCTAssertEqual(appIDs, ["7PVYUG4YQS.com.relayium.mac", "7PVYUG4YQS.com.relayium.app"],
                        "the association no longer names both native app IDs")
+
         let paths = details.flatMap { detail in
             ((detail["components"] as? [[String: Any]]) ?? []).compactMap { $0["/"] as? String }
         }
+        // Unchanged by the share extension, and that is the point: a Share
+        // Extension may not open its containing app, so there is no link for it
+        // to emit and no path for this file to claim on its behalf. The
+        // extension publishes a draft into the App Group and the app re-reads
+        // that inbox when its scene becomes active.
         XCTAssertEqual(paths, ["/d/*", "/cross-network"],
                        "the site claims a path parseAppDeepLink cannot route")
+        XCTAssertFalse(paths.contains("/share"),
+                       "a path was claimed for a hand-off iOS cannot perform")
 
         // `webcredentials` shares the file and is a different permission: the
         // site allowing password AutoFill for an app. This app claims no
@@ -785,8 +1074,52 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// carries the separate prefix, never by reusing `keys`.
     func testThePendingUploadKeyIsAStoreOfItsOwn() throws {
         let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" })
-        XCTAssertTrue(app.text.contains("AppEnvironment.makePendingUploadSupport()"),
+        XCTAssertTrue(app.text.contains("AppEnvironment.makePendingUploadSupport(drafts: drafts)"),
                       "durable recovery must be wired through the factory, not assembled inline")
+        // ONE shared-draft store, reaching both the model that adopts a draft
+        // and the model that retires it once a job carrying it is durable. Two
+        // would address the same directory and so would not fail — until one of
+        // them was pointed somewhere else.
+        XCTAssertEqual(app.text.components(separatedBy: "makeSharedDraftStore()").count - 1, 1,
+                       "a second draft store would be a second answer to what is waiting")
+        XCTAssertTrue(app.text.contains("makeSendSelectionModel(upload: uploads, drafts: drafts)"),
+                      "the send model must take the SAME store the upload model retires through")
+    }
+
+    /// **The share extension's hand-off is the scene becoming active, and it is
+    /// wired at the scene root.**
+    ///
+    /// A Share Extension may not open its containing app, so nothing pushes a
+    /// staged draft onto the Send tab. What brings it there is the user opening
+    /// or returning to Relayium — and that has to be observed where the scene
+    /// is, not on a tab SwiftUI may have torn down while the user was in another
+    /// app doing the sharing.
+    ///
+    /// Both halves: `onChange` for a return from the background, and `.task` for
+    /// a cold launch, because `onChange` fires on a CHANGE and the scene is
+    /// already `.active` when it first appears. And the view reports the PHASE
+    /// only — whether `.active` means "re-read the inbox" is
+    /// `SendSelectionModel`'s decision, which
+    /// `SharedDraftAdoptionTests.testTheInboxIsReReadWheneverTheSceneBecomesActive`
+    /// drives.
+    func testTheSharedDraftInboxIsRefreshedFromTheSceneLifecycle() throws {
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" })
+
+        XCTAssertTrue(app.text.contains("send.phaseChanged(to: lifecycle(phase))"),
+                      "a return to the app must re-read what the share extension staged")
+        XCTAssertTrue(app.text.contains("send.phaseChanged(to: .active)"),
+                      "a cold launch must too, because onChange fires on a CHANGE")
+        // The decision is not re-derived here. A `.active` comparison in the
+        // scene root would be a second copy of a policy the model already owns,
+        // and the two would drift.
+        XCTAssertFalse(app.text.contains("refreshSharedDrafts"),
+                       "the scene root reaches past the lifecycle entry point")
+        XCTAssertFalse(app.text.contains("== .active"),
+                       "the scene root decides what a phase means")
+        // And no link routing was added for it: the coordinator takes the same
+        // four models it always did.
+        XCTAssertFalse(app.text.contains("send: sending"),
+                       "a deep link was wired for a hand-off that does not exist")
         XCTAssertFalse(app.text.contains("PendingUploadSupport(store:"),
                        "the app must not hand-build the pair and pick its own keychain namespace")
         XCTAssertEqual(KeychainStoredLinkKeyStore.pendingUploadPrefix, "pending-upload-key:")
@@ -2132,14 +2465,16 @@ final class IOSSurfaceGuardTests: XCTestCase {
             try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
                 as? [String: Any])
         // `com.apple.developer.associated-domains` left this list with the
-        // Universal Link slice, and only that one: it is now claimed, for
-        // `applinks:relayium.com` alone, and
+        // Universal Link slice and `com.apple.security.application-groups` with
+        // the share extension, and in both cases for the same reason: the key is
+        // now claimed with the feature that uses it, and
         // `testTheEntitlementsFileClaimsOnlyAppleSignInAndAppLinks` asserts the
-        // exact value rather than merely allowing the key. Nothing else moved —
-        // link routing needs no network capability, no App Group and no push.
+        // exact value rather than merely allowing the key. Neither is a NETWORK
+        // capability, which is what this test is about — an App Group is a
+        // shared directory, and the extension that writes into it makes no
+        // request at all.
         for banned in ["com.apple.developer.networking.multicast",
                        "com.apple.developer.networking.wifi-info",
-                       "com.apple.security.application-groups",
                        "keychain-access-groups",
                        "aps-environment"] {
             XCTAssertNil(entitlements[banned], "the entitlements file claims \(banned)")

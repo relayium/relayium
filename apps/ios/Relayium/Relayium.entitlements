@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<!-- Exactly two entitlements, and each arrives with the feature that needs it.
+<!-- Exactly three entitlements, and each arrives with the feature that needs it.
 
      `com.apple.developer.applesignin` is what lets the app present an
      `ASAuthorizationAppleIDRequest`. It is claimed now because this slice ships
@@ -63,9 +63,28 @@
      `NSPhotoLibraryUsageDescription`: it runs out of process and hands back only
      the items the user picked, so this app never has library access to ask for.
 
-     Still absent, each with the slice that would earn it: an App Group and a
-     shared keychain group (a Share Extension), background modes (transfers
-     surviving suspension), push, IAP.
+     `com.apple.security.application-groups = [group.com.relayium.app]` is the
+     third, and it is the Share Extension's. `RelayiumShare.appex` copies what
+     the user shared into that container and this app reads it back; a group is
+     the only way two processes in one app can share a directory at all.
+
+     It arrives ALONE, and the pairing an earlier version of this comment
+     predicted — an App Group plus a shared keychain group — turned out to be
+     wrong by one. The extension holds no credential and mints no key: it stages
+     plaintext copies and stops. The content key for a shared draft is generated
+     HERE, when the user presses Send, and filed under the pending job in this
+     app's own default keychain group. So `keychain-access-groups` is still
+     absent, and adding it would be a credential share with a process that has
+     nothing to put in it.
+
+     What the group container holds is worth being precise about, because it is
+     readable by both processes for as long as a draft is waiting: plaintext
+     copies of files the user deliberately shared, plus a plan naming them, their
+     sizes and an opaque index. No account id, no bearer, no key, and no path
+     from the device the copies were made from.
+
+     Still absent, each with the slice that would earn it: background modes
+     (transfers surviving suspension), push, IAP.
 
      Local network is NOT on that list, and R3-E's version of this comment was
      wrong to put it there. Relayium's nearby feature is not Bonjour and does
@@ -84,6 +103,10 @@
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:relayium.com</string>
+	</array>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.relayium.app</string>
 	</array>
 </dict>
 </plist>

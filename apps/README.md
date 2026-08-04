@@ -1,8 +1,19 @@
 # Relayium native apps
 
 - `RelayiumKit/` — pure-logic Swift package (transport, signaling, crypto, wire). Test: `cd RelayiumKit && swift test`.
+  It vends two products. `RelayiumKit` is the transport stack plus the
+  `RelayiumAppKit` view-model layer, which both apps link. `RelayiumShareKit` is
+  Foundation-only — the nine localization catalogs, `L10n`, and the App Group
+  shared-draft store — and exists so the iOS share extension can render the same
+  copy and stage the same files without mapping WebRTC, libsodium, an account
+  client and an uploader into an `.appex`. `RelayiumAppKit` re-exports it
+  (`SharedLocalizationExport.swift`), so `import RelayiumAppKit` still sees
+  `L10n` and nothing at any call site changed.
 - `mac/` — macOS SwiftUI app (`com.relayium.mac`), depends on the local RelayiumKit package.
 - `ios/` — iOS SwiftUI app (`com.relayium.app`), same local package. In development, not public.
+- `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.app.share`),
+  embedded in the app at `PlugIns/RelayiumShare.appex`. Links `RelayiumShareKit`
+  only. In development, not public, and not yet run on a device.
 
 Licensed under Apache-2.0 (unlike `server/`/`web/`, which are AGPL-3.0) — see
 [`apps/LICENSE`](LICENSE). Apache-2.0 was chosen specifically so these clients can
@@ -158,15 +169,21 @@ The exceptional 400 `no_email_first_signin` has dedicated native copy directing
 the user to reset Relayium under the device's Sign in with Apple settings; it is
 not rendered as an unexplained HTTP status.
 
-`com.apple.developer.applesignin = [Default]` is now the iOS app's **only**
-entitlement, and `DEVELOPMENT_TEAM` is set on the iOS target so a signed build
-can resolve a profile for it.
+`com.apple.developer.applesignin = [Default]` is one of the iOS app's three
+entitlements — the others being `associated-domains` for `applinks:relayium.com`
+and `application-groups` for `group.com.relayium.app` — and `DEVELOPMENT_TEAM` is
+set on both iOS targets so a signed build can resolve a profile for each.
 
 **Manual preconditions this repository cannot satisfy**, and which no simulator
 or unsigned build proves:
 
 - the `com.relayium.app` App ID and its provisioning profile must carry the Sign
   in with Apple capability;
+- the App Group `group.com.relayium.app` must be registered on the developer
+  portal and carried by BOTH the app's and the extension's provisioning
+  profiles; without it `AppGroup.containerURL` fails closed, the share
+  extension refuses with a sentence rather than staging into a container the
+  app cannot read, and the Send tab simply never shows a shared draft;
 - production `RELAYIUM_APPLE_CLIENT_IDS` must include `com.relayium.app`, and the
   deployment must hold the Apple Team ID, Key ID and `.p8` key (without them the
   route answers 503 rather than pretending);
@@ -759,12 +776,130 @@ live roster, plus the passive half — one unsolicited file or text session at a
 time. **Account** is R3-B's sign-in and usage summary plus R3-D's device and
 stored-file management, described below.
 
-Headless build (the same command CI runs):
+Headless build (the same command CI runs). It builds the share extension too,
+because the app target depends on it and embeds it:
 
 ```
 xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
 ```
+
+### Share Extension
+
+`apps/ios/RelayiumShare` (bundle id `com.relayium.app.share`,
+`IPHONEOS_DEPLOYMENT_TARGET = 16.0`, embedded at
+`Relayium.app/PlugIns/RelayiumShare.appex`). Sharing files, folders, photos or
+movies to Relayium from any app copies them into the App Group
+`group.com.relayium.app`. The sheet then says the files are saved on this device
+and that nothing has been uploaded; the user opens Relayium themselves, and the
+draft is waiting on **Send**, where they choose it and press Send.
+
+**A Share Extension may not open its containing app.** Apple documents
+`NSExtensionContext.open(_:completionHandler:)` as supported by the Today and
+iMessage extension points on iOS, and the App Extension Programming Guide gives
+opening the containing app to a widget and no other extension type. So there is
+no hand-off link, no custom URL scheme, no responder-chain walk to
+`UIApplication`, no pasteboard signal and no notification. The supported
+mechanism is the user returning to the app, and `RelayiumApp` reports every
+scene-phase change to `SendSelectionModel.phaseChanged(to:)` — on `onChange` for
+a return from the background and on `.task` for a cold launch, since `onChange`
+fires only on a change. The model decides that `.active` means "re-read the
+inbox"; the view decides nothing. `SendView` also re-reads on appearance, and
+every account event does too.
+
+**It is a staging process, not a second uploader**, and every part of the design
+follows from that:
+
+- **One entitlement.** `com.apple.security.application-groups`, and nothing else
+  — no keychain group, no associated domains, no network capability. It holds no
+  bearer, reads no account and generates no content key: the key for a shared
+  draft is minted in the APP when the user presses Send. `IOSSurfaceGuardTests`
+  scans this target's source for `URLSession`, `AccountSession`, `bearerToken`,
+  `Keychain`, `CloudUploader`, `generateStoreKey`, `RelayiumKit` and the rest,
+  because those are absences and an absence has no runtime to observe.
+- **A bounded activation rule.** File, image and movie counts **plus the
+  aggregate** `NSExtensionActivationSupportsAttachmentsWithMaxCount`, all four
+  capped at `MAX_FILES`. The aggregate is not redundant: Apple documents it as
+  the maximum *total* number of attachments, and the three per-type maxima are
+  each satisfiable on their own — so without it a mixed share of 1000 files,
+  1000 images and 1000 movies satisfies all three at once and hands the
+  extension 3000 items, three times the bound the rest of the product enforces.
+  Never `TRUEPREDICATE`, which is the Xcode template's default and would offer
+  Relayium in every share sheet on the device, including for a selected sentence
+  or a web page it cannot stage.
+- **The copy happens inside the provider callback.**
+  `NSItemProvider.loadFileRepresentation` deletes its temporary representation
+  the moment the completion handler returns, so `SharedDraftWriter.adopt` is
+  synchronous and the staging pass blocks on a semaphore off the main actor. It
+  streams in `SHARED_DRAFT_COPY_CHUNK` blocks and records the peak, because an
+  `.appex` is killed for far less than the memory a whole-file read of a shared
+  video would take.
+- **Publication is one atomic rename, with the plan already inside.** Bytes are
+  assembled under `SharedDrafts/staging/<id>/`, `draft.json` is written
+  atomically and LAST *into that staging directory*, and only then is the whole
+  directory renamed into the published root. A reader in the other process
+  therefore sees either no directory or a complete one. Writing the plan after
+  the rename — which an earlier version of this did — leaves a window in which a
+  published directory has no plan, and the app's launch sweep deletes exactly
+  that; no lock could have fixed it, because these are two processes.
+- **The sweep removes only work that is provably incomplete.** A published
+  directory with no plan at all, and only once it is outside the grace window;
+  and staging from a preparation the system killed. It will **not** delete a
+  directory whose plan is merely malformed, symlinked, or from a version this
+  build does not know — that is somebody's complete work, and an upgraded or
+  downgraded build destroying it would be data loss dressed up as tidiness. Such
+  drafts are ignored, not offered and not removed.
+- **Path indirection is refused, never resolved.** A symlinked draft directory, a
+  symlinked `draft.json`, a symlinked `staged/` and a symlinked or non-regular
+  staged entry are all refusals, checked with `lstat` semantics before anything
+  is opened or followed. The App Group container is writable by both processes;
+  a reader that followed a link would leave the store, and a sweep that did would
+  delete its target.
+- **A complete draft never expires.** It is retained until the user discards it
+  or until the app has durably copied it into an account-bound pending upload
+  AND committed that job's Keychain content key — `PendingUploadPlan` gained an
+  optional `sourceDraftId` (no version bump; v1 plans decode with `nil`) so a
+  crash inside that window is repaired by validated recovery retiring the source
+  idempotently.
+- **Retirement is logical first, physical second.** From the moment a durable job
+  owns a source draft, that draft must never be offered as a second send — and a
+  `removeItem` that fails is not authority to upload the user's files twice. So a
+  marker under `SharedDrafts/retired/<id>` is written *before* any byte is
+  deleted, and every reader honours it whatever is still on disk. If the deletion
+  fails, the upload still succeeds and still produces its link, the ordinary
+  `upload.cleanupFailed` warning reports the leftover bytes, and the app's launch
+  sweep retries the deletion idempotently. The marker lives in the draft store
+  rather than in the pending plan, so it survives a successful upload purging its
+  pending bytes — which is the only other pointer there was.
+- **Adoption is explicit and reversible.** The waiting draft is shown even when
+  signed out, with the reason it cannot be used yet. Using it is refused while an
+  upload, a recovery offer, a finished link or a selection the user made by hand
+  would be overwritten. Replacing it, clearing it, signing out or switching
+  account returns it to the FIFO inbox; it is never handed to the next account.
+
+**No Universal Link was added for any of this.** `AppDeepLink` is still `/d/*`
+and `/cross-network`, and
+`web/public/.well-known/apple-app-site-association` is unchanged by this slice —
+one `details` entry naming both app IDs, exactly as before. There is nothing for
+a hand-off link to carry and nothing to route it to.
+
+Copy that the sheet renders is `share.*` in all nine catalogs. The summary above
+the action counts **items** (`share.itemCount`), not files: the share sheet hands
+over providers, and one shared folder is one provider and may be a thousand
+files. The copying label counts staged files, which is measured and legitimately
+climbs past the item count.
+
+**Unverified, and not claimed away.** The App Group is not registered on the
+Apple Developer portal and is carried by no provisioning profile, so a signed
+build has never run. Nothing here has been seen in a real share sheet: what
+providers actually vend for a shared *folder* is untested, and so is whether the
+activation rule offers Relayium where it is expected to. No VoiceOver, Dynamic
+Type or RTL pass has been made on the sheet itself. The Universal Link
+association is fetched and verified by the OS at install time and so proves
+nothing in a simulator. Coverage is at the model boundary —
+`SharedDraftStoreTests`, `SharedDraftPreparationTests`,
+`SharedDraftAdoptionTests` — plus the source, plist, entitlement,
+version-parity and `project.pbxproj` guards in `IOSSurfaceGuardTests`.
 
 ### Where received files go
 

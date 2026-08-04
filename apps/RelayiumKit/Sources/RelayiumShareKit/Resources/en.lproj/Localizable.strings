@@ -190,6 +190,22 @@
 "send.accountUnavailableBody" = "Sending needs your plan's limits, and they couldn't be loaded. Open Account to try again.";
 "send.choosePhotos" = "Choose Photos or Videos…";
 "send.preparingPhotos" = "Preparing what you chose…";
+
+/* MARK: iOS share extension */
+"share.heading" = "Send with Relayium";
+"share.disclosure" = "Your files are copied to Relayium on this device. Nothing is uploaded until you press Send in Relayium.";
+"share.continue" = "Copy to Relayium";
+"share.copying" = "Copying to Relayium — %@ so far";
+"share.itemCount.one" = "%@ item";
+"share.itemCount.other" = "%@ items";
+"share.savedTitle" = "Saved to Relayium on this device";
+"share.savedBody" = "Nothing has been uploaded. Open Relayium and press Send on the Send tab when you're ready.";
+"share.waitingTitle" = "Shared from another app";
+"share.waitingBody" = "%@ waiting to be sent.";
+"share.staysHere" = "They stay on this device until you send or discard them. Relayium never sends them on its own.";
+"share.use" = "Use these files";
+"share.signedOutBody" = "Sending needs an account. Sign in and they will still be here.";
+"share.busyBody" = "Finish, discard or clear what is on this screen first.";
 "ttl.oneHour" = "1 hour";
 "ttl.oneDay" = "1 day";
 "ttl.threeDays" = "3 days";
@@ -467,6 +483,10 @@
 "error.selection.symbolicLink" = "“%@” is a symbolic link. Relayium won't follow it — that could send files from outside what you chose — and won't skip it silently either. Remove it from the selection, or send the real folder it points at.";
 "error.selection.pathTooLong" = "The path “%@” is too long to describe in a transfer. Send from a shallower folder, or shorten the names.";
 "error.photoImport.failed" = "Some of what you chose couldn't be prepared for sending, so nothing was selected. Choose again, or send fewer items at once.";
+"error.share.unavailable" = "Relayium could not reach its shared storage, so nothing was copied. Open Relayium and choose the files there instead.";
+"error.share.nothingUsable" = "There was nothing here Relayium can send. It takes files, folders, photos and videos.";
+"error.share.duplicatePath" = "Two of the shared items would both be sent as “%@”. Share them separately, or rename one first.";
+"error.share.storageFailed" = "The files could not be copied, so nothing was staged. Check there is free space on this device and try again.";
 "error.cloud.unauthorized" = "Your sign-in expired. Sign in again to send files.";
 "error.cloud.quota" = "Not enough space or daily quota left for this file. Free up space or upgrade.";
 "error.cloud.rateLimited" = "Too many uploads right now. Wait a minute, then try again.";

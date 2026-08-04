@@ -1,5 +1,6 @@
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 /// TTL options, mirroring the web's. An unknown cap (signed out, or a usage
 /// fetch that failed) offers all of them: the server truncates anyway, and
@@ -75,6 +76,26 @@ public final class CloudUploadModel: ObservableObject {
     /// model when the session changes; a job is only ever prepared, recovered
     /// or resumed for the account that is signed in NOW.
     public var accountId: String?
+    /// The shared draft the current selection was adopted from, or nil for the
+    /// ordinary picker and photo paths — which is what keeps those two
+    /// unchanged, recording nothing and retiring nothing.
+    ///
+    /// Written by `SendSelectionModel` at adoption and cleared with the
+    /// selection. It is copied into the pending plan at `start()` and read back
+    /// from the plan afterwards, so the retirement decision is made from what is
+    /// durably on disk rather than from a field this object still happens to
+    /// hold.
+    public var sourceDraftId: String?
+    /// Announced, on the main actor, the moment a durable job has taken
+    /// ownership of a shared draft and that draft has been retired.
+    ///
+    /// Installed by `SendSelectionModel`, which is the only thing that knows a
+    /// draft is *selected*. This model's own half of the same moment is
+    /// `consumeSourceDraft` below: the staged copies it was picking from have
+    /// just been deleted, so nothing may return to them. Both halves have to
+    /// happen HERE, at the retirement, rather than at whatever button the user
+    /// presses next — the bytes are gone whether or not anybody presses one.
+    public var onSourceDraftConsumed: (@MainActor (String) -> Void)?
     /// The staged job this model is currently offering or running, if any.
     private var job: PendingUploadPlan?
     var task: Task<Void, Never>?
@@ -206,6 +227,7 @@ public final class CloudUploadModel: ObservableObject {
         state = .preparing
         let burn = burnAfterRead
         let ttl = self.ttl
+        let source = sourceDraftId
         task = Task { [weak self] in
             guard let self else { return }
             let store = pending.store
@@ -215,7 +237,8 @@ public final class CloudUploadModel: ObservableObject {
             do {
                 let preparation = Task.detached(priority: .userInitiated) {
                     try store.prepare(files: files, accountId: accountId,
-                                      burnAfterRead: burn, ttl: ttl)
+                                      burnAfterRead: burn, ttl: ttl,
+                                      sourceDraftId: source)
                 }
                 let plan = try await withTaskCancellationHandler {
                     try await preparation.value
@@ -230,13 +253,37 @@ public final class CloudUploadModel: ObservableObject {
                     keyWasSaved = true
                 } catch {
                     // A job whose key cannot be kept is not recoverable, so it
-                    // must not be left on disk pretending to be.
+                    // must not be left on disk pretending to be. The SHARED
+                    // DRAFT is deliberately untouched here: this is the failure
+                    // in which the user's only other copy of those files is the
+                    // draft, so it stays and is offered again.
                     store.purge(plan)
                     throw error
                 }
                 try Task.checkCancellation()
                 wasAdopted = self.adopt(plan, g: g)
                 guard wasAdopted else { throw CancellationError() }
+                // The plan is on disk, its content key is in the Keychain, and
+                // this model has adopted the job — so it survives anything that
+                // happens from here on, and the two failure paths above (which
+                // purge the job) are now behind us. THAT is the moment the draft
+                // stops being the user's only copy, and the only moment removing
+                // it is safe. Retiring one line earlier would mean a
+                // cancellation landing in between deleting both copies.
+                //
+                // Before the upload finishes rather than after it: an upload can
+                // be cancelled, interrupted, or resumed days later, and a draft
+                // sitting in the inbox through all of that would be offered as a
+                // second, separate send of the same files.
+                //
+                // A failure here is NOT an upload failure. The retirement is
+                // recorded durably before any byte is deleted, so the draft is
+                // already out of the inbox and already queued for another
+                // attempt; what is left is a copy taking up space, and that is
+                // exactly what `uploadCleanupFailed` is for. Turning it into a
+                // failed send would be this app refusing to transfer files it
+                // has already staged, because it could not tidy up after itself.
+                self.consumeSourceDraft(of: plan, using: pending, g: g)
                 await self.run(plan: plan, key: key, token: token, g: g)
             } catch is CancellationError {
                 if let plan = stagedPlan, !wasAdopted {
@@ -363,6 +410,62 @@ public final class CloudUploadModel: ObservableObject {
         }
     }
 
+    /// Remove the shared draft a durable job was copied out of, and stop
+    /// pointing at the bytes that are about to go.
+    ///
+    /// Called from exactly two places, and it has to be both: the commit path,
+    /// and validated recovery. A crash between "the key is saved" and "the draft
+    /// is gone" leaves a job that is complete and a draft that still looks
+    /// waiting — which, without the second call, would offer the same files as a
+    /// second send forever. `SharedDraftStore.retire` is idempotent, so the
+    /// overwhelmingly common case of recovery finding an already-retired draft
+    /// is a no-op that reports success.
+    ///
+    /// **`retire`'s Bool is about BYTES, not about the offer.** It records the
+    /// retirement durably before it deletes anything, so a draft whose
+    /// `removeItem` fails is already hidden from the inbox and already queued
+    /// for another attempt on the next launch — the invariant "one durable job,
+    /// one send" holds either way. `false` means only that a copy of the user's
+    /// files is still occupying the container, which is the same thing
+    /// `uploadCleanupFailed` says about a pending job's own bytes.
+    ///
+    /// **`lastPicked` is dropped here, and that is the point of the method.**
+    /// It held the draft's STAGED copies, and `reset()`, `cancel()`, `restore()`
+    /// and `discard()` all return to `.picked(lastPicked)`. Left populated, Send
+    /// another and Discard would hand the user back a selection of files this
+    /// process has just deleted, and the next send would read them. There is
+    /// nothing to preserve either: the only surviving copy is the account-bound
+    /// job, and it is exactly what these two callers have just committed to.
+    ///
+    /// Deliberately NOT symmetrical with the failure paths above. A key save
+    /// that fails purges the job and leaves the draft alone, so `lastPicked`
+    /// still describes files that exist and Try again still works — which is the
+    /// one case where the draft is the user's only remaining copy.
+    ///
+    /// **The generation check is the first thing here, and it guards the STORE
+    /// as well as the screen.** A superseded caller mutates nothing at all: not
+    /// the draft store, not `lastPicked`, not the state the user is looking at.
+    /// This method's authority to delete comes entirely from the durable job its
+    /// caller has just committed, and a superseded caller no longer has one —
+    /// the account may have left and taken that job with it, which puts the
+    /// draft straight back to being the only copy of those files on the device.
+    /// Retiring first and checking afterwards would delete them on the way out.
+    ///
+    /// Both callers guard before reaching this, and this guards again anyway.
+    /// Recovery's own check cannot be the only one: the reason it is needed is
+    /// that a Keychain read may resume a task that was cancelled long ago, and
+    /// the cost of getting that wrong is the user's files.
+    private func consumeSourceDraft(of plan: PendingUploadPlan,
+                                    using pending: PendingUploadSupport, g: Int) {
+        guard g == generation else { return }
+        guard let id = plan.sourceDraftId, let drafts = pending.drafts else { return }
+        let removed = drafts.retire(id: id)
+        if !removed { cleanupWarning = L10n.t(.uploadCleanupFailed) }
+        lastPicked = []
+        sourceDraftId = nil
+        onSourceDraftConsumed?(id)
+    }
+
     // MARK: - recovery, offered and never taken on its own
 
     /// Look for a job this account can finish. Called when the session becomes
@@ -411,6 +514,32 @@ public final class CloudUploadModel: ObservableObject {
                     return
                 }
                 message = nil
+                // The key is here and readable, so this job IS durable — which
+                // means a shared draft behind it is redundant even though the
+                // process that proved it crashed before saying so. Idempotent,
+                // and deliberately inside the arm that validated the key: a job
+                // whose key could not be read is one whose source must stay.
+                //
+                // This is also the retry that finishes a retirement the previous
+                // process recorded but could not carry out, for the case where
+                // the job is still pending. `SendSelectionModel`'s launch sweep
+                // covers the case where it is not.
+                //
+                // Revalidated HERE, on the main actor, immediately before the
+                // only mutation in this task that can destroy user data. The
+                // key read above is recovery's one suspension point, and a key
+                // store need not observe cancellation to be correct — the real
+                // one wraps a synchronous `SecItemCopyMatching`, which returns
+                // what it fetched whatever became of the Swift task around it.
+                // So this can resume after the account has left, after the
+                // generation moved on, and after `purgePendingJob` deleted the
+                // account-bound job named by `plan`. The draft `plan` points at
+                // is device-owned and is still there, which by then makes it the
+                // user's only copy again. Everything checked before the await is
+                // stale by definition.
+                guard !Task.isCancelled, g == self.generation,
+                      self.accountId == accountId else { return }
+                self.consumeSourceDraft(of: plan, using: pending, g: g)
             } catch {
                 // Keychain may merely be locked. Keep the job and let an
                 // explicit Resume retry the read; state what blocked recovery.

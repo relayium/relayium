@@ -1,5 +1,6 @@
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 /// Decode one `NSItemProvider` payload into a file URL.
 ///

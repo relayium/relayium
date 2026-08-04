@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- ONE entitlement, and it is the whole of what this process is allowed to do.
+
+     `com.apple.security.application-groups = [group.com.relayium.app]` gives the
+     extension a directory the containing app can also read. That is the entire
+     hand-off: copy what the user shared into that directory, write a small plan
+     describing it, and say on the sheet that the files are waiting in Relayium.
+     Nothing is pushed to the app. A Share Extension may not open its containing
+     app — Apple documents `NSExtensionContext.open(_:completionHandler:)` as the
+     Today and iMessage extension points' method — so what brings the draft onto
+     the Send tab is the user opening Relayium themselves.
+
+     Everything else is absent, and each absence is load-bearing rather than
+     merely unclaimed:
+
+     No `keychain-access-groups`. The extension holds no bearer, reads no
+     account, and generates no content key. The key for a shared draft is minted
+     in the APP, at the moment the user presses Send, and filed under the pending
+     job in the app's own default group. A keychain group here would be a
+     credential share with a process that has nothing to share — and it would put
+     the user's bearer one API call away from a target whose whole safety
+     argument is that it cannot reach it.
+
+     No `com.apple.developer.associated-domains`. The extension neither receives
+     a link nor emits one. There is no `/share` hand-off URL, no custom scheme,
+     no `NSExtensionContext.open` call and no responder-chain walk to
+     `UIApplication` — `SharedDraftPreparationTests` scans this target's source
+     for every one of those spellings. Claiming the domain would let this target
+     be launched for a link it has no screen for.
+
+     No `com.apple.developer.applesignin`. There is no sign-in here, and there is
+     nothing to sign in FOR: staging files needs no account, which is why the
+     Send tab shows a waiting draft to a signed-out user rather than the
+     extension refusing to stage one.
+
+     No network client, no background mode, no push. `IOSSurfaceGuardTests`
+     checks the source of this target for `URLSession`, `URLRequest`,
+     `AccountSession`, `bearerToken`, `TokenStore`, `Keychain`, `CloudUploader`
+     and the rest, because "the extension makes no network request" is an
+     absence, and an absence has no runtime to observe. -->
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.relayium.app</string>
+	</array>
+</dict>
+</plist>

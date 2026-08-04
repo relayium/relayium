@@ -1,5 +1,6 @@
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 public struct MeterDisplay: Equatable {
     public let usedText: String

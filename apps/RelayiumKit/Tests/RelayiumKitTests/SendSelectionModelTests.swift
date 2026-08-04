@@ -946,6 +946,12 @@ final class SendSelectionModelTests: XCTestCase {
 
     /// The internal isolation state is not part of the render surface: nothing
     /// renders an account id, and nothing should redraw because one changed.
+    ///
+    /// The share slice adds three, and they belong here for the same reason the
+    /// first four do: the Send surface renders what is waiting in the App Group,
+    /// which draft it adopted, and why it refused to adopt one. The internal
+    /// state below stays internal — in particular the `SharedDraftStore` itself,
+    /// which a view must never reach past this model to read.
     func testTheSendModelPublishesOnlyItsFourRenderProperties() throws {
         let source = try String(
             contentsOf: URL(fileURLWithPath: #filePath)
@@ -961,13 +967,15 @@ final class SendSelectionModelTests: XCTestCase {
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { $0.hasPrefix("@Published") }
-        XCTAssertEqual(declarations.count, 4,
-                       "summary, selectionError, isImportingPhotos, importError — got \(declarations)")
-        for name in ["summary", "selectionError", "isImportingPhotos", "importError"] {
+        XCTAssertEqual(declarations.count, 7,
+                       "the four selection properties plus the three shared-draft ones "
+                       + "— got \(declarations)")
+        for name in ["summary", "selectionError", "isImportingPhotos", "importError",
+                     "sharedDrafts", "adoptedDraft", "sharedDraftRefusal"] {
             XCTAssertTrue(declarations.contains { $0.hasSuffix(" var \(name)") || $0.contains(" var \(name):") },
                           "\(name) is not published: \(declarations)")
         }
-        for internalState in ["accountUserId", "accountGeneration", "photoGeneration"] {
+        for internalState in ["accountUserId", "accountGeneration", "photoGeneration", "drafts"] {
             XCTAssertFalse(declarations.contains { $0.contains(" var \(internalState)") },
                            "\(internalState) is isolation state, not part of the render surface")
         }

@@ -1,5 +1,6 @@
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 /// One file inside a staged job.
 ///
@@ -55,6 +56,25 @@ public struct PendingUploadPlan: Codable, Equatable {
     /// when cleanup fails: the object exists, the user has the link, and
     /// uploading the bytes again would bill them twice for one file.
     public var finalizedStoredId: String?
+    /// The shared draft these bytes were copied out of, when they came from the
+    /// iOS share extension rather than from a picker.
+    ///
+    /// **Optional, and the version is deliberately NOT bumped.** A plan written
+    /// by the previous build has no such key; Swift's synthesized decoding of an
+    /// optional uses `decodeIfPresent`, so it reads back as nil and that job
+    /// resumes exactly as it did before. A plan written by this build with no
+    /// draft behind it encodes nothing, so an ordinary picker send is
+    /// byte-identical to what it was. Bumping the version instead would have
+    /// made every interrupted upload on every existing install unresumable, to
+    /// record a field that changes nothing about how the bytes are sent.
+    ///
+    /// It is an id and nothing else: opaque, minted by the extension, and
+    /// carrying no name, path or size. What it is FOR is the retirement rule —
+    /// the draft is the user's only other copy, so it may be removed only once
+    /// this plan and its Keychain content key both exist, and a crash in that
+    /// window is repaired by recovery reading this field and retiring the draft
+    /// then.
+    public var sourceDraftId: String?
 
     public var totalBytes: Int { files.reduce(0) { $0 + $1.size } }
 }
@@ -130,13 +150,14 @@ public final class PendingUploadStore: @unchecked Sendable {
 
     /// Stage a selection: copy it, then describe it.
     public func prepare(files: [SelectedFile], accountId: String,
-                        burnAfterRead: Bool, ttl: Int) throws -> PendingUploadPlan {
+                        burnAfterRead: Bool, ttl: Int,
+                        sourceDraftId: String? = nil) throws -> PendingUploadPlan {
         // Through `stageCloudFiles`, so the sources are the same descriptor-
         // pinned ones the uploader would have used. The pin is what makes these
         // the bytes the user consented to: a path looked up a second time is
         // the lookup that can lie.
         try prepare(sources: try stageCloudFiles(files), accountId: accountId,
-                    burnAfterRead: burnAfterRead, ttl: ttl)
+                    burnAfterRead: burnAfterRead, ttl: ttl, sourceDraftId: sourceDraftId)
     }
 
     /// The real preparation, taking already-pinned sources.
@@ -144,13 +165,20 @@ public final class PendingUploadStore: @unchecked Sendable {
     /// It takes `PlaintextSource` rather than URLs on purpose: this function
     /// cannot reopen anything, because it is handed no path to reopen.
     public func prepare(sources: [PlaintextSource], accountId: String,
-                        burnAfterRead: Bool, ttl: Int) throws -> PendingUploadPlan {
+                        burnAfterRead: Bool, ttl: Int,
+                        sourceDraftId: String? = nil) throws -> PendingUploadPlan {
         lock.lock()
         defer { lock.unlock() }
         guard !sources.isEmpty, sources.count <= MAX_FILES else {
             throw PendingUploadError.unusableSelection
         }
         guard !accountId.isEmpty, ttl > 0 else {
+            throw PendingUploadError.unusableSelection
+        }
+        // Checked before a byte is copied. A draft id that would not validate on
+        // read is one recovery could never act on, so a job carrying it would be
+        // a source the crash path silently fails to retire.
+        if let sourceDraftId, !SharedDraftID.isValid(sourceDraftId) {
             throw PendingUploadError.unusableSelection
         }
         for source in sources {
@@ -235,7 +263,7 @@ public final class PendingUploadStore: @unchecked Sendable {
                                          files: entries, burnAfterRead: burnAfterRead, ttl: ttl,
                                          createdAt: Int64(Date().timeIntervalSince1970),
                                          uploadId: nil, uploadChunkSize: nil, retired: false,
-                                         finalizedStoredId: nil)
+                                         finalizedStoredId: nil, sourceDraftId: sourceDraftId)
             try write(plan)                 // LAST: this is what makes the job complete
             return plan
         } catch {
@@ -313,6 +341,11 @@ public final class PendingUploadStore: @unchecked Sendable {
 
         if let finalized = plan.finalizedStoredId,
            (try? StoredObjectID.checked(finalized)) != finalized { return false }
+
+        // A plan carrying a malformed draft id is refused whole rather than
+        // read with the field ignored. Ignoring it would leave the user's only
+        // other copy of those files staged forever with nothing able to name it.
+        if let source = plan.sourceDraftId, !SharedDraftID.isValid(source) { return false }
 
         switch (plan.uploadId, plan.uploadChunkSize) {
         case (nil, nil): break
@@ -484,9 +517,24 @@ public struct PendingUploadSupport {
     /// Keyed by job id, in its own keychain namespace
     /// (`KeychainStoredLinkKeyStore.pendingUploadPrefix`).
     public let keys: StoredLinkKeyStore
+    /// Where a shared draft came from, so the one that fed this job can be
+    /// retired once the job is durable.
+    ///
+    /// Optional, unlike the pair above, and that is the honest shape: macOS has
+    /// no share extension and passes nothing, and the iOS app itself must keep
+    /// working when the App Group cannot be resolved — an un-provisioned build
+    /// still sends files chosen in the picker. Nil means "no draft can ever be
+    /// the source of a job here", which is exactly true in both cases.
+    ///
+    /// It is a plain `SharedDraftStore` rather than anything main-actor-bound:
+    /// retirement happens on whichever context finished the commit, and the
+    /// store is lock-guarded for precisely that.
+    public let drafts: SharedDraftStore?
 
-    public init(store: PendingUploadStore, keys: StoredLinkKeyStore) {
+    public init(store: PendingUploadStore, keys: StoredLinkKeyStore,
+                drafts: SharedDraftStore? = nil) {
         self.store = store
         self.keys = keys
+        self.drafts = drafts
     }
 }

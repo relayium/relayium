@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 /// The subset of `RealtimeConnection` this model drives.
 ///

@@ -1,5 +1,6 @@
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 /// Wiring: the few constants and factory calls the SwiftUI layer would otherwise
 /// hard-code, kept here so tests and the iOS app in R3 can point elsewhere.
@@ -312,9 +313,28 @@ public enum AppEnvironment {
     /// copy exists. macOS keeps the original single-process path rather than
     /// gaining a recovery surface nobody there has asked for and nothing there
     /// has tested.
-    public static func makePendingUploadSupport() -> PendingUploadSupport {
+    /// `drafts` has no default on purpose. The upload model and the send model
+    /// must share ONE `SharedDraftStore`, and a defaulted argument here is
+    /// exactly how they would silently end up with two — which would still work
+    /// (both address the same directory) right up until one gained an injected
+    /// root and the other did not.
+    public static func makePendingUploadSupport(drafts: SharedDraftStore?) -> PendingUploadSupport {
         PendingUploadSupport(store: PendingUploadStore(root: PendingUploadStore.defaultRoot()),
-                             keys: makePendingUploadKeyStore())
+                             keys: makePendingUploadKeyStore(),
+                             drafts: drafts)
+    }
+
+    /// The App Group inbox the iOS share extension writes into, or nil.
+    ///
+    /// Nil in exactly two situations, and neither is a bug this should paper
+    /// over: on macOS, where there is no share extension at all, and in an iOS
+    /// build whose provisioning does not carry
+    /// `com.apple.security.application-groups`. `AppGroup.containerURL` fails
+    /// closed rather than substituting a directory the app could write and the
+    /// extension could not read, so the surface simply never appears and every
+    /// other way of sending goes on working.
+    public static func makeSharedDraftStore() -> SharedDraftStore? {
+        try? SharedDraftStore.shared()
     }
 
     @MainActor
@@ -342,9 +362,11 @@ public enum AppEnvironment {
     /// gone, and that cannot be staged against a real `URLSession`.
     @MainActor
     public static func makeSendSelectionModel(baseURL: URL = productionBaseURL,
-                                              upload: CloudUploadModel) -> SendSelectionModel {
+                                              upload: CloudUploadModel,
+                                              drafts: SharedDraftStore? = nil) -> SendSelectionModel {
         let client = CloudClient(baseURL: baseURL)
         return SendSelectionModel(upload: upload,
+                                  drafts: drafts,
                                   fetchConfig: { try await client.fetchConfig() })
     }
 

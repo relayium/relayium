@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 /// Holds at most one task and cancels it on replace, on demand, or on release.
 ///
@@ -64,12 +65,43 @@ public final class SendSelectionModel: ObservableObject {
     @Published public private(set) var isImportingPhotos: Bool = false
     @Published public private(set) var importError: String?
 
+    /// Drafts the iOS share extension has staged and nobody has used yet,
+    /// oldest first.
+    ///
+    /// Published even when signed out, and that is a decision rather than an
+    /// oversight: the extension can be used from any app at any time, including
+    /// on a device where nobody has signed in, and it tells the user their files
+    /// are waiting in Relayium. A Send tab that showed nothing until they signed
+    /// in would have made that sentence false.
+    @Published public private(set) var sharedDrafts: [SharedDraftSummary] = []
+    /// The draft currently occupying the selection, if any.
+    ///
+    /// Held so it can be handed BACK. An adopted draft has been read out of the
+    /// inbox but not yet copied into an account-bound job, so anything that
+    /// replaces the selection — Clear, a picker, a photo import, signing out,
+    /// switching account — must return it rather than lose it. It is never
+    /// silently reassigned to whoever signs in next: it goes back to the inbox
+    /// and waits to be chosen again.
+    @Published public private(set) var adoptedDraft: SharedDraftSummary?
+    /// Why the newest attempt to use a draft was refused, or nil.
+    ///
+    /// It names the DRAFT as well as the reason, and it has to: the Send tab
+    /// renders one card per waiting draft, and a bare reason would be repeated
+    /// inside every one of them — so pressing Use on the third draft would put
+    /// "sign in first" under all five, as though each had been refused.
+    @Published public private(set) var sharedDraftRefusal: SharedDraftRefusalNotice?
+
     // MARK: - collaborators
 
     private let upload: CloudUploadModel
     private let access: SecurityScopedAccess
     private let photos: PhotoStagingArea
     private let store: SelectionStore
+    /// The App Group inbox, or nil where there is no share extension — macOS,
+    /// and any iOS build whose App Group cannot be resolved. Nil means the
+    /// shared-draft surface never appears, which is the truthful rendering of
+    /// "nothing can arrive here".
+    private let drafts: SharedDraftStore?
     private let fetchConfig: @Sendable () async throws -> ServerConfig
     /// Production sending is account-owned. The opt-out exists only so the
     /// package can exercise resource ownership independently of a session; the
@@ -89,6 +121,10 @@ public final class SendSelectionModel: ObservableObject {
     /// Bumped per import intent, so a superseded import discards its own batch
     /// and candidates when it resumes and repaints nothing.
     private var photoGeneration = 0
+    /// Bumped per inbox read, so an older listing can never publish over a newer
+    /// one. Not `@Published`: nothing renders it and nothing should redraw
+    /// because a read was superseded.
+    private var draftGeneration = 0
 
     private var sessionObservation: AnyCancellable?
     private let configTask = CancellableTaskBox()
@@ -110,12 +146,14 @@ public final class SendSelectionModel: ObservableObject {
                 access: SecurityScopedAccess = SecurityScopedAccess(),
                 photos: PhotoStagingArea = PhotoStagingArea(),
                 inbox: URL? = nil,
+                drafts: SharedDraftStore? = nil,
                 fetchConfig: @escaping @Sendable () async throws -> ServerConfig,
                 store: SelectionStore? = nil,
                 enforcesReadyAccount: Bool = true) {
         self.upload = upload
         self.access = access
         self.photos = photos
+        self.drafts = drafts
         // Constructed in the body rather than as a default argument:
         // `SelectionStore` is `@MainActor`, and a default argument expression is
         // evaluated in a nonisolated context even when the initializer it
@@ -132,10 +170,29 @@ public final class SendSelectionModel: ObservableObject {
         // live launch directory is excluded by construction, so a live batch —
         // which is always inside it — can never be caught by this.
         let launchRoot = photos.launchRoot
+        let draftStore = drafts
         self.startupSweep = Task.detached(priority: .utility) {
             PhotoStagingArea.sweepOtherLaunches(under: launchRoot.deletingLastPathComponent(),
                                                 keeping: launchRoot)
             PhotoInbox.sweepLeftovers(inbox)
+            // Complete drafts are NEVER touched here — this removes only a
+            // published directory with no plan, and staging an extension the
+            // system killed outright left behind. See
+            // `SharedDraftStore.sweepIncomplete`.
+            draftStore?.sweepIncomplete()
+            // And finishes any retirement whose `removeItem` failed in an
+            // earlier process. Those drafts are already hidden — the marker is
+            // written before the bytes are removed — so this is reclaiming
+            // space, not changing what the user is offered.
+            draftStore?.retryRetirements()
+        }
+
+        // The other half of retirement, and it is installed here rather than
+        // observed from a view because the moment it fires is nowhere near a
+        // button: a draft is consumed while the upload is running. Weak, so the
+        // upload model holding this closure never keeps the send model alive.
+        upload.onSourceDraftConsumed = { [weak self] id in
+            self?.sharedDraftWasConsumed(id)
         }
     }
 
@@ -167,6 +224,7 @@ public final class SendSelectionModel: ObservableObject {
         case let .success(urls):
             guard !urls.isEmpty else { clear(); return }
             supersedeImports()
+            returnAdoptedDraft()                    // …and so does a file pick
             photos.clear()                          // a file pick replaces a photo batch
             let roots = access.replace(with: urls)  // ── the scope starts HERE
             // The previous list's access is gone, so nothing may return to it.
@@ -224,6 +282,7 @@ public final class SendSelectionModel: ObservableObject {
         isImportingPhotos = true                    // THIS import now owns the flag
         importError = nil
         selectionError = nil
+        returnAdoptedDraft()                        // before the first await, like everything here
         access.clear()
         photos.clear()
         store.clear()
@@ -307,6 +366,198 @@ public final class SendSelectionModel: ObservableObject {
         store.clear()
     }
 
+    // MARK: - drafts the share extension left behind
+
+    /// The scene changed phase. The one supported hand-off from the share
+    /// extension, and the reason it lives here rather than in a view.
+    ///
+    /// A Share Extension cannot open its containing app — Apple documents
+    /// `NSExtensionContext.open` as the Today and iMessage extension points'
+    /// and no others — so the extension publishes its draft, says so, and stops.
+    /// What brings it onto this screen is the user opening or returning to
+    /// Relayium, which is exactly `.active`. The scene root reports the phase and
+    /// nothing else; whether a phase means "re-read the inbox" is decided HERE,
+    /// where `swift test` can drive it.
+    ///
+    /// `.inactive` deliberately does nothing. It is what the system reports while
+    /// a document picker or the app switcher is up, and re-reading there would
+    /// be a disk scan on the way into the picker, every time.
+    public func phaseChanged(to phase: AppLifecyclePhase) {
+        guard phase == .active else { return }
+        refreshSharedDrafts()
+    }
+
+    /// Re-read the App Group inbox.
+    ///
+    /// Called when the scene becomes active, when the Send surface appears, on
+    /// every account event, and after anything that adopts, returns or discards
+    /// a draft. It is a pure read: it never adopts, never uploads and never
+    /// deletes a complete draft.
+    ///
+    /// Off the main actor because it stats every staged file of every waiting
+    /// draft, and a thousand-file draft would otherwise stall a frame. The
+    /// publish is guarded by the account generation, so a listing that lands
+    /// after a sign-out repaints nothing.
+    public func refreshSharedDrafts() {
+        guard let drafts else { return }
+        let g = accountGeneration
+        draftGeneration += 1
+        let d = draftGeneration
+        Task { [weak self] in
+            let waiting = await Task.detached(priority: .utility) {
+                drafts.drafts().map(SharedDraftSummary.init)
+            }.value
+            // Both generations. The account one catches a sign-out landing
+            // during the read; `draftGeneration` catches the ordinary case that
+            // happens several times per interaction — Discard refreshes twice
+            // (once for the selection it cleared, once after the removal), and
+            // two disk reads in flight can finish in either order. Without this
+            // the earlier listing could publish last and put a draft the user
+            // just deleted back on screen until something else refreshed.
+            guard let self, g == self.accountGeneration, d == self.draftGeneration else { return }
+            // The adopted one is out of the inbox as far as this surface is
+            // concerned: it is already describing the selection, and listing it
+            // again would offer the same files twice.
+            self.sharedDrafts = waiting.filter { $0.id != self.adoptedDraft?.id }
+        }
+    }
+
+    /// Use a waiting draft as the current selection. Always the user's own tap.
+    ///
+    /// Nothing about this is automatic. A draft is never adopted on arrival, on
+    /// launch, on sign-in or when the scene becomes active — all of which would
+    /// be this app deciding which of several waiting things the user meant, and
+    /// the wrong answer overwrites a selection they made by hand.
+    public func useSharedDraft(_ id: String) {
+        sharedDraftRefusal = nil
+        guard let drafts else { return }
+        if let refusal = SharedDraftGate.refusal(hasReadyAccount: accountUserId != nil,
+                                                 upload: upload.state) {
+            // Attached to the draft whose button was pressed. A refusal that
+            // named only the reason would be rendered under every card.
+            sharedDraftRefusal = SharedDraftRefusalNotice(draftId: id, reason: refusal)
+            return
+        }
+        // Read through the store, so what is adopted is a plan that still
+        // validates and staging that still matches it. A draft removed by
+        // another process, or damaged, simply disappears from the list.
+        guard let plan = drafts.draft(id: id),
+              let staged = try? drafts.stagedFiles(for: plan) else {
+            selectionError = L10n.t(.errorShareStorageFailed)
+            refreshSharedDrafts()
+            return
+        }
+        supersedeImports()
+        // Whatever was selected before goes, INCLUDING another draft — which
+        // returns to the inbox rather than being lost.
+        returnAdoptedDraft()
+        access.clear()
+        photos.clear()
+        store.clear()
+        upload.clearSelection()
+        selectionError = nil
+
+        // The staged copies, under their manifest names. Hierarchy rides in the
+        // name exactly as it does for a picked folder, so the receiving side
+        // rebuilds the same tree.
+        let files = staged.map { SelectedFile(url: $0.url, relativePath: $0.name) }
+        upload.sourceDraftId = plan.id
+        upload.pick(FileSelection(files: files, emptyDirectories: []))
+        guard case .picked = upload.state else {
+            // Refused — an item is over this plan's per-file limit. The draft is
+            // untouched and goes back to the inbox, because the user may be able
+            // to send it after an upgrade, and it is still their only copy of
+            // whatever they shared.
+            upload.sourceDraftId = nil
+            refreshSharedDrafts()
+            publishRenderState()
+            return
+        }
+        adoptedDraft = SharedDraftSummary(plan)
+        sharedDrafts.removeAll { $0.id == plan.id }
+        publishRenderState()
+    }
+
+    /// Delete a waiting draft. Destructive, explicit, and the only thing in this
+    /// app that removes a complete draft the user has not sent.
+    public func discardSharedDraft(_ id: String) {
+        guard let drafts, !upload.isBusy else { return }
+        sharedDraftRefusal = nil
+        if adoptedDraft?.id == id {
+            // Its bytes are about to go, so the selection describing them must
+            // go first — otherwise Send would be offered for files that are no
+            // longer there.
+            clear()
+        }
+        drafts.discard(id: id)
+        refreshSharedDrafts()
+    }
+
+    /// Hand an adopted draft back to the inbox.
+    ///
+    /// Adoption never removed it from disk, so "returning" it is exactly this:
+    /// stop describing it, stop claiming it as an upload's source, and list it
+    /// again. That is what makes leaving an account safe — the draft belongs to
+    /// the device, not to whoever happened to be signed in when it arrived, and
+    /// it is never silently handed to the next account.
+    private func returnAdoptedDraft() {
+        guard adoptedDraft != nil else { return }
+        adoptedDraft = nil
+        upload.sourceDraftId = nil
+        refreshSharedDrafts()
+    }
+
+    /// The opposite of `returnAdoptedDraft`: the draft is GONE.
+    ///
+    /// A durable, account-bound job has taken ownership of those files and the
+    /// staged copies have been retired, so there is nothing to hand back and
+    /// nothing left on disk to describe. Forgetting it here — at the retirement,
+    /// not at the next button — is what makes both of the screens the user
+    /// reaches afterwards honest: Send another and Discard both return to
+    /// `choosing`, and a summary line surviving into either of them would be
+    /// describing bytes this process deleted.
+    ///
+    /// `CloudUploadModel` has already dropped `lastPicked` and `sourceDraftId`
+    /// for the same reason, so this is only the render surface.
+    private func sharedDraftWasConsumed(_ id: String) {
+        // Relaunched recovery retires the source of a job THIS process never
+        // adopted — there is no selection to forget, and clearing one would drop
+        // whatever the user has since chosen by hand. Only the waiting list can
+        // have changed.
+        guard adoptedDraft?.id == id else { return refreshSharedDrafts() }
+        adoptedDraft = nil
+        refreshSharedDrafts()
+        publishRenderState()
+    }
+
+    // MARK: - what the send screen's own buttons mean
+
+    /// "Send another" after a finished upload, and "Try again" after a failed
+    /// one. Both are the same transition — back to a state the user can start
+    /// from — and what that state IS depends on whether anything is left to
+    /// start from, which is `CloudUploadModel`'s to answer.
+    ///
+    /// It is a method here rather than `upload.reset()` in the view because the
+    /// screen is two models' published state and only one of them is being
+    /// reset. After a sent shared draft that means an empty screen; after a
+    /// failure before the job became durable it means the same draft still
+    /// selected, which is what makes Try again retry something.
+    public func resetUpload() {
+        upload.reset()
+        publishRenderState()
+    }
+
+    /// "Discard", for the staged job an interrupted upload left behind.
+    ///
+    /// Destructive, and for a job copied out of a shared draft it is the second
+    /// destruction rather than the first: the draft was retired the moment this
+    /// job became durable, so discarding it leaves nothing at all — which is
+    /// exactly the screen the user must be returned to.
+    public func discardPendingUpload() {
+        upload.discardPendingJob()
+        publishRenderState()
+    }
+
     /// Forget the selection entirely — what "Clear" means on this platform.
     ///
     /// Beyond `CloudUploadModel.clearSelection()` it releases the security
@@ -316,6 +567,7 @@ public final class SendSelectionModel: ObservableObject {
     public func clear() {
         guard !upload.isBusy else { return }
         supersedeImports()
+        returnAdoptedDraft()
         access.clear()
         photos.clear()
         store.clear()
@@ -335,6 +587,15 @@ public final class SendSelectionModel: ObservableObject {
     }
 
     private func publishRenderState() {
+        // A draft's files are not in `SelectionStore` — they were never picked
+        // or expanded, they were read out of the App Group already flat and
+        // already named. So the line describing them is built here, from the
+        // same plural the picker path uses, rather than left blank because the
+        // store happens to be empty.
+        if let adoptedDraft {
+            summary = L10n.plural(.selectionFiles, adoptedDraft.fileCount)
+            return
+        }
         summary = store.summaryText(language: nil)
     }
 
@@ -377,6 +638,11 @@ public final class SendSelectionModel: ObservableObject {
         let g = accountGeneration
         accountUserId = context.userId
         configTask.cancel()                     // an older fetch applies to nobody
+        // Every account event, including a sign-out. The inbox belongs to the
+        // device rather than to an account, so what is waiting stays visible —
+        // and the refusal beside it changes from "use these" to "sign in", which
+        // is the truthful thing to say to somebody whose files are sitting here.
+        refreshSharedDrafts()
         guard let userId = context.userId else { upload.apply(.unknown); return }
         // A staged job belongs to an account, so the account is what unlocks
         // it. This both tells the upload model who is signed in and offers any
@@ -444,6 +710,14 @@ public final class SendSelectionModel: ObservableObject {
         // one still on disk is one they could resume.
         upload.purgePendingJob()
         supersedeImports()
+        // SYNCHRONOUSLY, and this is the half that matters: an adopted draft was
+        // never copied into an account-bound job, so it must not follow the user
+        // into the next account. It goes back to the inbox — not deleted, not
+        // reassigned — and the next person to sign in has to choose it for
+        // themselves. `purgePendingJob` above is the opposite case and is
+        // correct: bytes already committed to an account leave WITH it.
+        sharedDraftRefusal = nil
+        returnAdoptedDraft()
         configTask.cancel()
         access.clear()
         photos.clear()

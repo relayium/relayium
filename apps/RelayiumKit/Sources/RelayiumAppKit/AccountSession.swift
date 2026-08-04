@@ -1,4 +1,5 @@
 import Foundation
+import RelayiumShareKit
 // @preconcurrency: RelayiumKit predates strict concurrency and marks nothing Sendable.
 // The one capture this silences — the TokenStore existential crossing to a background
 // queue in loadTokenOffMainActor() — is safe: KeychainTokenStore is a final class with

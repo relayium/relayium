@@ -10,7 +10,21 @@ let package = Package(
     // the two would disagree otherwise.
     defaultLocalization: "en",
     platforms: [.macOS(.v13), .iOS(.v16)],
-    products: [.library(name: "RelayiumKit", targets: ["RelayiumKit", "RelayiumAppKit"])],
+    products: [
+        .library(name: "RelayiumKit", targets: ["RelayiumKit", "RelayiumAppKit"]),
+        // The share extension's whole world, and deliberately a SEPARATE product
+        // from the one the apps link. An `.appex` is a second process the system
+        // launches inside somebody else's share sheet, under a tighter memory
+        // budget and with the user watching; linking `RelayiumKit` there would
+        // map WebRTC and libsodium into it for a job that copies files and writes
+        // one JSON document. It would also put a full account client, a token
+        // store and an uploader one `import` away from a process whose entire
+        // safety argument is that it cannot reach them.
+        //
+        // Nothing in this target may gain a dependency. That is the constraint
+        // that keeps the boundary real rather than documented.
+        .library(name: "RelayiumShareKit", targets: ["RelayiumShareKit"]),
+    ],
     dependencies: [
         // Exact, not `from:` — this is the crypto the whole E2E guarantee rests
         // on, so a resolve must never be able to move it on its own. 0.11.0 is
@@ -32,19 +46,34 @@ let package = Package(
                 .product(name: "WebRTC", package: "WebRTC"),
             ]
         ),
+        // Foundation and nothing else. Two things live here, and they are here
+        // for the same reason: the iOS share extension needs both, and needs
+        // them without the transport stack.
+        //
+        //  - **The nine `.lproj` catalogs and `L10n`.** They used to sit in
+        //    `RelayiumAppKit`. Nothing about turning a key into words depends on
+        //    WebRTC, an uploader or an account, and the extension has to render
+        //    the same nine languages as the app — so the layer moved down rather
+        //    than the extension linking up. `Bundle.module` still resolves them
+        //    with no main-bundle lookup, which is the property that made them
+        //    package resources in the first place; it now resolves in the appex
+        //    bundle too. `RelayiumAppKit` re-exports this module, so every
+        //    existing `import RelayiumAppKit` still sees `L10n` unchanged.
+        //  - **The shared draft store.** The App Group hand-off between the
+        //    extension and the app. Both sides link it, so there is exactly one
+        //    implementation of the on-disk format, and `swift test` drives it
+        //    against an injected root with no container, no entitlement and no
+        //    provider.
+        .target(name: "RelayiumShareKit",
+                resources: [.process("Resources")]),
         // @MainActor view-model layer for the native apps. Imports RelayiumKit and
         // Foundation, never SwiftUI — that is what keeps it unit-testable under
         // `swift test` and reusable by the iOS app in R3.
-        // The nine `.lproj` catalogs live here rather than in the macOS app
-        // target: the copy belongs to the layer that produces it, `Bundle.module`
-        // resolves it without any main-bundle lookup, and R3's iOS app then gets
-        // the same strings by linking the same package.
         .target(name: "RelayiumAppKit",
-                dependencies: ["RelayiumKit"],
-                resources: [.process("Resources")]),
+                dependencies: ["RelayiumKit", "RelayiumShareKit"]),
         .testTarget(
             name: "RelayiumKitTests",
-            dependencies: ["RelayiumKit", "RelayiumAppKit"],
+            dependencies: ["RelayiumKit", "RelayiumAppKit", "RelayiumShareKit"],
             path: "Tests",
             resources: [.process("Fixtures")]
         ),

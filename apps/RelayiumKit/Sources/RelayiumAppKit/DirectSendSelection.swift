@@ -1,5 +1,6 @@
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 /// What the iOS Direct tab's file half owns, and it is all lifetime.
 ///

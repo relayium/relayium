@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 public let TEXT_SESSION_MAX_MESSAGES = 500
 public let TEXT_SESSION_MAX_BYTES = 4 << 20

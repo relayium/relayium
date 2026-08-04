@@ -189,6 +189,21 @@
 "send.accountUnavailableBody" = "送信にはプランの上限が必要ですが、読み込めませんでした。「アカウント」を開いて再試行してください。";
 "send.choosePhotos" = "写真またはビデオを選択…";
 "send.preparingPhotos" = "選択した項目を準備しています…";
+
+/* MARK: iOS share extension */
+"share.heading" = "Relayium で送る";
+"share.disclosure" = "ファイルはこの端末の Relayium にコピーされます。Relayium で「送信」を押すまで、何もアップロードされません。";
+"share.continue" = "Relayium にコピー";
+"share.copying" = "Relayium にコピー中 — %@ 完了";
+"share.itemCount.other" = "%@ 個の項目";
+"share.savedTitle" = "この端末の Relayium に保存しました";
+"share.savedBody" = "まだ何もアップロードされていません。準備ができたら Relayium を開き、「送信」タブで送信してください。";
+"share.waitingTitle" = "他の App からの共有";
+"share.waitingBody" = "%@ が送信待ちです。";
+"share.staysHere" = "送信するか破棄するまで、この端末に残ります。Relayium が勝手に送ることはありません。";
+"share.use" = "このファイルを使う";
+"share.signedOutBody" = "送信にはアカウントが必要です。サインインすれば、そのままここにあります。";
+"share.busyBody" = "この画面の内容を先に完了・破棄・クリアしてください。";
 "ttl.oneHour" = "1 時間";
 "ttl.oneDay" = "1 日";
 "ttl.threeDays" = "3 日";
@@ -458,6 +473,10 @@
 "error.selection.symbolicLink" = "「%@」はシンボリックリンクです。Relayium はそれをたどりません — 選んだ範囲の外のファイルを送ってしまう可能性があるためです — そして黙って飛ばすこともしません。選択から外すか、リンク先の実際のフォルダを送ってください。";
 "error.selection.pathTooLong" = "パス「%@」は長すぎて転送で記述できません。より浅いフォルダから送るか、名前を短くしてください。";
 "error.photoImport.failed" = "選択した項目の一部を送信用に準備できなかったため、何も選択されませんでした。選び直すか、一度に選ぶ数を減らしてください。";
+"error.share.unavailable" = "Relayium が共有ストレージにアクセスできず、何もコピーされませんでした。Relayium を開いてファイルを選んでください。";
+"error.share.nothingUsable" = "ここには Relayium が送れるものがありませんでした。ファイル、フォルダ、写真、ビデオに対応しています。";
+"error.share.duplicatePath" = "共有された 2 つの項目が同じ「%@」として送られます。別々に共有するか、片方の名前を変えてください。";
+"error.share.storageFailed" = "ファイルをコピーできず、何も保存されませんでした。この端末の空き容量を確認して、もう一度お試しください。";
 "error.cloud.unauthorized" = "サインインの有効期限が切れました。ファイルを送るには、もう一度サインインしてください。";
 "error.cloud.quota" = "このファイルに使える空き容量または当日の割り当てが足りません。空き容量を確保するか、アップグレードしてください。";
 "error.cloud.rateLimited" = "いまアップロードが多すぎます。1 分ほど待ってからお試しください。";

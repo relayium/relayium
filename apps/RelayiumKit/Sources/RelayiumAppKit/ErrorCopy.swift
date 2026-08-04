@@ -1,5 +1,6 @@
 import Foundation
 import RelayiumKit
+import RelayiumShareKit
 
 /// Which stored-link-key operation a failure belongs to.
 ///

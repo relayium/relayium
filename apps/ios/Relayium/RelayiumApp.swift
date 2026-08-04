@@ -35,16 +35,33 @@ import RelayiumAppKit
 /// Resume or Discard — because nothing here runs while the app is suspended.
 /// Direct and Nearby remain live sessions and are unaffected.
 ///
+/// **The Share Extension ships in this slice, and it needed one entitlement
+/// rather than the three an earlier version of this comment predicted.**
+/// `RelayiumShare.appex` accepts files, folders, images and movies from any
+/// app's share sheet and copies them into the App Group. It claims
+/// `com.apple.security.application-groups` and nothing else: no shared keychain
+/// group, because it holds no credential and mints no key, and no network
+/// entitlement of any kind, because it makes no request. The division is the
+/// point — the extension stages plaintext copies on this device, and this app is
+/// still the only thing that encrypts, uploads, knows the account's limits, or
+/// produces a link. Nothing is uploaded until Send is pressed here.
+///
+/// **The extension does not open this app, and no link exists for it to open.**
+/// Apple documents `NSExtensionContext.open` as the Today and iMessage extension
+/// points' method; a Share Extension is neither, so it publishes the draft, says
+/// so, and finishes. The supported hand-off is the user opening or returning to
+/// Relayium, which is why `send.phaseChanged(to:)` is wired at the scene root
+/// below and why the association file is unchanged by this slice.
+///
+/// The app gains the same App Group so it can read that inbox. It is the third
+/// entitlement on a list of three, and `keychain-access-groups` is still absent.
+///
 /// Still absent, and deliberately not stubbed: background transfer (no
 /// `URLSessionConfiguration.background`, no background mode — an upload never
-/// progresses while suspended, force-quit or rebooted),
-/// notifications, IAP, and the **Share Extension** — which is deferred to the
-/// separately designed capability/release slice, because it is a second target
-/// in a second process needing an App Group and a shared keychain access group,
-/// which are three entitlements this development build cannot claim.
+/// progresses while suspended, force-quit or rebooted), notifications and IAP.
 ///
-/// **Universal Links are now wired, and that is the one capability this adds.**
-/// `Relayium.entitlements` gains `associated-domains` for `applinks:relayium.com`
+/// **Universal Links are wired, and their shape is unchanged here.**
+/// `Relayium.entitlements` claims `associated-domains` for `applinks:relayium.com`
 /// — that one domain, that one service — and the association file names exactly
 /// `/d/*` and `/cross-network`. There is no custom URL scheme, so nothing but a
 /// real relayium.com HTTPS link the OS has verified against the site can reach
@@ -167,8 +184,18 @@ struct RelayiumApp: App {
         // staged into this app's own Application Support directory before a
         // server session exists, so an upload the system interrupts can be
         // finished later — by the user asking, never on its own.
+        // ONE shared-draft store, handed to both halves that touch it: the send
+        // model, which lists and adopts what the share extension staged, and the
+        // upload model, which retires the source once a job carrying it is
+        // durable. Two stores would address the same directory and so would not
+        // fail — until one of them was pointed somewhere else.
+        //
+        // Nil when the App Group cannot be resolved, which is the un-provisioned
+        // development build. Everything else on this tab goes on working; the
+        // shared-draft surface simply never appears, because nothing can arrive.
+        let drafts = AppEnvironment.makeSharedDraftStore()
         let uploads = AppEnvironment.makeUploadModel(
-            keyStore: keys, pending: AppEnvironment.makePendingUploadSupport())
+            keyStore: keys, pending: AppEnvironment.makePendingUploadSupport(drafts: drafts))
         let managing = AppEnvironment.makeAccountManagementModel(keyStore: keys)
         _management = StateObject(wrappedValue: managing)
         // Subscribed HERE, in init, and not from a `.task` on any view. That is
@@ -185,7 +212,7 @@ struct RelayiumApp: App {
         leaving.observe(managing.$needsSignOut)
         _signOut = StateObject(wrappedValue: leaving)
         _upload = StateObject(wrappedValue: uploads)
-        let sending = AppEnvironment.makeSendSelectionModel(upload: uploads)
+        let sending = AppEnvironment.makeSendSelectionModel(upload: uploads, drafts: drafts)
         // App-scoped, for the model's whole life, and BEFORE any view exists.
         // A `.task` inside SendView would not do: SwiftUI mounts a TabView's
         // tabs lazily and may tear down an off-screen one, so a user who signs
@@ -310,6 +337,15 @@ struct RelayiumApp: App {
                 // real models; this only reports the phase.
                 .onChange(of: scenePhase) { phase in
                     residency.phaseChanged(to: lifecycle(phase))
+                    // The share extension's ONLY hand-off. It cannot open this
+                    // app — a Share Extension is not an extension point Apple
+                    // lets do that — so what brings a staged draft onto the Send
+                    // tab is the user coming back to Relayium, which is this.
+                    // The phase is reported and nothing more: whether `.active`
+                    // means "re-read the App Group inbox", and whether
+                    // `.inactive` does, is `SendSelectionModel`'s decision, and
+                    // `SharedDraftAdoptionTests` drives it.
+                    send.phaseChanged(to: lifecycle(phase))
                 }
                 // Launch. `onChange` fires on a CHANGE, and the app is already
                 // `.active` when the scene first appears — so without this the
@@ -317,7 +353,16 @@ struct RelayiumApp: App {
                 // to the background and back. Re-entrant by construction:
                 // resolving the folder is idempotent and `startResident` refuses
                 // both a second socket and an override of the user's pause.
-                .task { residency.phaseChanged(to: .active) }
+                .task {
+                    residency.phaseChanged(to: .active)
+                    // Cold launch, including the launch that follows a user
+                    // sharing something and then tapping Relayium on the home
+                    // screen. `onChange` fires on a CHANGE and the scene is
+                    // already `.active` when it first appears, so without this a
+                    // draft staged before launch would not appear until the app
+                    // had been backgrounded and brought forward again.
+                    send.phaseChanged(to: .active)
+                }
                 // A Universal Link the OS verified against relayium.com, at the
                 // SCENE root rather than on a tab: this fires on a cold launch
                 // before any tab has been built, and on a warm one while an

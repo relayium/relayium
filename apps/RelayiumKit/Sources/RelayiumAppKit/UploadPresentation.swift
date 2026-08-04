@@ -1,4 +1,5 @@
 import Foundation
+import RelayiumShareKit
 
 /// What the "Link ready" screen says about the key that opens an upload.
 ///
