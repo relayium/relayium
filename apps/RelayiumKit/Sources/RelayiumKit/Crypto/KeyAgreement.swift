@@ -10,7 +10,16 @@ public struct KeyPair {
     }
 }
 
-public enum Role { case initiator, responder }
+/// Which side of a key agreement — and, above it, of a connection — this is.
+///
+/// `Sendable` because it is exactly what it looks like: two cases, no associated
+/// values, no reference storage, nothing to mutate. It is decided once per
+/// connection and then read from the socket's delivery queue, the main actor and
+/// the WebRTC callback threads at the same time, so the conformance states a
+/// property the type already had rather than granting it a new one. Without it,
+/// every `Sendable` decision enum that carries a role (`LinkAdmissionDecision`,
+/// `LinkIntent`) is a Swift 6 error.
+public enum Role: Sendable { case initiator, responder }
 
 public struct SessionKeys: Equatable {
     public let send: [UInt8]  // sharedTx

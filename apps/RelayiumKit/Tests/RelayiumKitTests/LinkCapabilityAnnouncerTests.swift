@@ -1,0 +1,154 @@
+import XCTest
+@testable import RelayiumKit
+
+/// Telling each peer in the room what this build can speak.
+///
+/// The announcement rides the roster, not a connection's SDP, and the reason is
+/// an older peer: it treats ANY inbound offer as a file transfer and waits for a
+/// manifest that will never come, then fails it as a stall. A capability that
+/// arrives with the offer is too late to prevent the thing it exists to prevent.
+///
+/// The rules that matter are bounded retries and no ping-pong. This frame is
+/// unacknowledged, so it needs repeats; but a peer that answers every hello with
+/// a hello turns a two-device room into an unbounded exchange.
+@MainActor
+final class LinkCapabilityAnnouncerTests: XCTestCase {
+
+    private final class Recorder {
+        var sent: [(peer: String, caps: [String])] = []
+        var peers: [String] { sent.map(\.peer) }
+    }
+
+    private func make(linkRoomActive: Bool = true)
+        -> (LinkCapabilityAnnouncer, Recorder, PeerCapabilityRegistry) {
+        let recorder = Recorder()
+        let registry = PeerCapabilityRegistry(linkRoomActive: { linkRoomActive })
+        let announcer = LinkCapabilityAnnouncer(
+            registry: registry,
+            linkRoomActive: { linkRoomActive },
+            send: { peer, signal in recorder.sent.append((peer, peerCaps(from: signal))) }
+        )
+        return (announcer, recorder, registry)
+    }
+
+    // MARK: - announcing
+
+    func testAnnouncesTheAdvertisedListToEachNewPeerExactlyOnce() {
+        let (announcer, recorder, _) = make()
+        announcer.rosterChanged(peerIds: ["p1", "p2"])
+        XCTAssertEqual(Set(recorder.peers), ["p1", "p2"])
+        XCTAssertEqual(recorder.sent.first?.caps, [TEXT_CAPABILITY, LINK_CAPABILITY])
+
+        recorder.sent = []
+        announcer.rosterChanged(peerIds: ["p1", "p2"])
+        XCTAssertTrue(recorder.sent.isEmpty, "an unchanged roster is not a new peer")
+    }
+
+    func testOnlyNewPeersAreGreeted() {
+        let (announcer, recorder, _) = make()
+        announcer.rosterChanged(peerIds: ["p1"])
+        recorder.sent = []
+        announcer.rosterChanged(peerIds: ["p1", "p2"])
+        XCTAssertEqual(recorder.peers, ["p2"])
+    }
+
+    /// Nothing is announced where link mode cannot run. The legacy
+    /// per-connection SDP capability confirmation continues to serve `text/1`
+    /// exactly as it does today, so this adds no frame to a code room.
+    func testNothingIsAnnouncedWhereLinkModeIsNotActive() {
+        let (announcer, recorder, _) = make(linkRoomActive: false)
+        announcer.rosterChanged(peerIds: ["p1"])
+        announcer.retryTick()
+        XCTAssertTrue(recorder.sent.isEmpty)
+    }
+
+    /// The same gate as `testThisBuildNeitherAdvertisesNorRoutesLink`, at the
+    /// frame level: wired to the REAL composed predicate rather than an injected
+    /// one, this build puts no hello on the wire in any room. `link/1` cannot be
+    /// announced from a build that cannot honour it.
+    func testThisBuildAnnouncesNothingAnywhere() {
+        for isCodelessRoom in [true, false] {
+            let recorder = Recorder()
+            let active = { linkRoomActive(isCodelessRoom: isCodelessRoom) }
+            let announcer = LinkCapabilityAnnouncer(
+                registry: PeerCapabilityRegistry(linkRoomActive: active),
+                linkRoomActive: active,
+                send: { peer, signal in recorder.sent.append((peer, peerCaps(from: signal))) }
+            )
+            announcer.rosterChanged(peerIds: ["p1", "p2"])
+            for _ in 0..<LINK_CAPS_ANNOUNCE_ATTEMPTS { announcer.retryTick() }
+            XCTAssertTrue(recorder.sent.isEmpty,
+                          "no roster frame may be sent, code-less room: \(isCodelessRoom)")
+        }
+    }
+
+    // MARK: - bounded retries
+
+    /// The hello is unacknowledged, so it repeats — but a bounded number of
+    /// times. An unbounded repeat is a peer that never stops talking to a peer
+    /// that may never have existed.
+    func testRetriesAreBounded() {
+        let (announcer, recorder, _) = make()
+        announcer.rosterChanged(peerIds: ["p1"])
+        for _ in 0..<(LINK_CAPS_ANNOUNCE_ATTEMPTS * 3) { announcer.retryTick() }
+        XCTAssertEqual(recorder.peers.count, LINK_CAPS_ANNOUNCE_ATTEMPTS)
+    }
+
+    /// A peer that has told us what it speaks does not need to be told again.
+    func testHearingFromAPeerRetiresItsRemainingRetries() {
+        let (announcer, recorder, _) = make()
+        announcer.rosterChanged(peerIds: ["p1"])
+        XCTAssertEqual(recorder.peers.count, 1)
+        announcer.didHearFrom(peerId: "p1")
+        announcer.retryTick()
+        announcer.retryTick()
+        XCTAssertEqual(recorder.peers.count, 1)
+    }
+
+    /// The no-ping-pong rule, stated directly: receiving a hello must never
+    /// produce one.
+    func testReceivingAHelloNeverProducesAHello() {
+        let (announcer, recorder, registry) = make()
+        announcer.rosterChanged(peerIds: [])
+        XCTAssertTrue(registry.record(peerId: "p1", signal: linkCapsHello(linkRoomActive: true)))
+        announcer.didHearFrom(peerId: "p1")
+        XCTAssertTrue(recorder.sent.isEmpty)
+    }
+
+    // MARK: - scope and expiry
+
+    func testDepartedPeersAreForgottenByBothTheRegistryAndTheAnnouncer() {
+        let (announcer, recorder, registry) = make()
+        announcer.rosterChanged(peerIds: ["p1"])
+        _ = registry.record(peerId: "p1", signal: linkCapsHello(linkRoomActive: true))
+        XCTAssertTrue(registry.supports("p1", LINK_CAPABILITY))
+
+        recorder.sent = []
+        announcer.rosterChanged(peerIds: ["p2"])
+        XCTAssertFalse(registry.supports("p1", LINK_CAPABILITY))
+        XCTAssertEqual(recorder.peers, ["p2"])
+    }
+
+    /// A new socket means new peer ids and a roster nobody has been greeted in.
+    /// The previous room's announcements must not answer for ids in this one.
+    func testRoomEpochChangeClearsEverythingAndGreetsAgain() {
+        let (announcer, recorder, registry) = make()
+        announcer.rosterChanged(peerIds: ["p1"])
+        _ = registry.record(peerId: "p1", signal: linkCapsHello(linkRoomActive: true))
+        recorder.sent = []
+
+        announcer.roomChanged()
+        XCTAssertFalse(registry.supports("p1", LINK_CAPABILITY))
+        announcer.rosterChanged(peerIds: ["p1"])
+        XCTAssertEqual(recorder.peers, ["p1"], "a peer id in a new room is a new peer")
+    }
+
+    func testStopEndsRetriesWithoutLeavingStaleState() {
+        let (announcer, recorder, _) = make()
+        announcer.rosterChanged(peerIds: ["p1"])
+        recorder.sent = []
+        announcer.stop()
+        announcer.retryTick()
+        XCTAssertTrue(recorder.sent.isEmpty)
+    }
+}

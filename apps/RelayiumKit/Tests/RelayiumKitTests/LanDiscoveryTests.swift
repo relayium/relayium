@@ -291,6 +291,51 @@ final class LanDiscoveryTests: XCTestCase {
             selfId: "self")
         XCTAssertEqual(devices.map(\.id), ["p2"])
     }
+
+    // MARK: - capability announcements
+
+    private func capsHello(from peer: String, _ caps: [String]) {
+        let list = caps.map { "\"\($0)\"" }.joined(separator: ",")
+        channel.fireText(#"{"type":"signal","from":"\#(peer)","data":{"caps":[\#(list)]}}"#)
+    }
+
+    /// A hello can land before `welcome` does — the two are independent frames
+    /// on one socket, and a peer already in the room announces the instant it
+    /// sees us join. Retaining against the roster at that moment retains against
+    /// an EMPTY list, because there is no self id to exclude ourselves by yet,
+    /// and the announcement we had already correctly received is thrown away.
+    func testAnnouncementArrivingBeforeWelcomeSurvives() async {
+        let model = makeModel()
+        model.start()
+        capsHello(from: "other-2", [TEXT_CAPABILITY])
+        await settle()
+        welcome("self-1")
+        roster([("self-1", "Mac"), ("other-2", "Phone")])
+        await settle()
+        XCTAssertTrue(model.capabilities.supports("other-2", TEXT_CAPABILITY))
+    }
+
+    func testAnnouncementsAreDiscardedWithThePeerAndWithTheRoom() async {
+        let model = makeModel()
+        model.start()
+        welcome("self-1")
+        roster([("self-1", "Mac"), ("other-2", "Phone")])
+        capsHello(from: "other-2", [TEXT_CAPABILITY])
+        await settle()
+        XCTAssertTrue(model.capabilities.supports("other-2", TEXT_CAPABILITY))
+
+        // The peer left the room.
+        roster([("self-1", "Mac")])
+        await settle()
+        XCTAssertFalse(model.capabilities.supports("other-2", TEXT_CAPABILITY))
+
+        // …and a whole room epoch ends. A peer id means nothing outside the room
+        // that issued it, so nothing may be inherited across a reconnect.
+        capsHello(from: "other-3", [TEXT_CAPABILITY])
+        await settle()
+        model.stop()
+        XCTAssertFalse(model.capabilities.supports("other-3", TEXT_CAPABILITY))
+    }
 }
 
 // ── residency: the socket that makes this Mac reachable ─────────────────────
@@ -459,6 +504,7 @@ final class LanResidencyTests: XCTestCase {
         XCTAssertEqual(model.state, .off)
         XCTAssertEqual(log.channels.count, 1)
     }
+
 }
 
 /// One-shot rendezvous, for holding an injected sleep open across a lifecycle

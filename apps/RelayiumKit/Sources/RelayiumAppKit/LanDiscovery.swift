@@ -26,11 +26,22 @@ public struct NearbyDevice: Identifiable, Equatable {
     /// showing the same name, so two identical labels are still tellable apart
     /// before the user picks one.
     public let label: String
+    /// Whether this peer announced exact `link/1`.
+    ///
+    /// A CAPABILITY, never an identity and never a security input. The
+    /// signalling relay sees every roster frame and can strip this (link mode is
+    /// denied) or forge it (we offer a link to a peer that cannot answer — also
+    /// only a denial). It can never put plaintext on the wire, because the
+    /// session keys are derived through commit/reveal rather than negotiated
+    /// from an announcement. Treat it as "what this peer says it can do", which
+    /// is exactly what it is worth.
+    public let supportsLink: Bool
 
-    public init(id: String, name: String, label: String) {
+    public init(id: String, name: String, label: String, supportsLink: Bool = false) {
         self.id = id
         self.name = name
         self.label = label
+        self.supportsLink = supportsLink
     }
 }
 
@@ -72,7 +83,9 @@ public protocol NearbyRoomObserver: AnyObject {
 /// Pure and public because the rules that matter are here, and every one of
 /// them is a way this feature can go wrong: excluding ourselves by id, never
 /// inheriting the hub's ordering, and disambiguating duplicate names.
-public func nearbyDevices(roster: [Peer], selfId: String) -> [NearbyDevice] {
+public func nearbyDevices(roster: [Peer],
+                          selfId: String,
+                          supportsLink: (String) -> Bool = { _ in false }) -> [NearbyDevice] {
     // The hub broadcasts the WHOLE room to every member, us included
     // (server/internal/signal/hub.go's broadcastRoster). Before `welcome`
     // there is no way to tell which entry is ours, so nothing is offered at
@@ -106,7 +119,8 @@ public func nearbyDevices(roster: [Peer], selfId: String) -> [NearbyDevice] {
             return NearbyDevice(
                 id: device.id,
                 name: device.name,
-                label: ambiguous ? "\(device.name) · \(shortPeerID(device.id))" : device.name
+                label: ambiguous ? "\(device.name) · \(shortPeerID(device.id))" : device.name,
+                supportsLink: supportsLink(device.id)
             )
         }
 }
@@ -149,6 +163,25 @@ public final class LanDiscoveryModel: ObservableObject {
     /// outlives individual sockets and must not be kept alive by this one.
     public weak var observer: NearbyRoomObserver?
 
+    /// What each peer in the room says it can speak.
+    ///
+    /// Owned HERE because its lifetime is the room's: a peer id only means
+    /// something inside the room that issued it, and this model is the one thing
+    /// that knows when a room ends. Exposed so the workspace layer reads the
+    /// same announcements the roster was built from, rather than keeping a
+    /// second copy that can disagree with what the user is looking at.
+    public let capabilities = PeerCapabilityRegistry(
+        // The code-less room IS this model — it joins the hub's room with an
+        // empty code — so the room half of the predicate is constant here and
+        // the build flag is the only thing that can turn it off.
+        linkRoomActive: { linkRoomActive(isCodelessRoom: true) }
+    )
+    private lazy var announcer = LinkCapabilityAnnouncer(
+        registry: capabilities,
+        linkRoomActive: { linkRoomActive(isCodelessRoom: true) },
+        send: { [weak self] peerId, signal in self?.client?.sendSignal(to: peerId, data: signal) }
+    )
+
     public var selectedDevice: NearbyDevice? { devices.first { $0.id == selectedId } }
     /// A socket exists or is being opened. `reconnecting` is deliberately false:
     /// the roster is empty and unmaintained during the gap, and a UI that claims
@@ -182,6 +215,15 @@ public final class LanDiscoveryModel: ObservableObject {
     private var isPausedByUser = false
     private var reconnectAttempt = 0
     private var reconnectTask: Task<Void, Never>?
+    /// Records inbound capability hellos. A plain listener, never an
+    /// interceptor: a hello must keep travelling to whatever else is listening,
+    /// and this must not compete with the inbound-offer router for a frame.
+    private var capsSubscription: SignalSubscription?
+    private var capsRetryTask: Task<Void, Never>?
+
+    /// Spacing between the bounded capability-hello retries. Short, because the
+    /// whole point is to cover a hello lost to a socket that was still opening.
+    static let capsRetryInterval: TimeInterval = 1.5
 
     public init(connect: @escaping () -> SignalingClient,
                 // Optional rather than a defaulted closure literal — see
@@ -274,8 +316,43 @@ public final class LanDiscoveryModel: ObservableObject {
         socket.onClose = { [weak self] in
             Task { @MainActor in self?.apply(g) { $0.dropped() } }
         }
+        // Registered before the observer's own subscription, and deliberately as
+        // a listener rather than an interceptor: a capability hello is not this
+        // model's to claim, it is only this model's to notice.
+        capsSubscription = socket.addSignalListener { [weak self] from, data in
+            Task { @MainActor in
+                guard let self, g == self.generation else { return }
+                guard self.capabilities.record(peerId: from, signal: data) else { return }
+                // Only ever RETIRES retries. Answering a hello with a hello is
+                // how two devices talk past each other forever.
+                self.announcer.didHearFrom(peerId: from)
+                self.refresh()
+            }
+        }
         client = socket
+        // `teardown()` above has already ended the previous room for the
+        // announcer, so this only has to arm the new one's retries.
+        scheduleCapsRetries()
         observer?.roomDidConnect(socket)
+    }
+
+    /// Bounded, and tied to this socket epoch. The hello is unacknowledged, so
+    /// it repeats; it repeats a fixed number of times because a client that
+    /// keeps talking to a peer that never answers is a client that never stops.
+    private func scheduleCapsRetries() {
+        capsRetryTask?.cancel()
+        let g = generation
+        let sleep = self.sleep
+        capsRetryTask = Task { [weak self] in
+            for _ in 0..<LINK_CAPS_ANNOUNCE_ATTEMPTS {
+                await sleep(UInt64(Self.capsRetryInterval * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard let self, g == self.generation else { return }
+                    self.announcer.retryTick()
+                }
+            }
+        }
     }
 
     /// Everything that ends a socket epoch. Bumps first, so the `close()` below
@@ -285,6 +362,13 @@ public final class LanDiscoveryModel: ObservableObject {
         generation += 1
         reconnectTask?.cancel()
         reconnectTask = nil
+        capsRetryTask?.cancel()
+        capsRetryTask = nil
+        capsSubscription?.cancel()
+        capsSubscription = nil
+        // Discards every announcement with the room that issued the ids it
+        // named. A peer id means nothing outside its own room.
+        announcer.roomChanged()
         client?.close()
         client = nil
         observer?.roomDidDisconnect()
@@ -313,7 +397,31 @@ public final class LanDiscoveryModel: ObservableObject {
             selfId = known
             state = .joined
         }
-        devices = nearbyDevices(roster: roster, selfId: selfId)
+        devices = nearbyDevices(roster: roster, selfId: selfId,
+                                supportsLink: { [capabilities] in
+                                    capabilities.supports($0, LINK_CAPABILITY)
+                                })
+        // Only once BOTH halves of a meaningful roster exist.
+        //
+        // `devices` is empty by construction until `welcome` gives us an id to
+        // exclude ourselves by AND a `peers` frame has arrived — and those are
+        // two independent frames on one socket, in either order. Handing that
+        // empty list to the announcer retains nothing, which discards a hello
+        // that arrived ahead of it: a peer already in the room announces the
+        // instant it sees us join, so this is the ordinary case rather than a
+        // rare one. The peer's own bounded retries would eventually repair it,
+        // which is what made this survivable, but it threw away an announcement
+        // already correctly received.
+        //
+        // The hub always includes us in the roster it broadcasts, so a non-empty
+        // `roster` is exactly "a roster has been delivered".
+        //
+        // Greeting is driven by the roster gaining a peer, never by hearing from
+        // one — see `LinkCapabilityAnnouncer`. Departed peers are dropped from
+        // the registry in the same call.
+        if !selfId.isEmpty, !roster.isEmpty {
+            announcer.rosterChanged(peerIds: devices.map(\.id))
+        }
         // A device that left must not leave a selection pointing at nothing:
         // the next Send would dial a peer id the room no longer contains, and
         // the id could by then belong to a different device entirely.
@@ -328,6 +436,11 @@ public final class LanDiscoveryModel: ObservableObject {
         generation += 1
         reconnectTask?.cancel()
         reconnectTask = nil
+        capsRetryTask?.cancel()
+        capsRetryTask = nil
+        capsSubscription?.cancel()
+        capsSubscription = nil
+        announcer.roomChanged()
         client = nil
         observer?.roomDidDisconnect()
         roster = []
