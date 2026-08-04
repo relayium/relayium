@@ -135,12 +135,13 @@ final class RTCLinkLane: LinkLaneChannel {
 ///  - **Recovery.** This driver ignores the `resume` generation outright, and
 ///    must: it derives its own session keys and constructs the link's one
 ///    `LinkCodecs`, so answering a rebuild here would mean a second identity.
-///    The rebuild CONNECTION lives in `WebRTCLinkReplacementTransport`, which is
-///    handed an existing identity and derives nothing. Neither of them is
-///    recovery: nothing swaps an old transport for a new one, nothing retries
-///    inside a window, and `LINK_TRANSPORT_REPLACEMENT_SUPPORTED` is still
-///    false. A dropped lane here ends the transport; it does not hold an
-///    authentication open.
+///    The rebuild CONNECTION lives in `WebRTCLinkReplacementTransport`, and the
+///    gap that decides when to build one lives in `LinkRecoveryCoordinator` —
+///    which is what an owner hands this transport to on the way out. A dropped
+///    lane here still only ends THIS transport; whether that ends the link is
+///    the coordinator's question, and `LINK_TRANSPORT_REPLACEMENT_SUPPORTED` is
+///    still false because the lanes, lifecycle and serialization that would let
+///    an owner ask it do not exist yet.
 ///  - **Durable active-file recovery.** No file checkpoints and no
 ///    RESUME_REQ/RESUME_START, so even a rebuilt transport resumes a connection
 ///    rather than a transfer.

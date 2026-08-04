@@ -291,21 +291,63 @@ final class WebRTCLinkReplacementTransportSourceTests: XCTestCase {
     /// Closed state and teardown before any client callback. A second place that
     /// set `closed` or called `onError`/`onClose` would be a second terminal
     /// path, and the ordering guarantee is exactly what cannot survive two.
+    ///
+    /// Both callbacks are read out of their guarded slots into locals FIRST and
+    /// invoked afterwards, which is the second half of the same guarantee: the
+    /// slots are shared with a consumer that releases them from another thread,
+    /// and holding `callbackLock` across a callback that is allowed to re-enter
+    /// this transport would be a self-deadlock.
     func testThereIsOneTerminalPathAndItClosesBeforeItCallsBack() throws {
         let source = self.code
         XCTAssertEqual(occurrences(of: "closed = true", in: source), 1)
-        XCTAssertEqual(occurrences(of: "onError?(", in: source), 1)
-        XCTAssertEqual(occurrences(of: "onClose?(", in: source), 1)
+        XCTAssertEqual(occurrences(of: "let failed = onError", in: source), 1)
+        XCTAssertEqual(occurrences(of: "let ended = onClose", in: source), 1)
+        XCTAssertEqual(occurrences(of: "failed?(", in: source), 1)
+        XCTAssertEqual(occurrences(of: "ended?(", in: source), 1)
 
         let terminal = try XCTUnwrap(source.range(of: "private func terminateLocked"))
         let tail = String(source[terminal.upperBound...])
         let closedAt = try XCTUnwrap(tail.range(of: "closed = true"))
         let tornDownAt = try XCTUnwrap(tail.range(of: "teardownLocked()"))
-        let erroredAt = try XCTUnwrap(tail.range(of: "onError?("))
-        let closedCallbackAt = try XCTUnwrap(tail.range(of: "onClose?("))
+        let erroredAt = try XCTUnwrap(tail.range(of: "failed?("))
+        let closedCallbackAt = try XCTUnwrap(tail.range(of: "ended?("))
         XCTAssertTrue(closedAt.lowerBound < tornDownAt.lowerBound)
         XCTAssertTrue(tornDownAt.lowerBound < erroredAt.lowerBound)
         XCTAssertTrue(erroredAt.lowerBound < closedCallbackAt.lowerBound)
+    }
+
+    /// Every client callback slot is guarded, and nothing is ever invoked while
+    /// that guard is held.
+    ///
+    /// The slots are written by a consumer from whatever thread ended a link —
+    /// `LinkRecoveryCoordinator.detach` does exactly this — and read here on the
+    /// private queue. Plain stored properties would be a data race that Thread
+    /// Sanitizer reports; a lock held across the invocation would deadlock the
+    /// consumer that closes from inside its own callback. Pinned as source
+    /// because both halves are invisible to any assertion.
+    func testEveryClientCallbackSlotIsGuardedAndNoneIsInvokedUnderThatGuard() {
+        let source = self.code
+        for slot in ["_onReady", "_onFrame", "_onError", "_onClose"] {
+            XCTAssertTrue(source.contains("private var \(slot):"),
+                          "\(slot) must be private storage behind a guarded accessor")
+            // Only the accessor pair reads or writes it: two inside `callback`
+            // closures, one declaration.
+            XCTAssertEqual(occurrences(of: slot, in: source), 3,
+                           "\(slot) is reachable from somewhere other than its accessors")
+        }
+        XCTAssertTrue(source.contains("private let callbackLock = NSLock()"))
+        // The one place the lock is taken. A second would be a second policy.
+        XCTAssertEqual(occurrences(of: "callbackLock.lock()", in: source), 1)
+        for invoked in ["ready?(", "frame?(", "deliver?(", "failed?(", "ended?("] {
+            XCTAssertTrue(source.contains(invoked),
+                          "\(invoked) must be a local read out of its slot, not a call through it")
+        }
+        // Nothing calls a callback through the property, which would put the
+        // accessor's lock acquisition and the invocation in one expression.
+        for through in ["onReady?(", "onFrame?(", "onError?(", "onClose?("] {
+            XCTAssertEqual(occurrences(of: through, in: source), 0,
+                           "\(through) invokes a callback straight through its guarded accessor")
+        }
     }
 
     /// Teardown drops the references a closed transport must not keep — and here

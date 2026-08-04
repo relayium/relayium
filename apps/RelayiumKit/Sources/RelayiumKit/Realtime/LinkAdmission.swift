@@ -331,6 +331,22 @@ public final class LinkAdmission: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// A rebuild attempt ended without publishing. The one rebuild slot comes
+    /// back; the link stays interrupted.
+    ///
+    /// Deliberately symmetric with `didBeginReplacingTransport` rather than
+    /// folded into `didFail`. An attempt failing is not the link failing — the
+    /// recovery window is still open and the peer may still be trying — and
+    /// without a way back the slot would be one-shot for the whole gap: a
+    /// responder whose first attempt lost its ICE race would ignore every later
+    /// offer and sit out the rest of its window holding a link it could have
+    /// rebuilt.
+    public func didEndReplacingTransport() {
+        lock.lock()
+        replacingTransport = false
+        lock.unlock()
+    }
+
     /// The SAME authentication step on a new transport. Deliberately does not
     /// refill the leave budget: a peer that has already spent it must not earn a
     /// fresh one by dropping the connection.

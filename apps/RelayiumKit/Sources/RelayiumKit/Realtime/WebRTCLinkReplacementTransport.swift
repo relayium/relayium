@@ -76,22 +76,23 @@ import WebRTC
 ///
 /// ## What this is NOT, and what remains gated
 ///
-/// This is one replacement CONNECTION. It is not recovery, nothing constructs
-/// it, and `LINK_TRANSPORT_REPLACEMENT_SUPPORTED` remains false. Still open, and
-/// each one a separate piece of work:
+/// This is one replacement CONNECTION. It is not recovery, and
+/// `LINK_TRANSPORT_REPLACEMENT_SUPPORTED` remains false. What decides WHEN one of
+/// these should exist, keeps the dropped link current while it is built, and
+/// publishes it over the dead one is `LinkRecoveryCoordinator` — this driver
+/// publishes its own transport and still knows nothing about any other. Still
+/// open, and each one a separate piece of work:
 ///
-///  - **The atomic swap.** Nothing decides which of an old and a new transport
-///    owns the lanes, publishes one over the other, or closes the loser. This
-///    driver publishes its own transport and knows nothing about any other.
-///  - **Retry orchestration.** No recovery window, no 90-second retry loop, and
-///    nothing that keeps a dropped link current long enough to rebuild it.
 ///  - **ICE restart.** ABSENT ON PURPOSE, and the absence is a gate rather than
 ///    an oversight — see "Renegotiation" below before adding one.
 ///  - **Durable file recovery.** No checkpoints and no RESUME_REQ/RESUME_START,
 ///    so a rebuilt lane resumes a connection, not a transfer.
 ///  - **Poisoned text-lane policy and END acknowledgement timing.** Untouched;
 ///    a rebuild inherits whatever the lane's own state was.
-///  - **Admission, factory, lifecycle and UI.** Unwired, and `LINK_BUILD_SUPPORT`
+///  - **Lifecycle and UI.** A production factory exists
+///    (`webRTCLinkReplacementFactory`) and the coordinator drives `LinkAdmission`
+///    through a gap, but nothing above that is wired: no session model, no
+///    presentation and no background/foreground behaviour. `LINK_BUILD_SUPPORT`
 ///    is still false, so no peer is ever told this build speaks `link/1`.
 ///  - **Live evidence.** Native↔native is covered:
 ///    `WebRTCLinkReplacementInteropTests` runs two of these drivers against each
@@ -146,6 +147,32 @@ public final class WebRTCLinkReplacementTransport: NSObject {
 
     // MARK: - client callbacks (all fire on `queue`)
 
+    /// The four client callbacks all FIRE on `queue`, and are all SET from
+    /// wherever the consumer happens to be.
+    ///
+    /// Those are not the same thread, and the asymmetry is structural rather
+    /// than hypothetical: `LinkRecoveryCoordinator` installs all four when it
+    /// builds a rebuild and releases all four when that rebuild loses its race
+    /// or its link ends — from whichever thread reported the loss, while this
+    /// transport may be reading them on its own queue to publish or to report a
+    /// failure. As plain stored properties that is an ordinary data race, and
+    /// Thread Sanitizer reports it as one.
+    ///
+    /// So the SLOTS are guarded, and only the slots. Each closure is read into a
+    /// local and invoked with nothing held — they are consumer code that is
+    /// explicitly allowed to call back into this transport, and a lock held
+    /// across one would be a self-deadlock waiting to be written. `callbackLock`
+    /// is therefore a leaf: nothing is ever called while it is held, so it
+    /// cannot participate in an inversion with `queue` or with a consumer's own
+    /// lock.
+    private let callbackLock = NSLock()
+
+    private func callback<T>(_ read: () -> T) -> T {
+        callbackLock.lock()
+        defer { callbackLock.unlock() }
+        return read()
+    }
+
     /// Both exact lanes are open again under the identity this transport was
     /// given. Fires at most once, and carries THAT identity — the same object
     /// graph, so the link's one set of nonce-bearing codecs continues rather
@@ -154,14 +181,31 @@ public final class WebRTCLinkReplacementTransport: NSObject {
     /// There is deliberately no `onSAS` counterpart. The six digits belong to
     /// the authentication this rebuild inherited; announcing them again would
     /// tell a user to re-verify something that never changed.
-    public var onReady: ((LinkIdentity) -> Void)?
+    public var onReady: ((LinkIdentity) -> Void)? {
+        get { callback { _onReady } }
+        set { callback { _onReady = newValue } }
+    }
     /// One raw frame off one exact lane.
-    public var onFrame: ((LinkLane, [UInt8]) -> Void)?
+    public var onFrame: ((LinkLane, [UInt8]) -> Void)? {
+        get { callback { _onFrame } }
+        set { callback { _onFrame = newValue } }
+    }
     /// Fires at most once, and only for a failure. By the time it runs this
     /// transport is already closed: teardown happens first.
-    public var onError: ((Error) -> Void)?
+    public var onError: ((Error) -> Void)? {
+        get { callback { _onError } }
+        set { callback { _onError = newValue } }
+    }
     /// Fires at most once, whatever ended the transport, and always last.
-    public var onClose: (() -> Void)?
+    public var onClose: (() -> Void)? {
+        get { callback { _onClose } }
+        set { callback { _onClose = newValue } }
+    }
+
+    private var _onReady: ((LinkIdentity) -> Void)?
+    private var _onFrame: ((LinkLane, [UInt8]) -> Void)?
+    private var _onError: ((Error) -> Void)?
+    private var _onClose: (() -> Void)?
 
     // MARK: - wiring
 
@@ -652,9 +696,17 @@ public final class WebRTCLinkReplacementTransport: NSObject {
             ready: { [weak self] identity in
                 guard let self else { return }
                 Self.log.notice("link rebuilt role=\(String(describing: self.role), privacy: .public)")
-                self.onReady?(identity)
+                // Read out, then called with `callbackLock` released — a
+                // consumer taking the lanes over here is entitled to call
+                // straight back into this transport.
+                let ready = self.onReady
+                ready?(identity)
             },
-            frame: { [weak self] lane, bytes in self?.onFrame?(lane, bytes) })
+            frame: { [weak self] lane, bytes in
+                guard let self else { return }
+                let frame = self.onFrame
+                frame?(lane, bytes)
+            })
     }
 
     // MARK: - send
@@ -709,11 +761,16 @@ public final class WebRTCLinkReplacementTransport: NSObject {
         guard !closed else { return }
         closed = true
         teardownLocked()
+        // Both read out before either runs, and both invoked with
+        // `callbackLock` released: `close()` from inside `onError` is explicitly
+        // supported, and it re-enters this method.
+        let failed = onError
+        let ended = onClose
         if let error {
             Self.log.error("link rebuild failed error=\(String(describing: error), privacy: .public)")
-            onError?(error)
+            failed?(error)
         }
-        onClose?()
+        ended?()
     }
 
     /// Releases everything this transport holds. Safe to run from `deinit`: it
@@ -841,7 +898,8 @@ extension WebRTCLinkReplacementTransport: RTCDataChannelDelegate {
             case .captured, .ignore:
                 break
             case let .deliver(lane):
-                self.onFrame?(lane, frame)
+                let deliver = self.onFrame
+                deliver?(lane, frame)
             case let .fail(error):
                 self.failLocked(error)
             }

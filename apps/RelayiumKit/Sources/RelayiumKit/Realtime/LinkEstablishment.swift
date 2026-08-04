@@ -8,21 +8,27 @@ import Foundation
 /// runtime flag, and a reader deciding whether recovery exists must not have to
 /// infer it from what a driver happens to implement today.
 ///
-/// It is false, and what it is false ABOUT has moved. A replacement CONNECTION
-/// now exists — `WebRTCLinkReplacementTransport` rebuilds both lanes under one
-/// already-authenticated `LinkIdentity`, authenticating its own signalling with
-/// that link's `resumeAuth` key. What does not exist is everything that would
-/// turn one such connection into a recovery path a link can rely on:
+/// It is false, and what it is false ABOUT has moved twice. A replacement
+/// CONNECTION exists — `WebRTCLinkReplacementTransport` rebuilds both lanes under
+/// one already-authenticated `LinkIdentity`, authenticating its own signalling
+/// with that link's `resumeAuth` key. A COORDINATOR now exists too:
+/// `LinkRecoveryCoordinator` turns a terminal transport into one bounded gap,
+/// verifies an inbound resume offer before allocating anything, drives or awaits
+/// the rebuild in the inherited role, and publishes the winner atomically under
+/// the same identity. What does not exist is everything else a link would have
+/// to rely on:
 ///
-///  - no atomic swap of the old transport for the new one, so nothing decides
-///    which of two live transports owns the lanes;
-///  - no retry orchestration inside a recovery window, and nothing that keeps a
-///    dropped link current long enough to rebuild it;
 ///  - no durable file checkpoints and no RESUME_REQ/RESUME_START, so a rebuilt
 ///    lane resumes a connection, not a transfer;
-///  - no policy for a text lane whose codecs proved unsafe to reuse;
-///  - no admission, factory, lifecycle or UI integration, and `LINK_BUILD_SUPPORT`
-///    is still false, so no peer is ever told this build speaks `link/1`.
+///  - no file- or text-lane integration: nothing implements the coordinator's
+///    suspend-and-reattach hooks, and a text lane whose codecs proved unsafe to
+///    reuse still has no policy;
+///  - no END acknowledgement timing and no ICE restart;
+///  - no lifecycle or UI integration — the coordinator drives `LinkAdmission`'s
+///    interrupt/replace transitions and nothing above them — and
+///    `LINK_BUILD_SUPPORT` is still false, so no peer is ever told this build
+///    speaks `link/1`;
+///  - no native↔Web evidence for any of it.
 ///
 /// A caller deciding whether recovery exists must read this constant, not infer
 /// it from the existence of a driver. The invariant the replacement driver rests

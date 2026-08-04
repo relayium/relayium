@@ -241,6 +241,28 @@ final class LinkAdmissionTests: XCTestCase {
         XCTAssertEqual(b.route(from: smaller, signal: resumeOffer()), .ignore)
     }
 
+    /// The rebuild slot is given back when an attempt ends without publishing.
+    ///
+    /// Without this the slot is one-shot for the whole gap: a responder whose
+    /// first attempt failed would ignore every later offer from the peer that is
+    /// still trying, and sit out the rest of its recovery window holding a link
+    /// it could have rebuilt. Deliberately NOT a phase change — the link is still
+    /// interrupted, and still refuses everyone else.
+    func testTheRebuildSlotIsReturnedWhenAnAttemptEnds() {
+        let b = admission(selfId: larger)
+        b.didBeginEstablishing(peerId: smaller, role: .responder)
+        b.didOpen(peerId: smaller)
+        b.didInterrupt()
+        XCTAssertEqual(b.route(from: smaller, signal: resumeOffer()), .resumeOffer)
+        b.didBeginReplacingTransport()
+
+        b.didEndReplacingTransport()
+
+        XCTAssertEqual(b.phase, .interrupted(peerId: smaller))
+        XCTAssertEqual(b.route(from: smaller, signal: resumeOffer()), .resumeOffer)
+        XCTAssertEqual(b.route(from: "zzz", signal: linkRequestSignal()), .busy)
+    }
+
     // MARK: - leave
 
     func testLeaveIsRoutedForVerificationOnlyForTheCurrentPeer() {
