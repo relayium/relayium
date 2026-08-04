@@ -295,6 +295,33 @@ final class WebRTCLinkReplacementInteropTests: XCTestCase {
         wait(for: [settled], timeout: seconds + 5)
     }
 
+    /// The ONE failure a bounded two-sided cleanup may legitimately produce: a
+    /// side whose peer closed first saw a published lane of its own go
+    /// terminal, on one of the exact two labels.
+    ///
+    /// Deliberately an exact list rather than a predicate over the error's
+    /// shape. `laneClosed` is the only outcome that can be attributed to a
+    /// cleanup this test itself performed; `peerConnectionFailed`,
+    /// `laneClosedBeforeReady`, an establishment timeout or a candidate
+    /// overflow all describe something else, and a cleanup assertion that let
+    /// them through would be the assertion this suite exists to make.
+    private let toleratedDuringCleanup: [LinkTransportError] = [
+        .laneClosed(LinkLane.file.label),
+        .laneClosed(LinkLane.text.label),
+    ]
+
+    /// Everything a recorder holds that the cleanup above cannot account for,
+    /// rendered so a failure names what actually arrived. An error that is not
+    /// a `LinkTransportError` at all is never tolerated.
+    private func unexpectedDuringCleanup(_ errors: [Error]) -> [String] {
+        errors
+            .filter { error in
+                guard let link = error as? LinkTransportError else { return true }
+                return !toleratedDuringCleanup.contains(link)
+            }
+            .map { String(describing: $0) }
+    }
+
     private func fields(_ signal: JSONValue) -> [String: JSONValue] {
         guard case let .object(o) = signal else { return [:] }
         return o
@@ -308,7 +335,10 @@ final class WebRTCLinkReplacementInteropTests: XCTestCase {
     /// Deliberately ONE test rather than several. Every assertion below is about
     /// the same single negotiation, and splitting them would mean paying for a
     /// real ICE handshake once per property while making each property's
-    /// evidence a different connection from the others'.
+    /// evidence a different connection from the others'. The one property that
+    /// is NOT about this negotiation has its own run below: what a peer sees
+    /// when its counterpart closes cannot be observed here, because here both
+    /// sides close.
     func testTwoRealDriversRebuildOneAuthenticatedLinkOverABridgedRoom() throws {
         let bridge = SignalingBridge()
         // Mirrored, and each side keeps its OWN object: the identity assertions
@@ -388,6 +418,17 @@ final class WebRTCLinkReplacementInteropTests: XCTestCase {
 
             // MARK: bounded cleanup
 
+            // Two `close()` calls back to back from the test thread do NOT put
+            // the two teardowns in that order. Each lands on its own
+            // transport's queue, and A's teardown is meanwhile travelling to B
+            // over a real SCTP association — so whether B closes itself or is
+            // closed out from under it by A is a race, and it is one either
+            // side can lose. A published lane going terminal is a failure by
+            // design and must stay one, because the identical event on the wire
+            // is a peer that crashed. So exactly that outcome is tolerated
+            // below, and nothing else. It is not asserted away:
+            // `testClosingOneSideEndsTheOtherWithExactlyOneLaneClose` forces
+            // the order and asserts it.
             a.transport.close()
             b.transport.close()
             wait(for: [a.recorder.closedExpectation, b.recorder.closedExpectation], timeout: 15)
@@ -395,8 +436,10 @@ final class WebRTCLinkReplacementInteropTests: XCTestCase {
             for side in [a, b] {
                 XCTAssertTrue(side.transport.isClosed)
                 XCTAssertEqual(side.recorder.closes, 1, "\(side.peerId) closed more than once")
-                XCTAssertTrue(side.recorder.errors.isEmpty,
-                              "an explicit close is not a failure: \(side.recorder.errors)")
+                XCTAssertLessThanOrEqual(side.recorder.errors.count, 1,
+                                         "\(side.peerId) reported more than one failure: \(side.recorder.errors)")
+                XCTAssertEqual(unexpectedDuringCleanup(side.recorder.errors), [],
+                               "\(side.peerId) reported something a cleanup cannot explain")
                 XCTAssertNil(side.signaling.onSignal,
                              "\(side.peerId) kept the signalling slot after closing")
                 XCTAssertThrowsError(try side.transport.send([1], on: .file)) {
@@ -468,6 +511,87 @@ final class WebRTCLinkReplacementInteropTests: XCTestCase {
         // client is prone to.
         XCTAssertTrue(poll { releasedA == nil && releasedB == nil },
                       "a closed replacement transport must not outlive its owner")
+    }
+
+    /// What the side that did NOT close sees — the exact outcome the bounded
+    /// cleanup above is allowed to tolerate, forced into a fixed order so it is
+    /// asserted rather than assumed.
+    ///
+    /// Closing A is polite, and local. B is given no way to know that: what
+    /// reaches it is a published lane going `closed`, which is byte for byte
+    /// what a peer that crashed, was killed or lost its network produces. This
+    /// slice therefore ends the transport (`LinkEstablishment.laneStateChanged`
+    /// after publication), and it must keep doing so — a link consumer that is
+    /// not told holds a transport it believes is live, on codecs whose AEAD
+    /// sequence has nowhere left to go. That fail-closed behaviour is the
+    /// reason the cleanup above cannot demand two error-free recorders, so it
+    /// is pinned here rather than worked around there.
+    ///
+    /// A second full negotiation is the price of asking a question the combined
+    /// run genuinely cannot answer: that one closes BOTH sides, so the outcome
+    /// of leaving one open is not observable in it.
+    func testClosingOneSideEndsTheOtherWithExactlyOneLaneClose() throws {
+        let bridge = SignalingBridge()
+        let codecsA = LinkCodecs(sendKey: keyAtoB, recvKey: keyBtoA)
+        let codecsB = LinkCodecs(sendKey: keyBtoA, recvKey: keyAtoB)
+        let a = endpoint(peerId: "a", peer: "b", role: .initiator,
+                         codecs: codecsA, bridge: bridge)
+        let b = endpoint(peerId: "b", peer: "a", role: .responder,
+                         codecs: codecsB, bridge: bridge)
+
+        a.transport.start()
+        b.transport.start()
+        wait(for: [a.recorder.readyExpectation, b.recorder.readyExpectation], timeout: 60)
+
+        // Both lanes carry a frame each way first, so what is lost below is a
+        // pair of lanes that were demonstrably live rather than merely
+        // published.
+        try a.transport.send([0x01], on: .file)
+        try a.transport.send([0x02], on: .text)
+        try b.transport.send([0x03], on: .file)
+        try b.transport.send([0x04], on: .text)
+        wait(for: [a.recorder.framesExpectation, b.recorder.framesExpectation], timeout: 30)
+
+        for side in [a, b] {
+            XCTAssertTrue(side.recorder.errors.isEmpty,
+                          "\(side.peerId) reported \(side.recorder.errors) before anything closed")
+            XCTAssertEqual(side.recorder.closes, 0)
+        }
+
+        // ONLY A. B is never told to close, so nothing here is racing its own
+        // local teardown and the outcome below is the peer's alone.
+        a.transport.close()
+        wait(for: [a.recorder.closedExpectation, b.recorder.closedExpectation], timeout: 30)
+
+        // The side that closed itself reports no failure: an explicit close is
+        // not one.
+        XCTAssertTrue(a.recorder.errors.isEmpty,
+                      "an explicit close is not a failure: \(a.recorder.errors)")
+        XCTAssertEqual(a.recorder.closes, 1, "a closed more than once")
+        XCTAssertTrue(a.transport.isClosed)
+
+        // The side it left behind is told exactly once, and told precisely
+        // this: whichever of the two exact lanes reached the state callback
+        // first. Which one that is is genuinely undecided — both have been
+        // observed — so the assertion is on the pair, not on a winner.
+        XCTAssertEqual(b.recorder.errors.count, 1,
+                       "the peer of a close is told once: \(b.recorder.errors)")
+        let reported = try XCTUnwrap(b.recorder.errors.first as? LinkTransportError,
+                                     "b reported \(b.recorder.errors), which is not a LinkTransportError")
+        XCTAssertTrue(toleratedDuringCleanup.contains(reported),
+                      "\(reported) is not the remote lane close a cleanup can race")
+
+        // And it ends as completely as a side that closed itself: one close
+        // callback, closed state, the signalling slot given back, and no send
+        // accepted afterwards.
+        XCTAssertEqual(b.recorder.closes, 1, "b closed more than once")
+        XCTAssertTrue(b.transport.isClosed)
+        XCTAssertNil(b.signaling.onSignal, "b kept the signalling slot after its peer left")
+        XCTAssertThrowsError(try b.transport.send([1], on: .file)) {
+            XCTAssertEqual($0 as? LinkTransportError, .closed)
+        }
+        XCTAssertEqual(b.transport.bufferedAmount(on: .file), 0)
+        XCTAssertEqual(b.transport.bufferedAmount(on: .text), 0)
     }
 
     /// Neither constant moves on the strength of a native↔native run. Both ends
