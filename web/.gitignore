@@ -12,8 +12,9 @@ dist
 dist-ssr
 *.local
 
-# `npm run build:link-e2e` output. Deliberately NOT dist/: that bundle advertises
-# link/1 and must never be the thing a deploy picks up by accident.
+# Left behind by the retired `build:link-e2e` script: link/1 used to need its own
+# bundle. It is now a property of the default build, scoped to the LAN room, so
+# there is nothing to build separately — but an old checkout may still have one.
 dist-link-e2e
 # Browser evidence from `e2e/mixed-link.mjs --screenshots`.
 e2e-screenshots

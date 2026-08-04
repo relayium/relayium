@@ -743,6 +743,9 @@ const fr: Messages = {
     queuedHint: "Ils attendent la fin du transfert en cours. Vous pouvez continuer à choisir des fichiers et à écrire entre-temps.",
     queuedRemove: "Retirer",
     queuedFiles: (count) => (count === 1 ? "1 fichier" : `${count} fichiers`),
+    open: "Ouvrir l’espace de travail",
+    openWith: (n) => `Ouvrir un espace de travail partagé avec ${n}`,
+    openHint: "Une seule connexion chiffrée pour les fichiers et les messages.",
   },
   text: {
     panelTitle: "Message",

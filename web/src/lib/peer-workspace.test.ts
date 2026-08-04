@@ -1,6 +1,8 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CHROME_MAX_MESSAGE_BYTES } from "./wire-limit";
 import { generateKeyPair, ready } from "./crypto";
+import { CAP_LINK, CAP_TEXT, peerSupportsLink, recordPeerCaps, resetPeerCaps } from "./peer-caps.svelte";
+import { clearRoom, enterRoom } from "./room.svelte";
 import { createPeerWorkspace } from "./peer-workspace.svelte";
 import type { TextSession } from "./text-session.svelte";
 import type { TransferSession } from "./transfer-session.svelte";
@@ -18,7 +20,10 @@ function dataChannel(label: string) {
   } as unknown as RTCDataChannel;
 }
 
-function setup() {
+/** `realLinkCaps` drops the injected capability stub so the workspace uses the
+ *  shipped `peerSupportsLink` — the only way to test what a DEFAULT build does
+ *  with a peer's roster claim, room policy included. */
+function setup(opts: { realLinkCaps?: boolean } = {}) {
   const listeners: ((from: string, data: unknown) => void)[] = [];
   const sent: { to: string; data: InboundSignal }[] = [];
   const signaling = {
@@ -71,7 +76,7 @@ function setup() {
     rtcConfig: () => ({ iceServers: [] }),
     legacyFiles,
     legacyText,
-    supportsLink: (peerId) => peerId !== "old",
+    supportsLink: opts.realLinkCaps ? undefined : (peerId) => peerId !== "old",
     connect,
     resume,
   });
@@ -208,9 +213,10 @@ describe("peer workspace capability routing", () => {
     h.workspace.stop();
   });
 
-  // The SHIPPED default build negotiates text over the legacy session (it does
-  // not advertise link/1), so this is the path the reported "Waiting for the
-  // other device to accept…" actually came from. Without it, that panel stays on
+  // A peer that does not speak link/1 — an older Web tab, a native client, or
+  // any peer in a pairing-code room — negotiates text over the legacy session,
+  // so this is the path the reported "Waiting for the other device to
+  // accept…" actually came from. Without it, that panel stays on
   // screen for a page that is no longer in anybody's roster — and the sender
   // cannot even start a new session, because the dead one still counts as busy.
   it.each([
@@ -420,6 +426,50 @@ describe("peer workspace unified presentation surface", () => {
     h.workspace.stop();
   });
 
+  it("reports whether an authenticated link object genuinely exists", async () => {
+    // `usingMixed` is deliberately broader — it is true while a request is still
+    // in flight, so the workspace can own the screen before there is anything to
+    // trust. A launcher that opens a lane must key off the narrower fact.
+    const h = setup();
+    expect(h.workspace.hasLink).toBe(false);
+    const pending = h.workspace.openText("z");
+    expect(h.workspace.usingMixed).toBe(true);
+    expect(h.workspace.hasLink).toBe(false);
+    await pending;
+    expect(h.workspace.hasLink).toBe(true);
+    h.workspace.disconnect();
+    expect(h.workspace.hasLink).toBe(false);
+    h.workspace.stop();
+  });
+
+  it("makes a text open that resolves after Disconnect inert", async () => {
+    // The auto-open orchestration in App is fire-and-forget on purpose: the
+    // lane's own attempt/generation guards are what must absorb a resolution
+    // that lands after the user already tore the workspace down. If they ever
+    // stopped doing so, this is where a "connecting…" panel would reappear on a
+    // link that no longer exists.
+    const h = setup();
+    const pending = h.workspace.openText("z");
+    h.workspace.disconnect();
+    await pending;
+    expect(h.workspace.mixed.text.status).not.toBe("waitingAccept");
+    expect(h.workspace.mixed.text.status).not.toBe("connecting");
+    expect(h.workspace.hasLink).toBe(false);
+    expect(h.workspace.usingMixed).toBe(false);
+    h.workspace.stop();
+  });
+
+  it("makes a text open that resolves after a room switch inert", async () => {
+    const h = setup();
+    const pending = h.workspace.openText("z");
+    h.workspace.resetRoom();
+    await pending;
+    expect(h.workspace.mixed.text.status).not.toBe("waitingAccept");
+    expect(h.workspace.mixed.text.status).not.toBe("connecting");
+    expect(h.workspace.usingMixed).toBe(false);
+    h.workspace.stop();
+  });
+
   it("publishes queued file batches and cancels one by id", async () => {
     const h = setup();
     await h.workspace.mixed.ensure("z");
@@ -491,6 +541,131 @@ describe("peer workspace during a mixed transport gap", () => {
     expect(h.workspace.linkStatus).toBe("interrupted");
     expect(h.workspace.blocksLegacyInbound).toBe(true);
     expect(h.resume.mock.calls[0][0].signal?.aborted).toBe(false);
+    h.workspace.stop();
+  });
+});
+
+// ── the release scope of link/1 ────────────────────────────────────────────────
+//
+// A default build implements the unified link, so it advertises and routes it —
+// but only in the code-less LAN room. Everything below runs the SHIPPED
+// `peerSupportsLink` (no injected stub), because the point is what a real build
+// does with a real roster claim.
+//
+// The pairing-code half is a policy test, not a preference: a signalling relay
+// sees every frame and can inject one, so refusing to *say* `link/1` there is
+// worth nothing unless we also refuse to *believe* it.
+//
+// It is deterministic here rather than in a real browser on purpose, and that is
+// a limitation worth naming: `/api/pair` mints a cross-network code only for a
+// logged-in account and the ws route rejects any code that was never minted, so
+// the CDP harness cannot join a real pairing room at all. These cases are the
+// whole proof of that policy — see web/e2e/README.md.
+describe("peer workspace link/1 room scope", () => {
+  beforeEach(() => { clearRoom(); resetPeerCaps(); });
+
+  it("routes a link-capable peer in the code-less LAN room", async () => {
+    const h = setup({ realLinkCaps: true });
+    recordPeerCaps("z", { caps: [CAP_TEXT, CAP_LINK] });
+
+    expect(h.workspace.routes("z")).toBe(true);
+
+    const mixedFiles = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
+    const picked = [{ file: new File(["x"], "x.txt") }];
+    h.workspace.sendFiles("z", picked);
+    expect(mixedFiles).toHaveBeenCalledWith("z", picked);
+    expect(h.legacyFiles.sendFiles).not.toHaveBeenCalled();
+    h.workspace.stop();
+  });
+
+  // Requirement 3 of the rollout, against the SHIPPED predicate rather than a
+  // stub: a peer that never announced, or announced a different version, is a
+  // legacy peer even on LAN — and must never be probed with a link request or a
+  // two-channel offer it cannot answer. An old build reads such an offer as a
+  // file transfer whose manifest never arrives, and waits out its stall watchdog.
+  it.each([
+    ["a peer that never announced", null],
+    ["a peer that announced only text/1", [CAP_TEXT]],
+    ["a peer announcing a different link version", [CAP_TEXT, "link/2"]],
+  ])("leaves %s on the legacy path in the LAN room", async (_label, caps) => {
+    const h = setup({ realLinkCaps: true });
+    if (caps) recordPeerCaps("z", { caps });
+    h.workspace.start();
+
+    expect(h.workspace.routes("z")).toBe(false);
+
+    const mixedFiles = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
+    const picked = [{ file: new File(["x"], "x.txt") }];
+    h.workspace.sendFiles("z", picked);
+    await h.workspace.openText("z");
+
+    expect(mixedFiles).not.toHaveBeenCalled();
+    expect(h.legacyFiles.sendFiles).toHaveBeenCalledWith("z", picked);
+    expect(h.legacyText.openWith).toHaveBeenCalledWith("z");
+    // Nothing link-shaped went out: no request, no offer, not even a busy reply.
+    expect(h.sent.filter((s) => (s.data as { link?: boolean }).link === true)).toEqual([]);
+    expect(h.connect).not.toHaveBeenCalled();
+    h.workspace.stop();
+  });
+
+  it("refuses to route a forged link/1 claim inside a pairing-code room", async () => {
+    const h = setup({ realLinkCaps: true });
+    recordPeerCaps("z", { caps: [CAP_TEXT, CAP_LINK] });
+    enterRoom({ code: "123456" });
+
+    expect(h.workspace.routes("z")).toBe(false);
+
+    const mixedFiles = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
+    const mixedText = vi.spyOn(h.workspace.mixed.text, "openWith").mockResolvedValue();
+    const picked = [{ file: new File(["x"], "x.txt") }];
+    h.workspace.sendFiles("z", picked);
+    await h.workspace.openText("z");
+
+    // The pairing room keeps exactly its existing one-mode-at-a-time behaviour.
+    expect(mixedFiles).not.toHaveBeenCalled();
+    expect(mixedText).not.toHaveBeenCalled();
+    expect(h.legacyFiles.sendFiles).toHaveBeenCalledWith("z", picked);
+    expect(h.legacyText.openWith).toHaveBeenCalledWith("z");
+    h.workspace.stop();
+  });
+
+  it("never answers an inbound link request or offer from a pairing-code room", async () => {
+    const h = setup({ realLinkCaps: true });
+    recordPeerCaps("z", { caps: [CAP_TEXT, CAP_LINK] });
+    enterRoom({ code: "123456" });
+    h.workspace.start();
+
+    // "a" < "z", so an inbound request would make us the initiator and an
+    // inbound offer would make us the responder. Both must be dropped, and
+    // dropped SILENTLY: a busy reply would still tell the peer we speak link/1.
+    h.inject("z", { link: true, linkRequest: true } as unknown as InboundSignal);
+    h.setSelfId("zz");
+    h.inject("z", { link: true, sdp: { type: "offer", sdp: "v=0" } } as unknown as InboundSignal);
+
+    expect(h.sent).toEqual([]);
+    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.workspace.linkStatus).toBe("idle");
+    expect(h.workspace.usingMixed).toBe(false);
+    h.workspace.stop();
+  });
+
+  it("clears mixed state and capabilities on a room switch before the new room acts", async () => {
+    const h = setup({ realLinkCaps: true });
+    recordPeerCaps("z", { caps: [CAP_TEXT, CAP_LINK] });
+    await h.workspace.mixed.ensure("z");
+    expect(h.workspace.usingMixed).toBe(true);
+
+    // Exactly what App.switchRoom does, in that order.
+    h.workspace.resetRoom();
+    resetPeerCaps();
+    enterRoom({ code: "123456" });
+
+    expect(h.workspace.usingMixed).toBe(false);
+    expect(h.workspace.linkStatus).toBe("idle");
+    expect(peerSupportsLink("z")).toBe(false);
+    // And leaving the room again does not resurrect the old claim.
+    clearRoom();
+    expect(peerSupportsLink("z")).toBe(false);
     h.workspace.stop();
   });
 });

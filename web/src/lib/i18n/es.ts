@@ -742,6 +742,9 @@ const es: Messages = {
     queuedHint: "Esperan a que termine la transferencia actual. Mientras tanto puedes seguir eligiendo archivos y enviando mensajes.",
     queuedRemove: "Quitar",
     queuedFiles: (count) => (count === 1 ? "1 archivo" : `${count} archivos`),
+    open: "Abrir espacio de trabajo",
+    openWith: (n) => `Abrir un espacio de trabajo compartido con ${n}`,
+    openHint: "Una sola conexión cifrada para archivos y mensajes.",
   },
   text: {
     panelTitle: "Mensaje",

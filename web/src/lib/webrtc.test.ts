@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { connect, connectLink, connectResume, connectResumeLink, connectText, classifyPath, summarizeStats, PeerBusyError, LOCAL_CAPS, LINK_CAPTURE_MAX_BYTES, LINK_CHANNEL_LABELS, TEXT_CAPTURE_MAX_BYTES, authPayload as reExportedAuthPayload, type InboundSignal } from "./webrtc";
+import { connect, connectLink, connectResume, connectResumeLink, connectText, classifyPath, summarizeStats, PeerBusyError, localCaps, LINK_CAPTURE_MAX_BYTES, LINK_CHANNEL_LABELS, TEXT_CAPTURE_MAX_BYTES, authPayload as reExportedAuthPayload, type InboundSignal } from "./webrtc";
 import { TEXT_MAX_BYTES, TEXT_FRAME_OVERHEAD } from "./text-wire";
+import { clearRoom, enterRoom } from "./room.svelte";
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, deriveSession, signResume, verifyResume, type SessionKeys } from "./crypto";
 import { sas } from "./crypto";
@@ -692,7 +693,7 @@ describe("link leave signal domain", () => {
     expect(rPeer && Array.from(rPeer)).toEqual(Array.from(iKey.publicKey));
     expect(sas(iKey.publicKey, iPeer!)).toBe(sas(rKey.publicKey, rPeer!));
     expect(capsSeen).toHaveLength(1);
-    expect(capsSeen[0]).toEqual([...LOCAL_CAPS]);
+    expect(capsSeen[0]).toEqual([...localCaps()]);
 
     openAll();
     const [ic, rc] = await Promise.all([iP, rP]);
@@ -990,7 +991,20 @@ describe("capability piggyback", () => {
   });
 
   it("advertises text/1", () => {
-    expect(LOCAL_CAPS).toContain("text/1");
+    expect(localCaps()).toContain("text/1");
+  });
+
+  // The per-connection confirmation must say what the ROOM allows, not what the
+  // module knew at import time. A frozen constant would keep confirming link/1
+  // on the first connection made after a live room switch (no reload), which is
+  // the one asymmetry that turns a policy into a bug: advertised there, refused
+  // here — or worse, the reverse.
+  it("follows the room, sampled per connection rather than frozen at import", () => {
+    expect(localCaps()).toEqual(["text/1", "link/1"]);
+    enterRoom({ code: "123456" });
+    expect(localCaps()).toEqual(["text/1"]);
+    clearRoom();
+    expect(localCaps()).toEqual(["text/1", "link/1"]);
   });
 
   // Adding `leave` to InboundSignal must be exactly as inert as adding `caps`
@@ -1014,11 +1028,11 @@ describe("capability piggyback", () => {
 
     const offer = hub.sent.I.find((m) => m.sdp?.type === "offer");
     const answer = hub.sent.R.find((m) => m.sdp?.type === "answer");
-    expect(offer?.caps).toEqual([...LOCAL_CAPS]);
-    expect(answer?.caps).toEqual([...LOCAL_CAPS]);
+    expect(offer?.caps).toEqual([...localCaps()]);
+    expect(answer?.caps).toEqual([...localCaps()]);
     // Both sides know the peer's capabilities before the channel opens.
-    expect(iSaw).toEqual([...LOCAL_CAPS]);
-    expect(rSaw).toEqual([...LOCAL_CAPS]);
+    expect(iSaw).toEqual([...localCaps()]);
+    expect(rSaw).toEqual([...localCaps()]);
 
     openAll();
     const [ic, rc] = await Promise.all([iP, rP]);

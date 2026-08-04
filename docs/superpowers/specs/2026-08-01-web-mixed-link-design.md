@@ -1,10 +1,24 @@
 # Web mixed file and text link — batch 10
 
 Date: 2026-08-01
-Status: approved design; implementation in progress.
+Status: approved design; implemented. **Superseded on the release-gate question
+only** — see below.
 Scope owner: Web LAN and realtime/direct transfer between two `link/1` capable
 browser clients. CLI, native-client adoption, stored transfer and server-side
 persistence are excluded.
+
+> **Superseded (2026-08-04).** Every statement below that `link/1` is absent from
+> `capsSignal()`/`LOCAL_CAPS` in a default build, and every reference to the
+> `VITE_RELAYIUM_LINK_E2E` flag and its `dist-link-e2e` bundle, described the
+> pre-release gate. That gate is gone. A default build now implements `link/1`
+> unconditionally (`LINK_BUILD_SUPPORT`) and advertises/routes it **only in the
+> code-less LAN room** (`linkRoomActive()`); pairing-code rooms neither announce
+> it nor accept a forged roster claim for it. `LOCAL_CAPS` is now the function
+> `localCaps()`, sampled per connection so a room switch cannot leave the SDP
+> confirmation disagreeing with the roster hello. See DECISION-LOG
+> "Promote the unified Web peer workspace on LAN before pairing-code rooms".
+> Everything else in this document — the protocol, lanes, consent, recovery and
+> presentation rules — still holds.
 
 ## Problem
 
@@ -282,6 +296,43 @@ queued state. Neither lane's content is announced before consent.
 Legacy peers keep the existing surfaces and receive a concise compatibility note;
 the fallback must be explicit rather than appearing as a random disabled control.
 
+### Entry point and lane availability (2026-08-04)
+
+Wiring the above into App resolved two questions this section had left open.
+
+**One action, not three.** Before a workspace exists, a `link/1` peer in the
+code-less LAN room offers exactly ONE primary action (`.open-workspace`, and the
+card's pointer shortcut does the same) instead of the file / folder / message
+fork. On such a peer that fork asked the user to choose between three things that
+all live in the same place; it only decided which surface happened to build the
+link first. A queued OS share still outranks it: choosing the peer sends that
+explicit outbox rather than discarding it, and never sends a typed draft. Every
+pairing-code room and every peer that cannot route `link/1` — older browsers, the
+native clients, the CLI — keeps the three controls and their selectors exactly.
+
+While the workspace is active/connecting/interrupted it owns the screen: the
+chooser, those per-peer controls and the message-availability hint are hidden,
+and Disconnect brings all of them straight back.
+
+**The text lane opens itself once per link.** A link built by the file lane has
+no conversation on it, and with the peer card hidden there is nothing left to
+click to start one — on either side. So both sides open the text lane
+automatically, exactly once per authenticated `linkGeneration`, only when a real
+link exists and that lane is idle, and never sending anything. The rule lives in
+`web/src/lib/unified-text-open.ts` so its lifecycle cases are testable directly:
+an authenticated transport replacement keeps the same generation and must not
+retrigger; an ended, refused or failed conversation must not reopen on that same
+generation; a new link may open once more. A stale resolution after Disconnect or
+a room switch is left to the lane's own `attempt`/`generation` guards, which is
+why the orchestration writes no state after the call. Simultaneous opens converge
+through the existing `link.role` glare rule into one conversation and one consent
+prompt — on whichever side the roles select.
+
+A terminal text lane offers MessagePanel's explicit `onRestart`, scoped to the
+current link peer and refused when the link is gone. Clear still clears the
+transcript only; Disconnect belongs to the header, and clears App's own draft and
+launcher state synchronously as it tears both lanes down.
+
 ## Delivery stages
 
 1. Add link protocol documentation, capability/generation routing and a reusable
@@ -346,6 +397,32 @@ on every establishment and teardown; `PeerWorkspace` re-exports it. A second lin
 whose SAS collides with the first is therefore a new authentication step and is
 read out again, which the previous digit-keyed dedupe would have swallowed —
 silently, and only for the screen-reader user who most needs to hear it.
+
+That memory is now spent by *rendering*, not by composing. `announce()` returns a
+sentence plus a `confirm()`, and `App` calls `confirm()` only after the flush that
+puts the sentence in the live region and only if no newer edge has taken the
+region since. The reason is a real race rather than tidiness: an announcement is
+a pending state write, so an edge arriving before the next flush replaces it and
+the two writes coalesce, leaving the earlier sentence never rendered at all.
+Committing at compose time let that unheard sentence spend the once-per-link
+allowance, and the edge that actually landed then dropped the code. The trigger
+is ordinary: both tabs auto-open the text lane, and the loser of that glare goes
+`waitingAccept` → `incomingRequest` inside one flush, so `"Waiting for the other
+device to accept…. Verification code NNNNNN"` was composed, coalesced away, and
+replaced by a bare `"X wants to send you a message"` — an authenticated link
+whose code was never announced. Erring toward repeating a code that was on screen
+for one frame is the deliberate trade; losing its only announcement is not.
+
+For the same reason, every product side effect of a unified workspace —
+auto-accept, the reveal/announcement edge, and the new-message notification —
+reads `surfaceText` (the link's own lane while the workspace owns the screen)
+rather than `workspace.text`. That getter deliberately retains a non-idle legacy
+transcript so it stays rendered, which is right for the legacy card and wrong for
+anything that acts: a retained session must not be able to auto-accept a request
+the user was never shown, name the wrong peer in a lock-screen notification, or
+read another connection's code out under the linked peer's name. `workspace.text`
+is now consulted for one question only — whether legacy history remains to render
+outside a mixed workspace.
 
 Both capability announcements now come from one source, `advertisedCaps()`, whose
 only enabling input is the build-time constant `VITE_RELAYIUM_LINK_E2E`. Vite

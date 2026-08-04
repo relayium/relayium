@@ -1,20 +1,24 @@
 #!/usr/bin/env node
 /**
- * 端到端：两个真标签页之间跑一条真的 **统一链路**（`link/1`）。
+ * 端到端：两个真标签页之间跑一条真的 **统一链路**（`link/1`），走的是默认产物的
+ * 默认 LAN UI。
  *
- * 这一套是**选择性**的，不在 `npm run test:e2e` 里，因为 link/1 还没被任何发行构建
- * 通告。它需要一个专门用这个能力构建出来的产物：
- *
- *   cd web    && npm run build:link-e2e                       # → web/dist-link-e2e
- *   cd server && RELAYIUM_STATIC=../web/dist-link-e2e RELAYIUM_ADDR=:8098 go run .
+ *   cd web    && npm run build
+ *   cd server && RELAYIUM_STATIC=../web/dist RELAYIUM_ADDR=:8098 go run .
  *   cd web    && npm run test:e2e:mixed                       # 默认 --url :8098
  *
- * 那个构建旗标（peer-caps.svelte.ts 的 VITE_RELAYIUM_LINK_E2E）是 link/1 唯一的
- * 开关，而且是**构建期**的：默认产物把它折叠成 false，页面里没有任何查询参数、
- * 存储项或全局函数能把它打开。产物也刻意不叫 dist/，免得哪次部署顺手把它捡走。
+ * 它仍然和 `npm run test:e2e` 分开跑，因为它要一个自己的服务器端口和一整套自己的
+ * 场景，不是因为这条协议还藏着。
  *
- * 脚本一上来就先确认自己确实指着那个产物（读页面真正发出去的名册通告）。不做这件事的
- * 话，"拿错了 dist" 会伪装成 "链路建不起来" —— 一条看起来像回归的假红。
+ * link/1 的作用域由**房间**决定，不由构建旗标决定：默认产物在无配对码的 LAN 房间
+ * （就是这里开的 `/`）通告并路由它，在配对码房间既不通告也不接受。脚本一上来先读
+ * 页面真正发出去的名册通告确认这一点。不做这件事的话，"服务器指着旧 dist" 会伪装
+ * 成 "链路建不起来" —— 一条看起来像回归的假红。
+ *
+ * 这里跑的就是**默认的 LAN 界面**：一个能说 link/1 的对端只提供**一个**主动作
+ * （`.open-workspace`），它打开的工作区自己带着草稿框和附件控件（`.attach-file`）。
+ * 老的"文件 / 文件夹 / 消息"三选一只属于说不了这条协议的对端和所有配对码房间，
+ * 那条路由 `lan-transfer.mjs` 覆盖。
  *
  * 覆盖的是单元测试碰不到的那一段：真 caps → 真 link 请求/应答 → 真 commit-reveal →
  * 一条 PeerConnection 上的两条 DataChannel → 文件与消息两条通道各自的同意状态机 →
@@ -52,11 +56,40 @@ const SHOTS = shotsArg === null || !shotsArg || shotsArg.startsWith("--")
 const MSG_BODY = "  \tif x:\n\n\t\tprint('\u4f60\u597d \u0645\u0631\u062d\u0628\u0627 \ud83c\udf0d')\n   \n  trailing   ";
 const utf8Hex = (s) => [...Buffer.from(s, "utf8")].map((b) => b.toString(16).padStart(2, "0")).join("");
 
-/** 唯一的 <button>：文件/文件夹那两个是 <label>。结构选择器，九种语言和换图标都打不断。 */
-const MSG_OPEN_BTN = ".peer-actions button";
-const FILE_INPUT = ".peer-actions .pa-files > .file-pick-input";
+/** 默认 LAN UI 的**唯一**主动作。语义选择器，九种语言和换图标都打不断。 */
+const OPEN_WORKSPACE = ".open-workspace";
+/** 附件住在统一工作区里，不在对端卡片上——工作区一开，卡片就整个收走了。 */
+const ATTACH_FILE = ".msgpanel .attach-file";
 const HEAD = ".workspace-head";
 const HEAD_SAS = ".workspace-head .sas code";
+const TEXT_CONSENT = ".msgpanel .req";
+/**
+ * 记下 live region 说过的**每一句**话。
+ *
+ * 光读"此刻 live region 里是什么"是不够的：一条链路只念一次码（见
+ * activity-announcement.ts），而那一次落在这条链路的**第一条**边上——那条边未必就是
+ * 最后停在屏幕上的那一张卡片。两边都会自动开一次文本通道，所以输掉 glare 的那一边
+ * 真实的序列是「等待对方接受（含码）」→「X 想给你发消息」。只看后者会得出"这条链路
+ * 从来没念过码"的错误结论。
+ *
+ * 所以这里记全序列，断言"这条链路念过它自己的码"，同时另外单独断言"同一条链路上后来
+ * 的边不再念一遍"。
+ */
+const TRACK_ANNOUNCEMENTS = `
+  window.__e2eAnnouncements = [];
+  (function install() {
+    const el = document.querySelector('.activity-announcement');
+    if (!el) { setTimeout(install, 50); return; }
+    const push = () => {
+      const text = (el.textContent || '').trim();
+      if (text && window.__e2eAnnouncements[window.__e2eAnnouncements.length - 1] !== text) {
+        window.__e2eAnnouncements.push(text);
+      }
+    };
+    push();
+    new MutationObserver(push).observe(el, { childList: true, characterData: true, subtree: true });
+  })();
+`;
 const TRACK_PEER_CONNECTIONS = `
   window.__e2ePeerConnections = [];
   window.RTCPeerConnection = new Proxy(window.RTCPeerConnection, {
@@ -77,6 +110,31 @@ async function screenshot(tab, name) {
   writeFileSync(file, Buffer.from(data, "base64"));
   console.log(`      ↳ ${file}`);
 }
+
+/**
+ * 从统一工作区里选文件。**只有这一条路**：默认 LAN UI 上的对端卡片没有文件控件，
+ * 工作区一活起来连卡片本身都收走了。顺手断言控件是可用的——传输中再选文件要排队，
+ * 不是把控件禁掉，所以一个 disabled 的附件按钮本身就是回归。
+ */
+const pickFiles = (build) => `(() => {
+  const input = document.querySelector('${ATTACH_FILE}');
+  if (!input) throw new Error('no file attachment control in the unified workspace');
+  if (input.disabled) throw new Error('the unified attachment control was disabled');
+  const dt = new DataTransfer();
+  ${build}
+  input.files = dt.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+})()`;
+
+const pickOne = (name) => pickFiles(
+  `dt.items.add(new File(['x'], ${JSON.stringify(name)}, { type: 'text/plain' }));`,
+);
+
+const announcementOf = "(document.querySelector('.activity-announcement')?.textContent ?? '')";
+/** 这个标签页到目前为止说过多少句——拿来给"从这一刻起"的断言划一条线。 */
+const announcedCount = (tab) => tab.evaluate("window.__e2eAnnouncements.length");
+const announcedSince = (tab, mark) => tab.evaluate(`window.__e2eAnnouncements.slice(${mark})`);
 
 /**
  * 一条链路一个 SAS —— 这套 UI 最核心的一条规矩，所以它是一个可以在每个阶段复用的断言。
@@ -110,6 +168,22 @@ async function oneSas(tab, who, where) {
     throw new Error(`${who} showed more than one verification surface ${where}: ${JSON.stringify(seen)}`);
   }
   return seen.code;
+}
+
+/**
+ * 工作区一活起来，设备选择器和那条"可以发消息"的提示就该整个收走：它们描述的是一台
+ * 你**还没**连上的设备，留在活着的工作区旁边等于给出第二条互相矛盾的入口。
+ */
+async function chooserHidden(tab, who, where) {
+  const seen = await tab.evaluate(`({
+    peers: document.querySelectorAll('.peers').length,
+    openWorkspace: document.querySelectorAll('${OPEN_WORKSPACE}').length,
+    peerActions: document.querySelectorAll('.peer-actions').length,
+    hint: document.querySelectorAll('.text-availability').length,
+  })`);
+  if (seen.peers !== 0 || seen.openWorkspace !== 0 || seen.peerActions !== 0 || seen.hint !== 0) {
+    throw new Error(`${who} kept the device chooser up while the workspace owned the screen ${where}: ${JSON.stringify(seen)}`);
+  }
 }
 
 /** 手机上"下一步要做的事"必须在第一屏里，而且不能横向溢出。 */
@@ -161,6 +235,36 @@ async function mobileDecisionVisible(tab, who, cardSelector, label) {
   return layout;
 }
 
+/**
+ * 等文本同意卡出现，但**不预设它落在哪一边**。
+ *
+ * 两边的工作区都会为这条链路自动开一次文本通道（否则只有点了按钮的那一边有草稿框，
+ * 另一边连一个能点的东西都没有——卡片已经收走了）。两个请求撞在一起时，协议按
+ * link.role 收敛成**一个**会话、**一次**同意提示，而那一次落在哪一边取决于真实的
+ * 网络时序。所以这里等的是"有且只有一边在问"，不是"B 在问"。
+ */
+async function awaitTextConsent(tabs, timeoutMs = 45_000) {
+  const started = Date.now();
+  for (;;) {
+    const asking = [];
+    for (const [who, tab] of tabs) {
+      if (await tab.evaluate(`!!document.querySelector('${TEXT_CONSENT}')`)) asking.push([who, tab]);
+    }
+    if (asking.length === 1) {
+      const [who, tab] = asking[0];
+      const other = tabs.find(([name]) => name !== who);
+      return { who, tab, otherWho: other[0], other: other[1] };
+    }
+    if (asking.length > 1) {
+      throw new Error(`both tabs raised a text consent prompt: the simultaneous-open collision did not converge`);
+    }
+    if (Date.now() - started > timeoutMs) {
+      throw new Error(`no text consent prompt appeared on either tab within ${timeoutMs}ms`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+}
+
 const setLocale = async (tab, code) => {
   await tab.evaluate(`(() => {
     const select = document.querySelector('select.lang');
@@ -197,12 +301,12 @@ const setTheme = async (tab, value) => {
 
 async function mixedScenario(browser) {
   // A 发起，B 收（另存为被桩掉）。两边都装上只读的 caps 探针：跑任何断言之前先确认
-  // 这个产物真的通告了 link/1。
+  // 这个默认产物在这个 LAN 房间里真的通告了 link/1。
   // This scenario is about the unified workspace's verification presentation,
   // which only exists with advanced verification ON. It is off by default, so
   // both tabs opt in before boot.
-  const a = await newTab(browser, BASE + "/", VERIFY_ON + OBSERVE_CAPS + TRACK_PEER_CONNECTIONS);
-  const b = await newTab(browser, BASE + "/", VERIFY_ON + OBSERVE_CAPS + SAVE_STUB + TRACK_PEER_CONNECTIONS);
+  const a = await newTab(browser, BASE + "/", VERIFY_ON + OBSERVE_CAPS + TRACK_ANNOUNCEMENTS +TRACK_PEER_CONNECTIONS);
+  const b = await newTab(browser, BASE + "/", VERIFY_ON + OBSERVE_CAPS + TRACK_ANNOUNCEMENTS +SAVE_STUB + TRACK_PEER_CONNECTIONS);
   await setWideViewport(a, 390, 844);
   await setWideViewport(b, 390, 844);
 
@@ -215,42 +319,48 @@ async function mixedScenario(browser) {
     const advertised = await tab.evaluate("window.__advertisedCaps");
     if (!advertised.includes("link/1")) {
       throw new Error(
-        `tab ${who} advertised ${JSON.stringify(advertised)} — this build does not enable link/1.\n` +
-        `    Point --url at a link-enabled build, not the default dist:\n` +
-        `      cd web    && npm run build:link-e2e\n` +
-        `      cd server && RELAYIUM_STATIC=../web/dist-link-e2e RELAYIUM_ADDR=:8098 go run .`,
+        `tab ${who} advertised ${JSON.stringify(advertised)} — no link/1 in the code-less LAN room.\n` +
+        `    Either the server is holding a stale dist, or the build stopped advertising it:\n` +
+        `      cd web    && npm run build\n` +
+        `      cd server && RELAYIUM_STATIC=../web/dist RELAYIUM_ADDR=:8098 go run .`,
       );
     }
   }
-  ok("both tabs advertised link/1 from the opt-in build and discovered each other");
+  ok("both tabs advertised link/1 from the default build and discovered each other");
 
-  // ── 一、一批文件把链路建起来，并且是**一条**链路 ─────────────────────────
-  // 40 个长名字的小文件：既是"建链"的动作，也顺手把长内容列表铺出来，好在下面检查
-  // 粘性头部。
-  await a.evaluate(`(() => {
-    const input = document.querySelector('${FILE_INPUT}');
-    if (!input) throw new Error('no file input on the peer card');
-    const dt = new DataTransfer();
-    for (let i = 0; i < 40; i++) {
-      dt.items.add(new File(
-        ['x'],
-        'unified-workspace-' + String(i).padStart(2, '0') + '-with-a-deliberately-long-name.txt',
-        { type: 'text/plain' },
-      ));
-    }
-    input.files = dt.files;
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
+  // ── 一、默认 LAN 卡片只有**一个**动作，它打开的就是整个工作区 ─────────────
+  const card = await a.evaluate(`(() => {
+    const actions = document.querySelector('.peer-actions');
+    return {
+      open: document.querySelectorAll('${OPEN_WORKSPACE}').length,
+      controls: actions ? actions.children.length : 0,
+      // 老的三选一：文件 <label>、文件夹 <label>、消息 <button>。一个都不该在。
+      legacyPickers: document.querySelectorAll('.peer-actions .file-pick-input').length,
+      named: (document.querySelector('${OPEN_WORKSPACE}')?.textContent ?? '').trim(),
+      heads: document.querySelectorAll('${HEAD}').length,
+    };
   })()`);
+  if (card.open !== 1 || card.controls !== 1 || card.legacyPickers !== 0 || !card.named || card.heads !== 0) {
+    throw new Error(`the default LAN peer card is not a single workspace action: ${JSON.stringify(card)}`);
+  }
+  await screenshot(a, "peer-card-one-action");
+  ok("a link-capable LAN peer offered exactly one action and no file/folder/message fork");
 
+  const firstLinkMark = { a: await announcedCount(a), b: await announcedCount(b) };
+  await a.evaluate(`(() => { document.querySelector('${OPEN_WORKSPACE}').click(); return true; })()`);
   await a.waitFor(`!!document.querySelector('${HEAD_SAS}')`, "tab A's unified workspace header", 45_000);
   await b.waitFor(`!!document.querySelector('${HEAD_SAS}')`, "tab B's unified workspace header", 45_000);
-  await b.waitFor("!!document.querySelector('.request')", "tab B's file consent card", 45_000);
 
-  const sasA = await oneSas(a, "tab A", "while a file batch awaits consent");
-  const sasB = await oneSas(b, "tab B", "while a file batch awaits consent");
+  const sasA = await oneSas(a, "tab A", "on a freshly opened workspace");
+  const sasB = await oneSas(b, "tab B", "on a freshly opened workspace");
   if (sasA !== sasB) throw new Error(`link SAS mismatch: ${sasA} vs ${sasB}`);
-  ok(`one link, one SAS on both tabs (${sasA}) — no lane card repeated it`);
+  ok(`one action opened one link with one SAS on both tabs (${sasA})`);
+
+  // 工作区一活起来，选择器和提示就整个收走。
+  for (const [who, tab] of [["tab A", a], ["tab B", b]]) {
+    await chooserHidden(tab, who, "right after the workspace opened");
+  }
+  ok("the chooser, the old peer actions and the availability hint all went away");
 
   // 头部说清楚"和谁、什么状态、走哪条路"，并且带着显式断开。
   const headContract = await b.evaluate(`(() => {
@@ -275,18 +385,62 @@ async function mixedScenario(browser) {
 
   await scanLiveState(a, "mixed workspace header (one authenticated link)");
 
+  // ── 二、这条链路的第一次同意：文本通道，无自动聚焦，念一次码 ───────────────
+  const consent = await awaitTextConsent([["tab A", a], ["tab B", b]]);
+  const quiet = await consent.tab.evaluate(`({
+    bodies: document.querySelectorAll('.msg-body').length,
+    composer: document.querySelectorAll('.msgpanel textarea').length,
+    panelSas: document.querySelectorAll('.msgpanel .sas').length,
+  })`);
+  if (quiet.bodies !== 0 || quiet.composer !== 0 || quiet.panelSas !== 0) {
+    throw new Error(`text consent card leaked content or a second code: ${JSON.stringify(quiet)}`);
+  }
+  await oneSas(consent.tab, consent.who, "on the text consent card");
+  // activityFocused 是这里的重点之一：同意界面不许把焦点抢走，决定是用户按下去的。
+  const textEdge = await mobileDecisionVisible(consent.tab, consent.who, ".msgpanel", "a text consent card");
+  if (!textEdge.announcement) throw new Error("the text consent edge announced nothing at all");
+  // 这条链路必须念过它自己那串码——但念的是它的**第一条**边，而那条边未必是最后停在
+  // 屏幕上的这张卡片（见 TRACK_ANNOUNCEMENTS）。所以查的是这条链路建立以来说过的全部。
+  const mark = consent.who === "tab A" ? firstLinkMark.a : firstLinkMark.b;
+  const spoken = await announcedSince(consent.tab, mark);
+  if (!spoken.some((line) => line.includes(sasA))) {
+    throw new Error(`this link never announced its code on ${consent.who}: ${JSON.stringify(spoken)}`);
+  }
+  await screenshot(consent.tab, "mobile-text-consent");
+  await scanLiveState(consent.tab, "mixed text consent card (390px)");
+
+  await consent.tab.evaluate("(() => { document.querySelector('.msgpanel .act button.btn-primary').click(); return true; })()");
+  await a.waitFor("!!document.querySelector('.msgpanel textarea')", "tab A's composer (session open)", 40_000);
+  await b.waitFor("!!document.querySelector('.msgpanel textarea')", "tab B's composer (session open)");
+  ok(`${consent.who} completed the text consent without autofocus; both tabs got a composer`);
+
+  // ── 三、40 个文件，从统一工作区的附件控件里选 ─────────────────────────────
+  // 既是"这条链路还能开第二条通道"的动作，也顺手把长内容列表铺出来，好在下面检查
+  // 粘性头部。
+  await a.evaluate(pickFiles(`
+    for (let i = 0; i < 40; i++) {
+      dt.items.add(new File(
+        ['x'],
+        'unified-workspace-' + String(i).padStart(2, '0') + '-with-a-deliberately-long-name.txt',
+        { type: 'text/plain' },
+      ));
+    }
+  `));
+  await b.waitFor("!!document.querySelector('.request')", "tab B's file consent card", 45_000);
+  await oneSas(b, "tab B", "while a 40-file batch awaits consent");
+
   const fileEdge = await mobileDecisionVisible(b, "tab B", ".request", "a 40-file consent card");
-  // 这条链路的第一个同意边，读屏器必须听到那六位码。
-  if (!fileEdge.announcement.includes(sasB)) {
-    throw new Error(`the first consent edge never announced the link code: ${JSON.stringify(fileEdge.announcement)}`);
+  // 同一条链路的又一条边：码已经念过一次，而且一直挂在钉住的头部里，所以这里不该
+  // 再念一遍。这正是那条"每条链路只念一次"的规矩，在真浏览器里验它。
+  if (!fileEdge.announcement) throw new Error("the file consent edge announced nothing at all");
+  if (fileEdge.announcement.includes(sasB)) {
+    throw new Error(`a later edge on the SAME link re-read the code: ${JSON.stringify(fileEdge.announcement)}`);
   }
   await screenshot(b, "mobile-file-consent");
-  ok("a 40-file consent card stayed decidable inside a 390px viewport and announced the code");
-
-  // 文件通道的同意卡：40 个文件 + SAS + 同意按钮，全在 390px 里。
   await scanLiveState(b, "mixed file consent card (390px)");
+  ok("a 40-file batch chosen from the workspace stayed decidable at 390px without re-reading the code");
 
-  // ── 二、粘性：长列表滚下去，唯一的 SAS 不能滚出验证语境 ───────────────────
+  // ── 四、粘性：长列表滚下去，唯一的 SAS 不能滚出验证语境 ───────────────────
   // 只滚固定的一段，不滚到页面最底下：滚出粘性头部的包含块之后它本来就该松开，那时
   // 再断言"还钉着"测的就不是这条规矩了。300px 足够证明区别——一个不粘的头部这时
   // 会在 top ≈ -300 的地方。
@@ -317,39 +471,38 @@ async function mixedScenario(browser) {
   await b.evaluate("scrollTo(0, 0); true");
   ok("the sole SAS stayed pinned after scrolling a long file manifest");
 
-  // ── 三、传输中再选文件 → 可见、可取消的队列，而不是被禁用的控件 ───────────
-  await a.evaluate(`(() => {
-    const input = document.querySelector('${FILE_INPUT}');
-    const dt = new DataTransfer();
+  // ── 五、传输中再选文件 → 可见、可取消的队列，而不是被禁用的控件 ───────────
+  // pickFiles 自己就会在附件控件是 disabled 的时候抛错，所以"排队而不是禁用"这条
+  // 规矩在选之前和选之后各钉了一次。
+  await a.evaluate(pickFiles(`
     dt.items.add(new File(['queued-one'], 'queued-one.txt', { type: 'text/plain' }));
     dt.items.add(new File(['queued-two'], 'queued-two.txt', { type: 'text/plain' }));
-    input.files = dt.files;
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  })()`);
+  `));
   await a.waitFor("!!document.querySelector('.queued')", "tab A's visible outbound queue", 20_000);
   const queue = await a.evaluate(`(() => {
     const card = document.querySelector('.queued');
-    const input = document.querySelector('${FILE_INPUT}');
+    const input = document.querySelector('${ATTACH_FILE}');
     return {
       rows: card.querySelectorAll('li').length,
       cancels: card.querySelectorAll('.queued-cancel').length,
       names: [...card.querySelectorAll('.fname')].map((el) => el.textContent.trim()),
-      // 关键：选了新文件之后，文件控件仍然是可用的 —— 排队正是为了不禁用它。
+      // 关键：选了新文件之后，附件控件仍然是可用的 —— 排队正是为了不禁用它。
       pickerDisabled: !!input.disabled,
+      // 文本仍然可用：两条通道互不阻塞。
+      composer: document.querySelectorAll('.msgpanel textarea').length,
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     };
   })()`);
-  if (queue.rows !== 1 || queue.cancels !== 1 || queue.pickerDisabled || queue.overflow !== 0
-    || !queue.names[0].includes("queued-one")) {
+  if (queue.rows !== 1 || queue.cancels !== 1 || queue.pickerDisabled || queue.composer !== 1
+    || queue.overflow !== 0 || !queue.names[0].includes("queued-one")) {
     throw new Error(`queued-batch contract failed: ${JSON.stringify(queue)}`);
   }
   await oneSas(a, "tab A", "while a batch is queued");
   await a.evaluate("(() => { document.querySelector('.queued .queued-cancel').click(); return true; })()");
   await a.waitFor("!document.querySelector('.queued')", "the cancelled queue entry to disappear");
-  ok("a second selection queued visibly, kept the picker usable and cancelled by id");
+  ok("a second selection queued visibly, kept both the picker and the composer usable, and cancelled by id");
 
-  // ── 四、文件同意可以拒绝，而链路活下来 ──────────────────────────────────
+  // ── 六、文件同意可以拒绝，而链路和会话都活下来 ────────────────────────────
   await b.evaluate(`(() => {
     const reject = document.querySelector('.request .btn-ghost');
     if (!reject) throw new Error('no decline action on the consent card');
@@ -363,13 +516,59 @@ async function mixedScenario(browser) {
     40_000,
   );
   for (const [who, tab] of [["tab A", a], ["tab B", b]]) {
-    const alive = await tab.evaluate(`document.querySelectorAll('${HEAD}').length`);
-    if (alive !== 1) throw new Error(`${who} tore the link down over one rejected batch (${alive} headers)`);
+    const alive = await tab.evaluate(`({
+      heads: document.querySelectorAll('${HEAD}').length,
+      composers: document.querySelectorAll('.msgpanel textarea').length,
+    })`);
+    if (alive.heads !== 1 || alive.composers !== 1) {
+      throw new Error(`${who} lost the link or the conversation over one rejected batch: ${JSON.stringify(alive)}`);
+    }
     await oneSas(tab, who, "after a rejected file batch");
   }
-  ok("declining a file batch ended the batch and left the one link open");
+  ok("declining a file batch ended the batch and left the one link and its conversation open");
 
-  // ── 五、真传输断线后从 durable checkpoint 续传，不重新同意 ───────────────
+  // ── 七、正文逐字节一致，同时文件能力仍然可用 ──────────────────────────────
+  // 三步，不是一步：`disabled` 是从 draft 派生出来的，而 Svelte 的更新是批处理的 ——
+  // 在派发 input 的**同一个**同步块里读 btn.disabled，读到的是上一帧的值。
+  await a.evaluate(`(() => {
+    const ta = document.querySelector('.msgpanel textarea');
+    ta.value = ${JSON.stringify(MSG_BODY)};
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`);
+  // 字节计数器必须跟着动 —— 它显示的就是限制在比的那个数。
+  const counted = await a.evaluate("(() => { const c = document.querySelector('.byte-count'); return c ? c.textContent : ''; })()");
+  if (!counted) throw new Error("the byte counter is missing from the composer");
+  await a.waitFor(
+    "!document.querySelector('.msgpanel button.send').disabled",
+    "send to be enabled for a body inside the limit",
+    10_000,
+  );
+  // 打着字的时候文件能力必须还在：统一工作区的整个主张就是两条通道同时可用。
+  const bothLanes = await a.evaluate(`({
+    attachDisabled: !!document.querySelector('${ATTACH_FILE}').disabled,
+    sendDisabled: !!document.querySelector('.msgpanel button.send').disabled,
+  })`);
+  if (bothLanes.attachDisabled || bothLanes.sendDisabled) {
+    throw new Error(`text and file intent were not simultaneously available: ${JSON.stringify(bothLanes)}`);
+  }
+  await a.evaluate("(() => { document.querySelector('.msgpanel button.send').click(); return true; })()");
+  await b.waitFor("document.querySelectorAll('.msg-body').length >= 1", "tab B to render the message", 40_000);
+  const gotHex = await b.evaluate(`(() => {
+    const bytes = new TextEncoder().encode(document.querySelector('.msg-body').textContent);
+    return [...bytes].map(x => x.toString(16).padStart(2, '0')).join('');
+  })()`);
+  if (gotHex !== utf8Hex(MSG_BODY)) {
+    throw new Error(`message body is not byte-identical\n      got  ${gotHex}\n      want ${utf8Hex(MSG_BODY)}`);
+  }
+  for (const [who, tab] of [["tab A", a], ["tab B", b]]) {
+    const code = await oneSas(tab, who, "with both lanes used on one link");
+    if (code !== sasA) throw new Error(`${who} changed the link SAS mid-session: ${code} vs ${sasA}`);
+  }
+  await scanLiveState(b, "mixed workspace with both lanes live");
+  ok(`text was exchanged byte-identically while the file control stayed usable, still under one SAS (${sasA})`);
+
+  // ── 八、真传输断线后从 durable checkpoint 续传，不重新同意 ─────────────────
   const RESUME_BYTES = 5 * 1024 * 1024 + 73;
   await b.evaluate(`(() => {
     window.__e2e.chunks = [];
@@ -380,16 +579,11 @@ async function mixedScenario(browser) {
     window.__e2e.writeDelayMs = 20;
     return true;
   })()`);
-  await a.evaluate(`(() => {
-    const input = document.querySelector('${FILE_INPUT}');
+  await a.evaluate(pickFiles(`
     const body = new Uint8Array(${RESUME_BYTES});
     for (let i = 0; i < body.length; i++) body[i] = (i * 31 + 7) % 251;
-    const dt = new DataTransfer();
     dt.items.add(new File([body], 'resume-on-the-same-link.bin'));
-    input.files = dt.files;
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  })()`);
+  `));
   await b.waitFor("!!document.querySelector('.request')", "the resumable file consent card", 40_000);
   await b.evaluate("(() => { document.querySelector('.request .btn-primary').click(); return true; })()");
   await b.waitFor(
@@ -445,12 +639,18 @@ async function mixedScenario(browser) {
       mismatch,
       requests: document.querySelectorAll('.request').length,
       peerConnections: window.__e2ePeerConnections.length,
+      // 会话被传输中断关掉了（它没有前向恢复点），但**记录还在**，而且重开是一次
+      // 显式动作而不是自动重连——自动重开会在对方那边再弹一次同意提示。
+      transcript: document.querySelectorAll('.msg-body').length,
+      restarts: document.querySelectorAll('.msgpanel .restart').length,
+      attach: document.querySelectorAll('${ATTACH_FILE}').length,
     };
   })()`);
   const senderPcs = await a.evaluate("window.__e2ePeerConnections.length");
   if (
     resumed.bytes !== RESUME_BYTES || resumed.opens !== 1 || !resumed.closed ||
-    resumed.mismatch !== -1 || resumed.requests !== 0
+    resumed.mismatch !== -1 || resumed.requests !== 0 ||
+    resumed.transcript !== 1 || resumed.restarts !== 1 || resumed.attach !== 1
   ) {
     throw new Error(`byte-resume contract failed: ${JSON.stringify({ ...resumed, before: pcCounts })}`);
   }
@@ -467,78 +667,13 @@ async function mixedScenario(browser) {
   for (const [who, tab] of [["tab A", a], ["tab B", b]]) {
     const code = await oneSas(tab, who, "after a byte-level file resume");
     if (code !== sasA) throw new Error(`${who} changed SAS while resuming: ${code} vs ${sasA}`);
+    await chooserHidden(tab, who, "after a byte-level file resume");
   }
   ok(`a ${RESUME_BYTES}-byte file resumed exactly on rebuilt PeerConnections `
     + `(A ${pcCounts.a}→${senderPcs}, B ${pcCounts.b}→${resumed.peerConnections}), `
-    + "with one picker and unchanged SAS");
+    + "keeping the transcript, the attachments and the SAS, and offering one explicit restart");
 
-  // ── 六、同一条链路上开消息：同意后真的收发正文 ───────────────────────────
-  await a.evaluate(`(() => {
-    const button = document.querySelector('${MSG_OPEN_BTN}');
-    if (!button) throw new Error('no message control on the peer card');
-    button.focus();
-    button.click();
-    return true;
-  })()`);
-  await b.waitFor("!!document.querySelector('.msgpanel')", "tab B's message request", 40_000);
-  const beforeConsent = await b.evaluate(`({
-    bodies: document.querySelectorAll('.msg-body').length,
-    composer: document.querySelectorAll('.msgpanel textarea').length,
-    panelSas: document.querySelectorAll('.msgpanel .sas').length,
-  })`);
-  if (beforeConsent.bodies !== 0 || beforeConsent.composer !== 0 || beforeConsent.panelSas !== 0) {
-    throw new Error(`text consent card leaked content or a second code: ${JSON.stringify(beforeConsent)}`);
-  }
-  await oneSas(b, "tab B", "on the text consent card");
-  const textEdge = await mobileDecisionVisible(b, "tab B", ".msgpanel", "a text consent card");
-  // 同一条链路的第二条通道：这条边要announce它自己，但**不能**再把码念一遍——码
-  // 一直挂在钉住的头部里。这正是那条"每条链路只念一次"的规矩，在真浏览器里验它。
-  if (!textEdge.announcement) throw new Error("the text consent edge announced nothing at all");
-  if (textEdge.announcement.includes(sasB)) {
-    throw new Error(`the second lane re-announced the same link's code: ${JSON.stringify(textEdge.announcement)}`);
-  }
-  await screenshot(b, "mobile-text-consent");
-  ok("the second lane consented under the same SAS without re-reading it aloud");
-
-  // 文本通道同意之后：同一条链路上两条通道都活着，消息记录也在。
-  await scanLiveState(b, "mixed text lane consented (both lanes live)");
-
-  await b.evaluate("(() => { document.querySelector('.msgpanel .act button.btn-primary').click(); return true; })()");
-  await a.waitFor("!!document.querySelector('.msgpanel textarea')", "tab A's composer (session open)", 40_000);
-  await b.waitFor("!!document.querySelector('.msgpanel textarea')", "tab B's composer (session open)");
-
-  // 三步，不是一步：`disabled` 是从 draft 派生出来的，而 Svelte 的更新是批处理的 ——
-  // 在派发 input 的**同一个**同步块里读 btn.disabled，读到的是上一帧的值。
-  await a.evaluate(`(() => {
-    const ta = document.querySelector('.msgpanel textarea');
-    ta.value = ${JSON.stringify(MSG_BODY)};
-    ta.dispatchEvent(new Event('input', { bubbles: true }));
-    return true;
-  })()`);
-  // 字节计数器必须跟着动 —— 它显示的就是限制在比的那个数。
-  const counted = await a.evaluate("(() => { const c = document.querySelector('.byte-count'); return c ? c.textContent : ''; })()");
-  if (!counted) throw new Error("the byte counter is missing from the composer");
-  await a.waitFor(
-    "!document.querySelector('.msgpanel button.send').disabled",
-    "send to be enabled for a body inside the limit",
-    10_000,
-  );
-  await a.evaluate("(() => { document.querySelector('.msgpanel button.send').click(); return true; })()");
-  await b.waitFor("document.querySelectorAll('.msg-body').length >= 1", "tab B to render the message", 40_000);
-  const gotHex = await b.evaluate(`(() => {
-    const bytes = new TextEncoder().encode(document.querySelector('.msg-body').textContent);
-    return [...bytes].map(x => x.toString(16).padStart(2, '0')).join('');
-  })()`);
-  if (gotHex !== utf8Hex(MSG_BODY)) {
-    throw new Error(`message body is not byte-identical\n      got  ${gotHex}\n      want ${utf8Hex(MSG_BODY)}`);
-  }
-  for (const [who, tab] of [["tab A", a], ["tab B", b]]) {
-    const code = await oneSas(tab, who, "with both lanes used on one link");
-    if (code !== sasA) throw new Error(`${who} changed the link SAS mid-session: ${code} vs ${sasA}`);
-  }
-  ok(`text was exchanged byte-identically on the same link, still under one SAS (${sasA})`);
-
-  // ── 七、320px、RTL 和深色：最窄的屏幕上头部仍然是可读、可操作、不溢出的 ────
+  // ── 九、320px、RTL 和深色：最窄的屏幕上头部仍然是可读、可操作、不溢出的 ────
   const painted = {};
   for (const variant of [
     { name: "320-ltr-light", width: 320, locale: "en", theme: "light", rtl: false },
@@ -558,11 +693,13 @@ async function mixedScenario(browser) {
       const sas = head.querySelector('.sas').getBoundingClientRect();
       const dc = head.querySelector('.wh-disconnect').getBoundingClientRect();
       const panel = document.querySelector('.msgpanel');
+      const attach = document.querySelector('.msgpanel .attach');
       const rtl = document.documentElement.dir === 'rtl';
       return {
         pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         headOverflow: head.scrollWidth - head.clientWidth,
         panelOverflow: panel ? panel.scrollWidth - panel.clientWidth : 0,
+        attachOverflow: attach ? attach.scrollWidth - attach.clientWidth : 0,
         inside: rect.left >= -1 && rect.right <= innerWidth + 1,
         sasInside: sas.left >= -1 && sas.right <= innerWidth + 1 && sas.top >= 0,
         disconnectInside: dc.left >= -1 && dc.right <= innerWidth + 1 && dc.height >= 24,
@@ -577,6 +714,7 @@ async function mixedScenario(browser) {
     })()`);
     if (
       layout.pageOverflow !== 0 || layout.headOverflow > 1 || layout.panelOverflow > 1 ||
+      layout.attachOverflow > 1 ||
       !layout.inside || !layout.sasInside || !layout.disconnectInside || !layout.disconnectAtRowEnd
     ) {
       throw new Error(`${variant.name} workspace header layout failed: ${JSON.stringify(layout)}`);
@@ -587,8 +725,9 @@ async function mixedScenario(browser) {
     }
     painted[variant.theme] = { bg: layout.headBackground, fg: layout.headText };
     await oneSas(b, "tab B", `at ${variant.name}`);
+    await scanLiveState(b, `mixed workspace at ${variant.name}`);
     await screenshot(b, variant.name);
-    ok(`${variant.name}: the header stayed inside the viewport, mirrored correctly and kept one SAS`);
+    ok(`${variant.name}: the workspace stayed inside the viewport, mirrored correctly and kept one SAS`);
   }
   // 不这么比的话，"深色"那一格其实什么也没验证：一个只有浅色 token 的头部同样能
   // 通过上面每一条几何断言。这一条要求深浅两套真的画出了不同的东西。
@@ -600,29 +739,17 @@ async function mixedScenario(browser) {
   await setTheme(b, "system");
   await setWideViewport(b, 390, 844);
 
-  // ── 八、一次"活过了自己那条链路"的待决同意 ──────────────────────────────
+  // ── 十、一次"活过了自己那条链路"的待决同意 ───────────────────────────────
   //
-  // 这一幕针对的是一个很具体的怀疑：App 的 revealReveal 去重键是
-  // `file:recv:<peer>`，**不含**链路世代。同一个对端、同一条通道，第二条链路算出来
-  // 的键和第一条一模一样。如果那个键在两条链路之间没被清掉，第二次认证边就会被
-  // 整个吞掉——而被吞掉的恰恰是"这是一串新的验证码"这件事，且只有读屏用户会被影响。
+  // 这一幕针对的是一个很具体的怀疑：App 的 reveal 去重键是 `file:recv:<peer>` /
+  // `text:<status>:<peer>`，**不含**链路世代。同一个对端、同一条通道，第二条链路
+  // 算出来的键和第一条一模一样。如果那个键在两条链路之间没被清掉，第二次认证边就会
+  // 被整个吞掉——而被吞掉的恰恰是"这是一串新的验证码"这件事，且只有读屏用户会被影响。
   //
   // 所以这里刻意把请求**挂着不答**就断链：那是唯一能让旧键还留在手上的时刻。
-  const pickOne = (name) => `(() => {
-    const input = document.querySelector('${FILE_INPUT}');
-    const dt = new DataTransfer();
-    dt.items.add(new File(['x'], ${JSON.stringify("")} + '${name}', { type: 'text/plain' }));
-    input.files = dt.files;
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  })()`;
-  const announcementOf = "(document.querySelector('.activity-announcement')?.textContent ?? '')";
-
   await a.evaluate(pickOne("outlives-its-link.txt"));
   await b.waitFor("!!document.querySelector('.request')", "a second consent card on the same link", 40_000);
   const sameLinkEdge = await b.evaluate(announcementOf);
-  // 同一条链路上的又一条边：码已经念过一次，而且一直挂在钉住的头部里，所以这里
-  // 不该再念一遍。
   if (!sameLinkEdge || sameLinkEdge.includes(sasB)) {
     throw new Error(`a later edge on the SAME link re-read the code: ${JSON.stringify(sameLinkEdge)}`);
   }
@@ -640,28 +767,47 @@ async function mixedScenario(browser) {
   await b.waitFor(`!document.querySelector('${HEAD}')`, "the announced departure to tear the held link down", 30_000);
   await b.waitFor("!document.querySelector('.request')", "the pending consent to die with its link");
 
+  // 断开之后选择器立刻回来，而且回来的是同一个单动作卡片。
+  await a.waitFor(`document.querySelectorAll('${OPEN_WORKSPACE}').length === 1`, "tab A's chooser to come back", 20_000);
+  const afterDisconnect = await a.evaluate(`({
+    heads: document.querySelectorAll('${HEAD}').length,
+    // 统一草稿框不许活过一次显式断开：它是为上一条链路、上一个对端打的字。
+    composers: document.querySelectorAll('.msgpanel textarea').length,
+    attach: document.querySelectorAll('${ATTACH_FILE}').length,
+    queued: document.querySelectorAll('.queued').length,
+    sas: document.querySelectorAll('.sas').length,
+  })`);
+  if (afterDisconnect.heads !== 0 || afterDisconnect.composers !== 0 || afterDisconnect.attach !== 0
+    || afterDisconnect.queued !== 0 || afterDisconnect.sas !== 0) {
+    throw new Error(`tab A kept unified workspace state after Disconnect: ${JSON.stringify(afterDisconnect)}`);
+  }
+  ok("Disconnect restored the one-action chooser and left no unified composer or attachment behind");
+
   // 同一个对端、同一条通道 → 第二条链路会算出**同一个** reveal 键。
-  await a.evaluate(pickOne("after-relink.txt"));
+  const relinkMark = { a: await announcedCount(a), b: await announcedCount(b) };
+  await a.evaluate(`(() => { document.querySelector('${OPEN_WORKSPACE}').click(); return true; })()`);
   await a.waitFor(`!!document.querySelector('${HEAD_SAS}')`, "a fresh link to the same peer", 60_000);
   await b.waitFor(`!!document.querySelector('${HEAD_SAS}')`, "tab B's fresh link header", 60_000);
-  await b.waitFor("!!document.querySelector('.request')", "a consent card on the fresh link", 40_000);
-  const sas2 = await oneSas(b, "tab B", "on a fresh link to the same peer");
+  const relinked = await awaitTextConsent([["tab A", a], ["tab B", b]]);
+  const sas2 = await oneSas(relinked.tab, relinked.who, "on a fresh link to the same peer");
   if (sas2 === sasB) {
     throw new Error(`the relink reused the first link's SAS (${sas2}); this scenario proves nothing`);
   }
-  const freshEdge = await b.evaluate(announcementOf);
-  if (!freshEdge.includes(sas2)) {
+  const freshSpoken = await announcedSince(
+    relinked.tab, relinked.who === "tab A" ? relinkMark.a : relinkMark.b,
+  );
+  if (!freshSpoken.some((line) => line.includes(sas2))) {
     throw new Error(
-      `a NEW link's first consent edge never announced its code — the reveal key ` +
-      `(peer+lane, no generation) suppressed it: ${JSON.stringify(freshEdge)} lacks ${sas2}`,
+      `a NEW link never announced its own code — the reveal key (peer+lane, no ` +
+      `generation) suppressed it: ${JSON.stringify(freshSpoken)} lacks ${sas2}`,
     );
   }
   ok(`a fresh link to the same peer announced its own code (${sasB} → ${sas2}), same reveal key`);
 
-  await b.evaluate("(() => { document.querySelector('.request .btn-ghost').click(); return true; })()");
-  await b.waitFor("!document.querySelector('.request')", "the fresh link's consent to close");
+  await relinked.tab.evaluate("(() => { document.querySelector('.msgpanel .act button.btn-ghost').click(); return true; })()");
+  await relinked.tab.waitFor(`!document.querySelector('${TEXT_CONSENT}')`, "the fresh link's text consent to close");
 
-  // ── 九、显式断开：整个工作区收掉，两边都收掉 ────────────────────────────
+  // ── 十一、显式断开：整个工作区收掉，两边都收掉 ───────────────────────────
   await a.evaluate(`(() => { document.querySelector('${HEAD} .wh-disconnect').click(); return true; })()`);
   await a.waitFor(`!document.querySelector('${HEAD}')`, "tab A's workspace to tear down");
   // 对端有两条路知道：A 断开时发出的那条认证 leave 信令，以及传输真的塌掉
@@ -674,17 +820,22 @@ async function mixedScenario(browser) {
       heads: document.querySelectorAll('${HEAD}').length,
       queued: document.querySelectorAll('.queued').length,
       composers: document.querySelectorAll('.msgpanel textarea').length,
-      peerActions: document.querySelectorAll('.peer-actions').length,
+      attach: document.querySelectorAll('${ATTACH_FILE}').length,
+      // 选择器回来了，而且回来的仍然是那一个动作。
+      openWorkspace: document.querySelectorAll('${OPEN_WORKSPACE}').length,
+      legacyPickers: document.querySelectorAll('.peer-actions .file-pick-input').length,
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     })`);
     if (
       after.sas !== 0 || after.heads !== 0 || after.queued !== 0 ||
-      after.composers !== 0 || after.peerActions === 0 || after.overflow !== 0
+      after.composers !== 0 || after.attach !== 0 ||
+      after.openWorkspace !== 1 || after.legacyPickers !== 0 || after.overflow !== 0
     ) {
       throw new Error(`${who} did not tear the workspace down cleanly: ${JSON.stringify(after)}`);
     }
   }
   await screenshot(a, "after-disconnect");
+  await scanLiveState(a, "chooser restored after an explicit disconnect");
   ok("one disconnect closed both lanes on both tabs and left the peer selectable again");
 
   const errs = [...a.errors, ...b.errors].filter((e) => !/401|Failed to load resource/.test(e));
@@ -698,8 +849,8 @@ async function mixedScenario(browser) {
 async function main() {
   await requireServer(
     BASE,
-    "start the link-enabled build with: cd web && npm run build:link-e2e, then " +
-    "cd server && RELAYIUM_STATIC=../web/dist-link-e2e RELAYIUM_ADDR=:8098 go run .",
+    "start it with: cd web && npm run build, then " +
+    "cd server && RELAYIUM_STATIC=../web/dist RELAYIUM_ADDR=:8098 go run .",
   );
   const session = await launchBrowser({ debugPort: DEBUG_PORT, keep: argPresent("--keep") });
   try {

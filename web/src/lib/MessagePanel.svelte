@@ -6,16 +6,29 @@
   // 关于正文渲染，这里做的事情少得刻意：一个转义过的文本节点，pre-wrap，dir="auto"。
   // **不**做链接化、不做 Markdown、不做代码高亮、不做任何预览——每一样都是"把解析器
   // 对着敌方输入跑一遍"，而其中链接化还会顺手把发送方选的东西变成一个可点击目标。
+  //
+  // On a unified (`link/1`) workspace this panel stops being "the text card" and
+  // becomes the peer's whole activity surface, so it also carries the file and
+  // folder attachment controls — the unified workspace renders no peer card to
+  // put them on. That mode is entirely opt-in (`unified`), and every default
+  // below reproduces the legacy panel exactly: the legacy surface is what ships.
+  //
+  // Attachment stays a pure affordance here too. The component never reads a
+  // File, never touches bytes and never decides anything about a transfer; it
+  // hands the caller the change event and the caller owns everything after it.
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { copyFeedback } from "./clipboard.svelte";
   import { textByteLength, TEXT_MAX_BYTES } from "./text-wire";
   import type { TextMessage, TextStatus, TextErrorKey } from "./text-session.svelte";
   import type { ConnPath } from "./webrtc";
+  import Icon from "./Icon.svelte";
 
   let {
     status, peerName, sasCode, path, history, errorKey, prefill = "", showSas = true,
+    unified = false, attachmentsEnabled = false, folderPickSupported = false,
     revealTarget = $bindable(),
     onSend, onAccept, onReject, onClear, onEnd, onPrefillConsumed,
+    onPickFiles, onPickFolder, onRestart,
   }: {
     status: TextStatus;
     peerName: string;
@@ -26,6 +39,19 @@
      *  the same authentication step twice and invite a "which one do I compare?"
      *  mistake. The panel then renders NO verification code at all. */
     showSas?: boolean;
+    /** Unified `link/1` workspace mode. Off by default, and off is the legacy
+     *  panel down to the last selector. */
+    unified?: boolean;
+    /** Whether the caller's peer can accept another intent right now — the ONLY
+     *  input to whether attachment is usable. Deliberately not derived from the
+     *  text status: "is this conversation open?" and "can this link take another
+     *  file?" are different questions, and answering the second with the first
+     *  is what produced the old greyed-out picker during a live conversation.
+     *  The caller turns it off for teardown or a stale workspace. */
+    attachmentsEnabled?: boolean;
+    /** iOS/iPadOS Safari has no folder picker (see platform.ts), so the caller
+     *  tells the panel whether the control would do anything at all. */
+    folderPickSupported?: boolean;
     history: TextMessage[];
     errorKey: TextErrorKey;
     prefill?: string;
@@ -36,6 +62,16 @@
     onClear: () => void;
     onEnd: () => void;
     onPrefillConsumed?: () => void;
+    /** The raw change event of the hidden <input>, forwarded untouched. The
+     *  panel does not normalise, filter or read the FileList: `e.currentTarget`
+     *  is the input, `.files` is what the user picked, and both the picked-file
+     *  mapping and the input reset belong to the caller that owns the transfer. */
+    onPickFiles?: (e: Event) => void;
+    onPickFolder?: (e: Event) => void;
+    /** Unified terminal states offer this instead of silently reopening. A dead
+     *  conversation reopening by itself would re-run consent on the peer without
+     *  anyone asking for it. */
+    onRestart?: () => void;
   } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
@@ -57,6 +93,24 @@
   const used = $derived(textByteLength(draft));
   const overLimit = $derived(used > TEXT_MAX_BYTES);
   const canSend = $derived(status === "open" && !overLimit && draft !== "");
+
+  // 统一模式下草稿框在 connecting/waitingAccept 就已经在屏幕上了：会话还在建立时
+  // 输入框消失，用户打的字就"看起来没了"（其实 draft 还在，但看不见等于丢了）。
+  // 只是**显示**，不是允许发送——canSend 仍然要求 status === "open"。
+  const composing = $derived(
+    unified ? status === "open" || status === "connecting" || status === "waitingAccept" : status === "open",
+  );
+  // 终局态。会话没了，历史和附件还在，但重开必须是用户按下去的一次动作。
+  const terminal = $derived(
+    status === "ended" || status === "failed" || status === "refused" ||
+    status === "unsupported" || status === "peerBusy",
+  );
+  // 同意界面之前不显示附件，除非调用方明确开了：那个屏幕上唯一该被理解的事情是
+  // "要不要接受这条会话"。其余状态下附件一直在，禁用与否只看 attachmentsEnabled。
+  const showAttachments = $derived(
+    unified && !!onPickFiles && (status !== "incomingRequest" || attachmentsEnabled),
+  );
+  const showFolderPick = $derived(folderPickSupported && !!onPickFolder);
 
   function stateText(m: Messages, s: TextStatus): string {
     switch (s) {
@@ -89,6 +143,40 @@
   }
 </script>
 
+<!-- 隐藏的 file input + 可见 <label> 按钮，和 peer card 上那两个是同一套原语：
+     .file-pick-input 把 input 裁到 1px（焦点环由 label 画），.btn 提供全局的 44px
+     coarse 触控下限，:disabled 对 <label> 不生效所以停用态走 .is-disabled。
+     aria-labelledby 指向那段可见文案本身，所以读屏器念出来的名字就是屏幕上写的。 -->
+{#snippet attachments()}
+  <div class="attach">
+    <label class="btn btn-secondary btn-sm" class:is-disabled={!attachmentsEnabled}>
+      <span class="at-icon" aria-hidden="true"><Icon name="file" /></span><span class="at-label" id="msg-attach-file">{t.sendFile}</span>
+      <input
+        class="file-pick-input attach-file"
+        type="file"
+        multiple
+        disabled={!attachmentsEnabled}
+        aria-labelledby="msg-attach-file"
+        onchange={(e) => onPickFiles?.(e)}
+      />
+    </label>
+    {#if showFolderPick}
+      <label class="btn btn-secondary btn-sm" class:is-disabled={!attachmentsEnabled}>
+        <span class="at-icon" aria-hidden="true"><Icon name="folder" /></span><span class="at-label" id="msg-attach-folder">{t.sendFolder}</span>
+        <input
+          class="file-pick-input attach-folder"
+          type="file"
+          webkitdirectory
+          multiple
+          disabled={!attachmentsEnabled}
+          aria-labelledby="msg-attach-folder"
+          onchange={(e) => onPickFolder?.(e)}
+        />
+      </label>
+    {/if}
+  </div>
+{/snippet}
+
 <section class="ui-card ui-stack msgpanel">
   {#if !showSas}
     <!-- 统一工作区里 SAS 只在顶部那一处渲染，这个面板没有验证框可滚。用一个零高度
@@ -108,6 +196,9 @@
       <button type="button" class="btn btn-primary" onclick={onAccept}>{t.text.accept}</button>
       <button type="button" class="btn btn-ghost" onclick={onReject}>{t.text.reject}</button>
     </div>
+    <!-- After the two choices, never before them: the pending decision is what
+         this screen is for, and nothing here is focused or otherwise pre-armed. -->
+    {#if showAttachments}{@render attachments()}{/if}
   {:else}
     <div class="sess">
       <span class="pname">{t.text.peer(peerName)}</span>
@@ -149,7 +240,7 @@
       </ol>
     </div>
 
-    {#if status === "open"}
+    {#if composing}
       <label class="sr-only" for="msg-compose">{t.text.panelTitle}</label>
       <textarea
         id="msg-compose"
@@ -161,6 +252,8 @@
         aria-describedby="msg-bytes msg-hint"
         placeholder={t.text.composePlaceholder}
       ></textarea>
+      <!-- 附件在草稿框和 Send 之间：Tab 顺序就是"写字 → 加附件 → 发送"。 -->
+      {#if showAttachments}{@render attachments()}{/if}
       <div class="compose-foot">
         <!-- 有意不加 aria-live：每敲一个键都变的值放进 live region 会把读屏器灌满。
              DownloadPage 里已经把这条反模式写下来了。 -->
@@ -171,14 +264,26 @@
       {#if overLimit}
         <p class="over-note">{t.text.tooLong} {t.text.useFileInstead}</p>
       {/if}
+    {:else if showAttachments}
+      <!-- A conversation that ended does not end the link. Files still go, so the
+           attachment controls stay exactly where they were. -->
+      {@render attachments()}
     {/if}
 
     {#if errorKey}<p class="bad">{t.text[errorKey]}</p>{/if}
     <p class="note">{t.text.ephemeralNote}</p>
     <p class="note">{t.text.clipboardNote}</p>
     <div class="act">
+      {#if unified && terminal && onRestart}
+        <!-- 明确的一次动作，绝不自动重开：重开会在对方那边再弹一次同意提示，那必须
+             是有人按下去的结果。文案复用"开始会话"那颗按钮的既有翻译。 -->
+        <button type="button" class="btn btn-primary restart" onclick={onRestart}>{t.text.open}</button>
+      {/if}
       <button type="button" class="btn btn-ghost clear" onclick={onClear}>{t.text.clear}</button>
-      {#if status === "open"}
+      <!-- 统一工作区里断开连接属于 WorkspaceHeader。这里再放一颗"重新开始"只会拆掉
+           文本这一条腿，把一个仍然连着、仍然能传文件的工作区显示成坏掉的样子。
+           传统模式一字不改。 -->
+      {#if status === "open" && !unified}
         <button type="button" class="btn btn-ghost end" onclick={onEnd}>{t.startOver}</button>
       {/if}
     </div>
@@ -281,6 +386,11 @@
   .byte-count.over { color: var(--danger); font-weight: 600; }
   .hint { font-size: var(--fs-xs); color: var(--text); flex: 1; }
   .compose-foot .send { margin-inline-start: auto; }
+  /* 附件按钮行。和 peer card 上那一行同样的排布：图标不压缩，文案可以在窄屏和
+     长翻译（de/pt）下换行而不是把按钮撑出卡片。 */
+  .attach { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .at-icon { flex: none; }
+  .at-label { min-inline-size: 0; overflow-wrap: anywhere; }
   .over-note { margin: 0; font-size: var(--fs-sm); color: var(--danger); }
   .bad { margin: 0; font-size: var(--fs-sm); color: var(--danger); }
   .note { margin: 0; font-size: var(--fs-xs); color: var(--text); }

@@ -93,8 +93,11 @@ describe("what default-off changes", () => {
     // this card: no `verifyOn` guard may reach the manifest or the buttons.
     const afterSasBox = card.slice(card.indexOf("<ReceiveActions"));
     expect(afterSasBox).not.toMatch(/verifyOn|shownSas/);
-    // The auto-accept effect targets text and nothing else.
-    expect(app).toContain("autoAcceptsIncomingText(verifyOn, activeText.status)) workspace.acceptText()");
+    // The auto-accept effect targets text and nothing else. It reads and accepts
+    // the session the panel is showing (`surfaceText`/`acceptSurfaceText`) so a
+    // retained legacy conversation cannot be auto-accepted out of sight — see
+    // workspace-orchestration.test.ts.
+    expect(app).toContain("autoAcceptsIncomingText(verifyOn, surfaceText.status)) acceptSurfaceText()");
     expect(app).not.toMatch(/autoAccepts\w*\([^)]*\)\)\s*workspace\.acceptFile\(\)/);
   });
 });

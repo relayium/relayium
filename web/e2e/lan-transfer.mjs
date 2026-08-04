@@ -1,10 +1,19 @@
 #!/usr/bin/env node
 /**
- * 端到端：两个真标签页之间跑一次真的 LAN 直传。
+ * 端到端：两个真标签页之间跑一次真的 LAN 直传 —— 并且是**降级路径**那一条。
  *
  * 覆盖的是单元测试碰不到的那一段：信令握手 → commit-reveal → WebRTC DataChannel →
  * 分块加密 → 流控 ACK → 完整性校验 → 落盘。App.svelte 里的收发管道**一行都没有
  * 单元测试**（它们耦合在组件里，本来就测不了），这个脚本是它们唯一的回归网。
+ *
+ * 跑的是**默认产物**，但每个标签页都套上 STRIP_LINK_CAP：页面本身是原封不动的发行
+ * 构建、原封不动的策略，只有离开 socket 的那几帧被抹掉了 `link/1`——正是一个老版本
+ * Web/原生/CLI 对端会发出的东西。所以这一整套用例现在的身份是**兼容性回归**：新版本
+ * 浏览器碰上老对端时，那条一次一模式的文件/消息老路必须逐字节照旧工作。统一链路
+ * (`link/1`) 的正向覆盖在 mixed-link.mjs。
+ *
+ * 那个抹除是测试侧的线上过滤器，不是产品里的开关：产品里放一个运行时降级开关，等于
+ * 给所有能碰到它的人发了一条降级协议的路。
  *
  * 只桩掉一样东西：操作系统的"另存为"对话框（showSaveFilePicker）——它是原生 UI，
  * 无头浏览器里开不出来。桩件把字节收进内存，脚本再按 SHA-256 比对。除此之外每一步
@@ -12,15 +21,16 @@
  *
  * 用法：node e2e/lan-transfer.mjs [--url http://localhost:8099] [--keep]
  *       node e2e/lan-transfer.mjs --multi-page-only  # targeted identity regression
- *   前置：web 已 build，且 Go 服务器在 --url 上跑着（它同时兜 SPA 和 /ws）。
+ *   前置：web 已 build（普通 `npm run build` 即可），且 Go 服务器在 --url 上跑着
+ *   （它同时兜 SPA 和 /ws）。
  */
 import { createHash, randomBytes } from "node:crypto";
 // CDP 客户端、标签页把手、浏览器生命周期和另存为桩都在 harness.mjs 里，和
 // mixed-link.mjs 共用同一份——两个脚本的超时语义和挂死检测必须是同一套。
 import {
-  OBSERVE_CAPS, SAVE_STUB, VERIFY_DEFAULT, VERIFY_ON, activateTab, argFlag, argPresent,
-  distinctLanSeed, fail, launchBrowser, newTab, ok, requireServer, setWideViewport, sleep,
-  withWatchdog,
+  SAVE_STUB, STRIP_LINK_CAP, VERIFY_DEFAULT, VERIFY_ON, activateTab, argFlag, argPresent,
+  distinctLanSeed, fail, launchBrowser, newTab, ok, requireServer, setDefaultInit,
+  setWideViewport, sleep, withWatchdog,
 } from "./harness.mjs";
 // 真场景里的无障碍断言。静态扫描器扫不到这些状态：它没有对端，也没有信令服务器，
 // 而"同意卡 / 进行中的进度条 / 消息记录"恰好是这个产品里最需要读屏的三个地方。
@@ -591,10 +601,11 @@ const utf8Hex = (s) => [...Buffer.from(s, "utf8")].map((b) => b.toString(16).pad
 // opt-in now (the default opens straight into the composer with no code shown),
 // so this scenario says so instead of leaning on a default that has moved.
 async function messageScenario(browser) {
-  // 顺带钉住"默认构建通告什么"。这一幕本来就要等 caps 到达，探针不额外花任何时间，
-  // 而它守的是一条比消息本身更硬的规矩：link/1 还没做完，默认产物里就不能出现它。
-  const a = await newTab(browser, BASE + "/", VERIFY_ON + OBSERVE_CAPS);
-  const b = await newTab(browser, BASE + "/", VERIFY_ON + OBSERVE_CAPS);
+  // 顺带钉住这一整套用例的前提：默认构建**确实**通告了 link/1，而这两个标签页因为
+  // 被降级过滤器改写了线上帧，互相看到的是老对端。这一幕本来就要等 caps 到达，
+  // 检查不额外花任何时间。
+  const a = await newTab(browser, BASE + "/", VERIFY_ON);
+  const b = await newTab(browser, BASE + "/", VERIFY_ON);
   await setWideViewport(a, 390, 844);
   await setWideViewport(b, 390, 844);
 
@@ -608,24 +619,32 @@ async function messageScenario(browser) {
   await b.waitFor(`!!document.querySelector('${MSG_OPEN_BTN}')`, "the message control on tab B too", 30_000);
   ok("both tabs advertised text/1 and offered a message control");
 
-  // 默认产物必须**只**通告 text/1。link/1 的两条通道、协调器和恢复还没一起做完，
-  // 所以任何一个把它漏进默认构建的改动（比如把 e2e 的构建旗标写死成开）都要在这里
-  // 变成红色，而不是安静地把一个半成品协议放出去。
+  // 两件事一起钉，缺一件这一幕都证明不了什么：
+  //   sawLink > 0 —— 这个产物在**无配对码的 LAN 房间**里真的通告了 link/1。哪天
+  //     谁把通告整个关掉，下面所有"老路照旧工作"的断言都会因为错误的原因通过。
+  //   hello === ["text/1"] —— 但这两个标签页互相看到的是老对端，因为线上帧被降级
+  //     过滤器改写过。
   for (const [who, tab] of [["A", a], ["B", b]]) {
-    const advertised = await tab.evaluate("window.__advertisedCaps");
-    if (!Array.isArray(advertised) || advertised.length === 0) {
-      throw new Error(`tab ${who} never sent a roster capability hello; this check proves nothing`);
+    const seen = await tab.evaluate("window.__legacyPeer");
+    if (!seen || seen.capsFrames === 0) {
+      throw new Error(`tab ${who} never sent a capability frame; this check proves nothing`);
     }
-    if (JSON.stringify(advertised) !== JSON.stringify(["text/1"])) {
-      throw new Error(`the default build advertised ${JSON.stringify(advertised)}, want ["text/1"]`);
+    if (seen.sawLink === 0) {
+      throw new Error(
+        `tab ${who} never announced link/1 on LAN — the default build no longer advertises the ` +
+        `unified link, so this downgrade scenario is testing nothing. Check peer-caps.svelte.ts.`,
+      );
+    }
+    if (JSON.stringify(seen.hello) !== JSON.stringify(["text/1"])) {
+      throw new Error(`the simulated legacy peer ${who} put ${JSON.stringify(seen.hello)} on the wire, want ["text/1"]`);
     }
   }
-  // 而且默认构建里那套统一工作区一个节点都不该挂出来。
+  // 老对端在场时，那套统一工作区一个节点都不该挂出来。
   const unifiedNodes = await a.evaluate("document.querySelectorAll('.workspace-head, .queued').length");
   if (unifiedNodes !== 0) {
-    throw new Error(`the default build rendered ${unifiedNodes} unified-workspace node(s)`);
+    throw new Error(`the legacy path rendered ${unifiedNodes} unified-workspace node(s)`);
   }
-  ok("the default build advertised only text/1 and rendered no unified workspace");
+  ok("the build advertised link/1 on LAN, fell back to text/1 for a legacy peer, and rendered no unified workspace");
 
   await a.evaluate(`(() => {
     const button = document.querySelector('${MSG_OPEN_BTN}');
@@ -1905,6 +1924,10 @@ async function smallMessageCapScenario(browser) {
 async function main() {
   // 前置检查：服务器在不在，dist 是不是新的（旧 dist 会测出一个假绿）。
   await requireServer(BASE, "start it with: cd server && RELAYIUM_ADDR=:8099 go run .");
+
+  // 在开出第一个标签页之前。这一整套用例的身份就是"新版本对上老对端"，所以每一个
+  // 标签页——包括以后新加的那些——都必须是老对端，而不是靠每个 newTab 调用点记得传。
+  setDefaultInit(STRIP_LINK_CAP);
 
   // launchBrowser 负责 pkill 残留、临时 profile 和等 CDP 端口；收尾还在下面的 finally。
   const session = await launchBrowser({ debugPort: DEBUG_PORT, keep: argPresent("--keep") });

@@ -742,6 +742,9 @@ const ja: Messages = {
     queuedHint: "現在の転送が終わるまで待機します。その間もファイルの選択やメッセージの送信を続けられます。",
     queuedRemove: "削除",
     queuedFiles: (count) => `${count} 件のファイル`,
+    open: "ワークスペースを開く",
+    openWith: (n) => `${n} と共有ワークスペースを開く`,
+    openHint: "1 本の暗号化接続でファイルとメッセージをやり取りします。",
   },
   text: {
     panelTitle: "メッセージ",

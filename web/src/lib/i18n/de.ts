@@ -743,6 +743,9 @@ const de: Messages = {
     queuedHint: "Sie warten auf das Ende der laufenden Übertragung. In der Zwischenzeit können Sie weiter Dateien auswählen und weiter schreiben.",
     queuedRemove: "Entfernen",
     queuedFiles: (count) => (count === 1 ? "1 Datei" : `${count} Dateien`),
+    open: "Arbeitsbereich öffnen",
+    openWith: (n) => `Gemeinsamen Arbeitsbereich mit ${n} öffnen`,
+    openHint: "Eine verschlüsselte Verbindung für Dateien und Nachrichten.",
   },
   text: {
     panelTitle: "Nachricht",

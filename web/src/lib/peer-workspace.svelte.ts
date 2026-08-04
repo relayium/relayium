@@ -47,6 +47,13 @@ export interface PeerWorkspace {
   readonly text: LegacyText | MixedSession["text"];
   readonly textPath: ConnPath | undefined;
   readonly usingMixed: boolean;
+  /** Whether an authenticated link object genuinely exists right now.
+   *
+   *  Narrower than `usingMixed`, deliberately: that one is already true while a
+   *  request is in flight, because the workspace owns the screen from the moment
+   *  the user asks for it. Anything that must not act before the peers are
+   *  authenticated — opening a lane, for instance — reads this instead. */
+  readonly hasLink: boolean;
   readonly blocksLegacyInbound: boolean;
   readonly warnsOnLeave: boolean;
   /** The one link the unified workspace header describes. "" outside mixed mode. */
@@ -189,6 +196,7 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     get text() { return usesMixedText() ? mixed.text : deps.legacyText; },
     get textPath() { return usesMixedText() ? mixed.path ?? undefined : deps.legacyText.path; },
     get usingMixed() { return usingMixed(); },
+    get hasLink() { return !!mixed.link; },
     get blocksLegacyInbound() { return blocksLegacyInbound(); },
     get warnsOnLeave() { return deps.legacyFiles.busy || mixed.active(); },
     get linkPeerId() { return usingMixed() ? mixed.peerId : ""; },
@@ -275,8 +283,9 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
       // accept…" for a page that is no longer anybody's target.
       const awaiting = mixed.manager.requestedPeerId;
       if (awaiting && !deps.peerIds().includes(awaiting)) mixed.disconnect();
-      // The same rule for the legacy text session, which is the path the shipped
-      // build actually uses (it does not advertise link/1). A live session whose
+      // The same rule for the legacy text session, which is still the path for
+      // every peer outside a code-less LAN room and every peer that does not
+      // speak link/1 — native clients included. A live session whose
       // peer is no longer in the roster is not merely stale on screen: it still
       // counts as busy, so the user cannot start a new one with the page that
       // replaced it either.

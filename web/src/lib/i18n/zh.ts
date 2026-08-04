@@ -737,6 +737,9 @@ const zh: Messages = {
     queuedHint: "它们会等当前传输结束。等待期间你仍然可以继续选文件、继续发消息。",
     queuedRemove: "移除",
     queuedFiles: (count) => `${count} 个文件`,
+    open: "打开工作区",
+    openWith: (n) => `与 ${n} 打开共享工作区`,
+    openHint: "一条加密连接，文件和消息共用。",
   },
   text: {
     panelTitle: "消息",

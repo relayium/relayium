@@ -742,6 +742,9 @@ const pt: Messages = {
     queuedHint: "Eles aguardam o fim da transferência atual. Enquanto isso, você pode continuar escolhendo arquivos e enviando mensagens.",
     queuedRemove: "Remover",
     queuedFiles: (count) => (count === 1 ? "1 arquivo" : `${count} arquivos`),
+    open: "Abrir área de trabalho",
+    openWith: (n) => `Abrir uma área de trabalho compartilhada com ${n}`,
+    openHint: "Uma única conexão criptografada para arquivos e mensagens.",
   },
   text: {
     panelTitle: "Mensagem",

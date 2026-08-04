@@ -24,9 +24,18 @@ Relayium is a serious attempt at a **next-generation file and ephemeral text tra
 press one button to send, and the software picks the right path while keeping content
 **end-to-end encrypted by default** — the keys only ever exist on the sender and the receiver.
 
+On a LAN, two up-to-date browsers do not choose between the two at all. Picking the other
+device opens **one shared workspace**: a single end-to-end encrypted connection with one
+verification step, a composer and an attachment control, so files and messages travel together
+without reconnecting between them. Pairing-code (cross-network) rooms and the native clients keep
+the existing separate file and message flows, which is also what an older browser on the LAN falls
+back to.
+
 The same protocol also carries **ephemeral text**. When both devices are online, a message session
 opens an independent end-to-end encrypted connection — with its own optional verification code to compare — and carries a link,
-a command, or a block of multiline code instead of a file. On a LAN, browser messages move directly;
+a command, or a block of multiline code instead of a file. (Inside the shared LAN workspace above it is
+not a separate connection: that message lane rides the one link you already verified.)
+On a LAN, browser messages move directly;
 cross-network browser sessions use TURN that carries only ciphertext; CLI text is direct-only.
 Messages are session-scoped:
 never stored by Relayium, and gone from its session when that session ends. There is no offline messaging
@@ -198,7 +207,8 @@ go build -o relayium-server .
 
 Then find the machine's LAN IP (`ipconfig getifaddr en0` on macOS, `hostname -I` on Linux) and open
 `http://<LAN-IP>:8080` **on two devices on the same network**. They'll discover each other within a couple
-of seconds; pick files or choose the live message mode while both devices are online.
+of seconds; on a LAN, choosing the other device opens the shared workspace, where the same screen
+sends files and messages while both devices are online.
 
 > **HTTPS note:** the Web Crypto API and streaming-to-disk require a **secure context**. `localhost` counts,
 > but any real deployment must be served over **HTTPS** (e.g. behind Caddy/nginx/Cloudflare). The live site

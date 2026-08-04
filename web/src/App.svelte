@@ -23,6 +23,7 @@
   import { MAX_FILES } from "./lib/transfer";
   import { createTransferSession, type Xfer } from "./lib/transfer-session.svelte";
   import { createPeerWorkspace, type PeerWorkspace } from "./lib/peer-workspace.svelte";
+  import { createUnifiedTextOpener } from "./lib/unified-text-open";
   import { createActivityAnnouncer, type ActivityEdge } from "./lib/activity-announcement";
   import { recordTransfer, loadHistory, clearHistory, historyEnabled, setHistoryEnabled, type HistEntry } from "./lib/history";
   import { chooseRtcConfig, fetchIceConfig, measureRelays, pickRelay, type RelayAvailability, type RelayEntry } from "./lib/ice";
@@ -130,7 +131,51 @@
   const send = $derived(workspace.send);
   const recv = $derived(workspace.recv);
   const incoming = $derived(workspace.incoming);
+  /** The workspace router's own answer, which deliberately RETAINS a non-idle
+   *  legacy transcript so it stays rendered while a mixed lane is idle.
+   *
+   *  That retention is the whole point of it, and it is why this is now used for
+   *  exactly one question: "is there still legacy text history to render?" Every
+   *  product side effect — auto-accept, the reveal/announcement, the new-message
+   *  notification — reads `surfaceText` instead, because they must act on the
+   *  session that is actually on screen rather than on a preserved one. */
   const activeText = $derived(workspace.text);
+  /** The text session the workspace SURFACE renders and acts on.
+   *
+   *  Deliberately not `workspace.text`. That getter keeps a non-idle LEGACY
+   *  transcript on screen while the mixed lane is idle, which is correct for the
+   *  legacy card and its history — and wrong the moment a link owns the screen.
+   *  A `link/1` workspace is usually established by the FILE lane, so its text
+   *  lane is idle for a while; reading the legacy session during that window put
+   *  an EARLIER peer's conversation on screen under the LINKED peer's name, and
+   *  told the auto-opener the lane was already busy so the real one never opened.
+   *  Inside a mixed workspace the link's own lane is the only identity; outside
+   *  one nothing changes. */
+  const surfaceText = $derived(workspace.usingMixed ? workspace.mixed.text : workspace.text);
+  // Panel actions land on the session the panel is showing, for the same reason
+  // its props read it: inside a mixed workspace that is the link's own lane, and
+  // outside one the workspace router decides exactly as before — it owns the
+  // legacy/mixed lane bookkeeping and is left untouched.
+  function sendSurfaceText(body: string) {
+    if (workspace.usingMixed) void workspace.mixed.text.send(body);
+    else void workspace.sendText(body);
+  }
+  function acceptSurfaceText() {
+    if (workspace.usingMixed) workspace.mixed.text.accept();
+    else workspace.acceptText();
+  }
+  function rejectSurfaceText() {
+    if (workspace.usingMixed) workspace.mixed.text.reject();
+    else workspace.rejectText();
+  }
+  function clearSurfaceText() {
+    if (workspace.usingMixed) workspace.mixed.text.clearHistory();
+    else workspace.clearText();
+  }
+  function endSurfaceText() {
+    if (workspace.usingMixed) workspace.mixed.text.end();
+    else workspace.endText();
+  }
   // 「高级验证」偏好，默认关。关的时候 SAS 不上屏，围绕比对它建立的额外确认步骤
   // 也一并省掉；开的时候完全恢复原来的行为。理由与边界写在 verify-pref 里——
   // 尤其是：这个开关**不**影响 commit-reveal / AEAD，也不影响接收文件的保存同意。
@@ -138,6 +183,75 @@
   /** 这条链路的 SAS，只有在偏好打开时才是可显示的。模板一律读这个而不是
    *  workspace.sasCode，避免某一处漏掉判断又把码渲染出来。 */
   const shownSas = $derived(shownSasCode(verifyOn, workspace.sasCode));
+
+  /** Whether the unified panel's attachment controls are usable right now.
+   *
+   *  It asks the live workspace policy about the LINKED peer and nothing else.
+   *  Deliberately not derived from the conversation: "is this conversation
+   *  open?" and "can this link take another file?" are different questions, and
+   *  answering the second with the first is what greyed the picker out during a
+   *  live conversation. Picking during a transfer queues (see queuedBatches)
+   *  rather than disabling, so this stays true through file work too; a torn-down
+   *  or stale workspace has no linked peer and turns it off. */
+  const unifiedAttachments = $derived(
+    workspace.usingMixed && workspace.linkPeerId !== ""
+      && !workspace.blocksNewIntent(workspace.linkPeerId),
+  );
+
+  /** How many links this page has torn down.
+   *
+   *  It exists to remount the unified MessagePanel, which keeps its draft in
+   *  component state and stays mounted across a teardown (the transcript is
+   *  still on screen). Without a remount, text typed for one peer would reappear
+   *  in the composer of the NEXT authenticated link.
+   *
+   *  Counted on teardown and deliberately NEVER on establishment. The unified
+   *  composer is on screen from "connecting…" onward precisely so that what
+   *  someone types while the link comes up is not lost — and establishment is
+   *  exactly when `linkGeneration` advances, so keying on that identity would
+   *  delete what the composer exists to keep. An authenticated transport
+   *  replacement holds the link, so it is not a teardown either. */
+  let linkEpoch = $state(0);
+  let hadLink = false;
+  $effect(() => {
+    const has = workspace.hasLink;
+    if (hadLink && !has) linkEpoch++;
+    hadLink = has;
+  });
+
+  // ── the unified workspace's one automatic step ───────────────────────────────
+  // A mixed link is usually established by the FILE lane (files picked, dropped,
+  // or handed over by the OS share sheet), which leaves the workspace promising a
+  // composer that no one has opened. Open the text lane once per authenticated
+  // link so the promise holds.
+  //
+  // "Once" is the safety property, not a nicety: every extra open raises another
+  // consent prompt on the peer. The rule itself lives in unified-text-open.ts
+  // where its lifecycle cases are directly testable; what stays here is only the
+  // wiring. This effect deliberately writes NO state after the call and never
+  // awaits it, so a resolution landing after Disconnect or a room switch is left
+  // entirely to the lane's own attempt/generation guards — which is where it is
+  // tested (peer-workspace.test.ts, mixed-text-session.test.ts).
+  const textOpener = createUnifiedTextOpener();
+  $effect(() => {
+    const peerId = workspace.linkPeerId;
+    const generation = workspace.linkGeneration;
+    if (!peerId) return;
+    if (!textOpener.shouldOpen({
+      hasLink: workspace.hasLink,
+      linkGeneration: generation,
+      // The LINK's own lane, never the legacy-preserving workspace getter: that
+      // one still resolves to a retained legacy transcript while this lane is
+      // idle, and a stale "ended" read from it would permanently suppress the
+      // single open this workspace promises. See surfaceText.
+      textIdle: workspace.mixed.text.status === "idle",
+    })) return;
+    // Spend the generation BEFORE starting the open: openText is async, and a
+    // synchronous re-evaluation between here and its first status write must not
+    // be able to start a second one.
+    textOpener.markOpened(generation);
+    void workspace.openText(peerId);
+  });
 
   // Client-local "recent transfers" log (localStorage-backed, this device only).
   // Refreshed after each recorded completion and on clear — never read live from
@@ -352,13 +466,17 @@
   // 收到消息也提醒一声，但**只带发送方的名字，永远不带正文**：通知会渲染在锁屏上、
   // 共享的屏幕上、录屏里。边沿检测靠最后一条入站消息的 id，所以每条只提醒一次，而且
   // clearHistory 之后不会重播。
+  // 读的是 surfaceText，和面板同一个会话：通知报的是**谁**发来的消息，而这个"谁"必须
+  // 是屏幕上那条对话的对端。统一工作区里那是这条链路自己的通道；`workspace.text` 在这
+  // 条通道还空着的时候会保留旧的 legacy 记录，拿它报名字就会用上一个对端的名字去通知
+  // 一条根本不在屏幕上的对话。
   let lastNotifiedMsgId = 0;
   $effect(() => {
-    const last = activeText.history.at(-1);
+    const last = surfaceText.history.at(-1);
     if (!last) { lastNotifiedMsgId = 0; return; }
     if (last.dir !== "in" || last.id <= lastNotifiedMsgId) return;
     lastNotifiedMsgId = last.id;
-    void notifyTransfer(messages[lang()].text.newMessageFrom(nameOf(activeText.peerId)));
+    void notifyTransfer(messages[lang()].text.newMessageFrom(nameOf(surfaceText.peerId)));
   });
   $effect(() => {
     const s = send;
@@ -481,8 +599,15 @@
   // Deliberately NOT extended to an incoming FILE request. That prompt is about
   // what lands on disk (and carries the user gesture the save-target picker
   // needs), so it stays in every mode — see ReceiveActions.
+  //
+  // Both halves read the surface, never `workspace.text`: an automatic accept is
+  // only defensible for the conversation the user is actually looking at. Inside
+  // a mixed workspace the retained legacy session is neither on screen nor
+  // reachable, so letting it decide here would silently accept a stranger's
+  // request the user was never shown — and `acceptSurfaceText` is what lands the
+  // accept on that same session instead of routing it back to the legacy lane.
   $effect(() => {
-    if (autoAcceptsIncomingText(verifyOn, activeText.status)) workspace.acceptText();
+    if (autoAcceptsIncomingText(verifyOn, surfaceText.status)) acceptSurfaceText();
   });
 
   // A newly actionable verification/consent step must not appear silently below
@@ -503,6 +628,13 @@
   let textReveal = $state<HTMLElement | undefined>(undefined);
   let activityAnnouncement = $state("");
   let revealedActivity = "";
+  /** Which edge currently owns the live region.
+   *
+   *  Bumped where the region is cleared for a new edge, so the announcement that
+   *  is still in flight for the previous one can tell that it was superseded
+   *  before it ever rendered — the exact condition under which its sentence must
+   *  NOT count as having been said. See Announcement.confirm. */
+  let announcementTurn = 0;
   // The pinned trust header, kept so a reveal can measure it at the instant it
   // scrolls. Every cheaper option was measured and found wrong on a real tab: a
   // hardcoded reserve assumed 196px against a real 274px, and a ResizeObserver
@@ -547,18 +679,25 @@
         sasCompare: t.codeCompare,
       };
     }
+    // The surface, never `workspace.text`: this edge is a reveal, a spoken
+    // identity and a verification code, and all three have to describe the
+    // conversation the panel is showing. A retained legacy transcript read here
+    // while a link owns the screen scrolls to a card that is not on it, names
+    // the wrong peer, and — worst — reads out the LEGACY session's code under
+    // the linked peer's name, which is a verification step pointed at the wrong
+    // connection.
     if (
-      activeText.sasCode &&
-      (activeText.status === "waitingAccept" || activeText.status === "incomingRequest")
+      surfaceText.sasCode &&
+      (surfaceText.status === "waitingAccept" || surfaceText.status === "incomingRequest")
     ) {
-      const lead = activeText.status === "incomingRequest"
-        ? t.text.requestHead(nameOf(activeText.peerId))
+      const lead = surfaceText.status === "incomingRequest"
+        ? t.text.requestHead(nameOf(surfaceText.peerId))
         : t.text.waitingAccept;
       return {
-        key: `text:${activeText.status}:${activeText.peerId}`,
+        key: `text:${surfaceText.status}:${surfaceText.peerId}`,
         target: "text",
         lead,
-        sas: verifyOn ? activeText.sasCode : undefined,
+        sas: verifyOn ? surfaceText.sasCode : undefined,
         sasCompare: t.text.sasCompare,
       };
     }
@@ -589,6 +728,7 @@
     if (candidate.key === revealedActivity) return;
     revealedActivity = candidate.key;
     activityAnnouncement = "";
+    const turn = ++announcementTurn;
     void (async () => {
       await tick();
       const current = activityReveal();
@@ -596,12 +736,20 @@
       // Legacy surfaces keep the previous "<edge>. Code <sas>. <compare>"
       // sentence verbatim; only a mixed link ever drops the code, and only after
       // this same link already said it.
-      activityAnnouncement = announcer.announce(current, {
+      const announcement = announcer.announce(current, {
         mixed: workspace.usingMixed,
         linkGeneration: workspace.linkGeneration,
         codeLabel: t.codeLabel,
       });
+      activityAnnouncement = announcement.text;
       await tick();
+      // Confirm only what a person could actually have heard. This tick is the
+      // flush, so surviving it means the sentence really is in the live region;
+      // a newer edge that took the region first has already cleared it and taken
+      // the turn, and coalesced both writes, so its own sentence must be the one
+      // that carries the code. Erring this way can repeat a code that was on
+      // screen for one frame — never lose the only announcement of it.
+      if (announcementTurn === turn) announcement.confirm();
       // Intentionally instant. Smooth scrollIntoView has measured as a zero-scroll
       // no-op in Chrome on this page, while nearest+auto reveals correctly and
       // satisfies reduced-motion without a preference branch.
@@ -981,6 +1129,46 @@
     return m > 0 ? `~${m}:${String(s).padStart(2, "0")}` : `~${s}s`;
   }
 
+  /**
+   * The one explicit action a link-capable LAN peer offers.
+   *
+   * It replaces the old file / folder / message fork, because on a `link/1` peer
+   * that fork asked the user to choose between three things that all live in the
+   * same place: one authenticated connection with both lanes on it. Choosing
+   * "message" there did not mean "and not files", it just decided which surface
+   * happened to build the link first.
+   *
+   * A queued OS share is the single thing that outranks it. Those files were
+   * handed to us by the system with their destination still missing, so picking
+   * the peer completes THAT intent rather than throwing it away — and a typed
+   * draft is never sent by this path, on either branch.
+   */
+  function openWorkspace(peerId: string) {
+    if (workspace.blocksNewIntent(peerId)) return;
+    if (outbox().length) {
+      workspace.sendFiles(peerId, takeOutbox());
+      return;
+    }
+    void workspace.openText(peerId);
+  }
+  /** MessagePanel's explicit restart, scoped to the peer this link belongs to.
+   *  With no link there is nothing to restart — reopening would silently build a
+   *  new one, and a new authentication step must be something a person asked for. */
+  function restartText() {
+    const peerId = workspace.linkPeerId;
+    if (!peerId) return;
+    void workspace.openText(peerId);
+  }
+  /** The workspace header's Disconnect. Local state first and all of it
+   *  synchronous: the draft box and the once-per-link launcher belong to this
+   *  component, and a Disconnect that tore both lanes down while leaving them set
+   *  is exactly how a stale composer and a spent launcher survive into the next
+   *  link. The lane teardown itself is the workspace's. */
+  function disconnectWorkspace() {
+    textCompose = "";
+    textOpener.reset();
+    workspace.disconnect();
+  }
   function pickFile(e: Event, peerId: string) {
     const input = e.currentTarget as HTMLInputElement;
     if (input.files?.length) workspace.sendFiles(peerId, pickedFromInput(input.files));
@@ -999,6 +1187,12 @@
 <main>
 {#snippet peerCard(p: Peer, solo: boolean)}
   {@const intentBlocked = workspace.blocksNewIntent(p.id)}
+  <!-- Whether this peer can carry a unified workspace: it speaks `link/1` AND the
+       room allows routing it (peer-caps' linkRoomActive — the code-less LAN room
+       only). Every pairing-code room and every peer that does not speak the
+       protocol — older browsers, the native clients, the CLI — is false here and
+       renders the untouched legacy card below. -->
+  {@const unifiedPeer = workspace.routes(p.id)}
   <li
     class="peer"
     class:disabled={intentBlocked}
@@ -1027,6 +1221,9 @@
         // mousedown collapses it before this ever runs.
         const picked = getSelection();
         if (intentBlocked || (picked && !picked.isCollapsed && picked.containsNode(e.currentTarget as Node, true))) return;
+        // A unified peer has one action, so the card shortcut is that same one
+        // action rather than a picker the card no longer shows.
+        if (unifiedPeer) { openWorkspace(p.id); return; }
         const input = document.getElementById(`pick-${p.id}`) as HTMLInputElement | null;
         // Native label activation focuses its control before opening the picker.
         // Preserve that continuation point for pointer/keyboard mixed use without
@@ -1037,7 +1234,13 @@
     >
       <span class="pavatar" class:big={solo}>{p.name.slice(0, 1).toUpperCase()}</span>
       <span class="ptext">
-        {#if solo}
+        {#if unifiedPeer}
+          <!-- The lead must promise both lanes. "Click or drop files to send to
+               X" described a fork that no longer exists here, and would leave
+               the one action looking like it only sends files. -->
+          <span class="pname" id={`peer-target-${p.id}`}>{solo ? t.workspace.openWith(p.name) : p.name}</span>
+          <span class="pick">{t.workspace.openHint}</span>
+        {:else if solo}
           <span class="pname" id={`peer-target-${p.id}`}>{t.pickSendTo(p.name)}</span>
         {:else}
           <span class="pname" id={`peer-target-${p.id}`}>{p.name}</span>
@@ -1050,6 +1253,17 @@
          里自成一套的 .act-btn：透明底 + --border 描边，在暗色下边框只有 1.36:1，
          等于看不见。 -->
     <div class="peer-actions">
+      {#if unifiedPeer}
+      <!-- ONE action. Files, folders and messages are all inside the workspace it
+           opens, on one connection, so offering three entry points here made the
+           user pick a lane before there was anything to pick between. Named
+           `.open-workspace` on purpose: E2E and assistive tech both address it. -->
+      <button type="button" class="btn btn-primary btn-sm open-workspace" disabled={intentBlocked}
+        aria-describedby={`peer-target-${p.id}`}
+        onclick={() => openWorkspace(p.id)}>
+        <span class="pa-icon" aria-hidden="true"><Icon name="message" /></span><span class="pa-label">{t.workspace.open}</span>
+      </button>
+      {:else}
       <label class="btn btn-secondary btn-sm pa-files" class:is-disabled={intentBlocked}>
         <span class="pa-icon" aria-hidden="true"><Icon name="file" /></span><span class="pa-label" id={`send-file-label-${p.id}`}>{t.sendFile}</span>
         <input class="file-pick-input" id={`pick-${p.id}`} type="file" multiple disabled={intentBlocked}
@@ -1070,6 +1284,7 @@
           <span class="pa-icon" aria-hidden="true"><Icon name="message" /></span><span class="pa-label">{t.text.open}</span>
         </button>
       {/if}
+      {/if}
     </div>
   </li>
 {/snippet}
@@ -1088,14 +1303,15 @@
        path label, the single SAS and the explicit Disconnect live here and only
        here; every lane card below deliberately renders none of them again. Legacy
        peers (workspace.usingMixed === false) keep their untouched per-surface
-       chrome, because link/1 is still unadvertised. -->
+       chrome — that is the path for a peer that does not speak link/1 and for
+       every pairing-code room, which is not allowed to route it. -->
   {#if mixed}
     <WorkspaceHeader
       peerName={nameOf(workspace.linkPeerId)}
       status={workspace.linkStatus}
       sasCode={shownSas}
       path={workspace.linkPath}
-      onDisconnect={() => workspace.disconnect()}
+      onDisconnect={disconnectWorkspace}
       bind:element={headEl}
     />
   {/if}
@@ -1213,27 +1429,52 @@
     />
   {/if}
 
-  <!-- 消息面板放在这个 snippet 里面，所以 LAN 那条路径和 CrossPage 都从这一处拿到它。 -->
-  {#if activeText.status !== "idle"}
+  <!-- 消息面板放在这个 snippet 里面，所以 LAN 那条路径和 CrossPage 都从这一处拿到它。
+       On a unified link it is also the workspace's whole activity surface: there
+       is no peer card left to hang the file and folder controls on, so they live
+       in the panel (`unified`). It therefore renders for a mixed link even while
+       the text lane is still idle — the link exists, so its composer and its
+       attachment controls are what should be on the screen.
+       Every prop below is opt-in on the panel side; the legacy branch passes
+       `unified={false}` and behaves exactly as before. -->
+  {#if mixed || activeText.status !== "idle"}
+    <!-- Remounted once per torn-down link, so no draft crosses from one
+         authenticated link into the next. See linkEpoch for why this is not the
+         link identity: that advances at establishment, which is mid-compose. -->
+    {#key linkEpoch}
     <MessagePanel
-      status={activeText.status}
-      peerName={nameOf(activeText.peerId)}
-      sasCode={activeText.sasCode}
+      status={surfaceText.status}
+      peerName={nameOf(workspace.linkPeerId || surfaceText.peerId)}
+      sasCode={surfaceText.sasCode}
       showSas={!mixed && verifyOn}
       path={mixed ? undefined : workspace.textPath}
-      history={activeText.history}
-      errorKey={activeText.errorKey}
+      history={surfaceText.history}
+      errorKey={surfaceText.errorKey}
       prefill={textCompose}
+      unified={mixed}
+      attachmentsEnabled={unifiedAttachments}
+      folderPickSupported={folderUploadSupported}
       bind:revealTarget={textReveal}
-      onSend={(body) => void workspace.sendText(body)}
-      onAccept={() => workspace.acceptText()}
-      onReject={() => workspace.rejectText()}
-      onClear={() => workspace.clearText()}
-      onEnd={() => workspace.endText()}
+      onSend={sendSurfaceText}
+      onAccept={acceptSurfaceText}
+      onReject={rejectSurfaceText}
+      onClear={clearSurfaceText}
+      onEnd={endSurfaceText}
       onPrefillConsumed={() => (textCompose = "")}
+      onPickFiles={(e) => pickFile(e, workspace.linkPeerId)}
+      onPickFolder={(e) => pickFile(e, workspace.linkPeerId)}
+      onRestart={restartText}
     />
+    {/key}
   {/if}
 
+  <!-- While a unified workspace exists it owns the screen. The chooser, the old
+       per-peer file/folder/message controls and the message-availability hint all
+       describe a device you have NOT connected to yet — leaving them up next to a
+       live workspace offers a second, contradictory way to start one. Disconnect
+       brings this whole section straight back. Legacy peers and every pairing
+       room never take this branch. -->
+  {#if !mixed}
   <section class="peers" class:cross={currentRoute() === "cross"} class:after-activity={hasActivity}>
     <!-- A pairing room currently has one remote target (the signalling room cap
          is two participants). Cross without roomCode is the LAN auto-surface,
@@ -1290,6 +1531,7 @@
       </p>
     {/if}
   </section>
+  {/if}
 
   <!-- Deliberately inside transferSurface: LAN renders this snippet and so does
        CrossPage, so one placement makes the setting reachable from both kinds of

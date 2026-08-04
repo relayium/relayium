@@ -19,9 +19,16 @@ export type { Conn, ConnPath, Generation, InboundSignal, Reveal, RtcConfig, Sign
 /** What this build advertises to its peers. A list rather than a flag so a later
  *  capability needs no new field on the wire. See peer-caps.svelte.ts for why the
  *  authoritative announcement is at the roster level and this one is only the
- *  per-connection confirmation — and for the build-time seam that decides the
- *  contents. Derived from that one source so the two announcements cannot drift. */
-export const LOCAL_CAPS: readonly string[] = advertisedCaps();
+ *  per-connection confirmation — and for what decides the contents.
+ *
+ *  A function, not a constant: link/1 is scoped to the code-less LAN room, and a
+ *  room switch happens without a page reload. A value frozen at import time would
+ *  confirm the load-time room's capabilities on a connection made after the
+ *  switch — advertising one thing at the roster level and another in the SDP.
+ *  Derived from that one source so the two announcements cannot drift. */
+export function localCaps(): readonly string[] {
+  return advertisedCaps();
+}
 /** One maximum encrypted manifest plus lifecycle overhead. This is deliberately
  *  much smaller than the file flow-control window: pre-attachment traffic has
  *  not reached a content-consent state yet. */
@@ -280,7 +287,7 @@ async function handshakeConnect(opts: ConnectOpts, generation: Generation): Prom
 
       // The commit rides along with every offer/answer we send; caps ride with it
       // as the per-connection confirmation of the roster-level hello.
-      sdpExtra: () => ({ commit: selfCommit, caps: [...LOCAL_CAPS] }),
+      sdpExtra: () => ({ commit: selfCommit, caps: [...localCaps()] }),
 
       // Must run *before* the SDP is handled: answering an offer sends our commit,
       // and the peer's commit has to be recorded by then or a reveal that arrives

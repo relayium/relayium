@@ -191,6 +191,22 @@ export async function activateTab(browser, tab) {
   await tab.waitFor("document.visibilityState === 'visible'", "this tab to become the visible one");
 }
 
+let defaultInit = "";
+
+/**
+ * An init script every tab this run opens gets, before its own.
+ *
+ * Exists for one job: `lan-transfer.mjs` is the legacy/downgrade regression, and
+ * it has ~30 `newTab` call sites. Threading the same script through all of them
+ * would guarantee that the next scenario someone adds quietly forgets it — and a
+ * forgotten downgrade looks exactly like a passing test.
+ *
+ * Set it once at the top of a run, before the first tab.
+ */
+export function setDefaultInit(source) {
+  defaultInit = source ?? "";
+}
+
 /** 一个标签页的把手：evaluate / 等条件 / 收集 console 错误。
  *  `lanSeed` decides which installation this page belongs to; by default a fresh
  *  one, i.e. its own device. */
@@ -216,9 +232,10 @@ export async function newTab(browser, url, initScript, { lanSeed = distinctLanSe
   await send("Page.enable");
   await send("DOM.enable");
   // The seed goes first and unconditionally: a tab with no init script of its
-  // own still has to be an independent device.
+  // own still has to be an independent device. The run-wide default follows it,
+  // so a scenario's own script is layered on top of (not instead of) it.
   await send("Page.addScriptToEvaluateOnNewDocument", {
-    source: [lanSeedScript(lanSeed), initScript].filter(Boolean).join("\n"),
+    source: [lanSeedScript(lanSeed), defaultInit, initScript].filter(Boolean).join("\n"),
   });
   await send("Page.navigate", { url });
 
@@ -293,12 +310,11 @@ export const SAVE_STUB = `
  * 只读地记下这个 build 在**名册层**通告了哪些 capability（peer-caps 的 capsSignal）。
  *
  * 认帧的条件写得很紧：`data` 里除了 `caps` 什么都没有。SDP 的 offer/answer 上也捎带
- * 一份 caps（LOCAL_CAPS，连接级的确认），把那一份也算进来的话，这个探针就分不清
+ * 一份 caps（localCaps()，连接级的确认），把那一份也算进来的话，这个探针就分不清
  * "这个 build 通告了什么" 和 "某条连接确认了什么"了。
  *
- * 两边都要它：默认构建那一套用它证明 link/1 **没被**通告，mixed 那一套用它在跑任何
- * 断言之前确认自己确实指着 `build:link-e2e` 的产物——否则"链路没建起来"会被误读成
- * 回归，而真正的原因只是拿错了 dist。
+ * `mixed-link.mjs` 用它在跑任何断言之前确认这个产物真的通告了 link/1 —— 否则
+ * "链路没建起来"会被误读成回归，而真正的原因可能只是指错了服务器/构建。
  */
 
 /** Turn ON the advanced-verification preference before the app boots.
@@ -338,6 +354,50 @@ export const OBSERVE_CAPS = `
           if (e && e.type === "signal" && e.data && Array.isArray(e.data.caps)
               && Object.keys(e.data).length === 1) {
             window.__advertisedCaps = e.data.caps.slice();
+          }
+        } catch { /* 不是 JSON，照发 */ }
+      }
+      return realSend.call(this, data);
+    };
+  })();
+`;
+
+/**
+ * Make every tab in a run look like a peer that does not speak `link/1`.
+ *
+ * This is how `lan-transfer.mjs` stays a REAL downgrade regression now that a
+ * default build advertises the unified link on LAN. It is deliberately a
+ * test-only wire filter, not a product switch: the page runs the ordinary
+ * shipped bundle, with the ordinary shipped policy, and only what leaves the
+ * socket is rewritten — exactly what an older Web/native/CLI peer would have
+ * put there. A runtime flag inside the product would be a shipped way to
+ * downgrade the protocol, reachable by whoever can set it.
+ *
+ * It strips `link/1` from EVERY signal frame carrying a caps list: the roster
+ * hello and the caps confirmation piggybacked on the SDP offer/answer. Halving
+ * that would simulate an inconsistent peer, not an old one.
+ *
+ * The counters are the point, not bookkeeping. `sawLink` proves the build under
+ * test really did announce `link/1` before the filter removed it — without it, a
+ * change that stopped advertising the capability altogether would leave every
+ * legacy assertion below passing, for the wrong reason.
+ */
+export const STRIP_LINK_CAP = `
+  window.__legacyPeer = { capsFrames: 0, sawLink: 0, hello: null };
+  (() => {
+    const realSend = WebSocket.prototype.send;
+    WebSocket.prototype.send = function (data) {
+      if (typeof data === "string") {
+        try {
+          const e = JSON.parse(data);
+          if (e && e.type === "signal" && e.data && Array.isArray(e.data.caps)) {
+            const announced = e.data.caps.slice();
+            window.__legacyPeer.capsFrames++;
+            if (announced.includes("link/1")) window.__legacyPeer.sawLink++;
+            e.data.caps = announced.filter((c) => c !== "link/1");
+            // 只有名册那一帧（data 里只有 caps）算"这个对端自称支持什么"。
+            if (Object.keys(e.data).length === 1) window.__legacyPeer.hello = e.data.caps.slice();
+            return realSend.call(this, JSON.stringify(e));
           }
         } catch { /* 不是 JSON，照发 */ }
       }

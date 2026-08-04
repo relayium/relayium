@@ -759,6 +759,14 @@ export interface Messages {
     queuedHint: string;
     queuedRemove: string;
     queuedFiles: (count: number) => string;
+    // ── the one action that starts a workspace ──
+    // A link-capable LAN peer offers exactly ONE primary action instead of the
+    // separate file / folder / message fork: everything the fork used to choose
+    // between lives inside the workspace, on one connection. These three strings
+    // must therefore promise files AND messages, never one of the two.
+    open: string; // the single primary button on the peer card
+    openWith: (name: string) => string; // the card's own lead line
+    openHint: string; // secondary line when several devices are listed
   };
   // Ephemeral encrypted messages. In-memory only — nothing here is ever written to
   // localStorage, unlike the transfer history above.

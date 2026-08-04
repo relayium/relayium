@@ -15,36 +15,54 @@
 // 它永远不可能让明文被发出去：消息密钥是**派生**出来的，不是协商出来的，所以不存在
 // "降级成不加密"这条路径。能改写信令的攻击者本来就能直接让连接建不起来。
 
+import { roomCode } from "./room.svelte";
+
 /** The one capability this version advertises. Versioned so a later, wire-
  *  incompatible message format can be introduced without ambiguity. */
 export const CAP_TEXT = "text/1";
-/** Unified two-lane Web link. Defined before it is advertised so the coordinator
- *  and compatibility tests can land without exposing a half-built protocol. */
+/** Unified two-lane Web link: one authenticated connection carrying an ordered
+ *  file lane and an ordered text lane. Versioned for the same reason text/1 is. */
 export const CAP_LINK = "link/1";
 
 /**
- * Build-time E2E seam, and the ONLY way link/1 can be advertised today.
+ * Whether this BUILD implements link/1 at all.
  *
- * Written as a plain member access on purpose: Vite substitutes exactly this
- * form at build time, so a default build folds it to the literal `false` and
- * ships no way to flip it — no query parameter, no stored setting, no exported
- * setter, nothing a user or a page script can reach. Optional chaining here
- * would leave a live property lookup in the bundle instead of a constant.
- * Turning it on requires rebuilding with `VITE_RELAYIUM_LINK_E2E=1` — see
- * `npm run build:link-e2e`, which exists purely to feed `e2e/mixed-link.mjs`
- * and is never what a release builds.
+ * A plain constant, deliberately. It used to be a build-time Vite environment
+ * substitution, which made "does the shipped bundle speak this protocol?"
+ * depend on a variable somebody had to remember to set — a release could
+ * silently go out without it, and the E2E that proved the path needed its own
+ * separate bundle that no deployment ever ran. What a build can implement is a
+ * property of the source, so it is written in the source.
  *
- * Advertisement stays off in every shipped build until the coordinator, both
- * lanes and recovery are ready together; this seam does not change that gate,
- * it only lets two real browser tabs reach the path before the gate opens.
+ * It is not a switch. There is no setter, no query parameter and no stored
+ * setting: a page script, a relay or a user cannot reach it. Scope is decided
+ * one level down, by the room.
  */
-const LINK_E2E: boolean = import.meta.env.VITE_RELAYIUM_LINK_E2E === "1";
+export const LINK_BUILD_SUPPORT = true;
 
-/** What this build announces, at the roster level and (via LOCAL_CAPS) in its
- *  SDP confirmation. The argument exists so a test can exercise the enabled
- *  branch without a second bundle; production callers never pass one. */
-export function advertisedCaps(linkE2E: boolean = LINK_E2E): readonly string[] {
-  return linkE2E ? [CAP_TEXT, CAP_LINK] : [CAP_TEXT];
+/**
+ * Whether the room this page is currently in may use link/1.
+ *
+ * Only the code-less LAN room. A pairing-code/cross-network room keeps the
+ * existing one-mode-at-a-time file and text paths, because a relayed link's TURN
+ * allocation lifetime, quota accounting and mobile-background cost need their
+ * own production acceptance before one long-lived link replaces two short ones
+ * there. See DECISION-LOG "Promote the unified Web peer workspace on LAN".
+ *
+ * Read at call time, never cached: entering or leaving a room rewrites the URL
+ * fragment WITHOUT a reload, so a value frozen at import would keep answering
+ * for the room the page was loaded into.
+ */
+export function linkRoomActive(): boolean {
+  return LINK_BUILD_SUPPORT && roomCode() === "";
+}
+
+/** What this build announces, at the roster level and (via localCaps) in its
+ *  SDP confirmation. One expression for both, so the two announcements cannot
+ *  disagree — and so neither can disagree with the routing rule below, which
+ *  reads the same predicate. */
+export function advertisedCaps(): readonly string[] {
+  return linkRoomActive() ? [CAP_TEXT, CAP_LINK] : [CAP_TEXT];
 }
 
 /** What each peer in the room has told us it supports. Reactive: the peer cards
@@ -83,8 +101,18 @@ export function peerSupportsText(peerId: string): boolean {
   return (announced[peerId] ?? []).includes(CAP_TEXT);
 }
 
-/** Exact match; callers must never infer link support from text/1. */
+/**
+ * Exact match; callers must never infer link support from text/1.
+ *
+ * Room scope is enforced HERE rather than only at the announcement, because a
+ * signalling relay sees every frame and can inject one. Refusing to *say*
+ * link/1 in a pairing-code room is worth nothing on its own: this is the
+ * predicate every routing decision reads (peer-workspace's `routes`, the
+ * manager's inbound request/offer guards, `ensure`), so a forged roster claim
+ * cannot activate the mixed manager where the room does not allow it.
+ */
 export function peerSupportsLink(peerId: string): boolean {
+  if (!linkRoomActive()) return false;
   return (announced[peerId] ?? []).includes(CAP_LINK);
 }
 

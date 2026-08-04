@@ -753,6 +753,9 @@ const en: Messages = {
     queuedHint: "These wait for the current transfer to finish. You can keep picking files and keep messaging in the meantime.",
     queuedRemove: "Remove",
     queuedFiles: (count) => (count === 1 ? "1 file" : `${count} files`),
+    open: "Open workspace",
+    openWith: (n) => `Open a shared workspace with ${n}`,
+    openHint: "One encrypted connection carries files and messages.",
   },
   text: {
     panelTitle: "Message",

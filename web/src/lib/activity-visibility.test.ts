@@ -39,8 +39,11 @@ describe("active transfer visibility contract", () => {
 
   it("reveals only verification and consent edges, never progress or terminal states", () => {
     const reveal = app.slice(app.indexOf("function activityReveal()"), app.indexOf("function revealElement("));
-    expect(reveal).toContain('activeText.status === "waitingAccept"');
-    expect(reveal).toContain('activeText.status === "incomingRequest"');
+    // `surfaceText`, not `workspace.text`: which STATES reveal is this test's
+    // subject, but they are read off the session the panel shows — see
+    // workspace-orchestration.test.ts for why that identity is load-bearing.
+    expect(reveal).toContain('surfaceText.status === "waitingAccept"');
+    expect(reveal).toContain('surfaceText.status === "incomingRequest"');
     expect(reveal).toContain("!x.done && workspace.sasCode");
     expect(reveal.match(/key: `file:recv:\$\{/g)).toHaveLength(1);
     expect(reveal).not.toMatch(/receiving|sending|finishing|ended|failed|refused/);

@@ -15,7 +15,7 @@
 | `npm test` | Unit contracts: token contrast maths, landmark structure, dialog naming, role placement, focusability, i18n completeness for every accessible name. |
 | `npm run test:a11y` | axe-core 4.12.1 in real headless Chrome over the **built** site: 14 targets covering all six static template types (two representative pages are RTL), the SPA in light/desktop and dark/mobile, four SPA routes, and the account dialog. Runs in CI right after `npm run build`. |
 | `npm run test:e2e` | The same axe engine at four states only two real peers can reach: file consent card, live transfer (`role="progressbar"`), post-drop-resume completion, message session (`role="log"`). |
-| `npm run test:e2e:mixed` | Opt-in `link/1` build: unified workspace header, 40-file consent card at 390px, both lanes live after text consent. |
+| `npm run test:e2e:mixed` | Default build, `link/1` in the LAN room: unified workspace header, 40-file consent card at 390px, both lanes live after text consent. Separate command because it needs its own server port. |
 
 Scope of the rule set: **WCAG 2.0 / 2.1 / 2.2, levels A and AA**, plus ten
 named best-practice rules. The allowlist (`web/e2e/a11y-allowlist.json`) is

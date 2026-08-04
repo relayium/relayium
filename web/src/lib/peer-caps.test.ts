@@ -1,11 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  CAP_LINK, CAP_TEXT, advertisedCaps, capsSignal, recordPeerCaps, peerSupportsLink,
-  peerSupportsText, retainPeers, resetPeerCaps,
+  CAP_LINK, CAP_TEXT, LINK_BUILD_SUPPORT, advertisedCaps, capsSignal, linkRoomActive,
+  recordPeerCaps, peerSupportsLink, peerSupportsText, retainPeers, resetPeerCaps,
 } from "./peer-caps.svelte";
-import { LOCAL_CAPS } from "./webrtc";
+import { clearRoom, enterRoom } from "./room.svelte";
+import { localCaps } from "./webrtc";
 
-beforeEach(() => { resetPeerCaps(); });
+/** The code-less LAN room is the only one `link/1` is scoped to. Every test
+ *  starts there explicitly rather than inheriting whichever room a previous
+ *  file left behind. */
+beforeEach(() => { clearRoom(); resetPeerCaps(); });
 
 describe("peer caps", () => {
   it("treats an unheard-from peer as not supporting text", () => {
@@ -17,27 +21,45 @@ describe("peer caps", () => {
     expect(peerSupportsText("p1")).toBe(true);
   });
 
-  it("announces exactly our capability list", () => {
-    expect(capsSignal()).toEqual({ caps: [CAP_TEXT] });
+  it("announces exactly text/1 and link/1 in the code-less LAN room", () => {
     expect(CAP_TEXT).toBe("text/1");
-    // Capability advertisement is the release switch. Keep it off until the
-    // coordinator, both lanes and recovery all ship together.
-    expect(capsSignal().caps).not.toContain(CAP_LINK);
-    expect(LOCAL_CAPS).not.toContain(CAP_LINK);
-  });
-
-  it("keeps link/1 behind the build-time E2E seam, off by default", () => {
-    // The default is what every shipped bundle gets: no environment is read at
-    // runtime, so this is not something a page, a user or a relay can change.
-    expect(advertisedCaps()).toEqual([CAP_TEXT]);
-    expect(advertisedCaps(false)).toEqual([CAP_TEXT]);
-    // And the enabled branch really is the two-capability announcement the mixed
-    // browser E2E depends on — asserted here so that path cannot rot unnoticed
-    // while it has no default-build coverage.
-    expect(advertisedCaps(true)).toEqual([CAP_TEXT, CAP_LINK]);
+    expect(CAP_LINK).toBe("link/1");
+    // The release switch for the unified workspace. A default build implements
+    // both lanes, so it says so — in the LAN room, and only there.
+    expect(capsSignal()).toEqual({ caps: [CAP_TEXT, CAP_LINK] });
+    expect(advertisedCaps()).toEqual([CAP_TEXT, CAP_LINK]);
+    expect(LINK_BUILD_SUPPORT).toBe(true);
+    expect(linkRoomActive()).toBe(true);
     // Both announcements come from this one source, so the roster hello and the
     // per-connection SDP confirmation cannot disagree about what we support.
-    expect([...LOCAL_CAPS]).toEqual([...advertisedCaps()]);
+    expect([...localCaps()]).toEqual([...advertisedCaps()]);
+  });
+
+  it("never announces link/1 from a pairing-code room", () => {
+    enterRoom({ code: "123456" });
+    expect(linkRoomActive()).toBe(false);
+    expect(capsSignal()).toEqual({ caps: [CAP_TEXT] });
+    expect(advertisedCaps()).toEqual([CAP_TEXT]);
+    // The per-connection confirmation is read at call time, not frozen at
+    // import time — a module constant would keep announcing the LAN answer
+    // after the page switched rooms without reloading.
+    expect([...localCaps()]).toEqual([CAP_TEXT]);
+    clearRoom();
+    expect([...localCaps()]).toEqual([CAP_TEXT, CAP_LINK]);
+  });
+
+  // The room policy is not only about what we say. A signalling relay sees every
+  // frame and can inject one, so a code room must also refuse to BELIEVE a
+  // link/1 claim: routing is what actually activates the mixed manager.
+  it("refuses a forged link/1 claim inside a pairing-code room", () => {
+    recordPeerCaps("forger", { caps: [CAP_TEXT, CAP_LINK] });
+    expect(peerSupportsLink("forger")).toBe(true);
+    enterRoom({ code: "654321" });
+    expect(peerSupportsLink("forger")).toBe(false);
+    // text/1 is unaffected: the pairing room keeps its existing message path.
+    expect(peerSupportsText("forger")).toBe(true);
+    clearRoom();
+    expect(peerSupportsLink("forger")).toBe(true);
   });
 
   it("tracks exact link support independently from text", () => {
@@ -59,7 +81,7 @@ describe("peer caps", () => {
   it("hands out a fresh array, so a caller cannot mutate what we announce", () => {
     const first = capsSignal();
     first.caps.push("forged/1");
-    expect(capsSignal()).toEqual({ caps: [CAP_TEXT] });
+    expect(capsSignal()).toEqual({ caps: [CAP_TEXT, CAP_LINK] });
   });
 
   // The other piggybacks (relayRtt, rename) share this envelope and are handled

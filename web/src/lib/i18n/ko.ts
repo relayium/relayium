@@ -737,6 +737,9 @@ const ko: Messages = {
     queuedHint: "현재 전송이 끝날 때까지 기다립니다. 그동안에도 파일을 계속 고르고 메시지를 보낼 수 있습니다.",
     queuedRemove: "제거",
     queuedFiles: (count) => `파일 ${count}개`,
+    open: "작업 공간 열기",
+    openWith: (n) => `${n}와 공유 작업 공간 열기`,
+    openHint: "하나의 암호화된 연결로 파일과 메시지를 함께 주고받습니다.",
   },
   text: {
     panelTitle: "메시지",

@@ -4,8 +4,9 @@ import { describe, expect, it } from "vitest";
 
 // Source contract, like activity-visibility.test.ts: the rules below are about
 // which nodes exist in which branch, which is exactly what a rendered snapshot of
-// one state cannot prove. `link/1` is still unadvertised, so the legacy branch is
-// the production path and has to stay byte-for-behaviour identical.
+// one state cannot prove. `link/1` now ships, but only the code-less LAN room
+// activates it — pairing-code rooms and every older peer stay on the legacy
+// branch, so that branch has to stay byte-for-behaviour identical.
 const app = readFileSync(resolve(process.cwd(), "src/App.svelte"), "utf8");
 const surface = app.slice(
   app.indexOf("{#snippet transferSurface()}"),
@@ -19,6 +20,12 @@ const indicesOf = (haystack: string, needle: string): number[] => {
   for (let i = haystack.indexOf(needle); i >= 0; i = haystack.indexOf(needle, i + 1)) out.push(i);
   return out;
 };
+
+// The activity reveal/announcement effect, shared by the two contracts below.
+const revealEffect = app.slice(
+  app.indexOf("$effect(() => {", app.indexOf("function revealElement(")),
+  app.indexOf("// ── ?debug=1"),
+);
 
 describe("unified mixed peer workspace presentation", () => {
   it("gates the whole unified branch on workspace.usingMixed", () => {
@@ -37,7 +44,9 @@ describe("unified mixed peer workspace presentation", () => {
     expect(head).toBeLessThan(surface.indexOf("{#if pendingPeer}"));
     expect(head).toBeLessThan(surface.indexOf("{#if incoming}"));
     expect(head).toBeLessThan(surface.indexOf("{#each [send, recv].filter(Boolean)"));
-    expect(head).toBeLessThan(surface.indexOf('{#if activeText.status !== "idle"}'));
+    // The message panel is also the unified workspace's activity surface, so its
+    // gate now admits a mixed link whose text lane has not opened yet.
+    expect(head).toBeLessThan(surface.indexOf('{#if mixed || activeText.status !== "idle"}'));
     expect(head).toBeLessThan(surface.indexOf('<section class="peers"'));
 
     for (const prop of [
@@ -45,7 +54,10 @@ describe("unified mixed peer workspace presentation", () => {
       "status={workspace.linkStatus}",
       "sasCode={shownSas}",
       "path={workspace.linkPath}",
-      "onDisconnect={() => workspace.disconnect()}",
+      // Not an inline `workspace.disconnect()`: the action also has to clear
+      // App's own draft and launcher state synchronously — see
+      // workspace-orchestration.test.ts.
+      "onDisconnect={disconnectWorkspace}",
     ]) expect(surface).toContain(prop);
   });
 
@@ -84,12 +96,13 @@ describe("unified mixed peer workspace presentation", () => {
     // announced" bug that the announcer exists to prevent.
     expect(app).toContain("const announcer = createActivityAnnouncer();");
     const call = app.slice(
-      app.indexOf("activityAnnouncement = announcer.announce("),
-      app.indexOf("await tick();", app.indexOf("activityAnnouncement = announcer.announce(")),
+      app.indexOf("const announcement = announcer.announce("),
+      app.indexOf("await tick();", app.indexOf("const announcement = announcer.announce(")),
     );
     expect(call).toContain("mixed: workspace.usingMixed");
     expect(call).toContain("linkGeneration: workspace.linkGeneration");
     expect(call).toContain("codeLabel: t.codeLabel");
+    expect(call).toContain("activityAnnouncement = announcement.text;");
     // Consent is never auto-answered and protected bodies never reach the live
     // region — only the edge lead and the code.
     expect(call).not.toMatch(/\.accept\(|\.body\b/);
@@ -118,7 +131,48 @@ describe("unified mixed peer workspace presentation", () => {
     expect(reveal).toContain("incoming && workspace.sasCode");
     expect(reveal).toContain("sas: shownSas || undefined");
     expect(reveal).toContain("!x.done && workspace.sasCode");
-    expect(reveal).toContain("activeText.sasCode &&");
+    expect(reveal).toContain("surfaceText.sasCode &&");
+  });
+
+  it("only counts a code as announced once its sentence has actually rendered", () => {
+    // A sentence is a pending state write. A newer edge that takes the live
+    // region before the next flush coalesces both writes, so the earlier one
+    // never reaches the DOM — and committing the once-per-link allowance while
+    // composing let that unheard sentence spend it, leaving the edge that DID
+    // land with no code. Real glare between two tabs opening the text lane at
+    // once reproduces it (e2e/mixed-link.mjs).
+    const effect = revealEffect;
+    // The turn is taken where the region is cleared, i.e. synchronously in the
+    // effect body — taking it inside the async block would let the superseding
+    // edge's own clear go unnoticed.
+    expect(effect).toMatch(/activityAnnouncement = "";\s*const turn = \+\+announcementTurn;/);
+    // Confirmed only after the flush that renders it, and only if no newer edge
+    // has taken the region since.
+    expect(effect).toMatch(
+      /activityAnnouncement = announcement\.text;\s*await tick\(\);[^]*?if \(announcementTurn === turn\) announcement\.confirm\(\);/,
+    );
+    // No copy of the rule that spends the allowance at compose time.
+    expect(effect).not.toMatch(/activityAnnouncement = announcer\.announce\(/);
+  });
+
+  it("ships the announcement effect free of debug instrumentation", () => {
+    // Diagnosing the glare above meant parking a live-region trace on `window`
+    // (`__e2eSay`) plus a timer to sample it a task later. That probe was
+    // briefly left in the candidate change and caught before commit, so it never
+    // shipped. It is not harmless here: the effect runs on every authentication
+    // and consent edge, so the array grows unboundedly with SAS-bearing text,
+    // and the timer fires after the turn check the effect exists to make. E2E
+    // reads the live region and the announcement log, never a debug global —
+    // see e2e/mixed-link.mjs.
+    expect(revealEffect).not.toMatch(/__e2e|__debug/);
+    // The cast is how such a global gets written at all under TS.
+    expect(revealEffect).not.toMatch(/as unknown as/);
+    // Nothing in this effect may be deferred past the tick that confirms it.
+    expect(revealEffect).not.toMatch(/setTimeout|setInterval|queueMicrotask|requestIdleCallback/);
+    expect(revealEffect).not.toMatch(/console\./);
+    // `window` here is scroll measurement only; assignment would be a global.
+    const windowUses = revealEffect.match(/window\.\w+/g) ?? [];
+    expect(windowUses.every((use) => use === "window.scrollY" || use === "window.scrollTo")).toBe(true);
   });
 
   it("renders the queue with a cancel control routed by batch id", () => {
@@ -162,18 +216,46 @@ describe("unified mixed peer workspace presentation", () => {
     expect(panel).toContain("showSas = true");
   });
 
-  it("still does not advertise link/1 outside the build-time E2E seam", () => {
-    // Behavioural coverage of both branches lives in peer-caps.test.ts. What
-    // this pins is the *shape* of the switch: exactly one guard, reading a
-    // build-time constant, with no runtime setter beside it. A query parameter,
-    // a localStorage read or an exported setter here would turn a test seam into
-    // a shipped switch for a protocol that is not finished.
-    // Plain member access, not optional chaining: only this form is substituted
-    // by Vite, so only this form folds to a constant in a default bundle.
-    expect(caps).toContain('import.meta.env.VITE_RELAYIUM_LINK_E2E === "1"');
-    expect(caps.match(/CAP_LINK\]/g)).toHaveLength(1);
-    expect(caps).toContain("linkE2E ? [CAP_TEXT, CAP_LINK] : [CAP_TEXT]");
+  it("scopes link/1 to the room, with no build flag and no runtime switch", () => {
+    // Behavioural coverage of both branches lives in peer-caps.test.ts and
+    // peer-workspace.test.ts. What this pins is the *shape* of the scope.
+    //
+    // What a build can implement and what a room may activate are now two
+    // separate, named things. The build half is a plain constant, so a release
+    // no longer depends on an environment variable somebody has to remember to
+    // set — and cannot accidentally ship half-advertised because they forgot.
+    expect(caps).toContain("export const LINK_BUILD_SUPPORT = true");
+    expect(caps).not.toContain("VITE_RELAYIUM_LINK_E2E");
+    expect(caps).not.toContain("import.meta.env");
+    // The room half reads the URL-driven room store and nothing else. A query
+    // parameter, a stored setting or an exported setter here would be a runtime
+    // switch over a protocol scope, reachable by a page script or a user.
+    expect(caps).toContain('from "./room.svelte"');
     expect(caps).not.toMatch(/localStorage|location\.|searchParams|setAdvertised/);
+    // One expression decides it, and both the roster hello and the SDP
+    // confirmation are derived from that one expression. Asymmetry here is the
+    // failure mode: advertising a capability we then refuse to route (or the
+    // reverse) strands a peer that believed us.
+    expect(caps.match(/CAP_LINK\]/g)).toHaveLength(1);
+    expect(caps).toContain("linkRoomActive() ? [CAP_TEXT, CAP_LINK] : [CAP_TEXT]");
+    expect(caps).toMatch(/export function peerSupportsLink[\s\S]{0,400}?linkRoomActive\(\)/);
     expect(app).not.toContain("CAP_LINK");
+  });
+
+  // Requirement, not housekeeping: until these run, the page still holds the
+  // previous room's peer claims and a live mixed link, both of which name peer
+  // ids the new room's server will hand out again.
+  it("clears capabilities and mixed state before a room switch rebinds the socket", () => {
+    const switchRoom = app.slice(
+      app.indexOf("async function switchRoom()"),
+      app.indexOf("$effect(", app.indexOf("async function switchRoom()")),
+    );
+    expect(switchRoom).not.toBe("");
+    const reset = switchRoom.indexOf("resetPeerCaps()");
+    const teardown = switchRoom.indexOf("workspace.resetRoom()");
+    const rebind = switchRoom.indexOf("signaling.reconnect(");
+    expect(teardown).toBeGreaterThan(-1);
+    expect(reset).toBeGreaterThan(teardown);
+    expect(rebind).toBeGreaterThan(reset);
   });
 });

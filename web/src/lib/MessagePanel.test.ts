@@ -44,6 +44,11 @@ function open(props: Record<string, unknown> = {}) {
 }
 const bodies = () => [...target.querySelectorAll(".msg-body")] as HTMLElement[];
 const ta = () => target.querySelector("textarea") as HTMLTextAreaElement;
+function reset() {
+  if (app) unmount(app);
+  app = undefined;
+  target.innerHTML = "";
+}
 function type(text: string) {
   const el = ta();
   el.value = text;
@@ -373,5 +378,281 @@ describe("MessagePanel", () => {
       const name = (b.textContent ?? "").trim() || b.getAttribute("aria-label");
       expect(name, b.className).toBeTruthy();
     }
+  });
+});
+
+// ─── unified (`link/1`) workspace mode ───────────────────────────────────────
+// One workspace, one link, one composer: on a mixed link this panel is not "the
+// text card" any more, it is the peer's whole activity surface, so file/folder
+// attachment lives beside the text composer instead of on a separate peer card
+// that the unified workspace no longer renders.
+//
+// Every prop below is optional and every default reproduces the legacy panel
+// byte for byte — the legacy surface is the shipped path and this batch is not
+// allowed to move a single selector in it.
+// Read at call time: the catalogs are loaded by `loadLang` in beforeEach, so a
+// module-level constant here would capture an undefined catalog.
+const FILE_LABEL = () => messages.en.sendFile;
+const FOLDER_LABEL = () => messages.en.sendFolder;
+const RESTART_LABEL = () => messages.en.text.open;
+
+const fileInput = () => target.querySelector('input[type="file"]:not([webkitdirectory])') as HTMLInputElement | null;
+const folderInput = () => target.querySelector('input[type="file"][webkitdirectory]') as HTMLInputElement | null;
+const buttons = () => [...target.querySelectorAll("button")];
+const byText = (s: string) => buttons().find((b) => b.textContent!.trim() === s);
+
+function unified(props: Record<string, unknown> = {}) {
+  open({
+    unified: true, showSas: false, attachmentsEnabled: true,
+    onPickFiles: vi.fn(), onPickFolder: vi.fn(), onRestart: vi.fn(), ...props,
+  });
+}
+
+/** jsdom's `files` is a read-only getter; a real picker result is the only thing
+ *  worth asserting the callback receives, so install one on the instance. */
+function stubPick(input: HTMLInputElement, files: File[]): FileList {
+  const list = {
+    length: files.length,
+    item: (i: number) => files[i] ?? null,
+    [Symbol.iterator]: () => files[Symbol.iterator](),
+    ...Object.fromEntries(files.map((f, i) => [i, f])),
+  } as unknown as FileList;
+  Object.defineProperty(input, "files", { configurable: true, value: list });
+  return list;
+}
+
+describe("MessagePanel — unified workspace mode", () => {
+  // ── composer + attachments ─────────────────────────────────────────────────
+  it("renders a text composer and a file attachment, and the folder attachment only when the caller says the browser has one", () => {
+    unified({ folderPickSupported: false });
+    expect(ta()).not.toBe(null);
+    expect(fileInput()).not.toBe(null);
+    expect(target.textContent).toContain(FILE_LABEL());
+    expect(folderInput()).toBe(null);
+    expect(target.textContent).not.toContain(FOLDER_LABEL());
+    reset();
+
+    unified({ folderPickSupported: true });
+    expect(fileInput()).not.toBe(null);
+    expect(folderInput()).not.toBe(null);
+    expect(target.textContent).toContain(FOLDER_LABEL());
+  });
+
+  it("hands the attachment callback the actual change event and its FileList", () => {
+    let seen: { current: EventTarget | null; files: FileList | null } | null = null;
+    const onPickFiles = vi.fn((e: Event) => {
+      seen = { current: e.currentTarget, files: (e.currentTarget as HTMLInputElement).files };
+    });
+    let seenFolder: FileList | null = null;
+    const onPickFolder = vi.fn((e: Event) => { seenFolder = (e.currentTarget as HTMLInputElement).files; });
+    unified({ onPickFiles, onPickFolder, folderPickSupported: true });
+
+    const input = fileInput()!;
+    const picked = stubPick(input, [new File(["x"], "a.txt")]);
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect(onPickFiles).toHaveBeenCalledTimes(1);
+    expect(seen!.current).toBe(input);
+    expect(seen!.files).toBe(picked); // the exact list, not a copy or a mapping
+    expect(onPickFolder).not.toHaveBeenCalled();
+
+    const dir = folderInput()!;
+    const pickedDir = stubPick(dir, [new File(["y"], "b.txt")]);
+    dir.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    expect(onPickFolder).toHaveBeenCalledTimes(1);
+    expect(seenFolder).toBe(pickedDir);
+    expect(onPickFiles).toHaveBeenCalledTimes(1);
+  });
+
+  // Bytes are the caller's business. This panel is the surface that must never
+  // read a body it did not render, and a file is the biggest body of all.
+  it("never reads or sends file bytes itself", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("src/lib/MessagePanel.svelte", "utf8");
+    // Named APIs only. A bare "slice(" would also match ordinary string work and
+    // become a tripwire that fires on something harmless.
+    for (const forbidden of ["arrayBuffer", "FileReader", "pickedFromInput", "sendFiles", "stream()"]) {
+      expect(src, forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it("keeps attachments usable in every state where the caller allows another intent", () => {
+    // Text being connecting/open/ended says nothing about whether the LINK can
+    // take another file — that is one question, and only the caller can answer it.
+    for (const status of ["connecting", "waitingAccept", "open", "ended", "failed"] as const) {
+      unified({ status });
+      expect(fileInput()!.disabled, status).toBe(false);
+      reset();
+    }
+  });
+
+  it("disables attachments when the caller says the peer cannot take another intent", () => {
+    unified({ attachmentsEnabled: false });
+    const input = fileInput()!;
+    expect(input.disabled).toBe(true);
+    // :disabled does not apply to the <label> that carries the visible button,
+    // so the disabled look has to be a class, exactly as the peer card does it.
+    expect(input.closest("label")!.classList.contains("is-disabled")).toBe(true);
+  });
+
+  // ── connecting / waiting ───────────────────────────────────────────────────
+  it("shows the draft while the session is still connecting but refuses to send it", () => {
+    for (const status of ["connecting", "waitingAccept"] as const) {
+      const onSend = vi.fn();
+      unified({ status, prefill: "  half typed\n", onSend });
+      expect(ta(), status).not.toBe(null);
+      expect(ta().value, status).toBe("  half typed\n");
+      const send = target.querySelector("button.send") as HTMLButtonElement;
+      expect(send.disabled, status).toBe(true);
+      send.click();
+      ta().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+      flushSync();
+      expect(onSend, status).not.toHaveBeenCalled();
+      expect(ta().value, status).toBe("  half typed\n"); // and it is still there
+      reset();
+    }
+  });
+
+  // ── terminal states ────────────────────────────────────────────────────────
+  it("keeps the transcript and the attachments after the conversation ends, and restarts only when asked", () => {
+    for (const status of ["ended", "refused", "failed"] as const) {
+      const onRestart = vi.fn();
+      unified({ status, onRestart });
+      expect(bodies().length, status).toBe(3);
+      expect(fileInput(), status).not.toBe(null);
+      expect(fileInput()!.disabled, status).toBe(false);
+
+      const restart = byText(RESTART_LABEL());
+      expect(restart, status).toBeTruthy();
+      expect(onRestart, status).not.toHaveBeenCalled(); // nothing auto-restarts
+      restart!.click();
+      flushSync();
+      expect(onRestart, status).toHaveBeenCalledTimes(1);
+      reset();
+    }
+  });
+
+  it("offers no restart while the conversation is live", () => {
+    for (const status of ["connecting", "waitingAccept", "open"] as const) {
+      unified({ status });
+      expect(byText(RESTART_LABEL()), status).toBeUndefined();
+      reset();
+    }
+  });
+
+  // ── the end control belongs to the workspace header ────────────────────────
+  it("hides the legacy end control while open, because Disconnect lives in the workspace header", () => {
+    const onEnd = vi.fn();
+    unified({ onEnd });
+    expect(target.querySelector("button.end")).toBe(null);
+    expect(target.textContent).not.toContain(messages.en.startOver);
+    expect(byText(messages.en.text.clear)).toBeTruthy(); // Clear is local, and stays
+    expect(onEnd).not.toHaveBeenCalled();
+  });
+
+  // ── consent ────────────────────────────────────────────────────────────────
+  it("shows no bodies and no editable composer before an inbound conversation is accepted", () => {
+    unified({ status: "incomingRequest" });
+    expect(bodies().length).toBe(0);
+    expect(target.querySelector("textarea")).toBe(null);
+    expect(target.textContent).toContain(messages.en.text.accept);
+    // Nothing is pre-armed: a stray Enter/Space must not answer for the user.
+    expect(target.querySelector("[autofocus]")).toBe(null);
+    expect(target.contains(document.activeElement)).toBe(false);
+  });
+
+  it("offers file attachment during consent only when the caller explicitly enables it", () => {
+    unified({ status: "incomingRequest", attachmentsEnabled: true });
+    expect(fileInput()).not.toBe(null);
+    reset();
+
+    unified({ status: "incomingRequest", attachmentsEnabled: false });
+    expect(fileInput()).toBe(null);
+    expect(target.textContent).not.toContain(FILE_LABEL());
+  });
+
+  // ── unchanged invariants ───────────────────────────────────────────────────
+  it("still renders a body as an exact, uninterpreted text node", () => {
+    unified();
+    const got = bodies().find((n) => n.textContent!.includes("alert"))!;
+    expect(got.textContent).toBe(INJECTION);
+    expect(got.children.length).toBe(0);
+    expect(target.querySelector("script")).toBe(null);
+    expect(target.querySelector(".msg-body a")).toBe(null);
+  });
+
+  it("still renders no verification code of its own", () => {
+    unified();
+    expect(target.querySelectorAll(".sas")).toHaveLength(0);
+    expect(target.textContent).not.toContain("123456");
+    expect(target.querySelector(".reveal-anchor")).not.toBe(null);
+  });
+
+  // ── accessibility ──────────────────────────────────────────────────────────
+  it("names each hidden file input from its visible label and keeps a 44px target", async () => {
+    unified({ folderPickSupported: true });
+    for (const input of [fileInput()!, folderInput()!]) {
+      const id = input.getAttribute("aria-labelledby");
+      expect(id, input.className).toBeTruthy();
+      const label = target.querySelector(`#${id}`);
+      expect(label, id!).not.toBe(null);
+      expect(label!.textContent!.trim().length).toBeGreaterThan(0);
+      // The visible target is the <label> wrapping the 1px input; `.btn` is what
+      // carries the global coarse-pointer 44px floor.
+      const wrapper = input.closest("label")!;
+      expect(wrapper.classList.contains("btn"), input.className).toBe(true);
+      expect(input.classList.contains("file-pick-input")).toBe(true);
+    }
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync("src/app.css", "utf8");
+    expect(css).toMatch(/@media \(pointer: coarse\)\s*\{\s*\.btn\s*\{[^}]*min-block-size:\s*44px/s);
+  });
+
+  it("puts the attachments in the composer's keyboard order, before Send", () => {
+    unified({ folderPickSupported: true });
+    const order = [ta(), fileInput()!, folderInput()!, target.querySelector("button.send")!];
+    for (let i = 1; i < order.length; i++) {
+      const rel = order[i - 1].compareDocumentPosition(order[i]);
+      expect(rel & Node.DOCUMENT_POSITION_FOLLOWING, String(i)).toBeTruthy();
+    }
+  });
+
+  it("gives every unified control an accessible name", () => {
+    for (const status of ["open", "connecting", "ended", "incomingRequest"] as const) {
+      unified({ status, folderPickSupported: true });
+      for (const b of target.querySelectorAll("button")) {
+        expect((b.textContent ?? "").trim() || b.getAttribute("aria-label"), `${status} ${b.className}`).toBeTruthy();
+      }
+      reset();
+    }
+  });
+});
+
+// ─── the legacy surface, pinned ──────────────────────────────────────────────
+describe("MessagePanel — legacy mode is untouched", () => {
+  it("renders no attachment control, no restart, and keeps its own end control", () => {
+    open();
+    expect(target.querySelector('input[type="file"]')).toBe(null);
+    expect(target.textContent).not.toContain(FILE_LABEL());
+    expect(target.querySelector("button.end")).not.toBe(null);
+    expect(byText(RESTART_LABEL())).toBeUndefined();
+  });
+
+  it("renders the composer only while the session is open, exactly as before", () => {
+    for (const status of ["connecting", "waitingAccept", "ended", "failed", "refused"] as const) {
+      open({ status });
+      expect(target.querySelector("textarea"), status).toBe(null);
+      expect(target.querySelector("button.send"), status).toBe(null);
+      reset();
+    }
+    open({ status: "open" });
+    expect(target.querySelector("textarea")).not.toBe(null);
+  });
+
+  it("keeps every attachment prop opt-in: passing the callbacks alone changes nothing", () => {
+    open({ onPickFiles: vi.fn(), onPickFolder: vi.fn(), onRestart: vi.fn(), folderPickSupported: true, attachmentsEnabled: true });
+    expect(target.querySelector('input[type="file"]')).toBe(null);
+    expect(target.querySelector("button.end")).not.toBe(null);
   });
 });
