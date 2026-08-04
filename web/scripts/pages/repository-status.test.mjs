@@ -22,9 +22,12 @@ describe("public repository status", () => {
     expect(readme).toMatch(/no App\s+Store\s+release/);
     // R3-D/E/F shipped the iOS realtime, nearby and account-management work the
     // status section used to list as unbuilt. What is still missing is the
-    // lifecycle around it, and the section has to keep saying which is which.
+    // lifecycle around it, and the section has to keep saying which is which:
+    // the app has no background execution, so nothing keeps running once it
+    // leaves the foreground. Match that lifecycle truth by shape, across the
+    // Markdown line breaks, rather than by one exact sentence.
     expect(readme).not.toMatch(/realtime and nearby transfer[^.]*still to be built/);
-    expect(readme).toMatch(/only\s+while\s+the\s+app\s+is\s+in\s+the\s+foreground/);
+    expect(readme).toMatch(/Nothing\s+runs\s+while\s+the\s+app\s+is\s+in\s+the\s+background/);
     expect(readme).not.toContain("status-M0%20MVP");
     expect(readme).not.toContain("This repository is **M0**");
     expect(readme).not.toContain("This is an early MVP");
