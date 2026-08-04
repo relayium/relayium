@@ -73,6 +73,7 @@
 "tab.receive" = "Empfangen";
 "tab.send" = "Senden";
 "tab.account" = "Konto";
+"tab.direct" = "Direkt";
 
 /* MARK: Navigationsleiste */
 "nav.sectionDirect" = "Direkt";
@@ -126,7 +127,7 @@
 "hub.transferTypeHint" = "Wähle, was diese Sitzung übertragen soll.";
 "verify.toggle" = "Verifizierungscodes mit dem anderen Gerät vergleichen";
 "verify.explainWhat" = "Standardmäßig aus. Wenn aktiviert, zeigen beide Geräte denselben sechsstelligen Verifizierungscode (SAS), bevor irgendetwas übertragen wird; laut vorgelesen deckt der Vergleich einen ausgetauschten Signalisierungsendpunkt auf. Es ist nicht der Kopplungscode, den du eingegeben hast, und er erkennt nur dann etwas, wenn wirklich jemand die beiden vergleicht.";
-"verify.explainEncryption" = "Das ändert, was angezeigt wird und wo für eine Bestätigung angehalten wird — niemals die Verschlüsselung. Schlüssel entstehen auf diesem Mac und werden nie an Relayium gesendet, das Relay transportiert ausschließlich Chiffrat, und ein manipulierter Handshake scheitert immer.";
+"verify.explainEncryption" = "Das ändert, was angezeigt wird und wo für eine Bestätigung angehalten wird — niemals die Verschlüsselung. Schlüssel entstehen auf diesem Gerät und werden nie an Relayium gesendet, das Relay transportiert ausschließlich Chiffrat, und ein manipulierter Handshake scheitert immer.";
 
 /* MARK: single-session presence */
 "presence.busyTitle" = "Diese Sitzung wird woanders angezeigt";
@@ -144,6 +145,11 @@
 "direct.waitingForDevice" = "Warten auf das andere Gerät…";
 "direct.chooseFilesFirst" = "Wähle zuerst Dateien oder Ordner zum Senden aus.";
 "direct.joinNoAccountNeeded" = "Zum Beitreten zu einem Code, den jemand anderes erstellt hat, ist kein Konto nötig.";
+"direct.largeFilesTitle" = "Etwas Großes zu senden?";
+"direct.largeFilesBody" = "Eine Direktübertragung läuft nur, solange auf beiden Geräten Relayium geöffnet ist. Eine große Datei kann auf diesem Weg deshalb langsamer sein und beginnt von vorn, sobald eine der beiden Apps geschlossen wird. „Senden“ legt stattdessen die verschlüsselte Datei ab, und das andere Gerät kann sie jederzeit abholen.";
+"direct.openSend" = "„Senden“ öffnen";
+"direct.keepBothOpen" = "Lassen Sie Relayium auf beiden Geräten geöffnet, bis das hier fertig ist. Eine Direktübertragung kann nicht weiterlaufen, sobald die App den Bildschirm verlässt.";
+"direct.interrupted" = "Relayium hat den Bildschirm verlassen, deshalb wurde die Direktsitzung beendet. Eine Direktübertragung läuft nur, solange die App auf beiden Geräten geöffnet ist; teilweise Empfangenes wurde entfernt.";
 
 /* MARK: Live-Dateisitzung */
 "session.connecting" = "Verbindung wird hergestellt…";

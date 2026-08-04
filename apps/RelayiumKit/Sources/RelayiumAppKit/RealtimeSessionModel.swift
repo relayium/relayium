@@ -196,8 +196,29 @@ public final class RealtimeSessionModel: ObservableObject {
 
     /// Both sides end up here: the sender once a peer arrives on its code, the
     /// receiver as soon as it has one to join.
+    ///
+    /// **The role decides how much of the previous attempt survives**, and that
+    /// is a rule rather than hygiene.
+    ///
+    /// `.initiator` is the retry direction: this side minted the code and is
+    /// dialling its own peer, so `retirePreviousConnection` deliberately keeps
+    /// `pendingSend`. Re-picking the files is not a safety measure and it is the
+    /// whole reason a user retries.
+    ///
+    /// `.responder` is not a retry of anything. It is somebody typing a code
+    /// they were given, to RECEIVE — and `proceedAfterVerification` sends
+    /// whatever is pending. A user who staged files, created a code, watched it
+    /// fail or expire, and then joined the other device's code instead would
+    /// otherwise upload that staged selection to the peer whose code they just
+    /// typed: a disclosure nobody chose, reached through the action labelled
+    /// Receive. So this direction takes the full `teardown`, which is the same
+    /// clear `acceptNearby` already performs for the same reason on the
+    /// unsolicited-offer path.
     public func join(code: String, role: Role = .responder) async {
-        retirePreviousConnection()
+        switch role {
+        case .initiator: retirePreviousConnection()
+        case .responder: teardown()
+        }
         let g = generation
         // A sender minted this code and is already displaying it; the other
         // device has to read it off that screen, so replacing it with
@@ -653,8 +674,9 @@ public final class RealtimeSessionModel: ObservableObject {
     ///
     /// What is deliberately preserved is `pendingSend`: the files the local user
     /// staged are the whole point of retrying, and re-picking them is not a
-    /// safety measure. `teardown` clears that too, because an unsolicited
-    /// inbound session must not inherit anything the local user staged.
+    /// safety measure. `teardown` clears that too, and it is what the two
+    /// receiving directions use — an unsolicited inbound session, and a
+    /// `.responder` join — because neither is a retry of the local user's send.
     private func releaseConnectionState() {
         cancelAnswerTimeout()
         connection?.close()
@@ -681,9 +703,11 @@ public final class RealtimeSessionModel: ObservableObject {
     /// `retirePreviousConnection` plus the staged outbound selection.
     ///
     /// The extra clear is a rule rather than hygiene: `proceedAfterVerification`
-    /// sends whatever is pending, so a session nobody chose — `acceptNearby`
-    /// answering an unsolicited offer — must not inherit files the local user
-    /// staged for somebody else.
+    /// sends whatever is pending, so a session the local user did not start as a
+    /// sender must not inherit files they staged for somebody else. Two entry
+    /// points qualify — `acceptNearby` answering an unsolicited offer, and a
+    /// `.responder` `join`, which is the action a user reaches through
+    /// **Receive** after a create that failed.
     private func teardown() {
         generation += 1
         releaseConnectionState()

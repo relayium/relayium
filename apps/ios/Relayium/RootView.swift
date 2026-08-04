@@ -15,8 +15,16 @@ import RelayiumAppKit
 /// send tab, and the only thing this file learns about the account is where to
 /// route a user who needs one: `onOpenAccount` is a tab-selection change handed
 /// down as a closure, not a session read.
+///
+/// R3-E adds the fourth tab, Direct, and sharpens exactly the same temptation:
+/// it is the first screen whose two halves are gated DIFFERENTLY — creating a
+/// code needs an account, joining one needs nothing — so the natural way to draw
+/// them apart would be a `session.state` switch up here, and it would take the
+/// anonymous receive tab with it. Direct gets the same treatment as Send: the
+/// gate is inside it. The shell learns only how Direct may route to the existing
+/// Send and Account tabs; both selections are handed down as closures.
 struct RootView: View {
-    private enum Tab: Hashable { case receive, send, account }
+    private enum Tab: Hashable { case receive, send, direct, account }
 
     @EnvironmentObject private var session: AccountSession
     /// The ONE account-adjacent fact this file learns, and it is not who is
@@ -33,6 +41,13 @@ struct RootView: View {
     @ObservedObject var download: CloudDownloadModel
     @ObservedObject var upload: CloudUploadModel
     @ObservedObject var send: SendSelectionModel
+    // The Direct tab's five app-scoped owners, passed through rather than read:
+    // this file renders none of their state and decides none of it.
+    @ObservedObject var direct: RealtimeSessionModel
+    @ObservedObject var directText: RealtimeTextSessionModel
+    @ObservedObject var directSelection: DirectSendSelection
+    @ObservedObject var directModes: DirectModeSelection
+    @ObservedObject var foreground: ForegroundSessionCoordinator
     @State private var selection: Tab = .receive
 
     var body: some View {
@@ -45,6 +60,18 @@ struct RootView: View {
                      onOpenAccount: { self.selection = .account })
                 .tabItem { Label(L10n.t(.tabSend), systemImage: "arrow.up.doc") }
                 .tag(Tab.send)
+
+            DirectView(file: direct, text: directText,
+                       selection: directSelection, modes: directModes,
+                       foreground: foreground,
+                       // Two tab selections, and neither is a session read. The
+                       // first is the honest route for a large file — Direct
+                       // needs both devices open, Send does not — and the second
+                       // is where a user who needs an account goes.
+                       onOpenSend: { self.selection = .send },
+                       onOpenAccount: { self.selection = .account })
+                .tabItem { Label(L10n.t(.tabDirect), systemImage: "arrow.left.arrow.right") }
+                .tag(Tab.direct)
 
             AccountTab()
                 .tabItem { Label(L10n.t(.tabAccount), systemImage: "person.crop.circle") }

@@ -73,6 +73,7 @@
 "tab.receive" = "Recibir";
 "tab.send" = "Enviar";
 "tab.account" = "Cuenta";
+"tab.direct" = "Directo";
 
 /* MARK: barra lateral de navegación */
 "nav.sectionDirect" = "Directo";
@@ -126,7 +127,7 @@
 "hub.transferTypeHint" = "Elige qué va a transferir esta sesión.";
 "verify.toggle" = "Comparar códigos de verificación con el otro dispositivo";
 "verify.explainWhat" = "Desactivado por omisión. Al activarlo, ambos dispositivos muestran el mismo código de verificación de seis dígitos (SAS) antes de que se mueva nada; compararlo en voz alta detecta un punto de señalización suplantado. No es el código de emparejamiento que escribiste, y solo detecta algo si alguien compara los dos de verdad.";
-"verify.explainEncryption" = "Esto cambia lo que se muestra y dónde se detiene para pedir confirmación, nunca el cifrado. Las claves se generan en este Mac y nunca se envían a Relayium, el relé transporta solo texto cifrado, y un saludo alterado siempre falla.";
+"verify.explainEncryption" = "Esto cambia lo que se muestra y dónde se detiene para pedir confirmación, nunca el cifrado. Las claves se generan en este dispositivo y nunca se envían a Relayium, el relé transporta solo texto cifrado, y un saludo alterado siempre falla.";
 
 /* MARK: single-session presence */
 "presence.busyTitle" = "Esta sesión se muestra en otro lugar";
@@ -144,6 +145,11 @@
 "direct.waitingForDevice" = "Esperando al otro dispositivo…";
 "direct.chooseFilesFirst" = "Elige primero los archivos o carpetas que quieres enviar.";
 "direct.joinNoAccountNeeded" = "Unirse a un código creado por otra persona no requiere ninguna cuenta.";
+"direct.largeFilesTitle" = "¿Vas a enviar algo grande?";
+"direct.largeFilesBody" = "Una transferencia directa solo avanza mientras Relayium está abierto en ambos dispositivos, así que un archivo grande puede ser más lento por esta vía y vuelve a empezar si se cierra cualquiera de las dos apps. «Enviar» deposita el archivo cifrado en su lugar, y el otro dispositivo puede recogerlo cuando quiera.";
+"direct.openSend" = "Abrir «Enviar»";
+"direct.keepBothOpen" = "Mantén Relayium abierto en ambos dispositivos hasta que esto termine. Una transferencia directa no puede continuar en cuanto la app sale de la pantalla.";
+"direct.interrupted" = "Relayium salió de la pantalla, así que la sesión directa terminó. Una transferencia directa solo avanza mientras la app está abierta en ambos dispositivos, y lo recibido a medias se ha eliminado.";
 
 /* MARK: sesión de archivos en vivo */
 "session.connecting" = "Conectando…";

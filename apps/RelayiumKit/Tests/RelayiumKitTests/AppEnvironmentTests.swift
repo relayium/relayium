@@ -154,6 +154,64 @@ final class AppEnvironmentTests: XCTestCase {
                        AppEnvironment.keychainConfiguration.accessGroup)
     }
 
+    // MARK: - R3-E: realtime wiring for a client with no LAN half
+
+    /// The code-only factories, and why they are separate functions rather than
+    /// nil defaults on the existing ones.
+    ///
+    /// The macOS factories need a `LanDiscoveryModel` and an `InboundRoom`
+    /// because both nearby paths reach through the one room socket that model
+    /// owns. iOS has no nearby feature, no local-network entitlement and no
+    /// roster — so an iOS app that constructed those two objects to satisfy a
+    /// signature would be claiming a capability it does not have, and would open
+    /// a socket nothing reads.
+    ///
+    /// What the code-only wiring produces instead is a model whose two nearby
+    /// entry points refuse. That is the assertion below: not "the closure is
+    /// nil", which is unobservable, but that the model reached through them
+    /// fails rather than half-working.
+    @MainActor
+    func testTheCodeOnlyFileModelRefusesEveryNearbyPath() async {
+        let model = AppEnvironment.makeRealtimeModel(verification: VerificationPreference(
+            defaults: UserDefaults(suiteName: "r3e-\(UUID().uuidString)")!))
+        await model.connectNearby(peerId: "peer-1")
+        guard case .failed = model.state else {
+            return XCTFail("an iOS-wired model dialled a nearby peer: \(model.state)")
+        }
+        let accepted = await model.acceptNearby(peerId: "peer-2")
+        XCTAssertFalse(accepted, "an iOS-wired model answered an unsolicited offer")
+    }
+
+    @MainActor
+    func testTheCodeOnlyTextModelRefusesEveryNearbyPath() async {
+        let model = AppEnvironment.makeRealtimeTextModel(verification: VerificationPreference(
+            defaults: UserDefaults(suiteName: "r3e-\(UUID().uuidString)")!))
+        await model.connectNearby(peerId: "peer-1")
+        guard case .failed = model.state else {
+            return XCTFail("an iOS-wired model dialled a nearby peer: \(model.state)")
+        }
+        let accepted = await model.acceptNearby(peerId: "peer-2")
+        XCTAssertFalse(accepted, "an iOS-wired model answered an unsolicited offer")
+    }
+
+    /// The Mac's factories still take — and still use — the nearby dependencies.
+    /// The code-only overloads are an addition, not a relaxation: a default
+    /// argument on the existing signature would have let a macOS call site drop
+    /// its discovery model silently and lose the whole nearby feature.
+    @MainActor
+    func testTheNearbyFactoriesStillRequireTheirDiscoveryDependencies() async {
+        let defaults = UserDefaults(suiteName: "r3e-\(UUID().uuidString)")!
+        let nearby = AppEnvironment.makeLanDiscoveryModel()
+        let room = InboundRoom()
+        let model = AppEnvironment.makeRealtimeModel(
+            verification: VerificationPreference(defaults: defaults),
+            nearby: nearby, inboundRoom: room)
+        // Not scanning, so this still fails — but through the discovery model's
+        // own refusal, which is the path that exists only on macOS.
+        await model.connectNearby(peerId: "peer-1")
+        guard case .failed = model.state else { return XCTFail("got \(model.state)") }
+    }
+
     // "In the fragment" and "not in the query" are different claims, and only
     // the second one keeps the token out of the server's access log.
     func testReactivateURLPutsNothingInTheQuery() {

@@ -73,6 +73,7 @@
 "tab.receive" = "받기";
 "tab.send" = "보내기";
 "tab.account" = "계정";
+"tab.direct" = "다이렉트";
 
 /* MARK: 내비게이션 사이드바 */
 "nav.sectionDirect" = "직접 전송";
@@ -126,7 +127,7 @@
 "hub.transferTypeHint" = "이 세션에서 무엇을 전송할지 선택합니다.";
 "verify.toggle" = "상대 기기와 확인 코드 대조하기";
 "verify.explainWhat" = "기본값은 꺼짐입니다. 켜면 어떤 데이터도 오가기 전에 두 기기가 동일한 여섯 자리 확인 코드(SAS)를 표시합니다. 소리 내어 대조하면 시그널링 종단이 바꿔치기된 경우를 잡아낼 수 있습니다. 이는 입력한 페어링 코드와는 다른 것이며, 실제로 누군가 대조해야만 의미가 있습니다.";
-"verify.explainEncryption" = "이 설정은 무엇을 보여주고 어디서 확인을 위해 멈추는지만 바꿉니다 — 암호화 자체는 결코 바뀌지 않습니다. 키는 이 Mac에서 생성되어 Relayium으로 전송되지 않고, 중계 서버는 암호문만 나르며, 변조된 핸드셰이크는 언제나 실패합니다.";
+"verify.explainEncryption" = "이 설정은 무엇을 보여주고 어디서 확인을 위해 멈추는지만 바꿉니다 — 암호화 자체는 결코 바뀌지 않습니다. 키는 이 기기에서 생성되어 Relayium으로 전송되지 않고, 중계 서버는 암호문만 나르며, 변조된 핸드셰이크는 언제나 실패합니다.";
 
 /* MARK: single-session presence */
 "presence.busyTitle" = "이 세션은 다른 곳에 표시되어 있습니다";
@@ -144,6 +145,11 @@
 "direct.waitingForDevice" = "상대 기기를 기다리는 중…";
 "direct.chooseFilesFirst" = "먼저 보낼 파일이나 폴더를 선택하세요.";
 "direct.joinNoAccountNeeded" = "다른 사람이 만든 코드에 참여하는 데는 계정이 필요하지 않습니다.";
+"direct.largeFilesTitle" = "큰 파일을 보내나요?";
+"direct.largeFilesBody" = "다이렉트 전송은 두 기기 모두 Relayium을 열어 둔 동안에만 진행됩니다. 그래서 큰 파일은 이 방식이 더 느릴 수 있고, 한쪽이라도 앱을 닫으면 처음부터 다시 시작합니다. ‘보내기’는 대신 암호화된 파일을 보관하므로 상대는 언제든 받아 갈 수 있습니다.";
+"direct.openSend" = "‘보내기’ 열기";
+"direct.keepBothOpen" = "끝날 때까지 두 기기 모두에서 Relayium을 열어 두세요. 앱이 화면에서 벗어나면 다이렉트 전송은 이어질 수 없습니다.";
+"direct.interrupted" = "Relayium이 화면에서 벗어나 다이렉트 세션이 끝났습니다. 다이렉트 전송은 두 기기 모두에서 앱이 열려 있는 동안에만 진행되며, 일부만 받은 내용은 삭제했습니다.";
 
 /* MARK: 실시간 파일 세션 */
 "session.connecting" = "연결하는 중…";

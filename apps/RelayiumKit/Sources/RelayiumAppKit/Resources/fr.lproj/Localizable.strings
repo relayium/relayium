@@ -73,6 +73,7 @@
 "tab.receive" = "Recevoir";
 "tab.send" = "Envoyer";
 "tab.account" = "Compte";
+"tab.direct" = "Direct";
 
 /* MARK: barre latérale de navigation */
 "nav.sectionDirect" = "Direct";
@@ -126,7 +127,7 @@
 "hub.transferTypeHint" = "Choisissez ce que cette session va transférer.";
 "verify.toggle" = "Comparer les codes de vérification avec l’autre appareil";
 "verify.explainWhat" = "Désactivé par défaut. Une fois activé, les deux appareils affichent le même code de vérification à six chiffres (SAS) avant que quoi que ce soit ne circule ; le comparer à voix haute détecte un point de signalisation substitué. Ce n’est pas le code d’appairage que vous avez saisi, et il ne détecte quelque chose que si quelqu’un compare réellement les deux.";
-"verify.explainEncryption" = "Cela change ce qui est affiché et ce qui s’arrête pour confirmation — jamais le chiffrement. Les clés sont générées sur ce Mac et ne sont jamais envoyées à Relayium, le relais ne transporte que du chiffré, et une poignée de main altérée échoue toujours.";
+"verify.explainEncryption" = "Cela change ce qui est affiché et ce qui s’arrête pour confirmation — jamais le chiffrement. Les clés sont générées sur cet appareil et ne sont jamais envoyées à Relayium, le relais ne transporte que du chiffré, et une poignée de main altérée échoue toujours.";
 
 /* MARK: single-session presence */
 "presence.busyTitle" = "Cette session est affichée ailleurs";
@@ -144,6 +145,11 @@
 "direct.waitingForDevice" = "En attente de l’autre appareil…";
 "direct.chooseFilesFirst" = "Choisissez d’abord les fichiers ou dossiers à envoyer.";
 "direct.joinNoAccountNeeded" = "Rejoindre un code créé par quelqu’un d’autre ne nécessite aucun compte.";
+"direct.largeFilesTitle" = "Vous envoyez un fichier volumineux ?";
+"direct.largeFilesBody" = "Un transfert direct ne progresse que tant que Relayium est ouvert sur les deux appareils : un fichier volumineux peut donc être plus lent ainsi, et il recommence si l’une des applications est fermée. « Envoyer » dépose plutôt le fichier chiffré, que l’autre appareil peut récupérer quand il veut.";
+"direct.openSend" = "Ouvrir « Envoyer »";
+"direct.keepBothOpen" = "Gardez Relayium ouvert sur les deux appareils jusqu’à la fin. Un transfert direct ne peut pas continuer une fois que l’application quitte l’écran.";
+"direct.interrupted" = "Relayium a quitté l’écran, la session directe s’est donc terminée. Un transfert direct ne progresse que tant que l’application est ouverte sur les deux appareils, et ce qui n’était reçu qu’en partie a été supprimé.";
 
 /* MARK: session de fichiers en direct */
 "session.connecting" = "Connexion…";

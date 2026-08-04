@@ -130,6 +130,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// while this names a place in the tab bar.
     case tabSend = "tab.send"
     case tabAccount = "tab.account"
+    case tabDirect = "tab.direct"
 
     // MARK: - Navigation
     //
@@ -285,6 +286,23 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// signed out. Only minting a code is gated, and only because the code's
     /// owner is billed for the relay capacity it reserves.
     case directJoinNoAccountNeeded = "direct.joinNoAccountNeeded"
+
+    // MARK: - Direct, positioned and bounded (iOS)
+
+    /// The honest limit of a peer-to-peer transfer, said where the user is
+    /// deciding rather than after they have waited: both devices hold the
+    /// connection, so a large file is slower and does not survive either of them
+    /// leaving the app. The stored Send tab is the answer for that case, and
+    /// this names it rather than leaving the user to infer it.
+    case directLargeFilesTitle = "direct.largeFilesTitle"
+    case directLargeFilesBody = "direct.largeFilesBody"
+    case directOpenSend = "direct.openSend"
+    /// Rendered while a transfer is actually moving. Distinct from
+    /// `upload.keepOpen`, which is about one device and one upload.
+    case directKeepBothOpen = "direct.keepBothOpen"
+    /// What `ForegroundSessionCoordinator` says after ending a session the app
+    /// could not carry into the background. Never an API name.
+    case directInterrupted = "direct.interrupted"
 
     // MARK: - Live file session
 

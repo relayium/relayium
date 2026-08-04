@@ -73,6 +73,7 @@
 "tab.receive" = "接收";
 "tab.send" = "发送";
 "tab.account" = "账户";
+"tab.direct" = "直连";
 
 /* MARK: 导航侧栏 */
 "nav.sectionDirect" = "直连";
@@ -126,7 +127,7 @@
 "hub.transferTypeHint" = "选择这次会话要传输的内容。";
 "verify.toggle" = "与对方设备核对验证码";
 "verify.explainWhat" = "默认关闭。开启后，双方设备会在任何数据传输之前显示同一个六位验证码（SAS）；口头核对它可以发现被替换的信令端点。它不是你输入的配对码，而且只有真的有人去核对，它才起作用。";
-"verify.explainEncryption" = "这只改变显示什么、以及在哪里停下来等你确认 — 从不改变加密本身。密钥在这台 Mac 上生成、绝不发送给 Relayium，中继只承载密文，被篡改的握手一定会失败。";
+"verify.explainEncryption" = "这只改变显示什么、以及在哪里停下来等你确认 — 从不改变加密本身。密钥在这台设备上生成、绝不发送给 Relayium，中继只承载密文，被篡改的握手一定会失败。";
 
 /* MARK: single-session presence */
 "presence.busyTitle" = "该会话显示在别处";
@@ -144,6 +145,11 @@
 "direct.waitingForDevice" = "正在等待对方设备…";
 "direct.chooseFilesFirst" = "请先选择要发送的文件或文件夹。";
 "direct.joinNoAccountNeeded" = "加入别人创建的配对码不需要账户。";
+"direct.largeFilesTitle" = "要发送大文件？";
+"direct.largeFilesBody" = "直连传输只在两台设备都开着 Relayium 时进行，所以大文件走这条路可能更慢，任何一端关掉应用都要从头再来。“发送”改为存放加密后的文件，对方随时都能取。";
+"direct.openSend" = "打开“发送”";
+"direct.keepBothOpen" = "在两台设备上都保持 Relayium 打开，直到本次传输结束。应用一旦离开屏幕，直连传输就无法继续。";
+"direct.interrupted" = "Relayium 离开了屏幕，直连会话因此结束。直连传输只在两台设备都打开应用时进行，已收到的残缺部分已被删除。";
 
 /* MARK: 实时文件会话 */
 "session.connecting" = "正在连接…";

@@ -21,8 +21,10 @@ import XCTest
 ///     R3-C reaches five of the twenty-two and corrects those five in place, in
 ///     all nine catalogs, to device-neutral wording that stays true on macOS.
 ///     R3-D reaches eight more — the device list, the stored-file list and the
-///     link rebuild — and corrects those the same way. **Eight** remain, seven
-///     blocked behind a feature this app does not have and one rendered by
+///     link rebuild — and corrects those the same way. R3-E reaches a ninth,
+///     `verify.explainEncryption`, because this is the slice that renders the
+///     advanced-verification setting. **Seven** remain, six blocked behind the
+///     nearby/notification feature this app does not have and one rendered by
 ///     nothing on either platform, so rendering any of them has to be a decision
 ///     rather than an oversight.
 ///  4. **A feature quietly unwired.** Launch restore is not decoration: without
@@ -74,7 +76,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// this guard may miss nothing, and may only be too strict in a case that is
     /// trivially fixed by moving the comment to its own line.
     private func sources() throws -> [(name: String, text: String)] {
-        try sources(under: iosRoot, atLeast: 8)
+        try sources(under: iosRoot, atLeast: 12)
     }
 
     /// The app's own `Info.plist`, read as a plist rather than as text, so what
@@ -112,7 +114,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// Both roots, because the credential passes through both: the app renders
     /// the session, and `AccountSession`/`ErrorCopy` hold and format it.
     func testNothingInTheAppOrViewModelLayerLogs() throws {
-        let scanned = try sources(under: iosRoot, atLeast: 8)
+        let scanned = try sources(under: iosRoot, atLeast: 12)
             + sources(under: appKitRoot, atLeast: 40)
         for (name, text) in scanned {
             for call in ["print(", "NSLog(", "os_log(", "debugPrint(", "dump("] {
@@ -141,14 +143,30 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // store, injected once, and reachable only from the ready account
         // surface, which is the harder claim.
         //
-        // `UIPasteboard` deliberately stays. R3-D is the first slice with a
-        // rebuilt `#k=` link to hand somewhere, and the honest hand-off is the
-        // share sheet the user opened, not a clipboard write behind their back.
+        // `RealtimeSessionModel` and `RealtimeTextSessionModel` LEFT this list in
+        // R3-E, for the same reason `CloudUploadModel` left it in R3-C: this is
+        // the slice that renders them. What replaces the ban is the whole R3-E
+        // section below — app-scoped construction through the code-only
+        // factories, a gated create beside an ungated join, a resolved receive
+        // destination, and a foreground-only lifecycle. Those are harder claims
+        // than an absence.
+        //
+        // `UIPasteboard` also left it, and it is the one that needed the most
+        // care: R3-E has per-message Copy, which is a pasteboard WRITE the user
+        // asked for. The ban is replaced by
+        // `testThePasteboardIsWrittenOnlyInsideAnExplicitCopyActionAndNeverRead`,
+        // which allows exactly that one write and still forbids every read.
+        //
+        // The nearby half stays banned, and gained `InboundRoom` and the two
+        // factory names: iOS has no local-network entitlement, no roster and no
+        // listener, so any of these appearing would be a capability claimed in
+        // the file every reviewer opens first.
         let deferred = [
             "BrowserLoginModel",
-            "RealtimeSessionModel",
-            "RealtimeTextSessionModel", "LanDiscoveryModel", "NearbyReceiveModel",
-            "UIPasteboard", "onOpenURL", "UNUserNotificationCenter", "StoreKit",
+            "LanDiscoveryModel", "NearbyReceiveModel", "InboundRoom",
+            "makeLanDiscoveryModel", "makeNearbyReceiveModel",
+            "connectNearby", "acceptNearby", "NearbyError",
+            "onOpenURL", "UNUserNotificationCenter", "StoreKit",
             "NSWorkspace",
         ]
         // This is the wrong way to do THIS slice's work. Each of these compiles,
@@ -225,15 +243,24 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// does not have, so rendering one has to be a decision rather than an
     /// oversight. The eighth is rendered by nothing on either platform.
     func testNoPlatformNamingCopyKeyIsRenderedOnIOS() throws {
+        // **R3-E takes a ninth off by the same route.** This slice renders the
+        // advanced-verification setting, so `verify.explainEncryption` — which
+        // said keys are generated *on this Mac* — was corrected in place in all
+        // nine catalogs to the device noun each language uses. It is the one
+        // sentence on that setting that states what the preference does NOT
+        // change, so weakening it was not an option; only the platform noun
+        // moved. `LocalizedCopyTests.testTheVerificationExplanationNamesNoPlatformAndKeepsItsEncryptionClaims`
+        // carries the claim from here on, and it carries the half a ban cannot:
+        // that the four encryption facts are all still in the sentence.
         let platformNaming: [L10nKey] = [
-            // R3-E / R3-F: realtime, nearby, notifications.
+            // R3-F: nearby and notifications. iOS has neither.
             .nearbyExplain, .nearbyPausedBody, .nearbyAcceptanceNote,
-            .notifyIncomingFiles, .notifyIncomingText, .verifyExplainEncryption,
+            .notifyIncomingFiles, .notifyIncomingText,
             .errorNearbyNoAnswer,
             // Rendered by nothing on either platform yet.
             .errorKeychainSignIn,
         ]
-        XCTAssertEqual(platformNaming.count, 8)
+        XCTAssertEqual(platformNaming.count, 7)
         for (name, text) in try sources() {
             for key in platformNaming {
                 XCTAssertFalse(text.contains(".\(key)"),
@@ -512,8 +539,15 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testTheBearerIsReadOnlyWhereItIsSpent() throws {
         let all = try sources()
         let readers = all.filter { $0.text.contains("bearerToken") }.map(\.name).sorted()
-        XCTAssertEqual(readers, ["AccountSummaryView.swift", "SendView.swift"],
-                       "a third view-layer holder of the credential")
+        // `DirectView` joins the list in R3-E, and it is the only one of the
+        // three that reads the credential WITHOUT spending it: it builds an
+        // `AccountGate`, whose `.allowed` arm carries the token to the one
+        // action that needs one — minting a code, which is billed to whoever
+        // created it. Joining a code is beside it in the same view and reaches
+        // the transport with no credential at all.
+        XCTAssertEqual(readers, ["AccountSummaryView.swift", "DirectView.swift",
+                                 "SendView.swift"],
+                       "a fourth view-layer holder of the credential")
         let summary = try XCTUnwrap(all.first { $0.name == "AccountSummaryView.swift" })
         XCTAssertTrue(summary.text.contains("private var scope: AccountScope {"),
                       "the scope must be recomputed per render, not stored")
@@ -1000,5 +1034,465 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertNil(plist["UIBackgroundModes"])
         XCTAssertEqual(plist["CFBundleLocalizations"] as? [String],
                        ["en", "zh-Hans", "ja", "ko", "de", "fr", "ar", "es", "pt"])
+    }
+
+    // MARK: - R3-E: the Direct tab
+
+    private func direct() throws -> (name: String, text: String) {
+        try XCTUnwrap(try sources().first { $0.name == "DirectView.swift" })
+    }
+
+    /// Four tabs, and the shell still learns nothing about the account.
+    ///
+    /// Direct is the second tab with a half that needs one, and it is the first
+    /// where the two halves sit side by side on one screen. So the temptation is
+    /// sharper than it was in R3-C: a `session.state` switch up here would be
+    /// the natural way to draw "create" and "join" differently, and it would
+    /// take the anonymous receive tab with it.
+    func testTheShellGainedTheDirectTabAndStillReadsNoSessionState() throws {
+        let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
+        XCTAssertTrue(root.text.contains("case receive, send, direct, account"),
+                      "the tab set is not the four this slice ships")
+        XCTAssertTrue(root.text.contains("L10n.t(.tabDirect)"))
+        XCTAssertTrue(root.text.contains(".tag(Tab.direct)"))
+        for accountish in ["session.state", "AccountGate", "bearerToken"] {
+            XCTAssertFalse(root.text.contains(accountish),
+                           "the shell reads \(accountish) — that would gate the receive tab")
+        }
+    }
+
+    /// Both realtime models are app-scoped, built once, from the CODE-ONLY
+    /// factories.
+    ///
+    /// Two claims, and the second is the one a diff hides. App-scoped, because a
+    /// `TabView` tears an off-screen tab down and a live DataChannel must not go
+    /// with it — the user checking their plan mid-transfer is exactly that.
+    /// Code-only, because the nearby factories take a `LanDiscoveryModel` and an
+    /// `InboundRoom`, and constructing those here would open a room socket
+    /// nothing reads and claim a local-network capability this app has no
+    /// entitlement for.
+    func testTheRealtimeModelsAreAppScopedAndBuiltFromTheCodeOnlyFactories() throws {
+        let all = try sources()
+        let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" })
+        for scoped in ["@StateObject private var direct: RealtimeSessionModel",
+                       "@StateObject private var directText: RealtimeTextSessionModel",
+                       "@StateObject private var verification: VerificationPreference",
+                       "@StateObject private var directSelection: DirectSendSelection",
+                       "@StateObject private var directModes: DirectModeSelection",
+                       "@StateObject private var foreground: ForegroundSessionCoordinator"] {
+            XCTAssertTrue(app.text.contains(scoped), "missing app-scoped owner: \(scoped)")
+        }
+        XCTAssertTrue(app.text.contains("AppEnvironment.makeRealtimeModel(verification: verifying)"),
+                      "the file model must come from the code-only factory")
+        XCTAssertTrue(app.text.contains("AppEnvironment.makeRealtimeTextModel(verification: verifying)"),
+                      "the text model must come from the code-only factory")
+        for once in ["makeRealtimeModel(", "makeRealtimeTextModel(", "VerificationPreference(",
+                     "DirectSendSelection(", "DirectModeSelection(",
+                     "ForegroundSessionCoordinator("] {
+            XCTAssertEqual(all.map { $0.text.components(separatedBy: once).count - 1 }.reduce(0, +), 1,
+                           "\(once) is constructed more than once — a second owner")
+        }
+        // ONE preference object, shared by both models and by the control that
+        // flips it. Two would be a toggle that moves a setting neither session
+        // reads.
+        XCTAssertTrue(app.text.contains(".environmentObject(verification)"))
+    }
+
+    /// Creating a code is gated; joining one is not, and is not merely enabled —
+    /// it is rendered outside the gate entirely.
+    ///
+    /// This is the asymmetry the whole destination exists to express, and it is
+    /// a server-side fact rather than a UI preference: minting reserves relay
+    /// capacity billed to the account that created it, and joining reserves
+    /// nothing and presents no credential. A gate around both halves would take
+    /// away a capability that works signed out.
+    func testCreatingACodeIsGatedAndJoiningIsRenderedOutsideTheGate() throws {
+        let view = try direct()
+        XCTAssertTrue(view.text.contains("AccountGate.from(session.state, bearer: session.bearerToken)"),
+                      "the gate must be built from the shared, tested mapping")
+        XCTAssertTrue(view.text.contains("case let .allowed(access)"),
+                      "only the allowed arm may carry a token")
+        // The credential is read ONCE, to build the gate, and the only thing
+        // that ever sees it afterwards is the gate's `.allowed` payload on its
+        // way to the two mints. A second `session.bearerToken` would be a read
+        // that skipped the mapping — which is how an empty-string bearer used to
+        // reach the transport.
+        XCTAssertEqual(view.text.components(separatedBy: "session.bearerToken").count - 1, 1,
+                       "the credential must be read once, to build the gate")
+        for action in ["await createAndSend()", "await createTextSession()"] {
+            XCTAssertTrue(view.text.contains(action),
+                          "the button must call \(action) without capturing a credential")
+        }
+        XCTAssertEqual(
+            view.text.components(separatedBy:
+                "guard case let .allowed(access) = gate else { return }").count - 1,
+            2,
+            "both create actions must re-read the live gate at the instant of use")
+        XCTAssertEqual(view.text.components(separatedBy:
+            "mintCode(token: access.token)").count - 1, 2,
+            "both mints must spend the token from that live gate read")
+        guard let joinCard = view.text.range(of: "private func joinCard("),
+              let fileJoin = view.text.range(of: "private func joinToReceiveFiles()"),
+              let fileCreate = view.text.range(of: "private func createAndSend()"),
+              let textJoin = view.text.range(of: "private func joinTextSession()"),
+              let textCreate = view.text.range(of: "private func createTextSession()") else {
+            return XCTFail("DirectView no longer has a join half of its own")
+        }
+        // Isolate the shared join card and both receive actions. The two create
+        // actions follow them in the same source file and MUST read the live
+        // gate, so scanning to EOF would mistake the intended asymmetry for a
+        // join dependency.
+        let join = String(view.text[joinCard.lowerBound..<fileJoin.lowerBound])
+            + String(view.text[fileJoin.lowerBound..<fileCreate.lowerBound])
+            + String(view.text[textJoin.lowerBound..<textCreate.lowerBound])
+        for gated in ["AccountGate", "access.token", "session.state"] {
+            XCTAssertFalse(join.contains(gated),
+                           "the join half reads \(gated) — joining needs no account")
+        }
+        XCTAssertTrue(view.text.contains("L10n.t(.directJoinNoAccountNeeded)"),
+                      "and it has to say so, rather than leaving it to be discovered")
+    }
+
+    /// AccountGate exists to keep unlike failures unlike. Direct must not turn
+    /// them all back into the same “open account” card.
+    func testTheDirectCreateGateRendersEveryAccountStateTruthfully() throws {
+        let view = try direct()
+        let start = try XCTUnwrap(view.text.range(of: "private var capabilityGate:"))
+        let end = try XCTUnwrap(view.text.range(of: "private var openAccountButton:"))
+        let gate = view.text[start.lowerBound..<end.lowerBound]
+        for state in ["case .allowed:", "case .loading:", "case .signInRequired:",
+                      "case let .unavailable(message):", "case let .verifyEmail(email):",
+                      "case let .pendingDeletion(purgeAfter, _):"] {
+            XCTAssertTrue(gate.contains(state), "Direct flattens AccountGate's \(state)")
+        }
+        for truth in [".accountRestoring", ".gateCreateCodeTitle", ".gateCreateCodeBody",
+                      "failureLine(message)", "await session.refresh()",
+                      ".contentCheckEmailTitle", ".contentCheckEmailBody",
+                      ".contentPendingDeletionTitle", ".contentPendingDeletionBody"] {
+            XCTAssertTrue(gate.contains(truth), "Direct does not render \(truth)")
+        }
+        XCTAssertTrue(view.text.contains("if showsAnonymousNote"),
+                      "the anonymous-join explanation is duplicated for gated users")
+        XCTAssertTrue(view.text.contains("case .signInRequired: return false"),
+                      "the ordinary sign-in card repeats the anonymous-join explanation")
+        XCTAssertTrue(view.text.contains(
+            "case .allowed, .loading, .unavailable, .verifyEmail, .pendingDeletion: return true"),
+            "an unrelated account problem hides that joining still needs no account")
+    }
+
+    /// The join field is a six-digit numeric one-time code, normalized on every
+    /// change.
+    ///
+    /// Each clause is a real failure: the default keyboard makes a user hunt for
+    /// the number row, no `oneTimeCode` content type means iOS never offers the
+    /// code from a message, and normalizing anywhere but on every change is what
+    /// used to eat a leading `1` — `normalizedPairingCode` keeps digits and
+    /// caps at six, so a code beginning with 1 is only typeable if the filter
+    /// runs on the raw text rather than on a parsed number.
+    func testTheJoinFieldIsANumericOneTimeCodeNormalisedOnEveryChange() throws {
+        let view = try direct()
+        // ONE field, shared by both modes. Two would be two places for the
+        // keyboard type, the content type and the normalization to drift, and
+        // the drift is silent: a field that works and one that eats a leading
+        // digit look identical in a screenshot.
+        for wired in [".keyboardType(.numberPad)", ".textContentType(.oneTimeCode)"] {
+            XCTAssertEqual(view.text.components(separatedBy: wired).count - 1, 1,
+                           "the one join field must carry \(wired), exactly once")
+        }
+        // But each MODEL normalizes its own text, so both are wired to it.
+        XCTAssertEqual(view.text.components(separatedBy: "updateJoinCode(").count - 1, 2,
+                       "both models must normalize on every change")
+        XCTAssertFalse(view.text.contains("Int("),
+                       "a code is a string; an Int round trip would destroy 004291")
+    }
+
+    /// The code the user reads off this screen is monospaced, selectable, and
+    /// spoken one digit at a time.
+    ///
+    /// A six-digit code read as a NUMBER is "four hundred eighty-three thousand
+    /// nine hundred twenty", which nobody can type into the other device — which
+    /// is the entire task this screen exists for.
+    func testTheDisplayedCodeIsMonospacedAndSpokenAsDigits() throws {
+        let code = try XCTUnwrap(try sources().first { $0.name == "PairingCodeText.swift" })
+        XCTAssertTrue(code.text.contains("design: .monospaced"),
+                      "a proportional font makes a transcribed code ambiguous")
+        XCTAssertTrue(code.text.contains(".accessibilityLabel(spokenCode)"))
+        XCTAssertTrue(code.text.contains("joined(separator: \" \")"),
+                      "the digits must be separated so VoiceOver reads them one at a time")
+        XCTAssertTrue(code.text.contains("L10n.token(code)"),
+                      "the code must be bidi-isolated so Arabic does not reverse it")
+    }
+
+    /// The Files/Text choice goes through the locked selection, never a raw
+    /// binding.
+    ///
+    /// `$modes.mode` would be a `Picker` writing straight into the model, and a
+    /// `.disabled` modifier is a courtesy rather than the mechanism — SwiftUI
+    /// still owns the binding behind a disabled control. The refusal has to be
+    /// in `DirectModeSelection.select`, where `DirectModeSelectionTests` drives
+    /// it against every state of both models.
+    func testTheModeChoiceGoesThroughTheLockedSelectionAndNotARawBinding() throws {
+        let view = try direct()
+        XCTAssertTrue(view.text.contains("modes.select("),
+                      "the mode must change through the guarded entry point")
+        XCTAssertTrue(view.text.contains("DirectModeSelection.isLocked(file: file.state, text: text.state)"),
+                      "the lock must be derived from the two live model states")
+        XCTAssertFalse(view.text.contains("$modes.mode"),
+                       "a raw binding lets a rebuild move the mode under a running session")
+    }
+
+    /// A terminal session is still owned until Done, so it cannot also expose
+    /// the controls that replace it with a new one.
+    ///
+    /// `DirectModeSelection` already locks the Files/Text picker for these
+    /// states. That is not enough by itself: if Create or Join remains in the
+    /// terminal switch arm, the user can replace the model while its result,
+    /// partial receive or memory-only transcript is still on screen. Pin the
+    /// view wiring at the state boundary where that regression occurs.
+    func testTerminalDirectSessionsExposeOnlyDoneBeforeAnotherSessionCanStart() throws {
+        let view = try direct()
+
+        let filesStart = try XCTUnwrap(view.text.range(of: "private var filesMode:"))
+        let filesEnd = try XCTUnwrap(view.text.range(of: "private var createFiles:"))
+        let files = view.text[filesStart.lowerBound..<filesEnd.lowerBound]
+        let fileIdleStart = try XCTUnwrap(files.range(of: "case .idle:"))
+        let fileFailedStart = try XCTUnwrap(files.range(of: "case let .failed(message):"))
+        let fileMintingStart = try XCTUnwrap(files.range(of: "case .minting:"))
+        let fileIdle = files[fileIdleStart.lowerBound..<fileFailedStart.lowerBound]
+        let fileFailed = files[fileFailedStart.lowerBound..<fileMintingStart.lowerBound]
+        XCTAssertTrue(fileIdle.contains("createFiles"))
+        XCTAssertTrue(fileIdle.contains("joinCard("))
+        XCTAssertTrue(fileFailed.contains("L10n.t(.commonDone)"))
+        XCTAssertFalse(fileFailed.contains("createFiles"),
+                       "a failed file session can be replaced before cleanup")
+        XCTAssertFalse(fileFailed.contains("joinCard("),
+                       "a failed file session can join before cleanup")
+
+        let textStart = try XCTUnwrap(view.text.range(of: "private var textMode:"))
+        let textEnd = try XCTUnwrap(view.text.range(of: "private var createText:"))
+        let text = view.text[textStart.lowerBound..<textEnd.lowerBound]
+        let textIdleStart = try XCTUnwrap(text.range(of: "case .idle:"))
+        let textTerminalStart = try XCTUnwrap(
+            text.range(of: "case .failed, .ended, .refused, .unsupported:"))
+        let textMintingStart = try XCTUnwrap(text.range(of: "case .minting:"))
+        let textIdle = text[textIdleStart.lowerBound..<textTerminalStart.lowerBound]
+        let textTerminal = text[textTerminalStart.lowerBound..<textMintingStart.lowerBound]
+        XCTAssertTrue(textIdle.contains("createText"))
+        XCTAssertTrue(textIdle.contains("joinCard("))
+        XCTAssertTrue(textTerminal.contains("DirectTextSessionView(model: text)"))
+        XCTAssertTrue(textTerminal.contains("L10n.t(.commonDone)"))
+        XCTAssertFalse(textTerminal.contains("createText"),
+                       "a terminal transcript can be replaced before Done")
+        XCTAssertFalse(textTerminal.contains("joinCard("),
+                       "a terminal transcript can join another session before Done")
+    }
+
+    /// The receive folder is resolved BEFORE a connection is opened, and a
+    /// failure to resolve it connects nothing.
+    ///
+    /// The order is the whole point. `RealtimeSessionModel.saveDirectory`
+    /// defaults to Downloads — which on iOS is a directory in nobody's
+    /// container — so a join that ran before the destination was set would
+    /// connect, handshake, accept a manifest and only then discover it has
+    /// nowhere to write, with the peer already sending. And the fallback is the
+    /// other half: quietly writing to `temporaryDirectory` would put the user's
+    /// files somewhere iOS deletes without warning and the Files app never
+    /// shows.
+    func testTheReceiveDestinationIsResolvedBeforeJoiningAndNeverFallsBack() throws {
+        let view = try direct()
+        XCTAssertTrue(view.text.contains("try ReceiveDestination.directory()"),
+                      "the destination must come from the shared, container-aware seam")
+        XCTAssertTrue(view.text.contains("ReceiveDestinationCopy.message(for: error, in: .appFolder)"),
+                      "a failure must render the iOS Files-app recovery, not the picker advice")
+        // The RESPONDER join specifically, named exactly: the initiator join
+        // elsewhere in this file sends rather than receives and has no
+        // destination to resolve, so matching "any join" would pass on the
+        // wrong one.
+        guard let resolve = view.text.range(of: "try ReceiveDestination.directory()"),
+              let install = view.text.range(of: "file.saveDirectory = destination"),
+              let joinCall = view.text.range(of: "await file.join(code: file.joinCode)") else {
+            return XCTFail("DirectView no longer resolves a destination before joining")
+        }
+        XCTAssertTrue(resolve.upperBound < install.lowerBound,
+                      "the resolved destination was never installed on the model")
+        XCTAssertTrue(install.upperBound < joinCall.lowerBound,
+                      "the join must sit after the destination is set, not beside it")
+        for fallback in ["temporaryDirectory", "downloadsDirectory", ".cachesDirectory"] {
+            for (name, text) in try sources() {
+                XCTAssertFalse(text.contains(fallback),
+                               "\(name) writes received files to \(fallback)")
+            }
+        }
+    }
+
+    /// File preparation is not a session. If it fails, the explanation for an
+    /// earlier background interruption must remain until the user dismisses it
+    /// or a real new attempt starts.
+    func testDirectFileCreatePreparesAndRechecksTheAccountBeforeStartingASession() throws {
+        let view = try direct()
+        let start = try XCTUnwrap(view.text.range(of: "private func createAndSend()"))
+        let end = try XCTUnwrap(view.text.range(of: "private func joinTextSession()"))
+        let action = view.text[start.lowerBound..<end.lowerBound]
+        let prepare = try XCTUnwrap(action.range(of: "selection.stageForSend()"))
+        let account = try XCTUnwrap(action.range(of:
+            "guard case let .allowed(access) = gate else { return }"))
+        let session = try XCTUnwrap(action.range(of: "foreground.sessionStarting()"))
+        let stage = try XCTUnwrap(action.range(of: "file.stageSend("))
+        XCTAssertTrue(prepare.lowerBound < account.lowerBound)
+        XCTAssertTrue(account.lowerBound < session.lowerBound)
+        XCTAssertTrue(session.lowerBound < stage.lowerBound,
+                      "the interruption notice must clear only once a real session starts")
+    }
+
+    /// The share affordance is built from `model.received`, which is non-nil
+    /// only in `.completed` — which the model reaches only after
+    /// `ManifestWriter.finish()` returned. Nothing here can offer a file that is
+    /// still being written, and a folder receive shares its CONTAINER so the
+    /// hierarchy survives *Save to Files*.
+    func testTheReceivedResultIsShareableOnlyAfterTheWriterFinished() throws {
+        let session = try XCTUnwrap(
+            try sources().first { $0.name == "DirectFileSessionView.swift" })
+        XCTAssertTrue(session.text.contains("if let payload = model.received"),
+                      "the result must come from the model's post-finish payload")
+        XCTAssertTrue(session.text.contains("ShareLink(items: payload.dragURLs)"),
+                      "a foldered receive must share its container as one item")
+        XCTAssertFalse(session.text.contains("ShareLink(items: urls)"),
+                       "sharing the flat file list would flatten the folder at the destination")
+    }
+
+    /// **The pasteboard is written once, by a button the user pressed, and is
+    /// never read.**
+    ///
+    /// This replaces the blanket ban `UIPasteboard` carried through four slices.
+    /// A text session has to offer Copy — a message the user cannot get out of
+    /// the app is a message they have to retype — and the honest shape of that
+    /// is one write inside one action. Reading is a different thing entirely: an
+    /// app that inspects the clipboard is doing what this product promises not
+    /// to, and iOS raises its own paste notification for it besides.
+    func testThePasteboardIsWrittenOnlyInsideAnExplicitCopyActionAndNeverRead() throws {
+        let all = try sources()
+        let holders = all.filter { $0.text.contains("UIPasteboard") }.map(\.name).sorted()
+        XCTAssertEqual(holders, ["DirectTextSessionView.swift"],
+                       "the pasteboard is reachable from somewhere other than Copy")
+        let view = try XCTUnwrap(all.first { $0.name == "DirectTextSessionView.swift" })
+        XCTAssertEqual(view.text.components(separatedBy: "UIPasteboard").count - 1, 1,
+                       "one mention, so there is one thing to review")
+        XCTAssertTrue(view.text.contains("UIPasteboard.general.string = message.body"),
+                      "the one use must be a write of the message the button belongs to")
+        // Every read API, by name. `.string =` above is an assignment; these are
+        // the forms that take something OUT.
+        for reader in ["UIPasteboard.general.string)", "UIPasteboard.general.hasStrings",
+                       "UIPasteboard.general.items", "UIPasteboard.general.strings",
+                       "UIPasteboard.general.url", "UIPasteboard.general.changeCount",
+                       "detectPatterns", "value(forPasteboardType"] {
+            XCTAssertFalse(view.text.contains(reader), "the app inspects the clipboard: \(reader)")
+        }
+        XCTAssertTrue(view.text.contains("Button(L10n.t(.commonCopy))"),
+                      "the write must belong to a Copy button, per message")
+        XCTAssertTrue(view.text.contains("L10n.t(.textClipboardNotice)"),
+                      "and the screen must say what a copy costs")
+    }
+
+    /// **`.inactive` is not `.background`,** and this is where that gets got
+    /// wrong.
+    ///
+    /// SwiftUI reports `.inactive` while a document picker, a share sheet or the
+    /// app switcher is up — which is to say, at the exact moment the user is
+    /// choosing the files they are about to send. A mapping that folded it into
+    /// `.background` would cancel the session on the way into the picker, every
+    /// time, and would read as the picker being broken. The decision itself is
+    /// `ForegroundSessionCoordinator`'s, where a test drives it; this pins the
+    /// one line that feeds it.
+    func testTheScenePhaseObserverDistinguishesInactiveFromBackground() throws {
+        let all = try sources()
+        let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" })
+        XCTAssertTrue(app.text.contains("@Environment(\\.scenePhase) private var scenePhase"))
+        XCTAssertTrue(app.text.contains("case .background: return .background"))
+        XCTAssertTrue(app.text.contains("case .inactive: return .inactive"),
+                      "a picker or a share sheet must not end the session")
+        XCTAssertTrue(app.text.contains("foreground.phaseChanged(to: lifecycle(phase))"))
+        // Exactly one observer, at the app scope: a second in a view would fire
+        // only while that view was mounted, which is precisely when it is not.
+        // Three occurrences, all in `RelayiumApp`: twice on the `@Environment`
+        // declaration (the key path and the property name) and once in the
+        // `onChange` that reads it. A fourth would be a second reader.
+        XCTAssertEqual(all.map { $0.text.components(separatedBy: "scenePhase").count - 1 }
+                          .reduce(0, +), 3,
+                       "the scene phase is declared and read in exactly one place")
+        for (name, text) in all where name != "RelayiumApp.swift" {
+            XCTAssertFalse(text.contains("phaseChanged("),
+                           "\(name) is a second lifecycle observer")
+        }
+    }
+
+    /// The advanced-verification setting is on screen, and it is the shared
+    /// preference object rather than a local toggle.
+    ///
+    /// Default OFF is `VerificationPreference`'s own decision and
+    /// `VerificationPreference`'s tests prove it. What this pins is that the
+    /// setting is REACHABLE — a security control that only exists on macOS is a
+    /// control iOS users cannot turn on — and that flipping it moves the object
+    /// both models read, rather than a `@State` nothing consults.
+    func testTheVerificationSettingIsVisibleAndIsTheSharedPreference() throws {
+        let view = try direct()
+        XCTAssertTrue(view.text.contains("Toggle(L10n.t(.verifyToggle), isOn: $verification.requiresSASConfirmation)"),
+                      "the toggle must write the shared preference")
+        for explanation in [".verifyExplainWhat", ".verifyExplainEncryption"] {
+            XCTAssertTrue(view.text.contains(explanation),
+                          "the setting must say what it does and does not change: \(explanation)")
+        }
+        XCTAssertFalse(view.text.contains("@State private var requiresSAS"),
+                       "a view-local copy would be a setting no session reads")
+    }
+
+    /// Direct says what it is for, and hands the large-file case to the tab that
+    /// can actually carry it.
+    ///
+    /// A peer-to-peer transfer that needs both apps open is genuinely worse than
+    /// the stored one for a large file, and a user who discovers that ninety
+    /// seconds in has been misled by omission. The route out is a tab selection,
+    /// which is why it arrives as a closure — the same shape `SendView` already
+    /// uses for the account, and the reason `RootView` can stay ignorant.
+    func testDirectPositionsItselfAndRoutesLargeFilesToTheStoredSendTab() throws {
+        let view = try direct()
+        for copy in [".navPairingCodeSubtitle", ".directLargeFilesTitle",
+                     ".directLargeFilesBody", ".directOpenSend", ".directKeepBothOpen"] {
+            XCTAssertTrue(view.text.contains(copy), "the positioning copy \(copy) is not rendered")
+        }
+        XCTAssertTrue(view.text.contains("onOpenSend"),
+                      "the large-file route must be a tab selection handed down")
+        let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
+        XCTAssertTrue(root.text.contains("onOpenSend: { self.selection = .send }"),
+                      "and the shell must be the thing that performs it")
+    }
+
+    /// Progress is labelled and failure is never colour alone — the same two
+    /// rules R3-D's account surface holds, on the two new session screens.
+    func testTheDirectSessionScreensAreReadableWithoutColourOrSight() throws {
+        let all = try sources()
+        for name in ["DirectView.swift", "DirectFileSessionView.swift",
+                     "DirectTextSessionView.swift"] {
+            let view = try XCTUnwrap(all.first { $0.name == name })
+            XCTAssertFalse(view.text.contains("ProgressView()\n"),
+                           "\(name) has an unlabelled spinner, which reads as nothing")
+            XCTAssertFalse(view.text.contains("foregroundStyle(.red)"),
+                           "\(name) states a failure in colour")
+        }
+        let session = try XCTUnwrap(all.first { $0.name == "DirectFileSessionView.swift" })
+        XCTAssertTrue(session.text.contains("L10n.percent(done: done, total: total)"),
+                      "a progress bar with no figure beside it says nothing to VoiceOver")
+    }
+
+    /// No AppKit, anywhere. It compiles on macOS and not on iOS, so a copied
+    /// `NSPasteboard` line from the Mac panes is a build failure rather than a
+    /// silent one — but the guard is here because the Mac views this slice is
+    /// modelled on are full of them, and the copy is the obvious way to write it.
+    func testNoIOSSurfaceReachesForAppKit() throws {
+        for (name, text) in try sources() {
+            for appKitism in ["import AppKit", "NSPasteboard", "NSOpenPanel", "NSAlert",
+                              "NSApplication", "NSWindow"] {
+                XCTAssertFalse(text.contains(appKitism), "\(name) reaches for \(appKitism)")
+            }
+        }
     }
 }

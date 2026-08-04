@@ -750,10 +750,12 @@ Everything is the shared stack — `parseTransferLink` → `CloudClient.fetchMet
 holding views only. Design and plan:
 `docs/superpowers/specs/2026-08-03-native-ios-r3a-anonymous-stored-receive-design.md`.
 
-Three tabs now. **Receive** is R3-A unchanged and still needs no account.
+Four tabs now. **Receive** is R3-A unchanged and still needs no account.
 **Send** is R3-C: files, folders, photos and videos chosen in the app, encrypted
-here and uploaded. **Account** is R3-B's sign-in and usage summary plus R3-D's
-device and stored-file management, described below.
+here and uploaded. **Direct** is R3-E: a six-digit pairing code carrying text or
+small files straight to another device across networks, described below.
+**Account** is R3-B's sign-in and usage summary plus R3-D's device and
+stored-file management, described below.
 
 Headless build (the same command CI runs):
 
@@ -831,6 +833,120 @@ the one sentence the user acts on when the transfer is over.
 multi-file receive shares its **container** as one item and *Save to Files*
 copies the tree in one piece. The affordance exists only in `.done`, which the
 model reaches only after `ManifestWriter.finish()` returned.
+
+### Direct transfer (R3-E)
+
+A six-digit pairing code, the same one the web client and the macOS app mint and
+join, carrying **text or files straight to the other device** — the relay moves
+ciphertext and stores nothing.
+
+**Positioned, not just shipped.** A direct transfer runs only while both devices
+have Relayium open, which makes it very good for text and small files and less
+resilient than **Send** for anything large: a big file can be slower and starts
+over if either app closes. The tab says so where the user is deciding, and offers
+the Send tab as the route out (`direct.largeFilesTitle` / `.largeFilesBody` /
+`.openSend`), rather than letting it be discovered ninety seconds in.
+
+**The two halves are gated differently, and it is a server-side fact.** Creating
+a code reserves relay capacity billed to whoever created it, so it renders an
+`AccountGate` — the same shared, tested mapping the macOS panes use — whose
+`.allowed` payload carries the token to `mintCode`. Joining a code somebody else
+created reserves nothing and presents no credential, so the join field beside it
+is rendered and enabled identically signed out. `DirectView` reads
+`session.bearerToken` exactly once through a computed gate; each create action
+re-evaluates that gate at the instant of use instead of retaining the credential
+captured when its button was rendered.
+
+**One join field for both modes**, `numberPad` + `oneTimeCode`, normalized on
+every change by each model's `updateJoinCode` — which is what keeps a leading `1`
+typeable, since `normalizedPairingCode` filters the raw string rather than
+parsing a number. Displayed codes go through `PairingCodeText`: monospaced,
+Dynamic Type-scaled, bidi-isolated, and spoken digit by digit, because a
+six-digit code read as a number is unusable for the one task this screen exists
+for.
+
+**Files or text is one choice**, and it stops being the user's the moment either
+model owns a session — including the terminal ones. A `.completed` receive still
+owns its result and its share sheet; an `.ended` text session still owns a
+transcript that exists in no other copy. The refusal lives in
+`DirectModeSelection.select`, which re-reads both model states; `.disabled` on
+the picker is the courtesy, not the mechanism, because SwiftUI still owns the
+binding behind a disabled control.
+
+**Advanced verification is visible, persisted and default OFF.** The toggle
+writes the one app-scoped `VerificationPreference` both models read when the SAS
+arrives, so a change applies to the next session without a relaunch. With it off,
+the encrypted connection proceeds directly — no compare step for files, and the
+existing responder auto-accept for text is unchanged. Its two explanatory
+sentences are what stop the toggle reading as "turn this on to be encrypted", so
+`verify.explainEncryption` was corrected in all nine catalogs to say keys are
+generated on **this device** — only the platform noun moved;
+`LocalizedCopyTests` asserts the four encryption claims are all still there.
+
+**Ownership is app-scoped, and that is the substance of the slice.** Both
+realtime models, the file selection, the mode choice and the lifecycle
+coordinator are `@StateObject`s on `RelayiumApp`. A `TabView` mounts tabs lazily
+and tears an off-screen one down — the user checking their plan mid-transfer does
+exactly that — so a view-scoped owner would end a live DataChannel, drop a
+sandbox extension mid-read, or lose the transcript, on a tab switch.
+
+`DirectSendSelection` owns the security-scoped URLs `fileImporter` returns:
+`SecurityScopedAccess` starts each distinct URL once, expansion runs inside the
+scope, `stageRealtimeFiles` opens every file into descriptor-pinned
+`FileURLSource` values while it is still held, and the scope is released on
+`clear()` or by `deinit`. The view never calls
+`startAccessingSecurityScopedResource`; `IOSSurfaceGuardTests` forbids it.
+
+**Receiving resolves the destination before it connects.**
+`ReceiveDestination.directory()` (Documents/Received, published to Files) is set
+on the model *before* `join`, and a failure renders the iOS Files-app recovery
+(`ReceiveDestinationCopy` `.appFolder`) and connects nothing. There is
+deliberately no fallback to the temporary directory or Downloads — the guard bans
+all three names anywhere in the iOS target. The result becomes shareable only
+through `model.received`, which is non-nil only after `ManifestWriter.finish()`
+returned, and shares the **container** so a folder survives *Save to Files*.
+
+**Text** covers every state, the byte/message/rate/idle limits unchanged, a
+retained transcript after each terminal state, and an explicit per-message
+**Copy**. That Copy is the only `UIPasteboard` use in the app: one write, of the
+message the button belongs to, with the clipboard notice beside it. Nothing reads
+the pasteboard, and the guard now allows exactly that one write while forbidding
+every reading API by name.
+
+**Foreground-only, enforced rather than claimed.** There is no background mode
+and no background `URLSession`, so `ForegroundSessionCoordinator` observes the
+scene phase at the App scope and, on `.background` only, cancels a live file
+session (discarding the partial write) and ends a live text session (keeping its
+history), then publishes `direct.interrupted`. `.inactive` does nothing at all —
+that is the phase a document picker, a share sheet or the app switcher produces,
+which is to say the moment the user is choosing the files they are about to send.
+A finished receive and an already-ended text session are left alone.
+
+**No new capability.** No local network, no background mode, no notifications, no
+Associated Domains, no App Group, no StoreKit. `Relayium.entitlements` still
+claims only `com.apple.developer.applesignin`. iOS gets the realtime models from
+`AppEnvironment`'s **code-only** factories, which take no `LanDiscoveryModel` and
+no `InboundRoom`; `AppEnvironmentTests` asserts the resulting models refuse every
+nearby entry point rather than half-working, and the macOS nearby factories are
+untouched.
+
+**One shared-model fix travelled with this slice.**
+`RealtimeSessionModel.join(code:role:)` now clears the staged outbound selection
+on a `.responder` join. It preserved it for every role, which is right for the
+initiator — a retry is why the files are staged — and wrong for the direction a
+user reaches through **Receive**: staging files, creating a code, watching it fail,
+then joining the other device's code used to upload that selection to the peer
+whose code was just typed. `.initiator` behaviour is unchanged and is asserted
+separately.
+
+**Simulator hand check.** The signed-out Files and Text entry screens were
+inspected on an iPhone 17 Pro at the normal and largest accessibility content
+sizes; the Direct screen remained scrollable and the join field and action stayed
+reachable. The same two screens were inspected in Arabic right-to-left. Still not
+verified: a two-device run, a live text session or file transfer, SAS comparison
+with the preference on, backgrounding mid-transfer on a real device, *Save to
+Files* for a received folder from this tab, and VoiceOver. The layer below the
+views and the wiring that connects them are covered independently by tests.
 
 ### Account management (R3-D)
 
@@ -940,15 +1056,28 @@ network, background modes, push, IAP. Each entitlement lands with the functional
 slice that needs it, and `IOSSurfaceGuardTests` fails on any other key appearing
 in the file.
 
+R3-E is the slice where that rule cost something, which is worth recording.
+Direct is realtime transfer, and realtime transfer on macOS arrives with a nearby
+half — a resident room socket, a device roster, an inbound listener — so the
+shared code's shape invites it. It would need the local-network entitlement, and
+the pairing-code feature does not. So iOS took the pairing-code path alone
+through new code-only factories, and the app names no `LanDiscoveryModel`, no
+`InboundRoom` and no `NearbyReceiveModel`. Likewise `/cross-network#c=<code>`
+deep links: the Direct tab could consume one now, and Associated Domains is still
+not this slice's entitlement to add.
+
 ### Not verified yet
 
 The app builds, launches on the simulator, renders Arabic right-to-left, and is
-covered by `swift test` below the view layer. Not yet done by hand: an
+covered by `swift test` below the view layer. Direct's Files and Text entry
+screens have also been checked at the largest accessibility content size. Not
+yet done by hand: an
 end-to-end receive against a real link; the `Received` folder actually appearing
 under *On My iPhone ▸ Relayium* in Files (the two `Info.plist` keys are the
 documented way to get it, but this build has not been looked at in Files);
 *Save to Files* accepting a **directory** item from the share sheet; VoiceOver;
-the largest Dynamic Type sizes; in-app registration end to end (see "Accounts,
+the largest Dynamic Type sizes outside the Direct entry screens; in-app
+registration end to end (see "Accounts,
 in the app" above — the layer below the views is covered by `swift test`, the
 live path is not); and **native Sign in with Apple on a signed device against a
 real Apple ID**, which additionally needs the App ID capability and the server

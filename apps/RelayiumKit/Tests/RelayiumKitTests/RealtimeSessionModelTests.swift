@@ -658,6 +658,73 @@ final class RealtimeSessionModelTests: XCTestCase {
         XCTAssertEqual(conn.sentMetas.map(\.name), ["a.txt"])
     }
 
+    // MARK: - a RESPONDER join never inherits a staged outbound selection
+
+    /// The stale-outbound hazard, and the direction `retirePreviousConnection`
+    /// deliberately does not cover.
+    ///
+    /// `pendingSend` survives a retry on purpose — re-picking files is not a
+    /// safety measure and it is the whole reason a user retries. But `join`
+    /// takes a ROLE, and only one of its two values is a retry. A user who
+    /// staged files, created a code, watched it fail or expire, and then typed
+    /// the OTHER device's code to receive instead is not retrying anything: they
+    /// are the responder now, and `proceedAfterVerification` sends whatever is
+    /// pending. Without a clear here, the files they staged for a peer that
+    /// never arrived go to the peer whose code they just joined — a disclosure
+    /// nobody chose, on a path that looks like receiving.
+    ///
+    /// Same rule `acceptNearby` already enforces with the full `teardown`, on
+    /// the entry point iOS actually has.
+    func testAResponderJoinDropsAStagedOutboundSelection() async {
+        let m = makeModel(verify: false)
+        m.stageSend(sources: [DataSource(name: "private.txt", bytes: [1, 2, 3])],
+                    metas: [FileMeta(name: "private.txt", size: 3)])
+        await m.join(code: "483920")            // role defaults to .responder
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        XCTAssertTrue(conn.sentMetas.isEmpty,
+                      "a receive sent files staged for somebody else")
+        guard case .transferring(_, let total) = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertEqual(total, 0,
+                       "the receive inherited the staged send's byte total")
+    }
+
+    /// The realistic sequence, end to end: stage, create (initiator), the peer
+    /// never answers, then join the other device's code to receive.
+    func testAFailedCreateFollowedByAReceiveSendsNothing() async {
+        let m = makeModel(verify: false)
+        m.stageSend(sources: [DataSource(name: "private.txt", bytes: [1, 2, 3])],
+                    metas: [FileMeta(name: "private.txt", size: 3)])
+        await m.join(code: "111111", role: .initiator)
+        conn.onError?(RealtimeError.tamper)
+        await settle()
+        guard case .failed = m.state else { return XCTFail("got \(m.state)") }
+
+        await m.join(code: "222222")            // now the receiving direction
+        conn.onSAS?("y")
+        conn.onOpen?()
+        await settle()
+        XCTAssertTrue(conn.sentMetas.isEmpty,
+                      "a receive after a failed create sent the old files")
+    }
+
+    /// And the responder clear must not be reachable through the initiator, or
+    /// it would take the retry behaviour with it. This is the same claim
+    /// `testARetryKeepsTheStagedSendAndItsTotal` makes, restated as the negative
+    /// half of the rule above so the two cannot be "fixed" together.
+    func testAnInitiatorJoinStillKeepsTheStagedSelection() async {
+        let m = makeModel(verify: false)
+        m.stageSend(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])],
+                    metas: [FileMeta(name: "a.txt", size: 3)])
+        await m.join(code: "483920", role: .initiator)
+        await m.join(code: "483920", role: .initiator)
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        XCTAssertEqual(conn.sentMetas.map(\.name), ["a.txt"])
+    }
+
     /// Retrying after a partial receive removes the debris; retrying after a
     /// COMPLETED one must not delete what the user just received.
     func testARetryDiscardsAPartialReceiveButKeepsACompletedOne() async throws {

@@ -1042,6 +1042,98 @@ final class LocalizedCopyTests: XCTestCase {
         }
     }
 
+    /// The word each catalog uses for the ciphertext the relay carries.
+    ///
+    /// A root, for the same reason `deviceWord` is one: the sentence inflects it
+    /// and pinning the inflection would assert grammar rather than the claim.
+    private let ciphertextWord: [AppLanguage: String] = [
+        .en: "ciphertext", .zh: "密文", .ja: "暗号文", .ko: "암호문",
+        .de: "Chiffrat", .fr: "chiffré", .ar: "مُعمّى",
+        .es: "cifrado", .pt: "cifrado",
+    ]
+
+    /// **R3-E's correction, and the half a platform ban cannot make.**
+    ///
+    /// `verify.explainEncryption` is the one sentence on the advanced-
+    /// verification setting that says what the preference does NOT change, and
+    /// iOS is the first platform to render it — so it could no longer say keys
+    /// are generated *on this Mac*. Only the platform noun moved: dropping any
+    /// of the four claims would leave a security setting whose explanation is
+    /// weaker than the thing it explains, which is exactly how a toggle comes to
+    /// be read as "turn this on to be encrypted".
+    ///
+    /// So this asserts both directions in all nine: no platform is named, and
+    /// the sentence still names the device the keys are generated on, still
+    /// names Relayium as the party they are never sent to, and still says the
+    /// relay carries only ciphertext.
+    func testTheVerificationExplanationNamesNoPlatformAndKeepsItsEncryptionClaims() throws {
+        for language in AppLanguage.allCases {
+            let text = L10n.t(.verifyExplainEncryption, language: language)
+            for platform in ["Mac", "macOS", "iPhone", "iPad", "iOS"] {
+                XCTAssertFalse(text.contains(platform),
+                               "verify.explainEncryption [\(language.rawValue)] names "
+                               + "\(platform): \(text)")
+            }
+            let device = try XCTUnwrap(deviceWord[language])
+            XCTAssertTrue(text.contains(device),
+                          "[\(language.rawValue)] stopped saying WHERE the keys are "
+                          + "generated: \(text)")
+            XCTAssertTrue(text.contains("Relayium"),
+                          "[\(language.rawValue)] stopped naming who never receives "
+                          + "them: \(text)")
+            let ciphertext = try XCTUnwrap(ciphertextWord[language])
+            XCTAssertTrue(text.contains(ciphertext),
+                          "[\(language.rawValue)] stopped saying the relay carries only "
+                          + "ciphertext: \(text)")
+        }
+    }
+
+    /// The R3-E copy the Direct tab adds, in all nine.
+    ///
+    /// Two claims about the same three sentences, and they pull against each
+    /// other, which is why both are here. They must not name a platform — this
+    /// tab exists on both — and they must keep the honest limit that justifies
+    /// them: a direct transfer needs BOTH devices, so the sentence that routes a
+    /// large file to the stored tab has to say why, and the sentence that
+    /// reports an ended session has to say the same thing rather than blaming
+    /// the network.
+    func testTheDirectPositioningCopyIsHonestAndPlatformNeutral() throws {
+        let bothDevices: [AppLanguage: String] = [
+            .en: "both devices", .zh: "两台设备", .ja: "両方のデバイス", .ko: "두 기기",
+            .de: "beiden Geräten", .fr: "les deux appareils", .ar: "الجهازين",
+            .es: "ambos dispositivos", .pt: "dois dispositivos",
+        ]
+        // Direct can be slower depending on the route; it is not universally
+        // slower than the stored two-leg path. Keep the recommendation honest
+        // in every catalog rather than turning it into an absolute benchmark.
+        let possibility: [AppLanguage: String] = [
+            .en: "can", .zh: "可能", .ja: "ことがあり", .ko: "수 있고",
+            .de: "kann", .fr: "peut", .ar: "قد", .es: "puede", .pt: "pode",
+        ]
+        for language in AppLanguage.allCases {
+            for key in [L10nKey.directLargeFilesTitle, .directLargeFilesBody,
+                        .directOpenSend, .directKeepBothOpen, .directInterrupted] {
+                let text = L10n.t(key, language: language)
+                XCTAssertFalse(text.isEmpty, "\(key.rawValue) [\(language.rawValue)]")
+                for platform in ["Mac", "macOS", "iPhone", "iPad", "iOS"] {
+                    XCTAssertFalse(text.contains(platform),
+                                   "\(key.rawValue) [\(language.rawValue)] names \(platform)")
+                }
+            }
+            let phrase = try XCTUnwrap(bothDevices[language])
+            for key in [L10nKey.directLargeFilesBody, .directKeepBothOpen, .directInterrupted] {
+                XCTAssertTrue(L10n.t(key, language: language).contains(phrase),
+                              "\(key.rawValue) [\(language.rawValue)] dropped the reason a "
+                              + "direct transfer is limited: \(L10n.t(key, language: language))")
+            }
+            let conditional = try XCTUnwrap(possibility[language])
+            XCTAssertTrue(L10n.t(.directLargeFilesBody, language: language)
+                            .contains(conditional),
+                          "direct.largeFilesBody [\(language.rawValue)] makes a route-dependent "
+                          + "speed claim absolute")
+        }
+    }
+
     /// The key read and removal failures are reached through `ErrorCopy` rather
     /// than by name — `AccountManagementModel.availability` formats one and
     /// `cleanupMessage` the other — which is why they were found by reachability

@@ -74,6 +74,7 @@
 "tab.receive" = "Receive";
 "tab.send" = "Send";
 "tab.account" = "Account";
+"tab.direct" = "Direct";
 
 /* MARK: navigation sidebar */
 "nav.sectionDirect" = "Direct";
@@ -127,7 +128,7 @@
 "hub.transferTypeHint" = "Choose what this session will transfer.";
 "verify.toggle" = "Compare verification codes with the other device";
 "verify.explainWhat" = "Off by default. When on, both devices show the same six-digit verification code (SAS) before anything moves; comparing it out loud detects a substituted signalling endpoint. It is not the pairing code you typed in, and it only detects anything if someone actually compares the two.";
-"verify.explainEncryption" = "This changes what is shown and what stops for confirmation — never the encryption. Keys are generated on this Mac and never sent to Relayium, the relay carries only ciphertext, and a tampered handshake always fails.";
+"verify.explainEncryption" = "This changes what is shown and what stops for confirmation — never the encryption. Keys are generated on this device and never sent to Relayium, the relay carries only ciphertext, and a tampered handshake always fails.";
 
 /* MARK: single-session presence */
 "presence.busyTitle" = "This session is shown elsewhere";
@@ -145,6 +146,11 @@
 "direct.waitingForDevice" = "Waiting for the other device…";
 "direct.chooseFilesFirst" = "Choose files or folders to send first.";
 "direct.joinNoAccountNeeded" = "Joining a code somebody else created needs no account.";
+"direct.largeFilesTitle" = "Sending something large?";
+"direct.largeFilesBody" = "A direct transfer runs only while both devices have Relayium open, so a large file can be slower this way and starts over if either app is closed. Send stores the encrypted file instead, and the other device can collect it whenever it likes.";
+"direct.openSend" = "Open Send";
+"direct.keepBothOpen" = "Keep Relayium open on both devices until this finishes. A direct transfer cannot continue once the app leaves the screen.";
+"direct.interrupted" = "Relayium left the screen, so the direct session ended. A direct transfer runs only while the app is open on both devices, and anything partly received was removed.";
 
 /* MARK: live file session */
 "session.connecting" = "Connecting…";
