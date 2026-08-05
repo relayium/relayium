@@ -86,7 +86,14 @@ and literal program output stay in English — only the `#` comments are prose.
 A Latin run ending in `>` or `]` immediately before Arabic text puts a
 bidi-neutral character between an LTR and an RTL run. It resolves to the RTL base
 level, gets **mirrored** (`>` becomes `<`) and **jumps to the wrong side**. Wrap
-inline placeholders in U+200E: `‎--ttl <duration>‎`. Twelve of these render
-visibly broken today. Also prefix any `title`/`description` that opens with a
-Latin word with U+200F, or the browser tab and the search result render LTR-based
-with the punctuation in the wrong place.
+inline placeholders in U+200E: `‎--ttl <duration>‎`. The twelve that rendered
+visibly broken have been wrapped. Also prefix any `title`/`description` that opens
+with a Latin word with U+200F, or the browser tab and the search result render
+LTR-based with the punctuation in the wrong place.
+
+Both halves are now enforced by `../rtl-head-isolation.test.mjs`. The U+200F is
+applied centrally by `rtlHead()` in `../shared.mjs`, so a *generated* page needs
+nothing from you; a hand-written `ar` head string in `src/lib/i18n/ar.ts` still
+carries its own (see `titleDefault`). The U+200E stays the author's job — the
+test reads source strings for that half, because a built page has already
+escaped `<duration>` to `&lt;duration&gt;` and the `>` is no longer there to see.
