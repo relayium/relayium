@@ -250,7 +250,7 @@ public enum LinkRecoveryJoin: Equatable {
 /// sending from inside `onAttach` is on the driver's own queue already, so its
 /// `queue.sync` runs inline and blocks on nothing.
 ///
-/// The two other locks this one is ever held across are both leaves, which is
+/// The three other locks this one is ever held across are all leaves, which is
 /// what makes the ordering total rather than merely usual:
 ///
 ///  - **`LinkAdmission`'s.** Only the lifecycle transitions are called from
@@ -260,6 +260,13 @@ public enum LinkRecoveryJoin: Equatable {
 ///  - **A driver's callback-slot lock.** `detach` writes the four slots; the
 ///    driver reads them and releases the lock before invoking anything. Nothing
 ///    is ever called while it is held.
+///  - **A bound `LinkLaneOwner`'s lifecycle `gate`.** Its lifecycle hooks —
+///    `onTransportLost`, `onAttach` and `onEnded`, all of which run under this
+///    lock — take it only to record that a transition is in flight, and release
+///    it before the first driver call. It is never held across a call to
+///    anything: not a driver, not a transport, not a callback. So the order is
+///    this lock, then the gate, and there is no path from under the gate back
+///    to here.
 ///
 /// The scheduler chooses only where a wake-up is DELIVERED. It is not this
 /// object's lock and does not serialize anything for it.
