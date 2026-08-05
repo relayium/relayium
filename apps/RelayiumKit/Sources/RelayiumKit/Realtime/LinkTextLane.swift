@@ -370,6 +370,25 @@ public final class LinkTextLane {
         protectedSendPending = false
     }
 
+    /// End this lane from the owner above it, and hand back what that requires.
+    ///
+    /// This lane sees a frame's LENGTH and its consent state; it has no keys, so
+    /// the failures that depend on content are invisible to it. "The receiver
+    /// refused this frame" and "a frame this side sealed never left the buffer"
+    /// are both violations only the owner can detect, and both leave the same
+    /// question unanswerable — which nonces the peer has consumed. Routing them
+    /// through here rather than letting an owner keep its own terminal flag is
+    /// what keeps ONE terminal path: the timers are disarmed, the drains are
+    /// dropped, and the codecs cannot be poisoned without the lane being closed.
+    ///
+    /// Idempotent, and scoped to THIS lane: nothing here reaches the file lane,
+    /// the transport or the peer link.
+    @discardableResult
+    public func failClosed() -> [LinkTextEffect] {
+        guard !codecsPoisoned else { return [] }
+        return failLane(poison: true)
+    }
+
     // MARK: - transport gaps
 
     /// Enter a transport gap. Idempotent: a channel `onclose` and the peer
