@@ -13,17 +13,18 @@
 // ── SCOPE, and why it is this narrow ─────────────────────────────────────────
 // Only rules that are (a) settled in GLOSSARY.md, (b) mechanically decidable and
 // (c) produce ZERO false positives on today's corpus. A locale lint that cries
-// wolf gets suppressed, and then it protects nothing. Two rules were measured
-// and deliberately left out:
+// wolf gets suppressed, and then it protects nothing. One rule was measured and
+// deliberately left out:
 //
 //   * fr: the non-breaking space before `: ; ! ?`. fr.ts already carries 195
 //     NBSPs, so the convention is real, but ~950 sites across the corpus do not
 //     have one. That is its own typography pass, not a lint to bolt on here.
-//   * zh: half-width `,;:?` and `()` inside Chinese runs. The corpus is clean
-//     today (the 2026-07 machine-translation leftovers were all edited out), so
-//     a guard would be free — but the same rule cannot distinguish prose from
-//     the code samples and Latin-run punctuation that legitimately sit inside
-//     zh strings. Left to a follow-up that separates prose from code first.
+//
+// The zh half-width punctuation rule was left out at first for a reason that
+// turned out to be wrong — "it cannot separate prose from code samples". It does
+// not need to: keying on a CJK NEIGHBOUR rather than on the field makes Latin
+// runs, paths, flags and numbers inside zh strings invisible to it, and the
+// measurement across the whole corpus including code blocks is zero either way.
 //
 // ── HOW TO EXTEND ───────────────────────────────────────────────────────────
 // Add a row only with an injection proof: put the defect string into one locale,
@@ -103,6 +104,22 @@ const RULES = [
   // ar — tanwīn is written ً then ا. The reversed form اً is what a keyboard
   // produces by accident; it renders as a visibly misplaced mark.
   { locale: "ar", name: "reversed tanwīn اً (write ًا)", legal: "keep", re: /اً/ },
+
+  // zh — full-width ，：；？（）. The rule is written as CJK ADJACENCY rather than
+  // "no half-width punctuation in a zh string", because a zh string legitimately
+  // carries Latin runs, paths, flags and numbers whose own punctuation is
+  // half-width and must stay so: "docs/x.md", "--ttl 1d", "1,000".
+  //
+  // Adjacency is what the 2026-07 machine-translation leftovers actually looked
+  // like — "更进一步:文件…已经加密,而这把密钥", "（上限取决于套餐）,或首次下载后即焚" —
+  // and it is a shape correct Chinese never produces. It needed no prose-vs-code
+  // exclusion in the end: measured across the whole corpus INCLUDING code blocks,
+  // all four forms are zero, because the discriminator is the CJK neighbour and
+  // not the field the string sits in. A Chinese comment inside a code sample is
+  // prose too (GLOSSARY.md says translate them), so catching one there is right.
+  { locale: "zh", name: "half-width punctuation between CJK", legal: "keep", re: /[一-鿿々〇][,;:?!][一-鿿々〇]/ },
+  { locale: "zh", name: "half-width punctuation closing a CJK clause", legal: "keep", re: /[一-鿿々〇][,;:?!](\s|$)/ },
+  { locale: "zh", name: "half-width punctuation opening a CJK clause", legal: "keep", re: /[,;:?!][一-鿿々〇]/ },
 ];
 
 // German is not a plain substring rule. Capitalized Sie/Ihnen/Ihr* is formal
