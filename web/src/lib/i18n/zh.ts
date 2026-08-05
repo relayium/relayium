@@ -186,7 +186,7 @@ const zh: Messages = {
     scheduledDowngradeRow: (name, date) => `已排期：${date} 期末降到 ${name}`,
   },
   pricingPage: {
-    navLink: "定价",
+    navLink: "定价（英文）",
     title: "简单、诚实的定价",
     subtitle: "同一网络内的文件与实时文本传输始终免费。浏览器跨网络中继与云端存储按每月额度计量——每个账号都有额度，付费套餐额度更高。你也可以通过运行自己的节点，保持 100% 免费。",
     signedOutCta: "登录即可订阅或更改套餐。",

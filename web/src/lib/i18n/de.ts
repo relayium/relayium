@@ -186,7 +186,7 @@ const de: Messages = {
     scheduledDowngradeRow: (name, date) => `Geplant: Downgrade zu ${name} am ${date}`,
   },
   pricingPage: {
-    navLink: "Preise",
+    navLink: "Preise (englisch)",
     title: "Einfache, faire Preise",
     subtitle: "Datei- und Live-Text-Übertragungen im selben Netzwerk sind immer kostenlos. Browser-Relay über Netzwerkgrenzen und Cloud-Speicher laufen über ein monatliches Kontingent — jedes Konto hat eines, kostenpflichtige Tarife erhöhen es. Mit einem eigenen Node bleibst du zu 100% kostenlos.",
     signedOutCta: "Melde dich an, um zu abonnieren oder deinen Tarif zu ändern.",

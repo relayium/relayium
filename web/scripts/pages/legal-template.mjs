@@ -7,7 +7,7 @@
 // and the shared footer — plus one list this template knows how to render. A
 // second near-identical template would have meant maintaining this file's head,
 // bidi handling and inlined stylesheet twice.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, PRICING_LABELS, PRICING_URL, RELEASES_LABELS, BCP47, SITE, urlPath, absUrl, esc, dirAttr, rtlHead } from "./shared.mjs";
+import { LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, RELEASES_LABELS, BCP47, SITE, urlPath, absUrl, esc, dirAttr, rtlHead } from "./shared.mjs";
 
 const STYLE = `
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
@@ -146,7 +146,7 @@ export function renderLegalPage({ slug, lang, doc, releases = [] }) {
         <a href="/">← ${esc(SITE.name)}</a>
         <a href="${urlPath("apps", lang)}">${esc(APPS_LABELS[lang])}</a>
         <a href="${urlPath(otherSlug, lang)}">${esc(doc.otherDocLabel)}</a>
-        <a href="${PRICING_URL}">${esc(PRICING_LABELS[lang])}</a>${slug === "releases" ? "" : `
+        <a href="${PRICING_URL}">${esc(pricingLabel(lang))}</a>${slug === "releases" ? "" : `
         <a href="${urlPath("releases", lang)}">${esc(RELEASES_LABELS[lang])}</a>`}
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>

@@ -1,7 +1,7 @@
 // web/scripts/pages/article-template.mjs — renders one article (one language) to a
 // self-contained static HTML string. No JS, no external CSS: styles are inlined so
 // the page is independent of the Vite asset graph and crawlable with JS disabled.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, PRICING_LABELS, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, landingUrl, dirAttr, rtlHead } from "./shared.mjs";
+import { LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, landingUrl, dirAttr, rtlHead } from "./shared.mjs";
 
 // Footer link label; matches content/landing.mjs footer.privacy per language.
 const PRIVACY_LABELS = {
@@ -322,7 +322,7 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
         <a href="${urlPath("apps", lang)}">${esc(APPS_LABELS[lang])}</a>
         <a href="${urlPath("guides", lang)}">${esc(GUIDES_LABELS[lang])}</a>
         <a href="${urlPath("privacy", lang)}">${esc(PRIVACY_LABELS[lang])}</a>
-        <a href="${PRICING_URL}">${esc(PRICING_LABELS[lang])}</a>
+        <a href="${PRICING_URL}">${esc(pricingLabel(lang))}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>${hasWidget(doc) ? "\n    " + BUILDER_SCRIPT : ""}

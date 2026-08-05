@@ -21,10 +21,23 @@ export const APPS_LABELS = {
 // definition of an orphan and a strong "Discovered - currently not indexed"
 // candidate.
 export const PRICING_LABELS = {
-  en: "Pricing", zh: "价格", ja: "料金", ko: "요금제", de: "Preise", fr: "Tarifs", ar: "الأسعار", es: "Precios", pt: "Preços",
+  en: "Pricing", zh: "定价", ja: "料金", ko: "요금제", de: "Preise", fr: "Tarifs", ar: "الأسعار", es: "Precios", pt: "Preços",
 };
 /** The /pricing URL. English-only, an SPA route, so no trailing slash. */
 export const PRICING_URL = "/pricing";
+// Eight locales send readers to /pricing behind a localized label, and the page
+// they land on is English — the plan tiers come from the billing API and there
+// is no localized twin. The label alone promises otherwise, so it carries the
+// warning in the reader's own language. English gets no suffix: there is nothing
+// to warn an English reader about.
+const PRICING_ENGLISH_HINT = {
+  en: "", zh: "（英文）", ja: "（英語）", ko: " (영문)", de: " (englisch)",
+  fr: " (en anglais)", ar: " (بالإنجليزية)", es: " (en inglés)", pt: " (em inglês)",
+};
+/** The /pricing footer label for a language, warning when the page is not in it. */
+export function pricingLabel(lang) {
+  return PRICING_LABELS[lang] + PRICING_ENGLISH_HINT[lang];
+}
 // Footer link label for /releases/, per language. Matches each locale's page
 // title in content/releases.mjs — a footer that calls the page one thing and the
 // page itself another is the drift GLOSSARY.md exists to stop.

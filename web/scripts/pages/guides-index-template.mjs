@@ -1,7 +1,7 @@
 // web/scripts/pages/guides-index-template.mjs — renders the Guides hub (one language)
 // to a self-contained static HTML string. Same inlined-style, no-JS approach as
 // article-template.mjs so it is crawlable and independent of the Vite asset graph.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, PRICING_LABELS, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, dirAttr, rtlHead } from "./shared.mjs";
+import { LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, dirAttr, rtlHead } from "./shared.mjs";
 
 // Copy this verbatim from article-template.mjs:7-10 (same six labels).
 const PRIVACY_LABELS = {
@@ -157,7 +157,7 @@ export function renderGuidesIndexPage({ lang, doc, groups, slug = "guides", only
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>${backLabel ? `\n        <a href="${urlPath("guides", lang)}">${esc(backLabel)}</a>` : ""}
         <a href="${urlPath("apps", lang)}">${esc(APPS_LABELS[lang])}</a>
         <a href="${urlPath("privacy", lang)}">${esc(PRIVACY_LABELS[lang])}</a>
-        <a href="${PRICING_URL}">${esc(PRICING_LABELS[lang])}</a>
+        <a href="${PRICING_URL}">${esc(pricingLabel(lang))}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

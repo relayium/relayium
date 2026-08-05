@@ -11,7 +11,7 @@ import {
   LANGS,
   DEFAULT_LANG,
   APPS_LABELS,
-  PRICING_LABELS,
+  pricingLabel,
   PRICING_URL,
   BCP47,
   OG_LOCALE,
@@ -159,7 +159,7 @@ export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) 
         <a href="${urlPath("privacy", lang)}">${esc(doc.footer.privacy)}</a>
         <a href="${urlPath("terms", lang)}">${esc(doc.footer.terms)}</a>
         <a href="${urlPath("security", lang)}">${esc(doc.footer.security)}</a>
-        <a href="${PRICING_URL}">${esc(PRICING_LABELS[lang])}</a>
+        <a href="${PRICING_URL}">${esc(pricingLabel(lang))}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>
