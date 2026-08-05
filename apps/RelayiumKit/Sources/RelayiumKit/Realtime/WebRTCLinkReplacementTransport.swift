@@ -85,8 +85,10 @@ import WebRTC
 ///
 ///  - **ICE restart.** ABSENT ON PURPOSE, and the absence is a gate rather than
 ///    an oversight — see "Renegotiation" below before adding one.
-///  - **Durable file recovery.** No checkpoints and no RESUME_REQ/RESUME_START,
-///    so a rebuilt lane resumes a connection, not a transfer.
+///  - **A durable-file lane owner.** The wire and the lane state machine both
+///    exist (checkpoints, RESUME_REQ/RESUME_START, `LinkFileLane`); nothing
+///    drives them over a real channel, so a rebuilt lane resumes a connection,
+///    not a transfer.
 ///  - **Poisoned text-lane policy and END acknowledgement timing.** Untouched;
 ///    a rebuild inherits whatever the lane's own state was.
 ///  - **Lifecycle and UI.** A production factory exists

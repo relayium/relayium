@@ -66,6 +66,20 @@ public final class RealtimeReceiver {
     private var fileIndex = 0
     private var receivedInFile = 0
 
+    /// Every file of `files` has closed out.
+    ///
+    /// The manifest is deliberately RETAINED in that state rather than dropped,
+    /// and the reason is the last frame of a batch. A `COMPLETE` lost with the
+    /// transport is repaired by replaying the final encrypted DONE on the next
+    /// generation — but `resumeAt` validates its point against the manifest, so a
+    /// receiver that had already forgotten it would refuse the very frame the
+    /// replay exists to deliver.
+    ///
+    /// Retaining it changes nothing else: a chunk or DONE after the last file
+    /// still fails `fileIndex < files.count`, and the next batch is admitted by
+    /// this flag exactly as it used to be admitted by `files == nil`.
+    private var batchComplete = false
+
     /// Plaintext pieces of the logical chunk (or manifest) currently arriving,
     /// held until its terminating frame.
     private var parts: [[UInt8]] = []
@@ -99,6 +113,40 @@ public final class RealtimeReceiver {
     public func abortBatch() {
         hash = [UInt8](repeating: 0, count: 32)
         files = nil
+        batchComplete = false
+        fileIndex = 0
+        receivedInFile = 0
+        dropParts()
+    }
+
+    /// Realign a direction that has NO batch to continue.
+    ///
+    /// The other half of `resumeAt`, and it has to exist separately. Every
+    /// transport generation after the first owes exactly one forward-only
+    /// realignment before its first protected frame, including on a lane that is
+    /// merely idle — otherwise the next batch's manifest would be sealed under a
+    /// nonce this side cannot prove was never used. There is no batch here to
+    /// validate a point against, so the only point that means anything is the
+    /// batch-free origin, and the chain resets with it.
+    ///
+    /// Refuses while a batch is live: an "origin" realignment there would
+    /// silently rewind a transfer's position while claiming to move the sequence
+    /// forward, which is the one shape of this call that could lose bytes.
+    public func resumeAtOrigin(seq: UInt32) throws {
+        // Same forward-only rule as `resumeAt`, and for the same reason: moving
+        // the receive nonce backwards would make an old ciphertext valid again
+        // under the same key and sequence number.
+        guard UInt64(seq) >= expectedSeq else { throw RealtimeError.outOfOrder }
+        // A batch that has closed out is not a live one: there is no position
+        // left for this call to rewind, so the direction is idle in exactly the
+        // sense that matters here. Whether such a batch still owes a replayed
+        // final DONE is the LANE's question, not this receiver's — the lane
+        // chooses `resumeAt` for that and this call for the idle case.
+        guard files == nil || batchComplete else { throw RealtimeError.resumeRejected }
+        hash = [UInt8](repeating: 0, count: 32)
+        expectedSeq = UInt64(seq)
+        files = nil
+        batchComplete = false
         fileIndex = 0
         receivedInFile = 0
         dropParts()
@@ -130,6 +178,10 @@ public final class RealtimeReceiver {
         expectedSeq = UInt64(seq)
         fileIndex = point.index
         receivedInFile = point.offset
+        // Restoring INTO a batch that had closed out IS the replayed final DONE,
+        // so the completion flag comes back off with it — otherwise the frame the
+        // replay delivers would arrive with the next-manifest gate still open.
+        batchComplete = false
         // Pieces of a chunk the old transport cut in half are worthless: the
         // sender restarts from the checkpoint, which is a whole-chunk boundary.
         dropParts()
@@ -208,7 +260,9 @@ public final class RealtimeReceiver {
                 // and bounded before it is decoded, not after.
                 let plain = try joinParts(kind: RealtimeKind.batchPart, plain: plain,
                                           limit: MANIFEST_MAX_BYTES)
-                guard files == nil else { throw RealtimeError.malformed }
+                // A batch that has closed out is over: the next one is admitted
+                // exactly as it used to be when the manifest was dropped here.
+                guard files == nil || batchComplete else { throw RealtimeError.malformed }
                 guard let decoded = try? JSONDecoder().decode(BatchPayload.self, from: Data(plain)) else {
                     throw RealtimeError.malformed
                 }
@@ -216,6 +270,7 @@ public final class RealtimeReceiver {
                     throw RealtimeError.malformed
                 }
                 files = decoded.files
+                batchComplete = false
                 fileIndex = 0
                 receivedInFile = 0
                 // 文件名由发送端任意构造，接收方的确认卡片正是用户做信任决策的地方：
@@ -252,7 +307,7 @@ public final class RealtimeReceiver {
                 hash = [UInt8](repeating: 0, count: 32) // reset chain for the next file in the batch
                 fileIndex += 1
                 receivedInFile = 0
-                if fileIndex == files.count { self.files = nil }
+                if fileIndex == files.count { batchComplete = true }
                 return .done(ok: ok)
             }
 
@@ -260,16 +315,14 @@ public final class RealtimeReceiver {
             // Plaintext, not decrypted: a mid-signaling attacker can inject this
             // frame, and its `seq` becomes the nonce counter's new starting
             // point — a malformed/NaN-ish value would make every subsequent
-            // comparison false and stall the transfer, so validate the shape
-            // strictly rather than trust it.
-            guard
-                let obj = try? JSONSerialization.jsonObject(with: Data(payload)) as? [String: Any],
-                let index = safeIndex(obj["index"]),
-                let offset = safeIndex(obj["offset"]),
-                let rseq = safeIndex(obj["seq"]),
-                let seq32 = UInt32(exactly: rseq)
-            else { throw RealtimeError.malformed }
-            return .resume(index: index, offset: offset, seq: seq32)
+            // comparison false and stall the transfer. `parseResumeStart` owns
+            // that strictness, and owning it in ONE place is what keeps this
+            // path and the lane that decides on the announcement from ever
+            // disagreeing about which frames are well formed.
+            guard let announced = parseResumeStart(encoded) else { throw RealtimeError.malformed }
+            return .resume(index: announced.point.index,
+                           offset: announced.point.offset,
+                           seq: announced.seq)
 
         case RealtimeKind.batchLegacy, RealtimeKind.doneLegacy:
             // Peer is running a pre-encrypted-manifest version. No plaintext

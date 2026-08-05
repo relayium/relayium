@@ -270,8 +270,12 @@ public enum LinkRecoveryJoin: Equatable {
 /// and `LINK_BUILD_SUPPORT` both remain false, and each of these is its own
 /// piece of work:
 ///
-///  - **Durable file recovery.** No checkpoints and no `RESUME_REQ`/
-///    `RESUME_START`, so a rebuilt lane resumes a connection, not a transfer.
+///  - **A durable-file lane owner.** The wire itself exists — the checkpoint
+///    contract, `RESUME_REQ`/`RESUME_START`, and `LinkFileLane`'s generation,
+///    checkpoint and flow-control state machine. What does not exist is anything
+///    that drives them over a real channel: no pickers, sinks, source queues,
+///    timers or DataChannel wiring. So a rebuilt lane still resumes a
+///    connection, not a transfer.
 ///  - **File- and text-lane integration.** `onTransportLost` and `onAttach` are
 ///    where a lane suspends and re-attaches; no lane implements either yet, and
 ///    a text lane that proved its codecs unsafe to reuse has no policy here.

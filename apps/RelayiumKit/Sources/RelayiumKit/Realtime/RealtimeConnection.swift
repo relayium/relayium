@@ -414,7 +414,11 @@ public final class RealtimeConnection: NSObject {
         let bytes = [UInt8](data)
 
         if let ackedTotal = parseAck(bytes) {
-            sendWindow.recordAck(Int(ackedTotal))
+            // Handed over as the `Double` the frame actually carries. `Int(_:)`
+            // TRAPS on NaN, on either infinity and outside `Int`'s range, and
+            // this value is chosen by the peer — so the conversion has to happen
+            // behind `recordAck`'s validation, never in front of it.
+            sendWindow.recordAck(ackedTotal)
             return
         }
         if let control = parseControl(bytes) {

@@ -142,9 +142,10 @@ final class RTCLinkLane: LinkLaneChannel {
 ///    the coordinator's question, and `LINK_TRANSPORT_REPLACEMENT_SUPPORTED` is
 ///    still false because the lanes, lifecycle and serialization that would let
 ///    an owner ask it do not exist yet.
-///  - **Durable active-file recovery.** No file checkpoints and no
-///    RESUME_REQ/RESUME_START, so even a rebuilt transport resumes a connection
-///    rather than a transfer.
+///  - **A durable-file lane owner.** The file checkpoint contract,
+///    RESUME_REQ/RESUME_START and `LinkFileLane`'s generation and flow state
+///    all exist; no owner drives them over a real channel, so even a rebuilt
+///    transport resumes a connection rather than a transfer.
 ///  - **Poisoned-lane replacement closure.** `LinkTextLane` can prove its
 ///    codecs unsafe to reuse; deciding what a link does about that — and how a
 ///    replacement transport inherits it — is not answered here.

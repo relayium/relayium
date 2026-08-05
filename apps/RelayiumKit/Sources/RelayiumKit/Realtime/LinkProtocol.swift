@@ -269,3 +269,110 @@ public func linkTextLifecycleKind(_ frame: [UInt8]) -> LinkTextControl? {
 public func isLinkTextFrame(_ frame: [UInt8]) -> Bool {
     frame.count >= 5 + 16 && frame[0] == RealtimeKind.text
 }
+
+// MARK: - file lane lifecycle bytes
+
+/// "The file lane is occupied." Not a refusal: the peer requeues or retries.
+/// Byte-pinned to `transfer.ts`'s `CTRL_BUSY`.
+public let LINK_FILE_BUSY: UInt8 = 0xf9
+
+/// Sender -> receiver ordered barrier retiring exactly one batch.
+///
+/// The legacy transport expressed this by closing the whole PeerConnection. A
+/// long-lived link must end only the current batch, so the independent text lane
+/// and every later file batch stay usable. Byte-pinned to `transfer.ts`'s
+/// `CTRL_BATCH_ABORT`.
+public let LINK_FILE_BATCH_ABORT: UInt8 = 0xf8
+
+/// The file lane's lifecycle controls.
+///
+/// ACCEPT/REJECT are the same two bytes the text lane uses; the DataChannel
+/// label is what scopes their meaning to a file batch rather than a
+/// conversation. COMPLETE, BUSY and BATCH_ABORT are the file lane's alone.
+public enum LinkFileControl: Equatable, Sendable {
+    /// Receiver -> sender: this batch is consented to.
+    case accept
+    /// Receiver -> sender: this batch is refused, or an accepted one stopped.
+    case reject
+    /// Receiver -> sender: the whole batch arrived and verified.
+    case complete
+    /// Receiver -> sender: the lane is busy; requeue rather than fail.
+    case busy
+    /// Sender -> receiver: an ordered barrier retiring this batch.
+    case batchAbort
+}
+
+/// A lifecycle control is EXACTLY one byte.
+///
+/// A longer frame that merely starts with one of these values is a protected
+/// frame or a malformed one, and reading it as consent is how a peer would get
+/// a batch accepted without a user ever answering. The length check is the
+/// whole control, not a formality.
+public func linkFileLifecycleKind(_ frame: [UInt8]) -> LinkFileControl? {
+    guard frame.count == 1 else { return nil }
+    switch frame[0] {
+    case RealtimeControl.accept.rawValue: return .accept
+    case RealtimeControl.reject.rawValue: return .reject
+    case RealtimeControl.complete.rawValue: return .complete
+    case LINK_FILE_BUSY: return .busy
+    case LINK_FILE_BATCH_ABORT: return .batchAbort
+    default: return nil
+    }
+}
+
+/// What one frame arriving on the file channel is, exactly.
+///
+/// The classes PARTITION the space: every byte string lands in exactly one, so
+/// no frame can be both counted as flow control and fed to the AEAD receiver,
+/// and none can be silently dropped.
+public enum LinkFileFrameClass: Equatable, Sendable {
+    /// One of the five one-byte controls.
+    case lifecycle(LinkFileControl)
+    /// A well-formed flow-control ACK header. Its VALUE still has to pass
+    /// `linkFileAckTotal`, which is a separate decision from its shape.
+    case ack
+    /// Kind 5, INCLUDING a payload that does not parse. That distinction is the
+    /// one the lane needs: a malformed resume request is control it must fail
+    /// closed on, never bytes to route into the protected stream.
+    case resumeRequest
+    /// Kind 4, the plaintext realignment announcement.
+    case resumeStart
+    /// Carries a nonce and must be fed to the link's `RealtimeReceiver` in wire
+    /// order. Includes the two legacy kinds deliberately: the receiver is the
+    /// single place that turns those into `legacyPeer`, and a demux that
+    /// swallowed them here would downgrade a loud version mismatch into silence.
+    case protected
+    /// Nothing this lane can route. The owner fails closed rather than guessing:
+    /// on an ordered channel an unroutable frame is either corruption or a peer
+    /// speaking a protocol this build does not have, and skipping one that the
+    /// peer counted would strand the receiver's sequence.
+    case unroutable
+}
+
+/// Route one file-channel frame, by kind and by exact shape.
+///
+/// Deliberately total and allocation-free: it runs on every inbound message,
+/// before consent, on bytes a peer chose.
+public func linkFileFrameClass(_ frame: [UInt8]) -> LinkFileFrameClass {
+    if let control = linkFileLifecycleKind(frame) { return .lifecycle(control) }
+    // Below the header there is no kind to dispatch on at all.
+    guard frame.count >= 5 else { return .unroutable }
+    switch frame[0] {
+    case RealtimeKind.ack:
+        // 13 bytes is part of what an ACK IS — `parseAck` refuses anything else,
+        // so a kind-6 frame of another length is not one and must not fall
+        // through into the protected stream either.
+        return frame.count == 13 ? .ack : .unroutable
+    case RealtimeKind.resumeReq:
+        return .resumeRequest
+    case RealtimeKind.resumeStart:
+        return .resumeStart
+    case RealtimeKind.chunk, RealtimeKind.chunkPart,
+         RealtimeKind.batchEnc, RealtimeKind.batchPart,
+         RealtimeKind.doneEnc,
+         RealtimeKind.batchLegacy, RealtimeKind.doneLegacy:
+        return .protected
+    default:
+        return .unroutable
+    }
+}

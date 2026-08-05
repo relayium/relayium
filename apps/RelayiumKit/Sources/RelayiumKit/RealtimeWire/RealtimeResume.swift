@@ -46,6 +46,31 @@ public func parseResumeReq(_ buf: [UInt8]) -> ResumePoint? {
     return ResumePoint(index: index, offset: offset)
 }
 
+/// Decode a sender->receiver resume announcement; `nil` if the frame is not one
+/// **or does not carry a usable point and nonce**.
+///
+/// This frame is plaintext, so a mid-signalling attacker can inject one — and
+/// its `seq` becomes the receive nonce counter's new starting point. A malformed
+/// or NaN-ish value would make every subsequent comparison false and stall the
+/// direction for good, so the shape is pinned strictly rather than trusted:
+/// non-negative JSON-safe integers, with `seq` additionally inside the 32-bit
+/// wire range.
+///
+/// One copy, used by both `RealtimeReceiver.feed` and the lane that decides what
+/// to do with the announcement, so the two cannot drift apart about what counts
+/// as a well-formed one.
+public func parseResumeStart(_ buf: [UInt8]) -> (point: ResumePoint, seq: UInt32)? {
+    guard buf.first == RealtimeKind.resumeStart, buf.count >= 5 else { return nil }
+    guard
+        let obj = try? JSONSerialization.jsonObject(with: Data(buf[5...])) as? [String: Any],
+        let index = safeIndex(obj["index"]),
+        let offset = safeIndex(obj["offset"]),
+        let rseq = safeIndex(obj["seq"]),
+        let seq32 = UInt32(exactly: rseq)
+    else { return nil }
+    return (ResumePoint(index: index, offset: offset), seq32)
+}
+
 /// True for the receiver->sender resume-request frame kind, **including
 /// malformed payloads**.
 ///

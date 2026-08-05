@@ -18,8 +18,12 @@ import Foundation
 /// the same identity. What does not exist is everything else a link would have
 /// to rely on:
 ///
-///  - no durable file checkpoints and no RESUME_REQ/RESUME_START, so a rebuilt
-///    lane resumes a connection, not a transfer;
+///  - no OWNER for the durable file wire: the checkpoint contract,
+///    `RESUME_REQ`/`RESUME_START` and the file lane's own generation, checkpoint
+///    and flow state machine all exist now (`RealtimeResume`,
+///    `RealtimeFrameProducer`, `LinkFileLane`), but nothing drives them over a
+///    real channel, so a rebuilt lane still resumes a connection, not a
+///    transfer;
 ///  - no file- or text-lane integration: nothing implements the coordinator's
 ///    suspend-and-reattach hooks, and a text lane whose codecs proved unsafe to
 ///    reuse still has no policy;
