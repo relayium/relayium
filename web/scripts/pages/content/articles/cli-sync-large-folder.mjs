@@ -941,7 +941,7 @@ curl -fsSL https://relayium.com/install.sh | sh`,
         "عند أول اتصال للمُرسِل (القسم التالي)، يُظهِر serve عنوانه وبصمته ويطلب منك اعتماده؛ أجِب بـ y فيُحفَظ إلى الأبد:",
       ],
       code: [
-        `# على المُستقبِل (في المقدمة، للاعتماد تفاعلياً)
+        `# على المُستقبِل (في المقدمة، للاعتماد تفاعليًا)
 relayium serve --dir /root --port 9031`,
         `# على المُستقبِل، عند أول اتصال:
 Incoming push from 203.0.113.9:52140
@@ -975,7 +975,7 @@ nohup relayium serve --dir /root --port 9031 > ~/relayium-serve.log 2>&1 &`,
       ],
       code: [
         `# على المُرسِل
-tmux new -s xfer      # نفّذ apt install -y tmux إن لم يكن موجوداً`,
+tmux new -s xfer      # نفّذ apt install -y tmux إن لم يكن موجودًا`,
         `until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo "$(date) retrying"; sleep 10; done`,
       ],
       bullets: [

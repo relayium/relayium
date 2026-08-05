@@ -15,6 +15,12 @@ call things.
 **Rule: pick the row, use the row.** If a term genuinely does not fit a context,
 change the row here first, then change every file — never just the one string.
 
+The settled register decisions below are enforced at build time by
+`../register-glossary.test.mjs`, over the SPA tables and this content tree at
+once. It covers the mechanically decidable rows only — changing one of those
+rows means changing that test in the same commit, or the corpus and the rule
+disagree. Everything else here is still on the reviewer.
+
 ## Register decisions (settled — do not relitigate per file)
 
 | Locale | Decision |

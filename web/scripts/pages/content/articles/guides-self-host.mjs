@@ -421,7 +421,7 @@ const de = {
       ],
       bullets: [
         "Egal welchen Server sie nutzt, die CLI ist kostenlos — --server ändert nur den Rendezvous-Server. send oder text ohne Code erzeugen dort einen Code, und Cloud-up speichert unter einem Konto auf ihm; melde dich daher zuerst mit relayium login --server https://your-domain an. receive, down und text mit dem ausgegebenen Code brauchen keine Anmeldung.",
-        "Beide text-Gegenstellen müssen gleichzeitig online bleiben. Nachrichten laufen über eine eigene Ende-zu-Ende-verschlüsselte direkte P2P-Sitzung. CLI text ist rein direkt und nutzt nicht das TURN-Relay der Web-App. Weder Relayium noch Ihr selbst gehosteter Server speichern Nachrichteninhalte oder einen serverseitigen Verlauf; beide Terminals beziehungsweise der Empfänger können empfangenen Text jedoch kopieren oder aufbewahren.",
+        "Beide text-Gegenstellen müssen gleichzeitig online bleiben. Nachrichten laufen über eine eigene Ende-zu-Ende-verschlüsselte direkte P2P-Sitzung. CLI text ist rein direkt und nutzt nicht das TURN-Relay der Web-App. Weder Relayium noch dein selbst gehosteter Server speichern Nachrichteninhalte oder einen serverseitigen Verlauf; beide Terminals beziehungsweise der Empfänger können empfangenen Text jedoch kopieren oder aufbewahren.",
         "push/pull (über dein eigenes SSH) sowie serve + daemon-direct push relayium://host berühren relayium.com überhaupt nicht, selbst gehostet oder nicht — sie verbinden sich direkt mit der von dir angegebenen Gegenstelle.",
       ],
     },

@@ -1016,7 +1016,7 @@ const pt = {
         "O texto da CLI usa um protocolo diferente, exclusivamente direto, sobre TLS 1.3 com certificado fixado. Ele não usa os quadros X25519/AES do navegador nem TURN e falha se nenhum caminho direto puder ser estabelecido. A Relayium não armazena o corpo das mensagens, mas qualquer ponta pode copiar, registrar, capturar a tela ou reter o texto de outra forma após recebê-lo.",
       ],
       bullets: [
-        "As duas pessoas precisam estar on-line ao mesmo tempo; a Relayium não oferece entrega de texto off-line nem histórico de mensagens no servidor.",
+        "As duas pessoas precisam estar online ao mesmo tempo; a Relayium não oferece entrega de texto offline nem histórico de mensagens no servidor.",
         "Os servidores necessariamente processam metadados de conexão, como endereços IP, participação na sala, horário, apelido do dispositivo e presença em sessões do navegador e, quando aplicável, a associação da conta usada para criar um código de emparelhamento.",
         "Em sessões TURN, a Relayium pode registrar a quantidade de bytes retransmitidos para aplicar a cota e prevenir abusos, mas não inspeciona o texto simples das mensagens.",
       ],
@@ -1024,7 +1024,7 @@ const pt = {
     {
       heading: "Links de download armazenados — a chave nunca deixa seu navegador",
       body: [
-        "O modo opcional de link de download é para quando o destinatário não está on-line. Seu navegador criptografa os arquivos com AES-256-GCM antes de qualquer coisa ser enviada, e a chave de descriptografia é colocada apenas no fragmento da URL — a parte depois do # —, que os navegadores nunca enviam ao servidor.",
+        "O modo opcional de link de download é para quando o destinatário não está online. Seu navegador criptografa os arquivos com AES-256-GCM antes de qualquer coisa ser enviada, e a chave de descriptografia é colocada apenas no fragmento da URL — a parte depois do # —, que os navegadores nunca enviam ao servidor.",
       ],
       bullets: [
         "O servidor armazena apenas texto cifrado, além do tamanho do texto cifrado e marcas de tempo para cota e limpeza — nunca texto simples, nomes de arquivos ou chaves.",

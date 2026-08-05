@@ -681,7 +681,7 @@ const pt = {
       },
       {
         q: "Como envio um arquivo de um iPhone para um PC com Windows?",
-        a: "Abra relayium.com em um navegador nos dois dispositivos. Na mesma rede Wi-Fi eles se descobrem automaticamente; caso contrário, digite no outro o código de emparelhamento mostrado em um dispositivo, o que exige que quem cria esse código faça login. Escolha até 1.000 arquivos e, se a verificação avançada estiver ativada, confirme que o código de verificação de 6 dígitos coincide nas duas telas; a transferência ocorre entre eles criptografada de ponta a ponta: diretamente na mesma rede Wi-Fi, ou por um retransmissor que só vê texto cifrado se vocês emparelharam entre redes.",
+        a: "Abra relayium.com em um navegador nos dois dispositivos. Na mesma rede Wi-Fi eles se descobrem automaticamente; caso contrário, digite no outro o código de emparelhamento mostrado em um dispositivo, o que exige que quem cria esse código faça login. Escolha até 1.000 arquivos e, se a verificação avançada estiver ativada, confirme que o código de verificação de 6 dígitos coincide nas duas telas; a transferência ocorre entre eles criptografada de ponta a ponta: diretamente na mesma rede Wi-Fi, ou por um retransmissor que só vê texto cifrado se você emparelhou entre redes.",
       },
       {
         q: "Preciso instalar um aplicativo?",

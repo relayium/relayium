@@ -94,7 +94,7 @@ const t: Record<Code, Tokens> = {
     linkMode: /Download-Link/i,
     stale: /Live-Übertragung großer Dateien/i,
     codeFirst: /6-stelligen Zifferncode/i,
-    filesAfter: /wählen Sie die Dateien/i,
+    filesAfter: /wählst du die Dateien/i,
   },
   fr: {
     sameNetworkOnly: /uniquement le même réseau local/i,

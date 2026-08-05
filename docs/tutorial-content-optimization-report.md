@@ -228,6 +228,15 @@
 10. 4 篇半角标点文章全文编辑（guides-is-it-safe、howto-automate-server-backups、howto-share-file-expiring-link、cli-backup-server-ssh)。
 11. 修"无需代码"误译；建立术语表（配对码/校验码/守护进程直连/阅后即焚/会合）并在构建期或 review 中强制；翻译 zh 代码块注释。
 
+   > **✅ 已完成（2026-08-05）**：术语表是 `web/scripts/pages/content/GLOSSARY.md`；
+   > 构建期强制是 `web/scripts/pages/register-glossary.test.mjs`——它同时读 SPA 语言表
+   > (`src/lib/i18n/*.ts`) 和静态页内容 (`scripts/pages/content/**/*.mjs`)，按 locale 归属每条
+   > 字符串，落地时查出并修掉 20 处违反自身既定语域的漂移（de 敬语 5、ja あなた 3、
+   > pt vocês 4 + on-line 3、ar 反向 tanwīn 8）。10 条规则每条都做过注入证明。
+   > 法务页保留各自的正式语域（ja お客様 / ko 귀하 / de Sie），故对三条人称规则豁免。
+   > **仍未做**：fr 的 `: ; ! ?` 前不间断空格（全站约 950 处，需单独一轮排版），
+   > 以及 zh 半角标点守卫（语料当前干净，但规则需先能区分正文与代码块）。
+
 ### P2 — 架构重组
 
 12. 文章加显式元数据，五类重组 hub + 组内排序；合并/互链两个备份主题。

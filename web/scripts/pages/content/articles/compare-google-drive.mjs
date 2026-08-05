@@ -648,7 +648,7 @@ const pt = {
     {
       heading: "O que o Google Drive faz bem",
       body: [
-        "A força do Drive é a permanência e a colaboração. Um arquivo que você envia permanece ali — sincronizado entre seu celular, seu notebook e a web — até você excluí-lo, que é exatamente o que você quer para uma pasta de trabalho, um drive de equipe compartilhado ou documentos que vocês coeditam em tempo real.",
+        "A força do Drive é a permanência e a colaboração. Um arquivo que você envia permanece ali — sincronizado entre seu celular, seu notebook e a web — até você excluí-lo, que é exatamente o que você quer para uma pasta de trabalho, um drive de equipe compartilhado ou documentos coeditados em tempo real.",
         "Ele também é generoso e sem atrito para o armazenamento: um plano gratuito sólido, backup automático, histórico de versões e busca em tudo o que você já salvou. Nada disso é algo que o Relayium tente substituir.",
       ],
     },

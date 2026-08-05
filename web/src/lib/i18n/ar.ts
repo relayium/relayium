@@ -808,7 +808,7 @@ const ar: Messages = {
     send: "إرسال",
     sendHint: "Enter لسطر جديد · ⌘/Ctrl+Enter للإرسال",
     byteCount: (used, max) => `${used.toLocaleString()} / ${max.toLocaleString()} بايت`,
-    useFileInstead: "أرسله كملف بدلاً من ذلك.",
+    useFileInstead: "أرسله كملف بدلًا من ذلك.",
     requestHead: (name) => `${name} يريد إرسال رسالة إليك`,
     accept: "قبول",
     reject: "رفض",

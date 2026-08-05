@@ -524,7 +524,7 @@ const de: Messages = {
     offline: { lead: "Gegenseite offline? Nutze die asynchrone Übertragung — verschlüsselt hochladen und einen Download-Link hinterlassen, tagelang abholbar.", cta: "Zur asynchronen Übertragung →" },
   },
   methods: {
-    realtime: { name: "Echtzeitübertragung", sub: "Zuerst einen 6-stelligen Zifferncode erstellen — vorlesen, als Link verschicken oder QR zeigen. Sobald das andere Gerät beitritt, wählen Sie die Dateien aus oder „Nachricht senden“ für Text.", badge: "Empfänger ohne Konto" },
+    realtime: { name: "Echtzeitübertragung", sub: "Zuerst einen 6-stelligen Zifferncode erstellen — vorlesen, als Link verschicken oder QR zeigen. Sobald das andere Gerät beitritt, wählst du die Dateien aus oder „Nachricht senden“ für Text.", badge: "Empfänger ohne Konto" },
     stored: { name: "Download-Link", sub: "Dein Browser verschlüsselt und speichert zwischen; die empfangende Person lädt jederzeit herunter — ohne Sitzung, ohne Konto.", badge: "Auch offline" },
   },
   pair: {
@@ -646,7 +646,7 @@ const de: Messages = {
     rows: [
       { label: "Anmeldung nötig", lan: "Keine Seite meldet sich an", realtime: "Ersteller eines Netzwerk-Datei-/Textcodes meldet sich an; Beitritt ohne Konto", stored: "Ersteller des Download-Links meldet sich an; die empfangende Seite braucht kein Konto" },
       { label: "Netzwerk-Voraussetzung", lan: "Nur dasselbe lokale Netzwerk — ein Gerät in einem anderen Netz ist nicht erreichbar", realtime: "Beliebiges Netz, aber beide Geräte gleichzeitig online", stored: "Beliebiges Netz; die empfangende Seite holt es ab, wann sie will" },
-      { label: "Dateien über Server?", lan: "Nein — von Gerät zu Gerät innerhalb Ihres eigenen Netzwerks", realtime: "Im selben Netz: direkt von Gerät zu Gerät. Netzübergreifend: Relay trägt Chiffretext, den es weder lesen noch entschlüsseln kann", stored: "Ja, aber nur Zero-Knowledge-Chiffretext" },
+      { label: "Dateien über Server?", lan: "Nein — von Gerät zu Gerät innerhalb deines eigenen Netzwerks", realtime: "Im selben Netz: direkt von Gerät zu Gerät. Netzübergreifend: Relay trägt Chiffretext, den es weder lesen noch entschlüsseln kann", stored: "Ja, aber nur Zero-Knowledge-Chiffretext" },
       { label: "Wenn es abbricht", lan: "Kurze Datei-Verbindungsabbrüche können fortgesetzt werden; Schließen oder Neuladen einer Seite erfordert einen Neustart", realtime: "Kurze Datei-Verbindungsabbrüche können fortgesetzt werden; Schließen oder Neuladen einer Seite erfordert einen Neustart", stored: "Senderseite bis zum Upload-Ende offen lassen; danach gilt der Link bis zum Ablauf" },
       { label: "Am besten für", lan: "Handy ↔ Laptop im selben WLAN, ganz ohne Konto", realtime: "Kleine Dateien und Text schnell über Netzgrenzen — ein Befehl, ein Link, eine Notiz", stored: "Große Dateien, und jetzt senden / später abholen" },
     ],
@@ -668,7 +668,7 @@ const de: Messages = {
     items: [
       { q: "Muss ich eine App installieren?", a: "Nein. Jeder moderne Browser überträgt direkt von der Webseite aus — Chrome wird empfohlen (streamt große Dateien speicherschonend auf die Festplatte, optional in einen Zielordner)." },
       { q: "Was, wenn keine Verbindung zustande kommt?", a: "Im selben Netz verbinden sich Echtzeitübertragungen direkt von Gerät zu Gerät. Netzübergreifend laufen sie über ein verschlüsseltes TURN-Relay, das auch durch strenge Firewalls und NATs zuverlässig durchkommt (das Relay leitet nur Chiffretext weiter und kann nicht entschlüsseln). Immer noch nichts? Ein Download-Link ist am zuverlässigsten — er ist asynchron, sodass nicht beide Seiten gleichzeitig online sein müssen." },
-      { q: "Wie groß dürfen Dateien sein?", a: "Die Echtzeit-Dateiübertragung streamt Daten und hat keine serverseitige Größengrenze. Kurze Verbindungsabbrüche können fortgesetzt werden, aber beide Seiten müssen offen bleiben; Schließen oder Neuladen beendet die Live-Sitzung. Für große Dateien nehmen Sie den Download-Link: Dateilimit und Tageskontingent stehen auf der Seite. Die Senderseite bleibt bis zum Upload-Ende offen; danach bleibt der Link bis zum Ablauf verfügbar, auch wenn ein Tab geschlossen wird. Echtzeit ist am besten für kleine Dateien und Text, die schnell hinübersollen." },
+      { q: "Wie groß dürfen Dateien sein?", a: "Die Echtzeit-Dateiübertragung streamt Daten und hat keine serverseitige Größengrenze. Kurze Verbindungsabbrüche können fortgesetzt werden, aber beide Seiten müssen offen bleiben; Schließen oder Neuladen beendet die Live-Sitzung. Für große Dateien nimm den Download-Link: Dateilimit und Tageskontingent stehen auf der Seite. Die Senderseite bleibt bis zum Upload-Ende offen; danach bleibt der Link bis zum Ablauf verfügbar, auch wenn ein Tab geschlossen wird. Echtzeit ist am besten für kleine Dateien und Text, die schnell hinübersollen." },
       { q: "Kann der Server meine Dateien lesen oder entschlüsseln?", a: "Nein. Im selben Netz läuft die Übertragung ohne Server; netzübergreifend trägt TURN Chiffretext, den es nicht entschlüsseln kann. Download-Links werden im Browser verschlüsselt; den Schlüssel haben nur teilende und empfangende Person." },
       { q: "Muss ich ein Konto anlegen?", a: "Datei- und Textübertragungen im selben Netz brauchen keine Anmeldung. Wer einen netzwerkübergreifenden Datei- oder Textcode erstellt, meldet sich an; der Beitritt per Code, Link oder QR braucht kein Konto. Auch das Erstellen eines asynchronen Download-Links braucht eine Anmeldung, das Herunterladen nicht." },
       { q: "Ist es Open Source?", a: "Ja. Das Protokolldesign sowie der gesamte Frontend- und Backend-Code liegen offen auf GitHub — frei zum Prüfen, Selbst-Hosten oder Mitwirken." },
@@ -740,7 +740,7 @@ const de: Messages = {
     stateFailed: "Verbindung fehlgeschlagen",
     lanesNote: "Dateien und Nachrichten teilen sich diese eine verschlüsselte Verbindung. Ein eingehender Dateisatz fragt weiterhin nach, bevor etwas gespeichert wird; die erweiterte Verifizierung ergänzt einen Code zum Vergleichen und eine Zustimmung für Nachrichten.",
     queuedTitle: (count) => `Warteschlange zum Senden (${count})`,
-    queuedHint: "Sie warten auf das Ende der laufenden Übertragung. In der Zwischenzeit können Sie weiter Dateien auswählen und weiter schreiben.",
+    queuedHint: "Du wartest auf das Ende der laufenden Übertragung. In der Zwischenzeit kannst du weiter Dateien auswählen und weiter schreiben.",
     queuedRemove: "Entfernen",
     queuedFiles: (count) => (count === 1 ? "1 Datei" : `${count} Dateien`),
     open: "Arbeitsbereich öffnen",

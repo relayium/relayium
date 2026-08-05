@@ -773,7 +773,7 @@ const ja: Messages = {
     clear: "消去",
     clearConfirm: "この会話をこの端末から消去しますか？",
     emptyHistory: "まだメッセージはありません。",
-    you: "あなた",
+    you: "自分",
     peer: (name) => name,
     newMessageFrom: (name) => `${name} から新しいメッセージ`,
     ephemeralNote: "メッセージはエンドツーエンド暗号化されます。Relayiumにサーバー側履歴はなく、このブラウザや受信側ではコピーまたは保持できます。",

@@ -19,7 +19,7 @@ const NO_SERVER_HISTORY = {
   zh: /不保存消息正文或服务端历史/,
   ja: /メッセージ本文やサーバー側の履歴を保存しません/,
   ko: /메시지 본문이나 서버 측 기록을 저장하지 않/,
-  de: /Weder Relayium noch Ihr selbst gehosteter Server speichern Nachrichteninhalte oder einen serverseitigen Verlauf/i,
+  de: /Weder Relayium noch dein selbst gehosteter Server speichern Nachrichteninhalte oder einen serverseitigen Verlauf/i,
   fr: /Ni Relayium ni votre serveur auto-hébergé ne stockent le corps des messages ou un historique côté serveur/i,
   ar: /لا تخزّن Relayium ولا خادمك المستضاف ذاتيًا متون الرسائل أو سجلًا على الخادم/,
   es: /Ni Relayium ni tu servidor autoalojado guardan el cuerpo de los mensajes ni un historial del servidor/i,
