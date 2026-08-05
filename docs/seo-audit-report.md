@@ -11,12 +11,21 @@
 > | 1.4 `/cli` canonical | ✅ 外壳 + `pageMeta` 补 `cli` 分支 + `cliPage.metaTitle/metaDesc`（9 语言）+ 入 sitemap |
 > | 1.5 `/d/*` | ⚠️ 部分：`d.html` 外壳已带 `noindex`；仍保留 robots.txt 的 `Disallow: /d/`（隐私优先，代价是 noindex 抓不到）。服务端对过期 id 返 410 未做 |
 > | 1.6 尾斜杠 | ✅ |
-> | 2.1 sitemap `xhtml:link` | ❌ 未做（长期项，405×9 会让文件膨胀，收益有限） |
+> | 2.1 sitemap `xhtml:link` | 🚫 **决定不做**（长期项，405×9 会让文件膨胀，收益有限；见 DECISION-LOG 2026-08 收益不足条目） |
 > | 2.2 文章 JSON-LD | ✅ 补 `datePublished`（取 git 首次提交日，非编造）、`image`、publisher/author logo |
 > | 2.3 OG 补全 | ✅ 4 个模板补 `og:site_name` + `og:image:width/height/alt`（legal 模板本就无 OG，未新增） |
-> | 3.3 相关文章策展 | ❌ 未做（产品判断，全网格暂留） |
+> | 3.3 相关文章策展 | ✅ **已完成**：`web/scripts/pages/content/related-map.mjs` 每篇策展 4 条，不再是 36 条全网格；`related-map.test.mjs` 对着真实文章列表校验 |
 > | 4.1 批次上限 1,000 vs 10 | ✅ 真值 1,000；已改 `index.html`×2、`llms.txt`×2，并加回归测试锁死 |
-> | 5.3 `pt_BR` | ❌ 未改（报告自己也说 OG 层面无害） |
+> | 5.3 `pt_BR` | ✅ **确认无需改**：GLOSSARY.md 已把葡语语域定为 pt-BR only（`arquivo`/`tela`/`celular`），`pt_BR` 与译文一致 |
+>
+> **2026-08-05 复核补充（本报告之后新增/关闭的条目）：**
+>
+> | 条目 | 状态 |
+> |---|---|
+> | 1.5 过期 `/d/<id>` 返 410 | 🚫 **决定不做**（Owner 决策，隐私优先）：任何区分"存在过"与"从未存在"的状态码都是阅后即焚链接的存在性预言机，410/200 配对同样成立。见 DECISION-LOG 2026-08-05 |
+> | `/how-to/`、`/compare/` 根 404 | ✅ 已生成真 hub 页（`content/category-index.mjs`，9 语言 ×2 根），提交 `5e4addaf` |
+> | 无公开 changelog / 信任页 | ✅ `/releases/` 已上线（9 语言，版本表 + 发布与校验说明），提交 `1140ed55` |
+> | 阿拉伯语页 ISO 日期视觉倒序 | ✅ 两个模板的日期加 `<bdi>`；`rtl-head-isolation.test.mjs` 守住全部生成页，提交 `1140ed55` |
 >
 > **额外修掉的两个报告没抓到的问题**：SPA 在 `/pricing`、`/cli` 上会把 hreflang 改写成
 > `/zh/pricing` 这类**根本不存在**的 URL；以及模式页的 SPA hreflang 少尾斜杠、与静态页

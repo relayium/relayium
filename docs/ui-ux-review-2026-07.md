@@ -1,5 +1,39 @@
 # Relayium 前端 UI/UX Review（2026-07）
 
+> **实施状态（2026-08-05 逐条对代码复核）：28 条中 27 条已完成，剩 1 条报告自己判为低收益。**
+> 复核方式是读当前代码，不是读交付记录——下表的每个 ✅ 都能在标注位置看到实现。
+>
+> | # | 条目 | 状态 | 落地位置 |
+> |---|---|---|---|
+> | 1 | 错误色用 accent | ✅ | 各组件 `.error { color: var(--danger) }` |
+> | 2 | 登录表单非 `<form>`、无 autocomplete | ✅ | `Account.svelte`（4 个 `<form>`、7 处 autocomplete） |
+> | 3 | 配对码倒计时归零不进过期态 | ✅ | `CodePairing.svelte` `timedOut` + `{#if expired \|\| timedOut}` |
+> | 4 | 上传无真实进度、不可取消 | ✅ | `StoredUpload.svelte` `AbortController` + 两段式进度 |
+> | 5 | 对端忙时静默挂起 | ✅ | `status.peerBusy` 文案 + 信令 busy 回执 |
+> | 6 | 设备名不持久、不可编辑 | ✅ | `App.svelte` `DEVICE_NAME_KEY` 持久化 + `commitName()` 改名 |
+> | 7 | 配对码输入 Enter/返回 | ✅ | `CodePairing.svelte` Enter 提交 + `t.pair.back` 返回 |
+> | 8 | 下载页把网络失败报成解密失败 | ✅ | `DownloadPage.svelte` 错误分类 + `retry()` |
+> | 9 | 上传大小限制未前置 | ✅ | `max-size.ts` + 选择框旁 `t.maxSize(hint)` |
+> | 10 | 缺 Web Share API | ✅ | `lib/share.ts` |
+> | 11 | 进度缺 ETA | ✅ | `App.svelte` `formatEta()` |
+> | 12 | LAN 空状态无引导 | ✅ | `emptyPeers` + `emptyCrossCta` 按钮 |
+> | 13 | 完成无通知 | ✅ | `lib/notify.ts` |
+> | 14 | 弹窗无焦点管理 | ✅ | `lib/focus-trap.ts`（Account / ConfirmModal / ChangePlan） |
+> | 15 | 动态状态读屏不可见 | ✅ | `aria-live` ×3 + 三处 `role="progressbar"` |
+> | 16 | 无找回密码路径 | ✅ | `account.forgotPasswordLink` / `resetPasswordSend` |
+> | 17 | iOS 上文件夹按钮不可用 | ✅ | `lib/platform.ts` `isIOS()` |
+> | 18 | toast 用 sticky 顶内容 | ✅ | 改 `position: fixed` |
+> | 19 | 导航守卫用原生 `confirm()` | ❌ **未做** | `App.svelte` `setNavGuard(... confirm(...))`；报告原文即判"低收益，可不做"，站内已有 `ConfirmModal.svelte` 可用 |
+> | 20 | 主题只跟随系统 | ✅ | `theme` 三态（system/light/dark） |
+> | 21 | TTL 只有 1/3/7 天 | ✅ | `ttl-options.ts` 五挡，含 1 小时（3600） |
+> | 22 | i18n 全量进主 bundle | ✅ | 按语言分块（构建产物 `fr-*.js` / `ja-*.js` / `ar-*.js`） |
+> | 23 | Nav 用 tablist 语义不准 | ✅ | 改 `aria-current="page"` |
+> | 24 | 触摸目标偏小 | ✅ | `.peer-actions > .btn { min-block-size: 44px }` |
+> | 25 | 完成卡片需手动关闭 | ✅ | `DISMISS_MS` 自动淡出 |
+> | 26 | 等待态无动效 | ✅ | `.pulse` 呼吸点 |
+> | 27 | 码无效与码过期共用文案 | ✅ | `errExpired: "Pairing code is invalid or expired"` |
+> | 28 | 无传输历史 | ✅ | `historyTitle` / `historyKeep`（本机 localStorage） |
+
 > 范围：`web/src` 下全部页面与交互组件（LAN 首页、跨网络页、配对码、分享链接、存储上传、下载页、账户弹窗、导航、营销区块），基于源码通读，未跑真机多设备实测。
 > 与 `optimization-requirements-2026-07.md`（功能/协议层缺口）互补，本文只关注 **UI 呈现与交互体验**。
 > 每条附代码位置，便于逐条转成 issue。
