@@ -37,6 +37,29 @@ export function dirAttr(lang) {
   return RTL_LANGS.has(lang) ? ' dir="rtl"' : "";
 }
 
+/**
+ * A head string (title, description, og:*, twitter:*) with RTL base direction
+ * forced when an RTL locale's copy happens to open with a Latin word.
+ *
+ * `dir="rtl"` on <html> only governs what the page renders. A <title> is read by
+ * the browser chrome and by search engines, which resolve direction from the
+ * FIRST STRONG CHARACTER instead — so "Relayium مقابل Snapdrop… آمن؟" resolves
+ * LTR and puts the Arabic question mark on the wrong end, in the browser tab and
+ * in the search result. U+200F in front is one invisible strong-RTL character
+ * that settles it. GLOSSARY.md records the rule; the SPA tables already follow
+ * it (see `titleDefault` in i18n/ar.ts) and the generated pages did not.
+ *
+ * Deliberately narrow: only RTL locales, only copy that opens with a Latin
+ * letter, and only when the string actually contains RTL text — a title with no
+ * Arabic in it has no bidi problem to solve. It is applied to the head only, so
+ * structured data and the visible <h1> (already inside a dir="rtl" document)
+ * stay byte-for-byte the author's string.
+ */
+export function rtlHead(lang, text) {
+  if (!RTL_LANGS.has(lang) || !/^[A-Za-z]/.test(text)) return text;
+  return /[֐-ࣿיִ-﷿ﹰ-ﻼ]/.test(text) ? "‏" + text : text;
+}
+
 export const SITE = { origin: "https://relayium.com", name: "Relayium" };
 
 /** The one social preview image, as the absolute URL every unfurler needs. */

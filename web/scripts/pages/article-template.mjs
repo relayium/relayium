@@ -1,7 +1,7 @@
 // web/scripts/pages/article-template.mjs — renders one article (one language) to a
 // self-contained static HTML string. No JS, no external CSS: styles are inlined so
 // the page is independent of the Vite asset graph and crawlable with JS disabled.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, PRICING_LABELS, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, landingUrl, dirAttr } from "./shared.mjs";
+import { LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, PRICING_LABELS, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, landingUrl, dirAttr, rtlHead } from "./shared.mjs";
 
 // Footer link label; matches content/landing.mjs footer.privacy per language.
 const PRIVACY_LABELS = {
@@ -255,13 +255,19 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
   ].join("");
   const relatedBlock = `<h2>${esc(doc.relatedHeading)}</h2>\n      <ul class="related">${relatedLinks}</ul>`;
 
+  // Bidi-isolated for RTL locales: the head is read by browser chrome and search
+  // engines, which resolve direction from the first strong character rather than
+  // from the page's dir="rtl". See rtlHead() in shared.mjs.
+  const headTitle = esc(rtlHead(lang, doc.title));
+  const headDesc = esc(rtlHead(lang, doc.description));
+
   return `<!doctype html>
 <html lang="${BCP47[lang]}"${dirAttr(lang)}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${esc(doc.title)} · ${SITE.name}</title>
-    <meta name="description" content="${esc(doc.description)}" />
+    <title>${headTitle} · ${SITE.name}</title>
+    <meta name="description" content="${headDesc}" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${canonical}" />
     ${alternates(slug)}
@@ -270,15 +276,15 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="${SITE.name}" />
-    <meta property="og:title" content="${esc(doc.title)}" />
-    <meta property="og:description" content="${esc(doc.description)}" />
+    <meta property="og:title" content="${headTitle}" />
+    <meta property="og:description" content="${headDesc}" />
     <meta property="og:url" content="${canonical}" />
     <meta property="og:image" content="${ogImage}" />
     ${OG_IMAGE_META}
     <meta property="og:locale" content="${OG_LOCALE[lang]}" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${esc(doc.title)}" />
-    <meta name="twitter:description" content="${esc(doc.description)}" />
+    <meta name="twitter:title" content="${headTitle}" />
+    <meta name="twitter:description" content="${headDesc}" />
     <meta name="twitter:image" content="${ogImage}" />
     <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
     <style>${STYLE}</style>${hasTable(doc) ? "\n    " + TABLE_STYLE : ""}${hasWidget(doc) ? "\n    " + BUILDER_STYLE : ""}

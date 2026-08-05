@@ -1,7 +1,7 @@
 // web/scripts/pages/landing-template.mjs — renders one static localized landing page.
 // Self-contained: no JS, no external CSS. Styles are inlined so the page is
 // independent of the Vite asset graph and fully crawlable with JS disabled.
-import { LANGS, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, PRICING_LABELS, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, landingUrl, ctaHref, urlPath, absUrl, esc, dirAttr } from "./shared.mjs";
+import { LANGS, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, PRICING_LABELS, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, landingUrl, ctaHref, urlPath, absUrl, esc, dirAttr, rtlHead } from "./shared.mjs";
 
 // Exported so mode-template.mjs (and any other landing-style page) can reuse the
 // exact same inline stylesheet + page-shell classes instead of forking them.
@@ -104,13 +104,19 @@ export function renderLandingPage({ lang, doc, articleLinks = [] }) {
         .join("")}</ul>`
     : "";
 
+  // Bidi-isolated for RTL locales: the head is read by browser chrome and search
+  // engines, which resolve direction from the first strong character rather than
+  // from the page's dir="rtl". See rtlHead() in shared.mjs.
+  const headTitle = esc(rtlHead(lang, doc.title));
+  const headDesc = esc(rtlHead(lang, doc.description));
+
   return `<!doctype html>
 <html lang="${BCP47[lang]}"${dirAttr(lang)}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${esc(doc.title)}</title>
-    <meta name="description" content="${esc(doc.description)}" />
+    <title>${headTitle}</title>
+    <meta name="description" content="${headDesc}" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${canonical}" />
     ${alternates()}
@@ -119,15 +125,15 @@ export function renderLandingPage({ lang, doc, articleLinks = [] }) {
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="${SITE.name}" />
-    <meta property="og:title" content="${esc(doc.title)}" />
-    <meta property="og:description" content="${esc(doc.description)}" />
+    <meta property="og:title" content="${headTitle}" />
+    <meta property="og:description" content="${headDesc}" />
     <meta property="og:url" content="${canonical}" />
     <meta property="og:image" content="${ogImage}" />
     ${OG_IMAGE_META}
     <meta property="og:locale" content="${OG_LOCALE[lang]}" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${esc(doc.title)}" />
-    <meta name="twitter:description" content="${esc(doc.description)}" />
+    <meta name="twitter:title" content="${headTitle}" />
+    <meta name="twitter:description" content="${headDesc}" />
     <meta name="twitter:image" content="${ogImage}" />
     <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
     <style>${STYLE}</style>

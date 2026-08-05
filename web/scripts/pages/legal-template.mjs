@@ -1,7 +1,7 @@
 // web/scripts/pages/legal-template.mjs — renders one legal document (one language) to a
 // self-contained static HTML string. No JS, no external CSS: styles are inlined so
 // the page is independent of the Vite asset graph and crawlable with JS disabled.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, PRICING_LABELS, PRICING_URL, BCP47, SITE, urlPath, absUrl, esc, dirAttr } from "./shared.mjs";
+import { LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, PRICING_LABELS, PRICING_URL, BCP47, SITE, urlPath, absUrl, esc, dirAttr, rtlHead } from "./shared.mjs";
 
 const STYLE = `
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
@@ -58,13 +58,19 @@ export function renderLegalPage({ slug, lang, doc }) {
     dateModified: doc.updated,
     isPartOf: { "@type": "WebSite", name: SITE.name, url: SITE.origin + "/" },
   };
+  // Bidi-isolated for RTL locales: the head is read by browser chrome and search
+  // engines, which resolve direction from the first strong character rather than
+  // from the page's dir="rtl". See rtlHead() in shared.mjs.
+  const headTitle = esc(rtlHead(lang, doc.title));
+  const headDesc = esc(rtlHead(lang, doc.description));
+
   return `<!doctype html>
 <html lang="${BCP47[lang]}"${dirAttr(lang)}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${esc(doc.title)} · ${SITE.name}</title>
-    <meta name="description" content="${esc(doc.description)}" />
+    <title>${headTitle} · ${SITE.name}</title>
+    <meta name="description" content="${headDesc}" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${canonical}" />
     ${alternates(slug)}

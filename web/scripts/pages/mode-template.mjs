@@ -22,6 +22,7 @@ import {
   esc,
   ctaHref,
   dirAttr,
+  rtlHead,
 } from "./shared.mjs";
 import { STYLE } from "./landing-template.mjs";
 
@@ -114,13 +115,19 @@ export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) 
   const canonical = absUrl(urlPath(slug, lang));
   const ogImage = SITE.origin + "/og-image.jpg";
 
+  // Bidi-isolated for RTL locales: the head is read by browser chrome and search
+  // engines, which resolve direction from the first strong character rather than
+  // from the page's dir="rtl". See rtlHead() in shared.mjs.
+  const headTitle = esc(rtlHead(lang, doc.title));
+  const headDesc = esc(rtlHead(lang, doc.description));
+
   return `<!doctype html>
 <html lang="${BCP47[lang]}"${dirAttr(lang)}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${esc(doc.title)}</title>
-    <meta name="description" content="${esc(doc.description)}" />
+    <title>${headTitle}</title>
+    <meta name="description" content="${headDesc}" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${canonical}" />
     ${alternates(slug)}
@@ -129,15 +136,15 @@ export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) 
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="${SITE.name}" />
-    <meta property="og:title" content="${esc(doc.title)}" />
-    <meta property="og:description" content="${esc(doc.description)}" />
+    <meta property="og:title" content="${headTitle}" />
+    <meta property="og:description" content="${headDesc}" />
     <meta property="og:url" content="${canonical}" />
     <meta property="og:image" content="${ogImage}" />
     ${OG_IMAGE_META}
     <meta property="og:locale" content="${OG_LOCALE[lang]}" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${esc(doc.title)}" />
-    <meta name="twitter:description" content="${esc(doc.description)}" />
+    <meta name="twitter:title" content="${headTitle}" />
+    <meta name="twitter:description" content="${headDesc}" />
     <meta name="twitter:image" content="${ogImage}" />
     <script type="application/ld+json">${jsonLd(slug, lang, doc, updated)}</script>
     <style>${STYLE}</style>

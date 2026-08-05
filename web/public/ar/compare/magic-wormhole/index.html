@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Relayium مقابل magic-wormhole: نقل الملفات عبر CLI · Relayium</title>
+    <title>‏Relayium مقابل magic-wormhole: نقل الملفات عبر CLI · Relayium</title>
     <meta name="description" content="كلٌّ من magic-wormhole و CLI في Relayium ينقل الملفات بين الطرفيات برمز قصير وتشفير من الطرف إلى الطرف. مقارنة عادلة، بما في ذلك المفاضلة الصادقة الوحيدة التي يجدر معرفتها." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ar/compare/magic-wormhole/" />
@@ -22,7 +22,7 @@
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="Relayium" />
-    <meta property="og:title" content="Relayium مقابل magic-wormhole: نقل الملفات عبر CLI" />
+    <meta property="og:title" content="‏Relayium مقابل magic-wormhole: نقل الملفات عبر CLI" />
     <meta property="og:description" content="كلٌّ من magic-wormhole و CLI في Relayium ينقل الملفات بين الطرفيات برمز قصير وتشفير من الطرف إلى الطرف. مقارنة عادلة، بما في ذلك المفاضلة الصادقة الوحيدة التي يجدر معرفتها." />
     <meta property="og:url" content="https://relayium.com/ar/compare/magic-wormhole/" />
     <meta property="og:image" content="https://relayium.com/og-image.jpg" />
@@ -32,7 +32,7 @@
     <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
     <meta property="og:locale" content="ar_AR" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Relayium مقابل magic-wormhole: نقل الملفات عبر CLI" />
+    <meta name="twitter:title" content="‏Relayium مقابل magic-wormhole: نقل الملفات عبر CLI" />
     <meta name="twitter:description" content="كلٌّ من magic-wormhole و CLI في Relayium ينقل الملفات بين الطرفيات برمز قصير وتشفير من الطرف إلى الطرف. مقارنة عادلة، بما في ذلك المفاضلة الصادقة الوحيدة التي يجدر معرفتها." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium مقابل magic-wormhole: نقل الملفات عبر CLI","description":"كلٌّ من magic-wormhole و CLI في Relayium ينقل الملفات بين الطرفيات برمز قصير وتشفير من الطرف إلى الطرف. مقارنة عادلة، بما في ذلك المفاضلة الصادقة الوحيدة التي يجدر معرفتها.","inLanguage":"ar","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/compare/magic-wormhole/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"Relayium مقابل magic-wormhole: نقل الملفات عبر CLI"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل CLI في Relayium مجاني؟","acceptedAnswer":{"@type":"Answer","text":"نعم، تمامًا. لا توجد فئة مدفوعة ولا شيء يُقاس — كل وضع يوصل الطرفين مباشرة، و CLI مفتوح المصدر."}},{"@type":"Question","name":"هل يحتاج إلى حساب؟","acceptedAnswer":{"@type":"Answer","text":"‏send نعم، وكذلك up السحابي. يستخدم push/pull وصولك عبر SSH، ويستخدم daemon direct ثقة شهادة TLS المثبَّتة بين أجهزتك، فلا يلمس أيٌّ منهما حساب Relayium. أما send/receive فهو الاستثناء: لا يستطيع إصدار رمز الاقتران إلا الخادم، ولحساب مسجَّل الدخول فقط، لذا يشغّل المُرسِل relayium login مرة واحدة — أما send الذي تمرّر له رمزًا أعطاك إياه غيرك فلا يُصدر شيئًا ولا يحتاج تسجيل دخول. أما الاستقبال فلا يحتاج حسابًا أبدًا."}},{"@type":"Question","name":"ماذا لو كنت خلف NAT صارم ولا يوجد مسار مباشر؟","acceptedAnswer":{"@type":"Answer","text":"send/receive في Relayium مباشر فقط وسيفشل في تلك الحالة — فهو لا يرجع إلى مُرحِّل. يستطيع مُرحِّل Transit Relay في magic-wormhole حمل التدفّق المُشفَّر وإتمام النقل رغم ذلك. إن احتجت أن يعمل مهما كان شكل الشبكة، فإن magic-wormhole يعالج هذه الحالة اليوم؛ كما يعمل push/pull في Relayium أو daemon direct مقابل خادم تستطيع الوصول إليه، لأنهما لا يعتمدان على قفزة مباشرة من الند للند."}},{"@type":"Question","name":"هل أستطيع استخدام رمز الاقتران في CLI مع تطبيق متصفح Relayium؟","acceptedAnswer":{"@type":"Answer","text":"ليس بعد لنقل مقترن حيّ — إذ يستخدم send/receive في CLI مصافحته المباشرة الخاصة، المنفصلة عن تدفّق الاقتران القائم على WebRTC في المتصفح، فلا يتوافق الاثنان اليوم. لتسليم ملف لشخص يستخدم المتصفح فقط، استخدم رابط التنزيل المُخزَّن في Relayium أو وضع رمز الاقتران الخاص بتطبيق المتصفح نفسه."}},{"@type":"Question","name":"هل أستطيع استضافته ذاتيًا؟","acceptedAnswer":{"@type":"Answer","text":"نعم. يُشحن خادم Relayium كصورة Docker (docker compose up -d --build)، ويمكنك توجيه send/receive في CLI إلى نسختك الخاصة بـ --server https://your-domain."}}]}]}</script>
