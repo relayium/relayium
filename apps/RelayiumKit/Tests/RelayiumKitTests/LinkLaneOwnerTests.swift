@@ -1337,12 +1337,19 @@ final class LinkLaneOwnerTests: XCTestCase {
         }
     }
 
-    /// Still unreachable from production: nothing outside the tests constructs
-    /// one, and neither feature flag has moved.
+    /// Still unreachable from production, and neither feature flag has moved.
+    ///
+    /// Exactly ONE object may construct a lane owner — `LinkSessionRuntime`,
+    /// which assembles it at the only moment it may be built, inside the initial
+    /// transport's publication. That is not a hole in this rule: the runtime is
+    /// itself unreachable, and `LinkSessionRuntimeTests` pins that with the same
+    /// scan over the same sources plus the iOS and macOS targets. So the chain
+    /// from a UI to a lane owner is still broken, one link further along.
     func testTheOwnerStaysUnreachableFromProduction() throws {
         XCTAssertFalse(LINK_BUILD_SUPPORT)
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
+        let entitled: Set<String> = ["LinkLaneOwner.swift", "LinkSessionRuntime.swift"]
         let sources = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -1350,7 +1357,7 @@ final class LinkLaneOwnerTests: XCTestCase {
             .appendingPathComponent("Sources")
         let files = FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil)?
             .compactMap { $0 as? URL }
-            .filter { $0.pathExtension == "swift" && $0.lastPathComponent != "LinkLaneOwner.swift" }
+            .filter { $0.pathExtension == "swift" && !entitled.contains($0.lastPathComponent) }
         for file in try XCTUnwrap(files) {
             let text = code((try? String(contentsOf: file, encoding: .utf8)) ?? "")
             XCTAssertFalse(text.contains("LinkLaneOwner("),
