@@ -367,6 +367,24 @@ independently.
 - Migrating `AppsPage`, `PricingPage`, `MePage`, `CliPage`, `Account`, `PlanCard`,
   `HowToSteps` onto `.ui-card` / `.ui-badge` (they keep their local `.card` / `.badge`
   until a later batch can verify them).
+
+  > **Verified 2026-08-05 — migrate `AppsPage` and `PricingPage` only; the rest stay.**
+  > Those two did adopt `.ui-card` and are the whole of the intended migration. Checking
+  > the other five one rule at a time, the shared name is the only thing they share:
+  >
+  > - `HowToSteps .badge` is a 46×46 accent step marker with a hover transform;
+  >   `PlanCard .badge` is an accent-tinted pill. `.ui-badge` is a neutral status chip
+  >   (`--code-bg` on `--text`) with only an `-ok` variant — adopting it would repaint both.
+  > - `MePage` and `Account` matched a grep for `border` + `border-radius`, not the card
+  >   contract: a device row, a kind chip, a delete-status strip, a stat tile on
+  >   `--social-bg`, a file row, a link button, a popover menu, an input, a toast.
+  > - `CliPage .pick-card` / `.guide-card` are the closest — same border, radius and
+  >   `--surface` — but they set `padding: var(--space-4)` where `.ui-card` sets
+  >   `padding-inline: var(--space-5)`. On a card capped at 300px that is 16px of content
+  >   width, so the swap is a layout change, not a cleanup.
+  >
+  > Do not re-open this as a mechanical cleanup. If `.ui-card`'s inline padding is ever
+  > revisited, `.pick-card` and `.guide-card` are the two that would then fit it exactly.
 - Raising `--border` itself to 3:1 (would repaint every page).
 - Typography scale, nav, icons, container width, spacing scale.
 - A form-control primitive (input/select/textarea) beyond the one textarea touched here.
