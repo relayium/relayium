@@ -58,10 +58,35 @@ const CONTENT = Object.entries(
   import.meta.glob(["./content/**/*.mjs", "!./content/**/*.test.mjs"], { eager: true }),
 ).map(([path, mod]) => [path.replace("./content/", ""), mod]);
 
-/** Every string in a value, with the path that reaches it. */
+// Arguments to render a message function with. A locale table is full of
+// `(n) => \`… ${n} …\`` and `(name) => \`… ${name} …\``, and the two shapes want
+// different values — a count that formats, and a string that does not throw on
+// .toUpperCase(). Try in order, keep the first that returns a string.
+const RENDER_ARGS = [1, "x", 0, [], null];
+
+/**
+ * Every string in a value, with the path that reaches it.
+ *
+ * Message FUNCTIONS are rendered, not skipped. They are prose with a hole in it,
+ * and skipping them left a real blind spot: 16 of the French non-breaking spaces
+ * this file now enforces live inside `(n) => …` templates that a string-only walk
+ * never visits. `renderFailures` records anything that would not render, so the
+ * blind spot cannot come back silently.
+ */
+const renderFailures = [];
 function strings(v, path, out) {
   if (typeof v === "string") out.push([path, v]);
-  else if (Array.isArray(v)) v.forEach((x, i) => strings(x, `${path}[${i}]`, out));
+  else if (typeof v === "function") {
+    for (const arg of RENDER_ARGS) {
+      try {
+        const r = v(...Array.from({ length: Math.max(v.length, 1) }, () => arg));
+        if (typeof r === "string") return out.push([path, r]);
+      } catch {
+        // next shape
+      }
+    }
+    renderFailures.push(path);
+  } else if (Array.isArray(v)) v.forEach((x, i) => strings(x, `${path}[${i}]`, out));
   else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) strings(x, `${path}.${k}`, out);
   return out;
 }
@@ -177,6 +202,14 @@ describe("GLOSSARY.md register decisions", () => {
       .map(([where, text]) => [where, siezen(text)])
       .filter(([, hit]) => hit);
     expect(bad.map(([where, hit]) => `${where}: ${hit.slice(0, 120)}`)).toEqual([]);
+  });
+
+  // Rendering message functions is the difference between checking a locale
+  // table and checking most of one. If a future table shape makes them
+  // unrenderable, the rules would quietly stop seeing that copy — so say so.
+  it("renders every message function it walks", () => {
+    for (const locale of Object.keys(APP_TABLES)) corpus(locale, { legal: "keep" });
+    expect(renderFailures).toEqual([]);
   });
 
   // The rules above are worth nothing if the corpus they read is empty — a
