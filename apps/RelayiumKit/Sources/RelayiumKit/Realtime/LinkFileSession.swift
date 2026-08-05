@@ -293,6 +293,9 @@ public final class LinkFileSession {
     public var outboundAttempt: Int? { outbound?.attempt }
     public var outboundPhase: LinkFileOutboundPhase? { outbound?.phase }
     public var inboundBatch: Int? { inbound?.id }
+    /// The manifest the peer offered, as the receiver sanitised it. A driver needs
+    /// it to put a consent prompt in front of a user; nothing here renders one.
+    public var inboundFiles: [FileMeta]? { inbound?.files }
     public var inboundPhase: LinkFileInboundPhase? { inbound?.phase }
     public var laneFailed: Bool { lane.codecsPoisoned }
     public var generation: Int { lane.generation }
@@ -1182,6 +1185,30 @@ public final class LinkFileSession {
         let outcome = transportGap()
         if !outcome.effects.isEmpty { onEffects?(outcome.effects) }
         return outcome.needsRecovery
+    }
+
+    /// End this lane closed because of a failure only the OWNER can see.
+    ///
+    /// A frame this session sealed and handed over that could not be put on the
+    /// wire, and an owner that could not hold the inbound frames it was ordered
+    /// to hold, are both the same fact: a nonce is spent, or an admitted frame is
+    /// gone, and neither end can say any more which sequence the other is on. The
+    /// lane sees frames and cannot detect either — which is exactly why the lane
+    /// exposes its own `failClosed`, and why this exists above it.
+    ///
+    /// Routing an owner's failure through here rather than letting it keep a
+    /// private terminal flag is what keeps ONE terminal path: the live work is
+    /// released, the batches that will never go out are NAMED, the destination is
+    /// let go, and the codecs are poisoned and closed together. A driver that only
+    /// stopped calling in would leave this session looking live, and its next
+    /// `enqueue` would succeed.
+    ///
+    /// Idempotent, and scoped to the FILE lane: nothing here reaches the text
+    /// lane, the transport or the recovery coordinator.
+    @discardableResult
+    public func failClosed() -> [LinkFileSessionEffect] {
+        guard !lane.codecsPoisoned else { return [] }
+        return failLane()
     }
 
     // MARK: - internals

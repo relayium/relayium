@@ -270,15 +270,22 @@ public enum LinkRecoveryJoin: Equatable {
 /// and `LINK_BUILD_SUPPORT` both remain false, and each of these is its own
 /// piece of work:
 ///
-///  - **A durable-file lane owner.** The wire itself exists — the checkpoint
-///    contract, `RESUME_REQ`/`RESUME_START`, and `LinkFileLane`'s generation,
-///    checkpoint and flow-control state machine. What does not exist is anything
-///    that drives them over a real channel: no pickers, sinks, source queues,
-///    timers or DataChannel wiring. So a rebuilt lane still resumes a
-///    connection, not a transfer.
-///  - **File- and text-lane integration.** `onTransportLost` and `onAttach` are
-///    where a lane suspends and re-attaches; no lane implements either yet, and
-///    a text lane that proved its codecs unsafe to reuse has no policy here.
+///  - **A CONSTRUCTED file owner.** `LinkFileDriver` implements this object's
+///    `onTransportLost`, `onAttach`, `onFrame` and `onEnded` seams, installs
+///    them through `installOwnerHooks`, owns a `LinkFileSession` across a
+///    replacement, and executes its effects — but nothing builds one. Its
+///    destination factory is deliberately unimplemented in this module (see
+///    `LinkFileDestination`: the validated writer lives in `RelayiumAppKit`,
+///    which depends on this one), and no picker, admission or App factory wires
+///    it up. So a rebuilt lane still resumes a connection, not a transfer.
+///  - **Text-lane integration.** No text lane implements these seams, and a text
+///    lane that proved its codecs unsafe to reuse has no policy here. The file
+///    driver cannot speak for it and does not try: it holds no reference to
+///    `LinkTextLane`, routes text frames straight out, and takes the other lanes'
+///    recovery answer as a REQUIRED parameter of `LinkFileDriver.bind(to:)` — no
+///    default, so an idle file lane cannot decline a link a live conversation
+///    still needs by saying nothing. What is missing is the thing that supplies
+///    that answer.
 ///  - **END acknowledgement timing.** Untouched.
 ///  - **ICE restart.** Absent on purpose in the driver, and this object does not
 ///    supply one: a rebuild is a whole new PeerConnection.
@@ -369,6 +376,31 @@ public final class LinkRecoveryCoordinator: @unchecked Sendable {
     public var onEnded: ((LinkRecoveryError) -> Void)? {
         get { locked { _onEnded } }
         set { locked { _onEnded = newValue } }
+    }
+
+    /// Install all four owner hooks as ONE step, before anything can fire.
+    ///
+    /// Four separate property writes are four separate acquisitions of this lock,
+    /// and a transport that terminates between the first and the last finds a
+    /// half-wired owner: a recovery policy with no attach handler behind it ends
+    /// the link with `missingAttachHandler`, and an attach with no frame handler
+    /// ends it with `missingFrameHandler`. Neither is a wiring mistake the owner
+    /// made; both are the gap between two setters. This closes it.
+    ///
+    /// It stores under the lock and CALLS none of them, which is what makes it
+    /// safe from an owner that has a lock of its own: the only ordering this
+    /// introduces is owner → coordinator, in the one direction the hooks
+    /// themselves never take.
+    public func installOwnerHooks(onTransportLost: @escaping (LinkIdentity) throws -> Bool,
+                                  onAttach: @escaping (LinkIdentity, LinkReplacementTransport) throws -> Void,
+                                  onFrame: @escaping (LinkLane, [UInt8]) -> Void,
+                                  onEnded: @escaping (LinkRecoveryError) -> Void) {
+        locked {
+            _onTransportLost = onTransportLost
+            _onAttach = onAttach
+            _onFrame = onFrame
+            _onEnded = onEnded
+        }
     }
 
     // MARK: - held state, all of it guarded by `lock`
