@@ -38,6 +38,11 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+.releases{list-style:none;margin:16px 0 0;padding:0}
+.releases li{display:flex;gap:16px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border)}
+.releases li:last-child{border-bottom:0}
+.releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
+.releases .date{font-size:14px;font-variant-numeric:tabular-nums}
 </style>
   </head>
   <body>
@@ -48,7 +53,13 @@ footer a{color:var(--text-h);text-decoration:none}
            visual position — it is a labelled <nav> landmark either way. -->
       <main>
       <h1>보안 및 위협 모델</h1>
-      <p class="updated">최종 업데이트: 2026-08-02</p>
+      <!-- The date is isolated for the same reason the release rows are: an ISO
+           date is three digit runs joined by hyphens, and on the Arabic page the
+           bidi algorithm lays those runs out right-to-left. "2026-08-03" was
+           rendering as "03-08-2026" on all four Arabic legal pages — measured in
+           a browser, not deduced. <bdi> resolves LTR (no strong character
+           inside) and pins the order. -->
+      <p class="updated">최종 업데이트: <bdi>2026-08-02</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/security/">English</a><a href="/zh/security/">中文</a><a href="/ja/security/">日本語</a><a href="/ko/security/" aria-current="true">한국어</a><a href="/de/security/">Deutsch</a><a href="/fr/security/">Français</a><a href="/ar/security/">العربية</a><a href="/es/security/">Español</a><a href="/pt/security/">Português</a></nav>
       <p>Relayium은 서버가 아니라 파일이나 임시 텍스트를 전송하는 당사자가 키를 갖도록 설계되었습니다. 이 페이지에서는 무엇이 어떻게 보호되는지, 그리고 그 보호의 한계를 설명합니다.</p>
       <p>요약하면: 같은 네트워크에서는 실시간 파일과 메시지가 기기 사이를 직접 이동합니다. 네트워크 간 브라우저 세션은 종단간 암호문만 운반하고 콘텐츠 키는 갖지 않는 릴레이를 사용합니다. 세션마다 새 키가 항상 사용되며, 여기에 선택적인 검증 코드를 대역 외로 비교하면 시그널링 가로채기까지 탐지할 수 있습니다. 자세한 내용은 아래와 같습니다.</p>
@@ -68,6 +79,7 @@ footer a{color:var(--text-h);text-decoration:none}
         <a href="/ko/apps/">앱</a>
         <a href="/ko/privacy/">개인정보 처리방침</a>
         <a href="/pricing">요금제</a>
+        <a href="/ko/releases/">릴리스</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

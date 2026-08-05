@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Como enviar uma pasta inteira, não só arquivos</h1>
-      <p class="updated">Última atualização: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder/">English</a><a href="/zh/how-to/send-a-folder/">中文</a><a href="/ja/how-to/send-a-folder/">日本語</a><a href="/ko/how-to/send-a-folder/">한국어</a><a href="/de/how-to/send-a-folder/">Deutsch</a><a href="/fr/how-to/send-a-folder/">Français</a><a href="/ar/how-to/send-a-folder/">العربية</a><a href="/es/how-to/send-a-folder/">Español</a><a href="/pt/how-to/send-a-folder/" aria-current="true">Português</a></nav>
       <p class="lead">Enviar um projeto não é a mesma coisa que enviar um arquivo — você tem uma pasta cheia de subpastas, e copiar e colar cada pedaço separadamente perde a estrutura que a torna útil. Compactar antes funciona, mas significa um desvio por uma ferramenta de compressão antes mesmo de conseguir começar.</p>
       <p class="lead">O Relayium deixa você escolher uma pasta e enviá-la como está. O navegador preserva toda a árvore e transmite ao vivo — diretamente por WebRTC na mesma LAN, ou como texto cifrado de ponta a ponta por TURN entre redes — sem cópia nem histórico em tempo real no servidor; também pode criar um link armazenado para depois.</p>

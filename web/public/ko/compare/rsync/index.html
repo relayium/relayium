@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs rsync: SSH 설정 없이 폴더 동기화하기</h1>
-      <p class="updated">마지막 업데이트: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/rsync/">English</a><a href="/zh/compare/rsync/">中文</a><a href="/ja/compare/rsync/">日本語</a><a href="/ko/compare/rsync/" aria-current="true">한국어</a><a href="/de/compare/rsync/">Deutsch</a><a href="/fr/compare/rsync/">Français</a><a href="/ar/compare/rsync/">العربية</a><a href="/es/compare/rsync/">Español</a><a href="/pt/compare/rsync/">Português</a></nav>
       <p class="lead">rsync가 1996년부터 폴더를 미러링해 온 데는 이유가 있습니다. 양방향 동기화, 롤링 체크섬으로 파일 내부에서 실제로 바뀐 바이트만 전송하는 델타 알고리즘, 그리고 온갖 예외 상황을 다루는 수십 년치 플래그입니다. 이미 SSH 접근 권한이 있고 rsync를 잘 안다면, 이를 능가하기는 매우 어렵습니다.</p>
       <p class="lead">Relayium의 sync 명령은 더 좁은 범위, 즉 단방향 증분 미러만 다루지만, rsync가 이미 되어 있다고 가정하는 한 단계, 즉 SSH 설정을 없애줍니다. 이미 SSH가 있다면 그 위에서 동작하고, 없다면 SSH 서버 없이 두 기기를 직접 연결합니다. 이 글은 둘을 정직하게 비교합니다. sync는 rsync의 완전한 대체품이 아니며, FAQ에서도 이를 분명히 밝힙니다.</p>

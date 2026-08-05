@@ -716,7 +716,7 @@ const ja: Messages = {
     ],
     limit: (max) => `1通あたり最大 ${max.toLocaleString()} UTF-8バイト。それより大きいものはファイルとして送ってください。`,
   },
-  legal: { privacy: "プライバシーポリシー", terms: "利用規約", security: "セキュリティ", support: "サポート" },
+  legal: { privacy: "プライバシーポリシー", terms: "利用規約", security: "セキュリティ", support: "サポート", releases: "リリース" },
   learn: { hub: "ガイド" },
   historyTitle: "最近の転送",
   historyEmpty: "まだ転送履歴はありません",

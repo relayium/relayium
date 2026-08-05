@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Sauvegarder des fichiers sur son propre serveur via SSH avec la CLI Relayium</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/">English</a><a href="/zh/guides/back-up-a-server-over-ssh/">中文</a><a href="/ja/guides/back-up-a-server-over-ssh/">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh/">한국어</a><a href="/de/guides/back-up-a-server-over-ssh/">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh/" aria-current="true">Français</a><a href="/ar/guides/back-up-a-server-over-ssh/">العربية</a><a href="/es/guides/back-up-a-server-over-ssh/">Español</a><a href="/pt/guides/back-up-a-server-over-ssh/">Português</a></nav>
       <p class="lead">Si vous avez déjà un accès SSH à une machine — un VPS, un serveur personnel, un NAS, un poste de travail —, vous pouvez y sauvegarder des fichiers avec la CLI Relayium sans mettre en place un service de synchronisation ni de compte. Le transfert passe par votre connexion SSH existante, si bien que les octets vont directement à votre serveur et ne transitent jamais par Relayium.</p>
       <p class="lead">Ce guide couvre le push et le pull de répertoires, ce que la reprise et la vérification d&#39;intégrité vous apportent, et comment le planifier avec cron.</p>

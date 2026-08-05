@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Windows、Linux、Android 的隔空投送替代方案</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/airdrop-for-windows-and-android/">English</a><a href="/zh/how-to/airdrop-for-windows-and-android/" aria-current="true">中文</a><a href="/ja/how-to/airdrop-for-windows-and-android/">日本語</a><a href="/ko/how-to/airdrop-for-windows-and-android/">한국어</a><a href="/de/how-to/airdrop-for-windows-and-android/">Deutsch</a><a href="/fr/how-to/airdrop-for-windows-and-android/">Français</a><a href="/ar/how-to/airdrop-for-windows-and-android/">العربية</a><a href="/es/how-to/airdrop-for-windows-and-android/">Español</a><a href="/pt/how-to/airdrop-for-windows-and-android/">Português</a></nav>
       <p class="lead">AirDrop 只活在 Apple 的世界里，这让 Windows、Linux、Android 用户，以及任何混用多种设备的家庭都没有对应的内置方案。本文展示非 Apple 设备最接近 AirDrop 的做法：两端各打开一个网页，文件就传过去了。</p>
       <p class="lead">这种方式不区分平台，因此也覆盖了 AirDrop 一向处理不好的场景：同一个房间里有 Windows 笔记本、Linux 台式机和 Android 手机，或者这三者再加一台 iPhone。</p>

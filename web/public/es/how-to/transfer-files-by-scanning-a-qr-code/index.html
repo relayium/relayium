@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Transferir archivos escaneando un código QR</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-by-scanning-a-qr-code/">English</a><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/">中文</a><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code/">日本語</a><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code/">한국어</a><a href="/de/how-to/transfer-files-by-scanning-a-qr-code/">Deutsch</a><a href="/fr/how-to/transfer-files-by-scanning-a-qr-code/">Français</a><a href="/ar/how-to/transfer-files-by-scanning-a-qr-code/">العربية</a><a href="/es/how-to/transfer-files-by-scanning-a-qr-code/" aria-current="true">Español</a><a href="/pt/how-to/transfer-files-by-scanning-a-qr-code/">Português</a></nav>
       <p class="lead">Escribir un código de seis dígitos es rápido, pero escanear lo es aún más — apunta la cámara del teléfono a la pantalla y la transferencia queda lista antes de que hubieras terminado de escribir. El flujo de emparejamiento de Relayium muestra un código QR junto a cada código de emparejamiento precisamente por esto.</p>
       <p class="lead">Este es el flujo entre redes: funciona tanto si ambos dispositivos están en la misma Wi-Fi como si están en lados opuestos del planeta. El QR es solo un atajo hacia ese flujo — el código y el enlace que hay debajo funcionan exactamente igual si escanear no es cómodo.</p>

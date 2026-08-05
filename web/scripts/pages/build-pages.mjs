@@ -20,6 +20,26 @@ export function buildLegalPages(docs) {
   return out;
 }
 
+/**
+ * /releases/, one page per language.
+ *
+ * It renders through the legal template because it is the same document shape,
+ * with one addition the template knows about: the version list, which is shared
+ * by all nine languages and so is passed once rather than per locale.
+ */
+export function buildReleasesPages(releasesDoc) {
+  validateLangs("releases", releasesDoc.langs);
+  return LANGS.map((lang) => ({
+    path: pagePath(releasesDoc.slug, lang),
+    html: renderLegalPage({
+      slug: releasesDoc.slug,
+      lang,
+      doc: releasesDoc.langs[lang],
+      releases: releasesDoc.releases,
+    }),
+  }));
+}
+
 export function buildLandingPages(landing, articleLinksByLang = {}) {
   validateLangs("landing", landing.langs, LANDING_LANGS);
   return LANDING_LANGS.map((lang) => ({
@@ -120,7 +140,7 @@ export function buildModePages(modeDef, { slug, learn = null }) {
   }));
 }
 
-export function buildSitemap(docs, { home = true, landing = null, articles = [], guidesIndex = null, categoryHubs = [], modes = [], spaPages = [] } = {}) {
+export function buildSitemap(docs, { home = true, landing = null, articles = [], guidesIndex = null, categoryHubs = [], modes = [], spaPages = [], releases = null } = {}) {
   // urlPath() only keeps a mode's English URL slash-less if the slug is listed in
   // SPA_ONLY_EN_SLUGS. A mode added here but not there would emit /new-mode/ —
   // a URL with no directory behind it. Fail the build instead.
@@ -151,6 +171,14 @@ export function buildSitemap(docs, { home = true, landing = null, articles = [],
   for (const hub of categoryHubs) {
     for (const lang of LANGS) {
       urls.push({ loc: absUrl(urlPath(hub.slug, lang)), lastmod: hub.updated, priority: "0.8", changefreq: "weekly" });
+    }
+  }
+  // /releases/ is a legal-shaped page but not a legal one: it gains a row every
+  // time a version ships, so it gets the weekly changefreq the legal pages'
+  // "yearly" would be wrong about, and a priority above them.
+  if (releases) {
+    for (const lang of LANGS) {
+      urls.push({ loc: absUrl(urlPath(releases.slug, lang)), lastmod: releases.updated, priority: "0.4", changefreq: "weekly" });
     }
   }
   if (landing) {

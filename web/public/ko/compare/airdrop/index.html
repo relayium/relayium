@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs AirDrop: 크로스플랫폼 에어드롭 대안</h1>
-      <p class="updated">마지막 업데이트: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/airdrop/">English</a><a href="/zh/compare/airdrop/">中文</a><a href="/ja/compare/airdrop/">日本語</a><a href="/ko/compare/airdrop/" aria-current="true">한국어</a><a href="/de/compare/airdrop/">Deutsch</a><a href="/fr/compare/airdrop/">Français</a><a href="/ar/compare/airdrop/">العربية</a><a href="/es/compare/airdrop/">Español</a><a href="/pt/compare/airdrop/">Português</a></nav>
       <p class="lead">AirDrop은 지금까지 나온 파일 공유 경험 중 최고에 속합니다. iPhone·iPad·Mac 사이에서 빠르고 사적이며 시스템에 자연스럽게 녹아 있습니다 — Relayium은 Apple의 홈그라운드에서 그것을 이기려 하지 않습니다.</p>
       <p class="lead">문제는 경계입니다. AirDrop은 다른 Apple 기기하고만 통신합니다. 이 글은 둘을 공정하게 비교하고, AirDrop이 진짜로 더 나은 점을 설명하며, Relayium이 도움이 되는 상황을 보여줍니다 — iPhone과 Windows PC, Android 폰과 Mac, 또는 Linux 노트북과 iPad 사이의 전송을 브라우저에서 바로 할 수 있습니다.</p>

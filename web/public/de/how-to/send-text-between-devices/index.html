@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Text, Links und Befehle zwischen Geräten senden</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-text-between-devices/">English</a><a href="/zh/how-to/send-text-between-devices/">中文</a><a href="/ja/how-to/send-text-between-devices/">日本語</a><a href="/ko/how-to/send-text-between-devices/">한국어</a><a href="/de/how-to/send-text-between-devices/" aria-current="true">Deutsch</a><a href="/fr/how-to/send-text-between-devices/">Français</a><a href="/ar/how-to/send-text-between-devices/">العربية</a><a href="/es/how-to/send-text-between-devices/">Español</a><a href="/pt/how-to/send-text-between-devices/">Português</a></nav>
       <p class="lead">Relayium überträgt neben Dateien auch Inhalte für die Zwischenablage: eine URL vom Handy, einen Befehl für einen anderen Rechner oder mehrzeiligen Code. Nachrichten sind Ende-zu-Ende-verschlüsselt; Relayium-Server speichern weder Inhalte noch serverseitigen Verlauf, aber beide Endpunkte können empfangenen Text kopieren oder aufbewahren.</p>
       <p class="lead">Browser und CLI unterstützen beide Text, verwenden aber getrennte Transportwege und können den Kopplungscode der jeweils anderen Seite nicht nutzen. Verwende an beiden Enden dieselbe Variante.</p>

@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>What is peer-to-peer file transfer?</h1>
-      <p class="updated">Last updated: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer/" aria-current="true">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer/">中文</a><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">日本語</a><a href="/ko/guides/what-is-peer-to-peer-file-transfer/">한국어</a><a href="/de/guides/what-is-peer-to-peer-file-transfer/">Deutsch</a><a href="/fr/guides/what-is-peer-to-peer-file-transfer/">Français</a><a href="/ar/guides/what-is-peer-to-peer-file-transfer/">العربية</a><a href="/es/guides/what-is-peer-to-peer-file-transfer/">Español</a><a href="/pt/guides/what-is-peer-to-peer-file-transfer/">Português</a></nav>
       <p class="lead">&quot;Peer-to-peer&quot; gets used loosely, so here&#39;s what it actually means for a file transfer: your file goes straight from one device to the other, not up to a company&#39;s server and back down. No stop in the middle where a copy could sit.</p>
       <p class="lead">That sounds simple, but routes differ in practice. This page first explains generic WebRTC/ICE, where TURN can be a fallback, then separates Relayium&#39;s actual choices: LAN browser WebRTC is direct, cross-network browser sessions use TURN by design, and the CLI is direct-only.</p>

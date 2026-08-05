@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs croc : transfert de fichiers chiffré en terminal</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/croc/">English</a><a href="/zh/compare/croc/">中文</a><a href="/ja/compare/croc/">日本語</a><a href="/ko/compare/croc/">한국어</a><a href="/de/compare/croc/">Deutsch</a><a href="/fr/compare/croc/" aria-current="true">Français</a><a href="/ar/compare/croc/">العربية</a><a href="/es/compare/croc/">Español</a><a href="/pt/compare/croc/">Português</a></nav>
       <p class="lead">croc est l&#39;un des outils les plus appréciés pour envoyer un fichier d&#39;un terminal à un autre : une courte phrase-code facile à retenir, un échange de clés PAKE, et cela fonctionne tout simplement. La CLI Relayium vise le même objectif et est construite dans le même esprit — gratuite, open source, chiffrée de bout en bout, un compte n&#39;étant requis que pour que send puisse générer son code d&#39;appairage.</p>
       <p class="lead">Ceci n&#39;est pas un dénigrement ; la réputation de croc est méritée. Cet article compare franchement ce que partagent les deux outils, là où la CLI Relayium fait plus parce qu&#39;elle sait aussi parler à des serveurs que vous exploitez déjà, et le cas où croc est honnêtement le choix le plus simple.</p>

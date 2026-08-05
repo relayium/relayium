@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Envoyer des fichiers entre deux ordinateurs par Internet</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-between-two-computers-over-the-internet/">English</a><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/">中文</a><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">日本語</a><a href="/ko/how-to/send-files-between-two-computers-over-the-internet/">한국어</a><a href="/de/how-to/send-files-between-two-computers-over-the-internet/">Deutsch</a><a href="/fr/how-to/send-files-between-two-computers-over-the-internet/" aria-current="true">Français</a><a href="/ar/how-to/send-files-between-two-computers-over-the-internet/">العربية</a><a href="/es/how-to/send-files-between-two-computers-over-the-internet/">Español</a><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Português</a></nav>
       <p class="lead">Envoyer un fichier à un autre ordinateur signifie généralement le téléverser quelque part au préalable — un cloud, une pièce jointe d&#39;e-mail, une appli de messagerie — puis espérer que le destinataire pourra le récupérer. Relayium saute cette étape de stockage : sur le même LAN, les navigateurs se connectent directement ; entre réseaux, un relais TURN ne porte que du texte chiffré de bout en bout et ne conserve ni copie côté serveur ni historique temps réel.</p>
       <p class="lead">Ce guide couvre les deux cas — deux ordinateurs sur le même réseau, et deux ordinateurs sur des réseaux complètement différents (domiciles, bureaux, pays différents) — et montre exactement ce que chaque côté doit faire.</p>

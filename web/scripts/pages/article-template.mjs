@@ -299,7 +299,14 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>${esc(doc.title)}</h1>
-      <p class="updated">${esc(doc.updatedLabel)}: ${esc(dateModified)}</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">${esc(doc.updatedLabel)}: <bdi>${esc(dateModified)}</bdi></p>
       ${langBar(slug, lang)}
       ${lead}
       ${sections}

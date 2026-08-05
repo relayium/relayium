@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>2026년 최고의 Firefox Send 대안</h1>
-      <p class="updated">마지막 업데이트: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/firefox-send/">English</a><a href="/zh/compare/firefox-send/">中文</a><a href="/ja/compare/firefox-send/">日本語</a><a href="/ko/compare/firefox-send/" aria-current="true">한국어</a><a href="/de/compare/firefox-send/">Deutsch</a><a href="/fr/compare/firefox-send/">Français</a><a href="/ar/compare/firefox-send/">العربية</a><a href="/es/compare/firefox-send/">Español</a><a href="/pt/compare/firefox-send/">Português</a></nav>
       <p class="lead">Firefox Send는 Mozilla가 시도한 사적인 파일 공유 방식이었습니다. 파일을 넣으면 암호화된 링크를 받고, 만료 시점이나 첫 다운로드 후 자동 삭제을 설정할 수 있었습니다. 많은 사람이 이를 좋아했고 몇 년이 지난 지금도 여전히 찾고 있습니다. 다시 돌아오지는 않습니다. Mozilla는 2020년에 이 서비스를 중단했습니다. 하지만 그것이 채워주던 필요는 지금도 실재합니다.</p>
       <p class="lead">Relayium의 비동기(저장 링크) 모드는 같은 발상을 이어받습니다. 브라우저에서 암호화하고, 링크를 공유하고, 만료되거나 삭제되는 것을 지켜보세요. 이 글은 정직한 비교입니다. Firefox Send가 무엇을 했는지, Relayium이 얼마나 가깝게 닮았는지, 그리고 Relayium이 실시간 P2P 전송, CLI, 셀프호스팅으로 어디까지 더 나아가는지를 다룹니다.</p>

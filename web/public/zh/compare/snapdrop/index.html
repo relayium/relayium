@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium 对比 Snapdrop 与 PairDrop：哪个点对点传输更安全？</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/snapdrop/">English</a><a href="/zh/compare/snapdrop/" aria-current="true">中文</a><a href="/ja/compare/snapdrop/">日本語</a><a href="/ko/compare/snapdrop/">한국어</a><a href="/de/compare/snapdrop/">Deutsch</a><a href="/fr/compare/snapdrop/">Français</a><a href="/ar/compare/snapdrop/">العربية</a><a href="/es/compare/snapdrop/">Español</a><a href="/pt/compare/snapdrop/">Português</a></nav>
       <p class="lead">Snapdrop 及其活跃维护的分支 PairDrop 是浏览器免安装文件分享的先驱，成熟、好用、体验优秀——Relayium 是在同样的思路上继续深化，而不是否定它们。</p>
       <p class="lead">本文客观对比这三者：它们的共同点、Snapdrop 与 PairDrop 更强的地方，以及 Relayium 的不同之处。一句话概括：Relayium 的重点是加密强度与跨网络可达性，而不是取代局域网里已经好用的方案。</p>

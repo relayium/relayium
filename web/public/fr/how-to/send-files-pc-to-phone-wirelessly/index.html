@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Envoyer des fichiers du PC au téléphone sans fil, sans câble ni appli</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-pc-to-phone-wirelessly/">English</a><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/">中文</a><a href="/ja/how-to/send-files-pc-to-phone-wirelessly/">日本語</a><a href="/ko/how-to/send-files-pc-to-phone-wirelessly/">한국어</a><a href="/de/how-to/send-files-pc-to-phone-wirelessly/">Deutsch</a><a href="/fr/how-to/send-files-pc-to-phone-wirelessly/" aria-current="true">Français</a><a href="/ar/how-to/send-files-pc-to-phone-wirelessly/">العربية</a><a href="/es/how-to/send-files-pc-to-phone-wirelessly/">Español</a><a href="/pt/how-to/send-files-pc-to-phone-wirelessly/">Português</a></nav>
       <p class="lead">Faire passer un fichier de votre ordinateur portable à votre téléphone ne devrait pas obliger à chercher le bon câble, à s&#39;envoyer un e-mail à soi-même, ou à téléverser vers un cloud pour le retélécharger ensuite. Relayium déplace les octets directement de votre ordinateur vers votre téléphone via votre propre Wi-Fi, dans le navigateur, sans rien à installer d&#39;un côté ou de l&#39;autre.</p>
       <p class="lead">Ce guide détaille la méthode sans fil pas à pas — même réseau ou réseaux différents — puis la compare honnêtement aux solutions habituelles (USB, Bluetooth, applis de messagerie et e-mail), pour que vous choisissiez le bon outil selon le cas.</p>

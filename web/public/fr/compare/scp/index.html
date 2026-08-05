@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs scp : transfert plus simple par SSH</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/scp/">English</a><a href="/zh/compare/scp/">中文</a><a href="/ja/compare/scp/">日本語</a><a href="/ko/compare/scp/">한국어</a><a href="/de/compare/scp/">Deutsch</a><a href="/fr/compare/scp/" aria-current="true">Français</a><a href="/ar/compare/scp/">العربية</a><a href="/es/compare/scp/">Español</a><a href="/pt/compare/scp/">Português</a></nav>
       <p class="lead">scp est depuis des décennies le moyen par défaut de déplacer un fichier par SSH : déjà présent sur presque toutes les machines de type Unix, tout le monde connaît sa syntaxe, et ça marche tout simplement. Inutile de prétendre le contraire — la réputation de scp est méritée.</p>
       <p class="lead">La CLI Relayium ne remplace pas SSH ; elle s&#39;appuie sur exactement le même accès SSH que vous avez déjà. push et pull utilisent votre connexion SSH de la même façon que scp, mais ajoutent quelques éléments que scp n&#39;a jamais été conçu pour faire : reprendre un transfert interrompu, vérifier chaque fichier avec une somme de contrôle, afficher une vraie progression, et fonctionner même quand rien n&#39;est installé côté distant.</p>

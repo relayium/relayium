@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Einen ganzen Ordner senden, nicht nur Dateien</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder/">English</a><a href="/zh/how-to/send-a-folder/">中文</a><a href="/ja/how-to/send-a-folder/">日本語</a><a href="/ko/how-to/send-a-folder/">한국어</a><a href="/de/how-to/send-a-folder/" aria-current="true">Deutsch</a><a href="/fr/how-to/send-a-folder/">Français</a><a href="/ar/how-to/send-a-folder/">العربية</a><a href="/es/how-to/send-a-folder/">Español</a><a href="/pt/how-to/send-a-folder/">Português</a></nav>
       <p class="lead">Ein Projekt zu senden ist nicht dasselbe wie eine Datei zu senden — man hat einen Ordner voller Unterordner, und jedes Stück einzeln zu kopieren zerstört genau die Struktur, die ihn brauchbar macht. Vorher zu zippen funktioniert, bedeutet aber einen Umweg über ein Kompressionswerkzeug, bevor man überhaupt anfangen kann.</p>
       <p class="lead">Relayium lässt dich einen Ordner auswählen und unverändert senden. Der Browser erhält Baum und relative Pfade und streamt live — im selben LAN direkt per WebRTC, netzübergreifend als Ende-zu-Ende-Chiffretext über TURN — ohne serverseitige Echtzeitkopie oder Historie; alternativ erstellt er einen gespeicherten Link für später.</p>

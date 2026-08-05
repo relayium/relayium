@@ -19,6 +19,9 @@
          six cards on /cli and there was no way to reach the other 30. Trailing
          slash because the hub is a generated directory and the bare form 301s. -->
     <a href={pageUrl("guides", lang()) + "/"}>{t.learn.hub}</a>
+    <!-- Trailing slash for the same reason as the Guides hub above: /releases/
+         is a generated directory and the bare form 301s. -->
+    <a href={pageUrl("releases", lang()) + "/"}>{t.legal.releases}</a>
     <a href={legalUrl("support", lang())}>{t.legal.support}</a>
     <a href={legalUrl("security", lang())}>{t.legal.security}</a>
     <a href={legalUrl("privacy", lang())}>{t.legal.privacy}</a>

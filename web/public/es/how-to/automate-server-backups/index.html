@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Automatiza copias de seguridad cifradas del servidor con una tarea cron</h1>
-      <p class="updated">Última actualización: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups/">English</a><a href="/zh/how-to/automate-server-backups/">中文</a><a href="/ja/how-to/automate-server-backups/">日本語</a><a href="/ko/how-to/automate-server-backups/">한국어</a><a href="/de/how-to/automate-server-backups/">Deutsch</a><a href="/fr/how-to/automate-server-backups/">Français</a><a href="/ar/how-to/automate-server-backups/">العربية</a><a href="/es/how-to/automate-server-backups/" aria-current="true">Español</a><a href="/pt/how-to/automate-server-backups/">Português</a></nav>
       <p class="lead">Las copias de seguridad que tienes que acordarte de ejecutar no ocurren. cron sí se acuerda, y la CLI de Relayium está hecha para eso: un único comando no interactivo que copia (o replica) un directorio a otra máquina, verifica cada archivo y retoma donde lo dejó si se cae la red.</p>
       <p class="lead">Esta guía cubre cómo programar relayium push y el relayium sync incremental desde cron, los dos transportes a los que puedes apuntar cualquiera de ellos, y las líneas de crontab para copiar.</p>

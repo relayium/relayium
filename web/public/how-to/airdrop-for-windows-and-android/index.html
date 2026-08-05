@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>AirDrop for Windows, Linux and Android</h1>
-      <p class="updated">Last updated: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/airdrop-for-windows-and-android/" aria-current="true">English</a><a href="/zh/how-to/airdrop-for-windows-and-android/">中文</a><a href="/ja/how-to/airdrop-for-windows-and-android/">日本語</a><a href="/ko/how-to/airdrop-for-windows-and-android/">한국어</a><a href="/de/how-to/airdrop-for-windows-and-android/">Deutsch</a><a href="/fr/how-to/airdrop-for-windows-and-android/">Français</a><a href="/ar/how-to/airdrop-for-windows-and-android/">العربية</a><a href="/es/how-to/airdrop-for-windows-and-android/">Español</a><a href="/pt/how-to/airdrop-for-windows-and-android/">Português</a></nav>
       <p class="lead">AirDrop only exists inside Apple&#39;s world, which leaves everyone else — Windows, Linux, Android, and any household with a mix of devices — without a built-in equivalent. This guide shows the closest thing to AirDrop for non-Apple devices: open a web page on both ends and the file just moves.</p>
       <p class="lead">It works the same way regardless of platform, so it also covers the case AirDrop never handles well: a Windows laptop, a Linux desktop and an Android phone all in the same room, or all three plus an iPhone thrown in.</p>

@@ -86,7 +86,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>클라우드에 올리고 다른 컴퓨터에서 받기</h1>
-      <p class="updated">마지막 업데이트: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer/">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer/">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer/">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer/" aria-current="true">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer/">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer/">Français</a><a href="/ar/guides/push-to-cloud-pull-on-another-computer/">العربية</a><a href="/es/guides/push-to-cloud-pull-on-another-computer/">Español</a><a href="/pt/guides/push-to-cloud-pull-on-another-computer/">Português</a></nav>
       <p class="lead">두 컴퓨터가 동시에 켜져 있는 일이 결코 없을 때가 있습니다. 오늘 밤 업무용 노트북에서 파일을 올려두고 내일 집 데스크톱에서 받고 싶은데, 실시간 연결을 기다리는 사람은 아무도 없습니다. relayium up과 relayium down이 바로 그 일을 합니다. up은 로컬에서 암호화해 계정에 업로드하고, down은 나중에 아무 기기에서나 가져와 복호화합니다. P2P 핸드셰이크도, 둘 다 ssh 할 수 있는 서버도 필요 없습니다.</p>
       <p class="lead">이것은 CLI에서 Relayium 계정을 사용하는 주된 부분이며, 다른 하나는 페어링 코드를 발급하기 위해 계정이 필요한 send입니다. 나머지의 바인딩은 선택 사항입니다. push/pull, 데몬 다이렉트, sync는 로그인 없이 계속 동작하고 receive도 마찬가지입니다. 다운로드에는 계정이 전혀 필요 없고 링크만 있으면 됩니다.</p>

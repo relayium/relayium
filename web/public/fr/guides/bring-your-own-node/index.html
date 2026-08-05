@@ -83,7 +83,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Apportez votre propre nœud : utilisez gratuitement le relais et le stockage de Relayium</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-22</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-22</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node/">English</a><a href="/zh/guides/bring-your-own-node/">中文</a><a href="/ja/guides/bring-your-own-node/">日本語</a><a href="/ko/guides/bring-your-own-node/">한국어</a><a href="/de/guides/bring-your-own-node/">Deutsch</a><a href="/fr/guides/bring-your-own-node/" aria-current="true">Français</a><a href="/ar/guides/bring-your-own-node/">العربية</a><a href="/es/guides/bring-your-own-node/">Español</a><a href="/pt/guides/bring-your-own-node/">Português</a></nav>
       <p class="lead">Les transferts inter-réseaux et les liens stockés consomment de la bande passante de relais et de l&#39;espace disque qui nous coûtent de l&#39;argent ; ils fonctionnent donc dans la limite d&#39;un quota gratuit et deviennent payants au-delà. Il existe un moyen de contourner cela : faites tourner votre propre nœud de relais/stockage, rattachez-le à votre compte, et vos transferts passent par votre nœud au lieu du nôtre — rien de mesuré, rien de facturé.</p>
       <p class="lead">C&#39;est différent d&#39;auto-héberger l&#39;ensemble du serveur Relayium. Vous continuez à utiliser votre compte relayium.com habituel et les mêmes applications ; vous ajoutez simplement un nœud qui vous appartient pour acheminer votre trafic. Ce guide vous mène d&#39;une machine Linux vierge à un nœud en ligne en environ cinq minutes.</p>

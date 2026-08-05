@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs. WeTransfer: verschlüsselte Links und Live-Übergaben</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/wetransfer/">English</a><a href="/zh/compare/wetransfer/">中文</a><a href="/ja/compare/wetransfer/">日本語</a><a href="/ko/compare/wetransfer/">한국어</a><a href="/de/compare/wetransfer/" aria-current="true">Deutsch</a><a href="/fr/compare/wetransfer/">Français</a><a href="/ar/compare/wetransfer/">العربية</a><a href="/es/compare/wetransfer/">Español</a><a href="/pt/compare/wetransfer/">Português</a></nav>
       <p class="lead">WeTransfer hat das Versenden großer Dateien mühelos gemacht: Datei ablegen, Link erhalten, und der Empfänger lädt herunter, wann er bereit ist — selbst wenn er beim Senden offline war. Dieses asynchrone Erlebnis, bei dem man zum Empfangen kein Konto braucht, ist wirklich gut und der Grund, warum so viele darauf zurückgreifen.</p>
       <p class="lead">Dieser Artikel vergleicht fair. Für große Dateien oder spätere Abholung empfiehlt Relayium ebenfalls einen Speicherlink, dessen Server jedoch nur Zero-Knowledge-Chiffretext hält. Echtzeit ist eine eigene Stärke für kleine Dateien und Text, solange beide Seiten online bleiben: im selben LAN direkt, netzübergreifend als Ende-zu-Ende-Chiffretext über TURN.</p>

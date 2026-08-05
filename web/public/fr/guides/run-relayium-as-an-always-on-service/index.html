@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Faire tourner Relayium en service de réception permanent</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service/">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service/">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service/">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service/">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service/">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service/" aria-current="true">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service/">العربية</a><a href="/es/guides/run-relayium-as-an-always-on-service/">Español</a><a href="/pt/guides/run-relayium-as-an-always-on-service/">Português</a></nav>
       <p class="lead">relayium serve --once traite un seul transfert entrant puis s&#39;arrête — parfait pour un pull occasionnel. Mais si vous voulez qu&#39;une machine soit un point de dépôt permanent — un serveur domestique qui reçoit des sauvegardes chaque nuit, une machine de build vers laquelle la CI pousse des artefacts, un NAS auquel votre téléphone peut envoyer des photos à tout moment — vous voulez que serve tourne en continu, sans avoir à le démarrer à la main à chaque transfert.</p>
       <p class="lead">Ce guide couvre le démarrage d&#39;un processus à l&#39;écoute de longue durée, l&#39;approbation de qui est autorisé à envoyer, l&#39;autorisation préalable des pairs pour les cas où personne n&#39;est devant le terminal, l&#39;exécution sous systemd, et le fait de laisser un émetteur utilisant sync --delete répercuter les suppressions.</p>

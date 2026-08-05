@@ -83,7 +83,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>شغّل عقدتك الخاصة: استخدم مُرحِّل وتخزين Relayium مجانًا</h1>
-      <p class="updated">آخر تحديث: 2026-07-22</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-22</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node/">English</a><a href="/zh/guides/bring-your-own-node/">中文</a><a href="/ja/guides/bring-your-own-node/">日本語</a><a href="/ko/guides/bring-your-own-node/">한국어</a><a href="/de/guides/bring-your-own-node/">Deutsch</a><a href="/fr/guides/bring-your-own-node/">Français</a><a href="/ar/guides/bring-your-own-node/" aria-current="true">العربية</a><a href="/es/guides/bring-your-own-node/">Español</a><a href="/pt/guides/bring-your-own-node/">Português</a></nav>
       <p class="lead">عمليات النقل عبر الشبكات والروابط المُخزَّنة تستهلك عرض نطاق المُرحِّل والقرص، وهذا يكلّفنا مالًا، لذا تعمل ضمن حصة مجانية وتصبح مدفوعة بعد تجاوزها. هناك طريقة لتفادي ذلك: شغّل عقدتك للترحيل/التخزين، اربطها بحسابك، فتتدفق عمليات نقلك عبر عقدتك بدل عقدتنا — لا شيء يُحسَب، ولا شيء يُفوتَر.</p>
       <p class="lead">هذا يختلف عن الاستضافة الذاتية لخادم Relayium بالكامل. تبقى تستخدم حساب relayium.com المعتاد ونفس التطبيقات؛ أنت فقط تضيف عقدة تملكها لتحمل حركتك. يأخذك هذا الدليل من جهاز Linux جديد إلى عقدة متصلة في نحو خمس دقائق.</p>

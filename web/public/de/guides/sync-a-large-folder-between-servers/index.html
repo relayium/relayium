@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Einen großen Ordner zwischen zwei Servern synchronisieren (fortsetzbar, im Hintergrund)</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-08</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-08</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers/">English</a><a href="/zh/guides/sync-a-large-folder-between-servers/">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers/">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers/">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers/" aria-current="true">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers/">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers/">العربية</a><a href="/es/guides/sync-a-large-folder-between-servers/">Español</a><a href="/pt/guides/sync-a-large-folder-between-servers/">Português</a></nav>
       <p class="lead">Du hast einen großen Ordner — zig Gigabyte — auf einem Server und willst eine exakte Kopie auf einem anderen. Du kannst kein Terminal stundenlang bewachen, und eine Übertragung, die auf halbem Weg abbricht, sollte nicht bei null neu beginnen. relayium sync ist genau dafür gebaut: ein einseitiger inkrementeller Spiegel, der überspringt, was schon da ist, eine halb gesendete Datei dort fortsetzt, wo sie stehen blieb, und jede Datei Ende-zu-Ende prüft.</p>
       <p class="lead">Diese Anleitung richtet eine unbeaufsichtigte, selbstheilende Übertragung ein: genehmige den Sender einmal, betreibe den Listener im Hintergrund und treibe relayium sync aus einer Retry-Schleife in tmux an, sodass es über Verbindungsabbrüche hinweg weiterläuft, bis der ganze Ordner angekommen ist.</p>

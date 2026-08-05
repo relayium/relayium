@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs. croc: verschlüsselte Dateiübertragung im Terminal</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/croc/">English</a><a href="/zh/compare/croc/">中文</a><a href="/ja/compare/croc/">日本語</a><a href="/ko/compare/croc/">한국어</a><a href="/de/compare/croc/" aria-current="true">Deutsch</a><a href="/fr/compare/croc/">Français</a><a href="/ar/compare/croc/">العربية</a><a href="/es/compare/croc/">Español</a><a href="/pt/compare/croc/">Português</a></nav>
       <p class="lead">croc ist eines der beliebtesten Werkzeuge, um eine Datei von einem Terminal zum anderen zu schicken: eine kurze, einprägsame Code-Phrase, ein PAKE-Schlüsselaustausch, und es funktioniert einfach. Die Relayium CLI setzt sich dieselbe Aufgabe und ist ähnlich gebaut — kostenlos, quelloffen und Ende-zu-Ende verschlüsselt, wobei ein Konto nur nötig ist, damit send seinen Pairing-Code erzeugen kann.</p>
       <p class="lead">Das ist keine Abrechnung; croc hat sich seinen Ruf verdient. Dieser Artikel vergleicht ehrlich, was beide gemeinsam haben, wo die Relayium CLI mehr bietet, weil sie auch mit Servern spricht, die du bereits betreibst, und den Fall, in dem croc schlicht die einfachere Wahl ist.</p>

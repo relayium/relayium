@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>نقل الملفات بين جهاز Mac وحاسوب Windows</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-between-mac-and-windows/">English</a><a href="/zh/how-to/transfer-files-between-mac-and-windows/">中文</a><a href="/ja/how-to/transfer-files-between-mac-and-windows/">日本語</a><a href="/ko/how-to/transfer-files-between-mac-and-windows/">한국어</a><a href="/de/how-to/transfer-files-between-mac-and-windows/">Deutsch</a><a href="/fr/how-to/transfer-files-between-mac-and-windows/">Français</a><a href="/ar/how-to/transfer-files-between-mac-and-windows/" aria-current="true">العربية</a><a href="/es/how-to/transfer-files-between-mac-and-windows/">Español</a><a href="/pt/how-to/transfer-files-between-mac-and-windows/">Português</a></nav>
       <p class="lead">لا يتكلم جهازا Mac وPC اللغة نفسها لمشاركة الملفات جاهزَين. فـ AirDrop حكرٌ على Apple، ومشاركة الشبكة في Windows تريد أن يكون الجهازان في مجموعة عمل أو نطاق متطابق، وأيٌّ منهما ليس سهل الإعداد تمامًا في خمس دقائق حين تريد فقط نقل مجلد واحد من ملفات مشروع من MacBook إلى سطح مكتب Windows.</p>
       <p class="lead">يتجاوز Relayium مسألة التوافق برمّتها. افتح الصفحة نفسها على الجهازين: داخل شبكة LAN نفسها تنتقل الملفات المشفَّرة من الطرف إلى الطرف مباشرةً، وعبر الشبكات ينقل مُرحِّل TURN نصًا مشفّرًا لا يستطيع قراءته أو فك تشفيره ولا يحتفظ بنسخة أو سجل للمحتوى الآني. لا حاجة إلى تثبيت شيء؛ يسجّل منشئ الاقتران عبر الشبكات الدخول، ولا يحتاج المنضم إلى حساب. إليك تحديدًا كيف يعمل الأمر في كلا الاتجاهين.</p>

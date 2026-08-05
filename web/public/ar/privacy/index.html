@@ -38,6 +38,11 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+.releases{list-style:none;margin:16px 0 0;padding:0}
+.releases li{display:flex;gap:16px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border)}
+.releases li:last-child{border-bottom:0}
+.releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
+.releases .date{font-size:14px;font-variant-numeric:tabular-nums}
 </style>
   </head>
   <body>
@@ -48,7 +53,13 @@ footer a{color:var(--text-h);text-decoration:none}
            visual position — it is a labelled <nav> landmark either way. -->
       <main>
       <h1>سياسة الخصوصية</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- The date is isolated for the same reason the release rows are: an ISO
+           date is three digit runs joined by hyphens, and on the Arabic page the
+           bidi algorithm lays those runs out right-to-left. "2026-08-03" was
+           rendering as "03-08-2026" on all four Arabic legal pages — measured in
+           a browser, not deduced. <bdi> resolves LTR (no strong character
+           inside) and pins the order. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/privacy/">English</a><a href="/zh/privacy/">中文</a><a href="/ja/privacy/">日本語</a><a href="/ko/privacy/">한국어</a><a href="/de/privacy/">Deutsch</a><a href="/fr/privacy/">Français</a><a href="/ar/privacy/" aria-current="true">العربية</a><a href="/es/privacy/">Español</a><a href="/pt/privacy/">Português</a></nav>
       <p>صُمِّمت Relayium بحيث تظل ملفاتك ونصوصك المؤقتة مِلكًا لك. جلسات المتصفح المحلية مباشرة؛ وقد تحمل جلسات المتصفح عبر الشبكات نصًا مُشفَّرًا من الطرف إلى الطرف عبر TURN؛ ونص CLI مباشر فقط؛ ولا تحتفظ روابط التنزيل إلا بنص ملفات مُشفَّر بمعرفة صفرية.</p>
       <p>توضّح هذه الصفحة البيانات القليلة التي تتعامل معها الخدمة فعلًا، والبيانات التي لا تراها عن قصد أبدًا.</p>
@@ -72,6 +83,7 @@ footer a{color:var(--text-h);text-decoration:none}
         <a href="/ar/apps/">التطبيقات</a>
         <a href="/ar/terms/">شروط الخدمة</a>
         <a href="/pricing">الأسعار</a>
+        <a href="/ar/releases/">الإصدارات</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

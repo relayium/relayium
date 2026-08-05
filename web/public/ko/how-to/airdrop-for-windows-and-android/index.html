@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Windows·Linux·Android용 AirDrop 대안</h1>
-      <p class="updated">마지막 업데이트: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/airdrop-for-windows-and-android/">English</a><a href="/zh/how-to/airdrop-for-windows-and-android/">中文</a><a href="/ja/how-to/airdrop-for-windows-and-android/">日本語</a><a href="/ko/how-to/airdrop-for-windows-and-android/" aria-current="true">한국어</a><a href="/de/how-to/airdrop-for-windows-and-android/">Deutsch</a><a href="/fr/how-to/airdrop-for-windows-and-android/">Français</a><a href="/ar/how-to/airdrop-for-windows-and-android/">العربية</a><a href="/es/how-to/airdrop-for-windows-and-android/">Español</a><a href="/pt/how-to/airdrop-for-windows-and-android/">Português</a></nav>
       <p class="lead">AirDrop은 Apple의 세계 안에만 존재하므로, Windows·Linux·Android 사용자와 여러 종류의 기기가 섞인 가정에는 내장된 대안이 없습니다. 이 가이드는 Apple이 아닌 기기에서 AirDrop과 가장 가까운 경험을 얻는 방법을 보여줍니다 — 양쪽에서 웹 페이지를 열면 파일이 옮겨집니다.</p>
       <p class="lead">이 방식은 플랫폼과 상관없이 똑같이 동작하므로, AirDrop이 잘 다루지 못하는 상황도 다룹니다 — 같은 방에 Windows 노트북, Linux 데스크톱, Android 폰이 함께 있거나, 여기에 iPhone까지 더해진 경우요.</p>

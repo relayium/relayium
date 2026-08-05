@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Was ist Peer-to-Peer-Dateiübertragung?</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer/">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer/">中文</a><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">日本語</a><a href="/ko/guides/what-is-peer-to-peer-file-transfer/">한국어</a><a href="/de/guides/what-is-peer-to-peer-file-transfer/" aria-current="true">Deutsch</a><a href="/fr/guides/what-is-peer-to-peer-file-transfer/">Français</a><a href="/ar/guides/what-is-peer-to-peer-file-transfer/">العربية</a><a href="/es/guides/what-is-peer-to-peer-file-transfer/">Español</a><a href="/pt/guides/what-is-peer-to-peer-file-transfer/">Português</a></nav>
       <p class="lead">„Peer-to-Peer“ wird oft locker verwendet, aber bei einer Dateiübertragung bedeutet es konkret: Deine Datei geht direkt von einem Gerät zum anderen — nicht auf den Server eines Unternehmens hoch und wieder herunter. Kein Zwischenstopp, an dem eine Kopie liegen bleiben könnte.</p>
       <p class="lead">Das klingt einfach, doch die tatsächlichen Pfade unterscheiden sich. Diese Seite erklärt zuerst allgemeines WebRTC/ICE, bei dem TURN als Ausweichweg dienen kann, und trennt dann Relayiums Umsetzung: Browser-WebRTC ist im selben LAN direkt, netzübergreifend wird TURN planmäßig genutzt, und die CLI ist direct-only.</p>

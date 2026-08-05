@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium مقابل LocalSend: أيّ نقل ملفات محلي تستخدم</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/localsend/">English</a><a href="/zh/compare/localsend/">中文</a><a href="/ja/compare/localsend/">日本語</a><a href="/ko/compare/localsend/">한국어</a><a href="/de/compare/localsend/">Deutsch</a><a href="/fr/compare/localsend/">Français</a><a href="/ar/compare/localsend/" aria-current="true">العربية</a><a href="/es/compare/localsend/">Español</a><a href="/pt/compare/localsend/">Português</a></nav>
       <p class="lead">LocalSend تطبيق جيد فعلًا ومحبوب: مجاني ومفتوح المصدر ومتعدد المنصات، ومبني لنقل الملفات بين الأجهزة على نفس الشبكة المحلية دون خادم ودون حساب على الإطلاق. يعتمد عليه كثيرون كأداة شبيهة بـ AirDrop لأنظمة Windows وLinux وAndroid.</p>
       <p class="lead">تقارنه هذه المقالة بإنصاف مع Relayium، الذي يعالج مشكلة نفس الشبكة ذاتها بطريقة مختلفة — لا تطبيق يُثبَّت، بل يعمل مباشرةً داخل متصفحك — ثم يذهب أبعد من ذلك، فيصل عبر الشبكات ويقدّم أداة سطر أوامر لا يملكها LocalSend.</p>

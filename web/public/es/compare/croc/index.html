@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs croc: transferencia de archivos cifrada desde la terminal</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/croc/">English</a><a href="/zh/compare/croc/">中文</a><a href="/ja/compare/croc/">日本語</a><a href="/ko/compare/croc/">한국어</a><a href="/de/compare/croc/">Deutsch</a><a href="/fr/compare/croc/">Français</a><a href="/ar/compare/croc/">العربية</a><a href="/es/compare/croc/" aria-current="true">Español</a><a href="/pt/compare/croc/">Português</a></nav>
       <p class="lead">croc es una de las herramientas más queridas para enviar un archivo de una terminal a otra: una frase clave corta y fácil de recordar, un intercambio de claves PAKE, y simplemente funciona. La CLI de Relayium se propone hacer el mismo trabajo y está construida de la misma manera — gratis, de código abierto y cifrada de extremo a extremo, y solo hace falta cuenta para que send genere su código de emparejamiento.</p>
       <p class="lead">Esto no es un ataque; croc se ganó su reputación. Es una comparación directa de lo que ambas comparten, de dónde la CLI de Relayium hace más porque también habla con servidores que ya tienes en marcha, y del caso en que croc es, con honestidad, la opción más sencilla.</p>

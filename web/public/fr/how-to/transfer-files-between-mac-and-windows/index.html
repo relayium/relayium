@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Transférer des fichiers entre un Mac et un PC Windows</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-between-mac-and-windows/">English</a><a href="/zh/how-to/transfer-files-between-mac-and-windows/">中文</a><a href="/ja/how-to/transfer-files-between-mac-and-windows/">日本語</a><a href="/ko/how-to/transfer-files-between-mac-and-windows/">한국어</a><a href="/de/how-to/transfer-files-between-mac-and-windows/">Deutsch</a><a href="/fr/how-to/transfer-files-between-mac-and-windows/" aria-current="true">Français</a><a href="/ar/how-to/transfer-files-between-mac-and-windows/">العربية</a><a href="/es/how-to/transfer-files-between-mac-and-windows/">Español</a><a href="/pt/how-to/transfer-files-between-mac-and-windows/">Português</a></nav>
       <p class="lead">Mac et PC ne parlent pas nativement le même langage de partage de fichiers. AirDrop est réservé à Apple, le partage réseau de Windows exige que les deux machines soient dans un groupe de travail ou un domaine compatible, et aucun des deux ne se configure vraiment en cinq minutes — alors que vous voulez peut-être juste déplacer un dossier de projet d&#39;un MacBook vers un PC de bureau Windows.</p>
       <p class="lead">Relayium contourne tout ce problème de compatibilité. Ouvrez la même page sur les deux ordinateurs : sur le même LAN, les fichiers chiffrés de bout en bout passent directement ; entre réseaux, un relais TURN ne transporte que du texte chiffré qu&#39;il ne peut ni lire ni déchiffrer, sans conserver de copie ni d&#39;historique du contenu en temps réel. Rien à installer ; pour l&#39;appairage entre réseaux, le créateur se connecte et la personne qui rejoint n&#39;a jamais besoin de compte. Voici la marche à suivre exacte dans les deux sens.</p>

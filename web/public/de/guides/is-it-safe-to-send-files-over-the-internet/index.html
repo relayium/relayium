@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Ist es sicher, Dateien über das Internet zu senden?</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/is-it-safe-to-send-files-over-the-internet/">English</a><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">中文</a><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/">日本語</a><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet/">한국어</a><a href="/de/guides/is-it-safe-to-send-files-over-the-internet/" aria-current="true">Deutsch</a><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet/">Français</a><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet/">العربية</a><a href="/es/guides/is-it-safe-to-send-files-over-the-internet/">Español</a><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet/">Português</a></nav>
       <p class="lead">„Ist es sicher, diese Datei zu senden?“ ist eine berechtigte Frage, kurz innezuhalten — egal ob es sich um eine Steuererklärung, einen Vertrag oder einfach Fotos handelt, die privat bleiben sollen. Diese Anleitung soll dich nicht von gängigen Tools abschrecken, sondern in aller Ruhe durchgehen, was tatsächlich passiert, wenn du eine Datei per E-Mail sendest, in einen Cloud-Ordner legst oder auf einem USB-Stick mit dir herumträgst, was die Begriffe „Ende-zu-Ende verschlüsselt“ und „Zero-Knowledge“ tatsächlich versprechen, und worauf du achten solltest, bevor du einem Tool etwas Wichtiges anvertraust.</p>
       <p class="lead">Dafür ist kein technisches Vorwissen nötig. Am Ende weißt du, welche Fragen du bei jeder Übertragungsmethode stellen solltest — auch bei der hier vorgestellten.</p>

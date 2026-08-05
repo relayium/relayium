@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Execute o Relayium como um serviço de recepção sempre ativo</h1>
-      <p class="updated">Última atualização: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service/">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service/">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service/">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service/">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service/">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service/">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service/">العربية</a><a href="/es/guides/run-relayium-as-an-always-on-service/">Español</a><a href="/pt/guides/run-relayium-as-an-always-on-service/" aria-current="true">Português</a></nav>
       <p class="lead">O relayium serve --once trata de uma única transferência recebida e então encerra — ótimo para um pull ocasional. Mas se você quer que uma máquina seja um ponto de recepção permanente — um servidor doméstico onde os backups chegam durante a noite, uma máquina de build para a qual o CI envia artefatos, um NAS para o qual seu celular pode mandar fotos a qualquer momento — você quer o serve em execução o tempo todo, em vez de iniciá-lo manualmente a cada transferência.</p>
       <p class="lead">Este guia aborda como iniciar um processo à escuta de longa duração, aprovar quem tem permissão para enviar, pré-autorizar pares para os casos em que ninguém está diante do terminal, executá-lo com systemd, e permitir que um remetente usando sync --delete espelhe as exclusões.</p>

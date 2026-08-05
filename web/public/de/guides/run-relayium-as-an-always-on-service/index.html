@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium als dauerhaft laufenden Empfangsdienst betreiben</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service/">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service/">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service/">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service/">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service/" aria-current="true">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service/">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service/">العربية</a><a href="/es/guides/run-relayium-as-an-always-on-service/">Español</a><a href="/pt/guides/run-relayium-as-an-always-on-service/">Português</a></nav>
       <p class="lead">relayium serve --once nimmt eine eingehende Übertragung entgegen und beendet sich dann — gut für ein gelegentliches Pull. Willst du aber eine Maschine zu einer dauerhaften Anlaufstelle machen — einen Heimserver, auf dem nachts Backups landen, eine Build-Maschine, zu der CI Artefakte pusht, ein NAS, an das dein Handy jederzeit Fotos schicken kann —, soll serve durchgehend laufen, statt für jede Übertragung von Hand gestartet zu werden.</p>
       <p class="lead">Diese Anleitung behandelt das Starten eines dauerhaft laufenden Listeners, das Genehmigen, wer pushen darf, das Vorab-Autorisieren von Peers für den Fall, dass niemand am Terminal sitzt, den Betrieb unter systemd sowie das Zulassen, dass ein sync --delete-Sender Löschungen spiegelt.</p>

@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs Google Drive: 파일을 더 직접적으로 보내기</h1>
-      <p class="updated">마지막 업데이트: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/google-drive/">English</a><a href="/zh/compare/google-drive/">中文</a><a href="/ja/compare/google-drive/">日本語</a><a href="/ko/compare/google-drive/" aria-current="true">한국어</a><a href="/de/compare/google-drive/">Deutsch</a><a href="/fr/compare/google-drive/">Français</a><a href="/ar/compare/google-drive/">العربية</a><a href="/es/compare/google-drive/">Español</a><a href="/pt/compare/google-drive/">Português</a></nav>
       <p class="lead">Google Drive는 정말 훌륭한 제품입니다. 파일이 한곳에 모여 있고, 기기 간 동기화되며, 백업되고, 팀과 함께 실시간으로 편집하기도 쉽습니다. 계속 다시 찾게 될 파일의 영구적인 보관 장소가 필요하다면 Drive는 합리적인 기본 선택지이며, 이 글은 그것을 그만두라고 설득하려는 것이 아닙니다.</p>
       <p class="lead">하지만 많은 사람이 Drive로 하는 일은 실제로는 일회성 전달입니다. 친구에게 동영상을 보내거나, 고객에게 계약서를 보내거나, 동료에게 데이터셋을 보내는 일이지 영구 저장이 아닙니다. 그 특정 작업만 놓고 보면, 사본을 Google 서버에 업로드하고 누가 볼 수 있는지 설정하는 것은 작업에 필요한 것보다 더 많은 절차입니다. Relayium의 실시간 전송은 서버 측 내용 사본을 저장하지 않고, 브라우저는 LAN에서 직접, 네트워크 간에는 종단간 암호화 TURN을 사용합니다. 저장 링크는 받는 사람만 복호화할 수 있습니다.</p>

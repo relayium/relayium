@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Enviar archivos entre dos ordenadores por Internet</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-between-two-computers-over-the-internet/">English</a><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/">中文</a><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">日本語</a><a href="/ko/how-to/send-files-between-two-computers-over-the-internet/">한국어</a><a href="/de/how-to/send-files-between-two-computers-over-the-internet/">Deutsch</a><a href="/fr/how-to/send-files-between-two-computers-over-the-internet/">Français</a><a href="/ar/how-to/send-files-between-two-computers-over-the-internet/">العربية</a><a href="/es/how-to/send-files-between-two-computers-over-the-internet/" aria-current="true">Español</a><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Português</a></nav>
       <p class="lead">Enviar un archivo a otro ordenador suele significar subirlo primero a algún sitio — un disco en la nube, un adjunto de correo, una aplicación de chat — y esperar que el destinatario pueda recuperarlo. Relayium se salta ese paso de almacenamiento: en la misma LAN los navegadores conectan directamente; entre redes, un retransmisor TURN solo lleva texto cifrado de extremo a extremo y no conserva copia de contenido ni historial en el servidor.</p>
       <p class="lead">Esta guía cubre ambos casos — dos ordenadores en la misma red, y dos ordenadores en redes completamente distintas (distintas casas, oficinas, países) — y muestra exactamente qué debe hacer cada lado.</p>

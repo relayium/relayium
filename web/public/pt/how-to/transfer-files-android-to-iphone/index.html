@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Como transferir arquivos do Android para o iPhone (sem cabo)</h1>
-      <p class="updated">Última atualização: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone/">English</a><a href="/zh/how-to/transfer-files-android-to-iphone/">中文</a><a href="/ja/how-to/transfer-files-android-to-iphone/">日本語</a><a href="/ko/how-to/transfer-files-android-to-iphone/">한국어</a><a href="/de/how-to/transfer-files-android-to-iphone/">Deutsch</a><a href="/fr/how-to/transfer-files-android-to-iphone/">Français</a><a href="/ar/how-to/transfer-files-android-to-iphone/">العربية</a><a href="/es/how-to/transfer-files-android-to-iphone/">Español</a><a href="/pt/how-to/transfer-files-android-to-iphone/" aria-current="true">Português</a></nav>
       <p class="lead">Android e iPhone não compartilham um AirDrop, então mover algumas fotos ou um vídeo entre eles geralmente significa um cabo USB, um app de conversa que comprime suas imagens, ou uma ida e volta por algum drive na nuvem. Os três são mais lentos e mais trabalhosos do que deveriam ser.</p>
       <p class="lead">O Relayium pula tudo isso. Os dois celulares abrem a mesma página: na mesma LAN os arquivos criptografados de ponta a ponta viajam diretamente; entre redes, um retransmissor TURN só transporta texto cifrado que não consegue ler nem descriptografar e não mantém cópia nem histórico do conteúdo em tempo real. Não há app para instalar; no emparelhamento entre redes o criador faz login e quem entra nunca precisa de conta. Este guia mostra passo a passo.</p>

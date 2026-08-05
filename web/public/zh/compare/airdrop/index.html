@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium 对比 AirDrop：跨平台的隔空投送替代方案</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/airdrop/">English</a><a href="/zh/compare/airdrop/" aria-current="true">中文</a><a href="/ja/compare/airdrop/">日本語</a><a href="/ko/compare/airdrop/">한국어</a><a href="/de/compare/airdrop/">Deutsch</a><a href="/fr/compare/airdrop/">Français</a><a href="/ar/compare/airdrop/">العربية</a><a href="/es/compare/airdrop/">Español</a><a href="/pt/compare/airdrop/">Português</a></nav>
       <p class="lead">AirDrop 是有史以来最出色的文件分享体验之一。在 iPhone、iPad 与 Mac 之间，它快速、私密，又天然融入系统——Relayium 并不打算在 Apple 的主场上胜过它。</p>
       <p class="lead">问题在于边界：AirDrop 只能与其他 Apple 设备互通。本文客观对比两者，说明 AirDrop 真正更好的地方，也展示 Relayium 能帮上忙的场景——直接在浏览器里完成 iPhone 与 Windows 电脑、Android 手机与 Mac、或 Linux 笔记本与 iPad 之间的互传。</p>

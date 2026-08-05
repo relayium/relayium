@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)</h1>
-      <p class="updated">Última actualización: 2026-07-08</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-08</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers/">English</a><a href="/zh/guides/sync-a-large-folder-between-servers/">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers/">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers/">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers/">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers/">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers/">العربية</a><a href="/es/guides/sync-a-large-folder-between-servers/" aria-current="true">Español</a><a href="/pt/guides/sync-a-large-folder-between-servers/">Português</a></nav>
       <p class="lead">Tienes una carpeta grande —decenas de gigabytes— en un servidor y quieres una copia exacta en otro. No puedes vigilar una terminal durante horas, y una transferencia que muere a mitad de camino no debería empezar de cero. relayium sync está hecho para esto: un espejo incremental unidireccional que se salta lo que ya está, reanuda un archivo enviado a medias desde donde se detuvo y verifica cada archivo de extremo a extremo.</p>
       <p class="lead">Esta guía configura una transferencia sin supervisión y con recuperación automática: autoriza al emisor una vez, ejecuta el proceso a la escucha en segundo plano y dirige relayium sync desde un bucle de reintentos dentro de tmux para que siga adelante a través de las caídas de conexión hasta que toda la carpeta haya llegado.</p>

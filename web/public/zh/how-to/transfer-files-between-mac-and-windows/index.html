@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>如何在 Mac 和 Windows 电脑之间传输文件</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-between-mac-and-windows/">English</a><a href="/zh/how-to/transfer-files-between-mac-and-windows/" aria-current="true">中文</a><a href="/ja/how-to/transfer-files-between-mac-and-windows/">日本語</a><a href="/ko/how-to/transfer-files-between-mac-and-windows/">한국어</a><a href="/de/how-to/transfer-files-between-mac-and-windows/">Deutsch</a><a href="/fr/how-to/transfer-files-between-mac-and-windows/">Français</a><a href="/ar/how-to/transfer-files-between-mac-and-windows/">العربية</a><a href="/es/how-to/transfer-files-between-mac-and-windows/">Español</a><a href="/pt/how-to/transfer-files-between-mac-and-windows/">Português</a></nav>
       <p class="lead">Mac 和 PC 天生就不说同一种文件共享语言。AirDrop 只属于苹果生态，Windows 的网络共享又要求两台机器加入匹配的工作组或域，两者都不是那种能在五分钟内搞定的东西——而你可能只是想把 MacBook 上一个项目文件夹搬到 Windows 台式机上。</p>
       <p class="lead">Relayium 绕开了这整套兼容性难题。在两台电脑上打开同一个页面：同一局域网内，端到端加密的文件会直接传输；跨网络时，TURN 中继只搬运它无法读取或解密的密文，也不保留实时内容副本或历史。两个系统都无需安装；跨网络配对由创建者登录，加入者始终无需账号。下面详细说明两个方向的具体做法。</p>

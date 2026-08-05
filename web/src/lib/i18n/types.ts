@@ -713,7 +713,12 @@ export interface Messages {
     points: string[];
     limit: (max: number) => string;
   };
-  legal: { privacy: string; terms: string; security: string; support: string };
+  // Footer labels for the generated static documents. `releases` is not a legal
+  // page — nor is `support` — but it is the same kind of footer link to the same
+  // kind of generated directory, and splitting the group would only add a second
+  // place to look. Keep the values equal to RELEASES_LABELS in
+  // scripts/pages/shared.mjs, which labels the same link on the static pages.
+  legal: { privacy: string; terms: string; security: string; support: string; releases: string };
   // Footer link label for the generated static Guides hub page.
   learn: { hub: string };
   // Client-local "recent transfers" panel (localStorage-backed, this device only).

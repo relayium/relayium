@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>نقل الملفات بمسح رمز QR ضوئيًا</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-by-scanning-a-qr-code/">English</a><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/">中文</a><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code/">日本語</a><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code/">한국어</a><a href="/de/how-to/transfer-files-by-scanning-a-qr-code/">Deutsch</a><a href="/fr/how-to/transfer-files-by-scanning-a-qr-code/">Français</a><a href="/ar/how-to/transfer-files-by-scanning-a-qr-code/" aria-current="true">العربية</a><a href="/es/how-to/transfer-files-by-scanning-a-qr-code/">Español</a><a href="/pt/how-to/transfer-files-by-scanning-a-qr-code/">Português</a></nav>
       <p class="lead">إدخال رمز من ستة أرقام سريع، لكن المسح الضوئي أسرع — وجّه كاميرا الهاتف نحو الشاشة ويُهيَّأ النقل قبل أن تنتهي من الكتابة. تُظهر عملية اقتران Relayium رمز QR إلى جانب كل رمز اقتران لهذا السبب بالضبط.</p>
       <p class="lead">هذا هو مسار النقل عبر الشبكات: فهو يعمل سواء أكان الجهازان على نفس شبكة Wi-Fi أم على طرفي الكوكب المتقابلين. رمز QR ليس سوى اختصار إلى ذلك المسار — فالرمز والرابط الكامنان تحته يعملان بالطريقة نفسها تمامًا إن لم يكن المسح مناسبًا.</p>

@@ -38,6 +38,11 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+.releases{list-style:none;margin:16px 0 0;padding:0}
+.releases li{display:flex;gap:16px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border)}
+.releases li:last-child{border-bottom:0}
+.releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
+.releases .date{font-size:14px;font-variant-numeric:tabular-nums}
 </style>
   </head>
   <body>
@@ -48,7 +53,13 @@ footer a{color:var(--text-h);text-decoration:none}
            visual position — it is a labelled <nav> landmark either way. -->
       <main>
       <h1>服务条款</h1>
-      <p class="updated">最后更新: 2026-07-31</p>
+      <!-- The date is isolated for the same reason the release rows are: an ISO
+           date is three digit runs joined by hyphens, and on the Arabic page the
+           bidi algorithm lays those runs out right-to-left. "2026-08-03" was
+           rendering as "03-08-2026" on all four Arabic legal pages — measured in
+           a browser, not deduced. <bdi> resolves LTR (no strong character
+           inside) and pins the order. -->
+      <p class="updated">最后更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/terms/">English</a><a href="/zh/terms/" aria-current="true">中文</a><a href="/ja/terms/">日本語</a><a href="/ko/terms/">한국어</a><a href="/de/terms/">Deutsch</a><a href="/fr/terms/">Français</a><a href="/ar/terms/">العربية</a><a href="/es/terms/">Español</a><a href="/pt/terms/">Português</a></nav>
       <p>使用 Relayium 即表示你同意本条款。Relayium 是一项开源服务，让你在设备之间端到端加密地发送文件与实时文本。核心服务免费，部分可选套餐需付费——详见「订阅与计费」。</p>
       <h2>服务说明</h2><p>Relayium 在设备之间端到端加密地传输文件与实时文本。核心服务免费，其源代码以 AGPL-3.0 许可证开源。可选的付费套餐可提高存储、传输与保留时长上限——详见「订阅与计费」。</p>
@@ -71,6 +82,7 @@ footer a{color:var(--text-h);text-decoration:none}
         <a href="/zh/apps/">应用</a>
         <a href="/zh/privacy/">隐私政策</a>
         <a href="/pricing">价格</a>
+        <a href="/zh/releases/">版本发布记录</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

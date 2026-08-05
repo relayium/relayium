@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>AirDrop لأنظمة Windows وLinux وAndroid</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/airdrop-for-windows-and-android/">English</a><a href="/zh/how-to/airdrop-for-windows-and-android/">中文</a><a href="/ja/how-to/airdrop-for-windows-and-android/">日本語</a><a href="/ko/how-to/airdrop-for-windows-and-android/">한국어</a><a href="/de/how-to/airdrop-for-windows-and-android/">Deutsch</a><a href="/fr/how-to/airdrop-for-windows-and-android/">Français</a><a href="/ar/how-to/airdrop-for-windows-and-android/" aria-current="true">العربية</a><a href="/es/how-to/airdrop-for-windows-and-android/">Español</a><a href="/pt/how-to/airdrop-for-windows-and-android/">Português</a></nav>
       <p class="lead">لا يوجد AirDrop إلا داخل عالم Apple، ما يترك الجميع عداه — Windows وLinux وAndroid وأي منزل يجمع بين أجهزة متنوعة — دون بديل مدمج. يعرض هذا الدليل أقرب بديل لـ AirDrop للأجهزة غير التابعة لـ Apple: افتح صفحة ويب على الطرفين، وينتقل الملف من تلقاء نفسه.</p>
       <p class="lead">يعمل بالطريقة نفسها بصرف النظر عن المنصة، لذا فهو يغطي أيضًا الحالة التي لم يُحسن AirDrop التعامل معها قط: حاسوب محمول بنظام Windows وحاسوب مكتبي بنظام Linux وهاتف Android في الغرفة نفسها، أو الثلاثة جميعًا مع إضافة iPhone.</p>

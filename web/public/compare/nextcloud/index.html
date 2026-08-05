@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs Nextcloud for sending files</h1>
-      <p class="updated">Last updated: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/nextcloud/" aria-current="true">English</a><a href="/zh/compare/nextcloud/">中文</a><a href="/ja/compare/nextcloud/">日本語</a><a href="/ko/compare/nextcloud/">한국어</a><a href="/de/compare/nextcloud/">Deutsch</a><a href="/fr/compare/nextcloud/">Français</a><a href="/ar/compare/nextcloud/">العربية</a><a href="/es/compare/nextcloud/">Español</a><a href="/pt/compare/nextcloud/">Português</a></nav>
       <p class="lead">Nextcloud turned self-hosting into a real alternative to Google Drive or Dropbox: your own files, your own sync across every device, your own calendar and contacts, all under a domain you control. It&#39;s genuinely powerful software, and if what you want is a permanent home for your files, Nextcloud is the right tool for the job.</p>
       <p class="lead">This article compares the two fairly. Nextcloud is built to store and sync data indefinitely, with a web server, database, PHP runtime, and ongoing updates. Relayium solves the narrower hand-off: realtime transfer keeps no server-side content copy, using a direct browser path on a LAN or encrypted TURN across networks, while an optional zero-knowledge link expires. For durable cloud storage Nextcloud fits better; for moving a file Relayium is lighter.</p>

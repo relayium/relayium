@@ -711,7 +711,7 @@ const ko: Messages = {
     ],
     limit: (max) => `메시지당 최대 ${max.toLocaleString()} UTF-8 바이트 — 그보다 큰 내용은 파일로 보내세요.`,
   },
-  legal: { privacy: "개인정보 처리방침", terms: "이용약관", security: "보안", support: "지원" },
+  legal: { privacy: "개인정보 처리방침", terms: "이용약관", security: "보안", support: "지원", releases: "릴리스" },
   learn: { hub: "가이드" },
   historyTitle: "최근 전송",
   historyEmpty: "아직 전송 기록이 없습니다",

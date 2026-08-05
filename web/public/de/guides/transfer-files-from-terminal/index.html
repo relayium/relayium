@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Dateien und Text mit der Relayium CLI vom Terminal übertragen</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/transfer-files-from-terminal/">English</a><a href="/zh/guides/transfer-files-from-terminal/">中文</a><a href="/ja/guides/transfer-files-from-terminal/">日本語</a><a href="/ko/guides/transfer-files-from-terminal/">한국어</a><a href="/de/guides/transfer-files-from-terminal/" aria-current="true">Deutsch</a><a href="/fr/guides/transfer-files-from-terminal/">Français</a><a href="/ar/guides/transfer-files-from-terminal/">العربية</a><a href="/es/guides/transfer-files-from-terminal/">Español</a><a href="/pt/guides/transfer-files-from-terminal/">Português</a></nav>
       <p class="lead">Die Relayium CLI ist ein kleines einzelnes Binary für Dateien und flüchtigen Text im Terminal — Ende-zu-Ende-verschlüsselt, selbst hostbar und kostenlos. Kopiere Dateien auf Server, pushe Builds zwischen Maschinen oder sende URLs, Befehle und Codeausschnitte, ohne sie erst als Datei zu speichern.</p>
       <p class="lead">Egal welchen Weg du nutzt, die Dateibytes wandern direkt zwischen den beiden Enden und laufen nie über Relayiums Server. Diese Anleitung bringt dich zur Installation und durch deine erste Übertragung und verweist dich dann auf die ausführlicheren Anleitungen zu jedem Modus.</p>

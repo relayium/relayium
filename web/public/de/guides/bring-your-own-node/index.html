@@ -83,7 +83,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Bring Your Own Node: Relay und Speicher von Relayium kostenlos nutzen</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-22</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-22</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node/">English</a><a href="/zh/guides/bring-your-own-node/">中文</a><a href="/ja/guides/bring-your-own-node/">日本語</a><a href="/ko/guides/bring-your-own-node/">한국어</a><a href="/de/guides/bring-your-own-node/" aria-current="true">Deutsch</a><a href="/fr/guides/bring-your-own-node/">Français</a><a href="/ar/guides/bring-your-own-node/">العربية</a><a href="/es/guides/bring-your-own-node/">Español</a><a href="/pt/guides/bring-your-own-node/">Português</a></nav>
       <p class="lead">Netzübergreifende Übertragungen und gespeicherte Links nutzen Relay-Bandbreite und Speicherplatz, die uns Geld kosten, und laufen daher auf einem kostenlosen Kontingent, das darüber hinaus kostenpflichtig ist. Es gibt einen Ausweg: Betreibe deinen eigenen Relay-/Speicher-Node, binde ihn an dein Konto, und deine Übertragungen fließen über deinen Node statt über unseren — nichts wird gemessen, nichts wird berechnet.</p>
       <p class="lead">Das unterscheidet sich davon, den gesamten Relayium-Server selbst zu hosten. Du verwendest weiterhin dein normales relayium.com-Konto und dieselben Apps; du fügst lediglich einen Node hinzu, der dir gehört und deinen Datenverkehr trägt. Diese Anleitung führt dich in etwa fünf Minuten von einem frischen Linux-Rechner zu einem Online-Node.</p>

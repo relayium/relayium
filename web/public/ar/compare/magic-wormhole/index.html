@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium مقابل magic-wormhole: نقل الملفات عبر CLI</h1>
-      <p class="updated">آخر تحديث: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/magic-wormhole/">English</a><a href="/zh/compare/magic-wormhole/">中文</a><a href="/ja/compare/magic-wormhole/">日本語</a><a href="/ko/compare/magic-wormhole/">한국어</a><a href="/de/compare/magic-wormhole/">Deutsch</a><a href="/fr/compare/magic-wormhole/">Français</a><a href="/ar/compare/magic-wormhole/" aria-current="true">العربية</a><a href="/es/compare/magic-wormhole/">Español</a><a href="/pt/compare/magic-wormhole/">Português</a></nav>
       <p class="lead">اكتسب magic-wormhole بهدوء جمهورًا وفيًا: شغّله، فتحصل على رمز قصير سهل القراءة مثل 7-crossover-clockwork، اقرأه للطرف الآخر فيصل الملف — مشفَّرًا طوال الطريق، بدون حساب وبدون خادم عليك التفكير فيه. وقد بُني CLI في Relayium حول فكرة مشابهة: رمز قصير يقرن جهازي حاسوب مباشرة ويشفّر كل ما بينهما.</p>
       <p class="lead">يتداخل الاثنان كثيرًا، وحيث لا يتداخلان يستحق الأمر الدقّة في وصفه — بما في ذلك الموضع الوحيد الذي يكون فيه magic-wormhole اليوم أكثر صمودًا فعلًا من CLI في Relayium.</p>

@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Dateien über die Kommandozeile empfangen</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line/">English</a><a href="/zh/guides/receive-files-from-the-command-line/">中文</a><a href="/ja/guides/receive-files-from-the-command-line/">日本語</a><a href="/ko/guides/receive-files-from-the-command-line/">한국어</a><a href="/de/guides/receive-files-from-the-command-line/" aria-current="true">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line/">Français</a><a href="/ar/guides/receive-files-from-the-command-line/">العربية</a><a href="/es/guides/receive-files-from-the-command-line/">Español</a><a href="/pt/guides/receive-files-from-the-command-line/">Português</a></nav>
       <p class="lead">Senden ist nur die halbe Geschichte — früher oder später bist du auf der Empfängerseite: Ein Kollege will dir eine Datei über das Internet übergeben, eine deiner eigenen Maschinen will sie an eine andere weiterreichen, oder du willst selbst etwas von einem Server holen, den du verwaltest. Die Relayium CLI deckt alle drei Fälle mit jeweils einem eigenen Befehl ab, und keiner davon braucht ein Konto.</p>
       <p class="lead">Wähle receive, wenn jemand anderes per Pairing-Code zu dir pusht, serve, wenn du einen dauerhaften Eingangskorb willst, zu dem vertrauenswürdige Maschinen jederzeit pushen können, und pull, wenn du selbst zu einem Server greifst, in den du dich schon per SSH einloggen kannst.</p>

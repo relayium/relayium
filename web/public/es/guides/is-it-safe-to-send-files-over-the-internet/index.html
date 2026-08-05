@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>¿Es seguro enviar archivos por internet?</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/is-it-safe-to-send-files-over-the-internet/">English</a><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">中文</a><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/">日本語</a><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet/">한국어</a><a href="/de/guides/is-it-safe-to-send-files-over-the-internet/">Deutsch</a><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet/">Français</a><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet/">العربية</a><a href="/es/guides/is-it-safe-to-send-files-over-the-internet/" aria-current="true">Español</a><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet/">Português</a></nav>
       <p class="lead">«¿Es seguro enviar este archivo?» es una pregunta razonable para detenerse a plantear, ya sea una declaración de la renta, un contrato o simplemente fotos que preferirías mantener privadas. Esta guía no pretende asustarte para que dejes las herramientas habituales — se trata de recorrer, con claridad, qué le ocurre en realidad a un archivo cuando lo envías por correo, lo dejas en una carpeta en la nube o lo llevas en una memoria USB, qué prometen de verdad las expresiones «cifrado de extremo a extremo» y «conocimiento cero», y qué comprobar antes de confiar algo que te importa a cualquier herramienta.</p>
       <p class="lead">Nada de esto requiere formación técnica. Al terminar, sabrás qué preguntas hacer — sobre cualquier método de transferencia, incluido este.</p>

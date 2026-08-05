@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs Dropbox pour envoyer un fichier</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/dropbox/">English</a><a href="/zh/compare/dropbox/">中文</a><a href="/ja/compare/dropbox/">日本語</a><a href="/ko/compare/dropbox/">한국어</a><a href="/de/compare/dropbox/">Deutsch</a><a href="/fr/compare/dropbox/" aria-current="true">Français</a><a href="/ar/compare/dropbox/">العربية</a><a href="/es/compare/dropbox/">Español</a><a href="/pt/compare/dropbox/">Português</a></nav>
       <p class="lead">Dropbox mérite sa réputation. Il synchronise un dossier sur tous vos appareils, conserve un historique des versions quand vous écrasez quelque chose par erreur, et permet de remettre tout un dossier de projet à un client via un lien partagé sans effort. Si vous voulez un dossier de travail qui reste simplement synchronisé, Dropbox fait bien ce travail, et cet article ne cherche pas à vous en dissuader.</p>
       <p class="lead">Même pour remettre un seul fichier, Dropbox le place d&#39;abord dans un compte. Relayium le diffuse en temps réel : WebRTC direct sur le même LAN, ou texte chiffré de bout en bout via TURN par conception entre réseaux ; il peut aussi créer un lien déchiffré uniquement dans le navigateur et supprimé selon votre calendrier.</p>

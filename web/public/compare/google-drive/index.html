@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs Google Drive for sending files</h1>
-      <p class="updated">Last updated: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/google-drive/" aria-current="true">English</a><a href="/zh/compare/google-drive/">中文</a><a href="/ja/compare/google-drive/">日本語</a><a href="/ko/compare/google-drive/">한국어</a><a href="/de/compare/google-drive/">Deutsch</a><a href="/fr/compare/google-drive/">Français</a><a href="/ar/compare/google-drive/">العربية</a><a href="/es/compare/google-drive/">Español</a><a href="/pt/compare/google-drive/">Português</a></nav>
       <p class="lead">Google Drive is a genuinely good product: your files live in one place, sync across devices, stay backed up, and are easy to co-edit with a team. If what you need is a durable home for files you will come back to, Drive is a reasonable default, and this article is not trying to talk you out of that.</p>
       <p class="lead">But a lot of what people use Drive for is really a one-off hand-off — sending a video to a friend, a contract to a client, a dataset to a colleague — not durable storage. For that specific job, uploading a copy to Google&#39;s servers and then configuring who can see it is more machinery than the task needs. Relayium is built for exactly that hand-off: realtime transfer keeps no server-side content copy, using a direct browser path on a LAN or end-to-end encrypted TURN across networks, while an optional stored link can be decrypted only by your recipient.</p>

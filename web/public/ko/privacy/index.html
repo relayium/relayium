@@ -38,6 +38,11 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+.releases{list-style:none;margin:16px 0 0;padding:0}
+.releases li{display:flex;gap:16px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border)}
+.releases li:last-child{border-bottom:0}
+.releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
+.releases .date{font-size:14px;font-variant-numeric:tabular-nums}
 </style>
   </head>
   <body>
@@ -48,7 +53,13 @@ footer a{color:var(--text-h);text-decoration:none}
            visual position — it is a labelled <nav> landmark either way. -->
       <main>
       <h1>개인정보 처리방침</h1>
-      <p class="updated">최종 업데이트: 2026-07-31</p>
+      <!-- The date is isolated for the same reason the release rows are: an ISO
+           date is three digit runs joined by hyphens, and on the Arabic page the
+           bidi algorithm lays those runs out right-to-left. "2026-08-03" was
+           rendering as "03-08-2026" on all four Arabic legal pages — measured in
+           a browser, not deduced. <bdi> resolves LTR (no strong character
+           inside) and pins the order. -->
+      <p class="updated">최종 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/privacy/">English</a><a href="/zh/privacy/">中文</a><a href="/ja/privacy/">日本語</a><a href="/ko/privacy/" aria-current="true">한국어</a><a href="/de/privacy/">Deutsch</a><a href="/fr/privacy/">Français</a><a href="/ar/privacy/">العربية</a><a href="/es/privacy/">Español</a><a href="/pt/privacy/">Português</a></nav>
       <p>Relayium은 파일과 임시 텍스트가 사용자의 것으로 남도록 설계되었습니다. 브라우저의 로컬 세션은 직접 연결되고, 네트워크 간 브라우저 세션은 TURN을 통해 종단간 암호화된 암호문을 전송할 수 있습니다. CLI 텍스트는 직접 연결만 사용하며, 임시 다운로드 링크에는 영지식 암호화된 파일 암호문만 저장됩니다.</p>
       <p>이 페이지에서는 서비스가 실제로 처리하는 소량의 데이터와 의도적으로 수집하지 않는 데이터를 설명합니다.</p>
@@ -72,6 +83,7 @@ footer a{color:var(--text-h);text-decoration:none}
         <a href="/ko/apps/">앱</a>
         <a href="/ko/terms/">이용약관</a>
         <a href="/pricing">요금제</a>
+        <a href="/ko/releases/">릴리스</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Transferir arquivos escaneando um código QR</h1>
-      <p class="updated">Última atualização: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-by-scanning-a-qr-code/">English</a><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/">中文</a><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code/">日本語</a><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code/">한국어</a><a href="/de/how-to/transfer-files-by-scanning-a-qr-code/">Deutsch</a><a href="/fr/how-to/transfer-files-by-scanning-a-qr-code/">Français</a><a href="/ar/how-to/transfer-files-by-scanning-a-qr-code/">العربية</a><a href="/es/how-to/transfer-files-by-scanning-a-qr-code/">Español</a><a href="/pt/how-to/transfer-files-by-scanning-a-qr-code/" aria-current="true">Português</a></nav>
       <p class="lead">Digitar um código de seis dígitos é rápido, mas escanear é ainda mais rápido — aponte a câmera do celular para a tela e a transferência fica pronta antes de você terminar de digitar. O fluxo de emparelhamento do Relayium mostra um código QR ao lado de cada código de emparelhamento exatamente por isso.</p>
       <p class="lead">Este é o fluxo entre redes: funciona tanto se os dois dispositivos estiverem no mesmo Wi-Fi como em lados opostos do planeta. O QR é só um atalho para esse fluxo — o código e o link abaixo dele funcionam exatamente da mesma forma se escanear não for conveniente.</p>

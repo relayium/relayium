@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Transférer des fichiers en scannant un code QR</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-by-scanning-a-qr-code/">English</a><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/">中文</a><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code/">日本語</a><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code/">한국어</a><a href="/de/how-to/transfer-files-by-scanning-a-qr-code/">Deutsch</a><a href="/fr/how-to/transfer-files-by-scanning-a-qr-code/" aria-current="true">Français</a><a href="/ar/how-to/transfer-files-by-scanning-a-qr-code/">العربية</a><a href="/es/how-to/transfer-files-by-scanning-a-qr-code/">Español</a><a href="/pt/how-to/transfer-files-by-scanning-a-qr-code/">Português</a></nav>
       <p class="lead">Taper un code de six chiffres est rapide, mais scanner l&#39;est encore plus : pointez la caméra du téléphone vers l&#39;écran, et le transfert est prêt avant même d&#39;avoir fini de taper le code. C&#39;est exactement pour cela que l&#39;écran d&#39;appairage de Relayium affiche un code QR juste à côté de chaque code d&#39;appairage.</p>
       <p class="lead">C&#39;est le mode d&#39;appairage entre réseaux différents : il fonctionne que les deux appareils soient sur le même Wi-Fi ou aux antipodes l&#39;un de l&#39;autre. Le code QR n&#39;est qu&#39;un raccourci vers ce mode — le code et le lien qu&#39;il contient fonctionnent exactement de la même façon si scanner n&#39;est pas pratique.</p>

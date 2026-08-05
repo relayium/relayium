@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium مقابل scp: نقل ملفات أبسط عبر SSH</h1>
-      <p class="updated">آخر تحديث: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/scp/">English</a><a href="/zh/compare/scp/">中文</a><a href="/ja/compare/scp/">日本語</a><a href="/ko/compare/scp/">한국어</a><a href="/de/compare/scp/">Deutsch</a><a href="/fr/compare/scp/">Français</a><a href="/ar/compare/scp/" aria-current="true">العربية</a><a href="/es/compare/scp/">Español</a><a href="/pt/compare/scp/">Português</a></nav>
       <p class="lead">ظل scp لعقود الطريقة الافتراضية لنقل ملف عبر SSH: فهو موجود سلفًا على كل جهاز شبيه بـ Unix تقريبًا، والجميع يعرف صيغته، وهو ببساطة يعمل. لا داعي للتظاهر بغير ذلك — فقد استحق scp مكانته عن جدارة.</p>
       <p class="lead">لا تحل واجهة Relayium السطرية محل SSH؛ بل تركب فوق نفس وصول SSH الذي تملكه أصلًا. يستخدم push وpull اتصالك عبر SSH بالطريقة نفسها التي يستخدمها scp، لكنهما يضيفان بضعة أمور لم يُبنَ scp أصلًا للقيام بها: استئناف نقل انقطع، والتحقق من كل ملف بمجموع تحقق، وإظهار تقدّم فعلي، والعمل حتى عندما لا يكون في الطرف البعيد أي شيء مثبَّت على الإطلاق.</p>

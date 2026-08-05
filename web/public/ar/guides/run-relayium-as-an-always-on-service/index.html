@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>شغّل Relayium كخدمة استقبال دائمة التشغيل</h1>
-      <p class="updated">آخر تحديث: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service/">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service/">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service/">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service/">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service/">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service/">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service/" aria-current="true">العربية</a><a href="/es/guides/run-relayium-as-an-always-on-service/">Español</a><a href="/pt/guides/run-relayium-as-an-always-on-service/">Português</a></nav>
       <p class="lead">يتعامل relayium serve --once مع عملية نقل واردة واحدة ثم يخرج — وهذا مناسب لعملية سحب لمرة واحدة. لكن إذا أردت أن تكون آلة ما نقطة إنزال دائمة — خادم منزلي تصل إليه النسخ الاحتياطية ليلًا، أو آلة بناء يدفع إليها CI منتجاتها، أو NAS يستطيع هاتفك إرسال الصور إليه في أي وقت — فأنت تريد أن يظل serve قيد التشغيل طوال الوقت، لا أن يُشغَّل يدويًا لكل عملية نقل.</p>
       <p class="lead">يغطّي هذا الدليل بدء مُستمِع طويل التشغيل، والموافقة على من يُسمَح له بالدفع إليه، والتفويض المسبق للنظراء في الحالات التي لا يكون فيها أحد أمام الطرفية، وتشغيله تحت systemd، والسماح لمُرسِل يستخدم sync --delete بأن يعكس عمليات الحذف.</p>

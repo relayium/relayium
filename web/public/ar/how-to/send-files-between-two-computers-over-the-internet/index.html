@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>إرسال الملفات بين حاسوبين عبر الإنترنت</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-between-two-computers-over-the-internet/">English</a><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/">中文</a><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">日本語</a><a href="/ko/how-to/send-files-between-two-computers-over-the-internet/">한국어</a><a href="/de/how-to/send-files-between-two-computers-over-the-internet/">Deutsch</a><a href="/fr/how-to/send-files-between-two-computers-over-the-internet/">Français</a><a href="/ar/how-to/send-files-between-two-computers-over-the-internet/" aria-current="true">العربية</a><a href="/es/how-to/send-files-between-two-computers-over-the-internet/">Español</a><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Português</a></nav>
       <p class="lead">إرسال ملف إلى حاسوب آخر يعني عادةً رفعه إلى مكان ما أولًا — قرص سحابي، مرفق بريد إلكتروني، تطبيق محادثة — والأمل في أن يتمكن المُستقبِل من إخراجه مجددًا. يتخطى Relayium خطوة التخزين هذه: يتصل المتصفحان مباشرةً على شبكة LAN نفسها؛ وعبر الشبكات لا يحمل مُرحِّل TURN سوى نص مشفَّر من الطرف إلى الطرف، ولا يحتفظ بنسخة محتوى فوري أو سجل على الخادم.</p>
       <p class="lead">يغطي هذا الدليل كلتا الحالتين — حاسوبان على نفس الشبكة، وحاسوبان على شبكتين مختلفتين تمامًا (منازل، مكاتب، بلدان مختلفة) — ويوضح بالضبط ما يحتاج كل طرف إلى فعله.</p>

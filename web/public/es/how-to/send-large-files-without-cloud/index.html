@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Cómo enviar archivos grandes sin la nube</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud/">English</a><a href="/zh/how-to/send-large-files-without-cloud/">中文</a><a href="/ja/how-to/send-large-files-without-cloud/">日本語</a><a href="/ko/how-to/send-large-files-without-cloud/">한국어</a><a href="/de/how-to/send-large-files-without-cloud/">Deutsch</a><a href="/fr/how-to/send-large-files-without-cloud/">Français</a><a href="/ar/how-to/send-large-files-without-cloud/">العربية</a><a href="/es/how-to/send-large-files-without-cloud/" aria-current="true">Español</a><a href="/pt/how-to/send-large-files-without-cloud/">Português</a></nav>
       <p class="lead">Una exportación de vídeo de 20 GB o un pesado archivo de proyecto es justo donde el almacenamiento en la nube se siente más lento: subes el archivo entero una vez, esperas y luego la otra persona lo descarga de nuevo — dos transferencias completas más lo que permita tu cuota de almacenamiento. Para una entrega única, es mucho copiar y esperar por bytes que solo tenían que ir de A a B.</p>
       <p class="lead">Para un archivo grande, Relayium recomienda un enlace almacenado y cifrado de extremo a extremo: quien recibe no necesita estar en línea durante la subida y lo recoge después. Mantén abierta la página de envío hasta que termine; luego el enlace queda disponible hasta caducar. Si ambos pueden seguir en línea, el tiempo real es la alternativa inmediata: WebRTC directo en LAN o texto cifrado por TURN entre redes. El tiempo real no conserva copia de contenido ni historial en el servidor.</p>

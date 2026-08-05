@@ -38,6 +38,11 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+.releases{list-style:none;margin:16px 0 0;padding:0}
+.releases li{display:flex;gap:16px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border)}
+.releases li:last-child{border-bottom:0}
+.releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
+.releases .date{font-size:14px;font-variant-numeric:tabular-nums}
 </style>
   </head>
   <body>
@@ -48,7 +53,13 @@ footer a{color:var(--text-h);text-decoration:none}
            visual position — it is a labelled <nav> landmark either way. -->
       <main>
       <h1>プライバシーポリシー</h1>
-      <p class="updated">最終更新: 2026-07-31</p>
+      <!-- The date is isolated for the same reason the release rows are: an ISO
+           date is three digit runs joined by hyphens, and on the Arabic page the
+           bidi algorithm lays those runs out right-to-left. "2026-08-03" was
+           rendering as "03-08-2026" on all four Arabic legal pages — measured in
+           a browser, not deduced. <bdi> resolves LTR (no strong character
+           inside) and pins the order. -->
+      <p class="updated">最終更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/privacy/">English</a><a href="/zh/privacy/">中文</a><a href="/ja/privacy/" aria-current="true">日本語</a><a href="/ko/privacy/">한국어</a><a href="/de/privacy/">Deutsch</a><a href="/fr/privacy/">Français</a><a href="/ar/privacy/">العربية</a><a href="/es/privacy/">Español</a><a href="/pt/privacy/">Português</a></nav>
       <p>Relayium はファイルと一時テキストがお客様のものであり続けるよう設計されています。ブラウザのローカルセッションは直接接続し、ネットワークをまたぐブラウザセッションは TURN 経由でエンドツーエンド暗号化された暗号文を運ぶ場合があります。CLI テキストは直接接続のみで、一時保存リンクにはゼロ知識暗号化されたファイル暗号文だけが保存されます。</p>
       <p>このページでは、本サービスが実際に扱う少量のデータと、意図的に取得しないデータについて説明します。</p>
@@ -72,6 +83,7 @@ footer a{color:var(--text-h);text-decoration:none}
         <a href="/ja/apps/">アプリ</a>
         <a href="/ja/terms/">利用規約</a>
         <a href="/pricing">料金</a>
+        <a href="/ja/releases/">リリース</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

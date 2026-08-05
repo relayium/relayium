@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium と WeTransfer の比較：暗号化リンクとリアルタイム受け渡し</h1>
-      <p class="updated">最終更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最終更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/wetransfer/">English</a><a href="/zh/compare/wetransfer/">中文</a><a href="/ja/compare/wetransfer/" aria-current="true">日本語</a><a href="/ko/compare/wetransfer/">한국어</a><a href="/de/compare/wetransfer/">Deutsch</a><a href="/fr/compare/wetransfer/">Français</a><a href="/ar/compare/wetransfer/">العربية</a><a href="/es/compare/wetransfer/">Español</a><a href="/pt/compare/wetransfer/">Português</a></nav>
       <p class="lead">WeTransfer は大きなファイルの送信を簡単にしました。ファイルをドロップしてリンクを受け取れば、相手は好きなときにダウンロードできます。送った時点で相手がオフラインでも大丈夫です。この非同期で、受け取りにアカウントが要らない体験は本当に優れており、多くの人が選ぶ理由です。</p>
       <p class="lead">本記事は公平に比較します。大きなファイルや後で受け取る場合、Relayium も保存リンクを推奨しますが、サーバーが保持するのはゼロ知識の暗号文だけです。リアルタイムは、双方がオンラインのまま小さなファイルやテキストをすばやく渡す別の強みです。同一 LAN では直結し、ネットワーク間では TURN がエンドツーエンド暗号文を運びます。</p>

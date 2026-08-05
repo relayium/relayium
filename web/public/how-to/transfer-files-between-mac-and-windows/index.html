@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Transfer files between a Mac and a Windows PC</h1>
-      <p class="updated">Last updated: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-between-mac-and-windows/" aria-current="true">English</a><a href="/zh/how-to/transfer-files-between-mac-and-windows/">中文</a><a href="/ja/how-to/transfer-files-between-mac-and-windows/">日本語</a><a href="/ko/how-to/transfer-files-between-mac-and-windows/">한국어</a><a href="/de/how-to/transfer-files-between-mac-and-windows/">Deutsch</a><a href="/fr/how-to/transfer-files-between-mac-and-windows/">Français</a><a href="/ar/how-to/transfer-files-between-mac-and-windows/">العربية</a><a href="/es/how-to/transfer-files-between-mac-and-windows/">Español</a><a href="/pt/how-to/transfer-files-between-mac-and-windows/">Português</a></nav>
       <p class="lead">Macs and PCs don&#39;t speak the same file-sharing language out of the box. AirDrop is Apple-only, Windows&#39; network sharing wants both machines on a matching workgroup or domain, and neither one is exactly friendly to set up in five minutes when you just want to move one folder of project files from a MacBook to a Windows desktop.</p>
       <p class="lead">Relayium sidesteps the whole compatibility question. Open the same page on both computers: on the same LAN the end-to-end encrypted files travel directly, while across networks a TURN relay carries ciphertext it cannot read or decrypt and keeps no realtime content copy or history. Nothing needs installing; the creator signs in for cross-network pairing, while the person joining never needs an account. Here&#39;s exactly how it works in both directions.</p>

@@ -83,7 +83,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Use seu próprio nó: aproveite o retransmissor e o armazenamento do Relayium de graça</h1>
-      <p class="updated">Última atualização: 2026-07-22</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-22</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node/">English</a><a href="/zh/guides/bring-your-own-node/">中文</a><a href="/ja/guides/bring-your-own-node/">日本語</a><a href="/ko/guides/bring-your-own-node/">한국어</a><a href="/de/guides/bring-your-own-node/">Deutsch</a><a href="/fr/guides/bring-your-own-node/">Français</a><a href="/ar/guides/bring-your-own-node/">العربية</a><a href="/es/guides/bring-your-own-node/">Español</a><a href="/pt/guides/bring-your-own-node/" aria-current="true">Português</a></nav>
       <p class="lead">Transferências entre redes e links armazenados usam largura de banda de retransmissão e disco que nos custam dinheiro, então funcionam dentro de uma cota gratuita e são pagas além dela. Há um jeito de contornar isso: rode seu próprio nó de retransmissão/armazenamento, vincule-o à sua conta, e suas transferências fluem pelo seu nó em vez do nosso — nada medido, nada faturado.</p>
       <p class="lead">Isso é diferente de auto-hospedar o servidor Relayium inteiro. Você continua usando sua conta habitual do relayium.com e os mesmos aplicativos; só está adicionando um nó que é seu para carregar seu tráfego. Este guia leva você de uma máquina Linux recém-instalada a um nó online em cerca de cinco minutos.</p>

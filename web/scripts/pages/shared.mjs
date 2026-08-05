@@ -25,6 +25,12 @@ export const PRICING_LABELS = {
 };
 /** The /pricing URL. English-only, an SPA route, so no trailing slash. */
 export const PRICING_URL = "/pricing";
+// Footer link label for /releases/, per language. Matches each locale's page
+// title in content/releases.mjs — a footer that calls the page one thing and the
+// page itself another is the drift GLOSSARY.md exists to stop.
+export const RELEASES_LABELS = {
+  en: "Releases", zh: "版本发布记录", ja: "リリース", ko: "릴리스", de: "Versionen", fr: "Versions", ar: "الإصدارات", es: "Versiones", pt: "Versões",
+};
 export const BCP47 = { en: "en", zh: "zh-Hans", ja: "ja", ko: "ko", de: "de", fr: "fr", ar: "ar", es: "es", pt: "pt" };
 // Open Graph wants language_TERRITORY with an underscore, not BCP47.
 export const OG_LOCALE = { en: "en_US", zh: "zh_CN", ja: "ja_JP", ko: "ko_KR", de: "de_DE", fr: "fr_FR", ar: "ar_AR", es: "es_ES", pt: "pt_BR" };

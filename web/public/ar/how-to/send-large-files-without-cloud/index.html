@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>كيفية إرسال الملفات الكبيرة دون سحابة</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud/">English</a><a href="/zh/how-to/send-large-files-without-cloud/">中文</a><a href="/ja/how-to/send-large-files-without-cloud/">日本語</a><a href="/ko/how-to/send-large-files-without-cloud/">한국어</a><a href="/de/how-to/send-large-files-without-cloud/">Deutsch</a><a href="/fr/how-to/send-large-files-without-cloud/">Français</a><a href="/ar/how-to/send-large-files-without-cloud/" aria-current="true">العربية</a><a href="/es/how-to/send-large-files-without-cloud/">Español</a><a href="/pt/how-to/send-large-files-without-cloud/">Português</a></nav>
       <p class="lead">تصدير فيديو بحجم 20 غيغابايت أو أرشيف مشروع ثقيل هو تحديدًا حيث يبدو تخزين السحابة أبطأ ما يكون: ترفع الملف كاملًا مرة، تنتظر، ثم ينزّله الطرف الآخر مجددًا — نقلتان كاملتان زائد ما تسمح به حصة التخزين لديك. لتسليم لمرة واحدة، هذا كمٌّ كبير من النسخ والانتظار لبايتات لم تكن بحاجة إلا للانتقال من أ إلى ب.</p>
       <p class="lead">للملف الكبير يوصي Relayium برابط تنزيل مخزّن ومشفّر من الطرف إلى الطرف: لا يلزم اتصال المستقبِل أثناء الرفع ويمكنه الاستلام لاحقًا. أبقِ صفحة المُرسِل مفتوحة حتى يكتمل الرفع؛ بعدها يبقى الرابط حتى انتهاء صلاحيته. وإذا أمكن للطرفين البقاء متصلين فالنقل الفوري بديل مباشر: WebRTC داخل LAN وTURN للنص المشفّر عبر الشبكات. ولا يحتفظ النقل الفوري بنسخة محتوى على الخادم أو بسجل.</p>

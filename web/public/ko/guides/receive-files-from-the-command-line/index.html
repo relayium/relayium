@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>명령줄에서 파일 받기</h1>
-      <p class="updated">마지막 업데이트: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line/">English</a><a href="/zh/guides/receive-files-from-the-command-line/">中文</a><a href="/ja/guides/receive-files-from-the-command-line/">日本語</a><a href="/ko/guides/receive-files-from-the-command-line/" aria-current="true">한국어</a><a href="/de/guides/receive-files-from-the-command-line/">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line/">Français</a><a href="/ar/guides/receive-files-from-the-command-line/">العربية</a><a href="/es/guides/receive-files-from-the-command-line/">Español</a><a href="/pt/guides/receive-files-from-the-command-line/">Português</a></nav>
       <p class="lead">보내는 것은 이야기의 절반일 뿐입니다——언젠가는 받는 쪽이 됩니다. 동료가 인터넷 너머로 파일을 건네주고 싶을 때, 내 기기 하나가 다른 기기에게 넘겨주고 싶을 때, 또는 본인이 관리하는 서버에서 무언가를 직접 가져오고 싶을 때. Relayium CLI는 이 세 가지 각각에 서로 다른 명령으로 대응하며, 어느 쪽도 계정이 필요 없습니다.</p>
       <p class="lead">상대가 페어링 코드로 푸시해 올 때는 receive를, 신뢰하는 기기들이 언제든 푸시할 수 있는 상시 수신함이 필요할 때는 serve를, 그리고 이미 SSH로 접속 가능한 서버로 직접 다가갈 때는 pull을 선택하세요.</p>

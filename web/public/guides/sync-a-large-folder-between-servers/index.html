@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Sync a large folder between two servers (resumable, in the background)</h1>
-      <p class="updated">Last updated: 2026-07-08</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-08</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers/" aria-current="true">English</a><a href="/zh/guides/sync-a-large-folder-between-servers/">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers/">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers/">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers/">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers/">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers/">العربية</a><a href="/es/guides/sync-a-large-folder-between-servers/">Español</a><a href="/pt/guides/sync-a-large-folder-between-servers/">Português</a></nav>
       <p class="lead">You have a large folder — tens of gigabytes — on one server and you want an exact copy on another. You can&#39;t watch a terminal for hours, and a transfer that dies halfway shouldn&#39;t start over from zero. relayium sync is built for this: a one-way incremental mirror that skips what&#39;s already there, resumes a half-sent file from where it stopped, and verifies every file end to end.</p>
       <p class="lead">This guide sets up an unattended, self-healing transfer: authorize the sender once, run the listener in the background, and drive relayium sync from a retry loop inside tmux so it keeps going across dropped connections until the whole folder has landed.</p>

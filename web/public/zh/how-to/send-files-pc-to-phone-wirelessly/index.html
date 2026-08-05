@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>电脑无线传文件到手机：不用数据线，不用装 App</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-pc-to-phone-wirelessly/">English</a><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/" aria-current="true">中文</a><a href="/ja/how-to/send-files-pc-to-phone-wirelessly/">日本語</a><a href="/ko/how-to/send-files-pc-to-phone-wirelessly/">한국어</a><a href="/de/how-to/send-files-pc-to-phone-wirelessly/">Deutsch</a><a href="/fr/how-to/send-files-pc-to-phone-wirelessly/">Français</a><a href="/ar/how-to/send-files-pc-to-phone-wirelessly/">العربية</a><a href="/es/how-to/send-files-pc-to-phone-wirelessly/">Español</a><a href="/pt/how-to/send-files-pc-to-phone-wirelessly/">Português</a></nav>
       <p class="lead">把一个文件从笔记本弄到手机上，不该还得翻找合适的数据线、给自己发邮件，或者先上传到网盘再下载一遍。Relayium 通过你自己的 Wi-Fi，把文件字节直接从电脑传到手机，全程在浏览器里完成，两端都无需安装任何软件。</p>
       <p class="lead">本文一步步讲清无线传输的做法——同一网络或跨网络都行——再客观地和常见的几种替代方式（数据线、蓝牙、聊天软件和邮件）作对比，帮你为不同场景选对工具。</p>

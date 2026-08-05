@@ -38,6 +38,11 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+.releases{list-style:none;margin:16px 0 0;padding:0}
+.releases li{display:flex;gap:16px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border)}
+.releases li:last-child{border-bottom:0}
+.releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
+.releases .date{font-size:14px;font-variant-numeric:tabular-nums}
 </style>
   </head>
   <body>
@@ -48,7 +53,13 @@ footer a{color:var(--text-h);text-decoration:none}
            visual position — it is a labelled <nav> landmark either way. -->
       <main>
       <h1>Términos del servicio</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- The date is isolated for the same reason the release rows are: an ISO
+           date is three digit runs joined by hyphens, and on the Arabic page the
+           bidi algorithm lays those runs out right-to-left. "2026-08-03" was
+           rendering as "03-08-2026" on all four Arabic legal pages — measured in
+           a browser, not deduced. <bdi> resolves LTR (no strong character
+           inside) and pins the order. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/terms/">English</a><a href="/zh/terms/">中文</a><a href="/ja/terms/">日本語</a><a href="/ko/terms/">한국어</a><a href="/de/terms/">Deutsch</a><a href="/fr/terms/">Français</a><a href="/ar/terms/">العربية</a><a href="/es/terms/" aria-current="true">Español</a><a href="/pt/terms/">Português</a></nav>
       <p>Al usar Relayium aceptas estos términos. Relayium es un servicio de código abierto que te permite enviar archivos y texto en tiempo real entre dispositivos, cifrados de extremo a extremo. El servicio básico es gratuito; algunos planes opcionales son de pago — consulta Suscripciones y facturación.</p>
       <h2>El servicio</h2><p>Relayium transfiere archivos y texto en tiempo real entre dispositivos, cifrados de extremo a extremo. El servicio básico es gratuito y su código fuente es de código abierto bajo la licencia AGPL-3.0. Los planes de pago opcionales aumentan los límites de almacenamiento, transferencia y retención — consulta Suscripciones y facturación.</p>
@@ -71,6 +82,7 @@ footer a{color:var(--text-h);text-decoration:none}
         <a href="/es/apps/">Apps</a>
         <a href="/es/privacy/">Política de privacidad</a>
         <a href="/pricing">Precios</a>
+        <a href="/es/releases/">Versiones</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

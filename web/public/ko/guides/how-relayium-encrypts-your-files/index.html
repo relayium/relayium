@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium이 파일을 종단간 암호화하는 방식</h1>
-      <p class="updated">마지막 업데이트: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/how-relayium-encrypts-your-files/">English</a><a href="/zh/guides/how-relayium-encrypts-your-files/">中文</a><a href="/ja/guides/how-relayium-encrypts-your-files/">日本語</a><a href="/ko/guides/how-relayium-encrypts-your-files/" aria-current="true">한국어</a><a href="/de/guides/how-relayium-encrypts-your-files/">Deutsch</a><a href="/fr/guides/how-relayium-encrypts-your-files/">Français</a><a href="/ar/guides/how-relayium-encrypts-your-files/">العربية</a><a href="/es/guides/how-relayium-encrypts-your-files/">Español</a><a href="/pt/guides/how-relayium-encrypts-your-files/">Português</a></nav>
       <p class="lead">&quot;Relayium은 안전한가요?&quot;는 합리적인 질문입니다——모든 파일 전송 도구가 프라이버시를 지킨다고 말하니까요. 이 페이지는 Relayium이 실제로 파일을 어떻게 보호하는지 쉬운 말로 짚어보아, 그 말을 그냥 믿는 대신 스스로 판단할 수 있게 해드립니다.</p>
       <p class="lead">여기에는 서로 다른 두 가지 암호화 방식이 작동합니다. 상황이 두 가지이기 때문입니다. 지금 온라인 상태인 상대에게 실시간으로 파일을 보내는 경우와, 나중에 받아가도록 다운로드 링크를 남겨두는 경우입니다. 둘 다 서버가 파일에 접근하지 못하게 하지만, 그 방식은 서로 다릅니다——언제 어떤 방식이 적용되는지 알아둘 가치가 있습니다.</p>

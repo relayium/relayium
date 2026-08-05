@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>インターネットでファイルを送るのは安全か</h1>
-      <p class="updated">最終更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最終更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/is-it-safe-to-send-files-over-the-internet/">English</a><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">中文</a><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/" aria-current="true">日本語</a><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet/">한국어</a><a href="/de/guides/is-it-safe-to-send-files-over-the-internet/">Deutsch</a><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet/">Français</a><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet/">العربية</a><a href="/es/guides/is-it-safe-to-send-files-over-the-internet/">Español</a><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet/">Português</a></nav>
       <p class="lead">「このファイルを送っても大丈夫だろうか」と立ち止まって考えるのは、ごく自然な疑問です。確定申告書でも、契約書でも、人に見られたくない写真でも同じです。このガイドは、普段使っているツールを怖がらせるためのものではありません。メールで送る、クラウドフォルダに置く、USBメモリで持ち歩く、それぞれの場合に実際に何が起きるのか、「エンドツーエンドで暗号化されている」「ゼロ知識」という言葉が実際に何を約束しているのか、そして大切なものをどんなツールに預けるにせよ、その前に何を確認すべきかを、平易な言葉で説明します。</p>
       <p class="lead">専門知識は一切必要ありません。読み終える頃には、このページで紹介するものも含め、どんな転送方法に対してもどんな質問をすればよいかが分かるはずです。</p>

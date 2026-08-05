@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>릴리스 · Relayium</title>
+    <meta name="description" content="공개된 모든 Relayium 버전과 배포 날짜, 각 버전의 전체 변경 내역. 버전 번호가 무엇을 포함하는지, 릴리스가 어떻게 만들어지는지, 내려받은 파일을 어떻게 확인하는지도 함께 정리했습니다." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ko/releases/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/releases/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/releases/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/releases/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/releases/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/releases/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/releases/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/releases/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/releases/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/releases/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/releases/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"릴리스 · Relayium","description":"공개된 모든 Relayium 버전과 배포 날짜, 각 버전의 전체 변경 내역. 버전 번호가 무엇을 포함하는지, 릴리스가 어떻게 만들어지는지, 내려받은 파일을 어떻게 확인하는지도 함께 정리했습니다.","url":"https://relayium.com/ko/releases/","inLanguage":"ko","dateModified":"2026-08-03","isPartOf":{"@type":"WebSite","name":"Relayium","url":"https://relayium.com/"}}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:21px;margin:34px 0 10px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+.releases{list-style:none;margin:16px 0 0;padding:0}
+.releases li{display:flex;gap:16px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border)}
+.releases li:last-child{border-bottom:0}
+.releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
+.releases .date{font-size:14px;font-variant-numeric:tabular-nums}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <!-- The legal text is the main landmark. The site header and footer are
+           outside it; the language bar is inside, after the h1, matching its
+           visual position — it is a labelled <nav> landmark either way. -->
+      <main>
+      <h1>릴리스</h1>
+      <!-- The date is isolated for the same reason the release rows are: an ISO
+           date is three digit runs joined by hyphens, and on the Arabic page the
+           bidi algorithm lays those runs out right-to-left. "2026-08-03" was
+           rendering as "03-08-2026" on all four Arabic legal pages — measured in
+           a browser, not deduced. <bdi> resolves LTR (no strong character
+           inside) and pins the order. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-08-03</bdi></p>
+      <nav class="langbar" aria-label="Language"><a href="/releases/">English</a><a href="/zh/releases/">中文</a><a href="/ja/releases/">日本語</a><a href="/ko/releases/" aria-current="true">한국어</a><a href="/de/releases/">Deutsch</a><a href="/fr/releases/">Français</a><a href="/ar/releases/">العربية</a><a href="/es/releases/">Español</a><a href="/pt/releases/">Português</a></nav>
+      <p>Relayium은 세 가지 리듬으로 배포되며, 이 페이지는 셋 모두를 있는 그대로 밝힙니다. 웹 앱은 계속 배포되고, 명령줄 도구는 번호를 붙여 릴리스하며, 네이티브 앱은 아직 공개되지 않은 개발 빌드입니다.</p>
+      <p>아래 모든 버전은 main 브랜치에서 자동으로 태그되었고, 해당 커밋의 검사가 통과한 뒤에만 공개되었습니다. 각 버전의 전체 변경 내역——포함된 모든 커밋——은 GitHub에서 한 번의 클릭으로 볼 수 있습니다.</p>
+      <h2>공개된 모든 버전</h2><p>최신순입니다. 각 버전에서 GitHub의 전체 변경 내역과 다운로드로 이동합니다.</p><ul class="releases"><li><a href="https://github.com/relayium/relayium/releases/tag/v0.15.0"><bdi>v0.15.0</bdi></a><span class="date"><bdi>2026-08-03</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.14.0"><bdi>v0.14.0</bdi></a><span class="date"><bdi>2026-08-02</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.13.0"><bdi>v0.13.0</bdi></a><span class="date"><bdi>2026-08-01</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.12.0"><bdi>v0.12.0</bdi></a><span class="date"><bdi>2026-07-30</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.11.1"><bdi>v0.11.1</bdi></a><span class="date"><bdi>2026-07-28</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.11.0"><bdi>v0.11.0</bdi></a><span class="date"><bdi>2026-07-28</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.10.2"><bdi>v0.10.2</bdi></a><span class="date"><bdi>2026-07-23</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.10.1"><bdi>v0.10.1</bdi></a><span class="date"><bdi>2026-07-23</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.10.0"><bdi>v0.10.0</bdi></a><span class="date"><bdi>2026-07-23</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.9.0"><bdi>v0.9.0</bdi></a><span class="date"><bdi>2026-07-22</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.8.1"><bdi>v0.8.1</bdi></a><span class="date"><bdi>2026-07-22</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.8.0"><bdi>v0.8.0</bdi></a><span class="date"><bdi>2026-07-22</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.7.0"><bdi>v0.7.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.6.0"><bdi>v0.6.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.5.0"><bdi>v0.5.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.4.0"><bdi>v0.4.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.3.1"><bdi>v0.3.1</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.3.0"><bdi>v0.3.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.2.0"><bdi>v0.2.0</bdi></a><span class="date"><bdi>2026-07-08</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.1.2"><bdi>v0.1.2</bdi></a><span class="date"><bdi>2026-07-08</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.1.1"><bdi>v0.1.1</bdi></a><span class="date"><bdi>2026-07-08</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.1.0"><bdi>v0.1.0</bdi></a><span class="date"><bdi>2026-07-08</bdi></span></li></ul>
+      <h2>버전 번호가 포함하는 것</h2><p>버전 태그 하나가 공개하는 프로그램은 둘입니다. relayium 명령줄 도구와, 자체 호스팅으로 운영하는 릴레이 겸 스토리지 노드인 relayium-node입니다. 둘 다 같은 소스 트리에서 빌드되므로, 그 트리가 바뀐 경우에만 새 버전이 생깁니다.</p><ul><li>웹 앱에는 버전 번호가 없습니다. 검사가 통과하는 대로 main 브랜치에서 배포되므로, 브라우저에서 쓰는 것은 대개 여기 있는 최신 버전보다 새롭습니다.</li><li>macOS와 iOS 앱은 개발 빌드이며 공개 릴리스가 아닙니다. 아래 어떤 버전에도 포함되어 있지 않습니다.</li><li>노드는 이 목록을 스스로 따라가지 않습니다. 소속된 서버에 어떤 버전을 실행할지 물어보므로, 누군가 롤아웃을 시작하기 전까지 새 버전은 아무것도 바꾸지 않습니다. 명령줄 도구는 relayium update로 업데이트합니다.</li></ul>
+      <h2>릴리스를 만드는 방식</h2><p>릴리스는 누가 기억해서가 아니라 일정에 따라 이루어집니다. 매주 한 번 워크플로가 지난 버전 이후 반영된 변경을 확인하고, 두 경우에는 태그 없이 멈춥니다. 실제로 공개되는 코드가 바뀌지 않았을 때, 그리고 그 커밋의 검사가 통과하지 않았을 때입니다.</p><ul><li>둘 다 설계상 의도한 것입니다. 기억에 맡긴 탓에 이미 완성된 기능이 몇 달 동안 배포되지 못한 적이 있고, 검증되지 않은 커밋에 태그를 붙이면 일정이 막으려던 장애를 그대로 내보내게 됩니다.</li><li>문서나 앱만 바뀐 주에는 새 버전이 나오지 않습니다. 공개되는 프로그램이 직전 버전과 바이트 단위로 같기 때문입니다.</li></ul>
+      <h2>내려받은 파일 확인하기</h2><p>릴리스마다 아카이브 옆에 체크섬 파일과 그 파일에 대한 서명이 함께 공개됩니다. 업데이터는 무엇이든 설치하기 전에, 프로그램에 내장된 공개 키로 둘 다 검증합니다. 그래서 변조된 아카이브는 Relayium이 알아챘는지와 무관하게, 쓰고 있는 컴퓨터에서 검증에 실패합니다.</p><ul><li>GitHub에 접속할 수 없는 네트워크를 위해 Relayium은 자체 릴리스 파일도 미러링합니다. 바이트가 어디에서 오는지는 도달성의 문제이지 신뢰의 문제가 아닙니다. 검증은 어느 경로에서나 동일합니다.</li><li>소스 코드는 공개되어 있습니다. 서버와 노드, 웹 앱은 AGPL-3.0, 네이티브 앱은 Apache-2.0, 문서는 CC BY 4.0입니다.</li></ul>
+      </main>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/ko/apps/">앱</a>
+        <a href="/ko/privacy/">개인정보처리방침</a>
+        <a href="/pricing">요금제</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

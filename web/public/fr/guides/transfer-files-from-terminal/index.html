@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Transférer fichiers et texte depuis le terminal avec la CLI Relayium</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/transfer-files-from-terminal/">English</a><a href="/zh/guides/transfer-files-from-terminal/">中文</a><a href="/ja/guides/transfer-files-from-terminal/">日本語</a><a href="/ko/guides/transfer-files-from-terminal/">한국어</a><a href="/de/guides/transfer-files-from-terminal/">Deutsch</a><a href="/fr/guides/transfer-files-from-terminal/" aria-current="true">Français</a><a href="/ar/guides/transfer-files-from-terminal/">العربية</a><a href="/es/guides/transfer-files-from-terminal/">Español</a><a href="/pt/guides/transfer-files-from-terminal/">Português</a></nav>
       <p class="lead">La CLI Relayium est un petit binaire unique pour transférer fichiers et texte éphémère depuis le terminal — chiffré de bout en bout, auto-hébergeable et gratuit. Copiez des fichiers vers un serveur, poussez un build, ou envoyez URL, commandes et code sans les enregistrer d&#39;abord dans un fichier.</p>
       <p class="lead">Quelle que soit la méthode utilisée, les octets du fichier voyagent directement entre les deux extrémités et ne passent jamais par les serveurs de Relayium. Ce guide vous installe et vous fait passer votre premier transfert, puis vous oriente vers les guides plus détaillés pour chaque mode.</p>

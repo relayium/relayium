@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>扫描二维码传输文件</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-by-scanning-a-qr-code/">English</a><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/" aria-current="true">中文</a><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code/">日本語</a><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code/">한국어</a><a href="/de/how-to/transfer-files-by-scanning-a-qr-code/">Deutsch</a><a href="/fr/how-to/transfer-files-by-scanning-a-qr-code/">Français</a><a href="/ar/how-to/transfer-files-by-scanning-a-qr-code/">العربية</a><a href="/es/how-to/transfer-files-by-scanning-a-qr-code/">Español</a><a href="/pt/how-to/transfer-files-by-scanning-a-qr-code/">Português</a></nav>
       <p class="lead">输入六位数字的配对码很快，但扫码更快——手机摄像头对准屏幕一扫，往往比你把码打完还快。Relayium 的配对流程会在每个配对码旁边同时显示一个二维码，就是为了这个。</p>
       <p class="lead">这是跨网络流程：无论两台设备是不是同一个 Wi-Fi，甚至身处地球两端，都能用。二维码只是这个流程的一条捷径——如果扫码不方便，下面的配对码和链接同样能用，效果完全一样。</p>

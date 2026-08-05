@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium 对比 LocalSend：局域网传输该选哪个</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/localsend/">English</a><a href="/zh/compare/localsend/" aria-current="true">中文</a><a href="/ja/compare/localsend/">日本語</a><a href="/ko/compare/localsend/">한국어</a><a href="/de/compare/localsend/">Deutsch</a><a href="/fr/compare/localsend/">Français</a><a href="/ar/compare/localsend/">العربية</a><a href="/es/compare/localsend/">Español</a><a href="/pt/compare/localsend/">Português</a></nav>
       <p class="lead">LocalSend 是一款真正优秀、深受喜爱的应用：免费、开源、跨平台，专为在同一局域网设备间传输文件而生，始终无需服务器、无需账号。不少人把它当作 Windows、Linux、Android 上的 AirDrop 替代品来用。</p>
       <p class="lead">本文客观地把它和 Relayium 比一比。Relayium 用不同的方式解决同样的同网络传输问题——无需安装任何应用，直接在浏览器里运行——并且走得更远：能跨网络传输，还提供 LocalSend 没有的命令行工具。</p>

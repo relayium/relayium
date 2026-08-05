@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Eine Datei mit einem sicheren, ablaufenden Link teilen</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/share-a-file-with-an-expiring-link/">English</a><a href="/zh/how-to/share-a-file-with-an-expiring-link/">中文</a><a href="/ja/how-to/share-a-file-with-an-expiring-link/">日本語</a><a href="/ko/how-to/share-a-file-with-an-expiring-link/">한국어</a><a href="/de/how-to/share-a-file-with-an-expiring-link/" aria-current="true">Deutsch</a><a href="/fr/how-to/share-a-file-with-an-expiring-link/">Français</a><a href="/ar/how-to/share-a-file-with-an-expiring-link/">العربية</a><a href="/es/how-to/share-a-file-with-an-expiring-link/">Español</a><a href="/pt/how-to/share-a-file-with-an-expiring-link/">Português</a></nav>
       <p class="lead">Nicht bei jeder Übertragung wartet jemand auf der anderen Seite. Vielleicht schläft die empfangende Person, sitzt im Flugzeug, oder du willst einfach einen Link in eine Nachricht fallen lassen und mit deinem Tag weitermachen. Dafür hat Relayium einen zweiten Modus: Statt eine Datei live an einen anderen geöffneten Browser zu streamen, verschlüsselt er die Datei bei dir, lädt nur den Chiffretext hoch und gibt dir einen Link, den du jederzeit versenden kannst — der Download findet nach dem Zeitplan der empfangenden Person statt.</p>
       <p class="lead">Diese Anleitung zeigt, wie man einen solchen Link erstellt, die Optionen für Ablauf und Löschung nach dem ersten Download, und was das Zero-Knowledge-Design in der Praxis tatsächlich bedeutet — einschließlich der ehrlichen Grenzen: Zum Erstellen eines Links muss sich der Absender anmelden, und Links zählen gegen ein Speicherkontingent.</p>

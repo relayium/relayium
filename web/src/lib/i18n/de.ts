@@ -717,7 +717,7 @@ const de: Messages = {
     ],
     limit: (max) => `Bis zu ${max.toLocaleString()} UTF-8-Bytes pro Nachricht — alles Größere als Datei senden.`,
   },
-  legal: { privacy: "Datenschutzerklärung", terms: "Nutzungsbedingungen", security: "Sicherheit", support: "Support" },
+  legal: { privacy: "Datenschutzerklärung", terms: "Nutzungsbedingungen", security: "Sicherheit", support: "Support", releases: "Versionen" },
   learn: { hub: "Anleitungen" },
   historyTitle: "Letzte Übertragungen",
   historyEmpty: "Noch keine Übertragungen",

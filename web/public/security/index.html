@@ -38,6 +38,11 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+.releases{list-style:none;margin:16px 0 0;padding:0}
+.releases li{display:flex;gap:16px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border)}
+.releases li:last-child{border-bottom:0}
+.releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
+.releases .date{font-size:14px;font-variant-numeric:tabular-nums}
 </style>
   </head>
   <body>
@@ -48,7 +53,13 @@ footer a{color:var(--text-h);text-decoration:none}
            visual position — it is a labelled <nav> landmark either way. -->
       <main>
       <h1>Security &amp; Threat Model</h1>
-      <p class="updated">Last updated: 2026-08-02</p>
+      <!-- The date is isolated for the same reason the release rows are: an ISO
+           date is three digit runs joined by hyphens, and on the Arabic page the
+           bidi algorithm lays those runs out right-to-left. "2026-08-03" was
+           rendering as "03-08-2026" on all four Arabic legal pages — measured in
+           a browser, not deduced. <bdi> resolves LTR (no strong character
+           inside) and pins the order. -->
+      <p class="updated">Last updated: <bdi>2026-08-02</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/security/" aria-current="true">English</a><a href="/zh/security/">中文</a><a href="/ja/security/">日本語</a><a href="/ko/security/">한국어</a><a href="/de/security/">Deutsch</a><a href="/fr/security/">Français</a><a href="/ar/security/">العربية</a><a href="/es/security/">Español</a><a href="/pt/security/">Português</a></nav>
       <p>Relayium is built so that the people transferring files or temporary text — not the server — hold the keys. This page describes exactly what is protected, how it works, and the limits of that protection.</p>
       <p>The short version: on the same network, realtime files and messages move directly between devices; across networks, browser sessions use a relay that carries only end-to-end encrypted ciphertext and holds no content key. Fresh session keys are always used; an optional out-of-band verification code lets the two people also detect signaling interception. The detail follows.</p>
@@ -68,6 +79,7 @@ footer a{color:var(--text-h);text-decoration:none}
         <a href="/apps">Apps</a>
         <a href="/privacy/">Privacy Policy</a>
         <a href="/pricing">Pricing</a>
+        <a href="/releases/">Releases</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

@@ -717,7 +717,7 @@ const fr: Messages = {
     ],
     limit: (max) => `Jusqu'à ${max.toLocaleString()} octets UTF-8 par message — au-delà, envoyez-le comme fichier.`,
   },
-  legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation", security: "Sécurité", support: "Assistance" },
+  legal: { privacy: "Politique de confidentialité", terms: "Conditions d'utilisation", security: "Sécurité", support: "Assistance", releases: "Versions" },
   learn: { hub: "Guides" },
   historyTitle: "Transferts récents",
   historyEmpty: "Aucun transfert pour l'instant",

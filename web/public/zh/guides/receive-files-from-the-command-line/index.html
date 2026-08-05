@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>在命令行接收文件</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line/">English</a><a href="/zh/guides/receive-files-from-the-command-line/" aria-current="true">中文</a><a href="/ja/guides/receive-files-from-the-command-line/">日本語</a><a href="/ko/guides/receive-files-from-the-command-line/">한국어</a><a href="/de/guides/receive-files-from-the-command-line/">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line/">Français</a><a href="/ar/guides/receive-files-from-the-command-line/">العربية</a><a href="/es/guides/receive-files-from-the-command-line/">Español</a><a href="/pt/guides/receive-files-from-the-command-line/">Português</a></nav>
       <p class="lead">发送只是故事的一半——迟早你也会是接收方：同事想跨网络给你一个文件，你自己的一台机器想把东西交给另一台，或者你想主动从你管理的服务器上取点东西回来。Relayium CLI 用三个不同的命令覆盖这三种情形，而且都不需要账号。</p>
       <p class="lead">对方用配对码推给你时用 receive；想要一个常驻收件箱、让受信任的机器随时可以推送过来时用 serve；而你主动去连接一台已能 SSH 登录的服务器取文件时用 pull。</p>

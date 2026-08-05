@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</h1>
-      <p class="updated">Last updated: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/snapdrop/" aria-current="true">English</a><a href="/zh/compare/snapdrop/">中文</a><a href="/ja/compare/snapdrop/">日本語</a><a href="/ko/compare/snapdrop/">한국어</a><a href="/de/compare/snapdrop/">Deutsch</a><a href="/fr/compare/snapdrop/">Français</a><a href="/ar/compare/snapdrop/">العربية</a><a href="/es/compare/snapdrop/">Español</a><a href="/pt/compare/snapdrop/">Português</a></nav>
       <p class="lead">Snapdrop and its actively maintained fork PairDrop are pioneers of browser-based, install-free file sharing. They are polished, familiar, and genuinely good tools — Relayium builds on the same idea rather than dismissing it.</p>
       <p class="lead">This article compares the three fairly: what they share, where Snapdrop and PairDrop are stronger, and where Relayium is different. The short version is that Relayium&#39;s focus is encryption strength and reaching across networks, not replacing what already works well on your LAN.</p>

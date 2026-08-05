@@ -86,7 +86,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Push files to the cloud, pull them on another computer</h1>
-      <p class="updated">Last updated: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer/" aria-current="true">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer/">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer/">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer/">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer/">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer/">Français</a><a href="/ar/guides/push-to-cloud-pull-on-another-computer/">العربية</a><a href="/es/guides/push-to-cloud-pull-on-another-computer/">Español</a><a href="/pt/guides/push-to-cloud-pull-on-another-computer/">Português</a></nav>
       <p class="lead">Sometimes the two computers are never awake at the same time. You want to drop a file from your work laptop tonight and grab it from your home desktop tomorrow, with nobody waiting on a live connection. relayium up and relayium down do exactly that: up encrypts and uploads to your account, and down fetches and decrypts it later on any machine — no peer-to-peer handshake, no server you both ssh into.</p>
       <p class="lead">This is the main part of the CLI that uses your Relayium account, alongside send, which needs it to mint a pairing code. Binding is optional for the rest: push/pull, daemon-direct and sync keep working with no login, and so does receive. Downloading needs no account at all, just the link.</p>

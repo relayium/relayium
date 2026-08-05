@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Transferencias de servidor a servidor con la CLI de Relayium (daemon directo)</h1>
-      <p class="updated">Última actualización: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers/">English</a><a href="/zh/guides/server-to-server-transfers/">中文</a><a href="/ja/guides/server-to-server-transfers/">日本語</a><a href="/ko/guides/server-to-server-transfers/">한국어</a><a href="/de/guides/server-to-server-transfers/">Deutsch</a><a href="/fr/guides/server-to-server-transfers/">Français</a><a href="/ar/guides/server-to-server-transfers/">العربية</a><a href="/es/guides/server-to-server-transfers/" aria-current="true">Español</a><a href="/pt/guides/server-to-server-transfers/">Português</a></nav>
       <p class="lead">Cuando ambas máquinas son tuyas y cada una conoce la dirección de la otra, SSH es una fricción de más y un encuentro es pura sobrecarga. daemon directo está hecho exactamente para esto: un servidor escucha, el otro le hace push directamente sobre una conexión TLS 1.3 con anclaje. Sin retransmisor, sin SSH, sin código de emparejamiento: la confianza se basa en clave pública y se configura una sola vez.</p>
       <p class="lead">Esta guía cubre iniciar el proceso a la escucha, hacerle push, aprobar un nuevo emisor en el primer contacto, automatizarlo y ejecutar el proceso a la escucha como servicio de systemd.</p>

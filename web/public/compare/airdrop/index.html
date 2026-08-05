@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs AirDrop: a cross-platform AirDrop alternative</h1>
-      <p class="updated">Last updated: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/airdrop/" aria-current="true">English</a><a href="/zh/compare/airdrop/">中文</a><a href="/ja/compare/airdrop/">日本語</a><a href="/ko/compare/airdrop/">한국어</a><a href="/de/compare/airdrop/">Deutsch</a><a href="/fr/compare/airdrop/">Français</a><a href="/ar/compare/airdrop/">العربية</a><a href="/es/compare/airdrop/">Español</a><a href="/pt/compare/airdrop/">Português</a></nav>
       <p class="lead">AirDrop is one of the best file-sharing experiences ever shipped. Between an iPhone, iPad and Mac it is fast, private, and effortlessly built into the system — Relayium does not pretend to beat it on Apple&#39;s home turf.</p>
       <p class="lead">The catch is the boundary: AirDrop only talks to other Apple devices. This article compares the two fairly, explains where AirDrop is genuinely better, and shows where Relayium helps — sending between an iPhone and a Windows PC, an Android phone and a Mac, or a Linux laptop and an iPad, straight from the browser.</p>

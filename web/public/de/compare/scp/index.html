@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs. scp: einfachere Dateiübertragung über SSH</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/scp/">English</a><a href="/zh/compare/scp/">中文</a><a href="/ja/compare/scp/">日本語</a><a href="/ko/compare/scp/">한국어</a><a href="/de/compare/scp/" aria-current="true">Deutsch</a><a href="/fr/compare/scp/">Français</a><a href="/ar/compare/scp/">العربية</a><a href="/es/compare/scp/">Español</a><a href="/pt/compare/scp/">Português</a></nav>
       <p class="lead">scp ist seit Jahrzehnten der Standardweg, eine Datei über SSH zu bewegen: schon auf praktisch jeder Unix-artigen Maschine installiert, jeder kennt die Syntax, und es funktioniert einfach. Es gibt keinen Grund, das kleinzureden — scp hat sich seinen Platz verdient.</p>
       <p class="lead">Die Relayium CLI ersetzt SSH nicht; sie nutzt genau denselben SSH-Zugang, den du bereits hast. push und pull verwenden deine SSH-Verbindung genauso wie scp, ergänzen aber ein paar Dinge, für die scp nie gebaut wurde: eine unterbrochene Übertragung fortsetzen, jede Datei mit einer Prüfsumme verifizieren, echten Fortschritt anzeigen, und funktionieren, selbst wenn auf der Gegenseite gar nichts installiert ist.</p>

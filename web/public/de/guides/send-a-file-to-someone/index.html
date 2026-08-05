@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Mit der Relayium CLI eine Datei über Netzwerke hinweg an jemanden senden</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/send-a-file-to-someone/">English</a><a href="/zh/guides/send-a-file-to-someone/">中文</a><a href="/ja/guides/send-a-file-to-someone/">日本語</a><a href="/ko/guides/send-a-file-to-someone/">한국어</a><a href="/de/guides/send-a-file-to-someone/" aria-current="true">Deutsch</a><a href="/fr/guides/send-a-file-to-someone/">Français</a><a href="/ar/guides/send-a-file-to-someone/">العربية</a><a href="/es/guides/send-a-file-to-someone/">Español</a><a href="/pt/guides/send-a-file-to-someone/">Português</a></nav>
       <p class="lead">Manchmal ist die andere Maschine nicht deine eigene und du kannst dich nicht per SSH einloggen — eine Datei für eine Kollegin in einem anderen Büro, ein Build für einen Kunden, ein Archiv für einen Freund am anderen Ende des Landes. relayium send und receive bewegen sie über Netzwerke hinweg direkt zwischen euch beiden, nur mit einem kurzen Pairing-Code, den deine CLI beim Senden erzeugt.</p>
       <p class="lead">Die Verbindung ist Peer-to-Peer und Ende-zu-Ende verschlüsselt. Nur ein winziger Rendezvous-Handshake läuft über Relayium, um die beiden Enden einander vorzustellen; die Dateibytes nie.</p>

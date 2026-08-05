@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Send files from PC to phone wirelessly, no cable or app</h1>
-      <p class="updated">Last updated: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-pc-to-phone-wirelessly/" aria-current="true">English</a><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/">中文</a><a href="/ja/how-to/send-files-pc-to-phone-wirelessly/">日本語</a><a href="/ko/how-to/send-files-pc-to-phone-wirelessly/">한국어</a><a href="/de/how-to/send-files-pc-to-phone-wirelessly/">Deutsch</a><a href="/fr/how-to/send-files-pc-to-phone-wirelessly/">Français</a><a href="/ar/how-to/send-files-pc-to-phone-wirelessly/">العربية</a><a href="/es/how-to/send-files-pc-to-phone-wirelessly/">Español</a><a href="/pt/how-to/send-files-pc-to-phone-wirelessly/">Português</a></nav>
       <p class="lead">Getting a file from your laptop onto your phone should not mean hunting for the right cable, emailing yourself, or uploading to a cloud drive and downloading it again. Relayium moves the bytes straight from your computer to your phone over your own Wi-Fi, in the browser, with nothing to install on either side.</p>
       <p class="lead">This guide walks through the wireless way step by step — same network or across networks — then compares it honestly with the usual alternatives (USB, Bluetooth, chat apps and email) so you can pick the right tool for the job.</p>

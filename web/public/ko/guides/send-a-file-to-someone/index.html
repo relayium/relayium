@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium CLI로 네트워크를 넘어 상대에게 파일 보내기</h1>
-      <p class="updated">마지막 업데이트: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/send-a-file-to-someone/">English</a><a href="/zh/guides/send-a-file-to-someone/">中文</a><a href="/ja/guides/send-a-file-to-someone/">日本語</a><a href="/ko/guides/send-a-file-to-someone/" aria-current="true">한국어</a><a href="/de/guides/send-a-file-to-someone/">Deutsch</a><a href="/fr/guides/send-a-file-to-someone/">Français</a><a href="/ar/guides/send-a-file-to-someone/">العربية</a><a href="/es/guides/send-a-file-to-someone/">Español</a><a href="/pt/guides/send-a-file-to-someone/">Português</a></nav>
       <p class="lead">때로는 상대의 컴퓨터가 내 것이 아니어서 SSH로 접속할 수 없을 때가 있습니다. 다른 사무실 동료에게 줄 파일, 고객에게 줄 빌드, 먼 곳의 친구에게 줄 아카이브. relayium send와 receive는 보낼 때 CLI가 발급하는 짧은 페어링 코드 하나만으로 네트워크를 넘어 그것을 두 사람 사이에 직접 옮깁니다.</p>
       <p class="lead">연결은 P2P이며 종단간 암호화됩니다. 두 끝을 서로 소개하기 위한 아주 작은 랑데부 핸드셰이크만 Relayium을 거치며, 파일 바이트는 결코 거치지 않습니다.</p>

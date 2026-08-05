@@ -38,7 +38,10 @@ describe("renderLegalPage", () => {
 
   it("renders headings, paragraphs, bullets and the last-updated line", () => {
     expect(html).toContain("<h1>Privacy Policy</h1>");
-    expect(html).toContain("Last updated: 2026-06-29");
+    // <bdi> around the date is load-bearing, not markup noise: see the comment
+    // at the template's `class="updated"` line and the Arabic case in
+    // rtl-head-isolation.test.mjs.
+    expect(html).toContain("Last updated: <bdi>2026-06-29</bdi>");
     expect(html).toContain("<h2>What we never collect</h2>");
     expect(html).toContain("<li>File names</li>");
   });

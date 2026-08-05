@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium 对比 Dropbox：发送单个文件</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/dropbox/">English</a><a href="/zh/compare/dropbox/" aria-current="true">中文</a><a href="/ja/compare/dropbox/">日本語</a><a href="/ko/compare/dropbox/">한국어</a><a href="/de/compare/dropbox/">Deutsch</a><a href="/fr/compare/dropbox/">Français</a><a href="/ar/compare/dropbox/">العربية</a><a href="/es/compare/dropbox/">Español</a><a href="/pt/compare/dropbox/">Português</a></nav>
       <p class="lead">Dropbox 的口碑是挣来的：它能把一个文件夹同步到你所有设备上，误覆盖文件时还能靠版本历史找回来，把整个项目文件夹通过分享链接交给客户也很省心。如果你要的是一个始终保持同步的工作文件夹，Dropbox 确实做得好，本文并不是要劝你别这么用它。</p>
       <p class="lead">当任务只是交接一个文件时，Dropbox 仍要先把它放进账号。Relayium 则实时传输：同一局域网 WebRTC 直连，跨网络浏览器按设计经 TURN 承载端到端密文；也可以创建只在对方浏览器解密并按时消失的链接。</p>

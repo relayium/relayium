@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>الاستضافة الذاتية لـ Relayium: شغّل خادم نقل الملفات والنصوص الخاص بك</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium/">English</a><a href="/zh/guides/self-host-relayium/">中文</a><a href="/ja/guides/self-host-relayium/">日本語</a><a href="/ko/guides/self-host-relayium/">한국어</a><a href="/de/guides/self-host-relayium/">Deutsch</a><a href="/fr/guides/self-host-relayium/">Français</a><a href="/ar/guides/self-host-relayium/" aria-current="true">العربية</a><a href="/es/guides/self-host-relayium/">Español</a><a href="/pt/guides/self-host-relayium/">Português</a></nav>
       <p class="lead">‏Relayium مرخَّص بموجب AGPL-3.0 ومفتوح المصدر، والخادم صورة واحدة مكتفية بذاتها — بلا قاعدة بيانات خارجية، بلا حاوية تخزين لطرف ثالث، ولا شيء للتسجيل فيه. إن كنت تفضّل تشغيل كل شيء بنفسك بدل الاعتماد على relayium.com، فهذا الدليل يشغّل خادمًا بـ Docker ويوجّه الـ CLI إليه.</p>
       <p class="lead">تمنحك الاستضافة الذاتية تحكمًا كاملًا في مكان بياناتك، ونطاقك الخاص وشهادة TLS خاصة بك، وبلا اعتماد على بنية أحد آخر. كل ما يلي مبني على ملفات موجودة فعلًا في المستودع — `docker-compose.yml` و`server/.env.example` و`docs/self-hosting.md` — فلا شيء هنا عبارة عن راية أو إعداد غير موجود فعلًا.</p>

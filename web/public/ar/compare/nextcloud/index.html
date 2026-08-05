@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium مقابل Nextcloud لإرسال الملفات</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/nextcloud/">English</a><a href="/zh/compare/nextcloud/">中文</a><a href="/ja/compare/nextcloud/">日本語</a><a href="/ko/compare/nextcloud/">한국어</a><a href="/de/compare/nextcloud/">Deutsch</a><a href="/fr/compare/nextcloud/">Français</a><a href="/ar/compare/nextcloud/" aria-current="true">العربية</a><a href="/es/compare/nextcloud/">Español</a><a href="/pt/compare/nextcloud/">Português</a></nav>
       <p class="lead">حوّل Nextcloud الاستضافة الذاتية إلى بديل حقيقي عن Google Drive أو Dropbox: ملفاتك أنت، ومزامنتك أنت عبر كل جهاز، وتقويمك وجهات اتصالك أنت، كلها تحت نطاق تتحكم فيه. إنه برنامج قوي فعلًا، وإن كان ما تريده بيتًا دائمًا لملفاتك، فإن Nextcloud هو الأداة المناسبة للمهمة.</p>
       <p class="lead">يقارن هذا المقال الاثنين بإنصاف. يخزّن Nextcloud البيانات ويزامنها دائمًا، مع خادم ويب وقاعدة بيانات وPHP وتحديثات مستمرة. يحلّ Relayium مهمة النقل الأضيق: نقل آني بلا نسخة محتوى على الخادم، أو رابط معرفة صفرية ينتهي. يمر المحتوى مباشرة داخل LAN؛ وبين الشبكات لا يمرر TURN إلا نصًا مشفّرًا من الطرف إلى الطرف لا يستطيع قراءته أو فكّه. للتخزين السحابي الدائم اختر Nextcloud؛ وللنقل Relayium أخف.</p>

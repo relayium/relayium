@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Comment Relayium chiffre vos fichiers de bout en bout</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/how-relayium-encrypts-your-files/">English</a><a href="/zh/guides/how-relayium-encrypts-your-files/">中文</a><a href="/ja/guides/how-relayium-encrypts-your-files/">日本語</a><a href="/ko/guides/how-relayium-encrypts-your-files/">한국어</a><a href="/de/guides/how-relayium-encrypts-your-files/">Deutsch</a><a href="/fr/guides/how-relayium-encrypts-your-files/" aria-current="true">Français</a><a href="/ar/guides/how-relayium-encrypts-your-files/">العربية</a><a href="/es/guides/how-relayium-encrypts-your-files/">Español</a><a href="/pt/guides/how-relayium-encrypts-your-files/">Português</a></nav>
       <p class="lead">« Relayium est-il sécurisé ? » est une question légitime — tout outil de transfert de fichiers prétend protéger la vie privée. Cette page explique exactement, en langage simple, comment Relayium garde vos fichiers privés, pour que vous puissiez juger l&#39;affirmation plutôt que la croire sur parole.</p>
       <p class="lead">Deux mécanismes de chiffrement différents entrent en jeu, parce qu&#39;il y a deux situations différentes : envoyer un fichier en direct à quelqu&#39;un qui est en ligne à l&#39;instant, et laisser un lien de téléchargement pour que quelqu&#39;un le récupère plus tard. Les deux empêchent le serveur d&#39;accéder à votre fichier, mais y parviennent par des chemins différents — et il vaut la peine de savoir lequel s&#39;applique quand.</p>

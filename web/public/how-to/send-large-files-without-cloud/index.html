@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>How to send large files without the cloud</h1>
-      <p class="updated">Last updated: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud/" aria-current="true">English</a><a href="/zh/how-to/send-large-files-without-cloud/">中文</a><a href="/ja/how-to/send-large-files-without-cloud/">日本語</a><a href="/ko/how-to/send-large-files-without-cloud/">한국어</a><a href="/de/how-to/send-large-files-without-cloud/">Deutsch</a><a href="/fr/how-to/send-large-files-without-cloud/">Français</a><a href="/ar/how-to/send-large-files-without-cloud/">العربية</a><a href="/es/how-to/send-large-files-without-cloud/">Español</a><a href="/pt/how-to/send-large-files-without-cloud/">Português</a></nav>
       <p class="lead">A 20 GB video export or a heavy project archive is exactly where cloud storage feels slowest: you upload the whole file once, wait, then the other person downloads it again — two full transfers plus whatever your storage quota allows. For a one-time hand-off, that is a lot of copying and waiting for bytes that only ever needed to go from A to B.</p>
       <p class="lead">For a large file, Relayium&#39;s recommended path is an end-to-end encrypted stored download link: the recipient need not be online while you upload and can fetch it later. Keep the sender page open until upload completes; after that the link remains available until expiry. If both people can stay online, realtime is the live alternative: LAN WebRTC is direct, while cross-network browser sessions carry end-to-end ciphertext over TURN. Relayium stores no realtime content or history.</p>

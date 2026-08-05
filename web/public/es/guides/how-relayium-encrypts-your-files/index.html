@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Cómo Relayium cifra tus archivos de extremo a extremo</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/how-relayium-encrypts-your-files/">English</a><a href="/zh/guides/how-relayium-encrypts-your-files/">中文</a><a href="/ja/guides/how-relayium-encrypts-your-files/">日本語</a><a href="/ko/guides/how-relayium-encrypts-your-files/">한국어</a><a href="/de/guides/how-relayium-encrypts-your-files/">Deutsch</a><a href="/fr/guides/how-relayium-encrypts-your-files/">Français</a><a href="/ar/guides/how-relayium-encrypts-your-files/">العربية</a><a href="/es/guides/how-relayium-encrypts-your-files/" aria-current="true">Español</a><a href="/pt/guides/how-relayium-encrypts-your-files/">Português</a></nav>
       <p class="lead">«¿Es seguro Relayium?» es una pregunta justa — toda herramienta de transferencia de archivos afirma ser privada. Esta página recorre exactamente cómo Relayium mantiene privados los archivos, en lenguaje sencillo, para que puedas juzgar la afirmación en lugar de creértela a ciegas.</p>
       <p class="lead">Hay dos esquemas de cifrado distintos en juego, porque hay dos situaciones distintas: enviar un archivo en vivo a alguien que está en línea ahora mismo, y dejar un enlace de descarga para que alguien lo recoja más tarde. Ambos dejan al servidor fuera de tu archivo, pero llegan ahí por caminos diferentes — y vale la pena saber cuál se aplica en cada caso.</p>

@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Recevoir des fichiers depuis la ligne de commande</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line/">English</a><a href="/zh/guides/receive-files-from-the-command-line/">中文</a><a href="/ja/guides/receive-files-from-the-command-line/">日本語</a><a href="/ko/guides/receive-files-from-the-command-line/">한국어</a><a href="/de/guides/receive-files-from-the-command-line/">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line/" aria-current="true">Français</a><a href="/ar/guides/receive-files-from-the-command-line/">العربية</a><a href="/es/guides/receive-files-from-the-command-line/">Español</a><a href="/pt/guides/receive-files-from-the-command-line/">Português</a></nav>
       <p class="lead">Envoyer n&#39;est que la moitié de l&#39;histoire — tôt ou tard, c&#39;est vous qui recevez : un collègue veut vous remettre un fichier par Internet, l&#39;une de vos machines veut le transmettre à une autre, ou vous voulez aller chercher quelque chose sur un serveur que vous administrez. La CLI Relayium couvre ces trois cas avec une commande différente pour chacun, et aucune ne nécessite de compte.</p>
       <p class="lead">Choisissez receive quand quelqu&#39;un d&#39;autre vous envoie via un code de jumelage, serve quand vous voulez une boîte de réception permanente vers laquelle des machines de confiance peuvent envoyer à tout moment, et pull quand c&#39;est vous qui allez chercher sur un serveur où vous pouvez déjà vous connecter en SSH.</p>

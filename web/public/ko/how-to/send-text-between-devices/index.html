@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>기기 사이에서 텍스트, 링크, 명령 보내기</h1>
-      <p class="updated">최근 업데이트: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">최근 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-text-between-devices/">English</a><a href="/zh/how-to/send-text-between-devices/">中文</a><a href="/ja/how-to/send-text-between-devices/">日本語</a><a href="/ko/how-to/send-text-between-devices/" aria-current="true">한국어</a><a href="/de/how-to/send-text-between-devices/">Deutsch</a><a href="/fr/how-to/send-text-between-devices/">Français</a><a href="/ar/how-to/send-text-between-devices/">العربية</a><a href="/es/how-to/send-text-between-devices/">Español</a><a href="/pt/how-to/send-text-between-devices/">Português</a></nav>
       <p class="lead">Relayium은 파일뿐 아니라 휴대폰의 URL, 다른 컴퓨터에서 쓸 명령, 여러 줄 코드처럼 클립보드에 맞는 내용도 옮깁니다. 메시지는 종단간 암호화되며 Relayium 서버는 본문이나 서버 측 기록을 저장하지 않지만, 각 기기는 받은 텍스트를 복사하거나 보관할 수 있습니다.</p>
       <p class="lead">브라우저와 CLI 모두 텍스트를 지원하지만 서로 다른 전송 방식이므로 상대 방식의 페어링 코드에 참여할 수 없습니다. 양쪽에서 같은 방식을 사용하세요.</p>

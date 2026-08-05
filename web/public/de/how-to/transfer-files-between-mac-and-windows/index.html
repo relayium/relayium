@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Dateien zwischen Mac und Windows-PC übertragen</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-between-mac-and-windows/">English</a><a href="/zh/how-to/transfer-files-between-mac-and-windows/">中文</a><a href="/ja/how-to/transfer-files-between-mac-and-windows/">日本語</a><a href="/ko/how-to/transfer-files-between-mac-and-windows/">한국어</a><a href="/de/how-to/transfer-files-between-mac-and-windows/" aria-current="true">Deutsch</a><a href="/fr/how-to/transfer-files-between-mac-and-windows/">Français</a><a href="/ar/how-to/transfer-files-between-mac-and-windows/">العربية</a><a href="/es/how-to/transfer-files-between-mac-and-windows/">Español</a><a href="/pt/how-to/transfer-files-between-mac-and-windows/">Português</a></nav>
       <p class="lead">Mac und PC sprechen von Haus aus nicht dieselbe Sprache, wenn es um Dateifreigabe geht. AirDrop ist Apple vorbehalten, die Netzwerkfreigabe von Windows verlangt, dass beide Rechner in einer passenden Arbeitsgruppe oder Domäne sind, und beides lässt sich nicht eben in fünf Minuten einrichten — dabei willst du vielleicht nur einen Projektordner vom MacBook auf den Windows-Desktop bringen.</p>
       <p class="lead">Relayium umgeht dieses ganze Kompatibilitätsproblem. Öffne dieselbe Seite auf beiden Rechnern: Im selben LAN werden die Ende-zu-Ende-verschlüsselten Dateien direkt übertragen; netzübergreifend transportiert ein TURN-Relay nur Chiffretext, den es weder lesen noch entschlüsseln kann, und behält weder Echtzeitinhalte noch einen Verlauf. Installiert werden muss nichts; beim netzübergreifenden Pairing meldet sich der Ersteller an, die beitretende Person braucht nie ein Konto. Hier die genauen Schritte in beide Richtungen.</p>

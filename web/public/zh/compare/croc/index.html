@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium 对比 croc：从终端加密传输文件</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/croc/">English</a><a href="/zh/compare/croc/" aria-current="true">中文</a><a href="/ja/compare/croc/">日本語</a><a href="/ko/compare/croc/">한국어</a><a href="/de/compare/croc/">Deutsch</a><a href="/fr/compare/croc/">Français</a><a href="/ar/compare/croc/">العربية</a><a href="/es/compare/croc/">Español</a><a href="/pt/compare/croc/">Português</a></nav>
       <p class="lead">croc 是最受欢迎的终端间传输文件工具之一：一个简短好记的暗号短语、一次 PAKE 密钥交换，就能直接用。Relayium CLI 想做的是同一件事，实现方式也相似——免费、开源、端到端加密，只有 send 为了签发配对码才需要账号。</p>
       <p class="lead">这不是一篇贬低文。croc 的口碑是实至名归的。本文客观对比两者的共同点、Relayium CLI 因为能对接你已有的服务器而多出的能力，以及 croc 老实说更简单的场景。</p>

@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Receber arquivos pela linha de comando</h1>
-      <p class="updated">Última atualização: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line/">English</a><a href="/zh/guides/receive-files-from-the-command-line/">中文</a><a href="/ja/guides/receive-files-from-the-command-line/">日本語</a><a href="/ko/guides/receive-files-from-the-command-line/">한국어</a><a href="/de/guides/receive-files-from-the-command-line/">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line/">Français</a><a href="/ar/guides/receive-files-from-the-command-line/">العربية</a><a href="/es/guides/receive-files-from-the-command-line/">Español</a><a href="/pt/guides/receive-files-from-the-command-line/" aria-current="true">Português</a></nav>
       <p class="lead">Enviar é só metade da história — mais cedo ou mais tarde você está na ponta receptora: um colega quer te entregar um arquivo pela internet, uma das suas próprias máquinas quer repassá-lo a outra, ou você quer buscar algo em um servidor que administra. A CLI do Relayium cobre os três casos com um comando diferente para cada um, e nenhum precisa de conta.</p>
       <p class="lead">Escolha receive quando outra pessoa está te enviando por código de emparelhamento, serve quando você quer uma caixa de entrada permanente para a qual máquinas confiáveis possam enviar a qualquer momento, e pull quando é você quem vai buscar em um servidor ao qual você já consegue se conectar por ssh.</p>

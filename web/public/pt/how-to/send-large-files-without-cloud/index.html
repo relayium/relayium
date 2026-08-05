@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Como enviar arquivos grandes sem a nuvem</h1>
-      <p class="updated">Última atualização: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud/">English</a><a href="/zh/how-to/send-large-files-without-cloud/">中文</a><a href="/ja/how-to/send-large-files-without-cloud/">日本語</a><a href="/ko/how-to/send-large-files-without-cloud/">한국어</a><a href="/de/how-to/send-large-files-without-cloud/">Deutsch</a><a href="/fr/how-to/send-large-files-without-cloud/">Français</a><a href="/ar/how-to/send-large-files-without-cloud/">العربية</a><a href="/es/how-to/send-large-files-without-cloud/">Español</a><a href="/pt/how-to/send-large-files-without-cloud/" aria-current="true">Português</a></nav>
       <p class="lead">Uma exportação de vídeo de 20 GB ou um arquivo de projeto pesado é exatamente onde o armazenamento em nuvem parece mais lento: você faz upload do arquivo inteiro uma vez, espera e a outra pessoa faz o download de novo — duas transferências completas mais o que sua cota de armazenamento permitir. Para uma entrega única, é muita cópia e espera por bytes que só precisavam ir de A para B.</p>
       <p class="lead">Para um arquivo grande, o Relayium recomenda um link armazenado e criptografado de ponta a ponta: quem recebe não precisa estar online durante o upload e pega depois. Mantenha a página de envio aberta até terminar; depois o link fica disponível até expirar. Se os dois puderem continuar online, o tempo real é a alternativa imediata: WebRTC direto na LAN ou texto cifrado pelo TURN entre redes. O tempo real não mantém cópia de conteúdo nem histórico no servidor.</p>

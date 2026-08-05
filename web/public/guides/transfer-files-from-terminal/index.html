@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Transfer files and text from the terminal with the Relayium CLI</h1>
-      <p class="updated">Last updated: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/transfer-files-from-terminal/" aria-current="true">English</a><a href="/zh/guides/transfer-files-from-terminal/">中文</a><a href="/ja/guides/transfer-files-from-terminal/">日本語</a><a href="/ko/guides/transfer-files-from-terminal/">한국어</a><a href="/de/guides/transfer-files-from-terminal/">Deutsch</a><a href="/fr/guides/transfer-files-from-terminal/">Français</a><a href="/ar/guides/transfer-files-from-terminal/">العربية</a><a href="/es/guides/transfer-files-from-terminal/">Español</a><a href="/pt/guides/transfer-files-from-terminal/">Português</a></nav>
       <p class="lead">The Relayium CLI is a single small binary that moves files and ephemeral text from your terminal — encrypted end to end, self-hostable, and completely free. It handles copying files to a server, pushing a build between machines, sending an archive across networks, and moving a URL, command, or code snippet without first saving it as a file.</p>
       <p class="lead">Whichever way you use it, the file bytes travel directly between the two ends and never pass through Relayium&#39;s servers. This guide gets you installed and through your first transfer, then points you at the deeper how-tos for each mode.</p>

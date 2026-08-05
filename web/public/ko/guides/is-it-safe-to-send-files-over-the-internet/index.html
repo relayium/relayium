@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>인터넷으로 파일을 보내도 안전할까요?</h1>
-      <p class="updated">마지막 업데이트: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/is-it-safe-to-send-files-over-the-internet/">English</a><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">中文</a><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/">日本語</a><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet/" aria-current="true">한국어</a><a href="/de/guides/is-it-safe-to-send-files-over-the-internet/">Deutsch</a><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet/">Français</a><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet/">العربية</a><a href="/es/guides/is-it-safe-to-send-files-over-the-internet/">Español</a><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet/">Português</a></nav>
       <p class="lead">&quot;이 파일을 보내도 안전할까?&quot;는 잠시 멈춰 생각해볼 만한 합리적인 질문입니다. 세금 신고서든, 계약서든, 그냥 남에게 보이고 싶지 않은 사진이든 말이죠. 이 글은 흔히 쓰는 도구들을 겁주려는 것이 아닙니다. 이메일로 파일을 보낼 때, 클라우드 폴더에 넣을 때, USB 드라이브에 담아 다닐 때 실제로 무슨 일이 일어나는지, &quot;종단간 암호화&quot;와 &quot;영지식&quot;이라는 말이 실제로 무엇을 약속하는지, 그리고 소중한 것을 어떤 도구에 맡기기 전에 무엇을 확인해야 하는지를 담담하게 짚어보려는 것입니다.</p>
       <p class="lead">기술적인 배경지식은 전혀 필요하지 않습니다. 다 읽고 나면, 어떤 전송 방식에든——이 글에서 소개하는 방식을 포함해서——어떤 질문을 던져야 할지 알게 될 것입니다.</p>

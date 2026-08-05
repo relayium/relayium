@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>如何通过互联网在两台电脑之间传文件</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-between-two-computers-over-the-internet/">English</a><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/" aria-current="true">中文</a><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">日本語</a><a href="/ko/how-to/send-files-between-two-computers-over-the-internet/">한국어</a><a href="/de/how-to/send-files-between-two-computers-over-the-internet/">Deutsch</a><a href="/fr/how-to/send-files-between-two-computers-over-the-internet/">Français</a><a href="/ar/how-to/send-files-between-two-computers-over-the-internet/">العربية</a><a href="/es/how-to/send-files-between-two-computers-over-the-internet/">Español</a><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Português</a></nav>
       <p class="lead">给另一台电脑发文件，通常得先把它传到某个地方——网盘、邮件附件、聊天软件——然后指望对方能顺利取出来。Relayium 省掉了存储这一步：同一局域网内浏览器彼此直连；跨网络时则由 TURN 中继承载端到端加密密文，服务器端不保留实时内容副本或历史。</p>
       <p class="lead">本文覆盖两种情况——两台电脑在同一网络，以及两台电脑处于完全不同的网络（不同的家、不同的办公室、不同的国家）——并说明双方各自需要做什么。</p>

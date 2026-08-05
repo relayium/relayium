@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>用 Relayium CLI 通过 SSH 把文件备份到自己的服务器</h1>
-      <p class="updated">最近更新: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/">English</a><a href="/zh/guides/back-up-a-server-over-ssh/" aria-current="true">中文</a><a href="/ja/guides/back-up-a-server-over-ssh/">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh/">한국어</a><a href="/de/guides/back-up-a-server-over-ssh/">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh/">Français</a><a href="/ar/guides/back-up-a-server-over-ssh/">العربية</a><a href="/es/guides/back-up-a-server-over-ssh/">Español</a><a href="/pt/guides/back-up-a-server-over-ssh/">Português</a></nav>
       <p class="lead">如果你已经能 ssh 到某台机器上——VPS、家庭服务器、NAS、工作站都算——那就可以用 Relayium CLI 直接把文件备份过去，不用搭同步服务，也不用注册账号。传输走的是你现有的 SSH 连接，字节直接进你的服务器，从不经过 Relayium。</p>
       <p class="lead">本文介绍怎么 push 和 pull 目录、断点续传与完整性校验各自能带来什么，以及如何用 cron 让它定时跑起来。</p>

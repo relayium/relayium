@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs Dropbox: 파일 하나 보내기</h1>
-      <p class="updated">마지막 업데이트: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/dropbox/">English</a><a href="/zh/compare/dropbox/">中文</a><a href="/ja/compare/dropbox/">日本語</a><a href="/ko/compare/dropbox/" aria-current="true">한국어</a><a href="/de/compare/dropbox/">Deutsch</a><a href="/fr/compare/dropbox/">Français</a><a href="/ar/compare/dropbox/">العربية</a><a href="/es/compare/dropbox/">Español</a><a href="/pt/compare/dropbox/">Português</a></nav>
       <p class="lead">Dropbox의 평판에는 이유가 있습니다. 소유한 모든 기기에서 폴더를 동기화하고, 실수로 덮어써도 버전 기록으로 되돌릴 수 있으며, 프로젝트 폴더 전체를 공유 링크로 클라이언트에게 넘기는 것도 수월합니다. 계속 동기화 상태를 유지하는 작업 폴더가 필요하다면 Dropbox는 그 역할을 잘 해내며, 이 글은 그런 용도로 쓰지 말라고 설득하려는 것이 아닙니다.</p>
       <p class="lead">파일 하나를 넘길 때도 Dropbox는 먼저 계정에 넣습니다. Relayium은 같은 LAN에서 WebRTC 직접 연결, 네트워크 간에는 설계상 TURN으로 종단간 암호문을 운반하는 실시간 전송, 또는 상대 브라우저에서만 복호화되고 만료되는 링크를 사용합니다.</p>

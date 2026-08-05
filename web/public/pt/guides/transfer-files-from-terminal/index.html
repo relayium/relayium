@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Transfira arquivos e texto pelo terminal com a CLI do Relayium</h1>
-      <p class="updated">Última atualização: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/transfer-files-from-terminal/">English</a><a href="/zh/guides/transfer-files-from-terminal/">中文</a><a href="/ja/guides/transfer-files-from-terminal/">日本語</a><a href="/ko/guides/transfer-files-from-terminal/">한국어</a><a href="/de/guides/transfer-files-from-terminal/">Deutsch</a><a href="/fr/guides/transfer-files-from-terminal/">Français</a><a href="/ar/guides/transfer-files-from-terminal/">العربية</a><a href="/es/guides/transfer-files-from-terminal/">Español</a><a href="/pt/guides/transfer-files-from-terminal/" aria-current="true">Português</a></nav>
       <p class="lead">A CLI do Relayium é um pequeno binário para transferir arquivos e texto efêmero pelo terminal — com criptografia de ponta a ponta, auto-hospedável e gratuito. Copie arquivos para um servidor, envie um build ou passe URLs, comandos e código sem salvar primeiro como arquivo.</p>
       <p class="lead">Seja qual for a forma que você usar, os bytes dos arquivos trafegam diretamente entre as duas pontas e nunca passam pelos servidores do Relayium. Este guia deixa você instalado e com a sua primeira transferência feita, e depois aponta para os tutoriais mais aprofundados de cada modo.</p>

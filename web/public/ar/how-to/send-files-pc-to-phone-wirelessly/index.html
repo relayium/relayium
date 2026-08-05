@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>إرسال الملفات من الحاسوب إلى الهاتف لاسلكيًا، دون كابل أو تطبيق</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-pc-to-phone-wirelessly/">English</a><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/">中文</a><a href="/ja/how-to/send-files-pc-to-phone-wirelessly/">日本語</a><a href="/ko/how-to/send-files-pc-to-phone-wirelessly/">한국어</a><a href="/de/how-to/send-files-pc-to-phone-wirelessly/">Deutsch</a><a href="/fr/how-to/send-files-pc-to-phone-wirelessly/">Français</a><a href="/ar/how-to/send-files-pc-to-phone-wirelessly/" aria-current="true">العربية</a><a href="/es/how-to/send-files-pc-to-phone-wirelessly/">Español</a><a href="/pt/how-to/send-files-pc-to-phone-wirelessly/">Português</a></nav>
       <p class="lead">نقل ملف من حاسوبك المحمول إلى هاتفك لا ينبغي أن يعني البحث عن الكابل المناسب، أو إرسال بريد إلكتروني إلى نفسك، أو الرفع إلى قرص سحابي ثم تنزيله من جديد. ينقل Relayium البايتات مباشرةً من حاسوبك إلى هاتفك عبر شبكة Wi-Fi لديك، داخل المتصفح، دون أي شيء لتثبيته على أي من الجهازين.</p>
       <p class="lead">يشرح هذا الدليل الطريقة اللاسلكية خطوة بخطوة — على نفس الشبكة أو عبر الشبكات — ثم يقارنها بصدق مع البدائل المعتادة (USB، بلوتوث، تطبيقات المحادثة والبريد الإلكتروني) حتى تختار الأداة المناسبة للمهمة.</p>

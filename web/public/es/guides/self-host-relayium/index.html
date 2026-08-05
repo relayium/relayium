@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Aloja Relayium por tu cuenta: ejecuta tu servidor de transferencia de archivos y texto</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium/">English</a><a href="/zh/guides/self-host-relayium/">中文</a><a href="/ja/guides/self-host-relayium/">日本語</a><a href="/ko/guides/self-host-relayium/">한국어</a><a href="/de/guides/self-host-relayium/">Deutsch</a><a href="/fr/guides/self-host-relayium/">Français</a><a href="/ar/guides/self-host-relayium/">العربية</a><a href="/es/guides/self-host-relayium/" aria-current="true">Español</a><a href="/pt/guides/self-host-relayium/">Português</a></nav>
       <p class="lead">Relayium tiene licencia AGPL-3.0 y es de código abierto, y el servidor es una única imagen autocontenida — sin base de datos externa, sin bucket de almacenamiento de terceros, nada para lo que registrarse. Si prefieres ejecutarlo todo por tu cuenta en vez de depender de relayium.com, esta guía levanta un servidor con Docker y apunta la CLI hacia él.</p>
       <p class="lead">Autoalojar te da control total sobre dónde viven tus datos, tu propio dominio y certificado TLS, y ninguna dependencia de la infraestructura de nadie más. Todo lo que sigue se basa en los archivos que se distribuyen en el repositorio — `docker-compose.yml`, `server/.env.example` y `docs/self-hosting.md` — así que nada de lo que hay aquí es un indicador o ajuste que no exista de verdad.</p>

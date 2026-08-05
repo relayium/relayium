@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>إرسال ملف إلى شخص ما عبر الشبكات باستخدام واجهة Relayium الطرفية (CLI)</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/send-a-file-to-someone/">English</a><a href="/zh/guides/send-a-file-to-someone/">中文</a><a href="/ja/guides/send-a-file-to-someone/">日本語</a><a href="/ko/guides/send-a-file-to-someone/">한국어</a><a href="/de/guides/send-a-file-to-someone/">Deutsch</a><a href="/fr/guides/send-a-file-to-someone/">Français</a><a href="/ar/guides/send-a-file-to-someone/" aria-current="true">العربية</a><a href="/es/guides/send-a-file-to-someone/">Español</a><a href="/pt/guides/send-a-file-to-someone/">Português</a></nav>
       <p class="lead">أحيانًا لا يكون الجهاز الآخر جهازك ولا يمكنك الدخول إليه عبر SSH — ملف لزميل في مكتب آخر، أو نسخة بناء لعميل، أو أرشيف لصديق في الطرف الآخر من البلاد. يقوم relayium send وreceive بنقله مباشرةً بينكما عبر الشبكات، بالاعتماد فقط على رمز اقتران قصير تُصدره واجهة CLI لديك عند الإرسال.</p>
       <p class="lead">الاتصال من الند للند (P2P) ومُشفَّر من الطرف إلى الطرف. لا يمر عبر Relayium سوى مصافحة تعارف ضئيلة للغاية تُعرِّف الطرفين ببعضهما؛ أما بايتات الملف فلا تمر أبدًا.</p>

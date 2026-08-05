@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>cron で暗号化されたサーバーバックアップを自動化する</h1>
-      <p class="updated">最終更新: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最終更新: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups/">English</a><a href="/zh/how-to/automate-server-backups/">中文</a><a href="/ja/how-to/automate-server-backups/" aria-current="true">日本語</a><a href="/ko/how-to/automate-server-backups/">한국어</a><a href="/de/how-to/automate-server-backups/">Deutsch</a><a href="/fr/how-to/automate-server-backups/">Français</a><a href="/ar/how-to/automate-server-backups/">العربية</a><a href="/es/how-to/automate-server-backups/">Español</a><a href="/pt/how-to/automate-server-backups/">Português</a></nav>
       <p class="lead">自分で覚えて実行しなければならないバックアップは、たいてい実行されません。cron は覚えていてくれますし、Relayium CLI はまさにそのために作られています。ディレクトリを別のマシンへコピー（またはミラー）し、すべてのファイルを検証し、ネットワークが切れても中断した所から再開する、単一の非対話型コマンドです。</p>
       <p class="lead">本ガイドでは、cron から relayium push と増分同期の relayium sync をスケジュール実行する方法、どちらでも使える2つの転送方式、そしてそのままコピーできる crontab の行を扱います。</p>

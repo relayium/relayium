@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Envoyer un dossier entier, pas seulement des fichiers</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder/">English</a><a href="/zh/how-to/send-a-folder/">中文</a><a href="/ja/how-to/send-a-folder/">日本語</a><a href="/ko/how-to/send-a-folder/">한국어</a><a href="/de/how-to/send-a-folder/">Deutsch</a><a href="/fr/how-to/send-a-folder/" aria-current="true">Français</a><a href="/ar/how-to/send-a-folder/">العربية</a><a href="/es/how-to/send-a-folder/">Español</a><a href="/pt/how-to/send-a-folder/">Português</a></nav>
       <p class="lead">Envoyer un projet, ce n&#39;est pas comme envoyer un fichier : vous avez un dossier plein de sous-dossiers, et copier-coller chaque élément un par un détruit la structure qui le rend utile. Le zipper d&#39;abord fonctionne, mais cela impose un détour par un outil de compression avant même de pouvoir commencer.</p>
       <p class="lead">Relayium vous laisse choisir un dossier et l&#39;envoyer tel quel. Le navigateur conserve toute l&#39;arborescence et diffuse en direct — directement par WebRTC sur le même LAN, ou sous forme de texte chiffré de bout en bout via TURN entre réseaux — sans copie ni historique temps réel côté serveur ; il peut aussi créer un lien stocké pour plus tard.</p>

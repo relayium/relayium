@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>如何把文件从安卓传到 iPhone（无需数据线）</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone/">English</a><a href="/zh/how-to/transfer-files-android-to-iphone/" aria-current="true">中文</a><a href="/ja/how-to/transfer-files-android-to-iphone/">日本語</a><a href="/ko/how-to/transfer-files-android-to-iphone/">한국어</a><a href="/de/how-to/transfer-files-android-to-iphone/">Deutsch</a><a href="/fr/how-to/transfer-files-android-to-iphone/">Français</a><a href="/ar/how-to/transfer-files-android-to-iphone/">العربية</a><a href="/es/how-to/transfer-files-android-to-iphone/">Español</a><a href="/pt/how-to/transfer-files-android-to-iphone/">Português</a></nav>
       <p class="lead">安卓和 iPhone 之间没有互通的 AirDrop，所以在两者间传几张照片或一段视频，往往只能靠 USB 数据线、会压缩画质的聊天软件，或者绕一圈网盘上传下载。三种方式都比本该有的更慢、更折腾。</p>
       <p class="lead">Relayium 把这些统统省掉。两台手机打开同一个网页：同一局域网内，端到端加密的文件会直接传输；跨网络时，TURN 中继只搬运它无法读取或解密的密文，也不保留实时内容副本或历史。无需安装应用；跨网络配对由创建者登录，加入者始终无需账号。本文一步步带你完成。</p>

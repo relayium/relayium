@@ -86,7 +86,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Envoyer des fichiers dans le cloud, les récupérer sur un autre ordinateur</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer/">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer/">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer/">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer/">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer/">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer/" aria-current="true">Français</a><a href="/ar/guides/push-to-cloud-pull-on-another-computer/">العربية</a><a href="/es/guides/push-to-cloud-pull-on-another-computer/">Español</a><a href="/pt/guides/push-to-cloud-pull-on-another-computer/">Português</a></nav>
       <p class="lead">Parfois, les deux ordinateurs ne sont jamais allumés en même temps. Vous voulez déposer un fichier ce soir depuis le portable du travail et le récupérer demain depuis le poste de la maison, sans que personne n&#39;attende une connexion en direct. relayium up et relayium down font exactement cela : up chiffre localement puis téléverse vers votre compte, et down le récupère plus tard sur n&#39;importe quelle machine et le déchiffre — pas de poignée de main pair-à-pair, pas de serveur où vous pouvez tous les deux vous connecter en ssh.</p>
       <p class="lead">C&#39;est la principale partie de la CLI qui utilise votre compte Relayium, avec send, qui en a besoin pour générer un code d&#39;appairage. Pour le reste, la liaison est facultative : push/pull, daemon-direct et sync continuent de fonctionner sans connexion, et receive aussi. Le téléchargement ne demande aucun compte, juste le lien.</p>

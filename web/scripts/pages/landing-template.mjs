@@ -1,7 +1,7 @@
 // web/scripts/pages/landing-template.mjs — renders one static localized landing page.
 // Self-contained: no JS, no external CSS. Styles are inlined so the page is
 // independent of the Vite asset graph and fully crawlable with JS disabled.
-import { LANGS, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, PRICING_LABELS, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, landingUrl, ctaHref, urlPath, absUrl, esc, dirAttr, rtlHead } from "./shared.mjs";
+import { LANGS, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, PRICING_LABELS, PRICING_URL, RELEASES_LABELS, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, landingUrl, ctaHref, urlPath, absUrl, esc, dirAttr, rtlHead } from "./shared.mjs";
 
 // Exported so mode-template.mjs (and any other landing-style page) can reuse the
 // exact same inline stylesheet + page-shell classes instead of forking them.
@@ -186,6 +186,7 @@ export function renderLandingPage({ lang, doc, articleLinks = [] }) {
         <a href="${urlPath("terms", lang)}">${esc(doc.footer.terms)}</a>
         <a href="${urlPath("security", lang)}">${esc(doc.footer.security)}</a>
         <a href="${PRICING_URL}">${esc(PRICING_LABELS[lang])}</a>
+        <a href="${urlPath("releases", lang)}">${esc(RELEASES_LABELS[lang])}</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

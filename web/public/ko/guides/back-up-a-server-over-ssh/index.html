@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium CLI로 SSH를 통해 자신의 서버에 파일 백업하기</h1>
-      <p class="updated">마지막 업데이트: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/">English</a><a href="/zh/guides/back-up-a-server-over-ssh/">中文</a><a href="/ja/guides/back-up-a-server-over-ssh/">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh/" aria-current="true">한국어</a><a href="/de/guides/back-up-a-server-over-ssh/">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh/">Français</a><a href="/ar/guides/back-up-a-server-over-ssh/">العربية</a><a href="/es/guides/back-up-a-server-over-ssh/">Español</a><a href="/pt/guides/back-up-a-server-over-ssh/">Português</a></nav>
       <p class="lead">VPS, 홈 서버, NAS, 워크스테이션 등 이미 ssh로 접속할 수 있는 서버가 있다면, 동기화 서비스나 계정을 따로 마련하지 않고도 Relayium CLI로 그곳에 파일을 백업할 수 있습니다. 전송은 기존 SSH 연결을 통해 이루어지므로 바이트는 곧장 내 서버로 가고 Relayium을 거치지 않습니다.</p>
       <p class="lead">이 가이드는 디렉터리를 push하고 pull하는 방법, 재개와 무결성 검사가 주는 이점, 그리고 cron으로 예약 실행하는 방법을 다룹니다.</p>

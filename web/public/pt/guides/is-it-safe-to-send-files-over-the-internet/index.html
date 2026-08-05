@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>É seguro enviar arquivos pela internet?</h1>
-      <p class="updated">Última atualização: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/is-it-safe-to-send-files-over-the-internet/">English</a><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">中文</a><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/">日本語</a><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet/">한국어</a><a href="/de/guides/is-it-safe-to-send-files-over-the-internet/">Deutsch</a><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet/">Français</a><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet/">العربية</a><a href="/es/guides/is-it-safe-to-send-files-over-the-internet/">Español</a><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet/" aria-current="true">Português</a></nav>
       <p class="lead">“É seguro enviar este arquivo?” é uma pergunta razoável para parar e fazer, seja uma declaração de imposto de renda, um contrato ou apenas fotos que você preferiria manter privadas. Este guia não pretende afastar você das ferramentas comuns — trata-se de percorrer, com clareza, o que de fato acontece com um arquivo quando você o envia por e-mail, o deixa em uma pasta na nuvem ou o carrega em um pendrive, o que as expressões “criptografia de ponta a ponta” e “conhecimento zero” realmente prometem, e o que verificar antes de confiar algo importante a qualquer ferramenta.</p>
       <p class="lead">Nada disso exige formação técnica. Ao final, você saberá que perguntas fazer — sobre qualquer método de transferência, incluindo este.</p>

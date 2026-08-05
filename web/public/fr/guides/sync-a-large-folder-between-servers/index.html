@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Synchroniser un gros dossier entre deux serveurs (avec reprise, en arrière-plan)</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-08</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-08</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers/">English</a><a href="/zh/guides/sync-a-large-folder-between-servers/">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers/">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers/">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers/">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers/" aria-current="true">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers/">العربية</a><a href="/es/guides/sync-a-large-folder-between-servers/">Español</a><a href="/pt/guides/sync-a-large-folder-between-servers/">Português</a></nav>
       <p class="lead">Vous avez un gros dossier — des dizaines de gigaoctets — sur un serveur et vous voulez une copie exacte sur un autre. Vous ne pouvez pas surveiller un terminal pendant des heures, et un transfert qui meurt à mi-chemin ne devrait pas repartir de zéro. relayium sync est fait pour cela : un miroir incrémental à sens unique qui saute ce qui est déjà là, reprend un fichier envoyé à moitié là où il s&#39;est arrêté, et vérifie chaque fichier de bout en bout.</p>
       <p class="lead">Ce guide met en place un transfert sans surveillance et auto-réparateur : autorisez l&#39;émetteur une fois, faites tourner le processus à l&#39;écoute en arrière-plan, et pilotez relayium sync depuis une boucle de reprise dans tmux pour qu&#39;il continue malgré les coupures jusqu&#39;à ce que tout le dossier soit arrivé.</p>

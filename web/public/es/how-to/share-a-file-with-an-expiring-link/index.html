@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Compartir un archivo con un enlace de descarga seguro y con caducidad</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/share-a-file-with-an-expiring-link/">English</a><a href="/zh/how-to/share-a-file-with-an-expiring-link/">中文</a><a href="/ja/how-to/share-a-file-with-an-expiring-link/">日本語</a><a href="/ko/how-to/share-a-file-with-an-expiring-link/">한국어</a><a href="/de/how-to/share-a-file-with-an-expiring-link/">Deutsch</a><a href="/fr/how-to/share-a-file-with-an-expiring-link/">Français</a><a href="/ar/how-to/share-a-file-with-an-expiring-link/">العربية</a><a href="/es/how-to/share-a-file-with-an-expiring-link/" aria-current="true">Español</a><a href="/pt/how-to/share-a-file-with-an-expiring-link/">Português</a></nav>
       <p class="lead">No en toda transferencia hay alguien esperando del otro lado. Quizás el destinatario está dormido, en un vuelo, o simplemente quieres dejar un enlace en un mensaje y seguir con tu día. Para eso Relayium tiene un segundo modo: en lugar de transmitir un archivo en vivo a otro navegador abierto, cifra el archivo donde estás, sube solo el texto cifrado y te entrega un enlace que puedes enviar cuando quieras — la descarga ocurre según el horario del propio destinatario.</p>
       <p class="lead">Esta guía recorre la creación de uno de estos enlaces, las opciones de caducidad y de borrado tras la lectura, y qué significa exactamente en la práctica el diseño de conocimiento cero — incluidos los límites honestos: crear un enlace requiere que el remitente inicie sesión, y los enlaces se descuentan de una cuota de almacenamiento.</p>

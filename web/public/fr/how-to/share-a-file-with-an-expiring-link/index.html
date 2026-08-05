@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Partager un fichier avec un lien de téléchargement à expiration</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/share-a-file-with-an-expiring-link/">English</a><a href="/zh/how-to/share-a-file-with-an-expiring-link/">中文</a><a href="/ja/how-to/share-a-file-with-an-expiring-link/">日本語</a><a href="/ko/how-to/share-a-file-with-an-expiring-link/">한국어</a><a href="/de/how-to/share-a-file-with-an-expiring-link/">Deutsch</a><a href="/fr/how-to/share-a-file-with-an-expiring-link/" aria-current="true">Français</a><a href="/ar/how-to/share-a-file-with-an-expiring-link/">العربية</a><a href="/es/how-to/share-a-file-with-an-expiring-link/">Español</a><a href="/pt/how-to/share-a-file-with-an-expiring-link/">Português</a></nav>
       <p class="lead">Il n&#39;y a pas toujours quelqu&#39;un qui attend de l&#39;autre côté d&#39;un transfert. Le destinataire dort peut-être, est dans l&#39;avion, ou vous voulez simplement déposer un lien dans un message et passer à autre chose. C&#39;est pour cela que Relayium propose un second mode : au lieu de diffuser un fichier en direct vers un autre navigateur ouvert, il chiffre le fichier chez vous, ne téléverse que le texte chiffré, et vous remet un lien que vous pouvez envoyer quand vous voulez — le téléchargement se fait au moment qui convient au destinataire.</p>
       <p class="lead">Ce guide explique comment créer un tel lien, les options d&#39;expiration et d&#39;autodestruction après le premier téléchargement, et ce que la conception à divulgation nulle signifie concrètement — y compris les limites honnêtes : créer un lien exige que l&#39;expéditeur se connecte, et les liens comptent dans un quota de stockage.</p>

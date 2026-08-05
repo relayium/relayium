@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium frente a LocalSend: qué transferencia local usar</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/localsend/">English</a><a href="/zh/compare/localsend/">中文</a><a href="/ja/compare/localsend/">日本語</a><a href="/ko/compare/localsend/">한국어</a><a href="/de/compare/localsend/">Deutsch</a><a href="/fr/compare/localsend/">Français</a><a href="/ar/compare/localsend/">العربية</a><a href="/es/compare/localsend/" aria-current="true">Español</a><a href="/pt/compare/localsend/">Português</a></nav>
       <p class="lead">LocalSend es una aplicación genuinamente buena y muy querida: gratis, de código abierto, multiplataforma y creada para mover archivos entre dispositivos de la misma red local sin servidor y sin cuenta, nunca. Mucha gente confía en ella como herramienta tipo AirDrop para Windows, Linux y Android.</p>
       <p class="lead">Este artículo la compara con justicia con Relayium, que aborda el mismo problema de la misma red de otra manera —sin ninguna aplicación que instalar, funcionando directamente en tu navegador— y luego va más allá, llegando entre redes y ofreciendo una herramienta de línea de comandos que LocalSend no tiene.</p>

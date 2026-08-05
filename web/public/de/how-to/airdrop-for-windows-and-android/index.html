@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>AirDrop-Alternative für Windows, Linux, Android</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/airdrop-for-windows-and-android/">English</a><a href="/zh/how-to/airdrop-for-windows-and-android/">中文</a><a href="/ja/how-to/airdrop-for-windows-and-android/">日本語</a><a href="/ko/how-to/airdrop-for-windows-and-android/">한국어</a><a href="/de/how-to/airdrop-for-windows-and-android/" aria-current="true">Deutsch</a><a href="/fr/how-to/airdrop-for-windows-and-android/">Français</a><a href="/ar/how-to/airdrop-for-windows-and-android/">العربية</a><a href="/es/how-to/airdrop-for-windows-and-android/">Español</a><a href="/pt/how-to/airdrop-for-windows-and-android/">Português</a></nav>
       <p class="lead">AirDrop existiert nur in Apples Welt, was allen anderen — Windows, Linux, Android und jedem Haushalt mit gemischten Geräten — kein eingebautes Äquivalent lässt. Diese Anleitung zeigt die nächste Alternative zu AirDrop für Nicht-Apple-Geräte: eine Webseite auf beiden Seiten öffnen, und die Datei bewegt sich einfach.</p>
       <p class="lead">Es funktioniert unabhängig von der Plattform gleich, deckt also auch den Fall ab, den AirDrop nie gut behandelt: ein Windows-Laptop, ein Linux-Desktop und ein Android-Handy im selben Raum — oder alle drei plus ein iPhone dazu.</p>

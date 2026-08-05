@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>AirDrop para Windows, Linux y Android</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/airdrop-for-windows-and-android/">English</a><a href="/zh/how-to/airdrop-for-windows-and-android/">中文</a><a href="/ja/how-to/airdrop-for-windows-and-android/">日本語</a><a href="/ko/how-to/airdrop-for-windows-and-android/">한국어</a><a href="/de/how-to/airdrop-for-windows-and-android/">Deutsch</a><a href="/fr/how-to/airdrop-for-windows-and-android/">Français</a><a href="/ar/how-to/airdrop-for-windows-and-android/">العربية</a><a href="/es/how-to/airdrop-for-windows-and-android/" aria-current="true">Español</a><a href="/pt/how-to/airdrop-for-windows-and-android/">Português</a></nav>
       <p class="lead">AirDrop solo existe dentro del mundo de Apple, lo que deja a todos los demás — Windows, Linux, Android y cualquier hogar con una mezcla de dispositivos — sin un equivalente integrado. Esta guía muestra lo más parecido a AirDrop para dispositivos que no son de Apple: abre una página web en ambos extremos y el archivo simplemente se mueve.</p>
       <p class="lead">Funciona igual sea cual sea la plataforma, así que también cubre el caso que AirDrop nunca gestiona bien: un portátil con Windows, un ordenador de escritorio con Linux y un teléfono Android todos en la misma habitación, o los tres más un iPhone añadido.</p>

@@ -38,6 +38,11 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+.releases{list-style:none;margin:16px 0 0;padding:0}
+.releases li{display:flex;gap:16px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border)}
+.releases li:last-child{border-bottom:0}
+.releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
+.releases .date{font-size:14px;font-variant-numeric:tabular-nums}
 </style>
   </head>
   <body>
@@ -48,7 +53,13 @@ footer a{color:var(--text-h);text-decoration:none}
            visual position — it is a labelled <nav> landmark either way. -->
       <main>
       <h1>Seguridad y modelo de amenazas</h1>
-      <p class="updated">Última actualización: 2026-08-02</p>
+      <!-- The date is isolated for the same reason the release rows are: an ISO
+           date is three digit runs joined by hyphens, and on the Arabic page the
+           bidi algorithm lays those runs out right-to-left. "2026-08-03" was
+           rendering as "03-08-2026" on all four Arabic legal pages — measured in
+           a browser, not deduced. <bdi> resolves LTR (no strong character
+           inside) and pins the order. -->
+      <p class="updated">Última actualización: <bdi>2026-08-02</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/security/">English</a><a href="/zh/security/">中文</a><a href="/ja/security/">日本語</a><a href="/ko/security/">한국어</a><a href="/de/security/">Deutsch</a><a href="/fr/security/">Français</a><a href="/ar/security/">العربية</a><a href="/es/security/" aria-current="true">Español</a><a href="/pt/security/">Português</a></nav>
       <p>Relayium está diseñado para que las personas que transfieren archivos o textos temporales —no el servidor— tengan las claves. Esta página describe exactamente qué está protegido, cómo funciona y los límites de esa protección.</p>
       <p>En resumen: en la misma red, los archivos y mensajes en tiempo real circulan directamente entre dispositivos. Entre redes, las sesiones del navegador usan un retransmisor que solo transporta texto cifrado de extremo a extremo y no posee la clave del contenido. Siempre se usan claves nuevas en cada sesión; además, un código opcional comparado fuera de banda permite detectar la interceptación de la señalización. A continuación, los detalles.</p>
@@ -68,6 +79,7 @@ footer a{color:var(--text-h);text-decoration:none}
         <a href="/es/apps/">Apps</a>
         <a href="/es/privacy/">Política de privacidad</a>
         <a href="/pricing">Precios</a>
+        <a href="/es/releases/">Versiones</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

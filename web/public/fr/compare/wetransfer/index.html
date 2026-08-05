@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs WeTransfer : liens chiffrés et remises en direct</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/wetransfer/">English</a><a href="/zh/compare/wetransfer/">中文</a><a href="/ja/compare/wetransfer/">日本語</a><a href="/ko/compare/wetransfer/">한국어</a><a href="/de/compare/wetransfer/">Deutsch</a><a href="/fr/compare/wetransfer/" aria-current="true">Français</a><a href="/ar/compare/wetransfer/">العربية</a><a href="/es/compare/wetransfer/">Español</a><a href="/pt/compare/wetransfer/">Português</a></nav>
       <p class="lead">WeTransfer a rendu l&#39;envoi de gros fichiers sans effort : déposez un fichier, obtenez un lien, et le destinataire télécharge quand il est prêt — même s&#39;il était hors ligne au moment de l&#39;envoi. Cette expérience asynchrone, sans compte pour recevoir, est vraiment bonne, et c&#39;est pourquoi tant de gens s&#39;y fient.</p>
       <p class="lead">Cet article compare équitablement. Pour les gros fichiers ou une récupération ultérieure, Relayium recommande aussi un lien stocké, mais le serveur ne conserve que du texte chiffré à divulgation nulle. Le temps réel est une force distincte pour les petits fichiers et le texte tant que les deux côtés restent en ligne : direct sur le LAN, ou chiffré de bout en bout via TURN entre réseaux.</p>

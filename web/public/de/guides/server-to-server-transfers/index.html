@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Server-zu-Server-Übertragungen mit der Relayium CLI (daemon-direct)</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers/">English</a><a href="/zh/guides/server-to-server-transfers/">中文</a><a href="/ja/guides/server-to-server-transfers/">日本語</a><a href="/ko/guides/server-to-server-transfers/">한국어</a><a href="/de/guides/server-to-server-transfers/" aria-current="true">Deutsch</a><a href="/fr/guides/server-to-server-transfers/">Français</a><a href="/ar/guides/server-to-server-transfers/">العربية</a><a href="/es/guides/server-to-server-transfers/">Español</a><a href="/pt/guides/server-to-server-transfers/">Português</a></nav>
       <p class="lead">Wenn beide Maschinen dir gehören und jede die Adresse der anderen kennt, ist SSH zusätzliche Reibung und ein Rendezvous reiner Overhead. daemon-direct ist genau dafür gebaut: Ein Server lauscht, der andere pusht direkt dorthin über eine TLS-1.3-Verbindung mit Pinning. Kein Relay, kein SSH, kein Pairing-Code — das Vertrauen basiert auf Public Keys und wird einmal eingerichtet.</p>
       <p class="lead">Diese Anleitung behandelt das Starten des Listeners, das Pushen dorthin, das Genehmigen eines neuen Pushers beim ersten Kontakt, die Automatisierung und den Betrieb des Listeners als systemd-Dienst.</p>

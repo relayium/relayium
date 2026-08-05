@@ -91,6 +91,26 @@ describe("Arabic bidi isolation in generated pages", () => {
     expect(bad).toEqual([]);
   });
 
+  // Dates, not head strings — the third member of the same family. An ISO date
+  // is three digit runs joined by hyphens, and in an RTL paragraph the bidi
+  // algorithm orders those runs right-to-left: "2026-08-03" rendered as
+  // "03-08-2026" on all four Arabic legal pages. Confirmed by measuring the
+  // rendered x positions of "2026" and "03" in a browser, then again after the
+  // fix, which is the only way to see it — the DOM text is correct either way.
+  it("every date rendered into an Arabic page is bidi-isolated", () => {
+    const bad = [];
+    for (const page of arPages) {
+      // Only dates that are laid out. A date inside the JSON-LD block or in a
+      // meta attribute is data a machine reads, never a run a browser orders,
+      // so the tag-then-text walk below skips both by construction.
+      const body = page.html.replace(/<script[\s\S]*?<\/script>/g, "");
+      for (const [, tag, text] of body.matchAll(/<(\w+)[^>]*>([^<]*)/g)) {
+        if (/\d{4}-\d{2}-\d{2}/.test(text) && tag !== "bdi") bad.push(`${page.path}: <${tag}> ${text.trim()}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
   // This one reads the SOURCE strings, not the built HTML, and that is the whole
   // point: by the time `--ttl <duration>` reaches a page it has been escaped to
   // `--ttl &lt;duration&gt;`, so a check over the output can never see the `>`

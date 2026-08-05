@@ -160,7 +160,12 @@ function proseBody(doc, { links = [], langSlug = null } = {}) {
   p.push(
     `<p><a href="/">Relayium home</a> · <a href="/guides/">Guides</a> · ` +
       `<a href="/apps">Apps</a> · <a href="${PRICING_URL}">Pricing</a> · <a href="/cli">CLI</a> · ` +
-      `<a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a> · <a href="/security/">Security</a></p>`
+      `<a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a> · <a href="/security/">Security</a> · ` +
+      // The only inbound link to the English /releases/. The eight localized
+      // twins are linked from their own landing and legal pages; the English
+      // homepage is this SPA, so without this line /releases/ would be in the
+      // sitemap and linked from nowhere.
+      `<a href="/releases/">Releases</a></p>`
   );
   return `<noscript>\n      <main>\n        ${p.join("\n        ")}\n      </main>\n    </noscript>`;
 }

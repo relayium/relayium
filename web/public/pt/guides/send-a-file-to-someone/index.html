@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Enviar um arquivo para alguém entre redes com a CLI do Relayium</h1>
-      <p class="updated">Última atualização: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/send-a-file-to-someone/">English</a><a href="/zh/guides/send-a-file-to-someone/">中文</a><a href="/ja/guides/send-a-file-to-someone/">日本語</a><a href="/ko/guides/send-a-file-to-someone/">한국어</a><a href="/de/guides/send-a-file-to-someone/">Deutsch</a><a href="/fr/guides/send-a-file-to-someone/">Français</a><a href="/ar/guides/send-a-file-to-someone/">العربية</a><a href="/es/guides/send-a-file-to-someone/">Español</a><a href="/pt/guides/send-a-file-to-someone/" aria-current="true">Português</a></nav>
       <p class="lead">Às vezes a outra máquina não é sua e você não consegue entrar por SSH: um arquivo para um colega em outro escritório, um build para um cliente, um arquivo compactado para um amigo do outro lado do país. relayium send e receive o movem diretamente entre as duas partes, entre redes, usando apenas um código de emparelhamento curto que a sua CLI gera na hora de enviar.</p>
       <p class="lead">A conexão é ponto a ponto e com criptografia de ponta a ponta. Apenas um pequeníssimo handshake de encontro passa pelo Relayium para apresentar as duas pontas; os bytes do arquivo nunca passam.</p>

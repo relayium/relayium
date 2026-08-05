@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>두 서버 사이에서 큰 폴더 동기화하기(재개 가능, 백그라운드)</h1>
-      <p class="updated">마지막 업데이트: 2026-07-08</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-08</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers/">English</a><a href="/zh/guides/sync-a-large-folder-between-servers/">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers/">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers/" aria-current="true">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers/">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers/">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers/">العربية</a><a href="/es/guides/sync-a-large-folder-between-servers/">Español</a><a href="/pt/guides/sync-a-large-folder-between-servers/">Português</a></nav>
       <p class="lead">한 서버에 큰 폴더(수십 GB)가 있고, 다른 서버에 똑같은 복사본을 원한다고 합시다. 몇 시간 동안 터미널을 지켜볼 수도 없고, 도중에 죽은 전송이 처음부터 다시 시작되어서도 안 됩니다. relayium sync는 바로 이를 위해 만들어졌습니다. 이미 있는 것은 건너뛰고, 절반만 보낸 파일은 멈춘 지점부터 재개하며, 모든 파일을 끝에서 끝까지 검증하는 단방향 증분 미러입니다.</p>
       <p class="lead">이 가이드는 무인으로 스스로 복구하는 전송을 구성합니다. 보내는 쪽을 한 번만 승인하고, 리스너를 백그라운드에서 돌리고, tmux 안의 재시도 루프로 relayium sync를 구동해 연결이 끊겨도 계속 진행하여 폴더 전체가 도착할 때까지 실행합니다.</p>

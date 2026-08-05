@@ -7,6 +7,7 @@ import privacy from "./pages/content/legal/privacy.mjs";
 import terms from "./pages/content/legal/terms.mjs";
 import security from "./pages/content/legal/security.mjs";
 import support from "./pages/content/legal/support.mjs";
+import releases from "./pages/content/releases.mjs";
 import landing from "./pages/content/landing.mjs";
 import crossNetwork from "./pages/content/cross-network.mjs";
 import offlineTransfer from "./pages/content/offline-transfer.mjs";
@@ -56,6 +57,7 @@ import {
   buildArticlePages,
   buildGuidesIndexPages,
   buildCategoryIndexPages,
+  buildReleasesPages,
   buildModePages,
   buildSitemap,
   articleLinksByLang,
@@ -124,6 +126,7 @@ const SPA_PAGES = [{ path: "/pricing" }, { path: "/cli" }];
 export function buildAllPages() {
   return [
     ...buildLegalPages(legalDocs),
+    ...buildReleasesPages(releases),
     ...buildLandingPages(landing, articleLinksByLang(articles)),
     ...buildArticlePages(articles),
     ...buildGuidesIndexPages(guidesIndex, articleGroupsByLang(articles)),
@@ -150,6 +153,7 @@ export function buildSiteSitemap() {
     categoryHubs: CATEGORY_HUBS,
     modes: MODES,
     spaPages: SPA_PAGES,
+    releases,
   });
 }
 

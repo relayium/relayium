@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Cómo enviar una carpeta entera, no solo archivos</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder/">English</a><a href="/zh/how-to/send-a-folder/">中文</a><a href="/ja/how-to/send-a-folder/">日本語</a><a href="/ko/how-to/send-a-folder/">한국어</a><a href="/de/how-to/send-a-folder/">Deutsch</a><a href="/fr/how-to/send-a-folder/">Français</a><a href="/ar/how-to/send-a-folder/">العربية</a><a href="/es/how-to/send-a-folder/" aria-current="true">Español</a><a href="/pt/how-to/send-a-folder/">Português</a></nav>
       <p class="lead">Enviar un proyecto no es lo mismo que enviar un archivo — tienes una carpeta llena de subcarpetas, y copiar y pegar cada pieza por separado pierde la estructura que la hace útil. Comprimirla primero funciona, pero implica un rodeo por una herramienta de compresión antes siquiera de poder empezar.</p>
       <p class="lead">Relayium te deja elegir una carpeta y enviarla tal cual. El navegador conserva todo el árbol y transmite en vivo — directamente por WebRTC en la misma LAN, o como texto cifrado de extremo a extremo por TURN entre redes — sin copia ni historial en tiempo real del lado del servidor; también puede crear un enlace almacenado para después.</p>

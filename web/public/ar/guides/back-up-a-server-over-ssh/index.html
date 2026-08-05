@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>انسخ الملفات احتياطيًا إلى خادمك عبر SSH باستخدام Relayium CLI</h1>
-      <p class="updated">آخر تحديث: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/">English</a><a href="/zh/guides/back-up-a-server-over-ssh/">中文</a><a href="/ja/guides/back-up-a-server-over-ssh/">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh/">한국어</a><a href="/de/guides/back-up-a-server-over-ssh/">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh/">Français</a><a href="/ar/guides/back-up-a-server-over-ssh/" aria-current="true">العربية</a><a href="/es/guides/back-up-a-server-over-ssh/">Español</a><a href="/pt/guides/back-up-a-server-over-ssh/">Português</a></nav>
       <p class="lead">إذا كان لديك بالفعل وصول SSH إلى جهاز — خادم افتراضي خاص، أو خادم منزلي، أو NAS، أو محطة عمل — فيمكنك نسخ الملفات إليه احتياطيًا باستخدام Relayium CLI دون إعداد خدمة مزامنة أو حساب. تجري عملية النقل عبر اتصال SSH الموجود لديك، فتذهب البايتات مباشرة إلى خادمك ولا تمر أبدًا عبر Relayium.</p>
       <p class="lead">يغطّي هذا الدليل دفع المجلدات وسحبها، وما يمنحك إياه الاستئناف والتحقق من السلامة، وكيفية تشغيله وفق جدول باستخدام cron.</p>

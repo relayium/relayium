@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs Dropbox para enviar un archivo</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/dropbox/">English</a><a href="/zh/compare/dropbox/">中文</a><a href="/ja/compare/dropbox/">日本語</a><a href="/ko/compare/dropbox/">한국어</a><a href="/de/compare/dropbox/">Deutsch</a><a href="/fr/compare/dropbox/">Français</a><a href="/ar/compare/dropbox/">العربية</a><a href="/es/compare/dropbox/" aria-current="true">Español</a><a href="/pt/compare/dropbox/">Português</a></nav>
       <p class="lead">Dropbox se gana su reputación. Sincroniza una carpeta en todas las máquinas que posees, mantiene un historial de versiones cuando sobrescribes algo por accidente, y convierte en un trámite el entregar una carpeta de proyecto entera a un cliente con una invitación por enlace para compartir. Si quieres una carpeta de trabajo que simplemente se mantenga sincronizada, Dropbox hace bien ese trabajo y esto no es un argumento en contra de usarlo así.</p>
       <p class="lead">Incluso para entregar un archivo, Dropbox lo pone primero en una cuenta. Relayium lo transmite en tiempo real: WebRTC directo en la misma LAN o texto cifrado de extremo a extremo por TURN entre redes por diseño; también puede crear un enlace que solo se descifra en el navegador y desaparece según tu calendario.</p>

@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Auto-héberger Relayium : gérez votre serveur de transfert de fichiers et de texte</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium/">English</a><a href="/zh/guides/self-host-relayium/">中文</a><a href="/ja/guides/self-host-relayium/">日本語</a><a href="/ko/guides/self-host-relayium/">한국어</a><a href="/de/guides/self-host-relayium/">Deutsch</a><a href="/fr/guides/self-host-relayium/" aria-current="true">Français</a><a href="/ar/guides/self-host-relayium/">العربية</a><a href="/es/guides/self-host-relayium/">Español</a><a href="/pt/guides/self-host-relayium/">Português</a></nav>
       <p class="lead">Relayium est sous licence AGPL-3.0 et open source, et le serveur est une image unique et autonome — pas de base de données externe, pas de bucket de stockage tiers, rien à quoi s&#39;inscrire. Si vous préférez tout faire tourner vous-même plutôt que dépendre de relayium.com, ce guide vous fait monter un serveur avec Docker et paramètre la CLI pour qu&#39;elle s&#39;y connecte.</p>
       <p class="lead">S&#39;auto-héberger vous donne un contrôle total sur l&#39;emplacement de vos données, votre propre domaine et certificat TLS, et aucune dépendance aux décisions opérationnelles de quelqu&#39;un d&#39;autre. Tout ce qui suit s&#39;appuie sur des fichiers réellement présents dans le dépôt — docker-compose.yml, server/.env.example et docs/self-hosting.md — donc rien ici n&#39;est un indicateur ou un réglage qui n&#39;existe pas réellement.</p>

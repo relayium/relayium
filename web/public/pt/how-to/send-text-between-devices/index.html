@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Enviar texto, links e comandos entre dispositivos</h1>
-      <p class="updated">Última atualização: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-text-between-devices/">English</a><a href="/zh/how-to/send-text-between-devices/">中文</a><a href="/ja/how-to/send-text-between-devices/">日本語</a><a href="/ko/how-to/send-text-between-devices/">한국어</a><a href="/de/how-to/send-text-between-devices/">Deutsch</a><a href="/fr/how-to/send-text-between-devices/">Français</a><a href="/ar/how-to/send-text-between-devices/">العربية</a><a href="/es/how-to/send-text-between-devices/">Español</a><a href="/pt/how-to/send-text-between-devices/" aria-current="true">Português</a></nav>
       <p class="lead">O Relayium também move conteúdo de área de transferência: uma URL do celular, um comando para outro computador ou código multilinha. As mensagens são criptografadas de ponta a ponta; os servidores do Relayium não guardam o corpo das mensagens nem histórico no servidor, mas qualquer ponta pode copiar ou conservar o texto recebido.</p>
       <p class="lead">O navegador e a CLI aceitam texto, mas usam transportes separados e não entram com o código um do outro. Use o mesmo método nas duas pontas.</p>

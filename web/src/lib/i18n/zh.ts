@@ -711,7 +711,7 @@ const zh: Messages = {
     ],
     limit: (max) => `每条消息最多 ${max.toLocaleString()} 个 UTF-8 字节，更大的内容请当作文件发送。`,
   },
-  legal: { privacy: "隐私政策", terms: "服务条款", security: "安全说明", support: "支持" },
+  legal: { privacy: "隐私政策", terms: "服务条款", security: "安全说明", support: "支持", releases: "版本发布记录" },
   learn: { hub: "使用指南" },
   historyTitle: "最近传输",
   historyEmpty: "暂无记录",

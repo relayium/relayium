@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>مشاركة ملف برابط تنزيل آمن ينتهي صلاحيته</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/share-a-file-with-an-expiring-link/">English</a><a href="/zh/how-to/share-a-file-with-an-expiring-link/">中文</a><a href="/ja/how-to/share-a-file-with-an-expiring-link/">日本語</a><a href="/ko/how-to/share-a-file-with-an-expiring-link/">한국어</a><a href="/de/how-to/share-a-file-with-an-expiring-link/">Deutsch</a><a href="/fr/how-to/share-a-file-with-an-expiring-link/">Français</a><a href="/ar/how-to/share-a-file-with-an-expiring-link/" aria-current="true">العربية</a><a href="/es/how-to/share-a-file-with-an-expiring-link/">Español</a><a href="/pt/how-to/share-a-file-with-an-expiring-link/">Português</a></nav>
       <p class="lead">ليس في كل عملية نقل من ينتظر على الطرف الآخر. ربما يكون المُستقبِل نائمًا، أو على متن طائرة، أو تريد ببساطة أن تترك رابطًا في رسالة وتمضي في يومك. لذلك لدى Relayium وضع ثانٍ: بدلًا من بثّ ملف مباشرةً إلى متصفح آخر مفتوح، يشفّر الملف حيث أنت، ويرفع النص المُشفَّر فقط، ويسلّمك رابطًا يمكنك إرساله متى شئت — ويحدث التنزيل وفق جدول المُستقبِل نفسه.</p>
       <p class="lead">يرشدك هذا الدليل خلال إنشاء أحد هذه الروابط، وخيارات انتهاء الصلاحية والحذف بعد القراءة، وما يعنيه تصميم المعرفة الصفرية بالضبط عمليًا — بما في ذلك الحدود الصريحة: إنشاء رابط يتطلب أن يسجّل المُرسِل الدخول، والروابط تُحتسب ضمن حصة تخزين.</p>

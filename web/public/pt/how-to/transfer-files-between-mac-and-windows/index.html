@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Transferir arquivos entre um Mac e um PC com Windows</h1>
-      <p class="updated">Última atualização: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-between-mac-and-windows/">English</a><a href="/zh/how-to/transfer-files-between-mac-and-windows/">中文</a><a href="/ja/how-to/transfer-files-between-mac-and-windows/">日本語</a><a href="/ko/how-to/transfer-files-between-mac-and-windows/">한국어</a><a href="/de/how-to/transfer-files-between-mac-and-windows/">Deutsch</a><a href="/fr/how-to/transfer-files-between-mac-and-windows/">Français</a><a href="/ar/how-to/transfer-files-between-mac-and-windows/">العربية</a><a href="/es/how-to/transfer-files-between-mac-and-windows/">Español</a><a href="/pt/how-to/transfer-files-between-mac-and-windows/" aria-current="true">Português</a></nav>
       <p class="lead">Macs e PCs não falam a mesma língua de compartilhamento de arquivos de fábrica. O AirDrop é só da Apple, o compartilhamento de rede do Windows exige que as duas máquinas estejam em um grupo de trabalho ou domínio compatível, e nenhum dos dois é exatamente fácil de configurar em cinco minutos quando você só quer mover uma pasta de arquivos de projeto de um MacBook para um desktop com Windows.</p>
       <p class="lead">O Relayium contorna toda a questão da compatibilidade. Abra a mesma página nos dois computadores: na mesma LAN os arquivos criptografados de ponta a ponta viajam diretamente; entre redes, um retransmissor TURN só transporta texto cifrado que não consegue ler nem descriptografar e não mantém cópia nem histórico do conteúdo em tempo real. Não há nada para instalar; no emparelhamento entre redes o criador faz login e quem entra nunca precisa de conta. Veja exatamente como funciona nos dois sentidos.</p>

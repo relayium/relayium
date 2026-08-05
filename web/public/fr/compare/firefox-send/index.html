@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>La meilleure alternative à Firefox Send en 2026</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/firefox-send/">English</a><a href="/zh/compare/firefox-send/">中文</a><a href="/ja/compare/firefox-send/">日本語</a><a href="/ko/compare/firefox-send/">한국어</a><a href="/de/compare/firefox-send/">Deutsch</a><a href="/fr/compare/firefox-send/" aria-current="true">Français</a><a href="/ar/compare/firefox-send/">العربية</a><a href="/es/compare/firefox-send/">Español</a><a href="/pt/compare/firefox-send/">Português</a></nav>
       <p class="lead">Firefox Send était la vision de Mozilla du partage de fichiers privé : déposez un fichier, obtenez un lien chiffré, réglez-le pour qu&#39;il expire ou s&#39;autodétruise après un téléchargement. Les gens l&#39;adoraient et le cherchent encore des années plus tard. Il ne reviendra pas — Mozilla a arrêté le service en 2020 — mais le besoin qu&#39;il comblait reste bien réel.</p>
       <p class="lead">Le mode asynchrone (lien stocké) de Relayium reprend cette même idée : chiffrer dans le navigateur, partager un lien, le voir expirer ou s&#39;autodétruire. Cet article est une comparaison honnête — ce que faisait Firefox Send, à quel point Relayium s&#39;en rapproche, et où Relayium va plus loin avec le transfert pair-à-pair en temps réel, une CLI et l&#39;auto-hébergement.</p>

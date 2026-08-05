@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Est-il sûr d&#39;envoyer des fichiers sur Internet ?</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/is-it-safe-to-send-files-over-the-internet/">English</a><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">中文</a><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/">日本語</a><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet/">한국어</a><a href="/de/guides/is-it-safe-to-send-files-over-the-internet/">Deutsch</a><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet/" aria-current="true">Français</a><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet/">العربية</a><a href="/es/guides/is-it-safe-to-send-files-over-the-internet/">Español</a><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet/">Português</a></nav>
       <p class="lead">« Est-ce sûr d&#39;envoyer ce fichier ? » est une question raisonnable à se poser, qu&#39;il s&#39;agisse d&#39;une déclaration d&#39;impôts, d&#39;un contrat, ou simplement de photos que vous préféreriez garder privées. Ce guide n&#39;a pas pour but de vous détourner des outils courants — il s&#39;agit d&#39;expliquer clairement ce qui se passe réellement quand vous envoyez un fichier par e-mail, le déposez dans un dossier cloud, ou le transportez sur une clé USB, ce que les expressions « chiffré de bout en bout » et « divulgation nulle » promettent réellement, et ce qu&#39;il faut vérifier avant de confier quelque chose d&#39;important à n&#39;importe quel outil.</p>
       <p class="lead">Rien de tout cela ne nécessite de connaissances techniques. À la fin, vous saurez quelles questions poser — pour n&#39;importe quelle méthode de transfert, y compris celle présentée ici.</p>

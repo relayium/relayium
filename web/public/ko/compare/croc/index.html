@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs croc: 터미널에서 암호화 파일 전송</h1>
-      <p class="updated">마지막 업데이트: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/croc/">English</a><a href="/zh/compare/croc/">中文</a><a href="/ja/compare/croc/">日本語</a><a href="/ko/compare/croc/" aria-current="true">한국어</a><a href="/de/compare/croc/">Deutsch</a><a href="/fr/compare/croc/">Français</a><a href="/ar/compare/croc/">العربية</a><a href="/es/compare/croc/">Español</a><a href="/pt/compare/croc/">Português</a></nav>
       <p class="lead">croc은 터미널 사이에서 파일을 보내는 가장 사랑받는 도구 중 하나입니다. 짧고 기억하기 쉬운 코드 문구, PAKE 키 교환, 그리고 그것만으로 잘 작동합니다. Relayium CLI도 같은 일을 하려 하며, 만들어진 방식도 비슷합니다 — 무료, 오픈소스, 종단간 암호화되어 있으며 계정은 send가 페어링 코드를 발급할 때만 필요합니다.</p>
       <p class="lead">이 글은 깎아내리려는 것이 아닙니다. croc의 명성은 그럴 만합니다. 이 글은 두 도구가 공유하는 부분, Relayium CLI가 이미 운영 중인 서버와도 통신할 수 있어 더 갖춘 부분, 그리고 croc이 솔직히 더 단순한 선택인 경우를 있는 그대로 비교합니다.</p>

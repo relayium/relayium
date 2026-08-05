@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium مقابل croc: نقل ملفات مُشفَّر من الطرفية</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/croc/">English</a><a href="/zh/compare/croc/">中文</a><a href="/ja/compare/croc/">日本語</a><a href="/ko/compare/croc/">한국어</a><a href="/de/compare/croc/">Deutsch</a><a href="/fr/compare/croc/">Français</a><a href="/ar/compare/croc/" aria-current="true">العربية</a><a href="/es/compare/croc/">Español</a><a href="/pt/compare/croc/">Português</a></nav>
       <p class="lead">croc من أحبّ الأدوات لإرسال ملف من طرفية إلى أخرى: عبارة رمزية قصيرة يسهل تذكّرها، وتبادل مفاتيح PAKE، ثم يعمل ببساطة. وتضع واجهة Relayium على سطر الأوامر لنفسها المهمّة ذاتها وهي مبنية بالطريقة نفسها — مجانية ومفتوحة المصدر ومُشفَّرة من الطرف إلى الطرف، ولا يلزم الحساب إلا كي يُصدر send رمز الاقتران.</p>
       <p class="lead">هذه ليست محاولة إسقاط؛ فقد استحقّ croc سمعته. إنها مقارنة مباشرة لِما يشترك فيه الاثنان، وأين تفعل واجهة Relayium أكثر لأنها تتحدّث أيضًا إلى خوادم تُشغّلها أصلًا، والحالة التي يكون فيها croc بصدق الخيار الأبسط.</p>

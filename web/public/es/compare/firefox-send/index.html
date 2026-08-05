@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>La mejor alternativa a Firefox Send en 2026</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/firefox-send/">English</a><a href="/zh/compare/firefox-send/">中文</a><a href="/ja/compare/firefox-send/">日本語</a><a href="/ko/compare/firefox-send/">한국어</a><a href="/de/compare/firefox-send/">Deutsch</a><a href="/fr/compare/firefox-send/">Français</a><a href="/ar/compare/firefox-send/">العربية</a><a href="/es/compare/firefox-send/" aria-current="true">Español</a><a href="/pt/compare/firefox-send/">Português</a></nav>
       <p class="lead">Firefox Send era la propuesta de Mozilla para compartir archivos de forma privada: sueltas un archivo, obtienes un enlace cifrado y lo configuras para que caduque o se destruya tras una sola descarga. A la gente le encantaba y lo sigue buscando años después. No va a volver —Mozilla descontinuó el servicio en 2020—, pero la necesidad que cubría sigue siendo real.</p>
       <p class="lead">El modo asíncrono (enlace almacenado) de Relayium retoma esa misma idea: cifrar en el navegador, compartir un enlace, verlo caducar o destruirse. Este artículo es una comparativa honesta: qué hacía Firefox Send, cuánto se le acerca Relayium y dónde Relayium va más allá con la transferencia en tiempo real de igual a igual, una CLI y el autoalojamiento.</p>

@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs magic-wormhole : transfert de fichiers CLI</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/magic-wormhole/">English</a><a href="/zh/compare/magic-wormhole/">中文</a><a href="/ja/compare/magic-wormhole/">日本語</a><a href="/ko/compare/magic-wormhole/">한국어</a><a href="/de/compare/magic-wormhole/">Deutsch</a><a href="/fr/compare/magic-wormhole/" aria-current="true">Français</a><a href="/ar/compare/magic-wormhole/">العربية</a><a href="/es/compare/magic-wormhole/">Español</a><a href="/pt/compare/magic-wormhole/">Português</a></nav>
       <p class="lead">magic-wormhole s&#39;est bâti discrètement un public fidèle : on le lance, on obtient un code court et facile à lire comme 7-crossover-clockwork, on le dicte à l&#39;autre personne, et le fichier arrive — chiffré de bout en bout, sans compte ni serveur dont il faut se soucier. La CLI Relayium repose sur une idée similaire : un code court appaire directement deux ordinateurs et chiffre tout ce qui passe entre eux.</p>
       <p class="lead">Les deux se recoupent beaucoup, et là où ce n&#39;est pas le cas, mieux vaut être précis — y compris sur le seul point où magic-wormhole est aujourd&#39;hui réellement plus robuste que la CLI Relayium.</p>

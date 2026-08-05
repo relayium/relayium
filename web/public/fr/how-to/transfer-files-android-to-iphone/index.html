@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Transférer des fichiers d&#39;Android vers iPhone (sans câble)</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone/">English</a><a href="/zh/how-to/transfer-files-android-to-iphone/">中文</a><a href="/ja/how-to/transfer-files-android-to-iphone/">日本語</a><a href="/ko/how-to/transfer-files-android-to-iphone/">한국어</a><a href="/de/how-to/transfer-files-android-to-iphone/">Deutsch</a><a href="/fr/how-to/transfer-files-android-to-iphone/" aria-current="true">Français</a><a href="/ar/how-to/transfer-files-android-to-iphone/">العربية</a><a href="/es/how-to/transfer-files-android-to-iphone/">Español</a><a href="/pt/how-to/transfer-files-android-to-iphone/">Português</a></nav>
       <p class="lead">Android et iPhone ne partagent pas d&#39;AirDrop, donc déplacer quelques photos ou une vidéo entre eux passe le plus souvent par un câble USB, une messagerie qui compresse vos images, ou un aller-retour via un espace cloud. Les trois sont plus lents et plus pénibles qu&#39;ils ne devraient l&#39;être.</p>
       <p class="lead">Relayium fait l&#39;impasse sur tout cela. Les deux téléphones ouvrent la même page : sur le même LAN, les fichiers chiffrés de bout en bout passent directement ; entre réseaux, un relais TURN ne transporte que du texte chiffré qu&#39;il ne peut ni lire ni déchiffrer, sans conserver de copie ni d&#39;historique du contenu en temps réel. Aucune application à installer ; pour l&#39;appairage entre réseaux, le créateur se connecte et la personne qui rejoint n&#39;a jamais besoin de compte. Ce guide vous accompagne pas à pas.</p>

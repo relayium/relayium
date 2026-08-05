@@ -716,7 +716,7 @@ const pt: Messages = {
     ],
     limit: (max) => `Até ${max.toLocaleString()} bytes UTF-8 por mensagem — se for maior, envie como arquivo.`,
   },
-  legal: { privacy: "Política de Privacidade", terms: "Termos de Serviço", security: "Segurança", support: "Suporte" },
+  legal: { privacy: "Política de Privacidade", terms: "Termos de Serviço", security: "Segurança", support: "Suporte", releases: "Versões" },
   learn: { hub: "Guias" },
   historyTitle: "Transferências recentes",
   historyEmpty: "Nenhuma transferência ainda",

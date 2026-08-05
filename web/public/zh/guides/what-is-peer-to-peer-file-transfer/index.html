@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>什么是点对点（P2P）文件传输？</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer/">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer/" aria-current="true">中文</a><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">日本語</a><a href="/ko/guides/what-is-peer-to-peer-file-transfer/">한국어</a><a href="/de/guides/what-is-peer-to-peer-file-transfer/">Deutsch</a><a href="/fr/guides/what-is-peer-to-peer-file-transfer/">Français</a><a href="/ar/guides/what-is-peer-to-peer-file-transfer/">العربية</a><a href="/es/guides/what-is-peer-to-peer-file-transfer/">Español</a><a href="/pt/guides/what-is-peer-to-peer-file-transfer/">Português</a></nav>
       <p class="lead">「点对点」这个词经常被随意使用，但对文件传输来说，它的确切含义是：文件直接从一台设备到另一台设备，而不是先上传到某家公司的服务器再下载下来。中间没有一站可以停留、可能留下副本。</p>
       <p class="lead">听起来很简单，但实际路径并不相同。本文先解释通用 WebRTC/ICE 中 TURN 可作为后备的概念，再明确区分 Relayium 的实现：局域网浏览器 WebRTC 直连、跨网络浏览器按设计使用 TURN、CLI 仅直连。</p>

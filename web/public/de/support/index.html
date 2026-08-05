@@ -38,6 +38,11 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+.releases{list-style:none;margin:16px 0 0;padding:0}
+.releases li{display:flex;gap:16px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border)}
+.releases li:last-child{border-bottom:0}
+.releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
+.releases .date{font-size:14px;font-variant-numeric:tabular-nums}
 </style>
   </head>
   <body>
@@ -48,7 +53,13 @@ footer a{color:var(--text-h);text-decoration:none}
            visual position — it is a labelled <nav> landmark either way. -->
       <main>
       <h1>Hilfe &amp; Support</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-20</p>
+      <!-- The date is isolated for the same reason the release rows are: an ISO
+           date is three digit runs joined by hyphens, and on the Arabic page the
+           bidi algorithm lays those runs out right-to-left. "2026-08-03" was
+           rendering as "03-08-2026" on all four Arabic legal pages — measured in
+           a browser, not deduced. <bdi> resolves LTR (no strong character
+           inside) and pins the order. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-20</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/support/">English</a><a href="/zh/support/">中文</a><a href="/ja/support/">日本語</a><a href="/ko/support/">한국어</a><a href="/de/support/" aria-current="true">Deutsch</a><a href="/fr/support/">Français</a><a href="/ar/support/">العربية</a><a href="/es/support/">Español</a><a href="/pt/support/">Português</a></nav>
       <p>Relayium wird von einem kleinen Team betrieben. Jede Nachricht landet bei einem Menschen, der am Produkt arbeitet — es gibt kein Ticket-Labyrinth und keinen Chatbot davor.</p>
       <p>Schreiben Sie an support@relayium.com; wir bemühen uns, innerhalb von zwei Werktagen zu antworten.</p>
@@ -62,6 +73,7 @@ footer a{color:var(--text-h);text-decoration:none}
         <a href="/de/apps/">Apps</a>
         <a href="/de/privacy/">Nutzungsbedingungen</a>
         <a href="/pricing">Preise</a>
+        <a href="/de/releases/">Versionen</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

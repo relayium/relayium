@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs rsync: sincroniza carpetas sin la configuración de SSH</h1>
-      <p class="updated">Última actualización: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/rsync/">English</a><a href="/zh/compare/rsync/">中文</a><a href="/ja/compare/rsync/">日本語</a><a href="/ko/compare/rsync/">한국어</a><a href="/de/compare/rsync/">Deutsch</a><a href="/fr/compare/rsync/">Français</a><a href="/ar/compare/rsync/">العربية</a><a href="/es/compare/rsync/" aria-current="true">Español</a><a href="/pt/compare/rsync/">Português</a></nav>
       <p class="lead">rsync refleja carpetas desde 1996 por una razón: sincronización bidireccional, un algoritmo de delta con suma de comprobación rodante que transfiere solo los bytes que realmente cambiaron dentro de un archivo, y décadas de opciones para cada caso límite. Si ya tienes acceso SSH y conoces rsync, es muy difícil de superar.</p>
       <p class="lead">El comando sync de Relayium cubre un trabajo más estrecho — un espejo incremental de un solo sentido — pero elimina un paso que rsync da por hecho que ya has realizado: configurar SSH. Se ejecuta sobre SSH si ya lo tienes, o conecta dos máquinas directamente sin ningún servidor SSH. Este artículo compara ambos con honestidad; sync no es un reemplazo completo de rsync, y las preguntas frecuentes lo dicen claramente.</p>

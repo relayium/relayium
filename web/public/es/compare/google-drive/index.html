@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium frente a Google Drive para enviar archivos</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/google-drive/">English</a><a href="/zh/compare/google-drive/">中文</a><a href="/ja/compare/google-drive/">日本語</a><a href="/ko/compare/google-drive/">한국어</a><a href="/de/compare/google-drive/">Deutsch</a><a href="/fr/compare/google-drive/">Français</a><a href="/ar/compare/google-drive/">العربية</a><a href="/es/compare/google-drive/" aria-current="true">Español</a><a href="/pt/compare/google-drive/">Português</a></nav>
       <p class="lead">Google Drive es un producto genuinamente bueno: tus archivos viven en un solo lugar, se sincronizan entre dispositivos, quedan respaldados y son fáciles de coeditar en equipo. Si lo que necesitas es un hogar duradero para archivos a los que volverás, Drive es una opción por defecto razonable, y este artículo no intenta disuadirte de ello.</p>
       <p class="lead">Pero mucho de aquello para lo que la gente usa Drive es en realidad una entrega puntual —enviar un vídeo a un amigo, un contrato a un cliente, un conjunto de datos a un colega—, no almacenamiento duradero. Para esa tarea concreta, subir una copia a los servidores de Google y luego configurar quién puede verla es más maquinaria de la que la tarea necesita. El tiempo real de Relayium no guarda una copia de contenido en el servidor: navegador directo en la LAN y TURN cifrado de extremo a extremo entre redes. Solo el destinatario puede descifrar el enlace almacenado.</p>

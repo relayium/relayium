@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>如何直接发送整个文件夹，而不只是文件</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder/">English</a><a href="/zh/how-to/send-a-folder/" aria-current="true">中文</a><a href="/ja/how-to/send-a-folder/">日本語</a><a href="/ko/how-to/send-a-folder/">한국어</a><a href="/de/how-to/send-a-folder/">Deutsch</a><a href="/fr/how-to/send-a-folder/">Français</a><a href="/ar/how-to/send-a-folder/">العربية</a><a href="/es/how-to/send-a-folder/">Español</a><a href="/pt/how-to/send-a-folder/">Português</a></nav>
       <p class="lead">发送一个项目和发送一个文件不是一回事——你手上是一个套着子文件夹的文件夹，一个一个复制粘贴会丢掉让它有意义的结构。先打包压缩也行，但那意味着在开始传输之前要先绕道用一个压缩工具。</p>
       <p class="lead">Relayium 让你选中文件夹整体发送。浏览器会遍历整棵目录树、保留每个相对路径，并选择实时传输——同一局域网内 WebRTC 直连，跨网络经 TURN 承载端到端密文——且不保留服务器端实时副本或历史；也可以生成稍后取用的存储链接。</p>

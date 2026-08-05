@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>هل من الآمن إرسال الملفات عبر الإنترنت؟</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/is-it-safe-to-send-files-over-the-internet/">English</a><a href="/zh/guides/is-it-safe-to-send-files-over-the-internet/">中文</a><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/">日本語</a><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet/">한국어</a><a href="/de/guides/is-it-safe-to-send-files-over-the-internet/">Deutsch</a><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet/">Français</a><a href="/ar/guides/is-it-safe-to-send-files-over-the-internet/" aria-current="true">العربية</a><a href="/es/guides/is-it-safe-to-send-files-over-the-internet/">Español</a><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet/">Português</a></nav>
       <p class="lead">«هل من الآمن إرسال هذا الملف؟» سؤال معقول يستحق أن تتوقف وتطرحه، سواء أكان إقرارًا ضريبيًا أم عقدًا أم مجرد صور تفضّل أن تبقى خاصة. لا تهدف هذه المقالة إلى تنفيرك من الأدوات الشائعة — بل إلى أن تستعرض بوضوح ما الذي يحدث فعلًا لملف حين ترسله بالبريد الإلكتروني، أو تضعه في مجلد سحابي، أو تحمله على ذاكرة USB، وما الذي تَعِد به عبارتا «التشفير من الطرف إلى الطرف» و«المعرفة الصفرية» فعلًا، وما الذي ينبغي التحقق منه قبل أن تأتمن أي أداة على شيء يهمّك.</p>
       <p class="lead">لا يتطلّب أيٌّ من هذا خلفية تقنية. وبحلول النهاية، ستعرف ما الأسئلة التي ينبغي طرحها — على أي طريقة نقل، بما فيها هذه الطريقة.</p>

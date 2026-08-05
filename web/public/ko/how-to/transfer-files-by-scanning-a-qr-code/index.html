@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>QR 코드를 스캔해서 파일 전송하기</h1>
-      <p class="updated">마지막 업데이트: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-by-scanning-a-qr-code/">English</a><a href="/zh/how-to/transfer-files-by-scanning-a-qr-code/">中文</a><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code/">日本語</a><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code/" aria-current="true">한국어</a><a href="/de/how-to/transfer-files-by-scanning-a-qr-code/">Deutsch</a><a href="/fr/how-to/transfer-files-by-scanning-a-qr-code/">Français</a><a href="/ar/how-to/transfer-files-by-scanning-a-qr-code/">العربية</a><a href="/es/how-to/transfer-files-by-scanning-a-qr-code/">Español</a><a href="/pt/how-to/transfer-files-by-scanning-a-qr-code/">Português</a></nav>
       <p class="lead">여섯 자리 숫자 코드를 입력하는 것도 빠르지만, 스캔은 더 빠릅니다. 휴대폰 카메라를 화면에 대기만 하면 코드를 다 입력하기도 전에 전송 준비가 끝납니다. Relayium의 페어링 화면이 페어링 코드 옆에 QR 코드를 함께 보여주는 이유가 바로 이것입니다.</p>
       <p class="lead">이것은 네트워크를 넘나드는 방식이라, 두 기기가 같은 Wi-Fi에 있든 지구 반대편에 있든 동작합니다. QR 코드는 그 방식으로 들어가는 지름길일 뿐입니다 — 스캔이 불편하면 그 아래의 코드나 링크도 똑같이 작동합니다.</p>

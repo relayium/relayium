@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium مقابل Dropbox لإرسال ملف</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/dropbox/">English</a><a href="/zh/compare/dropbox/">中文</a><a href="/ja/compare/dropbox/">日本語</a><a href="/ko/compare/dropbox/">한국어</a><a href="/de/compare/dropbox/">Deutsch</a><a href="/fr/compare/dropbox/">Français</a><a href="/ar/compare/dropbox/" aria-current="true">العربية</a><a href="/es/compare/dropbox/">Español</a><a href="/pt/compare/dropbox/">Português</a></nav>
       <p class="lead">يستحقّ Dropbox سمعته. فهو يزامن مجلدًا عبر كل جهاز تملكه، ويحتفظ بسجلّ إصدارات حين تكتب فوق شيء بالخطأ، ويجعل تسليم مجلد مشروع كامل إلى عميل عبر دعوة برابط مشترك أمرًا بلا عناء. فإذا أردت مجلد عمل يبقى متزامنًا وحسب، فإنّ Dropbox يؤدّي هذه المهمّة جيّدًا، وهذه المقالة ليست حجّةً ضدّ استخدامه على هذا النحو.</p>
       <p class="lead">حتى لتسليم ملف واحد يضعه Dropbox أولًا في حساب. يبثّه Relayium فوريًا عبر WebRTC مباشرةً داخل شبكة LAN نفسها، أو عبر TURN حسب التصميم كنص مشفّر من الطرف إلى الطرف بين الشبكات؛ أو ينشئ رابطًا لا يُفك إلا في المتصفح وينتهي حسب جدولك.</p>

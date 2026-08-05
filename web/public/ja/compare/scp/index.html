@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium と scp の比較：よりシンプルな SSH 転送</h1>
-      <p class="updated">最終更新: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最終更新: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/scp/">English</a><a href="/zh/compare/scp/">中文</a><a href="/ja/compare/scp/" aria-current="true">日本語</a><a href="/ko/compare/scp/">한국어</a><a href="/de/compare/scp/">Deutsch</a><a href="/fr/compare/scp/">Français</a><a href="/ar/compare/scp/">العربية</a><a href="/es/compare/scp/">Español</a><a href="/pt/compare/scp/">Português</a></nav>
       <p class="lead">scp は何十年もの間、SSH 経由でファイルを移動する既定の手段でした。ほぼすべての Unix 系マシンにすでに入っており、誰もが使い方を知っていて、ちゃんと動きます。そうでないふりをする理由はありません。scp の地位はふさわしいものです。</p>
       <p class="lead">Relayium の CLI は SSH を置き換えるものではなく、すでに持っているのと同じ SSH アクセスの上に乗っています。push と pull は scp と同じ方法で SSH 接続を使いますが、scp が元々やるように作られていないいくつかのことを加えています。途切れた転送の再開、チェックサムによる各ファイルの検証、実際の進捗表示、そしてリモートに何もインストールされていない場合でも動作することです。</p>

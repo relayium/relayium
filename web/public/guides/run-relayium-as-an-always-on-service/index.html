@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Run Relayium as an always-on receive service</h1>
-      <p class="updated">Last updated: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service/" aria-current="true">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service/">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service/">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service/">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service/">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service/">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service/">العربية</a><a href="/es/guides/run-relayium-as-an-always-on-service/">Español</a><a href="/pt/guides/run-relayium-as-an-always-on-service/">Português</a></nav>
       <p class="lead">relayium serve --once handles a single incoming transfer and exits — fine for a one-off pull. But if you want a machine to be a standing drop point — a home server that backups land on overnight, a build box that CI pushes artifacts to, a NAS your phone can send photos to whenever — you want serve running all the time, not started by hand for each transfer.</p>
       <p class="lead">This guide covers starting a long-running listener, approving who&#39;s allowed to push to it, pre-authorizing peers for the cases where no one&#39;s at the terminal, running it under systemd, and letting a sync --delete sender mirror deletions.</p>

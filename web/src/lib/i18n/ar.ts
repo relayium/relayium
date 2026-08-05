@@ -770,7 +770,7 @@ const ar: Messages = {
     ],
     limit: (max) => `حتى ${max.toLocaleString()} بايت UTF-8 للرسالة الواحدة — وما زاد على ذلك أرسِله كملف.`,
   },
-  legal: { privacy: "سياسة الخصوصية", terms: "شروط الخدمة", security: "الأمان", support: "الدعم" },
+  legal: { privacy: "سياسة الخصوصية", terms: "شروط الخدمة", security: "الأمان", support: "الدعم", releases: "الإصدارات" },
   learn: { hub: "الأدلة" },
   historyTitle: "عمليات النقل الأخيرة",
   historyEmpty: "لا توجد عمليات نقل بعد",

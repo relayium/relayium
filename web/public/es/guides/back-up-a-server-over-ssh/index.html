@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Haz copias de seguridad de archivos en tu propio servidor por SSH con la CLI de Relayium</h1>
-      <p class="updated">Última actualización: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/">English</a><a href="/zh/guides/back-up-a-server-over-ssh/">中文</a><a href="/ja/guides/back-up-a-server-over-ssh/">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh/">한국어</a><a href="/de/guides/back-up-a-server-over-ssh/">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh/">Français</a><a href="/ar/guides/back-up-a-server-over-ssh/">العربية</a><a href="/es/guides/back-up-a-server-over-ssh/" aria-current="true">Español</a><a href="/pt/guides/back-up-a-server-over-ssh/">Português</a></nav>
       <p class="lead">Si ya tienes acceso SSH a una máquina — un VPS, un servidor doméstico, un NAS, una estación de trabajo —, puedes hacer copias de seguridad de tus archivos en ella con la CLI de Relayium sin montar un servicio de sincronización ni una cuenta. La transferencia se ejecuta sobre tu conexión SSH existente, así que los bytes van directos a tu servidor y nunca pasan por Relayium.</p>
       <p class="lead">Esta guía cubre cómo hacer push y pull de directorios, qué te aportan la reanudación y la comprobación de integridad, y cómo ejecutarlo de forma programada con cron.</p>

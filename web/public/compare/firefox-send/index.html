@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>The best Firefox Send alternative in 2026</h1>
-      <p class="updated">Last updated: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/firefox-send/" aria-current="true">English</a><a href="/zh/compare/firefox-send/">中文</a><a href="/ja/compare/firefox-send/">日本語</a><a href="/ko/compare/firefox-send/">한국어</a><a href="/de/compare/firefox-send/">Deutsch</a><a href="/fr/compare/firefox-send/">Français</a><a href="/ar/compare/firefox-send/">العربية</a><a href="/es/compare/firefox-send/">Español</a><a href="/pt/compare/firefox-send/">Português</a></nav>
       <p class="lead">Firefox Send was Mozilla&#39;s take on private file sharing: drop in a file, get an encrypted link, set it to expire or self-destruct after one download. People loved it and still look for it years later. It is not coming back — Mozilla discontinued the service in 2020 — but the need it filled is still real.</p>
       <p class="lead">Relayium&#39;s async (stored-link) mode picks up that same idea: encrypt in the browser, share a link, watch it expire or burn. This article is an honest comparison — what Firefox Send did, how closely Relayium matches it, and where Relayium goes further with realtime peer-to-peer transfer, a CLI, and self-hosting.</p>

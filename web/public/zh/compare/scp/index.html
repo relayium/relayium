@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium 对比 scp：更简单的 SSH 文件传输</h1>
-      <p class="updated">最近更新: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/scp/">English</a><a href="/zh/compare/scp/" aria-current="true">中文</a><a href="/ja/compare/scp/">日本語</a><a href="/ko/compare/scp/">한국어</a><a href="/de/compare/scp/">Deutsch</a><a href="/fr/compare/scp/">Français</a><a href="/ar/compare/scp/">العربية</a><a href="/es/compare/scp/">Español</a><a href="/pt/compare/scp/">Português</a></nav>
       <p class="lead">几十年来，scp 一直是通过 SSH 传文件的默认方式：几乎装在你会用到的每一台类 Unix 机器上，人人都熟悉它的用法，而且一直很好用。没必要假装不是这样——scp 的地位是实至名归的。</p>
       <p class="lead">Relayium 的 CLI 并不是要取代 SSH，而是搭在你已经拥有的同一条 SSH 访问权限之上。push 和 pull 使用你的 SSH 连接的方式和 scp 一样，但补上了几件 scp 从未打算做的事：接续中断的传输、用校验和验证每个文件、显示真实进度，以及在远程什么都没安装的情况下依然能用。</p>

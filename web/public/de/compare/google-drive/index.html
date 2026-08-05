@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs. Google Drive: Dateien direkter versenden</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/google-drive/">English</a><a href="/zh/compare/google-drive/">中文</a><a href="/ja/compare/google-drive/">日本語</a><a href="/ko/compare/google-drive/">한국어</a><a href="/de/compare/google-drive/" aria-current="true">Deutsch</a><a href="/fr/compare/google-drive/">Français</a><a href="/ar/compare/google-drive/">العربية</a><a href="/es/compare/google-drive/">Español</a><a href="/pt/compare/google-drive/">Português</a></nav>
       <p class="lead">Google Drive ist ein wirklich gutes Produkt: Deine Dateien liegen an einem Ort, synchronisieren sich über Geräte hinweg, sind gesichert und lassen sich leicht im Team gemeinsam bearbeiten. Wenn du ein dauerhaftes Zuhause für Dateien brauchst, zu denen du immer wieder zurückkehrst, ist Drive eine vernünftige Standardwahl — dieser Artikel will dich davon nicht abbringen.</p>
       <p class="lead">Aber vieles, wofür Leute Drive nutzen, ist eigentlich eine einmalige Übergabe — ein Video an einen Freund, ein Vertrag an eine Kundin, ein Datensatz an einen Kollegen — keine dauerhafte Speicherung. Für genau diese Aufgabe ist es mehr Aufwand als nötig, eine Kopie auf Googles Server zu laden und dann zu konfigurieren, wer sie sehen darf. Relayiums Echtzeitübertragung speichert keine serverseitige Inhaltskopie; Browser nutzen im LAN den direkten Pfad und netzübergreifend Ende-zu-Ende-verschlüsseltes TURN. Einen Speicherlink kann nur der Empfänger entschlüsseln.</p>

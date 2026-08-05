@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Faça backup de arquivos no seu próprio servidor via SSH com a CLI do Relayium</h1>
-      <p class="updated">Última atualização: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/">English</a><a href="/zh/guides/back-up-a-server-over-ssh/">中文</a><a href="/ja/guides/back-up-a-server-over-ssh/">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh/">한국어</a><a href="/de/guides/back-up-a-server-over-ssh/">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh/">Français</a><a href="/ar/guides/back-up-a-server-over-ssh/">العربية</a><a href="/es/guides/back-up-a-server-over-ssh/">Español</a><a href="/pt/guides/back-up-a-server-over-ssh/" aria-current="true">Português</a></nav>
       <p class="lead">Se você já tem acesso SSH a uma máquina — um VPS, um servidor doméstico, um NAS, uma estação de trabalho —, pode fazer backup dos seus arquivos nela com a CLI do Relayium sem montar um serviço de sincronização nem uma conta. A transferência roda sobre a sua conexão SSH existente, então os bytes vão direto para o seu servidor e nunca passam pelo Relayium.</p>
       <p class="lead">Este guia aborda como fazer push e pull de diretórios, o que a retomada e a verificação de integridade oferecem, e como executá-lo de forma agendada com o cron.</p>

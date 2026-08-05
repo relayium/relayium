@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>P2P（ピアツーピア）ファイル転送とは？</h1>
-      <p class="updated">最終更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最終更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer/">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer/">中文</a><a href="/ja/guides/what-is-peer-to-peer-file-transfer/" aria-current="true">日本語</a><a href="/ko/guides/what-is-peer-to-peer-file-transfer/">한국어</a><a href="/de/guides/what-is-peer-to-peer-file-transfer/">Deutsch</a><a href="/fr/guides/what-is-peer-to-peer-file-transfer/">Français</a><a href="/ar/guides/what-is-peer-to-peer-file-transfer/">العربية</a><a href="/es/guides/what-is-peer-to-peer-file-transfer/">Español</a><a href="/pt/guides/what-is-peer-to-peer-file-transfer/">Português</a></nav>
       <p class="lead">「P2P」という言葉はあいまいに使われがちですが、ファイル転送における本当の意味はこうです。ファイルは会社のサーバーに一度アップロードされてからダウンロードされるのではなく、一台のデバイスからもう一台へ直接送られます。途中にコピーが留まりうる寄り道はありません。</p>
       <p class="lead">単純に聞こえますが、実際の経路は同じではありません。このページではまず TURN が予備になり得る一般的な WebRTC/ICE を説明し、そのうえで Relayium の実装を区別します。同じ LAN のブラウザは WebRTC 直結、ネットワーク間ブラウザは設計上 TURN、CLI は直接接続専用です。</p>

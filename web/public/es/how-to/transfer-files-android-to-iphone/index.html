@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Cómo transferir archivos de Android a iPhone (sin cable)</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone/">English</a><a href="/zh/how-to/transfer-files-android-to-iphone/">中文</a><a href="/ja/how-to/transfer-files-android-to-iphone/">日本語</a><a href="/ko/how-to/transfer-files-android-to-iphone/">한국어</a><a href="/de/how-to/transfer-files-android-to-iphone/">Deutsch</a><a href="/fr/how-to/transfer-files-android-to-iphone/">Français</a><a href="/ar/how-to/transfer-files-android-to-iphone/">العربية</a><a href="/es/how-to/transfer-files-android-to-iphone/" aria-current="true">Español</a><a href="/pt/how-to/transfer-files-android-to-iphone/">Português</a></nav>
       <p class="lead">Android y iPhone no comparten un AirDrop, así que mover unas fotos o un vídeo entre ellos suele implicar un cable USB, una app de chat que comprime tus imágenes, o un viaje de ida y vuelta por algún disco en la nube. Los tres son más lentos y engorrosos de lo que deberían.</p>
       <p class="lead">Relayium se salta todo eso. Ambos teléfonos abren la misma página: en la misma LAN los archivos cifrados de extremo a extremo viajan directamente; entre redes, un relé TURN solo transporta texto cifrado que no puede leer ni descifrar y no conserva copia ni historial del contenido en tiempo real. No hay app que instalar; en el emparejamiento entre redes inicia sesión el creador y quien se une nunca necesita cuenta. Esta guía lo explica paso a paso.</p>

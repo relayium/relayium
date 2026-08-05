@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>How to transfer files from Android to iPhone (no cable)</h1>
-      <p class="updated">Last updated: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone/" aria-current="true">English</a><a href="/zh/how-to/transfer-files-android-to-iphone/">中文</a><a href="/ja/how-to/transfer-files-android-to-iphone/">日本語</a><a href="/ko/how-to/transfer-files-android-to-iphone/">한국어</a><a href="/de/how-to/transfer-files-android-to-iphone/">Deutsch</a><a href="/fr/how-to/transfer-files-android-to-iphone/">Français</a><a href="/ar/how-to/transfer-files-android-to-iphone/">العربية</a><a href="/es/how-to/transfer-files-android-to-iphone/">Español</a><a href="/pt/how-to/transfer-files-android-to-iphone/">Português</a></nav>
       <p class="lead">Android and iPhone do not share an AirDrop, so moving a few photos or a video between them usually means a USB cable, a chat app that compresses your images, or a round-trip through some cloud drive. All three are slower and more fiddly than they should be.</p>
       <p class="lead">Relayium skips all of that. Both phones open the same page: on the same LAN the end-to-end encrypted files travel directly, while across networks a TURN relay carries ciphertext it cannot read or decrypt and keeps no realtime content copy or history. No app is needed; the creator signs in for cross-network pairing, while the person joining never needs an account. This guide walks through it step by step.</p>

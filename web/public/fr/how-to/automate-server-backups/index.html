@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Automatiser les sauvegardes serveur chiffrées avec une tâche cron</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups/">English</a><a href="/zh/how-to/automate-server-backups/">中文</a><a href="/ja/how-to/automate-server-backups/">日本語</a><a href="/ko/how-to/automate-server-backups/">한국어</a><a href="/de/how-to/automate-server-backups/">Deutsch</a><a href="/fr/how-to/automate-server-backups/" aria-current="true">Français</a><a href="/ar/how-to/automate-server-backups/">العربية</a><a href="/es/how-to/automate-server-backups/">Español</a><a href="/pt/how-to/automate-server-backups/">Português</a></nav>
       <p class="lead">Les sauvegardes qu&#39;il faut penser à lancer soi-même finissent par ne pas être faites. cron, lui, s&#39;en souvient, et la CLI Relayium est conçue pour cela : une seule commande non interactive qui copie (ou met en miroir) un répertoire vers une autre machine, vérifie chaque fichier, et reprend là où elle s&#39;est arrêtée si le réseau coupe.</p>
       <p class="lead">Ce guide couvre la planification de relayium push et du relayium sync incrémental via cron, les deux modes de transport que l&#39;un comme l&#39;autre peuvent utiliser, et des lignes de crontab prêtes à copier.</p>

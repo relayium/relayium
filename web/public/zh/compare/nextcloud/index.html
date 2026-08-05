@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium 对比 Nextcloud：发送文件该选谁</h1>
-      <p class="updated">最近更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/nextcloud/">English</a><a href="/zh/compare/nextcloud/" aria-current="true">中文</a><a href="/ja/compare/nextcloud/">日本語</a><a href="/ko/compare/nextcloud/">한국어</a><a href="/de/compare/nextcloud/">Deutsch</a><a href="/fr/compare/nextcloud/">Français</a><a href="/ar/compare/nextcloud/">العربية</a><a href="/es/compare/nextcloud/">Español</a><a href="/pt/compare/nextcloud/">Português</a></nav>
       <p class="lead">Nextcloud 把自托管变成了 Google Drive 或 Dropbox 真正意义上的替代品：自己的文件、跨所有设备的同步、自己的日历和联系人，一切都在你自己掌控的域名下运行。这是货真价实的强大软件——如果你想要的是文件的长期归宿，Nextcloud 就是对的工具。</p>
       <p class="lead">本文客观对比这两者。Nextcloud 长期存储并同步数据，需要 Web、数据库、PHP 与持续维护。Relayium 解决更窄的交接：实时传输不保存服务端内容副本，浏览器在局域网直连、跨网经加密 TURN；可选零知识链接会到期。持久云存储选 Nextcloud，只传文件时 Relayium 更轻。</p>

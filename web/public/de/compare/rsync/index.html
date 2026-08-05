@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs. rsync: Ordner synchronisieren ohne SSH-Setup</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/rsync/">English</a><a href="/zh/compare/rsync/">中文</a><a href="/ja/compare/rsync/">日本語</a><a href="/ko/compare/rsync/">한국어</a><a href="/de/compare/rsync/" aria-current="true">Deutsch</a><a href="/fr/compare/rsync/">Français</a><a href="/ar/compare/rsync/">العربية</a><a href="/es/compare/rsync/">Español</a><a href="/pt/compare/rsync/">Português</a></nav>
       <p class="lead">rsync spiegelt seit 1996 Ordner, und das aus gutem Grund: bidirektionale Synchronisation, ein Delta-Algorithmus mit Rolling-Checksum, der nur die tatsächlich veränderten Bytes innerhalb einer Datei überträgt, und Jahrzehnte an Flags für jeden Grenzfall. Wenn du schon SSH-Zugang hast und rsync kennst, ist es sehr schwer zu schlagen.</p>
       <p class="lead">Relayiums sync-Befehl deckt eine engere Aufgabe ab — einen einseitigen inkrementellen Spiegel —, entfernt aber einen Schritt, den rsync als bereits erledigt voraussetzt: das Einrichten von SSH. sync läuft über SSH, falls vorhanden, oder verbindet zwei Maschinen direkt, ganz ohne SSH-Server. Dieser Artikel vergleicht beide ehrlich: sync ist kein vollständiger Ersatz für rsync, und die FAQ sagt das unumwunden.</p>

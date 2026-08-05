@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium と croc の比較：ターミナルから暗号化転送</h1>
-      <p class="updated">最終更新: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最終更新: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/croc/">English</a><a href="/zh/compare/croc/">中文</a><a href="/ja/compare/croc/" aria-current="true">日本語</a><a href="/ko/compare/croc/">한국어</a><a href="/de/compare/croc/">Deutsch</a><a href="/fr/compare/croc/">Français</a><a href="/ar/compare/croc/">العربية</a><a href="/es/compare/croc/">Español</a><a href="/pt/compare/croc/">Português</a></nav>
       <p class="lead">croc はターミナル間でファイルを送る、最も愛されているツールの一つです。短く覚えやすいコードフレーズ、PAKE による鍵交換、それだけでちゃんと動きます。Relayium CLI も同じ仕事を目指し、同じ考え方で作られています。無料、オープンソース、エンドツーエンドで暗号化されており、アカウントが要るのは send がペアリングコードを発行するときだけです。</p>
       <p class="lead">これは批判の記事ではありません。croc の評判はふさわしいものです。両者の共通点、Relayium CLI がすでに運用しているサーバーとも話せるために持つ追加の力、そして croc の方が正直シンプルな場合を、率直に比較します。</p>

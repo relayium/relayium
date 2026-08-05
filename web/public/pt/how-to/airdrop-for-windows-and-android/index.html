@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>AirDrop para Windows, Linux e Android</h1>
-      <p class="updated">Última atualização: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/airdrop-for-windows-and-android/">English</a><a href="/zh/how-to/airdrop-for-windows-and-android/">中文</a><a href="/ja/how-to/airdrop-for-windows-and-android/">日本語</a><a href="/ko/how-to/airdrop-for-windows-and-android/">한국어</a><a href="/de/how-to/airdrop-for-windows-and-android/">Deutsch</a><a href="/fr/how-to/airdrop-for-windows-and-android/">Français</a><a href="/ar/how-to/airdrop-for-windows-and-android/">العربية</a><a href="/es/how-to/airdrop-for-windows-and-android/">Español</a><a href="/pt/how-to/airdrop-for-windows-and-android/" aria-current="true">Português</a></nav>
       <p class="lead">O AirDrop só existe dentro do mundo da Apple, o que deixa todos os demais — Windows, Linux, Android e qualquer casa com uma mistura de dispositivos — sem um equivalente embutido. Este guia mostra o mais próximo do AirDrop para dispositivos que não são da Apple: abra uma página web nas duas pontas e o arquivo simplesmente se move.</p>
       <p class="lead">Funciona da mesma forma independentemente da plataforma, então também cobre o caso que o AirDrop nunca lida bem: um notebook com Windows, um desktop com Linux e um celular Android todos na mesma sala, ou os três mais um iPhone incluído.</p>

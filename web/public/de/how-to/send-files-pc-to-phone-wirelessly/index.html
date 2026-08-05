@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Dateien vom PC drahtlos aufs Handy senden — ohne Kabel, ohne App</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-pc-to-phone-wirelessly/">English</a><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/">中文</a><a href="/ja/how-to/send-files-pc-to-phone-wirelessly/">日本語</a><a href="/ko/how-to/send-files-pc-to-phone-wirelessly/">한국어</a><a href="/de/how-to/send-files-pc-to-phone-wirelessly/" aria-current="true">Deutsch</a><a href="/fr/how-to/send-files-pc-to-phone-wirelessly/">Français</a><a href="/ar/how-to/send-files-pc-to-phone-wirelessly/">العربية</a><a href="/es/how-to/send-files-pc-to-phone-wirelessly/">Español</a><a href="/pt/how-to/send-files-pc-to-phone-wirelessly/">Português</a></nav>
       <p class="lead">Eine Datei vom Laptop aufs Handy zu bekommen, sollte nicht bedeuten, das richtige Kabel zu suchen, sich selbst eine E-Mail zu schreiben oder etwas in eine Cloud hochzuladen und wieder herunterzuladen. Relayium bewegt die Bytes über dein eigenes WLAN direkt vom Computer aufs Handy, im Browser, ohne dass auf einer Seite etwas installiert werden muss.</p>
       <p class="lead">Diese Anleitung zeigt den drahtlosen Weg Schritt für Schritt — im selben Netz oder netzwerkübergreifend — und vergleicht ihn dann ehrlich mit den üblichen Alternativen (USB, Bluetooth, Chat-Apps und E-Mail), damit du das passende Werkzeug wählen kannst.</p>

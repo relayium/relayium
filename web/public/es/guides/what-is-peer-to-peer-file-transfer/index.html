@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>¿Qué es la transferencia de archivos de igual a igual?</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer/">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer/">中文</a><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">日本語</a><a href="/ko/guides/what-is-peer-to-peer-file-transfer/">한국어</a><a href="/de/guides/what-is-peer-to-peer-file-transfer/">Deutsch</a><a href="/fr/guides/what-is-peer-to-peer-file-transfer/">Français</a><a href="/ar/guides/what-is-peer-to-peer-file-transfer/">العربية</a><a href="/es/guides/what-is-peer-to-peer-file-transfer/" aria-current="true">Español</a><a href="/pt/guides/what-is-peer-to-peer-file-transfer/">Português</a></nav>
       <p class="lead">«De igual a igual» se usa de forma imprecisa, así que esto es lo que realmente significa para una transferencia de archivos: tu archivo va directamente de un dispositivo al otro, no sube al servidor de una empresa y vuelve a bajar. No hay parada intermedia donde pueda quedarse una copia.</p>
       <p class="lead">Suena sencillo, pero las rutas reales difieren. Esta página explica primero WebRTC/ICE en general, donde TURN puede ser una vía de reserva, y luego separa la implementación de Relayium: WebRTC del navegador es directo en la misma LAN, TURN se usa por diseño entre redes y el CLI es direct-only.</p>

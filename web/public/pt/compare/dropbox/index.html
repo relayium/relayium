@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs Dropbox para enviar um arquivo</h1>
-      <p class="updated">Última atualização: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/dropbox/">English</a><a href="/zh/compare/dropbox/">中文</a><a href="/ja/compare/dropbox/">日本語</a><a href="/ko/compare/dropbox/">한국어</a><a href="/de/compare/dropbox/">Deutsch</a><a href="/fr/compare/dropbox/">Français</a><a href="/ar/compare/dropbox/">العربية</a><a href="/es/compare/dropbox/">Español</a><a href="/pt/compare/dropbox/" aria-current="true">Português</a></nav>
       <p class="lead">O Dropbox merece sua reputação. Ele sincroniza uma pasta em todas as máquinas que você possui, mantém um histórico de versões quando você sobrescreve algo por acidente, e torna indolor entregar uma pasta de projeto inteira a um cliente com um convite por link de compartilhamento. Se você quer uma pasta de trabalho que simplesmente permaneça sincronizada, o Dropbox faz bem esse trabalho e isto não é um argumento contra usá-lo assim.</p>
       <p class="lead">Mesmo para entregar um arquivo, o Dropbox primeiro o coloca em uma conta. O Relayium o transmite em tempo real: WebRTC direto na mesma LAN ou texto cifrado de ponta a ponta por TURN entre redes por design; também pode criar um link que só é descriptografado no navegador e desaparece no prazo escolhido.</p>

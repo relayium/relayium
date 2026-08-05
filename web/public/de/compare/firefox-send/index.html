@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Die beste Firefox-Send-Alternative 2026</h1>
-      <p class="updated">Zuletzt aktualisiert: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Zuletzt aktualisiert: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/firefox-send/">English</a><a href="/zh/compare/firefox-send/">中文</a><a href="/ja/compare/firefox-send/">日本語</a><a href="/ko/compare/firefox-send/">한국어</a><a href="/de/compare/firefox-send/" aria-current="true">Deutsch</a><a href="/fr/compare/firefox-send/">Français</a><a href="/ar/compare/firefox-send/">العربية</a><a href="/es/compare/firefox-send/">Español</a><a href="/pt/compare/firefox-send/">Português</a></nav>
       <p class="lead">Firefox Send war Mozillas Ansatz für privates Dateiteilen: Datei einwerfen, verschlüsselten Link erhalten, Ablauf oder Burn-after-read nach einem Download einstellen. Die Leute liebten es und suchen Jahre später immer noch danach. Es kommt nicht zurück — Mozilla hat den Dienst 2020 eingestellt —, aber das Bedürfnis, das er erfüllte, ist weiterhin real.</p>
       <p class="lead">Relayiums asynchroner (Speicherlink-)Modus greift dieselbe Idee auf: im Browser verschlüsseln, einen Link teilen, ihn ablaufen oder vernichten lassen. Dieser Artikel ist ein ehrlicher Vergleich — was Firefox Send konnte, wie nah Relayium herankommt, und wo Relayium mit Echtzeit-Peer-to-Peer-Übertragung, einer CLI und der Möglichkeit, selbst zu hosten, weiter geht.</p>

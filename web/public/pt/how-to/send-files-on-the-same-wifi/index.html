@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Enviar arquivos entre dispositivos na mesma rede Wi-Fi</h1>
-      <p class="updated">Última atualização: 2026-07-09</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última atualização: <bdi>2026-07-09</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-on-the-same-wifi/">English</a><a href="/zh/how-to/send-files-on-the-same-wifi/">中文</a><a href="/ja/how-to/send-files-on-the-same-wifi/">日本語</a><a href="/ko/how-to/send-files-on-the-same-wifi/">한국어</a><a href="/de/how-to/send-files-on-the-same-wifi/">Deutsch</a><a href="/fr/how-to/send-files-on-the-same-wifi/">Français</a><a href="/ar/how-to/send-files-on-the-same-wifi/">العربية</a><a href="/es/how-to/send-files-on-the-same-wifi/">Español</a><a href="/pt/how-to/send-files-on-the-same-wifi/" aria-current="true">Português</a></nav>
       <p class="lead">Se dois ou mais dispositivos estão na mesma rede Wi-Fi ou local, enviar um arquivo entre eles não deveria exigir uma conta, um código nem um desvio pela nuvem. O Relayium detecta quando os dispositivos compartilham uma rede e permite que se conectem diretamente, no navegador, sem nada para cadastrar.</p>
       <p class="lead">Este guia cobre o caso genérico da mesma rede — quaisquer dispositivos, quaisquer sistemas operacionais, até mais de dois ao mesmo tempo. Se você tem em mente um par de dispositivos específico, veja os guias dedicados para PC para celular, Mac para Windows, ou um fluxo no estilo AirDrop para Windows/Linux/Android, com links no fim.</p>

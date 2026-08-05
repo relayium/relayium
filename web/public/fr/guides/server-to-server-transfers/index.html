@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Transferts serveur à serveur avec la CLI Relayium (daemon-direct)</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers/">English</a><a href="/zh/guides/server-to-server-transfers/">中文</a><a href="/ja/guides/server-to-server-transfers/">日本語</a><a href="/ko/guides/server-to-server-transfers/">한국어</a><a href="/de/guides/server-to-server-transfers/">Deutsch</a><a href="/fr/guides/server-to-server-transfers/" aria-current="true">Français</a><a href="/ar/guides/server-to-server-transfers/">العربية</a><a href="/es/guides/server-to-server-transfers/">Español</a><a href="/pt/guides/server-to-server-transfers/">Português</a></nav>
       <p class="lead">Quand les deux machines vous appartiennent et que chacune connaît l&#39;adresse de l&#39;autre, SSH est une friction superflue et un rendez-vous n&#39;est que du pur surcoût. Le daemon-direct est fait exactement pour cela : un serveur écoute, l&#39;autre pousse directement vers lui via une connexion TLS 1.3 avec épinglage. Pas de relais, pas de SSH, pas de code d&#39;appairage — la confiance repose sur des clés publiques et se configure une seule fois.</p>
       <p class="lead">Ce guide couvre le démarrage du processus à l&#39;écoute, l&#39;envoi vers celui-ci, l&#39;approbation d&#39;un nouvel émetteur au premier contact, l&#39;automatisation, et l&#39;exécution du processus à l&#39;écoute en tant que service systemd.</p>

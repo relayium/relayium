@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs AirDrop : une alternative multiplateforme</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/airdrop/">English</a><a href="/zh/compare/airdrop/">中文</a><a href="/ja/compare/airdrop/">日本語</a><a href="/ko/compare/airdrop/">한국어</a><a href="/de/compare/airdrop/">Deutsch</a><a href="/fr/compare/airdrop/" aria-current="true">Français</a><a href="/ar/compare/airdrop/">العربية</a><a href="/es/compare/airdrop/">Español</a><a href="/pt/compare/airdrop/">Português</a></nav>
       <p class="lead">AirDrop est l&#39;une des meilleures expériences de partage de fichiers jamais livrées. Entre un iPhone, un iPad et un Mac, c&#39;est rapide, privé et intégré au système sans effort — Relayium ne prétend pas le battre sur le terrain d&#39;Apple.</p>
       <p class="lead">Le hic, c&#39;est la frontière : AirDrop ne parle qu&#39;à d&#39;autres appareils Apple. Cet article compare les deux équitablement, explique où AirDrop est réellement meilleur, et montre où Relayium aide — pour envoyer entre un iPhone et un PC Windows, un téléphone Android et un Mac, ou un portable Linux et un iPad, directement depuis le navigateur.</p>

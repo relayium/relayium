@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs Google Drive pour envoyer des fichiers</h1>
-      <p class="updated">Dernière mise à jour: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/google-drive/">English</a><a href="/zh/compare/google-drive/">中文</a><a href="/ja/compare/google-drive/">日本語</a><a href="/ko/compare/google-drive/">한국어</a><a href="/de/compare/google-drive/">Deutsch</a><a href="/fr/compare/google-drive/" aria-current="true">Français</a><a href="/ar/compare/google-drive/">العربية</a><a href="/es/compare/google-drive/">Español</a><a href="/pt/compare/google-drive/">Português</a></nav>
       <p class="lead">Google Drive est un vrai bon produit : vos fichiers vivent au même endroit, se synchronisent entre appareils, restent sauvegardés, et se coéditent facilement en équipe. Si vous avez besoin d&#39;un foyer durable pour des fichiers auxquels vous reviendrez, Drive est un choix par défaut raisonnable, et cet article n&#39;essaie pas de vous en dissuader.</p>
       <p class="lead">Mais une grande partie de ce pour quoi les gens utilisent Drive est en réalité une remise ponctuelle — envoyer une vidéo à un ami, un contrat à un client, un jeu de données à un collègue — pas du stockage durable. Pour cette tâche précise, téléverser une copie sur les serveurs de Google puis configurer qui peut la voir demande plus de rouages que nécessaire. Le temps réel de Relayium ne conserve aucune copie de contenu côté serveur : navigateur direct sur le LAN, TURN chiffré de bout en bout entre réseaux. Seul le destinataire peut déchiffrer le lien stocké.</p>

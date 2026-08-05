@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs Nextcloud para enviar archivos</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/nextcloud/">English</a><a href="/zh/compare/nextcloud/">中文</a><a href="/ja/compare/nextcloud/">日本語</a><a href="/ko/compare/nextcloud/">한국어</a><a href="/de/compare/nextcloud/">Deutsch</a><a href="/fr/compare/nextcloud/">Français</a><a href="/ar/compare/nextcloud/">العربية</a><a href="/es/compare/nextcloud/" aria-current="true">Español</a><a href="/pt/compare/nextcloud/">Português</a></nav>
       <p class="lead">Nextcloud convirtió el autoalojamiento en una alternativa real a Google Drive o Dropbox: tus propios archivos, tu propia sincronización en cada dispositivo, tu propio calendario y contactos, todo bajo un dominio que controlas. Es software genuinamente potente, y si lo que quieres es un hogar permanente para tus archivos, Nextcloud es la herramienta adecuada para ese trabajo.</p>
       <p class="lead">Este artículo compara ambos de forma justa. Nextcloud almacena y sincroniza datos de forma duradera, con servidor web, base de datos, PHP y actualizaciones continuas. Relayium resuelve la tarea más estrecha de transferir: tiempo real sin copia de contenido en el servidor, o un enlace de conocimiento cero que expira. En la LAN el contenido va directo; entre redes TURN solo retransmite texto cifrado de extremo a extremo que no puede leer ni descifrar. Para almacenamiento duradero elige Nextcloud; para transferir, Relayium es más ligero.</p>

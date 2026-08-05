@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>أفضل بديل لـ Firefox Send في 2026</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/firefox-send/">English</a><a href="/zh/compare/firefox-send/">中文</a><a href="/ja/compare/firefox-send/">日本語</a><a href="/ko/compare/firefox-send/">한국어</a><a href="/de/compare/firefox-send/">Deutsch</a><a href="/fr/compare/firefox-send/">Français</a><a href="/ar/compare/firefox-send/" aria-current="true">العربية</a><a href="/es/compare/firefox-send/">Español</a><a href="/pt/compare/firefox-send/">Português</a></nav>
       <p class="lead">كان Firefox Send رؤية Mozilla لمشاركة الملفات الخاصة: تضع ملفًا، فتحصل على رابط مشفّر، وتضبطه لينتهي أو يُحذف بعد تنزيل واحد. أحبّه الناس ولا يزالون يبحثون عنه بعد سنوات. لن يعود — فقد أوقفت Mozilla الخدمة في 2020 — لكن الحاجة التي كان يلبّيها لا تزال قائمة فعلًا.</p>
       <p class="lead">يلتقط وضع Relayium غير المتزامن (رابط مُخزَّن) الفكرة ذاتها: التشفير في المتصفح، ومشاركة رابط، ومراقبته وهو ينتهي أو يُحذف. هذه المقالة مقارنة صادقة — ماذا كان Firefox Send يفعل، وكم يقترب منه Relayium، وأين يذهب Relayium أبعد من ذلك بالنقل الفوري من الند للند، وواجهة سطر الأوامر CLI، والاستضافة الذاتية.</p>

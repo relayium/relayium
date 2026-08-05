@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron</h1>
-      <p class="updated">آخر تحديث: 2026-07-12</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-12</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups/">English</a><a href="/zh/how-to/automate-server-backups/">中文</a><a href="/ja/how-to/automate-server-backups/">日本語</a><a href="/ko/how-to/automate-server-backups/">한국어</a><a href="/de/how-to/automate-server-backups/">Deutsch</a><a href="/fr/how-to/automate-server-backups/">Français</a><a href="/ar/how-to/automate-server-backups/" aria-current="true">العربية</a><a href="/es/how-to/automate-server-backups/">Español</a><a href="/pt/how-to/automate-server-backups/">Português</a></nav>
       <p class="lead">النسخ الاحتياطي الذي عليك أن تتذكر تشغيله لا يحدث. أما cron فيتذكر، وواجهة Relayium CLI مبنية لذلك: أمر واحد غير تفاعلي ينسخ (أو يعكس) مجلدًا إلى جهاز آخر، ويتحقق من كل ملف، ويكمل من حيث توقف إذا انقطعت الشبكة.</p>
       <p class="lead">يغطي هذا الدليل جدولة relayium push وrelayium sync التزايدي عبر cron، ووسيلتَي النقل اللتين يمكن توجيه أيٍّ منهما إليهما، وأسطر crontab الجاهزة للنسخ.</p>

@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>استقبال الملفات من سطر الأوامر</h1>
-      <p class="updated">آخر تحديث: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line/">English</a><a href="/zh/guides/receive-files-from-the-command-line/">中文</a><a href="/ja/guides/receive-files-from-the-command-line/">日本語</a><a href="/ko/guides/receive-files-from-the-command-line/">한국어</a><a href="/de/guides/receive-files-from-the-command-line/">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line/">Français</a><a href="/ar/guides/receive-files-from-the-command-line/" aria-current="true">العربية</a><a href="/es/guides/receive-files-from-the-command-line/">Español</a><a href="/pt/guides/receive-files-from-the-command-line/">Português</a></nav>
       <p class="lead">الإرسال نصف القصة فقط — عاجلًا أم آجلًا ستكون أنت في الطرف المُستقبِل: زميل يريد أن يسلّمك ملفًا عبر الإنترنت، أو أحد أجهزتك يريد أن يمرّره إلى آخر، أو تريد أن تمدّ يدك وتجلب شيئًا من خادم تديره. يغطي Relayium CLI الحالات الثلاث بأمر مختلف لكلٍّ منها، ولا واحدة منها تحتاج حسابًا.</p>
       <p class="lead">اختر receive حين يدفع إليك شخص آخر برمز اقتران، وserve حين تريد صندوق وارد دائمًا تستطيع الأجهزة الموثوقة الدفع إليه في أي وقت، وpull حين تكون أنت من يمدّ يده إلى خادم يمكنك أصلًا تسجيل الدخول إليه عبر ssh.</p>

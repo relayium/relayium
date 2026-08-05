@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Relayium vs Nextcloud: 파일 전송에는 무엇을 써야 할까</h1>
-      <p class="updated">마지막 업데이트: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/compare/nextcloud/">English</a><a href="/zh/compare/nextcloud/">中文</a><a href="/ja/compare/nextcloud/">日本語</a><a href="/ko/compare/nextcloud/" aria-current="true">한국어</a><a href="/de/compare/nextcloud/">Deutsch</a><a href="/fr/compare/nextcloud/">Français</a><a href="/ar/compare/nextcloud/">العربية</a><a href="/es/compare/nextcloud/">Español</a><a href="/pt/compare/nextcloud/">Português</a></nav>
       <p class="lead">Nextcloud는 자체 호스팅을 Google Drive나 Dropbox의 진짜 대안으로 만들었습니다. 자신의 파일, 모든 기기에 걸친 동기화, 자신의 캘린더와 연락처까지 — 모두 자신이 통제하는 도메인 아래에서 돌아갑니다. 이는 정말로 강력한 소프트웨어이며, 파일의 영구적인 보금자리를 원한다면 Nextcloud가 딱 맞는 도구입니다.</p>
       <p class="lead">Nextcloud는 웹, DB, PHP와 지속 관리가 필요한 장기 저장·동기화 플랫폼입니다. Relayium은 전달에 집중해 실시간 서버 측 내용 사본을 저장하지 않고, LAN은 직접, 네트워크 간은 암호화 TURN을 사용하며 만료 영지식 링크도 선택할 수 있습니다.</p>

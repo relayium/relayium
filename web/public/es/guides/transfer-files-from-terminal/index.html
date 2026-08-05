@@ -76,7 +76,14 @@ footer a{color:var(--text-h);text-decoration:none}
            the boundary satisfies the "content lives in a landmark" rule. -->
       <main>
       <h1>Transfiere archivos y texto desde la terminal con la CLI de Relayium</h1>
-      <p class="updated">Última actualización: 2026-07-31</p>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/transfer-files-from-terminal/">English</a><a href="/zh/guides/transfer-files-from-terminal/">中文</a><a href="/ja/guides/transfer-files-from-terminal/">日本語</a><a href="/ko/guides/transfer-files-from-terminal/">한국어</a><a href="/de/guides/transfer-files-from-terminal/">Deutsch</a><a href="/fr/guides/transfer-files-from-terminal/">Français</a><a href="/ar/guides/transfer-files-from-terminal/">العربية</a><a href="/es/guides/transfer-files-from-terminal/" aria-current="true">Español</a><a href="/pt/guides/transfer-files-from-terminal/">Português</a></nav>
       <p class="lead">La CLI de Relayium es un pequeño binario para transferir archivos y texto efímero desde la terminal — cifrado de extremo a extremo, autoalojable y gratis. Copia archivos a un servidor, envía una compilación o pasa URL, comandos y código sin guardarlos antes como archivo.</p>
       <p class="lead">Sea cual sea la forma en que la uses, los bytes de los archivos viajan directamente entre los dos extremos y nunca pasan por los servidores de Relayium. Esta guía te deja instalado y con tu primera transferencia hecha, y luego te dirige a los tutoriales más detallados de cada modo.</p>
