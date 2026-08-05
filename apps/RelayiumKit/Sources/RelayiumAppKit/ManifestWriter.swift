@@ -195,6 +195,20 @@ final class ManifestWriter {
 
     private var index = 0
     private var writtenInCurrent = 0
+    /// How far this writer has got, as an index into the manifest: the entry it
+    /// is currently filling, or `entries.count` once every entry is closed.
+    ///
+    /// Read-only and internal, for the ONE consumer that needs it — the link
+    /// driver's destination adapter, whose protocol acknowledges a file boundary
+    /// separately from the bytes that crossed it and has to check the two agree.
+    /// Nothing may write it: the byte count is what advances this writer, and a
+    /// second way to move it would be a second source of truth about where the
+    /// next byte goes.
+    ///
+    /// It runs AHEAD of the acknowledgements over zero-length files, which
+    /// `openCurrent` creates and steps past in one go, so a reader must treat it
+    /// as "has reached at least", never as "is exactly at".
+    var preparedIndex: Int { index }
     /// `var`, not `let`, so the initializer can finish initialising `self`
     /// before the manifest is validated, which lets a validation failure reach
     /// `discard()` instead of throwing out of a half-initialised `self`. That is
