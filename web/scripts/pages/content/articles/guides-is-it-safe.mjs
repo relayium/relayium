@@ -536,7 +536,7 @@ const de = {
 };
 
 const fr = {
-  title: "Est-il sûr d'envoyer des fichiers sur Internet ?",
+  title: "Est-il sûr d'envoyer des fichiers sur Internet ?",
   description:
     "Les vrais risques des pièces jointes, des liens cloud et des clés USB, ce que « chiffré de bout en bout » et « divulgation nulle » signifient réellement, et ce qu'il faut vérifier avant de faire confiance à un outil de transfert.",
   updatedLabel: "Dernière mise à jour",

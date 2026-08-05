@@ -292,29 +292,29 @@ const de = article({
 const fr = article({
   title: "Envoyer du texte, des liens et des commandes entre appareils",
   description:
-    "Transférez texte, liens, commandes et code multiligne avec Relayium — chiffré de bout en bout et uniquement en ligne ; les serveurs Relayium ne gardent ni corps de message ni historique côté serveur, mais chaque extrémité peut conserver le texte reçu.",
+    "Transférez texte, liens, commandes et code multiligne avec Relayium — chiffré de bout en bout et uniquement en ligne ; les serveurs Relayium ne gardent ni corps de message ni historique côté serveur, mais chaque extrémité peut conserver le texte reçu.",
   updatedLabel: "Dernière mise à jour",
   lead: [
-    "Relayium transporte aussi le contenu du presse-papiers : une URL du téléphone, une commande pour un autre ordinateur ou un bloc de code multiligne. Les messages sont chiffrés de bout en bout ; les serveurs Relayium ne gardent ni corps de message ni historique côté serveur, mais chaque extrémité peut copier ou conserver le texte reçu.",
+    "Relayium transporte aussi le contenu du presse-papiers : une URL du téléphone, une commande pour un autre ordinateur ou un bloc de code multiligne. Les messages sont chiffrés de bout en bout ; les serveurs Relayium ne gardent ni corps de message ni historique côté serveur, mais chaque extrémité peut copier ou conserver le texte reçu.",
     "Le navigateur et la CLI prennent en charge le texte, mais utilisent des transports séparés et ne peuvent pas rejoindre leurs codes respectifs. Utilisez la même méthode aux deux extrémités.",
   ],
-  browserHeading: "Navigateur : envoyer un message à un appareil en ligne",
+  browserHeading: "Navigateur : envoyer un message à un appareil en ligne",
   browserBody:
-    "Ouvrez relayium.com sur les deux appareils. Sur le même réseau ils apparaissent automatiquement ; sinon créez un code navigateur sur la page interréseau et rejoignez-le dans l'autre navigateur.",
+    "Ouvrez relayium.com sur les deux appareils. Sur le même réseau ils apparaissent automatiquement ; sinon créez un code navigateur sur la page interréseau et rejoignez-le dans l'autre navigateur.",
   browserSteps: [
     "Choisissez « Envoyer un message » sur la carte du pair. Par défaut, la session s'ouvre directement sur la zone de saisie des deux côtés — la connexion est chiffrée dans tous les cas.",
     "Saisissez ou collez le texte, puis envoyez avec ⌘/Ctrl+Entrée. Activez d'abord la vérification avancée si vous voulez que les deux écrans affichent le même code de vérification à six chiffres (SAS) à comparer, avec une acceptation explicite avant l'ouverture de la session.",
     "Tant que la session reste ouverte, chaque côté peut envoyer plusieurs messages et copier ceux qu'il reçoit.",
   ],
-  cliHeading: "CLI : créer un code sur une machine, le rejoindre sur l'autre",
+  cliHeading: "CLI : créer un code sur une machine, le rejoindre sur l'autre",
   cliBody: [
     "Lancez relayium text sans code sur une machine. La commande crée un code à six chiffres avec votre compte, affiche exactement la commande que l'autre machine doit exécuter, et reste dans la session à l'attendre. Aucun fichier temporaire, aucun processus supplémentaire à arrêter.",
-    "Lancez ensuite relayium text avec ce code sur l'autre machine. En mode interactif, chaque ligne est un message et rien ne s'arrête pour comparer un code tant que vous ne le demandez pas. Pour du texte multiligne ou exact, utilisez un pipe en un seul message : aucun indicateur supplémentaire n'est requis.",
+    "Lancez ensuite relayium text avec ce code sur l'autre machine. En mode interactif, chaque ligne est un message et rien ne s'arrête pour comparer un code tant que vous ne le demandez pas. Pour du texte multiligne ou exact, utilisez un pipe en un seul message : aucun indicateur supplémentaire n'est requis.",
   ],
   cliNotes: [
-    "Les codes CLI durent cinq minutes et relient uniquement deux CLI ; navigateur et CLI ne sont pas interopérables.",
+    "Les codes CLI durent cinq minutes et relient uniquement deux CLI ; navigateur et CLI ne sont pas interopérables.",
     "Seule la machine qui crée le code exige un compte connecté. Celle qui rejoint le code affiché n'a pas besoin de se connecter.",
-    "--verify active la comparaison du SAS et nécessite un terminal pour y répondre : un lancement avec un pipe et --verify est refusé plutôt que poursuivi comme s'il avait été confirmé. --yes reste accepté, signifie toujours « ne jamais demander » et l'emporte sur --verify.",
+    "--verify active la comparaison du SAS et nécessite un terminal pour y répondre : un lancement avec un pipe et --verify est refusé plutôt que poursuivi comme s'il avait été confirmé. --yes reste accepté, signifie toujours « ne jamais demander » et l'emporte sur --verify.",
   ],
   boundariesHeading: "Ce que le transfert de texte est — et n'est pas",
   boundariesBody:
@@ -326,8 +326,8 @@ const fr = article({
   ],
   faqHeading: "Questions fréquentes",
   faq: [
-    { q: "Relayium peut-il lire ou récupérer mes messages ?", a: "Non. Le contenu est chiffré de bout en bout entre les appareils, et les serveurs Relayium ne gardent ni corps de message ni historique côté serveur. Chaque extrémité peut conserver le texte reçu ; après la session, Relayium n'a aucune copie serveur à récupérer." },
-    { q: "Puis-je utiliser le navigateur d'un côté et la CLI de l'autre ?", a: "Non. Les transports et associations diffèrent. Utilisez deux navigateurs ou deux clients CLI." },
+    { q: "Relayium peut-il lire ou récupérer mes messages ?", a: "Non. Le contenu est chiffré de bout en bout entre les appareils, et les serveurs Relayium ne gardent ni corps de message ni historique côté serveur. Chaque extrémité peut conserver le texte reçu ; après la session, Relayium n'a aucune copie serveur à récupérer." },
+    { q: "Puis-je utiliser le navigateur d'un côté et la CLI de l'autre ?", a: "Non. Les transports et associations diffèrent. Utilisez deux navigateurs ou deux clients CLI." },
   ],
   ctaText: "Ouvrez Relayium sur deux appareils en ligne et transférez directement ce que vous vous seriez envoyé à vous-même.",
   ctaButton: "Envoyer du texte",

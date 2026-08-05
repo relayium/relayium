@@ -81,9 +81,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <p class="lead">Si vous avez déjà un accès SSH à une machine — un VPS, un serveur personnel, un NAS, un poste de travail —, vous pouvez y sauvegarder des fichiers avec la CLI Relayium sans mettre en place un service de synchronisation ni de compte. Le transfert passe par votre connexion SSH existante, si bien que les octets vont directement à votre serveur et ne transitent jamais par Relayium.</p>
       <p class="lead">Ce guide couvre le push et le pull de répertoires, ce que la reprise et la vérification d&#39;intégrité vous apportent, et comment le planifier avec cron.</p>
       <h2>Avant de commencer</h2>
-      <p>Tout ci-dessous passe par la CLI relayium, alors installez-la d&#39;abord si ce n&#39;est pas fait. Sous macOS ou Linux, une commande place un binaire précompilé dans votre PATH :</p>
+      <p>Tout ci-dessous passe par la CLI relayium, alors installez-la d&#39;abord si ce n&#39;est pas fait. Sous macOS ou Linux, une commande place un binaire précompilé dans votre PATH :</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>Vous préférez choisir le fichier vous-même, ou sous Windows ? Récupérez un binaire depuis la page des releases — relayium.com/cli liste toutes les options (avec Go, go build -o relayium ./cmd/relayium).</li><li>relayium --version confirme l&#39;installation. Sans cela, les commandes ci-dessous affichent seulement « command not found ».</li></ul>
+      <ul><li>Vous préférez choisir le fichier vous-même, ou sous Windows ? Récupérez un binaire depuis la page des releases — relayium.com/cli liste toutes les options (avec Go, go build -o relayium ./cmd/relayium).</li><li>relayium --version confirme l&#39;installation. Sans cela, les commandes ci-dessous affichent seulement « command not found ».</li></ul>
       <h2>Pousser (push) un répertoire vers votre serveur</h2>
       <p>push prend une ou plusieurs sources et une destination de style scp. Relayium se connecte en SSH avec vos clés et votre configuration habituelles, puis diffuse les fichiers vers le répertoire de destination :</p>
       <pre><code># copier un dossier local vers le serveur

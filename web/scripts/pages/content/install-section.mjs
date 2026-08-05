@@ -63,11 +63,11 @@ export const installSection = {
   fr: {
     heading: "Avant de commencer",
     body: [
-      "Tout ci-dessous passe par la CLI relayium, alors installez-la d'abord si ce n'est pas fait. Sous macOS ou Linux, une commande place un binaire précompilé dans votre PATH :",
+      "Tout ci-dessous passe par la CLI relayium, alors installez-la d'abord si ce n'est pas fait. Sous macOS ou Linux, une commande place un binaire précompilé dans votre PATH :",
     ],
     code: ["curl -fsSL https://relayium.com/install.sh | sh"],
     bullets: [
-      "Vous préférez choisir le fichier vous-même, ou sous Windows ? Récupérez un binaire depuis la page des releases — relayium.com/cli liste toutes les options (avec Go, go build -o relayium ./cmd/relayium).",
+      "Vous préférez choisir le fichier vous-même, ou sous Windows ? Récupérez un binaire depuis la page des releases — relayium.com/cli liste toutes les options (avec Go, go build -o relayium ./cmd/relayium).",
       "relayium --version confirme l'installation. Sans cela, les commandes ci-dessous affichent seulement « command not found ».",
     ],
   },

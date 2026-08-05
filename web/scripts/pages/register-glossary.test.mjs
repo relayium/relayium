@@ -13,12 +13,18 @@
 // ── SCOPE, and why it is this narrow ─────────────────────────────────────────
 // Only rules that are (a) settled in GLOSSARY.md, (b) mechanically decidable and
 // (c) produce ZERO false positives on today's corpus. A locale lint that cries
-// wolf gets suppressed, and then it protects nothing. One rule was measured and
-// deliberately left out:
+// wolf gets suppressed, and then it protects nothing.
 //
-//   * fr: the non-breaking space before `: ; ! ?`. fr.ts already carries 195
-//     NBSPs, so the convention is real, but ~950 sites across the corpus do not
-//     have one. That is its own typography pass, not a lint to bolt on here.
+// One half of one row is deliberately left out: the French NBSP before a COLON.
+// An earlier note in this file claimed ~950 sites were missing it and called for
+// a typography pass. That number was wrong — it came from counting colons in the
+// TypeScript SOURCE of fr.ts, where almost every one is object syntax. Against
+// the parsed corpus the real figure was 122 strings, all fixed in the commit that
+// added this rule; what remains uncoverable is the colon, because the three sites
+// that legitimately keep a bare one are quoted machine output — `relayium-node:
+// command not found` and the `environment:` block key, which all nine locales
+// write exactly that way. So `; ! ?`, which machine output does not produce in
+// that position, carries the rule and the colon stays a reviewer's judgement.
 //
 // The zh half-width punctuation rule was left out at first for a reason that
 // turned out to be wrong — "it cannot separate prose from code samples". It does
@@ -120,6 +126,23 @@ const RULES = [
   { locale: "zh", name: "half-width punctuation between CJK", legal: "keep", re: /[一-鿿々〇][,;:?!][一-鿿々〇]/ },
   { locale: "zh", name: "half-width punctuation closing a CJK clause", legal: "keep", re: /[一-鿿々〇][,;:?!](\s|$)/ },
   { locale: "zh", name: "half-width punctuation opening a CJK clause", legal: "keep", re: /[,;:?!][一-鿿々〇]/ },
+
+  // fr — a no-break space before ; ! ? (see the colon note in the header for the
+  // half that is not enforced). A plain space would let the mark wrap to the next
+  // line on its own, which is the visible defect this prevents.
+  //
+  // This is the one rule that needs the code exclusion the zh rules turned out not
+  // to need, and for a reason that is specific to it: French typography is about
+  // the space around a mark, and a shell sample is full of marks with ordinary
+  // spacing — `…; do echo`, `Accept and remember this peer? [y/N]`. There is no
+  // neighbouring character that separates those from prose, only the field.
+  {
+    locale: "fr",
+    name: "missing no-break space before ; ! ?",
+    legal: "keep",
+    skipCode: true,
+    re: /[^\u00a0][;!?](\s|$)/,
+  },
 ];
 
 // German is not a plain substring rule. Capitalized Sie/Ihnen/Ihr* is formal
@@ -140,9 +163,11 @@ function siezen(text) {
 }
 
 describe("GLOSSARY.md register decisions", () => {
-  for (const { locale, name, legal, re } of RULES) {
+  for (const { locale, name, legal, re, skipCode } of RULES) {
     it(`${locale}: no ${name}`, () => {
-      const bad = corpus(locale, { legal }).filter(([, text]) => re.test(text));
+      const bad = corpus(locale, { legal })
+        .filter(([where]) => !(skipCode && /\.code\[/.test(where)))
+        .filter(([, text]) => re.test(text));
       expect(bad.map(([where, text]) => `${where}: ${text.slice(0, 120)}`)).toEqual([]);
     });
   }

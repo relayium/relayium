@@ -330,7 +330,7 @@ const de = {
 const fr = {
   title: "Obtenir Relayium — applis pour le web, le CLI, macOS et iOS",
   description:
-    "Téléchargez Relayium : utilisez-le dans n'importe quel navigateur, installez l'outil en ligne de commande ou découvrez ce que font les applis natives. Transfert chiffré de bout en bout de fichiers et de texte éphémère — web, ligne de commande, macOS et iOS.",
+    "Téléchargez Relayium : utilisez-le dans n'importe quel navigateur, installez l'outil en ligne de commande ou découvrez ce que font les applis natives. Transfert chiffré de bout en bout de fichiers et de texte éphémère — web, ligne de commande, macOS et iOS.",
   hero: {
     h1: "Obtenir Relayium",
     pitch:
@@ -338,14 +338,14 @@ const fr = {
     cta: "Ouvrir l'appli web",
   },
   how: {
-    heading: "Laquelle choisir ?",
+    heading: "Laquelle choisir ?",
     steps: [
-      "Appli web — sans installation, dans n'importe quel navigateur moderne, sur n'importe quel OS : fichiers et texte éphémère.",
+      "Appli web — sans installation, dans n'importe quel navigateur moderne, sur n'importe quel OS : fichiers et texte éphémère.",
       "Ligne de commande — transferts de fichiers scriptables, synchronisation de dossiers, sauvegardes de serveur et texte éphémère pour macOS, Linux et Windows.",
       MAC_AVAILABLE
         ? "Appli macOS — téléchargez l'appli native de barre des menus, signée et notarisée."
         : "Appli macOS — l'appli native de barre des menus est une version d'ingénierie et n'est pas encore disponible publiquement.",
-      "Appli iOS — une appli native iPhone et iPad : fichiers et texte tant qu'elle est ouverte ; pas encore disponible publiquement.",
+      "Appli iOS — une appli native iPhone et iPad : fichiers et texte tant qu'elle est ouverte ; pas encore disponible publiquement.",
     ],
   },
   why: {
@@ -362,17 +362,17 @@ const fr = {
       {
         title: "Appli macOS",
         desc: MAC_AVAILABLE
-          ? "Une vraie appli native dans la barre de menus (com.relayium.mac) : fichiers et texte avec les appareils à proximité ou par code d'appairage, envoi et ouverture de liens chiffrés, gestion du compte et des appareils. Disponible en téléchargement signé et notarisé."
-          : "Une vraie appli native dans la barre de menus (com.relayium.mac) : fichiers et texte avec les appareils à proximité ou par code d'appairage, envoi et ouverture de liens chiffrés, gestion du compte et des appareils. C'est une version d'ingénierie, pas encore disponible publiquement.",
+          ? "Une vraie appli native dans la barre de menus (com.relayium.mac) : fichiers et texte avec les appareils à proximité ou par code d'appairage, envoi et ouverture de liens chiffrés, gestion du compte et des appareils. Disponible en téléchargement signé et notarisé."
+          : "Une vraie appli native dans la barre de menus (com.relayium.mac) : fichiers et texte avec les appareils à proximité ou par code d'appairage, envoi et ouverture de liens chiffrés, gestion du compte et des appareils. C'est une version d'ingénierie, pas encore disponible publiquement.",
       },
       {
         title: "Appli iOS",
-        desc: "Une appli native iPhone et iPad (com.relayium.app) : ouvrez un lien chiffré sans compte, envoyez fichiers et texte aux appareils à proximité ou par code à six chiffres, gérez votre compte — tant que l'appli est ouverte.",
+        desc: "Une appli native iPhone et iPad (com.relayium.app) : ouvrez un lien chiffré sans compte, envoyez fichiers et texte aux appareils à proximité ou par code à six chiffres, gérez votre compte — tant que l'appli est ouverte.",
       },
     ],
   },
   compare: {
-    heading: "Native ou navigateur ?",
+    heading: "Native ou navigateur ?",
     items: [
       {
         title: "Utiliser l'appli web",
@@ -380,7 +380,7 @@ const fr = {
       },
       {
         title: "Obtenir une appli native",
-        body: "Une intégration plus poussée avec le client macOS ; l'appli iOS est en cours de développement.",
+        body: "Une intégration plus poussée avec le client macOS ; l'appli iOS est en cours de développement.",
       },
     ],
   },

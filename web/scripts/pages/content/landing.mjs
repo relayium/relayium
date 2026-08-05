@@ -405,11 +405,11 @@ const de = {
 const fr = {
   title: "Relayium — Transfert P2P de fichiers et de texte chiffré de bout en bout",
   description:
-    "Relayium est open source et sans installation. Sur le même réseau, les fichiers passent directement ; entre réseaux, le navigateur utilise TURN par conception et le relais ne voit que du chiffré. Le texte exige les deux appareils en ligne. Relayium ne conserve ni corps de message ni historique serveur, mais les appareils peuvent garder le texte.",
+    "Relayium est open source et sans installation. Sur le même réseau, les fichiers passent directement ; entre réseaux, le navigateur utilise TURN par conception et le relais ne voit que du chiffré. Le texte exige les deux appareils en ligne. Relayium ne conserve ni corps de message ni historique serveur, mais les appareils peuvent garder le texte.",
   hero: {
     h1: "Transfert P2P de fichiers et de texte chiffré de bout en bout",
     pitch:
-      "Sur le réseau local, les fichiers passent directement ; entre réseaux, TURN transporte uniquement du chiffré. Les deux appareils restent en ligne pour le texte. Relayium ne conserve ni corps de message ni historique serveur, mais le navigateur ou le destinataire peut garder le texte.",
+      "Sur le réseau local, les fichiers passent directement ; entre réseaux, TURN transporte uniquement du chiffré. Les deux appareils restent en ligne pour le texte. Relayium ne conserve ni corps de message ni historique serveur, mais le navigateur ou le destinataire peut garder le texte.",
     cta: "Démarrer le transfert",
   },
   how: {
@@ -417,8 +417,8 @@ const fr = {
     steps: [
       "Ouvrez relayium.com sur les deux appareils dans un navigateur moderne.",
       "Un côté sélectionne ou glisse les fichiers à envoyer (jusqu'à 1 000 par lot) — ou envoie plutôt un message texte.",
-      "Facultatif : activez la vérification avancée et les deux écrans affichent le même code de vérification à 6 chiffres (SAS), que vous pouvez comparer par un canal indépendant. Elle est désactivée par défaut ; le chiffrement, la poignée de main « engagement puis révélation » et le contrôle d'intégrité s'exécutent dans tous les cas. Une correspondance détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation qui usurpe une extrémité et termine le chiffrement applicatif de bout en bout ; elle ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau.",
-      "Les fichiers sont chiffrés en AES-256-GCM et vérifiés par SHA-256. Le texte utilise une session chiffrée distincte ; les deux appareils restent en ligne. Relayium ne conserve ni corps ni historique, mais les appareils peuvent garder le texte.",
+      "Facultatif : activez la vérification avancée et les deux écrans affichent le même code de vérification à 6 chiffres (SAS), que vous pouvez comparer par un canal indépendant. Elle est désactivée par défaut ; le chiffrement, la poignée de main « engagement puis révélation » et le contrôle d'intégrité s'exécutent dans tous les cas. Une correspondance détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation qui usurpe une extrémité et termine le chiffrement applicatif de bout en bout ; elle ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau.",
+      "Les fichiers sont chiffrés en AES-256-GCM et vérifiés par SHA-256. Le texte utilise une session chiffrée distincte ; les deux appareils restent en ligne. Relayium ne conserve ni corps ni historique, mais les appareils peuvent garder le texte.",
     ],
   },
   why: {
@@ -426,15 +426,15 @@ const fr = {
     items: [
       {
         title: "Chiffré de bout en bout",
-        desc: "Échange de clés X25519 et AES-256-GCM par bloc ; les clés sont négociées uniquement entre les deux appareils et le serveur ne peut pas déchiffrer.",
+        desc: "Échange de clés X25519 et AES-256-GCM par bloc ; les clés sont négociées uniquement entre les deux appareils et le serveur ne peut pas déchiffrer.",
       },
       {
         title: "Véritable pair-à-pair",
-        desc: "Sur le même réseau, les fichiers circulent directement d'appareil à appareil via un canal WebRTC chiffré et ne passent jamais par nos serveurs ; entre réseaux différents, ils transitent par un relais chiffré qui, lui aussi, ne voit que du chiffré.",
+        desc: "Sur le même réseau, les fichiers circulent directement d'appareil à appareil via un canal WebRTC chiffré et ne passent jamais par nos serveurs ; entre réseaux différents, ils transitent par un relais chiffré qui, lui aussi, ne voit que du chiffré.",
       },
       {
         title: "Vérification SAS facultative contre l'homme du milieu",
-        desc: "Avec la vérification avancée activée (désactivée par défaut), les deux écrans affichent un code à 6 chiffres ; le comparer par un canal indépendant détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation qui usurpe une extrémité et termine le chiffrement applicatif de bout en bout. Le SAS authentifie les extrémités ; il ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau.",
+        desc: "Avec la vérification avancée activée (désactivée par défaut), les deux écrans affichent un code à 6 chiffres ; le comparer par un canal indépendant détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation qui usurpe une extrémité et termine le chiffrement applicatif de bout en bout. Le SAS authentifie les extrémités ; il ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau.",
       },
       {
         title: "Texte chiffré éphémère",
@@ -446,7 +446,7 @@ const fr = {
       },
       {
         title: "Gratuit et open source",
-        desc: "Licence AGPL-3.0 ; le protocole et tout le code sont publics sur GitHub. Sur le même réseau, les transferts en temps réel ne nécessitent aucun compte ; pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
+        desc: "Licence AGPL-3.0 ; le protocole et tout le code sont publics sur GitHub. Sur le même réseau, les transferts en temps réel ne nécessitent aucun compte ; pour s'appairer entre réseaux différents, seul l'expéditeur se connecte.",
       },
     ],
   },
@@ -459,7 +459,7 @@ const fr = {
       },
       {
         title: "Face à Snapdrop / PairDrop",
-        body: "Snapdrop et PairDrop sont des pionniers du même genre. Relayium ajoute un chiffrement de bout en bout au niveau applicatif et un code de vérification SAS. Comparé par un canal indépendant, le SAS détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation malveillant qui usurpe une extrémité et termine ce chiffrement ; il ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau.",
+        body: "Snapdrop et PairDrop sont des pionniers du même genre. Relayium ajoute un chiffrement de bout en bout au niveau applicatif et un code de vérification SAS. Comparé par un canal indépendant, le SAS détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation malveillant qui usurpe une extrémité et termine ce chiffrement ; il ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau.",
       },
       {
         title: "Face à WeTransfer / stockage en ligne",
@@ -471,31 +471,31 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Est-ce gratuit ?",
-        a: "Oui. Relayium est open source sous licence AGPL-3.0 et s'utilise sans aucun frais. Sur le même réseau, les transferts en temps réel ne demandent aucune connexion ; pour s'appairer entre réseaux différents, seul l'expéditeur doit se connecter — le destinataire n'a jamais besoin de compte.",
+        q: "Est-ce gratuit ?",
+        a: "Oui. Relayium est open source sous licence AGPL-3.0 et s'utilise sans aucun frais. Sur le même réseau, les transferts en temps réel ne demandent aucune connexion ; pour s'appairer entre réseaux différents, seul l'expéditeur doit se connecter — le destinataire n'a jamais besoin de compte.",
       },
       {
-        q: "Mes fichiers sont-ils téléversés sur un serveur ?",
-        a: "Sur le même réseau, les fichiers du transfert direct en temps réel ne passent jamais par le serveur ; entre réseaux différents, ils transitent par un relais chiffré qui, lui aussi, ne voit que du chiffré. Uniquement si vous utilisez le lien de téléchargement optionnel, le navigateur les chiffre avant l'envoi et le serveur ne conserve que du chiffré qu'il ne peut pas déchiffrer — la clé reste dans le lien.",
+        q: "Mes fichiers sont-ils téléversés sur un serveur ?",
+        a: "Sur le même réseau, les fichiers du transfert direct en temps réel ne passent jamais par le serveur ; entre réseaux différents, ils transitent par un relais chiffré qui, lui aussi, ne voit que du chiffré. Uniquement si vous utilisez le lien de téléchargement optionnel, le navigateur les chiffre avant l'envoi et le serveur ne conserve que du chiffré qu'il ne peut pas déchiffrer — la clé reste dans le lien.",
       },
       {
-        q: "Est-ce chiffré de bout en bout ?",
-        a: "Oui. Il utilise l'échange de clés X25519 et le chiffrement AES-256-GCM par bloc ; les clés sont négociées uniquement entre les deux appareils, si bien que le serveur ne peut rien déchiffrer.",
+        q: "Est-ce chiffré de bout en bout ?",
+        a: "Oui. Il utilise l'échange de clés X25519 et le chiffrement AES-256-GCM par bloc ; les clés sont négociées uniquement entre les deux appareils, si bien que le serveur ne peut rien déchiffrer.",
       },
       {
-        q: "Peut-on transférer entre systèmes différents ?",
+        q: "Peut-on transférer entre systèmes différents ?",
         a: "Oui. Avec un navigateur moderne, vous pouvez transférer entre Windows, macOS, Linux, Android et iOS, sans installer d'application.",
       },
       {
-        q: "Y a-t-il une limite de taille ?",
-        a: "Le transfert en temps réel diffuse les données en flux, Relayium n'impose donc aucune limite stricte de taille (Chrome et Edge sur ordinateur écrivent directement sur le disque ; Firefox, Safari et tous les navigateurs mobiles assemblent le fichier en mémoire, d'où un avertissement au-delà d'environ 256 Mo — un repère volontairement prudent, pas une limite mesurée). Jusqu'à 1 000 fichiers par lot.",
+        q: "Y a-t-il une limite de taille ?",
+        a: "Le transfert en temps réel diffuse les données en flux, Relayium n'impose donc aucune limite stricte de taille (Chrome et Edge sur ordinateur écrivent directement sur le disque ; Firefox, Safari et tous les navigateurs mobiles assemblent le fichier en mémoire, d'où un avertissement au-delà d'environ 256 Mo — un repère volontairement prudent, pas une limite mesurée). Jusqu'à 1 000 fichiers par lot.",
       },
       {
-        q: "Puis-je envoyer du texte, et pas seulement des fichiers ?",
+        q: "Puis-je envoyer du texte, et pas seulement des fichiers ?",
         a: "Oui. Les deux appareils en ligne peuvent échanger jusqu'à 65 536 octets (UTF-8) par message. Relayium ne conserve ni corps ni historique serveur, mais le destinataire peut garder le texte. Pas de remise hors ligne.",
       },
       {
-        q: "Quelle différence avec Snapdrop ?",
+        q: "Quelle différence avec Snapdrop ?",
         a: "Relayium ajoute un chiffrement de bout en bout au niveau applicatif et un code de vérification SAS. Comparé par un canal indépendant, le SAS détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation compromis qui usurpe une extrémité et termine ce chiffrement. Il ne prouve pas l'absence de serveur ou de relais TURN sur le chemin réseau. Relayium prend aussi en charge les transferts inter-réseaux et des liens de téléchargement optionnels à connaissance nulle.",
       },
     ],
@@ -834,9 +834,9 @@ const TEXT_BOUNDARY = {
     detail: "Sind beide Geräte online, lassen sich Links, Befehle und mehrzeiliger Code senden. Höchstens 65.536 Bytes (UTF-8) pro Nachricht. Relayium-Server speichern weder Nachrichtentexte noch serverseitigen Verlauf, Browser oder Empfänger können Text aber kopieren oder behalten. Keine Offline-Zustellung; Größeres geht als Datei.",
   },
   fr: {
-    summary: "Relayium est un outil open source, sans installation, de transfert de fichiers et de texte chiffré de bout en bout. Sur le même réseau, les fichiers passent directement. Entre réseaux, le navigateur utilise TURN par conception et le relais ne voit que du chiffré de bout en bout. Le texte éphémère exige les deux appareils en ligne. Les serveurs Relayium ne conservent ni corps de message ni historique serveur, mais le navigateur ou le destinataire peut copier ou garder le texte. Aucun compte n'est requis sur le même réseau ; créer un code inter-réseaux exige une connexion, le rejoindre avec ce code non.",
-    step: "Les fichiers sont chiffrés bloc par bloc en AES-256-GCM et vérifiés par SHA-256 ; le texte éphémère utilise une session chiffrée distincte. Les deux appareils restent en ligne. Le serveur ne conserve ni corps ni historique, mais les appareils peuvent garder le texte.",
-    detail: "Avec les deux appareils en ligne, envoyez liens, commandes et code multiligne, jusqu'à 65 536 octets (UTF-8) par message. Les serveurs Relayium ne conservent ni corps de message ni historique serveur, mais le navigateur ou le destinataire peut copier ou garder le texte. Pas de remise hors ligne ; au-delà, envoyez un fichier.",
+    summary: "Relayium est un outil open source, sans installation, de transfert de fichiers et de texte chiffré de bout en bout. Sur le même réseau, les fichiers passent directement. Entre réseaux, le navigateur utilise TURN par conception et le relais ne voit que du chiffré de bout en bout. Le texte éphémère exige les deux appareils en ligne. Les serveurs Relayium ne conservent ni corps de message ni historique serveur, mais le navigateur ou le destinataire peut copier ou garder le texte. Aucun compte n'est requis sur le même réseau ; créer un code inter-réseaux exige une connexion, le rejoindre avec ce code non.",
+    step: "Les fichiers sont chiffrés bloc par bloc en AES-256-GCM et vérifiés par SHA-256 ; le texte éphémère utilise une session chiffrée distincte. Les deux appareils restent en ligne. Le serveur ne conserve ni corps ni historique, mais les appareils peuvent garder le texte.",
+    detail: "Avec les deux appareils en ligne, envoyez liens, commandes et code multiligne, jusqu'à 65 536 octets (UTF-8) par message. Les serveurs Relayium ne conservent ni corps de message ni historique serveur, mais le navigateur ou le destinataire peut copier ou garder le texte. Pas de remise hors ligne ; au-delà, envoyez un fichier.",
   },
   ar: {
     summary: "Relayium أداة مفتوحة المصدر ولا تتطلب تثبيتًا لنقل الملفات والنصوص بتشفير من الطرف إلى الطرف. تنتقل الملفات مباشرةً على الشبكة نفسها؛ وعبر الشبكات يستخدم المتصفح TURN بحكم التصميم، ولا يرى المُرحِّل سوى نص مشفَّر من الطرف إلى الطرف. يتطلب النص العابر اتصال الجهازين. لا تحفظ خوادم Relayium أجسام الرسائل أو سجلًا على الخادم، لكن يمكن للمتصفح أو المستلم نسخ النص أو الاحتفاظ به. لا يلزم حساب على الشبكة نفسها؛ يتطلب إنشاء رمز اقتران عبر الشبكات تسجيل الدخول، أما الانضمام بالرمز فلا يتطلب حسابًا.",

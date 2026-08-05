@@ -456,7 +456,7 @@ const de = {
 };
 
 const fr = {
-  title: "Auto-héberger Relayium : gérez votre serveur de transfert de fichiers et de texte",
+  title: "Auto-héberger Relayium : gérez votre serveur de transfert de fichiers et de texte",
   description:
     "Faites tourner toute la pile Relayium vous-même avec une seule commande Docker — votre propre domaine, vos propres données, aucun compte tiers requis. Couvre l'appairage de fichiers et de texte éphémère, les clés d'environnement, le relais TURN optionnel du navigateur et le paramétrage de la CLI.",
   updatedLabel: "Dernière mise à jour",
@@ -468,7 +468,7 @@ const fr = {
     {
       heading: "Pourquoi s'auto-héberger",
       body: [
-        "Les transferts en temps réel de Relayium sont chiffrés de bout en bout. Un relais TURN auto-hébergé peut transporter des octets chiffrés et le serveur traite des métadonnées de signalisation, mais aucun des deux ne peut lire ni déchiffrer le contenu en clair des fichiers ; ni le serveur ni le relais ne stockent de copie ou d'historique côté serveur du contenu en temps réel. Le serveur conserve toutefois votre compte et — pour les transferts stockés/basés sur un lien — des blobs chiffrés ainsi qu'une petite base SQLite. S'auto-héberger signifie que ces données vivent sur une infrastructure que vous contrôlez, sous votre propre domaine, sans que les décisions opérationnelles de quelqu'un d'autre n'interviennent.",
+        "Les transferts en temps réel de Relayium sont chiffrés de bout en bout. Un relais TURN auto-hébergé peut transporter des octets chiffrés et le serveur traite des métadonnées de signalisation, mais aucun des deux ne peut lire ni déchiffrer le contenu en clair des fichiers ; ni le serveur ni le relais ne stockent de copie ou d'historique côté serveur du contenu en temps réel. Le serveur conserve toutefois votre compte et — pour les transferts stockés/basés sur un lien — des blobs chiffrés ainsi qu'une petite base SQLite. S'auto-héberger signifie que ces données vivent sur une infrastructure que vous contrôlez, sous votre propre domaine, sans que les décisions opérationnelles de quelqu'un d'autre n'interviennent.",
         "Le projet étant sous licence AGPL-3.0 et open source (github.com/relayium/relayium), vous pouvez lire exactement ce que fait le serveur avant de lui confier quoi que ce soit, et le forker ou le modifier librement.",
       ],
     },
@@ -479,7 +479,7 @@ const fr = {
       ],
       code: ["docker compose up -d --build"],
       bullets: [
-        "C'est tout le serveur, à l'écoute sur :8080. En production, placez nginx ou Caddy devant pour le TLS — docs/self-hosting.md couvre le chemin Docker et ce qu'il faut proxyfier ; la configuration nginx de production propre à Relayium n'est pas publiée.",
+        "C'est tout le serveur, à l'écoute sur :8080. En production, placez nginx ou Caddy devant pour le TLS — docs/self-hosting.md couvre le chemin Docker et ce qu'il faut proxyfier ; la configuration nginx de production propre à Relayium n'est pas publiée.",
         "La configuration de l'appli provient d'un fichier server/.env optionnel plus le bloc environment: dans docker-compose.yml. Chaque réglage a une clé RELAYIUM_* correspondante — copiez server/.env.example comme point de départ.",
         "Les quatre clés qui comptent pour un déploiement de base : RELAYIUM_ADDR (adresse d'écoute), RELAYIUM_STATIC (chemin vers l'application web compilée), RELAYIUM_DB (chemin du fichier SQLite) et RELAYIUM_BLOB_DIR (où est écrit le texte chiffré des liens stockés). docker-compose.yml définit déjà des valeurs par défaut raisonnables pour ces quatre clés et les persiste dans un volume nommé.",
       ],
@@ -529,11 +529,11 @@ const fr = {
       },
       {
         q: "Puis-je utiliser mon propre domaine et mon propre certificat TLS ?",
-        a: "Oui. L'image Docker écoute elle-même en HTTP simple sur :8080 ; placez nginx ou Caddy devant avec votre propre domaine et votre certificat (par exemple via certbot/Let's Encrypt). docs/self-hosting.md couvre ce qu'il faut proxyfier ; la configuration nginx de production propre à Relayium n'est pas publiée, il faudra écrire la vôtre.",
+        a: "Oui. L'image Docker écoute elle-même en HTTP simple sur :8080 ; placez nginx ou Caddy devant avec votre propre domaine et votre certificat (par exemple via certbot/Let's Encrypt). docs/self-hosting.md couvre ce qu'il faut proxyfier ; la configuration nginx de production propre à Relayium n'est pas publiée, il faudra écrire la vôtre.",
       },
       {
         q: "Quelles données mon serveur auto-hébergé stocke-t-il ?",
-        a: "Une base SQLite (comptes, sessions) sous RELAYIUM_DB et, pour les transferts stockés/basés sur un lien, des blobs chiffrés sous RELAYIUM_BLOB_DIR que le serveur lui-même ne peut pas déchiffrer. Le serveur ne conserve aucun fichier ni corps de message en temps réel et ne fait que relayer la poignée de main de signalisation ; les appareils destinataires peuvent néanmoins garder les fichiers ou le texte.",
+        a: "Une base SQLite (comptes, sessions) sous RELAYIUM_DB et, pour les transferts stockés/basés sur un lien, des blobs chiffrés sous RELAYIUM_BLOB_DIR que le serveur lui-même ne peut pas déchiffrer. Le serveur ne conserve aucun fichier ni corps de message en temps réel et ne fait que relayer la poignée de main de signalisation ; les appareils destinataires peuvent néanmoins garder les fichiers ou le texte.",
       },
     ],
   },

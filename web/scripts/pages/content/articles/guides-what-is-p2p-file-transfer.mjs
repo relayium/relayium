@@ -470,7 +470,7 @@ const de = {
 };
 
 const fr = {
-  title: "Qu'est-ce que le transfert de fichiers pair à pair ?",
+  title: "Qu'est-ce que le transfert de fichiers pair à pair ?",
   description:
     "Une explication simple du transfert pair-à-pair : la différence avec l'envoi vers un serveur, comment WebRTC établit une connexion directe, et pourquoi c'est privé et rapide.",
   updatedLabel: "Dernière mise à jour",

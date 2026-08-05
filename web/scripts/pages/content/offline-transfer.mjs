@@ -462,16 +462,16 @@ const fr = {
   hero: {
     h1: "Envoyer un fichier sous forme de lien chiffré",
     pitch:
-      "Quand l'autre personne n'est pas en ligne, téléversez maintenant et partagez un lien. Votre navigateur chiffre avant l'envoi ; le serveur ne conserve que du texte chiffré qu'il ne peut pas lire — la clé ne quitte jamais le lien.",
+      "Quand l'autre personne n'est pas en ligne, téléversez maintenant et partagez un lien. Votre navigateur chiffre avant l'envoi ; le serveur ne conserve que du texte chiffré qu'il ne peut pas lire — la clé ne quitte jamais le lien.",
     cta: "Téléverser un fichier",
   },
   how: {
     heading: "Comment le lien est créé",
     steps: [
       "Connectez-vous et choisissez un fichier — votre navigateur le chiffre localement avant que quoi que ce soit ne quitte l'appareil.",
-      "Le serveur ne stocke que le texte chiffré ; la clé de déchiffrement reste dans le fragment du lien et n'est jamais envoyée au serveur.",
+      "Le serveur ne stocke que le texte chiffré ; la clé de déchiffrement reste dans le fragment du lien et n'est jamais envoyée au serveur.",
       "Partagez le lien de téléchargement (avec, en option, l'autodestruction après lecture et une expiration de votre choix).",
-      "Le destinataire ouvre le lien ; son navigateur récupère le texte chiffré et le déchiffre avec la clé du lien.",
+      "Le destinataire ouvre le lien ; son navigateur récupère le texte chiffré et le déchiffre avec la clé du lien.",
     ],
   },
   why: {
@@ -479,7 +479,7 @@ const fr = {
     items: [
       {
         title: "À divulgation nulle",
-        desc: "Le fichier est chiffré dans le navigateur ; le serveur ne détient jamais que du texte chiffré qu'il ne peut pas déchiffrer.",
+        desc: "Le fichier est chiffré dans le navigateur ; le serveur ne détient jamais que du texte chiffré qu'il ne peut pas déchiffrer.",
       },
       {
         title: "La clé est dans le lien",
@@ -491,11 +491,11 @@ const fr = {
       },
       {
         title: "Aucun compte pour le destinataire",
-        desc: "Quiconque possède le lien peut télécharger ; seule la personne qui téléverse doit se connecter.",
+        desc: "Quiconque possède le lien peut télécharger ; seule la personne qui téléverse doit se connecter.",
       },
       {
         title: "Complément asynchrone",
-        desc: "Utilisez ceci quand l'autre personne n'est pas en ligne pour l'instant ; utilisez le transfert inter-réseaux en temps réel quand les deux sont présentes.",
+        desc: "Utilisez ceci quand l'autre personne n'est pas en ligne pour l'instant ; utilisez le transfert inter-réseaux en temps réel quand les deux sont présentes.",
       },
       {
         title: "Aussi depuis le terminal",
@@ -508,11 +508,11 @@ const fr = {
     items: [
       {
         title: "Face aux liens WeTransfer/Dropbox",
-        body: "Ceux-ci peuvent lire vos fichiers côté serveur ; le serveur de Relayium ne détient que du texte chiffré qu'il ne peut pas déchiffrer — la clé reste dans le lien.",
+        body: "Ceux-ci peuvent lire vos fichiers côté serveur ; le serveur de Relayium ne détient que du texte chiffré qu'il ne peut pas déchiffrer — la clé reste dans le lien.",
       },
       {
         title: "Face au mode temps réel",
-        body: "Le temps réel exige que les deux parties soient en ligne en même temps ; ce mode stocke le fichier chiffré pour que le destinataire puisse le récupérer plus tard.",
+        body: "Le temps réel exige que les deux parties soient en ligne en même temps ; ce mode stocke le fichier chiffré pour que le destinataire puisse le récupérer plus tard.",
       },
     ],
   },
@@ -520,19 +520,19 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Le serveur peut-il lire mon fichier ?",
-        a: "Non — il est chiffré dans votre navigateur ; le serveur ne stocke que du texte chiffré, et la clé ne l'atteint jamais.",
+        q: "Le serveur peut-il lire mon fichier ?",
+        a: "Non — il est chiffré dans votre navigateur ; le serveur ne stocke que du texte chiffré, et la clé ne l'atteint jamais.",
       },
       {
-        q: "Où se trouve la clé ?",
+        q: "Où se trouve la clé ?",
         a: "Dans le fragment du lien (après #). Les navigateurs n'envoient pas les fragments aux serveurs, donc seule une personne disposant du lien complet peut déchiffrer.",
       },
       {
-        q: "Ai-je besoin d'un compte ?",
+        q: "Ai-je besoin d'un compte ?",
         a: "Pour téléverser, oui (cela utilise du stockage). Pour télécharger, non — il suffit du lien.",
       },
       {
-        q: "Puis-je le rendre à usage unique ?",
+        q: "Puis-je le rendre à usage unique ?",
         a: "Oui — activez l'autodestruction après lecture et définissez une expiration.",
       },
     ],

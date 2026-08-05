@@ -468,11 +468,11 @@ const de = {
 const fr = {
   title: "Transfert inter-réseaux de fichiers et de texte en direct — chiffré de bout en bout | Relayium",
   description:
-    "Transférez fichiers et texte éphémère en direct entre réseaux avec un code à 6 chiffres. Les deux appareils restent en ligne ; le navigateur utilise volontairement un relais TURN qui ne voit que du chiffré.",
+    "Transférez fichiers et texte éphémère en direct entre réseaux avec un code à 6 chiffres. Les deux appareils restent en ligne ; le navigateur utilise volontairement un relais TURN qui ne voit que du chiffré.",
   hero: {
     h1: "Fichiers et texte en direct entre réseaux, chiffrés de bout en bout",
     pitch:
-      "Deux appareils en ligne sur des réseaux différents s'appairent avec un code à 6 chiffres (ou son lien/QR) pour envoyer fichiers ou texte éphémère. Le navigateur utilise volontairement le relais TURN de Relayium, qui ne voit que du chiffré ; Relayium ne stocke aucun corps de message.",
+      "Deux appareils en ligne sur des réseaux différents s'appairent avec un code à 6 chiffres (ou son lien/QR) pour envoyer fichiers ou texte éphémère. Le navigateur utilise volontairement le relais TURN de Relayium, qui ne voit que du chiffré ; Relayium ne stocke aucun corps de message.",
     cta: "Démarrer le transfert",
   },
   how: {
@@ -480,8 +480,8 @@ const fr = {
     steps: [
       "Une personne se connecte et génère un code à 6 chiffres pour une session de fichiers ou de texte (ou partage son lien/QR).",
       "L'autre ouvre le lien ou saisit le code — rejoindre avec un code ne nécessite aucun compte.",
-      "Facultatif (activez la vérification avancée) : les deux parties comparent le même code de vérification (SAS) à 6 chiffres — différent du code d'appairage — par un canal indépendant. S'il correspond, les clés publiques X25519 des terminaux n'ont pas été remplacées : ni le service de signalisation ni le relais TURN n'a usurpé un terminal ou terminé le chiffrement E2E applicatif. TURN peut rester sur le chemin réseau, où il ne transporte que du texte chiffré.",
-      "Avec les deux appareils en ligne, fichiers et texte en direct passent par TURN, chiffrés de bout en bout. Relayium ne stocke aucun corps de message ; chacun peut contenir jusqu'à 65 536 octets UTF-8.",
+      "Facultatif (activez la vérification avancée) : les deux parties comparent le même code de vérification (SAS) à 6 chiffres — différent du code d'appairage — par un canal indépendant. S'il correspond, les clés publiques X25519 des terminaux n'ont pas été remplacées : ni le service de signalisation ni le relais TURN n'a usurpé un terminal ou terminé le chiffrement E2E applicatif. TURN peut rester sur le chemin réseau, où il ne transporte que du texte chiffré.",
+      "Avec les deux appareils en ligne, fichiers et texte en direct passent par TURN, chiffrés de bout en bout. Relayium ne stocke aucun corps de message ; chacun peut contenir jusqu'à 65 536 octets UTF-8.",
     ],
   },
   why: {
@@ -489,7 +489,7 @@ const fr = {
     items: [
       {
         title: "Chiffré de bout en bout",
-        desc: "Échange de clés X25519 et AES-256-GCM par bloc ; les clés sont négociées uniquement entre les deux appareils, ni le relais ni le serveur ne peuvent donc déchiffrer.",
+        desc: "Échange de clés X25519 et AES-256-GCM par bloc ; les clés sont négociées uniquement entre les deux appareils, ni le relais ni le serveur ne peuvent donc déchiffrer.",
       },
       {
         title: "Vérification SAS facultative contre l'homme du milieu",
@@ -497,11 +497,11 @@ const fr = {
       },
       {
         title: "Le relais ne voit que du chiffré",
-        desc: "Les transferts inter-réseaux dans le navigateur utilisent volontairement un relais TURN rapide pour traverser les NAT ; il ne transporte que du chiffré, jamais vos clés ni du texte en clair.",
+        desc: "Les transferts inter-réseaux dans le navigateur utilisent volontairement un relais TURN rapide pour traverser les NAT ; il ne transporte que du chiffré, jamais vos clés ni du texte en clair.",
       },
       {
         title: "Texte éphémère en direct",
-        desc: "Les deux appareils doivent rester en ligne. Relayium ne stocke ni corps de message ni historique serveur ; un appareil peut néanmoins copier ou conserver le texte reçu. Chaque message accepte 65 536 octets UTF-8.",
+        desc: "Les deux appareils doivent rester en ligne. Relayium ne stocke ni corps de message ni historique serveur ; un appareil peut néanmoins copier ou conserver le texte reçu. Chaque message accepte 65 536 octets UTF-8.",
       },
       {
         title: "Multiplateforme",
@@ -509,7 +509,7 @@ const fr = {
       },
       {
         title: "Gratuit",
-        desc: "Gratuit dans le quota mensuel du relais ; créer un code de fichier ou de texte exige une connexion, mais rejoindre avec ce code ne nécessite aucun compte.",
+        desc: "Gratuit dans le quota mensuel du relais ; créer un code de fichier ou de texte exige une connexion, mais rejoindre avec ce code ne nécessite aucun compte.",
       },
     ],
   },
@@ -518,11 +518,11 @@ const fr = {
     items: [
       {
         title: "Face à AirDrop",
-        body: "AirDrop est réservé aux appareils Apple et à la proximité immédiate ; Relayium appaire Windows, Android, iPhone et Mac entre réseaux différents, chiffré de bout en bout, avec un simple navigateur.",
+        body: "AirDrop est réservé aux appareils Apple et à la proximité immédiate ; Relayium appaire Windows, Android, iPhone et Mac entre réseaux différents, chiffré de bout en bout, avec un simple navigateur.",
       },
       {
         title: "Face à Snapdrop / PairDrop",
-        body: "Ceux-ci ne fonctionnent que sur le même réseau ; Relayium ajoute l'appairage inter-réseaux, le chiffrement E2E applicatif et une comparaison SAS par canal indépendant qui détecte le remplacement des clés publiques X25519 des terminaux. Un relais ou serveur de signalisation compromis ne peut pas usurper silencieusement un terminal et terminer ce chiffrement ; TURN reste sur le chemin avec uniquement du texte chiffré.",
+        body: "Ceux-ci ne fonctionnent que sur le même réseau ; Relayium ajoute l'appairage inter-réseaux, le chiffrement E2E applicatif et une comparaison SAS par canal indépendant qui détecte le remplacement des clés publiques X25519 des terminaux. Un relais ou serveur de signalisation compromis ne peut pas usurper silencieusement un terminal et terminer ce chiffrement ; TURN reste sur le chemin avec uniquement du texte chiffré.",
       },
     ],
   },
@@ -530,23 +530,23 @@ const fr = {
     heading: "Questions fréquentes",
     items: [
       {
-        q: "Mes fichiers ou messages passent-ils par votre serveur ?",
-        a: "Les sessions navigateur inter-réseaux utilisent volontairement le relais TURN de Relayium. Fichiers et messages sont chiffrés de bout en bout : il ne voit que du chiffré. Relayium ne stocke aucun corps de message.",
+        q: "Mes fichiers ou messages passent-ils par votre serveur ?",
+        a: "Les sessions navigateur inter-réseaux utilisent volontairement le relais TURN de Relayium. Fichiers et messages sont chiffrés de bout en bout : il ne voit que du chiffré. Relayium ne stocke aucun corps de message.",
       },
       {
-        q: "Un code est-il obligatoire ?",
-        a: "Oui : un code à 6 chiffres (ou son lien d'accès/QR), valable 5 minutes, appaire les deux appareils entre réseaux différents. Le serveur le tire uniformément au hasard entre 0 et 9, tous les chiffres sont possibles et un zéro initial est ordinaire — vous ne pouvez donc pas en inventer un : seul un code délivré par le serveur appaire. Ce ne sont pas les six chiffres du code de vérification (SAS), lequel est dérivé des clés des deux extrémités.",
+        q: "Un code est-il obligatoire ?",
+        a: "Oui : un code à 6 chiffres (ou son lien d'accès/QR), valable 5 minutes, appaire les deux appareils entre réseaux différents. Le serveur le tire uniformément au hasard entre 0 et 9, tous les chiffres sont possibles et un zéro initial est ordinaire — vous ne pouvez donc pas en inventer un : seul un code délivré par le serveur appaire. Ce ne sont pas les six chiffres du code de vérification (SAS), lequel est dérivé des clés des deux extrémités.",
       },
       {
-        q: "Faut-il un compte ?",
-        a: "La personne qui crée un code pour fichiers ou texte se connecte ; rejoindre avec ce code ne nécessite aucun compte.",
+        q: "Faut-il un compte ?",
+        a: "La personne qui crée un code pour fichiers ou texte se connecte ; rejoindre avec ce code ne nécessite aucun compte.",
       },
       {
-        q: "Est-ce chiffré de bout en bout ?",
+        q: "Est-ce chiffré de bout en bout ?",
         a: "Oui — X25519 et AES-256-GCM par bloc. Comparer le SAS par un canal indépendant confirme que les clés publiques des terminaux n'ont pas été remplacées et que ni le service de signalisation ni le relais TURN n'a usurpé un terminal ou terminé le chiffrement E2E applicatif. TURN peut rester sur le chemin réseau, avec uniquement du texte chiffré.",
       },
       {
-        q: "Puis-je envoyer du texte en plus des fichiers ?",
+        q: "Puis-je envoyer du texte en plus des fichiers ?",
         a: "Oui. Tant que les deux appareils sont en ligne, envoyez du texte éphémère en direct, jusqu'à 65 536 octets UTF-8 par message. Relayium ne stocke ni corps de message ni historique serveur, mais chaque appareil peut copier ou conserver le texte reçu.",
       },
     ],
