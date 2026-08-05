@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="在两台服务器之间同步一个大文件夹（可续传、后台运行）" />
     <meta name="twitter:description" content="用 relayium sync 把一台服务器上的大目录镜像到另一台——增量传输、掉线后可续传、可无人值守地后台运行。配合 tmux 里的重试循环，无需守着终端就能搬运数十 GB。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在两台服务器之间同步一个大文件夹（可续传、后台运行）","description":"用 relayium sync 把一台服务器上的大目录镜像到另一台——增量传输、掉线后可续传、可无人值守地后台运行。配合 tmux 里的重试循环，无需守着终端就能搬运数十 GB。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-07-08","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/sync-a-large-folder-between-servers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"在两台服务器之间同步一个大文件夹（可续传、后台运行）"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"传到一半被打断会怎样？","acceptedAnswer":{"@type":"Answer","text":"什么都不会丢。重新运行 relayium sync——它会跳过接收方已有的文件，并把传了一半的文件从磁盘上已有的字节偏移续传。本指南里的 until 循环会自动做这件事，直到整个文件夹镜像完成。"}},{"@type":"Question","name":"这和 rsync 有什么不同？","acceptedAnswer":{"@type":"Answer","text":"两者都做增量单向镜像，但 relayium sync 走证书固定的 TLS 连接、不需要 SSH 账号（daemon 直连），通过证书指纹互相认证两台机器，并对每个文件做 SHA-256 校验。它和 relayium 其他模式用的是同一个传输引擎。"}},{"@type":"Question","name":"sync 会把我从源端删掉的文件在接收方也删掉吗？","acceptedAnswer":{"@type":"Answer","text":"只有你要求时才会。默认情况下 sync 只新增和更新。加 --delete 才会镜像删除，而且接收方必须以 --allow-delete 运行 serve 才会执行——否则删除会被忽略并回报给你。"}},{"@type":"Question","name":"我能让两个文件夹持续保持同步吗？","acceptedAnswer":{"@type":"Answer","text":"可以。加 --watch，sync 会持续运行，在源目录下任何改动时重新镜像。对于一次性搬运一个大文件夹，你不需要它——重试循环加一个普通的 sync 就够了。"}},{"@type":"Question","name":"我必须开一个端口吗？","acceptedAnswer":{"@type":"Answer","text":"用 daemon 直连的话，是的——监听端口（默认 9031）必须能从发送方访问到。如果你不想开端口、而且两台服务器之间已经有 SSH，sync 也可以走 SSH：relayium sync /path user@host:/path（远端必须装了 relayium）。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在两台服务器之间同步一个大文件夹（可续传、后台运行）","description":"用 relayium sync 把一台服务器上的大目录镜像到另一台——增量传输、掉线后可续传、可无人值守地后台运行。配合 tmux 里的重试循环，无需守着终端就能搬运数十 GB。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/sync-a-large-folder-between-servers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"在两台服务器之间同步一个大文件夹（可续传、后台运行）"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"传到一半被打断会怎样？","acceptedAnswer":{"@type":"Answer","text":"什么都不会丢。重新运行 relayium sync——它会跳过接收方已有的文件，并把传了一半的文件从磁盘上已有的字节偏移续传。本指南里的 until 循环会自动做这件事，直到整个文件夹镜像完成。"}},{"@type":"Question","name":"这和 rsync 有什么不同？","acceptedAnswer":{"@type":"Answer","text":"两者都做增量单向镜像，但 relayium sync 走证书固定的 TLS 连接、不需要 SSH 账号（daemon 直连），通过证书指纹互相认证两台机器，并对它传输的每个文件做 SHA-256 校验。和 rsync 的默认行为一样，接收端上大小和 mtime 已经一致的文件会被跳过，而不是重新计算哈希。它和 relayium 其他模式用的是同一个传输引擎。"}},{"@type":"Question","name":"sync 会把我从源端删掉的文件在接收方也删掉吗？","acceptedAnswer":{"@type":"Answer","text":"只有你要求时才会。默认情况下 sync 只新增和更新。加 --delete 才会镜像删除，而且接收方必须以 --allow-delete 运行 serve 才会执行——否则删除会被忽略并回报给你。"}},{"@type":"Question","name":"我能让两个文件夹持续保持同步吗？","acceptedAnswer":{"@type":"Answer","text":"可以。加 --watch，sync 会持续运行，在源目录下任何改动时重新镜像。对于一次性搬运一个大文件夹，你不需要它——重试循环加一个普通的 sync 就够了。"}},{"@type":"Question","name":"我必须开一个端口吗？","acceptedAnswer":{"@type":"Answer","text":"用 daemon 直连的话，是的——监听端口（默认 9031）必须能从发送方访问到。如果你不想开端口、而且两台服务器之间已经有 SSH，sync 也可以走 SSH：relayium sync /path user@host:/path（远端必须装了 relayium）。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,18 +100,18 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最近更新: <bdi>2026-07-08</bdi></p>
+      <p class="updated">最近更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers/">English</a><a href="/zh/guides/sync-a-large-folder-between-servers/" aria-current="true">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers/">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers/">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers/">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers/">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers/">العربية</a><a href="/es/guides/sync-a-large-folder-between-servers/">Español</a><a href="/pt/guides/sync-a-large-folder-between-servers/">Português</a></nav>
-      <p class="lead">你在一台服务器上有一个很大的文件夹——几十 GB——想在另一台上得到一份完整副本。你没法盯着终端好几个小时，而且传到一半断掉的传输不应该从头再来。relayium sync 正是为此而生：一个单向增量镜像，跳过已经存在的文件，把传了一半的文件从中断处续传，并对每个文件做端到端校验。</p>
+      <p class="lead">你在一台服务器上有一个很大的文件夹——几十 GB——想在另一台上得到一份完整副本。你没法盯着终端好几个小时，而且传到一半断掉的传输不应该从头再来。relayium sync 正是为此而生：一个单向增量镜像，跳过已经存在的文件，把传了一半的文件从中断处续传，并对它发送的每个文件做端到端校验。</p>
       <p class="lead">本指南搭建一个无人值守、自动恢复的传输：把发送方授权一次，让监听端在后台运行，并在 tmux 里用重试循环驱动 relayium sync，让它在掉线之后继续跑，直到整个文件夹全部到达。</p>
       <h2>为什么 relayium sync 适合这件事</h2>
       <p>sync 是走原生协议的单向增量镜像（两端都要装 relayium）。有三个特性让它可以安心地无人值守地反复运行：</p>
-      <ul><li>跳过已存在的文件：接收方上大小和修改时间都一致的文件不会重复发送。</li><li>续传半截文件：如果某个文件在连接断开时只传了一半，下次运行会从磁盘上已有的字节偏移继续，而不是重新传。</li><li>校验每个文件：每个文件都做端到端的 SHA-256 校验，因此完成的镜像可以确认是完整的。</li><li>正因如此，这条命令是幂等的——再跑一次只做剩下的活，这正是重试循环能完成一次超大传输的关键。</li></ul>
+      <ul><li>跳过已存在的文件：接收方上大小和修改时间都一致的文件不会重复发送。</li><li>续传半截文件：如果某个文件在连接断开时只传了一半，下次运行会从磁盘上已有的字节偏移继续，而不是重新传。</li><li>校验它发送的内容：它传输的每个文件——包括续传的那些——都会按发送端的 SHA-256 做端到端校验，对不上就报为失败。被跳过的文件只按大小和 mtime 判定，不会重新计算哈希，所以 sync 对它没有发送的内容不作任何保证。</li><li>正因如此，这条命令是幂等的——再跑一次只做剩下的活，这正是重试循环能完成一次超大传输的关键。</li></ul>
       <h2>前提条件</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>本指南用 daemon 直连（relayium://），所以两台服务器之间不需要 SSH 互访。</li><li>在接收方的防火墙或安全组上，向发送方开放监听端口（默认 9031）。</li><li>接收方要有装得下整个文件夹的空间。开始一场几个小时的传输之前，先把发送方的 du -sh /root/workspace 和接收方的 df -h /root 对一下。</li></ul></div>
       <p>两端服务器都要装 relayium（sync 走原生协议，因此每一端都必须有）：</p>
       <pre><code># 两台服务器上都执行
 curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>本指南用 daemon 直连（relayium://），所以两台服务器之间不需要 SSH 互访。</li><li>在接收方的防火墙或安全组上，向发送方开放监听端口（默认 9031）。</li></ul>
       <h2>把发送方授权一次（在接收方）</h2>
       <p>接收方对发送的那台机器授权一次；授权会写入磁盘并在重启之间保持有效，因此你无需重复。先在终端里前台启动监听端，并把 --dir 指向父目录——relayium sync /root/workspace 会在接收方重建出 workspace/...，所以 --dir /root 会把文件落到 /root/workspace/。</p>
       <p>当发送方首次连接时（见下一节），serve 会显示它的地址和指纹并请你批准；回答 y，它就会被永久记住：</p>
@@ -106,32 +123,46 @@ Incoming push from 203.0.113.9:52140
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>若要完全无人值守，可跳过提示：在发送方运行 relayium id 打印其指纹，再在接收方运行 relayium authorize &lt;指纹&gt;。</li><li>--dir 是你要同步的文件夹的父目录，而不是文件夹本身——否则文件会多落一层（例如 /root/workspace/workspace）。</li></ul>
       <h2>让监听端在后台运行（在接收方）</h2>
-      <p>指纹授权之后，停掉前台的 serve（Ctrl-C），再以脱离终端的方式重新启动，让它在你退出登录后依然存活。它会读回已保存的指纹并静默接受发送方——这次不再提示：</p>
+      <p>指纹授权之后，停掉前台的 serve（Ctrl-C），再以脱离终端的方式重新启动，让它在你退出登录后依然存活。它会读回已保存的指纹并静默接受发送方——这次不再提示。同一行还会把新进程的 PID 记进 ~/relayium-serve.pid，本指南最后一步正是靠它停掉自己启动的这个监听端，而不是按名字匹配机器上所有 relayium 命令：</p>
       <pre><code># 在接收方
-nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp;</code></pre>
+nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp; echo $! &gt; ~/relayium-serve.pid</code></pre>
       <ul><li>serve 一次处理一个连接并持续运行，因此下面重试循环的每次重连它都准备好接收。</li><li>若要做常驻收件箱，改用 systemd 运行（Restart=always，--config-dir /etc/relayium）。</li></ul>
       <h2>在 tmux 里用重试循环运行 sync（在发送方）</h2>
       <p>长时间的传输总会被打断——会话断开、网络抖动、机器重启。解决办法不是什么高级工具，而是一个把 sync 反复重跑到成功为止的循环，再加一个终端复用器让它在你退出登录后存活。这里 tmux 比 nohup 更省心：没有容易写错的输出重定向，而且可以重新接入查看进度。</p>
       <p>开一个 tmux 会话，然后在 until 循环里运行镜像——它每 10 秒重试一次，直到 sync 成功返回，然后自己退出：</p>
-      <pre><code># 在发送方
-tmux new -s xfer      # 没有 tmux 就 apt install -y tmux</code></pre>
-      <pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre>
-      <ul><li>按 Ctrl-b 再按 d 脱离；关掉终端后循环仍在跑。用 tmux attach -t xfer 重新接入。</li><li>每次重试做的活都更少：已传完的文件被跳过，传了一半的文件续传——所以循环会收敛并结束。</li><li>进度是每传完一个文件打印一行，因此一个大文件会安静地传到完成为止。没有输出不代表卡住（见排错）。</li></ul>
+      <ol class="steps" data-block="steps"><li><p>在发送方开一个 tmux 会话，好让循环活得比你启动它的那次 ssh 更久。</p><pre><code># 在发送方
+tmux new -s xfer      # 没有 tmux 就 apt install -y tmux</code></pre></li><li><p>把镜像放进一个 until 循环里跑。它每 10 秒重试一次，直到 sync 返回成功，然后自己退出。</p><pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre></li><li><p>按 Ctrl-b 再按 d 脱离。循环照跑不误；想看的时候随时重新接入。</p><pre><code>tmux attach -t xfer</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">一次成功的传输是什么样</p><p>每一趟都会为它真正发出去的每个文件打印一行，然后打印一行汇总：这次发了多少，接收方已经有多少。循环会在 sync 第一次返回成功时结束，而那行汇总就是镜像的状态。</p><pre><code>relayium sync /root/workspace relayium://203.0.113.43:9031
+  workspace/data/part-004.bin (1073741824 bytes)
+synced: 1 sent, 812 unchanged</code></pre></div>
+      <ul><li>每次重试做的活都更少：已传完的文件被跳过，传了一半的文件续传——所以循环会收敛并结束。</li><li>进度是每传完一个文件打印一行，因此一个大文件会安静地传到完成为止。没有输出不代表卡住（见排错）。</li></ul>
       <h2>验证与收尾</h2>
       <p>当 until 循环结束、你回到普通的 shell 提示符时，传输就完成了。确认两边一致，然后停掉监听端：</p>
-      <pre><code># 在两台服务器上比较总量
-du -sh /root/workspace</code></pre>
-      <pre><code># 在接收方，确认无误后
-pkill -f &#39;relayium serve&#39;</code></pre>
-      <ul><li>每个文件到达时都做过 SHA-256 校验，所以大小一致再加上干净退出，就意味着副本是完整的。</li></ul>
+      <ol class="steps" data-block="steps"><li><p>等 until 循环自己退出。回到普通的 shell 提示符，说明的是传输结束了，而不是你把它打断了。</p></li><li><p>在两台服务器上比较总量。</p><pre><code># 在两台服务器上比较总量
+du -sh /root/workspace</code></pre></li><li><p>总量对上之后，在接收方停掉监听端。它只对启动时记下的那个 PID 发信号，而不是拿字符串去匹配机器上每一条 relayium 命令；只有信号成功送出，PID 文件才会被删掉。上一次运行遗留的 PID 文件，可能指向一个已被系统重新分配的 PID，所以拿不准这个文件还是不是你的时，先把那个 PID 的命令行打出来，确认回显的是 serve 再动手。</p><pre><code># 在接收方，确认无误后
+ps -p &quot;$(cat ~/relayium-serve.pid)&quot; -o command=
+kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">镜像完成是什么样</p><p>两台服务器上的 du -sh 报出同一个总量，而且 until 循环已经把你送回普通的 shell 提示符，而不是又在重试。总量一致只是一次粗略的完整性核对，并不能证明内容无误：sync 是按大小和 mtime 决定哪些文件不发送的，所以总量说明不了被跳过文件的内容。</p><pre><code># the same total, on BOTH servers
+46G	/root/workspace</code></pre></div>
+      <ul><li>sync 发送过的内容是校验过的：它传输的每个文件在到达时都做过 SHA-256 校验，干净退出意味着没有一项校验失败。被跳过的部分只比对了大小和 mtime，所以 du -sh 总量一致只是对完整性的一次粗略核对，并不能证明被跳过文件的内容仍然一致。需要这种证明，就在两台服务器上逐个文件比对校验和。</li></ul>
       <h2>排错</h2>
-      <p>有几件事看起来像问题，但通常并不是——以及一个通常确实是问题的（端口被挡）。</p>
-      <ul><li>没有输出不代表卡住。进度只在每个文件传完时才打印，因此一个大文件会安静地传。用 ss -tnp | grep 9031 在发送方查看真实状态——ESTAB 表示已连上并在传；SYN-SENT 表示连不上监听端。</li><li>SYN-SENT 表示端口被挡。在接收方向发送方开放 9031/TCP（云安全组，或 ufw allow 9031/tcp）。这是「传输迟迟不开始」最常见的原因。</li><li>优先用 tmux 加单行循环，而不是多行 nohup。把带引号和 &gt; 重定向的多行命令粘进 shell，常常会在重定向处出错，或让你停在 &gt; 续行提示符上。</li><li>清理进程时要精确匹配（pkill -f &#39;relayium sync&#39;），而不是 pkill relayium——宽泛匹配可能误杀同一台机器上无关的 relayium 进程。</li><li>没有排除参数，所以要靠指定源目录来控制范围。sync 只接受 -i 和 -p（SSH 身份文件与端口）、--delete、--watch 和 --config-dir——没有任何能在目录树中间过滤某个路径的选项。想跳过 Python 虚拟环境这类可再生目录，就直接同步你真正需要的子目录：sync 一次可以接受多个源，每个源都会以自己的名字落到接收方的 --dir 下面。用 relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 配合 serve --dir /root/workspace，它们会被还原到 /root/workspace/src 和 /root/workspace/data，而 venv 根本不会被遍历。</li><li>符号链接和特殊文件会被跳过——sync 只传常规文件。重要的软链请单独处理。</li></ul>
+      <p>跑几个小时的镜像会碰到六件事。其中三件看着像故障其实不是；另外三件是真问题。每一件都有一条命令能告诉你你正面对的是哪一种。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>很久没有任何输出，传输看着像卡住了。</dt><dd><pre><code># 在发送方，隔几秒跑两次
+ss -tinp dst :9031
+# ESTAB    说明够得着监听端，但不能证明字节在动
+# SYN-SENT 连不上监听端</code></pre><p>进度只在一个文件传完时才打印，所以一个大文件会在完全的安静中传输。ESTAB 只能证明够得着——一条已建立的连接照样可以闲着或者卡住——它本身永远不能证明还在往前走。隔几秒把这条检查跑两次，比较 -i 为该套接字打印的 bytes_acked 计数：数字在涨就是真的在传，一直不变才是真卡住。</p></dd><dt>套接字停在 SYN-SENT，传输压根没开始。</dt><dd><pre><code># 在接收方
+sudo ufw allow from 203.0.113.9 to any port 9031 proto tcp
+ss -tlnp | grep 9031</code></pre><p>端口被挡住了。只对发送方开放 9031/TCP——把 203.0.113.9 换成发送方自己的地址，公网 IP，或者两台服务器同处一个内网时的内网 IP——云安全组也收敛到同一个来源，然后确认 serve 真的在监听。这是「传输迟迟不开始」最常见的原因。</p></dd><dt>把后台命令粘进去之后，shell 停在一个 &gt; 续行提示符上。</dt><dd><pre><code>tmux new -s xfer
+until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre><p>带引号和 &gt; 重定向的多行 nohup 命令，粘贴时通常会在重定向那里断掉。改用 tmux 加这条单行循环：没有重定向可写错，而且随时能重新接入观察。</p></dd><dt>清理进程时误杀了不该杀的东西。</dt><dd><pre><code>pgrep -af relayium
+ps -p &quot;$(cat ~/relayium-serve.pid)&quot; -o command=
+tmux kill-session -t xfer
+kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre><p>按命令行模式去杀，会对所有命令行里含这段文字的进程都发信号；机器上同时跑着不止一个传输时，杀掉的就不是你想杀的那个。而且它也停不下镜像：sync 是 until 循环的子进程，杀掉之后循环十秒后又拉起一个。先用 pgrep -af 看清楚，再去结束本指南真正拥有的东西——tmux kill-session -t xfer 结束那个循环，对 ~/relayium-serve.pid 里的 PID 执行 kill 结束你启动的监听端。如果那个 PID 文件是上一次运行留下的，先把它的命令行打出来再发信号：被系统重新分配出去的 PID，属于完全不相干的另一个进程。</p></dd><dt>你想排除某个子目录，但没有 exclude 参数。</dt><dd><pre><code>relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031</code></pre><p>sync 支持 -i 和 -p、--delete、--watch 和 --config-dir——没有任何能在树中间过滤掉某个路径的开关。改成直接点名你真正想要的子目录：每个源都会按自己的名字落在接收方的 --dir 下面，所以配合 serve --dir /root/workspace，这条命令会重建 /root/workspace/src 和 /root/workspace/data，而那个可以重新生成的 venv 根本不会被遍历。</p></dd><dt>你以为会镜像过去的源，传过去却是空的。</dt><dd><pre><code>relayium sync ./links relayium://203.0.113.43:9031
+# warning: no regular files to send (symlinks and special files are skipped)</code></pre><p>sync 只传普通文件，而上面这行警告正是「整棵树全是符号链接」的样子。把 sync 指向这些链接真正指向的目录，接收方需要的符号链接单独处理。</p></dd></dl></div>
       <h2>常见问题</h2>
       <h3>传到一半被打断会怎样？</h3>
       <p>什么都不会丢。重新运行 relayium sync——它会跳过接收方已有的文件，并把传了一半的文件从磁盘上已有的字节偏移续传。本指南里的 until 循环会自动做这件事，直到整个文件夹镜像完成。</p>
       <h3>这和 rsync 有什么不同？</h3>
-      <p>两者都做增量单向镜像，但 relayium sync 走证书固定的 TLS 连接、不需要 SSH 账号（daemon 直连），通过证书指纹互相认证两台机器，并对每个文件做 SHA-256 校验。它和 relayium 其他模式用的是同一个传输引擎。</p>
+      <p>两者都做增量单向镜像，但 relayium sync 走证书固定的 TLS 连接、不需要 SSH 账号（daemon 直连），通过证书指纹互相认证两台机器，并对它传输的每个文件做 SHA-256 校验。和 rsync 的默认行为一样，接收端上大小和 mtime 已经一致的文件会被跳过，而不是重新计算哈希。它和 relayium 其他模式用的是同一个传输引擎。</p>
       <h3>sync 会把我从源端删掉的文件在接收方也删掉吗？</h3>
       <p>只有你要求时才会。默认情况下 sync 只新增和更新。加 --delete 才会镜像删除，而且接收方必须以 --allow-delete 运行 serve 才会执行——否则删除会被忽略并回报给你。</p>
       <h3>我能让两个文件夹持续保持同步吗？</h3>

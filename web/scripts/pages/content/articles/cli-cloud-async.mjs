@@ -29,10 +29,14 @@ const en = {
         "Two one-time things before your first up — install the CLI, and have an account. Already have both? Skip ahead.",
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
-      bullets: [
-        "Install the CLI so the relayium command exists. The line above drops a prebuilt binary on your PATH (macOS and Linux; on Windows, grab the .zip from the releases page); relayium --version confirms it, and relayium.com/cli lists every install option. Skip this and relayium login just prints 'command not found'.",
-        "Have a free Relayium account. The browser step approves the login against your account, so you need one before you can approve — sign in at relayium.com first, or create one there if you haven't. Only uploading needs the account; downloading never does.",
-      ],
+      prereqs: {
+        label: "What you need",
+        items: [
+          "Install the CLI so the relayium command exists. The command below drops a prebuilt binary on your PATH (macOS and Linux; on Windows, grab the .zip from the releases page); relayium --version confirms it, and relayium.com/cli lists every install option. Skip this and relayium login just prints 'command not found'.",
+          "Have a free Relayium account. The browser step approves the login against your account, so you need one before you can approve — sign in at relayium.com first, or create one there if you haven't. Only uploading needs the account; downloading never does.",
+          "A way to move one link to the other machine — a note app, a chat window, a password manager. Anyone holding the link can download the file, so treat it like a password.",
+        ],
+      },
     },
     {
       heading: "Bind this machine to your account (once)",
@@ -49,19 +53,43 @@ const en = {
     {
       heading: "Upload from the first computer",
       body: ["up walks the files you give it, encrypts them locally, uploads the ciphertext, and prints a claim link:"],
-      code: [
-        `relayium up ./report.pdf
-#   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# choose how long it lives (default: 24 hours):
+      steps: [
+        {
+          text: "Check this machine is still bound to your account. It prints the account and the server it is bound to; if it says you are not logged in, do the login step above first.",
+          code: ["relayium whoami"],
+        },
+        {
+          text: "Upload the file. up encrypts it locally, sends only ciphertext, and prints the claim link on stdout.",
+          code: ["relayium up ./report.pdf"],
+        },
+        {
+          text: "Add a retention flag if the 24-hour default isn't what you want. Your plan caps how long the server will actually keep it.",
+          code: [
+            `# choose how long it lives (default: 24 hours):
 relayium up ./report.pdf --burn              # deleted after one download
 relayium up ./report.pdf --ttl 7d            # kept 7 days (your plan sets the cap)
 relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
+          ],
+        },
+        {
+          text: "Move the link to where the second machine can read it. Only the link goes to stdout, so a pipe stays clean.",
+          code: ["relayium up ./report.pdf | pbcopy"],
+        },
       ],
+      success: {
+        label: "What a successful upload looks like",
+        body: [
+          "A progress bar runs on stderr while it uploads, then clears. The link lands on stdout on a line of its own, and the human hint — plus any retention note — follows on stderr.",
+        ],
+        code: [
+          `relayium up ./report.pdf
+https://relayium.com/d/7fK2p…#k=Xr8s…
+opens in a browser, or fetch it with \`relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'\``,
+        ],
+      },
       bullets: [
-        "The link is the whole handoff — copy it to wherever the other machine can read it. Anyone with the link can download the file, so treat it like a password.",
         "Retention: --burn removes the file after a single download; --ttl <duration> keeps it for a fixed time; --max-downloads <n> allows a fixed number of downloads. Give none of them and the link lives 24 hours, the default when --ttl is absent.",
         "--ttl takes a duration with a unit — 30m, 12h, 7d, 2w — or a plain number of seconds, so --ttl 3600 and --ttl 1h are the same request. Your plan sets the ceiling: 1 day on Free, 3 days on Plus, 7 days on Pro, 14 days on Max. Ask for longer than your ceiling and the server silently keeps it for the ceiling instead — up prints a note afterwards telling you how long it actually kept it.",
-        "up needs you to be logged in; if you're not, it tells you and does nothing.",
       ],
     },
     {
@@ -69,7 +97,30 @@ relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
       body: [
         "On the other machine, hand the link to down. No login, no setup — the key that decrypts the file is inside the link, so down needs nothing from your account:",
       ],
-      code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+      steps: [
+        {
+          text: "Get the link onto the second machine, however suits you. Nothing has to be installed or logged in there beyond the CLI itself.",
+        },
+        {
+          text: "Hand it to down inside single quotes, with the directory the files should land in.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+        },
+        {
+          text: "Leave the directory off to land in the current one.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'"],
+        },
+      ],
+      success: {
+        label: "What a successful download looks like",
+        body: [
+          "Every file it wrote is listed on stdout, one per line, and the count and destination are confirmed on stderr.",
+        ],
+        code: [
+          `relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads
+downloads/report.pdf
+✓ downloaded 1 file(s) to ./downloads`,
+        ],
+      },
       widget: {
         kind: "downloadBuilder",
         linkLabel: "Your share link",
@@ -82,8 +133,6 @@ relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
         copied: "Copied",
       },
       bullets: [
-        "Quote the link: the #k=… fragment carries the decryption key, and some shells treat # as the start of a comment.",
-        "Give a destination directory (./downloads here) or omit it to land in the current directory.",
         "If the file was set to burn, has hit its download limit, or has expired, the link is spent and down reports that it's gone.",
       ],
     },
@@ -102,6 +151,49 @@ relayium up ./report.pdf --max-downloads 5   # allow 5 downloads, then gone`,
         "Your file is encrypted on your machine before it's uploaded. The decryption key lives only in the link's #k= fragment and is never sent to the server — Relayium stores ciphertext it cannot read, including the file names.",
         "That also means the link is the only way back to the file: lose it and the file is unrecoverable, by you or by us.",
       ],
+    },
+    {
+      heading: "When a link doesn't work",
+      body: [
+        "Four failures cover almost every unsuccessful up or down, and none of them needs guessing — the state that decides each one is printed by a command, or visible in the command you typed.",
+      ],
+      troubleshooting: {
+        label: "Symptom, check, fix",
+        items: [
+          {
+            symptom: "up refuses with \"run `relayium login` first\".",
+            code: [
+              `relayium whoami
+# not logged in (run \`relayium login\`)`,
+            ],
+            fix: "Uploading stores the file under your account, so this machine needs credentials. Run relayium login and approve it in the browser at relayium.com/device; whoami then prints your account and the server it is bound to.",
+          },
+          {
+            symptom: "down cannot parse the link, and the key seems to have vanished.",
+            code: [
+              `echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p`,
+            ],
+            fix: "An unquoted # starts a comment in most shells, so everything from #k= onwards never reached the command — echo shows exactly what survived. Wrap the whole link in single quotes and the fragment, which is the decryption key, arrives intact.",
+          },
+          {
+            symptom: "The link stops working sooner than the --ttl you asked for.",
+            code: [
+              `relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for`,
+            ],
+            fix: "The server silently clamps a request beyond your plan's ceiling — 1 day on Free, 3 on Plus, 7 on Pro, 14 on Max — and up prints that note afterwards to say what it actually got. A link also ends early on --burn or --max-downloads. Upload again for a fresh one.",
+          },
+          {
+            symptom: "You are logged in, but up says you're logged in somewhere else.",
+            code: [
+              `relayium whoami
+# you@example.com (https://relayium.com)`,
+            ],
+            fix: "A --server that did not issue your token is refused rather than sent your credential, which would leak it and would not authenticate there anyway. Either drop --server so it uses the bound server whoami just printed, or run relayium login against the other host first.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -163,10 +255,14 @@ const zh = {
         "第一次 up 之前有两件一次性的事——装好 CLI，以及有个账号。两样都齐了就往下跳。",
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
-      bullets: [
-        "先装 CLI，这样 relayium 命令才存在。上面这行会把预编译好的二进制放到你的 PATH 上（macOS 和 Linux；Windows 请从发布页下载 .zip）；relayium --version 可确认是否装好，relayium.com/cli 列出了所有安装方式。不装这一步，relayium login 只会报「command not found」。",
-        "有一个免费的 Relayium 账号。浏览器那一步是拿你的账号来批准这次登录，所以你得先有账号才能批准——先在 relayium.com 登录，没有就在那里注册一个。只有上传才需要账号；下载从不需要。",
-      ],
+      prereqs: {
+        label: "你需要准备",
+        items: [
+          "先装 CLI，这样 relayium 命令才存在。下面这行会把预编译好的二进制放到你的 PATH 上（macOS 和 Linux；Windows 请从发布页下载 .zip）；relayium --version 可确认是否装好，relayium.com/cli 列出了所有安装方式。不装这一步，relayium login 只会报「command not found」。",
+          "有一个免费的 Relayium 账号。浏览器那一步是拿你的账号来批准这次登录，所以你得先有账号才能批准——先在 relayium.com 登录，没有就在那里注册一个。只有上传才需要账号；下载从不需要。",
+          "一个能把链接送到另一台机器的办法——备忘录、聊天窗口、密码管理器都行。任何拿到链接的人都能下载该文件，所以要像对待密码一样对待它。",
+        ],
+      },
     },
     {
       heading: "把这台机器绑定到你的账号（一次即可）",
@@ -183,19 +279,43 @@ const zh = {
     {
       heading: "从第一台电脑上传",
       body: ["up 会遍历你给的文件，在本地加密，上传密文，并打印一个取件链接："],
-      code: [
-        `relayium up ./report.pdf
-#   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# 选择它能存活多久（默认 24 小时）：
+      steps: [
+        {
+          text: "确认这台机器还绑定在你的账号上。它会打印账号和所绑定的服务器；如果显示未登录，先回到上面那步登录。",
+          code: ["relayium whoami"],
+        },
+        {
+          text: "上传文件。up 会在本地加密，只把密文发出去，并把取件链接打印到 stdout。",
+          code: ["relayium up ./report.pdf"],
+        },
+        {
+          text: "如果 24 小时的默认值不合适，就加一个保留策略参数。服务器实际保留多久，上限由你的套餐决定。",
+          code: [
+            `# 选择它能存活多久（默认 24 小时）：
 relayium up ./report.pdf --burn              # 下载一次后即删除
 relayium up ./report.pdf --ttl 7d            # 保留 7 天（上限取决于套餐）
 relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除`,
+          ],
+        },
+        {
+          text: "把链接送到第二台机器能读到的地方。只有链接会走 stdout，所以管道里很干净。",
+          code: ["relayium up ./report.pdf | pbcopy"],
+        },
       ],
+      success: {
+        label: "上传成功是什么样",
+        body: [
+          "上传过程中 stderr 上会有一个进度条，结束后清除。链接会单独一行落在 stdout 上，随后是给人看的提示行——以及可能出现的保留时长提示——都在 stderr 上。",
+        ],
+        code: [
+          `relayium up ./report.pdf
+https://relayium.com/d/7fK2p…#k=Xr8s…
+opens in a browser, or fetch it with \`relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'\``,
+        ],
+      },
       bullets: [
-        "链接就是全部交接物——把它复制到另一台机器能读到的地方。任何拿到链接的人都能下载该文件，所以要像对待密码一样对待它。",
         "保留策略：--burn 下载一次后即删；--ttl <时长> 保留固定时间；--max-downloads <n> 允许固定下载次数。三者都不给时，链接保留 24 小时——这就是不带 --ttl 时的默认值。",
         "--ttl 接受带单位的时长——30m、12h、7d、2w——也接受纯秒数，所以 --ttl 3600 和 --ttl 1h 是同一个请求。上限由你的套餐决定：Free 1 天、Plus 3 天、Pro 7 天、Max 14 天。要求超过上限时，服务器会静默地只按上限保留——up 随后会打印一行提示，告诉你它实际保留了多久。",
-        "up 需要你已登录；若未登录，它会提示你且不做任何事。",
       ],
     },
     {
@@ -203,7 +323,30 @@ relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除
       body: [
         "在另一台机器上，把链接交给 down。无需登录、无需配置——解密文件的密钥就在链接里，所以 down 完全不需要你的账号：",
       ],
-      code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+      steps: [
+        {
+          text: "用你顺手的方式把链接弄到第二台机器上。那边除了 CLI 本身，不需要安装或登录任何东西。",
+        },
+        {
+          text: "把链接用单引号括起来交给 down，后面跟上文件该落地的目录。",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+        },
+        {
+          text: "省略目录就落到当前目录。",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'"],
+        },
+      ],
+      success: {
+        label: "下载成功是什么样",
+        body: [
+          "它写下的每个文件都会逐行列在 stdout 上，数量和目标目录则在 stderr 上确认。",
+        ],
+        code: [
+          `relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads
+downloads/report.pdf
+✓ downloaded 1 file(s) to ./downloads`,
+        ],
+      },
       widget: {
         kind: "downloadBuilder",
         linkLabel: "你的分享链接",
@@ -216,8 +359,6 @@ relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除
         copied: "已复制",
       },
       bullets: [
-        "给链接加引号：#k=… 片段携带解密密钥，而有些 shell 会把 # 当作注释起点。",
-        "给一个目标目录（这里是 ./downloads），或省略以落到当前目录。",
         "如果该文件设了阅后即焚、已达下载次数上限或已过期，链接就失效了，down 会告知它已不存在。",
       ],
     },
@@ -236,6 +377,49 @@ relayium up ./report.pdf --max-downloads 5   # 允许下载 5 次，之后删除
         "你的文件在上传前就已在你的机器上加密。解密密钥只存在于链接的 #k= 片段里，从不发给服务器——Relayium 存的是它读不了的密文，连文件名也是。",
         "这也意味着链接是回到文件的唯一途径：丢了链接，文件就无法找回，你和我们都不行。",
       ],
+    },
+    {
+      heading: "链接不管用的时候",
+      body: [
+        "几乎所有失败的 up 或 down 都落在下面四种里，而且没有一种需要靠猜——决定性的状态要么由一条命令打印出来，要么就摆在你敲的那行命令里。",
+      ],
+      troubleshooting: {
+        label: "现象、检查、修复",
+        items: [
+          {
+            symptom: "up 直接拒绝并提示 “run `relayium login` first”。",
+            code: [
+              `relayium whoami
+# not logged in (run \`relayium login\`)`,
+            ],
+            fix: "上传是把文件存到你的账号名下，所以这台机器需要凭据。运行 relayium login，在浏览器的 relayium.com/device 上批准；之后 whoami 就会打印出你的账号和它绑定的服务器。",
+          },
+          {
+            symptom: "down 解析不了链接，密钥像是凭空消失了。",
+            code: [
+              `echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p`,
+            ],
+            fix: "在大多数 shell 里，没加引号的 # 会开启注释，于是从 #k= 起的部分根本没进到命令里——echo 会原样告诉你活下来的是哪一截。把整条链接用单引号括起来，那个片段（也就是解密密钥）就能完整送达。",
+          },
+          {
+            symptom: "链接比你要的 --ttl 更早失效。",
+            code: [
+              `relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for`,
+            ],
+            fix: "超过套餐上限的请求，服务器会静默地按上限处理——Free 1 天、Plus 3 天、Pro 7 天、Max 14 天——随后 up 会打印这行提示，告诉你实际拿到了多久。此外 --burn 和 --max-downloads 也会让链接提前作废。想要新的就重新上传一次。",
+          },
+          {
+            symptom: "明明登录了，up 却说你登录在别处。",
+            code: [
+              `relayium whoami
+# you@example.com (https://relayium.com)`,
+            ],
+            fix: "不是签发你令牌的那个 --server，会被拒绝而不是把凭据发过去——发过去既会泄露它，在那边也根本认证不了。要么去掉 --server，让它用 whoami 刚打印出来的那个绑定服务器；要么先对另一台主机执行 relayium login。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -297,10 +481,14 @@ const ja = {
         "最初の up の前に、一度だけ済ませることが二つあります。CLI のインストールと、アカウントの用意です。両方そろっていれば読み飛ばしてください。",
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
-      bullets: [
-        "まず CLI をインストールして relayium コマンドが存在するようにします。上の一行でビルド済みバイナリが PATH に入ります（macOS と Linux。Windows は releases ページから .zip を取得）。relayium --version でインストールを確認でき、relayium.com/cli にすべてのインストール方法があります。これをしないと relayium login は「command not found」と出るだけです。",
-        "無料の Relayium アカウントを用意します。ブラウザでの手順は自分のアカウントに対してログインを承認するので、承認する前にアカウントが必要です。まず relayium.com でサインインし、なければそこで作成してください。アカウントが要るのはアップロードだけで、ダウンロードには不要です。",
-      ],
+      prereqs: {
+        label: "必要なもの",
+        items: [
+          "まず CLI をインストールして relayium コマンドが存在するようにします。下の一行でビルド済みバイナリが PATH に入ります（macOS と Linux。Windows は releases ページから .zip を取得）。relayium --version でインストールを確認でき、relayium.com/cli にすべてのインストール方法があります。これをしないと relayium login は「command not found」と出るだけです。",
+          "無料の Relayium アカウントを用意します。ブラウザでの手順は自分のアカウントに対してログインを承認するので、承認する前にアカウントが必要です。まず relayium.com でサインインし、なければそこで作成してください。アカウントが要るのはアップロードだけで、ダウンロードには不要です。",
+          "リンクをもう一台へ移す手段。メモアプリ、チャットの窓、パスワードマネージャーなど何でも構いません。リンクを持つ誰もがダウンロードできるので、パスワードのように扱ってください。",
+        ],
+      },
     },
     {
       heading: "このマシンをアカウントにバインドする（一度だけ）",
@@ -317,19 +505,43 @@ const ja = {
     {
       heading: "一台目のコンピュータからアップロード",
       body: ["up は渡したファイルをたどり、ローカルで暗号化し、暗号文をアップロードして、取得用リンクを表示します："],
-      code: [
-        `relayium up ./report.pdf
-#   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# 保持期間を選ぶ（既定は24時間）：
+      steps: [
+        {
+          text: "このマシンがまだアカウントに結び付いているかを確認します。アカウントと結び付き先のサーバーが表示されます。未ログインと出たら、先に上のログイン手順を済ませてください。",
+          code: ["relayium whoami"],
+        },
+        {
+          text: "ファイルをアップロードします。up はローカルで暗号化し、暗号文だけを送り、取得用リンクを標準出力に表示します。",
+          code: ["relayium up ./report.pdf"],
+        },
+        {
+          text: "既定の24時間が望みと違うなら、保持のフラグを足します。サーバーが実際にどれだけ保持するかの上限はプランが決めます。",
+          code: [
+            `# 保持期間を選ぶ（既定は24時間）：
 relayium up ./report.pdf --burn              # 一度ダウンロードすると削除
 relayium up ./report.pdf --ttl 7d            # 7日間保持（上限はプランによる）
 relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除`,
+          ],
+        },
+        {
+          text: "二台目が読める場所へリンクを移します。標準出力に出るのはリンクだけなので、パイプはきれいなままです。",
+          code: ["relayium up ./report.pdf | pbcopy"],
+        },
       ],
+      success: {
+        label: "アップロードが成功したときの表示",
+        body: [
+          "アップロード中は標準エラー出力に進捗バーが出て、終わると消えます。リンクは標準出力に単独の行として出て、人向けのヒント（および保持期間の注記があればそれ）は標準エラー出力に続きます。",
+        ],
+        code: [
+          `relayium up ./report.pdf
+https://relayium.com/d/7fK2p…#k=Xr8s…
+opens in a browser, or fetch it with \`relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'\``,
+        ],
+      },
       bullets: [
-        "リンクが受け渡しのすべてです。相手のマシンが読める場所にコピーしてください。リンクを持つ誰もがダウンロードできるので、パスワードのように扱ってください。",
         "保持：--burn は一度のダウンロードで削除。--ttl <期間> は一定時間保持。--max-downloads <n> は一定回数まで。どれも指定しなければリンクは24時間保持されます。これが --ttl を付けないときの既定です。",
         "--ttl は単位付きの期間（30m、12h、7d、2w）のほか、単なる秒数も受け取ります。つまり --ttl 3600 と --ttl 1h は同じ指定です。上限はプランで決まります：Free は1日、Plus は3日、Pro は7日、Max は14日。上限より長く要求すると、サーバーは黙って上限までしか保持しません。その場合 up が後から、実際に保持される期間を1行で知らせます。",
-        "up はログインが必要です。していなければその旨を伝え、何もしません。",
       ],
     },
     {
@@ -337,7 +549,30 @@ relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除`,
       body: [
         "別のマシンでは、リンクを down に渡します。ログインも設定も不要。ファイルを復号する鍵はリンクの中にあるので、down はアカウントから何も必要としません：",
       ],
-      code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+      steps: [
+        {
+          text: "都合のよい方法でリンクを二台目に持っていきます。あちらには CLI 本体のほかに、インストールもログインも要りません。",
+        },
+        {
+          text: "シングルクォートで囲んだリンクと、ファイルを置きたいディレクトリを down に渡します。",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+        },
+        {
+          text: "ディレクトリを省くと現在のディレクトリに置かれます。",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'"],
+        },
+      ],
+      success: {
+        label: "ダウンロードが成功したときの表示",
+        body: [
+          "書き出したファイルが1行ずつ標準出力に並び、件数と保存先が標準エラー出力で確認されます。",
+        ],
+        code: [
+          `relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads
+downloads/report.pdf
+✓ downloaded 1 file(s) to ./downloads`,
+        ],
+      },
       widget: {
         kind: "downloadBuilder",
         linkLabel: "共有リンク",
@@ -350,8 +585,6 @@ relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除`,
         copied: "コピーしました",
       },
       bullets: [
-        "リンクは引用符で囲みます：#k=… 断片が復号鍵を運び、シェルによっては # をコメントの開始として扱うためです。",
-        "宛先ディレクトリ（ここでは ./downloads）を指定するか、省略して現在のディレクトリに落とします。",
         "ファイルがバーン設定、ダウンロード上限到達、または期限切れの場合、リンクは使い切られており、down はもう存在しないと報告します。",
       ],
     },
@@ -370,6 +603,49 @@ relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除`,
         "ファイルはアップロード前に自分のマシンで暗号化されます。復号鍵はリンクの #k= 断片にのみ存在し、サーバーには決して送られません。Relayium は読めない暗号文を、ファイル名も含めて保存します。",
         "つまりリンクだけがファイルへ戻る唯一の手段です。失えばファイルは復旧できません。自分でも当社でも同じです。",
       ],
+    },
+    {
+      heading: "リンクが働かないとき",
+      body: [
+        "失敗する up と down のほとんどは次の4つで尽きます。どれも当て推量は要りません。判定を決める状態は、コマンドが表示するか、自分が打ったコマンドの中に見えています。",
+      ],
+      troubleshooting: {
+        label: "症状・確認・対処",
+        items: [
+          {
+            symptom: "up が「run `relayium login` first」と出て断る。",
+            code: [
+              `relayium whoami
+# not logged in (run \`relayium login\`)`,
+            ],
+            fix: "アップロードはファイルをアカウントの下に保管するので、このマシンに資格情報が必要です。relayium login を実行し、ブラウザーの relayium.com/device で承認してください。以後 whoami はアカウントと結び付き先のサーバーを表示します。",
+          },
+          {
+            symptom: "down がリンクを解釈できず、鍵が消えたように見える。",
+            code: [
+              `echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p`,
+            ],
+            fix: "多くのシェルでは引用符のない # がコメントを始めるため、#k= 以降はコマンドに届いていません。echo が、生き残った部分をそのまま見せてくれます。リンク全体をシングルクォートで囲めば、復号鍵であるその断片も無傷で届きます。",
+          },
+          {
+            symptom: "指定した --ttl より早くリンクが切れる。",
+            code: [
+              `relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for`,
+            ],
+            fix: "プランの上限を超える要求を、サーバーは黙って上限に切り詰めます（Free は1日、Plus は3日、Pro は7日、Max は14日）。そのあと up がこの注記を出して、実際に得られた期間を伝えます。--burn や --max-downloads でもリンクは早く終わります。新しいものが必要ならもう一度アップロードしてください。",
+          },
+          {
+            symptom: "ログイン済みなのに、up が別の場所にログインしていると言う。",
+            code: [
+              `relayium whoami
+# you@example.com (https://relayium.com)`,
+            ],
+            fix: "トークンを発行していない --server には、資格情報を送らずに拒否します。送れば漏らすことになり、しかもそちらでは認証もできないからです。--server を外して whoami が今表示した結び付き先を使うか、先に相手のホストに対して relayium login を実行してください。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -431,10 +707,14 @@ const ko = {
         "첫 up 전에 한 번만 해두면 되는 두 가지 — CLI 설치와 계정 준비입니다. 둘 다 있으면 건너뛰세요.",
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
-      bullets: [
-        "먼저 CLI를 설치해 relayium 명령이 존재하게 합니다. 위 한 줄이 미리 빌드된 바이너리를 PATH에 올립니다(macOS와 Linux; Windows는 releases 페이지에서 .zip을 받으세요). relayium --version으로 설치를 확인할 수 있고, relayium.com/cli에 모든 설치 방법이 있습니다. 이 단계를 건너뛰면 relayium login은 “command not found”만 출력합니다.",
-        "무료 Relayium 계정을 준비합니다. 브라우저 단계는 본인 계정에 대해 로그인을 승인하므로, 승인하려면 먼저 계정이 있어야 합니다 — relayium.com에서 로그인하거나 없으면 거기서 새로 만드세요. 계정이 필요한 것은 업로드뿐이고 다운로드에는 필요 없습니다.",
-      ],
+      prereqs: {
+        label: "필요한 것",
+        items: [
+          "먼저 CLI를 설치해 relayium 명령이 존재하게 합니다. 아래 한 줄이 미리 빌드된 바이너리를 PATH에 올립니다(macOS와 Linux; Windows는 releases 페이지에서 .zip을 받으세요). relayium --version으로 설치를 확인할 수 있고, relayium.com/cli에 모든 설치 방법이 있습니다. 이 단계를 건너뛰면 relayium login은 “command not found”만 출력합니다.",
+          "무료 Relayium 계정을 준비합니다. 브라우저 단계는 본인 계정에 대해 로그인을 승인하므로, 승인하려면 먼저 계정이 있어야 합니다 — relayium.com에서 로그인하거나 없으면 거기서 새로 만드세요. 계정이 필요한 것은 업로드뿐이고 다운로드에는 필요 없습니다.",
+          "링크를 다른 기기로 옮길 수단 — 메모 앱, 채팅 창, 비밀번호 관리자 무엇이든 좋습니다. 링크를 가진 누구나 파일을 받을 수 있으니 비밀번호처럼 다루세요.",
+        ],
+      },
     },
     {
       heading: "이 기기를 계정에 바인딩하기 (한 번만)",
@@ -451,19 +731,43 @@ const ko = {
     {
       heading: "첫 번째 컴퓨터에서 업로드",
       body: ["up은 준 파일들을 훑어 로컬에서 암호화하고 암호문을 업로드한 뒤 수령용 링크를 출력합니다:"],
-      code: [
-        `relayium up ./report.pdf
-#   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# 얼마나 살려둘지 고르기(기본값 24시간):
+      steps: [
+        {
+          text: "이 기기가 아직 계정에 묶여 있는지 확인합니다. 계정과 묶여 있는 서버를 출력하며, 로그인되어 있지 않다고 하면 위의 로그인 단계를 먼저 하세요.",
+          code: ["relayium whoami"],
+        },
+        {
+          text: "파일을 올립니다. up은 로컬에서 암호화해 암호문만 보내고, 수령용 링크를 표준 출력에 찍습니다.",
+          code: ["relayium up ./report.pdf"],
+        },
+        {
+          text: "기본값인 24시간이 원하는 바가 아니면 보관 플래그를 붙이세요. 서버가 실제로 얼마나 보관할지의 상한은 요금제가 정합니다.",
+          code: [
+            `# 얼마나 살려둘지 고르기(기본값 24시간):
 relayium up ./report.pdf --burn              # 한 번 다운로드 후 삭제
 relayium up ./report.pdf --ttl 7d            # 7일간 보관(상한은 요금제에 따라 다름)
 relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제`,
+          ],
+        },
+        {
+          text: "두 번째 기기가 읽을 수 있는 곳으로 링크를 옮깁니다. 표준 출력에는 링크만 나오므로 파이프가 깨끗합니다.",
+          code: ["relayium up ./report.pdf | pbcopy"],
+        },
       ],
+      success: {
+        label: "업로드가 성공했을 때 보이는 것",
+        body: [
+          "올리는 동안 표준 오류에 진행 막대가 떴다가 끝나면 지워집니다. 링크는 표준 출력에 한 줄로 나오고, 사람이 읽을 안내와 보관 기간 안내는 표준 오류에 이어집니다.",
+        ],
+        code: [
+          `relayium up ./report.pdf
+https://relayium.com/d/7fK2p…#k=Xr8s…
+opens in a browser, or fetch it with \`relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'\``,
+        ],
+      },
       bullets: [
-        "링크가 전달의 전부입니다 — 다른 기기가 읽을 수 있는 곳에 복사하세요. 링크를 가진 누구나 파일을 다운로드할 수 있으니 비밀번호처럼 다루세요.",
         "보관: --burn은 한 번 다운로드하면 삭제, --ttl <기간>은 정해진 시간 보관, --max-downloads <n>은 정해진 횟수 허용. 셋 다 주지 않으면 링크는 24시간 살아 있습니다 — --ttl이 없을 때의 기본값입니다.",
         "--ttl은 단위가 붙은 기간(30m, 12h, 7d, 2w)이나 초 단위 숫자를 받습니다. 그래서 --ttl 3600과 --ttl 1h는 같은 요청입니다. 상한은 요금제가 정합니다: Free 1일, Plus 3일, Pro 7일, Max 14일. 상한보다 길게 요청하면 서버는 조용히 상한까지만 보관하며, up이 실제로 얼마나 보관되는지 한 줄로 알려줍니다.",
-        "up은 로그인이 필요합니다. 되어 있지 않으면 알려주고 아무 일도 하지 않습니다.",
       ],
     },
     {
@@ -471,7 +775,30 @@ relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제`,
       body: [
         "다른 기기에서 링크를 down에 건넵니다. 로그인도 설정도 필요 없습니다 — 파일을 복호화하는 키가 링크 안에 있으므로 down은 계정에서 아무것도 필요로 하지 않습니다:",
       ],
-      code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+      steps: [
+        {
+          text: "편한 방법으로 링크를 두 번째 기기로 옮깁니다. 그쪽에는 CLI 자체 말고는 설치할 것도 로그인할 것도 없습니다.",
+        },
+        {
+          text: "작은따옴표로 감싼 링크와, 파일이 저장될 디렉터리를 down에 건넵니다.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+        },
+        {
+          text: "디렉터리를 빼면 현재 디렉터리에 저장됩니다.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'"],
+        },
+      ],
+      success: {
+        label: "다운로드가 성공했을 때 보이는 것",
+        body: [
+          "쓴 파일이 표준 출력에 한 줄씩 나열되고, 개수와 대상 디렉터리가 표준 오류에서 확인됩니다.",
+        ],
+        code: [
+          `relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads
+downloads/report.pdf
+✓ downloaded 1 file(s) to ./downloads`,
+        ],
+      },
       widget: {
         kind: "downloadBuilder",
         linkLabel: "공유 링크",
@@ -484,8 +811,6 @@ relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제`,
         copied: "복사됨",
       },
       bullets: [
-        "링크는 따옴표로 감싸세요: #k=… 조각이 복호화 키를 담고 있는데 일부 셸은 # 을 주석 시작으로 취급합니다.",
-        "대상 디렉터리(여기서는 ./downloads)를 주거나 생략해 현재 디렉터리에 받습니다.",
         "파일이 번(burn) 설정이거나 다운로드 한도에 도달했거나 만료되었으면 링크는 소진된 것이고, down은 사라졌다고 알립니다.",
       ],
     },
@@ -504,6 +829,49 @@ relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제`,
         "파일은 업로드 전에 내 기기에서 암호화됩니다. 복호화 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다 — Relayium은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다.",
         "그래서 링크가 파일로 돌아가는 유일한 길입니다: 잃으면 파일은 복구할 수 없습니다. 본인도, 저희도.",
       ],
+    },
+    {
+      heading: "링크가 듣지 않을 때",
+      body: [
+        "실패하는 up과 down은 거의 다 아래 네 가지입니다. 어느 것도 추측이 필요 없습니다. 판정을 가르는 상태는 명령이 출력해 주거나, 직접 친 명령 안에 보입니다.",
+      ],
+      troubleshooting: {
+        label: "증상, 확인, 해결",
+        items: [
+          {
+            symptom: "up이 “run `relayium login` first”를 내며 거부합니다.",
+            code: [
+              `relayium whoami
+# not logged in (run \`relayium login\`)`,
+            ],
+            fix: "업로드는 파일을 계정 아래에 보관하므로 이 기기에 자격 증명이 필요합니다. relayium login 을 실행하고 브라우저의 relayium.com/device 에서 승인하세요. 그 뒤 whoami가 계정과 묶여 있는 서버를 출력합니다.",
+          },
+          {
+            symptom: "down이 링크를 해석하지 못하고, 키가 사라진 것처럼 보입니다.",
+            code: [
+              `echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p`,
+            ],
+            fix: "대부분의 셸에서 따옴표 없는 #은 주석을 시작하므로 #k= 이후는 명령에 닿지도 못했습니다. echo가 살아남은 부분을 그대로 보여 줍니다. 링크 전체를 작은따옴표로 감싸면 복호화 키인 그 조각이 온전히 전달됩니다.",
+          },
+          {
+            symptom: "요청한 --ttl보다 링크가 일찍 끊깁니다.",
+            code: [
+              `relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for`,
+            ],
+            fix: "요금제 상한을 넘는 요청을 서버는 조용히 상한으로 깎습니다 — Free 1일, Plus 3일, Pro 7일, Max 14일 — 그리고 up이 실제로 받은 기간을 이 안내로 알려 줍니다. --burn이나 --max-downloads로도 링크는 일찍 끝납니다. 새 링크가 필요하면 다시 올리세요.",
+          },
+          {
+            symptom: "로그인해 두었는데도 up이 다른 곳에 로그인되어 있다고 합니다.",
+            code: [
+              `relayium whoami
+# you@example.com (https://relayium.com)`,
+            ],
+            fix: "토큰을 발급하지 않은 --server에는 자격 증명을 보내지 않고 거부합니다. 보내면 유출이 되고, 그쪽에서 인증되지도 않기 때문입니다. --server를 빼서 whoami가 방금 출력한 서버를 쓰거나, 먼저 그 호스트를 상대로 relayium login 을 실행하세요.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -565,10 +933,14 @@ const de = {
         "Zwei einmalige Dinge vor deinem ersten up — die CLI installieren und ein Konto haben. Hast du beides, überspring diesen Abschnitt.",
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
-      bullets: [
-        "Installiere die CLI, damit es den Befehl relayium gibt. Die Zeile oben legt eine vorkompilierte Binärdatei in deinen PATH (macOS und Linux; unter Windows die .zip von der Releases-Seite holen); relayium --version bestätigt die Installation, und relayium.com/cli listet alle Installationswege. Ohne das gibt relayium login nur „command not found“ aus.",
-        "Halte ein kostenloses Relayium-Konto bereit. Der Browser-Schritt bestätigt die Anmeldung gegenüber deinem Konto, du brauchst also vorher eines — melde dich zuerst auf relayium.com an oder erstelle dort eines. Nur das Hochladen braucht das Konto; das Herunterladen nie.",
-      ],
+      prereqs: {
+        label: "Was du brauchst",
+        items: [
+          "Installiere die CLI, damit es den Befehl relayium gibt. Die Zeile unten legt eine vorkompilierte Binärdatei in deinen PATH (macOS und Linux; unter Windows die .zip von der Releases-Seite holen); relayium --version bestätigt die Installation, und relayium.com/cli listet alle Installationswege. Ohne das gibt relayium login nur „command not found“ aus.",
+          "Halte ein kostenloses Relayium-Konto bereit. Der Browser-Schritt bestätigt die Anmeldung gegenüber deinem Konto, du brauchst also vorher eines — melde dich zuerst auf relayium.com an oder erstelle dort eines. Nur das Hochladen braucht das Konto; das Herunterladen nie.",
+          "Einen Weg, einen Link auf den anderen Rechner zu bringen — eine Notiz-App, ein Chatfenster, ein Passwortmanager. Wer den Link hat, kann die Datei herunterladen, behandle ihn also wie ein Passwort.",
+        ],
+      },
     },
     {
       heading: "Diesen Rechner an dein Konto binden (einmalig)",
@@ -585,19 +957,43 @@ const de = {
     {
       heading: "Vom ersten Computer hochladen",
       body: ["up geht die angegebenen Dateien durch, verschlüsselt sie lokal, lädt den Chiffretext hoch und gibt einen Abhol-Link aus:"],
-      code: [
-        `relayium up ./report.pdf
-#   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# wähle, wie lange sie lebt (Standard: 24 Stunden):
+      steps: [
+        {
+          text: "Prüf, ob dieser Rechner noch an dein Konto gebunden ist. Er gibt das Konto und den Server aus, an den er gebunden ist. Steht dort, dass du nicht angemeldet bist, hol den Anmeldeschritt oben zuerst nach.",
+          code: ["relayium whoami"],
+        },
+        {
+          text: "Lade die Datei hoch. up verschlüsselt sie lokal, schickt nur Chiffretext und gibt den Abhollink auf stdout aus.",
+          code: ["relayium up ./report.pdf"],
+        },
+        {
+          text: "Setz eine Aufbewahrungs-Option, wenn die 24 Stunden Standard nicht passen. Wie lange der Server sie wirklich behält, begrenzt dein Tarif.",
+          code: [
+            `# wähle, wie lange sie lebt (Standard: 24 Stunden):
 relayium up ./report.pdf --burn              # nach einem Download gelöscht
 relayium up ./report.pdf --ttl 7d            # 7 Tage aufbewahrt (Obergrenze je nach Tarif)
 relayium up ./report.pdf --max-downloads 5   # 5 Downloads erlaubt, dann weg`,
+          ],
+        },
+        {
+          text: "Bring den Link dorthin, wo der zweite Rechner ihn lesen kann. Auf stdout landet nur der Link, eine Pipe bleibt also sauber.",
+          code: ["relayium up ./report.pdf | pbcopy"],
+        },
       ],
+      success: {
+        label: "So sieht ein erfolgreicher Upload aus",
+        body: [
+          "Während des Hochladens läuft auf stderr ein Fortschrittsbalken, der danach verschwindet. Der Link steht allein auf stdout, der Hinweis für Menschen — und ein etwaiger Hinweis zur Aufbewahrung — folgt auf stderr.",
+        ],
+        code: [
+          `relayium up ./report.pdf
+https://relayium.com/d/7fK2p…#k=Xr8s…
+opens in a browser, or fetch it with \`relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'\``,
+        ],
+      },
       bullets: [
-        "Der Link ist die ganze Übergabe — kopiere ihn dorthin, wo der andere Rechner ihn lesen kann. Jeder mit dem Link kann die Datei herunterladen, behandle ihn also wie ein Passwort.",
         "Aufbewahrung: --burn entfernt die Datei nach einem einzigen Download; --ttl <Dauer> behält sie eine feste Zeit; --max-downloads <n> erlaubt eine feste Anzahl. Gibst du keines davon an, lebt der Link 24 Stunden — das ist der Standard ohne --ttl.",
         "--ttl nimmt eine Dauer mit Einheit — 30m, 12h, 7d, 2w — oder schlicht eine Anzahl Sekunden, --ttl 3600 und --ttl 1h sind also dieselbe Anfrage. Die Obergrenze setzt dein Tarif: 1 Tag bei Free, 3 Tage bei Plus, 7 Tage bei Pro, 14 Tage bei Max. Forderst du mehr als deine Obergrenze, bewahrt der Server sie stillschweigend nur bis zur Obergrenze auf — up gibt danach einen Hinweis aus, wie lange sie tatsächlich bleibt.",
-        "up erfordert, dass du angemeldet bist; bist du es nicht, sagt es dir das und tut nichts.",
       ],
     },
     {
@@ -605,7 +1001,30 @@ relayium up ./report.pdf --max-downloads 5   # 5 Downloads erlaubt, dann weg`,
       body: [
         "Gib auf dem anderen Rechner den Link an down. Keine Anmeldung, keine Einrichtung — der Schlüssel, der die Datei entschlüsselt, steckt im Link, also braucht down nichts von deinem Konto:",
       ],
-      code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+      steps: [
+        {
+          text: "Bring den Link auf den zweiten Rechner, wie es dir passt. Dort muss außer der CLI selbst nichts installiert und niemand angemeldet sein.",
+        },
+        {
+          text: "Gib ihn in einfachen Anführungszeichen an down, zusammen mit dem Verzeichnis, in dem die Dateien landen sollen.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+        },
+        {
+          text: "Lass das Verzeichnis weg, um im aktuellen zu landen.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'"],
+        },
+      ],
+      success: {
+        label: "So sieht ein erfolgreicher Download aus",
+        body: [
+          "Jede geschriebene Datei steht auf stdout, eine pro Zeile, und Anzahl und Zielverzeichnis werden auf stderr bestätigt.",
+        ],
+        code: [
+          `relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads
+downloads/report.pdf
+✓ downloaded 1 file(s) to ./downloads`,
+        ],
+      },
       widget: {
         kind: "downloadBuilder",
         linkLabel: "Dein Freigabelink",
@@ -618,8 +1037,6 @@ relayium up ./report.pdf --max-downloads 5   # 5 Downloads erlaubt, dann weg`,
         copied: "Kopiert",
       },
       bullets: [
-        "Setz den Link in Anführungszeichen: das Fragment #k=… trägt den Entschlüsselungsschlüssel, und manche Shells behandeln # als Kommentaranfang.",
-        "Gib ein Zielverzeichnis an (hier ./downloads) oder lass es weg, um im aktuellen Verzeichnis zu landen.",
         "Wurde die Datei auf Burn gesetzt, ihr Download-Limit erreicht oder ist sie abgelaufen, ist der Link verbraucht und down meldet, dass sie weg ist.",
       ],
     },
@@ -638,6 +1055,49 @@ relayium up ./report.pdf --max-downloads 5   # 5 Downloads erlaubt, dann weg`,
         "Deine Datei wird auf deinem Rechner verschlüsselt, bevor sie hochgeladen wird. Der Entschlüsselungsschlüssel lebt nur im #k=-Fragment des Links und wird nie an den Server gesendet — Relayium speichert Chiffretext, den es nicht lesen kann, samt der Dateinamen.",
         "Das heißt auch: der Link ist der einzige Weg zurück zur Datei — verlierst du ihn, ist die Datei unwiederbringlich, für dich wie für uns.",
       ],
+    },
+    {
+      heading: "Wenn ein Link nicht funktioniert",
+      body: [
+        "Vier Fehlschläge decken fast jedes misslungene up oder down ab, und keiner davon braucht Raten — der entscheidende Zustand wird von einem Befehl ausgegeben oder steht sichtbar in dem Befehl, den du getippt hast.",
+      ],
+      troubleshooting: {
+        label: "Symptom, Prüfung, Lösung",
+        items: [
+          {
+            symptom: "up verweigert mit „run `relayium login` first“.",
+            code: [
+              `relayium whoami
+# not logged in (run \`relayium login\`)`,
+            ],
+            fix: "Hochladen legt die Datei unter deinem Konto ab, dieser Rechner braucht also Zugangsdaten. Führ relayium login aus und bestätige im Browser unter relayium.com/device; danach gibt whoami dein Konto und den gebundenen Server aus.",
+          },
+          {
+            symptom: "down kann den Link nicht lesen, und der Schlüssel scheint verschwunden.",
+            code: [
+              `echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p`,
+            ],
+            fix: "Ein nicht in Anführungszeichen gesetztes # beginnt in den meisten Shells einen Kommentar, alles ab #k= hat den Befehl also nie erreicht — echo zeigt genau, was übrig blieb. Setz den ganzen Link in einfache Anführungszeichen, dann kommt das Fragment, also der Entschlüsselungsschlüssel, unversehrt an.",
+          },
+          {
+            symptom: "Der Link stirbt früher als das --ttl, das du verlangt hast.",
+            code: [
+              `relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for`,
+            ],
+            fix: "Der Server begrenzt eine Anfrage über die Obergrenze deines Tarifs hinaus stillschweigend — 1 Tag bei Free, 3 bei Plus, 7 bei Pro, 14 bei Max — und up gibt danach diesen Hinweis aus, der sagt, was du wirklich bekommen hast. Auch --burn und --max-downloads beenden einen Link früher. Lade erneut hoch, um einen frischen zu bekommen.",
+          },
+          {
+            symptom: "Du bist angemeldet, aber up sagt, du seist woanders angemeldet.",
+            code: [
+              `relayium whoami
+# you@example.com (https://relayium.com)`,
+            ],
+            fix: "Ein --server, der dein Token nicht ausgestellt hat, wird abgelehnt, statt ihm deine Zugangsdaten zu schicken — das würde sie preisgeben und würde dort ohnehin nicht authentifizieren. Lass --server weg, dann nutzt es den gebundenen Server, den whoami eben ausgegeben hat, oder melde dich zuerst mit relayium login beim anderen Host an.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -699,10 +1159,14 @@ const fr = {
         "Deux choses à faire une seule fois avant votre premier up — installer la CLI et avoir un compte. Si vous avez déjà les deux, passez à la suite.",
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
-      bullets: [
-        "Installez la CLI pour que la commande relayium existe. La ligne ci-dessus place un binaire précompilé dans votre PATH (macOS et Linux ; sous Windows, récupérez le .zip depuis la page des releases) ; relayium --version confirme l'installation, et relayium.com/cli liste toutes les options d'installation. Sans cela, relayium login affiche seulement « command not found ».",
-        "Ayez un compte Relayium gratuit. L'étape dans le navigateur approuve la connexion pour votre compte, il vous en faut donc un avant de pouvoir approuver — connectez-vous d'abord sur relayium.com, ou créez-en un là-bas. Seul le téléversement demande le compte ; le téléchargement jamais.",
-      ],
+      prereqs: {
+        label: "Ce qu'il vous faut",
+        items: [
+          "Installez la CLI pour que la commande relayium existe. La ligne ci-dessous place un binaire précompilé dans votre PATH (macOS et Linux ; sous Windows, récupérez le .zip depuis la page des releases) ; relayium --version confirme l'installation, et relayium.com/cli liste toutes les options d'installation. Sans cela, relayium login affiche seulement « command not found ».",
+          "Ayez un compte Relayium gratuit. L'étape dans le navigateur approuve la connexion pour votre compte, il vous en faut donc un avant de pouvoir approuver — connectez-vous d'abord sur relayium.com, ou créez-en un là-bas. Seul le téléversement demande le compte ; le téléchargement jamais.",
+          "Un moyen d'amener un lien jusqu'à l'autre machine — une application de notes, une fenêtre de chat, un gestionnaire de mots de passe. Quiconque détient le lien peut télécharger le fichier, traitez-le donc comme un mot de passe.",
+        ],
+      },
     },
     {
       heading: "Lier cette machine à votre compte (une seule fois)",
@@ -719,19 +1183,43 @@ const fr = {
     {
       heading: "Téléverser depuis le premier ordinateur",
       body: ["up parcourt les fichiers indiqués, les chiffre localement, téléverse le chiffré et affiche un lien de récupération :"],
-      code: [
-        `relayium up ./report.pdf
-#   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# choisissez sa durée de vie (par défaut : 24 heures) :
+      steps: [
+        {
+          text: "Vérifiez que cette machine est toujours liée à votre compte. La commande affiche le compte et le serveur auquel il est lié ; si elle indique que vous n'êtes pas connecté, faites d'abord l'étape de connexion ci-dessus.",
+          code: ["relayium whoami"],
+        },
+        {
+          text: "Téléversez le fichier. up le chiffre en local, n'envoie que du texte chiffré et affiche le lien de retrait sur la sortie standard.",
+          code: ["relayium up ./report.pdf"],
+        },
+        {
+          text: "Ajoutez une option de conservation si les 24 heures par défaut ne vous conviennent pas. Votre offre plafonne la durée que le serveur retiendra réellement.",
+          code: [
+            `# choisissez sa durée de vie (par défaut : 24 heures) :
 relayium up ./report.pdf --burn              # supprimé après un téléchargement
 relayium up ./report.pdf --ttl 7d            # conservé 7 jours (plafond selon l'offre)
 relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, puis supprimé`,
+          ],
+        },
+        {
+          text: "Amenez le lien là où la deuxième machine pourra le lire. Seul le lien passe sur la sortie standard, un tube reste donc propre.",
+          code: ["relayium up ./report.pdf | pbcopy"],
+        },
       ],
+      success: {
+        label: "À quoi ressemble un téléversement réussi",
+        body: [
+          "Une barre de progression défile sur la sortie d'erreur pendant l'envoi, puis s'efface. Le lien arrive seul sur la sortie standard, et l'indication destinée à l'humain — ainsi qu'une éventuelle note de conservation — suit sur la sortie d'erreur.",
+        ],
+        code: [
+          `relayium up ./report.pdf
+https://relayium.com/d/7fK2p…#k=Xr8s…
+opens in a browser, or fetch it with \`relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'\``,
+        ],
+      },
       bullets: [
-        "Tout se joue sur le lien — copiez-le là où l'autre machine peut le lire. Quiconque a le lien peut télécharger le fichier, traitez-le donc comme un mot de passe.",
         "Rétention : --burn supprime le fichier après un seul téléchargement ; --ttl <durée> le conserve un temps fixe ; --max-downloads <n> autorise un nombre fixe. Si vous n'en donnez aucun, le lien vit 24 heures — la valeur par défaut en l'absence de --ttl.",
         "--ttl accepte une durée avec unité — 30m, 12h, 7d, 2w — ou un simple nombre de secondes : --ttl 3600 et --ttl 1h sont la même demande. Votre offre fixe le plafond : 1 jour en Free, 3 jours en Plus, 7 jours en Pro, 14 jours en Max. Demandez plus que votre plafond et le serveur ne le conserve silencieusement que jusqu'au plafond — up affiche ensuite une note indiquant la durée réellement retenue.",
-        "up exige que vous soyez connecté ; sinon il vous le dit et ne fait rien.",
       ],
     },
     {
@@ -739,7 +1227,30 @@ relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, p
       body: [
         "Sur l'autre machine, passez le lien à down. Pas de connexion, pas de configuration — la clé qui déchiffre le fichier est dans le lien, donc down n'a besoin de rien de votre compte :",
       ],
-      code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+      steps: [
+        {
+          text: "Amenez le lien sur la deuxième machine comme bon vous semble. Rien n'a besoin d'y être installé ni connecté, hormis la CLI elle-même.",
+        },
+        {
+          text: "Passez-le à down entre apostrophes, avec le répertoire où les fichiers doivent atterrir.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+        },
+        {
+          text: "Omettez le répertoire pour atterrir dans le répertoire courant.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'"],
+        },
+      ],
+      success: {
+        label: "À quoi ressemble un téléchargement réussi",
+        body: [
+          "Chaque fichier écrit est listé sur la sortie standard, un par ligne, et le nombre et la destination sont confirmés sur la sortie d'erreur.",
+        ],
+        code: [
+          `relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads
+downloads/report.pdf
+✓ downloaded 1 file(s) to ./downloads`,
+        ],
+      },
       widget: {
         kind: "downloadBuilder",
         linkLabel: "Votre lien de partage",
@@ -752,8 +1263,6 @@ relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, p
         copied: "Copié",
       },
       bullets: [
-        "Mettez le lien entre guillemets : le fragment #k=… porte la clé de déchiffrement, et certains shells traitent # comme un début de commentaire.",
-        "Indiquez un répertoire de destination (ici ./downloads) ou omettez-le pour atterrir dans le répertoire courant.",
         "Si le fichier était en mode burn, a atteint sa limite de téléchargements ou a expiré, le lien est épuisé et down signale qu'il n'existe plus.",
       ],
     },
@@ -772,6 +1281,49 @@ relayium up ./report.pdf --max-downloads 5   # 5 téléchargements autorisés, p
         "Votre fichier est chiffré sur votre machine avant d'être téléversé. La clé de déchiffrement ne vit que dans le fragment #k= du lien et n'est jamais envoyée au serveur — Relayium stocke un chiffré qu'il ne peut pas lire, noms de fichiers compris.",
         "Cela signifie aussi que le lien est le seul chemin de retour vers le fichier : perdez-le et le fichier est irrécupérable, par vous comme par nous.",
       ],
+    },
+    {
+      heading: "Quand un lien ne fonctionne pas",
+      body: [
+        "Quatre pannes couvrent presque tous les up et down ratés, et aucune ne demande de deviner : l'état qui tranche est soit affiché par une commande, soit visible dans la commande que vous avez tapée.",
+      ],
+      troubleshooting: {
+        label: "Symptôme, vérification, correction",
+        items: [
+          {
+            symptom: "up refuse avec « run `relayium login` first ».",
+            code: [
+              `relayium whoami
+# not logged in (run \`relayium login\`)`,
+            ],
+            fix: "Le téléversement range le fichier sous votre compte, cette machine a donc besoin d'informations d'identification. Lancez relayium login et approuvez dans le navigateur sur relayium.com/device ; whoami affiche ensuite votre compte et le serveur auquel il est lié.",
+          },
+          {
+            symptom: "down n'arrive pas à lire le lien, et la clé semble avoir disparu.",
+            code: [
+              `echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p`,
+            ],
+            fix: "Un # sans guillemets commence un commentaire dans la plupart des shells, donc tout ce qui suit #k= n'est jamais parvenu à la commande ; echo montre exactement ce qui a survécu. Encadrez le lien entier d'apostrophes et le fragment, c'est-à-dire la clé de déchiffrement, arrive intact.",
+          },
+          {
+            symptom: "Le lien s'éteint plus tôt que le --ttl demandé.",
+            code: [
+              `relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for`,
+            ],
+            fix: "Le serveur ramène silencieusement une demande au plafond de votre offre — 1 jour en Free, 3 en Plus, 7 en Pro, 14 en Max — et up affiche ensuite cette note pour dire ce que vous avez réellement obtenu. --burn et --max-downloads mettent aussi fin à un lien plus tôt. Téléversez de nouveau pour en obtenir un frais.",
+          },
+          {
+            symptom: "Vous êtes connecté, mais up dit que vous êtes connecté ailleurs.",
+            code: [
+              `relayium whoami
+# you@example.com (https://relayium.com)`,
+            ],
+            fix: "Un --server qui n'a pas émis votre jeton est refusé plutôt que de recevoir vos informations d'identification, ce qui les divulguerait sans même authentifier là-bas. Retirez --server pour utiliser le serveur lié que whoami vient d'afficher, ou lancez d'abord relayium login sur l'autre hôte.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -833,10 +1385,14 @@ const ar = {
         "شيئان لمرة واحدة قبل أول up لك — ثبّت CLI، وامتلك حسابًا. تملك كليهما بالفعل؟ تخطَّ إلى الأمام.",
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
-      bullets: [
-        "ثبّت CLI كي يوجد أمر relayium. يُسقط السطر أعلاه ملفًا ثنائيًا مُسبق البناء في PATH لديك (macOS وLinux؛ على Windows، احصل على ملف .zip من صفحة الإصدارات)؛ ويؤكّده relayium --version، وrelayium.com/cli يسرد كل خيارات التثبيت. تخطَّ هذا وسيطبع relayium login فقط «command not found».",
-        "امتلك حساب Relayium مجانيًا. تعتمد خطوة المتصفح تسجيل الدخول على حسابك، فتحتاج إليه قبل أن تتمكن من الاعتماد — سجّل الدخول في relayium.com أولًا، أو أنشئ واحدًا هناك إن لم تكن قد فعلت. الرفع وحده هو ما يحتاج إلى الحساب؛ أما التنزيل فلا يحتاج أبدًا.",
-      ],
+      prereqs: {
+        label: "ما تحتاج إليه",
+        items: [
+          "ثبّت CLI كي يوجد أمر relayium. يُسقط السطر أدناه ملفًا ثنائيًا مُسبق البناء في PATH لديك (macOS وLinux؛ على Windows، احصل على ملف .zip من صفحة الإصدارات)؛ ويؤكّده relayium --version، وrelayium.com/cli يسرد كل خيارات التثبيت. تخطَّ هذا وسيطبع relayium login فقط «command not found».",
+          "امتلك حساب Relayium مجانيًا. تعتمد خطوة المتصفح تسجيل الدخول على حسابك، فتحتاج إليه قبل أن تتمكن من الاعتماد — سجّل الدخول في relayium.com أولًا، أو أنشئ واحدًا هناك إن لم تكن قد فعلت. الرفع وحده هو ما يحتاج إلى الحساب؛ أما التنزيل فلا يحتاج أبدًا.",
+          "وسيلة لنقل رابط واحد إلى الجهاز الآخر، كتطبيق ملاحظات أو نافذة محادثة أو مدير كلمات مرور. كل من يملك الرابط يستطيع تنزيل الملف، فتعامل معه كأنه كلمة مرور.",
+        ],
+      },
     },
     {
       heading: "اربط هذا الجهاز بحسابك (مرة واحدة)",
@@ -853,19 +1409,43 @@ const ar = {
     {
       heading: "ارفع من الحاسوب الأول",
       body: ["يمرّ up على الملفات التي تعطيه إياها، ويشفّرها محليًا، ويرفع النص المُشفَّر، ويطبع رابط استلام:"],
-      code: [
-        `relayium up ./report.pdf
-#   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# اختر مدة بقائه (الافتراضي: 24 ساعة):
+      steps: [
+        {
+          text: "تأكّد من أن هذا الجهاز ما زال مرتبطًا بحسابك. يطبع الأمر الحساب والخادم المرتبط به، وإن قال إنك غير مسجَّل الدخول فأنجز خطوة تسجيل الدخول أعلاه أولًا.",
+          code: ["relayium whoami"],
+        },
+        {
+          text: "ارفع الملف. يشفّره up محليًا، ولا يرسل إلا نصًا مُشفَّرًا، ويطبع رابط الاستلام على المخرَج القياسي.",
+          code: ["relayium up ./report.pdf"],
+        },
+        {
+          text: "أضِف خيار احتفاظ إن كان الافتراضي البالغ 24 ساعة لا يناسبك. وباقتك هي ما يحدّ المدة التي سيحتفظ بها الخادم فعليًا.",
+          code: [
+            `# اختر مدة بقائه (الافتراضي: 24 ساعة):
 relayium up ./report.pdf --burn              # يُحذف بعد تنزيل واحد
 relayium up ./report.pdf --ttl 7d            # يُحفظ 7 أيام (خطتك تحدّد السقف)
 relayium up ./report.pdf --max-downloads 5   # يسمح بـ 5 تنزيلات ثم يختفي`,
+          ],
+        },
+        {
+          text: "انقل الرابط إلى حيث يستطيع الجهاز الثاني قراءته. لا يخرج على المخرَج القياسي سوى الرابط، فيبقى الأنبوب نظيفًا.",
+          code: ["relayium up ./report.pdf | pbcopy"],
+        },
       ],
+      success: {
+        label: "كيف يبدو الرفع الناجح",
+        body: [
+          "يعمل شريط تقدّم على مخرَج الأخطاء أثناء الرفع ثم يُمحى. ويصل الرابط وحده على المخرَج القياسي، بينما يتبعه على مخرَج الأخطاء التلميح الموجَّه للإنسان، وأي ملاحظة عن مدة الاحتفاظ.",
+        ],
+        code: [
+          `relayium up ./report.pdf
+https://relayium.com/d/7fK2p…#k=Xr8s…
+opens in a browser, or fetch it with \`relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'\``,
+        ],
+      },
       bullets: [
-        "الرابط هو كامل التسليم — انسخه إلى حيث يستطيع الجهاز الآخر قراءته. أي شخص يملك الرابط يستطيع تنزيل الملف، فعامله كأنه كلمة مرور.",
         "الاحتفاظ: --burn يزيل الملف بعد تنزيل واحد؛ و ‎--ttl <duration>‎ يبقيه مدة ثابتة؛ و ‎--max-downloads <n>‎ يسمح بعدد ثابت من التنزيلات. إن لم تعطِ أيًّا منها عاش الرابط 24 ساعة — وهذا هو الافتراضي عند غياب --ttl.",
         "يقبل --ttl مدةً بوحدة — 30m أو 12h أو 7d أو 2w — كما يقبل عدد ثوانٍ مجردًا، فـ --ttl 3600 و --ttl 1h طلب واحد. وخطتك تحدّد السقف: يوم واحد في Free، و3 أيام في Plus، و7 أيام في Pro، و14 يومًا في Max. وإن طلبت أطول من سقفك، احتفظ الخادم به حتى السقف فقط وبصمت — ثم يطبع up سطرًا يخبرك بالمدة التي حُفِظ بها فعلًا.",
-        "يحتاج up إلى أن تكون مسجّل الدخول؛ إن لم تكن، يخبرك ولا يفعل شيئًا.",
       ],
     },
     {
@@ -873,7 +1453,30 @@ relayium up ./report.pdf --max-downloads 5   # يسمح بـ 5 تنزيلات ث
       body: [
         "على الجهاز الآخر، سلّم الرابط إلى down. بلا تسجيل دخول، بلا إعداد — المفتاح الذي يفكّ تشفير الملف داخل الرابط، فلا يحتاج down إلى شيء من حسابك:",
       ],
-      code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+      steps: [
+        {
+          text: "انقل الرابط إلى الجهاز الثاني بالطريقة التي تناسبك. لا شيء يحتاج إلى تثبيت أو تسجيل دخول هناك سوى واجهة CLI نفسها.",
+        },
+        {
+          text: "مرِّره إلى down بين علامتَي اقتباس مفردتين، مع المجلد الذي يجب أن تحطّ فيه الملفات.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+        },
+        {
+          text: "احذف المجلد لتحطّ في المجلد الحالي.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'"],
+        },
+      ],
+      success: {
+        label: "كيف يبدو التنزيل الناجح",
+        body: [
+          "يُدرَج كل ملف كتبه على المخرَج القياسي، سطرًا لكل ملف، ويُؤكَّد العدد والوجهة على مخرَج الأخطاء.",
+        ],
+        code: [
+          `relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads
+downloads/report.pdf
+✓ downloaded 1 file(s) to ./downloads`,
+        ],
+      },
       widget: {
         kind: "downloadBuilder",
         linkLabel: "رابط المشاركة لديك",
@@ -886,8 +1489,6 @@ relayium up ./report.pdf --max-downloads 5   # يسمح بـ 5 تنزيلات ث
         copied: "تم النسخ",
       },
       bullets: [
-        "ضع الرابط بين علامتَي اقتباس: يحمل الجزء #k=… مفتاح فك التشفير، وبعض الأصداف تعامل # كبداية تعليق.",
-        "أعطِ مجلد وجهة (هنا ./downloads) أو احذفه لتحطّ في المجلد الحالي.",
         "إذا ضُبط الملف على الحرق، أو بلغ حد تنزيلاته، أو انتهت صلاحيته، فالرابط مُستنفَد وسيبلّغ down أنه لم يعد موجودًا.",
       ],
     },
@@ -906,6 +1507,49 @@ relayium up ./report.pdf --max-downloads 5   # يسمح بـ 5 تنزيلات ث
         "يُشفَّر ملفك على جهازك قبل رفعه. يعيش مفتاح فك التشفير فقط في الجزء #k= من الرابط ولا يُرسَل إلى الخادم أبدًا — يخزّن Relayium نصًا مُشفَّرًا لا يستطيع قراءته، بما في ذلك أسماء الملفات.",
         "يعني ذلك أيضًا أن الرابط هو الطريق الوحيد للعودة إلى الملف: افقده يصبح الملف غير قابل للاسترجاع، لا منك ولا منّا.",
       ],
+    },
+    {
+      heading: "حين لا يعمل الرابط",
+      body: [
+        "أربعة أعطال تغطي تقريبًا كل عملية up أو down فاشلة، ولا يحتاج أي منها إلى تخمين: فالحالة التي تحسم الأمر إما يطبعها أمر، وإما تراها ماثلة في الأمر الذي كتبته.",
+      ],
+      troubleshooting: {
+        label: "العَرَض، الفحص، الإصلاح",
+        items: [
+          {
+            symptom: "يرفض up ويقول «run `relayium login` first».",
+            code: [
+              `relayium whoami
+# not logged in (run \`relayium login\`)`,
+            ],
+            fix: "يحفظ الرفع الملف تحت حسابك، فيحتاج هذا الجهاز إلى بيانات اعتماد. شغّل relayium login ووافِق في المتصفح على relayium.com/device، فيطبع whoami بعدها حسابك والخادم المرتبط به.",
+          },
+          {
+            symptom: "يعجز down عن قراءة الرابط، ويبدو أن المفتاح اختفى.",
+            code: [
+              `echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p`,
+            ],
+            fix: "تبدأ العلامة # بلا اقتباس تعليقًا في معظم الأصداف، فلم يصل إلى الأمر أي شيء ابتداءً من ‎#k=‎، ويُظهر echo ما بقي منه بالضبط. ضع الرابط كله بين علامتَي اقتباس مفردتين فيصل الجزء الذي هو مفتاح فك التشفير سليمًا.",
+          },
+          {
+            symptom: "ينتهي مفعول الرابط قبل مدة --ttl التي طلبتها.",
+            code: [
+              `relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for`,
+            ],
+            fix: "يقلّص الخادم بصمت أي طلب يتجاوز سقف باقتك — يوم واحد في Free، وثلاثة في Plus، وسبعة في Pro، وأربعة عشر في Max — ثم يطبع up هذه الملاحظة ليخبرك بما حصلت عليه فعلًا. كما ينهي --burn و--max-downloads الرابط مبكرًا. ارفع من جديد للحصول على رابط جديد.",
+          },
+          {
+            symptom: "أنت مسجَّل الدخول، لكن up يقول إنك مسجَّل في مكان آخر.",
+            code: [
+              `relayium whoami
+# you@example.com (https://relayium.com)`,
+            ],
+            fix: "يُرفض أي --server لم يُصدِر رمزك بدل أن تُرسَل إليه بيانات اعتمادك، إذ إن إرسالها يكشفها ولا يصادق عليك هناك أصلًا. إما أن تحذف --server ليستخدم الخادم المرتبط الذي طبعه whoami للتو، وإما أن تشغّل relayium login على المضيف الآخر أولًا.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -967,10 +1611,14 @@ const es = {
         "Dos cosas de una sola vez antes de tu primer up — instalar la CLI y tener una cuenta. ¿Ya tienes ambas? Sáltate esto.",
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
-      bullets: [
-        "Instala la CLI para que exista el comando relayium. La línea de arriba deja un binario precompilado en tu PATH (macOS y Linux; en Windows, coge el .zip de la página de releases); relayium --version lo confirma, y relayium.com/cli lista todas las opciones de instalación. Sáltate esto y relayium login solo imprimirá « command not found ».",
-        "Ten una cuenta gratuita de Relayium. El paso del navegador aprueba el inicio de sesión contra tu cuenta, así que necesitas una antes de poder aprobar — inicia sesión primero en relayium.com, o crea una allí si no la tienes. Solo subir necesita la cuenta; descargar nunca.",
-      ],
+      prereqs: {
+        label: "Lo que necesitas",
+        items: [
+          "Instala la CLI para que exista el comando relayium. La línea de abajo deja un binario precompilado en tu PATH (macOS y Linux; en Windows, coge el .zip de la página de releases); relayium --version lo confirma, y relayium.com/cli lista todas las opciones de instalación. Sáltate esto y relayium login solo imprimirá « command not found ».",
+          "Ten una cuenta gratuita de Relayium. El paso del navegador aprueba el inicio de sesión contra tu cuenta, así que necesitas una antes de poder aprobar — inicia sesión primero en relayium.com, o crea una allí si no la tienes. Solo subir necesita la cuenta; descargar nunca.",
+          "Una forma de llevar un enlace a la otra máquina: una app de notas, una ventana de chat, un gestor de contraseñas. Cualquiera que tenga el enlace puede descargar el archivo, así que trátalo como una contraseña.",
+        ],
+      },
     },
     {
       heading: "Vincula esta máquina a tu cuenta (una vez)",
@@ -987,19 +1635,43 @@ const es = {
     {
       heading: "Sube desde el primer ordenador",
       body: ["up recorre los archivos que le das, los cifra localmente, sube el texto cifrado e imprime un enlace de recogida:"],
-      code: [
-        `relayium up ./report.pdf
-#   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# elige cuánto vive (por defecto: 24 horas):
+      steps: [
+        {
+          text: "Comprueba que esta máquina sigue vinculada a tu cuenta. Imprime la cuenta y el servidor al que está vinculada; si dice que no has iniciado sesión, haz antes el paso de inicio de sesión de arriba.",
+          code: ["relayium whoami"],
+        },
+        {
+          text: "Sube el archivo. up lo cifra en local, envía solo texto cifrado e imprime el enlace de recogida en la salida estándar.",
+          code: ["relayium up ./report.pdf"],
+        },
+        {
+          text: "Añade una opción de retención si las 24 horas por defecto no te sirven. Tu plan pone el tope de cuánto lo guardará realmente el servidor.",
+          code: [
+            `# elige cuánto vive (por defecto: 24 horas):
 relayium up ./report.pdf --burn              # borrado tras una descarga
 relayium up ./report.pdf --ttl 7d            # guardado 7 días (tu plan pone el tope)
 relayium up ./report.pdf --max-downloads 5   # 5 descargas y luego desaparece`,
+          ],
+        },
+        {
+          text: "Lleva el enlace a donde la segunda máquina pueda leerlo. A la salida estándar solo va el enlace, así que una tubería queda limpia.",
+          code: ["relayium up ./report.pdf | pbcopy"],
+        },
       ],
+      success: {
+        label: "Cómo se ve una subida correcta",
+        body: [
+          "Durante la subida corre una barra de progreso en la salida de error, que luego se borra. El enlace aparece solo en la salida estándar, y la pista para humanos —más cualquier aviso de retención— la sigue en la salida de error.",
+        ],
+        code: [
+          `relayium up ./report.pdf
+https://relayium.com/d/7fK2p…#k=Xr8s…
+opens in a browser, or fetch it with \`relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'\``,
+        ],
+      },
       bullets: [
-        "El enlace es toda la entrega — cópialo a donde la otra máquina pueda leerlo. Cualquiera con el enlace puede descargar el archivo, así que trátalo como una contraseña.",
         "Retención: --burn elimina el archivo tras una sola descarga; --ttl <duración> lo conserva un tiempo fijo; --max-downloads <n> permite un número fijo de descargas. Si no das ninguno de los tres, el enlace vive 24 horas — el valor por defecto cuando falta --ttl.",
         "--ttl acepta una duración con unidad —30m, 12h, 7d, 2w— o un simple número de segundos, así que --ttl 3600 y --ttl 1h son la misma petición. Tu plan pone el tope: 1 día en Free, 3 días en Plus, 7 días en Pro, 14 días en Max. Si pides más que tu tope, el servidor lo guarda en silencio solo hasta el tope, y up imprime después una nota diciéndote cuánto lo guardó en realidad.",
-        "up necesita que hayas iniciado sesión; si no lo has hecho, te lo dice y no hace nada.",
       ],
     },
     {
@@ -1007,7 +1679,30 @@ relayium up ./report.pdf --max-downloads 5   # 5 descargas y luego desaparece`,
       body: [
         "En la otra máquina, pasa el enlace a down. Sin iniciar sesión, sin configuración — la clave que descifra el archivo está dentro del enlace, así que down no necesita nada de tu cuenta:",
       ],
-      code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+      steps: [
+        {
+          text: "Lleva el enlace a la segunda máquina como prefieras. Ahí no hace falta instalar ni iniciar sesión en nada más allá de la propia CLI.",
+        },
+        {
+          text: "Pásaselo a down entre comillas simples, junto con el directorio donde deben aterrizar los archivos.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+        },
+        {
+          text: "Omite el directorio para guardarlo en el actual.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'"],
+        },
+      ],
+      success: {
+        label: "Cómo se ve una descarga correcta",
+        body: [
+          "Cada archivo escrito se lista en la salida estándar, uno por línea, y el número y el destino se confirman en la salida de error.",
+        ],
+        code: [
+          `relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads
+downloads/report.pdf
+✓ downloaded 1 file(s) to ./downloads`,
+        ],
+      },
       widget: {
         kind: "downloadBuilder",
         linkLabel: "Tu enlace para compartir",
@@ -1020,8 +1715,6 @@ relayium up ./report.pdf --max-downloads 5   # 5 descargas y luego desaparece`,
         copied: "Copiado",
       },
       bullets: [
-        "Pon el enlace entre comillas: el fragmento #k=… lleva la clave de descifrado, y algunas shells tratan # como el inicio de un comentario.",
-        "Da un directorio de destino (aquí ./downloads) u omítelo para guardarse en el directorio actual.",
         "Si el archivo estaba en modo de un solo uso, ha alcanzado su límite de descargas o ha caducado, el enlace está agotado y down informa de que ya no existe.",
       ],
     },
@@ -1040,6 +1733,49 @@ relayium up ./report.pdf --max-downloads 5   # 5 descargas y luego desaparece`,
         "Tu archivo se cifra en tu máquina antes de subirse. La clave de descifrado vive solo en el fragmento #k= del enlace y nunca se envía al servidor — Relayium almacena texto cifrado que no puede leer, incluidos los nombres de los archivos.",
         "Eso también significa que el enlace es la única vía de vuelta al archivo: si lo pierdes, el archivo es irrecuperable, ni por ti ni por nosotros.",
       ],
+    },
+    {
+      heading: "Cuando un enlace no funciona",
+      body: [
+        "Cuatro fallos cubren casi todos los up y down que salen mal, y ninguno exige adivinar: el estado que lo decide lo imprime un comando, o se ve en el comando que escribiste.",
+      ],
+      troubleshooting: {
+        label: "Síntoma, comprobación, solución",
+        items: [
+          {
+            symptom: "up se niega con «run `relayium login` first».",
+            code: [
+              `relayium whoami
+# not logged in (run \`relayium login\`)`,
+            ],
+            fix: "Subir guarda el archivo bajo tu cuenta, así que esta máquina necesita credenciales. Ejecuta relayium login y apruébalo en el navegador en relayium.com/device; después whoami imprime tu cuenta y el servidor al que está vinculada.",
+          },
+          {
+            symptom: "down no consigue leer el enlace y la clave parece haberse esfumado.",
+            code: [
+              `echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p`,
+            ],
+            fix: "Un # sin comillas inicia un comentario en la mayoría de las shells, así que todo lo que va desde #k= nunca llegó al comando; echo muestra exactamente lo que sobrevivió. Envuelve el enlace entero en comillas simples y el fragmento, que es la clave de descifrado, llega intacto.",
+          },
+          {
+            symptom: "El enlace muere antes del --ttl que pediste.",
+            code: [
+              `relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for`,
+            ],
+            fix: "El servidor recorta en silencio una petición que supere el tope de tu plan —1 día en Free, 3 en Plus, 7 en Pro, 14 en Max— y up imprime después ese aviso para decir lo que realmente obtuviste. --burn y --max-downloads también terminan un enlace antes. Vuelve a subirlo para obtener uno nuevo.",
+          },
+          {
+            symptom: "Has iniciado sesión, pero up dice que la tienes iniciada en otro sitio.",
+            code: [
+              `relayium whoami
+# you@example.com (https://relayium.com)`,
+            ],
+            fix: "Un --server que no emitió tu token se rechaza en lugar de recibir tus credenciales, lo que las filtraría y ni siquiera te autenticaría allí. O quitas --server para usar el servidor vinculado que whoami acaba de imprimir, o ejecutas antes relayium login contra el otro host.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -1101,10 +1837,14 @@ const pt = {
         "Duas coisas para fazer uma vez só antes do seu primeiro up — instalar a CLI e ter uma conta. Já tem as duas? Pule adiante.",
       ],
       code: ["curl -fsSL https://relayium.com/install.sh | sh"],
-      bullets: [
-        "Instale a CLI para que o comando relayium exista. A linha acima coloca um binário pré-compilado no seu PATH (macOS e Linux; no Windows, pegue o .zip na página de releases); relayium --version confirma, e relayium.com/cli lista todas as opções de instalação. Pule isso e o relayium login só imprimirá “command not found”.",
-        "Tenha uma conta gratuita do Relayium. O passo do navegador aprova o login contra a sua conta, então você precisa de uma antes de poder aprovar — faça login em relayium.com primeiro, ou crie uma lá se ainda não tiver. Só o envio precisa da conta; baixar nunca.",
-      ],
+      prereqs: {
+        label: "O que você precisa",
+        items: [
+          "Instale a CLI para que o comando relayium exista. A linha abaixo coloca um binário pré-compilado no seu PATH (macOS e Linux; no Windows, pegue o .zip na página de releases); relayium --version confirma, e relayium.com/cli lista todas as opções de instalação. Pule isso e o relayium login só imprimirá “command not found”.",
+          "Tenha uma conta gratuita do Relayium. O passo do navegador aprova o login contra a sua conta, então você precisa de uma antes de poder aprovar — faça login em relayium.com primeiro, ou crie uma lá se ainda não tiver. Só o envio precisa da conta; baixar nunca.",
+          "Um jeito de levar um link até a outra máquina: um app de notas, uma janela de chat, um gerenciador de senhas. Qualquer um com o link consegue baixar o arquivo, então trate-o como uma senha.",
+        ],
+      },
     },
     {
       heading: "Vincule esta máquina à sua conta (uma vez)",
@@ -1121,19 +1861,43 @@ const pt = {
     {
       heading: "Envie a partir do primeiro computador",
       body: ["O up percorre os arquivos que você passa, criptografa-os localmente, envia o texto cifrado e imprime um link de retirada:"],
-      code: [
-        `relayium up ./report.pdf
-#   → https://relayium.com/d/7fK2p…#k=Xr8s…`,
-        `# escolha quanto tempo ele vive (padrão: 24 horas):
+      steps: [
+        {
+          text: "Confirme que esta máquina continua vinculada à sua conta. Ela imprime a conta e o servidor a que está vinculada; se disser que você não está logado, faça antes o passo de login acima.",
+          code: ["relayium whoami"],
+        },
+        {
+          text: "Envie o arquivo. O up o criptografa localmente, manda só texto cifrado e imprime o link de retirada na saída padrão.",
+          code: ["relayium up ./report.pdf"],
+        },
+        {
+          text: "Acrescente uma opção de retenção se o padrão de 24 horas não servir. O seu plano limita quanto tempo o servidor de fato vai guardar.",
+          code: [
+            `# escolha quanto tempo ele vive (padrão: 24 horas):
 relayium up ./report.pdf --burn              # apagado após um download
 relayium up ./report.pdf --ttl 7d            # guardado por 7 dias (seu plano define o teto)
 relayium up ./report.pdf --max-downloads 5   # 5 downloads permitidos, depois some`,
+          ],
+        },
+        {
+          text: "Leve o link para onde a segunda máquina consiga lê-lo. Só o link vai para a saída padrão, então um pipe fica limpo.",
+          code: ["relayium up ./report.pdf | pbcopy"],
+        },
       ],
+      success: {
+        label: "Como é um envio bem-sucedido",
+        body: [
+          "Durante o envio corre uma barra de progresso na saída de erro, que depois some. O link aparece sozinho na saída padrão, e a dica para humanos — mais qualquer aviso de retenção — vem em seguida na saída de erro.",
+        ],
+        code: [
+          `relayium up ./report.pdf
+https://relayium.com/d/7fK2p…#k=Xr8s…
+opens in a browser, or fetch it with \`relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'\``,
+        ],
+      },
       bullets: [
-        "O link é toda a entrega — copie-o para onde a outra máquina possa lê-lo. Qualquer pessoa com o link pode baixar o arquivo, então trate-o como uma senha.",
         "Retenção: --burn remove o arquivo após um único download; --ttl <duração> o mantém por um tempo fixo; --max-downloads <n> permite um número fixo de downloads. Não informe nenhum dos três e o link vive 24 horas — o padrão quando --ttl está ausente.",
         "O --ttl aceita uma duração com unidade — 30m, 12h, 7d, 2w — ou um simples número de segundos, então --ttl 3600 e --ttl 1h são o mesmo pedido. O seu plano define o teto: 1 dia no Free, 3 dias no Plus, 7 dias no Pro, 14 dias no Max. Peça mais do que o seu teto e o servidor o guarda em silêncio apenas até o teto — o up imprime depois um aviso dizendo por quanto tempo ele realmente ficou guardado.",
-        "O up precisa que você esteja logado; se não estiver, ele avisa e não faz nada.",
       ],
     },
     {
@@ -1141,7 +1905,30 @@ relayium up ./report.pdf --max-downloads 5   # 5 downloads permitidos, depois so
       body: [
         "Na outra máquina, passe o link para o down. Sem login, sem configuração — a chave que descriptografa o arquivo está dentro do link, então o down não precisa de nada da sua conta:",
       ],
-      code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+      steps: [
+        {
+          text: "Leve o link até a segunda máquina do jeito que preferir. Ali não é preciso instalar nem logar em nada além da própria CLI.",
+        },
+        {
+          text: "Passe-o para o down entre aspas simples, junto com o diretório onde os arquivos devem chegar.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads"],
+        },
+        {
+          text: "Omita o diretório para cair no atual.",
+          code: ["relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…'"],
+        },
+      ],
+      success: {
+        label: "Como é um download bem-sucedido",
+        body: [
+          "Cada arquivo escrito é listado na saída padrão, um por linha, e a contagem e o destino são confirmados na saída de erro.",
+        ],
+        code: [
+          `relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./downloads
+downloads/report.pdf
+✓ downloaded 1 file(s) to ./downloads`,
+        ],
+      },
       widget: {
         kind: "downloadBuilder",
         linkLabel: "Seu link de compartilhamento",
@@ -1154,8 +1941,6 @@ relayium up ./report.pdf --max-downloads 5   # 5 downloads permitidos, depois so
         copied: "Copiado",
       },
       bullets: [
-        "Coloque o link entre aspas: o fragmento #k=… carrega a chave de descriptografia, e alguns shells tratam # como o início de um comentário.",
-        "Informe um diretório de destino (aqui ./downloads) ou omita-o para cair no diretório atual.",
         "Se o arquivo foi definido para queima, atingiu seu limite de downloads ou expirou, o link está esgotado e o down informa que ele não existe mais.",
       ],
     },
@@ -1174,6 +1959,49 @@ relayium up ./report.pdf --max-downloads 5   # 5 downloads permitidos, depois so
         "Seu arquivo é criptografado na sua máquina antes de ser enviado. A chave de descriptografia vive apenas no fragmento #k= do link e nunca é enviada ao servidor — o Relayium armazena texto cifrado que não consegue ler, incluindo os nomes dos arquivos.",
         "Isso também significa que o link é o único caminho de volta ao arquivo: perca-o e o arquivo fica irrecuperável, por você ou por nós.",
       ],
+    },
+    {
+      heading: "Quando um link não funciona",
+      body: [
+        "Quatro falhas cobrem quase todo up ou down malsucedido, e nenhuma exige adivinhação: o estado que decide é impresso por um comando ou está visível no comando que você digitou.",
+      ],
+      troubleshooting: {
+        label: "Sintoma, verificação, correção",
+        items: [
+          {
+            symptom: "O up recusa com “run `relayium login` first”.",
+            code: [
+              `relayium whoami
+# not logged in (run \`relayium login\`)`,
+            ],
+            fix: "Enviar guarda o arquivo sob a sua conta, então esta máquina precisa de credenciais. Rode relayium login e aprove no navegador em relayium.com/device; depois disso o whoami imprime sua conta e o servidor a que está vinculada.",
+          },
+          {
+            symptom: "O down não consegue ler o link, e a chave parece ter sumido.",
+            code: [
+              `echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p`,
+            ],
+            fix: "Um # sem aspas começa um comentário na maioria dos shells, então tudo a partir de #k= nunca chegou ao comando; o echo mostra exatamente o que sobrou. Coloque o link inteiro entre aspas simples e o fragmento, que é a chave de descriptografia, chega intacto.",
+          },
+          {
+            symptom: "O link morre antes do --ttl que você pediu.",
+            code: [
+              `relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for`,
+            ],
+            fix: "O servidor corta em silêncio um pedido acima do teto do seu plano — 1 dia no Free, 3 no Plus, 7 no Pro, 14 no Max — e o up imprime depois esse aviso para dizer o que você realmente conseguiu. --burn e --max-downloads também encerram um link mais cedo. Envie de novo para obter um link novo.",
+          },
+          {
+            symptom: "Você está logado, mas o up diz que você está logado em outro lugar.",
+            code: [
+              `relayium whoami
+# you@example.com (https://relayium.com)`,
+            ],
+            fix: "Um --server que não emitiu o seu token é recusado em vez de receber suas credenciais, o que as vazaria e nem autenticaria ali. Ou você tira o --server para usar o servidor vinculado que o whoami acabou de imprimir, ou roda antes relayium login contra o outro host.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -1212,6 +2040,6 @@ relayium up ./report.pdf --max-downloads 5   # 5 downloads permitidos, depois so
 export default {
   slug: "guides/push-to-cloud-pull-on-another-computer",
   published: "2026-07-12",
-  updated: "2026-07-12",
+  updated: "2026-08-05",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

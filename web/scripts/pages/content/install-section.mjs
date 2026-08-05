@@ -222,7 +222,18 @@ export function withInstall(langs, snippet = installSection) {
   const out = {};
   for (const [l, doc] of Object.entries(langs)) {
     const sections = doc.sections || [];
-    const hasCmd = (s) => (s.code || []).some((block) => block.includes("relayium "));
+    // Every command block a section can hold, not just `section.code`. A tutorial
+    // section keeps its commands inside its numbered steps (and its expected
+    // output inside `success`), so a `code`-only scan would miss the first
+    // `relayium` command on exactly the guides that lead with a procedure, and
+    // drop the install step below it — after the command it exists to precede.
+    const codeBlocks = (s) => [
+      ...(s.code || []),
+      ...(s.steps || []).flatMap((step) => step.code || []),
+      ...(s.success?.code || []),
+      ...(s.troubleshooting?.items || []).flatMap((i) => i.code || []),
+    ];
+    const hasCmd = (s) => codeBlocks(s).some((block) => block.includes("relayium "));
     let i = sections.findIndex(hasCmd);
     if (i < 0) i = 0;
     const snip = snippet[l] || snippet.en;

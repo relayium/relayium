@@ -15,6 +15,15 @@ const en = {
   sections: [
     {
       heading: "Install in one command",
+      prereqs: {
+        label: "What you need",
+        items: [
+          "A macOS, Linux or Windows machine with a terminal. Prebuilt binaries cover x86-64 and arm64 on all three.",
+          "curl, for the one-line install on macOS and Linux — curl --version prints a version. On Windows, download the .zip from the releases page instead.",
+          "A writable install directory. The script uses /usr/local/bin when it can write there and ~/.local/bin otherwise, and its last lines name the one it chose.",
+          "Nothing else for push, pull or daemon direct. Only minting a pairing code with send or text, and uploading with up, need a free Relayium account.",
+        ],
+      },
       body: [
         "On macOS or Linux, one command downloads a prebuilt binary for your OS and puts it on your PATH:",
       ],
@@ -53,12 +62,86 @@ const en = {
       body: [
         "The quickest thing to try is copying a folder to a server you can SSH into. Relayium uses your existing SSH access, so there is nothing to configure on the remote and no account to create:",
       ],
-      code: ["relayium push ./photos user@your-server:backups/"],
+      steps: [
+        {
+          text: "Check the CLI is on your PATH. It prints a version string, not \"command not found\".",
+          code: ["relayium version"],
+        },
+        {
+          text: "Check you can already reach the server the ordinary way. push reuses exactly this access, so an ssh that works settles the connection and authentication prerequisite — it does not promise the transfer itself, which still needs write permission and free space at user@your-server:backups/.",
+          code: ["ssh user@your-server true"],
+        },
+        {
+          text: "Push the folder. The last argument is host:path — the colon is what marks it remote, and a trailing slash means \"into this directory\".",
+          code: ["relayium push ./photos user@your-server:backups/"],
+        },
+        {
+          text: "Confirm the files arrived where you expected. push ./photos reproduces photos/ under the destination, so the folder name comes along.",
+          code: ["ssh user@your-server ls backups/photos"],
+        },
+      ],
+      success: {
+        label: "What a successful run looks like",
+        body: [
+          "With relayium on the far end, push prints one line per completed file and exits 0. Against a bare server it prints the tar-stream summary instead — both are success.",
+        ],
+        code: [
+          `relayium push ./photos user@your-server:backups/
+  photos/IMG_0413.jpg (2314518 bytes)
+  photos/IMG_0414.jpg (1998233 bytes)
+echo $?
+# 0`,
+        ],
+      },
       bullets: [
         "If relayium is installed on the remote too, push uses the native protocol (resumable, per-file SHA-256).",
         "push falls back to a plain tar stream when relayium isn't on the remote, so it works even against a bare server — that fallback is push-only.",
         "Pull the same files back with: relayium pull user@your-server:backups/ ./restore — pull always needs relayium on the remote (it has no tar fallback), so install it there first.",
       ],
+    },
+    {
+      heading: "When the first command doesn't work",
+      body: [
+        "Four things go wrong on a first run more often than everything else put together. None of them needs guesswork — each has a command whose output decides it.",
+      ],
+      troubleshooting: {
+        label: "Symptom, check, fix",
+        items: [
+          {
+            symptom: "\"relayium: command not found\", right after the install script said it succeeded.",
+            code: [
+              `command -v relayium
+# (prints nothing)`,
+            ],
+            fix: "The binary is installed, but its directory isn't on your PATH. The script's last lines name the directory it used and print the exact export PATH line to add; run them, then open a new shell and try relayium version again.",
+          },
+          {
+            symptom: "push exits immediately with \"push destination must be remote (host:path)\".",
+            code: [
+              `relayium push ./photos user@your-server backups/
+# push destination must be remote (host:path)`,
+            ],
+            fix: "The destination lost its colon, so relayium read it as a local path. Write it scp-style, with no space between the host and the path: user@your-server:backups/",
+          },
+          {
+            symptom: "pull fails against a server that push worked fine against.",
+            code: [
+              `ssh user@your-server command -v relayium
+# (prints nothing)`,
+            ],
+            fix: "pull has no tar fallback, because the remote is the sender in that direction — it needs relayium installed there. Install it on the server with the same one-line command and run the pull again.",
+          },
+          {
+            symptom: "Two machines join the same code and one prints \"the other side is running `relayium text`, not `relayium send`/`relayium receive`\".",
+            code: [
+              `# a message session: BOTH ends run text
+relayium text
+relayium text 483920`,
+            ],
+            fix: "The two ends ran different commands. Use relayium text on both machines for messages, and relayium send on one with relayium receive on the other for files; the mismatch is refused before anything is dialed, so nothing was sent.",
+          },
+        ],
+      },
     },
     {
       heading: "Free, and private by design",
@@ -109,6 +192,15 @@ const zh = {
   sections: [
     {
       heading: "一条命令完成安装",
+      prereqs: {
+        label: "你需要准备",
+        items: [
+          "一台有终端的 macOS、Linux 或 Windows 机器。三个系统都提供 x86-64 和 arm64 的预编译二进制。",
+          "curl，用于 macOS 和 Linux 上的一行安装——curl --version 会打印版本号。Windows 请改从发布页下载 .zip。",
+          "一个可写的安装目录。脚本能写 /usr/local/bin 时就用它，否则用 ~/.local/bin，最后几行会写明它选了哪个。",
+          "push、pull 和 daemon 直连不需要别的东西。只有用 send 或 text 生成配对码、以及用 up 上传，才需要一个免费的 Relayium 账号。",
+        ],
+      },
       body: [
         "在 macOS 或 Linux 上，一条命令就能下载适配你操作系统的预编译二进制，并放进你的 PATH：",
       ],
@@ -147,12 +239,86 @@ const zh = {
       body: [
         "最快上手的方式是把一个文件夹复制到你能 SSH 进去的服务器。Relayium 使用你现有的 SSH 访问权限，远程无需任何配置，也不用创建账号：",
       ],
-      code: ["relayium push ./photos user@your-server:backups/"],
+      steps: [
+        {
+          text: "确认 CLI 已在 PATH 里。它会打印版本号，而不是 “command not found”。",
+          code: ["relayium version"],
+        },
+        {
+          text: "确认你平时就能连上那台服务器。push 用的正是这条访问路径，所以 ssh 通了，连接和认证这项前置条件就满足了——但这并不保证传输本身成功，push 还需要 user@your-server:backups/ 有写入权限和足够空间。",
+          code: ["ssh user@your-server true"],
+        },
+        {
+          text: "把文件夹推上去。最后一个参数是 host:path——冒号才是把它标记为远程的东西，末尾的斜杠表示“放进这个目录里”。",
+          code: ["relayium push ./photos user@your-server:backups/"],
+        },
+        {
+          text: "确认文件落在了你以为的位置。push ./photos 会在目标下重建 photos/，所以文件夹名会一起带过去。",
+          code: ["ssh user@your-server ls backups/photos"],
+        },
+      ],
+      success: {
+        label: "成功时你会看到什么",
+        body: [
+          "远端装了 relayium 时，push 每传完一个文件打印一行，并以 0 退出。对着裸机服务器则改为打印 tar 流的汇总行——两者都算成功。",
+        ],
+        code: [
+          `relayium push ./photos user@your-server:backups/
+  photos/IMG_0413.jpg (2314518 bytes)
+  photos/IMG_0414.jpg (1998233 bytes)
+echo $?
+# 0`,
+        ],
+      },
       bullets: [
         "如果远程也装了 relayium，push 就会使用原生协议（可续传、逐文件 SHA-256）。",
         "如果远程没装 relayium，push 会退化为普通的 tar 流，因此在裸机服务器上依然可用——这个兜底只属于 push。",
         "用这个命令把同样的文件取回来：relayium pull user@your-server:backups/ ./restore——pull 始终需要远程装有 relayium（没有 tar 兜底），请先在远程装好它。",
       ],
+    },
+    {
+      heading: "第一条命令跑不通时",
+      body: [
+        "第一次运行时出问题，下面四种加起来比其他所有情况都多。它们都不需要靠猜——每一种都有一条命令，输出就能定性。",
+      ],
+      troubleshooting: {
+        label: "现象、检查、修复",
+        items: [
+          {
+            symptom: "安装脚本明明说成功了，却报 “relayium: command not found”。",
+            code: [
+              `command -v relayium
+# （什么都不打印）`,
+            ],
+            fix: "二进制装好了，只是它所在的目录不在 PATH 里。脚本最后几行会写明它用了哪个目录，并打印出该加的那行 export PATH；照着执行，然后开一个新 shell 再试 relayium version。",
+          },
+          {
+            symptom: "push 立刻退出并报 “push destination must be remote (host:path)”。",
+            code: [
+              `relayium push ./photos user@your-server backups/
+# push destination must be remote (host:path)`,
+            ],
+            fix: "目标里的冒号丢了，于是 relayium 把它当成了本地路径。按 scp 的写法写，主机和路径之间不要有空格：user@your-server:backups/",
+          },
+          {
+            symptom: "同一台服务器 push 没问题，pull 却失败。",
+            code: [
+              `ssh user@your-server command -v relayium
+# （什么都不打印）`,
+            ],
+            fix: "pull 没有 tar 兜底，因为在这个方向上远端才是发送方——它那边必须装有 relayium。用同一条一行命令在服务器上装好，再重新 pull。",
+          },
+          {
+            symptom: "两台机器加入了同一个码，其中一台打印 “the other side is running `relayium text`, not `relayium send`/`relayium receive`”。",
+            code: [
+              `# 消息会话：两端都跑 text
+relayium text
+relayium text 483920`,
+            ],
+            fix: "两端跑的是不同的命令。发消息就两台都用 relayium text；传文件就一台 relayium send、另一台 relayium receive。这种不匹配会在拨号之前就被拒绝，所以什么都没发出去。",
+          },
+        ],
+      },
     },
     {
       heading: "免费，且从设计上保护隐私",
@@ -203,6 +369,15 @@ const ja = {
   sections: [
     {
       heading: "1コマンドでインストール",
+      prereqs: {
+        label: "必要なもの",
+        items: [
+          "端末のある macOS、Linux、Windows のいずれかのマシン。ビルド済みバイナリは3つとも x86-64 と arm64 を用意しています。",
+          "macOS と Linux の1行インストールに使う curl。curl --version がバージョンを表示します。Windows ではリリースページから .zip をダウンロードしてください。",
+          "書き込めるインストール先ディレクトリ。スクリプトは書き込める場合は /usr/local/bin を、そうでなければ ~/.local/bin を使い、最後の数行でどちらを選んだかを表示します。",
+          "push、pull、デーモン直結にはこれ以外は不要です。無料の Relayium アカウントが要るのは、send や text でペアリングコードを発行するときと、up でアップロードするときだけです。",
+        ],
+      },
       body: [
         "macOS または Linux では、1つのコマンドでお使いの OS 向けのビルド済みバイナリをダウンロードし、PATH に配置できます：",
       ],
@@ -241,12 +416,86 @@ const ja = {
       body: [
         "最も手早く試せるのは、SSH でログインできるサーバーへフォルダをコピーすることです。Relayium は既存の SSH アクセスを使うので、リモート側で設定することは何もなく、アカウント作成も不要です：",
       ],
-      code: ["relayium push ./photos user@your-server:backups/"],
+      steps: [
+        {
+          text: "CLI が PATH にあることを確認します。「command not found」ではなくバージョン文字列が表示されます。",
+          code: ["relayium version"],
+        },
+        {
+          text: "普段どおりの方法でそのサーバーに届くことを確認します。push はまさにそのアクセスを再利用するので、ssh が通れば接続と認証という前提条件は満たせます。ただし転送そのものの成功を約束するものではなく、push には user@your-server:backups/ への書き込み権限と空き容量も必要です。",
+          code: ["ssh user@your-server true"],
+        },
+        {
+          text: "フォルダーを push します。最後の引数は host:path で、リモートだと示すのはコロンです。末尾のスラッシュは「このディレクトリの中へ」を意味します。",
+          code: ["relayium push ./photos user@your-server:backups/"],
+        },
+        {
+          text: "思ったところにファイルが届いたか確認します。push ./photos は宛先の下に photos/ を再現するので、フォルダー名もそのまま付いてきます。",
+          code: ["ssh user@your-server ls backups/photos"],
+        },
+      ],
+      success: {
+        label: "成功したときの表示",
+        body: [
+          "相手側に relayium があれば、push は完了したファイルごとに1行を表示して終了コード 0 で終わります。素のサーバー相手なら代わりに tar ストリームの要約行が出ます。どちらも成功です。",
+        ],
+        code: [
+          `relayium push ./photos user@your-server:backups/
+  photos/IMG_0413.jpg (2314518 bytes)
+  photos/IMG_0414.jpg (1998233 bytes)
+echo $?
+# 0`,
+        ],
+      },
       bullets: [
         "リモートにも relayium がインストールされていれば、push はネイティブプロトコル（再開可能、ファイル単位の SHA-256）を使います。",
         "リモートに relayium がなければ、push は単純な tar ストリームにフォールバックするため、relayium が入っていない素の状態のサーバーでも動作します。このフォールバックは push だけの機能です。",
         "同じファイルを次のコマンドで取り戻せます：relayium pull user@your-server:backups/ ./restore。pull は常にリモートの relayium を必要とし（tar フォールバックはありません）、先にリモートへインストールしておいてください。",
       ],
+    },
+    {
+      heading: "最初のコマンドが通らないとき",
+      body: [
+        "初回に起きる不具合は、次の4つで他のすべてを合わせたより多くを占めます。どれも当て推量は要りません。出力で判定できるコマンドがそれぞれにあります。",
+      ],
+      troubleshooting: {
+        label: "症状・確認・対処",
+        items: [
+          {
+            symptom: "インストールスクリプトは成功と言ったのに「relayium: command not found」と出る。",
+            code: [
+              `command -v relayium
+# （何も表示されない）`,
+            ],
+            fix: "バイナリは入っていますが、その置き場所が PATH にありません。スクリプトの最後の数行が使ったディレクトリを示し、追加すべき export PATH の行をそのまま表示します。それを実行し、新しいシェルを開いて relayium version をもう一度試してください。",
+          },
+          {
+            symptom: "push が即座に「push destination must be remote (host:path)」で終了する。",
+            code: [
+              `relayium push ./photos user@your-server backups/
+# push destination must be remote (host:path)`,
+            ],
+            fix: "宛先からコロンが落ちたため、relayium がローカルパスとして読みました。scp と同じ書き方で、ホストとパスの間に空白を入れずに書いてください：user@your-server:backups/",
+          },
+          {
+            symptom: "push は通るサーバーで pull だけ失敗する。",
+            code: [
+              `ssh user@your-server command -v relayium
+# （何も表示されない）`,
+            ],
+            fix: "pull に tar フォールバックはありません。この向きではリモートが送信側になるため、あちらに relayium が必要です。同じ1行のコマンドでサーバーに入れてから pull をやり直してください。",
+          },
+          {
+            symptom: "同じコードに2台が参加し、片方が「the other side is running `relayium text`, not `relayium send`/`relayium receive`」と表示する。",
+            code: [
+              `# メッセージセッション：両端とも text を実行する
+relayium text
+relayium text 483920`,
+            ],
+            fix: "両端が別のコマンドを実行しています。メッセージなら2台とも relayium text、ファイルなら片方が relayium send でもう片方が relayium receive です。この食い違いはダイヤルする前に拒否されるので、何も送られていません。",
+          },
+        ],
+      },
     },
     {
       heading: "無料、そして設計上プライベート",
@@ -297,6 +546,15 @@ const ko = {
   sections: [
     {
       heading: "명령어 하나로 설치",
+      prereqs: {
+        label: "필요한 것",
+        items: [
+          "터미널이 있는 macOS, Linux 또는 Windows 기기. 사전 빌드된 바이너리는 세 운영체제 모두에서 x86-64와 arm64를 지원합니다.",
+          "macOS와 Linux의 한 줄 설치에 쓰이는 curl. curl --version 이 버전을 출력합니다. Windows에서는 릴리스 페이지에서 .zip을 내려받으세요.",
+          "쓰기 가능한 설치 디렉터리. 스크립트는 쓸 수 있으면 /usr/local/bin을, 아니면 ~/.local/bin을 사용하고, 마지막 줄에서 어느 쪽을 골랐는지 알려 줍니다.",
+          "push, pull, 데몬 다이렉트에는 그 밖에 필요한 것이 없습니다. 무료 Relayium 계정이 필요한 것은 send나 text로 페어링 코드를 발급할 때, 그리고 up으로 올릴 때뿐입니다.",
+        ],
+      },
       body: [
         "macOS나 Linux에서는 명령어 하나로 사용 중인 OS용 사전 빌드된 바이너리를 내려받아 PATH에 등록할 수 있습니다:",
       ],
@@ -335,12 +593,86 @@ const ko = {
       body: [
         "가장 빠르게 시도해 볼 수 있는 것은 SSH로 접속 가능한 서버로 폴더를 복사하는 것입니다. Relayium은 기존 SSH 접근 권한을 사용하므로 원격지에서 설정할 것이 없고 계정을 만들 필요도 없습니다:",
       ],
-      code: ["relayium push ./photos user@your-server:backups/"],
+      steps: [
+        {
+          text: "CLI가 PATH에 있는지 확인합니다. “command not found”가 아니라 버전 문자열이 출력됩니다.",
+          code: ["relayium version"],
+        },
+        {
+          text: "평소 방식으로 그 서버에 닿는지 확인합니다. push는 바로 그 접근을 그대로 쓰므로, ssh가 되면 연결과 인증이라는 전제 조건은 충족됩니다. 다만 전송 자체의 성공을 약속하지는 않으며, push에는 user@your-server:backups/에 대한 쓰기 권한과 여유 공간도 필요합니다.",
+          code: ["ssh user@your-server true"],
+        },
+        {
+          text: "폴더를 push합니다. 마지막 인자는 host:path이고, 원격임을 표시하는 것은 콜론입니다. 끝의 슬래시는 “이 디렉터리 안으로”라는 뜻입니다.",
+          code: ["relayium push ./photos user@your-server:backups/"],
+        },
+        {
+          text: "파일이 기대한 곳에 도착했는지 확인합니다. push ./photos 는 목적지 아래에 photos/ 를 그대로 재현하므로 폴더 이름이 함께 따라옵니다.",
+          code: ["ssh user@your-server ls backups/photos"],
+        },
+      ],
+      success: {
+        label: "성공했을 때 보이는 것",
+        body: [
+          "원격에 relayium이 있으면 push는 완료된 파일마다 한 줄을 출력하고 0으로 종료합니다. 아무것도 없는 서버를 상대로는 tar 스트림 요약 줄이 대신 나옵니다 — 둘 다 성공입니다.",
+        ],
+        code: [
+          `relayium push ./photos user@your-server:backups/
+  photos/IMG_0413.jpg (2314518 bytes)
+  photos/IMG_0414.jpg (1998233 bytes)
+echo $?
+# 0`,
+        ],
+      },
       bullets: [
         "원격지에도 relayium이 설치되어 있으면 push는 네이티브 프로토콜(재개 가능, 파일별 SHA-256)을 사용합니다.",
         "원격지에 relayium이 없으면 push는 일반 tar 스트림으로 대체되므로, 아무것도 설치되지 않은 서버에서도 동작합니다 — 이 대체 방식은 push에서만 제공됩니다.",
         "다음 명령어로 같은 파일을 다시 가져올 수 있습니다: relayium pull user@your-server:backups/ ./restore — pull은 항상 원격지에 relayium이 있어야 하며(tar 대체 방식 없음), 먼저 원격지에 설치해 두세요.",
       ],
+    },
+    {
+      heading: "첫 명령이 안 될 때",
+      body: [
+        "첫 실행에서 어긋나는 일은 아래 네 가지가 나머지 전부를 합친 것보다 많습니다. 어느 것도 추측이 필요 없고, 각각 출력으로 판정해 주는 명령이 있습니다.",
+      ],
+      troubleshooting: {
+        label: "증상, 확인, 해결",
+        items: [
+          {
+            symptom: "설치 스크립트는 성공했다고 했는데 “relayium: command not found”가 뜹니다.",
+            code: [
+              `command -v relayium
+# (아무것도 출력되지 않음)`,
+            ],
+            fix: "바이너리는 설치됐지만 그 디렉터리가 PATH에 없습니다. 스크립트의 마지막 줄들이 사용한 디렉터리를 알려 주고 추가할 export PATH 줄을 그대로 출력합니다. 그것을 실행한 뒤 새 셸을 열고 relayium version 을 다시 시도하세요.",
+          },
+          {
+            symptom: "push가 곧바로 “push destination must be remote (host:path)”를 내고 끝납니다.",
+            code: [
+              `relayium push ./photos user@your-server backups/
+# push destination must be remote (host:path)`,
+            ],
+            fix: "목적지에서 콜론이 빠져 relayium이 로컬 경로로 읽었습니다. scp 방식으로, 호스트와 경로 사이에 공백 없이 쓰세요: user@your-server:backups/",
+          },
+          {
+            symptom: "push는 잘 되던 서버에서 pull만 실패합니다.",
+            code: [
+              `ssh user@your-server command -v relayium
+# (아무것도 출력되지 않음)`,
+            ],
+            fix: "pull에는 tar 대체 방식이 없습니다. 이 방향에서는 원격이 보내는 쪽이라 거기에 relayium이 있어야 합니다. 같은 한 줄 명령으로 서버에 설치한 뒤 pull을 다시 실행하세요.",
+          },
+          {
+            symptom: "두 기기가 같은 코드에 들어갔는데 한쪽이 “the other side is running `relayium text`, not `relayium send`/`relayium receive`”를 출력합니다.",
+            code: [
+              `# 메시지 세션: 양쪽 모두 text 를 실행
+relayium text
+relayium text 483920`,
+            ],
+            fix: "양쪽이 서로 다른 명령을 실행했습니다. 메시지는 두 기기 모두 relayium text, 파일은 한쪽이 relayium send 다른 쪽이 relayium receive 입니다. 이 불일치는 연결을 걸기 전에 거부되므로 아무것도 전송되지 않았습니다.",
+          },
+        ],
+      },
     },
     {
       heading: "무료이며, 설계상 프라이버시를 지킵니다",
@@ -391,6 +723,15 @@ const de = {
   sections: [
     {
       heading: "Installation mit einem Befehl",
+      prereqs: {
+        label: "Was du brauchst",
+        items: [
+          "Einen Rechner mit Terminal unter macOS, Linux oder Windows. Vorgebaute Binaries gibt es für alle drei, jeweils für x86-64 und arm64.",
+          "curl für die Ein-Zeilen-Installation unter macOS und Linux — curl --version gibt eine Version aus. Unter Windows lädst du stattdessen das .zip von der Releases-Seite.",
+          "Ein beschreibbares Installationsverzeichnis. Das Skript nimmt /usr/local/bin, wenn es dort schreiben darf, sonst ~/.local/bin, und seine letzten Zeilen nennen das gewählte.",
+          "Für push, pull und daemon-direct sonst nichts. Ein kostenloses Relayium-Konto brauchen nur das Erzeugen eines Pairing-Codes mit send oder text und das Hochladen mit up.",
+        ],
+      },
       body: [
         "Unter macOS oder Linux lädt ein Befehl ein vorkompiliertes Binary für dein Betriebssystem herunter und legt es in deinen PATH:",
       ],
@@ -429,12 +770,86 @@ const de = {
       body: [
         "Am schnellsten lässt sich ausprobieren, einen Ordner auf einen Server zu kopieren, in den du dich per SSH einloggen kannst. Relayium nutzt deinen bestehenden SSH-Zugang, es gibt also nichts auf der Gegenseite zu konfigurieren und kein Konto anzulegen:",
       ],
-      code: ["relayium push ./photos user@your-server:backups/"],
+      steps: [
+        {
+          text: "Prüf, ob die CLI in deinem PATH liegt. Sie gibt eine Versionsnummer aus, nicht „command not found“.",
+          code: ["relayium version"],
+        },
+        {
+          text: "Prüf, ob du den Server auf dem gewohnten Weg schon erreichst. push nutzt genau diesen Zugang wieder: klappt ssh, ist die Voraussetzung Verbindung und Authentifizierung erfüllt. Ein Versprechen für die Übertragung selbst ist das nicht — dafür braucht push weiterhin Schreibrechte und freien Platz unter user@your-server:backups/.",
+          code: ["ssh user@your-server true"],
+        },
+        {
+          text: "Schieb den Ordner hoch. Das letzte Argument ist host:path — der Doppelpunkt macht es zur Gegenstelle, und ein Schrägstrich am Ende heißt „in dieses Verzeichnis hinein“.",
+          code: ["relayium push ./photos user@your-server:backups/"],
+        },
+        {
+          text: "Prüf, ob die Dateien dort gelandet sind, wo du sie erwartest. push ./photos legt photos/ unter dem Ziel wieder an, der Ordnername kommt also mit.",
+          code: ["ssh user@your-server ls backups/photos"],
+        },
+      ],
+      success: {
+        label: "So sieht ein erfolgreicher Lauf aus",
+        body: [
+          "Liegt relayium auf der Gegenseite, gibt push eine Zeile pro fertiger Datei aus und endet mit 0. Gegen einen nackten Server erscheint stattdessen die tar-Stream-Zusammenfassung — beides ist Erfolg.",
+        ],
+        code: [
+          `relayium push ./photos user@your-server:backups/
+  photos/IMG_0413.jpg (2314518 bytes)
+  photos/IMG_0414.jpg (1998233 bytes)
+echo $?
+# 0`,
+        ],
+      },
       bullets: [
         "Ist relayium auch auf der Gegenseite installiert, nutzt push das native Protokoll (fortsetzbar, dateiweises SHA-256).",
         "Ist relayium dort nicht installiert, fällt push auf einen einfachen tar-Stream zurück, sodass es auch auf einem nackten Server funktioniert — dieser Fallback existiert nur bei push.",
         "Hole dieselben Dateien mit folgendem Befehl zurück: relayium pull user@your-server:backups/ ./restore — pull braucht immer relayium auf der Gegenseite (keinen tar-Fallback), installiere es dort also zuerst.",
       ],
+    },
+    {
+      heading: "Wenn der erste Befehl nicht durchgeht",
+      body: [
+        "Vier Dinge gehen beim ersten Lauf häufiger schief als alles andere zusammen. Keins davon musst du raten — zu jedem gibt es einen Befehl, dessen Ausgabe die Sache entscheidet.",
+      ],
+      troubleshooting: {
+        label: "Symptom, Prüfung, Lösung",
+        items: [
+          {
+            symptom: "„relayium: command not found“, direkt nachdem das Installationsskript Erfolg gemeldet hat.",
+            code: [
+              `command -v relayium
+# (gibt nichts aus)`,
+            ],
+            fix: "Das Binary ist installiert, sein Verzeichnis liegt aber nicht im PATH. Die letzten Zeilen des Skripts nennen das verwendete Verzeichnis und geben die passende export-PATH-Zeile aus; führ sie aus, öffne eine neue Shell und probier relayium version noch einmal.",
+          },
+          {
+            symptom: "push endet sofort mit „push destination must be remote (host:path)“.",
+            code: [
+              `relayium push ./photos user@your-server backups/
+# push destination must be remote (host:path)`,
+            ],
+            fix: "Dem Ziel fehlt der Doppelpunkt, also hat relayium es als lokalen Pfad gelesen. Schreib es scp-artig, ohne Leerzeichen zwischen Host und Pfad: user@your-server:backups/",
+          },
+          {
+            symptom: "pull scheitert an einem Server, gegen den push problemlos lief.",
+            code: [
+              `ssh user@your-server command -v relayium
+# (gibt nichts aus)`,
+            ],
+            fix: "pull hat keinen tar-Fallback, denn in dieser Richtung ist die Gegenseite der Sender — dort muss relayium installiert sein. Installier es mit demselben Ein-Zeilen-Befehl auf dem Server und wiederhol das pull.",
+          },
+          {
+            symptom: "Zwei Rechner treten demselben Code bei und einer gibt „the other side is running `relayium text`, not `relayium send`/`relayium receive`“ aus.",
+            code: [
+              `# Nachrichtensitzung: BEIDE Enden führen text aus
+relayium text
+relayium text 483920`,
+            ],
+            fix: "Die beiden Enden haben verschiedene Befehle ausgeführt. Für Nachrichten auf beiden Rechnern relayium text, für Dateien auf einem relayium send und auf dem anderen relayium receive. Die Nichtübereinstimmung wird abgelehnt, bevor überhaupt gewählt wird, es wurde also nichts gesendet.",
+          },
+        ],
+      },
     },
     {
       heading: "Kostenlos und von Grund auf privat",
@@ -485,6 +900,15 @@ const fr = {
   sections: [
     {
       heading: "Installation en une commande",
+      prereqs: {
+        label: "Ce qu'il vous faut",
+        items: [
+          "Une machine macOS, Linux ou Windows avec un terminal. Des binaires précompilés couvrent x86-64 et arm64 sur les trois.",
+          "curl, pour l'installation en une ligne sous macOS et Linux — curl --version affiche une version. Sous Windows, téléchargez plutôt le .zip depuis la page des releases.",
+          "Un répertoire d'installation accessible en écriture. Le script prend /usr/local/bin s'il peut y écrire, sinon ~/.local/bin, et ses dernières lignes nomment celui qu'il a retenu.",
+          "Rien d'autre pour push, pull ou daemon-direct. Seuls la génération d'un code d'appairage avec send ou text, et l'envoi avec up, demandent un compte Relayium gratuit.",
+        ],
+      },
       body: [
         "Sous macOS ou Linux, une commande télécharge un binaire précompilé pour votre OS et l'ajoute à votre PATH :",
       ],
@@ -523,12 +947,86 @@ const fr = {
       body: [
         "Le plus rapide à essayer est de copier un dossier vers un serveur où vous pouvez vous connecter en SSH. Relayium utilise votre accès SSH existant, il n'y a donc rien à configurer côté distant et aucun compte à créer :",
       ],
-      code: ["relayium push ./photos user@your-server:backups/"],
+      steps: [
+        {
+          text: "Vérifiez que la CLI est dans votre PATH. Elle affiche un numéro de version, et non « command not found ».",
+          code: ["relayium version"],
+        },
+        {
+          text: "Vérifiez que vous atteignez déjà le serveur par la voie habituelle. push réutilise exactement cet accès, donc un ssh qui passe remplit le prérequis de connexion et d'authentification — ce n'est pas une promesse sur le transfert lui-même, qui exige encore le droit d'écriture et de la place libre sur user@your-server:backups/.",
+          code: ["ssh user@your-server true"],
+        },
+        {
+          text: "Poussez le dossier. Le dernier argument est host:path, et c'est le deux-points qui le marque comme distant. Une barre oblique finale signifie « à l'intérieur de ce répertoire ».",
+          code: ["relayium push ./photos user@your-server:backups/"],
+        },
+        {
+          text: "Vérifiez que les fichiers sont arrivés là où vous les attendiez. push ./photos recrée photos/ sous la destination, le nom du dossier suit donc.",
+          code: ["ssh user@your-server ls backups/photos"],
+        },
+      ],
+      success: {
+        label: "À quoi ressemble une exécution réussie",
+        body: [
+          "Avec relayium en face, push affiche une ligne par fichier terminé et se termine par 0. Face à un serveur nu, il affiche à la place le résumé du flux tar : les deux sont des succès.",
+        ],
+        code: [
+          `relayium push ./photos user@your-server:backups/
+  photos/IMG_0413.jpg (2314518 bytes)
+  photos/IMG_0414.jpg (1998233 bytes)
+echo $?
+# 0`,
+        ],
+      },
       bullets: [
         "Si relayium est aussi installé sur la machine distante, push utilise le protocole natif (avec reprise, SHA-256 par fichier).",
         "Sinon, push bascule sur un simple flux tar, ce qui fonctionne donc même sur un serveur nu — ce repli n'existe que pour push.",
         "Récupérez les mêmes fichiers avec : relayium pull user@your-server:backups/ ./restore — pull a toujours besoin de relayium sur la machine distante (aucun repli tar), installez-le donc là-bas au préalable.",
       ],
+    },
+    {
+      heading: "Quand la première commande ne passe pas",
+      body: [
+        "Quatre choses tournent mal au premier essai plus souvent que tout le reste réuni. Aucune ne demande de deviner : chacune a une commande dont la sortie tranche la question.",
+      ],
+      troubleshooting: {
+        label: "Symptôme, vérification, correction",
+        items: [
+          {
+            symptom: "« relayium: command not found », juste après que le script d'installation a annoncé une réussite.",
+            code: [
+              `command -v relayium
+# (n'affiche rien)`,
+            ],
+            fix: "Le binaire est installé, mais son répertoire n'est pas dans votre PATH. Les dernières lignes du script nomment le répertoire retenu et affichent la ligne export PATH exacte à ajouter. Exécutez-la, ouvrez un nouveau shell et relancez relayium version.",
+          },
+          {
+            symptom: "push se termine aussitôt sur « push destination must be remote (host:path) ».",
+            code: [
+              `relayium push ./photos user@your-server backups/
+# push destination must be remote (host:path)`,
+            ],
+            fix: "Le deux-points a disparu de la destination, donc relayium l'a lue comme un chemin local. Écrivez-la à la manière de scp, sans espace entre l'hôte et le chemin : user@your-server:backups/",
+          },
+          {
+            symptom: "pull échoue sur un serveur où push fonctionnait très bien.",
+            code: [
+              `ssh user@your-server command -v relayium
+# (n'affiche rien)`,
+            ],
+            fix: "pull n'a aucun repli tar, car dans ce sens c'est la machine distante qui émet : relayium doit y être installé. Installez-le sur le serveur avec la même commande d'une ligne, puis relancez le pull.",
+          },
+          {
+            symptom: "Deux machines rejoignent le même code et l'une affiche « the other side is running `relayium text`, not `relayium send`/`relayium receive` ».",
+            code: [
+              `# session de messages : les DEUX extrémités lancent text
+relayium text
+relayium text 483920`,
+            ],
+            fix: "Les deux extrémités ont lancé des commandes différentes. Pour des messages, relayium text sur les deux machines ; pour des fichiers, relayium send d'un côté et relayium receive de l'autre. Le désaccord est refusé avant même toute tentative de connexion, donc rien n'a été envoyé.",
+          },
+        ],
+      },
     },
     {
       heading: "Gratuit, et privé par conception",
@@ -579,6 +1077,15 @@ const ar = {
   sections: [
     {
       heading: "التثبيت بأمر واحد",
+      prereqs: {
+        label: "ما تحتاج إليه",
+        items: [
+          "جهاز فيه طرفية يعمل بنظام macOS أو Linux أو Windows. تغطي الملفات الثنائية مُسبقة البناء معماريتَي x86-64 وarm64 على الأنظمة الثلاثة.",
+          "الأداة curl من أجل التثبيت بسطر واحد على macOS وLinux، ويطبع curl --version رقم الإصدار. أما على Windows فنزّل ملف zip. من صفحة الإصدارات.",
+          "مجلد تثبيت قابل للكتابة. يستخدم السكربت المسار /usr/local/bin إن كان يستطيع الكتابة فيه، وإلا فالمسار ~/.local/bin، وتذكر أسطره الأخيرة أيّهما اختار.",
+          "ولا شيء غير ذلك من أجل push وpull وdaemon direct. أما الحساب المجاني على Relayium فلا يلزم إلا لإصدار رمز اقتران عبر send أو text، وللرفع عبر up.",
+        ],
+      },
       body: [
         "على macOS أو Linux، يُنزّل أمر واحد ملفًا ثنائيًا مُسبق البناء لنظام تشغيلك ويضعه في PATH لديك:",
       ],
@@ -617,12 +1124,86 @@ const ar = {
       body: [
         "أسرع شيء يمكنك تجربته هو نسخ مجلد إلى خادم يمكنك الدخول إليه عبر SSH. يستخدم Relayium وصول SSH الموجود لديك، فلا شيء لتهيئته على الطرف البعيد ولا حساب لإنشائه:",
       ],
-      code: ["relayium push ./photos user@your-server:backups/"],
+      steps: [
+        {
+          text: "تأكّد من أن واجهة CLI موجودة في PATH لديك. ستطبع سطر إصدار لا عبارة «command not found».",
+          code: ["relayium version"],
+        },
+        {
+          text: "تأكّد من أنك تصل إلى الخادم أصلًا بالطريقة المعتادة. يعيد push استخدام هذا الوصول نفسه، فنجاح ssh يستوفي شرط الاتصال والمصادقة. لكنه ليس وعدًا بنجاح النقل نفسه، إذ يظل push بحاجة إلى صلاحية الكتابة ومساحة كافية في user@your-server:backups/.",
+          code: ["ssh user@your-server true"],
+        },
+        {
+          text: "ادفع المجلد. المُعامِل الأخير هو host:path، والنقطتان هما ما يجعله بعيدًا، والشرطة المائلة في النهاية تعني «إلى داخل هذا المجلد».",
+          code: ["relayium push ./photos user@your-server:backups/"],
+        },
+        {
+          text: "تأكّد من وصول الملفات إلى حيث توقّعت. يعيد push ./photos بناء المجلد photos تحت الوجهة، فيأتي اسم المجلد معه.",
+          code: ["ssh user@your-server ls backups/photos"],
+        },
+      ],
+      success: {
+        label: "كيف يبدو التشغيل الناجح",
+        body: [
+          "إن كان relayium على الطرف البعيد، يطبع push سطرًا لكل ملف اكتمل وينتهي بالرمز 0. وأمام خادم عارٍ يطبع بدلًا من ذلك سطر ملخّص بث tar، وكلاهما نجاح.",
+        ],
+        code: [
+          `relayium push ./photos user@your-server:backups/
+  photos/IMG_0413.jpg (2314518 bytes)
+  photos/IMG_0414.jpg (1998233 bytes)
+echo $?
+# 0`,
+        ],
+      },
       bullets: [
         "إذا كان relayium مثبّتًا على الطرف البعيد أيضًا، يستخدم push البروتوكول الأصلي (قابل للاستئناف، SHA-256 لكل ملف).",
         "يتراجع push إلى بث tar بسيط عندما لا يكون relayium على الطرف البعيد، فيعمل حتى مع خادم عارٍ — وهذا التراجع خاص بـ push وحده.",
         "استرجع الملفات نفسها بـ: relayium pull user@your-server:backups/ ./restore — يحتاج pull دائمًا إلى relayium على الطرف البعيد (لا يملك تراجع tar)، فثبّته هناك أولًا.",
       ],
+    },
+    {
+      heading: "حين لا يمر الأمر الأول",
+      body: [
+        "أربعة أمور تتعثر في أول تشغيل أكثر من كل ما عداها مجتمعًا. ولا يحتاج أي منها إلى تخمين، فلكل واحد أمر يحسم المسألة بمخرجاته.",
+      ],
+      troubleshooting: {
+        label: "العَرَض، الفحص، الإصلاح",
+        items: [
+          {
+            symptom: "تظهر «relayium: command not found» مباشرة بعد أن أعلن سكربت التثبيت نجاحه.",
+            code: [
+              `command -v relayium
+# (لا يطبع شيئًا)`,
+            ],
+            fix: "الملف الثنائي مثبَّت، لكن مجلده ليس ضمن PATH لديك. تذكر أسطر السكربت الأخيرة المجلد الذي استُخدم وتطبع سطر export PATH المطلوب إضافته بالضبط؛ نفّذه، ثم افتح صَدَفة جديدة وجرّب relayium version من جديد.",
+          },
+          {
+            symptom: "ينتهي push فورًا برسالة «push destination must be remote (host:path)».",
+            code: [
+              `relayium push ./photos user@your-server backups/
+# push destination must be remote (host:path)`,
+            ],
+            fix: "سقطت النقطتان من الوجهة، فقرأها relayium مسارًا محليًا. اكتبها على طريقة scp، بلا مسافة بين المضيف والمسار: user@your-server:backups/",
+          },
+          {
+            symptom: "يفشل pull على خادم كان push يعمل معه بلا مشكلة.",
+            code: [
+              `ssh user@your-server command -v relayium
+# (لا يطبع شيئًا)`,
+            ],
+            fix: "لا يملك pull تراجعًا إلى tar، لأن الطرف البعيد هو المُرسِل في هذا الاتجاه، فلا بد من وجود relayium هناك. ثبّته على الخادم بالأمر ذي السطر الواحد نفسه ثم أعِد تشغيل pull.",
+          },
+          {
+            symptom: "ينضم جهازان إلى الرمز نفسه فيطبع أحدهما «the other side is running `relayium text`, not `relayium send`/`relayium receive`».",
+            code: [
+              `# جلسة رسائل: كلا الطرفين يشغّل text
+relayium text
+relayium text 483920`,
+            ],
+            fix: "شغّل الطرفان أمرين مختلفين. للرسائل استخدم relayium text على الجهازين، وللملفات استخدم relayium send على أحدهما وrelayium receive على الآخر. يُرفض هذا التعارض قبل أي محاولة اتصال، فلم يُرسَل شيء.",
+          },
+        ],
+      },
     },
     {
       heading: "مجاني، وخاص بحكم التصميم",
@@ -673,6 +1254,15 @@ const es = {
   sections: [
     {
       heading: "Instala con un solo comando",
+      prereqs: {
+        label: "Lo que necesitas",
+        items: [
+          "Un ordenador con terminal en macOS, Linux o Windows. Hay binarios precompilados para los tres, tanto en x86-64 como en arm64.",
+          "curl, para la instalación de una línea en macOS y Linux: curl --version imprime una versión. En Windows, descarga en su lugar el .zip de la página de releases.",
+          "Un directorio de instalación con permiso de escritura. El script usa /usr/local/bin cuando puede escribir ahí y ~/.local/bin en caso contrario, y sus últimas líneas dicen cuál eligió.",
+          "Nada más para push, pull o daemon directo. Solo generar un código de emparejamiento con send o text, y subir con up, necesitan una cuenta gratuita de Relayium.",
+        ],
+      },
       body: [
         "En macOS o Linux, un comando descarga un binario precompilado para tu sistema operativo y lo coloca en tu PATH:",
       ],
@@ -711,12 +1301,86 @@ const es = {
       body: [
         "Lo más rápido para probar es copiar una carpeta a un servidor al que puedas entrar por SSH. Relayium usa tu acceso SSH existente, así que no hay nada que configurar en el remoto ni cuenta que crear:",
       ],
-      code: ["relayium push ./photos user@your-server:backups/"],
+      steps: [
+        {
+          text: "Comprueba que la CLI está en tu PATH. Imprime una versión, no «command not found».",
+          code: ["relayium version"],
+        },
+        {
+          text: "Comprueba que ya llegas al servidor por la vía de siempre. push reutiliza exactamente ese acceso, así que un ssh correcto cumple el requisito de conexión y autenticación. No es una promesa sobre la transferencia en sí: push todavía necesita permiso de escritura y espacio libre en user@your-server:backups/.",
+          code: ["ssh user@your-server true"],
+        },
+        {
+          text: "Empuja la carpeta. El último argumento es host:path, y son los dos puntos lo que lo marca como remoto. La barra final significa «dentro de este directorio».",
+          code: ["relayium push ./photos user@your-server:backups/"],
+        },
+        {
+          text: "Comprueba que los archivos llegaron donde esperabas. push ./photos recrea photos/ bajo el destino, así que el nombre de la carpeta viaja con ellos.",
+          code: ["ssh user@your-server ls backups/photos"],
+        },
+      ],
+      success: {
+        label: "Cómo se ve una ejecución correcta",
+        body: [
+          "Con relayium en el otro extremo, push imprime una línea por archivo terminado y sale con 0. Contra un servidor sin nada instalado imprime en su lugar el resumen del flujo tar: ambos son éxito.",
+        ],
+        code: [
+          `relayium push ./photos user@your-server:backups/
+  photos/IMG_0413.jpg (2314518 bytes)
+  photos/IMG_0414.jpg (1998233 bytes)
+echo $?
+# 0`,
+        ],
+      },
       bullets: [
         "Si relayium también está instalado en el remoto, push usa el protocolo nativo (reanudable, SHA-256 por archivo).",
         "push recurre a un simple flujo tar cuando relayium no está en el remoto, así que funciona incluso contra un servidor sin nada instalado — esa alternativa es solo para push.",
         "Recupera los mismos archivos con: relayium pull user@your-server:backups/ ./restore — pull siempre necesita relayium en el remoto (no tiene alternativa con tar), así que instálalo allí primero.",
       ],
+    },
+    {
+      heading: "Cuando el primer comando no funciona",
+      body: [
+        "Cuatro cosas salen mal en un primer intento más a menudo que todo lo demás junto. Ninguna exige adivinar: cada una tiene un comando cuya salida zanja la cuestión.",
+      ],
+      troubleshooting: {
+        label: "Síntoma, comprobación, solución",
+        items: [
+          {
+            symptom: "«relayium: command not found», justo después de que el script de instalación dijera que había terminado bien.",
+            code: [
+              `command -v relayium
+# (no imprime nada)`,
+            ],
+            fix: "El binario está instalado, pero su directorio no está en tu PATH. Las últimas líneas del script nombran el directorio que usó e imprimen la línea export PATH exacta que hay que añadir; ejecútala, abre un shell nuevo y prueba otra vez relayium version.",
+          },
+          {
+            symptom: "push termina de inmediato con «push destination must be remote (host:path)».",
+            code: [
+              `relayium push ./photos user@your-server backups/
+# push destination must be remote (host:path)`,
+            ],
+            fix: "Al destino le faltan los dos puntos, así que relayium lo leyó como una ruta local. Escríbelo al estilo de scp, sin espacio entre el host y la ruta: user@your-server:backups/",
+          },
+          {
+            symptom: "pull falla contra un servidor con el que push funcionaba sin problemas.",
+            code: [
+              `ssh user@your-server command -v relayium
+# (no imprime nada)`,
+            ],
+            fix: "pull no tiene alternativa con tar, porque en ese sentido el remoto es quien envía: necesita relayium instalado allí. Instálalo en el servidor con el mismo comando de una línea y repite el pull.",
+          },
+          {
+            symptom: "Dos máquinas entran en el mismo código y una imprime «the other side is running `relayium text`, not `relayium send`/`relayium receive`».",
+            code: [
+              `# sesión de mensajes: AMBOS extremos ejecutan text
+relayium text
+relayium text 483920`,
+            ],
+            fix: "Los dos extremos ejecutaron comandos distintos. Para mensajes, relayium text en las dos máquinas; para archivos, relayium send en una y relayium receive en la otra. El desajuste se rechaza antes de intentar ninguna conexión, así que no se envió nada.",
+          },
+        ],
+      },
     },
     {
       heading: "Gratis, y privado por diseño",
@@ -767,6 +1431,15 @@ const pt = {
   sections: [
     {
       heading: "Instale com um único comando",
+      prereqs: {
+        label: "O que você precisa",
+        items: [
+          "Uma máquina com terminal no macOS, Linux ou Windows. Há binários pré-compilados para os três, em x86-64 e arm64.",
+          "curl, para a instalação de uma linha no macOS e no Linux: curl --version imprime uma versão. No Windows, baixe o .zip na página de releases.",
+          "Um diretório de instalação com permissão de escrita. O script usa /usr/local/bin quando consegue escrever ali e ~/.local/bin caso contrário, e as últimas linhas dizem qual foi escolhido.",
+          "Nada mais para push, pull ou daemon direto. Só gerar um código de emparelhamento com send ou text, e subir com up, precisam de uma conta gratuita do Relayium.",
+        ],
+      },
       body: [
         "No macOS ou no Linux, um comando baixa um binário pré-compilado para o seu sistema operacional e o coloca no seu PATH:",
       ],
@@ -805,12 +1478,86 @@ const pt = {
       body: [
         "O mais rápido para experimentar é copiar uma pasta para um servidor no qual você consiga entrar por SSH. O Relayium usa o seu acesso SSH existente, então não há nada a configurar no remoto e nenhuma conta a criar:",
       ],
-      code: ["relayium push ./photos user@your-server:backups/"],
+      steps: [
+        {
+          text: "Confira se a CLI está no seu PATH. Ela imprime uma versão, não “command not found”.",
+          code: ["relayium version"],
+        },
+        {
+          text: "Confira se você já alcança o servidor do jeito de sempre. O push reaproveita exatamente esse acesso, então um ssh bem-sucedido cumpre o pré-requisito de conexão e autenticação. Isso não é uma promessa sobre a transferência em si: o push ainda precisa de permissão de escrita e espaço livre em user@your-server:backups/.",
+          code: ["ssh user@your-server true"],
+        },
+        {
+          text: "Empurre a pasta. O último argumento é host:path, e são os dois-pontos que o marcam como remoto. A barra no fim significa “para dentro deste diretório”.",
+          code: ["relayium push ./photos user@your-server:backups/"],
+        },
+        {
+          text: "Confira se os arquivos chegaram onde você esperava. push ./photos recria photos/ sob o destino, então o nome da pasta vai junto.",
+          code: ["ssh user@your-server ls backups/photos"],
+        },
+      ],
+      success: {
+        label: "Como é uma execução bem-sucedida",
+        body: [
+          "Com o relayium do outro lado, o push imprime uma linha por arquivo concluído e sai com 0. Contra um servidor sem nada instalado ele imprime o resumo do fluxo tar: os dois são sucesso.",
+        ],
+        code: [
+          `relayium push ./photos user@your-server:backups/
+  photos/IMG_0413.jpg (2314518 bytes)
+  photos/IMG_0414.jpg (1998233 bytes)
+echo $?
+# 0`,
+        ],
+      },
       bullets: [
         "Se o relayium também estiver instalado no remoto, o push usa o protocolo nativo (retomável, SHA-256 por arquivo).",
         "O push recorre a um simples fluxo tar quando o relayium não está no remoto, então funciona até contra um servidor sem nada instalado — essa alternativa é só do push.",
         "Traga os mesmos arquivos de volta com: relayium pull user@your-server:backups/ ./restore — o pull sempre precisa do relayium no remoto (ele não tem alternativa com tar), então instale-o lá primeiro.",
       ],
+    },
+    {
+      heading: "Quando o primeiro comando não passa",
+      body: [
+        "Quatro coisas dão errado numa primeira tentativa mais do que todo o resto somado. Nenhuma exige adivinhação: cada uma tem um comando cuja saída resolve a questão.",
+      ],
+      troubleshooting: {
+        label: "Sintoma, verificação, correção",
+        items: [
+          {
+            symptom: "“relayium: command not found”, logo depois de o script de instalação dizer que deu certo.",
+            code: [
+              `command -v relayium
+# (não imprime nada)`,
+            ],
+            fix: "O binário está instalado, mas o diretório dele não está no seu PATH. As últimas linhas do script dizem qual diretório foi usado e imprimem a linha export PATH exata a acrescentar; rode-a, abra um shell novo e tente relayium version de novo.",
+          },
+          {
+            symptom: "O push termina na hora com “push destination must be remote (host:path)”.",
+            code: [
+              `relayium push ./photos user@your-server backups/
+# push destination must be remote (host:path)`,
+            ],
+            fix: "O destino perdeu os dois-pontos, então o relayium leu como caminho local. Escreva no estilo do scp, sem espaço entre o host e o caminho: user@your-server:backups/",
+          },
+          {
+            symptom: "O pull falha num servidor com o qual o push funcionava bem.",
+            code: [
+              `ssh user@your-server command -v relayium
+# (não imprime nada)`,
+            ],
+            fix: "O pull não tem alternativa com tar, porque nesse sentido quem envia é o remoto: ele precisa do relayium instalado lá. Instale no servidor com o mesmo comando de uma linha e repita o pull.",
+          },
+          {
+            symptom: "Duas máquinas entram no mesmo código e uma imprime “the other side is running `relayium text`, not `relayium send`/`relayium receive`”.",
+            code: [
+              `# sessão de mensagens: AS DUAS pontas rodam text
+relayium text
+relayium text 483920`,
+            ],
+            fix: "As duas pontas rodaram comandos diferentes. Para mensagens, relayium text nas duas máquinas; para arquivos, relayium send em uma e relayium receive na outra. A divergência é recusada antes de qualquer tentativa de conexão, então nada foi enviado.",
+          },
+        ],
+      },
     },
     {
       heading: "Gratuito, e privado por decisão de projeto",
@@ -852,6 +1599,6 @@ const pt = {
 export default {
   slug: "guides/transfer-files-from-terminal",
   published: "2026-07-08",
-  updated: "2026-07-31",
+  updated: "2026-08-05",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

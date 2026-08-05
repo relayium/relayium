@@ -39,7 +39,10 @@ describe("CLI getting-started guide includes ephemeral text", () => {
   });
 
   it("records the release date and preserves the three file modes", () => {
-    expect(article.updated).toBe("2026-07-31");
+    // Re-dated when the guide became a runnable tutorial — prerequisites, an
+    // ordered procedure, a success signal and troubleshooting, in nine locales.
+    // See cli-tutorial-structure.test.mjs.
+    expect(article.updated).toBe("2026-08-05");
     const en = article.langs.en.sections.find((item) => item.heading === "The three ways it moves files");
     expect(en?.bullets.join(" ")).toContain("push / pull");
     expect(en?.bullets.join(" ")).toContain("send / receive");

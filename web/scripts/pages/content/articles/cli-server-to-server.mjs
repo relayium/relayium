@@ -17,13 +17,43 @@ const en = {
   sections: [
     {
       heading: "Start the listener (on the receiver)",
+      prereqs: {
+        label: "What you need",
+        items: [
+          "Two machines you control, with the receiver's address reachable from the sender. A hostname or a bare IP both work.",
+          "relayium on both ends. Daemon direct speaks the native protocol only, so there is no tar fallback to rescue a missing install here.",
+          "The listener's port open to the sender — 9031/TCP unless you change it — in the host firewall and in any cloud security group.",
+          "A terminal on the receiver for the first push, so you can answer the approval prompt. With no terminal, pre-authorize the sender instead (see below).",
+        ],
+      },
       body: [
         "On the receiving server, serve listens for pushes and writes them into a directory. It's long-running by default; add --once to accept a single transfer and exit. You don't pre-share anything — no fingerprints to copy up front:",
       ],
-      code: [
-        `# on the RECEIVER
-relayium serve --dir ~/inbox      # add --once for a single transfer; --port to change 9031`,
+      steps: [
+        {
+          text: "Create the directory pushes should land in.",
+          code: ["mkdir -p ~/inbox"],
+        },
+        {
+          text: "Open the listener's port to the sender only. Substitute the sender's own address for 203.0.113.7 — its public IP, or its private one when the two servers share a network — and scope the cloud security group to that same source rather than to the whole internet.",
+          code: ["sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp"],
+        },
+        {
+          text: "Start the listener in a terminal, so there is someone to answer the approval prompt on the first push. Add --once to take a single transfer and exit, or --port to move off 9031.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
       ],
+      success: {
+        label: "What a running listener looks like",
+        body: [
+          "serve names the address it bound, the directory it writes into, and this host's own fingerprint. With no approved peers yet, it also says it will ask about each new one.",
+        ],
+        code: [
+          `relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)`,
+        ],
+      },
       bullets: [
         "The listener processes connections one at a time and lands files under --dir.",
         "The default port is 9031; change it with --port and open it on your firewall.",
@@ -34,13 +64,34 @@ relayium serve --dir ~/inbox      # add --once for a single transfer; --port to 
       body: [
         "From the sending server, push to the receiver's relayium:// address. The first connection pins the receiver's fingerprint; every connection after that verifies it, and a changed fingerprint is refused rather than silently accepted — so a swapped key or a man-in-the-middle is caught, not trusted. On the very first push, the sender waits a moment while the receiver approves it (next step).",
       ],
-      code: [
-        `# on the SENDER
-relayium push ./build.tar.zst relayium://receiver.example.com
-
-# non-default port
-relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      steps: [
+        {
+          text: "Run the push from the sending server. On the very first connection it stops right here, while the receiver approves it.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com"],
+        },
+        {
+          text: "Answer the prompt on the receiver — that is the next section. The push then finishes on its own, and later pushes never stop here again.",
+        },
+        {
+          text: "Append a port when the listener isn't on 9031.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com:9040"],
+        },
       ],
+      success: {
+        label: "What a successful push looks like",
+        body: [
+          "On first contact the sender learns and pins the listener's fingerprint, then transfers. The receiver records the pusher's fingerprint and reports the file and byte count.",
+        ],
+        code: [
+          `# on the SENDER, first contact
+learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
+  build.tar.zst (48213004 bytes)
+
+# on the RECEIVER
+authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
+received 1 file(s), 48213004 bytes from 74318e3b…`,
+        ],
+      },
       bullets: [
         "No relay and no fallback: if the listener isn't reachable, the push fails — file bytes never route through anyone else.",
         "The same transfer engine as the other modes: resumable, with a per-file SHA-256 check.",
@@ -101,6 +152,55 @@ WantedBy=multi-user.target`,
         "Keep /etc/relayium/id.key readable only by the service user — relayium refuses to load a key with loose permissions.",
       ],
     },
+    {
+      heading: "When a push doesn't get through",
+      body: [
+        "Reachability and trust are the first two things to check: ss -tinp on the sender says whether the listener was reached at all, and relayium authorize on the receiver grants the trust a rejected pusher is missing. They are not the only ways a push can fail — a receiver out of disk space, an inbox its user cannot write into, or a transferred file whose integrity check fails all report themselves — so read the error in front of you rather than assuming it is one of the four below.",
+      ],
+      troubleshooting: {
+        label: "Symptom, check, fix",
+        items: [
+          {
+            symptom: "The push sits there, then fails with a connection error.",
+            code: [
+              `# on the SENDER, while the push is running — run it twice, a few seconds apart
+ss -tinp dst :9031
+# ESTAB    the listener was reached; says nothing about progress
+# SYN-SENT nothing answered on that port`,
+            ],
+            fix: "SYN-SENT means the packets never reached a listening socket. Confirm serve is up on the receiver with ss -tlnp | grep 9031, then open 9031/TCP to the sender in the host firewall and the cloud security group. ESTAB proves reachability only — an established socket can sit idle or stall — so to separate a live transfer from a stalled one, run the check twice a few seconds apart and compare the bytes_acked counter that -i prints for that socket. There is no relay path here, so an unreachable listener is a hard failure rather than a slow one.",
+          },
+          {
+            symptom: "The serve log says \"rejected unauthorized peer …\" and the push fails.",
+            code: [
+              `# on the SENDER
+relayium id
+# 74318e3b…
+
+# on the RECEIVER
+relayium authorize 74318e3b…`,
+            ],
+            fix: "serve had no terminal to ask on — a systemd unit or a pipe — so an unknown fingerprint is refused rather than trusted. Pre-authorize it: the fingerprint in the rejection line is exactly the one relayium id prints on the sender, and authorize is idempotent.",
+          },
+          {
+            symptom: "\"fingerprint mismatch for receiver.example.com:9031\".",
+            code: [
+              `grep receiver.example.com ~/.config/relayium/known_hosts`,
+            ],
+            fix: "The listener presented a different key than the one pinned on first contact. If you rotated that key on purpose, delete the matching known_hosts line and push again. If you did not, leave the line alone and find out why the key changed before sending anything.",
+          },
+          {
+            symptom: "The systemd unit dies at startup with an insecure-permissions error.",
+            code: [
+              `systemctl status relayium-serve
+# secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
+ls -l /etc/relayium/id.key`,
+            ],
+            fix: "relayium refuses to load a private key that anyone but its owner can read, the same rule ssh applies. Run chmod 600 on the path the error names, make sure it is owned by the service user, and restart the unit.",
+          },
+        ],
+      },
+    },
   ],
   faq: {
     heading: "Frequently asked questions",
@@ -147,13 +247,43 @@ const zh = {
   sections: [
     {
       heading: "启动监听端（在接收方）",
+      prereqs: {
+        label: "你需要准备",
+        items: [
+          "两台你自己掌控的机器，并且接收方的地址从发送方可达。主机名或裸 IP 都行。",
+          "两端都装好 relayium。daemon 直连只说原生协议，所以这里没有 tar 兜底来救一台没装的机器。",
+          "把监听端的端口对发送方开放——默认是 9031/TCP——主机防火墙和云安全组都要开。",
+          "接收方在第一次推送时要有一个终端，好回答批准提示。没有终端的话，请改为预先授权发送方（见下文）。",
+        ],
+      },
       body: [
         "在接收方服务器上，serve 监听推送并把它们写入某个目录。它默认长期运行；加上 --once 可以只接受一次传输就退出。你不需要预先共享任何东西——不用提前复制任何指纹：",
       ],
-      code: [
-        `# 在接收方
-relayium serve --dir ~/inbox      # 加 --once 只传一次；用 --port 改 9031`,
+      steps: [
+        {
+          text: "建好推送要落地的目录。",
+          code: ["mkdir -p ~/inbox"],
+        },
+        {
+          text: "只对发送方开放监听端的端口。把 203.0.113.7 换成发送方自己的地址——公网 IP，或者两台服务器同处一个内网时的内网 IP——并且把云安全组也收敛到同一个来源，而不是对整个互联网开放。",
+          code: ["sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp"],
+        },
+        {
+          text: "在终端里启动监听端，这样第一次推送时才有人回答批准提示。加 --once 只接一次传输就退出，加 --port 可以离开 9031。",
+          code: ["relayium serve --dir ~/inbox"],
+        },
       ],
+      success: {
+        label: "监听端跑起来是什么样",
+        body: [
+          "serve 会写明它绑定的地址、写入的目录，以及本机自己的指纹。在还没有已批准的对端时，它还会说明每遇到一个新对端都会来问你。",
+        ],
+        code: [
+          `relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)`,
+        ],
+      },
       bullets: [
         "监听端依次处理连接，并把文件落到 --dir 指定的目录下。",
         "默认端口是 9031；可用 --port 修改，并在防火墙上开放该端口。",
@@ -164,13 +294,34 @@ relayium serve --dir ~/inbox      # 加 --once 只传一次；用 --port 改 903
       body: [
         "从发送方服务器，推送到接收方的 relayium:// 地址。第一次连接会固定接收方的指纹；此后每次连接都会校验它，指纹一旦变化，监听端就会拒绝连接，而不会默默放行——密钥掉包或中间人攻击会当场暴露，不会被当成可信。在第一次推送时，发送方会稍等片刻，等待接收方批准（下一步）。",
       ],
-      code: [
-        `# 在发送方
-relayium push ./build.tar.zst relayium://receiver.example.com
-
-# 非默认端口
-relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      steps: [
+        {
+          text: "在发送方服务器上执行推送。第一次连接时它会正好停在这里，等接收方批准。",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com"],
+        },
+        {
+          text: "在接收方回答那个提示——就是下一节的内容。之后推送会自己走完，以后的推送也不会再停在这里。",
+        },
+        {
+          text: "监听端不在 9031 时，在地址后面加上端口。",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com:9040"],
+        },
       ],
+      success: {
+        label: "推送成功是什么样",
+        body: [
+          "第一次接触时，发送方会学到并固定监听端的指纹，然后开始传输。接收方会记下推送方的指纹，并报告文件数和字节数。",
+        ],
+        code: [
+          `# on the SENDER, first contact
+learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
+  build.tar.zst (48213004 bytes)
+
+# on the RECEIVER
+authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
+received 1 file(s), 48213004 bytes from 74318e3b…`,
+        ],
+      },
       bullets: [
         "没有中继，也没有回退：如果监听端无法到达，推送就会失败——文件字节永远不会经过其他任何人转发。",
         "使用与其他模式相同的传输引擎：可续传，并对每个文件做 SHA-256 校验。",
@@ -231,6 +382,55 @@ WantedBy=multi-user.target`,
         "让 /etc/relayium/id.key 只对服务用户可读——权限过于宽松时 relayium 会拒绝加载该密钥。",
       ],
     },
+    {
+      heading: "推送不通的时候",
+      body: [
+        "先查的是可达性和信任这两件事：在发送方跑 ss -tinp，能看出监听端到底通没通；在接收方跑 relayium authorize，则是把被拒绝的发送方缺的那份信任补上。但推送出错的方式不止这两类——接收方磁盘满了、收件目录对运行它的用户不可写、某个文件传完后过不了完整性校验，这些都会自己报错——所以请先看眼前的报错，而不是假定它一定是下面四种之一。",
+      ],
+      troubleshooting: {
+        label: "现象、检查、修复",
+        items: [
+          {
+            symptom: "推送一直挂着，最后报连接错误。",
+            code: [
+              `# 在发送方，推送还在跑的时候——隔几秒跑两次
+ss -tinp dst :9031
+# ESTAB    说明够得着监听端，但不说明有没有进展
+# SYN-SENT 那个端口上没人应答`,
+            ],
+            fix: "SYN-SENT 意味着数据包根本没到达一个正在监听的套接字。先在接收方用 ss -tlnp | grep 9031 确认 serve 起着，再在主机防火墙和云安全组里把 9031/TCP 对发送方开放。ESTAB 只能证明够得着——一条已建立的连接照样可以闲着或者卡住——所以要区分「在传」和「卡住」，得隔几秒把这条检查跑两次，比较 -i 为该套接字打印的 bytes_acked 计数。这里没有中继通路，所以监听端不可达是硬失败，而不是变慢。",
+          },
+          {
+            symptom: "serve 日志里写着 “rejected unauthorized peer …”，推送失败。",
+            code: [
+              `# 在发送方
+relayium id
+# 74318e3b…
+
+# 在接收方
+relayium authorize 74318e3b…`,
+            ],
+            fix: "serve 当时没有终端可问——比如跑在 systemd 下或接了管道——所以对未知指纹选择拒绝而不是信任。预先授权即可：拒绝那行里的指纹，正是发送方 relayium id 打印出来的那个，而 authorize 是幂等的。",
+          },
+          {
+            symptom: "“fingerprint mismatch for receiver.example.com:9031”。",
+            code: [
+              `grep receiver.example.com ~/.config/relayium/known_hosts`,
+            ],
+            fix: "监听端出示的密钥，和首次接触时固定下来的那把不一样。如果是你自己有意轮换了密钥，就删掉对应的 known_hosts 那一行再推。如果不是，先别动那一行，弄清楚密钥为什么变了，再发任何东西。",
+          },
+          {
+            symptom: "systemd 单元一启动就因为权限不安全而退出。",
+            code: [
+              `systemctl status relayium-serve
+# secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
+ls -l /etc/relayium/id.key`,
+            ],
+            fix: "relayium 拒绝加载一把除属主之外还有人能读的私钥，这和 ssh 的规矩一样。对报错里给出的路径执行 chmod 600，确认它属于那个服务用户，然后重启单元。",
+          },
+        ],
+      },
+    },
   ],
   faq: {
     heading: "常见问题",
@@ -277,13 +477,43 @@ const ja = {
   sections: [
     {
       heading: "リスナーを起動する（受信側）",
+      prereqs: {
+        label: "必要なもの",
+        items: [
+          "自分で管理する2台のマシン。受信側のアドレスが送信側から到達できることが条件です。ホスト名でも生の IP でも構いません。",
+          "両端の relayium。デーモン直結はネイティブプロトコルしか話さないので、未インストールを救う tar フォールバックはここにはありません。",
+          "リスナーのポートを送信側に開けること。変更しなければ 9031/TCP で、ホストのファイアウォールとクラウドのセキュリティグループの両方が対象です。",
+          "初回プッシュのために受信側の端末。承認プロンプトに答えるためです。端末が無い場合は、代わりに送信側を事前承認します（後述）。",
+        ],
+      },
       body: [
         "受信側のサーバーでは、serve がプッシュを待ち受け、あるディレクトリへ書き込みます。デフォルトでは常駐し続けます。--once を付けると1回の転送だけを受け取って終了します。事前に何かを共有しておく必要はありません。あらかじめコピーしておくフィンガープリントもありません：",
       ],
-      code: [
-        `# 受信側で
-relayium serve --dir ~/inbox      # 1回だけなら --once を追加。9031 の変更は --port`,
+      steps: [
+        {
+          text: "プッシュが着地するディレクトリを作ります。",
+          code: ["mkdir -p ~/inbox"],
+        },
+        {
+          text: "リスナーのポートは送信側にだけ開けます。203.0.113.7 は送信側自身のアドレス——グローバル IP、2台が同じネットワークにいるならプライベート IP——に置き換え、クラウドのセキュリティグループもインターネット全体ではなく同じ送信元だけに絞ってください。",
+          code: ["sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp"],
+        },
+        {
+          text: "初回プッシュの承認プロンプトに答える人がいるよう、端末でリスナーを起動します。--once を足せば1回受けて終了、--port なら 9031 以外に移せます。",
+          code: ["relayium serve --dir ~/inbox"],
+        },
       ],
+      success: {
+        label: "リスナーが動いているときの表示",
+        body: [
+          "serve は待ち受けたアドレス、書き込み先ディレクトリ、そしてこのホスト自身のフィンガープリントを表示します。承認済みのピアがまだ無いときは、新しいピアごとに確認する旨も表示します。",
+        ],
+        code: [
+          `relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)`,
+        ],
+      },
       bullets: [
         "リスナーは接続を1つずつ処理し、ファイルを --dir の下に配置します。",
         "デフォルトのポートは 9031 です。--port で変更し、ファイアウォールで開放してください。",
@@ -294,13 +524,34 @@ relayium serve --dir ~/inbox      # 1回だけなら --once を追加。9031 の
       body: [
         "送信側のサーバーから、受信側の relayium:// アドレスへプッシュします。最初の接続で受信側のフィンガープリントが固定され、以降の接続はすべてそれを検証します。フィンガープリントが変わった場合は黙って受け入れられるのではなく拒否されます。鍵のすり替えや中間者攻撃はそのまま信頼されるのではなく、検知されます。最初のプッシュでは、受信側が承認するまでの間、送信側は少し待機します（次のステップ）。",
       ],
-      code: [
-        `# 送信側で
-relayium push ./build.tar.zst relayium://receiver.example.com
-
-# 既定以外のポート
-relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      steps: [
+        {
+          text: "送信側のサーバーでプッシュを実行します。ごく最初の接続では、受信側が承認するまでちょうどここで止まります。",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com"],
+        },
+        {
+          text: "受信側でプロンプトに答えます。次の節がそれです。あとはプッシュが自力で完了し、以後のプッシュがここで止まることはありません。",
+        },
+        {
+          text: "リスナーが 9031 以外にいる場合は、末尾にポートを付けます。",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com:9040"],
+        },
       ],
+      success: {
+        label: "プッシュが成功したときの表示",
+        body: [
+          "初回接触で送信側はリスナーのフィンガープリントを学習してピン留めし、そのまま転送します。受信側はプッシュ元のフィンガープリントを記録し、ファイル数とバイト数を報告します。",
+        ],
+        code: [
+          `# on the SENDER, first contact
+learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
+  build.tar.zst (48213004 bytes)
+
+# on the RECEIVER
+authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
+received 1 file(s), 48213004 bytes from 74318e3b…`,
+        ],
+      },
       bullets: [
         "リレーもフォールバックもありません。リスナーに到達できなければプッシュは失敗します。ファイルのバイト列が他の誰かを経由することは決してありません。",
         "他のモードと同じ転送エンジンです。再開可能で、ファイルごとに SHA-256 チェックが行われます。",
@@ -361,6 +612,55 @@ WantedBy=multi-user.target`,
         "/etc/relayium/id.key はサービスユーザーだけが読めるようにしてください。権限が緩い鍵は relayium が読み込みを拒否します。",
       ],
     },
+    {
+      heading: "プッシュが通らないとき",
+      body: [
+        "まず見るのは到達性と信頼の2つです。送信側で ss -tinp を実行すればリスナーに届いているかが分かり、受信側の relayium authorize は、拒否された送信側に足りない信頼を与えます。ただしプッシュが失敗する道はこの2種類だけではありません。受信側のディスクが一杯、受信ディレクトリに実行ユーザーが書き込めない、転送されたファイルが整合性チェックに落ちる——どれも自分でエラーを出します。ですから下の4つのどれかだと決めてかからず、目の前のエラーを読んでください。",
+      ],
+      troubleshooting: {
+        label: "症状・確認・対処",
+        items: [
+          {
+            symptom: "プッシュがそのまま止まり、最後に接続エラーで失敗する。",
+            code: [
+              `# 送信側で、プッシュ実行中に — 数秒あけて2回実行する
+ss -tinp dst :9031
+# ESTAB    リスナーに届いたことだけを示し、進捗までは示さない
+# SYN-SENT そのポートで誰も応答していない`,
+            ],
+            fix: "SYN-SENT は、パケットが待ち受け中のソケットまで届いていないという意味です。受信側で ss -tlnp | grep 9031 を実行して serve が起動しているか確かめ、ホストのファイアウォールとクラウドのセキュリティグループで 9031/TCP を送信側に開けてください。ESTAB が示すのは到達できたことだけで、確立済みのソケットが無通信のまま止まっていることもあります。動いているのか止まっているのかを見分けるには、このチェックを数秒あけて2回実行し、-i がそのソケットについて表示する bytes_acked カウンターを比べてください。ここにはリレー経路が無いので、届かないリスナーは遅いのではなく完全な失敗です。",
+          },
+          {
+            symptom: "serve のログに「rejected unauthorized peer …」と出てプッシュが失敗する。",
+            code: [
+              `# 送信側で
+relayium id
+# 74318e3b…
+
+# 受信側で
+relayium authorize 74318e3b…`,
+            ],
+            fix: "serve に尋ねる相手の端末が無かった（systemd ユニットやパイプ）ため、未知のフィンガープリントは信頼されずに拒否されます。事前に承認してください。拒否行のフィンガープリントは送信側の relayium id が表示するものとまったく同じで、authorize は何度実行しても同じ結果です。",
+          },
+          {
+            symptom: "「fingerprint mismatch for receiver.example.com:9031」。",
+            code: [
+              `grep receiver.example.com ~/.config/relayium/known_hosts`,
+            ],
+            fix: "リスナーが、初回接触でピン留めした鍵とは別の鍵を提示しました。意図して鍵を更新したのなら、該当する known_hosts の行を削除してからプッシュし直します。そうでないなら行はそのままにして、鍵が変わった理由が分かるまで何も送らないでください。",
+          },
+          {
+            symptom: "systemd ユニットが起動時にパーミッション不備のエラーで落ちる。",
+            code: [
+              `systemctl status relayium-serve
+# secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
+ls -l /etc/relayium/id.key`,
+            ],
+            fix: "relayium は所有者以外にも読める秘密鍵の読み込みを拒否します。ssh と同じ規則です。エラーが示すパスに chmod 600 を実行し、所有者がサービス用ユーザーであることを確かめて、ユニットを再起動してください。",
+          },
+        ],
+      },
+    },
   ],
   faq: {
     heading: "よくある質問",
@@ -407,13 +707,43 @@ const ko = {
   sections: [
     {
       heading: "리스너 시작하기(받는 쪽)",
+      prereqs: {
+        label: "필요한 것",
+        items: [
+          "직접 관리하는 두 대의 기기, 그리고 보내는 쪽에서 닿을 수 있는 받는 쪽 주소. 호스트명이든 생 IP든 됩니다.",
+          "양쪽 모두의 relayium. 데몬 다이렉트는 네이티브 프로토콜만 쓰므로, 설치 누락을 구해 줄 tar 대체 방식이 여기에는 없습니다.",
+          "보내는 쪽에 열린 리스너 포트 — 바꾸지 않았다면 9031/TCP — 호스트 방화벽과 클라우드 보안 그룹 양쪽에서.",
+          "첫 푸시 때 승인 프롬프트에 답할 수 있도록 받는 쪽의 터미널. 터미널이 없다면 대신 보내는 쪽을 미리 승인하세요(아래 참고).",
+        ],
+      },
       body: [
         "받는 쪽 서버에서 serve는 푸시를 대기하고 이를 어떤 디렉터리에 기록합니다. 기본적으로 계속 실행되며, --once를 추가하면 한 번의 전송만 받고 종료합니다. 미리 공유해야 할 것은 아무것도 없습니다. 미리 복사해 둘 핑거프린트도 없습니다:",
       ],
-      code: [
-        `# 받는 쪽에서
-relayium serve --dir ~/inbox      # 한 번만 받으려면 --once 추가; 9031 변경은 --port`,
+      steps: [
+        {
+          text: "푸시가 도착할 디렉터리를 만듭니다.",
+          code: ["mkdir -p ~/inbox"],
+        },
+        {
+          text: "리스너의 포트를 보내는 쪽에만 엽니다. 203.0.113.7 은 보내는 쪽 자신의 주소——공인 IP, 두 서버가 같은 네트워크에 있다면 사설 IP——로 바꾸고, 클라우드 보안 그룹도 인터넷 전체가 아니라 같은 출발지로 좁히세요.",
+          code: ["sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp"],
+        },
+        {
+          text: "첫 푸시의 승인 프롬프트에 답할 사람이 있도록 터미널에서 리스너를 시작합니다. --once 를 붙이면 한 번 받고 종료하고, --port 로 9031을 벗어날 수 있습니다.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
       ],
+      success: {
+        label: "리스너가 떠 있을 때 보이는 것",
+        body: [
+          "serve는 바인딩한 주소, 파일을 쓰는 디렉터리, 그리고 이 호스트 자신의 지문을 알려 줍니다. 승인된 피어가 아직 없으면 새 피어마다 물어보겠다는 안내도 함께 나옵니다.",
+        ],
+        code: [
+          `relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)`,
+        ],
+      },
       bullets: [
         "리스너는 연결을 한 번에 하나씩 처리하며 파일을 --dir 아래에 내려놓습니다.",
         "기본 포트는 9031입니다. --port로 변경하고 방화벽에서 열어 두세요.",
@@ -424,13 +754,34 @@ relayium serve --dir ~/inbox      # 한 번만 받으려면 --once 추가; 9031 
       body: [
         "보내는 쪽 서버에서 받는 쪽의 relayium:// 주소로 푸시하세요. 첫 연결에서 받는 쪽의 핑거프린트가 고정되고, 이후 모든 연결은 이를 검증합니다. 핑거프린트가 바뀌면 조용히 받아들여지는 대신 거부됩니다. 그래서 키가 바뀌었거나 중간자 공격이 있으면 신뢰되는 대신 발견됩니다. 첫 푸시에서는 받는 쪽이 승인할 때까지 보내는 쪽이 잠시 대기합니다(다음 단계).",
       ],
-      code: [
-        `# 보내는 쪽에서
-relayium push ./build.tar.zst relayium://receiver.example.com
-
-# 기본이 아닌 포트
-relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      steps: [
+        {
+          text: "보내는 서버에서 푸시를 실행합니다. 맨 처음 연결에서는 받는 쪽이 승인할 때까지 바로 여기서 멈춥니다.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com"],
+        },
+        {
+          text: "받는 쪽에서 프롬프트에 답합니다 — 바로 다음 절의 내용입니다. 그 뒤로 푸시는 스스로 끝나고, 이후의 푸시는 다시는 여기서 멈추지 않습니다.",
+        },
+        {
+          text: "리스너가 9031이 아니라면 주소 뒤에 포트를 덧붙입니다.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com:9040"],
+        },
       ],
+      success: {
+        label: "푸시가 성공했을 때 보이는 것",
+        body: [
+          "첫 접촉에서 보내는 쪽이 리스너의 지문을 배워 고정한 뒤 전송합니다. 받는 쪽은 푸시한 기기의 지문을 기록하고 파일 수와 바이트 수를 보고합니다.",
+        ],
+        code: [
+          `# on the SENDER, first contact
+learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
+  build.tar.zst (48213004 bytes)
+
+# on the RECEIVER
+authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
+received 1 file(s), 48213004 bytes from 74318e3b…`,
+        ],
+      },
       bullets: [
         "릴레이도 폴백도 없습니다. 리스너에 도달할 수 없으면 푸시는 실패합니다. 파일 바이트는 결코 다른 누군가를 거쳐 전달되지 않습니다.",
         "다른 모드와 동일한 전송 엔진입니다. 재개 가능하며 파일별 SHA-256 검사를 수행합니다.",
@@ -491,6 +842,55 @@ WantedBy=multi-user.target`,
         "/etc/relayium/id.key는 서비스 사용자만 읽을 수 있게 하세요. 권한이 느슨한 키는 relayium이 불러오기를 거부합니다.",
       ],
     },
+    {
+      heading: "푸시가 통하지 않을 때",
+      body: [
+        "먼저 볼 것은 도달성과 신뢰, 이 두 가지입니다. 보내는 쪽에서 ss -tinp 를 돌리면 리스너에 닿기는 했는지 알 수 있고, 받는 쪽의 relayium authorize 는 거부당한 보내는 쪽에 없는 신뢰를 부여합니다. 다만 푸시가 실패하는 방식이 이 둘뿐인 것은 아닙니다. 받는 쪽 디스크가 꽉 찼거나, 받는 디렉터리에 실행 사용자가 쓸 수 없거나, 전송된 파일이 무결성 검사를 통과하지 못하는 경우도 각각 자기 오류를 냅니다. 그러니 아래 네 가지 중 하나라고 단정하지 말고 눈앞의 오류를 읽으세요.",
+      ],
+      troubleshooting: {
+        label: "증상, 확인, 해결",
+        items: [
+          {
+            symptom: "푸시가 그대로 멈춰 있다가 연결 오류로 실패합니다.",
+            code: [
+              `# 보내는 쪽에서, 푸시가 도는 동안 — 몇 초 간격으로 두 번 실행
+ss -tinp dst :9031
+# ESTAB    리스너에 닿았다는 뜻일 뿐, 진행 여부는 말해 주지 않음
+# SYN-SENT 그 포트에서 아무도 응답하지 않음`,
+            ],
+            fix: "SYN-SENT는 패킷이 대기 중인 소켓까지 닿지 못했다는 뜻입니다. 받는 쪽에서 ss -tlnp | grep 9031 로 serve가 떠 있는지 확인하고, 호스트 방화벽과 클라우드 보안 그룹에서 9031/TCP를 보내는 쪽에 여세요. ESTAB은 닿았다는 것만 증명합니다. established 소켓도 놀고 있거나 멈춰 있을 수 있습니다. 그러니 움직이는지 멈췄는지 가리려면 이 확인을 몇 초 간격으로 두 번 실행해, -i 가 그 소켓에 대해 출력하는 bytes_acked 카운터를 비교하세요. 여기에는 릴레이 경로가 없으므로, 닿지 않는 리스너는 느린 것이 아니라 완전한 실패입니다.",
+          },
+          {
+            symptom: "serve 로그에 “rejected unauthorized peer …”가 찍히고 푸시가 실패합니다.",
+            code: [
+              `# 보내는 쪽에서
+relayium id
+# 74318e3b…
+
+# 받는 쪽에서
+relayium authorize 74318e3b…`,
+            ],
+            fix: "serve에게 물어볼 터미널이 없었기 때문입니다 — systemd 유닛이나 파이프 — 그래서 알 수 없는 지문은 신뢰 대신 거부됩니다. 미리 승인하세요. 거부 줄에 있는 지문은 보내는 쪽의 relayium id 가 출력하는 것과 똑같고, authorize는 몇 번 실행해도 같습니다.",
+          },
+          {
+            symptom: "“fingerprint mismatch for receiver.example.com:9031”.",
+            code: [
+              `grep receiver.example.com ~/.config/relayium/known_hosts`,
+            ],
+            fix: "리스너가 첫 접촉 때 고정한 것과 다른 키를 제시했습니다. 일부러 그 키를 교체했다면 해당 known_hosts 줄을 지우고 다시 푸시하세요. 그렇지 않다면 그 줄은 그대로 두고, 키가 왜 바뀌었는지 알아내기 전에는 아무것도 보내지 마세요.",
+          },
+          {
+            symptom: "systemd 유닛이 시작하자마자 권한 오류로 죽습니다.",
+            code: [
+              `systemctl status relayium-serve
+# secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
+ls -l /etc/relayium/id.key`,
+            ],
+            fix: "relayium은 소유자 외의 누구라도 읽을 수 있는 개인 키를 읽어들이길 거부합니다. ssh와 같은 규칙입니다. 오류가 알려 준 경로에 chmod 600을 적용하고, 그 파일의 소유자가 서비스 사용자인지 확인한 뒤 유닛을 재시작하세요.",
+          },
+        ],
+      },
+    },
   ],
   faq: {
     heading: "자주 묻는 질문",
@@ -537,13 +937,43 @@ const de = {
   sections: [
     {
       heading: "Den Listener starten (auf dem Empfänger)",
+      prereqs: {
+        label: "Was du brauchst",
+        items: [
+          "Zwei Rechner, die dir gehören, und die Adresse des Empfängers vom Sender aus erreichbar. Ein Hostname oder eine nackte IP tun es beide.",
+          "relayium auf beiden Seiten. Daemon-direct spricht nur das native Protokoll, hier rettet dich also kein tar-Fallback, wenn die Installation fehlt.",
+          "Den Port des Listeners für den Sender offen — 9031/TCP, solange du ihn nicht änderst — in der Host-Firewall und in jeder Cloud-Sicherheitsgruppe.",
+          "Ein Terminal auf dem Empfänger für den ersten Push, damit du die Genehmigungsfrage beantworten kannst. Ohne Terminal autorisierst du den Sender stattdessen vorab (siehe unten).",
+        ],
+      },
       body: [
         "Auf dem empfangenden Server lauscht serve auf Pushes und schreibt sie in ein Verzeichnis. Standardmäßig läuft es dauerhaft; mit --once nimmt es eine einzelne Übertragung an und beendet sich. Du musst nichts vorab teilen — keine Fingerprints, die du im Voraus kopieren müsstest:",
       ],
-      code: [
-        `# auf dem EMPFÄNGER
-relayium serve --dir ~/inbox      # --once für eine einzelne Übertragung; --port ändert 9031`,
+      steps: [
+        {
+          text: "Leg das Verzeichnis an, in dem Pushes landen sollen.",
+          code: ["mkdir -p ~/inbox"],
+        },
+        {
+          text: "Öffne den Port des Listeners nur für den Sender. Ersetz 203.0.113.7 durch die Adresse des Senders selbst — seine öffentliche IP, oder seine private, wenn beide Server im selben Netz hängen — und grenz die Cloud-Sicherheitsgruppe auf dieselbe Quelle ein statt auf das ganze Internet.",
+          code: ["sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp"],
+        },
+        {
+          text: "Starte den Listener in einem Terminal, damit beim ersten Push jemand die Genehmigungsfrage beantworten kann. --once nimmt eine einzelne Übertragung und beendet sich, --port bringt ihn weg von 9031.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
       ],
+      success: {
+        label: "So sieht ein laufender Listener aus",
+        body: [
+          "serve nennt die Adresse, an die er gebunden hat, das Verzeichnis, in das er schreibt, und den eigenen Fingerabdruck dieses Hosts. Solange keine Peers genehmigt sind, sagt er außerdem, dass er zu jedem neuen nachfragen wird.",
+        ],
+        code: [
+          `relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)`,
+        ],
+      },
       bullets: [
         "Der Listener verarbeitet Verbindungen nacheinander und legt Dateien unter --dir ab.",
         "Der Standardport ist 9031; ändere ihn mit --port und öffne ihn in deiner Firewall.",
@@ -554,13 +984,34 @@ relayium serve --dir ~/inbox      # --once für eine einzelne Übertragung; --po
       body: [
         "Vom sendenden Server aus, push zur relayium://-Adresse des Empfängers. Die erste Verbindung pinnt den Fingerprint des Empfängers; jede folgende Verbindung überprüft ihn, und ein geänderter Fingerprint wird abgelehnt statt stillschweigend akzeptiert — ein ausgetauschter Schlüssel oder ein Man-in-the-Middle wird so erkannt, nicht vertraut. Beim allerersten Push wartet der Sender einen Moment, während der Empfänger ihn genehmigt (nächster Schritt).",
       ],
-      code: [
-        `# auf dem SENDER
-relayium push ./build.tar.zst relayium://receiver.example.com
-
-# abweichender Port
-relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      steps: [
+        {
+          text: "Führ den Push auf dem sendenden Server aus. Bei der allerersten Verbindung hält er genau hier an, bis der Empfänger ihn genehmigt.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com"],
+        },
+        {
+          text: "Beantworte die Frage auf dem Empfänger — das ist der nächste Abschnitt. Danach läuft der Push von allein zu Ende, und spätere Pushes halten hier nie wieder an.",
+        },
+        {
+          text: "Häng einen Port an, wenn der Listener nicht auf 9031 sitzt.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com:9040"],
+        },
       ],
+      success: {
+        label: "So sieht ein erfolgreicher Push aus",
+        body: [
+          "Beim ersten Kontakt lernt der Sender den Fingerabdruck des Listeners und heftet ihn an, dann überträgt er. Der Empfänger merkt sich den Fingerabdruck des Pushers und meldet Datei- und Byte-Zahl.",
+        ],
+        code: [
+          `# on the SENDER, first contact
+learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
+  build.tar.zst (48213004 bytes)
+
+# on the RECEIVER
+authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
+received 1 file(s), 48213004 bytes from 74318e3b…`,
+        ],
+      },
       bullets: [
         "Kein Relay und kein Fallback: Ist der Listener nicht erreichbar, schlägt der Push fehl — die Datei-Bytes laufen nie über irgendjemand anderen.",
         "Dieselbe Übertragungs-Engine wie die anderen Modi: fortsetzbar, mit einer SHA-256-Prüfung pro Datei.",
@@ -621,6 +1072,55 @@ WantedBy=multi-user.target`,
         "Halte /etc/relayium/id.key nur für den Dienstbenutzer lesbar — relayium verweigert das Laden eines Schlüssels mit zu lockeren Berechtigungen.",
       ],
     },
+    {
+      heading: "Wenn ein Push nicht durchkommt",
+      body: [
+        "Erreichbarkeit und Vertrauen sind das Erste, was du prüfst: ss -tinp auf dem Sender zeigt, ob der Listener überhaupt erreicht wurde, und relayium authorize auf dem Empfänger gibt einem abgewiesenen Sender das fehlende Vertrauen. Das sind nicht die einzigen Arten, wie ein Push scheitern kann — ein Empfänger ohne Plattenplatz, ein Eingangsverzeichnis, in das sein Benutzer nicht schreiben darf, oder eine übertragene Datei, die ihre Integritätsprüfung nicht besteht, melden sich alle selbst — lies also den Fehler vor dir, statt anzunehmen, es sei einer der vier unten.",
+      ],
+      troubleshooting: {
+        label: "Symptom, Prüfung, Lösung",
+        items: [
+          {
+            symptom: "Der Push steht, dann scheitert er mit einem Verbindungsfehler.",
+            code: [
+              `# auf dem SENDER, während der Push läuft — zweimal im Abstand einiger Sekunden
+ss -tinp dst :9031
+# ESTAB    der Listener wurde erreicht; über Fortschritt sagt das nichts
+# SYN-SENT auf dem Port hat nichts geantwortet`,
+            ],
+            fix: "SYN-SENT heißt, die Pakete haben nie einen lauschenden Socket erreicht. Prüf auf dem Empfänger mit ss -tlnp | grep 9031, ob serve läuft, und öffne dann 9031/TCP für den Sender in der Host-Firewall und in der Cloud-Sicherheitsgruppe. ESTAB belegt nur die Erreichbarkeit — ein aufgebauter Socket kann untätig oder blockiert sein —, also führ die Prüfung zweimal im Abstand einiger Sekunden aus und vergleich den bytes_acked-Zähler, den -i für diesen Socket ausgibt, um Bewegung von Stillstand zu unterscheiden. Hier gibt es keinen Relay-Weg, ein nicht erreichbarer Listener ist also ein harter Fehlschlag und kein langsamer Lauf.",
+          },
+          {
+            symptom: "Im serve-Log steht „rejected unauthorized peer …“ und der Push scheitert.",
+            code: [
+              `# auf dem SENDER
+relayium id
+# 74318e3b…
+
+# auf dem EMPFÄNGER
+relayium authorize 74318e3b…`,
+            ],
+            fix: "serve hatte kein Terminal zum Nachfragen — eine systemd-Unit oder eine Pipe — also wird ein unbekannter Fingerabdruck abgelehnt statt vertraut. Autorisier ihn vorab: Der Fingerabdruck in der Ablehnungszeile ist genau der, den relayium id auf dem Sender ausgibt, und authorize ist idempotent.",
+          },
+          {
+            symptom: "„fingerprint mismatch for receiver.example.com:9031“.",
+            code: [
+              `grep receiver.example.com ~/.config/relayium/known_hosts`,
+            ],
+            fix: "Der Listener hat einen anderen Schlüssel vorgezeigt als den, der beim ersten Kontakt angeheftet wurde. Hast du den Schlüssel absichtlich rotiert, lösch die passende known_hosts-Zeile und push erneut. Wenn nicht, lass die Zeile stehen und finde heraus, warum sich der Schlüssel geändert hat, bevor du irgendetwas sendest.",
+          },
+          {
+            symptom: "Die systemd-Unit stirbt beim Start an einem Fehler über unsichere Dateirechte.",
+            code: [
+              `systemctl status relayium-serve
+# secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
+ls -l /etc/relayium/id.key`,
+            ],
+            fix: "relayium lädt keinen privaten Schlüssel, den außer seinem Besitzer noch jemand lesen kann — dieselbe Regel, die ssh anwendet. Führ chmod 600 auf dem Pfad aus, den der Fehler nennt, stell sicher, dass er dem Dienstbenutzer gehört, und starte die Unit neu.",
+          },
+        ],
+      },
+    },
   ],
   faq: {
     heading: "Häufige Fragen",
@@ -667,13 +1167,43 @@ const fr = {
   sections: [
     {
       heading: "Démarrer le processus à l'écoute (sur le récepteur)",
+      prereqs: {
+        label: "Ce qu'il vous faut",
+        items: [
+          "Deux machines qui vous appartiennent, l'adresse du récepteur étant joignable depuis l'émetteur. Un nom d'hôte ou une simple IP conviennent.",
+          "relayium des deux côtés. Le daemon-direct ne parle que le protocole natif, donc aucun repli tar ne rattrapera ici une installation manquante.",
+          "Le port du processus à l'écoute ouvert à l'émetteur — 9031/TCP tant que vous ne le changez pas — dans le pare-feu de l'hôte et dans tout groupe de sécurité cloud.",
+          "Un terminal sur le récepteur pour le premier envoi, afin de répondre à la demande d'approbation. Sans terminal, autorisez plutôt l'émetteur à l'avance (voir plus bas).",
+        ],
+      },
       body: [
         "Sur le serveur récepteur, serve écoute les envois et les écrit dans un répertoire. Il tourne en continu par défaut ; ajoutez --once pour accepter un seul transfert puis s'arrêter. Vous n'avez rien à partager à l'avance — aucune empreinte à copier au préalable :",
       ],
-      code: [
-        `# sur le RÉCEPTEUR
-relayium serve --dir ~/inbox      # --once pour un seul transfert ; --port pour changer 9031`,
+      steps: [
+        {
+          text: "Créez le répertoire dans lequel les envois doivent atterrir.",
+          code: ["mkdir -p ~/inbox"],
+        },
+        {
+          text: "N'ouvrez le port du processus à l'écoute qu'à l'émetteur. Remplacez 203.0.113.7 par l'adresse de l'émetteur lui-même — son IP publique, ou son IP privée si les deux serveurs partagent un réseau — et restreignez le groupe de sécurité cloud à cette même source plutôt qu'à tout l'internet.",
+          code: ["sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp"],
+        },
+        {
+          text: "Démarrez le processus à l'écoute dans un terminal, pour que quelqu'un puisse répondre à la demande d'approbation au premier envoi. --once accepte un seul transfert puis quitte, --port le déplace hors de 9031.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
       ],
+      success: {
+        label: "À quoi ressemble un processus à l'écoute qui tourne",
+        body: [
+          "serve annonce l'adresse sur laquelle il écoute, le répertoire dans lequel il écrit, et l'empreinte propre de cet hôte. Tant qu'aucun pair n'est approuvé, il précise aussi qu'il posera la question pour chaque nouveau.",
+        ],
+        code: [
+          `relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)`,
+        ],
+      },
       bullets: [
         "Le processus à l'écoute traite les connexions une par une et dépose les fichiers sous --dir.",
         "Le port par défaut est 9031 ; changez-le avec --port et ouvrez-le sur votre pare-feu.",
@@ -684,13 +1214,34 @@ relayium serve --dir ~/inbox      # --once pour un seul transfert ; --port pour 
       body: [
         "Depuis le serveur émetteur, envoyez vers l'adresse relayium:// du récepteur. La première connexion épingle l'empreinte du récepteur ; chaque connexion suivante la vérifie, et une empreinte modifiée est refusée plutôt qu'acceptée silencieusement — une clé remplacée ou une attaque de l'homme du milieu est ainsi détectée, pas approuvée. Lors du tout premier envoi, l'émetteur patiente un instant pendant que le récepteur l'approuve (étape suivante).",
       ],
-      code: [
-        `# sur l'ÉMETTEUR
-relayium push ./build.tar.zst relayium://receiver.example.com
-
-# port non par défaut
-relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      steps: [
+        {
+          text: "Lancez l'envoi depuis le serveur émetteur. À la toute première connexion, il s'arrête précisément ici, le temps que le récepteur l'approuve.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com"],
+        },
+        {
+          text: "Répondez à la demande sur le récepteur, c'est la section suivante. L'envoi se termine ensuite tout seul, et les envois suivants ne s'arrêtent plus jamais ici.",
+        },
+        {
+          text: "Ajoutez un port lorsque le processus à l'écoute n'est pas sur 9031.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com:9040"],
+        },
       ],
+      success: {
+        label: "À quoi ressemble un envoi réussi",
+        body: [
+          "Au premier contact, l'émetteur apprend puis épingle l'empreinte du processus à l'écoute, et transfère. Le récepteur enregistre l'empreinte de l'émetteur et annonce le nombre de fichiers et d'octets.",
+        ],
+        code: [
+          `# on the SENDER, first contact
+learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
+  build.tar.zst (48213004 bytes)
+
+# on the RECEIVER
+authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
+received 1 file(s), 48213004 bytes from 74318e3b…`,
+        ],
+      },
       bullets: [
         "Aucun relais et aucun repli : si le processus à l'écoute n'est pas joignable, l'envoi échoue — les octets du fichier ne transitent jamais par qui que ce soit d'autre.",
         "Le même moteur de transfert que les autres modes : avec reprise, et une vérification SHA-256 par fichier.",
@@ -751,6 +1302,55 @@ WantedBy=multi-user.target`,
         "Gardez /etc/relayium/id.key lisible uniquement par l'utilisateur du service — relayium refuse de charger une clé aux permissions trop permissives.",
       ],
     },
+    {
+      heading: "Quand un envoi ne passe pas",
+      body: [
+        "La joignabilité et la confiance sont les deux premières choses à vérifier : ss -tinp sur l'émetteur dit si le processus à l'écoute a seulement été atteint, et relayium authorize sur le récepteur accorde à un émetteur refusé la confiance qui lui manque. Ce ne sont pas les seules façons dont un envoi peut échouer — un récepteur à court d'espace disque, un répertoire de réception où son utilisateur ne peut pas écrire, ou un fichier transféré qui rate son contrôle d'intégrité se signalent tous eux-mêmes — lisez donc l'erreur que vous avez sous les yeux plutôt que de supposer qu'il s'agit de l'un des quatre cas ci-dessous.",
+      ],
+      troubleshooting: {
+        label: "Symptôme, vérification, correction",
+        items: [
+          {
+            symptom: "L'envoi reste immobile, puis échoue sur une erreur de connexion.",
+            code: [
+              `# sur l'ÉMETTEUR, pendant que l'envoi tourne — lancez-la deux fois, à quelques secondes d'intervalle
+ss -tinp dst :9031
+# ESTAB    le processus à l'écoute a été atteint ; cela ne dit rien de la progression
+# SYN-SENT rien n'a répondu sur ce port`,
+            ],
+            fix: "SYN-SENT signifie que les paquets n'ont jamais atteint une socket à l'écoute. Vérifiez sur le récepteur que serve tourne, avec ss -tlnp | grep 9031, puis ouvrez 9031/TCP à l'émetteur dans le pare-feu de l'hôte et dans le groupe de sécurité cloud. ESTAB ne prouve que l'accessibilité — une socket établie peut rester inactive ou bloquée —, donc pour distinguer ce qui avance de ce qui est coincé, relancez la vérification à quelques secondes d'intervalle et comparez le compteur bytes_acked que -i affiche pour cette socket. Il n'y a aucune voie de relais ici, donc un processus à l'écoute injoignable est un échec net et non un ralentissement.",
+          },
+          {
+            symptom: "Le journal de serve indique « rejected unauthorized peer … » et l'envoi échoue.",
+            code: [
+              `# sur l'ÉMETTEUR
+relayium id
+# 74318e3b…
+
+# sur le RÉCEPTEUR
+relayium authorize 74318e3b…`,
+            ],
+            fix: "serve n'avait aucun terminal à qui demander — une unité systemd, un tube — donc une empreinte inconnue est refusée plutôt qu'acceptée. Autorisez-la à l'avance : l'empreinte de la ligne de refus est exactement celle qu'affiche relayium id sur l'émetteur, et authorize est idempotent.",
+          },
+          {
+            symptom: "« fingerprint mismatch for receiver.example.com:9031 ».",
+            code: [
+              `grep receiver.example.com ~/.config/relayium/known_hosts`,
+            ],
+            fix: "Le processus à l'écoute a présenté une clé différente de celle épinglée au premier contact. Si vous avez fait tourner cette clé volontairement, supprimez la ligne correspondante de known_hosts et relancez l'envoi. Sinon, laissez la ligne en place et cherchez pourquoi la clé a changé avant d'envoyer quoi que ce soit.",
+          },
+          {
+            symptom: "L'unité systemd meurt au démarrage sur une erreur de permissions non sûres.",
+            code: [
+              `systemctl status relayium-serve
+# secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
+ls -l /etc/relayium/id.key`,
+            ],
+            fix: "relayium refuse de charger une clé privée lisible par quelqu'un d'autre que son propriétaire, la même règle qu'applique ssh. Lancez chmod 600 sur le chemin nommé par l'erreur, assurez-vous qu'il appartient à l'utilisateur du service, et redémarrez l'unité.",
+          },
+        ],
+      },
+    },
   ],
   faq: {
     heading: "Questions fréquentes",
@@ -797,13 +1397,43 @@ const ar = {
   sections: [
     {
       heading: "شغّل المُستمِع (على المُستقبِل)",
+      prereqs: {
+        label: "ما تحتاج إليه",
+        items: [
+          "جهازان تتحكم بهما، وعنوان المُستقبِل قابل للوصول من المُرسِل. يصلح اسم مضيف أو عنوان IP مجرد.",
+          "برنامج relayium على الطرفين. لا يتحدث daemon direct إلا البروتوكول الأصلي، فلا يوجد هنا تراجع إلى tar ينقذ تثبيتًا ناقصًا.",
+          "منفذ المُستمِع مفتوح أمام المُرسِل، وهو 9031/TCP ما لم تغيّره، في جدار حماية المضيف وفي أي مجموعة أمان سحابية.",
+          "طرفية على المُستقبِل من أجل أول دفعة، كي تجيب عن سؤال الاعتماد. وإن لم تكن هناك طرفية، فاعتمِد المُرسِل مسبقًا بدلًا من ذلك (انظر أدناه).",
+        ],
+      },
       body: [
         "على الخادم المُستقبِل، يستمع serve للدفعات ويكتبها في مجلد. يعمل باستمرار افتراضيًا؛ أضِف --once لقبول نقلة واحدة ثم الخروج. لا تشارك أي شيء مسبقًا — لا بصمات تنسخها سلفًا:",
       ],
-      code: [
-        `# على المُستقبِل
-relayium serve --dir ~/inbox      # أضِف --once لنقلة واحدة؛ و --port لتغيير 9031`,
+      steps: [
+        {
+          text: "أنشئ المجلد الذي يجب أن تصل إليه الدفعات.",
+          code: ["mkdir -p ~/inbox"],
+        },
+        {
+          text: "لا تفتح منفذ المُستمِع إلا أمام المُرسِل. استبدِل 203.0.113.7 بعنوان المُرسِل نفسه — عنوانه العام، أو الخاص إن كان الخادمان على الشبكة ذاتها — وضيِّق مجموعة الأمان السحابية على المصدر نفسه بدل فتحها للإنترنت كله.",
+          code: ["sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp"],
+        },
+        {
+          text: "شغّل المُستمِع في طرفية، كي يكون هناك من يجيب عن سؤال الاعتماد عند أول دفعة. أضِف --once ليأخذ نقلة واحدة ثم يخرج، أو --port لنقله عن 9031.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
       ],
+      success: {
+        label: "كيف يبدو مُستمِع يعمل",
+        body: [
+          "يذكر serve العنوان الذي ارتبط به، والمجلد الذي يكتب فيه، وبصمة هذا المضيف نفسه. وما دام لا يوجد أقران معتمدون بعد، يذكر أيضًا أنه سيسأل عن كل قرين جديد.",
+        ],
+        code: [
+          `relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)`,
+        ],
+      },
       bullets: [
         "يعالج المُستمِع الاتصالات واحدًا تلو الآخر ويُنزِل الملفات تحت --dir.",
         "المنفذ الافتراضي هو 9031؛ غيّره بـ --port وافتحه على جدارك الناري.",
@@ -814,13 +1444,34 @@ relayium serve --dir ~/inbox      # أضِف --once لنقلة واحدة؛ و -
       body: [
         "من الخادم المُرسِل، ادفع إلى عنوان relayium:// الخاص بالمُستقبِل. يُثبِّت الاتصال الأول بصمة المُستقبِل؛ ويتحقق منها كل اتصال بعده، وتُرفَض البصمة المتغيّرة بدل قبولها بصمت — فالمفتاح المُستبدَل أو هجوم الوسيط يُكتشَف، لا يُوثَق به. عند أول دفعة على الإطلاق، ينتظر المُرسِل لحظةً بينما يعتمده المُستقبِل (الخطوة التالية).",
       ],
-      code: [
-        `# على المُرسِل
-relayium push ./build.tar.zst relayium://receiver.example.com
-
-# منفذ غير افتراضي
-relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      steps: [
+        {
+          text: "نفّذ الدفع على الخادم المُرسِل. في أول اتصال على الإطلاق يتوقف هنا بالضبط ريثما يعتمده المُستقبِل.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com"],
+        },
+        {
+          text: "أجِب عن السؤال على المُستقبِل، وهو موضوع القسم التالي. بعدها تكتمل الدفعة وحدها، ولن تتوقف الدفعات اللاحقة هنا أبدًا.",
+        },
+        {
+          text: "أضِف منفذًا في نهاية العنوان حين لا يكون المُستمِع على 9031.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com:9040"],
+        },
       ],
+      success: {
+        label: "كيف تبدو دفعة ناجحة",
+        body: [
+          "عند أول اتصال يتعلّم المُرسِل بصمة المُستمِع ويثبّتها، ثم ينقل. ويسجّل المُستقبِل بصمة الدافع ويُبلِغ بعدد الملفات والبايتات.",
+        ],
+        code: [
+          `# on the SENDER, first contact
+learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
+  build.tar.zst (48213004 bytes)
+
+# on the RECEIVER
+authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
+received 1 file(s), 48213004 bytes from 74318e3b…`,
+        ],
+      },
       bullets: [
         "لا مُرحِّل ولا احتياطي: إن تعذَّر الوصول إلى المُستمِع، تفشل الدفعة — ولا تمر بايتات الملف أبدًا عبر أي طرف آخر.",
         "المحرك نفسه المُستخدَم في الأوضاع الأخرى: قابل للاستئناف، مع فحص SHA-256 لكل ملف.",
@@ -881,6 +1532,55 @@ WantedBy=multi-user.target`,
         "أبقِ /etc/relayium/id.key قابلًا للقراءة من مستخدم الخدمة فقط — يرفض relayium تحميل مفتاح بأذونات فضفاضة.",
       ],
     },
+    {
+      heading: "حين لا تمرّ الدفعة",
+      body: [
+        "إمكانية الوصول والثقة هما أول ما تفحصه: يُظهر ss -tinp على المُرسِل ما إذا كان المُستمِع قد وصلته الحزم أصلًا، ويمنح relayium authorize على المُستقبِل الثقةَ الناقصة لمُرسِل مرفوض. وليستا الطريقتين الوحيدتين لفشل الدفعة — فالمُستقبِل الذي نفدت مساحته، أو مجلد الوارد الذي لا يستطيع مستخدمه الكتابة فيه، أو ملف مَنقول يسقط في فحص السلامة، كلها تُبلِغ عن نفسها — فاقرأ الخطأ الذي أمامك بدل افتراض أنه أحد الأربعة أدناه.",
+      ],
+      troubleshooting: {
+        label: "العَرَض، الفحص، الإصلاح",
+        items: [
+          {
+            symptom: "تبقى الدفعة واقفة ثم تفشل بخطأ في الاتصال.",
+            code: [
+              `# على المُرسِل، أثناء عمل الدفعة — نفّذه مرتين بفارق ثوانٍ قليلة
+ss -tinp dst :9031
+# ESTAB    يعني أن المُستمِع تم الوصول إليه، ولا يقول شيئًا عن التقدّم
+# SYN-SENT لم يردّ أحد على ذلك المنفذ`,
+            ],
+            fix: "تعني SYN-SENT أن الحزم لم تصل قط إلى مقبس يستمع. تأكّد على المُستقبِل من أن serve يعمل عبر ss -tlnp | grep 9031، ثم افتح 9031/TCP أمام المُرسِل في جدار حماية المضيف وفي مجموعة الأمان السحابية. لا تثبت ESTAB إلا إمكانية الوصول، فالمقبس المُنشأ قد يبقى خاملًا أو متعطّلًا؛ ولتمييز الحركة من التوقّف نفّذ الفحص مرتين بفارق ثوانٍ قليلة وقارِن عدّاد bytes_acked الذي يطبعه ‎-i‎ لذلك المقبس. لا يوجد هنا مسار عبر مُرحِّل، فالمُستمِع غير القابل للوصول فشل قاطع لا بطء.",
+          },
+          {
+            symptom: "يذكر سجل serve عبارة «rejected unauthorized peer …» وتفشل الدفعة.",
+            code: [
+              `# على المُرسِل
+relayium id
+# 74318e3b…
+
+# على المُستقبِل
+relayium authorize 74318e3b…`,
+            ],
+            fix: "لم تكن لدى serve طرفية يسأل عليها، كوحدة systemd أو أنبوب، فتُرفَض البصمة المجهولة بدل الوثوق بها. اعتمِدها مسبقًا: البصمة في سطر الرفض هي نفسها التي يطبعها relayium id على المُرسِل، وauthorize لا يتغير أثره بتكراره.",
+          },
+          {
+            symptom: "«fingerprint mismatch for receiver.example.com:9031».",
+            code: [
+              `grep receiver.example.com ~/.config/relayium/known_hosts`,
+            ],
+            fix: "قدّم المُستمِع مفتاحًا مختلفًا عن المفتاح المثبّت عند أول اتصال. إن كنت قد بدّلت ذلك المفتاح عن قصد، فاحذف سطر known_hosts المطابق وأعِد الدفع. وإن لم تفعل، فاترك السطر كما هو واعرف سبب تغيّر المفتاح قبل أن ترسل أي شيء.",
+          },
+          {
+            symptom: "تموت وحدة systemd عند الإقلاع بخطأ عن أذونات غير آمنة.",
+            code: [
+              `systemctl status relayium-serve
+# secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
+ls -l /etc/relayium/id.key`,
+            ],
+            fix: "يرفض relayium تحميل مفتاح خاص يستطيع أحد غير مالكه قراءته، وهي القاعدة نفسها التي يطبّقها ssh. نفّذ chmod 600 على المسار الذي يسمّيه الخطأ، وتأكّد من أن مالكه هو مستخدم الخدمة، ثم أعِد تشغيل الوحدة.",
+          },
+        ],
+      },
+    },
   ],
   faq: {
     heading: "الأسئلة الشائعة",
@@ -927,13 +1627,43 @@ const es = {
   sections: [
     {
       heading: "Iniciar el proceso a la escucha (en el receptor)",
+      prereqs: {
+        label: "Lo que necesitas",
+        items: [
+          "Dos máquinas bajo tu control, con la dirección del receptor alcanzable desde el emisor. Vale un nombre de host o una IP pelada.",
+          "relayium en los dos extremos. El daemon directo solo habla el protocolo nativo, así que aquí no hay ninguna alternativa con tar que rescate una instalación ausente.",
+          "El puerto del proceso a la escucha abierto al emisor —9031/TCP mientras no lo cambies— tanto en el cortafuegos del host como en cualquier grupo de seguridad en la nube.",
+          "Un terminal en el receptor para el primer push, para poder responder a la petición de aprobación. Sin terminal, autoriza al emisor de antemano (más abajo).",
+        ],
+      },
       body: [
         "En el servidor receptor, serve escucha los push y los escribe en un directorio. Se ejecuta de forma continua por defecto; añade --once para aceptar una sola transferencia y salir. No compartes nada de antemano: no hay huellas que copiar por adelantado:",
       ],
-      code: [
-        `# en el RECEPTOR
-relayium serve --dir ~/inbox      # añade --once para una sola transferencia; --port para cambiar 9031`,
+      steps: [
+        {
+          text: "Crea el directorio donde deben aterrizar los envíos.",
+          code: ["mkdir -p ~/inbox"],
+        },
+        {
+          text: "Abre el puerto del proceso a la escucha solo al emisor. Sustituye 203.0.113.7 por la dirección del propio emisor — su IP pública, o la privada si los dos servidores comparten red — y acota el grupo de seguridad en la nube a esa misma fuente en vez de a todo internet.",
+          code: ["sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp"],
+        },
+        {
+          text: "Arranca el proceso a la escucha en un terminal, para que haya alguien que responda a la petición de aprobación en el primer push. Con --once acepta una sola transferencia y sale; con --port lo mueves fuera de 9031.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
       ],
+      success: {
+        label: "Cómo se ve un proceso a la escucha en marcha",
+        body: [
+          "serve indica la dirección a la que se ha enlazado, el directorio en el que escribe y la huella propia de este host. Mientras no haya pares aprobados, avisa además de que preguntará por cada uno nuevo.",
+        ],
+        code: [
+          `relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)`,
+        ],
+      },
       bullets: [
         "El proceso a la escucha procesa las conexiones de una en una y deposita los archivos bajo --dir.",
         "El puerto por defecto es 9031; cámbialo con --port y ábrelo en tu cortafuegos.",
@@ -944,13 +1674,34 @@ relayium serve --dir ~/inbox      # añade --once para una sola transferencia; -
       body: [
         "Desde el servidor emisor, haz push a la dirección relayium:// del receptor. La primera conexión fija la huella del receptor; cada conexión posterior la verifica, y una huella cambiada se rechaza en lugar de aceptarse en silencio, de modo que una clave sustituida o un ataque de intermediario se detecta, no se confía en él. En el primer push, el emisor espera un momento mientras el receptor lo aprueba (siguiente paso).",
       ],
-      code: [
-        `# en el EMISOR
-relayium push ./build.tar.zst relayium://receiver.example.com
-
-# puerto distinto al de por defecto
-relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      steps: [
+        {
+          text: "Lanza el push desde el servidor emisor. En la primerísima conexión se detiene justo aquí mientras el receptor lo aprueba.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com"],
+        },
+        {
+          text: "Responde a la petición en el receptor: es la sección siguiente. Después el push termina solo, y los push posteriores ya no se detienen nunca aquí.",
+        },
+        {
+          text: "Añade un puerto cuando el proceso a la escucha no esté en 9031.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com:9040"],
+        },
       ],
+      success: {
+        label: "Cómo se ve un push correcto",
+        body: [
+          "En el primer contacto el emisor aprende y fija la huella del proceso a la escucha, y luego transfiere. El receptor anota la huella de quien empuja e informa del número de archivos y de bytes.",
+        ],
+        code: [
+          `# on the SENDER, first contact
+learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
+  build.tar.zst (48213004 bytes)
+
+# on the RECEIVER
+authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
+received 1 file(s), 48213004 bytes from 74318e3b…`,
+        ],
+      },
       bullets: [
         "Sin retransmisor y sin respaldo: si no se puede alcanzar el proceso a la escucha, el push falla; los bytes del archivo nunca se enrutan a través de nadie más.",
         "El mismo motor de transferencia que los otros modos: reanudable, con una comprobación SHA-256 por archivo.",
@@ -1011,6 +1762,55 @@ WantedBy=multi-user.target`,
         "Mantén /etc/relayium/id.key legible solo para el usuario del servicio: relayium se niega a cargar una clave con permisos laxos.",
       ],
     },
+    {
+      heading: "Cuando un push no llega",
+      body: [
+        "La accesibilidad y la confianza son lo primero que hay que comprobar: ss -tinp en el emisor dice si el proceso a la escucha llegó siquiera a ser alcanzado, y relayium authorize en el receptor le da a un emisor rechazado la confianza que le falta. No son las únicas formas en que un push puede fallar: un receptor sin espacio en disco, un directorio de entrada en el que su usuario no puede escribir o un archivo transferido que no supera su comprobación de integridad se anuncian todos por su cuenta, así que lee el error que tienes delante en vez de dar por hecho que es uno de los cuatro de abajo.",
+      ],
+      troubleshooting: {
+        label: "Síntoma, comprobación, solución",
+        items: [
+          {
+            symptom: "El push se queda quieto y luego falla con un error de conexión.",
+            code: [
+              `# en el EMISOR, mientras el push está en marcha — ejecútalo dos veces, con unos segundos de diferencia
+ss -tinp dst :9031
+# ESTAB    se alcanzó el proceso a la escucha; no dice nada del progreso
+# SYN-SENT nada respondió en ese puerto`,
+            ],
+            fix: "SYN-SENT significa que los paquetes nunca llegaron a un socket a la escucha. Comprueba en el receptor que serve está en marcha con ss -tlnp | grep 9031, y luego abre 9031/TCP al emisor en el cortafuegos del host y en el grupo de seguridad de la nube. ESTAB solo demuestra alcanzabilidad — un socket establecido puede quedarse inactivo o atascado —, así que para distinguir lo que avanza de lo que está parado ejecuta la comprobación dos veces con unos segundos de diferencia y compara el contador bytes_acked que -i imprime para ese socket. Aquí no hay ninguna vía de retransmisor, así que un proceso a la escucha inalcanzable es un fallo rotundo, no una lentitud.",
+          },
+          {
+            symptom: "El registro de serve dice «rejected unauthorized peer …» y el push falla.",
+            code: [
+              `# en el EMISOR
+relayium id
+# 74318e3b…
+
+# en el RECEPTOR
+relayium authorize 74318e3b…`,
+            ],
+            fix: "serve no tenía ningún terminal al que preguntar —una unidad de systemd, una tubería—, así que una huella desconocida se rechaza en lugar de aceptarse. Autorízala de antemano: la huella de la línea de rechazo es exactamente la que imprime relayium id en el emisor, y authorize es idempotente.",
+          },
+          {
+            symptom: "«fingerprint mismatch for receiver.example.com:9031».",
+            code: [
+              `grep receiver.example.com ~/.config/relayium/known_hosts`,
+            ],
+            fix: "El proceso a la escucha presentó una clave distinta de la fijada en el primer contacto. Si rotaste esa clave a propósito, borra la línea correspondiente de known_hosts y vuelve a hacer push. Si no fuiste tú, deja la línea en paz y averigua por qué cambió la clave antes de enviar nada.",
+          },
+          {
+            symptom: "La unidad de systemd muere al arrancar con un error de permisos inseguros.",
+            code: [
+              `systemctl status relayium-serve
+# secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
+ls -l /etc/relayium/id.key`,
+            ],
+            fix: "relayium se niega a cargar una clave privada que pueda leer alguien más que su propietario, la misma regla que aplica ssh. Ejecuta chmod 600 sobre la ruta que nombra el error, asegúrate de que pertenece al usuario del servicio y reinicia la unidad.",
+          },
+        ],
+      },
+    },
   ],
   faq: {
     heading: "Preguntas frecuentes",
@@ -1057,13 +1857,43 @@ const pt = {
   sections: [
     {
       heading: "Iniciar o processo à escuta (no receptor)",
+      prereqs: {
+        label: "O que você precisa",
+        items: [
+          "Duas máquinas sob o seu controle, com o endereço do receptor alcançável a partir do emissor. Serve um nome de host ou um IP puro.",
+          "O relayium nas duas pontas. O daemon direto só fala o protocolo nativo, então aqui não existe alternativa com tar para salvar uma instalação faltando.",
+          "A porta do processo à escuta aberta ao emissor — 9031/TCP enquanto você não mudar — no firewall do host e em qualquer grupo de segurança na nuvem.",
+          "Um terminal no receptor para o primeiro push, para responder ao pedido de aprovação. Sem terminal, autorize o emissor de antemão (veja abaixo).",
+        ],
+      },
       body: [
         "No servidor receptor, serve escuta os pushes e os escreve em um diretório. Ele roda continuamente por padrão; adicione --once para aceitar uma única transferência e sair. Você não compartilha nada com antecedência: não há impressões digitais para copiar antes:",
       ],
-      code: [
-        `# no RECEPTOR
-relayium serve --dir ~/inbox      # adicione --once para uma única transferência; --port para mudar 9031`,
+      steps: [
+        {
+          text: "Crie o diretório onde os envios devem aterrissar.",
+          code: ["mkdir -p ~/inbox"],
+        },
+        {
+          text: "Abra a porta do processo à escuta somente para o emissor. Substitua 203.0.113.7 pelo endereço do próprio emissor — o IP público, ou o privado se os dois servidores compartilham uma rede — e restrinja o grupo de segurança da nuvem à mesma origem em vez de à internet inteira.",
+          code: ["sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp"],
+        },
+        {
+          text: "Inicie o processo à escuta num terminal, para que haja alguém para responder ao pedido de aprovação no primeiro push. Com --once ele aceita uma única transferência e sai; com --port você o tira de 9031.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
       ],
+      success: {
+        label: "Como é um processo à escuta em execução",
+        body: [
+          "O serve informa o endereço em que se ligou, o diretório em que escreve e a impressão digital do próprio host. Enquanto não houver pares aprovados, ele também avisa que vai perguntar sobre cada novo.",
+        ],
+        code: [
+          `relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)`,
+        ],
+      },
       bullets: [
         "O processo à escuta processa as conexões uma de cada vez e deposita os arquivos em --dir.",
         "A porta padrão é 9031; altere-a com --port e abra-a no seu firewall.",
@@ -1074,13 +1904,34 @@ relayium serve --dir ~/inbox      # adicione --once para uma única transferênc
       body: [
         "Do servidor emissor, faça push para o endereço relayium:// do receptor. A primeira conexão fixa a impressão digital do receptor; toda conexão posterior a verifica, e uma impressão digital alterada é recusada em vez de aceita silenciosamente — assim, uma chave trocada ou um ataque de intermediário é detectado, não confiado. No primeiro push, o emissor espera um momento enquanto o receptor o aprova (próximo passo).",
       ],
-      code: [
-        `# no EMISSOR
-relayium push ./build.tar.zst relayium://receiver.example.com
-
-# porta diferente da padrão
-relayium push ./build.tar.zst relayium://receiver.example.com:9040`,
+      steps: [
+        {
+          text: "Rode o push a partir do servidor emissor. Na primeiríssima conexão ele para exatamente aqui enquanto o receptor o aprova.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com"],
+        },
+        {
+          text: "Responda ao pedido no receptor: é a seção seguinte. Depois o push termina sozinho, e os push seguintes nunca mais param aqui.",
+        },
+        {
+          text: "Acrescente uma porta quando o processo à escuta não estiver na 9031.",
+          code: ["relayium push ./build.tar.zst relayium://receiver.example.com:9040"],
+        },
       ],
+      success: {
+        label: "Como é um push bem-sucedido",
+        body: [
+          "No primeiro contato o emissor aprende e fixa a impressão digital do processo à escuta e então transfere. O receptor anota a impressão digital de quem empurrou e informa a contagem de arquivos e de bytes.",
+        ],
+        code: [
+          `# on the SENDER, first contact
+learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
+  build.tar.zst (48213004 bytes)
+
+# on the RECEIVER
+authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
+received 1 file(s), 48213004 bytes from 74318e3b…`,
+        ],
+      },
       bullets: [
         "Sem retransmissor e sem retorno: se o processo à escuta não for alcançável, o push falha — os bytes do arquivo nunca são roteados por mais ninguém.",
         "O mesmo motor de transferência dos outros modos: retomável, com uma verificação SHA-256 por arquivo.",
@@ -1141,6 +1992,55 @@ WantedBy=multi-user.target`,
         "Mantenha /etc/relayium/id.key legível apenas pelo usuário do serviço — relayium se recusa a carregar uma chave com permissões frouxas.",
       ],
     },
+    {
+      heading: "Quando um push não passa",
+      body: [
+        "Alcançabilidade e confiança são as duas primeiras coisas a verificar: ss -tinp no emissor diz se o processo à escuta chegou sequer a ser alcançado, e relayium authorize no receptor concede a um emissor recusado a confiança que lhe falta. Não são as únicas formas de um push falhar — um receptor sem espaço em disco, um diretório de entrada em que o seu usuário não pode escrever, ou um arquivo transferido que falha na verificação de integridade anunciam-se todos sozinhos — então leia o erro à sua frente em vez de supor que é um dos quatro abaixo.",
+      ],
+      troubleshooting: {
+        label: "Sintoma, verificação, correção",
+        items: [
+          {
+            symptom: "O push fica parado e depois falha com um erro de conexão.",
+            code: [
+              `# no EMISSOR, enquanto o push está rodando — execute duas vezes, com alguns segundos de intervalo
+ss -tinp dst :9031
+# ESTAB    o processo à escuta foi alcançado; não diz nada sobre progresso
+# SYN-SENT nada respondeu naquela porta`,
+            ],
+            fix: "SYN-SENT significa que os pacotes nunca chegaram a um socket à escuta. Confirme no receptor que o serve está no ar com ss -tlnp | grep 9031 e então abra 9031/TCP para o emissor no firewall do host e no grupo de segurança da nuvem. ESTAB prova apenas alcançabilidade — um socket estabelecido pode ficar ocioso ou travado —, então, para separar o que anda do que está parado, rode a verificação duas vezes com alguns segundos de intervalo e compare o contador bytes_acked que o -i imprime para aquele socket. Aqui não há caminho por retransmissor, então um processo à escuta inalcançável é uma falha seca, não uma lentidão.",
+          },
+          {
+            symptom: "O log do serve diz “rejected unauthorized peer …” e o push falha.",
+            code: [
+              `# no EMISSOR
+relayium id
+# 74318e3b…
+
+# no RECEPTOR
+relayium authorize 74318e3b…`,
+            ],
+            fix: "O serve não tinha nenhum terminal a quem perguntar — uma unidade do systemd, um pipe — então uma impressão digital desconhecida é recusada em vez de aceita. Autorize-a de antemão: a impressão digital da linha de recusa é exatamente a que relayium id imprime no emissor, e o authorize é idempotente.",
+          },
+          {
+            symptom: "“fingerprint mismatch for receiver.example.com:9031”.",
+            code: [
+              `grep receiver.example.com ~/.config/relayium/known_hosts`,
+            ],
+            fix: "O processo à escuta apresentou uma chave diferente da que foi fixada no primeiro contato. Se você girou essa chave de propósito, apague a linha correspondente do known_hosts e faça o push de novo. Se não foi você, deixe a linha em paz e descubra por que a chave mudou antes de enviar qualquer coisa.",
+          },
+          {
+            symptom: "A unidade do systemd morre na inicialização com um erro de permissões inseguras.",
+            code: [
+              `systemctl status relayium-serve
+# secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
+ls -l /etc/relayium/id.key`,
+            ],
+            fix: "O relayium se recusa a carregar uma chave privada que qualquer um além do dono consiga ler, a mesma regra que o ssh aplica. Rode chmod 600 no caminho que o erro nomeia, confirme que ele pertence ao usuário do serviço e reinicie a unidade.",
+          },
+        ],
+      },
+    },
   ],
   faq: {
     heading: "Perguntas frequentes",
@@ -1178,6 +2078,6 @@ WantedBy=multi-user.target`,
 export default {
   slug: "guides/server-to-server-transfers",
   published: "2026-07-08",
-  updated: "2026-07-12",
+  updated: "2026-08-05",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

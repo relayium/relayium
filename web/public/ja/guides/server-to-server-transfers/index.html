@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="Relayium CLI でサーバー間転送（デーモン直結）" />
     <meta name="twitter:description" content="relayium serve と push relayium:// を使い、自分が管理する2台のサーバー間でファイルを直接やり取りします。証明書ピンニング付き TLS 上で、リレーも SSH もペアリングコードも不要です。新しいプッシュ側が最初にプッシュしたときに一度だけ承認し、その後は自動化するか systemd の下で実行します。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI でサーバー間転送（デーモン直結）","description":"relayium serve と push relayium:// を使い、自分が管理する2台のサーバー間でファイルを直接やり取りします。証明書ピンニング付き TLS 上で、リレーも SSH もペアリングコードも不要です。新しいプッシュ側が最初にプッシュしたときに一度だけ承認し、その後は自動化するか systemd の下で実行します。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/server-to-server-transfers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium CLI でサーバー間転送（デーモン直結）"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"デーモン直結は SSH 経由の push と何が違いますか？","acceptedAnswer":{"@type":"Answer","text":"SSH 経由の push は転送を SSH 接続のトンネルに通し、リモート側に SSH アカウントが必要です。デーモン直結には SSH もアカウントも不要です。2台のサーバーは証明書ピンニング付き TLS 上で証明書のフィンガープリントによって互いを認証します。両方のマシンが自分のものである場合、これはより軽量です。"}},{"@type":"Question","name":"フィンガープリントを手作業でコピーして回る必要がありますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。ターミナルでは、serve が新しいプッシュ側の初回プッシュ時にそのアドレスとフィンガープリントを表示し、承認するかどうかを尋ね、それを記憶します。そのため以降のプッシュは確認なしで進みます。relayium id や relayium authorize が必要になるのは、systemd サービスのようにプロンプトに応答する人がいない非対話的な環境を設定する場合だけです。"}},{"@type":"Question","name":"アイデンティティと信頼のファイルはどこにありますか？","acceptedAnswer":{"@type":"Answer","text":"デフォルトでは ~/.config/relayium/ にあります（--config-dir で上書き可能）。id.key / id.crt はこのホストの永続的なアイデンティティ、known_hosts はプッシュ先にしたリスナーのフィンガープリントを保持し、authorized_fingerprints はリスナー側のプッシュ元許可リストです。"}},{"@type":"Question","name":"フィンガープリントが変わったらどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"プッシュは拒否され、警告が出ます。リスナーの鍵は初回使用時に known_hosts に固定されるため、その後の変化（鍵を再生成したホスト、あるいは中間者攻撃）は黙って受け入れられるのではなく拒否されます。known_hosts の該当行を削除するのは、意図的に鍵をローテーションした場合だけにしてください。"}},{"@type":"Question","name":"リレーへのフォールバックはありますか？","acceptedAnswer":{"@type":"Answer","text":"ありません。デーモン直結はリスナーのアドレスに到達できることを前提としています。接続できなければ失敗します。何ものも Relayium を経由してプロキシされることはありません。それがこのモードの要点です。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI でサーバー間転送（デーモン直結）","description":"relayium serve と push relayium:// を使い、自分が管理する2台のサーバー間でファイルを直接やり取りします。証明書ピンニング付き TLS 上で、リレーも SSH もペアリングコードも不要です。新しいプッシュ側が最初にプッシュしたときに一度だけ承認し、その後は自動化するか systemd の下で実行します。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/server-to-server-transfers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium CLI でサーバー間転送（デーモン直結）"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"デーモン直結は SSH 経由の push と何が違いますか？","acceptedAnswer":{"@type":"Answer","text":"SSH 経由の push は転送を SSH 接続のトンネルに通し、リモート側に SSH アカウントが必要です。デーモン直結には SSH もアカウントも不要です。2台のサーバーは証明書ピンニング付き TLS 上で証明書のフィンガープリントによって互いを認証します。両方のマシンが自分のものである場合、これはより軽量です。"}},{"@type":"Question","name":"フィンガープリントを手作業でコピーして回る必要がありますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。ターミナルでは、serve が新しいプッシュ側の初回プッシュ時にそのアドレスとフィンガープリントを表示し、承認するかどうかを尋ね、それを記憶します。そのため以降のプッシュは確認なしで進みます。relayium id や relayium authorize が必要になるのは、systemd サービスのようにプロンプトに応答する人がいない非対話的な環境を設定する場合だけです。"}},{"@type":"Question","name":"アイデンティティと信頼のファイルはどこにありますか？","acceptedAnswer":{"@type":"Answer","text":"デフォルトでは ~/.config/relayium/ にあります（--config-dir で上書き可能）。id.key / id.crt はこのホストの永続的なアイデンティティ、known_hosts はプッシュ先にしたリスナーのフィンガープリントを保持し、authorized_fingerprints はリスナー側のプッシュ元許可リストです。"}},{"@type":"Question","name":"フィンガープリントが変わったらどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"プッシュは拒否され、警告が出ます。リスナーの鍵は初回使用時に known_hosts に固定されるため、その後の変化（鍵を再生成したホスト、あるいは中間者攻撃）は黙って受け入れられるのではなく拒否されます。known_hosts の該当行を削除するのは、意図的に鍵をローテーションした場合だけにしてください。"}},{"@type":"Question","name":"リレーへのフォールバックはありますか？","acceptedAnswer":{"@type":"Answer","text":"ありません。デーモン直結はリスナーのアドレスに到達できることを前提としています。接続できなければ失敗します。何ものも Relayium を経由してプロキシされることはありません。それがこのモードの要点です。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,7 +100,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最終更新: <bdi>2026-07-12</bdi></p>
+      <p class="updated">最終更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers/">English</a><a href="/zh/guides/server-to-server-transfers/">中文</a><a href="/ja/guides/server-to-server-transfers/" aria-current="true">日本語</a><a href="/ko/guides/server-to-server-transfers/">한국어</a><a href="/de/guides/server-to-server-transfers/">Deutsch</a><a href="/fr/guides/server-to-server-transfers/">Français</a><a href="/ar/guides/server-to-server-transfers/">العربية</a><a href="/es/guides/server-to-server-transfers/">Español</a><a href="/pt/guides/server-to-server-transfers/">Português</a></nav>
       <p class="lead">両方のマシンが自分のもので、互いのアドレスを知っている場合、SSH は余計な手間であり、ランデブーは純粋なオーバーヘッドです。デーモン直結はまさにこのために作られています。一方のサーバーが待ち受け、もう一方が証明書ピンニング付き TLS 1.3 接続でそこへ直接プッシュします。リレーも SSH もペアリングコードも不要。信頼は公開鍵によるもので、一度設定すれば済みます。</p>
       <p class="lead">本ガイドではリスナーの起動、そこへのプッシュ、初回接触時に新しいプッシュ側を承認すること、自動化、そしてリスナーを systemd サービスとして実行する方法を扱います。</p>
@@ -92,17 +109,23 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>自分でファイルを選びたい、または Windows の場合は、リリースページからバイナリを取得してください——relayium.com/cli にすべてのインストール方法があります（Go があれば go build -o relayium ./cmd/relayium も可）。</li><li>relayium --version でインストールを確認できます。これをしないと以下のコマンドは「command not found」と出るだけです。</li></ul>
       <h2>リスナーを起動する（受信側）</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">必要なもの</p><ul><li>自分で管理する2台のマシン。受信側のアドレスが送信側から到達できることが条件です。ホスト名でも生の IP でも構いません。</li><li>両端の relayium。デーモン直結はネイティブプロトコルしか話さないので、未インストールを救う tar フォールバックはここにはありません。</li><li>リスナーのポートを送信側に開けること。変更しなければ 9031/TCP で、ホストのファイアウォールとクラウドのセキュリティグループの両方が対象です。</li><li>初回プッシュのために受信側の端末。承認プロンプトに答えるためです。端末が無い場合は、代わりに送信側を事前承認します（後述）。</li></ul></div>
       <p>受信側のサーバーでは、serve がプッシュを待ち受け、あるディレクトリへ書き込みます。デフォルトでは常駐し続けます。--once を付けると1回の転送だけを受け取って終了します。事前に何かを共有しておく必要はありません。あらかじめコピーしておくフィンガープリントもありません：</p>
-      <pre><code># 受信側で
-relayium serve --dir ~/inbox      # 1回だけなら --once を追加。9031 の変更は --port</code></pre>
+      <ol class="steps" data-block="steps"><li><p>プッシュが着地するディレクトリを作ります。</p><pre><code>mkdir -p ~/inbox</code></pre></li><li><p>リスナーのポートは送信側にだけ開けます。203.0.113.7 は送信側自身のアドレス——グローバル IP、2台が同じネットワークにいるならプライベート IP——に置き換え、クラウドのセキュリティグループもインターネット全体ではなく同じ送信元だけに絞ってください。</p><pre><code>sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp</code></pre></li><li><p>初回プッシュの承認プロンプトに答える人がいるよう、端末でリスナーを起動します。--once を足せば1回受けて終了、--port なら 9031 以外に移せます。</p><pre><code>relayium serve --dir ~/inbox</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">リスナーが動いているときの表示</p><p>serve は待ち受けたアドレス、書き込み先ディレクトリ、そしてこのホスト自身のフィンガープリントを表示します。承認済みのピアがまだ無いときは、新しいピアごとに確認する旨も表示します。</p><pre><code>relayium serve --dir ~/inbox
+no authorized peers yet — you&#39;ll be asked to approve each new peer on its first push.
+relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)</code></pre></div>
       <ul><li>リスナーは接続を1つずつ処理し、ファイルを --dir の下に配置します。</li><li>デフォルトのポートは 9031 です。--port で変更し、ファイアウォールで開放してください。</li></ul>
       <h2>リスナーへプッシュする（送信側）</h2>
       <p>送信側のサーバーから、受信側の relayium:// アドレスへプッシュします。最初の接続で受信側のフィンガープリントが固定され、以降の接続はすべてそれを検証します。フィンガープリントが変わった場合は黙って受け入れられるのではなく拒否されます。鍵のすり替えや中間者攻撃はそのまま信頼されるのではなく、検知されます。最初のプッシュでは、受信側が承認するまでの間、送信側は少し待機します（次のステップ）。</p>
-      <pre><code># 送信側で
-relayium push ./build.tar.zst relayium://receiver.example.com
+      <ol class="steps" data-block="steps"><li><p>送信側のサーバーでプッシュを実行します。ごく最初の接続では、受信側が承認するまでちょうどここで止まります。</p><pre><code>relayium push ./build.tar.zst relayium://receiver.example.com</code></pre></li><li><p>受信側でプロンプトに答えます。次の節がそれです。あとはプッシュが自力で完了し、以後のプッシュがここで止まることはありません。</p></li><li><p>リスナーが 9031 以外にいる場合は、末尾にポートを付けます。</p><pre><code>relayium push ./build.tar.zst relayium://receiver.example.com:9040</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">プッシュが成功したときの表示</p><p>初回接触で送信側はリスナーのフィンガープリントを学習してピン留めし、そのまま転送します。受信側はプッシュ元のフィンガープリントを記録し、ファイル数とバイト数を報告します。</p><pre><code># on the SENDER, first contact
+learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
+  build.tar.zst (48213004 bytes)
 
-# 既定以外のポート
-relayium push ./build.tar.zst relayium://receiver.example.com:9040</code></pre>
+# on the RECEIVER
+authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
+received 1 file(s), 48213004 bytes from 74318e3b…</code></pre></div>
       <ul><li>リレーもフォールバックもありません。リスナーに到達できなければプッシュは失敗します。ファイルのバイト列が他の誰かを経由することは決してありません。</li><li>他のモードと同じ転送エンジンです。再開可能で、ファイルごとに SHA-256 チェックが行われます。</li></ul>
       <h2>初回プッシュ時に送信側を承認する（受信側）</h2>
       <p>新しいマシンが初めて自分のリスナーへプッシュすると、serve は（ターミナルで）その送信元とフィンガープリントを表示し、承認するかどうかを尋ねます。SSH の初回接続時のプロンプトに似ていますが、受信側で行われる点が異なります：</p>
@@ -131,6 +154,19 @@ User=relayium
 [Install]
 WantedBy=multi-user.target</code></pre>
       <ul><li>systemctl enable --now relayium-serve で起動し、起動時に自動的に立ち上がるようにします。</li><li>/etc/relayium/id.key はサービスユーザーだけが読めるようにしてください。権限が緩い鍵は relayium が読み込みを拒否します。</li></ul>
+      <h2>プッシュが通らないとき</h2>
+      <p>まず見るのは到達性と信頼の2つです。送信側で ss -tinp を実行すればリスナーに届いているかが分かり、受信側の relayium authorize は、拒否された送信側に足りない信頼を与えます。ただしプッシュが失敗する道はこの2種類だけではありません。受信側のディスクが一杯、受信ディレクトリに実行ユーザーが書き込めない、転送されたファイルが整合性チェックに落ちる——どれも自分でエラーを出します。ですから下の4つのどれかだと決めてかからず、目の前のエラーを読んでください。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>プッシュがそのまま止まり、最後に接続エラーで失敗する。</dt><dd><pre><code># 送信側で、プッシュ実行中に — 数秒あけて2回実行する
+ss -tinp dst :9031
+# ESTAB    リスナーに届いたことだけを示し、進捗までは示さない
+# SYN-SENT そのポートで誰も応答していない</code></pre><p>SYN-SENT は、パケットが待ち受け中のソケットまで届いていないという意味です。受信側で ss -tlnp | grep 9031 を実行して serve が起動しているか確かめ、ホストのファイアウォールとクラウドのセキュリティグループで 9031/TCP を送信側に開けてください。ESTAB が示すのは到達できたことだけで、確立済みのソケットが無通信のまま止まっていることもあります。動いているのか止まっているのかを見分けるには、このチェックを数秒あけて2回実行し、-i がそのソケットについて表示する bytes_acked カウンターを比べてください。ここにはリレー経路が無いので、届かないリスナーは遅いのではなく完全な失敗です。</p></dd><dt>serve のログに「rejected unauthorized peer …」と出てプッシュが失敗する。</dt><dd><pre><code># 送信側で
+relayium id
+# 74318e3b…
+
+# 受信側で
+relayium authorize 74318e3b…</code></pre><p>serve に尋ねる相手の端末が無かった（systemd ユニットやパイプ）ため、未知のフィンガープリントは信頼されずに拒否されます。事前に承認してください。拒否行のフィンガープリントは送信側の relayium id が表示するものとまったく同じで、authorize は何度実行しても同じ結果です。</p></dd><dt>「fingerprint mismatch for receiver.example.com:9031」。</dt><dd><pre><code>grep receiver.example.com ~/.config/relayium/known_hosts</code></pre><p>リスナーが、初回接触でピン留めした鍵とは別の鍵を提示しました。意図して鍵を更新したのなら、該当する known_hosts の行を削除してからプッシュし直します。そうでないなら行はそのままにして、鍵が変わった理由が分かるまで何も送らないでください。</p></dd><dt>systemd ユニットが起動時にパーミッション不備のエラーで落ちる。</dt><dd><pre><code>systemctl status relayium-serve
+# secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
+ls -l /etc/relayium/id.key</code></pre><p>relayium は所有者以外にも読める秘密鍵の読み込みを拒否します。ssh と同じ規則です。エラーが示すパスに chmod 600 を実行し、所有者がサービス用ユーザーであることを確かめて、ユニットを再起動してください。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>デーモン直結は SSH 経由の push と何が違いますか？</h3>
       <p>SSH 経由の push は転送を SSH 接続のトンネルに通し、リモート側に SSH アカウントが必要です。デーモン直結には SSH もアカウントも不要です。2台のサーバーは証明書ピンニング付き TLS 上で証明書のフィンガープリントによって互いを認証します。両方のマシンが自分のものである場合、これはより軽量です。</p>

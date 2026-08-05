@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)" />
     <meta name="twitter:description" content="انقل الملفات مباشرةً بين خادمين تتحكم بهما باستخدام relayium serve وpush relayium:// — عبر TLS مُثبَّت، دون مُرحِّل، دون SSH، دون رمز اقتران. اعتمِد مُرسِلًا جديدًا مرةً واحدة عند أول دفعة له، ثم أتمتِه أو شغّله تحت systemd." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)","description":"انقل الملفات مباشرةً بين خادمين تتحكم بهما باستخدام relayium serve وpush relayium:// — عبر TLS مُثبَّت، دون مُرحِّل، دون SSH، دون رمز اقتران. اعتمِد مُرسِلًا جديدًا مرةً واحدة عند أول دفعة له، ثم أتمتِه أو شغّله تحت systemd.","inLanguage":"ar","datePublished":"2026-07-08","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/guides/server-to-server-transfers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"بماذا يختلف daemon direct عن push عبر SSH؟","acceptedAnswer":{"@type":"Answer","text":"يوجِّه push عبر SSH النقل خلال اتصال SSH لديك ويحتاج إلى حساب SSH على الطرف البعيد. أما daemon direct فلا يحتاج SSH ولا حسابًا — يصادق الخادمان أحدهما الآخر ببصمة الشهادة عبر TLS مُثبَّت، وهو أخف حين يكون الجهازان كلاهما لك."}},{"@type":"Question","name":"هل عليّ نسخ البصمات يدويًا هنا وهناك؟","acceptedAnswer":{"@type":"Answer","text":"لا. في طرفية، يطالبك serve باعتماد كل مُرسِل جديد عند أول دفعة له — مُظهِرًا عنوانه وبصمته — ويحفظه، فتمر الدفعات اللاحقة بصمت. لا تلجأ إلى relayium id أو relayium authorize إلا في الإعدادات غير التفاعلية مثل خدمة systemd، حيث لا أحد ليُجيب على المُطالبة."}},{"@type":"Question","name":"أين تقع ملفات الهوية والثقة؟","acceptedAnswer":{"@type":"Answer","text":"في ~/.config/relayium/ افتراضيًا (تُتجاوَز بـ --config-dir). id.key / id.crt هما الهوية الدائمة لهذا المضيف، ويحتفظ known_hosts ببصمات المُستمِعين الذين دفعت إليهم، أما authorized_fingerprints فهو قائمة السماح بالمُرسِلين لدى المُستمِع."}},{"@type":"Question","name":"ماذا يحدث إذا تغيّرت بصمة؟","acceptedAnswer":{"@type":"Answer","text":"تُرفَض الدفعة ويُطلَق تحذير. يُثبَّت مفتاح المُستمِع في known_hosts عند أول استخدام، فأي تغيّر لاحق — مضيف أُعيد ترميزه، أو هجوم وسيط — يُرفَض بدل قبوله بصمت. لا تحذف سطر known_hosts إلا إن كنت قد بدّلت المفتاح عمدًا."}},{"@type":"Question","name":"هل هناك احتياطي عبر مُرحِّل؟","acceptedAnswer":{"@type":"Answer","text":"لا. يفترض daemon direct عنوان مُستمِع يمكن الوصول إليه؛ فإن تعذَّر إنشاء الاتصال، يفشل. لا يُوجَّه أي شيء أبدًا عبر Relayium — وهذا هو مغزى هذا الوضع."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)","description":"انقل الملفات مباشرةً بين خادمين تتحكم بهما باستخدام relayium serve وpush relayium:// — عبر TLS مُثبَّت، دون مُرحِّل، دون SSH، دون رمز اقتران. اعتمِد مُرسِلًا جديدًا مرةً واحدة عند أول دفعة له، ثم أتمتِه أو شغّله تحت systemd.","inLanguage":"ar","datePublished":"2026-07-08","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/guides/server-to-server-transfers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"النقل من خادم إلى خادم باستخدام واجهة Relayium الطرفية (daemon direct)"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"بماذا يختلف daemon direct عن push عبر SSH؟","acceptedAnswer":{"@type":"Answer","text":"يوجِّه push عبر SSH النقل خلال اتصال SSH لديك ويحتاج إلى حساب SSH على الطرف البعيد. أما daemon direct فلا يحتاج SSH ولا حسابًا — يصادق الخادمان أحدهما الآخر ببصمة الشهادة عبر TLS مُثبَّت، وهو أخف حين يكون الجهازان كلاهما لك."}},{"@type":"Question","name":"هل عليّ نسخ البصمات يدويًا هنا وهناك؟","acceptedAnswer":{"@type":"Answer","text":"لا. في طرفية، يطالبك serve باعتماد كل مُرسِل جديد عند أول دفعة له — مُظهِرًا عنوانه وبصمته — ويحفظه، فتمر الدفعات اللاحقة بصمت. لا تلجأ إلى relayium id أو relayium authorize إلا في الإعدادات غير التفاعلية مثل خدمة systemd، حيث لا أحد ليُجيب على المُطالبة."}},{"@type":"Question","name":"أين تقع ملفات الهوية والثقة؟","acceptedAnswer":{"@type":"Answer","text":"في ~/.config/relayium/ افتراضيًا (تُتجاوَز بـ --config-dir). id.key / id.crt هما الهوية الدائمة لهذا المضيف، ويحتفظ known_hosts ببصمات المُستمِعين الذين دفعت إليهم، أما authorized_fingerprints فهو قائمة السماح بالمُرسِلين لدى المُستمِع."}},{"@type":"Question","name":"ماذا يحدث إذا تغيّرت بصمة؟","acceptedAnswer":{"@type":"Answer","text":"تُرفَض الدفعة ويُطلَق تحذير. يُثبَّت مفتاح المُستمِع في known_hosts عند أول استخدام، فأي تغيّر لاحق — مضيف أُعيد ترميزه، أو هجوم وسيط — يُرفَض بدل قبوله بصمت. لا تحذف سطر known_hosts إلا إن كنت قد بدّلت المفتاح عمدًا."}},{"@type":"Question","name":"هل هناك احتياطي عبر مُرحِّل؟","acceptedAnswer":{"@type":"Answer","text":"لا. يفترض daemon direct عنوان مُستمِع يمكن الوصول إليه؛ فإن تعذَّر إنشاء الاتصال، يفشل. لا يُوجَّه أي شيء أبدًا عبر Relayium — وهذا هو مغزى هذا الوضع."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,7 +100,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">آخر تحديث: <bdi>2026-07-12</bdi></p>
+      <p class="updated">آخر تحديث: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers/">English</a><a href="/zh/guides/server-to-server-transfers/">中文</a><a href="/ja/guides/server-to-server-transfers/">日本語</a><a href="/ko/guides/server-to-server-transfers/">한국어</a><a href="/de/guides/server-to-server-transfers/">Deutsch</a><a href="/fr/guides/server-to-server-transfers/">Français</a><a href="/ar/guides/server-to-server-transfers/" aria-current="true">العربية</a><a href="/es/guides/server-to-server-transfers/">Español</a><a href="/pt/guides/server-to-server-transfers/">Português</a></nav>
       <p class="lead">حين يكون الجهازان كلاهما لك ويعرف كلٌّ منهما عنوان الآخر، يصبح SSH احتكاكًا زائدًا والتعارف عبئًا محضًا. صُمِّم daemon direct لهذا تمامًا: خادم يُنصِت، والآخر يدفع إليه مباشرةً عبر اتصال TLS 1.3 مُثبَّت. لا مُرحِّل، لا SSH، لا رمز اقتران — الثقة تقوم على المفتاح العام وتُهيَّأ مرةً واحدة.</p>
       <p class="lead">يغطي هذا الدليل تشغيل المُستمِع، والدفع إليه، واعتماد مُرسِل جديد عند أول اتصال، وأتمتة ذلك، وتشغيل المُستمِع كخدمة systemd.</p>
@@ -92,17 +109,23 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>تفضّل اختيار الملف بنفسك، أو تعمل على Windows؟ احصل على ملف ثنائي من صفحة الإصدارات — يسرد relayium.com/cli كل خيارات التثبيت (أو go build -o relayium ./cmd/relayium إن كان لديك Go).</li><li>يؤكّد relayium --version أنه مثبَّت. تخطَّ هذا وستطبع الأوامر أدناه ‘command not found’ لا غير.</li></ul>
       <h2>شغّل المُستمِع (على المُستقبِل)</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">ما تحتاج إليه</p><ul><li>جهازان تتحكم بهما، وعنوان المُستقبِل قابل للوصول من المُرسِل. يصلح اسم مضيف أو عنوان IP مجرد.</li><li>برنامج relayium على الطرفين. لا يتحدث daemon direct إلا البروتوكول الأصلي، فلا يوجد هنا تراجع إلى tar ينقذ تثبيتًا ناقصًا.</li><li>منفذ المُستمِع مفتوح أمام المُرسِل، وهو 9031/TCP ما لم تغيّره، في جدار حماية المضيف وفي أي مجموعة أمان سحابية.</li><li>طرفية على المُستقبِل من أجل أول دفعة، كي تجيب عن سؤال الاعتماد. وإن لم تكن هناك طرفية، فاعتمِد المُرسِل مسبقًا بدلًا من ذلك (انظر أدناه).</li></ul></div>
       <p>على الخادم المُستقبِل، يستمع serve للدفعات ويكتبها في مجلد. يعمل باستمرار افتراضيًا؛ أضِف --once لقبول نقلة واحدة ثم الخروج. لا تشارك أي شيء مسبقًا — لا بصمات تنسخها سلفًا:</p>
-      <pre><code># على المُستقبِل
-relayium serve --dir ~/inbox      # أضِف --once لنقلة واحدة؛ و --port لتغيير 9031</code></pre>
+      <ol class="steps" data-block="steps"><li><p>أنشئ المجلد الذي يجب أن تصل إليه الدفعات.</p><pre><code>mkdir -p ~/inbox</code></pre></li><li><p>لا تفتح منفذ المُستمِع إلا أمام المُرسِل. استبدِل 203.0.113.7 بعنوان المُرسِل نفسه — عنوانه العام، أو الخاص إن كان الخادمان على الشبكة ذاتها — وضيِّق مجموعة الأمان السحابية على المصدر نفسه بدل فتحها للإنترنت كله.</p><pre><code>sudo ufw allow from 203.0.113.7 to any port 9031 proto tcp</code></pre></li><li><p>شغّل المُستمِع في طرفية، كي يكون هناك من يجيب عن سؤال الاعتماد عند أول دفعة. أضِف --once ليأخذ نقلة واحدة ثم يخرج، أو --port لنقله عن 9031.</p><pre><code>relayium serve --dir ~/inbox</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف يبدو مُستمِع يعمل</p><p>يذكر serve العنوان الذي ارتبط به، والمجلد الذي يكتب فيه، وبصمة هذا المضيف نفسه. وما دام لا يوجد أقران معتمدون بعد، يذكر أيضًا أنه سيسأل عن كل قرين جديد.</p><pre><code>relayium serve --dir ~/inbox
+no authorized peers yet — you&#39;ll be asked to approve each new peer on its first push.
+relayium serve: listening on [::]:9031, receiving into /home/you/inbox (fingerprint 5c1d9f04…)</code></pre></div>
       <ul><li>يعالج المُستمِع الاتصالات واحدًا تلو الآخر ويُنزِل الملفات تحت --dir.</li><li>المنفذ الافتراضي هو 9031؛ غيّره بـ --port وافتحه على جدارك الناري.</li></ul>
       <h2>ادفع إليه (على المُرسِل)</h2>
       <p>من الخادم المُرسِل، ادفع إلى عنوان relayium:// الخاص بالمُستقبِل. يُثبِّت الاتصال الأول بصمة المُستقبِل؛ ويتحقق منها كل اتصال بعده، وتُرفَض البصمة المتغيّرة بدل قبولها بصمت — فالمفتاح المُستبدَل أو هجوم الوسيط يُكتشَف، لا يُوثَق به. عند أول دفعة على الإطلاق، ينتظر المُرسِل لحظةً بينما يعتمده المُستقبِل (الخطوة التالية).</p>
-      <pre><code># على المُرسِل
-relayium push ./build.tar.zst relayium://receiver.example.com
+      <ol class="steps" data-block="steps"><li><p>نفّذ الدفع على الخادم المُرسِل. في أول اتصال على الإطلاق يتوقف هنا بالضبط ريثما يعتمده المُستقبِل.</p><pre><code>relayium push ./build.tar.zst relayium://receiver.example.com</code></pre></li><li><p>أجِب عن السؤال على المُستقبِل، وهو موضوع القسم التالي. بعدها تكتمل الدفعة وحدها، ولن تتوقف الدفعات اللاحقة هنا أبدًا.</p></li><li><p>أضِف منفذًا في نهاية العنوان حين لا يكون المُستمِع على 9031.</p><pre><code>relayium push ./build.tar.zst relayium://receiver.example.com:9040</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">كيف تبدو دفعة ناجحة</p><p>عند أول اتصال يتعلّم المُرسِل بصمة المُستمِع ويثبّتها، ثم ينقل. ويسجّل المُستقبِل بصمة الدافع ويُبلِغ بعدد الملفات والبايتات.</p><pre><code># on the SENDER, first contact
+learned receiver.example.com:9031 5c1d9f04… (added to known_hosts)
+  build.tar.zst (48213004 bytes)
 
-# منفذ غير افتراضي
-relayium push ./build.tar.zst relayium://receiver.example.com:9040</code></pre>
+# on the RECEIVER
+authorized 74318e3b… (added to /home/you/.config/relayium/authorized_fingerprints)
+received 1 file(s), 48213004 bytes from 74318e3b…</code></pre></div>
       <ul><li>لا مُرحِّل ولا احتياطي: إن تعذَّر الوصول إلى المُستمِع، تفشل الدفعة — ولا تمر بايتات الملف أبدًا عبر أي طرف آخر.</li><li>المحرك نفسه المُستخدَم في الأوضاع الأخرى: قابل للاستئناف، مع فحص SHA-256 لكل ملف.</li></ul>
       <h2>اعتمِد المُرسِل عند أول دفعة (على المُستقبِل)</h2>
       <p>في أول مرة يدفع فيها جهاز جديد إلى مُستمِعك، يُظهِر لك serve (في طرفية) من أين أتى وبصمته ويطلب منك اعتماده — مثل مُطالبة الاتصال الأول في SSH، لكن على جانب المُستقبِل:</p>
@@ -131,6 +154,19 @@ User=relayium
 [Install]
 WantedBy=multi-user.target</code></pre>
       <ul><li>systemctl enable --now relayium-serve لتشغيلها ولرفعها عند الإقلاع.</li><li>أبقِ /etc/relayium/id.key قابلًا للقراءة من مستخدم الخدمة فقط — يرفض relayium تحميل مفتاح بأذونات فضفاضة.</li></ul>
+      <h2>حين لا تمرّ الدفعة</h2>
+      <p>إمكانية الوصول والثقة هما أول ما تفحصه: يُظهر ss -tinp على المُرسِل ما إذا كان المُستمِع قد وصلته الحزم أصلًا، ويمنح relayium authorize على المُستقبِل الثقةَ الناقصة لمُرسِل مرفوض. وليستا الطريقتين الوحيدتين لفشل الدفعة — فالمُستقبِل الذي نفدت مساحته، أو مجلد الوارد الذي لا يستطيع مستخدمه الكتابة فيه، أو ملف مَنقول يسقط في فحص السلامة، كلها تُبلِغ عن نفسها — فاقرأ الخطأ الذي أمامك بدل افتراض أنه أحد الأربعة أدناه.</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">العَرَض، الفحص، الإصلاح</p><dl><dt>تبقى الدفعة واقفة ثم تفشل بخطأ في الاتصال.</dt><dd><pre><code># على المُرسِل، أثناء عمل الدفعة — نفّذه مرتين بفارق ثوانٍ قليلة
+ss -tinp dst :9031
+# ESTAB    يعني أن المُستمِع تم الوصول إليه، ولا يقول شيئًا عن التقدّم
+# SYN-SENT لم يردّ أحد على ذلك المنفذ</code></pre><p>تعني SYN-SENT أن الحزم لم تصل قط إلى مقبس يستمع. تأكّد على المُستقبِل من أن serve يعمل عبر ss -tlnp | grep 9031، ثم افتح 9031/TCP أمام المُرسِل في جدار حماية المضيف وفي مجموعة الأمان السحابية. لا تثبت ESTAB إلا إمكانية الوصول، فالمقبس المُنشأ قد يبقى خاملًا أو متعطّلًا؛ ولتمييز الحركة من التوقّف نفّذ الفحص مرتين بفارق ثوانٍ قليلة وقارِن عدّاد bytes_acked الذي يطبعه ‎-i‎ لذلك المقبس. لا يوجد هنا مسار عبر مُرحِّل، فالمُستمِع غير القابل للوصول فشل قاطع لا بطء.</p></dd><dt>يذكر سجل serve عبارة «rejected unauthorized peer …» وتفشل الدفعة.</dt><dd><pre><code># على المُرسِل
+relayium id
+# 74318e3b…
+
+# على المُستقبِل
+relayium authorize 74318e3b…</code></pre><p>لم تكن لدى serve طرفية يسأل عليها، كوحدة systemd أو أنبوب، فتُرفَض البصمة المجهولة بدل الوثوق بها. اعتمِدها مسبقًا: البصمة في سطر الرفض هي نفسها التي يطبعها relayium id على المُرسِل، وauthorize لا يتغير أثره بتكراره.</p></dd><dt>«fingerprint mismatch for receiver.example.com:9031».</dt><dd><pre><code>grep receiver.example.com ~/.config/relayium/known_hosts</code></pre><p>قدّم المُستمِع مفتاحًا مختلفًا عن المفتاح المثبّت عند أول اتصال. إن كنت قد بدّلت ذلك المفتاح عن قصد، فاحذف سطر known_hosts المطابق وأعِد الدفع. وإن لم تفعل، فاترك السطر كما هو واعرف سبب تغيّر المفتاح قبل أن ترسل أي شيء.</p></dd><dt>تموت وحدة systemd عند الإقلاع بخطأ عن أذونات غير آمنة.</dt><dd><pre><code>systemctl status relayium-serve
+# secure: /etc/relayium/id.key has insecure permissions 0644; run: chmod 600 /etc/relayium/id.key
+ls -l /etc/relayium/id.key</code></pre><p>يرفض relayium تحميل مفتاح خاص يستطيع أحد غير مالكه قراءته، وهي القاعدة نفسها التي يطبّقها ssh. نفّذ chmod 600 على المسار الذي يسمّيه الخطأ، وتأكّد من أن مالكه هو مستخدم الخدمة، ثم أعِد تشغيل الوحدة.</p></dd></dl></div>
       <h2>الأسئلة الشائعة</h2>
       <h3>بماذا يختلف daemon direct عن push عبر SSH؟</h3>
       <p>يوجِّه push عبر SSH النقل خلال اتصال SSH لديك ويحتاج إلى حساب SSH على الطرف البعيد. أما daemon direct فلا يحتاج SSH ولا حسابًا — يصادق الخادمان أحدهما الآخر ببصمة الشهادة عبر TLS مُثبَّت، وهو أخف حين يكون الجهازان كلاهما لك.</p>

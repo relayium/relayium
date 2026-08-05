@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="用 Relayium CLI 跨网络把文件发给对方" />
     <meta name="twitter:description" content="使用 relayium send 和 receive，凭一个简短的配对码，把文件直接在两个不同网络上的人之间传输。端到端加密，用 SAS 码验证，而且免费——文件径直在你们之间传输，从不经过我们的服务器。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 跨网络把文件发给对方","description":"使用 relayium send 和 receive，凭一个简短的配对码，把文件直接在两个不同网络上的人之间传输。端到端加密，用 SAS 码验证，而且免费——文件径直在你们之间传输，从不经过我们的服务器。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 Relayium CLI 跨网络把文件发给对方"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"配对码是从哪来的？","acceptedAnswer":{"@type":"Answer","text":"由 Relayium 生成。登录后运行 `relayium send ./release.zip`，CLI 会打印一个 6 位数字、5 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。"}},{"@type":"Question","name":"文件会上传到什么地方吗？","acceptedAnswer":{"@type":"Answer","text":"不会。文件在你们两个之间直接流式传输，端到端加密。只有一次很小的会合握手会经过 Relayium 来介绍双方——文件本身从不经过。"}},{"@type":"Question","name":"如果连接不上怎么办？","acceptedAnswer":{"@type":"Answer","text":"如果两端都在严格 NAT 之后、没有可达地址，就无法建立直连，传输会失败——CLI 按设计没有中继兜底。当没有直连路径时，可以在两台可达的服务器之间用 daemon 直连，或者用 SSH push。"}},{"@type":"Question","name":"我怎么知道对面真的是对的人？","acceptedAnswer":{"@type":"Answer","text":"两边的终端会打印出一个从固定 TLS 证书指纹派生的相同 6 位 SAS 码。通过带外方式核对；一致就能确认指纹没有被替换、会合服务没有冒充任一端。它认证的是端点，而不是网络路径上的每一跳。加上 --verify 可以要求在任何字节移动之前先完成这个确认。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 Relayium CLI 跨网络把文件发给对方","description":"使用 relayium send 和 receive，凭一个简短的配对码，把文件直接在两个不同网络上的人之间传输。端到端加密，用 SAS 码验证，而且免费——文件径直在你们之间传输，从不经过我们的服务器。","inLanguage":"zh-Hans","datePublished":"2026-07-08","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/send-a-file-to-someone/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 Relayium CLI 跨网络把文件发给对方"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"配对码是从哪来的？","acceptedAnswer":{"@type":"Answer","text":"由 Relayium 生成。登录后运行 `relayium send ./release.zip`，CLI 会打印一个 6 位数字、5 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。"}},{"@type":"Question","name":"文件会上传到什么地方吗？","acceptedAnswer":{"@type":"Answer","text":"不会。文件在你们两个之间直接流式传输，端到端加密。只有一次很小的会合握手会经过 Relayium 来介绍双方——文件本身从不经过。"}},{"@type":"Question","name":"如果连接不上怎么办？","acceptedAnswer":{"@type":"Answer","text":"如果两端都在严格 NAT 之后、没有可达地址，就无法建立直连，传输会失败——CLI 按设计没有中继兜底。当没有直连路径时，可以在两台可达的服务器之间用 daemon 直连，或者用 SSH push。"}},{"@type":"Question","name":"我怎么知道对面真的是对的人？","acceptedAnswer":{"@type":"Answer","text":"两边的终端会打印出一个从固定 TLS 证书指纹派生的相同 6 位 SAS 码。通过带外方式核对；一致就能确认指纹没有被替换、会合服务没有冒充任一端。它认证的是端点，而不是网络路径上的每一跳。加上 --verify 可以要求在任何字节移动之前先完成这个确认。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,7 +100,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
+      <p class="updated">最近更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/send-a-file-to-someone/">English</a><a href="/zh/guides/send-a-file-to-someone/" aria-current="true">中文</a><a href="/ja/guides/send-a-file-to-someone/">日本語</a><a href="/ko/guides/send-a-file-to-someone/">한국어</a><a href="/de/guides/send-a-file-to-someone/">Deutsch</a><a href="/fr/guides/send-a-file-to-someone/">Français</a><a href="/ar/guides/send-a-file-to-someone/">العربية</a><a href="/es/guides/send-a-file-to-someone/">Español</a><a href="/pt/guides/send-a-file-to-someone/">Português</a></nav>
       <p class="lead">有时候对方的机器不是你的，你也没法用 SSH 登录进去——给另一个办公室的同事发个文件，给客户发个构建产物，给国外的朋友发个压缩包。relayium send 和 receive 会跨网络把文件直接送到你们两个之间，靠的只是发送时 CLI 为你生成的一个简短配对码。</p>
       <p class="lead">连接是点对点、端到端加密的。只有一次极小的会合握手会经过 Relayium 来介绍双方；文件字节从不经过。</p>
@@ -92,15 +109,17 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>想自己挑文件，或在 Windows 上？从发布页下载二进制——relayium.com/cli 列出了所有安装方式（装了 Go 也可 go build -o relayium ./cmd/relayium）。</li><li>relayium --version 可确认是否装好。不装这一步，下面的命令只会报 “command not found”。</li></ul>
       <h2>先 send，再把打印出来的码转告对方</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>两台机器上都装好 CLI。在各自终端里 relayium version 会打印版本号；如果 shell 回的是 “command not found”，说明那台还没装。</li><li>发送方已登录。relayium whoami 会打印账号邮箱；生成配对码之前必须先 relayium login。接收方那台机器全程不用登录。</li><li>两个人同时守在终端前。码只有五分钟寿命，所以先约好时间再生成。</li><li>一个能把六位数字带外告诉对方的渠道——一通电话、一个聊天窗口，或者你们同处的那个房间。</li></ul></div>
       <p>用 relayium login 登录一次，然后直接 send 就行。CLI 会生成一个配对码，连同对面要执行的完整命令一起打印出来，然后等待。把这个码用带外方式转告对方——打电话说一下，或者丢进聊天里：</p>
-      <pre><code># 发送方（每台机器执行一次：relayium login）
-relayium send ./release.zip
-# 输出：  Code: 483920   (valid 5 minutes)
-#          On the other machine:  relayium receive 483920
-
-# 接收方（在文件应落地的目录下）——无需账号
-relayium receive 483920</code></pre>
-      <ul><li>这个码是 6 位十进制数字——0-9 都可能出现，也可能以 0 开头——并且在生成 5 分钟后失效。</li><li>只有发送方需要登录。接收方只需要装好 CLI 和拿到这个码，完全不需要账号。</li><li>这个码只是一个用来会合的共享密钥；除了会合服务器，它不会发给任何人，而且只用来介绍双方。</li><li>接收方可以指定目标目录：relayium receive 483920 ./downloads</li><li>两端都必须是 CLI——浏览器无法加入 CLI 的配对码。如果对方只有浏览器，请改用 relayium up，它会给你一个下载链接。</li></ul>
+      <ol class="steps" data-block="steps"><li><p>在发送方机器上登录一次。如果 relayium whoami 已经能打印出你的账号邮箱，就跳过这步。</p><pre><code>relayium login</code></pre></li><li><p>在文件所在目录里开始发送。CLI 会生成配对码，打印出对面要执行的命令，然后等待。</p><pre><code>relayium send ./release.zip</code></pre></li><li><p>把它打印出来的六位数字用带外方式念给对方。这串数字在生成五分钟后就不再有效。</p></li><li><p>在接收方机器上，切到文件该落地的目录，执行发送方看到的那条命令。想放到别处就在后面加一个目录。</p><pre><code>relayium receive 483920</code></pre><pre><code>relayium receive 483920 ./downloads</code></pre></li><li><p>两边的终端都别关，直到接收端回到 shell 提示符。这是一次实时会话：任何一端关掉，传输就停了。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">成功时你会看到什么</p><p>发送方先打印交接信息块并等待，然后打印校验码和它拿到的路径。两边终端显示同一个校验码，而且都以 0 退出。</p><pre><code># 发送方
+Code: 483920   (valid 5 minutes)
+On the other machine:  relayium receive 483920
+  not installed there?  curl -fsSL https://relayium.com/install.sh | sh
+waiting for the receiver…
+verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
+path: direct</code></pre></div>
+      <ul><li>这个码是 6 位十进制数字——0-9 都可能出现，也可能以 0 开头——并且在生成 5 分钟后失效。</li><li>这个码只是一个用来会合的共享密钥；除了会合服务器，它不会发给任何人，而且只用来介绍双方。</li><li>两端都必须是 CLI——浏览器无法加入 CLI 的配对码。如果对方只有浏览器，请改用 relayium up，它会给你一个下载链接。</li></ul>
       <h2>用 SAS 码验证</h2>
       <p>两端连接建立后，两边的终端会打印出同一个从固定 TLS 证书指纹派生的 6 位 SAS（简短认证串）。通过带外方式核对——例如在通话中念出来——可以确认指纹没有被替换、会合服务没有冒充任一端。SAS 认证的是端点，并不证明网络路径上的每一跳。</p>
       <p>为获得最强保护，加上 --verify：传输会等你确认两边的码一致后，才会移动哪怕一个字节。</p>
@@ -109,6 +128,13 @@ relayium receive 483920</code></pre>
       <p>传输会在两端之间竞速建立直连。一旦能建立——这是常见情况，只要至少一方有可达地址——文件就会直接、加密地全速传输，不收费。</p>
       <p>如果两端都在严格 NAT 之后，找不到直连路径，传输会干净地失败，而不会把你的文件路由经过中继。这样才能让 CLI 保持完全免费，也让你的文件字节远离我们的服务器。如果遇到这种情况，可靠的办法是在两台可达的服务器之间用 daemon 直连，或者用 SSH push。</p>
       <ul><li>直连成功 → 免费、全速、端到端加密。</li><li>没有直连路径 → 传输失败；CLI 从不替你代理文件。</li><li>两端在地理上可以在任何地方——发送方直接运行 send，接收方用它打印出来的码运行 receive。</li></ul>
+      <h2>传不过去的时候</h2>
+      <p>几乎所有失败都落在下面四种里。每一种都有一行可读的输出或一条可执行的命令来判定，你不必靠猜来判断是哪一端出了问题。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>发送方直接拒绝启动：“minting a pairing code needs an account”。</dt><dd><pre><code>relayium whoami
+# not logged in (run `relayium login`)</code></pre><p>这台机器上没有存下凭据。运行 relayium login 并在浏览器里批准；之后 whoami 就能打印出账号邮箱，发送也能继续。此时还没有生成过码，所以没浪费任何一个。</p></dd><dt>接收方输入了码，会合服务却不认。</dt><dd><pre><code># 发送方——交接信息块里写着确切的有效期
+relayium send ./release.zip
+Code: 483920   (valid 5 minutes)</code></pre><p>码过期了。在发送方按 Ctrl-C，重新运行 relayium send ./release.zip，然后在新交接信息块写明的五分钟内把新的六位数字念过去。</p></dd><dt>两边终端打印出的校验码不一样。</dt><dd><pre><code>relayium send --verify ./release.zip</code></pre><p>停下，别把文件发出去。校验码不一致意味着两端固定下来的证书指纹对不上，也就是说对面那台机器并不是你以为的那台。用 --verify 重跑一次，它会在这一步停住等你确认，同时跟对方核对他们到底在哪台机器上操作。</p></dd><dt>“no direct connection to the peer (both ends behind strict NAT?)”。</dt><dd><pre><code>relayium send ./release.zip
+# no direct connection to the peer (both ends behind strict NAT?): …</code></pre><p>两端谁也够不着谁，而 CLI 刻意如此，没有给文件字节留任何中继通路。把其中一端换到有可达地址的网络上——一台服务器，或者手机热点——或者改用 relayium up 上传文件，把下载链接交给对方。</p></dd></dl></div>
       <h2>常见问题</h2>
       <h3>配对码是从哪来的？</h3>
       <p>由 Relayium 生成。登录后运行 `relayium send ./release.zip`，CLI 会打印一个 6 位数字、5 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。</p>

@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="Relayium CLI と SSH で自分のサーバーにファイルをバックアップする" />
     <meta name="twitter:description" content="relayium push と pull を使って、すでに ssh でアクセスできるサーバーへディレクトリをコピーまたは同期。再開可能、整合性チェック付きで無料。バイトは自分の SSH 接続を通り、Relayium のサーバーには一切触れません。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI と SSH で自分のサーバーにファイルをバックアップする","description":"relayium push と pull を使って、すでに ssh でアクセスできるサーバーへディレクトリをコピーまたは同期。再開可能、整合性チェック付きで無料。バイトは自分の SSH 接続を通り、Relayium のサーバーには一切触れません。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium CLI と SSH で自分のサーバーにファイルをバックアップする"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ファイルは Relayium のサーバーを経由しますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。push と pull はすべて自分の SSH 接続の上で完結します。Relayium のサーバーは一切関与せず、アカウントも不要です。"}},{"@type":"Question","name":"サーバーに relayium のインストールは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"方向によります。push の場合は任意です。リモートに relayium があればネイティブプロトコルが使え、再開可能な転送とファイルごとの SHA-256 チェックが得られます。なければ push は SSH 上の tar ストリームにフォールバックし、それでも動作しますが、各ファイルは常に全体が送信されます。pull の場合は必須です。pull は常にリモート側の relayium を必要とし（tar フォールバックはありません）、先にリモートへインストールしておいてください。"}},{"@type":"Question","name":"どの SSH 鍵とポートを使うかはどう決まりますか？","acceptedAnswer":{"@type":"Answer","text":"ssh と同じように既存の ~/.ssh/config を読み込むため、ホストエイリアス、鍵、ポートは自動的に反映されます。コマンドごとに -i でアイデンティティファイル、-p でポートを指定して上書きすることもできます。"}},{"@type":"Question","name":"これは rsync より速いですか？","acceptedAnswer":{"@type":"Answer","text":"自分のサーバーへの push に関しては、SSH 経由の rsync とほぼ同等です。狙いは rsync に勝つことではなく、同じ再開・整合性保証を備えたまま、クロスネットワーク転送やサーバー間転送もこなせる1つのツールを提供することです。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI と SSH で自分のサーバーにファイルをバックアップする","description":"relayium push と pull を使って、すでに ssh でアクセスできるサーバーへディレクトリをコピーまたは同期。再開可能、整合性チェック付きで無料。バイトは自分の SSH 接続を通り、Relayium のサーバーには一切触れません。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/back-up-a-server-over-ssh/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium CLI と SSH で自分のサーバーにファイルをバックアップする"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"ファイルは Relayium のサーバーを経由しますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。push と pull はすべて自分の SSH 接続の上で完結します。Relayium のサーバーは一切関与せず、アカウントも不要です。"}},{"@type":"Question","name":"サーバーに relayium のインストールは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"方向によります。push の場合は任意です。リモートに relayium があればネイティブプロトコルが使え、再開可能な転送とファイルごとの SHA-256 チェックが得られます。なければ push は SSH 上の tar ストリームにフォールバックし、それでも動作しますが、各ファイルは常に全体が送信されます。pull の場合は必須です。pull は常にリモート側の relayium を必要とし（tar フォールバックはありません）、先にリモートへインストールしておいてください。"}},{"@type":"Question","name":"どの SSH 鍵とポートを使うかはどう決まりますか？","acceptedAnswer":{"@type":"Answer","text":"ssh と同じように既存の ~/.ssh/config を読み込むため、ホストエイリアス、鍵、ポートは自動的に反映されます。コマンドごとに -i でアイデンティティファイル、-p でポートを指定して上書きすることもできます。"}},{"@type":"Question","name":"これは rsync より速いですか？","acceptedAnswer":{"@type":"Answer","text":"自分のサーバーへの push に関しては、SSH 経由の rsync とほぼ同等です。狙いは rsync に勝つことではなく、同じ再開・整合性保証を備えたまま、クロスネットワーク転送やサーバー間転送もこなせる1つのツールを提供することです。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,7 +100,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最終更新: <bdi>2026-07-12</bdi></p>
+      <p class="updated">最終更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/">English</a><a href="/zh/guides/back-up-a-server-over-ssh/">中文</a><a href="/ja/guides/back-up-a-server-over-ssh/" aria-current="true">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh/">한국어</a><a href="/de/guides/back-up-a-server-over-ssh/">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh/">Français</a><a href="/ar/guides/back-up-a-server-over-ssh/">العربية</a><a href="/es/guides/back-up-a-server-over-ssh/">Español</a><a href="/pt/guides/back-up-a-server-over-ssh/">Português</a></nav>
       <p class="lead">VPS、自宅サーバー、NAS、ワークステーションなど、すでに ssh でアクセスできるマシンがあれば、同期サービスやアカウントを用意しなくても Relayium CLI でそこへファイルをバックアップできます。転送は既存の SSH 接続の上で行われるため、バイトは直接自分のサーバーへ向かい、Relayium を通ることはありません。</p>
       <p class="lead">本ガイドではディレクトリの push と pull、再開機能と整合性チェックが何をもたらすか、そして cron でスケジュール実行する方法を扱います。</p>
@@ -92,12 +109,15 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>自分でファイルを選びたい、または Windows の場合は、リリースページからバイナリを取得してください——relayium.com/cli にすべてのインストール方法があります（Go があれば go build -o relayium ./cmd/relayium も可）。</li><li>relayium --version でインストールを確認できます。これをしないと以下のコマンドは「command not found」と出るだけです。</li></ul>
       <h2>ディレクトリをサーバーへ push する</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">必要なもの</p><ul><li>すでに使っている SSH アクセス。ssh user@your-server true が黙って戻ることが条件です。push はまさにその接続を再利用し、独自の設定は何も持ちません。</li><li>サーバー側の書き込み可能な宛先。宛先パスの親ディレクトリが存在し、その SSH ユーザーが書き込めることが必要です。</li><li>任意で、サーバー側の relayium。再開とファイル単位の SHA-256 はこれで得られます。なくても push は素の tar ストリームで動きます。</li><li>Relayium アカウントも、どちらの端のデーモンも不要です。ここでは Relayium のサーバーと通信するものは何もありません。</li></ul></div>
       <p>push は1つ以上のソースと scp 形式の宛先を受け取ります。Relayium はいつも使っている鍵と設定を使って SSH 経由で接続し、ファイルを宛先ディレクトリへストリーミングします：</p>
-      <pre><code># ローカルのフォルダーをサーバーへコピーする
-relayium push ./photos user@your-server:backups/
+      <ol class="steps" data-block="steps"><li><p>push が再利用する SSH アクセスを確認します。黙って戻れば、鍵もホストエイリアスもポートもすでに正しいということです。</p><pre><code>ssh user@your-server true</code></pre></li><li><p>どちらのプロトコルになるかを調べます。パスが表示されればネイティブプロトコル（再開とファイル単位の SHA-256）、何も出なければ tar ストリームの方です。</p><pre><code>ssh user@your-server command -v relayium</code></pre></li><li><p>ディレクトリを push します。宛先は scp 形式で、末尾のスラッシュは「このディレクトリの中へ」を意味します。</p><pre><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>ssh の設定にそのホストがまだ無い場合は、このコマンドに限って鍵やポートを指定します。</p><pre><code>relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre></li><li><p>何が届いたかを確認します。push ./photos は宛先の下に photos/ を再現するので、フォルダー名もそのまま付いてきます。</p><pre><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">成功したときの表示</p><p>ネイティブプロトコルなら、push は完了したファイルごとに1行を表示して終了コード 0 で終わります。素のサーバー相手なら要約が1行出るだけで、それが tar フォールバックであり、これも成功です。</p><pre><code>relayium push ./photos user@your-server:backups/
+  photos/IMG_0413.jpg (2314518 bytes)
+  photos/IMG_0414.jpg (1998233 bytes)
 
-# SSH 鍵と既定以外のポートを指定する
-relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</code></pre>
+# against a server with no relayium installed, one summary line instead:
+sent 2 file(s) (zero-dependency mode)</code></pre></div>
       <ul><li>既存の ~/.ssh/config を再利用するので、すでに設定済みのホストエイリアス、鍵、ポートがそのまま使えます。</li><li>サーバーに relayium がインストールされていれば、ネイティブプロトコルを使います。ファイルごとの再開と、すべてのファイルに対する SHA-256 チェックです。</li><li>インストールされていない場合は、tar ストリームをリモートへパイプする方式にフォールバックするので、relayium のない素のサーバーでも動作します。</li></ul>
       <h2>ファイルを pull で戻す</h2>
       <p>復元は同じコマンドを逆にするだけです。リモートのソースとローカルの宛先ディレクトリを指定します。これがバックアップを復元したり、サーバーの出力をノート PC に同期したりする方法です：</p>
@@ -112,6 +132,15 @@ relayium push -i ~/.ssh/id_ed25519 -p 2222 ./photos user@your-server:backups/</c
       <pre><code># 毎晩2時にバックアップ（crontab -e で crontab に追加）
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@your-server:backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1</code></pre>
       <ul><li>再開と組み合わせれば、中断された夜間ジョブは翌晩そのまま続きから進みます。</li><li>いずれかのファイルが整合性チェックに失敗すると、コマンドは非ゼロで終了するので、cron の失敗時メール通知で問題に気づけます。</li></ul>
+      <h2>バックアップが届かないとき</h2>
+      <p>スケジュール実行のバックアップは、その性質上ひっそりと失敗します。誰も端末を見ていないからです。次の4つでほぼ尽きますし、どれも今すぐ実行できるコマンドで判定できます。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>cron ジョブが固まる、またはログがパスワード入力待ちで終わっている。</dt><dd><pre><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@your-server true
+# Permission denied (publickey).</code></pre><p>BatchMode=yes は入力を求めずに失敗するので、無言のハングがこの1行に変わります。その鍵の公開鍵をサーバーの ~/.ssh/authorized_keys に追加するか、エージェントがすでに保持している鍵をジョブに指定してください。</p></dd><dt>crontab の行は動いているのにログが空のまま。</dt><dd><pre><code>command -v relayium
+# /usr/local/bin/relayium</code></pre><p>cron は最小限の PATH で動き、たいてい /usr/local/bin を含みません。そのため relayium が起動する前に行が失敗します。いま確認した絶対パスを crontab のエントリーに書き、&gt;&gt; ~/relayium-backup.log 2&gt;&amp;1 のリダイレクトは残しておいて、次の失敗が見えるようにしてください。</p></dd><dt>中断された転送が、次の実行でゼロからやり直しになる。</dt><dd><pre><code>ssh user@your-server command -v relayium
+# （何も表示されない）</code></pre><p>再開はネイティブプロトコルの機能で、リモートに relayium が無いということは tar ストリームの方だということです。そちらは常にファイル全体を送り直します。サーバーに入れればファイル単位の再開が得られます。あわせて、意図的に再開を切る --no-resume を渡していないかも確認してください。</p></dd><dt>「N file(s) failed integrity check」と表示され、終了コードが 0 以外になる。</dt><dd><pre><code>relayium push ./photos user@your-server:backups/
+# 1 file(s) failed integrity check: [photos/IMG_0413.jpg]
+echo $?
+# 1</code></pre><p>到着時に計算した SHA-256 が送信時のものと一致しなかったので、サーバー上のそのファイルは信頼できません。push をやり直して終了コードをもう一度確認してください。同じファイルが繰り返し失敗するなら、そのファイルだけを push して、元データの問題か回線の問題かを切り分けます。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>ファイルは Relayium のサーバーを経由しますか？</h3>
       <p>いいえ。push と pull はすべて自分の SSH 接続の上で完結します。Relayium のサーバーは一切関与せず、アカウントも不要です。</p>

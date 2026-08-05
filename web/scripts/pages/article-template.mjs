@@ -105,13 +105,87 @@ function tableHtml(t) {
   return `\n      <div class="tw"><table>${head}<tbody>${body}</tbody></table></div>`;
 }
 
+// ── Tutorial blocks ─────────────────────────────────────────────────────────
+// A how-to needs four things a wall of prose and bullets cannot express: what
+// you must have before you start, the procedure in order, what a working run
+// actually looks like, and what to do when it doesn't. Four optional per-section
+// fields carry them, so a section keeps its existing narrative (body, code,
+// bullets) and gains structure only where structure is the point.
+//
+// They are separate fields rather than a `kind` on the generic bullet list
+// because each renders as a DIFFERENT element: prerequisites are an unordered
+// list, a procedure is an <ol> (numbering that survives a reordered step, a
+// screen reader, and a reader-mode extraction — a "1." typed into a bullet
+// string survives none of those), an expected result is a labelled note, and
+// troubleshooting is a <dl> whose <dt> is the symptom you are looking at.
+//
+// `data-block` on each is for the tests, not for CSS or script: it names the
+// concept in the output, so a guard can assert that an article really renders a
+// procedure as an <ol> rather than matching a class that a restyle could rename.
+
+const codeHtml = (blocks) =>
+  (blocks || []).map((b) => `<pre><code>${esc(b)}</code></pre>`).join("");
+
+// prereqsHtml — "you need these before step 1". An unordered list: the items are
+// conditions to satisfy in any order, not a sequence.
+function prereqsHtml(p) {
+  return (
+    `\n      <div class="cbox prereq" data-block="prereqs">` +
+    `<p class="cbox-t">${esc(p.label)}</p>` +
+    `<ul>${p.items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` +
+    `</div>`
+  );
+}
+
+// stepsHtml — the procedure, as a real ordered list. A step may carry its own
+// command block, which lands inside its <li> so the command stays attached to
+// the step that runs it.
+function stepsHtml(steps) {
+  const items = steps
+    .map((s) => `<li><p>${esc(s.text)}</p>${codeHtml(s.code)}</li>`)
+    .join("");
+  return `\n      <ol class="steps" data-block="steps">${items}</ol>`;
+}
+
+// successHtml — what the reader compares their terminal against. Labelled, so
+// it reads as "this is the expected result" rather than as one more code sample.
+function successHtml(s) {
+  return (
+    `\n      <div class="cbox ok" data-block="success">` +
+    `<p class="cbox-t">${esc(s.label)}</p>` +
+    (s.body || []).map((p) => `<p>${esc(p)}</p>`).join("") +
+    codeHtml(s.code) +
+    `</div>`
+  );
+}
+
+// troubleshootHtml — a description list, because that is exactly the shape of
+// the content: the <dt> is the symptom the reader can see, the <dd> is the check
+// that decides it and the fix that follows. Each item's `code` is the check —
+// something to run, or an exact state to look at.
+function troubleshootHtml(t) {
+  const items = t.items
+    .map((i) => `<dt>${esc(i.symptom)}</dt><dd>${codeHtml(i.code)}<p>${esc(i.fix)}</p></dd>`)
+    .join("");
+  return (
+    `\n      <div class="cbox fix" data-block="troubleshooting">` +
+    `<p class="cbox-t">${esc(t.label)}</p>` +
+    `<dl>${items}</dl>` +
+    `</div>`
+  );
+}
+
 function sectionHtml(s) {
   let out = `<h2>${esc(s.heading)}</h2>`;
+  if (s.prereqs) out += prereqsHtml(s.prereqs);
   for (const p of s.body || []) out += `\n      <p>${esc(p)}</p>`;
   if (s.table) out += tableHtml(s.table);
   for (const block of s.code || []) out += `\n      <pre><code>${esc(block)}</code></pre>`;
   if (s.widget) out += widgetHtml(s.widget);
+  if (s.steps?.length) out += stepsHtml(s.steps);
+  if (s.success) out += successHtml(s.success);
   if (s.bullets?.length) out += `\n      <ul>${s.bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>`;
+  if (s.troubleshooting) out += troubleshootHtml(s.troubleshooting);
   return out;
 }
 
@@ -126,6 +200,35 @@ const TABLE_STYLE = `<style>
 .tw th,.tw td{border:1px solid var(--border);padding:8px 11px;text-align:start;vertical-align:top}
 .tw th{color:var(--text-h);background:var(--card);font-weight:600}
 .tw code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;color:var(--text-h)}
+</style>`;
+
+// Styles for the four tutorial blocks, emitted only on pages that use one —
+// same gating as TABLE_STYLE, so the ~380 articles that are prose stay
+// byte-for-byte free of it.
+//
+// Every directional property is logical: `border-inline-start` puts the accent
+// rule on the reading-start edge, so an Arabic page gets it on the right with no
+// direction-specific rule, and `padding-inline-start` does the same for the two
+// lists. `<dd>` carries a UA `margin-inline-start:40px` that would indent every
+// fix under its symptom, so it is zeroed rather than overridden per direction.
+// Colours are the existing tokens, which already have a dark-scheme value, so
+// the blocks follow the page into dark mode without a second media query.
+const BLOCK_STYLE = `<style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
 </style>`;
 
 // Styles for widgetHtml, emitted only on pages that use a builder so every
@@ -180,6 +283,12 @@ function hasWidget(doc) {
 
 function hasTable(doc) {
   return (doc.sections || []).some((s) => s.table);
+}
+
+// hasBlocks reports whether any section uses a tutorial block, so BLOCK_STYLE is
+// emitted only where one of the four actually renders.
+function hasBlocks(doc) {
+  return (doc.sections || []).some((s) => s.prereqs || s.steps?.length || s.success || s.troubleshooting);
 }
 
 export function renderArticlePage({ slug, lang, doc, updated, published, related = [] }) {
@@ -287,7 +396,7 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
     <meta name="twitter:description" content="${headDesc}" />
     <meta name="twitter:image" content="${ogImage}" />
     <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
-    <style>${STYLE}</style>${hasTable(doc) ? "\n    " + TABLE_STYLE : ""}${hasWidget(doc) ? "\n    " + BUILDER_STYLE : ""}
+    <style>${STYLE}</style>${hasTable(doc) ? "\n    " + TABLE_STYLE : ""}${hasBlocks(doc) ? "\n    " + BLOCK_STYLE : ""}${hasWidget(doc) ? "\n    " + BUILDER_STYLE : ""}
   </head>
   <body>
     <div class="wrap">

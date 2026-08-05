@@ -15,7 +15,7 @@
 > （`ACDEFHJKMNPRTWXY23456789`)不再是现在的口径；TTL 的"5 分钟"虽然与现在的数字相同，
 > 但中间曾被放宽到 30 分钟又收回，所以它是巧合而不是依据。要看现在的数字，读那三个常量。
 
-> **实施状态（2026-08-05 逐条对代码复核）：15 条里 10 条已完成，2 条部分完成，3 条未做。**
+> **实施状态（2026-08-05 逐条对代码复核）：15 条里 11 条已完成，3 条部分完成，2 条未做。**
 > 复核方式是读当前代码与测试，不是读交付记录。
 >
 > | # | 行动项 | 状态 | 依据 |
@@ -24,10 +24,10 @@
 > | 2 | 跨网路径表述写反（7 篇） | ✅ | 同上，`content-claims.test.mjs` 的"直连优先、回落中继"规则对 9 语言逐条注入验证过 |
 > | 3 | `--ttl 7d` 不可运行 | ✅ | **按报告建议的反方向修的**：改的是产品而非文档——`server/cmd/relayium/cloud.go` 的 `parseDayOrWeek` 现在认 `7d`/`2w`，教程里的 `--ttl 7d` 因此成立 |
 > | 4 | "六位数字码"错 | ✅ | 现在码本身就是 6 位纯数字，表述与实现一致 |
-> | 5 | 每篇配对教程补 5 分钟 TTL / 码从哪来 | ⏳ **部分**：7 篇浏览器配对 how-to 里只有 `howto-transfer-by-qr-code`、`howto-mac-to-windows` 写了 5 分钟；其余 5 篇（`howto-same-wifi`、`howto-android-to-iphone`、`howto-pc-to-phone-wirelessly`、`howto-send-files-between-computers`、`howto-airdrop-for-windows-android`）仍未提 |
+> | 5 | 每篇配对教程补 5 分钟 TTL / 码从哪来 | ✅ | 16 篇提到配对码的教程已按“教流程 / 仅提及”完整分类；6 篇缺失流程说明的文章已补齐 5 分钟有效期与账户铸码来源，`pairing-facts.test.mjs` 对 9 语言守住分类完备性和事实 |
 > | 6 | 相关链接改策展 | ✅ | `content/related-map.mjs`，每篇 4 条 |
 > | 7 | 教程入口 | ⏳ **部分**：SPA 页脚已有 Guides 入口、UseCases 卡片已可点（`UseCases.svelte` 的 `caseHref`）；**落地页 learn 区仍是 37 条平铺、仍无收尾 CTA** |
-> | 8 | 编号步骤 / 预期输出 / 排障块 | ❌ **未做**——24 篇 ×9 语言，是当前排在最前的中型任务 |
+> | 8 | 编号步骤 / 预期输出 / 排障块 | ⏳ **部分**：第一批 6 篇 CLI 教程 ×9 语言已完成；模板已支持语义化编号步骤、成功标志与排障定义列表，`cli-tutorial-structure.test.mjs` 守住结构、可运行命令和关键事实。剩余浏览器 how-to 11 篇与 guides 8 篇待后续两批 |
 > | 9 | 事实去重成权威 snippet | ⏳ **部分**：`content/install-section.mjs` 是已落地的共享段落；跨网段落与浏览器限制段落仍各自散在文章里（由 1/2 的测试守住正确性，但没有单一来源） |
 > | 10 | 4 篇中文半角标点 | ✅ | 见下方 §11 的 2026-08-05 记录，并由 lint 守住 |
 > | 11 | 术语表 + 构建期强制 + zh 代码注释 | ✅ | `content/GLOSSARY.md` + `register-glossary.test.mjs` |

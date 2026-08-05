@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="클라우드에 올리고 다른 컴퓨터에서 받기" />
     <meta name="twitter:description" content="Relayium 계정을 통한 비동기 파일 전송. relayium up으로 한 기기에서 업로드하고, 편할 때 relayium down으로 다른 기기에서 다운로드 — 종단간 암호화이며 계정이 필요한 것은 업로드뿐입니다." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"클라우드에 올리고 다른 컴퓨터에서 받기","description":"Relayium 계정을 통한 비동기 파일 전송. relayium up으로 한 기기에서 업로드하고, 편할 때 relayium down으로 다른 기기에서 다운로드 — 종단간 암호화이며 계정이 필요한 것은 업로드뿐입니다.","inLanguage":"ko","datePublished":"2026-07-12","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/push-to-cloud-pull-on-another-computer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"클라우드에 올리고 다른 컴퓨터에서 받기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"업로드할 때, 그리고 코드를 발급해야 하는 보내기일 때요. relayium up은 파일을 내 계정에 저장해야 하므로 언제나 relayium login이 필요합니다. relayium send는 서버가 새 페어링 코드를 발급해야 할 때만 필요합니다 — 누군가 건네준 코드로 send를 실행하면 아무것도 발급하지 않으므로 로그인이 필요 없습니다. relayium down과 relayium receive는 계정이 필요 없고, push/pull, 데몬 다이렉트, sync도 계정 없이 동작합니다."}},{"@type":"Question","name":"파일은 암호화되나요?","acceptedAnswer":{"@type":"Answer","text":"네, 종단간으로요. 업로드 전에 내 기기에서 암호화되며, 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다. Relayium은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다."}},{"@type":"Question","name":"링크를 잃어버리면요?","acceptedAnswer":{"@type":"Answer","text":"링크는 복호화 키의 유일한 사본을 담고 있어, 잃으면 파일은 복구할 수 없습니다 — 서버에 복원할 수 있는 것이 전혀 없습니다."}},{"@type":"Question","name":"누가 다운로드할지 제한할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"링크를 가진 누구나 다운로드할 수 있으니 비공개로 공유하세요. --burn으로 한 번만, --max-downloads \u003cn>으로 횟수를 제한하고, --ttl \u003c기간>으로 일정 시간 후 만료시킬 수 있습니다."}},{"@type":"Question","name":"웹사이트와 연동되나요?","acceptedAnswer":{"@type":"Answer","text":"네. relayium up의 링크는 브라우저에서 열리고, relayium.com에서 만든 공유 링크는 다른 기기에서 relayium down으로 받을 수 있습니다."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"클라우드에 올리고 다른 컴퓨터에서 받기","description":"Relayium 계정을 통한 비동기 파일 전송. relayium up으로 한 기기에서 업로드하고, 편할 때 relayium down으로 다른 기기에서 다운로드 — 종단간 암호화이며 계정이 필요한 것은 업로드뿐입니다.","inLanguage":"ko","datePublished":"2026-07-12","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/push-to-cloud-pull-on-another-computer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"클라우드에 올리고 다른 컴퓨터에서 받기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"계정이 필요한가요?","acceptedAnswer":{"@type":"Answer","text":"업로드할 때, 그리고 코드를 발급해야 하는 보내기일 때요. relayium up은 파일을 내 계정에 저장해야 하므로 언제나 relayium login이 필요합니다. relayium send는 서버가 새 페어링 코드를 발급해야 할 때만 필요합니다 — 누군가 건네준 코드로 send를 실행하면 아무것도 발급하지 않으므로 로그인이 필요 없습니다. relayium down과 relayium receive는 계정이 필요 없고, push/pull, 데몬 다이렉트, sync도 계정 없이 동작합니다."}},{"@type":"Question","name":"파일은 암호화되나요?","acceptedAnswer":{"@type":"Answer","text":"네, 종단간으로요. 업로드 전에 내 기기에서 암호화되며, 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다. Relayium은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다."}},{"@type":"Question","name":"링크를 잃어버리면요?","acceptedAnswer":{"@type":"Answer","text":"링크는 복호화 키의 유일한 사본을 담고 있어, 잃으면 파일은 복구할 수 없습니다 — 서버에 복원할 수 있는 것이 전혀 없습니다."}},{"@type":"Question","name":"누가 다운로드할지 제한할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"링크를 가진 누구나 다운로드할 수 있으니 비공개로 공유하세요. --burn으로 한 번만, --max-downloads \u003cn>으로 횟수를 제한하고, --ttl \u003c기간>으로 일정 시간 후 만료시킬 수 있습니다."}},{"@type":"Question","name":"웹사이트와 연동되나요?","acceptedAnswer":{"@type":"Answer","text":"네. relayium up의 링크는 브라우저에서 열리고, relayium.com에서 만든 공유 링크는 다른 기기에서 relayium down으로 받을 수 있습니다."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -66,6 +66,23 @@ footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-
 footer a{color:var(--text-h);text-decoration:none}
 </style>
     <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
+    <style>
 .builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
 .builder .bf{display:block;margin:0 0 12px}
 .builder .bf span{display:block;font-size:14px;color:var(--text);margin:0 0 5px}
@@ -93,7 +110,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">마지막 업데이트: <bdi>2026-07-12</bdi></p>
+      <p class="updated">마지막 업데이트: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer/">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer/">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer/">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer/" aria-current="true">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer/">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer/">Français</a><a href="/ar/guides/push-to-cloud-pull-on-another-computer/">العربية</a><a href="/es/guides/push-to-cloud-pull-on-another-computer/">Español</a><a href="/pt/guides/push-to-cloud-pull-on-another-computer/">Português</a></nav>
       <p class="lead">두 컴퓨터가 동시에 켜져 있는 일이 결코 없을 때가 있습니다. 오늘 밤 업무용 노트북에서 파일을 올려두고 내일 집 데스크톱에서 받고 싶은데, 실시간 연결을 기다리는 사람은 아무도 없습니다. relayium up과 relayium down이 바로 그 일을 합니다. up은 로컬에서 암호화해 계정에 업로드하고, down은 나중에 아무 기기에서나 가져와 복호화합니다. P2P 핸드셰이크도, 둘 다 ssh 할 수 있는 서버도 필요 없습니다.</p>
       <p class="lead">이것은 CLI에서 Relayium 계정을 사용하는 주된 부분이며, 다른 하나는 페어링 코드를 발급하기 위해 계정이 필요한 send입니다. 나머지의 바인딩은 선택 사항입니다. push/pull, 데몬 다이렉트, sync는 로그인 없이 계속 동작하고 receive도 마찬가지입니다. 다운로드에는 계정이 전혀 필요 없고 링크만 있으면 됩니다.</p>
@@ -101,33 +118,44 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>상대편이 온라인인지, 두 기기가 서로 어떻게 닿는지에 따라 모드를 고릅니다:</p>
       <ul><li>up / down (이 가이드) — 두 기기가 동시에 온라인이 되지 않습니다. 지금 업로드하고, 나중에 자신(또는 다른 기기)이 다운로드합니다. 계정을 거칩니다.</li><li>send / receive — 양쪽이 지금 온라인이며 일회용 코드로 직접 P2P 전송을 원합니다.</li><li>push / pull — 상대 기기에 이미 ssh 할 수 있습니다.</li><li>relayium login이 필요한 것은 up과 send 둘입니다 — up은 파일을 계정에 저장하기 위해, send는 페어링 코드를 발급해야 할 때만(코드를 받았다면 필요 없습니다). down, receive, push/pull, 데몬 다이렉트, sync는 계정이 필요 없습니다.</li></ul>
       <h2>시작하기 전에</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">필요한 것</p><ul><li>먼저 CLI를 설치해 relayium 명령이 존재하게 합니다. 아래 한 줄이 미리 빌드된 바이너리를 PATH에 올립니다(macOS와 Linux; Windows는 releases 페이지에서 .zip을 받으세요). relayium --version으로 설치를 확인할 수 있고, relayium.com/cli에 모든 설치 방법이 있습니다. 이 단계를 건너뛰면 relayium login은 “command not found”만 출력합니다.</li><li>무료 Relayium 계정을 준비합니다. 브라우저 단계는 본인 계정에 대해 로그인을 승인하므로, 승인하려면 먼저 계정이 있어야 합니다 — relayium.com에서 로그인하거나 없으면 거기서 새로 만드세요. 계정이 필요한 것은 업로드뿐이고 다운로드에는 필요 없습니다.</li><li>링크를 다른 기기로 옮길 수단 — 메모 앱, 채팅 창, 비밀번호 관리자 무엇이든 좋습니다. 링크를 가진 누구나 파일을 받을 수 있으니 비밀번호처럼 다루세요.</li></ul></div>
       <p>첫 up 전에 한 번만 해두면 되는 두 가지 — CLI 설치와 계정 준비입니다. 둘 다 있으면 건너뛰세요.</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>먼저 CLI를 설치해 relayium 명령이 존재하게 합니다. 위 한 줄이 미리 빌드된 바이너리를 PATH에 올립니다(macOS와 Linux; Windows는 releases 페이지에서 .zip을 받으세요). relayium --version으로 설치를 확인할 수 있고, relayium.com/cli에 모든 설치 방법이 있습니다. 이 단계를 건너뛰면 relayium login은 “command not found”만 출력합니다.</li><li>무료 Relayium 계정을 준비합니다. 브라우저 단계는 본인 계정에 대해 로그인을 승인하므로, 승인하려면 먼저 계정이 있어야 합니다 — relayium.com에서 로그인하거나 없으면 거기서 새로 만드세요. 계정이 필요한 것은 업로드뿐이고 다운로드에는 필요 없습니다.</li></ul>
       <h2>이 기기를 계정에 바인딩하기 (한 번만)</h2>
       <p>up은 누구의 계정에 저장할지 알아야 하므로 기기마다 한 번 로그인합니다. 브라우저에서 승인하는 기기 로그인이며, 터미널에는 확인할 코드 외에는 아무것도 입력하지 않습니다:</p>
       <pre><code>relayium login</code></pre>
       <ul><li>CLI가 짧은 코드와 URL(relayium.com/device)을 표시합니다. relayium.com에 로그인된 브라우저에서 열어(로그인되어 있지 않으면 먼저 거기서 로그인) 코드를 입력하고 승인하면 이 기기가 바인딩됩니다.</li><li>로그인 정보는 ~/.config/relayium/ 아래 저장되므로 기기마다 한 번이면 됩니다. relayium whoami로 바인딩 대상을 보고, relayium logout으로 지웁니다.</li><li>나중에 기기를 취소하려면 브라우저의 계정 &#39;기기&#39; 페이지에서 해당 기기를 삭제하세요.</li></ul>
       <h2>첫 번째 컴퓨터에서 업로드</h2>
       <p>up은 준 파일들을 훑어 로컬에서 암호화하고 암호문을 업로드한 뒤 수령용 링크를 출력합니다:</p>
-      <pre><code>relayium up ./report.pdf
-#   → https://relayium.com/d/7fK2p…#k=Xr8s…</code></pre>
-      <pre><code># 얼마나 살려둘지 고르기(기본값 24시간):
+      <ol class="steps" data-block="steps"><li><p>이 기기가 아직 계정에 묶여 있는지 확인합니다. 계정과 묶여 있는 서버를 출력하며, 로그인되어 있지 않다고 하면 위의 로그인 단계를 먼저 하세요.</p><pre><code>relayium whoami</code></pre></li><li><p>파일을 올립니다. up은 로컬에서 암호화해 암호문만 보내고, 수령용 링크를 표준 출력에 찍습니다.</p><pre><code>relayium up ./report.pdf</code></pre></li><li><p>기본값인 24시간이 원하는 바가 아니면 보관 플래그를 붙이세요. 서버가 실제로 얼마나 보관할지의 상한은 요금제가 정합니다.</p><pre><code># 얼마나 살려둘지 고르기(기본값 24시간):
 relayium up ./report.pdf --burn              # 한 번 다운로드 후 삭제
 relayium up ./report.pdf --ttl 7d            # 7일간 보관(상한은 요금제에 따라 다름)
-relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제</code></pre>
-      <ul><li>링크가 전달의 전부입니다 — 다른 기기가 읽을 수 있는 곳에 복사하세요. 링크를 가진 누구나 파일을 다운로드할 수 있으니 비밀번호처럼 다루세요.</li><li>보관: --burn은 한 번 다운로드하면 삭제, --ttl &lt;기간&gt;은 정해진 시간 보관, --max-downloads &lt;n&gt;은 정해진 횟수 허용. 셋 다 주지 않으면 링크는 24시간 살아 있습니다 — --ttl이 없을 때의 기본값입니다.</li><li>--ttl은 단위가 붙은 기간(30m, 12h, 7d, 2w)이나 초 단위 숫자를 받습니다. 그래서 --ttl 3600과 --ttl 1h는 같은 요청입니다. 상한은 요금제가 정합니다: Free 1일, Plus 3일, Pro 7일, Max 14일. 상한보다 길게 요청하면 서버는 조용히 상한까지만 보관하며, up이 실제로 얼마나 보관되는지 한 줄로 알려줍니다.</li><li>up은 로그인이 필요합니다. 되어 있지 않으면 알려주고 아무 일도 하지 않습니다.</li></ul>
+relayium up ./report.pdf --max-downloads 5   # 5회까지 허용 후 삭제</code></pre></li><li><p>두 번째 기기가 읽을 수 있는 곳으로 링크를 옮깁니다. 표준 출력에는 링크만 나오므로 파이프가 깨끗합니다.</p><pre><code>relayium up ./report.pdf | pbcopy</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">업로드가 성공했을 때 보이는 것</p><p>올리는 동안 표준 오류에 진행 막대가 떴다가 끝나면 지워집니다. 링크는 표준 출력에 한 줄로 나오고, 사람이 읽을 안내와 보관 기간 안내는 표준 오류에 이어집니다.</p><pre><code>relayium up ./report.pdf
+https://relayium.com/d/7fK2p…#k=Xr8s…
+opens in a browser, or fetch it with `relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;`</code></pre></div>
+      <ul><li>보관: --burn은 한 번 다운로드하면 삭제, --ttl &lt;기간&gt;은 정해진 시간 보관, --max-downloads &lt;n&gt;은 정해진 횟수 허용. 셋 다 주지 않으면 링크는 24시간 살아 있습니다 — --ttl이 없을 때의 기본값입니다.</li><li>--ttl은 단위가 붙은 기간(30m, 12h, 7d, 2w)이나 초 단위 숫자를 받습니다. 그래서 --ttl 3600과 --ttl 1h는 같은 요청입니다. 상한은 요금제가 정합니다: Free 1일, Plus 3일, Pro 7일, Max 14일. 상한보다 길게 요청하면 서버는 조용히 상한까지만 보관하며, up이 실제로 얼마나 보관되는지 한 줄로 알려줍니다.</li></ul>
       <h2>두 번째 컴퓨터에서 다운로드</h2>
       <p>다른 기기에서 링크를 down에 건넵니다. 로그인도 설정도 필요 없습니다 — 파일을 복호화하는 키가 링크 안에 있으므로 down은 계정에서 아무것도 필요로 하지 않습니다:</p>
-      <pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre>
       <div class="builder" data-download-builder><label class="bf"><span>공유 링크</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="내 링크" /></label><label class="bf"><span>저장 위치 (pwd 출력을 붙여넣기)</span><input data-dest type="text" placeholder="/home/you/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre><code data-cmd>relayium down &#39;&lt;내 링크&gt;&#39; &lt;대상 디렉터리&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="복사됨" hidden>명령 복사</button></div></div>
-      <ul><li>링크는 따옴표로 감싸세요: #k=… 조각이 복호화 키를 담고 있는데 일부 셸은 # 을 주석 시작으로 취급합니다.</li><li>대상 디렉터리(여기서는 ./downloads)를 주거나 생략해 현재 디렉터리에 받습니다.</li><li>파일이 번(burn) 설정이거나 다운로드 한도에 도달했거나 만료되었으면 링크는 소진된 것이고, down은 사라졌다고 알립니다.</li></ul>
+      <ol class="steps" data-block="steps"><li><p>편한 방법으로 링크를 두 번째 기기로 옮깁니다. 그쪽에는 CLI 자체 말고는 설치할 것도 로그인할 것도 없습니다.</p></li><li><p>작은따옴표로 감싼 링크와, 파일이 저장될 디렉터리를 down에 건넵니다.</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre></li><li><p>디렉터리를 빼면 현재 디렉터리에 저장됩니다.</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">다운로드가 성공했을 때 보이는 것</p><p>쓴 파일이 표준 출력에 한 줄씩 나열되고, 개수와 대상 디렉터리가 표준 오류에서 확인됩니다.</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads
+downloads/report.pdf
+✓ downloaded 1 file(s) to ./downloads</code></pre></div>
+      <ul><li>파일이 번(burn) 설정이거나 다운로드 한도에 도달했거나 만료되었으면 링크는 소진된 것이고, down은 사라졌다고 알립니다.</li></ul>
       <h2>웹사이트와도 연동</h2>
       <p>이 링크는 웹사이트가 쓰는 것과 같으므로 CLI와 브라우저가 자유롭게 연동됩니다:</p>
       <ul><li>relayium up의 링크는 브라우저에서 열립니다 — CLI가 없는 사람에게 건네면 웹에서 다운로드합니다.</li><li>relayium.com에서 만든 공유 링크는 다른 기기에서 relayium down으로 받을 수 있습니다.</li></ul>
       <h2>서버가 볼 수 있는 것과 없는 것</h2>
       <p>클라우드 전송은 종단간 암호화를 유지합니다:</p>
       <ul><li>파일은 업로드 전에 내 기기에서 암호화됩니다. 복호화 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다 — Relayium은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다.</li><li>그래서 링크가 파일로 돌아가는 유일한 길입니다: 잃으면 파일은 복구할 수 없습니다. 본인도, 저희도.</li></ul>
+      <h2>링크가 듣지 않을 때</h2>
+      <p>실패하는 up과 down은 거의 다 아래 네 가지입니다. 어느 것도 추측이 필요 없습니다. 판정을 가르는 상태는 명령이 출력해 주거나, 직접 친 명령 안에 보입니다.</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 해결</p><dl><dt>up이 “run `relayium login` first”를 내며 거부합니다.</dt><dd><pre><code>relayium whoami
+# not logged in (run `relayium login`)</code></pre><p>업로드는 파일을 계정 아래에 보관하므로 이 기기에 자격 증명이 필요합니다. relayium login 을 실행하고 브라우저의 relayium.com/device 에서 승인하세요. 그 뒤 whoami가 계정과 묶여 있는 서버를 출력합니다.</p></dd><dt>down이 링크를 해석하지 못하고, 키가 사라진 것처럼 보입니다.</dt><dd><pre><code>echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p</code></pre><p>대부분의 셸에서 따옴표 없는 #은 주석을 시작하므로 #k= 이후는 명령에 닿지도 못했습니다. echo가 살아남은 부분을 그대로 보여 줍니다. 링크 전체를 작은따옴표로 감싸면 복호화 키인 그 조각이 온전히 전달됩니다.</p></dd><dt>요청한 --ttl보다 링크가 일찍 끊깁니다.</dt><dd><pre><code>relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for</code></pre><p>요금제 상한을 넘는 요청을 서버는 조용히 상한으로 깎습니다 — Free 1일, Plus 3일, Pro 7일, Max 14일 — 그리고 up이 실제로 받은 기간을 이 안내로 알려 줍니다. --burn이나 --max-downloads로도 링크는 일찍 끝납니다. 새 링크가 필요하면 다시 올리세요.</p></dd><dt>로그인해 두었는데도 up이 다른 곳에 로그인되어 있다고 합니다.</dt><dd><pre><code>relayium whoami
+# you@example.com (https://relayium.com)</code></pre><p>토큰을 발급하지 않은 --server에는 자격 증명을 보내지 않고 거부합니다. 보내면 유출이 되고, 그쪽에서 인증되지도 않기 때문입니다. --server를 빼서 whoami가 방금 출력한 서버를 쓰거나, 먼저 그 호스트를 상대로 relayium login 을 실행하세요.</p></dd></dl></div>
       <h2>자주 묻는 질문</h2>
       <h3>계정이 필요한가요?</h3>
       <p>업로드할 때, 그리고 코드를 발급해야 하는 보내기일 때요. relayium up은 파일을 내 계정에 저장해야 하므로 언제나 relayium login이 필요합니다. relayium send는 서버가 새 페어링 코드를 발급해야 할 때만 필요합니다 — 누군가 건네준 코드로 send를 실행하면 아무것도 발급하지 않으므로 로그인이 필요 없습니다. relayium down과 relayium receive는 계정이 필요 없고, push/pull, 데몬 다이렉트, sync도 계정 없이 동작합니다.</p>

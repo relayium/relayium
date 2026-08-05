@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="Relayium CLI でターミナルからファイルとテキストを転送する" />
     <meta name="twitter:description" content="無料でエンドツーエンド暗号化された Relayium CLI で、SSH・ペアリングコード・デーモン直結によるファイル転送と、両方の端末がオンライン時の一時テキスト送信を始めましょう。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI でターミナルからファイルとテキストを転送する","description":"無料でエンドツーエンド暗号化された Relayium CLI で、SSH・ペアリングコード・デーモン直結によるファイル転送と、両方の端末がオンライン時の一時テキスト送信を始めましょう。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium CLI でターミナルからファイルとテキストを転送する"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"CLI に料金はかかりますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。CLI は完全に無料です。直接転送されるファイルとテキストのバイトは Relayium のリレーを通らないため、計測するものも支払うものもありません。"}},{"@type":"Question","name":"Relayium アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"send または text でペアリングコードを発行するときと、クラウドの up で必要です。push / pull とデーモン直結には不要です。サーバーはログイン済みアカウントにだけコードを発行するため、作成側は一度 relayium login を実行します。渡されたコードで参加する側はログイン不要で、receive 側もサインインしません。"}},{"@type":"Question","name":"どのオペレーティングシステムに対応していますか？","acceptedAnswer":{"@type":"Answer","text":"macOS、Linux、Windows 向けに、x86-64 と arm64 の両方でビルド済みバイナリが公開されています。インストールスクリプトは macOS と Linux に対応しています。Windows では、リリースページから .zip をダウンロードしてください。"}},{"@type":"Question","name":"自分のファイルは Relayium のサーバーを通過しますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。どのモードでも、ファイルのバイトは両端の間を直接移動します。当社のサーバーに一切触れるのは send / receive だけで、それも小さなランデブーハンドシェイクのためだけです。ファイルの中身は決して含まれません。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium CLI でターミナルからファイルとテキストを転送する","description":"無料でエンドツーエンド暗号化された Relayium CLI で、SSH・ペアリングコード・デーモン直結によるファイル転送と、両方の端末がオンライン時の一時テキスト送信を始めましょう。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/transfer-files-from-terminal/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium CLI でターミナルからファイルとテキストを転送する"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"CLI に料金はかかりますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。CLI は完全に無料です。直接転送されるファイルとテキストのバイトは Relayium のリレーを通らないため、計測するものも支払うものもありません。"}},{"@type":"Question","name":"Relayium アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"send または text でペアリングコードを発行するときと、クラウドの up で必要です。push / pull とデーモン直結には不要です。サーバーはログイン済みアカウントにだけコードを発行するため、作成側は一度 relayium login を実行します。渡されたコードで参加する側はログイン不要で、receive 側もサインインしません。"}},{"@type":"Question","name":"どのオペレーティングシステムに対応していますか？","acceptedAnswer":{"@type":"Answer","text":"macOS、Linux、Windows 向けに、x86-64 と arm64 の両方でビルド済みバイナリが公開されています。インストールスクリプトは macOS と Linux に対応しています。Windows では、リリースページから .zip をダウンロードしてください。"}},{"@type":"Question","name":"自分のファイルは Relayium のサーバーを通過しますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。どのモードでも、ファイルのバイトは両端の間を直接移動します。当社のサーバーに一切触れるのは send / receive だけで、それも小さなランデブーハンドシェイクのためだけです。ファイルの中身は決して含まれません。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,11 +100,12 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最終更新: <bdi>2026-07-31</bdi></p>
+      <p class="updated">最終更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/transfer-files-from-terminal/">English</a><a href="/zh/guides/transfer-files-from-terminal/">中文</a><a href="/ja/guides/transfer-files-from-terminal/" aria-current="true">日本語</a><a href="/ko/guides/transfer-files-from-terminal/">한국어</a><a href="/de/guides/transfer-files-from-terminal/">Deutsch</a><a href="/fr/guides/transfer-files-from-terminal/">Français</a><a href="/ar/guides/transfer-files-from-terminal/">العربية</a><a href="/es/guides/transfer-files-from-terminal/">Español</a><a href="/pt/guides/transfer-files-from-terminal/">Português</a></nav>
       <p class="lead">Relayium CLI はターミナルからファイルと一時テキストを転送する小さな単一バイナリです。エンドツーエンド暗号化、セルフホスト可能、完全無料。サーバーへのファイルコピーやマシン間のビルド送信に加え、URL・コマンド・コード片をファイル化せずそのまま送れます。</p>
       <p class="lead">どの方法を使っても、ファイルのバイトは両端の間を直接移動し、Relayium のサーバーを通過することはありません。本ガイドではインストールから最初の転送までを案内し、その後各モードのより詳しいハウツーへ案内します。</p>
       <h2>1コマンドでインストール</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">必要なもの</p><ul><li>端末のある macOS、Linux、Windows のいずれかのマシン。ビルド済みバイナリは3つとも x86-64 と arm64 を用意しています。</li><li>macOS と Linux の1行インストールに使う curl。curl --version がバージョンを表示します。Windows ではリリースページから .zip をダウンロードしてください。</li><li>書き込めるインストール先ディレクトリ。スクリプトは書き込める場合は /usr/local/bin を、そうでなければ ~/.local/bin を使い、最後の数行でどちらを選んだかを表示します。</li><li>push、pull、デーモン直結にはこれ以外は不要です。無料の Relayium アカウントが要るのは、send や text でペアリングコードを発行するときと、up でアップロードするときだけです。</li></ul></div>
       <p>macOS または Linux では、1つのコマンドでお使いの OS 向けのビルド済みバイナリをダウンロードし、PATH に配置できます：</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>自分でファイルを選びたい場合は、リリースページからバイナリをダウンロードしてください。</li><li>Go がインストール済みなら、リポジトリを clone して次を実行します：go build -o relayium ./cmd/relayium（server ディレクトリから）。</li><li>その後 relayium --help を実行するとすべてのコマンドを確認でき、relayium version でビルドを確認できます。</li></ul>
@@ -101,8 +119,21 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>コードの発行には relayium login が必要ですが、コードでの参加にはログイン不要です。</li><li>両方の端末がオンラインである必要があります。メッセージはエンドツーエンド暗号化された P2P 直結で流れ、Relayium サーバーは本文を保存しません。CLI text はブラウザの TURN リレーを使いません。各端末は受信したテキストをコピーまたは保持できます。</li><li>1メッセージは最大 65,536 UTF-8 バイトです。それより大きい内容には relayium send を使ってください。</li></ul>
       <h2>最初の転送</h2>
       <p>最も手早く試せるのは、SSH でログインできるサーバーへフォルダをコピーすることです。Relayium は既存の SSH アクセスを使うので、リモート側で設定することは何もなく、アカウント作成も不要です：</p>
-      <pre><code>relayium push ./photos user@your-server:backups/</code></pre>
+      <ol class="steps" data-block="steps"><li><p>CLI が PATH にあることを確認します。「command not found」ではなくバージョン文字列が表示されます。</p><pre><code>relayium version</code></pre></li><li><p>普段どおりの方法でそのサーバーに届くことを確認します。push はまさにそのアクセスを再利用するので、ssh が通れば接続と認証という前提条件は満たせます。ただし転送そのものの成功を約束するものではなく、push には user@your-server:backups/ への書き込み権限と空き容量も必要です。</p><pre><code>ssh user@your-server true</code></pre></li><li><p>フォルダーを push します。最後の引数は host:path で、リモートだと示すのはコロンです。末尾のスラッシュは「このディレクトリの中へ」を意味します。</p><pre><code>relayium push ./photos user@your-server:backups/</code></pre></li><li><p>思ったところにファイルが届いたか確認します。push ./photos は宛先の下に photos/ を再現するので、フォルダー名もそのまま付いてきます。</p><pre><code>ssh user@your-server ls backups/photos</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">成功したときの表示</p><p>相手側に relayium があれば、push は完了したファイルごとに1行を表示して終了コード 0 で終わります。素のサーバー相手なら代わりに tar ストリームの要約行が出ます。どちらも成功です。</p><pre><code>relayium push ./photos user@your-server:backups/
+  photos/IMG_0413.jpg (2314518 bytes)
+  photos/IMG_0414.jpg (1998233 bytes)
+echo $?
+# 0</code></pre></div>
       <ul><li>リモートにも relayium がインストールされていれば、push はネイティブプロトコル（再開可能、ファイル単位の SHA-256）を使います。</li><li>リモートに relayium がなければ、push は単純な tar ストリームにフォールバックするため、relayium が入っていない素の状態のサーバーでも動作します。このフォールバックは push だけの機能です。</li><li>同じファイルを次のコマンドで取り戻せます：relayium pull user@your-server:backups/ ./restore。pull は常にリモートの relayium を必要とし（tar フォールバックはありません）、先にリモートへインストールしておいてください。</li></ul>
+      <h2>最初のコマンドが通らないとき</h2>
+      <p>初回に起きる不具合は、次の4つで他のすべてを合わせたより多くを占めます。どれも当て推量は要りません。出力で判定できるコマンドがそれぞれにあります。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>インストールスクリプトは成功と言ったのに「relayium: command not found」と出る。</dt><dd><pre><code>command -v relayium
+# （何も表示されない）</code></pre><p>バイナリは入っていますが、その置き場所が PATH にありません。スクリプトの最後の数行が使ったディレクトリを示し、追加すべき export PATH の行をそのまま表示します。それを実行し、新しいシェルを開いて relayium version をもう一度試してください。</p></dd><dt>push が即座に「push destination must be remote (host:path)」で終了する。</dt><dd><pre><code>relayium push ./photos user@your-server backups/
+# push destination must be remote (host:path)</code></pre><p>宛先からコロンが落ちたため、relayium がローカルパスとして読みました。scp と同じ書き方で、ホストとパスの間に空白を入れずに書いてください：user@your-server:backups/</p></dd><dt>push は通るサーバーで pull だけ失敗する。</dt><dd><pre><code>ssh user@your-server command -v relayium
+# （何も表示されない）</code></pre><p>pull に tar フォールバックはありません。この向きではリモートが送信側になるため、あちらに relayium が必要です。同じ1行のコマンドでサーバーに入れてから pull をやり直してください。</p></dd><dt>同じコードに2台が参加し、片方が「the other side is running `relayium text`, not `relayium send`/`relayium receive`」と表示する。</dt><dd><pre><code># メッセージセッション：両端とも text を実行する
+relayium text
+relayium text 483920</code></pre><p>両端が別のコマンドを実行しています。メッセージなら2台とも relayium text、ファイルなら片方が relayium send でもう片方が relayium receive です。この食い違いはダイヤルする前に拒否されるので、何も送られていません。</p></dd></dl></div>
       <h2>無料、そして設計上プライベート</h2>
       <p>支払うものは何もありません。上記の3つの方法のうちサインインが要るのは send / receive モードの送信側だけで、CLI がペアリングコードを発行できるようにするためです（クラウドの up もファイルを保存するためにアカウントを使います）。CLI は両端を直接つなぐため、ファイルが中間のサーバーにアップロードされることは決してありません。Relayium が触れるのは、send / receive モードでの小さなランデブーハンドシェイクだけで、両端を引き合わせるために使われ、ファイル自体は決して含まれません。</p>
       <p>すべての転送はエンドツーエンドで暗号化され、すべてのファイルは到着時に SHA-256 ハッシュで検証され、中断した転送は最初からやり直すのではなく、止まった所から再開します。macOS、Linux、Windows で動作し、全体がオープンソースでセルフホスト可能です。</p>

@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）" />
     <meta name="twitter:description" content="relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング。増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）","description":"relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング。増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-07-08","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/sync-a-large-folder-between-servers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"転送が途中で中断されたらどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"何も失われません。relayium sync を再実行してください。受信側にすでにあるファイルはスキップし、半分送ったファイルはディスク上のバイトオフセットから再開します。本ガイドの until ループが、フォルダー全体がミラーされるまでこれを自動で行います。"}},{"@type":"Question","name":"これは rsync と何が違いますか？","acceptedAnswer":{"@type":"Answer","text":"どちらも増分の一方向ミラーですが、relayium sync は証明書ピンニング付き TLS 接続で動作し、SSH アカウントを必要とせず（デーモン直結）、証明書のフィンガープリントで2台を認証し、各ファイルを SHA-256 で検証します。relayium の他モードと同じ転送エンジンです。"}},{"@type":"Question","name":"ソースから削除したファイルを、sync は受信側でも削除しますか？","acceptedAnswer":{"@type":"Answer","text":"求めたときだけです。既定では sync は追加と更新だけを行います。削除をミラーするには --delete を渡し、それが有効になるには受信側が --allow-delete で serve を実行している必要があります。さもなければ削除は無視され、報告されます。"}},{"@type":"Question","name":"2つのフォルダーを継続的に同期し続けられますか？","acceptedAnswer":{"@type":"Answer","text":"はい。--watch を付けると sync は動き続け、ソース配下の変更のたびに再ミラーします。大きなフォルダーの一度きりの移動には不要です。リトライループと素の sync で十分です。"}},{"@type":"Question","name":"ポートを開ける必要がありますか？","acceptedAnswer":{"@type":"Answer","text":"デーモン直結ならはい。リスナーのポート（既定 9031）が送信側から到達可能である必要があります。ポートを開けたくなく、サーバー間にすでに SSH があるなら、sync は SSH 経由でも動きます：relayium sync /path user@host:/path（リモートに relayium が必要）。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）","description":"relayium sync で大きなディレクトリを一方のサーバーからもう一方へミラーリング。増分転送、接続が切れても再開可能、無人での実行も安全です。tmux 内のリトライループで、ターミナルに張り付かずに数十 GB を運べます。","inLanguage":"ja","datePublished":"2026-07-08","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/sync-a-large-folder-between-servers/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"転送が途中で中断されたらどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"何も失われません。relayium sync を再実行してください。受信側にすでにあるファイルはスキップし、半分送ったファイルはディスク上のバイトオフセットから再開します。本ガイドの until ループが、フォルダー全体がミラーされるまでこれを自動で行います。"}},{"@type":"Question","name":"これは rsync と何が違いますか？","acceptedAnswer":{"@type":"Answer","text":"どちらも増分の一方向ミラーですが、relayium sync は証明書ピンニング付き TLS 接続で動作し、SSH アカウントを必要とせず（デーモン直結）、証明書のフィンガープリントで2台を認証し、転送する各ファイルを SHA-256 で検証します。rsync の既定と同じく、受信側でサイズと mtime がすでに一致するファイルはハッシュを取り直さずスキップされます。relayium の他モードと同じ転送エンジンです。"}},{"@type":"Question","name":"ソースから削除したファイルを、sync は受信側でも削除しますか？","acceptedAnswer":{"@type":"Answer","text":"求めたときだけです。既定では sync は追加と更新だけを行います。削除をミラーするには --delete を渡し、それが有効になるには受信側が --allow-delete で serve を実行している必要があります。さもなければ削除は無視され、報告されます。"}},{"@type":"Question","name":"2つのフォルダーを継続的に同期し続けられますか？","acceptedAnswer":{"@type":"Answer","text":"はい。--watch を付けると sync は動き続け、ソース配下の変更のたびに再ミラーします。大きなフォルダーの一度きりの移動には不要です。リトライループと素の sync で十分です。"}},{"@type":"Question","name":"ポートを開ける必要がありますか？","acceptedAnswer":{"@type":"Answer","text":"デーモン直結ならはい。リスナーのポート（既定 9031）が送信側から到達可能である必要があります。ポートを開けたくなく、サーバー間にすでに SSH があるなら、sync は SSH 経由でも動きます：relayium sync /path user@host:/path（リモートに relayium が必要）。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,18 +100,18 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最終更新: <bdi>2026-07-08</bdi></p>
+      <p class="updated">最終更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers/">English</a><a href="/zh/guides/sync-a-large-folder-between-servers/">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers/" aria-current="true">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers/">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers/">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers/">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers/">العربية</a><a href="/es/guides/sync-a-large-folder-between-servers/">Español</a><a href="/pt/guides/sync-a-large-folder-between-servers/">Português</a></nav>
-      <p class="lead">一方のサーバーに大きなフォルダー（数十 GB）があり、それをもう一方に完全な複製として欲しいとします。何時間もターミナルを見張ることはできませんし、途中で落ちた転送が最初からやり直しになるのも困ります。relayium sync はまさにこのために作られています。一方向の増分ミラーで、すでにあるものはスキップし、途中まで送ったファイルは止まったところから再開し、各ファイルを端から端まで検証します。</p>
+      <p class="lead">一方のサーバーに大きなフォルダー（数十 GB）があり、それをもう一方に完全な複製として欲しいとします。何時間もターミナルを見張ることはできませんし、途中で落ちた転送が最初からやり直しになるのも困ります。relayium sync はまさにこのために作られています。一方向の増分ミラーで、すでにあるものはスキップし、途中まで送ったファイルは止まったところから再開し、送信した各ファイルを端から端まで検証します。</p>
       <p class="lead">本ガイドでは、無人で自己修復する転送を構築します。送信側を一度だけ承認し、リスナーをバックグラウンドで動かし、tmux 内のリトライループで relayium sync を回して、接続が切れても続行させ、フォルダー全体が届くまで走らせます。</p>
       <h2>なぜ relayium sync がこの用途に向くのか</h2>
       <p>sync はネイティブプロトコル上の一方向増分ミラーです（両端に relayium をインストールします）。無人で繰り返し実行しても安全な理由が3つあります：</p>
-      <ul><li>すでにあるファイルはスキップ：受信側のコピーがサイズと更新時刻で一致するファイルは再送しません。</li><li>途中のファイルを再開：接続が切れたとき半分だけ送られていたファイルは、次回の実行でディスク上にすでにあるバイトオフセットから続行し、やり直しません。</li><li>各ファイルを検証：各ファイルを端から端まで SHA-256 で検査するため、完了したミラーは完全だと分かります。</li><li>これらのおかげでコマンドは冪等です。もう一度実行しても残りの作業だけを行います。これこそがリトライループで巨大な転送を完了させる要点です。</li></ul>
+      <ul><li>すでにあるファイルはスキップ：受信側のコピーがサイズと更新時刻で一致するファイルは再送しません。</li><li>途中のファイルを再開：接続が切れたとき半分だけ送られていたファイルは、次回の実行でディスク上にすでにあるバイトオフセットから続行し、やり直しません。</li><li>送るものを検証：転送する各ファイルは（再開したものも含めて）送信側の SHA-256 と端から端まで照合され、一致しなければ失敗として報告されます。スキップするファイルはサイズと mtime で判定するだけでハッシュを取り直さないため、送らなかった内容について sync は何も保証しません。</li><li>これらのおかげでコマンドは冪等です。もう一度実行しても残りの作業だけを行います。これこそがリトライループで巨大な転送を完了させる要点です。</li></ul>
       <h2>前提条件</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">必要なもの</p><ul><li>本ガイドはデーモン直結(relayium://)を使うため、2台のサーバー間に SSH アクセスは不要です。</li><li>受信側のファイアウォールまたはセキュリティグループで、リスナーのポート（既定 9031）を送信側に開放してください。</li><li>受信側にフォルダー全体が入る空き容量。数時間かかる転送を始める前に、送信側の du -sh /root/workspace と受信側の df -h /root を突き合わせてください。</li></ul></div>
       <p>両方のサーバーに relayium をインストールします（sync はネイティブプロトコルを話すため、各端に必要です）：</p>
       <pre><code># 両方のサーバーで
 curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>本ガイドはデーモン直結(relayium://)を使うため、2台のサーバー間に SSH アクセスは不要です。</li><li>受信側のファイアウォールまたはセキュリティグループで、リスナーのポート（既定 9031）を送信側に開放してください。</li></ul>
       <h2>送信側を一度だけ承認する（受信側）</h2>
       <p>受信側は送信側のマシンを一度だけ承認します。承認はディスクに書き込まれ、再起動をまたいでも有効なので繰り返す必要はありません。まずターミナルでリスナーをフォアグラウンド起動し、--dir を親ディレクトリに向けます。relayium sync /root/workspace は受信側で workspace/... を再現するので、--dir /root ならファイルは /root/workspace/ に着地します。</p>
       <p>送信側の初回接続時（次節）、serve はそのアドレスとフィンガープリントを表示して承認を求めます。y と答えれば永続的に記憶されます：</p>
@@ -106,32 +123,46 @@ Incoming push from 203.0.113.9:52140
 Accept and remember this peer? [y/N] y</code></pre>
       <ul><li>完全に無人にするならプロンプトを省けます：送信側で relayium id を実行してフィンガープリントを表示し、受信側で relayium authorize &lt;フィンガープリント&gt; を実行します。</li><li>--dir は同期するフォルダーの親であって、フォルダー自体ではありません。さもないとファイルが1階層深く着地します（例：/root/workspace/workspace）。</li></ul>
       <h2>リスナーをバックグラウンドで動かす（受信側）</h2>
-      <p>フィンガープリントを承認したら、フォアグラウンドの serve を止め(Ctrl-C)、ログアウト後も生き残るようデタッチして再起動します。保存済みのフィンガープリントを読み込み、送信側を確認なしで受け入れます。今回はプロンプトは出ません：</p>
+      <p>フィンガープリントを承認したら、フォアグラウンドの serve を止め(Ctrl-C)、ログアウト後も生き残るようデタッチして再起動します。保存済みのフィンガープリントを読み込み、送信側を確認なしで受け入れます。今回はプロンプトは出ません。同じ行が新しいプロセスの PID を ~/relayium-serve.pid に記録し、本ガイドの最後の手順はそれを使って、自分が起動したリスナーを止めます。relayium という文字列を含むコマンドを片端から止めるわけではありません：</p>
       <pre><code># 受信側で
-nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp;</code></pre>
+nohup relayium serve --dir /root --port 9031 &gt; ~/relayium-serve.log 2&gt;&amp;1 &amp; echo $! &gt; ~/relayium-serve.pid</code></pre>
       <ul><li>serve は接続を1つずつ処理して動き続けるため、下のリトライループの再接続のたびに受信の準備ができています。</li><li>常時稼働の受信箱にするなら、代わりに systemd で動かします（Restart=always、--config-dir /etc/relayium）。</li></ul>
       <h2>tmux 内のリトライループで sync を回す（送信側）</h2>
       <p>長い転送は中断されます。セッション切断、不安定なネットワーク、再起動。解決策は高級なツールではなく、sync を成功するまで再実行するループと、ログアウト後も生き残らせる端末マルチプレクサです。ここでは tmux のほうが nohup より扱いやすいです：間違えやすい出力リダイレクトがなく、再接続して進捗を見られます。</p>
       <p>tmux セッションを開始し、until ループでミラーを実行します。10秒ごとに再試行し、sync が成功を返したら自分で終了します：</p>
-      <pre><code># 送信側で
-tmux new -s xfer      # tmux が無ければ apt install -y tmux</code></pre>
-      <pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre>
-      <ul><li>Ctrl-b の次に d でデタッチ。ターミナルを閉じてもループは動き続けます。tmux attach -t xfer で再接続します。</li><li>再試行のたびに作業は減ります：転送済みのファイルはスキップされ、半分送ったファイルは再開されます。だからループは収束して終わります。</li><li>進捗はファイルが1つ完了するごとに1行表示されるので、大きなファイルは完了まで静かに転送されます。無音は停止ではありません（トラブルシューティング参照）。</li></ul>
+      <ol class="steps" data-block="steps"><li><p>ループを起動元の ssh セッションより長生きさせるため、送信側で tmux セッションを開きます。</p><pre><code># 送信側で
+tmux new -s xfer      # tmux が無ければ apt install -y tmux</code></pre></li><li><p>until ループの中でミラーを回します。10秒ごとに再試行し、sync が成功を返したところで自分から終了します。</p><pre><code>until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre></li><li><p>Ctrl-b の次に d でデタッチします。ループはそのまま動き続けるので、見たくなったらいつでも再接続してください。</p><pre><code>tmux attach -t xfer</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">成功した一巡の表示</p><p>一巡ごとに、実際に送ったファイルの数だけ行が表示され、続いて今回送った数と受信側にすでにあった数の要約が出ます。ループは sync が最初に成功を返した時点で終わり、その要約がミラーの状態です。</p><pre><code>relayium sync /root/workspace relayium://203.0.113.43:9031
+  workspace/data/part-004.bin (1073741824 bytes)
+synced: 1 sent, 812 unchanged</code></pre></div>
+      <ul><li>再試行のたびに作業は減ります：転送済みのファイルはスキップされ、半分送ったファイルは再開されます。だからループは収束して終わります。</li><li>進捗はファイルが1つ完了するごとに1行表示されるので、大きなファイルは完了まで静かに転送されます。無音は停止ではありません（トラブルシューティング参照）。</li></ul>
       <h2>検証と仕上げ</h2>
       <p>until ループが終わり、通常のシェルプロンプトに戻ったら転送は完了です。両側が一致することを確認してから、リスナーを停止します：</p>
-      <pre><code># 両方のサーバーで合計を比較
-du -sh /root/workspace</code></pre>
-      <pre><code># 受信側で、確認できたら
-pkill -f &#39;relayium serve&#39;</code></pre>
-      <ul><li>各ファイルは到着時に SHA-256 で検査済みなので、サイズの一致とクリーンな終了は複製が完全であることを意味します。</li></ul>
+      <ol class="steps" data-block="steps"><li><p>until ループが自分から終わるのを待ちます。通常のシェルプロンプトに戻っているのは、転送が終わったということであって、途中で中断されたということではありません。</p></li><li><p>両方のサーバーで合計を比較します。</p><pre><code># 両方のサーバーで合計を比較
+du -sh /root/workspace</code></pre></li><li><p>合計が一致したら受信側のリスナーを止めます。マシン上の relayium コマンドを文字列で総なめにするのではなく、起動時に記録した PID にシグナルを送り、PID ファイルはシグナルが成功したときにだけ削除されます。前回の実行が残した PID ファイルは、システムが再利用した別の PID を指していることがあります。そのファイルがまだ自分のものか確信が持てないときは、まずその PID のコマンドラインを表示し、serve が返ってきた場合にだけ kill してください。</p><pre><code># 受信側で、確認できたら
+ps -p &quot;$(cat ~/relayium-serve.pid)&quot; -o command=
+kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">ミラーが完了したときの表示</p><p>両方のサーバーで du -sh が同じ合計を報告し、until ループは再試行に戻らず、通常のシェルプロンプトへ戻っています。合計の一致は大まかな完了確認であって、内容が同一であることの証明ではありません。sync はサイズと mtime でどのファイルを送らないかを決めているため、スキップしたファイルの中身について合計は何も語りません。</p><pre><code># the same total, on BOTH servers
+46G	/root/workspace</code></pre></div>
+      <ul><li>sync が送ったものは検証済みです。転送した各ファイルは到着時に SHA-256 で検査され、クリーンな終了はその検査が一つも失敗しなかったことを意味します。スキップした分はサイズと mtime を照合しただけなので、du -sh の合計が一致することは完了の目安であって、スキップしたファイルの中身が今も同じだという証明ではありません。その証明が要るなら、両方のサーバーでファイルごとのチェックサムを突き合わせてください。</li></ul>
       <h2>トラブルシューティング</h2>
-      <p>問題に見えて多くの場合そうでないこと、そして多くの場合本当に問題であること（ポートの遮断）を挙げます。</p>
-      <ul><li>無音は停止ではありません。進捗は各ファイルが完了したときだけ表示されるので、大きなファイルは静かに転送されます。送信側で ss -tnp | grep 9031 を使って実際の状態を確認します。ESTAB は接続して転送中、SYN-SENT はリスナーに届いていないことを意味します。</li><li>SYN-SENT はポートが遮断されている印です。受信側で送信側に向けて 9031/TCP を開放します（クラウドのセキュリティグループ、または ufw allow 9031/tcp）。「転送がいつまでも始まらない」最も一般的な原因です。</li><li>複数行の nohup より、tmux と1行のループを優先します。引用符と &gt; リダイレクトを含む複数行コマンドをシェルに貼り付けると、リダイレクトで壊れたり、&gt; の継続プロンプトで止まったりしがちです。</li><li>プロセスを片付けるときは正確に一致させます(pkill -f &#39;relayium sync&#39;)。pkill relayium ではありません。広い一致は同じマシンで動く無関係な relayium プロセスを巻き込みかねません。</li><li>除外フラグはありません。代わりにソースを指定してください。sync が取るのは -i と -p（SSH の鍵とポート）、--delete、--watch、--config-dir だけで、ツリーの途中のパスを絞り込む手段はありません。Python の仮想環境のような再生成可能なディレクトリを置いていくには、本当に欲しいサブディレクトリを同期します：sync は複数のソースを一度に受け取り、それぞれが自分の名前で受信側の --dir の下に届きます。relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031 を serve --dir /root/workspace に対して実行すれば /root/workspace/src と /root/workspace/data に復元され、venv は一度も走査されません。</li><li>シンボリックリンクと特殊ファイルはスキップされます。sync が転送するのは通常ファイルだけです。重要なシンボリックリンクは別途扱ってください。</li></ul>
+      <p>数時間かかるミラーでは6つのことが起こります。うち3つは失敗に見えて失敗ではなく、残り3つは本当の問題です。どれについても、いま自分が見ているのがどれかを教えてくれるコマンドがあります。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>長いあいだ何も表示されず、転送が止まったように見える。</dt><dd><pre><code># 送信側で、数秒あけて2回
+ss -tinp dst :9031
+# ESTAB    リスナーに届いたことを示すだけで、バイトが動いている証拠ではない
+# SYN-SENT リスナーに届いていない</code></pre><p>進捗はファイルが1つ完了したときにしか表示されないので、大きなファイル1つはまったくの無音で転送されます。ESTAB が示すのは到達できたことだけで、確立済みのソケットが無通信のまま止まっていることもあり、それだけでは前進の証拠になりません。このチェックを数秒あけて2回実行し、-i がそのソケットについて表示する bytes_acked カウンターを比べてください。増えていれば転送は動いており、変わらなければ本当に止まっています。</p></dd><dt>ソケットが SYN-SENT のままで、転送がまったく始まらない。</dt><dd><pre><code># 受信側で
+sudo ufw allow from 203.0.113.9 to any port 9031 proto tcp
+ss -tlnp | grep 9031</code></pre><p>ポートが遮断されています。9031/TCP は送信側にだけ開けてください。203.0.113.9 は送信側自身のアドレス、グローバル IP か、2台が同じネットワークにいるならプライベート IP に置き換えます。クラウドのセキュリティグループも同じ送信元に絞ったうえで、serve が本当に待ち受けているかを確かめてください。転送が始まらない原因として最も多いものです。</p></dd><dt>バックグラウンド用のコマンドを貼ると、シェルが &gt; の継続プロンプトで止まる。</dt><dd><pre><code>tmux new -s xfer
+until relayium sync /root/workspace relayium://203.0.113.43:9031; do echo &quot;$(date) retrying&quot;; sleep 10; done</code></pre><p>引用符と &gt; リダイレクトを含む複数行の nohup コマンドは、貼り付け時にリダイレクトのところで壊れがちです。代わりに tmux とこの1行ループを使ってください。書き間違えるリダイレクトが無く、再接続して様子も見られます。</p></dd><dt>後片付けのつもりが、殺すつもりのないものまで殺してしまった。</dt><dd><pre><code>pgrep -af relayium
+ps -p &quot;$(cat ~/relayium-serve.pid)&quot; -o command=
+tmux kill-session -t xfer
+kill &quot;$(cat ~/relayium-serve.pid)&quot; &amp;&amp; rm ~/relayium-serve.pid</code></pre><p>コマンドラインのパターンで殺すやり方は、その文字列を含むプロセスすべてにシグナルを送るので、転送が複数動いているマシンでは狙った相手とは限りません。しかもミラーは止まりません。sync を所有しているのは until ループなので、子プロセスを殺しても10秒後にまた起動されます。まず pgrep -af で確認し、このガイドが実際に所有しているものを終わらせてください。tmux kill-session -t xfer でループを終了し、~/relayium-serve.pid にある PID を kill して、自分で起動したリスナーを止めます。その PID ファイルが前回の実行から残っているなら、シグナルを送る前にコマンドラインを表示してください。システムが再利用した PID は、まったく別のプロセスのものです。</p></dd><dt>あるサブディレクトリだけ除きたいのに、exclude のフラグが無い。</dt><dd><pre><code>relayium sync /root/workspace/src /root/workspace/data relayium://203.0.113.43:9031</code></pre><p>sync が取るのは -i と -p、--delete、--watch、--config-dir だけで、木の途中でパスを除外する仕組みはありません。代わりに欲しいサブディレクトリを列挙してください。各ソースは受信側の --dir の下に自分の名前で届くので、serve --dir /root/workspace に対してこのコマンドを実行すると /root/workspace/src と /root/workspace/data が再現され、作り直せる venv は一度も走査されません。</p></dd><dt>ミラーされるはずのソースが、中身のない状態で届く。</dt><dd><pre><code>relayium sync ./links relayium://203.0.113.43:9031
+# warning: no regular files to send (symlinks and special files are skipped)</code></pre><p>sync が転送するのは通常ファイルだけで、この警告はまさに「シンボリックリンクしか無い木」の姿です。リンクが指している実体のディレクトリを sync に渡し、受信側で必要なシンボリックリンクは別途用意してください。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>転送が途中で中断されたらどうなりますか？</h3>
       <p>何も失われません。relayium sync を再実行してください。受信側にすでにあるファイルはスキップし、半分送ったファイルはディスク上のバイトオフセットから再開します。本ガイドの until ループが、フォルダー全体がミラーされるまでこれを自動で行います。</p>
       <h3>これは rsync と何が違いますか？</h3>
-      <p>どちらも増分の一方向ミラーですが、relayium sync は証明書ピンニング付き TLS 接続で動作し、SSH アカウントを必要とせず（デーモン直結）、証明書のフィンガープリントで2台を認証し、各ファイルを SHA-256 で検証します。relayium の他モードと同じ転送エンジンです。</p>
+      <p>どちらも増分の一方向ミラーですが、relayium sync は証明書ピンニング付き TLS 接続で動作し、SSH アカウントを必要とせず（デーモン直結）、証明書のフィンガープリントで2台を認証し、転送する各ファイルを SHA-256 で検証します。rsync の既定と同じく、受信側でサイズと mtime がすでに一致するファイルはハッシュを取り直さずスキップされます。relayium の他モードと同じ転送エンジンです。</p>
       <h3>ソースから削除したファイルを、sync は受信側でも削除しますか？</h3>
       <p>求めたときだけです。既定では sync は追加と更新だけを行います。削除をミラーするには --delete を渡し、それが有効になるには受信側が --allow-delete で serve を実行している必要があります。さもなければ削除は無視され、報告されます。</p>
       <h3>2つのフォルダーを継続的に同期し続けられますか？</h3>

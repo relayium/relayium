@@ -19,10 +19,16 @@ const localeTokens = {
   pt: [/certificados TLS/i, /serviço de encontro/i, /pontas/i, /rota de rede/i],
 };
 
+// The SAS pass dated all three 2026-07-31. `send` was then rebuilt as a runnable
+// tutorial (cli-tutorial-structure.test.mjs) and re-dated for it; croc and
+// receive were untouched by that batch and keep the earlier date. Pinning them
+// separately is the point — a single shared date would hide exactly that.
+const REVISED = { send: "2026-08-05", croc: "2026-07-31", receive: "2026-07-31" };
+
 describe("CLI article SAS precision", () => {
   it("keeps all three articles current and structurally complete in nine locales", () => {
     for (const [name, article] of Object.entries(articles)) {
-      expect(article.updated, name).toBe("2026-07-31");
+      expect(article.updated, name).toBe(REVISED[name]);
       expect(Object.keys(article.langs), name).toEqual(expect.arrayContaining(locales));
       for (const locale of locales) {
         expect(article.langs[locale]?.sections?.length, `${name}:${locale}`).toBeGreaterThan(0);

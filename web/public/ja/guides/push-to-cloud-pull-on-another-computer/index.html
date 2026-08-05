@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="クラウドにアップロードし、別のコンピュータで取得する" />
     <meta name="twitter:description" content="Relayium アカウントを使った非同期ファイル転送。relayium up で一方のマシンからアップロードし、都合のよいときに relayium down で別のマシンからダウンロード。エンドツーエンド暗号化で、アカウントが要るのはアップロードだけ。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"クラウドにアップロードし、別のコンピュータで取得する","description":"Relayium アカウントを使った非同期ファイル転送。relayium up で一方のマシンからアップロードし、都合のよいときに relayium down で別のマシンからダウンロード。エンドツーエンド暗号化で、アカウントが要るのはアップロードだけ。","inLanguage":"ja","datePublished":"2026-07-12","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/push-to-cloud-pull-on-another-computer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"クラウドにアップロードし、別のコンピュータで取得する"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"アップロードのときと、コードを発行しなければならない送信のときです。relayium up は常に relayium login が必要で、ファイルを自分のアカウントに保存するためです。relayium send が必要なのは、サーバーが新しいペアリングコードを発行しなければならないときだけです。誰かから渡されたコードで send を実行する場合は何も発行されないため、ログインは要りません。relayium down と relayium receive にアカウントは不要で、push/pull、デーモン直結、sync もアカウントなしで動きます。"}},{"@type":"Question","name":"ファイルは暗号化されますか？","acceptedAnswer":{"@type":"Answer","text":"はい、エンドツーエンドで。アップロード前に自分のマシンで暗号化され、鍵はリンクの #k= 断片にのみ存在し、サーバーには決して送られません。Relayium は読めない暗号文を、ファイル名も含めて保存します。"}},{"@type":"Question","name":"リンクを失ったら？","acceptedAnswer":{"@type":"Answer","text":"リンクは復号鍵の唯一の控えを運びます。失えばファイルは復旧不能です。サーバー側に復元できるものは何もありません。"}},{"@type":"Question","name":"誰がダウンロードできるか制限できますか？","acceptedAnswer":{"@type":"Answer","text":"リンクを持つ誰もがダウンロードできるので、非公開で共有してください。--burn で一度だけ、--max-downloads \u003cn> で回数を制限し、--ttl \u003c期間> で一定時間後に失効させられます。"}},{"@type":"Question","name":"ウェブサイトと連携しますか？","acceptedAnswer":{"@type":"Answer","text":"はい。relayium up のリンクはブラウザで開け、relayium.com で作った共有リンクは別のマシンで relayium down から取得できます。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"クラウドにアップロードし、別のコンピュータで取得する","description":"Relayium アカウントを使った非同期ファイル転送。relayium up で一方のマシンからアップロードし、都合のよいときに relayium down で別のマシンからダウンロード。エンドツーエンド暗号化で、アカウントが要るのはアップロードだけ。","inLanguage":"ja","datePublished":"2026-07-12","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/push-to-cloud-pull-on-another-computer/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"クラウドにアップロードし、別のコンピュータで取得する"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"アカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"アップロードのときと、コードを発行しなければならない送信のときです。relayium up は常に relayium login が必要で、ファイルを自分のアカウントに保存するためです。relayium send が必要なのは、サーバーが新しいペアリングコードを発行しなければならないときだけです。誰かから渡されたコードで send を実行する場合は何も発行されないため、ログインは要りません。relayium down と relayium receive にアカウントは不要で、push/pull、デーモン直結、sync もアカウントなしで動きます。"}},{"@type":"Question","name":"ファイルは暗号化されますか？","acceptedAnswer":{"@type":"Answer","text":"はい、エンドツーエンドで。アップロード前に自分のマシンで暗号化され、鍵はリンクの #k= 断片にのみ存在し、サーバーには決して送られません。Relayium は読めない暗号文を、ファイル名も含めて保存します。"}},{"@type":"Question","name":"リンクを失ったら？","acceptedAnswer":{"@type":"Answer","text":"リンクは復号鍵の唯一の控えを運びます。失えばファイルは復旧不能です。サーバー側に復元できるものは何もありません。"}},{"@type":"Question","name":"誰がダウンロードできるか制限できますか？","acceptedAnswer":{"@type":"Answer","text":"リンクを持つ誰もがダウンロードできるので、非公開で共有してください。--burn で一度だけ、--max-downloads \u003cn> で回数を制限し、--ttl \u003c期間> で一定時間後に失効させられます。"}},{"@type":"Question","name":"ウェブサイトと連携しますか？","acceptedAnswer":{"@type":"Answer","text":"はい。relayium up のリンクはブラウザで開け、relayium.com で作った共有リンクは別のマシンで relayium down から取得できます。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -66,6 +66,23 @@ footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-
 footer a{color:var(--text-h);text-decoration:none}
 </style>
     <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
+    <style>
 .builder{margin:16px 0;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
 .builder .bf{display:block;margin:0 0 12px}
 .builder .bf span{display:block;font-size:14px;color:var(--text);margin:0 0 5px}
@@ -93,7 +110,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最終更新: <bdi>2026-07-12</bdi></p>
+      <p class="updated">最終更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer/">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer/">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer/" aria-current="true">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer/">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer/">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer/">Français</a><a href="/ar/guides/push-to-cloud-pull-on-another-computer/">العربية</a><a href="/es/guides/push-to-cloud-pull-on-another-computer/">Español</a><a href="/pt/guides/push-to-cloud-pull-on-another-computer/">Português</a></nav>
       <p class="lead">二台のコンピュータが同時に起きていることは決してない、という場面があります。今夜は仕事用ノートからファイルを置いておき、明日は自宅のデスクトップから取りたい。ライブ接続を待つ人は誰もいません。relayium up と relayium down はまさにそれです。up はローカルで暗号化してアカウントにアップロードし、down は後から任意のマシンで取得・復号します。P2P ハンドシェイクも、双方が ssh できるサーバーも不要です。</p>
       <p class="lead">これは CLI の中で Relayium アカウントを使う主な部分です。もう一つはペアリングコードの発行にアカウントを必要とする send です。残りのバインドは任意で、push/pull、デーモン直結、sync はログインなしで動き続け、receive も同様です。ダウンロードにはアカウントは一切不要で、リンクさえあれば十分です。</p>
@@ -101,33 +118,44 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>相手側がオンラインかどうか、二台がどう到達し合うかでモードを選びます：</p>
       <ul><li>up / down（このガイド）：二台が同時にオンラインになりません。今アップロードし、後で自分（または別のマシン）がダウンロードします。アカウント経由です。</li><li>send / receive：両端が今オンラインで、使い捨てコードで直接 P2P 転送したいときです。</li><li>push / pull：相手のマシンに既に ssh できます。</li><li>relayium login が要るのは up と send の二つ。up はファイルをアカウントに保存するため、send はペアリングコードを発行しなければならないときだけ（コードを渡されていれば不要）。down、receive、push/pull、デーモン直結、sync はアカウント不要です。</li></ul>
       <h2>始める前に</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">必要なもの</p><ul><li>まず CLI をインストールして relayium コマンドが存在するようにします。下の一行でビルド済みバイナリが PATH に入ります（macOS と Linux。Windows は releases ページから .zip を取得）。relayium --version でインストールを確認でき、relayium.com/cli にすべてのインストール方法があります。これをしないと relayium login は「command not found」と出るだけです。</li><li>無料の Relayium アカウントを用意します。ブラウザでの手順は自分のアカウントに対してログインを承認するので、承認する前にアカウントが必要です。まず relayium.com でサインインし、なければそこで作成してください。アカウントが要るのはアップロードだけで、ダウンロードには不要です。</li><li>リンクをもう一台へ移す手段。メモアプリ、チャットの窓、パスワードマネージャーなど何でも構いません。リンクを持つ誰もがダウンロードできるので、パスワードのように扱ってください。</li></ul></div>
       <p>最初の up の前に、一度だけ済ませることが二つあります。CLI のインストールと、アカウントの用意です。両方そろっていれば読み飛ばしてください。</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
-      <ul><li>まず CLI をインストールして relayium コマンドが存在するようにします。上の一行でビルド済みバイナリが PATH に入ります（macOS と Linux。Windows は releases ページから .zip を取得）。relayium --version でインストールを確認でき、relayium.com/cli にすべてのインストール方法があります。これをしないと relayium login は「command not found」と出るだけです。</li><li>無料の Relayium アカウントを用意します。ブラウザでの手順は自分のアカウントに対してログインを承認するので、承認する前にアカウントが必要です。まず relayium.com でサインインし、なければそこで作成してください。アカウントが要るのはアップロードだけで、ダウンロードには不要です。</li></ul>
       <h2>このマシンをアカウントにバインドする（一度だけ）</h2>
       <p>up は誰のアカウントに保存するかを知る必要があるため、マシンごとに一度サインインします。ブラウザで承認するデバイスログインで、ターミナルには確認するコード以外は何も入力しません：</p>
       <pre><code>relayium login</code></pre>
       <ul><li>CLI が短いコードと URL（relayium.com/device）を表示します。relayium.com にサインイン済みのブラウザで開き（未サインインならまずそこでサインイン）、コードを入力して承認すると、このマシンがバインドされます。</li><li>ログイン情報は ~/.config/relayium/ に保存されるので、マシンごとに一度で済みます。relayium whoami でバインド先を表示し、relayium logout で解除します。</li><li>後でマシンを取り消すには、ブラウザのアカウントの「デバイス」ページから該当デバイスを削除します。</li></ul>
       <h2>一台目のコンピュータからアップロード</h2>
       <p>up は渡したファイルをたどり、ローカルで暗号化し、暗号文をアップロードして、取得用リンクを表示します：</p>
-      <pre><code>relayium up ./report.pdf
-#   → https://relayium.com/d/7fK2p…#k=Xr8s…</code></pre>
-      <pre><code># 保持期間を選ぶ（既定は24時間）：
+      <ol class="steps" data-block="steps"><li><p>このマシンがまだアカウントに結び付いているかを確認します。アカウントと結び付き先のサーバーが表示されます。未ログインと出たら、先に上のログイン手順を済ませてください。</p><pre><code>relayium whoami</code></pre></li><li><p>ファイルをアップロードします。up はローカルで暗号化し、暗号文だけを送り、取得用リンクを標準出力に表示します。</p><pre><code>relayium up ./report.pdf</code></pre></li><li><p>既定の24時間が望みと違うなら、保持のフラグを足します。サーバーが実際にどれだけ保持するかの上限はプランが決めます。</p><pre><code># 保持期間を選ぶ（既定は24時間）：
 relayium up ./report.pdf --burn              # 一度ダウンロードすると削除
 relayium up ./report.pdf --ttl 7d            # 7日間保持（上限はプランによる）
-relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除</code></pre>
-      <ul><li>リンクが受け渡しのすべてです。相手のマシンが読める場所にコピーしてください。リンクを持つ誰もがダウンロードできるので、パスワードのように扱ってください。</li><li>保持：--burn は一度のダウンロードで削除。--ttl &lt;期間&gt; は一定時間保持。--max-downloads &lt;n&gt; は一定回数まで。どれも指定しなければリンクは24時間保持されます。これが --ttl を付けないときの既定です。</li><li>--ttl は単位付きの期間（30m、12h、7d、2w）のほか、単なる秒数も受け取ります。つまり --ttl 3600 と --ttl 1h は同じ指定です。上限はプランで決まります：Free は1日、Plus は3日、Pro は7日、Max は14日。上限より長く要求すると、サーバーは黙って上限までしか保持しません。その場合 up が後から、実際に保持される期間を1行で知らせます。</li><li>up はログインが必要です。していなければその旨を伝え、何もしません。</li></ul>
+relayium up ./report.pdf --max-downloads 5   # 5回まで、その後削除</code></pre></li><li><p>二台目が読める場所へリンクを移します。標準出力に出るのはリンクだけなので、パイプはきれいなままです。</p><pre><code>relayium up ./report.pdf | pbcopy</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">アップロードが成功したときの表示</p><p>アップロード中は標準エラー出力に進捗バーが出て、終わると消えます。リンクは標準出力に単独の行として出て、人向けのヒント（および保持期間の注記があればそれ）は標準エラー出力に続きます。</p><pre><code>relayium up ./report.pdf
+https://relayium.com/d/7fK2p…#k=Xr8s…
+opens in a browser, or fetch it with `relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;`</code></pre></div>
+      <ul><li>保持：--burn は一度のダウンロードで削除。--ttl &lt;期間&gt; は一定時間保持。--max-downloads &lt;n&gt; は一定回数まで。どれも指定しなければリンクは24時間保持されます。これが --ttl を付けないときの既定です。</li><li>--ttl は単位付きの期間（30m、12h、7d、2w）のほか、単なる秒数も受け取ります。つまり --ttl 3600 と --ttl 1h は同じ指定です。上限はプランで決まります：Free は1日、Plus は3日、Pro は7日、Max は14日。上限より長く要求すると、サーバーは黙って上限までしか保持しません。その場合 up が後から、実際に保持される期間を1行で知らせます。</li></ul>
       <h2>二台目のコンピュータでダウンロード</h2>
       <p>別のマシンでは、リンクを down に渡します。ログインも設定も不要。ファイルを復号する鍵はリンクの中にあるので、down はアカウントから何も必要としません：</p>
-      <pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre>
       <div class="builder" data-download-builder><label class="bf"><span>共有リンク</span><input data-link type="text" placeholder="https://relayium.com/d/…#k=…" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" data-token="自分のリンク" /></label><label class="bf"><span>保存先（pwd の出力を貼り付け）</span><input data-dest type="text" placeholder="/home/you/downloads" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" /></label><div class="bcmd"><pre><code data-cmd>relayium down &#39;&lt;自分のリンク&gt;&#39; &lt;保存先ディレクトリ&gt;</code></pre><button type="button" class="bcopy" data-copy data-copied="コピーしました" hidden>コマンドをコピー</button></div></div>
-      <ul><li>リンクは引用符で囲みます：#k=… 断片が復号鍵を運び、シェルによっては # をコメントの開始として扱うためです。</li><li>宛先ディレクトリ（ここでは ./downloads）を指定するか、省略して現在のディレクトリに落とします。</li><li>ファイルがバーン設定、ダウンロード上限到達、または期限切れの場合、リンクは使い切られており、down はもう存在しないと報告します。</li></ul>
+      <ol class="steps" data-block="steps"><li><p>都合のよい方法でリンクを二台目に持っていきます。あちらには CLI 本体のほかに、インストールもログインも要りません。</p></li><li><p>シングルクォートで囲んだリンクと、ファイルを置きたいディレクトリを down に渡します。</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads</code></pre></li><li><p>ディレクトリを省くと現在のディレクトリに置かれます。</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39;</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">ダウンロードが成功したときの表示</p><p>書き出したファイルが1行ずつ標準出力に並び、件数と保存先が標準エラー出力で確認されます。</p><pre><code>relayium down &#39;https://relayium.com/d/7fK2p…#k=Xr8s…&#39; ./downloads
+downloads/report.pdf
+✓ downloaded 1 file(s) to ./downloads</code></pre></div>
+      <ul><li>ファイルがバーン設定、ダウンロード上限到達、または期限切れの場合、リンクは使い切られており、down はもう存在しないと報告します。</li></ul>
       <h2>ウェブサイトとも連携</h2>
       <p>このリンクはウェブサイトが使うものと同じなので、CLI とブラウザは自由に連携します：</p>
       <ul><li>relayium up のリンクはブラウザで開けます。CLI を持たない人に渡せば、その人はウェブからダウンロードできます。</li><li>relayium.com で作った共有リンクは、別のマシンで relayium down から取得できます。</li></ul>
       <h2>サーバーに見えるもの・見えないもの</h2>
       <p>クラウド転送はエンドツーエンドで暗号化されたままです：</p>
       <ul><li>ファイルはアップロード前に自分のマシンで暗号化されます。復号鍵はリンクの #k= 断片にのみ存在し、サーバーには決して送られません。Relayium は読めない暗号文を、ファイル名も含めて保存します。</li><li>つまりリンクだけがファイルへ戻る唯一の手段です。失えばファイルは復旧できません。自分でも当社でも同じです。</li></ul>
+      <h2>リンクが働かないとき</h2>
+      <p>失敗する up と down のほとんどは次の4つで尽きます。どれも当て推量は要りません。判定を決める状態は、コマンドが表示するか、自分が打ったコマンドの中に見えています。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>up が「run `relayium login` first」と出て断る。</dt><dd><pre><code>relayium whoami
+# not logged in (run `relayium login`)</code></pre><p>アップロードはファイルをアカウントの下に保管するので、このマシンに資格情報が必要です。relayium login を実行し、ブラウザーの relayium.com/device で承認してください。以後 whoami はアカウントと結び付き先のサーバーを表示します。</p></dd><dt>down がリンクを解釈できず、鍵が消えたように見える。</dt><dd><pre><code>echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
+# relayium down https://relayium.com/d/7fK2p</code></pre><p>多くのシェルでは引用符のない # がコメントを始めるため、#k= 以降はコマンドに届いていません。echo が、生き残った部分をそのまま見せてくれます。リンク全体をシングルクォートで囲めば、復号鍵であるその断片も無傷で届きます。</p></dd><dt>指定した --ttl より早くリンクが切れる。</dt><dd><pre><code>relayium up ./report.pdf --ttl 7d
+# note: your plan caps retention, so this link is kept 1d, not the 7d you asked for</code></pre><p>プランの上限を超える要求を、サーバーは黙って上限に切り詰めます（Free は1日、Plus は3日、Pro は7日、Max は14日）。そのあと up がこの注記を出して、実際に得られた期間を伝えます。--burn や --max-downloads でもリンクは早く終わります。新しいものが必要ならもう一度アップロードしてください。</p></dd><dt>ログイン済みなのに、up が別の場所にログインしていると言う。</dt><dd><pre><code>relayium whoami
+# you@example.com (https://relayium.com)</code></pre><p>トークンを発行していない --server には、資格情報を送らずに拒否します。送れば漏らすことになり、しかもそちらでは認証もできないからです。--server を外して whoami が今表示した結び付き先を使うか、先に相手のホストに対して relayium login を実行してください。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>アカウントは必要ですか？</h3>
       <p>アップロードのときと、コードを発行しなければならない送信のときです。relayium up は常に relayium login が必要で、ファイルを自分のアカウントに保存するためです。relayium send が必要なのは、サーバーが新しいペアリングコードを発行しなければならないときだけです。誰かから渡されたコードで send を実行する場合は何も発行されないため、ログインは要りません。relayium down と relayium receive にアカウントは不要で、push/pull、デーモン直結、sync もアカウントなしで動きます。</p>
