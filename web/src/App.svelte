@@ -16,6 +16,8 @@
   import { createTextLink } from "./lib/text-link";
   import { pastedText } from "./lib/paste-text";
   import MessagePanel from "./lib/MessagePanel.svelte";
+  import ConfirmModal from "./lib/ConfirmModal.svelte";
+  import { confirmDialog } from "./lib/confirm-dialog.svelte";
   import Icon from "./lib/Icon.svelte";
   import { createWakeLock } from "./lib/wakelock";
   import { registerServiceWorker, drainSharedFiles } from "./lib/share-target";
@@ -975,7 +977,12 @@
     // Guard tab/logo navigation and tab-close while a transfer is live: navigating
     // tears down the room (aborting the transfer), so confirm first; and warn on a
     // full page unload so an accidental close doesn't silently kill a transfer.
-    setNavGuard(() => (busy ? confirm(messages[lang()].confirmLeave) : true));
+    // In-app dialog, not window.confirm(): the native one is unstyled, ignores
+    // the page's language direction, and on some browsers is suppressed outright
+    // when the click was not judged a user gesture — which would silently drop
+    // the guard on the one navigation that must ask. Returning the promise keeps
+    // the transfer alive until the reader actually answers.
+    setNavGuard(() => (busy ? confirmDialog(messages[lang()].confirmLeave) : true));
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!busy) return;
       e.preventDefault();
@@ -1664,6 +1671,7 @@
       <nav class="legal" aria-label={t.nav.footerGuidesLabel}>
         <a href={PRICING_PATH} onclick={(e) => { e.preventDefault(); navigate("pricing"); }}>{t.pricingPage.navLink}</a>
         <a href={pageUrl("guides", lang())}>{t.learn.hub}</a>
+        <a href={pageUrl("releases", lang()) + "/"}>{t.legal.releases}</a>
       </nav>
       <span class="fineprint">{t.footer}</span>
     </footer>
@@ -1685,6 +1693,12 @@
      queued outbox itself (a global store) and disables its refresh action for
      either. -->
 <UpdateNotice {busy} />
+
+<!-- Mounted here, not inside a route: the navigation guard can ask its question
+     from any tab, and until this moved up it only rendered inside /me. A guard
+     that opens a dialog nobody renders is worse than no guard — the promise
+     never settles, so the navigation silently never happens. -->
+<ConfirmModal />
 
 {#if debugOn}
   <DebugPanel

@@ -122,6 +122,44 @@ describe("navigate", () => {
     expect(currentRoute()).toBe("cross");
   });
 
+  it("waits for a guard that answers with a promise, then navigates", async () => {
+    // The in-app confirmation dialog cannot answer synchronously, and the whole
+    // point of the guard is that nothing is torn down before the answer: a user
+    // who is still reading "interrupt this transfer?" must still have the
+    // transfer.
+    let answer: (ok: boolean) => void = () => {};
+    setNavGuard(() => new Promise<boolean>((r) => { answer = r; }));
+    navigate("cross");
+    expect(currentRoute()).toBe("lan"); // still here while the question is open
+    answer(true);
+    await vi.waitFor(() => expect(currentRoute()).toBe("cross"));
+  });
+
+  it("stays put when a promised guard answers false", async () => {
+    setNavGuard(() => Promise.resolve(false));
+    navigate("cross");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(currentRoute()).toBe("lan");
+  });
+
+  it("does not navigate late if the route already moved while the guard was open", async () => {
+    // An awaited guard means arbitrary time passes between the click and the
+    // commit. A popstate, or a second answered dialog, can land in between —
+    // and a stale commit would then yank the user off the page they are on.
+    let answer: (ok: boolean) => void = () => {};
+    setNavGuard(() => new Promise<boolean>((r) => { answer = r; }));
+    navigate("cross");
+    setNavGuard(null);
+    navigate("apps"); // resolved synchronously, no guard
+    expect(currentRoute()).toBe("apps");
+    answer(true); // the stale "cross" answer arrives now
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(currentRoute()).toBe("apps");
+    expect(location.pathname).toBe(APPS_PATH);
+  });
+
   it("switches to verify-email and reset-password and back to their paths", () => {
     navigate("verify-email");
     expect(currentRoute()).toBe("verify-email");

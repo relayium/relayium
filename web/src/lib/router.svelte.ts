@@ -84,8 +84,15 @@ export function syncRouteFromLocation(): void {
 // Optional guard consulted before a navigation that would tear down room-scoped
 // state (and thus abort an in-flight transfer). Returns true to proceed, false to
 // cancel. App registers one that confirms before interrupting an active transfer.
-let navGuard: (() => boolean) | null = null;
-export function setNavGuard(g: (() => boolean) | null): void {
+//
+// A guard may also answer with a PROMISE, which is what lets the confirmation be
+// an in-app dialog instead of window.confirm(). The synchronous shape is kept —
+// and kept synchronous end to end — on purpose: making every navigation await
+// would defer the route change by a microtask for the overwhelmingly common case
+// of no guard at all, for the benefit of the one case that has a question to ask.
+type NavVerdict = boolean | Promise<boolean>;
+let navGuard: (() => NavVerdict) | null = null;
+export function setNavGuard(g: (() => NavVerdict) | null): void {
   navGuard = g;
 }
 
@@ -94,7 +101,27 @@ export function setNavGuard(g: (() => boolean) | null): void {
  *  signaling socket to the room-less (LAN) endpoint, so no page reload is needed. */
 export function navigate(r: Route): void {
   if (r === route) return; // already on this tab — don't tear down the room / abort a transfer
-  if (navGuard && !navGuard()) return; // e.g. user declined the "interrupt transfer?" confirm
+  if (!navGuard) return commitNavigation(r);
+  const verdict = navGuard();
+  if (verdict === false) return; // e.g. user declined the "interrupt transfer?" confirm
+  if (verdict === true) return commitNavigation(r);
+  // A pending question. Nothing is torn down until it is answered, so a user who
+  // cancels keeps the transfer they were asked about.
+  //
+  // `from` is what makes a late answer safe. An awaited guard means arbitrary
+  // time passes between the click and the answer, and a popstate or a second
+  // navigation can land in between — at which point this answer is about a
+  // question the user has already moved on from, and acting on it would yank
+  // them off the page they are now on.
+  const from = route;
+  void verdict.then((ok) => {
+    if (ok && route === from) commitNavigation(r);
+  });
+}
+
+/** The navigation itself, once nothing stands in its way. */
+function commitNavigation(r: Route): void {
+  if (r === route) return;
   const pathname =
     r === "cross" ? CROSS_PATH
     : r === "offline" ? OFFLINE_PATH

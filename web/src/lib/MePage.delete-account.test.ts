@@ -12,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, unmount } from "svelte";
 import MePage from "./MePage.svelte";
+import ConfirmModal from "./ConfirmModal.svelte";
 import { loadLang } from "./i18n.svelte";
 import { session, refreshSession } from "./auth.svelte";
 
@@ -91,10 +92,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// ConfirmModal lives in App now, not inside MePage — one shared dialog for the
+// whole app, because the navigation guard can ask its question from any route.
+// These tests mount MePage on its own, so they have to supply it the same way
+// App does; otherwise every confirm() here opens a dialog nothing renders.
+let confirmDialogHost: ReturnType<typeof mount> | null = null;
+function mountSharedDialog(target: HTMLElement) {
+  confirmDialogHost = mount(ConfirmModal, { target });
+}
+afterEach(() => {
+  if (confirmDialogHost) { unmount(confirmDialogHost); confirmDialogHost = null; }
+});
+
 async function render() {
   target = document.createElement("div");
   document.body.appendChild(target);
   app = mount(MePage, { target });
+  mountSharedDialog(target);
   await settle();
   return target;
 }

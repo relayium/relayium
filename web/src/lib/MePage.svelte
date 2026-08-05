@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import ConfirmModal from "./ConfirmModal.svelte";
   import { confirmDialog, resolveConfirm } from "./confirm-dialog.svelte";
   import { session, refreshSession } from "./auth.svelte";
   import { setLoginOpen } from "./login.svelte";
@@ -339,7 +338,9 @@
   // 账号变了（登出、或换成另一个账号）就作废在途请求并清空反馈：一句关于某个账号的
   // 「已提交请求」出现在登出后的页面上、或者别人的账号上，都是在说一件没发生的事。
   function resetDeleteRequest() {
-    // ConfirmModal is shared and lives outside the signed-in branch. Without
+    // ConfirmModal is shared and now lives in App, outside this page entirely —
+    // which makes this reset more load-bearing than when it was mounted here, not
+    // less: the dialog survives leaving /me. Without
     // this, signing out, changing account, or leaving /me while the dialog is
     // open leaves the old account address visible (and retained in its state)
     // even though the request itself would later be rejected by the uid guard.
@@ -410,7 +411,6 @@
 </script>
 
 <section class="me page-enter">
-  <ConfirmModal />
 
   <header class="me-head">
     <button class="back" onclick={() => navigate("lan")}>{t.me.back}</button>

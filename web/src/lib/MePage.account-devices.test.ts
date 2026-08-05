@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, unmount } from "svelte";
 import MePage from "./MePage.svelte";
+import ConfirmModal from "./ConfirmModal.svelte";
 import { loadLang } from "./i18n.svelte";
 import { refreshSession } from "./auth.svelte";
 
@@ -96,10 +97,24 @@ beforeEach(async () => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+// ConfirmModal lives in App now, not inside MePage — one shared dialog for the
+// whole app, because the navigation guard can ask its question from any route.
+// These tests mount MePage on its own, so they have to supply it the same way
+// App does; otherwise every confirm() here opens a dialog nothing renders.
+let confirmDialogHost: ReturnType<typeof mount> | null = null;
+function mountSharedDialog(target: HTMLElement) {
+  confirmDialogHost = mount(ConfirmModal, { target });
+}
+afterEach(() => {
+  if (confirmDialogHost) { unmount(confirmDialogHost); confirmDialogHost = null; }
+});
+
 async function render() {
   const target = document.createElement("div");
   document.body.appendChild(target);
   const app = mount(MePage, { target });
+  mountSharedDialog(target);
+  mountSharedDialog(target);
   await settle();
   return { target, app };
 }
@@ -372,6 +387,8 @@ it("未登录时不渲染账号设备区块", async () => {
   const target = document.createElement("div");
   document.body.appendChild(target);
   const app = mount(MePage, { target });
+  mountSharedDialog(target);
+  mountSharedDialog(target);
   await settle();
   expect(target.querySelector(".accountdevices"), "未登录也渲染了账号设备区块").toBeNull();
   unmount(app);
