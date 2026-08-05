@@ -93,7 +93,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>想自己挑选文件？从发布页下载对应的二进制。</li><li>已安装 Go？克隆仓库后运行：go build -o relayium ./cmd/relayium（在 server 目录下执行）。</li><li>然后运行 relayium --help 查看全部命令，运行 relayium version 检查构建版本。</li></ul>
       <h2>传输文件的三种方式</h2>
       <p>Relayium 提供三种传输方式。你按对方所在的位置来选，而不用去学三种不同的工具——它们共用同一个传输引擎，支持逐文件断点续传和 SHA-256 校验。</p>
-      <ul><li>push / pull——传到一台你已能 SSH 进去的服务器。字节走你的 SSH 连接；无需 Relayium 账号。</li><li>send / receive——跨网络传给另一个人，使用一个由发送方 CLI 生成的简短配对码（用 relayium login 登录一次即可；接收方无需登录）。直连点对点；如果找不到直连路径，传输会直接失败，而不会经我们中转。</li><li>serve + push relayium://（daemon 直连）——直接在你拥有的两台服务器之间传输，通过证书固定的 TLS。无中继、无 SSH、无需配对码。</li></ul>
+      <ul><li>push / pull——传到一台你已能 SSH 进去的服务器。字节走你的 SSH 连接；无需 Relayium 账号。</li><li>send / receive——跨网络传给另一个人，使用一个由发送方 CLI 生成的简短配对码（用 relayium login 登录一次即可；接收方无需登录）。直连点对点；如果找不到直连路径，传输会直接失败，而不会经我们中转。 铸出来的配对码有效期 5 分钟，所以要在这段时间内在接收端把命令跑起来。</li><li>serve + push relayium://（daemon 直连）——直接在你拥有的两台服务器之间传输，通过证书固定的 TLS。无中继、无 SSH、无需配对码。</li></ul>
       <h2>发送临时文本</h2>
       <p>在一台机器运行 relayium text 生成配对码并等待，然后在另一台机器用打印出的配对码加入：</p>
       <pre><code>relayium text</code></pre>

@@ -38,7 +38,7 @@ disagree. Everything else here is still on the reviewer.
 
 | EN | zh | ja | ko | de | fr | es | pt | ar |
 |---|---|---|---|---|---|---|---|---|
-| pairing code | 配对码 | ペアリングコード | 페어링 코드 | Pairing-Code | code d'appairage | código de emparejamiento | código de emparelhamento | رمز الاقتران |
+| pairing code | 配对码 | ペアリングコード | 페어링 코드 | Pairing-Code | code d'appairage *(jamais « jumelage »)* | código de emparejamiento | código de emparelhamento | رمز الاقتران |
 | verification code (SAS) | 校验码（SAS） | 検証コード（SAS） | 검증 코드 | Verifizierungscode | code de vérification | código de verificación | código de verificação | رمز التحقق |
 | relay (noun) | 中继 | リレー | 릴레이 | das Relay *(neuter)* | relais | retransmisor | retransmissor | مُرحِّل |
 | rendezvous | 会合 | ランデブー | 랑데부 | Rendezvous | rendez-vous | punto de encuentro | encontro | تعارف |

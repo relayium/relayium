@@ -52,7 +52,7 @@ const en = {
     {
       heading: "If a device is on a different network",
       body: [
-        "Same-network mode only works when the devices actually share a network — a phone on mobile data, a laptop on a different Wi-Fi, or a device behind a different router will not show up automatically. For that case, Relayium also supports connecting across networks with a short pairing code: the sender signs in to generate the code (or a QR code / link), and the receiver never needs an account. Across networks the two browsers connect through an encrypted TURN relay rather than directly — that path is relay-only by design, so the connection comes up in a second or two instead of stalling on direct-candidate checks that would almost always fail between two NATs. It is no less private: the key stays on the two devices, so the relay only ever forwards ciphertext and cannot read the file.",
+        "Same-network mode only works when the devices actually share a network — a phone on mobile data, a laptop on a different Wi-Fi, or a device behind a different router will not show up automatically. For that case, Relayium also supports connecting across networks with a short pairing code: the sender signs in to generate the code (or a QR code / link), and the receiver never needs an account. Across networks the two browsers connect through an encrypted TURN relay rather than directly — that path is relay-only by design, so the connection comes up in a second or two instead of stalling on direct-candidate checks that would almost always fail between two NATs. It is no less private: the key stays on the two devices, so the relay only ever forwards ciphertext and cannot read the file. The code is good for five minutes, so have both devices in front of you before you generate one.",
       ],
     },
   ],
@@ -135,7 +135,7 @@ const zh = {
     {
       heading: "如果某台设备在别的网络上",
       body: [
-        "同网络模式只在设备真正共享同一网络时才生效——用移动数据的手机、连着另一个 Wi-Fi 的笔记本，或在另一台路由器后面的设备，都不会自动出现。这种情况下，Relayium 也支持用一个短配对码跨网络连接：发送方登录后生成配对码（或二维码 / 链接），接收方始终无需账号。跨网络时，两个浏览器之间不是直连，而是经一个加密的 TURN 中继转发——这条路径是刻意只走中继的，连接一两秒就能建立，不必卡在两层 NAT 之间几乎注定失败的直连候选探测上。这并不会让它变得不私密：密钥始终留在两台设备上，中继只负责转发密文，读不到文件内容。",
+        "同网络模式只在设备真正共享同一网络时才生效——用移动数据的手机、连着另一个 Wi-Fi 的笔记本，或在另一台路由器后面的设备，都不会自动出现。这种情况下，Relayium 也支持用一个短配对码跨网络连接：发送方登录后生成配对码（或二维码 / 链接），接收方始终无需账号。跨网络时，两个浏览器之间不是直连，而是经一个加密的 TURN 中继转发——这条路径是刻意只走中继的，连接一两秒就能建立，不必卡在两层 NAT 之间几乎注定失败的直连候选探测上。这并不会让它变得不私密：密钥始终留在两台设备上，中继只负责转发密文，读不到文件内容。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。",
       ],
     },
   ],
@@ -218,7 +218,7 @@ const ja = {
     {
       heading: "端末が別のネットワークにある場合",
       body: [
-        "同一ネットワークモードは端末が実際にネットワークを共有しているときだけ働きます。モバイル通信のスマホ、別の Wi-Fi のノートPC、別のルーターの背後にある端末は自動的には現れません。その場合、Relayium は短いペアリングコードでネットワークをまたいで接続することもサポートしています。送信側がサインインしてコード（または QR コード／リンク）を生成し、受信側はアカウント不要です。ネットワークをまたぐ場合、2 つのブラウザは直接ではなく暗号化された TURN リレー経由でつながります。この経路は意図的にリレー専用にしてあり、2 つの NAT の間でほぼ確実に失敗する直接候補のチェックを待たずに、1〜2 秒で接続が確立します。プライバシーが下がるわけではありません。鍵は 2 台の端末に留まるので、リレーが転送するのは常に暗号文だけで、ファイルの中身は読めません。",
+        "同一ネットワークモードは端末が実際にネットワークを共有しているときだけ働きます。モバイル通信のスマホ、別の Wi-Fi のノートPC、別のルーターの背後にある端末は自動的には現れません。その場合、Relayium は短いペアリングコードでネットワークをまたいで接続することもサポートしています。送信側がサインインしてコード（または QR コード／リンク）を生成し、受信側はアカウント不要です。ネットワークをまたぐ場合、2 つのブラウザは直接ではなく暗号化された TURN リレー経由でつながります。この経路は意図的にリレー専用にしてあり、2 つの NAT の間でほぼ確実に失敗する直接候補のチェックを待たずに、1〜2 秒で接続が確立します。プライバシーが下がるわけではありません。鍵は 2 台の端末に留まるので、リレーが転送するのは常に暗号文だけで、ファイルの中身は読めません。 コードの有効期限は5分なので、生成する前に両方の端末を手元に用意してください。",
       ],
     },
   ],
@@ -301,7 +301,7 @@ const ko = {
     {
       heading: "기기가 다른 네트워크에 있다면",
       body: [
-        "같은 네트워크 모드는 기기가 실제로 네트워크를 공유할 때만 작동합니다 — 모바일 데이터를 쓰는 휴대폰, 다른 Wi-Fi에 있는 노트북, 다른 공유기 뒤에 있는 기기는 자동으로 나타나지 않습니다. 이런 경우 Relayium은 짧은 페어링 코드로 네트워크를 넘나드는 연결도 지원합니다. 보내는 쪽이 로그인해 코드(또는 QR 코드/링크)를 생성하고, 받는 쪽은 계정이 필요 없습니다. 네트워크를 넘나드는 경우 두 브라우저는 직접이 아니라 암호화된 TURN 릴레이를 거쳐 연결됩니다 — 이 경로는 의도적으로 릴레이 전용이며, 두 NAT 사이에서 거의 반드시 실패할 직접 후보 검사를 기다리는 대신 1~2초 만에 연결이 맺어집니다. 그렇다고 덜 안전한 것은 아닙니다. 키는 두 기기에만 남으므로 릴레이는 암호문만 전달할 뿐 파일 내용을 읽을 수 없습니다.",
+        "같은 네트워크 모드는 기기가 실제로 네트워크를 공유할 때만 작동합니다 — 모바일 데이터를 쓰는 휴대폰, 다른 Wi-Fi에 있는 노트북, 다른 공유기 뒤에 있는 기기는 자동으로 나타나지 않습니다. 이런 경우 Relayium은 짧은 페어링 코드로 네트워크를 넘나드는 연결도 지원합니다. 보내는 쪽이 로그인해 코드(또는 QR 코드/링크)를 생성하고, 받는 쪽은 계정이 필요 없습니다. 네트워크를 넘나드는 경우 두 브라우저는 직접이 아니라 암호화된 TURN 릴레이를 거쳐 연결됩니다 — 이 경로는 의도적으로 릴레이 전용이며, 두 NAT 사이에서 거의 반드시 실패할 직접 후보 검사를 기다리는 대신 1~2초 만에 연결이 맺어집니다. 그렇다고 덜 안전한 것은 아닙니다. 키는 두 기기에만 남으므로 릴레이는 암호문만 전달할 뿐 파일 내용을 읽을 수 없습니다. 코드는 5분 동안만 유효하니, 만들기 전에 두 기기를 모두 곁에 두세요.",
       ],
     },
   ],
@@ -384,7 +384,7 @@ const de = {
     {
       heading: "Wenn ein Gerät in einem anderen Netz ist",
       body: [
-        "Der Modus für dasselbe Netz funktioniert nur, wenn die Geräte tatsächlich ein Netzwerk teilen — ein Handy im Mobilfunknetz, ein Laptop in einem anderen WLAN oder ein Gerät hinter einem anderen Router erscheint nicht automatisch. Für diesen Fall unterstützt Relayium auch die Verbindung über Netzwerke hinweg mit einem kurzen Pairing-Code: Der Absender meldet sich an, um den Code (oder einen QR-Code / Link) zu erzeugen, und der Empfänger braucht dabei nie ein Konto. Über Netzwerkgrenzen hinweg verbinden sich die beiden Browser nicht direkt, sondern über ein verschlüsseltes TURN-Relay — dieser Weg ist von Grund auf reines Relay, sodass die Verbindung in ein bis zwei Sekunden steht, statt auf Prüfungen direkter Kandidaten zu warten, die zwischen zwei NATs fast immer scheitern. Das ist nicht weniger privat: Der Schlüssel bleibt auf den beiden Geräten, das Relay leitet also immer nur Chiffretext weiter und kann die Datei nicht lesen.",
+        "Der Modus für dasselbe Netz funktioniert nur, wenn die Geräte tatsächlich ein Netzwerk teilen — ein Handy im Mobilfunknetz, ein Laptop in einem anderen WLAN oder ein Gerät hinter einem anderen Router erscheint nicht automatisch. Für diesen Fall unterstützt Relayium auch die Verbindung über Netzwerke hinweg mit einem kurzen Pairing-Code: Der Absender meldet sich an, um den Code (oder einen QR-Code / Link) zu erzeugen, und der Empfänger braucht dabei nie ein Konto. Über Netzwerkgrenzen hinweg verbinden sich die beiden Browser nicht direkt, sondern über ein verschlüsseltes TURN-Relay — dieser Weg ist von Grund auf reines Relay, sodass die Verbindung in ein bis zwei Sekunden steht, statt auf Prüfungen direkter Kandidaten zu warten, die zwischen zwei NATs fast immer scheitern. Das ist nicht weniger privat: Der Schlüssel bleibt auf den beiden Geräten, das Relay leitet also immer nur Chiffretext weiter und kann die Datei nicht lesen. Der Code gilt fünf Minuten — halte beide Geräte bereit, bevor du einen erzeugst.",
       ],
     },
   ],
@@ -467,7 +467,7 @@ const fr = {
     {
       heading: "Si un appareil est sur un réseau différent",
       body: [
-        "Le mode même réseau ne fonctionne que quand les appareils partagent réellement un réseau — un téléphone en données mobiles, un ordinateur portable sur un autre Wi-Fi, ou un appareil derrière un autre routeur n'apparaîtra pas automatiquement. Dans ce cas, Relayium prend aussi en charge la connexion entre réseaux différents avec un court code d'appairage : l'expéditeur se connecte pour générer le code (ou un code QR / lien), et le destinataire n'a jamais besoin de compte. Entre réseaux différents, les deux navigateurs ne se connectent pas directement mais passent par un relais TURN chiffré — cette voie est délibérément réservée au relais, si bien que la connexion s'établit en une ou deux secondes au lieu d'attendre des tests de candidats directs qui échouent presque toujours entre deux NAT. Ce n'est pas moins privé : la clé reste sur les deux appareils, le relais ne transmet donc jamais que du texte chiffré et ne peut pas lire le fichier.",
+        "Le mode même réseau ne fonctionne que quand les appareils partagent réellement un réseau — un téléphone en données mobiles, un ordinateur portable sur un autre Wi-Fi, ou un appareil derrière un autre routeur n'apparaîtra pas automatiquement. Dans ce cas, Relayium prend aussi en charge la connexion entre réseaux différents avec un court code d'appairage : l'expéditeur se connecte pour générer le code (ou un code QR / lien), et le destinataire n'a jamais besoin de compte. Entre réseaux différents, les deux navigateurs ne se connectent pas directement mais passent par un relais TURN chiffré — cette voie est délibérément réservée au relais, si bien que la connexion s'établit en une ou deux secondes au lieu d'attendre des tests de candidats directs qui échouent presque toujours entre deux NAT. Ce n'est pas moins privé : la clé reste sur les deux appareils, le relais ne transmet donc jamais que du texte chiffré et ne peut pas lire le fichier. Le code est valable cinq minutes : ayez les deux appareils sous la main avant d'en générer un.",
       ],
     },
   ],
@@ -550,7 +550,7 @@ const ar = {
     {
       heading: "إذا كان جهاز على شبكة مختلفة",
       body: [
-        "لا يعمل وضع نفس الشبكة إلا عندما تتشارك الأجهزة شبكةً بالفعل — فالهاتف على بيانات الجوال، أو الحاسوب المحمول على شبكة Wi-Fi مختلفة، أو جهاز خلف موجّه مختلف لن يظهر تلقائيًا. لتلك الحالة، يدعم Relayium أيضًا الاتصال عبر الشبكات برمز اقتران قصير: يسجّل المُرسِل الدخول لتوليد الرمز (أو رمز QR / رابط)، ولا يحتاج المُستقبِل أبدًا إلى حساب. وعبر الشبكات، يتصل المتصفّحان عبر مُرحِّل TURN مُشفَّر بدلًا من الاتصال المباشر — فهذا المسار مُخصَّص للمُرحِّل عن قصد، بحيث ينعقد الاتصال خلال ثانية أو ثانيتين بدل انتظار فحوص المرشّحين المباشرين التي تفشل غالبًا بين شبكتَي NAT. وهذا لا يقلّل من الخصوصية: يبقى المفتاح على الجهازين، فلا يُمرِّر المُرحِّل سوى نصّ مُشفَّر ولا يستطيع قراءة الملف.",
+        "لا يعمل وضع نفس الشبكة إلا عندما تتشارك الأجهزة شبكةً بالفعل — فالهاتف على بيانات الجوال، أو الحاسوب المحمول على شبكة Wi-Fi مختلفة، أو جهاز خلف موجّه مختلف لن يظهر تلقائيًا. لتلك الحالة، يدعم Relayium أيضًا الاتصال عبر الشبكات برمز اقتران قصير: يسجّل المُرسِل الدخول لتوليد الرمز (أو رمز QR / رابط)، ولا يحتاج المُستقبِل أبدًا إلى حساب. وعبر الشبكات، يتصل المتصفّحان عبر مُرحِّل TURN مُشفَّر بدلًا من الاتصال المباشر — فهذا المسار مُخصَّص للمُرحِّل عن قصد، بحيث ينعقد الاتصال خلال ثانية أو ثانيتين بدل انتظار فحوص المرشّحين المباشرين التي تفشل غالبًا بين شبكتَي NAT. وهذا لا يقلّل من الخصوصية: يبقى المفتاح على الجهازين، فلا يُمرِّر المُرحِّل سوى نصّ مُشفَّر ولا يستطيع قراءة الملف. والرمز صالح خمس دقائق، فجهِّز الجهازين معًا قبل توليده.",
       ],
     },
   ],
@@ -633,7 +633,7 @@ const es = {
     {
       heading: "Si un dispositivo está en una red distinta",
       body: [
-        "El modo de la misma red solo funciona cuando los dispositivos comparten realmente una red — un teléfono con datos móviles, un portátil en otra Wi-Fi o un dispositivo detrás de otro router no aparecerán automáticamente. Para ese caso, Relayium también admite conectar entre redes con un código de emparejamiento corto: el remitente inicia sesión para generar el código (o un código QR / enlace) y quien recibe nunca necesita una cuenta. Entre redes distintas, los dos navegadores no se conectan directamente, sino a través de un retransmisor TURN cifrado — esa vía es solo de retransmisión a propósito, así que la conexión se establece en uno o dos segundos en lugar de esperar comprobaciones de candidatos directos que casi siempre fallan entre dos NAT. No es menos privado: la clave se queda en los dos dispositivos, así que el retransmisor solo reenvía texto cifrado y no puede leer el archivo.",
+        "El modo de la misma red solo funciona cuando los dispositivos comparten realmente una red — un teléfono con datos móviles, un portátil en otra Wi-Fi o un dispositivo detrás de otro router no aparecerán automáticamente. Para ese caso, Relayium también admite conectar entre redes con un código de emparejamiento corto: el remitente inicia sesión para generar el código (o un código QR / enlace) y quien recibe nunca necesita una cuenta. Entre redes distintas, los dos navegadores no se conectan directamente, sino a través de un retransmisor TURN cifrado — esa vía es solo de retransmisión a propósito, así que la conexión se establece en uno o dos segundos en lugar de esperar comprobaciones de candidatos directos que casi siempre fallan entre dos NAT. No es menos privado: la clave se queda en los dos dispositivos, así que el retransmisor solo reenvía texto cifrado y no puede leer el archivo. El código vale cinco minutos, así que ten los dos dispositivos a mano antes de generarlo.",
       ],
     },
   ],
@@ -716,7 +716,7 @@ const pt = {
     {
       heading: "Se um dispositivo estiver em uma rede diferente",
       body: [
-        "O modo da mesma rede só funciona quando os dispositivos realmente compartilham uma rede — um celular usando dados móveis, um notebook em outra Wi-Fi ou um dispositivo atrás de outro roteador não aparecerá automaticamente. Para esse caso, o Relayium também oferece conexão entre redes com um código de emparelhamento curto: o remetente faz login para gerar o código (ou um código QR / link) e quem recebe nunca precisa de conta. Entre redes diferentes, os dois navegadores não se conectam diretamente, e sim através de um retransmissor TURN criptografado — esse caminho é propositalmente só de retransmissão, então a conexão se estabelece em um ou dois segundos em vez de esperar por verificações de candidatos diretos que quase sempre falham entre dois NATs. Não é menos privado: a chave fica nos dois dispositivos, então o retransmissor só encaminha texto cifrado e não consegue ler o arquivo.",
+        "O modo da mesma rede só funciona quando os dispositivos realmente compartilham uma rede — um celular usando dados móveis, um notebook em outra Wi-Fi ou um dispositivo atrás de outro roteador não aparecerá automaticamente. Para esse caso, o Relayium também oferece conexão entre redes com um código de emparelhamento curto: o remetente faz login para gerar o código (ou um código QR / link) e quem recebe nunca precisa de conta. Entre redes diferentes, os dois navegadores não se conectam diretamente, e sim através de um retransmissor TURN criptografado — esse caminho é propositalmente só de retransmissão, então a conexão se estabelece em um ou dois segundos em vez de esperar por verificações de candidatos diretos que quase sempre falham entre dois NATs. Não é menos privado: a chave fica nos dois dispositivos, então o retransmissor só encaminha texto cifrado e não consegue ler o arquivo. O código vale cinco minutos, então deixe os dois aparelhos à mão antes de gerar um.",
       ],
     },
   ],

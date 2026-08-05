@@ -30,7 +30,7 @@ const en = {
       heading: "Not on the same network? Use a pairing code",
       body: [
         "Your phone is on mobile data and your PC is on home Wi-Fi? That is fine — Relayium is built to reach across networks, not only the same one.",
-        "Instead of automatic discovery, the sender gets a short pairing code (or the join link it generates) and signs in to generate it — the person receiving never needs an account. Enter the code on the other device and the two connect through an encrypted TURN relay. That is the deliberate design for the cross-network path: between a mobile network and a home router a direct route usually can't be found, and trying for one first would burn about 20 seconds before the connection ended up on the relay regardless — starting there instead has you connected in a second or two. Your files are sealed end-to-end before they leave the sending device, so the relay only ever moves ciphertext it cannot read. If the connection drops mid-way, the transfer can resume instead of starting over.",
+        "Instead of automatic discovery, the sender gets a short pairing code (or the join link it generates) and signs in to generate it — the person receiving never needs an account. Enter the code on the other device and the two connect through an encrypted TURN relay. That is the deliberate design for the cross-network path: between a mobile network and a home router a direct route usually can't be found, and trying for one first would burn about 20 seconds before the connection ended up on the relay regardless — starting there instead has you connected in a second or two. Your files are sealed end-to-end before they leave the sending device, so the relay only ever moves ciphertext it cannot read. If the connection drops mid-way, the transfer can resume instead of starting over. The code is good for five minutes, so have both devices in front of you before you generate one.",
       ],
     },
     {
@@ -111,7 +111,7 @@ const zh = {
       heading: "不在同一网络？用配对码",
       body: [
         "手机用的是移动数据，电脑连的是家里的 Wi-Fi？没关系——Relayium 生来就支持跨网络，而不只是同一个网络。",
-        "此时不再自动发现，而是发送方登录后拿到一个短配对码（或它生成的加入链接）——接收方始终无需账号。在另一台设备上输入这个码，两者就会通过加密的 TURN 中继连上。跨网络这条路径就是这样刻意设计的：在移动网络和家里的路由器之间，直连路径通常根本找不到，先去试一遍要白白花掉二十秒左右，最后照样落到中继上——直接从中继开始，一两秒就连上了。文件在离开发送端之前就已完成端到端加密，因此中继搬运的始终只是它读不懂的密文。若中途断开，传输可以断点续传，而不必从头再来。",
+        "此时不再自动发现，而是发送方登录后拿到一个短配对码（或它生成的加入链接）——接收方始终无需账号。在另一台设备上输入这个码，两者就会通过加密的 TURN 中继连上。跨网络这条路径就是这样刻意设计的：在移动网络和家里的路由器之间，直连路径通常根本找不到，先去试一遍要白白花掉二十秒左右，最后照样落到中继上——直接从中继开始，一两秒就连上了。文件在离开发送端之前就已完成端到端加密，因此中继搬运的始终只是它读不懂的密文。若中途断开，传输可以断点续传，而不必从头再来。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。",
       ],
     },
     {
@@ -192,7 +192,7 @@ const ja = {
       heading: "同じネットワークにない？ペアリングコードを使う",
       body: [
         "スマホはモバイル通信、PC は自宅の Wi-Fi？大丈夫です。Relayium は同じネットワークだけでなく、ネットワークをまたいで届くように作られています。",
-        "この場合は自動発見ではなく、送信側がサインインして短いペアリングコード（またはそれが生成する参加リンク）を受け取ります。受信側はアカウント不要です。もう一方の端末でそのコードを入力すると、2台は暗号化された TURN リレーを介してつながります。これはネットワークをまたぐ経路の意図的な設計です。モバイル回線と自宅ルーターの間では直接経路がまず見つからず、先に試すと20秒ほど無駄にしたあげく結局リレーに落ち着くため、最初からリレーを使えば1〜2秒で接続できます。ファイルは送信側の端末を出る前にエンドツーエンドで封印されているので、リレーが運ぶのは読めない暗号文だけです。途中で切れても、転送は最初からではなく再開できます。",
+        "この場合は自動発見ではなく、送信側がサインインして短いペアリングコード（またはそれが生成する参加リンク）を受け取ります。受信側はアカウント不要です。もう一方の端末でそのコードを入力すると、2台は暗号化された TURN リレーを介してつながります。これはネットワークをまたぐ経路の意図的な設計です。モバイル回線と自宅ルーターの間では直接経路がまず見つからず、先に試すと20秒ほど無駄にしたあげく結局リレーに落ち着くため、最初からリレーを使えば1〜2秒で接続できます。ファイルは送信側の端末を出る前にエンドツーエンドで封印されているので、リレーが運ぶのは読めない暗号文だけです。途中で切れても、転送は最初からではなく再開できます。 コードの有効期限は5分なので、生成する前に両方の端末を手元に用意してください。",
       ],
     },
     {
@@ -273,7 +273,7 @@ const ko = {
       heading: "같은 네트워크가 아니라면? 페어링 코드를 쓰세요",
       body: [
         "휴대폰은 모바일 데이터, PC는 집 Wi-Fi인가요? 괜찮습니다 — Relayium은 같은 네트워크뿐 아니라 네트워크를 넘나들며 닿도록 만들어졌습니다.",
-        "이 경우 자동 탐색 대신 보내는 쪽이 로그인해서 짧은 페어링 코드(또는 그것이 생성하는 참여 링크)를 받습니다 — 받는 쪽은 계정이 필요 없습니다. 상대 기기에 그 코드를 입력하면 두 기기는 암호화된 TURN 릴레이를 거쳐 연결됩니다. 네트워크를 넘는 경로는 의도적으로 그렇게 설계되어 있습니다. 모바일 망과 집 공유기 사이에서는 직접 경로를 찾지 못하는 것이 보통이라, 먼저 시도하면 20초쯤 허비하고도 결국 릴레이로 가게 됩니다. 처음부터 릴레이로 가면 1~2초 만에 연결됩니다. 파일은 보내는 기기를 떠나기 전에 종단간으로 봉인되므로, 릴레이가 옮기는 것은 읽을 수 없는 암호문뿐입니다. 도중에 끊겨도 전송은 처음부터가 아니라 이어서 재개할 수 있습니다.",
+        "이 경우 자동 탐색 대신 보내는 쪽이 로그인해서 짧은 페어링 코드(또는 그것이 생성하는 참여 링크)를 받습니다 — 받는 쪽은 계정이 필요 없습니다. 상대 기기에 그 코드를 입력하면 두 기기는 암호화된 TURN 릴레이를 거쳐 연결됩니다. 네트워크를 넘는 경로는 의도적으로 그렇게 설계되어 있습니다. 모바일 망과 집 공유기 사이에서는 직접 경로를 찾지 못하는 것이 보통이라, 먼저 시도하면 20초쯤 허비하고도 결국 릴레이로 가게 됩니다. 처음부터 릴레이로 가면 1~2초 만에 연결됩니다. 파일은 보내는 기기를 떠나기 전에 종단간으로 봉인되므로, 릴레이가 옮기는 것은 읽을 수 없는 암호문뿐입니다. 도중에 끊겨도 전송은 처음부터가 아니라 이어서 재개할 수 있습니다. 코드는 5분 동안만 유효하니, 만들기 전에 두 기기를 모두 곁에 두세요.",
       ],
     },
     {
@@ -354,7 +354,7 @@ const de = {
       heading: "Nicht im selben Netz? Nimm einen Pairing-Code",
       body: [
         "Das Handy ist im Mobilfunknetz und der PC im heimischen WLAN? Kein Problem — Relayium ist darauf ausgelegt, über Netzwerke hinweg zu reichen, nicht nur im selben.",
-        "Statt automatischer Erkennung meldet sich der Absender an und erhält einen kurzen Pairing-Code (oder den erzeugten Beitrittslink) — der Empfänger braucht dabei nie ein Konto. Gib den Code auf dem anderen Gerät ein, und die beiden verbinden sich über ein verschlüsseltes TURN-Relay. So ist der netzübergreifende Weg bewusst ausgelegt: Zwischen einem Mobilfunknetz und einem Heimrouter lässt sich meist kein direkter Weg finden, und der Versuch würde rund 20 Sekunden kosten, bevor die Verbindung ohnehin beim Relay landet — gleich dort zu beginnen bringt sie in ein bis zwei Sekunden zustande. Deine Dateien sind Ende-zu-Ende versiegelt, bevor sie das sendende Gerät verlassen, das Relay bewegt also nur Chiffretext, den es nicht lesen kann. Bricht die Verbindung mittendrin ab, kann die Übertragung fortgesetzt werden, statt neu zu beginnen.",
+        "Statt automatischer Erkennung meldet sich der Absender an und erhält einen kurzen Pairing-Code (oder den erzeugten Beitrittslink) — der Empfänger braucht dabei nie ein Konto. Gib den Code auf dem anderen Gerät ein, und die beiden verbinden sich über ein verschlüsseltes TURN-Relay. So ist der netzübergreifende Weg bewusst ausgelegt: Zwischen einem Mobilfunknetz und einem Heimrouter lässt sich meist kein direkter Weg finden, und der Versuch würde rund 20 Sekunden kosten, bevor die Verbindung ohnehin beim Relay landet — gleich dort zu beginnen bringt sie in ein bis zwei Sekunden zustande. Deine Dateien sind Ende-zu-Ende versiegelt, bevor sie das sendende Gerät verlassen, das Relay bewegt also nur Chiffretext, den es nicht lesen kann. Bricht die Verbindung mittendrin ab, kann die Übertragung fortgesetzt werden, statt neu zu beginnen. Der Code gilt fünf Minuten — halte beide Geräte bereit, bevor du einen erzeugst.",
       ],
     },
     {
@@ -435,7 +435,7 @@ const fr = {
       heading: "Pas sur le même réseau ? Utilisez un code d'appairage",
       body: [
         "Votre téléphone est en données mobiles et votre PC sur le Wi-Fi de la maison ? Aucun souci — Relayium est conçu pour atteindre à travers les réseaux, pas seulement le même.",
-        "Au lieu de la découverte automatique, l'expéditeur se connecte et obtient un court code d'appairage (ou le lien de participation qu'il génère) — le destinataire n'a jamais besoin de compte. Saisissez le code sur l'autre appareil et les deux se connectent via un relais TURN chiffré. C'est le choix délibéré pour le trajet entre réseaux : entre un réseau mobile et une box domestique, une voie directe est généralement introuvable, et la chercher d'abord coûterait une vingtaine de secondes avant que la connexion n'aboutisse malgré tout au relais — en partant directement du relais, elle s'établit en une ou deux secondes. Vos fichiers sont scellés de bout en bout avant de quitter l'appareil émetteur : le relais ne déplace donc que du texte chiffré qu'il ne peut pas lire. Si la connexion se coupe en cours de route, le transfert peut reprendre au lieu de tout recommencer.",
+        "Au lieu de la découverte automatique, l'expéditeur se connecte et obtient un court code d'appairage (ou le lien de participation qu'il génère) — le destinataire n'a jamais besoin de compte. Saisissez le code sur l'autre appareil et les deux se connectent via un relais TURN chiffré. C'est le choix délibéré pour le trajet entre réseaux : entre un réseau mobile et une box domestique, une voie directe est généralement introuvable, et la chercher d'abord coûterait une vingtaine de secondes avant que la connexion n'aboutisse malgré tout au relais — en partant directement du relais, elle s'établit en une ou deux secondes. Vos fichiers sont scellés de bout en bout avant de quitter l'appareil émetteur : le relais ne déplace donc que du texte chiffré qu'il ne peut pas lire. Si la connexion se coupe en cours de route, le transfert peut reprendre au lieu de tout recommencer. Le code est valable cinq minutes : ayez les deux appareils sous la main avant d'en générer un.",
       ],
     },
     {
@@ -516,7 +516,7 @@ const ar = {
       heading: "لست على نفس الشبكة؟ استخدم رمز اقتران",
       body: [
         "هاتفك على بيانات الجوال وحاسوبك على شبكة Wi-Fi المنزلية؟ لا بأس بذلك — بُني Relayium ليصل عبر الشبكات، لا على نفس الشبكة فقط.",
-        "بدلًا من الاكتشاف التلقائي، يحصل المُرسِل على رمز اقتران قصير (أو رابط الانضمام الذي يولّده) ويسجّل الدخول لتوليده — أما المُستقبِل فلا يحتاج إلى حساب أبدًا. أدخِل الرمز على الجهاز الآخر فيتصل الجهازان عبر مُرحِّل TURN مُشفَّر. هكذا صُمِّم المسار عبر الشبكات عن قصد: فبين شبكة الجوال وموجّه المنزل يتعذّر عادةً إيجاد مسار مباشر، ومحاولته أولًا تستهلك نحو عشرين ثانية قبل أن ينتهي الاتصال إلى المُرحِّل على أي حال — أما البدء منه مباشرةً فيُنشئ الاتصال في ثانية أو ثانيتين. وملفاتك مختومة من الطرف إلى الطرف قبل أن تغادر الجهاز المُرسِل، فلا ينقل المُرحِّل سوى نص مُشفَّر لا يستطيع قراءته. وإذا انقطع الاتصال في منتصف الطريق، يمكن استئناف النقل بدلًا من البدء من جديد.",
+        "بدلًا من الاكتشاف التلقائي، يحصل المُرسِل على رمز اقتران قصير (أو رابط الانضمام الذي يولّده) ويسجّل الدخول لتوليده — أما المُستقبِل فلا يحتاج إلى حساب أبدًا. أدخِل الرمز على الجهاز الآخر فيتصل الجهازان عبر مُرحِّل TURN مُشفَّر. هكذا صُمِّم المسار عبر الشبكات عن قصد: فبين شبكة الجوال وموجّه المنزل يتعذّر عادةً إيجاد مسار مباشر، ومحاولته أولًا تستهلك نحو عشرين ثانية قبل أن ينتهي الاتصال إلى المُرحِّل على أي حال — أما البدء منه مباشرةً فيُنشئ الاتصال في ثانية أو ثانيتين. وملفاتك مختومة من الطرف إلى الطرف قبل أن تغادر الجهاز المُرسِل، فلا ينقل المُرحِّل سوى نص مُشفَّر لا يستطيع قراءته. وإذا انقطع الاتصال في منتصف الطريق، يمكن استئناف النقل بدلًا من البدء من جديد. والرمز صالح خمس دقائق، فجهِّز الجهازين معًا قبل توليده.",
       ],
     },
     {
@@ -597,7 +597,7 @@ const es = {
       heading: "¿No están en la misma red? Usa un código de emparejamiento",
       body: [
         "¿Tu teléfono va con datos móviles y tu PC con la Wi-Fi de casa? No pasa nada — Relayium está hecho para llegar entre redes, no solo dentro de la misma.",
-        "En lugar del descubrimiento automático, el remitente obtiene un código de emparejamiento corto (o el enlace de unión que genera) e inicia sesión para generarlo — la persona que recibe nunca necesita una cuenta. Introduce el código en el otro dispositivo y los dos se conectan a través de un retransmisor TURN cifrado. Así está pensada a propósito la vía entre redes: entre una red móvil y el router de casa casi nunca se encuentra una ruta directa, e intentarla primero gastaría unos veinte segundos antes de que la conexión acabara igualmente en el retransmisor — empezando por él, queda establecida en uno o dos segundos. Tus archivos van sellados de extremo a extremo antes de salir del dispositivo emisor, así que el retransmisor solo mueve texto cifrado que no puede leer. Si la conexión se corta a medias, la transferencia puede reanudarse en lugar de empezar de nuevo.",
+        "En lugar del descubrimiento automático, el remitente obtiene un código de emparejamiento corto (o el enlace de unión que genera) e inicia sesión para generarlo — la persona que recibe nunca necesita una cuenta. Introduce el código en el otro dispositivo y los dos se conectan a través de un retransmisor TURN cifrado. Así está pensada a propósito la vía entre redes: entre una red móvil y el router de casa casi nunca se encuentra una ruta directa, e intentarla primero gastaría unos veinte segundos antes de que la conexión acabara igualmente en el retransmisor — empezando por él, queda establecida en uno o dos segundos. Tus archivos van sellados de extremo a extremo antes de salir del dispositivo emisor, así que el retransmisor solo mueve texto cifrado que no puede leer. Si la conexión se corta a medias, la transferencia puede reanudarse en lugar de empezar de nuevo. El código vale cinco minutos, así que ten los dos dispositivos a mano antes de generarlo.",
       ],
     },
     {
@@ -678,7 +678,7 @@ const pt = {
       heading: "Não estão na mesma rede? Use um código de emparelhamento",
       body: [
         "Seu celular está no dados móveis e seu PC na rede Wi-Fi de casa? Tudo bem — o Relayium foi feito para alcançar entre redes, não só dentro da mesma.",
-        "Em vez da descoberta automática, o remetente recebe um código de emparelhamento curto (ou o link de entrada que ele gera) e faz login para gerá-lo — quem recebe nunca precisa de conta. Digite o código no outro dispositivo e os dois se conectam por um retransmissor TURN criptografado. O caminho entre redes foi pensado assim de propósito: entre uma rede móvel e o roteador de casa quase nunca se acha uma rota direta, e tentá-la primeiro gastaria uns vinte segundos antes de a conexão terminar no retransmissor de qualquer forma — começando por ele, ela sobe em um ou dois segundos. Seus arquivos são selados de ponta a ponta antes de deixar o dispositivo que envia, então o retransmissor só move texto cifrado que não consegue ler. Se a conexão cair no meio, a transferência pode ser retomada em vez de recomeçar.",
+        "Em vez da descoberta automática, o remetente recebe um código de emparelhamento curto (ou o link de entrada que ele gera) e faz login para gerá-lo — quem recebe nunca precisa de conta. Digite o código no outro dispositivo e os dois se conectam por um retransmissor TURN criptografado. O caminho entre redes foi pensado assim de propósito: entre uma rede móvel e o roteador de casa quase nunca se acha uma rota direta, e tentá-la primeiro gastaria uns vinte segundos antes de a conexão terminar no retransmissor de qualquer forma — começando por ele, ela sobe em um ou dois segundos. Seus arquivos são selados de ponta a ponta antes de deixar o dispositivo que envia, então o retransmissor só move texto cifrado que não consegue ler. Se a conexão cair no meio, a transferência pode ser retomada em vez de recomeçar. O código vale cinco minutos, então deixe os dois aparelhos à mão antes de gerar um.",
       ],
     },
     {

@@ -567,11 +567,11 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
 const fr = {
   title: "Recevoir des fichiers depuis la ligne de commande",
   description:
-    "Trois façons de recevoir un fichier avec la CLI Relayium : receive pour un envoi par code de jumelage entre réseaux, serve comme boîte de réception à l'écoute des envois en daemon direct, ou pull depuis un serveur où vous pouvez déjà vous connecter en SSH. Gratuit, sans compte.",
+    "Trois façons de recevoir un fichier avec la CLI Relayium : receive pour un envoi par code d'appairage entre réseaux, serve comme boîte de réception à l'écoute des envois en daemon direct, ou pull depuis un serveur où vous pouvez déjà vous connecter en SSH. Gratuit, sans compte.",
   updatedLabel: "Dernière mise à jour",
   lead: [
     "Envoyer n'est que la moitié de l'histoire — tôt ou tard, c'est vous qui recevez : un collègue veut vous remettre un fichier par Internet, l'une de vos machines veut le transmettre à une autre, ou vous voulez aller chercher quelque chose sur un serveur que vous administrez. La CLI Relayium couvre ces trois cas avec une commande différente pour chacun, et aucune ne nécessite de compte.",
-    "Choisissez receive quand quelqu'un d'autre vous envoie via un code de jumelage, serve quand vous voulez une boîte de réception permanente vers laquelle des machines de confiance peuvent envoyer à tout moment, et pull quand c'est vous qui allez chercher sur un serveur où vous pouvez déjà vous connecter en SSH.",
+    "Choisissez receive quand quelqu'un d'autre vous envoie via un code d'appairage, serve quand vous voulez une boîte de réception permanente vers laquelle des machines de confiance peuvent envoyer à tout moment, et pull quand c'est vous qui allez chercher sur un serveur où vous pouvez déjà vous connecter en SSH.",
   ],
   sections: [
     {
@@ -580,7 +580,7 @@ const fr = {
         "La commande à exécuter dépend de qui déclenche le transfert et de la façon dont les deux machines se connaissent :",
       ],
       bullets: [
-        "relayium receive <code> [destdir] — quelqu'un vous envoie à travers les réseaux avec un code de jumelage que sa CLI a généré et vous a communiqué hors bande. Pair-à-pair direct, avec un code SAS à comparer.",
+        "relayium receive <code> [destdir] — quelqu'un vous envoie à travers les réseaux avec un code d'appairage que sa CLI a généré et vous a communiqué hors bande. Pair-à-pair direct, avec un code SAS à comparer.",
         "relayium serve [--dir D] [--port N] [--once] [--allow-delete] — cette machine écoute les envois en daemon direct via relayium://, sur le port 9031 par défaut.",
         "relayium pull [user@]host:src <dest> — vous allez chercher, via SSH, sur un serveur où vous pouvez déjà vous connecter, et vous récupérez des fichiers.",
       ],
@@ -600,7 +600,7 @@ relayium receive 483920 ./downloads`,
         "La connexion est directe, pair-à-pair et chiffrée de bout en bout ; une fois connectés, les deux terminaux affichent le même SAS (short authentication string). Comparez-le hors bande avec l'expéditeur pour confirmer que les empreintes des certificats TLS épinglés n'ont pas été substituées et que le service de rendez-vous n'a usurpé aucune extrémité. Le SAS authentifie les extrémités ; il ne prouve pas chaque saut réseau.",
         "Sans destination indiquée, les fichiers atterrissent dans le répertoire courant.",
         "Même règle de connexion directe uniquement que pour send : si aucun chemin direct n'est trouvé entre les deux réseaux, le transfert échoue plutôt que de transiter par un relais.",
-        "C'est le protocole de code de jumelage propre à la CLI — un code CLI ne se jumelle qu'avec une autre CLI. Il n'est pas interopérable aujourd'hui avec le code de jumelage ou le flux QR du navigateur sur relayium.com ; c'est un ajout possible à l'avenir, pas encore quelque chose sur quoi compter. Si vous n'avez qu'un navigateur, demandez plutôt à l'expéditeur un lien de téléchargement relayium up.",
+        "C'est le protocole de code d'appairage propre à la CLI — un code CLI ne s'appaire qu'avec une autre CLI. Il n'est pas interopérable aujourd'hui avec le code d'appairage ou le flux QR du navigateur sur relayium.com ; c'est un ajout possible à l'avenir, pas encore quelque chose sur quoi compter. Si vous n'avez qu'un navigateur, demandez plutôt à l'expéditeur un lien de téléchargement relayium up.",
         "Le destinataire n'a jamais besoin de compte, quel que soit le réseau. Seul l'expéditeur se connecte, pour que sa CLI puisse générer le code.",
       ],
     },
@@ -649,11 +649,11 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     items: [
       {
         q: "Ai-je besoin d'un compte pour recevoir des fichiers ?",
-        a: "Non. Les trois méthodes — receive, serve et pull — sont entièrement gratuites et ne nécessitent aucun compte Relayium de votre côté. La seule connexion où que ce soit est celle de l'expéditeur en mode receive, pour que sa CLI puisse générer le code de jumelage.",
+        a: "Non. Les trois méthodes — receive, serve et pull — sont entièrement gratuites et ne nécessitent aucun compte Relayium de votre côté. La seule connexion où que ce soit est celle de l'expéditeur en mode receive, pour que sa CLI puisse générer le code d'appairage.",
       },
       {
-        q: "relayium receive est-il interopérable avec le code de jumelage du navigateur ?",
-        a: "Non. Le protocole de code de jumelage de la CLI est distinct du flux de lien de participation et de QR code du navigateur sur relayium.com — ils utilisent des poignées de main différentes et ne communiquent pas entre eux aujourd'hui, donc un code CLI ne se jumelle qu'avec une autre CLI. C'est sur la feuille de route, mais ce n'est pas encore quelque chose sur quoi compter. En attendant, un destinataire sur navigateur veut un lien relayium up plutôt qu'un code.",
+        q: "relayium receive est-il interopérable avec le code d'appairage du navigateur ?",
+        a: "Non. Le protocole de code d'appairage de la CLI est distinct du flux de lien de participation et de QR code du navigateur sur relayium.com — ils utilisent des poignées de main différentes et ne communiquent pas entre eux aujourd'hui, donc un code CLI ne s'appaire qu'avec une autre CLI. C'est sur la feuille de route, mais ce n'est pas encore quelque chose sur quoi compter. En attendant, un destinataire sur navigateur veut un lien relayium up plutôt qu'un code.",
       },
       {
         q: "Que se passe-t-il si une machine inconnue envoie vers mon processus serve à l'écoute ?",

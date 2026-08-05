@@ -263,7 +263,7 @@ const de = article({
   ],
   cliHeading: "CLI: auf einem Rechner einen Code erzeugen, auf dem anderen beitreten",
   cliBody: [
-    "Starte auf einem Rechner relayium text ohne Code. Der Befehl erzeugt mit deinem Konto einen sechsstelligen Code, gibt genau den Befehl aus, den der andere Rechner ausführen soll, und wartet in der Sitzung auf ihn. Keine temporäre Datei, kein zusätzlicher Prozess, der beendet werden müsste.",
+    "Starte auf einem Rechner relayium text ohne Code. Der Befehl erzeugt mit deinem Konto einen sechsstelligen Pairing-Code, gibt genau den Befehl aus, den der andere Rechner ausführen soll, und wartet in der Sitzung auf ihn. Keine temporäre Datei, kein zusätzlicher Prozess, der beendet werden müsste.",
     "Starte auf dem anderen Rechner relayium text mit diesem Code. Interaktiv ist jede Zeile eine Nachricht, und es wird nicht für einen Codevergleich angehalten, solange du das nicht verlangst. Mehrzeilige oder bytegenaue Eingabe wird als eine Nachricht gepiped — dafür ist kein zusätzliches Flag nötig.",
   ],
   cliNotes: [
@@ -308,7 +308,7 @@ const fr = article({
   ],
   cliHeading: "CLI : créer un code sur une machine, le rejoindre sur l'autre",
   cliBody: [
-    "Lancez relayium text sans code sur une machine. La commande crée un code à six chiffres avec votre compte, affiche exactement la commande que l'autre machine doit exécuter, et reste dans la session à l'attendre. Aucun fichier temporaire, aucun processus supplémentaire à arrêter.",
+    "Lancez relayium text sans code sur une machine. La commande crée un code d'appairage à six chiffres avec votre compte, affiche exactement la commande que l'autre machine doit exécuter, et reste dans la session à l'attendre. Aucun fichier temporaire, aucun processus supplémentaire à arrêter.",
     "Lancez ensuite relayium text avec ce code sur l'autre machine. En mode interactif, chaque ligne est un message et rien ne s'arrête pour comparer un code tant que vous ne le demandez pas. Pour du texte multiligne ou exact, utilisez un pipe en un seul message : aucun indicateur supplémentaire n'est requis.",
   ],
   cliNotes: [
@@ -398,7 +398,7 @@ const es = article({
   ],
   cliHeading: "CLI: emite el código en un equipo y únete desde el otro",
   cliBody: [
-    "Ejecuta relayium text sin código en un equipo. Emite un código de seis dígitos con tu cuenta, imprime exactamente el comando que debe ejecutar el otro equipo y se queda en la sesión esperándolo. Sin archivo temporal y sin ningún proceso extra que detener.",
+    "Ejecuta relayium text sin código en un equipo. Emite un código de emparejamiento de seis dígitos con tu cuenta, imprime exactamente el comando que debe ejecutar el otro equipo y se queda en la sesión esperándolo. Sin archivo temporal y sin ningún proceso extra que detener.",
     "Después ejecuta relayium text con ese código en el otro equipo. El modo interactivo envía una línea por mensaje y no se detiene a comparar ningún código salvo que lo pidas. Para texto multilínea o exacto, usa una tubería como un solo mensaje: no hace falta ninguna opción adicional.",
   ],
   cliNotes: [
@@ -443,7 +443,7 @@ const pt = article({
   ],
   cliHeading: "CLI: emita o código em uma máquina e entre pela outra",
   cliBody: [
-    "Execute relayium text sem código em uma das máquinas. Ele emite um código de seis dígitos com a sua conta, imprime exatamente o comando que a outra máquina deve executar e permanece na sessão esperando por ela. Sem arquivo temporário e sem nenhum processo extra para parar.",
+    "Execute relayium text sem código em uma das máquinas. Ele emite um código de emparelhamento de seis dígitos com a sua conta, imprime exatamente o comando que a outra máquina deve executar e permanece na sessão esperando por ela. Sem arquivo temporário e sem nenhum processo extra para parar.",
     "Depois execute relayium text com esse código na outra máquina. O modo interativo envia uma linha por mensagem e não para para comparar nenhum código, a menos que você peça. Para texto multilinha ou exato, use um pipe como uma única mensagem: nenhuma opção extra é necessária.",
   ],
   cliNotes: [

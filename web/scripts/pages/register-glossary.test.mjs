@@ -152,6 +152,14 @@ const RULES = [
   { locale: "zh", name: "half-width punctuation closing a CJK clause", legal: "keep", re: /[一-鿿々〇][,;:?!](\s|$)/ },
   { locale: "zh", name: "half-width punctuation opening a CJK clause", legal: "keep", re: /[,;:?!][一-鿿々〇]/ },
 
+  // fr — one rendering of "pairing code", not two. GLOSSARY.md settles
+  // `code d'appairage`; `guides-receive-from-cli` had drifted to `code de
+  // jumelage` in 8 places (plus the matching verb `se jumeler`) while the other
+  // 127 sites across the corpus used the settled term. This is the "2–6
+  // competing renderings" problem GLOSSARY.md was written for, caught by the
+  // completeness guard in pairing-facts.test.mjs rather than by a reader.
+  { locale: "fr", name: "jumelage／jumeler (the settled term is appairage)", legal: "keep", re: /jumel/i },
+
   // fr — a no-break space before ; ! ? (see the colon note in the header for the
   // half that is not enforced). A plain space would let the mark wrap to the next
   // line on its own, which is the visible defect this prevents.

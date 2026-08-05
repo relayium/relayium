@@ -41,7 +41,7 @@ const en = {
       heading: "On different networks? Use a pairing code",
       body: [
         "You don't have to be on the same Wi-Fi. If the phones are on different networks — one on mobile data, the other on home Wi-Fi — Relayium can still connect them with a pairing code.",
-        "The sending device shows a short pairing code; enter it on the other phone (or open the share link it generates). A transfer set up this way runs over an encrypted TURN relay rather than a direct link between the two phones — and that is deliberate: across two different networks a direct route usually can't be found at all, and trying for one first would stall the connection for around 20 seconds before landing on the relay anyway, so Relayium goes straight there and connects in a second or two. The relay only ever forwards ciphertext; the files are sealed end-to-end before they leave your phone, so it can never read them. If the connection drops mid-transfer, it can resume instead of starting over. Sending this way needs the sender to sign in — the person receiving never needs an account.",
+        "The sending device shows a short pairing code; enter it on the other phone (or open the share link it generates). A transfer set up this way runs over an encrypted TURN relay rather than a direct link between the two phones — and that is deliberate: across two different networks a direct route usually can't be found at all, and trying for one first would stall the connection for around 20 seconds before landing on the relay anyway, so Relayium goes straight there and connects in a second or two. The relay only ever forwards ciphertext; the files are sealed end-to-end before they leave your phone, so it can never read them. If the connection drops mid-transfer, it can resume instead of starting over. Sending this way needs the sender to sign in — the person receiving never needs an account. The code is good for five minutes, so have both devices in front of you before you generate one.",
       ],
     },
     {
@@ -126,7 +126,7 @@ const zh = {
       heading: "不在同一网络？用配对码",
       body: [
         "你不必连同一个 Wi-Fi。如果两台手机在不同网络——一台用移动数据，另一台用家里的 Wi-Fi——Relayium 依然能用配对码把它们连起来。",
-        "发送方设备会显示一段简短的配对码，在另一台手机上输入即可（或打开它生成的分享链接）。这样建立的跨网络传输走的是加密 TURN 中继，而不是两台手机之间的直连——这是刻意的选择：跨越两个不同网络时往往根本找不到直连路径，先试直连只会让连接卡住二十秒左右，最后仍旧落到中继上，所以 Relayium 干脆直接走中继，一两秒就能连上。中继只转发密文；文件在离开你手机之前就已完成端到端加密，中继永远读不到内容。若中途连接断开，可以断点续传，而不必从头再来。这样发送需要发送方登录——接收方始终无需账号。",
+        "发送方设备会显示一段简短的配对码，在另一台手机上输入即可（或打开它生成的分享链接）。这样建立的跨网络传输走的是加密 TURN 中继，而不是两台手机之间的直连——这是刻意的选择：跨越两个不同网络时往往根本找不到直连路径，先试直连只会让连接卡住二十秒左右，最后仍旧落到中继上，所以 Relayium 干脆直接走中继，一两秒就能连上。中继只转发密文；文件在离开你手机之前就已完成端到端加密，中继永远读不到内容。若中途连接断开，可以断点续传，而不必从头再来。这样发送需要发送方登录——接收方始终无需账号。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。",
       ],
     },
     {
@@ -211,7 +211,7 @@ const ja = {
       heading: "異なるネットワークの場合は？ ペアリングコードを使う",
       body: [
         "同じ Wi-Fi である必要はありません。スマホが別々のネットワーク（一方はモバイルデータ、もう一方は自宅の Wi-Fi）にあっても、Relayium はペアリングコードで両者を接続できます。",
-        "送信側の端末が短いペアリングコードを表示するので、もう一方のスマホで入力します（または生成された共有リンクを開きます）。この方法で結ばれるネットワークをまたぐ転送は、端末同士の直接接続ではなく暗号化された TURN リレー経由で行われます。これは意図的な設計です。異なるネットワークの間では直接経路がそもそも見つからないことがほとんどで、先に直接接続を試すと 20 秒ほど接続が止まったあげく結局リレーに落ち着くため、Relayium は最初からリレーを使い、1〜2 秒で接続します。リレーが転送するのは暗号文だけで、ファイルはスマホを出る前にエンドツーエンドで封印されているため、リレーが中身を読むことはできません。途中で接続が切れても、最初からではなく再開できます。この方法で送るには送信側のサインインが必要です。受信側はアカウント不要です。",
+        "送信側の端末が短いペアリングコードを表示するので、もう一方のスマホで入力します（または生成された共有リンクを開きます）。この方法で結ばれるネットワークをまたぐ転送は、端末同士の直接接続ではなく暗号化された TURN リレー経由で行われます。これは意図的な設計です。異なるネットワークの間では直接経路がそもそも見つからないことがほとんどで、先に直接接続を試すと 20 秒ほど接続が止まったあげく結局リレーに落ち着くため、Relayium は最初からリレーを使い、1〜2 秒で接続します。リレーが転送するのは暗号文だけで、ファイルはスマホを出る前にエンドツーエンドで封印されているため、リレーが中身を読むことはできません。途中で接続が切れても、最初からではなく再開できます。この方法で送るには送信側のサインインが必要です。受信側はアカウント不要です。 コードの有効期限は5分なので、生成する前に両方の端末を手元に用意してください。",
       ],
     },
     {
@@ -296,7 +296,7 @@ const ko = {
       heading: "다른 네트워크라면? 페어링 코드를 쓰세요",
       body: [
         "같은 Wi-Fi일 필요는 없습니다. 휴대폰이 서로 다른 네트워크에 있어도 — 하나는 모바일 데이터, 다른 하나는 집 Wi-Fi — Relayium은 페어링 코드로 둘을 연결할 수 있습니다.",
-        "보내는 기기가 짧은 페어링 코드를 표시하니, 다른 폰에서 입력하세요(또는 생성된 공유 링크를 여세요). 이렇게 맺어지는 네트워크 간 전송은 두 폰 사이의 직접 연결이 아니라 암호화된 TURN 릴레이를 통해 이루어집니다. 이는 의도된 설계입니다. 서로 다른 네트워크 사이에서는 직접 경로가 아예 없는 경우가 대부분이라, 직접 연결을 먼저 시도하면 20초쯤 멈춰 있다가 결국 릴레이로 넘어가게 됩니다. 그래서 Relayium은 곧장 릴레이를 써서 1~2초 만에 연결합니다. 릴레이는 암호문만 전달하며, 파일은 폰을 떠나기 전에 이미 종단간으로 봉인되므로 릴레이가 내용을 읽을 수는 없습니다. 전송 중 연결이 끊겨도 처음부터가 아니라 이어서 재개할 수 있습니다. 이 방식으로 보내려면 보내는 쪽의 로그인이 필요합니다 — 받는 쪽은 계정이 필요 없습니다.",
+        "보내는 기기가 짧은 페어링 코드를 표시하니, 다른 폰에서 입력하세요(또는 생성된 공유 링크를 여세요). 이렇게 맺어지는 네트워크 간 전송은 두 폰 사이의 직접 연결이 아니라 암호화된 TURN 릴레이를 통해 이루어집니다. 이는 의도된 설계입니다. 서로 다른 네트워크 사이에서는 직접 경로가 아예 없는 경우가 대부분이라, 직접 연결을 먼저 시도하면 20초쯤 멈춰 있다가 결국 릴레이로 넘어가게 됩니다. 그래서 Relayium은 곧장 릴레이를 써서 1~2초 만에 연결합니다. 릴레이는 암호문만 전달하며, 파일은 폰을 떠나기 전에 이미 종단간으로 봉인되므로 릴레이가 내용을 읽을 수는 없습니다. 전송 중 연결이 끊겨도 처음부터가 아니라 이어서 재개할 수 있습니다. 이 방식으로 보내려면 보내는 쪽의 로그인이 필요합니다 — 받는 쪽은 계정이 필요 없습니다. 코드는 5분 동안만 유효하니, 만들기 전에 두 기기를 모두 곁에 두세요.",
       ],
     },
     {
@@ -381,7 +381,7 @@ const de = {
       heading: "In verschiedenen Netzwerken? Nutze einen Pairing-Code",
       body: [
         "Ihr müsst nicht im selben WLAN sein. Sind die Handys in verschiedenen Netzwerken — eines im Mobilfunk, das andere im Heim-WLAN — kann Relayium sie trotzdem per Pairing-Code verbinden.",
-        "Das sendende Gerät zeigt einen kurzen Pairing-Code; gib ihn auf dem anderen Handy ein (oder öffne den erzeugten Freigabelink). Eine so aufgebaute netzübergreifende Übertragung läuft über ein verschlüsseltes TURN-Relay statt über eine direkte Verbindung zwischen den beiden Handys — und das mit Absicht: Zwischen zwei verschiedenen Netzwerken lässt sich meist gar kein direkter Weg finden, ein Versuch würde den Verbindungsaufbau erst rund 20 Sekunden blockieren und am Ende doch beim Relay landen. Relayium nimmt deshalb gleich das Relay und steht in ein bis zwei Sekunden. Das Relay leitet ausschließlich Chiffretext weiter; die Dateien sind bereits Ende-zu-Ende versiegelt, bevor sie dein Handy verlassen, es kann sie also nie lesen. Bricht die Verbindung mittendrin ab, kann sie fortgesetzt statt neu gestartet werden. Für diesen Weg muss sich der Absender anmelden — der Empfänger braucht nie ein Konto.",
+        "Das sendende Gerät zeigt einen kurzen Pairing-Code; gib ihn auf dem anderen Handy ein (oder öffne den erzeugten Freigabelink). Eine so aufgebaute netzübergreifende Übertragung läuft über ein verschlüsseltes TURN-Relay statt über eine direkte Verbindung zwischen den beiden Handys — und das mit Absicht: Zwischen zwei verschiedenen Netzwerken lässt sich meist gar kein direkter Weg finden, ein Versuch würde den Verbindungsaufbau erst rund 20 Sekunden blockieren und am Ende doch beim Relay landen. Relayium nimmt deshalb gleich das Relay und steht in ein bis zwei Sekunden. Das Relay leitet ausschließlich Chiffretext weiter; die Dateien sind bereits Ende-zu-Ende versiegelt, bevor sie dein Handy verlassen, es kann sie also nie lesen. Bricht die Verbindung mittendrin ab, kann sie fortgesetzt statt neu gestartet werden. Für diesen Weg muss sich der Absender anmelden — der Empfänger braucht nie ein Konto. Der Code gilt fünf Minuten — halte beide Geräte bereit, bevor du einen erzeugst.",
       ],
     },
     {
@@ -466,7 +466,7 @@ const fr = {
       heading: "Sur des réseaux différents ? Utilisez un code d'appairage",
       body: [
         "Vous n'avez pas besoin d'être sur le même Wi-Fi. Si les téléphones sont sur des réseaux différents — l'un en données mobiles, l'autre sur le Wi-Fi de la maison — Relayium peut quand même les connecter avec un code d'appairage.",
-        "L'appareil qui envoie affiche un court code d'appairage ; saisissez-le sur l'autre téléphone (ou ouvrez le lien de partage qu'il génère). Un transfert établi ainsi entre deux réseaux passe par un relais TURN chiffré plutôt que par une liaison directe entre les deux téléphones — et c'est délibéré : entre deux réseaux différents, une voie directe est le plus souvent introuvable, et l'essayer d'abord bloquerait l'établissement de la connexion une vingtaine de secondes avant d'aboutir quand même au relais. Relayium y va donc d'emblée et se connecte en une ou deux secondes. Le relais ne transmet que du texte chiffré ; les fichiers sont scellés de bout en bout avant de quitter votre téléphone, il ne peut donc jamais les lire. Si la connexion se coupe en cours de route, il peut reprendre au lieu de tout recommencer. Envoyer ainsi exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte.",
+        "L'appareil qui envoie affiche un court code d'appairage ; saisissez-le sur l'autre téléphone (ou ouvrez le lien de partage qu'il génère). Un transfert établi ainsi entre deux réseaux passe par un relais TURN chiffré plutôt que par une liaison directe entre les deux téléphones — et c'est délibéré : entre deux réseaux différents, une voie directe est le plus souvent introuvable, et l'essayer d'abord bloquerait l'établissement de la connexion une vingtaine de secondes avant d'aboutir quand même au relais. Relayium y va donc d'emblée et se connecte en une ou deux secondes. Le relais ne transmet que du texte chiffré ; les fichiers sont scellés de bout en bout avant de quitter votre téléphone, il ne peut donc jamais les lire. Si la connexion se coupe en cours de route, il peut reprendre au lieu de tout recommencer. Envoyer ainsi exige que l'expéditeur se connecte — le destinataire n'a jamais besoin de compte. Le code est valable cinq minutes : ayez les deux appareils sous la main avant d'en générer un.",
       ],
     },
     {
@@ -551,7 +551,7 @@ const ar = {
       heading: "على شبكتين مختلفتين؟ استخدم رمز اقتران",
       body: [
         "لست مضطرًا إلى أن تكون على نفس شبكة Wi-Fi. إذا كان الهاتفان على شبكتين مختلفتين — أحدهما على بيانات الهاتف المحمول والآخر على شبكة Wi-Fi المنزلية — فلا يزال بإمكان Relayium ربطهما برمز اقتران.",
-        "يعرض الجهاز المُرسِل رمز اقتران قصيرًا؛ أدخله على الهاتف الآخر (أو افتح رابط المشاركة الذي يولّده). والنقل الذي يُبنى بهذه الطريقة عبر شبكتين مختلفتين يجري عبر مُرحِّل TURN مُشفَّر لا عبر اتصال مباشر بين الهاتفين — وهذا اختيار مقصود: فالمسار المباشر بين شبكتين مختلفتين يتعذّر إيجاده في الغالب، ومحاولته أولًا تُعطّل إنشاء الاتصال نحو عشرين ثانية ثم ينتهي الأمر بالمُرحِّل على أي حال، لذا يذهب Relayium إلى المُرحِّل مباشرةً فيتصل في ثانية أو ثانيتين. ولا يُمرِّر المُرحِّل سوى نص مُشفَّر؛ فالملفات مختومة من الطرف إلى الطرف قبل أن تغادر هاتفك، ولا يستطيع قراءتها أبدًا. وإن انقطع الاتصال أثناء النقل، أمكنه الاستئناف بدلًا من البدء من جديد. ويتطلب الإرسال بهذه الطريقة أن يسجّل المُرسِل الدخول — أما الشخص المُستقبِل فلا يحتاج إلى حساب مطلقًا.",
+        "يعرض الجهاز المُرسِل رمز اقتران قصيرًا؛ أدخله على الهاتف الآخر (أو افتح رابط المشاركة الذي يولّده). والنقل الذي يُبنى بهذه الطريقة عبر شبكتين مختلفتين يجري عبر مُرحِّل TURN مُشفَّر لا عبر اتصال مباشر بين الهاتفين — وهذا اختيار مقصود: فالمسار المباشر بين شبكتين مختلفتين يتعذّر إيجاده في الغالب، ومحاولته أولًا تُعطّل إنشاء الاتصال نحو عشرين ثانية ثم ينتهي الأمر بالمُرحِّل على أي حال، لذا يذهب Relayium إلى المُرحِّل مباشرةً فيتصل في ثانية أو ثانيتين. ولا يُمرِّر المُرحِّل سوى نص مُشفَّر؛ فالملفات مختومة من الطرف إلى الطرف قبل أن تغادر هاتفك، ولا يستطيع قراءتها أبدًا. وإن انقطع الاتصال أثناء النقل، أمكنه الاستئناف بدلًا من البدء من جديد. ويتطلب الإرسال بهذه الطريقة أن يسجّل المُرسِل الدخول — أما الشخص المُستقبِل فلا يحتاج إلى حساب مطلقًا. والرمز صالح خمس دقائق، فجهِّز الجهازين معًا قبل توليده.",
       ],
     },
     {
@@ -636,7 +636,7 @@ const es = {
       heading: "¿En redes distintas? Usa un código de emparejamiento",
       body: [
         "No hace falta estar en la misma Wi-Fi. Si los teléfonos están en redes distintas — uno con datos móviles, el otro con la Wi-Fi de casa — Relayium aún puede conectarlos con un código de emparejamiento.",
-        "El dispositivo que envía muestra un código de emparejamiento corto; introdúcelo en el otro teléfono (o abre el enlace para compartir que genera). Una transferencia montada así entre dos redes va por un retransmisor TURN cifrado, no por un enlace directo entre los dos teléfonos — y es a propósito: entre dos redes distintas casi nunca hay una ruta directa, e intentarla primero dejaría la conexión colgada unos veinte segundos antes de acabar igualmente en el retransmisor, así que Relayium va directo a él y conecta en uno o dos segundos. El retransmisor solo reenvía texto cifrado; los archivos salen sellados de extremo a extremo antes de dejar tu teléfono, así que nunca puede leerlos. Si la conexión se cae a mitad de la transferencia, puede reanudarse en lugar de empezar de nuevo. Enviar así necesita que el remitente inicie sesión — la persona que recibe nunca necesita una cuenta.",
+        "El dispositivo que envía muestra un código de emparejamiento corto; introdúcelo en el otro teléfono (o abre el enlace para compartir que genera). Una transferencia montada así entre dos redes va por un retransmisor TURN cifrado, no por un enlace directo entre los dos teléfonos — y es a propósito: entre dos redes distintas casi nunca hay una ruta directa, e intentarla primero dejaría la conexión colgada unos veinte segundos antes de acabar igualmente en el retransmisor, así que Relayium va directo a él y conecta en uno o dos segundos. El retransmisor solo reenvía texto cifrado; los archivos salen sellados de extremo a extremo antes de dejar tu teléfono, así que nunca puede leerlos. Si la conexión se cae a mitad de la transferencia, puede reanudarse en lugar de empezar de nuevo. Enviar así necesita que el remitente inicie sesión — la persona que recibe nunca necesita una cuenta. El código vale cinco minutos, así que ten los dos dispositivos a mano antes de generarlo.",
       ],
     },
     {
@@ -721,7 +721,7 @@ const pt = {
       heading: "Em redes diferentes? Use um código de emparelhamento",
       body: [
         "Você não precisa estar na mesma rede Wi-Fi. Se os celulares estão em redes diferentes — um em dados móveis, o outro na rede Wi-Fi de casa — o Relayium ainda consegue conectá-los com um código de emparelhamento.",
-        "O dispositivo que envia mostra um código de emparelhamento curto; digite-o no outro celular (ou abra o link de compartilhamento que ele gera). Uma transferência montada assim entre duas redes passa por um retransmissor TURN criptografado, e não por uma ligação direta entre os dois celulares — de propósito: entre duas redes diferentes quase nunca existe um caminho direto, e tentá-lo primeiro travaria a conexão por uns vinte segundos antes de acabar no retransmissor mesmo assim, então o Relayium vai direto a ele e conecta em um ou dois segundos. O retransmissor só encaminha texto cifrado; os arquivos saem selados de ponta a ponta antes de deixar o seu celular, então ele nunca consegue lê-los. Se a conexão cair no meio da transferência, ela pode ser retomada em vez de recomeçar. Enviar assim exige que o remetente entre — a pessoa que recebe nunca precisa de conta.",
+        "O dispositivo que envia mostra um código de emparelhamento curto; digite-o no outro celular (ou abra o link de compartilhamento que ele gera). Uma transferência montada assim entre duas redes passa por um retransmissor TURN criptografado, e não por uma ligação direta entre os dois celulares — de propósito: entre duas redes diferentes quase nunca existe um caminho direto, e tentá-lo primeiro travaria a conexão por uns vinte segundos antes de acabar no retransmissor mesmo assim, então o Relayium vai direto a ele e conecta em um ou dois segundos. O retransmissor só encaminha texto cifrado; os arquivos saem selados de ponta a ponta antes de deixar o seu celular, então ele nunca consegue lê-los. Se a conexão cair no meio da transferência, ela pode ser retomada em vez de recomeçar. Enviar assim exige que o remetente entre — a pessoa que recebe nunca precisa de conta. O código vale cinco minutos, então deixe os dois aparelhos à mão antes de gerar um.",
       ],
     },
     {

@@ -26,7 +26,7 @@ const en = {
       heading: "Same network vs. across the internet",
       body: [
         "If both computers are on the same Wi-Fi or LAN, Relayium finds them automatically — open relayium.com on both, and no account is needed on either side.",
-        "If the two computers are on different networks — your desktop at home and a colleague's laptop across the country, for instance — automatic discovery cannot reach across the internet, so Relayium uses a short pairing code instead. The person sending signs in to mint that code; the person receiving never needs an account, whether they type the code in or just open the link it generates.",
+        "If the two computers are on different networks — your desktop at home and a colleague's laptop across the country, for instance — automatic discovery cannot reach across the internet, so Relayium uses a short pairing code instead. The person sending signs in to mint that code; the person receiving never needs an account, whether they type the code in or just open the link it generates. The code is good for five minutes, so have both devices in front of you before you generate one.",
       ],
     },
     {
@@ -106,7 +106,7 @@ const zh = {
       heading: "同一网络，还是跨越互联网",
       body: [
         "如果两台电脑在同一 Wi-Fi 或局域网里，Relayium 会自动找到彼此——两边都打开 relayium.com 即可，双方都无需账号。",
-        "如果两台电脑处于不同网络——比如你家里的台式机和同事在外地的笔记本——自动发现就没法跨越互联网了，这时 Relayium 改用一个短配对码。发送方需要登录才能生成这个码；接收方始终无需账号，无论是手动输入码还是直接打开它生成的链接。",
+        "如果两台电脑处于不同网络——比如你家里的台式机和同事在外地的笔记本——自动发现就没法跨越互联网了，这时 Relayium 改用一个短配对码。发送方需要登录才能生成这个码；接收方始终无需账号，无论是手动输入码还是直接打开它生成的链接。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。",
       ],
     },
     {
@@ -186,7 +186,7 @@ const ja = {
       heading: "同じネットワークか、インターネットをまたぐか",
       body: [
         "2台とも同じ Wi-Fi や LAN にあれば、Relayium は自動的に互いを見つけます。両方で relayium.com を開くだけで、どちらの側もアカウントは不要です。",
-        "2台が別々のネットワークにある場合（たとえば自宅のデスクトップと遠方にいる同僚のノートPCなど）、自動発見はインターネットをまたげないため、Relayium は代わりに短いペアリングコードを使います。送信する側がサインインしてそのコードを発行し、受信する側はコードを入力するにせよ、生成されたリンクを開くにせよ、アカウントは一切不要です。",
+        "2台が別々のネットワークにある場合（たとえば自宅のデスクトップと遠方にいる同僚のノートPCなど）、自動発見はインターネットをまたげないため、Relayium は代わりに短いペアリングコードを使います。送信する側がサインインしてそのコードを発行し、受信する側はコードを入力するにせよ、生成されたリンクを開くにせよ、アカウントは一切不要です。 コードの有効期限は5分なので、生成する前に両方の端末を手元に用意してください。",
       ],
     },
     {
@@ -266,7 +266,7 @@ const ko = {
       heading: "같은 네트워크 vs. 인터넷을 넘나드는 경우",
       body: [
         "두 컴퓨터가 같은 Wi-Fi나 LAN에 있다면 Relayium이 자동으로 서로를 찾습니다 — 양쪽에서 relayium.com을 열기만 하면 되고, 어느 쪽도 계정이 필요 없습니다.",
-        "두 컴퓨터가 서로 다른 네트워크에 있다면 — 예를 들어 집의 데스크톱과 먼 곳에 있는 동료의 노트북 — 자동 탐색은 인터넷을 넘어설 수 없으므로 Relayium은 대신 짧은 페어링 코드를 씁니다. 보내는 쪽이 로그인해서 그 코드를 발급받고, 받는 쪽은 코드를 입력하든 생성된 링크를 열든 계정이 전혀 필요 없습니다.",
+        "두 컴퓨터가 서로 다른 네트워크에 있다면 — 예를 들어 집의 데스크톱과 먼 곳에 있는 동료의 노트북 — 자동 탐색은 인터넷을 넘어설 수 없으므로 Relayium은 대신 짧은 페어링 코드를 씁니다. 보내는 쪽이 로그인해서 그 코드를 발급받고, 받는 쪽은 코드를 입력하든 생성된 링크를 열든 계정이 전혀 필요 없습니다. 코드는 5분 동안만 유효하니, 만들기 전에 두 기기를 모두 곁에 두세요.",
       ],
     },
     {
@@ -346,7 +346,7 @@ const de = {
       heading: "Selbes Netzwerk vs. über das Internet",
       body: [
         "Sind beide Computer im selben WLAN oder LAN, findet Relayium sie automatisch — öffne auf beiden relayium.com, und auf keiner Seite ist ein Konto nötig.",
-        "Sind die beiden Computer in unterschiedlichen Netzwerken — dein Desktop zu Hause und der Laptop einer Kollegin am anderen Ende des Landes, zum Beispiel — kann die automatische Erkennung das Internet nicht überbrücken, also nutzt Relayium stattdessen einen kurzen Pairing-Code. Der Absender meldet sich an, um diesen Code zu erzeugen; der Empfänger braucht nie ein Konto, egal ob er den Code eingibt oder einfach den erzeugten Link öffnet.",
+        "Sind die beiden Computer in unterschiedlichen Netzwerken — dein Desktop zu Hause und der Laptop einer Kollegin am anderen Ende des Landes, zum Beispiel — kann die automatische Erkennung das Internet nicht überbrücken, also nutzt Relayium stattdessen einen kurzen Pairing-Code. Der Absender meldet sich an, um diesen Code zu erzeugen; der Empfänger braucht nie ein Konto, egal ob er den Code eingibt oder einfach den erzeugten Link öffnet. Der Code gilt fünf Minuten — halte beide Geräte bereit, bevor du einen erzeugst.",
       ],
     },
     {
@@ -426,7 +426,7 @@ const fr = {
       heading: "Même réseau vs. à travers Internet",
       body: [
         "Si les deux ordinateurs sont sur le même Wi-Fi ou réseau local, Relayium les trouve automatiquement — ouvrez relayium.com sur les deux, aucun compte n'est nécessaire d'un côté comme de l'autre.",
-        "Si les deux ordinateurs sont sur des réseaux différents — votre ordinateur de bureau chez vous et le portable d'une collègue à l'autre bout du pays, par exemple — la découverte automatique ne peut pas traverser Internet, donc Relayium utilise à la place un court code d'appairage. La personne qui envoie se connecte pour générer ce code ; la personne qui reçoit n'a jamais besoin de compte, qu'elle saisisse le code ou ouvre simplement le lien généré.",
+        "Si les deux ordinateurs sont sur des réseaux différents — votre ordinateur de bureau chez vous et le portable d'une collègue à l'autre bout du pays, par exemple — la découverte automatique ne peut pas traverser Internet, donc Relayium utilise à la place un court code d'appairage. La personne qui envoie se connecte pour générer ce code ; la personne qui reçoit n'a jamais besoin de compte, qu'elle saisisse le code ou ouvre simplement le lien généré. Le code est valable cinq minutes : ayez les deux appareils sous la main avant d'en générer un.",
       ],
     },
     {
@@ -506,7 +506,7 @@ const ar = {
       heading: "نفس الشبكة مقابل عبر الإنترنت",
       body: [
         "إذا كان الجهازان على نفس شبكة Wi-Fi أو الشبكة المحلية، يجدهما Relayium تلقائيًا — افتح relayium.com على كليهما، ولا حاجة إلى حساب على أي من الطرفين.",
-        "إذا كان الجهازان على شبكتين مختلفتين — جهاز مكتبك في المنزل وحاسوب زميل محمول في مدينة أخرى، مثلًا — فلا يستطيع الاكتشاف التلقائي العبور عبر الإنترنت، لذا يستخدم Relayium بدلًا من ذلك رمز اقتران قصيرًا. الشخص الذي يُرسل يسجّل الدخول لإنشاء ذلك الرمز؛ أما الشخص الذي يستقبل فلا يحتاج أبدًا إلى حساب، سواء أدخل الرمز أو فتح الرابط الذي يولّده فحسب.",
+        "إذا كان الجهازان على شبكتين مختلفتين — جهاز مكتبك في المنزل وحاسوب زميل محمول في مدينة أخرى، مثلًا — فلا يستطيع الاكتشاف التلقائي العبور عبر الإنترنت، لذا يستخدم Relayium بدلًا من ذلك رمز اقتران قصيرًا. الشخص الذي يُرسل يسجّل الدخول لإنشاء ذلك الرمز؛ أما الشخص الذي يستقبل فلا يحتاج أبدًا إلى حساب، سواء أدخل الرمز أو فتح الرابط الذي يولّده فحسب. والرمز صالح خمس دقائق، فجهِّز الجهازين معًا قبل توليده.",
       ],
     },
     {
@@ -586,7 +586,7 @@ const es = {
       heading: "Misma red vs. a través de Internet",
       body: [
         "Si ambos ordenadores están en la misma Wi-Fi o red local, Relayium los encuentra automáticamente — abre relayium.com en los dos, y no hace falta cuenta en ninguno de los lados.",
-        "Si los dos ordenadores están en redes distintas — tu ordenador de sobremesa en casa y el portátil de un colega al otro lado del país, por ejemplo — el descubrimiento automático no puede cruzar Internet, así que Relayium usa en su lugar un código de emparejamiento corto. La persona que envía inicia sesión para generar ese código; la persona que recibe nunca necesita una cuenta, ya sea que escriba el código o simplemente abra el enlace que este genera.",
+        "Si los dos ordenadores están en redes distintas — tu ordenador de sobremesa en casa y el portátil de un colega al otro lado del país, por ejemplo — el descubrimiento automático no puede cruzar Internet, así que Relayium usa en su lugar un código de emparejamiento corto. La persona que envía inicia sesión para generar ese código; la persona que recibe nunca necesita una cuenta, ya sea que escriba el código o simplemente abra el enlace que este genera. El código vale cinco minutos, así que ten los dos dispositivos a mano antes de generarlo.",
       ],
     },
     {
@@ -666,7 +666,7 @@ const pt = {
       heading: "Mesma rede vs. pela Internet",
       body: [
         "Se os dois computadores estiverem no mesmo Wi-Fi ou rede local, o Relayium os encontra automaticamente — abra relayium.com nos dois, e não é preciso conta em nenhum dos lados.",
-        "Se os dois computadores estiverem em redes diferentes — o seu desktop em casa e o notebook de um colega do outro lado do país, por exemplo — a descoberta automática não consegue atravessar a Internet, então o Relayium usa em vez disso um código de emparelhamento curto. Quem envia faz login para gerar esse código; quem recebe nunca precisa de conta, seja digitando o código ou apenas abrindo o link que ele gera.",
+        "Se os dois computadores estiverem em redes diferentes — o seu desktop em casa e o notebook de um colega do outro lado do país, por exemplo — a descoberta automática não consegue atravessar a Internet, então o Relayium usa em vez disso um código de emparelhamento curto. Quem envia faz login para gerar esse código; quem recebe nunca precisa de conta, seja digitando o código ou apenas abrindo o link que ele gera. O código vale cinco minutos, então deixe os dois aparelhos à mão antes de gerar um.",
       ],
     },
     {
