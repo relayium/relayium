@@ -18,6 +18,17 @@ public let LINK_TEXT_CONSENT_TIMEOUT_MS = 600_000
 /// END acknowledgement is an ordering barrier, not an unbounded lease.
 public let LINK_TEXT_END_ACK_TIMEOUT_MS = 30_000
 
+/// The same two bounds as the seconds a scheduler actually takes.
+///
+/// Derived rather than written out, because the millisecond constants are the
+/// ones pinned to `web/src/lib/text-session.svelte.ts` and two independent
+/// literals are two places for the two ends of a link to drift apart. A driver
+/// that scheduled `600_000` seconds would arm a consent prompt for a week and
+/// nothing would ever fail — which is exactly the class of mistake a unit
+/// conversion produces and a test has to state.
+public let LINK_TEXT_CONSENT_TIMEOUT: TimeInterval = Double(LINK_TEXT_CONSENT_TIMEOUT_MS) / 1000
+public let LINK_TEXT_END_ACK_TIMEOUT: TimeInterval = Double(LINK_TEXT_END_ACK_TIMEOUT_MS) / 1000
+
 public enum LinkTextStatus: Equatable, Sendable {
     case idle
     /// This side asked; the peer has not answered.
@@ -233,6 +244,24 @@ public final class LinkTextLane {
     public var isActive: Bool {
         awaitingEndAck || status == .waitingAccept || status == .incomingRequest || status == .open
     }
+
+    /// Does this lane still claim the link's recovery window?
+    ///
+    /// The STICKY answer `transportGap` recorded, readable separately from the
+    /// gap call itself — and that separation is the whole point. `transportGap`
+    /// is idempotent because a channel `onclose` and the peer connection's own
+    /// terminal callback are ONE gap, so its second return is `false` meaning
+    /// "this call suspended nothing", not "this lane has nothing to recover".
+    /// An owner that read the recovery answer off a repeated gap call would
+    /// therefore drop a live conversation's claim on the link the moment two
+    /// callbacks reported the same failure — which is the web's suspend/ask
+    /// split, and it is a split precisely because the two questions have
+    /// different answers.
+    ///
+    /// Read-only: nothing here moves the lane. `failClosed` withdraws the claim
+    /// and `didAttachReplacementTransport` answers it, and both are the only
+    /// ways it goes back to false.
+    public var needsRecovery: Bool { recoveryIntent }
 
     // MARK: - local intent
 

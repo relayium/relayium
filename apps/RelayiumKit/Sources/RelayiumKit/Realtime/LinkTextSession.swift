@@ -188,6 +188,10 @@ public final class LinkTextSession {
     public var codecsPoisoned: Bool { lane.codecsPoisoned }
     public var maySendProtected: Bool { lane.maySendProtected }
     public var isActive: Bool { lane.isActive }
+    /// The sticky claim on the link's recovery window this lane recorded at its
+    /// gap. Read AFTER `transportGap` has suspended the lane; see
+    /// `LinkTextLane.needsRecovery` for why the two are separate questions.
+    public var needsRecovery: Bool { lane.needsRecovery }
 
     // MARK: - local intent
 
