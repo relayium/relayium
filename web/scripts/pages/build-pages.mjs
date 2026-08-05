@@ -80,6 +80,32 @@ export function buildGuidesIndexPages(guidesIndex, groupsByLang) {
   }));
 }
 
+/**
+ * The /how-to/ and /compare/ roots, one page per language.
+ *
+ * `hub.langs[lang]` supplies only title/description/intro; the heading is the
+ * category label the Guides hub already ships, so the two indexes can never
+ * disagree about what a category is called. Each page lists exactly its own
+ * category and links back up to the full index.
+ */
+export function buildCategoryIndexPages(hub, guidesIndex, groupsByLang) {
+  validateLangs(`category-index:${hub.slug}`, hub.langs);
+  return LANGS.map((lang) => {
+    const guides = guidesIndex.langs[lang];
+    return {
+      path: pagePath(hub.slug, lang),
+      html: renderGuidesIndexPage({
+        lang,
+        slug: hub.slug,
+        only: hub.group,
+        doc: { ...hub.langs[lang], heading: guides.categories[hub.group], categories: guides.categories },
+        groups: groupsByLang[lang],
+        backLabel: guides.heading,
+      }),
+    };
+  });
+}
+
 export function buildModePages(modeDef, { slug, learn = null }) {
   validateLangs(`mode:${slug}`, modeDef.langs, LANDING_LANGS);
   return LANDING_LANGS.map((lang) => ({
@@ -94,7 +120,7 @@ export function buildModePages(modeDef, { slug, learn = null }) {
   }));
 }
 
-export function buildSitemap(docs, { home = true, landing = null, articles = [], guidesIndex = null, modes = [], spaPages = [] } = {}) {
+export function buildSitemap(docs, { home = true, landing = null, articles = [], guidesIndex = null, categoryHubs = [], modes = [], spaPages = [] } = {}) {
   // urlPath() only keeps a mode's English URL slash-less if the slug is listed in
   // SPA_ONLY_EN_SLUGS. A mode added here but not there would emit /new-mode/ —
   // a URL with no directory behind it. Fail the build instead.
@@ -118,6 +144,13 @@ export function buildSitemap(docs, { home = true, landing = null, articles = [],
       // page we most want crawled often. (Google treats priority as a weak hint
       // at best; this is for internal consistency more than for Google.)
       urls.push({ loc: absUrl(urlPath("guides", lang)), lastmod: guidesIndex.updated, priority: "0.8", changefreq: "weekly" });
+    }
+  }
+  // The category roots rank with the hub they split, not with the articles they
+  // list — same reasoning as the 0.8 above.
+  for (const hub of categoryHubs) {
+    for (const lang of LANGS) {
+      urls.push({ loc: absUrl(urlPath(hub.slug, lang)), lastmod: hub.updated, priority: "0.8", changefreq: "weekly" });
     }
   }
   if (landing) {

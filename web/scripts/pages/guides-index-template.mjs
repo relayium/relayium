@@ -25,42 +25,65 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:0}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .guidelist{list-style:none;padding:0}.guidelist li{margin:8px 0}.guidelist a{color:var(--accent-fg);text-decoration:none;font-size:18px}
+h2 a{color:inherit;text-decoration:none}h2 a:hover{text-decoration:underline}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 `;
 
-function langBar(lang) {
+function langBar(lang, slug) {
   const links = LANGS.map((l) => {
     const cur = l === lang ? " aria-current=\"true\"" : "";
-    return `<a href="${urlPath("guides", l)}"${cur}>${esc(LANG_LABELS[l])}</a>`;
+    return `<a href="${urlPath(slug, l)}"${cur}>${esc(LANG_LABELS[l])}</a>`;
   });
   return `<nav class="langbar" aria-label="Language">${links.join("")}</nav>`;
 }
 
-function alternates() {
+function alternates(slug) {
   const links = LANGS.map(
-    (l) => `<link rel="alternate" hreflang="${BCP47[l]}" href="${absUrl(urlPath("guides", l))}" />`
+    (l) => `<link rel="alternate" hreflang="${BCP47[l]}" href="${absUrl(urlPath(slug, l))}" />`
   );
-  links.push(`<link rel="alternate" hreflang="x-default" href="${absUrl(urlPath("guides", DEFAULT_LANG))}" />`);
+  links.push(`<link rel="alternate" hreflang="x-default" href="${absUrl(urlPath(slug, DEFAULT_LANG))}" />`);
   return links.join("\n    ");
 }
 
-function groupSection(label, items, lang) {
+// `label` is null on a single-category hub, where the <h1> already names the
+// category and a second identical heading would just be noise for a screen
+// reader walking the outline.
+function groupSection(label, items, lang, href) {
   if (!items.length) return "";
   const lis = items
     .map((a) => `<li><a href="${urlPath(a.slug, lang)}">${esc(a.title)}</a></li>`)
     .join("");
-  return `<h2>${esc(label)}</h2>\n      <ul class="guidelist">${lis}</ul>`;
+  const list = `<ul class="guidelist">${lis}</ul>`;
+  if (!label) return list;
+  // The heading links to its own category root. That link is also the only thing
+  // standing between those roots and Search Console's "Discovered - currently not
+  // indexed" — the bucket /pricing sat in for weeks while it was in the sitemap
+  // and linked from nowhere.
+  const heading = href ? `<a href="${href}">${esc(label)}</a>` : esc(label);
+  return `<h2>${heading}</h2>\n      ${list}`;
 }
 
-export function renderGuidesIndexPage({ lang, doc, groups }) {
-  const canonical = absUrl(urlPath("guides", lang));
+/**
+ * One hub page: the whole Guides index, or a single category root.
+ *
+ * `only` names one group key, and turns this into the /how-to/ or /compare/
+ * root. Those roots exist because 37 published articles sit under URL segments
+ * that answered a hard 404 in all nine languages — a reader who truncates
+ * /how-to/send-a-folder/ landed on an error page, and so did a crawler.
+ * `backLabel` is the localized "all guides" link that keeps a category hub
+ * connected to the full index instead of being a leaf with no way up.
+ */
+export function renderGuidesIndexPage({ lang, doc, groups, slug = "guides", only = null, backLabel = null }) {
+  const canonical = absUrl(urlPath(slug, lang));
   const ogImage = SITE.origin + "/og-image.jpg";
-  const ordered = [
-    [doc.categories.guides, groups.guides],
-    [doc.categories.howTo, groups.howTo],
-    [doc.categories.compare, groups.compare],
-  ];
+  const ordered = only
+    ? [[null, groups[only], null]]
+    : [
+        [doc.categories.guides, groups.guides, null],
+        [doc.categories.howTo, groups.howTo, urlPath("how-to", lang)],
+        [doc.categories.compare, groups.compare, urlPath("compare", lang)],
+      ];
   const flat = ordered.flatMap(([, items]) => items);
   const ld = {
     "@context": "https://schema.org",
@@ -83,7 +106,7 @@ export function renderGuidesIndexPage({ lang, doc, groups }) {
       },
     ],
   };
-  const sections = ordered.map(([label, items]) => groupSection(label, items, lang)).filter(Boolean).join("\n      ");
+  const sections = ordered.map(([label, items, href]) => groupSection(label, items, lang, href)).filter(Boolean).join("\n      ");
 
   // Bidi-isolated for RTL locales: the head is read by browser chrome and search
   // engines, which resolve direction from the first strong character rather than
@@ -100,7 +123,7 @@ export function renderGuidesIndexPage({ lang, doc, groups }) {
     <meta name="description" content="${headDesc}" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${canonical}" />
-    ${alternates()}
+    ${alternates(slug)}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -127,11 +150,11 @@ export function renderGuidesIndexPage({ lang, doc, groups }) {
       <main>
       <h1>${esc(doc.heading)}</h1>
       <p class="lead">${esc(doc.intro)}</p>
-      ${langBar(lang)}
+      ${langBar(lang, slug)}
       ${sections}
       </main>
       <footer>
-        <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
+        <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>${backLabel ? `\n        <a href="${urlPath("guides", lang)}">${esc(backLabel)}</a>` : ""}
         <a href="${urlPath("apps", lang)}">${esc(APPS_LABELS[lang])}</a>
         <a href="${urlPath("privacy", lang)}">${esc(PRIVACY_LABELS[lang])}</a>
         <a href="${PRICING_URL}">${esc(PRICING_LABELS[lang])}</a>

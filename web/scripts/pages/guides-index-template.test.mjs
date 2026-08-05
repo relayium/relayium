@@ -19,9 +19,14 @@ describe("renderGuidesIndexPage", () => {
 
   it("renders the H1 heading and the three category headings", () => {
     expect(en).toContain("<h1>Guides</h1>");
+    // The Guides group is the hub's own content and stays plain text; the two
+    // category groups link to their roots, which is the only inbound link those
+    // roots have and the difference between indexed and "Discovered - currently
+    // not indexed".
     expect(en).toContain(">Guides</h2>");
-    expect(en).toContain(">How-to</h2>");
-    expect(en).toContain(">Comparisons</h2>");
+    expect(en).toContain('<h2><a href="/how-to/">How-to</a></h2>');
+    expect(en).toContain('<h2><a href="/compare/">Comparisons</a></h2>');
+    expect(zh).toContain('<h2><a href="/zh/how-to/">操作指南</a></h2>');
   });
 
   it("links every article with the language-correct URL", () => {
@@ -50,7 +55,8 @@ describe("renderGuidesIndexPage", () => {
       groups: { guides: [], howTo: [{ slug: "how-to/x", title: "Howto X" }], compare: [] },
     });
     expect(html).not.toContain(">Guides</h2>");
+    expect(html).not.toContain('href="/compare/"');
     expect(html).not.toContain(">Comparisons</h2>");
-    expect(html).toContain(">How-to</h2>");
+    expect(html).toContain('<h2><a href="/how-to/">How-to</a></h2>');
   });
 });

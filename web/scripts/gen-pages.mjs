@@ -12,6 +12,7 @@ import crossNetwork from "./pages/content/cross-network.mjs";
 import offlineTransfer from "./pages/content/offline-transfer.mjs";
 import apps from "./pages/content/apps.mjs";
 import guidesIndex from "./pages/content/guides-index.mjs";
+import { CATEGORY_HUBS } from "./pages/content/category-index.mjs";
 import compareSnapdrop from "./pages/content/articles/compare-snapdrop.mjs";
 import compareAirdrop from "./pages/content/articles/compare-airdrop.mjs";
 import compareWetransfer from "./pages/content/articles/compare-wetransfer.mjs";
@@ -54,6 +55,7 @@ import {
   buildLandingPages,
   buildArticlePages,
   buildGuidesIndexPages,
+  buildCategoryIndexPages,
   buildModePages,
   buildSitemap,
   articleLinksByLang,
@@ -125,6 +127,9 @@ export function buildAllPages() {
     ...buildLandingPages(landing, articleLinksByLang(articles)),
     ...buildArticlePages(articles),
     ...buildGuidesIndexPages(guidesIndex, articleGroupsByLang(articles)),
+    ...CATEGORY_HUBS.flatMap((hub) =>
+      buildCategoryIndexPages(hub, guidesIndex, articleGroupsByLang(articles)),
+    ),
     ...buildModePages(crossNetwork, { slug: "cross-network" }),
     ...buildModePages(offlineTransfer, {
       slug: "offline-transfer",
@@ -142,6 +147,7 @@ export function buildSiteSitemap() {
     landing,
     articles,
     guidesIndex,
+    categoryHubs: CATEGORY_HUBS,
     modes: MODES,
     spaPages: SPA_PAGES,
   });
