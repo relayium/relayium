@@ -1,5 +1,8 @@
 import Combine
 import Foundation
+// For the TEXT lane's own vocabulary — `LinkTextStatus` and
+// `LinkTextDriverError` — which this projection mirrors rather than restates.
+import RelayiumKit
 
 /// Where one `link/1` attempt is in its CONNECTION lifecycle, as a screen would
 /// state it.
@@ -29,30 +32,77 @@ enum LinkSessionConnectionPhase: Equatable {
     case ended(LinkSessionRuntimeEnd)
 }
 
-/// The `@MainActor` projection of ONE attempt's connection lifecycle.
+/// One line of an authenticated `link/1` conversation, as a transcript would
+/// list it.
+///
+/// Three fields, and nothing that could be rendered from them. There is no
+/// timestamp, because nothing in `link/1` carries one and a receive-time clock
+/// read here would be a fact this model invented; there is no status, because a
+/// message this object holds has already been authenticated and delivered.
+///
+/// `id` is assigned by the model that holds the list and means only "this entry,
+/// in this model": it is not a sequence number, not a wire identifier, and it
+/// does not survive the model. Its whole job is to give SwiftUI a stable
+/// identity for a list whose entries are otherwise free to repeat — two
+/// identical bodies really are two messages, and a view that de-duplicated them
+/// by content would hide the second one.
+struct LinkTextMessage: Equatable, Identifiable {
+
+    /// Who said it.
+    ///
+    /// **`outgoing` is unused by this slice and is here deliberately.** Nothing
+    /// in `LinkTextDriverEvent` reports this side's own messages — the driver's
+    /// `received` is inbound plaintext and its send path answers the caller
+    /// rather than the event stream — so the only honest entry this projection
+    /// can create today is an `incoming` one. The case exists because the send
+    /// command that will append the other kind is the next slice, and adding it
+    /// then would change this type's identity under a view that already binds
+    /// to it. Nothing here fabricates one in the meantime.
+    enum Direction: Equatable {
+        case incoming
+        case outgoing
+    }
+
+    /// Model-local, monotonic, and never reused. See the note above.
+    let id: Int
+    let direction: Direction
+    /// Exactly what crossed the lane: no trimming, no normalisation.
+    let body: String
+}
+
+/// The `@MainActor` projection of ONE attempt's connection lifecycle and of its
+/// TEXT lane.
 ///
 /// ## What it is, and what it deliberately is not
 ///
-/// It is the first presentation slice above `LinkSessionEventBridge`, and it is
-/// exactly one thing: `LinkSessionRuntimeEvent` in, `phase` out. It owns no
-/// runtime, builds nothing, sends nothing, and cannot end an attempt. A caller
-/// hands it a bridge that is already the attempt's, and this object's whole
-/// visible surface is what a connection view would bind to.
+/// It is the presentation layer above `LinkSessionEventBridge`, and it is
+/// exactly one thing: `LinkSessionRuntimeEvent` in, published state out. It owns
+/// no runtime, builds nothing, **sends nothing**, and cannot end an attempt or a
+/// conversation. A caller hands it a bridge that is already the attempt's, and
+/// this object's whole visible surface is what a view would bind to.
 ///
-/// **`text`, `file` and `received` are ignored here, on purpose.** They are the
-/// two lanes and the committed-batch report, and each needs its own projection —
-/// a transcript with its own ordering and limits, a transfer list with per-batch
-/// progress, a received-files surface. Folding any of them into a connection
-/// phase now would mean inventing semantics that the later slices would then
-/// have to either duplicate or contradict, so this slice states the connection
-/// and leaves the lanes to the models that will actually render them.
+/// That it cannot send is the shape of this slice, not an oversight. There is no
+/// `send`, no `accept`, no `decline` and no reference to a runtime to call one
+/// on: commands arrive with the slice that wires an owner, and until then this
+/// object is a read-only reading of what the lane reported. It is why
+/// `LinkTextMessage.Direction.outgoing` exists but is never produced here.
+///
+/// **`file` and `received` are ignored here, on purpose.** They are the other
+/// lane and the committed-batch report, and each needs its own projection — a
+/// transfer list with per-batch progress, a received-files surface. Folding
+/// either into this one now would mean inventing semantics that the later slices
+/// would then have to either duplicate or contradict.
+///
+/// The two states it does hold are kept apart for the same reason: a
+/// conversation that fails or ends is not a link that failed or ended, so the
+/// text lane never writes `phase`, and a whole-session `ended` freezes both.
 ///
 /// ## Threading
 ///
 /// Everything here is main-actor isolated, and the hop the runtime's contract
 /// demands is the bridge's: it delivers on the main actor, in publication order,
 /// one at a time. So `apply` is an ordinary main-actor method with no
-/// synchronization of its own, and a view may read `phase` directly.
+/// synchronization of its own, and a view may read this state directly.
 ///
 /// ## Lifetime
 ///
@@ -73,8 +123,34 @@ enum LinkSessionConnectionPhase: Equatable {
 @MainActor
 final class LinkSessionPresentationModel: ObservableObject {
 
-    /// The one piece of state. Everything below is a reading of it.
+    /// The connection. Everything a view asks below is a reading of this and of
+    /// the three text properties.
     @Published private(set) var phase: LinkSessionConnectionPhase = .establishing(sas: nil)
+
+    // MARK: - the TEXT lane
+
+    /// The conversation the user is looking at, exactly as the driver states it.
+    /// The driver emits `status` only on a real change, so this is a mirror
+    /// rather than a second state machine.
+    @Published private(set) var textStatus: LinkTextStatus = .idle
+
+    /// The transcript, oldest first. Append-only for the life of the attempt:
+    /// an ordinary conversation `ended` or `refused` closes a conversation, not
+    /// the history of one, and the same link can open another.
+    @Published private(set) var textMessages: [LinkTextMessage] = []
+
+    /// Why the lane failed, as the typed value the driver reported and no more.
+    /// Turning it into words is a later slice's job — a message baked in here
+    /// would be one this type could not localize and a view could not override.
+    ///
+    /// `nil` while the lane has failed is a real state, not a placeholder: a
+    /// lane can reach `failed` through a plain status change, which carries no
+    /// error, before the driver's own `failed` arrives with one.
+    @Published private(set) var textFailure: LinkTextDriverError?
+
+    /// Next `LinkTextMessage.id`. Monotonic for this model's whole life and
+    /// never reset, including across conversations.
+    private var nextTextMessageId = 0
 
     /// Binds to the attempt's bridge, which may already be holding events: one
     /// published before this model existed is delivered on the next main-actor
@@ -116,6 +192,33 @@ final class LinkSessionPresentationModel: ObservableObject {
         return true
     }
 
+    /// Whether this lane is over. Deliberately NOT gated on the link: a lane
+    /// that failed stays failed, and a screen reporting why still has to be able
+    /// to say so after the session itself has ended.
+    ///
+    /// It is also the terminal guard `applyText` reads, which is why it is a
+    /// reading of `textStatus` rather than of `textFailure` — a bare
+    /// `status(.failed)` has no error to read.
+    var isTextFailed: Bool { textStatus == .failed }
+
+    /// Whether a composer may accept typing.
+    ///
+    /// Both states, because either alone is a composer that cannot send: an
+    /// open conversation on a link that is still establishing has nowhere to
+    /// put a message, and an open link with no conversation would have the
+    /// session refuse one. This is an enablement fact only — nothing here sends,
+    /// and the driver still owns every limit that decides whether a particular
+    /// message is accepted.
+    var canSendText: Bool { isOpen && textStatus == .open }
+
+    /// The peer asked for a conversation and this side has not answered. What a
+    /// consent prompt appears on, so it is gated on the link too: a request on
+    /// an attempt that is over is not something a user can still accept.
+    var hasIncomingTextRequest: Bool { isOpen && textStatus == .incomingRequest }
+
+    /// This side asked and the peer has not answered.
+    var isWaitingForTextAccept: Bool { isOpen && textStatus == .waitingAccept }
+
     // MARK: - the projection
 
     /// One event, one phase decision.
@@ -144,11 +247,56 @@ final class LinkSessionPresentationModel: ObservableObject {
         case let .ended(reason):
             phase = .ended(reason)
 
-        case .text, .file, .received:
-            // The lanes and the committed batch. Later presentation slices
+        case let .text(event):
+            // The TEXT lane, which is a projection of its own and deliberately
+            // never touches `phase`: a conversation that fails or ends is not a
+            // link that failed or ended, and folding one into the other would
+            // close a screen whose file lane is still working.
+            applyText(event)
+
+        case .file, .received:
+            // The file lane and the committed batch. Later presentation slices
             // project these; see the note on this type for why they are not
             // squeezed into a connection phase now.
             break
+        }
+    }
+
+    /// One text event, one lane decision.
+    private func applyText(_ event: LinkTextDriverEvent) {
+        switch event {
+        case let .failed(error):
+            // Handled BEFORE the terminal guard, because a lane can already be
+            // `failed` from a bare status change that carried no error, and the
+            // driver's own report is what supplies it. Only the first one is
+            // kept: the driver promises at most one `failed`, and if that ever
+            // stopped being true the useful value is the failure that started
+            // this, not whatever fell out of it afterwards.
+            if textFailure == nil { textFailure = error }
+            // Guarded rather than assigned unconditionally: re-assigning the
+            // value it already holds would publish, and a view that repainted
+            // its whole transcript for a state that did not change is the cost.
+            if !isTextFailed { textStatus = .failed }
+
+        case let .status(status):
+            // Terminal for this lane, defensively. The driver does not emit a
+            // status after `failed`, and the alternative failure is a lane that
+            // says "open" again on a screen that has already reported it broken.
+            guard !isTextFailed else { return }
+            textStatus = status
+
+        case let .received(body):
+            guard !isTextFailed else { return }
+            // Verbatim, including duplicates and — if an impossible producer
+            // ever sent one — an empty body. The session refuses empty bodies
+            // and the driver owns every size and rate limit, so a second policy
+            // here could only disagree with the one that is authoritative; what
+            // it would actually do is silently drop a message the peer was told
+            // had been delivered.
+            textMessages.append(LinkTextMessage(id: nextTextMessageId,
+                                                direction: .incoming,
+                                                body: body))
+            nextTextMessageId += 1
         }
     }
 }
