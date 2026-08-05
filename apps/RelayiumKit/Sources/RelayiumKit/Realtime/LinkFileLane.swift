@@ -283,6 +283,24 @@ public final class LinkFileLane {
 
     // MARK: - transport generations
 
+    /// End this lane from the owner above it, and hand back what that requires.
+    ///
+    /// The lane sees FRAMES; an owner sees what they mean. "Protected content
+    /// arrived before the user consented" and "the link's receiver refused this
+    /// frame" are both violations only the owner can detect, and both leave the
+    /// same question unanswerable — which nonces the peer has consumed. Routing
+    /// them through here rather than letting an owner keep its own terminal flag
+    /// is what keeps one terminal path: a lane cannot end without its codecs
+    /// being poisoned, and cannot be poisoned without being closed.
+    ///
+    /// Idempotent, and scoped to THIS lane: nothing here reaches the text lane or
+    /// the link's recovery coordinator.
+    @discardableResult
+    public func failClosed() -> [LinkFileEffect] {
+        poison()
+        return terminalEffects
+    }
+
     /// Enter a transport gap.
     ///
     /// Idempotent: a channel `onclose` and the PeerConnection's own terminal

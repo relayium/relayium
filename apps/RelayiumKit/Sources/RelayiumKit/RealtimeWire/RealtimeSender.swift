@@ -2,7 +2,12 @@ import Foundation
 
 /// One file's manifest entry. Mirrors transfer.ts's `FileMeta`: `path` is only
 /// present for files inside a dropped folder (relative path within it).
-public struct FileMeta: Codable, Equatable {
+///
+/// `Sendable` because it is one: three value-type fields and no reference among
+/// them. It rides inside lane and session effects, which a driver may carry
+/// across queues, and without the conformance those effect types could not be
+/// `Sendable` either.
+public struct FileMeta: Codable, Equatable, Sendable {
     public var name: String
     public var size: Int
     public var path: String?
