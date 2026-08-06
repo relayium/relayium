@@ -69,6 +69,38 @@ protocol LinkSessionCommands: AnyObject {
 
 extension LinkSessionRuntime: LinkSessionCommands {}
 
+// MARK: - what the room is told
+
+/// The two lifecycle facts a ROOM owner needs from one attempt, taken from the
+/// same ordered delivery the projections are painted by.
+///
+/// ## Why the room cannot read this off a projection instead
+///
+/// `LinkSessionPresentationModel.phase` answers "what should the screen show",
+/// and its terminal case is `.ended(reason)` with no memory of whether the link
+/// had ever been open. That is right for a screen and useless to a room: the
+/// whole question a room has to answer at the end is WHO already released
+/// `LinkAdmission` — `LinkRecoveryCoordinator` did, if the link published, and
+/// nobody did if it never got that far. Reconstructing that from a published
+/// property would mean watching a transition rather than reading a fact.
+///
+/// ## Why it is two cases and not the event stream
+///
+/// A room is not a second projection. It does not paint a transcript, a transfer
+/// list or a SAS, and handing it every event would invite one — and with it a
+/// second reading of the lane state that the file and text models already own.
+/// These are the two facts a room acts on: an authenticated link exists, and the
+/// attempt is over.
+enum LinkSessionLifecycle: Equatable {
+    /// An authenticated link published. `LinkSessionRuntime` has already told
+    /// `LinkAdmission` — see its invariant 6 — so this is the room LEARNING that
+    /// the transition happened, never the room being asked to make it.
+    case opened(peerId: String)
+    /// Terminal, and at most one per attempt. Who — if anyone — has already
+    /// released the room depends on whether `opened` came first.
+    case ended(LinkSessionRuntimeEnd)
+}
+
 // MARK: - the attempt
 
 /// The one owner of ONE `link/1` attempt's runtime, event bridge and two
@@ -97,12 +129,18 @@ extension LinkSessionRuntime: LinkSessionCommands {}
 /// a second thing able to retire — or to fail to retire — one attempt.
 ///
 /// **2. ONE binding, and the fan-out is here.** The bridge is bound once, to this
-/// object, and `apply` hands every event to both projections. That is not a
-/// convenience: a bridge may be bound once by design, so a model that bound for
-/// itself would be a second claimant to the one binding and the loser would
-/// silently paint nothing. It also means both projections see ONE ordered
-/// delivery — a second hop of any kind is a second order, and two independent
-/// hops can deliver a batch's progress before the offer it belongs to.
+/// object, and `apply` hands every event to both projections and then to the room
+/// that owns the attempt. That is not a convenience: a bridge may be bound once by
+/// design, so a model that bound for itself would be a second claimant to the one
+/// binding and the loser would silently paint nothing. It also means every
+/// consumer sees ONE ordered delivery — a second hop of any kind is a second
+/// order, and two independent hops can deliver a batch's progress before the offer
+/// it belongs to.
+///
+/// The room's share of that delivery is deliberately two facts and not the stream
+/// — see `LinkSessionLifecycle`. It is last in the fan-out, because a room may end
+/// the session from inside its own handler and both projections must already show
+/// what the link reported before anything reacts to it.
 ///
 /// The projections do not know about each other, and neither reads the other's
 /// state. `apply` calls them in a fixed order for readability alone; nothing
@@ -281,11 +319,58 @@ final class LinkSessionAttempt: ObservableObject {
         runtime.start()
     }
 
-    /// One delivery, both projections. Each ignores what is not its own — see
-    /// invariant 2 — and neither reads the other.
+    /// The room that owns this attempt, told the two facts a room acts on.
+    ///
+    /// Not a third projection and not a second stream: it is fed from the ONE
+    /// delivery below, after both projections, and it carries no lane state. Nil
+    /// for an attempt nobody owns — every test that is only about a screen leaves
+    /// it nil, and nothing changes.
+    ///
+    /// Set by the owner immediately after construction, which is soon enough
+    /// because the bridge never delivers inline: whatever the factory published
+    /// eagerly arrives on the NEXT main-actor turn, so an owner that assigns this
+    /// before returning to the runloop cannot miss the first event. That is the
+    /// bridge's documented contract rather than a coincidence of timing, and
+    /// `LinkRoomSessionTests` pins it with a transport that publishes and dies
+    /// from inside `start()`.
+    var onLifecycle: ((LinkSessionLifecycle) -> Void)?
+
+    /// `ended` is announced to the room at most once, whatever arrives.
+    ///
+    /// The runtime already promises `ended` is terminal and the bridge drops
+    /// what it was holding, so this should be unreachable — it is here because
+    /// the failure it prevents is a room releasing an admission twice, and the
+    /// second release can land on an establishment that has already begun for
+    /// somebody else.
+    private var announcedEnd = false
+
+    /// One delivery, both projections, then the room. Each ignores what is not
+    /// its own — see invariant 2 — and none of them reads the others.
+    ///
+    /// The order is load-bearing in exactly one direction: the room's handler may
+    /// end the session, or begin the next one, from inside this call, and both
+    /// projections must already show the terminal state the link actually
+    /// reported before anything reacts to it.
     private func apply(_ event: LinkSessionRuntimeEvent) {
         model.apply(event)
         fileModel.apply(event)
+        announce(event)
+    }
+
+    /// The two facts a room acts on, from the same ordered delivery.
+    private func announce(_ event: LinkSessionRuntimeEvent) {
+        switch event {
+        case let .opened(peerId, _):
+            onLifecycle?(.opened(peerId: peerId))
+        case let .ended(reason):
+            guard !announcedEnd else { return }
+            announcedEnd = true
+            onLifecycle?(.ended(reason))
+        case .sas, .text, .file, .received:
+            // A room does not paint. The digits, the conversation, the transfer
+            // and a committed batch are the projections' and nobody else's.
+            break
+        }
     }
 
     // MARK: - what this owner will accept

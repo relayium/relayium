@@ -1028,6 +1028,106 @@ final class LinkSessionAttemptTests: XCTestCase {
                        "a deallocation must not stop a runtime")
     }
 
+    // MARK: - 8b. what the room is told
+    //
+    // Two facts from the one ordered delivery, and no stream. The room acts on
+    // them — it releases `LinkAdmission` when nothing else will — so the cost of
+    // an extra one is a second release, and the cost of a missing one is a room
+    // stuck on a link that no longer exists.
+
+    /// Both facts, in delivery order, and nothing else. Everything a projection
+    /// paints — digits, conversation, transfer, committed batch — is deliberately
+    /// not a room's business and must not reach it.
+    func testTheRoomHearsOnlyTheOpenAndTheEnd() async {
+        let (attempt, _, publish) = rig()
+        var heard: [LinkSessionLifecycle] = []
+        attempt.onLifecycle = { heard.append($0) }
+
+        publish(.sas("424242"))
+        publish(.opened(peerId: "peer-room", sas: "424242"))
+        publish(.text(.status(.open)))
+        publish(.file(.outboundProgress(batch: 1, sentBytes: 10)))
+        publish(.received(LinkReceivedBatch(batch: 1, files: [], container: nil)))
+        publish(.ended(.linkEnded))
+        await settle()
+
+        XCTAssertEqual(heard, [.opened(peerId: "peer-room"), .ended(.linkEnded)])
+    }
+
+    /// The end is announced ONCE. A second release can land on an establishment
+    /// that has already begun for somebody else, and that peer is then refused
+    /// for the rest of the session.
+    func testTheEndIsAnnouncedToTheRoomExactlyOnce() async {
+        let (attempt, _, publish) = rig()
+        var ends = 0
+        attempt.onLifecycle = { if case .ended = $0 { ends += 1 } }
+
+        publish(.opened(peerId: "peer-room", sas: "424242"))
+        publish(.ended(.establishmentClosed))
+        publish(.ended(.linkEnded))
+        publish(.ended(.stopped))
+        await settle()
+
+        XCTAssertEqual(ends, 1, "terminal means terminal for the room too")
+    }
+
+    /// Both projections already show what the link reported by the time the room
+    /// hears it. The room's handler is where the next establishment begins, so a
+    /// screen repainted after that would be painting for a session that has
+    /// already been replaced.
+    func testBothProjectionsAreSettledBeforeTheRoomIsTold() async {
+        let (attempt, _, publish) = rig()
+        var phaseWhenTold: LinkSessionConnectionPhase?
+        var fileTerminalWhenTold: Bool?
+        attempt.onLifecycle = { event in
+            guard case .ended = event else { return }
+            phaseWhenTold = attempt.model.phase
+            fileTerminalWhenTold = attempt.fileModel.isSessionEnded
+        }
+
+        publish(.opened(peerId: "peer-room", sas: "424242"))
+        publish(.ended(.linkEnded))
+        await settle()
+
+        XCTAssertEqual(phaseWhenTold, .ended(.linkEnded),
+                       "the conversation projection is already terminal")
+        XCTAssertEqual(fileTerminalWhenTold, true,
+                       "and so is the transfer projection")
+    }
+
+    /// A retired attempt says nothing to its room. Retirement is the room's own
+    /// act — it is the caller of `retire()` — so an announcement would be this
+    /// object telling an owner something that owner just did, and it would arrive
+    /// after that owner had already moved on.
+    func testARetiredAttemptTellsItsRoomNothing() async {
+        let (attempt, _, publish) = rig()
+        var heard: [LinkSessionLifecycle] = []
+        attempt.onLifecycle = { heard.append($0) }
+        publish(.opened(peerId: "peer-room", sas: "424242"))
+        await settle()
+        XCTAssertEqual(heard, [.opened(peerId: "peer-room")])
+
+        attempt.retire()
+        publish(.ended(.stopped))
+        await settle()
+
+        XCTAssertEqual(heard, [.opened(peerId: "peer-room")],
+                       "the bridge is silenced before anything can be produced")
+    }
+
+    /// An attempt nobody owns behaves exactly as it always did. Every screen-only
+    /// test in this file leaves the hook nil, and that has to stay a supported
+    /// shape rather than a latent crash.
+    func testAnAttemptWithNoRoomIsUnaffected() async {
+        let (attempt, _, publish) = rig()
+
+        publish(.opened(peerId: "peer-room", sas: "424242"))
+        publish(.ended(.linkEnded))
+        await settle()
+
+        XCTAssertEqual(attempt.model.phase, .ended(.linkEnded))
+    }
+
     // MARK: - 9. nothing here is reachable from production
 
     /// Comments stripped, so a rule about code is not satisfied — or broken — by
