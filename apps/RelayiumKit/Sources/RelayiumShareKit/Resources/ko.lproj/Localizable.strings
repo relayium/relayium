@@ -44,6 +44,9 @@
 "settings.neverChecked" = "아직 확인하지 않음";
 "settings.checkNow" = "지금 확인";
 "settings.version" = "버전 %1$@ (%2$@)";
+"settings.shareExtension" = "Finder의 '공유' 메뉴에서 보내기";
+"settings.shareExtensionBody" = "Relayium을 설치하면 '공유' 메뉴에 추가되지만, macOS는 허용하기 전까지 새 공유 확장 프로그램을 꺼 둡니다. 메뉴에 Relayium이 없으면 '확장 프로그램 ▸ 공유'에서 켜 주십시오.";
+"settings.openExtensionSettings" = "'확장 프로그램' 설정 열기";
 
 "quit.title" = "아직 전송이 진행 중입니다";
 "quit.body" = "지금 종료하면 전송이 취소됩니다. 아무것도 저장되지 않으며, 진행 중인 업로드는 처음부터 다시 해야 합니다.";

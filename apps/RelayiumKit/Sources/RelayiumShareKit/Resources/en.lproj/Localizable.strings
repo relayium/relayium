@@ -45,6 +45,9 @@
 "settings.neverChecked" = "Not checked yet";
 "settings.checkNow" = "Check Now";
 "settings.version" = "Version %1$@ (%2$@)";
+"settings.shareExtension" = "Send from Finder's Share menu";
+"settings.shareExtensionBody" = "Installing Relayium adds it to the Share menu, but macOS keeps every new sharing extension switched off until you allow it. If Relayium is not in the menu, turn it on under Extensions ▸ Sharing.";
+"settings.openExtensionSettings" = "Open Extensions settings";
 
 "quit.title" = "A transfer is still running";
 "quit.body" = "Quitting now cancels it. Nothing is saved, and an upload in progress will have to start over.";

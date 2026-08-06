@@ -55,6 +55,29 @@ struct GeneralSettingsView: View {
                 caption(L10n.t(.settingsOpenAtLoginBody))
                 loginItemStatus
             }
+            // **Not a toggle, because this app cannot set it.** Installing
+            // Relayium registers the Share extension, and macOS then keeps every
+            // new third-party sharing extension switched off until the user
+            // allows it in System Settings — verified with `pluginkit -m -p
+            // com.apple.share-services`, where the entry appears without the
+            // leading `+` that marks an enabled one.
+            //
+            // There is no public API to read that state, so this says so
+            // unconditionally rather than pretending to detect it. Saying
+            // nothing was the alternative, and it is the worse one: the feature
+            // is simply absent from the Share menu, with nothing anywhere
+            // explaining why, which reads as broken rather than as off.
+            Section {
+                Text(L10n.t(.settingsShareExtension))
+                caption(L10n.t(.settingsShareExtensionBody))
+                Button(L10n.t(.settingsOpenExtensionSettings)) {
+                    // nonlocalized: a System Settings pane identifier, not user copy
+                    guard let url = URL(string: "x-apple.systempreferences:com.apple.ExtensionsPreferences")
+                    else { return }
+                    NSWorkspace.shared.open(url)
+                }
+                .buttonStyle(.link)
+            }
             Section {
                 Toggle(L10n.t(.verifyToggle), isOn: $verification.requiresSASConfirmation)
                 caption(L10n.t(.verifyExplainWhat))

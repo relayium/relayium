@@ -44,6 +44,9 @@
 "settings.neverChecked" = "Noch nicht gesucht";
 "settings.checkNow" = "Jetzt suchen";
 "settings.version" = "Version %1$@ (%2$@)";
+"settings.shareExtension" = "Aus dem Finder-Menü „Teilen“ senden";
+"settings.shareExtensionBody" = "Mit der Installation wird Relayium dem Menü „Teilen“ hinzugefügt, aber macOS lässt jede neue Freigabeerweiterung ausgeschaltet, bis Sie sie erlauben. Fehlt Relayium im Menü, aktivieren Sie es unter „Erweiterungen ▸ Teilen“.";
+"settings.openExtensionSettings" = "Einstellungen für Erweiterungen öffnen";
 
 "quit.title" = "Eine Übertragung läuft noch";
 "quit.body" = "Jetzt zu beenden bricht sie ab. Nichts wird gespeichert, und ein laufender Upload muss von vorn beginnen.";

@@ -74,6 +74,13 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case settingsLastChecked = "settings.lastChecked"
     case settingsNeverChecked = "settings.neverChecked"
     case settingsCheckNow = "settings.checkNow"
+
+    /// The Share extension is registered by installing the app but is OFF until
+    /// the user enables it — macOS ships every third-party sharing extension
+    /// disabled. Without saying so, the feature is invisible and looks broken.
+    case settingsShareExtension = "settings.shareExtension"
+    case settingsShareExtensionBody = "settings.shareExtensionBody"
+    case settingsOpenExtensionSettings = "settings.openExtensionSettings"
     /// %1$@ marketing version, %2$@ build number. Both are digits, never
     /// translated; the key exists so a language can order the two around them.
     case settingsVersion = "settings.version"

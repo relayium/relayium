@@ -44,6 +44,9 @@
 "settings.neverChecked" = "尚未检查";
 "settings.checkNow" = "立即检查";
 "settings.version" = "版本 %1$@（%2$@）";
+"settings.shareExtension" = "从访达的「共享」菜单发送";
+"settings.shareExtensionBody" = "安装 Relayium 就会把它加进「共享」菜单，但 macOS 会让每个新的共享扩展保持关闭，直到你允许它。如果菜单里没有 Relayium，请在「扩展 ▸ 共享」中打开。";
+"settings.openExtensionSettings" = "打开「扩展」设置";
 
 "quit.title" = "仍有传输正在进行";
 "quit.body" = "现在退出会取消传输。已传部分不会保存，正在进行的上传必须从头再来。";

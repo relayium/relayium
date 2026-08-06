@@ -47,6 +47,9 @@
 "settings.neverChecked" = "لم يتم التحقق بعد";
 "settings.checkNow" = "تحقق الآن";
 "settings.version" = "الإصدار %1$@ ‏(%2$@)";
+"settings.shareExtension" = "الإرسال من قائمة «مشاركة» في الفايندر";
+"settings.shareExtensionBody" = "يضيف تثبيت Relayium إلى قائمة «مشاركة»، لكن macOS يُبقي كل امتداد مشاركة جديد مُعطَّلاً حتى تسمح به. إذا لم يظهر Relayium في القائمة، فعّله من «الامتدادات ◂ المشاركة».";
+"settings.openExtensionSettings" = "فتح إعدادات «الامتدادات»";
 
 "quit.title" = "لا يزال هناك نقل جارٍ";
 "quit.body" = "الخروج الآن يُلغيه. لن يُحفظ شيء، وأي رفع قيد التنفيذ سيبدأ من جديد.";
