@@ -249,7 +249,16 @@ pairing code requires sign-in; joining with that code does not.
   Send a link, Open a link, Account — so the capabilities that need no account
   (nearby sending and receiving, joining someone else's pairing code, and opening
   a link somebody sent) are reachable without signing in; an account is asked
-  for only where it is actually required, with the reason stated. A DMG of an
+  for only where it is actually required, with the reason stated. Files reach it
+  from outside the app three ways — dropped on the Dock icon, opened from
+  Finder's **Open With**, or sent through a Share extension; the Share extension
+  is registered by installing the app but, like every new third-party sharing
+  extension, stays switched off until the user allows it under Extensions ▸
+  Sharing, and the app says so rather than appearing broken. ⌘, opens a Settings
+  window with automatic update checks, the last check and the running version,
+  and an *Open at login* switch that reports what macOS actually did with it —
+  including the "registered, waiting for your approval" state a checkbox cannot
+  express. A DMG of an
   earlier build is Developer ID-signed, accepted by Apple notarization,
   stapled, and Gatekeeper-validated. Public release, the Mac App Store and the
   website download switch are all still pending, and the release-readiness

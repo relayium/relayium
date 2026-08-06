@@ -10,6 +10,15 @@
   (`SharedLocalizationExport.swift`), so `import RelayiumAppKit` still sees
   `L10n` and nothing at any call site changed.
 - `mac/` — macOS SwiftUI app (`com.relayium.mac`), depends on the local RelayiumKit package.
+- `mac/RelayiumShare/` — the macOS Share Extension (`com.relayium.mac.Share`),
+  embedded in the app at `Contents/PlugIns/RelayiumShare.appex`. Links
+  `RelayiumShareKit` only, exactly as the iOS one does, and shares its model —
+  only the layout differs. **Its App Group is NOT iOS's**: the macOS profiles
+  authorize `group.com.relayium.shared` and the team-prefixed wildcard and never
+  `group.com.relayium.app`, and Apple documents the macOS form of an App Group
+  as `<team>.<group>`, so `AppGroup.identifier` resolves per platform. In
+  development, not public. The system Share menu is verified to list it; a real
+  Finder share has not yet been driven by hand.
 - `ios/` — iOS SwiftUI app (`com.relayium.app`), same local package. In development, not public.
 - `ios/RelayiumShare/` — the iOS Share Extension (`com.relayium.app.share`),
   embedded in the app at `PlugIns/RelayiumShare.appex`. Links `RelayiumShareKit`
@@ -244,9 +253,18 @@ What this slice does **not** claim to beat the Web at:
 
 - **Large or slow transfers.** There is no background `URLSession`: a transfer
   dies with the app. The quit guard warns about that rather than fixing it.
-- **Any workflow that starts outside the app.** There is no Share extension, no
-  Services entry, no Dock drop target and no Quick Action, so a file already
-  selected in Finder still has to be brought to the app.
+- **Some workflows that start outside the app.** As of 2026-08-06 macOS has
+  three out-of-app entry points — a Dock drop target and a Finder **Open With**
+  (`CFBundleDocumentTypes`, `LSHandlerRank = None` so Relayium is never proposed
+  as a default handler for anything), and a Share extension. There is still no
+  `NSServices` entry and no Quick Action.
+
+  **The Share extension starts switched off.** macOS keeps every new third-party
+  sharing extension disabled until the user allows it under Extensions ▸
+  Sharing — measured with `pluginkit -m -p com.apple.share-services`, where the
+  entry is listed without the leading `+`. Settings ▸ General says so and offers
+  the pane; until a user does that, the Share menu genuinely does not list
+  Relayium.
 - **Resumable transfer.** An interrupted transfer restarts from the beginning.
 
 ### Cloud transfer
