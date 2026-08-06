@@ -1113,6 +1113,116 @@ final class LinkSessionRuntimeTests: XCTestCase {
         XCTAssertEqual(h.runtime.joinRecovery(peerId: "peer-b") { _ in }, .unavailable)
     }
 
+    // MARK: - the authenticated departure
+
+    /// The tag the peer signs to leave on purpose, over this link's own resume
+    /// key and the directional payload.
+    private func leaveTag(_ h: Harness,
+                          from: String = "peer-b",
+                          to: String = "peer-a") -> String {
+        signResume(key: h.codecs.resumeAuthKey, payload: linkLeavePayload(from: from, to: to))
+    }
+
+    /// A verified leave ends the held link through the coordinator, exactly as a
+    /// server-confirmed departure does — and it is reported once, from the lanes'
+    /// own terminal reports.
+    ///
+    /// This runtime verifies nothing itself: it holds no key of its own and the
+    /// coordinator holds the identity the key hangs off, so a second check here
+    /// would be a second policy that can silently disagree with the authoritative
+    /// one.
+    func testAVerifiedLeaveEndsTheLinkThroughTheCoordinator() throws {
+        let h = harness()
+        opened(h)
+        let coordinator = try XCTUnwrap(h.runtime.coordinator)
+
+        h.runtime.receiveLeave(from: "peer-b", to: "peer-a", auth: leaveTag(h))
+        h.runtime.settle()
+
+        XCTAssertEqual(coordinator.phase, .ended)
+        XCTAssertEqual(h.events.ends, [.linkEnded], "both lanes reported; the runtime ends once")
+        XCTAssertTrue(h.runtime.isEnded)
+        XCTAssertEqual(h.admission.phase, .idle, "a deliberate departure failed the room")
+    }
+
+    /// The same mid-gap: a leave that arrives while a rebuild is being attempted
+    /// takes the gap down rather than waiting for the window to expire.
+    func testAVerifiedLeaveEndsAnInterruptedLink() throws {
+        let h = harness()
+        opened(h)
+        try holdingAReceive(h)
+        h.transport.die(error: LinkTransportError.closed)
+        h.runtime.settle()
+        let coordinator = try XCTUnwrap(h.runtime.coordinator)
+        XCTAssertEqual(coordinator.phase, .interrupted, "there is no gap to end")
+
+        h.runtime.receiveLeave(from: "peer-b", to: "peer-a", auth: leaveTag(h))
+        h.runtime.settle()
+
+        XCTAssertEqual(coordinator.phase, .ended)
+        XCTAssertTrue(h.runtime.isEnded)
+        XCTAssertEqual(h.admission.phase, .idle)
+    }
+
+    /// Everything that does not verify is a silent no-op at this seam too: a
+    /// stranger's replay, a reflected tag, a wrong local id and a malformed one.
+    func testAnUnverifiedLeaveLeavesTheLinkAlone() {
+        let cases: [(String, (Harness) -> (from: String, to: String, auth: String))] = [
+            ("a stranger replaying the genuine tag",
+             { h in ("peer-x", "peer-a", self.leaveTag(h)) }),
+            ("this side's own leave reflected back",
+             { h in ("peer-b", "peer-a", self.leaveTag(h, from: "peer-a", to: "peer-b")) }),
+            ("a tag addressed to another local id",
+             { h in ("peer-b", "peer-a", self.leaveTag(h, to: "peer-z")) }),
+            ("a malformed tag",
+             { _ in ("peer-b", "peer-a", "not-a-tag") }),
+        ]
+
+        for (what, make) in cases {
+            let h = harness()
+            opened(h)
+            let leave = make(h)
+
+            h.runtime.receiveLeave(from: leave.from, to: leave.to, auth: leave.auth)
+            h.runtime.settle()
+
+            XCTAssertEqual(h.runtime.coordinator?.phase, .open, "\(what) ended the link")
+            XCTAssertTrue(h.events.ends.isEmpty, "\(what) reported an ending")
+            XCTAssertEqual(h.admission.phase, .open(peerId: "peer-b"), "\(what) released the room")
+        }
+    }
+
+    /// Before a publication there is no authenticated link and therefore no key
+    /// to judge a tag with, so the seam is inert rather than deciding anything of
+    /// its own. An establishment is not ended by a signal claiming to be a leave.
+    func testALeaveBeforePublicationIsInert() {
+        let h = harness()
+        h.runtime.start()
+
+        h.runtime.receiveLeave(from: "peer-b", to: "peer-a", auth: leaveTag(h))
+        h.runtime.settle()
+
+        XCTAssertNil(h.runtime.coordinator)
+        XCTAssertFalse(h.runtime.isEnded, "an establishment was ended by a leave")
+        XCTAssertTrue(h.events.ends.isEmpty)
+        XCTAssertEqual(h.admission.phase, .connecting(peerId: "peer-b"))
+    }
+
+    /// And after the end it is inert too, whichever end got there first.
+    func testALeaveAfterTheRuntimeEndedIsInert() {
+        let h = harness()
+        opened(h)
+        h.runtime.stop()
+        h.runtime.settle()
+        let ends = h.events.ends
+
+        h.runtime.receiveLeave(from: "peer-b", to: "peer-a", auth: leaveTag(h))
+        h.runtime.settle()
+
+        XCTAssertEqual(h.events.ends, ends, "a late leave reported a second ending")
+        XCTAssertNil(h.runtime.coordinator)
+    }
+
     // MARK: - the establishment's routed signals
     //
     // The other half of the factory's `initialSignal`: everything that CHASES a

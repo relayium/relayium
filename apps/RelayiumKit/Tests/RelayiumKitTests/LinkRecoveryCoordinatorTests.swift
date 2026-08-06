@@ -1663,6 +1663,418 @@ final class LinkRecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(h.frames[0].1, [1, 2])
     }
 
+    // MARK: - the authenticated departure
+
+    /// The tag a peer produces when it leaves ON PURPOSE: this link's own resume
+    /// key over the DIRECTIONAL leave payload.
+    ///
+    /// `from`/`to` default to the harness's peer and this side, which is the one
+    /// tuple a genuine inbound leave is signed over. Every adversarial case below
+    /// changes exactly one of the four inputs, so a test that passes says which
+    /// input it was about.
+    private func leaveTag(_ identity: LinkIdentity,
+                          from: String = "peer-b",
+                          to: String = "peer-a",
+                          key: [UInt8]? = nil) -> String {
+        signResume(key: key ?? identity.codecs.resumeAuthKey,
+                   payload: linkLeavePayload(from: from, to: to))
+    }
+
+    /// A verified departure on an OPEN link ends it the way a clean close ends
+    /// it: the room free rather than failed, one terminal outcome, and nothing
+    /// allocated, scheduled or answered on the way out.
+    ///
+    /// The room's admission has already spent an attempt on this signal —
+    /// `LinkAdmission.route` returns `.leave(auth:)` and charges the budget — so
+    /// what remains here is the only thing that can decide whether the peer
+    /// really sent it.
+    func testAVerifiedLeaveEndsAnOpenLinkCleanly() {
+        let h = harness()
+
+        h.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: leaveTag(h.held))
+
+        XCTAssertEqual(h.coordinator.phase, .ended)
+        XCTAssertEqual(h.ended.count, 1, "one terminal outcome")
+        guard case .peerDeparted? = h.ended.first else { return XCTFail("wrong end reason") }
+        XCTAssertEqual(h.admission.phase, .idle, "a deliberate departure failed the room")
+        XCTAssertEqual(h.current.closeCount, 1, "the transport was closed once")
+        XCTAssertTrue(h.produced.isEmpty, "a departure allocated a rebuild")
+        XCTAssertTrue(h.scheduler.delays.isEmpty, "a departure armed a recovery window")
+        XCTAssertTrue(h.lostPolicyCalls.isEmpty,
+                      "a departure asked the owner whether to recover it")
+    }
+
+    /// The same, mid-gap. A leave that arrives while a rebuild is in flight has
+    /// to take the whole gap down with it: the candidate closed and detached, the
+    /// window and the retry cancelled, and every waiter finished exactly once.
+    func testAVerifiedLeaveEndsAnInterruptedLinkAndCancelsItsRecovery() {
+        let h = harness()
+        h.loseTransport()
+        guard let candidate = h.produced.first else { return XCTFail("no attempt") }
+        let outcomes = Recorded<Bool>()
+        XCTAssertEqual(h.coordinator.join(peerId: "peer-b") { result in
+            if case .success = result { outcomes.append(true) } else { outcomes.append(false) }
+        }, .joined)
+
+        h.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: leaveTag(h.held))
+
+        XCTAssertEqual(h.coordinator.phase, .ended)
+        XCTAssertEqual(h.ended.count, 1)
+        guard case .peerDeparted? = h.ended.first else { return XCTFail("wrong end reason") }
+        XCTAssertEqual(h.admission.phase, .idle)
+        XCTAssertEqual(outcomes.all, [false], "the one waiter was finished exactly once")
+        XCTAssertEqual(candidate.closeCount, 1, "the rebuild in flight was left running")
+        XCTAssertNil(candidate.onReady, "a handler was left on an abandoned rebuild")
+        XCTAssertNil(candidate.onFrame)
+        XCTAssertNil(candidate.onError)
+        XCTAssertNil(candidate.onClose)
+        XCTAssertTrue(h.scheduler.liveDelays.isEmpty, "an ended link left a wake-up armed")
+        XCTAssertEqual(h.produced.count, 1, "a departure allocated another rebuild")
+    }
+
+    /// A replacement transport is the SAME authenticated link, so a leave signed
+    /// under it still works afterwards.
+    ///
+    /// This is the whole reason the verifier lives on the coordinator rather than
+    /// on a transport: the key follows `LinkIdentity.codecs`, which is carried
+    /// across the gap unchanged, so the peer does not have to re-derive anything
+    /// to say goodbye on the new wire.
+    func testAVerifiedLeaveStillEndsTheLinkAfterATransportReplacement() {
+        let h = harness()
+        h.loseTransport()
+        guard let candidate = h.produced.first else { return XCTFail("no attempt") }
+        candidate.becomeReady(h.held)
+        XCTAssertEqual(h.coordinator.phase, .open, "the rebuild did not publish")
+        XCTAssertEqual(h.admission.phase, .open(peerId: "peer-b"))
+
+        h.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: leaveTag(h.held))
+
+        XCTAssertEqual(h.coordinator.phase, .ended)
+        guard case .peerDeparted? = h.ended.first else { return XCTFail("wrong end reason") }
+        XCTAssertEqual(h.admission.phase, .idle)
+        XCTAssertEqual(candidate.closeCount, 1, "the current transport was left running")
+    }
+
+    /// A FRESH authentication refuses a tag from the previous one, even to the
+    /// same peer with the same six digits.
+    ///
+    /// Cross-link replay needs no nonce precisely because of this: the key is
+    /// derived from session keys that a later link never shares. Same peer, same
+    /// SAS, same role — different `LinkCodecs`, and therefore a different
+    /// `resumeAuthKey`.
+    func testAFreshLinkIdentityRefusesTheOldLinksLeaveTag() {
+        let old = harness()
+        let stale = leaveTag(old.held)
+        let fresh = Harness(identity: LinkIdentity(
+            peerId: "peer-b",
+            role: .initiator,
+            sas: "314159",
+            codecs: LinkCodecs(sendKey: [UInt8](repeating: 0x5A, count: 32),
+                               recvKey: [UInt8](repeating: 0x5B, count: 32)),
+            authenticationGeneration: 5), selfId: "peer-a")
+        XCTAssertEqual(fresh.held.peerId, old.held.peerId)
+        XCTAssertEqual(fresh.held.sas, old.held.sas)
+        XCTAssertNotEqual(fresh.held.codecs.resumeAuthKey, old.held.codecs.resumeAuthKey)
+
+        fresh.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: stale)
+
+        XCTAssertEqual(fresh.coordinator.phase, .open, "a stale tag ended a new link")
+        XCTAssertTrue(fresh.ended.isEmpty)
+        XCTAssertEqual(fresh.admission.phase, .open(peerId: "peer-b"))
+        XCTAssertEqual(fresh.current.closeCount, 0)
+    }
+
+    /// A relay that reflects THIS side's own leave back at it verifies the
+    /// reversed tuple and fails.
+    ///
+    /// That is what the direction in `linkLeavePayload` buys, and it is the one
+    /// case an undirected constant would get catastrophically wrong: a signalling
+    /// relay sees every tag on the wire, so a tag with no direction in it is a
+    /// one-message kill switch for any link it has ever watched leave.
+    func testAReflectedLeaveIsASilentNoOp() {
+        let h = harness()
+        // Exactly what this side would sign to announce its OWN departure.
+        let mine = leaveTag(h.held, from: "peer-a", to: "peer-b")
+
+        h.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: mine)
+
+        XCTAssertEqual(h.coordinator.phase, .open, "a reflected leave ended the link")
+        XCTAssertTrue(h.ended.isEmpty)
+        XCTAssertEqual(h.admission.phase, .open(peerId: "peer-b"))
+    }
+
+    /// The tag covers the local id too, so a leave addressed to somebody else is
+    /// not this link's — in either direction the mismatch can take.
+    func testALeaveAddressedToAnotherLocalIdIsASilentNoOp() {
+        // Signed for this side, delivered claiming a different one.
+        let wrongLocal = harness()
+        wrongLocal.coordinator.receiveLeave(from: "peer-b", to: "peer-z",
+                                            auth: leaveTag(wrongLocal.held))
+        XCTAssertEqual(wrongLocal.coordinator.phase, .open)
+        XCTAssertTrue(wrongLocal.ended.isEmpty)
+
+        // Signed for a different side, delivered as though it were for this one.
+        let wrongTag = harness()
+        wrongTag.coordinator.receiveLeave(from: "peer-b", to: "peer-a",
+                                          auth: leaveTag(wrongTag.held, to: "peer-z"))
+        XCTAssertEqual(wrongTag.coordinator.phase, .open)
+        XCTAssertTrue(wrongTag.ended.isEmpty)
+    }
+
+    /// A genuine tag replayed by a DIFFERENT sender ends nothing.
+    ///
+    /// The payload is built from the peer this link actually holds, not from the
+    /// caller's word for who sent the signal — so this guard is what stands
+    /// between an observed tag and anybody on the socket being able to reuse it.
+    func testALeaveFromAnotherPeerIsASilentNoOp() {
+        let h = harness()
+
+        h.coordinator.receiveLeave(from: "peer-x", to: "peer-a", auth: leaveTag(h.held))
+
+        XCTAssertEqual(h.coordinator.phase, .open, "a stranger ended this link")
+        XCTAssertTrue(h.ended.isEmpty)
+        XCTAssertEqual(h.admission.phase, .open(peerId: "peer-b"))
+        XCTAssertEqual(h.current.closeCount, 0)
+    }
+
+    /// A tag under a key this link never derived is worth nothing, however
+    /// well-formed it is.
+    func testALeaveUnderAForeignKeyIsASilentNoOp() {
+        let h = harness()
+        let foreign = leaveTag(h.held, key: [UInt8](repeating: 0xAB, count: 32))
+        XCTAssertEqual(foreign.count, LINK_LEAVE_AUTH_LENGTH, "the forgery is the right shape")
+
+        h.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: foreign)
+
+        XCTAssertEqual(h.coordinator.phase, .open, "a forged tag ended the link")
+        XCTAssertTrue(h.ended.isEmpty)
+        XCTAssertEqual(h.admission.phase, .open(peerId: "peer-b"))
+    }
+
+    /// Nothing malformed reaches an HMAC, and nothing malformed ends a link.
+    ///
+    /// The length check in particular is a COST bound rather than a correctness
+    /// one — `verifyResume` would refuse these anyway — so it is stated here as
+    /// behaviour and pinned as ordering in
+    /// `testTheLeavesCheapChecksAllRunBeforeItsHMAC`.
+    func testALeaveWithAMalformedTagIsASilentNoOp() {
+        let genuine = leaveTag(identity())
+        let malformed = [
+            "",
+            String(genuine.dropLast()),
+            genuine + "A",
+            String(repeating: "!", count: LINK_LEAVE_AUTH_LENGTH),
+            String(repeating: "A", count: LINK_LEAVE_AUTH_LENGTH),
+            String(repeating: "A", count: 4096),
+        ]
+
+        for auth in malformed {
+            let h = harness()
+            h.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: auth)
+            XCTAssertEqual(h.coordinator.phase, .open, "a tag of \(auth.count) chars ended the link")
+            XCTAssertTrue(h.ended.isEmpty, "a tag of \(auth.count) chars reported an ending")
+            XCTAssertEqual(h.admission.phase, .open(peerId: "peer-b"))
+        }
+    }
+
+    /// One departure, one teardown. A peer that retransmits its leave — or a
+    /// relay that replays it — must not produce a second ending, a second
+    /// admission transition or a second close.
+    func testASecondVerifiedLeaveChangesNothing() {
+        let h = harness()
+        let tag = leaveTag(h.held)
+
+        h.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: tag)
+        h.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: tag)
+        h.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: tag)
+
+        XCTAssertEqual(h.ended.count, 1, "the link ended more than once")
+        XCTAssertEqual(h.current.closeCount, 1, "the transport was closed more than once")
+        XCTAssertEqual(h.admission.phase, .idle)
+    }
+
+    /// A leave that arrives after the link has ended for any other reason is
+    /// inert, whichever ending got there first.
+    func testALeaveAfterTheLinkEndedChangesNothing() {
+        let stopped = harness()
+        stopped.coordinator.stop()
+        stopped.coordinator.receiveLeave(from: "peer-b", to: "peer-a",
+                                         auth: leaveTag(stopped.held))
+        XCTAssertEqual(stopped.ended.count, 1)
+        guard case .cancelled? = stopped.ended.first else { return XCTFail("wrong end reason") }
+
+        let expired = harness()
+        expired.loseTransport()
+        XCTAssertTrue(expired.scheduler.fire(LINK_RECOVERY_WINDOW))
+        expired.coordinator.receiveLeave(from: "peer-b", to: "peer-a",
+                                         auth: leaveTag(expired.held))
+        XCTAssertEqual(expired.ended.count, 1)
+        guard case .windowExpired? = expired.ended.first else { return XCTFail("wrong end reason") }
+        XCTAssertEqual(expired.admission.phase, .failed,
+                       "a late leave rewrote an expired window as an ordinary close")
+    }
+
+    /// An owner may deliver a leave from inside one of this object's own hooks.
+    ///
+    /// A room that learns of a departure while it is suspending its lanes is
+    /// ordinary rather than an abuse, and the recursive lock is what makes it
+    /// legal. The gap must not then be resurrected on top of it.
+    func testAReentrantLeaveFromAnOwnerHookIsSafe() {
+        let fromPolicy = harness()
+        let policyTag = leaveTag(fromPolicy.held)
+        fromPolicy.onLostSideEffect = { [weak fromPolicy] in
+            fromPolicy?.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: policyTag)
+        }
+        fromPolicy.loseTransport()
+
+        XCTAssertEqual(fromPolicy.coordinator.phase, .ended)
+        XCTAssertEqual(fromPolicy.ended.count, 1)
+        guard case .peerDeparted? = fromPolicy.ended.first else { return XCTFail("wrong reason") }
+        XCTAssertEqual(fromPolicy.admission.phase, .idle)
+        XCTAssertTrue(fromPolicy.produced.isEmpty, "a departed peer got a rebuild anyway")
+        XCTAssertTrue(fromPolicy.scheduler.liveDelays.isEmpty)
+
+        let fromEnded = harness()
+        let endedTag = leaveTag(fromEnded.held)
+        fromEnded.onEndedSideEffect = { [weak fromEnded] in
+            fromEnded?.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: endedTag)
+        }
+        fromEnded.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: endedTag)
+
+        XCTAssertEqual(fromEnded.ended.count, 1, "a re-entrant leave reported a second ending")
+    }
+
+    /// A burst of genuine leaves is one teardown, whatever order the threads
+    /// arrive in. A terminal path decided on one thread and taken on another is
+    /// not a terminal path.
+    func testConcurrentVerifiedLeavesEndTheLinkExactlyOnce() {
+        for round in 0..<stressRounds {
+            let h = harness()
+            h.loseTransport()
+            // Signed up front: the race under test is the teardown, not the HMAC.
+            let tag = leaveTag(h.held)
+
+            inParallel(8) { _ in
+                h.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: tag)
+            }
+
+            XCTAssertEqual(h.coordinator.phase, .ended, "round \(round)")
+            XCTAssertEqual(h.ended.count, 1, "round \(round): the link ended more than once")
+            XCTAssertEqual(h.admission.phase, .idle,
+                           "round \(round): a deliberate departure failed the room")
+            XCTAssertEqual(h.produced.count, 1, "round \(round): a departure allocated a rebuild")
+            XCTAssertTrue(h.scheduler.liveDelays.isEmpty,
+                          "round \(round): an ended link left a wake-up armed")
+        }
+    }
+
+    /// A departure arriving as a rebuild publishes settles one way, and the two
+    /// answers stay consistent: an attached link is open, a departed one is
+    /// ended with the room free.
+    func testALeaveRacingAPublicationSettlesOneWay() {
+        for round in 0..<stressRounds {
+            let h = harness()
+            h.loseTransport()
+            guard let candidate = h.produced.first else { return XCTFail("round \(round): no attempt") }
+            let tag = leaveTag(h.held)
+
+            inParallel(2) { index in
+                if index == 0 {
+                    candidate.becomeReady(h.held)
+                } else {
+                    h.coordinator.receiveLeave(from: "peer-b", to: "peer-a", auth: tag)
+                }
+            }
+
+            XCTAssertLessThanOrEqual(h.attached.count, 1,
+                                     "round \(round): the lanes were handed over twice")
+            XCTAssertEqual(h.ended.count, 1, "round \(round): the link ended more than once")
+            XCTAssertEqual(h.coordinator.phase, .ended, "round \(round)")
+            XCTAssertEqual(h.admission.phase, .idle, "round \(round)")
+        }
+    }
+
+    // MARK: - the leave path's boundaries
+
+    /// Comments stripped, so a rule about code is not satisfied — or broken — by
+    /// prose.
+    private func code(_ source: String) -> String {
+        source
+            .components(separatedBy: "\n")
+            .map { line -> String in
+                guard let marker = line.range(of: "//") else { return line }
+                return String(line[line.startIndex..<marker.lowerBound])
+            }
+            .joined(separator: "\n")
+    }
+
+    /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → the kit's sources.
+    private func kitSource(_ name: String) throws -> String {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/RelayiumKit/Realtime/\(name)")
+        let source = code(try String(contentsOf: url, encoding: .utf8))
+        XCTAssertFalse(source.isEmpty, "\(name) must be readable")
+        return source
+    }
+
+    /// Every cheap refusal runs BEFORE the HMAC, exactly as the resume path's
+    /// does.
+    ///
+    /// Behaviour cannot see this: a wrong-length or wrong-peer tag is refused
+    /// either way, and the difference is only what a flood of them costs. It is
+    /// still the difference between a bounded verifier and one that a stranger on
+    /// the socket can spend this side's CPU through, so it is pinned as code.
+    func testTheLeavesCheapChecksAllRunBeforeItsHMAC() throws {
+        let source = try kitSource("LinkRecovery.swift")
+        let start = try XCTUnwrap(source.range(of: "private func receiveLeaveLocked"))
+        let hmac = try XCTUnwrap(source.range(of: "verifyResume(", range: start.upperBound..<source.endIndex))
+        let cheap = String(source[start.upperBound..<hmac.lowerBound])
+
+        XCTAssertTrue(cheap.contains("case .ended: return"),
+                      "an ended link must be refused before the HMAC")
+        XCTAssertTrue(cheap.contains("from == identity.peerId"),
+                      "a wrong peer must be refused before the HMAC")
+        XCTAssertTrue(cheap.contains("auth.count == LINK_LEAVE_AUTH_LENGTH"),
+                      "a malformed length must be refused before the HMAC")
+    }
+
+    /// The verifier covers the DIRECTIONAL leave payload and nothing else.
+    ///
+    /// `authPayload` would render one constant string for the whole life of a
+    /// link — a tag with no direction, replayable in either direction once
+    /// observed — and it is the function the neighbouring resume path uses, which
+    /// is exactly what makes it the wrong one to reach for here.
+    func testTheLeaveVerifierCoversTheDirectionalPayloadOnly() throws {
+        let source = try kitSource("LinkRecovery.swift")
+        let start = try XCTUnwrap(source.range(of: "private func receiveLeaveLocked"))
+        let end = try XCTUnwrap(source.range(of: "endLocked(.peerDeparted",
+                                             range: start.upperBound..<source.endIndex))
+        let body = String(source[start.upperBound..<end.lowerBound])
+
+        XCTAssertTrue(body.contains("linkLeavePayload(from: identity.peerId, to: to)"),
+                      "the tag must cover the peer this link holds, addressed to this side")
+        XCTAssertFalse(body.contains("authPayload"),
+                       "the leave must not verify the resume path's undirected payload")
+        XCTAssertFalse(body.contains("resumeSignalIsAuthentic"),
+                       "the leave must not be verified as a resume signal")
+    }
+
+    /// The coordinator answers a departure with silence. It holds no signalling
+    /// client, builds no signal and cannot echo one — which is what stops a leave
+    /// from being a way to make this side speak.
+    func testTheCoordinatorCannotAnswerADeparture() throws {
+        let source = try kitSource("LinkRecovery.swift")
+
+        for forbidden in ["linkLeaveSignal", "linkBusySignal", "SignalingClient",
+                          "sendSignal", "signResume"] {
+            XCTAssertFalse(source.contains(forbidden),
+                           "the coordinator must not name \(forbidden)")
+        }
+    }
+
     // MARK: - still gated
 
     /// This slice makes a rebuild reachable. It does not make `link/1`

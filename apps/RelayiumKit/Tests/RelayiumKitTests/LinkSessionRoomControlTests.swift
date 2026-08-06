@@ -16,6 +16,7 @@ private final class RecordingRecoveryControl: LinkSessionRecoveryControl {
     private(set) var routed: [(from: String, signal: JSONValue)] = []
     private(set) var resumeOffers: [(from: String, signal: JSONValue)] = []
     private(set) var departures: [String] = []
+    private(set) var leaves: [(from: String, to: String, auth: String)] = []
     private(set) var joins: [String] = []
     /// The completion the last `joinRecovery` was handed, so a test can prove it
     /// travelled through rather than being wrapped or dropped.
@@ -36,6 +37,11 @@ private final class RecordingRecoveryControl: LinkSessionRecoveryControl {
     func peerDeparted(_ peerId: String) {
         calls.append("departed")
         departures.append(peerId)
+    }
+
+    func receiveLeave(from: String, to: String, auth: String) {
+        calls.append("leave")
+        leaves.append((from, to, auth))
     }
 
     func joinRecovery(peerId: String,
@@ -84,9 +90,10 @@ final class LinkSessionRoomControlTests: XCTestCase {
         control.receive(from: "peer-a", signal: candidate)
         control.receiveResumeOffer(from: "peer-a", signal: signal)
         control.peerDeparted("peer-b")
+        control.receiveLeave(from: "peer-d", to: "peer-self", auth: "tag")
         control.joinRecovery(peerId: "peer-c") { _ in }
 
-        XCTAssertEqual(runtime.calls, ["routed", "resume", "departed", "join"],
+        XCTAssertEqual(runtime.calls, ["routed", "resume", "departed", "leave", "join"],
                        "each verb reached the runtime exactly once, in issue order")
         XCTAssertEqual(runtime.routed.count, 1)
         XCTAssertEqual(runtime.routed.first?.from, "peer-a")
@@ -98,6 +105,31 @@ final class LinkSessionRoomControlTests: XCTestCase {
                        "the signal is forwarded byte for byte")
         XCTAssertEqual(runtime.departures, ["peer-b"])
         XCTAssertEqual(runtime.joins, ["peer-c"])
+        XCTAssertEqual(runtime.leaves.count, 1)
+        // All three parts, unchanged. The direction is what the link's tag
+        // covers, so a control that swapped, defaulted or filled in either id
+        // would turn a genuine departure into a silent no-op — or, worse, make a
+        // reflected one verify.
+        XCTAssertEqual(runtime.leaves.first?.from, "peer-d")
+        XCTAssertEqual(runtime.leaves.first?.to, "peer-self")
+        XCTAssertEqual(runtime.leaves.first?.auth, "tag")
+    }
+
+    /// The control does not verify, and must not: it has no key, and a second
+    /// opinion about a tag is a second policy that can silently disagree with
+    /// `LinkRecoveryCoordinator`'s. An obviously worthless tag travels through
+    /// exactly like a genuine one.
+    func testAnUnverifiableLeaveIsStillForwardedVerbatim() {
+        let runtime = RecordingRecoveryControl()
+        let control = LinkSessionRoomControl(runtime: runtime)
+
+        control.receiveLeave(from: "peer-a", to: "peer-b", auth: "")
+        control.receiveLeave(from: "peer-a", to: "peer-b",
+                             auth: String(repeating: "A", count: LINK_LEAVE_AUTH_LENGTH))
+
+        XCTAssertEqual(runtime.leaves.count, 2, "the control refused a signal it cannot judge")
+        XCTAssertEqual(runtime.leaves.map(\.auth),
+                       ["", String(repeating: "A", count: LINK_LEAVE_AUTH_LENGTH)])
     }
 
     /// The join answer is the runtime's own, unwrapped. A control that
@@ -167,6 +199,8 @@ final class LinkSessionRoomControlTests: XCTestCase {
         control.receive(from: "peer-a", signal: resumeSignal())
         control.receiveResumeOffer(from: "peer-a", signal: resumeSignal())
         control.peerDeparted("peer-a")
+        control.receiveLeave(from: "peer-a", to: "peer-b",
+                             auth: String(repeating: "a", count: LINK_LEAVE_AUTH_LENGTH))
         var resolved = false
 
         XCTAssertEqual(control.joinRecovery(peerId: "peer-a") { _ in resolved = true },
@@ -186,6 +220,8 @@ final class LinkSessionRoomControlTests: XCTestCase {
         control.receive(from: "peer-a", signal: resumeSignal())
         control.receiveResumeOffer(from: "peer-a", signal: resumeSignal())
         control.peerDeparted("peer-a")
+        control.receiveLeave(from: "peer-a", to: "peer-b",
+                             auth: String(repeating: "a", count: LINK_LEAVE_AUTH_LENGTH))
 
         XCTAssertEqual(control.joinRecovery(peerId: "peer-a") { _ in }, .unavailable)
         XCTAssertFalse(control.isLive)
@@ -266,9 +302,43 @@ final class LinkSessionRoomControlTests: XCTestCase {
     func testTheCommandSeamStillExcludesEveryRoomVerb() throws {
         let attempt = try appSource("LinkSessionAttempt.swift")
 
-        for verb in ["receiveResumeOffer", "peerDeparted", "joinRecovery"] {
+        for verb in ["receiveResumeOffer", "peerDeparted", "joinRecovery", "receiveLeave"] {
             XCTAssertFalse(attempt.contains(verb),
                            "the command seam must not gain \(verb)")
+        }
+    }
+
+    /// The authenticated departure reaches exactly the four objects on the room's
+    /// own path to the link, and nothing else in app targets names it.
+    ///
+    /// A view, an `AppEnvironment` or a session model that could call this would
+    /// be able to end a link by asserting a tag it has no way to hold — the whole
+    /// point of putting the verifier under the identity is that only the layer
+    /// holding the key decides.
+    func testTheLeaveSeamReachesNothingButTheRoomsOwnPath() throws {
+        let expected: Set<String> = ["LinkRecovery.swift",
+                                     "LinkRoomSession.swift",
+                                     "LinkSessionRoomControl.swift",
+                                     "LinkSessionRuntime.swift"]
+
+        var naming: Set<String> = []
+        for source in try appSources() where source.code.contains("receiveLeave") {
+            naming.insert(source.name)
+        }
+
+        XCTAssertEqual(naming, expected,
+                       "the leave seam is named outside the room's path to the link")
+    }
+
+    /// And the control still holds no key and reads no payload. It forwards
+    /// three strings; every decision about them is the coordinator's.
+    func testTheControlVerifiesNothingItForwards() throws {
+        let source = try appSource("LinkSessionRoomControl.swift")
+
+        for forbidden in ["verifyResume", "signResume", "linkLeavePayload",
+                          "resumeAuthKey", "parsedLinkLeaveAuth", "LINK_LEAVE_AUTH_LENGTH"] {
+            XCTAssertFalse(source.contains(forbidden),
+                           "the room control must not name \(forbidden)")
         }
     }
 

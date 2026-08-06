@@ -277,6 +277,14 @@ final class LinkRoomSession {
         current?.assembly.control.receiveResumeOffer(from: from, signal: signal)
     }
 
+    /// Hand the held link an authenticated departure. `to` is the room
+    /// envelope's local recipient id, forwarded unchanged so it remains part of
+    /// the directional authentication payload. Inert with no link held, and
+    /// inert inside the link until it has a coordinator to verify against.
+    func receiveLeave(from: String, to: String, auth: String) {
+        current?.assembly.control.receiveLeave(from: from, to: to, auth: auth)
+    }
+
     /// The peer left the room, or announced an authenticated departure.
     ///
     /// Forwarded to the held link, which ignores it unless it is that link's own

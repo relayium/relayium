@@ -49,6 +49,9 @@ protocol LinkSessionRecoveryControl: AnyObject {
     /// The peer left the room, or announced an authenticated departure. Ignored
     /// unless it is the peer this link belongs to.
     func peerDeparted(_ peerId: String)
+    /// Hand the link an authenticated departure. `to` is the room envelope's
+    /// local recipient id and must be forwarded unchanged.
+    func receiveLeave(from: String, to: String, auth: String)
     /// Join the one recovery outcome for this link, so intent raised mid-gap
     /// lands on the rebuilt link rather than on the transport that is gone.
     @discardableResult
@@ -138,6 +141,12 @@ final class LinkSessionRoomControl {
     /// Hand the link an inbound `resume` offer.
     func receiveResumeOffer(from: String, signal: JSONValue) {
         runtime?.receiveResumeOffer(from: from, signal: signal)
+    }
+
+    /// Hand the link an authenticated departure. `to` is the room envelope's
+    /// local recipient id and is forwarded unchanged.
+    func receiveLeave(from: String, to: String, auth: String) {
+        runtime?.receiveLeave(from: from, to: to, auth: auth)
     }
 
     /// The peer left the room, or announced an authenticated departure.

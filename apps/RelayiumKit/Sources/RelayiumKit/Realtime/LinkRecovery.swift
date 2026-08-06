@@ -572,6 +572,32 @@ public final class LinkRecoveryCoordinator: @unchecked Sendable {
         locked { endLocked(.peerDeparted, admission: .closed) }
     }
 
+    /// The peer left the room, or announced an authenticated departure for this
+    /// link.
+    ///
+    /// The signature is checked here before any terminal teardown:
+    /// phase, peer, and tag shape all run before HMAC work, and anything that
+    /// fails is inert in SILENCE.
+    public func receiveLeave(from: String, to: String, auth: String) {
+        locked { receiveLeaveLocked(from: from, to: to, auth: auth) }
+    }
+
+    private func receiveLeaveLocked(from: String, to: String, auth: String) {
+        switch _phase {
+        case .ended: return
+        case .open, .interrupted:
+            break
+        }
+        guard from == identity.peerId else { return }
+        guard auth.count == LINK_LEAVE_AUTH_LENGTH else { return }
+        guard verifyResume(key: identity.codecs.resumeAuthKey,
+                          payload: linkLeavePayload(from: identity.peerId, to: to),
+                          mac: auth)
+        else { return }
+
+        endLocked(.peerDeparted, admission: .closed)
+    }
+
     /// Explicit close, stop, or owner cancellation.
     public func stop() {
         locked { endLocked(.cancelled, admission: .closed) }

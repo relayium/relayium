@@ -1245,6 +1245,15 @@ public final class LinkSessionRuntime: @unchecked Sendable {
         coordinator?.receiveResumeOffer(from: from, signal: signal)
     }
 
+    /// Hand the coordinator an authenticated departure. `to` must be the room
+    /// envelope's local recipient id, forwarded unchanged from signaling.
+    ///
+    /// It is verified THERE, against this link's own resume key, and dropped in
+    /// silence if it does not pass. Nothing here inspects, answers or counts it.
+    public func receiveLeave(from: String, to: String, auth: String) {
+        coordinator?.receiveLeave(from: from, to: to, auth: auth)
+    }
+
     /// The peer left the room, or announced an authenticated departure. Ignored
     /// by the coordinator unless it is the peer this link belongs to.
     public func peerDeparted(_ peerId: String) {

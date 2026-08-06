@@ -121,6 +121,13 @@ final class LinkRoomSessionTests: XCTestCase {
                      authenticationGeneration: 5)
     }
 
+    private func leaveTag(_ identity: LinkIdentity,
+                         from: String = "peer-1",
+                         to: String = "self-room") -> String {
+        signResume(key: identity.codecs.resumeAuthKey,
+                   payload: linkLeavePayload(from: from, to: to))
+    }
+
     private func signalingClient() -> SignalingClient {
         let channel = FakeWebSocketChannel()
         let signaling = SignalingClient(channel: channel, name: "self")
@@ -715,14 +722,81 @@ final class LinkRoomSessionTests: XCTestCase {
         XCTAssertEqual(r.session.peerId, "peer-1")
     }
 
+    /// The whole path an admitted departure takes, end to end: the room hands it
+    /// to the control, the control to the runtime, the runtime to the
+    /// coordinator, and the coordinator verifies it against the identity it holds
+    /// before the ordinary clean teardown runs.
+    ///
+    /// Nothing between the room and the coordinator is a double here, so this is
+    /// the test that says the seam really connects rather than merely compiling.
+    func testAVerifiedLeaveReachesTheHeldLinkAndEndsItCleanly() async {
+        let r = rig()
+        r.session.begin(peerId: "peer-1", role: .initiator)
+        r.assembled.transports[0].publish(identity(peerId: "peer-1"))
+        await settle()
+        XCTAssertEqual(r.admission.phase, .open(peerId: "peer-1"))
+
+        let peer = identity(peerId: "peer-1")
+        r.session.receiveLeave(from: "peer-1", to: "self-room", auth: leaveTag(peer))
+        await settle()
+
+        XCTAssertEqual(r.admission.phase, .idle, "the link ended through its coordinator")
+        XCTAssertNil(r.session.peerId)
+        XCTAssertEqual(r.assembled.transports[0].closeCount, 1, "one teardown")
+        XCTAssertTrue(r.assembled.transports[0].routed.isEmpty,
+                      "a departure was answered on the wire")
+    }
+
+    /// The room verifies nothing and holds no key. A tag that does not pass is
+    /// refused by the LINK, and the establishment the room holds is untouched —
+    /// which is the difference between forwarding and deciding.
+    func testAnUnverifiedLeaveReachesTheLinkAndIsRefusedThere() async {
+        let r = rig()
+        r.session.begin(peerId: "peer-1", role: .initiator)
+        r.assembled.transports[0].publish(identity(peerId: "peer-1"))
+        await settle()
+
+        // A stranger's replay, a reflection, and a malformed tag.
+        let peer = identity(peerId: "peer-1")
+        r.session.receiveLeave(from: "peer-x", to: "self-room", auth: leaveTag(peer))
+        r.session.receiveLeave(from: "peer-1", to: "self-room",
+                               auth: leaveTag(peer, from: "self-room", to: "peer-1"))
+        r.session.receiveLeave(from: "peer-1", to: "self-room", auth: "not-a-tag")
+        await settle()
+
+        XCTAssertEqual(r.admission.phase, .open(peerId: "peer-1"), "an unverified leave ended the link")
+        XCTAssertEqual(r.session.peerId, "peer-1")
+        XCTAssertEqual(r.assembled.transports[0].closeCount, 0)
+    }
+
+    /// A retired establishment takes no leave either: `end()` releases the
+    /// assembly, so the control it would travel through holds no runtime at all.
+    func testALeaveAfterTheEstablishmentEndsIsInert() async {
+        let r = rig()
+        r.session.begin(peerId: "peer-1", role: .initiator)
+        r.assembled.transports[0].publish(identity(peerId: "peer-1"))
+        await settle()
+        r.session.end()
+        await settle()
+        let peer = identity(peerId: "peer-1")
+
+        r.session.receiveLeave(from: "peer-1", to: "self-room", auth: leaveTag(peer))
+        await settle()
+
+        XCTAssertNil(r.session.peerId)
+        XCTAssertEqual(r.assembled.transports.count, 1, "a leave assembled something")
+    }
+
     /// Both seams are inert with nothing held. A signal that arrives between
     /// establishments must not crash, must not be buffered, and must not open
     /// anything.
     func testTheSeamsAreInertWithNoEstablishmentHeld() async {
         let r = rig()
+        let peer = identity(peerId: "peer-1")
 
         r.session.peerDeparted("peer-1")
         r.session.receiveResumeOffer(from: "peer-1", signal: .object(["resume": .bool(true)]))
+        r.session.receiveLeave(from: "peer-1", to: "self-room", auth: leaveTag(peer))
         await settle()
 
         XCTAssertEqual(r.admission.phase, .idle)
