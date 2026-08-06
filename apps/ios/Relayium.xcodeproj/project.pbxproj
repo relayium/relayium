@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -11,6 +11,16 @@
 		B100000000000000000000D6 /* RelayiumShareKit in Frameworks */ = {isa = PBXBuildFile; productRef = B100000000000000000000D5 /* RelayiumShareKit */; };
 		B100000000000000000000D7 /* RelayiumShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B100000000000000000000D1 /* RelayiumShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B100000000000000000000DA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B100000000000000000000A1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B100000000000000000000D2;
+			remoteInfo = RelayiumShare;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
 		B100000000000000000000D8 /* Embed Foundation Extensions */ = {
@@ -32,14 +42,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		B100000000000000000000C3 /* Exceptions for "Relayium" folder in "Relayium" target */ = {
+		B100000000000000000000C3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
 			target = B100000000000000000000A5 /* Relayium */;
 		};
-		B100000000000000000000D4 /* Exceptions for "RelayiumShare" folder in "RelayiumShare" target */ = {
+		B100000000000000000000D4 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -49,26 +59,8 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		B100000000000000000000AF /* Relayium */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				B100000000000000000000C3 /* Exceptions for "Relayium" folder in "Relayium" target */,
-			);
-			explicitFileTypes = {};
-			explicitFolders = ();
-			path = Relayium;
-			sourceTree = "<group>";
-		};
-		B100000000000000000000D3 /* RelayiumShare */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				B100000000000000000000D4 /* Exceptions for "RelayiumShare" folder in "RelayiumShare" target */,
-			);
-			explicitFileTypes = {};
-			explicitFolders = ();
-			path = RelayiumShare;
-			sourceTree = "<group>";
-		};
+		B100000000000000000000AF /* Relayium */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (B100000000000000000000C3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Relayium; sourceTree = "<group>"; };
+		B100000000000000000000D3 /* RelayiumShare */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (B100000000000000000000D4 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = RelayiumShare; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -162,24 +154,6 @@
 		};
 /* End PBXNativeTarget section */
 
-/* Begin PBXTargetDependency section */
-		B100000000000000000000D9 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = B100000000000000000000D2 /* RelayiumShare */;
-			targetProxy = B100000000000000000000DA /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
-/* Begin PBXContainerItemProxy section */
-		B100000000000000000000DA /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = B100000000000000000000A1 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = B100000000000000000000D2;
-			remoteInfo = RelayiumShare;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXProject section */
 		B100000000000000000000A1 /* Project object */ = {
 			isa = PBXProject;
@@ -216,7 +190,6 @@
 			packageReferences = (
 				B100000000000000000000B0 /* XCLocalSwiftPackageReference "../RelayiumKit" */,
 			);
-			preferredProjectObjectVersion = 77;
 			productRefGroup = B100000000000000000000A3 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -261,10 +234,19 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		B100000000000000000000D9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B100000000000000000000D2 /* RelayiumShare */;
+			targetProxy = B100000000000000000000DA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
 		B100000000000000000000A7 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Relayium/Relayium.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -290,6 +272,7 @@
 		B100000000000000000000A8 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Relayium/Relayium.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -512,7 +495,7 @@
 /* Begin XCLocalSwiftPackageReference section */
 		B100000000000000000000B0 /* XCLocalSwiftPackageReference "../RelayiumKit" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = "../RelayiumKit";
+			relativePath = ../RelayiumKit;
 		};
 /* End XCLocalSwiftPackageReference section */
 

@@ -26,14 +26,43 @@ let artworkURL = scriptDirectory
     .deletingLastPathComponent()            // apps/mac
     .appendingPathComponent("Brand/AppIcon.svg")
 
-guard CommandLine.arguments.count == 2 else {
+/// Which platform's icon set to write.
+///
+/// The two differ in exactly two ways, and both come from Apple's own rules
+/// rather than from taste:
+///
+///  - **Shape.** A macOS icon draws its own rounded body inset in a larger
+///    canvas; the system does not mask it. An iOS icon is a full-bleed opaque
+///    square that the system masks itself, so drawing the inset body there
+///    would leave a transparent margin and then be masked a second time — a
+///    visibly small glyph inside a ring of nothing.
+///  - **Slots.** macOS wants a PNG per size; iOS derives every size from one
+///    1024×1024 image.
+///
+/// Everything else — the gradient, its stops, the sheen, the glyph path, its
+/// stroke width and caps — is read from the one SVG for both, which is the
+/// property this whole script exists to keep.
+enum IconPlatform {
+    case mac, ios
+
+    init(argument: String) {
+        switch argument {
+        case "--mac": self = .mac
+        case "--ios": self = .ios
+        default: fail("unknown platform \(argument); expected --mac or --ios")
+        }
+    }
+}
+
+guard CommandLine.arguments.count == 3 else {
     FileHandle.standardError.write(Data("""
-        usage: xcrun swift render-app-icon.swift <AppIcon.appiconset path>
+        usage: xcrun swift render-app-icon.swift <--mac|--ios> <AppIcon.appiconset path>
 
         """.utf8))
     exit(2)
 }
-let outputDirectory = URL(fileURLWithPath: CommandLine.arguments[1])
+let platform = IconPlatform(argument: CommandLine.arguments[1])
+let outputDirectory = URL(fileURLWithPath: CommandLine.arguments[2])
 
 func fail(_ message: String) -> Never {
     fatalError("render-app-icon: \(message)")
@@ -311,9 +340,20 @@ let glyphPath = parsePath(commands)
 // MARK: - Rasterization
 
 func render(edge: Int) -> CGImage {
+    // **iOS icons must carry no alpha channel at all.** App Store Connect
+    // rejects a transparent icon outright ("The app icon can't be transparent
+    // nor contain an alpha channel"), and it is a rejection that only appears at
+    // upload — long after every build and test has passed. macOS is the
+    // opposite: its icon is an inset body on a transparent canvas, so it needs
+    // the channel.
+    //
+    // `noneSkipLast` is what removes it. Writing an opaque image through a
+    // premultiplied context would still emit RGBA, with every alpha byte 255 and
+    // the same rejection.
+    let alpha: CGImageAlphaInfo = platform == .ios ? .noneSkipLast : .premultipliedLast
     guard let context = CGContext(
         data: nil, width: edge, height: edge, bitsPerComponent: 8, bytesPerRow: 0,
-        space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        space: sRGB, bitmapInfo: alpha.rawValue)
     else { fail("cannot create a \(edge)px context") }
     context.setShouldAntialias(true)
 
@@ -324,8 +364,22 @@ func render(edge: Int) -> CGImage {
     let scale = CGFloat(edge) / canvasEdge
     context.scaleBy(x: scale, y: scale)
 
-    let body = CGPath(roundedRect: bodyRect, cornerWidth: cornerRadius,
-                      cornerHeight: cornerRadius, transform: nil)
+    // iOS is the same artwork with the inset removed. One transform maps the
+    // SVG's body rect onto the whole canvas, and because it is applied before
+    // anything is drawn, the gradients' userSpaceOnUse coordinates and the
+    // glyph's own transform follow it for free — no second set of numbers, and
+    // nothing here can drift from the SVG.
+    if platform == .ios {
+        let bleed = canvasEdge / bodyRect.width
+        context.scaleBy(x: bleed, y: bleed)
+        context.translateBy(x: -bodyRect.origin.x, y: -bodyRect.origin.y)
+    }
+
+    // Square on iOS, and that is the point rather than an omission: the system
+    // applies the mask, so an icon that rounds its own corners is rounded twice.
+    let body = CGPath(roundedRect: bodyRect,
+                      cornerWidth: platform == .ios ? 0 : cornerRadius,
+                      cornerHeight: platform == .ios ? 0 : cornerRadius, transform: nil)
     // Body first, then the sheen over it — the SVG's own painting order.
     for fill in [bodyGradient, sheenGradient] {
         context.saveGState()
@@ -357,8 +411,12 @@ func render(edge: Int) -> CGImage {
 /// from one large image, so 16/32/128/256/512 each appear at 1× and 2×, and
 /// 32, 256 and 512 are therefore each referenced twice.
 /// https://developer.apple.com/documentation/xcode/configuring-your-app-icon/
-let slots: [(point: Int, scale: Int)] = [(16, 1), (16, 2), (32, 1), (32, 2), (128, 1),
-                                         (128, 2), (256, 1), (256, 2), (512, 1), (512, 2)]
+let macSlots: [(point: Int, scale: Int)] = [(16, 1), (16, 2), (32, 1), (32, 2), (128, 1),
+                                            (128, 2), (256, 1), (256, 2), (512, 1), (512, 2)]
+/// One image, and the system derives the rest. Listing more would be listing
+/// sizes Xcode ignores.
+let iosSlots: [(point: Int, scale: Int)] = [(1024, 1)]
+let slots = platform == .ios ? iosSlots : macSlots
 func filename(forPixels pixels: Int) -> String { "icon_\(pixels).png" }
 
 try? FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
@@ -375,8 +433,22 @@ for pixels in Set(slots.map { $0.point * $0.scale }).sorted() {
 
 // Hand-built rather than JSONSerialization so the key order is stable and the
 // file stays reviewable as a diff.
-let entries = slots.map { slot in
-    """
+let entries = slots.map { slot -> String in
+    // iOS's single entry is "universal" with an explicit platform and no
+    // "scale" — the modern single-size form. A "scale" here makes Xcode treat
+    // it as the legacy per-size layout and then complain about the sizes it
+    // cannot find.
+    if platform == .ios {
+        return """
+                {
+                  "filename" : "\(filename(forPixels: slot.point * slot.scale))",
+                  "idiom" : "universal",
+                  "platform" : "ios",
+                  "size" : "\(slot.point)x\(slot.point)"
+                }
+            """
+    }
+    return """
         {
           "idiom" : "mac",
           "size" : "\(slot.point)x\(slot.point)",

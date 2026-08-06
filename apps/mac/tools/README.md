@@ -8,16 +8,38 @@ shipped bundle. Source artwork and a developer script must not be.
 ## Regenerating the app icon
 
 ```
-xcrun swift apps/mac/tools/render-app-icon.swift \
+xcrun swift apps/mac/tools/render-app-icon.swift --mac \
   apps/mac/Relayium/Assets.xcassets/AppIcon.appiconset
+
+xcrun swift apps/mac/tools/render-app-icon.swift --ios \
+  apps/ios/Relayium/Assets.xcassets/AppIcon.appiconset
 ```
 
-Writes seven PNGs (16, 32, 64, 128, 256, 512, 1024) and `Contents.json`, and
-prints one line per file.
+macOS writes seven PNGs (16, 32, 64, 128, 256, 512, 1024) and `Contents.json`.
+iOS writes one 1024×1024 PNG and `Contents.json`, because iOS derives every
+other size from it.
 
 The renderer reads every colour, coordinate and path out of
 `apps/mac/Brand/AppIcon.svg`. That SVG is the single place the artwork is
-written down; the script holds no second copy of it.
+written down; the script holds no second copy of it, and neither does the iOS
+mode — it renders the same artwork through one extra transform.
+
+### Why the two platforms differ, and where
+
+Two differences, both Apple's rules rather than taste:
+
+- **Shape.** macOS draws its own rounded body inset in a larger canvas and the
+  system does not mask it. iOS is a full-bleed square that the system masks
+  itself, so drawing the inset body there would leave a transparent margin and
+  then be masked again — a small glyph inside a ring of nothing. `--ios` maps
+  the SVG's body rect onto the whole canvas before drawing, so the gradients and
+  the glyph follow for free.
+- **Alpha.** macOS needs the channel; **iOS must not have it**. App Store
+  Connect rejects a transparent icon outright, and an opaque RGBA image still
+  carries the channel and is still refused. `--ios` renders through
+  `noneSkipLast` so the PNG is RGB. `IOSAppIconAssetTests` asserts PNG colour
+  type 2, because this is an upload-time rejection: every build, test and
+  simulator run passes with a transparent icon.
 
 ### This is a human command
 
