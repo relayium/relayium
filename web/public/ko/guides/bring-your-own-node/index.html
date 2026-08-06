@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기" />
     <meta name="twitter:description" content="직접 준비한 릴레이/스토리지 노드를 명령어 하나로 Relayium 계정에 연결하세요. 그러면 전송이 종량제 서버가 아닌 내 노드를 통해 이루어지므로 무료이며, 데이터도 직접 관리하는 하드웨어에 남습니다." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기","description":"직접 준비한 릴레이/스토리지 노드를 명령어 하나로 Relayium 계정에 연결하세요. 그러면 전송이 종량제 서버가 아닌 내 노드를 통해 이루어지므로 무료이며, 데이터도 직접 관리하는 하드웨어에 남습니다.","inLanguage":"ko","datePublished":"2026-07-10","dateModified":"2026-07-22","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"“relayium-node: command not found”가 떴습니다 — 무엇이 잘못되었나요?","acceptedAnswer":{"@type":"Answer","text":"relayium-node 바이너리를 설치하기 전에 실행한 것입니다. 계정 페이지의 한 줄 설치 명령어(curl … | sudo … sh 형태)를 사용하세요. 이것이 바이너리를 다운로드하여 PATH에 놓고 서비스로 시작합니다. relayium-node를 별도로 설치하는 일은 결코 없습니다."}},{"@type":"Question","name":"재부팅 후에도 노드가 온라인을 유지하나요?","acceptedAnswer":{"@type":"Answer","text":"네. 설치 프로그램은 부팅 시 활성화되고 Restart=always로 설정된 systemd 서비스를 등록하므로, 재부팅 후 복귀하고 충돌하면 스스로 재시작합니다. 추가로 실행할 것은 없습니다."}},{"@type":"Question","name":"이것은 Relayium 셀프 호스팅과 어떻게 다른가요?","acceptedAnswer":{"@type":"Answer","text":"Bring-your-own-node는 평소의 relayium.com 계정과 앱을 그대로 유지하면서 트래픽을 운반할 본인 소유의 노드를 추가하는 것뿐입니다. 셀프 호스팅은 서버 스택 전체(계정, 웹 앱, 시그널링)를 본인 도메인에서 운영합니다. 이에 대해서는 “Relayium 셀프 호스팅” 가이드를 참조하세요."}},{"@type":"Question","name":"다른 사람이 제 노드를 사용하거나 제 데이터를 볼 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 노드는 토큰으로 내 계정에 연결되어 그 계정의 트래픽만 운반합니다. 실시간 전송은 종단 간 암호화되고, 저장된 블롭은 내 노드가 읽을 수 없는 암호문입니다. 내 데이터와 노드 구성은 오직 본인만 사용할 수 있습니다."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기","description":"직접 준비한 릴레이/스토리지 노드를 명령어 하나로 Relayium 계정에 연결하세요. 그러면 전송이 종량제 서버가 아닌 내 노드를 통해 이루어지므로 무료이며, 데이터도 직접 관리하는 하드웨어에 남습니다.","inLanguage":"ko","datePublished":"2026-07-10","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Bring Your Own Node: Relayium 릴레이 및 스토리지를 무료로 사용하기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"“relayium-node: command not found”가 떴습니다 — 무엇이 잘못되었나요?","acceptedAnswer":{"@type":"Answer","text":"relayium-node 바이너리를 설치하기 전에 실행한 것입니다. 계정 페이지의 한 줄 설치 명령어(curl … | sudo … sh 형태)를 사용하세요. 이것이 바이너리를 다운로드하여 PATH에 놓고 서비스로 시작합니다. relayium-node를 별도로 설치하는 일은 결코 없습니다."}},{"@type":"Question","name":"재부팅 후에도 노드가 온라인을 유지하나요?","acceptedAnswer":{"@type":"Answer","text":"네. 설치 프로그램은 부팅 시 활성화되고 Restart=always로 설정된 systemd 서비스를 등록하므로, 재부팅 후 복귀하고 충돌하면 스스로 재시작합니다. 추가로 실행할 것은 없습니다."}},{"@type":"Question","name":"이것은 Relayium 셀프 호스팅과 어떻게 다른가요?","acceptedAnswer":{"@type":"Answer","text":"Bring-your-own-node는 평소의 relayium.com 계정과 앱을 그대로 유지하면서 트래픽을 운반할 본인 소유의 노드를 추가하는 것뿐입니다. 셀프 호스팅은 서버 스택 전체(계정, 웹 앱, 시그널링)를 본인 도메인에서 운영합니다. 이에 대해서는 “Relayium 셀프 호스팅” 가이드를 참조하세요."}},{"@type":"Question","name":"다른 사람이 제 노드를 사용하거나 제 데이터를 볼 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 노드는 토큰으로 내 계정에 연결되어 그 계정의 트래픽만 운반합니다. 실시간 전송은 종단 간 암호화되고, 저장된 블롭은 내 노드가 읽을 수 없는 암호문입니다. 내 데이터와 노드 구성은 오직 본인만 사용할 수 있습니다."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -72,6 +72,23 @@ footer a{color:var(--text-h);text-decoration:none}
 .tw th{color:var(--text-h);background:var(--card);font-weight:600}
 .tw code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;color:var(--text-h)}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -90,23 +107,24 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">마지막 업데이트: <bdi>2026-07-22</bdi></p>
+      <p class="updated">마지막 업데이트: <bdi>2026-08-06</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node/">English</a><a href="/zh/guides/bring-your-own-node/">中文</a><a href="/ja/guides/bring-your-own-node/">日本語</a><a href="/ko/guides/bring-your-own-node/" aria-current="true">한국어</a><a href="/de/guides/bring-your-own-node/">Deutsch</a><a href="/fr/guides/bring-your-own-node/">Français</a><a href="/ar/guides/bring-your-own-node/">العربية</a><a href="/es/guides/bring-your-own-node/">Español</a><a href="/pt/guides/bring-your-own-node/">Português</a></nav>
       <p class="lead">네트워크를 넘나드는 전송과 저장된 링크는 당사에 비용이 드는 릴레이 대역폭과 디스크를 사용하므로, 무료 허용량 내에서 동작하고 그 이상은 유료입니다. 이를 우회하는 방법이 있습니다. 직접 릴레이/스토리지 노드를 운영하여 계정에 연결하면, 전송이 당사가 아닌 내 노드를 통해 흐르며 종량 계측도 청구도 전혀 없습니다.</p>
       <p class="lead">이는 Relayium 서버 전체를 셀프 호스팅하는 것과는 다릅니다. 평소 쓰던 relayium.com 계정과 동일한 앱을 그대로 사용하면서, 트래픽을 운반할 본인 소유의 노드를 추가하는 것뿐입니다. 이 가이드는 새로운 Linux 머신에서 온라인 노드까지 약 5분 만에 안내합니다.</p>
       <h2>왜 직접 노드를 운영해야 하나</h2>
       <p>두 가지 이유가 있습니다. 첫째, 비용입니다. 직접 운영하는 노드는 내 릴레이와 스토리지 트래픽을 직접 운반하므로 당사의 종량제 인프라에 전혀 닿지 않고 청구할 것이 없습니다. 사용량이 아무리 커도 무료입니다.</p>
       <p>둘째, 통제권입니다. 릴레이된 바이트와 저장된 블롭은 직접 운영하고 본인의 운영 통제하에 있는 하드웨어에 존재합니다. 실시간 전송은 전 구간에서 종단 간 암호화를 유지하므로, 내 노드조차 항상 암호문만 보게 됩니다.</p>
-      <h2>필요한 것</h2>
-      <p>인터넷에서 접근 가능한 Linux 서버 — 저렴한 VPS든 집에 상시 켜둔 머신이든 모두 가능합니다. root(또는 sudo)와 몇 개의 인바운드 포트를 열 수 있는 권한이 필요합니다. amd64와 arm64 모두 지원됩니다.</p>
-      <h2>1단계 — 설치 명령어 받기</h2>
-      <p>relayium.com에 로그인하여 계정 페이지(/me)를 열고, “내 노드”까지 스크롤한 뒤 “노드 추가”를 클릭하세요. 토큰이 삽입된 일회성 설치 명령어를 받게 됩니다. 토큰은 한 번만 표시되므로 즉시 복사하세요. 다음과 같은 형태입니다.</p>
-      <pre><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre>
-      <ul><li>&lt;your-token&gt; 부분은 계정 페이지에서 자동으로 채워집니다. 위의 자리 표시자를 그대로 붙여넣지 마세요.</li><li>RELAYIUM_NODE_STORAGE_DIR는 릴레이뿐 아니라 블롭 스토리지도 켭니다. 노드가 저장하지 않고 릴레이만 하기를 원한다면 이를 끈 채로(변수를 생략) 두세요.</li></ul>
-      <h2>2단계 — 서버에서 root로 실행하기</h2>
-      <p>서버에 명령어를 붙여넣으세요. 이는 당사의 설치 프로그램을 sh로 파이프합니다. 설치 프로그램은 relayium-node 바이너리를 다운로드하고 체크섬을 검증한 뒤 /usr/local/bin에 설치하고, systemd 서비스를 작성하여 시작합니다. 앞의 sudo 덕분에 서비스를 설치할 수 있으며, 이미 root라면 무해한 no-op입니다.</p>
-      <p>systemd 서비스이므로 노드는 부팅 시 활성화되고 혹시 충돌하더라도 스스로 재시작합니다. 추가 작업 없이 재부팅을 넘나들며 온라인을 유지합니다. `relayium-node: command not found`가 보인다면 위의 설치 프로그램 대신 바이너리를 직접 실행한 것입니다. 바이너리를 제자리에 놓는 것은 이 한 줄 명령어입니다.</p>
-      <ul><li>시작되었는지 확인: `systemctl status relayium-node`(active/running으로 표시되어야 함).</li><li>부팅 지속성 확인: `systemctl is-enabled relayium-node`(enabled로 표시되어야 함).</li><li>로그 실시간 확인: `journalctl -u relayium-node -f`.</li></ul>
+      <h2>노드를 설치하고 온라인으로 만들기</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">1단계 전에 필요한 것</p><ul><li>인터넷에서 접근 가능한 리눅스 서버 — 저렴한 VPS도, 집에 늘 켜둔 컴퓨터도 됩니다. amd64와 arm64 모두 지원합니다.</li><li>그 서버의 root 권한 또는 sudo. 설치할 때 한 번만 필요하며, 노드 자체는 결코 root로 실행되지 않습니다.</li><li>인바운드 포트를 열 수 있는 권한 — 호스트 방화벽에서, 그리고 클라우드 VPS라면 제공업체의 보안 그룹에서도.</li><li>로그인되어 있는 relayium.com 계정. 설치 명령은 계정 페이지에서 발급되며 일회용 토큰을 담고 있습니다.</li><li>디스크 공간은 중계뿐 아니라 저장까지 맡기려는 경우에만 필요합니다. 중계 전용 노드에는 필요 없으며 RELAYIUM_NODE_STORAGE_DIR을 빼면 됩니다.</li></ul></div>
+      <p>순서대로 네 가지를 합니다. 명령을 발급받고, 실행하고, 포트를 열고, 노드가 온라인이 되었는지 확인합니다. 새 서버라면 5분 정도입니다.</p>
+      <ol class="steps" data-block="steps"><li><p>relayium.com에 로그인하고 계정 페이지 /me를 엽니다.</p></li><li><p>내 노드까지 내려가 노드 추가를 누릅니다. 설치 명령을 즉시 복사하세요 — 그 안의 토큰은 한 번만 표시되고 다시는 볼 수 없습니다.</p></li><li><p>서버에 붙여 넣어 실행합니다. relayium-node 바이너리를 내려받아 체크섬을 검증하고, /usr/local/bin에 설치하고, systemd 서비스를 작성한 뒤 시작합니다.</p><pre><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre></li><li><p>서비스가 떠 있고 재부팅 후에도 돌아오는지 확인합니다. 두 답이 모두 중요합니다. active는 지금 돌고 있다는 뜻이고, 재부팅을 견디게 하는 것은 enabled입니다.</p><pre><code>systemctl is-active relayium-node</code></pre><pre><code>systemctl is-enabled relayium-node</code></pre></li><li><p>호스트 방화벽에서 인바운드 포트를 엽니다. 온라인 표시에는 아웃바운드만 있으면 되지만, 상대가 중계하고 저장하는 통로는 이 포트들입니다.</p><pre><code>sudo ufw allow 3478/udp        # TURN
+sudo ufw allow 8081/tcp        # storage
+sudo ufw allow 49152:65535/udp # relay</code></pre></li><li><p>클라우드 VPS라면 제공업체의 보안 그룹에서도 같은 포트를 허용하세요. ufw만으로는 상위에서 막힌 채로 남고, 그동안 노드는 계속 정상으로 보입니다.</p></li><li><p>/me로 돌아가 노드가 온라인으로 바뀌는지 지켜봅니다 — 보통 30초 정도입니다. 그 뒤로 계정의 전송은 자동으로 이 노드를 우선합니다.</p></li><li><p>선택: 「중계/저장에 내 노드만 사용」을 켜면 공유 인프라로 조용히 되돌아가는 대신 전송이 실패합니다.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">정상적인 노드의 모습</p><p>systemd가 서비스를 active이자 enabled로 보고하고, 내 노드 아래에서 노드가 온라인으로 표시됩니다. active만으로는 부족합니다 — enabled가 아닌 노드는 다음 재부팅에 사라집니다.</p><pre><code>$ systemctl is-active relayium-node
+active
+$ systemctl is-enabled relayium-node
+enabled</code></pre></div>
+      <ul><li>&lt;your-token&gt; 부분은 계정 페이지에서 자동으로 채워집니다. 위의 자리 표시자를 그대로 붙여넣지 마세요.</li><li>RELAYIUM_NODE_STORAGE_DIR는 릴레이뿐 아니라 블롭 스토리지도 켭니다. 노드가 저장하지 않고 릴레이만 하기를 원한다면 이를 끈 채로(변수를 생략) 두세요.</li><li>시작되었는지 확인: `systemctl status relayium-node`(active/running으로 표시되어야 함).</li><li>부팅 지속성 확인: `systemctl is-enabled relayium-node`(enabled로 표시되어야 함).</li><li>로그 실시간 확인: `journalctl -u relayium-node -f`.</li><li>3478/udp는 피어가 릴레이에 사용하는 TURN 포트이고, 8081/tcp는 블롭 스토리지 HTTP 포트이며, 49152–65535/udp는 릴레이 미디어 범위입니다.</li><li>클라우드 VPS에서는 ufw뿐 아니라 공급자의 보안 그룹/네트워크 방화벽에서도 이들을 허용하세요.</li></ul>
       <h2>이 설치 프로그램을 root로 실행해도 안전한가요?</h2>
       <p>무엇보다 먼저: BYO 노드는 당사 자체 플릿 노드와 완전히 같은 코드, 완전히 같은 강화 설정으로 동작합니다 — 같은 서명된 릴리스의 같은 바이너리를, 같은 스크립트로, 같은 systemd 유닛 아래에 설치합니다. 유일한 차이는 그 머신이 누구의 것이냐뿐입니다. 아래 설명은 양쪽 모두에 해당합니다.</p>
       <p>인터넷에서 받아온 스크립트를 root 셸로 파이프하는 명령에 대해 나올 만한 질문이며, “괜찮습니다”라는 안심 대신 구체적인 답을 받을 자격이 있습니다. root는 설치에만 쓰이고, 그 이후 노드가 하는 일에는 전혀 쓰이지 않습니다. 설치 프로그램은 로그인 셸도 홈 디렉터리도 없는 relayium-node 시스템 계정을 만들고, systemd 유닛을 작성하고, 서비스를 시작한 뒤 종료합니다. 노드 자체는 결코 root로 실행되지 않습니다. 유닛에 User=relayium-node가 지정되어 있어, 온라인이 되는 순간부터 내 머신에서 아무것도 소유하지 않은 비특권 계정입니다. (기본으로 켜져 있는 자동 업데이트는 root로 실행되는 두 번째 유닛을 추가합니다 — 다음 절 전체가 그 유닛이 무엇을 할 수 있고 무엇을 할 수 없는지에 대한 이야기입니다.)</p>
@@ -126,15 +144,11 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
   [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh</code></pre>
       <ul><li>저장 디렉터리에 알아보지 못하는 파일이 하나라도 남아 있으면 거부합니다(정리가 아직 닿지 않은 만료된 blob도 마찬가지). 저장된 파일은 정확히 한 노드에만 있고 복제본이 없기 때문입니다. 0이 될 때까지 기다리거나, 그 파일들이 도달 불가능해지는 것을 감수하고 RELAYIUM_NODE_FORCE=1을 넘기세요.</li><li>blob이 어디 있는지 판단할 수 없으면 추측하지 않고 멈춥니다. RELAYIUM_NODE_ASSUME_NO_STORAGE=1이 유일한 통과 방법이며, 그래도 알아보지 못하는 것은 삭제하지 않습니다.</li><li>저장 디렉터리 자체는 RELAYIUM_NODE_PURGE_STORAGE=1을 함께 넘기지 않는 한 남습니다. 환경 변수는 `| sudo sh`를 넘지 못하므로 `sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh` 형태로 넘기세요.</li><li>그다음 `systemctl status relayium-node`는 not-found여야 하고 relayium-node 타이머도 보이지 않아야 합니다. 나중에 다시 설치하면 계정에 생기는 것은 완전히 새 노드입니다. 제거가 노드의 신원 파일을 지우므로, 재설치는 옛 노드를 되살리는 것이 아니라 새로 등록하는 것입니다.</li></ul>
-      <h2>3단계 — 인바운드 포트 열기</h2>
-      <p>온라인 상태(relayium.com으로의 하트비트)에는 이미 갖추고 있는 아웃바운드 접근만 필요합니다. 하지만 피어가 실제로 내 노드를 통해 릴레이하고 저장하려면 인바운드 포트가 접근 가능해야 합니다. 호스트에서 방화벽이 실행 중이라면 열어 주세요. ufw에서는 다음과 같습니다.</p>
-      <pre><code>sudo ufw allow 3478/udp        # TURN
-sudo ufw allow 8081/tcp        # storage
-sudo ufw allow 49152:65535/udp # relay</code></pre>
-      <ul><li>3478/udp는 피어가 릴레이에 사용하는 TURN 포트이고, 8081/tcp는 블롭 스토리지 HTTP 포트이며, 49152–65535/udp는 릴레이 미디어 범위입니다.</li><li>클라우드 VPS에서는 ufw뿐 아니라 공급자의 보안 그룹/네트워크 방화벽에서도 이들을 허용하세요.</li></ul>
-      <h2>4단계 — 확인하고 노드를 경유시키기</h2>
-      <p>계정 페이지로 돌아가면 추가한 노드가 “내 노드” 아래에 나타나고 약 30초 이내에 “온라인”으로 바뀝니다. 그때부터 내 계정의 전송은 자동으로 내 노드를 우선합니다.</p>
-      <p>이를 강제하려면 — 당사의 공유 인프라로 절대 폴백하지 않도록 — 같은 페이지에서 “내 노드로만 중계/저장하기”를 켜세요. 이를 켜면 내 노드가 하나도 온라인이 아닐 때 당사 것을 조용히 사용하는 대신 전송이 실패합니다.</p>
+      <h2>잘 안 될 때</h2>
+      <p>올라오지 않는 노드는 거의 모두 다섯 가지 중 하나이며, 그중 셋은 서버에서 보면 멀쩡합니다. 서비스는 돌고 있고, 아니라고 말해 주는 것은 계정 페이지나 리스닝 소켓뿐입니다.</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 해결</p><dl><dt>셸이 「relayium-node: command not found」라고 답합니다.</dt><dd><pre><code>command -v relayium-node
+# 아무것도 출력되지 않음</code></pre><p>바이너리가 설치되어 있지 않습니다. relayium-node를 따로 설치하는 일은 없습니다 — 계정 페이지의 한 줄 명령이 바로 바이너리를 내려받아 PATH에 놓고 서비스로 시작해 주는 것입니다. 그 명령을 실행하세요.</p></dd><dt>서비스는 active인데 계정 페이지에서 노드가 끝내 온라인이 되지 않습니다.</dt><dd><pre><code>journalctl -u relayium-node -n 50 --no-pager</code></pre><p>온라인 여부는 아웃바운드 하트비트로 결정되므로 여기서 방화벽이 원인인 경우는 드물고, 대개 등록 실패입니다. 토큰은 일회용이라 이미 실행한 명령이나 이전 시도에서 남은 옛 명령은 실패합니다. 노드 추가를 다시 눌러 새 명령을 받아 실행하세요.</p></dd><dt>노드는 온라인인데 전송이 여전히 공유 인프라를 지나갑니다.</dt><dd><pre><code>sudo ss -lunp | grep 3478</code></pre><p>온라인은 아웃바운드 하트비트만 증명합니다. 상대에게 필요한 것은 인바운드 포트입니다. 노드가 리스닝 중인지 확인한 뒤 호스트 방화벽과 클라우드 보안 그룹 양쪽에서 3478/udp, 8081/tcp, 49152-65535/udp를 여세요. 조용한 폴백을 완전히 배제하려면 내 노드만 사용 설정을 켜면 됩니다.</p></dd><dt>제거 명령이 아무것도 출력하지 않고 종료 코드 0으로 끝났는데 서비스는 그대로입니다.</dt><dd><pre><code>systemctl status relayium-node
+# active (running)</code></pre><p>실패한 다운로드를 sh로 파이프했을 때의 모습 그대로입니다. 404나 일시적인 네트워크 문제는 아무것도 출력하지 않고 종료 코드 0으로 끝나 성공처럼 읽힙니다. 스크립트를 내려받고 비어 있지 않은지 확인한 다음 실행하세요 — 이 문서의 명령이 파이프 하나가 아니라 세 부분으로 쓰인 이유가 그것입니다.</p></dd><dt>저장 디렉터리에 아직 파일이 남아 있어 제거가 거부됩니다.</dt><dd><pre><code>sudo ls /var/lib/relayium-node/blobs | wc -l</code></pre><p>의도된 동작입니다. 저장된 파일은 정확히 한 노드에만 존재하고 복제본이 없으므로, 노드를 없애면 그 파일들에 다시 닿을 수 없습니다. 블롭이 만료되어 개수가 0이 될 때까지 기다리거나, RELAYIUM_NODE_FORCE=1로 그 손실을 감수하세요. 환경 변수는 sudo sh로 가는 파이프를 넘지 못하므로 sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh 형태로 넘겨야 합니다.</p></dd></dl></div>
       <h2>자주 묻는 질문</h2>
       <h3>“relayium-node: command not found”가 떴습니다 — 무엇이 잘못되었나요?</h3>
       <p>relayium-node 바이너리를 설치하기 전에 실행한 것입니다. 계정 페이지의 한 줄 설치 명령어(curl … | sudo … sh 형태)를 사용하세요. 이것이 바이너리를 다운로드하여 PATH에 놓고 서비스로 시작합니다. relayium-node를 별도로 설치하는 일은 결코 없습니다.</p>

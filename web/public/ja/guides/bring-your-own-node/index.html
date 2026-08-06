@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う" />
     <meta name="twitter:description" content="自分で用意したリレー／ストレージノードを、コマンド1つで Relayium アカウントに紐付けます。以降、転送は当社の従量課金サーバーではなく自分のノードを経由するので無料になり、データも自分で管理するハードウェア上にとどまります。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う","description":"自分で用意したリレー／ストレージノードを、コマンド1つで Relayium アカウントに紐付けます。以降、転送は当社の従量課金サーバーではなく自分のノードを経由するので無料になり、データも自分で管理するハードウェア上にとどまります。","inLanguage":"ja","datePublished":"2026-07-10","dateModified":"2026-07-22","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"「relayium-node: command not found」と表示されました — 何が問題ですか？","acceptedAnswer":{"@type":"Answer","text":"relayium-node バイナリをインストールする前に実行しています。アカウントページのワンライナーインストールコマンド（curl … | sudo … sh の形式）を使ってください。これがバイナリをダウンロードし、PATH に配置し、サービスとして起動します。relayium-node を個別にインストールすることは決してありません。"}},{"@type":"Question","name":"再起動後もノードはオンラインを維持しますか？","acceptedAnswer":{"@type":"Answer","text":"はい。インストーラーは、起動時に有効化され Restart=always に設定された systemd サービスを登録するため、再起動後に復帰し、クラッシュしても自動的に再起動します。追加で実行するものはありません。"}},{"@type":"Question","name":"これは Relayium のセルフホストとどう違うのですか？","acceptedAnswer":{"@type":"Answer","text":"Bring-your-own-node は、いつもの relayium.com アカウントとアプリをそのまま使い、自分のトラフィックを運ぶノードを追加するだけです。セルフホストはサーバースタック全体（アカウント、Web アプリ、シグナリング）を自分のドメインで運用します。それについては「Relayium をセルフホスト」ガイドを参照してください。"}},{"@type":"Question","name":"他の誰かが私のノードを使ったり、私のデータを見たりできますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。ノードはトークンによって自分のアカウントに紐付けられ、そのアカウントのトラフィックのみを運びます。リアルタイム転送はエンドツーエンド暗号化されており、保存されるブロブは自分のノードが読めない暗号文です。データとノード設定を利用できるのは本人だけです。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う","description":"自分で用意したリレー／ストレージノードを、コマンド1つで Relayium アカウントに紐付けます。以降、転送は当社の従量課金サーバーではなく自分のノードを経由するので無料になり、データも自分で管理するハードウェア上にとどまります。","inLanguage":"ja","datePublished":"2026-07-10","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/bring-your-own-node/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Bring Your Own Node: Relayium のリレー＆ストレージを無料で使う"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"「relayium-node: command not found」と表示されました — 何が問題ですか？","acceptedAnswer":{"@type":"Answer","text":"relayium-node バイナリをインストールする前に実行しています。アカウントページのワンライナーインストールコマンド（curl … | sudo … sh の形式）を使ってください。これがバイナリをダウンロードし、PATH に配置し、サービスとして起動します。relayium-node を個別にインストールすることは決してありません。"}},{"@type":"Question","name":"再起動後もノードはオンラインを維持しますか？","acceptedAnswer":{"@type":"Answer","text":"はい。インストーラーは、起動時に有効化され Restart=always に設定された systemd サービスを登録するため、再起動後に復帰し、クラッシュしても自動的に再起動します。追加で実行するものはありません。"}},{"@type":"Question","name":"これは Relayium のセルフホストとどう違うのですか？","acceptedAnswer":{"@type":"Answer","text":"Bring-your-own-node は、いつもの relayium.com アカウントとアプリをそのまま使い、自分のトラフィックを運ぶノードを追加するだけです。セルフホストはサーバースタック全体（アカウント、Web アプリ、シグナリング）を自分のドメインで運用します。それについては「Relayium をセルフホスト」ガイドを参照してください。"}},{"@type":"Question","name":"他の誰かが私のノードを使ったり、私のデータを見たりできますか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。ノードはトークンによって自分のアカウントに紐付けられ、そのアカウントのトラフィックのみを運びます。リアルタイム転送はエンドツーエンド暗号化されており、保存されるブロブは自分のノードが読めない暗号文です。データとノード設定を利用できるのは本人だけです。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -72,6 +72,23 @@ footer a{color:var(--text-h);text-decoration:none}
 .tw th{color:var(--text-h);background:var(--card);font-weight:600}
 .tw code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;color:var(--text-h)}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -90,23 +107,24 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最終更新: <bdi>2026-07-22</bdi></p>
+      <p class="updated">最終更新: <bdi>2026-08-06</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node/">English</a><a href="/zh/guides/bring-your-own-node/">中文</a><a href="/ja/guides/bring-your-own-node/" aria-current="true">日本語</a><a href="/ko/guides/bring-your-own-node/">한국어</a><a href="/de/guides/bring-your-own-node/">Deutsch</a><a href="/fr/guides/bring-your-own-node/">Français</a><a href="/ar/guides/bring-your-own-node/">العربية</a><a href="/es/guides/bring-your-own-node/">Español</a><a href="/pt/guides/bring-your-own-node/">Português</a></nav>
       <p class="lead">ネットワークをまたぐ転送や保存リンクは、当社にとってコストのかかるリレー帯域とディスクを使うため、無料枠の範囲内で動作し、それを超えると有料になります。それを回避する方法があります。自分のリレー／ストレージノードを立ち上げてアカウントに紐付ければ、転送は当社ではなく自分のノードを経由するようになり、従量課金も請求も一切ありません。</p>
       <p class="lead">これは Relayium サーバー全体をセルフホストするのとは異なります。いつもの relayium.com アカウントと同じアプリをそのまま使い続け、自分のトラフィックを運ぶノードを追加するだけです。このガイドでは、まっさらな Linux マシンからオンラインのノードまで、およそ5分で到達できます。</p>
       <h2>なぜ自分のノードを立てるのか</h2>
       <p>理由は2つあります。1つ目はコストです。自分のノードはリレーとストレージのトラフィックを直接運ぶため、当社の従量課金インフラに一切触れず、請求するものが何もありません。使用量がどれだけ大きくても無料です。</p>
       <p>2つ目はコントロールです。リレーされたバイト列や保存されたブロブは、自分で運用し、自分の運用管理下に置いたハードウェア上に存在します。リアルタイム転送は全経路でエンドツーエンド暗号化されたままなので、自分のノードでさえ常に暗号文しか見えません。</p>
-      <h2>必要なもの</h2>
-      <p>インターネットから到達可能な Linux サーバー。安価な VPS でも、自宅の常時稼働マシンでも構いません。root（または sudo）と、いくつかの受信ポートを開ける権限が必要です。amd64 と arm64 の両方に対応しています。</p>
-      <h2>ステップ1 — インストールコマンドを取得する</h2>
-      <p>relayium.com にサインインし、アカウントページ（/me）を開いて、「マイノード」までスクロールし、「ノードを追加」をクリックします。トークンが埋め込まれた一度きりのインストールコマンドが表示されます。トークンは一度しか表示されないので、すぐにコピーしてください。次のような形式です。</p>
-      <pre><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre>
-      <ul><li>&lt;your-token&gt; の部分はアカウントページで自動的に埋め込まれます。上のプレースホルダーをそのまま貼り付けないでください。</li><li>RELAYIUM_NODE_STORAGE_DIR はリレーに加えてブロブストレージを有効にします。ノードをリレー専用にして保存させたくない場合は、これをオフのまま（変数を省略）にしてください。</li></ul>
-      <h2>ステップ2 — サーバー上で root として実行する</h2>
-      <p>サーバー上でコマンドを貼り付けます。これは当社のインストーラーを sh にパイプします。インストーラーは relayium-node バイナリをダウンロードしてチェックサムを検証し、/usr/local/bin にインストールし、systemd サービスを書き込んで起動します。先頭の sudo があるおかげでサービスをインストールできます。すでに root の場合は無害な no-op です。</p>
-      <p>systemd サービスなので、ノードは起動時に有効化され、万一クラッシュしても自動的に再起動します。再起動をまたいでオンラインを維持し、追加の作業は不要です。`relayium-node: command not found` と表示された場合は、上記のインストーラーではなくバイナリを直接実行しています。バイナリを配置するのはこのワンライナーコマンドです。</p>
-      <ul><li>起動を確認: `systemctl status relayium-node`（active/running と表示されるはず）。</li><li>起動時の永続性を確認: `systemctl is-enabled relayium-node`（enabled と表示されるはず）。</li><li>ログをライブで監視: `journalctl -u relayium-node -f`。</li></ul>
+      <h2>ノードをインストールしてオンラインにする</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">手順1の前に必要なもの</p><ul><li>インターネットから到達できる Linux サーバー——安価な VPS でも、自宅の常時起動マシンでも構いません。amd64 と arm64 の両方に対応しています。</li><li>そのサーバーの root 権限、または sudo。インストール時に一度だけ必要で、ノード自体が root で動くことはありません。</li><li>受信ポートを開けること——ホストのファイアウォールに加え、クラウド VPS では事業者のセキュリティグループにも設定が要ります。</li><li>サインイン済みの relayium.com アカウント。インストールコマンドはアカウントページで発行され、使い捨てのトークンを含みます。</li><li>ディスク容量。中継だけでなく保存もさせたい場合のみ必要です。中継専用なら不要で、RELAYIUM_NODE_STORAGE_DIR を外してください。</li></ul></div>
+      <p>順に4つのことをします。コマンドを発行し、実行し、ポートを開け、オンラインになったことを確認する——新しいマシンなら5分ほどです。</p>
+      <ol class="steps" data-block="steps"><li><p>relayium.com にサインインし、アカウントページ /me を開きます。</p></li><li><p>「マイノード」まで進み、「ノードを追加」をクリックします。表示されたインストールコマンドはすぐにコピーしてください。含まれるトークンは一度きりの表示で、あとから再表示はできません。</p></li><li><p>それをサーバーに貼り付けて実行します。relayium-node のバイナリをダウンロードしてチェックサムを検証し、/usr/local/bin に配置し、systemd サービスを書いて起動します。</p><pre><code>curl -fsSL https://relayium.com/install-node.sh | sudo RELAYIUM_CENTRAL_URL=https://relayium.com RELAYIUM_NODE_TOKEN=&lt;your-token&gt; RELAYIUM_NODE_STORAGE_DIR=/var/lib/relayium-node/blobs sh</code></pre></li><li><p>サービスが起動していること、再起動後も戻ってくることを確認します。どちらの答えも重要です。active は今動いていること、enabled は再起動をまたいで残ることを意味します。</p><pre><code>systemctl is-active relayium-node</code></pre><pre><code>systemctl is-enabled relayium-node</code></pre></li><li><p>ホストのファイアウォールで受信ポートを開けます。オンライン表示に必要なのは送信方向だけですが、ピアが中継や保存に使うのはこれらのポートです。</p><pre><code>sudo ufw allow 3478/udp        # TURN
+sudo ufw allow 8081/tcp        # storage
+sudo ufw allow 49152:65535/udp # relay</code></pre></li><li><p>クラウド VPS の場合は、事業者のセキュリティグループでも同じポートを許可してください。ufw だけでは上流で塞がれたままで、しかもノードはその間ずっと健全に見えます。</p></li><li><p>/me に戻り、ノードがオンラインに変わるのを待ちます——たいてい30秒ほどです。以降、アカウントの転送は自動的にこのノードを優先します。</p></li><li><p>任意: 「自分のノードだけを中継／保存に使う」をオンにすると、共有インフラへ黙って戻る代わりに転送が失敗するようになります。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">正常なノードの見え方</p><p>systemd がサービスを active かつ enabled と報告し、「マイノード」でノードがオンラインと表示されます。active だけでは不十分です——enabled になっていないノードは次の再起動で消えます。</p><pre><code>$ systemctl is-active relayium-node
+active
+$ systemctl is-enabled relayium-node
+enabled</code></pre></div>
+      <ul><li>&lt;your-token&gt; の部分はアカウントページで自動的に埋め込まれます。上のプレースホルダーをそのまま貼り付けないでください。</li><li>RELAYIUM_NODE_STORAGE_DIR はリレーに加えてブロブストレージを有効にします。ノードをリレー専用にして保存させたくない場合は、これをオフのまま（変数を省略）にしてください。</li><li>起動を確認: `systemctl status relayium-node`（active/running と表示されるはず）。</li><li>起動時の永続性を確認: `systemctl is-enabled relayium-node`（enabled と表示されるはず）。</li><li>ログをライブで監視: `journalctl -u relayium-node -f`。</li><li>3478/udp はピアがリレーに使う TURN ポート、8081/tcp はブロブストレージの HTTP ポート、49152–65535/udp はリレーメディアの範囲です。</li><li>クラウド VPS では、ufw だけでなくプロバイダーのセキュリティグループ／ネットワークファイアウォールでもこれらを許可してください。</li></ul>
       <h2>このインストーラーを root で実行しても安全ですか？</h2>
       <p>まず最初に。BYO ノードは当社自身のフリートノードとまったく同じコード、まったく同じ堅牢化で動きます — 同じ署名済みリリースの同じバイナリを、同じスクリプトで、同じ systemd ユニットの下にインストールします。違いは「そのマシンが誰のものか」だけです。以下の説明は両方に当てはまります。</p>
       <p>インターネットから取ってきたスクリプトを root シェルにパイプするコマンドについて当然の疑問であり、「大丈夫です」ではなく具体的な答えに値します。root はインストールのためだけに使われ、その後のノードの動作には一切使われません。インストーラーは、ログインシェルもホームディレクトリも持たない relayium-node というシステムアカウントを作成し、systemd ユニットを書き、サービスを起動して終了します。ノード自体が root で動くことはありません。ユニットに User=relayium-node が書かれているため、オンラインになった瞬間から、マシン上で何も所有しない非特権アカウントです。（既定で有効な自動更新は、root で動くもう1つのユニットを追加します — 次の節はまるごと、そのユニットに何ができて何ができないかの話です。）</p>
@@ -126,15 +144,11 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
   [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh</code></pre>
       <ul><li>保存ディレクトリに把握していないファイルが 1 つでも残っている間は拒否します（クリーンアップがまだ届いていない期限切れの blob も同じ扱いです）。保存ファイルは 1 台のノードにしか存在せず、レプリカが無いためです。0 になるまで待つか、それらが到達不能になることを受け入れて RELAYIUM_NODE_FORCE=1 を渡してください。</li><li>blob の場所を特定できない場合は、推測せずに停止します。RELAYIUM_NODE_ASSUME_NO_STORAGE=1 が唯一の回避手段で、それでも把握していないものは削除しません。</li><li>保存ディレクトリ自体は、RELAYIUM_NODE_PURGE_STORAGE=1 を併せて渡さない限り残ります。環境変数は `| sudo sh` を越えないので、`sudo env RELAYIUM_NODE_PURGE_STORAGE=1 sh uninstall-node.sh` の形で渡してください。</li><li>その後、`systemctl status relayium-node` は not-found になり、relayium-node のタイマーも一覧に出ないはずです。後で再インストールすると、アカウントに追加されるのは新しいノードです。アンインストールがノードの識別ファイルを削除するため、再インストールは旧ノードの復活ではなく新規登録になります。</li></ul>
-      <h2>ステップ3 — 受信ポートを開く</h2>
-      <p>オンライン状態（relayium.com へのハートビート）には送信アクセスだけが必要で、これはすでに備わっています。しかしピアが実際に自分のノードを経由してリレーし、保存するには、その受信ポートが到達可能でなければなりません。ホストでファイアウォールが動いている場合は開放してください。ufw では次のようにします。</p>
-      <pre><code>sudo ufw allow 3478/udp        # TURN
-sudo ufw allow 8081/tcp        # storage
-sudo ufw allow 49152:65535/udp # relay</code></pre>
-      <ul><li>3478/udp はピアがリレーに使う TURN ポート、8081/tcp はブロブストレージの HTTP ポート、49152–65535/udp はリレーメディアの範囲です。</li><li>クラウド VPS では、ufw だけでなくプロバイダーのセキュリティグループ／ネットワークファイアウォールでもこれらを許可してください。</li></ul>
-      <h2>ステップ4 — 確認して経由させる</h2>
-      <p>アカウントページに戻ると、追加したノードが「マイノード」の下に表示され、約30秒以内に「オンライン」に切り替わります。それ以降、アカウントの転送は自動的に自分のノードを優先します。</p>
-      <p>強制するには — 当社の共有インフラに決してフォールバックしない — 同じページで「自分のノードのみで中継・保存する」をオンにします。これをオンにすると、自分のノードが1つもオンラインでない場合、当社のものを黙って使うのではなく転送が失敗します。</p>
+      <h2>うまくいかないとき</h2>
+      <p>立ち上がらないノードのほぼすべては次の5つのどれかで、そのうち3つはサーバー側からは健全に見えます。サービスは動いており、違うと告げるのはアカウントページか待ち受けソケットだけです。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状、確認、対処</p><dl><dt>シェルが「relayium-node: command not found」と返す。</dt><dd><pre><code>command -v relayium-node
+# 何も表示されない</code></pre><p>バイナリが入っていません。relayium-node を単独でインストールすることはありません——アカウントページの1行コマンドこそが、バイナリをダウンロードし、PATH に置き、サービスとして起動するものです。そちらを実行してください。</p></dd><dt>サービスは active なのに、アカウントページでノードがオンラインにならない。</dt><dd><pre><code>journalctl -u relayium-node -n 50 --no-pager</code></pre><p>オンラインかどうかは送信方向のハートビートで決まるため、ここでファイアウォールが原因になることはまれで、たいていは登録の失敗です。トークンは使い捨てなので、すでに実行済みのコマンドや前回の試行で残った古いコマンドは失敗します。「ノードを追加」をもう一度押して新しいコマンドで実行し直してください。</p></dd><dt>ノードはオンラインなのに、転送は依然として共有インフラを通る。</dt><dd><pre><code>sudo ss -lunp | grep 3478</code></pre><p>オンラインが証明するのは送信方向のハートビートだけです。ピアが必要とするのは受信ポートです。ノードが待ち受けていることを確認したうえで、ホストのファイアウォールとクラウドのセキュリティグループの両方で 3478/udp、8081/tcp、49152-65535/udp を開けてください。黙ったフォールバックを完全に排除するには、自分のノードのみを使う設定をオンにします。</p></dd><dt>アンインストールが何も表示せず終了コード0で終わり、サービスは残っている。</dt><dd><pre><code>systemctl status relayium-node
+# active (running)</code></pre><p>失敗したダウンロードを sh にパイプしたときの見え方そのものです。404 やネットワークの瞬断は何も出力せず終了コード0で終わるため、成功と見分けがつきません。スクリプトをダウンロードし、空でないことを確かめてから実行してください。本記事のコマンドが1本のパイプではなく3つに分かれているのはそのためです。</p></dd><dt>ストレージディレクトリにまだファイルが残っているため、アンインストールが拒否される。</dt><dd><pre><code>sudo ls /var/lib/relayium-node/blobs | wc -l</code></pre><p>意図的な動作です。保存済みファイルはちょうど1つのノードにしか存在せず複製もないため、ノードを外すとそれらは取り出せなくなります。ブロブが期限切れになって数がゼロになるまで待つか、RELAYIUM_NODE_FORCE=1 でその損失を受け入れてください。環境変数は sudo sh へのパイプを越えられないので、sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh の形で渡します。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>「relayium-node: command not found」と表示されました — 何が問題ですか？</h3>
       <p>relayium-node バイナリをインストールする前に実行しています。アカウントページのワンライナーインストールコマンド（curl … | sudo … sh の形式）を使ってください。これがバイナリをダウンロードし、PATH に配置し、サービスとして起動します。relayium-node を個別にインストールすることは決してありません。</p>

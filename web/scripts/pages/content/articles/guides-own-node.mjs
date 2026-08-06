@@ -31,32 +31,69 @@ const en = {
       ],
     },
     {
-      heading: "What you need",
+      heading: "Install the node and bring it online",
+      prereqs: {
+        label: "What you need before step 1",
+        items: [
+          "A Linux server reachable from the internet — a cheap VPS or an always-on box at home both work. Both amd64 and arm64 are supported.",
+          "root on that server, or sudo. The install needs it once; the node itself never runs as root.",
+          "The ability to open inbound ports — in the host firewall, and on a cloud VPS in the provider's security group too.",
+          "A relayium.com account you are signed in to. The install command is minted on your account page and carries a one-time token.",
+          "Disk, only if you want the node to store as well as relay. A relay-only node needs none — leave RELAYIUM_NODE_STORAGE_DIR out.",
+        ],
+      },
       body: [
-        "A Linux server reachable from the internet — a cheap VPS or an always-on box at home both work. You'll need root (or sudo), and the ability to open a few inbound ports. Both amd64 and arm64 are supported.",
+        "Four things happen in order: you mint the command, you run it, you open the ports, and you confirm the node came online. About five minutes on a fresh box.",
       ],
-    },
-    {
-      heading: "Step 1 — get your install command",
-      body: [
-        "Sign in at relayium.com, open the account page (/me), scroll to My Nodes, and click Add node. You'll get a one-time install command with a token baked in — the token is shown only once, so copy it right away. It looks like this:",
+      steps: [
+        {
+          text: "Sign in at relayium.com and open your account page at /me.",
+        },
+        {
+          text: "Scroll to My Nodes and click Add node. Copy the install command right away — the token in it is shown once and cannot be shown again.",
+        },
+        {
+          text: "Paste it on your server. It downloads the relayium-node binary, checksum-verifies it, installs it to /usr/local/bin, writes a systemd service and starts it.",
+          code: [INSTALL_CMD],
+        },
+        {
+          text: "Confirm the service is up and will come back after a reboot. Both answers matter: active says it is running now, enabled is what survives a restart.",
+          code: ["systemctl is-active relayium-node", "systemctl is-enabled relayium-node"],
+        },
+        {
+          text: "Open the inbound ports on the host firewall. Being Online needs only outbound access, but peers relay and store over these.",
+          code: PORTS_CODE,
+        },
+        {
+          text: "On a cloud VPS, allow the same ports in the provider's security group as well. ufw alone leaves them blocked upstream, and the node looks healthy the whole time.",
+        },
+        {
+          text: "Back on /me, watch the node flip to Online — usually within about 30 seconds. From then on your account's transfers prefer it automatically.",
+        },
+        {
+          text: "Optional: turn on \"Only use my own nodes for relay/storage\" so a transfer fails rather than quietly falling back to our shared infrastructure.",
+        },
       ],
-      code: [INSTALL_CMD],
+      success: {
+        label: "What a working node looks like",
+        body: [
+          "systemd reports the service both active and enabled, and the node shows Online under My Nodes. active on its own is not enough — a node that is not enabled disappears at the next reboot.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-node
+active
+$ systemctl is-enabled relayium-node
+enabled`,
+        ],
+      },
       bullets: [
         "The <your-token> part is filled in for you on the account page — don't paste the placeholder above literally.",
         "RELAYIUM_NODE_STORAGE_DIR turns on blob storage as well as relay. Leave it off (omit the variable) if you only want the node to relay, not store.",
-      ],
-    },
-    {
-      heading: "Step 2 — run it on your server, as root",
-      body: [
-        "Paste the command on your server. It pipes our installer into sh: the installer downloads and checksum-verifies the relayium-node binary, installs it to /usr/local/bin, writes a systemd service, and starts it. The leading sudo is why it can install the service; if you're already root it's a harmless no-op.",
-        "Because it's a systemd service, the node is enabled on boot and restarts itself if it ever crashes — it stays online across reboots with nothing more to do. If you see `relayium-node: command not found`, you ran the binary directly instead of the installer above — the one-line command is what puts the binary in place.",
-      ],
-      bullets: [
         "Check it started: `systemctl status relayium-node` (should read active/running).",
         "Confirm boot-persistence: `systemctl is-enabled relayium-node` (should read enabled).",
         "Watch logs live: `journalctl -u relayium-node -f`.",
+        "3478/udp is the TURN port peers use to relay; 8081/tcp is the blob-storage HTTP port; 49152–65535/udp is the relay media range.",
+        "On a cloud VPS, also allow these in the provider's security group / network firewall, not just ufw.",
       ],
     },
     {
@@ -115,22 +152,52 @@ const en = {
       ],
     },
     {
-      heading: "Step 3 — open the inbound ports",
+      heading: "When it doesn't work",
       body: [
-        "Being online (a heartbeat to relayium.com) only needs outbound access, which you already have. But for peers to actually relay through and store on your node, its inbound ports must be reachable. If the host runs a firewall, open them — with ufw that's:",
+        "Five failures cover nearly every node that does not come up, and three of them look healthy from the server: the service is running, and only the account page or a listening socket says otherwise.",
       ],
-      code: PORTS_CODE,
-      bullets: [
-        "3478/udp is the TURN port peers use to relay; 8081/tcp is the blob-storage HTTP port; 49152–65535/udp is the relay media range.",
-        "On a cloud VPS, also allow these in the provider's security group / network firewall, not just ufw.",
-      ],
-    },
-    {
-      heading: "Step 4 — confirm and route through it",
-      body: [
-        "Back on the account page, your node appears under My Nodes and flips to Online within about 30 seconds. From then on your account's transfers prefer your own node automatically.",
-        "To force it — never fall back to our shared infrastructure — turn on \"Only use my own nodes for relay/storage\" on the same page. With that on, if none of your nodes are online a transfer fails rather than quietly using ours.",
-      ],
+      troubleshooting: {
+        label: "Symptom, check, fix",
+        items: [
+          {
+            symptom: "The shell answers \"relayium-node: command not found\".",
+            code: [
+              `command -v relayium-node
+# nothing printed`,
+            ],
+            fix: "The binary is not installed. You never install relayium-node separately — the one-line command from the account page is what downloads it, puts it on your PATH and starts it as a service. Run that command instead.",
+          },
+          {
+            symptom: "The service is active, but the node never turns Online on the account page.",
+            code: [
+              `journalctl -u relayium-node -n 50 --no-pager`,
+            ],
+            fix: "Online is decided by an outbound heartbeat, so a firewall is rarely the cause here — registration is. The token is one-time, so a command that was already run, or an old one from a previous attempt, fails. Click Add node again for a fresh command and re-run it.",
+          },
+          {
+            symptom: "The node shows Online, but transfers still run over our shared infrastructure.",
+            code: [
+              `sudo ss -lunp | grep 3478`,
+            ],
+            fix: "Online proves only the outbound heartbeat. Peers need the inbound ports: confirm the node is listening, then open 3478/udp, 8081/tcp and 49152-65535/udp in the host firewall and in the cloud security group. To rule out a silent fallback entirely, turn on the only-my-own-nodes setting.",
+          },
+          {
+            symptom: "The uninstall printed nothing, exited 0, and the service is still there.",
+            code: [
+              `systemctl status relayium-node
+# active (running)`,
+            ],
+            fix: "That is exactly what piping a failed download into sh looks like: a 404 or a network blip prints nothing and exits 0, which reads like success. Download the script, check it is not empty, then run it — that is why the command in this guide is written in three parts rather than one pipe.",
+          },
+          {
+            symptom: "The uninstall refuses while the storage directory still holds files.",
+            code: [
+              `sudo ls /var/lib/relayium-node/blobs | wc -l`,
+            ],
+            fix: "Deliberate. Every stored file lives on exactly one node and there are no replicas, so removing the node makes those files unreachable. Wait for the count to reach zero as blobs expire, or accept the loss with RELAYIUM_NODE_FORCE=1. Environment variables do not survive a pipe into sudo sh, so pass them as sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -180,32 +247,69 @@ const zh = {
       ],
     },
     {
-      heading: "你需要什么",
+      heading: "安装节点并让它上线",
+      prereqs: {
+        label: "开始之前你需要什么",
+        items: [
+          "一台能从公网访问到的 Linux 服务器——便宜的 VPS 或家里常开的机器都行。amd64 和 arm64 都支持。",
+          "那台服务器的 root 权限，或者 sudo。安装时需要一次；节点本身从不以 root 运行。",
+          "放通入站端口的能力——主机防火墙上要放，云 VPS 还要在服务商的安全组里放。",
+          "一个已登录的 relayium.com 账号。安装命令是在账号页现生成的，里面带着一次性令牌。",
+          "磁盘空间，仅当你希望节点在中继之外还负责存储时才需要。纯中继节点不需要——把 RELAYIUM_NODE_STORAGE_DIR 去掉即可。",
+        ],
+      },
       body: [
-        "一台能从公网访问的 Linux 服务器——便宜的 VPS 或家里常开的机器都行。你需要 root（或 sudo）权限，以及放通几个入站端口的能力。amd64 和 arm64 都支持。",
+        "按顺序做四件事：生成命令、跑它、放通端口、确认节点上线。全新机器上大约五分钟。",
       ],
-    },
-    {
-      heading: "第一步——拿到你的安装命令",
-      body: [
-        "在 relayium.com 登录，打开账号页（/me），滚动到「我的节点」，点「添加节点」。你会得到一条内嵌令牌的一次性安装命令——令牌只显示这一次，请立即复制。它长这样：",
+      steps: [
+        {
+          text: "在 relayium.com 登录，打开账号页 /me。",
+        },
+        {
+          text: "滚动到「我的节点」，点「添加节点」。立刻复制那条安装命令——里面的令牌只显示这一次，之后再也拿不到。",
+        },
+        {
+          text: "把它粘到你的服务器上执行。它会下载 relayium-node 二进制、校验校验和、安装到 /usr/local/bin、写好 systemd 服务并启动。",
+          code: [INSTALL_CMD],
+        },
+        {
+          text: "确认服务已经起来，并且重启后还会回来。两个答案都重要：active 说明它现在在跑，enabled 才是重启后还在的那个。",
+          code: ["systemctl is-active relayium-node", "systemctl is-enabled relayium-node"],
+        },
+        {
+          text: "在主机防火墙上放通入站端口。显示「在线」只需要出站访问，但对端要中继和存储，走的是这几个端口。",
+          code: PORTS_CODE,
+        },
+        {
+          text: "如果是云 VPS，还要在服务商的安全组里放通同样的端口。只配 ufw 的话它们在上游依然是封的，而节点全程看着都很健康。",
+        },
+        {
+          text: "回到 /me，看着节点变成「在线」——通常 30 秒左右。从此你账号的传输会自动优先走它。",
+        },
+        {
+          text: "可选：打开「只使用我自己的节点做中继/存储」，这样传输会直接失败，而不是悄悄退回我们的共享设施。",
+        },
       ],
-      code: [INSTALL_CMD],
+      success: {
+        label: "一个正常节点长什么样",
+        body: [
+          "systemd 报告服务同时是 active 和 enabled，并且节点在「我的节点」下显示为在线。光有 active 不够——没有 enabled 的节点下次重启就消失了。",
+        ],
+        code: [
+          `$ systemctl is-active relayium-node
+active
+$ systemctl is-enabled relayium-node
+enabled`,
+        ],
+      },
       bullets: [
         "其中 <your-token> 会在账号页里替你填好——不要直接照抄上面的占位符。",
         "RELAYIUM_NODE_STORAGE_DIR 会同时开启存储（不只是中继）。如果你只想让节点中继、不存储，去掉这个变量即可。",
-      ],
-    },
-    {
-      heading: "第二步——在你的服务器上以 root 运行",
-      body: [
-        "把命令粘到你的服务器上。它会把我们的安装脚本管道给 sh：脚本下载并校验 relayium-node 二进制、装到 /usr/local/bin、写好 systemd 服务并启动它。开头的 sudo 就是它能安装服务的原因；如果你本来就是 root，sudo 是无副作用的空操作。",
-        "因为它是 systemd 服务，节点会开机自启，崩溃后也会自动重启——无需额外操作就能一直在线。如果你看到 `relayium-node: command not found`，说明你直接运行了二进制、而不是上面的安装命令——正是那条一行命令把二进制装好的。",
-      ],
-      bullets: [
         "确认已启动：`systemctl status relayium-node`（应为 active/running）。",
         "确认开机自启：`systemctl is-enabled relayium-node`（应为 enabled）。",
         "实时看日志：`journalctl -u relayium-node -f`。",
+        "3478/udp 是别人用来中继的 TURN 端口；8081/tcp 是存储的 HTTP 端口；49152–65535/udp 是中继媒体端口段。",
+        "在云 VPS 上，还要在服务商的安全组 / 网络防火墙里放通这些端口，不只是 ufw。",
       ],
     },
     {
@@ -264,22 +368,52 @@ const zh = {
       ],
     },
     {
-      heading: "第三步——放通入站端口",
+      heading: "出问题时怎么办",
       body: [
-        "「在线」（向 relayium.com 发心跳）只需要出站访问，你已经有了。但要让别人真正通过你的节点中继、往上存储，它的入站端口必须可达。如果这台主机开了防火墙，就放通它们——用 ufw 就是：",
+        "几乎所有起不来的节点都逃不出这五种，其中三种从服务器上看一切正常：服务在跑，只有账号页或者一个监听端口会告诉你不对。",
       ],
-      code: PORTS_CODE,
-      bullets: [
-        "3478/udp 是别人用来中继的 TURN 端口；8081/tcp 是存储的 HTTP 端口；49152–65535/udp 是中继媒体端口段。",
-        "在云 VPS 上，还要在服务商的安全组 / 网络防火墙里放通这些端口，不只是 ufw。",
-      ],
-    },
-    {
-      heading: "第四步——确认并让流量走它",
-      body: [
-        "回到账号页，你的节点会出现在「我的节点」里，约 30 秒内变为「在线」。从此你账号的传输会自动优先使用你自己的节点。",
-        "想强制生效——绝不回落到我们的公共设施——就在同一页打开「仅使用我自己的节点中继/存储」。开启后，若你的节点都不在线，传输会失败，而不是悄悄用我们的。",
-      ],
+      troubleshooting: {
+        label: "现象、检查、修复",
+        items: [
+          {
+            symptom: "shell 回答「relayium-node: command not found」。",
+            code: [
+              `command -v relayium-node
+# 什么都没打印`,
+            ],
+            fix: "二进制根本没装。你从来不需要单独安装 relayium-node——账号页那条一行命令才是负责下载它、放进 PATH 并作为服务启动的东西。改跑那条命令。",
+          },
+          {
+            symptom: "服务是 active，但节点在账号页上始终不变成在线。",
+            code: [
+              `journalctl -u relayium-node -n 50 --no-pager`,
+            ],
+            fix: "在线与否是由出站心跳决定的，所以这里很少是防火墙的问题，而是注册失败。令牌是一次性的，已经用过的命令、或上一次尝试留下的旧命令都会失败。再点一次「添加节点」拿一条新命令重跑。",
+          },
+          {
+            symptom: "节点显示在线，但传输还是走我们的共享设施。",
+            code: [
+              `sudo ss -lunp | grep 3478`,
+            ],
+            fix: "在线只证明了出站心跳。对端需要的是入站端口：先确认节点确实在监听，然后在主机防火墙和云安全组里放通 3478/udp、8081/tcp 和 49152-65535/udp。想彻底排除悄悄回退，就打开「只使用我自己的节点」那个开关。",
+          },
+          {
+            symptom: "卸载命令什么都没打印、退出码 0，服务却还在。",
+            code: [
+              `systemctl status relayium-node
+# active (running)`,
+            ],
+            fix: "这正是把一次失败的下载管道给 sh 之后的样子：404 或网络抖动会什么都不打印、退出码 0，读起来和成功一模一样。先下载脚本、确认它非空、再执行——这也是本文那条命令写成三段而不是一条管道的原因。",
+          },
+          {
+            symptom: "存储目录里还有文件，卸载因此拒绝执行。",
+            code: [
+              `sudo ls /var/lib/relayium-node/blobs | wc -l`,
+            ],
+            fix: "这是刻意的。每个已存储的文件只存在于唯一一个节点上，没有副本，所以移除节点会让这些文件永远取不回来。要么等这些数据块过期、数量归零，要么用 RELAYIUM_NODE_FORCE=1 接受这个损失。环境变量无法穿过管道传给 sudo sh，所以要写成 sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -329,32 +463,69 @@ const ja = {
       ],
     },
     {
-      heading: "必要なもの",
+      heading: "ノードをインストールしてオンラインにする",
+      prereqs: {
+        label: "手順1の前に必要なもの",
+        items: [
+          "インターネットから到達できる Linux サーバー——安価な VPS でも、自宅の常時起動マシンでも構いません。amd64 と arm64 の両方に対応しています。",
+          "そのサーバーの root 権限、または sudo。インストール時に一度だけ必要で、ノード自体が root で動くことはありません。",
+          "受信ポートを開けること——ホストのファイアウォールに加え、クラウド VPS では事業者のセキュリティグループにも設定が要ります。",
+          "サインイン済みの relayium.com アカウント。インストールコマンドはアカウントページで発行され、使い捨てのトークンを含みます。",
+          "ディスク容量。中継だけでなく保存もさせたい場合のみ必要です。中継専用なら不要で、RELAYIUM_NODE_STORAGE_DIR を外してください。",
+        ],
+      },
       body: [
-        "インターネットから到達可能な Linux サーバー。安価な VPS でも、自宅の常時稼働マシンでも構いません。root（または sudo）と、いくつかの受信ポートを開ける権限が必要です。amd64 と arm64 の両方に対応しています。",
+        "順に4つのことをします。コマンドを発行し、実行し、ポートを開け、オンラインになったことを確認する——新しいマシンなら5分ほどです。",
       ],
-    },
-    {
-      heading: "ステップ1 — インストールコマンドを取得する",
-      body: [
-        "relayium.com にサインインし、アカウントページ（/me）を開いて、「マイノード」までスクロールし、「ノードを追加」をクリックします。トークンが埋め込まれた一度きりのインストールコマンドが表示されます。トークンは一度しか表示されないので、すぐにコピーしてください。次のような形式です。",
+      steps: [
+        {
+          text: "relayium.com にサインインし、アカウントページ /me を開きます。",
+        },
+        {
+          text: "「マイノード」まで進み、「ノードを追加」をクリックします。表示されたインストールコマンドはすぐにコピーしてください。含まれるトークンは一度きりの表示で、あとから再表示はできません。",
+        },
+        {
+          text: "それをサーバーに貼り付けて実行します。relayium-node のバイナリをダウンロードしてチェックサムを検証し、/usr/local/bin に配置し、systemd サービスを書いて起動します。",
+          code: [INSTALL_CMD],
+        },
+        {
+          text: "サービスが起動していること、再起動後も戻ってくることを確認します。どちらの答えも重要です。active は今動いていること、enabled は再起動をまたいで残ることを意味します。",
+          code: ["systemctl is-active relayium-node", "systemctl is-enabled relayium-node"],
+        },
+        {
+          text: "ホストのファイアウォールで受信ポートを開けます。オンライン表示に必要なのは送信方向だけですが、ピアが中継や保存に使うのはこれらのポートです。",
+          code: PORTS_CODE,
+        },
+        {
+          text: "クラウド VPS の場合は、事業者のセキュリティグループでも同じポートを許可してください。ufw だけでは上流で塞がれたままで、しかもノードはその間ずっと健全に見えます。",
+        },
+        {
+          text: "/me に戻り、ノードがオンラインに変わるのを待ちます——たいてい30秒ほどです。以降、アカウントの転送は自動的にこのノードを優先します。",
+        },
+        {
+          text: "任意: 「自分のノードだけを中継／保存に使う」をオンにすると、共有インフラへ黙って戻る代わりに転送が失敗するようになります。",
+        },
       ],
-      code: [INSTALL_CMD],
+      success: {
+        label: "正常なノードの見え方",
+        body: [
+          "systemd がサービスを active かつ enabled と報告し、「マイノード」でノードがオンラインと表示されます。active だけでは不十分です——enabled になっていないノードは次の再起動で消えます。",
+        ],
+        code: [
+          `$ systemctl is-active relayium-node
+active
+$ systemctl is-enabled relayium-node
+enabled`,
+        ],
+      },
       bullets: [
         "<your-token> の部分はアカウントページで自動的に埋め込まれます。上のプレースホルダーをそのまま貼り付けないでください。",
         "RELAYIUM_NODE_STORAGE_DIR はリレーに加えてブロブストレージを有効にします。ノードをリレー専用にして保存させたくない場合は、これをオフのまま（変数を省略）にしてください。",
-      ],
-    },
-    {
-      heading: "ステップ2 — サーバー上で root として実行する",
-      body: [
-        "サーバー上でコマンドを貼り付けます。これは当社のインストーラーを sh にパイプします。インストーラーは relayium-node バイナリをダウンロードしてチェックサムを検証し、/usr/local/bin にインストールし、systemd サービスを書き込んで起動します。先頭の sudo があるおかげでサービスをインストールできます。すでに root の場合は無害な no-op です。",
-        "systemd サービスなので、ノードは起動時に有効化され、万一クラッシュしても自動的に再起動します。再起動をまたいでオンラインを維持し、追加の作業は不要です。`relayium-node: command not found` と表示された場合は、上記のインストーラーではなくバイナリを直接実行しています。バイナリを配置するのはこのワンライナーコマンドです。",
-      ],
-      bullets: [
         "起動を確認: `systemctl status relayium-node`（active/running と表示されるはず）。",
         "起動時の永続性を確認: `systemctl is-enabled relayium-node`（enabled と表示されるはず）。",
         "ログをライブで監視: `journalctl -u relayium-node -f`。",
+        "3478/udp はピアがリレーに使う TURN ポート、8081/tcp はブロブストレージの HTTP ポート、49152–65535/udp はリレーメディアの範囲です。",
+        "クラウド VPS では、ufw だけでなくプロバイダーのセキュリティグループ／ネットワークファイアウォールでもこれらを許可してください。",
       ],
     },
     {
@@ -413,22 +584,52 @@ const ja = {
       ],
     },
     {
-      heading: "ステップ3 — 受信ポートを開く",
+      heading: "うまくいかないとき",
       body: [
-        "オンライン状態（relayium.com へのハートビート）には送信アクセスだけが必要で、これはすでに備わっています。しかしピアが実際に自分のノードを経由してリレーし、保存するには、その受信ポートが到達可能でなければなりません。ホストでファイアウォールが動いている場合は開放してください。ufw では次のようにします。",
+        "立ち上がらないノードのほぼすべては次の5つのどれかで、そのうち3つはサーバー側からは健全に見えます。サービスは動いており、違うと告げるのはアカウントページか待ち受けソケットだけです。",
       ],
-      code: PORTS_CODE,
-      bullets: [
-        "3478/udp はピアがリレーに使う TURN ポート、8081/tcp はブロブストレージの HTTP ポート、49152–65535/udp はリレーメディアの範囲です。",
-        "クラウド VPS では、ufw だけでなくプロバイダーのセキュリティグループ／ネットワークファイアウォールでもこれらを許可してください。",
-      ],
-    },
-    {
-      heading: "ステップ4 — 確認して経由させる",
-      body: [
-        "アカウントページに戻ると、追加したノードが「マイノード」の下に表示され、約30秒以内に「オンライン」に切り替わります。それ以降、アカウントの転送は自動的に自分のノードを優先します。",
-        "強制するには — 当社の共有インフラに決してフォールバックしない — 同じページで「自分のノードのみで中継・保存する」をオンにします。これをオンにすると、自分のノードが1つもオンラインでない場合、当社のものを黙って使うのではなく転送が失敗します。",
-      ],
+      troubleshooting: {
+        label: "症状、確認、対処",
+        items: [
+          {
+            symptom: "シェルが「relayium-node: command not found」と返す。",
+            code: [
+              `command -v relayium-node
+# 何も表示されない`,
+            ],
+            fix: "バイナリが入っていません。relayium-node を単独でインストールすることはありません——アカウントページの1行コマンドこそが、バイナリをダウンロードし、PATH に置き、サービスとして起動するものです。そちらを実行してください。",
+          },
+          {
+            symptom: "サービスは active なのに、アカウントページでノードがオンラインにならない。",
+            code: [
+              `journalctl -u relayium-node -n 50 --no-pager`,
+            ],
+            fix: "オンラインかどうかは送信方向のハートビートで決まるため、ここでファイアウォールが原因になることはまれで、たいていは登録の失敗です。トークンは使い捨てなので、すでに実行済みのコマンドや前回の試行で残った古いコマンドは失敗します。「ノードを追加」をもう一度押して新しいコマンドで実行し直してください。",
+          },
+          {
+            symptom: "ノードはオンラインなのに、転送は依然として共有インフラを通る。",
+            code: [
+              `sudo ss -lunp | grep 3478`,
+            ],
+            fix: "オンラインが証明するのは送信方向のハートビートだけです。ピアが必要とするのは受信ポートです。ノードが待ち受けていることを確認したうえで、ホストのファイアウォールとクラウドのセキュリティグループの両方で 3478/udp、8081/tcp、49152-65535/udp を開けてください。黙ったフォールバックを完全に排除するには、自分のノードのみを使う設定をオンにします。",
+          },
+          {
+            symptom: "アンインストールが何も表示せず終了コード0で終わり、サービスは残っている。",
+            code: [
+              `systemctl status relayium-node
+# active (running)`,
+            ],
+            fix: "失敗したダウンロードを sh にパイプしたときの見え方そのものです。404 やネットワークの瞬断は何も出力せず終了コード0で終わるため、成功と見分けがつきません。スクリプトをダウンロードし、空でないことを確かめてから実行してください。本記事のコマンドが1本のパイプではなく3つに分かれているのはそのためです。",
+          },
+          {
+            symptom: "ストレージディレクトリにまだファイルが残っているため、アンインストールが拒否される。",
+            code: [
+              `sudo ls /var/lib/relayium-node/blobs | wc -l`,
+            ],
+            fix: "意図的な動作です。保存済みファイルはちょうど1つのノードにしか存在せず複製もないため、ノードを外すとそれらは取り出せなくなります。ブロブが期限切れになって数がゼロになるまで待つか、RELAYIUM_NODE_FORCE=1 でその損失を受け入れてください。環境変数は sudo sh へのパイプを越えられないので、sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh の形で渡します。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -478,32 +679,69 @@ const ko = {
       ],
     },
     {
-      heading: "필요한 것",
+      heading: "노드를 설치하고 온라인으로 만들기",
+      prereqs: {
+        label: "1단계 전에 필요한 것",
+        items: [
+          "인터넷에서 접근 가능한 리눅스 서버 — 저렴한 VPS도, 집에 늘 켜둔 컴퓨터도 됩니다. amd64와 arm64 모두 지원합니다.",
+          "그 서버의 root 권한 또는 sudo. 설치할 때 한 번만 필요하며, 노드 자체는 결코 root로 실행되지 않습니다.",
+          "인바운드 포트를 열 수 있는 권한 — 호스트 방화벽에서, 그리고 클라우드 VPS라면 제공업체의 보안 그룹에서도.",
+          "로그인되어 있는 relayium.com 계정. 설치 명령은 계정 페이지에서 발급되며 일회용 토큰을 담고 있습니다.",
+          "디스크 공간은 중계뿐 아니라 저장까지 맡기려는 경우에만 필요합니다. 중계 전용 노드에는 필요 없으며 RELAYIUM_NODE_STORAGE_DIR을 빼면 됩니다.",
+        ],
+      },
       body: [
-        "인터넷에서 접근 가능한 Linux 서버 — 저렴한 VPS든 집에 상시 켜둔 머신이든 모두 가능합니다. root(또는 sudo)와 몇 개의 인바운드 포트를 열 수 있는 권한이 필요합니다. amd64와 arm64 모두 지원됩니다.",
+        "순서대로 네 가지를 합니다. 명령을 발급받고, 실행하고, 포트를 열고, 노드가 온라인이 되었는지 확인합니다. 새 서버라면 5분 정도입니다.",
       ],
-    },
-    {
-      heading: "1단계 — 설치 명령어 받기",
-      body: [
-        "relayium.com에 로그인하여 계정 페이지(/me)를 열고, “내 노드”까지 스크롤한 뒤 “노드 추가”를 클릭하세요. 토큰이 삽입된 일회성 설치 명령어를 받게 됩니다. 토큰은 한 번만 표시되므로 즉시 복사하세요. 다음과 같은 형태입니다.",
+      steps: [
+        {
+          text: "relayium.com에 로그인하고 계정 페이지 /me를 엽니다.",
+        },
+        {
+          text: "내 노드까지 내려가 노드 추가를 누릅니다. 설치 명령을 즉시 복사하세요 — 그 안의 토큰은 한 번만 표시되고 다시는 볼 수 없습니다.",
+        },
+        {
+          text: "서버에 붙여 넣어 실행합니다. relayium-node 바이너리를 내려받아 체크섬을 검증하고, /usr/local/bin에 설치하고, systemd 서비스를 작성한 뒤 시작합니다.",
+          code: [INSTALL_CMD],
+        },
+        {
+          text: "서비스가 떠 있고 재부팅 후에도 돌아오는지 확인합니다. 두 답이 모두 중요합니다. active는 지금 돌고 있다는 뜻이고, 재부팅을 견디게 하는 것은 enabled입니다.",
+          code: ["systemctl is-active relayium-node", "systemctl is-enabled relayium-node"],
+        },
+        {
+          text: "호스트 방화벽에서 인바운드 포트를 엽니다. 온라인 표시에는 아웃바운드만 있으면 되지만, 상대가 중계하고 저장하는 통로는 이 포트들입니다.",
+          code: PORTS_CODE,
+        },
+        {
+          text: "클라우드 VPS라면 제공업체의 보안 그룹에서도 같은 포트를 허용하세요. ufw만으로는 상위에서 막힌 채로 남고, 그동안 노드는 계속 정상으로 보입니다.",
+        },
+        {
+          text: "/me로 돌아가 노드가 온라인으로 바뀌는지 지켜봅니다 — 보통 30초 정도입니다. 그 뒤로 계정의 전송은 자동으로 이 노드를 우선합니다.",
+        },
+        {
+          text: "선택: 「중계/저장에 내 노드만 사용」을 켜면 공유 인프라로 조용히 되돌아가는 대신 전송이 실패합니다.",
+        },
       ],
-      code: [INSTALL_CMD],
+      success: {
+        label: "정상적인 노드의 모습",
+        body: [
+          "systemd가 서비스를 active이자 enabled로 보고하고, 내 노드 아래에서 노드가 온라인으로 표시됩니다. active만으로는 부족합니다 — enabled가 아닌 노드는 다음 재부팅에 사라집니다.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-node
+active
+$ systemctl is-enabled relayium-node
+enabled`,
+        ],
+      },
       bullets: [
         "<your-token> 부분은 계정 페이지에서 자동으로 채워집니다. 위의 자리 표시자를 그대로 붙여넣지 마세요.",
         "RELAYIUM_NODE_STORAGE_DIR는 릴레이뿐 아니라 블롭 스토리지도 켭니다. 노드가 저장하지 않고 릴레이만 하기를 원한다면 이를 끈 채로(변수를 생략) 두세요.",
-      ],
-    },
-    {
-      heading: "2단계 — 서버에서 root로 실행하기",
-      body: [
-        "서버에 명령어를 붙여넣으세요. 이는 당사의 설치 프로그램을 sh로 파이프합니다. 설치 프로그램은 relayium-node 바이너리를 다운로드하고 체크섬을 검증한 뒤 /usr/local/bin에 설치하고, systemd 서비스를 작성하여 시작합니다. 앞의 sudo 덕분에 서비스를 설치할 수 있으며, 이미 root라면 무해한 no-op입니다.",
-        "systemd 서비스이므로 노드는 부팅 시 활성화되고 혹시 충돌하더라도 스스로 재시작합니다. 추가 작업 없이 재부팅을 넘나들며 온라인을 유지합니다. `relayium-node: command not found`가 보인다면 위의 설치 프로그램 대신 바이너리를 직접 실행한 것입니다. 바이너리를 제자리에 놓는 것은 이 한 줄 명령어입니다.",
-      ],
-      bullets: [
         "시작되었는지 확인: `systemctl status relayium-node`(active/running으로 표시되어야 함).",
         "부팅 지속성 확인: `systemctl is-enabled relayium-node`(enabled로 표시되어야 함).",
         "로그 실시간 확인: `journalctl -u relayium-node -f`.",
+        "3478/udp는 피어가 릴레이에 사용하는 TURN 포트이고, 8081/tcp는 블롭 스토리지 HTTP 포트이며, 49152–65535/udp는 릴레이 미디어 범위입니다.",
+        "클라우드 VPS에서는 ufw뿐 아니라 공급자의 보안 그룹/네트워크 방화벽에서도 이들을 허용하세요.",
       ],
     },
     {
@@ -562,22 +800,52 @@ const ko = {
       ],
     },
     {
-      heading: "3단계 — 인바운드 포트 열기",
+      heading: "잘 안 될 때",
       body: [
-        "온라인 상태(relayium.com으로의 하트비트)에는 이미 갖추고 있는 아웃바운드 접근만 필요합니다. 하지만 피어가 실제로 내 노드를 통해 릴레이하고 저장하려면 인바운드 포트가 접근 가능해야 합니다. 호스트에서 방화벽이 실행 중이라면 열어 주세요. ufw에서는 다음과 같습니다.",
+        "올라오지 않는 노드는 거의 모두 다섯 가지 중 하나이며, 그중 셋은 서버에서 보면 멀쩡합니다. 서비스는 돌고 있고, 아니라고 말해 주는 것은 계정 페이지나 리스닝 소켓뿐입니다.",
       ],
-      code: PORTS_CODE,
-      bullets: [
-        "3478/udp는 피어가 릴레이에 사용하는 TURN 포트이고, 8081/tcp는 블롭 스토리지 HTTP 포트이며, 49152–65535/udp는 릴레이 미디어 범위입니다.",
-        "클라우드 VPS에서는 ufw뿐 아니라 공급자의 보안 그룹/네트워크 방화벽에서도 이들을 허용하세요.",
-      ],
-    },
-    {
-      heading: "4단계 — 확인하고 노드를 경유시키기",
-      body: [
-        "계정 페이지로 돌아가면 추가한 노드가 “내 노드” 아래에 나타나고 약 30초 이내에 “온라인”으로 바뀝니다. 그때부터 내 계정의 전송은 자동으로 내 노드를 우선합니다.",
-        "이를 강제하려면 — 당사의 공유 인프라로 절대 폴백하지 않도록 — 같은 페이지에서 “내 노드로만 중계/저장하기”를 켜세요. 이를 켜면 내 노드가 하나도 온라인이 아닐 때 당사 것을 조용히 사용하는 대신 전송이 실패합니다.",
-      ],
+      troubleshooting: {
+        label: "증상, 확인, 해결",
+        items: [
+          {
+            symptom: "셸이 「relayium-node: command not found」라고 답합니다.",
+            code: [
+              `command -v relayium-node
+# 아무것도 출력되지 않음`,
+            ],
+            fix: "바이너리가 설치되어 있지 않습니다. relayium-node를 따로 설치하는 일은 없습니다 — 계정 페이지의 한 줄 명령이 바로 바이너리를 내려받아 PATH에 놓고 서비스로 시작해 주는 것입니다. 그 명령을 실행하세요.",
+          },
+          {
+            symptom: "서비스는 active인데 계정 페이지에서 노드가 끝내 온라인이 되지 않습니다.",
+            code: [
+              `journalctl -u relayium-node -n 50 --no-pager`,
+            ],
+            fix: "온라인 여부는 아웃바운드 하트비트로 결정되므로 여기서 방화벽이 원인인 경우는 드물고, 대개 등록 실패입니다. 토큰은 일회용이라 이미 실행한 명령이나 이전 시도에서 남은 옛 명령은 실패합니다. 노드 추가를 다시 눌러 새 명령을 받아 실행하세요.",
+          },
+          {
+            symptom: "노드는 온라인인데 전송이 여전히 공유 인프라를 지나갑니다.",
+            code: [
+              `sudo ss -lunp | grep 3478`,
+            ],
+            fix: "온라인은 아웃바운드 하트비트만 증명합니다. 상대에게 필요한 것은 인바운드 포트입니다. 노드가 리스닝 중인지 확인한 뒤 호스트 방화벽과 클라우드 보안 그룹 양쪽에서 3478/udp, 8081/tcp, 49152-65535/udp를 여세요. 조용한 폴백을 완전히 배제하려면 내 노드만 사용 설정을 켜면 됩니다.",
+          },
+          {
+            symptom: "제거 명령이 아무것도 출력하지 않고 종료 코드 0으로 끝났는데 서비스는 그대로입니다.",
+            code: [
+              `systemctl status relayium-node
+# active (running)`,
+            ],
+            fix: "실패한 다운로드를 sh로 파이프했을 때의 모습 그대로입니다. 404나 일시적인 네트워크 문제는 아무것도 출력하지 않고 종료 코드 0으로 끝나 성공처럼 읽힙니다. 스크립트를 내려받고 비어 있지 않은지 확인한 다음 실행하세요 — 이 문서의 명령이 파이프 하나가 아니라 세 부분으로 쓰인 이유가 그것입니다.",
+          },
+          {
+            symptom: "저장 디렉터리에 아직 파일이 남아 있어 제거가 거부됩니다.",
+            code: [
+              `sudo ls /var/lib/relayium-node/blobs | wc -l`,
+            ],
+            fix: "의도된 동작입니다. 저장된 파일은 정확히 한 노드에만 존재하고 복제본이 없으므로, 노드를 없애면 그 파일들에 다시 닿을 수 없습니다. 블롭이 만료되어 개수가 0이 될 때까지 기다리거나, RELAYIUM_NODE_FORCE=1로 그 손실을 감수하세요. 환경 변수는 sudo sh로 가는 파이프를 넘지 못하므로 sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh 형태로 넘겨야 합니다.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -627,32 +895,69 @@ const de = {
       ],
     },
     {
-      heading: "Was du brauchst",
+      heading: "Den Node installieren und online bringen",
+      prereqs: {
+        label: "Was du vor Schritt 1 brauchst",
+        items: [
+          "Einen aus dem Internet erreichbaren Linux-Server — ein günstiger VPS oder eine dauerhaft laufende Kiste zu Hause tun es beide. amd64 und arm64 werden unterstützt.",
+          "root auf diesem Server, oder sudo. Die Installation braucht es einmal; der Node selbst läuft nie als root.",
+          "Die Möglichkeit, eingehende Ports zu öffnen — in der Host-Firewall und auf einem Cloud-VPS zusätzlich in der Security Group des Anbieters.",
+          "Ein relayium.com-Konto, an dem du angemeldet bist. Der Installationsbefehl wird auf der Kontoseite erzeugt und trägt ein Einmal-Token.",
+          "Plattenplatz, aber nur wenn der Node außer relayen auch speichern soll. Ein reiner Relay-Node braucht keinen — lass RELAYIUM_NODE_STORAGE_DIR dann weg.",
+        ],
+      },
       body: [
-        "Einen aus dem Internet erreichbaren Linux-Server — ein günstiger VPS oder ein dauerhaft laufender Rechner zu Hause funktionieren beide. Du benötigst root (oder sudo) und die Möglichkeit, einige eingehende Ports zu öffnen. Sowohl amd64 als auch arm64 werden unterstützt.",
+        "Vier Dinge der Reihe nach: den Befehl erzeugen, ihn ausführen, die Ports öffnen und bestätigen, dass der Node online gegangen ist. Auf einer frischen Kiste rund fünf Minuten.",
       ],
-    },
-    {
-      heading: "Schritt 1 — deinen Installationsbefehl abrufen",
-      body: [
-        "Melde dich bei relayium.com an, öffne die Kontoseite (/me), scrolle zu „Meine Knoten“ und klicke auf „Knoten hinzufügen“. Du erhältst einen einmaligen Installationsbefehl mit eingebettetem Token — der Token wird nur einmal angezeigt, kopiere ihn also sofort. Er sieht so aus:",
+      steps: [
+        {
+          text: "Melde dich auf relayium.com an und öffne deine Kontoseite unter /me.",
+        },
+        {
+          text: "Scroll zu Meine Nodes und klick auf Node hinzufügen. Kopiere den Installationsbefehl sofort — das Token darin wird genau einmal angezeigt und lässt sich nicht erneut abrufen.",
+        },
+        {
+          text: "Führ ihn auf deinem Server aus. Er lädt das relayium-node-Binary, prüft dessen Checksumme, installiert es nach /usr/local/bin, schreibt einen systemd-Dienst und startet ihn.",
+          code: [INSTALL_CMD],
+        },
+        {
+          text: "Bestätige, dass der Dienst läuft und nach einem Neustart wiederkommt. Beide Antworten zählen: active heißt, er läuft jetzt, enabled ist das, was einen Neustart überlebt.",
+          code: ["systemctl is-active relayium-node", "systemctl is-enabled relayium-node"],
+        },
+        {
+          text: "Öffne die eingehenden Ports in der Host-Firewall. Für den Online-Status reicht ausgehender Zugriff, aber Peers relayen und speichern über genau diese Ports.",
+          code: PORTS_CODE,
+        },
+        {
+          text: "Auf einem Cloud-VPS erlaub dieselben Ports zusätzlich in der Security Group des Anbieters. Mit ufw allein bleiben sie weiter oben dicht — und der Node sieht die ganze Zeit gesund aus.",
+        },
+        {
+          text: "Zurück auf /me: warte, bis der Node auf Online springt, meist in etwa 30 Sekunden. Ab da bevorzugen die Übertragungen deines Kontos ihn automatisch.",
+        },
+        {
+          text: "Optional: Schalte \"Nur meine eigenen Nodes für Relay/Speicher verwenden\" ein, damit eine Übertragung fehlschlägt, statt still auf unsere geteilte Infrastruktur zurückzufallen.",
+        },
       ],
-      code: [INSTALL_CMD],
+      success: {
+        label: "So sieht ein funktionierender Node aus",
+        body: [
+          "systemd meldet den Dienst als active UND enabled, und der Node steht unter Meine Nodes auf Online. active allein genügt nicht — ein Node ohne enabled ist nach dem nächsten Neustart weg.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-node
+active
+$ systemctl is-enabled relayium-node
+enabled`,
+        ],
+      },
       bullets: [
         "Der Teil <your-token> wird auf der Kontoseite für dich ausgefüllt — füge den obigen Platzhalter nicht wörtlich ein.",
         "RELAYIUM_NODE_STORAGE_DIR aktiviert neben dem Relay auch die Blob-Speicherung. Lass es weg (die Variable auslassen), wenn der Node nur weiterleiten und nicht speichern soll.",
-      ],
-    },
-    {
-      heading: "Schritt 2 — auf deinem Server als root ausführen",
-      body: [
-        "Füge den Befehl auf deinem Server ein. Er leitet unseren Installer an sh weiter: Der Installer lädt die relayium-node-Binärdatei herunter, verifiziert sie per Prüfsumme, installiert sie nach /usr/local/bin, schreibt einen systemd-Dienst und startet ihn. Das führende sudo ist der Grund, warum er den Dienst installieren kann; wenn du bereits root bist, ist es ein harmloser No-op.",
-        "Da es sich um einen systemd-Dienst handelt, wird der Node beim Booten aktiviert und startet sich selbst neu, falls er jemals abstürzt — er bleibt über Neustarts hinweg online, ohne dass du weiter etwas tun musst. Wenn du `relayium-node: command not found` siehst, hast du die Binärdatei direkt ausgeführt statt des obigen Installers — der Einzeiler ist es, der die Binärdatei an ihren Platz bringt.",
-      ],
-      bullets: [
         "Prüfen, ob er gestartet ist: `systemctl status relayium-node` (sollte active/running anzeigen).",
         "Boot-Persistenz bestätigen: `systemctl is-enabled relayium-node` (sollte enabled anzeigen).",
         "Logs live verfolgen: `journalctl -u relayium-node -f`.",
+        "3478/udp ist der TURN-Port, den Peers zum Weiterleiten verwenden; 8081/tcp ist der HTTP-Port der Blob-Speicherung; 49152–65535/udp ist der Relay-Medienbereich.",
+        "Auf einem Cloud-VPS erlaube sie auch in der Sicherheitsgruppe / Netzwerk-Firewall des Anbieters, nicht nur in ufw.",
       ],
     },
     {
@@ -711,22 +1016,52 @@ const de = {
       ],
     },
     {
-      heading: "Schritt 3 — die eingehenden Ports öffnen",
+      heading: "Wenn es nicht funktioniert",
       body: [
-        "Online zu sein (ein Heartbeat an relayium.com) erfordert nur ausgehenden Zugriff, den du bereits hast. Damit Peers aber tatsächlich über deinen Node weiterleiten und darauf speichern können, müssen dessen eingehende Ports erreichbar sein. Wenn auf dem Host eine Firewall läuft, öffne sie — mit ufw geht das so:",
+        "Fünf Fehler decken fast jeden Node ab, der nicht hochkommt, und drei davon sehen vom Server aus gesund aus: Der Dienst läuft, und nur die Kontoseite oder ein lauschender Socket sagt etwas anderes.",
       ],
-      code: PORTS_CODE,
-      bullets: [
-        "3478/udp ist der TURN-Port, den Peers zum Weiterleiten verwenden; 8081/tcp ist der HTTP-Port der Blob-Speicherung; 49152–65535/udp ist der Relay-Medienbereich.",
-        "Auf einem Cloud-VPS erlaube sie auch in der Sicherheitsgruppe / Netzwerk-Firewall des Anbieters, nicht nur in ufw.",
-      ],
-    },
-    {
-      heading: "Schritt 4 — bestätigen und den Verkehr darüber leiten",
-      body: [
-        "Zurück auf der Kontoseite erscheint dein Node unter „Meine Knoten“ und wechselt innerhalb von etwa 30 Sekunden auf „Online“. Von da an bevorzugen die Übertragungen deines Kontos automatisch deinen eigenen Node.",
-        "Um es zu erzwingen — nie auf unsere gemeinsam genutzte Infrastruktur zurückzufallen — aktiviere auf derselben Seite „Nur meine eigenen Knoten für Relay/Speicher verwenden“. Ist das aktiviert und keiner deiner Nodes ist online, schlägt eine Übertragung fehl, statt stillschweigend unsere zu verwenden.",
-      ],
+      troubleshooting: {
+        label: "Symptom, Prüfung, Lösung",
+        items: [
+          {
+            symptom: "Die Shell antwortet \"relayium-node: command not found\".",
+            code: [
+              `command -v relayium-node
+# keine Ausgabe`,
+            ],
+            fix: "Das Binary ist nicht installiert. relayium-node wird nie separat installiert — der Einzeiler von der Kontoseite ist das, was es herunterlädt, in deinen PATH legt und als Dienst startet. Führ stattdessen diesen Befehl aus.",
+          },
+          {
+            symptom: "Der Dienst ist active, aber der Node springt auf der Kontoseite nie auf Online.",
+            code: [
+              `journalctl -u relayium-node -n 50 --no-pager`,
+            ],
+            fix: "Über Online entscheidet ein ausgehender Heartbeat, eine Firewall ist hier also selten die Ursache — die Registrierung ist es. Das Token gilt einmal, ein bereits ausgeführter oder ein alter Befehl aus einem früheren Versuch scheitert deshalb. Klick erneut auf Node hinzufügen und führ den frischen Befehl aus.",
+          },
+          {
+            symptom: "Der Node steht auf Online, aber Übertragungen laufen weiter über unsere geteilte Infrastruktur.",
+            code: [
+              `sudo ss -lunp | grep 3478`,
+            ],
+            fix: "Online belegt nur den ausgehenden Heartbeat. Peers brauchen die eingehenden Ports: Prüfe, dass der Node lauscht, und öffne dann 3478/udp, 8081/tcp und 49152-65535/udp in der Host-Firewall UND in der Cloud-Security-Group. Um ein stilles Zurückfallen ganz auszuschließen, schalte die Einstellung für ausschließlich eigene Nodes ein.",
+          },
+          {
+            symptom: "Die Deinstallation gab nichts aus, endete mit 0, und der Dienst ist noch da.",
+            code: [
+              `systemctl status relayium-node
+# active (running)`,
+            ],
+            fix: "Genau so sieht es aus, wenn ein fehlgeschlagener Download in sh gepipet wird: Ein 404 oder ein kurzer Netzaussetzer gibt nichts aus und endet mit 0, was sich wie Erfolg liest. Lad das Skript herunter, prüfe, dass es nicht leer ist, und führ es dann aus — deshalb steht der Befehl in dieser Anleitung in drei Teilen und nicht als eine Pipe.",
+          },
+          {
+            symptom: "Die Deinstallation verweigert sich, solange im Speicherverzeichnis noch Dateien liegen.",
+            code: [
+              `sudo ls /var/lib/relayium-node/blobs | wc -l`,
+            ],
+            fix: "Das ist Absicht. Jede gespeicherte Datei liegt auf genau einem Node, Repliken gibt es nicht — den Node zu entfernen macht sie also unerreichbar. Warte, bis die Zahl mit dem Ablaufen der Blobs auf null geht, oder nimm den Verlust mit RELAYIUM_NODE_FORCE=1 in Kauf. Umgebungsvariablen überleben eine Pipe nach sudo sh nicht, übergib sie also als sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -776,32 +1111,69 @@ const fr = {
       ],
     },
     {
-      heading: "Ce dont vous avez besoin",
+      heading: "Installer le nœud et le mettre en ligne",
+      prereqs: {
+        label: "Ce qu'il vous faut avant l'étape 1",
+        items: [
+          "Un serveur Linux joignable depuis Internet — un VPS bon marché ou une machine allumée en permanence chez vous font l'affaire. amd64 et arm64 sont pris en charge.",
+          "root sur ce serveur, ou sudo. L'installation en a besoin une fois ; le nœud lui-même ne tourne jamais en root.",
+          "La possibilité d'ouvrir des ports entrants — dans le pare-feu de l'hôte et, sur un VPS cloud, dans le groupe de sécurité du fournisseur.",
+          "Un compte relayium.com auquel vous êtes connecté. La commande d'installation est générée sur la page de compte et contient un jeton à usage unique.",
+          "De l'espace disque, uniquement si le nœud doit aussi stocker et pas seulement relayer. Un nœud relais seul n'en a pas besoin — omettez alors RELAYIUM_NODE_STORAGE_DIR.",
+        ],
+      },
       body: [
-        "Un serveur Linux accessible depuis Internet — un VPS bon marché ou une machine toujours allumée chez vous conviennent tous les deux. Il vous faut root (ou sudo) et la possibilité d'ouvrir quelques ports entrants. amd64 et arm64 sont tous deux pris en charge.",
+        "Quatre choses dans l'ordre : générer la commande, l'exécuter, ouvrir les ports et confirmer que le nœud est passé en ligne. Environ cinq minutes sur une machine neuve.",
       ],
-    },
-    {
-      heading: "Étape 1 — obtenez votre commande d'installation",
-      body: [
-        "Connectez-vous sur relayium.com, ouvrez la page du compte (/me), faites défiler jusqu'à « Mes nœuds » et cliquez sur « Ajouter un nœud ». Vous obtenez une commande d'installation à usage unique avec un jeton intégré — le jeton n'est affiché qu'une seule fois, copiez-le donc immédiatement. Elle ressemble à ceci :",
+      steps: [
+        {
+          text: "Connectez-vous sur relayium.com et ouvrez votre page de compte, /me.",
+        },
+        {
+          text: "Descendez jusqu'à Mes nœuds et cliquez sur Ajouter un nœud. Copiez tout de suite la commande d'installation — le jeton qu'elle contient n'est affiché qu'une fois et ne peut pas être réaffiché.",
+        },
+        {
+          text: "Collez-la sur votre serveur. Elle télécharge le binaire relayium-node, en vérifie la somme de contrôle, l'installe dans /usr/local/bin, écrit un service systemd et le démarre.",
+          code: [INSTALL_CMD],
+        },
+        {
+          text: "Vérifiez que le service tourne et qu'il reviendra après un redémarrage. Les deux réponses comptent : active dit qu'il tourne maintenant, enabled est ce qui survit à un redémarrage.",
+          code: ["systemctl is-active relayium-node", "systemctl is-enabled relayium-node"],
+        },
+        {
+          text: "Ouvrez les ports entrants dans le pare-feu de l'hôte. L'état En ligne ne demande qu'un accès sortant, mais c'est par ces ports que les pairs relaient et stockent.",
+          code: PORTS_CODE,
+        },
+        {
+          text: "Sur un VPS cloud, autorisez aussi les mêmes ports dans le groupe de sécurité du fournisseur. Avec ufw seul ils restent bloqués en amont, et le nœud a l'air parfaitement sain pendant tout ce temps.",
+        },
+        {
+          text: "De retour sur /me, regardez le nœud passer En ligne — en général en une trentaine de secondes. À partir de là, les transferts de votre compte le préfèrent automatiquement.",
+        },
+        {
+          text: "Facultatif : activez « N'utiliser que mes propres nœuds pour le relais et le stockage » pour qu'un transfert échoue au lieu de revenir discrètement sur notre infrastructure partagée.",
+        },
       ],
-      code: [INSTALL_CMD],
+      success: {
+        label: "À quoi ressemble un nœud qui fonctionne",
+        body: [
+          "systemd signale le service à la fois active et enabled, et le nœud apparaît En ligne sous Mes nœuds. active seul ne suffit pas — un nœud qui n'est pas enabled disparaît au redémarrage suivant.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-node
+active
+$ systemctl is-enabled relayium-node
+enabled`,
+        ],
+      },
       bullets: [
         "La partie <your-token> est renseignée pour vous sur la page du compte — ne collez pas le paramètre fictif ci-dessus tel quel.",
         "RELAYIUM_NODE_STORAGE_DIR active le stockage de blobs en plus du relais. Laissez-le désactivé (omettez la variable) si vous voulez que le nœud ne fasse que relayer, pas stocker.",
-      ],
-    },
-    {
-      heading: "Étape 2 — exécutez-la sur votre serveur, en tant que root",
-      body: [
-        "Collez la commande sur votre serveur. Elle achemine notre installateur vers sh : l'installateur télécharge le binaire relayium-node et en vérifie la somme de contrôle, l'installe dans /usr/local/bin, écrit un service systemd et le démarre. Le sudo en tête est ce qui lui permet d'installer le service ; si vous êtes déjà root, c'est un no-op sans conséquence.",
-        "Comme il s'agit d'un service systemd, le nœud est activé au démarrage et se relance de lui-même s'il venait à planter — il reste en ligne à travers les redémarrages sans rien de plus à faire. Si vous voyez `relayium-node: command not found`, c'est que vous avez exécuté le binaire directement au lieu de l'installateur ci-dessus — c'est la commande en une ligne qui met le binaire en place.",
-      ],
-      bullets: [
         "Vérifiez qu'il a démarré : `systemctl status relayium-node` (devrait indiquer active/running).",
         "Confirmez la persistance au démarrage : `systemctl is-enabled relayium-node` (devrait indiquer enabled).",
         "Suivez les journaux en direct : `journalctl -u relayium-node -f`.",
+        "3478/udp est le port TURN que les pairs utilisent pour relayer ; 8081/tcp est le port HTTP du stockage de blobs ; 49152–65535/udp est la plage média du relais.",
+        "Sur un VPS cloud, autorisez-les aussi dans le groupe de sécurité / pare-feu réseau du fournisseur, pas seulement dans ufw.",
       ],
     },
     {
@@ -860,22 +1232,52 @@ const fr = {
       ],
     },
     {
-      heading: "Étape 3 — ouvrez les ports entrants",
+      heading: "Quand ça ne marche pas",
       body: [
-        "Être en ligne (un signal de présence vers relayium.com) ne nécessite qu'un accès sortant, que vous avez déjà. Mais pour que les pairs puissent effectivement relayer via votre nœud et y stocker, ses ports entrants doivent être accessibles. Si l'hôte fait tourner un pare-feu, ouvrez-les — avec ufw, cela donne :",
+        "Cinq pannes couvrent presque tous les nœuds qui ne démarrent pas, et trois d'entre elles paraissent saines depuis le serveur : le service tourne, et seuls la page de compte ou une socket en écoute disent le contraire.",
       ],
-      code: PORTS_CODE,
-      bullets: [
-        "3478/udp est le port TURN que les pairs utilisent pour relayer ; 8081/tcp est le port HTTP du stockage de blobs ; 49152–65535/udp est la plage média du relais.",
-        "Sur un VPS cloud, autorisez-les aussi dans le groupe de sécurité / pare-feu réseau du fournisseur, pas seulement dans ufw.",
-      ],
-    },
-    {
-      heading: "Étape 4 — confirmez et faites transiter le trafic par lui",
-      body: [
-        "De retour sur la page du compte, votre nœud apparaît sous « Mes nœuds » et passe à « En ligne » en une trentaine de secondes. À partir de là, les transferts de votre compte privilégient automatiquement votre propre nœud.",
-        "Pour le forcer — ne jamais retomber sur notre infrastructure partagée — activez « N'utiliser que mes propres nœuds pour le relais/stockage » sur la même page. Avec cette option activée, si aucun de vos nœuds n'est en ligne, un transfert échoue au lieu d'utiliser discrètement les nôtres.",
-      ],
+      troubleshooting: {
+        label: "Symptôme, vérification, correction",
+        items: [
+          {
+            symptom: "Le shell répond « relayium-node: command not found ».",
+            code: [
+              `command -v relayium-node
+# aucune sortie`,
+            ],
+            fix: "Le binaire n'est pas installé. On n'installe jamais relayium-node séparément — c'est la commande d'une ligne de la page de compte qui le télécharge, le place dans votre PATH et le démarre comme service. Exécutez plutôt celle-là.",
+          },
+          {
+            symptom: "Le service est active, mais le nœud ne passe jamais En ligne sur la page de compte.",
+            code: [
+              `journalctl -u relayium-node -n 50 --no-pager`,
+            ],
+            fix: "L'état En ligne dépend d'un battement sortant, un pare-feu en est donc rarement la cause ici — c'est l'enregistrement. Le jeton est à usage unique, une commande déjà exécutée ou une ancienne restée d'un essai précédent échoue donc. Cliquez de nouveau sur Ajouter un nœud et relancez la commande fraîche.",
+          },
+          {
+            symptom: "Le nœud est En ligne, mais les transferts passent toujours par notre infrastructure partagée.",
+            code: [
+              `sudo ss -lunp | grep 3478`,
+            ],
+            fix: "En ligne ne prouve que le battement sortant. Ce dont les pairs ont besoin, ce sont les ports entrants : vérifiez que le nœud écoute, puis ouvrez 3478/udp, 8081/tcp et 49152-65535/udp dans le pare-feu de l'hôte ET dans le groupe de sécurité du cloud. Pour exclure tout repli silencieux, activez le réglage qui n'utilise que vos propres nœuds.",
+          },
+          {
+            symptom: "La désinstallation n'a rien affiché, s'est terminée avec 0, et le service est toujours là.",
+            code: [
+              `systemctl status relayium-node
+# active (running)`,
+            ],
+            fix: "C'est exactement l'allure d'un téléchargement raté envoyé dans sh : une 404 ou un accroc réseau n'affiche rien et se termine avec 0, ce qui se lit comme une réussite. Téléchargez le script, vérifiez qu'il n'est pas vide, puis exécutez-le — c'est pourquoi la commande de ce guide est écrite en trois parties plutôt qu'en un seul tube.",
+          },
+          {
+            symptom: "La désinstallation refuse tant que le répertoire de stockage contient encore des fichiers.",
+            code: [
+              `sudo ls /var/lib/relayium-node/blobs | wc -l`,
+            ],
+            fix: "C'est délibéré. Chaque fichier stocké vit sur un seul nœud et il n'existe aucune réplique, retirer le nœud les rend donc inatteignables. Attendez que le compte tombe à zéro à mesure que les blobs expirent, ou acceptez la perte avec RELAYIUM_NODE_FORCE=1. Les variables d'environnement ne survivent pas à un tube vers sudo sh, passez-les donc sous la forme sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -925,32 +1327,69 @@ const ar = {
       ],
     },
     {
-      heading: "ما الذي تحتاجه",
+      heading: "ثبّت العقدة وأوصلها إلى الإنترنت",
+      prereqs: {
+        label: "ما تحتاجه قبل الخطوة 1",
+        items: [
+          "خادم لينكس يمكن الوصول إليه من الإنترنت — سواء VPS رخيص أو جهاز يعمل دائمًا في البيت. المعماريتان amd64 وarm64 مدعومتان.",
+          "صلاحية root على ذلك الخادم، أو sudo. التثبيت يحتاجها مرة واحدة، والعقدة نفسها لا تعمل بصلاحية root أبدًا.",
+          "القدرة على فتح المنافذ الواردة — في جدار حماية المضيف، وعلى VPS سحابي في مجموعة الأمان لدى المزوّد أيضًا.",
+          "حساب على relayium.com مسجَّل الدخول. أمر التثبيت يُولَّد في صفحة الحساب ويحمل رمزًا صالحًا لمرة واحدة.",
+          "مساحة قرص، فقط إن أردت للعقدة أن تخزّن إضافةً إلى الترحيل. العقدة المخصصة للترحيل وحده لا تحتاجها — احذف عندها RELAYIUM_NODE_STORAGE_DIR.",
+        ],
+      },
       body: [
-        "خادم Linux يمكن الوصول إليه من الإنترنت — سواء VPS رخيص أو جهاز يعمل دائمًا في المنزل، كلاهما يفي بالغرض. ستحتاج صلاحية root (أو sudo)، والقدرة على فتح بضعة منافذ واردة. كلٌّ من amd64 وarm64 مدعوم.",
+        "أربعة أمور بالترتيب: تولّد الأمر، ثم تشغّله، ثم تفتح المنافذ، ثم تتأكّد أن العقدة صارت متصلة. نحو خمس دقائق على جهاز جديد.",
       ],
-    },
-    {
-      heading: "الخطوة 1 — احصل على أمر التثبيت",
-      body: [
-        "سجّل الدخول في relayium.com، افتح صفحة الحساب (/me)، مرّر إلى «عُقدي»، وانقر على «إضافة عُقدة». ستحصل على أمر تثبيت لمرة واحدة مع رمز مضمَّن فيه — يُعرض الرمز مرة واحدة فقط، فانسخه فورًا. يبدو هكذا:",
+      steps: [
+        {
+          text: "سجّل الدخول في relayium.com وافتح صفحة حسابك على ‎/me‎.",
+        },
+        {
+          text: "انزل إلى «عقدي» واضغط «إضافة عقدة». انسخ أمر التثبيت فورًا — فالرمز الذي بداخله يُعرض مرة واحدة فقط ولا يمكن عرضه ثانيةً.",
+        },
+        {
+          text: "الصقه على خادمك. سينزّل ثنائي relayium-node ويتحقّق من مجموع التحقّق الخاص به، ويثبّته في ‎/usr/local/bin‎، ويكتب خدمة systemd ويشغّلها.",
+          code: [INSTALL_CMD],
+        },
+        {
+          text: "تأكّد أن الخدمة تعمل وأنها ستعود بعد إعادة التشغيل. الإجابتان كلتاهما مهمّة: active تعني أنها تعمل الآن، وenabled هي ما يصمد أمام إعادة التشغيل.",
+          code: ["systemctl is-active relayium-node", "systemctl is-enabled relayium-node"],
+        },
+        {
+          text: "افتح المنافذ الواردة في جدار حماية المضيف. حالة «متصل» لا تحتاج إلا وصولًا صادرًا، لكن الأقران يرحّلون ويخزّنون عبر هذه المنافذ تحديدًا.",
+          code: PORTS_CODE,
+        },
+        {
+          text: "على VPS سحابي، اسمح بالمنافذ نفسها في مجموعة الأمان لدى المزوّد كذلك. الاكتفاء بـ ufw يتركها مغلقة في الأعلى، والعقدة تبدو سليمة طوال ذلك الوقت.",
+        },
+        {
+          text: "عد إلى ‎/me‎ وراقب تحوّل العقدة إلى «متصلة» — عادةً خلال ثلاثين ثانية تقريبًا. ومن حينها تفضّلها عمليات النقل في حسابك تلقائيًا.",
+        },
+        {
+          text: "اختياري: فعّل «استخدام عقدي وحدها للترحيل والتخزين» ليفشل النقل بدل أن يعود بصمت إلى بنيتنا المشتركة.",
+        },
       ],
-      code: [INSTALL_CMD],
+      success: {
+        label: "كيف تبدو عقدة تعمل بشكل صحيح",
+        body: [
+          "يُبلِّغ systemd أن الخدمة active وenabled معًا، وتظهر العقدة «متصلة» تحت «عقدي». وactive وحدها لا تكفي — فالعقدة غير المفعَّلة بـ enabled تختفي عند إعادة التشغيل التالية.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-node
+active
+$ systemctl is-enabled relayium-node
+enabled`,
+        ],
+      },
       bullets: [
         "الجزء ‎<your-token>‎ يُملأ لك في صفحة الحساب — لا تلصق العنصر النائب أعلاه حرفيًا.",
         "RELAYIUM_NODE_STORAGE_DIR يفعّل تخزين الكتل إضافةً إلى الترحيل. اتركه معطّلًا (احذف المتغير) إن أردت أن تقوم العقدة بالترحيل فقط دون التخزين.",
-      ],
-    },
-    {
-      heading: "الخطوة 2 — شغّله على خادمك بصلاحية root",
-      body: [
-        "الصق الأمر على خادمك. إنه يمرّر مثبّتنا إلى sh: يقوم المثبّت بتنزيل ثنائي relayium-node والتحقق من مجموعه، وتثبيته في /usr/local/bin، وكتابة خدمة systemd وتشغيلها. الـ sudo في البداية هو ما يتيح له تثبيت الخدمة؛ إن كنت أصلًا root فهو عملية لا أثر لها.",
-        "لأنها خدمة systemd، تُفعَّل العقدة عند الإقلاع وتعيد تشغيل نفسها إذا تعطّلت — تبقى متصلة عبر عمليات إعادة التشغيل دون أي عمل إضافي. إذا رأيت `relayium-node: command not found`، فأنت شغّلت الثنائي مباشرةً بدل المثبّت أعلاه — الأمر ذو السطر الواحد هو ما يضع الثنائي في مكانه.",
-      ],
-      bullets: [
         "تأكّد من أنه بدأ: `systemctl status relayium-node` (يجب أن يظهر active/running).",
         "تأكّد من الاستمرارية عبر الإقلاع: `systemctl is-enabled relayium-node` (يجب أن يظهر enabled).",
         "راقب السجلات مباشرة: `journalctl -u relayium-node -f`.",
+        "المنفذ 3478/udp هو منفذ TURN الذي يستخدمه الأقران للترحيل؛ 8081/tcp هو منفذ HTTP لتخزين الكتل؛ 49152–65535/udp هو نطاق وسائط الترحيل.",
+        "على VPS سحابي، اسمح بهذه أيضًا في مجموعة الأمان / جدار حماية الشبكة لدى المزوّد، لا في ufw فقط.",
       ],
     },
     {
@@ -1009,22 +1448,52 @@ const ar = {
       ],
     },
     {
-      heading: "الخطوة 3 — افتح المنافذ الواردة",
+      heading: "حين لا ينجح الأمر",
       body: [
-        "البقاء متصلًا (نبضة إلى relayium.com) يحتاج وصولًا صادرًا فقط، وهو متوفر لديك بالفعل. لكن لكي يرحّل الأقران فعلًا عبر عقدتك ويخزّنوا عليها، يجب أن تكون منافذها الواردة قابلة للوصول. إن كان المضيف يشغّل جدار حماية، فافتحها — مع ufw يكون ذلك:",
+        "خمسة إخفاقات تغطي تقريبًا كل عقدة لا تقلع، وثلاثة منها تبدو سليمة من جهة الخادم: الخدمة تعمل، ولا يخبرك بغير ذلك إلا صفحة الحساب أو مقبس مُنصِت.",
       ],
-      code: PORTS_CODE,
-      bullets: [
-        "المنفذ 3478/udp هو منفذ TURN الذي يستخدمه الأقران للترحيل؛ 8081/tcp هو منفذ HTTP لتخزين الكتل؛ 49152–65535/udp هو نطاق وسائط الترحيل.",
-        "على VPS سحابي، اسمح بهذه أيضًا في مجموعة الأمان / جدار حماية الشبكة لدى المزوّد، لا في ufw فقط.",
-      ],
-    },
-    {
-      heading: "الخطوة 4 — تأكّد ووجّه الحركة عبرها",
-      body: [
-        "عند العودة إلى صفحة الحساب، تظهر عقدتك تحت «عُقدي» وتتحوّل إلى «متصل» خلال نحو 30 ثانية. من ثم تفضّل عمليات نقل حسابك عقدتك الخاصة تلقائيًا.",
-        "لفرض ذلك — بحيث لا ترجع أبدًا إلى بنيتنا المشتركة — فعّل «استخدم عُقدي الخاصة فقط للترحيل/التخزين» في الصفحة ذاتها. مع تفعيله، إذا لم تكن أيٌّ من عقدك متصلة يفشل النقل بدل أن يستخدم عقدنا بصمت.",
-      ],
+      troubleshooting: {
+        label: "العَرَض، الفحص، الإصلاح",
+        items: [
+          {
+            symptom: "تردّ الصدفة بـ «relayium-node: command not found».",
+            code: [
+              `command -v relayium-node
+# لا شيء يُطبع`,
+            ],
+            fix: "الثنائي غير مثبَّت. ولا يُثبَّت relayium-node منفصلًا أبدًا — فأمر السطر الواحد في صفحة الحساب هو ما ينزّله ويضعه في مسار PATH ويشغّله كخدمة. شغّل ذلك الأمر بدلًا من هذا.",
+          },
+          {
+            symptom: "الخدمة active لكن العقدة لا تصير «متصلة» في صفحة الحساب أبدًا.",
+            code: [
+              `journalctl -u relayium-node -n 50 --no-pager`,
+            ],
+            fix: "حالة «متصل» يقرّرها نبض صادر، لذا نادرًا ما يكون جدار الحماية هو السبب هنا — بل التسجيل. الرمز صالح لمرة واحدة، فيفشل أمر سبق تشغيله أو أمر قديم بقي من محاولة سابقة. اضغط «إضافة عقدة» مجددًا للحصول على أمر جديد وأعد تشغيله.",
+          },
+          {
+            symptom: "العقدة تظهر «متصلة» ومع ذلك تمر عمليات النقل عبر بنيتنا المشتركة.",
+            code: [
+              `sudo ss -lunp | grep 3478`,
+            ],
+            fix: "«متصل» لا تثبت إلا النبض الصادر. ما يحتاجه الأقران هو المنافذ الواردة: تأكّد أن العقدة تُنصِت، ثم افتح 3478/udp و8081/tcp و49152-65535/udp في جدار حماية المضيف وفي مجموعة الأمان السحابية معًا. ولاستبعاد أي عودة صامتة تمامًا، فعّل إعداد الاقتصار على عقدك.",
+          },
+          {
+            symptom: "أمر الإزالة لم يطبع شيئًا وانتهى بالرمز 0، والخدمة ما تزال موجودة.",
+            code: [
+              `systemctl status relayium-node
+# active (running)`,
+            ],
+            fix: "هذا بالضبط شكل تمرير تنزيل فاشل إلى sh: خطأ 404 أو انقطاع عابر في الشبكة لا يطبع شيئًا وينتهي بالرمز 0، فيُقرأ كنجاح. نزّل السكربت، وتحقّق أنه ليس فارغًا، ثم شغّله — ولهذا كُتب الأمر في هذا الدليل على ثلاثة أجزاء لا كأنبوب واحد.",
+          },
+          {
+            symptom: "الإزالة ترفض ما دام دليل التخزين يحوي ملفات.",
+            code: [
+              `sudo ls /var/lib/relayium-node/blobs | wc -l`,
+            ],
+            fix: "هذا مقصود. فكل ملف مخزَّن يوجد على عقدة واحدة بالضبط ولا نسخ احتياطية له، وإزالة العقدة تجعل تلك الملفات غير قابلة للوصول. انتظر حتى يبلغ العدد صفرًا مع انتهاء صلاحية الكتل، أو اقبل الخسارة بـ RELAYIUM_NODE_FORCE=1. ومتغيرات البيئة لا تعبر أنبوبًا إلى sudo sh، فمرّرها بصيغة sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -1074,32 +1543,69 @@ const es = {
       ],
     },
     {
-      heading: "Qué necesitas",
+      heading: "Instala el nodo y ponlo en línea",
+      prereqs: {
+        label: "Lo que necesitas antes del paso 1",
+        items: [
+          "Un servidor Linux accesible desde internet: sirve tanto un VPS barato como una máquina siempre encendida en casa. Se admiten amd64 y arm64.",
+          "root en ese servidor, o sudo. La instalación lo necesita una vez; el nodo en sí nunca se ejecuta como root.",
+          "Poder abrir puertos entrantes: en el cortafuegos del host y, en un VPS en la nube, también en el grupo de seguridad del proveedor.",
+          "Una cuenta de relayium.com con la sesión iniciada. El comando de instalación se genera en la página de cuenta y lleva un token de un solo uso.",
+          "Espacio en disco, solo si quieres que el nodo también almacene además de retransmitir. Un nodo de solo retransmisión no necesita ninguno: omite RELAYIUM_NODE_STORAGE_DIR.",
+        ],
+      },
       body: [
-        "Un servidor Linux accesible desde internet — sirve tanto un VPS barato como una máquina siempre encendida en casa. Necesitarás root (o sudo) y la capacidad de abrir unos cuantos puertos entrantes. Se admiten tanto amd64 como arm64.",
+        "Cuatro cosas en orden: generas el comando, lo ejecutas, abres los puertos y confirmas que el nodo se puso en línea. Unos cinco minutos en una máquina recién creada.",
       ],
-    },
-    {
-      heading: "Paso 1 — obtén tu comando de instalación",
-      body: [
-        "Inicia sesión en relayium.com, abre la página de cuenta (/me), desplázate hasta «Mis nodos» y haz clic en «Añadir nodo». Obtendrás un comando de instalación de un solo uso con un token incrustado — el token se muestra una única vez, así que cópialo de inmediato. Tiene este aspecto:",
+      steps: [
+        {
+          text: "Inicia sesión en relayium.com y abre tu página de cuenta en /me.",
+        },
+        {
+          text: "Baja hasta Mis nodos y pulsa Añadir nodo. Copia el comando de instalación de inmediato: el token que lleva se muestra una sola vez y no puede volver a mostrarse.",
+        },
+        {
+          text: "Pégalo en tu servidor. Descarga el binario relayium-node, verifica su suma de comprobación, lo instala en /usr/local/bin, escribe un servicio de systemd y lo arranca.",
+          code: [INSTALL_CMD],
+        },
+        {
+          text: "Confirma que el servicio está en marcha y que volverá tras un reinicio. Ambas respuestas importan: active dice que está corriendo ahora, y enabled es lo que sobrevive a un reinicio.",
+          code: ["systemctl is-active relayium-node", "systemctl is-enabled relayium-node"],
+        },
+        {
+          text: "Abre los puertos entrantes en el cortafuegos del host. El estado En línea solo requiere acceso saliente, pero es por estos puertos por donde los pares retransmiten y almacenan.",
+          code: PORTS_CODE,
+        },
+        {
+          text: "En un VPS en la nube, permite además los mismos puertos en el grupo de seguridad del proveedor. Con ufw a secas siguen bloqueados aguas arriba, y el nodo parece sano todo ese tiempo.",
+        },
+        {
+          text: "De vuelta en /me, observa cómo el nodo pasa a En línea, normalmente en unos 30 segundos. A partir de ahí las transferencias de tu cuenta lo prefieren automáticamente.",
+        },
+        {
+          text: "Opcional: activa \"Usar solo mis propios nodos para retransmisión/almacenamiento\" para que una transferencia falle en vez de volver en silencio a nuestra infraestructura compartida.",
+        },
       ],
-      code: [INSTALL_CMD],
+      success: {
+        label: "Qué aspecto tiene un nodo que funciona",
+        body: [
+          "systemd informa del servicio como active y enabled a la vez, y el nodo aparece En línea bajo Mis nodos. active por sí solo no basta: un nodo que no está enabled desaparece en el siguiente reinicio.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-node
+active
+$ systemctl is-enabled relayium-node
+enabled`,
+        ],
+      },
       bullets: [
         "La parte <your-token> se rellena por ti en la página de cuenta — no pegues literalmente el marcador de posición de arriba.",
         "RELAYIUM_NODE_STORAGE_DIR activa el almacenamiento de blobs además de la retransmisión. Déjalo desactivado (omite la variable) si solo quieres que el nodo retransmita y no almacene.",
-      ],
-    },
-    {
-      heading: "Paso 2 — ejecútalo en tu servidor, como root",
-      body: [
-        "Pega el comando en tu servidor. Canaliza nuestro instalador a sh: el instalador descarga y verifica por suma de comprobación el binario relayium-node, lo instala en /usr/local/bin, escribe un servicio systemd y lo arranca. El sudo inicial es lo que le permite instalar el servicio; si ya eres root, es un no-op inofensivo.",
-        "Como es un servicio systemd, el nodo se habilita al arrancar y se reinicia por sí solo si alguna vez se cae — se mantiene en línea a través de los reinicios sin nada más que hacer. Si ves `relayium-node: command not found`, ejecutaste el binario directamente en lugar del instalador de arriba — es el comando de una línea el que pone el binario en su sitio.",
-      ],
-      bullets: [
         "Comprueba que arrancó: `systemctl status relayium-node` (debería indicar active/running).",
         "Confirma la persistencia al arranque: `systemctl is-enabled relayium-node` (debería indicar enabled).",
         "Observa los registros en vivo: `journalctl -u relayium-node -f`.",
+        "3478/udp es el puerto TURN que los pares usan para retransmitir; 8081/tcp es el puerto HTTP del almacenamiento de blobs; 49152–65535/udp es el rango de medios de la retransmisión.",
+        "En un VPS en la nube, permítelos también en el grupo de seguridad / cortafuegos de red del proveedor, no solo en ufw.",
       ],
     },
     {
@@ -1158,22 +1664,52 @@ const es = {
       ],
     },
     {
-      heading: "Paso 3 — abre los puertos entrantes",
+      heading: "Cuando no funciona",
       body: [
-        "Estar en línea (un latido hacia relayium.com) solo necesita acceso saliente, que ya tienes. Pero para que otros pares realmente retransmitan a través de tu nodo y almacenen en él, sus puertos entrantes deben ser accesibles. Si el host ejecuta un cortafuegos, ábrelos — con ufw es así:",
+        "Cinco fallos cubren casi todos los nodos que no llegan a levantarse, y tres de ellos parecen sanos desde el servidor: el servicio está corriendo, y solo la página de cuenta o un socket a la escucha dicen lo contrario.",
       ],
-      code: PORTS_CODE,
-      bullets: [
-        "3478/udp es el puerto TURN que los pares usan para retransmitir; 8081/tcp es el puerto HTTP del almacenamiento de blobs; 49152–65535/udp es el rango de medios de la retransmisión.",
-        "En un VPS en la nube, permítelos también en el grupo de seguridad / cortafuegos de red del proveedor, no solo en ufw.",
-      ],
-    },
-    {
-      heading: "Paso 4 — confirma y enruta el tráfico a través de él",
-      body: [
-        "De vuelta en la página de cuenta, tu nodo aparece bajo «Mis nodos» y cambia a «En línea» en unos 30 segundos. A partir de entonces, las transferencias de tu cuenta prefieren tu propio nodo automáticamente.",
-        "Para forzarlo — que nunca recurra a nuestra infraestructura compartida — activa «Usar solo mis propios nodos para retransmisión/almacenamiento» en la misma página. Con eso activado, si ninguno de tus nodos está en línea, una transferencia falla en lugar de usar discretamente los nuestros.",
-      ],
+      troubleshooting: {
+        label: "Síntoma, comprobación, solución",
+        items: [
+          {
+            symptom: "El shell responde \"relayium-node: command not found\".",
+            code: [
+              `command -v relayium-node
+# no imprime nada`,
+            ],
+            fix: "El binario no está instalado. relayium-node nunca se instala por separado: el comando de una línea de la página de cuenta es justamente lo que lo descarga, lo pone en tu PATH y lo arranca como servicio. Ejecuta ese en su lugar.",
+          },
+          {
+            symptom: "El servicio está active, pero el nodo nunca pasa a En línea en la página de cuenta.",
+            code: [
+              `journalctl -u relayium-node -n 50 --no-pager`,
+            ],
+            fix: "El estado En línea lo decide un latido saliente, así que aquí rara vez la causa es el cortafuegos: es el registro. El token es de un solo uso, de modo que un comando ya ejecutado, o uno viejo de un intento anterior, falla. Pulsa Añadir nodo otra vez para obtener un comando nuevo y vuelve a ejecutarlo.",
+          },
+          {
+            symptom: "El nodo aparece En línea, pero las transferencias siguen pasando por nuestra infraestructura compartida.",
+            code: [
+              `sudo ss -lunp | grep 3478`,
+            ],
+            fix: "En línea solo demuestra el latido saliente. Lo que los pares necesitan son los puertos entrantes: comprueba que el nodo está escuchando y luego abre 3478/udp, 8081/tcp y 49152-65535/udp en el cortafuegos del host Y en el grupo de seguridad de la nube. Para descartar por completo un repliegue silencioso, activa el ajuste de usar solo tus propios nodos.",
+          },
+          {
+            symptom: "La desinstalación no imprimió nada, terminó con 0 y el servicio sigue ahí.",
+            code: [
+              `systemctl status relayium-node
+# active (running)`,
+            ],
+            fix: "Eso es exactamente el aspecto de canalizar una descarga fallida a sh: un 404 o un corte de red no imprime nada y termina con 0, lo que se lee como éxito. Descarga el script, comprueba que no está vacío y luego ejecútalo: por eso el comando de esta guía está escrito en tres partes y no como una sola tubería.",
+          },
+          {
+            symptom: "La desinstalación se niega mientras el directorio de almacenamiento aún contiene archivos.",
+            code: [
+              `sudo ls /var/lib/relayium-node/blobs | wc -l`,
+            ],
+            fix: "Es deliberado. Cada archivo almacenado vive en exactamente un nodo y no hay réplicas, así que retirar el nodo los deja inalcanzables. Espera a que la cuenta llegue a cero conforme caducan los blobs, o asume la pérdida con RELAYIUM_NODE_FORCE=1. Las variables de entorno no sobreviven a una tubería hacia sudo sh, así que pásalas como sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -1223,32 +1759,69 @@ const pt = {
       ],
     },
     {
-      heading: "O que você precisa",
+      heading: "Instale o nó e coloque-o online",
+      prereqs: {
+        label: "O que você precisa antes do passo 1",
+        items: [
+          "Um servidor Linux acessível pela internet — tanto um VPS barato quanto uma máquina sempre ligada em casa servem. amd64 e arm64 são suportados.",
+          "root nesse servidor, ou sudo. A instalação precisa disso uma vez; o nó em si nunca roda como root.",
+          "Poder abrir portas de entrada — no firewall do host e, num VPS na nuvem, também no grupo de segurança do provedor.",
+          "Uma conta relayium.com com sessão iniciada. O comando de instalação é gerado na página da conta e carrega um token de uso único.",
+          "Espaço em disco, apenas se você quiser que o nó também armazene além de retransmitir. Um nó só de retransmissão não precisa — nesse caso omita RELAYIUM_NODE_STORAGE_DIR.",
+        ],
+      },
       body: [
-        "Um servidor Linux acessível pela internet — serve tanto um VPS barato quanto uma máquina sempre ligada em casa. Você vai precisar de root (ou sudo) e da capacidade de abrir algumas poucas portas de entrada. Tanto amd64 quanto arm64 são suportados.",
+        "Quatro coisas em ordem: gerar o comando, executá-lo, abrir as portas e confirmar que o nó ficou online. Cerca de cinco minutos numa máquina nova.",
       ],
-    },
-    {
-      heading: "Passo 1 — obtenha seu comando de instalação",
-      body: [
-        "Faça login em relayium.com, abra a página da conta (/me), role até “Meus nós” e clique em “Adicionar nó”. Você receberá um comando de instalação de uso único com um token embutido — o token é exibido apenas uma vez, então copie-o imediatamente. Ele tem esta aparência:",
+      steps: [
+        {
+          text: "Entre no relayium.com e abra a página da sua conta em /me.",
+        },
+        {
+          text: "Desça até Meus nós e clique em Adicionar nó. Copie o comando de instalação na hora — o token que ele contém aparece uma única vez e não pode ser exibido de novo.",
+        },
+        {
+          text: "Cole no seu servidor. Ele baixa o binário relayium-node, verifica a soma de verificação, instala em /usr/local/bin, escreve um serviço systemd e o inicia.",
+          code: [INSTALL_CMD],
+        },
+        {
+          text: "Confirme que o serviço subiu e que voltará depois de um reboot. As duas respostas importam: active diz que está rodando agora, e enabled é o que sobrevive a um reinício.",
+          code: ["systemctl is-active relayium-node", "systemctl is-enabled relayium-node"],
+        },
+        {
+          text: "Abra as portas de entrada no firewall do host. O estado Online só precisa de acesso de saída, mas é por essas portas que os pares retransmitem e armazenam.",
+          code: PORTS_CODE,
+        },
+        {
+          text: "Num VPS na nuvem, libere as mesmas portas também no grupo de segurança do provedor. Só com o ufw elas continuam bloqueadas mais acima, e o nó parece saudável esse tempo todo.",
+        },
+        {
+          text: "De volta ao /me, veja o nó virar Online — normalmente em uns 30 segundos. Daí em diante as transferências da sua conta passam a preferi-lo automaticamente.",
+        },
+        {
+          text: "Opcional: ligue \"Usar somente meus próprios nós para retransmissão/armazenamento\" para que uma transferência falhe em vez de voltar silenciosamente à nossa infraestrutura compartilhada.",
+        },
       ],
-      code: [INSTALL_CMD],
+      success: {
+        label: "Como é um nó que funciona",
+        body: [
+          "O systemd informa o serviço como active e enabled ao mesmo tempo, e o nó aparece Online em Meus nós. Só active não basta — um nó que não está enabled some no próximo reboot.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-node
+active
+$ systemctl is-enabled relayium-node
+enabled`,
+        ],
+      },
       bullets: [
         "A parte <your-token> é preenchida para você na página da conta — não cole literalmente o espaço reservado acima.",
         "RELAYIUM_NODE_STORAGE_DIR ativa o armazenamento de blobs além da retransmissão. Deixe-o desativado (omita a variável) se quiser que o nó apenas retransmita, sem armazenar.",
-      ],
-    },
-    {
-      heading: "Passo 2 — execute-o no seu servidor, como root",
-      body: [
-        "Cole o comando no seu servidor. Ele canaliza nosso instalador para o sh: o instalador baixa e verifica por soma de verificação o binário relayium-node, instala-o em /usr/local/bin, escreve um serviço systemd e o inicia. O sudo inicial é o que permite instalar o serviço; se você já for root, é um no-op inofensivo.",
-        "Como é um serviço systemd, o nó é habilitado na inicialização e reinicia-se sozinho caso venha a travar — ele permanece online através dos reinícios sem nada mais a fazer. Se você vir `relayium-node: command not found`, executou o binário diretamente em vez do instalador acima — é o comando de uma linha que coloca o binário no lugar.",
-      ],
-      bullets: [
         "Verifique que iniciou: `systemctl status relayium-node` (deve indicar active/running).",
         "Confirme a persistência na inicialização: `systemctl is-enabled relayium-node` (deve indicar enabled).",
         "Acompanhe os logs ao vivo: `journalctl -u relayium-node -f`.",
+        "3478/udp é a porta TURN que os pares usam para retransmitir; 8081/tcp é a porta HTTP do armazenamento de blobs; 49152–65535/udp é a faixa de mídia da retransmissão.",
+        "Em um VPS na nuvem, permita-os também no grupo de segurança / firewall de rede do provedor, não só no ufw.",
       ],
     },
     {
@@ -1307,22 +1880,52 @@ const pt = {
       ],
     },
     {
-      heading: "Passo 3 — abra as portas de entrada",
+      heading: "Quando não funciona",
       body: [
-        "Estar online (um heartbeat para relayium.com) só precisa de acesso de saída, que você já tem. Mas para que os pares realmente retransmitam através do seu nó e armazenem nele, suas portas de entrada precisam estar acessíveis. Se o host executa um firewall, abra-as — com ufw é assim:",
+        "Cinco falhas cobrem quase todo nó que não sobe, e três delas parecem saudáveis do lado do servidor: o serviço está rodando, e só a página da conta ou um socket em escuta dizem o contrário.",
       ],
-      code: PORTS_CODE,
-      bullets: [
-        "3478/udp é a porta TURN que os pares usam para retransmitir; 8081/tcp é a porta HTTP do armazenamento de blobs; 49152–65535/udp é a faixa de mídia da retransmissão.",
-        "Em um VPS na nuvem, permita-os também no grupo de segurança / firewall de rede do provedor, não só no ufw.",
-      ],
-    },
-    {
-      heading: "Passo 4 — confirme e roteie o tráfego por ele",
-      body: [
-        "De volta à página da conta, seu nó aparece em “Meus nós” e muda para “Online” em cerca de 30 segundos. A partir daí, as transferências da sua conta preferem seu próprio nó automaticamente.",
-        "Para forçá-lo — que nunca recorra à nossa infraestrutura compartilhada — ative “Usar apenas meus próprios nós para retransmissão/armazenamento” na mesma página. Com isso ativado, se nenhum dos seus nós estiver online, uma transferência falha em vez de usar discretamente os nossos.",
-      ],
+      troubleshooting: {
+        label: "Sintoma, checagem, correção",
+        items: [
+          {
+            symptom: "O shell responde \"relayium-node: command not found\".",
+            code: [
+              `command -v relayium-node
+# nada é impresso`,
+            ],
+            fix: "O binário não está instalado. Você nunca instala o relayium-node separadamente — o comando de uma linha da página da conta é justamente o que o baixa, coloca no seu PATH e o inicia como serviço. Rode aquele comando.",
+          },
+          {
+            symptom: "O serviço está active, mas o nó nunca fica Online na página da conta.",
+            code: [
+              `journalctl -u relayium-node -n 50 --no-pager`,
+            ],
+            fix: "O estado Online é decidido por um heartbeat de saída, então firewall raramente é a causa aqui — o problema é o registro. O token é de uso único, então um comando já executado, ou um antigo de uma tentativa anterior, falha. Clique em Adicionar nó de novo para obter um comando novo e execute-o.",
+          },
+          {
+            symptom: "O nó aparece Online, mas as transferências continuam passando pela nossa infraestrutura compartilhada.",
+            code: [
+              `sudo ss -lunp | grep 3478`,
+            ],
+            fix: "Online só prova o heartbeat de saída. O que os pares precisam são as portas de entrada: confirme que o nó está escutando e então abra 3478/udp, 8081/tcp e 49152-65535/udp no firewall do host E no grupo de segurança da nuvem. Para descartar de vez um retorno silencioso, ligue a opção de usar somente os seus próprios nós.",
+          },
+          {
+            symptom: "A desinstalação não imprimiu nada, saiu com 0, e o serviço continua lá.",
+            code: [
+              `systemctl status relayium-node
+# active (running)`,
+            ],
+            fix: "É exatamente a cara de canalizar um download que falhou para o sh: um 404 ou uma falha passageira de rede não imprime nada e sai com 0, o que se lê como sucesso. Baixe o script, verifique que ele não está vazio e só então execute — é por isso que o comando neste guia está escrito em três partes e não como um único pipe.",
+          },
+          {
+            symptom: "A desinstalação se recusa enquanto o diretório de armazenamento ainda tem arquivos.",
+            code: [
+              `sudo ls /var/lib/relayium-node/blobs | wc -l`,
+            ],
+            fix: "É proposital. Cada arquivo armazenado vive em exatamente um nó e não há réplicas, então remover o nó deixa esses arquivos inalcançáveis. Espere a contagem chegar a zero conforme os blobs expiram, ou aceite a perda com RELAYIUM_NODE_FORCE=1. Variáveis de ambiente não sobrevivem a um pipe para sudo sh, então passe-as como sudo env RELAYIUM_NODE_FORCE=1 sh uninstall-node.sh.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -1357,6 +1960,6 @@ const pt = {
 export default {
   slug: "guides/bring-your-own-node",
   published: "2026-07-10",
-  updated: "2026-07-22",
+  updated: "2026-08-06",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };
