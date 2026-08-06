@@ -55,6 +55,45 @@ const en = {
   sections: [
     {
       heading: "Start the listener",
+      prereqs: {
+        label: "What you need before step 1",
+        items: [
+          "The CLI on both machines. relayium version prints a version string on each; a shell that answers command not found means it is not installed there yet.",
+          "A directory for incoming files on this machine, and the disk to hold what will land in it.",
+          "An address the sender can reach and an open inbound port. serve listens on 9031 unless you pass --port.",
+          "If this machine will run without a terminal — which is the whole point of a service — the pusher's fingerprint, ahead of time. There is a section on that below, and it is the single most common reason an always-on receiver rejects everything.",
+        ],
+      },
+      steps: [
+        {
+          text: "Pick where files should land and start the listener. Nothing has to be pre-shared to get this far.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
+        {
+          text: "On the sending machine, push something at this host by its relayium:// address.",
+          code: ["relayium push ./report.pdf relayium://drop.example.com:9031"],
+        },
+        {
+          text: "Back on the receiver, answer the approval prompt. y writes that fingerprint to authorized_fingerprints, and later pushes from the same machine never prompt again.",
+        },
+        {
+          text: "Confirm the file actually landed in --dir rather than the directory you started serve from.",
+          code: ["ls -l ~/inbox"],
+        },
+      ],
+      success: {
+        label: "What a working listener looks like",
+        body: [
+          "serve says up front that it has no authorized peers, then prompts on the first push from a new machine and stays silent on every later one. The sender exits 0 and the file is in --dir.",
+        ],
+        code: [
+          `$ relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+        ],
+      },
       body: [
         "serve listens for daemon-direct pushes (relayium://host:port) over a pinned TLS 1.3 connection and writes what it receives into a directory. Nothing needs to be pre-shared to start it — no fingerprints to copy, no server to register:",
       ],
@@ -87,6 +126,16 @@ Accept and remember this peer? [y/N] y`,
     },
     {
       heading: "Pre-authorize peers for non-interactive setups",
+      steps: [
+        {
+          text: "On the machine that will push, print its fingerprint. It is 64 hex characters and identifies that machine, not its address.",
+          code: ["relayium id"],
+        },
+        {
+          text: "On this receiver, authorize it — with the same --config-dir the service will run under. Authorize as the wrong user, or with the default path while the unit uses another, and the fingerprint lands in a file the service never reads.",
+          code: ["relayium authorize 74318e3b… --config-dir /etc/relayium"],
+        },
+      ],
       body: [
         "When serve has no terminal to prompt on — a systemd service, a background process, a pipe — it can't ask, so it rejects any fingerprint it doesn't already recognize. Authorize peers ahead of time instead. On the machine that will push, run relayium id to print its fingerprint; on the receiver, add it before the first push arrives:",
       ],
@@ -104,6 +153,34 @@ relayium authorize 74318e3b...`,
     },
     {
       heading: "Run it under systemd",
+      steps: [
+        {
+          text: "Authorize every peer that should be able to push, before the service exists. It cannot prompt, so anything not already trusted is rejected.",
+        },
+        {
+          text: "Write the unit file above to /etc/systemd/system/relayium-serve.service, with --config-dir pointing at the same fixed path you authorized under.",
+        },
+        {
+          text: "Reload systemd and start the service, enabling it so it comes back after a reboot.",
+          code: ["sudo systemctl daemon-reload", "sudo systemctl enable --now relayium-serve"],
+        },
+        {
+          text: "Confirm it is running and that the reject-everything warning is absent from its log. Only the second of those is specific to this setup.",
+          code: ["systemctl is-active relayium-serve", "journalctl -u relayium-serve -n 20 --no-pager"],
+        },
+      ],
+      success: {
+        label: "What a working service looks like",
+        body: [
+          "is-active answers active, and the startup warning about having no authorized peers does not appear. That warning is the one line that tells you, before any sender complains, that this service will refuse every push.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-serve
+active
+$ journalctl -u relayium-serve -n 20 --no-pager | grep -c 'all pushes will be rejected'
+0`,
+        ],
+      },
       body: [
         "For a service that survives reboots and crashes, hand serve to systemd. Point --config-dir at a fixed path so the host's identity and its authorized-peer list stay put across restarts:",
       ],
@@ -124,7 +201,7 @@ WantedBy=multi-user.target`,
       bullets: [
         "Before enabling the service, run relayium authorize <fingerprint> for every peer that should be able to push — the service itself can't prompt.",
         "systemctl enable --now relayium-serve starts it and brings it back on every boot.",
-        "Keep /etc/relayium/id.key readable only by the service user; relayium refuses to load a key with looser permissions.",
+        "/etc/relayium/id.key must be mode 0600 exactly, owned by the unit's User=. relayium refuses anything else — including 0400, so hardening it past 0600 stops the service just as surely as leaving it world-readable.",
       ],
     },
     {
@@ -150,6 +227,55 @@ WantedBy=multi-user.target`,
         "--allow-delete is a receiver-side opt-in; the sender still has to ask for it with sync --delete.",
         "Without it, nothing is ever deleted on this machine, no matter what a sender requests.",
       ],
+    },
+    {
+      heading: "When it doesn't work",
+      body: [
+        "Four of these five failures leave the service running and looking healthy — a listener that rejects everything is still a listener. Each has a line to read or a command to run that settles it.",
+      ],
+      troubleshooting: {
+        label: "Symptom, check, fix",
+        items: [
+          {
+            symptom: "The service starts and stays up, but every push is rejected.",
+            code: [
+              `journalctl -u relayium-serve -n 20 --no-pager
+# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.`,
+            ],
+            fix: "A service has no terminal, so it can never run the first-push approval prompt, and an unknown fingerprint is all it can see. Pre-authorize each sender: relayium id on the sending machine, relayium authorize <fingerprint> here — with the same --config-dir the unit uses. That warning is printed at startup, so it is in the log from the first line.",
+          },
+          {
+            symptom: "The service will not start at all, complaining about insecure permissions on id.key.",
+            code: [
+              `stat -c '%a %U %n' /etc/relayium/id.key
+# 400 relayium /etc/relayium/id.key`,
+            ],
+            fix: "The key must be exactly 0600. Not 0644, and — the part that catches people — not 0400 either, so tightening it further breaks the service just as surely as loosening it. chmod 600 the key and make sure it is owned by the unit's User=.",
+          },
+          {
+            symptom: "The sender reports that the connection was refused.",
+            code: [
+              `relayium push ./build relayium://drop.example.com:9031
+# hint: if the peer refused the connection, it may not have authorized this host.`,
+            ],
+            fix: "The receiver did not recognise this sender. Run relayium id on the sender and relayium authorize that fingerprint on the receiver. If you already did, check you did it under the unit's --config-dir: the trust file is per-directory, and a fingerprint authorized into ~/.config/relayium is invisible to a service reading /etc/relayium.",
+          },
+          {
+            symptom: "Pushes work when you run serve by hand, but not through the service or not from another machine.",
+            code: [
+              `sudo ss -tlnp | grep 9031`,
+            ],
+            fix: "Two separate causes with one check. If nothing is listening, the unit is not enabled — systemctl is-enabled relayium-serve. If it is listening, the port is blocked: open 9031 on the host firewall and in any cloud security group. A non-default --port must match the port in the sender's relayium://host:N.",
+          },
+          {
+            symptom: "A sync --delete sender's deletions never happen on this machine.",
+            code: [
+              `journalctl -u relayium-serve | grep -i delete`,
+            ],
+            fix: "Deletion is a receiver-side opt-in and is off by default: new and changed files still copy, and each skipped deletion is logged here as a warning. Add --allow-delete to the unit's ExecStart and restart. The sender asking for it is not enough, and that asymmetry is deliberate — a receiver never loses files because of a flag typed somewhere else.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -201,6 +327,45 @@ const zh = {
   sections: [
     {
       heading: "启动监听端",
+      prereqs: {
+        label: "开始之前你需要什么",
+        items: [
+          "两台机器上都装好 CLI。relayium version 会各自打印版本号；如果 shell 回答 command not found，说明那台还没装。",
+          "本机上一个用来接收文件的目录，以及装得下这些文件的磁盘空间。",
+          "一个发送方能访问到的地址，和一个放通的入站端口。不指定 --port 时 serve 监听 9031。",
+          "如果这台机器将来是没有终端运行的——那正是做成服务的意义——你需要事先拿到推送方的指纹。下面有专门一节讲这个，而它正是常驻接收端把一切都拒掉的最常见原因。",
+        ],
+      },
+      steps: [
+        {
+          text: "选好文件落地的位置，把监听器起起来。走到这一步不需要预先交换任何东西。",
+          code: ["relayium serve --dir ~/inbox"],
+        },
+        {
+          text: "在发送方机器上，按 relayium:// 地址往这台主机推一个文件。",
+          code: ["relayium push ./report.pdf relayium://drop.example.com:9031"],
+        },
+        {
+          text: "回到接收端，回答那个批准提示。按 y 会把该指纹写入 authorized_fingerprints，之后同一台机器再推就不会再问了。",
+        },
+        {
+          text: "确认文件真的落在了 --dir 里，而不是你启动 serve 时所在的那个目录。",
+          code: ["ls -l ~/inbox"],
+        },
+      ],
+      success: {
+        label: "一个正常的监听器长什么样",
+        body: [
+          "serve 一上来就会说明自己还没有已授权的对端，然后在新机器第一次推送时提示，此后每一次都安安静静。发送方退出码 0，文件出现在 --dir 里。",
+        ],
+        code: [
+          `$ relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+        ],
+      },
       body: [
         "serve 通过证书固定的 TLS 1.3 连接监听 daemon 直连推送（relayium://host:port），并把收到的内容写入某个目录。启动它不需要预先共享任何东西——不用复制指纹，也不用注册服务器：",
       ],
@@ -233,6 +398,16 @@ Accept and remember this peer? [y/N] y`,
     },
     {
       heading: "为非交互式场景预先授权对端",
+      steps: [
+        {
+          text: "在将要推送的机器上打印它的指纹。它是 64 位十六进制，标识的是那台机器而不是它的地址。",
+          code: ["relayium id"],
+        },
+        {
+          text: "在这台接收端上授权它——要用服务将来运行时相同的 --config-dir。用错用户执行、或者这边用默认路径而 unit 里用的是另一个，指纹就会写进服务永远不会读的那个文件里。",
+          code: ["relayium authorize 74318e3b… --config-dir /etc/relayium"],
+        },
+      ],
       body: [
         "当 serve 没有终端可以弹出提示时——作为 systemd 服务、后台进程，或通过管道运行——它无法询问，因此会拒绝任何它尚未识别的指纹。这时应该提前授权对端。在将要推送的那台机器上运行 relayium id 打印它的指纹；在接收方上，在第一次推送到达之前把它加进去：",
       ],
@@ -250,6 +425,34 @@ relayium authorize 74318e3b...`,
     },
     {
       heading: "在 systemd 下运行",
+      steps: [
+        {
+          text: "在服务存在之前，先授权每一个应该能推送的对端。服务无法弹提示，凡是不在信任列表里的一律拒绝。",
+        },
+        {
+          text: "把上面那份 unit 文件写到 /etc/systemd/system/relayium-serve.service，其中 --config-dir 要指向你刚才授权时用的那个固定路径。",
+        },
+        {
+          text: "重新加载 systemd 并启动服务，同时设为开机自启，这样重启后还会回来。",
+          code: ["sudo systemctl daemon-reload", "sudo systemctl enable --now relayium-serve"],
+        },
+        {
+          text: "确认它在运行，并且日志里没有那条「全部拒绝」的警告。两者之中只有后一条是这个场景特有的。",
+          code: ["systemctl is-active relayium-serve", "journalctl -u relayium-serve -n 20 --no-pager"],
+        },
+      ],
+      success: {
+        label: "一个正常的服务长什么样",
+        body: [
+          "is-active 回答 active，并且启动时那条「没有已授权对端」的警告不出现。这条警告是唯一一行能在任何发送方抱怨之前就告诉你：这个服务会拒掉每一次推送。",
+        ],
+        code: [
+          `$ systemctl is-active relayium-serve
+active
+$ journalctl -u relayium-serve -n 20 --no-pager | grep -c 'all pushes will be rejected'
+0`,
+        ],
+      },
       body: [
         "如果希望服务能在重启和崩溃后依然存活，把 serve 交给 systemd。把 --config-dir 指向一个固定路径，让主机的身份和它的对端允许列表在重启之间保持不变：",
       ],
@@ -270,7 +473,7 @@ WantedBy=multi-user.target`,
       bullets: [
         "在启用该服务之前，先为每一个应该能够推送的对端运行 relayium authorize <fingerprint>——服务本身无法弹出提示。",
         "systemctl enable --now relayium-serve 会启动它，并让它在每次开机时自动恢复运行。",
-        "让 /etc/relayium/id.key 只能被服务用户读取；权限过于宽松时 relayium 会拒绝加载该密钥。",
+        "/etc/relayium/id.key 的权限必须恰好是 0600，属主是 unit 里 User= 指定的用户。其他任何值 relayium 都拒绝加载——包括 0400，所以把它加固到比 0600 更严，和让它全局可读一样会让服务起不来。",
       ],
     },
     {
@@ -296,6 +499,55 @@ WantedBy=multi-user.target`,
         "--allow-delete 是接收方一侧的选择性开关；发送方仍然需要用 sync --delete 主动请求删除。",
         "如果不加这个选项，无论发送方请求什么，这台机器上都不会删除任何文件。",
       ],
+    },
+    {
+      heading: "出问题时怎么办",
+      body: [
+        "这五种里有四种会让服务照常运行、看着一切健康——一个把所有请求都拒掉的监听器，也仍然是个监听器。每一种都有一行可读的输出或一条可跑的命令来判定。",
+      ],
+      troubleshooting: {
+        label: "现象、检查、修复",
+        items: [
+          {
+            symptom: "服务起来了也一直在跑，但每一次推送都被拒绝。",
+            code: [
+              `journalctl -u relayium-serve -n 20 --no-pager
+# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.`,
+            ],
+            fix: "服务没有终端，所以它永远跑不了首次推送的批准提示，而它能看到的只有一个陌生指纹。请事先授权每个发送方：在发送方跑 relayium id，在这边跑 relayium authorize <指纹>——并且要用 unit 里那个 --config-dir。这条警告是启动时打印的，所以它从日志第一行起就在那里。",
+          },
+          {
+            symptom: "服务压根起不来，报 id.key 权限不安全。",
+            code: [
+              `stat -c '%a %U %n' /etc/relayium/id.key
+# 400 relayium /etc/relayium/id.key`,
+            ],
+            fix: "私钥权限必须恰好是 0600。不能是 0644，而且——这一点最容易踩——也不能是 0400，所以把它「加固得更严」和「放得更松」一样会让服务起不来。给它 chmod 600，并确认属主是 unit 里 User= 指定的那个用户。",
+          },
+          {
+            symptom: "发送方报告连接被拒绝。",
+            code: [
+              `relayium push ./build relayium://drop.example.com:9031
+# hint: if the peer refused the connection, it may not have authorized this host.`,
+            ],
+            fix: "接收端不认识这个发送方。在发送方跑 relayium id，把那个指纹在接收端 relayium authorize 一下。如果你已经做过了，那就检查是不是在 unit 的 --config-dir 下做的：信任文件是按目录存的，授权进 ~/.config/relayium 的指纹，对一个读 /etc/relayium 的服务来说根本不存在。",
+          },
+          {
+            symptom: "手动跑 serve 时推送正常，走服务就不行，或者换一台机器就不行。",
+            code: [
+              `sudo ss -tlnp | grep 9031`,
+            ],
+            fix: "两个不同的原因，一条检查就能分开。如果根本没有监听，说明 unit 没有 enable——用 systemctl is-enabled relayium-serve 确认。如果在监听，那就是端口被挡了：在主机防火墙和云安全组里放通 9031。用了非默认 --port 的话，它必须和发送方 relayium://host:N 里的端口一致。",
+          },
+          {
+            symptom: "sync --delete 发送方要求的删除在这台机器上从不发生。",
+            code: [
+              `journalctl -u relayium-serve | grep -i delete`,
+            ],
+            fix: "删除是接收端的显式选项，默认关闭：新增和变更的文件照常复制，每一次被跳过的删除都会在这边记一条警告。在 unit 的 ExecStart 上加 --allow-delete 再重启。光是发送方要求并不够，而这种不对称是刻意的——接收端不会因为别处敲了一个参数就丢文件。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -347,6 +599,45 @@ const ja = {
   sections: [
     {
       heading: "リスナーを起動する",
+      prereqs: {
+        label: "手順1の前に必要なもの",
+        items: [
+          "両方のマシンに CLI。relayium version はそれぞれでバージョン文字列を表示します。command not found と返るなら、そのマシンにはまだ入っていません。",
+          "このマシン上の受信用ディレクトリと、そこに届くものを収めるだけのディスク容量。",
+          "送信側から到達できるアドレスと、開いた受信ポート。--port を渡さない限り serve は 9031 で待ち受けます。",
+          "このマシンを端末なしで動かすつもりなら——サービス化の目的はまさにそこです——送信側のフィンガープリントを事前に用意してください。専用の節が下にあります。常時稼働の受信側がすべてを拒否する原因として、これが群を抜いて多いものです。",
+        ],
+      },
+      steps: [
+        {
+          text: "ファイルの着地先を決めて、リスナーを起動します。ここまでに事前共有が必要なものはありません。",
+          code: ["relayium serve --dir ~/inbox"],
+        },
+        {
+          text: "送信側のマシンから、relayium:// アドレスでこのホストに向けて push します。",
+          code: ["relayium push ./report.pdf relayium://drop.example.com:9031"],
+        },
+        {
+          text: "受信側に戻り、承認プロンプトに答えます。y と答えるとそのフィンガープリントが authorized_fingerprints に書かれ、以降の同じマシンからの push では二度と尋ねられません。",
+        },
+        {
+          text: "ファイルが serve を起動したディレクトリではなく、--dir に実際に届いたことを確認します。",
+          code: ["ls -l ~/inbox"],
+        },
+      ],
+      success: {
+        label: "正常なリスナーの見え方",
+        body: [
+          "serve はまず承認済みピアがないことを明示し、新しいマシンからの最初の push でプロンプトを出し、それ以降は何も言いません。送信側は終了コード0で終わり、ファイルは --dir にあります。",
+        ],
+        code: [
+          `$ relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+        ],
+      },
       body: [
         "serve は証明書ピンニング付き TLS 1.3 接続上でデーモン直結のプッシュ(relayium://host:port)を待ち受け、受け取った内容をあるディレクトリへ書き込みます。起動するのに事前共有は何も必要ありません——コピーしておくフィンガープリントも、登録しておくサーバーもありません:",
       ],
@@ -379,6 +670,16 @@ Accept and remember this peer? [y/N] y`,
     },
     {
       heading: "非対話的な環境のためにピアを事前承認する",
+      steps: [
+        {
+          text: "push する側のマシンでフィンガープリントを表示します。64桁の16進数で、アドレスではなくそのマシンを識別します。",
+          code: ["relayium id"],
+        },
+        {
+          text: "この受信側で承認します。サービスが動くときと同じ --config-dir を使ってください。別のユーザーで実行したり、ユニットが別のパスを使っているのに既定のパスで承認したりすると、フィンガープリントはサービスが決して読まないファイルに書かれます。",
+          code: ["relayium authorize 74318e3b… --config-dir /etc/relayium"],
+        },
+      ],
       body: [
         "serve がプロンプトを出せる端末を持たない場合——systemd サービス、バックグラウンドプロセス、パイプなど——尋ねることができないため、まだ認識していないフィンガープリントはすべて拒否します。代わりに事前にピアを承認しておきます。プッシュする側のマシンで relayium id を実行してフィンガープリントを表示し、受信側では最初のプッシュが届く前にそれを追加します:",
       ],
@@ -396,6 +697,34 @@ relayium authorize 74318e3b...`,
     },
     {
       heading: "systemd の下で実行する",
+      steps: [
+        {
+          text: "サービスを作る前に、push を許すピアをすべて承認しておきます。サービスはプロンプトを出せないため、すでに信頼されていないものはすべて拒否されます。",
+        },
+        {
+          text: "上のユニットファイルを /etc/systemd/system/relayium-serve.service に書きます。--config-dir は、いま承認に使ったのと同じ固定パスを指すようにします。",
+        },
+        {
+          text: "systemd を再読み込みしてサービスを起動し、再起動後も戻るよう有効化します。",
+          code: ["sudo systemctl daemon-reload", "sudo systemctl enable --now relayium-serve"],
+        },
+        {
+          text: "動作していること、そして「すべて拒否」の警告がログにないことを確認します。この構成に固有なのは後者だけです。",
+          code: ["systemctl is-active relayium-serve", "journalctl -u relayium-serve -n 20 --no-pager"],
+        },
+      ],
+      success: {
+        label: "正常なサービスの見え方",
+        body: [
+          "is-active は active と答え、承認済みピアがないという起動時の警告は出ません。この警告は、どの送信者が苦情を言うより先に「このサービスはすべての push を拒否する」と教えてくれる唯一の一行です。",
+        ],
+        code: [
+          `$ systemctl is-active relayium-serve
+active
+$ journalctl -u relayium-serve -n 20 --no-pager | grep -c 'all pushes will be rejected'
+0`,
+        ],
+      },
       body: [
         "再起動やクラッシュをまたいで生き残るサービスにするには、serve を systemd に任せます。--config-dir を固定パスに向けて、ホストのアイデンティティとピア許可リストが再起動をまたいでも維持されるようにします:",
       ],
@@ -416,7 +745,7 @@ WantedBy=multi-user.target`,
       bullets: [
         "このサービスを有効化する前に、プッシュを許可すべきすべてのピアに対して relayium authorize <fingerprint> を実行しておいてください——サービス自体はプロンプトを出せません。",
         "systemctl enable --now relayium-serve で起動し、起動のたびに復帰するようにします。",
-        "/etc/relayium/id.key はサービスユーザーだけが読めるようにしてください。権限が緩い鍵は relayium が読み込みを拒否します。",
+        "/etc/relayium/id.key のパーミッションはちょうど 0600 でなければならず、所有者はユニットの User= です。それ以外は relayium が拒否します——0400 も含まれるので、0600 より厳しくすることも、誰でも読める状態にしておくことと同じくらい確実にサービスを止めます。",
       ],
     },
     {
@@ -442,6 +771,55 @@ WantedBy=multi-user.target`,
         "--allow-delete は受信側で有効にするオプトインです。送信側は引き続き sync --delete で削除を要求する必要があります。",
         "このオプションを付けなければ、送信側が何を要求しても、このマシン上のファイルが削除されることはありません。",
       ],
+    },
+    {
+      heading: "うまくいかないとき",
+      body: [
+        "この5つのうち4つは、サービスが動いたまま健全に見えます——すべてを拒否するリスナーもまたリスナーです。どれにも、読めば分かる1行か、実行すれば決着がつくコマンドがあります。",
+      ],
+      troubleshooting: {
+        label: "症状、確認、対処",
+        items: [
+          {
+            symptom: "サービスは起動して動き続けているのに、push がすべて拒否される。",
+            code: [
+              `journalctl -u relayium-serve -n 20 --no-pager
+# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.`,
+            ],
+            fix: "サービスには端末がないため、初回 push の承認プロンプトを実行することができず、見えるのは見知らぬフィンガープリントだけです。各送信側を事前に承認してください。送信側で relayium id、こちらで relayium authorize <フィンガープリント> を、ユニットと同じ --config-dir で実行します。この警告は起動時に出るので、ログの最初から載っています。",
+          },
+          {
+            symptom: "id.key の権限が安全でないと言われ、サービスがまったく起動しない。",
+            code: [
+              `stat -c '%a %U %n' /etc/relayium/id.key
+# 400 relayium /etc/relayium/id.key`,
+            ],
+            fix: "鍵の権限はちょうど 0600 でなければなりません。0644 は当然として、見落としがちなのは 0400 も駄目だという点です。緩めるのと同じくらい確実に、締めすぎてもサービスは起動しません。鍵に chmod 600 を当て、ユニットの User= が所有者になっていることを確認してください。",
+          },
+          {
+            symptom: "送信側が「接続を拒否された」と報告する。",
+            code: [
+              `relayium push ./build relayium://drop.example.com:9031
+# hint: if the peer refused the connection, it may not have authorized this host.`,
+            ],
+            fix: "受信側がこの送信側を認識していません。送信側で relayium id を実行し、そのフィンガープリントを受信側で relayium authorize してください。すでに実行済みなら、ユニットの --config-dir の下で行ったかを確認します。信頼ファイルはディレクトリごとなので、~/.config/relayium に承認したフィンガープリントは /etc/relayium を読むサービスからは存在しないのと同じです。",
+          },
+          {
+            symptom: "手で serve を動かすと push できるのに、サービス経由や別マシンからだとできない。",
+            code: [
+              `sudo ss -tlnp | grep 9031`,
+            ],
+            fix: "原因は2つですが、確認は1つで足ります。何も待ち受けていなければユニットが有効化されていません——systemctl is-enabled relayium-serve で確認します。待ち受けているならポートが塞がれています。ホストのファイアウォールとクラウドのセキュリティグループで 9031 を開けてください。既定以外の --port を使う場合は、送信側の relayium://host:N のポートと一致している必要があります。",
+          },
+          {
+            symptom: "sync --delete の送信側が求めた削除が、このマシンでは決して起きない。",
+            code: [
+              `journalctl -u relayium-serve | grep -i delete`,
+            ],
+            fix: "削除は受信側のオプトインで、既定では無効です。新規・変更されたファイルは通常どおりコピーされ、スキップされた削除はこちらに警告として記録されます。ユニットの ExecStart に --allow-delete を足して再起動してください。送信側が求めるだけでは足りず、この非対称は意図的です——受信側が、よそで打たれたフラグのせいでファイルを失うことはありません。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -493,6 +871,45 @@ const ko = {
   sections: [
     {
       heading: "리스너 시작하기",
+      prereqs: {
+        label: "1단계 전에 필요한 것",
+        items: [
+          "두 기기 모두에 CLI. relayium version은 각각 버전 문자열을 출력합니다. command not found가 나오면 그 기기에는 아직 설치되지 않은 것입니다.",
+          "이 기기에서 파일을 받을 디렉터리와, 거기에 쌓일 만큼의 디스크 공간.",
+          "보내는 쪽에서 닿을 수 있는 주소와 열린 인바운드 포트. --port를 주지 않으면 serve는 9031에서 대기합니다.",
+          "이 기기를 터미널 없이 돌릴 예정이라면 — 서비스로 만드는 이유가 바로 그것입니다 — 보내는 쪽의 지문을 미리 확보하세요. 아래에 따로 절이 있으며, 상시 수신기가 모든 것을 거부하는 가장 흔한 원인이 바로 이것입니다.",
+        ],
+      },
+      steps: [
+        {
+          text: "파일이 떨어질 위치를 정하고 리스너를 시작합니다. 여기까지 오는 데 미리 주고받아야 할 것은 없습니다.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
+        {
+          text: "보내는 기기에서 relayium:// 주소로 이 호스트에 파일을 밀어 넣습니다.",
+          code: ["relayium push ./report.pdf relayium://drop.example.com:9031"],
+        },
+        {
+          text: "수신기로 돌아와 승인 프롬프트에 답합니다. y를 누르면 그 지문이 authorized_fingerprints에 기록되고, 같은 기기에서 오는 다음 전송부터는 다시 묻지 않습니다.",
+        },
+        {
+          text: "파일이 serve를 실행한 디렉터리가 아니라 --dir에 실제로 도착했는지 확인합니다.",
+          code: ["ls -l ~/inbox"],
+        },
+      ],
+      success: {
+        label: "정상적인 리스너의 모습",
+        body: [
+          "serve는 먼저 승인된 피어가 없다고 알리고, 새 기기의 첫 전송에서 프롬프트를 띄운 뒤 이후에는 조용합니다. 보내는 쪽은 종료 코드 0으로 끝나고 파일은 --dir 안에 있습니다.",
+        ],
+        code: [
+          `$ relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+        ],
+      },
       body: [
         "serve는 인증서 고정 TLS 1.3 연결을 통해 데몬 다이렉트 푸시(relayium://host:port)를 대기하고, 받은 내용을 어떤 디렉터리에 기록합니다. 시작하는 데 미리 공유해야 할 것은 없습니다——복사해 둘 핑거프린트도, 등록해 둘 서버도 없습니다:",
       ],
@@ -525,6 +942,16 @@ Accept and remember this peer? [y/N] y`,
     },
     {
       heading: "비대화형 환경을 위해 피어를 미리 승인하기",
+      steps: [
+        {
+          text: "보낼 기기에서 지문을 출력합니다. 64자리 16진수이며, 주소가 아니라 그 기기를 식별합니다.",
+          code: ["relayium id"],
+        },
+        {
+          text: "이 수신기에서 승인합니다 — 서비스가 실제로 사용할 --config-dir와 같은 값으로. 다른 사용자로 실행하거나, 유닛은 다른 경로를 쓰는데 기본 경로로 승인하면, 지문은 서비스가 결코 읽지 않는 파일에 기록됩니다.",
+          code: ["relayium authorize 74318e3b… --config-dir /etc/relayium"],
+        },
+      ],
       body: [
         "serve가 프롬프트를 띄울 터미널이 없을 때——systemd 서비스, 백그라운드 프로세스, 파이프——는 물어볼 수 없으므로 아직 인식하지 못한 핑거프린트를 모두 거부합니다. 대신 피어를 미리 승인해 두세요. 푸시할 기기에서 relayium id를 실행해 핑거프린트를 출력하고, 받는 쪽에서는 첫 푸시가 도착하기 전에 그것을 추가하세요:",
       ],
@@ -542,6 +969,34 @@ relayium authorize 74318e3b...`,
     },
     {
       heading: "systemd 아래에서 실행하기",
+      steps: [
+        {
+          text: "서비스를 만들기 전에, 전송을 허용할 모든 피어를 먼저 승인합니다. 서비스는 물어볼 수 없으므로 이미 신뢰되지 않은 것은 모두 거부됩니다.",
+        },
+        {
+          text: "위 유닛 파일을 /etc/systemd/system/relayium-serve.service에 씁니다. --config-dir는 방금 승인에 사용한 것과 같은 고정 경로를 가리켜야 합니다.",
+        },
+        {
+          text: "systemd를 다시 읽고 서비스를 시작하며, 재부팅 후에도 돌아오도록 활성화합니다.",
+          code: ["sudo systemctl daemon-reload", "sudo systemctl enable --now relayium-serve"],
+        },
+        {
+          text: "동작 중인지, 그리고 로그에 「전부 거부」 경고가 없는지 확인합니다. 이 구성에 고유한 것은 뒤쪽뿐입니다.",
+          code: ["systemctl is-active relayium-serve", "journalctl -u relayium-serve -n 20 --no-pager"],
+        },
+      ],
+      success: {
+        label: "정상적인 서비스의 모습",
+        body: [
+          "is-active가 active라고 답하고, 승인된 피어가 없다는 시작 경고가 나타나지 않습니다. 그 경고는 어떤 발신자가 불평하기도 전에 이 서비스가 모든 전송을 거부하리라는 것을 알려 주는 유일한 한 줄입니다.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-serve
+active
+$ journalctl -u relayium-serve -n 20 --no-pager | grep -c 'all pushes will be rejected'
+0`,
+        ],
+      },
       body: [
         "재부팅과 충돌을 견디는 서비스로 만들려면 serve를 systemd에 맡기세요. --config-dir을 고정된 경로로 지정해 호스트의 신원과 피어 허용 목록이 재시작 간에도 그대로 유지되게 하세요:",
       ],
@@ -562,7 +1017,7 @@ WantedBy=multi-user.target`,
       bullets: [
         "이 서비스를 활성화하기 전에, 푸시를 허용해야 할 모든 피어에 대해 relayium authorize <fingerprint>를 실행해 두세요——서비스 자체는 프롬프트를 띄울 수 없습니다.",
         "systemctl enable --now relayium-serve로 시작하고 부팅할 때마다 다시 올라오게 하세요.",
-        "/etc/relayium/id.key는 서비스 사용자만 읽을 수 있게 하세요——권한이 느슨한 키는 relayium이 불러오기를 거부합니다.",
+        "/etc/relayium/id.key의 권한은 정확히 0600이어야 하고 소유자는 유닛의 User=여야 합니다. 그 외에는 relayium이 모두 거부합니다——0400도 포함되므로, 0600보다 더 조이는 것도 누구나 읽게 두는 것만큼이나 확실하게 서비스를 멈춥니다.",
       ],
     },
     {
@@ -588,6 +1043,55 @@ WantedBy=multi-user.target`,
         "--allow-delete는 받는 쪽에서 선택하는 옵트인입니다. 보내는 쪽은 여전히 sync --delete로 삭제를 요청해야 합니다.",
         "이 옵션이 없으면 보내는 쪽이 무엇을 요청하든 이 기기에서는 아무 파일도 삭제되지 않습니다.",
       ],
+    },
+    {
+      heading: "잘 안 될 때",
+      body: [
+        "다섯 중 넷은 서비스가 계속 돌면서 멀쩡해 보입니다 — 전부 거부하는 리스너도 리스너입니다. 각각 읽어서 판단할 한 줄이나 실행해서 결론 낼 명령이 있습니다.",
+      ],
+      troubleshooting: {
+        label: "증상, 확인, 해결",
+        items: [
+          {
+            symptom: "서비스가 시작되어 계속 떠 있는데 모든 전송이 거부됩니다.",
+            code: [
+              `journalctl -u relayium-serve -n 20 --no-pager
+# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.`,
+            ],
+            fix: "서비스에는 터미널이 없으므로 첫 전송 승인 프롬프트를 띄울 수 없고, 보이는 것은 낯선 지문뿐입니다. 각 발신자를 미리 승인하세요. 보내는 기기에서 relayium id, 여기서 relayium authorize <지문>을 유닛과 같은 --config-dir로 실행합니다. 이 경고는 시작할 때 출력되므로 로그 첫 줄부터 남아 있습니다.",
+          },
+          {
+            symptom: "id.key 권한이 안전하지 않다며 서비스가 아예 시작되지 않습니다.",
+            code: [
+              `stat -c '%a %U %n' /etc/relayium/id.key
+# 400 relayium /etc/relayium/id.key`,
+            ],
+            fix: "키 권한은 정확히 0600이어야 합니다. 0644는 물론이고, 사람들이 자주 걸리는 부분인데 0400도 안 됩니다. 더 조이는 것도 푸는 것만큼이나 확실하게 서비스를 못 뜨게 합니다. 키에 chmod 600을 적용하고 유닛의 User=가 소유자인지 확인하세요.",
+          },
+          {
+            symptom: "보내는 쪽이 연결이 거부되었다고 보고합니다.",
+            code: [
+              `relayium push ./build relayium://drop.example.com:9031
+# hint: if the peer refused the connection, it may not have authorized this host.`,
+            ],
+            fix: "수신기가 이 발신자를 알지 못합니다. 보내는 쪽에서 relayium id를 실행하고 그 지문을 수신기에서 relayium authorize 하세요. 이미 했다면 유닛의 --config-dir 아래에서 했는지 확인합니다. 신뢰 파일은 디렉터리마다 따로이므로, ~/.config/relayium에 승인한 지문은 /etc/relayium을 읽는 서비스에게는 없는 것과 같습니다.",
+          },
+          {
+            symptom: "직접 serve를 실행하면 전송이 되는데 서비스로는 안 되거나 다른 기기에서는 안 됩니다.",
+            code: [
+              `sudo ss -tlnp | grep 9031`,
+            ],
+            fix: "원인은 둘이지만 확인은 하나로 갈립니다. 아무것도 대기 중이 아니라면 유닛이 활성화되지 않은 것입니다 — systemctl is-enabled relayium-serve. 대기 중이라면 포트가 막힌 것입니다. 호스트 방화벽과 클라우드 보안 그룹에서 9031을 여세요. 기본값이 아닌 --port를 쓴다면 보내는 쪽 relayium://host:N의 포트와 같아야 합니다.",
+          },
+          {
+            symptom: "sync --delete 발신자가 요청한 삭제가 이 기기에서는 전혀 일어나지 않습니다.",
+            code: [
+              `journalctl -u relayium-serve | grep -i delete`,
+            ],
+            fix: "삭제는 수신 측이 켜야 하는 옵션이며 기본은 꺼져 있습니다. 새로 생기거나 바뀐 파일은 그대로 복사되고, 건너뛴 삭제마다 여기에 경고가 남습니다. 유닛의 ExecStart에 --allow-delete를 넣고 재시작하세요. 보내는 쪽이 요청하는 것만으로는 부족하며, 이 비대칭은 의도적입니다 — 수신기가 다른 곳에서 입력된 플래그 때문에 파일을 잃는 일은 없습니다.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -639,6 +1143,45 @@ const de = {
   sections: [
     {
       heading: "Den Listener starten",
+      prereqs: {
+        label: "Was du vor Schritt 1 brauchst",
+        items: [
+          "Die CLI auf beiden Rechnern. relayium version gibt auf jedem eine Versionszeile aus; antwortet die Shell mit command not found, ist sie dort noch nicht installiert.",
+          "Ein Verzeichnis für eingehende Dateien auf diesem Rechner und den Plattenplatz für das, was darin landen wird.",
+          "Eine für den Sender erreichbare Adresse und einen offenen eingehenden Port. Ohne --port lauscht serve auf 9031.",
+          "Wenn dieser Rechner ohne Terminal laufen soll — und genau darum geht es bei einem Dienst — den Fingerprint des Senders, vorab. Dazu gibt es unten einen eigenen Abschnitt, und er ist mit Abstand der häufigste Grund, warum ein dauerhaft laufender Empfänger alles ablehnt.",
+        ],
+      },
+      steps: [
+        {
+          text: "Leg fest, wo Dateien landen sollen, und starte den Listener. Bis hierher muss nichts vorab ausgetauscht werden.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
+        {
+          text: "Schieb vom sendenden Rechner aus etwas an diesen Host, adressiert über seine relayium://-Adresse.",
+          code: ["relayium push ./report.pdf relayium://drop.example.com:9031"],
+        },
+        {
+          text: "Zurück auf dem Empfänger: beantworte die Freigabeabfrage. Ein y schreibt den Fingerprint in authorized_fingerprints, und spätere Pushes desselben Rechners fragen nie wieder.",
+        },
+        {
+          text: "Prüfe, dass die Datei wirklich in --dir gelandet ist und nicht in dem Verzeichnis, aus dem du serve gestartet hast.",
+          code: ["ls -l ~/inbox"],
+        },
+      ],
+      success: {
+        label: "So sieht ein funktionierender Listener aus",
+        body: [
+          "serve sagt gleich zu Beginn, dass es noch keine autorisierten Peers hat, fragt beim ersten Push eines neuen Rechners nach und bleibt bei jedem weiteren still. Der Sender endet mit 0, und die Datei liegt in --dir.",
+        ],
+        code: [
+          `$ relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+        ],
+      },
       body: [
         "serve lauscht über eine TLS-1.3-Verbindung mit Pinning auf Pushes per daemon-direct (relayium://host:port) und schreibt das Empfangene in ein Verzeichnis. Zum Starten muss nichts vorab geteilt werden — keine Fingerprints zum Kopieren, kein Server zum Registrieren:",
       ],
@@ -671,6 +1214,16 @@ Accept and remember this peer? [y/N] y`,
     },
     {
       heading: "Peers für nicht-interaktive Setups vorab autorisieren",
+      steps: [
+        {
+          text: "Lass den sendenden Rechner seinen Fingerprint ausgeben. Es sind 64 Hex-Zeichen, und sie identifizieren den Rechner, nicht seine Adresse.",
+          code: ["relayium id"],
+        },
+        {
+          text: "Autorisiere ihn auf diesem Empfänger — mit demselben --config-dir, unter dem der Dienst später läuft. Autorisierst du als falscher Benutzer oder im Standardpfad, während die Unit einen anderen nutzt, landet der Fingerprint in einer Datei, die der Dienst nie liest.",
+          code: ["relayium authorize 74318e3b… --config-dir /etc/relayium"],
+        },
+      ],
       body: [
         "Hat serve kein Terminal, an dem es nachfragen kann — ein systemd-Dienst, ein Hintergrundprozess, eine Pipe —, kann es nicht fragen und lehnt daher jeden noch nicht erkannten Fingerprint ab. Autorisiere Peers stattdessen im Voraus. Auf der Maschine, die pushen wird, führst du relayium id aus, um ihren Fingerprint auszugeben; auf dem Empfänger trägst du ihn ein, bevor der erste Push eintrifft:",
       ],
@@ -688,6 +1241,34 @@ relayium authorize 74318e3b...`,
     },
     {
       heading: "Unter systemd betreiben",
+      steps: [
+        {
+          text: "Autorisiere jeden Peer, der pushen darf, bevor es den Dienst überhaupt gibt. Er kann nicht nachfragen, also wird alles abgelehnt, dem nicht schon vertraut wird.",
+        },
+        {
+          text: "Schreib die Unit oben nach /etc/systemd/system/relayium-serve.service, mit --config-dir auf denselben festen Pfad, unter dem du autorisiert hast.",
+        },
+        {
+          text: "Lade systemd neu und starte den Dienst — mit enable, damit er nach einem Neustart wiederkommt.",
+          code: ["sudo systemctl daemon-reload", "sudo systemctl enable --now relayium-serve"],
+        },
+        {
+          text: "Prüfe, dass er läuft und dass die Warnung, die alles ablehnt, nicht im Log steht. Nur die zweite Prüfung ist für dieses Setup spezifisch.",
+          code: ["systemctl is-active relayium-serve", "journalctl -u relayium-serve -n 20 --no-pager"],
+        },
+      ],
+      success: {
+        label: "So sieht ein funktionierender Dienst aus",
+        body: [
+          "is-active antwortet active, und die Startwarnung über fehlende autorisierte Peers taucht nicht auf. Diese Warnung ist die eine Zeile, die dir schon vor der ersten Beschwerde eines Senders sagt, dass dieser Dienst jeden Push abweisen wird.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-serve
+active
+$ journalctl -u relayium-serve -n 20 --no-pager | grep -c 'all pushes will be rejected'
+0`,
+        ],
+      },
       body: [
         "Für einen Dienst, der Neustarts und Abstürze übersteht, überlässt du serve systemd. Richte --config-dir auf einen festen Pfad, damit Identität und Peer-Allow-Liste des Hosts über Neustarts hinweg erhalten bleiben:",
       ],
@@ -708,7 +1289,7 @@ WantedBy=multi-user.target`,
       bullets: [
         "Bevor du den Dienst aktivierst, führe relayium authorize <fingerprint> für jeden Peer aus, der pushen dürfen soll — der Dienst selbst kann nicht nachfragen.",
         "systemctl enable --now relayium-serve startet ihn und bringt ihn bei jedem Boot wieder hoch.",
-        "Halte /etc/relayium/id.key nur für den Dienstbenutzer lesbar; relayium verweigert das Laden eines Schlüssels mit zu lockeren Berechtigungen.",
+        "/etc/relayium/id.key muss exakt den Modus 0600 haben und dem User= der Unit gehören. Alles andere lehnt relayium ab — auch 0400, strenger als 0600 zu setzen legt den Dienst also genauso sicher lahm wie ihn für alle lesbar zu lassen.",
       ],
     },
     {
@@ -734,6 +1315,55 @@ WantedBy=multi-user.target`,
         "--allow-delete ist ein Opt-in auf Empfängerseite; der Sender muss weiterhin mit sync --delete danach fragen.",
         "Ohne diese Option wird auf dieser Maschine niemals etwas gelöscht, egal was ein Sender anfordert.",
       ],
+    },
+    {
+      heading: "Wenn es nicht funktioniert",
+      body: [
+        "Bei vier dieser fünf Fehler läuft der Dienst weiter und sieht gesund aus — ein Listener, der alles ablehnt, ist immer noch ein Listener. Zu jedem gibt es eine Zeile zum Lesen oder einen Befehl zum Ausführen, der die Sache entscheidet.",
+      ],
+      troubleshooting: {
+        label: "Symptom, Prüfung, Lösung",
+        items: [
+          {
+            symptom: "Der Dienst startet und bleibt oben, aber jeder Push wird abgelehnt.",
+            code: [
+              `journalctl -u relayium-serve -n 20 --no-pager
+# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.`,
+            ],
+            fix: "Ein Dienst hat kein Terminal, kann also die Freigabeabfrage beim ersten Push nie ausführen — und alles, was er sieht, ist ein unbekannter Fingerprint. Autorisiere jeden Sender vorab: relayium id auf dem sendenden Rechner, relayium authorize <Fingerprint> hier, mit demselben --config-dir wie in der Unit. Die Warnung wird beim Start ausgegeben und steht damit ab der ersten Logzeile darin.",
+          },
+          {
+            symptom: "Der Dienst startet gar nicht und beklagt unsichere Berechtigungen auf id.key.",
+            code: [
+              `stat -c '%a %U %n' /etc/relayium/id.key
+# 400 relayium /etc/relayium/id.key`,
+            ],
+            fix: "Der Schlüssel muss exakt 0600 haben. Nicht 0644 — und, das ist die Stelle, an der es die meisten erwischt, auch nicht 0400: strenger setzen bricht den Dienst genauso zuverlässig wie lockerer setzen. chmod 600 auf den Schlüssel, und der Eigentümer muss das User= der Unit sein.",
+          },
+          {
+            symptom: "Der Sender meldet, die Verbindung sei abgelehnt worden.",
+            code: [
+              `relayium push ./build relayium://drop.example.com:9031
+# hint: if the peer refused the connection, it may not have authorized this host.`,
+            ],
+            fix: "Der Empfänger kennt diesen Sender nicht. Führ relayium id auf dem Sender aus und relayium authorize mit diesem Fingerprint auf dem Empfänger. Wenn du das schon getan hast, prüfe, ob unter dem --config-dir der Unit: die Vertrauensdatei hängt am Verzeichnis, und ein nach ~/.config/relayium autorisierter Fingerprint existiert für einen Dienst, der /etc/relayium liest, schlicht nicht.",
+          },
+          {
+            symptom: "Pushes klappen, wenn du serve von Hand startest, aber nicht über den Dienst oder nicht von einem anderen Rechner.",
+            code: [
+              `sudo ss -tlnp | grep 9031`,
+            ],
+            fix: "Zwei verschiedene Ursachen, eine Prüfung. Lauscht nichts, ist die Unit nicht aktiviert — systemctl is-enabled relayium-serve. Lauscht sie, ist der Port zu: öffne 9031 in der Host-Firewall und in jeder Cloud-Security-Group. Ein abweichendes --port muss zum Port in der relayium://host:N des Senders passen.",
+          },
+          {
+            symptom: "Die Löschungen eines sync --delete-Senders passieren auf diesem Rechner nie.",
+            code: [
+              `journalctl -u relayium-serve | grep -i delete`,
+            ],
+            fix: "Löschen ist eine Opt-in-Entscheidung der Empfängerseite und standardmäßig aus: neue und geänderte Dateien werden weiterhin kopiert, jede übersprungene Löschung landet hier als Warnung im Log. Ergänze --allow-delete im ExecStart der Unit und starte neu. Dass der Sender danach fragt, genügt nicht, und diese Asymmetrie ist Absicht — ein Empfänger verliert keine Dateien wegen eines Flags, das woanders getippt wurde.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -785,6 +1415,45 @@ const fr = {
   sections: [
     {
       heading: "Démarrer le processus à l'écoute",
+      prereqs: {
+        label: "Ce qu'il vous faut avant l'étape 1",
+        items: [
+          "La CLI sur les deux machines. relayium version affiche un numéro de version sur chacune ; si le shell répond command not found, elle n'y est pas encore installée.",
+          "Un répertoire de réception sur cette machine, et l'espace disque pour ce qui va y atterrir.",
+          "Une adresse joignable par l'expéditeur et un port entrant ouvert. Sans --port, serve écoute sur 9031.",
+          "Si cette machine doit tourner sans terminal — et c'est tout l'intérêt d'un service — l'empreinte de l'expéditeur, à l'avance. Une section y est consacrée plus bas, et c'est de loin la première raison pour laquelle un récepteur permanent refuse tout.",
+        ],
+      },
+      steps: [
+        {
+          text: "Choisissez où les fichiers doivent atterrir et démarrez l'écouteur. Rien n'a besoin d'être partagé au préalable pour en arriver là.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
+        {
+          text: "Depuis la machine émettrice, poussez quelque chose vers cet hôte par son adresse relayium://.",
+          code: ["relayium push ./report.pdf relayium://drop.example.com:9031"],
+        },
+        {
+          text: "De retour sur le récepteur, répondez à la demande d'approbation. Un y écrit l'empreinte dans authorized_fingerprints, et les envois suivants de la même machine ne demandent plus rien.",
+        },
+        {
+          text: "Vérifiez que le fichier a bien atterri dans --dir et non dans le répertoire depuis lequel vous avez lancé serve.",
+          code: ["ls -l ~/inbox"],
+        },
+      ],
+      success: {
+        label: "À quoi ressemble un écouteur qui fonctionne",
+        body: [
+          "serve annonce d'emblée qu'il n'a aucun pair autorisé, demande confirmation au premier envoi d'une machine inconnue, puis reste muet à chaque envoi suivant. L'expéditeur se termine avec 0 et le fichier est dans --dir.",
+        ],
+        code: [
+          `$ relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+        ],
+      },
       body: [
         "serve écoute les envois en daemon-direct (relayium://host:port) via une connexion TLS 1.3 avec épinglage et écrit ce qu'il reçoit dans un répertoire. Rien n'a besoin d'être partagé au préalable pour le démarrer — aucune empreinte à copier, aucun serveur à enregistrer :",
       ],
@@ -817,6 +1486,16 @@ Accept and remember this peer? [y/N] y`,
     },
     {
       heading: "Autoriser des pairs à l'avance pour les configurations non interactives",
+      steps: [
+        {
+          text: "Sur la machine qui poussera, affichez son empreinte. Ce sont 64 caractères hexadécimaux, et ils identifient la machine, pas son adresse.",
+          code: ["relayium id"],
+        },
+        {
+          text: "Autorisez-la sur ce récepteur — avec le même --config-dir que celui sous lequel tournera le service. Autoriser sous un autre utilisateur, ou dans le chemin par défaut alors que l'unité en utilise un autre, écrit l'empreinte dans un fichier que le service ne lit jamais.",
+          code: ["relayium authorize 74318e3b… --config-dir /etc/relayium"],
+        },
+      ],
       body: [
         "Quand serve n'a pas de terminal où demander confirmation — un service systemd, un processus en arrière-plan, un pipe — il ne peut pas interroger et refuse donc toute empreinte qu'il ne reconnaît pas encore. Autorisez plutôt les pairs à l'avance. Sur la machine qui va envoyer, exécutez relayium id pour afficher son empreinte ; sur le récepteur, ajoutez-la avant que le premier envoi n'arrive :",
       ],
@@ -834,6 +1513,34 @@ relayium authorize 74318e3b...`,
     },
     {
       heading: "Exécuter sous systemd",
+      steps: [
+        {
+          text: "Autorisez chaque pair censé pouvoir pousser, avant même que le service existe. Il ne peut rien demander, donc tout ce qui n'est pas déjà de confiance est refusé.",
+        },
+        {
+          text: "Écrivez l'unité ci-dessus dans /etc/systemd/system/relayium-serve.service, avec --config-dir pointant sur le chemin fixe utilisé pour l'autorisation.",
+        },
+        {
+          text: "Rechargez systemd et démarrez le service, en l'activant pour qu'il revienne après un redémarrage.",
+          code: ["sudo systemctl daemon-reload", "sudo systemctl enable --now relayium-serve"],
+        },
+        {
+          text: "Vérifiez qu'il tourne et que l'avertissement qui refuse tout est absent du journal. Seule la seconde vérification est propre à cette installation.",
+          code: ["systemctl is-active relayium-serve", "journalctl -u relayium-serve -n 20 --no-pager"],
+        },
+      ],
+      success: {
+        label: "À quoi ressemble un service qui fonctionne",
+        body: [
+          "is-active répond active, et l'avertissement de démarrage sur l'absence de pairs autorisés n'apparaît pas. Cet avertissement est la seule ligne qui vous dit, avant qu'un expéditeur ne se plaigne, que ce service refusera chaque envoi.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-serve
+active
+$ journalctl -u relayium-serve -n 20 --no-pager | grep -c 'all pushes will be rejected'
+0`,
+        ],
+      },
       body: [
         "Pour un service qui survit aux redémarrages et aux plantages, confiez serve à systemd. Faites pointer --config-dir vers un chemin fixe pour que l'identité de l'hôte et sa liste de pairs autorisés restent stables d'un redémarrage à l'autre :",
       ],
@@ -880,6 +1587,55 @@ WantedBy=multi-user.target`,
         "--allow-delete est une option activée côté récepteur ; l'émetteur doit tout de même la demander avec sync --delete.",
         "Sans cette option, rien n'est jamais supprimé sur cette machine, quoi que demande un émetteur.",
       ],
+    },
+    {
+      heading: "Quand ça ne marche pas",
+      body: [
+        "Dans quatre de ces cinq pannes, le service continue de tourner et paraît sain — un écouteur qui refuse tout reste un écouteur. Chacune se tranche par une ligne à lire ou une commande à exécuter.",
+      ],
+      troubleshooting: {
+        label: "Symptôme, vérification, correction",
+        items: [
+          {
+            symptom: "Le service démarre et reste en vie, mais chaque envoi est refusé.",
+            code: [
+              `journalctl -u relayium-serve -n 20 --no-pager
+# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.`,
+            ],
+            fix: "Un service n'a pas de terminal, il ne peut donc jamais exécuter la demande d'approbation du premier envoi, et tout ce qu'il voit est une empreinte inconnue. Autorisez chaque expéditeur à l'avance : relayium id sur la machine émettrice, relayium authorize <empreinte> ici, avec le même --config-dir que l'unité. Cet avertissement est affiché au démarrage, il figure donc dans le journal dès la première ligne.",
+          },
+          {
+            symptom: "Le service ne démarre pas du tout et se plaint de permissions non sûres sur id.key.",
+            code: [
+              `stat -c '%a %U %n' /etc/relayium/id.key
+# 400 relayium /etc/relayium/id.key`,
+            ],
+            fix: "La clé doit être exactement en 0600. Pas 0644 — et, c'est là que ça piège, pas 0400 non plus : la resserrer casse le service aussi sûrement que la relâcher. Faites chmod 600 sur la clé et assurez-vous qu'elle appartient au User= de l'unité.",
+          },
+          {
+            symptom: "L'expéditeur signale que la connexion a été refusée.",
+            code: [
+              `relayium push ./build relayium://drop.example.com:9031
+# hint: if the peer refused the connection, it may not have authorized this host.`,
+            ],
+            fix: "Le récepteur ne reconnaît pas cet expéditeur. Lancez relayium id sur l'expéditeur et relayium authorize avec cette empreinte sur le récepteur. Si c'est déjà fait, vérifiez que ça l'a été sous le --config-dir de l'unité : le fichier de confiance est propre à un répertoire, et une empreinte autorisée dans ~/.config/relayium n'existe tout simplement pas pour un service qui lit /etc/relayium.",
+          },
+          {
+            symptom: "Les envois passent quand vous lancez serve à la main, mais pas via le service ou pas depuis une autre machine.",
+            code: [
+              `sudo ss -tlnp | grep 9031`,
+            ],
+            fix: "Deux causes distinctes, une seule vérification pour les séparer. Si rien n'écoute, l'unité n'est pas activée — systemctl is-enabled relayium-serve. Si elle écoute, le port est bloqué : ouvrez 9031 dans le pare-feu de l'hôte et dans tout groupe de sécurité cloud. Un --port non standard doit correspondre au port du relayium://host:N de l'expéditeur.",
+          },
+          {
+            symptom: "Les suppressions demandées par un expéditeur sync --delete ne se produisent jamais ici.",
+            code: [
+              `journalctl -u relayium-serve | grep -i delete`,
+            ],
+            fix: "La suppression se décide côté récepteur et elle est désactivée par défaut : les fichiers nouveaux et modifiés sont toujours copiés, et chaque suppression ignorée est journalisée ici en avertissement. Ajoutez --allow-delete à l'ExecStart de l'unité et redémarrez. Que l'expéditeur le demande ne suffit pas, et cette asymétrie est voulue — un récepteur ne perd pas de fichiers à cause d'une option tapée ailleurs.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -931,6 +1687,45 @@ const ar = {
   sections: [
     {
       heading: "ابدأ المُستمِع",
+      prereqs: {
+        label: "ما تحتاجه قبل الخطوة 1",
+        items: [
+          "الـ CLI على الجهازين معًا. يطبع relayium version سطر إصدار على كلٍّ منهما، وإذا ردّت الصدفة بـ command not found فهو غير مثبَّت هناك بعد.",
+          "دليل للملفات الواردة على هذا الجهاز، ومساحة قرص تكفي لما سيصل إليه.",
+          "عنوان يستطيع المرسِل الوصول إليه، ومنفذ وارد مفتوح. وما لم تمرّر ‎--port‎ فإن serve يُنصِت على 9031.",
+          "إن كان هذا الجهاز سيعمل بلا طرفية — وهذا هو مغزى تحويله إلى خدمة — فستحتاج بصمة المرسِل مسبقًا. لها قسم كامل أدناه، وهي أكثر الأسباب شيوعًا لرفض المستقبِل الدائم كلَّ شيء.",
+        ],
+      },
+      steps: [
+        {
+          text: "اختر مكان وصول الملفات وشغّل المُنصِت. لا شيء يحتاج إلى مشاركة مسبقة حتى هذه النقطة.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
+        {
+          text: "من الجهاز المرسِل، ادفع ملفًا إلى هذا المضيف عبر عنوان ‎relayium://‎ الخاص به.",
+          code: ["relayium push ./report.pdf relayium://drop.example.com:9031"],
+        },
+        {
+          text: "عد إلى المستقبِل وأجب عن طلب الموافقة. الإجابة y تكتب البصمة في authorized_fingerprints، فلا يُسأل عن الدفعات التالية من الجهاز نفسه مطلقًا.",
+        },
+        {
+          text: "تأكّد أن الملف وصل فعلًا إلى ‎--dir‎ وليس إلى الدليل الذي شغّلت منه serve.",
+          code: ["ls -l ~/inbox"],
+        },
+      ],
+      success: {
+        label: "كيف يبدو مُنصِت يعمل بشكل صحيح",
+        body: [
+          "يعلن serve منذ البداية أنه بلا أقران مُصرَّح لهم، ثم يسأل عند أول دفعة من جهاز جديد ويصمت في كل ما بعدها. ينتهي المرسِل بالرمز 0 ويكون الملف داخل ‎--dir‎.",
+        ],
+        code: [
+          `$ relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+        ],
+      },
       body: [
         "يستمع serve إلى عمليات الدفع بأسلوب daemon direct (relayium://host:port) عبر اتصال TLS 1.3 مثبَّت ويكتب ما يستقبله في مجلد. لا حاجة إلى مشاركة أي شيء مسبقًا لبدئه — لا بصمات لنسخها، ولا خادم للتسجيل فيه:",
       ],
@@ -963,6 +1758,16 @@ Accept and remember this peer? [y/N] y`,
     },
     {
       heading: "فوّض النظراء مسبقًا للإعدادات غير التفاعلية",
+      steps: [
+        {
+          text: "على الجهاز الذي سيدفع، اطبع بصمته. إنها 64 حرفًا ست عشريًا وتُعرِّف الجهاز نفسه لا عنوانه.",
+          code: ["relayium id"],
+        },
+        {
+          text: "صرّح له على هذا المستقبِل — بالـ ‎--config-dir‎ نفسه الذي ستعمل به الخدمة. فالتصريح بمستخدم آخر، أو بالمسار الافتراضي بينما تستعمل الوحدة مسارًا غيره، يكتب البصمة في ملف لا تقرؤه الخدمة أبدًا.",
+          code: ["relayium authorize 74318e3b… --config-dir /etc/relayium"],
+        },
+      ],
       body: [
         "حين لا يملك serve طرفيةً يطالب عليها — خدمة systemd، أو عملية في الخلفية، أو أنبوب — فإنه لا يستطيع السؤال، ولذلك يرفض أي بصمة لا يعرفها مسبقًا. بدلًا من ذلك، فوّض النظراء مسبقًا. على الآلة التي ستدفع، شغّل relayium id لطباعة بصمتها؛ وعلى المُستقبِل، أضِفها قبل وصول أول دفعة:",
       ],
@@ -980,6 +1785,34 @@ relayium authorize 74318e3b...`,
     },
     {
       heading: "شغّله تحت systemd",
+      steps: [
+        {
+          text: "صرّح لكل قرين يُفترض أن يستطيع الدفع، قبل وجود الخدمة أصلًا. فهي لا تستطيع السؤال، وكل ما ليس موثوقًا سلفًا مرفوض.",
+        },
+        {
+          text: "اكتب ملف الوحدة أعلاه في ‎/etc/systemd/system/relayium-serve.service‎، بحيث يشير ‎--config-dir‎ إلى المسار الثابت نفسه الذي صرّحت تحته.",
+        },
+        {
+          text: "أعد تحميل systemd وشغّل الخدمة، مع تفعيلها لتعود بعد إعادة التشغيل.",
+          code: ["sudo systemctl daemon-reload", "sudo systemctl enable --now relayium-serve"],
+        },
+        {
+          text: "تأكّد أنها تعمل وأن التحذير الذي يرفض كل شيء غائب عن السجل. والثاني وحده هو الخاص بهذا الإعداد.",
+          code: ["systemctl is-active relayium-serve", "journalctl -u relayium-serve -n 20 --no-pager"],
+        },
+      ],
+      success: {
+        label: "كيف تبدو خدمة تعمل بشكل صحيح",
+        body: [
+          "يجيب is-active بـ active، ولا يظهر تحذير الإقلاع عن غياب الأقران المُصرَّح لهم. وذلك التحذير هو السطر الوحيد الذي يخبرك، قبل أن يشتكي أي مرسِل، أن هذه الخدمة سترفض كل دفعة.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-serve
+active
+$ journalctl -u relayium-serve -n 20 --no-pager | grep -c 'all pushes will be rejected'
+0`,
+        ],
+      },
       body: [
         "للحصول على خدمة تصمد أمام عمليات إعادة التشغيل والأعطال، سلّم serve إلى systemd. وجّه --config-dir إلى مسار ثابت حتى تبقى هوية المضيف وقائمة نظرائه المفوَّضين في مكانها عبر عمليات إعادة التشغيل:",
       ],
@@ -1026,6 +1859,55 @@ WantedBy=multi-user.target`,
         "--allow-delete اشتراك اختياري على جانب المُستقبِل؛ ولا يزال على المُرسِل أن يطلبه بـ sync --delete.",
         "بدونه، لا يُحذَف أي شيء أبدًا على هذه الآلة، مهما طلب المُرسِل.",
       ],
+    },
+    {
+      heading: "حين لا ينجح الأمر",
+      body: [
+        "في أربع من هذه الإخفاقات الخمسة تبقى الخدمة تعمل وتبدو سليمة — فالمُنصِت الذي يرفض كل شيء يظل مُنصِتًا. ولكلٍّ منها سطر تقرؤه أو أمر تشغّله يحسم المسألة.",
+      ],
+      troubleshooting: {
+        label: "العَرَض، الفحص، الإصلاح",
+        items: [
+          {
+            symptom: "تبدأ الخدمة وتظل تعمل، لكن كل دفعة تُرفَض.",
+            code: [
+              `journalctl -u relayium-serve -n 20 --no-pager
+# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.`,
+            ],
+            fix: "الخدمة بلا طرفية، فلا يمكنها أبدًا تنفيذ طلب الموافقة عند أول دفعة، وكل ما تراه بصمة مجهولة. صرّح لكل مرسِل مسبقًا: relayium id على الجهاز المرسِل، وrelayium authorize <البصمة> هنا، بالـ ‎--config-dir‎ نفسه المستخدَم في الوحدة. وهذا التحذير يُطبع عند الإقلاع، فهو موجود في السجل من سطره الأول.",
+          },
+          {
+            symptom: "لا تبدأ الخدمة إطلاقًا وتشتكي من أذونات غير آمنة على id.key.",
+            code: [
+              `stat -c '%a %U %n' /etc/relayium/id.key
+# 400 relayium /etc/relayium/id.key`,
+            ],
+            fix: "يجب أن تكون أذونات المفتاح 0600 بالضبط. ليس 0644، والأهم — وهنا يقع أكثر الناس — ليس 0400 أيضًا، فتشديدها أكثر يعطّل الخدمة بالقدر نفسه الذي يعطّلها به تخفيفها. نفّذ chmod 600 على المفتاح وتأكّد أن مالكه هو المستخدم المحدَّد في ‎User=‎ داخل الوحدة.",
+          },
+          {
+            symptom: "يبلّغ المرسِل بأن الاتصال قد رُفِض.",
+            code: [
+              `relayium push ./build relayium://drop.example.com:9031
+# hint: if the peer refused the connection, it may not have authorized this host.`,
+            ],
+            fix: "المستقبِل لا يعرف هذا المرسِل. شغّل relayium id على المرسِل، وصرّح لتلك البصمة على المستقبِل بـ relayium authorize. وإن كنت فعلت ذلك سلفًا فتحقّق أنك فعلته تحت ‎--config-dir‎ الخاص بالوحدة: فملف الثقة مرتبط بالدليل، والبصمة المُصرَّح بها في ‎~/.config/relayium‎ غير موجودة أصلًا بالنسبة لخدمة تقرأ ‎/etc/relayium‎.",
+          },
+          {
+            symptom: "الدفع ينجح حين تشغّل serve يدويًا، لكنه يفشل عبر الخدمة أو من جهاز آخر.",
+            code: [
+              `sudo ss -tlnp | grep 9031`,
+            ],
+            fix: "سببان مختلفان يفصل بينهما فحص واحد. إن لم يكن هناك أي إنصات فالوحدة غير مفعَّلة — استخدم systemctl is-enabled relayium-serve. وإن كانت تُنصِت فالمنفذ مغلق: افتح 9031 في جدار حماية المضيف وفي أي مجموعة أمان سحابية. وأي ‎--port‎ غير افتراضي يجب أن يطابق المنفذ في ‎relayium://host:N‎ لدى المرسِل.",
+          },
+          {
+            symptom: "عمليات الحذف التي يطلبها مرسِل sync --delete لا تحدث على هذا الجهاز أبدًا.",
+            code: [
+              `journalctl -u relayium-serve | grep -i delete`,
+            ],
+            fix: "الحذف اختيار يفعّله الطرف المستقبِل وهو معطَّل افتراضيًا: الملفات الجديدة والمعدَّلة تُنسخ كالمعتاد، وكل عملية حذف متخطَّاة تُسجَّل هنا كتحذير. أضف ‎--allow-delete‎ إلى ExecStart في الوحدة وأعد التشغيل. ولا يكفي أن يطلبها المرسِل، وهذا التفاوت مقصود — فالمستقبِل لا يفقد ملفات بسبب راية كُتبت في مكان آخر.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -1077,6 +1959,45 @@ const es = {
   sections: [
     {
       heading: "Iniciar el proceso a la escucha",
+      prereqs: {
+        label: "Lo que necesitas antes del paso 1",
+        items: [
+          "La CLI en las dos máquinas. relayium version imprime una cadena de versión en cada una; si el shell responde command not found, ahí todavía no está instalada.",
+          "Un directorio para los archivos entrantes en esta máquina, y el disco para lo que vaya a caer en él.",
+          "Una dirección que el emisor pueda alcanzar y un puerto entrante abierto. Sin --port, serve escucha en el 9031.",
+          "Si esta máquina va a funcionar sin terminal —y ese es justamente el sentido de un servicio—, la huella del emisor, por adelantado. Hay una sección dedicada más abajo, y es con diferencia el motivo más frecuente de que un receptor permanente lo rechace todo.",
+        ],
+      },
+      steps: [
+        {
+          text: "Elige dónde deben caer los archivos y arranca el receptor. Hasta aquí no hace falta compartir nada de antemano.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
+        {
+          text: "Desde la máquina emisora, empuja algo hacia este host por su dirección relayium://.",
+          code: ["relayium push ./report.pdf relayium://drop.example.com:9031"],
+        },
+        {
+          text: "De vuelta en el receptor, responde a la petición de aprobación. Una y escribe esa huella en authorized_fingerprints, y los envíos posteriores de la misma máquina ya no vuelven a preguntar.",
+        },
+        {
+          text: "Comprueba que el archivo aterrizó de verdad en --dir y no en el directorio desde el que lanzaste serve.",
+          code: ["ls -l ~/inbox"],
+        },
+      ],
+      success: {
+        label: "Qué aspecto tiene un receptor que funciona",
+        body: [
+          "serve avisa de entrada de que no tiene pares autorizados, pregunta en el primer envío de una máquina nueva y calla en todos los siguientes. El emisor termina con 0 y el archivo está en --dir.",
+        ],
+        code: [
+          `$ relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+        ],
+      },
       body: [
         "serve escucha envíos daemon directo (relayium://host:port) a través de una conexión TLS 1.3 con anclaje y escribe lo que recibe en un directorio. No hace falta compartir nada de antemano para iniciarlo — ninguna huella que copiar, ningún servidor que registrar:",
       ],
@@ -1109,6 +2030,16 @@ Accept and remember this peer? [y/N] y`,
     },
     {
       heading: "Autorizar pares de antemano para configuraciones no interactivas",
+      steps: [
+        {
+          text: "En la máquina que va a empujar, imprime su huella. Son 64 caracteres hexadecimales e identifican a la máquina, no a su dirección.",
+          code: ["relayium id"],
+        },
+        {
+          text: "Autorízala en este receptor, con el mismo --config-dir bajo el que se ejecutará el servicio. Autorizar con otro usuario, o en la ruta por omisión mientras la unidad usa otra, deja la huella en un archivo que el servicio nunca lee.",
+          code: ["relayium authorize 74318e3b… --config-dir /etc/relayium"],
+        },
+      ],
       body: [
         "Cuando serve no tiene una terminal en la que preguntar — un servicio systemd, un proceso en segundo plano, una tubería — no puede preguntar, así que rechaza cualquier huella que aún no reconozca. En su lugar, autoriza los pares con antelación. En la máquina que va a enviar, ejecuta relayium id para imprimir su huella; en el receptor, añádela antes de que llegue el primer envío:",
       ],
@@ -1126,6 +2057,34 @@ relayium authorize 74318e3b...`,
     },
     {
       heading: "Ejecutarlo con systemd",
+      steps: [
+        {
+          text: "Autoriza a todos los pares que deban poder empujar, antes incluso de que exista el servicio. No puede preguntar, así que rechaza todo lo que no sea ya de confianza.",
+        },
+        {
+          text: "Escribe la unidad de arriba en /etc/systemd/system/relayium-serve.service, con --config-dir apuntando a la misma ruta fija bajo la que autorizaste.",
+        },
+        {
+          text: "Recarga systemd y arranca el servicio, habilitándolo para que vuelva tras un reinicio.",
+          code: ["sudo systemctl daemon-reload", "sudo systemctl enable --now relayium-serve"],
+        },
+        {
+          text: "Comprueba que está en marcha y que la advertencia que lo rechaza todo no aparece en su registro. Solo la segunda comprobación es específica de este montaje.",
+          code: ["systemctl is-active relayium-serve", "journalctl -u relayium-serve -n 20 --no-pager"],
+        },
+      ],
+      success: {
+        label: "Qué aspecto tiene un servicio que funciona",
+        body: [
+          "is-active responde active, y la advertencia de arranque sobre no tener pares autorizados no aparece. Esa advertencia es la única línea que te dice, antes de que se queje ningún emisor, que este servicio va a rechazar todos los envíos.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-serve
+active
+$ journalctl -u relayium-serve -n 20 --no-pager | grep -c 'all pushes will be rejected'
+0`,
+        ],
+      },
       body: [
         "Para un servicio que sobreviva a reinicios y caídas, entrega serve a systemd. Apunta --config-dir a una ruta fija para que la identidad del host y su lista de pares permitidos permanezcan intactas entre reinicios:",
       ],
@@ -1172,6 +2131,55 @@ WantedBy=multi-user.target`,
         "--allow-delete es una opción del lado del receptor; el remitente todavía tiene que solicitarla con sync --delete.",
         "Sin ella, nunca se elimina nada en esta máquina, sin importar lo que solicite un remitente.",
       ],
+    },
+    {
+      heading: "Cuando no funciona",
+      body: [
+        "En cuatro de estos cinco fallos el servicio sigue en marcha y parece sano: un receptor que lo rechaza todo sigue siendo un receptor. Cada uno se zanja con una línea que leer o una orden que ejecutar.",
+      ],
+      troubleshooting: {
+        label: "Síntoma, comprobación, solución",
+        items: [
+          {
+            symptom: "El servicio arranca y se mantiene, pero rechaza todos los envíos.",
+            code: [
+              `journalctl -u relayium-serve -n 20 --no-pager
+# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.`,
+            ],
+            fix: "Un servicio no tiene terminal, así que nunca puede ejecutar la aprobación del primer envío, y lo único que ve es una huella desconocida. Autoriza cada emisor por adelantado: relayium id en la máquina emisora y relayium authorize <huella> aquí, con el mismo --config-dir que usa la unidad. Esa advertencia se imprime al arrancar, así que está en el registro desde la primera línea.",
+          },
+          {
+            symptom: "El servicio no arranca en absoluto y se queja de permisos inseguros en id.key.",
+            code: [
+              `stat -c '%a %U %n' /etc/relayium/id.key
+# 400 relayium /etc/relayium/id.key`,
+            ],
+            fix: "La clave debe tener exactamente 0600. Ni 0644 ni —y aquí es donde cae casi todo el mundo— 0400: apretarla más rompe el servicio con la misma seguridad que aflojarla. Hazle chmod 600 y asegúrate de que pertenece al User= de la unidad.",
+          },
+          {
+            symptom: "El emisor informa de que se rechazó la conexión.",
+            code: [
+              `relayium push ./build relayium://drop.example.com:9031
+# hint: if the peer refused the connection, it may not have authorized this host.`,
+            ],
+            fix: "El receptor no reconoce a este emisor. Ejecuta relayium id en el emisor y relayium authorize con esa huella en el receptor. Si ya lo hiciste, comprueba que fue bajo el --config-dir de la unidad: el archivo de confianza es por directorio, y una huella autorizada en ~/.config/relayium sencillamente no existe para un servicio que lee /etc/relayium.",
+          },
+          {
+            symptom: "Los envíos funcionan cuando ejecutas serve a mano, pero no por el servicio o no desde otra máquina.",
+            code: [
+              `sudo ss -tlnp | grep 9031`,
+            ],
+            fix: "Dos causas distintas que una sola comprobación separa. Si no hay nada escuchando, la unidad no está habilitada: systemctl is-enabled relayium-serve. Si está escuchando, el puerto está cerrado: abre el 9031 en el cortafuegos del host y en cualquier grupo de seguridad de la nube. Un --port no estándar tiene que coincidir con el puerto del relayium://host:N del emisor.",
+          },
+          {
+            symptom: "Los borrados que pide un emisor con sync --delete no ocurren nunca en esta máquina.",
+            code: [
+              `journalctl -u relayium-serve | grep -i delete`,
+            ],
+            fix: "El borrado se activa en el lado receptor y viene desactivado: los archivos nuevos y modificados se siguen copiando, y cada borrado omitido queda aquí como advertencia en el registro. Añade --allow-delete al ExecStart de la unidad y reinicia. Que el emisor lo pida no basta, y esa asimetría es deliberada: un receptor no pierde archivos por una opción escrita en otro sitio.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -1223,6 +2231,45 @@ const pt = {
   sections: [
     {
       heading: "Iniciar o processo à escuta",
+      prereqs: {
+        label: "O que você precisa antes do passo 1",
+        items: [
+          "A CLI nas duas máquinas. relayium version imprime uma linha de versão em cada uma; se o shell responder command not found, ela ainda não está instalada ali.",
+          "Um diretório para os arquivos recebidos nesta máquina, e o disco para o que vai cair nele.",
+          "Um endereço que o remetente alcance e uma porta de entrada aberta. Sem --port, o serve escuta na 9031.",
+          "Se esta máquina vai rodar sem terminal — e é exatamente esse o sentido de virar um serviço —, a impressão digital do remetente, com antecedência. Há uma seção dedicada a isso abaixo, e é de longe o motivo mais comum de um receptor permanente recusar tudo.",
+        ],
+      },
+      steps: [
+        {
+          text: "Escolha onde os arquivos devem cair e inicie o receptor. Até aqui nada precisa ser combinado de antemão.",
+          code: ["relayium serve --dir ~/inbox"],
+        },
+        {
+          text: "Da máquina que envia, empurre algo para este host pelo endereço relayium:// dele.",
+          code: ["relayium push ./report.pdf relayium://drop.example.com:9031"],
+        },
+        {
+          text: "De volta ao receptor, responda ao pedido de aprovação. Um y grava essa impressão digital em authorized_fingerprints, e os envios seguintes da mesma máquina não perguntam mais.",
+        },
+        {
+          text: "Confirme que o arquivo caiu mesmo em --dir e não no diretório de onde você iniciou o serve.",
+          code: ["ls -l ~/inbox"],
+        },
+      ],
+      success: {
+        label: "Como é um receptor que funciona",
+        body: [
+          "O serve avisa logo de cara que não tem pares autorizados, pergunta no primeiro envio de uma máquina nova e fica em silêncio em todos os seguintes. Quem envia termina com 0 e o arquivo está em --dir.",
+        ],
+        code: [
+          `$ relayium serve --dir ~/inbox
+no authorized peers yet — you'll be asked to approve each new peer on its first push.
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y`,
+        ],
+      },
       body: [
         "O serve escuta envios daemon direto (relayium://host:port) por uma conexão TLS 1.3 com fixação e grava o que recebe em um diretório. Nada precisa ser compartilhado de antemão para iniciá-lo — nenhuma impressão digital para copiar, nenhum servidor para registrar:",
       ],
@@ -1255,6 +2302,16 @@ Accept and remember this peer? [y/N] y`,
     },
     {
       heading: "Pré-autorizar pares para configurações não interativas",
+      steps: [
+        {
+          text: "Na máquina que vai empurrar, imprima a impressão digital dela. São 64 caracteres hexadecimais e identificam a máquina, não o endereço.",
+          code: ["relayium id"],
+        },
+        {
+          text: "Autorize-a neste receptor, com o mesmo --config-dir sob o qual o serviço vai rodar. Autorizar como outro usuário, ou no caminho padrão enquanto a unidade usa outro, grava a impressão digital num arquivo que o serviço nunca lê.",
+          code: ["relayium authorize 74318e3b… --config-dir /etc/relayium"],
+        },
+      ],
       body: [
         "Quando o serve não tem um terminal onde perguntar — um serviço systemd, um processo em segundo plano, um pipe — ele não pode perguntar, então rejeita qualquer impressão digital que ainda não reconheça. Em vez disso, autorize os pares com antecedência. Na máquina que vai enviar, execute relayium id para imprimir a impressão digital dela; no receptor, adicione-a antes que o primeiro envio chegue:",
       ],
@@ -1272,6 +2329,34 @@ relayium authorize 74318e3b...`,
     },
     {
       heading: "Executá-lo com systemd",
+      steps: [
+        {
+          text: "Autorize todos os pares que devem poder empurrar, antes mesmo de o serviço existir. Ele não consegue perguntar, então recusa tudo que já não seja confiável.",
+        },
+        {
+          text: "Escreva a unidade acima em /etc/systemd/system/relayium-serve.service, com --config-dir apontando para o mesmo caminho fixo sob o qual você autorizou.",
+        },
+        {
+          text: "Recarregue o systemd e inicie o serviço, habilitando-o para que volte depois de um reboot.",
+          code: ["sudo systemctl daemon-reload", "sudo systemctl enable --now relayium-serve"],
+        },
+        {
+          text: "Confirme que está rodando e que o aviso que recusa tudo não aparece no log. Só a segunda checagem é específica desta montagem.",
+          code: ["systemctl is-active relayium-serve", "journalctl -u relayium-serve -n 20 --no-pager"],
+        },
+      ],
+      success: {
+        label: "Como é um serviço que funciona",
+        body: [
+          "is-active responde active, e o aviso de inicialização sobre não haver pares autorizados não aparece. Esse aviso é a única linha que diz, antes de qualquer remetente reclamar, que este serviço vai recusar todo envio.",
+        ],
+        code: [
+          `$ systemctl is-active relayium-serve
+active
+$ journalctl -u relayium-serve -n 20 --no-pager | grep -c 'all pushes will be rejected'
+0`,
+        ],
+      },
       body: [
         "Para um serviço que sobrevive a reinicializações e falhas, entregue o serve ao systemd. Aponte --config-dir para um caminho fixo para que a identidade do host e sua lista de pares autorizados permaneçam no lugar entre reinicializações:",
       ],
@@ -1319,6 +2404,55 @@ WantedBy=multi-user.target`,
         "Sem ela, nada é jamais excluído nesta máquina, não importa o que um remetente solicite.",
       ],
     },
+    {
+      heading: "Quando não funciona",
+      body: [
+        "Em quatro dessas cinco falhas o serviço continua rodando e parece saudável — um receptor que recusa tudo ainda é um receptor. Cada uma se resolve com uma linha para ler ou um comando para rodar.",
+      ],
+      troubleshooting: {
+        label: "Sintoma, checagem, correção",
+        items: [
+          {
+            symptom: "O serviço inicia e continua de pé, mas todo envio é recusado.",
+            code: [
+              `journalctl -u relayium-serve -n 20 --no-pager
+# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.`,
+            ],
+            fix: "Um serviço não tem terminal, então nunca consegue executar a aprovação do primeiro envio, e tudo que ele vê é uma impressão digital desconhecida. Autorize cada remetente antes: relayium id na máquina que envia e relayium authorize <impressão> aqui, com o mesmo --config-dir que a unidade usa. Esse aviso é impresso na inicialização, então está no log desde a primeira linha.",
+          },
+          {
+            symptom: "O serviço não inicia de jeito nenhum e reclama de permissões inseguras no id.key.",
+            code: [
+              `stat -c '%a %U %n' /etc/relayium/id.key
+# 400 relayium /etc/relayium/id.key`,
+            ],
+            fix: "A chave precisa estar exatamente em 0600. Nem 0644 e — é aqui que quase todo mundo tropeça — nem 0400: apertar mais quebra o serviço com a mesma certeza que afrouxar. Dê chmod 600 na chave e confirme que ela pertence ao User= da unidade.",
+          },
+          {
+            symptom: "Quem envia relata que a conexão foi recusada.",
+            code: [
+              `relayium push ./build relayium://drop.example.com:9031
+# hint: if the peer refused the connection, it may not have authorized this host.`,
+            ],
+            fix: "O receptor não reconhece esse remetente. Rode relayium id na máquina que envia e relayium authorize com essa impressão no receptor. Se já fez isso, verifique se foi sob o --config-dir da unidade: o arquivo de confiança é por diretório, e uma impressão autorizada em ~/.config/relayium simplesmente não existe para um serviço que lê /etc/relayium.",
+          },
+          {
+            symptom: "Os envios funcionam quando você roda o serve na mão, mas não pelo serviço ou não de outra máquina.",
+            code: [
+              `sudo ss -tlnp | grep 9031`,
+            ],
+            fix: "Duas causas distintas que uma única checagem separa. Se nada estiver escutando, a unidade não está habilitada: systemctl is-enabled relayium-serve. Se estiver escutando, a porta está bloqueada: abra a 9031 no firewall do host e em qualquer grupo de segurança da nuvem. Um --port fora do padrão precisa bater com a porta do relayium://host:N de quem envia.",
+          },
+          {
+            symptom: "As exclusões pedidas por um remetente com sync --delete nunca acontecem nesta máquina.",
+            code: [
+              `journalctl -u relayium-serve | grep -i delete`,
+            ],
+            fix: "A exclusão é uma opção do lado receptor e vem desligada: arquivos novos e alterados continuam sendo copiados, e cada exclusão ignorada fica aqui como aviso no log. Acrescente --allow-delete ao ExecStart da unidade e reinicie. O remetente pedir não basta, e essa assimetria é proposital — um receptor não perde arquivos por causa de uma opção digitada em outro lugar.",
+          },
+        ],
+      },
+    },
   ],
   faq: {
     heading: "Perguntas frequentes",
@@ -1360,6 +2494,6 @@ WantedBy=multi-user.target`,
 export default {
   slug: "guides/run-relayium-as-an-always-on-service",
   published: "2026-07-09",
-  updated: "2026-07-12",
+  updated: "2026-08-06",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

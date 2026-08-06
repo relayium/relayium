@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="Relayium を常時稼働の受信サービスとして実行する" />
     <meta name="twitter:description" content="relayium serve を起動したままにして、どのピアからでもいつでもプッシュを受け取れるようにします——証明書ピンニング付き TLS 上でのデーモン直結です。初回プッシュの承認、フィンガープリントの事前認可、systemd (Linux) または launchd (macOS) による起動時の自動実行、そして --allow-delete について解説します。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium を常時稼働の受信サービスとして実行する","description":"relayium serve を起動したままにして、どのピアからでもいつでもプッシュを受け取れるようにします——証明書ピンニング付き TLS 上でのデーモン直結です。初回プッシュの承認、フィンガープリントの事前認可、systemd (Linux) または launchd (macOS) による起動時の自動実行、そして --allow-delete について解説します。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/run-relayium-as-an-always-on-service/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium を常時稼働の受信サービスとして実行する"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"serve はデフォルトでどのポートを待ち受けますか?","acceptedAnswer":{"@type":"Answer","text":"9031 です。リスナー側(serve --port N)と送信側の宛先(relayium://host:N)の両方を --port で変更できます。"}},{"@type":"Question","name":"すべてのプッシュを手動で承認する必要がありますか?","acceptedAnswer":{"@type":"Answer","text":"あるフィンガープリントの最初のプッシュだけです。しかもそれは serve が端末付きで動いているときだけ表示されます。それ以降は記憶されます。serve を非対話的(systemd、パイプ)に動かす場合、プロンプトはまったく出ず未知のピアは拒否されます——その場合は relayium authorize で事前に承認してください。"}},{"@type":"Question","name":"送信側は私の常時稼働の受信機上のファイルを削除できますか?","acceptedAnswer":{"@type":"Answer","text":"serve を --allow-delete 付きで起動し、かつ送信側が sync --delete を実行している場合に限ります。--allow-delete がなければ削除は静かにスキップされ、それ以外は通常どおり転送されます。"}},{"@type":"Question","name":"常時稼働の受信サービスを動かすのは無料ですか?","acceptedAnswer":{"@type":"Answer","text":"はい。relayium serve は無料でセルフホスト可能な CLI の一部です——接続のどちら側もアカウントは不要で、有料プランもありません。"}},{"@type":"Question","name":"serve はアイデンティティとピアリストをどこに保存しますか?","acceptedAnswer":{"@type":"Answer","text":"デフォルトでは ~/.config/relayium です(id.key/id.crt はこのホストのアイデンティティ、authorized_fingerprints は許可リスト)。systemd サービスの場合は --config-dir を /etc/relayium のような固定の場所に向けてください。"}},{"@type":"Question","name":"macOS で起動時に serve を実行するには?","acceptedAnswer":{"@type":"Answer","text":"macOS に systemd はありません——launchd を使います。serve を /Library/LaunchDaemons に LaunchDaemon としてインストールする(起動時に開始。UserName を設定して自分のユーザーとして実行)か、~/Library/LaunchAgents に LaunchAgent としてインストールします(ログイン時に開始)。このガイドには編集してすぐ使える plist があります。Homebrew サービスはありません。launchd は serve にプロンプト用のターミナルを与えないため、先に relayium authorize でプッシュ元を事前認可してください。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium を常時稼働の受信サービスとして実行する","description":"relayium serve を起動したままにして、どのピアからでもいつでもプッシュを受け取れるようにします——証明書ピンニング付き TLS 上でのデーモン直結です。初回プッシュの承認、フィンガープリントの事前認可、systemd (Linux) または launchd (macOS) による起動時の自動実行、そして --allow-delete について解説します。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/run-relayium-as-an-always-on-service/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium を常時稼働の受信サービスとして実行する"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"serve はデフォルトでどのポートを待ち受けますか?","acceptedAnswer":{"@type":"Answer","text":"9031 です。リスナー側(serve --port N)と送信側の宛先(relayium://host:N)の両方を --port で変更できます。"}},{"@type":"Question","name":"すべてのプッシュを手動で承認する必要がありますか?","acceptedAnswer":{"@type":"Answer","text":"あるフィンガープリントの最初のプッシュだけです。しかもそれは serve が端末付きで動いているときだけ表示されます。それ以降は記憶されます。serve を非対話的(systemd、パイプ)に動かす場合、プロンプトはまったく出ず未知のピアは拒否されます——その場合は relayium authorize で事前に承認してください。"}},{"@type":"Question","name":"送信側は私の常時稼働の受信機上のファイルを削除できますか?","acceptedAnswer":{"@type":"Answer","text":"serve を --allow-delete 付きで起動し、かつ送信側が sync --delete を実行している場合に限ります。--allow-delete がなければ削除は静かにスキップされ、それ以外は通常どおり転送されます。"}},{"@type":"Question","name":"常時稼働の受信サービスを動かすのは無料ですか?","acceptedAnswer":{"@type":"Answer","text":"はい。relayium serve は無料でセルフホスト可能な CLI の一部です——接続のどちら側もアカウントは不要で、有料プランもありません。"}},{"@type":"Question","name":"serve はアイデンティティとピアリストをどこに保存しますか?","acceptedAnswer":{"@type":"Answer","text":"デフォルトでは ~/.config/relayium です(id.key/id.crt はこのホストのアイデンティティ、authorized_fingerprints は許可リスト)。systemd サービスの場合は --config-dir を /etc/relayium のような固定の場所に向けてください。"}},{"@type":"Question","name":"macOS で起動時に serve を実行するには?","acceptedAnswer":{"@type":"Answer","text":"macOS に systemd はありません——launchd を使います。serve を /Library/LaunchDaemons に LaunchDaemon としてインストールする(起動時に開始。UserName を設定して自分のユーザーとして実行)か、~/Library/LaunchAgents に LaunchAgent としてインストールします(ログイン時に開始)。このガイドには編集してすぐ使える plist があります。Homebrew サービスはありません。launchd は serve にプロンプト用のターミナルを与えないため、先に relayium authorize でプッシュ元を事前認可してください。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,7 +100,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最終更新: <bdi>2026-07-12</bdi></p>
+      <p class="updated">最終更新: <bdi>2026-08-06</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/run-relayium-as-an-always-on-service/">English</a><a href="/zh/guides/run-relayium-as-an-always-on-service/">中文</a><a href="/ja/guides/run-relayium-as-an-always-on-service/" aria-current="true">日本語</a><a href="/ko/guides/run-relayium-as-an-always-on-service/">한국어</a><a href="/de/guides/run-relayium-as-an-always-on-service/">Deutsch</a><a href="/fr/guides/run-relayium-as-an-always-on-service/">Français</a><a href="/ar/guides/run-relayium-as-an-always-on-service/">العربية</a><a href="/es/guides/run-relayium-as-an-always-on-service/">Español</a><a href="/pt/guides/run-relayium-as-an-always-on-service/">Português</a></nav>
       <p class="lead">relayium serve --once は1回の受信を処理して終了します——たまに1回だけ pull する用途には十分です。しかし、あるマシンを常駐の受け皿にしたい場合——毎晩バックアップが届くホームサーバー、CI がビルド成果物をプッシュするビルドマシン、スマートフォンからいつでも写真を送れる NAS——には、毎回手動で起動するのではなく、serve をずっと動かし続けたいはずです。</p>
       <p class="lead">本ガイドでは、長時間稼働するリスナーの起動、誰にプッシュを許可するかの承認、端末の前に誰もいない場合のためのピア事前承認、systemd 下での実行、そして sync --delete を使う送信側に削除をミラーさせる方法を扱います。</p>
@@ -92,10 +109,17 @@ footer a{color:var(--text-h);text-decoration:none}
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>自分でファイルを選びたい、または Windows の場合は、リリースページからバイナリを取得してください——relayium.com/cli にすべてのインストール方法があります（Go があれば go build -o relayium ./cmd/relayium も可）。</li><li>relayium --version でインストールを確認できます。これをしないと以下のコマンドは「command not found」と出るだけです。</li></ul>
       <h2>リスナーを起動する</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">手順1の前に必要なもの</p><ul><li>両方のマシンに CLI。relayium version はそれぞれでバージョン文字列を表示します。command not found と返るなら、そのマシンにはまだ入っていません。</li><li>このマシン上の受信用ディレクトリと、そこに届くものを収めるだけのディスク容量。</li><li>送信側から到達できるアドレスと、開いた受信ポート。--port を渡さない限り serve は 9031 で待ち受けます。</li><li>このマシンを端末なしで動かすつもりなら——サービス化の目的はまさにそこです——送信側のフィンガープリントを事前に用意してください。専用の節が下にあります。常時稼働の受信側がすべてを拒否する原因として、これが群を抜いて多いものです。</li></ul></div>
       <p>serve は証明書ピンニング付き TLS 1.3 接続上でデーモン直結のプッシュ(relayium://host:port)を待ち受け、受け取った内容をあるディレクトリへ書き込みます。起動するのに事前共有は何も必要ありません——コピーしておくフィンガープリントも、登録しておくサーバーもありません:</p>
       <pre><code>relayium serve --dir ~/inbox
 relayium serve --dir /srv/drop --port 9040   # デフォルト以外のポート
 relayium serve --dir ~/inbox --allow-delete  # sync --delete を使う送信側に削除をミラーさせる</code></pre>
+      <ol class="steps" data-block="steps"><li><p>ファイルの着地先を決めて、リスナーを起動します。ここまでに事前共有が必要なものはありません。</p><pre><code>relayium serve --dir ~/inbox</code></pre></li><li><p>送信側のマシンから、relayium:// アドレスでこのホストに向けて push します。</p><pre><code>relayium push ./report.pdf relayium://drop.example.com:9031</code></pre></li><li><p>受信側に戻り、承認プロンプトに答えます。y と答えるとそのフィンガープリントが authorized_fingerprints に書かれ、以降の同じマシンからの push では二度と尋ねられません。</p></li><li><p>ファイルが serve を起動したディレクトリではなく、--dir に実際に届いたことを確認します。</p><pre><code>ls -l ~/inbox</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">正常なリスナーの見え方</p><p>serve はまず承認済みピアがないことを明示し、新しいマシンからの最初の push でプロンプトを出し、それ以降は何も言いません。送信側は終了コード0で終わり、ファイルは --dir にあります。</p><pre><code>$ relayium serve --dir ~/inbox
+no authorized peers yet — you&#39;ll be asked to approve each new peer on its first push.
+Incoming push from 203.0.113.7:54021
+  fingerprint: 74318e3b…
+Accept and remember this peer? [y/N] y</code></pre></div>
       <ul><li>--dir はファイルの置き場所を設定します(デフォルトはカレントディレクトリ)。</li><li>--port は待ち受けポートを設定します(デフォルトは 9031)。送信側が別の場所にいる場合はファイアウォールで開放してください。</li><li>--once を付けなければ、serve は停止させるかプロセスマネージャーが再起動するまで動き続け、プッシュを受け入れ続けます——これが常時稼働サービスたる所以です。</li></ul>
       <h2>誰にプッシュを許可するか承認する</h2>
       <p>新しいピアが初めてプッシュすると、serve がターミナルで動いていれば、そのプッシュがどこから来たか、フィンガープリントは何かを表示し、承認するかどうかを尋ねます——SSH が初めての接続先を尋ねるのと同じ要領です:</p>
@@ -110,6 +134,7 @@ relayium id
 
 # この常時稼働の受信側で: 事前に承認しておく
 relayium authorize 74318e3b...</code></pre>
+      <ol class="steps" data-block="steps"><li><p>push する側のマシンでフィンガープリントを表示します。64桁の16進数で、アドレスではなくそのマシンを識別します。</p><pre><code>relayium id</code></pre></li><li><p>この受信側で承認します。サービスが動くときと同じ --config-dir を使ってください。別のユーザーで実行したり、ユニットが別のパスを使っているのに既定のパスで承認したりすると、フィンガープリントはサービスが決して読まないファイルに書かれます。</p><pre><code>relayium authorize 74318e3b… --config-dir /etc/relayium</code></pre></li></ol>
       <ul><li>authorize は冪等です——すでに信頼しているフィンガープリントに対して再度実行しても何も起きません。</li><li>アイデンティティと信頼のファイルは --config-dir で指定したディレクトリにあり、デフォルトは ~/.config/relayium です(id.key/id.crt はこのホストのアイデンティティ、authorized_fingerprints はピアの許可リスト)。</li></ul>
       <h2>systemd の下で実行する</h2>
       <p>再起動やクラッシュをまたいで生き残るサービスにするには、serve を systemd に任せます。--config-dir を固定パスに向けて、ホストのアイデンティティとピア許可リストが再起動をまたいでも維持されるようにします:</p>
@@ -125,7 +150,12 @@ User=relayium
 
 [Install]
 WantedBy=multi-user.target</code></pre>
-      <ul><li>このサービスを有効化する前に、プッシュを許可すべきすべてのピアに対して relayium authorize &lt;fingerprint&gt; を実行しておいてください——サービス自体はプロンプトを出せません。</li><li>systemctl enable --now relayium-serve で起動し、起動のたびに復帰するようにします。</li><li>/etc/relayium/id.key はサービスユーザーだけが読めるようにしてください。権限が緩い鍵は relayium が読み込みを拒否します。</li></ul>
+      <ol class="steps" data-block="steps"><li><p>サービスを作る前に、push を許すピアをすべて承認しておきます。サービスはプロンプトを出せないため、すでに信頼されていないものはすべて拒否されます。</p></li><li><p>上のユニットファイルを /etc/systemd/system/relayium-serve.service に書きます。--config-dir は、いま承認に使ったのと同じ固定パスを指すようにします。</p></li><li><p>systemd を再読み込みしてサービスを起動し、再起動後も戻るよう有効化します。</p><pre><code>sudo systemctl daemon-reload</code></pre><pre><code>sudo systemctl enable --now relayium-serve</code></pre></li><li><p>動作していること、そして「すべて拒否」の警告がログにないことを確認します。この構成に固有なのは後者だけです。</p><pre><code>systemctl is-active relayium-serve</code></pre><pre><code>journalctl -u relayium-serve -n 20 --no-pager</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">正常なサービスの見え方</p><p>is-active は active と答え、承認済みピアがないという起動時の警告は出ません。この警告は、どの送信者が苦情を言うより先に「このサービスはすべての push を拒否する」と教えてくれる唯一の一行です。</p><pre><code>$ systemctl is-active relayium-serve
+active
+$ journalctl -u relayium-serve -n 20 --no-pager | grep -c &#39;all pushes will be rejected&#39;
+0</code></pre></div>
+      <ul><li>このサービスを有効化する前に、プッシュを許可すべきすべてのピアに対して relayium authorize &lt;fingerprint&gt; を実行しておいてください——サービス自体はプロンプトを出せません。</li><li>systemctl enable --now relayium-serve で起動し、起動のたびに復帰するようにします。</li><li>/etc/relayium/id.key のパーミッションはちょうど 0600 でなければならず、所有者はユニットの User= です。それ以外は relayium が拒否します——0400 も含まれるので、0600 より厳しくすることも、誰でも読める状態にしておくことと同じくらい確実にサービスを止めます。</li></ul>
       <h2>macOS で起動時に実行する (launchd)</h2>
       <p>macOS に systemd はありません——サービスマネージャーは launchd です。Mac 上で serve を動かし続けるには(受け取り口として常時稼働させる Mac mini など)、LaunchDaemon としてインストールし、誰もログインしていない起動時から開始させます。UserName を設定して root ではなく自分のユーザーとして実行し、--dir と --config-dir には絶対パスを指定して、アイデンティティと信頼のファイルが自分の ~/.config/relayium に残るようにします:</p>
       <pre><code>&lt;!-- /Library/LaunchDaemons/com.relayium.serve.plist  (replace YOU with your macOS username) --&gt;
@@ -166,6 +196,12 @@ sudo launchctl bootout system/com.relayium.serve</code></pre>
       <p>デフォルトでは serve はファイルの追加・更新しか行いません——送信側が sync --delete を実行しても、新規・変更ファイルはコピーされますが、要求された削除はスキップされ、受信側に警告がログ出力されます。真のミラーリングを有効にするには --allow-delete を付けて serve を起動します。これにより送信側で削除されたファイルはこちらでも削除されます:</p>
       <pre><code>relayium serve --dir /srv/mirror --allow-delete</code></pre>
       <ul><li>--allow-delete は受信側で有効にするオプトインです。送信側は引き続き sync --delete で削除を要求する必要があります。</li><li>このオプションを付けなければ、送信側が何を要求しても、このマシン上のファイルが削除されることはありません。</li></ul>
+      <h2>うまくいかないとき</h2>
+      <p>この5つのうち4つは、サービスが動いたまま健全に見えます——すべてを拒否するリスナーもまたリスナーです。どれにも、読めば分かる1行か、実行すれば決着がつくコマンドがあります。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状、確認、対処</p><dl><dt>サービスは起動して動き続けているのに、push がすべて拒否される。</dt><dd><pre><code>journalctl -u relayium-serve -n 20 --no-pager
+# warning: no authorized peers and no terminal to approve on; all pushes will be rejected.</code></pre><p>サービスには端末がないため、初回 push の承認プロンプトを実行することができず、見えるのは見知らぬフィンガープリントだけです。各送信側を事前に承認してください。送信側で relayium id、こちらで relayium authorize &lt;フィンガープリント&gt; を、ユニットと同じ --config-dir で実行します。この警告は起動時に出るので、ログの最初から載っています。</p></dd><dt>id.key の権限が安全でないと言われ、サービスがまったく起動しない。</dt><dd><pre><code>stat -c &#39;%a %U %n&#39; /etc/relayium/id.key
+# 400 relayium /etc/relayium/id.key</code></pre><p>鍵の権限はちょうど 0600 でなければなりません。0644 は当然として、見落としがちなのは 0400 も駄目だという点です。緩めるのと同じくらい確実に、締めすぎてもサービスは起動しません。鍵に chmod 600 を当て、ユニットの User= が所有者になっていることを確認してください。</p></dd><dt>送信側が「接続を拒否された」と報告する。</dt><dd><pre><code>relayium push ./build relayium://drop.example.com:9031
+# hint: if the peer refused the connection, it may not have authorized this host.</code></pre><p>受信側がこの送信側を認識していません。送信側で relayium id を実行し、そのフィンガープリントを受信側で relayium authorize してください。すでに実行済みなら、ユニットの --config-dir の下で行ったかを確認します。信頼ファイルはディレクトリごとなので、~/.config/relayium に承認したフィンガープリントは /etc/relayium を読むサービスからは存在しないのと同じです。</p></dd><dt>手で serve を動かすと push できるのに、サービス経由や別マシンからだとできない。</dt><dd><pre><code>sudo ss -tlnp | grep 9031</code></pre><p>原因は2つですが、確認は1つで足ります。何も待ち受けていなければユニットが有効化されていません——systemctl is-enabled relayium-serve で確認します。待ち受けているならポートが塞がれています。ホストのファイアウォールとクラウドのセキュリティグループで 9031 を開けてください。既定以外の --port を使う場合は、送信側の relayium://host:N のポートと一致している必要があります。</p></dd><dt>sync --delete の送信側が求めた削除が、このマシンでは決して起きない。</dt><dd><pre><code>journalctl -u relayium-serve | grep -i delete</code></pre><p>削除は受信側のオプトインで、既定では無効です。新規・変更されたファイルは通常どおりコピーされ、スキップされた削除はこちらに警告として記録されます。ユニットの ExecStart に --allow-delete を足して再起動してください。送信側が求めるだけでは足りず、この非対称は意図的です——受信側が、よそで打たれたフラグのせいでファイルを失うことはありません。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>serve はデフォルトでどのポートを待ち受けますか?</h3>
       <p>9031 です。リスナー側(serve --port N)と送信側の宛先(relayium://host:N)の両方を --port で変更できます。</p>
