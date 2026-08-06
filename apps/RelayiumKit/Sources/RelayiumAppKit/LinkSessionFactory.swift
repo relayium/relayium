@@ -2,6 +2,41 @@ import Foundation
 import RelayiumKit
 import WebRTC
 
+// MARK: - the routed-establishment seam
+
+/// `LinkInitialTransport`, plus the one call an establishment that ADMISSION
+/// routed additionally needs of its transport.
+///
+/// ## Why this is a refinement rather than an optional cast
+///
+/// A responder's establishment exists BECAUSE a signal arrived: the room
+/// intercepted the peer's offer, `LinkAdmission.route` read it, decided
+/// `establish(role: .responder)`, and the router consumed it so the live
+/// connection could not also act on it. By the time this transport is built, the
+/// offer that justifies its existence has already been taken off the wire — and
+/// nothing sends it again. A transport that cannot be handed that one signal is
+/// a transport that waits out its whole establishment deadline for something it
+/// already missed.
+///
+/// `LinkInitialTransport` does not require the call, and should not: the runtime
+/// DRIVES a transport, it does not route to one, and it never makes this call.
+/// So the requirement lives on the assembly that does — and it is a requirement
+/// rather than an `as?` probe, because an optional cast would turn a missing
+/// conformance into a silently dropped offer, which is exactly the failure this
+/// seam exists to make unrepresentable. A builder that cannot answer with one of
+/// these does not compile.
+protocol LinkRoutableInitialTransport: LinkInitialTransport {
+    /// Hand this transport one signal that was routed elsewhere first.
+    ///
+    /// Safe for a signal the transport's own installed handler will also
+    /// deliver: `LinkSignalPolicy` acts on exactly one remote offer and one
+    /// remote answer, so a duplicate is dropped whole rather than reaching
+    /// `setRemoteDescription` a second time.
+    func receive(from: String, signal: JSONValue)
+}
+
+extension WebRTCLinkTransport: LinkRoutableInitialTransport {}
+
 /// The one place an application turns its own ingredients into ONE `link/1`
 /// attempt: a signalling client, a peer, a role, an ICE configuration, an
 /// authentication generation, a resolved receive directory and the room's
@@ -96,6 +131,34 @@ import WebRTC
 /// application that has a room has an admission — and this is the boundary where
 /// that stops being a convention and becomes a signature.
 ///
+/// **7. The signal that justified this link is handed over HERE, and after the
+/// transport starts.** A responder's establishment exists because an offer
+/// arrived and the room's router CONSUMED it, so that the live connection could
+/// not also act on it; nothing sends it again. Leaving the handover to the
+/// caller would make "assemble a link and then remember to give it its offer"
+/// two steps, and the failure of the second one is invisible — an establishment
+/// that simply times out. So it is one step, and a builder must answer with a
+/// transport that can take it (`LinkRoutableInitialTransport`) rather than being
+/// probed for the ability.
+///
+/// It is handed over after `LinkSessionAttempt`'s initializer, which is the call
+/// that starts the transport. Both calls enter that transport's one serial queue
+/// in issue order, so this order is `start` then the offer — which is the order
+/// in which the establishment deadlines are armed by the call that OWNS arming
+/// them rather than by the handler's own defence. `WebRTCLinkTransport` is
+/// bounded either way and says so: `handleLocked` arms the watchdog too,
+/// precisely because "a responder can be handed the offer that created it before
+/// anybody calls `start()`". So this is the order that does not depend on that
+/// defence, not a cliff edge beside it — and it is pinned as a test rather than
+/// left to reading, because a later edit could reverse it silently.
+///
+/// **8. Two handles, one owner.** `LinkSessionAssembly` returns the attempt and
+/// a `LinkSessionRoomControl` for the same runtime. The attempt is the only
+/// strong owner; the control holds the runtime weakly and reaches exactly the
+/// three verbs the screen's command seam excludes on purpose. That split is what
+/// lets a room owner route a resume offer or a departure without becoming a
+/// second thing able to end — or to fail to end — one link.
+///
 /// ## What it is not
 ///
 /// Unreachable from production, and not merely by convention: this enum is
@@ -126,7 +189,7 @@ enum LinkSessionFactory {
                                          _ iceTransportPolicy: RTCIceTransportPolicy,
                                          _ authenticationGeneration: Int,
                                          _ deadlines: LinkDeadlines)
-    -> LinkInitialTransport
+    -> LinkRoutableInitialTransport
 
     /// Builds the factory that will produce every authenticated rebuild.
     typealias ReplacementFactoryBuilder = (_ signaling: SignalingClient,
@@ -159,10 +222,15 @@ enum LinkSessionFactory {
 
     // MARK: - the assembly
 
-    /// Assemble ONE attempt. It is running by the time this returns — the
-    /// attempt starts its runtime as the last act of its own initializer — and
-    /// the caller owns it: an attempt that is dropped without `retire()` leaves
-    /// a live link behind.
+    /// Assemble ONE link: the attempt that owns it and the room's handle on it.
+    /// It is running by the time this returns — the attempt starts its runtime
+    /// as the last act of its own initializer — and the caller owns it: an
+    /// attempt that is dropped without `retire()` leaves a live link behind.
+    ///
+    /// The two halves of the answer are `LinkSessionAssembly`'s, and the split
+    /// is the lifetime: `attempt` is the sole strong owner, `control` reaches the
+    /// same runtime WEAKLY for the three room verbs the screen's command seam
+    /// deliberately excludes. Holding the control alone keeps nothing alive.
     ///
     /// - Parameters:
     ///   - signaling: the room's socket, used by this establishment AND by every
@@ -190,6 +258,15 @@ enum LinkSessionFactory {
     ///   - deadlines: the three establishment deadlines, applied to the first
     ///     transport and to every rebuild. The defaults are the deployed web
     ///     client's; overriding them is for tests.
+    ///   - initialSignal: the ONE signal the room already consumed on this
+    ///     link's behalf — the peer's offer that made `LinkAdmission` decide this
+    ///     establishment should exist — or nil when there was none.
+    ///
+    ///     It is attributed to `peerId` and cannot be attributed to anybody else:
+    ///     a routing decision about a peer is made from that peer's signal, and
+    ///     `LinkSignalPolicy` drops everything from any other sender anyway, so
+    ///     a separate sender parameter could only ever express a mistake. See
+    ///     invariant 7 for why the assembly hands it over rather than the caller.
     ///
     /// There is no failure path, and that is a property rather than an omission:
     /// every ingredient is already resolved by the time it arrives here, nothing
@@ -206,8 +283,9 @@ enum LinkSessionFactory {
                      authenticationGeneration: Int,
                      receiveDirectory: URL,
                      admission: LinkAdmission,
-                     deadlines: LinkDeadlines = LinkDeadlines())
-    -> LinkSessionAttempt {
+                     deadlines: LinkDeadlines = LinkDeadlines(),
+                     initialSignal: JSONValue? = nil)
+    -> LinkSessionAssembly {
         make(signaling: signaling,
              peerId: peerId,
              role: role,
@@ -217,6 +295,7 @@ enum LinkSessionFactory {
              receiveDirectory: receiveDirectory,
              admission: admission,
              deadlines: deadlines,
+             initialSignal: initialSignal,
              buildInitialTransport: liveInitialTransport,
              buildReplacementFactory: liveReplacementFactory)
     }
@@ -236,9 +315,10 @@ enum LinkSessionFactory {
                      receiveDirectory: URL,
                      admission: LinkAdmission,
                      deadlines: LinkDeadlines,
+                     initialSignal: JSONValue? = nil,
                      buildInitialTransport: InitialTransportBuilder,
                      buildReplacementFactory: ReplacementFactoryBuilder)
-    -> LinkSessionAttempt {
+    -> LinkSessionAssembly {
         // ONE configuration, read once and handed to both halves — see
         // invariant 1. The rebuild factory is built BEFORE the transport for no
         // reason other than reading order; neither can observe the other.
@@ -258,12 +338,27 @@ enum LinkSessionFactory {
         // the only way to obtain the sink — so the link assembled here reports
         // to this attempt's bridge and to nothing else. `sink` travels through
         // untouched: see invariant 3.
-        return LinkSessionAttempt(runtime: { sink in
-            LinkSessionRuntime(transport: transport,
-                               receiveDirectory: receiveDirectory,
-                               replacementFactory: replacementFactory,
-                               admission: admission,
-                               onEvent: sink)
+        //
+        // `assembled` is how the runtime built in there reaches the control
+        // below, and it is a local: this function keeps nothing, and the only
+        // surviving strong reference to that runtime is the attempt's own.
+        var assembled: LinkSessionRuntime?
+        let attempt = LinkSessionAttempt(runtime: { sink in
+            let runtime = LinkSessionRuntime(transport: transport,
+                                             receiveDirectory: receiveDirectory,
+                                             replacementFactory: replacementFactory,
+                                             admission: admission,
+                                             onEvent: sink)
+            assembled = runtime
+            return runtime
         })
+
+        // AFTER the attempt, and therefore after `start()` — see invariant 7.
+        if let initialSignal {
+            transport.receive(from: peerId, signal: initialSignal)
+        }
+
+        return LinkSessionAssembly(attempt: attempt,
+                                   control: LinkSessionRoomControl(runtime: assembled))
     }
 }

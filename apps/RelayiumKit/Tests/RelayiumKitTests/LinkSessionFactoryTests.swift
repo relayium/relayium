@@ -14,7 +14,7 @@ import XCTest
 // directory and the room's admission were forwarded is to drive a batch onto
 // disk and to end the link through them.
 
-private final class RecordingTransport: LinkInitialTransport, @unchecked Sendable {
+private final class RecordingTransport: LinkRoutableInitialTransport, @unchecked Sendable {
     private let slots = NSLock()
     private let state = NSLock()
 
@@ -64,8 +64,19 @@ private final class RecordingTransport: LinkInitialTransport, @unchecked Sendabl
     /// wired above by then.
     var duringStart: (() -> Void)?
 
+    /// Every signal handed in through `receive`, with its claimed sender.
+    private var _routed: [(from: String, signal: JSONValue)] = []
+    /// `start` and `receive` in the order this transport was told them — the
+    /// only place the handover's ordering is observable, because both calls
+    /// enter one serial queue on the real transport and neither answers.
+    private var _order: [String] = []
+
     var startCount: Int { state.lock(); defer { state.unlock() }; return _startCount }
     var closeCount: Int { state.lock(); defer { state.unlock() }; return _closeCount }
+    var routed: [(from: String, signal: JSONValue)] {
+        state.lock(); defer { state.unlock() }; return _routed
+    }
+    var callOrder: [String] { state.lock(); defer { state.unlock() }; return _order }
     /// True only if EVERY start this transport saw found all four slots
     /// installed — and vacuously true for a transport that was never started,
     /// which is why the tests below assert the start count as well.
@@ -77,9 +88,17 @@ private final class RecordingTransport: LinkInitialTransport, @unchecked Sendabl
         let wired = onSAS != nil && onReady != nil && onError != nil && onClose != nil
         state.lock()
         _startCount += 1
+        _order.append("start")
         _callbacksAtStart = _callbacksAtStart && wired
         state.unlock()
         duringStart?()
+    }
+
+    func receive(from: String, signal: JSONValue) {
+        state.lock()
+        _routed.append((from, signal))
+        _order.append("receive")
+        state.unlock()
     }
 
     func send(_ bytes: [UInt8], on lane: LinkLane) throws {
@@ -166,6 +185,8 @@ final class LinkSessionFactoryTests: XCTestCase {
 
     private struct Rig {
         let attempt: LinkSessionAttempt
+        /// The room's handle on the same link, from the same assembly.
+        let control: LinkSessionRoomControl
         let transport: RecordingTransport
         let signaling: SignalingClient
         let admission: LinkAdmission
@@ -186,6 +207,7 @@ final class LinkSessionFactoryTests: XCTestCase {
                      authenticationGeneration: Int = 7,
                      iceTransportPolicy: RTCIceTransportPolicy = .relay,
                      admission: LinkAdmission? = nil,
+                     initialSignal: JSONValue? = nil,
                      transport: RecordingTransport = RecordingTransport()) -> Rig {
         let signaling = signalingClient()
         let servers = [RTCIceServer(urlStrings: ["stun:stun.example:3478"])]
@@ -196,7 +218,7 @@ final class LinkSessionFactoryTests: XCTestCase {
         let initial = InitialTransportIngredients()
         let replacement = ReplacementIngredients()
 
-        let attempt = LinkSessionFactory.make(
+        let assembly = LinkSessionFactory.make(
             signaling: signaling,
             peerId: peerId,
             role: role,
@@ -206,6 +228,7 @@ final class LinkSessionFactoryTests: XCTestCase {
             receiveDirectory: receiveDirectory ?? dir,
             admission: admission,
             deadlines: deadlines,
+            initialSignal: initialSignal,
             buildInitialTransport: { signaling, peerId, role, servers, policy,
                                      generation, deadlines in
                 initial.calls += 1
@@ -228,7 +251,8 @@ final class LinkSessionFactoryTests: XCTestCase {
                 return { _ in throw LinkTransportError.notReady }
             })
 
-        return Rig(attempt: attempt, transport: transport, signaling: signaling,
+        return Rig(attempt: assembly.attempt, control: assembly.control,
+                   transport: transport, signaling: signaling,
                    admission: admission, iceServers: servers, deadlines: deadlines,
                    initial: initial, replacement: replacement,
                    peer: RealtimeSender(sessionKey: recvKey))
@@ -481,7 +505,132 @@ final class LinkSessionFactoryTests: XCTestCase {
         XCTAssertTrue(r.attempt.model.isOpen, "and the link itself is still open")
     }
 
-    // MARK: - 6. nothing here is reachable from production
+    // MARK: - 6. the one signal the room already consumed
+
+    private func offer(_ sdp: String = "v=0 admitted") -> JSONValue {
+        .object(["link": .bool(true),
+                 "caps": .array([.string(LINK_CAPABILITY)]),
+                 "commit": .string(String(repeating: "c", count: 44)),
+                 "sdp": .object(["type": .string("offer"), "sdp": .string(sdp)])])
+    }
+
+    /// The offer that made admission decide this establishment should exist is
+    /// handed to the transport by the ASSEMBLY, exactly once and byte for byte.
+    /// The room's router consumed it so the live connection could not also act on
+    /// it, and nothing sends it again — a caller left to pass it on separately
+    /// fails invisibly, as an establishment that simply times out.
+    func testTheRoutedOfferReachesTheTransportOnceAndVerbatim() {
+        let signal = offer()
+
+        let r = rig(peerId: "peer-routed", role: .responder, initialSignal: signal)
+
+        XCTAssertEqual(r.transport.routed.count, 1, "handed over exactly once")
+        XCTAssertEqual(r.transport.routed.first?.signal, signal,
+                       "and unaltered — no re-tagging, no re-wrapping")
+    }
+
+    /// It is attributed to the peer admission admitted, and cannot be attributed
+    /// to anybody else: a routing decision about a peer is made from that peer's
+    /// signal, and `LinkSignalPolicy` drops everything from any other sender.
+    func testTheRoutedOfferIsAttributedToTheAdmittedPeer() {
+        let r = rig(peerId: "peer-attributed", role: .responder, initialSignal: offer())
+
+        XCTAssertEqual(r.transport.routed.first?.from, "peer-attributed")
+        XCTAssertEqual(r.transport.routed.first?.from, r.initial.peerId,
+                       "the sender is the peer the transport was built for")
+    }
+
+    /// The handover comes AFTER the transport starts. Both calls enter the real
+    /// transport's one serial queue in issue order, so this is the order in which
+    /// the establishment deadlines are armed by the call that owns arming them —
+    /// `WebRTCLinkTransport` is bounded either way, because `handleLocked` arms
+    /// the watchdog defensively for exactly the reverse case, and this is the
+    /// order that does not rely on that defence. Pinned here because a later edit
+    /// could reverse it without any behavioural test noticing.
+    func testTheRoutedOfferIsHandedOverOnlyAfterTheTransportStarts() {
+        let r = rig(role: .responder, initialSignal: offer())
+
+        XCTAssertEqual(r.transport.callOrder, ["start", "receive"],
+                       "armed first, then fed")
+    }
+
+    /// An establishment with nothing to hand over hands over nothing. An
+    /// initiator's link exists because of a content-free `linkRequest`, or
+    /// because the user asked; feeding either to a transport would be inventing
+    /// a signal the peer never sent.
+    func testAnEstablishmentWithNoRoutedSignalIsHandedNothing() {
+        let r = rig(role: .initiator)
+
+        XCTAssertTrue(r.transport.routed.isEmpty, "nothing was invented")
+        XCTAssertEqual(r.transport.callOrder, ["start"])
+    }
+
+    // MARK: - 7. two handles, one owner
+
+    /// The assembly answers with a control for the SAME link the attempt owns:
+    /// a departure routed through it ends the link the attempt is projecting.
+    /// This is the only assertion that proves the two halves were not built for
+    /// two different runtimes.
+    func testTheControlReachesTheSameLinkTheAttemptOwns() async {
+        let r = rig(peerId: "peer-same")
+        r.transport.publish(identity(peerId: "peer-same"))
+        await wait("the link opens", until: { r.attempt.model.isOpen })
+
+        r.control.peerDeparted("peer-same")
+
+        await wait("the departure ended the attempt's own link",
+                   until: { r.attempt.model.isEnded })
+        XCTAssertEqual(r.transport.closeCount, 1, "and closed the transport it was built on")
+    }
+
+    /// A departure for somebody else is not this link's business, and the
+    /// control adds no opinion of its own about which peer that is — the
+    /// coordinator it forwards to already owns that comparison.
+    func testADepartureForAnotherPeerLeavesTheLinkAlone() async {
+        let r = rig(peerId: "peer-same")
+        r.transport.publish(identity(peerId: "peer-same"))
+        await wait("the link opens", until: { r.attempt.model.isOpen })
+
+        r.control.peerDeparted("peer-else")
+        await settle()
+
+        XCTAssertTrue(r.attempt.model.isOpen, "somebody else leaving is not this link ending")
+        XCTAssertFalse(r.attempt.model.isEnded)
+    }
+
+    /// Before publication there is no gap to join, and the control says exactly
+    /// that rather than inventing an answer — `.unavailable` is the runtime's own
+    /// word for it.
+    func testJoiningRecoveryBeforePublicationIsUnavailable() {
+        let r = rig()
+
+        XCTAssertEqual(r.control.joinRecovery(peerId: "peer-factory") { _ in }, .unavailable)
+        XCTAssertTrue(r.control.isLive, "the link exists; it just has no gap")
+    }
+
+    /// The control is not an owner. Holding one after the attempt is gone keeps
+    /// a handle alive, never a link — no PeerConnection, no TURN allocation, no
+    /// receive directory held open.
+    func testTheControlDoesNotKeepTheSessionAlive() async {
+        weak var observed: RecordingTransport?
+        var control: LinkSessionRoomControl?
+        do {
+            let transport = RecordingTransport()
+            observed = transport
+            let r = rig(transport: transport)
+            control = r.control
+            XCTAssertEqual(control?.isLive, true)
+            r.attempt.retire()
+        }
+        await settle()
+
+        XCTAssertNil(observed, "the attempt was the only owner")
+        XCTAssertEqual(control?.isLive, false, "and the control knows its link is gone")
+        control?.peerDeparted("peer-factory")
+        XCTAssertEqual(control?.joinRecovery(peerId: "peer-factory") { _ in }, .unavailable)
+    }
+
+    // MARK: - 8. nothing here is reachable from production
 
     /// Comments stripped, so a rule about code is not satisfied — or broken — by
     /// prose.
@@ -603,5 +752,34 @@ final class LinkSessionFactoryTests: XCTestCase {
                        "and it reports through exactly one sink")
         XCTAssertTrue(source.contains("onEvent: sink"),
                       "the attempt's own sink, unwrapped")
+    }
+
+    /// ONE handover, in the one place, after the attempt exists. The behavioural
+    /// checks above prove the order for a double; this proves the source cannot
+    /// grow a second call — a transport told twice would apply one offer and
+    /// silently drop the other, and the drop is the one that would be a real
+    /// signal in a burst.
+    func testTheFactoryHandsTheRoutedSignalOverExactlyOnceAfterTheAttempt() throws {
+        let source = try factorySource()
+
+        XCTAssertEqual(source.components(separatedBy: "transport.receive(").count - 1, 1,
+                       "exactly one handover")
+        let handover = try XCTUnwrap(source.range(of: "transport.receive("))
+        let attempt = try XCTUnwrap(source.range(of: "LinkSessionAttempt("))
+        XCTAssertTrue(attempt.upperBound < handover.lowerBound,
+                      "the attempt — and therefore start() — comes first")
+    }
+
+    /// The assembly hands back one attempt and one control, and the control is
+    /// the only thing besides the attempt that names the runtime. Two controls,
+    /// or a control built anywhere else, would be a second handle on one link
+    /// made by something that cannot know whether an attempt owns it.
+    func testTheFactoryBuildsOneAttemptAndOneControlForOneLink() throws {
+        let source = try factorySource()
+
+        XCTAssertEqual(source.components(separatedBy: "LinkSessionRoomControl(").count - 1, 1,
+                       "exactly one room control")
+        XCTAssertEqual(source.components(separatedBy: "LinkSessionAssembly(").count - 1, 1,
+                       "handed back as one assembly")
     }
 }
