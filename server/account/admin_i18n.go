@@ -260,6 +260,18 @@ var adminEN = map[string]string{
 	"恢复该用户节点？它会重新进入该用户的放置池/ICE/直连下载。": "Restore this user node? It re-enters that user's placement pool, ICE and direct downloads.",
 	"标记该用户节点已卸载？它会退出该用户的放置池/ICE/直连下载，文件与历史保留，可随时用「恢复」撤销。":                     "Mark this user node uninstalled? It leaves that user's placement pool, ICE and direct downloads. Files and history are kept, and Restore undoes it at any time.",
 	"手动标记该节点已卸载？用于卸载脚本联系不到中央、来不及自动登记的情况；节点会退出放置/ICE/直连下载，文件与历史保留，可随时用「恢复」撤销。": "Mark this node uninstalled by hand? For when the uninstall script could not reach central in time. The node leaves placement, ICE and direct downloads. Files and history are kept, and Restore undoes it at any time.",
+
+	// Passkey script messages. Same JS-string context as the confirm() text, and
+	// covered by the same escaping test.
+	"服务器错误 ":    "Server error ",
+	"验证失败（服务器 ": "Verification failed (server ",
+	"已取消，或这台设备上没有可用的 passkey。可用下方密码登录后在设置里添加": "Cancelled, or this device has no usable passkey. Sign in with the password below and add one in settings.",
+	"登录失败，请改用下方密码登录":                          "Sign-in failed — use the password below instead",
+	"这台设备不支持 passkey，请在注册了 passkey 的设备上确认。":   "This device does not support passkeys. Confirm on a device where one is registered.",
+	"已取消，或这台设备上没有可用的 passkey。":                "Cancelled, or this device has no usable passkey.",
+	"验证失败，请重试。":                               "Verification failed. Try again.",
+	"注册失败（服务器 ":                               "Registration failed (server ",
+	"注册失败":                                    "Registration failed",
 }
 
 // adminLangCookie holds an explicit choice made in the console's header.

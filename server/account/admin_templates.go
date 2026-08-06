@@ -367,7 +367,7 @@ button:hover{filter:brightness(1.07)}
         // A non-JSON body (a proxy's 502 page) must not surface as a parser
         // error; fall back to the status so the operator can diagnose it.
         return r.json().then(function(j){ return j.error; }, function(){ return null; })
-          .then(function(m){ throw new Error(m || '服务器错误 ' + r.status); });
+          .then(function(m){ throw new Error(m || '{{t $.Lang "服务器错误 "}}' + r.status); });
       })
       .then(function(o){
         var pk = o.publicKey;
@@ -392,7 +392,7 @@ button:hover{filter:brightness(1.07)}
       .then(function(r){
         if (r.ok) { location.href = '/admin'; return; }
         return r.json().then(function(j){ return j.error; }, function(){ return null; })
-          .then(function(m){ throw new Error(m || '验证失败（服务器 ' + r.status + '）'); });
+          .then(function(m){ throw new Error(m || '{{t $.Lang "验证失败（服务器 "}}' + r.status + '）'); });
       })
       .catch(function(e){
         btn.disabled = false;
@@ -403,10 +403,10 @@ button:hover{filter:brightness(1.07)}
           // them back apart. So say the one thing true of both, in muted text
           // rather than red: neither case is a failure the operator caused.
           err.className = 'muted';
-          err.textContent = '已取消，或这台设备上没有可用的 passkey。可用下方密码登录后在设置里添加';
+          err.textContent = '{{t $.Lang "已取消，或这台设备上没有可用的 passkey。可用下方密码登录后在设置里添加"}}';
         } else {
           err.className = 'err';
-          err.textContent = (e && e.message) || '登录失败，请改用下方密码登录';
+          err.textContent = (e && e.message) || '{{t $.Lang "登录失败，请改用下方密码登录"}}';
         }
         err.hidden = false;
       });
@@ -509,7 +509,7 @@ button:hover{filter:brightness(1.07)}
   // button; the operator can retry from a device that has the passkey.
   if (!window.PublicKeyCredential || !navigator.credentials) {
     btn.disabled = true;
-    err.textContent = '这台设备不支持 passkey，请在注册了 passkey 的设备上确认。';
+    err.textContent = '{{t $.Lang "这台设备不支持 passkey，请在注册了 passkey 的设备上确认。"}}';
     err.hidden = false;
     return;
   }
@@ -520,7 +520,7 @@ button:hover{filter:brightness(1.07)}
       .then(function(r){
         if (r.ok) return r.json();
         return r.json().then(function(j){ return j.error; }, function(){ return null; })
-          .then(function(m){ throw new Error(m || '服务器错误 ' + r.status); });
+          .then(function(m){ throw new Error(m || '{{t $.Lang "服务器错误 "}}' + r.status); });
       })
       .then(function(o){
         var pk = o.publicKey;
@@ -546,9 +546,9 @@ button:hover{filter:brightness(1.07)}
       .catch(function(e){
         btn.disabled = false;
         if (e && e.name === 'NotAllowedError') {
-          err.textContent = '已取消，或这台设备上没有可用的 passkey。';
+          err.textContent = '{{t $.Lang "已取消，或这台设备上没有可用的 passkey。"}}';
         } else {
-          err.textContent = (e && e.message) || '验证失败，请重试。';
+          err.textContent = (e && e.message) || '{{t $.Lang "验证失败，请重试。"}}';
         }
         err.hidden = false;
       });
@@ -1025,7 +1025,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
       .then(function(r){
         if (r.ok) return r.json();
         return r.json().then(function(j){ return j.error; }, function(){ return null; })
-          .then(function(m){ throw new Error(m || '验证失败（服务器 ' + r.status + '）'); });
+          .then(function(m){ throw new Error(m || '{{t $.Lang "验证失败（服务器 "}}' + r.status + '）'); });
       })
       .then(function(o){
         var pk = o.publicKey;
@@ -1049,12 +1049,12 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
       .then(function(r){
         if (r.ok) { location.reload(); return; }
         return r.json().then(function(j){ return j.error; }, function(){ return null; })
-          .then(function(m){ throw new Error(m || '注册失败（服务器 ' + r.status + '）'); });
+          .then(function(m){ throw new Error(m || '{{t $.Lang "注册失败（服务器 "}}' + r.status + '）'); });
       })
       .catch(function(e){
         // Cancelling the platform prompt is a normal action, not an error.
         if (e && e.name === 'NotAllowedError') return;
-        err.textContent = (e && e.message) || '注册失败';
+        err.textContent = (e && e.message) || '{{t $.Lang "注册失败"}}';
         err.hidden = false;
       });
   });
