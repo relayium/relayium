@@ -26,6 +26,45 @@ const en = {
     },
     {
       heading: "receive: someone sends you a file across networks",
+      prereqs: {
+        label: "What you need before step 1",
+        items: [
+          "The CLI on this machine. relayium version prints a version string; a shell that answers command not found means it is not installed here yet.",
+          "A sender who is signed in and at their terminal right now. Only they need an account — you never sign in to receive.",
+          "The six digits, passed to you out of band. They live five minutes from the moment their CLI minted them, so agree on the moment first.",
+          "A way to read six more digits back to them afterwards: the SAS is compared out loud, not on screen.",
+          "The other end must be the CLI. A browser cannot join a CLI pairing code — if that is what you have, ask for a relayium up link instead.",
+        ],
+      },
+      steps: [
+        {
+          text: "Agree with the sender on when they will run send. The code starts expiring the moment it is minted, not the moment you get it.",
+        },
+        {
+          text: "Take the six digits over a channel you both trust — a call, a chat window, the room you are both in.",
+        },
+        {
+          text: "Run receive from the directory where the files should land, or name one explicitly.",
+          code: ["relayium receive 483920", "relayium receive 483920 ./downloads"],
+        },
+        {
+          text: "When both terminals print a verification code, read yours aloud and check it matches theirs. It is not the pairing code, and it is the only thing that rules out a substituted endpoint.",
+        },
+        {
+          text: "Leave the terminal alone until it returns to the prompt. This is one live session: closing either end stops the transfer.",
+        },
+      ],
+      success: {
+        label: "What a successful receive looks like",
+        body: [
+          "The connection is announced as direct, and both terminals print the SAME verification code. Different codes are the one result you must not accept — stop and check with the sender which machine they are on.",
+        ],
+        code: [
+          `$ relayium receive 483920
+verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
+path: direct`,
+        ],
+      },
       body: [
         "This is the receiving half of relayium send. The other person runs relayium send <path> on their end (after relayium login); their CLI mints a 6-digit code, good for 5 minutes, and prints it. They tell you what it is over any channel you both trust — a call, a chat message. You run receive with that code:",
       ],
@@ -45,6 +84,18 @@ relayium receive 483920 ./downloads`,
     },
     {
       heading: "serve: turn this machine into a listening drop box",
+      steps: [
+        {
+          text: "Start the listener, naming the directory pushes should land in.",
+          code: ["relayium serve --dir ~/incoming"],
+        },
+        {
+          text: "When a new machine pushes for the first time, serve shows its address and fingerprint and asks. Approve it once and later pushes from that fingerprint go through silently.",
+        },
+        {
+          text: "If this listener will run without a terminal, do not rely on that prompt — nobody is there to answer it, and an unrecognised pusher is rejected outright. Pre-authorize instead, as the next section describes.",
+        },
+      ],
       body: [
         "serve works the other way around: instead of you reaching out, other machines push straight to you over relayium:// — built for machines you already trust, like your own laptop pushing to a NAS, or a build server dropping artifacts on a box you own — over a pinned TLS 1.3 connection, no SSH, no rendezvous.",
       ],
@@ -72,6 +123,20 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     },
     {
       heading: "pull: reach out and fetch from a server you can ssh into",
+      steps: [
+        {
+          text: "Confirm the remote actually has the CLI. pull runs relayium on the far end, and unlike push there is no tar fallback, so a missing binary fails the whole command.",
+          code: ["ssh user@host command -v relayium"],
+        },
+        {
+          text: "If it is missing, install it there first.",
+          code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+        },
+        {
+          text: "Pull the files back over your existing SSH access. -i and -p behave like ssh's own.",
+          code: ["relayium pull user@host:/path/to/files ./local-dest"],
+        },
+      ],
       body: [
         "pull is the mirror of push: instead of waiting for someone to send you something, you reach out over your existing SSH access and fetch files back.",
       ],
@@ -81,6 +146,55 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
         "Files are verified with a per-file SHA-256 check and resume automatically if interrupted (add --no-resume to disable).",
         "-i and -p behave like ssh's own -i/-p, for a specific identity file or port.",
       ],
+    },
+    {
+      heading: "When it doesn't work",
+      body: [
+        "Five failures cover nearly every unsuccessful receive. Which command you were running decides which of them applies, and each has a line to read or a command to run that settles it.",
+      ],
+      troubleshooting: {
+        label: "Symptom, check, fix",
+        items: [
+          {
+            symptom: "You type the code and the rendezvous refuses it.",
+            code: [
+              `relayium receive 483920
+# the rendezvous refuses the code`,
+            ],
+            fix: "Almost always the five minutes elapsed — the code expires from the moment the sender's CLI minted it, not from when you were told. Ask them to run send again and read you the fresh digits straight away. A mistyped digit looks identical from here, so re-read it back before assuming it lapsed.",
+          },
+          {
+            symptom: "The transfer completes but you cannot find the files.",
+            code: [
+              `relayium receive 483920 ./downloads`,
+            ],
+            fix: "With no destination, receive writes into the directory you ran it from, which is rarely where you were looking. Pass one explicitly, or run pwd first and be sure.",
+          },
+          {
+            symptom: "It fails with \"no direct connection to the peer (both ends behind strict NAT?)\".",
+            code: [
+              `relayium receive 483920
+# no direct connection to the peer (both ends behind strict NAT?): …`,
+            ],
+            fix: "The CLI pairing path is direct-only by design: when no direct route exists it fails rather than routing your file through a relay. Nothing on your side fixes that. Ask the sender for a relayium up download link instead, or, between machines you both control, use daemon-direct or push over SSH.",
+          },
+          {
+            symptom: "pull fails immediately, complaining that relayium was not found.",
+            code: [
+              `ssh user@host command -v relayium
+# (no output)`,
+            ],
+            fix: "pull runs relayium on the remote — it is the sender in that exchange — and there is no tar fallback the way push has one. Install the CLI on the remote first, then re-run the pull.",
+          },
+          {
+            symptom: "A machine pushes to your serve listener and is rejected without ever prompting you.",
+            code: [
+              `relayium serve --dir ~/incoming`,
+            ],
+            fix: "The prompt only exists when serve has a terminal. Under systemd, in a script, or behind a pipe there is nobody to ask, so an unknown fingerprint is refused outright. Have the pusher run relayium id and pre-authorize it here with relayium authorize <fingerprint>, using the same --config-dir the listener runs under.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -137,6 +251,45 @@ const zh = {
     },
     {
       heading: "receive：对方跨网络把文件发给你",
+      prereqs: {
+        label: "开始之前你需要什么",
+        items: [
+          "本机装好 CLI。relayium version 会打印版本号；如果 shell 回答 command not found，说明这台还没装。",
+          "一位此刻已登录、并且人就在终端前的发送方。只有他需要账号——你接收全程都不用登录。",
+          "那六位数字，通过带外渠道传给你。它从对方 CLI 生成的那一刻起只活五分钟，所以先约好时间。",
+          "事后还能再把六位数字念回去的渠道：SAS 是靠口头比对的，不是看屏幕。",
+          "另一端必须是 CLI。浏览器无法加入 CLI 的配对码——如果你手上只有浏览器，请对方改用 relayium up 链接。",
+        ],
+      },
+      steps: [
+        {
+          text: "和发送方约好他什么时候执行 send。配对码是从生成那一刻开始计时的，不是从你拿到它的那一刻。",
+        },
+        {
+          text: "通过你们都信任的渠道拿到这六位数字——一通电话、一个聊天窗口，或者你们同处的那个房间。",
+        },
+        {
+          text: "在希望文件落地的目录里执行 receive，或者显式指定一个目录。",
+          code: ["relayium receive 483920", "relayium receive 483920 ./downloads"],
+        },
+        {
+          text: "当两个终端都打印出验证码时，把你这边的念出来，确认和对方一致。它不是配对码，而且它是唯一能排除对端被替换的东西。",
+        },
+        {
+          text: "在终端回到提示符之前不要动它。这是一次实时会话：任何一端关掉，传输就停了。",
+        },
+      ],
+      success: {
+        label: "一次成功的接收长什么样",
+        body: [
+          "连接被标为 direct，并且两个终端打印出相同的验证码。验证码不同是唯一一种你绝不能接受的结果——立刻停下，跟发送方核对他到底在哪台机器上。",
+        ],
+        code: [
+          `$ relayium receive 483920
+verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
+path: direct`,
+        ],
+      },
       body: [
         "这是 relayium send 的接收端。对方在自己那边运行 relayium send <path>（事先 relayium login 过），CLI 会生成一个 6 位数字、5 分钟内有效的码并打印出来。然后对方通过你们都信任的渠道告诉你——打个电话、发条消息。你则用这个码运行 receive：",
       ],
@@ -156,6 +309,18 @@ relayium receive 483920 ./downloads`,
     },
     {
       heading: "serve：把这台机器变成一个监听收件箱",
+      steps: [
+        {
+          text: "启动监听器，并指定推送文件落地的目录。",
+          code: ["relayium serve --dir ~/incoming"],
+        },
+        {
+          text: "有新机器第一次推送时，serve 会显示它的地址和指纹并询问你。批准一次之后，来自该指纹的推送就会静默通过。",
+        },
+        {
+          text: "如果这个监听器将来没有终端运行，就不要指望那个提示——没人能回答它，陌生的推送方会被直接拒绝。改用下一节讲的预先授权。",
+        },
+      ],
       body: [
         "serve 的方向正相反：不是你去连别人，而是其他机器通过 relayium:// 直接推送给你——专为你已经信任的机器设计，比如你自己的笔记本推给一台 NAS，或者构建服务器把产物投递到你的机器上——走的是证书固定的 TLS 1.3 连接，无需 SSH，无需会合。",
       ],
@@ -183,6 +348,20 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     },
     {
       heading: "pull：主动从你能 SSH 登录的服务器取文件",
+      steps: [
+        {
+          text: "先确认远端真的装了 CLI。pull 是在远端执行 relayium 的，而且不像 push 那样有 tar 兜底，二进制缺失会让整条命令失败。",
+          code: ["ssh user@host command -v relayium"],
+        },
+        {
+          text: "如果没有，先在远端装上。",
+          code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+        },
+        {
+          text: "用你已有的 SSH 访问把文件拉回来。-i 和 -p 的行为与 ssh 自身一致。",
+          code: ["relayium pull user@host:/path/to/files ./local-dest"],
+        },
+      ],
       body: [
         "pull 是 push 的镜像：不是等别人发东西给你，而是你通过已有的 SSH 权限主动连过去，把文件取回来。",
       ],
@@ -192,6 +371,55 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
         "文件会用逐文件 SHA-256 校验，中断后会自动续传（加 --no-resume 可以禁用）。",
         "-i 和 -p 的行为和 ssh 自己的 -i/-p 一样，用于指定身份文件或端口。",
       ],
+    },
+    {
+      heading: "出问题时怎么办",
+      body: [
+        "几乎所有失败的接收都逃不出这五种。你当时跑的是哪条命令，决定了适用哪一条；每一条都有一行可读的输出或一条可跑的命令来判定。",
+      ],
+      troubleshooting: {
+        label: "现象、检查、修复",
+        items: [
+          {
+            symptom: "你输入配对码，会合服务器拒绝了它。",
+            code: [
+              `relayium receive 483920
+# the rendezvous refuses the code`,
+            ],
+            fix: "几乎总是那五分钟已经过去了——配对码是从发送方 CLI 生成的那一刻起计时，而不是从你被告知的那一刻。让他重新跑一次 send，并立刻把新的数字念给你。输错一位数字从你这边看起来一模一样，所以在断定它过期之前，先把码复述回去核对一遍。",
+          },
+          {
+            symptom: "传输完成了，但你找不到文件。",
+            code: [
+              `relayium receive 483920 ./downloads`,
+            ],
+            fix: "不指定目标目录时，receive 会写进你执行它时所在的那个目录，而那通常不是你去找的地方。显式传一个目录，或者先跑 pwd 确认清楚。",
+          },
+          {
+            symptom: "失败并提示「no direct connection to the peer (both ends behind strict NAT?)」。",
+            code: [
+              `relayium receive 483920
+# no direct connection to the peer (both ends behind strict NAT?): …`,
+            ],
+            fix: "CLI 的配对码路径按设计只走直连：找不到直连路径时它宁可失败，也不会把你的文件绕经中继。这在你这边无解。让发送方改用 relayium up 下载链接；如果两台机器都归你控制，那就用 daemon 直连或走 SSH 的 push。",
+          },
+          {
+            symptom: "pull 立刻失败，提示找不到 relayium。",
+            code: [
+              `ssh user@host command -v relayium
+# (no output)`,
+            ],
+            fix: "pull 是在远端执行 relayium 的——在那次交换里远端才是发送方——而且它没有 push 那样的 tar 兜底。先在远端装好 CLI，再重跑 pull。",
+          },
+          {
+            symptom: "有机器推送到你的 serve 监听器，被拒绝了，而且从头到尾没问过你。",
+            code: [
+              `relayium serve --dir ~/incoming`,
+            ],
+            fix: "那个提示只在 serve 拥有终端时才存在。跑在 systemd 下、脚本里或管道后面时没人可问，所以陌生指纹会被直接拒绝。让推送方跑 relayium id，在这边用 relayium authorize <指纹> 预先授权，并且要用监听器运行时相同的 --config-dir。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -250,6 +478,45 @@ const ja = {
     },
     {
       heading: "receive: 相手がネットワークを越えてファイルを送ってくる",
+      prereqs: {
+        label: "手順1の前に必要なもの",
+        items: [
+          "このマシンに CLI。relayium version はバージョン文字列を表示します。command not found と返るなら、ここにはまだ入っていません。",
+          "いまサインイン済みで、いま端末の前にいる送信者。アカウントが要るのは送信者だけで、受信側がサインインすることはありません。",
+          "6桁の数字を、帯域外の手段で受け取ること。相手の CLI が発行した瞬間から5分間だけ有効なので、先にタイミングを合わせてください。",
+          "あとで6桁をもう一度読み返せる手段。SAS は画面上ではなく口頭で照合します。",
+          "相手側も CLI であること。ブラウザは CLI のペアリングコードに参加できません。手元にブラウザしかないなら、relayium up のリンクを頼んでください。",
+        ],
+      },
+      steps: [
+        {
+          text: "送信者が send を実行するタイミングを先に決めます。コードの有効期限は発行された瞬間から始まり、受け取った瞬間からではありません。",
+        },
+        {
+          text: "互いに信頼できる経路で6桁を受け取ります——通話、チャット、あるいは同じ部屋にいるならその場で。",
+        },
+        {
+          text: "ファイルを置きたいディレクトリで receive を実行するか、置き場所を明示します。",
+          code: ["relayium receive 483920", "relayium receive 483920 ./downloads"],
+        },
+        {
+          text: "両方の端末に確認コードが表示されたら、自分の側を読み上げて相手と一致するか確かめます。これはペアリングコードではなく、相手側がすり替えられていないことを否定できる唯一の材料です。",
+        },
+        {
+          text: "端末がプロンプトに戻るまで触らないでください。これは1つのライブセッションで、どちらかを閉じれば転送は止まります。",
+        },
+      ],
+      success: {
+        label: "受信が成功したときの見え方",
+        body: [
+          "接続は direct と表示され、両方の端末が同じ確認コードを表示します。コードが食い違うことだけは受け入れてはいけません——そこで止めて、相手がどのマシンにいるのかを確認してください。",
+        ],
+        code: [
+          `$ relayium receive 483920
+verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
+path: direct`,
+        ],
+      },
       body: [
         "これは relayium send の受信側です。相手は自分の側で relayium send <path> を実行します（事前に relayium login 済み）。相手の CLI が 5 分間有効な 6 桁の数字コードを発行して表示するので、通話やチャットなど二人が信頼できる手段でそれを伝えてもらいます。受け取ったコードで receive を実行します:",
       ],
@@ -269,6 +536,18 @@ relayium receive 483920 ./downloads`,
     },
     {
       heading: "serve: このマシンを待ち受け型の受信箱にする",
+      steps: [
+        {
+          text: "受信先ディレクトリを指定してリスナーを起動します。",
+          code: ["relayium serve --dir ~/incoming"],
+        },
+        {
+          text: "新しいマシンが初めて push してくると、serve はそのアドレスとフィンガープリントを示して確認を求めます。一度承認すれば、同じフィンガープリントからの push は以後そのまま通ります。",
+        },
+        {
+          text: "このリスナーを端末なしで動かすつもりなら、そのプロンプトを当てにしないでください。答える人がいないため、見知らぬ送信元は問答無用で拒否されます。次の節にある事前承認を使ってください。",
+        },
+      ],
       body: [
         "serve は逆方向に動作します。こちらから出向くのではなく、他のマシンが relayium:// 経由で直接プッシュしてきます——自分のノート PC が NAS へプッシュする、ビルドサーバーが成果物を自分のマシンへ落とすなど、すでに信頼しているマシン向けです。証明書ピンニング付き TLS 1.3 接続で、SSH もランデブーも不要です。",
       ],
@@ -296,6 +575,20 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     },
     {
       heading: "pull: すでに SSH でログインできるサーバーから取り込む",
+      steps: [
+        {
+          text: "リモートに本当に CLI が入っているか確認します。pull はリモート側で relayium を実行し、push と違って tar のフォールバックがないため、バイナリがなければコマンド全体が失敗します。",
+          code: ["ssh user@host command -v relayium"],
+        },
+        {
+          text: "入っていなければ、まずリモートに入れます。",
+          code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+        },
+        {
+          text: "既存の SSH アクセスでファイルを取り戻します。-i と -p は ssh 自身と同じ挙動です。",
+          code: ["relayium pull user@host:/path/to/files ./local-dest"],
+        },
+      ],
       body: [
         "pull は push の鏡像です。誰かが何かを送ってくるのを待つのではなく、すでに持っている SSH アクセスを使って自分から出向き、ファイルを取り込みます。",
       ],
@@ -305,6 +598,55 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
         "ファイルはファイルごとの SHA-256 チェックで検証され、中断しても自動的に再開します（--no-resume で無効化できます）。",
         "-i と -p は ssh 自体の -i/-p と同様に、特定のアイデンティティファイルやポートを指定するために使えます。",
       ],
+    },
+    {
+      heading: "うまくいかないとき",
+      body: [
+        "失敗する受信のほぼすべては次の5つのどれかです。どのコマンドを実行していたかで該当するものが決まり、どれにも読めば分かる1行か実行すれば決着がつくコマンドがあります。",
+      ],
+      troubleshooting: {
+        label: "症状、確認、対処",
+        items: [
+          {
+            symptom: "コードを入力したのに、ランデブーがそれを拒否する。",
+            code: [
+              `relayium receive 483920
+# the rendezvous refuses the code`,
+            ],
+            fix: "ほぼ確実に5分が経過しています。コードの有効期限は送信者の CLI が発行した瞬間から始まり、知らされた瞬間からではありません。もう一度 send を実行してもらい、新しい数字をその場で読み上げてもらってください。1桁の打ち間違いはこちらからは見分けがつかないので、期限切れと決めつける前に読み返して照合します。",
+          },
+          {
+            symptom: "転送は終わったのに、ファイルが見つからない。",
+            code: [
+              `relayium receive 483920 ./downloads`,
+            ],
+            fix: "宛先を指定しない場合、receive は実行したディレクトリに書き込みます。そこは探している場所とは限りません。明示的に指定するか、先に pwd で確かめてください。",
+          },
+          {
+            symptom: "「no direct connection to the peer (both ends behind strict NAT?)」で失敗する。",
+            code: [
+              `relayium receive 483920
+# no direct connection to the peer (both ends behind strict NAT?): …`,
+            ],
+            fix: "CLI のペアリング経路は設計上ダイレクト専用で、直接の経路が見つからないときはファイルをリレー経由にせず失敗します。こちら側でできることはありません。送信者に relayium up のダウンロードリンクを頼むか、双方が管理するマシン同士ならデーモン直結か SSH 経由の push を使ってください。",
+          },
+          {
+            symptom: "pull が即座に失敗し、relayium が見つからないと言われる。",
+            code: [
+              `ssh user@host command -v relayium
+# (no output)`,
+            ],
+            fix: "pull はリモート側で relayium を実行します——その交換ではリモートが送信側です——そして push のような tar フォールバックはありません。先にリモートへ CLI を入れてから pull をやり直してください。",
+          },
+          {
+            symptom: "あるマシンが serve リスナーに push して拒否されたのに、こちらには一度も確認が出なかった。",
+            code: [
+              `relayium serve --dir ~/incoming`,
+            ],
+            fix: "あの確認は serve に端末があるときにしか存在しません。systemd 配下、スクリプト内、パイプの先では尋ねる相手がいないため、未知のフィンガープリントは問答無用で拒否されます。送信側に relayium id を実行してもらい、こちらで relayium authorize <フィンガープリント> を、リスナーと同じ --config-dir で実行してください。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -361,6 +703,45 @@ const ko = {
     },
     {
       heading: "receive: 상대가 네트워크를 넘어 파일을 보낼 때",
+      prereqs: {
+        label: "1단계 전에 필요한 것",
+        items: [
+          "이 기기에 CLI. relayium version은 버전 문자열을 출력합니다. command not found가 나오면 여기에는 아직 설치되지 않은 것입니다.",
+          "지금 로그인되어 있고 지금 터미널 앞에 있는 발신자. 계정이 필요한 쪽은 발신자뿐이고, 받는 쪽은 로그인하지 않습니다.",
+          "여섯 자리 숫자를 대역 외 경로로 전달받을 것. 상대 CLI가 발급한 순간부터 5분간만 유효하므로 시점을 먼저 맞추세요.",
+          "나중에 여섯 자리를 다시 읽어 줄 수 있는 경로. SAS는 화면이 아니라 말로 대조합니다.",
+          "상대편도 CLI여야 합니다. 브라우저는 CLI 페어링 코드에 참여할 수 없습니다. 브라우저밖에 없다면 relayium up 링크를 요청하세요.",
+        ],
+      },
+      steps: [
+        {
+          text: "발신자가 send를 언제 실행할지 먼저 맞추세요. 코드는 발급된 순간부터 만료가 시작되며, 전달받은 순간부터가 아닙니다.",
+        },
+        {
+          text: "서로 신뢰하는 경로로 여섯 자리를 받으세요 — 통화, 채팅창, 아니면 같이 있는 그 방에서.",
+        },
+        {
+          text: "파일이 떨어질 디렉터리에서 receive를 실행하거나, 위치를 명시하세요.",
+          code: ["relayium receive 483920", "relayium receive 483920 ./downloads"],
+        },
+        {
+          text: "두 터미널에 확인 코드가 뜨면 자기 쪽 값을 소리 내어 읽고 상대와 일치하는지 확인하세요. 이것은 페어링 코드가 아니며, 상대 종단이 바꿔치기되지 않았음을 배제해 주는 유일한 근거입니다.",
+        },
+        {
+          text: "터미널이 프롬프트로 돌아올 때까지 건드리지 마세요. 이것은 하나의 실시간 세션이라 어느 쪽이든 닫으면 전송이 멈춥니다.",
+        },
+      ],
+      success: {
+        label: "성공적인 수신의 모습",
+        body: [
+          "연결이 direct로 표시되고, 두 터미널이 서로 같은 확인 코드를 출력합니다. 코드가 다른 경우만은 받아들이면 안 됩니다 — 거기서 멈추고 상대가 어느 기기에 있는지 확인하세요.",
+        ],
+        code: [
+          `$ relayium receive 483920
+verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
+path: direct`,
+        ],
+      },
       body: [
         "이것은 relayium send의 받는 쪽입니다. 상대는 자기 쪽에서 relayium send <path>를 실행합니다(미리 relayium login을 해 둔 상태로). 그러면 상대의 CLI가 5분간 유효한 6자리 숫자 코드를 발급해 출력하고, 상대는 통화나 채팅 등 서로 신뢰하는 채널로 그것을 알려줍니다. 받는 쪽에서는 그 코드로 receive를 실행합니다:",
       ],
@@ -380,6 +761,18 @@ relayium receive 483920 ./downloads`,
     },
     {
       heading: "serve: 이 기기를 대기형 수신함으로 만들기",
+      steps: [
+        {
+          text: "전송이 떨어질 디렉터리를 지정해 리스너를 시작합니다.",
+          code: ["relayium serve --dir ~/incoming"],
+        },
+        {
+          text: "새 기기가 처음 밀어 넣으면 serve가 그 주소와 지문을 보여 주며 묻습니다. 한 번 승인하면 같은 지문에서 오는 전송은 이후 조용히 통과합니다.",
+        },
+        {
+          text: "이 리스너를 터미널 없이 돌릴 예정이라면 그 프롬프트에 기대지 마세요. 답할 사람이 없으므로 낯선 발신자는 그대로 거부됩니다. 다음 절의 사전 승인을 쓰세요.",
+        },
+      ],
       body: [
         "serve는 반대 방향으로 동작합니다. 이쪽에서 다가가는 대신, 다른 기기가 relayium://를 통해 곧바로 푸시해 옵니다——이미 신뢰하는 기기, 예를 들어 자신의 노트북이 NAS로 푸시하거나 빌드 서버가 산출물을 내 기기에 떨어뜨리는 경우를 위한 것입니다. 인증서 고정 TLS 1.3 연결로, SSH도 랑데부도 필요 없습니다.",
       ],
@@ -407,6 +800,20 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     },
     {
       heading: "pull: 이미 SSH로 접속 가능한 서버에서 직접 가져오기",
+      steps: [
+        {
+          text: "원격에 CLI가 정말 있는지 확인하세요. pull은 원격에서 relayium을 실행하며, push와 달리 tar 대체 경로가 없어 바이너리가 없으면 명령 전체가 실패합니다.",
+          code: ["ssh user@host command -v relayium"],
+        },
+        {
+          text: "없다면 원격에 먼저 설치하세요.",
+          code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+        },
+        {
+          text: "이미 가진 SSH 접근으로 파일을 가져옵니다. -i와 -p는 ssh 자체와 똑같이 동작합니다.",
+          code: ["relayium pull user@host:/path/to/files ./local-dest"],
+        },
+      ],
       body: [
         "pull은 push의 거울상입니다. 누군가 무언가를 보내오기를 기다리는 대신, 이미 가진 SSH 접근 권한으로 직접 다가가 파일을 가져옵니다.",
       ],
@@ -416,6 +823,55 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
         "파일은 파일별 SHA-256 검사로 검증되며, 중단되면 자동으로 재개됩니다(--no-resume으로 비활성화 가능).",
         "-i와 -p는 ssh 자체의 -i/-p처럼 동작하며, 특정 신원 파일이나 포트를 지정하는 데 사용합니다.",
       ],
+    },
+    {
+      heading: "잘 안 될 때",
+      body: [
+        "실패하는 수신은 거의 모두 다섯 가지 중 하나입니다. 어떤 명령을 실행했는지가 해당 항목을 정하며, 각각 읽어서 판단할 한 줄이나 실행해서 결론 낼 명령이 있습니다.",
+      ],
+      troubleshooting: {
+        label: "증상, 확인, 해결",
+        items: [
+          {
+            symptom: "코드를 입력했는데 랑데부가 거부합니다.",
+            code: [
+              `relayium receive 483920
+# the rendezvous refuses the code`,
+            ],
+            fix: "거의 항상 5분이 지난 경우입니다. 코드는 발신자의 CLI가 발급한 순간부터 만료되며, 전달받은 시점부터가 아닙니다. 다시 send를 실행하게 하고 새 숫자를 바로 읽어 달라고 하세요. 한 자리 오타는 이쪽에서 보면 똑같아 보이므로, 만료라고 단정하기 전에 코드를 되읽어 대조하세요.",
+          },
+          {
+            symptom: "전송은 끝났는데 파일을 찾을 수 없습니다.",
+            code: [
+              `relayium receive 483920 ./downloads`,
+            ],
+            fix: "목적지를 주지 않으면 receive는 실행한 디렉터리에 씁니다. 그곳이 찾고 있던 위치인 경우는 드뭅니다. 위치를 명시하거나 먼저 pwd로 확인하세요.",
+          },
+          {
+            symptom: "\"no direct connection to the peer (both ends behind strict NAT?)\"로 실패합니다.",
+            code: [
+              `relayium receive 483920
+# no direct connection to the peer (both ends behind strict NAT?): …`,
+            ],
+            fix: "CLI 페어링 경로는 설계상 직결 전용이라, 직접 경로가 없으면 파일을 릴레이로 우회시키는 대신 실패합니다. 이쪽에서 고칠 수 있는 것은 없습니다. 발신자에게 relayium up 다운로드 링크를 요청하거나, 둘 다 관리하는 기기끼리라면 데몬 직결이나 SSH를 통한 push를 쓰세요.",
+          },
+          {
+            symptom: "pull이 곧바로 실패하며 relayium을 찾을 수 없다고 합니다.",
+            code: [
+              `ssh user@host command -v relayium
+# (no output)`,
+            ],
+            fix: "pull은 원격에서 relayium을 실행합니다 — 그 교환에서는 원격이 보내는 쪽입니다 — 그리고 push에 있는 tar 대체 경로가 없습니다. 원격에 CLI를 먼저 설치한 다음 pull을 다시 실행하세요.",
+          },
+          {
+            symptom: "어떤 기기가 serve 리스너로 밀어 넣었다가 거부되었는데, 한 번도 묻는 창이 뜨지 않았습니다.",
+            code: [
+              `relayium serve --dir ~/incoming`,
+            ],
+            fix: "그 프롬프트는 serve에 터미널이 있을 때만 존재합니다. systemd 아래, 스크립트 안, 파이프 뒤에서는 물어볼 상대가 없으므로 모르는 지문은 그대로 거부됩니다. 보내는 쪽에서 relayium id를 실행하게 하고, 여기서 relayium authorize <지문>을 리스너와 같은 --config-dir로 실행하세요.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -474,6 +930,45 @@ const de = {
     },
     {
       heading: "receive: jemand sendet dir eine Datei über Netzwerke hinweg",
+      prereqs: {
+        label: "Was du vor Schritt 1 brauchst",
+        items: [
+          "Die CLI auf diesem Rechner. relayium version gibt eine Versionszeile aus; antwortet die Shell mit command not found, ist sie hier noch nicht installiert.",
+          "Einen Sender, der gerade angemeldet und gerade am Terminal ist. Nur er braucht ein Konto — zum Empfangen meldest du dich nie an.",
+          "Die sechs Ziffern, über einen Nebenkanal. Sie leben fünf Minuten ab dem Moment, in dem seine CLI sie geprägt hat, also stimmt den Zeitpunkt vorher ab.",
+          "Einen Weg, ihm danach sechs weitere Ziffern vorzulesen: der SAS wird laut verglichen, nicht auf dem Bildschirm.",
+          "Die Gegenseite muss die CLI sein. Ein Browser kann einem CLI-Pairing-Code nicht beitreten — hast du nur einen, bitte um einen relayium up-Link.",
+        ],
+      },
+      steps: [
+        {
+          text: "Stimm mit dem Sender ab, wann er send ausführt. Der Code läuft ab dem Prägen ab, nicht ab dem Moment, in dem du ihn bekommst.",
+        },
+        {
+          text: "Nimm die sechs Ziffern über einen Kanal entgegen, dem ihr beide traut — ein Anruf, ein Chatfenster, der Raum, in dem ihr sitzt.",
+        },
+        {
+          text: "Führ receive in dem Verzeichnis aus, in dem die Dateien landen sollen, oder gib eines explizit an.",
+          code: ["relayium receive 483920", "relayium receive 483920 ./downloads"],
+        },
+        {
+          text: "Wenn beide Terminals einen Verifizierungscode zeigen, lies deinen laut vor und prüfe, ob er mit seinem übereinstimmt. Er ist nicht der Pairing-Code, und er ist das Einzige, was eine ausgetauschte Gegenstelle ausschließt.",
+        },
+        {
+          text: "Lass das Terminal in Ruhe, bis es zur Eingabeaufforderung zurückkehrt. Das ist eine laufende Sitzung: schließt eine Seite, stoppt die Übertragung.",
+        },
+      ],
+      success: {
+        label: "So sieht ein erfolgreicher Empfang aus",
+        body: [
+          "Die Verbindung wird als direct gemeldet, und beide Terminals zeigen denselben Verifizierungscode. Unterschiedliche Codes sind das eine Ergebnis, das du nicht akzeptieren darfst — hör auf und kläre mit dem Sender, an welchem Rechner er sitzt.",
+        ],
+        code: [
+          `$ relayium receive 483920
+verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
+path: direct`,
+        ],
+      },
       body: [
         "Das ist die Empfangsseite von relayium send. Die andere Person führt auf ihrer Seite relayium send <path> aus (nach relayium login); ihre CLI erzeugt einen Code aus 6 Ziffern, gültig für 5 Minuten, und gibt ihn aus. Sie teilt ihn dir über einen Kanal mit, dem ihr beide vertraut — ein Anruf, eine Chatnachricht. Du führst receive mit diesem Code aus:",
       ],
@@ -493,6 +988,18 @@ relayium receive 483920 ./downloads`,
     },
     {
       heading: "serve: diese Maschine zu einem lauschenden Eingangskorb machen",
+      steps: [
+        {
+          text: "Starte den Listener und nenne das Verzeichnis, in dem Pushes landen sollen.",
+          code: ["relayium serve --dir ~/incoming"],
+        },
+        {
+          text: "Beim ersten Push eines neuen Rechners zeigt serve dessen Adresse und Fingerprint und fragt nach. Einmal freigegeben, laufen spätere Pushes desselben Fingerprints stumm durch.",
+        },
+        {
+          text: "Soll dieser Listener ohne Terminal laufen, verlass dich nicht auf die Abfrage — niemand kann sie beantworten, und ein unbekannter Sender wird schlicht abgewiesen. Nimm stattdessen die Vorab-Freigabe aus dem nächsten Abschnitt.",
+        },
+      ],
       body: [
         "serve funktioniert umgekehrt: Statt dass du selbst aktiv wirst, pushen andere Maschinen direkt zu dir über relayium:// — gebaut für Maschinen, denen du schon vertraust, etwa dein eigener Laptop, der zu einem NAS pusht, oder ein Build-Server, der Artefakte auf einer Maschine ablegt, die dir gehört — über eine TLS-1.3-Verbindung mit Pinning, ohne SSH, ohne Rendezvous.",
       ],
@@ -520,6 +1027,20 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     },
     {
       heading: "pull: selbst auf einen Server zugreifen, in den du dich per SSH einloggen kannst",
+      steps: [
+        {
+          text: "Prüfe, ob die Gegenstelle die CLI überhaupt hat. pull führt relayium drüben aus, und anders als push gibt es keinen tar-Fallback — fehlt das Binary, scheitert der ganze Befehl.",
+          code: ["ssh user@host command -v relayium"],
+        },
+        {
+          text: "Fehlt es, installiere es dort zuerst.",
+          code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+        },
+        {
+          text: "Hol die Dateien über deinen vorhandenen SSH-Zugang zurück. -i und -p verhalten sich wie bei ssh selbst.",
+          code: ["relayium pull user@host:/path/to/files ./local-dest"],
+        },
+      ],
       body: [
         "pull ist das Spiegelbild von push: Statt darauf zu warten, dass dir jemand etwas sendet, greifst du über deinen bestehenden SSH-Zugang zu und holst Dateien zurück.",
       ],
@@ -529,6 +1050,55 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
         "Dateien werden mit einer SHA-256-Prüfung pro Datei verifiziert und setzen bei Unterbrechung automatisch fort (mit --no-resume deaktivierbar).",
         "-i und -p verhalten sich wie die eigenen -i/-p von ssh, für eine bestimmte Identitätsdatei oder einen bestimmten Port.",
       ],
+    },
+    {
+      heading: "Wenn es nicht funktioniert",
+      body: [
+        "Fünf Fehler decken fast jeden misslungenen Empfang ab. Welcher Befehl lief, entscheidet, welcher davon greift, und zu jedem gibt es eine Zeile zum Lesen oder einen Befehl zum Ausführen.",
+      ],
+      troubleshooting: {
+        label: "Symptom, Prüfung, Lösung",
+        items: [
+          {
+            symptom: "Du gibst den Code ein und der Rendezvous weist ihn ab.",
+            code: [
+              `relayium receive 483920
+# the rendezvous refuses the code`,
+            ],
+            fix: "Fast immer sind die fünf Minuten um — der Code verfällt ab dem Prägen durch die CLI des Senders, nicht ab dem Moment, in dem du ihn erfahren hast. Lass ihn send erneut ausführen und dir die frischen Ziffern sofort vorlesen. Eine vertippte Ziffer sieht von hier aus identisch aus, also lies sie zurück, bevor du auf Ablauf tippst.",
+          },
+          {
+            symptom: "Die Übertragung läuft durch, aber du findest die Dateien nicht.",
+            code: [
+              `relayium receive 483920 ./downloads`,
+            ],
+            fix: "Ohne Zielangabe schreibt receive in das Verzeichnis, aus dem du es gestartet hast — selten das, in dem du gesucht hast. Gib eines explizit an, oder führ vorher pwd aus.",
+          },
+          {
+            symptom: "Es scheitert mit \"no direct connection to the peer (both ends behind strict NAT?)\".",
+            code: [
+              `relayium receive 483920
+# no direct connection to the peer (both ends behind strict NAT?): …`,
+            ],
+            fix: "Der CLI-Pairing-Pfad ist bewusst nur direkt: gibt es keine direkte Route, scheitert er, statt deine Datei über ein Relay zu schicken. Auf deiner Seite ist da nichts zu machen. Bitte den Sender stattdessen um einen relayium up-Downloadlink, oder nutzt zwischen Rechnern, die euch beiden gehören, daemon-direct oder push über SSH.",
+          },
+          {
+            symptom: "pull scheitert sofort und beklagt, relayium sei nicht gefunden worden.",
+            code: [
+              `ssh user@host command -v relayium
+# (no output)`,
+            ],
+            fix: "pull führt relayium auf der Gegenstelle aus — dort ist sie der Sender — und es gibt keinen tar-Fallback wie bei push. Installiere die CLI zuerst drüben und starte den Pull neu.",
+          },
+          {
+            symptom: "Ein Rechner pusht an deinen serve-Listener und wird abgewiesen, ohne dass du je gefragt wurdest.",
+            code: [
+              `relayium serve --dir ~/incoming`,
+            ],
+            fix: "Die Abfrage existiert nur, wenn serve ein Terminal hat. Unter systemd, in einem Skript oder hinter einer Pipe ist niemand da, also wird ein unbekannter Fingerprint direkt abgelehnt. Lass den Sender relayium id ausführen und gib ihn hier mit relayium authorize <Fingerprint> frei — mit demselben --config-dir, unter dem der Listener läuft.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -587,6 +1157,45 @@ const fr = {
     },
     {
       heading: "receive : quelqu'un vous envoie un fichier à travers les réseaux",
+      prereqs: {
+        label: "Ce qu'il vous faut avant l'étape 1",
+        items: [
+          "La CLI sur cette machine. relayium version affiche un numéro de version ; si le shell répond command not found, elle n'y est pas encore installée.",
+          "Un expéditeur connecté et devant son terminal maintenant. Lui seul a besoin d'un compte — vous ne vous connectez jamais pour recevoir.",
+          "Les six chiffres, transmis hors bande. Ils vivent cinq minutes à partir du moment où sa CLI les a générés, alors convenez d'abord du moment.",
+          "Un moyen de lui relire six autres chiffres ensuite : le SAS se compare à voix haute, pas à l'écran.",
+          "L'autre extrémité doit être la CLI. Un navigateur ne peut pas rejoindre un code d'appairage CLI — si c'est tout ce que vous avez, demandez plutôt un lien relayium up.",
+        ],
+      },
+      steps: [
+        {
+          text: "Convenez avec l'expéditeur du moment où il lancera send. Le code commence à expirer dès sa génération, pas dès que vous le recevez.",
+        },
+        {
+          text: "Récupérez les six chiffres par un canal auquel vous faites confiance tous les deux — un appel, une fenêtre de discussion, la pièce où vous êtes.",
+        },
+        {
+          text: "Lancez receive depuis le répertoire où les fichiers doivent atterrir, ou indiquez-en un explicitement.",
+          code: ["relayium receive 483920", "relayium receive 483920 ./downloads"],
+        },
+        {
+          text: "Quand les deux terminaux affichent un code de vérification, lisez le vôtre à voix haute et vérifiez qu'il correspond au sien. Ce n'est pas le code d'appairage, et c'est la seule chose qui écarte une extrémité substituée.",
+        },
+        {
+          text: "Ne touchez plus au terminal jusqu'à ce qu'il revienne à l'invite. C'est une session en direct : fermer l'une des extrémités arrête le transfert.",
+        },
+      ],
+      success: {
+        label: "À quoi ressemble une réception réussie",
+        body: [
+          "La connexion est annoncée comme direct, et les deux terminaux affichent le même code de vérification. Des codes différents sont le seul résultat que vous ne devez pas accepter — arrêtez-vous et vérifiez avec l'expéditeur sur quelle machine il se trouve.",
+        ],
+        code: [
+          `$ relayium receive 483920
+verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
+path: direct`,
+        ],
+      },
       body: [
         "C'est le pendant côté réception de relayium send. L'autre personne exécute relayium send <path> de son côté (après relayium login) ; sa CLI génère un code de 6 chiffres, valable 5 minutes, et l'affiche. Elle vous le communique par un canal auquel vous faites tous deux confiance — un appel, un message. Vous exécutez receive avec ce code :",
       ],
@@ -606,6 +1215,18 @@ relayium receive 483920 ./downloads`,
     },
     {
       heading: "serve : transformer cette machine en boîte de réception à l'écoute",
+      steps: [
+        {
+          text: "Démarrez l'écouteur en nommant le répertoire où les envois doivent atterrir.",
+          code: ["relayium serve --dir ~/incoming"],
+        },
+        {
+          text: "Au premier envoi d'une machine inconnue, serve affiche son adresse et son empreinte et vous demande confirmation. Une fois approuvée, les envois suivants de cette empreinte passent sans rien dire.",
+        },
+        {
+          text: "Si cet écouteur doit tourner sans terminal, ne comptez pas sur cette demande — personne n'est là pour y répondre, et un expéditeur non reconnu est refusé d'emblée. Utilisez plutôt l'autorisation préalable décrite à la section suivante.",
+        },
+      ],
       body: [
         "serve fonctionne dans l'autre sens : au lieu que vous alliez chercher, d'autres machines vous envoient directement via relayium:// — conçu pour des machines en qui vous avez déjà confiance, comme votre propre ordinateur portable qui envoie vers un NAS, ou un serveur de build qui dépose des artefacts sur une machine qui vous appartient — via une connexion TLS 1.3 avec épinglage, sans SSH, sans rendez-vous.",
       ],
@@ -633,6 +1254,20 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     },
     {
       heading: "pull : aller chercher sur un serveur où vous pouvez déjà vous connecter en SSH",
+      steps: [
+        {
+          text: "Vérifiez que la machine distante a bien la CLI. pull exécute relayium à l'autre bout et, contrairement à push, il n'existe aucun repli sur tar : un binaire manquant fait échouer toute la commande.",
+          code: ["ssh user@host command -v relayium"],
+        },
+        {
+          text: "S'il manque, installez-le d'abord là-bas.",
+          code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+        },
+        {
+          text: "Rapatriez les fichiers via votre accès SSH existant. -i et -p se comportent comme ceux de ssh.",
+          code: ["relayium pull user@host:/path/to/files ./local-dest"],
+        },
+      ],
       body: [
         "pull est le miroir de push : au lieu d'attendre que quelqu'un vous envoie quelque chose, vous allez chercher via votre accès SSH existant et récupérez des fichiers.",
       ],
@@ -642,6 +1277,55 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
         "Les fichiers sont vérifiés par un contrôle SHA-256 par fichier et reprennent automatiquement en cas d'interruption (ajoutez --no-resume pour désactiver).",
         "-i et -p se comportent comme les -i/-p de ssh lui-même, pour un fichier d'identité ou un port spécifique.",
       ],
+    },
+    {
+      heading: "Quand ça ne marche pas",
+      body: [
+        "Cinq pannes couvrent presque toutes les réceptions ratées. La commande que vous exécutiez détermine laquelle s'applique, et chacune se tranche par une ligne à lire ou une commande à exécuter.",
+      ],
+      troubleshooting: {
+        label: "Symptôme, vérification, correction",
+        items: [
+          {
+            symptom: "Vous saisissez le code et le rendez-vous le refuse.",
+            code: [
+              `relayium receive 483920
+# the rendezvous refuses the code`,
+            ],
+            fix: "Presque toujours les cinq minutes sont écoulées — le code expire à partir de sa génération par la CLI de l'expéditeur, pas à partir du moment où on vous l'a donné. Demandez-lui de relancer send et de vous lire les chiffres frais dans la foulée. Un chiffre mal tapé est indiscernable d'ici, alors relisez-le-lui avant de conclure à l'expiration.",
+          },
+          {
+            symptom: "Le transfert se termine mais vous ne trouvez pas les fichiers.",
+            code: [
+              `relayium receive 483920 ./downloads`,
+            ],
+            fix: "Sans destination, receive écrit dans le répertoire depuis lequel vous l'avez lancé, rarement celui où vous cherchiez. Indiquez-en un explicitement, ou lancez pwd d'abord.",
+          },
+          {
+            symptom: "Il échoue avec « no direct connection to the peer (both ends behind strict NAT?) ».",
+            code: [
+              `relayium receive 483920
+# no direct connection to the peer (both ends behind strict NAT?): …`,
+            ],
+            fix: "Le chemin d'appairage de la CLI est délibérément direct uniquement : faute de route directe, il échoue plutôt que de faire transiter votre fichier par un relais. Rien de votre côté n'y changera quoi que ce soit. Demandez plutôt à l'expéditeur un lien de téléchargement relayium up, ou, entre machines que vous contrôlez tous les deux, passez par le daemon direct ou par push via SSH.",
+          },
+          {
+            symptom: "pull échoue immédiatement en signalant que relayium est introuvable.",
+            code: [
+              `ssh user@host command -v relayium
+# (no output)`,
+            ],
+            fix: "pull exécute relayium sur la machine distante — c'est elle l'expéditeur dans cet échange — et il n'y a pas de repli sur tar comme pour push. Installez d'abord la CLI là-bas, puis relancez le pull.",
+          },
+          {
+            symptom: "Une machine pousse vers votre écouteur serve et se fait refuser sans qu'on vous ait jamais demandé quoi que ce soit.",
+            code: [
+              `relayium serve --dir ~/incoming`,
+            ],
+            fix: "Cette demande n'existe que si serve dispose d'un terminal. Sous systemd, dans un script ou derrière un tube, il n'y a personne à qui demander, donc une empreinte inconnue est refusée d'emblée. Faites exécuter relayium id à l'expéditeur et autorisez-la ici avec relayium authorize <empreinte>, sous le même --config-dir que l'écouteur.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -700,6 +1384,45 @@ const ar = {
     },
     {
       heading: "receive: شخص يرسل إليك ملفًا عبر الشبكات",
+      prereqs: {
+        label: "ما تحتاجه قبل الخطوة 1",
+        items: [
+          "الـ CLI على هذا الجهاز. يطبع relayium version سطر إصدار، وإذا ردّت الصدفة بـ command not found فهو غير مثبَّت هنا بعد.",
+          "مرسِل مسجَّل الدخول وجالس أمام طرفيته الآن. وهو وحده من يحتاج حسابًا — أما أنت فلا تسجّل الدخول للاستقبال إطلاقًا.",
+          "الأرقام الستة، تصلك عبر قناة خارجة عن المسار. وهي تعيش خمس دقائق من لحظة توليد الـ CLI لديه لها، فاتفقا على اللحظة أولًا.",
+          "وسيلة تقرأ بها ستة أرقام أخرى عليه بعد ذلك: فالـ SAS يُقارَن نطقًا لا على الشاشة.",
+          "أن يكون الطرف الآخر هو الـ CLI. فالمتصفح لا يستطيع الانضمام إلى رمز اقتران خاص بالـ CLI — وإن كان المتصفح كل ما لديك فاطلب رابط relayium up بدلًا منه.",
+        ],
+      },
+      steps: [
+        {
+          text: "اتفق مع المرسِل على موعد تشغيله لـ send. فالرمز يبدأ بالانتهاء من لحظة توليده لا من لحظة وصوله إليك.",
+        },
+        {
+          text: "خذ الأرقام الستة عبر قناة يثق بها كلاكما — مكالمة، أو نافذة محادثة، أو الغرفة التي تجلسان فيها.",
+        },
+        {
+          text: "شغّل receive من الدليل الذي يُفترض أن تصل إليه الملفات، أو سمِّ دليلًا صراحةً.",
+          code: ["relayium receive 483920", "relayium receive 483920 ./downloads"],
+        },
+        {
+          text: "حين تطبع الطرفيتان رمز تحقّق، اقرأ رمزك بصوت مسموع وتأكّد أنه يطابق رمزه. إنه ليس رمز الاقتران، وهو الشيء الوحيد الذي يستبعد استبدال الطرف المقابل.",
+        },
+        {
+          text: "اترك الطرفية وشأنها حتى تعود إلى المحث. فهذه جلسة حيّة واحدة: إغلاق أي طرف يوقف النقل.",
+        },
+      ],
+      success: {
+        label: "كيف يبدو استقبال ناجح",
+        body: [
+          "يُعلَن الاتصال بأنه direct، وتطبع الطرفيتان رمز التحقّق نفسه. واختلاف الرمزين هو النتيجة الوحيدة التي يجب ألّا تقبلها — توقّف وتحقّق مع المرسِل من الجهاز الذي يجلس عليه.",
+        ],
+        code: [
+          `$ relayium receive 483920
+verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
+path: direct`,
+        ],
+      },
       body: [
         "هذا هو نصف الاستقبال من relayium send. يشغّل الطرف الآخر ‎relayium send <path>‎ من جهته (بعد relayium login)، فتُصدر واجهة CLI لديه رمزًا من 6 أرقام صالحًا لـ 5 دقائق وتطبعه. ثم يخبرك به عبر أي قناة تثقان بها كلاكما — مكالمة، رسالة محادثة. تشغّل أنت receive بذلك الرمز:",
       ],
@@ -719,6 +1442,18 @@ relayium receive 483920 ./downloads`,
     },
     {
       heading: "serve: حوّل هذا الجهاز إلى صندوق وارد مُستمِع",
+      steps: [
+        {
+          text: "شغّل المُنصِت مع تسمية الدليل الذي ستصل إليه الدفعات.",
+          code: ["relayium serve --dir ~/incoming"],
+        },
+        {
+          text: "عند أول دفعة من جهاز جديد، يعرض serve عنوانه وبصمته ويسألك. وافق مرة واحدة، فتمر الدفعات التالية من البصمة نفسها بصمت.",
+        },
+        {
+          text: "إن كان هذا المُنصِت سيعمل بلا طرفية، فلا تعتمد على ذلك السؤال — لا أحد هناك ليجيب عنه، والمرسِل غير المعروف يُرفَض من فوره. استخدم بدلًا من ذلك التصريح المسبق الموصوف في القسم التالي.",
+        },
+      ],
       body: [
         "يعمل serve بالعكس: بدل أن تمدّ يدك أنت، تدفع أجهزة أخرى إليك مباشرةً عبر relayium:// — مصمَّم للأجهزة التي تثق بها أصلًا، مثل حاسوبك المحمول يدفع إلى NAS، أو خادم بناء يُسقط منتجاته على جهاز تملكه — عبر اتصال TLS 1.3 مثبَّت، بلا SSH وبلا تعارف.",
       ],
@@ -746,6 +1481,20 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     },
     {
       heading: "pull: مدّ يدك واجلب من خادم يمكنك تسجيل الدخول إليه عبر ssh",
+      steps: [
+        {
+          text: "تأكّد أن الجهاز البعيد يملك الـ CLI فعلًا. فـ pull يشغّل relayium على الطرف البعيد، وخلافًا لـ push لا يوجد بديل احتياطي عبر tar، فغياب الثنائي يُفشل الأمر كله.",
+          code: ["ssh user@host command -v relayium"],
+        },
+        {
+          text: "إن كان غائبًا، ثبّته هناك أولًا.",
+          code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+        },
+        {
+          text: "اسحب الملفات عبر وصول SSH الذي تملكه أصلًا. وتتصرّف ‎-i‎ و‎-p‎ تمامًا كنظيرتيهما في ssh.",
+          code: ["relayium pull user@host:/path/to/files ./local-dest"],
+        },
+      ],
       body: [
         "‏pull هو مرآة push: بدل انتظار أن يرسل إليك أحد شيئًا، تمدّ يدك عبر وصول SSH الموجود لديك وتجلب الملفات.",
       ],
@@ -755,6 +1504,55 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
         "تُتحقَّق الملفات بفحص SHA-256 لكل ملف وتستأنف تلقائيًا إذا انقطعت (أضف --no-resume لتعطيل ذلك).",
         "‏-i و -p تتصرفان مثل -i/-p الخاصتين بـ ssh نفسه، لملف هوية أو منفذ محدد.",
       ],
+    },
+    {
+      heading: "حين لا ينجح الأمر",
+      body: [
+        "خمسة إخفاقات تغطي تقريبًا كل استقبال فاشل. والأمر الذي كنت تشغّله يحدّد أيها ينطبق، ولكلٍّ منها سطر تقرؤه أو أمر تشغّله يحسم المسألة.",
+      ],
+      troubleshooting: {
+        label: "العَرَض، الفحص، الإصلاح",
+        items: [
+          {
+            symptom: "تُدخِل الرمز فيرفضه خادم اللقاء.",
+            code: [
+              `relayium receive 483920
+# the rendezvous refuses the code`,
+            ],
+            fix: "غالبًا انقضت الدقائق الخمس — فالرمز ينتهي ابتداءً من لحظة توليد الـ CLI لدى المرسِل له، لا من لحظة إخبارك به. اطلب منه تشغيل send مرة أخرى وقراءة الأرقام الجديدة عليك فورًا. وخطأ رقم واحد يبدو من هنا مطابقًا تمامًا، فأعد قراءة الرمز عليه قبل أن تفترض أنه انتهى.",
+          },
+          {
+            symptom: "يكتمل النقل لكنك لا تجد الملفات.",
+            code: [
+              `relayium receive 483920 ./downloads`,
+            ],
+            fix: "من دون تحديد وجهة، يكتب receive في الدليل الذي شغّلته منه، وهو نادرًا ما يكون المكان الذي بحثت فيه. حدّد دليلًا صراحةً، أو شغّل pwd أولًا لتتيقّن.",
+          },
+          {
+            symptom: "يفشل برسالة «no direct connection to the peer (both ends behind strict NAT?)».",
+            code: [
+              `relayium receive 483920
+# no direct connection to the peer (both ends behind strict NAT?): …`,
+            ],
+            fix: "مسار الاقتران في الـ CLI مباشر فقط بحكم التصميم: فحين لا يوجد طريق مباشر يفشل بدل أن يمرّر ملفك عبر مُرحِّل. ولا شيء من جهتك يصلح ذلك. اطلب من المرسِل رابط تنزيل relayium up بدلًا منه، أو استخدم الاتصال المباشر بين الخادمين أو push عبر SSH بين جهازين تتحكّم فيهما.",
+          },
+          {
+            symptom: "يفشل pull فورًا شاكيًا أن relayium غير موجود.",
+            code: [
+              `ssh user@host command -v relayium
+# (no output)`,
+            ],
+            fix: "يشغّل pull أمر relayium على الجهاز البعيد — فهو المرسِل في ذلك التبادل — ولا يوجد بديل احتياطي عبر tar كما في push. ثبّت الـ CLI على الجهاز البعيد أولًا ثم أعد تشغيل pull.",
+          },
+          {
+            symptom: "جهاز يدفع إلى مُنصِت serve لديك فيُرفَض دون أن تُسأل قط.",
+            code: [
+              `relayium serve --dir ~/incoming`,
+            ],
+            fix: "ذلك السؤال لا يوجد إلا حين تكون لـ serve طرفية. أما تحت systemd أو داخل سكربت أو خلف أنبوب فلا أحد ليُسأل، فتُرفَض البصمة المجهولة من فورها. اطلب من المرسِل تشغيل relayium id، وصرّح لها هنا بـ relayium authorize <البصمة>، بالـ ‎--config-dir‎ نفسه الذي يعمل به المُنصِت.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -813,6 +1611,45 @@ const es = {
     },
     {
       heading: "receive: alguien te envía un archivo entre redes",
+      prereqs: {
+        label: "Lo que necesitas antes del paso 1",
+        items: [
+          "La CLI en esta máquina. relayium version imprime una cadena de versión; si el shell responde command not found, aquí todavía no está instalada.",
+          "Un emisor con la sesión iniciada y delante de su terminal ahora mismo. Solo él necesita cuenta: para recibir no inicias sesión nunca.",
+          "Los seis dígitos, por un canal aparte. Viven cinco minutos desde el momento en que su CLI los acuñó, así que acordad antes el momento.",
+          "Una forma de leerle después otros seis dígitos: el SAS se compara en voz alta, no en pantalla.",
+          "El otro extremo tiene que ser la CLI. Un navegador no puede unirse a un código de emparejamiento de la CLI: si es lo único que tienes, pide un enlace de relayium up.",
+        ],
+      },
+      steps: [
+        {
+          text: "Acuerda con el emisor cuándo va a ejecutar send. El código empieza a caducar en cuanto se acuña, no cuando te llega.",
+        },
+        {
+          text: "Recibe los seis dígitos por un canal en el que ambos confiéis: una llamada, una ventana de chat, la habitación en la que estáis.",
+        },
+        {
+          text: "Ejecuta receive desde el directorio donde deban caer los archivos, o nombra uno explícitamente.",
+          code: ["relayium receive 483920", "relayium receive 483920 ./downloads"],
+        },
+        {
+          text: "Cuando ambos terminales impriman un código de verificación, lee el tuyo en voz alta y comprueba que coincide con el suyo. No es el código de emparejamiento, y es lo único que descarta un extremo suplantado.",
+        },
+        {
+          text: "No toques el terminal hasta que vuelva al prompt. Es una sola sesión en vivo: cerrar cualquiera de los dos extremos detiene la transferencia.",
+        },
+      ],
+      success: {
+        label: "Qué aspecto tiene una recepción correcta",
+        body: [
+          "La conexión se anuncia como direct y ambos terminales imprimen el mismo código de verificación. Que los códigos difieran es el único resultado que no debes aceptar: para y comprueba con el emisor en qué máquina está.",
+        ],
+        code: [
+          `$ relayium receive 483920
+verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
+path: direct`,
+        ],
+      },
       body: [
         "Esta es la mitad receptora de relayium send. La otra persona ejecuta relayium send <path> en su extremo (tras relayium login); su CLI genera un código de 6 dígitos, válido 5 minutos, y lo imprime. Te dice cuál es por cualquier canal en el que ambos confíen — una llamada, un mensaje de chat. Tú ejecutas receive con ese código:",
       ],
@@ -832,6 +1669,18 @@ relayium receive 483920 ./downloads`,
     },
     {
       heading: "serve: convierte esta máquina en un buzón a la escucha",
+      steps: [
+        {
+          text: "Arranca el receptor nombrando el directorio donde deben caer los envíos.",
+          code: ["relayium serve --dir ~/incoming"],
+        },
+        {
+          text: "Cuando una máquina nueva empuja por primera vez, serve muestra su dirección y su huella y te pregunta. Apruébala una vez y los envíos posteriores de esa huella pasan en silencio.",
+        },
+        {
+          text: "Si este receptor va a funcionar sin terminal, no cuentes con esa pregunta: no hay nadie para responderla y un emisor desconocido se rechaza sin más. Usa la autorización previa de la sección siguiente.",
+        },
+      ],
       body: [
         "serve funciona al revés: en lugar de que seas tú quien va a buscar, otras máquinas te envían directamente por relayium:// — pensado para máquinas en las que ya confías, como tu propio portátil enviando a un NAS, o un servidor de compilación dejando artefactos en una máquina que es tuya — por una conexión TLS 1.3 con anclaje, sin SSH, sin punto de encuentro.",
       ],
@@ -859,6 +1708,20 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     },
     {
       heading: "pull: ve a buscar y recupera de un servidor al que puedes conectarte por ssh",
+      steps: [
+        {
+          text: "Comprueba que la máquina remota tiene realmente la CLI. pull ejecuta relayium en el otro extremo y, a diferencia de push, no hay repliegue a tar: si falta el binario, falla la orden entera.",
+          code: ["ssh user@host command -v relayium"],
+        },
+        {
+          text: "Si falta, instálala allí primero.",
+          code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+        },
+        {
+          text: "Trae los archivos por tu acceso SSH existente. -i y -p se comportan como los de ssh.",
+          code: ["relayium pull user@host:/path/to/files ./local-dest"],
+        },
+      ],
       body: [
         "pull es el espejo de push: en lugar de esperar a que alguien te envíe algo, vas a buscar por tu acceso SSH existente y recuperas archivos.",
       ],
@@ -868,6 +1731,55 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
         "Los archivos se verifican con una comprobación SHA-256 por archivo y se reanudan automáticamente si se interrumpen (añade --no-resume para desactivarlo).",
         "-i y -p se comportan como los propios -i/-p de ssh, para un archivo de identidad o un puerto específico.",
       ],
+    },
+    {
+      heading: "Cuando no funciona",
+      body: [
+        "Cinco fallos cubren casi todas las recepciones fallidas. Qué orden estabas ejecutando decide cuál aplica, y cada uno se zanja con una línea que leer o una orden que ejecutar.",
+      ],
+      troubleshooting: {
+        label: "Síntoma, comprobación, solución",
+        items: [
+          {
+            symptom: "Escribes el código y el rendezvous lo rechaza.",
+            code: [
+              `relayium receive 483920
+# the rendezvous refuses the code`,
+            ],
+            fix: "Casi siempre han pasado los cinco minutos: el código caduca desde que lo acuñó la CLI del emisor, no desde que te lo dijeron. Pídele que ejecute send otra vez y que te lea los dígitos nuevos en el momento. Un dígito mal tecleado es indistinguible desde aquí, así que reléeselo antes de dar por hecho que caducó.",
+          },
+          {
+            symptom: "La transferencia termina pero no encuentras los archivos.",
+            code: [
+              `relayium receive 483920 ./downloads`,
+            ],
+            fix: "Sin destino, receive escribe en el directorio desde el que lo lanzaste, que rara vez es donde estabas mirando. Indica uno explícitamente, o ejecuta pwd antes.",
+          },
+          {
+            symptom: "Falla con \"no direct connection to the peer (both ends behind strict NAT?)\".",
+            code: [
+              `relayium receive 483920
+# no direct connection to the peer (both ends behind strict NAT?): …`,
+            ],
+            fix: "La ruta de emparejamiento de la CLI es solo directa por diseño: cuando no hay ruta directa, falla en vez de encaminar tu archivo por un retransmisor. Desde tu lado no hay arreglo. Pide al emisor un enlace de descarga de relayium up, o, entre máquinas que ambos controléis, usad el modo directo entre demonios o push por SSH.",
+          },
+          {
+            symptom: "pull falla de inmediato quejándose de que no encuentra relayium.",
+            code: [
+              `ssh user@host command -v relayium
+# (no output)`,
+            ],
+            fix: "pull ejecuta relayium en la máquina remota —ahí es ella la emisora— y no hay repliegue a tar como en push. Instala primero la CLI allí y vuelve a lanzar el pull.",
+          },
+          {
+            symptom: "Una máquina empuja a tu receptor serve y es rechazada sin que nunca te pregunten.",
+            code: [
+              `relayium serve --dir ~/incoming`,
+            ],
+            fix: "Esa pregunta solo existe si serve tiene terminal. Bajo systemd, dentro de un script o detrás de una tubería no hay a quién preguntar, así que una huella desconocida se rechaza sin más. Haz que el emisor ejecute relayium id y autorízala aquí con relayium authorize <huella>, con el mismo --config-dir bajo el que corre el receptor.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -926,6 +1838,45 @@ const pt = {
     },
     {
       heading: "receive: alguém envia um arquivo para você entre redes",
+      prereqs: {
+        label: "O que você precisa antes do passo 1",
+        items: [
+          "A CLI nesta máquina. relayium version imprime uma linha de versão; se o shell responder command not found, ela ainda não está instalada aqui.",
+          "Um remetente com sessão iniciada e diante do terminal agora. Só ele precisa de conta — você nunca faz login para receber.",
+          "Os seis dígitos, por um canal à parte. Eles vivem cinco minutos a partir do momento em que a CLI dele os gerou, então combinem antes a hora.",
+          "Um jeito de ler outros seis dígitos de volta para ele depois: o SAS se compara em voz alta, não na tela.",
+          "A outra ponta precisa ser a CLI. Um navegador não consegue entrar num código de emparelhamento da CLI — se é só o que você tem, peça um link do relayium up.",
+        ],
+      },
+      steps: [
+        {
+          text: "Combine com o remetente quando ele vai rodar o send. O código começa a expirar assim que é gerado, não quando chega até você.",
+        },
+        {
+          text: "Receba os seis dígitos por um canal em que os dois lados confiem — uma ligação, uma janela de conversa, a sala em que estão.",
+        },
+        {
+          text: "Rode o receive no diretório onde os arquivos devem cair, ou nomeie um explicitamente.",
+          code: ["relayium receive 483920", "relayium receive 483920 ./downloads"],
+        },
+        {
+          text: "Quando os dois terminais imprimirem um código de verificação, leia o seu em voz alta e confirme que bate com o dele. Ele não é o código de emparelhamento, e é a única coisa que descarta uma ponta trocada.",
+        },
+        {
+          text: "Não mexa no terminal até ele voltar ao prompt. É uma única sessão ao vivo: fechar qualquer uma das pontas interrompe a transferência.",
+        },
+      ],
+      success: {
+        label: "Como é um recebimento bem-sucedido",
+        body: [
+          "A conexão é anunciada como direct e os dois terminais imprimem o mesmo código de verificação. Códigos diferentes são o único resultado que você não deve aceitar — pare e confira com o remetente em qual máquina ele está.",
+        ],
+        code: [
+          `$ relayium receive 483920
+verification code (SAS): 271044 — not the pairing code; compare it on both ends to rule out a substituted endpoint
+path: direct`,
+        ],
+      },
       body: [
         "Esta é a metade receptora do relayium send. A outra pessoa executa relayium send <path> do lado dela (depois de relayium login); a CLI dela gera um código de 6 dígitos, válido por 5 minutos, e o exibe. Ela te diz qual é por qualquer canal em que ambos confiem — uma ligação, uma mensagem de chat. Você executa receive com esse código:",
       ],
@@ -945,6 +1896,18 @@ relayium receive 483920 ./downloads`,
     },
     {
       heading: "serve: transforme esta máquina em uma caixa de entrada à escuta",
+      steps: [
+        {
+          text: "Inicie o receptor nomeando o diretório onde os envios devem cair.",
+          code: ["relayium serve --dir ~/incoming"],
+        },
+        {
+          text: "Quando uma máquina nova empurra pela primeira vez, o serve mostra o endereço e a impressão digital dela e pergunta. Aprove uma vez e os envios seguintes daquela impressão passam em silêncio.",
+        },
+        {
+          text: "Se este receptor for rodar sem terminal, não conte com essa pergunta: não há ninguém para responder, e um remetente desconhecido é recusado de cara. Use a autorização prévia descrita na próxima seção.",
+        },
+      ],
       body: [
         "serve funciona ao contrário: em vez de você ir buscar, outras máquinas enviam diretamente para você por relayium:// — feito para máquinas em que você já confia, como seu próprio notebook enviando para um NAS, ou um servidor de compilação despejando artefatos em uma máquina que é sua — por uma conexão TLS 1.3 com fixação, sem SSH, sem encontro.",
       ],
@@ -972,6 +1935,20 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
     },
     {
       heading: "pull: vá buscar e recupere de um servidor ao qual você consegue se conectar por ssh",
+      steps: [
+        {
+          text: "Confirme que a máquina remota realmente tem a CLI. O pull executa o relayium do outro lado e, ao contrário do push, não existe recurso ao tar: sem o binário, o comando inteiro falha.",
+          code: ["ssh user@host command -v relayium"],
+        },
+        {
+          text: "Se estiver faltando, instale lá primeiro.",
+          code: ["curl -fsSL https://relayium.com/install.sh | sh"],
+        },
+        {
+          text: "Traga os arquivos pelo acesso SSH que você já tem. -i e -p se comportam como os do ssh.",
+          code: ["relayium pull user@host:/path/to/files ./local-dest"],
+        },
+      ],
       body: [
         "pull é o espelho do push: em vez de esperar que alguém envie algo para você, você vai buscar pelo seu acesso SSH existente e recupera arquivos.",
       ],
@@ -981,6 +1958,55 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
         "Os arquivos são verificados com uma checagem SHA-256 por arquivo e retomam automaticamente se interrompidos (adicione --no-resume para desativar).",
         "-i e -p se comportam como os próprios -i/-p do ssh, para um arquivo de identidade ou porta específicos.",
       ],
+    },
+    {
+      heading: "Quando não funciona",
+      body: [
+        "Cinco falhas cobrem quase todo recebimento malsucedido. O comando que você estava rodando decide qual delas se aplica, e cada uma se resolve com uma linha para ler ou um comando para rodar.",
+      ],
+      troubleshooting: {
+        label: "Sintoma, checagem, correção",
+        items: [
+          {
+            symptom: "Você digita o código e o rendezvous recusa.",
+            code: [
+              `relayium receive 483920
+# the rendezvous refuses the code`,
+            ],
+            fix: "Quase sempre os cinco minutos já passaram: o código expira a partir de quando a CLI do remetente o gerou, não de quando você foi avisado. Peça para ele rodar o send de novo e ler os dígitos novos na hora. Um dígito digitado errado é indistinguível daqui, então releia o código para ele antes de concluir que expirou.",
+          },
+          {
+            symptom: "A transferência termina mas você não acha os arquivos.",
+            code: [
+              `relayium receive 483920 ./downloads`,
+            ],
+            fix: "Sem destino, o receive escreve no diretório de onde você o executou, que raramente é onde você estava procurando. Passe um explicitamente, ou rode pwd antes.",
+          },
+          {
+            symptom: "Falha com \"no direct connection to the peer (both ends behind strict NAT?)\".",
+            code: [
+              `relayium receive 483920
+# no direct connection to the peer (both ends behind strict NAT?): …`,
+            ],
+            fix: "O caminho de emparelhamento da CLI é direto por projeto: quando não existe rota direta, ele falha em vez de mandar seu arquivo por um retransmissor. Do seu lado não há conserto. Peça ao remetente um link de download do relayium up, ou, entre máquinas que os dois controlam, use o modo direto entre daemons ou o push por SSH.",
+          },
+          {
+            symptom: "O pull falha na hora reclamando que não achou o relayium.",
+            code: [
+              `ssh user@host command -v relayium
+# (no output)`,
+            ],
+            fix: "O pull executa o relayium na máquina remota — nessa troca é ela quem envia — e não há recurso ao tar como no push. Instale a CLI lá primeiro e rode o pull de novo.",
+          },
+          {
+            symptom: "Uma máquina empurra para o seu receptor serve e é recusada sem que você seja perguntado.",
+            code: [
+              `relayium serve --dir ~/incoming`,
+            ],
+            fix: "Essa pergunta só existe quando o serve tem terminal. Sob systemd, dentro de um script ou atrás de um pipe não há a quem perguntar, então uma impressão digital desconhecida é recusada de cara. Peça ao remetente para rodar relayium id e autorize aqui com relayium authorize <impressão>, usando o mesmo --config-dir sob o qual o receptor roda.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -1019,6 +2045,6 @@ relayium serve --dir ~/incoming --port 9031 --allow-delete`,
 export default {
   slug: "guides/receive-files-from-the-command-line",
   published: "2026-07-09",
-  updated: "2026-07-31",
+  updated: "2026-08-06",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

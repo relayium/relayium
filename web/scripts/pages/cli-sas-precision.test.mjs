@@ -23,7 +23,7 @@ const localeTokens = {
 // tutorial (cli-tutorial-structure.test.mjs) and re-dated for it; croc and
 // receive were untouched by that batch and keep the earlier date. Pinning them
 // separately is the point — a single shared date would hide exactly that.
-const REVISED = { send: "2026-08-05", croc: "2026-07-31", receive: "2026-07-31" };
+const REVISED = { send: "2026-08-05", croc: "2026-07-31", receive: "2026-08-06" };
 
 describe("CLI article SAS precision", () => {
   it("keeps all three articles current and structurally complete in nine locales", () => {
