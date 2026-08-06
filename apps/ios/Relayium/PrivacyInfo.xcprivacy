@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- Apple requires this file for App Store submission, and it is the app's own
+     public statement about what it does with data. Every entry below is traced
+     to a specific call site, and `IOSPrivacyManifestTests` re-derives the list
+     from the source so an added API or a removed one cannot leave this file
+     quietly wrong.
+
+     Over-declaring is as much a false statement as under-declaring, so nothing
+     here is included "to be safe". Disk space, active keyboard, and the file
+     timestamp APIs beyond the one below are all absent because this app does
+     not call them.
+
+     Note the Share extension has its OWN manifest, with a shorter list: it
+     never reaches the network and never touches user defaults. -->
+<dict>
+	<!-- Nothing here tracks. There is no analytics SDK, no advertising
+	     identifier and no third-party network destination in this binary, so
+	     there are no tracking domains to declare either. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<!-- The email address a user types to register or sign in, sent to
+		     Relayium's own server (`POST /api/auth/register`,
+		     `/api/auth/email/resend` — `AccountClient.swift`). Linked to the
+		     account by definition, since it IS the account identifier.
+
+		     **The files themselves are deliberately not listed, and that is not
+		     an omission.** They are encrypted on the device and the server sees
+		     ciphertext, so no file content or file metadata is collected in
+		     Apple's sense. That is the product's central promise, and stating it
+		     here is the same claim the website makes. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- `VerificationPreference` stores whether this device blocks on the
+		     SAS comparison, in `UserDefaults.standard` — this app's own domain,
+		     readable by nothing else. `SharedDraftInbox` records which shared
+		     drafts have been handed to the send flow, in the same place. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<!-- `SharedDraftStore.stale(_:grace:now:)` reads `.modificationDate` to
+		     decide whether an interrupted draft is old enough to sweep. The files
+		     are inside the app group container and nowhere else, which is exactly
+		     what DDA9.1 covers. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>DDA9.1</string>
+			</array>
+		</dict>
+		<!-- `WebRTCLinkTransport` measures its establishment deadlines against
+		     `ProcessInfo.systemUptime` rather than a wall clock, so that changing
+		     the device's date cannot expire a live connection. That is elapsed
+		     time between events inside the app, which is 35F9.1. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- The Share extension's own manifest, and deliberately shorter than the app's.
+     An appex is a separate bundle and Apple reads a separate file for it, so
+     copying the app's list here would declare APIs this process never calls —
+     which is a false statement in the direction people assume is safe.
+
+     What this target actually is: a staging process. It copies what the user
+     shared into the App Group and stops. It links only `RelayiumShareKit`, holds
+     no network entitlement at all, and `IOSSurfaceGuardTests` scans its source
+     for `URLSession`, `AccountSession`, `bearerToken`, Keychain access and the
+     rest — so "it collects nothing" is enforced by the sandbox and by tests
+     rather than asserted here alone. -->
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<!-- Empty because this process reaches no network. The email address the
+	     containing app collects is collected by the APP, and is declared there. -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- The one required-reason API in `RelayiumShareKit`:
+		     `SharedDraftStore.stale(_:grace:now:)` reads `.modificationDate` to
+		     decide whether an interrupted draft is old enough to sweep. Files
+		     inside the app group container, which is DDA9.1.
+
+		     No `UserDefaults` entry: `VerificationPreference` and
+		     `SharedDraftInbox` live in `RelayiumAppKit`, which this target does
+		     not link. No `SystemBootTime`: `WebRTCLinkTransport` is in
+		     `RelayiumKit`, likewise not linked here. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>DDA9.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
