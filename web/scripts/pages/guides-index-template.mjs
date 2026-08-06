@@ -80,9 +80,17 @@ export function renderGuidesIndexPage({ lang, doc, groups, slug = "guides", only
   const ordered = only
     ? [[null, groups[only], null]]
     : [
-        [doc.categories.guides, groups.guides, null],
-        [doc.categories.howTo, groups.howTo, urlPath("how-to", lang)],
-        [doc.categories.compare, groups.compare, urlPath("compare", lang)],
+        // Five groups, in taxonomy order. The two that have a page of their own
+        // still link to it; the other three exist only as a heading here, which
+        // is what they were always worth.
+        // `?? []` because a caller may hand over only the groups it cares about
+        // (the category pages do). A missing group is an empty section, never a
+        // crash halfway through rendering the hub.
+        [doc.categories.scenario, groups.scenario ?? [], urlPath("how-to", lang)],
+        [doc.categories.cli, groups.cli ?? [], null],
+        [doc.categories.selfhost, groups.selfhost ?? [], null],
+        [doc.categories.concept, groups.concept ?? [], null],
+        [doc.categories.compare, groups.compare ?? [], urlPath("compare", lang)],
       ];
   const flat = ordered.flatMap(([, items]) => items);
   const ld = {

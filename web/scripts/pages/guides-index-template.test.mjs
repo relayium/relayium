@@ -7,9 +7,13 @@ const TEXT_WORD = {
   fr: /texte/i, ar: /(?<!م)نص/, es: /texto/i, pt: /texto/i,
 };
 
+// Keyed by the five taxonomy groups the hub renders (content/taxonomy.mjs), not
+// by URL prefix — the prefix is an address, the group is a reading order.
 const groups = {
-  guides: [{ slug: "guides/y", title: "Guide Y" }],
-  howTo: [{ slug: "how-to/x", title: "Howto X" }],
+  scenario: [{ slug: "how-to/x", title: "Howto X" }],
+  cli: [{ slug: "guides/y", title: "Guide Y" }],
+  selfhost: [{ slug: "guides/z", title: "Guide Z" }],
+  concept: [{ slug: "guides/w", title: "Guide W" }],
   compare: [{ slug: "compare/snapdrop", title: "vs Snapdrop" }],
 };
 
@@ -17,20 +21,26 @@ describe("renderGuidesIndexPage", () => {
   const en = renderGuidesIndexPage({ lang: "en", doc: guidesIndex.langs.en, groups });
   const zh = renderGuidesIndexPage({ lang: "zh", doc: guidesIndex.langs.zh, groups });
 
-  it("renders the H1 heading and the three category headings", () => {
+  it("renders the H1 and all five group headings", () => {
     expect(en).toContain("<h1>Guides</h1>");
-    // The Guides group is the hub's own content and stays plain text; the two
-    // category groups link to their roots, which is the only inbound link those
-    // roots have and the difference between indexed and "Discovered - currently
-    // not indexed".
-    expect(en).toContain(">Guides</h2>");
-    expect(en).toContain('<h2><a href="/how-to/">How-to</a></h2>');
+    // Three groups are headings only. The two that have a page of their own link
+    // to it, which is the only inbound link those roots have and the difference
+    // between indexed and "Discovered - currently not indexed".
+    for (const h of ["Command line", "Self-hosting &amp; operations", "How it works &amp; safety"]) {
+      expect(en, h).toContain(`<h2>${h}</h2>`);
+    }
+    expect(en).toContain('<h2><a href="/how-to/">Everyday transfers</a></h2>');
     expect(en).toContain('<h2><a href="/compare/">Comparisons</a></h2>');
-    expect(zh).toContain('<h2><a href="/zh/how-to/">操作指南</a></h2>');
+    // And the labels are distinguishable in Chinese, which is the defect that
+    // prompted the regrouping: 教程 and 操作指南 were synonyms.
+    expect(zh).toContain('<h2><a href="/zh/how-to/">场景教程</a></h2>');
+    expect(zh).toContain("<h2>命令行</h2>");
   });
 
   it("links every article with the language-correct URL", () => {
     expect(en).toContain('href="/guides/y/"');
+    expect(en).toContain('href="/guides/z/"');
+    expect(en).toContain('href="/guides/w/"');
     expect(en).toContain('href="/how-to/x/"');
     expect(en).toContain('href="/compare/snapdrop/"');
     expect(zh).toContain('href="/zh/guides/y/"');
@@ -52,11 +62,11 @@ describe("renderGuidesIndexPage", () => {
   it("skips an empty category", () => {
     const html = renderGuidesIndexPage({
       lang: "en", doc: guidesIndex.langs.en,
-      groups: { guides: [], howTo: [{ slug: "how-to/x", title: "Howto X" }], compare: [] },
+      groups: { scenario: [{ slug: "how-to/x", title: "Howto X" }], cli: [], selfhost: [], concept: [], compare: [] },
     });
-    expect(html).not.toContain(">Guides</h2>");
+    expect(html).not.toContain(">Command line</h2>");
     expect(html).not.toContain('href="/compare/"');
     expect(html).not.toContain(">Comparisons</h2>");
-    expect(html).toContain('<h2><a href="/how-to/">How-to</a></h2>');
+    expect(html).toContain('<h2><a href="/how-to/">Everyday transfers</a></h2>');
   });
 });

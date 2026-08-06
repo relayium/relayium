@@ -5,6 +5,7 @@ import { renderLandingPage } from "./landing-template.mjs";
 import { renderArticlePage } from "./article-template.mjs";
 import { RELATED } from "./content/related-map.mjs";
 import { renderGuidesIndexPage } from "./guides-index-template.mjs";
+import { GROUPS, TAXONOMY } from "./content/taxonomy.mjs";
 import { renderModePage } from "./mode-template.mjs";
 
 export function buildLegalPages(docs) {
@@ -85,14 +86,38 @@ export function articleLinksByLang(articles) {
 }
 
 const CATEGORY_KEY = { guides: "guides", "how-to": "howTo", compare: "compare" };
+const FALLBACK_GROUP = { guides: "concept", howTo: "scenario", compare: "compare" };
 
+/**
+ * Article lists for the hub, grouped two ways at once.
+ *
+ * The FIVE keys in GROUPS are the reading taxonomy (content/taxonomy.mjs) and
+ * are what the main hub renders, ordered within each group rather than by
+ * import order. The legacy howTo/compare keys are kept because /how-to and
+ * /compare are real URLs whose pages render one group each — those are
+ * addresses, and re-cutting them would spend redirect and SEO cost on what is
+ * really a navigation change.
+ */
 export function articleGroupsByLang(articles) {
   return Object.fromEntries(
     LANGS.map((lang) => {
       const groups = { guides: [], howTo: [], compare: [] };
-      for (const a of articles) {
-        const key = CATEGORY_KEY[a.slug.split("/")[0]];
-        if (key) groups[key].push({ slug: a.slug, title: a.langs[lang].title });
+      for (const g of GROUPS) groups[g] = [];
+      const ordered = [...articles].sort(
+        (a, b) => (TAXONOMY[a.slug]?.[1] ?? 1e9) - (TAXONOMY[b.slug]?.[1] ?? 1e9),
+      );
+      for (const a of ordered) {
+        const entry = { slug: a.slug, title: a.langs[lang].title };
+        const legacy = CATEGORY_KEY[a.slug.split("/")[0]];
+        // An article missing from the taxonomy falls back to the group its URL
+        // prefix implies, rather than vanishing from the hub: being in the wrong
+        // group is something someone notices, being on no page at all is not.
+        // (The completeness test still fails on it, so the fallback buys a
+        // readable page while the omission is fixed, not silence.)
+        const g = TAXONOMY[a.slug]?.[0] ?? FALLBACK_GROUP[legacy];
+        // `compare` is both a legacy bucket and a taxonomy group, so the two
+        // pushes have to be deduped or every comparison appears twice.
+        for (const key of new Set([legacy, g].filter(Boolean))) groups[key].push(entry);
       }
       return [lang, groups];
     })

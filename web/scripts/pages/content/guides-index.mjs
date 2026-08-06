@@ -7,7 +7,15 @@ const en = {
   heading: "Guides",
   intro:
     "Everything about moving files with Relayium — terminal how-tos, phone-to-phone transfers, and honest comparisons with other tools — plus the ephemeral encrypted text Relayium carries when both devices are online.",
-  categories: { guides: "Guides", howTo: "How-to", compare: "Comparisons" },
+  categories: {
+    scenario: "Everyday transfers",
+    cli: "Command line",
+    selfhost: "Self-hosting & operations",
+    concept: "How it works & safety",
+    compare: "Comparisons",
+    guides: "Guides",
+    howTo: "How-to",
+  },
 };
 const zh = {
   title: "使用指南 · Relayium",
@@ -15,7 +23,15 @@ const zh = {
     "用 Relayium 传输文件的分步指南与对比，以及双方在线时发送临时加密文本的方法。",
   heading: "使用指南",
   intro: "关于用 Relayium 传输文件的一切——终端操作、手机互传，以及与其他工具的坦诚对比；双方都在线时，Relayium 还能发送临时加密文本。",
-  categories: { guides: "教程", howTo: "操作指南", compare: "对比" },
+  categories: {
+    scenario: "场景教程",
+    cli: "命令行",
+    selfhost: "自建与运维",
+    concept: "原理与安全",
+    compare: "横向对比",
+    guides: "教程",
+    howTo: "操作指南",
+  },
 };
 const ja = {
   title: "ガイド · Relayium",
@@ -23,7 +39,15 @@ const ja = {
     "Relayium でファイルを転送するための手順と比較に加え、両方の端末がオンライン時に一時的な暗号化テキストを送る方法。",
   heading: "ガイド",
   intro: "Relayium でのファイル転送のすべて——ターミナル操作、スマホ間転送、他ツールとの率直な比較。両方の端末がオンラインなら、Relayium は一時的な暗号化テキストも運びます。",
-  categories: { guides: "ガイド", howTo: "ハウツー", compare: "比較" },
+  categories: {
+    scenario: "場面別ガイド",
+    cli: "コマンドライン",
+    selfhost: "セルフホストと運用",
+    concept: "仕組みと安全性",
+    compare: "他サービスとの比較",
+    guides: "ガイド",
+    howTo: "ハウツー",
+  },
 };
 const ko = {
   title: "가이드 · Relayium",
@@ -31,7 +55,15 @@ const ko = {
     "Relayium으로 파일을 전송하는 단계별 가이드와 비교, 그리고 두 기기가 모두 온라인일 때 일회성 암호화 텍스트를 보내는 방법.",
   heading: "가이드",
   intro: "Relayium으로 파일을 전송하는 모든 것 — 터미널 사용법, 휴대폰 간 전송, 다른 도구와의 솔직한 비교. 두 기기가 모두 온라인이면 Relayium으로 일회성 암호화 텍스트도 보낼 수 있습니다.",
-  categories: { guides: "가이드", howTo: "사용법", compare: "비교" },
+  categories: {
+    scenario: "상황별 가이드",
+    cli: "커맨드 라인",
+    selfhost: "자체 호스팅과 운영",
+    concept: "원리와 안전성",
+    compare: "비교",
+    guides: "가이드",
+    howTo: "사용법",
+  },
 };
 const de = {
   title: "Anleitungen · Relayium",
@@ -40,7 +72,15 @@ const de = {
   heading: "Anleitungen",
   intro:
     "Alles zum Übertragen von Dateien mit Relayium — Terminal-Anleitungen, Handy-zu-Handy-Übertragungen und ehrliche Vergleiche mit anderen Tools — dazu der flüchtige verschlüsselte Text, den Relayium überträgt, wenn beide Geräte online sind.",
-  categories: { guides: "Anleitungen", howTo: "How-to", compare: "Vergleiche" },
+  categories: {
+    scenario: "Alltägliche Übertragungen",
+    cli: "Kommandozeile",
+    selfhost: "Selbst hosten & Betrieb",
+    concept: "Funktionsweise & Sicherheit",
+    compare: "Vergleiche",
+    guides: "Anleitungen",
+    howTo: "How-to",
+  },
 };
 const fr = {
   // "Guides" is the same word in French and English, so this page and /guides/
@@ -53,7 +93,15 @@ const fr = {
   heading: "Guides",
   intro:
     "Tout pour transférer des fichiers avec Relayium — tutoriels en terminal, transferts entre téléphones et comparatifs honnêtes avec d'autres outils — sans oublier le texte chiffré éphémère que Relayium transporte quand les deux appareils sont en ligne.",
-  categories: { guides: "Guides", howTo: "Tutoriels", compare: "Comparatifs" },
+  categories: {
+    scenario: "Transferts du quotidien",
+    cli: "Ligne de commande",
+    selfhost: "Auto-hébergement et exploitation",
+    concept: "Fonctionnement et sécurité",
+    compare: "Comparatifs",
+    guides: "Guides",
+    howTo: "Tutoriels",
+  },
 };
 const ar = {
   title: "الأدلة · Relayium",
@@ -62,7 +110,15 @@ const ar = {
   heading: "الأدلة",
   intro:
     "كل ما يخص نقل الملفات باستخدام Relayium — شروحات الطرفية، والنقل بين الهواتف، ومقارنات صادقة مع الأدوات الأخرى — إضافةً إلى النص المُشفَّر العابر الذي ينقله Relayium حين يكون الجهازان متصلين.",
-  categories: { guides: "الأدلة", howTo: "كيفية", compare: "المقارنات" },
+  categories: {
+    scenario: "عمليات النقل اليومية",
+    cli: "سطر الأوامر",
+    selfhost: "الاستضافة الذاتية والتشغيل",
+    concept: "كيف يعمل والأمان",
+    compare: "مقارنات",
+    guides: "الأدلة",
+    howTo: "كيفية",
+  },
 };
 const es = {
   title: "Guías · Relayium",
@@ -71,7 +127,15 @@ const es = {
   heading: "Guías",
   intro:
     "Todo sobre transferir archivos con Relayium — tutoriales en la terminal, transferencias entre teléfonos y comparativas honestas con otras herramientas — además del texto cifrado efímero que lleva Relayium cuando ambos dispositivos están conectados.",
-  categories: { guides: "Guías", howTo: "Cómo", compare: "Comparativas" },
+  categories: {
+    scenario: "Transferencias del día a día",
+    cli: "Línea de comandos",
+    selfhost: "Autoalojamiento y operación",
+    concept: "Cómo funciona y seguridad",
+    compare: "Comparativas",
+    guides: "Guías",
+    howTo: "Cómo",
+  },
 };
 const pt = {
   title: "Guias · Relayium",
@@ -80,7 +144,15 @@ const pt = {
   heading: "Guias",
   intro:
     "Tudo sobre transferir arquivos com o Relayium — tutoriais no terminal, transferências entre celulares e comparativos honestos com outras ferramentas — além do texto criptografado efêmero que o Relayium leva quando os dois dispositivos estão online.",
-  categories: { guides: "Guias", howTo: "Como", compare: "Comparativos" },
+  categories: {
+    scenario: "Transferências do dia a dia",
+    cli: "Linha de comando",
+    selfhost: "Auto-hospedagem e operação",
+    concept: "Como funciona e segurança",
+    compare: "Comparações",
+    guides: "Guias",
+    howTo: "Como",
+  },
 };
 
 export default { slug: "guides", updated: "2026-07-30", langs: { en, zh, ja, ko, de, fr, ar, es, pt } };
