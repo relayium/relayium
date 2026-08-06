@@ -127,7 +127,7 @@ export function buildAllPages() {
   return [
     ...buildLegalPages(legalDocs),
     ...buildReleasesPages(releases),
-    ...buildLandingPages(landing, articleLinksByLang(articles)),
+    ...buildLandingPages(landing, articleLinksByLang(articles), guidesIndex),
     ...buildArticlePages(articles),
     ...buildGuidesIndexPages(guidesIndex, articleGroupsByLang(articles)),
     ...CATEGORY_HUBS.flatMap((hub) =>

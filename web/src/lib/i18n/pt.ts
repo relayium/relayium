@@ -186,7 +186,7 @@ const pt: Messages = {
     scheduledDowngradeRow: (name, date) => `Agendado: rebaixamento para ${name} em ${date}`,
   },
   pricingPage: {
-    navLink: "Preços (em inglês)",
+    navLink: "Preços",
     title: "Preços simples e honestos",
     subtitle: "As transferências de arquivos e texto ao vivo na mesma rede são sempre gratuitas. A retransmissão do navegador entre redes e o armazenamento em nuvem usam uma cota mensal — toda conta tem uma, e os planos pagos aumentam. Você também pode continuar 100% grátis com seu próprio nó.",
     signedOutCta: "Entre para assinar ou alterar seu plano.",

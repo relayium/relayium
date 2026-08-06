@@ -33,6 +33,11 @@ ol.shots{display:grid;gap:18px;margin:22px 0 4px}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .why li b,.compare h3{color:var(--text-h)}
+.learn-groups{display:grid;gap:22px;margin-top:14px}
+@media(min-width:820px){.learn-groups{grid-template-columns:repeat(3,1fr)}}
+.learn-groups h3{margin:0 0 6px;font-size:16px}
+.learn-all{margin:16px 0 0}
+.close-cta{margin:26px 0 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent-fg);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -104,7 +109,7 @@ function shotsHtml(lang, captions) {
   return `\n      <div class="shots">${figures}</div>`;
 }
 
-export function renderLandingPage({ lang, doc, articleLinks = [] }) {
+export function renderLandingPage({ lang, doc, articleLinks = [], categories = null, guidesHeading = null }) {
   const canonical = absUrl(landingUrl(lang));
   const ogImage = SITE.origin + "/og-image.jpg";
   const ld = {
@@ -143,11 +148,42 @@ export function renderLandingPage({ lang, doc, articleLinks = [] }) {
   const faq = doc.faq.items
     .map((it) => `<h3>${esc(it.q)}</h3>\n      <p>${esc(it.a)}</p>`)
     .join("\n      ");
-  const learn = articleLinks.length
-    ? `<h2>${esc(doc.learnHeading)}</h2>\n      <ul class="learn">${articleLinks
-        .map((a) => `<li><a href="${urlPath(a.slug, lang)}">${esc(a.title)}</a></li>`)
-        .join("")}</ul>`
-    : "";
+  /**
+   * 深入了解：分组精选，而不是 37 条平铺。
+   *
+   * 原来这里把全部文章一条挨一条列出来。37 条无层级的链接对读者约等于 0 条——没有任何
+   * 信号告诉他该点哪一个，而这一节又正好是落地页的最后一屏。现在按 slug 前缀分成教程 /
+   * 操作指南 / 对比三组，每组只出前几条，后面接一个通往指南索引的「查看全部」。
+   *
+   * 分类标题复用 guides-index 里已经翻译好的那三个词，不在落地页再造一份译文。
+   * 拿不到分类标题时（调用方没传）退回原来的平铺列表，而不是渲染出一个没有标题的分组。
+   */
+  const PER_GROUP = 5;
+  const GROUP_OF = { "guides/": "guides", "how-to/": "howTo", "compare/": "compare" };
+  const grouped = categories
+    ? ["guides", "howTo", "compare"].map((key) => ({
+        key,
+        heading: categories[key],
+        items: articleLinks
+          .filter((a) => GROUP_OF[Object.keys(GROUP_OF).find((p) => a.slug.startsWith(p)) ?? ""] === key)
+          .slice(0, PER_GROUP),
+      })).filter((g) => g.heading && g.items.length)
+    : [];
+  const learn = !articleLinks.length
+    ? ""
+    : grouped.length
+      ? `<h2>${esc(doc.learnHeading)}</h2>\n      <div class="learn-groups">${grouped
+          .map((g) =>
+            `<div><h3>${esc(g.heading)}</h3><ul class="learn">${g.items
+              .map((a) => `<li><a href="${urlPath(a.slug, lang)}">${esc(a.title)}</a></li>`)
+              .join("")}</ul></div>`,
+          )
+          .join("")}</div>` +
+        `\n      <p class="learn-all"><a href="${urlPath("guides", lang)}">${esc(guidesHeading ?? GUIDES_LABELS[lang])}</a></p>` +
+        `\n      <p class="close-cta"><a class="cta" href="${ctaHref(lang)}">${esc(doc.hero.cta)}</a></p>`
+      : `<h2>${esc(doc.learnHeading)}</h2>\n      <ul class="learn">${articleLinks
+          .map((a) => `<li><a href="${urlPath(a.slug, lang)}">${esc(a.title)}</a></li>`)
+          .join("")}</ul>`;
 
   // Bidi-isolated for RTL locales: the head is read by browser chrome and search
   // engines, which resolve direction from the first strong character rather than

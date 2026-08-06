@@ -1,15 +1,21 @@
-// web/scripts/pages/pricing-label.test.mjs — /pricing is English-only, and the
-// eight localized footers that link to it have to say so.
+// web/scripts/pages/pricing-label.test.mjs — /pricing IS translated, so nothing
+// linking to it may claim otherwise.
 //
-// The page has no localized twin on purpose: the plan tiers come from the
-// billing API, and a hardcoded price in nine languages is the next "1,000 vs
-// 10" waiting to happen (see content/spa-pages.mjs). But that decision was only
-// visible in the code — on the site, a reader saw `Tarifs` / `料金` / `Preços`
-// in their own language and landed on an English page. The label promised a
-// localization that does not exist.
+// This file used to assert the opposite. An earlier pass added "(in English)" to
+// every non-English /pricing label, on the premise that the page had no
+// localized twin. The premise was wrong. /pricing is a client-rendered SPA route
+// whose copy comes from the i18n tables, and every one of the nine locales
+// carries a full pricingPage block — the same field count as English. Fetching
+// /pricing with curl shows English because that is the shell the SPA boots from,
+// not because that is what a reader sees.
 //
-// So every localized label carries the warning in the reader's own language,
-// and this file holds the three properties that make that true and keep it true.
+// The result was worse than the problem it was invented for: a Chinese reader
+// was told, in Chinese, that a page written in Chinese was in English. The owner
+// reported it from the live site.
+//
+// So the properties are inverted. What stays from the original is the one that
+// earned its place: the static pages and the app must show the SAME label, which
+// is what caught 价格 in the generated footers against 定价 in the app.
 import { describe, expect, it } from "vitest";
 import { LANGS, DEFAULT_LANG, PRICING_LABELS, pricingLabel } from "./shared.mjs";
 import { buildAllPages } from "../gen-pages.mjs";
@@ -26,46 +32,55 @@ import pt from "../../src/lib/i18n/pt.ts";
 
 const APP_TABLES = { en, zh, ja, ko, de, fr, ar, es, pt };
 
-describe("the /pricing link says the page is in English", () => {
-  it("warns in every language except English", () => {
+/** The words a label would use to disclaim its own language. */
+const CLAIMS_ENGLISH = /英文|英語|영문|englisch|en anglais|بالإنجليزية|en inglés|em inglês|in English/i;
+
+describe("the /pricing page is localized, and its labels say nothing else", () => {
+  it("carries a full pricingPage block in every locale", () => {
+    // The fact the removed warning got wrong. If a locale ever ships a stub —
+    // or the page stops being translated — this fails first, and only then is
+    // there anything for a label to warn about.
+    const enFields = Object.keys(en.pricingPage).length;
+    expect(enFields).toBeGreaterThan(20);
     for (const lang of LANGS) {
-      const label = pricingLabel(lang);
-      if (lang === DEFAULT_LANG) {
-        // Nothing to warn an English reader about, and a suffix here would be
-        // noise on the one page that IS in the reader's language.
-        expect(label).toBe("Pricing");
-      } else {
-        // Strictly more than the bare noun, and parenthesised — the warning is
-        // an aside on the label, not a second link.
-        expect(label, lang).not.toBe(PRICING_LABELS[lang]);
-        expect(label.startsWith(PRICING_LABELS[lang]), lang).toBe(true);
-        expect(label, lang).toMatch(/[（(].+[）)]$/);
-      }
+      const table = APP_TABLES[lang];
+      expect(table.pricingPage, lang).toBeTruthy();
+      expect(Object.keys(table.pricingPage).length, lang).toBe(enFields);
     }
   });
 
-  it("uses the same label in the static pages and in the app", () => {
-    // Four SPA surfaces render `pricingPage.navLink` and five static templates
-    // render `pricingLabel()`; they point at the same page, so they have to
-    // agree. They did not before this landed — Chinese said 定价 in the app and
-    // 价格 on every generated page.
+  it("never tells a reader their own translated page is in another language", () => {
     for (const lang of LANGS) {
-      expect(APP_TABLES[lang].pricingPage.navLink, lang).toBe(pricingLabel(lang));
+      expect(pricingLabel(lang), `${lang} static label`).not.toMatch(CLAIMS_ENGLISH);
+      expect(APP_TABLES[lang].pricingPage.navLink, `${lang} app nav link`).not.toMatch(CLAIMS_ENGLISH);
     }
   });
 
-  it("reaches every generated page that links to /pricing", () => {
-    // The warning is only worth anything where the link actually is. Five
-    // templates render it; this checks the built HTML rather than the templates,
-    // so a sixth template added later without the helper is caught.
+  it("shows the same label in the generated pages as in the app", () => {
+    // The property worth keeping. One link, two implementations: the app called
+    // it 定价 while ~400 generated footers called it 价格, and nothing noticed
+    // until this assertion existed.
+    for (const lang of LANGS) {
+      expect(pricingLabel(lang), lang).toBe(APP_TABLES[lang].pricingPage.navLink);
+    }
+  });
+
+  it("renders that label on every generated page that links to /pricing", () => {
+    // Checked against built HTML rather than the template, so a new template
+    // that hardcodes its own label cannot bypass pricingLabel().
     const bad = [];
     for (const page of buildAllPages()) {
       if (!page.html.includes('href="/pricing"')) continue;
-      const lang = page.path.match(/^([a-z]{2})\//)?.[1];
-      if (!lang || !LANGS.includes(lang)) continue; // English pages: no warning wanted
-      const label = page.html.match(/href="\/pricing">([^<]*)</)?.[1];
-      if (label !== pricingLabel(lang)) bad.push(`${page.path}: ${label}`);
+      const lang = LANGS.find((l) => page.path === `${l}/index.html` || page.path.startsWith(`${l}/`)) ?? DEFAULT_LANG;
+      if (!page.html.includes(pricingLabel(lang))) bad.push(`${page.path}: no ${pricingLabel(lang)}`);
+      if (CLAIMS_ENGLISH.test(page.html.match(/href="\/pricing"[^>]*>([^<]*)</)?.[1] ?? "")) {
+        bad.push(`${page.path}: the /pricing link disclaims its own language`);
+      }
     }
     expect(bad).toEqual([]);
+  });
+
+  it("keeps the bare noun as the whole label", () => {
+    for (const lang of LANGS) expect(pricingLabel(lang), lang).toBe(PRICING_LABELS[lang]);
   });
 });

@@ -60,6 +60,11 @@ ol.shots{display:grid;gap:18px;margin:22px 0 4px}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
 .why li b,.compare h3{color:var(--text-h)}
+.learn-groups{display:grid;gap:22px;margin-top:14px}
+@media(min-width:820px){.learn-groups{grid-template-columns:repeat(3,1fr)}}
+.learn-groups h3{margin:0 0 6px;font-size:16px}
+.learn-all{margin:16px 0 0}
+.close-cta{margin:26px 0 0}
 .learn{list-style:none;padding:0}.learn a{color:var(--accent-fg);text-decoration:none}
 footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
@@ -138,7 +143,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <a href="/zh/privacy/">隐私政策</a>
         <a href="/zh/terms/">服务条款</a>
         <a href="/zh/security/">安全说明</a>
-        <a href="/pricing">定价（英文）</a>
+        <a href="/pricing">定价</a>
         <a href="https://github.com/relayium/relayium">GitHub</a>
       </footer>
     </div>

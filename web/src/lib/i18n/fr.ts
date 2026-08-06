@@ -186,7 +186,7 @@ const fr: Messages = {
     scheduledDowngradeRow: (name, date) => `Prévu : passage à ${name} le ${date}`,
   },
   pricingPage: {
-    navLink: "Tarifs (en anglais)",
+    navLink: "Tarifs",
     title: "Une tarification simple et honnête",
     subtitle: "Les transferts de fichiers et de texte en direct sur le même réseau sont toujours gratuits. Le relais inter-réseaux du navigateur et le stockage cloud utilisent un quota mensuel — chaque compte en a un, et les offres payantes l'augmentent. Vous pouvez aussi rester 100 % gratuit avec votre propre nœud.",
     signedOutCta: "Connectez-vous pour vous abonner ou changer d'offre.",

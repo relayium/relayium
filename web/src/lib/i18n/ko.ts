@@ -186,7 +186,7 @@ const ko: Messages = {
     scheduledDowngradeRow: (name, date) => `변경 예정: ${date}에 ${name}(으)로 다운그레이드`,
   },
   pricingPage: {
-    navLink: "요금제 (영문)",
+    navLink: "요금제",
     title: "간단하고 정직한 요금제",
     subtitle: "동일 네트워크의 파일 및 실시간 텍스트 전송은 항상 무료입니다. 브라우저의 네트워크 간 릴레이와 클라우드 저장은 월간 허용량으로 운영되며, 모든 계정에 허용량이 있고 유료 요금제는 이를 늘립니다. 직접 노드를 운영하면 100% 무료로 이용할 수 있습니다.",
     signedOutCta: "로그인하여 구독하거나 요금제를 변경하세요.",

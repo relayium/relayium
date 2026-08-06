@@ -30,13 +30,22 @@ export const PRICING_URL = "/pricing";
 // is no localized twin. The label alone promises otherwise, so it carries the
 // warning in the reader's own language. English gets no suffix: there is nothing
 // to warn an English reader about.
-const PRICING_ENGLISH_HINT = {
-  en: "", zh: "（英文）", ja: "（英語）", ko: " (영문)", de: " (englisch)",
-  fr: " (en anglais)", ar: " (بالإنجليزية)", es: " (en inglés)", pt: " (em inglês)",
-};
-/** The /pricing footer label for a language, warning when the page is not in it. */
+/**
+ * The label for the /pricing link.
+ *
+ * This used to append "(in English)" in every non-English locale, on the premise
+ * that the pricing page was English-only. That premise was simply wrong: the
+ * page is a client-rendered SPA route whose copy comes from i18n, and every one
+ * of the nine locales carries a full pricingPage block (33 fields, same as
+ * English). Fetching /pricing with curl shows English because that is the shell,
+ * not because that is what a reader sees.
+ *
+ * So the hint told Chinese readers their own fully-translated page was in a
+ * language they might not read — a worse defect than the one it was added to
+ * fix. It is gone; the label is just the label.
+ */
 export function pricingLabel(lang) {
-  return PRICING_LABELS[lang] + PRICING_ENGLISH_HINT[lang];
+  return PRICING_LABELS[lang];
 }
 // Footer link label for /releases/, per language. Matches each locale's page
 // title in content/releases.mjs — a footer that calls the page one thing and the

@@ -40,11 +40,18 @@ export function buildReleasesPages(releasesDoc) {
   }));
 }
 
-export function buildLandingPages(landing, articleLinksByLang = {}) {
+export function buildLandingPages(landing, articleLinksByLang = {}, guidesIndex = null) {
   validateLangs("landing", landing.langs, LANDING_LANGS);
   return LANDING_LANGS.map((lang) => ({
     path: landingPath(lang),
-    html: renderLandingPage({ lang, doc: landing.langs[lang], articleLinks: articleLinksByLang[lang] ?? [] }),
+    html: renderLandingPage({
+      lang,
+      doc: landing.langs[lang],
+      articleLinks: articleLinksByLang[lang] ?? [],
+      // 分类标题复用指南索引里已经翻译好的那三个词，不要在落地页再造一份。
+      categories: guidesIndex?.langs[lang]?.categories ?? null,
+      guidesHeading: guidesIndex?.langs[lang]?.heading ?? null,
+    }),
   }));
 }
 
