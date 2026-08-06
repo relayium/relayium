@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="cron で暗号化されたサーバーバックアップを自動化する" />
     <meta name="twitter:description" content="cron から relayium push または sync を定期実行して、ディレクトリを別のサーバーへ自動コピー。暗号化、再開可能、SHA-256 検証付きで、しかも無料です。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"cron で暗号化されたサーバーバックアップを自動化する","description":"cron から relayium push または sync を定期実行して、ディレクトリを別のサーバーへ自動コピー。暗号化、再開可能、SHA-256 検証付きで、しかも無料です。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/automate-server-backups/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"cron で暗号化されたサーバーバックアップを自動化する"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"バックアップサーバーに relayium のインストールは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"コマンドによります。push はどちらでも動作します。relayium がインストールされていればネイティブプロトコル（再開 + ファイルごとの SHA-256 検証）を使い、なければ push は SSH 上の tar ストリームにフォールバックするので、素のサーバーでも動作します。sync は常にリモート側で relayium のネイティブプロトコルが必要です。sync に tar フォールバックはないので、先にインストールしてください。"}},{"@type":"Question","name":"バックアップは暗号化・検証されますか？","acceptedAnswer":{"@type":"Answer","text":"されます。すべてのファイルはエンドツーエンドで SHA-256 ハッシュによって検証され、SSH または daemon-direct でプッシュする場合、バイトはその接続自体の暗号化によってすでに保護されています。追加の設定は不要です。"}},{"@type":"Question","name":"cron ジョブが途中で中断された場合はどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"両端に relayium があれば、次の予定された実行で部分的なファイルが全体を再送するのではなく再開されます。きれいに全体を再送したい場合は --no-resume を指定してください。"}},{"@type":"Question","name":"--delete で誤って宛先を消してしまうことはありますか？","acceptedAnswer":{"@type":"Answer","text":"sync はソースディレクトリにファイルが1つもない場合、--delete の実行自体を拒否します。また、削除が実際に反映されるには受信側が serve --allow-delete で起動されている必要があります。そうでなければスキップされ、結果として報告されます。"}},{"@type":"Question","name":"アカウントは必要ですか、これは有料ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。CLI は無料で、push、pull、sync のいずれにもアカウントは不要です。転送はご自身の SSH 接続、または直接の daemon 接続の上で行われ、Relayium のサーバーは経由しません。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"cron で暗号化されたサーバーバックアップを自動化する","description":"cron から relayium push または sync を定期実行して、ディレクトリを別のサーバーへ自動コピー。暗号化、再開可能、SHA-256 検証付きで、しかも無料です。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/automate-server-backups/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"cron で暗号化されたサーバーバックアップを自動化する"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"バックアップサーバーに relayium のインストールは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"コマンドによります。push はどちらでも動作します。relayium がインストールされていればネイティブプロトコル（再開 + ファイルごとの SHA-256 検証）を使い、なければ push は SSH 上の tar ストリームにフォールバックするので、素のサーバーでも動作します。sync は常にリモート側で relayium のネイティブプロトコルが必要です。sync に tar フォールバックはないので、先にインストールしてください。"}},{"@type":"Question","name":"バックアップは暗号化・検証されますか？","acceptedAnswer":{"@type":"Answer","text":"されます。すべてのファイルはエンドツーエンドで SHA-256 ハッシュによって検証され、SSH または daemon-direct でプッシュする場合、バイトはその接続自体の暗号化によってすでに保護されています。追加の設定は不要です。"}},{"@type":"Question","name":"cron ジョブが途中で中断された場合はどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"両端に relayium があれば、次の予定された実行で部分的なファイルが全体を再送するのではなく再開されます。きれいに全体を再送したい場合は --no-resume を指定してください。"}},{"@type":"Question","name":"--delete で誤って宛先を消してしまうことはありますか？","acceptedAnswer":{"@type":"Answer","text":"sync はソースディレクトリにファイルが1つもない場合、--delete の実行自体を拒否します。また、削除が実際に反映されるには受信側が serve --allow-delete で起動されている必要があります。そうでなければスキップされ、結果として報告されます。"}},{"@type":"Question","name":"アカウントは必要ですか、これは有料ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。CLI は無料で、push、pull、sync のいずれにもアカウントは不要です。転送はご自身の SSH 接続、または直接の daemon 接続の上で行われ、Relayium のサーバーは経由しません。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,7 +100,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最終更新: <bdi>2026-07-12</bdi></p>
+      <p class="updated">最終更新: <bdi>2026-08-06</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups/">English</a><a href="/zh/how-to/automate-server-backups/">中文</a><a href="/ja/how-to/automate-server-backups/" aria-current="true">日本語</a><a href="/ko/how-to/automate-server-backups/">한국어</a><a href="/de/how-to/automate-server-backups/">Deutsch</a><a href="/fr/how-to/automate-server-backups/">Français</a><a href="/ar/how-to/automate-server-backups/">العربية</a><a href="/es/how-to/automate-server-backups/">Español</a><a href="/pt/how-to/automate-server-backups/">Português</a></nav>
       <p class="lead">自分で覚えて実行しなければならないバックアップは、たいてい実行されません。cron は覚えていてくれますし、Relayium CLI はまさにそのために作られています。ディレクトリを別のマシンへコピー（またはミラー）し、すべてのファイルを検証し、ネットワークが切れても中断した所から再開する、単一の非対話型コマンドです。</p>
       <p class="lead">本ガイドでは、cron から relayium push と増分同期の relayium sync をスケジュール実行する方法、どちらでも使える2つの転送方式、そしてそのままコピーできる crontab の行を扱います。</p>
@@ -104,17 +121,30 @@ relayium push ./data user@backup-server:/srv/backups/
 relayium push ./data relayium://backup-server:9031</code></pre>
       <ul><li>daemon-direct 接続はピン留めされた TLS 1.3 で、初回接続時に信頼（trust-on-first-use）し、以降の実行では同じフィンガープリントに対して検証します。</li><li>sync は push と同じ2つの宛先の書き方を受け付けます。</li></ul>
       <h2>cron でスケジュール実行する</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">手順1の前に必要なもの</p><ul><li>このマシンの CLI。sync を使うつもりなら送り先にも必要です。sync に tar のフォールバックはありません。</li><li>パスフレーズなしの SSH 鍵、または relayium serve が動いている送り先。cron にはエージェントも端末もないため、パスフレーズの入力には答えられません。</li><li>cron が起動する時点で実在するソースディレクトリ。ログイン中だけマウントされるネットワーク領域では困ります。</li><li>ログの書き出し先。出力がどこにも残らない cron ジョブは、必要になったときに初めて問題が分かるバックアップです。</li></ul></div>
       <p>push と sync はどちらも単一の非対話型コマンドなので、そのまま crontab に組み込めます。パスフレーズなしの鍵（または agent）を指定し、出力をログに残して失敗を確認できるようにしましょう：</p>
       <pre><code># 毎晩2時に全体コピー：crontab に追加します（crontab -e）
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1
 
 # 代わりに15分ごとの増分ミラー
 */15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-sync.log 2&gt;&amp;1</code></pre>
+      <ol class="steps" data-block="steps"><li><p>relayium が実際にどこにあるかを調べます。cron はシェルの PATH を使わず、install.sh は /usr/local/bin に書けないとき ~/.local/bin に置きます——まさに cron から見えない場所です。</p><pre><code>command -v relayium</code></pre></li><li><p>誰も鍵盤の前にいない状態でも鍵が使えるか確認します。BatchMode=yes は入力を促さずに失敗するので、cron と同じ条件です。</p><pre><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true</code></pre></li><li><p>まず手で一度、cron が実行するのとまったく同じ書き方で、絶対パスも含めて通しで実行します。</p><pre><code>/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/</code></pre></li><li><p>それが通ってからスケジュールを追加します。絶対パスとリダイレクトはそのまま残してください。</p><pre><code>crontab -e</code></pre></li><li><p>最初の定期実行のあと、思い込まずにログを読みます。ここが最も飛ばされやすく、そして問題を教えてくれたはずの手順です。</p><pre><code>tail -n 20 ~/relayium-backup.log</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">正しく設定できたときの見え方</p><p>relayium が crontab にそのまま貼れる絶対パスとして解決され、BatchMode 付きの ssh 確認が何も表示せず何も尋ねずに終了コード0で終わります。対話シェルでしか動かないバックアップは、まだスケジュールされていません。</p><pre><code>$ command -v relayium
+/usr/local/bin/relayium
+$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+$ echo $?
+0</code></pre></div>
       <ul><li>いずれかのファイルが整合性チェックに失敗すると、コマンドは非ゼロで終了するので、cron の失敗時メール通知で問題に気づけます。</li><li>中断された実行は、次の予定された実行で自動的に再開または追いつきます。</li></ul>
       <h2>削除のミラーリングとリアルタイム同期</h2>
       <p>デフォルトでは、sync は宛先側でファイルを追加または更新するだけです。--delete を付けると真のミラーになり、ソースにもう存在しないファイルも削除します。受信側は serve --allow-delete で明示的に待ち受けている必要があり、そうでなければ削除は黙って無視され、拒否されたと結果に報告されます。ソースディレクトリが1つもファイルを解決しない場合、sync は --delete の実行そのものを拒否するので、ソースパスの誤字で宛先が消えてしまうことはありません。</p>
       <p>cron の次の実行タイミングを待ちたくない場合は、--watch を使うと relayium sync が動き続け、ソース配下のファイルが変化するとすぐに自動で再同期します。スケジュールでポーリングする代わりの軽量な選択肢です。</p>
       <ul><li>relayium sync ./data user@backup-server:/srv/backups/ --delete は削除もミラーします（受信側に serve --allow-delete が必要）。</li><li>relayium sync ./data user@backup-server:/srv/backups/ --watch は動き続けて変化のたびに同期します。cron による単発実行の代わりに使えます。</li></ul>
+      <h2>うまくいかないとき</h2>
+      <p>どれもログを見るまでは表に出ません。だからログのリダイレクトは crontab の行に最初から入っていて、任意ではないのです。5つめは見えないより厄介で、成功したように見えます。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状、確認、対処</p><dl><dt>ログに relayium: command not found と出るのに、同じコマンドがシェルでは動く。</dt><dd><pre><code>tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found</code></pre><p>cron は最小限の PATH、たいてい /usr/bin:/bin だけで動きます。install.sh が /usr/local/bin に書けなかった場合、バイナリは ~/.local/bin に置かれ、cron はそこを決して探しません。command -v が示す絶対パスを crontab の行に書くか、crontab の先頭に PATH= の行を足してください。</p></dd><dt>ログに ssh 接続の拒否が出る、または初回以降なにも記録されない。</dt><dd><pre><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).</code></pre><p>cron には ssh-agent も端末もないため、パスフレーズ付きの鍵は固まるか失敗するかしかありません。-i でバックアップ専用のパスフレーズなし鍵を指し、BatchMode=yes で確認してください。これは、そこにいない人を待つ代わりに入力を拒否します。</p></dd><dt>sync は問題なく走るのに、ソースで削除したファイルが送り先に残っている。</dt><dd><pre><code>grep -i deni ~/relayium-sync.log</code></pre><p>削除は受信側のオプトインです。相手側に serve --allow-delete がなければ削除はスキップされ、denied として報告されます。答えが終了コードではなくログにあるのはそのためです。受信側のリスナーを --allow-delete 付きで再起動してください。</p></dd><dt>sync が --delete をきっぱり拒否する。</dt><dd><pre><code>relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).</code></pre><p>ソース側が1ファイルも解決できず、そのままではミラーが送り先を空にしてしまう状態です。この拒否は意図的です。パスの打ち間違いを確認し、そこにマウントされるはずのものが、ログイン中だけでなく cron の起動時点でも実際にマウントされているかを確認してください。</p></dd><dt>バックアップは走り、終了コード0で終わるのに、中身は思っているものではない。</dt><dd><pre><code>ssh user@backup-server command -v relayium</code></pre><p>リモートに relayium がないとき、push は SSH 上の素の tar ストリームにフォールバックします。ファイルは届くので何も文句を言いませんが、その経路にはファイルごとの SHA-256 検証も再開もありません——scp ではなくこれをスケジュールする理由そのものが失われます。送り先に CLI を入れれば戻ります。sync にこの失敗はありません。フォールバックが一切ないので、代わりに大きな音を立てて失敗します。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>バックアップサーバーに relayium のインストールは必要ですか？</h3>
       <p>コマンドによります。push はどちらでも動作します。relayium がインストールされていればネイティブプロトコル（再開 + ファイルごとの SHA-256 検証）を使い、なければ push は SSH 上の tar ストリームにフォールバックするので、素のサーバーでも動作します。sync は常にリモート側で relayium のネイティブプロトコルが必要です。sync に tar フォールバックはないので、先にインストールしてください。</p>

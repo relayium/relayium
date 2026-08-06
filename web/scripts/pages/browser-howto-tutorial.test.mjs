@@ -894,9 +894,14 @@ describe("the tutorial blocks reach the page with the right semantics", () => {
     expect(plain, "a prose article must not ship the block CSS").not.toContain("ol.steps{");
     expect(plain).not.toContain(".cbox{");
     expect(plain).not.toContain('data-block="');
-    // …and so must the server guide this batch deliberately left alone.
+    // The server guide is still deliberately outside THIS batch's set (see the
+    // exclusion test above), but the later guides batch did give it the blocks,
+    // so it is no longer an example of a page without them. What it still proves
+    // here is the gating: a page that uses the blocks ships the CSS, and the
+    // prose article above shows the same build emits none of it.
     const server = buildArticlePages([serverBackups])[0].html;
-    expect(server, "the server guide is not in this batch").not.toContain('data-block="steps"');
+    expect(server, "the server guide now carries the blocks").toContain('data-block="steps"');
+    expect(server, "so it must ship the block CSS too").toContain("ol.steps{");
   });
 
   it("keeps the RTL pages on logical properties and one main landmark", () => {

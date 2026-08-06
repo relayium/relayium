@@ -46,6 +46,50 @@ relayium push ./data relayium://backup-server:9031`,
     },
     {
       heading: "Schedule it with cron",
+      prereqs: {
+        label: "What you need before step 1",
+        items: [
+          "The CLI on this machine, and on the destination too if you plan to use sync. sync has no tar fallback.",
+          "An SSH key with no passphrase, or a destination running relayium serve. cron has no agent and no terminal, so it cannot answer a passphrase prompt.",
+          "A source directory that exists at the moment cron fires — not one on a network mount that is only there while you are logged in.",
+          "Somewhere to write a log. A cron job whose output goes nowhere is a backup you will find out about when you need it.",
+        ],
+      },
+      steps: [
+        {
+          text: "Find out where relayium actually is. cron does not use your shell's PATH, and install.sh falls back to ~/.local/bin when /usr/local/bin is not writable — which is exactly the case cron cannot see.",
+          code: ["command -v relayium"],
+        },
+        {
+          text: "Confirm the key works with nobody at the keyboard. BatchMode=yes fails instead of prompting, which is what cron would do.",
+          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+        },
+        {
+          text: "Run the whole command by hand once, written exactly as cron will run it, absolute path included.",
+          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+        },
+        {
+          text: "Only then add the schedule. Keep the absolute path and the redirect.",
+          code: ["crontab -e"],
+        },
+        {
+          text: "After the first scheduled tick, read the log instead of assuming. This is the step people skip, and it is the one that would have told them.",
+          code: ["tail -n 20 ~/relayium-backup.log"],
+        },
+      ],
+      success: {
+        label: "What a working setup looks like",
+        body: [
+          "relayium resolves to an absolute path you can paste into the crontab, and the BatchMode ssh check exits 0 without printing anything or asking for anything. A backup that only works from your interactive shell is not scheduled yet.",
+        ],
+        code: [
+          `$ command -v relayium
+/usr/local/bin/relayium
+$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+$ echo $?
+0`,
+        ],
+      },
       body: [
         "Both push and sync are single, non-interactive commands, so they drop straight into a crontab. Point them at an SSH key with no passphrase (or an agent), and log the output so failures are visible:",
       ],
@@ -71,6 +115,55 @@ relayium push ./data relayium://backup-server:9031`,
         "relayium sync ./data user@backup-server:/srv/backups/ --delete mirrors deletions (receiver needs serve --allow-delete).",
         "relayium sync ./data user@backup-server:/srv/backups/ --watch stays running and re-syncs on change instead of running once from cron.",
       ],
+    },
+    {
+      heading: "When it doesn't work",
+      body: [
+        "Every one of these is invisible until you look at the log, which is why the log redirect is in the crontab line rather than being optional. The fifth is worse than invisible: it looks like success.",
+      ],
+      troubleshooting: {
+        label: "Symptom, check, fix",
+        items: [
+          {
+            symptom: "The log says relayium: command not found, but the same command works in your shell.",
+            code: [
+              `tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found`,
+            ],
+            fix: "cron runs with a minimal PATH, usually just /usr/bin:/bin. If install.sh could not write to /usr/local/bin it put the binary in ~/.local/bin, which cron will never find. Use the absolute path from command -v in the crontab line, or set PATH= on a line at the top of the crontab.",
+          },
+          {
+            symptom: "The log shows the ssh connection being refused, or nothing after the first run.",
+            code: [
+              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).`,
+            ],
+            fix: "cron has no ssh-agent and no terminal, so a key with a passphrase can only hang or fail. Point -i at a passphrase-less key reserved for backups, and confirm with BatchMode=yes, which refuses to prompt rather than waiting for someone who is not there.",
+          },
+          {
+            symptom: "sync runs cleanly but files deleted at the source are still on the destination.",
+            code: [
+              `grep -i deni ~/relayium-sync.log`,
+            ],
+            fix: "Deletion is a receiver-side opt-in. Without serve --allow-delete on the other end the deletions are skipped and reported back as denied, which is why the log has the answer and the exit code does not. Restart the receiver's listener with --allow-delete.",
+          },
+          {
+            symptom: "sync refuses --delete outright.",
+            code: [
+              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+            ],
+            fix: "The source resolved to no files, so the mirror would have emptied the destination. That refusal is deliberate. Check the path for a typo, and check that anything mounted there is actually mounted at the time cron fires rather than only when you are logged in.",
+          },
+          {
+            symptom: "The backup runs, exits 0, and is not what you think it is.",
+            code: [
+              `ssh user@backup-server command -v relayium`,
+            ],
+            fix: "push falls back to a plain tar stream over SSH when the remote has no relayium. Your files arrive, so nothing complains — but that path has no per-file SHA-256 verification and no resume, which are the two reasons to schedule this rather than scp. Install the CLI on the destination to get them back. sync does not have this failure mode because it has no fallback at all: it fails loudly instead.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -147,6 +240,50 @@ relayium push ./data relayium://backup-server:9031`,
     },
     {
       heading: "用 cron 定时运行",
+      prereqs: {
+        label: "开始之前你需要什么",
+        items: [
+          "本机装好 CLI；如果你打算用 sync，目标机器上也要装。sync 没有 tar 兜底。",
+          "一把没有口令的 SSH 密钥，或者一台在跑 relayium serve 的目标机。cron 既没有 agent 也没有终端，回答不了口令提示。",
+          "一个在 cron 触发的那一刻确实存在的源目录——不能是那种只有你登录时才挂上的网络挂载点。",
+          "一个写日志的地方。输出无处可去的 cron 任务，等于一份等你真正需要时才会发现问题的备份。",
+        ],
+      },
+      steps: [
+        {
+          text: "先查清 relayium 到底在哪。cron 不用你 shell 的 PATH，而 install.sh 在 /usr/local/bin 不可写时会退到 ~/.local/bin——那正好是 cron 看不见的地方。",
+          code: ["command -v relayium"],
+        },
+        {
+          text: "确认这把密钥在没人守着键盘时也能用。BatchMode=yes 会直接失败而不是弹提示，这正是 cron 的处境。",
+          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+        },
+        {
+          text: "先手动完整跑一次，写法要和 cron 将要执行的一模一样，包括绝对路径。",
+          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+        },
+        {
+          text: "确认之后再加计划任务。绝对路径和重定向都要保留。",
+          code: ["crontab -e"],
+        },
+        {
+          text: "第一次定时执行之后，去读日志，不要想当然。这一步是最容易被跳过的，也正是本可以提前告诉你问题的那一步。",
+          code: ["tail -n 20 ~/relayium-backup.log"],
+        },
+      ],
+      success: {
+        label: "一个配置正确的备份长什么样",
+        body: [
+          "relayium 解析出一个可以直接粘进 crontab 的绝对路径，并且那条 BatchMode 的 ssh 检查什么都不打印、什么都不问、退出码为 0。只在你的交互式 shell 里能跑通的备份，还不算配好了。",
+        ],
+        code: [
+          `$ command -v relayium
+/usr/local/bin/relayium
+$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+$ echo $?
+0`,
+        ],
+      },
       body: [
         "push 和 sync 都是单条非交互式命令，可以直接放进 crontab。给它指定一个没有口令的密钥（或者用 agent），并把输出记下来，好让失败能被看见：",
       ],
@@ -172,6 +309,55 @@ relayium push ./data relayium://backup-server:9031`,
         "relayium sync ./data user@backup-server:/srv/backups/ --delete 会把删除也镜像过去（接收端需要 serve --allow-delete）。",
         "relayium sync ./data user@backup-server:/srv/backups/ --watch 会常驻运行，一有变化就同步，而不是靠 cron 单次触发。",
       ],
+    },
+    {
+      heading: "出问题时怎么办",
+      body: [
+        "这里每一种在你去看日志之前都是不可见的，所以那条日志重定向写在 crontab 行里，而不是可选项。第五种比不可见更糟：它看起来像成功。",
+      ],
+      troubleshooting: {
+        label: "现象、检查、修复",
+        items: [
+          {
+            symptom: "日志里写 relayium: command not found，但同一条命令在你的 shell 里能跑。",
+            code: [
+              `tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found`,
+            ],
+            fix: "cron 使用一个最小化的 PATH，通常只有 /usr/bin:/bin。如果 install.sh 当初写不进 /usr/local/bin，它会把二进制放在 ~/.local/bin，而 cron 永远找不到那里。把 command -v 给出的绝对路径写进 crontab 行，或者在 crontab 顶部单独加一行 PATH=。",
+          },
+          {
+            symptom: "日志显示 ssh 连接被拒绝，或者第一次运行之后就什么都没有了。",
+            code: [
+              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).`,
+            ],
+            fix: "cron 既没有 ssh-agent 也没有终端，所以带口令的密钥只能卡住或失败。用 -i 指向一把专供备份、没有口令的密钥，并用 BatchMode=yes 确认——它宁可拒绝也不会去等一个根本不在场的人。",
+          },
+          {
+            symptom: "sync 跑得很干净，但源端已删除的文件在目标端还在。",
+            code: [
+              `grep -i deni ~/relayium-sync.log`,
+            ],
+            fix: "删除是接收端的显式选项。对端没有 serve --allow-delete 时，这些删除会被跳过并回报为 denied，所以答案在日志里而不在退出码里。给接收端的监听器加上 --allow-delete 重启。",
+          },
+          {
+            symptom: "sync 直接拒绝执行 --delete。",
+            code: [
+              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+            ],
+            fix: "源端解析下来一个文件都没有，这时镜像会把目标端清空。这个拒绝是刻意的。检查路径是不是敲错了，也检查那里该挂载的东西在 cron 触发的时刻是否真的挂着，而不是只在你登录时才挂。",
+          },
+          {
+            symptom: "备份跑了，退出码 0，但它并不是你以为的那个东西。",
+            code: [
+              `ssh user@backup-server command -v relayium`,
+            ],
+            fix: "远端没有 relayium 时，push 会退回到走 SSH 的普通 tar 流。文件确实到了，所以没有任何东西报警——但这条路径既没有逐文件 SHA-256 校验，也没有断点续传，而这两点恰恰是你不用 scp 而设这个计划任务的理由。在目标机上装好 CLI 就能把它们拿回来。sync 不存在这种失败方式，因为它根本没有兜底：它会直接大声失败。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -248,6 +434,50 @@ relayium push ./data relayium://backup-server:9031`,
     },
     {
       heading: "cron でスケジュール実行する",
+      prereqs: {
+        label: "手順1の前に必要なもの",
+        items: [
+          "このマシンの CLI。sync を使うつもりなら送り先にも必要です。sync に tar のフォールバックはありません。",
+          "パスフレーズなしの SSH 鍵、または relayium serve が動いている送り先。cron にはエージェントも端末もないため、パスフレーズの入力には答えられません。",
+          "cron が起動する時点で実在するソースディレクトリ。ログイン中だけマウントされるネットワーク領域では困ります。",
+          "ログの書き出し先。出力がどこにも残らない cron ジョブは、必要になったときに初めて問題が分かるバックアップです。",
+        ],
+      },
+      steps: [
+        {
+          text: "relayium が実際にどこにあるかを調べます。cron はシェルの PATH を使わず、install.sh は /usr/local/bin に書けないとき ~/.local/bin に置きます——まさに cron から見えない場所です。",
+          code: ["command -v relayium"],
+        },
+        {
+          text: "誰も鍵盤の前にいない状態でも鍵が使えるか確認します。BatchMode=yes は入力を促さずに失敗するので、cron と同じ条件です。",
+          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+        },
+        {
+          text: "まず手で一度、cron が実行するのとまったく同じ書き方で、絶対パスも含めて通しで実行します。",
+          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+        },
+        {
+          text: "それが通ってからスケジュールを追加します。絶対パスとリダイレクトはそのまま残してください。",
+          code: ["crontab -e"],
+        },
+        {
+          text: "最初の定期実行のあと、思い込まずにログを読みます。ここが最も飛ばされやすく、そして問題を教えてくれたはずの手順です。",
+          code: ["tail -n 20 ~/relayium-backup.log"],
+        },
+      ],
+      success: {
+        label: "正しく設定できたときの見え方",
+        body: [
+          "relayium が crontab にそのまま貼れる絶対パスとして解決され、BatchMode 付きの ssh 確認が何も表示せず何も尋ねずに終了コード0で終わります。対話シェルでしか動かないバックアップは、まだスケジュールされていません。",
+        ],
+        code: [
+          `$ command -v relayium
+/usr/local/bin/relayium
+$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+$ echo $?
+0`,
+        ],
+      },
       body: [
         "push と sync はどちらも単一の非対話型コマンドなので、そのまま crontab に組み込めます。パスフレーズなしの鍵（または agent）を指定し、出力をログに残して失敗を確認できるようにしましょう：",
       ],
@@ -273,6 +503,55 @@ relayium push ./data relayium://backup-server:9031`,
         "relayium sync ./data user@backup-server:/srv/backups/ --delete は削除もミラーします（受信側に serve --allow-delete が必要）。",
         "relayium sync ./data user@backup-server:/srv/backups/ --watch は動き続けて変化のたびに同期します。cron による単発実行の代わりに使えます。",
       ],
+    },
+    {
+      heading: "うまくいかないとき",
+      body: [
+        "どれもログを見るまでは表に出ません。だからログのリダイレクトは crontab の行に最初から入っていて、任意ではないのです。5つめは見えないより厄介で、成功したように見えます。",
+      ],
+      troubleshooting: {
+        label: "症状、確認、対処",
+        items: [
+          {
+            symptom: "ログに relayium: command not found と出るのに、同じコマンドがシェルでは動く。",
+            code: [
+              `tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found`,
+            ],
+            fix: "cron は最小限の PATH、たいてい /usr/bin:/bin だけで動きます。install.sh が /usr/local/bin に書けなかった場合、バイナリは ~/.local/bin に置かれ、cron はそこを決して探しません。command -v が示す絶対パスを crontab の行に書くか、crontab の先頭に PATH= の行を足してください。",
+          },
+          {
+            symptom: "ログに ssh 接続の拒否が出る、または初回以降なにも記録されない。",
+            code: [
+              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).`,
+            ],
+            fix: "cron には ssh-agent も端末もないため、パスフレーズ付きの鍵は固まるか失敗するかしかありません。-i でバックアップ専用のパスフレーズなし鍵を指し、BatchMode=yes で確認してください。これは、そこにいない人を待つ代わりに入力を拒否します。",
+          },
+          {
+            symptom: "sync は問題なく走るのに、ソースで削除したファイルが送り先に残っている。",
+            code: [
+              `grep -i deni ~/relayium-sync.log`,
+            ],
+            fix: "削除は受信側のオプトインです。相手側に serve --allow-delete がなければ削除はスキップされ、denied として報告されます。答えが終了コードではなくログにあるのはそのためです。受信側のリスナーを --allow-delete 付きで再起動してください。",
+          },
+          {
+            symptom: "sync が --delete をきっぱり拒否する。",
+            code: [
+              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+            ],
+            fix: "ソース側が1ファイルも解決できず、そのままではミラーが送り先を空にしてしまう状態です。この拒否は意図的です。パスの打ち間違いを確認し、そこにマウントされるはずのものが、ログイン中だけでなく cron の起動時点でも実際にマウントされているかを確認してください。",
+          },
+          {
+            symptom: "バックアップは走り、終了コード0で終わるのに、中身は思っているものではない。",
+            code: [
+              `ssh user@backup-server command -v relayium`,
+            ],
+            fix: "リモートに relayium がないとき、push は SSH 上の素の tar ストリームにフォールバックします。ファイルは届くので何も文句を言いませんが、その経路にはファイルごとの SHA-256 検証も再開もありません——scp ではなくこれをスケジュールする理由そのものが失われます。送り先に CLI を入れれば戻ります。sync にこの失敗はありません。フォールバックが一切ないので、代わりに大きな音を立てて失敗します。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -349,6 +628,50 @@ relayium push ./data relayium://backup-server:9031`,
     },
     {
       heading: "cron으로 예약 실행하기",
+      prereqs: {
+        label: "1단계 전에 필요한 것",
+        items: [
+          "이 기기의 CLI. sync를 쓸 생각이라면 목적지에도 필요합니다. sync에는 tar 대체 경로가 없습니다.",
+          "암호가 없는 SSH 키, 또는 relayium serve를 돌리는 목적지. cron에는 에이전트도 터미널도 없어 암호 입력에 답할 수 없습니다.",
+          "cron이 실행되는 시점에 실제로 존재하는 원본 디렉터리. 로그인해 있을 때만 붙는 네트워크 마운트는 곤란합니다.",
+          "로그를 남길 곳. 출력이 아무 데도 가지 않는 cron 작업은, 정작 필요할 때에야 문제를 알게 되는 백업입니다.",
+        ],
+      },
+      steps: [
+        {
+          text: "relayium이 실제로 어디에 있는지 확인하세요. cron은 셸의 PATH를 쓰지 않고, install.sh는 /usr/local/bin에 쓸 수 없으면 ~/.local/bin에 둡니다 — 바로 cron이 보지 못하는 자리입니다.",
+          code: ["command -v relayium"],
+        },
+        {
+          text: "아무도 키보드 앞에 없어도 키가 동작하는지 확인하세요. BatchMode=yes는 묻지 않고 실패하므로 cron과 같은 조건입니다.",
+          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+        },
+        {
+          text: "먼저 손으로 한 번, cron이 실행할 것과 똑같은 형태로 절대 경로까지 포함해 통째로 실행해 보세요.",
+          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+        },
+        {
+          text: "그다음에야 스케줄을 추가합니다. 절대 경로와 리다이렉트는 그대로 두세요.",
+          code: ["crontab -e"],
+        },
+        {
+          text: "첫 예약 실행 뒤에는 넘겨짚지 말고 로그를 읽으세요. 사람들이 건너뛰는 단계이자, 문제를 미리 알려 주었을 단계입니다.",
+          code: ["tail -n 20 ~/relayium-backup.log"],
+        },
+      ],
+      success: {
+        label: "제대로 설정된 백업의 모습",
+        body: [
+          "relayium이 crontab에 그대로 붙여 넣을 수 있는 절대 경로로 확인되고, BatchMode를 붙인 ssh 검사가 아무것도 출력하지 않고 아무것도 묻지 않은 채 0으로 끝납니다. 대화형 셸에서만 되는 백업은 아직 예약된 것이 아닙니다.",
+        ],
+        code: [
+          `$ command -v relayium
+/usr/local/bin/relayium
+$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+$ echo $?
+0`,
+        ],
+      },
       body: [
         "push와 sync는 둘 다 단일 비대화형 명령이므로, 그대로 crontab에 넣을 수 있습니다. 암호 없는 키(또는 agent)를 지정하고, 출력을 로그로 남겨 실패를 확인할 수 있게 하세요:",
       ],
@@ -374,6 +697,55 @@ relayium push ./data relayium://backup-server:9031`,
         "relayium sync ./data user@backup-server:/srv/backups/ --delete는 삭제도 미러링합니다(수신 측에 serve --allow-delete 필요).",
         "relayium sync ./data user@backup-server:/srv/backups/ --watch는 계속 실행되며 변경 시마다 동기화합니다. cron의 단발 실행 대신 사용할 수 있습니다.",
       ],
+    },
+    {
+      heading: "잘 안 될 때",
+      body: [
+        "여기 있는 것들은 로그를 보기 전까지 전부 보이지 않습니다. 로그 리다이렉트가 선택이 아니라 crontab 줄에 처음부터 들어 있는 이유입니다. 다섯 번째는 보이지 않는 것보다 나쁩니다 — 성공처럼 보입니다.",
+      ],
+      troubleshooting: {
+        label: "증상, 확인, 해결",
+        items: [
+          {
+            symptom: "로그에 relayium: command not found가 찍히는데 같은 명령이 셸에서는 됩니다.",
+            code: [
+              `tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found`,
+            ],
+            fix: "cron은 최소한의 PATH, 보통 /usr/bin:/bin만으로 돕니다. install.sh가 /usr/local/bin에 쓰지 못했다면 바이너리는 ~/.local/bin에 있고, cron은 그곳을 결코 찾지 않습니다. command -v가 알려 준 절대 경로를 crontab 줄에 쓰거나, crontab 맨 위에 PATH= 줄을 넣으세요.",
+          },
+          {
+            symptom: "로그에 ssh 연결이 거부되었다고 나오거나, 첫 실행 이후로 아무것도 없습니다.",
+            code: [
+              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).`,
+            ],
+            fix: "cron에는 ssh-agent도 터미널도 없어서 암호가 걸린 키는 멈추거나 실패할 수밖에 없습니다. -i로 백업 전용의 암호 없는 키를 지정하고 BatchMode=yes로 확인하세요. 그 옵션은 거기 없는 사람을 기다리는 대신 아예 묻기를 거부합니다.",
+          },
+          {
+            symptom: "sync는 깔끔하게 도는데 원본에서 지운 파일이 목적지에 그대로 있습니다.",
+            code: [
+              `grep -i deni ~/relayium-sync.log`,
+            ],
+            fix: "삭제는 수신 측이 켜야 하는 옵션입니다. 상대편에 serve --allow-delete가 없으면 삭제는 건너뛰어지고 denied로 보고됩니다. 답이 종료 코드가 아니라 로그에 있는 이유입니다. 수신 측 리스너를 --allow-delete와 함께 재시작하세요.",
+          },
+          {
+            symptom: "sync가 --delete를 아예 거부합니다.",
+            code: [
+              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+            ],
+            fix: "원본에서 파일이 하나도 잡히지 않아, 그대로 두면 미러가 목적지를 비워 버리는 상태입니다. 이 거부는 의도된 것입니다. 경로 오타를 확인하고, 거기 붙어야 할 것이 로그인 중일 때뿐 아니라 cron이 도는 시점에도 실제로 마운트되어 있는지 확인하세요.",
+          },
+          {
+            symptom: "백업이 돌고 0으로 끝나는데, 내용이 생각한 그것이 아닙니다.",
+            code: [
+              `ssh user@backup-server command -v relayium`,
+            ],
+            fix: "원격에 relayium이 없으면 push는 SSH 위의 평범한 tar 스트림으로 물러납니다. 파일은 도착하니 아무도 불평하지 않지만, 그 경로에는 파일별 SHA-256 검증도 이어받기도 없습니다 — scp 대신 이걸 예약하는 두 가지 이유가 바로 그것입니다. 목적지에 CLI를 설치하면 되돌아옵니다. sync에는 이런 실패가 없습니다. 대체 경로가 아예 없어서 대신 요란하게 실패합니다.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -450,6 +822,50 @@ relayium push ./data relayium://backup-server:9031`,
     },
     {
       heading: "Per cron planen",
+      prereqs: {
+        label: "Was du vor Schritt 1 brauchst",
+        items: [
+          "Die CLI auf diesem Rechner — und auf dem Ziel ebenfalls, wenn du sync nutzen willst. sync hat keinen tar-Fallback.",
+          "Einen SSH-Schlüssel ohne Passphrase, oder ein Ziel, auf dem relayium serve läuft. cron hat weder Agent noch Terminal und kann eine Passphrase-Abfrage nicht beantworten.",
+          "Ein Quellverzeichnis, das in dem Moment existiert, in dem cron feuert — keins auf einem Netzlaufwerk, das nur eingehängt ist, solange du angemeldet bist.",
+          "Einen Ort für ein Log. Ein Cron-Job, dessen Ausgabe ins Nichts geht, ist ein Backup, von dem du erst erfährst, wenn du es brauchst.",
+        ],
+      },
+      steps: [
+        {
+          text: "Finde heraus, wo relayium wirklich liegt. cron nutzt nicht den PATH deiner Shell, und install.sh weicht auf ~/.local/bin aus, wenn /usr/local/bin nicht beschreibbar ist — genau die Stelle, die cron nie sieht.",
+          code: ["command -v relayium"],
+        },
+        {
+          text: "Prüfe, ob der Schlüssel auch ohne jemanden an der Tastatur funktioniert. BatchMode=yes scheitert, statt zu fragen — genau die Lage von cron.",
+          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+        },
+        {
+          text: "Führ den ganzen Befehl einmal von Hand aus, exakt so geschrieben wie cron ihn ausführen wird, absoluter Pfad inklusive.",
+          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+        },
+        {
+          text: "Erst danach den Zeitplan eintragen. Absoluten Pfad und Umleitung behalten.",
+          code: ["crontab -e"],
+        },
+        {
+          text: "Nach dem ersten geplanten Lauf das Log lesen statt zu vermuten. Genau dieser Schritt wird übersprungen, und genau er hätte es gesagt.",
+          code: ["tail -n 20 ~/relayium-backup.log"],
+        },
+      ],
+      success: {
+        label: "So sieht ein funktionierendes Setup aus",
+        body: [
+          "relayium löst sich zu einem absoluten Pfad auf, den du in die crontab kopieren kannst, und die ssh-Prüfung mit BatchMode endet mit 0, ohne etwas auszugeben oder zu fragen. Ein Backup, das nur aus deiner interaktiven Shell läuft, ist noch nicht geplant.",
+        ],
+        code: [
+          `$ command -v relayium
+/usr/local/bin/relayium
+$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+$ echo $?
+0`,
+        ],
+      },
       body: [
         "push und sync sind beide einzelne, nicht-interaktive Befehle, die sich direkt in eine crontab einsetzen lassen. Verweise auf einen Schlüssel ohne Passphrase (oder einen Agent) und protokolliere die Ausgabe, damit Fehlschläge sichtbar werden:",
       ],
@@ -475,6 +891,55 @@ relayium push ./data relayium://backup-server:9031`,
         "relayium sync ./data user@backup-server:/srv/backups/ --delete spiegelt auch Löschungen (Empfänger braucht serve --allow-delete).",
         "relayium sync ./data user@backup-server:/srv/backups/ --watch bleibt laufen und synchronisiert bei jeder Änderung, statt einmalig per cron.",
       ],
+    },
+    {
+      heading: "Wenn es nicht funktioniert",
+      body: [
+        "Jeder dieser Fälle ist unsichtbar, bis du ins Log schaust — deshalb steht die Umleitung in der crontab-Zeile und ist nicht optional. Der fünfte ist schlimmer als unsichtbar: er sieht wie Erfolg aus.",
+      ],
+      troubleshooting: {
+        label: "Symptom, Prüfung, Lösung",
+        items: [
+          {
+            symptom: "Im Log steht relayium: command not found, derselbe Befehl läuft in deiner Shell aber.",
+            code: [
+              `tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found`,
+            ],
+            fix: "cron läuft mit einem minimalen PATH, meist nur /usr/bin:/bin. Konnte install.sh nicht nach /usr/local/bin schreiben, liegt das Binary in ~/.local/bin, und dort sucht cron nie. Nimm den absoluten Pfad aus command -v in die crontab-Zeile, oder setz oben in der crontab eine PATH=-Zeile.",
+          },
+          {
+            symptom: "Das Log zeigt eine abgewiesene ssh-Verbindung, oder nach dem ersten Lauf gar nichts mehr.",
+            code: [
+              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).`,
+            ],
+            fix: "cron hat keinen ssh-agent und kein Terminal, ein Schlüssel mit Passphrase kann also nur hängen oder scheitern. Zeig mit -i auf einen passphrasenlosen Schlüssel, der nur fürs Backup da ist, und prüfe mit BatchMode=yes — das verweigert die Abfrage, statt auf jemanden zu warten, der nicht da ist.",
+          },
+          {
+            symptom: "sync läuft sauber, aber an der Quelle gelöschte Dateien liegen am Ziel noch.",
+            code: [
+              `grep -i deni ~/relayium-sync.log`,
+            ],
+            fix: "Löschen ist eine Opt-in-Entscheidung der Empfängerseite. Ohne serve --allow-delete drüben werden die Löschungen übersprungen und als denied zurückgemeldet — deshalb steht die Antwort im Log und nicht im Exit-Code. Starte den Listener der Gegenseite mit --allow-delete neu.",
+          },
+          {
+            symptom: "sync verweigert --delete rundheraus.",
+            code: [
+              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+            ],
+            fix: "Die Quelle löste sich zu null Dateien auf, der Spiegel hätte also das Ziel geleert. Diese Weigerung ist Absicht. Prüfe den Pfad auf einen Tippfehler — und prüfe, ob das, was dort eingehängt sein soll, auch zum Zeitpunkt des Cron-Laufs eingehängt ist und nicht nur, während du angemeldet bist.",
+          },
+          {
+            symptom: "Das Backup läuft, endet mit 0, und ist nicht das, wofür du es hältst.",
+            code: [
+              `ssh user@backup-server command -v relayium`,
+            ],
+            fix: "Hat die Gegenstelle kein relayium, fällt push auf einen einfachen tar-Strom über SSH zurück. Die Dateien kommen an, also beschwert sich nichts — aber auf diesem Weg gibt es keine SHA-256-Prüfung pro Datei und kein Fortsetzen, und genau das sind die beiden Gründe, das hier statt scp einzuplanen. Installier die CLI auf dem Ziel, dann sind sie zurück. sync kennt diesen Fehler nicht: es hat gar keinen Fallback und scheitert stattdessen laut.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -551,6 +1016,50 @@ relayium push ./data relayium://backup-server:9031`,
     },
     {
       heading: "Le planifier avec cron",
+      prereqs: {
+        label: "Ce qu'il vous faut avant l'étape 1",
+        items: [
+          "La CLI sur cette machine, et sur la destination aussi si vous comptez utiliser sync. sync n'a aucun repli sur tar.",
+          "Une clé SSH sans phrase de passe, ou une destination qui fait tourner relayium serve. cron n'a ni agent ni terminal : il ne peut pas répondre à une demande de phrase de passe.",
+          "Un répertoire source qui existe au moment où cron se déclenche — pas un montage réseau présent seulement pendant que vous êtes connecté.",
+          "Un endroit où écrire un journal. Une tâche cron dont la sortie ne va nulle part est une sauvegarde dont vous découvrirez l'état le jour où vous en aurez besoin.",
+        ],
+      },
+      steps: [
+        {
+          text: "Trouvez où se trouve réellement relayium. cron n'utilise pas le PATH de votre shell, et install.sh se rabat sur ~/.local/bin quand /usr/local/bin n'est pas accessible en écriture — précisément l'endroit que cron ne voit jamais.",
+          code: ["command -v relayium"],
+        },
+        {
+          text: "Vérifiez que la clé fonctionne sans personne au clavier. BatchMode=yes échoue au lieu de demander, ce qui est exactement la situation de cron.",
+          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+        },
+        {
+          text: "Exécutez la commande entière une fois à la main, écrite exactement comme cron l'exécutera, chemin absolu compris.",
+          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+        },
+        {
+          text: "Ensuite seulement, ajoutez la planification. Gardez le chemin absolu et la redirection.",
+          code: ["crontab -e"],
+        },
+        {
+          text: "Après le premier passage planifié, lisez le journal au lieu de supposer. C'est l'étape que l'on saute, et c'est celle qui vous l'aurait dit.",
+          code: ["tail -n 20 ~/relayium-backup.log"],
+        },
+      ],
+      success: {
+        label: "À quoi ressemble une installation qui fonctionne",
+        body: [
+          "relayium se résout en un chemin absolu que vous pouvez coller dans la crontab, et la vérification ssh avec BatchMode se termine par 0 sans rien afficher ni rien demander. Une sauvegarde qui ne marche que depuis votre shell interactif n'est pas encore planifiée.",
+        ],
+        code: [
+          `$ command -v relayium
+/usr/local/bin/relayium
+$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+$ echo $?
+0`,
+        ],
+      },
       body: [
         "push et sync sont tous deux des commandes uniques et non interactives, elles s'intègrent donc directement dans une crontab. Pointez-les vers une clé sans phrase de passe (ou vers un agent), et journalisez la sortie pour repérer les échecs :",
       ],
@@ -576,6 +1085,55 @@ relayium push ./data relayium://backup-server:9031`,
         "relayium sync ./data user@backup-server:/srv/backups/ --delete met en miroir les suppressions (le récepteur a besoin de serve --allow-delete).",
         "relayium sync ./data user@backup-server:/srv/backups/ --watch reste en cours d'exécution et resynchronise à chaque changement, au lieu d'une exécution unique via cron.",
       ],
+    },
+    {
+      heading: "Quand ça ne marche pas",
+      body: [
+        "Chacun de ces cas est invisible tant que vous ne regardez pas le journal — c'est pourquoi la redirection figure dans la ligne de crontab et n'est pas facultative. Le cinquième est pire qu'invisible : il ressemble à une réussite.",
+      ],
+      troubleshooting: {
+        label: "Symptôme, vérification, correction",
+        items: [
+          {
+            symptom: "Le journal indique relayium: command not found, alors que la même commande marche dans votre shell.",
+            code: [
+              `tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found`,
+            ],
+            fix: "cron tourne avec un PATH minimal, en général seulement /usr/bin:/bin. Si install.sh n'a pas pu écrire dans /usr/local/bin, le binaire est dans ~/.local/bin, que cron ne cherchera jamais. Mettez le chemin absolu donné par command -v dans la ligne de crontab, ou ajoutez une ligne PATH= en tête de crontab.",
+          },
+          {
+            symptom: "Le journal montre une connexion ssh refusée, ou plus rien après la première exécution.",
+            code: [
+              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).`,
+            ],
+            fix: "cron n'a ni ssh-agent ni terminal, une clé protégée par phrase de passe ne peut donc que bloquer ou échouer. Pointez -i sur une clé sans phrase de passe réservée aux sauvegardes, et vérifiez avec BatchMode=yes, qui refuse de demander plutôt que d'attendre quelqu'un qui n'est pas là.",
+          },
+          {
+            symptom: "sync s'exécute proprement, mais les fichiers supprimés à la source sont toujours sur la destination.",
+            code: [
+              `grep -i deni ~/relayium-sync.log`,
+            ],
+            fix: "La suppression se décide côté récepteur. Sans serve --allow-delete en face, les suppressions sont ignorées et renvoyées comme refusées — voilà pourquoi la réponse est dans le journal et pas dans le code de sortie. Relancez l'écouteur d'en face avec --allow-delete.",
+          },
+          {
+            symptom: "sync refuse purement et simplement --delete.",
+            code: [
+              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+            ],
+            fix: "La source n'a résolu aucun fichier, le miroir aurait donc vidé la destination. Ce refus est délibéré. Vérifiez le chemin, et vérifiez que ce qui doit y être monté l'est bien à l'heure où cron se déclenche et pas seulement quand vous êtes connecté.",
+          },
+          {
+            symptom: "La sauvegarde tourne, se termine par 0, et n'est pas ce que vous croyez.",
+            code: [
+              `ssh user@backup-server command -v relayium`,
+            ],
+            fix: "Quand la machine distante n'a pas relayium, push se rabat sur un simple flux tar via SSH. Les fichiers arrivent, donc rien ne se plaint — mais ce chemin n'a ni vérification SHA-256 fichier par fichier ni reprise, c'est-à-dire précisément les deux raisons de planifier ceci plutôt qu'un scp. Installez la CLI sur la destination pour les retrouver. sync n'a pas ce défaut : n'ayant aucun repli, il échoue bruyamment à la place.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -652,6 +1210,50 @@ relayium push ./data relayium://backup-server:9031`,
     },
     {
       heading: "جدولته باستخدام cron",
+      prereqs: {
+        label: "ما تحتاجه قبل الخطوة 1",
+        items: [
+          "الـ CLI على هذا الجهاز، وعلى الوجهة أيضًا إن كنت تنوي استخدام sync. فـ sync بلا بديل احتياطي عبر tar.",
+          "مفتاح SSH بلا عبارة مرور، أو وجهة تشغّل relayium serve. فـ cron بلا وكيل وبلا طرفية، ولا يستطيع الإجابة عن طلب عبارة المرور.",
+          "دليل مصدر موجود فعلًا في اللحظة التي ينطلق فيها cron — لا دليل على مشاركة شبكية لا تُركَّب إلا وأنت مسجَّل الدخول.",
+          "مكان تكتب فيه سجلًا. فمهمة cron التي تذهب مخرجاتها إلى العدم هي نسخة احتياطية لن تعرف حالها إلا يوم تحتاجها.",
+        ],
+      },
+      steps: [
+        {
+          text: "اعرف أين يوجد relayium فعلًا. فـ cron لا يستخدم PATH الخاص بصدفتك، وinstall.sh يتراجع إلى ‎~/.local/bin‎ حين يتعذّر الكتابة في ‎/usr/local/bin‎ — وهو بالضبط الموضع الذي لا يراه cron أبدًا.",
+          code: ["command -v relayium"],
+        },
+        {
+          text: "تأكّد أن المفتاح يعمل ولا أحد أمام لوحة المفاتيح. فـ BatchMode=yes يفشل بدل أن يسأل، وهذا هو حال cron تمامًا.",
+          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+        },
+        {
+          text: "شغّل الأمر كاملًا يدويًا مرة واحدة، مكتوبًا تمامًا كما سيشغّله cron، بما في ذلك المسار المطلق.",
+          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+        },
+        {
+          text: "عندها فقط أضف الجدولة. أبقِ المسار المطلق وإعادة التوجيه كما هما.",
+          code: ["crontab -e"],
+        },
+        {
+          text: "بعد أول تشغيل مجدول، اقرأ السجل بدل أن تفترض. هذه هي الخطوة التي يتخطّاها الناس، وهي نفسها التي كانت ستخبرهم.",
+          code: ["tail -n 20 ~/relayium-backup.log"],
+        },
+      ],
+      success: {
+        label: "كيف يبدو إعداد يعمل بشكل صحيح",
+        body: [
+          "يُحَل relayium إلى مسار مطلق يمكنك لصقه في crontab، وينتهي فحص ssh مع BatchMode بالرمز 0 دون أن يطبع شيئًا أو يطلب شيئًا. والنسخة الاحتياطية التي لا تعمل إلا من صدفتك التفاعلية ليست مجدولة بعد.",
+        ],
+        code: [
+          `$ command -v relayium
+/usr/local/bin/relayium
+$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+$ echo $?
+0`,
+        ],
+      },
       body: [
         "كلٌّ من push وsync أمر واحد غير تفاعلي، فيندرج مباشرةً في crontab. وجِّهه إلى مفتاح SSH بلا عبارة مرور (أو إلى وكيل)، وسجِّل المُخرجات لتظهر حالات الفشل:",
       ],
@@ -677,6 +1279,55 @@ relayium push ./data relayium://backup-server:9031`,
         "relayium sync ./data user@backup-server:/srv/backups/ --delete يعكس عمليات الحذف (يحتاج المستقبِل إلى serve --allow-delete).",
         "relayium sync ./data user@backup-server:/srv/backups/ --watch يبقى مستمرًا ويعيد المزامنة عند التغيّر بدلًا من التشغيل مرة واحدة من cron.",
       ],
+    },
+    {
+      heading: "حين لا ينجح الأمر",
+      body: [
+        "كل حالة من هذه غير مرئية حتى تنظر في السجل — ولهذا كُتبت إعادة التوجيه ضمن سطر crontab لا كخيار إضافي. والحالة الخامسة أسوأ من كونها غير مرئية: فهي تبدو كالنجاح.",
+      ],
+      troubleshooting: {
+        label: "العَرَض، الفحص، الإصلاح",
+        items: [
+          {
+            symptom: "يقول السجل relayium: command not found بينما الأمر نفسه يعمل في صدفتك.",
+            code: [
+              `tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found`,
+            ],
+            fix: "يعمل cron بمسار PATH أدنى، غالبًا ‎/usr/bin:/bin‎ فقط. وإن لم يتمكّن install.sh من الكتابة في ‎/usr/local/bin‎ فقد وضع الثنائي في ‎~/.local/bin‎، وهو موضع لن يبحث فيه cron قط. ضع المسار المطلق الذي يعطيه command -v في سطر crontab، أو أضف سطر ‎PATH=‎ في أعلى crontab.",
+          },
+          {
+            symptom: "يُظهر السجل رفض اتصال ssh، أو لا شيء بعد التشغيل الأول.",
+            code: [
+              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).`,
+            ],
+            fix: "لا يملك cron وكيل ssh ولا طرفية، فالمفتاح المحمي بعبارة مرور لا يسعه إلا أن يتعلّق أو يفشل. وجّه ‎-i‎ إلى مفتاح بلا عبارة مرور مخصَّص للنسخ الاحتياطي، وتحقّق بـ BatchMode=yes الذي يرفض السؤال بدل انتظار شخص غير موجود.",
+          },
+          {
+            symptom: "يعمل sync بنظافة، لكن الملفات المحذوفة من المصدر ما تزال في الوجهة.",
+            code: [
+              `grep -i deni ~/relayium-sync.log`,
+            ],
+            fix: "الحذف اختيار يفعّله الطرف المستقبِل. وبلا serve --allow-delete في الجهة المقابلة تُتخطّى عمليات الحذف ويُبلَّغ عنها بأنها مرفوضة، ولهذا يوجد الجواب في السجل لا في رمز الخروج. أعد تشغيل مُنصِت الطرف المقابل مع ‎--allow-delete‎.",
+          },
+          {
+            symptom: "يرفض sync الخيار ‎--delete‎ رفضًا قاطعًا.",
+            code: [
+              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+            ],
+            fix: "لم يُحلّ المصدر إلى أي ملف، فكانت المرآة ستفرغ الوجهة. وهذا الرفض مقصود. تحقّق من المسار بحثًا عن خطأ مطبعي، وتحقّق أن ما يُفترض تركيبه هناك مُركَّب فعلًا وقت انطلاق cron لا حين تكون مسجَّل الدخول فقط.",
+          },
+          {
+            symptom: "تعمل النسخة الاحتياطية وتنتهي بالرمز 0، لكنها ليست ما تظنه.",
+            code: [
+              `ssh user@backup-server command -v relayium`,
+            ],
+            fix: "حين لا يملك الجهاز البعيد relayium يتراجع push إلى تدفّق tar عادي عبر SSH. تصل الملفات فلا يشتكي شيء — لكن هذا المسار بلا تحقّق SHA-256 لكل ملف وبلا استئناف، وهما بالضبط السببان اللذان من أجلهما تجدول هذا بدل scp. ثبّت الـ CLI على الوجهة لتستعيدهما. أما sync فلا يعرف هذا الإخفاق: إذ لا بديل احتياطي لديه أصلًا، فيفشل بصوت عالٍ بدلًا من ذلك.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -753,6 +1404,50 @@ relayium push ./data relayium://backup-server:9031`,
     },
     {
       heading: "Prográmalo con cron",
+      prereqs: {
+        label: "Lo que necesitas antes del paso 1",
+        items: [
+          "La CLI en esta máquina, y también en el destino si piensas usar sync. sync no tiene repliegue a tar.",
+          "Una clave SSH sin frase de paso, o un destino que ejecute relayium serve. cron no tiene agente ni terminal, así que no puede responder a una petición de frase de paso.",
+          "Un directorio de origen que exista en el momento en que cron se dispara, no uno en un montaje de red que solo está presente mientras tienes la sesión abierta.",
+          "Un sitio donde escribir un registro. Una tarea de cron cuya salida no va a ninguna parte es una copia de seguridad de la que te enterarás el día que la necesites.",
+        ],
+      },
+      steps: [
+        {
+          text: "Averigua dónde está realmente relayium. cron no usa el PATH de tu shell, e install.sh se repliega a ~/.local/bin cuando no puede escribir en /usr/local/bin, que es justo el sitio que cron nunca ve.",
+          code: ["command -v relayium"],
+        },
+        {
+          text: "Comprueba que la clave funciona sin nadie al teclado. BatchMode=yes falla en lugar de preguntar, que es exactamente la situación de cron.",
+          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+        },
+        {
+          text: "Ejecuta la orden entera a mano una vez, escrita exactamente como la ejecutará cron, ruta absoluta incluida.",
+          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+        },
+        {
+          text: "Solo entonces añade la programación. Conserva la ruta absoluta y la redirección.",
+          code: ["crontab -e"],
+        },
+        {
+          text: "Tras la primera ejecución programada, lee el registro en vez de suponer. Es el paso que la gente se salta, y es el que se lo habría dicho.",
+          code: ["tail -n 20 ~/relayium-backup.log"],
+        },
+      ],
+      success: {
+        label: "Qué aspecto tiene un montaje que funciona",
+        body: [
+          "relayium se resuelve a una ruta absoluta que puedes pegar en el crontab, y la comprobación de ssh con BatchMode termina con 0 sin imprimir ni pedir nada. Una copia de seguridad que solo funciona desde tu shell interactiva todavía no está programada.",
+        ],
+        code: [
+          `$ command -v relayium
+/usr/local/bin/relayium
+$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+$ echo $?
+0`,
+        ],
+      },
       body: [
         "Tanto push como sync son comandos únicos y no interactivos, así que se integran directamente en un crontab. Apúntalos a una clave SSH sin frase de contraseña (o a un agente) y registra la salida para que los fallos sean visibles:",
       ],
@@ -778,6 +1473,55 @@ relayium push ./data relayium://backup-server:9031`,
         "relayium sync ./data user@backup-server:/srv/backups/ --delete replica los borrados (el receptor necesita serve --allow-delete).",
         "relayium sync ./data user@backup-server:/srv/backups/ --watch se mantiene en ejecución y vuelve a sincronizar al cambiar algo, en lugar de ejecutarse una sola vez desde cron.",
       ],
+    },
+    {
+      heading: "Cuando no funciona",
+      body: [
+        "Todos estos casos son invisibles hasta que miras el registro: por eso la redirección va en la línea del crontab y no es opcional. El quinto es peor que invisible, porque parece un éxito.",
+      ],
+      troubleshooting: {
+        label: "Síntoma, comprobación, solución",
+        items: [
+          {
+            symptom: "El registro dice relayium: command not found, pero la misma orden funciona en tu shell.",
+            code: [
+              `tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found`,
+            ],
+            fix: "cron corre con un PATH mínimo, normalmente solo /usr/bin:/bin. Si install.sh no pudo escribir en /usr/local/bin, el binario está en ~/.local/bin, donde cron no mirará jamás. Pon en la línea del crontab la ruta absoluta que da command -v, o añade una línea PATH= al principio del crontab.",
+          },
+          {
+            symptom: "El registro muestra la conexión ssh rechazada, o nada después de la primera ejecución.",
+            code: [
+              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).`,
+            ],
+            fix: "cron no tiene ssh-agent ni terminal, así que una clave con frase de paso solo puede colgarse o fallar. Apunta -i a una clave sin frase de paso reservada para las copias, y compruébalo con BatchMode=yes, que se niega a preguntar en lugar de esperar a alguien que no está.",
+          },
+          {
+            symptom: "sync se ejecuta limpiamente, pero los archivos borrados en el origen siguen en el destino.",
+            code: [
+              `grep -i deni ~/relayium-sync.log`,
+            ],
+            fix: "El borrado se activa en el lado receptor. Sin serve --allow-delete enfrente, los borrados se omiten y se informan como denegados, y por eso la respuesta está en el registro y no en el código de salida. Reinicia el receptor del otro lado con --allow-delete.",
+          },
+          {
+            symptom: "sync rechaza --delete de plano.",
+            code: [
+              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+            ],
+            fix: "El origen no resolvió ningún archivo, así que el espejo habría vaciado el destino. Ese rechazo es deliberado. Revisa la ruta por si hay una errata, y comprueba que lo que deba estar montado ahí lo esté a la hora en que se dispara cron y no solo cuando tienes sesión abierta.",
+          },
+          {
+            symptom: "La copia se ejecuta, termina con 0, y no es lo que crees.",
+            code: [
+              `ssh user@backup-server command -v relayium`,
+            ],
+            fix: "Cuando la máquina remota no tiene relayium, push se repliega a un flujo tar simple sobre SSH. Los archivos llegan, así que nada se queja, pero ese camino no tiene verificación SHA-256 por archivo ni reanudación, que son justo las dos razones para programar esto en lugar de un scp. Instala la CLI en el destino para recuperarlas. sync no tiene este fallo: como no tiene ningún repliegue, falla ruidosamente.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -854,6 +1598,50 @@ relayium push ./data relayium://backup-server:9031`,
     },
     {
       heading: "Agende com o cron",
+      prereqs: {
+        label: "O que você precisa antes do passo 1",
+        items: [
+          "A CLI nesta máquina, e também no destino se pretende usar o sync. O sync não tem recurso ao tar.",
+          "Uma chave SSH sem frase secreta, ou um destino rodando relayium serve. O cron não tem agente nem terminal, então não consegue responder a um pedido de frase secreta.",
+          "Um diretório de origem que exista no momento em que o cron dispara — não um em montagem de rede que só está presente enquanto você está logado.",
+          "Um lugar para escrever um log. Uma tarefa de cron cuja saída não vai a lugar nenhum é um backup do qual você vai saber no dia em que precisar dele.",
+        ],
+      },
+      steps: [
+        {
+          text: "Descubra onde o relayium realmente está. O cron não usa o PATH do seu shell, e o install.sh recorre a ~/.local/bin quando não consegue escrever em /usr/local/bin — exatamente o lugar que o cron nunca enxerga.",
+          code: ["command -v relayium"],
+        },
+        {
+          text: "Confirme que a chave funciona sem ninguém ao teclado. BatchMode=yes falha em vez de perguntar, que é justamente a situação do cron.",
+          code: ["ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true"],
+        },
+        {
+          text: "Rode o comando inteiro à mão uma vez, escrito exatamente como o cron vai rodar, caminho absoluto incluído.",
+          code: ["/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/"],
+        },
+        {
+          text: "Só então adicione o agendamento. Mantenha o caminho absoluto e o redirecionamento.",
+          code: ["crontab -e"],
+        },
+        {
+          text: "Depois da primeira execução agendada, leia o log em vez de supor. É o passo que as pessoas pulam, e é o que teria contado.",
+          code: ["tail -n 20 ~/relayium-backup.log"],
+        },
+      ],
+      success: {
+        label: "Como é uma configuração que funciona",
+        body: [
+          "O relayium resolve para um caminho absoluto que dá para colar no crontab, e a checagem de ssh com BatchMode termina em 0 sem imprimir nem pedir nada. Um backup que só funciona a partir do seu shell interativo ainda não está agendado.",
+        ],
+        code: [
+          `$ command -v relayium
+/usr/local/bin/relayium
+$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+$ echo $?
+0`,
+        ],
+      },
       body: [
         "Tanto push quanto sync são comandos únicos e não interativos, então se encaixam direto em um crontab. Aponte-os para uma chave SSH sem senha (ou um agente) e registre a saída para que as falhas fiquem visíveis:",
       ],
@@ -879,6 +1667,55 @@ relayium push ./data relayium://backup-server:9031`,
         "relayium sync ./data user@backup-server:/srv/backups/ --delete espelha as exclusões (o receptor precisa de serve --allow-delete).",
         "relayium sync ./data user@backup-server:/srv/backups/ --watch permanece em execução e sincroniza novamente a cada mudança, em vez de rodar uma única vez pelo cron.",
       ],
+    },
+    {
+      heading: "Quando não funciona",
+      body: [
+        "Cada um destes casos é invisível até você olhar o log — por isso o redirecionamento está na linha do crontab e não é opcional. O quinto é pior que invisível: ele parece sucesso.",
+      ],
+      troubleshooting: {
+        label: "Sintoma, checagem, correção",
+        items: [
+          {
+            symptom: "O log diz relayium: command not found, mas o mesmo comando funciona no seu shell.",
+            code: [
+              `tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found`,
+            ],
+            fix: "O cron roda com um PATH mínimo, normalmente só /usr/bin:/bin. Se o install.sh não conseguiu escrever em /usr/local/bin, o binário está em ~/.local/bin, onde o cron nunca vai procurar. Use na linha do crontab o caminho absoluto que o command -v mostra, ou coloque uma linha PATH= no topo do crontab.",
+          },
+          {
+            symptom: "O log mostra a conexão ssh recusada, ou nada depois da primeira execução.",
+            code: [
+              `ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).`,
+            ],
+            fix: "O cron não tem ssh-agent nem terminal, então uma chave com frase secreta só pode travar ou falhar. Aponte o -i para uma chave sem frase secreta reservada aos backups e confirme com BatchMode=yes, que se recusa a perguntar em vez de esperar por alguém que não está lá.",
+          },
+          {
+            symptom: "O sync roda limpo, mas os arquivos apagados na origem continuam no destino.",
+            code: [
+              `grep -i deni ~/relayium-sync.log`,
+            ],
+            fix: "A exclusão é uma opção do lado receptor. Sem serve --allow-delete do outro lado, as exclusões são puladas e reportadas como negadas — por isso a resposta está no log e não no código de saída. Reinicie o receptor do outro lado com --allow-delete.",
+          },
+          {
+            symptom: "O sync recusa o --delete de saída.",
+            code: [
+              `relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).`,
+            ],
+            fix: "A origem não resolveu nenhum arquivo, então o espelho teria esvaziado o destino. Essa recusa é proposital. Verifique o caminho por causa de um erro de digitação, e verifique se o que deveria estar montado ali está montado na hora em que o cron dispara, e não só quando você está logado.",
+          },
+          {
+            symptom: "O backup roda, sai com 0, e não é o que você pensa.",
+            code: [
+              `ssh user@backup-server command -v relayium`,
+            ],
+            fix: "Quando a máquina remota não tem relayium, o push recorre a um fluxo tar simples sobre SSH. Os arquivos chegam, então nada reclama — mas esse caminho não tem verificação SHA-256 por arquivo nem retomada, que são exatamente os dois motivos para agendar isto em vez de um scp. Instale a CLI no destino para recuperá-las. O sync não tem essa falha: como não tem recurso nenhum, ele falha alto em vez disso.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -917,6 +1754,6 @@ relayium push ./data relayium://backup-server:9031`,
 export default {
   slug: "how-to/automate-server-backups",
   published: "2026-07-09",
-  updated: "2026-07-12",
+  updated: "2026-08-06",
   langs: withInstall({ en, zh, ja, ko, de, fr, ar, es, pt }),
 };

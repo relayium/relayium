@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="用 cron 任务自动化加密的服务器备份" />
     <meta name="twitter:description" content="在 cron 里定时运行 relayium push 或 sync，按计划自动把目录复制到另一台服务器——加密传输、支持断点续传、逐文件 SHA-256 校验，而且想跑多频繁都免费。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 cron 任务自动化加密的服务器备份","description":"在 cron 里定时运行 relayium push 或 sync，按计划自动把目录复制到另一台服务器——加密传输、支持断点续传、逐文件 SHA-256 校验，而且想跑多频繁都免费。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-12","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/automate-server-backups/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 cron 任务自动化加密的服务器备份"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"备份服务器需要装 relayium 吗？","acceptedAnswer":{"@type":"Answer","text":"要看用哪条命令。push 不管远端装没装都能用：装了就走原生协议（断点续传 + 逐文件 SHA-256 校验）；没装的话，push 会退回到通过 SSH 传输 tar 流，一台裸服务器也照样能收。sync 则始终需要远端有 relayium 的原生协议——它没有 tar 兜底方案，请先在远端装好。"}},{"@type":"Question","name":"备份会加密并校验吗？","acceptedAnswer":{"@type":"Answer","text":"会。每个文件都会做端到端的 SHA-256 校验；而通过 SSH 或daemon 直连推送时，字节已经受该连接自身的加密保护——不需要额外配置什么。"}},{"@type":"Question","name":"如果 cron 任务执行到一半被中断会怎样？","acceptedAnswer":{"@type":"Answer","text":"只要两端都有 relayium，下一次计划运行就会接着传没传完的文件，而不是重新发送全部内容。如果你想放弃续传、做一次干净的完整重发，加上 --no-resume 即可。"}},{"@type":"Question","name":"--delete 会不会不小心清空我的目标目录？","acceptedAnswer":{"@type":"Answer","text":"如果源目录里一个文件都没有，sync 会直接拒绝执行 --delete；而且接收端必须以 serve --allow-delete 启动，删除才会真正生效——否则会被跳过，并把结果报告给你。"}},{"@type":"Question","name":"需要账号吗，这个要收费吗？","acceptedAnswer":{"@type":"Answer","text":"都不需要。CLI 完全免费，push、pull、sync 都不需要账号——传输走的是你自己的 SSH 连接，或者一条daemon 直连，不经过 Relayium 的服务器。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"用 cron 任务自动化加密的服务器备份","description":"在 cron 里定时运行 relayium push 或 sync，按计划自动把目录复制到另一台服务器——加密传输、支持断点续传、逐文件 SHA-256 校验，而且想跑多频繁都免费。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/automate-server-backups/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"用 cron 任务自动化加密的服务器备份"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"备份服务器需要装 relayium 吗？","acceptedAnswer":{"@type":"Answer","text":"要看用哪条命令。push 不管远端装没装都能用：装了就走原生协议（断点续传 + 逐文件 SHA-256 校验）；没装的话，push 会退回到通过 SSH 传输 tar 流，一台裸服务器也照样能收。sync 则始终需要远端有 relayium 的原生协议——它没有 tar 兜底方案，请先在远端装好。"}},{"@type":"Question","name":"备份会加密并校验吗？","acceptedAnswer":{"@type":"Answer","text":"会。每个文件都会做端到端的 SHA-256 校验；而通过 SSH 或daemon 直连推送时，字节已经受该连接自身的加密保护——不需要额外配置什么。"}},{"@type":"Question","name":"如果 cron 任务执行到一半被中断会怎样？","acceptedAnswer":{"@type":"Answer","text":"只要两端都有 relayium，下一次计划运行就会接着传没传完的文件，而不是重新发送全部内容。如果你想放弃续传、做一次干净的完整重发，加上 --no-resume 即可。"}},{"@type":"Question","name":"--delete 会不会不小心清空我的目标目录？","acceptedAnswer":{"@type":"Answer","text":"如果源目录里一个文件都没有，sync 会直接拒绝执行 --delete；而且接收端必须以 serve --allow-delete 启动，删除才会真正生效——否则会被跳过，并把结果报告给你。"}},{"@type":"Question","name":"需要账号吗，这个要收费吗？","acceptedAnswer":{"@type":"Answer","text":"都不需要。CLI 完全免费，push、pull、sync 都不需要账号——传输走的是你自己的 SSH 连接，或者一条daemon 直连，不经过 Relayium 的服务器。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,7 +100,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最近更新: <bdi>2026-07-12</bdi></p>
+      <p class="updated">最近更新: <bdi>2026-08-06</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups/">English</a><a href="/zh/how-to/automate-server-backups/" aria-current="true">中文</a><a href="/ja/how-to/automate-server-backups/">日本語</a><a href="/ko/how-to/automate-server-backups/">한국어</a><a href="/de/how-to/automate-server-backups/">Deutsch</a><a href="/fr/how-to/automate-server-backups/">Français</a><a href="/ar/how-to/automate-server-backups/">العربية</a><a href="/es/how-to/automate-server-backups/">Español</a><a href="/pt/how-to/automate-server-backups/">Português</a></nav>
       <p class="lead">需要你记得手动运行的备份，往往就不会发生。cron 会记得，而 Relayium CLI 正是为此而生：一条非交互式命令，把目录复制（或镜像）到另一台机器，逐个校验文件，网络断了也能从断点接着传。</p>
       <p class="lead">本文介绍如何用 cron 定时运行 relayium push 和增量的 relayium sync、两者共用的两种传输方式，以及可以直接抄走的 crontab 行。</p>
@@ -104,17 +121,30 @@ relayium push ./data user@backup-server:/srv/backups/
 relayium push ./data relayium://backup-server:9031</code></pre>
       <ul><li>daemon 直连走的是带证书证书固定的 TLS 1.3：首次连接时信任（trust-on-first-use），之后每次运行都校验同一个指纹。</li><li>sync 接受和 push 完全相同的两种目标写法。</li></ul>
       <h2>用 cron 定时运行</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前你需要什么</p><ul><li>本机装好 CLI；如果你打算用 sync，目标机器上也要装。sync 没有 tar 兜底。</li><li>一把没有口令的 SSH 密钥，或者一台在跑 relayium serve 的目标机。cron 既没有 agent 也没有终端，回答不了口令提示。</li><li>一个在 cron 触发的那一刻确实存在的源目录——不能是那种只有你登录时才挂上的网络挂载点。</li><li>一个写日志的地方。输出无处可去的 cron 任务，等于一份等你真正需要时才会发现问题的备份。</li></ul></div>
       <p>push 和 sync 都是单条非交互式命令，可以直接放进 crontab。给它指定一个没有口令的密钥（或者用 agent），并把输出记下来，好让失败能被看见：</p>
       <pre><code># 每晚 2 点做一次完整复制——添加到你的 crontab（crontab -e）
 0 2 * * * relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-backup.log 2&gt;&amp;1
 
 # 改为每 15 分钟做一次增量镜像
 */15 * * * * relayium sync -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/ &gt;&gt; ~/relayium-sync.log 2&gt;&amp;1</code></pre>
+      <ol class="steps" data-block="steps"><li><p>先查清 relayium 到底在哪。cron 不用你 shell 的 PATH，而 install.sh 在 /usr/local/bin 不可写时会退到 ~/.local/bin——那正好是 cron 看不见的地方。</p><pre><code>command -v relayium</code></pre></li><li><p>确认这把密钥在没人守着键盘时也能用。BatchMode=yes 会直接失败而不是弹提示，这正是 cron 的处境。</p><pre><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true</code></pre></li><li><p>先手动完整跑一次，写法要和 cron 将要执行的一模一样，包括绝对路径。</p><pre><code>/usr/local/bin/relayium push -i ~/.ssh/backup_key ~/documents user@backup-server:/srv/backups/</code></pre></li><li><p>确认之后再加计划任务。绝对路径和重定向都要保留。</p><pre><code>crontab -e</code></pre></li><li><p>第一次定时执行之后，去读日志，不要想当然。这一步是最容易被跳过的，也正是本可以提前告诉你问题的那一步。</p><pre><code>tail -n 20 ~/relayium-backup.log</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">一个配置正确的备份长什么样</p><p>relayium 解析出一个可以直接粘进 crontab 的绝对路径，并且那条 BatchMode 的 ssh 检查什么都不打印、什么都不问、退出码为 0。只在你的交互式 shell 里能跑通的备份，还不算配好了。</p><pre><code>$ command -v relayium
+/usr/local/bin/relayium
+$ ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+$ echo $?
+0</code></pre></div>
       <ul><li>只要有文件没通过完整性校验，命令就会以非零状态退出，cron 的失败邮件通知就能发现问题。</li><li>被中断的一次运行，会在下一次计划运行时自动续传或补上进度。</li></ul>
       <h2>镜像删除与实时同步</h2>
       <p>默认情况下，sync 只会在目标端新增或更新文件。加上 --delete 才会变成真正的镜像，把源目录里已经不存在的文件也从目标端删掉——接收端必须显式以 serve --allow-delete 监听，否则这些删除会被静默跳过，并在结果里报告为被拒绝。如果源目录解析不出任何文件，sync 还会直接拒绝执行 --delete，这样源路径写错也清空不了目标目录。</p>
       <p>不想等 cron 的下一个执行点，就用 --watch：它会让 relayium sync 常驻运行，源目录下一有文件变动，片刻之后就自动重新同步——比按计划轮询更轻量。</p>
       <ul><li>relayium sync ./data user@backup-server:/srv/backups/ --delete 会把删除也镜像过去（接收端需要 serve --allow-delete）。</li><li>relayium sync ./data user@backup-server:/srv/backups/ --watch 会常驻运行，一有变化就同步，而不是靠 cron 单次触发。</li></ul>
+      <h2>出问题时怎么办</h2>
+      <p>这里每一种在你去看日志之前都是不可见的，所以那条日志重定向写在 crontab 行里，而不是可选项。第五种比不可见更糟：它看起来像成功。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>日志里写 relayium: command not found，但同一条命令在你的 shell 里能跑。</dt><dd><pre><code>tail -n 5 ~/relayium-backup.log
+# /bin/sh: relayium: command not found</code></pre><p>cron 使用一个最小化的 PATH，通常只有 /usr/bin:/bin。如果 install.sh 当初写不进 /usr/local/bin，它会把二进制放在 ~/.local/bin，而 cron 永远找不到那里。把 command -v 给出的绝对路径写进 crontab 行，或者在 crontab 顶部单独加一行 PATH=。</p></dd><dt>日志显示 ssh 连接被拒绝，或者第一次运行之后就什么都没有了。</dt><dd><pre><code>ssh -i ~/.ssh/backup_key -o BatchMode=yes user@backup-server true
+# Permission denied (publickey).</code></pre><p>cron 既没有 ssh-agent 也没有终端，所以带口令的密钥只能卡住或失败。用 -i 指向一把专供备份、没有口令的密钥，并用 BatchMode=yes 确认——它宁可拒绝也不会去等一个根本不在场的人。</p></dd><dt>sync 跑得很干净，但源端已删除的文件在目标端还在。</dt><dd><pre><code>grep -i deni ~/relayium-sync.log</code></pre><p>删除是接收端的显式选项。对端没有 serve --allow-delete 时，这些删除会被跳过并回报为 denied，所以答案在日志里而不在退出码里。给接收端的监听器加上 --allow-delete 重启。</p></dd><dt>sync 直接拒绝执行 --delete。</dt><dd><pre><code>relayium sync ~/documents user@backup-server:/srv/backups/ --delete
+# refusing --delete with an empty source: this would delete everything on the destination. Check the path(s).</code></pre><p>源端解析下来一个文件都没有，这时镜像会把目标端清空。这个拒绝是刻意的。检查路径是不是敲错了，也检查那里该挂载的东西在 cron 触发的时刻是否真的挂着，而不是只在你登录时才挂。</p></dd><dt>备份跑了，退出码 0，但它并不是你以为的那个东西。</dt><dd><pre><code>ssh user@backup-server command -v relayium</code></pre><p>远端没有 relayium 时，push 会退回到走 SSH 的普通 tar 流。文件确实到了，所以没有任何东西报警——但这条路径既没有逐文件 SHA-256 校验，也没有断点续传，而这两点恰恰是你不用 scp 而设这个计划任务的理由。在目标机上装好 CLI 就能把它们拿回来。sync 不存在这种失败方式，因为它根本没有兜底：它会直接大声失败。</p></dd></dl></div>
       <h2>常见问题</h2>
       <h3>备份服务器需要装 relayium 吗？</h3>
       <p>要看用哪条命令。push 不管远端装没装都能用：装了就走原生协议（断点续传 + 逐文件 SHA-256 校验）；没装的话，push 会退回到通过 SSH 传输 tar 流，一台裸服务器也照样能收。sync 则始终需要远端有 relayium 的原生协议——它没有 tar 兜底方案，请先在远端装好。</p>
