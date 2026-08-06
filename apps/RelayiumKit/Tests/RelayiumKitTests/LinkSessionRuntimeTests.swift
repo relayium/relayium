@@ -18,7 +18,7 @@ import XCTest
 ///
 /// That is what makes "the runtime held its lock across a transport call" a real
 /// deadlock rather than a style opinion.
-private final class InitialTransport: LinkInitialTransport, @unchecked Sendable {
+private final class InitialTransport: LinkRoutableInitialTransport, @unchecked Sendable {
     let queue = DispatchQueue(label: "com.relayium.test.session-runtime-transport")
     private let key = DispatchSpecificKey<Bool>()
     private let slots = NSLock()
@@ -127,7 +127,21 @@ private final class InitialTransport: LinkInitialTransport, @unchecked Sendable 
         }
     }
 
-    func receive(from: String, signal: JSONValue) {}
+    /// Every signal the room routed to this transport, in order.
+    private var _routed: [(from: String, signal: JSONValue)] = []
+    var routed: [(from: String, signal: JSONValue)] {
+        state.lock(); defer { state.unlock() }; return _routed
+    }
+
+    /// Runs INSIDE `receive`, which is the exact instant the runtime is holding
+    /// its lock across the forward — the window a barrier test needs.
+    var duringReceive: (() -> Void)?
+    func receive(from: String, signal: JSONValue) {
+        state.lock()
+        _routed.append((from, signal))
+        state.unlock()
+        duringReceive?()
+    }
 
     // ── delivery ────────────────────────────────────────────────────────────
 
@@ -384,7 +398,7 @@ final class LinkSessionRuntimeTests: XCTestCase {
         let admission = LinkAdmission(selfId: { "peer-a" }, supportsLink: { _ in true })
         admission.didBeginEstablishing(peerId: identity.peerId, role: role)
         let runtime = LinkSessionRuntime(
-            transport: transport,
+            establishing: transport,
             receiveDirectory: receiveDirectory ?? dir,
             scheduler: scheduler,
             replacementFactory: { _ in
@@ -1097,6 +1111,184 @@ final class LinkSessionRuntimeTests: XCTestCase {
         h.runtime.start()
 
         XCTAssertEqual(h.runtime.joinRecovery(peerId: "peer-b") { _ in }, .unavailable)
+    }
+
+    // MARK: - the establishment's routed signals
+    //
+    // The other half of the factory's `initialSignal`: everything that CHASES a
+    // consumed offer — the peer's trickled candidates, and on the initiating side
+    // its answer — for the window between the room deciding to establish and the
+    // transport claiming the socket's single per-connection slot.
+
+    private func candidate(_ id: String) -> JSONValue {
+        .object(["link": .bool(true),
+                 "ice": .object(["candidate": .string("candidate:\(id)"),
+                                 "sdpMid": .string("0"),
+                                 "sdpMLineIndex": .number(0)])])
+    }
+
+    /// A routed signal reaches the establishing transport verbatim, and in the
+    /// order the room replayed it. Order is the contract: an answer applied after
+    /// the candidates that chase it is not the same establishment.
+    func testRoutedSignalsReachTheEstablishingTransportInOrder() {
+        let h = harness()
+        h.runtime.start()
+        let replayed = [candidate("1"), candidate("2"), candidate("3")]
+
+        for signal in replayed { h.runtime.receive(from: "peer-b", signal: signal) }
+        h.runtime.settle()
+
+        XCTAssertEqual(h.transport.routed.map(\.signal), replayed)
+        XCTAssertEqual(Set(h.transport.routed.map(\.from)), ["peer-b"])
+    }
+
+    /// Nothing is forwarded before `start()`. There is no establishment yet, and
+    /// a transport that had not been told to run has nothing to apply a remote
+    /// description to.
+    func testARoutedSignalBeforeStartReachesNothing() {
+        let h = harness()
+
+        h.runtime.receive(from: "peer-b", signal: candidate("1"))
+        h.runtime.settle()
+
+        XCTAssertTrue(h.transport.routed.isEmpty)
+    }
+
+    /// A published link still takes routed signalling, and that is deliberate:
+    /// ICE is trickled, so a peer legitimately keeps sending candidates after the
+    /// lanes are open, and the transport running the link is the right thing to
+    /// hand them to. Refusing here would drop a candidate that could still repair
+    /// a poor path.
+    func testARoutedSignalAfterPublicationStillReachesTheLiveTransport() {
+        let h = harness()
+        opened(h)
+
+        h.runtime.receive(from: "peer-b", signal: candidate("1"))
+        h.runtime.settle()
+
+        XCTAssertEqual(h.transport.routed.count, 1)
+    }
+
+    /// And nothing after the end, whichever way it ended.
+    func testARoutedSignalAfterTheEndReachesNothing() {
+        let h = harness()
+        h.runtime.start()
+        h.runtime.stop()
+        h.runtime.settle()
+
+        h.runtime.receive(from: "peer-b", signal: candidate("1"))
+        h.runtime.settle()
+
+        XCTAssertTrue(h.transport.routed.isEmpty)
+    }
+
+    /// **The deadlock question, tested rather than asserted.**
+    ///
+    /// An earlier draft made the state test and the forward one critical section
+    /// by holding `lock` across `transport.receive`. That closed a race and
+    /// opened a worse hole: a conformer that read the runtime back, or stopped
+    /// it, deadlocked on a non-recursive lock — and the first barrier test
+    /// written against that contract did exactly that.
+    ///
+    /// So this drives the case that used to hang. The transport reads three
+    /// runtime properties and then ENDS the runtime, all synchronously inside its
+    /// own `receive`. Every one of those takes `lock`. It must simply work, and
+    /// it must finish inside a bounded wait rather than hanging the suite.
+    func testAConformerMayReadAndEndTheRuntimeFromInsideAForward() {
+        let h = harness()
+        h.runtime.start()
+        let finished = expectation(description: "the forward returns")
+
+        h.transport.duringReceive = { [weak runtime = h.runtime] in
+            guard let runtime else { return }
+            _ = runtime.isEnded
+            _ = runtime.recoveryPhase
+            _ = runtime.textStatus
+            // The strongest form: re-entering the terminal path from inside the
+            // call the runtime made.
+            runtime.stop()
+            finished.fulfill()
+        }
+
+        h.runtime.receive(from: "peer-b", signal: candidate("1"))
+        wait(for: [finished], timeout: 5)
+        h.runtime.settle()
+
+        XCTAssertEqual(h.transport.routed.count, 1, "the forward happened")
+        XCTAssertTrue(h.runtime.isEnded, "and the re-entrant stop took effect")
+    }
+
+    /// A publication that lands while a routed signal is being forwarded is not a
+    /// problem to solve: ICE is trickled, and a peer legitimately keeps sending
+    /// candidates after the lanes open. The publishing thread is separate and
+    /// nothing here waits on the forwarding thread, so neither can hold the other
+    /// up.
+    func testAPublicationConcurrentWithAForwardIsHarmless() {
+        let h = harness()
+        h.runtime.start()
+        let published = expectation(description: "the link publishes")
+        let forwarded = expectation(description: "the forward returns")
+        // Set by the PUBLISHER thread, after `publish` has returned, and read
+        // only through its own lock. Nothing inside the forward touches the
+        // runtime.
+        let didPublish = LockedFlag()
+
+        h.transport.duringReceive = { [transport = h.transport, identity = h.identity] in
+            DispatchQueue.global().async {
+                transport.publish(identity)
+                didPublish.set()
+                published.fulfill()
+            }
+            // A bounded interleave, then out — nothing here waits for the
+            // publisher, so the forward can always return.
+            usleep(2000)
+            forwarded.fulfill()
+        }
+
+        h.runtime.receive(from: "peer-b", signal: candidate("1"))
+        wait(for: [forwarded, published], timeout: 5)
+        h.runtime.settle()
+
+        XCTAssertTrue(didPublish.isSet)
+        XCTAssertEqual(h.transport.routed.count, 1, "the forward happened exactly once")
+        XCTAssertTrue(h.events.all.contains(where: {
+            if case .opened = $0 { return true }; return false
+        }), "and the publication was not lost")
+    }
+
+    /// The genuinely wrong target — the initial transport after a rebuild has
+    /// replaced it — is inert by construction rather than by a check here: the
+    /// coordinator CLOSES it in the same synchronous step that stops it being
+    /// current, and a closed transport refuses a routed signal before it looks at
+    /// anything.
+    func testASupersededTransportIsClosedWhichIsWhatMakesALateForwardInert() throws {
+        let h = harness()
+        opened(h)
+        try holdingAReceive(h)
+
+        h.transport.die(error: LinkTransportError.laneClosed(LINK_FILE_CHANNEL))
+        h.runtime.settle()
+
+        XCTAssertEqual(h.runtime.recoveryPhase, .interrupted)
+        XCTAssertTrue(h.transport.isClosed,
+                      "the transport a late forward could reach has already refused everything")
+    }
+
+    /// The runtime inspects nothing. Sender, generation and shape are
+    /// `LinkSignalPolicy`'s inside the transport, and a second filter here would
+    /// be a second policy that can silently disagree with the authoritative one
+    /// about which frames an establishment may act on.
+    func testTheRuntimeFiltersNothingItForwards() {
+        let h = harness()
+        h.runtime.start()
+        let strange = JSONValue.object(["text": .bool(true), "sdp": .object([:])])
+
+        h.runtime.receive(from: "somebody-else", signal: strange)
+        h.runtime.settle()
+
+        XCTAssertEqual(h.transport.routed.count, 1, "forwarded whole, and refused below")
+        XCTAssertEqual(h.transport.routed[0].from, "somebody-else")
+        XCTAssertEqual(h.transport.routed[0].signal, strange)
     }
 
     // MARK: - the room's phase
@@ -1826,4 +2018,18 @@ private final class EventCounter: @unchecked Sendable {
     private var _value = 0
     func bump() { lock.lock(); _value += 1; lock.unlock() }
     var value: Int { lock.lock(); defer { lock.unlock() }; return _value }
+}
+
+/// A boolean two threads share, guarded by its own lock.
+///
+/// Deliberately not an `@unchecked Sendable` bare `var`: the writer here is a
+/// background publisher and the reader is the test body, and an unsynchronised
+/// bool between them is a data race whatever the surrounding barriers happen to
+/// order today.
+final class LockedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+
+    func set() { lock.lock(); value = true; lock.unlock() }
+    var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
 }

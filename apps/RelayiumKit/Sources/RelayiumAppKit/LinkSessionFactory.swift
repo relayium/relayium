@@ -2,41 +2,6 @@ import Foundation
 import RelayiumKit
 import WebRTC
 
-// MARK: - the routed-establishment seam
-
-/// `LinkInitialTransport`, plus the one call an establishment that ADMISSION
-/// routed additionally needs of its transport.
-///
-/// ## Why this is a refinement rather than an optional cast
-///
-/// A responder's establishment exists BECAUSE a signal arrived: the room
-/// intercepted the peer's offer, `LinkAdmission.route` read it, decided
-/// `establish(role: .responder)`, and the router consumed it so the live
-/// connection could not also act on it. By the time this transport is built, the
-/// offer that justifies its existence has already been taken off the wire — and
-/// nothing sends it again. A transport that cannot be handed that one signal is
-/// a transport that waits out its whole establishment deadline for something it
-/// already missed.
-///
-/// `LinkInitialTransport` does not require the call, and should not: the runtime
-/// DRIVES a transport, it does not route to one, and it never makes this call.
-/// So the requirement lives on the assembly that does — and it is a requirement
-/// rather than an `as?` probe, because an optional cast would turn a missing
-/// conformance into a silently dropped offer, which is exactly the failure this
-/// seam exists to make unrepresentable. A builder that cannot answer with one of
-/// these does not compile.
-protocol LinkRoutableInitialTransport: LinkInitialTransport {
-    /// Hand this transport one signal that was routed elsewhere first.
-    ///
-    /// Safe for a signal the transport's own installed handler will also
-    /// deliver: `LinkSignalPolicy` acts on exactly one remote offer and one
-    /// remote answer, so a duplicate is dropped whole rather than reaching
-    /// `setRemoteDescription` a second time.
-    func receive(from: String, signal: JSONValue)
-}
-
-extension WebRTCLinkTransport: LinkRoutableInitialTransport {}
-
 /// The one place an application turns its own ingredients into ONE `link/1`
 /// attempt: a signalling client, a peer, a role, an ICE configuration, an
 /// authentication generation, a resolved receive directory and the room's
@@ -351,7 +316,7 @@ enum LinkSessionFactory {
         // surviving strong reference to that runtime is the attempt's own.
         var assembled: LinkSessionRuntime?
         let attempt = LinkSessionAttempt(runtime: { sink in
-            let runtime = LinkSessionRuntime(transport: transport,
+            let runtime = LinkSessionRuntime(establishing: transport,
                                              receiveDirectory: receiveDirectory,
                                              replacementFactory: replacementFactory,
                                              admission: admission,

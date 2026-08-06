@@ -34,6 +34,15 @@ import RelayiumKit
 /// object able to stop the runtime would be a second thing able to end, or to
 /// fail to end, one link.
 protocol LinkSessionRecoveryControl: AnyObject {
+    /// Hand the link a `link/1` signal the room routed first — the candidates and
+    /// the answer that chase an offer the room consumed.
+    ///
+    /// Taken before publication AND after it: ICE is trickled, so a peer
+    /// legitimately keeps sending candidates once the lanes are open, and the
+    /// transport running the link is the right thing to hand them to. Inert only
+    /// before the link starts and after it has ended — see
+    /// `LinkSessionRuntime.receive`.
+    func receive(from: String, signal: JSONValue)
     /// Hand the link an inbound `resume` offer. Verified inside, against this
     /// link's own resume key, and dropped in silence if it does not pass.
     func receiveResumeOffer(from: String, signal: JSONValue)
@@ -120,6 +129,11 @@ final class LinkSessionRoomControl {
     /// the call that follows it the attempt may have been retired, so every verb
     /// resolves the reference itself.
     var isLive: Bool { runtime != nil }
+
+    /// Hand the link a signal the room routed first.
+    func receive(from: String, signal: JSONValue) {
+        runtime?.receive(from: from, signal: signal)
+    }
 
     /// Hand the link an inbound `resume` offer.
     func receiveResumeOffer(from: String, signal: JSONValue) {

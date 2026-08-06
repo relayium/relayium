@@ -64,11 +64,18 @@ import RelayiumKit
 ///
 /// ## What it deliberately does NOT do yet
 ///
-/// **It routes nothing.** Nothing here reads a signal, calls `LinkAdmission.route`
-/// or `ensure`, answers `busy`, sends a request, times one out, or subscribes to a
-/// socket. `begin` is called by something that has ALREADY decided — that decision,
-/// its request/timeout lifecycle and the socket epoch it belongs to are the next
-/// slice, and this object is shaped to be driven by it rather than to contain it.
+/// **It makes no routing decisions.** Nothing here reads a signal to decide what
+/// it means, calls `LinkAdmission.route` or `ensure`, answers `busy`, sends a
+/// request, times one out, or subscribes to a socket. `begin` is called by
+/// something that has ALREADY decided — that decision, its request/timeout
+/// lifecycle and the socket epoch it belongs to are the next slice, and this
+/// object is shaped to be driven by it rather than to contain it.
+///
+/// It does FORWARD, and the two are not the same thing: `receive`,
+/// `receiveResumeOffer` and `peerDeparted` carry signals an outer owner has
+/// already routed to this establishment, and each is a pass-through that inspects
+/// nothing. Deciding which establishment a frame belongs to happens above; making
+/// sure it reaches that establishment's link happens here.
 ///
 /// **A departure during establishment ends nothing.** `peerDeparted` below
 /// forwards to the link, which ignores it until there is a coordinator to hear it.
@@ -251,6 +258,18 @@ final class LinkRoomSession {
     // Neither verifies, answers, compares a peer or moves a phase: those already
     // live in the layer that owns them, and a copy here would be a second policy
     // that can silently diverge from the authoritative one.
+
+    /// Hand the held link a `link/1` signal the room routed first — the
+    /// candidates and the answer that chase the offer the room consumed.
+    ///
+    /// Inert with nothing held. NOT inert once the link has published: ICE is
+    /// trickled, so a peer legitimately keeps sending candidates after the lanes
+    /// open, and the link's own transport is what should receive them. What the
+    /// link refuses, and why a forward to a superseded transport is harmless
+    /// rather than guarded here, is `LinkSessionRuntime.receive`.
+    func receive(from: String, signal: JSONValue) {
+        current?.assembly.control.receive(from: from, signal: signal)
+    }
 
     /// Hand the held link an inbound `resume` offer. Inert with no link held, and
     /// inert inside the link until it has a coordinator to verify against.

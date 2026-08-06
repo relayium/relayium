@@ -13,6 +13,7 @@ import XCTest
 private final class RecordingRecoveryControl: LinkSessionRecoveryControl {
     /// Every call, in order, so "once, and in this order" is one assertion.
     private(set) var calls: [String] = []
+    private(set) var routed: [(from: String, signal: JSONValue)] = []
     private(set) var resumeOffers: [(from: String, signal: JSONValue)] = []
     private(set) var departures: [String] = []
     private(set) var joins: [String] = []
@@ -21,6 +22,11 @@ private final class RecordingRecoveryControl: LinkSessionRecoveryControl {
     private(set) var lastJoinCompletion: ((Result<LinkIdentity, Error>) -> Void)?
     /// What this runtime answers `joinRecovery` with.
     var joinAnswer: LinkRecoveryJoin = .joined
+
+    func receive(from: String, signal: JSONValue) {
+        calls.append("routed")
+        routed.append((from, signal))
+    }
 
     func receiveResumeOffer(from: String, signal: JSONValue) {
         calls.append("resume")
@@ -72,12 +78,20 @@ final class LinkSessionRoomControlTests: XCTestCase {
         let control = LinkSessionRoomControl(runtime: runtime)
         let signal = resumeSignal()
 
+        let candidate = JSONValue.object(["link": .bool(true),
+                                          "ice": .object(["candidate": .string("candidate:1")])])
+
+        control.receive(from: "peer-a", signal: candidate)
         control.receiveResumeOffer(from: "peer-a", signal: signal)
         control.peerDeparted("peer-b")
         control.joinRecovery(peerId: "peer-c") { _ in }
 
-        XCTAssertEqual(runtime.calls, ["resume", "departed", "join"],
+        XCTAssertEqual(runtime.calls, ["routed", "resume", "departed", "join"],
                        "each verb reached the runtime exactly once, in issue order")
+        XCTAssertEqual(runtime.routed.count, 1)
+        XCTAssertEqual(runtime.routed.first?.from, "peer-a")
+        XCTAssertEqual(runtime.routed.first?.signal, candidate,
+                       "the establishment's own signalling is forwarded byte for byte")
         XCTAssertEqual(runtime.resumeOffers.count, 1)
         XCTAssertEqual(runtime.resumeOffers.first?.from, "peer-a")
         XCTAssertEqual(runtime.resumeOffers.first?.signal, signal,
@@ -150,6 +164,7 @@ final class LinkSessionRoomControlTests: XCTestCase {
             control = LinkSessionRoomControl(runtime: runtime)
         }
 
+        control.receive(from: "peer-a", signal: resumeSignal())
         control.receiveResumeOffer(from: "peer-a", signal: resumeSignal())
         control.peerDeparted("peer-a")
         var resolved = false
@@ -168,6 +183,7 @@ final class LinkSessionRoomControlTests: XCTestCase {
     func testAControlWithNoRuntimeIsTheSameTerminalState() {
         let control = LinkSessionRoomControl(runtime: nil)
 
+        control.receive(from: "peer-a", signal: resumeSignal())
         control.receiveResumeOffer(from: "peer-a", signal: resumeSignal())
         control.peerDeparted("peer-a")
 
@@ -256,11 +272,11 @@ final class LinkSessionRoomControlTests: XCTestCase {
         }
     }
 
-    /// And the control is the mirror of that: the three room verbs, and no
-    /// command, no lifetime and no projection. A control that could `stop()` a
+    /// And the control is the mirror of that: the room verbs, and no command, no
+    /// lifetime and no projection. A control that could `stop()` a
     /// runtime would be a second thing able to end one link; one that could send
     /// would be a second, unowned writer on a screen's lane.
-    func testTheControlCarriesNothingButTheThreeRoomVerbs() throws {
+    func testTheControlCarriesNothingButTheRoomVerbs() throws {
         let source = try appSource("LinkSessionRoomControl.swift")
 
         for forbidden in ["LinkSessionCommands", "LinkSessionPresentationModel",

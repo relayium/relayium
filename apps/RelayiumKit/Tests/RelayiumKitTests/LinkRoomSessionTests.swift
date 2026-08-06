@@ -60,7 +60,16 @@ private final class RoomTransport: LinkRoutableInitialTransport, @unchecked Send
         duringStart?()
     }
 
-    func receive(from: String, signal: JSONValue) {}
+    /// Every signal the room routed to this transport, in order — the replay of
+    /// whatever chased the offer that created this establishment.
+    private var _routed: [(from: String, signal: JSONValue)] = []
+    var routed: [(from: String, signal: JSONValue)] {
+        state.lock(); defer { state.unlock() }; return _routed
+    }
+
+    func receive(from: String, signal: JSONValue) {
+        state.lock(); _routed.append((from, signal)); state.unlock()
+    }
     func send(_ bytes: [UInt8], on lane: LinkLane) throws {}
     func bufferedAmount(on lane: LinkLane) -> UInt64 { 0 }
     var isClosed: Bool { state.lock(); defer { state.unlock() }; return _closed }
@@ -642,6 +651,55 @@ final class LinkRoomSessionTests: XCTestCase {
         XCTAssertNil(r.session.peerId)
     }
 
+    /// The replay path, end to end: a signal the room routed reaches the
+    /// transport of the establishment it holds, verbatim and in order. This is
+    /// the seam a router needs to hand over everything that chased the offer it
+    /// consumed — without it those candidates reach a socket slot the transport
+    /// has not claimed yet, and are lost.
+    func testRoutedSignalsReachTheHeldEstablishmentsTransport() {
+        let r = rig()
+        r.session.begin(peerId: "peer-1", role: .responder)
+        let replayed = [
+            JSONValue.object(["link": .bool(true),
+                              "ice": .object(["candidate": .string("candidate:1")])]),
+            JSONValue.object(["link": .bool(true),
+                              "ice": .object(["candidate": .string("candidate:2")])]),
+        ]
+
+        for signal in replayed { r.session.receive(from: "peer-1", signal: signal) }
+
+        XCTAssertEqual(r.assembled.transports[0].routed.map(\.signal), replayed)
+        XCTAssertEqual(Set(r.assembled.transports[0].routed.map(\.from)), ["peer-1"])
+    }
+
+    /// With nothing held there is nothing to route to, and a signal that arrives
+    /// between establishments must not be buffered here — holding it would be a
+    /// second buffer beside the router's own, with no attempt to hand it to.
+    func testARoutedSignalWithNothingHeldIsInert() {
+        let r = rig()
+
+        r.session.receive(from: "peer-1",
+                          signal: .object(["link": .bool(true),
+                                           "ice": .object(["candidate": .string("c")])]))
+
+        XCTAssertTrue(r.assembled.transports.isEmpty)
+        XCTAssertNil(r.session.peerId)
+    }
+
+    /// A retired establishment takes nothing either: `end()` releases the
+    /// assembly, so the control it went through holds no runtime at all.
+    func testARoutedSignalAfterTheEstablishmentEndsIsInert() {
+        let r = rig()
+        r.session.begin(peerId: "peer-1", role: .responder)
+        r.session.end()
+
+        r.session.receive(from: "peer-1",
+                          signal: .object(["link": .bool(true),
+                                           "ice": .object(["candidate": .string("c")])]))
+
+        XCTAssertTrue(r.assembled.transports[0].routed.isEmpty)
+    }
+
     /// A departure for somebody else is not this link's business, and this object
     /// adds no comparison of its own.
     func testADepartureForAnotherPeerLeavesTheLinkAlone() async {
@@ -780,11 +838,16 @@ final class LinkRoomSessionTests: XCTestCase {
         }
     }
 
-    /// It routes nothing, and it resolves no ingredient. A room that read a
-    /// signal, answered a peer or picked an ICE server would be the next slice
-    /// written early — and the ingredients in particular would become a second
-    /// place the application's decisions are made.
-    func testTheRoomSessionRoutesNothingAndResolvesNothing() throws {
+    /// It makes no routing DECISIONS, and it resolves no ingredient.
+    ///
+    /// Forwarding is not deciding: `receive`, `receiveResumeOffer` and
+    /// `peerDeparted` carry signals an outer owner already routed here, and each
+    /// inspects nothing. What must not appear is the deciding — a room that read
+    /// a signal to work out what it meant, answered a peer, or picked an ICE
+    /// server would be the next slice written early, and the ingredients in
+    /// particular would become a second place the application's decisions are
+    /// made.
+    func testTheRoomSessionMakesNoRoutingDecisionsAndResolvesNothing() throws {
         let source = try appSource("LinkRoomSession.swift")
 
         for forbidden in ["admission.route", "admission.ensure", "isLinkRequest",

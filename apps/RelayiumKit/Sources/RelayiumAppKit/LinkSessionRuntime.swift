@@ -73,6 +73,65 @@ public protocol LinkInitialTransport: LinkLiveTransport, LinkTransportHandle {
 
 extension WebRTCLinkTransport: LinkInitialTransport {}
 
+/// `LinkInitialTransport`, plus the one call an establishment that ADMISSION
+/// routed additionally needs of its transport.
+///
+/// ## Why the establishment cannot get by without it
+///
+/// A responder's establishment exists BECAUSE a signal arrived: the room
+/// intercepted the peer's offer, `LinkAdmission.route` read it, decided
+/// `establish(role: .responder)`, and the router CONSUMED it so the live
+/// connection could not also act on it. By the time this transport is built, the
+/// offer that justifies its existence has already been taken off the wire — and
+/// nothing sends it again.
+///
+/// The same is true of everything that CHASES that offer. A peer trickles its
+/// candidates the instant it has them, so they arrive while the room is still
+/// hopping to the main actor to assemble anything at all; and on the initiating
+/// side the peer's answer can arrive the same way. None of those has a transport
+/// to reach yet — `WebRTCLinkTransport` claims the single per-connection slot in
+/// its own initializer, which is a turn later — so a router that could not hand
+/// them over would drop exactly the host candidates a LAN link depends on.
+///
+/// ## Why it is a refinement rather than an optional cast
+///
+/// A requirement rather than an `as?` probe, because an optional cast would turn
+/// a missing conformance into a silently dropped signal — which is precisely the
+/// failure this seam exists to make unrepresentable. A builder that cannot answer
+/// with one of these does not compile.
+///
+/// It refines rather than replaces `LinkInitialTransport` because the two are
+/// genuinely different questions: that one is what a runtime DRIVES — start,
+/// send, close, and the four callbacks it writes — and this is what a ROOM routes
+/// to.
+///
+/// INTERNAL, and deliberately: the public initializer still takes a plain
+/// `LinkInitialTransport`, because an application handing this runtime a
+/// transport is not a room routing to one. Routing is reached through the
+/// internal `init(establishing:)`, which is what `LinkSessionFactory` uses and
+/// the only way a route is ever installed. Widening the public initializer would
+/// have made every conformer outside this package implement a call none of them
+/// can be given work for.
+///
+/// ## What this seam does NOT require
+///
+/// `receive` is called with no lock of this package's held, exactly like `start`,
+/// `close` and `send`. A conformer may read the runtime back, call `stop()`, or
+/// hop to its own queue — an earlier draft did hold a lock across this call, and
+/// the first barrier test written against it deadlocked. See
+/// `LinkSessionRuntime.receive` for what makes the resulting slack harmless.
+protocol LinkRoutableInitialTransport: LinkInitialTransport {
+    /// Hand this transport one signal that was routed elsewhere first.
+    ///
+    /// Safe for a signal the transport's own installed handler will also
+    /// deliver: `LinkSignalPolicy` acts on exactly one remote offer and one
+    /// remote answer, so a duplicate is dropped whole rather than reaching
+    /// `setRemoteDescription` a second time.
+    func receive(from: String, signal: JSONValue)
+}
+
+extension WebRTCLinkTransport: LinkRoutableInitialTransport {}
+
 // MARK: - what a runtime reports
 
 /// One inbound batch that reached the user's disk.
@@ -314,7 +373,12 @@ public enum LinkSessionRuntimeError: Error, Equatable, Sendable {
 /// terminal edge that cannot close a cycle, and it is the same direction
 /// `LinkRecoveryCoordinator` already takes when it drives that object from inside
 /// its own critical sections. Invariant 6 and `publish` record why it cannot be
-/// moved outside. The
+/// moved outside.
+///
+/// `receive` deliberately does NOT join it: forwarding a routed signal calls into
+/// a conformer, and `receive` records why the slack that leaves is harmless and
+/// why holding the lock there would be a deadlock waiting for the first conformer
+/// that read this runtime back. The
 /// transport's four callback slots, which are the one thing that has to be written
 /// before anything else can happen, are written in `init`, where there is no
 /// concurrency to guard against and therefore no reason to hold anything across
@@ -453,6 +517,17 @@ public final class LinkSessionRuntime: @unchecked Sendable {
     /// object so `stop()` before publication still has something to close.
     private let transport: LinkInitialTransport
 
+    /// How a ROOM hands this establishment a signal it routed first, or nil for a
+    /// runtime that was not built by one.
+    ///
+    /// A closure rather than a second typed reference to the transport, and
+    /// internal rather than public, so the public initializer's `transport`
+    /// parameter keeps the shape every existing caller passes: an application
+    /// that hands over a transport is not a room routing to one, and giving it a
+    /// routing seam it can never be given work for would be API for nobody.
+    /// `init(establishing:)` is the one place this is installed.
+    private let route: ((String, JSONValue) -> Void)?
+
     /// Where inbound batches land, as an IMMUTABLE snapshot the application
     /// resolved once, before this object existed.
     ///
@@ -496,13 +571,55 @@ public final class LinkSessionRuntime: @unchecked Sendable {
     ///     There is no main-actor guarantee: it runs on whichever thread is
     ///     draining, which may or may not be the main one, so a presentation
     ///     model has to hop explicitly.
-    public init(transport: LinkInitialTransport,
-                receiveDirectory: URL,
+    public convenience init(transport: LinkInitialTransport,
+                            receiveDirectory: URL,
                 scheduler: LinkRecoveryScheduler = LinkDispatchRecoveryScheduler(),
                 replacementFactory: @escaping LinkReplacementFactory,
                 admission: LinkAdmission? = nil,
                 onEvent: @escaping (LinkSessionRuntimeEvent) -> Void) {
+        self.init(transport: transport,
+                  route: nil,
+                  receiveDirectory: receiveDirectory,
+                  scheduler: scheduler,
+                  replacementFactory: replacementFactory,
+                  admission: admission,
+                  onEvent: onEvent)
+    }
+
+    /// The same runtime, for an establishment a ROOM routed into being.
+    ///
+    /// The only difference is that the transport can be handed the signals that
+    /// chased the offer its room consumed — see `receive`. Internal, because that
+    /// is the only kind of caller the seam exists for.
+    convenience init(establishing transport: LinkRoutableInitialTransport,
+                     receiveDirectory: URL,
+                     scheduler: LinkRecoveryScheduler = LinkDispatchRecoveryScheduler(),
+                     replacementFactory: @escaping LinkReplacementFactory,
+                     admission: LinkAdmission? = nil,
+                     onEvent: @escaping (LinkSessionRuntimeEvent) -> Void) {
+        self.init(transport: transport,
+                  // Captured strongly, and that is not a second owner: this
+                  // runtime already holds the same object as its transport for
+                  // its whole life, so the closure adds no lifetime.
+                  route: { [transport] from, signal in
+                      transport.receive(from: from, signal: signal)
+                  },
+                  receiveDirectory: receiveDirectory,
+                  scheduler: scheduler,
+                  replacementFactory: replacementFactory,
+                  admission: admission,
+                  onEvent: onEvent)
+    }
+
+    private init(transport: LinkInitialTransport,
+                 route: ((String, JSONValue) -> Void)?,
+                 receiveDirectory: URL,
+                 scheduler: LinkRecoveryScheduler,
+                 replacementFactory: @escaping LinkReplacementFactory,
+                 admission: LinkAdmission?,
+                 onEvent: @escaping (LinkSessionRuntimeEvent) -> Void) {
         self.transport = transport
+        self.route = route
         self.receiveDirectory = receiveDirectory
         self.scheduler = scheduler
         self.replacementFactory = replacementFactory
@@ -1049,6 +1166,67 @@ public final class LinkSessionRuntime: @unchecked Sendable {
     public func acceptInboundBatch() { owner?.acceptInboundBatch() }
     /// Refuse it.
     public func rejectInboundBatch() { owner?.rejectInboundBatch() }
+
+    // MARK: - the establishment's routed signals
+
+    /// Hand the ESTABLISHING transport a `link/1` signal the room routed first.
+    ///
+    /// This is the other half of `LinkSessionFactory`'s `initialSignal`. That one
+    /// carries the offer that made admission decide this link should exist; this
+    /// carries everything that chased it — the peer's trickled candidates, and on
+    /// the initiating side its answer — for the window between the room deciding
+    /// to establish and the transport claiming the socket's single per-connection
+    /// slot. A room that could not hand those over would drop exactly the host
+    /// candidates a LAN link depends on.
+    ///
+    /// **The forward is made with the lock RELEASED, and the slack that leaves is
+    /// benign by construction rather than by luck.**
+    ///
+    /// Holding the lock across it would make the state test and the forward one
+    /// step, and that is genuinely tempting — but it would put an arbitrary
+    /// conformer's code inside this object's critical section, and a conformer
+    /// that so much as READ this runtime back (`isEnded`, `recoveryPhase`,
+    /// `textStatus`) or called `stop()` would deadlock on a non-recursive lock.
+    /// That is not a hypothetical: the first barrier test written against that
+    /// contract deadlocked on exactly it. So this keeps the rule the rest of the
+    /// type obeys — nothing arbitrary is called under `lock` — and pays for it by
+    /// making the slack harmless:
+    ///
+    ///  - **A publication landing in the window is not a problem to solve.** ICE
+    ///    is trickled, and a peer legitimately keeps sending candidates after the
+    ///    lanes are open; handing one to the transport that is still running the
+    ///    link is CORRECT, not stale.
+    ///  - **A transport that has been superseded is already inert.** The only
+    ///    genuinely wrong target is the initial transport after a rebuild has
+    ///    replaced it, and `LinkRecoveryCoordinator` closes it in the same
+    ///    synchronous step that stops it being current — so a forward that
+    ///    arrives afterwards reaches a closed transport, and
+    ///    `WebRTCLinkTransport.handleLocked` refuses on `closed` before it looks
+    ///    at anything. `LinkSessionRuntimeTests` pins that closure.
+    ///  - **An end landing in the window is the same case.** `end()` closes the
+    ///    transport it was built with, whichever path it took.
+    ///
+    /// What is still refused here is the case the transport cannot judge for
+    /// itself: a runtime that has not started, or one whose end has been claimed,
+    /// has no establishment for a routed signal to belong to.
+    ///
+    /// This object inspects nothing else. It does not check the sender, the
+    /// generation, the SDP kind or the ordering: `LinkSignalPolicy` inside the
+    /// transport already refuses everything that is not this establishment's, and
+    /// a second filter here would be a second policy that can silently disagree
+    /// with the authoritative one.
+    func receive(from: String, signal: JSONValue) {
+        lock.lock()
+        let live: Bool
+        switch state {
+        case .idle, .ending, .ended: live = false
+        case .establishing, .active: live = true
+        }
+        lock.unlock()
+
+        guard live else { return }
+        route?(from, signal)
+    }
 
     // MARK: - the recovery seams
     //
