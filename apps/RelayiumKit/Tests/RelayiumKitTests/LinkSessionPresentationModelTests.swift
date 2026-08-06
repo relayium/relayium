@@ -403,9 +403,14 @@ final class LinkSessionPresentationModelTests: XCTestCase {
             .deletingLastPathComponent()
     }
 
-    /// Still nothing but tests constructs one, and neither feature flag has
-    /// moved. This is a presentation projection for a transport no shipping
-    /// build speaks.
+    /// Nothing but its ONE owner — `LinkSessionAttempt` — constructs one, and
+    /// neither feature flag has moved. This is a presentation projection for a
+    /// transport no shipping build speaks, and the attempt is in turn built by
+    /// nothing outside the tests; `LinkSessionAttemptTests` pins that half.
+    ///
+    /// The exclusion is the invariant, not a concession to it: a second builder
+    /// would be a second lifetime for one screen — two objects able to retire, or
+    /// to fail to retire, the same attempt.
     func testTheModelStaysUnreachableFromProduction() throws {
         XCTAssertFalse(LINK_BUILD_SUPPORT)
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
@@ -419,7 +424,8 @@ final class LinkSessionPresentationModelTests: XCTestCase {
             let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)?
                 .compactMap { $0 as? URL }
                 .filter { $0.pathExtension == "swift"
-                    && $0.lastPathComponent != "LinkSessionPresentationModel.swift" }
+                    && $0.lastPathComponent != "LinkSessionPresentationModel.swift"
+                    && $0.lastPathComponent != "LinkSessionAttempt.swift" }
             for file in try XCTUnwrap(files) {
                 scanned += 1
                 let text = code((try? String(contentsOf: file, encoding: .utf8)) ?? "")

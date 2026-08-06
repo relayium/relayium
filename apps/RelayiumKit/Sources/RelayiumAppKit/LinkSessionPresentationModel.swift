@@ -50,14 +50,13 @@ struct LinkTextMessage: Equatable, Identifiable {
 
     /// Who said it.
     ///
-    /// **`outgoing` is unused by this slice and is here deliberately.** Nothing
-    /// in `LinkTextDriverEvent` reports this side's own messages — the driver's
-    /// `received` is inbound plaintext and its send path answers the caller
-    /// rather than the event stream — so the only honest entry this projection
-    /// can create today is an `incoming` one. The case exists because the send
-    /// command that will append the other kind is the next slice, and adding it
-    /// then would change this type's identity under a view that already binds
-    /// to it. Nothing here fabricates one in the meantime.
+    /// **The two arrive from different places, and that is the shape of the
+    /// lane rather than an asymmetry here.** Nothing in `LinkTextDriverEvent`
+    /// reports this side's own messages — the driver's `received` is inbound
+    /// plaintext and its send path answers the CALLER rather than the event
+    /// stream — so an `incoming` entry is created from the event stream and an
+    /// `outgoing` one only from `recordOutgoing`, which the attempt owner calls
+    /// once the runtime has accepted a send. Nothing here fabricates either.
     enum Direction: Equatable {
         case incoming
         case outgoing
@@ -81,11 +80,13 @@ struct LinkTextMessage: Equatable, Identifiable {
 /// conversation. A caller hands it a bridge that is already the attempt's, and
 /// this object's whole visible surface is what a view would bind to.
 ///
-/// That it cannot send is the shape of this slice, not an oversight. There is no
-/// `send`, no `accept`, no `decline` and no reference to a runtime to call one
-/// on: commands arrive with the slice that wires an owner, and until then this
-/// object is a read-only reading of what the lane reported. It is why
-/// `LinkTextMessage.Direction.outgoing` exists but is never produced here.
+/// That it cannot send is a decision, not an oversight. There is no `send`, no
+/// `accept`, no `decline` and no reference to a runtime to call one on: commands
+/// belong to `LinkSessionAttempt`, which owns this model's whole lifetime. The
+/// one thing that owner tells this object is `recordOutgoing`, and it is not a
+/// command — it is the transcript entry a send has already EARNED, handed over
+/// after the runtime accepted it, because the runtime's event stream carries no
+/// record of this side's own messages.
 ///
 /// **`file` and `received` are ignored here, on purpose.** They are the other
 /// lane and the committed-batch report, and each needs its own projection — a
@@ -287,16 +288,47 @@ final class LinkSessionPresentationModel: ObservableObject {
 
         case let .received(body):
             guard !isTextFailed else { return }
-            // Verbatim, including duplicates and — if an impossible producer
-            // ever sent one — an empty body. The session refuses empty bodies
-            // and the driver owns every size and rate limit, so a second policy
-            // here could only disagree with the one that is authoritative; what
-            // it would actually do is silently drop a message the peer was told
-            // had been delivered.
-            textMessages.append(LinkTextMessage(id: nextTextMessageId,
-                                                direction: .incoming,
-                                                body: body))
-            nextTextMessageId += 1
+            append(.incoming, body)
         }
+    }
+
+    // MARK: - what only the attempt owner knows
+
+    /// Record one message THIS side sent, after the runtime accepted it.
+    ///
+    /// The runtime's event stream has no successful-send event — the lane
+    /// answers the CALLER instead — so the only object that can honestly create
+    /// an outgoing entry is the one that made the call and saw it return.
+    /// `LinkSessionAttempt` is that object, it is this model's owner, and it is
+    /// the only caller of this method.
+    ///
+    /// It is not a command and takes no decision: whether the message may be
+    /// sent was already answered, by the lane, before this runs. Nothing here
+    /// trims, normalises or de-duplicates — for the same reason `received` does
+    /// not — and there is no "sending" state, because nothing below reports a
+    /// per-message acknowledgement this model could resolve one with.
+    ///
+    /// **The two terminal guards are defence in depth.** A live runtime refuses
+    /// every send once its session or its lane is over, so an accepted send
+    /// cannot coincide with either frozen state. If one ever did, the visible
+    /// failure would be a transcript that grew on a screen that had already
+    /// reported the session, or the conversation, finished — so the freeze wins.
+    func recordOutgoing(_ body: String) {
+        guard !isEnded, !isTextFailed else { return }
+        append(.outgoing, body)
+    }
+
+    /// One transcript entry, in the one id space both directions share.
+    ///
+    /// Verbatim, including duplicates and — if an impossible producer ever sent
+    /// one — an empty body. The session refuses empty bodies and the driver owns
+    /// every size and rate limit, so a second policy here could only disagree
+    /// with the one that is authoritative; what it would actually do is silently
+    /// drop a message one side was told had been delivered.
+    private func append(_ direction: LinkTextMessage.Direction, _ body: String) {
+        textMessages.append(LinkTextMessage(id: nextTextMessageId,
+                                            direction: direction,
+                                            body: body))
+        nextTextMessageId += 1
     }
 }
