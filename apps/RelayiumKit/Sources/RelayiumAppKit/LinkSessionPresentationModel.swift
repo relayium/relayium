@@ -89,10 +89,11 @@ struct LinkTextMessage: Equatable, Identifiable {
 /// record of this side's own messages.
 ///
 /// **`file` and `received` are ignored here, on purpose.** They are the other
-/// lane and the committed-batch report, and each needs its own projection — a
-/// transfer list with per-batch progress, a received-files surface. Folding
-/// either into this one now would mean inventing semantics that the later slices
-/// would then have to either duplicate or contradict.
+/// lane and the committed-batch report, and they have their own projection:
+/// `LinkFilePresentationModel`. Neither object knows the other exists — their
+/// one owner hands both the same ordered stream and each ignores what is not
+/// its own — because a transfer list folded in here would tie a file screen's
+/// correctness to the conversation's.
 ///
 /// The two states it does hold are kept apart for the same reason: a
 /// conversation that fails or ends is not a link that failed or ended, so the
@@ -107,11 +108,12 @@ struct LinkTextMessage: Equatable, Identifiable {
 ///
 /// ## Lifetime
 ///
-/// The binding uses the bridge's structural weak-owner API — the model arrives
-/// as the handler's `owner` parameter and is captured weakly by the wrapper the
-/// bridge stores — so this object is not retained by the bridge, and a runtime
-/// that outlives its screen cannot keep that screen alive. It does not hold the
-/// bridge either: the attempt's lifetime belongs to whoever owns the runtime.
+/// It holds nothing: no bridge, no runtime, no other projection. **It does not
+/// bind either**, and that is deliberate — one bridge belongs to one attempt and
+/// is bound ONCE, by that attempt, which then hands each event to the
+/// projections it owns. A model that bound for itself would be a second thing
+/// competing for the one binding the moment a second projection existed, and the
+/// loser would silently paint nothing.
 ///
 /// **There is no `deinit` teardown, and that is a decision rather than an
 /// omission.** Retiring an attempt is `LinkSessionEventBridge.invalidate` plus
@@ -153,15 +155,9 @@ final class LinkSessionPresentationModel: ObservableObject {
     /// never reset, including across conversations.
     private var nextTextMessageId = 0
 
-    /// Binds to the attempt's bridge, which may already be holding events: one
-    /// published before this model existed is delivered on the next main-actor
-    /// turn rather than inline, so nothing repaints a model mid-construction.
-    ///
-    /// The bridge is not stored. This model paints an attempt; it does not own
-    /// one.
-    init(bridge: LinkSessionEventBridge) {
-        bridge.bind(to: self) { owner, event in owner.apply(event) }
-    }
+    /// Nothing to wire. Events arrive through `apply`, which the attempt that
+    /// owns this model calls for every event its one bridge delivers.
+    init() {}
 
     // MARK: - what a view asks
 
@@ -223,7 +219,11 @@ final class LinkSessionPresentationModel: ObservableObject {
     // MARK: - the projection
 
     /// One event, one phase decision.
-    private func apply(_ event: LinkSessionRuntimeEvent) {
+    ///
+    /// Called by `LinkSessionAttempt` — the one object that binds this attempt's
+    /// bridge — for every event that bridge delivers, on the main actor, in
+    /// publication order, one at a time.
+    func apply(_ event: LinkSessionRuntimeEvent) {
         // Terminal means terminal. The runtime promises `ended` is its last
         // event and the bridge drops whatever it was holding, so this guard
         // should be unreachable — it is here because the alternative failure is
@@ -256,9 +256,9 @@ final class LinkSessionPresentationModel: ObservableObject {
             applyText(event)
 
         case .file, .received:
-            // The file lane and the committed batch. Later presentation slices
-            // project these; see the note on this type for why they are not
-            // squeezed into a connection phase now.
+            // The file lane and the committed batch. `LinkFilePresentationModel`
+            // projects these, from the same delivery; see the note on this type
+            // for why they are not squeezed into a connection phase.
             break
         }
     }

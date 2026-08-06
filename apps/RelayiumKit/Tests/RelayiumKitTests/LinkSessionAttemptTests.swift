@@ -25,6 +25,12 @@ private final class FakeRuntime: LinkSessionCommands, @unchecked Sendable {
         case rejectText
         case endText
         case sendText(String)
+        case enqueueFiles([FileMeta])
+        case pumpFiles
+        case cancelQueuedBatch(Int)
+        case cancelOutboundBatch
+        case acceptInboundBatch
+        case rejectInboundBatch
     }
 
     private let lock = NSLock()
@@ -32,6 +38,8 @@ private final class FakeRuntime: LinkSessionCommands, @unchecked Sendable {
     private var _refusal: Error?
     private var _duringSend: (() -> Void)?
     private var _duringStart: (() -> Void)?
+    private var _duringEnqueue: (() -> Void)?
+    private var _nextBatch = 1
 
     var log: [Command] { lock.lock(); defer { lock.unlock() }; return _log }
 
@@ -54,6 +62,21 @@ private final class FakeRuntime: LinkSessionCommands, @unchecked Sendable {
     var duringStart: (() -> Void)? {
         get { lock.lock(); defer { lock.unlock() }; return _duringStart }
         set { lock.lock(); _duringStart = newValue; lock.unlock() }
+    }
+
+    /// The same window as `duringSend`, one lane over: a link that ends while an
+    /// enqueue the lane has already accepted is on its way back.
+    var duringEnqueue: (() -> Void)? {
+        get { lock.lock(); defer { lock.unlock() }; return _duringEnqueue }
+        set { lock.lock(); _duringEnqueue = newValue; lock.unlock() }
+    }
+
+    /// The id the next accepted enqueue answers with, exactly as a real lane
+    /// answers one: the caller learns its batch number from the RETURN VALUE and
+    /// from nowhere else.
+    var nextBatch: Int {
+        get { lock.lock(); defer { lock.unlock() }; return _nextBatch }
+        set { lock.lock(); _nextBatch = newValue; lock.unlock() }
     }
 
     func count(of command: Command) -> Int { log.filter { $0 == command }.count }
@@ -82,6 +105,24 @@ private final class FakeRuntime: LinkSessionCommands, @unchecked Sendable {
         duringSend?()
         if let refusal { throw refusal }
     }
+
+    func enqueueFiles(files: [FileMeta],
+                      stage: @escaping () throws -> [PlaintextSource]) throws -> Int {
+        record(.enqueueFiles(files))
+        duringEnqueue?()
+        if let refusal { throw refusal }
+        lock.lock()
+        defer { lock.unlock() }
+        let batch = _nextBatch
+        _nextBatch += 1
+        return batch
+    }
+
+    func pumpFiles() { record(.pumpFiles) }
+    func cancelQueuedBatch(_ batch: Int) { record(.cancelQueuedBatch(batch)) }
+    func cancelOutboundBatch() { record(.cancelOutboundBatch) }
+    func acceptInboundBatch() { record(.acceptInboundBatch) }
+    func rejectInboundBatch() { record(.rejectInboundBatch) }
 }
 
 // MARK: - what a view would be watching
@@ -185,6 +226,13 @@ final class LinkSessionAttemptTests: XCTestCase {
         publish(.opened(peerId: "peer-attempt", sas: "424242"))
         await fulfillment(of: [opened], timeout: 5)
         log.detach()
+    }
+
+    /// The manifest the transfer tests enqueue and are offered: two files, one
+    /// of them inside a dropped folder.
+    private var manifest: [FileMeta] {
+        [FileMeta(name: "a.txt", size: 100),
+         FileMeta(name: "b.txt", size: 200, path: "inner/b.txt")]
     }
 
     /// An open link with an open conversation, which is the state every send
@@ -620,7 +668,318 @@ final class LinkSessionAttemptTests: XCTestCase {
         XCTAssertLessThan(settledCount, 400, "and the flood was cut off")
     }
 
-    // MARK: - 6. lifetime
+    // MARK: - 6. the transfer
+    //
+    // The same three questions as the conversation, one lane over: does the
+    // command reach the runtime unchanged, is what the runtime ANSWERED the only
+    // thing recorded, and does a retired attempt reach nothing at all.
+
+    /// Six forwarding calls, each once, in the order they were made, with the
+    /// manifest and the batch number travelling verbatim.
+    func testEveryFileCommandReachesTheRuntimeOnceAndInOrder() async throws {
+        let (attempt, runtime, publish) = rig()
+        await open(publish, attempt)
+
+        _ = try attempt.enqueueFiles(files: manifest, stage: { [] })
+        attempt.pumpFiles()
+        attempt.acceptInboundBatch()
+        attempt.rejectInboundBatch()
+        attempt.cancelQueuedBatch(4)
+        attempt.cancelOutboundBatch()
+
+        XCTAssertEqual(runtime.log, [.start, .enqueueFiles(manifest), .pumpFiles,
+                                     .acceptInboundBatch, .rejectInboundBatch,
+                                     .cancelQueuedBatch(4), .cancelOutboundBatch])
+    }
+
+    /// The lane answers the CALLER with the batch id, so the caller is the only
+    /// thing that can create the row. One accepted enqueue, one row, with the
+    /// manifest it was given and the id the lane returned.
+    func testAnAcceptedEnqueueRecordsTheReturnedBatchAndItsManifestExactlyOnce() async throws {
+        let (attempt, runtime, publish) = rig()
+        await open(publish, attempt)
+        runtime.nextBatch = 12
+
+        let log = PublicationLog(attempt.fileModel.$batches)
+        let batch = try attempt.enqueueFiles(files: manifest, stage: { [] })
+
+        XCTAssertEqual(batch, 12, "the lane's own answer reaches the caller")
+        XCTAssertEqual(attempt.fileModel.batches.count, 1)
+        let projected = try XCTUnwrap(attempt.fileModel.batch(12))
+        XCTAssertEqual(projected.direction, .outbound)
+        XCTAssertEqual(projected.files, manifest)
+        XCTAssertEqual(projected.totalBytes, 300)
+        XCTAssertEqual(projected.state, .queued)
+        XCTAssertEqual(log.count, 2, "one publication for the one row")
+    }
+
+    /// A refusal records nothing at all. A row for a batch the lane never took
+    /// is the transfer-list equivalent of a message a user believes was
+    /// delivered, and the id would be one the lane never issued.
+    func testARefusedEnqueueRecordsNothing() async {
+        let (attempt, runtime, publish) = rig()
+        await open(publish, attempt)
+
+        let log = PublicationLog(attempt.fileModel.$batches)
+        for refusal in [LinkSessionRuntimeError.notReady, LinkSessionRuntimeError.ended] {
+            runtime.refusal = refusal
+            XCTAssertThrowsError(try attempt.enqueueFiles(files: manifest, stage: { [] })) {
+                XCTAssertEqual($0 as? LinkSessionRuntimeError, refusal, "unwrapped")
+            }
+        }
+        runtime.refusal = LinkLaneOwnerError.transportUnavailable
+        XCTAssertThrowsError(try attempt.enqueueFiles(files: manifest, stage: { [] })) {
+            XCTAssertEqual($0 as? LinkLaneOwnerError, .transportUnavailable,
+                           "the lane owner's own refusal, unwrapped")
+        }
+
+        XCTAssertTrue(attempt.fileModel.batches.isEmpty)
+        XCTAssertEqual(log.count, 1, "nothing repainted the transfer list")
+    }
+
+    /// The five void verbs return nothing because their refusal IS the absence
+    /// of the action, so none of them may be read here as a result. A cancelled
+    /// batch is cancelled when the lane says so, not when a user asked.
+    func testTheVoidFileVerbsRecordNothing() async throws {
+        let (attempt, runtime, publish) = rig()
+        await open(publish, attempt)
+        runtime.nextBatch = 5
+        let batch = try attempt.enqueueFiles(files: manifest, stage: { [] })
+
+        let log = PublicationLog(attempt.fileModel.$batches)
+        attempt.pumpFiles()
+        attempt.cancelQueuedBatch(batch)
+        attempt.cancelOutboundBatch()
+        attempt.acceptInboundBatch()
+        attempt.rejectInboundBatch()
+
+        XCTAssertEqual(attempt.fileModel.batch(batch)?.state, .queued,
+                       "an asked-for cancel is not a result")
+        XCTAssertEqual(runtime.count(of: .cancelQueuedBatch(batch)), 1,
+                       "and the command still reached the lane")
+        XCTAssertEqual(log.count, 1)
+    }
+
+    /// A stale attempt takes no file command either: the throwing one answers
+    /// with the terminal error and the five void ones are inert, and none of
+    /// them reaches the runtime it used to own.
+    func testARetiredAttemptRefusesEveryFileCommandWithoutReachingItsRuntime() async throws {
+        let (attempt, runtime, publish) = rig()
+        await open(publish, attempt)
+        _ = try attempt.enqueueFiles(files: manifest, stage: { [] })
+        attempt.retire()
+
+        let log = PublicationLog(attempt.fileModel.$batches)
+        XCTAssertThrowsError(try attempt.enqueueFiles(files: manifest, stage: { [] })) { error in
+            XCTAssertEqual(error as? LinkSessionRuntimeError, .ended)
+        }
+        attempt.pumpFiles()
+        attempt.cancelQueuedBatch(1)
+        attempt.cancelOutboundBatch()
+        attempt.acceptInboundBatch()
+        attempt.rejectInboundBatch()
+
+        XCTAssertEqual(runtime.log, [.start, .enqueueFiles(manifest), .stop],
+                       "no file command reached the runtime after retirement")
+        XCTAssertEqual(attempt.fileModel.batches.count, 1, "and nothing was recorded")
+        XCTAssertEqual(log.count, 1)
+    }
+
+    /// The file lane's mirror of the send race: the link ends from another
+    /// thread while an enqueue the lane has already accepted is on its way back.
+    /// The batch really was queued, so it has to appear, exactly once and before
+    /// the end.
+    func testAnEnqueueAcceptedAsTheLinkEndsIsRecordedOnceAndBeforeTheEnd() async throws {
+        let (attempt, runtime, publish) = rig()
+        await open(publish, attempt)
+        runtime.nextBatch = 9
+
+        let batches = PublicationLog(attempt.fileModel.$batches)
+        let ends = PublicationLog(attempt.fileModel.$isSessionEnded)
+        runtime.duringEnqueue = {
+            let done = DispatchSemaphore(value: 0)
+            DispatchQueue.global().async {
+                publish(.file(.failed(.linkEnded)))
+                publish(.ended(.linkEnded))
+                done.signal()
+            }
+            done.wait()
+        }
+
+        let batch = try attempt.enqueueFiles(files: manifest, stage: { [] })
+
+        XCTAssertEqual(batch, 9)
+        XCTAssertEqual(attempt.fileModel.batch(9)?.state, .queued,
+                       "the end had not been projected yet — the command did not yield")
+
+        let ended = ends.expect(2, "the end is projected afterwards", in: self)
+        await fulfillment(of: [ended], timeout: 5)
+        await settle()
+
+        XCTAssertTrue(attempt.fileModel.isSessionEnded)
+        XCTAssertEqual(attempt.fileModel.batches.map(\.id), [9], "still there, exactly once")
+        XCTAssertEqual(attempt.fileModel.batch(9)?.state, .failed,
+                       "and a batch the ended session will never finish has its answer")
+        XCTAssertTrue(batches.alwaysOnMainThread)
+    }
+
+    // MARK: - 7. two projections, one stream
+
+    /// Both projections are painted by the SAME ordered delivery: there is one
+    /// bridge, one binding and one hop, and the file events go through it rather
+    /// than through a second path of their own.
+    func testFileAndTextEventsArePaintedByTheOneOrderedStream() async {
+        let (attempt, _, publish) = rig()
+        await open(publish, attempt)
+        let files = manifest
+
+        let batches = PublicationLog(attempt.fileModel.$batches)
+        let arrived = batches.expect(3, "the offer and its progress arrive", in: self)
+        await offMain {
+            publish(.file(.inboundOffer(batch: 7, files: files)))
+            publish(.text(.received("between the two")))
+            publish(.file(.inboundProgress(batch: 7, durableBytes: 100)))
+        }
+        await fulfillment(of: [arrived], timeout: 5)
+
+        XCTAssertEqual(attempt.fileModel.batch(7)?.transferredBytes, 100)
+        XCTAssertEqual(attempt.fileModel.batch(7)?.state, .transferring)
+        XCTAssertEqual(attempt.model.textMessages.map(\.body), ["between the two"],
+                       "the conversation was painted from the same stream")
+        XCTAssertTrue(batches.alwaysOnMainThread)
+    }
+
+    /// And it is painted in PUBLICATION order, which is observable because a
+    /// report that arrives before the offer it belongs to names a batch that
+    /// does not exist yet and is dropped. Two independent hops could deliver
+    /// these the other way round and the progress would stick.
+    func testTheFileProjectionSeesTheStreamInPublicationOrder() async {
+        let (attempt, _, publish) = rig()
+        await open(publish, attempt)
+        let files = manifest
+
+        let batches = PublicationLog(attempt.fileModel.$batches)
+        let arrived = batches.expect(2, "the offer arrives", in: self)
+        await offMain {
+            publish(.file(.inboundProgress(batch: 7, durableBytes: 100)))
+            publish(.file(.inboundOffer(batch: 7, files: files)))
+        }
+        await fulfillment(of: [arrived], timeout: 5)
+        await settle()
+
+        XCTAssertEqual(attempt.fileModel.batch(7)?.state, .offered)
+        XCTAssertEqual(attempt.fileModel.batch(7)?.transferredBytes, 0,
+                       "a report that preceded its own batch was dropped, not reordered")
+    }
+
+    /// A file lane that failed closed leaves a live link carrying a live
+    /// conversation, and the two projections say exactly that. This is the whole
+    /// reason they are two objects.
+    func testAFailedFileLaneDoesNotFreezeTheConversation() async throws {
+        let (attempt, _, publish) = rig()
+        await openConversation(publish, attempt)
+        let batch = try attempt.enqueueFiles(files: manifest, stage: { [] })
+
+        let batches = PublicationLog(attempt.fileModel.$batches)
+        let failed = batches.expect(2, "the file lane fails", in: self)
+        publish(.file(.failed(.laneFailed)))
+        await fulfillment(of: [failed], timeout: 5)
+
+        XCTAssertEqual(attempt.fileModel.laneFailure, .laneFailed)
+        XCTAssertEqual(attempt.fileModel.batch(batch)?.state, .failed)
+        XCTAssertFalse(attempt.model.isEnded, "the link is untouched")
+        XCTAssertTrue(attempt.canSendText)
+
+        try attempt.sendText("still talking")
+        XCTAssertEqual(attempt.model.textMessages.map(\.body), ["still talking"])
+    }
+
+    /// The whole session ending freezes BOTH, and nothing after it moves either.
+    func testTheWholeSessionEndingFreezesBothProjections() async throws {
+        let (attempt, _, publish) = rig()
+        await openConversation(publish, attempt)
+        let batch = try attempt.enqueueFiles(files: manifest, stage: { [] })
+        let files = manifest
+
+        let phases = PublicationLog(attempt.model.$phase)
+        let ended = phases.expect(2, "the session ends", in: self)
+        publish(.ended(.linkEnded))
+        await fulfillment(of: [ended], timeout: 5)
+
+        XCTAssertTrue(attempt.model.isEnded)
+        XCTAssertTrue(attempt.fileModel.isSessionEnded)
+        XCTAssertEqual(attempt.fileModel.batch(batch)?.state, .failed)
+
+        await offMain {
+            publish(.file(.inboundOffer(batch: 77, files: files)))
+            publish(.file(.outboundFinished(batch: batch, ok: true)))
+            publish(.text(.received("after the end")))
+        }
+        await settle()
+
+        XCTAssertEqual(attempt.fileModel.batches.map(\.id), [batch])
+        XCTAssertEqual(attempt.fileModel.batch(batch)?.state, .failed)
+        XCTAssertTrue(attempt.model.textMessages.isEmpty)
+    }
+
+    /// Retirement silences the file projection exactly as it silences the text
+    /// one: the stream is dropped before the teardown can produce anything, so
+    /// the transfer list freezes at the last thing the link actually reported.
+    func testRetirementSilencesTheFileProjectionToo() async throws {
+        let (attempt, _, publish) = rig()
+        await open(publish, attempt)
+        let batch = try attempt.enqueueFiles(files: manifest, stage: { [] })
+        let files = manifest
+
+        attempt.retire()
+        await offMain {
+            publish(.file(.inboundOffer(batch: 99, files: files)))
+            publish(.file(.outboundFinished(batch: batch, ok: true)))
+            publish(.ended(.stopped))
+        }
+        await settle()
+
+        XCTAssertEqual(attempt.fileModel.batches.map(\.id), [batch])
+        XCTAssertEqual(attempt.fileModel.batch(batch)?.state, .queued)
+        XCTAssertFalse(attempt.fileModel.isSessionEnded,
+                       "a retired attempt paints nothing more, including the end")
+    }
+
+    /// The session ends in the middle of a flood of file events from another
+    /// thread. Whatever was in flight, the list settles once: nothing is left
+    /// spinning, and nothing arrives afterwards.
+    func testAWholeSessionEndInsideAFileEventFloodSettlesOnce() async {
+        let (attempt, _, publish) = rig()
+        await open(publish, attempt)
+        let files = manifest
+
+        let started = DispatchSemaphore(value: 0)
+        let flooding = expectation(description: "the flood finishes")
+        DispatchQueue.global().async {
+            for index in 0..<400 {
+                publish(.file(.inboundOffer(batch: index, files: files)))
+                publish(.file(.inboundProgress(batch: index, durableBytes: 100)))
+                if index == 4 { started.signal() }
+            }
+            flooding.fulfill()
+        }
+        started.wait()
+        publish(.ended(.stopped))
+        await fulfillment(of: [flooding], timeout: 10)
+        await settle(16)
+
+        XCTAssertTrue(attempt.fileModel.isSessionEnded)
+        XCTAssertGreaterThanOrEqual(attempt.fileModel.batches.count, 5,
+                                    "what was published before the end was kept")
+        XCTAssertTrue(attempt.fileModel.batches.allSatisfy(\.isTerminal),
+                      "nothing is left spinning on a session that has ended")
+
+        let settled = attempt.fileModel.batches
+        await settle(16)
+        XCTAssertEqual(attempt.fileModel.batches, settled, "and nothing arrives after the end")
+    }
+
+    // MARK: - 8. lifetime
 
     /// The attempt owns all three, and releasing it releases all three. Nothing
     /// below it keeps the screen — or the runtime — alive on its own.
@@ -631,11 +990,13 @@ final class LinkSessionAttemptTests: XCTestCase {
     /// its wrapper when the model has to go away.
     func testTheAttemptReleasesEverythingItOwnsWhenItGoesAway() async {
         weak var observedModel: LinkSessionPresentationModel?
+        weak var observedFileModel: LinkFilePresentationModel?
         weak var observedRuntime: FakeRuntime?
         do {
             let runtime = FakeRuntime()
             let (attempt, _, publish) = rig(runtime)
             observedModel = attempt.model
+            observedFileModel = attempt.fileModel
             observedRuntime = runtime
 
             let log = PublicationLog(attempt.model.$phase)
@@ -648,6 +1009,7 @@ final class LinkSessionAttemptTests: XCTestCase {
         await settle()
 
         XCTAssertNil(observedModel, "the attempt was the model's only owner")
+        XCTAssertNil(observedFileModel, "and the file projection's")
         XCTAssertNil(observedRuntime, "and the runtime's")
     }
 
@@ -666,7 +1028,7 @@ final class LinkSessionAttemptTests: XCTestCase {
                        "a deallocation must not stop a runtime")
     }
 
-    // MARK: - 7. nothing here is reachable from production
+    // MARK: - 9. nothing here is reachable from production
 
     /// Comments stripped, so a rule about code is not satisfied — or broken — by
     /// prose.
@@ -722,19 +1084,47 @@ final class LinkSessionAttemptTests: XCTestCase {
     }
 
     /// ONE owner, structurally: the attempt is the only app source that builds a
-    /// bridge or a presentation model, and the only one that records an outgoing
-    /// entry. A second builder would be a second lifetime for the same screen —
-    /// two things able to retire, or to fail to retire, one attempt.
-    func testOnlyTheAttemptOwnsTheBridgeTheModelAndTheOutgoingTranscript() throws {
-        let owned = ["LinkSessionEventBridge(", "LinkSessionPresentationModel(",
-                     "recordOutgoing("]
+    /// bridge or either projection, the only one that binds the stream, and the
+    /// only one that records what a command earned. A second builder would be a
+    /// second lifetime for the same screen — two things able to retire, or to
+    /// fail to retire, one attempt.
+    func testOnlyTheAttemptOwnsTheBridgeBothProjectionsAndWhatCommandsEarned() throws {
+        // The symbol, and the ONE file that is allowed to contain it because it
+        // declares the thing.
+        let owned: [(symbol: String, declaredIn: String)] = [
+            ("LinkSessionEventBridge(", "LinkSessionEventBridge.swift"),
+            ("LinkSessionPresentationModel(", "LinkSessionPresentationModel.swift"),
+            ("LinkFilePresentationModel(", "LinkFilePresentationModel.swift"),
+            ("recordOutgoing(", "LinkSessionPresentationModel.swift"),
+            ("recordOutgoingBatch(", "LinkFilePresentationModel.swift"),
+        ]
+        // Deliberately NOT a scan for `bind(to:`: `LinkLaneOwner` has one of its
+        // own and the string alone cannot tell them apart. What makes a second
+        // binding of THIS bridge unreachable is that no other app source may
+        // even name the type — the entry above — and that both projection
+        // sources are pinned free of it in their own suites.
         for source in try appSources() where source.name != "LinkSessionAttempt.swift" {
-            for symbol in owned where !(symbol == "recordOutgoing("
-                                        && source.name == "LinkSessionPresentationModel.swift") {
-                XCTAssertFalse(source.code.contains(symbol),
-                               "\(source.name) reaches for \(symbol), which is the attempt's")
+            for entry in owned where source.name != entry.declaredIn {
+                XCTAssertFalse(source.code.contains(entry.symbol),
+                               "\(source.name) reaches for \(entry.symbol), which is the attempt's")
             }
         }
+    }
+
+    /// The one binding, in the one place, through the bridge's structural
+    /// weak-owner API — so the attempt's own stream cannot keep the attempt
+    /// alive, and both projections are painted by that single delivery rather
+    /// than by a path each.
+    func testTheAttemptIsWhatBindsTheStreamAndFansItOut() throws {
+        let url = appsRoot
+            .appendingPathComponent("RelayiumKit/Sources/RelayiumAppKit/LinkSessionAttempt.swift")
+        let source = code(try String(contentsOf: url, encoding: .utf8))
+        XCTAssertFalse(source.isEmpty, "the attempt source must be readable")
+
+        XCTAssertTrue(source.contains("bind(to: self)"),
+                      "the owner must arrive as the handler's parameter")
+        XCTAssertEqual(source.components(separatedBy: "bind(to:").count - 1, 1,
+                       "exactly one binding for one attempt")
     }
 
     /// The command owner forwards; it does not build a link. No key, no codec,

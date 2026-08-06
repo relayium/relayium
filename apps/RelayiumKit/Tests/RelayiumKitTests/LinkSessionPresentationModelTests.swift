@@ -110,7 +110,20 @@ final class LinkSessionPresentationModelTests: XCTestCase {
     /// has: no runtime, no transport, no environment.
     private func rig() -> (bridge: LinkSessionEventBridge, model: LinkSessionPresentationModel) {
         let bridge = LinkSessionEventBridge()
-        return (bridge, LinkSessionPresentationModel(bridge: bridge))
+        return (bridge, bound(to: bridge))
+    }
+
+    /// The model, bound to a bridge exactly as its owner binds one.
+    ///
+    /// In production the binding is `LinkSessionAttempt`'s: one bridge is bound
+    /// ONCE, by the owner, which then fans each event out to both projections.
+    /// This slice has no attempt, so it makes the same binding the same way —
+    /// through the bridge's structural weak-owner API, with the model reached
+    /// through the handler's `owner` parameter and no `[weak self]` written.
+    private func bound(to bridge: LinkSessionEventBridge) -> LinkSessionPresentationModel {
+        let model = LinkSessionPresentationModel()
+        bridge.bind(to: model) { owner, event in owner.apply(event) }
+        return model
     }
 
     // MARK: - 1. what a screen opens as
@@ -136,7 +149,7 @@ final class LinkSessionPresentationModelTests: XCTestCase {
         let bridge = LinkSessionEventBridge()
         bridge.publish(.sas("123456"))
 
-        let model = LinkSessionPresentationModel(bridge: bridge)
+        let model = bound(to: bridge)
         XCTAssertEqual(model.phase, .establishing(sas: nil),
                        "binding must not deliver inline")
 
@@ -337,7 +350,7 @@ final class LinkSessionPresentationModelTests: XCTestCase {
         let bridge = LinkSessionEventBridge()
         weak var observed: LinkSessionPresentationModel?
         do {
-            let model = LinkSessionPresentationModel(bridge: bridge)
+            let model = bound(to: bridge)
             observed = model
             let log = PhaseLog(model)
             let arrived = log.expect(2, "the model is live and painting", in: self)
@@ -368,7 +381,7 @@ final class LinkSessionPresentationModelTests: XCTestCase {
     func testTheModelDoesNotInvalidateTheBridgeWhenItGoesAway() async {
         let bridge = LinkSessionEventBridge()
         do {
-            let model = LinkSessionPresentationModel(bridge: bridge)
+            let model = bound(to: bridge)
             XCTAssertFalse(model.isEnded)
         }
         await settle()
@@ -436,18 +449,25 @@ final class LinkSessionPresentationModelTests: XCTestCase {
         XCTAssertGreaterThan(scanned, 50, "the scan really reached the app sources")
     }
 
-    /// The binding is the structural weak one, and the model does not reach for
-    /// the attempt's lifetime. Pinned as source as well as behaviour: both are
-    /// edits a later slice could make while every behavioural test above still
-    /// passed on a machine where the model happens to outlive the bridge.
-    func testTheModelNeitherCapturesItselfStronglyNorRetiresTheAttempt() throws {
+    /// The model claims no part of the stream's lifetime: it does not bind, does
+    /// not hold a bridge, and does not end the attempt it paints. Pinned as
+    /// source as well as behaviour — all three are edits a later slice could make
+    /// while every behavioural test above still passed.
+    ///
+    /// **Not binding is the load-bearing one.** A bridge is bound ONCE, by the
+    /// attempt, which fans each event out to both projections; a model that bound
+    /// for itself would be a second claimant to that one binding, and the loser
+    /// would silently paint nothing at all.
+    func testTheModelNeitherBindsTheStreamNorRetiresTheAttempt() throws {
         let url = appsRoot
             .appendingPathComponent("RelayiumKit/Sources/RelayiumAppKit/LinkSessionPresentationModel.swift")
         let source = code(try String(contentsOf: url, encoding: .utf8))
         XCTAssertFalse(source.isEmpty, "the model source must be readable")
 
-        XCTAssertTrue(source.contains("bind(to: self)"),
-                      "the owner must arrive as the handler's parameter")
+        XCTAssertFalse(source.contains("bind(to:"),
+                       "one bridge is bound once, by the attempt")
+        XCTAssertFalse(source.contains("LinkSessionEventBridge"),
+                       "and this model does not hold one")
         XCTAssertFalse(source.contains("deinit"),
                        "retiring the attempt belongs to the owner, not to a deallocation")
         XCTAssertFalse(source.contains("invalidate("),

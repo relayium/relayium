@@ -111,7 +111,20 @@ final class LinkSessionPresentationTextTests: XCTestCase {
     /// has: no runtime, no transport, no environment.
     private func rig() -> (bridge: LinkSessionEventBridge, model: LinkSessionPresentationModel) {
         let bridge = LinkSessionEventBridge()
-        return (bridge, LinkSessionPresentationModel(bridge: bridge))
+        return (bridge, bound(to: bridge))
+    }
+
+    /// The model, bound to a bridge exactly as its owner binds one.
+    ///
+    /// In production the binding is `LinkSessionAttempt`'s: one bridge is bound
+    /// ONCE, by the owner, which then fans each event out to both projections.
+    /// This slice has no attempt, so it makes the same binding the same way —
+    /// through the bridge's structural weak-owner API, with the model reached
+    /// through the handler's `owner` parameter and no `[weak self]` written.
+    private func bound(to bridge: LinkSessionEventBridge) -> LinkSessionPresentationModel {
+        let model = LinkSessionPresentationModel()
+        bridge.bind(to: model) { owner, event in owner.apply(event) }
+        return model
     }
 
     /// Open the link itself, since most of what the text lane does is only
@@ -431,7 +444,7 @@ final class LinkSessionPresentationTextTests: XCTestCase {
         let bridge = LinkSessionEventBridge()
         weak var observed: LinkSessionPresentationModel?
         do {
-            let model = LinkSessionPresentationModel(bridge: bridge)
+            let model = bound(to: bridge)
             observed = model
             let log = PublicationLog(model.$textMessages)
             let arrived = log.expect(2, "the transcript is live", in: self)
